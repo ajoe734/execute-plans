@@ -532,6 +532,112 @@ describe("StrategyWorkshopPage", () => {
     expect(workshopsModule.listWorkshopEvents).toHaveBeenCalledTimes(2);
   });
 
+  it("keeps the composer available when a non-authoritative session rail read remains pending", async () => {
+    vi.mocked(workshopsModule.getWorkshop).mockResolvedValue(MOCK_WORKSHOP);
+    vi.mocked(workshopsModule.listWorkshopCards).mockReturnValue(new Promise(() => {}));
+
+    render(<StrategyWorkshopPage workshopId="ws-abc" />);
+
+    const input = await screen.findByTestId("servant-composer-input");
+    await waitFor(() => expect(input).not.toBeDisabled());
+    fireEvent.change(input, { target: { value: "Composer remains usable" } });
+    expect(input).toHaveValue("Composer remains usable");
+  });
+
+  it("keeps a context-error draft editable and blocks click and Ctrl+Enter until an explicit retry resolves", async () => {
+    vi.mocked(workshopsModule.getWorkshop).mockResolvedValue(MOCK_WORKSHOP);
+    vi.mocked(interaction.resolveContext).mockRejectedValue(new Error("resolver temporarily unavailable"));
+
+    render(<StrategyWorkshopPage workshopId="ws-abc" />);
+
+    const input = await screen.findByTestId("servant-composer-input");
+    fireEvent.change(input, { target: { value: "Preserve this draft across context retry" } });
+    const reason = await screen.findByTestId("servant-composer-submit-disabled-reason");
+    await waitFor(() => expect(reason).toHaveAttribute("data-reason-code", "context_error"));
+    expect(input).not.toBeDisabled();
+
+    fireEvent.click(screen.getByTestId("servant-composer-submit"));
+    fireEvent.keyDown(input, { ctrlKey: true, key: "Enter" });
+    expect(submitDailyInteraction).not.toHaveBeenCalled();
+
+    vi.mocked(interaction.resolveContext).mockImplementation(resolvedContextFixture);
+    fireEvent.click(screen.getByTestId("servant-composer-context-retry"));
+
+    await waitFor(() => expect(screen.getByTestId("servant-composer-submit")).toBeEnabled());
+    expect(input).toHaveValue("Preserve this draft across context retry");
+    expect(interaction.resolveContext).toHaveBeenCalledTimes(2);
+  });
+
+  it("ignores stale ask eligibility after Propose wins and submits the exact strategy version without losing the draft", async () => {
+    let resolveAsk!: (value: Awaited<ReturnType<typeof interaction.participants>>) => void;
+    let resolvePropose!: (value: Awaited<ReturnType<typeof interaction.participants>>) => void;
+    const askPending = new Promise<Awaited<ReturnType<typeof interaction.participants>>>((resolve) => { resolveAsk = resolve; });
+    const proposePending = new Promise<Awaited<ReturnType<typeof interaction.participants>>>((resolve) => { resolvePropose = resolve; });
+    const eligibilityFor = (personaId: string) => ({
+      data: {
+        included: [{
+          persona_id: personaId,
+          display_name: personaId,
+          eligible: true,
+          reasons: [],
+          recommended: false,
+          participant_snapshot: {
+            persona_id: personaId,
+            persona_version: "1",
+            session_persona_id: `session-${personaId}`,
+            display_name: personaId,
+            provider_agent_id: `agent-${personaId}`,
+            workspace_id: `workspace-${personaId}`,
+            environment_ceiling: "paper" as const,
+            capability_snapshot: ["persona_opinion"],
+            captured_at: "2026-07-17T00:00:00Z",
+          },
+        }],
+        excluded: [],
+      },
+    });
+    let eligibilityCall = 0;
+    vi.mocked(interaction.participants).mockImplementation(() => {
+      eligibilityCall += 1;
+      if (eligibilityCall === 1) return askPending;
+      if (eligibilityCall === 2) return proposePending;
+      return Promise.resolve(eligibilityFor("per_propose"));
+    });
+    vi.mocked(workshopsModule.getWorkshop).mockResolvedValue({
+      ...MOCK_WORKSHOP,
+      strategy_id: "strategy-a",
+      active_strategy_spec_registry_id: "spec-v3",
+    });
+
+    render(<StrategyWorkshopPage workshopId="ws-abc" />);
+
+    const input = await screen.findByTestId("servant-composer-input");
+    fireEvent.change(input, { target: { value: "Propose the bounded measure" } });
+    await waitFor(() => expect(interaction.participants).toHaveBeenCalledTimes(1));
+    fireEvent.keyDown(screen.getByTestId("mode-selector"), { key: "Enter" });
+    fireEvent.click(await screen.findByRole("option", { name: /Propose \(Candidate Measure\)/i }));
+    await waitFor(() => expect(interaction.participants).toHaveBeenCalledTimes(2));
+
+    await act(async () => resolvePropose(eligibilityFor("per_propose")));
+    await waitFor(() => expect(screen.getByTestId("servant-composer-submit")).toBeEnabled());
+    await act(async () => resolveAsk(eligibilityFor("per_stale_ask")));
+
+    expect(input).toHaveValue("Propose the bounded measure");
+    expect(screen.queryByText("per_stale_ask")).not.toBeInTheDocument();
+    expect(screen.getByText("per_propose")).toBeInTheDocument();
+    expect(screen.getByTestId("servant-composer-submit")).toBeEnabled();
+    fireEvent.click(screen.getByTestId("servant-composer-submit"));
+
+    await waitFor(() => expect(submitDailyInteraction).toHaveBeenCalledWith(expect.objectContaining({
+      human_request: expect.objectContaining({ mode: "propose_action", request_text: "Propose the bounded measure" }),
+      context_snapshot: expect.objectContaining({
+        strategy_ref: { strategy_id: "strategy-a", version_id: "spec-v3" },
+        selected_persona_ids: ["per_propose"],
+      }),
+      participants: [expect.objectContaining({ persona_id: "per_propose" })],
+    })));
+  });
+
   it.each([
     ["ask", "ask"],
     ["challenge", "challenge"],
@@ -585,7 +691,7 @@ describe("StrategyWorkshopPage", () => {
     }
   });
 
-  it("gates pointer and keyboard submission until the canonical Workshop is loaded", async () => {
+  it("preserves a draft while gating pointer and keyboard submission until the canonical Workshop is loaded", async () => {
     let resolveWorkshop!: (workshop: StrategyWorkshop) => void;
     const workshopPending = new Promise<StrategyWorkshop>((resolve) => {
       resolveWorkshop = resolve;
@@ -599,8 +705,14 @@ describe("StrategyWorkshopPage", () => {
 
     const input = await screen.findByTestId("servant-composer-input");
     const submit = screen.getByTestId("servant-composer-submit");
-    expect(input).toBeDisabled();
+    expect(input).not.toBeDisabled();
     expect(submit).toBeDisabled();
+    expect(screen.getByTestId("servant-composer-submit-disabled-reason")).toHaveAttribute(
+      "data-reason-code",
+      "workshop_loading",
+    );
+
+    fireEvent.change(input, { target: { value: "Submit only after the Workshop is ready" } });
 
     fireEvent.click(submit);
     fireEvent.keyDown(input, { ctrlKey: true, key: "Enter" });
@@ -612,9 +724,8 @@ describe("StrategyWorkshopPage", () => {
       await workshopPending;
     });
     await waitFor(() => expect(interaction.participants).toHaveBeenCalled());
-    await waitFor(() => expect(input).not.toBeDisabled());
+    expect(input).toHaveValue("Submit only after the Workshop is ready");
 
-    fireEvent.change(input, { target: { value: "Submit only after the Workshop is ready" } });
     await waitFor(() => expect(submit).toBeEnabled());
     fireEvent.keyDown(input, { ctrlKey: true, key: "Enter" });
 
