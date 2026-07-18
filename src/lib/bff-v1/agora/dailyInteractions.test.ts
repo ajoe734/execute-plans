@@ -9,6 +9,7 @@ import {
   DailyInteractionUnsupportedError,
   createCandidateFromMeasure,
   decideCandidate,
+  getAuthoritativeValidation,
   getCandidateReviewReadiness,
   listCandidateDecisions,
   listDailyInteractions,
@@ -250,6 +251,35 @@ describe("daily Persona interaction v1.9 adapter", () => {
     expect(bffFetch).toHaveBeenNthCalledWith(2, {
       method: "GET", path: "/bff/agora/proposals/p1/review-readiness",
     });
+  });
+
+  it("rejects validation write and receipt readback that cross the requested bindings", async () => {
+    const crossedCandidate = candidateReadback();
+    crossedCandidate.candidate.proposal_id = "proposal-other";
+    crossedCandidate.revisions[0].proposal_id = "proposal-other";
+    vi.mocked(bffFetch).mockResolvedValueOnce({ data: crossedCandidate, meta: {} });
+
+    await expect(requestAuthoritativeValidation({
+      proposalId: "p1", revision: 3, proposalDigest: "b".repeat(64),
+      proposalEtag: crossedCandidate.etag, idempotencyKey: "pint15-validation-crossed",
+    })).rejects.toThrow("requested proposal binding");
+
+    vi.mocked(bffFetch).mockResolvedValueOnce({ data: {
+      validation_receipt_id: "receipt-other",
+      authority: "canonical_validation_service",
+      tenant_id: "tenant-1",
+      proposal_id: "p1",
+      revision: 3,
+      proposal_digest: "b".repeat(64),
+      outcome: "passed",
+      evidence_refs: ["evidence-1"],
+      validated_at: "2026-07-17T00:00:00Z",
+      expires_at: "2026-07-18T00:00:00Z",
+      receipt_sha256: "f".repeat(64),
+    }, meta: {} });
+    await expect(getAuthoritativeValidation({
+      proposalId: "p1", validationReceiptId: "receipt-requested",
+    })).rejects.toThrow("proposal and receipt authority");
   });
 
   it("retries failed providers through the durable interaction retry command", async () => {

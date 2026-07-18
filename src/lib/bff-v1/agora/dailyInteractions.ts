@@ -637,6 +637,9 @@ export async function requestAuthoritativeValidation(input: {
       },
     }));
     assertCandidateReadback(readback);
+    if (readback.candidate.proposal_id !== input.proposalId) {
+      throw makeBffError({ code: "VALIDATION_FAILED", message: "Candidate validation readback crossed the requested proposal binding." });
+    }
     return readback;
   } catch (error) {
     return unsupported(error);
@@ -651,8 +654,10 @@ export async function getAuthoritativeValidation(input: {
       method: "GET",
       path: paths.agoraCandidateValidation(input.proposalId, input.validationReceiptId),
     }));
-    if (receipt.authority !== "canonical_validation_service" || receipt.proposal_id !== input.proposalId) {
-      throw makeBffError({ code: "VALIDATION_FAILED", message: "Validation readback did not match the canonical proposal authority." });
+    if (receipt.authority !== "canonical_validation_service"
+      || receipt.proposal_id !== input.proposalId
+      || receipt.validation_receipt_id !== input.validationReceiptId) {
+      throw makeBffError({ code: "VALIDATION_FAILED", message: "Validation readback did not match the canonical proposal and receipt authority." });
     }
     return receipt;
   } catch (error) {
