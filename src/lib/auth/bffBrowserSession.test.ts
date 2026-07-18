@@ -156,4 +156,38 @@ describe("strict browser BFF session bridge", () => {
 
     await expect(verifyBffBrowserSession()).rejects.toThrow(/strict browser readiness/);
   });
+
+  it("auto-authenticates the browser via dev-login when Supabase session is absent but credentials are present", async () => {
+    vi.stubEnv("VITE_BFF_DEV_LOGIN_CLIENT_ID", "client-id-test");
+    vi.stubEnv("VITE_BFF_DEV_LOGIN_CLIENT_SECRET", "client-secret-test");
+    vi.stubEnv("VITE_BFF_BASE_URL", "https://bff.example.test");
+
+    const fetcher = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(response({
+        access_token: "dev-login-issued-jwt-token",
+        token_type: "bearer",
+        expires_in: 300,
+        tenant_id: "tenant-signed"
+      }))
+      .mockResolvedValueOnce(response(me(["operator"])))
+      .mockResolvedValueOnce(response(readiness(true)));
+
+    const verified = await verifyBffBrowserSession();
+
+    expect(verified.identity.roles).toEqual(["operator"]);
+    expect(verified.readiness.authReady).toBe(true);
+
+    expect(fetcher.mock.calls.map(([url]) => String(url))).toEqual([
+      "https://bff.example.test/bff/auth/dev-login",
+      "https://bff.example.test/bff/me",
+      "https://bff.example.test/bff/auth/readiness",
+    ]);
+
+    const [, loginInit] = fetcher.mock.calls[0];
+    expect(JSON.parse(loginInit!.body as string)).toEqual({
+      grant_type: "client_credentials",
+      client_id: "client-id-test",
+      client_secret: "client-secret-test",
+    });
+  });
 });
