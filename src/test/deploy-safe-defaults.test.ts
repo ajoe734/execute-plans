@@ -20,6 +20,10 @@ const branchWorkflow = readFileSync(
   resolve(root, ".github/workflows/branch-ci.yml"),
   "utf8",
 );
+const playwrightConfig = readFileSync(
+  resolve(root, "playwright.config.ts"),
+  "utf8",
+);
 const hostedPersonaSpec = readFileSync(
   resolve(root, "e2e/25-persona-fleet-live-linked-pages.spec.ts"),
   "utf8",
@@ -30,6 +34,10 @@ const hostedPersonaInteractionSpec = readFileSync(
 );
 const hostedPersonaServantPreflight = readFileSync(
   resolve(root, "scripts/ensure-persona-hosted-proof-servant.mjs"),
+  "utf8",
+);
+const hostedPersonaCredentialValidator = readFileSync(
+  resolve(root, "scripts/validate-persona-hosted-proof-env.mjs"),
   "utf8",
 );
 const hostedBrowserProbe = readFileSync(
@@ -427,17 +435,55 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
         "npx playwright test e2e/persona-interaction-cross-repo-hosted.spec.ts",
       ),
     );
-    expect(authorizedProof).toContain(
-      "--project=chromium --project=mobile-chromium",
-    );
+    expect(authorizedProof).toContain("--project=chromium --grep '@desktop-full'");
+    expect(authorizedProof).toContain("--project=mobile-chromium --grep '@mobile-basic'");
     expect(authorizedProof).toContain(
       "node scripts/ensure-persona-hosted-proof-servant.mjs",
     );
     expect(authorizedProof).toContain(
       "PANTHEON_EXPECTED_BFF_SHA: ${{ inputs.bff_sha }}",
     );
+    expect(authorizedProof).toContain(
+      "PANTHEON_PUBLIC_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}",
+    );
+    expect(hostedPersonaInteractionSpec).toContain("installVerifiedHostedProofSession");
+    expect(hostedPersonaInteractionSpec).not.toContain("installOidcDevLogin");
+    expect(hostedPersonaInteractionSpec).not.toContain("page.route(");
+    expect(hostedPersonaInteractionSpec).toContain("minimumTtlSeconds: 480");
+    expect(hostedPersonaCredentialValidator).toContain(
+      "HOSTED_PROOF_MIN_CREDENTIAL_TTL_SECONDS = 1200",
+    );
+    expect(hostedPersonaCredentialValidator).toContain(
+      'parts.length !== 3',
+    );
+    expect(hostedPersonaCredentialValidator).toContain(
+      "operatorSubject === viewerSubject",
+    );
     expect(authorizedProof).toContain("--retries=0 --reporter=list,json");
-    expect(authorizedProof).toContain("expected !== 6");
+    expect(authorizedProof.match(/--trace=off/gu)).toHaveLength(2);
+    expect(
+      authorizedProof.match(/PANTHEON_CREDENTIALED_PLAYWRIGHT_NO_ARTIFACTS=1/gu),
+    ).toHaveLength(2);
+    expect(playwrightConfig).toContain(
+      'process.env.PANTHEON_CREDENTIALED_PLAYWRIGHT_NO_ARTIFACTS === "1"',
+    );
+    expect(playwrightConfig).toContain(
+      'trace: credentialedProofNoArtifacts ? "off" : "retain-on-failure"',
+    );
+    expect(playwrightConfig).toContain(
+      'screenshot: credentialedProofNoArtifacts ? "off" : "only-on-failure"',
+    );
+    expect(playwrightConfig).toContain(
+      'video: credentialedProofNoArtifacts ? "off" : "retain-on-failure"',
+    );
+    const authorizedArtifact = authorizedProof.slice(
+      authorizedProof.indexOf("- name: Upload authorized proof evidence"),
+    );
+    expect(authorizedArtifact).toContain(".lovable/audits/authorized-write-proof");
+    expect(authorizedArtifact).not.toContain("playwright-report");
+    expect(authorizedArtifact).not.toContain("test-results");
+    expect(authorizedProof).toContain("desktop.expected !== 3");
+    expect(authorizedProof).toContain("mobile.expected !== 1");
     expect(authorizedProof).toContain("skipped !== 0");
     expect(authorizedProof).toContain("unexpected !== 0");
     expect(authorizedProof).toContain("flaky !== 0");
@@ -452,6 +498,24 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     );
     expect(hostedPersonaServantPreflight.indexOf("/bff/version")).toBeLessThan(
       hostedPersonaServantPreflight.indexOf("/bff/me"),
+    );
+    expect(hostedPersonaServantPreflight.indexOf("/bff/me")).toBeLessThan(
+      hostedPersonaServantPreflight.indexOf("/bff/auth/readiness"),
+    );
+    expect(hostedPersonaServantPreflight).toContain(
+      'posture.auth_stub !== false',
+    );
+    expect(hostedPersonaServantPreflight).toContain(
+      'posture.auth_mode !== "strict"',
+    );
+    expect(hostedPersonaServantPreflight).toContain(
+      'sessionKind !== "bearer"',
+    );
+    expect(hostedPersonaServantPreflight).toContain(
+      "readiness.authReady !== true",
+    );
+    expect(hostedPersonaServantPreflight).toContain(
+      "readinessAuth.interactionCapabilityReady !== true",
     );
     expect(hostedPersonaServantPreflight.indexOf("/bff/me")).toBeLessThan(
       hostedPersonaServantPreflight.indexOf("/bff/agora/servant/ensure"),
@@ -507,21 +571,17 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     ).toBeLessThan(
       hostedPersonaInteractionSpec.indexOf("/bff/management/persona-fleet"),
     );
-    expect(hostedPersonaInteractionSpec).toContain("proposedParticipants.some");
     expect(hostedPersonaInteractionSpec).toContain(
-      "row.persona_id === ENSURED_PERSONA_ID",
+      "const selected = included.find",
     );
     expect(hostedPersonaInteractionSpec).toContain(
-      "submittedRequest.participant_persona_ids",
+      "requestedParticipants.map((participant) => participant.persona_id)",
     );
-    expect(
-      hostedPersonaInteractionSpec.match(
-        /submitted\.participants\)\.to(?:Equal|Contain)\(\[?ENSURED_PERSONA_ID/gu,
-      ),
-    ).toHaveLength(2);
     expect(hostedPersonaInteractionSpec).toContain(
-      "canonical eligible selected",
+      "persistedParticipants.map((participant) => participant.persona_id)",
     );
+    expect(hostedPersonaInteractionSpec).not.toContain("submittedRequest.participant_persona_ids");
+    expect(hostedPersonaInteractionSpec).toContain("/recommended-measures/${encodeURIComponent(measureId)}/candidates");
     expect(hostedPersonaInteractionSpec).toContain(
       "`${BFF_BASE}/bff/agora/servant/ensure`",
     );
@@ -529,7 +589,7 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
       "expect(deniedEnsure.status()).toBe(403)",
     );
     expect(hostedPersonaInteractionSpec.match(/^\s*test\("/gmu)).toHaveLength(
-      3,
+      4,
     );
     expect(hostedPersonaInteractionSpec).toContain(
       "expect(denied.status()).toBe(403)",

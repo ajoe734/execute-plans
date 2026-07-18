@@ -37,6 +37,33 @@ function roleTokens() {
   return tokens;
 }
 
+const HOSTED_PROOF_MIN_CREDENTIAL_TTL_SECONDS = 1200;
+
+function verifiedJwtIdentity(token, role) {
+  const parts = token.split(".");
+  if (parts.length !== 3) {
+    throw new Error(`${role} credential is not a JWT bearer.`);
+  }
+  let claims;
+  try {
+    claims = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
+  } catch {
+    throw new Error(`${role} credential has invalid JWT claims.`);
+  }
+  const subject = typeof claims?.sub === "string" ? claims.sub.trim() : "";
+  const expiresAt = Number(claims?.exp ?? 0);
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  if (!subject || !Number.isFinite(expiresAt)) {
+    throw new Error(`${role} credential is missing a subject or expiry.`);
+  }
+  if (expiresAt <= nowSeconds + HOSTED_PROOF_MIN_CREDENTIAL_TTL_SECONDS) {
+    throw new Error(
+      `${role} credential does not cover the bounded hosted proof window.`,
+    );
+  }
+  return subject;
+}
+
 const tokens = roleTokens();
 const missing = [];
 if (!tokens.operator) missing.push("operator credential");
@@ -46,6 +73,24 @@ if (!String(process.env.PANTHEON_BFF_BASE_URL || "").trim()) missing.push("BFF U
 
 if (missing.length > 0) {
   console.error(`Hosted Persona write proof is missing: ${missing.join(", ")}.`);
+  process.exit(1);
+}
+
+let operatorSubject;
+let viewerSubject;
+try {
+  operatorSubject = verifiedJwtIdentity(tokens.operator, "operator");
+  viewerSubject = verifiedJwtIdentity(tokens.viewer, "viewer");
+} catch (error) {
+  console.error(
+    error instanceof Error
+      ? error.message
+      : "Hosted Persona credentials failed JWT validation.",
+  );
+  process.exit(1);
+}
+if (operatorSubject === viewerSubject) {
+  console.error("Hosted Persona operator and viewer credentials must bind distinct subjects.");
   process.exit(1);
 }
 

@@ -8,7 +8,7 @@
  */
 import { randomUUID } from "node:crypto";
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
-import { installOidcDevLogin, roleTokenFromEnv } from "./helpers/auth";
+import { roleTokenFromEnv } from "./helpers/auth";
 
 const FE_BASE = (process.env.PANTHEON_FE_BASE_URL ?? "").replace(/\/$/, "");
 const BFF_BASE = (process.env.PANTHEON_BFF_BASE_URL ?? "").replace(/\/$/, "");
@@ -18,7 +18,9 @@ const VIEWER_TOKEN = roleTokenFromEnv("viewer", ["PANTHEON_PERSONA_INTERACTION_V
 const WRITE_PROOF = process.env.PANTHEON_PERSONA_INTERACTION_WRITE_PROOF === "1";
 const ENSURED_PERSONA_ID = String(process.env.PANTHEON_PERSONA_INTERACTION_PERSONA_ID ?? "").trim();
 const EXPECTED_BFF_SHA = String(process.env.PANTHEON_BFF_SHA ?? "").trim().toLowerCase();
+const PUBLIC_SUPABASE_URL = String(process.env.PANTHEON_PUBLIC_SUPABASE_URL ?? "").trim();
 const DEV_BFF_HOST = "pantheon-lupin-dev-bff.35.201.239.38.sslip.io";
+const DEV_FE_HOST = "pantheon-lupin-dev-fe.35.201.239.38.sslip.io";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -60,19 +62,29 @@ function identityId(value: unknown): string {
   return String(identity.operator_id ?? identity.operatorId ?? identity.id ?? "").trim();
 }
 
-function stubTokenActor(token: string): string {
-  return token.replace(/^Bearer\s+/i, "").trim().split(":", 1)[0]?.trim() ?? "";
-}
-
 async function assertOperatorSession(request: APIRequestContext, token: string): Promise<{
   operatorId: string;
   roles: string[];
+  sessionKind: "bearer";
 }> {
   const meResponse = await request.get(`${BFF_BASE}/bff/me`, { headers: headers(token) });
   expect(meResponse.ok(), `/bff/me returned ${meResponse.status()}`).toBe(true);
   const me = record(data(await meResponse.json()));
   const roles = rolesFromMe(me);
   expect(roles).toContain("operator");
+  return assertHostedBearerSession(request, token, me, roles);
+}
+
+async function assertHostedBearerSession(
+  request: APIRequestContext,
+  token: string,
+  me: JsonRecord,
+  roles = rolesFromMe(me),
+): Promise<{
+  operatorId: string;
+  roles: string[];
+  sessionKind: "bearer";
+}> {
   const operatorId = String(me.operator_id ?? me.operatorId ?? "").trim();
   expect(operatorId).not.toBe("");
   const boundIdentities = [me.user, me.current_user, me.currentUser]
@@ -83,19 +95,13 @@ async function assertOperatorSession(request: APIRequestContext, token: string):
   const session = record(me.session);
   expect(session.authenticated).toBe(true);
   const sessionKind = String(session.session_kind ?? session.sessionKind ?? me.session_kind ?? me.sessionKind).toLowerCase();
-  if (["bearer", "cookie"].includes(sessionKind)) return { operatorId, roles };
-
-  // Stub auth is accepted only for the exact, release-bound Pantheon dev posture.
-  // Never print or attach the token: only compare its normalized actor segment.
-  expect(sessionKind).toBe("stub");
+  expect(sessionKind).toBe("bearer");
   expect(new URL(BFF_BASE).hostname).toBe(DEV_BFF_HOST);
   expect(EXPECTED_BFF_SHA).toMatch(/^[0-9a-f]{40}$/);
-  expect(stubTokenActor(token)).toBe(operatorId);
-  expect(String(session.id ?? "")).toBe(`bff-session-${operatorId}`);
   const meEnvironment = record(me.environment);
   expect(meEnvironment.name).toBe("dev");
   expect(meEnvironment.deployment_stage).toBe("dev");
-  expect(meEnvironment.auth_mode).toBe("stub");
+  expect(meEnvironment.auth_mode).toBe("strict");
 
   const versionResponse = await request.get(`${BFF_BASE}/bff/version`, { headers: headers(token) });
   expect(versionResponse.ok(), `/bff/version returned ${versionResponse.status()}`).toBe(true);
@@ -103,9 +109,84 @@ async function assertOperatorSession(request: APIRequestContext, token: string):
   expect(String(version.source_commit_sha ?? "").toLowerCase()).toBe(EXPECTED_BFF_SHA);
   expect(version.environment).toBe("dev");
   const posture = record(version.config_posture);
-  expect(posture.auth_stub).toBe(true);
-  expect(posture.auth_mode).toBe("permissive");
-  return { operatorId, roles };
+  expect(posture.auth_stub).toBe(false);
+  expect(posture.auth_mode).toBe("strict");
+
+  const readinessResponse = await request.get(`${BFF_BASE}/bff/auth/readiness`, { headers: headers(token) });
+  expect(readinessResponse.ok(), `/bff/auth/readiness returned ${readinessResponse.status()}`).toBe(true);
+  const readiness = record(data(await readinessResponse.json()));
+  const auth = record(readiness.auth);
+  expect(auth.strict).toBe(true);
+  expect(auth.stub).toBe(false);
+  expect(String(auth.sessionKind ?? auth.session_kind ?? "")).toBe("bearer");
+  expect(String(readiness.sourceCommitSha ?? readiness.source_commit_sha ?? "").toLowerCase()).toBe(EXPECTED_BFF_SHA);
+  return { operatorId, roles, sessionKind: "bearer" };
+}
+
+function hostedBearerClaims(token: string): JsonRecord {
+  const parts = token.split(".");
+  if (parts.length !== 3) return {};
+  try {
+    return record(JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8")));
+  } catch {
+    return {};
+  }
+}
+
+async function installVerifiedHostedProofSession(
+  page: Page,
+  input: {
+    operatorId: string;
+    roles: string[];
+    sessionKind: "bearer";
+    token: string;
+    minimumTtlSeconds: number;
+  },
+): Promise<void> {
+  expect(WRITE_PROOF, "hosted session bootstrap is proof-only").toBe(true);
+  expect(new URL(FE_BASE).hostname).toBe(DEV_FE_HOST);
+  expect(new URL(BFF_BASE).hostname).toBe(DEV_BFF_HOST);
+  expect(EXPECTED_BFF_SHA).toMatch(/^[0-9a-f]{40}$/);
+  const supabase = new URL(PUBLIC_SUPABASE_URL);
+  expect(supabase.protocol).toBe("https:");
+  expect(supabase.hostname.endsWith(".supabase.co")).toBe(true);
+
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const claims = hostedBearerClaims(input.token);
+  expect(input.sessionKind).toBe("bearer");
+  expect(String(claims.sub ?? "")).toBe(input.operatorId);
+  expect(input.minimumTtlSeconds).toBeGreaterThanOrEqual(240);
+  expect(Number(claims.exp ?? 0)).toBeGreaterThan(nowSeconds + input.minimumTtlSeconds);
+
+  const expiresAt = Number(claims.exp);
+  const projectRef = supabase.hostname.split(".")[0];
+  const storageKey = `sb-${projectRef}-auth-token`;
+  const storedSession = {
+    access_token: input.token,
+    refresh_token: "hosted-proof-no-refresh",
+    expires_in: Math.max(60, expiresAt - nowSeconds),
+    expires_at: expiresAt,
+    token_type: "bearer",
+    user: {
+      id: input.operatorId,
+      aud: String(claims.aud ?? "authenticated"),
+      role: String(claims.role ?? "authenticated"),
+      email: typeof claims.email === "string" ? claims.email : undefined,
+      app_metadata: record(claims.app_metadata),
+      user_metadata: record(claims.user_metadata),
+      created_at: new Date(nowSeconds * 1000).toISOString(),
+    },
+  };
+  await page.addInitScript(
+    ({ key, session }) => {
+      try {
+        window.sessionStorage.setItem(key, JSON.stringify(session));
+      } catch {
+        // The init script is retried for the hosted origin during navigation.
+      }
+    },
+    { key: storageKey, session: storedSession },
+  );
 }
 
 function personaId(row: JsonRecord): string {
@@ -235,35 +316,6 @@ async function prepareImmutableStrategyWorkshop(request: APIRequestContext, toke
   return { ...target, workshopId };
 }
 
-async function readProposal(request: APIRequestContext, token: string, proposalId: string) {
-  const response = await request.get(`${BFF_BASE}/bff/agora/proposals/${encodeURIComponent(proposalId)}`, {
-    headers: headers(token),
-  });
-  expect(response.ok(), `Proposal readback returned ${response.status()}`).toBe(true);
-  return {
-    etag: response.headers().etag ?? "",
-    proposal: record(data(await response.json())),
-  };
-}
-
-async function actOnProposal(
-  request: APIRequestContext,
-  token: string,
-  proposalId: string,
-  etag: string,
-  action: JsonRecord,
-) {
-  const response = await request.post(`${BFF_BASE}/bff/agora/proposals/${encodeURIComponent(proposalId)}/actions`, {
-    headers: headers(token, { "If-Match": etag }),
-    data: action,
-  });
-  expect(response.ok(), `Proposal ${String(action.action)} returned ${response.status()}: ${await response.text()}`).toBe(true);
-  return {
-    etag: response.headers().etag ?? "",
-    proposal: record(data(await response.json())),
-  };
-}
-
 async function openPersonaDetail(page: Page, persona: { id: string; name: string }): Promise<void> {
   await page.goto(`${FE_BASE}/management/personas/${encodeURIComponent(persona.id)}`);
   await expect(page.getByRole("heading", { level: 1, name: persona.name })).toBeAttached({ timeout: 30_000 });
@@ -282,17 +334,15 @@ async function revealWorkshopComposerOptions(page: Page): Promise<void> {
 test.describe("Persona Detail → canonical Workshop cross-repo proof", () => {
   test.skip(!FE_BASE || !BFF_BASE, "requires hosted Pantheon FE and BFF URLs");
 
-  test("operator resolves, checks eligibility, submits no-authority interaction, reads it back, and returns", async ({ page, request }) => {
+  test("operator resolves, checks eligibility, submits no-authority interaction, reads it back, and returns @desktop-full", async ({ page, request }) => {
     test.skip(!WRITE_PROOF || !OPERATOR_TOKEN, "requires explicit write-proof opt-in and operator token");
     test.setTimeout(180_000);
-    const { roles: operatorRoles } = await assertOperatorSession(request, OPERATOR_TOKEN);
+    const operatorSession = await assertOperatorSession(request, OPERATOR_TOKEN);
     const persona = await discoverEligiblePersona(request, OPERATOR_TOKEN);
-    await installOidcDevLogin(page, {
-      goto: false,
-      pageBaseUrl: FE_BASE,
-      roles: operatorRoles,
-      tenantId: TENANT_ID,
+    await installVerifiedHostedProofSession(page, {
+      ...operatorSession,
       token: OPERATOR_TOKEN,
+      minimumTtlSeconds: 300,
     });
     await page.addInitScript(() => {
       // runtimeEnv accepts this only on the allowlisted Pantheon dev host.
@@ -308,7 +358,7 @@ test.describe("Persona Detail → canonical Workshop cross-repo proof", () => {
       new URL(response.url()).pathname === "/bff/agora/interactions/participants:eligible"
       && response.request().method() === "POST",
     );
-    const talkButton = page.getByRole("button", { name: "Talk to" });
+    const talkButton = page.getByRole("button", { name: /^Talk with / });
     await expect(talkButton).toBeEnabled();
     await talkButton.click();
 
@@ -337,10 +387,16 @@ test.describe("Persona Detail → canonical Workshop cross-repo proof", () => {
     expect(submittedHttp.ok(), await submittedHttp.text()).toBe(true);
     const submitted = record(data(await submittedHttp.json()));
     const submittedRequest = record(submittedHttp.request().postDataJSON());
-    expect(submittedRequest.participant_persona_ids).toEqual([ENSURED_PERSONA_ID]);
-    expect(submitted.participants).toEqual([ENSURED_PERSONA_ID]);
-    expect(submitted.execution_authority).toBe("none");
-    expect(String(submitted.no_capital_authority_proof ?? "")).not.toBe("");
+    const requestedParticipants = Array.isArray(submittedRequest.participants)
+      ? submittedRequest.participants.map(record)
+      : [];
+    const persistedParticipants = Array.isArray(submitted.participants)
+      ? submitted.participants.map(record)
+      : [];
+    expect(requestedParticipants.map((participant) => participant.persona_id)).toEqual([ENSURED_PERSONA_ID]);
+    expect(persistedParticipants.map((participant) => participant.persona_id)).toEqual([ENSURED_PERSONA_ID]);
+    expect(record(submitted.authority).execution_authority).toBe("none");
+    expect(record(submitted.authority).capital_changed).toBe(false);
     const interactionId = String(submitted.interaction_id ?? "");
     expect(interactionId).not.toBe("");
 
@@ -358,142 +414,136 @@ test.describe("Persona Detail → canonical Workshop cross-repo proof", () => {
     await expect(page).toHaveURL(new RegExp(`/management/personas/${encodeURIComponent(persona.id)}$`));
   });
 
-  test("operator proposes a governed strategy measure, reads canonical state, and cannot self-approve", async ({ page, request }) => {
+  test("daily Persona measure supports durable modify, defer, accept-for-review, validation, reject, and reload @desktop-full", async ({ page, request }) => {
     test.skip(!WRITE_PROOF || !OPERATOR_TOKEN, "requires explicit write-proof opt-in and operator token");
-    test.setTimeout(240_000);
-    const { operatorId, roles: operatorRoles } = await assertOperatorSession(request, OPERATOR_TOKEN);
+    test.setTimeout(360_000);
+    const operatorSession = await assertOperatorSession(request, OPERATOR_TOKEN);
+    const { operatorId } = operatorSession;
+    await discoverEligiblePersona(request, OPERATOR_TOKEN);
     const target = await prepareImmutableStrategyWorkshop(request, OPERATOR_TOKEN, operatorId);
-
-    await installOidcDevLogin(page, {
-      goto: false,
-      pageBaseUrl: FE_BASE,
-      roles: operatorRoles,
-      tenantId: TENANT_ID,
+    await installVerifiedHostedProofSession(page, {
+      ...operatorSession,
       token: OPERATOR_TOKEN,
+      minimumTtlSeconds: 480,
     });
     await page.addInitScript(() => window.sessionStorage.setItem("pantheon.e2e.realWrites", "true"));
     await page.goto(`${FE_BASE}/agora/strategy-workshop/${encodeURIComponent(target.workshopId)}`);
     await expect(page.getByTestId("servant-composer")).toBeVisible({ timeout: 30_000 });
 
-    const proposeEligibility = page.waitForResponse((response) => {
-      if (new URL(response.url()).pathname !== "/bff/agora/interactions/participants:eligible") return false;
-      if (response.request().method() !== "POST") return false;
-      try { return record(response.request().postDataJSON()).mode === "propose_action"; } catch { return false; }
-    });
     await revealWorkshopComposerOptions(page);
     await page.getByTestId("mode-selector").click();
     await page.getByRole("option", { name: /Propose \(Candidate Measure\)/i }).click();
-    const proposeEligibilityHttp = await proposeEligibility;
-    expect(proposeEligibilityHttp.ok()).toBe(true);
-    const proposeEligibilityBody = record(data(await proposeEligibilityHttp.json()));
-    const proposedParticipants = items({ data: { items: proposeEligibilityBody.included } });
-    expect(proposedParticipants.length).toBeGreaterThanOrEqual(1);
-    expect(proposedParticipants.some((row) => row.persona_id === ENSURED_PERSONA_ID)).toBe(true);
-    await expect(page.getByTestId("eligibility-explanation")).toContainText(
-      /(?:up to )?[1-9]\d* canonical eligible selected/i,
+    await page.getByTestId("servant-composer-input").fill(
+      "Recommend one bounded paper-only risk_limit_recommendation. Use validator pantheon_candidate_validation_v1 with supported checks source_binding, target_version, authority_boundary, and rollback_plan. Include fresh canonical evidence and a reversible rollback.",
     );
-
-    const topic = `Hosted governed candidate ${randomUUID()}`;
-    await page.getByTestId("servant-composer-input").fill(topic);
     const submitResponse = page.waitForResponse((response) =>
       new URL(response.url()).pathname === "/bff/agora/interactions"
       && response.request().method() === "POST",
     );
-    await expect(page.getByTestId("servant-composer-submit")).toBeEnabled({ timeout: 30_000 });
     await page.getByTestId("servant-composer-submit").click();
     const submittedHttp = await submitResponse;
     expect(submittedHttp.ok(), await submittedHttp.text()).toBe(true);
-    const submitted = record(data(await submittedHttp.json()));
-    const submittedRequest = record(submittedHttp.request().postDataJSON());
-    expect(Array.isArray(submittedRequest.participant_persona_ids)).toBe(true);
-    expect(submittedRequest.participant_persona_ids).toContain(ENSURED_PERSONA_ID);
-    expect(submitted.participants).toContain(ENSURED_PERSONA_ID);
-    expect(submitted.execution_authority).toBe("none");
-    expect(record(submitted.proposal).execution_authority).toBe("none");
-    const proposalId = String(submitted.proposal_id ?? "");
-    expect(proposalId).not.toBe("");
+    const interactionId = String(record(data(await submittedHttp.json())).interaction_id ?? "");
+    expect(interactionId).not.toBe("");
 
+    let measureId = "";
+    let measureSha = "";
     await expect.poll(async () => {
-      const cardsResponse = await request.get(`${BFF_BASE}/bff/agora/workshops/${encodeURIComponent(target.workshopId)}/cards`, {
+      const response = await request.get(`${BFF_BASE}/bff/agora/interactions/${encodeURIComponent(interactionId)}`, {
         headers: headers(OPERATOR_TOKEN),
       });
-      if (!cardsResponse.ok()) return false;
-      return items(await cardsResponse.json()).some((card) =>
-        card.card_type === "governed_proposal" && JSON.stringify(card.payload ?? {}).includes(proposalId));
-    }, { timeout: 60_000 }).toBe(true);
-
-    let canonical = await readProposal(request, OPERATOR_TOKEN, proposalId);
-    expect(canonical.etag).not.toBe("");
-    expect(canonical.proposal.execution_authority).toBe("none");
-    expect(canonical.proposal.target_kind).toBe("strategy");
-    expect(canonical.proposal.target_id).toBe(target.strategyId);
-    expect(canonical.proposal.target_version).toBe(target.strategyVersion);
-    expect(canonical.proposal.proposer).toBe(operatorId);
-    expect(canonical.proposal.approval_decision_refs_authority).toBe("canonical_read_store");
+      if (!response.ok()) return false;
+      const interaction = record(data(await response.json()));
+      const opinions = Array.isArray(interaction.opinions) ? interaction.opinions.map(record) : [];
+      const measures = opinions.flatMap((opinion) =>
+        Array.isArray(opinion.recommended_measures) ? opinion.recommended_measures.map(record) : [],
+      );
+      const measure = measures.find((item) => /^[a-f0-9]{64}$/.test(String(item.measure_sha256 ?? "")));
+      measureId = String(measure?.measure_id ?? "");
+      measureSha = String(measure?.measure_sha256 ?? "");
+      return Boolean(measureId && measureSha);
+    }, { timeout: 120_000 }).toBe(true);
 
     await page.reload();
-    const proposalCard = page.getByTestId(`governed-proposal-${proposalId}`);
-    await expect(proposalCard).toBeVisible({ timeout: 60_000 });
-    const modify = proposalCard.getByRole("button", { name: "Modify" });
-    if (await modify.isEnabled()) {
-      await modify.click();
-      await proposalCard.getByLabel("Proposed value").fill(JSON.stringify({
-        ...record(canonical.proposal.proposed_value),
-        hosted_proof_note: topic,
-      }));
-      const modifiedResponse = page.waitForResponse((response) => {
-        if (!new URL(response.url()).pathname.endsWith(`/bff/agora/proposals/${proposalId}/actions`)) return false;
-        try { return record(response.request().postDataJSON()).action === "modify"; } catch { return false; }
-      });
-      await proposalCard.getByRole("button", { name: "Save new revision" }).click();
-      const response = await modifiedResponse;
-      expect(response.ok(), await response.text()).toBe(true);
-      canonical = { etag: response.headers().etag ?? "", proposal: record(data(await response.json())) };
-    } else {
-      test.info().annotations.push({
-        type: "governed-proposal-api-ui-split",
-        description: `Modify UI unavailable: ${await modify.getAttribute("title") ?? "no disabled reason"}`,
-      });
-      canonical = await actOnProposal(request, OPERATOR_TOKEN, proposalId, canonical.etag, {
-        action: "modify",
-        reason: "Hosted no-authority proposal revision proof",
-        proposed_value: { ...record(canonical.proposal.proposed_value), hosted_proof_note: topic },
-      });
-    }
-    expect(canonical.proposal.state).toBe("draft");
-    expect(canonical.proposal.execution_authority).toBe("none");
-
-    test.info().annotations.push({
-      type: "governed-proposal-api-ui-split",
-      description: "Validate uses the governed API because the card accepts only an authoritative validation artifact and does not synthesize one in the browser.",
-    });
-    canonical = await actOnProposal(request, OPERATOR_TOKEN, proposalId, canonical.etag, {
-      action: "validate",
-      reason: "Hosted bounded validation proof; no execution authority",
-      validation_result: { valid: true, status: "passed", errors: [], warnings: [] },
-    });
-    expect(canonical.proposal.state).toBe("validated");
-    expect(canonical.proposal.execution_authority).toBe("none");
-
-    canonical = await readProposal(request, OPERATOR_TOKEN, proposalId);
-    expect(canonical.proposal.state).toBe("validated");
-    expect(canonical.proposal.execution_authority).toBe("none");
-    expect(canonical.proposal.proposer).toBe(operatorId);
-    expect(Array.isArray(canonical.proposal.available_approval_decision_refs)).toBe(true);
-    expect(record(canonical.proposal.approval_decision_readiness).ready === true
-      || typeof record(canonical.proposal.approval_decision_readiness).reason === "string").toBe(true);
-
-    await page.reload();
-    const canonicalCard = page.getByTestId(`governed-proposal-${proposalId}`);
-    await expect(canonicalCard).toContainText(/revision/i, { timeout: 60_000 });
-    const approve = canonicalCard.getByRole("button", { name: "approve" });
-    await expect(approve).toBeDisabled();
-    await expect(canonicalCard.getByTestId("proposal-approval-disabled-reason")).toContainText(
-      /self-approval|authoritative|required|reviewer/i,
+    const measureCard = page.getByTestId(`recommended-measure-${measureId}`);
+    await expect(measureCard).toContainText(measureSha, { timeout: 60_000 });
+    const createResponse = page.waitForResponse((response) =>
+      new URL(response.url()).pathname.endsWith(`/recommended-measures/${encodeURIComponent(measureId)}/candidates`)
+      && response.request().method() === "POST",
     );
+    await measureCard.getByRole("button", { name: "Create governed candidate" }).click();
+    const createdHttp = await createResponse;
+    expect(createdHttp.ok(), await createdHttp.text()).toBe(true);
+    let detail = record(data(await createdHttp.json()));
+    let candidate = record(detail.candidate);
+    const proposalId = String(candidate.proposal_id ?? "");
+    expect(proposalId).not.toBe("");
+    expect(candidate.measure_sha256).toBe(measureSha);
+    expect(candidate.execution_authority).toBe("none");
+    expect(String(detail.etag ?? "")).toMatch(/^"[a-f0-9]{64}"$/);
+    expect(createdHttp.headers().etag).toBe(detail.etag);
+    const candidateCard = page.getByTestId(`candidate-${proposalId}`);
+    await expect(candidateCard).toBeVisible();
+
+    const decide = async (action: "modify" | "defer" | "accept_for_review" | "reject", button: string, proposed?: JsonRecord) => {
+      await candidateCard.getByLabel(new RegExp(`Decision reason for ${proposalId}`)).fill(`Hosted ${action} proof`);
+      if (proposed) {
+        await candidateCard.getByLabel(new RegExp(`Proposed value \\(JSON\\) for ${proposalId}`)).fill(JSON.stringify(proposed));
+      }
+      const responsePromise = page.waitForResponse((response) => {
+        if (new URL(response.url()).pathname !== `/bff/agora/proposals/${proposalId}/candidate-decisions`) return false;
+        if (response.request().method() !== "POST") return false;
+        return record(response.request().postDataJSON()).action === action;
+      });
+      await candidateCard.getByRole("button", { name: button, exact: true }).click();
+      const response = await responsePromise;
+      expect(response.ok(), await response.text()).toBe(true);
+      const requestBody = record(response.request().postDataJSON());
+      expect(requestBody.validation_result).toBeUndefined();
+      expect(response.request().headers()["if-match"]).toBe(detail.etag);
+      detail = record(data(await response.json()));
+      candidate = record(detail.candidate);
+      expect(candidate.execution_authority).toBe("none");
+      expect(String(detail.etag ?? "")).toMatch(/^"[a-f0-9]{64}"$/);
+    };
+
+    await decide("modify", "Modify", { ...record(candidate.proposed_value), hosted_bounded_risk: 0.015 });
+    await decide("defer", "Defer");
+    await decide("accept_for_review", "Accept for review");
+    expect(candidate.state).toBe("review_requested");
+    expect(record(detail.readiness).execution_authority).toBe("none");
+    expect(items({ data: { items: detail.formal_approval_receipts } })).toHaveLength(0);
+
+    const validationResponse = page.waitForResponse((response) =>
+      new URL(response.url()).pathname === `/bff/agora/proposals/${proposalId}/validations`
+      && response.request().method() === "POST",
+    );
+    await candidateCard.getByRole("button", { name: "Run authoritative validation" }).click();
+    const validatedHttp = await validationResponse;
+    expect(validatedHttp.ok(), await validatedHttp.text()).toBe(true);
+    detail = record(data(await validatedHttp.json()));
+    const validationReceipts = Array.isArray(detail.validation_receipts) ? detail.validation_receipts.map(record) : [];
+    expect(validationReceipts.length).toBeGreaterThan(0);
+    expect(validationReceipts.at(-1)?.authority).toBe("canonical_validation_service");
+
+    const readinessHttp = await request.get(`${BFF_BASE}/bff/agora/proposals/${proposalId}/review-readiness`, {
+      headers: headers(OPERATOR_TOKEN),
+    });
+    expect(readinessHttp.ok(), await readinessHttp.text()).toBe(true);
+    const readiness = record(data(await readinessHttp.json()));
+    expect(readiness.execution_authority).toBe("none");
+    expect(String(readiness.etag ?? "")).toMatch(/^"[a-f0-9]{64}"$/);
+
+    await decide("reject", "Reject");
+    expect(candidate.state).toBe("rejected");
+    await page.reload();
+    const reloaded = page.getByTestId(`candidate-${proposalId}`);
+    await expect(reloaded).toContainText("rejected", { timeout: 60_000 });
+    await expect(reloaded.getByTestId(`candidate-history-${proposalId}`)).toContainText("4 operator decision(s)");
+    await expect(reloaded).toContainText("formal approval: none");
   });
 
-  test("viewer sees a disabled reason and cannot produce an interaction POST", async ({ page, request }) => {
+  test("viewer sees a disabled reason and cannot produce an interaction POST @desktop-full", async ({ page, request }) => {
     test.skip(!VIEWER_TOKEN, "requires an explicit or RBAC-matrix viewer token");
     test.setTimeout(120_000);
     const unauthenticated = await request.get(`${BFF_BASE}/bff/me`, {
@@ -508,6 +558,7 @@ test.describe("Persona Detail → canonical Workshop cross-repo proof", () => {
     expect(viewerRoles).toContain("viewer");
     expect(viewerRoles).not.toContain("operator");
     expect(viewerRoles).not.toContain("admin");
+    const viewerSession = await assertHostedBearerSession(request, VIEWER_TOKEN, viewerMe, viewerRoles);
     const deniedEnsure = await request.post(`${BFF_BASE}/bff/agora/servant/ensure`, {
       headers: headers(VIEWER_TOKEN, { "Idempotency-Key": randomUUID() }),
       data: { display_name: "Viewer must not ensure a Persona", locale: "en-US", timezone: "UTC" },
@@ -521,15 +572,13 @@ test.describe("Persona Detail → canonical Workshop cross-repo proof", () => {
         browserInteractionPosts.push(path);
       }
     });
-    await installOidcDevLogin(page, {
-      goto: false,
-      pageBaseUrl: FE_BASE,
-      roles: viewerRoles,
-      tenantId: TENANT_ID,
+    await installVerifiedHostedProofSession(page, {
+      ...viewerSession,
       token: VIEWER_TOKEN,
+      minimumTtlSeconds: 240,
     });
     await openPersonaDetail(page, persona);
-    await expect(page.getByRole("button", { name: "Talk to" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: /^Talk with / })).toBeDisabled();
     await expect(page.getByTestId("persona-interaction-disabled-reason")).toContainText(/requires|disabled|eligible/i);
     expect(browserInteractionPosts).toEqual([]);
 
@@ -538,6 +587,29 @@ test.describe("Persona Detail → canonical Workshop cross-repo proof", () => {
       data: { context_refs: [{ type: "persona", id: persona.id }], environment: "paper" },
     });
     expect(denied.status()).toBe(403);
+    expect(browserInteractionPosts).toEqual([]);
+  });
+
+  test("mobile Persona detail remains usable without producing writes @mobile-basic", async ({ page, request }) => {
+    test.skip(!OPERATOR_TOKEN, "requires an operator token for hosted readback");
+    test.setTimeout(120_000);
+    const operatorSession = await assertOperatorSession(request, OPERATOR_TOKEN);
+    const persona = await matchEnsuredPersonaFromFleet(request, OPERATOR_TOKEN);
+    const browserInteractionPosts: string[] = [];
+    page.on("request", (browserRequest) => {
+      const path = new URL(browserRequest.url()).pathname;
+      if (browserRequest.method() === "POST" && path.startsWith("/bff/agora/interactions")) {
+        browserInteractionPosts.push(path);
+      }
+    });
+    await installVerifiedHostedProofSession(page, {
+      ...operatorSession,
+      token: OPERATOR_TOKEN,
+      minimumTtlSeconds: 240,
+    });
+    await openPersonaDetail(page, persona);
+    await expect(page.getByRole("button", { name: /^Talk with / })).toBeVisible();
+    await expect(page.getByRole("tab", { name: /trade journal/i })).toBeVisible();
     expect(browserInteractionPosts).toEqual([]);
   });
 });

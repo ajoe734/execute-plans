@@ -6,6 +6,7 @@ import { makeBffError } from "../errors";
 import { paths } from "../paths";
 import { liveWriteGated } from "../writeGate";
 import type { GovernedProposal } from "./governance";
+import type { ParticipantSnapshot } from "./dailyInteractions";
 
 async function requireInteractionWrite(): Promise<void> {
   if (await liveWriteGated()) return;
@@ -17,7 +18,7 @@ async function requireInteractionWrite(): Promise<void> {
 }
 
 export interface ContextRef {
-  type: "strategy" | "position" | "decision_event" | "journal_entry" | "persona" | "performance_window";
+  type: "strategy" | "position" | "decision_event" | "journal_entry" | "persona" | "performance_window" | "workshop" | "human_inbox_item";
   id: string;
   version_id?: string;
 }
@@ -26,6 +27,32 @@ export interface ResolveContextRequest {
   context_refs: ContextRef[];
   workshop_id?: string;
   environment?: "research" | "shadow" | "paper" | "canary" | "live";
+  source_route?: string;
+  focused_object?: { kind: string; id: string; version?: string | null };
+  evidence_cutoff?: string;
+  selected_persona_ids?: string[];
+  initial_mode?: "ask" | "challenge" | "compare" | "propose_action" | "reflect";
+  return_route?: string;
+}
+
+export interface ContextBinding {
+  binding_id: string;
+  workshop_id: string;
+  tenant_id: string;
+  source_route: string;
+  focused_object: { kind: string; id: string; version?: string | null };
+  context_refs: Array<{ kind: string; id: string; version?: string | null }>;
+  strategy_ref?: { strategy_id: string; version_id: string } | null;
+  decision_ref?: string | null;
+  journal_ref?: string | null;
+  position_risk_snapshot_refs?: string[];
+  evidence_cutoff: string;
+  selected_persona_ids: string[];
+  initial_mode: "ask" | "challenge" | "compare" | "propose_action" | "reflect";
+  return_route: string;
+  advice_environment: "research" | "shadow" | "paper" | "canary" | "live";
+  context_digest: string;
+  resolved_at: string;
 }
 
 export interface ResolveContextResponse {
@@ -35,6 +62,7 @@ export interface ResolveContextResponse {
   environment: string;
   verified: boolean;
   resolved_at: string;
+  context_binding: ContextBinding;
 }
 
 export interface EligibilityRequest {
@@ -51,6 +79,8 @@ export interface PersonaEligibility {
   reasons: string[];
   recommended: boolean;
   capability_snapshot_id?: string;
+  /** v1.9 runtime-owned immutable snapshot. The frontend must not fabricate it. */
+  participant_snapshot?: ParticipantSnapshot;
 }
 
 export interface EligibilityResponse {
@@ -98,21 +128,109 @@ export interface SubmitInteractionEnvelope {
   meta?: Record<string, unknown>;
 }
 
+function canonicalRequestJson(value: unknown): string {
+  if (value === null || typeof value !== "object") {
+    const encoded = JSON.stringify(value);
+    if (encoded === undefined) throw new Error("Context resolve request contains an unsupported value.");
+    return encoded;
+  }
+  if (Array.isArray(value)) return `[${value.map(canonicalRequestJson).join(",")}]`;
+  const record = value as Record<string, unknown>;
+  return `{${Object.keys(record)
+    .filter((key) => record[key] !== undefined)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${canonicalRequestJson(record[key])}`)
+    .join(",")}}`;
+}
+
+/**
+ * The resolver receipt is idempotent for the complete canonical request
+ * within one page-resolution session. Mount and pre-submit resolution replay
+ * the same receipt, while a fresh visit receives a fresh authoritative cutoff.
+ */
+export interface ResolveContextOptions {
+  resolutionSessionId?: string;
+}
+
+function resolutionSessionId(options?: ResolveContextOptions): string {
+  if (options?.resolutionSessionId) {
+    if (!/^[A-Za-z0-9._:-]+$/.test(options.resolutionSessionId)) {
+      throw new Error("Context resolution session identity must be ASCII-safe.");
+    }
+    return options.resolutionSessionId;
+  }
+  if (!globalThis.crypto?.randomUUID) {
+    throw new Error("Secure context resolution session identity support is unavailable in this browser.");
+  }
+  return globalThis.crypto.randomUUID();
+}
+
+export async function resolveContextIdempotencyKey(body: ResolveContextRequest, sessionId: string): Promise<string> {
+  if (!globalThis.crypto?.subtle) {
+    throw new Error("Secure context receipt identity support is unavailable in this browser.");
+  }
+  if (!/^[A-Za-z0-9._:-]+$/.test(sessionId)) {
+    throw new Error("Context resolution session identity must be ASCII-safe.");
+  }
+  const bytes = new TextEncoder().encode(canonicalRequestJson({
+    request: body,
+    resolution_session_id: sessionId,
+  }));
+  const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes);
+  const hex = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return `pint15-context-${hex}`;
+}
+
+const mockContextReceipts = new Map<string, ResolveContextEnvelope>();
+
 export const interaction = {
-  resolveContext: async (body: ResolveContextRequest): Promise<ResolveContextEnvelope> => {
+  resolveContext: async (body: ResolveContextRequest, options?: ResolveContextOptions): Promise<ResolveContextEnvelope> => {
     await requireInteractionWrite();
+    const idempotencyKey = await resolveContextIdempotencyKey(body, resolutionSessionId(options));
     const mockFn = async (): Promise<ResolveContextEnvelope> => {
-      const wid = body.workshop_id || `wksp-mock-${Math.random().toString(36).substr(2, 9)}`;
-      return {
+      const replay = mockContextReceipts.get(idempotencyKey);
+      if (replay) return replay;
+      const wid = body.workshop_id || `wksp-mock-${idempotencyKey.slice(-9)}`;
+      const resolvedAt = new Date().toISOString();
+      const sourceRoute = body.source_route ?? `/agora/strategy-workshop/${encodeURIComponent(wid)}`;
+      const focusedObject = body.focused_object ?? { kind: "workshop", id: wid };
+      const evidenceCutoff = body.evidence_cutoff ?? resolvedAt;
+      const selectedPersonaIds = body.selected_persona_ids ?? body.context_refs.filter((ref) => ref.type === "persona").map((ref) => ref.id);
+      const initialMode = body.initial_mode ?? "ask";
+      const returnRoute = body.return_route ?? sourceRoute;
+      const strategy = body.context_refs.find((ref) => ref.type === "strategy" && ref.version_id);
+      const contextDigest = "mock-digest-sha256";
+      const receipt: ResolveContextEnvelope = {
         data: {
           workshop_id: wid,
           context_refs: body.context_refs,
-          context_digest: "mock-digest-sha256",
+          context_digest: contextDigest,
           environment: body.environment || "research",
           verified: true,
-          resolved_at: new Date().toISOString(),
+          resolved_at: resolvedAt,
+          context_binding: {
+            binding_id: `binding-${wid}`,
+            workshop_id: wid,
+            tenant_id: "tenant-mock",
+            source_route: sourceRoute,
+            focused_object: focusedObject,
+            context_refs: body.context_refs.map((ref) => ({ kind: ref.type, id: ref.id, version: ref.version_id ?? null })),
+            strategy_ref: strategy?.version_id ? { strategy_id: strategy.id, version_id: strategy.version_id } : null,
+            decision_ref: body.context_refs.find((ref) => ref.type === "decision_event")?.id ?? null,
+            journal_ref: body.context_refs.find((ref) => ref.type === "journal_entry")?.id ?? null,
+            position_risk_snapshot_refs: body.context_refs.filter((ref) => ref.type === "position").map((ref) => ref.id),
+            evidence_cutoff: evidenceCutoff,
+            selected_persona_ids: selectedPersonaIds,
+            initial_mode: initialMode,
+            return_route: returnRoute,
+            advice_environment: body.environment ?? "research",
+            context_digest: contextDigest,
+            resolved_at: resolvedAt,
+          },
         },
       };
+      mockContextReceipts.set(idempotencyKey, receipt);
+      return receipt;
     };
 
     return withLiveOrMock<ResolveContextEnvelope>(
@@ -120,7 +238,7 @@ export const interaction = {
         method: "POST",
         path: paths.agoraInteractionsResolve(),
         body,
-        idempotencyKey: `idem-resolve-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        idempotencyKey,
       },
       mockFn,
     );

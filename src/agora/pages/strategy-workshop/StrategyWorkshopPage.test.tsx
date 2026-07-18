@@ -2,6 +2,7 @@ import React from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { StrategyWorkshop, WorkshopCard } from "@/lib/bff-v1/agora/types";
+import type { ResolveContextRequest } from "@/lib/bff-v1/agora/interaction";
 import type {
   WorkshopCard as WorkshopCardSchema,
   WorkshopCompletenessSnapshot,
@@ -26,14 +27,14 @@ vi.mock("@/lib/bff-v1/agora/workshops", () => ({
 
 vi.mock("@/lib/bff-v1/agora/interaction", () => ({
   interaction: {
-    resolveContext: vi.fn().mockResolvedValue({ data: { workshop_id: "ws-abc", context_refs: [{ type: "persona", id: "per_quant" }], verified: true } }),
+    resolveContext: vi.fn(),
     participants: vi.fn().mockResolvedValue({
       data: {
         included: [
-          { persona_id: "per_quant", display_name: "Quant Architect", eligible: true, reasons: [], recommended: true },
-          { persona_id: "per_macro", display_name: "Macro Strategist", eligible: true, reasons: [], recommended: true },
-          { persona_id: "per_risk", display_name: "Risk Officer", eligible: true, reasons: [], recommended: true },
-          { persona_id: "per_red", display_name: "Red Team", eligible: true, reasons: [], recommended: false },
+          { persona_id: "per_quant", display_name: "Quant Architect", eligible: true, reasons: [], recommended: true, participant_snapshot: { persona_id: "per_quant", persona_version: "1", session_persona_id: "session-quant", display_name: "Quant Architect", provider_agent_id: "agent-quant", workspace_id: "workspace-quant", environment_ceiling: "paper", capability_snapshot: ["persona_opinion"], captured_at: "2026-07-17T00:00:00Z" } },
+          { persona_id: "per_macro", display_name: "Macro Strategist", eligible: true, reasons: [], recommended: true, participant_snapshot: { persona_id: "per_macro", persona_version: "1", session_persona_id: "session-macro", display_name: "Macro Strategist", provider_agent_id: "agent-macro", workspace_id: "workspace-macro", environment_ceiling: "paper", capability_snapshot: ["persona_opinion"], captured_at: "2026-07-17T00:00:00Z" } },
+          { persona_id: "per_risk", display_name: "Risk Officer", eligible: true, reasons: [], recommended: true, participant_snapshot: { persona_id: "per_risk", persona_version: "1", session_persona_id: "session-risk", display_name: "Risk Officer", provider_agent_id: "agent-risk", workspace_id: "workspace-risk", environment_ceiling: "paper", capability_snapshot: ["persona_opinion"], captured_at: "2026-07-17T00:00:00Z" } },
+          { persona_id: "per_red", display_name: "Red Team", eligible: true, reasons: [], recommended: false, participant_snapshot: { persona_id: "per_red", persona_version: "1", session_persona_id: "session-red", display_name: "Red Team", provider_agent_id: "agent-red", workspace_id: "workspace-red", environment_ceiling: "paper", capability_snapshot: ["persona_opinion"], captured_at: "2026-07-17T00:00:00Z" } },
         ],
         excluded: [],
       },
@@ -41,6 +42,20 @@ vi.mock("@/lib/bff-v1/agora/interaction", () => ({
     submit: vi.fn().mockResolvedValue({ data: { execution_authority: "none" } }),
   },
 }));
+
+vi.mock("@/lib/bff-v1/agora/dailyInteractions", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@/lib/bff-v1/agora/dailyInteractions")>();
+  return {
+    ...original,
+    listDailyInteractions: vi.fn().mockResolvedValue([]),
+    submitDailyInteraction: vi.fn().mockResolvedValue({ interaction_id: "int-1", workshop_id: "ws-abc", status: "queued" }),
+  };
+});
+
+vi.mock("@/lib/bff-v1/headers", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@/lib/bff-v1/headers")>();
+  return { ...original, getAuthProvider: () => ({ getToken: () => null, getTenantId: () => "tenant-1" }) };
+});
 
 vi.mock("@/agora/useAgoraWriteAccess", () => ({
   useAgoraWriteAccess: () => ({
@@ -66,6 +81,7 @@ import { StrategyWorkshopPage } from "./StrategyWorkshopPage";
 import { pickerParticipants } from "@/agora/participantPicker";
 import * as workshopsModule from "@/lib/bff-v1/agora/workshops";
 import { interaction } from "@/lib/bff-v1/agora/interaction";
+import { listDailyInteractions, submitDailyInteraction } from "@/lib/bff-v1/agora/dailyInteractions";
 
 const MOCK_WORKSHOP = {
   spec_version: "1.0",
@@ -78,7 +94,47 @@ const MOCK_WORKSHOP = {
     title: "Momentum draft",
   },
   created_at: "2026-06-01T00:00:00Z",
+  metadata: { evidence_cutoff: "2026-07-17T00:00:00Z" },
 } satisfies StrategyWorkshop;
+
+function resolvedContextFixture(body: ResolveContextRequest) {
+  const workshopId = body.workshop_id ?? "ws-abc";
+  const contextRefs = body.context_refs ?? [];
+  const bindingRefs = contextRefs.map((ref: Record<string, unknown>) => ({
+    kind: ref.type, id: ref.id, version: ref.version_id ?? null,
+  }));
+  const strategy = bindingRefs.find((ref: Record<string, unknown>) => ref.kind === "strategy" && ref.version);
+  const resolvedAt = "2026-07-17T00:00:00Z";
+  return Promise.resolve({
+    data: {
+      workshop_id: workshopId,
+      context_refs: contextRefs,
+      context_digest: "server-context-digest",
+      environment: body.environment ?? "paper",
+      verified: true,
+      resolved_at: resolvedAt,
+      context_binding: {
+        binding_id: `binding-${workshopId}`,
+        workshop_id: workshopId,
+        tenant_id: "tenant-1",
+        source_route: body.source_route ?? `/agora/strategy-workshop/${workshopId}`,
+        focused_object: body.focused_object ?? { kind: "workshop", id: workshopId },
+        context_refs: bindingRefs,
+        strategy_ref: strategy ? { strategy_id: strategy.id, version_id: strategy.version } : null,
+        decision_ref: bindingRefs.find((ref: Record<string, unknown>) => ref.kind === "decision_event")?.id ?? null,
+        journal_ref: bindingRefs.find((ref: Record<string, unknown>) => ref.kind === "journal_entry")?.id ?? null,
+        position_risk_snapshot_refs: [],
+        evidence_cutoff: body.evidence_cutoff ?? resolvedAt,
+        selected_persona_ids: body.selected_persona_ids ?? [],
+        initial_mode: body.initial_mode ?? "ask",
+        return_route: body.return_route ?? `/agora/strategy-workshop/${workshopId}`,
+        advice_environment: body.environment ?? "paper",
+        context_digest: "server-context-digest",
+        resolved_at: resolvedAt,
+      },
+    },
+  });
+}
 
 const TRADING_ROOM_READY = {
   assessment_id: "ready-001",
@@ -162,6 +218,19 @@ describe("StrategyWorkshopPage", () => {
   });
 
   beforeEach(() => {
+    vi.mocked(interaction.resolveContext).mockImplementation(resolvedContextFixture);
+    vi.mocked(interaction.participants).mockResolvedValue({
+      data: {
+        included: [
+          { persona_id: "per_quant", display_name: "Quant Architect", eligible: true, reasons: [], recommended: true, participant_snapshot: { persona_id: "per_quant", persona_version: "1", session_persona_id: "session-quant", display_name: "Quant Architect", provider_agent_id: "agent-quant", workspace_id: "workspace-quant", environment_ceiling: "paper", capability_snapshot: ["persona_opinion"], captured_at: "2026-07-17T00:00:00Z" } },
+          { persona_id: "per_macro", display_name: "Macro Strategist", eligible: true, reasons: [], recommended: true, participant_snapshot: { persona_id: "per_macro", persona_version: "1", session_persona_id: "session-macro", display_name: "Macro Strategist", provider_agent_id: "agent-macro", workspace_id: "workspace-macro", environment_ceiling: "paper", capability_snapshot: ["persona_opinion"], captured_at: "2026-07-17T00:00:00Z" } },
+          { persona_id: "per_risk", display_name: "Risk Officer", eligible: true, reasons: [], recommended: true, participant_snapshot: { persona_id: "per_risk", persona_version: "1", session_persona_id: "session-risk", display_name: "Risk Officer", provider_agent_id: "agent-risk", workspace_id: "workspace-risk", environment_ceiling: "paper", capability_snapshot: ["persona_opinion"], captured_at: "2026-07-17T00:00:00Z" } },
+          { persona_id: "per_red", display_name: "Red Team", eligible: true, reasons: [], recommended: false, participant_snapshot: { persona_id: "per_red", persona_version: "1", session_persona_id: "session-red", display_name: "Red Team", provider_agent_id: "agent-red", workspace_id: "workspace-red", environment_ceiling: "paper", capability_snapshot: ["persona_opinion"], captured_at: "2026-07-17T00:00:00Z" } },
+        ],
+        excluded: [],
+      },
+    });
+    vi.mocked(submitDailyInteraction).mockResolvedValue({ interaction_id: "int-1", workshop_id: "ws-abc", status: "queued" } as never);
     vi.mocked(workshopsModule.listWorkshops).mockResolvedValue([]);
     vi.mocked(workshopsModule.getWorkshop).mockRejectedValue(new Error("No workshop fixture"));
     vi.mocked(workshopsModule.getWorkshopCompleteness).mockResolvedValue(null);
@@ -174,6 +243,7 @@ describe("StrategyWorkshopPage", () => {
       created_at: "2026-07-08T00:00:00Z",
     });
     vi.mocked(workshopsModule.openWorkshopStream).mockReturnValue(() => undefined);
+    vi.mocked(listDailyInteractions).mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -362,7 +432,7 @@ describe("StrategyWorkshopPage", () => {
     expect(readiness.getAttribute("data-mobile-pane-hidden")).toBe("false");
   });
 
-  it("keeps the hosted raw snapshot rail aligned with its latest completeness card", async () => {
+  it("keeps the hosted raw snapshot rail aligned without rendering legacy cards as Persona truth", async () => {
     vi.mocked(workshopsModule.getWorkshop).mockResolvedValue({
       ...MOCK_WORKSHOP,
       workshop_id: LIVE_COMPLETENESS_SNAPSHOT.workshop_id,
@@ -376,12 +446,8 @@ describe("StrategyWorkshopPage", () => {
     expect(screen.getByText("100%")).toBeDefined();
     expect(screen.queryByText("NaN%")).toBeNull();
     expect(screen.getByTestId("completeness-grade").textContent).toBe("complete");
-    expect(screen.getByText("Strategy completeness updated")).toBeDefined();
-    expect(screen.getByText("Overall grade").nextElementSibling?.textContent).toBe("complete");
-    expect(
-      screen.getAllByText("Research ready")
-        .some((label) => label.nextElementSibling?.textContent === "Yes"),
-    ).toBe(true);
+    expect(screen.queryByText("Strategy completeness updated")).toBeNull();
+    expect(screen.getByTestId("daily-interactions-empty")).toBeDefined();
   });
 
   it("refreshes the raw snapshot and derived card together after completeness events", async () => {
@@ -441,20 +507,82 @@ describe("StrategyWorkshopPage", () => {
     fireEvent.click(screen.getByTestId("servant-composer-submit"));
 
     await waitFor(() => {
-      expect(interaction.resolveContext).toHaveBeenCalledWith(expect.objectContaining({
-        workshop_id: "ws-abc",
-        context_refs: expect.arrayContaining([{ type: "persona", id: "per_quant" }]),
-      }));
+      expect(interaction.resolveContext).toHaveBeenCalledWith(
+        expect.objectContaining({
+          workshop_id: "ws-abc",
+          context_refs: expect.arrayContaining([
+            { type: "workshop", id: "ws-abc" },
+            { type: "persona", id: "per_quant" },
+          ]),
+        }),
+        expect.objectContaining({ resolutionSessionId: expect.stringMatching(/^[A-Za-z0-9._:-]+$/) }),
+      );
       expect(interaction.participants).toHaveBeenCalledWith(expect.objectContaining({ workshop_id: "ws-abc", mode: "ask" }));
-      expect(interaction.submit).toHaveBeenCalledWith(expect.objectContaining({
+      expect(submitDailyInteraction).toHaveBeenCalledWith(expect.objectContaining({
         workshop_id: "ws-abc",
-        mode: "ask",
-        topic: "What evidence is missing?",
-        participant_persona_ids: ["per_quant", "per_macro", "per_risk"],
+        human_request: expect.objectContaining({ mode: "ask", request_text: "What evidence is missing?" }),
+        context_snapshot: expect.objectContaining({ selected_persona_ids: ["per_quant", "per_macro", "per_risk"] }),
       }));
     });
-    expect(workshopsModule.listWorkshopCards).toHaveBeenCalledTimes(2);
+    const resolutionSessions = vi.mocked(interaction.resolveContext).mock.calls
+      .filter(([request]) => request.workshop_id === "ws-abc")
+      .map(([, options]) => options?.resolutionSessionId);
+    expect(resolutionSessions.length).toBeGreaterThanOrEqual(2);
+    expect(new Set(resolutionSessions).size).toBe(1);
     expect(workshopsModule.listWorkshopEvents).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    ["ask", "ask"],
+    ["challenge", "challenge"],
+    ["compare", "consult"],
+    ["propose_action", "propose_action"],
+    ["reflect", "reflect"],
+  ] as const)("submits a durable %s deep-link entry with authoritative context", async (mode, eligibilityMode) => {
+    vi.mocked(workshopsModule.getWorkshop).mockResolvedValue(MOCK_WORKSHOP);
+    vi.mocked(workshopsModule.listWorkshopCards).mockResolvedValue([]);
+    vi.mocked(workshopsModule.getWorkshopCompleteness).mockResolvedValue(null);
+    vi.mocked(workshopsModule.getWorkshopReadiness).mockResolvedValue(null);
+    render(<StrategyWorkshopPage
+      entry={{
+        mode,
+        participantIds: ["per_quant"],
+        picker: mode === "compare" ? "recommended" : "named",
+        returnTo: "/management/personas/per_quant",
+        source: { kind: "persona", id: "per_quant" },
+        targetStrategy: mode === "propose_action" ? { id: "strategy-a", version: "spec-v3" } : undefined,
+        environment: "research",
+        evidenceCutoff: "2026-07-17T01:02:03Z",
+      }}
+      workshopId="ws-abc"
+    />);
+
+    const input = await screen.findByTestId("servant-composer-input");
+    await waitFor(() => expect(input).not.toBeDisabled());
+    fireEvent.change(input, { target: { value: `Run ${mode} from Persona Detail` } });
+    fireEvent.click(screen.getByTestId("servant-composer-submit"));
+
+    await waitFor(() => expect(submitDailyInteraction).toHaveBeenCalledWith(expect.objectContaining({
+      human_request: expect.objectContaining({ mode }),
+      context_snapshot: expect.objectContaining({
+        evidence_cutoff: "2026-07-17T01:02:03Z",
+        return_route: "/management/personas/per_quant",
+        selected_persona_ids: mode === "compare" ? ["per_quant", "per_macro"] : ["per_quant"],
+      }),
+    })));
+    expect(interaction.participants).toHaveBeenCalledWith(expect.objectContaining({
+      environment: "research",
+      mode: eligibilityMode,
+    }));
+    if (mode === "propose_action") {
+      expect(interaction.resolveContext).toHaveBeenCalledWith(
+        expect.objectContaining({
+          context_refs: expect.arrayContaining([{ type: "strategy", id: "strategy-a", version_id: "spec-v3" }]),
+          environment: "research",
+        }),
+        expect.objectContaining({ resolutionSessionId: expect.any(String) }),
+      );
+    }
   });
 
   it("gates pointer and keyboard submission until the canonical Workshop is loaded", async () => {
@@ -477,7 +605,7 @@ describe("StrategyWorkshopPage", () => {
     fireEvent.click(submit);
     fireEvent.keyDown(input, { ctrlKey: true, key: "Enter" });
     expect(interaction.resolveContext).not.toHaveBeenCalled();
-    expect(interaction.submit).not.toHaveBeenCalled();
+    expect(submitDailyInteraction).not.toHaveBeenCalled();
 
     await act(async () => {
       resolveWorkshop(MOCK_WORKSHOP);
@@ -490,10 +618,10 @@ describe("StrategyWorkshopPage", () => {
     await waitFor(() => expect(submit).toBeEnabled());
     fireEvent.keyDown(input, { ctrlKey: true, key: "Enter" });
 
-    await waitFor(() => expect(interaction.submit).toHaveBeenCalledWith(expect.objectContaining({
+    await waitFor(() => expect(submitDailyInteraction).toHaveBeenCalledWith(expect.objectContaining({
       workshop_id: "ws-abc",
-      topic: "Submit only after the Workshop is ready",
-      participant_persona_ids: ["per_quant"],
+      human_request: expect.objectContaining({ request_text: "Submit only after the Workshop is ready" }),
+      context_snapshot: expect.objectContaining({ selected_persona_ids: ["per_quant"] }),
     })));
   });
 
@@ -505,28 +633,23 @@ describe("StrategyWorkshopPage", () => {
       selected_version_id: "workshop-version-link-4",
     } as StrategyWorkshop;
     vi.mocked(workshopsModule.getWorkshop).mockResolvedValue(liveSession);
-    vi.mocked(interaction.resolveContext).mockImplementationOnce(async (body) => ({
-      data: {
-        workshop_id: "ws-abc",
-        context_refs: body.context_refs,
-        verified: true,
-      },
-    } as Awaited<ReturnType<typeof interaction.resolveContext>>));
-
     render(<StrategyWorkshopPage workshopId="ws-abc" />);
     fireEvent.change(await screen.findByTestId("servant-composer-input"), {
       target: { value: "Propose a bounded candidate measure" },
     });
     fireEvent.click(screen.getByTestId("servant-composer-submit"));
 
-    await waitFor(() => expect(interaction.resolveContext).toHaveBeenCalledWith(expect.objectContaining({
-      workshop_id: "ws-abc",
-      context_refs: expect.arrayContaining([{
-        type: "strategy",
-        id: "strategy-stable-9",
-        version_id: "strategy-registry-9",
-      }]),
-    })));
+    await waitFor(() => expect(interaction.resolveContext).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workshop_id: "ws-abc",
+        context_refs: expect.arrayContaining([{
+          type: "strategy",
+          id: "strategy-stable-9",
+          version_id: "strategy-registry-9",
+        }]),
+      }),
+      expect.objectContaining({ resolutionSessionId: expect.any(String) }),
+    ));
   });
 
   it("fails closed instead of treating a Registry version as a stable strategy id", async () => {
@@ -569,9 +692,7 @@ describe("StrategyWorkshopPage", () => {
     vi.mocked(workshopsModule.listWorkshopCards).mockResolvedValue([]);
     vi.mocked(workshopsModule.getWorkshopCompleteness).mockResolvedValue(null);
     vi.mocked(workshopsModule.getWorkshopReadiness).mockResolvedValue(null);
-    vi.mocked(interaction.submit).mockResolvedValueOnce({
-      data: { interaction_id: "interaction-unsafe", execution_authority: "orders" },
-    } as never);
+    vi.mocked(submitDailyInteraction).mockRejectedValueOnce(new Error("The interaction response violated the no-execution authority boundary."));
 
     render(<StrategyWorkshopPage workshopId="ws-abc" />);
     fireEvent.change(await screen.findByTestId("servant-composer-input"), {
@@ -679,6 +800,9 @@ describe("StrategyWorkshopPage", () => {
     expect(screen.getByTestId("mode-selector")).toBeDefined();
     expect(screen.getByTestId("participant-picker")).toBeDefined();
     expect(screen.getByTestId("eligibility-explanation")).toBeDefined();
+    expect(screen.getByLabelText("Interaction Mode")).toBe(screen.getByTestId("mode-selector"));
+    expect(screen.getByLabelText("Participants")).toBe(screen.getByTestId("participant-picker"));
+    expect(screen.getByLabelText("Persona interaction request")).toBe(screen.getByTestId("servant-composer-input"));
   });
 
   it("keeps the live session renderable when a legacy workshop omits its subject", async () => {
@@ -696,7 +820,7 @@ describe("StrategyWorkshopPage", () => {
     render(<StrategyWorkshopPage workshopId="ws-legacy" />);
 
     const contextBar = await screen.findByTestId("context-bar");
-    expect(contextBar.textContent).toContain("Subject: none (none)");
+    expect(contextBar.textContent).toContain("Focused object: workshop:ws-legacy");
     expect(screen.getByTestId("strategy-workshop-page-session")).toBeDefined();
   });
 
@@ -708,7 +832,7 @@ describe("StrategyWorkshopPage", () => {
     expect(await screen.findByTestId("connected-governed-proposal")).toHaveTextContent("prop-pint-010");
   });
 
-  it("renders warning banners when stale/degraded/denied triggers are toggled", async () => {
+  it("renders provider degradation only from authoritative daily readback, with no simulator toggles", async () => {
     vi.mocked(workshopsModule.getWorkshop).mockResolvedValue({
       spec_version: "1.0",
       workshop_id: "ws-abc",
@@ -721,23 +845,20 @@ describe("StrategyWorkshopPage", () => {
     vi.mocked(workshopsModule.getWorkshopCompleteness).mockResolvedValue(null);
     vi.mocked(workshopsModule.getWorkshopReadiness).mockResolvedValue(null);
 
+    vi.mocked(listDailyInteractions).mockResolvedValueOnce([{
+      interaction_id: "degraded-1", workshop_id: "ws-abc", status: "degraded",
+      human_request: { mode: "ask", request_text: "Question", submitted_at: "2026-07-17T00:00:00Z" },
+      participants: [], provider_invocations: [], opinions: [], synthesis: null,
+      missing_participant_ids: [], degraded_participant_ids: [], candidate_proposal_links: [], audit_refs: [],
+    } as never]);
     render(<StrategyWorkshopPage workshopId="ws-abc" />);
-    
-    // Simulate user clicking on state toggle buttons using fireEvent and findBy
-    const staleBtn = screen.getByTestId("toggle-stale-btn");
-    fireEvent.click(staleBtn);
-    expect(await screen.findByTestId("warning-stale")).toBeDefined();
-
-    const degradedBtn = screen.getByTestId("toggle-degraded-btn");
-    fireEvent.click(degradedBtn);
     expect(await screen.findByTestId("warning-degraded")).toBeDefined();
-
-    const deniedBtn = screen.getByTestId("toggle-denied-btn");
-    fireEvent.click(deniedBtn);
-    expect(await screen.findByTestId("warning-denied")).toBeDefined();
+    expect(screen.queryByTestId("toggle-stale-btn")).toBeNull();
+    expect(screen.queryByTestId("toggle-degraded-btn")).toBeNull();
+    expect(screen.queryByTestId("toggle-denied-btn")).toBeNull();
   });
 
-  it("renders independent persona opinions and debates in cards list", async () => {
+  it("does not present legacy workshop Persona cards as v1.9 provider truth", async () => {
     vi.mocked(workshopsModule.getWorkshop).mockResolvedValue({
       spec_version: "1.0",
       workshop_id: "ws-abc",
@@ -798,16 +919,9 @@ describe("StrategyWorkshopPage", () => {
 
     render(<StrategyWorkshopPage workshopId="ws-abc" />);
     
-    // Verify custom cards exist
-    await screen.findByTestId("workshop-card-card-opinion-1");
-    expect(screen.getByText("Opinion Stance:")).toBeDefined();
-    expect(screen.getByText("Approve (贊成)")).toBeDefined();
-    expect(screen.getByText("The backtest Sharpe is high and meets criteria.")).toBeDefined();
-
-    expect(screen.getByTestId("workshop-card-card-debate-1")).toBeDefined();
-    expect(screen.getByText("Quant Architect")).toBeDefined();
-    expect(screen.getByText("Macro Strategist")).toBeDefined();
-    expect(screen.getByText("Parameters are robust.")).toBeDefined();
+    expect(await screen.findByTestId("daily-interactions-empty")).toBeDefined();
+    expect(screen.queryByTestId("workshop-card-card-opinion-1")).toBeNull();
+    expect(screen.queryByTestId("workshop-card-card-debate-1")).toBeNull();
   });
 
   it("proves no stale rail/gates/CTA/handoff when switching from A-ready to B-null/error", async () => {
@@ -882,6 +996,6 @@ describe("StrategyWorkshopPage", () => {
     const header = await screen.findByTestId("strategy-workshop-runtime-header");
     expect(header).toBeDefined();
     const contextBar = screen.getByTestId("context-bar");
-    expect(contextBar.textContent).toContain("Subject: none");
+    expect(contextBar.textContent).toContain("Focused object: workshop:ws-no-subject");
   });
 });

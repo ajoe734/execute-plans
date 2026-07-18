@@ -11,7 +11,7 @@ import { commandReceiptDescription } from "@/lib/bff-v1/commandReceipt";
 import { useT } from "@/platform/hooks";
 import { usePermissions } from "@/lib/usePermissions";
 import type { Persona, Strategy, AuditEvent } from "@/lib/bff/types";
-import { Pause, Edit, Beaker, Play, Lock, Archive, Inbox, MessageSquare, GitCompare } from "lucide-react";
+import { Pause, Edit, Beaker, Play, Lock, Archive, Inbox, MessageSquare, GitCompare, Lightbulb, History } from "lucide-react";
 import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
 import { DataTable } from "@/platform/components/DataTable";
 import { StatusBadge } from "@/platform/components/StatusBadge";
@@ -43,11 +43,15 @@ export const personaHumanInboxUrl = (personaId: string) =>
 
 export function personaWorkshopEntryUrl(input: {
   workshopId: string;
-  mode: "ask" | "challenge" | "consult";
+  mode: "ask" | "challenge" | "compare" | "propose_action" | "reflect";
   participantIds: string[];
   picker: "named" | "recommended" | "eligible-one" | "eligible-two" | "eligible-three";
   returnTo: string;
   returnLabel: string;
+  source: { kind: "persona"; id: string; version?: string };
+  targetStrategy?: { id: string; version: string };
+  environment: "research" | "paper";
+  evidenceCutoff: string;
 }): string {
   const params = new URLSearchParams({
     mode: input.mode,
@@ -55,8 +59,34 @@ export function personaWorkshopEntryUrl(input: {
     picker: input.picker,
     return_to: input.returnTo,
     return_label: input.returnLabel,
+    source_kind: input.source.kind,
+    source_id: input.source.id,
+    advice_environment: input.environment,
+    evidence_cutoff: input.evidenceCutoff,
   });
+  if (input.source.version) params.set("source_version", input.source.version);
+  if (input.targetStrategy) {
+    params.set("target_strategy_id", input.targetStrategy.id);
+    params.set("target_strategy_version", input.targetStrategy.version);
+  }
   return `/agora/strategy-workshop/${encodeURIComponent(input.workshopId)}?${params.toString()}`;
+}
+
+interface ImmutableStrategyTarget {
+  id: string;
+  name: string;
+  version: string;
+}
+
+function immutableStrategyTarget(strategy: Strategy): ImmutableStrategyTarget | null {
+  const record = strategy as Strategy & Record<string, unknown>;
+  const version = [
+    record.strategy_spec_registry_id,
+    record.active_strategy_spec_registry_id,
+    record.version_id,
+    record.version,
+  ].find((value): value is string => typeof value === "string" && Boolean(value.trim()));
+  return version ? { id: strategy.id, name: strategy.name, version } : null;
 }
 
 function selectPersonaEntryParticipants(
@@ -84,6 +114,7 @@ export const PersonaDetail = () => {
   const [retireOpen, setRetireOpen] = useState(false);
   const [interactionBusy, setInteractionBusy] = useState<string | null>(null);
   const [interactionError, setInteractionError] = useState<string | null>(null);
+  const [proposalStrategyKey, setProposalStrategyKey] = useState("");
   const { can } = usePermissions();
   const writeAccess = useAgoraWriteAccess();
   const canRetire = can("archive");
@@ -146,40 +177,97 @@ export const PersonaDetail = () => {
   const personaReceipt = (receipt: Record<string, unknown>, action: string) =>
     commandReceiptDescription(receipt, { fallback: `Persona ${p.id} · ${action}` });
 
-  const openPersonaInteraction = async (mode: "ask" | "challenge" | "consult", compare = false) => {
+  const openPersonaInteraction = async (mode: "ask" | "challenge" | "compare" | "propose_action" | "reflect") => {
     if (!writeAccess.interactionAllowed) {
       setInteractionError(writeAccess.interactionDisabledReason ?? "Persona interaction is not permitted.");
       return;
     }
-    setInteractionBusy(compare ? "compare" : mode);
+    setInteractionBusy(mode);
     setInteractionError(null);
     try {
-      const contextRefs = [{ type: "persona" as const, id: p.id }];
-      const resolved = await interaction.resolveContext({ context_refs: contextRefs, environment: "paper" });
-      if (!resolved.data.verified) throw new Error("The canonical Workshop context was not verified.");
+      const strategyTargets = routed.map(immutableStrategyTarget).filter((item): item is ImmutableStrategyTarget => Boolean(item));
+      const targetStrategy = mode === "propose_action"
+        ? strategyTargets.find((item) => `${item.id}:${item.version}` === proposalStrategyKey)
+        : undefined;
+      if (mode === "propose_action" && !targetStrategy) {
+        throw new Error("Select a routed strategy with an immutable version before proposing a measure.");
+      }
+      const contextRefs = [
+        { type: "persona" as const, id: p.id },
+        ...(targetStrategy ? [{ type: "strategy" as const, id: targetStrategy.id, version_id: targetStrategy.version }] : []),
+      ];
+      const returnTo = `${location.pathname}${location.search}`;
+      const resolved = await interaction.resolveContext({
+        context_refs: contextRefs,
+        environment: "research",
+        source_route: returnTo,
+        focused_object: { kind: "persona", id: p.id },
+        evidence_cutoff: p.updatedAt,
+        selected_persona_ids: [p.id],
+        initial_mode: mode,
+        return_route: returnTo,
+      });
+      const initialBinding = resolved.data.context_binding;
+      if (!resolved.data.verified || !initialBinding || initialBinding.workshop_id !== resolved.data.workshop_id) {
+        throw new Error("The canonical Workshop context was not verified.");
+      }
       const eligibility = await interaction.participants({
-        workshop_id: resolved.data.workshop_id,
-        mode,
-        environment: "paper",
+        workshop_id: initialBinding.workshop_id,
+        mode: mode === "compare" ? "consult" : mode,
+        environment: initialBinding.advice_environment,
         required_capability: "persona_opinion",
       });
-      const participantIds = selectPersonaEntryParticipants(p.id, eligibility.data, compare);
+      const participantIds = selectPersonaEntryParticipants(p.id, eligibility.data, mode === "compare");
       if (participantIds.length === 0) {
         const excluded = eligibility.data.excluded.find((item) => item.persona_id === p.id);
         throw new Error(excluded
           ? `This Persona is not eligible: ${excluded.reasons.join(", ")}.`
-          : compare
+          : mode === "compare"
             ? "No second eligible Persona is available for comparison."
             : "This Persona is not available in the canonical eligibility snapshot.");
       }
-      const returnTo = `${location.pathname}${location.search}`;
+      const rebound = await interaction.resolveContext({
+        workshop_id: initialBinding.workshop_id,
+        context_refs: contextRefs,
+        environment: initialBinding.advice_environment,
+        source_route: initialBinding.source_route,
+        focused_object: initialBinding.focused_object,
+        evidence_cutoff: initialBinding.evidence_cutoff,
+        selected_persona_ids: participantIds,
+        initial_mode: mode,
+        return_route: initialBinding.return_route,
+      });
+      const binding = rebound.data.context_binding;
+      if (!rebound.data.verified || !binding
+        || binding.focused_object.kind !== "persona" || binding.focused_object.id !== p.id
+        || binding.selected_persona_ids.length !== participantIds.length
+        || binding.selected_persona_ids.some((id, index) => id !== participantIds[index])) {
+        throw new Error("The resolver changed the Persona interaction binding.");
+      }
+      if (binding.advice_environment !== "research" && binding.advice_environment !== "paper") {
+        throw new Error(`The BFF resolved an unsupported Persona advice environment: ${binding.advice_environment}.`);
+      }
+      if (!binding.evidence_cutoff || Number.isNaN(Date.parse(binding.evidence_cutoff))) {
+        throw new Error("The BFF did not return an authoritative context resolution cutoff.");
+      }
+      if (targetStrategy && (binding.strategy_ref?.strategy_id !== targetStrategy.id
+        || binding.strategy_ref.version_id !== targetStrategy.version
+        || binding.context_refs.filter((ref) => ref.kind === "strategy").length !== 1)) {
+        throw new Error("The resolver changed or ambiguously expanded the selected strategy id/version.");
+      }
       navigate(personaWorkshopEntryUrl({
-        workshopId: resolved.data.workshop_id,
+        workshopId: binding.workshop_id,
         mode,
         participantIds,
-        picker: "named",
-        returnTo,
+        picker: mode === "compare" ? "recommended" : "named",
+        returnTo: binding.return_route,
         returnLabel: `Persona ${p.name}`,
+        source: { kind: "persona", id: binding.focused_object.id, version: binding.focused_object.version ?? undefined },
+        targetStrategy: binding.strategy_ref
+          ? { id: binding.strategy_ref.strategy_id, version: binding.strategy_ref.version_id }
+          : undefined,
+        environment: binding.advice_environment,
+        evidenceCutoff: binding.evidence_cutoff,
       }));
     } catch (error) {
       setInteractionError(error instanceof Error ? error.message : "Unable to open the canonical Workshop.");
@@ -188,6 +276,10 @@ export const PersonaDetail = () => {
     }
   };
 
+  const immutableStrategyTargets = routed
+    .map(immutableStrategyTarget)
+    .filter((item): item is ImmutableStrategyTarget => Boolean(item));
+
   return (
     <>
       <ObjectDetailLayout
@@ -195,14 +287,35 @@ export const PersonaDetail = () => {
         subtitle={`${p.archetype} · ${p.id}`}
         actions={
           <>
-            <Button disabled={interactionBusy !== null || !writeAccess.interactionAllowed} title={writeAccess.interactionDisabledReason ?? undefined} onClick={() => void openPersonaInteraction("ask")} size="sm" variant="outline">
-              <MessageSquare className="h-4 w-4 mr-1" />Talk to
+            <Button aria-label={`Talk with ${p.name}`} disabled={interactionBusy !== null || !writeAccess.interactionAllowed} title={writeAccess.interactionDisabledReason ?? undefined} onClick={() => void openPersonaInteraction("ask")} size="sm" variant="outline">
+              <MessageSquare className="h-4 w-4 mr-1" />Talk
             </Button>
-            <Button disabled={interactionBusy !== null || !writeAccess.interactionAllowed} title={writeAccess.interactionDisabledReason ?? undefined} onClick={() => void openPersonaInteraction("challenge")} size="sm" variant="outline">
-              <MessageSquare className="h-4 w-4 mr-1" />Ask to review
+            <Button aria-label={`Challenge ${p.name}`} disabled={interactionBusy !== null || !writeAccess.interactionAllowed} title={writeAccess.interactionDisabledReason ?? undefined} onClick={() => void openPersonaInteraction("challenge")} size="sm" variant="outline">
+              <MessageSquare className="h-4 w-4 mr-1" />Challenge
             </Button>
-            <Button disabled={interactionBusy !== null || !writeAccess.interactionAllowed} title={writeAccess.interactionDisabledReason ?? undefined} onClick={() => void openPersonaInteraction("consult", true)} size="sm" variant="outline">
+            <Button aria-label={`Compare ${p.name} with another Persona`} disabled={interactionBusy !== null || !writeAccess.interactionAllowed} title={writeAccess.interactionDisabledReason ?? undefined} onClick={() => void openPersonaInteraction("compare")} size="sm" variant="outline">
               <GitCompare className="h-4 w-4 mr-1" />Compare
+            </Button>
+            <Button aria-label={`Ask ${p.name} for a candidate measure`} disabled={interactionBusy !== null || !writeAccess.interactionAllowed || !proposalStrategyKey} title={!proposalStrategyKey ? "Select an immutable strategy target below." : writeAccess.interactionDisabledReason ?? undefined} onClick={() => void openPersonaInteraction("propose_action")} size="sm" variant="outline">
+              <Lightbulb className="h-4 w-4 mr-1" />Propose
+            </Button>
+            <label className="sr-only" htmlFor="persona-proposal-strategy">Strategy target for proposal</label>
+            <select
+              aria-label="Strategy target for Persona proposal"
+              className="h-9 max-w-64 rounded-md border border-input bg-background px-2 text-xs"
+              id="persona-proposal-strategy"
+              onChange={(event) => setProposalStrategyKey(event.target.value)}
+              value={proposalStrategyKey}
+            >
+              <option value="">Select strategy for Propose</option>
+              {immutableStrategyTargets.map((strategy) => (
+                <option key={`${strategy.id}:${strategy.version}`} value={`${strategy.id}:${strategy.version}`}>
+                  {strategy.name} · {strategy.version}
+                </option>
+              ))}
+            </select>
+            <Button aria-label={`Reflect with ${p.name} on thesis versus outcome`} disabled={interactionBusy !== null || !writeAccess.interactionAllowed} title={writeAccess.interactionDisabledReason ?? undefined} onClick={() => void openPersonaInteraction("reflect")} size="sm" variant="outline">
+              <History className="h-4 w-4 mr-1" />Reflect
             </Button>
             <Button asChild size="sm" variant="outline">
               <Link to={personaHumanInboxUrl(p.id)}>
