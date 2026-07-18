@@ -568,9 +568,11 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
   const [excludedParticipants, setExcludedParticipants] = useState<PersonaEligibility[]>([]);
   const [eligibilityLoading, setEligibilityLoading] = useState(false);
   const [eligibilityError, setEligibilityError] = useState<string | null>(null);
+  const eligibilityGenerationRef = useRef(0);
   const [resolvedContext, setResolvedContext] = useState<ResolvedInteractionContext | null>(null);
   const [contextResolving, setContextResolving] = useState(false);
   const [contextError, setContextError] = useState<string | null>(null);
+  const [contextRetryGeneration, setContextRetryGeneration] = useState(0);
   
   const [cardState, dispatch] = useReducer(cardReducer, {
     cards: [],
@@ -650,6 +652,7 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
     picker: WorkshopParticipantPicker = pickerSelectionType,
   ) => {
     if (!workshop) return;
+    const generation = ++eligibilityGenerationRef.current;
     setEligibilityLoading(true);
     setEligibilityError(null);
     try {
@@ -659,6 +662,7 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
         environment: normalizedEnvironment(workshop, entry),
         required_capability: "persona_opinion",
       });
+      if (generation !== eligibilityGenerationRef.current) return;
       setEligibleParticipants(result.data.included);
       setExcludedParticipants(result.data.excluded);
       const picked = mode === "compare"
@@ -666,12 +670,13 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
         : pickerParticipants(picker, result.data.included, preferred);
       setSelectedParticipants(picked);
     } catch (error) {
+      if (generation !== eligibilityGenerationRef.current) return;
       setEligibleParticipants([]);
       setExcludedParticipants([]);
       setSelectedParticipants([]);
       setEligibilityError(error instanceof Error ? error.message : "Participant eligibility is unavailable.");
     } finally {
-      setEligibilityLoading(false);
+      if (generation === eligibilityGenerationRef.current) setEligibilityLoading(false);
     }
   }, [entry, pickerSelectionType, selectedParticipants, workshop, workshopId]);
 
@@ -722,7 +727,7 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
       })
       .finally(() => { if (!cancelled) setContextResolving(false); });
     return () => { cancelled = true; };
-  }, [contextResolutionSessionId, entry, selectedMode, selectedParticipants, workshop, workshopId]);
+  }, [contextResolutionSessionId, contextRetryGeneration, entry, selectedMode, selectedParticipants, workshop, workshopId]);
 
   // SSE stream subscription — refreshes completeness/readiness on relevant events
   const refreshCompleteness = useCallback(() => {
@@ -947,20 +952,29 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
     ],
   );
 
-  const composerInputDisabled = !workshop
-    || sessionLoading
-    || sendLoading
-    || contextResolving
-    || !resolvedContext
-    || Boolean(contextError)
+  const composerInputDisabled = sendLoading
     || !writeAccess.interactionAllowed
-    || dailyRuntimeState !== "ready"
-    || workshop.status === "concluded";
-  const canSubmitInteraction = !composerInputDisabled
-    && !eligibilityLoading
-    && Boolean(composerValue.trim())
-    && selectedParticipants.length > 0
-    && (selectedMode !== "compare" || (selectedParticipants.length === 2 && new Set(selectedParticipants).size === 2));
+    || workshop?.status === "concluded";
+  const composerSubmitBlock = (() => {
+    if (!writeAccess.interactionAllowed) return { code: "write_access_denied", message: writeAccess.interactionDisabledReason ?? "Persona interaction access is restricted." };
+    if (workshop?.status === "concluded") return { code: "workshop_concluded", message: "This Workshop is concluded." };
+    if (!workshop) return { code: "workshop_loading", message: "Loading the canonical Workshop before submission." };
+    if (sendLoading) return { code: "submission_active", message: "Submitting the current Persona interaction." };
+    if (eligibilityLoading) return { code: "eligibility_loading", message: "Checking canonical Persona eligibility." };
+    if (eligibilityError) return { code: "eligibility_error", message: `Persona eligibility is unavailable: ${eligibilityError}` };
+    if (selectedParticipants.length === 0) return { code: "participants_empty", message: "Choose at least one eligible Persona before submitting." };
+    if (contextResolving) return { code: "context_resolving", message: "Resolving authoritative Workshop context." };
+    if (contextError) return { code: "context_error", message: `Authoritative context is unavailable: ${contextError}` };
+    if (!resolvedContext) return { code: "context_pending", message: "Waiting for authoritative Workshop context." };
+    if (dailyRuntimeState === "loading") return { code: "daily_runtime_loading", message: "Checking the authoritative daily Persona runtime." };
+    if (dailyRuntimeState !== "ready") return { code: "daily_runtime_unavailable", message: dailyRuntimeMessage ?? "The authoritative daily Persona runtime is unavailable." };
+    if (selectedMode === "compare" && (selectedParticipants.length !== 2 || new Set(selectedParticipants).size !== 2)) {
+      return { code: "compare_participants_invalid", message: "Compare requires exactly two distinct eligible Personas." };
+    }
+    if (!composerValue.trim()) return { code: "draft_empty", message: "Enter a Persona interaction request before submitting." };
+    return null;
+  })();
+  const canSubmitInteraction = composerSubmitBlock === null;
 
   return (
     <div
@@ -1324,7 +1338,7 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
               data-testid="servant-composer-input"
               disabled={composerInputDisabled}
               id="daily-interaction-request"
-              placeholder={!writeAccess.interactionAllowed ? "Access restricted..." : dailyRuntimeState !== "ready" ? "Daily Persona runtime unavailable" : "描述你的問題，Persona 將獨立回覆… (Ctrl+Enter 送出)"}
+              placeholder={!writeAccess.interactionAllowed ? "Access restricted..." : "描述你的問題，Persona 將獨立回覆… (Ctrl+Enter 送出)"}
               rows={3}
               value={composerValue}
               onChange={(e) => setComposerValue(e.target.value)}
@@ -1351,6 +1365,29 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
               送出
             </Button>
           </div>
+          {composerSubmitBlock ? (
+            <div
+              className="flex items-center justify-between gap-3 rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs font-semibold text-amber-800"
+              data-reason-code={composerSubmitBlock.code}
+              data-testid="servant-composer-submit-disabled-reason"
+              role="status"
+            >
+              <span>{composerSubmitBlock.message}</span>
+              {composerSubmitBlock.code === "context_error" ? (
+                <button
+                  className="shrink-0 underline"
+                  data-testid="servant-composer-context-retry"
+                  onClick={() => {
+                    setContextError(null);
+                    setContextRetryGeneration((generation) => generation + 1);
+                  }}
+                  type="button"
+                >
+                  Retry context
+                </button>
+              ) : null}
+            </div>
+          ) : null}
           {writeAccess.interactionDisabledReason ? (
             <p className="text-xs font-semibold text-amber-700" data-testid="interaction-disabled-reason">
               {writeAccess.interactionDisabledReason}
