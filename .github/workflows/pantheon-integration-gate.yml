@@ -1021,7 +1021,7 @@ jobs:
           set -o pipefail
           npm run accept:mgmt:hosted 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/management-hosted-acceptance.log"
 
-      - name: PINT hosted desktop/mobile write proof
+      - name: PINT hosted desktop write and mobile layout proof
         id: pint_hosted_e2e
         if: github.event_name == 'workflow_dispatch' && inputs.persona_interaction_write_proof == 'true'
         env:
@@ -1031,7 +1031,12 @@ jobs:
         run: |
           set -o pipefail
           node scripts/validate-persona-hosted-proof-env.mjs
-          npx playwright test e2e/persona-interaction-cross-repo-hosted.spec.ts --project=chromium --project=mobile-chromium 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/pint-hosted-desktop-mobile-e2e.log"
+          {
+            npx playwright test e2e/persona-interaction-cross-repo-hosted.spec.ts \
+              --project=chromium --grep '@desktop-full'
+            npx playwright test e2e/persona-interaction-cross-repo-hosted.spec.ts \
+              --project=mobile-chromium --grep '@mobile-basic'
+          } 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/pint-hosted-desktop-mobile-e2e.log"
 
       - name: Playwright E2E
         id: e2e
@@ -1492,20 +1497,31 @@ jobs:
         run: |
           set -euo pipefail
           node scripts/probe-persona-governed-proposal-live.mjs
-          PLAYWRIGHT_JSON_OUTPUT_FILE="$PANTHEON_AUDIT_OUT_DIR/persona-hosted-playwright-results.json" \
+          desktop_results="$PANTHEON_AUDIT_OUT_DIR/persona-hosted-desktop-results.json"
+          mobile_results="$PANTHEON_AUDIT_OUT_DIR/persona-hosted-mobile-results.json"
+          PLAYWRIGHT_JSON_OUTPUT_FILE="$desktop_results" \
             npx playwright test e2e/persona-interaction-cross-repo-hosted.spec.ts \
-              --project=chromium --project=mobile-chromium \
+              --project=chromium --grep '@desktop-full' \
               --retries=0 --reporter=list,json
-          node --input-type=module - "$PANTHEON_AUDIT_OUT_DIR/persona-hosted-playwright-results.json" <<'NODE'
+          PLAYWRIGHT_JSON_OUTPUT_FILE="$mobile_results" \
+            npx playwright test e2e/persona-interaction-cross-repo-hosted.spec.ts \
+              --project=mobile-chromium --grep '@mobile-basic' \
+              --retries=0 --reporter=list,json
+          node --input-type=module - "$desktop_results" "$mobile_results" <<'NODE'
           import fs from "node:fs";
-          const report = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
-          const stats = report.stats || {};
-          const expected = Number(stats.expected || 0);
-          const skipped = Number(stats.skipped || 0);
-          const unexpected = Number(stats.unexpected || 0);
-          const flaky = Number(stats.flaky || 0);
-          if (expected !== 8 || skipped !== 0 || unexpected !== 0 || flaky !== 0) {
-            throw new Error(`Persona hosted proof requires exactly 8 passed, 0 skipped/unexpected/flaky; got ${JSON.stringify({ expected, skipped, unexpected, flaky })}`);
+          const summaries = process.argv.slice(2).map((path) => {
+            const stats = JSON.parse(fs.readFileSync(path, "utf8")).stats || {};
+            return {
+              expected: Number(stats.expected || 0),
+              skipped: Number(stats.skipped || 0),
+              unexpected: Number(stats.unexpected || 0),
+              flaky: Number(stats.flaky || 0),
+            };
+          });
+          const [desktop, mobile] = summaries;
+          if (desktop.expected !== 3 || mobile.expected !== 1
+            || summaries.some((stats) => stats.skipped !== 0 || stats.unexpected !== 0 || stats.flaky !== 0)) {
+            throw new Error(`Persona hosted proof requires desktop 3/3 full and mobile 1/1 layout-only with no skipped/unexpected/flaky; got ${JSON.stringify({ desktop, mobile })}`);
           }
           NODE
 

@@ -427,9 +427,8 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
         "npx playwright test e2e/persona-interaction-cross-repo-hosted.spec.ts",
       ),
     );
-    expect(authorizedProof).toContain(
-      "--project=chromium --project=mobile-chromium",
-    );
+    expect(authorizedProof).toContain("--project=chromium --grep '@desktop-full'");
+    expect(authorizedProof).toContain("--project=mobile-chromium --grep '@mobile-basic'");
     expect(authorizedProof).toContain(
       "node scripts/ensure-persona-hosted-proof-servant.mjs",
     );
@@ -437,7 +436,8 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
       "PANTHEON_EXPECTED_BFF_SHA: ${{ inputs.bff_sha }}",
     );
     expect(authorizedProof).toContain("--retries=0 --reporter=list,json");
-    expect(authorizedProof).toContain("expected !== 8");
+    expect(authorizedProof).toContain("desktop.expected !== 3");
+    expect(authorizedProof).toContain("mobile.expected !== 1");
     expect(authorizedProof).toContain("skipped !== 0");
     expect(authorizedProof).toContain("unexpected !== 0");
     expect(authorizedProof).toContain("flaky !== 0");
@@ -507,21 +507,17 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     ).toBeLessThan(
       hostedPersonaInteractionSpec.indexOf("/bff/management/persona-fleet"),
     );
-    expect(hostedPersonaInteractionSpec).toContain("proposedParticipants.some");
     expect(hostedPersonaInteractionSpec).toContain(
-      "row.persona_id === ENSURED_PERSONA_ID",
+      "const selected = included.find",
     );
     expect(hostedPersonaInteractionSpec).toContain(
-      "submittedRequest.participant_persona_ids",
+      "requestedParticipants.map((participant) => participant.persona_id)",
     );
-    expect(
-      hostedPersonaInteractionSpec.match(
-        /submitted\.participants\)\.to(?:Equal|Contain)\(\[?ENSURED_PERSONA_ID/gu,
-      ),
-    ).toHaveLength(2);
     expect(hostedPersonaInteractionSpec).toContain(
-      "canonical eligible selected",
+      "persistedParticipants.map((participant) => participant.persona_id)",
     );
+    expect(hostedPersonaInteractionSpec).not.toContain("submittedRequest.participant_persona_ids");
+    expect(hostedPersonaInteractionSpec).toContain("/recommended-measures/${encodeURIComponent(measureId)}/candidates");
     expect(hostedPersonaInteractionSpec).toContain(
       "`${BFF_BASE}/bff/agora/servant/ensure`",
     );

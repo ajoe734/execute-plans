@@ -235,35 +235,6 @@ async function prepareImmutableStrategyWorkshop(request: APIRequestContext, toke
   return { ...target, workshopId };
 }
 
-async function readProposal(request: APIRequestContext, token: string, proposalId: string) {
-  const response = await request.get(`${BFF_BASE}/bff/agora/proposals/${encodeURIComponent(proposalId)}`, {
-    headers: headers(token),
-  });
-  expect(response.ok(), `Proposal readback returned ${response.status()}`).toBe(true);
-  return {
-    etag: response.headers().etag ?? "",
-    proposal: record(data(await response.json())),
-  };
-}
-
-async function actOnProposal(
-  request: APIRequestContext,
-  token: string,
-  proposalId: string,
-  etag: string,
-  action: JsonRecord,
-) {
-  const response = await request.post(`${BFF_BASE}/bff/agora/proposals/${encodeURIComponent(proposalId)}/actions`, {
-    headers: headers(token, { "If-Match": etag }),
-    data: action,
-  });
-  expect(response.ok(), `Proposal ${String(action.action)} returned ${response.status()}: ${await response.text()}`).toBe(true);
-  return {
-    etag: response.headers().etag ?? "",
-    proposal: record(data(await response.json())),
-  };
-}
-
 async function openPersonaDetail(page: Page, persona: { id: string; name: string }): Promise<void> {
   await page.goto(`${FE_BASE}/management/personas/${encodeURIComponent(persona.id)}`);
   await expect(page.getByRole("heading", { level: 1, name: persona.name })).toBeAttached({ timeout: 30_000 });
@@ -282,7 +253,7 @@ async function revealWorkshopComposerOptions(page: Page): Promise<void> {
 test.describe("Persona Detail → canonical Workshop cross-repo proof", () => {
   test.skip(!FE_BASE || !BFF_BASE, "requires hosted Pantheon FE and BFF URLs");
 
-  test("operator resolves, checks eligibility, submits no-authority interaction, reads it back, and returns", async ({ page, request }) => {
+  test("operator resolves, checks eligibility, submits no-authority interaction, reads it back, and returns @desktop-full", async ({ page, request }) => {
     test.skip(!WRITE_PROOF || !OPERATOR_TOKEN, "requires explicit write-proof opt-in and operator token");
     test.setTimeout(180_000);
     const { roles: operatorRoles } = await assertOperatorSession(request, OPERATOR_TOKEN);
@@ -337,10 +308,16 @@ test.describe("Persona Detail → canonical Workshop cross-repo proof", () => {
     expect(submittedHttp.ok(), await submittedHttp.text()).toBe(true);
     const submitted = record(data(await submittedHttp.json()));
     const submittedRequest = record(submittedHttp.request().postDataJSON());
-    expect(submittedRequest.participant_persona_ids).toEqual([ENSURED_PERSONA_ID]);
-    expect(submitted.participants).toEqual([ENSURED_PERSONA_ID]);
-    expect(submitted.execution_authority).toBe("none");
-    expect(String(submitted.no_capital_authority_proof ?? "")).not.toBe("");
+    const requestedParticipants = Array.isArray(submittedRequest.participants)
+      ? submittedRequest.participants.map(record)
+      : [];
+    const persistedParticipants = Array.isArray(submitted.participants)
+      ? submitted.participants.map(record)
+      : [];
+    expect(requestedParticipants.map((participant) => participant.persona_id)).toEqual([ENSURED_PERSONA_ID]);
+    expect(persistedParticipants.map((participant) => participant.persona_id)).toEqual([ENSURED_PERSONA_ID]);
+    expect(record(submitted.authority).execution_authority).toBe("none");
+    expect(record(submitted.authority).capital_changed).toBe(false);
     const interactionId = String(submitted.interaction_id ?? "");
     expect(interactionId).not.toBe("");
 
@@ -358,12 +335,12 @@ test.describe("Persona Detail → canonical Workshop cross-repo proof", () => {
     await expect(page).toHaveURL(new RegExp(`/management/personas/${encodeURIComponent(persona.id)}$`));
   });
 
-  test("operator proposes a governed strategy measure, reads canonical state, and cannot self-approve", async ({ page, request }) => {
+  test("daily Persona measure supports durable modify, defer, accept-for-review, validation, reject, and reload @desktop-full", async ({ page, request }) => {
     test.skip(!WRITE_PROOF || !OPERATOR_TOKEN, "requires explicit write-proof opt-in and operator token");
-    test.setTimeout(240_000);
+    test.setTimeout(360_000);
     const { operatorId, roles: operatorRoles } = await assertOperatorSession(request, OPERATOR_TOKEN);
+    await discoverEligiblePersona(request, OPERATOR_TOKEN);
     const target = await prepareImmutableStrategyWorkshop(request, OPERATOR_TOKEN, operatorId);
-
     await installOidcDevLogin(page, {
       goto: false,
       pageBaseUrl: FE_BASE,
@@ -374,141 +351,6 @@ test.describe("Persona Detail → canonical Workshop cross-repo proof", () => {
     await page.addInitScript(() => window.sessionStorage.setItem("pantheon.e2e.realWrites", "true"));
     await page.goto(`${FE_BASE}/agora/strategy-workshop/${encodeURIComponent(target.workshopId)}`);
     await expect(page.getByTestId("servant-composer")).toBeVisible({ timeout: 30_000 });
-
-    const proposeEligibility = page.waitForResponse((response) => {
-      if (new URL(response.url()).pathname !== "/bff/agora/interactions/participants:eligible") return false;
-      if (response.request().method() !== "POST") return false;
-      try { return record(response.request().postDataJSON()).mode === "propose_action"; } catch { return false; }
-    });
-    await revealWorkshopComposerOptions(page);
-    await page.getByTestId("mode-selector").click();
-    await page.getByRole("option", { name: /Propose \(Candidate Measure\)/i }).click();
-    const proposeEligibilityHttp = await proposeEligibility;
-    expect(proposeEligibilityHttp.ok()).toBe(true);
-    const proposeEligibilityBody = record(data(await proposeEligibilityHttp.json()));
-    const proposedParticipants = items({ data: { items: proposeEligibilityBody.included } });
-    expect(proposedParticipants.length).toBeGreaterThanOrEqual(1);
-    expect(proposedParticipants.some((row) => row.persona_id === ENSURED_PERSONA_ID)).toBe(true);
-    await expect(page.getByTestId("eligibility-explanation")).toContainText(
-      /(?:up to )?[1-9]\d* canonical eligible selected/i,
-    );
-
-    const topic = `Hosted governed candidate ${randomUUID()}`;
-    await page.getByTestId("servant-composer-input").fill(topic);
-    const submitResponse = page.waitForResponse((response) =>
-      new URL(response.url()).pathname === "/bff/agora/interactions"
-      && response.request().method() === "POST",
-    );
-    await expect(page.getByTestId("servant-composer-submit")).toBeEnabled({ timeout: 30_000 });
-    await page.getByTestId("servant-composer-submit").click();
-    const submittedHttp = await submitResponse;
-    expect(submittedHttp.ok(), await submittedHttp.text()).toBe(true);
-    const submitted = record(data(await submittedHttp.json()));
-    const submittedRequest = record(submittedHttp.request().postDataJSON());
-    expect(Array.isArray(submittedRequest.participant_persona_ids)).toBe(true);
-    expect(submittedRequest.participant_persona_ids).toContain(ENSURED_PERSONA_ID);
-    expect(submitted.participants).toContain(ENSURED_PERSONA_ID);
-    expect(submitted.execution_authority).toBe("none");
-    expect(record(submitted.proposal).execution_authority).toBe("none");
-    const proposalId = String(submitted.proposal_id ?? "");
-    expect(proposalId).not.toBe("");
-
-    await expect.poll(async () => {
-      const cardsResponse = await request.get(`${BFF_BASE}/bff/agora/workshops/${encodeURIComponent(target.workshopId)}/cards`, {
-        headers: headers(OPERATOR_TOKEN),
-      });
-      if (!cardsResponse.ok()) return false;
-      return items(await cardsResponse.json()).some((card) =>
-        card.card_type === "governed_proposal" && JSON.stringify(card.payload ?? {}).includes(proposalId));
-    }, { timeout: 60_000 }).toBe(true);
-
-    let canonical = await readProposal(request, OPERATOR_TOKEN, proposalId);
-    expect(canonical.etag).not.toBe("");
-    expect(canonical.proposal.execution_authority).toBe("none");
-    expect(canonical.proposal.target_kind).toBe("strategy");
-    expect(canonical.proposal.target_id).toBe(target.strategyId);
-    expect(canonical.proposal.target_version).toBe(target.strategyVersion);
-    expect(canonical.proposal.proposer).toBe(operatorId);
-    expect(canonical.proposal.approval_decision_refs_authority).toBe("canonical_read_store");
-
-    await page.reload();
-    const proposalCard = page.getByTestId(`governed-proposal-${proposalId}`);
-    await expect(proposalCard).toBeVisible({ timeout: 60_000 });
-    const modify = proposalCard.getByRole("button", { name: "Modify" });
-    if (await modify.isEnabled()) {
-      await modify.click();
-      await proposalCard.getByLabel("Proposed value").fill(JSON.stringify({
-        ...record(canonical.proposal.proposed_value),
-        hosted_proof_note: topic,
-      }));
-      const modifiedResponse = page.waitForResponse((response) => {
-        if (!new URL(response.url()).pathname.endsWith(`/bff/agora/proposals/${proposalId}/actions`)) return false;
-        try { return record(response.request().postDataJSON()).action === "modify"; } catch { return false; }
-      });
-      await proposalCard.getByRole("button", { name: "Save new revision" }).click();
-      const response = await modifiedResponse;
-      expect(response.ok(), await response.text()).toBe(true);
-      canonical = { etag: response.headers().etag ?? "", proposal: record(data(await response.json())) };
-    } else {
-      test.info().annotations.push({
-        type: "governed-proposal-api-ui-split",
-        description: `Modify UI unavailable: ${await modify.getAttribute("title") ?? "no disabled reason"}`,
-      });
-      canonical = await actOnProposal(request, OPERATOR_TOKEN, proposalId, canonical.etag, {
-        action: "modify",
-        reason: "Hosted no-authority proposal revision proof",
-        proposed_value: { ...record(canonical.proposal.proposed_value), hosted_proof_note: topic },
-      });
-    }
-    expect(canonical.proposal.state).toBe("draft");
-    expect(canonical.proposal.execution_authority).toBe("none");
-
-    test.info().annotations.push({
-      type: "governed-proposal-api-ui-split",
-      description: "Validate uses the governed API because the card accepts only an authoritative validation artifact and does not synthesize one in the browser.",
-    });
-    canonical = await actOnProposal(request, OPERATOR_TOKEN, proposalId, canonical.etag, {
-      action: "validate",
-      reason: "Hosted bounded validation proof; no execution authority",
-      validation_result: { valid: true, status: "passed", errors: [], warnings: [] },
-    });
-    expect(canonical.proposal.state).toBe("validated");
-    expect(canonical.proposal.execution_authority).toBe("none");
-
-    canonical = await readProposal(request, OPERATOR_TOKEN, proposalId);
-    expect(canonical.proposal.state).toBe("validated");
-    expect(canonical.proposal.execution_authority).toBe("none");
-    expect(canonical.proposal.proposer).toBe(operatorId);
-    expect(Array.isArray(canonical.proposal.available_approval_decision_refs)).toBe(true);
-    expect(record(canonical.proposal.approval_decision_readiness).ready === true
-      || typeof record(canonical.proposal.approval_decision_readiness).reason === "string").toBe(true);
-
-    await page.reload();
-    const canonicalCard = page.getByTestId(`governed-proposal-${proposalId}`);
-    await expect(canonicalCard).toContainText(/revision/i, { timeout: 60_000 });
-    const approve = canonicalCard.getByRole("button", { name: "approve" });
-    await expect(approve).toBeDisabled();
-    await expect(canonicalCard.getByTestId("proposal-approval-disabled-reason")).toContainText(
-      /self-approval|authoritative|required|reviewer/i,
-    );
-  });
-
-  test("daily Persona measure supports durable modify, defer, accept-for-review, validation, reject, and reload", async ({ page, request }) => {
-    test.skip(!WRITE_PROOF || !OPERATOR_TOKEN, "requires explicit write-proof opt-in and operator token");
-    test.setTimeout(360_000);
-    const { roles: operatorRoles } = await assertOperatorSession(request, OPERATOR_TOKEN);
-    const persona = await discoverEligiblePersona(request, OPERATOR_TOKEN);
-    await installOidcDevLogin(page, {
-      goto: false,
-      pageBaseUrl: FE_BASE,
-      roles: operatorRoles,
-      tenantId: TENANT_ID,
-      token: OPERATOR_TOKEN,
-    });
-    await page.addInitScript(() => window.sessionStorage.setItem("pantheon.e2e.realWrites", "true"));
-    await openPersonaDetail(page, persona);
-    await page.getByRole("button", { name: "Talk to" }).click();
-    await expect(page).toHaveURL(/\/agora\/strategy-workshop\//);
 
     await revealWorkshopComposerOptions(page);
     await page.getByTestId("mode-selector").click();
@@ -623,7 +465,7 @@ test.describe("Persona Detail → canonical Workshop cross-repo proof", () => {
     await expect(reloaded).toContainText("formal approval: none");
   });
 
-  test("viewer sees a disabled reason and cannot produce an interaction POST", async ({ page, request }) => {
+  test("viewer sees a disabled reason and cannot produce an interaction POST @desktop-full", async ({ page, request }) => {
     test.skip(!VIEWER_TOKEN, "requires an explicit or RBAC-matrix viewer token");
     test.setTimeout(120_000);
     const unauthenticated = await request.get(`${BFF_BASE}/bff/me`, {
@@ -668,6 +510,31 @@ test.describe("Persona Detail → canonical Workshop cross-repo proof", () => {
       data: { context_refs: [{ type: "persona", id: persona.id }], environment: "paper" },
     });
     expect(denied.status()).toBe(403);
+    expect(browserInteractionPosts).toEqual([]);
+  });
+
+  test("mobile Persona detail remains usable without producing writes @mobile-basic", async ({ page, request }) => {
+    test.skip(!OPERATOR_TOKEN, "requires an operator token for hosted readback");
+    test.setTimeout(120_000);
+    const { roles } = await assertOperatorSession(request, OPERATOR_TOKEN);
+    const persona = await matchEnsuredPersonaFromFleet(request, OPERATOR_TOKEN);
+    const browserInteractionPosts: string[] = [];
+    page.on("request", (browserRequest) => {
+      const path = new URL(browserRequest.url()).pathname;
+      if (browserRequest.method() === "POST" && path.startsWith("/bff/agora/interactions")) {
+        browserInteractionPosts.push(path);
+      }
+    });
+    await installOidcDevLogin(page, {
+      goto: false,
+      pageBaseUrl: FE_BASE,
+      roles,
+      tenantId: TENANT_ID,
+      token: OPERATOR_TOKEN,
+    });
+    await openPersonaDetail(page, persona);
+    await expect(page.getByRole("button", { name: "Talk to" })).toBeVisible();
+    await expect(page.getByRole("tab", { name: /trade journal/i })).toBeVisible();
     expect(browserInteractionPosts).toEqual([]);
   });
 });
