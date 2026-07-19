@@ -521,6 +521,7 @@ jobs:
           PANTHEON_DEPLOY_PROOF_WINDOW_ACK: "false"
           PANTHEON_DEPLOY_REAL_WRITES: ${{ steps.gate.outputs.deployment_profile == 'operator-live' && 'true' || 'false' }}
           PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES: "false"
+          PANTHEON_DEPLOY_ALLOW_BOOTSTRAP: ${{ steps.gate.outputs.deployment_profile == 'read-only' && 'true' || 'false' }}
         run: bash scripts/deploy-dev-vm.sh
 
       - name: Write redacted workflow envelope
