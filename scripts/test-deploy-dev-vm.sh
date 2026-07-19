@@ -59,6 +59,9 @@ die() {
   exit 1
 }
 
+grep -Fq 'npx playwright install chromium --with-deps' "${DEPLOY_SOURCE}" \
+  || die "deploy controller must provision Chromium runtime dependencies on the self-hosted runner"
+
 show_deploy_failure() {
   local message="$1"
   echo "${message}" >&2

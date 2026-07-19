@@ -37,7 +37,8 @@ under `/var/www/pantheon-dev-fe-releases`.
 6. `scripts/deploy-dev-vm.sh` verifies the candidate metadata and bytes, binds
    the candidate to the exact live `/bff/version` source commit, acquires an
    exclusive lock, and qualifies the current release as the rollback target.
-7. The controller installs an immutable release directory, runs the strict
+7. The controller installs the Playwright Chromium binary and its VM runtime
+   dependencies, installs an immutable release directory, runs the strict
    browser/auth/UX probe against those candidate bytes at the formal FE origin,
    and atomically switches `/var/www/pantheon-dev-fe` only after that pre-probe.
 8. After the switch it verifies public `deployment.json`, live BFF identity,
