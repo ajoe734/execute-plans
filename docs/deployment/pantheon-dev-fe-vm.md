@@ -12,6 +12,13 @@
 - Deploy runner: GitHub self-hosted runner on this VM
 - Required runner labels: `self-hosted`, `Linux`, `X64`, `pantheon-dev-vm`, `execute-plans-deploy`
 
+The current verified BFF delivery baseline is Pantheon `dev` merge commit
+`93c50da6d67560f7035025879af08dfc3197fb76` (2026-07-19). Frontend
+candidates must remain bound to that exact commit, or to a later exact BFF
+identity reported by `/bff/version`, through the integration-gate artifact and
+`deployment.json`; do not reuse an older successful frontend artifact after the
+BFF baseline changes.
+
 Caddy serves static files from `/var/www/pantheon-dev-fe`. The deploy script
 converts that path to a symlink that points at an immutable release directory
 under `/var/www/pantheon-dev-fe-releases`.
