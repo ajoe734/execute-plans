@@ -19,8 +19,8 @@ const WRITE_PROOF = process.env.PANTHEON_PERSONA_INTERACTION_WRITE_PROOF === "1"
 const ENSURED_PERSONA_ID = String(process.env.PANTHEON_PERSONA_INTERACTION_PERSONA_ID ?? "").trim();
 const EXPECTED_BFF_SHA = String(process.env.PANTHEON_BFF_SHA ?? "").trim().toLowerCase();
 const PUBLIC_SUPABASE_URL = String(process.env.PANTHEON_PUBLIC_SUPABASE_URL ?? "").trim();
-const DEV_BFF_HOST = "pantheon-lupin-dev-bff.35.201.239.38.sslip.io";
-const DEV_FE_HOST = "pantheon-lupin-dev-fe.35.201.239.38.sslip.io";
+const DEV_BFF_HOST = "pantheon-lupin-dev-bff.35.201.204.12.sslip.io";
+const DEV_FE_HOST = "pantheon-lupin-dev-fe.35.201.204.12.sslip.io";
 
 type JsonRecord = Record<string, unknown>;
 

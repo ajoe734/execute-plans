@@ -19,11 +19,11 @@ const FE_BASE_URL =
   process.env.PANTHEON_FE_BASE_URL ||
   process.env.FRONTEND_BASE_URL ||
   process.env.PLAYWRIGHT_BASE_URL ||
-  "https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io";
+  "https://pantheon-lupin-dev-fe.35.201.204.12.sslip.io";
 const BFF_BASE_URL =
   process.env.PANTHEON_BFF_BASE_URL ||
   process.env.VITE_BFF_BASE_URL ||
-  "https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io";
+  "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io";
 const AUTH_TOKEN = roleTokenFromEnv("operator", [
   "PANTHEON_BFF_OPERATOR_A_TOKEN",
   "BFF_AUTH_TOKEN",

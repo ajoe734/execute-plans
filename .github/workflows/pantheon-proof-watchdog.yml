@@ -238,7 +238,7 @@ jobs:
           EXPECTED_PAIR_ID: ${{ inputs.expected_pair_id }}
           EXPECTED_READ_ONLY_DIGEST: ${{ inputs.expected_read_only_digest }}
           EXPECTED_WRITE_PROOF_DIGEST: ${{ inputs.expected_write_proof_digest }}
-          BFF_BASE_URL: https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io
+          BFF_BASE_URL: https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io
         run: |
           set -euo pipefail
           archive="${RUNNER_TEMP%/}/prearm-source-pair.zip"
@@ -424,7 +424,7 @@ jobs:
       - pantheon-dev-vm
       - execute-plans-deploy
     env:
-      PANTHEON_BFF_BASE_URL: https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io
+      PANTHEON_BFF_BASE_URL: https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io
       PANTHEON_OLD_BFF_URL: https://pantheon-lupin-dev-bff.34.81.75.241.sslip.io
       CANDIDATE_SHA: ${{ inputs.candidate_sha }}
       BFF_SHA: ${{ inputs.bff_sha }}

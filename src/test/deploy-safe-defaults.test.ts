@@ -16,6 +16,10 @@ const deployWorkflow = readFileSync(
   resolve(root, ".github/workflows/pantheon-dev-fe-deploy.yml"),
   "utf8",
 );
+const proofWatchdogWorkflow = readFileSync(
+  resolve(root, ".github/workflows/pantheon-proof-watchdog.yml"),
+  "utf8",
+);
 const branchWorkflow = readFileSync(
   resolve(root, ".github/workflows/branch-ci.yml"),
   "utf8",
@@ -56,6 +60,10 @@ const browserAuthRuntime = [
   readFileSync(resolve(root, "src/config/publicBuildAuth.ts"), "utf8"),
   readFileSync(resolve(root, "src/lib/bff-v1/headers.ts"), "utf8"),
 ].join("\n");
+const runtimeEnv = readFileSync(
+  resolve(root, "src/lib/bff-v1/runtimeEnv.ts"),
+  "utf8",
+);
 
 function rejectedDeploy(extraEnv: Record<string, string>) {
   return spawnSync("bash", [deployScriptPath], {
@@ -72,6 +80,23 @@ function rejectedDeploy(extraEnv: Record<string, string>) {
 }
 
 describe("Pantheon dev frontend deploy safety boundary", () => {
+  it("routes active dev delivery only to the replacement VM", () => {
+    const activeRouting = [
+      deployScript,
+      integrationWorkflow,
+      deployWorkflow,
+      proofWatchdogWorkflow,
+      hostedPersonaInteractionSpec,
+      hostedPersonaServantPreflight,
+      hostedBrowserProbe,
+      runtimeEnv,
+    ].join("\n");
+
+    expect(activeRouting).toContain("35.201.204.12");
+    expect(activeRouting).not.toContain("35.201.239.38");
+    expect(activeRouting).not.toContain("pantheon-benjamin-20260528");
+  });
+
   it("creates only strict, read-only, credential-free release candidates", () => {
     expect(integrationWorkflow).toContain("VITE_BFF_MODE: live");
     expect(integrationWorkflow).toContain("VITE_BFF_FALLBACK: strict");

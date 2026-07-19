@@ -855,31 +855,31 @@ describe("hosted browser strict release policy", () => {
     expect(
       isAllowlistedConsoleError({
         text: "Failed to load resource: net::ERR_NETWORK_CHANGED",
-        url: "https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io/bff/events/stream",
+        url: "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/bff/events/stream",
       }),
     ).toBe(true);
     expect(
       isAllowlistedConsoleError({
         text: "Failed to load resource: net::ERR_NETWORK_CHANGED",
-        url: "https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io/bff/me",
+        url: "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/bff/me",
       }),
     ).toBe(false);
     expect(
       isAllowlistedBffRequestFailure({
         failure: "net::ERR_NETWORK_CHANGED",
-        url: "https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io/bff/events/stream?channel=system",
+        url: "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/bff/events/stream?channel=system",
       }),
     ).toBe(true);
     expect(
       isAllowlistedBffRequestFailure({
         failure: "net::ERR_NETWORK_CHANGED",
-        url: "https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io/bff/me",
+        url: "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/bff/me",
       }),
     ).toBe(false);
     expect(
       isAllowlistedBffRequestFailure({
         failure: "net::ERR_NETWORK_CHANGED Bearer secret-material-123456",
-        url: "https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io/bff/events/stream",
+        url: "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/bff/events/stream",
       }),
     ).toBe(false);
   });

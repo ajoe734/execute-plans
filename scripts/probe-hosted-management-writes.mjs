@@ -2,7 +2,7 @@
 
 const baseUrl = String(
   process.env.PANTHEON_BFF_BASE_URL ||
-  "https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io",
+  "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io",
 ).replace(/\/$/, "");
 const token = String(process.env.PANTHEON_BFF_AUTH_TOKEN || "").trim();
 const rationale = "Pantheon dev hosted write-path probe; reject keeps the recommendation non-operational.";

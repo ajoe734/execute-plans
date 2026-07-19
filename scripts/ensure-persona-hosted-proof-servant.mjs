@@ -115,7 +115,7 @@ async function responseJson(response, label) {
   return parsed;
 }
 
-const devBffHost = "pantheon-lupin-dev-bff.35.201.239.38.sslip.io";
+const devBffHost = "pantheon-lupin-dev-bff.35.201.204.12.sslip.io";
 const bffUrl = new URL(bffBase);
 if (bffUrl.protocol !== "https:" || bffUrl.hostname !== devBffHost) {
   throw new Error(

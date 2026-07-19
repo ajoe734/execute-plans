@@ -16,7 +16,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-const BFF_BASE = trimTrailingSlash(process.env.PANTHEON_BFF_BASE_URL || "https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io");
+const BFF_BASE = trimTrailingSlash(process.env.PANTHEON_BFF_BASE_URL || "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io");
 const OUT_DIR = process.env.PANTHEON_LOAD_BASELINE_OUT_DIR || ".lovable/audits";
 const BEARER_TOKEN = process.env.PANTHEON_BFF_SMOKE_BEARER_TOKEN || process.env.BFF_AUTH_TOKEN || "";
 const FETCH_TIMEOUT_MS = 20_000;

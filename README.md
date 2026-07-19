@@ -47,8 +47,8 @@ host 或驗收來源；請從 Pantheon dev 環境服務 `execute-plans` build。
 
 目前 dev FE / BFF 目標：
 
-- FE: `https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io`
-- BFF: `https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io`
+- FE: `https://pantheon-lupin-dev-fe.35.201.204.12.sslip.io`
+- BFF: `https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io`
 
 Dev FE 是這台 Pantheon dev VM 上的 Caddy static site：
 
@@ -75,7 +75,7 @@ Pantheon dev frontend build 請設定：
 
 ```env
 VITE_BFF_MODE=live
-VITE_BFF_BASE_URL=https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io
+VITE_BFF_BASE_URL=https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io
 VITE_BFF_FALLBACK=strict
 VITE_BFF_REAL_WRITES=true
 VITE_BFF_ALLOW_DEV_STUB_WRITES=true

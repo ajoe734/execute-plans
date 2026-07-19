@@ -4,8 +4,8 @@
 
 ## Current VM Shape
 
-- Public FE: `https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io`
-- Public BFF: `https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io`
+- Public FE: `https://pantheon-lupin-dev-fe.35.201.204.12.sslip.io`
+- Public BFF: `https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io`
 - Caddy config: `/etc/caddy/Caddyfile`
 - Caddy FE root path: `/var/www/pantheon-dev-fe`
 - Release store: `/var/www/pantheon-dev-fe-releases`
@@ -104,7 +104,7 @@ Do not say "published to dev" unless all of these are true:
 - the commit is on `origin/dev`;
 - `Pantheon FE-BFF Integration Gate` passed for that SHA;
 - `Pantheon Dev FE Deploy` passed for that SHA;
-- `https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io/deployment.json`
+- `https://pantheon-lupin-dev-fe.35.201.204.12.sslip.io/deployment.json`
   reports that SHA, its canonical asset digest, exact gate run id, exact BFF
   commit, `deploymentState=accepted`, strict live mode, the selected profile's
   exact write flags, all three paired digests, and no embedded browser bearer;

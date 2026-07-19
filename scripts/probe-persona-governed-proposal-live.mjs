@@ -11,7 +11,7 @@ import path from "node:path";
 
 const BFF_BASE_URL = (
   process.env.PANTHEON_BFF_BASE_URL ||
-  "https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io"
+  "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io"
 ).replace(/\/$/u, "");
 const TENANT_ID = process.env.PANTHEON_PINT_TENANT_ID || "pantheon-dev";
 const OPERATOR_TOKEN =
@@ -20,7 +20,7 @@ const VIEWER_TOKEN =
   process.env.PANTHEON_PINT_VIEWER_TOKEN || "pantheon-dev-browser:viewer";
 const EXPECTED_BFF_SHA = (process.env.PANTHEON_EXPECTED_BFF_SHA || "").trim();
 const AUDIT_DIR = process.env.PANTHEON_AUDIT_OUT_DIR || ".lovable/audits/current-run";
-const DEV_BFF_HOST = "pantheon-lupin-dev-bff.35.201.239.38.sslip.io";
+const DEV_BFF_HOST = "pantheon-lupin-dev-bff.35.201.204.12.sslip.io";
 
 function truthy(value) {
   return ["1", "true", "yes", "on"].includes(String(value ?? "").trim().toLowerCase());
