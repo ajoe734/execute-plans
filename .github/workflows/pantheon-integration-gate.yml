@@ -73,7 +73,7 @@ on:
       bff_base_url:
         description: "BFF base URL"
         required: false
-        default: "https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io"
+        default: "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io"
       bff_sha:
         description: "Pantheon backend/BFF SHA"
         required: false
@@ -397,7 +397,7 @@ jobs:
       actions: read
     env:
       PANTHEON_FE_BASE_URL: ${{ inputs.fe_base_url || 'http://127.0.0.1:4173' }}
-      PANTHEON_BFF_BASE_URL: ${{ inputs.bff_base_url || 'https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io' }}
+      PANTHEON_BFF_BASE_URL: ${{ inputs.bff_base_url || 'https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io' }}
       # Spec compatibility aliases. Some autoworker-written specs read
       # FRONTEND_BASE_URL / PLAYWRIGHT_BASE_URL instead of PANTHEON_FE_BASE_URL
       # and fall back to http://127.0.0.1:5173 (Vite dev server) when those
@@ -985,7 +985,7 @@ jobs:
           PANTHEON_PROBE_JSON_OUT: ${{ env.PANTHEON_AUDIT_OUT_DIR }}/hosted-browser-bff-probe.json
         run: |
           set -o pipefail
-          PANTHEON_FE_BASE_URL="https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io" \
+          PANTHEON_FE_BASE_URL="https://pantheon-lupin-dev-fe.35.201.204.12.sslip.io" \
           PANTHEON_BROWSER_BFF_BASE_URL="$PANTHEON_BFF_BASE_URL" \
           node scripts/probe-hosted-browser-bff.mjs 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/hosted-browser-bff-probe.log"
 

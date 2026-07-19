@@ -21,8 +21,8 @@ function validate(operator: string, viewer: string) {
       PANTHEON_BFF_RBAC_TOKENS_JSON: "",
       PANTHEON_PERSONA_INTERACTION_OPERATOR_TOKEN: operator,
       PANTHEON_PERSONA_INTERACTION_VIEWER_TOKEN: viewer,
-      PANTHEON_FE_BASE_URL: "https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io",
-      PANTHEON_BFF_BASE_URL: "https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io",
+      PANTHEON_FE_BASE_URL: "https://pantheon-lupin-dev-fe.35.201.204.12.sslip.io",
+      PANTHEON_BFF_BASE_URL: "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io",
     },
   });
 }

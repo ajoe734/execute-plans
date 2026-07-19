@@ -94,8 +94,8 @@ jobs:
       - pantheon-dev-vm
       - execute-plans-deploy
     env:
-      PANTHEON_DEV_FE_HOST: https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io
-      PANTHEON_BFF_BASE_URL: https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io
+      PANTHEON_DEV_FE_HOST: https://pantheon-lupin-dev-fe.35.201.204.12.sslip.io
+      PANTHEON_BFF_BASE_URL: https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io
       PANTHEON_OLD_BFF_URL: https://pantheon-lupin-dev-bff.34.81.75.241.sslip.io
       PANTHEON_HOSTED_PROBE_PATH: /management/persona-fleet
       PANTHEON_HOSTED_REQUIRED_BFF_PATHS: /bff/me
@@ -769,8 +769,8 @@ jobs:
       - pantheon-dev-vm
       - execute-plans-deploy
     env:
-      PANTHEON_DEV_FE_HOST: https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io
-      PANTHEON_BFF_BASE_URL: https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io
+      PANTHEON_DEV_FE_HOST: https://pantheon-lupin-dev-fe.35.201.204.12.sslip.io
+      PANTHEON_BFF_BASE_URL: https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io
       PANTHEON_OLD_BFF_URL: https://pantheon-lupin-dev-bff.34.81.75.241.sslip.io
       EXACT_FE_SHA: ${{ needs.deploy.outputs.candidate_sha }}
       EXACT_BFF_SHA: ${{ needs.deploy.outputs.bff_sha }}

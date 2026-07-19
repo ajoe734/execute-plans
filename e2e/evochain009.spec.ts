@@ -3,8 +3,8 @@ import type { APIRequestContext, Locator, Page } from "@playwright/test";
 import { authHeaders, authToken, installOidcDevLogin } from "./helpers/auth";
 import { installQuietEventSource } from "./helpers/sse";
 
-const FE_BASE = process.env.PANTHEON_FE_BASE_URL?.replace(/\/$/, "") ?? "https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io";
-const BFF_BASE = process.env.PANTHEON_BFF_BASE_URL?.replace(/\/$/, "") ?? "https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io";
+const FE_BASE = process.env.PANTHEON_FE_BASE_URL?.replace(/\/$/, "") ?? "https://pantheon-lupin-dev-fe.35.201.204.12.sslip.io";
+const BFF_BASE = process.env.PANTHEON_BFF_BASE_URL?.replace(/\/$/, "") ?? "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io";
 const RUN_HOSTED = process.env.PANTHEON_HOSTED_E2E === "1";
 const AUTH_ENV = {
   ...process.env,

@@ -13,8 +13,8 @@ Subcommands:
   discover  --github-output <path>   write candidate list to a GITHUB_OUTPUT file
   open-prs                            read PROMOTE_CANDIDATES env var and open PRs
 
-The PR shape is `promote/<VER>` branched from current main with a merge
-commit for `publish/<VER>`. `main-release.yml` reacts on merge.
+The PR shape is `promote/<VER>` with the exact immutable `publish/<VER>` tree
+and a history-only merge of current main. `main-release.yml` reacts on merge.
 """
 
 from __future__ import annotations
@@ -60,6 +60,55 @@ def run_git(*args: str) -> str:
     return subprocess.run(
         ["git", *args], check=True, capture_output=True, text=True, cwd=ROOT
     ).stdout.strip()
+
+
+def git_is_ancestor(older_ref: str, newer_ref: str) -> bool:
+    return (
+        subprocess.run(
+            ["git", "merge-base", "--is-ancestor", older_ref, newer_ref],
+            capture_output=True,
+            cwd=ROOT,
+        ).returncode
+        == 0
+    )
+
+
+def version_key(version: str) -> tuple[int, ...]:
+    return tuple(int(part) for part in version.removeprefix("v").split("."))
+
+
+def promotion_frontier(candidates: list[dict]) -> list[dict]:
+    """Return only candidates not superseded by a newer linear snapshot.
+
+    Hourly publish snapshots are immutable points on the dev history. Promoting
+    the newest snapshot also promotes every older snapshot that is its ancestor,
+    so opening one PR per historical tag is both redundant and brittle. Keep a
+    candidate only when no newer eligible release tag contains it; non-linear
+    snapshots remain separate candidates and are never discarded silently.
+    """
+    frontier: list[dict] = []
+    for candidate in sorted(
+        candidates, key=lambda item: version_key(item["version"]), reverse=True
+    ):
+        current = {**candidate, "blockers": list(candidate.get("blockers") or [])}
+        candidate_ref = f"refs/tags/release/{current['version']}"
+        superseding = next(
+            (
+                newer
+                for newer in frontier
+                if git_is_ancestor(
+                    candidate_ref, f"refs/tags/release/{newer['version']}"
+                )
+            ),
+            None,
+        )
+        if superseding is not None:
+            superseding["blockers"] = list(
+                dict.fromkeys([*superseding["blockers"], *current["blockers"]])
+            )
+            continue
+        frontier.append(current)
+    return list(reversed(frontier))
 
 
 def ensure_git_identity() -> None:
@@ -220,7 +269,8 @@ def cmd_discover(args: argparse.Namespace) -> int:
         settings["block_labels"],
         settings["publish_branch_prefix"],
     )
-    eligible = [c for c in candidates if not c["blockers"]]
+    frontier = promotion_frontier(candidates)
+    eligible = [c for c in frontier if not c["blockers"]]
     if args.github_output:
         with open(args.github_output, "a") as fh:
             fh.write(f"candidate_count={len(eligible)}\n")
@@ -250,16 +300,28 @@ def cmd_open_prs(_args: argparse.Namespace) -> int:
         promote_label = settings["promote_pr_label"]
 
         run_git("fetch", "origin", main_branch, publish_branch, "--tags")
-        run_git("checkout", "-B", promote_branch, f"origin/{main_branch}")
+        # The immutable publish snapshot is the promotion source of truth.
+        # Start from that exact tree, then join current main's history using the
+        # snapshot-authoritative `ours` strategy. This makes main an ancestor of
+        # the promote branch without trying to text-merge months of divergent
+        # main/dev work and without changing a byte of the vetted snapshot.
+        run_git("checkout", "-B", promote_branch, f"origin/{publish_branch}")
         run_git(
             "merge",
             "--no-ff",
             "--no-edit",
+            "-s",
+            "ours",
             "-m",
             f"promote: {version}",
-            f"origin/{publish_branch}",
+            f"origin/{main_branch}",
         )
-        run_git("push", "-u", "origin", promote_branch)
+        run_git("diff", "--quiet", f"origin/{publish_branch}", "HEAD")
+        if not git_is_ancestor(f"origin/{main_branch}", "HEAD"):
+            raise RuntimeError(
+                f"promotion branch {promote_branch} does not contain {main_branch}"
+            )
+        run_git("push", "--force-with-lease", "-u", "origin", promote_branch)
 
         body = (
             f"Auto-generated promotion of `{publish_branch}` "

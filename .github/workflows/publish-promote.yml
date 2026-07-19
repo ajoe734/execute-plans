@@ -38,6 +38,9 @@ jobs:
           fetch-depth: 0
           ref: dev
 
+      - name: Test promotion planner
+        run: python3 scripts/git/test_publish_promote.py
+
       - name: Discover candidates
         id: discover
         env:

@@ -20,7 +20,7 @@
  * (inherent to crawling a live SSE app) don't cause false failures.
  *
  * Usage:
- *   PANTHEON_FE_BASE_URL=https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io \
+ *   PANTHEON_FE_BASE_URL=https://pantheon-lupin-dev-fe.35.201.204.12.sslip.io \
  *     node scripts/audit-console-render.mjs
  */
 import { chromium } from "playwright";

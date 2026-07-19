@@ -13,8 +13,8 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
-const FE_BASE = trimTrailingSlash(process.env.PANTHEON_FE_BASE_URL || "https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io");
-const BFF_BASE = trimTrailingSlash(process.env.PANTHEON_BFF_BASE_URL || "https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io");
+const FE_BASE = trimTrailingSlash(process.env.PANTHEON_FE_BASE_URL || "https://pantheon-lupin-dev-fe.35.201.204.12.sslip.io");
+const BFF_BASE = trimTrailingSlash(process.env.PANTHEON_BFF_BASE_URL || "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io");
 const ROUTE_PATH = normalizePath(process.env.PANTHEON_ROUTE_LOAD_PROBE_PATH || "/management/evidence");
 const PRIMARY_API_PATH = process.env.PANTHEON_ROUTE_LOAD_PRIMARY_API_PATH || "/bff/management/evidence";
 const OUT_DIR = process.env.PANTHEON_LOAD_BASELINE_OUT_DIR || ".lovable/audits";

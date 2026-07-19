@@ -3,7 +3,7 @@ import { bearerHeader, installOidcDevLogin } from "./helpers/auth";
 import { installQuietEventSource } from "./helpers/sse";
 
 const HOSTED = process.env.PANTHEON_HOSTED_E2E === "1";
-const BFF_BASE = process.env.PANTHEON_BFF_BASE_URL ?? "https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io";
+const BFF_BASE = process.env.PANTHEON_BFF_BASE_URL ?? "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io";
 const AUTH_TOKEN = process.env.BFF_AUTH_TOKEN
   ?? process.env.PANTHEON_BFF_SMOKE_BEARER_TOKEN
   ?? "";

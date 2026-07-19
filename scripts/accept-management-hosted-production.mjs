@@ -63,8 +63,8 @@ function trimTrailingSlash(value) {
   return String(value || "").replace(/\/+$/, "");
 }
 
-const FE_BASE = trimTrailingSlash(process.env.PANTHEON_FE_BASE_URL || "https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io");
-const BFF_BASE = trimTrailingSlash(process.env.PANTHEON_BFF_BASE_URL || "https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io");
+const FE_BASE = trimTrailingSlash(process.env.PANTHEON_FE_BASE_URL || "https://pantheon-lupin-dev-fe.35.201.204.12.sslip.io");
+const BFF_BASE = trimTrailingSlash(process.env.PANTHEON_BFF_BASE_URL || "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io");
 const OUT_DIR = argv["out-dir"] || process.env.PANTHEON_AUDIT_OUT_DIR || ".lovable/audits";
 const SRC_SCAN_DIR = argv["src-scan-dir"] || "src/management";
 const LOAD_GATE_MANIFEST = argv["load-gate-manifest"] || process.env.PANTHEON_LOAD_GATE_MANIFEST || "";

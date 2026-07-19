@@ -6,11 +6,11 @@ import { pathToFileURL } from "node:url";
 
 const FE_BASE = trimTrailingSlash(
   process.env.PANTHEON_FE_BASE_URL ||
-    "https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io",
+    "https://pantheon-lupin-dev-fe.35.201.204.12.sslip.io",
 );
 const UPSTREAM_BFF_BASE = trimTrailingSlash(
   process.env.PANTHEON_BFF_BASE_URL ||
-    "https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io",
+    "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io",
 );
 const BFF_BASE = trimTrailingSlash(
   process.env.PANTHEON_BROWSER_BFF_BASE_URL || UPSTREAM_BFF_BASE,
