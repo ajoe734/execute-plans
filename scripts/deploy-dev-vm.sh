@@ -424,7 +424,7 @@ ensure_probe_dependencies() {
   fi
   echo "=== install probe dependencies ==="
   npm ci
-  npx playwright install chromium
+  npx playwright install chromium --with-deps
   PROBE_DEPENDENCIES_READY=true
 }
 
