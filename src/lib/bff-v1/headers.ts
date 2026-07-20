@@ -7,8 +7,9 @@
 //   - X-Correlation-Id              — auto-minted root chain (or caller-supplied)
 //   - Idempotency-Key               — mutations only (unchanged)
 // Providers default to no-op so mock mode and tests continue to pass without
-// real credentials. Live deployments register real providers via
-// `setAuthProvider({ getToken, getTenantId })`.
+// real credentials. Live deployments register the current short-lived token
+// in memory via `setAuthProvider({ getToken, getTenantId })`. Persistent browser
+// storage is deliberately not an authentication source.
 
 const HTTP_MUTATION_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
@@ -38,7 +39,8 @@ export function ifMatch(lockVersion: number | string): string {
 
 export function acceptLanguage(locale?: string): string {
   if (locale) return locale;
-  if (typeof navigator !== "undefined" && navigator.language) return navigator.language;
+  if (typeof navigator !== "undefined" && navigator.language)
+    return navigator.language;
   return "en-US";
 }
 
@@ -61,50 +63,7 @@ const noopProvider: AuthProvider = {
   getTenantId: () => null,
 };
 
-export const BFF_AUTH_STORAGE_KEYS = {
-  bearerToken: "pantheon.bff.bearerToken",
-  legacyBearerToken: "pantheon_operator_token",
-  tenantId: "pantheon.bff.tenantId",
-  legacyTenantId: "pantheon_tenant_id",
-} as const;
-
-function readEnv(): Record<string, string | undefined> {
-  const viteEnv = ((import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {});
-  const nodeEnv = typeof process !== "undefined" ? process.env : {};
-  return { ...viteEnv, ...nodeEnv };
-}
-
-function browserStorageGet(key: string): string | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const fromSession = window.sessionStorage?.getItem(key);
-    if (fromSession) return fromSession;
-    return window.localStorage?.getItem(key) ?? null;
-  } catch {
-    return null;
-  }
-}
-
-export function readBrowserAuthStorage(): { token: string | null; tenantId: string | null } {
-  return {
-    token: browserStorageGet(BFF_AUTH_STORAGE_KEYS.bearerToken) ?? browserStorageGet(BFF_AUTH_STORAGE_KEYS.legacyBearerToken),
-    tenantId: browserStorageGet(BFF_AUTH_STORAGE_KEYS.tenantId) ?? browserStorageGet(BFF_AUTH_STORAGE_KEYS.legacyTenantId),
-  };
-}
-
-function devBearerTokenFromEnv(): string | null {
-  const env = readEnv();
-  if (env.VITE_BFF_MODE !== "live") return null;
-  const token = env.VITE_BFF_DEV_BEARER_TOKEN?.trim();
-  return token || null;
-}
-
-const browserProvider: AuthProvider = {
-  getToken: () => readBrowserAuthStorage().token,
-  getTenantId: () => readBrowserAuthStorage().tenantId,
-};
-
-let authProvider: AuthProvider = browserProvider;
+let authProvider: AuthProvider = noopProvider;
 
 export function setAuthProvider(p: Partial<AuthProvider>): void {
   authProvider = {
@@ -115,6 +74,11 @@ export function setAuthProvider(p: Partial<AuthProvider>): void {
 
 export function getAuthProvider(): AuthProvider {
   return authProvider;
+}
+
+/** Clear the in-memory token/tenant bridge on logout or auth failure. */
+export function clearAuthProvider(): void {
+  authProvider = noopProvider;
 }
 
 export interface BuildHeadersInput {
@@ -130,7 +94,7 @@ export interface BuildHeadersInput {
 export function buildHeaders(input: BuildHeadersInput): Record<string, string> {
   const correlationId = input.correlationId ?? newCorrelationId();
   const headers: Record<string, string> = {
-    "Accept": "application/json",
+    Accept: "application/json",
     "Accept-Language": acceptLanguage(input.locale),
     "X-Request-Id": xRequestId(),
     "X-Correlation-Id": correlationId,
@@ -138,7 +102,7 @@ export function buildHeaders(input: BuildHeadersInput): Record<string, string> {
   };
   // Auth / tenant injection (live mode). Mock / test providers return null → headers omitted.
   try {
-    const token = authProvider.getToken() || devBearerTokenFromEnv();
+    const token = authProvider.getToken();
     if (token) headers["Authorization"] = `Bearer ${token}`;
     const tenant = authProvider.getTenantId();
     if (tenant) headers["X-Tenant-Id"] = tenant;
