@@ -1,0 +1,341 @@
+/*
+ * AG-UIPOL-011 narrow interaction contract.
+ *
+ * The recovered source has behavioral, not pixel, mobile authority. These
+ * rules keep one contained task surface below 900 px, collapse desktop rails
+ * into explicit selectors, and prevent inline desktop dimensions from
+ * widening the document. Component state decides which pane is active; CSS
+ * only changes the presentation at the shared breakpoint.
+ */
+
+.agora-mobile-only {
+  display: none;
+}
+
+.agora-narrow-drawer {
+  max-width: none !important;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  width: 100% !important;
+}
+
+@media (max-width: 899px) {
+  .agora-mobile-only {
+    display: flex;
+  }
+
+  .agora-desktop-only {
+    display: none !important;
+  }
+
+  [data-mobile-pane-hidden="true"],
+  [data-mobile-collapsed="true"] {
+    display: none !important;
+  }
+
+  [data-testid="trading-desk-command-bar"] {
+    padding-left: max(0.75rem, env(safe-area-inset-left));
+    padding-right: max(0.75rem, env(safe-area-inset-right));
+  }
+
+  [data-testid="trading-desk-tab-bar"] {
+    padding-left: max(0.25rem, env(safe-area-inset-left));
+    padding-right: max(0.25rem, env(safe-area-inset-right));
+    scrollbar-width: thin;
+  }
+
+  [data-testid="trading-desk-tab-bar"] > button {
+    flex: 0 0 auto;
+    padding-left: 0.875rem;
+    padding-right: 0.875rem;
+  }
+
+  [data-testid="trading-desk-bottom-strip"] {
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: max(0.25rem, env(safe-area-inset-left));
+    padding-right: max(0.25rem, env(safe-area-inset-right));
+  }
+
+  /* Trading Room: task and risk first; desktop rails become explicit panes. */
+  [data-testid="trading-room-page"],
+  [data-testid="trading-room-default-entry"],
+  [data-testid^="strategy-workspace-"] {
+    min-width: 0;
+  }
+
+  [data-testid="trading-room-navigation"] {
+    flex: 0 0 auto;
+    min-width: 0;
+  }
+
+  [data-testid="strategy-lens-switcher"] {
+    gap: 0.5rem !important;
+    max-height: min(44dvh, 22rem);
+    overflow-y: auto;
+    padding: 0.5rem 0.75rem !important;
+  }
+
+  [data-testid="strategy-lens-card-strip"] {
+    grid-template-columns: repeat(5, minmax(11rem, 78vw)) !important;
+  }
+
+  [data-testid="queue-summary-strip"] {
+    gap: 0.75rem !important;
+    overflow-x: auto;
+    padding-left: 0.75rem !important;
+    padding-right: 0.75rem !important;
+    white-space: nowrap;
+  }
+
+  [data-testid="trading-room-default-entry-body"] {
+    min-width: 0;
+  }
+
+  [data-testid="trading-room-lens-content"] {
+    width: 100%;
+  }
+
+  [data-testid="trading-room-lens-dashboard"] {
+    padding: 0.75rem !important;
+  }
+
+  [data-testid="trading-room-candidate-board"] {
+    flex: 1 1 auto !important;
+    height: auto !important;
+    min-height: 0;
+  }
+
+  [data-testid="candidate-board-mobile"] {
+    min-width: 0;
+  }
+
+  .agora-candidate-drawer-panel {
+    width: 100% !important;
+    max-width: none;
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+    padding-top: env(safe-area-inset-top);
+  }
+
+  .agora-drawer-action-footer {
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+
+  [data-testid="trading-room-workspace-layout"] {
+    min-height: 0;
+    min-width: 0;
+  }
+
+  [data-testid="trading-room-workspace-layout"][data-mobile-workspace-pane="decisions"] {
+    flex-direction: column;
+    overflow-y: auto !important;
+    overscroll-behavior: contain;
+  }
+
+  [data-testid="trading-room-workspace-layout"][data-mobile-workspace-pane="decisions"]
+    [data-testid="trading-room-workspace-column"] {
+    flex: 0 0 auto !important;
+    min-height: auto !important;
+    overflow: visible !important;
+  }
+
+  [data-testid="trading-room-workspace-layout"][data-mobile-workspace-pane="decisions"]
+    [data-testid="trading-room-decision-surface"],
+  [data-testid="trading-room-workspace-layout"][data-mobile-workspace-pane="decisions"]
+    [data-testid="trading-event-queue"] {
+    flex: 0 0 auto !important;
+    overflow: visible !important;
+  }
+
+  [data-testid="trading-room-workspace-layout"][data-mobile-workspace-pane="decisions"]
+    [data-testid="trading-room-position-surface"],
+  [data-testid="trading-room-workspace-layout"][data-mobile-workspace-pane="decisions"]
+    [data-testid="position-action-queue"] {
+    flex: 0 0 auto !important;
+    overflow: visible !important;
+    width: 100% !important;
+  }
+
+  [data-testid="trading-room-workspace-layout"][data-mobile-workspace-pane="decisions"]
+    [data-testid="position-action-queue"] {
+    border-left: 0 !important;
+    border-top: 1px solid #2a2e38;
+  }
+
+  [data-testid="trading-room-workspace-surface"],
+  [data-testid="trading-room-workspace-shell"],
+  [data-testid^="workspace-active-view-"] {
+    min-width: 0;
+  }
+
+  [data-testid="workspace-control-strip"],
+  [data-testid^="workspace-active-view-"] {
+    padding-left: max(0.75rem, env(safe-area-inset-left)) !important;
+    padding-right: max(0.75rem, env(safe-area-inset-right)) !important;
+  }
+
+  [data-testid="workspace-grid-drop-surface"],
+  [data-testid="workspace-grid-stacked"],
+  [data-testid^="workspace-grid-cell-"] {
+    max-width: 100%;
+    min-width: 0 !important;
+  }
+
+  [data-testid="workspace-add-widget-library"] {
+    border-radius: 0 !important;
+    bottom: 0 !important;
+    height: 100dvh;
+    left: 0 !important;
+    max-height: none !important;
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom)) !important;
+    padding-left: max(0.75rem, env(safe-area-inset-left)) !important;
+    padding-right: max(0.75rem, env(safe-area-inset-right)) !important;
+    padding-top: max(0.75rem, env(safe-area-inset-top)) !important;
+    right: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+  }
+
+  .agora-narrow-workspace-revision {
+    border-left: 0 !important;
+    height: 100dvh !important;
+    width: 100% !important;
+  }
+
+  [data-testid="workspace-widget-revision-drawer"] > header {
+    padding-left: max(0.75rem, env(safe-area-inset-left)) !important;
+    padding-right: max(0.75rem, env(safe-area-inset-right)) !important;
+  }
+
+  [data-testid="workspace-widget-revision-drawer"] > div,
+  [data-testid="workspace-widget-revision-drawer"] > footer {
+    padding-left: max(0.75rem, env(safe-area-inset-left)) !important;
+    padding-right: max(0.75rem, env(safe-area-inset-right)) !important;
+  }
+
+  .workspace-widget-before-after-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  [data-testid="workspace-widget-before-after-diff"] {
+    overflow-x: auto !important;
+  }
+
+  .workspace-widget-diff-header,
+  .workspace-widget-diff-row {
+    grid-template-columns: 5.5rem minmax(7.5rem, 1fr) minmax(7.5rem, 1fr) !important;
+    min-width: 21rem;
+  }
+
+  .workspace-proposal-actions {
+    background: #11151d;
+    border-top: 1px solid #2a2e38;
+    bottom: 0;
+    margin: 0 -0.75rem -0.75rem;
+    padding: 0.75rem;
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+    position: sticky;
+    z-index: 2;
+  }
+
+  /* Workshop: selector + one active conversation/readiness pane. */
+  [data-testid="strategy-workshop-page-list"] {
+    min-width: 0;
+  }
+
+  [data-testid="strategy-workshop-live-tab"] {
+    display: flex !important;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  [data-testid="workshop-selector"] {
+    flex: 0 0 auto;
+    max-height: 7.75rem;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    padding: 0.5rem !important;
+  }
+
+  [data-testid="workshop-list"] {
+    display: flex !important;
+    gap: 0.5rem;
+  }
+
+  [data-testid="workshop-list"] > button {
+    flex: 0 0 min(14rem, 78vw);
+  }
+
+  [data-testid="selected-workshop-runtime"] {
+    flex: 1 1 auto;
+    min-height: 0;
+    min-width: 0;
+  }
+
+  [data-testid="strategy-workshop-page-session"] {
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  [data-testid="workshop-conversation-pane"] {
+    border-right: 0 !important;
+    min-height: 0;
+    min-width: 0;
+    width: 100%;
+  }
+
+  [data-testid="strategy-workshop-runtime-header"] {
+    gap: 0.5rem !important;
+    padding: 0.5rem 0.75rem !important;
+  }
+
+  [data-testid="workshop-conversation"] {
+    padding: 0.75rem !important;
+  }
+
+  [data-testid="servant-composer"] {
+    gap: 0.5rem !important;
+    padding: 0.75rem !important;
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom)) !important;
+  }
+
+  [data-testid="servant-composer-input"] {
+    min-height: 3.5rem;
+  }
+
+  [data-testid="completeness-rail"] {
+    border-left: 0 !important;
+    flex: 1 1 auto;
+    min-height: 0;
+    width: 100% !important;
+  }
+
+  /* Performance: one selected decision/outcome/list pane, never a stacked
+     three-panel page or clipped desktop table. */
+  [data-testid="strategy-performance-page"] {
+    gap: 0.75rem !important;
+    min-width: 0;
+    padding: 0.75rem !important;
+  }
+
+  [data-testid="performance-pane-grid"] {
+    display: flex !important;
+    min-height: 0;
+    min-width: 0;
+  }
+
+  [data-testid="performance-strategy-pane"],
+  [data-testid="performance-outcome-pane"],
+  [data-testid="performance-decision-pane"] {
+    flex: 1 1 auto;
+    min-height: 0;
+    min-width: 0;
+    width: 100%;
+  }
+
+  [data-testid="performance-source-health"] {
+    max-height: 5.5rem;
+    overflow-y: auto;
+    padding: 0.5rem 0.75rem !important;
+  }
+}

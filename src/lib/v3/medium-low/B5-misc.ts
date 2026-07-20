@@ -188,7 +188,7 @@ export const MOCK_ID_PATTERNS = {
 export const DEMO_SCENARIOS: Record<"A" | "B" | "C" | "D" | "E" | "F", { name: string; routes: string[] }> = {
   A: { name: "Strategy replicated → review → paper",          routes: ["/management/strategies/:id", "/management/governance/:id", "/management/deployment"] },
   B: { name: "Live drawdown alert → incident → rollback",     routes: ["/management/risk", "/management/incidents/:id", "/management/deployment"] },
-  C: { name: "Quarterly ranking → rebalance",                 routes: ["/management/ranking", "/management/rebalance/:id", "/management/capital/:id"] },
+  C: { name: "Quarterly ranking → rebalance",                 routes: ["/management/promotion-allocation?tab=formula-policy", "/management/promotion-allocation?tab=quarterly-capital&rebalance_id=:id", "/management/promotion-allocation?tab=quarterly-capital&capital_id=:id"] },
   D: { name: "New persona → route policy → MCP/Skill grant",  routes: ["/management/personas/:id", "/management/mcp", "/management/skills"] },
   E: { name: "Agora signal review → research task",           routes: ["/agora/signals/:id", "/agora/insights", "/management/experiments"] },
   F: { name: "Skill draft → sandbox → approval",              routes: ["/agora/skill-coaching", "/management/skills", "/management/governance/:id"] },
