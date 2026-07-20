@@ -86,10 +86,12 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
           HEAD_SHA: ${{ github.sha }}
         run: |
+          # Deleting a previously tracked artifact is remediation, not a new
+          # artifact entering history. Inspect every change type except D.
           if [[ -n "$BASE_SHA" && "$BASE_SHA" != "0000000000000000000000000000000000000000" ]] && git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
-            CHANGED=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" || true)
+            CHANGED=$(git diff --diff-filter=ACMRTUXB --name-only "$BASE_SHA" "$HEAD_SHA" || true)
           else
-            CHANGED=$(git diff --name-only "$HEAD_SHA~1" "$HEAD_SHA" 2>/dev/null || true)
+            CHANGED=$(git diff --diff-filter=ACMRTUXB --name-only "$HEAD_SHA~1" "$HEAD_SHA" 2>/dev/null || true)
           fi
           if [[ -z "$CHANGED" ]]; then exit 0; fi
           echo "$CHANGED" | xargs python3 scripts/git/check_generated_files.py
