@@ -506,6 +506,8 @@ function makeDeploymentManifest(candidate) {
     profile: candidate.profile,
     ...(candidate.pairId ? { pairId: candidate.pairId } : {}),
     commit: candidate.frontendSha,
+    sourceBranch: "dev",
+    sourceRef: candidate.frontendSha,
     frontendSha: candidate.frontendSha,
     frontend: {
       repository: FRONTEND_REPOSITORY,
@@ -682,6 +684,8 @@ function validateDeploymentManifest(deployment, candidate, normalized) {
       ? deployment.pairId === normalized.pairId
       : deployment.pairId === undefined) &&
     deployment.commit === normalized.frontendSha &&
+    deployment.sourceBranch === "dev" &&
+    deployment.sourceRef === normalized.frontendSha &&
     deployment.frontendSha === normalized.frontendSha &&
     deployment.frontend?.repository === FRONTEND_REPOSITORY &&
     deployment.frontend?.commitSha === normalized.frontendSha &&

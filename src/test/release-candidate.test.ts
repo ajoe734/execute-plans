@@ -201,6 +201,8 @@ describe("release candidate preparation and verification", () => {
     expect(deployment.artifactDigestSha256).toBe(first.artifactDigestSha256);
     expect(deployment.integrationGateRunId).toBe(GATE_RUN_ID);
     expect(deployment.bffCommitEvidence).toBe(true);
+    expect(deployment.sourceBranch).toBe("dev");
+    expect(deployment.sourceRef).toBe(FRONTEND_SHA);
     expect(deployment.buildMode).toEqual(SAFE_BUILD_MODE);
 
     expect(verify(firstDir).artifactDigestSha256).toBe(
@@ -425,6 +427,23 @@ describe("release candidate preparation and verification", () => {
     ).toThrow(/frontend SHA does not match/u);
     expect(() => verify(candidateDir, { expectedGateRunId: "999999" })).toThrow(
       /gate run ID does not match/u,
+    );
+  });
+
+  it.each([
+    ["sourceBranch", "main"],
+    ["sourceRef", OTHER_FRONTEND_SHA],
+  ])("rejects tampered deployment %s", (field, value) => {
+    const root = temporaryRoot();
+    const candidateDir = path.join(root, "candidate");
+    prepare(root, { outputDir: candidateDir });
+    const deploymentPath = path.join(candidateDir, "dist", "deployment.json");
+    const deployment = JSON.parse(fs.readFileSync(deploymentPath, "utf8"));
+    deployment[field] = value;
+    fs.writeFileSync(deploymentPath, `${JSON.stringify(deployment, null, 2)}\n`);
+
+    expect(() => verify(candidateDir)).toThrow(
+      /deployment.json is inconsistent with the verified release candidate/u,
     );
   });
 
