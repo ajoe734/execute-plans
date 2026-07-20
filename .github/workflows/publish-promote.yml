@@ -1,0 +1,59 @@
+name: Publish Promote
+
+# Opens a `promote/<VER>` → `main` PR once the publish snapshot has
+# soaked for `branch_workflow.promote.soak_days` days and no
+# `regression/*` label blocks it. Ported from pantheon
+# .github/workflows/publish-promote.yml. Cron runs hourly; also
+# triggered on `release/v*` tag push.
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  push:
+    tags:
+      - "release/v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Publish version to promote (e.g. v2026.07.13.0). Omit to evaluate all candidates."
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: read
+
+concurrency:
+  group: publish-promote
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    name: Evaluate publish snapshots
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: dev
+
+      - name: Discover candidates
+        id: discover
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          args=(discover --github-output "$GITHUB_OUTPUT")
+          if [[ -n "${INPUT_VERSION}" ]]; then
+            args+=(--version "${INPUT_VERSION}")
+          fi
+          python3 scripts/git/publish_promote.py "${args[@]}"
+
+      - name: Open promote PRs
+        if: steps.discover.outputs.candidate_count != '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PROMOTE_CANDIDATES: ${{ steps.discover.outputs.candidates }}
+        run: |
+          python3 scripts/git/publish_promote.py open-prs
