@@ -14,8 +14,8 @@ import { Badge } from "@/components/ui/badge";
 import { useT } from "@/platform/hooks";
 import { usePlatform } from "@/platform/store";
 import { bff } from "@/lib/bff-v1";
-import { toast } from "sonner";
 import { MockDataBadge } from "@/components/data/MockDataBadge";
+import { NON_PRODUCTION_COMMAND_REASON, NonProductionActionButton } from "@/management/components/NonProductionActionButton";
 import {
   DEFAULT_FORCE_TRANSITION_POLICY,
   validateForceTransition,
@@ -92,14 +92,12 @@ const BreakGlassPanel = () => {
           Validation: {result.reason}
         </div>
       )}
-      <Button
+      <NonProductionActionButton
         size="sm"
         variant="destructive"
-        disabled={!result.ok || !entityId || !fromState || !toState}
-        onClick={() => toast.warning("Break-glass request submitted (mock)", { description: `${entityType}/${entityId} ${fromState}→${toState}` })}
       >
         Submit force transition
-      </Button>
+      </NonProductionActionButton>
     </Card>
   );
 };
@@ -131,7 +129,7 @@ export const SettingsPage = () => {
                 <div className="space-y-1.5"><Label>{t("settings.profile.displayName")}</Label><Input defaultValue="Operator" /></div>
                 <div className="space-y-1.5"><Label>{t("settings.profile.email")}</Label><Input defaultValue="ops@pantheon.local" /></div>
               </div>
-              <Button size="sm" onClick={() => toast.success(t("toast.saved"))}>{t("actions.save")}</Button>
+              <NonProductionActionButton size="sm">{t("actions.save")}</NonProductionActionButton>
             </Section>
           </TabsContent>
 
@@ -144,7 +142,9 @@ export const SettingsPage = () => {
             </Section>
             <Section title={t("settings.theme.title")}>
               <Row label={t("settings.theme.dark")} hint={t("settings.theme.darkHint")}>
-                <Switch defaultChecked />
+                <span className="inline-flex" title={NON_PRODUCTION_COMMAND_REASON}>
+                  <Switch defaultChecked disabled />
+                </span>
               </Row>
               <Row label={t("settings.theme.density")}>
                 <Badge variant="outline">{t("common.densityComfortable")}</Badge>
@@ -163,7 +163,7 @@ export const SettingsPage = () => {
                 <Row key={i.name} label={i.name}>
                   <div className="flex gap-2 items-center">
                     <Badge variant={i.status === "connected" ? "default" : "outline"}>{i.status}</Badge>
-                    <Button size="sm" variant="outline">{i.status === "connected" ? t("settings.integrations.manage") : t("settings.integrations.connect")}</Button>
+                    <NonProductionActionButton size="sm" variant="outline">{i.status === "connected" ? t("settings.integrations.manage") : t("settings.integrations.connect")}</NonProductionActionButton>
                   </div>
                 </Row>
               ))}
@@ -177,10 +177,10 @@ export const SettingsPage = () => {
                 { name: "ci-runner",    prefix: "pk_live_3f…", created: "2026-03-02" },
               ].map((k) => (
                 <Row key={k.name} label={k.name} hint={`${k.prefix} · created ${k.created}`}>
-                  <Button size="sm" variant="outline">{t("settings.api.rotate")}</Button>
+                  <NonProductionActionButton size="sm" variant="outline">{t("settings.api.rotate")}</NonProductionActionButton>
                 </Row>
               ))}
-              <Button size="sm">{t("settings.api.create")}</Button>
+              <NonProductionActionButton size="sm">{t("settings.api.create")}</NonProductionActionButton>
             </Section>
           </TabsContent>
 
@@ -211,7 +211,9 @@ export const SettingsPage = () => {
                 ["risk.realtimeStream", true],
               ].map(([k, v]) => (
                 <Row key={k as string} label={k as string}>
-                  <Switch defaultChecked={v as boolean} />
+                  <span className="inline-flex" title={NON_PRODUCTION_COMMAND_REASON}>
+                    <Switch defaultChecked={v as boolean} disabled />
+                  </span>
                 </Row>
               ))}
             </Section>
