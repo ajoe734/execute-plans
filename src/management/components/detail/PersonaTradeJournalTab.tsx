@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -8,17 +9,24 @@ import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
-import { tradeJournal, interaction, lists, type TradeEpisodeProjection, type PersonaTradeReflection, type TradePattern } from "@/lib/bff-v1";
+import {
+  tradeJournal,
+  interaction,
+  lists,
+  type TradeEpisodeProjection,
+  type PersonaTradeReflection,
+  type TradePattern,
+} from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { toast } from "sonner";
 import { safeDateTime } from "@/lib/utils";
-import { Link, useNavigate } from "react-router-dom";
-import { 
-  ArrowUpRight, 
-  Activity, 
-  FileText, 
-  Database, 
-  Inbox, 
+import { Link } from "react-router-dom";
+import {
+  ArrowUpRight,
+  Activity,
+  FileText,
+  Database,
+  Inbox,
   AlertTriangle,
   RotateCcw,
   Search,
@@ -26,6 +34,10 @@ import {
   ChevronRight
 } from "lucide-react";
 import { bffV1 } from "@/lib/bff-v1/client";
+import { useAgoraWriteAccess } from "@/agora/useAgoraWriteAccess";
+
+const errorMessage = (error: unknown, fallback: string) =>
+  error instanceof Error && error.message ? error.message : fallback;
 
 // Status color mappings
 const statusBadgeStyles: Record<string, string> = {
@@ -48,28 +60,36 @@ const ago = (hours: number): string => {
   return d.toISOString();
 };
 
+interface PersonaSummary {
+  persona_id: string;
+  display_name?: string;
+  name?: string;
+}
+
 export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => {
   const t = useT();
+  const navigate = useNavigate();
+  const writeAccess = useAgoraWriteAccess();
   const [activeTab, setActiveTab] = useState<string>("journal");
   const [episodes, setEpisodes] = useState<TradeEpisodeProjection[]>([]);
   const [reflections, setReflections] = useState<PersonaTradeReflection[]>([]);
   const [patterns, setPatterns] = useState<TradePattern[]>([]);
-  
+
   // Filters
   const [envFilter, setEnvFilter] = useState<string>("");
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [cursor, setCursor] = useState<number>(0);
   const [hasMore, setHasMore] = useState<boolean>(false);
-  
+
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [degradedState, setDegradedState] = useState<string>("complete");
   const [bffMode, setBffMode] = useState<string>("mock");
-  
+
   // Selected details
   const [selectedEpisode, setSelectedEpisode] = useState<TradeEpisodeProjection | null>(null);
-  
+
   // Commands state
   const [retryDialogOpen, setRetryDialogOpen] = useState<boolean>(false);
   const [retryReason, setRetryReason] = useState<string>("");
@@ -78,86 +98,21 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
   const [decideReason, setDecideReason] = useState<string>("");
   const [selectedCandidateId, setSelectedCandidateId] = useState<string>("");
   const [submittingCommand, setSubmittingCommand] = useState<boolean>(false);
-  const [allPersonas, setAllPersonas] = useState<any[]>([]);
+
+  // PINT-008 — "Reflect with Personas" contextual workshop handoff.
+  const [allPersonas, setAllPersonas] = useState<PersonaSummary[]>([]);
   const [selectedAltPersona, setSelectedAltPersona] = useState<string>("");
   const [varianceAttribution, setVarianceAttribution] = useState<string>("");
-  const [resolvedWorkshopId, setResolvedWorkshopId] = useState<string | null>(null);
-  const [redTeamEligiblePersona, setRedTeamEligiblePersona] = useState<any | null>(null);
-  const [checkingRedTeam, setCheckingRedTeam] = useState<boolean>(false);
-  const [redTeamUnavailableReason, setRedTeamUnavailableReason] = useState<string>("");
-  const navigate = useNavigate();
 
   useEffect(() => {
     setBffMode(bffV1.detectMode());
-    // Load all personas
     lists.personas()
-      .then((res) => {
-        const items = Array.isArray(res) ? res : res?.items || [];
-        setAllPersonas(items);
+      .then((res: unknown) => {
+        const items = Array.isArray(res) ? res : (res as { items?: unknown[] })?.items ?? [];
+        setAllPersonas(items as PersonaSummary[]);
       })
-      .catch(() => {});
+      .catch(() => undefined);
   }, []);
-
-  useEffect(() => {
-    if (!selectedEpisode) {
-      setResolvedWorkshopId(null);
-      setRedTeamEligiblePersona(null);
-      setRedTeamUnavailableReason("");
-      return;
-    }
-    
-    let cancelled = false;
-    const checkEligibility = async () => {
-      setCheckingRedTeam(true);
-      setRedTeamUnavailableReason("");
-      try {
-        const environment = selectedEpisode.environment || "paper";
-        const resolveRes = await interaction.resolveContext({
-          context_refs: [
-            { type: "journal_entry", id: selectedEpisode.trade_episode_id }
-          ],
-          environment: environment as any
-        });
-        
-        if (cancelled) return;
-        const workshopId = resolveRes.data.workshop_id;
-        setResolvedWorkshopId(workshopId);
-        
-        const eligibleRes = await interaction.participants({
-          workshop_id: workshopId,
-          mode: "challenge",
-          environment: environment as any
-        });
-        
-        if (cancelled) return;
-        const redTeam = eligibleRes.data.included.find(
-          (p: any) => p.persona_id === "per_red" || p.persona_id.toLowerCase().includes("red") || p.display_name.toLowerCase().includes("red")
-        );
-        setRedTeamEligiblePersona(redTeam || null);
-        
-        if (!redTeam) {
-          const excludedRedTeam = eligibleRes.data.excluded.find(
-            (p: any) => p.persona_id === "per_red" || p.persona_id.toLowerCase().includes("red") || p.display_name.toLowerCase().includes("red")
-          );
-          if (excludedRedTeam) {
-            setRedTeamUnavailableReason(excludedRedTeam.reasons.join(", ") || "Ineligible");
-          } else {
-            setRedTeamUnavailableReason("Not found in registry");
-          }
-        }
-      } catch (err: any) {
-        console.error("Failed to fetch red team eligibility", err);
-        setRedTeamUnavailableReason(err.message || "Failed to fetch participants");
-      } finally {
-        if (!cancelled) setCheckingRedTeam(false);
-      }
-    };
-    
-    checkEligibility();
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedEpisode]);
 
   const loadData = async () => {
     setLoading(true);
@@ -180,8 +135,8 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
         const res = await tradeJournal.patterns(personaId);
         setPatterns(res.data);
       }
-    } catch (err: any) {
-      setError(err.message || "Failed to load data");
+    } catch (err: unknown) {
+      setError(errorMessage(err, "Failed to load data"));
       toast.error("BFF Trade Journal Read Failed");
     } finally {
       setLoading(false);
@@ -210,8 +165,8 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
       const updatedDetail = await tradeJournal.get(personaId, selectedEpisode.trade_episode_id);
       setSelectedEpisode(updatedDetail.data);
       loadData();
-    } catch (err: any) {
-      toast.error(err.message || "Failed to submit retry command");
+    } catch (err: unknown) {
+      toast.error(errorMessage(err, "Failed to submit retry command"));
     } finally {
       setSubmittingCommand(false);
     }
@@ -225,7 +180,13 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
     }
     setSubmittingCommand(true);
     try {
-      const res = await tradeJournal.decideLesson(personaId, selectedCandidateId, decideReason, decideDecision, varianceAttribution || undefined);
+      const res = await tradeJournal.decideLesson(
+        personaId,
+        selectedCandidateId,
+        decideReason,
+        decideDecision,
+        varianceAttribution || undefined,
+      );
       toast.success(`Lesson candidate was ${decideDecision}`, {
         description: `Command ID: ${res.data.commandId}`
       });
@@ -238,57 +199,124 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
         setSelectedEpisode(updatedDetail.data);
       }
       loadData();
-    } catch (err: any) {
-      toast.error(err.message || "Failed to submit decision command");
+    } catch (err: unknown) {
+      toast.error(errorMessage(err, "Failed to submit decision command"));
     } finally {
       setSubmittingCommand(false);
     }
   };
 
-  const handleReflect = async (type: "original" | "alternate" | "red-team", targetPersonaId: string) => {
+  const handleJournalInteraction = async (
+    mode: "ask" | "challenge" | "compare" | "propose_action" | "reflect",
+    participantIds: string[],
+  ) => {
     if (!selectedEpisode) return;
-    if (!targetPersonaId) {
-      toast.error("Please select a persona to review");
+    if (!writeAccess.interactionAllowed) {
+      toast.error(writeAccess.interactionDisabledReason ?? "Persona interaction is not permitted");
       return;
     }
-    
+    if (participantIds.length === 0 || participantIds.some((id) => !id)) {
+      toast.error("Select every Persona required for this interaction");
+      return;
+    }
+
     setSubmittingCommand(true);
     try {
-      const mode = type === "red-team" ? "challenge" : "reflect";
-      const environment = selectedEpisode.environment || "paper";
-      
-      const workshopId = resolvedWorkshopId || (await interaction.resolveContext({
-        context_refs: [
-          { type: "journal_entry", id: selectedEpisode.trade_episode_id }
-        ],
-        environment: environment as any
-      })).data.workshop_id;
-      
-      // Now submit the interaction to initialize opinion/debate
-      await interaction.submit({
-        workshop_id: workshopId,
-        mode: mode,
-        environment: environment as any,
-        topic: `Reflection and review for episode ${selectedEpisode.trade_episode_id} by Persona ${targetPersonaId}`,
-        participant_persona_ids: [targetPersonaId],
-        context_refs: [
-          { type: "journal_entry", id: selectedEpisode.trade_episode_id },
-          { type: "persona", id: targetPersonaId }
-        ]
-      });
+      // The journal entry keeps the source environment in its canonical BFF
+      // projection; Persona advice itself is advisory-only and capped at paper.
+      const adviceEnvironment = "paper" as const;
 
-      toast.success("Workshop resolved successfully, redirecting...");
+      const requestedContextRefs = [
+        { type: "journal_entry" as const, id: selectedEpisode.trade_episode_id },
+        ...(selectedEpisode.strategy_id && selectedEpisode.artifact_version
+          ? [{ type: "strategy" as const, id: selectedEpisode.strategy_id, version_id: selectedEpisode.artifact_version }]
+          : []),
+      ];
+
+      const sourceRoute = `/management/personas/${encodeURIComponent(personaId)}?tab=tradeJournal`;
+      const cutoffHint = Object.values(selectedEpisode.coverage ?? {})
+        .map((item) => item.as_of)
+        .filter((value) => Boolean(value) && !Number.isNaN(Date.parse(value)))
+        .sort((left, right) => Date.parse(right) - Date.parse(left))[0]
+        ?? selectedEpisode.closed_at
+        ?? selectedEpisode.opened_at;
+
+      const resolved = await interaction.resolveContext({
+        context_refs: requestedContextRefs,
+        environment: adviceEnvironment,
+        source_route: sourceRoute,
+        focused_object: { kind: "journal_entry", id: selectedEpisode.trade_episode_id },
+        evidence_cutoff: cutoffHint,
+        selected_persona_ids: participantIds,
+        initial_mode: mode,
+        return_route: sourceRoute,
+      });
+      const binding = resolved.data.context_binding;
+      if (!resolved.data.verified || !binding) {
+        throw new Error("The BFF did not verify the canonical paper advice context.");
+      }
+      if (binding.focused_object.kind !== "journal_entry"
+        || binding.focused_object.id !== selectedEpisode.trade_episode_id
+        || binding.journal_ref !== selectedEpisode.trade_episode_id
+        || !binding.context_refs.some((ref) => ref.kind === "journal_entry" && ref.id === selectedEpisode.trade_episode_id)) {
+        throw new Error("The BFF resolved a different journal entry than the selected trade.");
+      }
+      if (!binding.evidence_cutoff || Number.isNaN(Date.parse(binding.evidence_cutoff))) {
+        throw new Error("The BFF did not return an authoritative context cutoff.");
+      }
+      const requestedStrategy = requestedContextRefs.find((ref) => ref.type === "strategy");
+      const resolvedStrategies = binding.context_refs.filter((ref) => ref.kind === "strategy" && ref.version);
+      if (requestedStrategy && (resolvedStrategies.length !== 1
+        || resolvedStrategies[0].id !== requestedStrategy.id
+        || resolvedStrategies[0].version !== requestedStrategy.version_id
+        || binding.strategy_ref?.strategy_id !== requestedStrategy.id
+        || binding.strategy_ref.version_id !== requestedStrategy.version_id)) {
+        throw new Error("The resolver changed or ambiguously expanded the journal strategy id/version.");
+      }
+      const strategyRef = resolvedStrategies.length === 1 ? resolvedStrategies[0] : undefined;
+      if (mode === "propose_action" && !strategyRef?.version) {
+        throw new Error("Propose requires a resolver-verified immutable strategy id and version for this journal entry.");
+      }
+      if (binding.selected_persona_ids.length !== participantIds.length
+        || binding.selected_persona_ids.some((id, index) => id !== participantIds[index])) {
+        throw new Error("The resolver changed the selected Persona binding for this journal interaction.");
+      }
+      const workshopId = binding.workshop_id;
+      const eligibility = await interaction.participants({
+        workshop_id: workshopId,
+        mode: mode === "compare" ? "consult" : mode,
+        environment: binding.advice_environment,
+      });
+      const eligibleIds = new Set(eligibility.data.included.map((item) => item.persona_id));
+      if (!participantIds.every((id) => eligibleIds.has(id))) {
+        throw new Error("One or more selected Personas are not eligible for this journal context.");
+      }
+      const params = new URLSearchParams({
+        mode,
+        participants: participantIds.join(","),
+        picker: "named",
+        return_to: binding.return_route,
+        return_label: `Trade Journal ${selectedEpisode.trade_episode_id}`,
+        source_kind: "journal_entry",
+        source_id: binding.focused_object.id,
+        advice_environment: binding.advice_environment,
+      });
+      params.set("evidence_cutoff", binding.evidence_cutoff);
+      if (strategyRef?.version) {
+        params.set("target_strategy_id", strategyRef.id);
+        params.set("target_strategy_version", strategyRef.version);
+      }
       setSelectedEpisode(null); // Close the sheet
-      navigate(`/agora/strategy-workshop/${workshopId}`);
-    } catch (err: any) {
-      toast.error(err.message || "Failed to resolve workshop context");
+      navigate(`/agora/strategy-workshop/${encodeURIComponent(workshopId)}?${params.toString()}`);
+    } catch (err: unknown) {
+      toast.error(errorMessage(err, "Failed to resolve workshop context"));
     } finally {
       setSubmittingCommand(false);
     }
   };
 
-  const filteredEpisodes = episodes.filter(ep => 
-    !searchQuery || 
+  const filteredEpisodes = episodes.filter(ep =>
+    !searchQuery ||
     ep.instrument_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
     ep.trade_episode_id.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -375,7 +403,7 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
                 className="pl-8 text-sm"
               />
             </div>
-            
+
             <div className="flex gap-2">
               <select
                 value={envFilter}
@@ -429,8 +457,8 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
                   </thead>
                   <tbody>
                     {filteredEpisodes.map((ep) => (
-                      <tr 
-                        key={ep.trade_episode_id} 
+                      <tr
+                        key={ep.trade_episode_id}
                         className="border-b border-border hover:bg-muted/20 cursor-pointer"
                         onClick={() => setSelectedEpisode(ep)}
                       >
@@ -464,9 +492,9 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
               {/* Pagination */}
               {hasMore && (
                 <div className="flex justify-end pt-2">
-                  <Button 
-                    size="sm" 
-                    variant="outline" 
+                  <Button
+                    size="sm"
+                    variant="outline"
                     onClick={() => setCursor(prev => prev + 10)}
                   >
                     Load More
@@ -538,24 +566,24 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
                           </div>
                           {ref.review_state === "proposed" && (
                             <div className="flex gap-1 shrink-0">
-                              <Button 
-                                size="sm" 
-                                variant="destructive" 
+                              <Button
+                                size="sm"
+                                variant="destructive"
                                 className="h-6 text-[10px] px-2"
                                 onClick={() => { setSelectedCandidateId(c.id); setDecideDecision("rejected"); setDecideDialogOpen(true); }}
                               >
                                 Reject
                               </Button>
-                              <Button 
-                                size="sm" 
-                                variant="outline" 
+                              <Button
+                                size="sm"
+                                variant="outline"
                                 className="h-6 text-[10px] px-2"
                                 onClick={() => { setSelectedCandidateId(c.id); setDecideDecision("quarantined"); setDecideDialogOpen(true); }}
                               >
                                 Quarantine
                               </Button>
-                              <Button 
-                                size="sm" 
+                              <Button
+                                size="sm"
                                 className="h-6 text-[10px] px-2 bg-emerald-600 hover:bg-emerald-500 text-white border-none"
                                 onClick={() => { setSelectedCandidateId(c.id); setDecideDecision("endorsed"); setDecideDialogOpen(true); }}
                               >
@@ -746,7 +774,7 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
               {/* Reflection telemetry */}
               <div className="space-y-2.5">
                 <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider border-b pb-1">Persona Reflection Telemetry</h3>
-                
+
                 {selectedEpisode.status === "reflection_pending" && (
                   <div className="p-3 bg-orange-500/10 border border-orange-500/20 text-orange-500 rounded-md text-xs flex gap-2 items-center justify-between">
                     <span>Reflection pipeline pending execution. Waiting for final watermarks.</span>
@@ -756,9 +784,9 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
                 {selectedEpisode.status === "reflection_failed" && (
                   <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-500 rounded-md text-xs flex flex-col sm:flex-row gap-2 items-start sm:items-center justify-between">
                     <span>Reflection generation failed due to timeout or missing joins.</span>
-                    <Button 
-                      size="sm" 
-                      variant="outline" 
+                    <Button
+                      size="sm"
+                      variant="outline"
                       onClick={() => setRetryDialogOpen(true)}
                       className="border-red-500/30 bg-red-500/10 hover:bg-red-500/20 text-red-500 font-semibold"
                     >
@@ -775,68 +803,61 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
                 )}
               </div>
 
-              {/* Contextual Workshop Reflection & Review Actions (PINT-008) */}
+              {/* Canonical contextual Persona Workshop actions (PINT-015). */}
               <div className="space-y-3 pt-3 border-t">
-                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider border-b pb-1">Reflect with Personas (Strategy Workshop)</h3>
+                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider border-b pb-1">Ask Personas about this trade</h3>
                 <div className="flex flex-col gap-3.5 bg-slate-50/50 p-3 rounded-lg border">
-                  
-                  {/* Original & Red-Team Review Row */}
-                  <div className="grid grid-cols-2 gap-2">
-                    <Button 
-                      size="sm" 
-                      variant="outline"
-                      className="text-xs font-semibold"
-                      onClick={() => handleReflect("original", selectedEpisode.persona_id)}
-                      disabled={submittingCommand}
-                    >
-                      Original Persona Review
-                    </Button>
-                    
-                    <div className="flex flex-col gap-1 w-full">
-                      <Button 
-                        size="sm" 
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-5" role="group" aria-label="Trade journal Persona actions">
+                    {([
+                      ["ask", "Ask"],
+                      ["challenge", "Challenge"],
+                      ["compare", "Compare"],
+                      ["propose_action", "Propose"],
+                      ["reflect", "Reflect"],
+                    ] as const).map(([mode, label]) => (
+                      <Button
+                        aria-label={`${label} Personas about trade ${selectedEpisode.trade_episode_id}`}
+                        className="text-xs font-semibold"
+                        disabled={submittingCommand || !writeAccess.interactionAllowed || (mode === "compare" && !selectedAltPersona)}
+                        key={mode}
+                        onClick={() => void handleJournalInteraction(
+                          mode,
+                          mode === "compare" ? [selectedEpisode.persona_id, selectedAltPersona] : [selectedEpisode.persona_id],
+                        )}
+                        size="sm"
+                        title={mode === "compare" && !selectedAltPersona ? "Select a comparison Persona below." : writeAccess.interactionDisabledReason ?? undefined}
                         variant="outline"
-                        className="text-xs font-semibold border-rose-500/30 hover:bg-rose-500/10 text-rose-600 hover:text-rose-700 w-full"
-                        onClick={() => handleReflect("red-team", redTeamEligiblePersona?.persona_id)}
-                        disabled={submittingCommand || checkingRedTeam || !redTeamEligiblePersona}
                       >
-                        {checkingRedTeam ? "Checking..." : redTeamEligiblePersona ? "Red Team Review" : "Red Team (Unavailable)"}
+                        {label}
                       </Button>
-                      {!checkingRedTeam && !redTeamEligiblePersona && (
-                        <span className="text-[10px] text-rose-500 text-center block mt-0.5" data-testid="red-team-unavailable">
-                          {redTeamUnavailableReason ? `Unavailable: ${redTeamUnavailableReason}` : "Unavailable in this environment"}
-                        </span>
-                      )}
-                    </div>
+                    ))}
                   </div>
 
-                  {/* Alternate Persona Review Row */}
+                  {/* Comparison Persona selection is preserved in the canonical deep link. */}
                   <div className="flex items-center gap-2 text-xs">
-                    <span className="text-muted-foreground shrink-0">Alternate Reviewer:</span>
+                    <label className="text-muted-foreground shrink-0" htmlFor="journal-comparison-persona">Comparison Persona:</label>
                     <select
+                      id="journal-comparison-persona"
                       value={selectedAltPersona}
                       onChange={(e) => setSelectedAltPersona(e.target.value)}
                       className="flex-1 min-w-0 px-2 py-1 text-xs rounded border border-input bg-background"
-                      disabled={submittingCommand}
+                      disabled={submittingCommand || !writeAccess.interactionAllowed}
                     >
                       <option value="">Select Persona...</option>
                       {allPersonas
-                        .filter(p => p.persona_id !== selectedEpisode.persona_id)
-                        .map(p => (
+                        .filter((p) => p.persona_id !== selectedEpisode.persona_id)
+                        .map((p) => (
                           <option key={p.persona_id} value={p.persona_id}>
                             {p.display_name || p.name || p.persona_id}
                           </option>
                         ))}
                     </select>
-                    <Button
-                      size="sm"
-                      className="h-7 text-xs bg-indigo-600 hover:bg-indigo-500 text-white"
-                      onClick={() => handleReflect("alternate", selectedAltPersona)}
-                      disabled={!selectedAltPersona || submittingCommand}
-                    >
-                      Review
-                    </Button>
                   </div>
+                  {writeAccess.interactionDisabledReason ? (
+                    <p className="text-[11px] font-semibold text-amber-700" data-testid="trade-journal-interaction-disabled-reason">
+                      {writeAccess.interactionDisabledReason}
+                    </p>
+                  ) : null}
                 </div>
               </div>
             </div>
@@ -864,9 +885,9 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
           </div>
           <DialogFooter>
             <Button size="sm" variant="outline" onClick={() => setRetryDialogOpen(false)}>Cancel</Button>
-            <Button 
-              size="sm" 
-              onClick={handleRetryReflection} 
+            <Button
+              size="sm"
+              onClick={handleRetryReflection}
               disabled={submittingCommand}
               className="bg-indigo-600 hover:bg-indigo-500 text-white border-none"
             >
@@ -889,7 +910,7 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
             <div className="text-xs p-2 bg-muted rounded border font-mono">
               Lesson ID: {selectedCandidateId}
             </div>
-            
+
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-semibold text-muted-foreground">Variance Attribution Category:</label>
               <select
@@ -922,9 +943,9 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
           </div>
           <DialogFooter>
             <Button size="sm" variant="outline" onClick={() => setDecideDialogOpen(false)}>Cancel</Button>
-            <Button 
-              size="sm" 
-              onClick={handleDecideLesson} 
+            <Button
+              size="sm"
+              onClick={handleDecideLesson}
               disabled={submittingCommand}
               className={decideDecision === "rejected" ? "bg-rose-600 hover:bg-rose-500 text-white border-none" : decideDecision === "quarantined" ? "bg-amber-600 hover:bg-amber-500 text-white border-none" : "bg-emerald-600 hover:bg-emerald-500 text-white border-none"}
             >
