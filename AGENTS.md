@@ -31,14 +31,14 @@ Pantheon dev frontend delivery is no longer Lovable-first. Do not use Lovable
 publish state as the dev frontend host or release truth. Build and validate this
 repo against the Pantheon-owned dev hosts:
 
-- FE: `https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io`
-- BFF: `https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io`
+- FE: `https://pantheon-lupin-dev-fe.35.201.204.12.sslip.io`
+- BFF: `https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io`
 
 Dev builds should use:
 
 ```sh
 VITE_BFF_MODE=live
-VITE_BFF_BASE_URL=https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io
+VITE_BFF_BASE_URL=https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io
 VITE_BFF_FALLBACK=strict
 VITE_BFF_REAL_WRITES=false
 ```
@@ -52,7 +52,11 @@ The dev FE host is a Caddy static site on the Pantheon dev VM:
 - release store: `/var/www/pantheon-dev-fe-releases`
 - deploy workflow: `.github/workflows/pantheon-dev-fe-deploy.yml`
 - deploy script: `scripts/deploy-dev-vm.sh`
-- deployment evidence: `https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io/deployment.json`
+- deployment evidence: `https://pantheon-lupin-dev-fe.35.201.204.12.sslip.io/deployment.json`
+
+The prior GCP project `pantheon-benjamin-20260528` and IP `35.201.239.38`
+are retired from active dev routing because the project is suspended. The
+replacement dev VM is in project `pantheon-lupin-dev-20260719`.
 
 The deployment workflow runs on the VM self-hosted GitHub runner with labels
 `self-hosted`, `Linux`, `X64`, `pantheon-dev-vm`, and
