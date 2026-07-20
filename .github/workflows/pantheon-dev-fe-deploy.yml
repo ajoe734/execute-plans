@@ -247,7 +247,39 @@ jobs:
               core.setFailed(`run ${gateRunId} returned an invalid run attempt`);
               return;
             }
-            const artifactName = `pantheon-fe-release-candidate-attempt-${run.run_attempt}`;
+            // A GitHub rerun can advance the run-level attempt when it schedules
+            // only a downstream skipped job.  Resolve the candidate-producing
+            // attempt from the latest successful integration-gate job instead
+            // of trusting that aggregate counter.
+            let producerAttempt = 0;
+            for (let attempt = run.run_attempt; attempt >= 1; attempt -= 1) {
+              const { data: jobsPage } = await github.rest.actions.listJobsForWorkflowRunAttempt({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                run_id: gateRunId,
+                attempt_number: attempt,
+                per_page: 100,
+              });
+              const producers = jobsPage.jobs.filter((job) => job.name === "integration-gate");
+              if (producers.length > 1) {
+                core.setFailed(`run ${gateRunId} attempt ${attempt} exposed multiple integration-gate jobs`);
+                return;
+              }
+              if (producers.length === 0) {
+                continue;
+              }
+              if (producers[0].status !== "completed" || producers[0].conclusion !== "success") {
+                core.setFailed(`run ${gateRunId} latest candidate-producing attempt was not successful`);
+                return;
+              }
+              producerAttempt = attempt;
+              break;
+            }
+            if (producerAttempt === 0) {
+              core.setFailed(`run ${gateRunId} did not expose a successful integration-gate producer attempt`);
+              return;
+            }
+            const artifactName = `pantheon-fe-release-candidate-attempt-${producerAttempt}`;
             const { data: artifactPage } = await github.rest.actions.listWorkflowRunArtifacts({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -285,6 +317,7 @@ jobs:
 
             core.setOutput("candidate_sha", requestedSha);
             core.setOutput("gate_run_id", gateRunIdText);
+            core.setOutput("gate_run_attempt", String(producerAttempt));
             core.setOutput("artifact_id", String(artifacts[0].id));
             core.setOutput("artifact_name", artifactName);
             core.setOutput("github_artifact_digest", String(artifacts[0].digest).toLowerCase());

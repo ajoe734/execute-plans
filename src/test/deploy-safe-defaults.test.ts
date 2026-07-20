@@ -312,7 +312,16 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
       "github.rest.actions.listWorkflowRunArtifacts",
     );
     expect(deployWorkflow).toContain(
-      "`pantheon-fe-release-candidate-attempt-${run.run_attempt}`",
+      "github.rest.actions.listJobsForWorkflowRunAttempt",
+    );
+    expect(deployWorkflow).toContain(
+      'job.name === "integration-gate"',
+    );
+    expect(deployWorkflow).toContain(
+      'producers[0].status !== "completed" || producers[0].conclusion !== "success"',
+    );
+    expect(deployWorkflow).toContain(
+      "`pantheon-fe-release-candidate-attempt-${producerAttempt}`",
     );
     expect(deployWorkflow).toContain("artifact.name === artifactName");
     expect(integrationWorkflow).toContain(
