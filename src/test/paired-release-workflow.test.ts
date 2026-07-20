@@ -297,15 +297,15 @@ describe("paired Pantheon release workflow", () => {
     );
     expect(
       authorized.match(/secrets\.PANTHEON_BFF_OPERATOR_A_TOKEN/gu),
-    ).toHaveLength(4);
+    ).toHaveLength(5);
     expect(
       authorized.match(/secrets\.PANTHEON_BFF_VIEWER_TOKEN/gu),
-    ).toHaveLength(3);
+    ).toHaveLength(4);
     expect(
       authorized.match(/secrets\.PANTHEON_BFF_RBAC_TOKENS_JSON/gu),
     ).toHaveLength(2);
     expect(integrationWorkflow.match(/secrets\.PANTHEON_BFF_/gu)).toHaveLength(
-      9,
+      11,
     );
     expect(integrationWorkflow).not.toContain(
       "secrets.PANTHEON_BFF_ADMIN_TOKEN",
@@ -531,7 +531,7 @@ describe("paired Pantheon release workflow", () => {
     ).toHaveLength(1);
     expect(deployWorkflow.match(/actions: write/gu)).toHaveLength(1);
     expect(integrationWorkflow.match(/secrets\.PANTHEON_BFF_/gu)).toHaveLength(
-      9,
+      11,
     );
   });
 
