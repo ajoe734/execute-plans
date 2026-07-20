@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Snowflake } from "lucide-react";
 import { toast } from "sonner";
 import { mutations } from "@/lib/bff/mutations";
+import { commandReceiptDescription } from "@/lib/bff-v1/commandReceipt";
 import type { EvolutionProgram } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { Section } from "@/management/pages/ObjectDetailLayout";
@@ -50,9 +51,11 @@ export const EvolutionFreezePanel = ({ program }: { program: EvolutionProgram })
         confirmToken="FREEZE-GEN"
         destructive
         onConfirm={async (memo) => {
-          await mutations.freezeGeneration(program.id, memo);
+          const receipt = await mutations.freezeGeneration(program.id, memo);
           setFrozen(true);
-          toast.success(t("phase13.evolution.freeze.queued"));
+          toast.success(t("phase13.evolution.freeze.queued"), {
+            description: commandReceiptDescription(receipt, { fallback: `Evolution ${program.id} · freeze_generation` }),
+          });
         }}
       />
     </>

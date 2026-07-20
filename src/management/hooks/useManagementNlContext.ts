@@ -32,7 +32,8 @@ const ROUTE_LABELS: Record<string, string> = {
   "/management/trading-pulse": "Trading Pulse",
   "/management/evolution-journal": "Evolution Journal",
   "/management/evidence": "Evidence Explorer",
-  "/management/persona-intent": "Persona Intent Traces",
+  "/management/persona-intent": "Persona Intent Audit",
+  "/management/promotion-allocation": "Promotion & Allocation",
   "/management/ask": "Ask Management",
 };
 
