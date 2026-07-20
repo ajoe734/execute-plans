@@ -119,6 +119,25 @@ describe("agoraIdentityClient.getCapabilities — live mode envelope parsing", (
     expect(await agoraIdentityClient.getCapabilities()).toEqual(["agora.identity.v1", "agora.servant.v1"]);
   });
 
+  it("parses canonical manifest objects from data.capabilities", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(okResponse({
+      data: {
+        spec_version: "1.0",
+        capabilities: [
+          { name: "agora.identity.v1", auth_level: "operator", route_prefixes: ["/bff/agora"] },
+          { name: "agora.workshop.v1", auth_level: "operator", route_prefixes: ["/bff/agora/workshops"] },
+        ],
+        scope: { scope_id: "scope-1" },
+      },
+      meta: { capability: "agora.identity.v1" },
+    }));
+
+    expect(await agoraIdentityClient.getCapabilities()).toEqual([
+      "agora.identity.v1",
+      "agora.workshop.v1",
+    ]);
+  });
+
   it("parses a data envelope where data.granted_capabilities is present", async () => {
     globalThis.fetch = vi.fn().mockResolvedValue(okResponse({ data: { granted_capabilities: ["agora.dashboard.v1"] } }));
     expect(await agoraIdentityClient.getCapabilities()).toContain("agora.dashboard.v1");

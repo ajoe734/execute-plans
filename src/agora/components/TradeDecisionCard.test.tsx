@@ -9,6 +9,28 @@ vi.mock("@/lib/bff-v1/agora/tradingRoom", () => ({
   decideOnEvent: vi.fn(),
 }));
 
+vi.mock("@/lib/bff-v1/agora/interaction", () => ({
+  interaction: {
+    resolveContext: vi.fn(),
+    participants: vi.fn(),
+    submit: vi.fn(),
+  },
+}));
+
+vi.mock("@/agora/useAgoraWriteAccess", () => ({
+  useAgoraWriteAccess: () => ({
+    actorId: "operator-001",
+    agoraCapabilities: ["agora.workshop.v1"],
+    capabilities: [],
+    roles: ["operator"],
+    loading: false,
+    interactionAllowed: true,
+    interactionDisabledReason: null,
+    writeAllowed: true,
+    writeDisabledReason: null,
+  }),
+}));
+
 vi.mock("react-router-dom", () => ({
   useNavigate: () => vi.fn(),
 }));
@@ -146,7 +168,7 @@ describe("TradeDecisionCard", () => {
   it("colors net EV green for positive values", () => {
     render(<TradeDecisionCard event={baseEvent} />);
     const netEl = screen.getByTestId("trade-decision-card-ev-net-evt-001");
-    expect(netEl.style.color).toBe("rgb(22, 163, 74)"); // #16a34a
+    expect(netEl.style.color).toBe("rgb(74, 222, 128)"); // #4ade80
   });
 
   it("colors net EV red for negative values", () => {
@@ -157,7 +179,7 @@ describe("TradeDecisionCard", () => {
     };
     render(<TradeDecisionCard event={negEvent} />);
     const netEl = screen.getByTestId("trade-decision-card-ev-net-evt-002");
-    expect(netEl.style.color).toBe("rgb(220, 38, 38)"); // #dc2626
+    expect(netEl.style.color).toBe("rgb(255, 107, 107)"); // #ff6b6b
   });
 
   it("displays rationale list", () => {
@@ -214,17 +236,17 @@ describe("TradeDecisionCard", () => {
 
   it("renders all four trader decision buttons", () => {
     render(<TradeDecisionCard event={baseEvent} />);
-    expect(screen.getByTestId("trade-decision-card-decide-approve-evt-001")).toBeDefined();
-    expect(screen.getByTestId("trade-decision-card-decide-reject-evt-001")).toBeDefined();
-    expect(screen.getByTestId("trade-decision-card-decide-defer-evt-001")).toBeDefined();
-    expect(screen.getByTestId("trade-decision-card-decide-modify-evt-001")).toBeDefined();
+    expect(screen.getByTestId("decide-approve-evt-001")).toBeDefined();
+    expect(screen.getByTestId("decide-reject-evt-001")).toBeDefined();
+    expect(screen.getByTestId("decide-defer-evt-001")).toBeDefined();
+    expect(screen.getByTestId("decide-modify-evt-001")).toBeDefined();
   });
 
   it("disables decision buttons when event is decided", () => {
     const decidedEvent = { ...baseEvent, state: "decided" as const };
     render(<TradeDecisionCard event={decidedEvent} />);
     const approveBtn = screen.getByTestId(
-      "trade-decision-card-decide-approve-evt-001",
+      "decide-approve-evt-001",
     ) as HTMLButtonElement;
     expect(approveBtn.disabled).toBe(true);
   });
@@ -239,9 +261,9 @@ describe("TradeDecisionCard", () => {
         onDecisionRecorded={onDecisionRecorded}
       />,
     );
-    fireEvent.click(screen.getByTestId("trade-decision-card-decide-approve-evt-001"));
+    fireEvent.click(screen.getByTestId("decide-approve-evt-001"));
     await waitFor(() => {
-      expect(screen.getByTestId("trade-decision-card-confirmed-evt-001")).toBeDefined();
+      expect(screen.getByTestId("confirmed-evt-001")).toBeDefined();
     });
     expect(mockDecideOnEvent).toHaveBeenCalledWith(
       "evt-001",
@@ -258,11 +280,11 @@ describe("TradeDecisionCard", () => {
   it("shows error state when decideOnEvent rejects", async () => {
     mockDecideOnEvent.mockRejectedValueOnce(new Error("Network error"));
     render(<TradeDecisionCard event={baseEvent} etag='"evt-etag-v1"' />);
-    fireEvent.click(screen.getByTestId("trade-decision-card-decide-reject-evt-001"));
+    fireEvent.click(screen.getByTestId("decide-reject-evt-001"));
     await waitFor(() => {
-      expect(screen.getByTestId("trade-decision-card-error-evt-001")).toBeDefined();
+      expect(screen.getByTestId("error-evt-001")).toBeDefined();
     });
-    expect(screen.getByTestId("trade-decision-card-error-evt-001").textContent).toContain(
+    expect(screen.getByTestId("error-evt-001").textContent).toContain(
       "Network error",
     );
   });

@@ -77,8 +77,20 @@ Pantheon dev frontend build 請設定：
 VITE_BFF_MODE=live
 VITE_BFF_BASE_URL=https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io
 VITE_BFF_FALLBACK=strict
-VITE_BFF_REAL_WRITES=false
+VITE_BFF_REAL_WRITES=true
+VITE_BFF_ALLOW_DEV_STUB_WRITES=true
+VITE_SUPABASE_URL=https://<project>.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=<public-publishable-or-anon-key>
 ```
+
+Supabase values above are public browser configuration, not server secrets.
+Never use a service-role or `sb_secret_` key in any `VITE_*` variable.
+
+Pantheon dev is a closed test environment. Its explicit dev-only stub-write
+gate requires `/bff/me` to report `dev` or `test` and is rejected for any
+production environment marker. Deployment verifies a persisted Human Review
+submit/decision/read-back flow while the BFF governance contract keeps direct
+capital and runtime mutation disabled.
 
 Staging-live:
 
@@ -89,19 +101,17 @@ VITE_BFF_FALLBACK=strict
 VITE_BFF_REAL_WRITES=false
 ```
 
-`VITE_BFF_REAL_WRITES=false` 會讓 state-machine action writes 保留在前端 mock/overlay；
-只有 operator auth、approval evidence、confirm-token、two-man signing 都驗證後，才可打開。
+Staging-live 仍維持 `VITE_BFF_REAL_WRITES=false`。Dev 的 real writes 只送入 BFF
+治理命令與 Human Review；資金或 runtime 的直接變更仍由後端 policy 阻擋。
 
 Auth/session access is explicit:
 
 - Browser cookie session：live fetch 使用 `credentials: "include"`。
 - Optional dev bearer token：`sessionStorage` 優先，其次 `localStorage`，key 為
   `pantheon.bff.bearerToken` 或 legacy `pantheon_operator_token`。
-- Optional dev fallback：`VITE_BFF_DEV_BEARER_TOKEN` 可提供非秘密
-  dev browser token，僅能搭配 dev BFF 的 `PANTHEON_BFF_AUTH_STUB=true`。
-  Pantheon-owned dev Management AI control-mode smoke 需要 operator/admin +
-  MFA + `assistant.kernel.*` capability；目前 dev FE 使用
-  `pantheon-dev-browser:operator:mfa:assistant.kernel.debug,assistant.kernel.repair`。
+- Public build bearer：`VITE_BFF_DEV_BEARER_TOKEN` 會編入公開 bundle，
+  因此必須留空。所有角色與 capability 都必須來自互動式
+  cookie／sessionStorage session，不能放進任何 `VITE_*` build variable。
 - Optional tenant id：`pantheon.bff.tenantId` 或 legacy `pantheon_tenant_id`。
 
 Management AI SA/SD dispatch is BFF-owned. The frontend calls
@@ -143,18 +153,18 @@ route family 時整站失效。
 
 ## 應用結構
 
-| 路徑 | 內容 |
-|------|------|
-| `src/platform/` | 跨產品共用的 Shell：TopBar、SideNav、Drawers、HighRiskConfirm、EntityHeader、StatusBadge、LifecycleStepper、AuditTimeline、PermissionAwareButton、QAChecklist… |
-| `src/management/` | Management Console（Strategy/Persona/Capital Pool/Rebalance/Approvals/Runtimes/Risk/Incidents/Capabilities…） |
-| `src/agora/` | Agora Workbench（DailyBrief/Signals/Notebook/AskPersonas/Committee/DecisionJournal/AlertTriage/InsightInbox/Trainer/MemoryReview/SkillCoaching） |
-| `src/lib/bff-v1/` | Pantheon BFF v1 live/mock transport：`client.ts`、`liveTransport.ts`、`paths.ts`、`lists.ts`、`writes.ts`、`me.ts` |
-| `src/lib/bff/` | Legacy mock seed support：`mutations.ts`（寫＋稽核）、`realtime.ts`（事件匯流排）、`types.ts`、v5 UI facade |
-| `src/lib/stateMachines/` | 18 個實體狀態機（Spec Part 7 §17） |
-| `src/lib/permissions.ts` | RBAC 權限矩陣 + `filterActions` |
-| `src/lib/handoff.ts` | Agora → Management 的工作交接 store |
-| `src/i18n/` | i18next 字典（zh-TW / en-US，536 keys 雙語對齊） |
-| `src/mocks/seed.ts` | 全部 mock 資料 |
+| 路徑                     | 內容                                                                                                                                                           |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/platform/`          | 跨產品共用的 Shell：TopBar、SideNav、Drawers、HighRiskConfirm、EntityHeader、StatusBadge、LifecycleStepper、AuditTimeline、PermissionAwareButton、QAChecklist… |
+| `src/management/`        | Management Console（Strategy/Persona/Capital Pool/Rebalance/Approvals/Runtimes/Risk/Incidents/Capabilities…）                                                  |
+| `src/agora/`             | Agora Workbench（DailyBrief/Signals/Notebook/AskPersonas/Committee/DecisionJournal/AlertTriage/InsightInbox/Trainer/MemoryReview/SkillCoaching）               |
+| `src/lib/bff-v1/`        | Pantheon BFF v1 live/mock transport：`client.ts`、`liveTransport.ts`、`paths.ts`、`lists.ts`、`writes.ts`、`me.ts`                                             |
+| `src/lib/bff/`           | Legacy mock seed support：`mutations.ts`（寫＋稽核）、`realtime.ts`（事件匯流排）、`types.ts`、v5 UI facade                                                    |
+| `src/lib/stateMachines/` | 18 個實體狀態機（Spec Part 7 §17）                                                                                                                             |
+| `src/lib/permissions.ts` | RBAC 權限矩陣 + `filterActions`                                                                                                                                |
+| `src/lib/handoff.ts`     | Agora → Management 的工作交接 store                                                                                                                            |
+| `src/i18n/`              | i18next 字典（zh-TW / en-US，536 keys 雙語對齊）                                                                                                               |
+| `src/mocks/seed.ts`      | 全部 mock 資料                                                                                                                                                 |
 
 ---
 
@@ -176,17 +186,17 @@ route family 時整站失效。
 
 ## 共用元件速查
 
-| 元件 | 用途 | Spec |
-|------|------|------|
-| `EntityHeader` | 詳情頁統一標頭：ID + 名稱 + Status/Risk badge + owner + env | §3.1 |
-| `LifecycleStepper` | 依狀態機渲染進度條（含 branch states） | §3.4 / Part 7 §17 |
-| `ApprovalStagesStepper` | 審批多階段 stepper | §3.5 |
-| `PermissionAwareButton` | 角色權限感知按鈕 | §3.6 |
-| `AuditTimeline` | 統一稽核事件時間軸 | §3.9 |
-| `HighRiskConfirm` | 高風險動作確認框（含 memo 欄位） | §3.7 |
-| `RightDrawer` | Inspector：metadata / lineage / next transitions / actions | §4.5 |
-| `HandoffDrawer` | Agora → Management 交接 | Part 5 §21 |
-| `JobProgressDrawer` | 背景 job 監控 | §3.10 |
+| 元件                    | 用途                                                        | Spec              |
+| ----------------------- | ----------------------------------------------------------- | ----------------- |
+| `EntityHeader`          | 詳情頁統一標頭：ID + 名稱 + Status/Risk badge + owner + env | §3.1              |
+| `LifecycleStepper`      | 依狀態機渲染進度條（含 branch states）                      | §3.4 / Part 7 §17 |
+| `ApprovalStagesStepper` | 審批多階段 stepper                                          | §3.5              |
+| `PermissionAwareButton` | 角色權限感知按鈕                                            | §3.6              |
+| `AuditTimeline`         | 統一稽核事件時間軸                                          | §3.9              |
+| `HighRiskConfirm`       | 高風險動作確認框（含 memo 欄位）                            | §3.7              |
+| `RightDrawer`           | Inspector：metadata / lineage / next transitions / actions  | §4.5              |
+| `HandoffDrawer`         | Agora → Management 交接                                     | Part 5 §21        |
+| `JobProgressDrawer`     | 背景 job 監控                                               | §3.10             |
 
 ---
 
