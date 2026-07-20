@@ -1,6 +1,6 @@
 // 2026-05-20 PM-5 — Unified Management Anomaly model.
 // Used across Cockpit, Persona Fleet, Human Inbox, Trading Pulse,
-// Evolution Journal, Readiness, Evidence Explorer, Persona Intent Traces.
+// Evolution Journal, Readiness, Evidence Explorer, Persona Intent Audit.
 
 import type { ManagementLinkSet } from "./links";
 

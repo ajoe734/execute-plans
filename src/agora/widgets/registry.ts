@@ -1,5 +1,5 @@
 import type { ChartSpecV1, WidgetSpecV2 } from "@/lib/bff-v1/agora/types";
-import { AGORA_CONTRACT_SNAPSHOT } from "@/lib/bff-v1/agora/types";
+import contractSnapshot from "@/lib/bff-v1/agora/contract-snapshot.json";
 
 import widgetRegistrySource from "./widget_registry.v1.json";
 
@@ -8,9 +8,9 @@ export const WIDGET_REGISTRY_ENTRY_COUNT = 42 as const;
 
 export const AGORA_WIDGET_CONTRACT_HASHES = {
   widgetRegistryV1: "add7f379f4ff1f3c0c0930a566a269897cd497fb22ef53bbdfecb2b1d85c34d4",
-  widgetSpecV2: AGORA_CONTRACT_SNAPSHOT.files["specs/agora/v2/widget_spec_v2.schema.json"],
-  chartSpecV1: AGORA_CONTRACT_SNAPSHOT.files["specs/agora/v2/chart_spec_v1.schema.json"],
-  dashboardRecipeV2: AGORA_CONTRACT_SNAPSHOT.files["specs/agora/v2/dashboard_recipe_v2.schema.json"],
+  widgetSpecV2: contractSnapshot.files["specs/agora/v2/widget_spec_v2.schema.json"],
+  chartSpecV1: contractSnapshot.files["specs/agora/v2/chart_spec_v1.schema.json"],
+  dashboardRecipeV2: contractSnapshot.files["specs/agora/v2/dashboard_recipe_v2.schema.json"],
 } as const;
 
 export const CHART_SPEC_KINDS = [
@@ -204,7 +204,22 @@ export function chartRendererForKind(kind: ChartSpecKind): "builtin" | "echarts"
   return "echarts";
 }
 
-export function validateChartSpecGrammar(chartSpec: ChartSpecV1): WidgetRegistryValidationFailure | null {
+// Structural subset of ChartSpecV1 covering only the fields this grammar
+// check reads. Two independent ChartSpecV1 declarations exist in this
+// codebase (the generated agora contract schema in `agora/types.ts`, and the
+// hand-authored trading-room dashboard type in `agora/tradingRoomTypes.ts`);
+// they agree on these fields but diverge elsewhere (e.g. click_action payload
+// vs params), so this function accepts the common structural shape instead of
+// forcing every caller to pick (and cast into) one nominal type.
+interface ChartSpecGrammarInput {
+  spec_version: unknown;
+  kind: unknown;
+  encodings?: Record<string, unknown>;
+  transforms?: Array<{ type: unknown }>;
+  click_action?: { kind: unknown } | null;
+}
+
+export function validateChartSpecGrammar(chartSpec: ChartSpecGrammarInput): WidgetRegistryValidationFailure | null {
   if (chartSpec.spec_version !== "1.0") {
     return {
       code: "UNAPPROVED_CHART_KIND",
