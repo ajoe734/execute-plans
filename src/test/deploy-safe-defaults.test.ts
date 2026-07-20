@@ -485,10 +485,12 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
       "operatorSubject === viewerSubject",
     );
     expect(authorizedProof).toContain("--retries=0 --reporter=list,json");
-    expect(authorizedProof.match(/--trace=off/gu)).toHaveLength(2);
+    // Both credentialed browser suites run desktop and mobile with artifacts
+    // disabled: Persona (2 invocations) and Trade Journeys (2 invocations).
+    expect(authorizedProof.match(/--trace=off/gu)).toHaveLength(4);
     expect(
       authorizedProof.match(/PANTHEON_CREDENTIALED_PLAYWRIGHT_NO_ARTIFACTS=1/gu),
-    ).toHaveLength(2);
+    ).toHaveLength(4);
     expect(playwrightConfig).toContain(
       'process.env.PANTHEON_CREDENTIALED_PLAYWRIGHT_NO_ARTIFACTS === "1"',
     );
