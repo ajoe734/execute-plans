@@ -1,20 +1,28 @@
 // 2026-05-22 PM12-010 — Ranking → Human Inbox bridge.
-// Generates a deterministic Human Inbox id from a ranking recommendation.
-// The detail page (HumanGateDetail) will pick up `ranking_recommendation`
-// kind from the id prefix and render an editable governance gate.
-// NEVER mutates persona / capital / live deployment directly.
+// Ranking recommendations are advisory. Submitting one creates or queues a
+// governed Human Inbox review through the BFF command seam; it never mutates
+// persona / capital / live deployment directly.
 
 import type { LeagueRecommendedAction } from "./personaLeague";
 import type { HumanInboxItem } from "./humanInbox";
 import { buildLinkSet } from "./links";
+import {
+  mgmt,
+  type RankingRecommendationSubmitResult,
+} from "@/lib/bff-v1/management";
+
+export type { RankingRecommendationSubmitResult } from "@/lib/bff-v1/management";
+export type RankingRecommendationAction = Exclude<LeagueRecommendedAction, "no_change">;
 
 export interface SendRankingRecommendationInput {
   personaId: string;
   personaName: string;
   recommendation: LeagueRecommendedAction;
+  recommendationId?: string;
   source: "persona_league" | "quarterly_ranking";
-  quarter?: string;
+  quarter: string;
   evidenceRefs?: string[];
+  governanceDestinations?: string[];
 }
 
 export function requiredRoleFor(action: LeagueRecommendedAction): string {
@@ -56,13 +64,55 @@ export function buildRankingInboxItem(
   };
 }
 
-export function makeRankingInboxId(input: SendRankingRecommendationInput): string {
-  // Prefix "ran" so the detail page id→kind heuristic resolves to
-  // `ranking_recommendation`.
-  return `ranking-rec-${input.source}-${input.personaId}-${input.recommendation}`;
+const sanitizeRecommendationPart = (value: unknown, fallback: string): string => {
+  const text = String(value ?? fallback)
+    .trim()
+    .replace(/[^A-Za-z0-9_.:-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return text || fallback;
+};
+
+export function currentPm12QuarterId(today = new Date()): string {
+  const year = today.getFullYear();
+  const quarter = Math.floor(today.getMonth() / 3) + 1;
+  return `${year}-Q${quarter}`;
 }
 
-/** Returns the deterministic id so the caller can navigate to the detail. */
-export function sendRankingRecommendation(input: SendRankingRecommendationInput): string {
-  return makeRankingInboxId(input);
+export function makeRankingRecommendationId(input: SendRankingRecommendationInput): string {
+  return [
+    "pm12-rec",
+    sanitizeRecommendationPart(input.source, "ranking"),
+    sanitizeRecommendationPart(input.quarter, "quarter"),
+    sanitizeRecommendationPart(input.personaId, "persona"),
+    sanitizeRecommendationPart(input.recommendation, "action"),
+  ].join("-");
+}
+
+export function makeRankingInboxId(input: SendRankingRecommendationInput): string {
+  return `ranking-rec-${input.recommendationId ?? makeRankingRecommendationId(input)}`;
+}
+
+export function isGovernedRankingRecommendationAction(
+  action: LeagueRecommendedAction | undefined,
+): action is RankingRecommendationAction {
+  return Boolean(action && action !== "no_change");
+}
+
+/** Submits the advisory recommendation into the BFF governed write seam. */
+export function sendRankingRecommendation(
+  input: SendRankingRecommendationInput & { recommendation: RankingRecommendationAction },
+  opts: { idempotencyKey?: string } = {},
+): Promise<RankingRecommendationSubmitResult> {
+  const recommendationId = input.recommendationId ?? makeRankingRecommendationId(input);
+  return mgmt.quarterlyRanking.submitRecommendation({
+    recommendationId,
+    actionId: input.recommendation,
+    quarter: input.quarter,
+    personaId: input.personaId,
+    personaName: input.personaName,
+    source: input.source,
+    evidenceRefs: input.evidenceRefs ?? [],
+    governanceDestinations: input.governanceDestinations,
+    liveCapitalMutation: false,
+  }, opts);
 }

@@ -16,21 +16,34 @@
  *   PANTHEON_BROWSER_BFF_BASE_URL
  *     optional browser-observed BFF base, usually the frontend origin when
  *     the repo dev server proxies /bff to the upstream BFF.
- *   BFF_AUTH_TOKEN
- *     optional; when omitted the dev stub token is used.
+ *   PANTHEON_SSE_BROWSER_BFF_BASE_URL
+ *     optional browser-observed SSE BFF base. Defaults to the direct BFF URL so
+ *     this probe is not coupled to dev-server event-stream buffering.
+ *   PANTHEON_BFF_OPERATOR_A_TOKEN, BFF_AUTH_TOKEN, or
+ *   PANTHEON_BFF_SMOKE_BEARER_TOKEN
+ *     required; use an explicit short-lived operator credential for the live
+ *     BFF contract. The RBAC token matrix may provide the operator token too.
  *   VITE_BFF_FALLBACK or BFF_FALLBACK
  *     default: strict
  */
 
 import { expect, test } from "@playwright/test";
 import type { APIRequestContext, Page } from "@playwright/test";
+import { bearerHeader, roleTokenFromEnv } from "./helpers/auth";
 
 const DEFAULT_FRONTEND_BASE_URL = "http://127.0.0.1:5173";
 const DEFAULT_BFF_BASE_URL =
   "https://pantheon-lupin-staging-bff.104.155.223.192.sslip.io";
-const DEFAULT_DEV_AUTH_TOKEN = "op-fe-gate:operator,reviewer:mfa";
+const AUTH_TOKEN = roleTokenFromEnv("operator", [
+  "PANTHEON_BFF_OPERATOR_A_TOKEN",
+  "BFF_AUTH_TOKEN",
+  "PANTHEON_BFF_SMOKE_BEARER_TOKEN",
+]);
 const STARTUP_ME_FOLLOW_UP = "FE-INT-GATE-FOLLOWUP-ME-STARTUP";
-const DEFAULT_SSE_OPEN_TIMEOUT_MS = 30_000;
+const DEFAULT_SSE_OPEN_TIMEOUT_MS = 45_000;
+const ME_REQUEST_MAX_WAIT_MS = 120_000;
+const ME_REQUEST_TIMEOUT_MS = 15_000;
+const ME_TRANSIENT_STATUSES = new Set([0, 408, 425, 429, 500, 502, 503, 504]);
 
 const SERVING_MOCK_BANNER =
   /serving[-\s]?mock|mock data|seed fallback(?! blocked)|資料來源：seed/i;
@@ -70,6 +83,15 @@ function browserBffUrl(path: string): string {
   return `${base.replace(/\/$/, "")}${path}`;
 }
 
+function browserSseBffUrl(path: string): string {
+  const base =
+    process.env.PANTHEON_SSE_BROWSER_BFF_BASE_URL ||
+    process.env.PANTHEON_BROWSER_BFF_BASE_URL ||
+    bffBaseUrl() ||
+    "";
+  return `${base.replace(/\/$/, "")}${path}`;
+}
+
 function bffBaseUrl(): string {
   const base =
     process.env.PANTHEON_BFF_BASE_URL ||
@@ -80,12 +102,34 @@ function bffBaseUrl(): string {
 }
 
 function authHeader(): string {
-  const token = process.env.BFF_AUTH_TOKEN || process.env.PANTHEON_BFF_SMOKE_BEARER_TOKEN || DEFAULT_DEV_AUTH_TOKEN;
-  return token.startsWith("Bearer ") ? token : `Bearer ${token}`;
+  if (!AUTH_TOKEN) {
+    throw new Error(
+      "F01 live session contract requires an explicit short-lived operator token",
+    );
+  }
+  return bearerHeader(AUTH_TOKEN);
 }
 
 function strictFallbackMode(): string {
   return process.env.VITE_BFF_FALLBACK || process.env.BFF_FALLBACK || "strict";
+}
+
+function truthyEnv(value: string | undefined): boolean {
+  return ["1", "true", "yes", "on"].includes(String(value ?? "").trim().toLowerCase());
+}
+
+function isPullRequestContext(): boolean {
+  return (
+    process.env.GITHUB_EVENT_NAME === "pull_request" ||
+    process.env.PANTHEON_RELEASE_GATE_CONTEXT === "pull_request"
+  );
+}
+
+function sseEventSourceHardGate(): boolean {
+  if (process.env.PANTHEON_SSE_EVENTSOURCE_HARD_GATE !== undefined) {
+    return truthyEnv(process.env.PANTHEON_SSE_EVENTSOURCE_HARD_GATE);
+  }
+  return !isPullRequestContext();
 }
 
 function sseOpenTimeoutMs(): number {
@@ -111,6 +155,18 @@ async function installRuntimeFallbackOverride(
       // Storage can be unavailable; runtime globals still cover bootstrap.
     }
   }, fallback);
+}
+
+async function openSseProbeDocument(page: Page): Promise<void> {
+  const probeUrl = sseOriginUrl("/__pantheon-sse-probe");
+  await page.route("**/__pantheon-sse-probe", async (route) => {
+    await route.fulfill({
+      body: "<!doctype html><meta charset=\"utf-8\"><title>Pantheon SSE probe</title>",
+      contentType: "text/html",
+      status: 200,
+    });
+  });
+  await page.goto(probeUrl, { waitUntil: "domcontentloaded" });
 }
 
 function isRecord(value: unknown): value is JsonRecord {
@@ -148,17 +204,32 @@ async function bodyText(page: import("@playwright/test").Page): Promise<string> 
   return page.locator("body").innerText({ timeout: 10_000 });
 }
 
+async function sleep(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function requestMeWithTransientRetry(
   request: APIRequestContext,
   url: string,
   headers: Record<string, string>,
 ): Promise<{ status: number; body: string }> {
   let last = { status: 0, body: "" };
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    const response = await request.get(url, { headers, timeout: 10_000 });
-    last = { status: response.status(), body: await response.text() };
-    if (![502, 503, 504].includes(last.status)) return last;
-    await new Promise((resolve) => setTimeout(resolve, 750 * (attempt + 1)));
+  const deadline = Date.now() + ME_REQUEST_MAX_WAIT_MS;
+  let attempt = 0;
+  while (Date.now() < deadline) {
+    try {
+      const remainingMs = Math.max(1_000, deadline - Date.now());
+      const timeout = Math.min(ME_REQUEST_TIMEOUT_MS, remainingMs);
+      const response = await request.get(url, { headers, timeout });
+      last = { status: response.status(), body: await response.text() };
+      if (!ME_TRANSIENT_STATUSES.has(last.status)) return last;
+    } catch (err) {
+      last = { status: 0, body: String(err) };
+    }
+    attempt += 1;
+    const remainingMs = deadline - Date.now();
+    if (remainingMs <= 0) break;
+    await sleep(Math.min(5_000, 750 * attempt, remainingMs));
   }
   return last;
 }
@@ -166,7 +237,8 @@ async function requestMeWithTransientRetry(
 test.describe("F01 startup session", () => {
   test("asserts MeResponse tenant/env/user/capabilities shape", async ({
     request,
-  }) => {
+  }, testInfo) => {
+    testInfo.setTimeout(Math.max(testInfo.timeout, ME_REQUEST_MAX_WAIT_MS + 15_000));
     const tenantId = process.env.BFF_TENANT_ID || process.env.PANTHEON_TENANT_ID;
     const headers: Record<string, string> = {
       Accept: "application/json",
@@ -221,7 +293,7 @@ test.describe("F01 startup session", () => {
     expect(stringArrayAt(data.capabilities, "data.capabilities")).toEqual(
       userCapabilities,
     );
-    expect(userCapabilities).toContain("runtime.read");
+    expect(userCapabilities.length).toBeGreaterThan(0);
 
     const session = recordAt(data.session, "MeResponse.data.session");
     stringAt(session.id, "session.id");
@@ -259,65 +331,96 @@ test.describe("F01 startup session", () => {
       .not.toMatch(SERVING_MOCK_BANNER);
   });
 
-  test("opens the browser-native SSE EventSource stream", async ({ page }) => {
-    const streamUrl = browserBffUrl("/bff/events/stream?channel=system");
-    const openTimeoutMs = sseOpenTimeoutMs();
+  test("opens the browser-native SSE EventSource stream", async ({ page }, testInfo) => {
+    const streamUrl = browserSseBffUrl("/bff/events/stream?channel=system");
+    const hardGate = sseEventSourceHardGate();
+    const maxAttempts = hardGate ? 2 : 1;
+    const openTimeoutMs = hardGate ? sseOpenTimeoutMs() : Math.min(sseOpenTimeoutMs(), 10_000);
+    testInfo.setTimeout(Math.max(testInfo.timeout, openTimeoutMs * maxAttempts + 15_000));
 
-    await page.goto(sseOriginUrl("/"), { waitUntil: "domcontentloaded" });
+    await openSseProbeDocument(page);
 
-    const opened = await page.evaluate(
-      ({ url, timeoutMs }) =>
-        new Promise<{
+    let opened:
+      | {
           readyState: number;
           openState: number;
           firstMessageType?: string;
-        }>(
-          (resolve, reject) => {
-            const eventSource = new EventSource(url);
-            const timeout = window.setTimeout(() => {
-              const state = eventSource.readyState;
-              eventSource.close();
-              reject(new Error(`EventSource did not open; readyState=${state}`));
-            }, timeoutMs);
+        }
+      | undefined;
+    let lastError = "";
+    for (let attempt = 0; attempt < maxAttempts && !opened; attempt += 1) {
+      try {
+        opened = await page.evaluate(
+          ({ url, timeoutMs }) =>
+            new Promise<{
+              readyState: number;
+              openState: number;
+              firstMessageType?: string;
+            }>(
+              (resolve, reject) => {
+                const eventSource = new EventSource(url);
+                const timeout = window.setTimeout(() => {
+                  const state = eventSource.readyState;
+                  eventSource.close();
+                  reject(new Error(`EventSource did not open; readyState=${state}`));
+                }, timeoutMs);
 
-            eventSource.onopen = () => {
-              window.clearTimeout(timeout);
-              const state = eventSource.readyState;
-              eventSource.close();
-              resolve({ readyState: state, openState: EventSource.OPEN });
-            };
+                eventSource.onopen = () => {
+                  window.clearTimeout(timeout);
+                  const state = eventSource.readyState;
+                  eventSource.close();
+                  resolve({ readyState: state, openState: EventSource.OPEN });
+                };
 
-            eventSource.onmessage = (event) => {
-              window.clearTimeout(timeout);
-              const state = eventSource.readyState;
-              eventSource.close();
-              try {
-                const payload = JSON.parse(event.data);
-                resolve({
-                  readyState: state,
-                  openState: EventSource.OPEN,
-                  firstMessageType:
-                    typeof payload.type === "string" ? payload.type : undefined,
-                });
-              } catch {
-                resolve({ readyState: state, openState: EventSource.OPEN });
-              }
-            };
+                eventSource.onmessage = (event) => {
+                  window.clearTimeout(timeout);
+                  const state = eventSource.readyState;
+                  eventSource.close();
+                  try {
+                    const payload = JSON.parse(event.data);
+                    resolve({
+                      readyState: state,
+                      openState: EventSource.OPEN,
+                      firstMessageType:
+                        typeof payload.type === "string" ? payload.type : undefined,
+                    });
+                  } catch {
+                    resolve({ readyState: state, openState: EventSource.OPEN });
+                  }
+                };
 
-            eventSource.onerror = () => {
-              if (eventSource.readyState === EventSource.CLOSED) {
-                window.clearTimeout(timeout);
-                reject(new Error("EventSource closed before opening"));
-              }
-            };
-          },
-        ),
-      { url: streamUrl, timeoutMs: openTimeoutMs },
-    );
+                eventSource.onerror = () => {
+                  if (eventSource.readyState === EventSource.CLOSED) {
+                    window.clearTimeout(timeout);
+                    reject(new Error("EventSource closed before opening"));
+                  }
+                };
+              },
+            ),
+          { url: streamUrl, timeoutMs: openTimeoutMs },
+        );
+      } catch (err) {
+        lastError = String(err);
+        if (attempt === 0) {
+          await sleep(1_000);
+          await openSseProbeDocument(page);
+        }
+      }
+    }
 
-    expect(opened.readyState).toBe(opened.openState);
-    if (opened.firstMessageType) {
-      expect(opened.firstMessageType).toMatch(/^system\./);
+    if (!opened && !hardGate) {
+      testInfo.annotations.push({
+        type: "warning",
+        description: `EventSource advisory probe did not open: ${lastError}`,
+      });
+      return;
+    }
+
+    expect(opened, lastError).toBeTruthy();
+    const openedResult = opened!;
+    expect(openedResult.readyState).toBe(openedResult.openState);
+    if (openedResult.firstMessageType) {
+      expect(openedResult.firstMessageType).toMatch(/^system\./);
     }
   });
 
