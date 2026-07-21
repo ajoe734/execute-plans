@@ -7,6 +7,7 @@ import { Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import type { Artifact } from "@/lib/bff/types";
 import { mutations } from "@/lib/bff/mutations";
+import { commandReceiptDescription } from "@/lib/bff-v1/commandReceipt";
 import { useT } from "@/platform/hooks";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
 import { safeDateTime } from "@/lib/utils";
@@ -67,8 +68,10 @@ export const ArtifactRollbackPanel = ({ artifact }: { artifact: Artifact }) => {
         confirmToken="ROLLBACK"
         destructive
         onConfirm={async (memo) => {
-          await mutations.rollback("Artifact", artifact.id, memo);
-          toast.success(t("artifact.rollback.done"));
+          const receipt = await mutations.rollback("Artifact", artifact.id, memo);
+          toast.success(t("artifact.rollback.done"), {
+            description: commandReceiptDescription(receipt, { fallback: `Artifact ${artifact.id} · rollback` }),
+          });
           setTarget(null);
         }}
       />
