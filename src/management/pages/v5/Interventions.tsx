@@ -8,6 +8,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { StatCard } from "@/platform/components/StatCard";
 import { Card } from "@/components/ui/card";
+import { ManagementTableScroll } from "@/management/components/ManagementTableScroll";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -53,18 +54,26 @@ export const InterventionsPage = () => {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [batchRunning, setBatchRunning] = useState(false);
 
-  // E2 drill-down: ?item=<id> auto-opens the matching intervention drawer.
+  // E2 drill-down: ?item=<id> / ?intervention=<id> / ?finding=<id>
+  // auto-opens the matching intervention drawer.
   useEffect(() => {
-    const id = params.get("item");
-    if (!id || !list.data) return;
-    const match = list.data.items.find((i) => i.id === id);
+    if (!list.data) return;
+    const id = params.get("item") ?? params.get("intervention");
+    const findingId = params.get("finding");
+    const match = id
+      ? list.data.items.find((i) => i.id === id)
+      : findingId
+        ? list.data.items.find((i) => i.linkedFindingId === findingId)
+        : undefined;
     if (match) setActive(match);
   }, [params, list.data]);
 
   const closeActive = () => {
     setActive(null);
-    if (params.get("item")) {
+    if (params.get("item") || params.get("intervention") || params.get("finding")) {
       params.delete("item");
+      params.delete("intervention");
+      params.delete("finding");
       setParams(params, { replace: true });
     }
   };
@@ -182,8 +191,9 @@ export const InterventionsPage = () => {
           </Card>
         )}
 
-        <Card className="p-0 overflow-hidden">
-          <table className="w-full text-sm">
+        <Card className="p-0">
+          <ManagementTableScroll minScrollWidth={1200}>
+          <table className="w-full min-w-[1200px] text-sm">
             <thead className="text-xs text-muted-foreground bg-muted/40">
               <tr>
                 <th className="px-3 py-2 w-8">
@@ -240,7 +250,7 @@ export const InterventionsPage = () => {
                       <Link to="/management/strategies">
                         <Button size="sm" variant="outline">{t("nav.strategies", { defaultValue: "Strategies" })}</Button>
                       </Link>
-                      <Link to="/management/capital">
+                      <Link to="/management/promotion-allocation?tab=quarterly-capital">
                         <Button size="sm" variant="outline">{t("nav.capital", { defaultValue: "Capital" })}</Button>
                       </Link>
                     </div>
@@ -249,6 +259,7 @@ export const InterventionsPage = () => {
               )}
             </tbody>
           </table>
+          </ManagementTableScroll>
         </Card>
       </PageBody>
 
@@ -277,7 +288,7 @@ const InterventionDrawer = ({
 
   const sourceLink =
     item.linkedApprovalId ? "/management/approvals" :
-    item.linkedFindingId ? "/management/sentinel" :
+    item.linkedFindingId ? `/management/sentinel?finding=${encodeURIComponent(item.linkedFindingId)}` :
     item.linkedIncidentId ? `/management/incidents/${item.linkedIncidentId}` : null;
 
   return (
