@@ -29,7 +29,7 @@ function validate(operator: string, viewer: string) {
 
 describe("Persona hosted proof credential validation", () => {
   it("accepts distinct JWT subjects with enough lifetime", () => {
-    const expiresAt = Math.floor(Date.now() / 1000) + 1201;
+    const expiresAt = Math.floor(Date.now() / 1000) + 3600;
     const result = validate(jwt("operator-proof", expiresAt), jwt("viewer-proof", expiresAt));
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("prerequisites are available");
@@ -53,7 +53,7 @@ describe("Persona hosted proof credential validation", () => {
   });
 
   it("rejects one credential reused for operator and viewer", () => {
-    const token = jwt("shared-proof", Math.floor(Date.now() / 1000) + 1201);
+    const token = jwt("shared-proof", Math.floor(Date.now() / 1000) + 3600);
     const result = validate(token, token);
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("must bind distinct subjects");
