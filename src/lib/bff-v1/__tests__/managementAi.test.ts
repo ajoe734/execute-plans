@@ -5,10 +5,15 @@ import {
   streamManagementAi,
   fetchAssistantModeStatus,
   fetchAssistantOrchestratorStatus,
+  fetchAssistantProviderUsageSummary,
+  fetchAssistantProviders,
   fetchAssistantProviderReauthStatus,
+  fetchManagementAiConversationList,
   generateAssistantDevDocs,
   prepareAssistantRepairWorktree,
+  registerAssistantProvider,
   startAssistantProviderReauth,
+  submitAssistantProviderReauthCode,
 } from "@/lib/bff-v1/managementAi";
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -150,6 +155,160 @@ describe("Management AI orchestrator status", () => {
     if (result.kind !== "failure") throw new Error("expected failure");
     expect(result.statusCode).toBe(404);
     expect(result.message).toContain("BFF 404");
+  });
+
+  it("reads assistant provider auth readiness with usage quota from the BFF", async () => {
+    vi.stubEnv("VITE_BFF_BASE_URL", "https://bff.example.test");
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
+      status: "ok",
+      data: [
+        {
+          provider: "codex",
+          provider_name: "Codex CLI",
+          runtime: "openclaw_gateway_cli_mount",
+          ready: false,
+          status: "degraded",
+          auth_status: "failed",
+          degraded_reason: "refresh token expired",
+          mount_mode: "service_user",
+          usage: {
+            status: "captured",
+            source: "snapshot",
+            remaining: 12,
+            remaining_percent: 24,
+            limit: 50,
+            used: 38,
+            unit: "requests",
+            reset_at: "2026-06-29T00:00:00Z",
+          },
+        },
+      ],
+      meta: { auth_probe: true },
+    }));
+    globalThis.fetch = fetchMock;
+
+    const result = await fetchAssistantProviders({ authProbe: true });
+
+    expect(result.kind).toBe("ok");
+    if (result.kind !== "ok") throw new Error(result.message);
+    expect(fetchMock.mock.calls[0][0]).toBe("https://bff.example.test/bff/assistant/providers?auth_probe=true");
+    expect(result.providers[0]).toMatchObject({
+      provider: "codex",
+      providerName: "Codex CLI",
+      ready: false,
+      authStatus: "failed",
+      degradedReason: "refresh token expired",
+    });
+    expect(result.providers[0].usage).toMatchObject({
+      remaining: 12,
+      remainingPercent: 24,
+      limit: 50,
+      used: 38,
+      resetAt: "2026-06-29T00:00:00Z",
+    });
+  });
+
+  it("reads assistant provider usage history and quota summary from the BFF", async () => {
+    vi.stubEnv("VITE_BFF_BASE_URL", "https://bff.example.test");
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
+      status: "ok",
+      data: {
+        providers: [
+          {
+            provider: "codex_cli",
+            provider_name: "Codex CLI",
+            runtime: "openclaw_gateway_cli_mount",
+            ready: true,
+            auth_status: "ready",
+            live_auth: true,
+            calls: 7,
+            success_count: 6,
+            failed_count: 1,
+            prompt_bytes: 1200,
+            input_tokens: 100,
+            output_tokens: 40,
+            total_tokens: 140,
+            quota: {
+              status: "captured",
+              source: "provider_snapshot",
+              remaining: 12,
+              used: 38,
+              limit: 50,
+              unit: "requests",
+            },
+            observed_usage: {
+              source: "management_ai_bff_audit",
+              coverage: "bff_observed_management_ai_only",
+              coverage_label: "BFF observed",
+              stale: true,
+              stale_after_hours: 24,
+              last_observed_at: "2026-06-28T11:07:35Z",
+              calls: 7,
+              total_tokens: 140,
+            },
+            models: [
+              {
+                model: "gpt-5-codex",
+                calls: 7,
+                total_tokens: 140,
+              },
+            ],
+          },
+        ],
+        totals: {
+          providers: 1,
+          live_auth_count: 1,
+          calls: 7,
+          total_tokens: 140,
+        },
+        quota: {
+          truth_policy: "provider_snapshot_only",
+        },
+        usage: {
+          truth_policy: "observed_bff_events_only",
+          source: "management_ai_bff_audit",
+        },
+      },
+      meta: { auth_probe: false },
+    }));
+    globalThis.fetch = fetchMock;
+
+    const result = await fetchAssistantProviderUsageSummary({ windowHours: 168, limit: 500 });
+
+    expect(result.kind).toBe("ok");
+    if (result.kind !== "ok") throw new Error(result.message);
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      "https://bff.example.test/bff/assistant/providers/usage-summary?auth_probe=false&window_hours=168&limit=500",
+    );
+    expect(result.totals.liveAuthCount).toBe(1);
+    expect(result.totals.totalTokens).toBe(140);
+    expect(result.providers[0]).toMatchObject({
+      provider: "codex_cli",
+      providerName: "Codex CLI",
+      liveAuth: true,
+      calls: 7,
+      totalTokens: 140,
+    });
+    expect(result.providers[0].quota).toMatchObject({
+      source: "provider_snapshot",
+      remaining: 12,
+      used: 38,
+    });
+    expect(result.providers[0].observedUsage).toMatchObject({
+      source: "management_ai_bff_audit",
+      coverage: "bff_observed_management_ai_only",
+      coverageLabel: "BFF observed",
+      stale: true,
+      staleAfterHours: 24,
+    });
+    expect(result.usage).toMatchObject({
+      truth_policy: "observed_bff_events_only",
+      source: "management_ai_bff_audit",
+    });
+    expect(result.providers[0].models?.[0]).toMatchObject({
+      model: "gpt-5-codex",
+      totalTokens: 140,
+    });
   });
 });
 
@@ -326,22 +485,122 @@ describe("Management AI provider reauth", () => {
     expect(result.reauth.verificationUriComplete).toContain("user_code=ABCD-EFGH");
   });
 
-  it("surfaces provider reauth control-mode precondition failures", async () => {
+  it("submits Claude provider reauth authorization code through the assistant BFF route", async () => {
+    vi.stubEnv("VITE_BFF_BASE_URL", "https://bff.example.test");
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
+      data: {
+        provider: "claude",
+        status: "code_submitted",
+        reauth_session_id: "claude_reauth_123",
+        code_submitted_at: "2026-07-01T00:00:00Z",
+      },
+    }));
+    globalThis.fetch = fetchMock;
+
+    const result = await submitAssistantProviderReauthCode({
+      provider: "claude",
+      sessionId: "claude_reauth_123",
+      code: "claude-oauth-code-123",
+      traceId: "trace-code-1",
+    });
+
+    expect(result.kind).toBe("ok");
+    if (result.kind !== "ok") throw new Error(result.message);
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      "https://bff.example.test/bff/assistant/provider/reauth/claude_reauth_123/code?provider=claude",
+    );
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(init.method).toBe("POST");
+    expect(init.credentials).toBe("include");
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      provider: "claude",
+      code: "claude-oauth-code-123",
+      traceId: "trace-code-1",
+    });
+    expect(result.reauth.status).toBe("code_submitted");
+    expect(result.reauth.reauthSessionId).toBe("claude_reauth_123");
+  });
+
+  it("surfaces provider reauth failures", async () => {
     vi.stubEnv("VITE_BFF_BASE_URL", "https://bff.example.test");
     globalThis.fetch = vi.fn().mockResolvedValue(jsonResponse({
       detail: {
         error: {
-          message: "Assistant dev workflow requires active control mode",
+          message: "Assistant provider reauth requires MFA",
         },
       },
-    }, 409));
+    }, 403));
 
     const result = await startAssistantProviderReauth({ provider: "codex" });
 
     expect(result.kind).toBe("failure");
     if (result.kind !== "failure") throw new Error("expected failure");
-    expect(result.statusCode).toBe(409);
-    expect(result.message).toContain("active control mode");
+    expect(result.statusCode).toBe(403);
+    expect(result.message).toContain("requires MFA");
+  });
+
+  it("labels missing provider reauth routes as route unavailable", async () => {
+    vi.stubEnv("VITE_BFF_BASE_URL", "https://bff.example.test");
+    globalThis.fetch = vi.fn().mockResolvedValue(new Response("not found", {
+      status: 404,
+      statusText: "Not Found",
+      headers: { "content-type": "text/plain" },
+    }));
+
+    const result = await startAssistantProviderReauth({ provider: "claude" });
+
+    expect(result.kind).toBe("failure");
+    if (result.kind !== "failure") throw new Error("expected failure");
+    expect(result.statusCode).toBe(404);
+    expect(result.message).toBe("BFF route unavailable: /bff/assistant/provider/reauth");
+  });
+});
+
+describe("Management AI provider registry", () => {
+  const realFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+    vi.unstubAllEnvs();
+  });
+
+  it("registers a new provider through the assistant BFF route", async () => {
+    vi.stubEnv("VITE_BFF_BASE_URL", "https://bff.example.test");
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
+      data: {
+        provider: "gemini_cli",
+        provider_name: "Gemini CLI",
+        runtime: "external_llm",
+        status: "registered",
+        ready: false,
+        auth_status: "not_configured",
+        reauth_supported: false,
+      },
+      meta: { openclawAdapterStatus: "ok" },
+    }, 201));
+    globalThis.fetch = fetchMock;
+
+    const result = await registerAssistantProvider({
+      provider: "gemini_cli",
+      providerName: "Gemini CLI",
+      model: "gemini-2.5-pro",
+      authStrategy: "manual",
+    });
+
+    expect(fetchMock.mock.calls[0][0]).toBe("https://bff.example.test/bff/assistant/providers");
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(init.method).toBe("POST");
+    expect(init.credentials).toBe("include");
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      provider: "gemini_cli",
+      providerName: "Gemini CLI",
+      model: "gemini-2.5-pro",
+      authStrategy: "manual",
+    });
+    expect(result.kind).toBe("ok");
+    if (result.kind !== "ok") throw new Error(result.message);
+    expect(result.provider.provider).toBe("gemini_cli");
+    expect(result.provider.reauthSupported).toBe(false);
   });
 });
 
@@ -602,5 +861,80 @@ describe("Management AI stream", () => {
     expect(result.providerStatus?.status).toBe("degraded");
     expect(result.providerStatus?.reasonCode).toBe("OPENCLAW_RESPONSES_FAILED");
     expect(result.message).toBe("provider failed");
+  });
+});
+
+describe("Management AI conversation list (history index hydration)", () => {
+  const realFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+    vi.unstubAllEnvs();
+  });
+
+  it("lists server-side conversations and normalizes snake/camel fields", async () => {
+    vi.stubEnv("VITE_BFF_BASE_URL", "https://bff.example.test");
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
+      data: [
+        { session_id: "mgmt-nl-aaa", title: "first chat", updated_at: "2026-06-20T10:00:00Z", created_at: "2026-06-20T09:00:00Z", turn_count: 4 },
+        { sessionId: "mgmt-nl-bbb", title: "", updatedAt: "2026-06-21T11:00:00Z", turnCount: 2 },
+        { title: "no id — dropped" },
+      ],
+      meta: { count: 2 },
+    }));
+    globalThis.fetch = fetchMock;
+
+    const res = await fetchManagementAiConversationList(50);
+
+    expect(res.ok).toBe(true);
+    if (res.kind !== "ok") throw new Error("expected ok");
+    expect(res.conversations).toHaveLength(2);
+    expect(res.conversations[0]).toEqual({
+      sessionId: "mgmt-nl-aaa",
+      title: "first chat",
+      updatedAt: "2026-06-20T10:00:00Z",
+      createdAt: "2026-06-20T09:00:00Z",
+      turnCount: 4,
+    });
+    expect(res.conversations[1].sessionId).toBe("mgmt-nl-bbb");
+    expect(res.conversations[1].turnCount).toBe(2);
+
+    const calledUrl = String(fetchMock.mock.calls[0][0]);
+    expect(calledUrl).toContain("/management/ai/conversations");
+    expect(calledUrl).toContain("limit=50");
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({ method: "GET" });
+  });
+
+  it("lists server-side conversations when wrapped in nested data.items object structure", async () => {
+    vi.stubEnv("VITE_BFF_BASE_URL", "https://bff.example.test");
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
+      data: {
+        id: "management_ai_conversations",
+        items: [
+          { session_id: "mgmt-nl-aaa", title: "nested chat", updated_at: "2026-06-20T10:00:00Z", created_at: "2026-06-20T09:00:00Z", turn_count: 4 },
+        ]
+      },
+      meta: { count: 1 },
+    }));
+    globalThis.fetch = fetchMock;
+
+    const res = await fetchManagementAiConversationList(10);
+
+    expect(res.ok).toBe(true);
+    if (res.kind !== "ok") throw new Error("expected ok");
+    expect(res.conversations).toHaveLength(1);
+    expect(res.conversations[0].sessionId).toBe("mgmt-nl-aaa");
+    expect(res.conversations[0].title).toBe("nested chat");
+  });
+
+  it("returns a visible failure when the BFF list endpoint errors", async () => {
+    vi.stubEnv("VITE_BFF_BASE_URL", "https://bff.example.test");
+    globalThis.fetch = vi.fn().mockResolvedValue(jsonResponse({ detail: "boom" }, 500));
+
+    const res = await fetchManagementAiConversationList();
+
+    expect(res.ok).toBe(false);
+    if (res.kind !== "failure") throw new Error("expected failure");
+    expect(res.status).toBe(500);
   });
 });
