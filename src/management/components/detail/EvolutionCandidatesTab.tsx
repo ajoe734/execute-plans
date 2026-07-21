@@ -7,10 +7,10 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { toast } from "sonner";
 import { bff } from "@/lib/bff-v1";
 import type { EvolutionCandidate, EvolutionRun } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
+import { NonProductionActionButton } from "@/management/components/NonProductionActionButton";
 
 type StateFilter = "all" | EvolutionCandidate["state"];
 
@@ -42,13 +42,6 @@ export const EvolutionCandidatesTab = ({ programId }: { programId: string }) => 
     return n;
   });
 
-  const batch = (kind: "promote" | "discard") => {
-    if (!selected.size) return toast.error(t("empty.none"));
-    toast.success(t("phase13.evolution.candidates.queued"));
-    setAll((cs) => cs.map((c) => selected.has(c.id) ? { ...c, state: kind === "promote" ? "promoted" : "discarded" } : c));
-    setSelected(new Set());
-  };
-
   return (
     <div className="space-y-3">
       <Card className="p-3 flex flex-wrap items-end gap-3">
@@ -71,12 +64,12 @@ export const EvolutionCandidatesTab = ({ programId }: { programId: string }) => 
         <div className="flex-1" />
         <div className="flex items-center gap-2">
           <Badge variant="outline" className="text-[10px] uppercase">{selected.size} selected</Badge>
-          <Button size="sm" variant="outline" onClick={() => batch("promote")} disabled={!selected.size}>
+          <NonProductionActionButton size="sm" variant="outline">
             {t("phase13.evolution.candidates.batchPromote")}
-          </Button>
-          <Button size="sm" variant="destructive" onClick={() => batch("discard")} disabled={!selected.size}>
+          </NonProductionActionButton>
+          <NonProductionActionButton size="sm" variant="destructive">
             {t("phase13.evolution.candidates.batchDiscard")}
-          </Button>
+          </NonProductionActionButton>
         </div>
       </Card>
 
@@ -124,11 +117,7 @@ export const EvolutionCandidatesTab = ({ programId }: { programId: string }) => 
                     {inspect.mutationsApplied.length === 0 && <li className="text-muted-foreground">—</li>}
                   </ul>
                 </div>
-                <Button size="sm" disabled={inspect.state === "promoted"} onClick={() => {
-                  setAll((cs) => cs.map((c) => c.id === inspect.id ? { ...c, state: "promoted" } : c));
-                  toast.success(t("evolution.runs.promoted"));
-                  setInspect(null);
-                }}>{t("evolution.candidate.promote")}</Button>
+                <NonProductionActionButton size="sm">{t("evolution.candidate.promote")}</NonProductionActionButton>
               </div>
             </>
           )}

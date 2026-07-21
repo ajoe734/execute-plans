@@ -3,6 +3,18 @@ import { lists } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { Badge } from "@/components/ui/badge";
 import type { Tool, McpServer, Skill, Channel } from "@/lib/bff/types";
+import { Inbox } from "lucide-react";
+
+const capabilityCreateDisabled = {
+  kind: "disabled" as const,
+  reasonI18nKey: "capabilities.actions.disabledReason",
+};
+
+const capabilityEmptyState = (title: string, description: string) => ({
+  title,
+  description,
+  icon: <Inbox className="h-8 w-8" />,
+});
 
 const envBadge = (env: string) => {
   if (env === "live") return "bg-env-live-bg text-status-success border-status-success/30";
@@ -23,6 +35,14 @@ export const ToolsList = () => {
       title={t("nav.tools")}
       loader={lists.tools}
       basePath="/management/tools" liveKinds={["Tool"]}
+      createBehavior={capabilityCreateDisabled}
+      emptyState={capabilityEmptyState(
+        t("capabilities.tools.emptyTitle", { defaultValue: "Live tool registry is empty" }),
+        t("capabilities.tools.emptyDescription", {
+          defaultValue:
+            "The BFF returned an empty tools registry. Create, import, publish, and retire actions stay disabled until a governed capability command returns a command id or audit receipt.",
+        }),
+      )}
       extraColumns={[
         { key: "cat", header: t("table.category"), cell: (r) => <span className="text-xs tracking-wide text-muted-foreground">{r.category}</span> },
         { key: "ver", header: t("table.version"), cell: (r) => <span className="text-mono text-xs">{r.version}</span> },
@@ -40,6 +60,14 @@ export const McpServersList = () => {
       title={t("nav.mcp")}
       loader={lists.mcpServers}
       basePath="/management/mcp" liveKinds={["McpServer","McpSecret"]}
+      createBehavior={capabilityCreateDisabled}
+      emptyState={capabilityEmptyState(
+        t("capabilities.mcp.emptyTitle", { defaultValue: "Live MCP registry is empty" }),
+        t("capabilities.mcp.emptyDescription", {
+          defaultValue:
+            "No MCP servers are registered by the live BFF. Import, env-grant, live-grant, and retire actions stay disabled until the command contract is available.",
+        }),
+      )}
       extraColumns={[
         { key: "ep", header: t("table.endpoint"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{r.endpoint}</span> },
         { key: "rg", header: t("table.region"), cell: (r) => <span className="text-mono text-xs">{r.region}</span> },
@@ -63,6 +91,14 @@ export const SkillsList = () => {
       title={t("nav.skills")}
       loader={lists.skills}
       basePath="/management/skills" liveKinds={["Skill"]}
+      createBehavior={capabilityCreateDisabled}
+      emptyState={capabilityEmptyState(
+        t("capabilities.skills.emptyTitle", { defaultValue: "Live skill registry is empty" }),
+        t("capabilities.skills.emptyDescription", {
+          defaultValue:
+            "The BFF returned no production skills. Create, publish, sandbox-run, and retire actions stay disabled until a governed skill runner or command receipt is exposed.",
+        }),
+      )}
       extraColumns={[
         { key: "arch", header: "Archetype", cell: (r) => r.archetype },
         { key: "ver", header: t("table.version"), cell: (r) => <span className="text-mono text-xs">{r.version}</span> },
