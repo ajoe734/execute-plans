@@ -40,6 +40,10 @@ const hostedPersonaServantPreflight = readFileSync(
   resolve(root, "scripts/ensure-persona-hosted-proof-servant.mjs"),
   "utf8",
 );
+const hostedPersonaGovernedProbe = readFileSync(
+  resolve(root, "scripts/probe-persona-governed-proposal-live.mjs"),
+  "utf8",
+);
 const hostedPersonaCredentialValidator = readFileSync(
   resolve(root, "scripts/validate-persona-hosted-proof-env.mjs"),
   "utf8",
@@ -433,6 +437,18 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
       integrationWorkflow.indexOf("  authorized-write-proof:"),
       integrationWorkflow.indexOf("  pr-comment:"),
     );
+    const authorizedProofEnv = authorizedProof.slice(
+      authorizedProof.indexOf("    env:"),
+      authorizedProof.indexOf("    steps:"),
+    );
+    expect(authorizedProofEnv).toContain("PANTHEON_TENANT_ID: tenant-dev");
+    expect(authorizedProofEnv).toContain("PANTHEON_PINT_TENANT_ID: tenant-dev");
+    expect(
+      authorizedProof.match(/^ {6}PANTHEON_TENANT_ID: tenant-dev$/gmu),
+    ).toHaveLength(1);
+    expect(
+      authorizedProof.match(/^ {6}PANTHEON_PINT_TENANT_ID: tenant-dev$/gmu),
+    ).toHaveLength(1);
     expect(integrationWorkflow).toContain(
       "npx playwright test e2e/persona-interaction-cross-repo-hosted.spec.ts",
     );
@@ -531,6 +547,15 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     );
     expect(hostedPersonaServantPreflight).toContain(
       "process.env.PANTHEON_EXPECTED_BFF_SHA",
+    );
+    expect(hostedPersonaServantPreflight).toContain(
+      'process.env.PANTHEON_TENANT_ID ?? "tenant-dev"',
+    );
+    expect(hostedPersonaGovernedProbe).toMatch(
+      /process\.env\.PANTHEON_PINT_TENANT_ID\s*\|\|\s*process\.env\.PANTHEON_TENANT_ID\s*\|\|\s*"tenant-dev"/u,
+    );
+    expect(hostedPersonaInteractionSpec).toContain(
+      'process.env.PANTHEON_TENANT_ID ?? "tenant-dev"',
     );
     expect(hostedPersonaServantPreflight.indexOf("/bff/version")).toBeLessThan(
       hostedPersonaServantPreflight.indexOf("/bff/me"),

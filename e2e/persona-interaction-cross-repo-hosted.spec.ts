@@ -12,7 +12,7 @@ import { roleTokenFromEnv } from "./helpers/auth";
 
 const FE_BASE = (process.env.PANTHEON_FE_BASE_URL ?? "").replace(/\/$/, "");
 const BFF_BASE = (process.env.PANTHEON_BFF_BASE_URL ?? "").replace(/\/$/, "");
-const TENANT_ID = process.env.PANTHEON_TENANT_ID ?? "pantheon-dev";
+const TENANT_ID = process.env.PANTHEON_TENANT_ID ?? "tenant-dev";
 const OPERATOR_TOKEN = roleTokenFromEnv("operator", ["PANTHEON_PERSONA_INTERACTION_OPERATOR_TOKEN"]);
 const VIEWER_TOKEN = roleTokenFromEnv("viewer", ["PANTHEON_PERSONA_INTERACTION_VIEWER_TOKEN"]);
 const WRITE_PROOF = process.env.PANTHEON_PERSONA_INTERACTION_WRITE_PROOF === "1";
