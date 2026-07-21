@@ -88,6 +88,7 @@ describe("Trade Journeys workbench", () => {
     expect(screen.getByRole("status")).toHaveTextContent("ledger unavailable");
     expect(screen.getByText(/Missing Ledger booking/)).toBeInTheDocument();
     expect(screen.getByLabelText("Journey stages")).toBeInTheDocument();
+    expect(screen.getByLabelText("Evidence")).toHaveAttribute("tabindex", "0");
   });
 
   it("offers a real back-to-origin link on the journey detail page when it arrived via a cross-entry return_to", async () => {
