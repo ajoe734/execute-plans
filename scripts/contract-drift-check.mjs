@@ -71,7 +71,7 @@ function findPantheonRoot() {
     path.join(repoRoot, "pantheon-contract"),
     path.join(repoRoot, "..", "pantheon"),
     path.join(repoRoot, "..", "..", "pantheon"),
-    "/home/lupin/code/pantheon",
+    "/home/lupin/pantheon",
   ].filter(Boolean);
 
   for (const candidate of candidates) {
