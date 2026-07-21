@@ -13,7 +13,10 @@ const BFF_BASE_URL = (
   process.env.PANTHEON_BFF_BASE_URL ||
   "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io"
 ).replace(/\/$/u, "");
-const TENANT_ID = process.env.PANTHEON_PINT_TENANT_ID || "pantheon-dev";
+const TENANT_ID =
+  process.env.PANTHEON_PINT_TENANT_ID ||
+  process.env.PANTHEON_TENANT_ID ||
+  "tenant-dev";
 const OPERATOR_TOKEN =
   process.env.PANTHEON_PINT_OPERATOR_TOKEN || "pantheon-dev-browser:operator";
 const VIEWER_TOKEN =

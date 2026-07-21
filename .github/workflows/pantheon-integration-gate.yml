@@ -1343,6 +1343,10 @@ jobs:
       EXPECTED_READ_ONLY_DIGEST: ${{ inputs.expected_read_only_digest }}
       EXPECTED_WRITE_PROOF_DIGEST: ${{ inputs.expected_write_proof_digest }}
       PANTHEON_PUBLIC_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+      # Keep every Persona and Trade Journey proof on the canonical dev
+      # data-plane tenant used by the strict proof JWTs.
+      PANTHEON_TENANT_ID: tenant-dev
+      PANTHEON_PINT_TENANT_ID: tenant-dev
     steps:
       - name: Checkout exact authorized immutable dev ref
         uses: actions/checkout@v4
@@ -1534,7 +1538,6 @@ jobs:
         env:
           PANTHEON_PERSONA_INTERACTION_OPERATOR_TOKEN: ${{ secrets.PANTHEON_BFF_OPERATOR_A_TOKEN }}
           PANTHEON_PERSONA_INTERACTION_VIEWER_TOKEN: ${{ secrets.PANTHEON_BFF_VIEWER_TOKEN }}
-          PANTHEON_TENANT_ID: tenant-dev
         run: |
           set -euo pipefail
           desktop_results="$PANTHEON_AUDIT_OUT_DIR/trade-journey-hosted-desktop-results.json"

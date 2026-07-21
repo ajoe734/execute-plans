@@ -15,7 +15,7 @@ const operatorToken = String(
   process.env.PANTHEON_PERSONA_INTERACTION_OPERATOR_TOKEN ?? "",
 ).trim();
 const tenantId = String(
-  process.env.PANTHEON_TENANT_ID ?? "pantheon-dev",
+  process.env.PANTHEON_TENANT_ID ?? "tenant-dev",
 ).trim();
 const correlationId = String(
   process.env.PANTHEON_PROOF_CORRELATION_ID ?? "",
