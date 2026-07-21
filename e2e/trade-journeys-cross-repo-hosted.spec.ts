@@ -14,7 +14,9 @@ const FE_BASE = (process.env.PANTHEON_FE_BASE_URL ?? "").replace(/\/+$/, "");
 const BFF_BASE = (process.env.PANTHEON_BFF_BASE_URL ?? "").replace(/\/+$/, "");
 const EXPECTED_FE_SHA = String(process.env.PANTHEON_FRONTEND_SHA ?? "").trim().toLowerCase();
 const EXPECTED_BFF_SHA = String(process.env.PANTHEON_BFF_SHA ?? "").trim().toLowerCase();
-const TENANT_ID = String(process.env.PANTHEON_TENANT_ID ?? "tenant-dev").trim();
+// `tenant-dev` belongs to the fixture-only Playwright auth helpers. The strict
+// hosted BFF and its short-lived proof JWTs are scoped to `pantheon-dev`.
+const TENANT_ID = String(process.env.PANTHEON_TENANT_ID ?? "pantheon-dev").trim();
 const PUBLIC_SUPABASE_URL = String(process.env.PANTHEON_PUBLIC_SUPABASE_URL ?? "").trim();
 const OPERATOR_TOKEN = roleTokenFromEnv("operator", ["PANTHEON_PERSONA_INTERACTION_OPERATOR_TOKEN"]);
 const VIEWER_TOKEN = roleTokenFromEnv("viewer", ["PANTHEON_PERSONA_INTERACTION_VIEWER_TOKEN"]);
