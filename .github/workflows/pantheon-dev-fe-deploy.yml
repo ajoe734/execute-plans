@@ -15,6 +15,11 @@ on:
         required: false
         default: "dev"
         type: string
+      bff_commit:
+        description: "Exact Pantheon BFF merge SHA paired with this frontend deployment. Required for manual final proof."
+        required: false
+        default: ""
+        type: string
       skip_probe:
         description: "Emergency only: deploy without the browser/BFF probe."
         required: false
@@ -51,7 +56,11 @@ jobs:
       PANTHEON_OLD_BFF_URL: https://pantheon-lupin-dev-bff.34.81.75.241.sslip.io
       PANTHEON_AUDIT_OUT_DIR: .lovable/audits/current-run
       PANTHEON_HOSTED_PROBE_PATH: /management/persona-fleet
-      PANTHEON_HOSTED_REQUIRED_BFF_PATHS: /bff/management/fleet
+      PANTHEON_HOSTED_REQUIRED_BFF_PATHS: /bff/me
+      # Manual final-proof runs must name the exact expected runtime SHA.
+      # Push deploys leave this empty and resolve /bff/version directly.
+      # Never inherit the mutable repo variable as deployment evidence.
+      PANTHEON_DEPLOY_EXPECTED_BFF_COMMIT: ${{ github.event_name == 'workflow_dispatch' && inputs.bff_commit || '' }}
       PANTHEON_DEPLOY_SKIP_PROBE: ${{ github.event_name == 'workflow_dispatch' && inputs.skip_probe || false }}
 
     steps:
@@ -77,10 +86,13 @@ jobs:
           mkdir -p "$PANTHEON_AUDIT_OUT_DIR"
 
       - name: Deploy static build
+        id: deploy
         env:
           PANTHEON_DEPLOY_REF: ${{ env.TARGET_REF || steps.sha.outputs.sha }}
           PANTHEON_DEPLOY_BRANCH: ${{ env.TARGET_BRANCH || 'dev' }}
           GITHUB_SHA: ${{ steps.sha.outputs.sha }}
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
         run: bash scripts/deploy-dev-vm.sh
 
       - name: Upload deploy evidence
@@ -102,5 +114,7 @@ jobs:
             echo "- deployed sha: \`${{ steps.sha.outputs.sha }}\`"
             echo "- FE: ${PANTHEON_DEV_FE_HOST}"
             echo "- BFF: ${PANTHEON_BFF_BASE_URL}"
+            echo "- BFF commit: \`${{ steps.deploy.outputs.bff_commit || 'unknown' }}\`"
+            echo "- BFF commit source: \`${{ steps.deploy.outputs.bff_commit_source || 'unknown' }}\`"
             echo "- evidence: pantheon-dev-fe-deploy-evidence"
           } >> "$GITHUB_STEP_SUMMARY"

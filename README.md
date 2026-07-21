@@ -77,8 +77,20 @@ Pantheon dev frontend build 請設定：
 VITE_BFF_MODE=live
 VITE_BFF_BASE_URL=https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io
 VITE_BFF_FALLBACK=strict
-VITE_BFF_REAL_WRITES=false
+VITE_BFF_REAL_WRITES=true
+VITE_BFF_ALLOW_DEV_STUB_WRITES=true
+VITE_SUPABASE_URL=https://<project>.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=<public-publishable-or-anon-key>
 ```
+
+Supabase values above are public browser configuration, not server secrets.
+Never use a service-role or `sb_secret_` key in any `VITE_*` variable.
+
+Pantheon dev is a closed test environment. Its explicit dev-only stub-write
+gate requires `/bff/me` to report `dev` or `test` and is rejected for any
+production environment marker. Deployment verifies a persisted Human Review
+submit/decision/read-back flow while the BFF governance contract keeps direct
+capital and runtime mutation disabled.
 
 Staging-live:
 
@@ -89,19 +101,19 @@ VITE_BFF_FALLBACK=strict
 VITE_BFF_REAL_WRITES=false
 ```
 
-`VITE_BFF_REAL_WRITES=false` 會讓 state-machine action writes 保留在前端 mock/overlay；
-只有 operator auth、approval evidence、confirm-token、two-man signing 都驗證後，才可打開。
+Staging-live 仍維持 `VITE_BFF_REAL_WRITES=false`。Dev 的 real writes 只送入 BFF
+治理命令與 Human Review；資金或 runtime 的直接變更仍由後端 policy 阻擋。
 
 Auth/session access is explicit:
 
 - Browser cookie session：live fetch 使用 `credentials: "include"`。
 - Optional dev bearer token：`sessionStorage` 優先，其次 `localStorage`，key 為
   `pantheon.bff.bearerToken` 或 legacy `pantheon_operator_token`。
-- Optional dev fallback：`VITE_BFF_DEV_BEARER_TOKEN` 可提供非秘密
-  dev browser token，僅能搭配 dev BFF 的 `PANTHEON_BFF_AUTH_STUB=true`。
-  Pantheon-owned dev Management AI control-mode smoke 需要 operator/admin +
-  MFA + `assistant.kernel.*` capability；目前 dev FE 使用
-  `pantheon-dev-browser:operator:mfa:assistant.kernel.debug,assistant.kernel.repair`。
+- Optional dev fallback：`VITE_BFF_DEV_BEARER_TOKEN` 會編入公開 bundle，
+  因此只能留空或使用唯一允許的 dev-only viewer identity
+  `pantheon-dev-browser:viewer`。operator/admin、MFA 與
+  `assistant.kernel.*` capability 必須來自互動式 cookie／sessionStorage
+  session，不能放進任何 `VITE_*` build variable。
 - Optional tenant id：`pantheon.bff.tenantId` 或 legacy `pantheon_tenant_id`。
 
 Management AI SA/SD dispatch is BFF-owned. The frontend calls
