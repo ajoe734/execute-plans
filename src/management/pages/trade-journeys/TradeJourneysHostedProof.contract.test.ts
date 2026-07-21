@@ -29,6 +29,14 @@ describe("TJ-E2E-012 hosted browser proof contract", () => {
     }
   });
 
+  it("locates hosted scenarios with the real server-side q filter instead of first-page ordering", () => {
+    expect(spec).toContain('url.searchParams.get("q") === input.query');
+    expect(spec).toContain('environment: "paper", query: "tj-scenario-"');
+    expect(spec).toContain('environment: "paper", query: "tj-scenario-7"');
+    expect(spec).toContain('environment: "live", query: "tj-scenario-10"');
+    expect(spec).not.toContain("const paper = await openPaperList(page)");
+  });
+
   it("runs desktop, viewer-RBAC, and mobile proof inside the existing authorized window", () => {
     expect(workflow).toContain("e2e/trade-journeys-cross-repo-hosted.spec.ts");
     expect(workflow).toContain("secrets.PANTHEON_BFF_OPERATOR_A_TOKEN");

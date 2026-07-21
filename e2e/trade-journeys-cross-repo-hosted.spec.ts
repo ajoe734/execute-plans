@@ -248,19 +248,28 @@ async function writeEvidence(testInfo: TestInfo, suffix: string, payload: JsonRe
   await testInfo.attach(`tj-e2e-012-${suffix}`, { contentType: "application/json", path });
 }
 
-async function openPaperList(page: Page): Promise<{ response: JsonRecord; rows: JsonRecord[] }> {
+async function openJourneyList(
+  page: Page,
+  input: { environment: "paper" | "live"; query: string },
+): Promise<{ response: JsonRecord; rows: JsonRecord[] }> {
   const listResponse = page.waitForResponse((response) => {
     const url = new URL(response.url());
     return url.pathname === "/bff/management/trade-journeys"
       && url.searchParams.get("tenant_id") === TENANT_ID
-      && url.searchParams.get("environment") === "paper"
+      && url.searchParams.get("environment") === input.environment
+      && url.searchParams.get("q") === input.query
       && response.request().method() === "GET";
   });
-  await page.goto(`${FE_BASE}/management/trade-journeys?tenant_id=${encodeURIComponent(TENANT_ID)}&environment=paper`, {
+  const params = new URLSearchParams({
+    tenant_id: TENANT_ID,
+    environment: input.environment,
+    q: input.query,
+  });
+  await page.goto(`${FE_BASE}/management/trade-journeys?${params}`, {
     waitUntil: "domcontentloaded",
   });
   const response = await listResponse;
-  expect(response.ok(), `paper journey list returned ${response.status()}`).toBe(true);
+  expect(response.ok(), `${input.environment} journey list returned ${response.status()}`).toBe(true);
   const responseJson = record(await response.json());
   return { response: responseJson, rows: items(responseJson) };
 }
@@ -278,7 +287,10 @@ test.describe("TJ-E2E-012 hosted Trade Journey browser proof", () => {
     const session = await assertStrictSession(request, OPERATOR_TOKEN, "operator");
     await installHostedSession(page, { ...session, token: OPERATOR_TOKEN });
     const network = observeBffResponses(page);
-    const paper = await openPaperList(page);
+    // The shared tenant contains thousands of genuine journeys. Restrict the
+    // real server-composed list to the scenario namespace instead of assuming
+    // fixture rows happen to occupy the first updated_at-desc page.
+    const paper = await openJourneyList(page, { environment: "paper", query: "tj-scenario-" });
     const rowsById = new Map(paper.rows.map((row) => [String(row.journey_id ?? ""), row]));
     expect([...rowsById.keys()].sort()).toEqual(expect.arrayContaining([...PAPER_SCENARIO_IDS].sort()));
     expect(rowsById.get("tj-scenario-7")?.status).toBe("completed_with_variance");
@@ -330,18 +342,8 @@ test.describe("TJ-E2E-012 hosted Trade Journey browser proof", () => {
     const session = await assertStrictSession(request, VIEWER_TOKEN, "viewer");
     await installHostedSession(page, { ...session, token: VIEWER_TOKEN });
     const network = observeBffResponses(page);
-    const listResponse = page.waitForResponse((response) => {
-      const url = new URL(response.url());
-      return url.pathname === "/bff/management/trade-journeys"
-        && url.searchParams.get("environment") === "live"
-        && response.request().method() === "GET";
-    });
-    await page.goto(`${FE_BASE}/management/trade-journeys?tenant_id=${encodeURIComponent(TENANT_ID)}&environment=live`, {
-      waitUntil: "domcontentloaded",
-    });
-    const response = await listResponse;
-    expect(response.ok(), `live journey list returned ${response.status()}`).toBe(true);
-    const row = items(await response.json()).find((item) => item.journey_id === "tj-scenario-10");
+    const live = await openJourneyList(page, { environment: "live", query: "tj-scenario-10" });
+    const row = live.rows.find((item) => item.journey_id === "tj-scenario-10");
     expect(row, "live scenario 10 must be visible as a masked journey").toBeTruthy();
     expect(row?.live_capital_masked).toBe(true);
     for (const field of LIVE_SENSITIVE_FIELDS) {
@@ -374,7 +376,7 @@ test.describe("TJ-E2E-012 hosted Trade Journey browser proof", () => {
     const session = await assertStrictSession(request, OPERATOR_TOKEN, "operator");
     await installHostedSession(page, { ...session, token: OPERATOR_TOKEN });
     const network = observeBffResponses(page);
-    const paper = await openPaperList(page);
+    const paper = await openJourneyList(page, { environment: "paper", query: "tj-scenario-7" });
     expect(paper.rows.some((row) => row.journey_id === "tj-scenario-7")).toBe(true);
     await expect(page.getByRole("heading", { name: /Trade Journeys|交易旅程/ })).toBeVisible();
     const listDimensions = await page.evaluate(() => ({
