@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { safePercent } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { bff } from "@/lib/bff-v1";
 import { runActionSafe } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import type { ApprovalRequest, AuditEvent, Rebalance, CapitalPool, Strategy } from "@/lib/bff/types";
-import { Download, Send } from "lucide-react";
-import { mutations } from "@/lib/bff/mutations";
+import { Download, Send, Inbox } from "lucide-react";
 import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
+import { PageBody, PageHeader } from "@/platform/components/PageHeader";
+import { EmptyState } from "@/components/ui/empty-state";
 import { AuditTimeline } from "@/platform/components/AuditTimeline";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { RiskBadge } from "@/platform/components/RiskBadge";
@@ -18,7 +20,6 @@ import { LifecycleStepper } from "@/platform/components/LifecycleStepper";
 import { rebalanceMachine, type RebalanceState } from "@/lib/stateMachines";
 import { nextTransitions, type Transition } from "@/lib/stateMachines/types";
 import { usePermissions } from "@/lib/usePermissions";
-import { toast } from "sonner";
 import { AllocationSimulationPanel } from "../components/detail/AllocationSimulationPanel";
 import { ConstraintChecker } from "../components/detail/ConstraintChecker";
 
@@ -41,6 +42,7 @@ export const RebalanceDetail = () => {
   const navigate = useNavigate();
   const { can } = usePermissions();
   const [r, setR] = useState<Rebalance | undefined>();
+  const [loading, setLoading] = useState(true);
   const [pool, setPool] = useState<CapitalPool | undefined>();
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
   const [audit, setAudit] = useState<AuditEvent[]>([]);
@@ -50,14 +52,21 @@ export const RebalanceDetail = () => {
   const [strategies, setStrategies] = useState<Strategy[]>([]);
 
   useEffect(() => {
-    if (!id) return;
-    bff.rebalances.get(id).then((rb) => {
-      setR(rb);
-      if (rb) {
-        setMachineState(mapState(rb.state));
-        bff.capitalPools.get(rb.targetPoolId).then(setPool);
-      }
-    });
+    if (!id) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    bff.rebalances.get(id)
+      .then((rb) => {
+        setR(rb);
+        if (rb) {
+          setMachineState(mapState(rb.state));
+          bff.capitalPools.get(rb.targetPoolId).then(setPool);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
     bff.approvals.list().then((all) => setApprovals(all.filter((a) => (a.subject ?? "").includes(id) || (a.kind ?? "").includes("rebalance"))));
     bff.audit.list().then((all) => setAudit(all.filter((a) => a.target === id || a.action?.startsWith("rebalance."))));
     bff.strategies.list().then(setStrategies);
@@ -68,7 +77,22 @@ export const RebalanceDetail = () => {
     [machineState, can, r],
   );
 
-  if (!r) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
+  if (loading) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
+  if (!r) {
+    return (
+      <>
+        <PageHeader title={t("nav.rebalance", { defaultValue: "Rebalance" })} />
+        <PageBody>
+          <EmptyState
+            icon={<Inbox className="h-8 w-8 text-muted-foreground" />}
+            title={t("rebalance.detail.notFoundTitle", { defaultValue: "Rebalance Not Found" })}
+            description={t("rebalance.detail.notFoundDescription", { id: id ?? "", defaultValue: `Rebalance detail for ID ${id} is not available in the live contract.` })}
+            cta={{ label: t("governanceDecisions.backToList", { defaultValue: "Back to Governance Decisions" }), onClick: () => navigate("/management/governance-decisions?tab=capital") }}
+          />
+        </PageBody>
+      </>
+    );
+  }
   const lines = r.lines ?? [];
 
   return (
@@ -81,7 +105,15 @@ export const RebalanceDetail = () => {
             <Button size="sm" variant="outline">
               <Download className="h-4 w-4 mr-1" />Export
             </Button>
-            <Button size="sm" variant="outline" onClick={async () => { await mutations.publishRebalanceReport(r.id, "manual publish"); toast.success(t("rebalance.publishReport.toast")); }}>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={async () => {
+                await runActionSafe({ kind: "Rebalance", id: r.id, action: "publish_report", memo: "manual publish" }, {
+                  successTitle: t("rebalance.publishReport.toast"),
+                });
+              }}
+            >
               <Send className="h-4 w-4 mr-1" />{t("rebalance.publishReport.action")}
             </Button>
             {transitions.length === 0 && (
@@ -110,7 +142,7 @@ export const RebalanceDetail = () => {
                 </Section>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <StatCard label={t("nav.capitalPools")} value={pool ? pool.name : r.targetPoolId} />
-                  <StatCard label="Proposed Δ" value={`${(r.proposedDelta * 100).toFixed(1)}%`} tone="warning" />
+                  <StatCard label="Proposed Δ" value={safePercent(r.proposedDelta)} tone="warning" />
                   <StatCard label={t("table.sharpe")} value={r.expectedSharpe?.toFixed(2) ?? "—"} tone="success" />
                   <StatCard label={t("table.drawdown")} value={r.expectedDrawdown != null ? `${(r.expectedDrawdown * 100).toFixed(1)}%` : "—"} tone="danger" />
                 </div>
@@ -130,9 +162,9 @@ export const RebalanceDetail = () => {
                 onRowClick={(row) => navigate(`/management/strategies/${row.strategyId}`)}
                 columns={[
                   { key: "strat", header: t("nav.strategies"), cell: (row) => <div className="font-medium">{row.strategyName}</div> },
-                  { key: "cur", header: t("section.overview"), cell: (row) => <span className="text-mono text-xs">{(row.currentWeight * 100).toFixed(1)}%</span> },
-                  { key: "prop", header: t("section.changeSummary"), cell: (row) => <span className="text-mono text-xs">{(row.proposedWeight * 100).toFixed(1)}%</span> },
-                  { key: "delta", header: "Δ", cell: (row) => <span className={`text-mono text-xs ${row.delta >= 0 ? "text-status-success" : "text-status-failed"}`}>{row.delta >= 0 ? "+" : ""}{(row.delta * 100).toFixed(1)}%</span> },
+                  { key: "cur", header: t("section.overview"), cell: (row) => <span className="text-mono text-xs">{safePercent(row.currentWeight)}</span> },
+                  { key: "prop", header: t("section.changeSummary"), cell: (row) => <span className="text-mono text-xs">{safePercent(row.proposedWeight)}</span> },
+                  { key: "delta", header: "Δ", cell: (row) => <span className={`text-mono text-xs ${(row.delta ?? 0) >= 0 ? "text-status-success" : "text-status-failed"}`}>{(row.delta ?? 0) >= 0 ? "+" : ""}{safePercent(row.delta)}</span> },
                 ]}
                 empty={t("empty.noResults")}
               />
@@ -146,7 +178,7 @@ export const RebalanceDetail = () => {
                   <Field label={t("table.risk")} value={pool ? `${pool.currency} ${(pool.allocated * pool.riskBudget).toLocaleString(undefined, { maximumFractionDigits: 0 })}` : "—"} mono />
                   <Field label={t("table.utilization")} value="OK" mono />
                   <Field label={t("table.utilization")} value="Pass" mono />
-                  <Field label="Stress (−20%)" value={`${(r.expectedDrawdown! * 100 * 1.5).toFixed(1)}%`} mono />
+                  <Field label="Stress (−20%)" value={r.expectedDrawdown != null ? safePercent(r.expectedDrawdown * 1.5) : "—"} mono />
                 </div>
               </Section>
             ),
@@ -200,9 +232,12 @@ export const RebalanceDetail = () => {
             confirmEntity={v3ActionId ? { type: "rebalance", id: r.id } : undefined}
             confirmToken={!v3ActionId && activeTr.risk === "critical" ? (activeTr.action ?? "").toUpperCase() : undefined}
             onConfirm={async (memo, token) => {
-              await runActionSafe({ kind: "Rebalance", id: r.id, action: activeTr.action, memo }, { confirmToken: token });
+              const receipt = await runActionSafe({ kind: "Rebalance", id: r.id, action: activeTr.action, memo }, {
+                confirmToken: token,
+                successTitle: `${activeTr.action} requested`,
+              });
+              if (!receipt.ok) return;
               setMachineState(activeTr.to);
-              toast.success(`${activeTr.action} · ${memo.slice(0, 40)}`);
             }}
           />
         );

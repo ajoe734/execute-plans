@@ -33,6 +33,7 @@ import {
   deactivateAssistantControlMode,
   fetchAssistantModeStatus,
   fetchManagementAiConversation,
+  fetchManagementAiConversationList,
   fetchAssistantOrchestratorStatus,
   generateAssistantDevDocs,
   prepareAssistantRepairWorktree,
@@ -645,6 +646,40 @@ export function AgentPanelBody() {
   useEffect(() => {
     void refreshAssistantRuntimeStatus();
   }, [refreshAssistantRuntimeStatus]);
+
+  // Hydrate the history index from the server so a fresh browser / cleared
+  // localStorage still surfaces past conversations. The left rail is a local
+  // cache, not the source of truth; this merges the authoritative server list
+  // in. Runs once on mount and is independent of provider/OpenClaw health, so
+  // the degraded banner never hides recoverable history.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const res = await fetchManagementAiConversationList(50);
+      if (cancelled || res.kind !== "ok" || res.conversations.length === 0) return;
+      setSessions((prev) => {
+        const byId = new Map<string, SessionIndexEntry>();
+        for (const entry of prev) byId.set(entry.id, entry);
+        for (const conv of res.conversations) {
+          const existing = byId.get(conv.sessionId);
+          const updatedAt = conv.updatedAt
+            ? (Date.parse(conv.updatedAt) || existing?.updatedAt || Date.now())
+            : (existing?.updatedAt ?? Date.now());
+          const hasLocalTitle = !!existing?.title && existing.title !== "新對話";
+          const title = hasLocalTitle
+            ? existing!.title
+            : (conv.title.trim() || existing?.title || "新對話");
+          byId.set(conv.sessionId, { id: conv.sessionId, title, updatedAt });
+        }
+        const list = Array.from(byId.values())
+          .sort((a, b) => b.updatedAt - a.updatedAt)
+          .slice(0, 50);
+        saveSessionIndex(list);
+        return list;
+      });
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const inputContainerRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
