@@ -2,7 +2,7 @@
 // Combines: execution-kind LoopRuns + Persona Health Matrix.
 // Timeout policy uses v0-mock (Q12) until D05 lands.
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { StatCard } from "@/platform/components/StatCard";
@@ -47,7 +47,7 @@ export const ExecutionLoopPage = () => {
   const runsRef = useRef<HTMLDivElement | null>(null);
   const runs = useV5Live(() => v5.loops.list("execution"));
   const personas = useV5Live(() => v5.personas.health());
-  const [activeRunId, setActiveRunId] = useState<string | null>(null);
+  const activeRunId = runParam;
   const activeRunTriggerRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -57,12 +57,6 @@ export const ExecutionLoopPage = () => {
     }
   }, [focus]);
 
-  // Deep-link sync: ?run=<id>
-  useEffect(() => {
-    if (runParam && runParam !== activeRunId) setActiveRunId(runParam);
-    else if (!runParam && activeRunId) setActiveRunId(null);
-  }, [runParam, activeRunId]);
-
   const items = runs.data?.items ?? [];
   const activeRun: LoopRun | null = useMemo(
     () => items.find((r) => r.id === activeRunId) ?? null,
@@ -70,13 +64,11 @@ export const ExecutionLoopPage = () => {
   );
   const openRun = (id: string, trigger?: HTMLElement) => {
     activeRunTriggerRef.current = trigger ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
-    setActiveRunId(id);
     const next = new URLSearchParams(params);
     next.set("run", id);
     setParams(next, { replace: true });
   };
   const closeRun = () => {
-    setActiveRunId(null);
     const next = new URLSearchParams(params);
     next.delete("run");
     setParams(next, { replace: true });
