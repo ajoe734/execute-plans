@@ -11,6 +11,7 @@ import { PermissionAwareButton } from "@/platform/components/PermissionAwareButt
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
 import { useT } from "@/platform/hooks";
 import { toast } from "sonner";
+import { commandReceiptDescription } from "@/lib/bff-v1/commandReceipt";
 
 export const FreezeUnfreezePanel = ({ poolId }: { poolId: string }) => {
   const t = useT();
@@ -68,10 +69,12 @@ export const FreezeUnfreezePanel = ({ poolId }: { poolId: string }) => {
         confirmToken="FREEZE"
         destructive
         onConfirm={async () => {
-          await mutations.freezePool(poolId, reason);
+          const receipt = await mutations.freezePool(poolId, reason);
           setRows((r) => [{ id: `pf_new_${Date.now().toString(36)}`, poolId, reason, frozenBy: "capital", frozenAt: new Date().toISOString(), active: true }, ...r]);
           setReason("");
-          toast.success(t("phase13.capital.freeze.queued"));
+          toast.success(t("phase13.capital.freeze.queued"), {
+            description: commandReceiptDescription(receipt, { fallback: `CapitalPool ${poolId} · freeze_pool` }),
+          });
         }}
       />
       {unfreezeTarget && (
@@ -82,9 +85,11 @@ export const FreezeUnfreezePanel = ({ poolId }: { poolId: string }) => {
           description={t("detail.confirm.unfreezePool")}
           confirmToken="UNFREEZE"
           onConfirm={async (memo) => {
-            await mutations.unfreezePool(poolId, unfreezeTarget.id, memo);
+            const receipt = await mutations.unfreezePool(poolId, unfreezeTarget.id, memo);
             setRows((r) => r.map((x) => x.id === unfreezeTarget.id ? { ...x, active: false } : x));
-            toast.success(t("phase13.capital.freeze.queued"));
+            toast.success(t("phase13.capital.freeze.queued"), {
+              description: commandReceiptDescription(receipt, { fallback: `CapitalPool ${poolId} · unfreeze_pool` }),
+            });
           }}
         />
       )}

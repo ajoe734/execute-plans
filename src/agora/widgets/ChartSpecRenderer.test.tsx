@@ -127,4 +127,81 @@ describe("ChartSpecRenderer", () => {
     fireEvent.click(screen.getByTestId("chart-spec-renderer"));
     expect(onInteraction).toHaveBeenCalledWith({ kind: "open_evidence", params: { evidence_id: "ev-1" } });
   });
+
+  it("renders honest ChartNotice and does not fabricate fake data when data is undefined and isSampleData is false", () => {
+    render(
+      <ChartSpecRenderer
+        spec={{
+          spec_version: "1.0",
+          kind: "table",
+          encodings: {
+            label: { field: "label", type: "nominal" },
+            value: { field: "value", type: "quantitative" },
+          },
+        }}
+        widgetType="candidate_funnel"
+        isSampleData={false}
+      />
+    );
+
+    expect(screen.getByTestId("chart-render-notice")).toBeTruthy();
+    expect(screen.getByText("NO CANDIDATES")).toBeTruthy();
+    expect(screen.getByText("Awaiting candidate monitoring telemetry from BFF.")).toBeTruthy();
+    expect(screen.queryByText("SAMPLE DATA")).toBeNull();
+  });
+
+  it("renders sample/mock data and shows the SAMPLE DATA badge when isSampleData is true", () => {
+    render(
+      <ChartSpecRenderer
+        spec={{
+          spec_version: "1.0",
+          kind: "table",
+          encodings: {
+            label: { field: "label", type: "nominal" },
+            value: { field: "value", type: "quantitative" },
+          },
+        }}
+        widgetType="candidate_funnel"
+        isSampleData={true}
+      />
+    );
+
+    expect(screen.queryByTestId("chart-render-notice")).toBeNull();
+    expect(screen.getByTestId("chart-renderer-builtin")).toBeTruthy();
+    expect(screen.getByText("SAMPLE DATA")).toBeTruthy();
+  });
+
+  it("renders correct status details for different widgetTypes when data is missing", () => {
+    const { rerender } = render(
+      <ChartSpecRenderer
+        spec={{ spec_version: "1.0", kind: "table", encodings: {} }}
+        widgetType="winner_branch_scoreboard"
+      />
+    );
+    expect(screen.getByText("AWAITING DISCLOSURES")).toBeTruthy();
+
+    rerender(
+      <ChartSpecRenderer
+        spec={{ spec_version: "1.0", kind: "table", encodings: {} }}
+        widgetType="related_branch_network"
+      />
+    );
+    expect(screen.getByText("AWAITING DISCLOSURES")).toBeTruthy();
+
+    rerender(
+      <ChartSpecRenderer
+        spec={{ spec_version: "1.0", kind: "table", encodings: {} }}
+        widgetType="event_lead_distribution"
+      />
+    );
+    expect(screen.getByText("TIMELINE UNAVAILABLE")).toBeTruthy();
+
+    rerender(
+      <ChartSpecRenderer
+        spec={{ spec_version: "1.0", kind: "table", encodings: {} }}
+        widgetType="confidence_decomposition"
+      />
+    );
+    expect(screen.getByText("AWAITING DISCLOSURES")).toBeTruthy();
+  });
 });

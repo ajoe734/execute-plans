@@ -15,7 +15,7 @@ import {
   defaultPerformanceAttribution, ATTRIBUTION_DIMENSIONS,
 } from "@/lib/v5/management/performanceAttribution";
 import {
-  buildRankingInboxItem, requiredRoleFor, sendRankingRecommendation,
+  buildRankingInboxItem, makeRankingRecommendationId, requiredRoleFor, sendRankingRecommendation,
 } from "@/lib/v5/management/rankingGovernance";
 
 describe("PM12 portfolio", () => {
@@ -30,7 +30,7 @@ describe("PM12 portfolio", () => {
   });
   it("default book has valid links on every row", () => {
     const b = defaultPortfolioBook();
-    expect(b.pools.every((p) => p.links.manageHref.startsWith("/management/capital/"))).toBe(true);
+    expect(b.pools.every((p) => p.links.manageHref.startsWith("/management/governance-decisions?tab=capital"))).toBe(true);
     expect(b.holdings.every((h) => h.links.manageHref.startsWith("/management/"))).toBe(true);
   });
 });
@@ -102,21 +102,30 @@ describe("PM12 ranking governance", () => {
   it("builds inbox item with ranking_recommendation kind", () => {
     const it = buildRankingInboxItem({
       personaId: "p1", personaName: "P1",
-      recommendation: "require_retraining", source: "quarterly_ranking",
+      recommendation: "require_retraining", source: "quarterly_ranking", quarter: "2026-Q2",
     });
     expect(it.kind).toBe("ranking_recommendation");
     expect(it.id.startsWith("ranking-rec-")).toBe(true);
     expect(it.links.manageHref).toBe("/management/personas/p1");
   });
-  it("sendRankingRecommendation returns deterministic id", () => {
-    const id1 = sendRankingRecommendation({
+  it("makeRankingRecommendationId returns deterministic id", () => {
+    const id1 = makeRankingRecommendationId({
       personaId: "p1", personaName: "P1",
-      recommendation: "freeze_persona", source: "persona_league",
+      recommendation: "freeze_persona", source: "persona_league", quarter: "2026-Q2",
     });
-    const id2 = sendRankingRecommendation({
+    const id2 = makeRankingRecommendationId({
       personaId: "p1", personaName: "P1",
-      recommendation: "freeze_persona", source: "persona_league",
+      recommendation: "freeze_persona", source: "persona_league", quarter: "2026-Q2",
     });
     expect(id1).toBe(id2);
+  });
+  it("sendRankingRecommendation fails closed when real writes are disabled", async () => {
+    const result = await sendRankingRecommendation({
+      personaId: "p1", personaName: "P1",
+      recommendation: "freeze_persona", source: "persona_league", quarter: "2026-Q2",
+    });
+    expect(result.persisted).toBe(false);
+    expect(result.status).toBe("write_disabled");
+    expect(result.liveCapitalMutation).toBe(false);
   });
 });
