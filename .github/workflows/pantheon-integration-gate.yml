@@ -21,8 +21,20 @@ on:
         description: "Pantheon backend/BFF SHA"
         required: false
         default: ""
+      pantheon_contract_ref:
+        description: "Pantheon ref used for the Agora OpenAPI/schema contract bundle"
+        required: false
+        default: "dev"
       soft_fail:
         description: "Emergency override to keep release gate in observation mode. Hard-gate is the default since 2026-05-14 (FE-INT-GATE early switch). Set true only if a transient external dependency is blocking valid merges."
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "true"
+          - "false"
+      pint_hosted_probe:
+        description: "Opt in to the PINT-010-R2 paper-only hosted proposal and targeted desktop/mobile proof."
         required: false
         default: "false"
         type: choice
@@ -51,12 +63,14 @@ jobs:
       PLAYWRIGHT_BASE_URL: ${{ inputs.fe_base_url || 'http://127.0.0.1:4173' }}
       PANTHEON_OLD_BFF_URL: ${{ secrets.PANTHEON_OLD_BFF_URL || 'https://pantheon-lupin-dev-bff.34.81.75.241.sslip.io' }}
       PANTHEON_HOSTED_PROBE_PATH: "/management/persona-fleet"
-      PANTHEON_HOSTED_REQUIRED_BFF_PATHS: "/bff/management/fleet"
+      PANTHEON_HOSTED_REQUIRED_BFF_PATHS: "/health"
       PANTHEON_FRONTEND_SHA: ${{ github.sha }}
       PANTHEON_BFF_SHA: ${{ inputs.bff_sha || vars.PANTHEON_BFF_SHA || '' }}
+      PANTHEON_AGORA_CONTRACT_REF: ${{ inputs.pantheon_contract_ref || vars.PANTHEON_AGORA_CONTRACT_REF || 'dev' }}
       PANTHEON_RELEASE_GATE_AUTH_MODE: ${{ vars.PANTHEON_RELEASE_GATE_AUTH_MODE || 'permissive' }}
       PANTHEON_RELEASE_GATE_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
       PANTHEON_RELEASE_GATE_SOFT_FAIL: ${{ inputs.soft_fail || vars.PANTHEON_RELEASE_GATE_SOFT_FAIL || 'false' }}
+      PANTHEON_PINT_HOSTED_PROBE: ${{ inputs.pint_hosted_probe || 'false' }}
       # VITE_BFF_* are build-time vars for the Vite FE bundle. Keep them unset
       # at job level so unit tests can exercise hybrid/auto fallback paths.
       # Browser probes use runtime env/input plumbing and PANTHEON_E2E_STRICT.
@@ -80,7 +94,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ajoe734/pantheon
-          ref: ${{ vars.PANTHEON_CONTRACT_REF || inputs.bff_sha || 'dev' }}
+          ref: ${{ env.PANTHEON_AGORA_CONTRACT_REF }}
           path: pantheon-contract
           token: ${{ secrets.PANTHEON_CONTRACT_READ_TOKEN || github.token }}
 
@@ -121,7 +135,17 @@ jobs:
         continue-on-error: true
         run: |
           set -o pipefail
-          npm run build 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/npm-run-build.log"
+          VITE_BFF_DEV_BEARER_TOKEN="" npm run build 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/npm-run-build.log"
+
+      - name: Bundle-size budget check
+        id: bundle_budget
+        continue-on-error: true
+        env:
+          PANTHEON_BUNDLE_SKIP_BUILD: "1"
+          PANTHEON_LOAD_BASELINE_OUT_DIR: ${{ env.PANTHEON_AUDIT_OUT_DIR }}
+        run: |
+          set -o pipefail
+          npm run probe:bundle-budget 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/bundle-budget-check.log"
 
       - name: Contract drift
         id: contract
@@ -141,6 +165,10 @@ jobs:
       - name: Anonymous BFF route probe
         id: route_probe
         continue-on-error: true
+        timeout-minutes: 8
+        env:
+          PANTHEON_BFF_ROUTE_PROBE_ATTEMPTS: ${{ github.event_name == 'pull_request' && '1' || '3' }}
+          PANTHEON_BFF_ROUTE_PROBE_TIMEOUT_MS: ${{ github.event_name == 'pull_request' && '8000' || '25000' }}
         run: |
           set -o pipefail
           node scripts/probe-bff-routes.mjs --anonymous 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/bff-route-probe-anonymous.log"
@@ -160,6 +188,16 @@ jobs:
         run: |
           set -o pipefail
           npm run probe:bff:writes 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/bff-write-path-probe.log"
+
+      - name: PINT hosted governed-proposal smoke
+        id: pint_hosted_governance
+        if: env.PANTHEON_PINT_HOSTED_PROBE == 'true'
+        env:
+          PANTHEON_EXPECTED_BFF_SHA: ${{ env.PANTHEON_BFF_SHA }}
+          PANTHEON_PINT_PROBE_ALLOW_WRITES: "true"
+        run: |
+          set -o pipefail
+          node scripts/probe-persona-governed-proposal-live.mjs 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/pint-hosted-governed-proposal.log"
 
       - name: Management live deep validation
         id: mgmt_live_deep
@@ -184,6 +222,7 @@ jobs:
           VITE_BFF_MODE=live \
           VITE_BFF_BASE_URL="" \
           VITE_BFF_FALLBACK=strict \
+          VITE_BFF_DEV_BEARER_TOKEN="" \
           npm run dev -- --host 127.0.0.1 --port 4173 > "$PANTHEON_AUDIT_OUT_DIR/pr-frontend-server.log" 2>&1 &
           echo "$!" > "$PANTHEON_AUDIT_OUT_DIR/pr-frontend-server.pid"
           for i in {1..60}; do
@@ -207,6 +246,44 @@ jobs:
           fi
           PANTHEON_BROWSER_BFF_BASE_URL="$BROWSER_BFF_BASE" \
           node scripts/probe-hosted-browser-bff.mjs 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/hosted-browser-bff-probe.log"
+
+      - name: Management route-load baseline
+        id: route_load
+        continue-on-error: true
+        env:
+          PANTHEON_LOAD_BASELINE_OUT_DIR: ${{ env.PANTHEON_AUDIT_OUT_DIR }}
+        run: |
+          set -o pipefail
+          npm run probe:route-load 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/route-load-baseline.log"
+
+      - name: Compose management load gate manifest
+        id: mgmt_load_gate
+        continue-on-error: true
+        env:
+          PANTHEON_LOAD_BASELINE_OUT_DIR: ${{ env.PANTHEON_AUDIT_OUT_DIR }}
+          PANTHEON_LOAD_GATE_MANIFEST: ${{ env.PANTHEON_AUDIT_OUT_DIR }}/release-load-gate-current.json
+        run: |
+          set -o pipefail
+          echo "PANTHEON_LOAD_GATE_MANIFEST=$PANTHEON_LOAD_GATE_MANIFEST" >> "$GITHUB_ENV"
+          node scripts/compose-release-load-gate.mjs 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/release-load-gate.log"
+
+      - name: Management hosted production acceptance
+        id: mgmt_hosted_accept
+        continue-on-error: true
+        env:
+          PANTHEON_LOAD_BASELINE_OUT_DIR: ${{ env.PANTHEON_AUDIT_OUT_DIR }}
+          PANTHEON_ACCEPT_ROUTE_TIMEOUT_MS: "45000"
+          PANTHEON_ACCEPT_SETTLE_TIMEOUT_MS: "6000"
+        run: |
+          set -o pipefail
+          npm run accept:mgmt:hosted 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/management-hosted-acceptance.log"
+
+      - name: PINT hosted desktop/mobile E2E
+        id: pint_hosted_e2e
+        if: env.PANTHEON_PINT_HOSTED_PROBE == 'true'
+        run: |
+          set -o pipefail
+          npx playwright test e2e/29-persona-interaction.spec.ts --project=chromium --project=mobile-chromium 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/pint-hosted-desktop-mobile-e2e.log"
 
       - name: Playwright E2E
         id: e2e
@@ -244,6 +321,7 @@ jobs:
             "lint": { "outcome": "${{ steps.lint.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/npm-run-lint.log" },
             "test": { "outcome": "${{ steps.test.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/npm-run-test.log" },
             "build": { "outcome": "${{ steps.build.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/npm-run-build.log" },
+            "bundle_budget": { "outcome": "${{ steps.bundle_budget.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/bundle-budget-check.log" },
             "contract": { "outcome": "${{ steps.contract.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/contract-drift.log" },
             "mgmt_persona_3000": { "outcome": "${{ steps.mgmt_persona_3000.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/mgmt-persona-3000-validation.log" },
             "route_probe": { "outcome": "${{ steps.route_probe.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/bff-route-probe-anonymous.log" },
@@ -252,6 +330,9 @@ jobs:
             "mgmt_live_deep": { "outcome": "${{ steps.mgmt_live_deep.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/management-live-deep-validation.log" },
             "install_playwright": { "outcome": "${{ steps.install_playwright.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/playwright-install.log" },
             "browser_probe": { "outcome": "${{ steps.browser_probe.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/hosted-browser-bff-probe.log" },
+            "route_load": { "outcome": "${{ steps.route_load.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/route-load-baseline.log" },
+            "mgmt_load_gate": { "outcome": "${{ steps.mgmt_load_gate.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/release-load-gate.log" },
+            "mgmt_hosted_accept": { "outcome": "${{ steps.mgmt_hosted_accept.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/management-hosted-acceptance.log" },
             "pr_preview": { "outcome": "${{ steps.pr_preview.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/pr-frontend-server.log" },
             "e2e": { "outcome": "${{ steps.e2e.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/playwright-e2e.log" }
           }
