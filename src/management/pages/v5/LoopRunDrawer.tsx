@@ -1,13 +1,14 @@
 // E3 — LoopRun drawer: stage timeline with timeout state badges + advance/pause/resume/cancel.
 // Mock-only via v5.loops.* (overlay-backed); never mutates seed.
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/use-toast";
 import { useT } from "@/platform/hooks";
+import { useNavigate } from "react-router-dom";
 import {
   DEFAULT_TIMEOUT_POLICY,
   V5_TIMEOUT_POLICY_VERSION,
@@ -15,7 +16,8 @@ import {
   type LoopRun,
   type LoopStage,
 } from "@/lib/v5";
-import { v5 } from "@/lib/bff-v1";
+import { v5, bff } from "@/lib/bff-v1";
+import type { ApprovalRequest } from "@/lib/bff/types";
 import { Play, Pause, SkipForward, X, AlertTriangle, ShieldAlert } from "lucide-react";
 import { safeDateTime } from "@/lib/utils";
 
@@ -42,9 +44,30 @@ interface Props {
 
 export const LoopRunDrawer = ({ run, onClose, triggerRef }: Props) => {
   const t = useT();
+  const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
   const [reason, setReason] = useState("");
+  const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
   const policy = DEFAULT_TIMEOUT_POLICY;
+
+  useEffect(() => {
+    if (run && (run.status === "blocked" || run.nextAction?.kind === "awaiting_approval" || run.nextAction?.kind === "awaiting_human_decision")) {
+      bff.approvals.list().then(setApprovals).catch(() => {});
+    } else {
+      setApprovals([]);
+    }
+  }, [run]);
+
+  const matchingApproval = useMemo(() => {
+    if (!run) return null;
+    return approvals.find(
+      (a) =>
+        a.state === "pending" &&
+        (a.id === run.id ||
+          a.subject.includes(run.id) ||
+          (run.subjectId && a.subject.includes(run.subjectId))),
+    );
+  }, [approvals, run]);
 
   const isOpen = !!run;
 
@@ -109,9 +132,37 @@ export const LoopRunDrawer = ({ run, onClose, triggerRef }: Props) => {
             </section>
 
             {run.nextAction && (
-              <section className="mt-4 text-xs">
-                <div className="text-muted-foreground">{t("v5.col.next")}</div>
-                <div className="mt-1 font-medium">{run.nextAction.label ?? run.nextAction.kind}</div>
+              <section className="mt-4 text-xs bg-status-warning/10 p-3 rounded-md border border-status-warning/20">
+                <div className="text-muted-foreground font-semibold flex items-center gap-1.5 text-[11px] uppercase tracking-wider">
+                  <AlertTriangle className="h-3.5 w-3.5 text-status-warning" />
+                  {t("v5.col.next", { defaultValue: "Estimated Next Action Target" })}
+                </div>
+                <div className="mt-1 font-medium text-sm flex items-center justify-between">
+                  <span>{run.nextAction.label ?? run.nextAction.kind}</span>
+                  {run.nextAction.href && (
+                    <Button size="sm" variant="outline" onClick={() => navigate(run.nextAction.href!)}>
+                      {t("v5.loops.execution.action.goToAction", { defaultValue: "Go to Action" })}
+                    </Button>
+                  )}
+                </div>
+              </section>
+            )}
+
+            {matchingApproval && (
+              <section className="mt-3 p-3 rounded-md border border-accent/20 bg-accent/5 text-xs">
+                <div className="font-semibold text-accent flex items-center gap-1.5 text-[11px] uppercase tracking-wider">
+                  <ShieldAlert className="h-3.5 w-3.5 text-accent" />
+                  {t("v5.loops.execution.action.pendingApprovalFound", { defaultValue: "Pending Approval Request Found" })}
+                </div>
+                <div className="mt-2 flex items-center justify-between">
+                  <div className="truncate mr-2">
+                    <span className="font-medium text-foreground">{matchingApproval.subject}</span>
+                    <span className="ml-1 text-muted-foreground">({matchingApproval.kind})</span>
+                  </div>
+                  <Button size="sm" className="bg-accent hover:bg-accent/90 text-accent-foreground shrink-0" onClick={() => navigate(`/management/human-inbox/${matchingApproval.id}`)}>
+                    {t("v5.loops.execution.action.goToReview", { defaultValue: "Go to Review" })}
+                  </Button>
+                </div>
               </section>
             )}
 

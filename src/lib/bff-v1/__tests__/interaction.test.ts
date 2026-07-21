@@ -7,6 +7,10 @@ describe("Agora Interactions client tests", () => {
 
   beforeEach(() => {
     liveStatus._reset({ mode: "mock", effective: "mock", baseUrl: "" });
+    vi.stubEnv("VITE_BFF_REAL_WRITES", "true");
+    globalThis.fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      data: { session: { authenticated: true, session_kind: "bearer" }, environment: { name: "dev" } },
+    }), { status: 200 }));
   });
 
   afterEach(() => {
@@ -55,12 +59,46 @@ describe("Agora Interactions client tests", () => {
     vi.stubEnv("VITE_BFF_FALLBACK", "strict");
     vi.stubEnv("VITE_BFF_BASE_URL", "https://bff.example.test");
     liveStatus._reset({ mode: "live", effective: "live", baseUrl: "https://bff.example.test" });
-    globalThis.fetch = vi.fn().mockRejectedValue(new Error("ECONNREFUSED"));
+    globalThis.fetch = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        data: { session: { authenticated: true, session_kind: "bearer" }, environment: { name: "dev" } },
+      }), { status: 200 }))
+      .mockRejectedValueOnce(new Error("ECONNREFUSED"));
 
     await expect(
       interaction.resolveContext({
         context_refs: [{ type: "journal_entry", id: "episode-123" }]
       })
     ).rejects.toThrow(/ECONNREFUSED|strict mode/);
+  });
+
+  it("makes zero requests when real writes are disabled", async () => {
+    vi.stubEnv("VITE_BFF_REAL_WRITES", "false");
+    const fetchMock = vi.fn();
+    globalThis.fetch = fetchMock;
+    await expect(interaction.resolveContext({
+      context_refs: [{ type: "persona", id: "persona-1" }],
+    })).rejects.toMatchObject({ code: "PERMISSION_DENIED" });
+    await expect(interaction.submit({
+      workshop_id: "ws-1", mode: "ask", topic: "Reflect", participant_persona_ids: ["persona-1"],
+      context_refs: [{ type: "persona", id: "persona-1" }],
+    })).rejects.toMatchObject({ code: "PERMISSION_DENIED" });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("blocks strict stub sessions before any interaction POST", async () => {
+    vi.stubEnv("VITE_BFF_FALLBACK", "strict");
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      data: {
+        session: { authenticated: true, session_kind: "stub" },
+        environment: { name: "dev", strict_auth: true },
+      },
+    }), { status: 200 }));
+    globalThis.fetch = fetchMock;
+    await expect(interaction.resolveContext({
+      context_refs: [{ type: "persona", id: "persona-1" }],
+    })).rejects.toMatchObject({ code: "PERMISSION_DENIED" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0][0])).toContain("/bff/me");
   });
 });
