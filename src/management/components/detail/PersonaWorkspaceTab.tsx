@@ -1,11 +1,10 @@
 import { useState } from "react";
 import { Section } from "@/management/pages/ObjectDetailLayout";
 import { Textarea } from "@/components/ui/textarea";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Pin } from "lucide-react";
-import { toast } from "sonner";
 import { useT } from "@/platform/hooks";
+import { NonProductionActionButton } from "@/management/components/NonProductionActionButton";
 
 export const PersonaWorkspaceTab = ({ personaId }: { personaId: string }) => {
   const t = useT();
@@ -22,9 +21,9 @@ export const PersonaWorkspaceTab = ({ personaId }: { personaId: string }) => {
     <div className="grid gap-4 md:grid-cols-2">
       <Section title={t("phase13.persona.workspace.scratchpad")}>
         <Textarea value={draft} onChange={(e) => setDraft(e.target.value)} rows={8} placeholder={t("phase13.persona.workspace.scratchPlaceholder")} className="font-mono text-xs" />
-        <Button size="sm" variant="outline" onClick={() => toast.success(t("phase13.persona.workspace.savedDraft"))}>
+        <NonProductionActionButton size="sm" variant="outline">
           {t("actions.save")}
-        </Button>
+        </NonProductionActionButton>
       </Section>
       <div className="space-y-4">
         <Section title={t("phase13.persona.workspace.pinned")}>

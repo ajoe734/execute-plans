@@ -1,7 +1,7 @@
 // 2026-05-22 PM-12 facade tests.
 import { describe, it, expect } from "vitest";
 import { mgmt } from "@/lib/bff-v1";
-import { adaptPortfolioHoldingsMonitor } from "@/lib/bff-v1/management";
+import { adaptPortfolioHoldingsMonitor, adaptQuarterlyRankingRows } from "@/lib/bff-v1/management";
 import { paths } from "@/lib/bff-v1/paths";
 import { defaultPortfolioBook, defaultPortfolioPools, defaultPortfolioHoldings } from "@/lib/v5/management/portfolio";
 import { defaultPersonaLeague } from "@/lib/v5/management/personaLeague";
@@ -13,6 +13,7 @@ describe("PM12 paths", () => {
     expect(paths.mgmtPortfolioBook()).toBe("/bff/management/portfolio-book");
     expect(paths.mgmtPortfolioPools()).toBe("/bff/management/portfolio-book/pools");
     expect(paths.mgmtPortfolioHoldings()).toBe("/bff/management/portfolio-book/holdings");
+    expect(paths.mgmtPortfolioExposure()).toBe("/bff/management/portfolio-book/exposure");
   });
   it("portfolio holdings serializes all monitor filters", () => {
     expect(paths.mgmtPortfolioHoldings({ deployment_stage: "canary", broker_id: "broker a", runtime_id: "rt-1", source_status: "stale", stale_telemetry: "true", risk_state: "stale_telemetry" }))
@@ -25,12 +26,21 @@ describe("PM12 paths", () => {
   it("quarterly ranking with quarter qs", () => {
     expect(paths.mgmtQuarterlyRanking()).toBe("/bff/management/quarterly-ranking");
     expect(paths.mgmtQuarterlyRanking("2026-Q2")).toContain("quarter=2026-Q2");
+    expect(paths.mgmtQuarterlyRanking("2026-Q2", { pageSize: 200, persona: "persona/live alpha" }))
+      .toBe("/bff/management/quarterly-ranking?quarter=2026-Q2&page_size=200&persona=persona%2Flive%20alpha");
+    expect(paths.mgmtQuarterlyRanking(undefined, { pageSize: 200, persona: "persona/live alpha" }))
+      .toBe("/bff/management/quarterly-ranking?page_size=200&persona=persona%2Flive%20alpha");
     expect(paths.mgmtQuarterlyRankingFormula()).toBe("/bff/management/quarterly-ranking/formula");
+    expect(paths.mgmtQuarterlyRankingRecommendationSubmit("pm12-rec-1"))
+      .toBe("/bff/management/quarterly-ranking/recommendations/pm12-rec-1/submit");
+    expect(paths.commandsV1()).toBe("/bff/v1/commands");
   });
   it("performance attribution", () => {
     expect(paths.mgmtPerformanceAttribution()).toBe("/bff/management/performance-attribution");
     expect(paths.mgmtPerformanceAttribution("persona", "30d"))
       .toBe("/bff/management/performance-attribution?dimension=persona&period=30d");
+    expect(paths.mgmtOperationsReadModel("persona/alpha", "30d"))
+      .toBe("/bff/management/operations-read-model/persona%2Falpha?period=30d");
   });
 });
 
@@ -53,6 +63,44 @@ describe("portfolio holdings live monitor adapter", () => {
       expect(result?.surfaceStatus).toBe(status);
       expect(result?.items).toEqual([]);
     }
+  });
+});
+
+describe("quarterly ranking live adapter", () => {
+  it("keeps focused BFF rows that identify the persona with persona", () => {
+    const rows = adaptQuarterlyRankingRows({
+      data: {
+        items: [
+          {
+            persona: "persona-live-smoke-b",
+            name: "Deploy Smoke Persona 2026-05-13 B Persisted",
+            rank: 7,
+            previous_quarter_rank: 9,
+            rank_delta: 2,
+            tier_label: "B",
+            score: 71.25,
+            eligibility: "eligible",
+            metrics: { pnl: 12500, sharpe: 1.42 },
+            evidence_refs: ["evidence:live-smoke-b"],
+          },
+        ],
+      },
+    });
+
+    expect(rows).toHaveLength(1);
+    expect(rows?.[0]).toEqual(expect.objectContaining({
+      personaId: "persona-live-smoke-b",
+      personaName: "Deploy Smoke Persona 2026-05-13 B Persisted",
+      currentRank: 7,
+      previousQuarterRank: 9,
+      rankDelta: 2,
+      tier: "B",
+      score: 71.25,
+      pnlQuarter: 12500,
+      sharpeQuarter: 1.42,
+      eligibility: "eligible",
+      evidenceRefs: ["evidence:live-smoke-b"],
+    }));
   });
 });
 
