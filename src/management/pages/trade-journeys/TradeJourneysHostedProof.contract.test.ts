@@ -38,9 +38,9 @@ describe("TJ-E2E-012 hosted browser proof contract", () => {
     expect(workflow).toContain("--grep '@mobile-basic'");
   });
 
-  it("uses the strict hosted tenant instead of the fixture-only tenant", () => {
-    expect(spec).toContain('PANTHEON_TENANT_ID ?? "pantheon-dev"');
-    expect(workflow).toContain("PANTHEON_TENANT_ID: pantheon-dev");
-    expect(workflow).not.toContain("PANTHEON_TENANT_ID: tenant-dev");
+  it("uses the canonical hosted data-plane tenant", () => {
+    expect(spec).toContain('PANTHEON_TENANT_ID ?? "tenant-dev"');
+    expect(workflow).toContain("PANTHEON_TENANT_ID: tenant-dev");
+    expect(workflow).not.toContain("PANTHEON_TENANT_ID: pantheon-dev");
   });
 });
