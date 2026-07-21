@@ -38,7 +38,8 @@ export function ifMatch(lockVersion: number | string): string {
 
 export function acceptLanguage(locale?: string): string {
   if (locale) return locale;
-  if (typeof navigator !== "undefined" && navigator.language) return navigator.language;
+  if (typeof navigator !== "undefined" && navigator.language)
+    return navigator.language;
   return "en-US";
 }
 
@@ -68,12 +69,6 @@ export const BFF_AUTH_STORAGE_KEYS = {
   legacyTenantId: "pantheon_tenant_id",
 } as const;
 
-function readEnv(): Record<string, string | undefined> {
-  const viteEnv = ((import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {});
-  const nodeEnv = typeof process !== "undefined" ? process.env : {};
-  return { ...viteEnv, ...nodeEnv };
-}
-
 function browserStorageGet(key: string): string | null {
   if (typeof window === "undefined") return null;
   try {
@@ -85,18 +80,18 @@ function browserStorageGet(key: string): string | null {
   }
 }
 
-export function readBrowserAuthStorage(): { token: string | null; tenantId: string | null } {
+export function readBrowserAuthStorage(): {
+  token: string | null;
+  tenantId: string | null;
+} {
   return {
-    token: browserStorageGet(BFF_AUTH_STORAGE_KEYS.bearerToken) ?? browserStorageGet(BFF_AUTH_STORAGE_KEYS.legacyBearerToken),
-    tenantId: browserStorageGet(BFF_AUTH_STORAGE_KEYS.tenantId) ?? browserStorageGet(BFF_AUTH_STORAGE_KEYS.legacyTenantId),
+    token:
+      browserStorageGet(BFF_AUTH_STORAGE_KEYS.bearerToken) ??
+      browserStorageGet(BFF_AUTH_STORAGE_KEYS.legacyBearerToken),
+    tenantId:
+      browserStorageGet(BFF_AUTH_STORAGE_KEYS.tenantId) ??
+      browserStorageGet(BFF_AUTH_STORAGE_KEYS.legacyTenantId),
   };
-}
-
-function devBearerTokenFromEnv(): string | null {
-  const env = readEnv();
-  if (env.VITE_BFF_MODE !== "live") return null;
-  const token = env.VITE_BFF_DEV_BEARER_TOKEN?.trim();
-  return token || null;
 }
 
 const browserProvider: AuthProvider = {
@@ -130,7 +125,7 @@ export interface BuildHeadersInput {
 export function buildHeaders(input: BuildHeadersInput): Record<string, string> {
   const correlationId = input.correlationId ?? newCorrelationId();
   const headers: Record<string, string> = {
-    "Accept": "application/json",
+    Accept: "application/json",
     "Accept-Language": acceptLanguage(input.locale),
     "X-Request-Id": xRequestId(),
     "X-Correlation-Id": correlationId,
@@ -138,7 +133,7 @@ export function buildHeaders(input: BuildHeadersInput): Record<string, string> {
   };
   // Auth / tenant injection (live mode). Mock / test providers return null → headers omitted.
   try {
-    const token = authProvider.getToken() || devBearerTokenFromEnv();
+    const token = authProvider.getToken();
     if (token) headers["Authorization"] = `Bearer ${token}`;
     const tenant = authProvider.getTenantId();
     if (tenant) headers["X-Tenant-Id"] = tenant;
