@@ -19,9 +19,30 @@
 //   /agora/strategy-workshop     策略工坊
 //   /agora/strategy-performance  策略執行與績效
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import { getWorkshop } from "@/lib/bff-v1/agora/workshops";
+import type { StrategyWorkshop } from "@/lib/bff-v1/agora/types";
+
+/** Below this width the servant drawer becomes a full-width overlay instead of a fixed side column. */
+const MOBILE_BREAKPOINT_PX = 768;
+
+function useIsMobileViewport(): boolean {
+  const [isMobile, setIsMobile] = useState<boolean>(() =>
+    typeof window !== "undefined" ? window.innerWidth < MOBILE_BREAKPOINT_PX : false,
+  );
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handler = () => setIsMobile(window.innerWidth < MOBILE_BREAKPOINT_PX);
+    handler();
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
+
+  return isMobile;
+}
 
 // ─── Tab definitions ──────────────────────────────────────────────────────────
 
@@ -78,10 +99,13 @@ function CommandBar({
 }) {
   return (
     <header
-      className="flex h-12 shrink-0 items-center gap-3 border-b border-slate-200 bg-white px-4"
+      className="flex h-12 shrink-0 items-center gap-3 border-b border-[#2a2e38] bg-[#1a1d23] px-4"
       data-testid="trading-desk-command-bar"
     >
-      <span className="text-sm font-semibold text-slate-900">Trading Desk</span>
+      <span className="flex h-6 w-6 items-center justify-center rounded-md bg-[#e8b750] text-xs font-black text-[#1a1410]">
+        A
+      </span>
+      <span className="text-sm font-bold tracking-wide text-[#f0ece4]">AGORA</span>
       <span className="flex-1" />
       <button
         aria-label={drawerOpen ? "Close servant drawer" : "Open servant drawer"}
@@ -89,8 +113,8 @@ function CommandBar({
         className={cn(
           "inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors",
           drawerOpen
-            ? "border-blue-300 bg-blue-50 text-blue-800 hover:bg-blue-100"
-            : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50",
+            ? "border-[rgba(232,183,80,0.35)] bg-[rgba(232,183,80,0.12)] text-[#e8b750]"
+            : "border-[#2a2e38] bg-transparent text-[#8c96a6] hover:bg-[#171b22]",
         )}
         onClick={onToggleDrawer}
         type="button"
@@ -116,7 +140,7 @@ function TabBar({
   return (
     <nav
       aria-label="Trading desk sections"
-      className="flex h-10 shrink-0 items-end gap-0 border-b border-slate-200 bg-white px-4"
+      className="flex h-10 shrink-0 items-end gap-0 overflow-x-auto border-b border-[#2a2e38] bg-[#171b22] px-4"
       data-testid="trading-desk-tab-bar"
     >
       {TABS.map((tab) => {
@@ -128,8 +152,8 @@ function TabBar({
             className={cn(
               "relative -mb-px flex h-9 items-center px-4 text-sm font-medium transition-colors",
               isActive
-                ? "border-b-2 border-blue-600 text-blue-700"
-                : "text-slate-600 hover:text-slate-900",
+                ? "border-b-2 border-[#e8b750] text-[#e8b750]"
+                : "text-[#8c96a6] hover:text-[#f0ece4]",
             )}
             key={tab.id}
             onClick={() => onTabChange(tab.id)}
@@ -145,26 +169,100 @@ function TabBar({
 
 // ─── ServantDrawer ────────────────────────────────────────────────────────────
 
-function ServantDrawer({ open, workshopId }: { open: boolean; workshopId?: string }) {
+type ServantWorkshopState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "loaded"; workshop: StrategyWorkshop }
+  | { status: "error"; message: string };
+
+function useServantWorkshopContext(workshopId: string | undefined): ServantWorkshopState {
+  const [state, setState] = useState<ServantWorkshopState>({ status: "idle" });
+
+  useEffect(() => {
+    if (!workshopId) {
+      setState({ status: "idle" });
+      return;
+    }
+    let cancelled = false;
+    setState({ status: "loading" });
+    getWorkshop(workshopId)
+      .then((workshop) => {
+        if (!cancelled) setState({ status: "loaded", workshop });
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setState({
+            status: "error",
+            message: err instanceof Error ? err.message : "Unable to load workshop context",
+          });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [workshopId]);
+
+  return state;
+}
+
+function ServantDrawer({
+  open,
+  workshopId,
+  isMobile,
+}: {
+  open: boolean;
+  workshopId?: string;
+  isMobile: boolean;
+}) {
+  const contextState = useServantWorkshopContext(workshopId);
   if (!open) return null;
+
   return (
     <aside
       aria-label="Servant drawer"
-      className="flex w-80 shrink-0 flex-col border-l border-slate-200 bg-white"
+      className={cn(
+        "flex shrink-0 flex-col border-l border-[#2a2e38] bg-[#171b22]",
+        isMobile ? "fixed inset-x-0 bottom-10 top-[122px] z-30 w-full" : "w-80",
+      )}
       data-testid="trading-desk-servant-drawer"
     >
-      <div className="flex h-10 shrink-0 items-center border-b border-slate-100 px-3">
-        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+      <div className="flex h-10 shrink-0 items-center border-b border-[#2a2e38] px-3">
+        <span className="text-xs font-semibold uppercase tracking-wide text-[#e8b750]">
           Servant
         </span>
         {workshopId && (
-          <span className="ml-auto font-mono text-xs text-slate-400">
+          <span className="ml-auto font-mono text-xs text-[#737d8e]">
             {workshopId.slice(0, 8)}…
           </span>
         )}
       </div>
-      <div className="flex-1 p-3">
-        <p className="text-xs text-slate-400">Servant panel — workshop context loads here.</p>
+      <div className="flex-1 overflow-auto p-3" data-testid="servant-drawer-context">
+        {!workshopId && (
+          <p className="text-xs text-[#737d8e]">
+            Servant panel — open a strategy workshop session for contextual state.
+          </p>
+        )}
+        {workshopId && contextState.status === "loading" && (
+          <p className="text-xs text-[#737d8e]">Loading workshop context…</p>
+        )}
+        {workshopId && contextState.status === "error" && (
+          <p className="text-xs text-[#f87171]" role="alert">
+            Workshop context unavailable: {contextState.message}
+          </p>
+        )}
+        {workshopId && contextState.status === "loaded" && (
+          <div className="flex flex-col gap-1.5">
+            <p className="text-sm font-medium text-[#f0ece4]">
+              {contextState.workshop.subject.title ?? contextState.workshop.subject.ref}
+            </p>
+            <p className="text-xs text-[#8c96a6]">Status: {contextState.workshop.status}</p>
+            {typeof contextState.workshop.message_count === "number" && (
+              <p className="text-xs text-[#8c96a6]">
+                Messages: {contextState.workshop.message_count}
+              </p>
+            )}
+          </div>
+        )}
       </div>
     </aside>
   );
@@ -187,7 +285,7 @@ function BottomStrip({
 }) {
   return (
     <footer
-      className="flex h-10 shrink-0 items-center gap-0 border-t border-slate-200 bg-slate-50 px-4"
+      className="flex h-10 shrink-0 items-center gap-0 border-t border-[#2a2e38] bg-[#1a1d23] px-4"
       data-testid="trading-desk-bottom-strip"
     >
       {BOTTOM_SECTIONS.map((section) => {
@@ -198,8 +296,8 @@ function BottomStrip({
             className={cn(
               "h-full px-3 text-xs font-medium transition-colors",
               isActive
-                ? "border-t-2 border-blue-600 bg-white text-blue-700"
-                : "text-slate-500 hover:text-slate-800",
+                ? "border-t-2 border-[#e8b750] bg-[#171b22] text-[#e8b750]"
+                : "text-[#737d8e] hover:text-[#f0ece4]",
             )}
             key={section.id}
             onClick={() => onSectionChange(isActive ? null : section.id)}
@@ -226,6 +324,7 @@ export function TradingDeskLayout({ workshopId, className }: TradingDeskLayoutPr
   const navigate = useNavigate();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [bottomSection, setBottomSection] = useState<string | null>(null);
+  const isMobile = useIsMobileViewport();
 
   const activeTab = tabFromPath(location.pathname);
 
@@ -239,8 +338,9 @@ export function TradingDeskLayout({ workshopId, className }: TradingDeskLayoutPr
 
   return (
     <div
-      className={cn("flex flex-1 flex-col overflow-hidden min-h-0", className)}
+      className={cn("flex flex-1 flex-col overflow-hidden min-h-0 bg-[#111417] text-[#f0ece4]", className)}
       data-testid="trading-desk-shell"
+      data-viewport={isMobile ? "mobile" : "desktop"}
     >
       <CommandBar
         drawerOpen={drawerOpen}
@@ -258,7 +358,7 @@ export function TradingDeskLayout({ workshopId, className }: TradingDeskLayoutPr
           <Outlet />
         </main>
 
-        <ServantDrawer open={drawerOpen} workshopId={servantWorkshopId} />
+        <ServantDrawer open={drawerOpen} workshopId={servantWorkshopId} isMobile={isMobile} />
       </div>
 
       <BottomStrip activeSection={bottomSection} onSectionChange={setBottomSection} />

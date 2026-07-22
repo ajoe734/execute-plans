@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
@@ -9,14 +9,20 @@ import { Badge } from "@/components/ui/badge";
 import { Search, Bell, AlertTriangle, ClipboardCheck, Loader2, Globe, User, Lock } from "lucide-react";
 import { usePlatform, type Locale } from "@/platform/store";
 import { useT } from "@/platform/hooks";
-import { EnvSwitcher } from "./EnvSwitcher";
-import { CommandPalette } from "./CommandPalette";
-import { lists, liveStatus, probeLiveHealth, useLiveStatus, type ListEnvelope } from "@/lib/bff-v1";
+import {
+  lists, liveStatus, probeLiveHealth, useLiveStatus, type ListEnvelope,
+  fetchShellSummary, shellSummaryStatus,
+} from "@/lib/bff-v1";
 import { useMe } from "@/lib/v4/session/me";
 import { useNotificationCenter } from "./NotificationCenter";
 import { RealtimeStatusBadge } from "./RealtimeStatusBadge";
+import { scheduleAfterRoutePrimaryReady } from "@/platform/routePrimaryReady";
 
-type TopbarDataSource = "checking" | "live" | "mock" | "fallback" | "degraded" | "unverified";
+type TopbarDataSource = "checking" | "live" | "mock" | "fallback" | "degraded" | "unverified" | "unavailable";
+
+const CommandPalette = lazy(() =>
+  import("./CommandPalette").then((module) => ({ default: module.CommandPalette })),
+);
 
 export const TopBar = () => {
   const t = useT();
@@ -31,11 +37,17 @@ export const TopBar = () => {
   const transportSource: TopbarDataSource = live.mode === "mock" ? "mock" : live.effective === "mock" ? "fallback" : "live";
   const [dataSource, setDataSource] = useState<TopbarDataSource>(transportSource === "live" ? "checking" : transportSource);
   const dataSourceRef = useRef<TopbarDataSource>(dataSource);
+  const pathnameRef = useRef(loc.pathname);
   const countsAreLive = dataSource === "live";
+
+  useEffect(() => {
+    pathnameRef.current = loc.pathname;
+  }, [loc.pathname]);
 
   useEffect(() => {
     let disposed = false;
     let cleanup: (() => void) | undefined;
+    let cancelDeferredFallback: (() => void) | undefined;
     const setSource = (next: TopbarDataSource) => {
       dataSourceRef.current = next;
       setDataSource(next);
@@ -45,31 +57,80 @@ export const TopBar = () => {
       setCounts({ approvals: 0, alerts: 0, jobs: 0 });
     };
 
-    if (transportSource !== "live") {
-      clearCounts(transportSource);
-    } else {
-      setSource("checking");
-      Promise.all([lists.approvals(), lists.alerts(), lists.jobs()]).then(([a, al, j]) => {
+    // Deferred fallback: only used when shell-summary itself is unavailable.
+    // Waits for the route-primary-ready milestone, then runs on an idle
+    // callback so it cannot compete with the route's first row/empty state.
+    //
+    // Deliberately does NOT read `lists.jobs()`: JobProgressDrawer already
+    // owns the one jobs-list hydration for the shell (its own idle-callback
+    // effect, unconditional on mount — see JobProgressDrawer.tsx), so a
+    // second independent read here would be a genuine duplicate `/bff/jobs`
+    // request, not just a redundant one. This is also dead weight even
+    // without that: `counts.jobs` (like approvals/alerts here) only renders
+    // once `dataSource === "live"`, and this fallback path only ever lands
+    // on "degraded" or a non-live source, so a jobs count fetched here was
+    // never shown.
+    const hydrateFromFullLists = () => {
+      if (disposed) return;
+      Promise.all([lists.approvals(), lists.alerts()]).then(([a, al]) => {
         const source = liveStatus.get();
         if (disposed || source.mode !== "live" || source.effective !== "live") {
           clearCounts("fallback");
           return;
         }
-        const listSource = classifyListSource([a, al, j]);
+        const listSource = classifyListSource([a, al]);
         if (listSource !== "live") {
           clearCounts(listSource);
           return;
         }
         const approvals = a.items as Array<{ state?: string }>;
         const alerts = al.items as Array<{ acknowledged?: boolean }>;
-        const jobs = j.items as Array<{ status?: string }>;
-        setSource("live");
-        setCounts({
+        // Recovered via the heavier full-list path, not the cheap summary —
+        // label as degraded so the operator knows counts came from a fallback.
+        setSource("degraded");
+        setCounts((c) => ({
+          ...c,
           approvals: approvals.filter((x) => x.state === "pending").length,
           alerts: alerts.filter((x) => !x.acknowledged).length,
-          jobs: jobs.filter((x) => x.status === "running").length,
-        });
+        }));
       }).catch(() => clearCounts("fallback"));
+    };
+    const deferHydrateFromFullLists = () => {
+      const pathname = pathnameRef.current;
+      cancelDeferredFallback = scheduleAfterRoutePrimaryReady(hydrateFromFullLists, {
+        pathname,
+        isStillCurrent: () => pathnameRef.current === pathname,
+      });
+    };
+
+    if (transportSource !== "live") {
+      clearCounts(transportSource);
+    } else {
+      setSource("checking");
+      fetchShellSummary().then((summary) => {
+        if (disposed) return;
+        const source = liveStatus.get();
+        if (source.mode !== "live" || source.effective !== "live") {
+          clearCounts("fallback");
+          return;
+        }
+        const status = shellSummaryStatus(summary);
+        if (status === "unavailable" || status === "unknown") {
+          clearCounts("unavailable");
+          deferHydrateFromFullLists();
+          return;
+        }
+        setSource(status === "degraded" ? "degraded" : "live");
+        setCounts({
+          approvals: summary.counts.pendingApprovals,
+          alerts: summary.counts.openAlerts,
+          jobs: summary.counts.runningJobs,
+        });
+      }).catch(() => {
+        if (disposed) return;
+        clearCounts("unavailable");
+        deferHydrateFromFullLists();
+      });
 
       import("@/lib/bff/realtime").then(({ realtime }) => {
         if (disposed) return;
@@ -99,6 +160,7 @@ export const TopBar = () => {
     }, 30_000);
     return () => {
       disposed = true;
+      cancelDeferredFallback?.();
       cleanup?.();
       window.clearInterval(healthTimer);
     };
@@ -116,13 +178,13 @@ export const TopBar = () => {
   }, []);
 
   return (
-    <header className="h-14 border-b border-border bg-card flex items-center px-4 gap-3 sticky top-0 z-40">
+    <header className="min-h-14 max-w-full overflow-x-hidden border-b border-border bg-card flex items-center px-3 gap-2 sticky top-0 z-40 sm:px-4 sm:gap-3">
       {/* Logo + product switcher */}
-      <div className="flex items-center gap-2">
-        <div className="font-bold tracking-tight text-base">⟁ {t("app.name")}</div>
+      <div className="flex min-w-0 shrink-0 items-center gap-2">
+        <div className="whitespace-nowrap font-bold tracking-tight text-base">⟁ {t("app.name")}</div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="sm" className="font-medium">
+            <Button variant="ghost" size="sm" className="max-w-[9rem] truncate font-medium sm:max-w-none">
               {isManagement ? t("app.management") : t("app.agora")}
             </Button>
           </DropdownMenuTrigger>
@@ -134,22 +196,24 @@ export const TopBar = () => {
         </DropdownMenu>
       </div>
 
-      <EnvSwitcher />
-
       {/* Search */}
       <button
         onClick={() => setPaletteOpen(true)}
-        className="flex items-center gap-2 flex-1 max-w-xl mx-auto h-9 px-3 rounded-md border border-border bg-muted/40 text-sm text-muted-foreground hover:bg-muted transition"
+        className="hidden items-center gap-2 flex-1 max-w-xl mx-auto h-9 px-3 rounded-md border border-border bg-muted/40 text-sm text-muted-foreground hover:bg-muted transition md:flex"
       >
         <Search className="h-4 w-4" />
         <span className="flex-1 text-left">{t("topbar.search")}</span>
         <kbd className="text-mono text-xs bg-background border border-border rounded px-1.5 py-0.5">⌘K</kbd>
       </button>
 
-      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
+      {paletteOpen && (
+        <Suspense fallback={null}>
+          <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
+        </Suspense>
+      )}
 
       {/* Indicators */}
-      <div className="flex items-center gap-1">
+      <div className="ml-auto hidden items-center gap-1 sm:flex">
         <IndicatorButton icon={ClipboardCheck} count={countsAreLive ? counts.approvals : undefined} muted={!countsAreLive} tooltip={t("topbar.pendingApprovals")} onClick={() => navigate("/management/approvals")} />
         <IndicatorButton icon={AlertTriangle} count={countsAreLive ? counts.alerts : undefined} muted={!countsAreLive} tooltip={t("topbar.openAlerts")} onClick={() => navigate("/management/alerts")} />
         <IndicatorButton icon={Loader2} count={countsAreLive ? counts.jobs : undefined} muted={!countsAreLive} tooltip={t("topbar.runningJobs")} onClick={() => navigate("/management/jobs")} spin />
@@ -162,7 +226,9 @@ export const TopBar = () => {
       </div>
 
       {/* Realtime / BFF status */}
-      <RealtimeStatusBadge />
+      <div className="hidden sm:block">
+        <RealtimeStatusBadge />
+      </div>
 
       {/* Locale */}
       <DropdownMenu>
@@ -178,18 +244,18 @@ export const TopBar = () => {
 
       {/* User / Session — sourced from /bff/me; 401 surfaces auth error, never mock user */}
       {meLoading && !me ? (
-        <Button variant="ghost" size="sm" disabled className="gap-1">
+        <Button variant="ghost" size="sm" disabled className="hidden gap-1 md:inline-flex">
           <Loader2 className="h-4 w-4 animate-spin" />
         </Button>
       ) : meError || !me ? (
-        <Button variant="ghost" size="sm" className="gap-1 text-destructive" title={meError?.message ?? "Session unavailable"} aria-label="auth-error">
+        <Button variant="ghost" size="sm" className="hidden gap-1 text-destructive md:inline-flex" title={meError?.message ?? "Session unavailable"} aria-label="auth-error">
           <Lock className="h-4 w-4" />
           <span className="text-xs">Auth</span>
         </Button>
       ) : me ? (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="sm" className="gap-1">
+            <Button variant="ghost" size="sm" className="hidden gap-1 md:inline-flex">
               <User className="h-4 w-4" />
               {String(
                 (me.user as { displayName?: string; display_name?: string }).displayName
