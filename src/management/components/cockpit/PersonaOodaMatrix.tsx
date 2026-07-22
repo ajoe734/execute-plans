@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Card } from "@/components/ui/card";
+import { ManagementTableScroll } from "@/management/components/ManagementTableScroll";
 import type { PersonaOodaMatrixModel, PersonaOodaCell } from "@/lib/v5/management/cockpit";
 
 const cellTone = (s: PersonaOodaCell["state"]) =>
@@ -12,11 +13,12 @@ const cellTone = (s: PersonaOodaCell["state"]) =>
 export const PersonaOodaMatrix = ({ model }: { model: PersonaOodaMatrixModel }) => {
   const { t } = useTranslation();
   return (
-    <Card className="overflow-x-auto p-4">
+    <Card className="p-4">
       <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
         {t("mgmt.cockpit.personaOoda")}
       </h2>
-      <table className="mt-3 w-full text-sm" aria-label={t("mgmt.cockpit.personaOoda")}>
+      <ManagementTableScroll className="mt-3" minScrollWidth={720}>
+      <table className="w-full min-w-[720px] text-sm" aria-label={t("mgmt.cockpit.personaOoda")}>
         <thead className="text-xs uppercase tracking-wider text-muted-foreground">
           <tr>
             <th className="px-2 py-1 text-left">{t("mgmt.fleet.persona")}</th>
@@ -46,6 +48,7 @@ export const PersonaOodaMatrix = ({ model }: { model: PersonaOodaMatrixModel }) 
           ))}
         </tbody>
       </table>
+      </ManagementTableScroll>
     </Card>
   );
 };

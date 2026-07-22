@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { bff } from "@/lib/bff-v1";
-import { runActionSafe } from "@/lib/bff-v1";
 import type { AuditEvent, Strategy, Tool } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
@@ -11,12 +10,11 @@ import { AuditTimeline } from "@/platform/components/AuditTimeline";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { ToolSchemaPanel, ToolSandboxPanel } from "@/management/components/detail/ToolSchemaPanel";
 import { ActivityMonitor } from "@/management/components/detail/ActivityMonitor";
-import { Button } from "@/components/ui/button";
-import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
 import { LifecycleStepper } from "@/platform/components/LifecycleStepper";
 import { toolMachine, type ToolState } from "@/lib/stateMachines";
 import { PlayCircle, Power, ShieldOff, ShieldCheck, ArchiveX, Archive, Gauge, Tag } from "lucide-react";
-import { toast } from "sonner";
+import { NonProductionActionButton } from "@/management/components/NonProductionActionButton";
+import { CapabilityDetailEmptyState } from "@/management/components/CapabilityDetailEmptyState";
 
 const STATE_MAP: Record<string, ToolState> = {
   draft: "draft", testing: "testing", active: "active", deployed: "active",
@@ -28,70 +26,66 @@ export const ToolDetail = () => {
   const t = useT();
   const nav = useNavigate();
   const [tool, setTool] = useState<Tool | undefined>();
+  const [loaded, setLoaded] = useState(false);
   const [consumers, setConsumers] = useState<Strategy[]>([]);
   const [audit, setAudit] = useState<AuditEvent[]>([]);
-  const [restrictOpen, setRestrictOpen] = useState(false);
-  const [retireOpen, setRetireOpen] = useState(false);
-  const [blockOpen, setBlockOpen] = useState(false);
 
-  const refresh = () => { if (id) bff.tools.get(id).then(setTool); };
   useEffect(() => {
     if (!id) return;
-    bff.tools.get(id).then(setTool);
+    setLoaded(false);
+    bff.tools.get(id).then((row) => { setTool(row); setLoaded(true); }).catch(() => setLoaded(true));
     bff.strategies.list().then((s) => setConsumers(s.slice(0, 4)));
     bff.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action?.startsWith("tool."))));
   }, [id]);
-  if (!tool) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
+  if (!tool) {
+    return loaded
+      ? <CapabilityDetailEmptyState kind="tool" id={id} />
+      : <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
+  }
 
   const machineState: ToolState = STATE_MAP[tool.state ?? ""] ?? "draft";
-
-  const run = async (action: string, label: string) => {
-    const r = await runActionSafe({ kind: "Tool", id: tool.id, action });
-    if (r.ok) { toast.success(label); refresh(); }
-    else toast.error(r.message ?? "Rejected");
-  };
 
   const actions = (
     <div className="flex flex-wrap gap-2">
       {machineState === "draft" && (
-        <Button size="sm" variant="outline" onClick={() => run("test_tool", t("tool.actions.testQueued"))}>
+        <NonProductionActionButton size="sm" variant="outline">
           <PlayCircle className="h-4 w-4 mr-1" />{t("tool.actions.test")}
-        </Button>
+        </NonProductionActionButton>
       )}
       {machineState === "testing" && (
-        <Button size="sm" onClick={() => run("activate_tool", t("tool.actions.activated"))}>
+        <NonProductionActionButton size="sm">
           <Power className="h-4 w-4 mr-1" />{t("tool.actions.activate")}
-        </Button>
+        </NonProductionActionButton>
       )}
       {machineState === "active" && (
         <>
-          <Button size="sm" variant="outline" onClick={() => setRestrictOpen(true)}>
+          <NonProductionActionButton size="sm" variant="outline">
             <ShieldOff className="h-4 w-4 mr-1" />{t("tool.actions.restrict")}
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => run("deprecate_tool", t("tool.actions.deprecated"))}>
+          </NonProductionActionButton>
+          <NonProductionActionButton size="sm" variant="outline">
             <Archive className="h-4 w-4 mr-1" />{t("tool.actions.deprecate")}
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => setBlockOpen(true)}>
+          </NonProductionActionButton>
+          <NonProductionActionButton size="sm" variant="outline">
             <ArchiveX className="h-4 w-4 mr-1" />{t("tool.actions.block")}
-          </Button>
+          </NonProductionActionButton>
         </>
       )}
       {machineState === "restricted" && (
-        <Button size="sm" onClick={() => run("unrestrict_tool", t("tool.actions.unrestricted"))}>
+        <NonProductionActionButton size="sm">
           <ShieldCheck className="h-4 w-4 mr-1" />{t("tool.actions.unrestrict")}
-        </Button>
+        </NonProductionActionButton>
       )}
       {machineState === "deprecated" && (
-        <Button size="sm" variant="outline" onClick={() => setRetireOpen(true)}>
+        <NonProductionActionButton size="sm" variant="outline">
           <ArchiveX className="h-4 w-4 mr-1" />{t("tool.actions.retire")}
-        </Button>
+        </NonProductionActionButton>
       )}
-      <Button size="sm" variant="outline" onClick={() => toast.success(t("tool.actions.rateLimitSaved"), { description: tool.id })}>
+      <NonProductionActionButton size="sm" variant="outline">
         <Gauge className="h-4 w-4 mr-1" />{t("tool.actions.rateLimit")}
-      </Button>
-      <Button size="sm" variant="outline" onClick={() => toast.success(t("tool.actions.riskClassified"), { description: tool.id })}>
+      </NonProductionActionButton>
+      <NonProductionActionButton size="sm" variant="outline">
         <Tag className="h-4 w-4 mr-1" />{t("tool.actions.classifyRisk")}
-      </Button>
+      </NonProductionActionButton>
     </div>
   );
 
@@ -138,30 +132,6 @@ export const ToolDetail = () => {
           )},
           { value: "audit", label: t("nav.audit"), content: <AuditTimeline entries={audit} /> },
         ]}
-      />
-
-      <HighRiskConfirm
-        open={restrictOpen} onOpenChange={setRestrictOpen}
-        title={t("tool.actions.restrictTitle", { name: tool.name })}
-        description={t("tool.actions.restrictDesc")}
-        confirmToken="RESTRICT"
-        onConfirm={async (memo) => { await runActionSafe({ kind: "Tool", id: tool.id, action: "restrict_tool", memo }); toast.success(t("tool.actions.restricted")); refresh(); }}
-      />
-      <HighRiskConfirm
-        open={blockOpen} onOpenChange={setBlockOpen}
-        title={t("tool.actions.blockTitle", { name: tool.name })}
-        description={t("tool.actions.blockDesc")}
-        confirmToken="BLOCK"
-        destructive
-        onConfirm={async (memo) => { await runActionSafe({ kind: "Tool", id: tool.id, action: "block_tool", memo }); toast.success(t("tool.actions.blocked")); refresh(); }}
-      />
-      <HighRiskConfirm
-        open={retireOpen} onOpenChange={setRetireOpen}
-        title={t("tool.actions.retireTitle", { name: tool.name })}
-        description={t("tool.actions.retireDesc")}
-        confirmToken="RETIRE"
-        destructive
-        onConfirm={async (memo) => { await runActionSafe({ kind: "Tool", id: tool.id, action: "retire_tool", memo }); toast.success(t("tool.actions.retired")); refresh(); }}
       />
     </>
   );

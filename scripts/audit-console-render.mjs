@@ -65,7 +65,12 @@ async function checkRoute(browser, route, settleMs) {
     if (crash) problems.push("error-boundary crash");
     if (/\bNaN\b/.test(txt)) problems.push(`NaN x${(txt.match(/\bNaN\b/g) || []).length}`);
     if (txt.includes("Invalid Date")) problems.push(`Invalid Date x${(txt.match(/Invalid Date/g) || []).length}`);
-    if (/\bmgmt\.[a-z][a-z.]+/i.test(txt)) problems.push(`raw i18n key x${(txt.match(/\bmgmt\.[a-z][a-z.]+/gi) || []).length}`);
+    // Raw i18n keys from any locale namespace used by nav/pages, not just mgmt.*
+    // (2026-07-13: sidebar rendered a literal "readiness.ep5Title" that the
+    // mgmt-only pattern missed).
+    const RAW_I18N = /\b(?:mgmt|nav|groups|readiness|performanceCenter|rankingsCenter|governanceDecisions|humanInbox|personaFleet)\.[a-z][a-zA-Z0-9.]+/g;
+    const rawKeys = txt.match(RAW_I18N) || [];
+    if (rawKeys.length) problems.push(`raw i18n key x${rawKeys.length} (${[...new Set(rawKeys)].slice(0, 3).join(",")})`);
     if (renderErrors.length) problems.push(`render error: ${[...new Set(renderErrors)].slice(0, 2).join(" | ")}`);
     return problems;
   } catch (e) {
