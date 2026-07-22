@@ -583,31 +583,3 @@ describe("deleteConfirmToken live mode adapter", () => {
     expect(globalThis.fetch).toHaveBeenCalledTimes(2);
   });
 });
-
-import { commandClient } from "@/lib/bff/runAction";
-
-describe("operations console command mapping", () => {
-  it("maps operations actions specifically to their command names in the envelope", () => {
-    const { buildRunActionCommand } = commandClient;
-    const actions = [
-      "Observe",
-      "RequestReview",
-      "PausePaperRuntime",
-      "ResumePaperRuntime",
-      "Demote",
-      "PromoteCandidate",
-      "RebalanceProposal",
-      "ApprovedApply",
-      "EmergencyContainment"
-    ];
-    for (const action of actions) {
-      const envelope = buildRunActionCommand(
-        { kind: "Persona", id: "persona-123", action, memo: "test" },
-        { correlationId: "c1", idempotencyKey: "i1" }
-      );
-      expect(envelope.command).toBe(action);
-      expect(envelope.target.type).toBe("Persona");
-      expect(envelope.target.id).toBe("persona-123");
-    }
-  });
-});

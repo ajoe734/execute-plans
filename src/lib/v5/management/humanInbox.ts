@@ -1,4 +1,4 @@
-// 2026-05-20 PM-6 — Human Inbox model (9 kinds + detail shape).
+// 2026-05-20 PM-6 — Human Inbox model (governance kinds + detail shape).
 
 import type { ManagementLinkSet } from "./links";
 
@@ -12,13 +12,22 @@ export type HumanInboxKind =
   | "rollback_request"
   | "capital_breach"
   | "broker_disconnect"
-  | "ranking_recommendation"; // 2026-05-22 PM12-010 — quarterly ranking → governance
+  | "ranking_recommendation" // 2026-05-22 PM12-010 — quarterly ranking → governance
+  | "promotion_review"; // 2026-07-03 PPLG — paper/canary promotion human review
 
 export const HUMAN_INBOX_KINDS: readonly HumanInboxKind[] = [
   "approval", "sentinel", "ask", "intervention", "readiness_blocker",
   "policy_violation", "rollback_request", "capital_breach", "broker_disconnect",
-  "ranking_recommendation",
+  "ranking_recommendation", "promotion_review",
 ] as const;
+
+export interface HumanInboxAllowedActions {
+  canDecide?: boolean;
+  canApprove?: boolean;
+  canReject?: boolean;
+  canRequestRevision?: boolean;
+  canRequestEvidence?: boolean;
+}
 
 export interface HumanInboxItem {
   id: string;
@@ -33,10 +42,48 @@ export interface HumanInboxItem {
   ttlSec?: number;
   canDecide: boolean;
   canProceed: boolean;
+  status?: string;
+  sourceId?: string;
+  personaId?: string;
+  reviewId?: string;
+  /** Canonical governance review semantic (for example paper_to_canary_review). */
+  reviewKind?: string;
+  /** Legacy review semantic retained for older BFF payloads. */
+  reviewType?: string;
+  /** Recommendation/action being reviewed (for example reduce_capital_access). */
+  actionId?: string;
+  decisionHref?: string;
+  allowedActions?: HumanInboxAllowedActions;
   /** Optional blocking reason when canProceed=false. */
   blockingReasons?: string[];
+  /** Evidence refs available from the list/detail payload. */
+  evidenceRefs?: string[];
   detailHref: string;
   links: ManagementLinkSet;
+}
+
+export type HumanInboxSurfaceStatus = "ok" | "degraded" | "unavailable";
+
+export interface HumanInboxSurfaceState {
+  status: HumanInboxSurfaceStatus;
+  source?: string;
+  message?: string;
+  reason?: string;
+  staleness?: {
+    servedFrom?: string;
+    lastKnownAt?: string;
+  };
+}
+
+/**
+ * Truth-bearing list state. An empty `items` array is authoritative only when
+ * `surface.status === "ok"` and `partial === false`.
+ */
+export interface HumanInboxListState {
+  items: HumanInboxItem[];
+  surface: HumanInboxSurfaceState;
+  snapshotAt?: string;
+  partial: boolean;
 }
 
 export interface HumanInboxDecisionRecord {
@@ -59,6 +106,7 @@ export function humanInboxRank(kind: HumanInboxKind): number {
   switch (kind) {
     case "policy_violation": return 9;
     case "capital_breach": return 8;
+    case "promotion_review": return 7.5;
     case "rollback_request": return 7;
     case "sentinel": return 6;
     case "broker_disconnect": return 5;
