@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
@@ -9,14 +9,36 @@ import { Badge } from "@/components/ui/badge";
 import { Search, Bell, AlertTriangle, ClipboardCheck, Loader2, Globe, User, Lock } from "lucide-react";
 import { usePlatform, type Locale } from "@/platform/store";
 import { useT } from "@/platform/hooks";
-import { EnvSwitcher } from "./EnvSwitcher";
-import { CommandPalette } from "./CommandPalette";
-import { lists, liveStatus, probeLiveHealth, useLiveStatus, type ListEnvelope } from "@/lib/bff-v1";
+import {
+  lists, liveStatus, probeLiveHealth, useLiveStatus, type ListEnvelope,
+  fetchShellSummary, shellSummaryStatus,
+} from "@/lib/bff-v1";
 import { useMe } from "@/lib/v4/session/me";
 import { useNotificationCenter } from "./NotificationCenter";
 import { RealtimeStatusBadge } from "./RealtimeStatusBadge";
+import { scheduleAfterRoutePrimaryReady } from "@/platform/routePrimaryReady";
 
-type TopbarDataSource = "checking" | "live" | "mock" | "fallback" | "degraded" | "unverified";
+type TopbarDataSource = "checking" | "live" | "mock" | "fallback" | "degraded" | "live_degraded" | "unverified" | "unavailable";
+
+// Surfaces sourced through these BFF pathways are still live data; when one
+// of them reports degraded/stale it must badge as "LIVE (partially
+// degraded)", never "SNAPSHOT DATA" — that label is reserved for surfaces
+// genuinely backed by a snapshot (local_snapshot/missing/unverifiable, or an
+// unnamed/unknown source we cannot positively confirm is live).
+// `service_store` and `bff_cheap_count` are real production shell-summary
+// child sources (see services/control-plane/bff/test_mgmt_load_002_shell_summary.py)
+// — they are live pathways, not snapshot signals, even though they are not
+// the primary `bff_composed`/`service_client` surface source.
+const LIVE_SURFACE_SOURCES = ["bff_composed", "service_client", "service_store", "bff_cheap_count"];
+
+// A surface explicitly reporting one of these sources is a true snapshot
+// signal regardless of what its own `status` field claims — an explicit
+// snapshot source always dominates a co-reported "ok" status.
+const SNAPSHOT_SURFACE_SOURCES = ["local_snapshot", "missing", "unverifiable"];
+
+const CommandPalette = lazy(() =>
+  import("./CommandPalette").then((module) => ({ default: module.CommandPalette })),
+);
 
 export const TopBar = () => {
   const t = useT();
@@ -30,46 +52,114 @@ export const TopBar = () => {
   const [counts, setCounts] = useState({ approvals: 0, alerts: 0, jobs: 0 });
   const transportSource: TopbarDataSource = live.mode === "mock" ? "mock" : live.effective === "mock" ? "fallback" : "live";
   const [dataSource, setDataSource] = useState<TopbarDataSource>(transportSource === "live" ? "checking" : transportSource);
+  const [degradedSurfaces, setDegradedSurfaces] = useState<string[]>([]);
   const dataSourceRef = useRef<TopbarDataSource>(dataSource);
+  const pathnameRef = useRef(loc.pathname);
   const countsAreLive = dataSource === "live";
+
+  useEffect(() => {
+    pathnameRef.current = loc.pathname;
+  }, [loc.pathname]);
 
   useEffect(() => {
     let disposed = false;
     let cleanup: (() => void) | undefined;
-    const setSource = (next: TopbarDataSource) => {
+    let cancelDeferredFallback: (() => void) | undefined;
+    const setSource = (next: TopbarDataSource, surfaces: string[] = []) => {
       dataSourceRef.current = next;
       setDataSource(next);
+      setDegradedSurfaces(surfaces);
     };
-    const clearCounts = (next: TopbarDataSource) => {
-      setSource(next);
+    const clearCounts = (next: TopbarDataSource, surfaces: string[] = []) => {
+      setSource(next, surfaces);
       setCounts({ approvals: 0, alerts: 0, jobs: 0 });
+    };
+
+    // Deferred fallback: only used when shell-summary itself is unavailable.
+    // Waits for the route-primary-ready milestone, then runs on an idle
+    // callback so it cannot compete with the route's first row/empty state.
+    //
+    // Deliberately does NOT read `lists.jobs()`: JobProgressDrawer already
+    // owns the one jobs-list hydration for the shell (its own idle-callback
+    // effect, unconditional on mount — see JobProgressDrawer.tsx), so a
+    // second independent read here would be a genuine duplicate `/bff/jobs`
+    // request, not just a redundant one. This is also dead weight even
+    // without that: `counts.jobs` (like approvals/alerts here) only renders
+    // once `dataSource === "live"`, and this fallback path never lands on
+    // plain "live" (it only runs because shell-summary degraded), so a jobs
+    // count fetched here was never shown.
+    const hydrateFromFullLists = () => {
+      if (disposed) return;
+      Promise.all([lists.approvals(), lists.alerts()]).then(([a, al]) => {
+        const source = liveStatus.get();
+        if (disposed || source.mode !== "live" || source.effective !== "live") {
+          clearCounts("fallback");
+          return;
+        }
+        const { source: listSource, degradedSurfaces: listDegradedSurfaces } = classifyListSource([a, al]);
+        if (listSource !== "live") {
+          // `shell_summary` is what triggered this full-list fallback in the
+          // first place — it must stay named alongside any surfaces the list
+          // envelopes themselves report as degraded.
+          clearCounts(listSource, Array.from(new Set([...listDegradedSurfaces, "shell_summary"])));
+          return;
+        }
+        const approvals = a.items as Array<{ state?: string }>;
+        const alerts = al.items as Array<{ acknowledged?: boolean }>;
+        // Recovered via the heavier full-list path because shell-summary was
+        // unavailable, but the list envelopes themselves classified as live
+        // (listSource === "live" above) — that is still real data, just
+        // fetched through the degraded shell-summary surface's fallback.
+        setSource("live_degraded", ["shell_summary"]);
+        setCounts((c) => ({
+          ...c,
+          approvals: approvals.filter((x) => x.state === "pending").length,
+          alerts: alerts.filter((x) => !x.acknowledged).length,
+        }));
+      }).catch(() => clearCounts("fallback"));
+    };
+    const deferHydrateFromFullLists = () => {
+      const pathname = pathnameRef.current;
+      cancelDeferredFallback = scheduleAfterRoutePrimaryReady(hydrateFromFullLists, {
+        pathname,
+        isStillCurrent: () => pathnameRef.current === pathname,
+      });
     };
 
     if (transportSource !== "live") {
       clearCounts(transportSource);
     } else {
       setSource("checking");
-      Promise.all([lists.approvals(), lists.alerts(), lists.jobs()]).then(([a, al, j]) => {
+      fetchShellSummary().then((summary) => {
+        if (disposed) return;
         const source = liveStatus.get();
-        if (disposed || source.mode !== "live" || source.effective !== "live") {
+        if (source.mode !== "live" || source.effective !== "live") {
           clearCounts("fallback");
           return;
         }
-        const listSource = classifyListSource([a, al, j]);
-        if (listSource !== "live") {
-          clearCounts(listSource);
+        const status = shellSummaryStatus(summary);
+        if (status === "unavailable" || status === "unknown") {
+          clearCounts("unavailable");
+          deferHydrateFromFullLists();
           return;
         }
-        const approvals = a.items as Array<{ state?: string }>;
-        const alerts = al.items as Array<{ acknowledged?: boolean }>;
-        const jobs = j.items as Array<{ status?: string }>;
-        setSource("live");
+        // Always resolve through the per-surface classifier, even when the
+        // primary `shell_summary` status is "ok": a co-reported child surface
+        // can still carry an explicit snapshot source (e.g. status: ok,
+        // source: local_snapshot), and that provenance must dominate — it
+        // must not be bypassed just because the primary surface looks fine.
+        const classified = classifyShellSummarySurfaces(summary.surfaces);
+        setSource(classified.source, classified.degradedSurfaces);
         setCounts({
-          approvals: approvals.filter((x) => x.state === "pending").length,
-          alerts: alerts.filter((x) => !x.acknowledged).length,
-          jobs: jobs.filter((x) => x.status === "running").length,
+          approvals: summary.counts.pendingApprovals,
+          alerts: summary.counts.openAlerts,
+          jobs: summary.counts.runningJobs,
         });
-      }).catch(() => clearCounts("fallback"));
+      }).catch(() => {
+        if (disposed) return;
+        clearCounts("unavailable");
+        deferHydrateFromFullLists();
+      });
 
       import("@/lib/bff/realtime").then(({ realtime }) => {
         if (disposed) return;
@@ -99,6 +189,7 @@ export const TopBar = () => {
     }, 30_000);
     return () => {
       disposed = true;
+      cancelDeferredFallback?.();
       cleanup?.();
       window.clearInterval(healthTimer);
     };
@@ -116,13 +207,13 @@ export const TopBar = () => {
   }, []);
 
   return (
-    <header className="h-14 border-b border-border bg-card flex items-center px-4 gap-3 sticky top-0 z-40">
+    <header className="min-h-14 max-w-full overflow-x-hidden border-b border-border bg-card flex items-center px-3 gap-2 sticky top-0 z-40 sm:px-4 sm:gap-3">
       {/* Logo + product switcher */}
-      <div className="flex items-center gap-2">
-        <div className="font-bold tracking-tight text-base">⟁ {t("app.name")}</div>
+      <div className="flex min-w-0 shrink-0 items-center gap-2">
+        <div className="whitespace-nowrap font-bold tracking-tight text-base">⟁ {t("app.name")}</div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="sm" className="font-medium">
+            <Button variant="ghost" size="sm" className="max-w-[9rem] truncate font-medium sm:max-w-none">
               {isManagement ? t("app.management") : t("app.agora")}
             </Button>
           </DropdownMenuTrigger>
@@ -134,27 +225,33 @@ export const TopBar = () => {
         </DropdownMenu>
       </div>
 
-      <EnvSwitcher />
-
       {/* Search */}
       <button
         onClick={() => setPaletteOpen(true)}
-        className="flex items-center gap-2 flex-1 max-w-xl mx-auto h-9 px-3 rounded-md border border-border bg-muted/40 text-sm text-muted-foreground hover:bg-muted transition"
+        className="hidden items-center gap-2 flex-1 max-w-xl mx-auto h-9 px-3 rounded-md border border-border bg-muted/40 text-sm text-muted-foreground hover:bg-muted transition md:flex"
       >
         <Search className="h-4 w-4" />
         <span className="flex-1 text-left">{t("topbar.search")}</span>
         <kbd className="text-mono text-xs bg-background border border-border rounded px-1.5 py-0.5">⌘K</kbd>
       </button>
 
-      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
+      {paletteOpen && (
+        <Suspense fallback={null}>
+          <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
+        </Suspense>
+      )}
 
       {/* Indicators */}
-      <div className="flex items-center gap-1">
+      <div className="ml-auto hidden items-center gap-1 sm:flex">
         <IndicatorButton icon={ClipboardCheck} count={countsAreLive ? counts.approvals : undefined} muted={!countsAreLive} tooltip={t("topbar.pendingApprovals")} onClick={() => navigate("/management/approvals")} />
         <IndicatorButton icon={AlertTriangle} count={countsAreLive ? counts.alerts : undefined} muted={!countsAreLive} tooltip={t("topbar.openAlerts")} onClick={() => navigate("/management/alerts")} />
         <IndicatorButton icon={Loader2} count={countsAreLive ? counts.jobs : undefined} muted={!countsAreLive} tooltip={t("topbar.runningJobs")} onClick={() => navigate("/management/jobs")} spin />
         {!countsAreLive && (
-          <Badge variant="outline" className="h-6 px-2 text-[10px] uppercase tracking-wider text-status-warning border-status-warning/30 bg-status-warning/10">
+          <Badge
+            variant="outline"
+            className="h-6 px-2 text-[10px] uppercase tracking-wider text-status-warning border-status-warning/30 bg-status-warning/10"
+            title={degradedSurfaces.length > 0 ? t("topbar.degradedSurfaces", { surfaces: degradedSurfaces.join(", ") }) : undefined}
+          >
             {t(`topbar.dataSource.${dataSource}`)}
           </Badge>
         )}
@@ -162,7 +259,9 @@ export const TopBar = () => {
       </div>
 
       {/* Realtime / BFF status */}
-      <RealtimeStatusBadge />
+      <div className="hidden sm:block">
+        <RealtimeStatusBadge />
+      </div>
 
       {/* Locale */}
       <DropdownMenu>
@@ -178,18 +277,18 @@ export const TopBar = () => {
 
       {/* User / Session — sourced from /bff/me; 401 surfaces auth error, never mock user */}
       {meLoading && !me ? (
-        <Button variant="ghost" size="sm" disabled className="gap-1">
+        <Button variant="ghost" size="sm" disabled className="hidden gap-1 md:inline-flex">
           <Loader2 className="h-4 w-4 animate-spin" />
         </Button>
       ) : meError || !me ? (
-        <Button variant="ghost" size="sm" className="gap-1 text-destructive" title={meError?.message ?? "Session unavailable"} aria-label="auth-error">
+        <Button variant="ghost" size="sm" className="hidden gap-1 text-destructive md:inline-flex" title={meError?.message ?? "Session unavailable"} aria-label="auth-error">
           <Lock className="h-4 w-4" />
           <span className="text-xs">Auth</span>
         </Button>
       ) : me ? (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="sm" className="gap-1">
+            <Button variant="ghost" size="sm" className="hidden gap-1 md:inline-flex">
               <User className="h-4 w-4" />
               {String(
                 (me.user as { displayName?: string; display_name?: string }).displayName
@@ -220,36 +319,101 @@ const IndicatorButton = ({ icon: Icon, count, tooltip, onClick, spin, muted }: {
   </Button>
 );
 
-function classifyListSource(envelopes: Array<ListEnvelope<unknown>>): TopbarDataSource {
-  let hasUnverified = false;
-  for (const env of envelopes) {
-    const source = classifyEnvelopeSource(env);
-    if (source === "degraded") return "degraded";
-    if (source === "unverified") hasUnverified = true;
-  }
-  return hasUnverified ? "unverified" : "live";
+interface EnvelopeSourceClassification {
+  source: "live" | "live_degraded" | "snapshot" | "unverified";
+  degradedSurfaces: string[];
 }
 
-function classifyEnvelopeSource(env: ListEnvelope<unknown>): TopbarDataSource {
+const ENVELOPE_SOURCE_RANK: Record<EnvelopeSourceClassification["source"], number> = {
+  live: 0,
+  unverified: 1,
+  live_degraded: 2,
+  snapshot: 3,
+};
+
+function classifyListSource(
+  envelopes: Array<ListEnvelope<unknown>>,
+): { source: TopbarDataSource; degradedSurfaces: string[] } {
+  let worst: EnvelopeSourceClassification["source"] = "live";
+  const degradedSurfaces: string[] = [];
+  for (const env of envelopes) {
+    const classified = classifyEnvelopeSource(env);
+    degradedSurfaces.push(...classified.degradedSurfaces);
+    if (ENVELOPE_SOURCE_RANK[classified.source] > ENVELOPE_SOURCE_RANK[worst]) worst = classified.source;
+  }
+  return {
+    source: worst === "snapshot" ? "degraded" : worst,
+    degradedSurfaces: Array.from(new Set(degradedSurfaces)),
+  };
+}
+
+function classifyEnvelopeSource(env: ListEnvelope<unknown>): EnvelopeSourceClassification {
   const meta = asRecord(env.meta);
   const surfaces = asRecord(meta?.surfaces);
-  if (!meta || !surfaces || Object.keys(surfaces).length === 0) return "unverified";
-  if (meta.staleness || meta.degradation) return "degraded";
-  for (const surface of Object.values(surfaces)) {
-    if (!surfaceIsLive(surface)) return "degraded";
+  if (!meta || !surfaces || Object.keys(surfaces).length === 0) return { source: "unverified", degradedSurfaces: [] };
+  // An envelope-wide flag marks every surface degraded, but a surface can
+  // still name a recognized live pathway (bff_composed/service_client) —
+  // examine each surface's own source instead of assuming snapshot outright.
+  const envelopeFlagged = Boolean(meta.staleness || meta.degradation);
+  let worst: "live" | "live_degraded" | "snapshot" = "live";
+  const degradedSurfaces: string[] = [];
+  for (const [name, surface] of Object.entries(surfaces)) {
+    const cls = classifySurfaceValue(surface, envelopeFlagged);
+    if (cls === "live") continue;
+    degradedSurfaces.push(name);
+    if (cls === "snapshot") worst = "snapshot";
+    else if (worst !== "snapshot") worst = "live_degraded";
   }
-  return "live";
+  return { source: worst, degradedSurfaces };
 }
 
-function surfaceIsLive(surface: unknown): boolean {
-  if (typeof surface === "string") return ["ok", "fresh", "live"].includes(surface.toLowerCase());
+/**
+ * Classifies a single named surface. A `local_snapshot`/`missing`/
+ * `unverifiable` source is always a true snapshot regardless of status. A
+ * surface flagged degraded/stale through a known live pathway
+ * (`bff_composed`/`service_client`) is "live_degraded" — still real data,
+ * just partially degraded. Anything else flagged degraded with an
+ * unspecified/other source falls back to "snapshot": we cannot claim it is
+ * live data without a recognized live source.
+ *
+ * `envelopeFlagged` forces this surface into the degraded branch even when
+ * its own status looks fine — an envelope-level staleness/degradation flag
+ * still has to resolve through this surface's own source (see
+ * `classifyEnvelopeSource`), not short-circuit to "snapshot" for the whole
+ * envelope.
+ */
+function classifySurfaceValue(surface: unknown, envelopeFlagged = false): "live" | "live_degraded" | "snapshot" {
+  if (typeof surface === "string") {
+    if (envelopeFlagged) return "snapshot"; // a bare string carries no source to positively confirm as live
+    return ["ok", "fresh", "live"].includes(surface.toLowerCase()) ? "live" : "snapshot";
+  }
   const record = asRecord(surface);
-  if (!record) return false;
+  if (!record) return "snapshot";
   const source = String(record.source ?? "").toLowerCase();
-  if (["local_snapshot", "missing", "unverifiable"].includes(source)) return false;
+  if (SNAPSHOT_SURFACE_SOURCES.includes(source)) return "snapshot";
   const status = String(record.status ?? record.state ?? "ok").toLowerCase();
-  if (!["ok", "fresh", "live"].includes(status)) return false;
-  return !record.staleness && !record.degradation;
+  const flagged = envelopeFlagged || !["ok", "fresh", "live"].includes(status) || Boolean(record.staleness || record.degradation);
+  if (!flagged) return "live";
+  return LIVE_SURFACE_SOURCES.includes(source) ? "live_degraded" : "snapshot";
+}
+
+function classifyShellSummarySurfaces(
+  surfaces: Record<string, { status: string; source?: string }>,
+): { source: TopbarDataSource; degradedSurfaces: string[] } {
+  const degradedSurfaces: string[] = [];
+  let sawSnapshot = false;
+  for (const [name, surface] of Object.entries(surfaces)) {
+    const source = (surface.source ?? "").toLowerCase();
+    // An explicit snapshot source dominates a co-reported "ok" status — a
+    // payload can be internally inconsistent (status: ok, source:
+    // local_snapshot) and must not be treated as live.
+    const explicitSnapshot = SNAPSHOT_SURFACE_SOURCES.includes(source);
+    if (surface.status === "ok" && !explicitSnapshot) continue;
+    degradedSurfaces.push(name);
+    if (explicitSnapshot || !LIVE_SURFACE_SOURCES.includes(source)) sawSnapshot = true;
+  }
+  if (degradedSurfaces.length === 0) return { source: "live", degradedSurfaces: [] };
+  return { source: sawSnapshot ? "degraded" : "live_degraded", degradedSurfaces };
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {

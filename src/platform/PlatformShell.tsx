@@ -1,7 +1,6 @@
-import { useEffect } from "react";
 import { Outlet } from "react-router-dom";
 import { TopBar } from "./components/TopBar";
-import { useLocaleSync } from "./hooks";
+import { useLocaleSync, useLiveSseConnection } from "./hooks";
 import { useMockRealtimeTicker } from "@/lib/useMockRealtime";
 import { RightDrawer } from "./components/RightDrawer";
 import { NotificationCenter } from "./components/NotificationCenter";
@@ -12,25 +11,21 @@ import { BulkResultDrawer } from "./components/BulkResultDrawer";
 import { RollbackSagaDrawer } from "./components/RollbackSagaDrawer";
 import { KeyboardShortcutsHelp, useGlobalShortcuts } from "./components/KeyboardShortcutsHelp";
 import { useOverlay } from "./overlayStore";
-import { connectLiveSse, disconnectLiveSse } from "@/lib/bff-v1";
 
 export const PlatformShell = () => {
   useLocaleSync();
   useMockRealtimeTicker();
+  useLiveSseConnection();
   const { helpOpen, setHelpOpen } = useGlobalShortcuts();
   const bulkResult = useOverlay((s) => s.bulkResult);
   const bulkResultTitle = useOverlay((s) => s.bulkResultTitle);
   const closeBulkResult = useOverlay((s) => s.closeBulkResult);
 
-  useEffect(() => {
-    connectLiveSse();
-    return () => { disconnectLiveSse(); };
-  }, []);
   return (
-    <div className="min-h-screen flex flex-col bg-background">
+    <div className="h-screen min-w-0 flex flex-col overflow-hidden bg-background">
       <LiveStatusBanner />
       <TopBar />
-      <div className="flex-1 flex pb-10">
+      <div className="flex-1 min-h-0 min-w-0 flex flex-col overflow-hidden lg:flex-row">
         <Outlet />
       </div>
       <RightDrawer />

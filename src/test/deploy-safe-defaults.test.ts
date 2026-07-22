@@ -1,0 +1,796 @@
+import { spawnSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { describe, expect, it } from "vitest";
+
+const root = process.cwd();
+const deployScriptPath = resolve(root, "scripts/deploy-dev-vm.sh");
+const deployScript = readFileSync(deployScriptPath, "utf8");
+const localEnvPath = resolve(root, ".env");
+const gitignore = readFileSync(resolve(root, ".gitignore"), "utf8");
+const integrationWorkflow = readFileSync(
+  resolve(root, ".github/workflows/pantheon-integration-gate.yml"),
+  "utf8",
+);
+const deployWorkflow = readFileSync(
+  resolve(root, ".github/workflows/pantheon-dev-fe-deploy.yml"),
+  "utf8",
+);
+const proofWatchdogWorkflow = readFileSync(
+  resolve(root, ".github/workflows/pantheon-proof-watchdog.yml"),
+  "utf8",
+);
+const branchWorkflow = readFileSync(
+  resolve(root, ".github/workflows/branch-ci.yml"),
+  "utf8",
+);
+const playwrightConfig = readFileSync(
+  resolve(root, "playwright.config.ts"),
+  "utf8",
+);
+const hostedPersonaSpec = readFileSync(
+  resolve(root, "e2e/25-persona-fleet-live-linked-pages.spec.ts"),
+  "utf8",
+);
+const hostedPersonaInteractionSpec = readFileSync(
+  resolve(root, "e2e/persona-interaction-cross-repo-hosted.spec.ts"),
+  "utf8",
+);
+const hostedPersonaServantPreflight = readFileSync(
+  resolve(root, "scripts/ensure-persona-hosted-proof-servant.mjs"),
+  "utf8",
+);
+const hostedPersonaCredentialValidator = readFileSync(
+  resolve(root, "scripts/validate-persona-hosted-proof-env.mjs"),
+  "utf8",
+);
+const hostedBrowserProbe = readFileSync(
+  resolve(root, "scripts/probe-hosted-browser-bff.mjs"),
+  "utf8",
+);
+const releaseCandidate = readFileSync(
+  resolve(root, "scripts/release-candidate.mjs"),
+  "utf8",
+);
+const atomicManifest = readFileSync(
+  resolve(root, "scripts/atomic-release-manifest.py"),
+  "utf8",
+);
+const browserAuthRuntime = [
+  readFileSync(resolve(root, "src/config/publicBuildAuth.ts"), "utf8"),
+  readFileSync(resolve(root, "src/lib/bff-v1/headers.ts"), "utf8"),
+].join("\n");
+const runtimeEnv = readFileSync(
+  resolve(root, "src/lib/bff-v1/runtimeEnv.ts"),
+  "utf8",
+);
+
+function rejectedDeploy(extraEnv: Record<string, string>) {
+  return spawnSync("bash", [deployScriptPath], {
+    cwd: root,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      GITHUB_EVENT_NAME: "",
+      PANTHEON_DEPLOY_ALLOW_DIRTY: "true",
+      VITE_BFF_DEV_BEARER_TOKEN: "",
+      ...extraEnv,
+    },
+  });
+}
+
+describe("Pantheon dev frontend deploy safety boundary", () => {
+  it("routes active dev delivery only to the replacement VM", () => {
+    const activeRouting = [
+      deployScript,
+      integrationWorkflow,
+      deployWorkflow,
+      proofWatchdogWorkflow,
+      hostedPersonaInteractionSpec,
+      hostedPersonaServantPreflight,
+      hostedBrowserProbe,
+      runtimeEnv,
+    ].join("\n");
+
+    expect(activeRouting).toContain("35.201.204.12");
+    expect(activeRouting).not.toContain("35.201.239.38");
+    expect(activeRouting).not.toContain("pantheon-benjamin-20260528");
+  });
+
+  it("creates only strict, read-only, credential-free release candidates", () => {
+    expect(integrationWorkflow).toContain("VITE_BFF_MODE: live");
+    expect(integrationWorkflow).toContain("VITE_BFF_FALLBACK: strict");
+    expect(integrationWorkflow).toContain('VITE_BFF_REAL_WRITES: "false"');
+    expect(integrationWorkflow).toContain(
+      'VITE_BFF_ALLOW_DEV_STUB_WRITES: "false"',
+    );
+    expect(integrationWorkflow).toContain('VITE_BFF_DEV_BEARER_TOKEN: ""');
+    expect(integrationWorkflow).toContain(
+      "node scripts/release-candidate.mjs prepare",
+    );
+    expect(deployScript).toContain(
+      'REAL_WRITES="${PANTHEON_DEPLOY_REAL_WRITES:-false}"',
+    );
+    expect(deployScript).toContain(
+      'ALLOW_DEV_STUB_WRITES="${PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES:-false}"',
+    );
+    expect(deployScript).toContain(
+      'if [[ -n "${VITE_BFF_DEV_BEARER_TOKEN:-}" ]]',
+    );
+    expect(deployScript).toContain("VITE_*CLIENT_SECRET*");
+    expect(deployScript).toContain("VITE_*PRIVATE_KEY*");
+    expect(deployScript).toContain("VITE_*SERVICE_ROLE*");
+    expect(deployScript).not.toMatch(/pantheon-dev-browser:operator/u);
+    expect(deployScript).not.toMatch(/pantheon-dev-browser:viewer/u);
+    expect(deployScript).not.toMatch(/VITE_BFF_REAL_WRITES=true/u);
+    expect(deployScript).not.toMatch(/VITE_BFF_ALLOW_DEV_STUB_WRITES=true/u);
+    expect(releaseCandidate).toContain(
+      'VITE_BFF_EMBEDDED_BEARER_TOKEN: "false"',
+    );
+    expect(releaseCandidate).toContain("collectEnvironmentSecretSentinels");
+    expect(releaseCandidate).toContain("CREDENTIAL_PATTERNS");
+    expect(integrationWorkflow).not.toMatch(/pantheon-dev-browser:viewer/gu);
+    expect(browserAuthRuntime).not.toMatch(/pantheon-dev-browser:viewer/gu);
+    expect(browserAuthRuntime).not.toContain(
+      "import.meta.env.VITE_BFF_DEV_BEARER_TOKEN",
+    );
+    expect(existsSync(localEnvPath)).toBe(false);
+    expect(gitignore).toMatch(/^\.env\*$/mu);
+    expect(gitignore).toMatch(/^!\.env\*\.example$/mu);
+  });
+
+  it("injects public Supabase config only while building a gated candidate", () => {
+    for (const workflow of [branchWorkflow, integrationWorkflow]) {
+      expect(workflow).toContain(
+        "VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}",
+      );
+      expect(workflow).toContain(
+        "VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}",
+      );
+      expect(workflow.match(/VITE_SUPABASE_URL:/gu)).toHaveLength(1);
+      expect(workflow.match(/VITE_SUPABASE_PUBLISHABLE_KEY:/gu)).toHaveLength(
+        1,
+      );
+    }
+    expect(deployWorkflow).not.toContain("VITE_SUPABASE_URL");
+    expect(deployWorkflow).not.toContain("VITE_SUPABASE_PUBLISHABLE_KEY");
+    expect(deployScript).not.toContain("VITE_SUPABASE_URL");
+    expect(deployScript).not.toContain("VITE_SUPABASE_PUBLISHABLE_KEY");
+    expect(deployWorkflow).not.toContain(
+      "PANTHEON_HOSTED_BROWSER_BEARER_TOKEN",
+    );
+  });
+
+  it("runs release-gate Playwright evidence against the exact candidate", () => {
+    const start = integrationWorkflow.indexOf(
+      "- name: Release-gate Playwright evidence against exact candidate",
+    );
+    const end = integrationWorkflow.indexOf(
+      "- name: Frontend browser BFF probe",
+    );
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    const fixtureBlock = integrationWorkflow.slice(start, end);
+
+    expect(fixtureBlock).toContain("if: steps.pr_preview.outcome == 'success'");
+    expect(fixtureBlock).toContain(
+      'PANTHEON_FE_BASE_URL: "http://127.0.0.1:4173"',
+    );
+    expect(fixtureBlock).toContain(
+      'PANTHEON_SSE_ORIGIN_URL: "http://127.0.0.1:4173"',
+    );
+    expect(fixtureBlock).toContain(
+      'PLAYWRIGHT_JSON_OUTPUT_FILE="$PANTHEON_AUDIT_OUT_DIR/playwright-results.json"',
+    );
+    expect(fixtureBlock).toContain(
+      '--output "$PANTHEON_AUDIT_OUT_DIR/playwright-output"',
+    );
+    expect(fixtureBlock).toContain("--trace=off");
+    // screenshot and video are Playwright config options, not `playwright test`
+    // CLI flags. Keep them out of this command so the gate cannot fail before
+    // collecting any tests with "unknown option".
+    expect(fixtureBlock).not.toMatch(/--(?:screenshot|video)(?:=|\s)/u);
+    expect(fixtureBlock).not.toContain("npm run dev --");
+    expect(fixtureBlock).not.toContain("VITE_SUPABASE_URL:");
+    expect(fixtureBlock).not.toContain("VITE_SUPABASE_PUBLISHABLE_KEY:");
+    expect(fixtureBlock).toContain("VITE_BFF_FALLBACK: strict");
+    expect(fixtureBlock).toContain("BFF_FALLBACK: strict");
+    for (const credential of ["BFF_AUTH_TOKEN", "VITE_BFF_DEV_BEARER_TOKEN"]) {
+      expect(fixtureBlock).not.toContain(`${credential}: $` + "{{");
+    }
+    for (const spec of [
+      "01-startup-session",
+      "02-control-room",
+      "03-execution-loop",
+      "04-sentinel-remediation",
+      "04b-optimization-loop",
+      "05-interventions",
+      "06-entity-registry",
+      "07-high-risk-confirm",
+      "08-create-intent",
+      "08-sse-reconnect",
+      "09-strict-vs-hybrid",
+      "10-rollback-saga",
+      "11-handoff-sla",
+      "12-approvals",
+      "13-agora",
+      "16-audit-correlation",
+      "17-a11y-v5",
+      "18-perf",
+    ]) {
+      expect(fixtureBlock).toMatch(new RegExp(`e2e/${spec}\\.spec\\.ts`, "u"));
+    }
+    expect(fixtureBlock).toContain("--project=chromium");
+    expect(fixtureBlock).not.toContain("--project=mobile-chromium");
+    expect(fixtureBlock).toContain(
+      '--grep-invert "asserts MeResponse tenant/env/user/capabilities shape"',
+    );
+    expect(integrationWorkflow).toContain(
+      '"fixture_e2e": { "outcome": "${{ steps.fixture_e2e.outcome }}"',
+    );
+  });
+
+  it("splits exact-candidate Chromium from the later mobile-only suite", () => {
+    const start = integrationWorkflow.indexOf("- name: Playwright E2E");
+    const end = integrationWorkflow.indexOf(
+      "- name: Verify live BFF release identity remained stable",
+    );
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    const mobileBlock = integrationWorkflow.slice(start, end);
+
+    expect(mobileBlock).toContain("npx playwright test \\");
+    for (const spec of [
+      "01-startup-session",
+      "02-control-room",
+      "03-execution-loop",
+      "04-sentinel-remediation",
+      "04b-optimization-loop",
+      "05-interventions",
+      "06-entity-registry",
+      "07-high-risk-confirm",
+      "08-create-intent",
+      "08-sse-reconnect",
+      "09-strict-vs-hybrid",
+      "10-rollback-saga",
+      "11-handoff-sla",
+      "12-approvals",
+      "13-agora",
+      "16-audit-correlation",
+      "17-a11y-v5",
+      "18-perf",
+    ]) {
+      expect(mobileBlock).toMatch(new RegExp(`e2e/${spec}\\.spec\\.ts`, "u"));
+    }
+    expect(mobileBlock).toContain(
+      'PLAYWRIGHT_JSON_OUTPUT_FILE="$PANTHEON_AUDIT_OUT_DIR/playwright-mobile-results.json"',
+    );
+    expect(mobileBlock).not.toContain(
+      'PLAYWRIGHT_JSON_OUTPUT_FILE="$PANTHEON_AUDIT_OUT_DIR/playwright-results.json"',
+    );
+    expect(mobileBlock).toContain("--project=mobile-chromium");
+    expect(mobileBlock).not.toMatch(/e2e\/\S*hosted\S*\.spec\.ts/u);
+    expect(mobileBlock).toContain(
+      '--grep-invert "asserts MeResponse tenant/env/user/capabilities shape"',
+    );
+  });
+
+  it("publishes accepted manifests with a durable atomic replace", () => {
+    expect(deployScript).toContain("publish_manifest_atomically");
+    expect(deployScript).toContain("atomic-release-manifest.py");
+    expect(deployScript).not.toMatch(
+      /sudo install[^\n]+deployment\.json[^\n]+\/deployment\.json/u,
+    );
+    expect(atomicManifest).toContain("os.O_EXCL");
+    expect(atomicManifest).toContain('getattr(os, "O_NOFOLLOW", 0)');
+    expect(atomicManifest).toContain("os.replace(");
+    expect(atomicManifest).toContain("os.fsync(release_fd)");
+    expect(atomicManifest).toContain("os.fsync(store_fd)");
+  });
+
+  it("keeps current hosted FE checks advisory while producing a deployable candidate", () => {
+    expect(integrationWorkflow).toContain(
+      'PANTHEON_HOSTED_FE_HARD_GATE: "false"',
+    );
+    expect(deployWorkflow).toContain("Deploy exact gated candidate");
+    expect(deployScript).toContain(
+      "post-switch manifest, BFF, and browser/auth probe",
+    );
+  });
+
+  it("deploys only the immutable artifact from one exact successful dev gate", () => {
+    expect(deployWorkflow).toContain("workflow_run:");
+    expect(deployWorkflow).toContain("Pantheon FE-BFF Integration Gate");
+    expect(deployWorkflow).toContain("github.rest.actions.getWorkflowRun");
+    expect(deployWorkflow).toContain(
+      'runPath === ".github/workflows/pantheon-integration-gate.yml"',
+    );
+    expect(deployWorkflow).toContain('run.event === "push"');
+    expect(deployWorkflow).toContain('run.head_branch === "dev"');
+    expect(deployWorkflow).toContain('run.conclusion === "success"');
+    expect(deployWorkflow).toContain(
+      "github.rest.actions.listWorkflowRunArtifacts",
+    );
+    expect(deployWorkflow).toContain(
+      "github.rest.actions.listJobsForWorkflowRunAttempt",
+    );
+    expect(deployWorkflow).toContain(
+      'job.name === "integration-gate"',
+    );
+    expect(deployWorkflow).toContain(
+      'producers[0].status !== "completed" || producers[0].conclusion !== "success"',
+    );
+    expect(deployWorkflow).toContain(
+      "`pantheon-fe-release-candidate-attempt-${producerAttempt}`",
+    );
+    expect(deployWorkflow).toContain("artifact.name === artifactName");
+    expect(integrationWorkflow).toContain(
+      "name: pantheon-fe-release-candidate-attempt-${{ github.run_attempt }}",
+    );
+    expect(integrationWorkflow).toContain(
+      "name: pantheon-integration-evidence-attempt-${{ github.run_attempt }}",
+    );
+    const evidenceStart = integrationWorkflow.indexOf(
+      "- name: Upload evidence",
+    );
+    const evidenceEnd = integrationWorkflow.indexOf(
+      "- name: Upload exact release identity",
+    );
+    expect(evidenceStart).toBeGreaterThan(-1);
+    expect(evidenceEnd).toBeGreaterThan(evidenceStart);
+    const evidenceBlock = integrationWorkflow.slice(evidenceStart, evidenceEnd);
+    expect(evidenceBlock).toContain("path: pantheon-audits");
+    expect(evidenceBlock).not.toContain("test-results");
+    expect(deployWorkflow).toContain(
+      "name: pantheon-dev-fe-deploy-evidence-attempt-${{ github.run_attempt }}",
+    );
+    expect(`${integrationWorkflow}\n${deployWorkflow}`).not.toContain(
+      "overwrite: true",
+    );
+    expect(deployWorkflow).toContain("actions/artifacts/${ARTIFACT_ID}/zip");
+    expect(deployWorkflow).toContain(
+      'actual_archive_digest="sha256:$(sha256sum',
+    );
+    expect(deployWorkflow).toContain(
+      "artifact archive contains a non-regular entry",
+    );
+    expect(deployScript).toContain("node scripts/release-candidate.mjs verify");
+    expect(deployScript).toContain('--expected-frontend-sha "${SHA}"');
+    expect(deployScript).toContain('--expected-gate-run-id "${GATE_RUN_ID}"');
+    expect(deployScript).toContain('BFF_COMMIT="$(node -e');
+    expect(deployScript).toContain("payload.source_commit_known !== true");
+    expect(integrationWorkflow).toContain(
+      "Upload deployable immutable candidate",
+    );
+    expect(integrationWorkflow).toContain(
+      "steps.aggregate.outcome == 'success'",
+    );
+  });
+
+  it("pre-probes, atomically switches, and conditionally restores and re-probes", () => {
+    expect(deployScript).toContain("flock -n 9");
+    expect(deployScript).toContain("candidate.order_at_switch");
+    expect(deployScript).toContain("candidate pre-switch browser/auth probe");
+    expect(deployScript).toContain(
+      'run_release_probe candidate_pre_switch "${RELEASE_DIR}"',
+    );
+    expect(deployScript).toContain('local strict_env="0"');
+    expect(deployScript).toContain(
+      'if [[ "${strict}" == "true" || "${strict}" == "1" ]]',
+    );
+    expect(deployScript).toContain(
+      'PANTHEON_PROBE_RELEASE_STRICT="${strict_env}"',
+    );
+    expect(deployScript).toContain(
+      'PANTHEON_PROBE_LEGACY_ROLLBACK_TARGET_COMPAT="$([[ "${legacy_rollback_target_compat}" == "true" ]] && echo 1 || echo 0)"',
+    );
+    expect(deployScript).toContain(
+      'PANTHEON_PROBE_CANDIDATE_SOURCE_SCAN="${candidate_source_scan}"',
+    );
+    expect(deployScript).toContain(
+      'run_release_probe "${phase}" "${release_root}" "${release_commit}" "${release_digest}" "${probe_strict}" "${legacy_compat}" loaded "${rollback_compat}"',
+    );
+    expect(deployScript).toContain("probe_strict=false");
+    expect(deployScript).toContain("rollback_compat=true");
+    expect(deployScript).toContain(
+      'NEXT_LINK="${DEPLOY_ROOT}.next-${RELEASE_INSTANCE}"',
+    );
+    expect(deployScript).toContain(
+      'SYMLINK_CAS_HELPER="${ROOT_DIR}/scripts/atomic-symlink-cas.py"',
+    );
+    expect(deployScript).toContain(
+      'sudo python3 "${SYMLINK_CAS_HELPER}" exchange',
+    );
+    expect(deployScript).toContain(
+      'sudo python3 "${SYMLINK_CAS_HELPER}" install-if-absent',
+    );
+    expect(deployScript).toContain(
+      "post-switch manifest, BFF, and browser/auth probe",
+    );
+    expect(deployScript).toContain("rollback_release");
+    expect(deployScript).toContain('run_release_probe rollback ""');
+    expect(deployScript).toContain("rollback.reprobe");
+    expect(deployScript).toContain(
+      "Same-SHA/profile artifact replacement rejected",
+    );
+    expect(deployScript).toContain("exact live candidate no-op revalidation");
+    expect(deployWorkflow).not.toContain("skip_probe:");
+  });
+
+  it("keeps every post-deploy acceptance probe read-only", () => {
+    expect(deployScript).toContain("scripts/probe-hosted-browser-bff.mjs");
+    expect(deployScript).not.toContain("npx playwright test");
+    expect(deployScript).not.toContain(
+      "scripts/probe-hosted-management-writes.mjs",
+    );
+    expect(hostedPersonaSpec).toContain('roleTokenFromEnv("viewer"');
+    expect(hostedPersonaSpec).toContain('roles: ["viewer"]');
+    expect(hostedPersonaSpec).toContain("token: VIEWER_TOKEN");
+  });
+
+  it("hard-gates the real hosted Persona write proof without credential skips", () => {
+    const authorizedProof = integrationWorkflow.slice(
+      integrationWorkflow.indexOf("  authorized-write-proof:"),
+      integrationWorkflow.indexOf("  pr-comment:"),
+    );
+    expect(integrationWorkflow).toContain(
+      "npx playwright test e2e/persona-interaction-cross-repo-hosted.spec.ts",
+    );
+    expect(integrationWorkflow).toContain(
+      "node scripts/validate-persona-hosted-proof-env.mjs",
+    );
+    expect(authorizedProof).toContain(
+      "PANTHEON_BFF_RBAC_TOKENS_JSON: ${{ secrets.PANTHEON_BFF_RBAC_TOKENS_JSON }}",
+    );
+    expect(
+      authorizedProof.indexOf(
+        "node scripts/validate-persona-hosted-proof-env.mjs",
+      ),
+    ).toBeLessThan(
+      authorizedProof.indexOf(
+        "node scripts/ensure-persona-hosted-proof-servant.mjs",
+      ),
+    );
+    expect(
+      authorizedProof.indexOf(
+        "node scripts/ensure-persona-hosted-proof-servant.mjs",
+      ),
+    ).toBeLessThan(
+      authorizedProof.indexOf(
+        "node scripts/probe-persona-governed-proposal-live.mjs",
+      ),
+    );
+    expect(
+      authorizedProof.indexOf(
+        "node scripts/validate-persona-hosted-proof-env.mjs",
+      ),
+    ).toBeLessThan(
+      authorizedProof.indexOf(
+        "npx playwright test e2e/persona-interaction-cross-repo-hosted.spec.ts",
+      ),
+    );
+    expect(authorizedProof).toContain("--project=chromium --grep '@desktop-full'");
+    expect(authorizedProof).toContain("--project=mobile-chromium --grep '@mobile-basic'");
+    expect(authorizedProof).toContain(
+      "node scripts/ensure-persona-hosted-proof-servant.mjs",
+    );
+    expect(authorizedProof).toContain(
+      "PANTHEON_EXPECTED_BFF_SHA: ${{ inputs.bff_sha }}",
+    );
+    expect(authorizedProof).toContain(
+      "PANTHEON_PUBLIC_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}",
+    );
+    expect(hostedPersonaInteractionSpec).toContain("installVerifiedHostedProofSession");
+    expect(hostedPersonaInteractionSpec).not.toContain("installOidcDevLogin");
+    expect(hostedPersonaInteractionSpec).not.toContain("page.route(");
+    expect(hostedPersonaInteractionSpec).toContain("minimumTtlSeconds: 480");
+    expect(hostedPersonaCredentialValidator).toContain(
+      "HOSTED_PROOF_MIN_CREDENTIAL_TTL_SECONDS = 1200",
+    );
+    expect(hostedPersonaCredentialValidator).toContain(
+      'parts.length !== 3',
+    );
+    expect(hostedPersonaCredentialValidator).toContain(
+      "operatorSubject === viewerSubject",
+    );
+    expect(authorizedProof).toContain("--retries=0 --reporter=list,json");
+    // Both credentialed browser suites run desktop and mobile with artifacts
+    // disabled: Persona (2 invocations) and Trade Journeys (2 invocations).
+    expect(authorizedProof.match(/--trace=off/gu)).toHaveLength(4);
+    expect(
+      authorizedProof.match(/PANTHEON_CREDENTIALED_PLAYWRIGHT_NO_ARTIFACTS=1/gu),
+    ).toHaveLength(4);
+    expect(playwrightConfig).toContain(
+      'process.env.PANTHEON_CREDENTIALED_PLAYWRIGHT_NO_ARTIFACTS === "1"',
+    );
+    expect(playwrightConfig).toContain(
+      'trace: credentialedProofNoArtifacts ? "off" : "retain-on-failure"',
+    );
+    expect(playwrightConfig).toContain(
+      'screenshot: credentialedProofNoArtifacts ? "off" : "only-on-failure"',
+    );
+    expect(playwrightConfig).toContain(
+      'video: credentialedProofNoArtifacts ? "off" : "retain-on-failure"',
+    );
+    const authorizedArtifact = authorizedProof.slice(
+      authorizedProof.indexOf("- name: Upload authorized proof evidence"),
+    );
+    expect(authorizedArtifact).toContain(".lovable/audits/authorized-write-proof");
+    expect(authorizedArtifact).not.toContain("playwright-report");
+    expect(authorizedArtifact).not.toContain("test-results");
+    expect(authorizedProof).toContain("desktop.expected !== 3");
+    expect(authorizedProof).toContain("mobile.expected !== 1");
+    expect(authorizedProof).toContain("skipped !== 0");
+    expect(authorizedProof).toContain("unexpected !== 0");
+    expect(authorizedProof).toContain("flaky !== 0");
+    expect(
+      authorizedProof.match(/ensure-persona-hosted-proof-servant\.mjs/gu),
+    ).toHaveLength(1);
+    expect(hostedPersonaServantPreflight).toContain(
+      "/bff/agora/servant/ensure",
+    );
+    expect(hostedPersonaServantPreflight).toContain(
+      "process.env.PANTHEON_EXPECTED_BFF_SHA",
+    );
+    expect(hostedPersonaServantPreflight.indexOf("/bff/version")).toBeLessThan(
+      hostedPersonaServantPreflight.indexOf("/bff/me"),
+    );
+    expect(hostedPersonaServantPreflight.indexOf("/bff/me")).toBeLessThan(
+      hostedPersonaServantPreflight.indexOf("/bff/auth/readiness"),
+    );
+    expect(hostedPersonaServantPreflight).toContain(
+      'posture.auth_stub !== false',
+    );
+    expect(hostedPersonaServantPreflight).toContain(
+      'posture.auth_mode !== "strict"',
+    );
+    expect(hostedPersonaServantPreflight).toContain(
+      'sessionKind !== "bearer"',
+    );
+    expect(hostedPersonaServantPreflight).toContain(
+      "readiness.authReady !== true",
+    );
+    expect(hostedPersonaServantPreflight).toContain(
+      "readinessAuth.interactionCapabilityReady !== true",
+    );
+    expect(hostedPersonaServantPreflight.indexOf("/bff/me")).toBeLessThan(
+      hostedPersonaServantPreflight.indexOf("/bff/agora/servant/ensure"),
+    );
+    expect(hostedPersonaServantPreflight).toContain(
+      "bffUrl.hostname !== devBffHost",
+    );
+    expect(hostedPersonaServantPreflight).toContain(
+      '"Idempotency-Key": idempotencyKey',
+    );
+    expect(hostedPersonaServantPreflight).toContain(
+      '"X-Request-Id": requestId',
+    );
+    expect(hostedPersonaServantPreflight).toContain('"X-Tenant-Id": tenantId');
+    expect(hostedPersonaServantPreflight).toMatch(
+      /stableUuid\(\s*`pantheon-persona-hosted-proof:v1:\$\{tenantId\}:\$\{operatorId\}`\s*,?\s*\)/u,
+    );
+    expect(hostedPersonaServantPreflight).not.toContain(
+      "stableUuid(`pantheon-persona-hosted-proof:${tenantId}:${correlationId}`)",
+    );
+    expect(hostedPersonaServantPreflight).not.toMatch(
+      /stableUuid\([^)]*operatorToken/u,
+    );
+    const responseJsonBoundary = hostedPersonaServantPreflight.slice(
+      hostedPersonaServantPreflight.indexOf("function safeDiagnosticValue"),
+      hostedPersonaServantPreflight.indexOf("const devBffHost"),
+    );
+    expect(responseJsonBoundary).toContain("http_status: responseStatus");
+    expect(responseJsonBoundary).toContain("error.error_code");
+    expect(responseJsonBoundary).toContain("error.code");
+    expect(responseJsonBoundary).toContain("details.precondition_failed");
+    expect(responseJsonBoundary).toContain(
+      "/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u",
+    );
+    expect(responseJsonBoundary).not.toMatch(
+      /Authorization|operatorToken|raw_body|response_body/iu,
+    );
+    expect(responseJsonBoundary).not.toMatch(
+      /error\.message|details\.message|payload\.message|parsed\.message/u,
+    );
+    expect(responseJsonBoundary).not.toMatch(
+      /JSON\.stringify\((?:text|parsed|payload|detail|error)\)/u,
+    );
+    expect(responseJsonBoundary).not.toMatch(/\$\{text\}/u);
+    expect(hostedPersonaServantPreflight).not.toContain("/bff/personas");
+    expect(hostedPersonaServantPreflight).not.toMatch(/delete|cleanup/iu);
+    expect(hostedPersonaInteractionSpec).toContain(
+      "PANTHEON_PERSONA_INTERACTION_PERSONA_ID",
+    );
+    expect(hostedPersonaInteractionSpec).toContain("excluded_reason_counts=");
+    expect(
+      hostedPersonaInteractionSpec.indexOf("participants:eligible"),
+    ).toBeLessThan(
+      hostedPersonaInteractionSpec.indexOf("/bff/management/persona-fleet"),
+    );
+    expect(hostedPersonaInteractionSpec).toContain(
+      "const selected = included.find",
+    );
+    expect(hostedPersonaInteractionSpec).toContain(
+      "requestedParticipants.map((participant) => participant.persona_id)",
+    );
+    expect(hostedPersonaInteractionSpec).toContain(
+      "persistedParticipants.map((participant) => participant.persona_id)",
+    );
+    expect(hostedPersonaInteractionSpec).not.toContain("submittedRequest.participant_persona_ids");
+    expect(hostedPersonaInteractionSpec).toContain("/recommended-measures/${encodeURIComponent(measureId)}/candidates");
+    expect(hostedPersonaInteractionSpec).toContain(
+      "`${BFF_BASE}/bff/agora/servant/ensure`",
+    );
+    expect(hostedPersonaInteractionSpec).toContain(
+      "expect(deniedEnsure.status()).toBe(403)",
+    );
+    expect(hostedPersonaInteractionSpec.match(/^\s*test\("/gmu)).toHaveLength(
+      4,
+    );
+    expect(hostedPersonaInteractionSpec).toContain(
+      "expect(denied.status()).toBe(403)",
+    );
+  });
+
+  it("defines the deployed-host contract as an unauthenticated strict auth boundary", () => {
+    expect(hostedBrowserProbe).toContain(
+      'const PUBLIC_HEALTH_PATHS = ["/health", "/readyz"]',
+    );
+    expect(hostedBrowserProbe).toContain("response.status === 401");
+    expect(hostedBrowserProbe).toMatch(
+      /AUTH_REQUIRED\|authentication required/u,
+    );
+    expect(hostedBrowserProbe).toContain("noAuthorizationRequests");
+    expect(hostedBrowserProbe).toContain("noEmbeddedDevBearer");
+    expect(hostedBrowserProbe).not.toContain("const AUTH_TOKEN");
+    expect(hostedBrowserProbe).not.toContain("BROWSER_AUTH_TOKEN");
+    expect(hostedBrowserProbe).not.toContain("window.sessionStorage.setItem");
+    expect(hostedBrowserProbe).toContain('page.on("pageerror"');
+    expect(hostedBrowserProbe).toContain("rootRendered");
+    expect(hostedBrowserProbe).toContain("pageErrors.length === 0");
+    expect(hostedBrowserProbe).toContain("target.origin !== base.origin");
+    expect(hostedBrowserProbe).toContain(
+      "applicationRootRendered: rootRendered",
+    );
+    expect(hostedBrowserProbe).toContain(
+      "pageErrorsAbsent: pageErrors.length === 0",
+    );
+    expect(hostedBrowserProbe).not.toContain("url.startsWith(BFF_BASE)");
+    expect(deployScript).toContain(
+      'PANTHEON_HOSTED_REQUIRED_BFF_PATHS="${PANTHEON_HOSTED_REQUIRED_BFF_PATHS:-/bff/me}"',
+    );
+    expect(integrationWorkflow).toContain(
+      'PANTHEON_HOSTED_REQUIRED_BFF_PATHS: "/bff/me"',
+    );
+    expect(deployWorkflow).toContain(
+      "PANTHEON_HOSTED_REQUIRED_BFF_PATHS: /bff/me",
+    );
+  });
+
+  it("fails closed on any build-time token without echoing it", () => {
+    const sentinel = "sentinel-privileged-token-must-not-leak";
+    const result = rejectedDeploy({ VITE_BFF_DEV_BEARER_TOKEN: sentinel });
+
+    expect(result.status).toBe(2);
+    expect(result.stderr).toMatch(/any browser bearer token/u);
+    expect(`${result.stdout}${result.stderr}`).not.toContain(sentinel);
+  });
+
+  it("does not let emergency dispatch bypass probes or leak a generic Vite credential", () => {
+    expect(deployWorkflow).toContain("emergency_override:");
+    expect(deployWorkflow).toContain("rollback_drill:");
+    expect(deployWorkflow).toContain("override_reason:");
+    expect(deployWorkflow).toContain("PANTHEON_DEV_FE_DEPLOY_OPERATORS");
+    expect(deployWorkflow).toContain("require an authorized deploy operator");
+    expect(deployWorkflow).toContain(
+      "integrity, auth, and rollback probes still run",
+    );
+    expect(deployScript).toContain(
+      "Candidate, auth, post-switch, and rollback probes cannot be skipped",
+    );
+
+    const skipped = rejectedDeploy({ PANTHEON_DEPLOY_SKIP_PROBE: "true" });
+    expect(skipped.status).toBe(2);
+    expect(skipped.stderr).toMatch(/cannot be skipped/u);
+
+    const sentinel = "service-role-sentinel-must-not-leak";
+    const credential = rejectedDeploy({ VITE_SERVICE_ROLE_TOKEN: sentinel });
+    expect(credential.status).toBe(2);
+    expect(credential.stderr).toMatch(/non-public Vite credential variable/u);
+    expect(`${credential.stdout}${credential.stderr}`).not.toContain(sentinel);
+  });
+
+  it("seals, verifies, and durably retains every run-attempt audit file", () => {
+    expect(deployWorkflow).toContain(
+      '"schemaVersion": "pantheon.dev-fe.workflow-audit-seal.v1"',
+    );
+    expect(deployWorkflow).toContain("workflow audit checksum mismatch");
+    expect(deployWorkflow).toContain(
+      "/var/lib/pantheon-dev-fe-deploy-evidence",
+    );
+    expect(deployWorkflow).toContain("PANTHEON_AUDIT_RUN_ROOT");
+    expect(deployWorkflow).toContain('audit_dir="${audit_root}/controller"');
+  });
+
+  it.each([
+    { PANTHEON_DEPLOY_REAL_WRITES: "true" },
+    { PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES: "true" },
+  ])("fails closed when a runner attempts to enable writes: %j", (extraEnv) => {
+    const result = rejectedDeploy(extraEnv);
+
+    expect(result.status).toBe(2);
+    expect(result.stderr).toMatch(
+      /read-only deployment requires false write flags/iu,
+    );
+  });
+
+  it("binds paired write proof to an exact safe sibling and fail-closed restore", () => {
+    expect(deployScript).toContain(
+      'DEPLOY_PROFILE="${PANTHEON_DEPLOY_PROFILE:-read-only}"',
+    );
+    expect(deployScript).toContain(
+      'EXPECTED_PAIR_ID="${PANTHEON_DEPLOY_EXPECTED_PAIR_ID:-}"',
+    );
+    expect(deployScript).toContain("read-only-restore");
+    expect(deployScript).toContain(
+      "node scripts/release-candidate.mjs verify-pair",
+    );
+    expect(deployScript).toContain("--profile read-only");
+    expect(deployScript).toContain("--profile operator-live");
+    expect(deployScript).toContain("--profile write-proof");
+    expect(deployScript).toContain("safe_sibling.qualified");
+    expect(deployScript).toContain("safe_sibling.locator");
+    expect(deployScript).toContain("-m 600");
+    expect(deployScript).toContain("restore.safe_switch");
+    expect(deployScript).toContain("restore.safe_preserved");
+    expect(deployScript).toContain(
+      '"PANTHEON_PROBE_EXPECTED_PROFILE=${DEPLOY_PROFILE}"',
+    );
+    expect(deployScript).toContain(
+      '"PANTHEON_PROBE_EXPECTED_PAIR_ID=${PAIR_ID}"',
+    );
+    expect(deployScript).toContain(
+      '( "${phase}" == "candidate_pre_switch" || "${phase}" == "post_switch" )',
+    );
+    expect(deployScript).toContain(
+      "Same-SHA/profile artifact replacement rejected",
+    );
+    expect(deployScript).not.toContain("npm run build");
+
+    const restoreStart = deployScript.indexOf("restore_paired_safe_release()");
+    const restoreEnd = deployScript.indexOf("\ncleanup()", restoreStart);
+    const restoreBlock = deployScript.slice(restoreStart, restoreEnd);
+    const safeSwitch = restoreBlock.indexOf(
+      'sudo python3 "${SYMLINK_CAS_HELPER}" exchange',
+    );
+    const dependencyInstall = restoreBlock.indexOf("ensure_probe_dependencies");
+    const bffProbe = restoreBlock.indexOf(
+      "verify_bff_identity restore_after_safe_switch",
+    );
+    expect(safeSwitch).toBeGreaterThan(-1);
+    expect(dependencyInstall).toBeGreaterThan(safeSwitch);
+    expect(bffProbe).toBeGreaterThan(safeSwitch);
+  });
+
+  it("defines persistent operator-live as strict true/false without watchdog restore", () => {
+    expect(releaseCandidate).toContain('OPERATOR_LIVE: "operator-live"');
+    expect(releaseCandidate).toContain(
+      'VITE_BFF_ALLOW_DEV_STUB_WRITES: "false"',
+    );
+    expect(deployScript).toContain('operator-live)');
+    expect(deployScript).toContain(
+      "Operator-live deployment requires a manual strict session profile",
+    );
+    expect(deployScript).toContain(
+      'authMode !== "strict" || authStub !== false',
+    );
+    expect(deployScript).toContain('${BFF_HOST%/}/readyz');
+    expect(deployScript).toContain('${BFF_HOST%/}/bff/me');
+    expect(deployWorkflow).toContain(
+      "needs.deploy.outputs.deployment_profile == 'write-proof'",
+    );
+    expect(deployWorkflow).not.toContain(
+      "needs.deploy.outputs.deployment_profile == 'operator-live'",
+    );
+  });
+});
