@@ -61,8 +61,9 @@ Dev FE 是這台 Pantheon dev VM 上的 Caddy static site：
 部署流程是 gate-first：`dev` push 先跑 `Pantheon FE-BFF Integration Gate`，
 成功後 `Pantheon Dev FE Deploy` 的 `workflow_run` 才會在 VM self-hosted
 runner（labels: `pantheon-dev-vm`, `execute-plans-deploy`）部署同一個 SHA。
-手動部署可用 workflow_dispatch 指定 ref，但仍應選已通過 integration gate 的
-commit。
+已落後目前 `dev` head 的 gate 結果會被略過。手動部署可用
+workflow_dispatch 指定 ref，但只接受已通過 integration gate 的目前 `dev`
+head。
 
 常用 env 範本：
 
@@ -78,7 +79,14 @@ VITE_BFF_MODE=live
 VITE_BFF_BASE_URL=https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io
 VITE_BFF_FALLBACK=strict
 VITE_BFF_REAL_WRITES=false
+VITE_BFF_ALLOW_DEV_STUB_WRITES=false
 ```
+
+Pantheon dev deployments are safe-by-default. An operator may explicitly set
+the workflow-dispatch `real_writes` input to exercise the governed Human Review
+submit/decision/read-back flow. That opt-in also enables the dev-only
+stub-write gate, which requires `/bff/me` to report `dev` or `test` and rejects
+any production environment marker.
 
 Staging-live:
 
@@ -89,8 +97,9 @@ VITE_BFF_FALLBACK=strict
 VITE_BFF_REAL_WRITES=false
 ```
 
-`VITE_BFF_REAL_WRITES=false` 會讓 state-machine action writes 保留在前端 mock/overlay；
-只有 operator auth、approval evidence、confirm-token、two-man signing 都驗證後，才可打開。
+Staging-live 與自動 dev 部署都維持 `VITE_BFF_REAL_WRITES=false`。只有 operator
+明確啟用的 dev workflow dispatch 才會將 writes 送入 BFF 治理命令與 Human
+Review；資金或 runtime 的直接變更仍由後端 policy 阻擋。
 
 Auth/session access is explicit:
 

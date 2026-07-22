@@ -3,7 +3,9 @@
 // Live strict — pages must not call fetch() directly; use this module.
 // Agora-scoped paths only; no Management routes.
 
-import { bffFetch } from "@/lib/bff-v1/client";
+import { bffFetch, detectBaseUrl } from "@/lib/bff-v1/client";
+import { buildHeaders } from "@/lib/bff-v1/headers";
+import { nextBackoffMs, readSseFrames } from "@/lib/bff-v1/sse/protocol";
 import type { StrategyWorkshop, StrategyCompleteness } from "./types";
 
 // ─── v1.3 types (not yet in auto-generated types.ts) ──────────────────────────
@@ -20,10 +22,7 @@ export type WorkshopCardType =
   | "consult_result"
   | "version_patch_proposal"
   | "version_compare"
-  | "readiness_gate"
-  | "persona_opinion"
-  | "opinion"
-  | "debate";
+  | "readiness_gate";
 
 export type WorkshopCardStatus =
   | "informational"
@@ -37,6 +36,36 @@ export type WorkshopReadinessGate =
   | "preliminary_research"
   | "full_validation"
   | "trading_room";
+
+export type WorkshopReadinessGateState =
+  | "not_assessed"
+  | "blocked"
+  | "conditional"
+  | "ready"
+  | "stale";
+
+export type WorkshopReadinessRequirementState =
+  | "missing"
+  | "partial"
+  | "satisfied"
+  | "waived"
+  | "stale";
+
+export interface WorkshopReadinessRequirement {
+  requirement_id: string;
+  title: string;
+  hardness: "hard" | "soft";
+  state: WorkshopReadinessRequirementState;
+  summary?: string;
+}
+
+export interface WorkshopReadinessGateEntry {
+  gate: WorkshopReadinessGate;
+  state: WorkshopReadinessGateState;
+  requirements: WorkshopReadinessRequirement[];
+  blocking_requirement_ids?: string[];
+  conditional_assumptions?: string[];
+}
 
 export interface WorkshopEvidenceRef {
   ref_type:
@@ -81,12 +110,23 @@ export interface WorkshopCard {
 }
 
 export interface WorkshopReadinessAssessment {
+  spec_version?: "1.0";
   assessment_id: string;
   workshop_id: string;
-  gate: WorkshopReadinessGate;
-  passed: boolean;
-  blockers: string[];
+  strategy_id?: string;
+  workshop_version_id?: string;
+  strategy_spec_registry_id?: string;
+  assessment_version?: number;
+  gates?: WorkshopReadinessGateEntry[];
+  highest_ready_gate?: WorkshopReadinessGate | null;
+  staleness_reasons?: string[];
+  evidence_refs?: WorkshopEvidenceRef[];
   assessed_at: string;
+  valid_until?: string;
+  // Legacy single-gate compatibility while older test/projection payloads roll off.
+  gate?: WorkshopReadinessGate;
+  passed?: boolean;
+  blockers?: string[];
   assessed_by_persona_id?: string;
 }
 
@@ -98,22 +138,70 @@ export interface WorkshopStreamEvent {
   occurred_at: string;
 }
 
+/**
+ * Store-level shape returned by the live completeness endpoint.
+ *
+ * The endpoint predates the canonical StrategyCompleteness DTO and returns the
+ * persisted snapshot fields directly. Keep that contract explicit instead of
+ * asserting that `overall_grade` and `dimensions` are present at runtime.
+ */
+export interface WorkshopCompletenessSnapshot {
+  snapshot_id: string;
+  workshop_id: string;
+  strategy_version_id: string;
+  state_map_json: Record<string, unknown>;
+  blocking_items_json: unknown[];
+  next_question_json?: Record<string, unknown>;
+  created_at: string;
+}
+
+export type WorkshopCompleteness = StrategyCompleteness | WorkshopCompletenessSnapshot;
+
+// ─── Response normalization ──────────────────────────────────────────────────
+
+function recordFrom(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function dataFrom(value: unknown): unknown {
+  const root = recordFrom(value);
+  return root.data ?? value;
+}
+
+function entityFrom<T>(value: unknown): T {
+  return recordFrom(dataFrom(value)) as T;
+}
+
+function itemsFrom<T>(value: unknown, aliases: string[] = []): T[] {
+  const data = dataFrom(value);
+  if (Array.isArray(data)) return data as T[];
+  const record = recordFrom(data);
+  for (const key of ["items", ...aliases]) {
+    const items = record[key];
+    if (Array.isArray(items)) return items as T[];
+  }
+  return [];
+}
+
 // ─── Workshop CRUD ─────────────────────────────────────────────────────────────
 
 export async function listWorkshops(params?: {
   status?: StrategyWorkshop["status"];
   limit?: number;
   cursor?: string;
-}): Promise<{ items: StrategyWorkshop[]; cursor?: string }> {
+}): Promise<StrategyWorkshop[]> {
   const query: Record<string, string | number | undefined> = {};
   if (params?.status) query.status = params.status;
   if (params?.limit) query.limit = params.limit;
   if (params?.cursor) query.cursor = params.cursor;
-  return bffFetch<{ items: StrategyWorkshop[]; cursor?: string }>({
+  const body = await bffFetch<unknown>({
     method: "GET",
     path: "/bff/agora/workshops",
     query,
   });
+  return itemsFrom<StrategyWorkshop>(body, ["workshops", "results"]);
 }
 
 export async function createWorkshop(body: {
@@ -121,18 +209,20 @@ export async function createWorkshop(body: {
   participant_persona_ids?: string[];
   metadata?: Record<string, unknown>;
 }): Promise<StrategyWorkshop> {
-  return bffFetch<StrategyWorkshop>({
+  const response = await bffFetch<unknown>({
     method: "POST",
     path: "/bff/agora/workshops",
     body,
   });
+  return entityFrom<StrategyWorkshop>(response);
 }
 
 export async function getWorkshop(workshopId: string): Promise<StrategyWorkshop> {
-  return bffFetch<StrategyWorkshop>({
+  const response = await bffFetch<unknown>({
     method: "GET",
     path: `/bff/agora/workshops/${encodeURIComponent(workshopId)}`,
   });
+  return entityFrom<StrategyWorkshop>(response);
 }
 
 // ─── Workshop messages ─────────────────────────────────────────────────────────
@@ -141,11 +231,12 @@ export async function postWorkshopMessage(
   workshopId: string,
   body: { content: string; metadata?: Record<string, unknown> },
 ): Promise<{ message_id: string; workshop_id: string; created_at: string }> {
-  return bffFetch({
+  const response = await bffFetch<unknown>({
     method: "POST",
     path: `/bff/agora/workshops/${encodeURIComponent(workshopId)}/messages`,
     body,
   });
+  return entityFrom<{ message_id: string; workshop_id: string; created_at: string }>(response);
 }
 
 // ─── Workshop events ───────────────────────────────────────────────────────────
@@ -157,23 +248,32 @@ export async function listWorkshopEvents(
   const query: Record<string, string | number | undefined> = {};
   if (params?.after) query.after = params.after;
   if (params?.limit) query.limit = params.limit;
-  return bffFetch<{ items: WorkshopStreamEvent[] }>({
+  const body = await bffFetch<unknown>({
     method: "GET",
     path: `/bff/agora/workshops/${encodeURIComponent(workshopId)}/events`,
     query,
   });
+  return { items: itemsFrom<WorkshopStreamEvent>(body, ["events", "results"]) };
 }
 
 // ─── Completeness ──────────────────────────────────────────────────────────────
 
 export async function getWorkshopCompleteness(
   workshopId: string,
-): Promise<StrategyCompleteness | null> {
+): Promise<WorkshopCompleteness | null> {
   try {
-    return await bffFetch<StrategyCompleteness>({
+    const response = await bffFetch<unknown>({
       method: "GET",
       path: `/bff/agora/workshops/${encodeURIComponent(workshopId)}/completeness`,
     });
+    // The BFF signals "not yet assessed" as `{ data: null }` (200 OK) as well
+    // as 404. `dataFrom()`'s `root.data ?? value` falls through to the raw
+    // envelope when `data` is explicitly null, which would otherwise return
+    // a truthy `{ data: null, meta: {...} }` placeholder here and crash
+    // StrategyCompletenessRail's `completeness.dimensions.length` on every
+    // workshop that hasn't been assessed yet.
+    if (recordFrom(response).data === null) return null;
+    return entityFrom<WorkshopCompleteness>(response);
   } catch (err) {
     if (err instanceof Error && "status" in err && (err as { status: number }).status === 404) {
       return null;
@@ -247,20 +347,79 @@ export async function concludeWorkshop(
   workshopId: string,
   body?: { notes?: string },
 ): Promise<StrategyWorkshop> {
-  return bffFetch<StrategyWorkshop>({
+  const response = await bffFetch<unknown>({
     method: "POST",
     path: `/bff/agora/workshops/${encodeURIComponent(workshopId)}/conclude`,
     body: body ?? {},
   });
+  return entityFrom<StrategyWorkshop>(response);
 }
 
 // ─── Streaming (SSE) ──────────────────────────────────────────────────────────
 
-export function openWorkshopStream(workshopId: string): EventSource {
-  return new EventSource(
-    `/bff/agora/workshops/${encodeURIComponent(workshopId)}/stream`,
-    { withCredentials: true },
-  );
+/**
+ * Streams workshop events via an authenticated `fetch()` rather than
+ * `EventSource`: the BFF requires the `Authorization` header on this route
+ * and `EventSource` cannot send it (and separately ignores
+ * `VITE_BFF_BASE_URL`, hitting the FE origin instead of the BFF). The server
+ * holds the stream open (heartbeats every ~30s), so a dropped connection is
+ * reopened with backoff rather than treated as terminal.
+ */
+export function openWorkshopStream(
+  workshopId: string,
+  onEvent?: (event: WorkshopStreamEvent) => void,
+): () => void {
+  let closed = false;
+  let controller: AbortController | null = null;
+  let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+  let attempt = 0;
+
+  async function run(): Promise<void> {
+    if (closed) return;
+    controller = new AbortController();
+    const headers = buildHeaders({ method: "GET", extra: { Accept: "text/event-stream" } });
+    let res: Response;
+    try {
+      res = await fetch(
+        `${detectBaseUrl()}/bff/agora/workshops/${encodeURIComponent(workshopId)}/stream`,
+        { headers, credentials: "include", signal: controller.signal },
+      );
+    } catch {
+      scheduleReconnect();
+      return;
+    }
+    if (!res.ok || !res.body) {
+      scheduleReconnect();
+      return;
+    }
+    attempt = 0;
+    try {
+      await readSseFrames(res.body, (frame) => {
+        if (closed || !frame.data) return;
+        try {
+          onEvent?.(entityFrom<WorkshopStreamEvent>(JSON.parse(frame.data)));
+        } catch {
+          // Ignore malformed keepalive or compatibility messages.
+        }
+      });
+    } catch {
+      /* stream read error — falls through to reconnect below */
+    }
+    scheduleReconnect();
+  }
+
+  function scheduleReconnect(): void {
+    if (closed) return;
+    reconnectTimer = setTimeout(() => { void run(); }, nextBackoffMs(attempt++));
+  }
+
+  void run();
+
+  return () => {
+    closed = true;
+    if (reconnectTimer) clearTimeout(reconnectTimer);
+    controller?.abort();
+  };
 }
 
 // ─── v1.3: Cards ──────────────────────────────────────────────────────────────
@@ -268,15 +427,16 @@ export function openWorkshopStream(workshopId: string): EventSource {
 export async function listWorkshopCards(
   workshopId: string,
   params?: { after_sequence?: number; limit?: number },
-): Promise<{ items: WorkshopCard[] }> {
+): Promise<WorkshopCard[]> {
   const query: Record<string, string | number | undefined> = {};
   if (params?.after_sequence !== undefined) query.after_sequence = params.after_sequence;
   if (params?.limit) query.limit = params.limit;
-  return bffFetch<{ items: WorkshopCard[] }>({
+  const body = await bffFetch<unknown>({
     method: "GET",
     path: `/bff/agora/workshops/${encodeURIComponent(workshopId)}/cards`,
     query,
   });
+  return itemsFrom<WorkshopCard>(body, ["cards", "results"]);
 }
 
 // ─── v1.3: Readiness ──────────────────────────────────────────────────────────
@@ -288,11 +448,15 @@ export async function getWorkshopReadiness(
   const query: Record<string, string | undefined> = {};
   if (gate) query.gate = gate;
   try {
-    return await bffFetch<WorkshopReadinessAssessment>({
+    const response = await bffFetch<unknown>({
       method: "GET",
       path: `/bff/agora/workshops/${encodeURIComponent(workshopId)}/readiness`,
       query,
     });
+    // See getWorkshopCompleteness() above: `{ data: null }` means "not yet
+    // assessed" and must not be treated as a truthy placeholder assessment.
+    if (recordFrom(response).data === null) return null;
+    return entityFrom<WorkshopReadinessAssessment>(response);
   } catch (err) {
     if (err instanceof Error && "status" in err && (err as { status: number }).status === 404) {
       return null;
@@ -305,9 +469,10 @@ export async function reassessWorkshopReadiness(
   workshopId: string,
   body: { gate: WorkshopReadinessGate },
 ): Promise<WorkshopReadinessAssessment> {
-  return bffFetch<WorkshopReadinessAssessment>({
+  const response = await bffFetch<unknown>({
     method: "POST",
     path: `/bff/agora/workshops/${encodeURIComponent(workshopId)}/readiness/reassess`,
     body,
   });
+  return entityFrom<WorkshopReadinessAssessment>(response);
 }

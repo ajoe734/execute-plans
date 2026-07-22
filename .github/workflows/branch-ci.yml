@@ -1,0 +1,116 @@
+name: Branch CI Gate
+
+# Gate every push and PR that participates in the task / publish / main
+# pipeline. Ported from pantheon .github/workflows/branch-ci.yml. The
+# three jobs below ("Commit trailers", "Generated files guard", "Smoke
+# acceptance") are the required status checks on the dev and main
+# branch protections.
+
+on:
+  push:
+    branches:
+      - "task/**"
+      - "hotfix/**"
+      - "dev"
+      - "publish/**"
+      - "main"
+  pull_request:
+    branches:
+      - "dev"
+      - "main"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: branch-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  trailers:
+    name: Commit trailers
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine commit range
+        id: range
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+          REF_NAME: ${{ github.ref_name }}
+          PR_BASE_REF: ${{ github.event.pull_request.base.ref || '' }}
+        run: |
+          python3 scripts/git/resolve_commit_trailer_range.py \
+            --event "$EVENT" \
+            --base-sha "$BASE_SHA" \
+            --head-sha "$HEAD_SHA" \
+            --ref-name "$REF_NAME" \
+            --pr-base-ref "$PR_BASE_REF" >> "$GITHUB_OUTPUT"
+
+      - name: Check commit trailers
+        env:
+          EVENT: ${{ github.event_name }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref || github.ref_name }}
+          REF_NAME: ${{ github.ref_name }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          if [[ "$EVENT" == "pull_request" && "$HEAD_REF" == promote/* ]]; then
+            echo "Skipping commit trailer re-scan for promote PR ${HEAD_REF}; publish history was already validated before snapshot cut."
+            exit 0
+          fi
+          if [[ "$EVENT" == "push" && "$REF_NAME" == "main" ]]; then
+            subject="$(git log -1 --format=%s "$HEAD_SHA")"
+            if [[ "$subject" == Merge\ pull\ request*promote/* ]]; then
+              echo "Skipping commit trailer re-scan for main promote merge: ${subject}"
+              exit 0
+            fi
+          fi
+          python3 scripts/git/check_commit_trailers.py \
+            --range "${{ steps.range.outputs.range }}" \
+            --skip-merge
+
+  generated-files:
+    name: Generated files guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Diff against base
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          if [[ -n "$BASE_SHA" && "$BASE_SHA" != "0000000000000000000000000000000000000000" ]] && git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
+            CHANGED=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" || true)
+          else
+            CHANGED=$(git diff --name-only "$HEAD_SHA~1" "$HEAD_SHA" 2>/dev/null || true)
+          fi
+          if [[ -z "$CHANGED" ]]; then exit 0; fi
+          echo "$CHANGED" | xargs python3 scripts/git/check_generated_files.py
+
+  smoke:
+    name: Smoke acceptance
+    runs-on: ubuntu-latest
+    needs:
+      - trailers
+      - generated-files
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install
+        run: npm ci
+
+      - name: Build
+        run: npm run build
