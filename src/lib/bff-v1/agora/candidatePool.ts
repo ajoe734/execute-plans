@@ -54,6 +54,121 @@ export interface CandidateScoreResult {
   override_reason: string | null;
 }
 
+export type CandidateFieldUnavailableReason =
+  | "score_not_run"
+  | "no_governed_source"
+  | "not_recorded";
+
+export interface CandidateFieldProvenance {
+  source_type:
+    | "candidate_pool_member"
+    | "candidate_score_result"
+    | "candidate_review"
+    | "candidate_monitoring";
+  source_ref: string;
+  as_of: string;
+}
+
+export type CandidateFieldState<T> =
+  | {
+      availability: "available";
+      value: T;
+      provenance: CandidateFieldProvenance;
+    }
+  | {
+      availability: "unavailable";
+      reason: CandidateFieldUnavailableReason;
+    };
+
+export interface CandidateComponentDigest {
+  component_id: string;
+  label: string | null;
+  contribution: number | null;
+  explanation: string | null;
+}
+
+export type CandidateRationaleValue =
+  | {
+      kind: "operator_review_rationale";
+      decision: string | null;
+      rationale: string;
+      reviewed_by: string | null;
+      reviewed_at: string | null;
+    }
+  | {
+      kind: "score_component_attribution";
+      band: string | null;
+      effective_score: number | null;
+      top_components: CandidateComponentDigest[];
+    };
+
+export interface CandidateConcernsValue {
+  kind: "score_risk_attribution";
+  blockers: string[];
+  penalty_components: CandidateComponentDigest[];
+}
+
+export interface CandidateNextEventValue {
+  kind: "monitoring_schedule";
+  monitoring_state: "active" | "paused";
+  review_due_at: string | null;
+  trigger_conditions: Record<string, unknown>[];
+  added_by?: string | null;
+  added_at?: string | null;
+}
+
+export interface CandidateEvidenceItem {
+  component_id: string;
+  label?: string | null;
+  evidence_refs: string[];
+  summary: string | null;
+  summary_redacted: boolean;
+  redaction_reason?: "list_response" | "viewer_role";
+}
+
+export interface CandidateEvidenceValue {
+  kind: "score_evidence_refs";
+  items: CandidateEvidenceItem[];
+  total_refs: number;
+}
+
+export interface CandidateDetailsValue {
+  kind: "candidate_identity";
+  title?: string | null;
+  strategy_ref: string | null;
+  run_ref?: string | null;
+  producing_persona_id?: string | null;
+  lifecycle_state: string | null;
+  created_at: string | null;
+}
+
+export interface CandidateTruthFields {
+  rationale: CandidateFieldState<CandidateRationaleValue>;
+  concerns: CandidateFieldState<CandidateConcernsValue>;
+  next_event: CandidateFieldState<CandidateNextEventValue>;
+  evidence: CandidateFieldState<CandidateEvidenceValue>;
+  details: CandidateFieldState<CandidateDetailsValue>;
+}
+
+export interface CandidateScoreSemanticsEntry {
+  kind: "recipe_weighted_score" | "sharpe_ratio";
+  availability: "available" | "unavailable";
+  is_confidence_score: false;
+  scale_min?: number;
+  scale_max?: number;
+  recipe_id?: string | null;
+  recipe_version?: number | null;
+  transformation?: "sharpe_ratio_from_producing_research_run";
+  source_ref?: string | null;
+  as_of?: string | null;
+  reason?: CandidateFieldUnavailableReason;
+}
+
+export interface CandidateScoreSemantics {
+  effective_score: CandidateScoreSemanticsEntry;
+  sharpe_summary: CandidateScoreSemanticsEntry;
+}
+
 export interface CandidatePoolMember {
   artifact_id: string;
   strategy_ref: string;
@@ -63,6 +178,35 @@ export interface CandidatePoolMember {
   sharpe_summary?: number;
   run_ref?: string;
   created_at: string;
+  current_score?: CandidateScoreResult;
+  effective_score?: number;
+  rank?: number | null;
+  band?: CandidateScoreResult["band"] | null;
+  fields: CandidateTruthFields;
+  as_of: string;
+  score_semantics: CandidateScoreSemantics;
+}
+
+export interface CandidateMemberPageInfo {
+  next_page_token: string | null;
+  page_size: number;
+  has_more: boolean;
+  total: number;
+  order_by: "created_at,artifact_id";
+}
+
+export interface CandidateMemberListFreshness {
+  pool_snapshot_at: string | null;
+  data_cutoff: string | null;
+  last_score_run_at: string | null;
+}
+
+export interface CandidatePoolMembersMeta {
+  snapshot_at: string | null;
+  freshness: CandidateMemberListFreshness;
+  /** Common envelope state; v1.12 currently omits it unless the source is degraded/stale. */
+  read_state?: string;
+  warnings?: string[];
 }
 
 /** v1.4 contract enum — must match _REVIEW_DECISION_TO_LIFECYCLE on the BFF */
@@ -192,6 +336,8 @@ export interface CandidatePoolMembersResult {
   items: CandidatePoolMember[];
   /** ETag from the response — forward as If-Match in subsequent writes. */
   etag: string | null;
+  pageInfo: CandidateMemberPageInfo | null;
+  meta: CandidatePoolMembersMeta;
 }
 
 /** List candidate pool members (metadata, lifecycle state). Returns items + ETag for If-Match. */
@@ -214,9 +360,34 @@ export async function listCandidatePoolMembers(
     throw new Error(String(message));
   }
   const body = await parseJson(res);
+  const root = recordFrom(body);
+  const rawMeta = recordFrom(root.meta);
+  const rawFreshness = recordFrom(rawMeta.freshness);
+  const rawPageInfo = recordFrom(root.page_info);
   return {
     items: extractItems<CandidatePoolMember>(body),
     etag: res.headers.get("ETag"),
+    pageInfo: Object.keys(rawPageInfo).length > 0
+      ? rawPageInfo as unknown as CandidateMemberPageInfo
+      : null,
+    meta: {
+      snapshot_at: typeof rawMeta.snapshot_at === "string" ? rawMeta.snapshot_at : null,
+      freshness: {
+        pool_snapshot_at: typeof rawFreshness.pool_snapshot_at === "string"
+          ? rawFreshness.pool_snapshot_at
+          : null,
+        data_cutoff: typeof rawFreshness.data_cutoff === "string"
+          ? rawFreshness.data_cutoff
+          : null,
+        last_score_run_at: typeof rawFreshness.last_score_run_at === "string"
+          ? rawFreshness.last_score_run_at
+          : null,
+      },
+      read_state: typeof rawMeta.read_state === "string" ? rawMeta.read_state : undefined,
+      warnings: Array.isArray(rawMeta.warnings)
+        ? rawMeta.warnings.filter((warning): warning is string => typeof warning === "string")
+        : undefined,
+    },
   };
 }
 
