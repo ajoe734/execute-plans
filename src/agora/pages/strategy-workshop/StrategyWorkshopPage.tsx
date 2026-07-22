@@ -1,5 +1,4 @@
-import React, { useEffect, useReducer, useRef, useCallback, useState } from "react";
-import { useParams } from "react-router-dom";
+import React, { useEffect, useReducer, useCallback, useState } from "react";
 import { cn } from "@/lib/utils";
 import {
   listWorkshops,
@@ -7,15 +6,18 @@ import {
   getWorkshopCompleteness,
   getWorkshopReadiness,
   listWorkshopCards,
-  openWorkshopStream,
+  listWorkshopEvents,
   postWorkshopMessage,
+  openWorkshopStream,
   type WorkshopCard,
-  type StrategyReadinessAssessment,
+  type WorkshopCompleteness,
+  type WorkshopReadinessAssessment,
   type WorkshopStreamEvent,
 } from "@/lib/bff-v1/agora/workshops";
-import type { StrategyWorkshop, StrategyCompleteness } from "@/lib/bff-v1/agora/workshops";
+import type { StrategyWorkshop } from "@/lib/bff-v1/agora/workshops";
 import { WorkshopCardRenderer } from "@/agora/components/WorkshopCardRenderer";
 import { StrategyCompletenessRail } from "@/agora/components/StrategyCompletenessRail";
+import { materializeWorkshopCompleteness } from "@/agora/components/workshopCompletenessDisplay";
 import {
   ArrowLeft,
   Bot,
@@ -25,11 +27,8 @@ import {
   XCircle,
   Clock,
   ShieldAlert,
-  HelpCircle,
-  FileText
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -37,7 +36,123 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { formatLabel } from "@/agora/components/workshopCardUtils";
+
+export interface TradingRoomReadinessHandoff {
+  strategyId: string;
+  strategyVersion: string;
+  readinessGate: "trading_room";
+  readinessAssessmentId: string;
+  workshopId: string;
+  workshopVersionId?: string;
+  assessedAt?: string;
+}
+
+function readinessHighestGate(
+  readiness: WorkshopReadinessAssessment | null,
+): WorkshopReadinessAssessment["highest_ready_gate"] | null {
+  if (!readiness) return null;
+  if (readiness.highest_ready_gate) return readiness.highest_ready_gate;
+  return readiness.passed && readiness.gate ? readiness.gate : null;
+}
+
+function readinessText(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
+
+function tradingRoomHandoffFromReadiness(
+  readiness: WorkshopReadinessAssessment | null,
+): TradingRoomReadinessHandoff | null {
+  if (!readiness || readinessHighestGate(readiness) !== "trading_room") return null;
+
+  const strategyId = readinessText(readiness.strategy_id);
+  const strategyVersion = readinessText(readiness.strategy_spec_registry_id);
+  if (!strategyId || !strategyVersion) return null;
+
+  return {
+    assessedAt: readiness.assessed_at,
+    readinessAssessmentId: readiness.assessment_id,
+    readinessGate: "trading_room",
+    strategyId,
+    strategyVersion,
+    workshopId: readiness.workshop_id,
+    workshopVersionId: readinessText(readiness.workshop_version_id) ?? undefined,
+  };
+}
+
+function addToTradingRoomDisabledReason(
+  readiness: WorkshopReadinessAssessment | null,
+  handoff: TradingRoomReadinessHandoff | null,
+): string | null {
+  if (!readiness) return "Readiness not yet assessed";
+  const highestGate = readinessHighestGate(readiness);
+  if (highestGate !== "trading_room") {
+    return `Trading Room gate not yet ready (highest: ${highestGate ?? "none"})`;
+  }
+  if (!readinessText(readiness.strategy_id)) {
+    return "Trading Room handoff is missing strategy id";
+  }
+  if (!readinessText(readiness.strategy_spec_registry_id)) {
+    return "Trading Room handoff is missing strategy version";
+  }
+  return handoff ? null : "Trading Room handoff is incomplete";
+}
+
+function recordFrom(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function metadataString(workshop: StrategyWorkshop | null | undefined, key: string): string | null {
+  const value = recordFrom(workshop?.metadata)[key];
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function workshopTitle(workshop: StrategyWorkshop | null | undefined): string {
+  return (
+    metadataString(workshop, "strategy_name") ??
+    metadataString(workshop, "title") ??
+    metadataString(workshop, "display_name") ??
+    workshop?.subject?.title?.trim() ??
+    "Strategy workshop"
+  );
+}
+
+function timestampValue(workshop: StrategyWorkshop): number {
+  const updatedAt = metadataString(workshop, "updated_at");
+  const value = updatedAt ?? workshop.concluded_at ?? workshop.created_at;
+  const time = Date.parse(value);
+  return Number.isFinite(time) ? time : 0;
+}
+
+function statusPriority(workshop: StrategyWorkshop): number {
+  if (workshop.status === "open") return 4;
+  if (workshop.status === "in_review") return 3;
+  if (workshop.status === "concluded") return 2;
+  return 1;
+}
+
+function orderWorkshops(workshops: StrategyWorkshop[]): StrategyWorkshop[] {
+  return workshops.slice().sort((a, b) => {
+    const statusDiff = statusPriority(b) - statusPriority(a);
+    if (statusDiff !== 0) return statusDiff;
+    return timestampValue(b) - timestampValue(a);
+  });
+}
+
+function compactTime(workshop: StrategyWorkshop): string {
+  const updatedAt = metadataString(workshop, "updated_at");
+  const value = updatedAt ?? workshop.concluded_at ?? workshop.created_at;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "time unavailable";
+  return date.toISOString().replace("T", " ").replace(/\.\d{3}Z$/, "Z");
+}
+
+function readinessSummary(readiness: WorkshopReadinessAssessment | null): string {
+  if (!readiness) return "Readiness: pending";
+  return `Readiness: ${readinessHighestGate(readiness) ?? "none"}`;
+}
 
 // ---------------------------------------------------------------------------
 // Card list reducer
@@ -79,19 +194,27 @@ function cardReducer(state: CardState, action: CardAction): CardState {
 
 type ListState = "loading" | "empty" | "loaded" | "error";
 
-function WorkshopListView(): JSX.Element {
+interface WorkshopListViewProps {
+  onAddToTradingRoom?: (handoff: TradingRoomReadinessHandoff) => void;
+}
+
+function WorkshopListView({ onAddToTradingRoom }: WorkshopListViewProps): JSX.Element {
   const [state, setState] = useState<ListState>("loading");
   const [workshops, setWorkshops] = useState<StrategyWorkshop[]>([]);
+  const [selectedWorkshopId, setSelectedWorkshopId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     listWorkshops()
       .then((res) => {
         if (cancelled) return;
-        // Handle both raw array and items-envelope responses safely
-        const items = Array.isArray(res) ? res : res?.items || [];
-        setWorkshops(items);
-        setState(items.length === 0 ? "empty" : "loaded");
+        const ordered = orderWorkshops(res);
+        setWorkshops(ordered);
+        setSelectedWorkshopId((current) => {
+          if (current && ordered.some((workshop) => workshop.workshop_id === current)) return current;
+          return ordered[0]?.workshop_id ?? null;
+        });
+        setState(ordered.length === 0 ? "empty" : "loaded");
       })
       .catch(() => {
         if (!cancelled) setState("error");
@@ -102,68 +225,61 @@ function WorkshopListView(): JSX.Element {
   }, []);
 
   return (
-    <div data-testid="strategy-workshop-page-list" className="flex flex-col flex-1 p-4 bg-slate-50">
-      <div className="flex h-12 shrink-0 items-center justify-between border-b border-slate-200 px-4 bg-white rounded-t-lg shadow-sm">
-        <h2 className="text-sm font-semibold text-slate-900">策略工坊 (Strategy Workshops)</h2>
-        <span className="text-xs text-slate-400 font-medium">
-          {workshops.length > 0 ? `${workshops.length} 個工坊` : ""}
-        </span>
-      </div>
-
-      <div className="bg-white rounded-b-lg border-x border-b border-slate-200 shadow-sm flex-1 overflow-y-auto">
-        {state === "loading" && (
-          <div data-testid="workshop-list-loading" className="flex items-center justify-center py-20 text-slate-400 gap-2">
-            <span className="animate-spin rounded-full h-4 w-4 border-2 border-indigo-500 border-t-transparent" />
-            Loading workshops…
-          </div>
-        )}
-        {state === "empty" && (
-          <div data-testid="workshop-list-empty" className="flex flex-col items-center justify-center py-20 text-slate-400 gap-2">
-            <Bot className="h-10 w-10 text-slate-300" />
-            <p className="text-sm font-medium">No strategy workshops found.</p>
-          </div>
-        )}
-        {state === "error" && (
-          <div className="flex items-center justify-center py-20 text-red-500 font-medium">
-            Failed to load workshops.
-          </div>
-        )}
-        {state === "loaded" && (
-          <ul data-testid="workshop-list" className="divide-y divide-slate-100">
-            {workshops.map((ws) => (
-              <li key={ws.workshop_id} data-testid={`workshop-item-${ws.workshop_id}`}>
-                <a
-                  className="flex items-center justify-between px-6 py-4 hover:bg-slate-50 transition-colors"
-                  href={`/agora/strategy-workshop/${ws.workshop_id}`}
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-slate-900">
-                      {ws.subject.title ?? ws.subject.ref}
-                    </p>
-                    <p className="mt-1 text-xs text-slate-400 flex items-center gap-2">
-                      <span className="font-mono">ID: {ws.workshop_id.slice(0, 8)}</span>
-                      <span>•</span>
-                      <span>Subject: {ws.subject.kind}</span>
-                    </p>
-                  </div>
-                  <span
-                    className={cn(
-                      "shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wider",
-                      ws.status === "open"
-                        ? "bg-green-50 text-green-700 border border-green-100"
-                        : ws.status === "in_review"
-                          ? "bg-amber-50 text-amber-700 border border-amber-100"
-                          : "bg-slate-100 text-slate-500 border border-slate-200",
-                    )}
+    <div className="flex h-full min-h-0 flex-col" data-testid="strategy-workshop-page-list">
+      {state === "loading" && (
+        <div className="flex items-center justify-center gap-2 p-6 text-sm text-slate-500" data-testid="workshop-list-loading">
+          <span className="h-4 w-4 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent" />
+          Loading workshops...
+        </div>
+      )}
+      {state === "empty" && (
+        <div className="flex flex-col items-center gap-2 p-6 text-sm text-slate-500" data-testid="workshop-list-empty">
+          <Bot className="h-10 w-10 text-slate-300" />
+          No workshops found.
+        </div>
+      )}
+      {state === "error" && (
+        <div className="p-6 text-sm text-red-600" data-testid="workshop-list-error">Unable to load workshops.</div>
+      )}
+      {state === "loaded" && selectedWorkshopId && (
+        <div
+          className="grid min-h-0 flex-1 grid-cols-[minmax(210px,260px)_minmax(0,1fr)]"
+          data-testid="strategy-workshop-live-tab"
+        >
+          <aside className="min-h-0 overflow-auto border-r border-slate-200 bg-slate-50 p-3" data-testid="workshop-selector">
+            <div className="mb-2 flex items-center justify-between text-[11px] font-semibold uppercase text-slate-500">
+              <span>Live workshops</span>
+              <span className="normal-case text-slate-400">{workshops.length} 個工坊</span>
+            </div>
+            <div className="grid gap-2" data-testid="workshop-list">
+              {workshops.map((ws) => {
+                const selected = ws.workshop_id === selectedWorkshopId;
+                return (
+                  <button
+                    aria-current={selected ? "page" : undefined}
+                    className={
+                      selected
+                        ? "rounded-md border border-blue-300 bg-blue-50 p-2 text-left"
+                        : "rounded-md border border-slate-200 bg-white p-2 text-left hover:border-slate-300"
+                    }
+                    data-testid={`workshop-item-${ws.workshop_id}`}
+                    data-workshop-id={ws.workshop_id}
+                    key={ws.workshop_id}
+                    onClick={() => setSelectedWorkshopId(ws.workshop_id)}
+                    type="button"
                   >
-                    {ws.status}
-                  </span>
-                </a>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+                    <span className="block text-xs font-semibold text-slate-800">{workshopTitle(ws)}</span>
+                    <span className="block text-[11px] text-slate-500">{ws.status} - {compactTime(ws)}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </aside>
+          <section className="min-h-0 overflow-hidden" data-testid="selected-workshop-runtime">
+            <WorkshopSessionView workshopId={selectedWorkshopId} onAddToTradingRoom={onAddToTradingRoom} />
+          </section>
+        </div>
+      )}
     </div>
   );
 }
@@ -174,13 +290,14 @@ function WorkshopListView(): JSX.Element {
 
 interface SessionViewProps {
   workshopId: string;
-  onAddToTradingRoom?: () => void;
+  onAddToTradingRoom?: (handoff: TradingRoomReadinessHandoff) => void;
 }
 
 function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProps): JSX.Element {
   const [workshop, setWorkshop] = useState<StrategyWorkshop | null>(null);
-  const [completeness, setCompleteness] = useState<StrategyCompleteness | null>(null);
-  const [readiness, setReadiness] = useState<StrategyReadinessAssessment | null>(null);
+  const [completeness, setCompleteness] = useState<WorkshopCompleteness | null>(null);
+  const [readiness, setReadiness] = useState<WorkshopReadinessAssessment | null>(null);
+  const [workshopEvents, setWorkshopEvents] = useState<WorkshopStreamEvent[]>([]);
   const [composerValue, setComposerValue] = useState("");
 
   // Custom states for PINT-005
@@ -207,7 +324,7 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProp
   useEffect(() => {
     let cancelled = false;
     setSessionLoading(true);
-    
+
     Promise.all([
       getWorkshop(workshopId)
         .then((ws) => { if (!cancelled) setWorkshop(ws); })
@@ -219,13 +336,13 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProp
         .then((r) => { if (!cancelled && r) setReadiness(r); })
         .catch(() => undefined),
       listWorkshopCards(workshopId)
-        .then((res) => { 
-          if (!cancelled) {
-            const items = Array.isArray(res) ? res : res?.items || [];
-            dispatch({ type: "RESET", cards: items }); 
-          }
+        .then((items) => {
+          if (!cancelled) dispatch({ type: "RESET", cards: items });
         })
-        .catch(() => undefined)
+        .catch(() => undefined),
+      listWorkshopEvents(workshopId)
+        .then((response) => { if (!cancelled) setWorkshopEvents(response.items ?? []); })
+        .catch(() => undefined),
     ]).finally(() => {
       if (!cancelled) setSessionLoading(false);
     });
@@ -250,10 +367,13 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProp
 
   const refreshCards = useCallback(() => {
     listWorkshopCards(workshopId)
-      .then((res) => {
-        const items = Array.isArray(res) ? res : res?.items || [];
-        dispatch({ type: "RESET", cards: items });
-      })
+      .then((items) => dispatch({ type: "RESET", cards: items }))
+      .catch(() => undefined);
+  }, [workshopId]);
+
+  const refreshEvents = useCallback(() => {
+    listWorkshopEvents(workshopId)
+      .then((response) => setWorkshopEvents(response.items ?? []))
       .catch(() => undefined);
   }, [workshopId]);
 
@@ -263,9 +383,11 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProp
       switch (event.event_type) {
         case "workshop.completeness.updated":
           refreshCompleteness();
+          refreshCards();
           break;
         case "workshop.readiness.updated":
           refreshReadiness();
+          refreshCards();
           break;
         case "workshop.servant.response.completed":
         case "research.plan.created":
@@ -280,38 +402,46 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProp
         case "workshop.patch.validated":
         case "workshop.version.created":
           refreshCards();
+          refreshEvents();
           break;
         case "workshop.snapshot":
           refreshCards();
           refreshCompleteness();
           refreshReadiness();
+          refreshEvents();
           break;
         default:
           break;
       }
     });
     return teardown;
-  }, [workshopId, refreshCards, refreshCompleteness, refreshReadiness]);
+  }, [workshopId, refreshCards, refreshCompleteness, refreshEvents, refreshReadiness]);
 
   // Derive the most recent next_question card for the rail
   const nextQuestion =
     cardState.cards
       .filter((c) => c.card_type === "next_question")
       .sort((a, b) => b.sequence_no - a.sequence_no)[0] ?? null;
+  const completenessCard =
+    cardState.cards
+      .filter((c) => c.card_type === "completeness_update")
+      .sort((a, b) => b.sequence_no - a.sequence_no)[0] ?? null;
+  const displayCompleteness = materializeWorkshopCompleteness(completeness, completenessCard);
 
   const handleContinueDiscussion = useCallback((cardId: string) => {
-    setComposerValue((prev) => (prev ? prev : `Re: card ${cardId} — `));
+    setComposerValue((prev) => (prev ? prev : `Re: card ${cardId} - `));
     setFocusedRef(cardId);
   }, []);
 
   const handleSend = useCallback(
     async (text: string) => {
-      if (!workshopId || !text.trim() || isDenied) return;
+      const content = text.trim();
+      if (!workshopId || !content || isDenied || sendLoading) return;
       setSendLoading(true);
       setSendError(null);
       try {
         await postWorkshopMessage(workshopId, {
-          content: text.trim(),
+          content,
           metadata: {
             mode: selectedMode,
             participant_persona_ids: selectedParticipants,
@@ -322,22 +452,31 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProp
           },
         });
         setComposerValue("");
-        const [res, comp, r] = await Promise.all([
-          listWorkshopCards(workshopId),
-          getWorkshopCompleteness(workshopId),
-          getWorkshopReadiness(workshopId),
-        ]);
-        const items = Array.isArray(res) ? res : res?.items || [];
-        dispatch({ type: "RESET", cards: items });
-        if (comp) setCompleteness(comp);
-        if (r) setReadiness(r);
+        setFocusedRef(null);
+        refreshCards();
+        refreshEvents();
+        refreshCompleteness();
+        refreshReadiness();
       } catch (err) {
         setSendError(err instanceof Error ? err.message : "Failed to send message");
       } finally {
         setSendLoading(false);
       }
     },
-    [workshopId, selectedMode, selectedParticipants, focusedRef, workshop, pickerSelectionType, isDenied]
+    [
+      workshopId,
+      selectedMode,
+      selectedParticipants,
+      focusedRef,
+      workshop,
+      pickerSelectionType,
+      isDenied,
+      sendLoading,
+      refreshCards,
+      refreshCompleteness,
+      refreshEvents,
+      refreshReadiness,
+    ],
   );
 
   return (
@@ -347,10 +486,14 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProp
     >
       {/* Left: conversation + composer */}
       <div className="flex flex-1 flex-col overflow-hidden bg-white border-r border-slate-200">
-        
+
         {/* Session header */}
-        <div className="flex h-12 shrink-0 items-center justify-between border-b border-slate-200 px-4 bg-white z-10">
-          <div className="flex items-center gap-3">
+        <div
+          aria-label={`${workshopTitle(workshop)} status`}
+          className="flex h-auto min-h-12 shrink-0 flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-2 bg-white z-10"
+          data-testid="strategy-workshop-runtime-header"
+        >
+          <div className="flex flex-wrap items-center gap-3">
             <a
               className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700 font-medium transition-colors"
               href="/agora/strategy-workshop"
@@ -358,11 +501,15 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProp
               <ArrowLeft className="h-4 w-4" /> 工坊列表
             </a>
             <span className="text-slate-300">|</span>
-            {workshop && (
-              <span className="text-sm font-semibold text-slate-900 truncate">
-                {workshop.subject.title ?? workshop.subject.ref}
-              </span>
-            )}
+            <span className="text-xs text-slate-500" data-testid="workshop-readiness-summary">
+              {readinessSummary(readiness)}
+            </span>
+            <span className="text-xs text-slate-500" data-testid="workshop-card-summary">
+              Cards: {cardState.cards.length}
+            </span>
+            <span className="text-xs text-slate-500" data-testid="workshop-event-summary">
+              Events: {workshopEvents.length}
+            </span>
           </div>
           <div className="flex items-center gap-2">
             <span className={cn(
@@ -561,7 +708,7 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProp
                 <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Interaction Mode</label>
                 <Select
                   value={selectedMode}
-                  onValueChange={(val: string) => setSelectedMode(val)}
+                  onValueChange={(val: string) => setSelectedMode(val as typeof selectedMode)}
                 >
                   <SelectTrigger className="w-[160px] h-8 text-xs font-semibold bg-white border-slate-200" data-testid="mode-selector">
                     <SelectValue placeholder="Select mode" />
@@ -582,7 +729,7 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProp
                 <Select
                   value={pickerSelectionType}
                   onValueChange={(val: string) => {
-                    setPickerSelectionType(val);
+                    setPickerSelectionType(val as typeof pickerSelectionType);
                     if (val === "recommended") setSelectedParticipants(["per_quant", "per_macro", "per_risk"]);
                     else if (val === "committee") setSelectedParticipants(["per_risk", "per_macro"]);
                     else if (val === "red-team") setSelectedParticipants(["per_red"]);
@@ -684,6 +831,7 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProp
           <div className="flex gap-2">
             <textarea
               className="flex-1 resize-none rounded-md border border-slate-300 px-3 py-2 text-sm placeholder:text-slate-400 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none disabled:opacity-50"
+              data-testid="servant-composer-input"
               disabled={sendLoading || isDenied || workshop?.status === "concluded"}
               placeholder={isDenied ? "Access restricted..." : "描述你的策略構想或與 Persona 進行諮詢… (Ctrl+Enter 送出)"}
               rows={3}
@@ -698,6 +846,7 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProp
             />
             <Button
               className="self-end bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-1.5 px-4 h-9 font-semibold disabled:opacity-50"
+              data-testid="servant-composer-submit"
               disabled={sendLoading || isDenied || !composerValue.trim() || workshop?.status === "concluded"}
               onClick={() => handleSend(composerValue)}
               type="button"
@@ -711,7 +860,7 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProp
             </Button>
           </div>
           {sendError && (
-            <p className="text-xs text-red-500 font-semibold">{sendError}</p>
+            <p className="text-xs text-red-500 font-semibold" data-testid="servant-composer-error">{sendError}</p>
           )}
         </div>
       </div>
@@ -731,6 +880,7 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProp
         <div style={{ flex: 1, overflow: "auto" }}>
           <StrategyCompletenessRail
             completeness={completeness}
+            completenessCard={completenessCard}
             readiness={readiness}
             nextQuestion={nextQuestion}
           />
@@ -746,13 +896,9 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProp
           className="bg-white"
         >
           {(() => {
-            const tradingRoomReady = readiness?.highest_ready_gate === "trading_room";
-            const isActive = tradingRoomReady && !!onAddToTradingRoom;
-            const disabledReason = readiness
-              ? tradingRoomReady
-                ? null
-                : `Trading Room gate not yet ready (highest: ${readiness.highest_ready_gate ?? "none"})`
-              : "Readiness not yet assessed";
+            const handoff = tradingRoomHandoffFromReadiness(readiness);
+            const disabledReason = addToTradingRoomDisabledReason(readiness, handoff);
+            const isActive = !!handoff && !!onAddToTradingRoom;
             return (
               <>
                 <button
@@ -760,7 +906,7 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProp
                   disabled={!isActive}
                   aria-disabled={!isActive}
                   title={disabledReason ?? undefined}
-                  onClick={isActive ? onAddToTradingRoom : undefined}
+                  onClick={isActive ? () => onAddToTradingRoom?.(handoff) : undefined}
                   style={{
                     width: "100%",
                     padding: "7px 12px",
@@ -790,9 +936,9 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProp
         </div>
 
         {/* Legacy test-id shims for existing tests */}
-        {completeness && (
+        {displayCompleteness && (
           <div data-testid="completeness-grade" style={{ display: "none" }}>
-            {completeness.overall_grade}
+            {displayCompleteness.overall_grade}
           </div>
         )}
         {readiness && (
@@ -811,14 +957,12 @@ function WorkshopSessionView({ workshopId, onAddToTradingRoom }: SessionViewProp
 
 interface StrategyWorkshopPageProps {
   workshopId?: string;
-  onAddToTradingRoom?: () => void;
+  onAddToTradingRoom?: (handoff: TradingRoomReadinessHandoff) => void;
 }
 
-export function StrategyWorkshopPage({ workshopId: propsWorkshopId, onAddToTradingRoom }: StrategyWorkshopPageProps): JSX.Element {
-  const { workshopId: routeWorkshopId } = useParams<{ workshopId?: string }>();
-  const workshopId = propsWorkshopId || routeWorkshopId;
+export function StrategyWorkshopPage({ workshopId, onAddToTradingRoom }: StrategyWorkshopPageProps): JSX.Element {
   if (workshopId) {
     return <WorkshopSessionView workshopId={workshopId} onAddToTradingRoom={onAddToTradingRoom} />;
   }
-  return <WorkshopListView />;
+  return <WorkshopListView onAddToTradingRoom={onAddToTradingRoom} />;
 }

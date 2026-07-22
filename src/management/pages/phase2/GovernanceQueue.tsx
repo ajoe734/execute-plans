@@ -10,7 +10,8 @@ import { StatusBadge } from "@/platform/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { bff } from "@/lib/bff-v1";
-import { mutations } from "@/lib/bff/mutations";
+import { bffWrites } from "@/lib/bff/runAction";
+import { commandBatchReceiptDescription } from "@/lib/bff-v1/commandReceipt";
 import type { ApprovalRequest } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { SlaCountdown } from "@/platform/components/SlaCountdown";
@@ -168,8 +169,19 @@ export const GovernanceQueuePage = () => {
           destructive={batchDecision === "reject"}
           onConfirm={async (memo) => {
             if (!batchDecision) return;
-            const r = await mutations.batchDecideApproval(selectedIds, batchDecision, memo);
-            toast.success(t("governance.batch.done", { defaultValue: "{{n}} request(s) processed", n: r.results.length }));
+            try {
+              const results = await Promise.all(
+                selectedIds.map((id) => bffWrites.decideApproval(id, batchDecision, memo)),
+              );
+              toast.success(t("governance.batch.done", { defaultValue: "{{n}} request(s) processed", n: results.length }), {
+                description: commandBatchReceiptDescription(results),
+              });
+            } catch (err) {
+              toast.error(t("toast.failed", { defaultValue: "Action failed" }), {
+                description: err instanceof Error ? err.message : String(err),
+              });
+              return;
+            }
             setSelected(new Set());
             await reload();
           }}

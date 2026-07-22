@@ -87,15 +87,24 @@ export interface PortfolioBookModel {
   holdings: HoldingRow[];
 }
 
+// ---------- PM12-GAP-001 holdings monitor: incidents, filters, capital scope ----------
+// Mirrors the live MGMT-OPS-003 BFF holdings/incident contract 1:1 so degraded
+// or missing-binding coverage can never render as formal attribution.
+
 export type PortfolioSourceStatus = "ok" | "partial" | "degraded" | "stale" | "unavailable" | string;
 export type PortfolioCapitalScopeKind = "paper_ledger" | "canary_sleeve" | "live_capital_pool" | "unclassified";
 
-export interface PortfolioSourceIssue { code: string; message: string; }
+export interface PortfolioSourceIssue {
+  code: string;
+  message: string;
+}
+
 export interface PortfolioCapitalScope {
   stage: string;
   scopeKind: PortfolioCapitalScopeKind;
   scopeId?: string;
 }
+
 export interface PortfolioHoldingMonitorRow {
   holdingId: string;
   runtimeId?: string;
@@ -114,6 +123,7 @@ export interface PortfolioHoldingMonitorRow {
   capitalScope: PortfolioCapitalScope;
   links: Record<string, string>;
 }
+
 export interface PortfolioIncident {
   id: string;
   holdingId?: string;
@@ -124,6 +134,7 @@ export interface PortfolioIncident {
   sourceIssues: PortfolioSourceIssue[];
   links: Record<string, string>;
 }
+
 export interface PortfolioCoverageSummary {
   holdingCount: number;
   sourceRowCount: number;
@@ -134,6 +145,7 @@ export interface PortfolioCoverageSummary {
   degradedSourceCount: number;
   incidentCount: number;
 }
+
 export interface PortfolioHoldingsMonitor {
   items: PortfolioHoldingMonitorRow[];
   incidents: PortfolioIncident[];
@@ -149,6 +161,8 @@ export interface PortfolioHoldingFilters {
   sourceStatus?: string;
   staleTelemetry?: string;
   riskState?: string;
+  capitalPoolId?: string;
+  personaId?: string;
 }
 
 // ---------- seeds ----------
