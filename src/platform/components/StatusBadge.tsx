@@ -16,8 +16,15 @@ const map: Record<string, string> = {
   failed: "bg-status-failed/15 text-status-failed border-status-failed/30",
 };
 
-export const StatusBadge = ({ state }: { state: string }) => {
+export const StatusBadge = ({ state }: { state?: string }) => {
   const t = useT();
+  if (!state) {
+    return (
+      <Badge variant="outline" className="font-medium bg-muted text-muted-foreground border-dashed">
+        {t("status.unavailable", { defaultValue: "Unavailable" })}
+      </Badge>
+    );
+  }
   const key = `status.${state}`;
   return (
     <Badge variant="outline" className={cn("font-medium", map[state] ?? "bg-muted text-muted-foreground")}>

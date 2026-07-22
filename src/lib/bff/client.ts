@@ -26,28 +26,13 @@ import {
   withLiveOrMock,
   liveStatus,
 } from "@/lib/bff-v1";
-import {
-  idempotencyKey as mintIdempotencyKey,
-  newCorrelationId,
-} from "@/lib/bff-v1/headers";
-import { normalizeLiveListResponse } from "@/lib/bff-v1/lists";
 import { readBffEnv } from "@/lib/bff-v1/runtimeEnv";
 import {
-  strictDataFrom,
-  strictNotFoundAsUndefined,
-  withStrictLiveOrMock,
-} from "@/lib/bff/liveRead";
-import {
-  commandClient,
-  type BackendCommandResponse,
-  type FinalCommandEnvelope,
-} from "@/lib/bff/commandClient";
+  normalizeAlertTimestampFields,
+  normalizeIncidentTimestampFields,
+} from "@/lib/bff-v1/eventTimestamps";
 import * as seed from "@/mocks/seed";
-import type {
-  OodaLoopPacket,
-  OodaPacketDetail,
-  OodaPacketMeta,
-} from "@/lib/ooda/packets";
+import { normalizeCapitalPool } from "@/lib/bff-v1/capitalPools";
 import type {
   Strategy,
   Persona,
@@ -117,210 +102,6 @@ function liveOrMockDetail<T>(
   };
 }
 
-function asObject(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {};
-}
-
-function emptyOodaPacketList(): ListEnvelope<OodaLoopPacket> {
-  return {
-    items: [],
-    cursor: {},
-    pageSize: 0,
-    totalCountExact: true,
-    estimatedTotal: 0,
-    meta: {
-      surfaces: {
-        ooda_packets: {
-          status: "unavailable",
-          source: "mock",
-          reason: "OODA packets are served only by the Pantheon OODA read surface.",
-        },
-      },
-    },
-  };
-}
-
-function adaptOodaPacketDetail(body: unknown): OodaPacketDetail | undefined {
-  const envelope = asObject(body);
-  const rawPacket = asObject(strictDataFrom(body) ?? body);
-  const id = String(rawPacket.packet_id ?? rawPacket.id ?? "").trim();
-  if (!id) return undefined;
-  const packet = {
-    ...rawPacket,
-    packet_id: id,
-  } as OodaLoopPacket;
-  const meta = asObject(envelope.meta) as OodaPacketMeta;
-  return {
-    packet,
-    meta: Object.keys(meta).length > 0 ? meta : undefined,
-  };
-}
-
-export type OodaPacketListQuery = {
-  status?: string;
-  stage?: string;
-  strategy_id?: string;
-  runtime_id?: string;
-  evolution_program_id?: string;
-  page_token?: string;
-  page_size?: number;
-};
-
-export type EvolutionReviewDecision = "approve" | "reject";
-
-export type EvolutionReviewSurfaceState = "fresh" | "stale" | "unavailable" | string;
-
-export type EvolutionReviewProjection = {
-  decision_id: string;
-  target_type?: string | null;
-  target_id?: string | null;
-  target_version?: string | null;
-  action_type?: string | null;
-  decision_state?: string | null;
-  risk_level?: string | null;
-  created_at?: string | null;
-  approval_decision_id?: string | null;
-  proposed_changes?: Record<string, unknown>;
-  risk_assessment?: Record<string, unknown>;
-  required_approvals?: Array<Record<string, unknown>>;
-  review_chain?: Array<Record<string, unknown>>;
-  linked_incident_id?: string | null;
-  linked_postmortem_id?: string | null;
-  evidence_refs?: Array<Record<string, unknown>>;
-  rollback_followthrough?: Record<string, unknown> | null;
-  allowedActions: {
-    canApproveMutation: boolean;
-    canRejectMutation: boolean;
-    [key: string]: unknown;
-  };
-  meta?: {
-    snapshot_at?: string;
-    surfaces?: {
-      mutation_review?: EvolutionReviewSurfaceState | Record<string, unknown>;
-      [key: string]: unknown;
-    };
-    [key: string]: unknown;
-  };
-};
-
-export type EvolutionReviewDecisionOptions = {
-  memo?: string;
-  approvalDecisionId?: string | null;
-  correlationId?: string;
-  idempotencyKey?: string;
-  headers?: Record<string, string>;
-  baseUrl?: string;
-};
-
-function oodaPacketList(
-  path: string,
-  query?: OodaPacketListQuery,
-): Promise<ListEnvelope<OodaLoopPacket>> {
-  const queryParams = query as Record<string, string | number | undefined> | undefined;
-  return withStrictLiveOrMock<ListEnvelope<OodaLoopPacket>, unknown>(
-    { method: "GET", path, query: queryParams },
-    async () => emptyOodaPacketList(),
-    (data) => normalizeLiveListResponse<OodaLoopPacket>(data, "loopRun"),
-  );
-}
-
-function oodaPacketDetail(id: string): Promise<OodaPacketDetail | undefined> {
-  return withStrictLiveOrMock<OodaPacketDetail | undefined, unknown>(
-    { method: "GET", path: paths.oodaPacket(id) },
-    async () => undefined,
-    adaptOodaPacketDetail,
-    strictNotFoundAsUndefined,
-  );
-}
-
-function adaptEvolutionReview(body: unknown): EvolutionReviewProjection | undefined {
-  const rawReview = asObject(strictDataFrom(body) ?? body);
-  const decisionId = String(
-    rawReview.decision_id ?? rawReview.id ?? rawReview.evolution_decision_id ?? "",
-  ).trim();
-  if (!decisionId) return undefined;
-  const allowedActions = asObject(rawReview.allowedActions);
-  return {
-    ...rawReview,
-    decision_id: decisionId,
-    allowedActions: {
-      canApproveMutation: allowedActions.canApproveMutation === true,
-      canRejectMutation: allowedActions.canRejectMutation === true,
-      ...allowedActions,
-    },
-  } as EvolutionReviewProjection;
-}
-
-function evolutionReviewDetail(decisionId: string): Promise<EvolutionReviewProjection | undefined> {
-  return withStrictLiveOrMock<EvolutionReviewProjection | undefined, unknown>(
-    { method: "GET", path: paths.evolutionMutationReview(decisionId) },
-    async () => undefined,
-    adaptEvolutionReview,
-    strictNotFoundAsUndefined,
-  );
-}
-
-function evolutionReviewDecisionPayload(
-  decisionId: string,
-  decision: EvolutionReviewDecision,
-  opts: EvolutionReviewDecisionOptions,
-): FinalCommandEnvelope {
-  const cleanDecisionId = decisionId.trim();
-  const cleanApprovalDecisionId = String(opts.approvalDecisionId ?? "").trim() || undefined;
-  const memo = String(opts.memo ?? "").trim() || `Evolution decision ${decision}`;
-  const params = {
-    evolution_decision_id: cleanDecisionId,
-    approval_action: decision,
-    ...(cleanApprovalDecisionId ? {
-      approval_decision_id: cleanApprovalDecisionId,
-      approvalDecisionId: cleanApprovalDecisionId,
-    } : {}),
-    note: memo,
-    approval_rationale: memo,
-    frontend_source_route: paths.evolutionMutationReview(cleanDecisionId),
-  };
-
-  return {
-    command: "ApproveEvolutionDecision",
-    target: {
-      type: "EvolutionDecision",
-      id: cleanDecisionId,
-    },
-    action: decision,
-    params,
-    audit_context: {
-      reason: memo,
-      incident_id: null,
-    },
-    ...(cleanApprovalDecisionId ? { approvalDecisionId: cleanApprovalDecisionId } : {}),
-  };
-}
-
-async function decideEvolutionReview(
-  decisionId: string,
-  decision: EvolutionReviewDecision,
-  opts: EvolutionReviewDecisionOptions = {},
-): Promise<BackendCommandResponse> {
-  const cleanDecisionId = decisionId.trim();
-  if (!cleanDecisionId) {
-    throw new Error("Evolution review decision requires a decision id.");
-  }
-  const correlationId = opts.correlationId ?? newCorrelationId();
-  const idempotencyKey = opts.idempotencyKey ?? mintIdempotencyKey();
-  return commandClient.submitCommand(
-    evolutionReviewDecisionPayload(cleanDecisionId, decision, opts),
-    {
-      correlationId,
-      idempotencyKey,
-      approvalDecisionId: opts.approvalDecisionId ?? undefined,
-      headers: opts.headers,
-      baseUrl: opts.baseUrl,
-    },
-  );
-}
-
 // ---------- Per-family adapters ----------
 
 const strategies = {
@@ -335,7 +116,9 @@ const personas = {
 
 const capitalPools = {
   list:  bffV1Lists.capitalPools as () => Promise<ListEnvelope<CapitalPool>>,
-  get:   liveOrMockDetail<CapitalPool>(paths.capitalPool, async (id) => seed.capitalPools.find((item) => item.id === id)),
+  get:   (id: string): Promise<CapitalPool | undefined> =>
+    liveOrMockDetail<unknown>(paths.capitalPool, async (poolId) => seed.capitalPools.find((item) => item.id === poolId))(id)
+      .then(normalizeCapitalPool),
 };
 
 const rankingFormulas = {
@@ -429,15 +212,18 @@ const runtimes = {
 
 const alerts = {
   list:  bffV1Lists.alerts as () => Promise<ListEnvelope<Alert>>,
-  get:   liveOrMockDetail<Alert>(
-    (id) => `${paths.alerts()}/${encodeURIComponent(id)}`,
-    async (id) => seed.alerts.find((item) => item.id === id),
-  ),
+  get:   (id: string) => liveOrMockDetail<Alert>(
+    (alertId) => `${paths.alerts()}/${encodeURIComponent(alertId)}`,
+    async (alertId) => seed.alerts.find((item) => item.id === alertId),
+  )(id).then(normalizeAlertTimestampFields),
 };
 
 const incidents = {
   list:  bffV1Lists.incidents as () => Promise<ListEnvelope<Incident>>,
-  get:   liveOrMockDetail<Incident>(paths.incident, async (id) => seed.incidents.find((item) => item.id === id)),
+  get:   (id: string) => liveOrMockDetail<Incident>(
+    paths.incident,
+    async (incidentId) => seed.incidents.find((item) => item.id === incidentId),
+  )(id).then(normalizeIncidentTimestampFields),
 };
 
 const approvals = {
@@ -447,23 +233,6 @@ const approvals = {
 
 const audit = {
   list:  bffV1Lists.audit as () => Promise<ListEnvelope<AuditEvent>>,
-};
-
-const oodaPackets = {
-  list: (query?: OodaPacketListQuery): Promise<ListEnvelope<OodaLoopPacket>> =>
-    oodaPacketList(paths.oodaPackets(), query),
-  get: oodaPacketDetail,
-  forStrategy: (id: string, query?: Omit<OodaPacketListQuery, "strategy_id">): Promise<ListEnvelope<OodaLoopPacket>> =>
-    oodaPacketList(paths.strategyOodaPackets(id), query),
-  forRuntime: (id: string, query?: Omit<OodaPacketListQuery, "runtime_id">): Promise<ListEnvelope<OodaLoopPacket>> =>
-    oodaPacketList(paths.runtimeOodaPackets(id), query),
-  forEvolutionProgram: (id: string, query?: Omit<OodaPacketListQuery, "evolution_program_id">): Promise<ListEnvelope<OodaLoopPacket>> =>
-    oodaPacketList(paths.evolutionProgramOodaPackets(id), query),
-};
-
-const evolutionReviews = {
-  get: evolutionReviewDetail,
-  decide: decideEvolutionReview,
 };
 
 // ---------- Public surface ----------
@@ -491,8 +260,6 @@ export const managementClient = {
   incidents,
   approvals,
   audit,
-  oodaPackets,
-  evolutionReviews,
 } as const;
 
 export type ManagementFamily = keyof typeof managementClient;
@@ -503,7 +270,6 @@ export const MANAGEMENT_FAMILIES: readonly ManagementFamily[] = [
   "rebalances", "deployments", "evolution", "research", "artifacts",
   "tools", "mcpServers", "mcpTools", "skills", "channels",
   "jobs", "runtimes", "alerts", "incidents", "approvals", "audit",
-  "oodaPackets",
 ] as const;
 
 /** Snapshot of the current live-status, useful for UI banners that show
