@@ -6,11 +6,10 @@ import type { AuditEvent, Channel } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
 import { StatCard } from "@/platform/components/StatCard";
-import { Button } from "@/components/ui/button";
 import { Send } from "lucide-react";
-import { toast } from "sonner";
 import { DataTable } from "@/platform/components/DataTable";
 import { AuditTimeline } from "@/platform/components/AuditTimeline";
+import { NonProductionActionButton } from "@/management/components/NonProductionActionButton";
 
 export const ChannelDetail = () => {
   const { id } = useParams();
@@ -23,12 +22,7 @@ export const ChannelDetail = () => {
     bff.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action?.startsWith("channel."))));
   }, [id]);
 
-  const recent = c ? Array.from({ length: 6 }).map((_, i) => ({
-    id: `msg_${id}_${i}`,
-    ts: new Date(Date.now() - (i + 1) * 1800_000).toISOString(),
-    title: i % 3 === 0 ? "Daily macro briefing" : i % 3 === 1 ? "Alert: drawdown breach stg_004" : "Job completed: rebalance.simulate",
-    severity: i % 3 === 1 ? "high" : "low",
-  })) : [];
+  const recent: { id: string; ts: string; title: string; severity: string }[] = [];
   if (!c) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
 
   return (
@@ -36,9 +30,9 @@ export const ChannelDetail = () => {
       object={c}
       subtitle={`${(c.kind ?? "").toUpperCase()} · ${c.subscribers ?? 0} subscribers`}
       actions={
-        <Button size="sm" variant="outline" onClick={() => toast.success("Test message sent")}>
+        <NonProductionActionButton size="sm" variant="outline">
           <Send className="h-4 w-4 mr-1" />Send test
-        </Button>
+        </NonProductionActionButton>
       }
       tabs={[
         {

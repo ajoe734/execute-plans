@@ -5,10 +5,12 @@
  *
  * Mutating methods (reviewCandidateMember, triggerCandidatePoolScore) require:
  *   If-Match        — ETag captured from the preceding GET response
- *   Idempotency-Key — client-generated UUID per submission
- *   X-Request-Id    — client-generated UUID per request
+ *   Idempotency-Key — caller-supplied or minted by the canonical header helper
+ *   X-Request-Id    — caller-supplied or minted by the canonical header helper
  * AG-BE-CP-001 rejects writes that omit these headers.
  */
+
+import { buildHeaders } from "@/lib/bff-v1/headers";
 
 // ── Types (snake_case matches BFF JSON response) ──────────────────────────────
 
@@ -109,6 +111,26 @@ function extractItems<T>(value: unknown): T[] {
   return Array.isArray(items) ? (items as T[]) : [];
 }
 
+interface CandidatePoolRequestOptions {
+  ifMatch?: string;
+  idempotencyKey?: string;
+  requestId?: string;
+}
+
+function candidatePoolHeaders(
+  method: "GET" | "POST",
+  options?: CandidatePoolRequestOptions,
+): Record<string, string> {
+  const extra: Record<string, string> = {};
+  if (options?.ifMatch) extra["If-Match"] = options.ifMatch;
+  if (options?.requestId) extra["X-Request-Id"] = options.requestId;
+  return buildHeaders({
+    method,
+    idempotency: options?.idempotencyKey,
+    extra,
+  });
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /**
@@ -124,7 +146,7 @@ export async function getCandidatePoolScore(
   const res = await fetch(url, {
     method: "GET",
     credentials: "include",
-    headers: { Accept: "application/json" },
+    headers: candidatePoolHeaders("GET"),
   });
   if (!res.ok) {
     const body = await parseJson(res);
@@ -151,17 +173,10 @@ export async function triggerCandidatePoolScore(
 ): Promise<void> {
   const base = resolvedBase(baseUrl);
   const url = `${base}/bff/agora/candidate-pools/${encodeURIComponent(poolId)}/score`;
-  const headers: Record<string, string> = {
-    Accept: "application/json",
-    "Content-Type": "application/json",
-  };
-  if (options?.ifMatch) headers["If-Match"] = options.ifMatch;
-  if (options?.idempotencyKey) headers["Idempotency-Key"] = options.idempotencyKey;
-  if (options?.requestId) headers["X-Request-Id"] = options.requestId;
   const res = await fetch(url, {
     method: "POST",
     credentials: "include",
-    headers,
+    headers: candidatePoolHeaders("POST", options),
     body: JSON.stringify({}),
   });
   if (!res.ok) {
@@ -189,7 +204,7 @@ export async function listCandidatePoolMembers(
   const res = await fetch(url, {
     method: "GET",
     credentials: "include",
-    headers: { Accept: "application/json" },
+    headers: candidatePoolHeaders("GET"),
   });
   if (!res.ok) {
     const body = await parseJson(res);
@@ -212,8 +227,8 @@ export async function listCandidatePoolMembers(
  * Rejected candidates are retained as negative/preference examples; they are not deleted.
  *
  * options.ifMatch       — ETag from listCandidatePoolMembers; required by AG-BE-CP-001.
- * options.idempotencyKey — client-generated UUID; required by AG-BE-CP-001.
- * options.requestId      — client-generated UUID per request; required by AG-BE-CP-001.
+ * options.idempotencyKey — optional override for the canonical generated key.
+ * options.requestId      — optional override for the canonical generated request id.
  */
 export async function reviewCandidateMember(
   poolId: string,
@@ -224,17 +239,10 @@ export async function reviewCandidateMember(
 ): Promise<Record<string, unknown>> {
   const base = resolvedBase(baseUrl);
   const url = `${base}/bff/agora/candidate-pools/${encodeURIComponent(poolId)}/members/${encodeURIComponent(artifactId)}/review`;
-  const headers: Record<string, string> = {
-    Accept: "application/json",
-    "Content-Type": "application/json",
-  };
-  if (options?.ifMatch) headers["If-Match"] = options.ifMatch;
-  if (options?.idempotencyKey) headers["Idempotency-Key"] = options.idempotencyKey;
-  if (options?.requestId) headers["X-Request-Id"] = options.requestId;
   const res = await fetch(url, {
     method: "POST",
     credentials: "include",
-    headers,
+    headers: candidatePoolHeaders("POST", options),
     body: JSON.stringify(body),
   });
   if (!res.ok) {
