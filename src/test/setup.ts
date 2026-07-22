@@ -1,36 +1,4 @@
 import "@testing-library/jest-dom";
-import { randomUUID } from "node:crypto";
-
-// Mock crypto.randomUUID for environments where it is missing (like jsdom in older Node)
-if (typeof window !== "undefined") {
-  if (!window.crypto) {
-    Object.defineProperty(window, "crypto", {
-      value: {},
-      writable: true,
-    });
-  }
-  if (!window.crypto.randomUUID) {
-    Object.defineProperty(window.crypto, "randomUUID", {
-      value: () => randomUUID(),
-      writable: true,
-    });
-  }
-}
-
-if (typeof globalThis !== "undefined") {
-  if (!globalThis.crypto) {
-    Object.defineProperty(globalThis, "crypto", {
-      value: {},
-      writable: true,
-    });
-  }
-  if (!globalThis.crypto.randomUUID) {
-    Object.defineProperty(globalThis.crypto, "randomUUID", {
-      value: () => randomUUID(),
-      writable: true,
-    });
-  }
-}
 
 Object.defineProperty(window, "matchMedia", {
   writable: true,

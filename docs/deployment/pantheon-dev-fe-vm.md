@@ -22,7 +22,8 @@ under `/var/www/pantheon-dev-fe-releases`.
 2. `Pantheon FE-BFF Integration Gate` runs on the `dev` push.
 3. `Pantheon Dev FE Deploy` is triggered by `workflow_run` only when that gate
    succeeds for a `dev` push.
-4. The deploy job checks out the exact gated SHA on the VM self-hosted runner.
+4. The deploy job checks out the exact gated SHA on the VM self-hosted runner
+   and skips it if a newer commit has become the `dev` head.
 5. `scripts/deploy-dev-vm.sh` runs:
    - `npm ci`
    - Playwright Chromium install for the post-deploy browser probe
@@ -32,11 +33,27 @@ under `/var/www/pantheon-dev-fe-releases`.
    - atomically switch `/var/www/pantheon-dev-fe`
    - fetch `/deployment.json` and verify the deployed commit
    - run `scripts/probe-hosted-browser-bff.mjs` against the public FE host
+   - run the Persona Fleet live linked-page contract
+   - roll back the symlink to the previous release if any post-switch
+     verification or probe fails
+   - only when explicitly enabled, run
+     `scripts/probe-hosted-management-writes.mjs` to submit a governed
+     recommendation, persist a Human Review decision, and read it back
+
+Automatic Pantheon dev deployments build with `VITE_BFF_REAL_WRITES=false`
+and `VITE_BFF_ALLOW_DEV_STUB_WRITES=false`. A manual workflow dispatch may set
+`real_writes=true` only for explicitly authorized governed write testing. That
+opt-in admits the dev BFF's authenticated stub session only when `/bff/me`
+identifies the backend as `dev` or `test`; any production environment marker
+still fails closed. The conditional write probe records a rejected governance
+recommendation and verifies `live_capital_mutation=false`, so it exercises
+persistence without changing capital or runtime state.
 
 Manual deployment is available through `workflow_dispatch` on
-`.github/workflows/pantheon-dev-fe-deploy.yml`. Manual deploys should still use
-a SHA that has passed the integration gate unless this is an explicitly declared
-emergency dev repair.
+`.github/workflows/pantheon-dev-fe-deploy.yml`. The workflow only accepts the
+current `dev` head after a successful integration-gate push run. The
+`real_writes` input defaults to `false` and must not be enabled without explicit
+operator authorization.
 
 ## Local VM Command
 
@@ -61,11 +78,18 @@ Do not say "published to dev" unless all of these are true:
 - `https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io/deployment.json`
   reports that SHA;
 - the deployed-host browser/BFF probe passed against `/management/persona-fleet`.
+- when `real_writes=true` was explicitly requested, the governed management
+  write/read-back probe persisted a Human Review command and resolved it from
+  Human Inbox.
 
 The deployed-host probe must show Persona Fleet rows for US/TW/Crypto, shioaji
 / qlib source evidence, no `NaN`, no old BFF URL, and no armed seed fallback.
 
 ## Rollback
+
+The deploy script automatically restores the previous release symlink if a
+post-switch host verification or probe fails. Manual rollback remains available
+for an already accepted release:
 
 Rollback is a VM operation:
 

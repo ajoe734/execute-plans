@@ -279,6 +279,10 @@ async function expectNoSeedFallback(page: Page) {
   await expect(page.getByText(SEED_STRATEGY)).toHaveCount(0);
 }
 
+function liveStatusBanner(page: Page, text: RegExp) {
+  return page.locator('[role="status"][aria-live="polite"]').filter({ hasText: text });
+}
+
 test.describe("F15 strict vs hybrid fallback", () => {
   test("hybrid 5xx injection falls back to mock with a visible live-BFF banner", async ({
     page,
@@ -298,9 +302,7 @@ test.describe("F15 strict vs hybrid fallback", () => {
 
     await gotoStrategiesAndWaitForInjectedStatus(page, 503);
 
-    await expect(
-      page.getByRole("status").filter({ hasText: FALLBACK_ACTIVE_TEXT }),
-    ).toBeVisible();
+    await expect(liveStatusBanner(page, FALLBACK_ACTIVE_TEXT)).toBeVisible();
     await expect(page.getByText(SEED_STRATEGY)).toBeVisible();
   });
 
@@ -322,9 +324,7 @@ test.describe("F15 strict vs hybrid fallback", () => {
 
     await gotoStrategiesAndWaitForInjectedStatus(page, 503);
 
-    await expect(
-      page.getByRole("status").filter({ hasText: STRICT_ERROR_TEXT }),
-    ).toBeVisible();
+    await expect(liveStatusBanner(page, STRICT_ERROR_TEXT)).toBeVisible();
     await expectNoSeedFallback(page);
   });
 
