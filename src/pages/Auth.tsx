@@ -9,7 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 
 export default function AuthPage() {
-  const { session } = useAuth();
+  const { session, bffSession, bffError, loading, signOut } = useAuth();
   const nav = useNavigate();
   const [params] = useSearchParams();
   const from = params.get("from") ?? "/management/cockpit";
@@ -18,8 +18,8 @@ export default function AuthPage() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (session) nav(from, { replace: true });
-  }, [session, from, nav]);
+    if (bffSession) nav(from, { replace: true });
+  }, [bffSession, from, nav]);
 
   const signIn = async () => {
     setBusy(true);
@@ -53,6 +53,15 @@ export default function AuthPage() {
           <h1 className="text-2xl font-semibold">Pantheon Management</h1>
           <p className="text-sm text-muted-foreground">Sign in to access the cockpit.</p>
         </div>
+        {session && !loading && bffError ? (
+          <div role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm">
+            <p className="font-medium">Pantheon session verification failed.</p>
+            <p className="mt-1 text-muted-foreground">{bffError.message}</p>
+            <Button className="mt-3 w-full" variant="outline" onClick={() => void signOut()}>
+              Clear session and sign in again
+            </Button>
+          </div>
+        ) : null}
         <Tabs defaultValue="signin">
           <TabsList className="grid grid-cols-2 w-full">
             <TabsTrigger value="signin">Sign in</TabsTrigger>
