@@ -49,4 +49,19 @@ describe("extractDegradation", () => {
       reason: "no upstream yet",
     });
   });
+
+  it("surfaces strict fallback blocked only when explicitly present", () => {
+    const meta = {
+      degradation: {
+        reason: "Injected F15 5xx",
+        strictFallbackBlocked: true,
+      },
+    };
+    expect(extractDegradation(meta)).toEqual({
+      degraded: true,
+      level: "degraded",
+      reason: "Injected F15 5xx",
+      strictFallbackBlocked: true,
+    });
+  });
 });
