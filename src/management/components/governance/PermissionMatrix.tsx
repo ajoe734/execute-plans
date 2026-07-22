@@ -2,14 +2,13 @@
 // Cells are clickable to cycle grants; dirty cells are tracked and submitted via runAction.
 import { useMemo, useState } from "react";
 import { Card } from "@/components/ui/card";
+import { ManagementTableScroll } from "@/management/components/ManagementTableScroll";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { toast } from "sonner";
 import { ShieldAlert } from "lucide-react";
 import type { PermissionGrant, PermissionMatrix as Matrix } from "@/lib/bff/types";
-import { mutations } from "@/lib/bff/mutations";
 import { useT } from "@/platform/hooks";
 import { RiskBadge } from "@/platform/components/RiskBadge";
+import { NonProductionActionButton } from "@/management/components/NonProductionActionButton";
 
 const GRANT_CYCLE: PermissionGrant[] = ["none", "read", "use", "manage"];
 
@@ -27,6 +26,8 @@ interface Props {
 
 export const PermissionMatrix = ({ matrix, readOnly }: Props) => {
   const t = useT();
+  const writesDisabled = true;
+  const isReadOnly = readOnly || writesDisabled;
   // key = `${rowId}|${colId}` → grant
   const initial = useMemo(() => {
     const m = new Map<string, PermissionGrant>();
@@ -37,7 +38,7 @@ export const PermissionMatrix = ({ matrix, readOnly }: Props) => {
   const [dirty, setDirty] = useState<Set<string>>(new Set());
 
   const cycle = (rowId: string, colId: string) => {
-    if (readOnly) return;
+    if (isReadOnly) return;
     const k = `${rowId}|${colId}`;
     const cur = grants.get(k) ?? "none";
     const next = GRANT_CYCLE[(GRANT_CYCLE.indexOf(cur) + 1) % GRANT_CYCLE.length];
@@ -50,20 +51,8 @@ export const PermissionMatrix = ({ matrix, readOnly }: Props) => {
     setDirty(d);
   };
 
-  const reset = () => { setGrants(new Map(initial)); setDirty(new Set()); };
-
-  const submit = async () => {
-    const updates = Array.from(dirty).map((k) => {
-      const [rowId, colId] = k.split("|");
-      return { rowId, colId, grant: grants.get(k) ?? "none" };
-    });
-    await mutations.updatePermissionMatrix(matrix.instance, updates, `${dirty.size} cell(s) updated`);
-    toast.success(t("governance.permission.submitted"));
-    setDirty(new Set());
-  };
-
   return (
-    <Card className="p-0 overflow-hidden">
+    <Card className="p-0">
       <div className="flex items-center justify-between p-4 border-b border-border">
         <div>
           <div className="text-sm font-semibold">{t(`governance.permission.instance.${matrix.instance}`)}</div>
@@ -78,12 +67,12 @@ export const PermissionMatrix = ({ matrix, readOnly }: Props) => {
                 {dirty.size} {t("governance.permission.pending")}
               </Badge>
             )}
-            <Button size="sm" variant="outline" onClick={reset} disabled={!dirty.size}>{t("actions.reset")}</Button>
-            <Button size="sm" onClick={submit} disabled={!dirty.size}>{t("actions.submitForReview")}</Button>
+            <NonProductionActionButton size="sm" variant="outline">{t("actions.reset")}</NonProductionActionButton>
+            <NonProductionActionButton size="sm">{t("actions.submitForReview")}</NonProductionActionButton>
           </div>
         )}
       </div>
-      <div className="overflow-x-auto">
+      <ManagementTableScroll minScrollWidth={Math.max(720, matrix.cols.length * 132)}>
         <table className="w-full border-collapse text-xs">
           <thead>
             <tr className="bg-muted/40">
@@ -112,10 +101,10 @@ export const PermissionMatrix = ({ matrix, readOnly }: Props) => {
                     <td key={c.id} className="border-l border-border p-1.5">
                       <button
                         onClick={() => cycle(r.id, c.id)}
-                        disabled={readOnly}
+                        disabled={isReadOnly}
                         className={`w-full px-2 py-1 rounded text-[10px] uppercase tracking-wider font-medium transition ${grantTone[g]} ${
                           isDirty ? "ring-2 ring-accent" : ""
-                        } ${readOnly ? "cursor-default" : "hover:opacity-80"}`}
+                        } ${isReadOnly ? "cursor-default" : "hover:opacity-80"}`}
                       >
                         {g}
                       </button>
@@ -126,7 +115,7 @@ export const PermissionMatrix = ({ matrix, readOnly }: Props) => {
             ))}
           </tbody>
         </table>
-      </div>
+      </ManagementTableScroll>
       {matrix.cols.some((c) => c.risk === "critical") && (
         <div className="p-3 border-t border-border bg-status-warning/5 text-xs text-status-warning flex items-center gap-2">
           <ShieldAlert className="h-3.5 w-3.5" />

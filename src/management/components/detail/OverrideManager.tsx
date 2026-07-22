@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { PermissionAwareButton } from "@/platform/components/PermissionAwareButton";
 import { useT } from "@/platform/hooks";
 import { toast } from "sonner";
+import { commandReceiptDescription } from "@/lib/bff-v1/commandReceipt";
 
 export const OverrideManager = ({ rebalanceId, strategies }: { rebalanceId: string; strategies: Strategy[] }) => {
   const t = useT();
@@ -33,10 +34,12 @@ export const OverrideManager = ({ rebalanceId, strategies }: { rebalanceId: stri
       reason: reason.trim(), state: "review",
       proposedBy: "ops", proposedAt: new Date().toISOString(),
     };
-    await mutations.submitOverride(rebalanceId, stratId, parsed, reason.trim());
+    const receipt = await mutations.submitOverride(rebalanceId, stratId, parsed, reason.trim());
     setRows((r) => [ov, ...r]);
     setReason("");
-    toast.success(t("phase13.rebalance.override.queued"));
+    toast.success(t("phase13.rebalance.override.queued"), {
+      description: commandReceiptDescription(receipt, { fallback: `Rebalance ${rebalanceId} · override ${stratId}` }),
+    });
   };
 
   return (
