@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -8,17 +9,24 @@ import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
-import { tradeJournal, interaction, lists, type TradeEpisodeProjection, type PersonaTradeReflection, type TradePattern } from "@/lib/bff-v1";
+import {
+  tradeJournal,
+  interaction,
+  lists,
+  type TradeEpisodeProjection,
+  type PersonaTradeReflection,
+  type TradePattern,
+} from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { toast } from "sonner";
 import { safeDateTime } from "@/lib/utils";
-import { Link, useNavigate } from "react-router-dom";
-import { 
-  ArrowUpRight, 
-  Activity, 
-  FileText, 
-  Database, 
-  Inbox, 
+import { Link } from "react-router-dom";
+import {
+  ArrowUpRight,
+  Activity,
+  FileText,
+  Database,
+  Inbox,
   AlertTriangle,
   RotateCcw,
   Search,
@@ -26,6 +34,9 @@ import {
   ChevronRight
 } from "lucide-react";
 import { bffV1 } from "@/lib/bff-v1/client";
+
+const errorMessage = (error: unknown, fallback: string) =>
+  error instanceof Error && error.message ? error.message : fallback;
 
 // Status color mappings
 const statusBadgeStyles: Record<string, string> = {
@@ -48,28 +59,41 @@ const ago = (hours: number): string => {
   return d.toISOString();
 };
 
+interface RedTeamCandidate {
+  persona_id: string;
+  display_name: string;
+  reasons: string[];
+}
+
+interface PersonaSummary {
+  persona_id: string;
+  display_name?: string;
+  name?: string;
+}
+
 export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => {
   const t = useT();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<string>("journal");
   const [episodes, setEpisodes] = useState<TradeEpisodeProjection[]>([]);
   const [reflections, setReflections] = useState<PersonaTradeReflection[]>([]);
   const [patterns, setPatterns] = useState<TradePattern[]>([]);
-  
+
   // Filters
   const [envFilter, setEnvFilter] = useState<string>("");
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [cursor, setCursor] = useState<number>(0);
   const [hasMore, setHasMore] = useState<boolean>(false);
-  
+
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [degradedState, setDegradedState] = useState<string>("complete");
   const [bffMode, setBffMode] = useState<string>("mock");
-  
+
   // Selected details
   const [selectedEpisode, setSelectedEpisode] = useState<TradeEpisodeProjection | null>(null);
-  
+
   // Commands state
   const [retryDialogOpen, setRetryDialogOpen] = useState<boolean>(false);
   const [retryReason, setRetryReason] = useState<string>("");
@@ -78,26 +102,28 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
   const [decideReason, setDecideReason] = useState<string>("");
   const [selectedCandidateId, setSelectedCandidateId] = useState<string>("");
   const [submittingCommand, setSubmittingCommand] = useState<boolean>(false);
-  const [allPersonas, setAllPersonas] = useState<any[]>([]);
+
+  // PINT-008 — "Reflect with Personas" contextual workshop handoff.
+  const [allPersonas, setAllPersonas] = useState<PersonaSummary[]>([]);
   const [selectedAltPersona, setSelectedAltPersona] = useState<string>("");
   const [varianceAttribution, setVarianceAttribution] = useState<string>("");
   const [resolvedWorkshopId, setResolvedWorkshopId] = useState<string | null>(null);
-  const [redTeamEligiblePersona, setRedTeamEligiblePersona] = useState<any | null>(null);
+  const [redTeamEligiblePersona, setRedTeamEligiblePersona] = useState<RedTeamCandidate | null>(null);
   const [checkingRedTeam, setCheckingRedTeam] = useState<boolean>(false);
   const [redTeamUnavailableReason, setRedTeamUnavailableReason] = useState<string>("");
-  const navigate = useNavigate();
 
   useEffect(() => {
     setBffMode(bffV1.detectMode());
-    // Load all personas
     lists.personas()
-      .then((res) => {
-        const items = Array.isArray(res) ? res : res?.items || [];
-        setAllPersonas(items);
+      .then((res: unknown) => {
+        const items = Array.isArray(res) ? res : (res as { items?: unknown[] })?.items ?? [];
+        setAllPersonas(items as PersonaSummary[]);
       })
-      .catch(() => {});
+      .catch(() => undefined);
   }, []);
 
+  // Resolve the workshop context + red-team eligibility for the selected episode
+  // so the "Reflect with Personas" panel can offer a same-click red-team review.
   useEffect(() => {
     if (!selectedEpisode) {
       setResolvedWorkshopId(null);
@@ -105,7 +131,7 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
       setRedTeamUnavailableReason("");
       return;
     }
-    
+
     let cancelled = false;
     const checkEligibility = async () => {
       setCheckingRedTeam(true);
@@ -113,46 +139,43 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
       try {
         const environment = selectedEpisode.environment || "paper";
         const resolveRes = await interaction.resolveContext({
-          context_refs: [
-            { type: "journal_entry", id: selectedEpisode.trade_episode_id }
-          ],
-          environment: environment as any
+          context_refs: [{ type: "journal_entry", id: selectedEpisode.trade_episode_id }],
+          environment: environment as "research" | "shadow" | "paper" | "canary" | "live",
         });
-        
+
         if (cancelled) return;
         const workshopId = resolveRes.data.workshop_id;
         setResolvedWorkshopId(workshopId);
-        
+
         const eligibleRes = await interaction.participants({
           workshop_id: workshopId,
           mode: "challenge",
-          environment: environment as any
+          environment: environment as "research" | "shadow" | "paper" | "canary" | "live",
         });
-        
+
         if (cancelled) return;
-        const redTeam = eligibleRes.data.included.find(
-          (p: any) => p.persona_id === "per_red" || p.persona_id.toLowerCase().includes("red") || p.display_name.toLowerCase().includes("red")
-        );
-        setRedTeamEligiblePersona(redTeam || null);
-        
+        const isRedTeam = (p: { persona_id: string; display_name: string }) =>
+          p.persona_id === "per_red" ||
+          p.persona_id.toLowerCase().includes("red") ||
+          p.display_name.toLowerCase().includes("red");
+        const redTeam = eligibleRes.data.included.find(isRedTeam);
+        setRedTeamEligiblePersona(redTeam ?? null);
+
         if (!redTeam) {
-          const excludedRedTeam = eligibleRes.data.excluded.find(
-            (p: any) => p.persona_id === "per_red" || p.persona_id.toLowerCase().includes("red") || p.display_name.toLowerCase().includes("red")
-          );
+          const excludedRedTeam = eligibleRes.data.excluded.find(isRedTeam);
           if (excludedRedTeam) {
             setRedTeamUnavailableReason(excludedRedTeam.reasons.join(", ") || "Ineligible");
           } else {
             setRedTeamUnavailableReason("Not found in registry");
           }
         }
-      } catch (err: any) {
-        console.error("Failed to fetch red team eligibility", err);
-        setRedTeamUnavailableReason(err.message || "Failed to fetch participants");
+      } catch (err: unknown) {
+        setRedTeamUnavailableReason(errorMessage(err, "Failed to fetch participants"));
       } finally {
         if (!cancelled) setCheckingRedTeam(false);
       }
     };
-    
+
     checkEligibility();
     return () => {
       cancelled = true;
@@ -180,8 +203,8 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
         const res = await tradeJournal.patterns(personaId);
         setPatterns(res.data);
       }
-    } catch (err: any) {
-      setError(err.message || "Failed to load data");
+    } catch (err: unknown) {
+      setError(errorMessage(err, "Failed to load data"));
       toast.error("BFF Trade Journal Read Failed");
     } finally {
       setLoading(false);
@@ -210,8 +233,8 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
       const updatedDetail = await tradeJournal.get(personaId, selectedEpisode.trade_episode_id);
       setSelectedEpisode(updatedDetail.data);
       loadData();
-    } catch (err: any) {
-      toast.error(err.message || "Failed to submit retry command");
+    } catch (err: unknown) {
+      toast.error(errorMessage(err, "Failed to submit retry command"));
     } finally {
       setSubmittingCommand(false);
     }
@@ -225,7 +248,13 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
     }
     setSubmittingCommand(true);
     try {
-      const res = await tradeJournal.decideLesson(personaId, selectedCandidateId, decideReason, decideDecision, varianceAttribution || undefined);
+      const res = await tradeJournal.decideLesson(
+        personaId,
+        selectedCandidateId,
+        decideReason,
+        decideDecision,
+        varianceAttribution || undefined,
+      );
       toast.success(`Lesson candidate was ${decideDecision}`, {
         description: `Command ID: ${res.data.commandId}`
       });
@@ -238,57 +267,61 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
         setSelectedEpisode(updatedDetail.data);
       }
       loadData();
-    } catch (err: any) {
-      toast.error(err.message || "Failed to submit decision command");
+    } catch (err: unknown) {
+      toast.error(errorMessage(err, "Failed to submit decision command"));
     } finally {
       setSubmittingCommand(false);
     }
   };
 
+  // PINT-008 — hand a trade episode off to the Strategy Workshop for persona
+  // review (original persona, an alternate persona, or a red-team challenge).
   const handleReflect = async (type: "original" | "alternate" | "red-team", targetPersonaId: string) => {
     if (!selectedEpisode) return;
     if (!targetPersonaId) {
       toast.error("Please select a persona to review");
       return;
     }
-    
+
     setSubmittingCommand(true);
     try {
       const mode = type === "red-team" ? "challenge" : "reflect";
       const environment = selectedEpisode.environment || "paper";
-      
-      const workshopId = resolvedWorkshopId || (await interaction.resolveContext({
-        context_refs: [
-          { type: "journal_entry", id: selectedEpisode.trade_episode_id }
-        ],
-        environment: environment as any
-      })).data.workshop_id;
-      
-      // Now submit the interaction to initialize opinion/debate
+
+      const workshopId =
+        resolvedWorkshopId ||
+        (
+          await interaction.resolveContext({
+            context_refs: [{ type: "journal_entry", id: selectedEpisode.trade_episode_id }],
+            environment: environment as "research" | "shadow" | "paper" | "canary" | "live",
+          })
+        ).data.workshop_id;
+
+      // Submit the interaction to initialize the opinion/debate thread.
       await interaction.submit({
         workshop_id: workshopId,
-        mode: mode,
-        environment: environment as any,
+        mode,
+        environment: environment as "research" | "shadow" | "paper" | "canary" | "live",
         topic: `Reflection and review for episode ${selectedEpisode.trade_episode_id} by Persona ${targetPersonaId}`,
         participant_persona_ids: [targetPersonaId],
         context_refs: [
           { type: "journal_entry", id: selectedEpisode.trade_episode_id },
-          { type: "persona", id: targetPersonaId }
-        ]
+          { type: "persona", id: targetPersonaId },
+        ],
       });
 
       toast.success("Workshop resolved successfully, redirecting...");
       setSelectedEpisode(null); // Close the sheet
       navigate(`/agora/strategy-workshop/${workshopId}`);
-    } catch (err: any) {
-      toast.error(err.message || "Failed to resolve workshop context");
+    } catch (err: unknown) {
+      toast.error(errorMessage(err, "Failed to resolve workshop context"));
     } finally {
       setSubmittingCommand(false);
     }
   };
 
-  const filteredEpisodes = episodes.filter(ep => 
-    !searchQuery || 
+  const filteredEpisodes = episodes.filter(ep =>
+    !searchQuery ||
     ep.instrument_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
     ep.trade_episode_id.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -375,7 +408,7 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
                 className="pl-8 text-sm"
               />
             </div>
-            
+
             <div className="flex gap-2">
               <select
                 value={envFilter}
@@ -429,8 +462,8 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
                   </thead>
                   <tbody>
                     {filteredEpisodes.map((ep) => (
-                      <tr 
-                        key={ep.trade_episode_id} 
+                      <tr
+                        key={ep.trade_episode_id}
                         className="border-b border-border hover:bg-muted/20 cursor-pointer"
                         onClick={() => setSelectedEpisode(ep)}
                       >
@@ -464,9 +497,9 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
               {/* Pagination */}
               {hasMore && (
                 <div className="flex justify-end pt-2">
-                  <Button 
-                    size="sm" 
-                    variant="outline" 
+                  <Button
+                    size="sm"
+                    variant="outline"
                     onClick={() => setCursor(prev => prev + 10)}
                   >
                     Load More
@@ -538,24 +571,24 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
                           </div>
                           {ref.review_state === "proposed" && (
                             <div className="flex gap-1 shrink-0">
-                              <Button 
-                                size="sm" 
-                                variant="destructive" 
+                              <Button
+                                size="sm"
+                                variant="destructive"
                                 className="h-6 text-[10px] px-2"
                                 onClick={() => { setSelectedCandidateId(c.id); setDecideDecision("rejected"); setDecideDialogOpen(true); }}
                               >
                                 Reject
                               </Button>
-                              <Button 
-                                size="sm" 
-                                variant="outline" 
+                              <Button
+                                size="sm"
+                                variant="outline"
                                 className="h-6 text-[10px] px-2"
                                 onClick={() => { setSelectedCandidateId(c.id); setDecideDecision("quarantined"); setDecideDialogOpen(true); }}
                               >
                                 Quarantine
                               </Button>
-                              <Button 
-                                size="sm" 
+                              <Button
+                                size="sm"
                                 className="h-6 text-[10px] px-2 bg-emerald-600 hover:bg-emerald-500 text-white border-none"
                                 onClick={() => { setSelectedCandidateId(c.id); setDecideDecision("endorsed"); setDecideDialogOpen(true); }}
                               >
@@ -746,7 +779,7 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
               {/* Reflection telemetry */}
               <div className="space-y-2.5">
                 <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider border-b pb-1">Persona Reflection Telemetry</h3>
-                
+
                 {selectedEpisode.status === "reflection_pending" && (
                   <div className="p-3 bg-orange-500/10 border border-orange-500/20 text-orange-500 rounded-md text-xs flex gap-2 items-center justify-between">
                     <span>Reflection pipeline pending execution. Waiting for final watermarks.</span>
@@ -756,9 +789,9 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
                 {selectedEpisode.status === "reflection_failed" && (
                   <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-500 rounded-md text-xs flex flex-col sm:flex-row gap-2 items-start sm:items-center justify-between">
                     <span>Reflection generation failed due to timeout or missing joins.</span>
-                    <Button 
-                      size="sm" 
-                      variant="outline" 
+                    <Button
+                      size="sm"
+                      variant="outline"
                       onClick={() => setRetryDialogOpen(true)}
                       className="border-red-500/30 bg-red-500/10 hover:bg-red-500/20 text-red-500 font-semibold"
                     >
@@ -779,11 +812,11 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
               <div className="space-y-3 pt-3 border-t">
                 <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider border-b pb-1">Reflect with Personas (Strategy Workshop)</h3>
                 <div className="flex flex-col gap-3.5 bg-slate-50/50 p-3 rounded-lg border">
-                  
+
                   {/* Original & Red-Team Review Row */}
                   <div className="grid grid-cols-2 gap-2">
-                    <Button 
-                      size="sm" 
+                    <Button
+                      size="sm"
                       variant="outline"
                       className="text-xs font-semibold"
                       onClick={() => handleReflect("original", selectedEpisode.persona_id)}
@@ -791,13 +824,13 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
                     >
                       Original Persona Review
                     </Button>
-                    
+
                     <div className="flex flex-col gap-1 w-full">
-                      <Button 
-                        size="sm" 
+                      <Button
+                        size="sm"
                         variant="outline"
                         className="text-xs font-semibold border-rose-500/30 hover:bg-rose-500/10 text-rose-600 hover:text-rose-700 w-full"
-                        onClick={() => handleReflect("red-team", redTeamEligiblePersona?.persona_id)}
+                        onClick={() => handleReflect("red-team", redTeamEligiblePersona?.persona_id ?? "")}
                         disabled={submittingCommand || checkingRedTeam || !redTeamEligiblePersona}
                       >
                         {checkingRedTeam ? "Checking..." : redTeamEligiblePersona ? "Red Team Review" : "Red Team (Unavailable)"}
@@ -821,8 +854,8 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
                     >
                       <option value="">Select Persona...</option>
                       {allPersonas
-                        .filter(p => p.persona_id !== selectedEpisode.persona_id)
-                        .map(p => (
+                        .filter((p) => p.persona_id !== selectedEpisode.persona_id)
+                        .map((p) => (
                           <option key={p.persona_id} value={p.persona_id}>
                             {p.display_name || p.name || p.persona_id}
                           </option>
@@ -864,9 +897,9 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
           </div>
           <DialogFooter>
             <Button size="sm" variant="outline" onClick={() => setRetryDialogOpen(false)}>Cancel</Button>
-            <Button 
-              size="sm" 
-              onClick={handleRetryReflection} 
+            <Button
+              size="sm"
+              onClick={handleRetryReflection}
               disabled={submittingCommand}
               className="bg-indigo-600 hover:bg-indigo-500 text-white border-none"
             >
@@ -889,7 +922,7 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
             <div className="text-xs p-2 bg-muted rounded border font-mono">
               Lesson ID: {selectedCandidateId}
             </div>
-            
+
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-semibold text-muted-foreground">Variance Attribution Category:</label>
               <select
@@ -922,9 +955,9 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
           </div>
           <DialogFooter>
             <Button size="sm" variant="outline" onClick={() => setDecideDialogOpen(false)}>Cancel</Button>
-            <Button 
-              size="sm" 
-              onClick={handleDecideLesson} 
+            <Button
+              size="sm"
+              onClick={handleDecideLesson}
               disabled={submittingCommand}
               className={decideDecision === "rejected" ? "bg-rose-600 hover:bg-rose-500 text-white border-none" : decideDecision === "quarantined" ? "bg-amber-600 hover:bg-amber-500 text-white border-none" : "bg-emerald-600 hover:bg-emerald-500 text-white border-none"}
             >

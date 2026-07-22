@@ -3,6 +3,7 @@
 // Pure presentational; data injected by ExecutionLoop page.
 
 import { Card } from "@/components/ui/card";
+import { ManagementTableScroll } from "@/management/components/ManagementTableScroll";
 import { Badge } from "@/components/ui/badge";
 import { useT } from "@/platform/hooks";
 import type { PersonaExecutionHealth } from "@/lib/v5";
@@ -21,21 +22,9 @@ const modeCls: Record<string, string> = {
   suspended: "bg-muted text-muted-foreground border-border",
 };
 
-// D (2026-05-09) — deterministic mock score series for sparkline.
-// Replace once backend exposes PersonaExecutionHealth.history (Pack D D05+).
-function mockSeries(personaId: string, current: number): number[] {
-  let h = 0;
-  for (let i = 0; i < personaId.length; i++) h = (h * 31 + personaId.charCodeAt(i)) >>> 0;
-  const points: number[] = [];
-  for (let i = 0; i < 12; i++) {
-    h = (h * 1664525 + 1013904223) >>> 0;
-    const drift = ((h % 21) - 10); // -10..+10
-    const decayWeight = i / 11; // last point weighted toward `current`
-    const base = current + drift * (1 - decayWeight);
-    points.push(Math.max(0, Math.min(100, base)));
-  }
-  points[points.length - 1] = current;
-  return points;
+function scoreHistory(item: PersonaExecutionHealth): number[] {
+  const row = item as PersonaExecutionHealth & { history?: number[]; scoreHistory?: number[]; score_history?: number[] };
+  return row.history ?? row.scoreHistory ?? row.score_history ?? [];
 }
 
 const Sparkline = ({ values, tone }: { values: number[]; tone: string }) => {
@@ -74,8 +63,9 @@ export const PersonaHealthMatrix = ({ items }: { items: PersonaExecutionHealth[]
   });
 
   return (
-    <Card className="p-0 overflow-hidden">
-      <table className="w-full text-sm">
+    <Card className="p-0">
+      <ManagementTableScroll minScrollWidth={1120}>
+          <table className="w-full min-w-[1120px] text-sm">
         <thead className="text-xs text-muted-foreground bg-muted/40">
           <tr>
             <th className="text-left px-3 py-2">{t("v5.matrix.persona")}</th>
@@ -103,7 +93,7 @@ export const PersonaHealthMatrix = ({ items }: { items: PersonaExecutionHealth[]
               </td>
               <td className="px-3 py-2 text-right text-mono">{p.score.toFixed(0)}</td>
               <td className="px-3 py-2">
-                <Sparkline values={mockSeries(p.personaId, p.score)} tone={sparkTone(p.status)} />
+                <Sparkline values={scoreHistory(p)} tone={sparkTone(p.status)} />
               </td>
               <td className="px-3 py-2 text-right text-mono">{p.routedStrategies}</td>
               <td className="px-3 py-2 text-right text-mono">
@@ -119,6 +109,7 @@ export const PersonaHealthMatrix = ({ items }: { items: PersonaExecutionHealth[]
           )}
         </tbody>
       </table>
+          </ManagementTableScroll>
     </Card>
   );
 };

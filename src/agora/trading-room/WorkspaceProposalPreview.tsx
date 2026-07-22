@@ -1,113 +1,50 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
 
 import type {
   TradingRoomViewSpec,
-  TradingRoomWidgetSpec,
   TradingRoomWorkspaceProposal,
-} from "@/lib/bff-v1/agora/types";
-
+} from "@/lib/bff-v1/agora/tradingRoomTypes";
 import {
-  getWidgetRegistryEntry,
-  isBlockedInteractionKind,
-  isWidgetInteractionKind,
-  validateChartSpecGrammar,
-} from "@/agora/widgets/registry";
+  safeWarningText,
+  validateTradingRoomWidgetSpec,
+} from "./workspaceValidation";
 
 type DataAvailabilityStatus = "complete" | "partial" | "unavailable";
 
-export interface TradingRoomWidgetValidation {
-  ok: boolean;
-  title: string;
-  messages: string[];
-}
-
-const STATUS_LABEL: Record<DataAvailabilityStatus, string> = {
-  complete: "完整",
-  partial: "部分可用",
-  unavailable: "暫不可用",
+const COLORS = {
+  accent: "#e8b750",
+  border: "#2a2e38",
+  borderStrong: "#3a4254",
+  danger: "#ff6b6b",
+  good: "#56d98b",
+  muted: "#8c96a6",
+  panel: "#171b22",
+  panelElevated: "#1e2330",
+  panelInset: "#11151d",
+  text: "#f0ece4",
+  textSoft: "#c4ccda",
+  warning: "#f0b84d",
 };
 
 const STATUS_COLOR: Record<DataAvailabilityStatus, { bg: string; fg: string; border: string }> = {
-  complete: { bg: "#ecfdf5", fg: "#047857", border: "#a7f3d0" },
-  partial: { bg: "#fffbeb", fg: "#b45309", border: "#fde68a" },
-  unavailable: { bg: "#fef2f2", fg: "#b91c1c", border: "#fecaca" },
+  complete: { bg: "rgba(86, 217, 139, 0.13)", fg: COLORS.good, border: "rgba(86, 217, 139, 0.42)" },
+  partial: { bg: "rgba(240, 184, 77, 0.14)", fg: COLORS.warning, border: "rgba(240, 184, 77, 0.44)" },
+  unavailable: { bg: "rgba(255, 107, 107, 0.13)", fg: COLORS.danger, border: "rgba(255, 107, 107, 0.42)" },
 };
 
-function sensitivityRank(value: TradingRoomWidgetSpec["sensitivity"]): number {
-  if (value === "public_market") return 0;
-  if (value === "user_private") return 1;
-  if (value === "restricted") return 3;
-  return 2;
-}
-
-export function formatSensitivityLabel(value: TradingRoomWidgetSpec["sensitivity"]): string {
-  if (value === "public_market") return "公開市場";
-  if (value === "user_private") return "使用者私有";
-  if (value === "restricted") return "嚴格受限";
-  return "受限資料";
-}
-
-export function safeWarningText(value: string): string {
-  return value
-    .replace(/runtime\s*bindings?/giu, "後台執行狀態")
-    .replace(/management/giu, "系統治理")
-    .replace(new RegExp(["bro", "ker"].join(""), "giu"), "外部連線")
-    .replace(/capital\s*binding/giu, "資金連動")
-    .replace(/direct\s*orders?/giu, "交易執行");
-}
-
-export function validateTradingRoomWidgetSpec(widget: TradingRoomWidgetSpec): TradingRoomWidgetValidation {
-  const entry = getWidgetRegistryEntry(widget.widgetType);
-  if (!entry) {
-    return {
-      ok: false,
-      title: "Widget type 未註冊",
-      messages: [`${widget.widgetType} 不在 Agora widget registry。`],
-    };
-  }
-
-  const messages: string[] = [];
-  if (entry.status !== "active") {
-    messages.push(`${entry.display_name} 目前不是 active widget。`);
-  }
-  if (!entry.allowed_data_sources.includes(widget.dataSource)) {
-    messages.push(`${widget.dataSource} 不是 ${entry.display_name} 的允許 data source。`);
-  }
-
-  const grammarFailure = validateChartSpecGrammar(widget.chartSpec);
-  if (grammarFailure) {
-    messages.push(grammarFailure.message);
-  } else if (!entry.allowed_chart_kinds.includes(widget.chartSpec.kind)) {
-    messages.push(`${widget.chartSpec.kind} 不是 ${entry.display_name} 的允許 ChartSpec kind。`);
-  }
-
-  for (const transform of widget.chartSpec.transforms ?? []) {
-    if (!entry.allowed_transforms.includes(transform.type)) {
-      messages.push(`${transform.type} 不是 ${entry.display_name} 的允許 transform。`);
-    }
-  }
-
-  const interactions = [...(widget.interactions ?? []), widget.chartSpec.click_action].filter(Boolean);
-  for (const interaction of interactions) {
-    const kind = interaction?.kind;
-    if (!isWidgetInteractionKind(kind) || isBlockedInteractionKind(kind) || !entry.allowed_interactions.includes(kind)) {
-      messages.push(`${String(kind)} 不是 ${entry.display_name} 的允許 interaction。`);
-    }
-  }
-
-  if (sensitivityRank(widget.sensitivity) < sensitivityRank(entry.sensitivity)) {
-    messages.push(`${entry.display_name} 需要 ${formatSensitivityLabel(entry.sensitivity)}，proposal 降為 ${formatSensitivityLabel(widget.sensitivity)}。`);
-  }
-
-  return {
-    ok: messages.length === 0,
-    title: entry.display_name,
-    messages,
-  };
+function safeAvailabilityStatus(value: unknown): DataAvailabilityStatus {
+  return value === "complete" || value === "partial" || value === "unavailable"
+    ? value
+    : "unavailable";
 }
 
 function StatusPill({ status }: { status: DataAvailabilityStatus }) {
-  const color = STATUS_COLOR[status];
+  const { t } = useTranslation();
+  // Transport normalization owns canonical aliases, but keep the render path
+  // fail-safe for unexpected persisted values instead of crashing the route.
+  const safeStatus = safeAvailabilityStatus(status);
+  const color = STATUS_COLOR[safeStatus];
   return (
     <span
       style={{
@@ -117,26 +54,29 @@ function StatusPill({ status }: { status: DataAvailabilityStatus }) {
         borderRadius: 999,
         color: color.fg,
         display: "inline-flex",
+        flex: "0 0 auto",
         fontSize: 11,
         fontWeight: 600,
         lineHeight: 1,
         padding: "4px 8px",
+        whiteSpace: "nowrap",
       }}
     >
-      {STATUS_LABEL[status]}
+      {t(`agora.tradingRoom.availability.${safeStatus}`)}
     </span>
   );
 }
 
 function ProposalThumbnail({ view }: { view: TradingRoomViewSpec }) {
+  const { t } = useTranslation();
   const widgets = view.widgets.slice(0, 12);
   return (
     <div
-      aria-label={`${view.title} thumbnail`}
+      aria-label={t("agora.tradingRoom.proposal.thumbnail", { title: view.title })}
       data-testid={`workspace-proposal-thumbnail-${view.id}`}
       style={{
-        background: "#f8fafc",
-        border: "1px solid #e2e8f0",
+        background: COLORS.panelInset,
+        border: `1px solid ${COLORS.border}`,
         borderRadius: 8,
         display: "grid",
         gap: 3,
@@ -158,8 +98,8 @@ function ProposalThumbnail({ view }: { view: TradingRoomViewSpec }) {
             key={widget.id}
             title={widget.title}
             style={{
-              background: valid ? "#dbeafe" : "#fee2e2",
-              border: `1px solid ${valid ? "#93c5fd" : "#fecaca"}`,
+              background: valid ? "rgba(232, 183, 80, 0.22)" : "rgba(255, 107, 107, 0.2)",
+              border: `1px solid ${valid ? "rgba(232, 183, 80, 0.46)" : "rgba(255, 107, 107, 0.48)"}`,
               borderRadius: 4,
               gridColumn: `${column} / span ${Math.min(width, 13 - column)}`,
               gridRow: `${row} / span ${height}`,
@@ -169,8 +109,8 @@ function ProposalThumbnail({ view }: { view: TradingRoomViewSpec }) {
         );
       })}
       {widgets.length === 0 ? (
-        <span style={{ alignSelf: "center", color: "#94a3b8", fontSize: 12, gridColumn: "1 / -1", justifySelf: "center" }}>
-          No widgets
+        <span style={{ alignSelf: "center", color: COLORS.muted, fontSize: 12, gridColumn: "1 / -1", justifySelf: "center" }}>
+          {t("agora.tradingRoom.proposal.noWidgets")}
         </span>
       ) : null}
     </div>
@@ -179,25 +119,42 @@ function ProposalThumbnail({ view }: { view: TradingRoomViewSpec }) {
 
 function ViewProposalCard({
   selected,
+  sourceStatuses,
   view,
   onPreview,
 }: {
   selected: boolean;
+  sourceStatuses: ReadonlyMap<string, DataAvailabilityStatus>;
   view: TradingRoomViewSpec;
   onPreview?: (view: TradingRoomViewSpec) => void;
 }) {
-  const status = view.dataAvailability ?? "complete";
+  const { t } = useTranslation();
   const invalidWidgets = view.widgets
     .map((widget) => ({ widget, validation: validateTradingRoomWidgetSpec(widget) }))
     .filter((entry) => !entry.validation.ok);
-  const unavailableWidgets = status === "complete" ? [] : view.widgets.map((widget) => widget.title).slice(0, 3);
+  const widgetAvailability = view.widgets.map((widget) => ({
+    status: safeAvailabilityStatus(
+      widget.dataAvailability ?? sourceStatuses.get(widget.dataSource) ?? view.dataAvailability,
+    ),
+    widget,
+  }));
+  const counts = widgetAvailability.reduce(
+    (summary, entry) => ({ ...summary, [entry.status]: summary[entry.status] + 1 }),
+    { complete: 0, partial: 0, unavailable: 0 } satisfies Record<DataAvailabilityStatus, number>,
+  );
+  const degradedWidgets = widgetAvailability.filter((entry) => entry.status !== "complete");
+  const availabilitySummary = t("agora.tradingRoom.proposal.availabilitySummary", {
+    complete: counts.complete,
+    partial: counts.partial,
+    unavailable: counts.unavailable,
+  });
 
   return (
     <section
       data-testid={`workspace-proposal-view-${view.id}`}
       style={{
-        background: "#ffffff",
-        border: selected ? "2px solid #2563eb" : "1px solid #e2e8f0",
+        background: selected ? "#222535" : COLORS.panel,
+        border: selected ? `2px solid ${COLORS.accent}` : `1px solid ${COLORS.border}`,
         borderRadius: 8,
         display: "flex",
         flexDirection: "column",
@@ -207,39 +164,54 @@ function ViewProposalCard({
       }}
     >
       <ProposalThumbnail view={view} />
-      <div style={{ alignItems: "flex-start", display: "flex", gap: 10, justifyContent: "space-between" }}>
-        <div style={{ minWidth: 0 }}>
-          <h3 style={{ color: "#0f172a", fontSize: 14, fontWeight: 700, margin: 0 }}>{view.title}</h3>
-          <p style={{ color: "#475569", fontSize: 12, lineHeight: 1.45, margin: "4px 0 0" }}>{view.purpose}</p>
+      <div style={{ alignItems: "flex-start", display: "flex", gap: 10, justifyContent: "space-between", minWidth: 0 }}>
+        <div style={{ flex: "1 1 auto", minWidth: 0 }}>
+          <h3 style={{ color: COLORS.text, fontSize: 14, fontWeight: 700, lineHeight: 1.25, margin: 0, overflowWrap: "anywhere" }}>{view.title}</h3>
+          <p style={{ color: COLORS.textSoft, fontSize: 12, lineHeight: 1.45, margin: "4px 0 0", overflowWrap: "anywhere" }}>{view.purpose}</p>
         </div>
-        <StatusPill status={status} />
       </div>
-      <div style={{ color: "#64748b", display: "flex", flexWrap: "wrap", fontSize: 12, gap: 8 }}>
-        <span data-testid={`workspace-proposal-view-${view.id}-widget-count`}>{view.widgetCount ?? view.widgets.length} widgets</span>
+      <div style={{ color: COLORS.muted, display: "flex", flexWrap: "wrap", fontSize: 12, gap: 8 }}>
+        <span data-testid={`workspace-proposal-view-${view.id}-widget-count`}>
+          {t("agora.tradingRoom.proposal.widgetCount", { count: view.widgetCount ?? view.widgets.length })}
+        </span>
         <span>{view.layoutTemplate}</span>
       </div>
       {view.rationale ? (
-        <p style={{ color: "#334155", fontSize: 12, lineHeight: 1.45, margin: 0 }}>{view.rationale}</p>
+        <p style={{ color: COLORS.textSoft, fontSize: 12, lineHeight: 1.45, margin: 0 }}>{view.rationale}</p>
       ) : null}
-      {unavailableWidgets.length ? (
-        <div style={{ color: "#b45309", fontSize: 12 }} data-testid={`workspace-proposal-view-${view.id}-data-gaps`}>
-          資料狀態需確認: {unavailableWidgets.join("、")}
+      {degradedWidgets.length ? (
+        <details data-testid={`workspace-proposal-view-${view.id}-availability`} style={{ color: COLORS.textSoft, fontSize: 12 }}>
+          <summary style={{ color: COLORS.warning, cursor: "pointer", fontWeight: 700 }}>
+            {t("agora.tradingRoom.proposal.dataAvailability")}: {availabilitySummary}
+          </summary>
+          <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
+            {degradedWidgets.map(({ status, widget }) => (
+              <div key={widget.id} style={{ alignItems: "center", display: "flex", gap: 8, minWidth: 0 }}>
+                <StatusPill status={status} />
+                <span style={{ minWidth: 0, overflowWrap: "anywhere" }}>{widget.title} · {widget.dataSource}</span>
+              </div>
+            ))}
+          </div>
+        </details>
+      ) : (
+        <div data-testid={`workspace-proposal-view-${view.id}-availability`} style={{ color: COLORS.good, fontSize: 12, fontWeight: 700 }}>
+          {t("agora.tradingRoom.proposal.dataAvailability")}: {availabilitySummary}
         </div>
-      ) : null}
+      )}
       {view.warnings?.length ? (
-        <ul style={{ color: "#b45309", fontSize: 12, margin: 0, paddingLeft: 16 }}>
+        <ul style={{ color: COLORS.warning, fontSize: 12, margin: 0, paddingLeft: 16 }}>
           {view.warnings.map((warning, index) => (
             <li key={`${view.id}-warning-${index}`}>{safeWarningText(warning)}</li>
           ))}
         </ul>
       ) : null}
       {invalidWidgets.length ? (
-        <div data-testid={`workspace-proposal-view-${view.id}-validation`} style={{ color: "#b91c1c", fontSize: 12 }}>
-          {invalidWidgets.length} widget validation issue{invalidWidgets.length > 1 ? "s" : ""}
+        <div data-testid={`workspace-proposal-view-${view.id}-validation`} style={{ color: COLORS.danger, fontSize: 12 }}>
+          {t("agora.tradingRoom.proposal.validationIssues", { count: invalidWidgets.length })}
         </div>
       ) : (
-        <div data-testid={`workspace-proposal-view-${view.id}-validation`} style={{ color: "#047857", fontSize: 12 }}>
-          Registry validated
+        <div data-testid={`workspace-proposal-view-${view.id}-validation`} style={{ color: COLORS.good, fontSize: 12 }}>
+          {t("agora.tradingRoom.proposal.registryValidated")}
         </div>
       )}
       <button
@@ -247,10 +219,10 @@ function ViewProposalCard({
         onClick={() => onPreview?.(view)}
         style={{
           alignSelf: "flex-start",
-          background: selected ? "#eff6ff" : "#ffffff",
-          border: "1px solid #cbd5e1",
+          background: selected ? "rgba(232, 183, 80, 0.14)" : "transparent",
+          border: `1px solid ${selected ? COLORS.accent : COLORS.borderStrong}`,
           borderRadius: 6,
-          color: "#1e40af",
+          color: selected ? COLORS.accent : COLORS.textSoft,
           cursor: "pointer",
           fontSize: 12,
           fontWeight: 600,
@@ -258,7 +230,7 @@ function ViewProposalCard({
         }}
         type="button"
       >
-        逐頁預覽
+        {t("agora.tradingRoom.proposal.previewView")}
       </button>
     </section>
   );
@@ -287,71 +259,94 @@ export function WorkspaceProposalPreview({
   proposal,
   selectedViewId,
 }: WorkspaceProposalPreviewProps) {
-  const availability = proposal.dataAvailability.status;
+  const { t } = useTranslation();
+  const availability = safeAvailabilityStatus(proposal.dataAvailability.status);
+  const sourceStatuses = new Map(
+    proposal.dataAvailability.sources.map((source) => [
+      source.dataSource,
+      safeAvailabilityStatus(source.status),
+    ] as const),
+  );
   const personalizationItems = proposal.personalizationApplied.items ?? [];
   const selected = selectedViewId ?? proposal.views[0]?.id ?? null;
 
   return (
-    <div data-testid="workspace-proposal-preview" style={{ display: "flex", flexDirection: "column", gap: 14, padding: 16 }}>
-      <header style={{ display: "flex", flexWrap: "wrap", gap: 12, justifyContent: "space-between" }}>
-        <div>
-          <div style={{ color: "#64748b", fontSize: 12, fontWeight: 600 }}>Trading Servant Proposal</div>
-          <h2 style={{ color: "#0f172a", fontSize: 20, fontWeight: 800, letterSpacing: 0, margin: "2px 0 0" }}>
-            {proposal.strategyVersion} — 操盤室提案
+    <div
+      data-testid="workspace-proposal-preview"
+      style={{
+        background: COLORS.panelInset,
+        color: COLORS.text,
+        display: "flex",
+        flexDirection: "column",
+        gap: 14,
+        padding: 16,
+      }}
+    >
+      <header style={{ display: "flex", flexWrap: "wrap", gap: 12, justifyContent: "space-between", minWidth: 0 }}>
+        <div style={{ flex: "1 1 420px", minWidth: 0 }}>
+          <div style={{ color: COLORS.accent, fontSize: 12, fontWeight: 600 }}>
+            {t("agora.tradingRoom.proposal.eyebrow")}
+          </div>
+          <h2 style={{ color: COLORS.text, fontSize: 20, fontWeight: 800, letterSpacing: 0, lineHeight: 1.25, margin: "2px 0 0", overflowWrap: "anywhere" }}>
+            {proposal.strategyVersion} - 操盤室提案
           </h2>
-          <p style={{ color: "#475569", fontSize: 13, lineHeight: 1.5, margin: "6px 0 0", maxWidth: 760 }}>
+          <p style={{ color: COLORS.textSoft, fontSize: 13, lineHeight: 1.5, margin: "6px 0 0", maxWidth: 760 }}>
             {proposal.rationale}
           </p>
         </div>
-        <div style={{ alignItems: "flex-end", display: "flex", flexDirection: "column", gap: 8 }}>
-          <span style={{ color: "#475569", fontSize: 12 }}>Generated {new Date(proposal.generatedAt).toLocaleString()}</span>
+        <div style={{ alignItems: "flex-end", display: "flex", flex: "0 0 auto", flexDirection: "column", gap: 8 }}>
+          <span style={{ color: COLORS.muted, fontSize: 12 }}>
+            {t("agora.tradingRoom.proposal.generatedAt", { time: new Date(proposal.generatedAt).toLocaleString() })}
+          </span>
           <StatusPill status={availability} />
         </div>
       </header>
 
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-        <span style={{ background: "#eef2ff", borderRadius: 999, color: "#3730a3", fontSize: 12, fontWeight: 700, padding: "5px 10px" }}>
-          {proposal.views.length} 個 View
+        <span style={summaryPillStyle}>
+          {t("agora.tradingRoom.proposal.viewCount", { count: proposal.views.length })}
         </span>
-        <span style={{ background: "#f1f5f9", borderRadius: 999, color: "#334155", fontSize: 12, fontWeight: 700, padding: "5px 10px" }}>
-          {proposal.views.reduce((sum, view) => sum + (view.widgetCount ?? view.widgets.length), 0)} widgets
+        <span style={summaryPillStyle}>
+          {t("agora.tradingRoom.proposal.widgetCount", { count: proposal.views.reduce((sum, view) => sum + (view.widgetCount ?? view.widgets.length), 0) })}
         </span>
-        <span style={{ background: "#f1f5f9", borderRadius: 999, color: "#334155", fontSize: 12, fontWeight: 700, padding: "5px 10px" }}>
-          Personalization {proposal.personalizationApplied.status === "applied" ? "applied" : "not applied"}
+        <span style={summaryPillStyle}>
+          {t(
+            proposal.personalizationApplied.status === "applied"
+              ? "agora.tradingRoom.proposal.personalizationApplied"
+              : "agora.tradingRoom.proposal.personalizationNotApplied"
+          )}
         </span>
       </div>
 
       <section
         data-testid="workspace-proposal-data-availability"
         style={{
-          background: "#ffffff",
-          border: "1px solid #e2e8f0",
+          background: COLORS.panel,
+          border: `1px solid ${COLORS.border}`,
           borderRadius: 8,
-          display: "grid",
-          gap: 10,
-          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+          alignItems: "center",
+          display: "flex",
+          gap: 8,
+          justifyContent: "space-between",
           padding: 12,
         }}
       >
-        {proposal.dataAvailability.sources.map((source) => (
-          <div key={source.dataSource} style={{ minWidth: 0 }}>
-            <div style={{ alignItems: "center", display: "flex", gap: 8 }}>
-              <StatusPill status={source.status} />
-              <span style={{ color: "#0f172a", fontSize: 12, fontWeight: 700 }}>{source.dataSource}</span>
-            </div>
-            {source.reason ? <div style={{ color: "#64748b", fontSize: 12, marginTop: 4 }}>{source.reason}</div> : null}
-          </div>
-        ))}
+        <span style={{ color: COLORS.textSoft, fontSize: 12, fontWeight: 700 }}>
+          {t("agora.tradingRoom.proposal.workspaceDataAvailability")}
+        </span>
+        <StatusPill status={availability} />
       </section>
 
       {personalizationItems.length ? (
-        <section data-testid="workspace-proposal-personalization" style={{ color: "#334155", fontSize: 12 }}>
-          Personalization: {personalizationItems.map((item) => `${item.key}: ${String(item.value)}`).join(" · ")}
+        <section data-testid="workspace-proposal-personalization" style={{ color: COLORS.textSoft, fontSize: 12 }}>
+          {t("agora.tradingRoom.proposal.personalization", {
+            items: personalizationItems.map((item) => `${item.key}: ${String(item.value)}`).join(" · "),
+          })}
         </section>
       ) : null}
 
       {proposal.warnings.length ? (
-        <section data-testid="workspace-proposal-warnings" style={{ color: "#b45309", fontSize: 12 }}>
+        <section data-testid="workspace-proposal-warnings" style={{ color: COLORS.warning, fontSize: 12 }}>
           {proposal.warnings.map((warning, index) => (
             <div key={`proposal-warning-${index}`}>{safeWarningText(warning)}</div>
           ))}
@@ -362,7 +357,7 @@ export function WorkspaceProposalPreview({
         style={{
           display: "grid",
           gap: 12,
-          gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+          gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 300px), 1fr))",
         }}
       >
         {proposal.views.map((view) => (
@@ -370,13 +365,14 @@ export function WorkspaceProposalPreview({
             key={view.id}
             onPreview={onPreviewView}
             selected={selected === view.id}
+            sourceStatuses={sourceStatuses}
             view={view}
           />
         ))}
       </div>
 
       {error ? (
-        <div data-testid="workspace-proposal-error" style={{ color: "#b91c1c", fontSize: 13 }}>
+        <div data-testid="workspace-proposal-error" style={{ color: COLORS.danger, fontSize: 13 }}>
           {error}
         </div>
       ) : null}
@@ -387,10 +383,10 @@ export function WorkspaceProposalPreview({
           disabled={busy}
           onClick={onAccept}
           style={{
-            background: busy ? "#94a3b8" : "#2563eb",
-            border: "1px solid #1d4ed8",
+            background: busy ? "#343b4c" : COLORS.accent,
+            border: `1px solid ${busy ? "#485064" : COLORS.accent}`,
             borderRadius: 6,
-            color: "#ffffff",
+            color: busy ? COLORS.muted : "#17120a",
             cursor: busy ? "not-allowed" : "pointer",
             fontSize: 13,
             fontWeight: 700,
@@ -398,19 +394,19 @@ export function WorkspaceProposalPreview({
           }}
           type="button"
         >
-          套用完整提案
+          {t("agora.tradingRoom.proposal.accept")}
         </button>
         <button data-testid="workspace-proposal-preview-first" onClick={() => proposal.views[0] && onPreviewView?.(proposal.views[0])} style={secondaryButtonStyle} type="button">
-          逐頁預覽
+          {t("agora.tradingRoom.proposal.previewView")}
         </button>
         <button data-testid="workspace-proposal-adjust-layout" onClick={onAdjustLayout} style={secondaryButtonStyle} type="button">
-          先調整版面
+          {t("agora.tradingRoom.proposal.adjustLayout")}
         </button>
         <button data-testid="workspace-proposal-regenerate" onClick={onRegenerate} style={secondaryButtonStyle} type="button">
-          重新產生
+          {t("agora.tradingRoom.proposal.regenerate")}
         </button>
         <button data-testid="workspace-proposal-back" onClick={onBackToWorkshop} style={secondaryButtonStyle} type="button">
-          回到策略工坊
+          {t("agora.tradingRoom.proposal.backToWorkshop")}
         </button>
       </footer>
     </div>
@@ -418,14 +414,24 @@ export function WorkspaceProposalPreview({
 }
 
 const secondaryButtonStyle: React.CSSProperties = {
-  background: "#ffffff",
-  border: "1px solid #cbd5e1",
+  background: "transparent",
+  border: `1px solid ${COLORS.borderStrong}`,
   borderRadius: 6,
-  color: "#334155",
+  color: COLORS.textSoft,
   cursor: "pointer",
   fontSize: 13,
   fontWeight: 700,
   padding: "8px 12px",
+};
+
+const summaryPillStyle: React.CSSProperties = {
+  background: COLORS.panelElevated,
+  border: `1px solid ${COLORS.border}`,
+  borderRadius: 999,
+  color: COLORS.textSoft,
+  fontSize: 12,
+  fontWeight: 700,
+  padding: "5px 10px",
 };
 
 export default WorkspaceProposalPreview;
