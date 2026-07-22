@@ -11,6 +11,7 @@
 import { toast } from "sonner";
 import type { RunActionInput, MutationResult } from "@/lib/bff/mutations";
 import { tryRunAction, type RunActionV1Options } from "@/lib/bff-v1";
+import { commandReceiptDescription } from "./commandReceipt";
 import i18n from "@/i18n";
 
 const ttl = (key: string, fallback: string) =>
@@ -34,7 +35,9 @@ export async function runActionSafe(
   if (r.ok === true) {
     if (!silent) {
       toast.success(successTitle ?? ttl("toast.actionApplied", "Action applied"), {
-        description: successDescription ?? `${input.kind} · ${input.action}`,
+        description: successDescription ?? commandReceiptDescription(r.envelope, {
+          fallback: `${input.kind} · ${input.action}`,
+        }),
       });
     }
     return r.envelope.legacy;
