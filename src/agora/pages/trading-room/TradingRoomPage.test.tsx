@@ -104,6 +104,10 @@ import i18n from "@/i18n";
 import * as tradingRoomModule from "@/lib/bff-v1/agora/tradingRoom";
 import { interaction } from "@/lib/bff-v1/agora/interaction";
 import * as candidatePoolModule from "@/lib/bff-v1/agora/candidatePool";
+import type {
+  CandidatePoolMember,
+  CandidatePoolMembersResult,
+} from "@/lib/bff-v1/agora/candidatePool";
 import * as workshopsModule from "@/lib/bff-v1/agora/workshops";
 import { BffError, type ErrorCode } from "@/lib/bff-v1/errors";
 import type {
@@ -155,6 +159,120 @@ const MOCK_AGGREGATE = {
   risk_summary: { state: "normal" as const },
   snapshot_at: "2026-06-22T10:00:00Z",
   data_cutoff: "2026-06-22T09:55:00Z",
+};
+
+const LIVE_CANDIDATE_MEMBER: CandidatePoolMember = {
+  artifact_id: "artifact-live-aapl",
+  strategy_ref: "strategy-live-aapl",
+  title: "AAPL",
+  lifecycle_state: "candidate",
+  producing_persona_id: "persona-live-quant",
+  run_ref: "research-run-live-aapl",
+  created_at: "2026-07-22T20:00:00Z",
+  effective_score: 94,
+  as_of: "2026-07-22T20:05:00Z",
+  fields: {
+    rationale: {
+      availability: "available",
+      value: {
+        kind: "operator_review_rationale",
+        decision: "needs_more_research",
+        rationale: "Significant accumulation recorded for this live candidate only.",
+        reviewed_by: "operator-001",
+        reviewed_at: "2026-07-22T20:05:00Z",
+      },
+      provenance: {
+        source_type: "candidate_review",
+        source_ref: "candidate-review:lens-A:artifact-live-aapl:review-001",
+        as_of: "2026-07-22T20:05:00Z",
+      },
+    },
+    concerns: {
+      availability: "unavailable",
+      reason: "not_recorded",
+    },
+    next_event: {
+      availability: "unavailable",
+      reason: "no_governed_source",
+    },
+    evidence: {
+      availability: "available",
+      value: {
+        kind: "score_evidence_refs",
+        items: [{
+          component_id: "institutional-flow",
+          label: "Institutional flow",
+          evidence_refs: ["evidence://artifact-live-aapl/flow-001"],
+          summary: null,
+          summary_redacted: true,
+          redaction_reason: "list_response",
+        }],
+        total_refs: 1,
+      },
+      provenance: {
+        source_type: "candidate_score_result",
+        source_ref: "candidate-score:lens-A:artifact-live-aapl:2026-07-22T20:04:00Z",
+        as_of: "2026-07-22T20:04:00Z",
+      },
+    },
+    details: {
+      availability: "available",
+      value: {
+        kind: "candidate_identity",
+        title: "AAPL",
+        strategy_ref: "strategy-live-aapl",
+        run_ref: "research-run-live-aapl",
+        producing_persona_id: "persona-live-quant",
+        lifecycle_state: "candidate",
+        created_at: "2026-07-22T20:00:00Z",
+      },
+      provenance: {
+        source_type: "candidate_pool_member",
+        source_ref: "candidate-pool-member:lens-A:artifact-live-aapl",
+        as_of: "2026-07-22T20:00:00Z",
+      },
+    },
+  },
+  score_semantics: {
+    effective_score: {
+      kind: "recipe_weighted_score",
+      availability: "available",
+      is_confidence_score: false,
+      scale_min: 0,
+      scale_max: 100,
+      recipe_id: "candidate-scoring-v1",
+      recipe_version: 1,
+      source_ref: "candidate-score:lens-A:artifact-live-aapl:2026-07-22T20:04:00Z",
+      as_of: "2026-07-22T20:04:00Z",
+    },
+    sharpe_summary: {
+      kind: "sharpe_ratio",
+      availability: "unavailable",
+      is_confidence_score: false,
+      reason: "not_recorded",
+    },
+  },
+};
+
+const LIVE_CANDIDATE_RESULT: CandidatePoolMembersResult = {
+  items: [LIVE_CANDIDATE_MEMBER],
+  etag: '"candidate-live-v1"',
+  pageInfo: {
+    next_page_token: null,
+    page_size: 1,
+    has_more: false,
+    total: 1,
+    order_by: "created_at,artifact_id",
+  },
+  meta: {
+    snapshot_at: "2026-07-22T20:06:00Z",
+    freshness: {
+      pool_snapshot_at: "2026-07-22T20:00:00Z",
+      data_cutoff: "2026-07-22T19:59:00Z",
+      last_score_run_at: "2026-07-22T20:04:00Z",
+    },
+    read_state: "formal",
+  },
 };
 
 const MOCK_DECISION_EVENT = {
@@ -546,7 +664,10 @@ afterEach(cleanup);
 
 describe("TradingRoomPage", () => {
   beforeEach(() => {
+    vi.stubEnv("VITE_BFF_MODE", "live");
     gridCallbacks.onLayoutChange = undefined;
+    vi.mocked(candidatePoolModule.listCandidatePoolMembers).mockReset();
+    vi.mocked(candidatePoolModule.listCandidatePoolMembers).mockResolvedValue(LIVE_CANDIDATE_RESULT);
     vi.mocked(tradingRoomModule.getTradingRoom).mockResolvedValue(MOCK_AGGREGATE);
     vi.mocked(tradingRoomModule.listDecisionEvents).mockResolvedValue({
       items: [MOCK_DECISION_EVENT],
@@ -588,6 +709,7 @@ describe("TradingRoomPage", () => {
   });
 
   afterEach(() => {
+    vi.unstubAllEnvs();
     vi.clearAllMocks();
   });
 
@@ -1657,6 +1779,14 @@ describe("TradingRoomPage", () => {
     expect(screen.getByTestId("drawer-candidate-symbol").textContent).toBe("AAPL");
     expect(screen.getByTestId("drawer-candidate-score").textContent).toBe("94");
     expect(screen.getByTestId("drawer-candidate-reason").textContent).toContain("Significant accumulation");
+    expect(screen.getByTestId("drawer-candidate-source").textContent).toContain("Live candidate");
+    expect(screen.getByTestId("drawer-candidate-reason-provenance").textContent).toContain(
+      "candidate-review:lens-A:artifact-live-aapl:review-001",
+    );
+    expect(screen.getByTestId("drawer-candidate-concerns").textContent).toContain("Unavailable");
+    expect(screen.getByTestId("drawer-candidate-event").textContent).toContain("Unavailable");
+    expect(screen.getByText("evidence://artifact-live-aapl/flow-001")).toBeDefined();
+    expect(screen.queryByText(/Minor distribution from minor retail desks/i)).toBeNull();
     expect(screen.getByTestId("drawer-action-monitor").textContent).toBe("納入監控");
     expect(screen.getByTestId("drawer-action-shadow").textContent).toBe("送影子追蹤");
     expect(screen.getByTestId("drawer-action-workspace").textContent).toBe("開啟 Winner Branch 工作區");
@@ -1670,7 +1800,7 @@ describe("TradingRoomPage", () => {
     const appleRow = await screen.findByTestId("candidate-row-AAPL");
     fireEvent.click(appleRow);
 
-    expect(screen.getByTestId("drawer-candidate-state").textContent).toBe("待討論");
+    expect(screen.getByTestId("drawer-candidate-state").textContent).toBe("新候選");
     fireEvent.click(screen.getByTestId("drawer-action-monitor"));
     expect(screen.getByTestId("drawer-candidate-state").textContent).toBe("納入監控");
   });
@@ -1704,7 +1834,7 @@ describe("TradingRoomPage", () => {
     expect(await screen.findByText(/此狀態下無候選人/i)).toBeDefined();
   });
 
-  it("displays sample data warning when BFF candidatePool API fails", async () => {
+  it("renders a strict live error without substituting sample candidates", async () => {
     vi.mocked(candidatePoolModule.listCandidatePoolMembers).mockRejectedValueOnce(
       new Error("Network Error"),
     );
@@ -1713,10 +1843,75 @@ describe("TradingRoomPage", () => {
     await screen.findByTestId("trading-room-page");
     fireEvent.click(screen.getByTestId("strategy-lens-all"));
 
-    await waitFor(() => {
-      expect(screen.getByTestId("sample-data-warning")).toBeDefined();
-      expect(screen.getByTestId("sample-data-warning").textContent).toContain("模擬數據");
+    const error = await screen.findByTestId("candidate-error-state");
+    expect(error.textContent).toContain("Network Error");
+    expect(screen.queryByTestId("sample-data-warning")).toBeNull();
+    expect(screen.queryByTestId("candidate-row-AAPL")).toBeNull();
+  });
+
+  it("renders an honest empty live state without substituting sample candidates", async () => {
+    vi.mocked(candidatePoolModule.listCandidatePoolMembers).mockResolvedValueOnce({
+      ...LIVE_CANDIDATE_RESULT,
+      items: [],
+      pageInfo: { ...LIVE_CANDIDATE_RESULT.pageInfo!, page_size: 0, total: 0 },
     });
+
+    render(<TradingRoomPage />);
+    await screen.findByTestId("trading-room-page");
+    fireEvent.click(screen.getByTestId("strategy-lens-all"));
+
+    expect(await screen.findByTestId("candidate-unavailable-state")).toHaveTextContent(
+      "Sample data was not substituted",
+    );
+    expect(screen.queryByTestId("sample-data-warning")).toBeNull();
+  });
+
+  it("rejects a live row whose field provenance belongs to another identity", async () => {
+    const mixedResult = structuredClone(LIVE_CANDIDATE_RESULT);
+    const rationale = mixedResult.items[0].fields.rationale;
+    if (rationale.availability !== "available") throw new Error("fixture rationale must be available");
+    rationale.provenance.source_ref = "candidate-review:lens-A:artifact-other:review-001";
+    vi.mocked(candidatePoolModule.listCandidatePoolMembers).mockResolvedValueOnce(mixedResult);
+
+    render(<TradingRoomPage />);
+    await screen.findByTestId("trading-room-page");
+    fireEvent.click(screen.getByTestId("strategy-lens-all"));
+
+    expect(await screen.findByTestId("candidate-error-state")).toHaveTextContent(
+      "identity mismatch",
+    );
+    expect(screen.queryByTestId("candidate-row-AAPL")).toBeNull();
+    expect(screen.queryByTestId("sample-data-warning")).toBeNull();
+  });
+
+  it("labels the entire candidate dataset as sample only in explicit mock mode", async () => {
+    vi.stubEnv("VITE_BFF_MODE", "mock");
+
+    render(<TradingRoomPage />);
+    await screen.findByTestId("trading-room-page");
+    fireEvent.click(screen.getByTestId("strategy-lens-all"));
+
+    expect(screen.getByTestId("sample-data-warning")).toBeDefined();
+    expect(screen.getByTestId("candidate-data-source")).toHaveTextContent("Sample dataset");
+    expect(screen.getByTestId("candidate-row-AAPL")).toHaveAttribute("data-candidate-source", "sample");
+    expect(candidatePoolModule.listCandidatePoolMembers).not.toHaveBeenCalled();
+  });
+
+  it("renders backend-declared stale state with the exact candidate as-of", async () => {
+    vi.mocked(candidatePoolModule.listCandidatePoolMembers).mockResolvedValueOnce({
+      ...LIVE_CANDIDATE_RESULT,
+      meta: { ...LIVE_CANDIDATE_RESULT.meta, read_state: "stale" },
+    });
+
+    render(<TradingRoomPage />);
+    await screen.findByTestId("trading-room-page");
+    fireEvent.click(screen.getByTestId("strategy-lens-all"));
+
+    expect(await screen.findByTestId("candidate-live-freshness")).toHaveTextContent("STALE");
+    fireEvent.click(await screen.findByTestId("candidate-row-AAPL"));
+    expect(screen.getByTestId("drawer-candidate-freshness")).toHaveTextContent(
+      "Stale · as of 2026-07-22T20:05:00Z",
+    );
   });
 
   it("handles drawer Escape key closing and keyboard focus trap accessibility", async () => {
@@ -1795,7 +1990,7 @@ describe("TradingRoomPage", () => {
     expect(screen.getByTestId("candidates-loading").textContent).toMatch(/正在載入|Loading/);
 
     // Resolve the promise to end loading state
-    resolvePromise({ items: [] });
+    resolvePromise(LIVE_CANDIDATE_RESULT);
     await waitFor(() => {
       expect(screen.queryByTestId("candidates-loading")).toBeNull();
     });

@@ -15,6 +15,16 @@ import {
   type TradingRoomWorkspaceResult,
 } from "@/lib/bff-v1/agora/tradingRoom";
 import { BffError } from "@/lib/bff-v1/errors";
+import {
+  listCandidatePoolMembers,
+  type CandidateComponentDigest,
+  type CandidateFieldProvenance,
+  type CandidateFieldState,
+  type CandidateMemberListFreshness,
+  type CandidatePoolMember,
+  type CandidateTruthFields,
+} from "@/lib/bff-v1/agora/candidatePool";
+import { readBffEnv } from "@/lib/bff-v1/runtimeEnv";
 import type {
   TradingRoomWorkspaceProposal,
 } from "@/lib/bff-v1/agora/tradingRoomTypes";
@@ -653,13 +663,13 @@ function readinessReason(strategy: TradingRoomStrategyEntry, t: TFunction): stri
   return t("agora.tradingRoom.page.blockedReadiness");
 }
 
-export interface CandidateRecord {
+interface CandidateRecordCore {
   id: string;
   symbol: string;
   name: string;
   state: "new_candidate" | "to_discuss" | "deep_research" | "monitoring" | "shadow" | "triggered" | "parked" | "excluded";
   lensId: string;
-  score: number;
+  score: number | null;
   reason: string;
   concerns: string;
   nextEvent: string;
@@ -667,7 +677,15 @@ export interface CandidateRecord {
   details: Record<string, string | number>;
 }
 
-export const DEFAULT_CANDIDATES: CandidateRecord[] = [
+export interface CandidateRecord extends CandidateRecordCore {
+  dataSource: "live" | "sample";
+  fieldTruth: CandidateTruthFields | null;
+  asOf: string | null;
+  freshness: CandidateMemberListFreshness | null;
+  freshnessState: "observed" | "stale" | "unknown";
+}
+
+const DEFAULT_CANDIDATE_FIXTURES: CandidateRecordCore[] = [
   // Lens A: Chip/Large-Holder Positioning
   {
     id: "cand-a1",
@@ -906,6 +924,197 @@ export const DEFAULT_CANDIDATES: CandidateRecord[] = [
   }
 ];
 
+export const DEFAULT_CANDIDATES: CandidateRecord[] = DEFAULT_CANDIDATE_FIXTURES.map(
+  (candidate) => ({
+    ...candidate,
+    dataSource: "sample",
+    fieldTruth: null,
+    asOf: null,
+    freshness: null,
+    freshnessState: "unknown",
+  }),
+);
+
+const CANDIDATE_FIELD_NAMES = [
+  "rationale",
+  "concerns",
+  "next_event",
+  "evidence",
+  "details",
+] as const;
+
+function unavailableReasonText(reason: string): string {
+  switch (reason) {
+    case "score_not_run":
+      return "Unavailable — score has not run";
+    case "no_governed_source":
+      return "Unavailable — no governed source";
+    case "not_recorded":
+      return "Unavailable — not recorded";
+    default:
+      return "Unavailable";
+  }
+}
+
+function componentText(component: CandidateComponentDigest): string {
+  const label = component.label?.trim() || component.component_id;
+  return typeof component.contribution === "number"
+    ? `${label} (${component.contribution >= 0 ? "+" : ""}${component.contribution})`
+    : label;
+}
+
+function rationaleText(field: CandidateTruthFields["rationale"]): string {
+  if (field.availability === "unavailable") return unavailableReasonText(field.reason);
+  if (field.value.kind === "operator_review_rationale") return field.value.rationale;
+  const components = field.value.top_components.map(componentText);
+  if (components.length > 0) return components.join(" · ");
+  if (field.value.band) return `Recorded score band: ${field.value.band}`;
+  return "Available — no component attribution recorded";
+}
+
+function concernsText(field: CandidateTruthFields["concerns"]): string {
+  if (field.availability === "unavailable") return unavailableReasonText(field.reason);
+  const values = [
+    ...field.value.blockers,
+    ...field.value.penalty_components.map(componentText),
+  ];
+  return values.length > 0
+    ? values.join(" · ")
+    : "No recorded blockers or penalty components";
+}
+
+function nextEventText(field: CandidateTruthFields["next_event"]): string {
+  if (field.availability === "unavailable") return unavailableReasonText(field.reason);
+  const values = [`Monitoring ${field.value.monitoring_state}`];
+  if (field.value.review_due_at) values.push(`review due ${field.value.review_due_at}`);
+  if (field.value.trigger_conditions.length > 0) {
+    values.push(`${field.value.trigger_conditions.length} governed trigger condition(s)`);
+  }
+  return values.join(" · ");
+}
+
+function evidenceItems(field: CandidateTruthFields["evidence"]): CandidateRecord["evidence"] {
+  if (field.availability === "unavailable") {
+    return [{ type: "unavailable", label: unavailableReasonText(field.reason) }];
+  }
+  return field.value.items.flatMap((item) =>
+    item.evidence_refs.map((ref) => ({
+      type: item.component_id,
+      label: ref,
+    })),
+  );
+}
+
+function lifecycleState(state: CandidatePoolMember["lifecycle_state"]): CandidateRecord["state"] {
+  switch (state) {
+    case "candidate":
+      return "new_candidate";
+    case "review":
+      return "to_discuss";
+    case "approved":
+      return "monitoring";
+    case "rejected":
+      return "excluded";
+  }
+}
+
+function assertSameCandidateProvenance(
+  artifactId: string,
+  fieldName: string,
+  field: CandidateFieldState<unknown>,
+): void {
+  if (field.availability !== "available") return;
+  if (
+    !field.provenance.as_of.trim()
+    || !field.provenance.source_ref.includes(artifactId)
+  ) {
+    throw new Error(
+      `Candidate truth identity mismatch for ${artifactId}.${fieldName}`,
+    );
+  }
+}
+
+function mapCandidatePoolMember(
+  item: CandidatePoolMember,
+  lensId: string,
+  freshness: CandidateMemberListFreshness,
+  readState?: string,
+): CandidateRecord {
+  if (!item.fields || !item.score_semantics || !item.as_of) {
+    throw new Error(`Candidate truth contract missing for ${item.artifact_id}`);
+  }
+  for (const fieldName of CANDIDATE_FIELD_NAMES) {
+    const field = item.fields[fieldName];
+    if (!field) throw new Error(`Candidate truth field missing for ${item.artifact_id}.${fieldName}`);
+    assertSameCandidateProvenance(item.artifact_id, fieldName, field);
+  }
+
+  const details = item.fields.details.availability === "available"
+    ? item.fields.details.value
+    : null;
+  if (
+    details?.strategy_ref
+    && item.strategy_ref
+    && details.strategy_ref !== item.strategy_ref
+  ) {
+    throw new Error(`Candidate identity details mismatch for ${item.artifact_id}`);
+  }
+
+  const effectiveSemantics = item.score_semantics.effective_score;
+  if (
+    effectiveSemantics.availability === "available"
+    && effectiveSemantics.source_ref
+    && !effectiveSemantics.source_ref.includes(item.artifact_id)
+  ) {
+    throw new Error(`Candidate score identity mismatch for ${item.artifact_id}`);
+  }
+  const score = effectiveSemantics.availability === "available"
+    && typeof item.effective_score === "number"
+    ? Math.round(item.effective_score * 10) / 10
+    : null;
+  const title = details?.title?.trim() || item.title?.trim() || item.strategy_ref || item.artifact_id;
+  const detailValues: Record<string, string | number> = {};
+  if (details) {
+    if (details.strategy_ref) detailValues.strategyRef = details.strategy_ref;
+    if (details.run_ref) detailValues.runRef = details.run_ref;
+    if (details.producing_persona_id) detailValues.producingPersonaId = details.producing_persona_id;
+    if (details.created_at) detailValues.createdAt = details.created_at;
+  }
+
+  return {
+    id: item.artifact_id,
+    symbol: title,
+    name: details?.strategy_ref || item.strategy_ref || item.artifact_id,
+    state: lifecycleState(item.lifecycle_state),
+    lensId,
+    score,
+    reason: rationaleText(item.fields.rationale),
+    concerns: concernsText(item.fields.concerns),
+    nextEvent: nextEventText(item.fields.next_event),
+    evidence: evidenceItems(item.fields.evidence),
+    details: detailValues,
+    dataSource: "live",
+    fieldTruth: item.fields,
+    asOf: item.as_of,
+    freshness,
+    freshnessState: readState === "stale"
+      ? "stale"
+      : item.as_of.trim()
+        ? "observed"
+        : "unknown",
+  };
+}
+
+function fieldProvenance(
+  field: CandidateFieldState<unknown> | undefined,
+): CandidateFieldProvenance | null {
+  return field?.availability === "available" ? field.provenance : null;
+}
+
+function candidateDetailValue(candidate: CandidateRecord, key: string): string | number {
+  return candidate.details[key] ?? "Unavailable";
+}
+
 function getLifecycleLabel(state: string, t: TFunction): string {
   switch (state) {
     case "all":
@@ -929,6 +1138,32 @@ function getLifecycleLabel(state: string, t: TFunction): string {
     default:
       return state;
   }
+}
+
+function candidateScoreText(candidate: CandidateRecord): string {
+  return candidate.score === null ? "Unavailable" : String(candidate.score);
+}
+
+function CandidateFieldProvenanceLine({
+  field,
+  testId,
+}: {
+  field: CandidateFieldState<unknown> | undefined;
+  testId: string;
+}): JSX.Element | null {
+  if (!field) return null;
+  const provenance = fieldProvenance(field);
+  const text = field.availability === "available"
+    ? `${provenance?.source_type} · ${provenance?.source_ref} · as of ${provenance?.as_of}`
+    : unavailableReasonText(field.reason);
+  return (
+    <div
+      className="mt-1 break-all font-mono text-[9px] text-[#aab1bc]"
+      data-testid={testId}
+    >
+      {text}
+    </div>
+  );
 }
 
 interface CandidateReviewDrawerProps {
@@ -1043,6 +1278,12 @@ function CandidateReviewDrawer({
           <div>
             <h2 className="text-base font-bold text-[#e8b750]" data-testid="drawer-candidate-symbol">{candidate.symbol}</h2>
             <p className="text-[11px] text-[#8c96a6]">{candidate.name}</p>
+            <span
+              className={candidate.dataSource === "sample" ? "mt-1 inline-flex rounded bg-amber-950 px-1.5 py-0.5 text-[9px] font-bold uppercase text-amber-300" : "mt-1 inline-flex rounded bg-emerald-950 px-1.5 py-0.5 text-[9px] font-bold uppercase text-emerald-300"}
+              data-testid="drawer-candidate-source"
+            >
+              {candidate.dataSource === "sample" ? "Sample candidate" : "Live candidate"}
+            </span>
           </div>
           <button
             ref={closeBtnRef}
@@ -1056,7 +1297,11 @@ function CandidateReviewDrawer({
         </div>
 
         {/* Scrollable details */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        <div
+          aria-label="Candidate details"
+          className="flex-1 overflow-y-auto p-4 space-y-4"
+          tabIndex={0}
+        >
           {/* Fitness & Status */}
           <div className="bg-[#171b22] p-3 rounded-lg border border-[#2a2e38]">
             <h3 className="text-[10px] font-bold text-[#8c96a6] uppercase tracking-wider mb-2">
@@ -1079,8 +1324,17 @@ function CandidateReviewDrawer({
               </span>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
-              <span className="text-[#c5cad2]">{t("agora.tradingRoom.candidates.headers.aiFitScore", { defaultValue: "AI Fit Score:" })}</span>
-              <span className="font-mono font-bold text-[#e8b750]" data-testid="drawer-candidate-score">{candidate.score}</span>
+              <span className="text-[#c5cad2]">{t("agora.tradingRoom.candidates.headers.recipeScore", { defaultValue: "Recipe score:" })}</span>
+              <span className="font-mono font-bold text-[#e8b750]" data-testid="drawer-candidate-score">{candidateScoreText(candidate)}</span>
+            </div>
+            <div className="mt-2 text-[9px] text-[#aab1bc]" data-testid="drawer-candidate-freshness">
+              {candidate.dataSource === "sample"
+                ? "Sample dataset — no live freshness claim"
+                : candidate.freshnessState === "stale"
+                  ? `Stale · as of ${candidate.asOf}`
+                  : candidate.freshnessState === "observed"
+                    ? `Observed as of ${candidate.asOf}`
+                    : "Freshness unavailable"}
             </div>
           </div>
 
@@ -1092,6 +1346,10 @@ function CandidateReviewDrawer({
             <p className="text-[#c5cad2] leading-relaxed bg-[#171b22] p-2.5 rounded border border-[#2a2e38]/50" data-testid="drawer-candidate-reason">
               {t(`agora.tradingRoom.candidates.${candidate.id}.reason`, { defaultValue: candidate.reason })}
             </p>
+            <CandidateFieldProvenanceLine
+              field={candidate.fieldTruth?.rationale}
+              testId="drawer-candidate-reason-provenance"
+            />
           </div>
 
           {/* Concerns / Counter-Thesis */}
@@ -1102,6 +1360,10 @@ function CandidateReviewDrawer({
             <p className="text-[#c5cad2] leading-relaxed bg-[#171b22] p-2.5 rounded border border-[#2a2e38]/50" data-testid="drawer-candidate-concerns">
               {t(`agora.tradingRoom.candidates.${candidate.id}.concerns`, { defaultValue: candidate.concerns })}
             </p>
+            <CandidateFieldProvenanceLine
+              field={candidate.fieldTruth?.concerns}
+              testId="drawer-candidate-concerns-provenance"
+            />
           </div>
 
           {/* Next Event */}
@@ -1110,6 +1372,10 @@ function CandidateReviewDrawer({
             <p className="text-[#f0ece4] font-semibold bg-[#171b22] p-2.5 rounded border border-[#2a2e38]/50" data-testid="drawer-candidate-event">
               {t(`agora.tradingRoom.candidates.${candidate.id}.nextEvent`, { defaultValue: candidate.nextEvent })}
             </p>
+            <CandidateFieldProvenanceLine
+              field={candidate.fieldTruth?.next_event}
+              testId="drawer-candidate-event-provenance"
+            />
           </div>
 
           {/* Evidence */}
@@ -1123,6 +1389,10 @@ function CandidateReviewDrawer({
                 </div>
               ))}
             </div>
+            <CandidateFieldProvenanceLine
+              field={candidate.fieldTruth?.evidence}
+              testId="drawer-candidate-evidence-provenance"
+            />
           </div>
         </div>
 
@@ -1476,6 +1746,8 @@ function DashboardRecipeE({ candidates }: { candidates: CandidateRecord[] }) {
   );
 }
 
+type CandidateLoadState = "loading" | "ready" | "sample" | "empty" | "error";
+
 interface TradingRoomDefaultEntryProps {
   aggregate: TradingRoomAggregate;
   onOpenWorkshop?: () => void;
@@ -1493,6 +1765,8 @@ interface TradingRoomDefaultEntryProps {
   eventsEtag: string | null;
   isSampleData?: boolean;
   candidatesLoading?: boolean;
+  candidateLoadState?: CandidateLoadState;
+  candidatesError?: string | null;
 }
 
 function TradingRoomDefaultEntry({
@@ -1512,6 +1786,8 @@ function TradingRoomDefaultEntry({
   eventsEtag,
   isSampleData = false,
   candidatesLoading = false,
+  candidateLoadState = "ready",
+  candidatesError = null,
 }: TradingRoomDefaultEntryProps): JSX.Element {
   const { t } = useTranslation();
   const [mobilePane, setMobilePane] = useState<"tasks" | "context">("tasks");
@@ -1759,6 +2035,19 @@ function TradingRoomDefaultEntry({
               </div>
             )}
 
+            {!isSampleData && candidateLoadState === "ready" && (
+              <div
+                className="break-all font-mono text-[10px] text-[#737d8e]"
+                data-testid="candidate-live-freshness"
+              >
+                LIVE CANDIDATES · {lensCandidates[0]?.freshnessState === "stale" ? "STALE · " : ""}
+                as of {lensCandidates[0]?.asOf ?? "unavailable"}
+                {lensCandidates[0]?.freshness?.data_cutoff
+                  ? ` · data cutoff ${lensCandidates[0].freshness?.data_cutoff}`
+                  : ""}
+              </div>
+            )}
+
             {/* Render distinct dashboard layouts */}
             {activeLensId === "lens-A" && <DashboardRecipeA candidates={lensCandidates} />}
             {activeLensId === "lens-B" && <DashboardRecipeB candidates={lensCandidates} />}
@@ -1775,9 +2064,14 @@ function TradingRoomDefaultEntry({
           >
             <div style={{ padding: "8px 16px", borderBottom: "1px solid #2a2e38", background: "#1a1f29", fontWeight: 700, fontSize: 12, color: "#8c96a6", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <span>{t("agora.tradingRoom.candidates.headers.boardTitle", { count: filteredCandidates.length, defaultValue: `CANDIDATE & MONITORING BOARD (${filteredCandidates.length})` })}</span>
-              <span style={{ fontSize: 9, color: "#737d8e", fontFamily: "monospace", textTransform: "uppercase" }}>
-                Lens: {t(currentLens.titleKey, { defaultValue: currentLens.title })}
-              </span>
+              <div className="flex min-w-0 flex-col items-end gap-0.5 pl-2 text-right">
+                <span style={{ fontSize: 9, color: isSampleData ? "#e8b750" : "#43cf94", fontFamily: "monospace", textTransform: "uppercase" }} data-testid="candidate-data-source">
+                  {isSampleData ? "Sample dataset" : "Live dataset"}
+                </span>
+                <span className="max-w-full truncate" style={{ fontSize: 9, color: "#737d8e", fontFamily: "monospace", textTransform: "uppercase" }}>
+                  Lens: {t(currentLens.titleKey, { defaultValue: currentLens.title })}
+                </span>
+              </div>
             </div>
 
             <div style={{ flex: 1, overflow: "auto" }}>
@@ -1785,6 +2079,22 @@ function TradingRoomDefaultEntry({
                 <div style={{ padding: 32, textAlign: "center", fontSize: 12, color: "#737d8e" }} data-testid="candidates-loading">
                   <span className="inline-block animate-spin mr-2">⏳</span>
                   {t("agora.tradingRoom.candidates.headers.loading", { defaultValue: "Loading candidates..." })}
+                </div>
+              ) : candidateLoadState === "error" ? (
+                <div
+                  className="m-3 rounded border border-red-900 bg-red-950/30 p-4 text-center text-xs text-red-300"
+                  data-testid="candidate-error-state"
+                  role="alert"
+                >
+                  Live candidate data unavailable. {candidatesError || "The BFF request failed."}
+                </div>
+              ) : candidateLoadState === "empty" ? (
+                <div
+                  className="m-3 rounded border border-[#2a2e38] bg-[#111417] p-4 text-center text-xs text-[#8c96a6]"
+                  data-testid="candidate-unavailable-state"
+                  role="status"
+                >
+                  No live candidates were returned for this lens. Sample data was not substituted.
                 </div>
               ) : filteredCandidates.length === 0 ? (
                 <div style={{ padding: 32, textAlign: "center", fontSize: 12, color: "#737d8e" }}>
@@ -1796,6 +2106,7 @@ function TradingRoomDefaultEntry({
                   {filteredCandidates.map((candidate, index) => (
                     <article
                       className="rounded-lg border border-[#2a2e38] bg-[#111417] p-3"
+                      data-candidate-source={candidate.dataSource}
                       data-testid={`candidate-mobile-card-${candidate.symbol}`}
                       key={candidate.id}
                     >
@@ -1809,7 +2120,7 @@ function TradingRoomDefaultEntry({
                           </h3>
                         </div>
                         <span className="shrink-0 font-mono text-base font-bold text-[#e8b750]">
-                          {candidate.score}
+                          {candidateScoreText(candidate)}
                         </span>
                       </div>
                       <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-[#c5cad2]">
@@ -1932,6 +2243,7 @@ function TradingRoomDefaultEntry({
                   <tbody>
                     {filteredCandidates.map((c, idx) => (
                       <tr
+                        data-candidate-source={c.dataSource}
                         key={c.id}
                         onClick={() => setSelectedCandidate(c)}
                         onKeyDown={(e) => {
@@ -1952,42 +2264,42 @@ function TradingRoomDefaultEntry({
                         <td style={{ padding: 8, color: "#c5cad2" }}>{c.name}</td>
                         {activeLensId === "lens-A" && (
                           <>
-                            <td style={{ padding: 8, textAlign: "right", fontFamily: "monospace", fontWeight: 700, color: "#e8b750" }}>{c.score}</td>
-                            <td style={{ padding: 8, textAlign: "right", fontFamily: "monospace" }}>{c.details.accumDays}d</td>
-                            <td style={{ padding: 8, textAlign: "right", fontFamily: "monospace" }}>{c.details.concentration}</td>
-                            <td style={{ padding: 8, textAlign: "right", fontFamily: "monospace" }}>{c.details.priceDev}</td>
+                            <td style={{ padding: 8, textAlign: "right", fontFamily: "monospace", fontWeight: 700, color: "#e8b750" }}>{candidateScoreText(c)}</td>
+                            <td style={{ padding: 8, textAlign: "right", fontFamily: "monospace" }}>{candidateDetailValue(c, "accumDays")}{c.details.accumDays === undefined ? "" : "d"}</td>
+                            <td style={{ padding: 8, textAlign: "right", fontFamily: "monospace" }}>{candidateDetailValue(c, "concentration")}</td>
+                            <td style={{ padding: 8, textAlign: "right", fontFamily: "monospace" }}>{candidateDetailValue(c, "priceDev")}</td>
                           </>
                         )}
                         {activeLensId === "lens-B" && (
                           <>
-                            <td style={{ padding: 8 }}>{c.details.peerGroup}</td>
-                            <td style={{ padding: 8, textAlign: "right", fontFamily: "monospace" }}>{c.details.similarity}</td>
-                            <td style={{ padding: 8, textAlign: "right", fontFamily: "monospace", color: "#43cf94" }}>{c.details.priceLag}</td>
-                            <td style={{ padding: 8, textAlign: "right", fontFamily: "monospace" }}>{c.details.catalyst}</td>
+                            <td style={{ padding: 8 }}>{candidateDetailValue(c, "peerGroup")}</td>
+                            <td style={{ padding: 8, textAlign: "right", fontFamily: "monospace" }}>{candidateDetailValue(c, "similarity")}</td>
+                            <td style={{ padding: 8, textAlign: "right", fontFamily: "monospace", color: "#43cf94" }}>{candidateDetailValue(c, "priceLag")}</td>
+                            <td style={{ padding: 8, textAlign: "right", fontFamily: "monospace" }}>{candidateDetailValue(c, "catalyst")}</td>
                           </>
                         )}
                         {activeLensId === "lens-C" && (
                           <>
-                            <td style={{ padding: 8, fontFamily: "monospace" }}>{c.details.breakoutLevel}</td>
-                            <td style={{ padding: 8, textAlign: "right", fontFamily: "monospace", color: "#e8b750" }}>{c.details.distance}</td>
-                            <td style={{ padding: 8, textAlign: "right", fontFamily: "monospace" }}>{c.details.volumeMult}</td>
-                            <td style={{ padding: 8, textAlign: "right", fontFamily: "monospace" }}>{c.details.atrRatio}</td>
+                            <td style={{ padding: 8, fontFamily: "monospace" }}>{candidateDetailValue(c, "breakoutLevel")}</td>
+                            <td style={{ padding: 8, textAlign: "right", fontFamily: "monospace", color: "#e8b750" }}>{candidateDetailValue(c, "distance")}</td>
+                            <td style={{ padding: 8, textAlign: "right", fontFamily: "monospace" }}>{candidateDetailValue(c, "volumeMult")}</td>
+                            <td style={{ padding: 8, textAlign: "right", fontFamily: "monospace" }}>{candidateDetailValue(c, "atrRatio")}</td>
                           </>
                         )}
                         {activeLensId === "lens-D" && (
                           <>
-                            <td style={{ padding: 8 }}>{c.details.eventType}</td>
-                            <td style={{ padding: 8, textAlign: "right", fontFamily: "monospace", color: "#f05c61" }}>{c.details.countdown}</td>
-                            <td style={{ padding: 8, textAlign: "right", fontFamily: "monospace" }}>{c.details.ivPercentile}</td>
-                            <td style={{ padding: 8, textAlign: "right", fontFamily: "monospace" }}>{c.details.expectedImpact}</td>
+                            <td style={{ padding: 8 }}>{candidateDetailValue(c, "eventType")}</td>
+                            <td style={{ padding: 8, textAlign: "right", fontFamily: "monospace", color: "#f05c61" }}>{candidateDetailValue(c, "countdown")}</td>
+                            <td style={{ padding: 8, textAlign: "right", fontFamily: "monospace" }}>{candidateDetailValue(c, "ivPercentile")}</td>
+                            <td style={{ padding: 8, textAlign: "right", fontFamily: "monospace" }}>{candidateDetailValue(c, "expectedImpact")}</td>
                           </>
                         )}
                         {activeLensId === "lens-E" && (
                           <>
-                            <td style={{ padding: 8, textAlign: "right", fontFamily: "monospace" }}>{c.details.targetAmt}</td>
-                            <td style={{ padding: 8, textAlign: "right", fontFamily: "monospace" }}>{c.details.advPct}</td>
-                            <td style={{ padding: 8, textAlign: "right", fontFamily: "monospace" }}>{c.details.estSlippage}</td>
-                            <td style={{ padding: 8, textAlign: "right", fontFamily: "monospace" }}>{c.details.marketImpact}</td>
+                            <td style={{ padding: 8, textAlign: "right", fontFamily: "monospace" }}>{candidateDetailValue(c, "targetAmt")}</td>
+                            <td style={{ padding: 8, textAlign: "right", fontFamily: "monospace" }}>{candidateDetailValue(c, "advPct")}</td>
+                            <td style={{ padding: 8, textAlign: "right", fontFamily: "monospace" }}>{candidateDetailValue(c, "estSlippage")}</td>
+                            <td style={{ padding: 8, textAlign: "right", fontFamily: "monospace" }}>{candidateDetailValue(c, "marketImpact")}</td>
                           </>
                         )}
                         <td style={{ padding: 8, textAlign: "center" }}>
@@ -2496,69 +2808,71 @@ export function TradingRoomPage({
 
   // AG-UIPOL-007 State
   const [activeLensId, setActiveLensId] = useState<string>("lens-A");
-  const [candidates, setCandidates] = useState<CandidateRecord[]>(DEFAULT_CANDIDATES);
+  const candidateDemoMode = readBffEnv().VITE_BFF_MODE !== "live";
+  const [candidates, setCandidates] = useState<CandidateRecord[]>(
+    () => candidateDemoMode ? DEFAULT_CANDIDATES : [],
+  );
   const [selectedCandidate, setSelectedCandidate] = useState<CandidateRecord | null>(null);
   const [candidateFilter, setCandidateFilter] = useState<string>("all");
   const [activeStrategyIdOverride, setActiveStrategyIdOverride] = useState<string | null>(null);
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
 
-  const [candidatesLoading, setCandidatesLoading] = useState(false);
+  const [candidatesLoading, setCandidatesLoading] = useState(!candidateDemoMode);
   const [candidatesError, setCandidatesError] = useState<string | null>(null);
-  const [isSampleData, setIsSampleData] = useState(false);
+  const [candidateLoadState, setCandidateLoadState] = useState<CandidateLoadState>(
+    candidateDemoMode ? "sample" : "loading",
+  );
+  const isSampleData = candidateLoadState === "sample";
 
   useEffect(() => {
     let active = true;
+    setSelectedCandidate(null);
+
+    if (candidateDemoMode) {
+      setCandidates(DEFAULT_CANDIDATES);
+      setCandidatesError(null);
+      setCandidatesLoading(false);
+      setCandidateLoadState("sample");
+      return () => {
+        active = false;
+      };
+    }
+
+    setCandidates([]);
     setCandidatesLoading(true);
     setCandidatesError(null);
-    setIsSampleData(false);
+    setCandidateLoadState("loading");
 
-    import("@/lib/bff-v1/agora/candidatePool")
-      .then(({ listCandidatePoolMembers }) => {
-        return listCandidatePoolMembers(activeLensId);
-      })
+    listCandidatePoolMembers(activeLensId)
       .then((res) => {
         if (!active) return;
-        if (res && res.items && res.items.length > 0) {
-          const mapped: CandidateRecord[] = res.items.map((item) => {
-            const staticFallback = DEFAULT_CANDIDATES.find(c => c.symbol === item.title) || DEFAULT_CANDIDATES[0];
-            return {
-              id: item.artifact_id,
-              symbol: item.title || item.strategy_ref || "UNKNOWN",
-              name: item.title || "Unknown Company",
-              state: item.lifecycle_state === "candidate" ? "new_candidate" : (item.lifecycle_state as CandidateRecord["state"]),
-              lensId: activeLensId,
-              score: item.sharpe_summary ? Math.round(item.sharpe_summary * 100) : staticFallback.score,
-              reason: staticFallback.reason,
-              concerns: staticFallback.concerns,
-              nextEvent: staticFallback.nextEvent,
-              evidence: staticFallback.evidence,
-              details: staticFallback.details
-            };
-          });
+        if (res.items.length > 0) {
+          const mapped = res.items.map((item) => mapCandidatePoolMember(
+            item,
+            activeLensId,
+            res.meta.freshness,
+            res.meta.read_state,
+          ));
           setCandidates(mapped);
-          setIsSampleData(false);
+          setCandidateLoadState("ready");
         } else {
-          // Empty items list, fallback to mock data
-          const localCandidates = DEFAULT_CANDIDATES.filter(c => c.lensId === activeLensId);
-          setCandidates(localCandidates);
-          setIsSampleData(true);
+          setCandidates([]);
+          setCandidateLoadState("empty");
         }
         setCandidatesLoading(false);
       })
       .catch((err) => {
         if (!active) return;
-        setCandidatesError(err.message || "BFF Offline");
-        // Fallback to local simulation data
-        const localCandidates = DEFAULT_CANDIDATES.filter(c => c.lensId === activeLensId);
-        setCandidates(localCandidates);
-        setIsSampleData(true);
+        setCandidatesError(err instanceof Error ? err.message : "BFF request failed");
+        setCandidates([]);
+        setCandidateLoadState("error");
         setCandidatesLoading(false);
       });
 
     return () => {
       active = false;
     };
-  }, [activeLensId]);
+  }, [activeLensId, candidateDemoMode]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2715,6 +3029,8 @@ export function TradingRoomPage({
           eventsEtag={eventsEtag}
           isSampleData={isSampleData}
           candidatesLoading={candidatesLoading}
+          candidateLoadState={candidateLoadState}
+          candidatesError={candidatesError}
         />
       )}
     </div>
