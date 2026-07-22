@@ -1,22 +1,27 @@
 name: Pantheon Dev FE Deploy
 
 on:
-  # Auto-deploy on every merge/push to dev. Decoupled from the FE-BFF
-  # integration gate (which keeps running as an informational PR/push check):
-  # "merge to dev" now == "deploy to dev FE", no manual workflow_dispatch needed.
-  # dev-only target; staging/prod still go through their own promotion path.
-  push:
+  workflow_run:
+    workflows:
+      - Pantheon FE-BFF Integration Gate
+    types:
+      - completed
     branches:
       - dev
   workflow_dispatch:
     inputs:
       ref:
-        description: "Commit SHA, branch, or tag to deploy. Defaults to dev."
+        description: "Current dev SHA or dev; must have a successful integration gate."
         required: false
         default: "dev"
         type: string
       skip_probe:
         description: "Emergency only: deploy without the browser/BFF probe."
+        required: false
+        default: false
+        type: boolean
+      real_writes:
+        description: "Explicitly enable governed dev writes and the write/read-back probe."
         required: false
         default: false
         type: boolean
@@ -35,7 +40,11 @@ jobs:
     if: >-
       ${{
         github.event_name == 'workflow_dispatch' ||
-        github.event_name == 'push'
+        (
+          github.event.workflow_run.conclusion == 'success' &&
+          github.event.workflow_run.event == 'push' &&
+          github.event.workflow_run.head_branch == 'dev'
+        )
       }}
     runs-on:
       - self-hosted
@@ -44,15 +53,17 @@ jobs:
       - pantheon-dev-vm
       - execute-plans-deploy
     env:
-      TARGET_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.sha }}
-      TARGET_BRANCH: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref_name }}
+      TARGET_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.event.workflow_run.head_sha }}
+      TARGET_BRANCH: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.event.workflow_run.head_branch }}
       PANTHEON_DEV_FE_HOST: https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io
       PANTHEON_BFF_BASE_URL: https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io
       PANTHEON_OLD_BFF_URL: https://pantheon-lupin-dev-bff.34.81.75.241.sslip.io
       PANTHEON_AUDIT_OUT_DIR: .lovable/audits/current-run
       PANTHEON_HOSTED_PROBE_PATH: /management/persona-fleet
-      PANTHEON_HOSTED_REQUIRED_BFF_PATHS: /bff/management/fleet
+      PANTHEON_HOSTED_REQUIRED_BFF_PATHS: /bff/management/persona-fleet
       PANTHEON_DEPLOY_SKIP_PROBE: ${{ github.event_name == 'workflow_dispatch' && inputs.skip_probe || false }}
+      PANTHEON_DEPLOY_REAL_WRITES: ${{ github.event_name == 'workflow_dispatch' && inputs.real_writes && 'true' || 'false' }}
+      PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES: ${{ github.event_name == 'workflow_dispatch' && inputs.real_writes && 'true' || 'false' }}
 
     steps:
       - name: Checkout target ref
@@ -61,30 +72,110 @@ jobs:
           ref: ${{ env.TARGET_REF || 'dev' }}
           fetch-depth: 0
 
-      - name: Resolve deployment SHA
-        id: sha
-        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Validate deployment candidate
+        id: candidate
+        shell: bash
+        run: |
+          candidate_sha="$(git rev-parse HEAD)"
+          echo "sha=${candidate_sha}" >> "$GITHUB_OUTPUT"
+
+          if [[ "${GITHUB_EVENT_NAME}" != "workflow_dispatch" && "${candidate_sha}" != "${TARGET_REF}" ]]; then
+            echo "Deployment candidate mismatch: expected ${TARGET_REF}, got ${candidate_sha}" >&2
+            exit 1
+          fi
+
+          current_dev_sha="$(git ls-remote --exit-code origin refs/heads/dev | awk '{print $1}')"
+          if [[ "${candidate_sha}" != "${current_dev_sha}" ]]; then
+            if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+              echo "Manual deployments are restricted to the current dev head ${current_dev_sha}; got ${candidate_sha}." >&2
+              exit 1
+            fi
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping stale gated candidate ${candidate_sha}; current dev is ${current_dev_sha}."
+            exit 0
+          fi
+
+          echo "deploy=true" >> "$GITHUB_OUTPUT"
+
+      - name: Validate manual candidate integration gate
+        id: manual_gate
+        if: github.event_name == 'workflow_dispatch' && steps.candidate.outputs.deploy == 'true'
+        uses: actions/github-script@v7
+        env:
+          CANDIDATE_SHA: ${{ steps.candidate.outputs.sha }}
+        with:
+          script: |
+            const { data } = await github.rest.actions.listWorkflowRuns({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: "pantheon-integration-gate.yml",
+              branch: "dev",
+              event: "push",
+              status: "success",
+              per_page: 100,
+            });
+            const accepted = data.workflow_runs.find(
+              (run) => run.head_sha === process.env.CANDIDATE_SHA && run.conclusion === "success",
+            );
+            if (!accepted) {
+              core.setFailed(
+                `No successful Pantheon FE-BFF Integration Gate push run exists for ${process.env.CANDIDATE_SHA}.`,
+              );
+            } else {
+              core.setOutput("run_id", String(accepted.id));
+            }
 
       - name: Setup Node
+        if: steps.candidate.outputs.deploy == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: "npm"
 
+      - name: Download exact gated release identity
+        if: steps.candidate.outputs.deploy == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: pantheon-release-identity
+          path: ${{ runner.temp }}/pantheon-release-identity
+          run-id: ${{ github.event_name == 'workflow_dispatch' && steps.manual_gate.outputs.run_id || github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      - name: Validate exact gated release identity
+        id: identity
+        if: steps.candidate.outputs.deploy == 'true'
+        env:
+          RELEASE_IDENTITY_FILE: ${{ runner.temp }}/pantheon-release-identity/release-identity.json
+          RELEASE_GATE_RUN_ID: ${{ github.event_name == 'workflow_dispatch' && steps.manual_gate.outputs.run_id || github.event.workflow_run.id }}
+        run: |
+          set -euo pipefail
+          bff_sha="$(node scripts/release-identity.mjs validate \
+            --identity-file "$RELEASE_IDENTITY_FILE" \
+            --frontend-sha "${{ steps.candidate.outputs.sha }}" \
+            --bff-base-url "$PANTHEON_BFF_BASE_URL" \
+            --gate-run-id "$RELEASE_GATE_RUN_ID")"
+          echo "bff_sha=${bff_sha}" >> "$GITHUB_OUTPUT"
+          echo "Exact gated release identity: FE ${{ steps.candidate.outputs.sha }}, BFF ${bff_sha}"
+
       - name: Prepare audit directory
+        if: steps.candidate.outputs.deploy == 'true'
         run: |
           rm -rf "$PANTHEON_AUDIT_OUT_DIR"
           mkdir -p "$PANTHEON_AUDIT_OUT_DIR"
 
       - name: Deploy static build
+        id: deploy
+        if: steps.candidate.outputs.deploy == 'true'
         env:
-          PANTHEON_DEPLOY_REF: ${{ env.TARGET_REF || steps.sha.outputs.sha }}
+          PANTHEON_DEPLOY_REF: ${{ env.TARGET_REF || steps.candidate.outputs.sha }}
           PANTHEON_DEPLOY_BRANCH: ${{ env.TARGET_BRANCH || 'dev' }}
-          GITHUB_SHA: ${{ steps.sha.outputs.sha }}
+          PANTHEON_RELEASE_IDENTITY_FILE: ${{ runner.temp }}/pantheon-release-identity/release-identity.json
+          PANTHEON_RELEASE_GATE_RUN_ID: ${{ github.event_name == 'workflow_dispatch' && steps.manual_gate.outputs.run_id || github.event.workflow_run.id }}
+          GITHUB_SHA: ${{ steps.candidate.outputs.sha }}
         run: bash scripts/deploy-dev-vm.sh
 
       - name: Upload deploy evidence
-        if: always()
+        if: always() && steps.deploy.outcome != '' && steps.deploy.outcome != 'skipped'
         uses: actions/upload-artifact@v4
         with:
           name: pantheon-dev-fe-deploy-evidence
@@ -99,7 +190,9 @@ jobs:
           {
             echo "## Pantheon Dev FE Deploy"
             echo "- target ref: \`${TARGET_REF}\`"
-            echo "- deployed sha: \`${{ steps.sha.outputs.sha }}\`"
+            echo "- candidate sha: \`${{ steps.candidate.outputs.sha }}\`"
+            echo "- gated BFF sha: \`${{ steps.identity.outputs.bff_sha || 'unresolved' }}\`"
+            echo "- deployment outcome: \`${{ steps.deploy.outcome || 'not-attempted' }}\`"
             echo "- FE: ${PANTHEON_DEV_FE_HOST}"
             echo "- BFF: ${PANTHEON_BFF_BASE_URL}"
             echo "- evidence: pantheon-dev-fe-deploy-evidence"

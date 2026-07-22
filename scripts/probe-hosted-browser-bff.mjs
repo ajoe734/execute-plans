@@ -13,7 +13,7 @@ const OVERALL_TIMEOUT_MS = 90_000;
 const OPTIONAL_CORE_TIMEOUT_MS = 5_000;
 const NAVIGATION_WAIT_UNTIL = "domcontentloaded";
 const REQUIRED_CORE_BFF_PATHS = parsePathList(process.env.PANTHEON_HOSTED_REQUIRED_BFF_PATHS, [
-  "/bff/management/fleet",
+  "/bff/management/persona-fleet",
 ]);
 const OPTIONAL_CORE_BFF_PATHS = ["/bff/me"];
 const CORE_BFF_PATHS = [...OPTIONAL_CORE_BFF_PATHS, ...REQUIRED_CORE_BFF_PATHS];
@@ -193,44 +193,51 @@ try {
   coreResponses.push(...await Promise.all(optionalCoreResponsePromises));
   coreResponses.push(...await Promise.all(requiredCoreResponsePromises));
 
-  await page.locator("body").innerText({ timeout: Math.min(5_000, remainingTimeoutMs()) }).catch(() => "");
   if (FE_PATH.includes("persona-fleet")) {
+    await page.waitForFunction(() => {
+      const text = document.body.innerText || "";
+      const rowCount = Array.from(document.querySelectorAll("tbody tr"))
+        .map((tr) => (tr.textContent || "").trim())
+        .filter(Boolean).length;
+      return rowCount > 0 || /Live Persona Fleet data unavailable|目前沒有 live Persona Fleet 資料|seed fallback armed|fallback standby|NaN/i.test(text);
+    }, undefined, { timeout: Math.min(15_000, remainingTimeoutMs()) }).catch(() => {});
+
     personaFleetChecks = await page.evaluate(() => {
       const text = document.body.innerText || "";
       const rows = Array.from(document.querySelectorAll("tbody tr"))
         .map((tr) => (tr.textContent || "").trim())
         .filter(Boolean);
-      const hasUS = /US Equity Persona|US.*Equity/i.test(text);
-      const hasTW = /Taiwan Equity Persona|Taiwan.*Equity|TW Equity/i.test(text);
-      const hasCrypto = /Crypto Persona|Crypto/i.test(text);
-      const hasShioaji = /shioaji/i.test(text);
-      const hasQlib = /qlib/i.test(text);
       const hasNaN = /NaN/.test(text);
       const hasSeedFallbackArmed = /seed fallback armed/i.test(text);
       const hasFallbackStandby = /fallback standby/i.test(text);
+      const hasLiveEmptyState = /Live Persona Fleet data unavailable|目前沒有 live Persona Fleet 資料/i.test(text);
+      const hasNonProductionRows = [
+        /persona-crypto/i,
+        /persona-us-equity/i,
+        /persona-tw-equity/i,
+        /Crypto Persona/i,
+        /US Equity Persona/i,
+        /Taiwan Equity Persona/i,
+        /Deploy Smoke Persona/i,
+        /dry-run-write-probe/i,
+      ].some((pattern) => pattern.test(text));
       return {
         rowCount: rows.length,
-        hasUS,
-        hasTW,
-        hasCrypto,
-        hasShioaji,
-        hasQlib,
         hasNaN,
         hasSeedFallbackArmed,
         hasFallbackStandby,
-        rowsValid: rows.length > 0 && hasUS && hasTW && hasCrypto && hasShioaji && hasQlib && !hasNaN,
+        hasLiveEmptyState,
+        hasNonProductionRows,
+        rowsValid: (rows.length > 0 || hasLiveEmptyState) && !hasNaN && !hasNonProductionRows,
         liveBannerValid: !hasSeedFallbackArmed,
       };
     }).catch(() => ({
       rowCount: 0,
-      hasUS: false,
-      hasTW: false,
-      hasCrypto: false,
-      hasShioaji: false,
-      hasQlib: false,
       hasNaN: false,
       hasSeedFallbackArmed: false,
       hasFallbackStandby: false,
+      hasLiveEmptyState: false,
+      hasNonProductionRows: false,
       rowsValid: false,
       liveBannerValid: false,
     }));
@@ -300,9 +307,9 @@ const md = [
   `- optional core BFF responses observed: ${optionalCoreResponsesObserved}`,
   ...(personaFleetChecks ? [
     `- persona fleet row count: ${personaFleetChecks.rowCount}`,
-    `- persona fleet has US/TW/Crypto: ${personaFleetChecks.hasUS && personaFleetChecks.hasTW && personaFleetChecks.hasCrypto}`,
-    `- persona fleet has shioaji/qlib: ${personaFleetChecks.hasShioaji && personaFleetChecks.hasQlib}`,
     `- persona fleet has NaN: ${personaFleetChecks.hasNaN}`,
+    `- persona fleet has live empty state: ${personaFleetChecks.hasLiveEmptyState}`,
+    `- persona fleet has non-production rows: ${personaFleetChecks.hasNonProductionRows}`,
     `- persona fleet seed fallback armed: ${personaFleetChecks.hasSeedFallbackArmed}`,
     `- persona fleet fallback standby: ${personaFleetChecks.hasFallbackStandby}`,
     `- persona fleet rows valid: ${personaFleetChecks.rowsValid}`,

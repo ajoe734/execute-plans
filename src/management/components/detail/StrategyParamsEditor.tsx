@@ -4,9 +4,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { toast } from "sonner";
 import type { Strategy } from "@/lib/bff/types";
-import { bff } from "@/lib/bff-v1";
 import { runActionSafe } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 
@@ -31,8 +29,9 @@ export const StrategyParamsEditor = ({ strategy, initial }: { strategy: Strategy
       id: strategy.id,
       action: "update_params",
       memo: changes.map((c) => `${c.key}: ${c.prev} → ${c.value}`).join("; "),
+    }, {
+      successTitle: t("strategy.params.draftCreated"),
     });
-    toast.success(t("strategy.params.draftCreated"));
   };
 
   return (
