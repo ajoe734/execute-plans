@@ -10,10 +10,10 @@ import { Button } from "@/components/ui/button";
 import { LineageGraph, type LineageNode, type LineageEdge } from "@/platform/components/LineageGraph";
 import { useInspector } from "@/platform/components/RightDrawer";
 import { useT } from "@/platform/hooks";
-import { bff } from "@/lib/bff-v1";
-import type { Strategy } from "@/lib/bff/types";
+import { managementConsoleReads } from "@/lib/bff-v1";
 import { resolveEntity, decisionsHref, auditHref } from "@/lib/entityLinks";
 import { GitBranch, BookMarked, ArrowUpRight } from "lucide-react";
+import { useV5Live } from "@/management/pages/v5/useV5Live";
 
 const TYPES = ["Strategy", "Persona", "Artifact", "CapitalPool", "Experiment"] as const;
 
@@ -22,24 +22,13 @@ export const LineageExplorerPage = () => {
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const initialRoot = params.get("root") ?? "";
-  const [strategies, setStrategies] = useState<Strategy[]>([]);
   const [rootId, setRootId] = useState<string>(initialRoot);
   const [filter, setFilter] = useState("");
   const [selected, setSelected] = useState<LineageNode | null>(null);
   const [enabled, setEnabled] = useState<Record<string, boolean>>(
     () => Object.fromEntries(TYPES.map((t) => [t, true])),
   );
-
-  useEffect(() => {
-    bff.strategies.list().then((s) => {
-      setStrategies(s);
-      if (!rootId) {
-        const match = initialRoot && s.find((x) => x.id === initialRoot);
-        setRootId(match ? match.id : (s[0]?.id ?? ""));
-      }
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const { data } = useV5Live(() => managementConsoleReads.lineage(rootId || undefined), [rootId]);
 
   useEffect(() => {
     if (!rootId) return;
@@ -51,25 +40,15 @@ export const LineageExplorerPage = () => {
   }, [rootId]);
 
   const { nodes, edges } = useMemo<{ nodes: LineageNode[]; edges: LineageEdge[] }>(() => {
-    const root = strategies.find((s) => s.id === rootId);
-    if (!root) return { nodes: [], edges: [] };
-    const all: LineageNode[] = [
-      { id: "exp_42", label: "Momentum Search", type: "Experiment", state: "completed", risk: "low" },
-      { id: "art_88", label: "Backtest Result", type: "Artifact", state: "approved", risk: "low" },
-      { id: root.id, label: root.name, type: "Strategy", state: root.state, risk: root.risk, highlight: true },
-      { id: root.capitalPoolId, label: "Capital Pool", type: "CapitalPool", state: "deployed", risk: "medium" },
-      ...root.personaIds.map((p) => ({ id: p, label: p, type: "Persona", state: "deployed", risk: "low" as const })),
-    ];
-    const e: LineageEdge[] = [
-      { from: "exp_42", to: "art_88", label: "produces" },
-      { from: "art_88", to: root.id, label: "scaffolds" },
-      { from: root.capitalPoolId, to: root.id, label: "funds" },
-      ...root.personaIds.map((p) => ({ from: p, to: root.id, label: "routes" })),
-    ];
+    const all: LineageNode[] = (data?.nodes ?? []).map((node) => ({
+      ...node,
+      highlight: node.highlight || (!!rootId && node.id === rootId),
+    }));
+    const e: LineageEdge[] = data?.edges ?? [];
     const filtered = all.filter((n) => enabled[n.type] !== false && (!filter || n.label.toLowerCase().includes(filter.toLowerCase()) || n.id.includes(filter)));
     const ids = new Set(filtered.map((n) => n.id));
     return { nodes: filtered, edges: e.filter((edge) => ids.has(edge.from) && ids.has(edge.to)) };
-  }, [strategies, rootId, filter, enabled]);
+  }, [data, rootId, filter, enabled]);
 
   const selectedResolved = selected ? resolveEntity(selected.id) : null;
 
@@ -81,9 +60,7 @@ export const LineageExplorerPage = () => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
             <div className="space-y-1.5">
               <div className="text-xs uppercase tracking-wider text-muted-foreground">{t("lineageExplorer.root")}</div>
-              <select className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm" value={rootId} onChange={(e) => setRootId(e.target.value)}>
-                {strategies.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
+              <Input value={rootId} onChange={(e) => setRootId(e.target.value)} placeholder={t("lineageExplorer.root")} />
             </div>
             <div className="space-y-1.5">
               <div className="text-xs uppercase tracking-wider text-muted-foreground">{t("lineageExplorer.filter")}</div>

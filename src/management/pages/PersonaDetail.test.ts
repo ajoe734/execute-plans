@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { resolvePersonaForDetail } from "./personaDetailData";
+import { personaHumanInboxUrl } from "./PersonaDetail";
 import type { Persona } from "@/lib/bff/types";
 import { getPersona } from "@/lib/bff-v1/personas";
 
@@ -32,5 +33,11 @@ describe("PersonaDetail", () => {
       name: "Detail Persona",
     });
     expect(getPersona).toHaveBeenCalledWith("ps_detail");
+  });
+
+  it("builds a persona-scoped Human Inbox entry URL", () => {
+    expect(personaHumanInboxUrl("persona/tw equity")).toBe(
+      "/management/human-inbox?persona=persona%2Ftw%20equity",
+    );
   });
 });

@@ -28,7 +28,8 @@ interface Props {
 export const EntityHeader = ({ object, env, subtitle, actions, hideBack }: Props) => {
   const t = useT();
   const navigate = useNavigate();
-  const label = object.labelKey ? t(object.labelKey, { defaultValue: object.name }) : object.name;
+  const label = (object.labelKey ? t(object.labelKey, { defaultValue: object.name }) : object.name) || object.id;
+  const owner = object.owner || "—";
 
   return (
     <div className="border-b border-border bg-card px-6 py-4 space-y-2">
@@ -48,7 +49,7 @@ export const EntityHeader = ({ object, env, subtitle, actions, hideBack }: Props
           {subtitle && <p className="text-sm text-muted-foreground mt-1">{subtitle}</p>}
           <div className="flex items-center gap-4 text-xs text-muted-foreground mt-1">
             <span>
-              {t("common.owner")}: <span className="text-mono text-foreground/80">{object.owner}</span>
+              {t("common.owner")}: <span className="text-mono text-foreground/80">{owner}</span>
             </span>
             <span>
               {t("common.updated")}: <span className="text-mono text-foreground/80">{safeDateTime(object.updatedAt)}</span>
