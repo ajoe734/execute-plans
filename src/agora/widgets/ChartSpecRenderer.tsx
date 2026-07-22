@@ -15,7 +15,7 @@ import {
   YAxis,
 } from "recharts";
 
-import type { ChartSpecV1 } from "@/lib/bff-v1/agora/types";
+import type { ChartSpecV1 } from "@/lib/bff-v1/agora/tradingRoomTypes";
 
 import {
   chartRendererForKind,

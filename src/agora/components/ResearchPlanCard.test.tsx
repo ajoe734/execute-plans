@@ -1,7 +1,6 @@
-import React from "react";
-import { cleanup, render, screen, fireEvent } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { WorkshopCardRenderer } from "./WorkshopCardRenderer";
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it } from "vitest";
+import { ResearchPlanCard } from "./ResearchPlanCard";
 import type { WorkshopCard } from "@/lib/bff-v1/agora/workshops";
 
 afterEach(cleanup);
@@ -35,91 +34,67 @@ const baseCard: WorkshopCard = {
         dependencies: ["s1"],
       },
     ],
-    evaluation_criteria: "Sharpe > 0.8, max drawdown < 15%",
+    evaluation_criteria: {
+      sharpe: "> 0.8",
+      max_drawdown: "< 15%",
+    },
     warnings: ["Data availability limited post-2023"],
     approval_requirement: "human",
+    budget: {
+      max_runtime_minutes: 30,
+      max_cost_usd: 25,
+    },
   },
   created_at: "2026-06-22T00:00:00Z",
   allowed_actions: { approve: true, reject: true },
 };
 
-function renderCard(card: WorkshopCard = baseCard, onContinueDiscussion?: (cardId: string) => void) {
-  render(<WorkshopCardRenderer card={card} onContinueDiscussion={onContinueDiscussion} />);
-}
-
 describe("ResearchPlanCard", () => {
-  it("renders with correct testid", () => {
-    renderCard();
-    expect(screen.getByTestId("workshop-card-card-rp-001")).toBeDefined();
-  });
-
-  it("displays card title and summary", () => {
-    renderCard();
-    expect(screen.getByText("Momentum Factor Research Plan")).toBeDefined();
-    expect(screen.getByText(/Propose a 3-stage research run/)).toBeDefined();
-  });
-
-  it("shows status badge", () => {
-    renderCard();
-    expect(screen.getByText("Action required")).toBeDefined();
-  });
-
-  it("renders objectives section", () => {
-    renderCard();
-    expect(screen.getByText(/Validate momentum persistence/)).toBeDefined();
-  });
-
-  it("renders stages section with stage details", () => {
-    renderCard();
-    expect(screen.getByText("s1")).toBeDefined();
-    expect(screen.getByText("s2")).toBeDefined();
-    expect(screen.getByText("In-sample momentum validation")).toBeDefined();
-    expect(screen.getByText("Walk-forward OOS check")).toBeDefined();
-  });
-
-  it("shows evaluation criteria", () => {
-    renderCard();
-    expect(screen.getByText(/Sharpe > 0.8/)).toBeDefined();
-  });
-
-  it("shows warnings section", () => {
-    renderCard();
-    expect(screen.getByText(/Data availability limited/)).toBeDefined();
-  });
-
-  it("shows approval requirement", () => {
-    renderCard();
-    expect(screen.getByText("Approval")).toBeDefined();
+  it("renders plan metadata from payload", () => {
+    render(<ResearchPlanCard payload={baseCard.payload} />);
+    expect(screen.getByText("plan-001")).toBeDefined();
     expect(screen.getByText("human")).toBeDefined();
   });
 
-  it("renders approve and reject buttons when allowed_actions permits", () => {
-    renderCard();
-    expect(screen.getByRole("button", { name: "Approve" })).toBeDefined();
-    expect(screen.getByRole("button", { name: "Reject" })).toBeDefined();
+  it("renders objectives section", () => {
+    render(<ResearchPlanCard payload={baseCard.payload} />);
+    expect(screen.getByText("Objectives")).toBeDefined();
+    expect(screen.getByText("Validate momentum persistence over 12M horizon")).toBeDefined();
   });
 
-  it("does not render approve button when allowed_actions.approve is falsy", () => {
-    const card: WorkshopCard = { ...baseCard, allowed_actions: { approve: false, reject: true } };
-    renderCard(card);
-    expect(screen.queryByRole("button", { name: "Approve" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Reject" })).toBeDefined();
+  it("renders data requirements", () => {
+    render(<ResearchPlanCard payload={baseCard.payload} />);
+    expect(screen.getByText("Data Requirements")).toBeDefined();
+    expect(screen.getByText("OHLCV daily 10Y")).toBeDefined();
+    expect(screen.getByText("sector classifications")).toBeDefined();
   });
 
-  it("renders Ask Servant button when onContinueDiscussion is provided", () => {
-    renderCard(baseCard, () => undefined);
-    expect(screen.getByTestId("workshop-card-card-rp-001-discuss")).toBeDefined();
+  it("renders stages section with stage details", () => {
+    render(<ResearchPlanCard payload={baseCard.payload} />);
+    expect(screen.getByText("Stages")).toBeDefined();
+    expect(screen.getByText("s1")).toBeDefined();
+    expect(screen.getByText("s2")).toBeDefined();
+    expect(screen.getByText("In-sample momentum validation")).toBeDefined();
+    expect(screen.getByText("Depends on s1")).toBeDefined();
   });
 
-  it("calls onContinueDiscussion with card_id when Ask Servant is clicked", () => {
-    const handler = vi.fn();
-    renderCard(baseCard, handler);
-    fireEvent.click(screen.getByTestId("workshop-card-card-rp-001-discuss"));
-    expect(handler).toHaveBeenCalledWith("card-rp-001");
+  it("shows evaluation criteria", () => {
+    render(<ResearchPlanCard payload={baseCard.payload} />);
+    expect(screen.getByText("Evaluation Criteria")).toBeDefined();
+    expect(screen.getByText("> 0.8")).toBeDefined();
+    expect(screen.getByText("< 15%")).toBeDefined();
   });
 
-  it("does not render Ask Servant button when no callback is provided", () => {
-    renderCard();
-    expect(screen.queryByTestId("workshop-card-card-rp-001-discuss")).toBeNull();
+  it("shows warnings section", () => {
+    render(<ResearchPlanCard payload={baseCard.payload} />);
+    expect(screen.getByText("Warnings")).toBeDefined();
+    expect(screen.getByText("Data availability limited post-2023")).toBeDefined();
+  });
+
+  it("shows budget details when present", () => {
+    render(<ResearchPlanCard payload={baseCard.payload} />);
+    expect(screen.getByText("Budget")).toBeDefined();
+    expect(screen.getByText("30")).toBeDefined();
+    expect(screen.getByText("25")).toBeDefined();
   });
 });

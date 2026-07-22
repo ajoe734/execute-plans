@@ -93,21 +93,16 @@ function ObjectSummary({
 }) {
   const record = asRecord(value);
   const entries = Object.entries(record);
-  const scalarItems = stringList(value);
-  if (entries.length === 0 && scalarItems.length === 0) return null;
+  if (entries.length === 0) return null;
 
   return (
     <Section title={title}>
-      {entries.length > 0 ? (
-        <KeyValueGrid
-          items={entries.map(([label, entry]) => ({
-            label: formatLabel(label),
-            value: Array.isArray(entry) ? stringList(entry).join(", ") : entry,
-          }))}
-        />
-      ) : (
-        <TextList items={scalarItems} />
-      )}
+      <KeyValueGrid
+        items={entries.map(([label, entry]) => ({
+          label: formatLabel(label),
+          value: Array.isArray(entry) ? stringList(entry).join(", ") : entry,
+        }))}
+      />
     </Section>
   );
 }

@@ -193,18 +193,6 @@ function idempotencyFrom(raw: BackendCommandResponse, fallback: string): string 
   return raw.meta?.idempotency?.idempotencyKey ?? raw.meta?.idempotency?.key ?? fallback;
 }
 
-const OPERATIONS_COMMAND_TYPES = new Set([
-  "Observe",
-  "RequestReview",
-  "PausePaperRuntime",
-  "ResumePaperRuntime",
-  "Demote",
-  "PromoteCandidate",
-  "RebalanceProposal",
-  "ApprovedApply",
-  "EmergencyContainment"
-]);
-
 export function buildRunActionCommand(
   input: RunActionInput,
   opts: CommandClientOptions,
@@ -212,8 +200,6 @@ export function buildRunActionCommand(
   const entityType = entityTypeForKind(input.kind);
   const spec = specForEntityType(entityType);
   const actionId = input.action.trim();
-  const isOperationsCommand = OPERATIONS_COMMAND_TYPES.has(actionId);
-  const commandName = isOperationsCommand ? actionId : spec.command;
   const auditEvent = `${spec.auditNamespace}.${actionId}`;
   const confirmToken = opts.confirmToken ?? input.confirmToken;
   const params = definedParams({
@@ -233,7 +219,7 @@ export function buildRunActionCommand(
   });
 
   return definedParams({
-    command: commandName,
+    command: spec.command,
     target: {
       type: spec.targetType,
       id: input.id,
