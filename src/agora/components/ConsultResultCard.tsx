@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import {
   KeyValueGrid,
   Pill,
@@ -62,31 +63,33 @@ function RecordOrTextList({
 }
 
 export function ConsultResultCard({ payload }: { payload: UnknownRecord }) {
+  const { t } = useTranslation();
+
   return (
     <div className="space-y-4">
       <KeyValueGrid
         items={[
-          { label: "Consultation", value: payload.consultation_id },
-          { label: "Type", value: payload.consultation_type },
-          { label: "Status", value: payload.status },
-          { label: "Freshness", value: payload.freshness },
+          { label: t("agora.workshop.cardLabels.consultation"), value: payload.consultation_id },
+          { label: t("agora.workshop.cardLabels.type"), value: payload.consultation_type },
+          { label: t("agora.workshop.cardLabels.status"), value: payload.status },
+          { label: t("agora.workshop.cardLabels.freshness"), value: payload.freshness },
         ]}
       />
 
-      <Section title="Participants">
+      <Section title={t("agora.workshop.cardLabels.participants")}>
         <PersonaRefs refs={payload.participant_persona_refs} />
       </Section>
 
       {payload.consensus_summary ? (
-        <Section title="Consensus">
+        <Section title={t("agora.workshop.cardLabels.consensus")}>
           <p className="text-xs leading-5 text-slate-700">{stringValue(payload.consensus_summary)}</p>
         </Section>
       ) : null}
 
-      <RecordOrTextList title="Disagreements" items={payload.disagreements} tone="amber" />
-      <RecordOrTextList title="Risk Notes" items={payload.risk_notes} tone="red" />
-      <RecordOrTextList title="Conditions" items={payload.conditions} />
-      <RecordOrTextList title="Evidence Refs" items={payload.evidence_refs} />
+      <RecordOrTextList title={t("agora.workshop.cardLabels.disagreements")} items={payload.disagreements} tone="amber" />
+      <RecordOrTextList title={t("agora.workshop.cardLabels.risk_notes")} items={payload.risk_notes} tone="red" />
+      <RecordOrTextList title={t("agora.workshop.cardLabels.conditions")} items={payload.conditions} />
+      <RecordOrTextList title={t("agora.workshop.cardLabels.evidence_refs")} items={payload.evidence_refs} />
     </div>
   );
 }

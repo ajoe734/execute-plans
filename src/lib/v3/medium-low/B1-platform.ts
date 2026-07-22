@@ -67,7 +67,7 @@ export const NOTIFICATION_ROUTING: Record<NotificationType, { routeTemplate: str
   job_failed:               { routeTemplate: "/management/jobs/:id",       requiresUserAction: true,  severity: "warning" },
   deployment_event:         { routeTemplate: "/management/deployment/:id", requiresUserAction: true,  severity: "warning" },
   rollback_event:           { routeTemplate: "/management/deployment/:id", requiresUserAction: true,  severity: "warning" },
-  rebalance_event:          { routeTemplate: "/management/rebalance/:id",  requiresUserAction: false, severity: "info" },
+  rebalance_event:          { routeTemplate: "/management/promotion-allocation?tab=quarterly-capital&rebalance_id=:id",  requiresUserAction: false, severity: "info" },
   persona_policy_violation: { routeTemplate: "/management/personas/:id",   requiresUserAction: true,  severity: "warning" },
   handoff_incoming:         { routeTemplate: "/management/command-center", requiresUserAction: true,  severity: "info" },
   mention:                  { routeTemplate: ":targetRoute",               requiresUserAction: false, severity: "info" },
