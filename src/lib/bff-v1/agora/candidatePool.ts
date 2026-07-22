@@ -1,5 +1,7 @@
 /**
- * BFF client for the Candidate Pool surface (v1.4, agora.research.v1).
+ * BFF client for the Candidate Pool surface (v1.4 base plus v1.12 candidate
+ * truth projection, agora.research.v1). The additive truth contract consumed
+ * here landed in Pantheon PR #3980 at merge 5004450c5493aa8aef284cf42439c9b27ef54235.
  * All data reads go through these functions; pages must not call fetch() directly.
  * No order routing, no capital binding — read/review/score only.
  *

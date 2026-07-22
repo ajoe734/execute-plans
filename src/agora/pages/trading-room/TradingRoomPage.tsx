@@ -1034,7 +1034,7 @@ function assertSameCandidateProvenance(
   }
 }
 
-export function mapCandidatePoolMember(
+function mapCandidatePoolMember(
   item: CandidatePoolMember,
   lensId: string,
   freshness: CandidateMemberListFreshness,
@@ -1158,7 +1158,7 @@ function CandidateFieldProvenanceLine({
     : unavailableReasonText(field.reason);
   return (
     <div
-      className="mt-1 break-all font-mono text-[9px] text-[#737d8e]"
+      className="mt-1 break-all font-mono text-[9px] text-[#aab1bc]"
       data-testid={testId}
     >
       {text}
@@ -1297,7 +1297,11 @@ function CandidateReviewDrawer({
         </div>
 
         {/* Scrollable details */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        <div
+          aria-label="Candidate details"
+          className="flex-1 overflow-y-auto p-4 space-y-4"
+          tabIndex={0}
+        >
           {/* Fitness & Status */}
           <div className="bg-[#171b22] p-3 rounded-lg border border-[#2a2e38]">
             <h3 className="text-[10px] font-bold text-[#8c96a6] uppercase tracking-wider mb-2">
@@ -1323,7 +1327,7 @@ function CandidateReviewDrawer({
               <span className="text-[#c5cad2]">{t("agora.tradingRoom.candidates.headers.recipeScore", { defaultValue: "Recipe score:" })}</span>
               <span className="font-mono font-bold text-[#e8b750]" data-testid="drawer-candidate-score">{candidateScoreText(candidate)}</span>
             </div>
-            <div className="mt-2 text-[9px] text-[#737d8e]" data-testid="drawer-candidate-freshness">
+            <div className="mt-2 text-[9px] text-[#aab1bc]" data-testid="drawer-candidate-freshness">
               {candidate.dataSource === "sample"
                 ? "Sample dataset — no live freshness claim"
                 : candidate.freshnessState === "stale"

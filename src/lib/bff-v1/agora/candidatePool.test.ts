@@ -149,9 +149,32 @@ describe("listCandidatePoolMembers — ETag in response", () => {
       strategy_ref: "strat-001",
       lifecycle_state: "candidate",
       created_at: "2026-06-20T00:00:00Z",
+      fields: {
+        rationale: { availability: "unavailable", reason: "score_not_run" },
+      },
+      as_of: "2026-06-20T00:00:00Z",
     };
     const fetchMock = vi.fn().mockResolvedValue(
-      ok({ items: [member] }, 200, { ETag: '"members-etag-v2"' }),
+      ok({
+        items: [member],
+        page_info: {
+          next_page_token: null,
+          page_size: 1,
+          has_more: false,
+          total: 1,
+          order_by: "created_at,artifact_id",
+        },
+        meta: {
+          snapshot_at: "2026-06-20T00:01:00Z",
+          read_state: "stale",
+          warnings: ["candidate projection delayed"],
+          freshness: {
+            pool_snapshot_at: "2026-06-20T00:00:00Z",
+            data_cutoff: "2026-06-19T23:59:00Z",
+            last_score_run_at: null,
+          },
+        },
+      }, 200, { ETag: '"members-etag-v2"' }),
     );
     globalThis.fetch = fetchMock;
 
@@ -159,7 +182,22 @@ describe("listCandidatePoolMembers — ETag in response", () => {
 
     expect(result.items).toHaveLength(1);
     expect(result.items[0].artifact_id).toBe("art-001");
+    expect(result.items[0].fields.rationale).toEqual({
+      availability: "unavailable",
+      reason: "score_not_run",
+    });
     expect(result.etag).toBe('"members-etag-v2"');
+    expect(result.pageInfo?.order_by).toBe("created_at,artifact_id");
+    expect(result.meta).toEqual({
+      snapshot_at: "2026-06-20T00:01:00Z",
+      read_state: "stale",
+      warnings: ["candidate projection delayed"],
+      freshness: {
+        pool_snapshot_at: "2026-06-20T00:00:00Z",
+        data_cutoff: "2026-06-19T23:59:00Z",
+        last_score_run_at: null,
+      },
+    });
   });
 
   it("returns null etag when server omits ETag header", async () => {
