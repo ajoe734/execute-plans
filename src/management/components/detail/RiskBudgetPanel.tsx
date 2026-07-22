@@ -4,9 +4,9 @@ import { Card } from "@/components/ui/card";
 import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { toast } from "sonner";
 import type { CapitalPool } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
+import { NonProductionActionButton } from "@/management/components/NonProductionActionButton";
 
 export const RiskBudgetPanel = ({ pool }: { pool: CapitalPool }) => {
   const t = useT();
@@ -39,7 +39,7 @@ export const RiskBudgetPanel = ({ pool }: { pool: CapitalPool }) => {
         ))}
         <div className="flex justify-end gap-2 pt-2">
           <Button size="sm" variant="outline" onClick={() => setBudget(pool.riskBudget * 100)} disabled={!dirty}>{t("actions.reset")}</Button>
-          <Button size="sm" disabled={!dirty} onClick={() => toast.success(t("capitalPool.risk.queued"))}>{t("actions.proposeChange")}</Button>
+          <NonProductionActionButton size="sm">{t("actions.proposeChange")}</NonProductionActionButton>
         </div>
       </Card>
     </div>
