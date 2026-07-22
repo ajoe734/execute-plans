@@ -1,13 +1,12 @@
 import { useEffect, useState } from "react";
-import { safeDateTime } from "@/lib/utils";
-import { useParams, useNavigate } from "react-router-dom";
+import { safeDateTime, safePercent } from "@/lib/utils";
+import { useLocation, useParams, useNavigate } from "react-router-dom";
+import { tradeJourneyHref } from "@/management/navigation/tradeJourneyLinks";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Rocket, Undo2, TrendingDown, CalendarClock } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { mutations } from "@/lib/bff/mutations";
-import { toast } from "sonner";
 import { bff } from "@/lib/bff-v1";
 import { runActionSafe } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
@@ -28,6 +27,7 @@ export const DeploymentDetail = () => {
   const { id } = useParams();
   const t = useT();
   const navigate = useNavigate();
+  const location = useLocation();
   const [d, setD] = useState<Deployment | undefined>();
   const [runtimes, setRuntimes] = useState<Runtime[]>([]);
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
@@ -101,6 +101,11 @@ export const DeploymentDetail = () => {
                       <button className="text-accent hover:underline text-mono" onClick={() => navigate(`/management/artifacts/${d.artifactId}`)}>{d.artifactId}</button>
                     } />
                     <Field label={t("table.owner")} value={d.owner} mono />
+                    <Field label={t("nav.tradeJourneys", { defaultValue: "Trade Journeys" })} value={
+                      d.strategyId
+                        ? <button aria-label={`${d.id} trade journeys`} className="text-accent hover:underline text-mono" onClick={() => navigate(tradeJourneyHref(location, { strategyId: d.strategyId }, `Deployment ${d.id}`))}>{t("detail.tradeJourneys.viewTradeJourneys", { defaultValue: "View Trade Journeys" })}</button>
+                        : "—"
+                    } />
                   </div>
                 </Section>
               </>
@@ -113,10 +118,10 @@ export const DeploymentDetail = () => {
               <DataTable rows={filtered} columns={[
                 { key: "name", header: t("table.name"), cell: (r) => <div className="font-medium text-mono text-xs">{r.name}</div> },
                 { key: "status", header: t("table.status"), cell: (r) => <StatusBadge state={r.status} /> },
-                { key: "cpu", header: "CPU", cell: (r) => <span className="text-mono text-xs">{(r.cpu * 100).toFixed(0)}%</span> },
-                { key: "mem", header: "MEM", cell: (r) => <span className="text-mono text-xs">{(r.memory * 100).toFixed(0)}%</span> },
-                { key: "p95", header: "p95", cell: (r) => <span className="text-mono text-xs">{r.latencyP95Ms}ms</span> },
-                { key: "uptime", header: "Uptime", cell: (r) => <span className="text-mono text-xs">{r.uptimePct}%</span> },
+                { key: "cpu", header: "CPU", cell: (r) => <span className="text-mono text-xs">{safePercent(r.cpu, 0)}</span> },
+                { key: "mem", header: "MEM", cell: (r) => <span className="text-mono text-xs">{safePercent(r.memory, 0)}</span> },
+                { key: "p95", header: "p95", cell: (r) => <span className="text-mono text-xs">{typeof r.latencyP95Ms === "number" ? `${r.latencyP95Ms}ms` : "—"}</span> },
+                { key: "uptime", header: "Uptime", cell: (r) => <span className="text-mono text-xs">{typeof r.uptimePct === "number" ? `${r.uptimePct}%` : "—"}</span> },
               ]} empty={t("empty.noResults")} />
             );
           })() },
@@ -146,7 +151,9 @@ export const DeploymentDetail = () => {
         description={t("detail.confirm.promoteLive")}
         confirmToken="PROMOTE"
         destructive
-        onConfirm={async (memo) => { await runActionSafe({ kind: "Deployment", id: d.id, action: "promote_live", newState: "deployed", memo }); toast.success("Promotion request submitted"); }}
+        onConfirm={async (memo) => {
+          await runActionSafe({ kind: "Deployment", id: d.id, action: "promote_live", newState: "deployed", memo }, { successTitle: "Promotion request submitted" });
+        }}
       />
       <HighRiskConfirm
         open={rollbackOpen}
@@ -155,7 +162,9 @@ export const DeploymentDetail = () => {
         description={`Rolls back to version ${d.previousVersion ?? "previous"}. Live orders will continue to flow through the previous artifact.`}
         confirmToken="ROLLBACK"
         destructive
-        onConfirm={async (memo) => { await mutations.rollback("Deployment", d.id, memo); toast.success("Rollback executed"); }}
+        onConfirm={async (memo) => {
+          await runActionSafe({ kind: "Deployment", id: d.id, action: "rollback", memo }, { successTitle: "Rollback executed" });
+        }}
       />
 
       <Dialog open={reduceOpen} onOpenChange={setReduceOpen}>
@@ -180,8 +189,15 @@ export const DeploymentDetail = () => {
           <DialogFooter>
             <Button variant="outline" onClick={() => setReduceOpen(false)}>{t("actions.cancel")}</Button>
             <Button onClick={async () => {
-              await mutations.reduceAllocation(d.id, newPct, `manual reduce → ${newPct}%`);
-              toast.success(t("deployment.reduceAllocation.queued", { pct: newPct }));
+              const receipt = await runActionSafe({
+                kind: "Deployment",
+                id: d.id,
+                action: "reduce_allocation",
+                memo: `manual reduce -> ${newPct}%`,
+              }, {
+                successTitle: t("deployment.reduceAllocation.queued", { pct: newPct }),
+              });
+              if (!receipt.ok) return;
               setReduceOpen(false);
               const fresh = await bff.deployments.get(d.id);
               if (fresh) setD(fresh);
@@ -203,8 +219,16 @@ export const DeploymentDetail = () => {
           <DialogFooter>
             <Button variant="outline" onClick={() => setScheduleOpen(false)}>{t("actions.cancel")}</Button>
             <Button onClick={async () => {
-              await mutations.scheduleDeployment(d.id, new Date(scheduleAt).toISOString(), `scheduled by user`);
-              toast.success(t("deployment.schedule.toast", { when: safeDateTime(scheduleAt) }));
+              const when = new Date(scheduleAt).toISOString();
+              const receipt = await runActionSafe({
+                kind: "Deployment",
+                id: d.id,
+                action: "schedule",
+                memo: `scheduled for ${when}`,
+              }, {
+                successTitle: t("deployment.schedule.toast", { when: safeDateTime(scheduleAt) }),
+              });
+              if (!receipt.ok) return;
               setScheduleOpen(false);
             }}>{t("actions.confirm")}</Button>
           </DialogFooter>

@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import {
-  acceptTradingRoomWorkspaceProposal,
+  acceptTradingRoomWorkspaceProposalWithMeta,
   createTradingRoomWorkspaceProposal,
   getTradingRoom,
   listDecisionEvents,
@@ -10,23 +11,14 @@ import {
   type TradingRoomStrategyEntry,
   type TradingDecisionEvent,
   type DecisionChoice,
+  type TradingRoomWorkspaceResult,
 } from "@/lib/bff-v1/agora/tradingRoom";
-import { createWorkshop, postWorkshopMessage } from "@/lib/bff-v1/agora/workshops";
 import { BffError } from "@/lib/bff-v1/errors";
 import type {
-  ChartSpecV1,
-  TradingRoomViewSpec,
-  TradingRoomWidgetSpec,
-  TradingRoomWorkspace,
   TradingRoomWorkspaceProposal,
-} from "@/lib/bff-v1/agora/types";
-import ChartSpecRenderer from "@/agora/widgets/ChartSpecRenderer";
-import {
-  formatSensitivityLabel,
-  safeWarningText,
-  validateTradingRoomWidgetSpec,
-  WorkspaceProposalPreview,
-} from "@/agora/trading-room/WorkspaceProposalPreview";
+} from "@/lib/bff-v1/agora/tradingRoomTypes";
+import { WorkspaceProposalPreview } from "@/agora/trading-room/WorkspaceProposalPreview";
+import { WorkspaceGridEditor } from "@/agora/trading-room/WorkspaceGridEditor";
 
 function newUUID(): string {
   return crypto.randomUUID();
@@ -38,28 +30,28 @@ interface TradingRoomUiError {
   code?: string;
 }
 
-function tradingRoomErrorMessage(err: BffError, fallback: string): string {
+function tradingRoomErrorMessage(err: BffError, fallback: string, t: TFunction): string {
   switch (err.status) {
     case 403:
-      return "目前權限或範圍無法讀取這個操盤室提案。";
+      return t("agora.tradingRoom.errors.readForbidden");
     case 404:
-      return "這個操盤室提案或工作區已不存在，請重新產生。";
+      return t("agora.tradingRoom.errors.proposalNotFound");
     case 409:
-      return "操盤室提案狀態已變更，請重新產生後再套用。";
+      return t("agora.tradingRoom.errors.proposalConflict");
     case 412:
-      return "操盤室狀態已過期，請重新整理後再繼續。";
+      return t("agora.tradingRoom.errors.proposalStale");
     case 501:
-      return "交易操盤室生成功能尚未在目前 BFF 啟用。";
+      return t("agora.tradingRoom.errors.notImplemented");
     default:
       return err.message || fallback;
   }
 }
 
-function toTradingRoomUiError(err: unknown, fallback: string): TradingRoomUiError {
+function toTradingRoomUiError(err: unknown, fallback: string, t: TFunction): TradingRoomUiError {
   if (err instanceof BffError) {
     return {
       code: err.code,
-      message: tradingRoomErrorMessage(err, fallback),
+      message: tradingRoomErrorMessage(err, fallback, t),
       status: err.status,
     };
   }
@@ -103,19 +95,21 @@ function StrategyLensSwitcher({
   activeStrategyId,
   onSelect,
 }: StrategyLensSwitcherProps): JSX.Element {
+  const { t } = useTranslation();
   return (
     <div
       data-testid="strategy-lens-switcher"
       role="listbox"
-      aria-label="Strategy workspace switcher"
+      aria-label={t("agora.tradingRoom.page.strategySwitcher")}
       style={{
         display: "flex",
         alignItems: "center",
         gap: 8,
         padding: "0 16px",
-        borderBottom: "1px solid #e2e8f0",
+        borderBottom: "1px solid #2a2e38",
         overflowX: "auto",
         flexShrink: 0,
+        background: "#171b22",
       }}
     >
       <button
@@ -129,11 +123,11 @@ function StrategyLensSwitcher({
           border: "none",
           cursor: "pointer",
           fontWeight: activeStrategyId === undefined ? 600 : 400,
-          borderBottom: activeStrategyId === undefined ? "2px solid #2563eb" : "2px solid transparent",
+          borderBottom: activeStrategyId === undefined ? "2px solid #e8b750" : "2px solid transparent",
           whiteSpace: "nowrap",
         }}
       >
-        All Strategies
+        {t("agora.tradingRoom.page.allStrategies")}
       </button>
       {strategies.map((s) => (
         <button
@@ -150,7 +144,7 @@ function StrategyLensSwitcher({
             fontWeight: activeStrategyId === s.strategy_id ? 600 : 400,
             borderBottom:
               activeStrategyId === s.strategy_id
-                ? "2px solid #2563eb"
+                ? "2px solid #e8b750"
                 : "2px solid transparent",
             whiteSpace: "nowrap",
           }}
@@ -165,10 +159,10 @@ function StrategyLensSwitcher({
 // ── Risk Banner ───────────────────────────────────────────────────────────────
 
 const RISK_COLORS: Record<string, string> = {
-  normal: "#f0fdf4",
-  watch: "#fefce8",
-  warning: "#fff7ed",
-  critical: "#fef2f2",
+  normal: "#111417",
+  watch: "#1e1c0e",
+  warning: "#231808",
+  critical: "#230e0e",
 };
 
 interface RiskBannerProps {
@@ -178,6 +172,7 @@ interface RiskBannerProps {
 }
 
 function RiskBanner({ state, summary, alerts }: RiskBannerProps): JSX.Element | null {
+  const { t } = useTranslation();
   if (state === "normal") return null;
   return (
     <div
@@ -186,11 +181,12 @@ function RiskBanner({ state, summary, alerts }: RiskBannerProps): JSX.Element | 
       style={{
         padding: "6px 16px",
         background: RISK_COLORS[state] ?? RISK_COLORS.warning,
-        borderBottom: "1px solid #e2e8f0",
+        borderBottom: "1px solid #2a2e38",
         fontSize: 13,
+        color: "#f0ece4",
       }}
     >
-      <strong>Risk: {state}</strong>
+      <strong>{t("agora.tradingRoom.page.risk", { state })}</strong>
       {summary ? ` — ${summary}` : null}
       {alerts && alerts.length > 0 ? (
         <ul style={{ margin: "4px 0 0 16px", padding: 0 }}>
@@ -214,6 +210,7 @@ interface QueueSummaryStripProps {
 }
 
 function QueueSummaryStrip({ entry, add, reduce, exit, review }: QueueSummaryStripProps): JSX.Element {
+  const { t } = useTranslation();
   return (
     <div
       data-testid="queue-summary-strip"
@@ -221,16 +218,17 @@ function QueueSummaryStrip({ entry, add, reduce, exit, review }: QueueSummaryStr
         display: "flex",
         gap: 16,
         padding: "4px 16px",
-        borderBottom: "1px solid #e2e8f0",
+        borderBottom: "1px solid #2a2e38",
         fontSize: 12,
-        color: "#64748b",
+        color: "#8c96a6",
+        background: "#171b22",
       }}
     >
-      <span data-testid="queue-entry-count">Entry: {entry}</span>
-      <span data-testid="queue-add-count">Add: {add}</span>
-      <span data-testid="queue-reduce-count">Reduce: {reduce}</span>
-      <span data-testid="queue-exit-count">Exit: {exit}</span>
-      <span data-testid="queue-review-count">Review: {review}</span>
+      <span data-testid="queue-entry-count">{t("agora.tradingRoom.page.queue.entry", { count: entry })}</span>
+      <span data-testid="queue-add-count">{t("agora.tradingRoom.page.queue.add", { count: add })}</span>
+      <span data-testid="queue-reduce-count">{t("agora.tradingRoom.page.queue.reduce", { count: reduce })}</span>
+      <span data-testid="queue-exit-count">{t("agora.tradingRoom.page.queue.exit", { count: exit })}</span>
+      <span data-testid="queue-review-count">{t("agora.tradingRoom.page.queue.review", { count: review })}</span>
     </div>
   );
 }
@@ -246,24 +244,9 @@ interface DecisionEventDetailPanelProps {
 }
 
 function DecisionEventDetailPanel({ event, etag }: DecisionEventDetailPanelProps): JSX.Element {
-  const navigate = useNavigate();
   const [callState, setCallState] = useState<DecisionCallState>("idle");
   const [callError, setCallError] = useState<string | null>(null);
   const [decidedChoice, setDecidedChoice] = useState<DecisionChoice | null>(null);
-
-  // Consultation states
-  const [showConsultPanel, setShowConsultPanel] = useState(false);
-  const [selectedPersonas, setSelectedPersonas] = useState<string[]>(["per_quant", "per_risk", "per_macro"]);
-  const [consultQuery, setConsultQuery] = useState("");
-  const [consultLoading, setConsultLoading] = useState(false);
-  const [consultError, setConsultError] = useState<string | null>(null);
-
-  // Modify linkage states
-  const [showModifyLinkage, setShowModifyLinkage] = useState(false);
-  const [modifyProposalId, setModifyProposalId] = useState("");
-  const [modifyProposalRevision, setModifyProposalRevision] = useState("1");
-  const [modifyWorkshopId, setModifyWorkshopId] = useState("");
-  const [modifyRationale, setModifyRationale] = useState("");
 
   const canDecide =
     callState !== "loading" &&
@@ -291,12 +274,12 @@ function DecisionEventDetailPanel({ event, etag }: DecisionEventDetailPanelProps
 
   return (
     <tr data-testid={`event-detail-${ev.decision_event_id}`}>
-      <td colSpan={5} style={{ padding: "8px 16px", background: "#f8fafc", borderBottom: "2px solid #e2e8f0" }}>
+      <td colSpan={5} style={{ padding: "8px 16px", background: "#1a2030", borderBottom: "2px solid #2a2e38" }}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12, fontSize: 12 }}>
 
           {/* Signal Quality */}
           <div data-testid="detail-confidence">
-            <div style={{ fontWeight: 600, color: "#475569", marginBottom: 4 }}>Signal Quality</div>
+            <div style={{ fontWeight: 600, color: "#8c96a6", marginBottom: 4 }}>Signal Quality</div>
             <div>Confidence: {(ev.confidence.value * 100).toFixed(0)}% ({ev.confidence.basis})</div>
             <div data-testid="detail-calibration">Calibration: {ev.confidence.calibration_state}</div>
             {ev.confidence.sample_size != null && (
@@ -315,7 +298,7 @@ function DecisionEventDetailPanel({ event, etag }: DecisionEventDetailPanelProps
 
           {/* Expected Value */}
           <div data-testid="detail-expected-value">
-            <div style={{ fontWeight: 600, color: "#475569", marginBottom: 4 }}>Expected Value</div>
+            <div style={{ fontWeight: 600, color: "#8c96a6", marginBottom: 4 }}>Expected Value</div>
             <div>Horizon: {ev.expected_value.horizon} ({ev.expected_value.unit})</div>
             <div>Gross: {ev.expected_value.gross > 0 ? "+" : ""}{ev.expected_value.gross.toFixed(4)}</div>
             <div>Cost: {ev.expected_value.cost.toFixed(4)}</div>
@@ -325,7 +308,7 @@ function DecisionEventDetailPanel({ event, etag }: DecisionEventDetailPanelProps
 
           {/* Suggested Action */}
           <div data-testid="detail-suggested-action">
-            <div style={{ fontWeight: 600, color: "#475569", marginBottom: 4 }}>Suggested Action</div>
+            <div style={{ fontWeight: 600, color: "#8c96a6", marginBottom: 4 }}>Suggested Action</div>
             <div style={{ textTransform: "capitalize", fontWeight: 500 }}>{ev.suggested_action}</div>
             {ev.suggested_size && (
               <>
@@ -333,15 +316,15 @@ function DecisionEventDetailPanel({ event, etag }: DecisionEventDetailPanelProps
                 {ev.suggested_size.portfolio_pct != null && (
                   <div>Portfolio %: {(ev.suggested_size.portfolio_pct * 100).toFixed(1)}%</div>
                 )}
-                <div style={{ color: "#94a3b8", fontSize: 11 }}>Non-binding</div>
+                <div style={{ color: "#737d8e", fontSize: 11 }}>Non-binding</div>
               </>
             )}
             {ev.data_cutoff && (
-              <div style={{ marginTop: 4, color: "#64748b" }}>Data cutoff: {ev.data_cutoff}</div>
+              <div style={{ marginTop: 4, color: "#8c96a6" }}>Data cutoff: {ev.data_cutoff}</div>
             )}
             <div
               data-testid="detail-no-order-route"
-              style={{ marginTop: 4, fontSize: 11, color: "#22c55e", fontWeight: 500 }}
+              style={{ marginTop: 4, fontSize: 11, color: "#4ade80", fontWeight: 500 }}
             >
               {ev.no_order_route_proof}
             </div>
@@ -349,7 +332,7 @@ function DecisionEventDetailPanel({ event, etag }: DecisionEventDetailPanelProps
 
           {/* Invalidation */}
           <div data-testid="detail-invalidation">
-            <div style={{ fontWeight: 600, color: "#475569", marginBottom: 4 }}>Invalidation</div>
+            <div style={{ fontWeight: 600, color: "#8c96a6", marginBottom: 4 }}>Invalidation</div>
             <div>State: <span style={{ fontWeight: 500 }}>{ev.invalidation.current_state}</span></div>
             {ev.invalidation.conditions.length > 0 && (
               <ul style={{ margin: "4px 0 0 12px", padding: 0 }}>
@@ -365,10 +348,10 @@ function DecisionEventDetailPanel({ event, etag }: DecisionEventDetailPanelProps
         {/* Rationale */}
         {ev.rationale.length > 0 && (
           <div data-testid="detail-rationale" style={{ marginTop: 10, fontSize: 12 }}>
-            <div style={{ fontWeight: 600, color: "#475569", marginBottom: 4 }}>Rationale</div>
+            <div style={{ fontWeight: 600, color: "#8c96a6", marginBottom: 4 }}>Rationale</div>
             {ev.rationale.map((r, i) => (
               <div key={i} style={{ display: "flex", gap: 8, marginBottom: 2 }}>
-                <span style={{ color: "#94a3b8", minWidth: 32 }}>{(r.confidence * 100).toFixed(0)}%</span>
+                <span style={{ color: "#737d8e", minWidth: 32 }}>{(r.confidence * 100).toFixed(0)}%</span>
                 <span>{r.claim}</span>
               </div>
             ))}
@@ -378,19 +361,19 @@ function DecisionEventDetailPanel({ event, etag }: DecisionEventDetailPanelProps
         {/* Risk Notes */}
         {ev.risk_notes.length > 0 && (
           <div data-testid="detail-risk-notes" style={{ marginTop: 10, fontSize: 12 }}>
-            <div style={{ fontWeight: 600, color: "#475569", marginBottom: 4 }}>Risk Notes</div>
+            <div style={{ fontWeight: 600, color: "#8c96a6", marginBottom: 4 }}>Risk Notes</div>
             {ev.risk_notes.map((rn, i) => (
               <div
                 key={i}
                 style={{
                   padding: "4px 8px",
-                  background: rn.severity === "critical" || rn.severity === "high" ? "#fef2f2" : "#fefce8",
+                  background: rn.severity === "critical" || rn.severity === "high" ? "#230e0e" : "#1e1c0e",
                   borderRadius: 4,
                   marginBottom: 2,
                 }}
               >
                 <span style={{ fontWeight: 500 }}>[{rn.severity}] {rn.domain}:</span> {rn.summary}
-                {rn.mitigation && <span style={{ color: "#64748b" }}> — {rn.mitigation}</span>}
+                {rn.mitigation && <span style={{ color: "#8c96a6" }}> — {rn.mitigation}</span>}
               </div>
             ))}
           </div>
@@ -399,12 +382,12 @@ function DecisionEventDetailPanel({ event, etag }: DecisionEventDetailPanelProps
         {/* Evidence Refs */}
         {ev.evidence_refs.length > 0 && (
           <div data-testid="detail-evidence-refs" style={{ marginTop: 10, fontSize: 12 }}>
-            <div style={{ fontWeight: 600, color: "#475569", marginBottom: 4 }}>
+            <div style={{ fontWeight: 600, color: "#8c96a6", marginBottom: 4 }}>
               Evidence ({ev.evidence_refs.length})
             </div>
             {ev.evidence_refs.map((ref, i) => (
-              <div key={i} style={{ color: "#475569" }}>
-                <span style={{ color: "#94a3b8" }}>{ref.ref_type}</span> {ref.ref_id}
+              <div key={i} style={{ color: "#8c96a6" }}>
+                <span style={{ color: "#737d8e" }}>{ref.ref_type}</span> {ref.ref_id}
                 {ref.summary ? ` — ${ref.summary}` : null}
               </div>
             ))}
@@ -414,368 +397,45 @@ function DecisionEventDetailPanel({ event, etag }: DecisionEventDetailPanelProps
         {/* Trader Decision Actions */}
         <div data-testid="detail-trader-actions" style={{ marginTop: 12, display: "flex", gap: 8, alignItems: "center" }}>
           {callState === "success" ? (
-            <span data-testid="detail-decision-confirmed" style={{ fontSize: 12, color: "#22c55e", fontWeight: 500 }}>
+            <span data-testid="detail-decision-confirmed" style={{ fontSize: 12, color: "#4ade80", fontWeight: 500 }}>
               Decision recorded: {decidedChoice}
             </span>
           ) : (
             <>
-              <span style={{ fontSize: 12, color: "#64748b", marginRight: 4 }}>Trader decision:</span>
+              <span style={{ fontSize: 12, color: "#8c96a6", marginRight: 4 }}>Trader decision:</span>
               {(["approve", "reject", "defer", "modify"] as DecisionChoice[]).map((choice) => (
                 <button
                   key={choice}
                   data-testid={`decide-${choice}-${ev.decision_event_id}`}
                   disabled={!canDecide}
-                  onClick={() => {
-                    if (choice === "modify") {
-                      setShowModifyLinkage(true);
-                      setShowConsultPanel(false);
-                    } else {
-                      handleDecide(choice);
-                    }
-                  }}
+                  onClick={() => handleDecide(choice)}
                   style={{
                     padding: "3px 10px",
                     fontSize: 12,
-                    border: "1px solid #e2e8f0",
+                    border: "1px solid #2a2e38",
                     borderRadius: 4,
                     cursor: canDecide ? "pointer" : "not-allowed",
-                    background: choice === "approve" ? "#f0fdf4" : choice === "reject" ? "#fef2f2" : "#fff",
-                    color: choice === "approve" ? "#16a34a" : choice === "reject" ? "#dc2626" : "#475569",
+                    background: choice === "approve" ? "rgba(74,222,128,0.12)" : choice === "reject" ? "rgba(248,113,113,0.12)" : "#1e2330",
+                    color: choice === "approve" ? "#4ade80" : choice === "reject" ? "#f87171" : "#8c96a6",
                     opacity: canDecide ? 1 : 0.5,
                   }}
                 >
                   {choice.charAt(0).toUpperCase() + choice.slice(1)}
                 </button>
               ))}
-              <button
-                type="button"
-                data-testid={`ask-personas-${ev.decision_event_id}`}
-                onClick={() => {
-                  setShowConsultPanel(!showConsultPanel);
-                  setShowModifyLinkage(false);
-                }}
-                style={{
-                  padding: "3px 10px",
-                  fontSize: 12,
-                  border: "1px solid #6366f1",
-                  borderRadius: 4,
-                  cursor: "pointer",
-                  background: "#e0e7ff",
-                  color: "#4f46e5",
-                  fontWeight: 500,
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 4
-                }}
-              >
-                💬 Ask Personas
-              </button>
               {callState === "loading" && (
-                <span data-testid="detail-decision-loading" style={{ fontSize: 12, color: "#94a3b8" }}>
+                <span data-testid="detail-decision-loading" style={{ fontSize: 12, color: "#737d8e" }}>
                   Sending…
                 </span>
               )}
               {callState === "error" && callError && (
-                <span data-testid="detail-decision-error" style={{ fontSize: 12, color: "#dc2626" }}>
+                <span data-testid="detail-decision-error" style={{ fontSize: 12, color: "#f87171" }}>
                   {callError}
                 </span>
               )}
             </>
           )}
         </div>
-
-        {/* Contextual Consultation Panel */}
-        {showConsultPanel && (
-          <div
-            data-testid={`consult-panel-${ev.decision_event_id}`}
-            style={{
-              marginTop: 12,
-              padding: 12,
-              background: "#eff6ff",
-              borderRadius: 6,
-              border: "1px solid #bfdbfe",
-              fontSize: 12,
-            }}
-          >
-            <div style={{ fontWeight: 600, color: "#1e3a8a", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
-              <span>🔍 Consult Personas on Signal ({ev.subject.symbol})</span>
-            </div>
-            
-            {/* Display carried context */}
-            <div style={{ background: "#fff", padding: 8, borderRadius: 4, marginBottom: 8, border: "1px solid #bfdbfe" }}>
-              <div style={{ color: "#64748b", fontSize: 11, fontStyle: "italic", marginBottom: 4 }}>Carried Context:</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
-                <div><strong>Event ID:</strong> <span className="font-mono">{ev.decision_event_id}</span></div>
-                <div><strong>Strategy Version:</strong> <span className="font-mono">{ev.strategy_spec_registry_id}</span></div>
-                <div style={{ gridColumn: "span 2" }}><strong>Risk Snapshot:</strong> {ev.risk_notes.map(r => `[${r.severity}] ${r.summary}`).join("; ") || "Normal"}</div>
-                <div style={{ gridColumn: "span 2" }}><strong>Evidence Refs:</strong> {ev.evidence_refs.map(r => `${r.ref_type}:${r.ref_id}`).join(", ") || "None"}</div>
-              </div>
-            </div>
-
-            {/* Persona Checklist */}
-            <div style={{ marginBottom: 8 }}>
-              <span style={{ fontWeight: 500, color: "#475569", display: "block", marginBottom: 4 }}>Select Personas:</span>
-              <div style={{ display: "flex", gap: 12 }}>
-                {[
-                  { id: "per_quant", name: "Quant" },
-                  { id: "per_risk", name: "Risk" },
-                  { id: "per_macro", name: "Macro" },
-                  { id: "per_red", name: "Red Team" }
-                ].map(p => (
-                  <label key={p.id} style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}>
-                    <input
-                      type="checkbox"
-                      checked={selectedPersonas.includes(p.id)}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedPersonas([...selectedPersonas, p.id]);
-                        } else {
-                          setSelectedPersonas(selectedPersonas.filter(x => x !== p.id));
-                        }
-                      }}
-                    />
-                    {p.name}
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            {/* Quick Templates */}
-            <div style={{ marginBottom: 8 }}>
-              <span style={{ fontWeight: 500, color: "#475569", display: "block", marginBottom: 4 }}>Quick Templates:</span>
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setConsultQuery(`紅隊分析：此信號是否受特定事件或流動性限制影響？`);
-                    if (!selectedPersonas.includes("per_red")) setSelectedPersonas([...selectedPersonas, "per_red"]);
-                  }}
-                  style={{ padding: "2px 8px", background: "#fff", border: "1px solid #cbd5e1", borderRadius: 4, cursor: "pointer" }}
-                >
-                  🔴 Red-Team Analysis
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setConsultQuery(`風險分析：部位規模是否超過部位與槓桿限制？`);
-                    if (!selectedPersonas.includes("per_risk")) setSelectedPersonas([...selectedPersonas, "per_risk"]);
-                  }}
-                  style={{ padding: "2px 8px", background: "#fff", border: "1px solid #cbd5e1", borderRadius: 4, cursor: "pointer" }}
-                >
-                  ⚠️ Fast Risk Assessment
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setConsultQuery(`多方案比較：是否有更優的減碼或出場時間點？`);
-                    if (!selectedPersonas.includes("per_quant")) setSelectedPersonas([...selectedPersonas, "per_quant"]);
-                  }}
-                  style={{ padding: "2px 8px", background: "#fff", border: "1px solid #cbd5e1", borderRadius: 4, cursor: "pointer" }}
-                >
-                  📊 Option Comparison
-                </button>
-              </div>
-            </div>
-
-            {/* Prompt input */}
-            <div style={{ marginBottom: 8 }}>
-              <textarea
-                placeholder="Ask your question to the selected personas..."
-                value={consultQuery}
-                onChange={(e) => setConsultQuery(e.target.value)}
-                style={{ width: "100%", height: 60, padding: 6, borderRadius: 4, border: "1px solid #cbd5e1", resize: "none" }}
-              />
-            </div>
-
-            {/* Actions */}
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <button
-                type="button"
-                disabled={consultLoading || selectedPersonas.length === 0}
-                onClick={async () => {
-                  setConsultLoading(true);
-                  setConsultError(null);
-                  try {
-                    const newWs = await createWorkshop({
-                      subject: {
-                        kind: "candidate_artifact",
-                        ref: ev.decision_event_id,
-                        title: `Contextual Consult: ${ev.subject.symbol} ${ev.event_kind}`,
-                      },
-                      participant_persona_ids: selectedPersonas,
-                      metadata: {
-                        decision_event_id: ev.decision_event_id,
-                        strategy_id: ev.strategy_id,
-                        strategy_version: ev.strategy_spec_registry_id,
-                        position_snapshot: ev.position_snapshot,
-                        risk_notes: ev.risk_notes,
-                        evidence_refs: ev.evidence_refs,
-                        context_type: "decision_event_consultation",
-                      }
-                    });
-                    
-                    if (consultQuery.trim()) {
-                      await postWorkshopMessage(newWs.workshop_id, {
-                        content: consultQuery.trim(),
-                        metadata: {
-                          mode: "consult",
-                          participant_persona_ids: selectedPersonas,
-                        }
-                      });
-                    }
-
-                    navigate(`/agora/strategy-workshop/${newWs.workshop_id}`);
-                  } catch (err) {
-                    setConsultError(err instanceof Error ? err.message : "Failed to create consultation");
-                  } finally {
-                    setConsultLoading(false);
-                  }
-                }}
-                style={{
-                  padding: "4px 12px",
-                  background: "#4f46e5",
-                  color: "#fff",
-                  border: "none",
-                  borderRadius: 4,
-                  fontWeight: 600,
-                  cursor: (consultLoading || selectedPersonas.length === 0) ? "not-allowed" : "pointer",
-                  opacity: (consultLoading || selectedPersonas.length === 0) ? 0.7 : 1
-                }}
-                data-testid={`consult-panel-submit-${ev.decision_event_id}`}
-              >
-                {consultLoading ? "Launching..." : "🚀 Launch Workshop Consultation"}
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowConsultPanel(false)}
-                style={{ padding: "4px 12px", background: "#fff", border: "1px solid #cbd5e1", borderRadius: 4, cursor: "pointer" }}
-              >
-                Cancel
-              </button>
-              {consultError && (
-                <span style={{ color: "#dc2626", fontSize: 11 }}>{consultError}</span>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Structured Modify Linkage Panel */}
-        {showModifyLinkage && (
-          <div
-            data-testid={`modify-linkage-panel-${ev.decision_event_id}`}
-            style={{
-              marginTop: 12,
-              padding: 12,
-              background: "#fffbeb",
-              borderRadius: 6,
-              border: "1px solid #fef3c7",
-              fontSize: 12,
-            }}
-          >
-            <div style={{ fontWeight: 600, color: "#92400e", marginBottom: 8 }}>
-              🛠️ Link Modification Proposal & Consultation
-            </div>
-            
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
-              <div>
-                <label style={{ display: "block", color: "#475569", fontWeight: 500, marginBottom: 2 }}>Linked Proposal ID:</label>
-                <input
-                  type="text"
-                  placeholder="e.g. prop-123"
-                  value={modifyProposalId}
-                  onChange={(e) => setModifyProposalId(e.target.value)}
-                  style={{ width: "100%", padding: "4px 8px", borderRadius: 4, border: "1px solid #cbd5e1" }}
-                  data-testid={`modify-proposal-id-${ev.decision_event_id}`}
-                />
-              </div>
-              <div>
-                <label style={{ display: "block", color: "#475569", fontWeight: 500, marginBottom: 2 }}>Proposal Revision:</label>
-                <input
-                  type="number"
-                  min="1"
-                  value={modifyProposalRevision}
-                  onChange={(e) => setModifyProposalRevision(e.target.value)}
-                  style={{ width: "100%", padding: "4px 8px", borderRadius: 4, border: "1px solid #cbd5e1" }}
-                  data-testid={`modify-proposal-revision-${ev.decision_event_id}`}
-                />
-              </div>
-              <div style={{ gridColumn: "span 2" }}>
-                <label style={{ display: "block", color: "#475569", fontWeight: 500, marginBottom: 2 }}>Linked Consultation Workshop ID:</label>
-                <input
-                  type="text"
-                  placeholder="e.g. ws-abc (optional)"
-                  value={modifyWorkshopId}
-                  onChange={(e) => setModifyWorkshopId(e.target.value)}
-                  style={{ width: "100%", padding: "4px 8px", borderRadius: 4, border: "1px solid #cbd5e1" }}
-                  data-testid={`modify-workshop-id-${ev.decision_event_id}`}
-                />
-              </div>
-            </div>
-
-            <div style={{ marginBottom: 8 }}>
-              <label style={{ display: "block", color: "#475569", fontWeight: 500, marginBottom: 2 }}>Modification Rationale:</label>
-              <textarea
-                placeholder="Explain the changes to sizes, bounds, or limits..."
-                value={modifyRationale}
-                onChange={(e) => setModifyRationale(e.target.value)}
-                style={{ width: "100%", height: 50, padding: 6, borderRadius: 4, border: "1px solid #cbd5e1", resize: "none" }}
-                data-testid={`modify-rationale-${ev.decision_event_id}`}
-              />
-            </div>
-
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <button
-                type="button"
-                disabled={callState === "loading" || !modifyProposalId.trim() || !modifyRationale.trim()}
-                onClick={async () => {
-                  setCallState("loading");
-                  setCallError(null);
-                  try {
-                    await decideOnEvent(
-                      ev.decision_event_id,
-                      {
-                        decision: "modify",
-                        rationale: modifyRationale,
-                        modifications: {
-                          proposal_id: modifyProposalId.trim(),
-                          proposal_revision: parseInt(modifyProposalRevision, 10) || 1,
-                          consultation_workshop_id: modifyWorkshopId.trim() || undefined,
-                        }
-                      },
-                      { ifMatch: etag ?? undefined, idempotencyKey: newUUID(), requestId: newUUID() }
-                    );
-                    setDecidedChoice("modify");
-                    setCallState("success");
-                    setShowModifyLinkage(false);
-                  } catch (err) {
-                    setCallError(err instanceof Error ? err.message : "Modify failed");
-                    setCallState("error");
-                  }
-                }}
-                style={{
-                  padding: "4px 12px",
-                  background: "#d97706",
-                  color: "#fff",
-                  border: "none",
-                  borderRadius: 4,
-                  fontWeight: 600,
-                  cursor: (callState === "loading" || !modifyProposalId.trim() || !modifyRationale.trim()) ? "not-allowed" : "pointer",
-                  opacity: (callState === "loading" || !modifyProposalId.trim() || !modifyRationale.trim()) ? 0.7 : 1
-                }}
-                data-testid={`modify-linkage-submit-${ev.decision_event_id}`}
-              >
-                Confirm Modification
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowModifyLinkage(false)}
-                style={{ padding: "4px 12px", background: "#fff", border: "1px solid #cbd5e1", borderRadius: 4, cursor: "pointer" }}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
       </td>
     </tr>
   );
@@ -809,6 +469,7 @@ interface TradingEventQueueProps {
 }
 
 function TradingEventQueue({ events, loading, eventsEtag }: TradingEventQueueProps): JSX.Element {
+  const { t } = useTranslation();
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   function toggleExpand(id: string) {
@@ -817,16 +478,16 @@ function TradingEventQueue({ events, loading, eventsEtag }: TradingEventQueuePro
 
   return (
     <div data-testid="trading-event-queue" style={{ flex: 1, overflow: "auto" }}>
-      <div style={{ padding: "8px 16px", fontWeight: 600, fontSize: 13, borderBottom: "1px solid #e2e8f0" }}>
-        Decision Event Queue
+      <div style={{ padding: "8px 16px", fontWeight: 600, fontSize: 13, borderBottom: "1px solid #2a2e38" }}>
+        {t("agora.tradingRoom.page.eventQueue")}
       </div>
       {loading ? (
-        <div data-testid="event-queue-loading" style={{ padding: 16, fontSize: 13, color: "#94a3b8" }}>
-          Loading events…
+        <div data-testid="event-queue-loading" style={{ padding: 16, fontSize: 13, color: "#737d8e" }}>
+          {t("agora.tradingRoom.page.loadingEvents")}
         </div>
       ) : events.length === 0 ? (
-        <div data-testid="event-queue-empty" style={{ padding: 16, fontSize: 13, color: "#94a3b8" }}>
-          No pending decision events.
+        <div data-testid="event-queue-empty" style={{ padding: 16, fontSize: 13, color: "#737d8e" }}>
+          {t("agora.tradingRoom.page.noEvents")}
         </div>
       ) : (
         <table
@@ -834,12 +495,12 @@ function TradingEventQueue({ events, loading, eventsEtag }: TradingEventQueuePro
           style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}
         >
           <thead>
-            <tr style={{ borderBottom: "1px solid #e2e8f0" }}>
-              <th style={{ textAlign: "left", padding: "6px 16px", fontWeight: 500, color: "#64748b" }}>Symbol</th>
-              <th style={{ textAlign: "left", padding: "6px 8px", fontWeight: 500, color: "#64748b" }}>Kind</th>
-              <th style={{ textAlign: "left", padding: "6px 8px", fontWeight: 500, color: "#64748b" }}>State</th>
-              <th style={{ textAlign: "right", padding: "6px 8px", fontWeight: 500, color: "#64748b" }}>Confidence</th>
-              <th style={{ textAlign: "right", padding: "6px 16px", fontWeight: 500, color: "#64748b" }}>EV (net)</th>
+            <tr style={{ borderBottom: "1px solid #2a2e38" }}>
+              <th style={{ textAlign: "left", padding: "6px 16px", fontWeight: 500, color: "#8c96a6" }}>{t("agora.tradingRoom.page.symbol")}</th>
+              <th style={{ textAlign: "left", padding: "6px 8px", fontWeight: 500, color: "#8c96a6" }}>{t("agora.tradingRoom.page.kind")}</th>
+              <th style={{ textAlign: "left", padding: "6px 8px", fontWeight: 500, color: "#8c96a6" }}>{t("agora.tradingRoom.page.state")}</th>
+              <th style={{ textAlign: "right", padding: "6px 8px", fontWeight: 500, color: "#8c96a6" }}>{t("agora.tradingRoom.page.confidence")}</th>
+              <th style={{ textAlign: "right", padding: "6px 16px", fontWeight: 500, color: "#8c96a6" }}>EV (net)</th>
             </tr>
           </thead>
           <tbody>
@@ -849,15 +510,15 @@ function TradingEventQueue({ events, loading, eventsEtag }: TradingEventQueuePro
                   data-testid={`event-row-${ev.decision_event_id}`}
                   aria-expanded={expandedId === ev.decision_event_id}
                   style={{
-                    borderBottom: expandedId === ev.decision_event_id ? "none" : "1px solid #f1f5f9",
+                    borderBottom: expandedId === ev.decision_event_id ? "none" : "1px solid #2a2e38",
                     cursor: "pointer",
-                    background: expandedId === ev.decision_event_id ? "#f8fafc" : undefined,
+                    background: expandedId === ev.decision_event_id ? "#1a2030" : undefined,
                   }}
                   onClick={() => toggleExpand(ev.decision_event_id)}
                 >
                   <td style={{ padding: "6px 16px" }}>{ev.subject.symbol}</td>
-                  <td style={{ padding: "6px 8px" }}>{EVENT_KIND_LABEL[ev.event_kind] ?? ev.event_kind}</td>
-                  <td style={{ padding: "6px 8px" }}>{STATE_LABEL[ev.state] ?? ev.state}</td>
+                  <td style={{ padding: "6px 8px" }}>{t(`agora.tradingRoom.page.eventKinds.${ev.event_kind}`, { defaultValue: EVENT_KIND_LABEL[ev.event_kind] ?? ev.event_kind })}</td>
+                  <td style={{ padding: "6px 8px" }}>{t(`agora.tradingRoom.page.states.${ev.state}`, { defaultValue: STATE_LABEL[ev.state] ?? ev.state })}</td>
                   <td style={{ padding: "6px 8px", textAlign: "right" }}>
                     {(ev.confidence.value * 100).toFixed(0)}%
                   </td>
@@ -885,20 +546,21 @@ interface PositionActionQueueProps {
 }
 
 function PositionActionQueue({ positionSummaries }: PositionActionQueueProps): JSX.Element {
+  const { t } = useTranslation();
   return (
     <div
       data-testid="position-action-queue"
-      style={{ borderLeft: "1px solid #e2e8f0", width: 240, overflow: "auto", flexShrink: 0 }}
+      style={{ borderLeft: "1px solid #2a2e38", width: 240, overflow: "auto", flexShrink: 0, background: "#171b22" }}
     >
-      <div style={{ padding: "8px 12px", fontWeight: 600, fontSize: 13, borderBottom: "1px solid #e2e8f0" }}>
-        Position Actions
+      <div style={{ padding: "8px 12px", fontWeight: 600, fontSize: 13, borderBottom: "1px solid #2a2e38" }}>
+        {t("agora.tradingRoom.page.positionActions")}
       </div>
       {positionSummaries.length === 0 ? (
-        <div style={{ padding: 12, fontSize: 13, color: "#94a3b8" }}>No open positions.</div>
+        <div style={{ padding: 12, fontSize: 13, color: "#737d8e" }}>{t("agora.tradingRoom.page.noPositions")}</div>
       ) : (
         <ul style={{ margin: 0, padding: "8px 12px", listStyle: "none" }}>
           {positionSummaries.map((p, i) => (
-            <li key={i} style={{ fontSize: 13, borderBottom: "1px solid #f1f5f9", padding: "4px 0" }}>
+            <li key={i} style={{ fontSize: 13, borderBottom: "1px solid #2a2e38", padding: "4px 0" }}>
               {JSON.stringify(p)}
             </li>
           ))}
@@ -908,82 +570,86 @@ function PositionActionQueue({ positionSummaries }: PositionActionQueueProps): J
   );
 }
 
-// ── Strategy List (aggregate view) ────────────────────────────────────────────
+// ── Default Dynamic Entry (no explicit strategy selected) ────────────────────
 
-interface StrategyListProps {
-  strategies: TradingRoomStrategyEntry[];
-  onSelect: (strategyId: string) => void;
-}
-
-function StrategyList({ strategies, onSelect }: StrategyListProps): JSX.Element {
+function pendingEventTotal(strategy: TradingRoomStrategyEntry): number {
   return (
-    <div data-testid="strategy-list" style={{ padding: "8px 16px" }}>
-      {strategies.length === 0 ? (
-        <div data-testid="strategy-list-empty" style={{ fontSize: 13, color: "#94a3b8" }}>
-          No strategies in the Trading Room.
-        </div>
-      ) : (
-        <table
-          data-testid="strategy-list-table"
-          style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}
-        >
-          <thead>
-            <tr style={{ borderBottom: "1px solid #e2e8f0" }}>
-              <th style={{ textAlign: "left", padding: "6px 0", fontWeight: 500, color: "#64748b" }}>Strategy</th>
-              <th style={{ textAlign: "left", padding: "6px 8px", fontWeight: 500, color: "#64748b" }}>Readiness</th>
-              <th style={{ textAlign: "left", padding: "6px 8px", fontWeight: 500, color: "#64748b" }}>Monitoring</th>
-              <th style={{ textAlign: "right", padding: "6px 0", fontWeight: 500, color: "#64748b" }}>Pending</th>
-            </tr>
-          </thead>
-          <tbody>
-            {strategies.map((s) => {
-              const total =
-                (s.pending_event_counts.entry ?? 0) +
-                (s.pending_event_counts.add ?? 0) +
-                (s.pending_event_counts.reduce ?? 0) +
-                (s.pending_event_counts.exit ?? 0) +
-                (s.pending_event_counts.review ?? 0);
-              return (
-                <tr
-                  key={s.strategy_id}
-                  data-testid={`strategy-row-${s.strategy_id}`}
-                  style={{ borderBottom: "1px solid #f1f5f9", cursor: "pointer" }}
-                  onClick={() => onSelect(s.strategy_id)}
-                >
-                  <td style={{ padding: "6px 0" }}>{s.title}</td>
-                  <td style={{ padding: "6px 8px" }}>{s.readiness_state}</td>
-                  <td style={{ padding: "6px 8px" }}>{s.monitoring_state}</td>
-                  <td style={{ padding: "6px 0", textAlign: "right" }}>{total > 0 ? total : "—"}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      )}
-    </div>
+    (strategy.pending_event_counts.entry ?? 0) +
+    (strategy.pending_event_counts.add ?? 0) +
+    (strategy.pending_event_counts.reduce ?? 0) +
+    (strategy.pending_event_counts.exit ?? 0) +
+    (strategy.pending_event_counts.review ?? 0)
   );
 }
 
-// ── Aggregate View (no strategy selected) ────────────────────────────────────
+const MONITORING_PRIORITY: Record<TradingRoomStrategyEntry["monitoring_state"], number> = {
+  monitoring: 5,
+  paper_requested: 4,
+  shadow: 3,
+  paused: 2,
+  inactive: 1,
+};
 
-interface AggregateViewProps {
+function selectDefaultReadyStrategy(
+  strategies: TradingRoomStrategyEntry[],
+): TradingRoomStrategyEntry | undefined {
+  return strategies
+    .filter((strategy) => strategy.readiness_state === "ready")
+    .slice()
+    .sort((a, b) => {
+      const recipeDiff = Number(Boolean(b.dashboard_recipe_id)) - Number(Boolean(a.dashboard_recipe_id));
+      if (recipeDiff !== 0) return recipeDiff;
+      const pendingDiff = pendingEventTotal(b) - pendingEventTotal(a);
+      if (pendingDiff !== 0) return pendingDiff;
+      const monitoringDiff = MONITORING_PRIORITY[b.monitoring_state] - MONITORING_PRIORITY[a.monitoring_state];
+      if (monitoringDiff !== 0) return monitoringDiff;
+      return a.title.localeCompare(b.title);
+    })[0];
+}
+
+function readinessReason(strategy: TradingRoomStrategyEntry, t: TFunction): string {
+  if (strategy.readiness_state === "conditional") {
+    return t("agora.tradingRoom.page.conditionalReadiness");
+  }
+  if (strategy.readiness_state === "stale") {
+    return strategy.staleness_reasons?.[0] ?? t("agora.tradingRoom.page.staleReadiness");
+  }
+  return t("agora.tradingRoom.page.blockedReadiness");
+}
+
+interface TradingRoomDefaultEntryProps {
   aggregate: TradingRoomAggregate;
-  events: TradingDecisionEvent[];
-  eventsLoading: boolean;
-  eventsEtag: string | null;
+  onOpenWorkshop?: () => void;
   onStrategySelect: (strategyId: string) => void;
 }
 
-function AggregateView({
+function TradingRoomDefaultEntry({
   aggregate,
-  events,
-  eventsLoading,
-  eventsEtag,
+  onOpenWorkshop,
   onStrategySelect,
-}: AggregateViewProps): JSX.Element {
+}: TradingRoomDefaultEntryProps): JSX.Element {
+  const { t } = useTranslation();
+  const strategies = aggregate.strategies;
+  const pendingTotal = strategies.reduce((total, strategy) => total + pendingEventTotal(strategy), 0);
+  const entryState = strategies.length === 0 ? "empty" : "no-ready-strategy";
+  const readinessRows = strategies
+    .slice()
+    .sort((a, b) => {
+      const readinessOrder: Record<TradingRoomStrategyEntry["readiness_state"], number> = {
+        conditional: 0,
+        stale: 1,
+        blocked: 2,
+        ready: 3,
+      };
+      const orderDiff = readinessOrder[a.readiness_state] - readinessOrder[b.readiness_state];
+      if (orderDiff !== 0) return orderDiff;
+      return (b.candidate_count ?? 0) - (a.candidate_count ?? 0);
+    });
+
   return (
     <div
-      data-testid="trading-room-aggregate-view"
+      data-entry-state={entryState}
+      data-testid="trading-room-default-entry"
       style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}
     >
       <QueueSummaryStrip {...aggregate.queue_summary} />
@@ -992,12 +658,162 @@ function AggregateView({
         summary={aggregate.risk_summary.summary}
         alerts={aggregate.risk_summary.alerts}
       />
-      <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-          <StrategyList strategies={aggregate.strategies} onSelect={onStrategySelect} />
-          <TradingEventQueue events={events} loading={eventsLoading} eventsEtag={eventsEtag} />
-        </div>
-        <PositionActionQueue positionSummaries={aggregate.position_summaries ?? []} />
+
+      <div style={{ flex: 1, overflow: "auto", padding: 18 }}>
+        <section
+          style={{
+            background: "#171b22",
+            border: "1px solid #2a2e38",
+            borderRadius: 8,
+            display: "grid",
+            gap: 14,
+            padding: 18,
+          }}
+        >
+          <div>
+            <div style={{ color: "#8c96a6", fontSize: 12, fontWeight: 700 }}>{t("agora.tradingRoom.page.dynamicEntry")}</div>
+            <h2 style={{ color: "#f0ece4", fontSize: 20, fontWeight: 800, letterSpacing: 0, margin: "4px 0 0" }}>
+              {strategies.length === 0
+                ? t("agora.tradingRoom.page.workshopNext")
+                : t("agora.tradingRoom.page.noReadyStrategy")}
+            </h2>
+            <p style={{ color: "#8c96a6", fontSize: 13, lineHeight: 1.55, margin: "8px 0 0", maxWidth: 860 }}>
+              {strategies.length === 0
+                ? t("agora.tradingRoom.page.emptyDescription")
+                : t("agora.tradingRoom.page.notReadyDescription")}
+            </p>
+          </div>
+
+          <div
+            data-testid="trading-room-default-snapshot"
+            style={{
+              color: "#8c96a6",
+              display: "flex",
+              flexWrap: "wrap",
+              fontSize: 12,
+              gap: 12,
+            }}
+          >
+            <span>{t("agora.tradingRoom.page.strategyCount", { count: strategies.length })}</span>
+            <span>{t("agora.tradingRoom.page.readyCount", { count: 0 })}</span>
+            <span>{t("agora.tradingRoom.page.pendingCount", { count: pendingTotal })}</span>
+            <span>{t("agora.tradingRoom.page.snapshot", { value: aggregate.snapshot_at || t("agora.tradingRoom.page.unavailable") })}</span>
+            <span>{t("agora.tradingRoom.page.dataCutoff", { value: aggregate.data_cutoff || t("agora.tradingRoom.page.unavailable") })}</span>
+          </div>
+
+          <div>
+            <button
+              data-testid="trading-room-open-workshop"
+              disabled={!onOpenWorkshop}
+              onClick={onOpenWorkshop}
+              style={{
+                background: onOpenWorkshop ? "#e8b750" : "#1e2330",
+                border: "1px solid rgba(232,183,80,0.45)",
+                borderRadius: 6,
+                color: onOpenWorkshop ? "#111417" : "#737d8e",
+                cursor: onOpenWorkshop ? "pointer" : "not-allowed",
+                fontSize: 13,
+                fontWeight: 800,
+                padding: "8px 12px",
+              }}
+              type="button"
+            >
+              {t("agora.tradingRoom.page.openWorkshop")}
+            </button>
+          </div>
+        </section>
+
+        {strategies.length > 0 ? (
+          <section
+            data-testid="trading-room-readiness-entry"
+            style={{
+              display: "grid",
+              gap: 10,
+              gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+              marginTop: 14,
+            }}
+          >
+            {readinessRows.map((strategy) => (
+              <article
+                data-testid={`trading-room-readiness-${strategy.strategy_id}`}
+                key={strategy.strategy_id}
+                style={{
+                  background: "#171b22",
+                  border: "1px solid #2a2e38",
+                  borderRadius: 8,
+                  color: "#f0ece4",
+                  padding: 14,
+                }}
+              >
+                <div style={{ color: "#8c96a6", fontSize: 11, fontWeight: 700, textTransform: "uppercase" }}>
+                  {strategy.readiness_state} · {strategy.monitoring_state}
+                </div>
+                <h3 style={{ fontSize: 15, fontWeight: 800, margin: "4px 0 0" }}>{strategy.title}</h3>
+                <p style={{ color: "#8c96a6", fontSize: 12, lineHeight: 1.45, margin: "8px 0 0" }}>
+                  {readinessReason(strategy, t)}
+                </p>
+                <div style={{ color: "#737d8e", display: "flex", flexWrap: "wrap", fontSize: 12, gap: 10, marginTop: 10 }}>
+                  <span>{t("agora.tradingRoom.page.version", { value: strategy.strategy_spec_registry_id })}</span>
+                  <span>{t("agora.tradingRoom.page.candidates", { count: strategy.candidate_count ?? 0 })}</span>
+                  <span>{t("agora.tradingRoom.page.pending", { count: pendingEventTotal(strategy) })}</span>
+                </div>
+                <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                  <button
+                    data-testid={`trading-room-open-workshop-${strategy.strategy_id}`}
+                    disabled={!onOpenWorkshop}
+                    onClick={onOpenWorkshop}
+                    style={{
+                      background: "transparent",
+                      border: "1px solid #2a2e38",
+                      borderRadius: 6,
+                      color: onOpenWorkshop ? "#e8b750" : "#737d8e",
+                      cursor: onOpenWorkshop ? "pointer" : "not-allowed",
+                      fontSize: 12,
+                      padding: "6px 10px",
+                    }}
+                    type="button"
+                  >
+                    {t("agora.tradingRoom.page.reviewReadiness")}
+                  </button>
+                  {strategy.readiness_state === "ready" && (
+                    <button
+                      data-testid={`trading-room-open-strategy-${strategy.strategy_id}`}
+                      onClick={() => onStrategySelect(strategy.strategy_id)}
+                      style={{
+                        background: "#1e2330",
+                        border: "1px solid #2a2e38",
+                        borderRadius: 6,
+                        color: "#f0ece4",
+                        cursor: "pointer",
+                        fontSize: 12,
+                        padding: "6px 10px",
+                      }}
+                      type="button"
+                    >
+                      {t("agora.tradingRoom.page.openWorkspace")}
+                    </button>
+                  )}
+                </div>
+              </article>
+            ))}
+          </section>
+        ) : (
+          <section
+            data-testid="trading-room-workshop-empty-entry"
+            style={{
+              background: "#171b22",
+              border: "1px solid #2a2e38",
+              borderRadius: 8,
+              color: "#8c96a6",
+              fontSize: 13,
+              lineHeight: 1.5,
+              marginTop: 14,
+              padding: 14,
+            }}
+          >
+            {t("agora.tradingRoom.page.noStrategyRecords")}
+          </section>
+        )}
       </div>
     </div>
   );
@@ -1006,15 +822,7 @@ function AggregateView({
 // ── V11 Proposal Generation And Workspace Shell ──────────────────────────────
 
 const GENERATION_STEPS = [
-  "讀取 Winner Branch Score、confidence 與 trust",
-  "分析分點關係映射與資金遷移",
-  "整理分點群組、遷移與分布模型",
-  "建立事件領先研究與證據索引",
-  "轉譯候選、進場、加碼、減碼與出場規則",
-  "校準部位、槓桿、流動性與風險限制",
-  "串接回測、shadow 與監控規則",
-  "產生 Views 與 widgets",
-  "安排 layout 並套用個人化偏好",
+  "score", "relationships", "clusters", "evidence", "rules", "risk", "monitoring", "views", "layout",
 ];
 
 function TradingRoomGenerationProgress({
@@ -1024,12 +832,13 @@ function TradingRoomGenerationProgress({
   strategyTitle: string;
   strategyVersion: string;
 }) {
+  const { t } = useTranslation();
   return (
     <section
       data-testid="trading-room-generation-progress"
       style={{
-        background: "#ffffff",
-        borderBottom: "1px solid #e2e8f0",
+        background: "#171b22",
+        borderBottom: "1px solid #2a2e38",
         display: "flex",
         flexDirection: "column",
         gap: 12,
@@ -1037,12 +846,12 @@ function TradingRoomGenerationProgress({
       }}
     >
       <div>
-        <div style={{ color: "#64748b", fontSize: 12, fontWeight: 700 }}>Trading Servant</div>
-        <h2 style={{ color: "#0f172a", fontSize: 18, fontWeight: 800, letterSpacing: 0, margin: "2px 0 0" }}>
-          交易僕人正在建立「{strategyTitle || strategyVersion}」交易操盤室
+        <div style={{ color: "#8c96a6", fontSize: 12, fontWeight: 700 }}>{t("agora.tradingRoom.page.servant")}</div>
+        <h2 style={{ color: "#f0ece4", fontSize: 18, fontWeight: 800, letterSpacing: 0, margin: "2px 0 0" }}>
+          {t("agora.tradingRoom.page.generatingTitle", { strategy: strategyTitle || strategyVersion })}
         </h2>
-        <p style={{ color: "#475569", fontSize: 13, lineHeight: 1.5, margin: "6px 0 0", maxWidth: 840 }}>
-          我會先替您把完整操盤頁面準備好。您不需要從空白版面開始；完成後可自行拖曳、刪除、增加、縮放，或直接交代我修改任何圖表。
+        <p style={{ color: "#8c96a6", fontSize: 13, lineHeight: 1.5, margin: "6px 0 0", maxWidth: 840 }}>
+          {t("agora.tradingRoom.page.generatingDescription")}
         </p>
       </div>
       <ol
@@ -1060,10 +869,10 @@ function TradingRoomGenerationProgress({
             key={step}
             style={{
               alignItems: "center",
-              background: index < 2 ? "#eff6ff" : "#f8fafc",
-              border: `1px solid ${index < 2 ? "#bfdbfe" : "#e2e8f0"}`,
+              background: index < 2 ? "rgba(232,183,80,0.12)" : "#1a2030",
+              border: `1px solid ${index < 2 ? "rgba(232,183,80,0.35)" : "#2a2e38"}`,
               borderRadius: 8,
-              color: "#334155",
+              color: "#8c96a6",
               display: "flex",
               fontSize: 12,
               gap: 8,
@@ -1074,7 +883,7 @@ function TradingRoomGenerationProgress({
             <span
               style={{
                 alignItems: "center",
-                background: index < 2 ? "#2563eb" : "#cbd5e1",
+                background: index < 2 ? "#e8b750" : "#2a2e38",
                 borderRadius: 999,
                 color: "#ffffff",
                 display: "inline-flex",
@@ -1088,172 +897,10 @@ function TradingRoomGenerationProgress({
             >
               {index + 1}
             </span>
-            <span>{step}</span>
+            <span>{t(`agora.tradingRoom.page.generationSteps.${step}`)}</span>
           </li>
         ))}
       </ol>
-    </section>
-  );
-}
-
-function chartSpecSummary(spec: ChartSpecV1): string {
-  const channels = Object.entries(spec.encodings ?? {})
-    .map(([channel, encoding]) => `${channel}:${encoding.field}`)
-    .join(" · ");
-  return channels ? `${spec.kind} · ${channels}` : spec.kind;
-}
-
-function WorkspaceWidgetCard({ widget }: { widget: TradingRoomWidgetSpec }) {
-  const validation = validateTradingRoomWidgetSpec(widget);
-  const placement = widget.placement;
-  const columnStart = Math.max(1, Math.min(12, (placement.x ?? 0) + 1));
-  const width = Math.max(1, Math.min(12, placement.width || 4));
-  const rowStart = Math.max(1, (placement.y ?? 0) + 1);
-  const height = Math.max(1, Math.min(6, placement.height || 3));
-
-  return (
-    <section
-      data-testid={`workspace-widget-${widget.id}`}
-      style={{
-        background: "#ffffff",
-        border: "1px solid #e2e8f0",
-        borderRadius: 8,
-        display: "flex",
-        flexDirection: "column",
-        gap: 10,
-        gridColumn: `${columnStart} / span ${Math.min(width, 13 - columnStart)}`,
-        gridRow: `${rowStart} / span ${height}`,
-        minHeight: 220,
-        minWidth: 0,
-        padding: 12,
-      }}
-    >
-      <header style={{ display: "flex", gap: 10, justifyContent: "space-between" }}>
-        <div style={{ minWidth: 0 }}>
-          <h3 style={{ color: "#0f172a", fontSize: 14, fontWeight: 700, margin: 0 }}>{widget.title}</h3>
-          <p style={{ color: "#475569", fontSize: 12, lineHeight: 1.45, margin: "4px 0 0" }}>{widget.purpose}</p>
-        </div>
-        <span
-          style={{
-            background: validation.ok ? "#ecfdf5" : "#fef2f2",
-            border: `1px solid ${validation.ok ? "#a7f3d0" : "#fecaca"}`,
-            borderRadius: 999,
-            color: validation.ok ? "#047857" : "#b91c1c",
-            flex: "0 0 auto",
-            fontSize: 11,
-            fontWeight: 700,
-            padding: "4px 8px",
-          }}
-        >
-          {validation.ok ? "validated" : "review"}
-        </span>
-      </header>
-
-      <div style={{ color: "#64748b", display: "grid", fontSize: 12, gap: 4 }}>
-        <span>{validation.title}</span>
-        <span>{widget.dataSource}</span>
-        <span>{formatSensitivityLabel(widget.sensitivity)}</span>
-        <span>{chartSpecSummary(widget.chartSpec)}</span>
-      </div>
-
-      <p style={{ color: "#334155", fontSize: 12, lineHeight: 1.45, margin: 0 }}>{widget.whyIncluded}</p>
-
-      {validation.ok ? (
-        <ChartSpecRenderer data={[]} height={180} spec={widget.chartSpec} />
-      ) : (
-        <div data-testid={`workspace-widget-${widget.id}-validation`} style={{ color: "#b91c1c", fontSize: 12 }}>
-          {validation.messages.join(" ")}
-        </div>
-      )}
-    </section>
-  );
-}
-
-function TradingRoomWorkspaceShell({ workspace }: { workspace: TradingRoomWorkspace }) {
-  const sortedViews = [...workspace.views].sort((a, b) => a.order - b.order);
-  const initialViewId = workspace.activeViewId || sortedViews[0]?.id;
-  const [activeViewId, setActiveViewId] = useState(initialViewId);
-  const activeView = sortedViews.find((view) => view.id === activeViewId) ?? sortedViews[0];
-
-  useEffect(() => {
-    setActiveViewId(initialViewId);
-  }, [initialViewId, workspace.id]);
-
-  if (!activeView) {
-    return (
-      <div data-testid="trading-room-workspace-empty" style={{ color: "#94a3b8", fontSize: 13, padding: 16 }}>
-        Workspace contains no views.
-      </div>
-    );
-  }
-
-  return (
-    <section data-testid="trading-room-workspace-shell" style={{ display: "flex", flex: 1, flexDirection: "column", minHeight: 0 }}>
-      <header style={{ borderBottom: "1px solid #e2e8f0", padding: "10px 16px" }}>
-        <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 10, justifyContent: "space-between" }}>
-          <div>
-            <div style={{ color: "#64748b", fontSize: 12, fontWeight: 700 }}>Workspace Shell</div>
-            <h2 style={{ color: "#0f172a", fontSize: 18, fontWeight: 800, letterSpacing: 0, margin: "2px 0 0" }}>
-              {workspace.strategyVersion}
-            </h2>
-          </div>
-          <div style={{ color: "#64748b", display: "flex", flexWrap: "wrap", fontSize: 12, gap: 8 }}>
-            <span>Status: {workspace.status}</span>
-            <span>Dashboard v{workspace.dashboardVersion}</span>
-            <span>Updated {new Date(workspace.updatedAt).toLocaleString()}</span>
-          </div>
-        </div>
-        <nav data-testid="workspace-view-tabs" style={{ display: "flex", gap: 6, marginTop: 10, overflowX: "auto" }}>
-          {sortedViews.map((view) => (
-            <button
-              aria-selected={view.id === activeView.id}
-              data-testid={`workspace-view-tab-${view.id}`}
-              key={view.id}
-              onClick={() => setActiveViewId(view.id)}
-              style={{
-                background: view.id === activeView.id ? "#eff6ff" : "#ffffff",
-                border: "1px solid #cbd5e1",
-                borderBottomColor: view.id === activeView.id ? "#2563eb" : "#cbd5e1",
-                borderRadius: 6,
-                color: view.id === activeView.id ? "#1d4ed8" : "#334155",
-                cursor: "pointer",
-                flex: "0 0 auto",
-                fontSize: 12,
-                fontWeight: 700,
-                padding: "6px 10px",
-              }}
-              type="button"
-            >
-              {view.title}
-            </button>
-          ))}
-        </nav>
-      </header>
-
-      <div data-testid={`workspace-active-view-${activeView.id}`} style={{ flex: 1, minHeight: 0, overflow: "auto", padding: 16 }}>
-        <div style={{ color: "#475569", fontSize: 13, lineHeight: 1.5, marginBottom: 12 }}>
-          <strong style={{ color: "#0f172a" }}>{activeView.title}</strong> · {activeView.purpose}
-          {activeView.warnings?.length ? (
-            <div style={{ color: "#b45309", marginTop: 4 }}>
-              {activeView.warnings.map((warning, index) => (
-                <span key={`${activeView.id}-warning-${index}`}>{safeWarningText(warning)}</span>
-              ))}
-            </div>
-          ) : null}
-        </div>
-        <div
-          style={{
-            display: "grid",
-            gap: 12,
-            gridAutoRows: "minmax(72px, auto)",
-            gridTemplateColumns: "repeat(12, minmax(0, 1fr))",
-          }}
-        >
-          {activeView.widgets.map((widget) => (
-            <WorkspaceWidgetCard key={widget.id} widget={widget} />
-          ))}
-        </div>
-      </div>
     </section>
   );
 }
@@ -1267,6 +914,8 @@ interface StrategyWorkspaceViewProps {
   events: TradingDecisionEvent[];
   eventsLoading: boolean;
   eventsEtag: string | null;
+  readinessAssessmentId?: string;
+  readinessGate?: string;
   strategyVersion?: string;
   onBackToWorkshop?: () => void;
 }
@@ -1278,22 +927,27 @@ function StrategyWorkspaceView({
   events,
   eventsLoading,
   eventsEtag,
+  readinessAssessmentId,
+  readinessGate,
   strategyVersion,
   onBackToWorkshop,
 }: StrategyWorkspaceViewProps): JSX.Element {
+  const { t } = useTranslation();
   const filteredEvents = events.filter((ev) => ev.strategy_id === strategyId);
 
   const resolvedStrategyVersion = strategyVersion ?? strategy?.strategy_spec_registry_id ?? "";
+  const routeTradingRoomReady = readinessGate === "trading_room";
+  const aggregateTradingRoomReady = strategy?.readiness_state === "ready";
   const [proposal, setProposal] = useState<TradingRoomWorkspaceProposal | null>(null);
   const [proposalLoading, setProposalLoading] = useState(false);
   const [proposalError, setProposalError] = useState<TradingRoomUiError | null>(null);
   const [proposalRevision, setProposalRevision] = useState(0);
   const [selectedPreviewViewId, setSelectedPreviewViewId] = useState<string | null>(null);
-  const [workspace, setWorkspace] = useState<TradingRoomWorkspace | null>(null);
+  const [workspaceResult, setWorkspaceResult] = useState<TradingRoomWorkspaceResult | null>(null);
   const [accepting, setAccepting] = useState(false);
 
   useEffect(() => {
-    setWorkspace(null);
+    setWorkspaceResult(null);
     setSelectedPreviewViewId(null);
   }, [strategyId, resolvedStrategyVersion]);
 
@@ -1313,9 +967,14 @@ function StrategyWorkspaceView({
     createTradingRoomWorkspaceProposal(
       strategyId,
       {
-        personalizationHints: { source: "trading_room_join", surface: "agora" },
+        personalizationHints: {
+          readinessAssessmentId,
+          readinessGate,
+          source: "trading_room_join",
+          surface: "agora",
+        },
         strategyVersion: resolvedStrategyVersion,
-        tradingRoomReady: strategy?.readiness_state === "ready",
+        tradingRoomReady: routeTradingRoomReady || aggregateTradingRoomReady,
       },
       { idempotencyKey: newUUID() },
     )
@@ -1327,10 +986,10 @@ function StrategyWorkspaceView({
       })
       .catch((err) => {
         if (cancelled) return;
-        const nextError = toTradingRoomUiError(err, "Workspace proposal generation failed.");
+        const nextError = toTradingRoomUiError(err, "Workspace proposal generation failed.", t);
         if (shouldClearStaleWorkspaceState(nextError)) {
           setProposal(null);
-          setWorkspace(null);
+          setWorkspaceResult(null);
           setSelectedPreviewViewId(null);
         }
         setProposalError(nextError);
@@ -1340,25 +999,33 @@ function StrategyWorkspaceView({
     return () => {
       cancelled = true;
     };
-  }, [proposalRevision, resolvedStrategyVersion, strategy?.readiness_state, strategyId]);
+  }, [
+    aggregateTradingRoomReady,
+    proposalRevision,
+    readinessAssessmentId,
+    readinessGate,
+    resolvedStrategyVersion,
+    routeTradingRoomReady,
+    strategyId,
+  ]);
 
   async function handleAcceptProposal() {
     if (!proposal) return;
     setAccepting(true);
     setProposalError(null);
     try {
-      const nextWorkspace = await acceptTradingRoomWorkspaceProposal(
+      const nextWorkspace = await acceptTradingRoomWorkspaceProposalWithMeta(
         strategyId,
         proposal.proposalId,
         { expectedStatus: "preview" },
         { idempotencyKey: newUUID() },
       );
-      setWorkspace(nextWorkspace);
+      setWorkspaceResult(nextWorkspace);
     } catch (err) {
-      const nextError = toTradingRoomUiError(err, "Workspace proposal acceptance failed.");
+      const nextError = toTradingRoomUiError(err, "Workspace proposal acceptance failed.", t);
       if (shouldClearStaleWorkspaceState(nextError)) {
         setProposal(null);
-        setWorkspace(null);
+        setWorkspaceResult(null);
         setSelectedPreviewViewId(null);
       }
       setProposalError(nextError);
@@ -1368,7 +1035,7 @@ function StrategyWorkspaceView({
   }
 
   function regenerateProposal() {
-    setWorkspace(null);
+    setWorkspaceResult(null);
     setProposal(null);
     setSelectedPreviewViewId(null);
     setProposalRevision((prev) => prev + 1);
@@ -1379,10 +1046,10 @@ function StrategyWorkspaceView({
       data-testid={`strategy-workspace-${strategyId}`}
       style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}
     >
-      <div style={{ padding: "8px 16px", borderBottom: "1px solid #e2e8f0", fontSize: 13, flexShrink: 0 }}>
+      <div style={{ padding: "8px 16px", borderBottom: "1px solid #2a2e38", fontSize: 13, flexShrink: 0 }}>
         <strong>{strategy?.title ?? strategyId}</strong>
         {strategy && (
-          <span style={{ marginLeft: 12, color: "#64748b" }}>
+          <span style={{ marginLeft: 12, color: "#8c96a6" }}>
             {strategy.readiness_state} · {strategy.monitoring_state}
           </span>
         )}
@@ -1394,16 +1061,23 @@ function StrategyWorkspaceView({
       />
 
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+        <div
+          data-testid="trading-room-workspace-column"
+          style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, minWidth: 0, overflow: "hidden" }}
+        >
           {!resolvedStrategyVersion ? (
             <div
               data-testid="trading-room-strategy-version-required"
-              style={{ padding: 16, fontSize: 13, color: "#b45309" }}
+              style={{ padding: 16, fontSize: 13, color: "#e8b750" }}
             >
-              Strategy version is required before Trading Room proposal generation.
+              {t("agora.tradingRoom.page.strategyVersionRequired")}
             </div>
-          ) : workspace ? (
-            <TradingRoomWorkspaceShell workspace={workspace} />
+          ) : workspaceResult ? (
+            <WorkspaceGridEditor
+              initialEtag={workspaceResult.etag}
+              initialWorkspace={workspaceResult.workspace}
+              onWorkspaceChange={setWorkspaceResult}
+            />
           ) : proposalLoading ? (
             <TradingRoomGenerationProgress
               strategyTitle={strategy?.title ?? strategyId}
@@ -1428,18 +1102,18 @@ function StrategyWorkspaceView({
               data-testid="trading-room-proposal-error"
               data-error-code={proposalError?.code ?? ""}
               data-error-status={proposalError?.status ?? ""}
-              style={{ padding: 16, fontSize: 13, color: "#b91c1c" }}
+              style={{ padding: 16, fontSize: 13, color: "#f87171" }}
             >
-              {proposalError?.message ?? "Workspace proposal unavailable."}
+              {proposalError?.message ?? t("agora.tradingRoom.page.proposalUnavailable")}
               <div>
                 <button
                   data-testid="trading-room-proposal-retry"
                   onClick={regenerateProposal}
                   style={{
-                    background: "#ffffff",
-                    border: "1px solid #cbd5e1",
+                    background: "#171b22",
+                    border: "1px solid #2a2e38",
                     borderRadius: 6,
-                    color: "#334155",
+                    color: "#8c96a6",
                     cursor: "pointer",
                     fontSize: 12,
                     fontWeight: 700,
@@ -1448,7 +1122,7 @@ function StrategyWorkspaceView({
                   }}
                   type="button"
                 >
-                  重新產生
+                  {t("agora.tradingRoom.proposal.regenerate")}
                 </button>
               </div>
             </div>
@@ -1469,16 +1143,23 @@ type LoadState = "loading" | "loaded" | "error";
 interface TradingRoomPageProps {
   strategyId?: string;
   strategyVersion?: string;
+  readinessAssessmentId?: string;
+  readinessGate?: string;
   onBackToWorkshop?: () => void;
+  onOpenWorkshop?: () => void;
   onStrategySelect?: (strategyId: string | undefined) => void;
 }
 
 export function TradingRoomPage({
   strategyId,
   strategyVersion,
+  readinessAssessmentId,
+  readinessGate,
   onBackToWorkshop,
+  onOpenWorkshop,
   onStrategySelect,
 }: TradingRoomPageProps): JSX.Element {
+  const { t } = useTranslation();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [aggregate, setAggregate] = useState<TradingRoomAggregate | null>(null);
   const [events, setEvents] = useState<TradingDecisionEvent[]>([]);
@@ -1532,9 +1213,9 @@ export function TradingRoomPage({
     return (
       <div
         data-testid="trading-room-loading"
-        style={{ display: "flex", height: "100%", alignItems: "center", justifyContent: "center", fontSize: 13, color: "#94a3b8" }}
+        style={{ display: "flex", height: "100%", alignItems: "center", justifyContent: "center", fontSize: 13, color: "#737d8e", background: "#111417" }}
       >
-        Loading Trading Room…
+        {t("agora.tradingRoom.page.loading")}
       </div>
     );
   }
@@ -1543,45 +1224,48 @@ export function TradingRoomPage({
     return (
       <div
         data-testid="trading-room-error"
-        style={{ display: "flex", height: "100%", alignItems: "center", justifyContent: "center", fontSize: 13, color: "#ef4444" }}
+        style={{ display: "flex", height: "100%", alignItems: "center", justifyContent: "center", fontSize: 13, color: "#f87171", background: "#111417" }}
       >
-        Failed to load Trading Room.
+        {t("agora.tradingRoom.page.loadFailed")}
       </div>
     );
   }
 
-  const activeStrategy = strategyId
-    ? aggregate.strategies.find((s) => s.strategy_id === strategyId)
+  const defaultReadyStrategy =
+    !strategyId && aggregate ? selectDefaultReadyStrategy(aggregate.strategies) : undefined;
+  const effectiveStrategyId = strategyId ?? defaultReadyStrategy?.strategy_id;
+  const activeStrategy = effectiveStrategyId
+    ? aggregate.strategies.find((s) => s.strategy_id === effectiveStrategyId)
     : undefined;
 
   return (
     <div
       data-testid="trading-room-page"
-      style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}
+      style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden", background: "#111417", color: "#f0ece4" }}
     >
       <StrategyLensSwitcher
         strategies={aggregate.strategies}
-        activeStrategyId={strategyId}
+        activeStrategyId={effectiveStrategyId}
         onSelect={handleStrategySelect}
       />
 
-      {strategyId ? (
+      {effectiveStrategyId ? (
         <StrategyWorkspaceView
-          strategyId={strategyId}
+          strategyId={effectiveStrategyId}
           strategy={activeStrategy}
           aggregate={aggregate}
           events={events}
           eventsLoading={eventsLoading}
           eventsEtag={eventsEtag}
           onBackToWorkshop={onBackToWorkshop}
+          readinessAssessmentId={readinessAssessmentId}
+          readinessGate={readinessGate}
           strategyVersion={strategyVersion}
         />
       ) : (
-        <AggregateView
+        <TradingRoomDefaultEntry
           aggregate={aggregate}
-          events={events}
-          eventsLoading={eventsLoading}
-          eventsEtag={eventsEtag}
+          onOpenWorkshop={onOpenWorkshop}
           onStrategySelect={(id) => handleStrategySelect(id)}
         />
       )}
