@@ -13,63 +13,30 @@
  */
 
 import { buildHeaders } from "@/lib/bff-v1/headers";
+import type {
+  CandidateComponentDigest as GeneratedCandidateComponentDigest,
+  CandidateConcernsValue as GeneratedCandidateConcernsValue,
+  CandidateDetailsValue as GeneratedCandidateDetailsValue,
+  CandidateEvidenceItem as GeneratedCandidateEvidenceItem,
+  CandidateEvidenceValue as GeneratedCandidateEvidenceValue,
+  CandidateFieldProvenance as GeneratedCandidateFieldProvenance,
+  CandidateMemberListFreshness as GeneratedCandidateMemberListFreshness,
+  CandidateMemberPageInfo as GeneratedCandidateMemberPageInfo,
+  CandidateNextEventValue as GeneratedCandidateNextEventValue,
+  CandidateRationaleValue as GeneratedCandidateRationaleValue,
+  CandidateScoreResult as GeneratedCandidateScoreResult,
+  CandidateScoreSemantics as GeneratedCandidateScoreSemantics,
+  CandidateTruthFields as GeneratedCandidateTruthFields,
+  UnavailableField as GeneratedUnavailableField,
+} from "./types";
 
 // ── Types (snake_case matches BFF JSON response) ──────────────────────────────
 
-export interface CandidateScoreComponent {
-  component_id: string;
-  label: string;
-  category:
-    | "alpha"
-    | "confidence"
-    | "liquidity"
-    | "risk"
-    | "execution"
-    | "data_quality"
-    | "custom";
-  raw_value: number | null;
-  normalized_value: number | null;
-  transform: string;
-  direction: "higher_better" | "lower_better";
-  weight: number;
-  contribution: number;
-  missing_policy: string;
-  evidence_refs: string[];
-  explanation: string;
-}
+export type CandidateScoreComponent = GeneratedCandidateScoreResult["components"][number];
+export type CandidateScoreResult = GeneratedCandidateScoreResult;
 
-export interface CandidateScoreResult {
-  candidate_id: string;
-  pool_id: string;
-  recipe_id: string;
-  recipe_version: number;
-  raw_score: number;
-  penalty_score: number;
-  evidence_confidence: number;
-  effective_score: number;
-  rank: number | null;
-  band: "priority_review" | "discuss" | "needs_research" | "park" | "suppressed";
-  components: CandidateScoreComponent[];
-  blockers: string[];
-  data_cutoff: string;
-  scored_at: string;
-  override_reason: string | null;
-}
-
-export type CandidateFieldUnavailableReason =
-  | "score_not_run"
-  | "no_governed_source"
-  | "not_recorded";
-
-export interface CandidateFieldProvenance {
-  source_type:
-    | "candidate_pool_member"
-    | "candidate_score_result"
-    | "candidate_review"
-    | "candidate_monitoring";
-  source_ref: string;
-  as_of: string;
-}
+export type CandidateFieldUnavailableReason = GeneratedUnavailableField;
+export type CandidateFieldProvenance = GeneratedCandidateFieldProvenance;
 
 export type CandidateFieldState<T> =
   | {
@@ -82,94 +49,17 @@ export type CandidateFieldState<T> =
       reason: CandidateFieldUnavailableReason;
     };
 
-export interface CandidateComponentDigest {
-  component_id: string;
-  label: string | null;
-  contribution: number | null;
-  explanation: string | null;
-}
+export type CandidateComponentDigest = GeneratedCandidateComponentDigest;
+export type CandidateRationaleValue = GeneratedCandidateRationaleValue;
+export type CandidateConcernsValue = GeneratedCandidateConcernsValue;
+export type CandidateNextEventValue = GeneratedCandidateNextEventValue;
+export type CandidateEvidenceItem = GeneratedCandidateEvidenceItem;
+export type CandidateEvidenceValue = GeneratedCandidateEvidenceValue;
+export type CandidateDetailsValue = GeneratedCandidateDetailsValue;
+export type CandidateTruthFields = GeneratedCandidateTruthFields;
 
-export type CandidateRationaleValue =
-  | {
-      kind: "operator_review_rationale";
-      decision: string | null;
-      rationale: string;
-      reviewed_by: string | null;
-      reviewed_at: string | null;
-    }
-  | {
-      kind: "score_component_attribution";
-      band: string | null;
-      effective_score: number | null;
-      top_components: CandidateComponentDigest[];
-    };
-
-export interface CandidateConcernsValue {
-  kind: "score_risk_attribution";
-  blockers: string[];
-  penalty_components: CandidateComponentDigest[];
-}
-
-export interface CandidateNextEventValue {
-  kind: "monitoring_schedule";
-  monitoring_state: "active" | "paused";
-  review_due_at: string | null;
-  trigger_conditions: Record<string, unknown>[];
-  added_by?: string | null;
-  added_at?: string | null;
-}
-
-export interface CandidateEvidenceItem {
-  component_id: string;
-  label?: string | null;
-  evidence_refs: string[];
-  summary: string | null;
-  summary_redacted: boolean;
-  redaction_reason?: "list_response" | "viewer_role";
-}
-
-export interface CandidateEvidenceValue {
-  kind: "score_evidence_refs";
-  items: CandidateEvidenceItem[];
-  total_refs: number;
-}
-
-export interface CandidateDetailsValue {
-  kind: "candidate_identity";
-  title?: string | null;
-  strategy_ref: string | null;
-  run_ref?: string | null;
-  producing_persona_id?: string | null;
-  lifecycle_state: string | null;
-  created_at: string | null;
-}
-
-export interface CandidateTruthFields {
-  rationale: CandidateFieldState<CandidateRationaleValue>;
-  concerns: CandidateFieldState<CandidateConcernsValue>;
-  next_event: CandidateFieldState<CandidateNextEventValue>;
-  evidence: CandidateFieldState<CandidateEvidenceValue>;
-  details: CandidateFieldState<CandidateDetailsValue>;
-}
-
-export interface CandidateScoreSemanticsEntry {
-  kind: "recipe_weighted_score" | "sharpe_ratio";
-  availability: "available" | "unavailable";
-  is_confidence_score: false;
-  scale_min?: number;
-  scale_max?: number;
-  recipe_id?: string | null;
-  recipe_version?: number | null;
-  transformation?: "sharpe_ratio_from_producing_research_run";
-  source_ref?: string | null;
-  as_of?: string | null;
-  reason?: CandidateFieldUnavailableReason;
-}
-
-export interface CandidateScoreSemantics {
-  effective_score: CandidateScoreSemanticsEntry;
-  sharpe_summary: CandidateScoreSemanticsEntry;
-}
+export type CandidateScoreSemanticsEntry = GeneratedCandidateScoreSemantics["effective_score"];
+export type CandidateScoreSemantics = GeneratedCandidateScoreSemantics;
 
 export interface CandidatePoolMember {
   artifact_id: string;
