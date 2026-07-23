@@ -270,6 +270,9 @@ function cleanTypeName(raw) {
 function refToType(ref, context) {
   if (typeof ref !== "string") return "unknown";
   const [refPath, fragment] = ref.split("#");
+  if (fragment?.startsWith("/$defs/")) {
+    return cleanTypeName(decodeURIComponent(fragment.slice("/$defs/".length)));
+  }
   if (fragment?.startsWith("/definitions/")) {
     return cleanTypeName(decodeURIComponent(fragment.slice("/definitions/".length)));
   }
@@ -394,6 +397,9 @@ function collectDeclarations(bundle) {
     addDeclaration(typeNameFromSchema(entry.schema, entry.fileName), entry.schema);
     for (const [definitionName, definition] of Object.entries(entry.schema.definitions || {})) {
       addDeclaration(definitionName, definition);
+    }
+    for (const [defName, defSchema] of Object.entries(entry.schema.$defs || {})) {
+      addDeclaration(defName, defSchema);
     }
   }
 

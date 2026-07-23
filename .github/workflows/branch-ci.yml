@@ -120,6 +120,9 @@ jobs:
       - name: Deploy safety contract
         run: npx vitest run src/test/deploy-safe-defaults.test.ts
 
+      - name: Typecheck
+        run: npm run typecheck
+
       - name: Build
         env:
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
