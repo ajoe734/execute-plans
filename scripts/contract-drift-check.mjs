@@ -208,8 +208,8 @@ function loadBundle(pantheonRoot) {
     fail(`Frontend generation output handoff file missing at ${feHandoffPath}`);
   }
   const feHandoff = readJson(feHandoffPath);
-  if (feHandoff.frontend?.runtime_commit !== "222b01cd0eeb4af7f064b179eb7b3ff5776928fe") {
-    fail(`Frontend handoff runtime_commit mismatch: expected 222b01cd0eeb4af7f064b179eb7b3ff5776928fe, actual ${feHandoff.frontend?.runtime_commit}`);
+  if (feHandoff.frontend?.runtime_commit !== "c76a838342b08331849f994d8f756155d2e3b961") {
+    fail(`Frontend handoff runtime_commit mismatch: expected c76a838342b08331849f994d8f756155d2e3b961, actual ${feHandoff.frontend?.runtime_commit}`);
   }
   if (feHandoff.frontend?.generated_from_contract_commit !== expectedContractCommit) {
     fail(`Frontend handoff generated_from_contract_commit mismatch: expected ${expectedContractCommit}, actual ${feHandoff.frontend?.generated_from_contract_commit}`);
