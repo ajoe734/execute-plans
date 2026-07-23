@@ -202,6 +202,37 @@ function loadBundle(pantheonRoot) {
     fail(`Handoff expected_output_paths mismatch: expected ${JSON.stringify(expectedOutputPaths)}, actual ${JSON.stringify(actualOutputRelPaths)}`);
   }
 
+  // Validate frontend generation output handoff artifact
+  const feHandoffPath = path.join(repoRoot, "docs/contracts/agora/frontend-generation-output.v1_13.json");
+  if (!fs.existsSync(feHandoffPath)) {
+    fail(`Frontend generation output handoff file missing at ${feHandoffPath}`);
+  }
+  const feHandoff = readJson(feHandoffPath);
+  if (feHandoff.frontend?.runtime_commit !== "222b01cd0eeb4af7f064b179eb7b3ff5776928fe") {
+    fail(`Frontend handoff runtime_commit mismatch: expected 222b01cd0eeb4af7f064b179eb7b3ff5776928fe, actual ${feHandoff.frontend?.runtime_commit}`);
+  }
+  if (feHandoff.frontend?.generated_from_contract_commit !== expectedContractCommit) {
+    fail(`Frontend handoff generated_from_contract_commit mismatch: expected ${expectedContractCommit}, actual ${feHandoff.frontend?.generated_from_contract_commit}`);
+  }
+  if (feHandoff.frontend?.bundle_index_sha256 !== actualBundleSha) {
+    fail(`Frontend handoff bundle_index_sha256 mismatch: expected ${actualBundleSha}, actual ${feHandoff.frontend?.bundle_index_sha256}`);
+  }
+  if (feHandoff.frontend?.openapi_sha256 !== actualOpenApiSha) {
+    fail(`Frontend handoff openapi_sha256 mismatch: expected ${actualOpenApiSha}, actual ${feHandoff.frontend?.openapi_sha256}`);
+  }
+
+  // Calculate actual generated types sha256 using sha256-path-tab-filehash-lf-v1
+  const sortedOutputPaths = [snapshotOutFile, typesOutFile].sort();
+  const manifestLines = sortedOutputPaths.map((fullPath) => {
+    const relPath = path.relative(repoRoot, fullPath);
+    const fileHash = sha256File(fullPath);
+    return `${relPath}\t${fileHash}\n`;
+  });
+  const calculatedTypesSha = sha256Bytes(Buffer.from(manifestLines.join(""), "utf8"));
+  if (feHandoff.frontend?.generated_types_sha256 !== calculatedTypesSha) {
+    fail(`Frontend handoff generated_types_sha256 mismatch: expected ${calculatedTypesSha}, actual ${feHandoff.frontend?.generated_types_sha256}`);
+  }
+
   const schemaEntries = Object.keys(files)
     .filter((rel) => rel.startsWith("specs/agora/") && rel.endsWith(".schema.json"))
     .sort();
