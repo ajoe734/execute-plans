@@ -363,14 +363,33 @@ function schemaToType(schema, context, indent = 0) {
     return refToType(schema.$ref, context);
   }
 
+  const compositionBase = ({ oneOf, anyOf, allOf, ...base }) => base;
+  const hasCompositionBase = (base) => (
+    Object.prototype.hasOwnProperty.call(base, "$ref")
+    || Object.prototype.hasOwnProperty.call(base, "type")
+    || Object.prototype.hasOwnProperty.call(base, "enum")
+    || Object.prototype.hasOwnProperty.call(base, "const")
+    || Object.prototype.hasOwnProperty.call(base, "properties")
+    || Object.prototype.hasOwnProperty.call(base, "additionalProperties")
+    || Object.prototype.hasOwnProperty.call(base, "items")
+  );
+  const composeWithBase = (members, operator) => {
+    const memberType = members
+      .map((item) => schemaToType(item, context, indent))
+      .join(` ${operator} `);
+    const base = compositionBase(schema);
+    if (!hasCompositionBase(base)) return memberType;
+    return `${schemaToType(base, context, indent)} & (${memberType})`;
+  };
+
   if (Array.isArray(schema.oneOf)) {
-    return schema.oneOf.map((item) => schemaToType(item, context, indent)).join(" | ");
+    return composeWithBase(schema.oneOf, "|");
   }
   if (Array.isArray(schema.anyOf)) {
-    return schema.anyOf.map((item) => schemaToType(item, context, indent)).join(" | ");
+    return composeWithBase(schema.anyOf, "|");
   }
   if (Array.isArray(schema.allOf)) {
-    return schema.allOf.map((item) => schemaToType(item, context, indent)).join(" & ");
+    return composeWithBase(schema.allOf, "&");
   }
 
   if (Array.isArray(schema.enum)) {
@@ -440,7 +459,10 @@ function objectToType(schema, context, indent = 0) {
 
 function emitDeclaration(name, schema, context) {
   const body = schemaToType(schema, context, 0);
-  if (body.startsWith("{\n") && !body.includes("} | {")) {
+  const hasComposition = Array.isArray(schema?.oneOf)
+    || Array.isArray(schema?.anyOf)
+    || Array.isArray(schema?.allOf);
+  if (body.startsWith("{\n") && !hasComposition && !body.includes("} | {")) {
     return {
       name,
       text: `export interface ${name} ${body}\n`,

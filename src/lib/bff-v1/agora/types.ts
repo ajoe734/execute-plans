@@ -1487,7 +1487,25 @@ export interface PersonaParticipantSnapshot {
   "captured_at": string;
 }
 
-export type ProviderInvocation = unknown & unknown;
+export type ProviderInvocation = {
+  "invocation_id": string;
+  "interaction_id": string;
+  "participant": PersonaParticipantSnapshot;
+  "provider_kind": "openclaw";
+  "request_correlation_id": string;
+  "response_correlation_id"?: string | null;
+  "request_sha256": string;
+  "response_sha256"?: string | null;
+  "status": "queued" | "running" | "succeeded" | "failed";
+  "started_at": string;
+  "completed_at"?: string | null;
+  "error"?: {
+    "code": string;
+    "message": string;
+    "retryable": boolean;
+  } | null;
+  "authority": AuthorityBoundary;
+} & (unknown & unknown);
 
 export interface ProductionContentProvenance {
   "content_origin": "selected_persona_provider_response";
@@ -1608,9 +1626,34 @@ export interface CandidateFromMeasureRequest {
   "measure_id": string;
 }
 
-export type CandidateDecisionRequest = unknown;
+export type CandidateDecisionRequest = {
+  "action": "modify" | "accept_for_review" | "reject" | "defer" | "cancel";
+  "reason": string;
+  "expected_revision": number;
+  "expected_proposal_digest": string;
+  "proposed_value"?: unknown;
+  "evidence_refs"?: Array<string>;
+} & (unknown);
 
-export type CandidateDecisionRecord = unknown;
+export type CandidateDecisionRecord = {
+  "decision_id": string;
+  "proposal_id": string;
+  "interaction_id": string;
+  "opinion_id": string;
+  "opinion_sha256": string;
+  "measure_id": string;
+  "measure_sha256": string;
+  "action": "modified" | "accepted_for_review" | "rejected" | "deferred" | "cancelled";
+  "actor_id": string;
+  "reason": string;
+  "revision": number;
+  "proposal_digest": string;
+  "review_request_id"?: string | null;
+  "decided_at": string;
+  "formal_approval": false;
+  "execution_authority": "none";
+  "audit_ref": string;
+} & (unknown);
 
 export interface AuthoritativeValidationRequest {
   "expected_revision": number;
@@ -1680,6 +1723,17 @@ export interface InterventionRecord {
 }
 
 export type ExecutionHistoryRow = {
+  "journey_id": string;
+  "status": string;
+  "occurred_at": string;
+  "updated_at": string;
+  "decision_ids": Array<string>;
+  "order_ids": Array<string>;
+  "fill_ids": Array<string>;
+  "reconciliation_ids": Array<string>;
+  "evidence_refs": Array<string>;
+  "source_id": "canonical_trade_journey_projector";
+} & ({
   "decision_ids"?: unknown;
 } | {
   "order_ids"?: unknown;
@@ -1687,7 +1741,7 @@ export type ExecutionHistoryRow = {
   "fill_ids"?: unknown;
 } | {
   "reconciliation_ids"?: unknown;
-};
+});
 
 export interface PerformanceWarning {
   "warning_id": string;
@@ -2056,7 +2110,14 @@ export interface CandidateNextEventValue {
   "added_at"?: string | null;
 }
 
-export type CandidateEvidenceItem = unknown;
+export type CandidateEvidenceItem = {
+  "component_id": string;
+  "label"?: string | null;
+  "evidence_refs": Array<string>;
+  "summary": string | null;
+  "summary_redacted": boolean;
+  "redaction_reason"?: "list_response" | "viewer_role";
+} & (unknown);
 
 export interface CandidateEvidenceValue {
   "kind": "score_evidence_refs";
@@ -2995,7 +3056,12 @@ export interface VersionPatchProposal {
   "decided_at"?: string;
 }
 
-export type patch_operation = unknown;
+export type patch_operation = {
+  "op": "add" | "remove" | "replace" | "test";
+  "path": string;
+  "value"?: unknown;
+  "comment"?: string;
+} & (unknown);
 
 export interface predicted_effect {
   "metric": string;
@@ -3007,7 +3073,24 @@ export interface predicted_effect {
   "limitations"?: Array<string>;
 }
 
-export type WorkshopCard = unknown & unknown & unknown & unknown & unknown & unknown & unknown & unknown & unknown & unknown & unknown & unknown;
+export type WorkshopCard = {
+  "spec_version": "1.0";
+  "card_id": string;
+  "card_type": "user_strategy_description" | "servant_reconstruction" | "completeness_update" | "missing_definition" | "next_question" | "research_plan_proposal" | "research_progress" | "research_result" | "consult_result" | "version_patch_proposal" | "version_compare" | "readiness_gate";
+  "workshop_id": string;
+  "sequence_no": number;
+  "source_event_ids"?: Array<string>;
+  "workshop_version_id"?: string;
+  "strategy_spec_registry_id"?: string;
+  "status": "informational" | "action_required" | "running" | "completed" | "failed" | "stale";
+  "title": string;
+  "summary"?: string;
+  "payload": Record<string, never>;
+  "evidence_refs"?: Array<evidence_ref>;
+  "allowed_actions"?: Record<string, boolean>;
+  "created_at": string;
+  "updated_at"?: string;
+} & (unknown & unknown & unknown & unknown & unknown & unknown & unknown & unknown & unknown & unknown & unknown & unknown);
 
 export interface payload_user_strategy_description {
   "owner_visible_content": string;
@@ -3361,9 +3444,34 @@ export interface score_component {
   "explanation"?: string;
 }
 
-export type GovernedActionAuthorityRequest = unknown & unknown;
+export type GovernedActionAuthorityRequest = {
+  "spec_version": "1.0";
+  "authority_request_id": string;
+  "action_type": string;
+  "requested_by": sessionActorRef;
+  "consult_policy_id"?: nullableString;
+  "persona_lifecycle_state"?: nullableString;
+  "solo_eligibility": soloEligibility;
+  "required_reviewers"?: Array<string>;
+  "required_committees"?: Array<string>;
+  "linked_opinion_consultation_ids"?: Array<string>;
+  "linked_consult_request_id"?: nullableString;
+  "decision"?: "pending" | "authorized" | "authorized_with_conditions" | "denied" | "escalated";
+  "decision_ref"?: nullableString;
+  "decision_by"?: sessionActorRef | null;
+  "execution_authority_proof": "governed_action_authority_request_does_not_execute_command";
+  "status": "draft" | "evaluating" | "awaiting_decision" | "resolved" | "expired";
+  "trace_id": string;
+  "created_at": string;
+  "resolved_at"?: nullableDateTime;
+} & (unknown & unknown);
 
-export type sessionActorRef = unknown;
+export type sessionActorRef = {
+  "actor_type": "persona_session" | "human" | "committee" | "system";
+  "actor_id": string;
+  "session_id"?: nullableString;
+  "display_name"?: nullableString;
+} & (unknown);
 
 export interface soloEligibility {
   "evaluated": boolean;
@@ -3375,7 +3483,23 @@ export type nullableString = string | null;
 
 export type nullableDateTime = string | null;
 
-export type PersonaOpinionConsultationEvent = unknown & unknown;
+export type PersonaOpinionConsultationEvent = {
+  "spec_version": "1.0";
+  "event_id": string;
+  "event_type": "opinion_requested" | "opinion_offered" | "opinion_declined" | "opinion_escalated" | "thread_closed";
+  "interaction_id": string;
+  "topic": string;
+  "requester": sessionActorRef;
+  "participants"?: Array<participant>;
+  "context_refs": Array<contextRef>;
+  "opinion"?: opinion | null;
+  "escalated_consult_request_id"?: nullableString;
+  "status": "open" | "partially_answered" | "answered" | "escalated" | "closed";
+  "no_capital_authority_proof": "persona_interaction_event_no_capital_or_order_authority";
+  "trace_id": string;
+  "created_at": string;
+  "updated_at"?: nullableDateTime;
+} & (unknown & unknown);
 
 export interface participant {
   "actor": sessionActorRef;
@@ -3401,8 +3525,19 @@ export interface WinnerBranchCompleteness {
   "workshop_id"?: string;
   "assessed_by_persona_id": string;
   "overall_grade": "complete" | "mostly_complete" | "partial" | "incomplete";
-  "dimensions": unknown & unknown & unknown & unknown & unknown & unknown & unknown;
-  "winner_branch_blocks": unknown & unknown & unknown & unknown & unknown & unknown & unknown & unknown & unknown & unknown & unknown & unknown;
+  "dimensions": Array<{
+    "dimension": "hypothesis" | "data_dependencies" | "market_scope" | "evaluation_plan" | "risk_constraints" | "execution_profile" | "governance";
+    "grade": "complete" | "partial" | "missing";
+    "gaps"?: Array<string>;
+    "required_actions"?: Array<string>;
+  }> & (unknown & unknown & unknown & unknown & unknown & unknown & unknown);
+  "winner_branch_blocks": Array<{
+    "block_name": "market_scope" | "insider_branch_mapping" | "winner_branch_scoring" | "migration_reverse_flow" | "event_lead" | "signal_formation" | "entry_holding" | "add_reduce_exit" | "sizing_leverage" | "cost_liquidity_capacity" | "validation_backtest_refutation" | "monitoring_update";
+    "grade": "confirmed" | "inferred_needs_confirmation" | "missing" | "weak" | "conflicting" | "not_applicable";
+    "mapped_dimension": "hypothesis" | "data_dependencies" | "market_scope" | "evaluation_plan" | "risk_constraints" | "execution_profile" | "governance";
+    "gaps"?: Array<string>;
+    "required_actions"?: Array<string>;
+  }> & (unknown & unknown & unknown & unknown & unknown & unknown & unknown & unknown & unknown & unknown & unknown & unknown);
   "blockers"?: Array<string>;
   "research_ready"?: boolean;
   "assessed_at": string;
@@ -3411,7 +3546,11 @@ export interface WinnerBranchCompleteness {
 
 export type AgoraPINTandOODAliveroutepayloads = unknown;
 
-export type ContextRef = unknown;
+export type ContextRef = {
+  "type": "strategy" | "position" | "decision_event" | "journal_entry" | "persona" | "performance_window";
+  "id": string;
+  "version_id"?: string | null;
+} & (unknown);
 
 export interface ResolveContextRequest {
   "context_refs": Array<ContextRef>;

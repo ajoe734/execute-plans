@@ -46,7 +46,7 @@ import type {
   WorkshopCard as GeneratedWorkshopCard,
   WorkshopConcludeEnvelope as GeneratedWorkshopConcludeEnvelope,
   WorkshopConsultationEnvelope as GeneratedWorkshopConsultationEnvelope,
-  WorkshopReadinessAssessment as GeneratedWorkshopReadinessAssessment,
+  StrategyReadinessAssessment as GeneratedWorkshopReadinessAssessment,
   WorkshopResearchRunEnvelope as GeneratedWorkshopResearchRunEnvelope,
   WorkshopStreamEvent as GeneratedWorkshopStreamEvent,
   WorkshopVersionCreateEnvelope as GeneratedWorkshopVersionCreateEnvelope,
@@ -138,7 +138,11 @@ describe("Agora generated DTO client bindings", () => {
         audience: "operator",
         canonical_authority: "strategy_registry",
         etag: "etag-1",
-        no_direct_action: "agora_workshop_read_only",
+        no_direct_action: {
+          deployment_triggered: false,
+          order_submitted: false,
+          live_capital_changed: false,
+        },
       },
     };
 
