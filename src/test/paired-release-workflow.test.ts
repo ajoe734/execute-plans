@@ -455,8 +455,20 @@ describe("paired Pantheon release workflow", () => {
       restore.indexOf(
         "Quiesce parent and terminalize exact credentialed child before restore",
       ),
-    ).toBeLessThan(restore.indexOf("Checkout exact paired controller"));
-    expect(restore.indexOf("Checkout exact paired controller")).toBeLessThan(
+    ).toBeLessThan(restore.indexOf("Checkout protected restore controller"));
+    expect(
+      restore.indexOf("Checkout protected restore controller"),
+    ).toBeLessThan(
+      restore.indexOf("Checkout protected Pantheon Agora gate controller"),
+    );
+    expect(
+      restore.indexOf("Checkout protected Pantheon Agora gate controller"),
+    ).toBeLessThan(
+      restore.indexOf("Revalidate exact Agora pair before restore"),
+    );
+    expect(
+      restore.indexOf("Revalidate exact Agora pair before restore"),
+    ).toBeLessThan(
       restore.indexOf("Restore exact pair before any mutable successor action"),
     );
     expect(
