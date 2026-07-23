@@ -46,7 +46,7 @@ import type {
   WorkshopCard as GeneratedWorkshopCard,
   WorkshopConcludeEnvelope as GeneratedWorkshopConcludeEnvelope,
   WorkshopConsultationEnvelope as GeneratedWorkshopConsultationEnvelope,
-  WorkshopReadinessAssessment as GeneratedWorkshopReadinessAssessment,
+  StrategyReadinessAssessment as GeneratedWorkshopReadinessAssessment,
   WorkshopResearchRunEnvelope as GeneratedWorkshopResearchRunEnvelope,
   WorkshopStreamEvent as GeneratedWorkshopStreamEvent,
   WorkshopVersionCreateEnvelope as GeneratedWorkshopVersionCreateEnvelope,

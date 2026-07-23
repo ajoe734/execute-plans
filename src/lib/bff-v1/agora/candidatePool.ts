@@ -14,12 +14,12 @@
 
 import { buildHeaders } from "@/lib/bff-v1/headers";
 import type {
-  CandidateComponentDigest as GeneratedCandidateComponentDigest,
+  ComponentDigest as GeneratedCandidateComponentDigest,
   CandidateConcernsValue as GeneratedCandidateConcernsValue,
   CandidateDetailsValue as GeneratedCandidateDetailsValue,
   CandidateEvidenceItem as GeneratedCandidateEvidenceItem,
   CandidateEvidenceValue as GeneratedCandidateEvidenceValue,
-  CandidateFieldProvenance as GeneratedCandidateFieldProvenance,
+  FieldProvenance as GeneratedCandidateFieldProvenance,
   CandidateMemberListFreshness as GeneratedCandidateMemberListFreshness,
   CandidateMemberPageInfo as GeneratedCandidateMemberPageInfo,
   CandidatePoolMember as GeneratedCandidatePoolMember,
@@ -36,7 +36,7 @@ import type {
 export type CandidateScoreComponent = GeneratedCandidateScoreResult["components"][number];
 export type CandidateScoreResult = GeneratedCandidateScoreResult;
 
-export type CandidateFieldUnavailableReason = GeneratedUnavailableField;
+export type CandidateFieldUnavailableReason = GeneratedUnavailableField["reason"];
 export type CandidateFieldProvenance = GeneratedCandidateFieldProvenance;
 
 export type CandidateFieldState<T> =

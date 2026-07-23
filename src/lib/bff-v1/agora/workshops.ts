@@ -8,7 +8,7 @@ import type {
   StrategyWorkshop,
   StrategyCompleteness,
   WorkshopCard as GeneratedWorkshopCard,
-  WorkshopReadinessAssessment as GeneratedWorkshopReadinessAssessment,
+  StrategyReadinessAssessment as GeneratedWorkshopReadinessAssessment,
   WorkshopStreamEvent as GeneratedWorkshopStreamEvent,
   WorkshopVersionListEnvelope,
   WorkshopVersionCreateEnvelope,
