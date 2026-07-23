@@ -1,12 +1,40 @@
-// BFF client for agora.workshop.v1 capability (v1.1 + v1.3 endpoints).
+// BFF client for agora.workshop.v1 capability (v1.1 + v1.3 + v1.13 endpoints).
 // Routes: /bff/agora/workshops/*
 // Live strict — pages must not call fetch() directly; use this module.
 // Agora-scoped paths only; no Management routes.
 
 import { bffFetch } from "@/lib/bff-v1/client";
-import type { StrategyWorkshop, StrategyCompleteness } from "./types";
+import type {
+  StrategyWorkshop,
+  StrategyCompleteness,
+  WorkshopCard as GeneratedWorkshopCard,
+  WorkshopReadinessAssessment as GeneratedWorkshopReadinessAssessment,
+  WorkshopStreamEvent as GeneratedWorkshopStreamEvent,
+  WorkshopVersionListEnvelope,
+  WorkshopVersionCreateEnvelope,
+  WorkshopVersionSelectEnvelope,
+  WorkshopResearchRunEnvelope,
+  WorkshopConsultationEnvelope,
+  WorkshopConcludeEnvelope,
+  WorkshopVersionCreateRequest,
+  WorkshopResearchRunRequest,
+  WorkshopConsultationRequest,
+  WorkshopConcludeRequest,
+} from "./types";
 
-// ─── v1.3 types (not yet in auto-generated types.ts) ──────────────────────────
+// Re-export generated v1.13 request/envelope DTO types
+export type {
+  WorkshopVersionListEnvelope,
+  WorkshopVersionCreateEnvelope,
+  WorkshopVersionSelectEnvelope,
+  WorkshopResearchRunEnvelope,
+  WorkshopConsultationEnvelope,
+  WorkshopConcludeEnvelope,
+  WorkshopVersionCreateRequest,
+  WorkshopResearchRunRequest,
+  WorkshopConsultationRequest,
+  WorkshopConcludeRequest,
+};
 
 export type WorkshopCardType =
   | "user_strategy_description"
@@ -88,57 +116,9 @@ export interface WorkshopEvidenceRef {
 
 export type WorkshopAllowedActions = Record<string, boolean>;
 
-export interface WorkshopCard {
-  spec_version?: "1.0";
-  card_id: string;
-  card_type: WorkshopCardType;
-  workshop_id: string;
-  sequence_no: number;
-  source_event_ids?: string[];
-  workshop_version_id?: string;
-  strategy_spec_registry_id?: string;
-  status: WorkshopCardStatus;
-  title: string;
-  summary?: string;
-  payload: Record<string, unknown>;
-  evidence_refs?: WorkshopEvidenceRef[];
-  allowed_actions?: WorkshopAllowedActions;
-  created_at: string;
-  updated_at?: string;
-  // Compatibility with the pre-v1.3 AG-FE-SW-001 projection while the BFF rolls.
-  sequence?: number;
-  emitted_by?: "user" | "servant";
-  persona_id?: string;
-}
-
-export interface WorkshopReadinessAssessment {
-  spec_version?: "1.0";
-  assessment_id: string;
-  workshop_id: string;
-  strategy_id?: string;
-  workshop_version_id?: string;
-  strategy_spec_registry_id?: string;
-  assessment_version?: number;
-  gates?: WorkshopReadinessGateEntry[];
-  highest_ready_gate?: WorkshopReadinessGate | null;
-  staleness_reasons?: string[];
-  evidence_refs?: WorkshopEvidenceRef[];
-  assessed_at: string;
-  valid_until?: string;
-  // Legacy single-gate compatibility while older test/projection payloads roll off.
-  gate?: WorkshopReadinessGate;
-  passed?: boolean;
-  blockers?: string[];
-  assessed_by_persona_id?: string;
-}
-
-export interface WorkshopStreamEvent {
-  event_id: string;
-  workshop_id: string;
-  event_type: string;
-  payload: Record<string, unknown>;
-  occurred_at: string;
-}
+export type WorkshopCard = GeneratedWorkshopCard;
+export type WorkshopReadinessAssessment = GeneratedWorkshopReadinessAssessment;
+export type WorkshopStreamEvent = GeneratedWorkshopStreamEvent;
 
 /**
  * Store-level shape returned by the live completeness endpoint.

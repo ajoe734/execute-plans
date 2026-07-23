@@ -2,6 +2,19 @@ import { detectBaseUrl } from "../client";
 import { BffError, normalizeBffErrorEnvelope, type ErrorCode } from "../errors";
 import { buildHeaders } from "../headers";
 import { liveWriteGated } from "../writeGate";
+import type {
+  AdjustmentSuggestion as GeneratedAdjustmentSuggestion,
+  ComplianceMetric as GeneratedComplianceMetric,
+  ExecutionHistoryRow as GeneratedExecutionHistoryRow,
+  InterventionRecord as GeneratedInterventionRecord,
+  PerformanceProjectionEnvelope as GeneratedPerformanceProjectionEnvelope,
+  PerformanceWarning as GeneratedPerformanceWarning,
+  SourceAvailability as GeneratedSourceAvailability,
+  StrategyPerformanceProjection as GeneratedStrategyPerformanceProjection,
+  SuggestionActionEnvelope as GeneratedSuggestionActionEnvelope,
+  SuggestionActionReceipt as GeneratedSuggestionActionReceipt,
+  SuggestionProvenance as GeneratedSuggestionProvenance,
+} from "./types";
 
 export type PerformanceAvailability = "available" | "partial" | "unavailable";
 export type PerformancePeriod = "latest" | "7d" | "30d" | "all";
@@ -9,147 +22,17 @@ export type PerformanceEnvironment = "paper" | "broker_sandbox" | "canary" | "li
 export type SuggestionAction = "apply" | "reject" | "return_to_workshop";
 export type SuggestionStatus = "proposed" | "applied" | "rejected" | "returned_to_workshop";
 
-export interface SourceAvailability {
-  status: PerformanceAvailability;
-  as_of: string | null;
-  source_ids: string[];
-  reason: string | null;
-}
-
-export interface ComplianceMetric {
-  metric_id: string;
-  label: string | null;
-  value: number | null;
-  unit: string | null;
-  calculation_id: string;
-  source_id: string;
-  as_of: string;
-  evidence_refs: string[];
-}
-
-export interface InterventionRecord {
-  intervention_id: string;
-  kind: string;
-  status: string;
-  occurred_at: string;
-  source_id: string;
-  evidence_refs: string[];
-}
-
-export interface ExecutionHistoryRow {
-  journey_id: string;
-  status: string;
-  occurred_at: string;
-  updated_at: string;
-  decision_ids: string[];
-  order_ids: string[];
-  fill_ids: string[];
-  reconciliation_ids: string[];
-  evidence_refs: string[];
-  source_id: "canonical_trade_journey_projector";
-}
-
-export interface PerformanceWarning {
-  warning_id: string;
-  code: string;
-  severity: "info" | "warning" | "high" | "critical";
-  occurred_at: string;
-  source_id: string;
-  evidence_refs: string[];
-  message: string | null;
-  details: Record<string, unknown>;
-}
-
-export interface SuggestionProvenance {
-  source_id: string;
-  source_type: string;
-  produced_at: string;
-  source_version: string | null;
-  evidence_refs: string[];
-}
-
-export interface AdjustmentSuggestion {
-  suggestion_id: string;
-  strategy_id: string;
-  period: PerformancePeriod;
-  status: SuggestionStatus;
-  version: number;
-  title: string | null;
-  rationale: string | null;
-  expected_effect: Record<string, unknown> | null;
-  expected_risk: Record<string, unknown> | null;
-  provenance: SuggestionProvenance;
-  as_of: string;
-  updated_at: string | null;
-  no_order_route_proof: "agora_suggestion_state_only";
-}
-
-export interface StrategyPerformanceProjection {
-  strategy_id: string;
-  period: PerformancePeriod;
-  environment: PerformanceEnvironment;
-  availability: PerformanceAvailability;
-  freshness: {
-    status: PerformanceAvailability;
-    snapshot_at: string;
-    as_of: string | null;
-    source_watermarks: Record<string, string>;
-    projection_revision: number | null;
-    projection_generation: number | null;
-    unavailable_sources: string[];
-  };
-  compliance: {
-    availability: SourceAvailability;
-    metrics: ComplianceMetric[];
-  };
-  interventions: {
-    availability: SourceAvailability;
-    aggregate: { total: number; by_status: Record<string, number> } | null;
-    items: InterventionRecord[];
-  };
-  execution_history: {
-    availability: SourceAvailability;
-    items: ExecutionHistoryRow[];
-  };
-  warnings: {
-    availability: SourceAvailability;
-    items: PerformanceWarning[];
-  };
-  adjustment_suggestions: {
-    availability: SourceAvailability;
-    items: AdjustmentSuggestion[];
-  };
-  no_order_route_proof: "agora_performance_read_only";
-}
-
-export interface PerformanceProjectionEnvelope {
-  data: StrategyPerformanceProjection;
-  meta: Record<string, unknown>;
-}
-
-export interface SuggestionActionReceipt {
-  receipt_id: string;
-  audit_event_id: string;
-  suggestion_id: string;
-  strategy_id: string;
-  action: SuggestionAction;
-  previous_status: SuggestionStatus;
-  status: SuggestionStatus;
-  previous_version: number;
-  version: number;
-  actor_id: string;
-  reason: string | null;
-  recorded_at: string;
-  authoritative_readback: AdjustmentSuggestion;
-  idempotent_replay: boolean;
-  execution_authority: "none";
-  no_order_route_proof: "agora_suggestion_state_only";
-}
-
-export interface SuggestionActionEnvelope {
-  data: SuggestionActionReceipt;
-  meta: Record<string, unknown>;
-}
+export type SourceAvailability = GeneratedSourceAvailability;
+export type ComplianceMetric = GeneratedComplianceMetric;
+export type InterventionRecord = GeneratedInterventionRecord;
+export type ExecutionHistoryRow = GeneratedExecutionHistoryRow;
+export type PerformanceWarning = GeneratedPerformanceWarning;
+export type SuggestionProvenance = GeneratedSuggestionProvenance;
+export type AdjustmentSuggestion = GeneratedAdjustmentSuggestion;
+export type StrategyPerformanceProjection = GeneratedStrategyPerformanceProjection;
+export type PerformanceProjectionEnvelope = GeneratedPerformanceProjectionEnvelope;
+export type SuggestionActionReceipt = GeneratedSuggestionActionReceipt;
+export type SuggestionActionEnvelope = GeneratedSuggestionActionEnvelope;
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)

@@ -71,10 +71,12 @@ function findPantheonRoot() {
     path.join(repoRoot, "pantheon-contract"),
     path.join(repoRoot, "..", "pantheon"),
     path.join(repoRoot, "..", "..", "pantheon"),
+    "/tmp/pantheon-worker-worktrees/pantheon/ag-compat-001-fe",
     "/home/lupin/pantheon",
   ].filter(Boolean);
 
   for (const candidate of candidates) {
+    if (!candidate) continue;
     const resolved = path.resolve(candidate);
     if (fs.existsSync(path.join(resolved, bundleIndexRel))) {
       return resolved;
