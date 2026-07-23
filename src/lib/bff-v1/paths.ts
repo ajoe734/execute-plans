@@ -108,6 +108,7 @@ export const paths = {
   strategySpecs: (id: string) => `${BASE}/strategies/${enc(id)}/specs`,
 
   // ---- Command confirmations (v3 §6.2) — submission endpoint ----
+  commandsV1: () => `${BASE}/v1/commands`,
   // /bff/command-confirmations requires confirm_token + command_id in body (submission of an already-issued token).
   commandConfirmations: () => `${BASE}/command-confirmations`,
   commandConfirmation: (token: string) => `${BASE}/command-confirmations/${enc(token)}`,
@@ -132,6 +133,8 @@ export const paths = {
   v5LoopRuns: () => `${BASE}/v5/loop-runs`,
   v5LoopRun: (id: string) => `${BASE}/v5/loop-runs/${enc(id)}`,
   v5SentinelFindings: () => `${BASE}/v5/sentinel/findings`,
+  v5SentinelFinding: (id: string) => `${BASE}/v5/sentinel/findings/${enc(id)}`,
+  v5SentinelFindingStatus: (id: string) => `${BASE}/v5/sentinel/findings/${enc(id)}/status`,
   v5Interventions: () => `${BASE}/v5/interventions`,
   v5Intervention: (id: string) => `${BASE}/v5/interventions/${enc(id)}`,
   v5InterventionDecide: (id: string) => `${BASE}/v5/interventions/${enc(id)}/decide`,
@@ -147,13 +150,35 @@ export const paths = {
   knowledgeInbox: () => `${BASE}/knowledge`,
   workflowTemplates: () => `${BASE}/workflows`,
   hookRegistry: () => `${BASE}/hooks`,
-  mgmtPersonaFleet: () => `${BASE}/management/fleet`,
+  lineage: (rootId?: string) =>
+    `${BASE}/lineage${rootId ? `?root_id=${enc(rootId)}` : ""}`,
+  mgmtDataSources: () => `${BASE}/management/data-sources`,
+  mgmtPermissions: () => `${BASE}/management/permissions`,
+  mgmtMemoryGovernance: () => `${BASE}/management/memory-governance`,
+  mgmtConsultRules: () => `${BASE}/management/consult-rules`,
+  mgmtPersonaFleet: (filters: { q?: string; pageSize?: number } = {}) => {
+    const params = new URLSearchParams();
+    const q = filters.q?.trim();
+    if (q) params.set("q", q);
+    if (filters.pageSize !== undefined) params.set("page_size", String(filters.pageSize));
+    const query = params.toString();
+    return `${BASE}/management/persona-fleet${query ? `?${query}` : ""}`;
+  },
+  mgmtAllocationPolicyEvaluate: () => `${BASE}/management/allocation-policy/evaluate`,
   mgmtHumanInbox: () => `${BASE}/management/human-inbox`,
   mgmtHumanInboxItem: (id: string) => `${BASE}/management/human-inbox/${enc(id)}`,
+  mgmtPromotionReviews: () => `${BASE}/management/promotion-reviews`,
+  mgmtPromotionReview: (id: string) => `${BASE}/management/promotion-reviews/${enc(id)}`,
+  mgmtPromotionReviewDecision: (id: string) => `${BASE}/management/promotion-reviews/${enc(id)}/decisions`,
   mgmtTradingPulse: () => `${BASE}/management/trading-pulse`,
   mgmtTradingRankings: () => `${BASE}/management/trading-pulse/rankings`,
   mgmtEvolutionJournal: () => `${BASE}/management/evolution-journal`,
   mgmtEvidenceExplorer: () => `${BASE}/management/evidence`,
+  mgmtEvidenceRef: (id: string) => `${BASE}/management/evidence/${enc(id)}`,
+  /** MGMT-LOAD-003 — cheap shell badge counts + session/transport, no full lists. */
+  mgmtShellSummary: () => `${BASE}/management/shell-summary`,
+  knowledgeEvidenceRefs: () => `/api/v1/knowledge/evidence`,
+  knowledgeEvidenceRef: (id: string) => `/api/v1/knowledge/evidence/${enc(id)}`,
   mgmtPersonaIntent: () => `${BASE}/management/persona-intent`,
   mgmtReadinessEp5: () => `${BASE}/management/readiness/ep5`,
   mgmtReadinessBrokerLive: () => `${BASE}/management/readiness/broker-live`,
@@ -168,10 +193,20 @@ export const paths = {
   managementNlAskStream: () => `${BASE}/management/nl/ask/stream`,
   managementAiConversation: (sessionId: string, traceId?: string) =>
     `${BASE}/management/ai/conversations/${enc(sessionId)}${traceId ? `?trace_id=${enc(traceId)}` : ""}`,
+  // List the caller's server-side conversations (history index source of truth).
+  managementAiConversations: (limit?: number) =>
+    `${BASE}/management/ai/conversations${limit ? `?limit=${enc(String(limit))}` : ""}`,
   assistantMode: () => `${BASE}/assistant/mode`,
+  assistantProviders: (authProbe = false) =>
+    `${BASE}/assistant/providers${authProbe ? "?auth_probe=true" : ""}`,
+  assistantProviderRegister: () => `${BASE}/assistant/providers`,
+  assistantProviderUsageSummary: (authProbe = false, windowHours = 168, limit = 500) =>
+    `${BASE}/assistant/providers/usage-summary?auth_probe=${authProbe ? "true" : "false"}&window_hours=${enc(String(windowHours))}&limit=${enc(String(limit))}`,
   assistantProviderReauth: () => `${BASE}/assistant/provider/reauth`,
   assistantProviderReauthStatus: (sessionId: string, provider?: string) =>
     `${BASE}/assistant/provider/reauth/${enc(sessionId)}${provider ? `?provider=${enc(provider)}` : ""}`,
+  assistantProviderReauthCode: (sessionId: string, provider?: string) =>
+    `${BASE}/assistant/provider/reauth/${enc(sessionId)}/code${provider ? `?provider=${enc(provider)}` : ""}`,
   assistantControlModeActivate: () => `${BASE}/assistant/control-mode/activate`,
   assistantControlModeDeactivate: () => `${BASE}/assistant/control-mode/deactivate`,
   assistantOrchestratorStatus: () => `${BASE}/assistant/orchestrator/status`,
@@ -183,13 +218,9 @@ export const paths = {
 
   // ---- 2026-05-22 PM-12 — Competition-style performance management. ----
   mgmtPortfolioBook: () => `${BASE}/management/portfolio-book`,
-  mgmtPortfolioHoldings: (query?: Record<string, string | undefined>) => {
-    const params = Object.entries(query ?? {})
-      .filter((entry): entry is [string, string] => Boolean(entry[1]))
-      .map(([key, value]) => `${enc(key)}=${enc(value)}`);
-    return `${BASE}/management/portfolio-book/holdings${params.length ? `?${params.join("&")}` : ""}`;
-  },
+  mgmtPortfolioHoldings: () => `${BASE}/management/portfolio-book/holdings`,
   mgmtPortfolioPools: () => `${BASE}/management/portfolio-book/pools`,
+  mgmtPortfolioExposure: () => `${BASE}/management/portfolio-book/exposure`,
   mgmtPersonaLeague: () => `${BASE}/management/persona-league`,
   mgmtPersonaLeagueRankings: () => `${BASE}/management/persona-league/rankings`,
   mgmtPersonaLeagueTiers: () => `${BASE}/management/persona-league/tiers`,
@@ -198,12 +229,16 @@ export const paths = {
   mgmtQuarterlyRankingFormula: () => `${BASE}/management/quarterly-ranking/formula`,
   mgmtQuarterlyRankingRecommendations: (quarter?: string) =>
     `${BASE}/management/quarterly-ranking/recommendations${quarter ? `?quarter=${enc(quarter)}` : ""}`,
+  mgmtQuarterlyRankingRecommendationSubmit: (recommendationId: string) =>
+    `${BASE}/management/quarterly-ranking/recommendations/${enc(recommendationId)}/submit`,
   mgmtPerformanceAttribution: (dimension?: string, period?: string) => {
     const qs: string[] = [];
     if (dimension) qs.push(`dimension=${enc(dimension)}`);
     if (period) qs.push(`period=${enc(period)}`);
     return `${BASE}/management/performance-attribution${qs.length ? `?${qs.join("&")}` : ""}`;
   },
+  mgmtOperationsReadModel: (personaId: string, period?: string) =>
+    `${BASE}/management/operations-read-model/${enc(personaId)}${period ? `?period=${enc(period)}` : ""}`,
 
   // ---- 2026-07-11 Persona Trade Journal ----
   tradeJournal: (personaId: string, query?: Record<string, string | number | undefined>) => {
@@ -228,17 +263,4 @@ export const paths = {
     `${BASE}/personas/${enc(personaId)}/trade-lessons/${enc(lessonId)}:submit-review`,
   tradeLessonDecide: (personaId: string, lessonId: string) =>
     `${BASE}/personas/${enc(personaId)}/trade-lessons/${enc(lessonId)}:decide`,
-
-  // ---- 2026-07-12 Agora Interactions ----
-  agoraInteractionsResolve: () => `${BASE}/agora/interactions/context:resolve`,
-  agoraInteractionsEligible: () => `${BASE}/agora/interactions/participants:eligible`,
-  agoraInteractionsSubmit: () => `${BASE}/agora/interactions`,
-
-  // ---- 2026-07-12 OODA Packets & Evolution Reviews ----
-  oodaPacket: (id: string) => `${BASE}/ooda/packets/${enc(id)}`,
-  oodaPackets: () => `${BASE}/ooda/packets`,
-  strategyOodaPackets: (id: string) => `${BASE}/strategies/${enc(id)}/ooda`,
-  runtimeOodaPackets: (id: string) => `${BASE}/runtimes/${enc(id)}/ooda`,
-  evolutionProgramOodaPackets: (id: string) => `${BASE}/evolution-programs/${enc(id)}/ooda`,
-  evolutionMutationReview: (decisionId: string) => `/api/v1/operator/mutation-review/${enc(decisionId)}`,
 } as const;

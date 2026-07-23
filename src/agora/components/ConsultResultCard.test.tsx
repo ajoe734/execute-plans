@@ -1,7 +1,6 @@
-import React from "react";
-import { cleanup, render, screen, fireEvent } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { WorkshopCardRenderer } from "./WorkshopCardRenderer";
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it } from "vitest";
+import { ConsultResultCard } from "./ConsultResultCard";
 import type { WorkshopCard } from "@/lib/bff-v1/agora/workshops";
 
 afterEach(cleanup);
@@ -29,50 +28,48 @@ const baseCard: WorkshopCard = {
   created_at: "2026-06-22T00:00:00Z",
 };
 
-function renderCard(card: WorkshopCard = baseCard, onContinueDiscussion?: (cardId: string) => void) {
-  render(<WorkshopCardRenderer card={card} onContinueDiscussion={onContinueDiscussion} />);
-}
-
 describe("ConsultResultCard", () => {
-  it("renders with correct testid", () => {
-    renderCard();
-    expect(screen.getByTestId("workshop-card-card-cr-001")).toBeDefined();
-  });
-
-  it("displays card title", () => {
-    renderCard();
-    expect(screen.getByText("Risk Committee Consultation")).toBeDefined();
-  });
-
-  it("shows status badge from payload.status", () => {
-    renderCard();
-    expect(screen.getByText("Completed")).toBeDefined();
+  it("renders consultation metadata from payload", () => {
+    render(<ConsultResultCard payload={baseCard.payload} />);
+    expect(screen.getByText("consult-001")).toBeDefined();
+    expect(screen.getByText("risk_committee")).toBeDefined();
+    expect(screen.getByText("completed")).toBeDefined();
   });
 
   it("shows freshness badge", () => {
-    renderCard();
-    expect(screen.getByText("Freshness")).toBeDefined();
+    render(<ConsultResultCard payload={baseCard.payload} />);
     expect(screen.getByText("fresh")).toBeDefined();
   });
 
+  it("renders participant persona refs", () => {
+    render(<ConsultResultCard payload={baseCard.payload} />);
+    expect(screen.getByText("Participants")).toBeDefined();
+    expect(screen.getByText("persona-risk-a")).toBeDefined();
+    expect(screen.getByText("persona-risk-b")).toBeDefined();
+  });
+
   it("renders consensus summary", () => {
-    renderCard();
+    render(<ConsultResultCard payload={baseCard.payload} />);
+    expect(screen.getByText("Consensus")).toBeDefined();
     expect(screen.getByText(/position size cap at 2%/)).toBeDefined();
   });
 
   it("renders disagreements list", () => {
-    renderCard();
+    render(<ConsultResultCard payload={baseCard.payload} />);
+    expect(screen.getByText("Disagreements")).toBeDefined();
     expect(screen.getByText(/1.5% cap/)).toBeDefined();
   });
 
   it("renders risk notes section", () => {
-    renderCard();
-    expect(screen.getByText(/Liquidity deteriorates/)).toBeDefined();
+    render(<ConsultResultCard payload={baseCard.payload} />);
+    expect(screen.getByText("Risk Notes")).toBeDefined();
+    expect(screen.getByText("Liquidity deteriorates beyond $5M notional in small-cap names")).toBeDefined();
   });
 
   it("renders conditions list", () => {
-    renderCard();
-    expect(screen.getByText(/hard stop at -8%/)).toBeDefined();
+    render(<ConsultResultCard payload={baseCard.payload} />);
+    expect(screen.getByText("Conditions")).toBeDefined();
+    expect(screen.getByText("Implement hard stop at -8% drawdown")).toBeDefined();
   });
 
   it("does not show disagreements section when empty", () => {
@@ -80,7 +77,7 @@ describe("ConsultResultCard", () => {
       ...baseCard,
       payload: { ...baseCard.payload, disagreements: [] },
     };
-    renderCard(card);
+    render(<ConsultResultCard payload={card.payload} />);
     expect(screen.queryByText("Disagreements")).toBeNull();
   });
 
@@ -89,20 +86,8 @@ describe("ConsultResultCard", () => {
       ...baseCard,
       payload: { ...baseCard.payload, risk_notes: undefined },
     };
-    renderCard(card);
+    render(<ConsultResultCard payload={card.payload} />);
     expect(screen.queryByText("Risk Notes")).toBeNull();
-  });
-
-  it("renders Ask Servant button when onContinueDiscussion provided", () => {
-    renderCard(baseCard, () => undefined);
-    expect(screen.getByTestId("workshop-card-card-cr-001-discuss")).toBeDefined();
-  });
-
-  it("calls onContinueDiscussion with card_id on click", () => {
-    const handler = vi.fn();
-    renderCard(baseCard, handler);
-    fireEvent.click(screen.getByTestId("workshop-card-card-cr-001-discuss"));
-    expect(handler).toHaveBeenCalledWith("card-cr-001");
   });
 
   it("handles in_progress status", () => {
@@ -110,7 +95,7 @@ describe("ConsultResultCard", () => {
       ...baseCard,
       payload: { ...baseCard.payload, status: "in_progress" },
     };
-    renderCard(card);
+    render(<ConsultResultCard payload={card.payload} />);
     expect(screen.getByText("in_progress")).toBeDefined();
   });
 });

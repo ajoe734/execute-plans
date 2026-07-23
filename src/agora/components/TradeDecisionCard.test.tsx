@@ -9,10 +9,6 @@ vi.mock("@/lib/bff-v1/agora/tradingRoom", () => ({
   decideOnEvent: vi.fn(),
 }));
 
-vi.mock("react-router-dom", () => ({
-  useNavigate: () => vi.fn(),
-}));
-
 import { decideOnEvent } from "@/lib/bff-v1/agora/tradingRoom";
 const mockDecideOnEvent = decideOnEvent as ReturnType<typeof vi.fn>;
 

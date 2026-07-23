@@ -22,6 +22,8 @@ SOURCE_BRANCH="${PANTHEON_DEPLOY_BRANCH:-${GITHUB_REF_NAME:-$(git branch --show-
 ALLOW_DIRTY="${PANTHEON_DEPLOY_ALLOW_DIRTY:-false}"
 SKIP_PROBE="${PANTHEON_DEPLOY_SKIP_PROBE:-false}"
 KEEP_RELEASES="${PANTHEON_DEV_FE_KEEP_RELEASES:-8}"
+PRESERVE_ASSETS="${PANTHEON_DEV_FE_PRESERVE_ASSETS:-true}"
+DEV_BEARER_TOKEN="${VITE_BFF_DEV_BEARER_TOKEN:-pantheon-dev-browser:operator,reviewer,approver,risk_owner,admin:mfa:assistant.kernel.debug,assistant.kernel.repair}"
 TIMESTAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 SHA="$(git rev-parse HEAD)"
 SHORT_SHA="${SHA:0:12}"
@@ -76,8 +78,9 @@ echo "=== build strict live dev bundle ==="
 VITE_BFF_MODE=live \
 VITE_BFF_BASE_URL="${BFF_HOST}" \
 VITE_BFF_FALLBACK=strict \
-VITE_BFF_REAL_WRITES=false \
-VITE_BFF_DEV_BEARER_TOKEN="${VITE_BFF_DEV_BEARER_TOKEN:-pantheon-dev-browser:operator,reviewer,approver,risk_owner,admin:mfa:assistant.kernel.debug,assistant.kernel.repair}" \
+VITE_BFF_REAL_WRITES=true \
+VITE_BFF_ALLOW_DEV_STUB_WRITES=true \
+VITE_BFF_DEV_BEARER_TOKEN="${DEV_BEARER_TOKEN}" \
 npm run build
 
 export PANTHEON_DEPLOYED_AT="${TIMESTAMP}"
@@ -102,7 +105,8 @@ const metadata = {
   buildMode: {
     VITE_BFF_MODE: "live",
     VITE_BFF_FALLBACK: "strict",
-    VITE_BFF_REAL_WRITES: "false",
+    VITE_BFF_REAL_WRITES: "true",
+    VITE_BFF_ALLOW_DEV_STUB_WRITES: "true",
   },
 };
 
@@ -113,6 +117,26 @@ echo "=== install release ==="
 rsync -a --delete dist/ "${TMP_DIR}/"
 sudo install -d -o root -g root -m 775 "${RELEASES_DIR}"
 sudo install -d -o root -g root -m 775 "${RELEASE_DIR}"
+
+if [[ "${PRESERVE_ASSETS}" == "true" ]]; then
+  echo "=== preserve retained hashed assets ==="
+  # Old browser tabs may still request prior Vite chunks after the symlink switch.
+  mkdir -p "${TMP_DIR}/assets"
+  mapfile -t retained_asset_dirs < <(sudo find "${RELEASES_DIR}" -mindepth 2 -maxdepth 2 -type d -name assets -printf '%T@ %p\n' | sort -nr | cut -d' ' -f2- || true)
+  preserved_asset_dirs=0
+  for retained_asset_dir in "${retained_asset_dirs[@]}"; do
+    case "${retained_asset_dir}" in
+      "${RELEASE_DIR}/assets") continue ;;
+      "${RELEASES_DIR}"/*/assets) ;;
+      *) continue ;;
+    esac
+
+    rsync -rt --ignore-existing "${retained_asset_dir}/" "${TMP_DIR}/assets/"
+    preserved_asset_dirs=$((preserved_asset_dirs + 1))
+  done
+  echo "preserved hashed assets from ${preserved_asset_dirs} retained release(s)"
+fi
+
 sudo rsync -a --delete --chown=root:root --chmod=Du=rwx,Dg=rwx,Do=rx,Fu=rw,Fg=rw,Fo=r "${TMP_DIR}/" "${RELEASE_DIR}/"
 
 if [[ -e "${DEPLOY_ROOT}" && ! -L "${DEPLOY_ROOT}" ]]; then
@@ -152,10 +176,20 @@ if [[ "${SKIP_PROBE}" != "true" ]]; then
   PANTHEON_BROWSER_BFF_BASE_URL="${BFF_HOST}" \
   PANTHEON_OLD_BFF_URL="${OLD_BFF_HOST}" \
   PANTHEON_HOSTED_PROBE_PATH="${PANTHEON_HOSTED_PROBE_PATH:-/management/persona-fleet}" \
-  PANTHEON_HOSTED_REQUIRED_BFF_PATHS="${PANTHEON_HOSTED_REQUIRED_BFF_PATHS:-/bff/management/fleet}" \
+  PANTHEON_HOSTED_REQUIRED_BFF_PATHS="${PANTHEON_HOSTED_REQUIRED_BFF_PATHS:-/bff/management/persona-fleet}" \
   PANTHEON_PROBE_NOCACHE_SHA="${SHA}" \
   PANTHEON_AUDIT_OUT_DIR="${AUDIT_DIR}" \
   node scripts/probe-hosted-browser-bff.mjs
+
+  echo "=== run Persona Fleet live linked-page contract ==="
+  PANTHEON_FE_BASE_URL="${FE_HOST}" \
+  PANTHEON_BFF_BASE_URL="${BFF_HOST}" \
+  npx playwright test e2e/25-persona-fleet-live-linked-pages.spec.ts --project=chromium
+
+  echo "=== run governed management write/read-back probe ==="
+  PANTHEON_BFF_BASE_URL="${BFF_HOST}" \
+  PANTHEON_BFF_AUTH_TOKEN="${DEV_BEARER_TOKEN}" \
+  node scripts/probe-hosted-management-writes.mjs
 fi
 
 cat > "${AUDIT_DIR}/dev-fe-deploy-${TIMESTAMP}.md" <<EOF
@@ -169,6 +203,7 @@ cat > "${AUDIT_DIR}/dev-fe-deploy-${TIMESTAMP}.md" <<EOF
 - bff_host: ${BFF_HOST}
 - release_dir: ${RELEASE_DIR}
 - deploy_root: ${DEPLOY_ROOT}
+- preserve_assets: ${PRESERVE_ASSETS}
 - probe: $([[ "${SKIP_PROBE}" == "true" ]] && echo "skipped" || echo "passed")
 EOF
 
