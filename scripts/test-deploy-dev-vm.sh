@@ -13,6 +13,8 @@ CANDIDATE_SOURCE="${PANTHEON_TEST_RELEASE_CANDIDATE_SOURCE:-${ROOT_DIR}/scripts/
 EVIDENCE_SOURCE="${ROOT_DIR}/scripts/release-evidence.mjs"
 CAS_SOURCE="${ROOT_DIR}/scripts/atomic-symlink-cas.py"
 ATOMIC_MANIFEST_SOURCE="${ROOT_DIR}/scripts/atomic-release-manifest.py"
+DEPLOY_WORKFLOW_SOURCE="${ROOT_DIR}/.github/workflows/pantheon-dev-fe-deploy.yml"
+WATCHDOG_WORKFLOW_SOURCE="${ROOT_DIR}/.github/workflows/pantheon-proof-watchdog.yml"
 SYSTEM_PATH="${PATH}"
 REAL_NODE="$(command -v node)"
 
@@ -21,7 +23,9 @@ for required_file in \
   "${CANDIDATE_SOURCE}" \
   "${EVIDENCE_SOURCE}" \
   "${CAS_SOURCE}" \
-  "${ATOMIC_MANIFEST_SOURCE}"; do
+  "${ATOMIC_MANIFEST_SOURCE}" \
+  "${DEPLOY_WORKFLOW_SOURCE}" \
+  "${WATCHDOG_WORKFLOW_SOURCE}"; do
   if [[ ! -f "${required_file}" ]]; then
     echo "missing test contract: ${required_file}" >&2
     exit 2
@@ -33,6 +37,36 @@ for required_command in git flock node python3; do
     exit 2
   fi
 done
+
+python3 - "${DEPLOY_WORKFLOW_SOURCE}" "${WATCHDOG_WORKFLOW_SOURCE}" <<'PY'
+import pathlib
+import sys
+
+deploy = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
+watchdog = pathlib.Path(sys.argv[2]).read_text(encoding="utf-8")
+deploy_gate = deploy.index("Enforce exact accepted Agora pair before release controller")
+deploy_harness = deploy.index("Run target-runner controller regression harness")
+deploy_switch = deploy.index("Deploy verified persistent candidate profile")
+write_gate = deploy.index("Revalidate exact Agora pair before write activation")
+write_switch = deploy.index("Activate bounded write-proof profile after watchdog is durable")
+restore_gate = watchdog.index("Revalidate exact Agora pair before restore")
+restore_switch = watchdog.index("Restore exact pair before any mutable successor action")
+if not (deploy_gate < deploy_harness < deploy_switch and write_gate < write_switch):
+    raise SystemExit("frontend deploy workflow does not gate every candidate switch")
+if not restore_gate < restore_switch:
+    raise SystemExit("watchdog restore workflow does not gate its switch")
+for workflow in (deploy, watchdog):
+    if "--allow-pending" in workflow:
+        raise SystemExit("accepting frontend deployment path exposes --allow-pending")
+    for marker in (
+        "--backend-runtime-commit",
+        "--frontend-runtime-commit",
+        "--evidence-out",
+        "PANTHEON_DEPLOY_AGORA_COMPAT_EVIDENCE:",
+    ):
+        if marker not in workflow:
+            raise SystemExit(f"frontend deployment wiring is missing {marker}")
+PY
 
 HARNESS_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/deploy-dev-vm-contract.XXXXXX")"
 MOCK_BIN="${HARNESS_ROOT}/mock-bin"
@@ -399,6 +433,53 @@ fs.writeFileSync(output, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
 NODE
 }
 
+make_agora_compatibility_evidence() {
+  local output="$1"
+  local status="${2:-accepted}"
+  local backend_commit="${3:-${BFF_SHA}}"
+  local frontend_commit="${4:-${CANDIDATE_SHA}}"
+  local frontend_tree
+  frontend_tree="$(git -C "${CASE_REPO}" rev-parse "${CANDIDATE_SHA}^{tree}")"
+  "${REAL_NODE}" --input-type=module - \
+    "${output}" "${status}" "${backend_commit}" "${frontend_commit}" "${frontend_tree}" <<'NODE'
+import fs from "node:fs";
+const [output, status, backendCommit, frontendCommit, frontendTree] = process.argv.slice(2);
+const accepted = status === "accepted";
+const evidence = {
+  schema_version: "pantheon.agora.compatibility-gate-evidence.v1",
+  contract_family: "agora.v1.13",
+  environment: "dev",
+  compatibility_status: status,
+  blocking_reasons: accepted ? [] : [`test-${status}`],
+  manifest_sha256: "a".repeat(64),
+  gate_controller: {
+    repo: "ajoe734/pantheon",
+    commit: "c".repeat(40),
+    tree: "d".repeat(40),
+  },
+  backend: {
+    repo: "ajoe734/pantheon",
+    runtime_commit: backendCommit,
+    tree: "e".repeat(40),
+  },
+  frontend: {
+    repo: "ajoe734/execute-plans",
+    runtime_commit: frontendCommit,
+    tree: frontendTree,
+  },
+  source_handoffs: {
+    backend: { path: "backend.json", commit: "1".repeat(40), sha256: "2".repeat(64) },
+    frontend: { path: "frontend.json", commit: "3".repeat(40), sha256: "4".repeat(64) },
+  },
+  hash_policy: {
+    file_hash: "sha256-exact-git-bytes-v1",
+    generated_types_hash: "sha256-path-tab-filehash-lf-v1",
+  },
+};
+fs.writeFileSync(output, `${JSON.stringify(evidence, null, 2)}\n`, "utf8");
+NODE
+}
+
 upgrade_previous_manifest_to_modern() {
   local manifest="$1"
   local commit digest
@@ -467,6 +548,8 @@ setup_case() {
   CASE_DURABLE="${CASE_DIR}/durable-evidence"
   CASE_LOCK="${CASE_DIR}/deploy.lock"
   CASE_CALL_LOG="${CASE_DIR}/calls.log"
+  CASE_AGORA_EVIDENCE="${CASE_DIR}/agora-compatibility-gate.json"
+  PREVIOUS_MANIFEST_SNAPSHOT="${CASE_DIR}/previous-deployment.before.json"
   PREVIOUS_TARGET="${CASE_RELEASES}/previous"
   CANDIDATE_DIST="${CASE_DIR}/candidate-dist-read-only"
   OPERATOR_LIVE_DIST="${CASE_DIR}/candidate-dist-operator-live"
@@ -489,6 +572,7 @@ setup_case() {
         --dist-dir "${PREVIOUS_TARGET}")"
   fi
   make_previous_manifest "${PREVIOUS_TARGET}/deployment.json" "${previous_commit}" "${previous_digest}"
+  cp "${PREVIOUS_TARGET}/deployment.json" "${PREVIOUS_MANIFEST_SNAPSHOT}"
   ln -s "${PREVIOUS_TARGET}" "${CASE_LIVE}"
 
   printf '<!doctype html><html><body>candidate</body></html>\n' > "${CANDIDATE_DIST}/index.html"
@@ -514,6 +598,7 @@ setup_case() {
   WRITE_PROOF_DIGEST="$(json_field "${CANDIDATE_DIR}/pair.json" profiles.writeProof.artifactDigestSha256)"
   [[ "${CANDIDATE_DIGEST}" =~ ^[0-9a-f]{64}$ && "${OPERATOR_LIVE_DIGEST}" =~ ^[0-9a-f]{64}$ && "${WRITE_PROOF_DIGEST}" =~ ^[0-9a-f]{64}$ ]] || \
     die "fixture profile digest is invalid"
+  make_agora_compatibility_evidence "${CASE_AGORA_EVIDENCE}"
   : > "${CASE_CALL_LOG}"
 }
 
@@ -583,6 +668,7 @@ run_deploy() {
       PANTHEON_DEPLOY_DURABLE_EVIDENCE_ROOT="${CASE_DURABLE}" \
       PANTHEON_DEPLOY_DURABLE_EVIDENCE_PREFIX="${CASE_DIR}" \
       PANTHEON_DEPLOY_CANDIDATE_DIR="${CANDIDATE_DIR}" \
+      PANTHEON_DEPLOY_AGORA_COMPAT_EVIDENCE="${CASE_AGORA_EVIDENCE}" \
       PANTHEON_DEPLOY_REF="${CANDIDATE_SHA}" \
       PANTHEON_DEPLOY_BRANCH="dev" \
       PANTHEON_DEPLOY_GATE_RUN_ID="${GATE_RUN_ID}" \
@@ -650,6 +736,15 @@ assert_previous_is_live() {
   observed="$(readlink -f "${CASE_LIVE}" 2>/dev/null || true)"
   [[ "${observed}" == "${PREVIOUS_TARGET}" ]] || \
     show_deploy_failure "expected exact previous target ${PREVIOUS_TARGET}, observed ${observed:-missing}"
+}
+
+assert_previous_manifest_unchanged() {
+  local observed
+  observed="$(readlink -f "${CASE_LIVE}" 2>/dev/null || true)"
+  [[ "${observed}" == "${PREVIOUS_TARGET}" ]] || \
+    show_deploy_failure "previous manifest check observed a different live target"
+  cmp -s "${PREVIOUS_MANIFEST_SNAPSHOT}" "${observed}/deployment.json" || \
+    show_deploy_failure "previous active deployment manifest changed"
 }
 
 assert_candidate_is_live() {
@@ -789,6 +884,8 @@ test_valid_candidate_success() {
   run_deploy
   [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "valid candidate should succeed"
   assert_candidate_is_live
+  [[ "$(json_field "$(readlink -f "${CASE_LIVE}")/deployment.json" agoraCompatibility.compatibility_status)" == "accepted" ]] || \
+    show_deploy_failure "accepted release omitted Agora compatibility evidence"
   assert_probe_called previous_target_pre_switch
   assert_probe_source_scan previous_target_pre_switch loaded
   assert_probe_strict previous_target_pre_switch 0
@@ -877,6 +974,39 @@ test_valid_candidate_success() {
   assert_probe_called post_switch
   assert_summary_outcome accepted
   verify_evidence_pair
+}
+
+test_agora_compatibility_gate_is_consumed_before_switch() {
+  local status
+  for status in pending rejected; do
+    setup_case "agora-${status}"
+    make_agora_compatibility_evidence "${CASE_AGORA_EVIDENCE}" "${status}"
+    run_deploy
+    [[ "${RUN_STATUS}" -ne 0 ]] || die "${status} Agora evidence unexpectedly switched"
+    assert_previous_is_live
+    assert_previous_manifest_unchanged
+    assert_probe_not_called candidate_pre_switch
+    grep -Fq "Agora compatibility evidence rejected" "${RUN_OUTPUT}" || \
+      show_deploy_failure "missing ${status} compatibility rejection"
+  done
+
+  setup_case agora-frontend-mismatch
+  make_agora_compatibility_evidence \
+    "${CASE_AGORA_EVIDENCE}" accepted "${BFF_SHA}" "$(repeat_character f 40)"
+  run_deploy
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "mismatched frontend compatibility evidence switched"
+  assert_previous_is_live
+  assert_previous_manifest_unchanged
+  assert_probe_not_called candidate_pre_switch
+
+  setup_case agora-backend-mismatch
+  make_agora_compatibility_evidence \
+    "${CASE_AGORA_EVIDENCE}" accepted "$(repeat_character f 40)" "${CANDIDATE_SHA}"
+  run_deploy
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "mismatched backend compatibility evidence switched"
+  assert_previous_is_live
+  assert_previous_manifest_unchanged
+  assert_probe_not_called candidate_pre_switch
 }
 
 test_tampered_candidate_and_digest_rejected() {
@@ -1114,6 +1244,7 @@ test_manual_rollback_drill_restores_and_reprobes() {
     PANTHEON_DEPLOY_OVERRIDE_REASON="${drill_reason}"
   [[ "${RUN_STATUS}" -ne 0 ]] || die "controlled rollback drill unexpectedly accepted the candidate"
   assert_previous_is_live
+  assert_previous_manifest_unchanged
   assert_probe_called candidate_pre_switch
   assert_probe_called post_switch
   assert_probe_called rollback
@@ -1557,6 +1688,7 @@ run_test() {
 }
 
 run_test "valid candidate succeeds and evidence hashes verify" test_valid_candidate_success
+run_test "Agora pending/rejected or mismatched evidence cannot switch" test_agora_compatibility_gate_is_consumed_before_switch
 run_test "candidate asset and digest tampering reject before switch" test_tampered_candidate_and_digest_rejected
 run_test "candidate pre-probe failure preserves exact previous" test_pre_probe_failure_preserves_previous
 run_test "BFF identity is exact and stable across the switch" test_bff_identity_is_bound_before_and_after_switch

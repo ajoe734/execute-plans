@@ -199,6 +199,8 @@ function validateStatus(value) {
 const DETAIL_VALIDATORS = Object.freeze({
   acceptedGateRunId: validateRunIdOrLegacy,
   acceptedGithubArtifactDigest: validateGithubDigestOrLegacy,
+  agoraCompatibilityEvidenceSha256: validateDigest,
+  agoraCompatibilityManifestSha256: validateDigest,
   artifactDigestSha256: (value) => validateDigest(value, ["legacy"]),
   auditDir: (value) => validatePath(value),
   bffCommit: validateSha40,

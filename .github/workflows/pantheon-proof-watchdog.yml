@@ -582,12 +582,21 @@ jobs:
           echo "Restore refused: exact credentialed child is still nonterminal." >&2
           exit 1
 
-      - name: Checkout exact paired controller
+      - name: Checkout protected restore controller
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.candidate_sha }}
+          ref: dev
           fetch-depth: 0
           persist-credentials: false
+
+      - name: Pin current protected restore controller
+        id: controller
+        run: |
+          set -euo pipefail
+          controller_sha="$(git rev-parse HEAD)"
+          remote_dev_sha="$(git ls-remote --exit-code origin refs/heads/dev | awk '{print $1}')"
+          [[ "${controller_sha}" == "${remote_dev_sha}" ]]
+          echo "sha=${controller_sha}" >> "$GITHUB_OUTPUT"
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -671,6 +680,32 @@ jobs:
             --profile write-proof)"
           [[ "$ro" == "$EXPECTED_READ_ONLY_DIGEST" && "$wp" == "$EXPECTED_WRITE_PROOF_DIGEST" ]]
 
+      - name: Checkout protected Pantheon Agora gate controller
+        uses: actions/checkout@v4
+        with:
+          repository: ajoe734/pantheon
+          ref: dev
+          path: .pantheon-agora-compat
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Revalidate exact Agora pair before restore
+        id: restore_agora_compat
+        run: |
+          set -euo pipefail
+          evidence_dir="${RUNNER_TEMP%/}/pantheon-proof-watchdog-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          evidence_path="${evidence_dir}/agora-compatibility-gate.input.json"
+          mkdir -p "${evidence_dir}"
+          python3 .pantheon-agora-compat/scripts/agora_compat_manifest.py deployment-gate \
+            --manifest .pantheon-agora-compat/docs/contracts/agora/dev-compatibility-manifest.json \
+            --frontend-root "${GITHUB_WORKSPACE}" \
+            --backend-dev-ref refs/remotes/origin/dev \
+            --frontend-dev-ref refs/remotes/origin/dev \
+            --backend-runtime-commit "${BFF_SHA}" \
+            --frontend-runtime-commit "${CANDIDATE_SHA}" \
+            --evidence-out "${evidence_path}"
+          echo "evidence_path=${evidence_path}" >> "$GITHUB_OUTPUT"
+
       - name: Restore exact pair before any mutable successor action
         timeout-minutes: 30
         env:
@@ -678,9 +713,10 @@ jobs:
           PANTHEON_DEPLOY_CANDIDATE_SHA: ${{ inputs.candidate_sha }}
           PANTHEON_DEPLOY_BRANCH: dev
           PANTHEON_DEPLOY_CANDIDATE_DIR: .release-candidate
+          PANTHEON_DEPLOY_AGORA_COMPAT_EVIDENCE: ${{ steps.restore_agora_compat.outputs.evidence_path }}
           PANTHEON_DEPLOY_GATE_RUN_ID: ${{ inputs.source_gate_run_id }}
           PANTHEON_DEPLOY_GITHUB_ARTIFACT_DIGEST: ${{ inputs.source_artifact_digest }}
-          PANTHEON_DEPLOY_EXPECTED_DEV_SHA: ${{ inputs.candidate_sha }}
+          PANTHEON_DEPLOY_EXPECTED_DEV_SHA: ${{ steps.controller.outputs.sha }}
           PANTHEON_DEPLOY_EMERGENCY_OVERRIDE: "false"
           PANTHEON_DEPLOY_ROLLBACK_DRILL: "false"
           PANTHEON_DEPLOY_PROFILE: read-only-restore
