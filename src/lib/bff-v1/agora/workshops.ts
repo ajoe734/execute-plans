@@ -266,10 +266,8 @@ export async function getWorkshopCompleteness(
 
 // ─── Versions ─────────────────────────────────────────────────────────────────
 
-export async function listWorkshopVersions(workshopId: string): Promise<{
-  items: Array<{ version: number; strategy_ref: string; selected: boolean; created_at: string }>;
-}> {
-  return bffFetch({
+export async function listWorkshopVersions(workshopId: string): Promise<WorkshopVersionListEnvelope> {
+  return bffFetch<WorkshopVersionListEnvelope>({
     method: "GET",
     path: `/bff/agora/workshops/${encodeURIComponent(workshopId)}/versions`,
   });
@@ -277,9 +275,9 @@ export async function listWorkshopVersions(workshopId: string): Promise<{
 
 export async function createWorkshopVersion(
   workshopId: string,
-  body: { strategy_ref: string; notes?: string },
-): Promise<{ version: number; strategy_ref: string; created_at: string }> {
-  return bffFetch({
+  body: WorkshopVersionCreateRequest,
+): Promise<WorkshopVersionCreateEnvelope> {
+  return bffFetch<WorkshopVersionCreateEnvelope>({
     method: "POST",
     path: `/bff/agora/workshops/${encodeURIComponent(workshopId)}/versions`,
     body,
@@ -289,8 +287,8 @@ export async function createWorkshopVersion(
 export async function selectWorkshopVersion(
   workshopId: string,
   version: number,
-): Promise<{ workshop_id: string; selected_version: number }> {
-  return bffFetch({
+): Promise<WorkshopVersionSelectEnvelope> {
+  return bffFetch<WorkshopVersionSelectEnvelope>({
     method: "POST",
     path: `/bff/agora/workshops/${encodeURIComponent(workshopId)}/versions/${version}/select`,
     body: {},
@@ -301,9 +299,9 @@ export async function selectWorkshopVersion(
 
 export async function dispatchWorkshopResearchRun(
   workshopId: string,
-  body?: { objectives?: string[] },
-): Promise<{ run_id: string; workshop_id: string; status: string }> {
-  return bffFetch({
+  body?: WorkshopResearchRunRequest,
+): Promise<WorkshopResearchRunEnvelope> {
+  return bffFetch<WorkshopResearchRunEnvelope>({
     method: "POST",
     path: `/bff/agora/workshops/${encodeURIComponent(workshopId)}/research-run`,
     body: body ?? {},
@@ -314,9 +312,9 @@ export async function dispatchWorkshopResearchRun(
 
 export async function openWorkshopConsultation(
   workshopId: string,
-  body: { persona_ids: string[]; topic?: string },
-): Promise<{ consultation_id: string; workshop_id: string }> {
-  return bffFetch({
+  body: WorkshopConsultationRequest,
+): Promise<WorkshopConsultationEnvelope> {
+  return bffFetch<WorkshopConsultationEnvelope>({
     method: "POST",
     path: `/bff/agora/workshops/${encodeURIComponent(workshopId)}/consultation`,
     body,
@@ -327,14 +325,13 @@ export async function openWorkshopConsultation(
 
 export async function concludeWorkshop(
   workshopId: string,
-  body?: { notes?: string },
-): Promise<StrategyWorkshop> {
-  const response = await bffFetch<unknown>({
+  body?: WorkshopConcludeRequest,
+): Promise<WorkshopConcludeEnvelope> {
+  return bffFetch<WorkshopConcludeEnvelope>({
     method: "POST",
     path: `/bff/agora/workshops/${encodeURIComponent(workshopId)}/conclude`,
     body: body ?? {},
   });
-  return entityFrom<StrategyWorkshop>(response);
 }
 
 // ─── Streaming (SSE) ──────────────────────────────────────────────────────────

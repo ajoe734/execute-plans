@@ -22,6 +22,7 @@ import type {
   CandidateFieldProvenance as GeneratedCandidateFieldProvenance,
   CandidateMemberListFreshness as GeneratedCandidateMemberListFreshness,
   CandidateMemberPageInfo as GeneratedCandidateMemberPageInfo,
+  CandidatePoolMember as GeneratedCandidatePoolMember,
   CandidateNextEventValue as GeneratedCandidateNextEventValue,
   CandidateRationaleValue as GeneratedCandidateRationaleValue,
   CandidateScoreResult as GeneratedCandidateScoreResult,
@@ -61,37 +62,9 @@ export type CandidateTruthFields = GeneratedCandidateTruthFields;
 export type CandidateScoreSemanticsEntry = GeneratedCandidateScoreSemantics["effective_score"];
 export type CandidateScoreSemantics = GeneratedCandidateScoreSemantics;
 
-export interface CandidatePoolMember {
-  artifact_id: string;
-  strategy_ref: string;
-  title?: string;
-  lifecycle_state: "candidate" | "review" | "approved" | "rejected";
-  producing_persona_id?: string;
-  sharpe_summary?: number;
-  run_ref?: string;
-  created_at: string;
-  current_score?: CandidateScoreResult;
-  effective_score?: number;
-  rank?: number | null;
-  band?: CandidateScoreResult["band"] | null;
-  fields: CandidateTruthFields;
-  as_of: string;
-  score_semantics: CandidateScoreSemantics;
-}
-
-export interface CandidateMemberPageInfo {
-  next_page_token: string | null;
-  page_size: number;
-  has_more: boolean;
-  total: number;
-  order_by: "created_at,artifact_id";
-}
-
-export interface CandidateMemberListFreshness {
-  pool_snapshot_at: string | null;
-  data_cutoff: string | null;
-  last_score_run_at: string | null;
-}
+export type CandidatePoolMember = GeneratedCandidatePoolMember;
+export type CandidateMemberPageInfo = GeneratedCandidateMemberPageInfo;
+export type CandidateMemberListFreshness = GeneratedCandidateMemberListFreshness;
 
 export interface CandidatePoolMembersMeta {
   snapshot_at: string | null;
