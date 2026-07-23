@@ -11,7 +11,7 @@ const snapshotOutFile = path.join(repoRoot, "src/lib/bff-v1/agora/contract-snaps
 
 const schemaRootRel = "services/control-plane/specs/agora";
 const openapiRootRel = "services/control-plane/openapi";
-const defaultBundleIndexRel = `${schemaRootRel}/bundle_index.v1_5.json`;
+const defaultBundleIndexRel = `${schemaRootRel}/bundle_index.v1_13.json`;
 
 const args = new Set(process.argv.slice(2));
 const writeMode = args.has("--write");
@@ -215,8 +215,12 @@ function computeDefinitionChecksums(schemas, requiredDefinitionChecksums) {
   if (wanted.size === 0) return result;
   for (const entry of schemas) {
     for (const [name, definition] of Object.entries(entry.schema.definitions || {})) {
+      const fullKey = `services/control-plane/${entry.rel}#/definitions/${name}`;
       if (wanted.has(name)) {
         result[name] = sha256Json(definition);
+      }
+      if (wanted.has(fullKey)) {
+        result[fullKey] = sha256Json(definition);
       }
     }
   }
@@ -350,7 +354,7 @@ function objectToType(schema, context, indent = 0) {
 
 function emitDeclaration(name, schema, context) {
   const body = schemaToType(schema, context, 0);
-  if (body.startsWith("{\n")) {
+  if (body.startsWith("{\n") && !body.includes("} | {")) {
     return {
       name,
       text: `export interface ${name} ${body}\n`,
