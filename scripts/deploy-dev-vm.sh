@@ -23,6 +23,7 @@ STRICT_DIR_PREFIX="${PANTHEON_DEV_FE_ROOT_PREFIX:-/var/www/pantheon-dev-fe}"
 STRICT_RELEASES_PREFIX="${PANTHEON_DEV_FE_RELEASES_PREFIX:-/var/www/pantheon-dev-fe-releases}"
 AUDIT_DIR="${PANTHEON_AUDIT_OUT_DIR:-.lovable/audits/current-run}"
 CANDIDATE_INPUT="${PANTHEON_DEPLOY_CANDIDATE_DIR:-}"
+AGORA_COMPAT_EVIDENCE_INPUT="${PANTHEON_DEPLOY_AGORA_COMPAT_EVIDENCE:-}"
 SOURCE_BRANCH="${PANTHEON_DEPLOY_BRANCH:-dev}"
 GATE_RUN_ID="${PANTHEON_DEPLOY_GATE_RUN_ID:-}"
 GITHUB_ARTIFACT_DIGEST="${PANTHEON_DEPLOY_GITHUB_ARTIFACT_DIGEST:-}"
@@ -61,6 +62,7 @@ ROLLBACK_LINK="${DEPLOY_ROOT}.rollback-${RELEASE_INSTANCE}"
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/execute-plans-dev-fe.XXXXXX")"
 EVIDENCE_LOG="${AUDIT_DIR}/evidence.jsonl"
 EVIDENCE_SUMMARY="${AUDIT_DIR}/evidence.json"
+AGORA_COMPAT_EVIDENCE_AUDIT="${AUDIT_DIR}/agora-compatibility-gate.json"
 
 CANDIDATE_DIR=""
 READ_ONLY_CANDIDATE_DIR=""
@@ -216,6 +218,111 @@ verify_dist_digest() {
   node scripts/release-candidate.mjs digest \
     --dist-dir "${release_root}" \
     --expected-artifact-digest "${expected_digest}"
+}
+
+verify_agora_compatibility_evidence() {
+  local evidence_file="$1"
+  local frontend_tree evidence_values
+  if [[ -z "${evidence_file}" || ! -f "${evidence_file}" || -L "${evidence_file}" ]]; then
+    echo "Deployment requires regular immutable Agora compatibility evidence." >&2
+    return 2
+  fi
+  frontend_tree="$(git rev-parse "${SHA}^{tree}")"
+  evidence_values="$(node --input-type=module - \
+    "${evidence_file}" "${SHA}" "${frontend_tree}" "${BFF_COMMIT}" <<'NODE'
+import crypto from "node:crypto";
+import fs from "node:fs";
+const [file, expectedFrontend, expectedFrontendTree, expectedBackend] = process.argv.slice(2);
+const raw = fs.readFileSync(file);
+const payload = JSON.parse(raw.toString("utf8"));
+const exactKeys = (value, keys, label) => {
+  if (!value || typeof value !== "object" || Array.isArray(value) ||
+      JSON.stringify(Object.keys(value).sort()) !== JSON.stringify([...keys].sort())) {
+    throw new Error(`${label} has an unexpected shape`);
+  }
+};
+const sha40 = (value, label) => {
+  const normalized = String(value || "").toLowerCase();
+  if (!/^[0-9a-f]{40}$/u.test(normalized)) throw new Error(`${label} must be a Git SHA`);
+  return normalized;
+};
+const sha256 = (value, label) => {
+  const normalized = String(value || "").toLowerCase();
+  if (!/^[0-9a-f]{64}$/u.test(normalized)) throw new Error(`${label} must be a SHA-256`);
+  return normalized;
+};
+exactKeys(payload, [
+  "backend", "blocking_reasons", "compatibility_status", "contract_family",
+  "environment", "frontend", "gate_controller", "hash_policy",
+  "manifest_sha256", "schema_version", "source_handoffs",
+], "Agora compatibility evidence");
+exactKeys(payload.gate_controller, ["commit", "repo", "tree"], "gate_controller");
+exactKeys(payload.backend, ["repo", "runtime_commit", "tree"], "backend");
+exactKeys(payload.frontend, ["repo", "runtime_commit", "tree"], "frontend");
+if (payload.schema_version !== "pantheon.agora.compatibility-gate-evidence.v1" ||
+    payload.contract_family !== "agora.v1.13" || payload.environment !== "dev" ||
+    payload.compatibility_status !== "accepted" ||
+    !Array.isArray(payload.blocking_reasons) || payload.blocking_reasons.length !== 0 ||
+    payload.gate_controller.repo !== "ajoe734/pantheon" ||
+    payload.backend.repo !== "ajoe734/pantheon" ||
+    payload.frontend.repo !== "ajoe734/execute-plans" ||
+    payload.hash_policy?.file_hash !== "sha256-exact-git-bytes-v1" ||
+    payload.hash_policy?.generated_types_hash !== "sha256-path-tab-filehash-lf-v1") {
+  throw new Error("Agora compatibility evidence is not one accepted dev pair");
+}
+const frontend = sha40(payload.frontend.runtime_commit, "frontend.runtime_commit");
+const frontendTree = sha40(payload.frontend.tree, "frontend.tree");
+const backend = sha40(payload.backend.runtime_commit, "backend.runtime_commit");
+sha40(payload.backend.tree, "backend.tree");
+sha40(payload.gate_controller.commit, "gate_controller.commit");
+sha40(payload.gate_controller.tree, "gate_controller.tree");
+const manifestSha = sha256(payload.manifest_sha256, "manifest_sha256");
+if (frontend !== expectedFrontend || frontendTree !== expectedFrontendTree ||
+    backend !== expectedBackend) {
+  throw new Error(
+    `Agora compatibility payload mismatch: frontend=${frontend}/${frontendTree} backend=${backend}`,
+  );
+}
+const evidenceSha = crypto.createHash("sha256").update(raw).digest("hex");
+process.stdout.write(`${evidenceSha} ${manifestSha}\n`);
+NODE
+  )" || {
+    echo "Agora compatibility evidence rejected." >&2
+    return 2
+  }
+  read -r AGORA_COMPAT_EVIDENCE_SHA256 AGORA_COMPAT_MANIFEST_SHA256 <<<"${evidence_values}"
+  python3 - "${evidence_file}" "${AGORA_COMPAT_EVIDENCE_AUDIT}" <<'PY'
+import os
+import pathlib
+import stat
+import sys
+
+source = pathlib.Path(sys.argv[1])
+target = pathlib.Path(sys.argv[2])
+opened = os.open(source, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+try:
+    source_stat = os.fstat(opened)
+    if not stat.S_ISREG(source_stat.st_mode):
+        raise SystemExit("Agora compatibility evidence must be a regular file")
+    payload = b""
+    while True:
+        chunk = os.read(opened, 1024 * 1024)
+        if not chunk:
+            break
+        payload += chunk
+finally:
+    os.close(opened)
+descriptor = os.open(
+    target,
+    os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
+    0o600,
+)
+try:
+    os.write(descriptor, payload)
+    os.fsync(descriptor)
+finally:
+    os.close(descriptor)
+PY
 }
 
 remove_candidate_release() {
@@ -1219,6 +1326,8 @@ case "${DEPLOY_PROFILE}" in
     ;;
 esac
 
+verify_agora_compatibility_evidence "${AGORA_COMPAT_EVIDENCE_INPUT}"
+
 OVERRIDE_REASON_SHA256=""
 if [[ -n "${OVERRIDE_REASON}" ]]; then
   OVERRIDE_REASON_SHA256="$(node -e 'const crypto=require("node:crypto");process.stdout.write(crypto.createHash("sha256").update(process.argv[1]).digest("hex"))' "${OVERRIDE_REASON}")"
@@ -1230,6 +1339,8 @@ node scripts/release-evidence.mjs init \
   --detail "integrationGateRunId=${GATE_RUN_ID}" \
   --detail "artifactDigestSha256=${ARTIFACT_DIGEST}" \
   --detail "githubArtifactDigest=${GITHUB_ARTIFACT_DIGEST}" \
+  --detail "agoraCompatibilityEvidenceSha256=${AGORA_COMPAT_EVIDENCE_SHA256}" \
+  --detail "agoraCompatibilityManifestSha256=${AGORA_COMPAT_MANIFEST_SHA256}" \
   --detail "emergencyOverride=${EMERGENCY_OVERRIDE}" \
   --detail "rollbackDrill=${ROLLBACK_DRILL}" \
   --detail "overrideActor=${OVERRIDE_ACTOR:-none}" \
@@ -1444,6 +1555,7 @@ if [[ "${DEPLOY_PROFILE}" == "write-proof" ]]; then
   PANTHEON_RUNTIME_READ_ONLY_DIGEST="${READ_ONLY_ARTIFACT_DIGEST}" \
   PANTHEON_RUNTIME_OPERATOR_LIVE_DIGEST="${OPERATOR_LIVE_ARTIFACT_DIGEST}" \
   PANTHEON_RUNTIME_WRITE_PROOF_DIGEST="${WRITE_PROOF_ARTIFACT_DIGEST}" \
+  PANTHEON_RUNTIME_AGORA_COMPAT_EVIDENCE="${AGORA_COMPAT_EVIDENCE_AUDIT}" \
     node --input-type=module <<'NODE'
 import fs from "node:fs";
 const file = process.env.PANTHEON_RUNTIME_MANIFEST;
@@ -1460,6 +1572,9 @@ manifest.pair = {
 manifest.deploymentState = "standby";
 manifest.releaseName = process.env.PANTHEON_RUNTIME_RELEASE_NAME;
 manifest.githubArtifactDigest = process.env.PANTHEON_RUNTIME_GITHUB_DIGEST;
+manifest.agoraCompatibility = JSON.parse(
+  fs.readFileSync(process.env.PANTHEON_RUNTIME_AGORA_COMPAT_EVIDENCE, "utf8"),
+);
 fs.writeFileSync(file, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
 NODE
   verify_dist_digest "${TMP_DIR}/safe-release" "${READ_ONLY_ARTIFACT_DIGEST}" >/dev/null
@@ -1580,6 +1695,7 @@ PANTHEON_RUNTIME_PAIR_ID="${PAIR_ID}" \
 PANTHEON_RUNTIME_READ_ONLY_DIGEST="${READ_ONLY_ARTIFACT_DIGEST}" \
 PANTHEON_RUNTIME_OPERATOR_LIVE_DIGEST="${OPERATOR_LIVE_ARTIFACT_DIGEST}" \
 PANTHEON_RUNTIME_WRITE_PROOF_DIGEST="${WRITE_PROOF_ARTIFACT_DIGEST}" \
+PANTHEON_RUNTIME_AGORA_COMPAT_EVIDENCE="${AGORA_COMPAT_EVIDENCE_AUDIT}" \
   node --input-type=module <<'NODE'
 import fs from "node:fs";
 const file = process.env.PANTHEON_RUNTIME_MANIFEST;
@@ -1591,6 +1707,9 @@ manifest.previousCommit = process.env.PANTHEON_RUNTIME_PREVIOUS_COMMIT || null;
 manifest.previousArtifactDigest = process.env.PANTHEON_RUNTIME_PREVIOUS_DIGEST || null;
 manifest.previousReleaseName = process.env.PANTHEON_RUNTIME_PREVIOUS_RELEASE_NAME || null;
 manifest.githubArtifactDigest = process.env.PANTHEON_RUNTIME_GITHUB_DIGEST;
+manifest.agoraCompatibility = JSON.parse(
+  fs.readFileSync(process.env.PANTHEON_RUNTIME_AGORA_COMPAT_EVIDENCE, "utf8"),
+);
 manifest.profile = process.env.PANTHEON_RUNTIME_PROFILE;
 manifest.deploymentProfile = process.env.PANTHEON_RUNTIME_PROFILE;
 manifest.pairId = process.env.PANTHEON_RUNTIME_PAIR_ID;

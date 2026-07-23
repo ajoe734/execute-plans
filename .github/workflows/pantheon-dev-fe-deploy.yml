@@ -527,6 +527,34 @@ jobs:
             `${Object.entries(values).map(([key, value]) => `${key}=${value}`).join("\n")}\n`, "utf8");
           NODE
 
+      - name: Checkout protected Pantheon Agora gate controller
+        uses: actions/checkout@v4
+        with:
+          repository: ajoe734/pantheon
+          ref: dev
+          path: .pantheon-agora-compat
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Enforce exact accepted Agora pair before release controller
+        id: agora_compat
+        shell: bash
+        env:
+          EXPECTED_FRONTEND_SHA: ${{ steps.gate.outputs.candidate_sha }}
+          EXPECTED_BFF_SHA: ${{ steps.pair.outputs.bff_sha }}
+        run: |
+          set -euo pipefail
+          evidence_path="${PANTHEON_AUDIT_RUN_ROOT}/agora-compatibility-gate.input.json"
+          python3 .pantheon-agora-compat/scripts/agora_compat_manifest.py deployment-gate \
+            --manifest .pantheon-agora-compat/docs/contracts/agora/dev-compatibility-manifest.json \
+            --frontend-root "${GITHUB_WORKSPACE}" \
+            --backend-dev-ref refs/remotes/origin/dev \
+            --frontend-dev-ref refs/remotes/origin/dev \
+            --backend-runtime-commit "${EXPECTED_BFF_SHA}" \
+            --frontend-runtime-commit "${EXPECTED_FRONTEND_SHA}" \
+            --evidence-out "${evidence_path}"
+          echo "evidence_path=${evidence_path}" >> "$GITHUB_OUTPUT"
+
       - name: Run target-runner controller regression harness
         id: controller_regression
         shell: bash
@@ -542,6 +570,7 @@ jobs:
           PANTHEON_DEPLOY_CANDIDATE_SHA: ${{ steps.gate.outputs.candidate_sha }}
           PANTHEON_DEPLOY_BRANCH: dev
           PANTHEON_DEPLOY_CANDIDATE_DIR: .release-candidate
+          PANTHEON_DEPLOY_AGORA_COMPAT_EVIDENCE: ${{ steps.agora_compat.outputs.evidence_path }}
           PANTHEON_DEPLOY_GATE_RUN_ID: ${{ steps.gate.outputs.gate_run_id }}
           PANTHEON_DEPLOY_GITHUB_ARTIFACT_DIGEST: ${{ steps.gate.outputs.github_artifact_digest }}
           PANTHEON_DEPLOY_EXPECTED_DEV_SHA: ${{ steps.gate.outputs.current_dev_sha }}
@@ -575,6 +604,7 @@ jobs:
           CONTROLLER_OUTCOME: ${{ steps.controller.outcome }}
           ARTIFACT_TRANSPORT_OUTCOME: ${{ steps.artifact_transport.outcome }}
           PAIR_OUTCOME: ${{ steps.pair.outcome }}
+          AGORA_COMPAT_OUTCOME: ${{ steps.agora_compat.outcome }}
           CONTROLLER_REGRESSION_OUTCOME: ${{ steps.controller_regression.outcome }}
           DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
           DEPLOYMENT_PROFILE: ${{ steps.gate.outputs.deployment_profile }}
@@ -626,6 +656,7 @@ jobs:
                   "controller": os.environ.get("CONTROLLER_OUTCOME", ""),
                   "artifactTransport": os.environ.get("ARTIFACT_TRANSPORT_OUTCOME", ""),
                   "pair": os.environ.get("PAIR_OUTCOME", ""),
+                  "agoraCompatibility": os.environ.get("AGORA_COMPAT_OUTCOME", ""),
                   "controllerRegression": os.environ.get("CONTROLLER_REGRESSION_OUTCOME", ""),
                   "deploy": os.environ.get("DEPLOY_OUTCOME", ""),
               },
@@ -835,7 +866,7 @@ jobs:
       - name: Checkout exact trusted proof controller
         uses: actions/checkout@v4
         with:
-          ref: ${{ needs.deploy.outputs.candidate_sha }}
+          ref: ${{ needs.deploy.outputs.current_dev_sha }}
           fetch-depth: 0
           persist-credentials: false
 
@@ -935,6 +966,32 @@ jobs:
             --profile write-proof)"
           [[ "$read_only_digest" == "$EXPECTED_READ_ONLY_DIGEST" ]]
           [[ "$write_proof_digest" == "$EXPECTED_WRITE_PROOF_DIGEST" ]]
+
+      - name: Checkout protected Pantheon Agora gate controller
+        uses: actions/checkout@v4
+        with:
+          repository: ajoe734/pantheon
+          ref: dev
+          path: .pantheon-agora-compat
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Revalidate exact Agora pair before write activation
+        id: write_agora_compat
+        run: |
+          set -euo pipefail
+          evidence_dir="${RUNNER_TEMP%/}/pantheon-proof-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          evidence_path="${evidence_dir}/agora-compatibility-gate.input.json"
+          mkdir -p "${evidence_dir}"
+          python3 .pantheon-agora-compat/scripts/agora_compat_manifest.py deployment-gate \
+            --manifest .pantheon-agora-compat/docs/contracts/agora/dev-compatibility-manifest.json \
+            --frontend-root "${GITHUB_WORKSPACE}" \
+            --backend-dev-ref refs/remotes/origin/dev \
+            --frontend-dev-ref refs/remotes/origin/dev \
+            --backend-runtime-commit "${EXACT_BFF_SHA}" \
+            --frontend-runtime-commit "${EXACT_FE_SHA}" \
+            --evidence-out "${evidence_path}"
+          echo "evidence_path=${evidence_path}" >> "$GITHUB_OUTPUT"
 
       - name: Create parent proof binding
         id: binding
@@ -1100,6 +1157,7 @@ jobs:
           PANTHEON_DEPLOY_CANDIDATE_SHA: ${{ needs.deploy.outputs.candidate_sha }}
           PANTHEON_DEPLOY_BRANCH: dev
           PANTHEON_DEPLOY_CANDIDATE_DIR: .release-candidate
+          PANTHEON_DEPLOY_AGORA_COMPAT_EVIDENCE: ${{ steps.write_agora_compat.outputs.evidence_path }}
           PANTHEON_DEPLOY_GATE_RUN_ID: ${{ needs.deploy.outputs.source_gate_run_id }}
           PANTHEON_DEPLOY_GITHUB_ARTIFACT_DIGEST: ${{ needs.deploy.outputs.source_artifact_digest }}
           PANTHEON_DEPLOY_EXPECTED_DEV_SHA: ${{ needs.deploy.outputs.current_dev_sha }}
