@@ -71,7 +71,6 @@ function findPantheonRoot() {
     path.join(repoRoot, "pantheon-contract"),
     path.join(repoRoot, "..", "pantheon"),
     path.join(repoRoot, "..", "..", "pantheon"),
-    "/tmp/pantheon-worker-worktrees/pantheon/ag-compat-001-fe",
     "/home/lupin/pantheon",
   ].filter(Boolean);
 
@@ -150,6 +149,15 @@ function loadBundle(pantheonRoot) {
 
   if (mismatches.length > 0) {
     fail(`Pantheon Agora bundle is not reproducible:\n${mismatches.join("\n")}`);
+  }
+
+  const handoffPath = path.join(pantheonRoot, "docs/contracts/agora/backend-generation-input.v1_13.json");
+  if (fs.existsSync(handoffPath)) {
+    const handoff = readJson(handoffPath);
+    const expectedContractCommit = "9e909de182f9f2379d23e8e6b81eefec29ffbce7";
+    if (handoff.backend?.contract_commit !== expectedContractCommit) {
+      fail(`Backend handoff contract_commit mismatch: expected ${expectedContractCommit}, actual ${handoff.backend?.contract_commit}`);
+    }
   }
 
   const schemaEntries = Object.keys(files)

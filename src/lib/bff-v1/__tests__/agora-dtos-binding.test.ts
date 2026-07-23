@@ -126,7 +126,7 @@ describe("Agora generated DTO client bindings", () => {
     expect(genScoreResult.band).toBe("priority_review");
   });
 
-  it("workshops.ts exports generated v1.13 operation envelope DTO types", () => {
+  it("workshops.ts exports generated v1.13 operation envelope DTO types and function signatures", () => {
     const listEnv: WorkshopVersionListEnvelope = {
       data: {
         versions: [],
@@ -144,5 +144,27 @@ describe("Agora generated DTO client bindings", () => {
 
     const genListEnv: GeneratedWorkshopVersionListEnvelope = listEnv;
     expect(genListEnv.meta.canonical_authority).toBe("strategy_registry");
+
+    // Verify workshops.ts client function return types assignability
+    type ListFnReturn = ReturnType<typeof import("../agora/workshops").listWorkshopVersions>;
+    type CreateFnReturn = ReturnType<typeof import("../agora/workshops").createWorkshopVersion>;
+    type SelectFnReturn = ReturnType<typeof import("../agora/workshops").selectWorkshopVersion>;
+    type ResearchFnReturn = ReturnType<typeof import("../agora/workshops").dispatchWorkshopResearchRun>;
+    type ConsultFnReturn = ReturnType<typeof import("../agora/workshops").openWorkshopConsultation>;
+    type ConcludeFnReturn = ReturnType<typeof import("../agora/workshops").concludeWorkshop>;
+
+    const _testListRet: Promise<GeneratedWorkshopVersionListEnvelope> = null as unknown as ListFnReturn;
+    const _testCreateRet: Promise<GeneratedWorkshopVersionCreateEnvelope> = null as unknown as CreateFnReturn;
+    const _testSelectRet: Promise<GeneratedWorkshopVersionSelectEnvelope> = null as unknown as SelectFnReturn;
+    const _testResearchRet: Promise<GeneratedWorkshopResearchRunEnvelope> = null as unknown as ResearchFnReturn;
+    const _testConsultRet: Promise<GeneratedWorkshopConsultationEnvelope> = null as unknown as ConsultFnReturn;
+    const _testConcludeRet: Promise<GeneratedWorkshopConcludeEnvelope> = null as unknown as ConcludeFnReturn;
+
+    expect(_testListRet).toBeNull();
+    expect(_testCreateRet).toBeNull();
+    expect(_testSelectRet).toBeNull();
+    expect(_testResearchRet).toBeNull();
+    expect(_testConsultRet).toBeNull();
+    expect(_testConcludeRet).toBeNull();
   });
 });
