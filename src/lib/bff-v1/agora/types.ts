@@ -2501,6 +2501,77 @@ export interface WorkshopStorageContract {
   "ag_task"?: "AG-DES-SW-PRIV-001";
 }
 
+export type RetentionClass = "workshop_default" | "user_saved" | "ephemeral_attachment" | "legal_hold";
+
+export type ContentObjectState = "active" | "deleted" | "orphaned";
+
+export interface PrivateContentDescriptor {
+  "private_content_ref": PrivateContentRef;
+  "tenant_id": string;
+  "owner_user_id": string;
+  "workshop_id": string;
+  "event_id"?: string | null;
+  "content_type": string;
+  "retention_class": RetentionClass;
+  "expires_at"?: string | null;
+  "state": ContentObjectState;
+  "created_at": string;
+}
+
+export interface DecryptAuditRecord {
+  "private_content_ref": PrivateContentRef;
+  "tenant_id": string;
+  "owner_user_id": string;
+  "actor_ref": string;
+  "purpose": string;
+  "request_id": string;
+  "accessed_at": string;
+  "outcome": "success" | "denied" | "expired" | "not_found";
+}
+
+export interface RedactionResult {
+  "redacted_summary": string;
+  "redaction_policy_version": string;
+  "redaction_status": "completed";
+}
+
+export interface EncryptionEnvelopeMetadata {
+  "encrypted_dek": string;
+  "kek_key_version": string;
+  "nonce": string;
+  "tag": string;
+  "ciphertext_sha256": string;
+}
+
+export type WriteSequenceStep = "authenticate_and_resolve_scope" | "validate_size_and_type" | "reserve_event_id_and_idempotency_record" | "redact_plaintext_in_memory" | "encrypt_and_write_object" | "transactional_create_or_update_workshop_aggregate" | "commit_outbox_event" | "mark_ciphertext_orphaned_on_db_failure" | "return_response";
+
+export type PrivateContentErrorCode = "PRIVATE_CONTENT_STORE_UNAVAILABLE" | "PRIVATE_CONTENT_REDACTION_UNAVAILABLE" | "PRIVATE_CONTENT_EXPIRED" | "PRIVATE_CONTENT_ACCESS_DENIED" | "STRATEGY_REFERENCE_MISMATCH" | "STRATEGY_REFERENCE_NOT_FOUND" | "WORKSHOP_ALREADY_CONCLUDED" | "WORKSHOP_ARCHIVED" | "WORKSHOP_VERSION_REQUIRED" | "CONCURRENT_MODIFICATION";
+
+export interface PrivateContentErrorResponse {
+  "error_code": PrivateContentErrorCode;
+  "http_status": number;
+  "request_id"?: string;
+  "message"?: string;
+}
+
+export interface AgoraPrivateContentObject {
+  "private_content_ref": PrivateContentRef;
+  "tenant_id": string;
+  "owner_user_id": string;
+  "workshop_id": string;
+  "event_id"?: string | null;
+  "object_uri": string;
+  "ciphertext_sha256": string;
+  "encrypted_dek": string;
+  "kek_key_version": string;
+  "content_type": string;
+  "retention_class": RetentionClass;
+  "expires_at"?: string | null;
+  "state": ContentObjectState;
+  "created_at": string;
+  "deleted_at"?: string | null;
+}
+
 export interface GovernedIntentHandoff {
   "spec_version": "1.0";
   "handoff_id": string;
@@ -3268,11 +3339,26 @@ export interface CandidateScoreResult {
   "effective_score": number;
   "rank"?: number | null;
   "band": "priority_review" | "discuss" | "needs_research" | "park" | "suppressed";
-  "components": Array<unknown>;
+  "components": Array<score_component>;
   "blockers": Array<string>;
   "data_cutoff": string;
   "scored_at": string;
   "override_reason"?: string | null;
+}
+
+export interface score_component {
+  "component_id": string;
+  "label": string;
+  "category": "alpha" | "confidence" | "liquidity" | "risk" | "execution" | "data_quality" | "custom";
+  "raw_value"?: number | null;
+  "normalized_value"?: number | null;
+  "transform": "min_max" | "robust_zscore" | "percentile_rank" | "binary" | "logistic" | "piecewise_linear" | "inverse_percentile";
+  "direction": "higher_better" | "lower_better";
+  "weight": number;
+  "contribution": number;
+  "missing_policy": "reject_candidate" | "score_zero" | "impute_median" | "mark_needs_research" | "cap_final_score" | "not_applicable";
+  "evidence_refs": Array<string>;
+  "explanation"?: string;
 }
 
 export type GovernedActionAuthorityRequest = unknown & unknown;
@@ -3496,7 +3582,7 @@ export interface WidgetSpec {
   "metadata"?: Record<string, unknown>;
 }
 
-export type AgoraSchema = AgoraUserScope | agora_capability | agora_servant_policy | CandidatePool | DashboardRecipe | PersonalizationEvent | ResearchPlan | ResearchRunSummary | ServantProfile | ShadowDecision | StrategyCompleteness | StrategyWorkshop | TradingEvent | TradingIntent | TradingRoomWorkspaceContract | TradingRoomWorkspaceProposal | TradingRoomWorkspace | TradingRoomViewSpec | TradingRoomWidgetSpec | WidgetPlacement | WidgetSize | DataAvailabilitySummary | PersonalizationSummary | WorkspaceLayoutOperation | WidgetRevisionProposal | TradingRoomDashboardVersion | WorkspaceChangeLogEntry | WorkspaceError | AgoradailyPersonainteractionandgovernedcandidatecontracts | AuthorityBoundary | EvidenceRef | InteractionContextSnapshot | ImmutableHumanRequest | PersonaParticipantSnapshot | ProviderInvocation | ProductionContentProvenance | RecommendedMeasure | TypedPersonaOpinion | InteractionSynthesis | InteractionSubmitRequestV2 | InteractionResource | CandidateFromMeasureRequest | CandidateDecisionRequest | CandidateDecisionRecord | AuthoritativeValidationRequest | AuthoritativeValidationReceipt | FormalApprovalReceipt | AgoraStrategyPerformanceTruth | SourceAvailability | ComplianceMetric | InterventionRecord | ExecutionHistoryRow | PerformanceWarning | SuggestionProvenance | AdjustmentSuggestion | StrategyPerformanceProjection | PerformanceProjectionEnvelope | SuggestionActionRequest | SuggestionActionReceipt | SuggestionActionEnvelope | DurableStrategyWorkshopversionoperations | WorkshopVersionLink | AuthoritativeStrategySpecReadback | WorkshopVersionResource | WorkshopVersionListEnvelope | WorkshopVersionCreateEnvelope | WorkshopVersionSelectResource | WorkshopVersionSelectEnvelope | LegacyVersionBackfillRule | DurableStrategyWorkshopoperationlifecycle | WorkshopOperationCommandReceipt | WorkshopResearchRunResource | WorkshopResearchRunEnvelope | WorkshopConsultationResource | WorkshopConsultationEnvelope | WorkshopConcludeResource | WorkshopConcludeEnvelope | WorkshopConcludeFinalVersionRule | WorkshopOperationDurabilityRule | CandidateMemberTruthProjectionBundle | FieldProvenance | UnavailableField | ComponentDigest | CandidateRationaleValue | CandidateConcernsValue | CandidateNextEventValue | CandidateEvidenceItem | CandidateEvidenceValue | CandidateDetailsValue | CandidateRationaleAvailableField | CandidateConcernsAvailableField | CandidateNextEventAvailableField | CandidateEvidenceAvailableField | CandidateDetailsAvailableField | CandidateFieldState | CandidateRationaleFieldState | CandidateConcernsFieldState | CandidateNextEventFieldState | CandidateEvidenceFieldState | CandidateDetailsFieldState | CandidateTruthFields | ScoreSemanticsEntry | CandidateScoreSemantics | CandidateMemberTruthProjection | CandidateMemberPageInfo | CandidateMemberListFreshness | ChartSpecV1 | field_encoding | transform | interaction | AgoraCrossRepoCompatibilityManifest | DashboardRecipeV2 | dashboard_view | widget_placement | WidgetSpecV2 | PrivateContentRef | StrategyRefContract | strategy_ref_input | workshop_strategy_projection | workshop_conclude_refs | first_version_link_request | strategy_ref_error_codes | create_from_draft_semantics | free_form_semantics | WorkshopEvent | WorkshopPersistenceContract | workshop_status | strategy_workshop_session_row | strategy_workshop_event_row | strategy_workshop_version_link_row | strategy_completeness_snapshot_row | agora_private_content_object_row | WorkshopStorageContract | GovernedIntentHandoff | actor | evidence_ref | ResearchPlanExecution | stage | ResearchRunProjection | progress | metric | StrategyReadinessAssessment | gate | requirement | TradingDecisionEvent | TradingRoomAggregate | VersionCompare | version_ref | VersionPatchProposal | patch_operation | predicted_effect | WorkshopCard | payload_user_strategy_description | payload_servant_reconstruction | payload_completeness_update | payload_missing_definition | payload_next_question | payload_research_plan_proposal | payload_research_progress | payload_research_result | payload_consult_result | payload_version_patch_proposal | payload_version_compare | payload_readiness_gate | WorkshopStreamEvent | CandidateDiscussion | CandidateMemberReview | CandidateMonitoringStatus | CandidateScoreResult | GovernedActionAuthorityRequest | sessionActorRef | soloEligibility | nullableString | nullableDateTime | PersonaOpinionConsultationEvent | participant | contextRef | opinion | WinnerBranchCompleteness | AgoraPINTandOODAliveroutepayloads | ContextRef | ResolveContextRequest | EligibilityRequest | SubmitInteractionRequest | ProposalCreateRequest | ProposalActionRequest | OodaPacket | AgoraStrategyWorkshopliveoperationpayloads | JsonPatchOperation | WorkshopVersionCreateRequest | WorkshopResearchRunRequest | WorkshopConsultationRequest | WorkshopConcludeRequest | WorkshopCommandReceipt | NoDirectActionProof | WorkshopLiveOperationEnvelope | WidgetSpec;
+export type AgoraSchema = AgoraUserScope | agora_capability | agora_servant_policy | CandidatePool | DashboardRecipe | PersonalizationEvent | ResearchPlan | ResearchRunSummary | ServantProfile | ShadowDecision | StrategyCompleteness | StrategyWorkshop | TradingEvent | TradingIntent | TradingRoomWorkspaceContract | TradingRoomWorkspaceProposal | TradingRoomWorkspace | TradingRoomViewSpec | TradingRoomWidgetSpec | WidgetPlacement | WidgetSize | DataAvailabilitySummary | PersonalizationSummary | WorkspaceLayoutOperation | WidgetRevisionProposal | TradingRoomDashboardVersion | WorkspaceChangeLogEntry | WorkspaceError | AgoradailyPersonainteractionandgovernedcandidatecontracts | AuthorityBoundary | EvidenceRef | InteractionContextSnapshot | ImmutableHumanRequest | PersonaParticipantSnapshot | ProviderInvocation | ProductionContentProvenance | RecommendedMeasure | TypedPersonaOpinion | InteractionSynthesis | InteractionSubmitRequestV2 | InteractionResource | CandidateFromMeasureRequest | CandidateDecisionRequest | CandidateDecisionRecord | AuthoritativeValidationRequest | AuthoritativeValidationReceipt | FormalApprovalReceipt | AgoraStrategyPerformanceTruth | SourceAvailability | ComplianceMetric | InterventionRecord | ExecutionHistoryRow | PerformanceWarning | SuggestionProvenance | AdjustmentSuggestion | StrategyPerformanceProjection | PerformanceProjectionEnvelope | SuggestionActionRequest | SuggestionActionReceipt | SuggestionActionEnvelope | DurableStrategyWorkshopversionoperations | WorkshopVersionLink | AuthoritativeStrategySpecReadback | WorkshopVersionResource | WorkshopVersionListEnvelope | WorkshopVersionCreateEnvelope | WorkshopVersionSelectResource | WorkshopVersionSelectEnvelope | LegacyVersionBackfillRule | DurableStrategyWorkshopoperationlifecycle | WorkshopOperationCommandReceipt | WorkshopResearchRunResource | WorkshopResearchRunEnvelope | WorkshopConsultationResource | WorkshopConsultationEnvelope | WorkshopConcludeResource | WorkshopConcludeEnvelope | WorkshopConcludeFinalVersionRule | WorkshopOperationDurabilityRule | CandidateMemberTruthProjectionBundle | FieldProvenance | UnavailableField | ComponentDigest | CandidateRationaleValue | CandidateConcernsValue | CandidateNextEventValue | CandidateEvidenceItem | CandidateEvidenceValue | CandidateDetailsValue | CandidateRationaleAvailableField | CandidateConcernsAvailableField | CandidateNextEventAvailableField | CandidateEvidenceAvailableField | CandidateDetailsAvailableField | CandidateFieldState | CandidateRationaleFieldState | CandidateConcernsFieldState | CandidateNextEventFieldState | CandidateEvidenceFieldState | CandidateDetailsFieldState | CandidateTruthFields | ScoreSemanticsEntry | CandidateScoreSemantics | CandidateMemberTruthProjection | CandidateMemberPageInfo | CandidateMemberListFreshness | ChartSpecV1 | field_encoding | transform | interaction | AgoraCrossRepoCompatibilityManifest | DashboardRecipeV2 | dashboard_view | widget_placement | WidgetSpecV2 | PrivateContentRef | StrategyRefContract | strategy_ref_input | workshop_strategy_projection | workshop_conclude_refs | first_version_link_request | strategy_ref_error_codes | create_from_draft_semantics | free_form_semantics | WorkshopEvent | WorkshopPersistenceContract | workshop_status | strategy_workshop_session_row | strategy_workshop_event_row | strategy_workshop_version_link_row | strategy_completeness_snapshot_row | agora_private_content_object_row | WorkshopStorageContract | RetentionClass | ContentObjectState | PrivateContentDescriptor | DecryptAuditRecord | RedactionResult | EncryptionEnvelopeMetadata | WriteSequenceStep | PrivateContentErrorCode | PrivateContentErrorResponse | AgoraPrivateContentObject | GovernedIntentHandoff | actor | evidence_ref | ResearchPlanExecution | stage | ResearchRunProjection | progress | metric | StrategyReadinessAssessment | gate | requirement | TradingDecisionEvent | TradingRoomAggregate | VersionCompare | version_ref | VersionPatchProposal | patch_operation | predicted_effect | WorkshopCard | payload_user_strategy_description | payload_servant_reconstruction | payload_completeness_update | payload_missing_definition | payload_next_question | payload_research_plan_proposal | payload_research_progress | payload_research_result | payload_consult_result | payload_version_patch_proposal | payload_version_compare | payload_readiness_gate | WorkshopStreamEvent | CandidateDiscussion | CandidateMemberReview | CandidateMonitoringStatus | CandidateScoreResult | score_component | GovernedActionAuthorityRequest | sessionActorRef | soloEligibility | nullableString | nullableDateTime | PersonaOpinionConsultationEvent | participant | contextRef | opinion | WinnerBranchCompleteness | AgoraPINTandOODAliveroutepayloads | ContextRef | ResolveContextRequest | EligibilityRequest | SubmitInteractionRequest | ProposalCreateRequest | ProposalActionRequest | OodaPacket | AgoraStrategyWorkshopliveoperationpayloads | JsonPatchOperation | WorkshopVersionCreateRequest | WorkshopResearchRunRequest | WorkshopConsultationRequest | WorkshopConcludeRequest | WorkshopCommandReceipt | NoDirectActionProof | WorkshopLiveOperationEnvelope | WidgetSpec;
 
 export interface AgoraSchemaByTitle {
   AgoraUserScope: AgoraUserScope;
@@ -3632,6 +3718,16 @@ export interface AgoraSchemaByTitle {
   strategy_completeness_snapshot_row: strategy_completeness_snapshot_row;
   agora_private_content_object_row: agora_private_content_object_row;
   WorkshopStorageContract: WorkshopStorageContract;
+  RetentionClass: RetentionClass;
+  ContentObjectState: ContentObjectState;
+  PrivateContentDescriptor: PrivateContentDescriptor;
+  DecryptAuditRecord: DecryptAuditRecord;
+  RedactionResult: RedactionResult;
+  EncryptionEnvelopeMetadata: EncryptionEnvelopeMetadata;
+  WriteSequenceStep: WriteSequenceStep;
+  PrivateContentErrorCode: PrivateContentErrorCode;
+  PrivateContentErrorResponse: PrivateContentErrorResponse;
+  AgoraPrivateContentObject: AgoraPrivateContentObject;
   GovernedIntentHandoff: GovernedIntentHandoff;
   actor: actor;
   evidence_ref: evidence_ref;
@@ -3668,6 +3764,7 @@ export interface AgoraSchemaByTitle {
   CandidateMemberReview: CandidateMemberReview;
   CandidateMonitoringStatus: CandidateMonitoringStatus;
   CandidateScoreResult: CandidateScoreResult;
+  score_component: score_component;
   GovernedActionAuthorityRequest: GovernedActionAuthorityRequest;
   sessionActorRef: sessionActorRef;
   soloEligibility: soloEligibility;
