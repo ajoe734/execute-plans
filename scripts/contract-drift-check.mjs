@@ -152,12 +152,54 @@ function loadBundle(pantheonRoot) {
   }
 
   const handoffPath = path.join(pantheonRoot, "docs/contracts/agora/backend-generation-input.v1_13.json");
-  if (fs.existsSync(handoffPath)) {
-    const handoff = readJson(handoffPath);
-    const expectedContractCommit = "9e909de182f9f2379d23e8e6b81eefec29ffbce7";
-    if (handoff.backend?.contract_commit !== expectedContractCommit) {
-      fail(`Backend handoff contract_commit mismatch: expected ${expectedContractCommit}, actual ${handoff.backend?.contract_commit}`);
+  if (!fs.existsSync(handoffPath)) {
+    fail(`Backend generation handoff file missing at ${handoffPath}`);
+  }
+  const handoff = readJson(handoffPath);
+  const expectedContractCommit = "9e909de182f9f2379d23e8e6b81eefec29ffbce7";
+  if (handoff.backend?.contract_commit !== expectedContractCommit) {
+    fail(`Backend handoff contract_commit mismatch: expected ${expectedContractCommit}, actual ${handoff.backend?.contract_commit}`);
+  }
+
+  // Validate bundle_index sha256 against handoff
+  const handoffBundleSha = handoff.contract?.bundle_index?.sha256;
+  const actualBundleSha = latest.bundle.bundle_index_sha256 || files[requestedBundleRel] || sha256File(path.join(pantheonRoot, requestedBundleRel));
+  if (handoffBundleSha && actualBundleSha !== handoffBundleSha) {
+    fail(`Handoff bundle_index sha256 mismatch: expected ${handoffBundleSha}, actual ${actualBundleSha}`);
+  }
+
+  // Validate openapi sha256 against handoff
+  const handoffOpenApiSha = handoff.contract?.openapi?.sha256;
+  const openapiRel = openapiRelFromBundlePath(latest.bundle.openapi?.path);
+  const actualOpenApiSha = files[openapiRel] || (fs.existsSync(controlPlanePath(pantheonRoot, openapiRel)) ? sha256File(controlPlanePath(pantheonRoot, openapiRel)) : null);
+  if (handoffOpenApiSha && actualOpenApiSha !== handoffOpenApiSha) {
+    fail(`Handoff openapi sha256 mismatch: expected ${handoffOpenApiSha}, actual ${actualOpenApiSha}`);
+  }
+
+  // Validate required files from handoff
+  for (const reqPath of handoff.frontend_generation?.required_files || []) {
+    const fullReqPath = path.join(pantheonRoot, reqPath);
+    if (!fs.existsSync(fullReqPath)) {
+      fail(`Handoff required file missing: ${reqPath}`);
     }
+  }
+
+  // Validate hash algorithms from handoff
+  if (handoff.frontend_generation?.file_hash_algorithm !== "sha256-exact-git-bytes-v1") {
+    fail(`Unsupported handoff file_hash_algorithm: ${handoff.frontend_generation?.file_hash_algorithm}`);
+  }
+  if (handoff.frontend_generation?.generated_types_hash_algorithm !== "sha256-path-tab-filehash-lf-v1") {
+    fail(`Unsupported handoff generated_types_hash_algorithm: ${handoff.frontend_generation?.generated_types_hash_algorithm}`);
+  }
+
+  // Validate expected output paths from handoff
+  const expectedOutputPaths = handoff.frontend_generation?.expected_output_paths || [];
+  const actualOutputRelPaths = [
+    path.relative(repoRoot, snapshotOutFile),
+    path.relative(repoRoot, typesOutFile),
+  ].sort();
+  if (JSON.stringify(expectedOutputPaths.slice().sort()) !== JSON.stringify(actualOutputRelPaths)) {
+    fail(`Handoff expected_output_paths mismatch: expected ${JSON.stringify(expectedOutputPaths)}, actual ${JSON.stringify(actualOutputRelPaths)}`);
   }
 
   const schemaEntries = Object.keys(files)
