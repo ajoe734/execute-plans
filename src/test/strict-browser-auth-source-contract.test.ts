@@ -59,10 +59,11 @@ describe("strict browser auth source contract", () => {
     expect(combined).not.toMatch(/secSuffix|secretKeys/);
   });
 
-  it("mounts Persona Detail and Agora interaction entry behind ProtectedRoute", () => {
+  it("mounts the complete Management shell and Agora behind ProtectedRoute", () => {
     const app = source("App.tsx");
-    expect(app).toContain('path="personas/:id" element={<ProtectedRoute><PersonaDetailRoute /></ProtectedRoute>}');
+    expect(app).toContain("<Route element={<ProtectedRoute><PlatformShellRoute /></ProtectedRoute>}>");
     expect(app).toContain("<ProtectedRoute><AgoraLayoutRoute /></ProtectedRoute>");
-    expect(app).toContain("<Route element={<PlatformShellRoute />}");
+    expect(app).not.toContain("<Route element={<PlatformShellRoute />}>");
+    expect(app).not.toContain("<ProtectedRoute><PersonaDetailRoute /></ProtectedRoute>");
   });
 });

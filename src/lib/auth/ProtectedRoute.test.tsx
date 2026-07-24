@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
@@ -19,11 +19,21 @@ vi.mock("./AuthProvider", () => ({
 
 import { ProtectedRoute } from "./ProtectedRoute";
 
+function AuthenticationPage() {
+  const location = useLocation();
+  return (
+    <>
+      <div>Authentication page</div>
+      <div data-testid="auth-location">{`${location.pathname}${location.search}`}</div>
+    </>
+  );
+}
+
 function renderRoute() {
   return render(
     <MemoryRouter initialEntries={["/agora/strategy-workshop/ws-1?mode=challenge"]}>
       <Routes>
-        <Route path="/auth" element={<div>Authentication page</div>} />
+        <Route path="/auth" element={<AuthenticationPage />} />
         <Route
           path="/agora/strategy-workshop/:id"
           element={<ProtectedRoute><div>Persona interaction</div></ProtectedRoute>}
@@ -48,6 +58,9 @@ describe("Persona and Agora auth route boundary", () => {
   it("redirects an unauthenticated browser to /auth", () => {
     renderRoute();
     expect(screen.getByText("Authentication page")).toBeInTheDocument();
+    expect(screen.getByTestId("auth-location")).toHaveTextContent(
+      "/auth?reason=auth-required&from=%2Fagora%2Fstrategy-workshop%2Fws-1%3Fmode%3Dchallenge",
+    );
     expect(screen.queryByText("Persona interaction")).not.toBeInTheDocument();
   });
 
