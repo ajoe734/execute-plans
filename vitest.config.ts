@@ -9,12 +9,13 @@ export default defineConfig({
     globals: true,
     setupFiles: ["./src/test/setup.ts"],
     include: ["src/**/*.{test,spec}.{ts,tsx}"],
-    // A clean checkout must not need a developer's local Supabase env just to
+    // A clean checkout must not need a developer's GCP project config just to
     // import auth-dependent components. These loopback-only placeholders are
     // confined to Vitest and are never used by a production build.
     env: {
-      VITE_SUPABASE_URL: "http://127.0.0.1:54321",
-      VITE_SUPABASE_PUBLISHABLE_KEY: "vitest-local-anon-key",
+      VITE_GCP_IDENTITY_API_KEY: "AIza00000000000000000000000000000000000",
+      VITE_GCP_IDENTITY_PROJECT_ID: "pantheon-test",
+      VITE_GCP_IDENTITY_AUTH_DOMAIN: "pantheon-test.firebaseapp.com",
     },
   },
   resolve: {

@@ -7,8 +7,13 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import type { AuthChangeEvent, Session, User } from "@supabase/supabase-js";
-import { supabase } from "@/integrations/supabase/client";
+import { onIdTokenChanged, signOut as signOutGcpIdentity, type User } from "firebase/auth";
+import {
+  gcpIdentityAuth,
+  gcpIdentityReady,
+  gcpIdentitySession,
+  type GcpIdentitySession,
+} from "@/integrations/gcp/identity";
 import {
   clearBffBrowserSession,
   logoutBffBrowserSession,
@@ -20,7 +25,7 @@ import {
 import { hasDevLoginCredentials } from "./devLoginHelper";
 
 export interface AuthContextValue {
-  session: Session | null;
+  session: GcpIdentitySession | null;
   user: User | null;
   /** BFF-owned identity/readiness; never inferred from browser-editable claims. */
   bffSession: VerifiedBffBrowserSession | null;
@@ -39,15 +44,18 @@ const AuthContext = createContext<AuthContextValue>({
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null);
+  const [session, setSession] = useState<GcpIdentitySession | null>(null);
   const [bffSession, setBffSession] = useState<VerifiedBffBrowserSession | null>(null);
   const [bffError, setBffError] = useState<Error | null>(null);
   const [loading, setLoading] = useState(true);
-  const sessionRef = useRef<Session | null>(null);
+  const sessionRef = useRef<GcpIdentitySession | null>(null);
   const syncVersion = useRef(0);
 
-  const applySession = useCallback((event: AuthChangeEvent | "BOOTSTRAP", next: Session | null) => {
+  const applyUser = useCallback(async (user: User | null) => {
     const version = ++syncVersion.current;
+    const prior = sessionRef.current;
+    const next = user ? await gcpIdentitySession(user) : null;
+    if (syncVersion.current !== version) return;
     sessionRef.current = next;
     setSession(next);
     setBffSession(null);
@@ -66,7 +74,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     setLoading(true);
-    const verification = event === "TOKEN_REFRESHED" && next
+    const verification = prior?.user.uid === next?.user.uid && prior?.idToken !== next?.idToken
       ? refreshAndVerifyBffBrowserSession()
       : verifyBffBrowserSession();
 
@@ -79,7 +87,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })
       .catch((error: unknown) => {
         if (syncVersion.current !== version) return;
-        // A Supabase-only session is never enough to cross the product route
+        // A first-factor-only Identity Platform session is never enough to cross the product route
         // boundary. Drop the header provider and retain the error for the auth UI.
         clearBffBrowserSession();
         setBffSession(null);
@@ -89,25 +97,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    // Set up listener FIRST, then fetch session.
-    let authEventSeen = false;
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, next) => {
-      authEventSeen = true;
-      applySession(event, next);
-    });
-    supabase.auth.getSession().then(({ data }) => {
-      if (!authEventSeen) applySession("BOOTSTRAP", data.session);
-    }).catch((error: unknown) => {
-      clearBffBrowserSession();
-      setBffError(error instanceof Error ? error : new Error(String(error)));
-      setLoading(false);
-    });
+    let unsubscribe = () => {};
+    let active = true;
+    void gcpIdentityReady
+      .then(() => {
+        if (!active) return;
+        unsubscribe = onIdTokenChanged(gcpIdentityAuth, (user) => {
+          void applyUser(user).catch((error: unknown) => {
+            clearBffBrowserSession();
+            setBffError(error instanceof Error ? error : new Error(String(error)));
+            setLoading(false);
+          });
+        });
+      })
+      .catch((error: unknown) => {
+        clearBffBrowserSession();
+        setBffError(error instanceof Error ? error : new Error(String(error)));
+        setLoading(false);
+      });
     return () => {
-      subscription.unsubscribe();
+      active = false;
+      unsubscribe();
       ++syncVersion.current;
       clearBffBrowserSession();
     };
-  }, [applySession]);
+  }, [applyUser]);
 
   const signOut = useCallback(async () => {
     const current = sessionRef.current;
@@ -124,10 +138,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    let supabaseLogoutError: unknown;
+    let identityLogoutError: unknown;
     try {
-      const { error } = await supabase.auth.signOut();
-      if (error) supabaseLogoutError = error;
+      await signOutGcpIdentity(gcpIdentityAuth);
+    } catch (error: unknown) {
+      identityLogoutError = error;
     } finally {
       ++syncVersion.current;
       sessionRef.current = null;
@@ -138,7 +153,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false);
     }
 
-    if (supabaseLogoutError) throw supabaseLogoutError;
+    if (identityLogoutError) throw identityLogoutError;
     if (bffLogoutError) throw bffLogoutError;
   }, []);
 

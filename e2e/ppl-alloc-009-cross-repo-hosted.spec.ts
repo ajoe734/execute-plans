@@ -17,13 +17,19 @@ import {
   type Page,
   type TestInfo,
 } from "@playwright/test";
+import {
+  gcpIdentityStorageKey,
+  gcpIdentityStoredUser,
+} from "./helpers/auth";
 import { bindPplAlloc009RecommendationSnapshot } from "./helpers/pplAlloc009Recommendation";
 
 const FE_BASE = String(process.env.PPL_ALLOC_009_FE_BASE_URL ?? "").replace(/\/+$/u, "");
 const BFF_BASE = String(process.env.PPL_ALLOC_009_BFF_BASE_URL ?? "").replace(/\/+$/u, "");
 const EXPECTED_FE_SHA = String(process.env.PPL_ALLOC_009_EXPECTED_FE_SHA ?? "").trim().toLowerCase();
 const EXPECTED_BFF_SHA = String(process.env.PPL_ALLOC_009_EXPECTED_BFF_SHA ?? "").trim().toLowerCase();
-const PUBLIC_SUPABASE_URL = String(process.env.PPL_ALLOC_009_PUBLIC_SUPABASE_URL ?? "").trim();
+const GCP_IDENTITY_API_KEY = String(
+  process.env.PPL_ALLOC_009_GCP_IDENTITY_API_KEY ?? "",
+).trim();
 const TENANT_ID = String(process.env.PPL_ALLOC_009_TENANT_ID ?? "tenant-dev").trim();
 const QUARTER = String(process.env.PPL_ALLOC_009_QUARTER ?? "2026-Q3").trim();
 const OPERATOR_CLIENT_ID = String(process.env.PPL_ALLOC_009_OPERATOR_CLIENT_ID ?? "").trim();
@@ -268,33 +274,20 @@ async function assertExactPair(
 }
 
 async function installHostedSession(page: Page, identity: StrictIdentity): Promise<void> {
-  const supabase = new URL(PUBLIC_SUPABASE_URL);
-  expect(supabase.protocol).toBe("https:");
-  expect(supabase.hostname.endsWith(".supabase.co")).toBe(true);
+  expect(GCP_IDENTITY_API_KEY).toMatch(/^AIza[A-Za-z0-9_-]{35}$/u);
   const claims = bearerClaims(identity.token);
   const nowSeconds = Math.floor(Date.now() / 1000);
   const expiresAt = Number(claims.exp ?? 0);
   expect(expiresAt).toBeGreaterThan(nowSeconds + 120);
-  const storageKey = `sb-${supabase.hostname.split(".")[0]}-auth-token`;
-  const session = {
-    access_token: identity.token,
-    expires_at: expiresAt,
-    expires_in: Math.max(60, expiresAt - nowSeconds),
-    refresh_token: "ppl-alloc-009-no-refresh",
-    token_type: "bearer",
-    user: {
-      app_metadata: {
-        ...record(claims.app_metadata),
-        roles: identity.roles,
-        tenant_id: TENANT_ID,
-      },
-      aud: String(claims.aud ?? "authenticated"),
-      created_at: new Date(nowSeconds * 1000).toISOString(),
-      id: identity.operatorId,
-      role: String(claims.role ?? "authenticated"),
-      user_metadata: record(claims.user_metadata),
-    },
-  };
+  const storageKey = gcpIdentityStorageKey(GCP_IDENTITY_API_KEY);
+  const session = gcpIdentityStoredUser({
+    apiKey: GCP_IDENTITY_API_KEY,
+    email: typeof claims.email === "string"
+      ? claims.email
+      : `${identity.operatorId}@pantheon-dev.invalid`,
+    token: identity.token,
+    uid: identity.operatorId,
+  });
   await page.addInitScript(
     ({ key, storedSession }) => {
       window.sessionStorage.setItem(key, JSON.stringify(storedSession));
@@ -508,7 +501,7 @@ test.describe("PPL-ALLOC-009 hosted paper allocation acceptance", () => {
         realWritesEnabled: false,
       },
     });
-    expect(PUBLIC_SUPABASE_URL).not.toBe("");
+    expect(GCP_IDENTITY_API_KEY).toMatch(/^AIza[A-Za-z0-9_-]{35}$/u);
     expect(OPERATOR_CLIENT_ID).not.toBe("");
     expect(OPERATOR_CLIENT_SECRET).not.toBe("");
     expect(APPROVER_CLIENT_ID).not.toBe("");

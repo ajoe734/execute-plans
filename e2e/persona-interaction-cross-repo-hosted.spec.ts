@@ -8,7 +8,11 @@
  */
 import { randomUUID } from "node:crypto";
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
-import { roleTokenFromEnv } from "./helpers/auth";
+import {
+  gcpIdentityStorageKey,
+  gcpIdentityStoredUser,
+  roleTokenFromEnv,
+} from "./helpers/auth";
 
 const FE_BASE = (process.env.PANTHEON_FE_BASE_URL ?? "").replace(/\/$/, "");
 const BFF_BASE = (process.env.PANTHEON_BFF_BASE_URL ?? "").replace(/\/$/, "");
@@ -18,7 +22,9 @@ const VIEWER_TOKEN = roleTokenFromEnv("viewer", ["PANTHEON_PERSONA_INTERACTION_V
 const WRITE_PROOF = process.env.PANTHEON_PERSONA_INTERACTION_WRITE_PROOF === "1";
 const ENSURED_PERSONA_ID = String(process.env.PANTHEON_PERSONA_INTERACTION_PERSONA_ID ?? "").trim();
 const EXPECTED_BFF_SHA = String(process.env.PANTHEON_BFF_SHA ?? "").trim().toLowerCase();
-const PUBLIC_SUPABASE_URL = String(process.env.PANTHEON_PUBLIC_SUPABASE_URL ?? "").trim();
+const GCP_IDENTITY_API_KEY = String(
+  process.env.PANTHEON_PUBLIC_GCP_IDENTITY_API_KEY ?? "",
+).trim();
 const DEV_BFF_HOST = "pantheon-lupin-dev-bff.35.201.204.12.sslip.io";
 const DEV_FE_HOST = "pantheon-lupin-dev-fe.35.201.204.12.sslip.io";
 
@@ -147,9 +153,7 @@ async function installVerifiedHostedProofSession(
   expect(new URL(FE_BASE).hostname).toBe(DEV_FE_HOST);
   expect(new URL(BFF_BASE).hostname).toBe(DEV_BFF_HOST);
   expect(EXPECTED_BFF_SHA).toMatch(/^[0-9a-f]{40}$/);
-  const supabase = new URL(PUBLIC_SUPABASE_URL);
-  expect(supabase.protocol).toBe("https:");
-  expect(supabase.hostname.endsWith(".supabase.co")).toBe(true);
+  expect(GCP_IDENTITY_API_KEY).toMatch(/^AIza[A-Za-z0-9_-]{35}$/u);
 
   const nowSeconds = Math.floor(Date.now() / 1000);
   const claims = hostedBearerClaims(input.token);
@@ -158,25 +162,15 @@ async function installVerifiedHostedProofSession(
   expect(input.minimumTtlSeconds).toBeGreaterThanOrEqual(240);
   expect(Number(claims.exp ?? 0)).toBeGreaterThan(nowSeconds + input.minimumTtlSeconds);
 
-  const expiresAt = Number(claims.exp);
-  const projectRef = supabase.hostname.split(".")[0];
-  const storageKey = `sb-${projectRef}-auth-token`;
-  const storedSession = {
-    access_token: input.token,
-    refresh_token: "hosted-proof-no-refresh",
-    expires_in: Math.max(60, expiresAt - nowSeconds),
-    expires_at: expiresAt,
-    token_type: "bearer",
-    user: {
-      id: input.operatorId,
-      aud: String(claims.aud ?? "authenticated"),
-      role: String(claims.role ?? "authenticated"),
-      email: typeof claims.email === "string" ? claims.email : undefined,
-      app_metadata: record(claims.app_metadata),
-      user_metadata: record(claims.user_metadata),
-      created_at: new Date(nowSeconds * 1000).toISOString(),
-    },
-  };
+  const storageKey = gcpIdentityStorageKey(GCP_IDENTITY_API_KEY);
+  const storedSession = gcpIdentityStoredUser({
+    apiKey: GCP_IDENTITY_API_KEY,
+    email: typeof claims.email === "string"
+      ? claims.email
+      : `${input.operatorId}@pantheon-dev.invalid`,
+    token: input.token,
+    uid: input.operatorId,
+  });
   await page.addInitScript(
     ({ key, session }) => {
       try {

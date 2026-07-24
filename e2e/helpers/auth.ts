@@ -36,7 +36,7 @@ export type DevLoginOptions = {
   operatorId?: string;
   pageBaseUrl?: string;
   roles?: string[];
-  /** Loopback fixtures support same-tab Supabase storage only. */
+  /** Loopback fixtures support same-tab GCP Identity storage only. */
   storage?: "session" | "local" | "both";
   tenantId?: string;
   token?: string;
@@ -267,6 +267,74 @@ export function actorFromAuthorization(value: string | undefined): string {
   return token.split(":")[0] ?? "";
 }
 
+export function gcpIdentityStorageKey(apiKey: string): string {
+  return `firebase:authUser:${apiKey}:[DEFAULT]`;
+}
+
+export function gcpIdentityStoredUser(input: {
+  apiKey: string;
+  email: string;
+  emailVerified?: boolean;
+  token: string;
+  uid: string;
+}): Record<string, unknown> {
+  const claims = (() => {
+    const parts = input.token.split(".");
+    if (parts.length !== 3) return {};
+    try {
+      return JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8")) as Record<string, unknown>;
+    } catch {
+      return {};
+    }
+  })();
+  const expirationTime = Number(claims.exp ?? 0) * 1000;
+  return {
+    apiKey: input.apiKey,
+    appName: "[DEFAULT]",
+    createdAt: String(Date.now()),
+    displayName: null,
+    email: input.email,
+    emailVerified: input.emailVerified ?? true,
+    isAnonymous: false,
+    lastLoginAt: String(Date.now()),
+    phoneNumber: null,
+    photoURL: null,
+    providerData: [],
+    stsTokenManager: {
+      accessToken: input.token,
+      expirationTime,
+      refreshToken: "",
+    },
+    tenantId: null,
+    uid: input.uid,
+  };
+}
+
+function loopbackFirebaseToken(session: DevLoginSession): string {
+  if (session.token.split(".").length === 3) return session.token;
+  const now = Math.floor(Date.now() / 1000);
+  const encode = (value: Record<string, unknown>) =>
+    Buffer.from(JSON.stringify(value)).toString("base64url");
+  return [
+    encode({ alg: "HS256", typ: "JWT" }),
+    encode({
+      aud: "pantheon-loopback",
+      email: `${session.operatorId}@loopback.invalid`,
+      email_verified: true,
+      exp: now + 3600,
+      firebase: {
+        sign_in_provider: "password",
+        sign_in_second_factor: "totp",
+      },
+      iat: now,
+      roles: session.roles,
+      sub: session.operatorId,
+      tenant_id: session.tenantId,
+    }),
+    "loopback-fixture-signature",
+  ].join(".");
+}
+
 export function devLoginSession(options: DevLoginOptions = {}): DevLoginSession {
   const roles = options.roles ?? [...DEFAULT_FE_AUTH_ROLES];
   const env = options.env ?? defaultEnv();
@@ -306,20 +374,18 @@ export async function installOidcDevLogin(
     || targetsExternalE2eEnvironment(env)
   ) {
     throw new Error(
-      "installOidcDevLogin cannot synthesize hosted auth; establish a real Supabase/BFF strict browser session instead",
+      "installOidcDevLogin cannot synthesize hosted auth; establish a real GCP Identity/BFF strict browser session instead",
     );
   }
   if (options.storage === "local" || options.storage === "both") {
     throw new Error("Loopback auth fixtures may use same-tab sessionStorage only");
   }
 
-  const configuredSupabaseUrl = envValue(env, [
-    "VITE_SUPABASE_URL",
-    "PANTHEON_PUBLIC_SUPABASE_URL",
-  ]) ?? "http://127.0.0.1:54321";
-  const projectRef = new URL(configuredSupabaseUrl).hostname.split(".")[0];
-  const storageKey = `sb-${projectRef}-auth-token`;
-  const nowSeconds = Math.floor(Date.now() / 1000);
+  const apiKey = envValue(env, [
+    "VITE_GCP_IDENTITY_API_KEY",
+    "PANTHEON_PUBLIC_GCP_IDENTITY_API_KEY",
+  ]) ?? "AIza00000000000000000000000000000000000";
+  const storageKey = gcpIdentityStorageKey(apiKey);
   const operatorReady = session.roles.some((role) =>
     ["admin", "platform_admin", "operator", "ops", "reviewer", "approver", "research_lead"]
       .includes(role.toLowerCase()),
@@ -327,27 +393,12 @@ export async function installOidcDevLogin(
   const capabilities = operatorReady
     ? ["agora.workshop.v1", "agora.persona.interaction.v1"]
     : [];
-  const supabaseSession = {
-    access_token: session.token,
-    refresh_token: `loopback-fixture-refresh-${session.operatorId}`,
-    expires_in: 3600,
-    expires_at: nowSeconds + 3600,
-    token_type: "bearer",
-    user: {
-      id: session.operatorId,
-      aud: "authenticated",
-      role: "authenticated",
-      email: `${session.operatorId}@loopback.invalid`,
-      app_metadata: {
-        provider: "loopback-fixture",
-        providers: ["loopback-fixture"],
-        roles: session.roles,
-        tenant_id: session.tenantId,
-      },
-      user_metadata: {},
-      created_at: new Date(nowSeconds * 1000).toISOString(),
-    },
-  };
+  const storedUser = gcpIdentityStoredUser({
+    apiKey,
+    email: `${session.operatorId}@loopback.invalid`,
+    token: loopbackFirebaseToken(session),
+    uid: session.operatorId,
+  });
 
   const fulfillJson = async (route: Route, body: unknown) => {
     await route.fulfill({
@@ -405,7 +456,7 @@ export async function installOidcDevLogin(
         // Init scripts can run before the page has a durable origin.
       }
     },
-    { key: storageKey, storedSession: supabaseSession },
+    { key: storageKey, storedSession: storedUser },
   );
 
   await page
@@ -413,7 +464,7 @@ export async function installOidcDevLogin(
       ({ key, storedSession }) => {
         window.sessionStorage.setItem(key, JSON.stringify(storedSession));
       },
-      { key: storageKey, storedSession: supabaseSession },
+      { key: storageKey, storedSession: storedUser },
     )
     .catch(() => undefined);
 

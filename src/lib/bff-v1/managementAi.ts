@@ -5,7 +5,7 @@
 //                    ← Pantheon BFF ← provider
 //
 // FE rules enforced by this client:
-//   • NEVER generate an answer locally. No Lovable AI / Supabase Edge fallback.
+//   • NEVER generate an answer locally. No browser AI or edge-function fallback.
 //   • If providerStatus.used !== true OR status ∈ {degraded, disabled, error},
 //     return a typed `ProviderDegraded` result; UI MUST render degraded banner
 //     (not a synthetic answer).

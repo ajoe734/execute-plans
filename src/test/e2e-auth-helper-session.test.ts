@@ -30,34 +30,36 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("loopback Supabase/BFF E2E auth helper", () => {
-  it("installs a Supabase-rehydratable same-tab session and exact BFF auth mocks", async () => {
+describe("loopback GCP Identity/BFF E2E auth helper", () => {
+  it("installs a Firebase SDK-rehydratable same-tab session and exact BFF auth mocks", async () => {
     const { page, handlers } = fakePage();
 
     const installed = await installOidcDevLogin(page, {
       env: {
         PANTHEON_FE_BASE_URL: "http://127.0.0.1:4173",
         PANTHEON_BROWSER_BFF_BASE_URL: "http://127.0.0.1:4173",
-        VITE_SUPABASE_URL: "https://project-ref.supabase.co",
+        VITE_GCP_IDENTITY_API_KEY: "AIza00000000000000000000000000000000000",
       },
       goto: false,
     });
 
     expect(installed.token).toBe(LOCAL_FIXTURE_AUTH_TOKEN);
-    const raw = window.sessionStorage.getItem("sb-project-ref-auth-token");
+    const raw = window.sessionStorage.getItem(
+      "firebase:authUser:AIza00000000000000000000000000000000000:[DEFAULT]",
+    );
     expect(raw).toBeTruthy();
     const stored = JSON.parse(raw ?? "{}") as Record<string, unknown>;
     expect(stored).toMatchObject({
-      access_token: LOCAL_FIXTURE_AUTH_TOKEN,
-      token_type: "bearer",
-      user: {
-        id: "op-fe-gate",
-        app_metadata: { tenant_id: "tenant-dev" },
-        user_metadata: {},
+      apiKey: "AIza00000000000000000000000000000000000",
+      appName: "[DEFAULT]",
+      emailVerified: true,
+      uid: "op-fe-gate",
+      stsTokenManager: {
+        refreshToken: "",
       },
     });
-    expect(stored).toHaveProperty("refresh_token");
-    expect(stored).toHaveProperty("expires_at");
+    expect(String((stored.stsTokenManager as Record<string, unknown>).accessToken)).toContain(".");
+    expect(stored).toHaveProperty("stsTokenManager.expirationTime");
     for (const legacyKey of [
       "pantheon.bff.bearerToken",
       "pantheon_operator_token",
@@ -95,7 +97,7 @@ describe("loopback Supabase/BFF E2E auth helper", () => {
       env: { PANTHEON_FE_BASE_URL: "https://fe.example.test" },
       goto: false,
       token: "real-short-lived-token",
-    })).rejects.toThrow(/real Supabase\/BFF strict browser session/);
+    })).rejects.toThrow(/real GCP Identity\/BFF strict browser session/);
     expect(operations.addInitScript).not.toHaveBeenCalled();
     expect(operations.evaluate).not.toHaveBeenCalled();
     expect(operations.route).not.toHaveBeenCalled();
@@ -109,7 +111,7 @@ describe("loopback Supabase/BFF E2E auth helper", () => {
         PANTHEON_BROWSER_BFF_BASE_URL: "https://bff.example.test",
         PANTHEON_FE_BASE_URL: "http://127.0.0.1:4173",
         PANTHEON_HOSTED_E2E: "1",
-        VITE_SUPABASE_URL: "https://project-ref.supabase.co",
+        VITE_GCP_IDENTITY_API_KEY: "AIza00000000000000000000000000000000000",
       },
     });
 

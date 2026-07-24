@@ -437,8 +437,9 @@ jobs:
       PANTHEON_E2E_STRICT: "1"
       PANTHEON_AUDIT_OUT_DIR: .lovable/audits/current-run
       PANTHEON_LIVE_DEEP_SSE_MS: ${{ vars.PANTHEON_LIVE_DEEP_SSE_MS || '65000' }}
-      PANTHEON_PUBLIC_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
-      PANTHEON_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
+      PANTHEON_PUBLIC_GCP_IDENTITY_API_KEY: ${{ vars.VITE_GCP_IDENTITY_API_KEY }}
+      PANTHEON_PUBLIC_GCP_IDENTITY_PROJECT_ID: ${{ vars.VITE_GCP_IDENTITY_PROJECT_ID }}
+      PANTHEON_PUBLIC_GCP_IDENTITY_AUTH_DOMAIN: ${{ vars.VITE_GCP_IDENTITY_AUTH_DOMAIN }}
 
     steps:
       - uses: actions/checkout@v4
@@ -712,8 +713,9 @@ jobs:
           VITE_BFF_REAL_WRITES: "false"
           VITE_BFF_ALLOW_DEV_STUB_WRITES: "false"
           VITE_BFF_DEV_BEARER_TOKEN: ""
-          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          VITE_GCP_IDENTITY_API_KEY: ${{ vars.VITE_GCP_IDENTITY_API_KEY }}
+          VITE_GCP_IDENTITY_PROJECT_ID: ${{ vars.VITE_GCP_IDENTITY_PROJECT_ID }}
+          VITE_GCP_IDENTITY_AUTH_DOMAIN: ${{ vars.VITE_GCP_IDENTITY_AUTH_DOMAIN }}
         run: |
           set -o pipefail
           npm run build 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/npm-run-build.log"
@@ -730,8 +732,9 @@ jobs:
           VITE_BFF_DEV_BEARER_TOKEN: ""
         run: |
           set -o pipefail
-          VITE_SUPABASE_URL="$PANTHEON_PUBLIC_SUPABASE_URL" \
-          VITE_SUPABASE_PUBLISHABLE_KEY="$PANTHEON_PUBLIC_SUPABASE_PUBLISHABLE_KEY" \
+          VITE_GCP_IDENTITY_API_KEY="$PANTHEON_PUBLIC_GCP_IDENTITY_API_KEY" \
+          VITE_GCP_IDENTITY_PROJECT_ID="$PANTHEON_PUBLIC_GCP_IDENTITY_PROJECT_ID" \
+          VITE_GCP_IDENTITY_AUTH_DOMAIN="$PANTHEON_PUBLIC_GCP_IDENTITY_AUTH_DOMAIN" \
           npm run build -- --outDir dist-write-proof 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/npm-run-build-write-proof.log"
 
       - name: Build persistent operator-live release profile
@@ -746,8 +749,9 @@ jobs:
           VITE_BFF_DEV_BEARER_TOKEN: ""
         run: |
           set -o pipefail
-          VITE_SUPABASE_URL="$PANTHEON_PUBLIC_SUPABASE_URL" \
-          VITE_SUPABASE_PUBLISHABLE_KEY="$PANTHEON_PUBLIC_SUPABASE_PUBLISHABLE_KEY" \
+          VITE_GCP_IDENTITY_API_KEY="$PANTHEON_PUBLIC_GCP_IDENTITY_API_KEY" \
+          VITE_GCP_IDENTITY_PROJECT_ID="$PANTHEON_PUBLIC_GCP_IDENTITY_PROJECT_ID" \
+          VITE_GCP_IDENTITY_AUTH_DOMAIN="$PANTHEON_PUBLIC_GCP_IDENTITY_AUTH_DOMAIN" \
           npm run build -- --outDir dist-operator-live 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/npm-run-build-operator-live.log"
 
       - name: Prepare authenticated immutable three-profile candidate set
@@ -1342,7 +1346,7 @@ jobs:
       EXPECTED_PAIR_ID: ${{ inputs.expected_pair_id }}
       EXPECTED_READ_ONLY_DIGEST: ${{ inputs.expected_read_only_digest }}
       EXPECTED_WRITE_PROOF_DIGEST: ${{ inputs.expected_write_proof_digest }}
-      PANTHEON_PUBLIC_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+      PANTHEON_PUBLIC_GCP_IDENTITY_API_KEY: ${{ vars.VITE_GCP_IDENTITY_API_KEY }}
       # Keep every Persona and Trade Journey proof on the canonical dev
       # data-plane tenant used by the strict proof JWTs.
       PANTHEON_TENANT_ID: tenant-dev

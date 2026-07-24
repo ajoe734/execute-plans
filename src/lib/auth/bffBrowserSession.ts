@@ -1,8 +1,8 @@
-import type { Session } from "@supabase/supabase-js";
 import { bffFetch } from "@/lib/bff-v1/client";
 import { clearAuthProvider, setAuthProvider, getAuthProvider } from "@/lib/bff-v1/headers";
 import { paths } from "@/lib/bff-v1/paths";
 import { invalidateMe } from "@/lib/v4/session/me";
+import type { GcpIdentitySession } from "@/integrations/gcp/identity";
 import { tryDevLogin, clearDevLoginCache, hasDevLoginCredentials } from "./devLoginHelper";
 
 type JsonRecord = Record<string, unknown>;
@@ -54,21 +54,21 @@ function nonBlank(value: unknown): string | null {
 }
 
 /**
- * Only server-owned, signed Supabase app_metadata may select a tenant header.
+ * Only a custom claim in the GCP-signed ID token may select a tenant header.
  * Missing metadata safely falls back to no header so the BFF chooses and
- * validates its own default. user_metadata is intentionally never consulted.
+ * validates its own default.
  */
-export function signedTenantId(session: Session | null): string | null {
-  const appMetadata = record(session?.user?.app_metadata);
-  const nestedTenant = record(appMetadata.tenant);
-  return nonBlank(appMetadata.tenant_id)
-    ?? nonBlank(appMetadata.tenantId)
+export function signedTenantId(session: GcpIdentitySession | null): string | null {
+  const claims = record(session?.claims);
+  const nestedTenant = record(claims.tenant);
+  return nonBlank(claims.tenant_id)
+    ?? nonBlank(claims.tenantId)
     ?? nonBlank(nestedTenant.id);
 }
 
-/** Register the current Supabase bearer as an in-memory BFF header source. */
-export function registerBffBrowserSession(session: Session): void {
-  const accessToken = nonBlank(session.access_token);
+/** Register the current GCP Identity ID token as an in-memory BFF source. */
+export function registerBffBrowserSession(session: GcpIdentitySession): void {
+  const accessToken = nonBlank(session.idToken);
   const tenantId = signedTenantId(session);
   setAuthProvider({
     getToken: () => accessToken,

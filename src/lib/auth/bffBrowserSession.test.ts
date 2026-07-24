@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { Session } from "@supabase/supabase-js";
+import type { User } from "firebase/auth";
+import type { GcpIdentitySession } from "@/integrations/gcp/identity";
 import { buildHeaders, clearAuthProvider } from "@/lib/bff-v1/headers";
 import {
   clearBffBrowserSession,
@@ -11,20 +12,13 @@ import {
 
 function session(input: {
   token?: string;
-  appMetadata?: Record<string, unknown>;
-  userMetadata?: Record<string, unknown>;
-} = {}): Session {
+  claims?: Record<string, unknown>;
+} = {}): GcpIdentitySession {
   return {
-    access_token: input.token ?? "short-lived-supabase-access-token",
-    refresh_token: "refresh-token-never-forwarded",
-    expires_in: 3600,
-    token_type: "bearer",
-    user: {
-      id: "supabase-user",
-      app_metadata: input.appMetadata ?? {},
-      user_metadata: input.userMetadata ?? {},
-    },
-  } as Session;
+    idToken: input.token ?? "short-lived-gcp-identity-token",
+    claims: input.claims ?? {},
+    user: { uid: "gcp-user" } as User,
+  };
 }
 
 function response(body: unknown, status = 200): Response {
@@ -73,14 +67,11 @@ afterEach(() => {
 });
 
 describe("strict browser BFF session bridge", () => {
-  it("uses only signed app_metadata for tenant selection", () => {
+  it("uses only signed GCP custom claims for tenant selection", () => {
     expect(signedTenantId(session({
-      appMetadata: { tenant_id: "tenant-signed" },
-      userMetadata: { tenant_id: "tenant-attacker" },
+      claims: { tenant_id: "tenant-signed" },
     }))).toBe("tenant-signed");
-    expect(signedTenantId(session({
-      userMetadata: { tenant_id: "tenant-attacker" },
-    }))).toBeNull();
+    expect(signedTenantId(session())).toBeNull();
   });
 
   it("registers the short-lived bearer in memory and ignores stale Web Storage", () => {
@@ -92,7 +83,7 @@ describe("strict browser BFF session bridge", () => {
 
     registerBffBrowserSession(session({
       token: "fresh-in-memory-token",
-      appMetadata: { tenant_id: "tenant-signed" },
+      claims: { tenant_id: "tenant-signed" },
     }));
     expect(buildHeaders({ method: "GET" })).toMatchObject({
       Authorization: "Bearer fresh-in-memory-token",
@@ -104,7 +95,7 @@ describe("strict browser BFF session bridge", () => {
   });
 
   it("accepts an authenticated viewer boundary but never reports write readiness", async () => {
-    registerBffBrowserSession(session({ appMetadata: { tenant_id: "tenant-signed" } }));
+    registerBffBrowserSession(session({ claims: { tenant_id: "tenant-signed" } }));
     const fetcher = vi.spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(response(me(["viewer"])))
       .mockResolvedValueOnce(response(readiness(false)));
@@ -117,7 +108,7 @@ describe("strict browser BFF session bridge", () => {
     expect(verified.readiness.operatorRoleReady).toBe(false);
     for (const call of fetcher.mock.calls) {
       expect((call[1] as RequestInit).headers).toMatchObject({
-        Authorization: "Bearer short-lived-supabase-access-token",
+        Authorization: "Bearer short-lived-gcp-identity-token",
         "X-Tenant-Id": "tenant-signed",
       });
     }
@@ -157,7 +148,7 @@ describe("strict browser BFF session bridge", () => {
     await expect(verifyBffBrowserSession()).rejects.toThrow(/strict browser readiness/);
   });
 
-  it("auto-authenticates the browser via dev-login when Supabase session is absent but credentials are present", async () => {
+  it("auto-authenticates the browser via dev-login when GCP session is absent but credentials are present", async () => {
     vi.stubEnv("VITE_BFF_DEV_LOGIN_CLIENT_ID", "client-id-test");
     vi.stubEnv("VITE_BFF_DEV_LOGIN_CLIENT_SECRET", "client-secret-test");
     vi.stubEnv("VITE_BFF_BASE_URL", "https://bff.example.test");
