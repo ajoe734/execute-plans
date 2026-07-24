@@ -22,6 +22,7 @@ import {
   gcpIdentityStoredUser,
 } from "./helpers/auth";
 import { bindPplAlloc009RecommendationSnapshot } from "./helpers/pplAlloc009Recommendation";
+import { bindPplAlloc009SessionRotation } from "./helpers/pplAlloc009Session";
 
 const FE_BASE = String(process.env.PPL_ALLOC_009_FE_BASE_URL ?? "").replace(/\/+$/u, "");
 const BFF_BASE = String(process.env.PPL_ALLOC_009_BFF_BASE_URL ?? "").replace(/\/+$/u, "");
@@ -566,9 +567,14 @@ test.describe("PPL-ALLOC-009 hosted paper allocation acceptance", () => {
       "runtime binding id",
     );
     const runtimeId = requiredString(persona.runtimeId ?? runtimeBinding.runtime_id, "runtime id");
-    const paperSessionId = requiredString(paperWorker.session_id, "paper monitoring session id");
+    const provisioningPaperSessionId = requiredString(
+      paperWorker.session_id,
+      "provisioning paper monitoring session id",
+    );
     expect(persona.state).toBe("paper_running");
     expect(persona.paperLedgerId).toBe(paperLedgerId);
+    expect(paperWorker.runtime_id).toBe(runtimeId);
+    expect(paperWorker.runtime_binding_id).toBe(runtimeBindingId);
 
     const eligibilityProofResponse = await request.post(
       (
@@ -604,7 +610,10 @@ test.describe("PPL-ALLOC-009 hosted paper allocation acceptance", () => {
     expect(eligibilityProof.runtime_binding_id).toBe(runtimeBindingId);
     expect(eligibilityProof.persona_capital_binding_id).toBe(personaCapitalBindingId);
     expect(eligibilityProof.paper_ledger_id).toBe(paperLedgerId);
-    expect(eligibilityProof.paper_session_id).toBe(paperSessionId);
+    const currentPaperSessionId = requiredString(
+      eligibilityProof.paper_session_id,
+      "current paper monitoring session id",
+    );
     expect(eligibilitySafety.paper_only).toBe(true);
     expect(eligibilitySafety.real_capital_side_effects).toBe(false);
     expect(eligibilitySafety.real_order_side_effects).toBe(false);
@@ -615,12 +624,49 @@ test.describe("PPL-ALLOC-009 hosted paper allocation acceptance", () => {
       "promote_to_canary_candidate",
     );
 
+    const runtimeStateResponse = await request.get(
+      `${BFF_BASE}/api/v1/operator/runtime-state?deployment_stage=paper&page_size=200`,
+      { headers: authHeaders(operator.token) },
+    );
+    calls.push(await requestEvidence(runtimeStateResponse, "operator-runtime-state"));
+    const runtimeStatePayload = await expectStatus(
+      runtimeStateResponse,
+      200,
+      "operator runtime state",
+    );
+    const runtimeStateRows = Array.isArray(runtimeStatePayload.runtimes)
+      ? runtimeStatePayload.runtimes.map(record)
+      : [];
+    const runtimeState = runtimeStateRows.find(
+      (item) => String(item.runtime_id ?? "") === runtimeId
+        && String(item.runtime_binding_id ?? "") === runtimeBindingId,
+    );
+    expect(runtimeState).toBeTruthy();
+    const currentMonitoringSession = record(runtimeState?.paper_runtime_monitoring);
+    expect(currentMonitoringSession.session_id).toBe(currentPaperSessionId);
+    expect(currentMonitoringSession.runtime_id).toBe(runtimeId);
+    expect(currentMonitoringSession.runtime_binding_id).toBe(runtimeBindingId);
+    expect(currentMonitoringSession.status).toBe("running");
+    expect(currentMonitoringSession.active).toBe(true);
+    expect(currentMonitoringSession.ended_at ?? null).toBeNull();
+
     const ranking = await waitForRanking(request, operator, personaId, calls);
     const priorRankingRow = ranking.row;
     expect(priorRankingRow.paper_ledger_id).toBe(paperLedgerId);
     expect(priorRankingRow.runtime_ids).toContain(runtimeId);
     expect(priorRankingRow.binding_ids).toContain(personaCapitalBindingId);
-    expect(priorRankingRow.session_id).toBe(paperSessionId);
+    expect(priorRankingRow.session_id).toBe(currentPaperSessionId);
+    const sessionRotation = bindPplAlloc009SessionRotation({
+      currentMonitoringSession,
+      currentPaperSessionId,
+      provisioningPaperSessionId,
+      rankingSessionId: requiredString(
+        priorRankingRow.session_id,
+        "ranking paper monitoring session id",
+      ),
+      runtimeBindingId,
+      runtimeId,
+    });
     const recommendationQuery = new URLSearchParams({
       page_size: "200",
       personaId,
@@ -695,8 +741,11 @@ test.describe("PPL-ALLOC-009 hosted paper allocation acceptance", () => {
         telemetryResolution: recommendationRow.telemetry_resolution,
       },
       provisioning: {
-        paperSessionId,
+        paperSessionId: provisioningPaperSessionId,
         rankingSnapshotId: ranking.snapshotId,
+      },
+      sessionRotation: {
+        ...sessionRotation,
       },
       requestResponseEvidence: calls,
       result: recommendation ? "in_progress" : "failed",
@@ -943,7 +992,8 @@ test.describe("PPL-ALLOC-009 hosted paper allocation acceptance", () => {
         applyCommandId: commandId,
         capitalBindingId,
         paperLedgerId,
-        provisioningPaperSessionId: paperSessionId,
+        currentPaperSessionId,
+        provisioningPaperSessionId,
         personaId,
         promotionReviewId,
         rankingSnapshotId: recommendationSnapshotId,
@@ -965,6 +1015,11 @@ test.describe("PPL-ALLOC-009 hosted paper allocation acceptance", () => {
         ownerReceipt: eligibilityProof.owner_receipt,
         scenarioDigest: eligibilityProof.scenario_digest,
         traceId: eligibilityProof.trace_id,
+      },
+      sessionRotation: {
+        currentAuthority: "runtime_manager.paper_fleet_monitoring",
+        ...sessionRotation,
+        provisioningObservedAt: authoritativeReadback.observed_at,
       },
       identities: {
         approver: {
