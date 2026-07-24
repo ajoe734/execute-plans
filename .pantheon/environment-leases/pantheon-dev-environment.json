@@ -1,15 +1,15 @@
 {
-  "acquiredAt": "2026-07-24T04:27:16Z",
+  "acquiredAt": "2026-07-24T04:57:22Z",
   "branch": "environment-coordination",
   "expectedBackendSha": "f71c1f8ba889ba64956006ef0f9159840be6d065",
-  "expiresAt": "2026-07-24T04:39:22Z",
-  "heartbeatAt": "2026-07-24T04:34:22Z",
-  "leaseId": "1cdac0cd-c158-4248-9aff-b4010d8230a3",
+  "expiresAt": "2026-07-24T05:02:22Z",
+  "heartbeatAt": "2026-07-24T04:57:22Z",
+  "leaseId": "4ab25da8-cd3c-4c8b-b085-82a78fb67ae1",
   "mode": "deployment",
-  "owner": "pantheon:ajoe734/pantheon:30065717086:2",
+  "owner": "pantheon:ajoe734/pantheon:30068077516:1",
   "path": ".pantheon/environment-leases/pantheon-dev-environment.json",
   "repository": "ajoe734/execute-plans",
   "resource": "pantheon-dev-environment",
-  "runUrl": "https://github.com/ajoe734/pantheon/actions/runs/30065717086",
+  "runUrl": "https://github.com/ajoe734/pantheon/actions/runs/30068077516",
   "schemaVersion": 1
 }
