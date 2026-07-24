@@ -394,13 +394,18 @@ async function runBrowserProof(
 }
 
 async function writeEvidence(testInfo: TestInfo, evidence: JsonRecord): Promise<void> {
-  mkdirSync(EVIDENCE_DIR, { recursive: true });
+  writeEvidenceFile(evidence);
   const path = `${EVIDENCE_DIR}/ppl-alloc-009-hosted-evidence.json`;
-  writeFileSync(path, `${JSON.stringify(evidence, null, 2)}\n`, "utf8");
   await testInfo.attach("ppl-alloc-009-hosted-evidence", {
     contentType: "application/json",
     path,
   });
+}
+
+function writeEvidenceFile(evidence: JsonRecord): void {
+  mkdirSync(EVIDENCE_DIR, { recursive: true });
+  const path = `${EVIDENCE_DIR}/ppl-alloc-009-hosted-evidence.json`;
+  writeFileSync(path, `${JSON.stringify(evidence, null, 2)}\n`, "utf8");
 }
 
 async function waitForPaperRunning(
@@ -483,6 +488,25 @@ test.describe("PPL-ALLOC-009 hosted paper allocation acceptance", () => {
     request,
   }, testInfo) => {
     test.setTimeout(720_000);
+    writeEvidenceFile({
+      acceptance: {
+        B1: "in_progress",
+        B3: "not_started",
+        realLiveCapitalAuthority: "disabled",
+      },
+      capturedAt: new Date().toISOString(),
+      deployment: {
+        bffCommit: EXPECTED_BFF_SHA,
+        frontendCommit: EXPECTED_FE_SHA,
+      },
+      result: "in_progress",
+      runKey: RUN_KEY,
+      safety: {
+        canaryEnabled: false,
+        liveEnabled: false,
+        realWritesEnabled: false,
+      },
+    });
     expect(PUBLIC_SUPABASE_URL).not.toBe("");
     expect(OPERATOR_CLIENT_ID).not.toBe("");
     expect(OPERATOR_CLIENT_SECRET).not.toBe("");
