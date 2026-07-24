@@ -57,7 +57,7 @@ jobs:
       PPL_ALLOC_009_OPERATOR_CLIENT_SECRET: ${{ secrets.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_SECRET }}
       PPL_ALLOC_009_PUBLIC_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
       PPL_ALLOC_009_QUARTER: ${{ inputs.quarter }}
-      PPL_ALLOC_009_RUN_KEY: ${{ github.run_id }}
+      PPL_ALLOC_009_RUN_KEY: "30095677466"
       PPL_ALLOC_009_TENANT_ID: ${{ inputs.tenant_id }}
       PANTHEON_CREDENTIALED_PLAYWRIGHT_NO_ARTIFACTS: "1"
     steps:
@@ -77,6 +77,7 @@ jobs:
           [[ -n "${PPL_ALLOC_009_APPROVER_CLIENT_ID}" ]]
           [[ -n "${PPL_ALLOC_009_APPROVER_CLIENT_SECRET}" ]]
           [[ -n "${PPL_ALLOC_009_PUBLIC_SUPABASE_URL}" ]]
+          [[ "${PPL_ALLOC_009_RUN_KEY}" == "30095677466" ]]
           [[ "${PPL_ALLOC_009_TENANT_ID}" == "tenant-dev" ]]
 
       - name: Set up Node
