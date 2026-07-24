@@ -17,6 +17,7 @@ import {
   type Page,
   type TestInfo,
 } from "@playwright/test";
+import { bindPplAlloc009RecommendationSnapshot } from "./helpers/pplAlloc009Recommendation";
 
 const FE_BASE = String(process.env.PPL_ALLOC_009_FE_BASE_URL ?? "").replace(/\/+$/u, "");
 const BFF_BASE = String(process.env.PPL_ALLOC_009_BFF_BASE_URL ?? "").replace(/\/+$/u, "");
@@ -487,7 +488,7 @@ test.describe("PPL-ALLOC-009 hosted paper allocation acceptance", () => {
     browser,
     request,
   }, testInfo) => {
-    test.setTimeout(720_000);
+    test.setTimeout(1_200_000);
     writeEvidenceFile({
       acceptance: {
         B1: "in_progress",
@@ -576,13 +577,57 @@ test.describe("PPL-ALLOC-009 hosted paper allocation acceptance", () => {
     expect(persona.state).toBe("paper_running");
     expect(persona.paperLedgerId).toBe(paperLedgerId);
 
-    const ranking = await waitForRanking(request, operator, personaId, calls);
-    const rankingRow = ranking.row;
-    expect(rankingRow.paper_ledger_id).toBe(paperLedgerId);
-    expect(rankingRow.runtime_ids).toContain(runtimeId);
-    expect(rankingRow.binding_ids).toContain(personaCapitalBindingId);
-    expect(rankingRow.session_id).toBe(paperSessionId);
+    const eligibilityProofResponse = await request.post(
+      (
+        `${BFF_BASE}/bff/management/personas/${encodeURIComponent(personaId)}`
+        + "/ppl-alloc-009-paper-eligibility-proof"
+      ),
+      {
+        data: {
+          benchmark_version: "ppl-alloc-009-paper-positive-control-v1",
+          run_key: RUN_KEY,
+          task_id: "PPL-ALLOC-009",
+        },
+        headers: authHeaders(operator.token, {
+          "Idempotency-Key": idempotency("paper-eligibility-proof"),
+        }),
+      },
+    );
+    calls.push(await requestEvidence(
+      eligibilityProofResponse,
+      "paper-eligibility-proof",
+      "POST",
+    ));
+    const eligibilityProofPayload = await expectStatus(
+      eligibilityProofResponse,
+      202,
+      "governed paper eligibility proof",
+    );
+    const eligibilityProof = responseData(eligibilityProofPayload);
+    const eligibilitySafety = record(eligibilityProof.safety);
+    const eligibilityRanking = record(eligibilityProof.ranking);
+    expect(eligibilityProof.persona_id).toBe(personaId);
+    expect(eligibilityProof.runtime_id).toBe(runtimeId);
+    expect(eligibilityProof.runtime_binding_id).toBe(runtimeBindingId);
+    expect(eligibilityProof.persona_capital_binding_id).toBe(personaCapitalBindingId);
+    expect(eligibilityProof.paper_ledger_id).toBe(paperLedgerId);
+    expect(eligibilityProof.paper_session_id).toBe(paperSessionId);
+    expect(eligibilitySafety.paper_only).toBe(true);
+    expect(eligibilitySafety.real_capital_side_effects).toBe(false);
+    expect(eligibilitySafety.real_order_side_effects).toBe(false);
+    expect(eligibilitySafety.canary_execution_enabled).toBe(false);
+    expect(eligibilitySafety.live_execution_enabled).toBe(false);
+    expect(eligibilityRanking.eligible).toBe(true);
+    expect(eligibilityRanking.recommendation_action_ids).toContain(
+      "promote_to_canary_candidate",
+    );
 
+    const ranking = await waitForRanking(request, operator, personaId, calls);
+    const priorRankingRow = ranking.row;
+    expect(priorRankingRow.paper_ledger_id).toBe(paperLedgerId);
+    expect(priorRankingRow.runtime_ids).toContain(runtimeId);
+    expect(priorRankingRow.binding_ids).toContain(personaCapitalBindingId);
+    expect(priorRankingRow.session_id).toBe(paperSessionId);
     const recommendationQuery = new URLSearchParams({
       page_size: "200",
       personaId,
@@ -598,11 +643,77 @@ test.describe("PPL-ALLOC-009 hosted paper allocation acceptance", () => {
       200,
       "promotion recommendation",
     );
-    const recommendation = rows(recommendationPayload).find(
-      (item) => String(item.persona_id ?? "") === personaId
-        && String(item.action_id ?? "") === "promote_to_canary_candidate",
+    const personaRecommendations = rows(recommendationPayload).filter(
+      (item) => String(item.persona_id ?? "") === personaId,
+    );
+    const recommendation = personaRecommendations.find(
+      (item) => String(item.action_id ?? "") === "promote_to_canary_candidate",
     );
     expect(recommendation).toBeTruthy();
+    const recommendationBinding = bindPplAlloc009RecommendationSnapshot(
+      recommendation ?? {},
+      ranking.snapshotId,
+    );
+    const recommendationSnapshotId = recommendationBinding.recommendationSnapshotId;
+    const recommendationRow = recommendationBinding.rankingRow;
+    expect(recommendationRow.paper_ledger_id).toBe(paperLedgerId);
+    expect(recommendationRow.runtime_ids).toContain(runtimeId);
+    expect(recommendationRow.binding_ids).toContain(personaCapitalBindingId);
+    expect(recommendationRow.capital_scope).toBe("paper_ledger");
+    expect(recommendationRow.allocation_policy_input).toBeTruthy();
+    expect(recommendationRow.metrics).toBeTruthy();
+    expect(recommendationRow.components).toBeTruthy();
+    writeEvidenceFile({
+      acceptance: {
+        B1: recommendation ? "promotion_recommendation_ready" : "failed_promotion_eligibility",
+        B3: "not_started",
+        realLiveCapitalAuthority: "disabled",
+      },
+      capturedAt: new Date().toISOString(),
+      chain: {
+        paperLedgerId,
+        personaCapitalBindingId,
+        personaId,
+        rankingSnapshotId: recommendationSnapshotId,
+        runtimeBindingId,
+        runtimeId,
+      },
+      deployment: {
+        bffCommit: EXPECTED_BFF_SHA,
+        frontendCommit: EXPECTED_FE_SHA,
+      },
+      eligibilityProof: {
+        benchmarkVersion: eligibilityProof.benchmark_version,
+        eventId: eligibilityProof.event_id,
+        ownerReceipt: eligibilityProof.owner_receipt,
+        scenarioDigest: eligibilityProof.scenario_digest,
+        traceId: eligibilityProof.trace_id,
+      },
+      ranking: {
+        actionIds: personaRecommendations.map((item) => item.action_id),
+        components: recommendationRow.components,
+        eligible: recommendationRow.eligible,
+        priorRankingSnapshotId: recommendationBinding.priorRankingSnapshotId,
+        rank: recommendationRow.rank,
+        recommendationSnapshotId,
+        score: recommendationRow.score,
+        snapshotChangedSincePriorRanking:
+          recommendationBinding.snapshotChangedSincePriorRanking,
+        telemetryResolution: recommendationRow.telemetry_resolution,
+      },
+      provisioning: {
+        paperSessionId,
+        rankingSnapshotId: ranking.snapshotId,
+      },
+      requestResponseEvidence: calls,
+      result: recommendation ? "in_progress" : "failed",
+      runKey: RUN_KEY,
+      safety: {
+        canaryEnabled: false,
+        liveEnabled: false,
+        realWritesEnabled: false,
+      },
+    });
     const promotionReviewId = requiredString(
       recommendation?.recommendation_id ?? recommendation?.review_id,
       "promotion review id",
@@ -613,7 +724,7 @@ test.describe("PPL-ALLOC-009 hosted paper allocation acceptance", () => {
       {
         data: {
           quarter: QUARTER,
-          ranking_snapshot_id: ranking.snapshotId,
+          ranking_snapshot_id: recommendationSnapshotId,
         },
         headers: authHeaders(operator.token, {
           "Idempotency-Key": idempotency("promotion-submit"),
@@ -647,8 +758,8 @@ test.describe("PPL-ALLOC-009 hosted paper allocation acceptance", () => {
         data: {
           authority_mode: "governed_paper_simulation",
           promotion_review_id: promotionReviewId,
-          ranking_snapshot_id: ranking.snapshotId,
-          rows: [rankingRow],
+          ranking_snapshot_id: recommendationSnapshotId,
+          rows: [recommendationRow],
         },
         headers: authHeaders(operator.token),
       },
@@ -684,7 +795,7 @@ test.describe("PPL-ALLOC-009 hosted paper allocation acceptance", () => {
         allocation_policy_version: evaluation.allocation_policy_version,
         audit_refs: [
           `promotion_review:${promotionReviewId}`,
-          `ranking_snapshot:${ranking.snapshotId}`,
+          `ranking_snapshot:${recommendationSnapshotId}`,
         ],
         capital_pool_id: poolId,
         constraints: {
@@ -693,7 +804,7 @@ test.describe("PPL-ALLOC-009 hosted paper allocation acceptance", () => {
           paper_only: true,
         },
         lines: allocationLines,
-        ranking_snapshot_id: ranking.snapshotId,
+        ranking_snapshot_id: recommendationSnapshotId,
         reason: "PPL-ALLOC-009 governed paper allocation",
         rollback_target: {
           current_weight: allocationLine.current_weight,
@@ -839,10 +950,10 @@ test.describe("PPL-ALLOC-009 hosted paper allocation acceptance", () => {
         applyCommandId: commandId,
         capitalBindingId,
         paperLedgerId,
-        paperSessionId,
+        provisioningPaperSessionId: paperSessionId,
         personaId,
         promotionReviewId,
-        rankingSnapshotId: ranking.snapshotId,
+        rankingSnapshotId: recommendationSnapshotId,
         rebalanceId,
         runtimeBindingId,
         runtimeId,
@@ -853,6 +964,14 @@ test.describe("PPL-ALLOC-009 hosted paper allocation acceptance", () => {
         frontendCommit: EXPECTED_FE_SHA,
         pairId: pair.deployment.pairId ?? null,
         safeBuildMode: pair.deployment.buildMode,
+      },
+      eligibilityProof: {
+        benchmarkVersion: eligibilityProof.benchmark_version,
+        eventId: eligibilityProof.event_id,
+        metrics: eligibilityProof.metrics,
+        ownerReceipt: eligibilityProof.owner_receipt,
+        scenarioDigest: eligibilityProof.scenario_digest,
+        traceId: eligibilityProof.trace_id,
       },
       identities: {
         approver: {
