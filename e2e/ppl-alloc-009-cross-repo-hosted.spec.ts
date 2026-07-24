@@ -576,80 +576,123 @@ test.describe("PPL-ALLOC-009 hosted paper allocation acceptance", () => {
     expect(persona.state).toBe("paper_running");
     expect(persona.paperLedgerId).toBe(paperLedgerId);
 
-    let ranking = await waitForRanking(request, operator, personaId, calls);
-    let rankingRow = ranking.row;
+    const eligibilityProofResponse = await request.post(
+      (
+        `${BFF_BASE}/bff/management/personas/${encodeURIComponent(personaId)}`
+        + "/ppl-alloc-009-paper-eligibility-proof"
+      ),
+      {
+        data: {
+          benchmark_version: "ppl-alloc-009-paper-positive-control-v1",
+          run_key: RUN_KEY,
+          task_id: "PPL-ALLOC-009",
+        },
+        headers: authHeaders(operator.token, {
+          "Idempotency-Key": idempotency("paper-eligibility-proof"),
+        }),
+      },
+    );
+    calls.push(await requestEvidence(
+      eligibilityProofResponse,
+      "paper-eligibility-proof",
+      "POST",
+    ));
+    const eligibilityProofPayload = await expectStatus(
+      eligibilityProofResponse,
+      202,
+      "governed paper eligibility proof",
+    );
+    const eligibilityProof = responseData(eligibilityProofPayload);
+    const eligibilitySafety = record(eligibilityProof.safety);
+    const eligibilityRanking = record(eligibilityProof.ranking);
+    expect(eligibilityProof.persona_id).toBe(personaId);
+    expect(eligibilityProof.runtime_id).toBe(runtimeId);
+    expect(eligibilityProof.runtime_binding_id).toBe(runtimeBindingId);
+    expect(eligibilityProof.persona_capital_binding_id).toBe(personaCapitalBindingId);
+    expect(eligibilityProof.paper_ledger_id).toBe(paperLedgerId);
+    expect(eligibilityProof.paper_session_id).toBe(paperSessionId);
+    expect(eligibilitySafety.paper_only).toBe(true);
+    expect(eligibilitySafety.real_capital_side_effects).toBe(false);
+    expect(eligibilitySafety.real_order_side_effects).toBe(false);
+    expect(eligibilitySafety.canary_execution_enabled).toBe(false);
+    expect(eligibilitySafety.live_execution_enabled).toBe(false);
+    expect(eligibilityRanking.eligible).toBe(true);
+    expect(eligibilityRanking.recommendation_action_ids).toContain(
+      "promote_to_canary_candidate",
+    );
 
-    let recommendation: JsonRecord | undefined;
-    for (let attempt = 0; attempt < 60 && !recommendation; attempt += 1) {
-      if (attempt > 0) {
-        await new Promise((resolve) => setTimeout(resolve, 15_000));
-        ranking = await waitForRanking(request, operator, personaId, calls);
-        rankingRow = ranking.row;
-      }
-      expect(rankingRow.paper_ledger_id).toBe(paperLedgerId);
-      expect(rankingRow.runtime_ids).toContain(runtimeId);
-      expect(rankingRow.binding_ids).toContain(personaCapitalBindingId);
-      expect(rankingRow.session_id).toBe(paperSessionId);
-      const recommendationQuery = new URLSearchParams({
-        page_size: "200",
+    const ranking = await waitForRanking(request, operator, personaId, calls);
+    const rankingRow = ranking.row;
+    expect(rankingRow.paper_ledger_id).toBe(paperLedgerId);
+    expect(rankingRow.runtime_ids).toContain(runtimeId);
+    expect(rankingRow.binding_ids).toContain(personaCapitalBindingId);
+    expect(rankingRow.session_id).toBe(paperSessionId);
+    const recommendationQuery = new URLSearchParams({
+      page_size: "200",
+      personaId,
+      quarter: QUARTER,
+    });
+    const recommendationResponse = await request.get(
+      `${BFF_BASE}/bff/management/quarterly-ranking/recommendations?${recommendationQuery}`,
+      { headers: authHeaders(operator.token) },
+    );
+    calls.push(await requestEvidence(recommendationResponse, "promotion-recommendation"));
+    const recommendationPayload = await expectStatus(
+      recommendationResponse,
+      200,
+      "promotion recommendation",
+    );
+    const personaRecommendations = rows(recommendationPayload).filter(
+      (item) => String(item.persona_id ?? "") === personaId,
+    );
+    const recommendation = personaRecommendations.find(
+      (item) => String(item.action_id ?? "") === "promote_to_canary_candidate"
+        && String(item.ranking_snapshot_id ?? "") === ranking.snapshotId,
+    );
+    writeEvidenceFile({
+      acceptance: {
+        B1: recommendation ? "promotion_recommendation_ready" : "failed_promotion_eligibility",
+        B3: "not_started",
+        realLiveCapitalAuthority: "disabled",
+      },
+      capturedAt: new Date().toISOString(),
+      chain: {
+        paperLedgerId,
+        paperSessionId,
+        personaCapitalBindingId,
         personaId,
-        quarter: QUARTER,
-      });
-      const recommendationResponse = await request.get(
-        `${BFF_BASE}/bff/management/quarterly-ranking/recommendations?${recommendationQuery}`,
-        { headers: authHeaders(operator.token) },
-      );
-      calls.push(await requestEvidence(recommendationResponse, "promotion-recommendation"));
-      const recommendationPayload = await expectStatus(
-        recommendationResponse,
-        200,
-        "promotion recommendation",
-      );
-      const personaRecommendations = rows(recommendationPayload).filter(
-        (item) => String(item.persona_id ?? "") === personaId,
-      );
-      recommendation = personaRecommendations.find(
-        (item) => String(item.action_id ?? "") === "promote_to_canary_candidate"
-          && String(item.ranking_snapshot_id ?? "") === ranking.snapshotId,
-      );
-      writeEvidenceFile({
-        acceptance: {
-          B1: recommendation ? "promotion_recommendation_ready" : "awaiting_promotion_eligibility",
-          B3: "not_started",
-          realLiveCapitalAuthority: "disabled",
-        },
-        capturedAt: new Date().toISOString(),
-        chain: {
-          paperLedgerId,
-          paperSessionId,
-          personaCapitalBindingId,
-          personaId,
-          rankingSnapshotId: ranking.snapshotId,
-          runtimeBindingId,
-          runtimeId,
-        },
-        deployment: {
-          bffCommit: EXPECTED_BFF_SHA,
-          frontendCommit: EXPECTED_FE_SHA,
-        },
-        ranking: {
-          actionIds: personaRecommendations.map((item) => item.action_id),
-          components: rankingRow.components,
-          eligible: rankingRow.eligible,
-          rank: rankingRow.rank,
-          score: rankingRow.score,
-          telemetryResolution: rankingRow.telemetry_resolution,
-        },
-        requestResponseEvidence: calls,
-        result: recommendation ? "in_progress" : "waiting",
-        runKey: RUN_KEY,
-        safety: {
-          canaryEnabled: false,
-          liveEnabled: false,
-          realWritesEnabled: false,
-        },
-      });
-    }
+        rankingSnapshotId: ranking.snapshotId,
+        runtimeBindingId,
+        runtimeId,
+      },
+      deployment: {
+        bffCommit: EXPECTED_BFF_SHA,
+        frontendCommit: EXPECTED_FE_SHA,
+      },
+      eligibilityProof: {
+        benchmarkVersion: eligibilityProof.benchmark_version,
+        eventId: eligibilityProof.event_id,
+        ownerReceipt: eligibilityProof.owner_receipt,
+        scenarioDigest: eligibilityProof.scenario_digest,
+        traceId: eligibilityProof.trace_id,
+      },
+      ranking: {
+        actionIds: personaRecommendations.map((item) => item.action_id),
+        components: rankingRow.components,
+        eligible: rankingRow.eligible,
+        rank: rankingRow.rank,
+        score: rankingRow.score,
+        telemetryResolution: rankingRow.telemetry_resolution,
+      },
+      requestResponseEvidence: calls,
+      result: recommendation ? "in_progress" : "failed",
+      runKey: RUN_KEY,
+      safety: {
+        canaryEnabled: false,
+        liveEnabled: false,
+        realWritesEnabled: false,
+      },
+    });
     expect(recommendation).toBeTruthy();
     const promotionReviewId = requiredString(
       recommendation?.recommendation_id ?? recommendation?.review_id,
@@ -901,6 +944,14 @@ test.describe("PPL-ALLOC-009 hosted paper allocation acceptance", () => {
         frontendCommit: EXPECTED_FE_SHA,
         pairId: pair.deployment.pairId ?? null,
         safeBuildMode: pair.deployment.buildMode,
+      },
+      eligibilityProof: {
+        benchmarkVersion: eligibilityProof.benchmark_version,
+        eventId: eligibilityProof.event_id,
+        metrics: eligibilityProof.metrics,
+        ownerReceipt: eligibilityProof.owner_receipt,
+        scenarioDigest: eligibilityProof.scenario_digest,
+        traceId: eligibilityProof.trace_id,
       },
       identities: {
         approver: {
