@@ -20,6 +20,7 @@ import {
   cssBoxShadowHasVisibleLayer,
   cssColorHasVisibleAlpha,
   createCandidateResolver,
+  fetchPublicHealthWithRetry,
   httpPathWithinBase,
   inspectBrowserBffMethods,
   inspectDeploymentMetadata,
@@ -114,6 +115,68 @@ describe("hosted browser strict release policy", () => {
     rowsValid: true,
     liveBannerValid: true,
   };
+
+  it("retries a transient public-health 502 within the bounded attempt budget", async () => {
+    const statuses = [502, 200];
+    const sleeps: number[] = [];
+    let fetchCount = 0;
+
+    const result = await fetchPublicHealthWithRetry(
+      "https://pantheon.example/readyz",
+      {
+        fetchImpl: async () => {
+          const status = statuses[Math.min(fetchCount, statuses.length - 1)];
+          fetchCount += 1;
+          return { ok: status >= 200 && status < 300, status };
+        },
+        maxAttempts: 4,
+        retryDelayMs: 25,
+        remainingMs: () => 10_000,
+        sleepImpl: async (milliseconds: number) => {
+          sleeps.push(milliseconds);
+        },
+      },
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      status: 200,
+      attemptCount: 2,
+      statuses: [502, 200],
+    });
+    expect(fetchCount).toBe(2);
+    expect(sleeps).toEqual([25]);
+  });
+
+  it("fails closed after the bounded public-health 502 budget is exhausted", async () => {
+    let fetchCount = 0;
+    let sleepCount = 0;
+
+    const result = await fetchPublicHealthWithRetry(
+      "https://pantheon.example/health",
+      {
+        fetchImpl: async () => {
+          fetchCount += 1;
+          return { ok: false, status: 502 };
+        },
+        maxAttempts: 99,
+        retryDelayMs: 25,
+        remainingMs: () => 10_000,
+        sleepImpl: async () => {
+          sleepCount += 1;
+        },
+      },
+    );
+
+    expect(result).toMatchObject({
+      ok: false,
+      status: 502,
+      attemptCount: 4,
+      statuses: [502, 502, 502, 502],
+    });
+    expect(fetchCount).toBe(4);
+    expect(sleepCount).toBe(3);
+  });
 
   it("keeps the required cold-start response within the overall probe budget", () => {
     const probeSource = readFileSync(

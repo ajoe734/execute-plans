@@ -508,6 +508,9 @@ verify_public_manifest() {
   local expected_github_digest="${7-${GITHUB_ARTIFACT_DIGEST}}"
   local expected_profile="${8:-}"
   local expected_pair_id="${9:-}"
+  local expected_read_only_digest="${10:-${READ_ONLY_ARTIFACT_DIGEST}}"
+  local expected_operator_live_digest="${11:-${OPERATOR_LIVE_ARTIFACT_DIGEST}}"
+  local expected_write_proof_digest="${12:-${WRITE_PROOF_ARTIFACT_DIGEST}}"
   if ! curl --fail --silent --show-error --location \
     --retry 3 --retry-all-errors --connect-timeout 5 --max-time 20 \
     "${FE_HOST}/deployment.json?nocache=$(date +%s%N)" > "${output_file}"; then
@@ -522,7 +525,10 @@ verify_public_manifest() {
     "${expected_state}" \
     "${expected_github_digest}" \
     "${expected_profile}" \
-    "${expected_pair_id}"
+    "${expected_pair_id}" \
+    "${expected_read_only_digest}" \
+    "${expected_operator_live_digest}" \
+    "${expected_write_proof_digest}"
 }
 
 ensure_probe_dependencies() {
@@ -708,7 +714,19 @@ verify_restored_previous() {
     return 1
   fi
   evidence_append rollback.assets passed "previousCommit=${PREVIOUS_COMMIT}"
-  if ! verify_public_manifest "${PREVIOUS_COMMIT}" "${PREVIOUS_MANIFEST_DIGEST}" "${PREVIOUS_GATE_RUN_ID}" "${AUDIT_DIR}/rollback-deployment.json" "${PREVIOUS_MANIFEST_BFF_COMMIT}" "${PREVIOUS_DEPLOYMENT_STATE}" "${PREVIOUS_GITHUB_ARTIFACT_DIGEST}" "${PREVIOUS_PROFILE}" "${PREVIOUS_PAIR_ID}"; then
+  if ! verify_public_manifest \
+    "${PREVIOUS_COMMIT}" \
+    "${PREVIOUS_MANIFEST_DIGEST}" \
+    "${PREVIOUS_GATE_RUN_ID}" \
+    "${AUDIT_DIR}/rollback-deployment.json" \
+    "${PREVIOUS_MANIFEST_BFF_COMMIT}" \
+    "${PREVIOUS_DEPLOYMENT_STATE}" \
+    "${PREVIOUS_GITHUB_ARTIFACT_DIGEST}" \
+    "${PREVIOUS_PROFILE}" \
+    "${PREVIOUS_PAIR_ID}" \
+    "${PREVIOUS_READ_ONLY_ARTIFACT_DIGEST}" \
+    "${PREVIOUS_OPERATOR_LIVE_ARTIFACT_DIGEST}" \
+    "${PREVIOUS_WRITE_PROOF_ARTIFACT_DIGEST}"; then
     evidence_append rollback.manifest failed "previousCommit=${PREVIOUS_COMMIT}"
     return 1
   fi

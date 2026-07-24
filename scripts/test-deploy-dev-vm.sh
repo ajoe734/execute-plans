@@ -248,6 +248,18 @@ case "${url}" in
       echo "mock public manifest is unavailable" >&2
       exit 22
     fi
+    if [[
+      "${MOCK_TAMPER_ROLLBACK_PAIR:-false}" == "true" &&
+      "$(readlink -f "${PANTHEON_DEV_FE_ROOT:?}")" == "${MOCK_PREVIOUS_TARGET:?}"
+    ]]; then
+      node -e '
+        const fs=require("node:fs");
+        const payload=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));
+        payload.pair.readOnlyArtifactDigestSha256="0".repeat(64);
+        process.stdout.write(`${JSON.stringify(payload,null,2)}\n`);
+      ' "${manifest}"
+      exit 0
+    fi
     digest_marker="${MOCK_ALLOWED_ROOT}/.github-digest-tampered-once"
     if [[ "${MOCK_BAD_GITHUB_DIGEST:-false}" == "true" && ! -e "${digest_marker}" ]]; then
       : > "${digest_marker}"
@@ -377,6 +389,29 @@ if (
 if (output) {
   fs.mkdirSync(path.dirname(output), { recursive: true });
   fs.writeFileSync(output, `${JSON.stringify({ phase, pass: true })}\n`, "utf8");
+}
+if (
+  phase === "post_switch" &&
+  process.env.MOCK_PUBLIC_HEALTH_STATUS_SEQUENCE
+) {
+  const statuses = process.env.MOCK_PUBLIC_HEALTH_STATUS_SEQUENCE
+    .split(",")
+    .map((value) => Number.parseInt(value.trim(), 10))
+    .filter(Number.isFinite)
+    .slice(0, 4);
+  let healthy = false;
+  for (const status of statuses) {
+    fs.appendFileSync(log, `probe-health:${phase}:${status}\n`, "utf8");
+    if (status >= 200 && status < 300) {
+      healthy = true;
+      break;
+    }
+    if (status !== 502) break;
+  }
+  if (!healthy) {
+    console.error(`mock persistent public health failure: ${statuses.join(",")}`);
+    process.exitCode = 1;
+  }
 }
 const failures = String(process.env.MOCK_FAIL_PROBE_PHASES || "")
   .split(",")
@@ -510,6 +545,26 @@ payload.bff = {
   sourceCommitKnown: true,
 };
 payload.deploymentState = "accepted";
+fs.writeFileSync(file, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+NODE
+}
+
+upgrade_previous_manifest_to_paired_modern() {
+  local manifest="$1"
+  upgrade_previous_manifest_to_modern "${manifest}"
+  "${REAL_NODE}" --input-type=module - "${manifest}" <<'NODE'
+import fs from "node:fs";
+const file = process.argv[2];
+const payload = JSON.parse(fs.readFileSync(file, "utf8"));
+payload.profile = "read-only";
+payload.deploymentProfile = "read-only";
+payload.pairId = "8".repeat(64);
+payload.pair = {
+  pairId: payload.pairId,
+  readOnlyArtifactDigestSha256: payload.artifactDigestSha256,
+  operatorLiveArtifactDigestSha256: "6".repeat(64),
+  writeProofArtifactDigestSha256: "7".repeat(64),
+};
 fs.writeFileSync(file, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
 NODE
 }
@@ -654,6 +709,9 @@ run_deploy() {
       MOCK_FAIL_PROBE_PHASES="" \
       MOCK_FAIL_DURABLE_RSYNC_ONCE="false" \
       MOCK_BAD_GITHUB_DIGEST="false" \
+      MOCK_PUBLIC_HEALTH_STATUS_SEQUENCE="" \
+      MOCK_TAMPER_ROLLBACK_PAIR="false" \
+      MOCK_PREVIOUS_TARGET="${PREVIOUS_TARGET}" \
       MOCK_ADVANCE_DEV_AFTER_PROBE="false" \
       MOCK_ADVANCED_DEV_SHA="" \
       MOCK_ORIGIN_DIR="${CASE_ORIGIN}" \
@@ -1163,6 +1221,65 @@ test_post_probe_failure_rolls_back_and_reprobes() {
   assert_probe_called previous_target_pre_switch
   assert_probe_called rollback
   assert_summary_outcome rolled_back
+  verify_evidence_pair
+}
+
+test_public_health_retry_is_bounded_and_fail_closed() {
+  local health_call_count
+
+  setup_case post-switch-health-recovers
+  run_deploy MOCK_PUBLIC_HEALTH_STATUS_SEQUENCE=502,200
+  [[ "${RUN_STATUS}" -eq 0 ]] || \
+    show_deploy_failure "transient post-switch health 502 should recover within the bounded retry budget"
+  assert_candidate_is_live
+  grep -Fxq 'probe-health:post_switch:502' "${CASE_CALL_LOG}" || \
+    show_deploy_failure "transient health retry omitted the initial 502"
+  grep -Fxq 'probe-health:post_switch:200' "${CASE_CALL_LOG}" || \
+    show_deploy_failure "transient health retry omitted the recovered 200"
+
+  setup_case post-switch-health-persistent
+  run_deploy MOCK_PUBLIC_HEALTH_STATUS_SEQUENCE=502,502,502,502
+  [[ "${RUN_STATUS}" -ne 0 ]] || \
+    die "persistent post-switch health 502 unexpectedly accepted the candidate"
+  assert_previous_is_live
+  assert_probe_called post_switch
+  assert_probe_called rollback
+  health_call_count="$(grep -Fxc 'probe-health:post_switch:502' "${CASE_CALL_LOG}" || true)"
+  [[ "${health_call_count}" -eq 4 ]] || \
+    show_deploy_failure "persistent health failure did not stop at four bounded attempts"
+  assert_summary_outcome rolled_back
+  verify_evidence_pair
+}
+
+test_rollback_manifest_uses_previous_pair_identity() {
+  setup_case rollback-previous-own-pair
+  upgrade_previous_manifest_to_paired_modern "${PREVIOUS_TARGET}/deployment.json"
+  cp "${PREVIOUS_TARGET}/deployment.json" "${PREVIOUS_MANIFEST_SNAPSHOT}"
+  run_deploy MOCK_FAIL_PROBE_PHASES=post_switch
+  [[ "${RUN_STATUS}" -ne 0 ]] || \
+    die "failed post-switch probe unexpectedly accepted the candidate"
+  assert_previous_is_live
+  assert_previous_manifest_unchanged
+  assert_probe_called rollback
+  assert_summary_outcome rolled_back
+  grep -Fq '"type":"rollback.manifest","status":"passed"' \
+    "${CASE_AUDIT}/evidence.jsonl" || \
+    show_deploy_failure "rollback did not validate the predecessor's own paired identity"
+  verify_evidence_pair
+
+  setup_case rollback-previous-pair-tampered
+  upgrade_previous_manifest_to_paired_modern "${PREVIOUS_TARGET}/deployment.json"
+  cp "${PREVIOUS_TARGET}/deployment.json" "${PREVIOUS_MANIFEST_SNAPSHOT}"
+  run_deploy \
+    MOCK_FAIL_PROBE_PHASES=post_switch \
+    MOCK_TAMPER_ROLLBACK_PAIR=true
+  [[ "${RUN_STATUS}" -ne 0 ]] || \
+    die "tampered predecessor pair manifest unexpectedly passed rollback verification"
+  assert_previous_is_live
+  assert_previous_manifest_unchanged
+  assert_summary_outcome rollback_probe_failed
+  grep -Fq "deployment manifest paired profile digests mismatch" "${RUN_OUTPUT}" || \
+    show_deploy_failure "tampered predecessor pair rejection was not explicit"
   verify_evidence_pair
 }
 
@@ -1693,6 +1810,8 @@ run_test "candidate asset and digest tampering reject before switch" test_tamper
 run_test "candidate pre-probe failure preserves exact previous" test_pre_probe_failure_preserves_previous
 run_test "BFF identity is exact and stable across the switch" test_bff_identity_is_bound_before_and_after_switch
 run_test "post-switch failure rolls back and re-probes" test_post_probe_failure_rolls_back_and_reprobes
+run_test "public health retries are bounded and persistent 502 rolls back" test_public_health_retry_is_bounded_and_fail_closed
+run_test "rollback validates the predecessor's own paired identity" test_rollback_manifest_uses_previous_pair_identity
 run_test "public manifest binds the GitHub archive digest" test_github_archive_digest_is_bound_in_public_manifest
 run_test "external predecessor restore is fully re-probed" test_external_restore_of_previous_is_reprobed
 run_test "durable evidence failure rolls back and re-finalizes" test_durable_evidence_failure_rolls_back_and_refinalizes
