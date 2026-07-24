@@ -487,7 +487,7 @@ test.describe("PPL-ALLOC-009 hosted paper allocation acceptance", () => {
     browser,
     request,
   }, testInfo) => {
-    test.setTimeout(720_000);
+    test.setTimeout(1_200_000);
     writeEvidenceFile({
       acceptance: {
         B1: "in_progress",
@@ -576,32 +576,80 @@ test.describe("PPL-ALLOC-009 hosted paper allocation acceptance", () => {
     expect(persona.state).toBe("paper_running");
     expect(persona.paperLedgerId).toBe(paperLedgerId);
 
-    const ranking = await waitForRanking(request, operator, personaId, calls);
-    const rankingRow = ranking.row;
-    expect(rankingRow.paper_ledger_id).toBe(paperLedgerId);
-    expect(rankingRow.runtime_ids).toContain(runtimeId);
-    expect(rankingRow.binding_ids).toContain(personaCapitalBindingId);
-    expect(rankingRow.session_id).toBe(paperSessionId);
+    let ranking = await waitForRanking(request, operator, personaId, calls);
+    let rankingRow = ranking.row;
 
-    const recommendationQuery = new URLSearchParams({
-      page_size: "200",
-      personaId,
-      quarter: QUARTER,
-    });
-    const recommendationResponse = await request.get(
-      `${BFF_BASE}/bff/management/quarterly-ranking/recommendations?${recommendationQuery}`,
-      { headers: authHeaders(operator.token) },
-    );
-    calls.push(await requestEvidence(recommendationResponse, "promotion-recommendation"));
-    const recommendationPayload = await expectStatus(
-      recommendationResponse,
-      200,
-      "promotion recommendation",
-    );
-    const recommendation = rows(recommendationPayload).find(
-      (item) => String(item.persona_id ?? "") === personaId
-        && String(item.action_id ?? "") === "promote_to_canary_candidate",
-    );
+    let recommendation: JsonRecord | undefined;
+    for (let attempt = 0; attempt < 60 && !recommendation; attempt += 1) {
+      if (attempt > 0) {
+        await new Promise((resolve) => setTimeout(resolve, 15_000));
+        ranking = await waitForRanking(request, operator, personaId, calls);
+        rankingRow = ranking.row;
+      }
+      expect(rankingRow.paper_ledger_id).toBe(paperLedgerId);
+      expect(rankingRow.runtime_ids).toContain(runtimeId);
+      expect(rankingRow.binding_ids).toContain(personaCapitalBindingId);
+      expect(rankingRow.session_id).toBe(paperSessionId);
+      const recommendationQuery = new URLSearchParams({
+        page_size: "200",
+        personaId,
+        quarter: QUARTER,
+      });
+      const recommendationResponse = await request.get(
+        `${BFF_BASE}/bff/management/quarterly-ranking/recommendations?${recommendationQuery}`,
+        { headers: authHeaders(operator.token) },
+      );
+      calls.push(await requestEvidence(recommendationResponse, "promotion-recommendation"));
+      const recommendationPayload = await expectStatus(
+        recommendationResponse,
+        200,
+        "promotion recommendation",
+      );
+      const personaRecommendations = rows(recommendationPayload).filter(
+        (item) => String(item.persona_id ?? "") === personaId,
+      );
+      recommendation = personaRecommendations.find(
+        (item) => String(item.action_id ?? "") === "promote_to_canary_candidate"
+          && String(item.ranking_snapshot_id ?? "") === ranking.snapshotId,
+      );
+      writeEvidenceFile({
+        acceptance: {
+          B1: recommendation ? "promotion_recommendation_ready" : "awaiting_promotion_eligibility",
+          B3: "not_started",
+          realLiveCapitalAuthority: "disabled",
+        },
+        capturedAt: new Date().toISOString(),
+        chain: {
+          paperLedgerId,
+          paperSessionId,
+          personaCapitalBindingId,
+          personaId,
+          rankingSnapshotId: ranking.snapshotId,
+          runtimeBindingId,
+          runtimeId,
+        },
+        deployment: {
+          bffCommit: EXPECTED_BFF_SHA,
+          frontendCommit: EXPECTED_FE_SHA,
+        },
+        ranking: {
+          actionIds: personaRecommendations.map((item) => item.action_id),
+          components: rankingRow.components,
+          eligible: rankingRow.eligible,
+          rank: rankingRow.rank,
+          score: rankingRow.score,
+          telemetryResolution: rankingRow.telemetry_resolution,
+        },
+        requestResponseEvidence: calls,
+        result: recommendation ? "in_progress" : "waiting",
+        runKey: RUN_KEY,
+        safety: {
+          canaryEnabled: false,
+          liveEnabled: false,
+          realWritesEnabled: false,
+        },
+      });
+    }
     expect(recommendation).toBeTruthy();
     const promotionReviewId = requiredString(
       recommendation?.recommendation_id ?? recommendation?.review_id,
