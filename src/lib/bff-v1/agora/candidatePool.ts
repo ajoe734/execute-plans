@@ -1,66 +1,77 @@
 /**
- * BFF client for the Candidate Pool surface (v1.4, agora.research.v1).
+ * BFF client for the Candidate Pool surface (v1.4 base plus v1.12 candidate
+ * truth projection, agora.research.v1). The additive truth contract consumed
+ * here landed in Pantheon PR #3980 at merge 5004450c5493aa8aef284cf42439c9b27ef54235.
  * All data reads go through these functions; pages must not call fetch() directly.
  * No order routing, no capital binding — read/review/score only.
  *
  * Mutating methods (reviewCandidateMember, triggerCandidatePoolScore) require:
  *   If-Match        — ETag captured from the preceding GET response
- *   Idempotency-Key — client-generated UUID per submission
- *   X-Request-Id    — client-generated UUID per request
+ *   Idempotency-Key — caller-supplied or minted by the canonical header helper
+ *   X-Request-Id    — caller-supplied or minted by the canonical header helper
  * AG-BE-CP-001 rejects writes that omit these headers.
  */
 
+import { buildHeaders } from "@/lib/bff-v1/headers";
+import type {
+  CandidateComponentDigest as GeneratedCandidateComponentDigest,
+  CandidateConcernsValue as GeneratedCandidateConcernsValue,
+  CandidateDetailsValue as GeneratedCandidateDetailsValue,
+  CandidateEvidenceItem as GeneratedCandidateEvidenceItem,
+  CandidateEvidenceValue as GeneratedCandidateEvidenceValue,
+  CandidateFieldProvenance as GeneratedCandidateFieldProvenance,
+  CandidateMemberListFreshness as GeneratedCandidateMemberListFreshness,
+  CandidateMemberPageInfo as GeneratedCandidateMemberPageInfo,
+  CandidatePoolMember as GeneratedCandidatePoolMember,
+  CandidateNextEventValue as GeneratedCandidateNextEventValue,
+  CandidateRationaleValue as GeneratedCandidateRationaleValue,
+  CandidateScoreResult as GeneratedCandidateScoreResult,
+  CandidateScoreSemantics as GeneratedCandidateScoreSemantics,
+  CandidateTruthFields as GeneratedCandidateTruthFields,
+  UnavailableField as GeneratedUnavailableField,
+} from "./types";
+
 // ── Types (snake_case matches BFF JSON response) ──────────────────────────────
 
-export interface CandidateScoreComponent {
-  component_id: string;
-  label: string;
-  category:
-    | "alpha"
-    | "confidence"
-    | "liquidity"
-    | "risk"
-    | "execution"
-    | "data_quality"
-    | "custom";
-  raw_value: number | null;
-  normalized_value: number | null;
-  transform: string;
-  direction: "higher_better" | "lower_better";
-  weight: number;
-  contribution: number;
-  missing_policy: string;
-  evidence_refs: string[];
-  explanation: string;
-}
+export type CandidateScoreComponent = GeneratedCandidateScoreResult["components"][number];
+export type CandidateScoreResult = GeneratedCandidateScoreResult;
 
-export interface CandidateScoreResult {
-  candidate_id: string;
-  pool_id: string;
-  recipe_id: string;
-  recipe_version: number;
-  raw_score: number;
-  penalty_score: number;
-  evidence_confidence: number;
-  effective_score: number;
-  rank: number | null;
-  band: "priority_review" | "discuss" | "needs_research" | "park" | "suppressed";
-  components: CandidateScoreComponent[];
-  blockers: string[];
-  data_cutoff: string;
-  scored_at: string;
-  override_reason: string | null;
-}
+export type CandidateFieldUnavailableReason = GeneratedUnavailableField;
+export type CandidateFieldProvenance = GeneratedCandidateFieldProvenance;
 
-export interface CandidatePoolMember {
-  artifact_id: string;
-  strategy_ref: string;
-  title?: string;
-  lifecycle_state: "candidate" | "review" | "approved" | "rejected";
-  producing_persona_id?: string;
-  sharpe_summary?: number;
-  run_ref?: string;
-  created_at: string;
+export type CandidateFieldState<T> =
+  | {
+      availability: "available";
+      value: T;
+      provenance: CandidateFieldProvenance;
+    }
+  | {
+      availability: "unavailable";
+      reason: CandidateFieldUnavailableReason;
+    };
+
+export type CandidateComponentDigest = GeneratedCandidateComponentDigest;
+export type CandidateRationaleValue = GeneratedCandidateRationaleValue;
+export type CandidateConcernsValue = GeneratedCandidateConcernsValue;
+export type CandidateNextEventValue = GeneratedCandidateNextEventValue;
+export type CandidateEvidenceItem = GeneratedCandidateEvidenceItem;
+export type CandidateEvidenceValue = GeneratedCandidateEvidenceValue;
+export type CandidateDetailsValue = GeneratedCandidateDetailsValue;
+export type CandidateTruthFields = GeneratedCandidateTruthFields;
+
+export type CandidateScoreSemanticsEntry = GeneratedCandidateScoreSemantics["effective_score"];
+export type CandidateScoreSemantics = GeneratedCandidateScoreSemantics;
+
+export type CandidatePoolMember = GeneratedCandidatePoolMember;
+export type CandidateMemberPageInfo = GeneratedCandidateMemberPageInfo;
+export type CandidateMemberListFreshness = GeneratedCandidateMemberListFreshness;
+
+export interface CandidatePoolMembersMeta {
+  snapshot_at: string | null;
+  freshness: CandidateMemberListFreshness;
+  /** Common envelope state; v1.12 currently omits it unless the source is degraded/stale. */
+  read_state?: string;
+  warnings?: string[];
 }
 
 /** v1.4 contract enum — must match _REVIEW_DECISION_TO_LIFECYCLE on the BFF */
@@ -109,6 +120,26 @@ function extractItems<T>(value: unknown): T[] {
   return Array.isArray(items) ? (items as T[]) : [];
 }
 
+interface CandidatePoolRequestOptions {
+  ifMatch?: string;
+  idempotencyKey?: string;
+  requestId?: string;
+}
+
+function candidatePoolHeaders(
+  method: "GET" | "POST",
+  options?: CandidatePoolRequestOptions,
+): Record<string, string> {
+  const extra: Record<string, string> = {};
+  if (options?.ifMatch) extra["If-Match"] = options.ifMatch;
+  if (options?.requestId) extra["X-Request-Id"] = options.requestId;
+  return buildHeaders({
+    method,
+    idempotency: options?.idempotencyKey,
+    extra,
+  });
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /**
@@ -124,7 +155,7 @@ export async function getCandidatePoolScore(
   const res = await fetch(url, {
     method: "GET",
     credentials: "include",
-    headers: { Accept: "application/json" },
+    headers: candidatePoolHeaders("GET"),
   });
   if (!res.ok) {
     const body = await parseJson(res);
@@ -151,17 +182,10 @@ export async function triggerCandidatePoolScore(
 ): Promise<void> {
   const base = resolvedBase(baseUrl);
   const url = `${base}/bff/agora/candidate-pools/${encodeURIComponent(poolId)}/score`;
-  const headers: Record<string, string> = {
-    Accept: "application/json",
-    "Content-Type": "application/json",
-  };
-  if (options?.ifMatch) headers["If-Match"] = options.ifMatch;
-  if (options?.idempotencyKey) headers["Idempotency-Key"] = options.idempotencyKey;
-  if (options?.requestId) headers["X-Request-Id"] = options.requestId;
   const res = await fetch(url, {
     method: "POST",
     credentials: "include",
-    headers,
+    headers: candidatePoolHeaders("POST", options),
     body: JSON.stringify({}),
   });
   if (!res.ok) {
@@ -177,6 +201,8 @@ export interface CandidatePoolMembersResult {
   items: CandidatePoolMember[];
   /** ETag from the response — forward as If-Match in subsequent writes. */
   etag: string | null;
+  pageInfo: CandidateMemberPageInfo | null;
+  meta: CandidatePoolMembersMeta;
 }
 
 /** List candidate pool members (metadata, lifecycle state). Returns items + ETag for If-Match. */
@@ -189,7 +215,7 @@ export async function listCandidatePoolMembers(
   const res = await fetch(url, {
     method: "GET",
     credentials: "include",
-    headers: { Accept: "application/json" },
+    headers: candidatePoolHeaders("GET"),
   });
   if (!res.ok) {
     const body = await parseJson(res);
@@ -199,9 +225,34 @@ export async function listCandidatePoolMembers(
     throw new Error(String(message));
   }
   const body = await parseJson(res);
+  const root = recordFrom(body);
+  const rawMeta = recordFrom(root.meta);
+  const rawFreshness = recordFrom(rawMeta.freshness);
+  const rawPageInfo = recordFrom(root.page_info);
   return {
     items: extractItems<CandidatePoolMember>(body),
     etag: res.headers.get("ETag"),
+    pageInfo: Object.keys(rawPageInfo).length > 0
+      ? rawPageInfo as unknown as CandidateMemberPageInfo
+      : null,
+    meta: {
+      snapshot_at: typeof rawMeta.snapshot_at === "string" ? rawMeta.snapshot_at : null,
+      freshness: {
+        pool_snapshot_at: typeof rawFreshness.pool_snapshot_at === "string"
+          ? rawFreshness.pool_snapshot_at
+          : null,
+        data_cutoff: typeof rawFreshness.data_cutoff === "string"
+          ? rawFreshness.data_cutoff
+          : null,
+        last_score_run_at: typeof rawFreshness.last_score_run_at === "string"
+          ? rawFreshness.last_score_run_at
+          : null,
+      },
+      read_state: typeof rawMeta.read_state === "string" ? rawMeta.read_state : undefined,
+      warnings: Array.isArray(rawMeta.warnings)
+        ? rawMeta.warnings.filter((warning): warning is string => typeof warning === "string")
+        : undefined,
+    },
   };
 }
 
@@ -212,8 +263,8 @@ export async function listCandidatePoolMembers(
  * Rejected candidates are retained as negative/preference examples; they are not deleted.
  *
  * options.ifMatch       — ETag from listCandidatePoolMembers; required by AG-BE-CP-001.
- * options.idempotencyKey — client-generated UUID; required by AG-BE-CP-001.
- * options.requestId      — client-generated UUID per request; required by AG-BE-CP-001.
+ * options.idempotencyKey — optional override for the canonical generated key.
+ * options.requestId      — optional override for the canonical generated request id.
  */
 export async function reviewCandidateMember(
   poolId: string,
@@ -224,17 +275,10 @@ export async function reviewCandidateMember(
 ): Promise<Record<string, unknown>> {
   const base = resolvedBase(baseUrl);
   const url = `${base}/bff/agora/candidate-pools/${encodeURIComponent(poolId)}/members/${encodeURIComponent(artifactId)}/review`;
-  const headers: Record<string, string> = {
-    Accept: "application/json",
-    "Content-Type": "application/json",
-  };
-  if (options?.ifMatch) headers["If-Match"] = options.ifMatch;
-  if (options?.idempotencyKey) headers["Idempotency-Key"] = options.idempotencyKey;
-  if (options?.requestId) headers["X-Request-Id"] = options.requestId;
   const res = await fetch(url, {
     method: "POST",
     credentials: "include",
-    headers,
+    headers: candidatePoolHeaders("POST", options),
     body: JSON.stringify(body),
   });
   if (!res.ok) {
