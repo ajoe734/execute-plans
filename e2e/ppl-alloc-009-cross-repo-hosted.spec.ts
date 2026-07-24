@@ -577,12 +577,12 @@ test.describe("PPL-ALLOC-009 hosted paper allocation acceptance", () => {
       ),
       {
         data: {
-          benchmark_version: "ppl-alloc-009-paper-positive-control-v1",
+          benchmark_version: "ppl-alloc-009-paper-positive-control-v2",
           run_key: RUN_KEY,
           task_id: "PPL-ALLOC-009",
         },
         headers: authHeaders(operator.token, {
-          "Idempotency-Key": idempotency("paper-eligibility-proof"),
+          "Idempotency-Key": idempotency("paper-eligibility-proof-v2"),
         }),
       },
     );
