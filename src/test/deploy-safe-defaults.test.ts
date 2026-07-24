@@ -662,6 +662,13 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
       'const PUBLIC_HEALTH_PATHS = ["/health", "/readyz"]',
     );
     expect(hostedBrowserProbe).toContain("response.status === 401");
+    expect(hostedBrowserProbe).toContain("assessAnonymousAuthRedirect");
+    expect(hostedBrowserProbe).toContain(
+      "anonymous auth boundary verified:",
+    );
+    expect(hostedBrowserProbe).toContain(
+      "requests.length > 0 || anonymousAuthBoundary.pass",
+    );
     expect(hostedBrowserProbe).toMatch(
       /AUTH_REQUIRED\|authentication required/u,
     );
