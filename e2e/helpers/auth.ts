@@ -425,5 +425,55 @@ export async function installOidcDevLogin(
   return session;
 }
 
+/**
+ * Installs the synthetic same-tab session used by fully intercepted loopback
+ * browser fixtures. The deny route is registered first so later fixture routes
+ * can handle declared BFF calls while every undeclared BFF request is blocked
+ * from reaching an external runtime with the synthetic credential.
+ */
+export async function installContainedLoopbackAuth(
+  page: E2ePage,
+  options: DevLoginOptions = {},
+): Promise<DevLoginSession> {
+  const env = options.env ?? defaultEnv();
+  if (!localFixtureFrontendIsLoopback(options, env)) {
+    throw localFixtureExternalFrontend();
+  }
+
+  await page.route("**/bff/**", async (route) => {
+    await route.abort("blockedbyclient");
+  });
+
+  return installContainedLoopbackAuthAuthority(page, options);
+}
+
+/**
+ * Re-registers the strict identity/readiness fixtures after a test's broader
+ * BFF catch-all routes, giving the auth authority endpoints exact priority
+ * without moving the deny-by-default route ahead of declared fixture routes.
+ */
+export async function installContainedLoopbackAuthAuthority(
+  page: E2ePage,
+  options: DevLoginOptions = {},
+): Promise<DevLoginSession> {
+  const env = options.env ?? defaultEnv();
+  if (!localFixtureFrontendIsLoopback(options, env)) {
+    throw localFixtureExternalFrontend();
+  }
+
+  return installOidcDevLogin(page, {
+    ...options,
+    env: {
+      ...env,
+      F08_CREATE_INTENT_LIVE_BFF: "",
+      FE_INT_GATE_LIVE_BFF: "",
+      PANTHEON_BROWSER_BFF_BASE_URL: "",
+      PANTHEON_HOSTED_E2E: "",
+      RUN_LIVE_BFF_CONTRACTS: "",
+    },
+    goto: options.goto ?? false,
+  });
+}
+
 export const installDevOidcLogin = installOidcDevLogin;
 export const devLogin = installOidcDevLogin;

@@ -20,6 +20,10 @@
  */
 
 import { test, expect, type Page, type Route } from "@playwright/test";
+import {
+  installContainedLoopbackAuth,
+  installContainedLoopbackAuthAuthority,
+} from "./helpers/auth";
 
 const STRATEGIES_ROUTE = "/bff/strategies";
 const DEFAULT_FRONTEND_BASE_URL = "http://127.0.0.1:5173";
@@ -152,6 +156,7 @@ async function injectBffResponse(
 }
 
 async function installStableShellRoutes(page: Page) {
+  await installContainedLoopbackAuth(page);
   const stableRoutes: Array<[string, number, unknown]> = [
     ["/health", 200, { status: "ok", service: "pantheon-f15-route-harness" }],
     ["/bff/me", 200, meResponse()],
@@ -177,6 +182,7 @@ async function installStableShellRoutes(page: Page) {
       });
     });
   }
+  await installContainedLoopbackAuthAuthority(page);
 }
 
 async function isolateOtherAncillaryBffRoutes(page: Page) {
