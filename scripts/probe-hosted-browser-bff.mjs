@@ -62,6 +62,9 @@ const CANDIDATE_SOURCE_SCAN_MODE = String(
 const OVERALL_TIMEOUT_MS = 120_000;
 const OPTIONAL_CORE_TIMEOUT_MS = 5_000;
 const NAVIGATION_WAIT_UNTIL = "domcontentloaded";
+const AUTH_ROUTE_PATH = "/auth";
+const AUTH_REQUIRED_REASON = "auth-required";
+const AUTH_BOUNDARY_TIMEOUT_MS = 10_000;
 export const HOSTED_UX_PROFILES = Object.freeze([
   Object.freeze({
     id: "desktop-1440",
@@ -138,6 +141,99 @@ function normalizePath(value) {
   const clean = String(value || "").trim();
   if (!clean) return "/";
   return clean.startsWith("/") ? clean : "/" + clean;
+}
+
+export function assessAnonymousAuthRedirect(
+  value,
+  expectedFromPath,
+  expectedOrigin = FE_BASE,
+) {
+  const expectedPath = normalizePath(expectedFromPath);
+  let url;
+  try {
+    url = new URL(String(value || ""), expectedOrigin);
+  } catch {
+    url = new URL(AUTH_ROUTE_PATH, expectedOrigin);
+  }
+  const reason = url.searchParams.get("reason") || "";
+  const from = url.searchParams.get("from") || "";
+  const safeReturnTarget = from.startsWith("/") && !from.startsWith("//");
+  let fromPath = "";
+  if (safeReturnTarget) {
+    try {
+      fromPath = new URL(from, expectedOrigin).pathname;
+    } catch {
+      fromPath = "";
+    }
+  }
+  const checks = {
+    sameOrigin: url.origin === new URL(expectedOrigin).origin,
+    authRoute: url.pathname === AUTH_ROUTE_PATH,
+    authRequiredReason: reason === AUTH_REQUIRED_REASON,
+    safeReturnTarget,
+    expectedReturnPath: fromPath === expectedPath,
+  };
+  return {
+    pass: Object.values(checks).every(Boolean),
+    url: redactUrl(url.toString()),
+    reason,
+    from,
+    checks,
+  };
+}
+
+async function waitForAnonymousAuthRedirect(page, expectedFromPath) {
+  await page.waitForURL(
+    (url) =>
+      assessAnonymousAuthRedirect(
+        url.toString(),
+        expectedFromPath,
+        FE_BASE,
+      ).pass,
+    { timeout: Math.min(AUTH_BOUNDARY_TIMEOUT_MS, remainingTimeoutMs()) },
+  );
+  return assessAnonymousAuthRedirect(page.url(), expectedFromPath, FE_BASE);
+}
+
+async function waitForRequiredCoreOrAuthBoundary(
+  page,
+  expectedPaths,
+  expectedFromPath,
+  coreTimeoutMs,
+) {
+  const corePromise = Promise.all(
+    expectedPaths.map((expectedPath) =>
+      waitForCoreBffResponse(page, expectedPath, coreTimeoutMs),
+    ),
+  ).then((responses) => ({ kind: "core", responses }));
+  const authPromise = waitForAnonymousAuthRedirect(
+    page,
+    expectedFromPath,
+  ).then((boundary) => ({ kind: "auth", boundary }));
+
+  try {
+    const outcome = await Promise.race([corePromise, authPromise]);
+    if (outcome.kind === "auth") {
+      return { responses: [], authBoundary: outcome.boundary };
+    }
+    return {
+      responses: outcome.responses,
+      authBoundary: assessAnonymousAuthRedirect(
+        page.url(),
+        expectedFromPath,
+        FE_BASE,
+      ),
+    };
+  } catch {
+    return {
+      responses: await corePromise.then((outcome) => outcome.responses),
+      authBoundary: assessAnonymousAuthRedirect(
+        page.url(),
+        expectedFromPath,
+        FE_BASE,
+      ),
+    };
+  }
 }
 
 function parsePathList(value, fallback) {
@@ -1523,6 +1619,11 @@ async function runHostedUxProfile({
     executionCompleted: false,
     shellStatus: 0,
     requiredCoreResponsesObserved: false,
+    anonymousAuthBoundary: assessAnonymousAuthRedirect(
+      "",
+      FE_PATH,
+      FE_BASE,
+    ),
     routeContentReady: false,
     axe: { completed: false, blockingViolations: [] },
     keyboardFocus: {
@@ -1636,25 +1737,23 @@ async function runHostedUxProfile({
       });
     });
 
-    const requiredCoreResponsePromises = REQUIRED_CORE_BFF_PATHS.map(
-      (expectedPath) =>
-        waitForCoreBffResponse(
-          page,
-          expectedPath,
-          Math.min(10_000, remainingTimeoutMs()),
-        ),
+    const requiredBoundaryPromise = waitForRequiredCoreOrAuthBoundary(
+      page,
+      REQUIRED_CORE_BFF_PATHS,
+      FE_PATH,
+      Math.min(10_000, remainingTimeoutMs()),
     );
     const response = await page.goto(pageUrl, {
       waitUntil: NAVIGATION_WAIT_UNTIL,
       timeout: Math.min(30_000, remainingTimeoutMs()),
     });
     result.shellStatus = response?.status() ?? 0;
-    const requiredCoreResponses = await Promise.all(
-      requiredCoreResponsePromises,
-    );
+    const requiredBoundary = await requiredBoundaryPromise;
+    const requiredCoreResponses = requiredBoundary.responses;
+    result.anonymousAuthBoundary = requiredBoundary.authBoundary;
     result.requiredCoreResponsesObserved = requiredCoreResponses.every(
       (entry) => entry.status > 0,
-    );
+    ) || result.anonymousAuthBoundary.pass;
     await page.waitForLoadState("load", {
       timeout: Math.min(10_000, remainingTimeoutMs()),
     });
@@ -1798,6 +1897,11 @@ async function runProbe() {
   let html = "";
   let bundleText = "";
   let personaFleetChecks = null;
+  let anonymousAuthBoundary = assessAnonymousAuthRedirect(
+    "",
+    FE_PATH,
+    FE_BASE,
+  );
   let shellStatus = 0;
   let rootChecks = {
     bodyTextLength: 0,
@@ -1934,8 +2038,11 @@ async function runProbe() {
 
   const pageUrl = withNoCache(FE_BASE + FE_PATH);
   try {
-    const requiredCoreResponsePromises = REQUIRED_CORE_BFF_PATHS.map(
-      (expectedPath) => waitForCoreBffResponse(page, expectedPath),
+    const requiredBoundaryPromise = waitForRequiredCoreOrAuthBoundary(
+      page,
+      REQUIRED_CORE_BFF_PATHS,
+      FE_PATH,
+      remainingTimeoutMs(),
     );
     const optionalCoreResponsePromises = OPTIONAL_CORE_BFF_PATHS.map(
       (expectedPath) =>
@@ -1973,28 +2080,34 @@ async function runProbe() {
         childElementCount: 0,
         rootTextLength: 0,
       }));
-    coreResponses.push(...(await Promise.all(optionalCoreResponsePromises)));
-    coreResponses.push(...(await Promise.all(requiredCoreResponsePromises)));
+    const requiredBoundary = await requiredBoundaryPromise;
+    anonymousAuthBoundary = requiredBoundary.authBoundary;
+    coreResponses.push(...requiredBoundary.responses);
+    if (!anonymousAuthBoundary.pass) {
+      coreResponses.push(...(await Promise.all(optionalCoreResponsePromises)));
+    }
 
     if (FE_PATH.includes("persona-fleet")) {
-      await page
-        .waitForFunction(
-          () => {
-            const text = document.body.innerText || "";
-            const rowCount = Array.from(document.querySelectorAll("tbody tr"))
-              .map((row) => (row.textContent || "").trim())
-              .filter(Boolean).length;
-            return (
-              rowCount > 0 ||
-              /AUTH_REQUIRED|authentication required|missing Bearer token|Live Persona Fleet data unavailable|目前沒有 live Persona Fleet 資料|seed fallback armed|fallback standby|NaN/iu.test(
-                text,
-              )
-            );
-          },
-          undefined,
-          { timeout: Math.min(15_000, remainingTimeoutMs()) },
-        )
-        .catch(() => {});
+      if (!anonymousAuthBoundary.pass) {
+        await page
+          .waitForFunction(
+            () => {
+              const text = document.body.innerText || "";
+              const rowCount = Array.from(document.querySelectorAll("tbody tr"))
+                .map((row) => (row.textContent || "").trim())
+                .filter(Boolean).length;
+              return (
+                rowCount > 0 ||
+                /AUTH_REQUIRED|authentication required|missing Bearer token|Live Persona Fleet data unavailable|目前沒有 live Persona Fleet 資料|seed fallback armed|fallback standby|NaN/iu.test(
+                  text,
+                )
+              );
+            },
+            undefined,
+            { timeout: Math.min(15_000, remainingTimeoutMs()) },
+          )
+          .catch(() => {});
+      }
 
       personaFleetChecks = await page
         .evaluate(() => {
@@ -2049,6 +2162,14 @@ async function runProbe() {
           rowsValid: false,
           liveBannerValid: false,
         }));
+      personaFleetChecks = {
+        ...personaFleetChecks,
+        hasAuthRequiredState:
+          personaFleetChecks.hasAuthRequiredState ||
+          anonymousAuthBoundary.pass,
+        liveBannerValid:
+          personaFleetChecks.liveBannerValid || anonymousAuthBoundary.pass,
+      };
     }
 
     html = await page.content();
@@ -2228,7 +2349,9 @@ async function runProbe() {
     requests.some((request) => isBffUrl(request.url)) ||
     responses.some((response) => isBffUrl(response.url)) ||
     coreResponses.some((response) => isBffUrl(response.url));
-  const usesIntendedBff = observedIntendedBff;
+  const usesIntendedBff =
+    observedIntendedBff ||
+    (anonymousAuthBoundary.pass && containsBffStatic);
   const containsOld =
     Boolean(OLD_BFF_URL) &&
     (bundleText.includes(OLD_BFF_URL) || html.includes(OLD_BFF_URL));
@@ -2238,12 +2361,14 @@ async function runProbe() {
     (total, hit) => total + (hit.count ?? 1),
     0,
   );
-  const requiredCoreResponseOk = REQUIRED_CORE_BFF_PATHS.every((expectedPath) =>
-    coreResponses.some(
-      (response) =>
-        response.path === expectedPath && isAcceptableCoreStatus(response),
-    ),
-  );
+  const requiredCoreResponseOk =
+    anonymousAuthBoundary.pass ||
+    REQUIRED_CORE_BFF_PATHS.every((expectedPath) =>
+      coreResponses.some(
+        (response) =>
+          response.path === expectedPath && isAcceptableCoreStatus(response),
+      ),
+    );
   const observedProtectedResponsesOk = coreResponses
     .filter((response) => response.status > 0)
     .every(isAcceptableCoreStatus);
@@ -2291,7 +2416,7 @@ async function runProbe() {
     rootRendered &&
     pageErrors.length === 0 &&
     oldUrlHitCount === 0 &&
-    requests.length > 0 &&
+    (requests.length > 0 || anonymousAuthBoundary.pass) &&
     failed.length === 0;
 
   const strictChecks = {
@@ -2355,6 +2480,11 @@ async function runProbe() {
     "## Summary",
     "",
     "- contains intended BFF URL: " + usesIntendedBff,
+    "- anonymous auth boundary verified: " + anonymousAuthBoundary.pass,
+    "- anonymous auth boundary reason: " +
+      (anonymousAuthBoundary.reason || "(none)"),
+    "- anonymous auth boundary return target: " +
+      (anonymousAuthBoundary.from || "(none)"),
     "- frontend shell status: " + shellStatus,
     "- application root rendered: " + rootRendered,
     "- root child element count: " + rootChecks.childElementCount,
@@ -2609,6 +2739,7 @@ async function runProbe() {
           shellOk,
           publicHealthOk,
           usesIntendedBff,
+          anonymousAuthBoundaryVerified: anonymousAuthBoundary.pass,
           requiredCoreResponseOk,
           observedProtectedResponsesOk,
           noAuthorizationRequests,
@@ -2619,7 +2750,8 @@ async function runProbe() {
           applicationRootRendered: rootRendered,
           pageErrorsAbsent: pageErrors.length === 0,
           oldUrlAbsent: oldUrlHitCount === 0,
-          bffRequestsObserved: requests.length > 0,
+          bffRequestsObserved:
+            requests.length > 0 || anonymousAuthBoundary.pass,
           bffRequestFailuresAbsent: failed.length === 0,
           pass: basePass,
         },
@@ -2659,6 +2791,7 @@ async function runProbe() {
         candidateRouteErrors,
         hostedUxProfiles,
         personaFleetChecks,
+        anonymousAuthBoundary,
         personaFleetSafety,
       },
       bff: {
