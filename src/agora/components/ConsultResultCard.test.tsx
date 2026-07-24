@@ -55,6 +55,13 @@ describe("ConsultResultCard", () => {
     expect(screen.getByText("fresh")).toBeDefined();
   });
 
+  it("renders participant persona refs", () => {
+    renderCard();
+    expect(screen.getByText("Participants")).toBeDefined();
+    expect(screen.getByText("persona-risk-a")).toBeDefined();
+    expect(screen.getByText("persona-risk-b")).toBeDefined();
+  });
+
   it("renders consensus summary", () => {
     renderCard();
     expect(screen.getByText(/position size cap at 2%/)).toBeDefined();
