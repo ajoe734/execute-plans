@@ -37,6 +37,7 @@ const RECOMMENDATION_SNAPSHOT_ROW_FIELDS = [
   "eligible",
   "exclusion_codes",
   "exclusion_reasons",
+  "evidence_ref_ids",
   "evidence_coverage",
   "source_confidence",
 ] as const;
@@ -70,6 +71,7 @@ export function bindPplAlloc009RecommendationSnapshot(
       rankingRow[field] = recommendation[field];
     }
   }
+  rankingRow.overall_score = recommendation.score;
   rankingRow.ranking_snapshot_id = recommendationSnapshotId;
 
   return {
