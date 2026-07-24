@@ -32,7 +32,7 @@ describe("writeIntents validation", () => {
     const r = validateCreate("persona", { name: "ab", archetype: "trader" });
     expect(r.errors.name).toBeDefined();
   });
-  it("persona rejects unknown role type and initial mode", () => {
+  it("persona rejects unknown role type and non-paper initial mode", () => {
     const r = validateCreate("persona", {
       name: "Persona X",
       archetype: "desk" as never,
@@ -41,23 +41,18 @@ describe("writeIntents validation", () => {
     expect(r.errors.archetype).toBe("invalid option");
     expect(r.errors.initialMode).toBe("invalid option");
   });
-  it("persona keeps shadow as execution mode instead of lifecycle status", () => {
-    const shadow = buildEntity("persona", {
+  it("persona creation defaults to a paper-running runtime contract", () => {
+    const paper = buildEntity("persona", {
       name: "Persona X",
       archetype: "trader",
-      initialMode: "shadow",
     });
-    expect(shadow.state).toBe("draft");
-    expect(shadow.lifecycleStatus).toBe("draft");
-    expect(shadow.executionMode).toBe("shadow");
-
-    const suspended = buildEntity("persona", {
-      name: "Persona Y",
-      archetype: "risk",
-      initialMode: "suspended",
-    });
-    expect(suspended.state).toBe("paused");
-    expect(suspended.lifecycleStatus).toBe("suspended");
-    expect(suspended.executionMode).toBe("suspended");
+    expect(paper.state).toBe("paper_running");
+    expect(paper.lifecycleStatus).toBe("paper_running");
+    expect(paper.executionMode).toBe("paper");
+    expect(paper.capitalMode).toBe("paper");
+    expect(paper.deploymentStage).toBe("paper");
+    expect(paper.liveCapitalEnabled).toBe(false);
+    expect(paper.orderSideEffectsAllowed).toBe(false);
+    expect(paper.capitalSideEffectsAllowed).toBe(false);
   });
 });

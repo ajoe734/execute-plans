@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "files": [
+    "src/lib/bff-v1/agora/types.ts",
+    "src/lib/bff-v1/agora/performance.ts",
+    "src/lib/bff-v1/agora/candidatePool.ts",
+    "src/lib/bff-v1/agora/workshops.ts",
+    "src/lib/bff-v1/__tests__/agora-dtos-binding.test.ts",
+    "src/agora/pages/strategy-performance/StrategyPerformancePage.tsx"
+  ],
+  "include": []
+}

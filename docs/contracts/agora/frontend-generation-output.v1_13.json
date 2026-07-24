@@ -1,0 +1,22 @@
+{
+  "handoff_version": "1.0",
+  "contract_family": "agora.v1.13",
+  "generated": true,
+  "frontend": {
+    "repo": "ajoe734/execute-plans",
+    "runtime_commit": "c76a838342b08331849f994d8f756155d2e3b961",
+    "generated_from_contract_commit": "9e909de182f9f2379d23e8e6b81eefec29ffbce7",
+    "bundle_index_sha256": "b1d488c3b35aa1c691e5b464362ac5a2fdd1efc442249e15be9bb143f379f870",
+    "openapi_sha256": "36d1be5bc033ea1a55610f3f523fc478704fdfad1f06fec620e741bed9bf6f86",
+    "generated_types_sha256": "5ef7b5752304b65f041f2e5a724f0e16f28d4a1db36484eefc2cf0c8b77c092e"
+  },
+  "generation_metadata": {
+    "expected_output_paths": [
+      "src/lib/bff-v1/agora/contract-snapshot.json",
+      "src/lib/bff-v1/agora/types.ts"
+    ],
+    "file_hash_algorithm": "sha256-exact-git-bytes-v1",
+    "generated_types_hash_algorithm": "sha256-path-tab-filehash-lf-v1"
+  },
+  "generated_at": "2026-07-23T08:42:22Z"
+}
