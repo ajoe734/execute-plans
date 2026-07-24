@@ -80,7 +80,7 @@ jobs:
           [[ "${PPL_ALLOC_009_TENANT_ID}" == "tenant-dev" ]]
 
       - name: Set up Node
-        uses: actions/setup-node@1e60f620b9541d0c243d96c8b7695a910765aa6a
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: "20"
           cache: npm
