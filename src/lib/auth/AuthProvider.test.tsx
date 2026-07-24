@@ -1,12 +1,14 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
-import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
+import type { User } from "firebase/auth";
+import type { GcpIdentitySession } from "@/integrations/gcp/identity";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  authListener: null as ((event: AuthChangeEvent, session: Session | null) => void) | null,
-  getSession: vi.fn(),
-  supabaseSignOut: vi.fn(),
+  authListener: null as ((user: User | null) => void) | null,
+  initialUser: null as User | null,
+  identitySession: vi.fn(),
+  identitySignOut: vi.fn(),
   unsubscribe: vi.fn(),
   register: vi.fn(),
   clear: vi.fn(),
@@ -15,17 +17,19 @@ const mocks = vi.hoisted(() => ({
   bffLogout: vi.fn(),
 }));
 
-vi.mock("@/integrations/supabase/client", () => ({
-  supabase: {
-    auth: {
-      onAuthStateChange: (listener: (event: AuthChangeEvent, session: Session | null) => void) => {
-        mocks.authListener = listener;
-        return { data: { subscription: { unsubscribe: mocks.unsubscribe } } };
-      },
-      getSession: mocks.getSession,
-      signOut: mocks.supabaseSignOut,
-    },
+vi.mock("firebase/auth", () => ({
+  onIdTokenChanged: (_auth: unknown, listener: (user: User | null) => void) => {
+    mocks.authListener = listener;
+    queueMicrotask(() => listener(mocks.initialUser));
+    return mocks.unsubscribe;
   },
+  signOut: mocks.identitySignOut,
+}));
+
+vi.mock("@/integrations/gcp/identity", () => ({
+  gcpIdentityAuth: {},
+  gcpIdentityReady: Promise.resolve(),
+  gcpIdentitySession: mocks.identitySession,
 }));
 
 vi.mock("@/lib/auth/bffBrowserSession", () => ({
@@ -38,14 +42,12 @@ vi.mock("@/lib/auth/bffBrowserSession", () => ({
 
 import { AuthProvider, useAuth } from "./AuthProvider";
 
-function session(token: string): Session {
+function session(token: string): GcpIdentitySession {
   return {
-    access_token: token,
-    refresh_token: "refresh-never-persisted",
-    expires_in: 3600,
-    token_type: "bearer",
-    user: { id: "supabase-user", app_metadata: {}, user_metadata: {} },
-  } as Session;
+    idToken: token,
+    claims: {},
+    user: { uid: "gcp-user" } as User,
+  };
 }
 
 const verified = {
@@ -76,8 +78,10 @@ function wrapper({ children }: { children: ReactNode }) {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.authListener = null;
-  mocks.getSession.mockResolvedValue({ data: { session: session("initial-token") } });
-  mocks.supabaseSignOut.mockResolvedValue({ error: null });
+  mocks.initialUser = { uid: "gcp-user" } as User;
+  mocks.identitySession.mockImplementation(async (user: User) =>
+    session(user === mocks.initialUser ? "initial-token" : "refreshed-token"));
+  mocks.identitySignOut.mockResolvedValue(undefined);
   mocks.verify.mockResolvedValue(verified);
   mocks.refreshVerify.mockResolvedValue(verified);
   mocks.bffLogout.mockResolvedValue(undefined);
@@ -88,7 +92,7 @@ describe("AuthProvider strict BFF bridge", () => {
     const { result } = renderHook(() => useAuth(), { wrapper });
 
     await waitFor(() => expect(result.current.loading).toBe(false));
-    expect(mocks.register).toHaveBeenCalledWith(expect.objectContaining({ access_token: "initial-token" }));
+    expect(mocks.register).toHaveBeenCalledWith(expect.objectContaining({ idToken: "initial-token" }));
     expect(mocks.register.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.verify.mock.invocationCallOrder[0],
     );
@@ -101,51 +105,51 @@ describe("AuthProvider strict BFF bridge", () => {
     await waitFor(() => expect(result.current.loading).toBe(false));
     mocks.register.mockClear();
     mocks.refreshVerify.mockClear();
-    const refreshed = session("refreshed-token");
+    const refreshedUser = { uid: "gcp-user" } as User;
 
     act(() => {
-      mocks.authListener?.("TOKEN_REFRESHED", refreshed);
+      mocks.authListener?.(refreshedUser);
     });
 
     await waitFor(() => expect(mocks.refreshVerify).toHaveBeenCalledOnce());
-    expect(mocks.register).toHaveBeenCalledWith(refreshed);
+    expect(mocks.register).toHaveBeenCalledWith(expect.objectContaining({ idToken: "refreshed-token" }));
     expect(mocks.register.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.refreshVerify.mock.invocationCallOrder[0],
     );
     await waitFor(() => expect(result.current.loading).toBe(false));
   });
 
-  it("calls BFF logout with the current bearer before clearing Supabase and provider state", async () => {
+  it("calls BFF logout with the current bearer before clearing GCP Identity and provider state", async () => {
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.loading).toBe(false));
     mocks.register.mockClear();
     mocks.bffLogout.mockClear();
-    mocks.supabaseSignOut.mockClear();
+    mocks.identitySignOut.mockClear();
     mocks.clear.mockClear();
 
     await act(async () => {
       await result.current.signOut();
     });
 
-    expect(mocks.register).toHaveBeenCalledWith(expect.objectContaining({ access_token: "initial-token" }));
+    expect(mocks.register).toHaveBeenCalledWith(expect.objectContaining({ idToken: "initial-token" }));
     expect(mocks.bffLogout).toHaveBeenCalledOnce();
-    expect(mocks.supabaseSignOut).toHaveBeenCalledOnce();
+    expect(mocks.identitySignOut).toHaveBeenCalledOnce();
     expect(mocks.bffLogout.mock.invocationCallOrder[0]).toBeLessThan(
-      mocks.supabaseSignOut.mock.invocationCallOrder[0],
+      mocks.identitySignOut.mock.invocationCallOrder[0],
     );
-    expect(mocks.supabaseSignOut.mock.invocationCallOrder[0]).toBeLessThan(
+    expect(mocks.identitySignOut.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.clear.mock.invocationCallOrder.at(-1) ?? 0,
     );
     expect(result.current.session).toBeNull();
     expect(result.current.bffSession).toBeNull();
   });
 
-  it("fails closed when Supabase authenticates but BFF verification rejects", async () => {
+  it("fails closed when GCP Identity authenticates but BFF verification rejects", async () => {
     mocks.verify.mockRejectedValue(new Error("BFF returned 401"));
     const { result } = renderHook(() => useAuth(), { wrapper });
 
     await waitFor(() => expect(result.current.loading).toBe(false));
-    expect(result.current.session?.access_token).toBe("initial-token");
+    expect(result.current.session?.idToken).toBe("initial-token");
     expect(result.current.bffSession).toBeNull();
     expect(result.current.bffError?.message).toContain("401");
     expect(mocks.clear).toHaveBeenCalled();
@@ -166,7 +170,7 @@ describe("AuthProvider strict BFF bridge", () => {
     });
     expect(logoutError).toBeInstanceOf(Error);
     expect((logoutError as Error).message).toBe("BFF offline");
-    expect(mocks.supabaseSignOut).toHaveBeenCalledOnce();
+    expect(mocks.identitySignOut).toHaveBeenCalledOnce();
     await waitFor(() => expect(result.current.session).toBeNull());
     expect(result.current.bffSession).toBeNull();
   });

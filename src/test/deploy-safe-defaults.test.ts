@@ -143,23 +143,20 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     expect(gitignore).toMatch(/^!\.env\*\.example$/mu);
   });
 
-  it("injects public Supabase config only while building a gated candidate", () => {
+  it("injects public GCP Identity config only while building a gated candidate", () => {
     for (const workflow of [branchWorkflow, integrationWorkflow]) {
       expect(workflow).toContain(
-        "VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}",
+        "VITE_GCP_IDENTITY_API_KEY: ${{ vars.VITE_GCP_IDENTITY_API_KEY }}",
       );
       expect(workflow).toContain(
-        "VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}",
+        "VITE_GCP_IDENTITY_PROJECT_ID: ${{ vars.VITE_GCP_IDENTITY_PROJECT_ID }}",
       );
-      expect(workflow.match(/VITE_SUPABASE_URL:/gu)).toHaveLength(1);
-      expect(workflow.match(/VITE_SUPABASE_PUBLISHABLE_KEY:/gu)).toHaveLength(
-        1,
+      expect(workflow).toContain(
+        "VITE_GCP_IDENTITY_AUTH_DOMAIN: ${{ vars.VITE_GCP_IDENTITY_AUTH_DOMAIN }}",
       );
     }
-    expect(deployWorkflow).not.toContain("VITE_SUPABASE_URL");
-    expect(deployWorkflow).not.toContain("VITE_SUPABASE_PUBLISHABLE_KEY");
-    expect(deployScript).not.toContain("VITE_SUPABASE_URL");
-    expect(deployScript).not.toContain("VITE_SUPABASE_PUBLISHABLE_KEY");
+    expect(deployWorkflow).not.toContain("VITE_GCP_IDENTITY_API_KEY");
+    expect(deployScript).not.toContain("VITE_GCP_IDENTITY_API_KEY");
     expect(deployWorkflow).not.toContain(
       "PANTHEON_HOSTED_BROWSER_BEARER_TOKEN",
     );
@@ -195,8 +192,7 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     // collecting any tests with "unknown option".
     expect(fixtureBlock).not.toMatch(/--(?:screenshot|video)(?:=|\s)/u);
     expect(fixtureBlock).not.toContain("npm run dev --");
-    expect(fixtureBlock).not.toContain("VITE_SUPABASE_URL:");
-    expect(fixtureBlock).not.toContain("VITE_SUPABASE_PUBLISHABLE_KEY:");
+    expect(fixtureBlock).not.toContain("VITE_GCP_IDENTITY_API_KEY:");
     expect(fixtureBlock).toContain("VITE_BFF_FALLBACK: strict");
     expect(fixtureBlock).toContain("BFF_FALLBACK: strict");
     for (const credential of ["BFF_AUTH_TOKEN", "VITE_BFF_DEV_BEARER_TOKEN"]) {
@@ -494,7 +490,7 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
       "PANTHEON_EXPECTED_BFF_SHA: ${{ inputs.bff_sha }}",
     );
     expect(authorizedProof).toContain(
-      "PANTHEON_PUBLIC_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}",
+      "PANTHEON_PUBLIC_GCP_IDENTITY_API_KEY: ${{ vars.VITE_GCP_IDENTITY_API_KEY }}",
     );
     expect(hostedPersonaInteractionSpec).toContain("installVerifiedHostedProofSession");
     expect(hostedPersonaInteractionSpec).not.toContain("installOidcDevLogin");

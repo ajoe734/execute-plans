@@ -8,7 +8,11 @@
 import AxeBuilder from "@axe-core/playwright";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { expect, test, type APIRequestContext, type Page, type TestInfo } from "@playwright/test";
-import { roleTokenFromEnv } from "./helpers/auth";
+import {
+  gcpIdentityStorageKey,
+  gcpIdentityStoredUser,
+  roleTokenFromEnv,
+} from "./helpers/auth";
 
 const FE_BASE = (process.env.PANTHEON_FE_BASE_URL ?? "").replace(/\/+$/, "");
 const BFF_BASE = (process.env.PANTHEON_BFF_BASE_URL ?? "").replace(/\/+$/, "");
@@ -17,7 +21,9 @@ const EXPECTED_BFF_SHA = String(process.env.PANTHEON_BFF_SHA ?? "").trim().toLow
 // `pantheon-dev` names the hosted environment; `tenant-dev` is the canonical
 // data-plane tenant used by its lifecycle projector and short-lived proof JWTs.
 const TENANT_ID = String(process.env.PANTHEON_TENANT_ID ?? "tenant-dev").trim();
-const PUBLIC_SUPABASE_URL = String(process.env.PANTHEON_PUBLIC_SUPABASE_URL ?? "").trim();
+const GCP_IDENTITY_API_KEY = String(
+  process.env.PANTHEON_PUBLIC_GCP_IDENTITY_API_KEY ?? "",
+).trim();
 const OPERATOR_TOKEN = roleTokenFromEnv("operator", ["PANTHEON_PERSONA_INTERACTION_OPERATOR_TOKEN"]);
 const VIEWER_TOKEN = roleTokenFromEnv("viewer", ["PANTHEON_PERSONA_INTERACTION_VIEWER_TOKEN"]);
 const EVIDENCE_DIR = process.env.PANTHEON_AUDIT_OUT_DIR || "/tmp/tj-e2e-012-hosted-browser";
@@ -161,35 +167,21 @@ async function installHostedSession(
   page: Page,
   input: { operatorId: string; roles: string[]; token: string },
 ): Promise<void> {
-  const supabase = new URL(PUBLIC_SUPABASE_URL);
-  expect(supabase.protocol).toBe("https:");
-  expect(supabase.hostname.endsWith(".supabase.co")).toBe(true);
+  expect(GCP_IDENTITY_API_KEY).toMatch(/^AIza[A-Za-z0-9_-]{35}$/u);
   const claims = bearerClaims(input.token);
   const nowSeconds = Math.floor(Date.now() / 1000);
   const expiresAt = Number(claims.exp ?? 0);
   expect(String(claims.sub ?? "")).toBe(input.operatorId);
   expect(expiresAt).toBeGreaterThan(nowSeconds + 240);
-  const projectRef = supabase.hostname.split(".")[0];
-  const storageKey = `sb-${projectRef}-auth-token`;
-  const storedSession = {
-    access_token: input.token,
-    refresh_token: "hosted-proof-no-refresh",
-    expires_in: Math.max(60, expiresAt - nowSeconds),
-    expires_at: expiresAt,
-    token_type: "bearer",
-    user: {
-      id: input.operatorId,
-      aud: String(claims.aud ?? "authenticated"),
-      role: String(claims.role ?? "authenticated"),
-      app_metadata: {
-        ...record(claims.app_metadata),
-        roles: input.roles,
-        tenant_id: TENANT_ID,
-      },
-      user_metadata: record(claims.user_metadata),
-      created_at: new Date(nowSeconds * 1000).toISOString(),
-    },
-  };
+  const storageKey = gcpIdentityStorageKey(GCP_IDENTITY_API_KEY);
+  const storedSession = gcpIdentityStoredUser({
+    apiKey: GCP_IDENTITY_API_KEY,
+    email: typeof claims.email === "string"
+      ? claims.email
+      : `${input.operatorId}@pantheon-dev.invalid`,
+    token: input.token,
+    uid: input.operatorId,
+  });
   await page.addInitScript(
     ({ key, session }) => {
       try {
@@ -281,7 +273,7 @@ test.describe("TJ-E2E-012 hosted Trade Journey browser proof", () => {
     page,
     request,
   }, testInfo) => {
-    test.skip(!OPERATOR_TOKEN || !PUBLIC_SUPABASE_URL, "requires an operator token and hosted Supabase URL");
+    test.skip(!OPERATOR_TOKEN || !GCP_IDENTITY_API_KEY, "requires an operator token and GCP Identity config");
     test.setTimeout(180_000);
     const deployment = await assertDeploymentPair(request);
     const session = await assertStrictSession(request, OPERATOR_TOKEN, "operator");
@@ -336,7 +328,7 @@ test.describe("TJ-E2E-012 hosted Trade Journey browser proof", () => {
     page,
     request,
   }, testInfo) => {
-    test.skip(!VIEWER_TOKEN || !PUBLIC_SUPABASE_URL, "requires a viewer token and hosted Supabase URL");
+    test.skip(!VIEWER_TOKEN || !GCP_IDENTITY_API_KEY, "requires a viewer token and GCP Identity config");
     test.setTimeout(120_000);
     const deployment = await assertDeploymentPair(request);
     const session = await assertStrictSession(request, VIEWER_TOKEN, "viewer");
@@ -370,7 +362,7 @@ test.describe("TJ-E2E-012 hosted Trade Journey browser proof", () => {
     page,
     request,
   }, testInfo) => {
-    test.skip(!OPERATOR_TOKEN || !PUBLIC_SUPABASE_URL, "requires an operator token and hosted Supabase URL");
+    test.skip(!OPERATOR_TOKEN || !GCP_IDENTITY_API_KEY, "requires an operator token and GCP Identity config");
     test.setTimeout(120_000);
     const deployment = await assertDeploymentPair(request);
     const session = await assertStrictSession(request, OPERATOR_TOKEN, "operator");

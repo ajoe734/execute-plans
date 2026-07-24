@@ -64,15 +64,15 @@ describe("Persona and Agora auth route boundary", () => {
     expect(screen.queryByText("Persona interaction")).not.toBeInTheDocument();
   });
 
-  it("does not admit a Supabase-only session before BFF verification", () => {
-    state.value.session = { access_token: "supabase-only" };
+  it("does not admit a GCP first-factor session before BFF verification", () => {
+    state.value.session = { idToken: "gcp-first-factor-only" };
     renderRoute();
     expect(screen.getByText("Authentication page")).toBeInTheDocument();
     expect(screen.queryByText("Persona interaction")).not.toBeInTheDocument();
   });
 
   it("admits a BFF-authenticated viewer to read while write gates remain separate", () => {
-    state.value.session = { access_token: "viewer-token" };
+    state.value.session = { idToken: "viewer-token" };
     state.value.bffSession = {
       identity: { roles: ["viewer"], capabilities: [] },
       readiness: { authReady: false, operatorRoleReady: false },

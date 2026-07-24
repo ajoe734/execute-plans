@@ -55,7 +55,7 @@ jobs:
       PPL_ALLOC_009_FE_BASE_URL: ${{ inputs.fe_base_url }}
       PPL_ALLOC_009_OPERATOR_CLIENT_ID: ${{ vars.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_ID || 'pantheon-dev-operator-a-v1' }}
       PPL_ALLOC_009_OPERATOR_CLIENT_SECRET: ${{ secrets.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_SECRET }}
-      PPL_ALLOC_009_PUBLIC_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+      PPL_ALLOC_009_GCP_IDENTITY_API_KEY: ${{ vars.VITE_GCP_IDENTITY_API_KEY }}
       PPL_ALLOC_009_QUARTER: ${{ inputs.quarter }}
       PPL_ALLOC_009_RUN_KEY: "30095677466"
       PPL_ALLOC_009_TENANT_ID: ${{ inputs.tenant_id }}
@@ -76,7 +76,7 @@ jobs:
           [[ -n "${PPL_ALLOC_009_OPERATOR_CLIENT_SECRET}" ]]
           [[ -n "${PPL_ALLOC_009_APPROVER_CLIENT_ID}" ]]
           [[ -n "${PPL_ALLOC_009_APPROVER_CLIENT_SECRET}" ]]
-          [[ -n "${PPL_ALLOC_009_PUBLIC_SUPABASE_URL}" ]]
+          [[ "${PPL_ALLOC_009_GCP_IDENTITY_API_KEY}" =~ ^AIza[A-Za-z0-9_-]{35}$ ]]
           [[ "${PPL_ALLOC_009_RUN_KEY}" == "30095677466" ]]
           [[ "${PPL_ALLOC_009_TENANT_ID}" == "tenant-dev" ]]
 

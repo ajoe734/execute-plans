@@ -3,7 +3,7 @@ import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
 import { validatePublicBuildBearerToken } from "./src/config/publicBuildAuth";
-import { validatePublicSupabaseConfig } from "./src/config/publicSupabase";
+import { validatePublicGcpIdentityConfig } from "./src/config/publicGcpIdentity";
 
 const bffProxyTarget =
   process.env.PANTHEON_BFF_BASE_URL ||
@@ -19,10 +19,13 @@ export default defineConfig(({ mode }) => {
   validatePublicBuildBearerToken(
     process.env.VITE_BFF_DEV_BEARER_TOKEN ?? loadedEnv.VITE_BFF_DEV_BEARER_TOKEN,
   );
-  validatePublicSupabaseConfig(
-    process.env.VITE_SUPABASE_URL ?? loadedEnv.VITE_SUPABASE_URL,
-    process.env.VITE_SUPABASE_PUBLISHABLE_KEY
-      ?? loadedEnv.VITE_SUPABASE_PUBLISHABLE_KEY,
+  validatePublicGcpIdentityConfig(
+    process.env.VITE_GCP_IDENTITY_API_KEY
+      ?? loadedEnv.VITE_GCP_IDENTITY_API_KEY,
+    process.env.VITE_GCP_IDENTITY_PROJECT_ID
+      ?? loadedEnv.VITE_GCP_IDENTITY_PROJECT_ID,
+    process.env.VITE_GCP_IDENTITY_AUTH_DOMAIN
+      ?? loadedEnv.VITE_GCP_IDENTITY_AUTH_DOMAIN,
   );
 
   return {

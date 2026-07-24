@@ -3,9 +3,12 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  signInWithPassword: vi.fn(),
-  signUp: vi.fn(),
-  signInWithOAuth: vi.fn(),
+  createUser: vi.fn(),
+  signIn: vi.fn(),
+  sendVerification: vi.fn(),
+  resetPassword: vi.fn(),
+  identitySignOut: vi.fn(),
+  multiFactor: vi.fn(() => ({ enrolledFactors: [] })),
   signOut: vi.fn(),
   auth: {
     session: null,
@@ -16,22 +19,23 @@ const mocks = vi.hoisted(() => ({
   } as Record<string, unknown>,
 }));
 
-vi.mock("@/integrations/supabase/client", () => ({
-  supabase: {
-    auth: {
-      signInWithPassword: mocks.signInWithPassword,
-      signUp: mocks.signUp,
-    },
+vi.mock("firebase/auth", () => ({
+  createUserWithEmailAndPassword: mocks.createUser,
+  getMultiFactorResolver: vi.fn(),
+  multiFactor: mocks.multiFactor,
+  sendEmailVerification: mocks.sendVerification,
+  sendPasswordResetEmail: mocks.resetPassword,
+  signInWithEmailAndPassword: mocks.signIn,
+  signOut: mocks.identitySignOut,
+  TotpMultiFactorGenerator: {
+    FACTOR_ID: "totp",
+    assertionForSignIn: vi.fn(),
+    assertionForEnrollment: vi.fn(),
+    generateSecret: vi.fn(),
   },
 }));
 
-vi.mock("@/integrations/lovable", () => ({
-  lovable: {
-    auth: {
-      signInWithOAuth: mocks.signInWithOAuth,
-    },
-  },
-}));
+vi.mock("@/integrations/gcp/identity", () => ({ gcpIdentityAuth: {} }));
 
 vi.mock("@/lib/auth/AuthProvider", () => ({
   useAuth: () => mocks.auth,
@@ -59,9 +63,10 @@ beforeEach(() => {
     loading: false,
     signOut: mocks.signOut,
   };
-  mocks.signInWithPassword.mockResolvedValue({ error: null });
-  mocks.signUp.mockResolvedValue({ error: null });
-  mocks.signInWithOAuth.mockResolvedValue({ error: null });
+  mocks.signIn.mockResolvedValue({ user: { uid: "gcp-user" } });
+  mocks.createUser.mockResolvedValue({ user: { uid: "gcp-user" } });
+  mocks.sendVerification.mockResolvedValue(undefined);
+  mocks.identitySignOut.mockResolvedValue(undefined);
 });
 
 describe("Pantheon auth recovery page", () => {
@@ -76,7 +81,7 @@ describe("Pantheon auth recovery page", () => {
     );
   });
 
-  it("submits user credentials through Supabase", async () => {
+  it("submits user credentials through GCP Identity Platform", async () => {
     renderAuth("/auth?reason=auth-required&from=%2Fmanagement%2Fcockpit");
 
     fireEvent.change(screen.getByPlaceholderText("Email"), {
@@ -89,16 +94,38 @@ describe("Pantheon auth recovery page", () => {
       fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
     });
 
-    expect(mocks.signInWithPassword).toHaveBeenCalledWith({
-      email: "operator@example.test",
-      password: "correct-password",
-    });
+    expect(mocks.signIn).toHaveBeenCalledWith(
+      {},
+      "operator@example.test",
+      "correct-password",
+    );
+  });
+
+  it("offers required TOTP enrollment before showing a BFF first-factor rejection", () => {
+    mocks.auth = {
+      ...mocks.auth,
+      session: {
+        user: {
+          email: "operator@example.test",
+          emailVerified: true,
+          uid: "gcp-user",
+        },
+      },
+      bffError: new Error("MFA proof required"),
+    };
+
+    renderAuth("/auth");
+
+    expect(screen.getByText("Set up authenticator MFA")).toBeInTheDocument();
+    expect(
+      screen.queryByText("Pantheon session verification failed."),
+    ).not.toBeInTheDocument();
   });
 
   it("rejects a protocol-relative return target", () => {
     mocks.auth = {
       ...mocks.auth,
-      session: { access_token: "signed-token" },
+      session: { idToken: "signed-token" },
       bffSession: { identity: { authenticated: true } },
     };
 

@@ -11,7 +11,7 @@ describe("strict browser auth source contract", () => {
     const headers = source("lib/bff-v1/headers.ts");
     const authProvider = source("lib/auth/AuthProvider.tsx");
     const browserSession = source("lib/auth/bffBrowserSession.ts");
-    const supabaseClient = source("integrations/supabase/client.ts");
+    const identityClient = source("integrations/gcp/identity.ts");
     const bffBridge = [headers, authProvider, browserSession].join("\n");
 
     expect(bffBridge).not.toMatch(/localStorage|sessionStorage/);
@@ -23,20 +23,20 @@ describe("strict browser auth source contract", () => {
     expect(bffBridge).not.toContain("pantheon.bff.bearerToken");
     expect(bffBridge).not.toContain("pantheon_operator_token");
     expect(bffBridge).not.toContain("VITE_BFF_DEV_BEARER_TOKEN");
-    expect(supabaseClient).toContain("storage: sameTabAuthStorage");
+    expect(identityClient).toContain("browserSessionPersistence");
   });
 
-  it("limits Supabase persistence to same-tab sessionStorage", () => {
-    const storage = source("integrations/supabase/sameTabAuthStorage.ts");
-    expect(storage).toContain("window.sessionStorage");
-    expect(storage).not.toContain("window.localStorage");
-    expect(storage).not.toContain("pantheon.bff.bearerToken");
-    expect(storage).not.toContain("pantheon_operator_token");
+  it("limits GCP Identity persistence to same-tab browser session persistence", () => {
+    const identityClient = source("integrations/gcp/identity.ts");
+    expect(identityClient).toContain("browserSessionPersistence");
+    expect(identityClient).not.toContain("browserLocalPersistence");
+    expect(identityClient).not.toContain("pantheon.bff.bearerToken");
+    expect(identityClient).not.toContain("pantheon_operator_token");
   });
 
-  it("keeps loopback E2E auth on Supabase storage and removes legacy BFF keys", () => {
+  it("keeps loopback E2E auth on Firebase SDK storage and removes legacy BFF keys", () => {
     const helper = readFileSync(resolve(process.cwd(), "e2e/helpers/auth.ts"), "utf8");
-    expect(helper).toContain("sb-${projectRef}-auth-token");
+    expect(helper).toContain("firebase:authUser:${apiKey}:[DEFAULT]");
     expect(helper).toContain('page.route("**/bff/me"');
     expect(helper).toContain('page.route("**/bff/auth/readiness"');
     expect(helper).not.toContain("pantheon.bff.bearerToken");
@@ -48,7 +48,7 @@ describe("strict browser auth source contract", () => {
     const combined = [
       source("lib/auth/AuthProvider.tsx"),
       source("lib/auth/bffBrowserSession.ts"),
-      source("integrations/supabase/client.ts"),
+      source("integrations/gcp/identity.ts"),
     ].join("\n");
 
     expect(combined).not.toMatch(/service[_-]?role/i);

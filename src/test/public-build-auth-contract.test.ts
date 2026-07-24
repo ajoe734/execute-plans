@@ -17,19 +17,13 @@ import {
   normalizeBearerToken as normalizeScriptBearerToken,
 } from "../../scripts/lib/bearer-token.mjs";
 import { validatePublicBuildBearerToken } from "@/config/publicBuildAuth";
-import { validatePublicSupabaseConfig } from "@/config/publicSupabase";
+import { validatePublicGcpIdentityConfig } from "@/config/publicGcpIdentity";
 
 const originalToken = process.env.VITE_BFF_DEV_BEARER_TOKEN;
 const trackedViewerIdentity = ["pantheon-dev-browser", "viewer"].join(":");
 // These two subprocess checks are optional in a browser-free unit-test phase;
 // the workflow provisions Chromium separately before its Playwright phase.
 const chromiumInstalled = existsSync(chromium.executablePath());
-
-function syntheticSupabaseJwt(role: string): string {
-  const encode = (value: Record<string, string>) =>
-    Buffer.from(JSON.stringify(value)).toString("base64url");
-  return `${encode({ alg: "HS256", typ: "JWT" })}.${encode({ role })}.synthetic-signature`;
-}
 
 function filesRecursively(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -44,48 +38,29 @@ afterEach(() => {
 });
 
 describe("public frontend build auth boundary", () => {
-  it("requires valid public Supabase client configuration without accepting secret keys", () => {
+  it("requires valid public GCP Identity Platform client configuration", () => {
     expect(
-      validatePublicSupabaseConfig(
-        "https://project.supabase.example",
-        "sb_publishable_test-key",
+      validatePublicGcpIdentityConfig(
+        "AIza00000000000000000000000000000000000",
+        "pantheon-dev",
+        "pantheon-dev.firebaseapp.com",
       ),
     ).toEqual({
-      publishableKey: "sb_publishable_test-key",
-      url: "https://project.supabase.example",
+      apiKey: "AIza00000000000000000000000000000000000",
+      authDomain: "pantheon-dev.firebaseapp.com",
+      projectId: "pantheon-dev",
     });
-    const legacyAnonKey = syntheticSupabaseJwt("anon");
-    expect(
-      validatePublicSupabaseConfig(
-        "https://project.supabase.example",
-        legacyAnonKey,
-      ),
-    ).toEqual({
-      publishableKey: legacyAnonKey,
-      url: "https://project.supabase.example",
-    });
-    for (const [url, publishableKey] of [
-      [undefined, "sb_publishable_test-key"],
-      ["https://project.supabase.example", undefined],
-      [" project.supabase.example", "sb_publishable_test-key"],
-      ["ftp://project.supabase.example", "sb_publishable_test-key"],
-      [
-        "https://user:password@project.supabase.example",
-        "sb_publishable_test-key",
-      ],
-      ["https://project.supabase.example", "sb_secret_service-role-key"],
-      [
-        "https://project.supabase.example",
-        syntheticSupabaseJwt("service_role"),
-      ],
-      [
-        "https://project.supabase.example",
-        syntheticSupabaseJwt("authenticated"),
-      ],
-      ["https://project.supabase.example", "not.a.valid-jwt"],
+    for (const [apiKey, projectId, authDomain] of [
+      [undefined, "pantheon-dev", "pantheon-dev.firebaseapp.com"],
+      ["not-a-gcp-api-key", "pantheon-dev", "pantheon-dev.firebaseapp.com"],
+      ["AIza00000000000000000000000000000000000", undefined, "pantheon-dev.firebaseapp.com"],
+      ["AIza00000000000000000000000000000000000", "Pantheon Dev", "pantheon-dev.firebaseapp.com"],
+      ["AIza00000000000000000000000000000000000", "pantheon-dev", undefined],
+      ["AIza00000000000000000000000000000000000", "pantheon-dev", "https://pantheon-dev.firebaseapp.com"],
+      ["AIza00000000000000000000000000000000000", "pantheon-dev", "user@pantheon-dev.firebaseapp.com"],
     ] as const) {
-      expect(() => validatePublicSupabaseConfig(url, publishableKey)).toThrow(
-        /VITE_SUPABASE_(?:URL|PUBLISHABLE_KEY)/,
+      expect(() => validatePublicGcpIdentityConfig(apiKey, projectId, authDomain)).toThrow(
+        /VITE_GCP_IDENTITY_(?:API_KEY|PROJECT_ID|AUTH_DOMAIN)/,
       );
     }
   });
@@ -124,24 +99,25 @@ describe("public frontend build auth boundary", () => {
     );
   }, 30_000);
 
-  it("rejects a build before bundling when public Supabase configuration is missing", () => {
+  it("rejects a build before bundling when public GCP Identity configuration is missing", () => {
     const result = spawnSync("npm", ["run", "build"], {
       cwd: process.cwd(),
       encoding: "utf8",
       env: {
         ...process.env,
         VITE_BFF_DEV_BEARER_TOKEN: "",
-        VITE_SUPABASE_PUBLISHABLE_KEY: "",
-        VITE_SUPABASE_URL: "",
+        VITE_GCP_IDENTITY_API_KEY: "",
+        VITE_GCP_IDENTITY_PROJECT_ID: "",
+        VITE_GCP_IDENTITY_AUTH_DOMAIN: "",
       },
     });
     const output = `${result.stdout}\n${result.stderr}`;
 
     expect(result.status).not.toBe(0);
     expect(output).toMatch(
-      /VITE_SUPABASE_URL is required public browser configuration/,
+      /VITE_GCP_IDENTITY_API_KEY is required public browser configuration/,
     );
-    expect(output).not.toMatch(/supabaseUrl is required/);
+    expect(output).not.toMatch(/Firebase: Error/);
   }, 30_000);
 
   it("rejects a privileged token before the standard Vite dev server can bind", () => {
