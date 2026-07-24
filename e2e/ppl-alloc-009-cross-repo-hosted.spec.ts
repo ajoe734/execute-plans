@@ -531,6 +531,10 @@ test.describe("PPL-ALLOC-009 hosted paper allocation acceptance", () => {
       createData.paperLedgerId ?? createMeta.paper_ledger_id,
       "paper ledger id",
     );
+    const personaCapitalBindingId = requiredString(
+      createMeta.persona_capital_binding_id,
+      "Persona paper capital binding id",
+    );
     expect(createMeta.live_capital_side_effects).toBe(false);
 
     const provisioned = await waitForPaperRunning(request, operator, personaId, calls);
@@ -552,7 +556,7 @@ test.describe("PPL-ALLOC-009 hosted paper allocation acceptance", () => {
     const rankingRow = ranking.row;
     expect(rankingRow.paper_ledger_id).toBe(paperLedgerId);
     expect(rankingRow.runtime_ids).toContain(runtimeId);
-    expect(rankingRow.binding_ids).toContain(runtimeBindingId);
+    expect(rankingRow.binding_ids).toContain(personaCapitalBindingId);
     expect(rankingRow.session_id).toBe(paperSessionId);
 
     const recommendationQuery = new URLSearchParams({
@@ -645,6 +649,7 @@ test.describe("PPL-ALLOC-009 hosted paper allocation acceptance", () => {
     const allocationLine = allocationLines[0];
     const poolId = requiredString(allocationLine.capital_pool_id, "internal paper pool id");
     const capitalBindingId = requiredString(allocationLine.binding_id, "paper capital binding id");
+    expect(capitalBindingId).toBe(personaCapitalBindingId);
     expect(allocationLine.paper_ledger_id).toBe(paperLedgerId);
     expect(allocationLine.live_capital_side_effects).toBe(false);
     expect(allocationLine.target_weight).toBe(1);
