@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Route } from "@playwright/test";
 import {
+  installContainedLoopbackAuth,
   installOidcDevLogin,
   LOCAL_FIXTURE_AUTH_TOKEN,
   type E2ePage,
@@ -98,6 +99,27 @@ describe("loopback Supabase/BFF E2E auth helper", () => {
     expect(operations.addInitScript).not.toHaveBeenCalled();
     expect(operations.evaluate).not.toHaveBeenCalled();
     expect(operations.route).not.toHaveBeenCalled();
+  });
+
+  it("contains synthetic fixture credentials behind a deny-by-default BFF route", async () => {
+    const { page, handlers, operations } = fakePage();
+
+    const installed = await installContainedLoopbackAuth(page, {
+      env: {
+        PANTHEON_BROWSER_BFF_BASE_URL: "https://bff.example.test",
+        PANTHEON_FE_BASE_URL: "http://127.0.0.1:4173",
+        PANTHEON_HOSTED_E2E: "1",
+        VITE_SUPABASE_URL: "https://project-ref.supabase.co",
+      },
+    });
+
+    expect(installed.token).toBe(LOCAL_FIXTURE_AUTH_TOKEN);
+    expect(operations.goto).not.toHaveBeenCalled();
+    expect(operations.route.mock.calls[0][0]).toBe("**/bff/**");
+
+    const abort = vi.fn().mockResolvedValue(undefined);
+    await handlers.get("**/bff/**")?.({ abort } as unknown as Route);
+    expect(abort).toHaveBeenCalledWith("blockedbyclient");
   });
 
   it("rejects localStorage and dual-storage fixture modes", async () => {

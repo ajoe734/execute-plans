@@ -29,7 +29,11 @@
 
 import { expect, test } from "@playwright/test";
 import type { APIRequestContext, Page } from "@playwright/test";
-import { bearerHeader, roleTokenFromEnv } from "./helpers/auth";
+import {
+  bearerHeader,
+  installContainedLoopbackAuth,
+  roleTokenFromEnv,
+} from "./helpers/auth";
 
 const DEFAULT_FRONTEND_BASE_URL = "http://127.0.0.1:5173";
 const DEFAULT_BFF_BASE_URL =
@@ -428,6 +432,7 @@ test.describe("F01 startup session", () => {
     page,
   }) => {
     expect(strictFallbackMode()).toBe("strict");
+    await installContainedLoopbackAuth(page);
     await installRuntimeFallbackOverride(page, "strict");
 
     let interceptedMeRequests = 0;
@@ -477,7 +482,11 @@ test.describe("F01 startup session", () => {
       interceptedMeRequests,
       `${STARTUP_ME_FOLLOW_UP} fixed: startup must request /bff/me at least once before showing user UI`,
     ).toBeGreaterThan(0);
-    expect(text).toMatch(/\bAuth\b|AUTH_REQUIRED|Sign in required|STRICT TYPED ERROR/i);
+    expect(new URL(page.url()).pathname).toBe("/auth");
+    expect(new URL(page.url()).searchParams.get("reason")).toBe("auth-required");
+    expect(text).toMatch(
+      /Pantheon session verification failed|Sign in to access the cockpit/i,
+    );
     expect(text).not.toMatch(SERVING_MOCK_BANNER);
     expect(text).not.toMatch(/op-fe-gate|portfolio_manager|mock operator/i);
   });

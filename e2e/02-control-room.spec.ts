@@ -18,7 +18,11 @@
  */
 
 import { expect, test, type Page, type Route } from "@playwright/test";
-import { bearerHeader } from "./helpers/auth";
+import {
+  bearerHeader,
+  installContainedLoopbackAuth,
+  installContainedLoopbackAuthAuthority,
+} from "./helpers/auth";
 
 const DEFAULT_FRONTEND_BASE_URL = "http://127.0.0.1:5173";
 const DEFAULT_BFF_BASE_URL =
@@ -358,6 +362,7 @@ async function installBffFixtureRoutes(
   fixture: RouteFixture,
   seenDetailPaths: string[] = [],
 ): Promise<void> {
+  await installContainedLoopbackAuth(page);
   await page.route("**/bff/me**", async (route) => {
     await fulfillJson(route, ME_RESPONSE);
   });
@@ -450,6 +455,7 @@ async function installBffFixtureRoutes(
     seenDetailPaths.push(new URL(route.request().url()).pathname);
     await fulfillJson(route, fixture.interventionDetail ?? INTERVENTION_RECORD);
   });
+  await installContainedLoopbackAuthAuthority(page);
 }
 
 function collectPageFailures(page: Page): string[] {
