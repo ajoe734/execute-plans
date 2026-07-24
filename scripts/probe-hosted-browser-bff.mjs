@@ -93,6 +93,9 @@ const OPTIONAL_CORE_BFF_PATHS = ["/bff/management/persona-fleet"].filter(
 );
 const CORE_BFF_PATHS = [...OPTIONAL_CORE_BFF_PATHS, ...REQUIRED_CORE_BFF_PATHS];
 const PUBLIC_HEALTH_PATHS = ["/health", "/readyz"];
+const PUBLIC_HEALTH_HARD_MAX_ATTEMPTS = 4;
+const PUBLIC_HEALTH_MAX_ATTEMPTS = PUBLIC_HEALTH_HARD_MAX_ATTEMPTS;
+const PUBLIC_HEALTH_RETRY_DELAY_MS = 2_000;
 const SSE_EVENT_STREAM_PATH = "/bff/events/stream";
 const FRONTEND_RESOURCE_TYPES = new Set([
   "document",
@@ -309,6 +312,86 @@ function isRequiredCorePath(pathname) {
 
 function remainingTimeoutMs() {
   return Math.max(1, OVERALL_TIMEOUT_MS - (Date.now() - probeStartedAt));
+}
+
+function wait(milliseconds) {
+  return new Promise((resolvePromise) => {
+    setTimeout(resolvePromise, milliseconds);
+  });
+}
+
+export async function fetchPublicHealthWithRetry(
+  url,
+  {
+    fetchImpl = globalThis.fetch,
+    maxAttempts = PUBLIC_HEALTH_MAX_ATTEMPTS,
+    retryDelayMs = PUBLIC_HEALTH_RETRY_DELAY_MS,
+    timeoutMs = 10_000,
+    remainingMs = () => Number.MAX_SAFE_INTEGER,
+    sleepImpl = wait,
+  } = {},
+) {
+  const boundedAttempts = Math.max(
+    1,
+    Math.min(PUBLIC_HEALTH_HARD_MAX_ATTEMPTS, Math.trunc(maxAttempts)),
+  );
+  const boundedDelay = Math.max(0, Math.min(10_000, Math.trunc(retryDelayMs)));
+  const statuses = [];
+  let lastResult = {
+    status: 0,
+    ok: false,
+    error: "",
+  };
+
+  for (let attempt = 1; attempt <= boundedAttempts; attempt += 1) {
+    try {
+      const requestTimeout = Math.max(
+        1,
+        Math.min(timeoutMs, remainingMs()),
+      );
+      const signal =
+        typeof globalThis.AbortSignal?.timeout === "function"
+          ? globalThis.AbortSignal.timeout(requestTimeout)
+          : undefined;
+      const response = await fetchImpl(url, {
+        headers: { Accept: "application/json" },
+        ...(signal ? { signal } : {}),
+      });
+      lastResult = {
+        status: response.status,
+        ok: response.ok,
+        error: "",
+      };
+    } catch (error) {
+      lastResult = {
+        status: 0,
+        ok: false,
+        error: redactDiagnosticText(error, 200),
+      };
+    }
+    statuses.push(lastResult.status);
+
+    if (lastResult.ok || lastResult.status !== 502) {
+      return {
+        ...lastResult,
+        attemptCount: attempt,
+        statuses,
+      };
+    }
+    if (
+      attempt >= boundedAttempts ||
+      boundedDelay >= Math.max(1, remainingMs())
+    ) {
+      break;
+    }
+    await sleepImpl(boundedDelay);
+  }
+
+  return {
+    ...lastResult,
+    attemptCount: statuses.length,
+    statuses,
+  };
 }
 
 function finitePositive(value) {
@@ -2297,24 +2380,12 @@ async function runProbe() {
   }
 
   for (const healthPath of PUBLIC_HEALTH_PATHS) {
-    try {
-      const response = await fetch(BFF_BASE + healthPath, {
-        headers: { Accept: "application/json" },
-        signal: AbortSignal.timeout(Math.min(10_000, remainingTimeoutMs())),
-      });
-      publicHealthResponses.push({
-        path: healthPath,
-        status: response.status,
-        ok: response.ok,
-      });
-    } catch (error) {
-      publicHealthResponses.push({
-        path: healthPath,
-        status: 0,
-        ok: false,
-        error: redactDiagnosticText(error, 200),
-      });
-    }
+    publicHealthResponses.push({
+      path: healthPath,
+      ...(await fetchPublicHealthWithRetry(BFF_BASE + healthPath, {
+        remainingMs: remainingTimeoutMs,
+      })),
+    });
   }
 
   const deploymentFetch = RELEASE_STRICT
