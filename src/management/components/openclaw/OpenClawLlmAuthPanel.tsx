@@ -890,6 +890,11 @@ function ProviderCard({
   const authSuccessful = isSuccessfulStatus(authStatus, provider.ready);
   const authPending = isPendingStatus(authStatus);
   const quota = recordFrom(usageSummary?.quota);
+  const providerAuth = recordFrom(usageSummary?.providerAuth);
+  const liveSmoke = recordFrom(usageSummary?.liveSmoke);
+  const readiness = recordFrom(usageSummary?.readiness);
+  const dependencies = recordFrom(usageSummary?.personaDependencies);
+  const reauth = recordFrom(usageSummary?.reauth);
   const usage = Object.keys(quota).length > 0 ? quota : providerUsage(provider);
   const unit = usageValue(usage, "unit");
   const busy = reauthState.busy;
@@ -921,6 +926,11 @@ function ProviderCard({
         <Info label="used" value={formatMetric(usageValue(usage, "used"), unit)} />
         <Info label="history calls" value={formatNumber(usageSummary?.calls)} />
         <Info label="tokens" value={formatNumber(usageSummary?.totalTokens)} />
+        <Info label="provider auth" value={textFrom(providerAuth.status, "unknown")} />
+        <Info label="live smoke" value={textFrom(liveSmoke.status, "not checked")} />
+        <Info label="readiness" value={textFrom(readiness.ready, readiness.reason, "unknown")} />
+        <Info label="dependent personas" value={textFrom(dependencies.count, dependencies.reason, "unknown")} />
+        <Info className="col-span-2" label="reauth state" value={textFrom(reauth.status, "not started")} />
         {mode === "full" && (
           <>
             {(provider.model || provider.authStrategy) && (

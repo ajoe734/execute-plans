@@ -112,6 +112,11 @@ function api(overrides: Partial<OpenClawLlmAuthApi> = {}): OpenClawLlmAuthApi {
             calls: 7,
             totalTokens: 140,
           },
+          providerAuth: { status: "authorized", authenticated: true },
+          liveSmoke: { status: "passed", passed: true },
+          readiness: { ready: true, mount_ready_is_sufficient: false },
+          personaDependencies: { status: "available", count: 3, personas: ["alpha", "beta", "gamma"] },
+          reauth: { status: "completed", code_entry_required: false },
           models: [
             {
               model: "gpt-5-codex",
@@ -298,6 +303,10 @@ describe("OpenClawLlmAuthPanel", () => {
     expect(screen.getByText("12 requests (24%)")).toBeInTheDocument();
     expect(screen.getByText("7")).toBeInTheDocument();
     expect(screen.getByText("140")).toBeInTheDocument();
+    expect(screen.getByText("authorized")).toBeInTheDocument();
+    expect(screen.getByText("passed")).toBeInTheDocument();
+    expect(screen.getByText("3")).toBeInTheDocument();
+    expect(screen.getByText("completed")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open provider auth" })).toHaveAttribute(
       "href",
       "/management/llm-provider-auth",
