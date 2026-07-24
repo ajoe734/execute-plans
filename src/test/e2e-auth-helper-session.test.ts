@@ -58,8 +58,18 @@ describe("loopback GCP Identity/BFF E2E auth helper", () => {
         refreshToken: "",
       },
     });
-    expect(String((stored.stsTokenManager as Record<string, unknown>).accessToken)).toContain(".");
+    const accessToken = String(
+      (stored.stsTokenManager as Record<string, unknown>).accessToken,
+    );
+    expect(accessToken).toContain(".");
+    const claims = JSON.parse(
+      Buffer.from(accessToken.split(".")[1], "base64url").toString("utf8"),
+    ) as Record<string, unknown>;
+    expect(claims.auth_time).toEqual(claims.iat);
+    expect(Number(claims.exp)).toBeGreaterThan(Number(claims.iat));
     expect(stored).toHaveProperty("stsTokenManager.expirationTime");
+    expect(handlers.has("https://identitytoolkit.googleapis.com/**")).toBe(true);
+    expect(handlers.has("https://securetoken.googleapis.com/**")).toBe(true);
     for (const legacyKey of [
       "pantheon.bff.bearerToken",
       "pantheon_operator_token",

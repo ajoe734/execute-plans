@@ -319,6 +319,7 @@ function loopbackFirebaseToken(session: DevLoginSession): string {
     encode({ alg: "HS256", typ: "JWT" }),
     encode({
       aud: "pantheon-loopback",
+      auth_time: now,
       email: `${session.operatorId}@loopback.invalid`,
       email_verified: true,
       exp: now + 3600,
@@ -407,6 +408,29 @@ export async function installOidcDevLogin(
       body: JSON.stringify(body),
     });
   };
+  // Firebase reloads a persisted browser user through accounts:lookup during
+  // SDK initialization. Keep the synthetic fixture completely loopback-bound:
+  // provide that one read locally and deny every other Identity/STSToken call.
+  await page.route("https://identitytoolkit.googleapis.com/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith("/accounts:lookup")) {
+      await fulfillJson(route, {
+        users: [{
+          createdAt: String(Date.now()),
+          email: `${session.operatorId}@loopback.invalid`,
+          emailVerified: true,
+          lastLoginAt: String(Date.now()),
+          localId: session.operatorId,
+          passwordHash: "loopback-fixture",
+        }],
+      });
+      return;
+    }
+    await route.abort("blockedbyclient");
+  });
+  await page.route("https://securetoken.googleapis.com/**", async (route) => {
+    await route.abort("blockedbyclient");
+  });
   await page.route("**/bff/me", async (route) => {
     await fulfillJson(route, {
       data: {
