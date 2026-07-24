@@ -13,6 +13,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   HOSTED_UX_PERFORMANCE_BUDGETS,
   HOSTED_UX_PROFILES,
+  assessAnonymousAuthRedirect,
   assessHostedUxProfile,
   assessPersonaFleetSafety,
   canonicalizeSha256,
@@ -125,6 +126,48 @@ describe("hosted browser strict release policy", () => {
       "waitForCoreBffResponse(page, expectedPath, OPTIONAL_CORE_TIMEOUT_MS)",
     );
     expect(probeSource).not.toContain("REQUIRED_CORE_TIMEOUT_MS");
+  });
+
+  it("accepts the explicit same-origin auth redirect as a strict anonymous boundary", () => {
+    const result = assessAnonymousAuthRedirect(
+      "https://pantheon.example/auth?reason=auth-required&from=%2Fmanagement%2Fpersona-fleet%3Fnocache%3Dabc123",
+      "/management/persona-fleet",
+      "https://pantheon.example",
+    );
+
+    expect(result.pass).toBe(true);
+    expect(result.checks).toEqual({
+      sameOrigin: true,
+      authRoute: true,
+      authRequiredReason: true,
+      safeReturnTarget: true,
+      expectedReturnPath: true,
+    });
+  });
+
+  it("rejects unsafe or unrelated auth redirects", () => {
+    const unsafeReturn = assessAnonymousAuthRedirect(
+      "https://pantheon.example/auth?reason=auth-required&from=%2F%2Fevil.example%2Fmanagement%2Fpersona-fleet",
+      "/management/persona-fleet",
+      "https://pantheon.example",
+    );
+    const wrongReason = assessAnonymousAuthRedirect(
+      "https://pantheon.example/auth?reason=logout&from=%2Fmanagement%2Fpersona-fleet",
+      "/management/persona-fleet",
+      "https://pantheon.example",
+    );
+    const crossOrigin = assessAnonymousAuthRedirect(
+      "https://evil.example/auth?reason=auth-required&from=%2Fmanagement%2Fpersona-fleet",
+      "/management/persona-fleet",
+      "https://pantheon.example",
+    );
+
+    expect(unsafeReturn.pass).toBe(false);
+    expect(unsafeReturn.checks.safeReturnTarget).toBe(false);
+    expect(wrongReason.pass).toBe(false);
+    expect(wrongReason.checks.authRequiredReason).toBe(false);
+    expect(crossOrigin.pass).toBe(false);
+    expect(crossOrigin.checks.sameOrigin).toBe(false);
   });
 
   it("distinguishes an RGB zero channel from transparent CSS focus colors", () => {
