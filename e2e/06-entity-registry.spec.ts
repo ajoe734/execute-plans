@@ -20,7 +20,11 @@
  */
 
 import { expect, test, type Page, type Route } from "@playwright/test";
-import { bearerHeader } from "./helpers/auth";
+import {
+  bearerHeader,
+  installContainedLoopbackAuth,
+  installContainedLoopbackAuthAuthority,
+} from "./helpers/auth";
 
 const DEFAULT_FRONTEND_BASE_URL = "http://127.0.0.1:5173";
 const DEFAULT_BFF_BASE_URL =
@@ -762,6 +766,7 @@ async function installQuietEventSource(page: Page): Promise<void> {
 }
 
 async function installRegistryRoutes(page: Page, calls = new Set<string>()): Promise<Set<string>> {
+  await installContainedLoopbackAuth(page);
   await page.route("**/*", async (route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -838,6 +843,7 @@ async function installRegistryRoutes(page: Page, calls = new Set<string>()): Pro
     await route.continue();
   });
 
+  await installContainedLoopbackAuthAuthority(page);
   return calls;
 }
 

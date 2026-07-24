@@ -13,6 +13,8 @@
 
 import { expect, test, type Page, type Route } from "@playwright/test";
 import {
+  installContainedLoopbackAuth,
+  installContainedLoopbackAuthAuthority,
   LOCAL_FIXTURE_AUTH_TOKEN,
   targetsExternalE2eEnvironment,
 } from "./helpers/auth";
@@ -144,6 +146,7 @@ function isSentinelMutationOrRemediationPost(path: string, bodyText: string): bo
 }
 
 async function installB04Routes(page: Page): Promise<RouteCalls> {
+  await installContainedLoopbackAuth(page);
   const calls: RouteCalls = {
     findingGets: 0,
     mutationPosts: [],
@@ -265,6 +268,7 @@ async function installB04Routes(page: Page): Promise<RouteCalls> {
     await route.continue();
   });
 
+  await installContainedLoopbackAuthAuthority(page);
   return calls;
 }
 

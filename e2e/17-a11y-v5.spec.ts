@@ -1,5 +1,9 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Locator, type Page, type Route } from "@playwright/test";
+import {
+  installContainedLoopbackAuth,
+  installContainedLoopbackAuthAuthority,
+} from "./helpers/auth";
 
 const CRASH_TEXT =
   /application error|cannot read properties|undefined is not|uncaught|traceback|typeerror|referenceerror/i;
@@ -205,6 +209,7 @@ async function fulfillJson(route: Route, body: unknown, status = 200): Promise<v
 }
 
 async function installV5A11yRoutes(page: Page): Promise<void> {
+  await installContainedLoopbackAuth(page);
   await page.route("**/*", async (route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -273,6 +278,7 @@ async function installV5A11yRoutes(page: Page): Promise<void> {
 
     await route.fallback();
   });
+  await installContainedLoopbackAuthAuthority(page);
 }
 
 async function gotoReady(page: Page, path: string, ready: RegExp): Promise<void> {

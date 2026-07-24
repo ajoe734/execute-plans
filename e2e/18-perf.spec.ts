@@ -13,6 +13,10 @@
  */
 
 import { expect, test, type Page, type Route, type TestInfo } from "@playwright/test";
+import {
+  installContainedLoopbackAuth,
+  installContainedLoopbackAuthAuthority,
+} from "./helpers/auth";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 
@@ -810,6 +814,7 @@ const ASSISTANT_MODE_RESPONSE = {
 };
 
 async function installPerfRoutes(page: Page, counters: RouteCounters): Promise<void> {
+  await installContainedLoopbackAuth(page);
   await page.route(/\/bff\/me(?:\?.*)?$/, async (route) => {
     counters.me += 1;
     await fulfillJson(route, ME_RESPONSE);
@@ -898,6 +903,7 @@ async function installPerfRoutes(page: Page, counters: RouteCounters): Promise<v
       meta: { snapshot_at: nowIso(), surfaces: { search: { status: "ok" } } },
     });
   });
+  await installContainedLoopbackAuthAuthority(page);
 }
 
 async function installEventSourceRedirect(page: Page, baseUrl: string): Promise<void> {

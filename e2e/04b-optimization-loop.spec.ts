@@ -14,6 +14,10 @@
  */
 
 import { expect, test, type Locator, type Page, type Route } from "@playwright/test";
+import {
+  installContainedLoopbackAuth,
+  installContainedLoopbackAuthAuthority,
+} from "./helpers/auth";
 
 const DEFAULT_FRONTEND_BASE_URL = "http://127.0.0.1:5173";
 
@@ -495,6 +499,7 @@ function isEvolutionPath(path: string): boolean {
 async function installC01Routes(page: Page): Promise<Set<string>> {
   const calls = new Set<string>();
 
+  await installContainedLoopbackAuth(page);
   await page.route(/\/health(?:\?.*)?$/, async (route) => {
     calls.add(new URL(route.request().url()).pathname);
     await fulfillJson(route, { status: "ok", checked_at: nowIso() });
@@ -602,6 +607,7 @@ async function installC01Routes(page: Page): Promise<Set<string>> {
     await fulfillJson(route, listEnvelope([], "unhandled_bff"));
   });
 
+  await installContainedLoopbackAuthAuthority(page);
   return calls;
 }
 
