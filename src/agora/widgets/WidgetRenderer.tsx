@@ -1,6 +1,7 @@
 import React from "react";
 
 import type { WidgetSpecV2 } from "@/lib/bff-v1/agora/types";
+import type { ChartSpecV1 as TradingRoomChartSpecV1 } from "@/lib/bff-v1/agora/tradingRoomTypes";
 
 import ChartSpecRenderer, { type ChartDataRow, type ChartInteraction } from "./ChartSpecRenderer";
 import {
@@ -145,7 +146,11 @@ export function WidgetRenderer({
         <ChartSpecRenderer
           data={data}
           onInteraction={(interaction) => onInteraction?.(interaction, { widget, entry })}
-          spec={widget.chart_spec}
+          // Two independent ChartSpecV1 declarations exist in this codebase (see
+          // registry.ts's ChartSpecGrammarInput comment) — they describe the same
+          // runtime JSON shape but diverge nominally (click_action payload vs
+          // params), so this crossing point casts through the common structure.
+          spec={widget.chart_spec as unknown as TradingRoomChartSpecV1}
         />
       )}
     </WidgetShell>

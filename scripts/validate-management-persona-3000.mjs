@@ -36,7 +36,7 @@ const NO_EVIDENCE = process.argv.includes("--no-evidence");
 const BFF_BASE_URL = (
   process.env.PANTHEON_BFF_BASE_URL ||
   process.env.VITE_BFF_BASE_URL ||
-  "https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io"
+  "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io"
 ).replace(/\/$/, "");
 const BEARER_TOKEN = process.env.PANTHEON_BFF_SMOKE_BEARER_TOKEN || process.env.BFF_AUTH_TOKEN || "";
 
@@ -90,9 +90,9 @@ const roles = [
 const readRoutes = [
   { route: "/bff/me", family: "identity", shape: "object" },
   { route: "/bff/management/cockpit", family: "cockpit", shape: "cockpit" },
-  { route: "/bff/management/fleet", family: "persona-fleet", shape: "list" },
   { route: "/bff/management/persona-fleet", family: "persona-fleet", shape: "list" },
-  { route: "/bff/management/fleet", family: "data-source", shape: "list" },
+  { route: "/bff/management/persona-fleet", family: "persona-fleet", shape: "list" },
+  { route: "/bff/management/persona-fleet", family: "data-source", shape: "list" },
   { route: "/bff/management/human-inbox", family: "human-inbox", shape: "list" },
   { route: "/bff/management/trading-pulse", family: "trading-pulse", shape: "list" },
   { route: "/bff/management/trading-pulse/rankings", family: "trading-ranking", shape: "list" },

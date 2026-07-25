@@ -1,0 +1,92 @@
+name: Hourly Publish Cut
+
+# Cut a publish snapshot from dev every hour (or on demand) when dev has
+# advanced since the latest release tag. Ported from pantheon
+# .github/workflows/nightly-publish-cut.yml.
+#
+# Trigger:
+#   * cron hourly at :05 UTC (offset from pantheon's :00 cut)
+#   * workflow_dispatch (manual override)
+#
+# Unlike pantheon, no deploy dispatch here: the dev FE auto-deploys on
+# push to dev (pantheon-dev-fe-deploy.yml), so publish snapshots exist
+# purely as the immutable promotion line toward main (staging).
+
+on:
+  schedule:
+    - cron: "5 * * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Cut even if dev did not advance (debug only)"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nightly-publish-cut
+  cancel-in-progress: false
+
+jobs:
+  cut:
+    name: Cut publish snapshot
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout dev
+        uses: actions/checkout@v4
+        with:
+          ref: dev
+          fetch-depth: 0
+          fetch-tags: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git identity
+        run: |
+          git config user.name "pantheon-publish-bot"
+          git config user.email "pantheon-publish-bot@users.noreply.github.com"
+
+      - name: Check if dev advanced
+        id: check
+        run: |
+          if [[ "${{ inputs.force }}" == "true" ]]; then
+            echo "should_cut=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if bash scripts/git/nightly_publish.sh check; then
+            echo "should_cut=true" >> "$GITHUB_OUTPUT"
+          else
+            rc=$?
+            if [[ "$rc" == "10" ]]; then
+              echo "should_cut=false" >> "$GITHUB_OUTPUT"
+              echo "dev has not advanced since the latest release; nothing to cut"
+              exit 0
+            fi
+            echo "nightly_publish.sh check failed with exit $rc" >&2
+            exit "$rc"
+          fi
+
+      - name: Cut publish snapshot
+        id: cut
+        if: steps.check.outputs.should_cut == 'true'
+        run: |
+          out=$(bash scripts/git/nightly_publish.sh now)
+          echo "$out"
+          branch=$(printf '%s\n' "$out" | sed -n 's/^[[:space:]]*branch:[[:space:]]*//p' | head -1)
+          if [[ -z "$branch" ]]; then
+            echo "no snapshot cut this run (dev did not advance)"
+          else
+            echo "publish_branch=$branch" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## Hourly publish cut"
+            echo "- should_cut: ${{ steps.check.outputs.should_cut }}"
+            echo "- trigger: ${{ github.event_name }}"
+            echo "- publish_branch: ${{ steps.cut.outputs.publish_branch }}"
+          } >> "$GITHUB_STEP_SUMMARY"

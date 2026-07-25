@@ -28,15 +28,16 @@ interface Props {
 export const EntityHeader = ({ object, env, subtitle, actions, hideBack }: Props) => {
   const t = useT();
   const navigate = useNavigate();
-  const label = object.labelKey ? t(object.labelKey, { defaultValue: object.name }) : object.name;
+  const label = (object.labelKey ? t(object.labelKey, { defaultValue: object.name }) : object.name) || object.id;
+  const owner = object.owner || "—";
 
   return (
-    <div className="border-b border-border bg-card px-6 py-4 space-y-2">
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0 flex-1">
+    <div className="border-b border-border bg-card px-4 py-4 space-y-2 sm:px-6">
+      <div className="flex flex-col gap-4">
+        <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <Badge variant="outline" className="text-mono text-[10px]">{object.id}</Badge>
-            <h1 className="text-xl font-semibold tracking-tight truncate">{label}</h1>
+            <h1 className="min-w-0 break-words text-xl font-semibold tracking-tight">{label}</h1>
             <StatusBadge state={object.state} />
             <RiskBadge level={object.risk} />
             {env && (
@@ -48,14 +49,14 @@ export const EntityHeader = ({ object, env, subtitle, actions, hideBack }: Props
           {subtitle && <p className="text-sm text-muted-foreground mt-1">{subtitle}</p>}
           <div className="flex items-center gap-4 text-xs text-muted-foreground mt-1">
             <span>
-              {t("common.owner")}: <span className="text-mono text-foreground/80">{object.owner}</span>
+              {t("common.owner")}: <span className="text-mono text-foreground/80">{owner}</span>
             </span>
             <span>
               {t("common.updated")}: <span className="text-mono text-foreground/80">{safeDateTime(object.updatedAt)}</span>
             </span>
           </div>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex max-w-full flex-wrap items-center justify-start gap-2 sm:justify-end">
           {!hideBack && (
             <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>
               <ArrowLeft className="h-4 w-4 mr-1" />{t("common.back")}

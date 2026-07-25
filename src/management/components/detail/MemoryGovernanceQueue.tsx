@@ -6,9 +6,9 @@ import { Button } from "@/components/ui/button";
 import { bff } from "@/lib/bff-v1";
 import type { MemoryUpdate } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
-import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { safeDateTime } from "@/lib/utils";
+import { NonProductionActionButton } from "@/management/components/NonProductionActionButton";
 
 const stateTone: Record<string, string> = {
   queued: "border-accent/40 text-accent",
@@ -50,8 +50,8 @@ export const MemoryGovernanceQueue = ({ personaId }: { personaId: string }) => {
             <div className="text-sm">{m.after}</div>
             {m.state === "queued" && (
               <div className="flex justify-end gap-2">
-                <Button size="sm" variant="outline" onClick={() => toast.info(t("persona.memory.rejected"))}>{t("actions.reject")}</Button>
-                <Button size="sm" onClick={() => toast.success(t("persona.memory.approved"))}>{t("actions.approve")}</Button>
+                <NonProductionActionButton size="sm" variant="outline">{t("actions.reject")}</NonProductionActionButton>
+                <NonProductionActionButton size="sm">{t("actions.approve")}</NonProductionActionButton>
               </div>
             )}
             {m.state === "conflict" && (
