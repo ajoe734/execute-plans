@@ -2,7 +2,7 @@
  * FE-INT-GATE-D05 / F18 - Perf and stability soft-fail budgets.
  *
  * Coverage:
- *   1. Control Room load budget plus 30s SSE-driven DOM rerender proxy.
+ *   1. Cockpit load budget plus 30s SSE-driven DOM rerender proxy.
  *   2. Entity registry first-page load budget and DataTable density stability.
  *   3. Sentinel list load budget.
  *   4. LineageGraph warns when the graph exceeds 500 nodes.
@@ -18,7 +18,7 @@ import type { AddressInfo } from "node:net";
 
 const DEFAULT_FRONTEND_BASE_URL = "http://127.0.0.1:5173";
 
-const CONTROL_ROOM_PATH = "/management/cockpit";
+const COCKPIT_PATH = "/management/cockpit";
 const ENTITY_LIST_PATH = "/management/strategies";
 const SENTINEL_PATH = "/management/sentinel";
 const LINEAGE_PATH = "/management/lineage?root=strategy-f18-wide";
@@ -28,7 +28,7 @@ const SSE_WINDOW_MS = Number(process.env.FE_INT_GATE_SSE_WINDOW_MS ?? "30000");
 const SSE_EVENT_INTERVAL_MS = Number(process.env.FE_INT_GATE_SSE_EVENT_INTERVAL_MS ?? "1000");
 
 const BUDGETS = {
-  controlRoomLoadMs: 4_000,
+  cockpitLoadMs: 4_000,
   entityFirstPageLoadMs: 4_000,
   sentinelListLoadMs: 4_000,
   sseMutationBatchesPer30s: 180,
@@ -42,7 +42,9 @@ const SERVING_MOCK_BANNER =
 type JsonRecord = Record<string, unknown>;
 
 type RouteCounters = {
+  cockpit: number;
   controlRoom: number;
+  lineage: number;
   loopRuns: number;
   me: number;
   personaHealth: number;
@@ -98,7 +100,15 @@ class SsePerfHarness {
     }
     this.openResponses = [];
     await new Promise<void>((resolve, reject) => {
-      this.server.close((error) => (error ? reject(error) : resolve()));
+      const timeout = setTimeout(() => {
+        this.server.closeAllConnections?.();
+        resolve();
+      }, 2_000);
+      this.server.close((error) => {
+        clearTimeout(timeout);
+        if (error) reject(error);
+        else resolve();
+      });
     });
   }
 
@@ -228,7 +238,9 @@ async function fulfillJson(
 
 function routeCounters(): RouteCounters {
   return {
+    cockpit: 0,
     controlRoom: 0,
+    lineage: 0,
     loopRuns: 0,
     me: 0,
     personaHealth: 0,
@@ -372,58 +384,99 @@ const CONTROL_ROOM_RESPONSE = {
 const COCKPIT_RESPONSE = {
   strip: {
     fields: [
-      { key: "autonomy", label: "Autonomy", value: "supervised", tone: "ok", href: "/management/governance" },
-      { key: "humanPending", label: "Human pending", value: 2, tone: "warn", href: "/management/human-inbox" },
-      { key: "critical", label: "Critical findings", value: 12, tone: "bad", href: "/management/sentinel" },
-      { key: "owners", label: "Persona owners", value: 10, href: "/management/personas" },
-      { key: "personas", label: "Personas", value: 10, href: "/management/persona-fleet" },
-      { key: "broker", label: "Broker live", value: "ready", tone: "ok", href: "/management/readiness/broker-live" },
-      { key: "capital", label: "Capital bound", value: "paper", tone: "warn", href: "/management/readiness/capital-binding-live" },
-      { key: "strict", label: "Strict publish", value: "ok", tone: "ok", href: "/management/readiness/strict-publish" },
-      { key: "bffHa", label: "BFF HA", value: "ok", tone: "ok", href: "/management/readiness/bff-ha" },
+      { key: "autonomy", label: "Autonomy", value: "guarded", tone: "ok" },
+      { key: "humanPending", label: "Human pending", value: 2, tone: "warn" },
+      { key: "critical", label: "Critical findings", value: 1, tone: "bad", href: "/management/sentinel" },
+      { key: "bffHa", label: "BFF HA", value: "ok", tone: "ok" },
     ],
   },
   loopFlow: {
     nodes: [
-      { id: "f18-research-observe", label: "F18 Research Observe", loop: "research", severity: "ok", href: "/management/loops/research" },
-      { id: "f18-research-decide", label: "F18 Research Decide", loop: "research", severity: "warn", href: "/management/loops/research" },
-      { id: "f18-execution-act", label: "F18 Execution Act", loop: "execution", severity: "warn", href: "/management/loops/execution" },
-      { id: "f18-execution-learn", label: "F18 Execution Learn", loop: "execution", severity: "ok", href: "/management/loops/execution" },
-      { id: "f18-optimization-act", label: "F18 Optimization Act", loop: "optimization", severity: "ok", href: "/management/loops/optimization" },
+      { id: "f18-research", label: "F18 research loop", loop: "research", severity: "ok", href: "/management/loops/research" },
+      { id: "f18-execution", label: "F18 execution loop", loop: "execution", severity: "bad", href: "/management/loops/execution" },
+      { id: "f18-optimization", label: "F18 optimization loop", loop: "optimization", severity: "warn", href: "/management/loops/optimization" },
     ],
     edges: [
-      { from: "f18-research-observe", to: "f18-research-decide", severity: "ok" },
-      { from: "f18-research-decide", to: "f18-execution-act", severity: "warn" },
-      { from: "f18-execution-act", to: "f18-execution-learn", severity: "warn" },
-      { from: "f18-execution-learn", to: "f18-optimization-act", severity: "ok" },
+      { from: "f18-research", to: "f18-execution", severity: "warn" },
+      { from: "f18-execution", to: "f18-optimization", severity: "bad" },
     ],
   },
   matrix: {
-    personas: ["persona-f18-1", "persona-f18-2"],
+    personas: ["persona-f18-1"],
     phases: ["Observe", "Orient", "Decide", "Act", "Learn"],
-    cells: ["persona-f18-1", "persona-f18-2"].flatMap((personaId) =>
-      ["Observe", "Orient", "Decide", "Act", "Learn"].map((phase) => ({
-        personaId,
-        phase,
-        state: personaId === "persona-f18-1" && phase === "Act" ? "alerting" : phase === "Decide" ? "active" : "idle",
-        href: `/management/personas/${personaId}`,
-      })),
-    ),
+    cells: ["Observe", "Orient", "Decide", "Act", "Learn"].map((phase) => ({
+      personaId: "persona-f18-1",
+      phase,
+      state: phase === "Act" ? "alerting" : "active",
+      href: "/management/persona-fleet",
+    })),
   },
   anomalies: [
     {
-      id: "anom-f18-sentinel-001",
+      id: "finding-f18-001",
       severity: "critical",
       domain: "runtime",
       title: "F18 Sentinel Finding 001",
-      why: "Synthetic F18 stability finding is still open.",
-      recommendedAction: "Open Sentinel and review remediation.",
+      why: "Synthetic F18 cockpit anomaly.",
+      recommendedAction: "Inspect sentinel finding.",
       detectedAt: nowIso(),
-      subjectId: "finding-f18-001",
-      links: { manageHref: "/management/sentinel?finding=finding-f18-001" },
+      links: { manageHref: "/management/sentinel", evidenceHref: "/management/evidence" },
     },
   ],
 };
+
+const PORTFOLIO_SUMMARY_RESPONSE = {
+  totalNav: 1_250_000,
+  totalCash: 120_000,
+  grossExposure: 870_000,
+  leverage: 1.18,
+  unrealizedPnl: 42_000,
+  pnlToday: 7_500,
+  activeCapitalPools: 3,
+  highestRiskPoolId: "pool-f18-ops",
+};
+
+const PERSONA_LEAGUE_RESPONSE = [
+  {
+    personaId: "persona-f18-1",
+    personaName: "F18 Persona 1",
+    currentRank: 1,
+    previousRank: 2,
+    rankDelta: 1,
+    tier: "S",
+    score: 97,
+    links: { manageHref: "/management/personas/persona-f18-1" },
+  },
+  {
+    personaId: "persona-f18-2",
+    personaName: "F18 Persona 2",
+    currentRank: 2,
+    previousRank: 1,
+    rankDelta: -1,
+    tier: "A",
+    score: 91,
+    links: { manageHref: "/management/personas/persona-f18-2" },
+  },
+];
+
+const PERSONA_FLEET_RESPONSE = [
+  {
+    personaId: "persona-f18-1",
+    personaName: "F18 Persona 1",
+    lifecycleState: "active",
+    productionReadiness: "production",
+    dataProviderKeys: ["ibkr"],
+    dataSources: [
+      {
+        providerKey: "ibkr",
+        readStatus: "healthy",
+        credentialStatus: "present",
+        ingestionMode: "live",
+        orderSideEffects: false,
+      },
+    ],
+  },
+];
 
 const PERSONA_HEALTH_RESPONSE = {
   items: Array.from({ length: 10 }, (_, index) => ({
@@ -495,6 +548,65 @@ const STRATEGIES_RESPONSE = {
   meta: { snapshot_at: nowIso(), surfaces: { strategies: { status: "ok" } } },
 };
 
+const WIDE_LINEAGE_NODES = [
+  {
+    id: WIDE_LINEAGE_STRATEGY.id,
+    label: WIDE_LINEAGE_STRATEGY.name,
+    type: "Strategy",
+    state: WIDE_LINEAGE_STRATEGY.state,
+    risk: WIDE_LINEAGE_STRATEGY.risk,
+    highlight: true,
+  },
+  ...WIDE_LINEAGE_STRATEGY.personaIds.map((id, index) => ({
+    id,
+    label: `F18 Wide Persona ${index + 1}`,
+    type: "Persona",
+    state: "active",
+    risk: index % 7 === 0 ? "medium" : "low",
+  })),
+  {
+    id: "pool-f18-wide",
+    label: "F18 Wide Capital Pool",
+    type: "CapitalPool",
+    state: "active",
+    risk: "medium",
+  },
+  {
+    id: "artifact-f18-wide",
+    label: "F18 Wide Artifact",
+    type: "Artifact",
+    state: "approved",
+    risk: "low",
+  },
+  {
+    id: "experiment-f18-wide",
+    label: "F18 Wide Experiment",
+    type: "Experiment",
+    state: "complete",
+    risk: "low",
+  },
+];
+
+const WIDE_LINEAGE_RESPONSE = {
+  data: {
+    nodes: WIDE_LINEAGE_NODES,
+    edges: [
+      ...WIDE_LINEAGE_STRATEGY.personaIds.map((id) => ({
+        from: WIDE_LINEAGE_STRATEGY.id,
+        to: id,
+        label: "routes",
+      })),
+      { from: "artifact-f18-wide", to: WIDE_LINEAGE_STRATEGY.id, label: "scaffolds" },
+      { from: WIDE_LINEAGE_STRATEGY.id, to: "pool-f18-wide", label: "allocates" },
+      { from: "experiment-f18-wide", to: "artifact-f18-wide", label: "promotes" },
+    ],
+  },
+  meta: {
+    snapshot_at: nowIso(),
+    surfaces: { lineage: { status: "ok", source: "fe-int-gate-d05" } },
+  },
+};
+
 const TOPBAR_APPROVALS_RESPONSE = {
   items: [],
   cursor: {},
@@ -521,6 +633,182 @@ const TOPBAR_JOBS_RESPONSE = {
   meta: { snapshot_at: nowIso(), surfaces: { jobs: { status: "ok", source: "live" } } },
 };
 
+const TOPBAR_SHELL_SUMMARY_RESPONSE = {
+  data: {
+    counts: {
+      pending_approvals: 0,
+      open_alerts: 0,
+      running_jobs: 0,
+    },
+    session: {
+      operator_id: "op-fe-gate",
+      authenticated: true,
+      mfa_verified: true,
+    },
+    transport: {
+      bff_status: "ok",
+      service: "fe-int-gate-d05",
+    },
+  },
+  meta: {
+    snapshot_at: nowIso(),
+    surfaces: {
+      shell_summary: { status: "ok", source: "fe-int-gate-d05" },
+    },
+  },
+};
+
+const ASSISTANT_PROVIDER_READY = {
+  provider: "codex_cli",
+  provider_name: "Codex CLI",
+  runtime: "openclaw_gateway_cli_mount",
+  ready: true,
+  status: "ready",
+  auth_status: "ready",
+  live_auth: true,
+  mount_mode: "service_user",
+  checked_at: nowIso(),
+  usage: {
+    status: "captured",
+    source: "provider_snapshot",
+    remaining: 42,
+    remaining_percent: 84,
+    limit: 50,
+    used: 8,
+    unit: "requests",
+    reset_at: nowIso(),
+  },
+};
+
+const ASSISTANT_ADAPTER_READY = {
+  provider: "openclaw",
+  provider_name: "OpenClaw Runtime",
+  runtime: "openclaw_gateway_agent_cli",
+  ready: true,
+  status: "ready",
+  auth_status: "ready",
+  mount_mode: "rw",
+  checked_at: nowIso(),
+  capabilities: { read: true, repair_write: false },
+  repair_workspace: {
+    root: "/tmp/pantheon-f18-fixture",
+    ready: true,
+    writable: false,
+    worktree_count: 0,
+  },
+};
+
+const ASSISTANT_ORCHESTRATOR_STATUS_RESPONSE = {
+  data: {
+    status: "ready",
+    snapshot_at: nowIso(),
+    project: "pantheon",
+    sprint: "fe-int-gate-d05",
+    objective: "F18 exact-candidate performance gate",
+    provider_status: {
+      provider: "codex_cli",
+      runtime: "openclaw_gateway_cli_mount",
+      status: "completed",
+      used: true,
+      fallback: null,
+      run_id: "f18-perf-fixture",
+    },
+    openclawToolPolicy: {
+      status: "ready",
+      effectiveStatus: "ready",
+      upstreamStatus: "ready",
+      assistantCommandAllowed: true,
+      assistantCommandEffective: true,
+      assistantCommandUsable: true,
+      assistantCommandStatus: "usable",
+      effectiveTools: ["assistant.command"],
+    },
+    providerReadiness: ASSISTANT_ADAPTER_READY,
+    supervisor: {
+      lifecycle: "running",
+      mode_status: "idle",
+      focus_mode: "execution",
+      last_heartbeat_at: nowIso(),
+    },
+    tasks: [],
+    coordination: { file_count: 0, feature_count: 0, feature_ids: [] },
+  },
+};
+
+const ASSISTANT_PROVIDERS_RESPONSE = {
+  status: "ok",
+  data: [
+    ASSISTANT_ADAPTER_READY,
+    ASSISTANT_PROVIDER_READY,
+  ],
+  meta: { auth_probe: false, snapshot_at: nowIso() },
+};
+
+const ASSISTANT_PROVIDER_USAGE_RESPONSE = {
+  status: "ok",
+  data: {
+    providers: [
+      {
+        ...ASSISTANT_PROVIDER_READY,
+        calls: 8,
+        success_count: 8,
+        failed_count: 0,
+        prompt_bytes: 2048,
+        input_tokens: 1000,
+        output_tokens: 420,
+        total_tokens: 1420,
+        last_used_at: nowIso(),
+        last_status: "completed",
+        quota: ASSISTANT_PROVIDER_READY.usage,
+        observed_usage: {
+          source: "management_ai_bff_audit",
+          coverage: "bff_observed_management_ai_only",
+          coverage_label: "BFF observed",
+          stale: false,
+          calls: 8,
+          total_tokens: 1420,
+          last_observed_at: nowIso(),
+        },
+        models: [
+          {
+            model: "gpt-5-codex",
+            calls: 8,
+            success_count: 8,
+            failed_count: 0,
+            total_tokens: 1420,
+            last_used_at: nowIso(),
+            last_status: "completed",
+          },
+        ],
+      },
+    ],
+    totals: {
+      providers: 1,
+      live_auth_count: 1,
+      calls: 8,
+      success_count: 8,
+      failed_count: 0,
+      total_tokens: 1420,
+    },
+    quota: { truth_policy: "provider_snapshot_only" },
+  },
+  meta: { auth_probe: false, snapshot_at: nowIso() },
+};
+
+const ASSISTANT_MODE_RESPONSE = {
+  data: {
+    product_default_mode: "kernel_debug",
+    kernel_enabled: true,
+    control_mode: {
+      state: "inactive",
+      active: false,
+      configured: true,
+      mode: "kernel_debug",
+      command_classes: ["code_search", "file_slice"],
+    },
+  },
+};
+
 async function installPerfRoutes(page: Page, counters: RouteCounters): Promise<void> {
   await page.route(/\/bff\/me(?:\?.*)?$/, async (route) => {
     counters.me += 1;
@@ -534,8 +822,17 @@ async function installPerfRoutes(page: Page, counters: RouteCounters): Promise<v
     await fulfillJson(route, CONTROL_ROOM_RESPONSE);
   });
   await page.route(/\/bff\/management\/cockpit(?:\?.*)?$/, async (route) => {
-    counters.controlRoom += 1;
+    counters.cockpit += 1;
     await fulfillJson(route, { data: COCKPIT_RESPONSE, meta: { snapshot_at: nowIso() } });
+  });
+  await page.route(/\/bff\/management\/portfolio-book(?:\?.*)?$/, async (route) => {
+    await fulfillJson(route, { data: PORTFOLIO_SUMMARY_RESPONSE, meta: { snapshot_at: nowIso() } });
+  });
+  await page.route(/\/bff\/management\/persona-league(?:\?.*)?$/, async (route) => {
+    await fulfillJson(route, { data: PERSONA_LEAGUE_RESPONSE, meta: { snapshot_at: nowIso() } });
+  });
+  await page.route(/\/bff\/management\/persona-fleet(?:\?.*)?$/, async (route) => {
+    await fulfillJson(route, { data: PERSONA_FLEET_RESPONSE, meta: { snapshot_at: nowIso() } });
   });
   await page.route(/\/bff\/v5\/loop-runs(?:\?.*)?$/, async (route) => {
     counters.loopRuns += 1;
@@ -567,6 +864,10 @@ async function installPerfRoutes(page: Page, counters: RouteCounters): Promise<v
     counters.strategies += 1;
     await fulfillJson(route, STRATEGIES_RESPONSE);
   });
+  await page.route(/\/bff\/lineage(?:\?.*)?$/, async (route) => {
+    counters.lineage += 1;
+    await fulfillJson(route, WIDE_LINEAGE_RESPONSE);
+  });
   await page.route(/\/bff\/approvals(?:\?.*)?$/, async (route) => {
     await fulfillJson(route, TOPBAR_APPROVALS_RESPONSE);
   });
@@ -575,6 +876,21 @@ async function installPerfRoutes(page: Page, counters: RouteCounters): Promise<v
   });
   await page.route(/\/bff\/jobs(?:\?.*)?$/, async (route) => {
     await fulfillJson(route, TOPBAR_JOBS_RESPONSE);
+  });
+  await page.route(/\/bff\/management\/shell-summary(?:\?.*)?$/, async (route) => {
+    await fulfillJson(route, TOPBAR_SHELL_SUMMARY_RESPONSE);
+  });
+  await page.route(/\/bff\/assistant\/orchestrator\/status(?:\?.*)?$/, async (route) => {
+    await fulfillJson(route, ASSISTANT_ORCHESTRATOR_STATUS_RESPONSE);
+  });
+  await page.route(/\/bff\/assistant\/providers\/usage-summary(?:\?.*)?$/, async (route) => {
+    await fulfillJson(route, ASSISTANT_PROVIDER_USAGE_RESPONSE);
+  });
+  await page.route(/\/bff\/assistant\/providers(?:\?.*)?$/, async (route) => {
+    await fulfillJson(route, ASSISTANT_PROVIDERS_RESPONSE);
+  });
+  await page.route(/\/bff\/assistant\/mode(?:\?.*)?$/, async (route) => {
+    await fulfillJson(route, ASSISTANT_MODE_RESPONSE);
   });
   await page.route(/\/bff\/search(?:\?.*)?$/, async (route) => {
     await fulfillJson(route, {
@@ -724,7 +1040,7 @@ function annotateSoftGap(testInfo: TestInfo, description: string): void {
 test.describe("F18 perf and stability soft-fail budgets", () => {
   test.describe.configure({ timeout: Math.max(75_000, SSE_WINDOW_MS + 45_000) });
 
-  test("keeps Control Room load and SSE rerender proxy within soft budgets", async ({
+  test("keeps Cockpit load and SSE rerender proxy within soft budgets", async ({
     page,
   }, testInfo) => {
     const harness = new SsePerfHarness();
@@ -738,20 +1054,20 @@ test.describe("F18 perf and stability soft-fail budgets", () => {
 
       const loadMs = await gotoAndWaitForText(
         page,
-        CONTROL_ROOM_PATH,
-        [/Pathreon Management/i, /F18 Sentinel Finding 001/i, /F18 Execution Act/i],
-        "Control Room",
+        COCKPIT_PATH,
+        [/cockpit/i, /F18 Sentinel Finding 001/i, /F18 .* loop/i],
+        "Cockpit",
       );
       recordBudget(testInfo, {
-        id: "control_room_load",
-        label: "Control Room load",
+        id: "cockpit_load",
+        label: "Cockpit load",
         actual: loadMs,
-        max: BUDGETS.controlRoomLoadMs,
+        max: BUDGETS.cockpitLoadMs,
         unit: "ms",
       });
 
       expect(await bodyText(page)).not.toMatch(SERVING_MOCK_BANNER);
-      expect(failures, "Control Room should not emit console/page errors").toEqual([]);
+      expect(failures, "Cockpit should not emit console/page errors").toEqual([]);
 
       await startMutationCounter(page);
       await page.waitForTimeout(SSE_WINDOW_MS);
@@ -767,7 +1083,7 @@ test.describe("F18 perf and stability soft-fail budgets", () => {
       });
       testInfo.annotations.push({
         type: "sse-mutation-records",
-        description: `records=${mutations.records}; requests=${harness.requests.length}; control_room_reads=${counters.controlRoom}; sentinel_reads=${counters.sentinelFindings}`,
+        description: `records=${mutations.records}; requests=${harness.requests.length}; cockpit_reads=${counters.cockpit}; sentinel_reads=${counters.sentinelFindings}`,
       });
       if (harness.requests.length === 0) {
         annotateSoftGap(
@@ -861,7 +1177,7 @@ test.describe("F18 perf and stability soft-fail budgets", () => {
     await gotoAndWaitForText(
       page,
       LINEAGE_PATH,
-      [/F18 Wide Lineage Strategy/i, /Lineage has 506 nodes/i],
+      [/strategy-f18-wide/i, /Lineage has 506 nodes/i],
       "Lineage graph",
     );
 
@@ -871,6 +1187,6 @@ test.describe("F18 perf and stability soft-fail budgets", () => {
       ),
     ).toBeVisible();
     expect(failures, "Lineage graph should not emit console/page errors").toEqual([]);
-    expect(counters.strategies, "Lineage graph fixture should read the live strategies route").toBeGreaterThan(0);
+    expect(counters.lineage, "Lineage graph fixture should read the canonical lineage route").toBeGreaterThan(0);
   });
 });

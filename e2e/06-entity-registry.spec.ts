@@ -13,18 +13,18 @@
  *   BFF_BASE_URL, VITE_BFF_BASE_URL, or PANTHEON_BFF_BASE_URL
  *     default: https://pantheon-lupin-staging-bff.104.155.223.192.sslip.io
  *   BFF_AUTH_TOKEN
- *     optional; when omitted the dev stub token is used.
+ *     required for the opt-in live BFF contract.
  *   FE_INT_GATE_LIVE_BFF=1 or RUN_LIVE_BFF_CONTRACTS=1
  *     opt in to the live BFF contract probe; fixture-driven UI coverage runs
  *     without a staging dependency.
  */
 
 import { expect, test, type Page, type Route } from "@playwright/test";
+import { bearerHeader } from "./helpers/auth";
 
 const DEFAULT_FRONTEND_BASE_URL = "http://127.0.0.1:5173";
 const DEFAULT_BFF_BASE_URL =
   "https://pantheon-lupin-staging-bff.104.155.223.192.sslip.io";
-const DEFAULT_DEV_AUTH_TOKEN = "op-fe-gate:operator,reviewer,approver:mfa";
 const RUN_LIVE_BFF_CONTRACT =
   process.env.FE_INT_GATE_LIVE_BFF === "1" ||
   process.env.RUN_LIVE_BFF_CONTRACTS === "1";
@@ -35,6 +35,8 @@ const SERVING_MOCK_BANNER =
   /serving[-\s]?mock|mock data|fallback data|hybrid fallback active|seed fallback active|資料來源：seed/i;
 const CRASH_TEXT =
   /application error|cannot read properties|undefined is not|uncaught|traceback|typeerror|referenceerror/i;
+const ROUTE_CHUNK_ERROR_TEXT =
+  /畫面渲染失敗（[^）]*route chunk）|Failed to fetch dynamically imported module|Importing a module script failed|error loading dynamically imported module/i;
 
 type JsonRecord = Record<string, unknown>;
 
@@ -75,8 +77,11 @@ function bffUrl(path: string): string {
 }
 
 function authHeader(): string {
-  const token = process.env.BFF_AUTH_TOKEN || DEFAULT_DEV_AUTH_TOKEN;
-  return token.startsWith("Bearer ") ? token : `Bearer ${token}`;
+  const token = process.env.BFF_AUTH_TOKEN || process.env.PANTHEON_BFF_SMOKE_BEARER_TOKEN || "";
+  if (!token) {
+    throw new Error("Live registry contract requires a short-lived BFF_AUTH_TOKEN");
+  }
+  return bearerHeader(token);
 }
 
 function isRecord(value: unknown): value is JsonRecord {
@@ -208,7 +213,10 @@ const REGISTRIES: RegistryFixture[] = [
   makeRegistry({
     key: "capital-pools",
     label: "B06 Core Capital Pool",
-    managementPath: "/management/capital",
+    // MGMT-PERF-IA-001: bare /management/capital now redirects to the
+    // Performance Center exposure tab (ROUTE_MIGRATION_MATRIX.md); the
+    // capital-pools list itself lives on Governance Decisions' capital tab.
+    managementPath: "/management/governance-decisions?tab=capital",
     listPath: "/bff/capital-pools",
     surface: "capital_pools",
     entityType: "capital-pool",
@@ -294,7 +302,9 @@ const REGISTRIES: RegistryFixture[] = [
   makeRegistry({
     key: "rebalances",
     label: "B06 Rebalance Plan",
-    managementPath: "/management/rebalance",
+    // MGMT-PERF-IA-001: bare /management/rebalance now redirects to
+    // Governance Decisions' capital tab (ROUTE_MIGRATION_MATRIX.md).
+    managementPath: "/management/governance-decisions?tab=capital",
     listPath: "/bff/rebalances",
     surface: "rebalances",
     entityType: "rebalance",
@@ -490,6 +500,10 @@ const ME_RESPONSE = {
   data: {
     tenant: {
       id: "tenant-fe-gate",
+      name: "FE Gate Tenant",
+      tz: "UTC",
+      locale: "zh-TW",
+      baseCurrency: "USD",
       default_id: "tenant-fe-gate",
       allowed_ids: ["tenant-fe-gate"],
       scope: "tenant",
@@ -504,6 +518,8 @@ const ME_RESPONSE = {
     },
     user: {
       id: "op-fe-gate",
+      displayName: "FE Gate Operator",
+      email: "op-fe-gate@pantheon.local",
       operator_id: "op-fe-gate",
       display_name: "FE Gate Operator",
       roles: ["operator", "reviewer", "approver"],
@@ -526,8 +542,15 @@ const ME_RESPONSE = {
       capabilities: ["runtime.read", "registry.read"],
       mfa_verified: true,
     },
-    roles: ["operator", "reviewer", "approver"],
+    roles: ["ops", "viewer"],
     capabilities: ["runtime.read", "registry.read"],
+    env: "dev",
+    featureFlags: {
+      sessionAuthMe: true,
+    },
+    serverTime: SNAPSHOT_AT,
+    sessionExpiresAt: "2026-05-13T22:10:00Z",
+    permissionsVersion: "fe-gate-b06-v1",
     session: {
       id: "session-fe-gate-b06",
       authenticated: true,
@@ -839,24 +862,39 @@ function escapeRegExp(value: string): string {
 }
 
 async function gotoRegistry(page: Page, registry: RegistryFixture): Promise<void> {
-  await page.goto(frontendUrl(registry.managementPath), {
-    waitUntil: "domcontentloaded",
-    timeout: 30_000,
-  });
-  await page.locator("#root").waitFor({ state: "attached", timeout: 15_000 });
   const expectedText = new RegExp(escapeRegExp(registry.label), "i");
-  await expect
-    .poll(
-      async () => {
-        const text = await bodyText(page);
-        return expectedText.test(text);
-      },
-      {
-        message: `${registry.managementPath} should render ${registry.label}`,
-        timeout: 20_000,
-      },
-    )
-    .toBe(true);
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    await page.goto(frontendUrl(registry.managementPath), {
+      waitUntil: "domcontentloaded",
+      timeout: 30_000,
+    });
+    await page.locator("#root").waitFor({ state: "attached", timeout: 15_000 });
+
+    try {
+      await expect
+        .poll(
+          async () => {
+            const text = await bodyText(page);
+            return expectedText.test(text);
+          },
+          {
+            message: `${registry.managementPath} should render ${registry.label}`,
+            timeout: 20_000,
+          },
+        )
+        .toBe(true);
+      return;
+    } catch (error) {
+      lastError = error;
+      const text = await bodyText(page).catch(() => "");
+      if (!ROUTE_CHUNK_ERROR_TEXT.test(text) || attempt === 2) {
+        throw error;
+      }
+      await page.reload({ waitUntil: "domcontentloaded", timeout: 30_000 }).catch(() => undefined);
+    }
+  }
+  throw lastError;
 }
 
 async function fetchJsonInBrowser(

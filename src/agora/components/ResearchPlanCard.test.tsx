@@ -38,6 +38,10 @@ const baseCard: WorkshopCard = {
     evaluation_criteria: "Sharpe > 0.8, max drawdown < 15%",
     warnings: ["Data availability limited post-2023"],
     approval_requirement: "human",
+    budget: {
+      max_runtime_minutes: 30,
+      max_cost_usd: 25,
+    },
   },
   created_at: "2026-06-22T00:00:00Z",
   allowed_actions: { approve: true, reject: true },
@@ -77,6 +81,12 @@ describe("ResearchPlanCard", () => {
     expect(screen.getByText("Walk-forward OOS check")).toBeDefined();
   });
 
+  it("renders data requirements", () => {
+    renderCard();
+    expect(screen.getByText("OHLCV daily 10Y")).toBeDefined();
+    expect(screen.getByText("sector classifications")).toBeDefined();
+  });
+
   it("shows evaluation criteria", () => {
     renderCard();
     expect(screen.getByText(/Sharpe > 0.8/)).toBeDefined();
@@ -85,6 +95,12 @@ describe("ResearchPlanCard", () => {
   it("shows warnings section", () => {
     renderCard();
     expect(screen.getByText(/Data availability limited/)).toBeDefined();
+  });
+
+  it("shows budget details when present", () => {
+    renderCard();
+    expect(screen.getByText("30")).toBeDefined();
+    expect(screen.getByText("25")).toBeDefined();
   });
 
   it("shows approval requirement", () => {

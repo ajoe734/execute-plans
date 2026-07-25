@@ -19,6 +19,8 @@ export interface Degradation {
   level?: DegradationLevel;
   /** Human-readable reason from meta.degradation.reason, when present. */
   reason?: string;
+  /** Strict live transport failed; seed/mock fallback was intentionally blocked. */
+  strictFallbackBlocked?: boolean;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
@@ -52,10 +54,19 @@ export function extractDegradation(meta: unknown): Degradation {
 
   const degradation = asRecord(record.degradation);
   const reason = typeof degradation?.reason === "string" ? degradation.reason : undefined;
+  const strictFallbackBlocked =
+    degradation?.strictFallbackBlocked === true ||
+    degradation?.strict_fallback_blocked === true ||
+    degradation?.seedFallbackBlocked === true ||
+    degradation?.seed_fallback_blocked === true;
 
   // A `degradation` block without an unavailable/degraded surface still counts
   // as degraded (the BFF only emits it intentionally).
   if (!level && degradation) level = "degraded";
 
-  return { degraded: Boolean(level), level, reason };
+  const out: Degradation = { degraded: Boolean(level) };
+  if (level) out.level = level;
+  if (reason) out.reason = reason;
+  if (strictFallbackBlocked) out.strictFallbackBlocked = true;
+  return out;
 }
