@@ -21,6 +21,7 @@ import {
   gcpIdentityStorageKey,
   gcpIdentityStoredUser,
 } from "./helpers/auth";
+import { bindPplAlloc009PromotionSubmission } from "./helpers/pplAlloc009PromotionSubmission";
 import { bindPplAlloc009RecommendationSnapshot } from "./helpers/pplAlloc009Recommendation";
 import { bindPplAlloc009SessionRotation } from "./helpers/pplAlloc009Session";
 
@@ -756,13 +757,13 @@ test.describe("PPL-ALLOC-009 hosted paper allocation acceptance", () => {
         realWritesEnabled: false,
       },
     });
-    const promotionReviewId = requiredString(
+    const stableRecommendationId = requiredString(
       recommendation?.recommendation_id ?? recommendation?.review_id,
-      "promotion review id",
+      "stable recommendation id",
     );
 
     const submitResponse = await request.post(
-      `${BFF_BASE}/bff/management/quarterly-ranking/recommendations/${encodeURIComponent(promotionReviewId)}/submit`,
+      `${BFF_BASE}/bff/management/quarterly-ranking/recommendations/${encodeURIComponent(stableRecommendationId)}/submit`,
       {
         data: {
           quarter: QUARTER,
@@ -774,11 +775,17 @@ test.describe("PPL-ALLOC-009 hosted paper allocation acceptance", () => {
       },
     );
     calls.push(await requestEvidence(submitResponse, "promotion-submit", "POST"));
-    const submitPayload = await expectStatus(submitResponse, 202, "promotion submit");
+    const submitPayload = await expectStatus(submitResponse, [200, 202], "promotion submit");
     expect(record(submitPayload.meta).live_capital_mutation).not.toBe(true);
+    const { submittedReviewId } = bindPplAlloc009PromotionSubmission({
+      expectedRankingSnapshotId: recommendationSnapshotId,
+      stableRecommendationId,
+      status: submitResponse.status(),
+      submitPayload,
+    });
 
     const decisionResponse = await request.post(
-      `${BFF_BASE}/bff/management/promotion-reviews/${encodeURIComponent(promotionReviewId)}/decisions`,
+      `${BFF_BASE}/bff/management/promotion-reviews/${encodeURIComponent(submittedReviewId)}/decisions`,
       {
         data: {
           decision: "approve",
@@ -799,7 +806,7 @@ test.describe("PPL-ALLOC-009 hosted paper allocation acceptance", () => {
       {
         data: {
           authority_mode: "governed_paper_simulation",
-          promotion_review_id: promotionReviewId,
+          promotion_review_id: submittedReviewId,
           ranking_snapshot_id: recommendationSnapshotId,
           rows: [recommendationRow],
         },
@@ -836,7 +843,7 @@ test.describe("PPL-ALLOC-009 hosted paper allocation acceptance", () => {
         allocation_evaluation_id: evaluationId,
         allocation_policy_version: evaluation.allocation_policy_version,
         audit_refs: [
-          `promotion_review:${promotionReviewId}`,
+          `promotion_review:${submittedReviewId}`,
           `ranking_snapshot:${recommendationSnapshotId}`,
         ],
         capital_pool_id: poolId,
@@ -995,7 +1002,7 @@ test.describe("PPL-ALLOC-009 hosted paper allocation acceptance", () => {
         currentPaperSessionId,
         provisioningPaperSessionId,
         personaId,
-        promotionReviewId,
+        promotionReviewId: submittedReviewId,
         rankingSnapshotId: recommendationSnapshotId,
         rebalanceId,
         runtimeBindingId,

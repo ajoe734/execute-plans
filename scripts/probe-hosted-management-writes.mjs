@@ -92,43 +92,65 @@ assert(session.authenticated !== false, "/bff/me did not return an authenticated
 assert(["dev", "development", "test", "testing"].includes(environmentName), `write probe refuses non-dev BFF environment: ${environmentName || "missing"}`);
 
 const recommendation = await findRecommendation();
-const reviewId = String(recommendation.review_id || recommendation.recommendation_id);
-const recommendationId = String(recommendation.recommendation_id || reviewId);
+const recommendationId = String(recommendation.recommendation_id || recommendation.review_id);
 const quarter = String(recommendation.quarter || "");
-const stableId = reviewId.replace(/[^A-Za-z0-9._-]/g, "-").slice(0, 120);
+const rankingSnapshotId = String(recommendation.ranking_snapshot_id || "");
+assert(rankingSnapshotId, "recommendation did not provide a ranking snapshot");
+const stableRecommendationSegment = recommendationId.replace(/[^A-Za-z0-9._-]/g, "-").slice(0, 120);
 
 const submitted = await request(
   `/bff/management/quarterly-ranking/recommendations/${encodeURIComponent(recommendationId)}/submit`,
   {
     method: "POST",
-    body: quarter ? { quarter } : {},
-    idempotencyKey: `dev-write-probe-submit-${stableId}`,
+    body: {
+      ...(quarter ? { quarter } : {}),
+      ranking_snapshot_id: rankingSnapshotId,
+    },
+    idempotencyKey: `dev-write-probe-submit-${stableRecommendationSegment}`,
   },
 );
 assert([200, 202].includes(submitted.status), `unexpected submit status ${submitted.status}`);
+if (submitted.status === 200) {
+  assert(
+    record(record(submitted.payload.meta).idempotency).replayed === true,
+    "HTTP 200 recommendation submit was not marked as an idempotent replay",
+  );
+}
 assert(mutationIsDisabled(submitted.payload), "recommendation submit reported a live capital mutation");
+const submittedData = record(submitted.payload.data);
+const submittedReviewId = String(submittedData.review_id || submittedData.promotion_review_id || "");
+assert(submittedReviewId, "recommendation submit did not return an immutable promotion review revision");
+assert(
+  String(submittedData.recommendation_id || "") === recommendationId,
+  "recommendation submit rebound to a different stable recommendation",
+);
+assert(
+  String(submittedData.ranking_snapshot_id || "") === rankingSnapshotId,
+  "recommendation submit rebound to a different ranking snapshot",
+);
+const submittedReviewSegment = submittedReviewId.replace(/[^A-Za-z0-9._-]/g, "-").slice(0, 120);
 
-let detail = await readDetail(reviewId);
+let detail = await readDetail(submittedReviewId);
 const submittedDetail = record(detail.payload.data);
 assert(submittedDetail.submitted === true, "promotion review was not persisted as submitted");
 const humanInboxId = String(
   submittedDetail.human_inbox_id ||
-  record(submitted.payload.data).human_inbox_id ||
-  `promotion_review:${reviewId}`,
+  submittedData.human_inbox_id ||
+  `promotion_review:${submittedReviewId}`,
 );
 
 const decision = await request(
-  `/bff/management/promotion-reviews/${encodeURIComponent(reviewId)}/decisions`,
+  `/bff/management/promotion-reviews/${encodeURIComponent(submittedReviewId)}/decisions`,
   {
     method: "POST",
     body: { decision: "reject", rationale, ...(quarter ? { quarter } : {}) },
-    idempotencyKey: `dev-write-probe-reject-${stableId}`,
+    idempotencyKey: `dev-write-probe-reject-${submittedReviewSegment}`,
   },
 );
 assert(decision.status === 202, `unexpected decision status ${decision.status}`);
 assert(mutationIsDisabled(decision.payload), "Human Review decision reported a live capital mutation");
 
-detail = await readDetail(reviewId);
+detail = await readDetail(submittedReviewId);
 const decidedDetail = record(detail.payload.data);
 assert(decidedDetail.submitted === true, "submitted state disappeared after decision");
 assert(
@@ -139,7 +161,7 @@ assert(
 const inbox = await request(`/bff/management/human-inbox/${encodeURIComponent(humanInboxId)}`);
 const inboxData = record(inbox.payload.data);
 assert(
-  String(inboxData.promotion_review_id || inboxData.review_id || "") === reviewId,
+  String(inboxData.promotion_review_id || inboxData.review_id || "") === submittedReviewId,
   "Human Inbox read-back did not resolve the persisted promotion review",
 );
 
@@ -147,7 +169,7 @@ console.log(JSON.stringify({
   status: "pass",
   environment: environmentName,
   sessionKind: session.session_kind || session.sessionKind,
-  reviewId,
+  reviewId: submittedReviewId,
   recommendationId,
   submitStatus: submitted.status,
   decisionStatus: decision.status,
