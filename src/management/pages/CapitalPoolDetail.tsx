@@ -1,12 +1,16 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { safePercent, safeRatio } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { bff } from "@/lib/bff-v1";
-import { runActionSafe } from "@/lib/bff-v1";
+import { EmptyState } from "@/components/ui/empty-state";
+import { bff, runActionSafe, mgmt } from "@/lib/bff-v1";
+import { capitalPoolWithFleetFallback, getPersonaIdsForPoolId } from "./capitalPoolsFleetFallback";
 import { useT } from "@/platform/hooks";
 import type { ApprovalRequest, AuditEvent, CapitalPool, Rebalance, Strategy } from "@/lib/bff/types";
-import { Edit, ShieldAlert } from "lucide-react";
+import type { ManagementPersonaFleetRow } from "@/lib/bff-v1/management";
+import { Edit, Inbox, ShieldAlert } from "lucide-react";
 import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
+import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { AuditTimeline } from "@/platform/components/AuditTimeline";
 import { DataTable } from "@/platform/components/DataTable";
 import { StatusBadge } from "@/platform/components/StatusBadge";
@@ -15,7 +19,6 @@ import { StatCard } from "@/platform/components/StatCard";
 import { Progress } from "@/components/ui/progress";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
 import { LineageGraph, type LineageNode, type LineageEdge } from "@/platform/components/LineageGraph";
-import { toast } from "sonner";
 import { MandatePanel } from "../components/detail/MandatePanel";
 import { RiskBudgetPanel } from "../components/detail/RiskBudgetPanel";
 import { BindingsMatrix } from "../components/detail/BindingsMatrix";
@@ -27,11 +30,15 @@ import { lifecycleOf } from "@/lib/v4/strategyTripleDerive";
 import { findMetric } from "@/lib/v4/metricRegistry";
 import { Badge } from "@/components/ui/badge";
 
+const num = (value: unknown): number => (typeof value === "number" && Number.isFinite(value) ? value : 0);
+
 export const CapitalPoolDetail = () => {
   const { id } = useParams();
   const t = useT();
   const navigate = useNavigate();
   const [c, setC] = useState<CapitalPool | undefined>();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | undefined>();
   const [strats, setStrats] = useState<Strategy[]>([]);
   const [rebalances, setRebalances] = useState<Rebalance[]>([]);
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
@@ -39,16 +46,112 @@ export const CapitalPoolDetail = () => {
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   useEffect(() => {
-    if (!id) return;
-    bff.capitalPools.get(id).then(setC);
-    bff.strategies.list().then((all) => setStrats(all.filter((s) => s.capitalPoolId === id)));
-    bff.rebalances.list().then((all) => setRebalances(all.filter((r) => r.targetPoolId === id)));
-    bff.approvals.list().then((all) => setApprovals(all.filter((a) => (a.subject ?? "").includes(id) || (a.kind ?? "").includes("capital"))));
-    bff.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action?.startsWith("capital.") || x.action?.startsWith("rebalance."))));
+    let cancelled = false;
+
+    async function load() {
+      if (!id) {
+        setLoading(false);
+        setError("missing-id");
+        return;
+      }
+
+      setLoading(true);
+      setError(undefined);
+      setC(undefined);
+      setStrats([]);
+      setRebalances([]);
+      setApprovals([]);
+      setAudit([]);
+
+      try {
+        let pool: CapitalPool | undefined;
+        let detailError: string | undefined;
+        try {
+          pool = await bff.capitalPools.get(id);
+        } catch (err) {
+          detailError = err instanceof Error ? err.message : String(err);
+        }
+        pool ??= await capitalPoolWithFleetFallback(id);
+        if (cancelled) return;
+        if (!pool) {
+          setError(detailError ?? "not-found");
+          return;
+        }
+
+        setC(pool);
+        const poolIds = new Set(
+          [id, pool.id, pool.poolId, pool.pool_id].filter((value): value is string => Boolean(value)),
+        );
+        const mentionsPool = (value?: string) => Boolean(value && Array.from(poolIds).some((poolId) => value.includes(poolId)));
+
+        const [allStrategies, allRebalances, allApprovals, allAudit, fleetRows] = await Promise.all([
+          bff.strategies.list().catch((): Strategy[] => []),
+          bff.rebalances.list().catch((): Rebalance[] => []),
+          bff.approvals.list().catch((): ApprovalRequest[] => []),
+          bff.audit.list().catch((): AuditEvent[] => []),
+          mgmt.personaFleet.get().catch(() => [] as unknown[]),
+        ]);
+        if (cancelled) return;
+
+        const boundPersonaIds = getPersonaIdsForPoolId(id || "", fleetRows as unknown as ManagementPersonaFleetRow[]);
+        const rawPool = pool as Record<string, unknown>;
+        const boundStrats = allStrategies.filter((s) => {
+          if (poolIds.has(s.capitalPoolId)) return true;
+          const isPaper =
+            rawPool.capitalMode === "paper" ||
+            rawPool.capital_mode === "paper" ||
+            rawPool.capitalScope === "paper" ||
+            rawPool.capital_scope === "paper" ||
+            (id || "").startsWith("paper-ledger-") ||
+            (id || "").startsWith("pool-crypto-paper");
+          if (isPaper) {
+            return s.personaIds.some((pId) => boundPersonaIds.has(pId));
+          }
+          return false;
+        });
+
+        setStrats(boundStrats);
+        setRebalances(allRebalances.filter((r) => poolIds.has(r.targetPoolId)));
+        setApprovals(allApprovals.filter((a) => mentionsPool(a.subject) || (a.kind ?? "").includes("capital")));
+        setAudit(allAudit.filter((x) => poolIds.has(x.target) || x.action?.startsWith("capital.") || x.action?.startsWith("rebalance.")));
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    void load();
+    return () => {
+      cancelled = true;
+    };
   }, [id]);
 
-  if (!c) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
-  const utilizationPct = (c.utilized / c.allocated) * 100;
+  if (loading) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
+  if (!c) {
+    const description = error && !["missing-id", "not-found"].includes(error)
+      ? t("phase13.capital.detail.notFoundWithError", { id, error })
+      : t("phase13.capital.detail.notFoundDescription", { id: id ?? "" });
+    return (
+      <>
+        <PageHeader title={t("nav.capitalPools")} />
+        <PageBody>
+          <EmptyState
+            icon={<Inbox className="h-8 w-8" />}
+            title={t("phase13.capital.detail.notFoundTitle")}
+            description={description}
+            cta={{ label: t("phase13.capital.detail.backToList"), onClick: () => navigate("/management/governance-decisions?tab=capital") }}
+          />
+        </PageBody>
+      </>
+    );
+  }
+  const allocated = num(c.allocated);
+  const utilized = num(c.utilized);
+  const riskBudget = num(c.riskBudget);
+  const utilizationPct = safeRatio(utilized, allocated) * 100;
+  const bindingCount = typeof c.bindingCount === "number" ? c.bindingCount : Array.isArray(c.bindings) ? c.bindings.length : 0;
+  const riskPolicyRef = c.riskPolicyRef ?? c.risk_policy_ref;
   const firstRebalance = rebalances[0];
 
   // Lineage: pool ↔ rebalance ↔ strategy
@@ -80,10 +183,10 @@ export const CapitalPoolDetail = () => {
             value: "overview", label: t("section.overview"),
             content: (() => {
               const breach = assessBreach({
-                utilized: c.utilized,
-                allocated: c.allocated,
+                utilized,
+                allocated,
                 currentDrawdownPct: strats.length ? Math.min(...strats.map((s) => s.drawdown)) : undefined,
-                riskBudgetPct: c.riskBudget,
+                riskBudgetPct: riskBudget,
               });
               const utilMetric = findMetric("capital_utilization_pct");
               const rbuMetric = findMetric("risk_budget_usage_pct");
@@ -96,14 +199,22 @@ export const CapitalPoolDetail = () => {
               return (
                 <>
                   <div className="grid grid-cols-3 gap-4">
-                    <StatCard label={t("section.holdings")} value={`${c.currency} ${(c.allocated ?? 0).toLocaleString()}`} />
+                    <StatCard label={t("section.holdings")} value={`${c.currency} ${allocated.toLocaleString()}`} />
                     <StatCard
                       label={utilMetric ? `Capital utilization (%)` : t("table.utilization")}
                       value={`${(breach.utilizationPct * 100).toFixed(utilMetric?.precision ?? 2)}%`}
-                      hint={`${c.currency} ${(c.utilized ?? 0).toLocaleString()}`}
+                      hint={`${c.currency} ${utilized.toLocaleString()}`}
                     />
-                    <StatCard label={t("section.limits")} value={`${(c.riskBudget * 100).toFixed(2)}%`} tone="warning" />
+                    <StatCard label={t("section.limits")} value={safePercent(riskBudget, 2)} tone="warning" />
                   </div>
+                  <Section title={t("section.details")}>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <Field label={t("nav.capitalPools")} value={c.id} mono />
+                      <Field label={t("phase13.capital.detail.riskPolicy")} value={riskPolicyRef ?? "—"} mono />
+                      <Field label={t("phase13.capital.detail.bindings")} value={bindingCount.toLocaleString()} mono />
+                      <Field label={t("common.owner")} value={c.owner} mono />
+                    </div>
+                  </Section>
                   <Section title={t("detail.section.breachAssessment")}>
                     <div className="flex flex-wrap items-center gap-2 mb-2">
                       <Badge variant="outline" className={breachToneCls[breach.level]}>{(breach.level ?? "").toUpperCase()}</Badge>
@@ -119,7 +230,7 @@ export const CapitalPoolDetail = () => {
                     <Progress value={breach.utilizationPct * 100} className="h-2" />
                     <div className="flex justify-between text-xs text-muted-foreground text-mono">
                       <span>0</span>
-                      <span>{(c.allocated ?? 0).toLocaleString()}</span>
+                      <span>{allocated.toLocaleString()}</span>
                     </div>
                   </Section>
                 </>
@@ -187,7 +298,7 @@ export const CapitalPoolDetail = () => {
             content: (
               <Section title={t("phase13.capital.tabs.lineage")}>
                 <p className="text-xs text-muted-foreground mb-2">{t("phase13.capital.lineage.hint")}</p>
-                <LineageGraph nodes={lineageNodes} edges={lineageEdges} onSelect={(n) => navigate(`/management/${n.type === "Rebalance" ? "rebalance" : n.type === "Strategy" ? "strategies" : "capital-pools"}/${n.id}`)} />
+                <LineageGraph nodes={lineageNodes} edges={lineageEdges} onSelect={(n) => navigate(`/management/${n.type === "Rebalance" ? "rebalance" : n.type === "Strategy" ? "strategies" : "capital"}/${encodeURIComponent(n.id)}`)} />
               </Section>
             ),
           },
@@ -196,16 +307,16 @@ export const CapitalPoolDetail = () => {
             content: (
               <Section>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <Field label="VaR (mock)" value={`${c.currency} ${((c.allocated ?? 0) * (c.riskBudget ?? 0)).toLocaleString(undefined, { maximumFractionDigits: 0 })}`} mono />
-                  <Field label={t("section.limits")} value={`${(c.riskBudget * 100).toFixed(2)}%`} mono />
-                  <Field label={t("table.capacity")} value={`${(100 - utilizationPct).toFixed(1)}%`} mono />
+                  <Field label="VaR" value="—" mono />
+                  <Field label={t("section.limits")} value={safePercent(riskBudget, 2)} mono />
+                  <Field label={t("table.capacity")} value={`${Math.max(0, 100 - utilizationPct).toFixed(1)}%`} mono />
                   <Field label={t("table.value")} value={c.currency} mono />
                 </div>
               </Section>
             ),
           },
           { value: "rebalance", label: t("nav.rebalance"), content: (
-            <DataTable rows={rebalances} onRowClick={(r) => navigate(`/management/rebalance/${r.id}`)} columns={[
+            <DataTable rows={rebalances} onRowClick={(r) => navigate(`/management/promotion-allocation?tab=quarterly-capital&rebalance_id=${encodeURIComponent(r.id)}`)} columns={[
               { key: "name", header: t("table.name"), cell: (r) => <div className="font-medium">{r.name}</div> },
               { key: "q", header: "Quarter", cell: (r) => <span className="text-mono text-xs">{r.quarter}</span> },
               { key: "delta", header: "Δ", cell: (r) => <span className="text-mono text-xs">{(r.proposedDelta * 100).toFixed(1)}%</span> },
@@ -237,7 +348,12 @@ export const CapitalPoolDetail = () => {
         target={{ type: "CapitalPool", id: c.id, name: c.name }}
         risk="high"
         destructive
-        onConfirm={async (memo, token) => { await runActionSafe({ kind: "CapitalPool", id: c.id, action: "adjust_budget", memo }, { confirmToken: token }); toast.success(t("toast.actionQueued")); }}
+        onConfirm={async (memo, token) => {
+          await runActionSafe({ kind: "CapitalPool", id: c.id, action: "adjust_budget", memo }, {
+            confirmToken: token,
+            successTitle: t("toast.actionQueued"),
+          });
+        }}
       />
     </>
   );

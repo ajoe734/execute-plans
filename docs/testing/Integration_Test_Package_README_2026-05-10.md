@@ -59,14 +59,14 @@ npm run test:contract
 5. 跑匿名路由註冊 probe：
 
 ```bash
-PANTHEON_BFF_BASE_URL=https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io \
+PANTHEON_BFF_BASE_URL=https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io \
 node scripts/probe-bff-routes.mjs --anonymous
 ```
 
 6. 跑 authenticated smoke，需 token：
 
 ```bash
-PANTHEON_BFF_BASE_URL=https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io \
+PANTHEON_BFF_BASE_URL=https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io \
 PANTHEON_BFF_SMOKE_BEARER_TOKEN=... \
 node scripts/probe-bff-authenticated-live.mjs
 ```
@@ -74,8 +74,8 @@ node scripts/probe-bff-authenticated-live.mjs
 7. 跑 hosted browser probe：
 
 ```bash
-PANTHEON_FE_BASE_URL=https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io \
-PANTHEON_BFF_BASE_URL=https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io \
+PANTHEON_FE_BASE_URL=https://pantheon-lupin-dev-fe.35.201.204.12.sslip.io \
+PANTHEON_BFF_BASE_URL=https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io \
 PANTHEON_OLD_BFF_URL=https://pantheon-dev-bff.35.236.178.81.sslip.io \
 node scripts/probe-hosted-browser-bff.mjs
 ```
@@ -83,8 +83,8 @@ node scripts/probe-hosted-browser-bff.mjs
 8. 跑 Playwright E2E：
 
 ```bash
-PANTHEON_FE_BASE_URL=https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io \
-PANTHEON_BFF_BASE_URL=https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io \
+PANTHEON_FE_BASE_URL=https://pantheon-lupin-dev-fe.35.201.204.12.sslip.io \
+PANTHEON_BFF_BASE_URL=https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io \
 npm run e2e
 ```
 
