@@ -58,6 +58,10 @@ let state: LiveStatus = {
 const listeners = new Set<() => void>();
 function notify() { for (const l of listeners) l(); }
 
+function isStrictTypedError(reason: string | undefined): boolean {
+  return reason?.trim().toLowerCase().startsWith("strict:") ?? false;
+}
+
 export const liveStatus = {
   get(): LiveStatus { return state; },
   subscribe(cb: () => void): () => void {
@@ -77,9 +81,12 @@ export const liveStatus = {
     state = { ...state, effective: "live", lastError: undefined, lastErrorAt: undefined, fellBackAt: undefined };
     notify();
   },
-  /** Live request succeeded → clear any prior fallback. */
+  /** Live request succeeded → clear non-strict fallback. */
   reportSuccess(): void {
     if (state.mode !== "live") return;
+    if (state.effective === "mock" && isStrictTypedError(state.lastError)) {
+      return;
+    }
     if (state.effective === "live" && !state.lastError) return;
     state = { ...state, effective: "live", lastError: undefined, lastErrorAt: undefined, fellBackAt: undefined };
     notify();

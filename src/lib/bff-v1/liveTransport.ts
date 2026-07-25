@@ -44,7 +44,14 @@ export async function withLiveOrMock<T, TLive = T>(
   mockFn: () => Promise<T>,
   adaptLive?: (data: TLive) => T,
 ): Promise<T> {
-  if (!shouldUseLive()) return mockFn();
+  if (!shouldUseLive()) {
+    // liveStatus is flagged offline (a prior live read fell back). In strict + live mode we must
+    // NOT mask that with mock seed — re-attempt live so the real result (or a typed error)
+    // surfaces, and so the surface self-heals once the BFF recovers. Only a genuinely configured
+    // mock mode (VITE_BFF_MODE=mock) short-circuits to mock here.
+    const strictLive = liveStatus.get().mode === "live" && detectFallbackMode() === "strict";
+    if (!strictLive) return mockFn();
+  }
   try {
     const data = await bffFetch<TLive>({ ...req, mode: "live" });
     liveStatus.reportSuccess();
