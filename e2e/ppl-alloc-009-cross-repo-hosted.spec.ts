@@ -1,10 +1,12 @@
 /**
  * PPL-ALLOC-009 exact-pair hosted acceptance.
  *
- * The proof uses only strict dev-login identities and the governed paper
- * allocation authority. Tokens and client secrets remain in memory. The
- * persisted evidence contains linked resource/request identities, browser
- * network metadata, console results, and accessibility summaries only.
+ * The governed API chain uses strict dev-login identities. Browser proof signs
+ * in through the hosted GCP Identity Platform UI with a dedicated dev account;
+ * it never injects a synthetic Firebase session. Tokens, passwords, and client
+ * secrets remain in memory. Persisted evidence contains linked resource/request
+ * identities, browser network metadata, console results, and accessibility
+ * summaries only.
  */
 import AxeBuilder from "@axe-core/playwright";
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -17,10 +19,6 @@ import {
   type Page,
   type TestInfo,
 } from "@playwright/test";
-import {
-  gcpIdentityStorageKey,
-  gcpIdentityStoredUser,
-} from "./helpers/auth";
 import { bindPplAlloc009PromotionSubmission } from "./helpers/pplAlloc009PromotionSubmission";
 import { bindPplAlloc009RecommendationSnapshot } from "./helpers/pplAlloc009Recommendation";
 import { bindPplAlloc009SessionRotation } from "./helpers/pplAlloc009Session";
@@ -32,6 +30,12 @@ const EXPECTED_BFF_SHA = String(process.env.PPL_ALLOC_009_EXPECTED_BFF_SHA ?? ""
 const GCP_IDENTITY_API_KEY = String(
   process.env.PPL_ALLOC_009_GCP_IDENTITY_API_KEY ?? "",
 ).trim();
+const GCP_IDENTITY_EMAIL = String(
+  process.env.PPL_ALLOC_009_GCP_IDENTITY_EMAIL ?? "",
+).trim();
+const GCP_IDENTITY_PASSWORD = String(
+  process.env.PPL_ALLOC_009_GCP_IDENTITY_PASSWORD ?? "",
+);
 const TENANT_ID = String(process.env.PPL_ALLOC_009_TENANT_ID ?? "tenant-dev").trim();
 const QUARTER = String(process.env.PPL_ALLOC_009_QUARTER ?? "2026-Q3").trim();
 const OPERATOR_CLIENT_ID = String(process.env.PPL_ALLOC_009_OPERATOR_CLIENT_ID ?? "").trim();
@@ -275,27 +279,23 @@ async function assertExactPair(
   return { deployment, version };
 }
 
-async function installHostedSession(page: Page, identity: StrictIdentity): Promise<void> {
+async function installHostedSession(page: Page, fromRoute: string): Promise<void> {
   expect(GCP_IDENTITY_API_KEY).toMatch(/^AIza[A-Za-z0-9_-]{35}$/u);
-  const claims = bearerClaims(identity.token);
-  const nowSeconds = Math.floor(Date.now() / 1000);
-  const expiresAt = Number(claims.exp ?? 0);
-  expect(expiresAt).toBeGreaterThan(nowSeconds + 120);
-  const storageKey = gcpIdentityStorageKey(GCP_IDENTITY_API_KEY);
-  const session = gcpIdentityStoredUser({
-    apiKey: GCP_IDENTITY_API_KEY,
-    email: typeof claims.email === "string"
-      ? claims.email
-      : `${identity.operatorId}@pantheon-dev.invalid`,
-    token: identity.token,
-    uid: identity.operatorId,
-  });
-  await page.addInitScript(
-    ({ key, storedSession }) => {
-      window.sessionStorage.setItem(key, JSON.stringify(storedSession));
-    },
-    { key: storageKey, storedSession: session },
+  expect(GCP_IDENTITY_EMAIL).not.toBe("");
+  expect(GCP_IDENTITY_PASSWORD).not.toBe("");
+  await page.goto(
+    `${FE_BASE}/auth?from=${encodeURIComponent(fromRoute)}`,
+    { waitUntil: "domcontentloaded", timeout: 60_000 },
   );
+  await page.getByPlaceholder("Email").fill(GCP_IDENTITY_EMAIL);
+  await page.getByPlaceholder("Password").fill(GCP_IDENTITY_PASSWORD);
+  await page.getByRole("button", { exact: true, name: "Sign in" }).click();
+  await page.waitForURL((url) => {
+    return url.origin === FE_BASE
+      && `${url.pathname}${url.search}` === fromRoute;
+  }, {
+    timeout: 60_000,
+  });
 }
 
 function observeBrowser(page: Page): {
@@ -325,7 +325,6 @@ function observeBrowser(page: Page): {
 
 async function runBrowserProof(
   browser: Browser,
-  identity: StrictIdentity,
   input: {
     personaId: string;
     personaName: string;
@@ -338,12 +337,12 @@ async function runBrowserProof(
   const context = await browser.newContext({ viewport: input.viewport });
   const page = await context.newPage();
   const observed = observeBrowser(page);
-  await installHostedSession(page, identity);
   const routes = [
     `/management/rankings?tab=quarterly&persona=${encodeURIComponent(input.personaId)}&quarter=${encodeURIComponent(QUARTER)}`,
     `/management/governance-decisions?tab=recommendations&persona=${encodeURIComponent(input.personaId)}`,
     `/management/governance-decisions?tab=capital&capital_id=${encodeURIComponent(input.poolId)}&rebalance_id=${encodeURIComponent(input.rebalanceId)}`,
   ];
+  await installHostedSession(page, routes[0]);
   for (const route of routes) {
     await page.goto(`${FE_BASE}${route}`, { waitUntil: "domcontentloaded", timeout: 60_000 });
     await expect(page.locator("h1").first()).toBeVisible({ timeout: 30_000 });
@@ -382,6 +381,11 @@ async function runBrowserProof(
     },
     consoleErrors: observed.consoleErrors,
     dimensions,
+    identity: {
+      provider: "gcp_identity_platform",
+      sessionBootstrap: "hosted_firebase_email_password_sign_in",
+      syntheticSession: false,
+    },
     network: observed.network,
     routes,
     viewport: input.viewport,
@@ -504,6 +508,8 @@ test.describe("PPL-ALLOC-009 hosted paper allocation acceptance", () => {
       },
     });
     expect(GCP_IDENTITY_API_KEY).toMatch(/^AIza[A-Za-z0-9_-]{35}$/u);
+    expect(GCP_IDENTITY_EMAIL).not.toBe("");
+    expect(GCP_IDENTITY_PASSWORD).not.toBe("");
     expect(OPERATOR_CLIENT_ID).not.toBe("");
     expect(OPERATOR_CLIENT_SECRET).not.toBe("");
     expect(APPROVER_CLIENT_ID).not.toBe("");
@@ -968,7 +974,46 @@ test.describe("PPL-ALLOC-009 hosted paper allocation acceptance", () => {
     expect(allocation?.capital_scope).toBe("paper_ledger");
     expect(allocation?.capital_sleeve_id ?? null).toBeNull();
 
-    const desktop = await runBrowserProof(browser, operator, {
+    writeEvidenceFile({
+      acceptance: {
+        B1: "passed_governed_paper_only_chain",
+        B3: "in_progress_real_gcp_identity_browser",
+        realLiveCapitalAuthority: "disabled",
+      },
+      capturedAt: new Date().toISOString(),
+      chain: {
+        allocationEvaluationId: evaluationId,
+        approvalDecisionId: canonicalApprovalId,
+        applyCommandId: commandId,
+        capitalBindingId,
+        paperLedgerId,
+        currentPaperSessionId,
+        provisioningPaperSessionId,
+        personaId,
+        promotionReviewId: submittedReviewId,
+        rankingSnapshotId: recommendationSnapshotId,
+        rebalanceId,
+        runtimeBindingId,
+        runtimeId,
+      },
+      deployment: {
+        bffCommit: EXPECTED_BFF_SHA,
+        deploymentState: pair.deployment.deploymentState,
+        frontendCommit: EXPECTED_FE_SHA,
+        pairId: pair.deployment.pairId ?? null,
+        safeBuildMode: pair.deployment.buildMode,
+      },
+      requestResponseEvidence: calls,
+      result: "in_progress",
+      runKey: RUN_KEY,
+      safety: {
+        canaryEnabled: false,
+        liveEnabled: false,
+        realWritesEnabled: false,
+      },
+    });
+
+    const desktop = await runBrowserProof(browser, {
       personaId,
       personaName,
       poolId,
@@ -976,7 +1021,7 @@ test.describe("PPL-ALLOC-009 hosted paper allocation acceptance", () => {
       viewport: { height: 900, width: 1440 },
       viewportName: "desktop",
     });
-    const mobile = await runBrowserProof(browser, operator, {
+    const mobile = await runBrowserProof(browser, {
       personaId,
       personaName,
       poolId,
