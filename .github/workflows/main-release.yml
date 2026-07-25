@@ -1,0 +1,66 @@
+name: Main Release
+
+# Runs after a promote PR is merged into main. Tags `prod/<VER>` on the
+# merge commit. Ported from pantheon .github/workflows/master-release.yml
+# (canonical branch here is `main`). Also recognizes hotfix merges that
+# carry a `Hotfix: yes` trailer.
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  pull-requests: read
+
+concurrency:
+  group: main-release-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    name: Tag prod release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect release intent
+        id: detect
+        run: |
+          set -e
+          SUBJECT=$(git log -1 --format=%s)
+          BODY=$(git log -1 --format=%b)
+          echo "subject=$SUBJECT" >> "$GITHUB_OUTPUT"
+
+          VER=""
+          if [[ "$SUBJECT" =~ ^promote:\ (v[0-9]{4}\.[0-9]{2}(\.[0-9]+){1,2})$ ]]; then
+            VER="${BASH_REMATCH[1]}"
+            echo "kind=promote" >> "$GITHUB_OUTPUT"
+          elif [[ "$SUBJECT" =~ Merge\ pull\ request.*from.*promote/(v[0-9]{4}\.[0-9]{2}(\.[0-9]+){1,2}) ]]; then
+            VER="${BASH_REMATCH[1]}"
+            echo "kind=promote" >> "$GITHUB_OUTPUT"
+          elif grep -q "^Hotfix: yes" <<<"$BODY"; then
+            echo "kind=hotfix" >> "$GITHUB_OUTPUT"
+          else
+            echo "kind=none" >> "$GITHUB_OUTPUT"
+          fi
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+
+      - name: Tag prod release
+        if: steps.detect.outputs.kind == 'promote' && steps.detect.outputs.version != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VER: ${{ steps.detect.outputs.version }}
+        run: |
+          set -e
+          git config user.name "pantheon-release-bot"
+          git config user.email "pantheon-release-bot@users.noreply.github.com"
+          if git ls-remote --exit-code --tags origin "prod/$VER" >/dev/null 2>&1; then
+            echo "prod/$VER already exists; skipping"
+            exit 0
+          fi
+          git tag -a "prod/$VER" -m "prod release: $VER"
+          git push origin "prod/$VER"

@@ -1,17 +1,16 @@
-// Tool I/O schema preview + lightweight editor stub.
-// Phase 12 will replace with full JSON-Schema editor.
+// Tool I/O schema preview. Execution stays disabled until a governed runner exists.
 import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { toast } from "sonner";
 import type { Tool } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
+import { NonProductionActionButton } from "@/management/components/NonProductionActionButton";
 
 interface SchemaField { name: string; type: string; required: boolean; description: string; }
 
-const mockSchema = (tool: Tool): { inputs: SchemaField[]; output: SchemaField } => {
+const deriveSchemaPreview = (tool: Tool): { inputs: SchemaField[]; output: SchemaField } => {
   const baseByCategory: Record<string, SchemaField[]> = {
     data: [
       { name: "symbol", type: "string", required: true, description: "Instrument identifier" },
@@ -45,7 +44,7 @@ const mockSchema = (tool: Tool): { inputs: SchemaField[]; output: SchemaField } 
 
 export const ToolSchemaPanel = ({ tool }: { tool: Tool }) => {
   const t = useT();
-  const schema = mockSchema(tool);
+  const schema = deriveSchemaPreview(tool);
   return (
     <div className="space-y-4">
       <Card className="p-4">
@@ -81,49 +80,23 @@ export const ToolSandboxPanel = ({ tool }: { tool: Tool }) => {
   const [payload, setPayload] = useState<string>(() =>
     JSON.stringify({ tool: tool.id, args: { symbol: "BTC-PERP", lookback_days: 30 } }, null, 2)
   );
-  const [response, setResponse] = useState<string>("");
-  const [running, setRunning] = useState(false);
-
-  const run = async () => {
-    setRunning(true);
-    try {
-      JSON.parse(payload);
-    } catch {
-      toast.error(t("tool.sandbox.invalidJson"));
-      setRunning(false);
-      return;
-    }
-    setTimeout(() => {
-      setResponse(JSON.stringify({
-        ok: true,
-        tool: tool.id,
-        latencyMs: 124 + Math.round(Math.random() * 60),
-        result: { rows: 30, sample: { ts: new Date().toISOString(), value: 42.17 } },
-      }, null, 2));
-      setRunning(false);
-      toast.success(t("tool.sandbox.executed"));
-    }, 600);
-  };
 
   return (
     <div className="space-y-3">
-      <div className="text-xs text-muted-foreground">{t("tool.sandbox.hint")}</div>
+      <div className="text-xs text-muted-foreground">
+        {t("tool.sandbox.runnerUnavailable", {
+          defaultValue:
+            "Tool execution is disabled until the BFF exposes a governed tool-runner command with a command id, audit receipt, and readback trace.",
+        })}
+      </div>
       <Card className="p-4 space-y-3">
         <div className="text-xs uppercase tracking-wider text-muted-foreground">{t("tool.sandbox.request")}</div>
         <Textarea value={payload} onChange={(e) => setPayload(e.target.value)} rows={8} className="text-mono text-xs" />
         <div className="flex justify-end gap-2">
-          <Button size="sm" variant="outline" onClick={() => setResponse("")}>{t("actions.reset")}</Button>
-          <Button size="sm" onClick={run} disabled={running}>
-            {running ? t("common.loading") : t("tool.sandbox.run")}
-          </Button>
+          <Button size="sm" variant="outline" onClick={() => setPayload(JSON.stringify({ tool: tool.id, args: {} }, null, 2))}>{t("actions.reset")}</Button>
+          <NonProductionActionButton size="sm">{t("tool.sandbox.run")}</NonProductionActionButton>
         </div>
       </Card>
-      {response && (
-        <Card className="p-4">
-          <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">{t("tool.sandbox.response")}</div>
-          <pre className="text-mono text-xs bg-muted/30 p-3 rounded overflow-x-auto">{response}</pre>
-        </Card>
-      )}
     </div>
   );
 };

@@ -13,6 +13,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useT } from "@/platform/hooks";
 import { bff } from "@/lib/bff-v1";
 import { realtime } from "@/lib/bff/realtime";
+import { normalizeAlertTimestampFields } from "@/lib/bff-v1/eventTimestamps";
 import { RiskBadge } from "./RiskBadge";
 import { StatusBadge } from "./StatusBadge";
 import type { Alert, ApprovalRequest, Job, Incident } from "@/lib/bff/types";
@@ -45,7 +46,7 @@ export const NotificationCenter = () => {
       ([a, ap, j, inc]) => { setAlerts(a); setApprovals(ap); setJobs(j); setIncidents(inc); },
     );
     const offAlert = realtime.on("alert", (p) => {
-      const a = p as Alert;
+      const a = normalizeAlertTimestampFields(p as Alert) ?? (p as Alert);
       setAlerts((cur) => [a, ...cur].slice(0, 50));
     });
     const offJob = realtime.on("job", (p) => {

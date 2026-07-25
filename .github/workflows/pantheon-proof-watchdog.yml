@@ -1,0 +1,752 @@
+name: Pantheon Persona Proof Restore Watchdog
+run-name: PINT watchdog ${{ inputs.parent_deploy_run_id }} ${{ inputs.proof_correlation_id }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      parent_deploy_run_id:
+        required: true
+        type: string
+      parent_deploy_run_attempt:
+        required: true
+        type: string
+      parent_deploy_actor:
+        required: true
+        type: string
+      parent_proof_nonce:
+        required: true
+        type: string
+      proof_correlation_id:
+        required: true
+        type: string
+      parent_binding_artifact_id:
+        required: true
+        type: string
+      parent_binding_artifact_digest:
+        required: true
+        type: string
+      candidate_sha:
+        required: true
+        type: string
+      bff_sha:
+        required: true
+        type: string
+      source_gate_run_id:
+        required: true
+        type: string
+      source_artifact_id:
+        required: true
+        type: string
+      source_artifact_digest:
+        required: true
+        type: string
+      expected_pair_id:
+        required: true
+        type: string
+      expected_read_only_digest:
+        required: true
+        type: string
+      expected_write_proof_digest:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: pantheon-pint-proof-watchdog-restore
+  cancel-in-progress: false
+
+jobs:
+  authorize:
+    name: Authenticate exact parent restore authority
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate exact authorized parent and binding artifact
+        id: parent
+        uses: actions/github-script@v7
+        env:
+          AUTHORIZED_OPERATORS: ${{ vars.PANTHEON_DEV_FE_DEPLOY_OPERATORS }}
+          PARENT_RUN_ID: ${{ inputs.parent_deploy_run_id }}
+          PARENT_RUN_ATTEMPT: ${{ inputs.parent_deploy_run_attempt }}
+          PARENT_ACTOR: ${{ inputs.parent_deploy_actor }}
+          BINDING_ARTIFACT_ID: ${{ inputs.parent_binding_artifact_id }}
+          BINDING_ARTIFACT_DIGEST: ${{ inputs.parent_binding_artifact_digest }}
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+        with:
+          script: |
+            const numeric = /^[1-9][0-9]*$/;
+            const sha = /^[0-9a-f]{40}$/i;
+            const digest = /^sha256:[0-9a-f]{64}$/i;
+            const parentRunText = String(process.env.PARENT_RUN_ID || "");
+            const parentAttempt = String(process.env.PARENT_RUN_ATTEMPT || "");
+            const actor = String(process.env.PARENT_ACTOR || "").toLowerCase();
+            const artifactId = String(process.env.BINDING_ARTIFACT_ID || "");
+            const artifactDigest = String(process.env.BINDING_ARTIFACT_DIGEST || "").toLowerCase();
+            const candidateSha = String(process.env.CANDIDATE_SHA || "").toLowerCase();
+            const operators = new Set(String(process.env.AUTHORIZED_OPERATORS || "")
+              .split(",").map((value) => value.trim().toLowerCase()).filter(Boolean));
+            if (!numeric.test(parentRunText) || !numeric.test(parentAttempt) ||
+                !numeric.test(artifactId) || !sha.test(candidateSha) ||
+                !digest.test(artifactDigest) || !operators.has(actor)) {
+              core.setFailed("watchdog parent identity is malformed or unauthorized");
+              return;
+            }
+            const parentRunId = Number(parentRunText);
+            const { data: run } = await github.rest.actions.getWorkflowRun({
+              owner: context.repo.owner, repo: context.repo.repo, run_id: parentRunId,
+            });
+            const path = String(run.path || "").split("@")[0];
+            const repo = String(run.head_repository?.full_name || run.repository?.full_name || "").toLowerCase();
+            if (path !== ".github/workflows/pantheon-dev-fe-deploy.yml" ||
+                repo !== `${context.repo.owner}/${context.repo.repo}`.toLowerCase() ||
+                run.event !== "workflow_dispatch" || run.head_branch !== "dev" ||
+                String(run.head_sha || "").toLowerCase() !== candidateSha ||
+                String(run.run_attempt) !== parentAttempt ||
+                String(run.actor?.login || "").toLowerCase() !== actor ||
+                String(run.triggering_actor?.login || "").toLowerCase() !== actor) {
+              core.setFailed("watchdog is not bound to the exact authorized parent deploy run");
+              return;
+            }
+            const name = `pantheon-proof-binding-attempt-${parentAttempt}`;
+            const { data: page } = await github.rest.actions.listWorkflowRunArtifacts({
+              owner: context.repo.owner, repo: context.repo.repo, run_id: parentRunId,
+              name, per_page: 100,
+            });
+            const matches = page.artifacts.filter((artifact) =>
+              String(artifact.id) === artifactId && artifact.name === name && !artifact.expired &&
+              String(artifact.digest || "").toLowerCase() === artifactDigest,
+            );
+            if (matches.length !== 1) {
+              core.setFailed("watchdog binding artifact is not the exact parent-run artifact");
+            }
+
+      - name: Download and authenticate parent proof binding
+        id: binding
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BINDING_ARTIFACT_ID: ${{ inputs.parent_binding_artifact_id }}
+          BINDING_ARTIFACT_DIGEST: ${{ inputs.parent_binding_artifact_digest }}
+          PARENT_RUN_ID: ${{ inputs.parent_deploy_run_id }}
+          PARENT_RUN_ATTEMPT: ${{ inputs.parent_deploy_run_attempt }}
+          PARENT_ACTOR: ${{ inputs.parent_deploy_actor }}
+          PROOF_NONCE: ${{ inputs.parent_proof_nonce }}
+          CORRELATION_ID: ${{ inputs.proof_correlation_id }}
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          BFF_SHA: ${{ inputs.bff_sha }}
+          SOURCE_GATE_RUN_ID: ${{ inputs.source_gate_run_id }}
+          SOURCE_ARTIFACT_ID: ${{ inputs.source_artifact_id }}
+          SOURCE_ARTIFACT_DIGEST: ${{ inputs.source_artifact_digest }}
+          EXPECTED_PAIR_ID: ${{ inputs.expected_pair_id }}
+          EXPECTED_READ_ONLY_DIGEST: ${{ inputs.expected_read_only_digest }}
+          EXPECTED_WRITE_PROOF_DIGEST: ${{ inputs.expected_write_proof_digest }}
+        run: |
+          set -euo pipefail
+          archive="${RUNNER_TEMP%/}/proof-binding.zip"
+          extract="${RUNNER_TEMP%/}/proof-binding"
+          rm -f "$archive"
+          rm -rf "$extract"
+          mkdir -p "$extract"
+          curl --fail-with-body --silent --show-error --location \
+            --retry 3 --retry-all-errors --connect-timeout 10 --max-time 120 \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/artifacts/${BINDING_ARTIFACT_ID}/zip" \
+            --output "$archive"
+          actual="sha256:$(sha256sum "$archive" | awk '{print $1}')"
+          [[ "${actual,,}" == "${BINDING_ARTIFACT_DIGEST,,}" ]]
+          python3 - "$archive" "$extract/proof-binding.json" <<'PY'
+          import pathlib
+          import stat
+          import sys
+          import zipfile
+          archive = pathlib.Path(sys.argv[1])
+          output = pathlib.Path(sys.argv[2])
+          with zipfile.ZipFile(archive) as bundle:
+              files = [entry for entry in bundle.infolist() if not entry.is_dir()]
+              if len(files) != 1 or pathlib.PurePosixPath(files[0].filename).name != "proof-binding.json":
+                  raise SystemExit("binding artifact must contain exactly proof-binding.json")
+              entry = files[0]
+              if stat.S_IFMT(entry.external_attr >> 16) not in (0, stat.S_IFREG) or entry.file_size > 65536:
+                  raise SystemExit("binding artifact entry is unsafe")
+              output.write_bytes(bundle.read(entry))
+          PY
+          node --input-type=module - "$extract/proof-binding.json" <<'NODE'
+          import fs from "node:fs";
+          const binding = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+          const expected = {
+            parentRunId: process.env.PARENT_RUN_ID,
+            parentAttempt: process.env.PARENT_RUN_ATTEMPT,
+            actor: process.env.PARENT_ACTOR,
+            nonce: process.env.PROOF_NONCE,
+            correlation: process.env.CORRELATION_ID,
+            candidateSha: process.env.CANDIDATE_SHA,
+            bffSha: process.env.BFF_SHA,
+            gateRunId: process.env.SOURCE_GATE_RUN_ID,
+            artifactId: process.env.SOURCE_ARTIFACT_ID,
+            artifactDigest: process.env.SOURCE_ARTIFACT_DIGEST,
+            pairId: process.env.EXPECTED_PAIR_ID,
+            readOnlyDigest: process.env.EXPECTED_READ_ONLY_DIGEST,
+            writeProofDigest: process.env.EXPECTED_WRITE_PROOF_DIGEST,
+          };
+          const valid = binding.schemaVersion === "pantheon.pint-proof-binding.v1" &&
+            binding.repository === process.env.GITHUB_REPOSITORY &&
+            binding.parent?.workflowPath === ".github/workflows/pantheon-dev-fe-deploy.yml" &&
+            String(binding.parent?.runId) === expected.parentRunId &&
+            String(binding.parent?.runAttempt) === expected.parentAttempt &&
+            binding.parent?.actor === expected.actor && binding.parent?.frontendSha === expected.candidateSha &&
+            binding.parent?.triggeringActor === expected.actor &&
+            binding.nonce === expected.nonce && binding.correlationId === expected.correlation &&
+            String(binding.source?.gateRunId) === expected.gateRunId &&
+            String(binding.source?.artifactId) === expected.artifactId &&
+            binding.source?.artifactDigest === expected.artifactDigest &&
+            binding.pair?.pairId === expected.pairId && binding.pair?.bffSha === expected.bffSha &&
+            binding.pair?.readOnlyArtifactDigestSha256 === expected.readOnlyDigest &&
+            binding.pair?.writeProofArtifactDigestSha256 === expected.writeProofDigest;
+          if (!valid || !/^[0-9a-f]{64}$/u.test(expected.nonce)) {
+            throw new Error("watchdog parent proof binding content mismatch");
+          }
+          NODE
+
+      - name: Checkout exact paired controller for pre-arm verification
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.candidate_sha }}
+          persist-credentials: false
+
+      - name: Setup Node for pre-arm verification
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Download and authenticate source pair before arming
+        id: source_pair
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_ARTIFACT_ID: ${{ inputs.source_artifact_id }}
+          SOURCE_ARTIFACT_DIGEST: ${{ inputs.source_artifact_digest }}
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          BFF_SHA: ${{ inputs.bff_sha }}
+          SOURCE_GATE_RUN_ID: ${{ inputs.source_gate_run_id }}
+          EXPECTED_PAIR_ID: ${{ inputs.expected_pair_id }}
+          EXPECTED_READ_ONLY_DIGEST: ${{ inputs.expected_read_only_digest }}
+          EXPECTED_WRITE_PROOF_DIGEST: ${{ inputs.expected_write_proof_digest }}
+          BFF_BASE_URL: https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io
+        run: |
+          set -euo pipefail
+          archive="${RUNNER_TEMP%/}/prearm-source-pair.zip"
+          extract="${RUNNER_TEMP%/}/prearm-source-pair.extract"
+          pair_dir="${RUNNER_TEMP%/}/prearm-source-pair"
+          rm -f "$archive"
+          rm -rf "$extract" "$pair_dir"
+          mkdir -p "$extract"
+          curl --fail-with-body --silent --show-error --location \
+            --retry 3 --retry-all-errors --connect-timeout 10 --max-time 180 \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/artifacts/${SOURCE_ARTIFACT_ID}/zip" \
+            --output "$archive"
+          actual="sha256:$(sha256sum "$archive" | awk '{print $1}')"
+          [[ "${actual,,}" == "${SOURCE_ARTIFACT_DIGEST,,}" ]]
+          python3 - "$archive" "$extract" <<'PY'
+          import pathlib
+          import shutil
+          import stat
+          import sys
+          import zipfile
+          archive = pathlib.Path(sys.argv[1])
+          root = pathlib.Path(sys.argv[2]).resolve()
+          seen = set()
+          total = 0
+          with zipfile.ZipFile(archive) as bundle:
+              entries = bundle.infolist()
+              if not entries or len(entries) > 100_000:
+                  raise SystemExit("source pair archive has an invalid entry count")
+              for entry in entries:
+                  name = entry.filename
+                  path = pathlib.PurePosixPath(name)
+                  if (not name or "\\" in name or "\x00" in name or path.is_absolute()
+                          or any(part in ("", ".", "..") for part in path.parts)):
+                      raise SystemExit("source pair archive contains an unsafe path")
+                  normalized = path.as_posix().rstrip("/")
+                  if normalized in seen:
+                      raise SystemExit("source pair archive contains a duplicate path")
+                  seen.add(normalized)
+                  mode = entry.external_attr >> 16
+                  is_dir = entry.is_dir() or name.endswith("/")
+                  allowed = stat.S_IFDIR if is_dir else stat.S_IFREG
+                  if stat.S_IFMT(mode) not in (0, allowed):
+                      raise SystemExit("source pair archive contains a non-regular entry")
+                  total += entry.file_size
+                  if total > 1_073_741_824:
+                      raise SystemExit("source pair archive exceeds safety limit")
+                  destination = root.joinpath(*path.parts)
+                  if is_dir:
+                      destination.mkdir(parents=True, exist_ok=True)
+                  else:
+                      destination.parent.mkdir(parents=True, exist_ok=True)
+                      with bundle.open(entry) as source, destination.open("xb") as target:
+                          shutil.copyfileobj(source, target, length=1024 * 1024)
+          PY
+          if [[ -f "$extract/pair.json" ]]; then
+            mv "$extract" "$pair_dir"
+          elif [[ -f "$extract/.release-candidate/pair.json" ]]; then
+            mv "$extract/.release-candidate" "$pair_dir"
+            rm -rf "$extract"
+          else
+            echo "Source artifact has no paired-candidate root." >&2
+            exit 1
+          fi
+          ro="$(node scripts/release-candidate.mjs verify-pair \
+            --candidate-dir "$pair_dir" --expected-frontend-sha "$CANDIDATE_SHA" \
+            --expected-bff-sha "$BFF_SHA" --expected-bff-base-url "$BFF_BASE_URL" \
+            --expected-gate-run-id "$SOURCE_GATE_RUN_ID" --expected-pair-id "$EXPECTED_PAIR_ID" \
+            --profile read-only)"
+          wp="$(node scripts/release-candidate.mjs verify-pair \
+            --candidate-dir "$pair_dir" --expected-frontend-sha "$CANDIDATE_SHA" \
+            --expected-bff-sha "$BFF_SHA" --expected-bff-base-url "$BFF_BASE_URL" \
+            --expected-gate-run-id "$SOURCE_GATE_RUN_ID" --expected-pair-id "$EXPECTED_PAIR_ID" \
+            --profile write-proof)"
+          [[ "$ro" == "$EXPECTED_READ_ONLY_DIGEST" && "$wp" == "$EXPECTED_WRITE_PROOF_DIGEST" ]]
+  watch:
+    name: Watch bounded hosted proof
+    needs: authorize
+    if: needs.authorize.result == 'success'
+    timeout-minutes: 190
+    permissions:
+      contents: read
+      actions: write
+    runs-on: ubuntu-latest
+    outputs:
+      proof_run_id: ${{ steps.proof.outputs.proof_run_id }}
+    steps:
+      - name: Resolve and watch uniquely correlated hosted proof
+        id: proof
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CORRELATION_ID: ${{ inputs.proof_correlation_id }}
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          PARENT_RUN_ID: ${{ inputs.parent_deploy_run_id }}
+        run: |
+          set -euo pipefail
+          expected_title="PINT proof ${CORRELATION_ID}"
+          proof_run_id=""
+          parent_coordinator_terminal() {
+            local parent_jobs
+            parent_jobs="$(gh api \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "/repos/${GITHUB_REPOSITORY}/actions/runs/${PARENT_RUN_ID}/jobs?per_page=100")"
+            node -e '
+              const jobs=JSON.parse(process.argv[1]).jobs||[];
+              const coordinator=jobs.find((job)=>job.name==="Coordinate bounded authenticated Persona proof");
+              process.stdout.write(coordinator?.status==="completed" ? "true" : "false");
+            ' "$parent_jobs"
+          }
+          cancel_child_and_wait() {
+            local run_status credential_status jobs
+            for _ in $(seq 1 120); do
+              gh run cancel "$proof_run_id" --repo "$GITHUB_REPOSITORY" || true
+              run_status="$(gh run view "$proof_run_id" --repo "$GITHUB_REPOSITORY" --json status --jq .status)"
+              [[ "$run_status" == "completed" ]] && return 0
+              jobs="$(gh api \
+                -H "Accept: application/vnd.github+json" \
+                -H "X-GitHub-Api-Version: 2022-11-28" \
+                "/repos/${GITHUB_REPOSITORY}/actions/runs/${proof_run_id}/jobs?per_page=100")"
+              credential_status="$(node -e '
+                const jobs=JSON.parse(process.argv[1]).jobs||[];
+                const proof=jobs.find((job)=>job.name==="Run authorized one-time Persona write proof");
+                process.stdout.write(proof?.status||"missing");
+              ' "$jobs")"
+              [[ "$credential_status" == "completed" ]] && return 0
+              sleep 5
+            done
+            echo "Exact credentialed hosted proof did not stop within the bounded cancellation deadline." >&2
+            return 1
+          }
+          for _ in $(seq 1 420); do
+            matches="$(gh run list --repo "$GITHUB_REPOSITORY" \
+              --workflow pantheon-integration-gate.yml --event workflow_dispatch --branch dev --limit 100 \
+              --json databaseId,displayTitle,headSha \
+              --jq 'map(select(.displayTitle == "'"$expected_title"'" and .headSha == "'"$CANDIDATE_SHA"'"))')"
+            count="$(node -e 'const rows=JSON.parse(process.argv[1]); console.log(rows.length)' "$matches")"
+            if [[ "$count" == "1" ]]; then
+              proof_run_id="$(node -e 'const rows=JSON.parse(process.argv[1]); console.log(rows[0].databaseId)' "$matches")"
+              break
+            fi
+            [[ "$count" == "0" ]] || { echo "Ambiguous hosted proof correlation." >&2; exit 1; }
+            if [[ "$(parent_coordinator_terminal)" == "true" ]]; then
+              echo "Parent proof coordinator ended before an exact child appeared; restoring now."
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "proof_run_id=${proof_run_id}" >> "$GITHUB_OUTPUT"
+          if [[ -z "$proof_run_id" ]]; then
+            echo "No hosted proof appeared before the activation safety deadline; restoring now."
+            exit 0
+          fi
+          for _ in $(seq 1 620); do
+            if [[ "$(parent_coordinator_terminal)" == "true" ]]; then
+              cancel_child_and_wait
+              echo "Parent proof coordinator ended while the hosted proof was active; restoring now."
+              exit 0
+            fi
+            status="$(gh run view "$proof_run_id" --repo "$GITHUB_REPOSITORY" --json status --jq .status)"
+            [[ "$status" == "completed" ]] && exit 0
+            sleep 15
+          done
+          cancel_child_and_wait
+          echo "Hosted proof exceeded the bounded window; restoring independently."
+
+  restore:
+    name: Restore exact authenticated pair read-only
+    needs:
+      - authorize
+      - watch
+    if: always() && needs.authorize.result == 'success'
+    timeout-minutes: 75
+    permissions:
+      contents: read
+      actions: write
+    runs-on:
+      - self-hosted
+      - Linux
+      - X64
+      - pantheon-dev-vm
+      - execute-plans-deploy
+    env:
+      PANTHEON_BFF_BASE_URL: https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io
+      PANTHEON_OLD_BFF_URL: https://pantheon-lupin-dev-bff.34.81.75.241.sslip.io
+      CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+      BFF_SHA: ${{ inputs.bff_sha }}
+      SOURCE_GATE_RUN_ID: ${{ inputs.source_gate_run_id }}
+      SOURCE_ARTIFACT_ID: ${{ inputs.source_artifact_id }}
+      SOURCE_ARTIFACT_DIGEST: ${{ inputs.source_artifact_digest }}
+      EXPECTED_PAIR_ID: ${{ inputs.expected_pair_id }}
+      EXPECTED_READ_ONLY_DIGEST: ${{ inputs.expected_read_only_digest }}
+      EXPECTED_WRITE_PROOF_DIGEST: ${{ inputs.expected_write_proof_digest }}
+      PARENT_RUN_ID: ${{ inputs.parent_deploy_run_id }}
+      PARENT_RUN_ATTEMPT: ${{ inputs.parent_deploy_run_attempt }}
+      PARENT_ACTOR: ${{ inputs.parent_deploy_actor }}
+      PROOF_NONCE: ${{ inputs.parent_proof_nonce }}
+      CORRELATION_ID: ${{ inputs.proof_correlation_id }}
+    steps:
+      - name: Quiesce parent and terminalize exact credentialed child before restore
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          coordinator_status() {
+            local jobs
+            jobs="$(gh api \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "/repos/${GITHUB_REPOSITORY}/actions/runs/${PARENT_RUN_ID}/jobs?per_page=100")"
+            node -e '
+              const jobs=JSON.parse(process.argv[1]).jobs||[];
+              const coordinator=jobs.find((job)=>job.name==="Coordinate bounded authenticated Persona proof");
+              process.stdout.write(coordinator?.status||"missing");
+            ' "$jobs"
+          }
+          parent_status="$(coordinator_status)"
+          for _ in $(seq 1 30); do
+            [[ "$parent_status" != "in_progress" && "$parent_status" != "queued" ]] && break
+            sleep 2
+            parent_status="$(coordinator_status)"
+          done
+          if [[ "$parent_status" == "in_progress" || "$parent_status" == "queued" ]]; then
+            gh run cancel "$PARENT_RUN_ID" --repo "$GITHUB_REPOSITORY"
+            for _ in $(seq 1 120); do
+              parent_status="$(coordinator_status)"
+              [[ "$parent_status" == "completed" ]] && break
+              sleep 2
+            done
+          fi
+          if [[ "$parent_status" != "completed" ]]; then
+            echo "Exact parent coordinator did not quiesce before restore." >&2
+            exit 1
+          fi
+
+          expected_title="PINT proof ${CORRELATION_ID}"
+          proof_run_id=""
+          for _ in $(seq 1 60); do
+            matches="$(gh run list --repo "$GITHUB_REPOSITORY" \
+              --workflow pantheon-integration-gate.yml --event workflow_dispatch --branch dev --limit 100 \
+              --json databaseId,displayTitle,headSha \
+              --jq 'map(select(.displayTitle == "'"$expected_title"'" and .headSha == "'"$CANDIDATE_SHA"'"))')"
+            count="$(node -e 'const rows=JSON.parse(process.argv[1]); process.stdout.write(String(rows.length))' "$matches")"
+            if [[ "$count" == "1" ]]; then
+              proof_run_id="$(node -e 'const rows=JSON.parse(process.argv[1]); process.stdout.write(String(rows[0].databaseId))' "$matches")"
+              break
+            fi
+            [[ "$count" == "0" ]] || { echo "Ambiguous correlated child before restore." >&2; exit 1; }
+            sleep 2
+          done
+          if [[ -z "$proof_run_id" ]]; then
+            echo "No correlated child exists after the exact parent was quiesced."
+            exit 0
+          fi
+          gh run cancel "$proof_run_id" --repo "$GITHUB_REPOSITORY" || true
+
+          claim_name="pantheon-proof-child-claim-attempt-${PARENT_RUN_ATTEMPT}"
+          artifacts="$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "/repos/${GITHUB_REPOSITORY}/actions/runs/${PARENT_RUN_ID}/artifacts?name=${claim_name}&per_page=100")"
+          claim_count="$(node -e '
+            const rows=(JSON.parse(process.argv[1]).artifacts||[])
+              .filter((artifact)=>artifact.name===process.argv[2] && !artifact.expired);
+            process.stdout.write(String(rows.length));
+          ' "$artifacts" "$claim_name")"
+          if [[ "$claim_count" == "1" ]]; then
+            claim_metadata="$(node -e '
+              const artifact=(JSON.parse(process.argv[1]).artifacts||[])
+                .find((row)=>row.name===process.argv[2] && !row.expired);
+              process.stdout.write(`${artifact.id}\t${String(artifact.digest||"").toLowerCase()}`);
+            ' "$artifacts" "$claim_name")"
+            IFS=$'\t' read -r claim_id claim_digest <<< "$claim_metadata"
+            [[ "$claim_id" =~ ^[1-9][0-9]*$ && "$claim_digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+            archive="${RUNNER_TEMP%/}/restore-proof-child-claim.zip"
+            claim_file="${RUNNER_TEMP%/}/restore-proof-child-claim.json"
+            rm -f "$archive" "$claim_file"
+            curl --fail-with-body --silent --show-error --location \
+              --retry 3 --retry-all-errors --connect-timeout 10 --max-time 120 \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/artifacts/${claim_id}/zip" \
+              --output "$archive"
+            [[ "sha256:$(sha256sum "$archive" | awk '{print $1}')" == "$claim_digest" ]]
+            python3 - "$archive" "$claim_file" <<'PY'
+          import pathlib
+          import stat
+          import sys
+          import zipfile
+          with zipfile.ZipFile(sys.argv[1]) as bundle:
+              files = [entry for entry in bundle.infolist() if not entry.is_dir()]
+              if len(files) != 1 or pathlib.PurePosixPath(files[0].filename).name != "proof-child-claim.json":
+                  raise SystemExit("child claim artifact must contain exactly proof-child-claim.json")
+              entry = files[0]
+              if stat.S_IFMT(entry.external_attr >> 16) not in (0, stat.S_IFREG) or entry.file_size > 65536:
+                  raise SystemExit("child claim artifact entry is unsafe")
+              pathlib.Path(sys.argv[2]).write_bytes(bundle.read(entry))
+          PY
+            PROOF_RUN_ID="$proof_run_id" node --input-type=module - "$claim_file" <<'NODE'
+          import fs from "node:fs";
+          const claim = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+          const valid = claim.schemaVersion === "pantheon.pint-proof-child-claim.v1" &&
+            claim.repository === process.env.GITHUB_REPOSITORY &&
+            String(claim.parent?.runId) === process.env.PARENT_RUN_ID &&
+            String(claim.parent?.runAttempt) === process.env.PARENT_RUN_ATTEMPT &&
+            String(claim.parent?.actor).toLowerCase() === process.env.PARENT_ACTOR.toLowerCase() &&
+            String(claim.parent?.triggeringActor).toLowerCase() === process.env.PARENT_ACTOR.toLowerCase() &&
+            String(claim.child?.runId) === process.env.PROOF_RUN_ID &&
+            String(claim.child?.runAttempt) === "1" &&
+            String(claim.child?.actor).toLowerCase() === "github-actions[bot]" &&
+            String(claim.child?.triggeringActor).toLowerCase() === "github-actions[bot]" &&
+            claim.child?.frontendSha === process.env.CANDIDATE_SHA &&
+            claim.nonce === process.env.PROOF_NONCE &&
+            claim.correlationId === process.env.CORRELATION_ID;
+          if (!valid) throw new Error("restore child claim does not match the exact correlated proof");
+          NODE
+          elif [[ "$claim_count" != "0" ]]; then
+            echo "Ambiguous one-time child claim before restore." >&2
+            exit 1
+          fi
+
+          for _ in $(seq 1 120); do
+            gh run cancel "$proof_run_id" --repo "$GITHUB_REPOSITORY" || true
+            run_status="$(gh run view "$proof_run_id" --repo "$GITHUB_REPOSITORY" --json status --jq .status)"
+            [[ "$run_status" == "completed" ]] && exit 0
+            jobs="$(gh api \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "/repos/${GITHUB_REPOSITORY}/actions/runs/${proof_run_id}/jobs?per_page=100")"
+            credential_status="$(node -e '
+              const jobs=JSON.parse(process.argv[1]).jobs||[];
+              const proof=jobs.find((job)=>job.name==="Run authorized one-time Persona write proof");
+              process.stdout.write(proof?.status||"missing");
+            ' "$jobs")"
+            [[ "$credential_status" == "completed" ]] && exit 0
+            sleep 5
+          done
+          echo "Restore refused: exact credentialed child is still nonterminal." >&2
+          exit 1
+
+      - name: Checkout protected restore controller
+        uses: actions/checkout@v4
+        with:
+          ref: dev
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Pin current protected restore controller
+        id: controller
+        run: |
+          set -euo pipefail
+          controller_sha="$(git rev-parse HEAD)"
+          remote_dev_sha="$(git ls-remote --exit-code origin refs/heads/dev | awk '{print $1}')"
+          [[ "${controller_sha}" == "${remote_dev_sha}" ]]
+          echo "sha=${controller_sha}" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Download and authenticate exact source pair
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          archive="${RUNNER_TEMP%/}/watchdog-source-pair.zip"
+          extract="${RUNNER_TEMP%/}/watchdog-source-pair.extract"
+          rm -f "$archive"
+          rm -rf "$extract" .release-candidate
+          mkdir -p "$extract"
+          curl --fail-with-body --silent --show-error --location \
+            --retry 3 --retry-all-errors --connect-timeout 10 --max-time 180 \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/artifacts/${SOURCE_ARTIFACT_ID}/zip" \
+            --output "$archive"
+          actual="sha256:$(sha256sum "$archive" | awk '{print $1}')"
+          [[ "${actual,,}" == "${SOURCE_ARTIFACT_DIGEST,,}" ]]
+          python3 - "$archive" "$extract" <<'PY'
+          import pathlib
+          import shutil
+          import stat
+          import sys
+          import zipfile
+          archive = pathlib.Path(sys.argv[1])
+          root = pathlib.Path(sys.argv[2]).resolve()
+          seen = set()
+          total = 0
+          with zipfile.ZipFile(archive) as bundle:
+              for entry in bundle.infolist():
+                  name = entry.filename
+                  path = pathlib.PurePosixPath(name)
+                  if (not name or "\\" in name or "\x00" in name or path.is_absolute()
+                          or any(part in ("", ".", "..") for part in path.parts)):
+                      raise SystemExit("source pair archive contains an unsafe path")
+                  normalized = path.as_posix().rstrip("/")
+                  if normalized in seen:
+                      raise SystemExit("source pair archive contains a duplicate path")
+                  seen.add(normalized)
+                  mode = entry.external_attr >> 16
+                  is_dir = entry.is_dir() or name.endswith("/")
+                  if stat.S_IFMT(mode) not in (0, stat.S_IFDIR if is_dir else stat.S_IFREG):
+                      raise SystemExit("source pair archive contains a non-regular entry")
+                  total += entry.file_size
+                  if total > 1_073_741_824:
+                      raise SystemExit("source pair archive exceeds safety limit")
+                  destination = root.joinpath(*path.parts)
+                  if is_dir:
+                      destination.mkdir(parents=True, exist_ok=True)
+                  else:
+                      destination.parent.mkdir(parents=True, exist_ok=True)
+                      with bundle.open(entry) as source, destination.open("xb") as target:
+                          shutil.copyfileobj(source, target, length=1024 * 1024)
+          PY
+          if [[ -f "$extract/pair.json" ]]; then
+            mv "$extract" .release-candidate
+          elif [[ -f "$extract/.release-candidate/pair.json" ]]; then
+            mv "$extract/.release-candidate" .release-candidate
+            rm -rf "$extract"
+          else
+            echo "Source artifact has no paired-candidate root." >&2
+            exit 1
+          fi
+          ro="$(node scripts/release-candidate.mjs verify-pair \
+            --candidate-dir .release-candidate --expected-frontend-sha "$CANDIDATE_SHA" \
+            --expected-bff-sha "$BFF_SHA" --expected-bff-base-url "$PANTHEON_BFF_BASE_URL" \
+            --expected-gate-run-id "$SOURCE_GATE_RUN_ID" --expected-pair-id "$EXPECTED_PAIR_ID" \
+            --profile read-only)"
+          wp="$(node scripts/release-candidate.mjs verify-pair \
+            --candidate-dir .release-candidate --expected-frontend-sha "$CANDIDATE_SHA" \
+            --expected-bff-sha "$BFF_SHA" --expected-bff-base-url "$PANTHEON_BFF_BASE_URL" \
+            --expected-gate-run-id "$SOURCE_GATE_RUN_ID" --expected-pair-id "$EXPECTED_PAIR_ID" \
+            --profile write-proof)"
+          [[ "$ro" == "$EXPECTED_READ_ONLY_DIGEST" && "$wp" == "$EXPECTED_WRITE_PROOF_DIGEST" ]]
+
+      - name: Checkout protected Pantheon Agora gate controller
+        uses: actions/checkout@v4
+        with:
+          repository: ajoe734/pantheon
+          ref: dev
+          path: .pantheon-agora-compat
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Revalidate exact Agora pair before restore
+        id: restore_agora_compat
+        run: |
+          set -euo pipefail
+          evidence_dir="${RUNNER_TEMP%/}/pantheon-proof-watchdog-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          evidence_path="${evidence_dir}/agora-compatibility-gate.input.json"
+          mkdir -p "${evidence_dir}"
+          python3 .pantheon-agora-compat/scripts/agora_compat_manifest.py deployment-gate \
+            --manifest .pantheon-agora-compat/docs/contracts/agora/dev-compatibility-manifest.json \
+            --frontend-root "${GITHUB_WORKSPACE}" \
+            --backend-dev-ref refs/remotes/origin/dev \
+            --frontend-dev-ref refs/remotes/origin/dev \
+            --backend-runtime-commit "${BFF_SHA}" \
+            --frontend-runtime-commit "${CANDIDATE_SHA}" \
+            --evidence-out "${evidence_path}"
+          echo "evidence_path=${evidence_path}" >> "$GITHUB_OUTPUT"
+
+      - name: Restore exact pair before any mutable successor action
+        timeout-minutes: 30
+        env:
+          PANTHEON_AUDIT_OUT_DIR: ${{ runner.temp }}/pantheon-proof-watchdog-${{ github.run_id }}-${{ github.run_attempt }}/restore-controller
+          PANTHEON_DEPLOY_CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          PANTHEON_DEPLOY_BRANCH: dev
+          PANTHEON_DEPLOY_CANDIDATE_DIR: .release-candidate
+          PANTHEON_DEPLOY_AGORA_COMPAT_EVIDENCE: ${{ steps.restore_agora_compat.outputs.evidence_path }}
+          PANTHEON_DEPLOY_GATE_RUN_ID: ${{ inputs.source_gate_run_id }}
+          PANTHEON_DEPLOY_GITHUB_ARTIFACT_DIGEST: ${{ inputs.source_artifact_digest }}
+          PANTHEON_DEPLOY_EXPECTED_DEV_SHA: ${{ steps.controller.outputs.sha }}
+          PANTHEON_DEPLOY_EMERGENCY_OVERRIDE: "false"
+          PANTHEON_DEPLOY_ROLLBACK_DRILL: "false"
+          PANTHEON_DEPLOY_PROFILE: read-only-restore
+          PANTHEON_DEPLOY_EXPECTED_PAIR_ID: ${{ inputs.expected_pair_id }}
+          PANTHEON_DEPLOY_PROOF_WINDOW_ACK: "false"
+          PANTHEON_DEPLOY_REAL_WRITES: "false"
+          PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES: "false"
+          PANTHEON_DEPLOY_RELEASE_INSTANCE: watchdog-${{ inputs.parent_deploy_run_id }}-${{ inputs.parent_deploy_run_attempt }}
+        run: |
+          set -euo pipefail
+          audit_root="$PANTHEON_AUDIT_OUT_DIR"
+          release_root="$PANTHEON_DEPLOY_RELEASE_INSTANCE"
+          mkdir -p "$audit_root"
+          for attempt in $(seq 1 120); do
+            set +e
+            controller_output="$(
+              PANTHEON_AUDIT_OUT_DIR="${audit_root}/attempt-${attempt}" \
+              PANTHEON_DEPLOY_RELEASE_INSTANCE="${release_root}-attempt-${attempt}" \
+              bash scripts/deploy-dev-vm.sh 2>&1
+            )"
+            controller_status=$?
+            set -e
+            printf '%s\n' "$controller_output"
+            [[ "$controller_status" == "0" ]] && exit 0
+            if [[ "$controller_status" != "2" ]] ||
+               ! grep -Fq "Another dev frontend deployment holds /tmp/pantheon-dev-fe-deploy.lock." <<< "$controller_output"; then
+              exit "$controller_status"
+            fi
+            echo "Restore lock is busy (attempt ${attempt}/120); retrying exact same-pair read-only restore."
+            sleep 10
+          done
+          echo "Timed out acquiring the shared dev frontend mutation lock for restore." >&2
+          exit 2

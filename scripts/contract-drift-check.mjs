@@ -11,7 +11,7 @@ const snapshotOutFile = path.join(repoRoot, "src/lib/bff-v1/agora/contract-snaps
 
 const schemaRootRel = "services/control-plane/specs/agora";
 const openapiRootRel = "services/control-plane/openapi";
-const defaultBundleIndexRel = `${schemaRootRel}/bundle_index.v1_5.json`;
+const defaultBundleIndexRel = `${schemaRootRel}/bundle_index.v1_13.json`;
 
 const args = new Set(process.argv.slice(2));
 const writeMode = args.has("--write");
@@ -71,10 +71,11 @@ function findPantheonRoot() {
     path.join(repoRoot, "pantheon-contract"),
     path.join(repoRoot, "..", "pantheon"),
     path.join(repoRoot, "..", "..", "pantheon"),
-    "/home/lupin/code/pantheon",
+    "/home/lupin/pantheon",
   ].filter(Boolean);
 
   for (const candidate of candidates) {
+    if (!candidate) continue;
     const resolved = path.resolve(candidate);
     if (fs.existsSync(path.join(resolved, bundleIndexRel))) {
       return resolved;
@@ -150,6 +151,88 @@ function loadBundle(pantheonRoot) {
     fail(`Pantheon Agora bundle is not reproducible:\n${mismatches.join("\n")}`);
   }
 
+  const handoffPath = path.join(pantheonRoot, "docs/contracts/agora/backend-generation-input.v1_13.json");
+  if (!fs.existsSync(handoffPath)) {
+    fail(`Backend generation handoff file missing at ${handoffPath}`);
+  }
+  const handoff = readJson(handoffPath);
+  const expectedContractCommit = "9e909de182f9f2379d23e8e6b81eefec29ffbce7";
+  if (handoff.backend?.contract_commit !== expectedContractCommit) {
+    fail(`Backend handoff contract_commit mismatch: expected ${expectedContractCommit}, actual ${handoff.backend?.contract_commit}`);
+  }
+
+  // Validate bundle_index sha256 against handoff
+  const handoffBundleSha = handoff.contract?.bundle_index?.sha256;
+  const actualBundleSha = latest.bundle.bundle_index_sha256 || files[requestedBundleRel] || sha256File(path.join(pantheonRoot, requestedBundleRel));
+  if (handoffBundleSha && actualBundleSha !== handoffBundleSha) {
+    fail(`Handoff bundle_index sha256 mismatch: expected ${handoffBundleSha}, actual ${actualBundleSha}`);
+  }
+
+  // Validate openapi sha256 against handoff
+  const handoffOpenApiSha = handoff.contract?.openapi?.sha256;
+  const openapiRel = openapiRelFromBundlePath(latest.bundle.openapi?.path);
+  const actualOpenApiSha = files[openapiRel] || (fs.existsSync(controlPlanePath(pantheonRoot, openapiRel)) ? sha256File(controlPlanePath(pantheonRoot, openapiRel)) : null);
+  if (handoffOpenApiSha && actualOpenApiSha !== handoffOpenApiSha) {
+    fail(`Handoff openapi sha256 mismatch: expected ${handoffOpenApiSha}, actual ${actualOpenApiSha}`);
+  }
+
+  // Validate required files from handoff
+  for (const reqPath of handoff.frontend_generation?.required_files || []) {
+    const fullReqPath = path.join(pantheonRoot, reqPath);
+    if (!fs.existsSync(fullReqPath)) {
+      fail(`Handoff required file missing: ${reqPath}`);
+    }
+  }
+
+  // Validate hash algorithms from handoff
+  if (handoff.frontend_generation?.file_hash_algorithm !== "sha256-exact-git-bytes-v1") {
+    fail(`Unsupported handoff file_hash_algorithm: ${handoff.frontend_generation?.file_hash_algorithm}`);
+  }
+  if (handoff.frontend_generation?.generated_types_hash_algorithm !== "sha256-path-tab-filehash-lf-v1") {
+    fail(`Unsupported handoff generated_types_hash_algorithm: ${handoff.frontend_generation?.generated_types_hash_algorithm}`);
+  }
+
+  // Validate expected output paths from handoff
+  const expectedOutputPaths = handoff.frontend_generation?.expected_output_paths || [];
+  const actualOutputRelPaths = [
+    path.relative(repoRoot, snapshotOutFile),
+    path.relative(repoRoot, typesOutFile),
+  ].sort();
+  if (JSON.stringify(expectedOutputPaths.slice().sort()) !== JSON.stringify(actualOutputRelPaths)) {
+    fail(`Handoff expected_output_paths mismatch: expected ${JSON.stringify(expectedOutputPaths)}, actual ${JSON.stringify(actualOutputRelPaths)}`);
+  }
+
+  // Validate frontend generation output handoff artifact
+  const feHandoffPath = path.join(repoRoot, "docs/contracts/agora/frontend-generation-output.v1_13.json");
+  if (!fs.existsSync(feHandoffPath)) {
+    fail(`Frontend generation output handoff file missing at ${feHandoffPath}`);
+  }
+  const feHandoff = readJson(feHandoffPath);
+  if (feHandoff.frontend?.runtime_commit !== "c76a838342b08331849f994d8f756155d2e3b961") {
+    fail(`Frontend handoff runtime_commit mismatch: expected c76a838342b08331849f994d8f756155d2e3b961, actual ${feHandoff.frontend?.runtime_commit}`);
+  }
+  if (feHandoff.frontend?.generated_from_contract_commit !== expectedContractCommit) {
+    fail(`Frontend handoff generated_from_contract_commit mismatch: expected ${expectedContractCommit}, actual ${feHandoff.frontend?.generated_from_contract_commit}`);
+  }
+  if (feHandoff.frontend?.bundle_index_sha256 !== actualBundleSha) {
+    fail(`Frontend handoff bundle_index_sha256 mismatch: expected ${actualBundleSha}, actual ${feHandoff.frontend?.bundle_index_sha256}`);
+  }
+  if (feHandoff.frontend?.openapi_sha256 !== actualOpenApiSha) {
+    fail(`Frontend handoff openapi_sha256 mismatch: expected ${actualOpenApiSha}, actual ${feHandoff.frontend?.openapi_sha256}`);
+  }
+
+  // Calculate actual generated types sha256 using sha256-path-tab-filehash-lf-v1
+  const sortedOutputPaths = [snapshotOutFile, typesOutFile].sort();
+  const manifestLines = sortedOutputPaths.map((fullPath) => {
+    const relPath = path.relative(repoRoot, fullPath);
+    const fileHash = sha256File(fullPath);
+    return `${relPath}\t${fileHash}\n`;
+  });
+  const calculatedTypesSha = sha256Bytes(Buffer.from(manifestLines.join(""), "utf8"));
+  if (feHandoff.frontend?.generated_types_sha256 !== calculatedTypesSha) {
+    fail(`Frontend handoff generated_types_sha256 mismatch: expected ${calculatedTypesSha}, actual ${feHandoff.frontend?.generated_types_sha256}`);
+  }
+
   const schemaEntries = Object.keys(files)
     .filter((rel) => rel.startsWith("specs/agora/") && rel.endsWith(".schema.json"))
     .sort();
@@ -215,8 +298,12 @@ function computeDefinitionChecksums(schemas, requiredDefinitionChecksums) {
   if (wanted.size === 0) return result;
   for (const entry of schemas) {
     for (const [name, definition] of Object.entries(entry.schema.definitions || {})) {
+      const fullKey = `services/control-plane/${entry.rel}#/definitions/${name}`;
       if (wanted.has(name)) {
         result[name] = sha256Json(definition);
+      }
+      if (wanted.has(fullKey)) {
+        result[fullKey] = sha256Json(definition);
       }
     }
   }
@@ -256,6 +343,9 @@ function cleanTypeName(raw) {
 function refToType(ref, context) {
   if (typeof ref !== "string") return "unknown";
   const [refPath, fragment] = ref.split("#");
+  if (fragment?.startsWith("/$defs/")) {
+    return cleanTypeName(decodeURIComponent(fragment.slice("/$defs/".length)));
+  }
   if (fragment?.startsWith("/definitions/")) {
     return cleanTypeName(decodeURIComponent(fragment.slice("/definitions/".length)));
   }
@@ -273,14 +363,33 @@ function schemaToType(schema, context, indent = 0) {
     return refToType(schema.$ref, context);
   }
 
+  const compositionBase = ({ oneOf, anyOf, allOf, ...base }) => base;
+  const hasCompositionBase = (base) => (
+    Object.prototype.hasOwnProperty.call(base, "$ref")
+    || Object.prototype.hasOwnProperty.call(base, "type")
+    || Object.prototype.hasOwnProperty.call(base, "enum")
+    || Object.prototype.hasOwnProperty.call(base, "const")
+    || Object.prototype.hasOwnProperty.call(base, "properties")
+    || Object.prototype.hasOwnProperty.call(base, "additionalProperties")
+    || Object.prototype.hasOwnProperty.call(base, "items")
+  );
+  const composeWithBase = (members, operator) => {
+    const memberType = members
+      .map((item) => schemaToType(item, context, indent))
+      .join(` ${operator} `);
+    const base = compositionBase(schema);
+    if (!hasCompositionBase(base)) return memberType;
+    return `${schemaToType(base, context, indent)} & (${memberType})`;
+  };
+
   if (Array.isArray(schema.oneOf)) {
-    return schema.oneOf.map((item) => schemaToType(item, context, indent)).join(" | ");
+    return composeWithBase(schema.oneOf, "|");
   }
   if (Array.isArray(schema.anyOf)) {
-    return schema.anyOf.map((item) => schemaToType(item, context, indent)).join(" | ");
+    return composeWithBase(schema.anyOf, "|");
   }
   if (Array.isArray(schema.allOf)) {
-    return schema.allOf.map((item) => schemaToType(item, context, indent)).join(" & ");
+    return composeWithBase(schema.allOf, "&");
   }
 
   if (Array.isArray(schema.enum)) {
@@ -350,7 +459,10 @@ function objectToType(schema, context, indent = 0) {
 
 function emitDeclaration(name, schema, context) {
   const body = schemaToType(schema, context, 0);
-  if (body.startsWith("{\n")) {
+  const hasComposition = Array.isArray(schema?.oneOf)
+    || Array.isArray(schema?.anyOf)
+    || Array.isArray(schema?.allOf);
+  if (body.startsWith("{\n") && !hasComposition && !body.includes("} | {")) {
     return {
       name,
       text: `export interface ${name} ${body}\n`,
@@ -380,6 +492,9 @@ function collectDeclarations(bundle) {
     addDeclaration(typeNameFromSchema(entry.schema, entry.fileName), entry.schema);
     for (const [definitionName, definition] of Object.entries(entry.schema.definitions || {})) {
       addDeclaration(definitionName, definition);
+    }
+    for (const [defName, defSchema] of Object.entries(entry.schema.$defs || {})) {
+      addDeclaration(defName, defSchema);
     }
   }
 
