@@ -627,8 +627,11 @@ describe("mgmt façade (PM-Live)", () => {
         data: {
           status: "accepted",
           commandId: "cmd-ranking-enabled",
-          humanInboxId: "promotion_review:review-ranking-enabled",
-          detailHref: "/management/human-inbox/promotion_review%3Areview-ranking-enabled",
+          recommendation_id: "pm12-rec-enabled",
+          review_id: "review-ranking-enabled-revision-2",
+          promotion_review_id: "review-ranking-enabled-revision-2",
+          ranking_snapshot_id: "ranking-quarterly-2026-q3-revision-2",
+          human_inbox_id: "promotion_review:review-ranking-enabled-revision-2",
         },
         meta: { idempotency: { idempotencyKey: "idk-ranking-enabled", replayed: false } },
       }, 202);
@@ -676,8 +679,9 @@ describe("mgmt façade (PM-Live)", () => {
       status: "accepted",
       idempotencyKey: "idk-ranking-enabled",
       commandId: "cmd-ranking-enabled",
-      humanInboxId: "promotion_review:review-ranking-enabled",
-      detailHref: "/management/human-inbox/promotion_review%3Areview-ranking-enabled",
+      reviewId: "review-ranking-enabled-revision-2",
+      humanInboxId: "promotion_review:review-ranking-enabled-revision-2",
+      detailHref: "/management/human-inbox/promotion_review%3Areview-ranking-enabled-revision-2",
       replayed: false,
       liveCapitalMutation: false,
     });
