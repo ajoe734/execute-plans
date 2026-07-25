@@ -20,6 +20,7 @@ import {
   type TestInfo,
 } from "@playwright/test";
 import { bindPplAlloc009PromotionSubmission } from "./helpers/pplAlloc009PromotionSubmission";
+import { bindPplAlloc009RebalanceProposal } from "./helpers/pplAlloc009RebalanceResume";
 import { bindPplAlloc009RecommendationSnapshot } from "./helpers/pplAlloc009Recommendation";
 import { bindPplAlloc009SessionRotation } from "./helpers/pplAlloc009Session";
 
@@ -844,6 +845,7 @@ test.describe("PPL-ALLOC-009 hosted paper allocation acceptance", () => {
     expect(allocationLine.live_capital_side_effects).toBe(false);
     expect(allocationLine.target_weight).toBe(1);
 
+    const approvalDecisionId = `approval-${safeSegment(RUN_KEY)}`;
     const proposalResponse = await request.post(`${BFF_BASE}/bff/rebalances`, {
       data: {
         allocation_evaluation_id: evaluationId,
@@ -875,13 +877,46 @@ test.describe("PPL-ALLOC-009 hosted paper allocation acceptance", () => {
       }),
     });
     calls.push(await requestEvidence(proposalResponse, "rebalance-proposal", "POST"));
-    const proposalPayload = await expectStatus(proposalResponse, 202, "rebalance proposal");
-    const rebalanceId = requiredString(
-      proposalPayload.rebalance_id ?? responseData(proposalPayload).rebalance_id,
-      "rebalance id",
-    );
+    const proposalPayload = await parseJson(proposalResponse);
+    let resumeListPayload: JsonRecord | undefined;
+    if (proposalResponse.status() === 409) {
+      expect(
+        String(record(proposalPayload.error).code ?? proposalPayload.code ?? ""),
+        `rebalance proposal returned HTTP 409: ${safeFailure(proposalPayload)}`,
+      ).toBe("IDEMPOTENCY_CONFLICT");
+      const resumeListResponse = await request.get(
+        `${BFF_BASE}/bff/rebalances?pool_id=${encodeURIComponent(poolId)}`,
+        { headers: authHeaders(operator.token) },
+      );
+      calls.push(await requestEvidence(resumeListResponse, "rebalance-resume-owner-list"));
+      resumeListPayload = await expectStatus(
+        resumeListResponse,
+        200,
+        "rebalance resume owner list",
+      );
+    }
+    const proposalBinding = bindPplAlloc009RebalanceProposal({
+      allocationEvaluationId: evaluationId,
+      allocationPolicyVersion: requiredString(
+        evaluation.allocation_policy_version,
+        "allocation policy version",
+      ),
+      capitalBindingId,
+      expectedApprovalRef: approvalDecisionId,
+      paperLedgerId,
+      poolId,
+      proposalPayload,
+      proposalStatus: proposalResponse.status(),
+      rankingSnapshotId: recommendationSnapshotId,
+      resumeListPayload,
+      submittedReviewId,
+    });
+    const {
+      allocationEvaluationId: authoritativeEvaluationId,
+      rankingSnapshotId: authoritativeRankingSnapshotId,
+      rebalanceId,
+    } = proposalBinding;
 
-    const approvalDecisionId = `approval-${safeSegment(RUN_KEY)}`;
     const approvalResponse = await request.post(
       `${BFF_BASE}/bff/rebalances/${encodeURIComponent(rebalanceId)}/approve`,
       {
@@ -982,7 +1017,7 @@ test.describe("PPL-ALLOC-009 hosted paper allocation acceptance", () => {
       },
       capturedAt: new Date().toISOString(),
       chain: {
-        allocationEvaluationId: evaluationId,
+        allocationEvaluationId: authoritativeEvaluationId,
         approvalDecisionId: canonicalApprovalId,
         applyCommandId: commandId,
         capitalBindingId,
@@ -991,7 +1026,7 @@ test.describe("PPL-ALLOC-009 hosted paper allocation acceptance", () => {
         provisioningPaperSessionId,
         personaId,
         promotionReviewId: submittedReviewId,
-        rankingSnapshotId: recommendationSnapshotId,
+        rankingSnapshotId: authoritativeRankingSnapshotId,
         rebalanceId,
         runtimeBindingId,
         runtimeId,
@@ -1004,6 +1039,7 @@ test.describe("PPL-ALLOC-009 hosted paper allocation acceptance", () => {
         safeBuildMode: pair.deployment.buildMode,
       },
       requestResponseEvidence: calls,
+      resume: proposalBinding,
       result: "in_progress",
       runKey: RUN_KEY,
       safety: {
@@ -1039,7 +1075,7 @@ test.describe("PPL-ALLOC-009 hosted paper allocation acceptance", () => {
       browsers: { desktop, mobile },
       capturedAt: new Date().toISOString(),
       chain: {
-        allocationEvaluationId: evaluationId,
+        allocationEvaluationId: authoritativeEvaluationId,
         approvalDecisionId: canonicalApprovalId,
         applyCommandId: commandId,
         capitalBindingId,
@@ -1048,7 +1084,7 @@ test.describe("PPL-ALLOC-009 hosted paper allocation acceptance", () => {
         provisioningPaperSessionId,
         personaId,
         promotionReviewId: submittedReviewId,
-        rankingSnapshotId: recommendationSnapshotId,
+        rankingSnapshotId: authoritativeRankingSnapshotId,
         rebalanceId,
         runtimeBindingId,
         runtimeId,
@@ -1088,6 +1124,7 @@ test.describe("PPL-ALLOC-009 hosted paper allocation acceptance", () => {
         },
         distinctApprovalAndApply: approver.operatorId !== operator.operatorId,
       },
+      resume: proposalBinding,
       requestResponseEvidence: calls,
       result: "passed",
       safety: {
