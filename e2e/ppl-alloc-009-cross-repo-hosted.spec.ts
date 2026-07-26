@@ -325,31 +325,6 @@ async function installHostedSession(page: Page, fromRoute: string): Promise<void
   });
 }
 
-function observeBrowser(page: Page): {
-  consoleErrors: string[];
-  network: NetworkEvidence[];
-} {
-  const consoleErrors: string[] = [];
-  const network: NetworkEvidence[] = [];
-  page.on("console", (message) => {
-    if (message.type() === "error") consoleErrors.push(message.text());
-  });
-  page.on("response", async (response) => {
-    const url = new URL(response.url());
-    if (!url.pathname.startsWith("/bff/")) return;
-    const headers = await response.allHeaders();
-    network.push({
-      correlationId: headers["x-correlation-id"] ?? null,
-      host: url.hostname,
-      method: response.request().method(),
-      path: url.pathname,
-      requestId: headers["x-request-id"] ?? null,
-      status: response.status(),
-    });
-  });
-  return { consoleErrors, network };
-}
-
 function observeBrowserDiagnostic(page: Page): BrowserDiagnosticObservation {
   const observation: BrowserDiagnosticObservation = {
     consoleErrors: [],
@@ -487,70 +462,21 @@ async function runBrowserProof(
     viewportName: "desktop" | "mobile-393";
   },
 ): Promise<JsonRecord> {
-  const context = await browser.newContext({ viewport: input.viewport });
-  const page = await context.newPage();
-  const observed = observeBrowser(page);
-  const routes = [
-    `/management/rankings?tab=quarterly&persona=${encodeURIComponent(input.personaId)}&quarter=${encodeURIComponent(QUARTER)}`,
-    `/management/governance-decisions?tab=recommendations&persona=${encodeURIComponent(input.personaId)}`,
-    `/management/governance-decisions?tab=capital&capital_id=${encodeURIComponent(input.poolId)}&rebalance_id=${encodeURIComponent(input.rebalanceId)}`,
-  ];
-  const settleCurrentRoute = async (): Promise<void> => {
-    await expect(page.locator("h1").first()).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByRole("tablist").first()).toBeVisible({ timeout: 30_000 });
-    await page.waitForTimeout(1_500);
-  };
-  await installHostedSession(page, routes[0]);
-  // The successful sign-in already redirects to routes[0]. Let that page finish
-  // its live loaders before navigating; revisiting it immediately aborts the
-  // ranking and formula reads and creates test-induced console errors.
-  await settleCurrentRoute();
-  for (const route of routes.slice(1)) {
-    await page.goto(`${FE_BASE}${route}`, { waitUntil: "domcontentloaded", timeout: 60_000 });
-    await settleCurrentRoute();
+  const evidence = await runIsolatedBrowserDiagnostic(browser, input);
+  const routeEvidence = Array.isArray(evidence.routes)
+    ? evidence.routes.map(record)
+    : [];
+  expect(routeEvidence).toHaveLength(3);
+  for (const route of routeEvidence) {
+    expect(route.error, `${String(route.routeName)} browser exception`).toBeUndefined();
+    const verdict = record(route.verdict);
+    expect(verdict.axePassed, `${String(route.routeName)} Axe`).toBe(true);
+    expect(verdict.consolePassed, `${String(route.routeName)} console`).toBe(true);
+    expect(verdict.networkPassed, `${String(route.routeName)} network`).toBe(true);
+    expect(verdict.overflowPassed, `${String(route.routeName)} overflow`).toBe(true);
+    expect(verdict.pageErrorsPassed, `${String(route.routeName)} page errors`).toBe(true);
   }
-
-  await page.goto(`${FE_BASE}${routes[0]}`, { waitUntil: "domcontentloaded", timeout: 60_000 });
-  await expect(page.locator("body")).toContainText(input.personaName, { timeout: 30_000 });
-  const dimensions = await page.evaluate(() => ({
-    bodyWidth: document.body.scrollWidth,
-    documentWidth: document.documentElement.scrollWidth,
-    viewportWidth: window.innerWidth,
-  }));
-  expect(Number(dimensions.bodyWidth)).toBeLessThanOrEqual(Number(dimensions.viewportWidth) + 1);
-  expect(Number(dimensions.documentWidth)).toBeLessThanOrEqual(Number(dimensions.viewportWidth) + 1);
-  const axe = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).analyze();
-  const seriousOrCritical = axe.violations.filter(
-    (violation) => violation.impact === "serious" || violation.impact === "critical",
-  );
-  expect(seriousOrCritical).toEqual([]);
-  expect(observed.consoleErrors).toEqual([]);
-  expect(observed.network.length).toBeGreaterThan(0);
-  for (const request of observed.network) {
-    expect(request.host).toBe(DEV_BFF_HOST);
-    expect(request.status, `${request.method} ${request.path}`).toBeLessThan(400);
-  }
-  expect(
-    observed.network.some((request) => request.path === "/bff/management/quarterly-ranking"),
-  ).toBe(true);
-  await context.close();
-  return {
-    accessibility: {
-      seriousOrCritical: seriousOrCritical.length,
-      totalViolations: axe.violations.length,
-    },
-    consoleErrors: observed.consoleErrors,
-    dimensions,
-    identity: {
-      provider: "gcp_identity_platform",
-      sessionBootstrap: "hosted_firebase_email_password_sign_in",
-      syntheticSession: false,
-    },
-    network: observed.network,
-    routes,
-    viewport: input.viewport,
-    viewportName: input.viewportName,
-  };
+  return evidence;
 }
 
 async function runIsolatedBrowserDiagnostic(
@@ -592,18 +518,13 @@ async function runIsolatedBrowserDiagnostic(
   ];
   const routeEvidence: JsonRecord[] = [];
 
-  for (const [index, route] of routes.entries()) {
+  for (const route of routes) {
     const page = await context.newPage();
     try {
       const evidence = await inspectIsolatedRoute(
         page,
         route,
-        index === 0
-          ? () => installHostedSession(page, route.route)
-          : () => page.goto(
-            `${FE_BASE}${route.route}`,
-            { waitUntil: "domcontentloaded", timeout: 60_000 },
-          ).then(() => undefined),
+        () => installHostedSession(page, route.route),
       );
       routeEvidence.push(evidence);
     } catch (error) {

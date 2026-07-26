@@ -44,4 +44,15 @@ describe("PPL-ALLOC-009 hosted browser identity contract", () => {
       "requestResponseEvidence: calls",
     );
   });
+
+  it("audits each route in its own authenticated page with completion barriers", () => {
+    expect(harness).toContain("for (const route of routes)");
+    expect(harness).toContain("const page = await context.newPage()");
+    expect(harness).toContain("() => installHostedSession(page, route.route)");
+    expect(harness).toContain("expect(await response.finished()).toBeNull()");
+    expect(harness).toContain('page.on("requestfailed"');
+    expect(harness).toContain('page.on("pageerror"');
+    expect(harness).toContain("new AxeBuilder({ page })");
+    expect(harness).not.toContain("waitForTimeout");
+  });
 });
