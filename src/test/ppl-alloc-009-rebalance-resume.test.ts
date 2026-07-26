@@ -11,6 +11,7 @@ const POOL_ID = "pool-ppl-alloc-009";
 const RANKING_SNAPSHOT_ID = "ranking-snapshot-original";
 const REBALANCE_ID = "rb-ppl-alloc-009-original";
 const SUBMITTED_REVIEW_ID = "promotion-review-ppl-alloc-009";
+const DRIFTED_SUBMITTED_REVIEW_ID = "promotion-review-ppl-alloc-009-current";
 
 function ownerRecord(overrides: Record<string, unknown> = {}) {
   return {
@@ -43,7 +44,10 @@ function ownerRecord(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function bindResume(records: unknown[]) {
+function bindResume(
+  records: unknown[],
+  submittedReviewId = SUBMITTED_REVIEW_ID,
+) {
   return bindPplAlloc009RebalanceProposal({
     allocationEvaluationId: "allocation-evaluation-new-attempt",
     allocationPolicyVersion: ALLOCATION_POLICY_VERSION,
@@ -60,7 +64,7 @@ function bindResume(records: unknown[]) {
     proposalStatus: 409,
     rankingSnapshotId: "ranking-snapshot-new-attempt",
     resumeListPayload: { data: records },
-    submittedReviewId: SUBMITTED_REVIEW_ID,
+    submittedReviewId,
   });
 }
 
@@ -78,11 +82,74 @@ describe("PPL-ALLOC-009 rebalance strict resume", () => {
     });
   });
 
-  it("fails closed when more than one owner rebalance matches", () => {
+  it("resumes an applied owner with the exact stable approval after the current review id drifts", () => {
+    expect(bindResume(
+      [ownerRecord()],
+      DRIFTED_SUBMITTED_REVIEW_ID,
+    )).toMatchObject({
+      applied: true,
+      approvalRef: APPROVAL_REF,
+      mode: "resumed",
+      ownerStatus: "applied",
+      rebalanceId: REBALANCE_ID,
+    });
+  });
+
+  it("fails closed when an applied owner has the wrong or missing stable approval", () => {
+    expect(() => bindResume(
+      [ownerRecord({ approval_ref: "approval-wrong" })],
+      DRIFTED_SUBMITTED_REVIEW_ID,
+    )).toThrow("requires exactly one matching owner rebalance; found 0");
+
+    expect(() => bindResume(
+      [ownerRecord({ approval_ref: null })],
+      DRIFTED_SUBMITTED_REVIEW_ID,
+    )).toThrow("requires exactly one matching owner rebalance; found 0");
+  });
+
+  it("requires at least one non-empty promotion review audit ref for an applied owner", () => {
+    expect(() => bindResume(
+      [ownerRecord({
+        audit_refs: [`ranking_snapshot:${RANKING_SNAPSHOT_ID}`],
+      })],
+      DRIFTED_SUBMITTED_REVIEW_ID,
+    )).toThrow("requires exactly one matching owner rebalance; found 0");
+
+    expect(() => bindResume(
+      [ownerRecord({
+        audit_refs: [
+          "promotion_review:",
+          `ranking_snapshot:${RANKING_SNAPSHOT_ID}`,
+        ],
+      })],
+      DRIFTED_SUBMITTED_REVIEW_ID,
+    )).toThrow("requires exactly one matching owner rebalance; found 0");
+  });
+
+  it("accepts multiple historic promotion review refs only for one uniquely bound applied owner", () => {
+    expect(bindResume(
+      [ownerRecord({
+        audit_refs: [
+          "promotion_review:promotion-review-older",
+          `promotion_review:${SUBMITTED_REVIEW_ID}`,
+          `ranking_snapshot:${RANKING_SNAPSHOT_ID}`,
+        ],
+      })],
+      DRIFTED_SUBMITTED_REVIEW_ID,
+    )).toMatchObject({
+      approvalRef: APPROVAL_REF,
+      mode: "resumed",
+      rebalanceId: REBALANCE_ID,
+    });
+  });
+
+  it("fails closed when more than one owner rebalance matches the stable applied identity", () => {
     expect(() => bindResume([
       ownerRecord(),
       ownerRecord({ rebalance_id: "rb-ppl-alloc-009-duplicate" }),
-    ])).toThrow("requires exactly one matching owner rebalance; found 2");
+    ], DRIFTED_SUBMITTED_REVIEW_ID)).toThrow(
+      "requires exactly one matching owner rebalance; found 2",
+    );
   });
 
   it("fails closed when owner safety or paper-ledger identity does not match", () => {
@@ -107,5 +174,52 @@ describe("PPL-ALLOC-009 rebalance strict resume", () => {
         }],
       }),
     ])).toThrow("requires exactly one matching owner rebalance; found 0");
+  });
+
+  it("fails closed when the applied owner line conflicts with its original lineage", () => {
+    expect(() => bindResume([
+      ownerRecord({
+        lines: [{
+          allocation_evaluation_id: "allocation-evaluation-conflict",
+          allocation_policy_version: ALLOCATION_POLICY_VERSION,
+          binding_id: CAPITAL_BINDING_ID,
+          paper_ledger_id: PAPER_LEDGER_ID,
+          ranking_snapshot_id: RANKING_SNAPSHOT_ID,
+        }],
+      }),
+    ], DRIFTED_SUBMITTED_REVIEW_ID)).toThrow(
+      "resumed allocation line has conflicting lineage",
+    );
+  });
+
+  it("fails closed when the applied owner lacks its authoritative ranking audit ref", () => {
+    expect(() => bindResume([
+      ownerRecord({
+        audit_refs: [`promotion_review:${SUBMITTED_REVIEW_ID}`],
+      }),
+    ], DRIFTED_SUBMITTED_REVIEW_ID)).toThrow(
+      "resumed rebalance lacks its ranking snapshot audit reference",
+    );
+  });
+
+  it("does not allow review-id drift for a pending owner", () => {
+    const pendingOwner = ownerRecord({
+      applied: false,
+      approval_ref: null,
+      status: "pending",
+    });
+
+    expect(() => bindResume(
+      [pendingOwner],
+      DRIFTED_SUBMITTED_REVIEW_ID,
+    )).toThrow("requires exactly one matching owner rebalance; found 0");
+
+    expect(bindResume([pendingOwner])).toMatchObject({
+      applied: false,
+      approvalRef: null,
+      mode: "resumed",
+      ownerStatus: "pending",
+      rebalanceId: REBALANCE_ID,
+    });
   });
 });
