@@ -67,9 +67,10 @@ function matchesResumeIdentity(
   const auditRefs = Array.isArray(candidate.audit_refs)
     ? candidate.audit_refs.map((value) => String(value))
     : [];
-  if (!auditRefs.includes(`promotion_review:${input.submittedReviewId}`)) {
-    return false;
-  }
+  const promotionReviewRefs = auditRefs.filter((value) =>
+    value.startsWith("promotion_review:")
+    && value.slice("promotion_review:".length).trim().length > 0
+  );
 
   const constraints = record(candidate.constraints);
   if (
@@ -95,7 +96,20 @@ function matchesResumeIdentity(
   }
 
   const approvalRef = String(candidate.approval_ref ?? "").trim();
-  return !approvalRef || approvalRef === input.expectedApprovalRef;
+  const isAuthoritativelyApplied =
+    candidate.applied === true
+    && String(candidate.status ?? "").trim() === "applied";
+  if (isAuthoritativelyApplied) {
+    return (
+      approvalRef === input.expectedApprovalRef
+      && promotionReviewRefs.length > 0
+    );
+  }
+
+  return (
+    auditRefs.includes(`promotion_review:${input.submittedReviewId}`)
+    && (!approvalRef || approvalRef === input.expectedApprovalRef)
+  );
 }
 
 function resumedBinding(
