@@ -136,6 +136,7 @@ describe("PersonaFleetPage deep links", () => {
         mutation: "/management/evolution-journal?persona=persona%2Ftw%20equity",
         humanGate: "/management/human-inbox/readiness_blocker%3Apersona%3Apersona%2Ftw%20equity",
       },
+      hasTradingTelemetry: true,
     } as unknown as ManagementPersonaFleetRow;
 
     expect(personaFleetPersonaHref(row)).toBe("/management/personas/persona%2Ftw%20equity");
@@ -150,6 +151,15 @@ describe("PersonaFleetPage deep links", () => {
     expect(personaFleetPerformanceHref(row)).toBe(
       "/management/performance?tab=attribution&dimension=persona&persona=persona%2Ftw%20equity",
     );
+    expect(personaFleetPerformanceHref({
+      ...row,
+      linkTargets: {},
+      link_targets: {},
+      hasTradingTelemetry: false,
+      has_trading_telemetry: false,
+      perfDelta: null,
+      perf_delta: null,
+    })).toBeNull();
     expect(personaFleetMutationHref(row)).toBe(
       "/management/evolution-journal?persona=persona%2Ftw%20equity",
     );
