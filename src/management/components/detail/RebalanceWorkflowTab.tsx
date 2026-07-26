@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { bff } from "@/lib/bff-v1";
 import { mutations } from "@/lib/bff/mutations";
 import type { WorkflowStep } from "@/lib/bff/types";
@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { ChevronRight, RefreshCw, Snowflake, PlayCircle } from "lucide-react";
 import { toast } from "sonner";
 import { realtime } from "@/lib/bff/realtime";
+import { commandReceiptDescription } from "@/lib/bff-v1/commandReceipt";
 
 interface StepX extends WorkflowStep { jobKind?: string }
 
@@ -18,8 +19,9 @@ export const RebalanceWorkflowTab = ({ rebalanceId }: { rebalanceId: string }) =
   const [steps, setSteps] = useState<StepX[]>([]);
   const [busy, setBusy] = useState(false);
 
-  const refresh = () =>
-    bff.rebalanceWorkflow.forRebalance(rebalanceId).then((arr) => setSteps(arr as unknown as StepX[]));
+  const refresh = useCallback(() =>
+    bff.rebalanceWorkflow.forRebalance(rebalanceId).then((arr) => setSteps(arr as unknown as StepX[])),
+  [rebalanceId]);
 
   useEffect(() => {
     refresh();
@@ -28,7 +30,7 @@ export const RebalanceWorkflowTab = ({ rebalanceId }: { rebalanceId: string }) =
       if (event?.kind === "RebalanceStep" || event?.kind === "Job") refresh();
     });
     return () => { off(); };
-  }, [rebalanceId]);
+  }, [refresh]);
 
   const current = steps.findIndex((s) => s.status === "in_progress");
   const cur = current >= 0 ? steps[current] : undefined;
@@ -39,7 +41,10 @@ export const RebalanceWorkflowTab = ({ rebalanceId }: { rebalanceId: string }) =
     setBusy(false);
     if (res.ok) {
       toast.success(t("phase21.rebalance.workflow.advanced"), {
-        description: res.jobId ? `${t("phase21.rebalance.workflow.queuedJob")}: ${res.jobId}` : undefined,
+        description: commandReceiptDescription(res, {
+          fallback: `Rebalance ${rebalanceId} · workflow advance`,
+          extra: res.jobId ? `${t("phase21.rebalance.workflow.queuedJob")}: ${res.jobId}` : undefined,
+        }),
       });
     } else {
       toast.error(res.message ?? "Cannot advance");
@@ -52,7 +57,14 @@ export const RebalanceWorkflowTab = ({ rebalanceId }: { rebalanceId: string }) =
     setBusy(true);
     const res = await mutations.rerunRebalanceStep(rebalanceId, cur.id);
     setBusy(false);
-    if (res.ok) toast.success(t("phase21.rebalance.workflow.rerun"), { description: res.jobId });
+    if (res.ok) {
+      toast.success(t("phase21.rebalance.workflow.rerun"), {
+        description: commandReceiptDescription(res, {
+          fallback: `Rebalance ${rebalanceId} · workflow rerun`,
+          extra: res.jobId ? `job ${res.jobId}` : undefined,
+        }),
+      });
+    }
     else toast.error("Step has no rerunnable job");
   };
 

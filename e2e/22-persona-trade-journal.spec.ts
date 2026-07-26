@@ -1,5 +1,9 @@
 import { expect, test } from "@playwright/test";
-import { installOidcDevLogin } from "./helpers/auth";
+import {
+  LOCAL_FIXTURE_AUTH_TOKEN,
+  installOidcDevLogin,
+  targetsExternalE2eEnvironment,
+} from "./helpers/auth";
 
 const PERSONA_ID = "per_quant";
 
@@ -144,8 +148,16 @@ const mockPatterns = [
 ];
 
 test.describe("Persona Trade Journal E2E Flows", () => {
+  test.skip(
+    targetsExternalE2eEnvironment(),
+    "route-mocked fixture coverage is loopback-only; hosted candidates use live acceptance specs",
+  );
+
   test.beforeEach(async ({ page }) => {
-    await installOidcDevLogin(page, { goto: false });
+    await installOidcDevLogin(page, {
+      goto: false,
+      token: LOCAL_FIXTURE_AUTH_TOKEN,
+    });
 
     // Route standard persona queries
     await page.route(`**/bff/personas/${PERSONA_ID}`, async (route) => {

@@ -26,8 +26,8 @@ const defaulters: { [K in CreatableEntity]: Defaulter<K> } = {
     deploymentStatus: "not_deployed",
   }),
   persona: (i) => {
-    const initialMode = i.initialMode ?? "shadow";
-    const lifecycleStatus = initialMode === "suspended" ? "suspended" : "draft";
+    const initialMode = i.initialMode ?? "paper";
+    const lifecycleStatus = "paper_running";
     // Assemble the persona's trading-character traits from the flat form inputs.
     // Only carry non-empty values so the BFF stores real data and the OpenClaw
     // SOUL can honestly mark whatever is still unset.
@@ -49,13 +49,18 @@ const defaulters: { [K in CreatableEntity]: Defaulter<K> } = {
       name: i.name,
       owner: i.owner ?? "you",
       risk: i.risk ?? "low",
-      state: initialMode === "suspended" ? "paused" : "draft",
+      state: "paper_running",
       updatedAt: nowIso(),
       archetype: i.archetype,
       routedStrategies: 0,
       successRate: 0,
       lifecycleStatus,
       executionMode: initialMode,
+      capitalMode: "paper",
+      deploymentStage: "paper",
+      liveCapitalEnabled: false,
+      orderSideEffectsAllowed: false,
+      capitalSideEffectsAllowed: false,
       mandate: (i.mandate ?? "").trim() || undefined,
       strategyFamily: (i.strategyFamily ?? "").trim() || undefined,
       traits: Object.keys(traits).length ? traits : undefined,
