@@ -1,5 +1,6 @@
 // 2026-07-11 MGMT-PERF-IA-004 - Consolidated Rankings Center - Recommendation page tests
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import axe from "axe-core";
 import type { ReactElement } from "react";
 import { I18nextProvider } from "react-i18next";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
@@ -46,6 +47,23 @@ function renderWithRoutes(initialEntry: string, element: ReactElement, routePath
   );
 }
 
+async function expectAccessibleRankingStatusAndPagination(container: HTMLElement) {
+  const previous = within(container).getByRole("button", { name: "Go to previous page" });
+  const next = within(container).getByRole("button", { name: "Go to next page" });
+
+  expect(previous).toHaveAttribute("title", "Go to previous page");
+  expect(next).toHaveAttribute("title", "Go to next page");
+  expect(container.querySelector('[class~="text-emerald-500"]')).not.toBeInTheDocument();
+  expect(container.querySelector('[class~="text-emerald-600"]')).not.toBeInTheDocument();
+  expect(container.querySelector('[class~="text-emerald-700"]')).toBeInTheDocument();
+  expect(container.querySelector('[class~="dark:text-emerald-300"]')).toBeInTheDocument();
+
+  const results = await axe.run(previous.parentElement as HTMLElement, {
+    runOnly: { type: "rule", values: ["button-name"] },
+  });
+  expect(results.violations).toHaveLength(0);
+}
+
 describe("ranking recommendation submit pages", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -76,6 +94,20 @@ describe("ranking recommendation submit pages", () => {
 
     renderWithRoutes("/management/quarterly-ranking", <QuarterlyRankingPage />);
     expect(screen.getByRole("heading", { name: "Quarterly Ranking" })).toBeInTheDocument();
+  });
+
+  it("Quarterly Ranking exposes named pagination controls and contrast-safe success tones", async () => {
+    let liveCall = 0;
+    mocks.useV5Live.mockImplementation(() => {
+      liveCall += 1;
+      return liveCall % 2 === 1
+        ? { data: defaultQuarterlyRanking(), loading: false, refresh: vi.fn() }
+        : { data: defaultQuarterlyFormula(), loading: false, refresh: vi.fn() };
+    });
+
+    const { container } = renderWithRoutes("/management/quarterly-ranking", <QuarterlyRankingPage />);
+
+    await expectAccessibleRankingStatusAndPagination(container);
   });
 
   it("Paper candidate tab preserves Fleet persona focus and scopes the ranking row", () => {
@@ -166,6 +198,18 @@ describe("ranking recommendation submit pages", () => {
     const table = screen.getByRole("table");
     expect(within(table).getByText(focused.personaName)).toBeInTheDocument();
     expect(within(table).queryByText(other.personaName)).not.toBeInTheDocument();
+  });
+
+  it("Persona League exposes named pagination controls and contrast-safe success tones", async () => {
+    mocks.useV5Live.mockReturnValue({
+      data: defaultPersonaLeague(),
+      loading: false,
+      refresh: vi.fn(),
+    });
+
+    const { container } = renderWithRoutes("/management/persona-league", <PersonaLeaguePage />);
+
+    await expectAccessibleRankingStatusAndPagination(container);
   });
 
   it("Quarterly Ranking keeps an ineligible focused Persona in the ranking table", () => {

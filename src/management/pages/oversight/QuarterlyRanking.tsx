@@ -329,13 +329,13 @@ export const QuarterlyRankingPage = ({ embedded = false }: { embedded?: boolean 
       </header>
 
       {/* Telemetry Status Indicator */}
-      <Alert className={`border-l-4 transition-all duration-300 ${isTelemetryDegraded ? "bg-amber-500/5 border-l-amber-500 border-amber-500/10 text-amber-600" : "bg-emerald-500/5 border-l-emerald-500 border-emerald-500/10 text-emerald-600"}`}>
+      <Alert className={`border-l-4 transition-all duration-300 ${isTelemetryDegraded ? "bg-amber-500/5 border-l-amber-500 border-amber-500/10 text-amber-600" : "bg-emerald-500/5 border-l-emerald-500 border-emerald-500/10 text-emerald-700 dark:text-emerald-300"}`}>
         <div className="flex items-center gap-3">
-          {isTelemetryDegraded ? <ShieldAlert className="h-5 w-5 text-amber-500 animate-pulse" /> : <ShieldCheck className="h-5 w-5 text-emerald-500" />}
+          {isTelemetryDegraded ? <ShieldAlert className="h-5 w-5 text-amber-500 animate-pulse" /> : <ShieldCheck className="h-5 w-5 text-emerald-700 dark:text-emerald-300" />}
           <div className="flex-1">
             <AlertTitle className="text-sm font-semibold flex items-center gap-2">
               Telemetry Feed: {isTelemetryDegraded ? "Degraded Standby" : "High Confidence (BFF Live)"}
-              <Badge variant="outline" className={`ml-2 text-[10px] uppercase font-bold tracking-wider ${isTelemetryDegraded ? "border-amber-500/30 text-amber-500 bg-amber-500/10" : "border-emerald-500/30 text-emerald-500 bg-emerald-500/10"}`}>
+              <Badge variant="outline" className={`ml-2 text-[10px] uppercase font-bold tracking-wider ${isTelemetryDegraded ? "border-amber-500/30 text-amber-500 bg-amber-500/10" : "border-emerald-500/30 text-emerald-700 dark:text-emerald-300 bg-emerald-500/10"}`}>
                 {isTelemetryDegraded ? "standby" : "live"}
               </Badge>
             </AlertTitle>
@@ -562,7 +562,7 @@ export const QuarterlyRankingPage = ({ embedded = false }: { embedded?: boolean 
                 <tr key={r.personaId} className="border-b border-border/50 hover:bg-muted/10 transition-colors">
                   <td className="px-3 py-3 font-mono font-semibold">#{r.currentRank}</td>
                   <td className="px-3 py-3 font-mono">{r.previousQuarterRank ?? "·"}</td>
-                  <td className={`px-3 py-3 font-mono text-xs ${(r.rankDelta ?? 0) > 0 ? "text-emerald-500" : (r.rankDelta ?? 0) < 0 ? "text-rose-500" : "text-muted-foreground"}`}>
+                  <td className={`px-3 py-3 font-mono text-xs ${(r.rankDelta ?? 0) > 0 ? "text-emerald-700 dark:text-emerald-300" : (r.rankDelta ?? 0) < 0 ? "text-rose-500" : "text-muted-foreground"}`}>
                     {deltaArrow(r.rankDelta)}
                   </td>
                   <td className="px-3 py-3">
@@ -587,12 +587,12 @@ export const QuarterlyRankingPage = ({ embedded = false }: { embedded?: boolean 
                     </Badge>
                   </td>
                   <td className="px-3 py-3 font-mono font-semibold text-foreground">{fmtNum(r.score, 1)}</td>
-                  <td className={`px-3 py-3 font-mono font-medium ${(r.pnlQuarter ?? 0) < 0 ? "text-rose-500" : "text-emerald-500"}`}>
+                  <td className={`px-3 py-3 font-mono font-medium ${(r.pnlQuarter ?? 0) < 0 ? "text-rose-500" : "text-emerald-700 dark:text-emerald-300"}`}>
                     {fmtUsd(r.pnlQuarter)}
                   </td>
                   <td className="px-3 py-3 font-mono">{fmtNum(r.sharpeQuarter)}</td>
                   <td className="px-3 py-3 text-xs">
-                    <span className={`px-1.5 py-0.5 rounded text-[11px] font-medium border ${r.eligibility === "eligible" ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : r.eligibility === "insufficient_data" ? "bg-amber-500/10 text-amber-500 border-amber-500/20" : "bg-rose-500/10 text-rose-500 border-rose-500/20"}`}>
+                    <span className={`px-1.5 py-0.5 rounded text-[11px] font-medium border ${r.eligibility === "eligible" ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20" : r.eligibility === "insufficient_data" ? "bg-amber-500/10 text-amber-500 border-amber-500/20" : "bg-rose-500/10 text-rose-500 border-rose-500/20"}`}>
                       {t(`mgmt.quarterly.eligibilityValues.${r.eligibility}`, { defaultValue: String(r.eligibility ?? "—") })}
                     </span>
                     {r.disqualificationReason && (
@@ -647,6 +647,8 @@ export const QuarterlyRankingPage = ({ embedded = false }: { embedded?: boolean 
               variant="outline"
               size="sm"
               className="h-8 w-8 p-0"
+              aria-label={t("ui.pagination.prevAria")}
+              title={t("ui.pagination.prevAria")}
               onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
               disabled={currentPage === 1}
             >
@@ -659,6 +661,8 @@ export const QuarterlyRankingPage = ({ embedded = false }: { embedded?: boolean 
               variant="outline"
               size="sm"
               className="h-8 w-8 p-0"
+              aria-label={t("ui.pagination.nextAria")}
+              title={t("ui.pagination.nextAria")}
               onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
               disabled={currentPage === totalPages}
             >
@@ -743,7 +747,7 @@ function RecommendationSubmitCell({
         </p>
       )}
       {state?.kind === "submitted" && (
-        <p role="status" className="text-[10px] leading-snug text-emerald-500 font-semibold">
+        <p role="status" className="text-[10px] leading-snug text-emerald-700 dark:text-emerald-300 font-semibold">
           {t("mgmt.governance.submitted")}
         </p>
       )}

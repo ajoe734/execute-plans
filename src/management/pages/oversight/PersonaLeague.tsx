@@ -51,7 +51,7 @@ const fmtNum = (n: number | undefined | null, d = 2) =>
   n !== undefined && n !== null && Number.isFinite(n) ? new Intl.NumberFormat("en-US", { maximumFractionDigits: d }).format(n) : "—";
 
 const tierTone = (tier: string) =>
-  tier === "S" ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" :
+  tier === "S" ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20" :
   tier === "A" ? "bg-blue-500/10 text-blue-500 border-blue-500/20" :
   tier === "B" ? "bg-amber-500/10 text-amber-500 border-amber-500/20" :
   tier === "C" ? "bg-orange-500/10 text-orange-500 border-orange-500/20" :
@@ -257,13 +257,13 @@ export const PersonaLeaguePage = ({ embedded = false }: { embedded?: boolean }) 
   return (
     <section className={embedded ? "space-y-6" : "p-6 space-y-6"} aria-label={t("mgmt.league.title")}>
       {/* Telemetry Status Indicator */}
-      <Alert className={`border-l-4 transition-all duration-300 ${isTelemetryDegraded ? "bg-amber-500/5 border-l-amber-500 border-amber-500/10 text-amber-600" : "bg-emerald-500/5 border-l-emerald-500 border-emerald-500/10 text-emerald-600"}`}>
+      <Alert className={`border-l-4 transition-all duration-300 ${isTelemetryDegraded ? "bg-amber-500/5 border-l-amber-500 border-amber-500/10 text-amber-600" : "bg-emerald-500/5 border-l-emerald-500 border-emerald-500/10 text-emerald-700 dark:text-emerald-300"}`}>
         <div className="flex items-center gap-3">
-          {isTelemetryDegraded ? <ShieldAlert className="h-5 w-5 text-amber-500 animate-pulse" /> : <ShieldCheck className="h-5 w-5 text-emerald-500" />}
+          {isTelemetryDegraded ? <ShieldAlert className="h-5 w-5 text-amber-500 animate-pulse" /> : <ShieldCheck className="h-5 w-5 text-emerald-700 dark:text-emerald-300" />}
           <div className="flex-1">
             <AlertTitle className="text-sm font-semibold flex items-center gap-2">
               Telemetry Feed: {isTelemetryDegraded ? "Degraded Standby" : "High Confidence (BFF Live)"}
-              <Badge variant="outline" className={`ml-2 text-[10px] uppercase font-bold tracking-wider ${isTelemetryDegraded ? "border-amber-500/30 text-amber-500 bg-amber-500/10" : "border-emerald-500/30 text-emerald-500 bg-emerald-500/10"}`}>
+              <Badge variant="outline" className={`ml-2 text-[10px] uppercase font-bold tracking-wider ${isTelemetryDegraded ? "border-amber-500/30 text-amber-500 bg-amber-500/10" : "border-emerald-500/30 text-emerald-700 dark:text-emerald-300 bg-emerald-500/10"}`}>
                 {isTelemetryDegraded ? "standby" : "live"}
               </Badge>
             </AlertTitle>
@@ -444,13 +444,13 @@ export const PersonaLeaguePage = ({ embedded = false }: { embedded?: boolean }) 
         </Card>
         <Card className="p-3 bg-card/40 border-border/60">
           <div className="text-xs text-muted-foreground mb-2 font-medium flex items-center gap-1">
-            <TrendingUp className="h-3 w-3 text-emerald-500" /> {t("mgmt.league.topUp")}
+            <TrendingUp className="h-3 w-3 text-emerald-700 dark:text-emerald-300" /> {t("mgmt.league.topUp")}
           </div>
           <ul className="text-sm space-y-1">
             {movers.topUp.map((m) => (
               <li key={m.personaId} className="flex justify-between items-center py-0.5 border-b border-border/30 last:border-0">
                 <Link to={personaManageHref(m)} className="text-primary hover:underline font-medium">{m.personaName}</Link>
-                <span className="text-emerald-500 font-mono text-xs flex items-center gap-0.5">
+                <span className="text-emerald-700 dark:text-emerald-300 font-mono text-xs flex items-center gap-0.5">
                   {deltaArrow(m.rankDelta)}
                 </span>
               </li>
@@ -549,6 +549,8 @@ export const PersonaLeaguePage = ({ embedded = false }: { embedded?: boolean }) 
               variant="outline"
               size="sm"
               className="h-8 w-8 p-0"
+              aria-label={t("ui.pagination.prevAria")}
+              title={t("ui.pagination.prevAria")}
               onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
               disabled={currentPage === 1}
             >
@@ -561,6 +563,8 @@ export const PersonaLeaguePage = ({ embedded = false }: { embedded?: boolean }) 
               variant="outline"
               size="sm"
               className="h-8 w-8 p-0"
+              aria-label={t("ui.pagination.nextAria")}
+              title={t("ui.pagination.nextAria")}
               onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
               disabled={currentPage === totalPages}
             >
@@ -598,7 +602,7 @@ export const PersonaLeaguePage = ({ embedded = false }: { embedded?: boolean }) 
       <>
         <tr className="border-b border-border/50 hover:bg-muted/10 transition-colors">
           <td className="px-3 py-3 font-mono font-semibold">#{r.currentRank}</td>
-          <td className={`px-3 py-3 font-mono text-xs ${(r.rankDelta ?? 0) > 0 ? "text-emerald-500" : (r.rankDelta ?? 0) < 0 ? "text-rose-500" : "text-muted-foreground"}`}>
+          <td className={`px-3 py-3 font-mono text-xs ${(r.rankDelta ?? 0) > 0 ? "text-emerald-700 dark:text-emerald-300" : (r.rankDelta ?? 0) < 0 ? "text-rose-500" : "text-muted-foreground"}`}>
             {deltaArrow(r.rankDelta)}
           </td>
           <td className="px-3 py-3">
@@ -620,7 +624,7 @@ export const PersonaLeaguePage = ({ embedded = false }: { embedded?: boolean }) 
             </Badge>
           </td>
           <td className="px-3 py-3 font-mono text-foreground font-semibold">{fmtNum(r.score, 1)}</td>
-          <td className={`px-3 py-3 font-mono font-medium ${isPnlNegative ? "text-rose-500" : "text-emerald-500"}`}>
+          <td className={`px-3 py-3 font-mono font-medium ${isPnlNegative ? "text-rose-500" : "text-emerald-700 dark:text-emerald-300"}`}>
             {fmtUsd(r.pnl30d)}
           </td>
           <td className="px-3 py-3 font-mono">{fmtNum(r.sharpe)}</td>
@@ -704,7 +708,7 @@ function RecommendationButton({
         </p>
       )}
       {state?.kind === "submitted" && (
-        <p role="status" className="text-[10px] leading-snug text-emerald-500 font-semibold">
+        <p role="status" className="text-[10px] leading-snug text-emerald-700 dark:text-emerald-300 font-semibold">
           {t("mgmt.governance.submitted")}
         </p>
       )}
