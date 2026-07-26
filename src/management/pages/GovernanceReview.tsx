@@ -10,7 +10,8 @@ import { RiskBadge } from "@/platform/components/RiskBadge";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
 import { bff } from "@/lib/bff-v1";
-import { mutations } from "@/lib/bff/mutations";
+import { bffWrites } from "@/lib/bff/runAction";
+import { commandReceiptDescription } from "@/lib/bff-v1/commandReceipt";
 import type { ApprovalRequest, AuditEvent } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { usePermissions } from "@/lib/usePermissions";
@@ -64,9 +65,11 @@ export const GovernanceReview = () => {
     const mapState: Record<Decision, ApprovalRequest["state"]> = {
       approve: "approved", reject: "rejected", request_changes: "pending", escalate: "pending", freeze: "pending",
     };
-    await mutations.decideApproval(req.id, d, memo);
+    const receipt = await bffWrites.decideApproval(req.id, d, memo);
     setReq({ ...req, state: mapState[d] });
-    toast.success(`${t(`governance.decision.${d}`)} — ${req.subject}${memo ? ` · ${memo.slice(0, 40)}` : ""}`);
+    toast.success(`${t(`governance.decision.${d}`)} - ${req.subject}${memo ? ` · ${memo.slice(0, 40)}` : ""}`, {
+      description: commandReceiptDescription(receipt, { fallback: `Approval ${req.id} · ${d}` }),
+    });
   };
 
   // Mock evidence + validator results — in real BFF these come from /bff/approvals/:id/evidence
@@ -215,9 +218,11 @@ export const GovernanceReview = () => {
           confirmToken={req.riskLevel === "critical" ? stageDecision?.decision.toUpperCase() : undefined}
           onConfirm={async (memo) => {
             if (!stageDecision) return;
-            const r = await mutations.decideApproval(req.id, stageDecision.decision, memo, { stageName: stageDecision.stageName });
+            const r = await bffWrites.decideApproval(req.id, stageDecision.decision, memo, { stageName: stageDecision.stageName });
             if (r.ok) {
-              toast.success(`${t(`approval.stage.${stageDecision.decision}`, { defaultValue: stageDecision.decision })} — ${stageDecision.stageName}`);
+              toast.success(`${t(`approval.stage.${stageDecision.decision}`, { defaultValue: stageDecision.decision })} - ${stageDecision.stageName}`, {
+                description: commandReceiptDescription(r, { fallback: `Approval ${req.id} · ${stageDecision.stageName}` }),
+              });
               await reload();
             }
           }}

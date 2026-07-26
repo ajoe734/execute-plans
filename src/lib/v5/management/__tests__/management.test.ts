@@ -24,24 +24,27 @@ describe("PersonaIntent visibility rules", () => {
       badge: "summary",
     });
   });
-  it("redacted shows summary + risk flags only, no interpretation/tools/evidence", () => {
+  it("redacted remains fully inspectable for debug", () => {
     const r = intentDisplayRules("redacted");
     expect(r.showSummary).toBe(true);
-    expect(r.showInterpretation).toBe(false);
-    expect(r.showToolsUsed).toBe(false);
-    expect(r.showEvidenceRefs).toBe(false);
+    expect(r.showInterpretation).toBe(true);
+    expect(r.showToolsUsed).toBe(true);
+    expect(r.showRiskFlags).toBe(true);
+    expect(r.showEvidenceRefs).toBe(true);
+    expect(r.showOnlyMetadata).toBe(false);
     expect(r.badge).toBe("redacted");
   });
-  it("restricted hides summary, shows metadata only", () => {
+  it("restricted remains fully inspectable for debug", () => {
     const r = intentDisplayRules("restricted");
-    expect(r.showSummary).toBe(false);
-    expect(r.showOnlyMetadata).toBe(true);
+    expect(r.showSummary).toBe(true);
+    expect(r.showInterpretation).toBe(true);
+    expect(r.showToolsUsed).toBe(true);
+    expect(r.showRiskFlags).toBe(true);
+    expect(r.showEvidenceRefs).toBe(true);
+    expect(r.showOnlyMetadata).toBe(false);
     expect(r.badge).toBe("restricted");
   });
-  it("PersonaIntentTrace type does not declare any raw prompt field", () => {
-    // Compile-time guard. If someone adds rawPrompt this test won't catch it
-    // alone, but combined with the `_NoRawPromptApi` conditional in the
-    // module it acts as a tripwire.
+  it("PersonaIntentTrace type carries an optional BFF debug row", () => {
     const t: PersonaIntentTrace = {
       id: "t", ringPersonaId: "p", ringBearerId: "rb",
       userIntentSummary: "s", toolsUsed: [], consultedPersonas: [],
@@ -49,8 +52,9 @@ describe("PersonaIntent visibility rules", () => {
       redaction: { status: "not_required" },
       evidenceRefs: [], riskFlags: [], policyViolations: [],
       createdAt: new Date().toISOString(),
+      debugRecord: { raw_prompt: "shown if BFF sends it" },
     };
-    expect("rawPrompt" in (t as unknown as Record<string, unknown>)).toBe(false);
+    expect((t.debugRecord as Record<string, unknown>).raw_prompt).toBe("shown if BFF sends it");
   });
 });
 

@@ -14,7 +14,7 @@
  *   BFF_BASE_URL or VITE_BFF_BASE_URL
  *     default: https://pantheon-lupin-staging-bff.104.155.223.192.sslip.io
  *   BFF_AUTH_TOKEN
- *     optional; when omitted the dev stub token is used.
+ *     required for the opt-in live BFF contract.
  *   FE_INT_GATE_LIVE_BFF=1 or F08_CREATE_INTENT_LIVE_BFF=1
  *     opt in to the live BFF contract probe; fixture-driven browser coverage
  *     runs without a staging dependency.
@@ -28,7 +28,11 @@ import {
   type Route,
 } from "@playwright/test";
 
-import { mutationAuthHeaders } from "./helpers/auth";
+import {
+  LOCAL_FIXTURE_AUTH_TOKEN,
+  authToken,
+  mutationAuthHeaders,
+} from "./helpers/auth";
 import {
   CAPITAL_POOL_DEV_ID,
   CREATE_INTENT_RESOURCE_KEYS,
@@ -48,6 +52,20 @@ const SNAPSHOT_AT = "2026-05-13T14:35:00Z";
 const RUN_LIVE_BFF_CONTRACT =
   process.env.FE_INT_GATE_LIVE_BFF === "1" ||
   process.env.F08_CREATE_INTENT_LIVE_BFF === "1";
+const BFF_BASE_URL = (
+  process.env.BFF_BASE_URL ||
+  process.env.VITE_BFF_BASE_URL ||
+  DEFAULT_BFF_BASE_URL
+).replace(/\/$/u, "");
+const LIVE_AUTH_TOKEN = RUN_LIVE_BFF_CONTRACT
+  ? authToken({
+      env: {
+        ...process.env,
+        BFF_BASE_URL,
+        F08_CREATE_INTENT_LIVE_BFF: process.env.F08_CREATE_INTENT_LIVE_BFF,
+      },
+    })
+  : "";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -87,11 +105,7 @@ function frontendUrl(path = "/"): string {
 }
 
 function bffUrl(path: string): string {
-  const base =
-    process.env.BFF_BASE_URL ||
-    process.env.VITE_BFF_BASE_URL ||
-    DEFAULT_BFF_BASE_URL;
-  return `${base.replace(/\/$/, "")}${path}`;
+  return `${BFF_BASE_URL}${path}`;
 }
 
 function isRecord(value: unknown): value is JsonRecord {
@@ -119,9 +133,20 @@ function arrayAt(value: unknown, label: string): unknown[] {
   return value as unknown[];
 }
 
-function headersFor(resource: CreateIntentResource, suffix: string): Record<string, string> {
+function headersFor(
+  resource: CreateIntentResource,
+  suffix: string,
+  token: string,
+): Record<string, string> {
   const correlationId = seededCorrelationId(`f08-${resource}-${suffix}`);
   return mutationAuthHeaders({
+    // Fixture requests are sent only to the effective loopback frontend and
+    // are fully intercepted below. Do not let an unrelated external global
+    // BFF setting reclassify this local request or receive its credential.
+    env: token === LOCAL_FIXTURE_AUTH_TOKEN
+      ? { PANTHEON_FE_BASE_URL: frontendUrl("/") }
+      : process.env,
+    token,
     extra: {
       "Idempotency-Key": seededIdempotencyKey(resource, suffix),
       "X-Correlation-Id": correlationId,
@@ -553,7 +578,7 @@ async function postCreateIntentsInBrowser(
   valid: boolean,
 ): Promise<BrowserCreateResult[]> {
   const requests = CREATE_INTENTS.map((fixture) => ({
-    headers: headersFor(fixture.resource, suffix),
+    headers: headersFor(fixture.resource, suffix, LOCAL_FIXTURE_AUTH_TOKEN),
     path: frontendUrl(fixture.path),
     payload: valid ? fixture.payload : {},
   }));
@@ -632,7 +657,7 @@ async function postLiveCreateIntent(
 ): Promise<BrowserCreateResult> {
   const response = await request.post(bffUrl(fixture.path), {
     data: payload,
-    headers: headersFor(fixture.resource, suffix),
+    headers: headersFor(fixture.resource, suffix, LIVE_AUTH_TOKEN),
     timeout: 10_000,
   });
   let body: unknown;
