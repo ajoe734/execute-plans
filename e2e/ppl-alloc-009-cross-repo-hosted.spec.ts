@@ -47,6 +47,19 @@ const RUN_KEY = String(process.env.PPL_ALLOC_009_RUN_KEY ?? "local").replace(/[^
 const EVIDENCE_DIR = String(
   process.env.PPL_ALLOC_009_EVIDENCE_DIR ?? "/tmp/ppl-alloc-009-hosted-acceptance",
 );
+const BROWSER_DIAGNOSTIC_ONLY = (
+  String(process.env.PPL_ALLOC_009_BROWSER_DIAGNOSTIC_ONLY ?? "false").trim().toLowerCase()
+  === "true"
+);
+const DIAGNOSTIC_PERSONA_ID = String(
+  process.env.PPL_ALLOC_009_DIAGNOSTIC_PERSONA_ID ?? "",
+).trim();
+const DIAGNOSTIC_POOL_ID = String(
+  process.env.PPL_ALLOC_009_DIAGNOSTIC_POOL_ID ?? "",
+).trim();
+const DIAGNOSTIC_REBALANCE_ID = String(
+  process.env.PPL_ALLOC_009_DIAGNOSTIC_REBALANCE_ID ?? "",
+).trim();
 const HOSTED_REQUESTED = Boolean(FE_BASE && BFF_BASE && EXPECTED_FE_SHA && EXPECTED_BFF_SHA);
 const DEV_FE_HOST = "pantheon-lupin-dev-fe.35.201.204.12.sslip.io";
 const DEV_BFF_HOST = "pantheon-lupin-dev-bff.35.201.204.12.sslip.io";
@@ -68,6 +81,19 @@ type NetworkEvidence = {
   path: string;
   requestId: string | null;
   status: number;
+};
+type RequestFailureEvidence = {
+  errorText: string | null;
+  host: string;
+  method: string;
+  path: string;
+};
+type BrowserDiagnosticObservation = {
+  consoleErrors: string[];
+  network: NetworkEvidence[];
+  pageErrors: string[];
+  pendingResponseReads: Promise<void>[];
+  requestFailures: RequestFailureEvidence[];
 };
 type StrictIdentity = {
   identityClass: string;
@@ -324,6 +350,132 @@ function observeBrowser(page: Page): {
   return { consoleErrors, network };
 }
 
+function observeBrowserDiagnostic(page: Page): BrowserDiagnosticObservation {
+  const observation: BrowserDiagnosticObservation = {
+    consoleErrors: [],
+    network: [],
+    pageErrors: [],
+    pendingResponseReads: [],
+    requestFailures: [],
+  };
+  page.on("console", (message) => {
+    if (message.type() === "error") observation.consoleErrors.push(message.text());
+  });
+  page.on("pageerror", (error) => {
+    observation.pageErrors.push(error.message);
+  });
+  page.on("requestfailed", (request) => {
+    const url = new URL(request.url());
+    observation.requestFailures.push({
+      errorText: request.failure()?.errorText ?? null,
+      host: url.hostname,
+      method: request.method(),
+      path: url.pathname,
+    });
+  });
+  page.on("response", (response) => {
+    const url = new URL(response.url());
+    if (!url.pathname.startsWith("/bff/")) return;
+    const entry: NetworkEvidence = {
+      correlationId: null,
+      host: url.hostname,
+      method: response.request().method(),
+      path: url.pathname,
+      requestId: null,
+      status: response.status(),
+    };
+    observation.network.push(entry);
+    observation.pendingResponseReads.push(
+      response.allHeaders().then((headers) => {
+        entry.correlationId = headers["x-correlation-id"] ?? null;
+        entry.requestId = headers["x-request-id"] ?? null;
+      }),
+    );
+  });
+  return observation;
+}
+
+async function waitForRouteResponses(
+  page: Page,
+  expectedPaths: string[],
+  navigate: () => Promise<void>,
+): Promise<void> {
+  const pending = expectedPaths.map((expectedPath) => page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return url.hostname === DEV_BFF_HOST
+      && url.pathname === expectedPath
+      && response.request().method() === "GET";
+  }, { timeout: 60_000 }));
+  await navigate();
+  const responses = await Promise.all(pending);
+  for (const response of responses) {
+    expect(response.status(), `${response.request().method()} ${new URL(response.url()).pathname}`)
+      .toBeLessThan(400);
+    expect(await response.finished()).toBeNull();
+  }
+}
+
+async function inspectIsolatedRoute(
+  page: Page,
+  input: {
+    expectedBffPaths: string[];
+    expectedText?: string;
+    route: string;
+    routeName: string;
+  },
+  navigate: () => Promise<void>,
+): Promise<JsonRecord> {
+  const observed = observeBrowserDiagnostic(page);
+  await waitForRouteResponses(page, input.expectedBffPaths, navigate);
+  await expect(page).toHaveURL(`${FE_BASE}${input.route}`);
+  await expect(page.locator("h1").first()).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole("tablist").first()).toBeVisible({ timeout: 30_000 });
+  if (input.expectedText) {
+    await expect(page.locator("body")).toContainText(input.expectedText, { timeout: 30_000 });
+  }
+  const dimensions = await page.evaluate(() => ({
+    bodyWidth: document.body.scrollWidth,
+    documentWidth: document.documentElement.scrollWidth,
+    viewportWidth: window.innerWidth,
+  }));
+  const axe = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).analyze();
+  const seriousOrCritical = axe.violations.filter(
+    (violation) => violation.impact === "serious" || violation.impact === "critical",
+  );
+  await Promise.all(observed.pendingResponseReads);
+  const unexpectedFailures = observed.requestFailures;
+  const unexpectedResponses = observed.network.filter(
+    (response) => response.host !== DEV_BFF_HOST || response.status >= 400,
+  );
+
+  return {
+    accessibility: {
+      seriousOrCritical: seriousOrCritical.map((violation) => ({
+        id: violation.id,
+        impact: violation.impact,
+        nodes: violation.nodes.length,
+      })),
+      totalViolations: axe.violations.length,
+    },
+    consoleErrors: [...observed.consoleErrors],
+    dimensions,
+    expectedBffPaths: input.expectedBffPaths,
+    network: observed.network.map((entry) => ({ ...entry })),
+    pageErrors: [...observed.pageErrors],
+    requestFailures: observed.requestFailures.map((entry) => ({ ...entry })),
+    route: input.route,
+    routeName: input.routeName,
+    verdict: {
+      axePassed: seriousOrCritical.length === 0,
+      consolePassed: observed.consoleErrors.length === 0,
+      networkPassed: unexpectedFailures.length === 0 && unexpectedResponses.length === 0,
+      overflowPassed: Number(dimensions.bodyWidth) <= Number(dimensions.viewportWidth) + 1
+        && Number(dimensions.documentWidth) <= Number(dimensions.viewportWidth) + 1,
+      pageErrorsPassed: observed.pageErrors.length === 0,
+    },
+  };
+}
+
 async function runBrowserProof(
   browser: Browser,
   input: {
@@ -396,6 +548,83 @@ async function runBrowserProof(
     },
     network: observed.network,
     routes,
+    viewport: input.viewport,
+    viewportName: input.viewportName,
+  };
+}
+
+async function runIsolatedBrowserDiagnostic(
+  browser: Browser,
+  input: {
+    personaId: string;
+    personaName: string;
+    poolId: string;
+    rebalanceId: string;
+    viewport: { height: number; width: number };
+    viewportName: "desktop" | "mobile-393";
+  },
+): Promise<JsonRecord> {
+  const context = await browser.newContext({ viewport: input.viewport });
+  const routes = [
+    {
+      expectedBffPaths: [
+        "/bff/management/quarterly-ranking",
+        "/bff/management/quarterly-ranking/formula",
+      ],
+      expectedText: input.personaName,
+      route: `/management/rankings?tab=quarterly&persona=${encodeURIComponent(input.personaId)}&quarter=${encodeURIComponent(QUARTER)}`,
+      routeName: "quarterly-ranking",
+    },
+    {
+      expectedBffPaths: ["/bff/management/human-inbox"],
+      route: `/management/governance-decisions?tab=recommendations&persona=${encodeURIComponent(input.personaId)}`,
+      routeName: "recommendations",
+    },
+    {
+      expectedBffPaths: [
+        "/bff/management/persona-fleet",
+        "/bff/capital-pools",
+        "/bff/rebalances",
+      ],
+      route: `/management/governance-decisions?tab=capital&capital_id=${encodeURIComponent(input.poolId)}&rebalance_id=${encodeURIComponent(input.rebalanceId)}`,
+      routeName: "capital",
+    },
+  ];
+  const routeEvidence: JsonRecord[] = [];
+
+  for (const [index, route] of routes.entries()) {
+    const page = await context.newPage();
+    try {
+      const evidence = await inspectIsolatedRoute(
+        page,
+        route,
+        index === 0
+          ? () => installHostedSession(page, route.route)
+          : () => page.goto(
+            `${FE_BASE}${route.route}`,
+            { waitUntil: "domcontentloaded", timeout: 60_000 },
+          ).then(() => undefined),
+      );
+      routeEvidence.push(evidence);
+    } catch (error) {
+      routeEvidence.push({
+        error: error instanceof Error ? error.message : String(error),
+        route: route.route,
+        routeName: route.routeName,
+      });
+    } finally {
+      await page.close();
+    }
+  }
+
+  await context.close();
+  return {
+    identity: {
+      provider: "gcp_identity_platform",
+      sessionBootstrap: "hosted_firebase_email_password_sign_in",
+      syntheticSession: false,
+    },
+    routes: routeEvidence,
     viewport: input.viewport,
     viewportName: input.viewportName,
   };
@@ -491,10 +720,136 @@ async function waitForRanking(
 test.describe("PPL-ALLOC-009 hosted paper allocation acceptance", () => {
   test.skip(!HOSTED_REQUESTED, "requires exact hosted FE/BFF URLs and commit SHAs");
 
+  test("audits all hosted browser routes without mutations or cross-route aborts", async ({
+    browser,
+    request,
+  }, testInfo) => {
+    test.skip(!BROWSER_DIAGNOSTIC_ONLY, "read-only diagnostic mode was not requested");
+    test.setTimeout(600_000);
+    expect(DIAGNOSTIC_PERSONA_ID).not.toBe("");
+    expect(DIAGNOSTIC_POOL_ID).not.toBe("");
+    expect(DIAGNOSTIC_REBALANCE_ID).not.toBe("");
+    expect(OPERATOR_CLIENT_ID).not.toBe("");
+    expect(OPERATOR_CLIENT_SECRET).not.toBe("");
+
+    const calls: RequestEvidence[] = [];
+    const pair = await assertExactPair(request, calls);
+    const operator = await devLogin(request, {
+      clientId: OPERATOR_CLIENT_ID,
+      clientSecret: OPERATOR_CLIENT_SECRET,
+      expectedIdentity: "operator_a",
+    }, calls);
+
+    const personaResponse = await request.get(
+      `${BFF_BASE}/bff/personas/${encodeURIComponent(DIAGNOSTIC_PERSONA_ID)}`,
+      { headers: authHeaders(operator.token) },
+    );
+    calls.push(await requestEvidence(personaResponse, "diagnostic-persona"));
+    const personaPayload = await expectStatus(personaResponse, 200, "diagnostic Persona");
+    const persona = responseData(personaPayload);
+    const personaId = requiredString(
+      persona.id ?? persona.persona_id,
+      "diagnostic Persona id",
+    );
+    const personaName = requiredString(persona.name, "diagnostic Persona name");
+    expect(personaId).toBe(DIAGNOSTIC_PERSONA_ID);
+
+    const poolResponse = await request.get(
+      `${BFF_BASE}/bff/capital-pools/${encodeURIComponent(DIAGNOSTIC_POOL_ID)}`,
+      { headers: authHeaders(operator.token) },
+    );
+    calls.push(await requestEvidence(poolResponse, "diagnostic-capital-pool"));
+    const poolPayload = await expectStatus(poolResponse, 200, "diagnostic capital pool");
+    const pool = responseData(poolPayload);
+    expect(requiredString(pool.id ?? pool.pool_id, "diagnostic capital pool id"))
+      .toBe(DIAGNOSTIC_POOL_ID);
+
+    const rebalancesResponse = await request.get(
+      `${BFF_BASE}/bff/rebalances?pool_id=${encodeURIComponent(DIAGNOSTIC_POOL_ID)}`,
+      { headers: authHeaders(operator.token) },
+    );
+    calls.push(await requestEvidence(rebalancesResponse, "diagnostic-rebalances"));
+    const rebalancesPayload = await expectStatus(
+      rebalancesResponse,
+      200,
+      "diagnostic rebalances",
+    );
+    const rebalance = rows(rebalancesPayload).find(
+      (item) => String(item.id ?? item.rebalance_id ?? "") === DIAGNOSTIC_REBALANCE_ID,
+    );
+    expect(rebalance, "diagnostic rebalance must remain in the authoritative owner list")
+      .toBeDefined();
+
+    const desktop = await runIsolatedBrowserDiagnostic(browser, {
+      personaId,
+      personaName,
+      poolId: DIAGNOSTIC_POOL_ID,
+      rebalanceId: DIAGNOSTIC_REBALANCE_ID,
+      viewport: { height: 900, width: 1440 },
+      viewportName: "desktop",
+    });
+    const mobile = await runIsolatedBrowserDiagnostic(browser, {
+      personaId,
+      personaName,
+      poolId: DIAGNOSTIC_POOL_ID,
+      rebalanceId: DIAGNOSTIC_REBALANCE_ID,
+      viewport: { height: 852, width: 393 },
+      viewportName: "mobile-393",
+    });
+
+    await writeEvidence(testInfo, {
+      acceptance: {
+        B1: "read_only_lineage_revalidated",
+        B3: "diagnostic_all_routes_desktop_and_393px",
+        realLiveCapitalAuthority: "disabled",
+      },
+      browsers: { desktop, mobile },
+      capturedAt: new Date().toISOString(),
+      deployment: {
+        bffCommit: EXPECTED_BFF_SHA,
+        deploymentState: pair.deployment.deploymentState,
+        frontendCommit: EXPECTED_FE_SHA,
+        pairId: pair.deployment.pairId ?? null,
+        safeBuildMode: pair.deployment.buildMode,
+      },
+      requestResponseEvidence: calls,
+      result: "diagnostic_complete",
+      safety: {
+        canaryEnabled: false,
+        liveEnabled: false,
+        mutationsExecuted: false,
+        realWritesEnabled: false,
+      },
+      stateLineage: {
+        personaId,
+        personaName,
+        poolId: DIAGNOSTIC_POOL_ID,
+        rebalance: rebalance ?? null,
+        rebalanceId: DIAGNOSTIC_REBALANCE_ID,
+      },
+    });
+
+    const routeEvidence = [desktop, mobile].flatMap((viewport) => {
+      const evidence = record(viewport);
+      return Array.isArray(evidence.routes) ? evidence.routes.map(record) : [];
+    });
+    expect(routeEvidence).toHaveLength(6);
+    for (const route of routeEvidence) {
+      expect(route.error, `${String(route.routeName)} diagnostic exception`).toBeUndefined();
+      const verdict = record(route.verdict);
+      expect(verdict.axePassed, `${String(route.routeName)} Axe`).toBe(true);
+      expect(verdict.consolePassed, `${String(route.routeName)} console`).toBe(true);
+      expect(verdict.networkPassed, `${String(route.routeName)} network`).toBe(true);
+      expect(verdict.overflowPassed, `${String(route.routeName)} overflow`).toBe(true);
+      expect(verdict.pageErrorsPassed, `${String(route.routeName)} page errors`).toBe(true);
+    }
+  });
+
   test("correlates governed B1 and proves the same identity on desktop and 393px mobile", async ({
     browser,
     request,
   }, testInfo) => {
+    test.skip(BROWSER_DIAGNOSTIC_ONLY, "read-only diagnostic mode does not execute B1 mutations");
     test.setTimeout(1_200_000);
     writeEvidenceFile({
       acceptance: {
