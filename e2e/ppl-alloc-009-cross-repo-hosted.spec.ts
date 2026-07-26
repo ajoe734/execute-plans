@@ -343,12 +343,19 @@ async function runBrowserProof(
     `/management/governance-decisions?tab=recommendations&persona=${encodeURIComponent(input.personaId)}`,
     `/management/governance-decisions?tab=capital&capital_id=${encodeURIComponent(input.poolId)}&rebalance_id=${encodeURIComponent(input.rebalanceId)}`,
   ];
-  await installHostedSession(page, routes[0]);
-  for (const route of routes) {
-    await page.goto(`${FE_BASE}${route}`, { waitUntil: "domcontentloaded", timeout: 60_000 });
+  const settleCurrentRoute = async (): Promise<void> => {
     await expect(page.locator("h1").first()).toBeVisible({ timeout: 30_000 });
     await expect(page.getByRole("tablist").first()).toBeVisible({ timeout: 30_000 });
     await page.waitForTimeout(1_500);
+  };
+  await installHostedSession(page, routes[0]);
+  // The successful sign-in already redirects to routes[0]. Let that page finish
+  // its live loaders before navigating; revisiting it immediately aborts the
+  // ranking and formula reads and creates test-induced console errors.
+  await settleCurrentRoute();
+  for (const route of routes.slice(1)) {
+    await page.goto(`${FE_BASE}${route}`, { waitUntil: "domcontentloaded", timeout: 60_000 });
+    await settleCurrentRoute();
   }
 
   await page.goto(`${FE_BASE}${routes[0]}`, { waitUntil: "domcontentloaded", timeout: 60_000 });
