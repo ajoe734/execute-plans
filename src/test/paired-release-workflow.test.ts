@@ -43,8 +43,13 @@ describe("paired Pantheon release workflow", () => {
     expect(integrationWorkflow).toContain(
       "name: pantheon-fe-release-candidate-attempt-${{ github.run_attempt }}",
     );
-    expect(integrationWorkflow).toContain("github.event_name == 'push' &&");
-    expect(integrationWorkflow).toContain("github.ref == 'refs/heads/dev' &&");
+    const upload = integrationWorkflow.slice(
+      integrationWorkflow.indexOf("Upload deployable immutable candidate pair"),
+      integrationWorkflow.indexOf("Record deployable candidate identity"),
+    );
+    expect(upload).toContain("github.event_name == 'workflow_dispatch'");
+    expect(upload).toContain("inputs.release_candidate_id != ''");
+    expect(upload).not.toContain("github.event_name == 'push'");
   });
 
   it("keeps normal deploys read-only and isolates actions write to the gated proof coordinator", () => {
@@ -56,7 +61,9 @@ describe("paired Pantheon release workflow", () => {
     expect(deployWorkflow.slice(0, deployJobStart)).toContain("actions: read");
     expect(normalDeploy).toContain("actions: read");
     expect(normalDeploy).not.toContain("actions: write");
-    expect(normalDeploy).toContain("Deploy verified persistent candidate profile");
+    expect(normalDeploy).toContain(
+      "Deploy verified persistent candidate profile",
+    );
     expect(normalDeploy).toContain(
       "PANTHEON_DEPLOY_PROFILE: ${{ steps.gate.outputs.deployment_profile }}",
     );
@@ -92,7 +99,7 @@ describe("paired Pantheon release workflow", () => {
       "operator-live requires the initial run of an authorized triggering operator",
     );
     expect(deployJob).toContain(
-      "PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES: \"false\"",
+      'PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES: "false"',
     );
     expect(deployJob).toContain(
       "if: steps.gate.outputs.deployment_profile != 'write-proof'",
@@ -551,13 +558,19 @@ describe("paired Pantheon release workflow", () => {
     expect(integrationWorkflow).toContain(
       'runPath !== ".github/workflows/pantheon-integration-gate.yml"',
     );
-    expect(integrationWorkflow).toContain('run.event !== "push"');
+    expect(integrationWorkflow).toContain('run.event !== "workflow_dispatch"');
     expect(integrationWorkflow).toContain('run.head_branch !== "dev"');
+    expect(integrationWorkflow).toContain(
+      "`Release candidate ${process.env.EXPECTED_RELEASE_CANDIDATE_ID}`",
+    );
     expect(integrationWorkflow).toContain(
       "Download and authenticate exact source candidate pair",
     );
     expect(integrationWorkflow).toContain(
       '--expected-pair-id "$EXPECTED_PAIR_ID"',
+    );
+    expect(integrationWorkflow).toContain(
+      '--expected-release-candidate-id "$EXPECTED_RELEASE_CANDIDATE_ID"',
     );
     expect(integrationWorkflow).toContain(
       "Verify exact paired hosted deployment before PINT proof",

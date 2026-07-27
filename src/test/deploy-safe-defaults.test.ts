@@ -298,25 +298,32 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     );
   });
 
-  it("deploys only the immutable artifact from one exact successful dev gate", () => {
-    expect(deployWorkflow).toContain("workflow_run:");
-    expect(deployWorkflow).toContain("Pantheon FE-BFF Integration Gate");
+  it("deploys only the immutable artifact from one exact controller gate", () => {
+    expect(deployWorkflow).not.toContain("workflow_run:");
+    expect(deployWorkflow).toContain("workflow_dispatch:");
+    expect(deployWorkflow).toContain("release_candidate_id:");
+    expect(deployWorkflow).toContain("compatibility_manifest_sha256:");
+    expect(deployWorkflow).toContain("release_controller_run_id:");
     expect(deployWorkflow).toContain("github.rest.actions.getWorkflowRun");
     expect(deployWorkflow).toContain(
       'runPath === ".github/workflows/pantheon-integration-gate.yml"',
     );
-    expect(deployWorkflow).toContain('run.event === "push"');
+    expect(deployWorkflow).toContain('run.event === "workflow_dispatch"');
     expect(deployWorkflow).toContain('run.head_branch === "dev"');
     expect(deployWorkflow).toContain('run.conclusion === "success"');
+    expect(deployWorkflow).toContain(
+      "`Release candidate ${releaseCandidateId}`",
+    );
+    expect(deployWorkflow).toContain(
+      "Pantheon controller does not own an active or accepted exact-pair transaction",
+    );
     expect(deployWorkflow).toContain(
       "github.rest.actions.listWorkflowRunArtifacts",
     );
     expect(deployWorkflow).toContain(
       "github.rest.actions.listJobsForWorkflowRunAttempt",
     );
-    expect(deployWorkflow).toContain(
-      'job.name === "integration-gate"',
-    );
+    expect(deployWorkflow).toContain('job.name === "integration-gate"');
     expect(deployWorkflow).toContain(
       'producers[0].status !== "completed" || producers[0].conclusion !== "success"',
     );
@@ -481,8 +488,12 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
         "npx playwright test e2e/persona-interaction-cross-repo-hosted.spec.ts",
       ),
     );
-    expect(authorizedProof).toContain("--project=chromium --grep '@desktop-full'");
-    expect(authorizedProof).toContain("--project=mobile-chromium --grep '@mobile-basic'");
+    expect(authorizedProof).toContain(
+      "--project=chromium --grep '@desktop-full'",
+    );
+    expect(authorizedProof).toContain(
+      "--project=mobile-chromium --grep '@mobile-basic'",
+    );
     expect(authorizedProof).toContain(
       "node scripts/ensure-persona-hosted-proof-servant.mjs",
     );
@@ -492,16 +503,16 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     expect(authorizedProof).toContain(
       "PANTHEON_PUBLIC_GCP_IDENTITY_API_KEY: ${{ vars.VITE_GCP_IDENTITY_API_KEY }}",
     );
-    expect(hostedPersonaInteractionSpec).toContain("installVerifiedHostedProofSession");
+    expect(hostedPersonaInteractionSpec).toContain(
+      "installVerifiedHostedProofSession",
+    );
     expect(hostedPersonaInteractionSpec).not.toContain("installOidcDevLogin");
     expect(hostedPersonaInteractionSpec).not.toContain("page.route(");
     expect(hostedPersonaInteractionSpec).toContain("minimumTtlSeconds: 480");
     expect(hostedPersonaCredentialValidator).toContain(
       "HOSTED_PROOF_MIN_CREDENTIAL_TTL_SECONDS = 1200",
     );
-    expect(hostedPersonaCredentialValidator).toContain(
-      'parts.length !== 3',
-    );
+    expect(hostedPersonaCredentialValidator).toContain("parts.length !== 3");
     expect(hostedPersonaCredentialValidator).toContain(
       "operatorSubject === viewerSubject",
     );
@@ -510,7 +521,9 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     // disabled: Persona (2 invocations) and Trade Journeys (2 invocations).
     expect(authorizedProof.match(/--trace=off/gu)).toHaveLength(4);
     expect(
-      authorizedProof.match(/PANTHEON_CREDENTIALED_PLAYWRIGHT_NO_ARTIFACTS=1/gu),
+      authorizedProof.match(
+        /PANTHEON_CREDENTIALED_PLAYWRIGHT_NO_ARTIFACTS=1/gu,
+      ),
     ).toHaveLength(4);
     expect(playwrightConfig).toContain(
       'process.env.PANTHEON_CREDENTIALED_PLAYWRIGHT_NO_ARTIFACTS === "1"',
@@ -527,7 +540,9 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     const authorizedArtifact = authorizedProof.slice(
       authorizedProof.indexOf("- name: Upload authorized proof evidence"),
     );
-    expect(authorizedArtifact).toContain(".lovable/audits/authorized-write-proof");
+    expect(authorizedArtifact).toContain(
+      ".lovable/audits/authorized-write-proof",
+    );
     expect(authorizedArtifact).not.toContain("playwright-report");
     expect(authorizedArtifact).not.toContain("test-results");
     expect(authorizedProof).toContain("desktop.expected !== 3");
@@ -560,14 +575,12 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
       hostedPersonaServantPreflight.indexOf("/bff/auth/readiness"),
     );
     expect(hostedPersonaServantPreflight).toContain(
-      'posture.auth_stub !== false',
+      "posture.auth_stub !== false",
     );
     expect(hostedPersonaServantPreflight).toContain(
       'posture.auth_mode !== "strict"',
     );
-    expect(hostedPersonaServantPreflight).toContain(
-      'sessionKind !== "bearer"',
-    );
+    expect(hostedPersonaServantPreflight).toContain('sessionKind !== "bearer"');
     expect(hostedPersonaServantPreflight).toContain(
       "readiness.authReady !== true",
     );
@@ -637,8 +650,12 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     expect(hostedPersonaInteractionSpec).toContain(
       "persistedParticipants.map((participant) => participant.persona_id)",
     );
-    expect(hostedPersonaInteractionSpec).not.toContain("submittedRequest.participant_persona_ids");
-    expect(hostedPersonaInteractionSpec).toContain("/recommended-measures/${encodeURIComponent(measureId)}/candidates");
+    expect(hostedPersonaInteractionSpec).not.toContain(
+      "submittedRequest.participant_persona_ids",
+    );
+    expect(hostedPersonaInteractionSpec).toContain(
+      "/recommended-measures/${encodeURIComponent(measureId)}/candidates",
+    );
     expect(hostedPersonaInteractionSpec).toContain(
       "`${BFF_BASE}/bff/agora/servant/ensure`",
     );
@@ -659,9 +676,7 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     );
     expect(hostedBrowserProbe).toContain("response.status === 401");
     expect(hostedBrowserProbe).toContain("assessAnonymousAuthRedirect");
-    expect(hostedBrowserProbe).toContain(
-      "anonymous auth boundary verified:",
-    );
+    expect(hostedBrowserProbe).toContain("anonymous auth boundary verified:");
     expect(hostedBrowserProbe).toContain(
       "requests.length > 0 || anonymousAuthBoundary.pass",
     );
@@ -805,15 +820,15 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     expect(releaseCandidate).toContain(
       'VITE_BFF_ALLOW_DEV_STUB_WRITES: "false"',
     );
-    expect(deployScript).toContain('operator-live)');
+    expect(deployScript).toContain("operator-live)");
     expect(deployScript).toContain(
       "Operator-live deployment requires a manual strict session profile",
     );
     expect(deployScript).toContain(
       'authMode !== "strict" || authStub !== false',
     );
-    expect(deployScript).toContain('${BFF_HOST%/}/readyz');
-    expect(deployScript).toContain('${BFF_HOST%/}/bff/me');
+    expect(deployScript).toContain("${BFF_HOST%/}/readyz");
+    expect(deployScript).toContain("${BFF_HOST%/}/bff/me");
     expect(deployWorkflow).toContain(
       "needs.deploy.outputs.deployment_profile == 'write-proof'",
     );
