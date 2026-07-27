@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Card } from "@/components/ui/card";
 import type { QuarterlySnapshot } from "@/lib/v5/management/quarterlyRanking";
+import { canonicalCenterUrl } from "@/management/navigation/managementRouteManifest";
 
 export const QuarterlyRankingCountdown = ({ snap }: { snap: QuarterlySnapshot }) => {
   const { t } = useTranslation();
@@ -11,7 +12,7 @@ export const QuarterlyRankingCountdown = ({ snap }: { snap: QuarterlySnapshot })
     <Card className="p-4">
       <header className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-semibold text-foreground">{t("mgmt.cockpit.quarterlyCountdown")}</h3>
-        <Link to="/management/quarterly-ranking" className="text-xs text-primary hover:underline">{t("mgmt.actions.openDetail")} →</Link>
+        <Link to={canonicalCenterUrl("rankings", "quarterly")} className="text-xs text-primary hover:underline">{t("mgmt.actions.openDetail")} →</Link>
       </header>
       <div className="grid grid-cols-2 gap-2 text-xs">
         <Stat label={t("mgmt.quarterly.currentQuarter")} value={snap.quarter} />

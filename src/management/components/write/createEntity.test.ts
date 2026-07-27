@@ -10,7 +10,9 @@ vi.mock("@/lib/bff-v1/personas", () => ({
     name: payload.name,
     owner: payload.owner ?? "you",
     updatedAt: "2026-05-13T00:00:00.000Z",
-    state: "draft",
+    state: "paper_running",
+    paperLedgerId: "paper-ledger-001",
+    runtimeBindingId: "binding-001-paper",
     risk: "low",
     archetype: payload.archetype ?? "generalist",
     routedStrategies: 0,
@@ -34,7 +36,6 @@ describe("createEntityFromInput", () => {
         owner: "admin",
         archetype: "macro",
         description: "Persist me",
-        initialMode: "shadow",
       },
       { idempotencyKey: "idem-persona" },
     );
@@ -47,7 +48,13 @@ describe("createEntityFromInput", () => {
         owner: "admin",
         archetype: "macro",
         description: "Persist me",
-        initialMode: "shadow",
+        initialMode: "paper",
+        executionMode: "paper",
+        capitalMode: "paper",
+        deploymentStage: "paper",
+        liveCapitalEnabled: false,
+        orderSideEffectsAllowed: false,
+        capitalSideEffectsAllowed: false,
       }),
       { idempotencyKey: "idem-persona" },
     );
@@ -70,5 +77,17 @@ describe("createEntityFromInput", () => {
     expect(result.persistence).toBe("overlay");
     expect(createPersona).not.toHaveBeenCalled();
     expect(writeOverlay.list("artifact")).toHaveLength(1);
+  });
+
+  it("does not fall back to an overlay when paper bundle creation fails", async () => {
+    vi.mocked(createPersona).mockRejectedValueOnce(new Error("BFF unavailable"));
+
+    await expect(createEntityFromInput("persona", {
+      name: "No false success",
+      owner: "admin",
+      archetype: "macro",
+    })).rejects.toThrow("BFF unavailable");
+
+    expect(writeOverlay.list("persona")).toHaveLength(0);
   });
 });

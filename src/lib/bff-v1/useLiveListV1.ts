@@ -9,6 +9,8 @@
 import { useEffect, useRef, useState } from "react";
 import { realtime } from "@/lib/bff/realtime";
 import type { ListEnvelope } from "./dto";
+import { BffError } from "./errors";
+import { liveStatus } from "./liveStatus";
 
 export interface UseLiveListV1Result<T> {
   items: T[];
@@ -35,10 +37,33 @@ export function useLiveListV1<T>(
   const loaderRef = useRef(loader);
   loaderRef.current = loader;
 
+  // In strict fallback mode the loader rejects on a live transport failure instead of
+  // masking it with mock seed. Surface that as a degraded envelope so the page renders
+  // the "backend unavailable" state (with the reason) rather than hanging on the spinner
+  // or showing a bare empty table.
+  const degradedEnv = (err: unknown): ListEnvelope<T> => {
+    const liveMode = liveStatus.get().mode === "live";
+    const strictFallbackBlocked =
+      liveMode && (!(err instanceof BffError) || err.status === 0 || err.status >= 500);
+    return {
+      items: [], cursor: {}, pageSize: 0, totalCountExact: true,
+      meta: {
+        degradation: {
+          reason: err instanceof Error ? err.message : "live read failed",
+          strictFallbackBlocked,
+        },
+      },
+    };
+  };
+
   const refresh = () => {
     setLoading(true);
     void loaderRef.current().then((next) => {
       setEnv(next);
+      setPending(0);
+      setLoading(false);
+    }).catch((err) => {
+      setEnv(degradedEnv(err));
       setPending(0);
       setLoading(false);
     });
@@ -51,7 +76,7 @@ export function useLiveListV1<T>(
       if (!kind) return;
       if (kind !== "*" && !kinds.includes(kind)) return;
       if (auto) {
-        void loaderRef.current().then((next) => setEnv(next));
+        void loaderRef.current().then((next) => setEnv(next)).catch((err) => setEnv(degradedEnv(err)));
       } else {
         setPending((n) => n + 1);
       }

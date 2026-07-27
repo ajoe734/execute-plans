@@ -1,0 +1,69 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { describe, expect, it } from "vitest";
+
+function source(path: string): string {
+  return readFileSync(resolve(process.cwd(), "src", path), "utf8");
+}
+
+describe("strict browser auth source contract", () => {
+  it("contains no persistent BFF bearer storage source", () => {
+    const headers = source("lib/bff-v1/headers.ts");
+    const authProvider = source("lib/auth/AuthProvider.tsx");
+    const browserSession = source("lib/auth/bffBrowserSession.ts");
+    const identityClient = source("integrations/gcp/identity.ts");
+    const bffBridge = [headers, authProvider, browserSession].join("\n");
+
+    expect(bffBridge).not.toMatch(/localStorage|sessionStorage/);
+    expect(bffBridge).not.toMatch(/local\s*storage|session\s*storage/i);
+    expect(bffBridge).not.toMatch(/window\s*\[\s*['"`](local|session)Storage['"`]\s*\]/i);
+    expect(bffBridge).not.toMatch(/(local|session)\s*\+\s*storage/i);
+    expect(bffBridge).not.toMatch(/['"`]sess['"`]\s*,\s*['"`]ion['"`]\s*,\s*['"`]Storage['"`]/i);
+    expect(bffBridge).not.toMatch(/join\(\s*['"`]\.?['"`]\s*\)/i);
+    expect(bffBridge).not.toContain("pantheon.bff.bearerToken");
+    expect(bffBridge).not.toContain("pantheon_operator_token");
+    expect(bffBridge).not.toContain("VITE_BFF_DEV_BEARER_TOKEN");
+    expect(identityClient).toContain("browserSessionPersistence");
+  });
+
+  it("limits GCP Identity persistence to same-tab browser session persistence", () => {
+    const identityClient = source("integrations/gcp/identity.ts");
+    expect(identityClient).toContain("browserSessionPersistence");
+    expect(identityClient).not.toContain("browserLocalPersistence");
+    expect(identityClient).not.toContain("pantheon.bff.bearerToken");
+    expect(identityClient).not.toContain("pantheon_operator_token");
+  });
+
+  it("keeps loopback E2E auth on Firebase SDK storage and removes legacy BFF keys", () => {
+    const helper = readFileSync(resolve(process.cwd(), "e2e/helpers/auth.ts"), "utf8");
+    expect(helper).toContain("firebase:authUser:${apiKey}:[DEFAULT]");
+    expect(helper).toContain('page.route("**/bff/me"');
+    expect(helper).toContain('page.route("**/bff/auth/readiness"');
+    expect(helper).not.toContain("pantheon.bff.bearerToken");
+    expect(helper).not.toContain("pantheon_operator_token");
+    expect(helper).not.toContain("window.localStorage.setItem");
+  });
+
+  it("keeps privileged secrets out of the browser auth bridge", () => {
+    const combined = [
+      source("lib/auth/AuthProvider.tsx"),
+      source("lib/auth/bffBrowserSession.ts"),
+      source("integrations/gcp/identity.ts"),
+    ].join("\n");
+
+    expect(combined).not.toMatch(/service[_-]?role/i);
+    expect(combined).not.toMatch(/client[_-]?secret/i);
+    expect(combined).not.toMatch(/private[_-]?key/i);
+    expect(combined).not.toMatch(/client\s*\+\s*secret/i);
+    expect(combined).not.toMatch(/['"`]client['"`]\s*,\s*['"`]secret['"`]/i);
+    expect(combined).not.toMatch(/secSuffix|secretKeys/);
+  });
+
+  it("mounts the complete Management shell and Agora behind ProtectedRoute", () => {
+    const app = source("App.tsx");
+    expect(app).toContain("<Route element={<ProtectedRoute><PlatformShellRoute /></ProtectedRoute>}>");
+    expect(app).toContain("<ProtectedRoute><AgoraLayoutRoute /></ProtectedRoute>");
+    expect(app).not.toContain("<Route element={<PlatformShellRoute />}>");
+    expect(app).not.toContain("<ProtectedRoute><PersonaDetailRoute /></ProtectedRoute>");
+  });
+});
