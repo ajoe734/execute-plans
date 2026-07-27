@@ -309,6 +309,10 @@ export interface ManagementPersonaFleetPerformanceSummary {
   sharpe?: number;
   maxDrawdown?: number;
   violationCount?: number;
+  totalTrades?: number;
+  source?: string;
+  telemetryRuntimeCount?: number;
+  latestTelemetryAt?: string;
 }
 
 export interface ManagementPersonaFleetPaperLedger {
@@ -349,6 +353,13 @@ export interface ManagementPersonaFleetRow {
   ooda: ManagementOodaStage;
   autonomy: ManagementAutonomyMode;
   perfDelta: number;
+  perf_delta?: number | null;
+  hasTradingTelemetry?: boolean;
+  has_trading_telemetry?: boolean;
+  isMarketPersonaDefault?: boolean;
+  is_market_persona_default?: boolean;
+  seedRow?: boolean;
+  seed_row?: boolean;
   humanNeeded: boolean;
   lastMutation: string;
   lastMutationLabel?: string;
@@ -384,6 +395,9 @@ export interface ManagementPersonaFleetRow {
   targetWeight?: number;
   bindingState?: string;
   performanceSummary?: ManagementPersonaFleetPerformanceSummary;
+  performance_summary?: {
+    telemetry_runtime_count?: number;
+  };
   runtimeBinding?: ManagementPersonaFleetRuntimeBinding;
   runtimeHealth?: Record<string, unknown>;
   requiredHumanReview?: string;
@@ -2163,11 +2177,7 @@ function adaptPersonaFleetRow(value: unknown): ManagementPersonaFleetRow | null 
   const personaId = asString(value.personaId ?? value.persona_id ?? value.id);
   if (!personaId) return null;
 
-  const explicitDelta = value.perfDelta ?? value.perf_delta;
-  const trainingImprovement = metrics.training_improvement_pct ?? metrics.trainingImprovementPct;
-  const perfDelta = Number.isFinite(Number(explicitDelta))
-    ? asFiniteNumber(explicitDelta)
-    : asFiniteNumber(trainingImprovement) / 100;
+  const perfDelta = optionalFiniteNumber(value.perfDelta ?? value.perf_delta);
 
   const recommendation = asString(value.recommendation).toLowerCase();
   const governanceRequired = asBoolean(value.governanceRequired ?? value.governance_required, false);
@@ -2196,6 +2206,14 @@ function adaptPersonaFleetRow(value: unknown): ManagementPersonaFleetRow | null 
   const capitalPool = objectOrEmpty(value.capitalPool ?? value.capital_pool);
   const capitalBinding = objectOrEmpty(value.capitalBinding ?? value.capital_binding);
   const performanceSummary = objectOrEmpty(value.performanceSummary ?? value.performance_summary);
+  const telemetryRuntimeCount = optionalFiniteNumber(
+    performanceSummary.telemetryRuntimeCount
+    ?? performanceSummary.telemetry_runtime_count,
+  );
+  const hasTradingTelemetry = asBoolean(
+    value.hasTradingTelemetry ?? value.has_trading_telemetry,
+    (telemetryRuntimeCount ?? 0) > 0,
+  );
   const paperLedger = objectOrEmpty(value.paperLedger ?? value.paper_ledger);
   const runtimeBinding = objectOrEmpty(value.runtimeBinding ?? value.runtime_binding);
   const review = objectOrEmpty(value.review);
@@ -2279,7 +2297,14 @@ function adaptPersonaFleetRow(value: unknown): ManagementPersonaFleetRow | null 
     owner: asString(value.owner ?? value.owner_id ?? value.capitalPoolId ?? value.capital_pool_id, "pathreon-management"),
     ooda: normalizeOoda(value.ooda ?? value.oodaStage ?? value.ooda_stage),
     autonomy: normalizeAutonomy(value.autonomy),
-    perfDelta: Number.isFinite(perfDelta) ? perfDelta : 0,
+    perfDelta: perfDelta ?? Number.NaN,
+    hasTradingTelemetry,
+    has_trading_telemetry: hasTradingTelemetry,
+    isMarketPersonaDefault: asBoolean(
+      value.isMarketPersonaDefault ?? value.is_market_persona_default,
+      false,
+    ),
+    seedRow: asBoolean(value.seedRow ?? value.seed_row, false),
     humanNeeded,
     lastMutation: updated.length >= 10 ? updated.slice(0, 10) : updated,
     lastMutationLabel: asOptionalString(value.lastMutationLabel ?? value.last_mutation_label),
@@ -2338,6 +2363,13 @@ function adaptPersonaFleetRow(value: unknown): ManagementPersonaFleetRow | null 
       sharpe: optionalFiniteNumber(performanceSummary.sharpe),
       maxDrawdown: optionalFiniteNumber(performanceSummary.maxDrawdown ?? performanceSummary.max_drawdown),
       violationCount: optionalFiniteNumber(performanceSummary.violationCount ?? performanceSummary.violation_count),
+      totalTrades: optionalFiniteNumber(performanceSummary.totalTrades ?? performanceSummary.total_trades),
+      source: asOptionalString(performanceSummary.source),
+      telemetryRuntimeCount,
+      latestTelemetryAt: asOptionalString(
+        performanceSummary.latestTelemetryAt
+        ?? performanceSummary.latest_telemetry_at,
+      ),
     } : undefined,
     runtimeBinding: isObject(value.runtimeBinding ?? value.runtime_binding) ? {
       id: asOptionalString(runtimeBinding.id),

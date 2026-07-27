@@ -1265,7 +1265,16 @@ describe("mgmt façade (PM-Live)", () => {
               league_score: 91.7,
               basis: "quarterly_paper_live_league",
             },
+            perf_delta: null,
+            has_trading_telemetry: false,
+            is_market_persona_default: true,
+            seed_row: true,
             metrics: { training_improvement_pct: 9.5 },
+            performance_summary: {
+              source: "persona_league",
+              telemetry_runtime_count: 0,
+              total_trades: null,
+            },
             updated_at: "2026-06-07T13:00:00Z",
             status: "needs_human_approval",
             data_source_status: {
@@ -1340,7 +1349,9 @@ describe("mgmt façade (PM-Live)", () => {
       owner: "pathreon-management",
       ooda: "Decide",
       autonomy: "supervised",
-      perfDelta: 0.095,
+      hasTradingTelemetry: false,
+      isMarketPersonaDefault: true,
+      seedRow: true,
       humanNeeded: true,
       lastMutation: "2026-06-07",
       state: "needs_human_approval",
@@ -1411,7 +1422,11 @@ describe("mgmt façade (PM-Live)", () => {
       blockedByTaskIds: ["MGMT-QLIB-003", "MGMT-QLIB-005"],
       canDeploy: false,
     });
-    expect(Number.isFinite(rows?.[0].perfDelta)).toBe(true);
+    expect(Number.isNaN(rows?.[0].perfDelta)).toBe(true);
+    expect(rows?.[0].performanceSummary).toMatchObject({
+      source: "persona_league",
+      telemetryRuntimeCount: 0,
+    });
   });
 
   // PPL-ALLOC-006 — PPL-ALLOC-003 read model adds current/target weight,

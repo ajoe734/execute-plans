@@ -995,12 +995,22 @@ export const PersonaFleetPage = () => {
 	                    </div>
 	                    )}
 	                  </td>
-                  <td className={"px-3 py-2 " + (Number.isFinite(r.perfDelta) && r.perfDelta >= 0 ? "text-status-success" : "text-status-failed")}>
+                  <td className={"px-3 py-2 " + (
+                    Number.isFinite(r.perfDelta)
+                      ? (r.perfDelta >= 0 ? "text-status-success" : "text-status-failed")
+                      : "text-muted-foreground"
+                  )}>
                     {performanceHref ? (
                       <Link
                         to={performanceHref}
                         aria-label={`${r.personaId} performance attribution`}
-                        className={fieldLinkClass(Number.isFinite(r.perfDelta) && r.perfDelta >= 0 ? "text-status-success hover:text-status-success" : "text-status-failed hover:text-status-failed")}
+                        className={fieldLinkClass(
+                          Number.isFinite(r.perfDelta)
+                            ? (r.perfDelta >= 0
+                                ? "text-status-success hover:text-status-success"
+                                : "text-status-failed hover:text-status-failed")
+                            : "text-muted-foreground hover:text-muted-foreground",
+                        )}
                       >
                         {formatPerfDelta(r.perfDelta)}
                       </Link>

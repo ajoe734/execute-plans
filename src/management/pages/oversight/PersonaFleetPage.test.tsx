@@ -29,6 +29,7 @@ function fleetRow(
     ooda: "Orient",
     autonomy: "supervised",
     perfDelta: 0.095,
+    hasTradingTelemetry: true,
     humanNeeded: true,
     lastMutation: "2026-06-07",
     state: "needs_human_approval",
@@ -147,6 +148,28 @@ describe("PersonaFleetPage", () => {
       "href",
       "/management/human-inbox/readiness_blocker%3Apersona%3Apersona-live-tw-equity",
     );
+  });
+
+  it("marks a market-default seed and leaves unavailable trading performance unlinked", () => {
+    mocks.useV5Live.mockReturnValue({
+      data: [
+        fleetRow("persona-tw-equity", "Taiwan Equity Persona", {
+          perfDelta: Number.NaN,
+          hasTradingTelemetry: false,
+          isMarketPersonaDefault: true,
+          seedRow: true,
+        }),
+      ],
+      loading: false,
+      refresh: vi.fn(),
+    });
+
+    renderFleet("/management/persona-fleet?persona=persona-tw-equity");
+
+    expect(screen.getByText("Seed Fixture")).toBeInTheDocument();
+    expect(screen.getByLabelText("persona-tw-equity performance attribution unavailable")).toHaveTextContent("—");
+    expect(screen.queryByRole("link", { name: "persona-tw-equity performance attribution" })).not.toBeInTheDocument();
+    expect(screen.queryByText("9.50%")).not.toBeInTheDocument();
   });
 
   it("honors the canonical persona_id query from Portfolio Book links", () => {
@@ -516,6 +539,7 @@ describe("PersonaFleetPage", () => {
         ooda: "Act",
         autonomy: "supervised",
         perfDelta: 0.182,
+        hasTradingTelemetry: true,
         humanNeeded: true,
         lastMutation: "2026-06-07",
         state: "paper_running",

@@ -153,11 +153,9 @@ describe("PersonaFleetPage deep links", () => {
     );
     expect(personaFleetPerformanceHref({
       ...row,
-      linkTargets: {},
-      link_targets: {},
       hasTradingTelemetry: false,
       has_trading_telemetry: false,
-      perfDelta: null,
+      perfDelta: Number.NaN,
       perf_delta: null,
     })).toBeNull();
     expect(personaFleetMutationHref(row)).toBe(
@@ -350,6 +348,7 @@ describe("PersonaFleetPage deep links", () => {
     const row = {
       personaId: "persona-snake-case",
       ooda: "Observe",
+      has_trading_telemetry: true,
       link_targets: {
         data_sources: "/management/data-sources?persona=persona-snake-case",
         performance_attribution: "/management/performance-attribution?dimension=persona&persona=persona-snake-case",
@@ -520,6 +519,7 @@ describe("PersonaFleetPage deep links", () => {
       persona_id: "persona-crypto-paper",
       capital_pool_id: "pool-crypto-paper",
       perf_delta: 0.182,
+      has_trading_telemetry: true,
       last_mutation: "2026-06-03",
     } as unknown as ManagementPersonaFleetRow;
 
@@ -664,15 +664,29 @@ describe("PersonaFleetPage deep links", () => {
     expect(personaFleetOodaHref(row)).toBeNull();
   });
 
-  it("links performance display to persona-scoped attribution when no canonical target exists", () => {
+  it("links telemetry-backed performance to persona-scoped attribution when no canonical target exists", () => {
     const row = {
       personaId: "persona-with-performance",
       perfDelta: 0.42,
+      hasTradingTelemetry: true,
     } as ManagementPersonaFleetRow;
 
     expect(personaFleetPerformanceHref(row)).toBe(
       "/management/performance?tab=attribution&dimension=persona&persona=persona-with-performance",
     );
+  });
+
+  it("does not treat a performance delta or canonical target as trading telemetry", () => {
+    const row = {
+      personaId: "persona-seed-only",
+      perfDelta: 0.095,
+      hasTradingTelemetry: false,
+      linkTargets: {
+        performance: "/management/performance?tab=attribution&dimension=persona&persona=persona-seed-only",
+      },
+    } as ManagementPersonaFleetRow;
+
+    expect(personaFleetPerformanceHref(row)).toBeNull();
   });
 
   it("ignores legacy unvalidated links when no canonical link target exists", () => {

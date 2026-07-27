@@ -798,12 +798,13 @@ export function personaFleetPerformanceHref(r: ManagementPersonaFleetRow): strin
     "performanceHref",
     "performance_href",
   ]);
-  const hasTelemetry = Boolean(
-    r.has_trading_telemetry || r.hasTradingTelemetry
-    || (r.performance_summary && (r.performance_summary.telemetry_runtime_count ?? 0) > 0)
-    || (r.perfDelta && r.perfDelta !== 0) || (r.perf_delta && r.perf_delta !== 0)
-    || canonical
-  );
+  const explicitTelemetry = typeof r.hasTradingTelemetry === "boolean"
+    ? r.hasTradingTelemetry
+    : (typeof r.has_trading_telemetry === "boolean" ? r.has_trading_telemetry : undefined);
+  const telemetryRuntimeCount = r.performanceSummary?.telemetryRuntimeCount
+    ?? r.performance_summary?.telemetry_runtime_count
+    ?? 0;
+  const hasTelemetry = explicitTelemetry ?? telemetryRuntimeCount > 0;
   if (!hasTelemetry) {
     return null;
   }
