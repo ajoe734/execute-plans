@@ -3,14 +3,12 @@
 import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
-import { toast } from "sonner";
 import type { RoutePolicy, RoutePolicyRule, RouteTargetKind } from "@/lib/bff/types";
-import { mutations } from "@/lib/bff/mutations";
 import { useT } from "@/platform/hooks";
+import { NonProductionActionButton } from "@/management/components/NonProductionActionButton";
 
 const ENVS: ("research" | "paper" | "live")[] = ["research", "paper", "live"];
 const KINDS: RouteTargetKind[] = ["tool", "mcp", "skill"];
@@ -29,14 +27,14 @@ interface Props {
 export const RoutePolicyEditor = ({ policy, readOnly }: Props) => {
   const t = useT();
   const [rules, setRules] = useState<RoutePolicyRule[]>([...policy.rules].sort((a, b) => a.priority - b.priority));
-  const [dirty, setDirty] = useState(false);
   const [mode, setMode] = useState<"visual" | "json">("visual");
+  const writesDisabled = true;
+  const isReadOnly = readOnly || writesDisabled;
 
   const update = (next: RoutePolicyRule[]) => {
     // re-number priorities by index*10
     const renum = next.map((r, i) => ({ ...r, priority: (i + 1) * 10 }));
     setRules(renum);
-    setDirty(true);
   };
 
   const move = (i: number, dir: -1 | 1) => {
@@ -47,15 +45,6 @@ export const RoutePolicyEditor = ({ policy, readOnly }: Props) => {
     update(next);
   };
 
-  const add = () => {
-    update([...rules, {
-      id: `r_${Date.now()}`, intent: "new_intent", targetKind: "tool", targetId: "tl_unknown",
-      envScope: ["research"], priority: 999,
-    }]);
-  };
-
-  const remove = (id: string) => update(rules.filter((r) => r.id !== id));
-
   const patch = (id: string, p: Partial<RoutePolicyRule>) =>
     update(rules.map((r) => (r.id === id ? { ...r, ...p } : r)));
 
@@ -64,12 +53,6 @@ export const RoutePolicyEditor = ({ policy, readOnly }: Props) => {
     if (!r) return;
     const has = r.envScope.includes(env);
     patch(id, { envScope: has ? r.envScope.filter((e) => e !== env) : [...r.envScope, env] });
-  };
-
-  const submit = async () => {
-    await mutations.publishRoutePolicy(policy.id, rules, `Edited rules: ${rules.length}`);
-    toast.success(t("governance.policy.submitted"));
-    setDirty(false);
   };
 
   return (
@@ -83,10 +66,10 @@ export const RoutePolicyEditor = ({ policy, readOnly }: Props) => {
         </div>
         {!readOnly && (
           <div className="flex items-center gap-2">
-            <Button size="sm" variant="outline" onClick={() => { setRules([...policy.rules].sort((a, b) => a.priority - b.priority)); setDirty(false); }} disabled={!dirty}>
+            <NonProductionActionButton size="sm" variant="outline">
               {t("actions.reset")}
-            </Button>
-            <Button size="sm" onClick={submit} disabled={!dirty}>{t("actions.submitForReview")}</Button>
+            </NonProductionActionButton>
+            <NonProductionActionButton size="sm">{t("actions.submitForReview")}</NonProductionActionButton>
           </div>
         )}
       </div>
@@ -103,14 +86,14 @@ export const RoutePolicyEditor = ({ policy, readOnly }: Props) => {
           {rules.map((r, i) => (
             <div key={r.id} className="flex items-start gap-2 p-3 rounded-md border border-border bg-muted/20">
               <div className="flex flex-col gap-1 pt-1">
-                <button onClick={() => move(i, -1)} disabled={readOnly || i === 0} className="text-muted-foreground hover:text-foreground disabled:opacity-30"><ArrowUp className="h-3 w-3" /></button>
+                <button onClick={() => move(i, -1)} disabled={isReadOnly || i === 0} className="text-muted-foreground hover:text-foreground disabled:opacity-30"><ArrowUp className="h-3 w-3" /></button>
                 <span className="text-mono text-[10px] text-muted-foreground text-center">#{r.priority}</span>
-                <button onClick={() => move(i, 1)} disabled={readOnly || i === rules.length - 1} className="text-muted-foreground hover:text-foreground disabled:opacity-30"><ArrowDown className="h-3 w-3" /></button>
+                <button onClick={() => move(i, 1)} disabled={isReadOnly || i === rules.length - 1} className="text-muted-foreground hover:text-foreground disabled:opacity-30"><ArrowDown className="h-3 w-3" /></button>
               </div>
               <div className="flex-1 grid grid-cols-12 gap-2">
                 <div className="col-span-3">
                   <label className="text-[10px] uppercase text-muted-foreground">{t("governance.policy.intent")}</label>
-                  <Input className="h-7 text-xs mt-0.5" value={r.intent} onChange={(e) => patch(r.id, { intent: e.target.value })} disabled={readOnly} />
+                  <Input className="h-7 text-xs mt-0.5" value={r.intent} onChange={(e) => patch(r.id, { intent: e.target.value })} disabled={isReadOnly} />
                 </div>
                 <div className="col-span-2">
                   <label className="text-[10px] uppercase text-muted-foreground">{t("governance.policy.kind")}</label>
@@ -118,14 +101,14 @@ export const RoutePolicyEditor = ({ policy, readOnly }: Props) => {
                     className="h-7 w-full rounded-md border border-input bg-background px-2 text-xs mt-0.5"
                     value={r.targetKind}
                     onChange={(e) => patch(r.id, { targetKind: e.target.value as RouteTargetKind })}
-                    disabled={readOnly}
+                    disabled={isReadOnly}
                   >
                     {KINDS.map((k) => <option key={k} value={k}>{k}</option>)}
                   </select>
                 </div>
                 <div className="col-span-3">
                   <label className="text-[10px] uppercase text-muted-foreground">{t("governance.policy.target")}</label>
-                  <Input className="h-7 text-xs mt-0.5 text-mono" value={r.targetId} onChange={(e) => patch(r.id, { targetId: e.target.value })} disabled={readOnly} />
+                  <Input className="h-7 text-xs mt-0.5 text-mono" value={r.targetId} onChange={(e) => patch(r.id, { targetId: e.target.value })} disabled={isReadOnly} />
                 </div>
                 <div className="col-span-4">
                   <label className="text-[10px] uppercase text-muted-foreground">{t("governance.policy.env")}</label>
@@ -133,7 +116,7 @@ export const RoutePolicyEditor = ({ policy, readOnly }: Props) => {
                     {ENVS.map((e) => {
                       const on = r.envScope.includes(e);
                       return (
-                        <button key={e} onClick={() => toggleEnv(r.id, e)} disabled={readOnly}
+                        <button key={e} onClick={() => toggleEnv(r.id, e)} disabled={isReadOnly}
                           className={`px-2 py-0.5 rounded text-[10px] uppercase border ${on ? "border-accent text-accent bg-accent/10" : "border-border text-muted-foreground"}`}>
                           {e}
                         </button>
@@ -143,21 +126,23 @@ export const RoutePolicyEditor = ({ policy, readOnly }: Props) => {
                 </div>
                 <div className="col-span-12">
                   <label className="text-[10px] uppercase text-muted-foreground">{t("governance.policy.guard")}</label>
-                  <Input className="h-7 text-xs mt-0.5" value={r.guard ?? ""} placeholder={t("governance.policy.guardPlaceholder")} onChange={(e) => patch(r.id, { guard: e.target.value || undefined })} disabled={readOnly} />
+                  <Input className="h-7 text-xs mt-0.5" value={r.guard ?? ""} placeholder={t("governance.policy.guardPlaceholder")} onChange={(e) => patch(r.id, { guard: e.target.value || undefined })} disabled={isReadOnly} />
                 </div>
               </div>
               <div className="flex flex-col items-end gap-1">
                 <Badge variant="outline" className={`text-[10px] uppercase ${kindTone[r.targetKind]}`}>{r.targetKind}</Badge>
                 {!readOnly && (
-                  <button onClick={() => remove(r.id)} className="text-muted-foreground hover:text-destructive p-1"><Trash2 className="h-3 w-3" /></button>
+                  <NonProductionActionButton size="icon" variant="ghost" className="h-7 w-7 p-0" aria-label={t("actions.delete")}>
+                    <Trash2 className="h-3 w-3" />
+                  </NonProductionActionButton>
                 )}
               </div>
             </div>
           ))}
           {!readOnly && (
-            <Button variant="outline" size="sm" onClick={add} className="w-full">
+            <NonProductionActionButton variant="outline" size="sm" className="w-full">
               <Plus className="h-3.5 w-3.5 mr-1" />{t("governance.policy.addRule")}
-            </Button>
+            </NonProductionActionButton>
           )}
         </TabsContent>
 

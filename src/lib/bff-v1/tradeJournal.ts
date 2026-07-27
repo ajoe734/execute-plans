@@ -47,7 +47,7 @@ export interface TradeEpisodeProjection {
     event_type: string;
     occurred_at: string;
     actor?: string;
-    details: Record<string, any>;
+    details: Record<string, unknown>;
   }>;
 }
 
@@ -137,20 +137,26 @@ export interface CommandResponse {
   meta: { idempotent_replay: boolean; audit: { record_ref: string } };
 }
 
+const mockTradeEpisodes = seed.tradeEpisodes as TradeEpisodeProjection[];
+const mockTradeReflections = seed.tradeReflections as PersonaTradeReflection[];
+const mockTradePatterns = seed.tradePatterns as TradePattern[];
+
 export const tradeJournal = {
   list: (personaId: string, query?: Record<string, string | number | undefined>): Promise<TradeJournalResponse> => {
     const mockFn = async (): Promise<TradeJournalResponse> => {
-      const items = ((seed as any).tradeEpisodes || []).map((item: any) => ({
+      const items = mockTradeEpisodes.map((item) => ({
         ...item,
         persona_id: personaId,
       }));
       let filtered = items;
-      if (query?.environment) filtered = filtered.filter((x: any) => x.environment === query.environment);
-      if (query?.status) filtered = filtered.filter((x: any) => x.status === query.status);
+      if (query?.environment) filtered = filtered.filter((x) => x.environment === query.environment);
+      if (query?.status) filtered = filtered.filter((x) => x.status === query.status);
       const limit = Number(query?.limit ?? 20);
       const cursor = Number(query?.cursor ?? 0);
       const page = filtered.slice(cursor, cursor + limit);
-      const state = page.every((x: any) => !x.missing_refs) ? "complete" : "partial";
+      const state = page.every((x) => !Object.values(x.coverage).some((coverage) => coverage.missing_refs.length > 0))
+        ? "complete"
+        : "partial";
       return {
         data: page,
         page_info: {
@@ -176,7 +182,7 @@ export const tradeJournal = {
 
   get: (personaId: string, episodeId: string, environment?: string): Promise<TradeJournalDetailResponse> => {
     const mockFn = async (): Promise<TradeJournalDetailResponse> => {
-      const row = ((seed as any).tradeEpisodes || []).find((x: any) => x.trade_episode_id === episodeId);
+      const row = mockTradeEpisodes.find((x) => x.trade_episode_id === episodeId);
       if (!row) {
         throw new Error("Trade episode not found");
       }
@@ -197,13 +203,13 @@ export const tradeJournal = {
 
   reflections: (personaId: string, query?: Record<string, string | number | undefined>): Promise<TradeReflectionsResponse> => {
     const mockFn = async (): Promise<TradeReflectionsResponse> => {
-      const items = ((seed as any).tradeReflections || []).map((item: any) => ({
+      const items = mockTradeReflections.map((item) => ({
         ...item,
         persona_id: personaId,
       }));
       let filtered = items;
       if (query?.review_state) {
-        filtered = filtered.filter((x: any) => x.review_state === query.review_state);
+        filtered = filtered.filter((x) => x.review_state === query.review_state);
       }
       const limit = Number(query?.limit ?? 20);
       const cursor = Number(query?.cursor ?? 0);
@@ -228,7 +234,7 @@ export const tradeJournal = {
 
   patterns: (personaId: string, environment?: string): Promise<TradePatternsResponse> => {
     const mockFn = async (): Promise<TradePatternsResponse> => {
-      const items = ((seed as any).tradePatterns || []).map((item: any) => ({
+      const items = mockTradePatterns.map((item) => ({
         ...item,
         persona_id: personaId,
       }));
@@ -285,7 +291,13 @@ export const tradeJournal = {
     );
   },
 
-  decideLesson: (personaId: string, lessonId: string, reason: string, decision: "endorsed" | "rejected" | "quarantined"): Promise<CommandResponse> => {
+  decideLesson: (
+    personaId: string,
+    lessonId: string,
+    reason: string,
+    decision: "endorsed" | "rejected" | "quarantined",
+    varianceAttribution?: string,
+  ): Promise<CommandResponse> => {
     const mockFn = async (): Promise<CommandResponse> => {
       return {
         data: { status: "accepted", commandId: `cmd-decide-${Math.random().toString(36).substr(2, 9)}` },
@@ -297,7 +309,7 @@ export const tradeJournal = {
       {
         method: "POST",
         path: paths.tradeLessonDecide(personaId, lessonId),
-        body: { reason, decision },
+        body: varianceAttribution ? { reason, decision, variance_attribution: varianceAttribution } : { reason, decision },
         idempotencyKey: `idem-decide-${lessonId}-${Math.random().toString(36).substr(2, 9)}`,
       },
       mockFn,

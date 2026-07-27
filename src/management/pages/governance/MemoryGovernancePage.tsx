@@ -3,14 +3,14 @@ import { useEffect, useMemo, useState } from "react";
 import { PageHeader, PageBody } from "@/platform/components/PageHeader";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
+import { ManagementTableScroll } from "@/management/components/ManagementTableScroll";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { GitMerge, AlertTriangle, Check, X } from "lucide-react";
-import { toast } from "sonner";
-import { bff } from "@/lib/bff-v1";
+import { bff, managementConsoleReads } from "@/lib/bff-v1";
 import type { MemoryUpdate, Persona } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { safeDateTime } from "@/lib/utils";
+import { NonProductionActionButton } from "@/management/components/NonProductionActionButton";
 
 const stateTone: Record<MemoryUpdate["state"], string> = {
   queued: "border-accent/40 text-accent",
@@ -26,7 +26,7 @@ export const MemoryGovernancePage = () => {
   const [personas, setPersonas] = useState<Persona[]>([]);
 
   useEffect(() => {
-    bff.memoryUpdates.list().then(setItems);
+    managementConsoleReads.memoryGovernance().then((envelope) => setItems(envelope.items));
     bff.personas.list().then(setPersonas);
   }, []);
 
@@ -48,14 +48,6 @@ export const MemoryGovernancePage = () => {
     });
     return pairs;
   }, [conflicts]);
-
-  const action = (id: string, kind: "approve" | "reject" | "merge") => {
-    setItems((prev) => prev.map((m) => m.id === id ? {
-      ...m,
-      state: kind === "approve" ? "approved" : kind === "reject" ? "rejected" : "merged",
-    } : m));
-    toast.success(t(`governance.memory.${kind}d`));
-  };
 
   return (
     <>
@@ -99,8 +91,8 @@ export const MemoryGovernancePage = () => {
                 {m.before && <div className="text-xs text-muted-foreground line-through">{m.before}</div>}
                 <div className="text-sm">{m.after}</div>
                 <div className="flex justify-end gap-2">
-                  <Button size="sm" variant="outline" onClick={() => action(m.id, "reject")}><X className="h-3.5 w-3.5 mr-1" />{t("actions.reject")}</Button>
-                  <Button size="sm" onClick={() => action(m.id, "approve")}><Check className="h-3.5 w-3.5 mr-1" />{t("actions.approve")}</Button>
+                  <NonProductionActionButton size="sm" variant="outline"><X className="h-3.5 w-3.5 mr-1" />{t("actions.reject")}</NonProductionActionButton>
+                  <NonProductionActionButton size="sm"><Check className="h-3.5 w-3.5 mr-1" />{t("actions.approve")}</NonProductionActionButton>
                 </div>
               </Card>
             ))}
@@ -124,24 +116,25 @@ export const MemoryGovernancePage = () => {
                       </div>
                       <div className="text-sm">{m!.after}</div>
                       <div className="flex justify-end gap-1 pt-1">
-                        <Button size="sm" variant="outline" onClick={() => action(m!.id, "reject")}>{t("actions.reject")}</Button>
-                        <Button size="sm" onClick={() => action(m!.id, "approve")}>{t("governance.memory.keep")}</Button>
+                        <NonProductionActionButton size="sm" variant="outline">{t("actions.reject")}</NonProductionActionButton>
+                        <NonProductionActionButton size="sm">{t("governance.memory.keep")}</NonProductionActionButton>
                       </div>
                     </div>
                   ))}
                 </div>
                 <div className="flex justify-end">
-                  <Button size="sm" variant="secondary" onClick={() => { action(a.id, "merge"); if (b) action(b.id, "merge"); }}>
+                  <NonProductionActionButton size="sm" variant="secondary">
                     <GitMerge className="h-3.5 w-3.5 mr-1" />{t("governance.memory.merge")}
-                  </Button>
+                  </NonProductionActionButton>
                 </div>
               </Card>
             ))}
           </TabsContent>
 
           <TabsContent value="history" className="mt-4">
-            <Card className="p-0 overflow-hidden">
-              <table className="w-full text-sm">
+            <Card className="p-0">
+              <ManagementTableScroll minScrollWidth={1120}>
+          <table className="w-full min-w-[1120px] text-sm">
                 <thead className="bg-muted/40">
                   <tr className="text-left">
                     <th className="px-4 py-2 text-[10px] uppercase tracking-wider text-muted-foreground">{t("table.persona")}</th>
@@ -164,6 +157,7 @@ export const MemoryGovernancePage = () => {
                   {decided.length === 0 && <tr><td colSpan={5} className="text-center text-xs text-muted-foreground py-6">{t("empty.none")}</td></tr>}
                 </tbody>
               </table>
+          </ManagementTableScroll>
             </Card>
           </TabsContent>
         </Tabs>

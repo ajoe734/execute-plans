@@ -12,6 +12,7 @@ import { ConsultResultCard } from "./ConsultResultCard";
 import { ResearchPlanCard } from "./ResearchPlanCard";
 import { PersonaOpinionCard } from "./PersonaOpinionCard";
 import { DebateCard } from "./DebateCard";
+import { GovernedProposalReferences, GovernedProposalWorkshopCard } from "./GovernedProposalWorkshopCard";
 import type { WorkshopCard } from "@/lib/bff-v1/agora/workshops";
 import {
   asRecord,
@@ -521,7 +522,7 @@ function CardBody({ card }: { card: WorkshopCard }) {
     case "research_result":
       return <ResearchResult payload={payload} />;
     case "consult_result":
-      return <ConsultResultCard payload={payload} />;
+      return <><ConsultResultCard payload={payload} /><GovernedProposalReferences payload={payload} /></>;
     case "version_patch_proposal":
       return <PatchProposal payload={payload} />;
     case "version_compare":
@@ -533,6 +534,8 @@ function CardBody({ card }: { card: WorkshopCard }) {
       return <PersonaOpinionCard payload={payload} />;
     case "debate":
       return <DebateCard payload={payload} />;
+    case "governed_proposal":
+      return <GovernedProposalWorkshopCard payload={payload} />;
     default:
       return <GenericPayload payload={payload} />;
   }

@@ -6,7 +6,10 @@
 import * as seed from "@/mocks/seed";
 import { usePlatform } from "@/platform/store";
 import { realWritesEnabled, withLiveOrMock } from "@/lib/bff-v1/liveTransport";
+import { liveWriteGated } from "@/lib/bff-v1/writeGate";
+import { bffFetch } from "@/lib/bff-v1/client";
 import { paths } from "@/lib/bff-v1/paths";
+import { idempotencyKey as mintIdempotencyKey } from "@/lib/bff-v1/headers";
 import { strictDataFrom, strictItemsFrom, strictNotFoundAsUndefined, withStrictLiveOrMock } from "@/lib/bff/liveRead";
 import {
   v5List,
@@ -30,6 +33,7 @@ import {
   findCatalogueEntry,
   type LoopRun,
   type SentinelFinding,
+  type EvidenceRef,
   type InterventionItem,
   type PersonaExecutionHealth,
   type StrategyExecutionHealth,
@@ -47,8 +51,8 @@ type UnknownRecord = Record<string, unknown>;
 const livePaths = {
   v5ControlRoom: () => "/bff/v5/control-room",
   v5StrategyHealth: () => "/bff/v5/execution/strategy-health",
-  v5SentinelFinding: (id: string) => `${paths.v5SentinelFindings()}/${encodeURIComponent(id)}`,
-  v5SentinelStatus: (id: string) => `${paths.v5SentinelFindings()}/${encodeURIComponent(id)}/status`,
+  v5SentinelFinding: paths.v5SentinelFinding,
+  v5SentinelStatus: paths.v5SentinelFindingStatus,
 };
 
 const asRecord = (value: unknown): UnknownRecord =>
@@ -69,6 +73,60 @@ const asStringArray = (value: unknown): string[] => {
   return value.map((item) => asString(item)).filter(Boolean);
 };
 
+const EVIDENCE_KINDS = new Set<EvidenceRef["kind"]>([
+  "alert",
+  "incident",
+  "job",
+  "audit",
+  "metric",
+  "strategy",
+  "persona",
+  "deployment",
+  "runtime",
+  "policy",
+  "approval",
+]);
+
+const asEvidenceKind = (value: unknown, fallback: EvidenceRef["kind"] = "audit"): EvidenceRef["kind"] => {
+  const kind = asString(value).toLowerCase();
+  return EVIDENCE_KINDS.has(kind as EvidenceRef["kind"]) ? kind as EvidenceRef["kind"] : fallback;
+};
+
+const asEvidenceRef = (value: unknown): EvidenceRef | undefined => {
+  if (typeof value === "string") {
+    const [kindMaybe, ...rest] = value.split(":");
+    if (rest.length > 0 && EVIDENCE_KINDS.has(kindMaybe as EvidenceRef["kind"])) {
+      const id = rest.join(":").trim();
+      return id ? { kind: kindMaybe as EvidenceRef["kind"], id } : undefined;
+    }
+    const id = value.trim();
+    return id ? { kind: "audit", id } : undefined;
+  }
+
+  const item = asRecord(value);
+  const id = asString(item.id ?? item.ref ?? item.path ?? item.evidence_id ?? item.evidenceId);
+  if (!id) return undefined;
+  const snapshotRecord = asRecord(item.snapshot);
+  const snapshot =
+    Object.keys(snapshotRecord).length > 0
+      ? {
+          value: snapshotRecord.value as number | string | undefined,
+          ts: asString(snapshotRecord.ts ?? snapshotRecord.timestamp),
+          label: asString(snapshotRecord.label ?? snapshotRecord.name),
+        }
+      : undefined;
+  return {
+    kind: asEvidenceKind(item.kind ?? item.type ?? item.source),
+    id,
+    ...(snapshot ? { snapshot } : {}),
+  };
+};
+
+const asEvidenceRefs = (value: unknown): EvidenceRef[] => {
+  if (!Array.isArray(value)) return [];
+  return value.map(asEvidenceRef).filter((ref): ref is EvidenceRef => !!ref);
+};
+
 const asManagementHref = (value: unknown): string | undefined => {
   const href = asString(value);
   if (!href) return undefined;
@@ -76,6 +134,22 @@ const asManagementHref = (value: unknown): string | undefined => {
   if (href.startsWith("management/")) return `/${href}`;
   return undefined;
 };
+
+const sentinelStatusOverlay = new Map<string, SentinelFinding["status"]>();
+
+function applySentinelStatusOverlay(finding: SentinelFinding): SentinelFinding {
+  const status = sentinelStatusOverlay.get(finding.id);
+  return status ? { ...finding, status } : finding;
+}
+
+function setSentinelStatusOverlay(id: string, status: SentinelFinding["status"]) {
+  sentinelStatusOverlay.set(id, status);
+  emitV5Event({
+    channel: "v5.sentinel.finding.status",
+    type: "sentinel.finding.status_changed",
+    payload: { findingId: id, status },
+  });
+}
 
 const firstManagementHref = (...values: unknown[]): string | undefined => {
   for (const value of values) {
@@ -109,6 +183,7 @@ function adaptBffIntervention(value: unknown, index: number): InterventionItem {
   const kind = asString(item.kind, "hiq_sentinel");
   const targetType = asString(item.target_type ?? item.targetType, "target");
   const targetId = asString(item.target_id ?? item.targetId, id);
+  const linkedFindingId = asString(item.linked_finding_id ?? item.linkedFindingId ?? item.finding_id ?? item.findingId, id);
   const triggeredAt = asString(item.triggered_at ?? item.triggeredAt ?? item.created_at ?? item.createdAt, new Date().toISOString());
   const updatedAt = asString(item.remediated_at ?? item.remediatedAt ?? item.updated_at ?? item.updatedAt, triggeredAt);
   return {
@@ -120,7 +195,7 @@ function adaptBffIntervention(value: unknown, index: number): InterventionItem {
     createdAt: triggeredAt,
     updatedAt,
     requiredRoles: ["risk_officer", "system_operator"],
-    linkedFindingId: id,
+    linkedFindingId,
     recommendedDecision: "escalate",
     allowedDecisions: ["escalate", "defer"],
     evidenceRefs: [{ kind: "approval", id }],
@@ -435,6 +510,10 @@ function adaptBffSentinelFinding(value: unknown, index: number): SentinelFinding
   const id = asString(item.finding_id ?? item.findingId ?? item.id, `sentinel-finding-${index + 1}`);
   const incidentId = asString(item.derived_from_incident_id ?? item.incident_id ?? item.incidentId);
   const severity = adaptSentinelSeverity(item.severity);
+  const evidence = asEvidenceRefs(item.evidence ?? item.evidence_refs ?? item.evidenceRefs);
+  if (incidentId && !evidence.some((ref) => ref.kind === "incident" && ref.id === incidentId)) {
+    evidence.unshift({ kind: "incident", id: incidentId });
+  }
   const confidence = Number.isFinite(Number(item.confidence))
     ? Math.max(0, Math.min(1, Number(item.confidence)))
     : severity === "critical" ? 0.88 : severity === "warning" ? 0.76 : severity === "watch" ? 0.62 : 0.35;
@@ -456,7 +535,7 @@ function adaptBffSentinelFinding(value: unknown, index: number): SentinelFinding
       pools: asStringArray(item.pool_ids ?? item.poolIds),
       deployments: asStringArray(item.deployment_ids ?? item.deploymentIds),
     },
-    evidence: incidentId ? [{ kind: "incident", id: incidentId }] : [],
+    evidence,
     recommendedActionIds: asStringArray(item.recommendedActionIds ?? item.recommended_action_ids),
   };
 }
@@ -509,7 +588,7 @@ function allFindings(): SentinelFinding[] {
     incidents: seed.incidents,
     runtimes: seed.runtimes,
     jobs: seed.jobs,
-  });
+  }).map(applySentinelStatusOverlay);
 }
 
 function allLoopRuns(): LoopRun[] {
@@ -674,7 +753,7 @@ export const bffV5 = {
       withStrictLiveOrMock<V5ListResponse<SentinelFinding>>(
         { method: "GET", path: paths.v5SentinelFindings() },
         async () => delay(v5List(allFindings())),
-        (data) => v5List(strictItemsFrom(data).map(adaptBffSentinelFinding)),
+        (data) => v5List(strictItemsFrom(data).map(adaptBffSentinelFinding).map(applySentinelStatusOverlay)),
       ),
     get: (id: string): Promise<SentinelFinding | undefined> =>
       withStrictLiveOrMock<SentinelFinding | undefined>(
@@ -682,18 +761,25 @@ export const bffV5 = {
         async () => delay(allFindings().find((f) => f.id === id)),
         (data) => {
           const record = strictDataFrom(data);
-          return record ? adaptBffSentinelFinding(record, 0) : undefined;
+          return record ? applySentinelStatusOverlay(adaptBffSentinelFinding(record, 0)) : undefined;
         },
         strictNotFoundAsUndefined,
       ),
-    /** Q24 — mock state transition; emits typed event; does NOT touch seed. */
-    setStatus: (id: string, status: SentinelFinding["status"]): Promise<{ ok: true }> => {
-      emitV5Event({
-        channel: "v5.sentinel.finding.status",
-        type: "sentinel.finding.status_changed",
-        payload: { findingId: id, status },
-      });
-      return delay({ ok: true });
+    setStatus: async (id: string, status: SentinelFinding["status"]): Promise<{ ok: true; persisted: boolean }> => {
+      const persisted = await liveWriteGated();
+      if (persisted) {
+        await bffFetch<unknown>({
+          method: "POST",
+          path: livePaths.v5SentinelStatus(id),
+          body: { status },
+          idempotencyKey: mintIdempotencyKey(),
+          mode: "live",
+        });
+      } else {
+        await delay(undefined);
+      }
+      setSentinelStatusOverlay(id, status);
+      return { ok: true, persisted };
     },
   },
 
@@ -739,7 +825,7 @@ export const bffV5 = {
     /** Q10 — only mutates v5ActionOverlay. Existing seed remains untouched. */
     execute: async (action: RemediationAction): Promise<{ ok: true; overlayUpdated: boolean }> => {
       if (realWritesEnabled()) {
-        await withLiveOrMock<unknown>({
+        await bffFetch<unknown>({
           method: "POST",
           path: `${paths.v5Intervention(action.id)}/remediate`,
           body: {
@@ -747,7 +833,8 @@ export const bffV5 = {
             remediation_action: action.kind,
           },
           idempotencyKey: `execute-plans-${action.id}-${Date.now()}`,
-        }, async () => ({ ok: true }));
+          mode: "live",
+        });
       }
       let overlayUpdated = false;
       if (action.targetKind === "persona" && action.targetId) {
