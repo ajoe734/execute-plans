@@ -7,7 +7,12 @@ import { pathToFileURL } from "node:url";
 
 const SCHEMA_VERSION = 1;
 const FRONTEND_REPOSITORY = "ajoe734/execute-plans";
+const PANTHEON_REPOSITORY = "ajoe734/pantheon";
 const GATE_WORKFLOW = "pantheon-integration-gate.yml";
+const RELEASE_CONTROLLER_WORKFLOW = "nonprod-deploy.yml";
+const RELEASE_ADMISSION_SCHEMA =
+  "pantheon.dev-release-candidate-admission.v1";
+const RELEASE_COMPATIBILITY_STATUS = "compatible";
 const DEPLOYMENT_MANIFEST_PATH = "deployment.json";
 const SHA_PATTERN = /^[0-9a-f]{40}$/u;
 const SHA256_PATTERN = /^[0-9a-f]{64}$/u;
@@ -87,6 +92,118 @@ function normalizeGateRunId(value, label = "gate run ID") {
   const normalized = requiredString(value, label);
   if (!POSITIVE_INTEGER_PATTERN.test(normalized)) {
     throw new Error(`${label} must be a positive integer`);
+  }
+  return normalized;
+}
+
+function makeReleaseAdmission({
+  releaseCandidateId = "",
+  compatibilityManifestSha256 = "",
+  controllerRunId = "",
+  frontendSha,
+  bffSha,
+}) {
+  const supplied = [
+    releaseCandidateId,
+    compatibilityManifestSha256,
+    controllerRunId,
+  ].filter((value) => String(value ?? "").trim()).length;
+  if (supplied === 0) return null;
+  if (supplied !== 3) {
+    throw new Error(
+      "release admission requires candidate ID, compatibility manifest digest, and controller run ID",
+    );
+  }
+  return {
+    schemaVersion: RELEASE_ADMISSION_SCHEMA,
+    releaseCandidateId: normalizeDigest(
+      releaseCandidateId,
+      "release candidate ID",
+    ),
+    compatibilityStatus: RELEASE_COMPATIBILITY_STATUS,
+    compatibilityManifestSha256: normalizeDigest(
+      compatibilityManifestSha256,
+      "compatibility manifest digest",
+    ),
+    controller: {
+      repository: PANTHEON_REPOSITORY,
+      workflow: RELEASE_CONTROLLER_WORKFLOW,
+      runId: normalizeGateRunId(controllerRunId, "release controller run ID"),
+    },
+    backend: {
+      repository: PANTHEON_REPOSITORY,
+      branch: "dev",
+      commitSha: normalizeSha(bffSha, "release admission BFF SHA"),
+    },
+    frontend: {
+      repository: FRONTEND_REPOSITORY,
+      branch: "dev",
+      commitSha: normalizeSha(frontendSha, "release admission frontend SHA"),
+    },
+  };
+}
+
+function normalizeReleaseAdmission(
+  value,
+  {
+    frontendSha,
+    bffSha,
+    expectedReleaseCandidateId = "",
+    expectedCompatibilityManifestSha256 = "",
+    expectedControllerRunId = "",
+  },
+) {
+  const expected = makeReleaseAdmission({
+    releaseCandidateId: expectedReleaseCandidateId,
+    compatibilityManifestSha256: expectedCompatibilityManifestSha256,
+    controllerRunId: expectedControllerRunId,
+    frontendSha,
+    bffSha,
+  });
+  if (value === undefined && expected === null) return null;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("release admission must be an object");
+  }
+  const normalized = makeReleaseAdmission({
+    releaseCandidateId: value.releaseCandidateId,
+    compatibilityManifestSha256: value.compatibilityManifestSha256,
+    controllerRunId: value.controller?.runId,
+    frontendSha: value.frontend?.commitSha,
+    bffSha: value.backend?.commitSha,
+  });
+  const expectedKeys = [
+    "backend",
+    "compatibilityManifestSha256",
+    "compatibilityStatus",
+    "controller",
+    "frontend",
+    "releaseCandidateId",
+    "schemaVersion",
+  ];
+  const validShape =
+    value.schemaVersion === RELEASE_ADMISSION_SCHEMA &&
+    value.compatibilityStatus === RELEASE_COMPATIBILITY_STATUS &&
+    Object.keys(value).sort().join(",") === expectedKeys.join(",") &&
+    Object.keys(value.controller || {}).sort().join(",") ===
+      "repository,runId,workflow" &&
+    Object.keys(value.backend || {}).sort().join(",") ===
+      "branch,commitSha,repository" &&
+    Object.keys(value.frontend || {}).sort().join(",") ===
+      "branch,commitSha,repository" &&
+    JSON.stringify(value) === JSON.stringify(normalized);
+  if (!validShape) {
+    throw new Error("release admission shape or exact pair binding is invalid");
+  }
+  if (
+    normalized.frontend.commitSha !==
+      normalizeSha(frontendSha, "release admission expected frontend SHA") ||
+    normalized.backend.commitSha !==
+      normalizeSha(bffSha, "release admission expected BFF SHA")
+  ) {
+    throw new Error("release admission does not bind the candidate pair");
+  }
+  if (expected !== null && JSON.stringify(normalized) !== JSON.stringify(expected)) {
+    throw new Error("release admission does not match the expected controller ledger");
   }
   return normalized;
 }
@@ -468,6 +585,7 @@ export function digestReleaseDist({
 function makeCandidate({
   profile,
   pairId = "",
+  releaseAdmission = null,
   frontendSha,
   bffSha,
   bffBaseUrl,
@@ -482,6 +600,7 @@ function makeCandidate({
     repository: FRONTEND_REPOSITORY,
     profile,
     ...(pairId ? { pairId } : {}),
+    ...(releaseAdmission ? { releaseAdmission } : {}),
     frontendSha,
     bffSha,
     bffBaseUrl,
@@ -505,6 +624,9 @@ function makeDeploymentManifest(candidate) {
     repository: FRONTEND_REPOSITORY,
     profile: candidate.profile,
     ...(candidate.pairId ? { pairId: candidate.pairId } : {}),
+    ...(candidate.releaseAdmission
+      ? { releaseAdmission: candidate.releaseAdmission }
+      : {}),
     commit: candidate.frontendSha,
     sourceBranch: "dev",
     sourceRef: candidate.frontendSha,
@@ -628,6 +750,17 @@ function validateExpectedCandidate(candidate, expectations) {
       "candidate artifact digest does not match the expected digest",
     );
   }
+  const releaseAdmission = normalizeReleaseAdmission(
+    candidate.releaseAdmission,
+    {
+      frontendSha,
+      bffSha,
+      expectedReleaseCandidateId: expectations.releaseCandidateId,
+      expectedCompatibilityManifestSha256:
+        expectations.compatibilityManifestSha256,
+      expectedControllerRunId: expectations.controllerRunId,
+    },
+  );
 
   return {
     profile,
@@ -640,6 +773,7 @@ function validateExpectedCandidate(candidate, expectations) {
     gateRunUrl,
     buildMode,
     artifactDigest,
+    releaseAdmission,
   };
 }
 
@@ -683,6 +817,10 @@ function validateDeploymentManifest(deployment, candidate, normalized) {
     (normalized.pairId
       ? deployment.pairId === normalized.pairId
       : deployment.pairId === undefined) &&
+    (normalized.releaseAdmission
+      ? JSON.stringify(deployment.releaseAdmission) ===
+        JSON.stringify(normalized.releaseAdmission)
+      : deployment.releaseAdmission === undefined) &&
     deployment.commit === normalized.frontendSha &&
     deployment.sourceBranch === "dev" &&
     deployment.sourceRef === normalized.frontendSha &&
@@ -724,6 +862,9 @@ export function verifyReleaseCandidate({
   expectedArtifactDigest = "",
   expectedProfile = RELEASE_PROFILES.READ_ONLY,
   expectedPairId = "",
+  expectedReleaseCandidateId = "",
+  expectedCompatibilityManifestSha256 = "",
+  expectedControllerRunId = "",
   secretSentinels = [],
   allowPairEnvelope = false,
 }) {
@@ -782,6 +923,9 @@ export function verifyReleaseCandidate({
     artifactDigest: expectedArtifactDigest,
     profile: expectedProfile,
     pairId: expectedPairId,
+    releaseCandidateId: expectedReleaseCandidateId,
+    compatibilityManifestSha256: expectedCompatibilityManifestSha256,
+    controllerRunId: expectedControllerRunId,
   });
   const declaredFiles = validateDeclaredFiles(candidate.files);
   const actualRecords = collectFiles(distRoot, {
@@ -835,6 +979,9 @@ export function prepareReleaseCandidate({
   gateRunId,
   gateRunUrl,
   bffBaseUrl,
+  releaseCandidateId = "",
+  compatibilityManifestSha256 = "",
+  controllerRunId = "",
   buildMode = SAFE_BUILD_MODE,
   secretSentinels = [],
 }) {
@@ -852,6 +999,13 @@ export function prepareReleaseCandidate({
     gateRunId: normalizedGateRunId,
   });
   const normalizedBffBaseUrl = normalizeHttpUrl(bffBaseUrl, "BFF base URL");
+  const releaseAdmission = makeReleaseAdmission({
+    releaseCandidateId,
+    compatibilityManifestSha256,
+    controllerRunId,
+    frontendSha: normalizedFrontendSha,
+    bffSha: normalizedBffSha,
+  });
   const normalizedBuildMode = normalizeBuildMode(buildMode);
   const normalizedSentinels = normalizeSentinels(secretSentinels);
   const sourceRecords = collectFiles(sourceRoot, {
@@ -862,6 +1016,7 @@ export function prepareReleaseCandidate({
   const artifactDigest = sha256(canonicalAssetManifestBytes(files));
   const candidate = makeCandidate({
     profile: RELEASE_PROFILES.READ_ONLY,
+    releaseAdmission,
     frontendSha: normalizedFrontendSha,
     bffSha: normalizedBffSha,
     bffBaseUrl: normalizedBffBaseUrl,
@@ -928,6 +1083,7 @@ function pairIdentity({
   bffBaseUrl,
   gateRunId,
   gateRunUrl,
+  releaseAdmission = null,
   readOnlyDigest,
   operatorLiveDigest,
   writeProofDigest,
@@ -943,6 +1099,7 @@ function pairIdentity({
       runId: gateRunId,
       runUrl: gateRunUrl,
     },
+    ...(releaseAdmission ? { releaseAdmission } : {}),
     profiles: {
       readOnly: {
         profile: RELEASE_PROFILES.READ_ONLY,
@@ -1000,6 +1157,7 @@ function validatePairManifest(pair, expectations) {
     "gate",
     "pairId",
     "profiles",
+    ...(pair.releaseAdmission ? ["releaseAdmission"] : []),
     "repository",
     "schemaVersion",
   ];
@@ -1028,6 +1186,14 @@ function validatePairManifest(pair, expectations) {
   ) {
     throw new Error("pair gate has unexpected fields");
   }
+  const releaseAdmission = normalizeReleaseAdmission(pair.releaseAdmission, {
+    frontendSha,
+    bffSha,
+    expectedReleaseCandidateId: expectations.releaseCandidateId,
+    expectedCompatibilityManifestSha256:
+      expectations.compatibilityManifestSha256,
+    expectedControllerRunId: expectations.controllerRunId,
+  });
   const readOnly = pair.profiles?.readOnly;
   const operatorLive = pair.profiles?.operatorLive;
   const writeProof = pair.profiles?.writeProof;
@@ -1068,6 +1234,7 @@ function validatePairManifest(pair, expectations) {
     bffBaseUrl,
     gateRunId,
     gateRunUrl,
+    releaseAdmission,
     readOnlyDigest,
     operatorLiveDigest,
     writeProofDigest,
@@ -1120,6 +1287,9 @@ export function verifyPairedReleaseCandidate({
   expectedBffSha = "",
   expectedBffBaseUrl = "",
   expectedPairId = "",
+  expectedReleaseCandidateId = "",
+  expectedCompatibilityManifestSha256 = "",
+  expectedControllerRunId = "",
   expectedArtifactDigest = "",
   profile = RELEASE_PROFILES.READ_ONLY,
   secretSentinels = [],
@@ -1153,6 +1323,9 @@ export function verifyPairedReleaseCandidate({
     bffSha: expectedBffSha,
     bffBaseUrl: expectedBffBaseUrl,
     pairId: expectedPairId,
+    releaseCandidateId: expectedReleaseCandidateId,
+    compatibilityManifestSha256: expectedCompatibilityManifestSha256,
+    controllerRunId: expectedControllerRunId,
   });
   const common = {
     expectedFrontendSha: normalized.frontendSha,
@@ -1160,6 +1333,12 @@ export function verifyPairedReleaseCandidate({
     expectedBffSha: normalized.bffSha,
     expectedBffBaseUrl: normalized.bffBaseUrl,
     expectedPairId: normalized.pairId,
+    expectedReleaseCandidateId:
+      normalized.releaseAdmission?.releaseCandidateId || "",
+    expectedCompatibilityManifestSha256:
+      normalized.releaseAdmission?.compatibilityManifestSha256 || "",
+    expectedControllerRunId:
+      normalized.releaseAdmission?.controller.runId || "",
     secretSentinels: normalizedSentinels,
   };
   const readOnly = verifyReleaseCandidate({
@@ -1218,6 +1397,9 @@ export function preparePairedReleaseCandidate({
   gateRunId,
   gateRunUrl,
   bffBaseUrl,
+  releaseCandidateId = "",
+  compatibilityManifestSha256 = "",
+  controllerRunId = "",
   secretSentinels = [],
 }) {
   const readOnlyRoot = path.resolve(
@@ -1248,6 +1430,13 @@ export function preparePairedReleaseCandidate({
     gateRunId: normalizedGateRunId,
   });
   const normalizedBffBaseUrl = normalizeHttpUrl(bffBaseUrl, "BFF base URL");
+  const releaseAdmission = makeReleaseAdmission({
+    releaseCandidateId,
+    compatibilityManifestSha256,
+    controllerRunId,
+    frontendSha: normalizedFrontendSha,
+    bffSha: normalizedBffSha,
+  });
   const normalizedSentinels = normalizeSentinels(secretSentinels);
   const readOnlyRecords = collectFiles(readOnlyRoot, {
     secretSentinels: normalizedSentinels,
@@ -1273,6 +1462,7 @@ export function preparePairedReleaseCandidate({
     bffBaseUrl: normalizedBffBaseUrl,
     gateRunId: normalizedGateRunId,
     gateRunUrl: normalizedGateRunUrl,
+    releaseAdmission,
     readOnlyDigest,
     operatorLiveDigest,
     writeProofDigest,
@@ -1281,6 +1471,7 @@ export function preparePairedReleaseCandidate({
   const pair = { ...identity, pairId };
   const commonCandidate = {
     pairId,
+    releaseAdmission,
     frontendSha: normalizedFrontendSha,
     bffSha: normalizedBffSha,
     bffBaseUrl: normalizedBffBaseUrl,
@@ -1466,6 +1657,12 @@ export function main(argv = process.argv.slice(2), environment = process.env) {
     "--artifact-digest",
     "--expected-pair-id",
     "--pair-id",
+    "--expected-release-candidate-id",
+    "--release-candidate-id",
+    "--expected-compatibility-manifest-sha256",
+    "--compatibility-manifest-sha256",
+    "--expected-controller-run-id",
+    "--controller-run-id",
     "--profile",
   ]);
   if (command === "prepare-pair") {
@@ -1482,6 +1679,9 @@ export function main(argv = process.argv.slice(2), environment = process.env) {
         "--gate-run-id",
         "--gate-run-url",
         "--bff-base-url",
+        "--release-candidate-id",
+        "--compatibility-manifest-sha256",
+        "--controller-run-id",
       ]),
     );
     cliBuildMode(
@@ -1502,6 +1702,11 @@ export function main(argv = process.argv.slice(2), environment = process.env) {
       gateRunId: options.get("--gate-run-id"),
       gateRunUrl: options.get("--gate-run-url"),
       bffBaseUrl: options.get("--bff-base-url"),
+      releaseCandidateId: options.get("--release-candidate-id"),
+      compatibilityManifestSha256: options.get(
+        "--compatibility-manifest-sha256",
+      ),
+      controllerRunId: options.get("--controller-run-id"),
       secretSentinels: collectEnvironmentSecretSentinels(environment),
     });
     process.stdout.write(`${result.pairId}\n`);
@@ -1520,6 +1725,9 @@ export function main(argv = process.argv.slice(2), environment = process.env) {
         "--gate-run-id",
         "--gate-run-url",
         "--bff-base-url",
+        "--release-candidate-id",
+        "--compatibility-manifest-sha256",
+        "--controller-run-id",
         "--vite-bff-mode",
         "--vite-bff-fallback",
         "--vite-bff-real-writes",
@@ -1538,6 +1746,11 @@ export function main(argv = process.argv.slice(2), environment = process.env) {
       gateRunId: options.get("--gate-run-id"),
       gateRunUrl: options.get("--gate-run-url"),
       bffBaseUrl: options.get("--bff-base-url"),
+      releaseCandidateId: options.get("--release-candidate-id"),
+      compatibilityManifestSha256: options.get(
+        "--compatibility-manifest-sha256",
+      ),
+      controllerRunId: options.get("--controller-run-id"),
       buildMode: cliBuildMode(options, environment),
       secretSentinels: collectEnvironmentSecretSentinels(environment),
     });
@@ -1566,6 +1779,18 @@ export function main(argv = process.argv.slice(2), environment = process.env) {
       expectedProfile:
         options.get("--profile") || RELEASE_PROFILES.READ_ONLY,
       expectedPairId: options.get("--expected-pair-id", "--pair-id"),
+      expectedReleaseCandidateId: options.get(
+        "--expected-release-candidate-id",
+        "--release-candidate-id",
+      ),
+      expectedCompatibilityManifestSha256: options.get(
+        "--expected-compatibility-manifest-sha256",
+        "--compatibility-manifest-sha256",
+      ),
+      expectedControllerRunId: options.get(
+        "--expected-controller-run-id",
+        "--controller-run-id",
+      ),
       secretSentinels: collectEnvironmentSecretSentinels(environment),
     });
     process.stdout.write(`${result.artifactDigestSha256}\n`);
@@ -1587,6 +1812,18 @@ export function main(argv = process.argv.slice(2), environment = process.env) {
         "--bff-base-url",
       ),
       expectedPairId: options.get("--expected-pair-id", "--pair-id"),
+      expectedReleaseCandidateId: options.get(
+        "--expected-release-candidate-id",
+        "--release-candidate-id",
+      ),
+      expectedCompatibilityManifestSha256: options.get(
+        "--expected-compatibility-manifest-sha256",
+        "--compatibility-manifest-sha256",
+      ),
+      expectedControllerRunId: options.get(
+        "--expected-controller-run-id",
+        "--controller-run-id",
+      ),
       expectedArtifactDigest: options.get(
         "--expected-artifact-digest",
         "--artifact-digest",
