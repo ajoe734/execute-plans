@@ -740,7 +740,14 @@ export const PersonaFleetPage = () => {
                     ) : (
                       <span className="font-medium text-foreground">{r.personaName || r.personaId}</span>
                     )}
-                    <div className="mt-0.5 font-mono text-xs text-muted-foreground">{r.personaId}</div>
+                    <div className="mt-0.5 flex items-center gap-1 font-mono text-xs text-muted-foreground">
+                      <span>{r.personaId}</span>
+                      {(r.is_market_persona_default || r.isMarketPersonaDefault || r.seed_row || r.seedRow) && (
+                        <Badge variant="outline" className="border-amber-500/40 text-[10px] text-amber-600 dark:text-amber-400">
+                          Seed Fixture
+                        </Badge>
+                      )}
+                    </div>
                   </td>
                   <td className="px-3 py-2 text-muted-foreground">{r.owner}</td>
                   <td className="px-3 py-2">
@@ -988,12 +995,22 @@ export const PersonaFleetPage = () => {
 	                    </div>
 	                    )}
 	                  </td>
-                  <td className={"px-3 py-2 " + (Number.isFinite(r.perfDelta) && r.perfDelta >= 0 ? "text-status-success" : "text-status-failed")}>
+                  <td className={"px-3 py-2 " + (
+                    Number.isFinite(r.perfDelta)
+                      ? (r.perfDelta >= 0 ? "text-status-success" : "text-status-failed")
+                      : "text-muted-foreground"
+                  )}>
                     {performanceHref ? (
                       <Link
                         to={performanceHref}
                         aria-label={`${r.personaId} performance attribution`}
-                        className={fieldLinkClass(Number.isFinite(r.perfDelta) && r.perfDelta >= 0 ? "text-status-success hover:text-status-success" : "text-status-failed hover:text-status-failed")}
+                        className={fieldLinkClass(
+                          Number.isFinite(r.perfDelta)
+                            ? (r.perfDelta >= 0
+                                ? "text-status-success hover:text-status-success"
+                                : "text-status-failed hover:text-status-failed")
+                            : "text-muted-foreground hover:text-muted-foreground",
+                        )}
                       >
                         {formatPerfDelta(r.perfDelta)}
                       </Link>

@@ -798,6 +798,16 @@ export function personaFleetPerformanceHref(r: ManagementPersonaFleetRow): strin
     "performanceHref",
     "performance_href",
   ]);
+  const explicitTelemetry = typeof r.hasTradingTelemetry === "boolean"
+    ? r.hasTradingTelemetry
+    : (typeof r.has_trading_telemetry === "boolean" ? r.has_trading_telemetry : undefined);
+  const telemetryRuntimeCount = r.performanceSummary?.telemetryRuntimeCount
+    ?? r.performance_summary?.telemetry_runtime_count
+    ?? 0;
+  const hasTelemetry = explicitTelemetry ?? telemetryRuntimeCount > 0;
+  if (!hasTelemetry) {
+    return null;
+  }
   if (canonical) {
     if (canonical.startsWith("/management/performance-attribution")) {
       const rest = canonical.slice("/management/performance-attribution".length);
