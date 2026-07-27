@@ -74,7 +74,15 @@ jobs:
         run: |
           out=$(bash scripts/git/nightly_publish.sh now)
           echo "$out"
-          branch=$(printf '%s\n' "$out" | sed -n 's/^[[:space:]]*branch:[[:space:]]*//p' | head -1)
+          branch=""
+          while IFS= read -r line; do
+            case "$line" in
+              publish_branch=*)
+                branch="${line#publish_branch=}"
+                break
+                ;;
+            esac
+          done <<< "$out"
           if [[ -z "$branch" ]]; then
             echo "no snapshot cut this run (dev did not advance)"
           else

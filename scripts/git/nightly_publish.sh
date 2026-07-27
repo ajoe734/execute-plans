@@ -17,6 +17,13 @@
 set -euo pipefail
 
 MODE="${1:-now}"
+case "$MODE" in
+  now|check) ;;
+  *)
+    echo "usage: $0 [now|check]" >&2
+    exit 2
+    ;;
+esac
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
@@ -41,8 +48,7 @@ git fetch origin --tags --prune --quiet
 
 DEV_SHA=$(git rev-parse "origin/${DEV_BRANCH}")
 LATEST_RELEASE_SHA=$(git for-each-ref --sort=-creatordate \
-  --format='%(objectname) %(refname:short)' "refs/tags/${RELEASE_PREFIX}*" \
-  | head -1 | awk '{print $1}')
+  --count=1 --format='%(objectname)' "refs/tags/${RELEASE_PREFIX}*")
 
 # Resolve to the commit the tag points at (handle annotated tags).
 if [[ -n "$LATEST_RELEASE_SHA" ]]; then
@@ -68,10 +74,14 @@ VER="v${TODAY}.${N}"
 PUBLISH_BRANCH="${PUBLISH_PREFIX}${VER}"
 RELEASE_TAG="${RELEASE_PREFIX}${VER}"
 
-# Sanity: ensure the branch doesn't already exist on origin.
+# Sanity: ensure neither immutable ref already exists on origin.
 if git ls-remote --exit-code --heads origin "$PUBLISH_BRANCH" >/dev/null 2>&1; then
   echo "ERROR: $PUBLISH_BRANCH already exists on origin; refusing to overwrite immutable snapshot" >&2
   exit 4
+fi
+if git ls-remote --exit-code --tags origin "$RELEASE_TAG" >/dev/null 2>&1; then
+  echo "ERROR: tag $RELEASE_TAG already exists on origin; bump N or fix the cron drift" >&2
+  exit 5
 fi
 
 if [[ "$MODE" == "check" ]]; then
@@ -95,6 +105,6 @@ git worktree add "$WT" "origin/${DEV_BRANCH}" --quiet
 )
 
 echo "✓ published ${VER} (${DEV_SHA:0:10})"
-echo "  branch: $PUBLISH_BRANCH"
-echo "  tag:    $RELEASE_TAG"
+echo "publish_branch=$PUBLISH_BRANCH"
+echo "release_tag=$RELEASE_TAG"
 echo "  next:   publish-promote.yml will pick this up after the soak window"
