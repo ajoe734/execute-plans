@@ -2173,7 +2173,6 @@ function normalizeEvolutionHref(value: unknown): string | null {
 
 function adaptPersonaFleetRow(value: unknown): ManagementPersonaFleetRow | null {
   if (!isObject(value)) return null;
-  const metrics = isObject(value.metrics) ? value.metrics : {};
   const personaId = asString(value.personaId ?? value.persona_id ?? value.id);
   if (!personaId) return null;
 
