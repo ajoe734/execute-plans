@@ -255,7 +255,7 @@ export function CardShell({
 
   const isUser = card.emitted_by === "user" || card.card_type === "user_strategy_description" || card.persona_id === "human";
   const isPersona = card.card_type === "persona_opinion" || card.card_type === "opinion" || (card.persona_id !== undefined && card.persona_id !== "servant" && card.persona_id !== "human");
-  const isSynthesis = card.card_type === "consult_result" || card.card_type === "synthesis";
+  const isSynthesis = card.card_type === "consult_result";
   const isTool = ["research_result", "research_progress", "research_plan_proposal"].includes(card.card_type);
 
   if (isUser) {

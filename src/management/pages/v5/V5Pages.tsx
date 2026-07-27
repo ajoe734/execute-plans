@@ -1,17 +1,17 @@
-// Pack E E1 — Loops list surface.
-// Wires the bff.v5 facade for real KPIs/lists. The Control Room / Sentinel / HIQ
-// placeholder versions that once lived here were dead code (App.tsx uses the full
-// implementations in v5/Sentinel.tsx and v5/Interventions.tsx, and the Control Room
-// was folded into the Cockpit console), so they were removed 2026-06-15.
+// Pack E E1 — lightweight v5 closed-loop surfaces.
+// The full Sentinel / HIQ implementations live in their dedicated modules. Control
+// Room remains here as a legacy release-gate read surface for /bff/v5/control-room.
 
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
+import { StatCard } from "@/platform/components/StatCard";
 import { Card } from "@/components/ui/card";
+import { ManagementTableScroll } from "@/management/components/ManagementTableScroll";
 import { Badge } from "@/components/ui/badge";
 import { v5 } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
-import type { LoopRun } from "@/lib/v5";
+import type { ControlRoomSummary, LoopRun } from "@/lib/v5";
 import type { LoopKind } from "@/lib/v5/enums";
 
 function useAsync<T>(load: () => Promise<T>, deps: unknown[] = []): T | undefined {
@@ -24,6 +24,48 @@ function useAsync<T>(load: () => Promise<T>, deps: unknown[] = []): T | undefine
   }, deps);
   return v;
 }
+
+// ---------- Control Room ----------
+
+export const ControlRoomPage = () => {
+  const t = useT();
+  const summary = useAsync<ControlRoomSummary>(() => v5.controlRoom.get());
+  return (
+    <>
+      <PageHeader title={t("nav.controlRoom")} subtitle={t("v5.controlRoom.subtitle")} />
+      <PageBody>
+        {!summary ? (
+          <div className="text-sm text-muted-foreground">{t("ui.loading") ?? "…"}</div>
+        ) : (
+          <>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <StatCard label={t("v5.kpi.loopsRunning")} value={summary.kpi.loopsRunning} />
+              <StatCard label={t("v5.kpi.loopsBlocked")} value={summary.kpi.loopsBlocked} />
+              <StatCard label={t("v5.kpi.openFindings")} value={summary.kpi.openFindings} />
+              <StatCard label={t("v5.kpi.pendingInterventions")} value={summary.kpi.pendingInterventions} />
+            </div>
+            <Card className="p-4 mt-4">
+              <div className="text-sm font-semibold mb-2">{t("v5.controlRoom.topLoops")}</div>
+              <ul className="text-sm space-y-1">
+                {summary.loopRuns.slice(0, 6).map((run) => (
+                  <li key={run.id} className="flex items-center justify-between gap-3">
+                    <Link to="/management/loops" className="hover:underline">
+                      {run.subjectName ?? run.id}
+                    </Link>
+                    <Badge variant="outline">{run.loopKind} · {run.status}</Badge>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+            <div className="text-xs text-muted-foreground mt-3">
+              {t("v5.transitional.controlRoom")} · tenant=<code>{summary.session.tenantId}</code>
+            </div>
+          </>
+        )}
+      </PageBody>
+    </>
+  );
+};
 
 // ---------- Loops ----------
 
@@ -43,7 +85,8 @@ export const LoopsPage = () => {
           <div className="text-sm text-muted-foreground">…</div>
         ) : (
           <Card className="p-0">
-            <table className="w-full text-sm">
+            <ManagementTableScroll minScrollWidth={960}>
+          <table className="w-full min-w-[960px] text-sm">
               <thead className="text-xs text-muted-foreground bg-muted/40">
                 <tr>
                   <th className="text-left px-3 py-2">{t("v5.col.subject")}</th>
@@ -66,6 +109,7 @@ export const LoopsPage = () => {
                 )}
               </tbody>
             </table>
+          </ManagementTableScroll>
             <div className="px-3 py-2 text-xs text-muted-foreground">
               {t("v5.col.total")}: {data.totalCount} · exact={String(data.totalCountExact)}
             </div>

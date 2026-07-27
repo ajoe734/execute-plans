@@ -10,7 +10,6 @@ import { Download, Trash2 } from "lucide-react";
 import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
 import { StatCard } from "@/platform/components/StatCard";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
-import { toast } from "sonner";
 import { DataTable } from "@/platform/components/DataTable";
 import { AuditTimeline } from "@/platform/components/AuditTimeline";
 import { StatusBadge } from "@/platform/components/StatusBadge";
@@ -124,7 +123,9 @@ export const ArtifactDetail = () => {
         description={t("detail.confirm.retireArtifact")}
         confirmToken="RETIRE"
         destructive
-        onConfirm={async (memo) => { await runActionSafe({ kind: "Artifact", id: a.id, action: "archive", memo }); toast.success("Retirement requested"); }}
+        onConfirm={async (memo) => {
+          await runActionSafe({ kind: "Artifact", id: a.id, action: "archive", memo }, { successTitle: "Retirement requested" });
+        }}
       />
     </>
   );

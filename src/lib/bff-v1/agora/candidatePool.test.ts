@@ -1,22 +1,25 @@
 // AG-FE-TR-002 — focused tests for candidate pool BFF client header contract.
 //
 // Coverage:
-//   * reviewCandidateMember forwards If-Match, Idempotency-Key, and X-Request-Id when provided
+//   * reviewCandidateMember forwards supplied governance headers and canonically mints omitted ids
 //   * reviewCandidateMember sends POST to the correct URL
 //   * listCandidatePoolMembers returns items + etag from response header
-//   * triggerCandidatePoolScore forwards If-Match, Idempotency-Key, and X-Request-Id
+//   * triggerCandidatePoolScore forwards supplied governance headers and canonically mints omitted ids
 //   * Read-only methods do NOT send mutation headers
 //   * Error handling: non-2xx throws with message from error.message
 
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import {
   getCandidatePoolScore,
   listCandidatePoolMembers,
   reviewCandidateMember,
   triggerCandidatePoolScore,
 } from "./candidatePool";
+import { setAuthProvider } from "@/lib/bff-v1/headers";
 
 const BASE = "https://test.example";
+const SESSION_TOKEN = "signed-candidate-pool-session";
+const TENANT_ID = "tenant-candidate-pool";
 
 function ok(body: unknown, status = 200, extraHeaders?: Record<string, string>): Response {
   return new Response(JSON.stringify(body), {
@@ -25,7 +28,18 @@ function ok(body: unknown, status = 200, extraHeaders?: Record<string, string>):
   });
 }
 
+beforeEach(() => {
+  vi.stubEnv("VITE_BFF_MODE", "mock");
+  vi.stubEnv("VITE_BFF_DEV_BEARER_TOKEN", "");
+  setAuthProvider({
+    getToken: () => SESSION_TOKEN,
+    getTenantId: () => TENANT_ID,
+  });
+});
+
 afterEach(() => {
+  setAuthProvider({ getToken: () => null, getTenantId: () => null });
+  vi.unstubAllEnvs();
   vi.restoreAllMocks();
 });
 
@@ -48,9 +62,14 @@ describe("reviewCandidateMember — If-Match, Idempotency-Key, and X-Request-Id"
     expect(headers["If-Match"]).toBe('"etag-v3"');
     expect(headers["Idempotency-Key"]).toBe("idem-key-review-1");
     expect(headers["X-Request-Id"]).toBe("req-review-1");
+    expect(headers.Authorization).toBe(`Bearer ${SESSION_TOKEN}`);
+    expect(headers["X-Tenant-Id"]).toBe(TENANT_ID);
+    expect(headers.Accept).toBe("application/json");
+    expect(headers["Content-Type"]).toBe("application/json");
+    expect(fetchMock.mock.calls[0][1].credentials).toBe("include");
   });
 
-  it("sends If-Match and Idempotency-Key when provided (without requestId)", async () => {
+  it("sends If-Match and Idempotency-Key and auto-mints requestId when omitted", async () => {
     const fetchMock = vi.fn().mockResolvedValue(ok({ data: { lifecycle_state: "approved" } }));
     globalThis.fetch = fetchMock;
 
@@ -65,7 +84,7 @@ describe("reviewCandidateMember — If-Match, Idempotency-Key, and X-Request-Id"
     const headers = fetchMock.mock.calls[0][1].headers as Record<string, string>;
     expect(headers["If-Match"]).toBe('"etag-v3"');
     expect(headers["Idempotency-Key"]).toBe("idem-key-review-1");
-    expect(headers["X-Request-Id"]).toBeUndefined();
+    expect(headers["X-Request-Id"]).toMatch(/^req_/u);
   });
 
   it("does NOT send If-Match when omitted", async () => {
@@ -85,7 +104,7 @@ describe("reviewCandidateMember — If-Match, Idempotency-Key, and X-Request-Id"
     expect(headers["Idempotency-Key"]).toBe("idem-key-2");
   });
 
-  it("does NOT send Idempotency-Key when omitted", async () => {
+  it("auto-mints Idempotency-Key when omitted", async () => {
     const fetchMock = vi.fn().mockResolvedValue(ok({ data: {} }));
     globalThis.fetch = fetchMock;
 
@@ -99,7 +118,7 @@ describe("reviewCandidateMember — If-Match, Idempotency-Key, and X-Request-Id"
 
     const headers = fetchMock.mock.calls[0][1].headers as Record<string, string>;
     expect(headers["If-Match"]).toBe('"etag-v1"');
-    expect(headers["Idempotency-Key"]).toBeUndefined();
+    expect(headers["Idempotency-Key"]).toMatch(/^idk_/u);
   });
 
   it("POSTs to the correct review URL with encoded IDs", async () => {
@@ -161,8 +180,15 @@ describe("listCandidatePoolMembers — ETag in response", () => {
 
     const init = fetchMock.mock.calls[0][1] as RequestInit;
     expect(init.method).toBe("GET");
-    expect((init.headers as Record<string, string>)["If-Match"]).toBeUndefined();
-    expect((init.headers as Record<string, string>)["Idempotency-Key"]).toBeUndefined();
+    const headers = init.headers as Record<string, string>;
+    expect(headers["If-Match"]).toBeUndefined();
+    expect(headers["Idempotency-Key"]).toBeUndefined();
+    expect(headers["Content-Type"]).toBeUndefined();
+    expect(headers.Authorization).toBe(`Bearer ${SESSION_TOKEN}`);
+    expect(headers["X-Tenant-Id"]).toBe(TENANT_ID);
+    expect(headers["X-Request-Id"]).toMatch(/^req_/u);
+    expect(headers["X-Correlation-Id"]).toMatch(/^cid_/u);
+    expect(init.credentials).toBe("include");
   });
 });
 
@@ -183,9 +209,11 @@ describe("triggerCandidatePoolScore — If-Match, Idempotency-Key, and X-Request
     expect(headers["If-Match"]).toBe('"score-etag-v1"');
     expect(headers["Idempotency-Key"]).toBe("idem-score-1");
     expect(headers["X-Request-Id"]).toBe("req-score-1");
+    expect(headers.Authorization).toBe(`Bearer ${SESSION_TOKEN}`);
+    expect(headers["Content-Type"]).toBe("application/json");
   });
 
-  it("forwards If-Match and Idempotency-Key when provided (without requestId)", async () => {
+  it("forwards If-Match and Idempotency-Key and auto-mints requestId when omitted", async () => {
     const fetchMock = vi.fn().mockResolvedValue(ok({}, 202));
     globalThis.fetch = fetchMock;
 
@@ -198,7 +226,7 @@ describe("triggerCandidatePoolScore — If-Match, Idempotency-Key, and X-Request
     const headers = fetchMock.mock.calls[0][1].headers as Record<string, string>;
     expect(headers["If-Match"]).toBe('"score-etag-v1"');
     expect(headers["Idempotency-Key"]).toBe("idem-score-1");
-    expect(headers["X-Request-Id"]).toBeUndefined();
+    expect(headers["X-Request-Id"]).toMatch(/^req_/u);
   });
 });
 
@@ -213,8 +241,12 @@ describe("getCandidatePoolScore — read-only, no mutation headers", () => {
 
     const init = fetchMock.mock.calls[0][1] as RequestInit;
     expect(init.method).toBe("GET");
-    expect((init.headers as Record<string, string>)["If-Match"]).toBeUndefined();
-    expect((init.headers as Record<string, string>)["Idempotency-Key"]).toBeUndefined();
+    const headers = init.headers as Record<string, string>;
+    expect(headers["If-Match"]).toBeUndefined();
+    expect(headers["Idempotency-Key"]).toBeUndefined();
+    expect(headers["Content-Type"]).toBeUndefined();
+    expect(headers.Authorization).toBe(`Bearer ${SESSION_TOKEN}`);
+    expect(init.credentials).toBe("include");
   });
 
   it("returns empty array when BFF returns status:queued", async () => {

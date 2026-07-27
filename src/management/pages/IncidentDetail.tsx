@@ -2,7 +2,8 @@
 // Sections: summary, timeline, linked alerts, affected scope, root cause hypothesis,
 // actions taken, mitigation, postmortem, training feedback, evolution constraint, audit.
 import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useLocation, useParams, useNavigate } from "react-router-dom";
+import { tradeJourneyHref } from "@/management/navigation/tradeJourneyLinks";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -12,6 +13,7 @@ import { RiskBadge } from "@/platform/components/RiskBadge";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
 import { bff } from "@/lib/bff-v1";
+import { commandReceiptDescription } from "@/lib/bff-v1/commandReceipt";
 import { mutations } from "@/lib/bff/mutations";
 import type { Incident, Alert, Strategy, Runtime } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
@@ -20,6 +22,7 @@ import { Field } from "./ObjectDetailLayout";
 import { toast } from "sonner";
 import { AuditTimeline } from "@/platform/components/AuditTimeline";
 import { PermissionAwareButton } from "@/platform/components/PermissionAwareButton";
+import { NonProductionActionButton } from "@/management/components/NonProductionActionButton";
 import { useOverlay } from "@/platform/overlayStore";
 import type { RollbackSagaDTO } from "@/lib/v4/rollbackSaga";
 import { findAsyncTransitionPolicy } from "@/lib/v4/asyncTransitionPolicy";
@@ -29,13 +32,13 @@ export const IncidentDetail = () => {
   const t = useT();
   const { id = "" } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const perms = usePermissions();
   const [incident, setIncident] = useState<Incident | null>(null);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [strategies, setStrategies] = useState<Strategy[]>([]);
   const [runtimes, setRuntimes] = useState<Runtime[]>([]);
   const [closeOpen, setCloseOpen] = useState(false);
-  const [pauseOpen, setPauseOpen] = useState(false);
   const [postmortem, setPostmortem] = useState("");
   const [mitigation, setMitigation] = useState("");
   const [constraint, setConstraint] = useState("");
@@ -44,7 +47,8 @@ export const IncidentDetail = () => {
   const showRollbackSaga = () => {
     if (!incident) return;
     const policy = findAsyncTransitionPolicy("rollback.saga");
-    const deploymentId = (incident.affected ?? [])[0] ?? "deploy-mock";
+    const deploymentId = (incident.affected ?? [])[0];
+    if (!deploymentId) return;
     const now = new Date().toISOString();
     const saga: RollbackSagaDTO = {
       id: `saga-${incident.id}`,
@@ -114,13 +118,18 @@ export const IncidentDetail = () => {
   const requirePostmortem = isHighSev && postmortem.trim().length < 20;
 
   const close = async () => {
-    await mutations.setIncidentStatus(incident.id, "resolved", postmortem);
+    const receipt = await mutations.setIncidentStatus(incident.id, "resolved", postmortem);
     setIncident({ ...incident, status: "resolved", timeline: [...(incident.timeline ?? []), { ts: new Date().toISOString(), actor: perms.role, note: `Incident closed. Postmortem: ${postmortem.slice(0, 80)}…` }] });
-    toast.success(t("incident.closed"));
+    toast.success(t("incident.closed"), {
+      description: commandReceiptDescription(receipt, { fallback: `Incident ${incident.id} · resolved` }),
+    });
   };
   const advance = async (status: Incident["status"]) => {
-    await mutations.setIncidentStatus(incident.id, status);
+    const receipt = await mutations.setIncidentStatus(incident.id, status);
     setIncident({ ...incident, status, timeline: [...(incident.timeline ?? []), { ts: new Date().toISOString(), actor: perms.role, note: `Status → ${status}` }] });
+    toast.success(t("toast.incidentAdvanced", { id: incident.id, status }), {
+      description: commandReceiptDescription(receipt, { fallback: `Incident ${incident.id} · ${status}` }),
+    });
   };
 
   return (
@@ -131,7 +140,7 @@ export const IncidentDetail = () => {
         actions={
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => navigate("/management/incidents")}>{t("common.back")}</Button>
-            <Button variant="outline" size="sm" onClick={showRollbackSaga}>
+            <Button variant="outline" size="sm" onClick={showRollbackSaga} disabled={(incident.affected ?? []).length === 0}>
               {t("incident.viewRollbackSaga", { defaultValue: "View rollback saga" })}
             </Button>
             {incident.status === "open" && (
@@ -139,9 +148,9 @@ export const IncidentDetail = () => {
                 {t("incident.startMitigation")}
               </PermissionAwareButton>
             )}
-            <PermissionAwareButton requiredAction="pause" size="sm" variant="outline" onClick={() => setPauseOpen(true)}>
+            <NonProductionActionButton size="sm" variant="outline">
               {t("incident.pauseStrategy")}
-            </PermissionAwareButton>
+            </NonProductionActionButton>
             {incident.status !== "resolved" && (
               <PermissionAwareButton requiredAction="approve" size="sm" variant="destructive" onClick={() => setCloseOpen(true)}>
                 {t("incident.close")}
@@ -201,6 +210,7 @@ export const IncidentDetail = () => {
                     <li key={a.id} className="py-2 flex items-center gap-3 cursor-pointer hover:bg-muted/30 -mx-2 px-2 rounded" onClick={() => navigate("/management/alerts")}>
                       <RiskBadge level={a.severity} />
                       <span className="text-sm flex-1">{a.title}</span>
+                      <span className="text-mono text-xs text-muted-foreground">{safeDateTime(a.openedAt)}</span>
                       <span className="text-mono text-xs text-muted-foreground">{a.source}</span>
                     </li>
                   ))}
@@ -211,9 +221,19 @@ export const IncidentDetail = () => {
               <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">{t("incident.affectedStrategies")}</div>
               <div className="flex flex-wrap gap-2">
                 {affectedStrategies.map((s) => (
-                  <Button key={s.id} size="sm" variant="outline" onClick={() => navigate(`/management/strategies/${s.id}`)}>
-                    {s.name} <RiskBadge level={s.risk} />
-                  </Button>
+                  <div key={s.id} className="flex items-center gap-1">
+                    <Button size="sm" variant="outline" onClick={() => navigate(`/management/strategies/${s.id}`)}>
+                      {s.name} <RiskBadge level={s.risk} />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      aria-label={`${s.id} trade journeys`}
+                      onClick={() => navigate(tradeJourneyHref(location, { strategyId: s.id }, `Incident ${id}`))}
+                    >
+                      {t("nav.tradeJourneys", { defaultValue: "Trade Journeys" })}
+                    </Button>
+                  </div>
                 ))}
                 {affectedStrategies.length === 0 && <span className="text-xs text-muted-foreground">—</span>}
               </div>
@@ -233,7 +253,7 @@ export const IncidentDetail = () => {
               <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">{t("incident.affectedCapital")}</div>
               <div className="flex flex-wrap gap-2">
                 {affectedCapitalIds.length === 0 ? <span className="text-xs text-muted-foreground">—</span> : affectedCapitalIds.map((cid) => (
-                  <Button key={cid} size="sm" variant="outline" onClick={() => navigate(`/management/capital/${cid}`)}>{cid}</Button>
+                  <Button key={cid} size="sm" variant="outline" onClick={() => navigate(`/management/promotion-allocation?tab=quarterly-capital&capital_id=${encodeURIComponent(cid)}`)}>{cid}</Button>
                 ))}
               </div>
             </Card>
@@ -266,8 +286,10 @@ export const IncidentDetail = () => {
               <Textarea value={mitigation} onChange={(e) => setMitigation(e.target.value)} placeholder={t("incident.mitigation.placeholder")} rows={3} />
               <div>
                 <Button size="sm" disabled={mitigation.trim().length < 8} onClick={async () => {
-                  await mutations.appendIncidentMitigation(incident.id, mitigation);
-                  toast.success(t("incident.mitigation.logged"));
+                  const receipt = await mutations.appendIncidentMitigation(incident.id, mitigation);
+                  toast.success(t("incident.mitigation.logged"), {
+                    description: commandReceiptDescription(receipt, { fallback: `Incident ${incident.id} · mitigation` }),
+                  });
                   setIncident({ ...incident, timeline: [...(incident.timeline ?? []), { ts: new Date().toISOString(), actor: perms.role, note: `[mitigation] ${mitigation.slice(0, 120)}` }] });
                   setMitigation("");
                 }}>{t("incident.mitigation.add")}</Button>
@@ -289,8 +311,10 @@ export const IncidentDetail = () => {
               )}
               <div>
                 <Button size="sm" disabled={postmortem.trim().length < 10} onClick={async () => {
-                  await mutations.appendPostmortem(incident.id, postmortem);
-                  toast.success(t("incident.postmortem.appended"));
+                  const receipt = await mutations.appendPostmortem(incident.id, postmortem);
+                  toast.success(t("incident.postmortem.appended"), {
+                    description: commandReceiptDescription(receipt, { fallback: `Incident ${incident.id} · postmortem` }),
+                  });
                   setIncident({ ...incident, timeline: [...(incident.timeline ?? []), { ts: new Date().toISOString(), actor: perms.role, note: `[postmortem] ${postmortem.slice(0, 80)}` }] });
                 }}>{t("incident.postmortem.add")}</Button>
               </div>
@@ -307,7 +331,12 @@ export const IncidentDetail = () => {
               <div>
                 <Button size="sm" variant="outline" disabled={postmortem.trim().length < 10} onClick={async () => {
                   const res = await mutations.createTrainingFeedback(incident.id, postmortem, affectedStrategies[0] ? { kind: "Strategy", id: affectedStrategies[0].id } : undefined);
-                  toast.success(t("incident.feedbackQueued"), { description: res.feedbackId });
+                  toast.success(t("incident.feedbackQueued"), {
+                    description: commandReceiptDescription(res, {
+                      fallback: `Incident ${incident.id} · training_feedback`,
+                      extra: `feedback ${res.feedbackId}`,
+                    }),
+                  });
                   setIncident({ ...incident, timeline: [...(incident.timeline ?? []), { ts: new Date().toISOString(), actor: perms.role, note: `[training-feedback ${res.feedbackId}] ${postmortem.slice(0, 80)}` }] });
                 }}>{t("incident.createTrainingFeedback")}</Button>
               </div>
@@ -325,7 +354,12 @@ export const IncidentDetail = () => {
               <div>
                 <Button size="sm" variant="outline" disabled={constraint.trim().length < 8} onClick={async () => {
                   const res = await mutations.createEvolutionConstraint(incident.id, constraint);
-                  toast.success(t("incident.constraint.created"), { description: res.constraintId });
+                  toast.success(t("incident.constraint.created"), {
+                    description: commandReceiptDescription(res, {
+                      fallback: `Incident ${incident.id} · evolution_constraint`,
+                      extra: `constraint ${res.constraintId}`,
+                    }),
+                  });
                   setIncident({ ...incident, timeline: [...(incident.timeline ?? []), { ts: new Date().toISOString(), actor: perms.role, note: `[constraint ${res.constraintId}] ${constraint.slice(0, 80)}` }] });
                   setConstraint("");
                 }}>{t("incident.constraint.add")}</Button>
@@ -361,19 +395,6 @@ export const IncidentDetail = () => {
           }}
         />
 
-        <HighRiskConfirm
-          open={pauseOpen}
-          onOpenChange={setPauseOpen}
-          operation="strategy.pause"
-          target={{ type: "Incident", id: incident.id, name: `Pause affected strategies of ${incident.title}` }}
-          currentState="deployed"
-          newState="paused"
-          affected={{ strategies: affectedStrategies.map((s) => s.id), runtimes: affectedRuntimes.map((r) => r.id) }}
-          risk={incident.severity}
-          rollbackTarget="resume after mitigation"
-          requiredApproval={["risk", "ops"]}
-          onConfirm={() => { toast.success(t("incident.pauseQueued")); }}
-        />
       </PageBody>
     </>
   );

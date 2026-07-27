@@ -2,8 +2,7 @@
  * FE-INT-GATE-B02 / F02 - Control Room drill-down and empty-data gate.
  *
  * Coverage:
- *   1. /management/control-room-legacy renders KPI cards plus loop, sentinel, and
- *      intervention data from the v5 control-room read model.
+ *   1. Legacy console aliases redirect to the canonical Cockpit surface.
  *   2. Drill-down affordances can reach loop, sentinel, and intervention
  *      surfaces without relying on mock/seed fallback banners.
  *   3. An empty-but-valid control-room payload renders without crashing.
@@ -19,11 +18,11 @@
  */
 
 import { expect, test, type Page, type Route } from "@playwright/test";
+import { bearerHeader } from "./helpers/auth";
 
 const DEFAULT_FRONTEND_BASE_URL = "http://127.0.0.1:5173";
 const DEFAULT_BFF_BASE_URL =
   "https://pantheon-lupin-staging-bff.104.155.223.192.sslip.io";
-const DEFAULT_DEV_AUTH_TOKEN = "op-fe-gate:operator,reviewer,approver:mfa";
 const RUN_LIVE_BFF_CONTRACT =
   process.env.FE_INT_GATE_LIVE_BFF === "1" ||
   process.env.RUN_LIVE_BFF_CONTRACTS === "1";
@@ -76,8 +75,11 @@ function bffUrl(path: string): string {
 }
 
 function authHeader(): string {
-  const token = process.env.BFF_AUTH_TOKEN || DEFAULT_DEV_AUTH_TOKEN;
-  return token.startsWith("Bearer ") ? token : `Bearer ${token}`;
+  const token = process.env.BFF_AUTH_TOKEN || process.env.PANTHEON_BFF_SMOKE_BEARER_TOKEN || "";
+  if (!token) {
+    throw new Error("Live control-room contract requires a short-lived BFF_AUTH_TOKEN");
+  }
+  return bearerHeader(token);
 }
 
 function nowIso(): string {
@@ -525,10 +527,9 @@ async function clickDrilldown(
 test.describe("F02 Control Room", () => {
   test.describe.configure({ timeout: 60_000 });
 
-  // 2026-06-15 console consolidation: the standalone Control Room page was folded
-  // into the single Cockpit console. The legacy console routes now redirect to
-  // /management/cockpit; loop / sentinel / intervention detail keeps its own routes
-  // (/management/loops, /sentinel, /interventions) covered by their own specs.
+  // 2026-06-30 MGMT-GAP-001: all old console aliases now redirect to the
+  // Cockpit. Hidden legacy rendering is no longer accepted as a release-gate
+  // fixture route.
   test("redirects consolidated console aliases to the cockpit", async ({
     page,
   }) => {

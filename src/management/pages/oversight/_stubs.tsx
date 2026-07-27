@@ -25,3 +25,4 @@ export { StrictPublishAuditPage } from "./StrictPublishAudit";
 export { DataSourceManagementPage } from "./DataSourceManagement";
 export { ManagementNlConsole } from "./NlConsole";
 export { HumanGateDetailPage } from "./HumanGateDetail";
+export { OpenClawLlmAuthPage } from "./OpenClawLlmAuthPage";
