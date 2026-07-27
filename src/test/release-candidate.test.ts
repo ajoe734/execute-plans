@@ -22,6 +22,9 @@ const BFF_SHA = "a".repeat(40);
 const GATE_RUN_ID = "123456";
 const GATE_RUN_URL = `https://github.test/actions/runs/${GATE_RUN_ID}`;
 const BFF_BASE_URL = "https://bff.test";
+const RELEASE_CANDIDATE_ID = "c".repeat(64);
+const COMPATIBILITY_MANIFEST_SHA256 = "d".repeat(64);
+const CONTROLLER_RUN_ID = "987654";
 const SCRIPT_PATH = path.resolve(
   process.cwd(),
   "scripts/release-candidate.mjs",
@@ -602,6 +605,76 @@ describe("release candidate preparation and verification", () => {
 });
 
 describe("paired release candidate preparation and verification", () => {
+  it("binds every paired manifest to one exact cross-repo admission ledger", () => {
+    const root = temporaryRoot();
+    const candidateDir = path.join(root, "candidate");
+    const prepared = preparePair(root, {
+      outputDir: candidateDir,
+      releaseCandidateId: RELEASE_CANDIDATE_ID,
+      compatibilityManifestSha256: COMPATIBILITY_MANIFEST_SHA256,
+      controllerRunId: CONTROLLER_RUN_ID,
+    });
+
+    const expectedAdmission = {
+      schemaVersion: "pantheon.dev-release-candidate-admission.v1",
+      releaseCandidateId: RELEASE_CANDIDATE_ID,
+      compatibilityStatus: "compatible",
+      compatibilityManifestSha256: COMPATIBILITY_MANIFEST_SHA256,
+      controller: {
+        repository: "ajoe734/pantheon",
+        workflow: "nonprod-deploy.yml",
+        runId: CONTROLLER_RUN_ID,
+      },
+      backend: {
+        repository: "ajoe734/pantheon",
+        branch: "dev",
+        commitSha: BFF_SHA,
+      },
+      frontend: {
+        repository: "ajoe734/execute-plans",
+        branch: "dev",
+        commitSha: FRONTEND_SHA,
+      },
+    };
+    expect(prepared.pair.releaseAdmission).toEqual(expectedAdmission);
+    for (const relativePath of [
+      "candidate.json",
+      "dist/deployment.json",
+      "operator-live/candidate.json",
+      "operator-live/dist/deployment.json",
+      "write-proof/candidate.json",
+      "write-proof/dist/deployment.json",
+    ]) {
+      const manifest = JSON.parse(
+        fs.readFileSync(path.join(candidateDir, relativePath), "utf8"),
+      );
+      expect(manifest.releaseAdmission).toEqual(expectedAdmission);
+    }
+
+    const verified = verifyPair(candidateDir, {
+      expectedReleaseCandidateId: RELEASE_CANDIDATE_ID,
+      expectedCompatibilityManifestSha256: COMPATIBILITY_MANIFEST_SHA256,
+      expectedControllerRunId: CONTROLLER_RUN_ID,
+    });
+    expect(verified.pair.releaseAdmission).toEqual(expectedAdmission);
+    expect(() =>
+      verifyPair(candidateDir, {
+        expectedReleaseCandidateId: "e".repeat(64),
+        expectedCompatibilityManifestSha256:
+          COMPATIBILITY_MANIFEST_SHA256,
+        expectedControllerRunId: CONTROLLER_RUN_ID,
+      }),
+    ).toThrow(/release admission does not match the expected controller ledger/u);
+
+    const pairPath = path.join(candidateDir, "pair.json");
+    const pair = JSON.parse(fs.readFileSync(pairPath, "utf8"));
+    pair.releaseAdmission.compatibilityStatus = "pending";
+    fs.writeFileSync(pairPath, `${JSON.stringify(pair, null, 2)}\n`);
+    expect(() => verifyPair(candidateDir)).toThrow(
+      /release admission shape or exact pair binding is invalid/u,
+    );
+  });
+
   it("creates one deterministic, profile-bound read-only/operator-live/write-proof set", () => {
     const root = temporaryRoot();
     const readOnlyDistDir = makeDist(path.join(root, "read-only"));

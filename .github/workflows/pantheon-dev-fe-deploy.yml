@@ -1,23 +1,32 @@
 name: Pantheon Dev FE Deploy
+run-name: ${{ inputs.release_candidate_id && format('Deploy release candidate {0}', inputs.release_candidate_id) || github.workflow }}
 
 on:
-  workflow_run:
-    workflows:
-      - Pantheon FE-BFF Integration Gate
-    types:
-      - completed
-    branches:
-      - dev
   workflow_dispatch:
     inputs:
       candidate_sha:
         description: "Exact 40-character dev candidate SHA."
-        required: false
+        required: true
         default: ""
         type: string
       gate_run_id:
-        description: "Successful Pantheon FE-BFF Integration Gate push run for candidate_sha."
-        required: false
+        description: "Successful controller-dispatched Pantheon FE-BFF Integration Gate run."
+        required: true
+        default: ""
+        type: string
+      release_candidate_id:
+        description: "Exact Pantheon-owned cross-repo release candidate ID."
+        required: true
+        default: ""
+        type: string
+      compatibility_manifest_sha256:
+        description: "Exact compatibility manifest digest for release_candidate_id."
+        required: true
+        default: ""
+        type: string
+      release_controller_run_id:
+        description: "Pantheon Nonprod Deploy run that owns the release transaction."
+        required: true
         default: ""
         type: string
       deployment_profile:
@@ -64,12 +73,7 @@ jobs:
     timeout-minutes: 60
     if: >-
       ${{
-        github.event_name == 'workflow_dispatch' ||
-        (
-          github.event.workflow_run.conclusion == 'success' &&
-          github.event.workflow_run.event == 'push' &&
-          github.event.workflow_run.head_branch == 'dev'
-        )
+        github.event_name == 'workflow_dispatch'
       }}
     permissions:
       contents: read
@@ -87,6 +91,9 @@ jobs:
       read_only_digest: ${{ steps.pair.outputs.read_only_digest }}
       operator_live_digest: ${{ steps.pair.outputs.operator_live_digest }}
       write_proof_digest: ${{ steps.pair.outputs.write_proof_digest }}
+      release_candidate_id: ${{ steps.pair.outputs.release_candidate_id }}
+      compatibility_manifest_sha256: ${{ steps.pair.outputs.compatibility_manifest_sha256 }}
+      release_controller_run_id: ${{ steps.pair.outputs.release_controller_run_id }}
     runs-on:
       - self-hosted
       - Linux
@@ -118,14 +125,17 @@ jobs:
         id: gate
         uses: actions/github-script@v7
         env:
-          REQUESTED_GATE_RUN_ID: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.id || inputs.gate_run_id }}
-          REQUESTED_CANDIDATE_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.candidate_sha }}
-          EMERGENCY_OVERRIDE: ${{ github.event_name == 'workflow_dispatch' && inputs.emergency_override || false }}
-          ROLLBACK_DRILL: ${{ github.event_name == 'workflow_dispatch' && inputs.rollback_drill || false }}
-          OVERRIDE_REASON: ${{ github.event_name == 'workflow_dispatch' && inputs.override_reason || '' }}
+          REQUESTED_GATE_RUN_ID: ${{ inputs.gate_run_id }}
+          REQUESTED_CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          RELEASE_CANDIDATE_ID: ${{ inputs.release_candidate_id }}
+          COMPATIBILITY_MANIFEST_SHA256: ${{ inputs.compatibility_manifest_sha256 }}
+          RELEASE_CONTROLLER_RUN_ID: ${{ inputs.release_controller_run_id }}
+          EMERGENCY_OVERRIDE: ${{ inputs.emergency_override }}
+          ROLLBACK_DRILL: ${{ inputs.rollback_drill }}
+          OVERRIDE_REASON: ${{ inputs.override_reason }}
           EVENT_NAME: ${{ github.event_name }}
-          DEPLOYMENT_PROFILE: ${{ github.event_name == 'workflow_dispatch' && inputs.deployment_profile || 'read-only' }}
-          PROOF_WINDOW_ACK: ${{ github.event_name == 'workflow_dispatch' && inputs.proof_window_ack || false }}
+          DEPLOYMENT_PROFILE: ${{ inputs.deployment_profile }}
+          PROOF_WINDOW_ACK: ${{ inputs.proof_window_ack }}
           AUTHORIZED_OPERATORS: ${{ vars.PANTHEON_DEV_FE_DEPLOY_OPERATORS }}
           RUN_ATTEMPT: ${{ github.run_attempt }}
           TRIGGERING_ACTOR: ${{ github.triggering_actor }}
@@ -136,6 +146,9 @@ jobs:
             const digestPattern = /^sha256:[0-9a-f]{64}$/i;
             const gateRunIdText = String(process.env.REQUESTED_GATE_RUN_ID || "").trim();
             const requestedSha = String(process.env.REQUESTED_CANDIDATE_SHA || "").trim().toLowerCase();
+            const releaseCandidateId = String(process.env.RELEASE_CANDIDATE_ID || "").trim().toLowerCase();
+            const compatibilityManifestSha256 = String(process.env.COMPATIBILITY_MANIFEST_SHA256 || "").trim().toLowerCase();
+            const releaseControllerRunId = String(process.env.RELEASE_CONTROLLER_RUN_ID || "").trim();
             const emergencyOverride = String(process.env.EMERGENCY_OVERRIDE || "false") === "true";
             const rollbackDrill = String(process.env.ROLLBACK_DRILL || "false") === "true";
             const overrideReason = String(process.env.OVERRIDE_REASON || "").trim();
@@ -160,12 +173,18 @@ jobs:
               core.setFailed("candidate_sha must be one exact 40-character commit SHA");
               return;
             }
+            if (!/^[0-9a-f]{64}$/.test(releaseCandidateId) ||
+                !/^[0-9a-f]{64}$/.test(compatibilityManifestSha256) ||
+                !runPattern.test(releaseControllerRunId)) {
+              core.setFailed("cross-repo release admission identity is incomplete or malformed");
+              return;
+            }
             if (!["read-only", "operator-live", "write-proof"].includes(deploymentProfile)) {
               core.setFailed("deployment_profile must be read-only, operator-live, or write-proof");
               return;
             }
-            if (eventName !== "workflow_dispatch" && deploymentProfile !== "read-only") {
-              core.setFailed("workflow_run deployments are always read-only");
+            if (eventName !== "workflow_dispatch") {
+              core.setFailed("frontend deployment requires an exact controller workflow_dispatch");
               return;
             }
             if (deploymentProfile === "write-proof") {
@@ -233,13 +252,14 @@ jobs:
             const validRun =
               runPath === ".github/workflows/pantheon-integration-gate.yml" &&
               runRepo.toLowerCase() === `${context.repo.owner}/${context.repo.repo}`.toLowerCase() &&
-              run.event === "push" &&
+              run.event === "workflow_dispatch" &&
               run.head_branch === "dev" &&
               run.status === "completed" &&
               run.conclusion === "success" &&
-              String(run.head_sha || "").toLowerCase() === requestedSha;
+              String(run.head_sha || "").toLowerCase() === requestedSha &&
+              String(run.display_title || "") === `Release candidate ${releaseCandidateId}`;
             if (!validRun) {
-              core.setFailed(`run ${gateRunId} is not the successful dev push integration gate for ${requestedSha}`);
+              core.setFailed(`run ${gateRunId} is not the successful controller-dispatched integration gate for ${requestedSha}`);
               return;
             }
 
@@ -310,7 +330,7 @@ jobs:
               return;
             }
             const outOfOrder = currentDevSha !== requestedSha;
-            if (outOfOrder && !emergencyOverride) {
+            if (outOfOrder) {
               core.setFailed(`out-of-order candidate rejected: current dev is ${currentDevSha}, candidate is ${requestedSha}`);
               return;
             }
@@ -328,6 +348,9 @@ jobs:
             core.setOutput("override_actor", emergencyOverride || rollbackDrill ? context.actor : "");
             core.setOutput("deployment_profile", deploymentProfile);
             core.setOutput("proof_window_ack", proofWindowAck ? "true" : "false");
+            core.setOutput("release_candidate_id", releaseCandidateId);
+            core.setOutput("compatibility_manifest_sha256", compatibilityManifestSha256);
+            core.setOutput("release_controller_run_id", releaseControllerRunId);
 
       - name: Checkout trusted controller from exact current dev
         uses: actions/checkout@v4
@@ -481,6 +504,9 @@ jobs:
         env:
           EXPECTED_FRONTEND_SHA: ${{ steps.gate.outputs.candidate_sha }}
           EXPECTED_GATE_RUN_ID: ${{ steps.gate.outputs.gate_run_id }}
+          EXPECTED_RELEASE_CANDIDATE_ID: ${{ steps.gate.outputs.release_candidate_id }}
+          EXPECTED_COMPATIBILITY_MANIFEST_SHA256: ${{ steps.gate.outputs.compatibility_manifest_sha256 }}
+          EXPECTED_RELEASE_CONTROLLER_RUN_ID: ${{ steps.gate.outputs.release_controller_run_id }}
         run: |
           set -euo pipefail
           read_only_digest="$(node scripts/release-candidate.mjs verify-pair \
@@ -488,18 +514,27 @@ jobs:
             --expected-frontend-sha "$EXPECTED_FRONTEND_SHA" \
             --expected-gate-run-id "$EXPECTED_GATE_RUN_ID" \
             --expected-bff-base-url "$PANTHEON_BFF_BASE_URL" \
+            --expected-release-candidate-id "$EXPECTED_RELEASE_CANDIDATE_ID" \
+            --expected-compatibility-manifest-sha256 "$EXPECTED_COMPATIBILITY_MANIFEST_SHA256" \
+            --expected-controller-run-id "$EXPECTED_RELEASE_CONTROLLER_RUN_ID" \
             --profile read-only)"
           write_proof_digest="$(node scripts/release-candidate.mjs verify-pair \
             --candidate-dir .release-candidate \
             --expected-frontend-sha "$EXPECTED_FRONTEND_SHA" \
             --expected-gate-run-id "$EXPECTED_GATE_RUN_ID" \
             --expected-bff-base-url "$PANTHEON_BFF_BASE_URL" \
+            --expected-release-candidate-id "$EXPECTED_RELEASE_CANDIDATE_ID" \
+            --expected-compatibility-manifest-sha256 "$EXPECTED_COMPATIBILITY_MANIFEST_SHA256" \
+            --expected-controller-run-id "$EXPECTED_RELEASE_CONTROLLER_RUN_ID" \
             --profile write-proof)"
           operator_live_digest="$(node scripts/release-candidate.mjs verify-pair \
             --candidate-dir .release-candidate \
             --expected-frontend-sha "$EXPECTED_FRONTEND_SHA" \
             --expected-gate-run-id "$EXPECTED_GATE_RUN_ID" \
             --expected-bff-base-url "$PANTHEON_BFF_BASE_URL" \
+            --expected-release-candidate-id "$EXPECTED_RELEASE_CANDIDATE_ID" \
+            --expected-compatibility-manifest-sha256 "$EXPECTED_COMPATIBILITY_MANIFEST_SHA256" \
+            --expected-controller-run-id "$EXPECTED_RELEASE_CONTROLLER_RUN_ID" \
             --profile operator-live)"
           node --input-type=module - "$read_only_digest" "$operator_live_digest" "$write_proof_digest" <<'NODE'
           import fs from "node:fs";
@@ -513,11 +548,18 @@ jobs:
           const values = {
             pair_id: digest(pair.pairId, "pair id"),
             bff_sha: String(pair.bffSha || "").toLowerCase(),
+            release_candidate_id: digest(pair.releaseAdmission?.releaseCandidateId, "release candidate id"),
+            compatibility_manifest_sha256: digest(pair.releaseAdmission?.compatibilityManifestSha256, "compatibility manifest digest"),
+            release_controller_run_id: String(pair.releaseAdmission?.controller?.runId || ""),
             read_only_digest: digest(readOnlyDigest, "verified read-only digest"),
             operator_live_digest: digest(operatorLiveDigest, "verified operator-live digest"),
             write_proof_digest: digest(writeProofDigest, "verified write-proof digest"),
           };
           if (!/^[0-9a-f]{40}$/u.test(values.bff_sha) ||
+              !/^[1-9][0-9]*$/u.test(values.release_controller_run_id) ||
+              values.release_candidate_id !== process.env.EXPECTED_RELEASE_CANDIDATE_ID ||
+              values.compatibility_manifest_sha256 !== process.env.EXPECTED_COMPATIBILITY_MANIFEST_SHA256 ||
+              values.release_controller_run_id !== process.env.EXPECTED_RELEASE_CONTROLLER_RUN_ID ||
               values.read_only_digest !== digest(pair.profiles?.readOnly?.artifactDigestSha256, "pair read-only digest") ||
               values.operator_live_digest !== digest(pair.profiles?.operatorLive?.artifactDigestSha256, "pair operator-live digest") ||
               values.write_proof_digest !== digest(pair.profiles?.writeProof?.artifactDigestSha256, "pair write-proof digest")) {
@@ -526,6 +568,36 @@ jobs:
           fs.appendFileSync(process.env.GITHUB_OUTPUT,
             `${Object.entries(values).map(([key, value]) => `${key}=${value}`).join("\n")}\n`, "utf8");
           NODE
+
+      - name: Validate Pantheon release controller owns the exact pair
+        uses: actions/github-script@v7
+        env:
+          RELEASE_CONTROLLER_RUN_ID: ${{ steps.pair.outputs.release_controller_run_id }}
+          EXPECTED_BACKEND_SHA: ${{ steps.pair.outputs.bff_sha }}
+          EXPECTED_RELEASE_CANDIDATE_ID: ${{ steps.pair.outputs.release_candidate_id }}
+          EXPECTED_COMPATIBILITY_MANIFEST_SHA256: ${{ steps.pair.outputs.compatibility_manifest_sha256 }}
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const { data: run } = await github.rest.actions.getWorkflowRun({
+              owner: "ajoe734",
+              repo: "pantheon",
+              run_id: Number(process.env.RELEASE_CONTROLLER_RUN_ID),
+            });
+            const path = String(run.path || "").split("@")[0];
+            const repository = String(
+              run.head_repository?.full_name || run.repository?.full_name || "",
+            ).toLowerCase();
+            const active = run.status === "in_progress" && run.conclusion == null;
+            const accepted = run.status === "completed" && run.conclusion === "success";
+            if (path !== ".github/workflows/nonprod-deploy.yml" ||
+                repository !== "ajoe734/pantheon" ||
+                run.event !== "workflow_dispatch" ||
+                run.head_branch !== "dev" ||
+                String(run.head_sha || "").toLowerCase() !== process.env.EXPECTED_BACKEND_SHA ||
+                (!active && !accepted)) {
+              core.setFailed("Pantheon controller does not own an active or accepted exact-pair transaction");
+            }
 
       - name: Checkout protected Pantheon Agora gate controller
         uses: actions/checkout@v4
@@ -542,17 +614,40 @@ jobs:
         env:
           EXPECTED_FRONTEND_SHA: ${{ steps.gate.outputs.candidate_sha }}
           EXPECTED_BFF_SHA: ${{ steps.pair.outputs.bff_sha }}
+          EXPECTED_RELEASE_CANDIDATE_ID: ${{ steps.pair.outputs.release_candidate_id }}
+          EXPECTED_COMPATIBILITY_MANIFEST_SHA256: ${{ steps.pair.outputs.compatibility_manifest_sha256 }}
         run: |
           set -euo pipefail
+          manifest_path="${PANTHEON_AUDIT_RUN_ROOT}/release-compatibility-manifest.json"
           evidence_path="${PANTHEON_AUDIT_RUN_ROOT}/agora-compatibility-gate.input.json"
+          python3 .pantheon-agora-compat/scripts/agora_compat_manifest.py write \
+            --output "${manifest_path}" \
+            --frontend-root "${GITHUB_WORKSPACE}" \
+            --backend-dev-ref refs/remotes/origin/dev \
+            --frontend-dev-ref refs/remotes/origin/dev \
+            --backend-runtime-commit "${EXPECTED_BFF_SHA}" \
+            --frontend-runtime-commit "${EXPECTED_FRONTEND_SHA}" \
+            --compatibility-status accepted
           python3 .pantheon-agora-compat/scripts/agora_compat_manifest.py deployment-gate \
-            --manifest .pantheon-agora-compat/docs/contracts/agora/dev-compatibility-manifest.json \
+            --manifest "${manifest_path}" \
             --frontend-root "${GITHUB_WORKSPACE}" \
             --backend-dev-ref refs/remotes/origin/dev \
             --frontend-dev-ref refs/remotes/origin/dev \
             --backend-runtime-commit "${EXPECTED_BFF_SHA}" \
             --frontend-runtime-commit "${EXPECTED_FRONTEND_SHA}" \
             --evidence-out "${evidence_path}"
+          node --input-type=module - "${evidence_path}" <<'NODE'
+          import fs from "node:fs";
+          const evidence = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+          const candidate = evidence.release_candidate || {};
+          if (candidate.compatibility_status !== "compatible" ||
+              candidate.release_candidate_id !== process.env.EXPECTED_RELEASE_CANDIDATE_ID ||
+              candidate.compatibility_manifest?.sha256 !== process.env.EXPECTED_COMPATIBILITY_MANIFEST_SHA256 ||
+              candidate.backend?.commit !== process.env.EXPECTED_BFF_SHA ||
+              candidate.frontend?.commit !== process.env.EXPECTED_FRONTEND_SHA) {
+            throw new Error("execute-plans candidate manifest does not match recomputed Pantheon admission");
+          }
+          NODE
           echo "evidence_path=${evidence_path}" >> "$GITHUB_OUTPUT"
 
       - name: Run target-runner controller regression harness
@@ -590,8 +685,8 @@ jobs:
         if: always()
         shell: bash
         env:
-          CANDIDATE_SHA: ${{ steps.gate.outputs.candidate_sha || (github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.candidate_sha) }}
-          GATE_RUN_ID: ${{ steps.gate.outputs.gate_run_id || (github.event_name == 'workflow_run' && github.event.workflow_run.id || inputs.gate_run_id) }}
+          CANDIDATE_SHA: ${{ steps.gate.outputs.candidate_sha || inputs.candidate_sha }}
+          GATE_RUN_ID: ${{ steps.gate.outputs.gate_run_id || inputs.gate_run_id }}
           ARTIFACT_ID: ${{ steps.gate.outputs.artifact_id }}
           ARTIFACT_NAME: ${{ steps.gate.outputs.artifact_name }}
           GITHUB_ARTIFACT_DIGEST: ${{ steps.gate.outputs.github_artifact_digest }}
@@ -612,6 +707,9 @@ jobs:
           READ_ONLY_DIGEST: ${{ steps.pair.outputs.read_only_digest }}
           OPERATOR_LIVE_DIGEST: ${{ steps.pair.outputs.operator_live_digest }}
           WRITE_PROOF_DIGEST: ${{ steps.pair.outputs.write_proof_digest }}
+          RELEASE_CANDIDATE_ID: ${{ steps.pair.outputs.release_candidate_id }}
+          COMPATIBILITY_MANIFEST_SHA256: ${{ steps.pair.outputs.compatibility_manifest_sha256 }}
+          RELEASE_CONTROLLER_RUN_ID: ${{ steps.pair.outputs.release_controller_run_id }}
         run: |
           set -euo pipefail
           expected_audit_root="${RUNNER_TEMP%/}/pantheon-dev-fe-deploy-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
@@ -642,6 +740,9 @@ jobs:
               "trustedControllerSha": os.environ.get("TRUSTED_CONTROLLER_SHA", ""),
               "deploymentProfile": os.environ.get("DEPLOYMENT_PROFILE", ""),
               "pairId": os.environ.get("PAIR_ID", ""),
+              "releaseCandidateId": os.environ.get("RELEASE_CANDIDATE_ID", ""),
+              "compatibilityManifestSha256": os.environ.get("COMPATIBILITY_MANIFEST_SHA256", ""),
+              "releaseControllerRunId": os.environ.get("RELEASE_CONTROLLER_RUN_ID", ""),
               "pair": {
                   "readOnlyArtifactDigestSha256": os.environ.get("READ_ONLY_DIGEST", ""),
                   "operatorLiveArtifactDigestSha256": os.environ.get("OPERATOR_LIVE_DIGEST", ""),
@@ -846,6 +947,9 @@ jobs:
       EXPECTED_PAIR_ID: ${{ needs.deploy.outputs.pair_id }}
       EXPECTED_READ_ONLY_DIGEST: ${{ needs.deploy.outputs.read_only_digest }}
       EXPECTED_WRITE_PROOF_DIGEST: ${{ needs.deploy.outputs.write_proof_digest }}
+      RELEASE_CANDIDATE_ID: ${{ needs.deploy.outputs.release_candidate_id }}
+      COMPATIBILITY_MANIFEST_SHA256: ${{ needs.deploy.outputs.compatibility_manifest_sha256 }}
+      RELEASE_CONTROLLER_RUN_ID: ${{ needs.deploy.outputs.release_controller_run_id }}
 
     steps:
       - name: Reauthorize one-time parent proof coordinator
@@ -955,6 +1059,9 @@ jobs:
             --expected-bff-base-url "$PANTHEON_BFF_BASE_URL" \
             --expected-gate-run-id "$SOURCE_GATE_RUN_ID" \
             --expected-pair-id "$EXPECTED_PAIR_ID" \
+            --expected-release-candidate-id "$RELEASE_CANDIDATE_ID" \
+            --expected-compatibility-manifest-sha256 "$COMPATIBILITY_MANIFEST_SHA256" \
+            --expected-controller-run-id "$RELEASE_CONTROLLER_RUN_ID" \
             --profile read-only)"
           write_proof_digest="$(node scripts/release-candidate.mjs verify-pair \
             --candidate-dir .release-candidate \
@@ -963,6 +1070,9 @@ jobs:
             --expected-bff-base-url "$PANTHEON_BFF_BASE_URL" \
             --expected-gate-run-id "$SOURCE_GATE_RUN_ID" \
             --expected-pair-id "$EXPECTED_PAIR_ID" \
+            --expected-release-candidate-id "$RELEASE_CANDIDATE_ID" \
+            --expected-compatibility-manifest-sha256 "$COMPATIBILITY_MANIFEST_SHA256" \
+            --expected-controller-run-id "$RELEASE_CONTROLLER_RUN_ID" \
             --profile write-proof)"
           [[ "$read_only_digest" == "$EXPECTED_READ_ONLY_DIGEST" ]]
           [[ "$write_proof_digest" == "$EXPECTED_WRITE_PROOF_DIGEST" ]]
@@ -981,16 +1091,37 @@ jobs:
         run: |
           set -euo pipefail
           evidence_dir="${RUNNER_TEMP%/}/pantheon-proof-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          manifest_path="${evidence_dir}/release-compatibility-manifest.json"
           evidence_path="${evidence_dir}/agora-compatibility-gate.input.json"
           mkdir -p "${evidence_dir}"
+          python3 .pantheon-agora-compat/scripts/agora_compat_manifest.py write \
+            --output "${manifest_path}" \
+            --frontend-root "${GITHUB_WORKSPACE}" \
+            --backend-dev-ref refs/remotes/origin/dev \
+            --frontend-dev-ref refs/remotes/origin/dev \
+            --backend-runtime-commit "${EXACT_BFF_SHA}" \
+            --frontend-runtime-commit "${EXACT_FE_SHA}" \
+            --compatibility-status accepted
           python3 .pantheon-agora-compat/scripts/agora_compat_manifest.py deployment-gate \
-            --manifest .pantheon-agora-compat/docs/contracts/agora/dev-compatibility-manifest.json \
+            --manifest "${manifest_path}" \
             --frontend-root "${GITHUB_WORKSPACE}" \
             --backend-dev-ref refs/remotes/origin/dev \
             --frontend-dev-ref refs/remotes/origin/dev \
             --backend-runtime-commit "${EXACT_BFF_SHA}" \
             --frontend-runtime-commit "${EXACT_FE_SHA}" \
             --evidence-out "${evidence_path}"
+          node --input-type=module - "${evidence_path}" <<'NODE'
+          import fs from "node:fs";
+          const evidence = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+          const candidate = evidence.release_candidate || {};
+          if (candidate.compatibility_status !== "compatible" ||
+              candidate.release_candidate_id !== process.env.RELEASE_CANDIDATE_ID ||
+              candidate.compatibility_manifest?.sha256 !== process.env.COMPATIBILITY_MANIFEST_SHA256 ||
+              candidate.backend?.commit !== process.env.EXACT_BFF_SHA ||
+              candidate.frontend?.commit !== process.env.EXACT_FE_SHA) {
+            throw new Error("write proof does not match the controller admission");
+          }
+          NODE
           echo "evidence_path=${evidence_path}" >> "$GITHUB_OUTPUT"
 
       - name: Create parent proof binding
@@ -1029,6 +1160,11 @@ jobs:
               bffSha: process.env.EXACT_BFF_SHA,
               readOnlyArtifactDigestSha256: process.env.EXPECTED_READ_ONLY_DIGEST,
               writeProofArtifactDigestSha256: process.env.EXPECTED_WRITE_PROOF_DIGEST,
+            },
+            releaseAdmission: {
+              releaseCandidateId: process.env.RELEASE_CANDIDATE_ID,
+              compatibilityManifestSha256: process.env.COMPATIBILITY_MANIFEST_SHA256,
+              controllerRunId: process.env.RELEASE_CONTROLLER_RUN_ID,
             },
             correlationId,
             nonce,
@@ -1207,6 +1343,9 @@ jobs:
             -f bff_base_url="$PANTHEON_BFF_BASE_URL" \
             -f bff_sha="$EXACT_BFF_SHA" \
             -f pantheon_contract_ref="$EXACT_BFF_SHA" \
+            -f release_candidate_id="$RELEASE_CANDIDATE_ID" \
+            -f compatibility_manifest_sha256="$COMPATIBILITY_MANIFEST_SHA256" \
+            -f release_controller_run_id="$RELEASE_CONTROLLER_RUN_ID" \
             -f persona_interaction_write_proof=true \
             -f pint_hosted_probe=true \
             -f soft_fail=false

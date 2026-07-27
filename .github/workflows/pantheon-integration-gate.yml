@@ -1,5 +1,5 @@
 name: Pantheon FE-BFF Integration Gate
-run-name: ${{ inputs.proof_correlation_id && format('PINT proof {0}', inputs.proof_correlation_id) || github.event.pull_request.title || github.event.head_commit.message || github.workflow }}
+run-name: ${{ inputs.proof_correlation_id && format('PINT proof {0}', inputs.proof_correlation_id) || inputs.release_candidate_id && format('Release candidate {0}', inputs.release_candidate_id) || github.event.pull_request.title || github.event.head_commit.message || github.workflow }}
 
 on:
   pull_request:
@@ -47,7 +47,7 @@ on:
         required: false
         default: ""
       source_gate_run_id:
-        description: "Successful dev-push gate run that produced the deployed candidate pair."
+        description: "Successful controller-dispatched gate run that produced the deployed candidate pair."
         required: false
         default: ""
       source_artifact_id:
@@ -82,6 +82,18 @@ on:
         description: "Pantheon ref used for the Agora OpenAPI/schema contract bundle"
         required: false
         default: "dev"
+      release_candidate_id:
+        description: "Exact Pantheon-owned cross-repo release candidate ID."
+        required: false
+        default: ""
+      compatibility_manifest_sha256:
+        description: "Exact generated compatibility manifest digest for release_candidate_id."
+        required: false
+        default: ""
+      release_controller_run_id:
+        description: "Active Pantheon Nonprod Deploy run that owns this release transaction."
+        required: false
+        default: ""
       persona_interaction_write_proof:
         description: "Run the explicitly gated hosted Persona interaction write/readback proof"
         required: false
@@ -140,6 +152,7 @@ jobs:
           BINDING_ARTIFACT_DIGEST: ${{ inputs.parent_binding_artifact_digest }}
           CHILD_TRIGGERING_ACTOR: ${{ github.triggering_actor }}
         with:
+          github-token: ${{ github.token }}
           script: |
             const numeric = /^[1-9][0-9]*$/;
             const sha = /^[0-9a-f]{40}$/i;
@@ -244,6 +257,9 @@ jobs:
           EXPECTED_PAIR_ID: ${{ inputs.expected_pair_id }}
           EXPECTED_READ_ONLY_DIGEST: ${{ inputs.expected_read_only_digest }}
           EXPECTED_WRITE_PROOF_DIGEST: ${{ inputs.expected_write_proof_digest }}
+          EXPECTED_RELEASE_CANDIDATE_ID: ${{ inputs.release_candidate_id }}
+          EXPECTED_COMPATIBILITY_MANIFEST_SHA256: ${{ inputs.compatibility_manifest_sha256 }}
+          EXPECTED_RELEASE_CONTROLLER_RUN_ID: ${{ inputs.release_controller_run_id }}
         run: |
           set -euo pipefail
           archive="${RUNNER_TEMP%/}/parent-proof-binding.zip"
@@ -288,7 +304,10 @@ jobs:
             b.source?.artifactDigest === process.env.SOURCE_ARTIFACT_DIGEST &&
             b.pair?.pairId === process.env.EXPECTED_PAIR_ID && b.pair?.bffSha === process.env.BFF_SHA &&
             b.pair?.readOnlyArtifactDigestSha256 === process.env.EXPECTED_READ_ONLY_DIGEST &&
-            b.pair?.writeProofArtifactDigestSha256 === process.env.EXPECTED_WRITE_PROOF_DIGEST;
+            b.pair?.writeProofArtifactDigestSha256 === process.env.EXPECTED_WRITE_PROOF_DIGEST &&
+            b.releaseAdmission?.releaseCandidateId === process.env.EXPECTED_RELEASE_CANDIDATE_ID &&
+            b.releaseAdmission?.compatibilityManifestSha256 === process.env.EXPECTED_COMPATIBILITY_MANIFEST_SHA256 &&
+            String(b.releaseAdmission?.controllerRunId) === process.env.EXPECTED_RELEASE_CONTROLLER_RUN_ID;
           if (!valid) throw new Error("parent proof nonce/correlation binding mismatch");
           NODE
 
@@ -445,7 +464,61 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.fe_sha || github.sha }}
+          fetch-depth: 0
           persist-credentials: false
+
+      - name: Validate active Pantheon release controller source
+        if: inputs.release_candidate_id != ''
+        uses: actions/github-script@v7
+        env:
+          RELEASE_CANDIDATE_ID: ${{ inputs.release_candidate_id }}
+          COMPATIBILITY_MANIFEST_SHA256: ${{ inputs.compatibility_manifest_sha256 }}
+          RELEASE_CONTROLLER_RUN_ID: ${{ inputs.release_controller_run_id }}
+          EXPECTED_FRONTEND_SHA: ${{ inputs.fe_sha }}
+          EXPECTED_BACKEND_SHA: ${{ inputs.bff_sha }}
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const sha = /^[0-9a-f]{40}$/;
+            const digest = /^[0-9a-f]{64}$/;
+            const numeric = /^[1-9][0-9]*$/;
+            const candidateId = String(process.env.RELEASE_CANDIDATE_ID || "").toLowerCase();
+            const manifestDigest = String(process.env.COMPATIBILITY_MANIFEST_SHA256 || "").toLowerCase();
+            const controllerRunId = String(process.env.RELEASE_CONTROLLER_RUN_ID || "");
+            const frontendSha = String(process.env.EXPECTED_FRONTEND_SHA || "").toLowerCase();
+            const backendSha = String(process.env.EXPECTED_BACKEND_SHA || "").toLowerCase();
+            if (context.eventName !== "workflow_dispatch" ||
+                !digest.test(candidateId) || !digest.test(manifestDigest) ||
+                !numeric.test(controllerRunId) ||
+                !sha.test(frontendSha) || !sha.test(backendSha)) {
+              core.setFailed("release admission inputs are incomplete or malformed");
+              return;
+            }
+            const { data: dev } = await github.rest.git.getRef({
+              owner: context.repo.owner, repo: context.repo.repo, ref: "heads/dev",
+            });
+            if (String(dev.object.sha || "").toLowerCase() !== frontendSha ||
+                String(context.sha || "").toLowerCase() !== frontendSha ||
+                context.ref !== "refs/heads/dev") {
+              core.setFailed("release candidate must be the exact current execute-plans dev commit");
+              return;
+            }
+            const { data: controller } = await github.rest.actions.getWorkflowRun({
+              owner: "ajoe734", repo: "pantheon", run_id: Number(controllerRunId),
+            });
+            const path = String(controller.path || "").split("@")[0];
+            const repository = String(
+              controller.head_repository?.full_name || controller.repository?.full_name || "",
+            ).toLowerCase();
+            if (path !== ".github/workflows/nonprod-deploy.yml" ||
+                repository !== "ajoe734/pantheon" ||
+                controller.event !== "workflow_dispatch" ||
+                controller.head_branch !== "dev" ||
+                controller.status !== "in_progress" ||
+                controller.conclusion != null ||
+                String(controller.head_sha || "").toLowerCase() !== backendSha) {
+              core.setFailed("release candidate is not owned by the exact active Pantheon dev controller");
+            }
 
       - name: Validate exact hosted proof source before credentials
         id: proof_source
@@ -458,6 +531,7 @@ jobs:
           EXPECTED_PAIR_ID: ${{ inputs.expected_pair_id }}
           EXPECTED_READ_ONLY_DIGEST: ${{ inputs.expected_read_only_digest }}
           EXPECTED_WRITE_PROOF_DIGEST: ${{ inputs.expected_write_proof_digest }}
+          EXPECTED_RELEASE_CANDIDATE_ID: ${{ inputs.release_candidate_id }}
         with:
           script: |
             const sha = /^[0-9a-f]{40}$/i;
@@ -497,10 +571,11 @@ jobs:
             const runRepo = String(run.head_repository?.full_name || run.repository?.full_name || "").toLowerCase();
             if (runPath !== ".github/workflows/pantheon-integration-gate.yml" ||
                 runRepo !== `${context.repo.owner}/${context.repo.repo}`.toLowerCase() ||
-                run.event !== "push" || run.head_branch !== "dev" ||
+                run.event !== "workflow_dispatch" || run.head_branch !== "dev" ||
                 run.status !== "completed" || run.conclusion !== "success" ||
+                String(run.display_title || "") !== `Release candidate ${process.env.EXPECTED_RELEASE_CANDIDATE_ID}` ||
                 String(run.head_sha || "").toLowerCase() !== frontendSha) {
-              fail(`run ${runId} is not the exact successful dev-push gate for ${frontendSha}`);
+              fail(`run ${runId} is not the exact successful controller gate for ${frontendSha}`);
               return;
             }
             const { data: dev } = await github.rest.git.getRef({
@@ -520,7 +595,7 @@ jobs:
               !artifact.expired && String(artifact.digest || "").toLowerCase() === artifactDigest,
             );
             if (matches.length !== 1) {
-              fail("Hosted PINT proof source artifact does not match the exact immutable dev-push pair");
+              fail("Hosted PINT proof source artifact does not match the exact immutable controller pair");
               return;
             }
             core.setOutput("pair_id", pairId);
@@ -534,6 +609,7 @@ jobs:
           ref: ${{ env.PANTHEON_AGORA_CONTRACT_REF }}
           path: pantheon-contract
           token: ${{ github.token }}
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Setup Node
@@ -558,6 +634,9 @@ jobs:
           EXPECTED_PAIR_ID: ${{ inputs.expected_pair_id }}
           EXPECTED_READ_ONLY_DIGEST: ${{ inputs.expected_read_only_digest }}
           EXPECTED_WRITE_PROOF_DIGEST: ${{ inputs.expected_write_proof_digest }}
+          EXPECTED_RELEASE_CANDIDATE_ID: ${{ inputs.release_candidate_id }}
+          EXPECTED_COMPATIBILITY_MANIFEST_SHA256: ${{ inputs.compatibility_manifest_sha256 }}
+          EXPECTED_RELEASE_CONTROLLER_RUN_ID: ${{ inputs.release_controller_run_id }}
         run: |
           set -euo pipefail
           archive="${RUNNER_TEMP%/}/pint-source-pair-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.zip"
@@ -635,6 +714,9 @@ jobs:
             --expected-bff-base-url "$PANTHEON_BFF_BASE_URL" \
             --expected-gate-run-id "$SOURCE_GATE_RUN_ID" \
             --expected-pair-id "$EXPECTED_PAIR_ID" \
+            --expected-release-candidate-id "$EXPECTED_RELEASE_CANDIDATE_ID" \
+            --expected-compatibility-manifest-sha256 "$EXPECTED_COMPATIBILITY_MANIFEST_SHA256" \
+            --expected-controller-run-id "$EXPECTED_RELEASE_CONTROLLER_RUN_ID" \
             --profile read-only)"
           write_proof_digest="$(node scripts/release-candidate.mjs verify-pair \
             --candidate-dir "$pair_dir" \
@@ -643,6 +725,9 @@ jobs:
             --expected-bff-base-url "$PANTHEON_BFF_BASE_URL" \
             --expected-gate-run-id "$SOURCE_GATE_RUN_ID" \
             --expected-pair-id "$EXPECTED_PAIR_ID" \
+            --expected-release-candidate-id "$EXPECTED_RELEASE_CANDIDATE_ID" \
+            --expected-compatibility-manifest-sha256 "$EXPECTED_COMPATIBILITY_MANIFEST_SHA256" \
+            --expected-controller-run-id "$EXPECTED_RELEASE_CONTROLLER_RUN_ID" \
             --profile write-proof)"
           if [[ "$read_only_digest" != "$EXPECTED_READ_ONLY_DIGEST" || \
                 "$write_proof_digest" != "$EXPECTED_WRITE_PROOF_DIGEST" ]]; then
@@ -675,6 +760,60 @@ jobs:
           echo "PANTHEON_RELEASE_IDENTITY_FILE=${identity_file}" >> "$GITHUB_ENV"
           echo "bff_sha=${bff_sha}" >> "$GITHUB_OUTPUT"
           echo "Exact release identity: FE ${PANTHEON_FRONTEND_SHA}, BFF ${bff_sha}"
+
+      - name: Recompute exact Pantheon compatibility admission
+        id: release_admission
+        if: inputs.release_candidate_id != ''
+        env:
+          EXPECTED_RELEASE_CANDIDATE_ID: ${{ inputs.release_candidate_id }}
+          EXPECTED_COMPATIBILITY_MANIFEST_SHA256: ${{ inputs.compatibility_manifest_sha256 }}
+          RELEASE_CONTROLLER_RUN_ID: ${{ inputs.release_controller_run_id }}
+        run: |
+          set -euo pipefail
+          manifest="$PANTHEON_AUDIT_OUT_DIR/release-compatibility-manifest.json"
+          evidence="$PANTHEON_AUDIT_OUT_DIR/release-candidate-ledger.json"
+          python3 pantheon-contract/scripts/agora_compat_manifest.py write \
+            --output "$manifest" \
+            --frontend-root "$GITHUB_WORKSPACE" \
+            --backend-dev-ref refs/remotes/origin/dev \
+            --frontend-dev-ref refs/remotes/origin/dev \
+            --backend-runtime-commit "$PANTHEON_BFF_SHA" \
+            --frontend-runtime-commit "$PANTHEON_FRONTEND_SHA" \
+            --compatibility-status accepted
+          python3 pantheon-contract/scripts/agora_compat_manifest.py deployment-gate \
+            --manifest "$manifest" \
+            --frontend-root "$GITHUB_WORKSPACE" \
+            --backend-dev-ref refs/remotes/origin/dev \
+            --frontend-dev-ref refs/remotes/origin/dev \
+            --backend-runtime-commit "$PANTHEON_BFF_SHA" \
+            --frontend-runtime-commit "$PANTHEON_FRONTEND_SHA" \
+            --evidence-out "$evidence"
+          node --input-type=module - "$evidence" <<'NODE'
+          import fs from "node:fs";
+          const ledger = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+          const candidate = ledger.release_candidate || {};
+          const valid = candidate.schema_version === "pantheon.dev-release-candidate.v1" &&
+            candidate.compatibility_status === "compatible" &&
+            candidate.release_candidate_id === process.env.EXPECTED_RELEASE_CANDIDATE_ID &&
+            candidate.compatibility_manifest?.sha256 === process.env.EXPECTED_COMPATIBILITY_MANIFEST_SHA256 &&
+            candidate.compatibility_manifest?.source_status === "accepted" &&
+            candidate.backend?.repository === "ajoe734/pantheon" &&
+            candidate.backend?.branch === "dev" &&
+            candidate.backend?.commit === process.env.PANTHEON_BFF_SHA &&
+            candidate.frontend?.repository === "ajoe734/execute-plans" &&
+            candidate.frontend?.branch === "dev" &&
+            candidate.frontend?.commit === process.env.PANTHEON_FRONTEND_SHA;
+          if (!valid) throw new Error("recomputed release candidate ledger does not match Pantheon admission");
+          fs.appendFileSync(process.env.GITHUB_ENV, [
+            `PANTHEON_RELEASE_CANDIDATE_ID=${candidate.release_candidate_id}`,
+            `PANTHEON_COMPATIBILITY_MANIFEST_SHA256=${candidate.compatibility_manifest.sha256}`,
+            `PANTHEON_RELEASE_CONTROLLER_RUN_ID=${process.env.RELEASE_CONTROLLER_RUN_ID}`,
+          ].join("\n") + "\n");
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, [
+            `release_candidate_id=${candidate.release_candidate_id}`,
+            `compatibility_manifest_sha256=${candidate.compatibility_manifest.sha256}`,
+          ].join("\n") + "\n");
+          NODE
 
       - name: Install
         id: install
@@ -758,6 +897,14 @@ jobs:
         id: candidate
         if: steps.release_identity.outcome == 'success' && steps.build.outcome == 'success' && steps.build_operator_live.outcome == 'success' && steps.build_write_proof.outcome == 'success'
         run: |
+          admission_args=()
+          if [[ -n "${PANTHEON_RELEASE_CANDIDATE_ID:-}" ]]; then
+            admission_args+=(
+              --release-candidate-id "$PANTHEON_RELEASE_CANDIDATE_ID"
+              --compatibility-manifest-sha256 "$PANTHEON_COMPATIBILITY_MANIFEST_SHA256"
+              --controller-run-id "$PANTHEON_RELEASE_CONTROLLER_RUN_ID"
+            )
+          fi
           node scripts/release-candidate.mjs prepare-pair \
             --read-only-dist-dir dist \
             --operator-live-dist-dir dist-operator-live \
@@ -767,7 +914,8 @@ jobs:
             --bff-sha "$PANTHEON_BFF_SHA" \
             --gate-run-id "$GITHUB_RUN_ID" \
             --gate-run-url "$PANTHEON_RELEASE_GATE_RUN_URL" \
-            --bff-base-url "$PANTHEON_BFF_BASE_URL"
+            --bff-base-url "$PANTHEON_BFF_BASE_URL" \
+            "${admission_args[@]}"
           node --input-type=module <<'NODE'
           import fs from "node:fs";
           const pair = JSON.parse(fs.readFileSync(".release-candidate/pair.json", "utf8"));
@@ -1156,8 +1304,14 @@ jobs:
         if: >-
           ${{
             always() &&
-            github.event_name == 'push' &&
-            github.ref == 'refs/heads/dev' &&
+            (
+              (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
+              (
+                github.event_name == 'workflow_dispatch' &&
+                inputs.release_candidate_id != '' &&
+                steps.release_admission.outcome == 'success'
+              )
+            ) &&
             steps.deploy_controller.outcome == 'success' &&
             steps.candidate.outcome == 'success' &&
             steps.release_identity_final.outcome == 'success' &&
@@ -1165,6 +1319,14 @@ jobs:
           }}
         run: |
           set -euo pipefail
+          admission_args=()
+          if [[ -n "${PANTHEON_RELEASE_CANDIDATE_ID:-}" ]]; then
+            admission_args+=(
+              --expected-release-candidate-id "$PANTHEON_RELEASE_CANDIDATE_ID"
+              --expected-compatibility-manifest-sha256 "$PANTHEON_COMPATIBILITY_MANIFEST_SHA256"
+              --expected-controller-run-id "$PANTHEON_RELEASE_CONTROLLER_RUN_ID"
+            )
+          fi
           verified_read_only_digest="$(node scripts/release-candidate.mjs verify-pair \
             --candidate-dir .release-candidate \
             --expected-frontend-sha "$PANTHEON_FRONTEND_SHA" \
@@ -1172,7 +1334,8 @@ jobs:
             --expected-bff-base-url "$PANTHEON_BFF_BASE_URL" \
             --expected-gate-run-id "$GITHUB_RUN_ID" \
             --expected-pair-id "$PANTHEON_CANDIDATE_PAIR_ID" \
-            --profile read-only)"
+            --profile read-only \
+            "${admission_args[@]}")"
           verified_write_proof_digest="$(node scripts/release-candidate.mjs verify-pair \
             --candidate-dir .release-candidate \
             --expected-frontend-sha "$PANTHEON_FRONTEND_SHA" \
@@ -1180,7 +1343,8 @@ jobs:
             --expected-bff-base-url "$PANTHEON_BFF_BASE_URL" \
             --expected-gate-run-id "$GITHUB_RUN_ID" \
             --expected-pair-id "$PANTHEON_CANDIDATE_PAIR_ID" \
-            --profile write-proof)"
+            --profile write-proof \
+            "${admission_args[@]}")"
           verified_operator_live_digest="$(node scripts/release-candidate.mjs verify-pair \
             --candidate-dir .release-candidate \
             --expected-frontend-sha "$PANTHEON_FRONTEND_SHA" \
@@ -1188,14 +1352,17 @@ jobs:
             --expected-bff-base-url "$PANTHEON_BFF_BASE_URL" \
             --expected-gate-run-id "$GITHUB_RUN_ID" \
             --expected-pair-id "$PANTHEON_CANDIDATE_PAIR_ID" \
-            --profile operator-live)"
+            --profile operator-live \
+            "${admission_args[@]}")"
           if [[ "$verified_read_only_digest" != "$PANTHEON_EXPECTED_ARTIFACT_DIGEST" || \
                 "$verified_operator_live_digest" != "$PANTHEON_EXPECTED_OPERATOR_LIVE_DIGEST" || \
                 "$verified_write_proof_digest" != "$PANTHEON_EXPECTED_WRITE_PROOF_DIGEST" ]]; then
             echo "Final paired candidate digest mismatch." >&2
             exit 1
           fi
-          printf 'pairId=%s\nreadOnlyArtifactDigestSha256=%s\noperatorLiveArtifactDigestSha256=%s\nwriteProofArtifactDigestSha256=%s\n' \
+          printf 'releaseCandidateId=%s\ncompatibilityManifestSha256=%s\npairId=%s\nreadOnlyArtifactDigestSha256=%s\noperatorLiveArtifactDigestSha256=%s\nwriteProofArtifactDigestSha256=%s\n' \
+            "${PANTHEON_RELEASE_CANDIDATE_ID:-ci-only}" \
+            "${PANTHEON_COMPATIBILITY_MANIFEST_SHA256:-ci-only}" \
             "$PANTHEON_CANDIDATE_PAIR_ID" \
             "$verified_read_only_digest" \
             "$verified_operator_live_digest" \
@@ -1208,6 +1375,7 @@ jobs:
           cat > "$PANTHEON_AUDIT_OUT_DIR/release-gate-step-outcomes.json" <<JSON
           {
             "release_identity": { "outcome": "${{ steps.release_identity.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/release-identity.json" },
+            "release_admission": { "outcome": "${{ steps.release_admission.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/release-candidate-ledger.json" },
             "proof_source_pair": { "outcome": "${{ steps.proof_source_pair.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/pint-source-pair.txt" },
             "release_identity_final": { "outcome": "${{ steps.release_identity_final.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/bff-version-final.json" },
             "install": { "outcome": "${{ steps.install.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/npm-ci.log" },
@@ -1250,8 +1418,9 @@ jobs:
         id: candidate_upload
         if: >-
           ${{
-            github.event_name == 'push' &&
-            github.ref == 'refs/heads/dev' &&
+            github.event_name == 'workflow_dispatch' &&
+            inputs.release_candidate_id != '' &&
+            steps.release_admission.outcome == 'success' &&
             steps.aggregate.outcome == 'success' &&
             steps.deploy_controller.outcome == 'success' &&
             steps.candidate.outcome == 'success' &&
@@ -1274,6 +1443,9 @@ jobs:
             echo "## Deployable frontend candidate"
             echo "- frontend SHA: \`${PANTHEON_FRONTEND_SHA}\`"
             echo "- BFF SHA: \`${PANTHEON_BFF_SHA}\`"
+            echo "- release candidate: \`${PANTHEON_RELEASE_CANDIDATE_ID}\`"
+            echo "- compatibility manifest: \`${PANTHEON_COMPATIBILITY_MANIFEST_SHA256}\`"
+            echo "- Pantheon controller run: \`${PANTHEON_RELEASE_CONTROLLER_RUN_ID}\`"
             echo "- gate run: \`${GITHUB_RUN_ID}\`"
             echo "- gate attempt: \`${GITHUB_RUN_ATTEMPT}\`"
             echo "- pair id: \`${PANTHEON_CANDIDATE_PAIR_ID}\`"
