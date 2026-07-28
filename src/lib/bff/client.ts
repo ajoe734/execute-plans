@@ -33,6 +33,10 @@ import {
 import { normalizeLiveListResponse } from "@/lib/bff-v1/lists";
 import { readBffEnv } from "@/lib/bff-v1/runtimeEnv";
 import {
+  normalizeAlertTimestampFields,
+  normalizeIncidentTimestampFields,
+} from "@/lib/bff-v1/eventTimestamps";
+import {
   strictDataFrom,
   strictNotFoundAsUndefined,
   withStrictLiveOrMock,
@@ -43,6 +47,7 @@ import {
   type FinalCommandEnvelope,
 } from "@/lib/bff/commandClient";
 import * as seed from "@/mocks/seed";
+import { normalizeCapitalPool } from "@/lib/bff-v1/capitalPools";
 import type {
   OodaLoopPacket,
   OodaPacketDetail,
@@ -335,7 +340,9 @@ const personas = {
 
 const capitalPools = {
   list:  bffV1Lists.capitalPools as () => Promise<ListEnvelope<CapitalPool>>,
-  get:   liveOrMockDetail<CapitalPool>(paths.capitalPool, async (id) => seed.capitalPools.find((item) => item.id === id)),
+  get:   (id: string): Promise<CapitalPool | undefined> =>
+    liveOrMockDetail<unknown>(paths.capitalPool, async (poolId) => seed.capitalPools.find((item) => item.id === poolId))(id)
+      .then(normalizeCapitalPool),
 };
 
 const rankingFormulas = {
@@ -429,15 +436,18 @@ const runtimes = {
 
 const alerts = {
   list:  bffV1Lists.alerts as () => Promise<ListEnvelope<Alert>>,
-  get:   liveOrMockDetail<Alert>(
-    (id) => `${paths.alerts()}/${encodeURIComponent(id)}`,
-    async (id) => seed.alerts.find((item) => item.id === id),
-  ),
+  get:   (id: string) => liveOrMockDetail<Alert>(
+    (alertId) => `${paths.alerts()}/${encodeURIComponent(alertId)}`,
+    async (alertId) => seed.alerts.find((item) => item.id === alertId),
+  )(id).then(normalizeAlertTimestampFields),
 };
 
 const incidents = {
   list:  bffV1Lists.incidents as () => Promise<ListEnvelope<Incident>>,
-  get:   liveOrMockDetail<Incident>(paths.incident, async (id) => seed.incidents.find((item) => item.id === id)),
+  get:   (id: string) => liveOrMockDetail<Incident>(
+    paths.incident,
+    async (incidentId) => seed.incidents.find((item) => item.id === incidentId),
+  )(id).then(normalizeIncidentTimestampFields),
 };
 
 const approvals = {

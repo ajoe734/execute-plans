@@ -1,0 +1,1286 @@
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Copy,
+  ExternalLink,
+  KeyRound,
+  Loader2,
+  Plus,
+  RefreshCcw,
+} from "lucide-react";
+
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
+import {
+  activateAssistantControlMode,
+  fetchAssistantModeStatus,
+  fetchAssistantOrchestratorStatus,
+  fetchAssistantProviderReauthStatus,
+  fetchAssistantProviderUsageSummary,
+  fetchAssistantProviders,
+  registerAssistantProvider,
+  startAssistantProviderReauth,
+  submitAssistantProviderReauthCode,
+  type AssistantControlModeStatus,
+  type AssistantModeStatusResult,
+  type AssistantOrchestratorStatusResult,
+  type AssistantProviderReadinessStatus,
+  type AssistantProviderReauthResult,
+  type AssistantProviderReauthSession,
+  type AssistantProvidersResult,
+  type AssistantProviderUsageSummaryResult,
+  type AssistantProviderUsageSummaryRow,
+  type ProviderStatus,
+} from "@/lib/bff-v1/managementAi";
+
+export interface OpenClawLlmAuthApi {
+  fetchProviders: typeof fetchAssistantProviders;
+  fetchMode: typeof fetchAssistantModeStatus;
+  fetchOrchestratorStatus: typeof fetchAssistantOrchestratorStatus;
+  fetchUsageSummary: typeof fetchAssistantProviderUsageSummary;
+  activateControlMode: typeof activateAssistantControlMode;
+  startReauth: typeof startAssistantProviderReauth;
+  fetchReauthStatus: typeof fetchAssistantProviderReauthStatus;
+  submitReauthCode: typeof submitAssistantProviderReauthCode;
+  registerProvider: typeof registerAssistantProvider;
+}
+
+const defaultApi: OpenClawLlmAuthApi = {
+  fetchProviders: fetchAssistantProviders,
+  fetchMode: fetchAssistantModeStatus,
+  fetchOrchestratorStatus: fetchAssistantOrchestratorStatus,
+  fetchUsageSummary: fetchAssistantProviderUsageSummary,
+  activateControlMode: activateAssistantControlMode,
+  startReauth: startAssistantProviderReauth,
+  fetchReauthStatus: fetchAssistantProviderReauthStatus,
+  submitReauthCode: submitAssistantProviderReauthCode,
+  registerProvider: registerAssistantProvider,
+};
+
+type PanelMode = "summary" | "full";
+type AddProviderForm = {
+  provider: string;
+  providerName: string;
+  runtime: string;
+  model: string;
+  authStrategy: string;
+  binary: string;
+  binaryEnv: string;
+  note: string;
+  passphrase: string;
+};
+
+const defaultAddProviderForm: AddProviderForm = {
+  provider: "",
+  providerName: "",
+  runtime: "external_llm",
+  model: "",
+  authStrategy: "manual",
+  binary: "",
+  binaryEnv: "",
+  note: "",
+  passphrase: "",
+};
+
+interface PanelState {
+  providers: AssistantProviderReadinessStatus[];
+  mode: AssistantModeStatusResult | null;
+  orchestrator: AssistantOrchestratorStatusResult | null;
+  providerResult: AssistantProvidersResult | null;
+  usageSummary: AssistantProviderUsageSummaryResult | null;
+  authProbePending: boolean;
+}
+
+interface ProviderReauthUiState {
+  busy: boolean;
+  codeBusy?: boolean;
+  codeError?: string | null;
+  result: AssistantProviderReauthResult | null;
+}
+
+function textFrom(...values: unknown[]): string {
+  for (const value of values) {
+    const text = String(value ?? "").trim();
+    if (text) return text;
+  }
+  return "";
+}
+
+function recordFrom(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+function providerId(provider: AssistantProviderReadinessStatus): string {
+  return textFrom(provider.provider, provider.providerName, "unknown");
+}
+
+function providerLabel(provider: AssistantProviderReadinessStatus): string {
+  return textFrom(provider.providerName, provider.provider, "unknown");
+}
+
+function providerAuthStatus(provider: AssistantProviderReadinessStatus): string {
+  return textFrom(provider.authStatus, provider.auth, provider.status, "unknown");
+}
+
+function providerReason(provider: AssistantProviderReadinessStatus): string {
+  return textFrom(provider.degradedReason, provider.reason, provider.message);
+}
+
+function providerUsage(provider: AssistantProviderReadinessStatus): Record<string, unknown> {
+  const usage = recordFrom(provider.usage);
+  if (Object.keys(usage).length > 0) return usage;
+  return recordFrom(provider.quota);
+}
+
+function usageValue(usage: Record<string, unknown>, ...keys: string[]): string {
+  return textFrom(...keys.map((key) => usage[key]));
+}
+
+function usageNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function formatNumber(value: unknown): string {
+  const numeric = usageNumber(value);
+  if (numeric === null) return "unknown";
+  return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(numeric);
+}
+
+function formatMetric(value: string, unit: string): string {
+  if (!value) return "unknown";
+  return unit ? `${value} ${unit}` : value;
+}
+
+function usageRemaining(usage: Record<string, unknown>): string {
+  const unit = usageValue(usage, "unit");
+  const remaining = formatMetric(usageValue(usage, "remaining"), unit);
+  const percent = usageValue(usage, "remainingPercent", "remaining_percent");
+  return percent && remaining !== "unknown" ? `${remaining} (${percent}%)` : remaining;
+}
+
+function usageReset(usage: Record<string, unknown>): string {
+  return usageValue(usage, "resetAt", "reset_at", "updatedAt", "updated_at", "checkedAt", "checked_at") || "unknown";
+}
+
+function normalizeProviderId(value: unknown): string {
+  const id = textFrom(value).toLowerCase();
+  if (id === "codex") return "codex_cli";
+  if (id === "claude_cli") return "claude";
+  return id;
+}
+
+function isOpenClawProviderValue(value: unknown): boolean {
+  return normalizeProviderId(value) === "openclaw";
+}
+
+function isOpenClawAdapter(provider: AssistantProviderReadinessStatus): boolean {
+  return isOpenClawProviderValue(providerId(provider));
+}
+
+function statusTone(status: string, ready?: boolean): string {
+  const normalized = status.toLowerCase();
+  if (["not_checked"].includes(normalized)) {
+    return "border-border bg-muted/50 text-muted-foreground";
+  }
+  if (ready === true || ["ready", "ok", "completed", "authorized", "account_session"].includes(normalized)) {
+    return "border-status-success/30 bg-status-success/10 text-status-success";
+  }
+  if (["pending", "capturing", "processing", "code_submitted"].includes(normalized)) {
+    return "border-primary/30 bg-primary/10 text-primary";
+  }
+  if (["degraded", "timeout", "unavailable", "unknown"].includes(normalized)) {
+    return "border-status-warning/30 bg-status-warning/15 text-status-warning";
+  }
+  if (["failed", "error", "mount_unavailable"].includes(normalized) || ready === false) {
+    return "border-status-failed/30 bg-status-failed/10 text-status-failed";
+  }
+  return "bg-muted text-muted-foreground";
+}
+
+function isSuccessfulStatus(status: string, ready?: boolean): boolean {
+  const normalized = status.toLowerCase();
+  if (normalized === "not_checked") return false;
+  return ready === true || ["ready", "ok", "completed", "authorized", "account_session"].includes(normalized);
+}
+
+function isPendingStatus(status: string): boolean {
+  return ["not_checked", "pending", "capturing", "processing", "code_submitted"].includes(status.toLowerCase());
+}
+
+function needsAttention(provider: AssistantProviderReadinessStatus): boolean {
+  if (provider.ready === false) return true;
+  const auth = providerAuthStatus(provider).toLowerCase();
+  return ["failed", "timeout", "unavailable", "mount_unavailable", "degraded", "unknown"].includes(auth);
+}
+
+function supportsReauth(provider: AssistantProviderReadinessStatus): boolean {
+  if (typeof provider.reauthSupported === "boolean") return provider.reauthSupported;
+  return ["codex", "codex_cli", "claude", "claude_cli"].includes(providerId(provider).toLowerCase());
+}
+
+function reauthButtonLabel(provider: AssistantProviderReadinessStatus): string {
+  if (!supportsReauth(provider)) return "Adapter reauth missing";
+  return "Start reauth";
+}
+
+function controlModeFrom(mode: AssistantModeStatusResult | null): AssistantControlModeStatus | null {
+  return mode?.ok ? mode.status.controlMode ?? null : null;
+}
+
+function kernelLabel(mode: AssistantModeStatusResult | null): string {
+  if (!mode) return "kernel unknown";
+  if (!mode.ok) return "kernel unavailable";
+  return mode.status.kernelEnabled ? "kernel on" : "kernel off";
+}
+
+function activeProviderLabel(providerStatus: ProviderStatus | null | undefined): string {
+  if (!providerStatus) return "unknown";
+  return `${providerStatus.provider}/${providerStatus.runtime}`;
+}
+
+function firstError(state: PanelState): string | null {
+  if (state.providerResult && !state.providerResult.ok) return state.providerResult.message;
+  if (state.usageSummary && !state.usageSummary.ok) return state.usageSummary.message;
+  if (state.mode && !state.mode.ok && state.mode.message !== "aborted") return state.mode.message;
+  if (state.orchestrator && !state.orchestrator.ok && state.orchestrator.message !== "aborted") return state.orchestrator.message;
+  return null;
+}
+
+function reauthHref(result: AssistantProviderReauthResult | null): string | null {
+  if (!result?.ok) return null;
+  return result.reauth.verificationUriComplete ?? result.reauth.verificationUri;
+}
+
+function reauthUserCode(result: AssistantProviderReauthResult): string | null {
+  if (!result.ok) return null;
+  const code = result.reauth.userCode?.trim();
+  if (!code || /^(true|false)$/i.test(code)) return null;
+  return code;
+}
+
+function credentialFlag(result: AssistantProviderReauthResult, ...keys: string[]): boolean {
+  if (!result.ok) return false;
+  const exchange = result.reauth.credentialExchange;
+  if (!exchange) return false;
+  return keys.some((key) => exchange[key] === true || exchange[key] === "true");
+}
+
+function canSubmitReauthAuthorizationCode(
+  result: AssistantProviderReauthResult,
+  providerValue: unknown,
+): boolean {
+  if (!result.ok) return false;
+  const normalized = reauthStateKeyForValue(result.reauth.provider ?? providerValue);
+  if (normalized !== "claude") return false;
+  if (result.reauth.codeSubmittedAt) return false;
+  const status = String(result.reauth.status ?? "").trim().toLowerCase();
+  if (["completed", "expired", "timeout", "cancelled", "canceled"].includes(status)) return false;
+  return Boolean(reauthHref(result)) || credentialFlag(
+    result,
+    "requiresAuthorizationCode",
+    "requires_authorization_code",
+    "codeSubmitToBff",
+    "code_submit_to_bff",
+  );
+}
+
+function reauthStateKeyForValue(value: unknown): string {
+  return normalizeProviderId(value) || textFrom(value).toLowerCase() || "unknown";
+}
+
+function reauthStateKey(provider: AssistantProviderReadinessStatus): string {
+  return reauthStateKeyForValue(providerId(provider));
+}
+
+function isTerminalReauthStatus(status: string | null | undefined): boolean {
+  return ["completed", "failed", "error", "expired", "timeout", "cancelled", "canceled"].includes(
+    String(status ?? "").trim().toLowerCase(),
+  );
+}
+
+function shouldPollReauthStatus(status: string | null | undefined): boolean {
+  return !isTerminalReauthStatus(status);
+}
+
+function reauthPollDelayMs(session: AssistantProviderReauthSession): number {
+  const seconds = session.intervalSeconds ?? 5;
+  return Math.max(2_000, Math.min(15_000, seconds * 1_000));
+}
+
+function reauthFailureTitle(result: AssistantProviderReauthResult): string {
+  if (result.ok) return "";
+  return result.statusCode === 404 ? "BFF route unavailable" : "Reauth failed";
+}
+
+function reauthFailureMessage(result: AssistantProviderReauthResult): string {
+  if (result.ok) return "";
+  if (result.statusCode === 404 && /^BFF 404\b/i.test(result.message)) {
+    return "BFF route unavailable: /bff/assistant/provider/reauth";
+  }
+  return result.message;
+}
+
+function providersFromResults(
+  providerResult: AssistantProvidersResult,
+  orchestratorResult: AssistantOrchestratorStatusResult,
+  previousProviders: AssistantProviderReadinessStatus[] = [],
+): AssistantProviderReadinessStatus[] {
+  if (providerResult.ok && providerResult.providers.length > 0) {
+    return providerResult.providers;
+  }
+  if (previousProviders.length > 0) {
+    return previousProviders;
+  }
+  return orchestratorResult.ok && orchestratorResult.status.providerReadiness
+    ? [orchestratorResult.status.providerReadiness]
+    : [];
+}
+
+export function OpenClawLlmAuthPanel({
+  mode = "full",
+  api = defaultApi,
+}: {
+  mode?: PanelMode;
+  api?: OpenClawLlmAuthApi;
+}) {
+  const [state, setState] = useState<PanelState>({
+    providers: [],
+    mode: null,
+    orchestrator: null,
+    providerResult: null,
+    usageSummary: null,
+    authProbePending: false,
+  });
+  const [loading, setLoading] = useState(false);
+  const [reauthByProvider, setReauthByProvider] = useState<Record<string, ProviderReauthUiState>>({});
+  const [addProviderOpen, setAddProviderOpen] = useState(false);
+  const [addProviderForm, setAddProviderForm] = useState<AddProviderForm>(defaultAddProviderForm);
+  const [addProviderBusy, setAddProviderBusy] = useState(false);
+  const [addProviderError, setAddProviderError] = useState<string | null>(null);
+  const [addProviderResult, setAddProviderResult] = useState<string | null>(null);
+
+  const load = useCallback(async (signal?: AbortSignal) => {
+    setLoading(true);
+    setState((current) => ({ ...current, authProbePending: true }));
+    try {
+      const [providerResult, modeResult, orchestratorResult, usageSummary] = await Promise.all([
+        api.fetchProviders({ authProbe: false, signal }),
+        api.fetchMode({ signal }),
+        api.fetchOrchestratorStatus({ signal }),
+        api.fetchUsageSummary({ authProbe: false, windowHours: 168, limit: 500, signal }),
+      ]);
+      if (signal?.aborted) return;
+      const providers = providersFromResults(providerResult, orchestratorResult);
+      setState({
+        providers,
+        mode: modeResult,
+        orchestrator: orchestratorResult,
+        providerResult,
+        usageSummary,
+        authProbePending: true,
+      });
+
+      const authProbeResult = await api.fetchProviders({ authProbe: true, signal });
+      if (signal?.aborted) return;
+      setState((current) => ({
+        ...current,
+        providers: providersFromResults(authProbeResult, orchestratorResult, current.providers),
+        providerResult: authProbeResult,
+        authProbePending: false,
+      }));
+    } catch {
+      if (signal?.aborted) return;
+      setState((current) => ({ ...current, authProbePending: false }));
+    } finally {
+      if (!signal?.aborted) setLoading(false);
+    }
+  }, [api]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void load(controller.signal);
+    return () => controller.abort();
+  }, [load]);
+
+  const controlMode = controlModeFrom(state.mode);
+  const activeControl = Boolean(controlMode?.active);
+  const activeProvider = state.orchestrator?.ok ? state.orchestrator.status.providerStatus : null;
+  const llmProviders = useMemo(() => state.providers.filter((provider) => !isOpenClawAdapter(provider)), [state.providers]);
+  const adapterProviders = useMemo(() => state.providers.filter(isOpenClawAdapter), [state.providers]);
+  const attentionCount = useMemo(() => llmProviders.filter(needsAttention).length, [llmProviders]);
+  const error = firstError(state);
+  const rows = mode === "summary" ? llmProviders.slice(0, 3) : llmProviders;
+  const usageByProvider = useMemo(() => {
+    const byId = new Map<string, AssistantProviderUsageSummaryRow>();
+    const usageRows = state.usageSummary?.ok ? state.usageSummary.providers : [];
+    for (const row of usageRows) {
+      const key = normalizeProviderId(row.provider ?? row.providerName);
+      if (key) byId.set(key, row);
+    }
+    return byId;
+  }, [state.usageSummary]);
+  const checkingAuth = state.authProbePending || (loading && rows.length === 0);
+  const authProbeFailed = Boolean(state.providerResult && !state.providerResult.ok);
+  const authSummaryLabel = checkingAuth
+    ? "checking auth"
+    : authProbeFailed
+      ? "auth unknown"
+    : attentionCount > 0
+      ? `${attentionCount} attention`
+      : rows.length > 0
+        ? "auth ready"
+        : "auth unknown";
+  const authSummaryTone = checkingAuth
+    ? statusTone("pending")
+    : authProbeFailed
+      ? statusTone("unknown")
+    : attentionCount > 0
+      ? statusTone("degraded", false)
+      : statusTone(rows.length > 0 ? "ready" : "unknown", rows.length > 0);
+  const setProviderReauth = useCallback((key: string, patch: Partial<ProviderReauthUiState>) => {
+    setReauthByProvider((current) => ({
+      ...current,
+      [key]: {
+        busy: current[key]?.busy ?? false,
+        result: current[key]?.result ?? null,
+        ...patch,
+      },
+    }));
+  }, []);
+
+  const runReauth = useCallback(async (provider: AssistantProviderReadinessStatus) => {
+    const id = providerId(provider);
+    const key = reauthStateKey(provider);
+    setProviderReauth(key, { busy: true, result: null });
+    try {
+      const result = await api.startReauth({
+        provider: id,
+        reason: "LLM Provider Auth management",
+      });
+      const resultKey = result.ok && result.reauth.provider ? reauthStateKeyForValue(result.reauth.provider) : key;
+      setProviderReauth(resultKey, { busy: false, result });
+      if (resultKey !== key) setProviderReauth(key, { busy: false, result });
+    } finally {
+      setProviderReauth(key, { busy: false });
+    }
+  }, [api, setProviderReauth]);
+
+  const startReauth = useCallback(async (provider: AssistantProviderReadinessStatus) => {
+    const key = reauthStateKey(provider);
+    if (!supportsReauth(provider)) {
+      setProviderReauth(key, {
+        busy: false,
+        result: {
+          ok: false,
+          kind: "failure",
+          statusCode: null,
+          message: `${providerLabel(provider)} reauth is not supported by the provider adapter yet.`,
+        },
+      });
+      return;
+    }
+    await runReauth(provider);
+  }, [runReauth, setProviderReauth]);
+
+  const applyControlMode = useCallback((nextControlMode: AssistantControlModeStatus) => {
+    setState((current) => ({
+      ...current,
+      mode: current.mode?.ok
+        ? {
+            ...current.mode,
+            status: {
+              ...current.mode.status,
+              controlMode: nextControlMode,
+            },
+          }
+        : current.mode,
+    }));
+  }, []);
+
+  const updateAddProviderForm = useCallback((patch: Partial<AddProviderForm>) => {
+    setAddProviderForm((current) => ({ ...current, ...patch }));
+  }, []);
+
+  const registerProvider = useCallback(async () => {
+    const provider = addProviderForm.provider.trim().toLowerCase().replace(/[-\s]+/g, "_");
+    if (!provider) {
+      setAddProviderError("Provider id is required.");
+      return;
+    }
+    if (!/^[a-z][a-z0-9_]{1,63}$/.test(provider)) {
+      setAddProviderError("Provider id must use lowercase letters, numbers, and underscores.");
+      return;
+    }
+    if (!activeControl && !addProviderForm.passphrase.trim()) {
+      setAddProviderError("Control passphrase is required.");
+      return;
+    }
+
+    setAddProviderBusy(true);
+    setAddProviderError(null);
+    setAddProviderResult(null);
+    try {
+      if (!activeControl) {
+        const control = await api.activateControlMode({
+          passphrase: addProviderForm.passphrase.trim(),
+          mode: "kernel_debug",
+          reason: `LLM Provider Auth register provider: ${provider}`,
+          ttlSeconds: 900,
+          idleTtlSeconds: 300,
+        });
+        if (!control.ok) {
+          setAddProviderError(control.message);
+          return;
+        }
+        applyControlMode(control.controlMode);
+      }
+
+      const result = await api.registerProvider({
+        provider,
+        providerName: addProviderForm.providerName.trim() || provider,
+        runtime: addProviderForm.runtime.trim() || "external_llm",
+        model: addProviderForm.model.trim() || undefined,
+        authStrategy: addProviderForm.authStrategy.trim() || "manual",
+        binary: addProviderForm.binary.trim() || undefined,
+        binaryEnv: addProviderForm.binaryEnv.trim() || undefined,
+        note: addProviderForm.note.trim() || undefined,
+      });
+      if (!result.ok) {
+        setAddProviderError(result.message);
+        return;
+      }
+      setState((current) => ({
+        ...current,
+        providers: [
+          ...current.providers.filter((item) => normalizeProviderId(providerId(item)) !== normalizeProviderId(provider)),
+          result.provider,
+        ],
+      }));
+      setAddProviderResult(`Registered ${result.provider.providerName ?? result.provider.provider ?? provider}`);
+      setAddProviderForm(defaultAddProviderForm);
+      setAddProviderOpen(false);
+    } finally {
+      setAddProviderBusy(false);
+    }
+  }, [activeControl, addProviderForm, api, applyControlMode]);
+
+  const refreshReauth = useCallback(async (key: string, session: AssistantProviderReauthSession) => {
+    setProviderReauth(key, { busy: true });
+    try {
+      const refreshed = await api.fetchReauthStatus(
+        session.reauthSessionId,
+        session.provider ?? key,
+      );
+      setProviderReauth(key, { busy: false, result: refreshed });
+      if (refreshed.ok && refreshed.reauth.status === "completed") void load();
+    } finally {
+      setProviderReauth(key, { busy: false });
+    }
+  }, [api, load, setProviderReauth]);
+
+  const submitReauthCode = useCallback(async (key: string, session: AssistantProviderReauthSession, code: string) => {
+    setProviderReauth(key, { codeBusy: true, codeError: null });
+    try {
+      const submitted = await api.submitReauthCode({
+        provider: session.provider ?? key,
+        sessionId: session.reauthSessionId,
+        code,
+      });
+      if (!submitted.ok) {
+        setProviderReauth(key, { codeBusy: false, codeError: submitted.message });
+        return;
+      }
+      const resultKey = submitted.reauth.provider ? reauthStateKeyForValue(submitted.reauth.provider) : key;
+      setProviderReauth(resultKey, { codeBusy: false, codeError: null, result: submitted });
+      if (resultKey !== key) setProviderReauth(key, { codeBusy: false, codeError: null, result: submitted });
+      if (submitted.reauth.status === "completed") void load();
+    } finally {
+      setProviderReauth(key, { codeBusy: false });
+    }
+  }, [api, load, setProviderReauth]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const pollable = Object.entries(reauthByProvider)
+      .filter(([, item]) => item.result?.ok && !item.busy && shouldPollReauthStatus(item.result.reauth.status))
+      .map(([key, item]) => ({ key, session: (item.result as { ok: true; reauth: AssistantProviderReauthSession }).reauth }));
+    if (pollable.length === 0) return undefined;
+
+    const delay = Math.min(...pollable.map((item) => reauthPollDelayMs(item.session)));
+    const timer = window.setTimeout(() => {
+      for (const item of pollable) void refreshReauth(item.key, item.session);
+    }, delay);
+    return () => window.clearTimeout(timer);
+  }, [reauthByProvider, refreshReauth]);
+
+  return (
+    <Card className={cn("p-4", mode === "full" && "p-5")}>
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="flex items-center gap-2 text-base font-semibold text-foreground">
+            <KeyRound className="h-4 w-4 text-muted-foreground" />
+            LLM Provider Auth
+          </h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            active={activeProviderLabel(activeProvider)} · {kernelLabel(state.mode)}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {mode === "full" && (
+            <Button size="sm" variant="outline" onClick={() => setAddProviderOpen(true)}>
+              <Plus className="h-3.5 w-3.5" />
+              Add Provider
+            </Button>
+          )}
+          <Badge variant="outline" className={statusTone(activeControl ? controlMode?.mode ?? "active" : "inactive", activeControl)}>
+            {activeControl ? controlMode?.mode ?? "active" : "control inactive"}
+          </Badge>
+          <Badge variant="outline" className={authSummaryTone}>
+            {authSummaryLabel}
+          </Badge>
+          <Button size="icon-sm" variant="outline" onClick={() => void load()} disabled={loading} aria-label="Refresh LLM provider auth">
+            <RefreshCcw className={cn("h-4 w-4", loading && "animate-spin")} />
+          </Button>
+        </div>
+      </header>
+
+      {error && (
+        <div className="mt-3 flex items-start gap-2 rounded-md border border-status-warning/30 bg-status-warning/10 p-3 text-xs text-status-warning" role="alert">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {addProviderResult && (
+        <div className="mt-3 flex items-center gap-2 rounded-md border border-status-success/30 bg-status-success/10 p-3 text-xs text-status-success">
+          <CheckCircle2 className="h-4 w-4" />
+          <span>{addProviderResult}</span>
+        </div>
+      )}
+
+      {adapterProviders.length > 0 && (
+        <div className="mt-4 grid gap-3">
+          {adapterProviders.map((provider) => (
+            <AdapterStatusCard key={providerId(provider)} provider={provider} />
+          ))}
+        </div>
+      )}
+
+      <div className={cn("mt-4 grid gap-3", mode === "full" ? "lg:grid-cols-3" : "md:grid-cols-3")}>
+        {rows.map((provider) => (
+          <ProviderCard
+            key={providerId(provider)}
+            mode={mode}
+            provider={provider}
+            usageSummary={usageByProvider.get(normalizeProviderId(providerId(provider))) ?? null}
+            reauthState={reauthByProvider[reauthStateKey(provider)] ?? { busy: false, result: null }}
+            onStartReauth={startReauth}
+            onRefreshReauth={refreshReauth}
+            onSubmitReauthCode={submitReauthCode}
+          />
+        ))}
+      </div>
+
+      {loading && rows.length === 0 && (
+        <div className="mt-4 flex items-center gap-2 rounded-md border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          <span>Checking LLM provider auth status.</span>
+        </div>
+      )}
+
+      {state.authProbePending && rows.length > 0 && (
+        <div className="mt-4 flex items-center gap-2 rounded-md border border-primary/20 bg-primary/5 p-3 text-xs text-primary">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          <span>Updating LLM provider auth probe results.</span>
+        </div>
+      )}
+
+      {!loading && rows.length === 0 && (
+        <div className="mt-4 rounded-md border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+          No LLM provider auth status returned.
+        </div>
+      )}
+
+      {mode === "full" && (
+        <UsageHistoryPanel summary={state.usageSummary} />
+      )}
+
+      {mode === "summary" && (
+        <div className="mt-4 flex justify-end">
+          <Button asChild size="sm" variant="outline">
+            <Link to="/management/llm-provider-auth">Open provider auth</Link>
+          </Button>
+        </div>
+      )}
+
+      {mode === "full" && (
+        <Dialog
+          open={addProviderOpen}
+          onOpenChange={(open) => {
+            setAddProviderOpen(open);
+            if (!open) {
+              setAddProviderForm(defaultAddProviderForm);
+              setAddProviderError(null);
+            }
+          }}
+        >
+          <DialogContent className="max-w-lg gap-3">
+            <DialogHeader>
+              <DialogTitle className="text-base">Add Provider</DialogTitle>
+              <DialogDescription className="text-xs">
+                Provider registry
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <LabeledInput
+                id="openclaw-llm-add-provider"
+                label="Provider id"
+                value={addProviderForm.provider}
+                onChange={(value) => updateAddProviderForm({ provider: value })}
+              />
+              <LabeledInput
+                id="openclaw-llm-add-provider-name"
+                label="Display name"
+                value={addProviderForm.providerName}
+                onChange={(value) => updateAddProviderForm({ providerName: value })}
+              />
+              <LabeledInput
+                id="openclaw-llm-add-runtime"
+                label="Runtime"
+                value={addProviderForm.runtime}
+                onChange={(value) => updateAddProviderForm({ runtime: value })}
+              />
+              <LabeledInput
+                id="openclaw-llm-add-model"
+                label="Model"
+                value={addProviderForm.model}
+                onChange={(value) => updateAddProviderForm({ model: value })}
+              />
+              <LabeledInput
+                id="openclaw-llm-add-auth-strategy"
+                label="Auth strategy"
+                value={addProviderForm.authStrategy}
+                onChange={(value) => updateAddProviderForm({ authStrategy: value })}
+              />
+              <LabeledInput
+                id="openclaw-llm-add-binary"
+                label="Binary"
+                value={addProviderForm.binary}
+                onChange={(value) => updateAddProviderForm({ binary: value })}
+              />
+              <LabeledInput
+                id="openclaw-llm-add-binary-env"
+                label="Binary env"
+                value={addProviderForm.binaryEnv}
+                onChange={(value) => updateAddProviderForm({ binaryEnv: value })}
+              />
+              {!activeControl && (
+                <LabeledInput
+                  id="openclaw-llm-add-passphrase"
+                  label="Control passphrase"
+                  type="password"
+                  value={addProviderForm.passphrase}
+                  onChange={(value) => updateAddProviderForm({ passphrase: value })}
+                />
+              )}
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label htmlFor="openclaw-llm-add-note" className="text-xs">
+                  Note
+                </Label>
+                <Input
+                  id="openclaw-llm-add-note"
+                  value={addProviderForm.note}
+                  onChange={(event) => updateAddProviderForm({ note: event.target.value })}
+                  className="h-8 text-xs"
+                />
+              </div>
+            </div>
+            {addProviderError && (
+              <div className="rounded-md border border-status-warning/30 bg-status-warning/10 px-2 py-1.5 text-xs text-status-warning">
+                {addProviderError}
+              </div>
+            )}
+            <DialogFooter>
+              <Button type="button" size="sm" variant="outline" onClick={() => setAddProviderOpen(false)} disabled={addProviderBusy}>
+                Cancel
+              </Button>
+              <Button type="button" size="sm" onClick={() => void registerProvider()} disabled={addProviderBusy}>
+                {addProviderBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
+                Register
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+    </Card>
+  );
+}
+
+function LabeledInput({
+  id,
+  label,
+  value,
+  type = "text",
+  onChange,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  type?: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={id} className="text-xs">
+        {label}
+      </Label>
+      <Input
+        id={id}
+        type={type}
+        autoComplete="off"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="h-8 text-xs"
+      />
+    </div>
+  );
+}
+
+function ProviderCard({
+  provider,
+  mode,
+  usageSummary,
+  reauthState,
+  onStartReauth,
+  onRefreshReauth,
+  onSubmitReauthCode,
+}: {
+  provider: AssistantProviderReadinessStatus;
+  mode: PanelMode;
+  usageSummary: AssistantProviderUsageSummaryRow | null;
+  reauthState: ProviderReauthUiState;
+  onStartReauth: (provider: AssistantProviderReadinessStatus) => void;
+  onRefreshReauth: (key: string, session: AssistantProviderReauthSession) => void;
+  onSubmitReauthCode: (key: string, session: AssistantProviderReauthSession, code: string) => Promise<void>;
+}) {
+  const id = providerId(provider);
+  const key = reauthStateKey(provider);
+  const authStatus = providerAuthStatus(provider);
+  const authSuccessful = isSuccessfulStatus(authStatus, provider.ready);
+  const authPending = isPendingStatus(authStatus);
+  const quota = recordFrom(usageSummary?.quota);
+  const usage = Object.keys(quota).length > 0 ? quota : providerUsage(provider);
+  const unit = usageValue(usage, "unit");
+  const busy = reauthState.busy;
+  const reauthable = supportsReauth(provider);
+
+  return (
+    <article className="rounded-md border border-border p-3">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <h3 className="truncate text-sm font-medium text-foreground">{providerLabel(provider)}</h3>
+          <p className="mt-0.5 truncate text-xs text-muted-foreground">{provider.runtime ?? "runtime unknown"}</p>
+        </div>
+        <Badge variant="outline" className={statusTone(authStatus, provider.ready)}>
+          {authSuccessful ? (
+            <CheckCircle2 className="mr-1 h-3 w-3" />
+          ) : authPending ? (
+            <RefreshCcw className="mr-1 h-3 w-3" />
+          ) : (
+            <AlertTriangle className="mr-1 h-3 w-3" />
+          )}
+          {authStatus}
+        </Badge>
+      </div>
+
+      <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+        <Info label="status" value={provider.status ?? "unknown"} />
+        <Info label="mount" value={provider.mountMode ?? "unknown"} />
+        <Info label="remaining" value={usageRemaining(usage)} />
+        <Info label="used" value={formatMetric(usageValue(usage, "used"), unit)} />
+        <Info label="history calls" value={formatNumber(usageSummary?.calls)} />
+        <Info label="tokens" value={formatNumber(usageSummary?.totalTokens)} />
+        {mode === "full" && (
+          <>
+            {(provider.model || provider.authStrategy) && (
+              <Info className="col-span-2" label="model" value={provider.model ?? provider.authStrategy ?? "unknown"} />
+            )}
+            {provider.authStrategy && (
+              <Info className="col-span-2" label="auth strategy" value={provider.authStrategy} />
+            )}
+            <Info label="limit" value={formatMetric(usageValue(usage, "limit"), unit)} />
+            <Info label="reset" value={usageReset(usage)} />
+            <Info className="col-span-2" label="quota source" value={usageValue(usage, "source", "status", "reason") || "unknown"} />
+            <Info className="col-span-2" label="checked" value={provider.checkedAt ?? "unknown"} />
+          </>
+        )}
+        {providerReason(provider) && (
+          <Info className="col-span-2" label="reason" value={providerReason(provider)} />
+        )}
+      </dl>
+
+      {mode === "full" && (
+        <Button
+          className="mt-3 w-full"
+          size="sm"
+          variant="outline"
+          disabled={!reauthable || busy}
+          onClick={() => onStartReauth(provider)}
+        >
+          {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <KeyRound className="h-3 w-3" />}
+          {reauthButtonLabel(provider)}
+        </Button>
+      )}
+
+      {mode === "full" && (reauthState.busy || reauthState.result) && (
+        <ProviderReauthPanel
+          provider={provider}
+          providerKey={key}
+          state={reauthState}
+          onRefresh={onRefreshReauth}
+          onSubmitCode={onSubmitReauthCode}
+          onRetry={() => onStartReauth(provider)}
+        />
+      )}
+    </article>
+  );
+}
+
+function ProviderReauthPanel({
+  provider,
+  providerKey,
+  state,
+  onRefresh,
+  onSubmitCode,
+  onRetry,
+}: {
+  provider: AssistantProviderReadinessStatus;
+  providerKey: string;
+  state: ProviderReauthUiState;
+  onRefresh: (key: string, session: AssistantProviderReauthSession) => void;
+  onSubmitCode: (key: string, session: AssistantProviderReauthSession, code: string) => Promise<void>;
+  onRetry: () => void;
+}) {
+  const result = state.result;
+  const [authorizationCode, setAuthorizationCode] = useState("");
+
+  if (!result) {
+    return (
+      <div className="mt-3 rounded-md border border-primary/20 bg-primary/5 p-3 text-xs text-primary" aria-live="polite">
+        <div className="flex items-center gap-2 font-medium">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          <span>Starting {providerLabel(provider)} reauth</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!result.ok) {
+    return (
+      <div className="mt-3 rounded-md border border-status-failed/30 bg-status-failed/10 p-3 text-xs" role="alert">
+        <div className="flex items-center justify-between gap-2">
+          <div className="font-medium text-status-failed">{reauthFailureTitle(result)}</div>
+          <Button size="sm" variant="outline" onClick={onRetry} disabled={state.busy}>
+            {state.busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <KeyRound className="h-3 w-3" />}
+            Retry
+          </Button>
+        </div>
+        <div className="mt-1 break-words text-status-failed">{reauthFailureMessage(result)}</div>
+      </div>
+    );
+  }
+
+  const href = reauthHref(result);
+  const status = result.reauth.status ?? "pending";
+  const normalizedStatus = String(status).trim().toLowerCase();
+  const terminal = isTerminalReauthStatus(status);
+  const completed = normalizedStatus === "completed";
+  const reauthProvider = result.reauth.provider ?? providerId(provider);
+  const userCode = reauthUserCode(result);
+  const canSubmitCode = canSubmitReauthAuthorizationCode(result, reauthProvider);
+  const authCodeInputId = `reauth-code-${providerKey}`;
+  const codeSubmittedAt = result.reauth.codeSubmittedAt;
+
+  return (
+    <div className="mt-3 rounded-md border border-border bg-muted/30 p-3 text-xs" aria-live="polite">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="font-medium text-foreground">
+          {reauthProvider} reauth {status}
+        </div>
+        <Badge variant="outline" className={statusTone(status)}>
+          {status}
+        </Badge>
+      </div>
+      <div className="mt-2 flex flex-wrap gap-2 text-muted-foreground">
+        {userCode && (
+          <span className="rounded-md border border-border bg-background px-2 py-1 font-mono text-foreground">
+            code={userCode}
+          </span>
+        )}
+        <span className="rounded-md border border-border bg-background px-2 py-1 font-mono">
+          session={result.reauth.reauthSessionId}
+        </span>
+        {codeSubmittedAt && (
+          <span className="rounded-md border border-border bg-background px-2 py-1">
+            code submitted={codeSubmittedAt}
+          </span>
+        )}
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {href && !completed && (
+          <Button asChild size="sm" variant="outline">
+            <a href={href} target="_blank" rel="noreferrer">
+              <ExternalLink className="h-3 w-3" />
+              Open login
+            </a>
+          </Button>
+        )}
+        {userCode && (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => void navigator.clipboard?.writeText(userCode)}
+          >
+            <Copy className="h-3 w-3" />
+            Copy code
+          </Button>
+        )}
+        <Button size="sm" variant="outline" onClick={() => onRefresh(providerKey, result.reauth)} disabled={state.busy}>
+          {state.busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCcw className="h-3 w-3" />}
+          Refresh
+        </Button>
+        {terminal && (
+          <Button size="sm" variant="outline" onClick={onRetry} disabled={state.busy}>
+            <KeyRound className="h-3 w-3" />
+            {completed ? "Reauth again" : "Retry"}
+          </Button>
+        )}
+      </div>
+      {canSubmitCode && (
+        <form
+          className="mt-3 space-y-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const code = authorizationCode.trim();
+            if (!code || state.codeBusy) return;
+            void onSubmitCode(providerKey, result.reauth, code);
+          }}
+        >
+          <Label htmlFor={authCodeInputId} className="text-xs">
+            Authorization code
+          </Label>
+          <div className="flex flex-wrap gap-2">
+            <Input
+              id={authCodeInputId}
+              value={authorizationCode}
+              onChange={(event) => setAuthorizationCode(event.target.value)}
+              autoComplete="one-time-code"
+              placeholder="Paste Claude code"
+              className="h-8 min-w-0 flex-1 text-xs"
+            />
+            <Button size="sm" type="submit" variant="outline" disabled={!authorizationCode.trim() || state.codeBusy}>
+              {state.codeBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : <KeyRound className="h-3 w-3" />}
+              Submit code
+            </Button>
+          </div>
+          {state.codeError && (
+            <div className="rounded-md border border-status-failed/30 bg-status-failed/10 px-2 py-1.5 text-status-failed" role="alert">
+              {state.codeError}
+            </div>
+          )}
+        </form>
+      )}
+      {result.reauth.message && (
+        <div className="mt-3 rounded-md border border-border bg-background px-2 py-1.5 text-muted-foreground">
+          {result.reauth.message}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AdapterStatusCard({ provider }: { provider: AssistantProviderReadinessStatus }) {
+  const status = providerAuthStatus(provider);
+  const successful = isSuccessfulStatus(status, provider.ready);
+  const pending = isPendingStatus(status);
+  return (
+    <article className="rounded-md border border-border bg-muted/20 p-3" aria-label="OpenClaw adapter status">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="text-sm font-medium text-foreground">OpenClaw adapter</h3>
+          <p className="mt-0.5 break-words text-xs text-muted-foreground">{provider.runtime ?? "runtime unknown"}</p>
+        </div>
+        <Badge variant="outline" className={statusTone(status, provider.ready)}>
+          {successful ? (
+            <CheckCircle2 className="mr-1 h-3 w-3" />
+          ) : pending ? (
+            <RefreshCcw className="mr-1 h-3 w-3" />
+          ) : (
+            <AlertTriangle className="mr-1 h-3 w-3" />
+          )}
+          {status}
+        </Badge>
+      </div>
+      <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-xs sm:grid-cols-4">
+        <Info label="status" value={provider.status ?? "unknown"} />
+        <Info label="mount" value={provider.mountMode ?? "unknown"} />
+        <Info label="checked" value={provider.checkedAt ?? "unknown"} />
+        <Info label="source" value={provider.source ?? "unknown"} />
+        {providerReason(provider) && (
+          <Info className="col-span-2 sm:col-span-4" label="reason" value={providerReason(provider)} />
+        )}
+      </dl>
+    </article>
+  );
+}
+
+function UsageHistoryPanel({ summary }: { summary: AssistantProviderUsageSummaryResult | null }) {
+  if (!summary) {
+    return (
+      <section className="mt-5 border-t border-border pt-4">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          <span>Loading provider usage history.</span>
+        </div>
+      </section>
+    );
+  }
+
+  if (!summary.ok) {
+    return (
+      <section className="mt-5 border-t border-border pt-4">
+        <div className="flex items-start gap-2 rounded-md border border-status-warning/30 bg-status-warning/10 p-3 text-xs text-status-warning">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{summary.message}</span>
+        </div>
+      </section>
+    );
+  }
+
+  const providers = summary.providers.filter((provider) => !isOpenClawProviderValue(provider.provider ?? provider.providerName));
+  const staleCount = providers.filter((provider) => recordFrom(provider.observedUsage).stale === true).length;
+  const totals = providers.reduce(
+    (acc, provider) => ({
+      liveAuthCount: acc.liveAuthCount + (provider.liveAuth ? 1 : 0),
+      calls: acc.calls + (usageNumber(provider.calls) ?? 0),
+      totalTokens: acc.totalTokens + (usageNumber(provider.totalTokens) ?? 0),
+    }),
+    { liveAuthCount: 0, calls: 0, totalTokens: 0 },
+  );
+
+  return (
+    <section className="mt-5 border-t border-border pt-4" aria-label="Provider usage history">
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <h3 className="text-sm font-semibold text-foreground">Observed usage history</h3>
+        <div className="flex flex-wrap gap-2">
+          <Badge variant="outline">{formatNumber(totals.liveAuthCount)} live auth</Badge>
+          <Badge variant="outline">{formatNumber(totals.calls)} calls</Badge>
+          <Badge variant="outline">{formatNumber(totals.totalTokens)} tokens</Badge>
+          {staleCount > 0 && (
+            <Badge variant="outline" className="border-status-warning/30 bg-status-warning/10 text-status-warning">
+              {formatNumber(staleCount)} stale
+            </Badge>
+          )}
+        </div>
+      </header>
+
+      <div className="mt-3 divide-y divide-border rounded-md border border-border">
+        {providers.map((provider) => (
+          <UsageHistoryRow key={provider.provider ?? provider.providerName ?? "unknown"} provider={provider} />
+        ))}
+        {providers.length === 0 && (
+          <div className="p-3 text-xs text-muted-foreground">No LLM provider usage history returned.</div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function UsageHistoryRow({ provider }: { provider: AssistantProviderUsageSummaryRow }) {
+  const quota = recordFrom(provider.quota);
+  const observed = recordFrom(provider.observedUsage);
+  const models = provider.models ?? [];
+  const observedSource = usageValue(observed, "coverageLabel", "coverage_label", "source") || "BFF observed";
+  const observedAt = usageValue(observed, "lastObservedAt", "last_observed_at") || provider.lastUsedAt || "unknown";
+  const observedStale = observed.stale === true || observed.stale === "true";
+  return (
+    <article className="p-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-mono text-sm text-foreground">{provider.provider ?? "unknown"}</span>
+            <Badge variant="outline" className={statusTone(provider.authStatus ?? provider.status ?? "unknown", provider.liveAuth)}>
+              {provider.liveAuth ? "live auth" : provider.authStatus ?? provider.status ?? "unknown"}
+            </Badge>
+            <Badge
+              variant="outline"
+              className={observedStale ? "border-status-warning/30 bg-status-warning/10 text-status-warning" : ""}
+            >
+              {observedStale ? "stale" : observedSource}
+            </Badge>
+          </div>
+          <div className="mt-1 text-xs text-muted-foreground">{provider.runtime ?? "runtime unknown"}</div>
+        </div>
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs sm:grid-cols-4">
+          <Info label="calls" value={formatNumber(provider.calls)} />
+          <Info label="fail" value={formatNumber(provider.failedCount)} />
+          <Info label="tokens" value={formatNumber(provider.totalTokens)} />
+          <Info label="last" value={provider.lastUsedAt ?? "unknown"} />
+        </dl>
+      </div>
+      <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-xs sm:grid-cols-4">
+        <Info label="usage source" value={observedSource} />
+        <Info label="observed at" value={observedAt} />
+        <Info label="quota source" value={usageValue(quota, "source") || "unknown"} />
+        <Info label="remaining" value={usageRemaining(quota)} />
+        <Info label="quota used" value={formatMetric(usageValue(quota, "used"), usageValue(quota, "unit"))} />
+        <Info label="prompt bytes" value={formatNumber(provider.promptBytes)} />
+      </dl>
+      {models.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {models.slice(0, 4).map((model) => (
+            <span key={model.model ?? "default"} className="rounded-md border border-border px-2 py-1 text-[11px] text-muted-foreground">
+              <span className="font-mono text-foreground">{model.model ?? "default"}</span>
+              {" · "}
+              {formatNumber(model.calls)} calls
+              {" · "}
+              {formatNumber(model.totalTokens)} tokens
+            </span>
+          ))}
+        </div>
+      )}
+    </article>
+  );
+}
+
+function Info({ label, value, className }: { label: string; value: string; className?: string }) {
+  return (
+    <div className={className}>
+      <dt className="text-[10px] font-medium uppercase tracking-normal text-muted-foreground">{label}</dt>
+      <dd className="mt-0.5 break-words text-foreground">{value}</dd>
+    </div>
+  );
+}
+
+export default OpenClawLlmAuthPanel;

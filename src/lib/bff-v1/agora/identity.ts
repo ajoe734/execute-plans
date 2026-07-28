@@ -124,16 +124,28 @@ function adaptUserScope(body: unknown): AgoraUserScope {
 }
 
 function adaptCapabilities(body: unknown): AgoraCapability[] {
-  if (Array.isArray(body)) return body.filter((c) => typeof c === "string") as AgoraCapability[];
+  const namesFrom = (value: unknown): AgoraCapability[] => {
+    if (!Array.isArray(value)) return [];
+    return value.flatMap((capability) => {
+      if (typeof capability === "string") return [capability as AgoraCapability];
+      if (!capability || typeof capability !== "object" || Array.isArray(capability)) return [];
+      const name = (capability as Record<string, unknown>).name;
+      return typeof name === "string" && name.trim()
+        ? [name as AgoraCapability]
+        : [];
+    });
+  };
+
+  if (Array.isArray(body)) return namesFrom(body);
   if (!body || typeof body !== "object") return [];
   const envelope = body as Record<string, unknown>;
   const direct = envelope.capabilities ?? envelope.granted_capabilities;
-  if (Array.isArray(direct)) return direct.filter((c) => typeof c === "string") as AgoraCapability[];
+  if (Array.isArray(direct)) return namesFrom(direct);
   const data = envelope.data;
-  if (Array.isArray(data)) return data.filter((c) => typeof c === "string") as AgoraCapability[];
+  if (Array.isArray(data)) return namesFrom(data);
   if (data && typeof data === "object" && !Array.isArray(data)) {
     const nested = (data as Record<string, unknown>).capabilities ?? (data as Record<string, unknown>).granted_capabilities;
-    if (Array.isArray(nested)) return nested.filter((c) => typeof c === "string") as AgoraCapability[];
+    if (Array.isArray(nested)) return namesFrom(nested);
   }
   return [];
 }

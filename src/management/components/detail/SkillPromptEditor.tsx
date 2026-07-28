@@ -1,13 +1,12 @@
-// Lightweight Skill prompt/spec editor stub.
-// Phase 12 ships the full versioned editor with diff view.
+// Lightweight Skill prompt/spec editor surface; saving stays disabled until a governed command exists.
 import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { toast } from "sonner";
 import type { Skill } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
+import { NonProductionActionButton } from "@/management/components/NonProductionActionButton";
 
 const initialPrompt = (skill: Skill) => `# ${skill.name}
 Archetype: ${skill.archetype}
@@ -60,9 +59,9 @@ export const SkillPromptEditor = ({ skill }: { skill: Skill }) => {
             <Button size="sm" variant="outline" onClick={() => { setDraft(original); }} disabled={!dirty}>
               {t("actions.reset")}
             </Button>
-            <Button size="sm" onClick={() => toast.success(t("skill.prompt.saved"))} disabled={!dirty}>
+            <NonProductionActionButton size="sm">
               {t("skill.prompt.saveDraft")}
-            </Button>
+            </NonProductionActionButton>
           </div>
         </div>
       </Card>

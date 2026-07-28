@@ -1,8 +1,16 @@
-import { describe, it, expect } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import { bff } from "@/lib/bff-v1";
 import { v5ActionOverlay } from "@/lib/v5/overlay";
 
+const realFetch = globalThis.fetch;
+
 describe("bff.v5 facade (Q3/Q14/Q16/Q24)", () => {
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  });
+
   it("exposes session without depending on MeDto", async () => {
     const s = await bff.v5.session.get();
     expect(s.tenantId).toBe("demo");
@@ -43,5 +51,46 @@ describe("bff.v5 facade (Q3/Q14/Q16/Q24)", () => {
     expect(r.overlayUpdated).toBe(true);
     expect(v5ActionOverlay.getPersona("per_quant")?.forcedMode).toBe("shadow");
     v5ActionOverlay.clear();
+  });
+
+  it("sentinel.setStatus updates the mock/session list state", async () => {
+    const before = await bff.v5.sentinel.list();
+    const target = before.items.find((finding) => finding.status === "open") ?? before.items[0];
+
+    const result = await bff.v5.sentinel.setStatus(target.id, "acknowledged");
+    const after = await bff.v5.sentinel.list();
+
+    expect(result).toEqual({ ok: true, persisted: false });
+    expect(after.items.find((finding) => finding.id === target.id)?.status).toBe("acknowledged");
+    await bff.v5.sentinel.setStatus(target.id, target.status);
+  });
+
+  it("sentinel.setStatus posts to the live status endpoint when write-gated", async () => {
+    vi.stubEnv("VITE_BFF_BASE_URL", "https://bff.example.test");
+    vi.stubEnv("VITE_BFF_REAL_WRITES", "true");
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/bff/me")) {
+        return new Response(JSON.stringify({
+          data: {
+            session: { authenticated: true, session_kind: "cookie" },
+            environment: { name: "dev", strict_auth: false },
+          },
+        }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      if (url.endsWith("/bff/v5/sentinel/findings/live-finding/status")) {
+        expect(init?.method).toBe("POST");
+        expect(JSON.parse(String(init?.body))).toEqual({ status: "dismissed" });
+        return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      return new Response("not found", { status: 404 });
+    });
+    globalThis.fetch = fetchMock;
+
+    const result = await bff.v5.sentinel.setStatus("live-finding", "dismissed");
+
+    expect(result).toEqual({ ok: true, persisted: true });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(String(fetchMock.mock.calls[1][0])).toBe("https://bff.example.test/bff/v5/sentinel/findings/live-finding/status");
   });
 });

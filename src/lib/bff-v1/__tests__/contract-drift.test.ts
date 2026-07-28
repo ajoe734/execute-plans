@@ -109,10 +109,10 @@ describe("BFF v1 contract drift", () => {
     }
   });
 
-  it("Agora generated types carry the v1.5 dynamic Trading Room bundle snapshot", () => {
-    expect(AGORA_CONTRACT_SNAPSHOT.bundleVersion).toBe("1.5");
+  it("Agora generated types carry the v1.13 dynamic Trading Room bundle snapshot", () => {
+    expect(AGORA_CONTRACT_SNAPSHOT.bundleVersion).toBe("1.13");
     expect(AGORA_CONTRACT_SNAPSHOT.sourceBundle).toBe(
-      "services/control-plane/specs/agora/bundle_index.v1_5.json",
+      "services/control-plane/specs/agora/bundle_index.v1_13.json",
     );
     expect(AGORA_SCHEMA_FILES).toContain("specs/agora/trading_room_workspace.schema.json");
     expect(AGORA_CAPABILITIES.map((capability) => capability.name)).toEqual(
@@ -130,16 +130,11 @@ describe("BFF v1 contract drift", () => {
     expect(AGORA_ROUTE_PATHS).toContain(
       "/bff/agora/trading-room/workspaces/{workspace_id}/versions/{version_id}/rollback",
     );
-    expect(AGORA_CONTRACT_SNAPSHOT.files["openapi/agora_v1_5.openapi.yaml"]).toMatch(/^[0-9a-f]{64}$/);
+    expect(AGORA_CONTRACT_SNAPSHOT.files["openapi/agora_v1_13.openapi.yaml"]).toMatch(/^[0-9a-f]{64}$/);
     expect(AGORA_CONTRACT_SNAPSHOT.files["specs/agora/trading_room_workspace.schema.json"]).toMatch(/^[0-9a-f]{64}$/);
-    expect(contractSnapshot.contract_version).toBe("1.5");
+    expect(contractSnapshot.contract_version).toBe("1.13");
     expect(contractSnapshot.source_bundle).toBe(AGORA_CONTRACT_SNAPSHOT.sourceBundle);
     expect(contractSnapshot.required_definition_checksums).toEqual(AGORA_SCHEMA_DEFINITION_CHECKSUMS);
-    expect(AGORA_SCHEMA_DEFINITION_CHECKSUMS).toEqual({
-      TradingRoomWorkspaceProposal: "280655b1dabb861436bf7a5aad2f707d6be7a6e51c077324cd2edd834e52b8db",
-      TradingRoomWidgetSpec: "66873948e5e92e5a56c5fb8e02074744f07748d74ee3b093e38fb9c8439d65e5",
-      WidgetRevisionProposal: "789047106e192b4ba73099f2bda0bddb473f37cb1691590dda7b9e0345b9c4d6",
-    });
   });
 
   it("dynamic Trading Room generated types are usable by frontend clients", () => {

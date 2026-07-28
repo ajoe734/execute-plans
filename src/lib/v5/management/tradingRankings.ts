@@ -3,7 +3,7 @@
 import type { ManagementLinkSet } from "./links";
 import { buildLinkSet } from "./links";
 
-export type RankingBlockKind =
+export type SeedRankingBlockKind =
   | "top_improving_personas"
   | "top_degrading_personas"
   | "top_improving_strategies"
@@ -13,7 +13,9 @@ export type RankingBlockKind =
   | "most_intervened_personas"
   | "most_unstable_after_training";
 
-export const RANKING_BLOCKS: readonly RankingBlockKind[] = [
+export type RankingBlockKind = SeedRankingBlockKind | string;
+
+export const RANKING_BLOCKS: readonly SeedRankingBlockKind[] = [
   "top_improving_personas",
   "top_degrading_personas",
   "top_improving_strategies",
@@ -24,7 +26,7 @@ export const RANKING_BLOCKS: readonly RankingBlockKind[] = [
   "most_unstable_after_training",
 ] as const;
 
-export const RANKING_BLOCK_LABELS: Record<RankingBlockKind, string> = {
+export const RANKING_BLOCK_LABELS: Record<SeedRankingBlockKind, string> = {
   top_improving_personas: "Top Improving Personas",
   top_degrading_personas: "Top Degrading Personas",
   top_improving_strategies: "Top Improving Strategies",
@@ -39,19 +41,27 @@ export interface TradingPulseRankRow {
   subjectId: string;
   subjectLabel: string;
   metric: string;
-  metricValue: number;
+  metricValue: number | string | null;
   metricUnit?: string;
-  links: ManagementLinkSet;
+  links?: ManagementLinkSet;
+  rankingEligible?: boolean;
+  ranking_eligible?: boolean;
 }
 
 export interface TradingPulseRankBlock {
   kind: RankingBlockKind;
   label: string;
   rows: TradingPulseRankRow[];
+  eligibleItemCount?: number;
+  eligible_item_count?: number;
+  missingMetricCount?: number;
+  missing_metric_count?: number;
+  missingMetricRuntimeIds?: string[];
+  missing_metric_runtime_ids?: string[];
 }
 
 const seed = (
-  kind: RankingBlockKind,
+  kind: SeedRankingBlockKind,
   rows: { id: string; label: string; metric: string; value: number; unit?: string;
           linkKind: Parameters<typeof buildLinkSet>[0]["primary"]["kind"] }[],
 ): TradingPulseRankBlock => ({
