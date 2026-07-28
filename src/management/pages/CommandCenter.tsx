@@ -21,20 +21,6 @@ import { ArrowRight, AlertOctagon, Activity, Wallet, Inbox } from "lucide-react"
 import { isLive, lifecycleOf } from "@/lib/v4/strategyTripleDerive";
 import { safeDateTime } from "@/lib/utils";
 
-const relTime = (iso: string, locale: string, justNow: string) => {
-  const diffMs = new Date(iso).getTime() - Date.now();
-  const abs = Math.abs(diffMs);
-  if (abs < 60_000) return justNow;
-  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: "auto" });
-  const units: [Intl.RelativeTimeFormatUnit, number][] = [
-    ["day", 86_400_000], ["hour", 3_600_000], ["minute", 60_000],
-  ];
-  for (const [unit, ms] of units) {
-    if (abs >= ms) return rtf.format(Math.round(diffMs / ms), unit);
-  }
-  return justNow;
-};
-
 const poolBarClass = (pct: number) =>
   pct > 90 ? "bg-risk-critical" : pct > 75 ? "bg-risk-high" : pct > 60 ? "bg-risk-medium" : "bg-accent";
 
@@ -60,7 +46,6 @@ export const CommandCenter = () => {
   const t = useT();
   const navigate = useNavigate();
   const env = usePlatform((s) => s.env);
-  const locale = usePlatform((s) => s.locale);
   const [d, setD] = useState<State>(empty);
 
   useEffect(() => {
@@ -178,7 +163,7 @@ export const CommandCenter = () => {
                 return (
                   <li key={p.id} className="text-sm">
                     <div className="flex justify-between items-center gap-2">
-                      <button onClick={() => navigate(`/management/capital-pools/${p.id}`)} className="font-medium hover:underline truncate">{p.name}</button>
+                      <button onClick={() => navigate(`/management/promotion-allocation?tab=quarterly-capital&capital_id=${encodeURIComponent(p.id)}`)} className="font-medium hover:underline truncate">{p.name}</button>
                       <div className="flex items-center gap-2 shrink-0">
                         <span className="text-mono text-xs text-muted-foreground">{pct}%</span>
                         <RiskBadge level={level} />
@@ -205,7 +190,7 @@ export const CommandCenter = () => {
                   <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
                     <span className="text-mono">{i.id}</span>
                     <span>·</span>
-                    <span>{relTime(i.openedAt, locale, t("common.justNow"))}</span>
+                    <span>{safeDateTime(i.openedAt)}</span>
                   </div>
                 </li>
               ))}
@@ -218,7 +203,7 @@ export const CommandCenter = () => {
                   <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
                     <span className="text-mono">{a.source}</span>
                     <span>·</span>
-                    <span>{relTime(a.openedAt, locale, t("common.justNow"))}</span>
+                    <span>{safeDateTime(a.openedAt)}</span>
                   </div>
                 </li>
               ))}

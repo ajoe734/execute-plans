@@ -4,10 +4,10 @@ import { Card } from "@/components/ui/card";
 import { Slider } from "@/components/ui/slider";
 import { StatCard } from "@/platform/components/StatCard";
 import { Button } from "@/components/ui/button";
-import { toast } from "sonner";
 import { bff } from "@/lib/bff-v1";
 import type { Rebalance } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
+import { NonProductionActionButton } from "@/management/components/NonProductionActionButton";
 import {
   MockDataEmptyState,
 } from "@/components/data/MockDataBadge";
@@ -64,7 +64,7 @@ export const AllocationSimulationPanel = ({ rebalance }: { rebalance: Rebalance 
         ))}
         <div className="flex justify-end gap-2 pt-2">
           <Button size="sm" variant="outline" onClick={() => setWeights(Object.fromEntries(lines.map((l) => [l.strategyId, l.proposedWeight * 100])))}>{t("actions.reset")}</Button>
-          <Button size="sm" onClick={() => toast.success(t("rebalance.sim.queued"))}>{t("rebalance.sim.run")}</Button>
+          <NonProductionActionButton size="sm">{t("rebalance.sim.run")}</NonProductionActionButton>
         </div>
       </Card>
     </div>

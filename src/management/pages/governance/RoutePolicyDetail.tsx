@@ -5,6 +5,7 @@ import { PageHeader, PageBody } from "@/platform/components/PageHeader";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { ManagementTableScroll } from "@/management/components/ManagementTableScroll";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, GitCompare } from "lucide-react";
 import { bff } from "@/lib/bff-v1";
@@ -99,8 +100,9 @@ export const RoutePolicyDetail = () => {
           </TabsContent>
 
           <TabsContent value="versions" className="mt-4">
-            <Card className="p-0 overflow-hidden">
-              <table className="w-full text-sm">
+            <Card className="p-0">
+              <ManagementTableScroll minScrollWidth={1040}>
+          <table className="w-full min-w-[1040px] text-sm">
                 <thead className="bg-muted/40">
                   <tr className="text-left">
                     <th className="px-4 py-2 text-[10px] uppercase tracking-wider text-muted-foreground">{t("table.version")}</th>
@@ -125,6 +127,7 @@ export const RoutePolicyDetail = () => {
                   )}
                 </tbody>
               </table>
+          </ManagementTableScroll>
             </Card>
           </TabsContent>
 
