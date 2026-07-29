@@ -33,9 +33,10 @@
     "seed_fixtures_not_live": true,
     "stale_records_not_green": true,
     "strict_live_bff_endpoints": [
-      "/bff/loops",
-      "/bff/loops/health",
-      "/bff/loops/health/{loop_id}"
+      "/bff/v5/loop-inventory",
+      "/bff/v5/loop-inventory/{loop_id}",
+      "/bff/v5/loop-health",
+      "/bff/v5/loop-health/{loop_id}"
     ]
   }
 }
