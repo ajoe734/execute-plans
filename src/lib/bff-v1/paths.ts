@@ -143,6 +143,12 @@ export const paths = {
   v5InterventionDecision: (id: string) => `${BASE}/v5/interventions/${enc(id)}/decide`,
   v5ExecutionPersonaHealth: () => `${BASE}/v5/execution/persona-health`,
 
+  // ---- 2026-07-29 Twelve Loop Gap Truth ----
+  loopInventoryList: () => `${BASE}/loops`,
+  loopInventoryDetail: (loopId: string) => `${BASE}/loops/${enc(loopId)}`,
+  loopHealthList: () => `${BASE}/loops/health`,
+  loopHealthDetail: (loopId: string) => `${BASE}/loops/health/${enc(loopId)}`,
+
   // ---- 2026-05-20 PM-9 — Management aggregate read paths (§12.2). ----
   // Mock providers continue returning seeds; live providers hit these.
   mgmtCockpit: () => `${BASE}/management/cockpit`,
