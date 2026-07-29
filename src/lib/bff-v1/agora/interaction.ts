@@ -2,7 +2,19 @@
 // Routes: /bff/agora/interactions/*
 
 import { withLiveOrMock } from "../liveTransport";
+import { makeBffError } from "../errors";
 import { paths } from "../paths";
+import { liveWriteGated } from "../writeGate";
+import type { GovernedProposal } from "./governance";
+
+async function requireInteractionWrite(): Promise<void> {
+  if (await liveWriteGated()) return;
+  throw makeBffError({
+    code: "PERMISSION_DENIED",
+    message: "Interaction writes are disabled by deployment policy or session-kind policy.",
+    details: { reason: "live_write_gate_closed" },
+  });
+}
 
 export interface ContextRef {
   type: "strategy" | "position" | "decision_event" | "journal_entry" | "persona" | "performance_window";
@@ -64,6 +76,11 @@ export interface SubmitInteractionResponse {
   execution_authority: string;
   no_capital_authority_proof: string;
   submitted_at: string;
+  proposal_id?: string;
+  proposal_ref?: string;
+  proposal_refs?: string[];
+  proposal?: GovernedProposal;
+  proposal_etag?: string;
 }
 
 export interface ResolveContextEnvelope {
@@ -82,7 +99,8 @@ export interface SubmitInteractionEnvelope {
 }
 
 export const interaction = {
-  resolveContext: (body: ResolveContextRequest): Promise<ResolveContextEnvelope> => {
+  resolveContext: async (body: ResolveContextRequest): Promise<ResolveContextEnvelope> => {
+    await requireInteractionWrite();
     const mockFn = async (): Promise<ResolveContextEnvelope> => {
       const wid = body.workshop_id || `wksp-mock-${Math.random().toString(36).substr(2, 9)}`;
       return {
@@ -163,7 +181,8 @@ export const interaction = {
     );
   },
 
-  submit: (body: SubmitInteractionRequest): Promise<SubmitInteractionEnvelope> => {
+  submit: async (body: SubmitInteractionRequest): Promise<SubmitInteractionEnvelope> => {
+    await requireInteractionWrite();
     const mockFn = async (): Promise<SubmitInteractionEnvelope> => {
       const interactionId = body.interaction_id || `int-mock-${Math.random().toString(36).substr(2, 9)}`;
       return {

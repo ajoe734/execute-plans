@@ -95,8 +95,19 @@ export function readBrowserAuthStorage(): { token: string | null; tenantId: stri
 function devBearerTokenFromEnv(): string | null {
   const env = readEnv();
   if (env.VITE_BFF_MODE !== "live") return null;
-  const token = env.VITE_BFF_DEV_BEARER_TOKEN?.trim();
-  return token || null;
+  // Prioritize env object so that tests can stub it successfully.
+  // Fallback to direct import.meta.env reference for Vite build-time static replacement.
+  let token = env.VITE_BFF_DEV_BEARER_TOKEN;
+  if (!token) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore: import.meta is not allowed under some tsc targets but Vite requires this literal for static replacement
+      token = import.meta.env.VITE_BFF_DEV_BEARER_TOKEN;
+    } catch {
+      // ignore
+    }
+  }
+  return token?.trim() || null;
 }
 
 const browserProvider: AuthProvider = {

@@ -32,6 +32,20 @@ vi.mock("@/platform/hooks", () => ({
   useT: () => (key: string) => key,
 }));
 
+vi.mock("@/agora/useAgoraWriteAccess", () => ({
+  useAgoraWriteAccess: () => ({
+    actorId: "operator-001",
+    agoraCapabilities: ["agora.workshop.v1"],
+    capabilities: ["agora.workshop.v1"],
+    roles: ["operator"],
+    loading: false,
+    interactionAllowed: true,
+    interactionDisabledReason: null,
+    writeAllowed: true,
+    writeDisabledReason: null,
+  }),
+}));
+
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string) => key,
@@ -113,8 +127,7 @@ describe("PersonaTradeJournalTab Component Tests", () => {
     });
   });
 
-  it("handles red-team review flow when red-team persona is eligible", async () => {
-    // Mock resolveContext and participants to return per_red as eligible
+  it("uses the first canonical eligible challenge Persona without inferring a role from id or name", async () => {
     mockResolveContext.mockResolvedValue({
       data: { workshop_id: "wksp-123", context_refs: [] },
     });
@@ -122,8 +135,8 @@ describe("PersonaTradeJournalTab Component Tests", () => {
       data: {
         included: [
           {
-            persona_id: "per_red",
-            display_name: "Red Team Adversary",
+            persona_id: "persona-neutral-first",
+            display_name: "Neutral First Candidate",
             eligible: true,
             reasons: [],
             recommended: true,
@@ -158,12 +171,10 @@ describe("PersonaTradeJournalTab Component Tests", () => {
       });
     });
 
-    // Verify Red Team Review button is enabled
-    const redTeamBtn = await screen.findByRole("button", { name: "Red Team Review" });
-    expect(redTeamBtn).not.toBeDisabled();
+    const challengeButton = await screen.findByRole("button", { name: "Challenge Persona Review" });
+    expect(challengeButton).not.toBeDisabled();
 
-    // Click Red Team Review
-    fireEvent.click(redTeamBtn);
+    fireEvent.click(challengeButton);
 
     // Verify submission and navigation
     await waitFor(() => {
@@ -171,18 +182,18 @@ describe("PersonaTradeJournalTab Component Tests", () => {
         workshop_id: "wksp-123",
         mode: "challenge",
         environment: "paper",
-        topic: "Reflection and review for episode ep-1 by Persona per_red",
-        participant_persona_ids: ["per_red"],
+        topic: "Reflection and review for episode ep-1 by Persona persona-neutral-first",
+        participant_persona_ids: ["persona-neutral-first"],
         context_refs: [
           { type: "journal_entry", id: "ep-1" },
-          { type: "persona", id: "per_red" },
+          { type: "persona", id: "persona-neutral-first" },
         ],
       });
       expect(mockNavigate).toHaveBeenCalledWith("/agora/strategy-workshop/wksp-123");
     });
   });
 
-  it("surfaces unavailable state when red-team persona is ineligible (e.g. environment ceiling exceeded)", async () => {
+  it("surfaces unavailable state when no challenge Persona is eligible", async () => {
     mockResolveContext.mockResolvedValue({
       data: { workshop_id: "wksp-456", context_refs: [] },
     });
@@ -192,7 +203,7 @@ describe("PersonaTradeJournalTab Component Tests", () => {
         excluded: [
           {
             persona_id: "per_red",
-            display_name: "Red Team Adversary",
+            display_name: "Excluded Challenge Candidate",
             eligible: false,
             reasons: ["environment_ceiling_exceeded"],
             recommended: false,
@@ -214,11 +225,11 @@ describe("PersonaTradeJournalTab Component Tests", () => {
     });
 
     // Wait for button to be updated to unavailable
-    const unavailableBtn = await screen.findByRole("button", { name: "Red Team (Unavailable)" });
+    const unavailableBtn = await screen.findByRole("button", { name: "Challenge Persona (Unavailable)" });
     expect(unavailableBtn).toBeDisabled();
 
     // Verify reason surfaced
-    expect(screen.getByTestId("red-team-unavailable").textContent).toContain(
+    expect(screen.getByTestId("challenge-persona-unavailable").textContent).toContain(
       "Unavailable: environment_ceiling_exceeded"
     );
   });

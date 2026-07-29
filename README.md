@@ -77,8 +77,15 @@ Pantheon dev frontend build 請設定：
 VITE_BFF_MODE=live
 VITE_BFF_BASE_URL=https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io
 VITE_BFF_FALLBACK=strict
-VITE_BFF_REAL_WRITES=false
+VITE_BFF_REAL_WRITES=true
+VITE_BFF_ALLOW_DEV_STUB_WRITES=true
 ```
+
+Pantheon dev is a closed test environment. Its explicit dev-only stub-write
+gate requires `/bff/me` to report `dev` or `test` and is rejected for any
+production environment marker. Deployment verifies a persisted Human Review
+submit/decision/read-back flow while the BFF governance contract keeps direct
+capital and runtime mutation disabled.
 
 Staging-live:
 
@@ -89,8 +96,8 @@ VITE_BFF_FALLBACK=strict
 VITE_BFF_REAL_WRITES=false
 ```
 
-`VITE_BFF_REAL_WRITES=false` 會讓 state-machine action writes 保留在前端 mock/overlay；
-只有 operator auth、approval evidence、confirm-token、two-man signing 都驗證後，才可打開。
+Staging-live 仍維持 `VITE_BFF_REAL_WRITES=false`。Dev 的 real writes 只送入 BFF
+治理命令與 Human Review；資金或 runtime 的直接變更仍由後端 policy 阻擋。
 
 Auth/session access is explicit:
 

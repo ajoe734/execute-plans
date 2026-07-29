@@ -10,6 +10,11 @@ import type {
   Watcher, DecisionJournalEntry, AllocationLimit, PoolFreeze, DeploymentStage,
   McpSecret, PromotionRecord, MetricFreeze, RebalanceOverride,
 } from "@/lib/bff/types";
+import type {
+  PersonaTradeReflection,
+  TradeEpisodeProjection,
+  TradePattern,
+} from "@/lib/bff-v1/tradeJournal";
 
 const now = () => new Date().toISOString();
 const ago = (h: number) => new Date(Date.now() - h * 3600_000).toISOString();
@@ -854,7 +859,7 @@ export const searchableObjects = () => [
 ];
 
 // ---- Persona Trade Journal Mock Data ----
-export const tradeEpisodes: any[] = [
+export const tradeEpisodes: TradeEpisodeProjection[] = [
   {
     trade_episode_id: "ep-complete-paper-long",
     persona_id: "per_quant",
@@ -1049,7 +1054,7 @@ export const tradeEpisodes: any[] = [
   }
 ];
 
-export const tradeReflections: any[] = [
+export const tradeReflections: PersonaTradeReflection[] = [
   {
     reflection_id: "ref-complete-paper-long",
     trade_episode_id: "ep-complete-paper-long",
@@ -1151,7 +1156,7 @@ export const tradeReflections: any[] = [
   }
 ];
 
-export const tradePatterns: any[] = [
+export const tradePatterns: TradePattern[] = [
   {
     pattern_id: "pat-earnings-overconfidence",
     persona_id: "per_quant",
@@ -1165,4 +1170,3 @@ export const tradePatterns: any[] = [
     recommendation: "Hard limit size to 5% during earnings weeks."
   }
 ];
-

@@ -75,6 +75,32 @@ export function normalizeBearerToken(token: string): string {
     : trimmed;
 }
 
+export function roleTokenFromEnv(
+  role: string,
+  explicitKeys: string[] = [],
+  env: Record<string, string | undefined> = defaultEnv(),
+): string {
+  const normalizedRole = role.trim().toLowerCase().replaceAll("-", "_");
+  const explicit = envValue(env, [
+    ...explicitKeys,
+    `PANTHEON_BFF_${normalizedRole.toUpperCase()}_TOKEN`,
+  ]);
+  if (explicit) return normalizeBearerToken(explicit);
+
+  const encoded = env.PANTHEON_BFF_RBAC_TOKENS_JSON?.trim();
+  if (!encoded) return "";
+  try {
+    const tokens = JSON.parse(encoded) as Record<string, unknown>;
+    for (const [candidateRole, token] of Object.entries(tokens)) {
+      if (candidateRole.trim().toLowerCase().replaceAll("-", "_") !== normalizedRole) continue;
+      return typeof token === "string" ? normalizeBearerToken(token) : "";
+    }
+  } catch {
+    return "";
+  }
+  return "";
+}
+
 export function makeDevAuthToken(options: {
   operatorId?: string;
   roles?: readonly string[];

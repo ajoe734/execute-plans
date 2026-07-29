@@ -661,6 +661,38 @@ function managementFleetEnvelope(path: string): JsonRecord {
   };
 }
 
+function managementDataSourcesEnvelope(path: string): JsonRecord {
+  const rows = [
+    {
+      connector_id: "ibkr",
+      provider: "IBKR market data",
+      kind: "broker_execution",
+      health: "read_ok",
+      universe: ["US", "TW"],
+      last_heartbeat_at: SNAPSHOT_AT,
+      credential_state: "configured",
+      read_only: true,
+      live_ingestion_enabled: false,
+      order_capable_provider: true,
+      order_side_effects_allowed: false,
+      capital_side_effects_allowed: false,
+      consumer_persona_ids: [PERSONA_ID],
+      consumer_persona_names: [PERSONA_NAME],
+      evidence_refs: ["support/evidence/mgmt100/readback.json"],
+    },
+  ];
+  return {
+    data: { items: rows },
+    items: rows,
+    meta: envelope(rows, path, {
+      surfaces: {
+        data_sources: { source: "playwright_bff_fixture", status: "ok" },
+      },
+    }).meta,
+    page_info: { page_size: rows.length, total: rows.length, totalCountExact: true },
+  };
+}
+
 function cockpitModel(): JsonRecord {
   return {
     anomalies: [],
@@ -718,10 +750,29 @@ function responseFor(method: string, path: string, body: unknown): { body: unkno
     return {
       status: 200,
       body: envelope({
+        user: {
+          id: "op-mgmt100",
+          displayName: "MGMT100 Operator",
+          email: "op-mgmt100@pantheon.local",
+        },
+        tenant: {
+          id: "tenant-mgmt100",
+          name: "MGMT100 Tenant",
+          tz: "UTC",
+          locale: "zh-TW",
+          baseCurrency: "USD",
+        },
+        roles: ["ops", "viewer"],
+        capabilities: ["persona.view", "persona.manage", "risk.read"],
+        env: "dev",
+        featureFlags: { managementPersona100: true },
+        serverTime: SNAPSHOT_AT,
+        sessionExpiresAt: "2026-05-13T22:10:00Z",
+        permissionsVersion: "mgmt100-v1",
         environment: { name: "playwright", strict_auth: false },
         permissions: ["persona.view", "persona.manage", "risk.read"],
         tenant_id: "tenant-mgmt100",
-        user: { id: "op-mgmt100", roles: ["operator", "reviewer", "approver"] },
+        current_user: { id: "op-mgmt100", roles: ["operator", "reviewer", "approver"] },
       }, path),
     };
   }
@@ -731,8 +782,11 @@ function responseFor(method: string, path: string, body: unknown): { body: unkno
       body: envelope(cockpitModel(), path),
     };
   }
-  if (pathname === "/bff/management/fleet" || pathname === "/bff/management/persona-fleet") {
+  if (pathname === "/bff/management/persona-fleet") {
     return { status: 200, body: managementFleetEnvelope(path) };
+  }
+  if (pathname === "/bff/management/data-sources") {
+    return { status: 200, body: managementDataSourcesEnvelope(path) };
   }
   if (pathname === "/bff/management/human-inbox") {
     return { status: 200, body: envelope(humanInbox, path) };
@@ -892,7 +946,53 @@ function responseFor(method: string, path: string, body: unknown): { body: unkno
     return { status: 202, body: envelope({ persona_id: PERSONA_ID, prompt: (body as JsonRecord | undefined)?.prompt ?? "" }, path) };
   }
   if (pathname === "/bff/capital-pools") {
-    return { status: 200, body: envelope([{ id: CAPITAL_POOL_ID, name: "MGMT100 Core Pool", status: "active" }], path) };
+    return {
+      status: 200,
+      body: envelope([{
+        id: CAPITAL_POOL_ID,
+        name: "MGMT100 Core Pool",
+        owner: "operator-mgmt100",
+        risk: "medium",
+        state: "deployed",
+        status: "active",
+        updatedAt: SNAPSHOT_AT,
+        allocated: 1_000_000,
+        currency: "USD",
+        riskBudget: 0.04,
+        utilized: 420_000,
+      }], path),
+    };
+  }
+  if (pathname === "/bff/rebalances") {
+    return {
+      status: 200,
+      body: envelope([{
+        id: "rebalance-mgmt100-q2",
+        name: "MGMT100 Q2 Rebalance",
+        owner: "operator-mgmt100",
+        quarter: "2026-Q2",
+        risk: "medium",
+        state: "review",
+        targetPoolId: CAPITAL_POOL_ID,
+        proposedDelta: 0.06,
+        updatedAt: SNAPSHOT_AT,
+      }], path),
+    };
+  }
+  if (pathname === "/bff/ranking-formulas") {
+    return {
+      status: 200,
+      body: envelope([{
+        id: quarterlyFormula.formulaId,
+        name: "MGMT100 Ranking Formula",
+        owner: "operator-mgmt100",
+        risk: "low",
+        state: "deployed",
+        updatedAt: SNAPSHOT_AT,
+        expression: "0.25*pnl + 0.15*drawdown + 0.15*execution",
+        appliedTo: 2,
+      }], path),
+    };
   }
   if (pathname === "/bff/runtimes") {
     return { status: 200, body: envelope([runtimeRow], path) };
@@ -1005,8 +1105,8 @@ async function installBffFixture(page: Page, hits: BffHit[]): Promise<void> {
 
 const uiFlows: UiFlow[] = [
   { id: "ui-001-cockpit", type: "ui", category: "display", path: "/management/cockpit", endpoint: "/bff/management/cockpit" },
-  { id: "ui-002-persona-fleet", type: "ui", category: "display", path: "/management/persona-fleet", endpoint: "/bff/management/fleet", text: PERSONA_NAME },
-  { id: "ui-003-data-sources", type: "ui", category: "monitor", path: "/management/data-sources", endpoint: "/bff/management/fleet", text: "IBKR" },
+  { id: "ui-002-persona-fleet", type: "ui", category: "display", path: "/management/persona-fleet", endpoint: "/bff/management/persona-fleet", text: PERSONA_NAME },
+  { id: "ui-003-data-sources", type: "ui", category: "monitor", path: "/management/data-sources", endpoint: "/bff/management/data-sources", text: "IBKR" },
   { id: "ui-004-human-inbox", type: "ui", category: "monitor", path: "/management/human-inbox", endpoint: "/bff/management/human-inbox", text: "MGMT100" },
   { id: "ui-005-trading-pulse", type: "ui", category: "monitor", path: "/management/trading-pulse", endpoint: "/bff/management/trading-pulse" },
   { id: "ui-006-evolution-journal", type: "ui", category: "monitor", path: "/management/evolution-journal", endpoint: "/bff/management/evolution-journal", text: "Restrict route tools" },
@@ -1016,12 +1116,12 @@ const uiFlows: UiFlow[] = [
   { id: "ui-010-portfolio-book", type: "ui", category: "display", path: "/management/portfolio-book", endpoint: "/bff/management/portfolio-book" },
   { id: "ui-011-quarterly-ranking", type: "ui", category: "display", path: "/management/quarterly-ranking", endpoint: "/bff/management/quarterly-ranking" },
   { id: "ui-012-performance-attribution", type: "ui", category: "display", path: "/management/performance-attribution", endpoint: "/bff/management/performance-attribution" },
-  { id: "ui-013-readiness-ep5", type: "ui", category: "monitor", path: "/management/readiness/ep5", endpoint: "/bff/management/readiness/ep5" },
-  { id: "ui-014-readiness-broker", type: "ui", category: "monitor", path: "/management/readiness/broker-live", endpoint: "/bff/management/readiness/broker-live" },
-  { id: "ui-015-readiness-capital", type: "ui", category: "monitor", path: "/management/readiness/capital-binding-live", endpoint: "/bff/management/readiness/capital-binding-live" },
-  { id: "ui-016-readiness-bff-ha", type: "ui", category: "monitor", path: "/management/readiness/bff-ha", endpoint: "/bff/management/readiness/bff-ha" },
-  { id: "ui-017-readiness-strict", type: "ui", category: "monitor", path: "/management/readiness/strict-publish", endpoint: "/bff/management/readiness/strict-publish" },
-  { id: "ui-018-control-room", type: "ui", category: "monitor", path: "/management/control-room", endpoint: "/bff/management/cockpit" },
+  { id: "ui-013-promotion-paper", type: "ui", category: "monitor", path: "/management/promotion-allocation?tab=paper-candidates", endpoint: "/bff/management/quarterly-ranking" },
+  { id: "ui-014-promotion-real", type: "ui", category: "monitor", path: "/management/promotion-allocation?tab=real-ranking", endpoint: "/bff/management/persona-league", text: PERSONA_NAME },
+  { id: "ui-015-quarterly-capital", type: "ui", category: "monitor", path: "/management/promotion-allocation?tab=quarterly-capital", endpoint: "/bff/capital-pools", text: "MGMT100 Core Pool" },
+  { id: "ui-016-formula-policy", type: "ui", category: "monitor", path: "/management/promotion-allocation?tab=formula-policy", endpoint: "/bff/ranking-formulas", text: "MGMT100 Ranking Formula" },
+  { id: "ui-017-formula-policy-detail", type: "ui", category: "monitor", path: `/management/promotion-allocation?tab=formula-policy&formula_id=${quarterlyFormula.formulaId}`, endpoint: "/bff/ranking-formulas", text: "MGMT100 Ranking Formula" },
+  { id: "ui-018-deployment-alias", type: "ui", category: "monitor", path: "/management/deployment", endpoint: "/bff/deployments" },
   { id: "ui-019-execution-loop", type: "ui", category: "monitor", path: "/management/loops/execution", endpoint: "/bff/v5/loop-runs" },
   { id: "ui-020-sentinel", type: "ui", category: "monitor", path: "/management/sentinel", endpoint: "/bff/v5/sentinel/findings" },
   { id: "ui-021-interventions", type: "ui", category: "monitor", path: "/management/interventions", endpoint: "/bff/v5/interventions" },
@@ -1033,8 +1133,8 @@ const uiFlows: UiFlow[] = [
 
 const fetchFlows: FetchFlow[] = [
   { id: "fetch-026-me", type: "fetch", category: "display", method: "GET", path: "/bff/me" },
-  { id: "fetch-027-fleet", type: "fetch", category: "display", method: "GET", path: "/bff/management/fleet" },
-  { id: "fetch-028-fleet-alias", type: "fetch", category: "display", method: "GET", path: "/bff/management/persona-fleet" },
+  { id: "fetch-027-persona-fleet", type: "fetch", category: "display", method: "GET", path: "/bff/management/persona-fleet" },
+  { id: "fetch-028-cockpit", type: "fetch", category: "display", method: "GET", path: "/bff/management/cockpit" },
   { id: "fetch-029-league", type: "fetch", category: "display", method: "GET", path: "/bff/management/persona-league" },
   { id: "fetch-030-league-alias", type: "fetch", category: "display", method: "GET", path: "/bff/persona-league" },
   { id: "fetch-031-persona-intent", type: "fetch", category: "display", method: "GET", path: "/bff/management/persona-intent" },
@@ -1057,7 +1157,7 @@ const fetchFlows: FetchFlow[] = [
   { id: "fetch-048-persona-detail", type: "fetch", category: "display", method: "GET", path: `/bff/personas/${PERSONA_ID}` },
   { id: "fetch-049-persona-memory", type: "fetch", category: "display", method: "GET", path: `/bff/personas/${PERSONA_ID}/memory` },
   { id: "fetch-050-persona-evaluations", type: "fetch", category: "display", method: "GET", path: `/bff/personas/${PERSONA_ID}/evaluations` },
-  { id: "fetch-051-fleet-filter", type: "fetch", category: "monitor", method: "GET", path: "/bff/management/fleet?health=degraded&page_size=1" },
+  { id: "fetch-051-fleet-filter", type: "fetch", category: "monitor", method: "GET", path: "/bff/management/persona-fleet?health=degraded&page_size=1" },
   { id: "fetch-052-intent-filter", type: "fetch", category: "monitor", method: "GET", path: `/bff/management/persona-intent?persona_id=${PERSONA_ID}&status=active` },
   { id: "fetch-053-rankings", type: "fetch", category: "monitor", method: "GET", path: "/bff/management/trading-pulse/rankings" },
   { id: "fetch-054-league-rankings", type: "fetch", category: "monitor", method: "GET", path: "/bff/management/persona-league/rankings" },

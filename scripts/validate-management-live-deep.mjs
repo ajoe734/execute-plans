@@ -25,6 +25,8 @@ const SMOKE_TOKEN = process.env.PANTHEON_BFF_SMOKE_BEARER_TOKEN || process.env.B
 const OPERATOR_A_TOKEN = process.env.PANTHEON_BFF_OPERATOR_A_TOKEN || "";
 const OPERATOR_B_TOKEN = process.env.PANTHEON_BFF_OPERATOR_B_TOKEN || "";
 const SSE_MS = Math.max(10_000, Number(process.env.PANTHEON_LIVE_DEEP_SSE_MS || "65000"));
+const LIVE_FETCH_ATTEMPTS = positiveInt(process.env.PANTHEON_LIVE_DEEP_FETCH_ATTEMPTS, 3, 1);
+const LIVE_FETCH_TIMEOUT_MS = positiveInt(process.env.PANTHEON_LIVE_DEEP_FETCH_TIMEOUT_MS, 20_000, 5_000);
 const REQUIRE_FULL = truthy(process.env.PANTHEON_LIVE_DEEP_REQUIRE_FULL || "false");
 const RUN_ID = (process.env.GITHUB_RUN_ID || `${Date.now()}`).replace(/[^a-zA-Z0-9_-]/g, "-");
 const PROBE_MARKER = `management-live-deep-${RUN_ID}-${Math.random().toString(36).slice(2, 8)}`;
@@ -36,34 +38,34 @@ const RBAC_MATRIX = [
     id: "read-strategies",
     method: "GET",
     route: "/bff/strategies",
-    allowed: ["viewer", "operator", "approver", "risk_owner", "admin"],
+    allowed: ["viewer", "operator", "approver", "admin"],
   },
   {
     id: "read-approvals",
     method: "GET",
     route: "/bff/approvals",
-    allowed: ["viewer", "operator", "approver", "risk_owner", "admin"],
+    allowed: ["viewer", "operator", "approver", "admin"],
   },
   {
     id: "approval-decide-dry-run",
     method: "POST",
     route: "/bff/approvals/approval-dev/decide",
     allowTyped404: true,
-    allowed: ["operator", "approver", "risk_owner", "admin"],
+    allowed: ["approver", "admin"],
     body: { decision: "approve", reason: PROBE_MARKER },
   },
   {
     id: "intervention-decide-dry-run",
     method: "POST",
-    route: "/bff/v5/interventions/intervention-dev/decide",
-    allowed: ["operator", "approver", "risk_owner", "admin"],
+    routeForRole: (role, check) => `/bff/v5/interventions/${probeTargetId(role, check.id)}/decide`,
+    allowed: ["operator", "approver", "admin"],
     body: { decision: "approve", memo: PROBE_MARKER },
   },
   {
     id: "two-man-sign-dry-run",
     method: "POST",
-    route: "/bff/v5/interventions/intervention-dev/two-man-sign",
-    allowed: ["operator", "approver", "risk_owner", "admin"],
+    routeForRole: (role, check) => `/bff/v5/interventions/${probeTargetId(role, check.id)}/two-man-sign`,
+    allowed: ["operator", "approver", "admin"],
     body: { memo: PROBE_MARKER },
   },
   {
@@ -81,6 +83,11 @@ const RBAC_MATRIX = [
 
 function truthy(value) {
   return ["1", "true", "yes", "on"].includes(String(value ?? "").trim().toLowerCase());
+}
+
+function positiveInt(value, fallback, minimum) {
+  const parsed = Number(value ?? fallback);
+  return Number.isFinite(parsed) && parsed >= minimum ? Math.floor(parsed) : fallback;
 }
 
 function normalizeRole(role) {
@@ -127,6 +134,23 @@ function worstStatus(statuses) {
   return statuses.reduce((worst, status) => (statusWeight(status) > statusWeight(worst) ? status : worst), "pass");
 }
 
+function slug(value) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 72) || "probe";
+}
+
+function probeTargetId(role, checkId) {
+  return ["rbac", slug(PROBE_MARKER), slug(role), slug(checkId)].join("-");
+}
+
+function routeForCheck(check, role) {
+  return typeof check.routeForRole === "function" ? check.routeForRole(role, check) : check.route;
+}
+
 function loadRoleTokens() {
   const tokens = {};
   const json = process.env.PANTHEON_BFF_RBAC_TOKENS_JSON || "";
@@ -171,33 +195,73 @@ function requestHeaders(token, method, requestId, extra = {}) {
   return headers;
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function fetchJson(route, { method = "GET", token = "", body, requestPrefix = "live-deep", extraHeaders = {} } = {}) {
   const requestId = `${requestPrefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
   const url = new URL(route, BFF_BASE_URL).toString();
-  try {
-    const res = await fetch(url, {
-      method,
-      headers: requestHeaders(token, method, requestId, extraHeaders),
-      body: method === "GET" ? undefined : JSON.stringify(body ?? {}),
-      signal: AbortSignal.timeout(20000),
-    });
-    const text = await res.text().catch(() => "");
-    return {
-      route,
-      method,
-      status: res.status,
-      json: safeJson(text),
-      text,
-      error: "",
-      typedEnvelope: isBffErrorEnvelope(safeJson(text)),
-    };
-  } catch (err) {
-    return { route, method, status: 0, json: null, text: "", error: String(err), typedEnvelope: false };
+  let last = {
+    route,
+    method,
+    status: 0,
+    json: null,
+    text: "",
+    error: "not attempted",
+    typedEnvelope: false,
+  };
+
+  for (let attempt = 0; attempt < LIVE_FETCH_ATTEMPTS; attempt += 1) {
+    try {
+      const res = await fetch(url, {
+        method,
+        headers: requestHeaders(token, method, requestId, extraHeaders),
+        body: method === "GET" ? undefined : JSON.stringify(body ?? {}),
+        signal: AbortSignal.timeout(LIVE_FETCH_TIMEOUT_MS),
+      });
+      const text = await res.text().catch(() => "");
+      const json = safeJson(text);
+      last = {
+        route,
+        method,
+        status: res.status,
+        json,
+        text,
+        error: "",
+        typedEnvelope: isBffErrorEnvelope(json),
+      };
+      if (![502, 503, 504].includes(res.status)) return last;
+    } catch (err) {
+      last = {
+        route,
+        method,
+        status: 0,
+        json: null,
+        text: "",
+        error: String(err),
+        typedEnvelope: false,
+      };
+    }
+
+    if (attempt < LIVE_FETCH_ATTEMPTS - 1) {
+      await sleep(750 * (attempt + 1));
+    }
   }
+
+  return {
+    ...last,
+    error: last.error
+      ? `${last.error} after ${LIVE_FETCH_ATTEMPTS} attempt(s)`
+      : `transient HTTP ${last.status} after ${LIVE_FETCH_ATTEMPTS} attempt(s)`,
+  };
 }
 
 function classifyAllowed(response, check = {}) {
   if (response.error) return { pass: false, note: response.error.slice(0, 120) };
+  if ([401, 403].includes(response.status)) {
+    return { pass: false, note: `expected allowed but got auth denial ${response.status}; typed=${response.typedEnvelope}` };
+  }
   if (check.allowTyped404 && response.status === 404 && response.typedEnvelope) {
     return { pass: true, note: "allowed route reached typed dev-id not-found envelope" };
   }
@@ -227,7 +291,8 @@ async function runRbacMatrix() {
   for (const role of presentRoles) {
     for (const check of RBAC_MATRIX) {
       const allowed = check.allowed.includes(role);
-      const response = await fetchJson(check.route, {
+      const route = routeForCheck(check, role);
+      const response = await fetchJson(route, {
         method: check.method,
         token: roleTokens[role],
         body: check.body,
@@ -238,7 +303,7 @@ async function runRbacMatrix() {
         role,
         check: check.id,
         method: check.method,
-        route: check.route,
+        route,
         expected: allowed ? "allowed" : "denied",
         status: response.status,
         typedEnvelope: response.typedEnvelope,
@@ -251,7 +316,8 @@ async function runRbacMatrix() {
   const smokeRows = [];
   if (!presentRoles.length && SMOKE_TOKEN) {
     for (const check of RBAC_MATRIX) {
-      const response = await fetchJson(check.route, {
+      const route = routeForCheck(check, "smoke");
+      const response = await fetchJson(route, {
         method: check.method,
         token: SMOKE_TOKEN,
         body: check.body,
@@ -262,7 +328,7 @@ async function runRbacMatrix() {
         role: "smoke",
         check: check.id,
         method: check.method,
-        route: check.route,
+        route,
         status: response.status,
         typedEnvelope: response.typedEnvelope,
         pass: verdict.pass,
@@ -392,8 +458,8 @@ function processSseChunk(state, text) {
   }
 }
 
-async function readSsePhase({ token, lastEventId = "", durationMs, phase }) {
-  const state = {
+function makeSsePhaseState(phase) {
+  return {
     phase,
     opened: false,
     status: 0,
@@ -406,38 +472,58 @@ async function readSsePhase({ token, lastEventId = "", durationMs, phase }) {
     current: { id: "", event: "", data: [] },
     error: "",
   };
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), durationMs);
-  const headers = {
-    Accept: "text/event-stream",
-    "X-Request-Id": `sse-${phase}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-  };
-  if (token) headers.Authorization = `Bearer ${normalizeToken(token)}`;
-  if (lastEventId) headers["Last-Event-ID"] = lastEventId;
+}
 
-  try {
-    const res = await fetch(new URL("/bff/events/stream", BFF_BASE_URL), {
-      method: "GET",
-      headers,
-      signal: controller.signal,
-    });
-    state.status = res.status;
-    state.opened = res.ok;
-    if (!res.ok || !res.body) return state;
+function shouldRetrySsePhase(state) {
+  return !state.opened && (
+    state.status === 0 ||
+    [502, 503, 504].includes(state.status)
+  );
+}
 
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      processSseChunk(state, decoder.decode(value, { stream: true }));
+async function readSsePhase({ token, lastEventId = "", durationMs, phase }) {
+  let lastState = makeSsePhaseState(phase);
+  for (let attempt = 0; attempt < LIVE_FETCH_ATTEMPTS; attempt += 1) {
+    const state = makeSsePhaseState(phase);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), durationMs);
+    const headers = {
+      Accept: "text/event-stream",
+      "X-Request-Id": `sse-${phase}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    };
+    if (token) headers.Authorization = `Bearer ${normalizeToken(token)}`;
+    if (lastEventId) headers["Last-Event-ID"] = lastEventId;
+
+    try {
+      const res = await fetch(new URL("/bff/events/stream", BFF_BASE_URL), {
+        method: "GET",
+        headers,
+        signal: controller.signal,
+      });
+      state.status = res.status;
+      state.opened = res.ok;
+      if (res.ok && res.body) {
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          processSseChunk(state, decoder.decode(value, { stream: true }));
+        }
+      }
+    } catch (err) {
+      if (!controller.signal.aborted) state.error = String(err).slice(0, 180);
+    } finally {
+      clearTimeout(timer);
     }
-  } catch (err) {
-    if (!controller.signal.aborted) state.error = String(err).slice(0, 180);
-  } finally {
-    clearTimeout(timer);
+
+    lastState = state;
+    if (!shouldRetrySsePhase(lastState) || attempt >= LIVE_FETCH_ATTEMPTS - 1) {
+      return lastState;
+    }
+    await sleep(750 * (attempt + 1));
   }
-  return state;
+  return lastState;
 }
 
 async function runSseLongReconnect() {

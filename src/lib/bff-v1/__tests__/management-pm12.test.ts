@@ -13,6 +13,7 @@ describe("PM12 paths", () => {
     expect(paths.mgmtPortfolioBook()).toBe("/bff/management/portfolio-book");
     expect(paths.mgmtPortfolioPools()).toBe("/bff/management/portfolio-book/pools");
     expect(paths.mgmtPortfolioHoldings()).toBe("/bff/management/portfolio-book/holdings");
+    expect(paths.mgmtPortfolioExposure()).toBe("/bff/management/portfolio-book/exposure");
   });
   it("portfolio holdings serializes all monitor filters", () => {
     expect(paths.mgmtPortfolioHoldings({ deployment_stage: "canary", broker_id: "broker a", runtime_id: "rt-1", source_status: "stale", stale_telemetry: "true", risk_state: "stale_telemetry" }))
@@ -26,11 +27,16 @@ describe("PM12 paths", () => {
     expect(paths.mgmtQuarterlyRanking()).toBe("/bff/management/quarterly-ranking");
     expect(paths.mgmtQuarterlyRanking("2026-Q2")).toContain("quarter=2026-Q2");
     expect(paths.mgmtQuarterlyRankingFormula()).toBe("/bff/management/quarterly-ranking/formula");
+    expect(paths.mgmtQuarterlyRankingRecommendationSubmit("pm12-rec-1"))
+      .toBe("/bff/management/quarterly-ranking/recommendations/pm12-rec-1/submit");
+    expect(paths.commandsV1()).toBe("/bff/v1/commands");
   });
   it("performance attribution", () => {
     expect(paths.mgmtPerformanceAttribution()).toBe("/bff/management/performance-attribution");
     expect(paths.mgmtPerformanceAttribution("persona", "30d"))
       .toBe("/bff/management/performance-attribution?dimension=persona&period=30d");
+    expect(paths.mgmtOperationsReadModel("persona/alpha", "30d"))
+      .toBe("/bff/management/operations-read-model/persona%2Falpha?period=30d");
   });
 });
 
