@@ -1,5 +1,9 @@
 // Bottom-anchored job progress drawer — Part 1 §Shell.
 // Shows a compact strip when collapsed; expand to see all running jobs with progress.
+// MGMT-LOAD-003: the full job list is not fetched at mount. It hydrates once,
+// either when the operator expands the drawer or on an idle callback after
+// primary route content has rendered — never both, and never
+// racing TopBar's shell-summary badge count for the same /bff/jobs request.
 import { useEffect, useState } from "react";
 import { create } from "zustand";
 import { realtime } from "@/lib/bff/realtime";
@@ -10,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { ChevronUp, ChevronDown, Loader2, X } from "lucide-react";
 import { useT } from "@/platform/hooks";
 import { StatusBadge } from "./StatusBadge";
+import { scheduleAfterRoutePrimaryReady } from "@/platform/routePrimaryReady";
 
 interface RunningJob {
   id: string;
@@ -28,6 +33,9 @@ interface JobDrawerState {
   upsert: (j: RunningJob) => void;
   remove: (id: string) => void;
   setAll: (rows: RunningJob[]) => void;
+  /** Guards the one-time full-list hydration so open + idle-callback can't double-fetch. */
+  hydrated: boolean;
+  markHydrated: () => void;
 }
 
 export const useJobDrawer = create<JobDrawerState>((set) => ({
@@ -44,24 +52,37 @@ export const useJobDrawer = create<JobDrawerState>((set) => ({
   }),
   remove: (id) => set((s) => ({ jobs: s.jobs.filter((j) => j.id !== id) })),
   setAll: (rows) => set({ jobs: rows.slice(0, 30) }),
+  hydrated: false,
+  markHydrated: () => set({ hydrated: true }),
 }));
 
 export const JobProgressDrawer = () => {
   const t = useT();
   const live = useLiveStatus();
-  const { expanded, toggle, jobs, upsert, remove, setAll } = useJobDrawer();
+  const { expanded, toggle, jobs, upsert, remove, setAll, hydrated, markHydrated } = useJobDrawer();
   const [tick, setTick] = useState(0);
   const isMockData = live.effective === "mock";
 
-  // Initial seed from BFF
+  // Lazy hydrate the full job list: on drawer open, or on idle otherwise.
   useEffect(() => {
-    void lists.jobs().then((env) => setAll(
-      (env.items as Array<{ id: string; kind: string; owner: string; startedAt: string; status: RunningJob["status"] }>).map((r) => ({
-        id: r.id, kind: r.kind, owner: r.owner, startedAt: r.startedAt,
-        status: r.status, progress: r.status === "success" ? 1 : Math.random() * 0.6 + 0.2,
-      })),
-    )).catch(() => setAll([]));
-  }, [setAll]);
+    if (hydrated) return;
+    const hydrate = () => {
+      if (useJobDrawer.getState().hydrated) return;
+      markHydrated();
+      void lists.jobs().then((env) => setAll(
+        (env.items as Array<{ id: string; kind: string; owner: string; startedAt: string; status: RunningJob["status"] }>).map((r) => ({
+          id: r.id, kind: r.kind, owner: r.owner, startedAt: r.startedAt,
+          status: r.status, progress: r.status === "success" ? 1 : Math.random() * 0.6 + 0.2,
+        })),
+      )).catch(() => setAll([]));
+    };
+    if (expanded) {
+      hydrate();
+      return;
+    }
+    const cancelDeferredHydration = scheduleAfterRoutePrimaryReady(hydrate);
+    return () => cancelDeferredHydration();
+  }, [expanded, hydrated, markHydrated, setAll]);
 
   // Subscribe to realtime job events
   useEffect(() => {

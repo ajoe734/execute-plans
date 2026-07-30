@@ -8,6 +8,8 @@ export type BffSessionKind = "cookie" | "bearer" | "stub";
 export interface SessionKindWriteContext {
   production?: boolean;
   strict?: boolean;
+  development?: boolean;
+  allowDevStubWrites?: boolean;
 }
 
 export function sessionKindAllowsWrite(
@@ -16,7 +18,11 @@ export function sessionKindAllowsWrite(
 ): boolean {
   const normalized = String(sessionKind ?? "").trim().toLowerCase();
   if (normalized === "cookie" || normalized === "bearer") return true;
-  if (normalized === "stub") return !context.production && !context.strict;
+  if (normalized === "stub") {
+    if (context.production) return false;
+    if (context.development && context.allowDevStubWrites) return true;
+    return !context.strict;
+  }
   return false;
 }
 
@@ -27,6 +33,10 @@ function truthy(value: unknown): boolean {
 function strictWriteModeFromEnv(): boolean {
   const env = readBffEnv();
   return env.VITE_BFF_FALLBACK === "strict" || truthy(env.VITE_BFF_STRICT_WRITES);
+}
+
+function devStubWritesEnabled(): boolean {
+  return truthy(readBffEnv().VITE_BFF_ALLOW_DEV_STUB_WRITES);
 }
 
 function isProduction(value: unknown): boolean {
@@ -49,15 +59,22 @@ function readSessionSummary(value: unknown): {
   authenticated: boolean;
   sessionKind: unknown;
   production: boolean;
+  development: boolean;
   strict: boolean;
 } {
   const data = readMeData(value);
   const session = asRecord(data.session) ?? {};
   const environment = asRecord(data.environment) ?? {};
+  const environmentNames = [data.env, environment.name, environment.deployment_stage]
+    .map((value) => String(value ?? "").trim().toLowerCase())
+    .filter(Boolean);
+  const production = environmentNames.some(isProduction);
   return {
     authenticated: session.authenticated !== false,
     sessionKind: session.session_kind ?? session.sessionKind,
-    production: isProduction(data.env) || isProduction(environment.name) || isProduction(environment.deployment_stage),
+    production,
+    development: !production && environmentNames.some((name) =>
+      ["dev", "development", "test", "testing"].includes(name)),
     strict: environment.strict_auth === true || strictWriteModeFromEnv(),
   };
 }
@@ -70,7 +87,9 @@ export async function liveWriteGated(): Promise<boolean> {
     if (!summary.authenticated) return false;
     return sessionKindAllowsWrite(summary.sessionKind, {
       production: summary.production,
+      development: summary.development,
       strict: summary.strict,
+      allowDevStubWrites: devStubWritesEnabled(),
     });
   } catch {
     return false;

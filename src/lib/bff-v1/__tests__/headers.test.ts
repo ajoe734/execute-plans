@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { buildHeaders, idempotencyKey, isMutation, setAuthProvider } from "../headers";
+import {
+  buildHeaders,
+  idempotencyKey,
+  isMutation,
+  setAuthProvider,
+} from "../headers";
 
 beforeEach(() => {
   vi.stubEnv("VITE_BFF_MODE", "mock");
@@ -53,7 +58,10 @@ describe("bff-v1 headers (Final C.1: Idempotency-Key is HEADER)", () => {
   it("auto-mints X-Correlation-Id (or accepts caller-supplied)", () => {
     const auto = buildHeaders({ method: "GET" });
     expect(auto["X-Correlation-Id"]).toMatch(/^cid_/);
-    const supplied = buildHeaders({ method: "GET", correlationId: "cid_test_1" });
+    const supplied = buildHeaders({
+      method: "GET",
+      correlationId: "cid_test_1",
+    });
     expect(supplied["X-Correlation-Id"]).toBe("cid_test_1");
   });
 
@@ -70,18 +78,33 @@ describe("bff-v1 headers (Final C.1: Idempotency-Key is HEADER)", () => {
     expect(h["X-Tenant-Id"]).toBeUndefined();
   });
 
-  it("injects non-secret dev bearer fallback only in live mode", () => {
+  it("does not inject a public build bearer in live mode", () => {
     vi.stubEnv("VITE_BFF_MODE", "live");
-    vi.stubEnv("VITE_BFF_DEV_BEARER_TOKEN", "pantheon-dev-browser:operator:mfa:assistant.kernel.debug,assistant.kernel.repair");
+    vi.stubEnv("VITE_BFF_DEV_BEARER_TOKEN", "pantheon-dev-browser:viewer");
 
     const h = buildHeaders({ method: "GET" });
 
-    expect(h["Authorization"]).toBe("Bearer pantheon-dev-browser:operator:mfa:assistant.kernel.debug,assistant.kernel.repair");
+    expect(h["Authorization"]).toBeUndefined();
+  });
+
+  it("does not inject a privileged public build fallback", () => {
+    vi.stubEnv("VITE_BFF_MODE", "live");
+    vi.stubEnv(
+      "VITE_BFF_DEV_BEARER_TOKEN",
+      "pantheon-dev-browser:operator:mfa:assistant.kernel.debug,assistant.kernel.repair",
+    );
+
+    const h = buildHeaders({ method: "GET" });
+
+    expect(h["Authorization"]).toBeUndefined();
   });
 
   it("does not inject dev bearer fallback in mock mode", () => {
     vi.stubEnv("VITE_BFF_MODE", "mock");
-    vi.stubEnv("VITE_BFF_DEV_BEARER_TOKEN", "pantheon-dev-browser:operator:mfa:assistant.kernel.debug,assistant.kernel.repair");
+    vi.stubEnv(
+      "VITE_BFF_DEV_BEARER_TOKEN",
+      "pantheon-dev-browser:operator:mfa:assistant.kernel.debug,assistant.kernel.repair",
+    );
 
     const h = buildHeaders({ method: "GET" });
 
