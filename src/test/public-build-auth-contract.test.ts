@@ -74,7 +74,7 @@ describe("public frontend build auth boundary", () => {
       ` ${trackedViewerIdentity}`,
       `${trackedViewerIdentity} `,
       trackedViewerIdentity.toUpperCase(),
-      "pantheon-dev-browser:admin:mfa:assistant.kernel.repair",
+      "pantheon-dev-browser:admin:mfa:assistant.kernel.debug",
     ]) {
       expect(() => validatePublicBuildBearerToken(rejected)).toThrow(
         /must be empty; browser bearer credentials are forbidden/,
@@ -89,7 +89,7 @@ describe("public frontend build auth boundary", () => {
       env: {
         ...process.env,
         VITE_BFF_DEV_BEARER_TOKEN:
-          "pantheon-dev-browser:admin:mfa:assistant.kernel.repair",
+          "pantheon-dev-browser:admin:mfa:assistant.kernel.debug",
       },
     });
 
@@ -139,7 +139,7 @@ describe("public frontend build auth boundary", () => {
         env: {
           ...process.env,
           VITE_BFF_DEV_BEARER_TOKEN:
-            "pantheon-dev-browser:admin:mfa:assistant.kernel.repair",
+            "pantheon-dev-browser:admin:mfa:assistant.kernel.debug",
         },
         timeout: 10_000,
       },

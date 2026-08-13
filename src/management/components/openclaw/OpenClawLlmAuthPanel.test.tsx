@@ -63,19 +63,6 @@ function api(overrides: Partial<OpenClawLlmAuthApi> = {}): OpenClawLlmAuthApi {
         },
       },
     }),
-    fetchOrchestratorStatus: vi.fn().mockResolvedValue({
-      ok: true,
-      kind: "ok",
-      status: {
-        providerStatus: {
-          provider: "codex_cli",
-          runtime: "openclaw_gateway_cli_mount",
-          status: "degraded",
-          used: false,
-          fallback: null,
-        },
-      },
-    }),
     fetchUsageSummary: vi.fn().mockResolvedValue({
       ok: true,
       kind: "ok",

@@ -693,50 +693,6 @@ const ASSISTANT_ADAPTER_READY = {
   auth_status: "ready",
   mount_mode: "rw",
   checked_at: nowIso(),
-  capabilities: { read: true, repair_write: false },
-  repair_workspace: {
-    root: "/tmp/pantheon-f18-fixture",
-    ready: true,
-    writable: false,
-    worktree_count: 0,
-  },
-};
-
-const ASSISTANT_ORCHESTRATOR_STATUS_RESPONSE = {
-  data: {
-    status: "ready",
-    snapshot_at: nowIso(),
-    project: "pantheon",
-    sprint: "fe-int-gate-d05",
-    objective: "F18 exact-candidate performance gate",
-    provider_status: {
-      provider: "codex_cli",
-      runtime: "openclaw_gateway_cli_mount",
-      status: "completed",
-      used: true,
-      fallback: null,
-      run_id: "f18-perf-fixture",
-    },
-    openclawToolPolicy: {
-      status: "ready",
-      effectiveStatus: "ready",
-      upstreamStatus: "ready",
-      assistantCommandAllowed: true,
-      assistantCommandEffective: true,
-      assistantCommandUsable: true,
-      assistantCommandStatus: "usable",
-      effectiveTools: ["assistant.command"],
-    },
-    providerReadiness: ASSISTANT_ADAPTER_READY,
-    supervisor: {
-      lifecycle: "running",
-      mode_status: "idle",
-      focus_mode: "execution",
-      last_heartbeat_at: nowIso(),
-    },
-    tasks: [],
-    coordination: { file_count: 0, feature_count: 0, feature_ids: [] },
-  },
 };
 
 const ASSISTANT_PROVIDERS_RESPONSE = {
@@ -884,9 +840,6 @@ async function installPerfRoutes(page: Page, counters: RouteCounters): Promise<v
   });
   await page.route(/\/bff\/management\/shell-summary(?:\?.*)?$/, async (route) => {
     await fulfillJson(route, TOPBAR_SHELL_SUMMARY_RESPONSE);
-  });
-  await page.route(/\/bff\/assistant\/orchestrator\/status(?:\?.*)?$/, async (route) => {
-    await fulfillJson(route, ASSISTANT_ORCHESTRATOR_STATUS_RESPONSE);
   });
   await page.route(/\/bff\/assistant\/providers\/usage-summary(?:\?.*)?$/, async (route) => {
     await fulfillJson(route, ASSISTANT_PROVIDER_USAGE_RESPONSE);

@@ -91,7 +91,7 @@ describe("bff-v1 headers (Final C.1: Idempotency-Key is HEADER)", () => {
     vi.stubEnv("VITE_BFF_MODE", "live");
     vi.stubEnv(
       "VITE_BFF_DEV_BEARER_TOKEN",
-      "pantheon-dev-browser:operator:mfa:assistant.kernel.debug,assistant.kernel.repair",
+      "pantheon-dev-browser:operator:mfa:assistant.kernel.debug",
     );
 
     const h = buildHeaders({ method: "GET" });
@@ -103,7 +103,7 @@ describe("bff-v1 headers (Final C.1: Idempotency-Key is HEADER)", () => {
     vi.stubEnv("VITE_BFF_MODE", "mock");
     vi.stubEnv(
       "VITE_BFF_DEV_BEARER_TOKEN",
-      "pantheon-dev-browser:operator:mfa:assistant.kernel.debug,assistant.kernel.repair",
+      "pantheon-dev-browser:operator:mfa:assistant.kernel.debug",
     );
 
     const h = buildHeaders({ method: "GET" });
