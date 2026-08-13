@@ -21,6 +21,7 @@ import type { LoopHealthEntryDTO, TruthSourceInfo } from "@/lib/bff-v1/loopTruth
 interface LoopTruthViewProps {
   loops: LoopHealthEntryDTO[];
   loading?: boolean;
+  error?: unknown | null;
   onRefresh?: () => void;
 }
 
@@ -45,6 +46,7 @@ export const truthLevelLabels: Record<string, string> = {
 export const LoopTruthView: React.FC<LoopTruthViewProps> = ({
   loops,
   loading = false,
+  error = null,
   onRefresh,
 }) => {
   const [filter, setFilter] = useState<string>("all");
@@ -78,6 +80,32 @@ export const LoopTruthView: React.FC<LoopTruthViewProps> = ({
 
   return (
     <div className="space-y-4">
+      {/* Error Banner */}
+      {error != null && (
+        <Card className="p-4 border-status-failed/40 bg-status-failed/10 text-foreground space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-status-failed font-semibold text-sm">
+              <XCircle className="h-5 w-5 shrink-0" />
+              <span>Failed to load Twelve Loop health truth from BFF</span>
+            </div>
+            {onRefresh && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs border-status-failed/40 text-status-failed hover:bg-status-failed/20"
+                onClick={onRefresh}
+                disabled={loading}
+              >
+                {loading ? "Retrying..." : "Retry"}
+              </Button>
+            )}
+          </div>
+          <div className="text-xs text-muted-foreground font-mono bg-background/50 p-2 rounded border border-border">
+            {error instanceof Error ? error.message : String(error)}
+          </div>
+        </Card>
+      )}
+
       {/* Overview Cards */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Card className="p-3">
@@ -100,11 +128,20 @@ export const LoopTruthView: React.FC<LoopTruthViewProps> = ({
 
         <Card className="p-3">
           <div className="text-xs text-muted-foreground font-medium">BFF Truth Contract</div>
-          <div className="text-sm font-semibold mt-1 flex items-center gap-1.5 text-accent">
-            <ShieldCheck className="h-4 w-4" />
-            Strict Live-BFF Grounding
+          {error != null ? (
+            <div className="text-sm font-semibold mt-1 flex items-center gap-1.5 text-status-failed">
+              <XCircle className="h-4 w-4" />
+              BFF Fetch Error
+            </div>
+          ) : (
+            <div className="text-sm font-semibold mt-1 flex items-center gap-1.5 text-accent">
+              <ShieldCheck className="h-4 w-4" />
+              Strict Live-BFF Grounding
+            </div>
+          )}
+          <div className="text-[11px] text-muted-foreground mt-0.5">
+            {error != null ? "Explicit error state (no seed fallback)" : "Seed/fixture visually distinguished"}
           </div>
-          <div className="text-[11px] text-muted-foreground mt-0.5">Seed/fixture visually distinguished</div>
         </Card>
       </div>
 
