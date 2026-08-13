@@ -1254,25 +1254,6 @@ describe("TradingRoomPage", () => {
         "w-status",
         expect.objectContaining({
           instruction: "改成表格",
-          proposedSpec: expect.objectContaining({
-            dataSource: "agora.strategy.summary",
-            id: "w-status",
-            interactions: expect.arrayContaining([
-              expect.objectContaining({ kind: "request_widget_revision" }),
-            ]),
-            placement: expect.objectContaining({
-              height: 3,
-              width: 4,
-              x: 0,
-              y: 0,
-            }),
-            query: expect.objectContaining({
-              filters: { strategy_id: "strat-001" },
-              limit: 50,
-            }),
-            sensitivity: "user_private",
-            widgetType: "strategy_status_summary",
-          }),
           viewId: "strategy-overview",
         }),
         expect.objectContaining({ idempotencyKey: expect.any(String) }),

@@ -15,6 +15,7 @@ export interface TradingRoomWidgetValidation {
 function sensitivityRank(value: TradingRoomWidgetSpec["sensitivity"]): number {
   if (value === "public_market") return 0;
   if (value === "user_private") return 1;
+  if (value === "broker_sensitive") return 2;
   if (value === "restricted") return 3;
   return 2;
 }
@@ -22,6 +23,7 @@ function sensitivityRank(value: TradingRoomWidgetSpec["sensitivity"]): number {
 export function formatSensitivityLabel(value: TradingRoomWidgetSpec["sensitivity"]): string {
   if (value === "public_market") return "公開市場";
   if (value === "user_private") return "使用者私有";
+  if (value === "broker_sensitive") return "券商機敏";
   if (value === "restricted") return "嚴格受限";
   return "受限資料";
 }
