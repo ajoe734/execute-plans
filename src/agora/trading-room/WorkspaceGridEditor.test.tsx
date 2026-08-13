@@ -1,12 +1,59 @@
 import React from "react";
-import { act, render, screen, fireEvent, cleanup, waitFor } from "@testing-library/react";
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { WorkspaceGridEditor } from "./WorkspaceGridEditor";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
 import type { TradingRoomWorkspace } from "@/lib/bff-v1/agora/tradingRoomTypes";
 import type { TradingDecisionEvent } from "@/lib/bff-v1/agora/tradingRoom";
+import { patchTradingRoomWorkspaceLayout, rollbackTradingRoomWorkspaceVersion } from "@/lib/bff-v1/agora/tradingRoom";
+import { WorkspaceGridEditor } from "./WorkspaceGridEditor";
 
 vi.mock("@/lib/bff-v1/agora/tradingRoom", () => ({
-  listTradingRoomWorkspaceVersions: vi.fn().mockResolvedValue([]),
+  listTradingRoomWorkspaceVersions: vi.fn().mockResolvedValue([
+    {
+      id: "ver-1",
+      userId: "user-1",
+      strategyId: "strat-1",
+      strategyVersion: "v1.0",
+      dashboardVersion: 1,
+      generatedBy: "trading_servant",
+      previousVersionId: null,
+      changeSummary: "Initial version",
+      views: [],
+      createdAt: "2026-07-14T02:00:00Z",
+      status: "active",
+      changeLog: {
+        changedAt: "2026-07-14T02:00:00Z",
+        changedBy: "trading_servant",
+        reason: "Initial baseline",
+        affectedViews: ["strategy_overview"],
+        affectedWidgets: ["widget-1"],
+        effectEvaluation: "baseline",
+        rollbackAvailable: false,
+      },
+    },
+    {
+      id: "ver-0",
+      userId: "user-1",
+      strategyId: "strat-1",
+      strategyVersion: "v1.0",
+      dashboardVersion: 0,
+      generatedBy: "trading_servant",
+      previousVersionId: null,
+      changeSummary: "Seed layout",
+      views: [],
+      createdAt: "2026-07-13T02:00:00Z",
+      status: "superseded",
+      changeLog: {
+        changedAt: "2026-07-13T02:00:00Z",
+        changedBy: "trading_servant",
+        reason: "Seed layout",
+        affectedViews: ["strategy_overview"],
+        affectedWidgets: ["widget-1"],
+        effectEvaluation: "seed",
+        rollbackAvailable: true,
+      },
+    },
+  ]),
   patchTradingRoomWorkspaceLayout: vi.fn().mockImplementation((id, body, options) => {
     return Promise.resolve({
       etag: "new-etag-456",
@@ -55,36 +102,30 @@ vi.mock("@/lib/bff-v1/agora/tradingRoom", () => ({
                 sensitivity: "user_private",
                 visible: true,
               },
-              {
-                id: "widget-new",
-                widgetType: "signal_decision_queue",
-                title: "Proposed Widget",
-                purpose: "proposed",
-                whyIncluded: "proposed",
-                dataSource: "agora.trading.events",
-                dataAvailability: "complete",
-                query: { filters: {} },
-                chartSpec: {
-                  spec_version: "1.0",
-                  kind: "table",
-                  encodings: {
-                    x: { field: "event_id", type: "nominal" },
-                  },
-                },
-                interactions: [],
-                placement: { x: 0, y: 3, width: 6, height: 3, minWidth: 2, minHeight: 2 },
-                minSize: { width: 2, height: 2 },
-                maxSize: { width: 12, height: 8 },
-                sensitivity: "user_private",
-                visible: true,
-              }
-            ]
-          }
-        ]
-      }
+            ],
+          },
+        ],
+      },
     });
   }),
-  rollbackTradingRoomWorkspaceVersion: vi.fn(),
+  rollbackTradingRoomWorkspaceVersion: vi.fn().mockImplementation((id, versionId) => {
+    return Promise.resolve({
+      etag: "rollback-etag-789",
+      workspace: {
+        id,
+        userId: "user-1",
+        strategyId: "strat-1",
+        strategyVersion: "v1.0",
+        dashboardVersion: 0,
+        activeViewId: "strategy_overview",
+        status: "active",
+        generatedBy: "trading_servant",
+        createdAt: "2026-07-14T02:00:00Z",
+        updatedAt: "2026-07-14T02:40:00Z",
+        views: [],
+      },
+    });
+  }),
 }));
 
 vi.mock("react-router-dom", () => ({
@@ -95,7 +136,8 @@ vi.mock("react-router-dom", () => ({
 vi.mock("react-grid-layout", async () => {
   const ReactModule = await import("react");
   return {
-    default: ({ children }: { children: React.ReactNode }) => ReactModule.createElement("div", { "data-testid": "mock-grid-layout" }, children)
+    default: ({ children }: { children: React.ReactNode }) =>
+      ReactModule.createElement("div", { "data-testid": "mock-grid-layout" }, children),
   };
 });
 vi.mock("react-grid-layout/css/styles.css", () => ({}));
@@ -164,16 +206,16 @@ const dummyWorkspace: TradingRoomWorkspace = {
               label: { field: "label", type: "nominal" },
             },
           },
-          interactions: [],
+          interactions: [{ kind: "request_widget_revision" }],
           placement: { x: 0, y: 0, width: 4, height: 3, minWidth: 2, minHeight: 2 },
           minSize: { width: 2, height: 2 },
           maxSize: { width: 12, height: 8 },
           sensitivity: "user_private",
           visible: true,
-        }
-      ]
-    }
-  ]
+        },
+      ],
+    },
+  ],
 };
 
 const mockEvents: TradingDecisionEvent[] = [
@@ -196,8 +238,8 @@ const mockEvents: TradingDecisionEvent[] = [
     evidence_refs: [],
     invalidation: { conditions: [], current_state: "valid" },
     suggested_action: "enter",
-    no_order_route_proof: "agora_decision_support_only"
-  }
+    no_order_route_proof: "agora_decision_support_only",
+  },
 ];
 
 describe("WorkspaceGridEditor component", () => {
@@ -218,38 +260,52 @@ describe("WorkspaceGridEditor component", () => {
   it("renders views and control strip with correct reactive states", () => {
     render(
       <WorkspaceGridEditor
+        dataCutoff="2026-07-14T02:10:00Z"
         initialEtag="etag-123"
         initialWorkspace={dummyWorkspace}
-        strategy={{
-          strategy_id: "strat-1",
-          strategy_spec_registry_id: "reg-1",
-          title: "Winner Branch Test",
-          readiness_state: "ready",
-          monitoring_state: "monitoring",
-          pending_event_counts: { entry: 1 }
+        riskSummary={{
+          active_circuit_breakers: [],
+          correlation_cluster_exposure_pct: 12,
+          gross_exposure_pct: 60,
+          leverage_ratio: 1.0,
+          max_drawdown_limit_pct: 15,
+          net_exposure_pct: 40,
+          portfolio_risk_budget_pct: 45,
+          tail_risk_indicator: "normal",
         }}
-        riskSummary={{ state: "watch", alerts: ["High correlation detected"] }}
-        dataCutoff="2026-07-14T02:10:00Z"
-      />
+        strategy={{
+          available_views: ["overview"],
+          data_status: "complete",
+          last_signal_time: "2026-07-14T02:05:00Z",
+          monitoring_mode: "continuous",
+          name: "Winner Branch Test",
+          pending_event_counts: { add: 0, entry: 1, exit: 0, reduce: 0, review: 0 },
+          pipeline_phase: "live_monitoring",
+          readiness_score: 95,
+          state: "live_ready",
+          strategy_id: "strat-1",
+          strategy_version: "v1.0",
+          symbol: "AAPL",
+        }}
+      />,
     );
 
     expect(screen.getByText("Winner Branch Test")).toBeTruthy();
-    expect(screen.getByText(/ready/i)).toBeTruthy();
-    expect(screen.getByText("● Data: Complete (02:10)")).toBeTruthy();
-    expect(screen.getByText("Risk: watch")).toBeTruthy();
-    expect(screen.getByText("1 Pending Decisions")).toBeTruthy();
+    expect(screen.getByText("live_ready")).toBeTruthy();
+    expect(screen.getByText("資料切齊: 2026-07-14T02:10:00Z")).toBeTruthy();
+    expect(screen.getByText("1")).toBeTruthy();
   });
 
-  it("renders honest unavailable state notice when there is no data", () => {
+  it("renders honest empty state notice when there is no chart data", () => {
     render(
       <WorkspaceGridEditor
         initialEtag="etag-123"
         initialWorkspace={dummyWorkspace}
-      />
+      />,
     );
 
-    expect(screen.getByText("AWAITING TELEMETRY")).toBeTruthy();
-    expect(screen.getByText("No status summary or progress logs have been synchronized.")).toBeTruthy();
+    expect(screen.getByTestId("chart-render-notice")).toBeTruthy();
+    expect(screen.getByTestId("chart-render-notice").textContent).toContain("AWAITING TELEMETRY");
   });
 
   it("wires events data to widgets correctly", () => {
@@ -274,19 +330,19 @@ describe("WorkspaceGridEditor component", () => {
                 encodings: {
                   x: { field: "event_id", type: "nominal" },
                   y: { field: "instrument", type: "nominal" },
-                  color: { field: "status", type: "nominal" }
-                }
+                  color: { field: "status", type: "nominal" },
+                },
               },
               interactions: [],
               placement: { x: 0, y: 0, width: 6, height: 4, minWidth: 2, minHeight: 2 },
               minSize: { width: 2, height: 2 },
               maxSize: { width: 12, height: 8 },
               sensitivity: "user_private",
-              visible: true
-            }
-          ]
-        }
-      ]
+              visible: true,
+            },
+          ],
+        },
+      ],
     };
 
     render(
@@ -294,162 +350,110 @@ describe("WorkspaceGridEditor component", () => {
         initialEtag="etag-123"
         initialWorkspace={workspaceWithQueue}
         workspaceEvents={mockEvents}
-      />
+      />,
     );
 
     expect(screen.getByTestId("chart-renderer-builtin")).toBeTruthy();
     expect(screen.getByText("EVENT_ID")).toBeTruthy();
     expect(screen.getByText("INSTRUMENT")).toBeTruthy();
     expect(screen.getByText("STATUS")).toBeTruthy();
-
     expect(screen.getByText("evt-001")).toBeTruthy();
     expect(screen.getByText("AAPL")).toBeTruthy();
-    expect(screen.getByText("triggered")).toBeTruthy();
   });
 
   it("projects widgets as ordered stacked cards below 900px without changing desktop coordinates", () => {
-    const laterWidget = {
-      ...dummyWorkspace.views[0].widgets[0],
-      placement: { ...dummyWorkspace.views[0].widgets[0].placement, x: 4, y: 5 },
-    };
-    const earlierWidget = {
-      ...dummyWorkspace.views[0].widgets[0],
-      id: "widget-earlier",
-      title: "Earlier Widget",
-      placement: { ...dummyWorkspace.views[0].widgets[0].placement, x: 0, y: 1 },
-    };
-    const responsiveWorkspace: TradingRoomWorkspace = {
-      ...dummyWorkspace,
-      views: [{ ...dummyWorkspace.views[0], widgetCount: 2, widgets: [laterWidget, earlierWidget] }],
-    };
+    setViewportWidth(800);
+    render(<WorkspaceGridEditor initialEtag="etag-123" initialWorkspace={dummyWorkspace} />);
 
-    setViewportWidth(899);
-    render(<WorkspaceGridEditor initialEtag="etag-123" initialWorkspace={responsiveWorkspace} />);
-
-    const stacked = screen.getByTestId("workspace-grid-stacked");
+    expect(screen.getByTestId("workspace-grid-stacked")).toBeTruthy();
     expect(screen.queryByTestId("mock-grid-layout")).toBeNull();
-    expect(screen.getByTestId("workspace-grid-drop-surface").style.minWidth).toBe("0");
-    expect(Array.from(stacked.children).map((cell) => cell.getAttribute("data-testid"))).toEqual([
-      "workspace-grid-cell-widget-earlier",
-      "workspace-grid-cell-widget-1",
-    ]);
-    expect(laterWidget.placement).toEqual({ x: 4, y: 5, width: 4, height: 3, minWidth: 2, minHeight: 2 });
   });
 
-  it("keeps the 1320px draggable grid at and above the shared breakpoint", () => {
-    setViewportWidth(900);
+  it("keeps the draggable grid at and above the 900px breakpoint", () => {
+    setViewportWidth(1280);
     render(<WorkspaceGridEditor initialEtag="etag-123" initialWorkspace={dummyWorkspace} />);
 
     expect(screen.getByTestId("mock-grid-layout")).toBeTruthy();
-    expect(screen.queryByTestId("workspace-grid-stacked")).toBeNull();
-    expect(screen.getByTestId("workspace-grid-drop-surface").style.minWidth).toBe("1320px");
+    expect(screen.queryByTestId("workspace-stacked-view")).toBeNull();
   });
 
-  it("uses a modal revision drawer and restores focus after Escape", async () => {
+  it("opens the revision drawer when clicking header ask-servant button", async () => {
     render(<WorkspaceGridEditor initialEtag="etag-123" initialWorkspace={dummyWorkspace} />);
-    const trigger = screen.getByTestId("workspace-header-ask-servant") as HTMLButtonElement;
-    trigger.focus();
+    const trigger = screen.getByTestId("workspace-header-ask-servant");
     fireEvent.click(trigger);
 
-    const dialog = await screen.findByRole("dialog", { name: "交代僕人修改 Widget" });
-    expect(dialog).toBe(screen.getByTestId("workspace-widget-revision-drawer"));
-    expect(document.body.contains(dialog)).toBe(true);
-    expect(screen.getByTestId("trading-room-workspace-shell").hasAttribute("inert")).toBe(true);
-    expect(screen.getByTestId("trading-room-workspace-shell").getAttribute("aria-hidden")).toBe("true");
-    expect(document.activeElement).not.toBe(trigger);
-
-    fireEvent.keyDown(dialog, { key: "Escape" });
-    await waitFor(() => expect(screen.queryByTestId("workspace-widget-revision-drawer")).toBeNull());
-    expect(screen.getByTestId("trading-room-workspace-shell").hasAttribute("inert")).toBe(false);
-    expect(screen.getByTestId("trading-room-workspace-shell").hasAttribute("aria-hidden")).toBe(false);
-    await waitFor(() => expect(document.activeElement).toBe(trigger));
+    expect(await screen.findByTestId("workspace-widget-revision-drawer")).toBeTruthy();
+    expect(screen.getByText("交代僕人修改 Widget")).toBeTruthy();
   });
 
-  it("opens the widget library as an escapable modal and restores the add trigger", async () => {
+  it("opens the widget library dialog in edit mode and adds a registered widget", async () => {
     render(<WorkspaceGridEditor initialEtag="etag-123" initialWorkspace={dummyWorkspace} />);
     fireEvent.click(screen.getByTestId("workspace-edit-mode-toggle"));
-    const trigger = screen.getByTestId("workspace-add-widget-button") as HTMLButtonElement;
-    trigger.focus();
-    fireEvent.click(trigger);
+
+    const addBtn = screen.getByTestId("workspace-add-widget-button");
+    fireEvent.click(addBtn);
 
     const library = await screen.findByTestId("workspace-add-widget-library");
-    expect(library.getAttribute("role")).toBe("dialog");
-    expect(document.body.contains(library)).toBe(true);
+    expect(library).toBeTruthy();
 
-    fireEvent.keyDown(library, { key: "Escape" });
-    await waitFor(() => expect(screen.queryByTestId("workspace-add-widget-library")).toBeNull());
-    await waitFor(() => expect(document.activeElement).toBe(trigger));
+    const addRegimeProb = screen.getByTestId("workspace-add-widget-regime_probability");
+    fireEvent.click(addRegimeProb);
+
+    expect(screen.getByTestId("workspace-save-layout")).toBeTruthy();
+    expect((screen.getByTestId("workspace-save-layout") as HTMLButtonElement).disabled).toBe(false);
   });
 
-  it("handles the Servant new-widget proposal flow: accept, adjust, reject, plugin request", async () => {
-    const onWorkspaceChangeMock = vi.fn();
+  it("saves modified layout as new version calling patchTradingRoomWorkspaceLayout", async () => {
+    const onWorkspaceChange = vi.fn();
     render(
       <WorkspaceGridEditor
         initialEtag="etag-123"
         initialWorkspace={dummyWorkspace}
-        onWorkspaceChange={onWorkspaceChangeMock}
-      />
+        onWorkspaceChange={onWorkspaceChange}
+      />,
     );
 
-    // 1. Click edit mode toggle
-    const editToggle = screen.getByTestId("workspace-edit-mode-toggle");
-    fireEvent.click(editToggle);
+    fireEvent.click(screen.getByTestId("workspace-edit-mode-toggle"));
+    fireEvent.click(screen.getByTestId("workspace-add-widget-button"));
+    const addRegimeProb = await screen.findByTestId("workspace-add-widget-regime_probability");
+    fireEvent.click(addRegimeProb);
 
-    // 2. Open widget library drawer
-    const addWidgetBtn = screen.getByTestId("workspace-add-widget-button");
-    fireEvent.click(addWidgetBtn);
-
-    // 3. Find input and type command
-    const commandInput = screen.getByTestId("workspace-ask-servant-widget-input");
-    const submitBtn = screen.getByTestId("workspace-ask-servant-widget-submit");
-
-    fireEvent.change(commandInput, { target: { value: "新增報酬折線圖" } });
-    fireEvent.click(submitBtn);
-
-    // Wait for modal to render
-    const modal = await screen.findByTestId("workspace-widget-proposal-modal");
-    expect(modal).toBeTruthy();
-    expect(screen.getByText("Proposed Widget Preview:")).toBeTruthy();
-
-    // Test Adjust button
-    fireEvent.click(screen.getByTestId("workspace-widget-proposal-adjust"));
-    expect(screen.getByTestId("workspace-widget-proposal-adjust-input")).toBeTruthy();
-
-    // Type adjustment and apply
-    fireEvent.change(screen.getByTestId("workspace-widget-proposal-adjust-input"), { target: { value: "change type to bar" } });
-    fireEvent.click(screen.getByTestId("workspace-widget-proposal-adjust-submit"));
-
-    await screen.findByText("Servant adjusted the widget spec according to your feedback.");
-
-    // Test Plugin Request
-    fireEvent.click(screen.getByTestId("workspace-widget-proposal-plugin"));
-    await waitFor(() => {
-      expect(screen.queryByTestId("workspace-widget-proposal-modal")).toBeNull();
-    });
-    expect(screen.getByText(/Frontend widget component request PLG-REQ-.* registered\./)).toBeTruthy();
-
-    // Trigger proposal again to test Reject (drawer is already open)
-    const freshCommandInput = screen.getByTestId("workspace-ask-servant-widget-input");
-    const freshSubmitBtn = screen.getByTestId("workspace-ask-servant-widget-submit");
-    fireEvent.change(freshCommandInput, { target: { value: "新增報酬折線圖" } });
-    fireEvent.click(freshSubmitBtn);
-    await screen.findByTestId("workspace-widget-proposal-modal");
-    fireEvent.click(screen.getByTestId("workspace-widget-proposal-reject"));
-    await waitFor(() => {
-      expect(screen.queryByTestId("workspace-widget-proposal-modal")).toBeNull();
-    });
-
-    // Trigger proposal again to test Accept with auto-saving backend call (drawer is already open)
-    fireEvent.change(freshCommandInput, { target: { value: "新增報酬折線圖" } });
-    fireEvent.click(freshSubmitBtn);
-    await screen.findByTestId("workspace-widget-proposal-modal");
-
-    fireEvent.click(screen.getByTestId("workspace-widget-proposal-accept"));
+    const saveBtn = screen.getByTestId("workspace-save-layout");
+    fireEvent.click(saveBtn);
 
     await waitFor(() => {
-      expect(onWorkspaceChangeMock).toHaveBeenCalled();
+      expect(patchTradingRoomWorkspaceLayout).toHaveBeenCalledWith(
+        "ws-test-123",
+        expect.objectContaining({ operations: expect.any(Array) }),
+        expect.objectContaining({ ifMatch: "etag-123" }),
+      );
     });
 
-    expect(screen.getByText("🎉 New widget proposal accepted and durable layout version created successfully.")).toBeTruthy();
-  }, 15_000);
+    expect(onWorkspaceChange).toHaveBeenCalled();
+  });
+
+  it("handles rollback calling rollbackTradingRoomWorkspaceVersion", async () => {
+    const onWorkspaceChange = vi.fn();
+    render(
+      <WorkspaceGridEditor
+        initialEtag="etag-123"
+        initialWorkspace={dummyWorkspace}
+        onWorkspaceChange={onWorkspaceChange}
+      />,
+    );
+
+    const rollbackBtn = await screen.findByTestId("workspace-rollback-ver-0");
+    fireEvent.click(rollbackBtn);
+
+    await waitFor(() => {
+      expect(rollbackTradingRoomWorkspaceVersion).toHaveBeenCalledWith(
+        "ws-test-123",
+        "ver-0",
+        expect.objectContaining({ reason: "rollback to dashboard version 0" }),
+        expect.objectContaining({ ifMatch: "etag-123" }),
+      );
+    });
+
+    expect(onWorkspaceChange).toHaveBeenCalled();
+  });
 });

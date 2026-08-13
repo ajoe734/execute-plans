@@ -344,10 +344,10 @@ export interface RollbackTradingRoomWorkspaceVersionRequest {
 export interface CreateWidgetRevisionProposalRequest {
   viewId?: string;
   instruction: string;
-  proposedSpec: TradingRoomWidgetSpec;
-  rationale: string;
+  proposedSpec?: TradingRoomWidgetSpec;
+  rationale?: string;
   warnings?: string[];
-  dataAvailability: "complete" | "partial" | "unavailable";
+  dataAvailability?: "complete" | "partial" | "unavailable";
 }
 
 export interface AcceptWidgetRevisionProposalRequest {

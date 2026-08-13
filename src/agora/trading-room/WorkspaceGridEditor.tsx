@@ -167,14 +167,11 @@ function mutationErrorMessage(error: unknown): string {
 function AddWidgetLibrary({
   onAdd,
   onClose,
-  onAskServant,
 }: {
   onAdd: (entry: WidgetRegistryEntry) => void;
   onClose: () => void;
-  onAskServant: (prompt: string) => void;
 }) {
   const { t } = useTranslation();
-  const [prompt, setPrompt] = useState("");
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const entries = getActiveWidgetTypes()
     .map((widgetType) => getWidgetRegistryEntry(widgetType))
@@ -226,85 +223,47 @@ function AddWidgetLibrary({
             zIndex: 20,
           }}
         >
-      <header style={{ alignItems: "center", display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-        <DialogPrimitive.Title asChild>
-          <strong style={{ color: COLORS.text, fontSize: 13 }}>{t("agora.tradingRoom.editor.addWidget")}</strong>
-        </DialogPrimitive.Title>
-        <DialogPrimitive.Close asChild>
-          <button aria-label="Close widget library" style={plainButtonStyle} type="button">
-            ×
-          </button>
-        </DialogPrimitive.Close>
-      </header>
-
-      {/* Ask Servant Input */}
-      <div style={{ borderBottom: `1px solid ${COLORS.border}`, marginBottom: 12, paddingBottom: 12 }}>
-        <div style={{ color: COLORS.accent, fontSize: 11, fontWeight: 800, marginBottom: 6 }}>
-          ASK SERVANT TO CREATE WIDGET (交代僕人新增)
-        </div>
-        <div style={{ display: "flex", gap: 6 }}>
-          <input
-            aria-label="Describe the widget for Servant"
-            data-testid="workspace-ask-servant-widget-input"
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            placeholder="e.g. 比較贏家分點出現後 5、20、60 日的成本後報酬"
-            style={{
-              flex: 1,
-              background: COLORS.panel,
-              border: `1px solid ${COLORS.border}`,
-              borderRadius: 6,
-              color: COLORS.text,
-              fontSize: 12,
-              padding: "6px 8px",
-            }}
-          />
-          <button
-            data-testid="workspace-ask-servant-widget-submit"
-            onClick={() => {
-              if (prompt.trim()) {
-                onAskServant(prompt);
-                setPrompt("");
-              }
-            }}
-            style={primaryButtonStyle}
-            type="button"
-          >
-            Ask
-          </button>
-        </div>
-      </div>
-
-      {Object.entries(grouped).map(([category, categoryEntries]) => (
-        <section key={category} style={{ marginTop: 10 }}>
-          <div style={{ color: COLORS.muted, fontSize: 11, fontWeight: 800, textTransform: "uppercase" }}>
-            {category}
-          </div>
-          <div style={{ display: "grid", gap: 6, marginTop: 6 }}>
-            {categoryEntries.map((entry) => (
-              <button
-                data-testid={`workspace-add-widget-${entry.widget_type}`}
-                key={entry.widget_type}
-                onClick={() => onAdd(entry)}
-                style={{
-                  background: COLORS.panel,
-                  border: `1px solid ${COLORS.border}`,
-                  borderRadius: 6,
-                  color: COLORS.textSoft,
-                  cursor: "pointer",
-                  fontSize: 12,
-                  padding: "8px 10px",
-                  textAlign: "left",
-                }}
-                type="button"
-              >
-                <span style={{ color: COLORS.text, display: "block", fontWeight: 700 }}>{entry.display_name}</span>
-                <span>{entry.description}</span>
+          <header style={{ alignItems: "center", display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+            <DialogPrimitive.Title asChild>
+              <strong style={{ color: COLORS.text, fontSize: 13 }}>{t("agora.tradingRoom.editor.addWidget")}</strong>
+            </DialogPrimitive.Title>
+            <DialogPrimitive.Close asChild>
+              <button aria-label="Close widget library" style={plainButtonStyle} type="button">
+                ×
               </button>
-            ))}
-          </div>
-        </section>
-      ))}
+            </DialogPrimitive.Close>
+          </header>
+
+          {Object.entries(grouped).map(([category, categoryEntries]) => (
+            <section key={category} style={{ marginTop: 10 }}>
+              <div style={{ color: COLORS.muted, fontSize: 11, fontWeight: 800, textTransform: "uppercase" }}>
+                {category}
+              </div>
+              <div style={{ display: "grid", gap: 6, marginTop: 6 }}>
+                {categoryEntries.map((entry) => (
+                  <button
+                    data-testid={`workspace-add-widget-${entry.widget_type}`}
+                    key={entry.widget_type}
+                    onClick={() => onAdd(entry)}
+                    style={{
+                      background: COLORS.panel,
+                      border: `1px solid ${COLORS.border}`,
+                      borderRadius: 6,
+                      color: COLORS.textSoft,
+                      cursor: "pointer",
+                      fontSize: 12,
+                      padding: "8px 10px",
+                      textAlign: "left",
+                    }}
+                    type="button"
+                  >
+                    <span style={{ color: COLORS.text, display: "block", fontWeight: 700 }}>{entry.display_name}</span>
+                    <span>{entry.description}</span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          ))}
         </DialogPrimitive.Content>
       </DialogPrimitive.Portal>
     </DialogPrimitive.Root>
@@ -319,12 +278,6 @@ function WorkspaceWidgetCard({
   onMenuToggle,
   onRemove,
   onRequestRevision,
-  onEditDataRange,
-  onAddBenchmark,
-  onMarkUseful,
-  onMarkNotUseful,
-  onWhyShown,
-  onViewEvidence,
   widget,
   workspaceEvents = [],
 }: {
@@ -335,12 +288,6 @@ function WorkspaceWidgetCard({
   onMenuToggle: () => void;
   onRemove: () => void;
   onRequestRevision: () => void;
-  onEditDataRange: () => void;
-  onAddBenchmark: () => void;
-  onMarkUseful: () => void;
-  onMarkNotUseful: () => void;
-  onWhyShown: () => void;
-  onViewEvidence: () => void;
   widget: TradingRoomWidgetSpec;
   workspaceEvents?: TradingDecisionEvent[];
 }) {
@@ -448,13 +395,7 @@ function WorkspaceWidgetCard({
               }}
             >
               <button onClick={onRequestRevision} style={menuButtonStyle} type="button">{t("agora.tradingRoom.editor.askServant")}</button>
-              <button onClick={onEditDataRange} style={menuButtonStyle} type="button">編輯資料範圍 (Edit range)</button>
-              <button onClick={onAddBenchmark} style={menuButtonStyle} type="button">新增比較基準 (Add benchmark)</button>
               <button onClick={onDuplicate} style={menuButtonStyle} type="button">{t("agora.tradingRoom.editor.duplicateWidget")}</button>
-              <button onClick={onMarkUseful} style={menuButtonStyle} type="button">標記有用 (Mark useful)</button>
-              <button onClick={onMarkNotUseful} style={menuButtonStyle} type="button">標記無用 (Mark unuseful)</button>
-              <button onClick={onWhyShown} style={menuButtonStyle} type="button">查看為何出現在此 (Why shown)</button>
-              <button onClick={onViewEvidence} style={menuButtonStyle} type="button">查看資料與證據 (Evidence)</button>
               <button onClick={onRemove} style={dangerMenuButtonStyle} type="button">{t("agora.tradingRoom.editor.removeWidget")}</button>
               <div style={{ borderTop: `1px solid ${COLORS.border}`, marginTop: 4, paddingTop: 6 }}>
                 <div style={{ color: COLORS.muted, fontSize: 11, fontWeight: 800, marginBottom: 4 }}>
@@ -507,74 +448,6 @@ function WorkspaceWidgetCard({
       </div>
     </section>
   );
-}
-
-function parseNewWidgetPrompt(prompt: string, strategyId: string, currentY: number): {
-  widgetSpec: TradingRoomWidgetSpec;
-  problem: string;
-  mapping: string;
-} {
-  const isReturn = prompt.includes("報酬") || prompt.includes("return") || prompt.includes("5") || prompt.includes("20");
-
-  if (isReturn) {
-    const spec: TradingRoomWidgetSpec = {
-      id: `servant_widget_${Date.now()}`,
-      widgetType: "branch_profitability_table",
-      title: "Winner Branch Horizon Returns (5d/20d/60d)",
-      purpose: "Compare cost-adjusted returns across 5, 20, and 60 days post-accumulation.",
-      whyIncluded: "Servant proposal based on trader request for return comparison.",
-      dataSource: "agora.winner_branch.performance",
-      query: { filters: { strategy_id: strategyId }, limit: 100, window: "60d" },
-      chartSpec: {
-        spec_version: "1.0",
-        kind: "bar",
-        encodings: {
-          x: { field: "horizon", type: "nominal", label: "Horizon" },
-          y: { field: "avg_return", type: "quantitative", label: "Avg Return (%)" },
-        },
-      },
-      interactions: [{ kind: "request_widget_revision" }],
-      placement: { x: 0, y: currentY, width: 6, height: 3, minWidth: 2, minHeight: 2 },
-      minSize: { width: 2, height: 2 },
-      maxSize: { width: 12, height: 8 },
-      sensitivity: "public_market",
-      visible: true,
-    };
-    return {
-      widgetSpec: spec,
-      problem: "Assessing profit decay to optimize trade execution duration.",
-      mapping: "X: Horizon (5d/20d/60d) | Y: Avg Return (%)",
-    };
-  }
-
-  const spec: TradingRoomWidgetSpec = {
-    id: `servant_widget_${Date.now()}`,
-    widgetType: "strategy_status_summary",
-    title: prompt.length > 30 ? prompt.slice(0, 30) + "..." : prompt,
-    purpose: `Custom visualization generated for: "${prompt}"`,
-    whyIncluded: "Servant proposal based on trader request.",
-    dataSource: "agora.strategy.summary",
-    query: { filters: { strategy_id: strategyId }, limit: 100, window: "20d" },
-    chartSpec: {
-      spec_version: "1.0",
-      kind: "line",
-      encodings: {
-        x: { field: "time", type: "temporal", label: "Time" },
-        y: { field: "value", type: "quantitative", label: "Value" },
-      },
-    },
-    interactions: [{ kind: "request_widget_revision" }],
-    placement: { x: 0, y: currentY, width: 6, height: 3, minWidth: 2, minHeight: 2 },
-    minSize: { width: 2, height: 2 },
-    maxSize: { width: 12, height: 8 },
-    sensitivity: "user_private",
-    visible: true,
-  };
-  return {
-    widgetSpec: spec,
-    problem: `Display trend of requested parameter: "${prompt}"`,
-    mapping: "X: Time | Y: Value",
-  };
 }
 
 function getWidgetData(widgetType: string, events: TradingDecisionEvent[]): Record<string, unknown>[] | undefined {
@@ -650,17 +523,6 @@ export function WorkspaceGridEditor({
   const [versions, setVersions] = useState<TradingRoomDashboardVersion[]>([]);
   const [versionError, setVersionError] = useState<string | null>(null);
   const [revisionTarget, setRevisionTarget] = useState<{ viewId: string; widgetId: string } | null>(null);
-
-  // Custom states for notifications and Ask Servant widget proposals
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [widgetProposal, setWidgetProposal] = useState<{
-    prompt: string;
-    widgetSpec: TradingRoomWidgetSpec;
-    problem: string;
-    mapping: string;
-  } | null>(null);
-  const [isAdjusting, setIsAdjusting] = useState(false);
-  const [adjustPromptText, setAdjustPromptText] = useState("");
 
   useEffect(() => {
     setBaseWorkspace(cloneWorkspace(initialWorkspace));
@@ -967,57 +829,6 @@ export function WorkspaceGridEditor({
     onWorkspaceChange?.(result);
   }
 
-  // Menu action handlers
-  function handleEditDataRange(widget: TradingRoomWidgetSpec) {
-    setToastMessage(`🔧 ${widget.title}: 資料範圍編輯已開啟 (Mock Mode)`);
-  }
-
-  function handleAddBenchmark(widget: TradingRoomWidgetSpec) {
-    setToastMessage(`📊 ${widget.title}: 已新增比較基準 (Mock Mode)`);
-  }
-
-  function handleMarkUseful(widget: TradingRoomWidgetSpec) {
-    setToastMessage(`✓ 已收到您的回饋：Widget "${widget.title}" 已標記為有用`);
-    recordEvent(makePersonalizationEvent({
-      after_state: { feedback: "useful" },
-      before_state: {},
-      event_type: "dashboard_recipe_changed",
-      memory_writeback_eligible: true,
-      target: { target_id: widget.id, target_type: "widget" },
-    }));
-  }
-
-  function handleMarkNotUseful(widget: TradingRoomWidgetSpec) {
-    setToastMessage(`✗ 已收到您的回饋：Widget "${widget.title}" 已標記為無用`);
-    recordEvent(makePersonalizationEvent({
-      after_state: { feedback: "not_useful" },
-      before_state: {},
-      event_type: "dashboard_recipe_changed",
-      memory_writeback_eligible: true,
-      target: { target_id: widget.id, target_type: "widget" },
-    }));
-  }
-
-  function handleWhyShown(widget: TradingRoomWidgetSpec) {
-    setToastMessage(`ℹ ${widget.title} 出現原因: ${widget.whyIncluded || "系統默認配置"}`);
-  }
-
-  function handleViewEvidence(widget: TradingRoomWidgetSpec) {
-    setToastMessage(`🔎 ${widget.title}: 已載入相關證據與原始數據來源 (${widget.dataSource})`);
-  }
-
-  function handleAskServant(prompt: string) {
-    if (!activeView) return;
-    const currentY = maxViewY(activeView.widgets);
-    const parsed = parseNewWidgetPrompt(prompt, draftWorkspace.strategyId, currentY);
-    setWidgetProposal({
-      prompt,
-      widgetSpec: parsed.widgetSpec,
-      problem: parsed.problem,
-      mapping: parsed.mapping,
-    });
-  }
-
   function renderWidgetCard(widget: TradingRoomWidgetSpec, viewId: string, stacked = false) {
     return (
       <div
@@ -1036,12 +847,6 @@ export function WorkspaceGridEditor({
             setMenuWidgetId(null);
             setRevisionTarget({ viewId, widgetId: widget.id });
           }}
-          onEditDataRange={() => handleEditDataRange(widget)}
-          onAddBenchmark={() => handleAddBenchmark(widget)}
-          onMarkUseful={() => handleMarkUseful(widget)}
-          onMarkNotUseful={() => handleMarkNotUseful(widget)}
-          onWhyShown={() => handleWhyShown(widget)}
-          onViewEvidence={() => handleViewEvidence(widget)}
           widget={widget}
           workspaceEvents={workspaceEvents}
         />
@@ -1070,109 +875,36 @@ export function WorkspaceGridEditor({
           padding: "12px 16px",
           display: "flex",
           flexDirection: "column",
-          gap: 10,
-          flexShrink: 0,
+          gap: 12,
         }}
       >
-        {/* Row 1: Identity & State badges */}
-        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12, minWidth: 0 }}>
-            <span style={{ fontSize: 18, fontWeight: 800, color: COLORS.text }}>
-              {strategy?.title || "Winner Branch"}
+        <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10 }}>
+            <div>
+              <div style={{ color: COLORS.accent, fontSize: 11, fontWeight: 900, textTransform: "uppercase" }}>
+                Trading Room Workspace
+              </div>
+              <h2 style={{ color: COLORS.text, fontSize: 18, fontWeight: 900, margin: 0 }}>
+                {draftWorkspace.strategyId}
+              </h2>
+            </div>
+            <span style={{ background: COLORS.panelElevated, border: `1px solid ${COLORS.borderStrong}`, borderRadius: 999, color: COLORS.textSoft, fontSize: 11, fontWeight: 700, padding: "3px 8px" }}>
+              v{draftWorkspace.strategyVersion}
             </span>
-            <span style={{ color: COLORS.muted, fontSize: 12 }}>
-              ({draftWorkspace.strategyVersion})
-            </span>
-
-            {/* Status indicators */}
-            <span
-              data-testid="workspace-readiness-badge"
-              style={{
-                fontSize: 11,
-                fontWeight: 700,
-                background: strategy?.readiness_state === "ready" ? "rgba(86, 217, 139, 0.15)" : "rgba(240, 184, 77, 0.15)",
-                color: strategy?.readiness_state === "ready" ? COLORS.good : COLORS.warning,
-                padding: "2px 8px",
-                borderRadius: 4,
-                textTransform: "uppercase",
-              }}
-            >
-              {strategy?.readiness_state || "READY"}
-            </span>
-
-            <span
-              data-testid="workspace-data-freshness"
-              style={{
-                fontSize: 11,
-                color: activeView?.dataAvailability === "complete" || !activeView?.dataAvailability ? COLORS.good : activeView?.dataAvailability === "partial" ? COLORS.warning : COLORS.muted,
-                display: "flex",
-                alignItems: "center",
-                gap: 4,
-              }}
-            >
-              ● Data: {(activeView?.dataAvailability || "complete").charAt(0).toUpperCase() + (activeView?.dataAvailability || "complete").slice(1)} {dataCutoff ? `(${dataCutoff.includes('T') ? dataCutoff.split('T')[1].slice(0, 5) : dataCutoff})` : ""}
-            </span>
-
-            <span
-              data-testid="workspace-risk-state"
-              style={{
-                fontSize: 11,
-                background:
-                  (riskSummary?.state || "normal") === "critical"
-                    ? "rgba(235, 87, 87, 0.15)"
-                    : (riskSummary?.state || "normal") === "warning" || (riskSummary?.state || "normal") === "watch"
-                    ? "rgba(240, 184, 77, 0.15)"
-                    : "rgba(86, 217, 139, 0.15)",
-                color:
-                  (riskSummary?.state || "normal") === "critical"
-                    ? COLORS.danger
-                    : (riskSummary?.state || "normal") === "warning" || (riskSummary?.state || "normal") === "watch"
-                    ? COLORS.warning
-                    : COLORS.good,
-                padding: "2px 6px",
-                borderRadius: 4,
-                textTransform: "uppercase",
-              }}
-            >
-              Risk: {riskSummary?.state || "normal"}
-            </span>
-
-            <span
-              data-testid="workspace-pending-decisions"
-              style={{
-                fontSize: 11,
-                background: "rgba(240, 184, 77, 0.15)",
-                color: COLORS.warning,
-                padding: "2px 6px",
-                borderRadius: 4,
-              }}
-            >
-              {strategy ? pendingEventTotal(strategy) : 0} Pending Decisions
-            </span>
-          </div>
-
-          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
             <span
               data-testid="workspace-dashboard-version"
-              style={{
-                color: COLORS.textSoft,
-                fontSize: 12,
-                background: COLORS.panelElevated,
-                padding: "4px 8px",
-                borderRadius: 4,
-                border: `1px solid ${COLORS.border}`,
-              }}
+              style={{ background: "rgba(232, 183, 80, 0.14)", border: "1px solid rgba(232, 183, 80, 0.42)", borderRadius: 999, color: COLORS.accent, fontSize: 11, fontWeight: 800, padding: "3px 8px" }}
             >
-              Dashboard v{draftWorkspace.dashboardVersion}
+              dashboard v{draftWorkspace.dashboardVersion}
+            </span>
+            <span style={{ background: COLORS.panelElevated, border: `1px solid ${COLORS.borderStrong}`, borderRadius: 999, color: COLORS.good, fontSize: 11, fontWeight: 700, padding: "3px 8px" }}>
+              {draftWorkspace.status}
             </span>
           </div>
-        </div>
 
-        {/* Row 2: Entrances & Tabs */}
-        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 12, borderTop: `1px solid ${COLORS.border}`, paddingTop: 10 }}>
-          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, minWidth: 0 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
             <button
-              data-testid="workspace-back-to-strategies"
+              data-testid="workspace-switch-strategy"
               onClick={onSwitchStrategy}
               style={secondaryButtonStyle}
               type="button"
@@ -1193,7 +925,7 @@ export function WorkspaceGridEditor({
                 if (activeView.widgets[0]) {
                   setRevisionTarget({ viewId: activeView.id, widgetId: activeView.widgets[0].id });
                 } else {
-                  setToastMessage("Add a widget first to ask Servant for revision.");
+                  setError("請先新增 Widget 才能交代僕人修改。");
                 }
               }}
               style={secondaryButtonStyle}
@@ -1213,60 +945,108 @@ export function WorkspaceGridEditor({
               版本紀錄 (Versions)
             </button>
             <button
-              aria-pressed={editMode}
               data-testid="workspace-edit-mode-toggle"
-              onClick={() => setEditMode((prev) => !prev)}
-              style={primaryButtonStyle}
+              onClick={() => {
+                if (editMode && dirty) {
+                  handleDiscard();
+                }
+                setEditMode((prev) => !prev);
+              }}
+              style={editMode ? primaryButtonStyle : secondaryButtonStyle}
               type="button"
             >
-              {editMode ? t("agora.tradingRoom.editor.exitAdjust") : t("agora.tradingRoom.editor.adjustLayout")}
+              {editMode ? t("agora.tradingRoom.editor.exitEditMode") : t("agora.tradingRoom.editor.enterEditMode")}
             </button>
           </div>
         </div>
 
-        <nav data-testid="workspace-view-tabs" style={{ display: "flex", gap: 6, overflowX: "auto" }}>
-          {views.map((view) => (
-            <button
-              aria-selected={view.id === activeView.id}
-              data-testid={`workspace-view-tab-${view.id}`}
-              key={view.id}
-              onClick={() => setActiveViewId(view.id)}
-              style={{
-                background: view.id === activeView.id ? "rgba(232, 183, 80, 0.14)" : COLORS.panel,
-                border: `1px solid ${view.id === activeView.id ? COLORS.accent : COLORS.border}`,
-                borderBottomColor: view.id === activeView.id ? COLORS.accent : COLORS.border,
-                borderRadius: 6,
-                color: view.id === activeView.id ? COLORS.accent : COLORS.textSoft,
-                cursor: "pointer",
-                flex: "0 0 auto",
-                fontSize: 12,
-                fontWeight: 700,
-                padding: "6px 10px",
-              }}
-              type="button"
-            >
-              {agoraCopy(t, view.titleKey, view.title)}
-            </button>
-          ))}
-        </nav>
-
-        {editMode ? (
+        {strategy ? (
           <div
-            data-testid="workspace-unsaved-bar"
+            data-testid="workspace-strategy-telemetry"
             style={{
               alignItems: "center",
-              background: dirty ? "rgba(240, 184, 77, 0.12)" : COLORS.panel,
-              border: `1px solid ${dirty ? "rgba(240, 184, 77, 0.45)" : COLORS.border}`,
+              background: COLORS.panelInset,
+              border: `1px solid ${COLORS.border}`,
               borderRadius: 8,
               display: "flex",
               flexWrap: "wrap",
-              gap: 8,
-              justifyContent: "space-between",
-              marginTop: 10,
-              padding: "8px 10px",
+              gap: 12,
+              padding: "8px 12px",
             }}
           >
-            <div style={{ color: dirty ? COLORS.warning : COLORS.textSoft, fontSize: 12, fontWeight: 700 }}>
+            <div style={{ color: COLORS.text, fontSize: 12, fontWeight: 800 }}>
+              {agoraCopy(t, strategy.nameKey, strategy.name)}
+            </div>
+            <div style={{ color: COLORS.textSoft, fontSize: 11 }}>
+              狀態: <strong style={{ color: strategy.state === "live_ready" ? COLORS.good : COLORS.warning }}>{strategy.state}</strong>
+            </div>
+            <div style={{ color: COLORS.textSoft, fontSize: 11 }}>
+              待處理決策: <strong style={{ color: pendingEventTotal(strategy) > 0 ? COLORS.accent : COLORS.muted }}>{pendingEventTotal(strategy)}</strong>
+            </div>
+            {riskSummary ? (
+              <div style={{ color: COLORS.textSoft, fontSize: 11 }}>
+                風險限制: <strong>{riskSummary.max_drawdown_limit_pct}% MDD</strong> · 使用率 <strong>{riskSummary.portfolio_risk_budget_pct}%</strong>
+              </div>
+            ) : null}
+            {dataCutoff ? (
+              <div style={{ color: COLORS.muted, fontSize: 11, marginLeft: "auto" }}>
+                資料切齊: {dataCutoff}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+          <nav aria-label="Workspace views" data-testid="workspace-view-tabs" style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {views.map((view) => {
+              const active = view.id === activeView.id;
+              return (
+                <button
+                  aria-pressed={active}
+                  data-testid={`workspace-view-tab-${view.id}`}
+                  key={view.id}
+                  onClick={() => setActiveViewId(view.id)}
+                  style={{
+                    background: active ? COLORS.panelElevated : "transparent",
+                    border: `1px solid ${active ? COLORS.borderStrong : "transparent"}`,
+                    borderRadius: 6,
+                    color: active ? COLORS.accent : COLORS.textSoft,
+                    cursor: "pointer",
+                    fontSize: 12,
+                    fontWeight: active ? 800 : 600,
+                    padding: "6px 12px",
+                  }}
+                  type="button"
+                >
+                  {agoraCopy(t, view.titleKey, view.title)} ({view.widgetCount})
+                </button>
+              );
+            })}
+          </nav>
+        </div>
+
+        {error ? (
+          <div data-testid="workspace-error" style={{ color: COLORS.danger, fontSize: 12 }}>
+            {error}
+          </div>
+        ) : null}
+
+        {editMode ? (
+          <div
+            data-testid={dirty ? "workspace-unsaved-bar" : "workspace-edit-toolbar"}
+            style={{
+              alignItems: "center",
+              background: COLORS.panelElevated,
+              border: `1px solid ${COLORS.borderStrong}`,
+              borderRadius: 8,
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 10,
+              justifyContent: "space-between",
+              padding: "8px 12px",
+            }}
+          >
+            <div style={{ color: COLORS.textSoft, fontSize: 12 }}>
               {dirty ? `${pendingOps.length} unsaved layout operation${pendingOps.length > 1 ? "s" : ""}` : "Grid drop targets and resize handles are active."}
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
@@ -1297,7 +1077,6 @@ export function WorkspaceGridEditor({
           <AddWidgetLibrary
             onAdd={handleAddFromLibrary}
             onClose={() => setShowAddLibrary(false)}
-            onAskServant={handleAskServant}
           />
         ) : null}
       </header>
@@ -1323,406 +1102,142 @@ export function WorkspaceGridEditor({
                   data-testid={`workspace-restore-widget-${widget.id}`}
                   key={widget.id}
                   onClick={() => handleRestore(widget)}
-                  style={chipButtonStyle}
+                  style={secondaryButtonStyle}
                   type="button"
                 >
-                  {agoraCopy(t, widget.titleKey, widget.title)}
+                  {t("agora.tradingRoom.editor.restoreWidget", { title: agoraCopy(t, widget.titleKey, widget.title) })}
                 </button>
               ))}
             </div>
           </section>
         ) : null}
 
-        <div
-          data-testid="workspace-grid-drop-surface"
-          style={{
-            background: editMode
-              ? "linear-gradient(rgba(232, 183, 80, 0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(232, 183, 80, 0.1) 1px, transparent 1px)"
-              : "transparent",
-            backgroundSize: editMode && !isNarrowViewport ? "110px 74px" : undefined,
-            border: editMode ? `1px dashed ${COLORS.borderStrong}` : "1px solid transparent",
-            borderRadius: 8,
-            minWidth: isNarrowViewport ? 0 : GRID_WIDTH,
-            padding: editMode ? 8 : 0,
-          }}
-        >
-          {isNarrowViewport ? (
-            <div
-              data-testid="workspace-grid-stacked"
-              style={{ display: "grid", gap: 12, minWidth: 0, width: "100%" }}
-            >
-              {[...visibleWidgets]
-                .sort((left, right) => left.placement.y - right.placement.y || left.placement.x - right.placement.x)
-                .map((widget) => renderWidgetCard(widget, activeView.id, true))}
-            </div>
-          ) : (
+        {isNarrowViewport ? (
+          <div data-testid="workspace-grid-stacked" style={{ display: "grid", gap: 12 }}>
+            {visibleWidgets.map((widget) => renderWidgetCard(widget, activeView.id, true))}
+          </div>
+        ) : (
+          <div data-testid="workspace-grid-drop-surface" style={{ minWidth: 1320, width: "100%" }}>
             <GridLayout
               className="layout"
               cols={GRID_COLS}
-              draggableHandle=".workspace-widget-drag-handle"
+              data-testid="workspace-grid-layout"
               isDraggable={editMode}
               isResizable={editMode}
               layout={layoutFromWidgets(visibleWidgets)}
+              margin={[12, 12]}
+              onLayoutChange={handleLayoutChange}
               rowHeight={ROW_HEIGHT}
               width={GRID_WIDTH}
-              onLayoutChange={handleLayoutChange}
             >
-              {visibleWidgets.map((widget) => renderWidgetCard(widget, activeView.id))}
+              {visibleWidgets.map((widget) => renderWidgetCard(widget, activeView.id, false))}
             </GridLayout>
-          )}
-        </div>
-
-        {error ? (
-          <div data-testid="workspace-layout-error" style={{ color: COLORS.danger, fontSize: 13, marginTop: 10 }}>
-            {error}
           </div>
-        ) : null}
+        )}
 
-        <section data-testid="workspace-personalization-events" style={{ color: COLORS.muted, fontSize: 12, marginTop: 14 }}>
-          Personalization events: {events.length}
-          {events[0] ? <span> · latest {events[0].event_type}</span> : null}
-        </section>
-
-        {/* Dashboard Version History Section */}
-        <section data-testid="workspace-version-history" style={{ marginTop: 24, borderTop: `1px solid ${COLORS.border}`, paddingTop: 16 }}>
-          <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "space-between", marginBottom: 12 }}>
-            <strong style={{ color: COLORS.text, fontSize: 14 }}>Dashboard Version History</strong>
-            {versionError ? <span style={{ color: COLORS.danger, fontSize: 12 }}>{versionError}</span> : null}
+        <section
+          data-testid="workspace-version-history"
+          style={{
+            background: COLORS.panel,
+            border: `1px solid ${COLORS.border}`,
+            borderRadius: 8,
+            marginTop: 20,
+            padding: 14,
+          }}
+        >
+          <div style={{ alignItems: "center", display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
+            <div>
+              <strong style={{ color: COLORS.text, fontSize: 13 }}>{t("agora.tradingRoom.editor.versionHistory")}</strong>
+              <div style={{ color: COLORS.muted, fontSize: 11 }}>
+                Immutable snapshots and change logs persisted through BFF contracts.
+              </div>
+            </div>
+            <span style={{ color: COLORS.textSoft, fontSize: 11 }}>{versions.length} versions</span>
           </div>
-          <div style={{ display: "grid", gap: 10 }}>
-            {versions.length ? versions.map((version) => {
+
+          {versionError ? (
+            <div data-testid="workspace-version-error" style={{ color: COLORS.danger, fontSize: 12 }}>
+              {versionError}
+            </div>
+          ) : null}
+
+          <div style={{ display: "grid", gap: 8 }}>
+            {versions.map((version) => {
               const isCurrent = version.dashboardVersion === draftWorkspace.dashboardVersion;
-              const authorLabel =
-                version.generatedBy === "trading_servant"
-                  ? "交易僕人 (Servant)"
-                  : version.generatedBy === "learned_personalization"
-                  ? "AI 個人化 (Learner)"
-                  : "交易員 (Trader)";
-
-              const badgeBg =
-                version.generatedBy === "trading_servant"
-                  ? "rgba(59, 130, 246, 0.15)"
-                  : version.generatedBy === "learned_personalization"
-                  ? "rgba(168, 85, 247, 0.15)"
-                  : "rgba(232, 183, 80, 0.15)";
-              const badgeColor =
-                version.generatedBy === "trading_servant"
-                  ? "#60a5fa"
-                  : version.generatedBy === "learned_personalization"
-                  ? "#c084fc"
-                  : "#fbbf24";
-
               return (
                 <div
                   data-testid={`workspace-version-${version.id}`}
                   key={version.id}
                   style={{
-                    background: isCurrent ? "rgba(86, 217, 139, 0.08)" : COLORS.panel,
-                    border: `1px solid ${isCurrent ? COLORS.good : COLORS.border}`,
-                    borderRadius: 8,
-                    padding: "12px 14px",
+                    background: isCurrent ? "rgba(232, 183, 80, 0.08)" : COLORS.panelElevated,
+                    border: `1px solid ${isCurrent ? "rgba(232, 183, 80, 0.42)" : COLORS.borderStrong}`,
+                    borderRadius: 6,
                     display: "flex",
-                    flexDirection: "column",
-                    gap: 6,
+                    flexWrap: "wrap",
+                    gap: 10,
+                    justifyContent: "space-between",
+                    padding: "8px 12px",
                   }}
                 >
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "space-between", alignItems: "center" }}>
-                    <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
-                      <span style={{ color: COLORS.text, fontSize: 13, fontWeight: 800 }}>
-                        Version {version.dashboardVersion}
-                      </span>
-                      {isCurrent && (
-                        <span style={{ fontSize: 10, background: "rgba(86, 217, 139, 0.2)", color: COLORS.good, padding: "2px 6px", borderRadius: 4, fontWeight: 700 }}>
-                          CURRENT
-                        </span>
-                      )}
-                      <span style={{ fontSize: 11, background: badgeBg, color: badgeColor, padding: "2px 6px", borderRadius: 4, fontWeight: 600 }}>
-                        {authorLabel}
-                      </span>
+                  <div>
+                    <div style={{ color: COLORS.text, fontSize: 12, fontWeight: 700 }}>
+                      v{version.dashboardVersion} · {version.changeSummary || "Dashboard revision"}
                     </div>
-                    <span style={{ color: COLORS.muted, fontSize: 11 }}>
-                      {new Date(version.createdAt).toLocaleString()}
-                    </span>
+                    <div style={{ color: COLORS.muted, fontSize: 11 }}>
+                      {version.createdAt} · by{" "}
+                      {version.generatedBy === "trading_servant"
+                        ? "交易僕人 (Servant)"
+                        : version.generatedBy === "user_modified"
+                        ? "使用者 (User)"
+                        : version.generatedBy}
+                    </div>
                   </div>
-                  <div style={{ fontSize: 13, color: COLORS.textSoft }}>
-                    <strong>Change Summary:</strong> {version.changeSummary}
-                  </div>
-                  <div style={{ fontSize: 12, color: COLORS.muted }}>
-                    <strong>Reason:</strong> {version.changeLog?.reason || "No explicit rationale recorded."}
-                  </div>
-                  <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 4 }}>
-                    <button
-                      data-testid={`workspace-rollback-${version.id}`}
-                      disabled={isCurrent || saveState === "saving"}
-                      onClick={() => handleRollback(version)}
-                      style={{
-                        ...secondaryButtonStyle,
-                        padding: "4px 10px",
-                        fontSize: 11,
-                        borderColor: isCurrent ? COLORS.border : COLORS.borderStrong,
-                        color: isCurrent ? COLORS.muted : COLORS.text,
-                      }}
-                      type="button"
-                    >
-                      Rollback to v{version.dashboardVersion}
-                    </button>
+                  <div style={{ alignItems: "center", display: "flex", gap: 6 }}>
+                    {isCurrent ? (
+                      <span style={{ color: COLORS.accent, fontSize: 11, fontWeight: 800 }}>current</span>
+                    ) : (
+                      <button
+                        data-testid={`workspace-rollback-${version.id}`}
+                        disabled={saveState === "saving"}
+                        onClick={() => handleRollback(version)}
+                        style={secondaryButtonStyle}
+                        type="button"
+                      >
+                        Rollback
+                      </button>
+                    )}
                   </div>
                 </div>
               );
-            }) : (
-              <div style={{ color: COLORS.muted, fontSize: 12 }}>No version records returned.</div>
-            )}
+            })}
           </div>
         </section>
-      </div>
 
-      {/* Floating Toast Notification */}
-      {toastMessage && (
-        <div
-          data-testid="workspace-feedback-toast"
-          style={{
-            position: "fixed",
-            bottom: 24,
-            right: 24,
-            background: COLORS.panelElevated,
-            border: `1px solid ${COLORS.accent}`,
-            borderRadius: 8,
-            padding: "12px 16px",
-            color: COLORS.text,
-            boxShadow: "0 10px 25px rgba(0,0,0,0.5)",
-            zIndex: 1000,
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-            fontSize: 13,
-          }}
-        >
-          <span>💡</span>
-          <span>{toastMessage}</span>
-          <button
-            onClick={() => setToastMessage(null)}
+        {events.length ? (
+          <section
+            data-testid="workspace-personalization-stream"
             style={{
-              background: "none",
-              border: "none",
-              color: COLORS.muted,
-              cursor: "pointer",
-              fontSize: 16,
-              padding: 0,
-            }}
-          >
-            ×
-          </button>
-        </div>
-      )}
-
-      {/* New Widget Proposal Preview Modal */}
-      {widgetProposal && (
-        <DialogPrimitive.Root
-          onOpenChange={(nextOpen) => {
-            if (!nextOpen) setWidgetProposal(null);
-          }}
-          open
-        >
-          <DialogPrimitive.Portal>
-            <DialogPrimitive.Overlay
-              style={{ background: "rgba(0, 0, 0, 0.75)", inset: 0, position: "fixed", zIndex: 1000 }}
-            />
-            <DialogPrimitive.Content
-            aria-describedby={undefined}
-            data-testid="workspace-widget-proposal-modal"
-            style={{
-              background: COLORS.panelElevated,
-              border: `1px solid ${COLORS.borderStrong}`,
+              background: COLORS.panel,
+              border: `1px solid ${COLORS.border}`,
               borderRadius: 8,
-              boxShadow: "0 20px 50px rgba(0,0,0,0.5)",
-              display: "flex",
-              flexDirection: "column",
-              gap: 12,
-              left: "50%",
-              maxHeight: "calc(100dvh - 32px)",
-              maxWidth: 580,
-              overflowY: "auto",
-              padding: 20,
-              position: "fixed",
-              top: "50%",
-              transform: "translate(-50%, -50%)",
-              width: "calc(100% - 32px)",
-              zIndex: 1001,
+              marginTop: 16,
+              padding: 14,
             }}
           >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: `1px solid ${COLORS.border}`, paddingBottom: 10 }}>
-              <DialogPrimitive.Title asChild>
-                <strong style={{ color: COLORS.accent, fontSize: 15 }}>交易僕人 - 新 Widget 提案 (Proposal)</strong>
-              </DialogPrimitive.Title>
-              <span style={{ fontSize: 11, background: "rgba(59, 130, 246, 0.15)", color: "#60a5fa", padding: "2px 6px", borderRadius: 4 }}>
-                Servant Proposed
-              </span>
-            </div>
-
-            <div style={{ fontSize: 13, color: COLORS.textSoft }}>
-              <strong>Trader Request:</strong> "{widgetProposal.prompt}"
-            </div>
-
-            <div style={{ background: COLORS.panel, borderRadius: 6, padding: 12, display: "grid", gap: 6, fontSize: 12, border: `1px solid ${COLORS.border}` }}>
-              <div><strong>Problem (解決痛點):</strong> {widgetProposal.problem}</div>
-              <div><strong>Data Source:</strong> {widgetProposal.widgetSpec.dataSource}</div>
-              <div><strong>Chart Type:</strong> {widgetProposal.widgetSpec.chartSpec.kind.toUpperCase()}</div>
-              <div><strong>Mapping:</strong> {widgetProposal.mapping}</div>
-              <div><strong>Sensitivity (敏感度):</strong> {widgetProposal.widgetSpec.sensitivity}</div>
-            </div>
-
-            <div style={{ border: `1px solid ${COLORS.border}`, borderRadius: 6, overflow: "hidden" }}>
-              <div style={{ background: COLORS.panel, padding: "6px 10px", fontSize: 11, borderBottom: `1px solid ${COLORS.border}`, color: COLORS.textSoft }}>
-                Proposed Widget Preview:
-              </div>
-              <div style={{ padding: 10, background: COLORS.panelInset, height: 160 }}>
-                <ChartSpecRenderer
-                  spec={widgetProposal.widgetSpec.chartSpec}
-                  widgetType={widgetProposal.widgetSpec.widgetType}
-                  dataSource={widgetProposal.widgetSpec.dataSource}
-                  isSampleData={true}
-                />
-              </div>
-            </div>
-
-            {isAdjusting ? (
-              <div style={{ display: "flex", flexDirection: "column", gap: 10, width: "100%" }}>
-                <label style={{ fontSize: 13, color: COLORS.textSoft, fontWeight: "bold" }}>
-                  輸入您的調整指示 (Enter adjustment instruction):
-                </label>
-                <input
-                  type="text"
-                  value={adjustPromptText}
-                  onChange={(e) => setAdjustPromptText(e.target.value)}
-                  placeholder="e.g. change type to bar / 換成直條圖"
-                  style={{
-                    background: COLORS.panel,
-                    color: COLORS.text,
-                    border: `1px solid ${COLORS.border}`,
-                    borderRadius: 4,
-                    padding: "8px 12px",
-                    fontSize: 13,
-                    width: "100%",
-                    boxSizing: "border-box",
-                  }}
-                  data-testid="workspace-widget-proposal-adjust-input"
-                />
-                <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "flex-end", gap: 8 }}>
-                  <button
-                    onClick={() => {
-                      setIsAdjusting(false);
-                      setAdjustPromptText("");
-                    }}
-                    style={secondaryButtonStyle}
-                    type="button"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={() => {
-                      const spec = { ...widgetProposal.widgetSpec };
-                      const promptLower = adjustPromptText.toLowerCase();
-                      if (promptLower.includes("bar") || promptLower.includes("條")) {
-                        spec.chartSpec = { ...spec.chartSpec, kind: "bar" };
-                      } else if (promptLower.includes("line") || promptLower.includes("線")) {
-                        spec.chartSpec = { ...spec.chartSpec, kind: "line" };
-                      } else if (promptLower.includes("restricted") || promptLower.includes("限制")) {
-                        spec.sensitivity = "restricted";
-                      } else if (promptLower.includes("public") || promptLower.includes("公開")) {
-                        spec.sensitivity = "public_market";
-                      }
-                      setWidgetProposal({
-                        ...widgetProposal,
-                        prompt: `${widgetProposal.prompt} (Adjusted: ${adjustPromptText})`,
-                        widgetSpec: spec,
-                      });
-                      setIsAdjusting(false);
-                      setAdjustPromptText("");
-                      setToastMessage("Servant adjusted the widget spec according to your feedback.");
-                    }}
-                    style={primaryButtonStyle}
-                    type="button"
-                    data-testid="workspace-widget-proposal-adjust-submit"
-                  >
-                    Apply Adjustment
-                  </button>
+            <strong style={{ color: COLORS.text, fontSize: 13 }}>Personalization telemetry</strong>
+            <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
+              {events.map((event) => (
+                <div
+                  key={event.event_id}
+                  style={{ color: COLORS.textSoft, fontSize: 11 }}
+                >
+                  {event.occurred_at} · {event.event_type} · {event.target.target_type}:{event.target.target_id}
                 </div>
-              </div>
-            ) : (
-              <div
-                className="agora-drawer-action-footer"
-                style={{ display: "flex", flexWrap: "wrap", justifyContent: "flex-end", gap: 8, marginTop: 10, width: "100%" }}
-              >
-                <button
-                  onClick={() => setWidgetProposal(null)}
-                  style={secondaryButtonStyle}
-                  type="button"
-                  data-testid="workspace-widget-proposal-reject"
-                >
-                  Reject (拒絕)
-                </button>
-                <button
-                  onClick={() => {
-                    setIsAdjusting(true);
-                  }}
-                  style={secondaryButtonStyle}
-                  type="button"
-                  data-testid="workspace-widget-proposal-adjust"
-                >
-                  Adjust (再微調)
-                </button>
-                <button
-                  onClick={() => {
-                    const reqId = `PLG-REQ-${Date.now().toString(36).toUpperCase()}`;
-                    setToastMessage(`Frontend widget component request ${reqId} registered.`);
-                    setWidgetProposal(null);
-                  }}
-                  style={secondaryButtonStyle}
-                  type="button"
-                  data-testid="workspace-widget-proposal-plugin"
-                >
-                  Plugin Request (新增前端需求)
-                </button>
-                <button
-                  onClick={async () => {
-                    const widgetSpec = widgetProposal.widgetSpec;
-                    const newOp = { kind: "add_registered_widget" as const, payload: { viewId: activeView.id, widgetSpec } };
-
-                    setSaveState("saving");
-                    setError(null);
-                    try {
-                      const result = await patchTradingRoomWorkspaceLayout(
-                        draftWorkspace.id,
-                        { operations: [...pendingOps, newOp] },
-                        { ifMatch: currentEtag, idempotencyKey: newUUID() },
-                      );
-                      setBaseWorkspace(cloneWorkspace(result.workspace));
-                      setDraftWorkspace(cloneWorkspace(result.workspace));
-                      setCurrentEtag(result.etag);
-                      setPendingOps([]);
-                      setEditMode(false);
-                      setSaveState("idle");
-                      onWorkspaceChange?.(result);
-                      setToastMessage("🎉 New widget proposal accepted and durable layout version created successfully.");
-                    } catch (err) {
-                      addWidgetSpec(widgetSpec, "ask_servant_create");
-                      setToastMessage("New widget proposal added to local draft layout.");
-                      setSaveState("idle");
-                    }
-                    setWidgetProposal(null);
-                  }}
-                  style={primaryButtonStyle}
-                  type="button"
-                  data-testid="workspace-widget-proposal-accept"
-                >
-                  Accept & Version Add (套用)
-                </button>
-              </div>
-            )}
-            </DialogPrimitive.Content>
-          </DialogPrimitive.Portal>
-        </DialogPrimitive.Root>
-      )}
+              ))}
+            </div>
+          </section>
+        ) : null}
+      </div>
 
       <WorkspaceWidgetRevisionDrawer
         currentEtag={currentEtag}

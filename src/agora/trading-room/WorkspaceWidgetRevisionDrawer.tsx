@@ -1,8 +1,7 @@
 import * as DialogPrimitive from "@radix-ui/react-dialog";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 
 import type {
-  DataAvailabilityStatus,
   TradingRoomViewSpec,
   TradingRoomWidgetSpec,
   TradingRoomWorkspace,
@@ -14,16 +13,13 @@ import {
   type WidgetRevisionAcceptResult,
 } from "@/lib/bff-v1/agora/tradingRoom";
 import { BffError } from "@/lib/bff-v1/errors";
-import {
-  getWidgetRegistryEntry,
-  type ChartSpecKind,
-} from "@/agora/widgets/registry";
 import ChartSpecRenderer from "@/agora/widgets/ChartSpecRenderer";
 import {
+  formatSensitivityLabel,
   safeWarningText,
   validateTradingRoomWidgetSpec,
 } from "./workspaceValidation";
-import { chartSpecForKind, chartSpecSummary } from "./workspaceChartSpec";
+import { chartSpecSummary } from "./workspaceChartSpec";
 
 const QUICK_INSTRUCTIONS = [
   "改成分點為列、日期為欄的熱圖",
@@ -40,13 +36,6 @@ interface RevisionUiError {
   code?: string;
   message: string;
   status?: number;
-}
-
-interface RevisionDraft {
-  proposedSpec: TradingRoomWidgetSpec;
-  rationale: string;
-  warnings: string[];
-  dataAvailability: DataAvailabilityStatus;
 }
 
 interface DiffRow {
@@ -66,10 +55,6 @@ export interface WorkspaceWidgetRevisionDrawerProps {
   view?: TradingRoomViewSpec | null;
   widget?: TradingRoomWidgetSpec | null;
   workspace: TradingRoomWorkspace;
-}
-
-function cloneWidget(widget: TradingRoomWidgetSpec): TradingRoomWidgetSpec {
-  return JSON.parse(JSON.stringify(widget)) as TradingRoomWidgetSpec;
 }
 
 function stableText(value: unknown): string {
@@ -184,98 +169,6 @@ function toRevisionUiError(error: unknown, fallback: string): RevisionUiError {
   };
 }
 
-function requestedChartKind(instruction: string, allowedKinds: readonly ChartSpecKind[]): ChartSpecKind | null {
-  const text = instruction.toLowerCase();
-  const candidates: Array<[RegExp, ChartSpecKind]> = [
-    [/熱圖|heatmap/u, "heatmap"],
-    [/表格|table|排序/u, "table"],
-    [/network|網路圖|關係/u, "network"],
-    [/timeline|時間軸|事件/u, "timeline"],
-    [/line|折線|疊加/u, "line"],
-    [/bar|長條/u, "bar"],
-    [/scatter|散佈/u, "scatter"],
-    [/sankey|流向/u, "sankey"],
-    [/gauge|儀表/u, "gauge"],
-    [/metric|指標/u, "metric"],
-  ];
-  const match = candidates.find(([pattern, kind]) => pattern.test(text) && allowedKinds.includes(kind));
-  return match?.[1] ?? null;
-}
-
-function revisedTitle(title: string, instruction: string): string {
-  if (/熱圖|heatmap/u.test(instruction)) return `${title} Heatmap`;
-  if (/表格|table|排序/u.test(instruction)) return `${title} Table`;
-  if (/cluster|疊加|統一/u.test(instruction)) return `${title} Cluster-adjusted`;
-  if (/20 ?日|最近/u.test(instruction)) return `${title} 20D`;
-  return `${title} Revised`;
-}
-
-function buildRevisionDraft(
-  widget: TradingRoomWidgetSpec,
-  view: TradingRoomViewSpec | null | undefined,
-  workspace: TradingRoomWorkspace,
-  instruction: string,
-): RevisionDraft {
-  const entry = getWidgetRegistryEntry(widget.widgetType);
-  const proposedSpec = cloneWidget(widget);
-  const allowedKinds = entry?.allowed_chart_kinds ?? [];
-  const nextKind = requestedChartKind(instruction, allowedKinds);
-  const warnings: string[] = [];
-  let dataAvailability: DataAvailabilityStatus = view?.dataAvailability ?? "complete";
-
-  if (nextKind && nextKind !== widget.chartSpec.kind) {
-    proposedSpec.chartSpec = chartSpecForKind(nextKind);
-  }
-
-  if (/20 ?日|最近/u.test(instruction)) {
-    proposedSpec.query = { ...proposedSpec.query, window: "20d" };
-  }
-  if (/三億|3 ?億|低量|成交/u.test(instruction)) {
-    proposedSpec.query = {
-      ...proposedSpec.query,
-      filters: {
-        ...proposedSpec.query.filters,
-        min_daily_turnover_twd: 300000000,
-      },
-    };
-  }
-  if (/前 ?60|後 ?20|重大訊息|事件/u.test(instruction)) {
-    proposedSpec.query = { ...proposedSpec.query, window: "event_-60d_to_20d" };
-  }
-  if (/前 ?10|top ?10|前十/u.test(instruction)) {
-    proposedSpec.query = { ...proposedSpec.query, limit: 10 };
-  }
-  if (/cluster|統一|疊加/u.test(instruction)) {
-    proposedSpec.query = {
-      ...proposedSpec.query,
-      filters: {
-        ...proposedSpec.query.filters,
-        cluster_adjusted: true,
-      },
-    };
-    dataAvailability = dataAvailability === "unavailable" ? "unavailable" : "partial";
-    warnings.push("Cluster-adjusted flow uses probabilistic branch relationship evidence; inferred links remain marked.");
-  }
-
-  proposedSpec.title = revisedTitle(widget.title, instruction).slice(0, 96);
-  proposedSpec.purpose = `${widget.purpose} Revision requested by the trader for: ${instruction}`.slice(0, 240);
-  proposedSpec.whyIncluded = `${widget.whyIncluded} Revision keeps the same allowlisted widget type and data source for ${workspace.strategyVersion}.`.slice(0, 260);
-  proposedSpec.interactions = widget.interactions.some((interaction) => interaction.kind === "request_widget_revision")
-    ? widget.interactions
-    : [...widget.interactions, { kind: "request_widget_revision" }];
-
-  const rationale = nextKind && nextKind !== widget.chartSpec.kind
-    ? `目前 ${widget.chartSpec.kind} 適合觀察原始脈絡；${nextKind} 更適合回應這次調整需求並保留原 data source。`
-    : "我會保留原 Widget 型別與資料來源，只調整受控 query/chart spec，讓這張圖更貼近這次裁示。";
-
-  return {
-    dataAvailability,
-    proposedSpec,
-    rationale,
-    warnings: [...(view?.warnings ?? []), ...warnings].map(safeWarningText),
-  };
-}
-
 function ContextRow({ label, value }: { label: string; value: string }) {
   return (
     <div style={{ display: "grid", gap: 3 }}>
@@ -379,28 +272,16 @@ export function WorkspaceWidgetRevisionDrawer({
     };
   }, [open, widget?.id]);
 
-  const draft = useMemo(() => {
-    const text = instruction.trim();
-    if (!widget || !text) return null;
-    return buildRevisionDraft(widget, view, workspace, text);
-  }, [instruction, view, widget, workspace]);
-
   if (!open || !widget) return null;
 
-  const validation = draft ? validateTradingRoomWidgetSpec(draft.proposedSpec) : null;
   const canSubmit = Boolean(instruction.trim()) && state !== "creating" && state !== "accepting" && !disabledReason;
   const canAccept = Boolean(proposal && currentEtag) && state !== "accepting";
 
   async function submitProposal(event: React.FormEvent) {
     event.preventDefault();
-    if (!widget || !draft || !view) return;
+    if (!widget || !instruction.trim()) return;
     if (disabledReason) {
       setError({ message: disabledReason });
-      setState("error");
-      return;
-    }
-    if (!validation?.ok) {
-      setError({ message: validation?.messages.join(" ") || "Widget revision validation failed." });
       setState("error");
       return;
     }
@@ -413,12 +294,8 @@ export function WorkspaceWidgetRevisionDrawer({
         workspace.id,
         widget.id,
         {
-          dataAvailability: draft.dataAvailability,
           instruction: instruction.trim(),
-          proposedSpec: draft.proposedSpec,
-          rationale: draft.rationale,
-          viewId: view.id,
-          warnings: draft.warnings,
+          viewId: view?.id,
         },
         { idempotencyKey: newUUID() },
       );
@@ -466,7 +343,7 @@ export function WorkspaceWidgetRevisionDrawer({
   }
 
   const beforeSpec = proposal?.beforeSpec ?? widget;
-  const afterSpec = proposal?.proposedSpec ?? draft?.proposedSpec ?? null;
+  const afterSpec = proposal?.proposedSpec ?? null;
   const diffRows = buildWidgetDiffRows(beforeSpec, afterSpec);
 
   return (
@@ -546,7 +423,7 @@ export function WorkspaceWidgetRevisionDrawer({
             <ContextRow label="目前時間窗口" value={widget.query.window ?? "-"} />
             <ContextRow label="目前圖表型態" value={chartSpecSummary(widget.chartSpec)} />
             <ContextRow label="可用互動" value={interactionSummary(widget)} />
-            <ContextRow label="資料敏感度" value={widget.sensitivity} />
+            <ContextRow label="資料敏感度" value={`${formatSensitivityLabel(widget.sensitivity)} (${widget.sensitivity})`} />
             <ContextRow label="目前 Placement" value={placementSummary(widget)} />
             <ContextRow label="資料可用性" value={dataAvailabilitySummary(view)} />
             <ContextRow label="Warnings" value={warningSummary(view)} />
@@ -711,6 +588,13 @@ function newUUID(): string {
   return `id-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+const diffCellStyle: React.CSSProperties = {
+  fontSize: 11,
+  lineHeight: 1.4,
+  overflowWrap: "anywhere",
+  padding: "8px 10px",
+};
+
 const iconButtonStyle: React.CSSProperties = {
   background: "transparent",
   border: "1px solid #3a4254",
@@ -801,19 +685,8 @@ const previewCardStyle: React.CSSProperties = {
   background: "#171b25",
   border: "1px solid #343b4c",
   borderRadius: 10,
-  minHeight: 188,
-  minWidth: 0,
-  padding: 11,
-};
-
-const diffCellStyle: React.CSSProperties = {
-  borderLeft: "1px solid #343b4c",
-  color: "#9aa5b8",
-  fontFamily: "'IBM Plex Mono', monospace",
-  fontSize: 10.5,
-  lineHeight: 1.4,
-  overflowWrap: "anywhere",
-  padding: "8px 10px",
+  minHeight: 180,
+  padding: 12,
 };
 
 export default WorkspaceWidgetRevisionDrawer;
