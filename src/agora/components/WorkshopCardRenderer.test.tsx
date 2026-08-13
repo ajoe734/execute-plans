@@ -201,6 +201,29 @@ describe("WorkshopCardRenderer", () => {
     expect(screen.getByText(/no execution authority/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "validate" })).toBeEnabled();
   });
+
+  it("renders workshop conclusion card fields", () => {
+    render(
+      <WorkshopCardRenderer
+        card={card({
+          card_type: "workshop_concluded",
+          status: "completed",
+          title: "Workshop Concluded",
+          payload: {
+            concluded_outcome: "Strategy draft validated and version 2 created.",
+            concluded_by: "operator-001",
+            concluded_at: "2026-08-13T12:00:00Z",
+            final_version_id: "v2-draft",
+            next_actions: ["Promote to Paper Trading"],
+          },
+        })}
+      />,
+    );
+
+    expect(screen.getByText("Strategy draft validated and version 2 created.")).toBeInTheDocument();
+    expect(screen.getByText("operator-001")).toBeInTheDocument();
+    expect(screen.getByText("Promote to Paper Trading")).toBeInTheDocument();
+  });
 });
 
 describe("StrategyCompletenessRail", () => {
