@@ -37,75 +37,6 @@ export interface ProviderStatus {
   runId?: string | null;
 }
 
-export interface AssistantOpenClawToolPolicyStatus {
-  status?: string;
-  effectiveStatus?: string;
-  upstreamStatus?: string;
-  assistantCommandAllowed?: boolean;
-  assistantCommandEffective?: boolean;
-  assistantCommandUsable?: boolean;
-  assistantCommandStatus?: string;
-  assistantCommandTool?: string;
-  allowedTools?: string[];
-  effectiveTools?: string[];
-  effectiveSkills?: AssistantOpenClawSkillDescriptor[];
-  allowedWorkflows?: string[];
-  defaultPosture?: string | null;
-  source?: string;
-}
-
-export interface AssistantOpenClawSkillDescriptor {
-  id?: string;
-  title?: string;
-  surface?: string;
-  handlerRef?: string;
-  resultSurface?: string;
-  confirmPolicy?: string;
-  role?: string;
-  modeGate?: Record<string, unknown>;
-  inputSchema?: Record<string, unknown>;
-}
-
-export interface AssistantStatusSourceRef {
-  sourceType?: string;
-  path?: string;
-  available?: boolean;
-  status?: string;
-  snapshotAt?: string;
-  lastModifiedAt?: string;
-}
-
-export interface AssistantSupervisorOccupancy {
-  running?: number;
-  pending?: number;
-  queued?: number;
-}
-
-export interface AssistantSupervisorStatus {
-  pid?: number;
-  lifecycle?: string;
-  modeStatus?: string;
-  focusMode?: string;
-  startedAt?: string;
-  lastHeartbeatAt?: string;
-  lastSuccessfulLoopAt?: string;
-  lastLoopStartedAt?: string;
-  lastLoopFinishedAt?: string;
-  lastLoopDurationMs?: number;
-  lastLoopError?: string | null;
-  modeOccupancy?: Record<string, AssistantSupervisorOccupancy>;
-}
-
-export interface AssistantRepairWorkspaceStatus {
-  root?: string;
-  exists?: boolean;
-  isDir?: boolean;
-  writable?: boolean;
-  ready?: boolean;
-  status?: string;
-  worktreeCount?: number;
-}
-
 export interface AssistantProviderUsage {
   status?: string | null;
   source?: string | null;
@@ -142,8 +73,7 @@ export interface AssistantProviderReadinessStatus {
   message?: string | null;
   usage?: AssistantProviderUsage | Record<string, unknown> | null;
   quota?: AssistantProviderUsage | Record<string, unknown> | null;
-  capabilities?: { read?: boolean; repairWrite?: boolean };
-  repairWorkspace?: AssistantRepairWorkspaceStatus | null;
+  capabilities?: { read?: boolean };
 }
 
 export interface AssistantProviderUsageSummaryModel {
@@ -258,78 +188,6 @@ export type AssistantProviderRegisterResult =
   | { ok: true; kind: "ok"; provider: AssistantProviderReadinessStatus; meta: Record<string, unknown> | null }
   | { ok: false; kind: "failure"; statusCode: number | null; message: string };
 
-export interface AssistantDevBridgeInboxStatus {
-  path?: string;
-  exists?: boolean;
-  pendingCount?: number;
-  processedCount?: number;
-  failedCount?: number;
-  receiptCount?: number;
-}
-
-export interface AssistantDevBridgeReceipt {
-  packetId?: string;
-  status?: string;
-  drainedAt?: string;
-  dryRun?: boolean;
-  errorCount?: number;
-  archivedPath?: string;
-  error?: string | null;
-}
-
-export interface AssistantDevBridgeStatus {
-  status?: string;
-  inbox?: AssistantDevBridgeInboxStatus | null;
-  lastDrainAt?: string;
-  recentReceipts?: AssistantDevBridgeReceipt[];
-}
-
-export interface AssistantTaskStatusSummary {
-  id?: string;
-  title?: string;
-  owner?: string;
-  reviewer?: string;
-  status?: string;
-  phase?: string;
-  next?: string;
-  lastUpdate?: string;
-  waitingFor?: string | null;
-  briefPath?: string | null;
-  blockers?: string[];
-}
-
-export interface AssistantCoordinationStatus {
-  lastScanAt?: string;
-  fileCount?: number;
-  featureCount?: number;
-  featureIds?: string[];
-}
-
-export interface AssistantOrchestratorStatus {
-  status?: string;
-  snapshotAt?: string;
-  project?: string;
-  sprint?: string;
-  objective?: string;
-  providerStatus?: ProviderStatus | null;
-  openclawToolPolicy?: AssistantOpenClawToolPolicyStatus | null;
-  sourceRefs?: AssistantStatusSourceRef[];
-  tasks?: AssistantTaskStatusSummary[];
-  supervisor?: AssistantSupervisorStatus | null;
-  providerReadiness?: AssistantProviderReadinessStatus | null;
-  assistantDevBridge?: AssistantDevBridgeStatus | null;
-  coordination?: AssistantCoordinationStatus | null;
-  queue?: Record<string, unknown> | unknown[] | null;
-  workers?: Record<string, unknown> | unknown[] | null;
-  handoffs?: unknown[];
-  blockers?: unknown[];
-  providerGuardrails?: Record<string, unknown> | null;
-}
-
-export type AssistantOrchestratorStatusResult =
-  | { ok: true; kind: "ok"; status: AssistantOrchestratorStatus }
-  | { ok: false; kind: "failure"; statusCode: number | null; message: string };
-
 export interface AssistantControlModeStatus {
   state?: string;
   active?: boolean;
@@ -363,84 +221,12 @@ export type AssistantControlModeMutationResult =
 
 export interface ActivateAssistantControlModeInput {
   passphrase: string;
-  mode: "kernel_debug" | "kernel_repair";
+  mode: "kernel_debug";
   reason: string;
   ttlSeconds?: number;
   idleTtlSeconds?: number;
   managementSessionId?: string | null;
 }
-
-export interface AssistantDevDocsArchiveLocations {
-  requirementCapture?: string | null;
-  systemAnalysis?: string | null;
-  systemDesign?: string | null;
-  taskBriefs: string[];
-}
-
-export interface AssistantDevDocsGenerateInput {
-  conversationId: string;
-  featureSummary: string;
-  affectedModules?: string[];
-  proposedOwner?: string;
-  proposedReviewer?: string;
-  archive?: boolean;
-  emitTaskPacket?: boolean;
-  queueTaskPacket?: boolean;
-  extraContext?: Record<string, unknown>;
-}
-
-export type AssistantDevDocsGenerateResult =
-  | {
-      ok: true;
-      kind: "ok";
-      packetId: string;
-      conversationId: string | null;
-      archiveLocations: AssistantDevDocsArchiveLocations | null;
-      taskPacketQueued: boolean;
-      taskPacketQueuePath: string | null;
-      taskCount: number;
-      taskPacket: Record<string, unknown> | null;
-    }
-  | { ok: false; kind: "failure"; statusCode: number | null; message: string };
-
-export interface AssistantRepairMetadata {
-  task_id: string;
-  taskId?: string;
-  task_worktree: string;
-  taskWorktree?: string;
-  declared_scope: string[];
-  declaredScope?: string[];
-  expected_branch: string;
-  expectedBranch?: string;
-  remote: string;
-  merge_target: string;
-  mergeTarget?: string;
-  require_clean?: boolean;
-  requireClean?: boolean;
-  repo_key?: string;
-  repoKey?: string;
-}
-
-export interface AssistantRepairWorktreePrepareInput {
-  taskId?: string;
-  repoKey?: "pantheon" | "execute-plans" | string;
-  declaredScope: string[];
-  expectedBranch?: string;
-  mergeTarget?: string;
-  remote?: string;
-  reason?: string;
-  traceId?: string;
-}
-
-export type AssistantRepairWorktreePrepareResult =
-  | {
-      ok: true;
-      kind: "ok";
-      repair: AssistantRepairMetadata;
-      created: boolean | null;
-      workflow: Record<string, unknown> | null;
-    }
-  | { ok: false; kind: "failure"; statusCode: number | null; message: string };
 
 export interface AssistantProviderCredentialExchange {
   bffHandlesCredentials?: boolean;
@@ -574,9 +360,6 @@ export interface ManagementAiAskInput {
   };
   ui?: ManagementAiUiSnapshot;
   attachments?: ManagementAiAttachment[];
-  openclaw?: {
-    repair?: AssistantRepairMetadata;
-  };
 }
 
 interface RawAskResponse {
@@ -670,100 +453,6 @@ function asRecordArray(value: unknown): Record<string, unknown>[] {
   return Array.isArray(value) ? value.map(asRecord).filter((item): item is Record<string, unknown> => Boolean(item)) : [];
 }
 
-function asUnknownArray(value: unknown): unknown[] | undefined {
-  return Array.isArray(value) ? value : undefined;
-}
-
-function adaptOpenClawToolPolicy(raw: unknown): AssistantOpenClawToolPolicyStatus | null {
-  const r = asRecord(raw);
-  if (!r) return null;
-  return {
-    status: asString(r.status),
-    effectiveStatus: asString(r.effectiveStatus ?? r.effective_status),
-    upstreamStatus: asString(r.upstreamStatus ?? r.upstream_status),
-    assistantCommandAllowed: asBoolean(r.assistantCommandAllowed ?? r.assistant_command_allowed),
-    assistantCommandEffective: asBoolean(r.assistantCommandEffective ?? r.assistant_command_effective),
-    assistantCommandUsable: asBoolean(r.assistantCommandUsable ?? r.assistant_command_usable),
-    assistantCommandStatus: asString(r.assistantCommandStatus ?? r.assistant_command_status),
-    assistantCommandTool: asString(r.assistantCommandTool ?? r.assistant_command_tool),
-    allowedTools: asStringArray(r.allowedTools ?? r.allowed_tools),
-    effectiveTools: asStringArray(r.effectiveTools ?? r.effective_tools),
-    effectiveSkills: adaptOpenClawSkillDescriptors(r.effectiveSkills ?? r.effective_skills),
-    allowedWorkflows: asStringArray(r.allowedWorkflows ?? r.allowed_workflows),
-    defaultPosture: asString(r.defaultPosture ?? r.default_posture) ?? null,
-    source: asString(r.source),
-  };
-}
-
-function adaptOpenClawSkillDescriptors(raw: unknown): AssistantOpenClawSkillDescriptor[] {
-  return asRecordArray(raw).map((r) => ({
-    id: asString(r.id),
-    title: asString(r.title),
-    surface: asString(r.surface),
-    handlerRef: asString(r.handlerRef ?? r.handler_ref),
-    resultSurface: asString(r.resultSurface ?? r.result_surface),
-    confirmPolicy: asString(r.confirmPolicy ?? r.confirm_policy),
-    role: asString(r.role),
-    modeGate: asRecord(r.modeGate ?? r.mode_gate) ?? undefined,
-    inputSchema: asRecord(r.inputSchema ?? r.input_schema) ?? undefined,
-  }));
-}
-
-function adaptSourceRefs(raw: unknown): AssistantStatusSourceRef[] {
-  return asRecordArray(raw).map((r) => ({
-    sourceType: asString(r.sourceType ?? r.source_type),
-    path: asString(r.path),
-    available: asBoolean(r.available),
-    status: asString(r.status),
-    snapshotAt: asString(r.snapshotAt ?? r.snapshot_at),
-    lastModifiedAt: asString(r.lastModifiedAt ?? r.last_modified_at),
-  }));
-}
-
-function adaptSupervisorStatus(raw: unknown): AssistantSupervisorStatus | null {
-  const r = asRecord(raw);
-  if (!r) return null;
-  const occupancyRaw = asRecord(r.modeOccupancy ?? r.mode_occupancy);
-  const modeOccupancy = occupancyRaw
-    ? Object.fromEntries(Object.entries(occupancyRaw).map(([mode, value]) => {
-        const item = asRecord(value) ?? {};
-        return [mode, {
-          running: asNumber(item.running),
-          pending: asNumber(item.pending),
-          queued: asNumber(item.queued),
-        }];
-      }))
-    : undefined;
-  return {
-    pid: asNumber(r.pid),
-    lifecycle: asString(r.lifecycle),
-    modeStatus: asString(r.modeStatus ?? r.mode_status),
-    focusMode: asString(r.focusMode ?? r.focus_mode),
-    startedAt: asString(r.startedAt ?? r.started_at),
-    lastHeartbeatAt: asString(r.lastHeartbeatAt ?? r.last_heartbeat_at),
-    lastSuccessfulLoopAt: asString(r.lastSuccessfulLoopAt ?? r.last_successful_loop_at),
-    lastLoopStartedAt: asString(r.lastLoopStartedAt ?? r.last_loop_started_at),
-    lastLoopFinishedAt: asString(r.lastLoopFinishedAt ?? r.last_loop_finished_at),
-    lastLoopDurationMs: asNumber(r.lastLoopDurationMs ?? r.last_loop_duration_ms),
-    lastLoopError: asString(r.lastLoopError ?? r.last_loop_error) ?? null,
-    modeOccupancy,
-  };
-}
-
-function adaptRepairWorkspaceStatus(raw: unknown): AssistantRepairWorkspaceStatus | null {
-  const r = asRecord(raw);
-  if (!r) return null;
-  return {
-    root: asString(r.root),
-    exists: asBoolean(r.exists),
-    isDir: asBoolean(r.isDir ?? r.is_dir),
-    writable: asBoolean(r.writable),
-    ready: asBoolean(r.ready),
-    status: asString(r.status),
-    worktreeCount: asNumber(r.worktreeCount ?? r.worktree_count),
-  };
-}
-
 function adaptProviderUsage(raw: unknown): AssistantProviderUsage | Record<string, unknown> | null {
   const r = asRecord(raw);
   if (!r) return null;
@@ -810,9 +499,7 @@ function adaptProviderReadinessStatus(raw: unknown): AssistantProviderReadinessS
     quota: adaptProviderUsage(r.quota),
     capabilities: capabilities ? {
       read: asBoolean(capabilities.read),
-      repairWrite: asBoolean(capabilities.repairWrite ?? capabilities.repair_write),
     } : undefined,
-    repairWorkspace: adaptRepairWorkspaceStatus(r.repairWorkspace ?? r.repair_workspace),
   };
 }
 
@@ -1120,60 +807,6 @@ export async function fetchAssistantProviderUsageSummary(
   };
 }
 
-function adaptDevBridgeStatus(raw: unknown): AssistantDevBridgeStatus | null {
-  const r = asRecord(raw);
-  if (!r) return null;
-  const inbox = asRecord(r.inbox);
-  return {
-    status: asString(r.status),
-    inbox: inbox ? {
-      path: asString(inbox.path),
-      exists: asBoolean(inbox.exists),
-      pendingCount: asNumber(inbox.pendingCount ?? inbox.pending_count),
-      processedCount: asNumber(inbox.processedCount ?? inbox.processed_count),
-      failedCount: asNumber(inbox.failedCount ?? inbox.failed_count),
-      receiptCount: asNumber(inbox.receiptCount ?? inbox.receipt_count),
-    } : null,
-    lastDrainAt: asString(r.lastDrainAt ?? r.last_drain_at),
-    recentReceipts: asRecordArray(r.recentReceipts ?? r.recent_receipts).map((receipt) => ({
-      packetId: asString(receipt.packetId ?? receipt.packet_id),
-      status: asString(receipt.status),
-      drainedAt: asString(receipt.drainedAt ?? receipt.drained_at),
-      dryRun: asBoolean(receipt.dryRun ?? receipt.dry_run),
-      errorCount: asNumber(receipt.errorCount ?? receipt.error_count),
-      archivedPath: asString(receipt.archivedPath ?? receipt.archived_path),
-      error: asString(receipt.error) ?? null,
-    })),
-  };
-}
-
-function adaptTaskSummaries(raw: unknown): AssistantTaskStatusSummary[] {
-  return asRecordArray(raw).map((r) => ({
-    id: asString(r.id),
-    title: asString(r.title),
-    owner: asString(r.owner),
-    reviewer: asString(r.reviewer),
-    status: asString(r.status),
-    phase: asString(r.phase),
-    next: asString(r.next),
-    lastUpdate: asString(r.lastUpdate ?? r.last_update),
-    waitingFor: asString(r.waitingFor ?? r.waiting_for) ?? null,
-    briefPath: asString(r.briefPath ?? r.brief_path) ?? null,
-    blockers: asStringArray(r.blockers) ?? [],
-  }));
-}
-
-function adaptCoordinationStatus(raw: unknown): AssistantCoordinationStatus | null {
-  const r = asRecord(raw);
-  if (!r) return null;
-  return {
-    lastScanAt: asString(r.lastScanAt ?? r.last_scan_at),
-    fileCount: asNumber(r.fileCount ?? r.file_count),
-    featureCount: asNumber(r.featureCount ?? r.feature_count),
-    featureIds: asStringArray(r.featureIds ?? r.feature_ids),
-  };
-}
-
 function adaptControlModeStatus(raw: unknown): AssistantControlModeStatus | null {
   const r = asRecord(raw);
   if (!r) return null;
@@ -1192,50 +825,6 @@ function adaptControlModeStatus(raw: unknown): AssistantControlModeStatus | null
     ttlSeconds: asNumber(r.ttlSeconds ?? r.ttl_seconds),
     idleTtlSeconds: asNumber(r.idleTtlSeconds ?? r.idle_ttl_seconds),
     commandClasses: asStringArray(r.commandClasses ?? r.command_classes),
-  };
-}
-
-function adaptArchiveLocations(raw: unknown): AssistantDevDocsArchiveLocations | null {
-  const r = asRecord(raw);
-  if (!r) return null;
-  return {
-    requirementCapture: asString(r.requirementCapture ?? r.requirement_capture) ?? null,
-    systemAnalysis: asString(r.systemAnalysis ?? r.system_analysis) ?? null,
-    systemDesign: asString(r.systemDesign ?? r.system_design) ?? null,
-    taskBriefs: asStringArray(r.taskBriefs ?? r.task_briefs) ?? [],
-  };
-}
-
-function adaptRepairMetadata(raw: unknown): AssistantRepairMetadata | null {
-  const r = asRecord(raw);
-  if (!r) return null;
-  const taskId = asString(r.task_id ?? r.taskId);
-  const taskWorktree = asString(r.task_worktree ?? r.taskWorktree);
-  const declaredScope = asStringArray(r.declared_scope ?? r.declaredScope);
-  const expectedBranch = asString(r.expected_branch ?? r.expectedBranch);
-  const remote = asString(r.remote);
-  const mergeTarget = asString(r.merge_target ?? r.mergeTarget);
-  if (!taskId || !taskWorktree || !declaredScope?.length || !expectedBranch || !remote || !mergeTarget) {
-    return null;
-  }
-  const requireClean = asBoolean(r.require_clean ?? r.requireClean);
-  const repoKey = asString(r.repo_key ?? r.repoKey);
-  return {
-    task_id: taskId,
-    taskId,
-    task_worktree: taskWorktree,
-    taskWorktree,
-    declared_scope: declaredScope,
-    declaredScope,
-    expected_branch: expectedBranch,
-    expectedBranch,
-    remote,
-    merge_target: mergeTarget,
-    mergeTarget,
-    require_clean: requireClean,
-    requireClean,
-    repo_key: repoKey,
-    repoKey,
   };
 }
 
@@ -1579,181 +1168,6 @@ export async function streamManagementAi(
   };
 }
 
-export async function fetchAssistantOrchestratorStatus(
-  options?: { signal?: AbortSignal },
-): Promise<AssistantOrchestratorStatusResult> {
-  const base = detectBaseUrl();
-  if (!base) {
-    return {
-      ok: false,
-      kind: "failure",
-      statusCode: null,
-      message: "BFF base URL is not configured (VITE_BFF_BASE_URL missing).",
-    };
-  }
-  const headers = buildHeaders({ method: "GET" });
-  let res: Response;
-  try {
-    res = await fetch(`${base}${paths.assistantOrchestratorStatus()}`, {
-      method: "GET",
-      headers,
-      credentials: "include",
-      signal: options?.signal,
-    });
-  } catch (err) {
-    if ((err as { name?: string })?.name === "AbortError" || options?.signal?.aborted) {
-      return { ok: false, kind: "failure", statusCode: null, message: "aborted" };
-    }
-    return {
-      ok: false,
-      kind: "failure",
-      statusCode: null,
-      message: (err as Error)?.message ?? "Network error contacting Pantheon BFF.",
-    };
-  }
-
-  const text = await res.text();
-  let parsed: { data?: Record<string, unknown> } | undefined;
-  try { parsed = text ? JSON.parse(text) as { data?: Record<string, unknown> } : undefined; } catch { parsed = undefined; }
-  if (!res.ok) {
-    return {
-      ok: false,
-      kind: "failure",
-      statusCode: res.status,
-      message: `BFF ${res.status} ${res.statusText || ""}`.trim(),
-    };
-  }
-
-  const data = parsed?.data ?? {};
-  const providerRaw = asRecord(data.providerStatus ?? data.provider_status);
-  return {
-    ok: true,
-    kind: "ok",
-    status: {
-      status: asString(data.status),
-      snapshotAt: asString(data.snapshotAt ?? data.snapshot_at),
-      project: asString(data.project),
-      sprint: asString(data.sprint),
-      objective: asString(data.objective),
-      providerStatus: adaptProviderStatus(providerRaw as (Partial<ProviderStatus> & Record<string, unknown>) | undefined),
-      openclawToolPolicy: adaptOpenClawToolPolicy(data.openclawToolPolicy ?? data.openclaw_tool_policy),
-      sourceRefs: adaptSourceRefs(data.sourceRefs ?? data.source_refs),
-      tasks: adaptTaskSummaries(data.tasks),
-      supervisor: adaptSupervisorStatus(data.supervisor),
-      providerReadiness: adaptProviderReadinessStatus(data.providerReadiness ?? data.provider_readiness),
-      assistantDevBridge: adaptDevBridgeStatus(data.assistantDevBridge ?? data.assistant_dev_bridge),
-      coordination: adaptCoordinationStatus(data.coordination),
-      queue: asRecord(data.queue) ?? asUnknownArray(data.queue) ?? null,
-      workers: asRecord(data.workers) ?? asUnknownArray(data.workers) ?? null,
-      handoffs: asUnknownArray(data.handoffs) ?? [],
-      blockers: asUnknownArray(data.blockers) ?? [],
-      providerGuardrails: asRecord(data.providerGuardrails ?? data.provider_guardrails) ?? null,
-    },
-  };
-}
-
-export async function generateAssistantDevDocs(
-  input: AssistantDevDocsGenerateInput,
-  options?: { signal?: AbortSignal },
-): Promise<AssistantDevDocsGenerateResult> {
-  const base = detectBaseUrl();
-  if (!base) {
-    return {
-      ok: false,
-      kind: "failure",
-      statusCode: null,
-      message: "BFF base URL is not configured (VITE_BFF_BASE_URL missing).",
-    };
-  }
-
-  const headers = buildHeaders({ method: "POST", idempotency: newIdempotencyKey() });
-  const body = JSON.stringify({
-    conversationId: input.conversationId,
-    featureSummary: input.featureSummary,
-    affectedModules: input.affectedModules ?? [],
-    proposedOwner: input.proposedOwner,
-    proposedReviewer: input.proposedReviewer,
-    archive: input.archive ?? true,
-    emitTaskPacket: input.emitTaskPacket ?? true,
-    queueTaskPacket: input.queueTaskPacket ?? true,
-    extraContext: input.extraContext,
-  });
-
-  let res: Response;
-  try {
-    res = await fetch(`${base}${paths.assistantDevDocsGenerate()}`, {
-      method: "POST",
-      headers,
-      body,
-      credentials: "include",
-      signal: options?.signal,
-    });
-  } catch (err) {
-    if ((err as { name?: string })?.name === "AbortError" || options?.signal?.aborted) {
-      return { ok: false, kind: "failure", statusCode: null, message: "aborted" };
-    }
-    return {
-      ok: false,
-      kind: "failure",
-      statusCode: null,
-      message: (err as Error)?.message ?? "Network error contacting Pantheon BFF.",
-    };
-  }
-
-  const text = await res.text();
-  let parsed: { data?: unknown; meta?: unknown; detail?: unknown; message?: unknown } | undefined;
-  try {
-    parsed = text ? JSON.parse(text) as { data?: unknown; meta?: unknown; detail?: unknown; message?: unknown } : undefined;
-  } catch {
-    parsed = undefined;
-  }
-
-  if (!res.ok) {
-    return {
-      ok: false,
-      kind: "failure",
-      statusCode: res.status,
-      message: extractBffFailureMessage(parsed) ?? `BFF ${res.status} ${res.statusText || ""}`.trim(),
-    };
-  }
-
-  const data = asRecord(parsed?.data) ?? {};
-  const meta = asRecord(parsed?.meta) ?? {};
-  const queueReceipt = asRecord(meta.taskPacketQueueReceipt ?? meta.task_packet_queue_receipt);
-  const packetId = asString(data.packetId ?? data.packet_id);
-  if (!packetId) {
-    return {
-      ok: false,
-      kind: "failure",
-      statusCode: res.status,
-      message: "BFF returned no dev-doc packetId.",
-    };
-  }
-
-  const executionTasks = Array.isArray(data.executionTasks)
-    ? data.executionTasks
-    : Array.isArray(data.execution_tasks)
-      ? data.execution_tasks
-      : [];
-
-  return {
-    ok: true,
-    kind: "ok",
-    packetId,
-    conversationId: asString(data.conversationId ?? data.conversation_id) ?? null,
-    archiveLocations: adaptArchiveLocations(
-      meta.archiveLocations ??
-      meta.archive_locations ??
-      data.archiveLocations ??
-      data.archive_locations,
-    ),
-    taskPacketQueued: asBoolean(meta.taskPacketQueued ?? meta.task_packet_queued) ?? asBoolean(queueReceipt?.queued) ?? false,
-    taskPacketQueuePath: asString(queueReceipt?.path ?? queueReceipt?.inbox) ?? null,
-    taskCount: asNumber(meta.taskCount ?? meta.task_count ?? queueReceipt?.taskCount ?? queueReceipt?.task_count) ?? executionTasks.length,
-    taskPacket: asRecord(meta.taskPacket ?? meta.task_packet) ?? null,
-  };
-}
-
 export async function startAssistantProviderReauth(
   input: AssistantProviderReauthInput = {},
   options?: { signal?: AbortSignal },
@@ -1973,88 +1387,6 @@ export async function submitAssistantProviderReauthCode(
     };
   }
   return { ok: true, kind: "ok", reauth };
-}
-
-export async function prepareAssistantRepairWorktree(
-  input: AssistantRepairWorktreePrepareInput,
-  options?: { signal?: AbortSignal },
-): Promise<AssistantRepairWorktreePrepareResult> {
-  const base = detectBaseUrl();
-  if (!base) {
-    return {
-      ok: false,
-      kind: "failure",
-      statusCode: null,
-      message: "BFF base URL is not configured (VITE_BFF_BASE_URL missing).",
-    };
-  }
-
-  const headers = buildHeaders({ method: "POST", idempotency: newIdempotencyKey() });
-  const body = JSON.stringify({
-    taskId: input.taskId,
-    repoKey: input.repoKey,
-    declaredScope: input.declaredScope,
-    expectedBranch: input.expectedBranch,
-    mergeTarget: input.mergeTarget,
-    remote: input.remote,
-    reason: input.reason,
-    traceId: input.traceId,
-  });
-
-  let res: Response;
-  try {
-    res = await fetch(`${base}${paths.assistantRepairWorktreePrepare()}`, {
-      method: "POST",
-      headers,
-      body,
-      credentials: "include",
-      signal: options?.signal,
-    });
-  } catch (err) {
-    if ((err as { name?: string })?.name === "AbortError" || options?.signal?.aborted) {
-      return { ok: false, kind: "failure", statusCode: null, message: "aborted" };
-    }
-    return {
-      ok: false,
-      kind: "failure",
-      statusCode: null,
-      message: (err as Error)?.message ?? "Network error contacting Pantheon BFF.",
-    };
-  }
-
-  const text = await res.text();
-  let parsed: { data?: unknown; meta?: unknown; detail?: unknown; message?: unknown } | undefined;
-  try {
-    parsed = text ? JSON.parse(text) as { data?: unknown; meta?: unknown; detail?: unknown; message?: unknown } : undefined;
-  } catch {
-    parsed = undefined;
-  }
-  if (!res.ok) {
-    return {
-      ok: false,
-      kind: "failure",
-      statusCode: res.status,
-      message: extractBffFailureMessage(parsed) ?? `BFF ${res.status} ${res.statusText || ""}`.trim(),
-    };
-  }
-
-  const data = asRecord(parsed?.data) ?? {};
-  const repair = adaptRepairMetadata(data.repair ?? data.repairMetadata);
-  if (!repair) {
-    return {
-      ok: false,
-      kind: "failure",
-      statusCode: res.status,
-      message: "BFF returned no repair metadata.",
-    };
-  }
-  return {
-    ok: true,
-    kind: "ok",
-    repair,
-    created: asBoolean(data.created) ?? null,
-    workflow: asRecord(data.workflow) ?? null,
-  };
 }
 
 export async function fetchAssistantModeStatus(

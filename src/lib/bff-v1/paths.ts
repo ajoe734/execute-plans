@@ -216,13 +216,6 @@ export const paths = {
     `${BASE}/assistant/provider/reauth/${enc(sessionId)}/code${provider ? `?provider=${enc(provider)}` : ""}`,
   assistantControlModeActivate: () => `${BASE}/assistant/control-mode/activate`,
   assistantControlModeDeactivate: () => `${BASE}/assistant/control-mode/deactivate`,
-  assistantOrchestratorStatus: () => `${BASE}/assistant/orchestrator/status`,
-  assistantRepairWorktreePrepare: () => `${BASE}/assistant/repair-worktrees/prepare`,
-  assistantDevDocsGenerate: () => `${BASE}/assistant/dev-docs/generate`,
-  assistantDevDocsPacket: (packetId: string) => `${BASE}/assistant/dev-docs/${enc(packetId)}`,
-  assistantDevBridgeTaskPacket: () => `${BASE}/assistant/dev-bridge/task-packet`,
-
-
   // ---- 2026-05-22 PM-12 — Competition-style performance management. ----
   mgmtPortfolioBook: () => `${BASE}/management/portfolio-book`,
   mgmtPortfolioHoldings: (query?: Record<string, string | undefined>) => {

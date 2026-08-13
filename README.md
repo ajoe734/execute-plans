@@ -114,10 +114,11 @@ Auth/session access is explicit:
   cookie／sessionStorage session，不能放進任何 `VITE_*` build variable。
 - Optional tenant id：`pantheon.bff.tenantId` 或 legacy `pantheon_tenant_id`。
 
-Management AI SA/SD dispatch is BFF-owned. The frontend calls
-`POST /bff/assistant/dev-docs/generate` and lets the supervisor drain the dev
-bridge inbox. `Supervisor` is not a dispatchable reviewer identity; frontend
-SA/SD packets should use real worker names such as `Codex` and `Claude`.
+Management AI in the product frontend is a conversation and provider-auth
+client only. Supervisor dispatch, canonical task state, SA/SD generation, task
+packets, and repository worktrees are local development tooling under
+Pantheon's `.orchestrator/`; they are not exposed through the product BFF or
+this browser bundle.
 
 Route-by-route live/fallback behavior:
 

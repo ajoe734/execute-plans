@@ -28,7 +28,6 @@ import { cn } from "@/lib/utils";
 import {
   activateAssistantControlMode,
   fetchAssistantModeStatus,
-  fetchAssistantOrchestratorStatus,
   fetchAssistantProviderReauthStatus,
   fetchAssistantProviderUsageSummary,
   fetchAssistantProviders,
@@ -37,20 +36,17 @@ import {
   submitAssistantProviderReauthCode,
   type AssistantControlModeStatus,
   type AssistantModeStatusResult,
-  type AssistantOrchestratorStatusResult,
   type AssistantProviderReadinessStatus,
   type AssistantProviderReauthResult,
   type AssistantProviderReauthSession,
   type AssistantProvidersResult,
   type AssistantProviderUsageSummaryResult,
   type AssistantProviderUsageSummaryRow,
-  type ProviderStatus,
 } from "@/lib/bff-v1/managementAi";
 
 export interface OpenClawLlmAuthApi {
   fetchProviders: typeof fetchAssistantProviders;
   fetchMode: typeof fetchAssistantModeStatus;
-  fetchOrchestratorStatus: typeof fetchAssistantOrchestratorStatus;
   fetchUsageSummary: typeof fetchAssistantProviderUsageSummary;
   activateControlMode: typeof activateAssistantControlMode;
   startReauth: typeof startAssistantProviderReauth;
@@ -62,7 +58,6 @@ export interface OpenClawLlmAuthApi {
 const defaultApi: OpenClawLlmAuthApi = {
   fetchProviders: fetchAssistantProviders,
   fetchMode: fetchAssistantModeStatus,
-  fetchOrchestratorStatus: fetchAssistantOrchestratorStatus,
   fetchUsageSummary: fetchAssistantProviderUsageSummary,
   activateControlMode: activateAssistantControlMode,
   startReauth: startAssistantProviderReauth,
@@ -99,7 +94,6 @@ const defaultAddProviderForm: AddProviderForm = {
 interface PanelState {
   providers: AssistantProviderReadinessStatus[];
   mode: AssistantModeStatusResult | null;
-  orchestrator: AssistantOrchestratorStatusResult | null;
   providerResult: AssistantProvidersResult | null;
   usageSummary: AssistantProviderUsageSummaryResult | null;
   authProbePending: boolean;
@@ -254,16 +248,10 @@ function kernelLabel(mode: AssistantModeStatusResult | null): string {
   return mode.status.kernelEnabled ? "kernel on" : "kernel off";
 }
 
-function activeProviderLabel(providerStatus: ProviderStatus | null | undefined): string {
-  if (!providerStatus) return "unknown";
-  return `${providerStatus.provider}/${providerStatus.runtime}`;
-}
-
 function firstError(state: PanelState): string | null {
   if (state.providerResult && !state.providerResult.ok) return state.providerResult.message;
   if (state.usageSummary && !state.usageSummary.ok) return state.usageSummary.message;
   if (state.mode && !state.mode.ok && state.mode.message !== "aborted") return state.mode.message;
-  if (state.orchestrator && !state.orchestrator.ok && state.orchestrator.message !== "aborted") return state.orchestrator.message;
   return null;
 }
 
@@ -343,7 +331,6 @@ function reauthFailureMessage(result: AssistantProviderReauthResult): string {
 
 function providersFromResults(
   providerResult: AssistantProvidersResult,
-  orchestratorResult: AssistantOrchestratorStatusResult,
   previousProviders: AssistantProviderReadinessStatus[] = [],
 ): AssistantProviderReadinessStatus[] {
   if (providerResult.ok && providerResult.providers.length > 0) {
@@ -352,9 +339,7 @@ function providersFromResults(
   if (previousProviders.length > 0) {
     return previousProviders;
   }
-  return orchestratorResult.ok && orchestratorResult.status.providerReadiness
-    ? [orchestratorResult.status.providerReadiness]
-    : [];
+  return [];
 }
 
 export function OpenClawLlmAuthPanel({
@@ -367,7 +352,6 @@ export function OpenClawLlmAuthPanel({
   const [state, setState] = useState<PanelState>({
     providers: [],
     mode: null,
-    orchestrator: null,
     providerResult: null,
     usageSummary: null,
     authProbePending: false,
@@ -384,18 +368,16 @@ export function OpenClawLlmAuthPanel({
     setLoading(true);
     setState((current) => ({ ...current, authProbePending: true }));
     try {
-      const [providerResult, modeResult, orchestratorResult, usageSummary] = await Promise.all([
+      const [providerResult, modeResult, usageSummary] = await Promise.all([
         api.fetchProviders({ authProbe: false, signal }),
         api.fetchMode({ signal }),
-        api.fetchOrchestratorStatus({ signal }),
         api.fetchUsageSummary({ authProbe: false, windowHours: 168, limit: 500, signal }),
       ]);
       if (signal?.aborted) return;
-      const providers = providersFromResults(providerResult, orchestratorResult);
+      const providers = providersFromResults(providerResult);
       setState({
         providers,
         mode: modeResult,
-        orchestrator: orchestratorResult,
         providerResult,
         usageSummary,
         authProbePending: true,
@@ -405,7 +387,7 @@ export function OpenClawLlmAuthPanel({
       if (signal?.aborted) return;
       setState((current) => ({
         ...current,
-        providers: providersFromResults(authProbeResult, orchestratorResult, current.providers),
+        providers: providersFromResults(authProbeResult, current.providers),
         providerResult: authProbeResult,
         authProbePending: false,
       }));
@@ -425,7 +407,6 @@ export function OpenClawLlmAuthPanel({
 
   const controlMode = controlModeFrom(state.mode);
   const activeControl = Boolean(controlMode?.active);
-  const activeProvider = state.orchestrator?.ok ? state.orchestrator.status.providerStatus : null;
   const llmProviders = useMemo(() => state.providers.filter((provider) => !isOpenClawAdapter(provider)), [state.providers]);
   const adapterProviders = useMemo(() => state.providers.filter(isOpenClawAdapter), [state.providers]);
   const attentionCount = useMemo(() => llmProviders.filter(needsAttention).length, [llmProviders]);
@@ -643,7 +624,7 @@ export function OpenClawLlmAuthPanel({
             LLM Provider Auth
           </h2>
           <p className="mt-1 text-xs text-muted-foreground">
-            active={activeProviderLabel(activeProvider)} · {kernelLabel(state.mode)}
+            {kernelLabel(state.mode)}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
