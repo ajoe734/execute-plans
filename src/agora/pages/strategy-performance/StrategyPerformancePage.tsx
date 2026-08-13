@@ -8,6 +8,7 @@ import { useAgoraWriteAccess } from "@/agora/useAgoraWriteAccess";
 import { canonicalCenterUrl } from "@/management/navigation/managementRouteManifest";
 import {
   actOnPerformanceSuggestion,
+  getAgoraPerformanceAttribution,
   getStrategyPerformance,
   type AdjustmentSuggestion,
   type PerformanceAvailability,
@@ -19,7 +20,6 @@ import {
 } from "@/lib/bff-v1/agora/performance";
 import {
   getTradingRoom,
-  getTradingRoomPerformanceAttribution,
   type TradingRoomAggregate,
   type TradingRoomPerformanceAttributionResponse,
   type TradingRoomPerformanceAttributionRow,
@@ -353,7 +353,7 @@ export function StrategyPerformancePage(): JSX.Element {
     setState({ status: "loading" });
     Promise.all([
       getTradingRoom(),
-      getTradingRoomPerformanceAttribution({ pageSize: 50, period }),
+      getAgoraPerformanceAttribution({ pageSize: 50, period }),
     ])
       .then(([aggregate, attribution]) => {
         if (!cancelled) setState({ data: { aggregate, attribution }, status: "loaded" });

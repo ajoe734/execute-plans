@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BffError } from "../errors";
 import {
   actOnPerformanceSuggestion,
+  getAgoraPerformanceAttribution,
   getStrategyPerformance,
   type AdjustmentSuggestion,
   type PerformanceProjectionEnvelope,
@@ -221,5 +222,74 @@ describe("Strategy Performance truth client", () => {
     expect(caught).toMatchObject({ code: "STATE_CONFLICT", status: 409 });
     expect((caught as Error).message).toContain("version conflict");
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("Owner-scoped Agora performance attribution", () => {
+  it("hits the Agora trading-room path with correct period and page_size", async () => {
+    const body = {
+      data: {
+        id: "attr-1",
+        period: "latest",
+        dimensions: ["strategy"],
+        items: [],
+        summary: {
+          basis: "live_telemetry",
+          dimensions: ["strategy"],
+          holding_count: 0,
+          period: "latest",
+          returned_row_count: 0,
+          row_count: 0,
+          runtime_count: 0,
+          supported_dimensions: ["strategy"],
+          telemetry_runtime_count: 0,
+          total_trades: 0,
+        },
+      },
+      meta: { policy: "owner_scoped_performance_attribution" },
+      page_info: { next_page_token: null, page_size: 50, total: 0 },
+    };
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await getAgoraPerformanceAttribution({ period: "7d", pageSize: 25 });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, req] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(
+      "https://bff.example.test/bff/agora/trading-room/performance-attribution/by-strategy?period=7d&page_size=25",
+    );
+    expect(req.method).toBe("GET");
+    expect(req.credentials).toBe("include");
+    expect(result.meta.policy).toBe("owner_scoped_performance_attribution");
+  });
+
+  it("uses default period=latest and page_size=50 when no query provided", async () => {
+    const body = { data: { id: "a", period: "latest", dimensions: [], items: [], summary: { basis: "", dimensions: [], holding_count: 0, period: "latest", returned_row_count: 0, row_count: 0, runtime_count: 0, supported_dimensions: [], telemetry_runtime_count: 0, total_trades: 0 } }, meta: {}, page_info: { next_page_token: null, page_size: 50, total: 0 } };
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await getAgoraPerformanceAttribution();
+
+    const [url] = fetchMock.mock.calls[0] as [string];
+    expect(url).toContain("period=latest");
+    expect(url).toContain("page_size=50");
+    expect(url).toContain("/bff/agora/trading-room/performance-attribution/by-strategy");
+  });
+
+  it("propagates BffError from a non-ok Agora attribution response", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({ error: { code: "AUTH_REQUIRED", message: "agora auth required" } }),
+      { status: 401, headers: { "Content-Type": "application/json" } },
+    ));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getAgoraPerformanceAttribution()).rejects.toMatchObject({
+      code: "AUTH_REQUIRED",
+      status: 401,
+    });
   });
 });

@@ -15,6 +15,10 @@ import type {
   SuggestionActionReceipt as GeneratedSuggestionActionReceipt,
   SuggestionProvenance as GeneratedSuggestionProvenance,
 } from "./types";
+import type {
+  TradingRoomPerformanceAttributionResponse,
+  TradingRoomPerformanceAttributionQuery,
+} from "./tradingRoom";
 
 export type PerformanceAvailability = "available" | "partial" | "unavailable";
 export type PerformancePeriod = "latest" | "7d" | "30d" | "all";
@@ -222,4 +226,26 @@ export async function actOnPerformanceSuggestion(input: {
     malformed("Suggestion receipt readback did not match the action response.");
   }
   return readback;
+}
+
+/**
+ * Get owner-scoped performance attribution grouped by strategy.
+ * Uses the Agora trading-room endpoint (agora.performance.truth.v1 boundary)
+ * rather than the management fleet-wide endpoint. The BFF enforces
+ * user_scope_ref so only the authenticated owner's strategies appear.
+ */
+export async function getAgoraPerformanceAttribution(
+  query?: TradingRoomPerformanceAttributionQuery,
+): Promise<TradingRoomPerformanceAttributionResponse> {
+  const base = detectBaseUrl().replace(/\/$/, "");
+  const qs = new URLSearchParams();
+  qs.set("period", query?.period ?? "latest");
+  qs.set("page_size", String(query?.pageSize ?? 50));
+  if (query?.pageToken) qs.set("page_token", query.pageToken);
+  const envelope = await request<TradingRoomPerformanceAttributionResponse>({
+    method: "GET",
+    path: `/bff/agora/trading-room/performance-attribution/by-strategy`,
+    query: qs,
+  });
+  return envelope;
 }

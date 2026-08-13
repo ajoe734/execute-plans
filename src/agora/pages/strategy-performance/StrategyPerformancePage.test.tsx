@@ -16,12 +16,12 @@ import { StrategyPerformancePage } from "./StrategyPerformancePage";
 
 const tradingRoomMocks = vi.hoisted(() => ({
   getTradingRoom: vi.fn(),
-  getTradingRoomPerformanceAttribution: vi.fn(),
 }));
 
 const performanceMocks = vi.hoisted(() => ({
   getStrategyPerformance: vi.fn(),
   actOnPerformanceSuggestion: vi.fn(),
+  getAgoraPerformanceAttribution: vi.fn(),
 }));
 
 const accessMocks = vi.hoisted(() => ({
@@ -32,12 +32,12 @@ const zhPerformance = i18n.getFixedT("zh-TW", undefined, "agora.performance");
 
 vi.mock("@/lib/bff-v1/agora/tradingRoom", () => ({
   getTradingRoom: tradingRoomMocks.getTradingRoom,
-  getTradingRoomPerformanceAttribution: tradingRoomMocks.getTradingRoomPerformanceAttribution,
 }));
 
 vi.mock("@/lib/bff-v1/agora/performance", () => ({
   getStrategyPerformance: performanceMocks.getStrategyPerformance,
   actOnPerformanceSuggestion: performanceMocks.actOnPerformanceSuggestion,
+  getAgoraPerformanceAttribution: performanceMocks.getAgoraPerformanceAttribution,
 }));
 
 vi.mock("@/agora/useAgoraWriteAccess", () => ({
@@ -270,7 +270,7 @@ function arrangeLoaded(
   detail: PerformanceProjectionEnvelope = performanceEnvelope(),
 ): void {
   tradingRoomMocks.getTradingRoom.mockResolvedValue(aggregate);
-  tradingRoomMocks.getTradingRoomPerformanceAttribution.mockResolvedValue(attribution);
+  performanceMocks.getAgoraPerformanceAttribution.mockResolvedValue(attribution);
   performanceMocks.getStrategyPerformance.mockResolvedValue(detail);
 }
 
@@ -374,7 +374,7 @@ describe("StrategyPerformancePage", () => {
 
   it("shows the strict aggregate BFF error state without fallback rows", async () => {
     tradingRoomMocks.getTradingRoom.mockRejectedValue(new Error("AUTH_REQUIRED"));
-    tradingRoomMocks.getTradingRoomPerformanceAttribution.mockResolvedValue(attributionResponse());
+    performanceMocks.getAgoraPerformanceAttribution.mockResolvedValue(attributionResponse());
     render(<MemoryRouter><StrategyPerformancePage /></MemoryRouter>);
 
     expect(await screen.findByText("無法取得即時績效資料。")).toBeDefined();
@@ -436,7 +436,7 @@ describe("StrategyPerformancePage", () => {
     expect(select).toBeDefined();
     fireEvent.change(select!, { target: { value: "7d" } });
     await waitFor(() => {
-      expect(tradingRoomMocks.getTradingRoomPerformanceAttribution).toHaveBeenCalledWith({ pageSize: 50, period: "7d" });
+      expect(performanceMocks.getAgoraPerformanceAttribution).toHaveBeenCalledWith({ pageSize: 50, period: "7d" });
       expect(performanceMocks.getStrategyPerformance).toHaveBeenCalledWith("strat-alpha", { period: "7d" });
     });
   });
