@@ -12,7 +12,7 @@ import {
   acceptWidgetRevisionProposal,
   createWidgetRevisionProposal,
 } from "@/lib/bff-v1/agora/tradingRoom";
-import { BffError, type BffErrorEnvelope } from "@/lib/bff-v1/errors";
+import { BffError, type BffErrorEnvelope, type ErrorCode } from "@/lib/bff-v1/errors";
 import { WorkspaceWidgetRevisionDrawer } from "./WorkspaceWidgetRevisionDrawer";
 
 vi.mock("@/lib/bff-v1/agora/tradingRoom", () => ({
@@ -137,10 +137,10 @@ function sampleProposal(): WidgetRevisionProposal {
   };
 }
 
-function makeBffError(status: number, code: string, message: string): BffError {
+function makeBffError(status: number, code: ErrorCode, message: string): BffError {
   const envelope: BffErrorEnvelope = {
     error: {
-      code: code as any,
+      code,
       correlationId: `corr-${status}`,
       i18nKey: `errors.${code}`,
       message,
