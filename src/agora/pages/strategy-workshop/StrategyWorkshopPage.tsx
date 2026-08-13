@@ -3,6 +3,12 @@ import { cn } from "@/lib/utils";
 import {
   listWorkshops,
   getWorkshop,
+  createWorkshop,
+  postWorkshopMessage,
+  dispatchWorkshopResearchRun,
+  openWorkshopConsultation,
+  createWorkshopVersion,
+  concludeWorkshop,
   getWorkshopCompleteness,
   getWorkshopReadiness,
   listWorkshopCards,
@@ -13,6 +19,7 @@ import {
   type WorkshopReadinessAssessment,
   type WorkshopStreamEvent,
 } from "@/lib/bff-v1/agora/workshops";
+import { WorkshopCardRenderer } from "@/agora/components/WorkshopCardRenderer";
 import {
   interaction,
   type ContextBinding,
@@ -186,18 +193,27 @@ type CardAction =
   | { type: "UPSERT"; card: WorkshopCard }
   | { type: "SET_LAST_EVENT_ID"; id: string };
 
+function sortCards(cards: WorkshopCard[]): WorkshopCard[] {
+  return cards.slice().sort((a, b) => {
+    const seqA = a.sequence_no ?? 0;
+    const seqB = b.sequence_no ?? 0;
+    if (seqA !== seqB) return seqA - seqB;
+    return (Date.parse(a.created_at || "") || 0) - (Date.parse(b.created_at || "") || 0);
+  });
+}
+
 function cardReducer(state: CardState, action: CardAction): CardState {
   switch (action.type) {
     case "RESET":
-      return { ...state, cards: action.cards };
+      return { ...state, cards: sortCards(action.cards) };
     case "UPSERT": {
       const idx = state.cards.findIndex((c) => c.card_id === action.card.card_id);
       if (idx === -1) {
-        return { ...state, cards: [...state.cards, action.card] };
+        return { ...state, cards: sortCards([...state.cards, action.card]) };
       }
       const updated = [...state.cards];
       updated[idx] = action.card;
-      return { ...state, cards: updated };
+      return { ...state, cards: sortCards(updated) };
     }
     case "SET_LAST_EVENT_ID":
       return { ...state, lastEventId: action.id };
@@ -220,40 +236,132 @@ function WorkshopListView({ onAddToTradingRoom }: WorkshopListViewProps): JSX.El
   const [state, setState] = useState<ListState>("loading");
   const [workshops, setWorkshops] = useState<StrategyWorkshop[]>([]);
   const [selectedWorkshopId, setSelectedWorkshopId] = useState<string | null>(null);
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [createTitle, setCreateTitle] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+
+  const fetchWorkshops = useCallback(async () => {
+    try {
+      const res = await listWorkshops();
+      const ordered = orderWorkshops(res);
+      setWorkshops(ordered);
+      setSelectedWorkshopId((current) => {
+        if (current && ordered.some((workshop) => workshop.workshop_id === current)) return current;
+        return ordered[0]?.workshop_id ?? null;
+      });
+      setState(ordered.length === 0 ? "empty" : "loaded");
+      return ordered;
+    } catch {
+      setState("error");
+      return [];
+    }
+  }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    listWorkshops()
-      .then((res) => {
-        if (cancelled) return;
-        const ordered = orderWorkshops(res);
-        setWorkshops(ordered);
-        setSelectedWorkshopId((current) => {
-          if (current && ordered.some((workshop) => workshop.workshop_id === current)) return current;
-          return ordered[0]?.workshop_id ?? null;
-        });
-        setState(ordered.length === 0 ? "empty" : "loaded");
-      })
-      .catch(() => {
-        if (!cancelled) setState("error");
+    void fetchWorkshops();
+  }, [fetchWorkshops]);
+
+  const handleCreateWorkshop = async () => {
+    const title = createTitle.trim();
+    if (!title || creating) return;
+    setCreating(true);
+    setCreateError(null);
+    try {
+      const created = await createWorkshop({
+        subject: { title, kind: "free_form" },
       });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+      const ordered = await fetchWorkshops();
+      const targetId = created?.workshop_id || ordered[0]?.workshop_id || null;
+      if (targetId) setSelectedWorkshopId(targetId);
+      setShowCreateForm(false);
+      setCreateTitle("");
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : "Failed to create workshop");
+    } finally {
+      setCreating(false);
+    }
+  };
 
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="strategy-workshop-page-list">
+      {/* List Header Bar with Create Action */}
+      <div className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-2.5 shrink-0" data-testid="workshop-list-header">
+        <h2 className="text-sm font-semibold text-slate-800">Strategy Workshops</h2>
+        <Button
+          size="sm"
+          className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold h-8 text-xs"
+          data-testid="create-workshop-btn"
+          onClick={() => setShowCreateForm(true)}
+          type="button"
+        >
+          + Create Workshop
+        </Button>
+      </div>
+
+      {showCreateForm && (
+        <div className="border-b border-indigo-100 bg-indigo-50/50 p-4 shrink-0" data-testid="create-workshop-form">
+          <div className="max-w-md space-y-3">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-indigo-900">Create New Strategy Workshop</h3>
+            <div>
+              <label className="sr-only" htmlFor="create-workshop-title">Workshop Strategy Title</label>
+              <input
+                id="create-workshop-title"
+                type="text"
+                className="w-full rounded-md border border-slate-300 px-3 py-1.5 text-xs placeholder:text-slate-400 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                data-testid="create-workshop-title-input"
+                placeholder="e.g. BTC Volatility Arbitrage Strategy"
+                value={createTitle}
+                onChange={(e) => setCreateTitle(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && createTitle.trim() && !creating) {
+                    e.preventDefault();
+                    void handleCreateWorkshop();
+                  }
+                }}
+              />
+            </div>
+            {createError && <p className="text-xs text-red-600 font-semibold" data-testid="create-workshop-error">{createError}</p>}
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                className="bg-indigo-600 hover:bg-indigo-700 text-white h-7 text-xs font-semibold"
+                data-testid="create-workshop-submit"
+                disabled={!createTitle.trim() || creating}
+                onClick={() => void handleCreateWorkshop()}
+                type="button"
+              >
+                {creating ? "Creating..." : "Create"}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs"
+                data-testid="create-workshop-cancel"
+                onClick={() => {
+                  setShowCreateForm(false);
+                  setCreateTitle("");
+                  setCreateError(null);
+                }}
+                type="button"
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {state === "loading" && (
         <div className="flex items-center justify-center gap-2 p-6 text-sm text-slate-500" data-testid="workshop-list-loading">
           <span className="h-4 w-4 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent" />
           Loading workshops...
         </div>
       )}
-      {state === "empty" && (
+      {state === "empty" && !showCreateForm && (
         <div className="flex flex-col items-center gap-2 p-6 text-sm text-slate-500" data-testid="workshop-list-empty">
           <Bot className="h-10 w-10 text-slate-300" />
-          No workshops found.
+          No workshops found. Click &quot;+ Create Workshop&quot; to begin.
         </div>
       )}
       {state === "error" && (
@@ -564,6 +672,7 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
   const [dailyInteractions, setDailyInteractions] = useState<DailyInteraction[]>([]);
   const [dailyRuntimeState, setDailyRuntimeState] = useState<DailyRuntimeState>("loading");
   const [dailyRuntimeMessage, setDailyRuntimeMessage] = useState<string | null>(null);
+  const [messageReceiptState, setMessageReceiptState] = useState<"none" | "accepted" | "processing" | "succeeded" | "degraded" | "failed">("none");
 
   // Custom states for PINT-005
   const [selectedMode, setSelectedMode] = useState<WorkshopInteractionMode>(entry?.mode ?? "ask");
@@ -784,55 +893,59 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
   }, [workshopId]);
 
   useEffect(() => {
-    const teardown = openWorkshopStream(workshopId, (event: WorkshopStreamEvent) => {
-      dispatch({ type: "SET_LAST_EVENT_ID", id: event.event_id });
-      switch (String(event.event_type)) {
-        case "workshop.completeness.updated":
-          refreshCompleteness();
-          refreshCards();
-          break;
-        case "workshop.readiness.updated":
-          refreshReadiness();
-          refreshCards();
-          break;
-        case "workshop.servant.response.completed":
-        case "research.plan.created":
-        case "research.plan.approved":
-        case "research.run.queued":
-        case "research.run.progress":
-        case "research.run.completed":
-        case "research.run.failed":
-        case "consultation.started":
-        case "consultation.completed":
-        case "workshop.patch.proposed":
-        case "workshop.patch.validated":
-        case "workshop.version.created":
-          refreshCards();
-          refreshEvents();
-          break;
-        case "interaction.queued":
-        case "interaction.running":
-        case "interaction.completed":
-        case "interaction.degraded":
-        case "interaction.failed":
-        case "candidate.decision.recorded":
-        case "candidate.validation.updated":
-          void refreshDailyInteractions();
-          refreshEvents();
-          break;
-        case "workshop.snapshot":
-          refreshCards();
-          refreshCompleteness();
-          refreshReadiness();
-          refreshEvents();
-          void refreshDailyInteractions();
-          break;
-        default:
-          break;
-      }
-    });
+    const teardown = openWorkshopStream(
+      workshopId,
+      (event: WorkshopStreamEvent) => {
+        dispatch({ type: "SET_LAST_EVENT_ID", id: event.event_id });
+        switch (String(event.event_type)) {
+          case "workshop.completeness.updated":
+            refreshCompleteness();
+            refreshCards();
+            break;
+          case "workshop.readiness.updated":
+            refreshReadiness();
+            refreshCards();
+            break;
+          case "workshop.servant.response.completed":
+          case "research.plan.created":
+          case "research.plan.approved":
+          case "research.run.queued":
+          case "research.run.progress":
+          case "research.run.completed":
+          case "research.run.failed":
+          case "consultation.started":
+          case "consultation.completed":
+          case "workshop.patch.proposed":
+          case "workshop.patch.validated":
+          case "workshop.version.created":
+            refreshCards();
+            refreshEvents();
+            break;
+          case "interaction.queued":
+          case "interaction.running":
+          case "interaction.completed":
+          case "interaction.degraded":
+          case "interaction.failed":
+          case "candidate.decision.recorded":
+          case "candidate.validation.updated":
+            void refreshDailyInteractions();
+            refreshEvents();
+            break;
+          case "workshop.snapshot":
+            refreshCards();
+            refreshCompleteness();
+            refreshReadiness();
+            refreshEvents();
+            void refreshDailyInteractions();
+            break;
+          default:
+            break;
+        }
+      },
+      { lastEventId: cardState.lastEventId ?? undefined },
+    );
     return teardown;
-  }, [workshopId, refreshCards, refreshCompleteness, refreshDailyInteractions, refreshEvents, refreshReadiness]);
+  }, [workshopId, refreshCards, refreshCompleteness, refreshDailyInteractions, refreshEvents, refreshReadiness, cardState.lastEventId]);
 
   // Derive the most recent next_question card for the rail
   const nextQuestion =
@@ -856,7 +969,11 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
       if (!workshopId || !workshop || !content || sendLoading || !writeAccess.interactionAllowed || dailyRuntimeState !== "ready") return;
       setSendLoading(true);
       setSendError(null);
+      setMessageReceiptState("accepted");
       try {
+        setMessageReceiptState("processing");
+        await postWorkshopMessage(workshopId, { content });
+
         if (selectedParticipants.length === 0) {
           throw new Error("Choose at least one eligible Persona before submitting.");
         }
@@ -954,10 +1071,15 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
           },
           participants: selectedSnapshots as ParticipantSnapshot[],
         });
+        setMessageReceiptState("succeeded");
         setComposerValue("");
+        refreshCards();
         refreshEvents();
+        refreshCompleteness();
+        refreshReadiness();
         void refreshDailyInteractions();
       } catch (err) {
+        setMessageReceiptState("failed");
         setSendError(err instanceof Error ? err.message : "Failed to send message");
       } finally {
         setSendLoading(false);
@@ -976,8 +1098,11 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
       contextError,
       contextResolutionSessionId,
       resolvedContext,
+      refreshCards,
+      refreshCompleteness,
       refreshDailyInteractions,
       refreshEvents,
+      refreshReadiness,
     ],
   );
 
@@ -1177,13 +1302,36 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
               Loading session cards…
             </div>
           )}
-          <DailyInteractionTimeline
-            interactions={dailyInteractions}
-            onRefresh={refreshDailyInteractions}
-            runtimeMessage={dailyRuntimeMessage}
-            runtimeState={dailyRuntimeState}
-            writeAllowed={writeAccess.interactionAllowed}
-          />
+
+          {/* Canonical Cards list */}
+          <div data-testid="workshop-cards-list" className="space-y-4">
+            {cardState.cards
+              .filter((c) => !["completeness_update", "persona_opinion", "opinion", "debate"].includes(c.card_type))
+              .map((c) => (
+                <WorkshopCardRenderer
+                  key={c.card_id}
+                  card={c}
+                  onContinueDiscussion={(cardId) => {
+                    const targetCard = cardState.cards.find((item) => item.card_id === cardId);
+                    if (targetCard) {
+                      setComposerValue(`Regarding ${targetCard.title || targetCard.card_type}: `);
+                    }
+                  }}
+                />
+              ))}
+          </div>
+
+          {dailyInteractions.length > 0 ? (
+            <DailyInteractionTimeline
+              interactions={dailyInteractions}
+              onRefresh={refreshDailyInteractions}
+              runtimeMessage={dailyRuntimeMessage}
+              runtimeState={dailyRuntimeState}
+              writeAllowed={writeAccess.interactionAllowed}
+            />
+          ) : (
+            <div data-testid="daily-interactions-empty" style={{ display: "none" }} />
+          )}
           {!sessionLoading && governedProposalId ? (
             <ConnectedGovernedProposalCard key={governedProposalId} proposalId={governedProposalId} />
           ) : null}
@@ -1358,6 +1506,141 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
               ))}
             </div>
           )}
+          </div>
+
+          {/* Receipt state indicator */}
+          {messageReceiptState !== "none" && (
+            <div
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-semibold shrink-0",
+                messageReceiptState === "accepted" && "bg-blue-50 text-blue-700 border border-blue-200",
+                messageReceiptState === "processing" && "bg-amber-50 text-amber-700 border border-amber-200 animate-pulse",
+                messageReceiptState === "succeeded" && "bg-green-50 text-green-700 border border-green-200",
+                (messageReceiptState === "degraded" || messageReceiptState === "failed") && "bg-red-50 text-red-700 border border-red-200",
+              )}
+              data-message-receipt={messageReceiptState}
+              data-testid="message-receipt-state"
+            >
+              <span>Receipt: {messageReceiptState}</span>
+            </div>
+          )}
+
+          {/* Workshop Command Shortcuts */}
+          <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-2 shrink-0" data-testid="workshop-command-buttons">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mr-1">Workshop Commands:</span>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs font-medium bg-slate-50 hover:bg-slate-100"
+              data-testid="cmd-research-btn"
+              disabled={composerInputDisabled}
+              onClick={async () => {
+                setSendLoading(true);
+                setMessageReceiptState("accepted");
+                try {
+                  setMessageReceiptState("processing");
+                  await dispatchWorkshopResearchRun(workshopId);
+                  setMessageReceiptState("succeeded");
+                  refreshCards();
+                  refreshEvents();
+                } catch (err) {
+                  setMessageReceiptState("failed");
+                  setSendError(err instanceof Error ? err.message : "Research run failed");
+                } finally {
+                  setSendLoading(false);
+                }
+              }}
+              type="button"
+            >
+              + Research Run
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs font-medium bg-slate-50 hover:bg-slate-100"
+              data-testid="cmd-consult-btn"
+              disabled={composerInputDisabled}
+              onClick={async () => {
+                setSendLoading(true);
+                setMessageReceiptState("accepted");
+                try {
+                  setMessageReceiptState("processing");
+                  await openWorkshopConsultation(workshopId, {
+                    consultation_type: "red_team",
+                    topic: composerValue.trim() || "Red team consultation",
+                    participant_persona_ids: selectedParticipants,
+                  });
+                  setMessageReceiptState("succeeded");
+                  refreshCards();
+                  refreshEvents();
+                } catch (err) {
+                  setMessageReceiptState("failed");
+                  setSendError(err instanceof Error ? err.message : "Consultation failed");
+                } finally {
+                  setSendLoading(false);
+                }
+              }}
+              type="button"
+            >
+              + Consultation
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs font-medium bg-slate-50 hover:bg-slate-100"
+              data-testid="cmd-version-btn"
+              disabled={composerInputDisabled}
+              onClick={async () => {
+                setSendLoading(true);
+                setMessageReceiptState("accepted");
+                try {
+                  setMessageReceiptState("processing");
+                  await createWorkshopVersion(workshopId, {
+                    change_summary: [composerValue.trim() || "Create new version patch"],
+                  });
+                  setMessageReceiptState("succeeded");
+                  refreshCards();
+                  refreshEvents();
+                } catch (err) {
+                  setMessageReceiptState("failed");
+                  setSendError(err instanceof Error ? err.message : "Create version failed");
+                } finally {
+                  setSendLoading(false);
+                }
+              }}
+              type="button"
+            >
+              + Version Patch
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs font-medium bg-slate-50 hover:bg-slate-100 text-slate-700 hover:text-red-700"
+              data-testid="cmd-conclude-btn"
+              disabled={composerInputDisabled}
+              onClick={async () => {
+                setSendLoading(true);
+                setMessageReceiptState("accepted");
+                try {
+                  setMessageReceiptState("processing");
+                  await concludeWorkshop(workshopId, {
+                    notes: composerValue.trim() || "Concluded strategy workshop",
+                  });
+                  setMessageReceiptState("succeeded");
+                  refreshCards();
+                  refreshEvents();
+                  getWorkshop(workshopId).then((ws) => setWorkshop(ws || null));
+                } catch (err) {
+                  setMessageReceiptState("failed");
+                  setSendError(err instanceof Error ? err.message : "Conclude workshop failed");
+                } finally {
+                  setSendLoading(false);
+                }
+              }}
+              type="button"
+            >
+              Conclude Workshop
+            </Button>
           </div>
 
           {/* Composer Input Area */}

@@ -288,4 +288,18 @@ describe("openWorkshopStream", () => {
     cleanup();
     expect(close).toHaveBeenCalled();
   });
+
+  it("passes last_event_id query parameter when lastEventId option is supplied", () => {
+    const close = vi.fn();
+    const source = { close, onmessage: null };
+    const EventSourceMock = vi.fn().mockReturnValue(source);
+    vi.stubGlobal("EventSource", EventSourceMock);
+
+    openWorkshopStream("ws-001", undefined, { lastEventId: "evt-099" });
+
+    expect(EventSourceMock).toHaveBeenCalledWith(
+      "/bff/agora/workshops/ws-001/stream?last_event_id=evt-099",
+      { withCredentials: true },
+    );
+  });
 });

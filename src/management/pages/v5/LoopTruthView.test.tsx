@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import React from "react";
 import { LoopTruthView } from "./LoopTruthView";
@@ -117,5 +117,49 @@ describe("LoopTruthView Component", () => {
     expect(
       screen.getByText("Registry metadata identifies the loop but does not prove runtime liveness.")
     ).toBeInTheDocument();
+  });
+
+  it("renders explicit error banner and retry button when BFF fails", () => {
+    const onRefresh = vi.fn();
+    render(
+      <LoopTruthView
+        loops={[]}
+        error={new Error("BFF 500 Connection Failed")}
+        onRefresh={onRefresh}
+      />
+    );
+
+    expect(
+      screen.getByText("Failed to load Twelve Loop health truth from BFF")
+    ).toBeInTheDocument();
+    expect(screen.getByText("BFF 500 Connection Failed")).toBeInTheDocument();
+    expect(screen.getByText("BFF Fetch Error")).toBeInTheDocument();
+
+    const retryBtn = screen.getByRole("button", { name: "Retry" });
+    expect(retryBtn).toBeInTheDocument();
+    retryBtn.click();
+    expect(onRefresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders 12 canonical rows when 12 loop items are provided", () => {
+    const twelveLoops: LoopHealthEntryDTO[] = Array.from({ length: 12 }, (_, i) => ({
+      id: `loop_${i + 1}`,
+      loop_id: `loop_${i + 1}`,
+      classification: "canonical",
+      name: `Loop ${i + 1}`,
+      current_maturity: "api-only",
+      target_maturity: "proven-live",
+      read_model: "loop_health",
+      controller_health: {
+        status: "unobserved",
+        source: "registry_metadata",
+      },
+    }));
+
+    render(<LoopTruthView loops={twelveLoops} />);
+
+    expect(screen.getByText("12")).toBeInTheDocument();
+    expect(screen.getByText("Loop 1")).toBeInTheDocument();
+    expect(screen.getByText("Loop 12")).toBeInTheDocument();
   });
 });

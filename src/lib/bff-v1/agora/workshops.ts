@@ -339,9 +339,11 @@ export async function concludeWorkshop(
 export function openWorkshopStream(
   workshopId: string,
   onEvent?: (event: WorkshopStreamEvent) => void,
+  options?: { lastEventId?: string },
 ): () => void {
+  const query = options?.lastEventId ? `?last_event_id=${encodeURIComponent(options.lastEventId)}` : "";
   const source = new EventSource(
-    `/bff/agora/workshops/${encodeURIComponent(workshopId)}/stream`,
+    `/bff/agora/workshops/${encodeURIComponent(workshopId)}/stream${query}`,
     { withCredentials: true },
   );
   if (onEvent) {

@@ -82,15 +82,15 @@ export const LoopsPage = () => {
   const data = useAsync(() => v5.loops.list(kind), [kind]);
 
   const loopHealthData = useV5Live<LoopHealthEntryDTO[]>(async () => {
-    try {
-      const res = await bffFetch<LoopHealthListEnvelope>({
-        method: "GET",
-        path: paths.loopHealthList(),
-      });
-      return res?.data || res?.items || [];
-    } catch {
-      return [];
+    const res = await bffFetch<LoopHealthListEnvelope>({
+      method: "GET",
+      path: paths.loopHealthList(),
+    });
+    const items = res?.data || res?.items;
+    if (!res || !items) {
+      throw new Error("BFF returned invalid or missing loop health data");
     }
+    return items;
   });
 
   return (
@@ -127,6 +127,7 @@ export const LoopsPage = () => {
           <LoopTruthView
             loops={loopHealthData.data || []}
             loading={loopHealthData.loading}
+            error={loopHealthData.error}
             onRefresh={loopHealthData.refresh}
           />
         )}
