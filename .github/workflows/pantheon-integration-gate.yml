@@ -741,6 +741,10 @@ jobs:
 
       - name: Resolve exact live BFF release identity
         id: release_identity
+        # A pull request has not produced a hosted pair.  Component admission
+        # therefore validates source, contract, and local behavior only; the
+        # exact FE/BFF identity is bound by the post-merge release transaction.
+        if: github.event_name != 'pull_request'
         run: |
           set -euo pipefail
           version_file="$PANTHEON_AUDIT_OUT_DIR/bff-version.json"
@@ -838,6 +842,7 @@ jobs:
 
       - name: Deploy controller regression harness
         id: deploy_controller
+        if: github.event_name != 'pull_request'
         run: |
           set -euo pipefail
           npm run test:deploy-release 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/deploy-controller-regression.log"
@@ -861,6 +866,7 @@ jobs:
 
       - name: Build bounded write-proof release profile
         id: build_write_proof
+        if: github.event_name != 'pull_request'
         continue-on-error: true
         env:
           VITE_BFF_MODE: live
@@ -878,6 +884,7 @@ jobs:
 
       - name: Build persistent operator-live release profile
         id: build_operator_live
+        if: github.event_name != 'pull_request'
         continue-on-error: true
         env:
           VITE_BFF_MODE: live
@@ -1067,9 +1074,13 @@ jobs:
         continue-on-error: true
         run: |
           set -o pipefail
+          preview_root="dist"
+          if [[ "$GITHUB_EVENT_NAME" != "pull_request" ]]; then
+            preview_root=".release-candidate/dist"
+          fi
           PANTHEON_CANDIDATE_PORT=4173 \
           PANTHEON_CANDIDATE_SERVER_INFO="$PANTHEON_AUDIT_OUT_DIR/pr-frontend-server.json" \
-          node scripts/serve-release-candidate.mjs .release-candidate/dist > "$PANTHEON_AUDIT_OUT_DIR/pr-frontend-server.log" 2>&1 &
+          node scripts/serve-release-candidate.mjs "$preview_root" > "$PANTHEON_AUDIT_OUT_DIR/pr-frontend-server.log" 2>&1 &
           echo "$!" > "$PANTHEON_AUDIT_OUT_DIR/pr-frontend-server.pid"
           for i in {1..60}; do
             if curl -fsS "$PANTHEON_FE_BASE_URL/" >/dev/null; then
@@ -1131,7 +1142,7 @@ jobs:
         id: browser_probe
         continue-on-error: true
         env:
-          PANTHEON_CANDIDATE_DIR: .release-candidate/dist
+          PANTHEON_CANDIDATE_DIR: ${{ github.event_name == 'pull_request' && 'dist' || '.release-candidate/dist' }}
           PANTHEON_EXPECTED_FE_SHA: ${{ env.PANTHEON_FRONTEND_SHA }}
           PANTHEON_PROBE_RELEASE_STRICT: "1"
           PANTHEON_PROBE_JSON_OUT: ${{ env.PANTHEON_AUDIT_OUT_DIR }}/hosted-browser-bff-probe.json
