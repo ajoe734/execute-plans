@@ -106,31 +106,37 @@ function gate1For(
 }
 
 describe("release Gate 1 deployment hard gates", () => {
-  it("records all available candidate and identity hard gates", () => {
+  it("defers hosted identity and candidate binding for a pull request", () => {
     const gate = gate1For();
 
-    for (const key of hardGateKeys) {
+    for (const key of ["fixture_e2e"] as const) {
       expect(
         gate.find((check) => check.label === hardGateLabels[key])?.status,
       ).toBe("pass");
     }
-    expect(
-      gate.filter((check) =>
-        hardGateKeys.some((key) => check.evidence.endsWith(`${key}.json`)),
-      ),
-    ).toHaveLength(hardGateKeys.length);
+    for (const key of ["release_identity", "deploy_controller", "candidate", "release_identity_final"] as const) {
+      expect(
+        gate.find((check) => check.label === hardGateLabels[key])?.status,
+      ).toBe("skip");
+    }
   });
 
-  it.each(hardGateKeys)("fails closed when %s fails", (key) => {
-    const gate = gate1For({ [key]: { outcome: "failure" } });
+  it.each(hardGateKeys)("fails closed when %s fails during a release", (key) => {
+    const gate = gate1For(
+      { [key]: { outcome: "failure" } },
+      { GITHUB_EVENT_NAME: "push", GITHUB_REF: "refs/heads/dev" },
+    );
 
     expect(
       gate.find((check) => check.label === hardGateLabels[key])?.status,
     ).toBe("fail");
   });
 
-  it.each(hardGateKeys)("fails closed when %s is absent", (key) => {
-    const gate = gate1For({ [key]: undefined });
+  it.each(hardGateKeys)("fails closed when %s is absent during a release", (key) => {
+    const gate = gate1For(
+      { [key]: undefined },
+      { GITHUB_EVENT_NAME: "push", GITHUB_REF: "refs/heads/dev" },
+    );
     expect(
       gate.find((check) => check.label === hardGateLabels[key]),
     ).toMatchObject({
@@ -139,8 +145,11 @@ describe("release Gate 1 deployment hard gates", () => {
     });
   });
 
-  it.each(hardGateKeys)("fails closed when %s is skipped", (key) => {
-    const gate = gate1For({ [key]: { outcome: "skipped" } });
+  it.each(hardGateKeys)("fails closed when %s is skipped during a release", (key) => {
+    const gate = gate1For(
+      { [key]: { outcome: "skipped" } },
+      { GITHUB_EVENT_NAME: "push", GITHUB_REF: "refs/heads/dev" },
+    );
     expect(
       gate.find((check) => check.label === hardGateLabels[key]),
     ).toMatchObject({

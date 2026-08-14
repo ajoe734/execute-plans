@@ -741,6 +741,10 @@ jobs:
 
       - name: Resolve exact live BFF release identity
         id: release_identity
+        # A pull request has not produced a hosted pair.  Component admission
+        # therefore validates source, contract, and local behavior only; the
+        # exact FE/BFF identity is bound by the post-merge release transaction.
+        if: github.event_name != 'pull_request'
         run: |
           set -euo pipefail
           version_file="$PANTHEON_AUDIT_OUT_DIR/bff-version.json"
@@ -838,6 +842,7 @@ jobs:
 
       - name: Deploy controller regression harness
         id: deploy_controller
+        if: github.event_name != 'pull_request'
         run: |
           set -euo pipefail
           npm run test:deploy-release 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/deploy-controller-regression.log"
@@ -861,6 +866,7 @@ jobs:
 
       - name: Build bounded write-proof release profile
         id: build_write_proof
+        if: github.event_name != 'pull_request'
         continue-on-error: true
         env:
           VITE_BFF_MODE: live
@@ -878,6 +884,7 @@ jobs:
 
       - name: Build persistent operator-live release profile
         id: build_operator_live
+        if: github.event_name != 'pull_request'
         continue-on-error: true
         env:
           VITE_BFF_MODE: live
