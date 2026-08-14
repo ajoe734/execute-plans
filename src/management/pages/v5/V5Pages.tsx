@@ -14,7 +14,7 @@ import { useT } from "@/platform/hooks";
 import type { ControlRoomSummary, LoopRun } from "@/lib/v5";
 import type { LoopKind } from "@/lib/v5/enums";
 import { useV5Live } from "./useV5Live";
-import { LoopTruthView } from "./LoopTruthView";
+import { LoopTruthView } from "@/components/management/LoopTruthView";
 import type { LoopHealthListEnvelope, LoopHealthEntryDTO } from "@/lib/bff-v1/loopTruthTypes";
 
 function useAsync<T>(load: () => Promise<T>, deps: unknown[] = []): T | undefined {
