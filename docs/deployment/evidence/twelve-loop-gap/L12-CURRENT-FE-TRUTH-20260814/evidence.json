@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "task_id": "L12-CURRENT-FE-TRUTH-20260814",
+  "program_id": "pantheon-l12-current-clean-closure-20260814",
+  "owner": "Antigravity",
+  "reviewer": "Codex",
+  "repository": "ajoe734/execute-plans",
+  "target_branch": "dev",
+  "head_branch": "task/L12-CURRENT-FE-TRUTH-20260814",
+  "pr_url": "https://github.com/ajoe734/execute-plans/pull/572",
+  "pr_number": 572,
+  "prior_head_sha": "f637286c4cbfea749f206beeb96fdb3dba947b4a",
+  "reviewed_artifacts": [
+    "src/components/management/LoopTruthView.tsx",
+    "src/components/management/LoopTruthView.test.tsx"
+  ],
+  "validation_results": {
+    "vitest": {
+      "command": "npm test src/components/management/LoopTruthView.test.tsx",
+      "status": "passed",
+      "tests_total": 4,
+      "tests_passed": 4,
+      "details": [
+        "renders canonical count and loop items correctly",
+        "visually distinguishes live proven loops from degraded loops",
+        "renders explicit error banner and retry button when BFF fails without seed fallback",
+        "renders exactly 12 canonical rows separately from composite overlays"
+      ]
+    },
+    "typecheck": {
+      "command": "npx tsc --noEmit",
+      "status": "passed"
+    },
+    "production_build": {
+      "command": "VITE_GCP_IDENTITY_API_KEY=*** VITE_GCP_IDENTITY_PROJECT_ID=pantheon-lupin-dev-20260719 VITE_GCP_IDENTITY_AUTH_DOMAIN=pantheon-lupin-dev-20260719.firebaseapp.com VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build",
+      "status": "passed"
+    }
+  },
+  "acceptance_proof": {
+    "canonical_count_separated": "LoopTruthView displays canonical count (12) separately from composite overlays (1)",
+    "non_live_count_inclusive": "nonLiveCount includes degraded, unobserved, and not-implemented canonical entries",
+    "no_seed_fallback": "BFF fetch errors display explicit error banner with retry button and never fall back to seed data"
+  }
+}
