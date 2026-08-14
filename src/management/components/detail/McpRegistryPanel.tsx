@@ -1,43 +1,17 @@
-// MCP server "registry" editor stub — env grants + region pinning preview.
-import { useState } from "react";
+// MCP server registry readback; env-grant writes stay disabled until command receipts exist.
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { toast } from "sonner";
 import type { McpServer } from "@/lib/bff/types";
-import { bff } from "@/lib/bff-v1";
-import { runActionSafe } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { envBadge } from "@/management/pages/CapabilitiesLists";
 import { ShieldCheck } from "lucide-react";
+import { NonProductionActionButton } from "@/management/components/NonProductionActionButton";
 
 const ALL_ENVS: ("research" | "paper" | "live")[] = ["research", "paper", "live"];
 
 export const McpRegistryPanel = ({ server }: { server: McpServer }) => {
   const t = useT();
-  const [grants, setGrants] = useState<Set<string>>(new Set(server.envAllowed));
-  const [dirty, setDirty] = useState(false);
-
-  const toggle = (env: string) => {
-    setGrants((g) => {
-      const next = new Set(g);
-      if (next.has(env)) next.delete(env);
-      else next.add(env);
-      return next;
-    });
-    setDirty(true);
-  };
-
-  const save = async () => {
-    await runActionSafe({
-      kind: "McpServer",
-      id: server.id,
-      action: "update_env_grants",
-      memo: `envs=${Array.from(grants).join(",")}`,
-    });
-    toast.success(t("mcp.registry.saved"));
-    setDirty(false);
-  };
+  const grants = new Set(server.envAllowed);
 
   return (
     <div className="space-y-4">
@@ -53,15 +27,15 @@ export const McpRegistryPanel = ({ server }: { server: McpServer }) => {
           {ALL_ENVS.map((e) => {
             const on = grants.has(e);
             return (
-              <button
+              <Badge
                 key={e}
-                onClick={() => toggle(e)}
-                className={`px-3 py-1.5 rounded-md border text-xs uppercase tracking-wider transition ${
-                  on ? `${envBadge(e)} border-current` : "text-muted-foreground border-border hover:border-foreground/30"
+                variant="outline"
+                className={`px-3 py-1.5 text-xs uppercase tracking-wider ${
+                  on ? `${envBadge(e)} border-current` : "text-muted-foreground border-border"
                 }`}
               >
                 {on ? "✓ " : ""}{e}
-              </button>
+              </Badge>
             );
           })}
         </div>
@@ -72,10 +46,7 @@ export const McpRegistryPanel = ({ server }: { server: McpServer }) => {
           </div>
         )}
         <div className="flex justify-end gap-2 pt-2">
-          <Button size="sm" variant="outline" onClick={() => { setGrants(new Set(server.envAllowed)); setDirty(false); }}>
-            {t("actions.reset")}
-          </Button>
-          <Button size="sm" onClick={save} disabled={!dirty}>{t("actions.save")}</Button>
+          <NonProductionActionButton size="sm">{t("actions.save")}</NonProductionActionButton>
         </div>
       </Card>
     </div>

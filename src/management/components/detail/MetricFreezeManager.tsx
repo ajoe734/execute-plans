@@ -9,6 +9,7 @@ import { PermissionAwareButton } from "@/platform/components/PermissionAwareButt
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
 import { useT } from "@/platform/hooks";
 import { toast } from "sonner";
+import { commandReceiptDescription } from "@/lib/bff-v1/commandReceipt";
 
 export const MetricFreezeManager = ({ rebalanceId }: { rebalanceId: string }) => {
   const t = useT();
@@ -48,7 +49,9 @@ export const MetricFreezeManager = ({ rebalanceId }: { rebalanceId: string }) =>
             const r = await mutations.freezeMetric(rebalanceId, pending.metric, !pending.frozen, memo);
             if (!r.ok) { toast.error(t("toast.illegalTransition")); return; }
             setRows((rs) => rs.map((x) => x.id === pending.id ? { ...x, frozen: !pending.frozen, frozenBy: "ops", frozenAt: new Date().toISOString() } : x));
-            toast.success(t("toast.actionQueued"));
+            toast.success(t("toast.actionQueued"), {
+              description: commandReceiptDescription(r, { fallback: `Rebalance ${rebalanceId} · metric ${pending.metric}` }),
+            });
           }}
         />
       )}

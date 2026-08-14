@@ -2,13 +2,12 @@
 import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { bff } from "@/lib/bff-v1";
-import { toast } from "sonner";
 import type { EvolutionCandidate, EvolutionRun } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { safeDateTime } from "@/lib/utils";
+import { NonProductionActionButton } from "@/management/components/NonProductionActionButton";
 
 export const EvolutionRunsPanel = ({ programId, mode = "all" }: { programId: string; mode?: "all" | "runs" | "candidates" }) => {
   const t = useT();
@@ -67,7 +66,7 @@ export const EvolutionRunsPanel = ({ programId, mode = "all" }: { programId: str
               : c.state === "discarded" ? "border-status-failed/40 text-status-failed"
               : "border-border text-muted-foreground"}`}>{c.state}</Badge>
             {c.state === "scored" && (
-              <Button size="sm" variant="outline" onClick={() => toast.success(t("evolution.runs.promoted"))}>{t("evolution.runs.promote")}</Button>
+              <NonProductionActionButton size="sm" variant="outline">{t("evolution.runs.promote")}</NonProductionActionButton>
             )}
           </div>
         ))}
