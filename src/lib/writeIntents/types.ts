@@ -29,7 +29,7 @@ export const PERSONA_ARCHETYPES = [
 ] as const;
 export type PersonaArchetype = (typeof PERSONA_ARCHETYPES)[number];
 
-export const PERSONA_INITIAL_MODES = ["shadow", "suspended"] as const;
+export const PERSONA_INITIAL_MODES = ["paper"] as const;
 export type PersonaInitialMode = (typeof PERSONA_INITIAL_MODES)[number];
 
 export interface BaseCreateInput {
