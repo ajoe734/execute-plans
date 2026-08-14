@@ -1840,13 +1840,15 @@ function buildGate7(previousGates) {
     ),
     makeCheck(
       "Backend SHA + frontend SHA + BFF URL recorded.",
-      shaRecorded ? "pass" : "missing",
+      shaRecorded ? "pass" : isPullRequestContext() ? "skip" : "missing",
       {
-        owner: shaRecorded ? "" : GATE_OWNERS[7],
+        owner: shaRecorded || isPullRequestContext() ? "" : GATE_OWNERS[7],
         evidence: RUN_URL || ROOT,
         note: shaRecorded
           ? "release identifiers present"
-          : "one or more release identifiers missing",
+          : isPullRequestContext()
+            ? "bound by the post-merge release transaction"
+            : "one or more release identifiers missing",
       },
     ),
   ];

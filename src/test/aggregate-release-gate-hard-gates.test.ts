@@ -56,8 +56,10 @@ const hardGateLabels = {
 } as const;
 const candidateFinalLabel =
   "Immutable release candidate passed final verification.";
+const releaseIdentifiersLabel =
+  "Backend SHA + frontend SHA + BFF URL recorded.";
 
-function gate1For(
+function gatesFor(
   overrides: Record<string, { outcome: string } | undefined> = {},
   envOverrides: Record<string, string> = {},
 ) {
@@ -98,14 +100,45 @@ function gate1For(
   );
 
   expect(result.error).toBeUndefined();
-  return (
-    JSON.parse(readFileSync(jsonOut, "utf8")) as {
-      gates: Record<string, GateCheck[]>;
-    }
-  ).gates["1"];
+  return JSON.parse(readFileSync(jsonOut, "utf8")) as {
+    gates: Record<string, GateCheck[]>;
+  };
+}
+
+function gate1For(
+  overrides: Record<string, { outcome: string } | undefined> = {},
+  envOverrides: Record<string, string> = {},
+) {
+  return gatesFor(overrides, envOverrides).gates["1"];
+}
+
+function gate7For(envOverrides: Record<string, string> = {}) {
+  return gatesFor({}, envOverrides).gates["7"];
 }
 
 describe("release Gate 1 deployment hard gates", () => {
+  it("defers release identifiers for a pull request", () => {
+    const gate = gate7For();
+
+    expect(
+      gate.find((check) => check.label === releaseIdentifiersLabel),
+    ).toMatchObject({
+      status: "skip",
+      note: "bound by the post-merge release transaction",
+    });
+  });
+
+  it("requires release identifiers on a dev release", () => {
+    const gate = gate7For({
+      GITHUB_EVENT_NAME: "push",
+      GITHUB_REF: "refs/heads/dev",
+    });
+
+    expect(
+      gate.find((check) => check.label === releaseIdentifiersLabel),
+    ).toMatchObject({ status: "missing" });
+  });
+
   it("defers hosted identity and candidate binding for a pull request", () => {
     const gate = gate1For();
 
