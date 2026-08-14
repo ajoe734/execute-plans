@@ -1,14 +1,16 @@
 // Floating, draggable, 8-handle-resizable Management AI panel.
 // Mounted once in ManagementLayout; controlled via useAgentPanel().
 
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { Brain, Minus, Maximize2, Minimize2, X, AlertTriangle } from "lucide-react";
 import { agentPanel, normalPanelMaxSize, PANEL_EDGE, PANEL_MIN_H, PANEL_MIN_W, useAgentPanel, type Corner } from "./useAgentPanel";
-import { AgentPanelBody } from "./AgentPanelBody";
 
 const SNAP_RADIUS = 80;
+const AgentPanelBody = lazy(() =>
+  import("./AgentPanelBody").then((module) => ({ default: module.AgentPanelBody })),
+);
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 
@@ -218,7 +220,15 @@ export function FloatingAgentPanel() {
           </Button>
         </div>
       </div>
-      <AgentPanelBody />
+      <Suspense
+        fallback={
+          <div className="flex flex-1 items-center justify-center p-4 text-sm text-muted-foreground" role="status">
+            Loading Management AI...
+          </div>
+        }
+      >
+        <AgentPanelBody />
+      </Suspense>
     </div>,
     document.body,
   );

@@ -31,14 +31,14 @@ Pantheon dev frontend delivery is no longer Lovable-first. Do not use Lovable
 publish state as the dev frontend host or release truth. Build and validate this
 repo against the Pantheon-owned dev hosts:
 
-- FE: `https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io`
-- BFF: `https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io`
+- FE: `https://pantheon-lupin-dev-fe.35.201.204.12.sslip.io`
+- BFF: `https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io`
 
 Dev builds should use:
 
 ```sh
 VITE_BFF_MODE=live
-VITE_BFF_BASE_URL=https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io
+VITE_BFF_BASE_URL=https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io
 VITE_BFF_FALLBACK=strict
 VITE_BFF_REAL_WRITES=false
 ```
@@ -52,7 +52,11 @@ The dev FE host is a Caddy static site on the Pantheon dev VM:
 - release store: `/var/www/pantheon-dev-fe-releases`
 - deploy workflow: `.github/workflows/pantheon-dev-fe-deploy.yml`
 - deploy script: `scripts/deploy-dev-vm.sh`
-- deployment evidence: `https://pantheon-lupin-dev-fe.35.201.239.38.sslip.io/deployment.json`
+- deployment evidence: `https://pantheon-lupin-dev-fe.35.201.204.12.sslip.io/deployment.json`
+
+The prior GCP project `pantheon-benjamin-20260528` and IP `35.201.239.38`
+are retired from active dev routing because the project is suspended. The
+replacement dev VM is in project `pantheon-lupin-dev-20260719`.
 
 The deployment workflow runs on the VM self-hosted GitHub runner with labels
 `self-hosted`, `Linux`, `X64`, `pantheon-dev-vm`, and
@@ -83,62 +87,24 @@ If a local checkout lacks `origin/dev`, create or request the one-time
 frontend feature work. Do not keep opening routine dev PRs to `main` just
 because this repo used to be Lovable-hosted.
 
-## Management AI
+## Management AI and development tooling
 
-Management AI SA/SD generation is owned by Pantheon BFF assistant routes, not by
-Lovable:
+The frontend is a product client. Its Management AI integration is limited to
+the conversation and provider-auth surfaces served by Pantheon BFF, including
+`POST /bff/management/nl/ask`, `GET /bff/assistant/mode`, and provider reauth
+routes. The browser must not call the OpenClaw adapter directly and must not
+write repository files.
 
-- `GET /bff/assistant/mode`
-- `GET /bff/assistant/orchestrator/status`
-- `POST /bff/assistant/dev-docs/generate`
-- `POST /bff/assistant/dev-bridge/task-packet`
-- `POST /bff/assistant/repair-worktrees/prepare`
+Supervisor operations, canonical task state, task packets, SA/SD generation,
+worktree preparation, source changes, and development credentials are local
+development tooling. They live under Pantheon's `.orchestrator/` and local CLI
+commands, not in the product BFF or this frontend. Do not add product routes,
+frontend clients, modes, status panels, or deployment dependencies for
+`dev-docs`, `dev-bridge`, `orchestrator/status`, or repair worktrees.
 
-`/bff/assistant/tools/*` is not the VM file-system access surface. It is the
-governed Pantheon action surface for BFF-owned preview, validation, and execute
-contracts. Do not use it as proof that Management AI can read, write, search, or
-debug VM files.
-
-Provider readiness alone is not enough. Before claiming Management AI can
-read/write VM files or coordinate debugging through OpenClaw, verify
-`/bff/assistant/mode` reports `kernel_enabled: true` and that control mode is
-activatable by an authorized operator/admin session. If provider readiness is
-ready but kernel is disabled, fix the dev BFF configuration in `pantheon`; do
-not patch around it in frontend code.
-
-Supervisor is the queue/drain process, not a worker identity. SA/SD task
-packets emitted by the frontend must use dispatchable worker names such as
-`Codex` and `Claude`; do not set `proposedReviewer: "Supervisor"` or similar
-non-agent values.
-
-OpenClaw-backed VM inspection/debugging is reached through Pantheon BFF
-conversation routes, primarily `POST /bff/management/nl/ask`, with the BFF
-calling the OpenClaw gateway adapter. The frontend must not call the OpenClaw
-adapter directly and must not write files from the browser.
-
-For write-capable repair, the request must run under active `kernel_repair` and
-the frontend must call `prepareAssistantRepairWorktree` /
-`POST /bff/assistant/repair-worktrees/prepare` before sending the chat turn.
-Use `repoKey: execute-plans` and merge target `dev` for frontend work; use
-`repoKey: pantheon` and merge target `dev` for backend/BFF repair. Use
-`execute-plans` merge target `main` only when the operator explicitly requests a
-stable/promotion cut. The
-subsequent `POST /bff/management/nl/ask` request must include the returned
-`openclaw.repair` metadata:
-
-- `repo_key`
-- `task_id`
-- `task_worktree`
-- `declared_scope`
-- `expected_branch`
-- `remote`
-- `merge_target`
-
-The repair worktree must already exist under the backend-configured repair root,
-be clean, be checked out on `expected_branch`, and be limited to repo-relative
-`declared_scope` entries. Do not use `.` as a blanket write scope. If the
-prepare route fails, the UI must fail closed and must not ask Management AI to
-perform VM writes in that turn.
+`kernel_debug` is a diagnostic conversation mode only. Repository changes use a
+normal local task worktree and repository PR flow; they are never initiated by a
+browser control-mode action.
 
 ## Repository Discipline
 

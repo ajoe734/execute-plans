@@ -420,6 +420,12 @@ function auditEntryFromResponse(value: unknown): AuditEntry {
 function headersFor(sourceMode: SourceMode, suffix: string): Record<string, string> {
   const correlationId = seededCorrelationId(`f16-${suffix}`);
   return mutationAuthHeaders({
+    // F16 owns a loopback-only HTTP/SSE harness. Do not let ambient hosted-gate
+    // variables reclassify this isolated request boundary as an external BFF.
+    env: {
+      PANTHEON_BROWSER_BFF_BASE_URL: "http://127.0.0.1",
+      PANTHEON_FE_BASE_URL: "http://127.0.0.1",
+    },
     extra: {
       "Idempotency-Key": seededIdempotencyKey("strategies", `f16-${suffix}`),
       "X-Correlation-Id": correlationId,
