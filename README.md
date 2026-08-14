@@ -271,8 +271,12 @@ npm run e2e                  # Playwright 全套
 npm run gate:integration     # 全部串起來
 ```
 
-CI workflow: `.github/workflows/pantheon-integration-gate.yml`（PR、`dev`/`main`
-push、`workflow_dispatch`；需設定 repo secret `PANTHEON_BFF_SMOKE_BEARER_TOKEN`；
+PR 的 component merge gate 是 `.github/workflows/branch-ci.yml`：它只執行
+local unit、contract、typecheck、build 與 review 所需檢查。FE/BFF exact-pair
+release gate 是 `.github/workflows/pantheon-integration-gate.yml`（`dev`/`main`
+push、`workflow_dispatch`），並由部署後的 hosted acceptance 驗證交付。它不會
+因單一 component PR 而執行。release gate 需設定 repo secret
+`PANTHEON_BFF_SMOKE_BEARER_TOKEN`；
 完整 RBAC / two-man race 證據需再設定 `PANTHEON_BFF_RBAC_TOKENS_JSON` 或各角色 token
 secret，以及 `PANTHEON_BFF_OPERATOR_A_TOKEN` / `PANTHEON_BFF_OPERATOR_B_TOKEN`；
 `PANTHEON_OLD_BFF_URL` 應對齊歷史 BFF URL `https://pantheon-dev-bff.35.236.178.81.sslip.io`）。

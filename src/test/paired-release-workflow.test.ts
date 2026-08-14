@@ -15,6 +15,10 @@ const watchdogWorkflow = readFileSync(
   resolve(root, ".github/workflows/pantheon-proof-watchdog.yml"),
   "utf8",
 );
+const branchWorkflow = readFileSync(
+  resolve(root, ".github/workflows/branch-ci.yml"),
+  "utf8",
+);
 
 describe("paired Pantheon release workflow", () => {
   it("builds one authenticated three-profile set while normal gates consume read-only", () => {
@@ -253,12 +257,11 @@ describe("paired Pantheon release workflow", () => {
     const authorizedStart = integrationWorkflow.indexOf(
       "  authorized-write-proof:",
     );
-    const commentStart = integrationWorkflow.indexOf("  pr-comment:");
     const ordinary = integrationWorkflow.slice(
       integrationStart,
       authorizedStart,
     );
-    const authorized = integrationWorkflow.slice(authorizedStart, commentStart);
+    const authorized = integrationWorkflow.slice(authorizedStart);
 
     expect(ordinary).toContain('PANTHEON_PINT_HOSTED_PROBE: "false"');
     expect(ordinary).toContain(
@@ -337,7 +340,6 @@ describe("paired Pantheon release workflow", () => {
     );
     const authorized = integrationWorkflow.slice(
       integrationWorkflow.indexOf("  authorized-write-proof:"),
-      integrationWorkflow.indexOf("  pr-comment:"),
     );
     expect(authorization).toContain(
       'String(process.env.GITHUB_RUN_ATTEMPT || "") !== "1"',
@@ -587,14 +589,13 @@ describe("paired Pantheon release workflow", () => {
     );
   });
 
-  it("isolates PR comment mutation from push and manual integration permissions", () => {
+  it("keeps hosted release validation out of the component PR gate", () => {
     const integrationStart = integrationWorkflow.indexOf("  integration-gate:");
-    const commentStart = integrationWorkflow.indexOf("  pr-comment:");
-    const integration = integrationWorkflow.slice(
-      integrationStart,
-      commentStart,
+    const integration = integrationWorkflow.slice(integrationStart);
+    const triggers = integrationWorkflow.slice(
+      integrationWorkflow.indexOf("on:"),
+      integrationWorkflow.indexOf("permissions:"),
     );
-    const comment = integrationWorkflow.slice(commentStart);
 
     expect(
       integrationWorkflow.slice(0, integrationWorkflow.indexOf("jobs:")),
@@ -602,9 +603,12 @@ describe("paired Pantheon release workflow", () => {
     expect(integration).toContain("actions: read");
     expect(integration).not.toContain("issues: write");
     expect(integration).not.toContain("pull-requests: write");
-    expect(comment).toContain("github.event_name == 'pull_request'");
-    expect(comment).toContain("issues: write");
-    expect(comment).toContain("pull-requests: write");
-    expect(comment).toContain("actions/download-artifact@v4");
+    expect(triggers).not.toContain("pull_request:");
+    expect(branchWorkflow).toContain("  component-merge:");
+    expect(branchWorkflow).toContain("name: Changed component tests");
+    expect(branchWorkflow).toContain("npx vitest related --run");
+    expect(branchWorkflow).toContain("name: Checkout Pantheon contract bundle");
+    expect(branchWorkflow).toContain("PANTHEON_CONTRACT_ROOT: pantheon-contract");
+    expect(branchWorkflow).toContain("run: npm run test:contract");
   });
 });
