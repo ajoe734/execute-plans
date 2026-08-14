@@ -1,8 +1,7 @@
 name: Pantheon FE-BFF Integration Gate
-run-name: ${{ inputs.proof_correlation_id && format('PINT proof {0}', inputs.proof_correlation_id) || inputs.release_candidate_id && format('Release candidate {0}', inputs.release_candidate_id) || github.event.pull_request.title || github.event.head_commit.message || github.workflow }}
+run-name: ${{ inputs.proof_correlation_id && format('PINT proof {0}', inputs.proof_correlation_id) || inputs.release_candidate_id && format('Release candidate {0}', inputs.release_candidate_id) || github.event.head_commit.message || github.workflow }}
 
 on:
-  pull_request:
   push:
     branches:
       - dev
@@ -963,8 +962,8 @@ jobs:
         continue-on-error: true
         timeout-minutes: 8
         env:
-          PANTHEON_BFF_ROUTE_PROBE_ATTEMPTS: ${{ github.event_name == 'pull_request' && '1' || '3' }}
-          PANTHEON_BFF_ROUTE_PROBE_TIMEOUT_MS: ${{ github.event_name == 'pull_request' && '8000' || '25000' }}
+          PANTHEON_BFF_ROUTE_PROBE_ATTEMPTS: "3"
+          PANTHEON_BFF_ROUTE_PROBE_TIMEOUT_MS: "25000"
         run: |
           set -o pipefail
           node scripts/probe-bff-routes.mjs --anonymous 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/bff-route-probe-anonymous.log"
@@ -1784,57 +1783,3 @@ jobs:
           include-hidden-files: true
           path: |
             .lovable/audits/authorized-write-proof
-
-  pr-comment:
-    name: Publish PR-only release gate comment
-    needs: integration-gate
-    if: always() && github.event_name == 'pull_request'
-    timeout-minutes: 10
-    permissions:
-      contents: read
-      actions: read
-      issues: write
-      pull-requests: write
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download release gate evidence
-        id: evidence
-        continue-on-error: true
-        uses: actions/download-artifact@v4
-        with:
-          name: pantheon-integration-evidence-attempt-${{ github.run_attempt }}
-          path: pantheon-pr-comment-evidence
-
-      - name: Comment release gate on PR
-        uses: actions/github-script@v7
-        env:
-          SUMMARY_PATH: pantheon-pr-comment-evidence/pantheon-audits/current-run/release-gate-summary.md
-        with:
-          script: |
-            const fs = require('fs');
-            const marker = '<!-- pantheon-release-gate-summary -->';
-            const summaryPath = process.env.SUMMARY_PATH;
-            const fallback = `${marker}\n# Pantheon FE-BFF Release Gate Summary\n\nRelease gate summary was not generated. Check the workflow logs.`;
-            const summary = summaryPath && fs.existsSync(summaryPath)
-              ? fs.readFileSync(summaryPath, 'utf8')
-              : fallback;
-            const body = summary.length > 60000
-              ? `${summary.slice(0, 59500)}\n\n...truncated; see uploaded pantheon-integration-evidence artifact.`
-              : summary;
-            const comments = await github.rest.issues.listComments({
-              owner: context.repo.owner, repo: context.repo.repo,
-              issue_number: context.issue.number, per_page: 100,
-            });
-            const existing = comments.data.find((comment) =>
-              comment.user?.type === 'Bot' && comment.body?.includes(marker));
-            if (existing) {
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner, repo: context.repo.repo,
-                comment_id: existing.id, body,
-              });
-            } else {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner, repo: context.repo.repo,
-                issue_number: context.issue.number, body,
-              });
-            }

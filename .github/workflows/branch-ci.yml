@@ -96,14 +96,16 @@ jobs:
           if [[ -z "$CHANGED" ]]; then exit 0; fi
           echo "$CHANGED" | xargs python3 scripts/git/check_generated_files.py
 
-  smoke:
-    name: Smoke acceptance
+  component-merge:
+    name: Component merge gate
     runs-on: ubuntu-latest
     needs:
       - trailers
       - generated-files
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Publish promotion planner
         run: python3 scripts/git/test_publish_promote.py
@@ -119,6 +121,38 @@ jobs:
 
       - name: Deploy safety contract
         run: npx vitest run src/test/deploy-safe-defaults.test.ts
+
+      - name: Changed component tests
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          mapfile -t component_paths < <(
+            git diff --name-only --diff-filter=ACMRTUXB "$BASE_SHA" "$HEAD_SHA" -- \
+              ':(glob)src/**/*.ts' ':(glob)src/**/*.tsx'
+          )
+          if [[ "${#component_paths[@]}" -eq 0 ]]; then
+            echo "No component source changed; no product unit suite to run."
+            exit 0
+          fi
+          printf 'Running tests related to changed components:\n%s\n' "${component_paths[*]}"
+          npx vitest related --run "${component_paths[@]}"
+
+      - name: Checkout Pantheon contract bundle
+        uses: actions/checkout@v4
+        with:
+          repository: ajoe734/pantheon
+          ref: dev
+          path: pantheon-contract
+          token: ${{ github.token }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: BFF contract tests
+        env:
+          PANTHEON_CONTRACT_ROOT: pantheon-contract
+        run: npm run test:contract
 
       - name: Typecheck
         run: npm run typecheck

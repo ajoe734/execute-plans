@@ -438,7 +438,6 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
   it("hard-gates the real hosted Persona write proof without credential skips", () => {
     const authorizedProof = integrationWorkflow.slice(
       integrationWorkflow.indexOf("  authorized-write-proof:"),
-      integrationWorkflow.indexOf("  pr-comment:"),
     );
     const authorizedProofEnv = authorizedProof.slice(
       authorizedProof.indexOf("    env:"),
