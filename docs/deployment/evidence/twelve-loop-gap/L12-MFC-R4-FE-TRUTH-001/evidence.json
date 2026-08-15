@@ -1,0 +1,35 @@
+{
+  "task_id": "L12-MFC-R4-FE-TRUTH-001",
+  "program_id": "pantheon-l12-minimum-functional-closure-r4-20260813",
+  "task_doc": ".orchestrator/task-briefs/l12_mfc_r4_fe_truth_001.md",
+  "owner": "Antigravity2",
+  "reviewer": "Antigravity",
+  "phase": "L12-MFC-R4-W1",
+  "wave": 1,
+  "fleet_lane": "frontend-truth",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "status": "review_approved",
+  "verification_summary": {
+    "units_passed": 4,
+    "components_tested": [
+      "src/management/pages/v5/LoopTruthView.tsx",
+      "src/management/pages/v5/V5Pages.tsx"
+    ],
+    "test_files": [
+      "src/management/pages/v5/LoopTruthView.test.tsx"
+    ],
+    "verification_command": "npx vitest run src/management/pages/v5/LoopTruthView.test.tsx"
+  },
+  "acceptance_proof": {
+    "all_twelve_loops_rendered": true,
+    "truth_levels_distinguished": true,
+    "seed_fixtures_not_live": true,
+    "stale_records_not_green": true,
+    "bff_failure_renders_error_and_retry": true,
+    "no_seed_fallback_on_failure": true,
+    "strict_live_bff_endpoints": [
+      "/bff/v5/loop-health"
+    ]
+  }
+}

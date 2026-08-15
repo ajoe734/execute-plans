@@ -14,6 +14,7 @@ afterEach(() => {
   setWriteEnv(false, null);
   delete process.env.VITE_BFF_FALLBACK;
   delete process.env.VITE_BFF_STRICT_WRITES;
+  delete process.env.VITE_BFF_ALLOW_DEV_STUB_WRITES;
   liveStatus._reset();
   vi.restoreAllMocks();
 });
@@ -256,6 +257,45 @@ describe("VI-2 session-kind write gate", () => {
     expect(sessionKindAllowsWrite("stub", { production: false, strict: false })).toBe(true);
     expect(sessionKindAllowsWrite("stub", { production: true, strict: false })).toBe(false);
     expect(sessionKindAllowsWrite("stub", { production: false, strict: true })).toBe(false);
+  });
+
+  it("admits a strict stub session only for an explicitly enabled dev environment", async () => {
+    setWriteEnv(true, "pantheon-dev-browser:operator,approver:mfa");
+    process.env.VITE_BFF_FALLBACK = "strict";
+    process.env.VITE_BFF_ALLOW_DEV_STUB_WRITES = "true";
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      makeJsonResponse(meSession("stub", { env: "dev" }), 200),
+    );
+
+    await expect(liveWriteGated()).resolves.toBe(true);
+  });
+
+  it("never admits a production stub session through the dev override", async () => {
+    setWriteEnv(true, "pantheon-dev-browser:operator,approver:mfa");
+    process.env.VITE_BFF_FALLBACK = "strict";
+    process.env.VITE_BFF_ALLOW_DEV_STUB_WRITES = "true";
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      makeJsonResponse(meSession("stub", { env: "production" }), 200),
+    );
+
+    await expect(liveWriteGated()).resolves.toBe(false);
+  });
+
+  it("fails closed when any BFF environment marker says production", async () => {
+    setWriteEnv(true, "pantheon-dev-browser:operator,approver:mfa");
+    process.env.VITE_BFF_FALLBACK = "strict";
+    process.env.VITE_BFF_ALLOW_DEV_STUB_WRITES = "true";
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      makeJsonResponse({
+        data: {
+          env: "dev",
+          session: { authenticated: true, session_kind: "stub" },
+          environment: { name: "production", strict_auth: false },
+        },
+      }, 200),
+    );
+
+    await expect(liveWriteGated()).resolves.toBe(false);
   });
 
   it("runAction stays in mock when /bff/me rejects the session", async () => {

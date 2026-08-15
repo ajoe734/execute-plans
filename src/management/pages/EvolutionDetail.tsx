@@ -14,7 +14,6 @@ import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
 import { StatCard } from "@/platform/components/StatCard";
 import { Progress } from "@/components/ui/progress";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
-import { toast } from "sonner";
 import { DataTable } from "@/platform/components/DataTable";
 import { AuditTimeline } from "@/platform/components/AuditTimeline";
 import { StatusBadge } from "@/platform/components/StatusBadge";
@@ -47,9 +46,7 @@ export const EvolutionDetail = () => {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
   const [stopOpen, setStopOpen] = useState(false);
-  const [constraints, setConstraints] = useState<{ id: string; expr: string; ts: string }[]>([
-    { id: "ec_seed1", expr: "max_drawdown < 0.15", ts: new Date(Date.now() - 86400_000).toISOString() },
-  ]);
+  const [constraints, setConstraints] = useState<{ id: string; expr: string; ts: string }[]>([]);
   const [newConstraint, setNewConstraint] = useState("");
 
   useEffect(() => {
@@ -144,10 +141,19 @@ export const EvolutionDetail = () => {
                   ))}
                 </ul>
                 <Textarea value={newConstraint} onChange={(ev) => setNewConstraint(ev.target.value)} placeholder={t("evolution.constraints.placeholder")} rows={2} />
-                <Button className="mt-2" size="sm" disabled={newConstraint.trim().length < 4} onClick={() => {
-                  setConstraints((cs) => [...cs, { id: `ec_${Date.now().toString(36)}`, expr: newConstraint.trim(), ts: new Date().toISOString() }]);
+                <Button className="mt-2" size="sm" disabled={newConstraint.trim().length < 4} onClick={async () => {
+                  const expr = newConstraint.trim();
+                  const receipt = await runActionSafe({
+                    kind: "Evolution",
+                    id: e.id,
+                    action: "create_constraint",
+                    memo: expr,
+                  }, {
+                    successTitle: t("evolution.constraints.created"),
+                  });
+                  if (!receipt.ok) return;
+                  setConstraints((cs) => [...cs, { id: `ec_${Date.now().toString(36)}`, expr, ts: new Date().toISOString() }]);
                   setNewConstraint("");
-                  toast.success(t("evolution.constraints.created"));
                 }}>{t("evolution.constraints.add")}</Button>
               </Section>
             ),
@@ -204,7 +210,9 @@ export const EvolutionDetail = () => {
         description={t("detail.confirm.stopEvolution")}
         confirmToken="STOP"
         destructive
-        onConfirm={async (memo) => { await runActionSafe({ kind: "Evolution", id: e.id, action: "stop", memo }); toast.success("Stop requested"); }}
+        onConfirm={async (memo) => {
+          await runActionSafe({ kind: "Evolution", id: e.id, action: "stop", memo }, { successTitle: "Stop requested" });
+        }}
       />
     </>
   );

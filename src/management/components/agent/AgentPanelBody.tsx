@@ -19,13 +19,11 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { Conversation, ConversationContent, ConversationEmptyState, ConversationScrollButton } from "@/components/ai-elements/conversation";
 import { Message, MessageContent, MessageResponse } from "@/components/ai-elements/message";
 import { PromptInput, PromptInputTextarea, PromptInputFooter, PromptInputSubmit } from "@/components/ai-elements/prompt-input";
 import { Shimmer } from "@/components/ai-elements/shimmer";
-import { AlertCircle, ExternalLink, RefreshCcw, Plus, Trash2, MessagesSquare, Play, ShieldAlert, Info, Paperclip, X as XIcon, ChevronDown, LogIn, Loader2, KeyRound, FileText } from "lucide-react";
+import { AlertCircle, ExternalLink, RefreshCcw, Plus, Trash2, MessagesSquare, Play, ShieldAlert, Info, Paperclip, X as XIcon, ChevronDown, LogIn, Loader2, KeyRound } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import {
   activateAssistantControlMode,
@@ -33,23 +31,15 @@ import {
   deactivateAssistantControlMode,
   fetchAssistantModeStatus,
   fetchManagementAiConversation,
-  fetchAssistantOrchestratorStatus,
-  generateAssistantDevDocs,
-  prepareAssistantRepairWorktree,
+  fetchManagementAiConversationList,
   startAssistantProviderReauth,
-  type AssistantRepairMetadata,
   type ManagementAiResult,
   type ManagementAiUiAction,
   type ManagementAiUiSnapshot,
   type ManagementAiRecentTurn,
   type ProviderStatus,
-  type AssistantOpenClawSkillDescriptor,
-  type AssistantOpenClawToolPolicyStatus,
   type AssistantControlModeStatus,
   type AssistantModeStatusResult,
-  type AssistantOrchestratorStatus,
-  type AssistantOrchestratorStatusResult,
-  type AssistantDevDocsGenerateResult,
   type AssistantProviderReauthResult,
 } from "@/lib/bff-v1/managementAi";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
@@ -71,46 +61,6 @@ import {
   validateNewFiles,
 } from "./attachmentUtils";
 
-type RepairRepoKey = "execute-plans" | "pantheon";
-
-const REPAIR_SCOPE_DEFAULTS: Record<RepairRepoKey, string[]> = {
-  "execute-plans": [
-    "src/management/components/agent",
-    "src/lib/bff-v1",
-    "src/lib/bff-v1/paths.ts",
-    "AGENTS.md",
-  ],
-  pantheon: [
-    "services/control-plane/bff",
-    "services/openclaw-gateway-adapter",
-    "scripts",
-    "docs",
-    "docker-compose.yml",
-  ],
-};
-
-function repairScopeText(repoKey: RepairRepoKey): string {
-  return REPAIR_SCOPE_DEFAULTS[repoKey].join("\n");
-}
-
-function parseRepairScope(value: string): string[] {
-  return Array.from(new Set(
-    value
-      .split(/[\n,]/)
-      .map((item) => item.trim())
-      .filter(Boolean),
-  ));
-}
-
-function repairMergeTarget(_repoKey: RepairRepoKey): string {
-  return "dev";
-}
-
-function makeRepairTaskId(repoKey: RepairRepoKey): string {
-  const stamp = new Date().toISOString().replace(/[-:.]/g, "").replace("Z", "Z");
-  const suffix = Math.random().toString(36).slice(2, 8).toUpperCase();
-  return `MGMT-AI-REPAIR-${repoKey.toUpperCase()}-${stamp}-${suffix}`;
-}
 
 interface ChatTurn {
   id: string;
@@ -295,127 +245,10 @@ function ProviderStatusPill({ s }: { s: ProviderStatus | null }) {
   );
 }
 
-const SA_SD_GENERATE_SKILL_ID = "assistant.sa_sd.generate";
-const SA_SD_GENERATE_HANDLER_REF = "bff.route:POST /bff/assistant/dev-docs/generate";
-
-function commandPolicyIsUsable(policy: AssistantOpenClawToolPolicyStatus | null | undefined): boolean {
-  if (!policy) return false;
-  return policy.assistantCommandUsable ?? policy.assistantCommandAllowed ?? false;
-}
-
-function commandPolicyLabel(policy: AssistantOpenClawToolPolicyStatus | null | undefined): string {
-  if (!policy) return "assistant.command unknown";
-  return `assistant.command ${policy.assistantCommandStatus ?? (commandPolicyIsUsable(policy) ? "usable" : "blocked")}`;
-}
-
-function saSdGenerateSkill(policy: AssistantOpenClawToolPolicyStatus | null | undefined): AssistantOpenClawSkillDescriptor | null {
-  return policy?.effectiveSkills?.find((skill) => (
-    skill.id === SA_SD_GENERATE_SKILL_ID && skill.handlerRef === SA_SD_GENERATE_HANDLER_REF
-  )) ?? null;
-}
-
-function saSdSkillLabel(skill: AssistantOpenClawSkillDescriptor | null): string {
-  return skill ? `${skill.id} via ${skill.handlerRef}` : `${SA_SD_GENERATE_SKILL_ID} unavailable`;
-}
-
-function ToolPolicyPill({ policy, failure }: {
-  policy?: AssistantOpenClawToolPolicyStatus | null;
-  failure?: Extract<AssistantOrchestratorStatusResult, { ok: false }>;
-}) {
-  if (failure) {
-    return (
-      <span
-        className="inline-flex items-center rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400"
-        title={failure.message}
-      >
-        OpenClaw status unavailable
-      </span>
-    );
-  }
-  const usable = commandPolicyIsUsable(policy);
-  const cls = usable
-    ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
-    : "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400";
-  return (
-    <span
-      className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${cls}`}
-      title={`OpenClaw ${policy?.status ?? "unknown"} / upstream ${policy?.upstreamStatus ?? "unknown"}`}
-    >
-      {commandPolicyLabel(policy)}
-    </span>
-  );
-}
-
 function controlModeLabel(status: AssistantControlModeStatus | null | undefined): string {
   if (!status) return "control unknown";
   if (status.active) return `control ${status.mode ?? "active"}`;
   return "control inactive";
-}
-
-function taskStatusCounts(tasks: AssistantOrchestratorStatus["tasks"]): string {
-  const counts = new Map<string, number>();
-  for (const task of tasks ?? []) {
-    const key = task.status ?? "unknown";
-    counts.set(key, (counts.get(key) ?? 0) + 1);
-  }
-  return Array.from(counts.entries()).map(([status, count]) => `${status}:${count}`).join(" · ") || "none";
-}
-
-function compactList(items: Array<string | undefined>, limit = 3): string {
-  const values = items.filter((item): item is string => Boolean(item));
-  if (values.length <= limit) return values.join(", ");
-  return `${values.slice(0, limit).join(", ")} +${values.length - limit}`;
-}
-
-function SystemStatusDetails({ status }: { status: AssistantOrchestratorStatus | null | undefined }) {
-  if (!status) return null;
-  const supervisor = status.supervisor;
-  const provider = status.providerReadiness;
-  const bridge = status.assistantDevBridge;
-  const inbox = bridge?.inbox;
-  const tasks = status.tasks ?? [];
-  const activeTasks = tasks
-    .filter((task) => ["in_progress", "running", "review_approved", "todo"].includes(task.status ?? ""))
-    .slice(0, 4);
-  const execution = supervisor?.modeOccupancy?.execution;
-  const sourceSummary = compactList((status.sourceRefs ?? []).map((ref) => `${ref.sourceType ?? ref.path}:${ref.status ?? (ref.available ? "ok" : "missing")}`), 4);
-  const taskSummary = taskStatusCounts(tasks);
-
-  return (
-    <details className="w-full group rounded border bg-background/60 px-2 py-1 text-[10px] text-muted-foreground">
-      <summary className="flex cursor-pointer select-none flex-wrap items-center gap-x-2 gap-y-0.5 list-none">
-        <ChevronDown className="h-2.5 w-2.5 transition-transform group-open:rotate-0 -rotate-90" />
-        <span className="font-medium text-foreground">System</span>
-        <span>snapshot={status.snapshotAt ?? "unknown"}</span>
-        <span>supervisor={supervisor?.lifecycle ?? "unknown"}/{supervisor?.modeStatus ?? "unknown"}</span>
-        <span>tasks={tasks.length}</span>
-        <span>bridge={bridge?.status ?? "unknown"}:p{inbox?.pendingCount ?? 0}/f{inbox?.failedCount ?? 0}</span>
-      </summary>
-      <div className="mt-1 grid gap-1 sm:grid-cols-2">
-        <div className="rounded bg-muted/30 p-1.5 font-mono leading-relaxed">
-          <div>project={status.project ?? "unknown"}</div>
-          <div>provider={provider?.providerName ?? provider?.provider ?? "unknown"} ready={String(provider?.ready ?? false)} read={String(provider?.capabilities?.read ?? false)} repair={String(provider?.capabilities?.repairWrite ?? false)}</div>
-          <div>workspace={provider?.repairWorkspace?.status ?? "unknown"} writable={String(provider?.repairWorkspace?.writable ?? false)} worktrees={provider?.repairWorkspace?.worktreeCount ?? 0}</div>
-          <div>supervisor_focus={supervisor?.focusMode ?? "unknown"} execution={execution ? `r${execution.running ?? 0}/p${execution.pending ?? 0}/q${execution.queued ?? 0}` : "unknown"}</div>
-        </div>
-        <div className="rounded bg-muted/30 p-1.5 font-mono leading-relaxed">
-          <div>dev_bridge={bridge?.status ?? "unknown"} pending={inbox?.pendingCount ?? 0} processed={inbox?.processedCount ?? 0} failed={inbox?.failedCount ?? 0}</div>
-          <div>sources={sourceSummary || "none"}</div>
-          <div>coordination=files:{status.coordination?.fileCount ?? 0} features:{status.coordination?.featureCount ?? 0}</div>
-          <div>task_status={taskSummary}</div>
-        </div>
-      </div>
-      {activeTasks.length > 0 && (
-        <div className="mt-1 space-y-0.5 font-mono">
-          {activeTasks.map((task) => (
-            <div key={task.id ?? task.title} className="truncate" title={task.next ?? task.title ?? task.id}>
-              {task.status ?? "unknown"}:{task.owner ?? "?"}:{task.id ?? task.title}
-            </div>
-          ))}
-        </div>
-      )}
-    </details>
-  );
 }
 
 function ControlModePill({ status, failure }: {
@@ -542,40 +375,6 @@ function AttachmentThumbs({ items, onRemove }: { items: ChatAttachment[]; onRemo
   );
 }
 
-type AssistantDevDocsOk = Extract<AssistantDevDocsGenerateResult, { ok: true }>;
-
-function latestFeatureSummary(turns: ChatTurn[]): string {
-  for (let i = turns.length - 1; i >= 0; i--) {
-    const turn = turns[i];
-    if (turn.role !== "user") continue;
-    const text = turn.text.trim().replace(/\s+/g, " ");
-    if (text) return text.slice(0, 240);
-  }
-  return "Management AI conversation requested a Pantheon development change.";
-}
-
-function compactPath(path: string | null | undefined): string | null {
-  if (!path) return null;
-  const parts = path.split("/").filter(Boolean);
-  return parts.slice(-4).join("/");
-}
-
-function devDocsReceiptText(result: AssistantDevDocsOk): string {
-  const archive = result.archiveLocations;
-  const lines = [
-    "SA/SD packet generated for supervisor/autoworker pickup.",
-    `packet: ${result.packetId}`,
-    `tasks: ${result.taskCount}`,
-    archive?.requirementCapture ? `requirements: ${archive.requirementCapture}` : null,
-    archive?.systemAnalysis ? `SA: ${archive.systemAnalysis}` : null,
-    archive?.systemDesign ? `SD: ${archive.systemDesign}` : null,
-    result.taskPacketQueued
-      ? `dev bridge queue: ${result.taskPacketQueuePath ?? "queued"}`
-      : "dev bridge queue: not queued",
-  ].filter((line): line is string => Boolean(line));
-  return lines.join("\n");
-}
-
 export function AgentPanelBody() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -597,19 +396,12 @@ export function AgentPanelBody() {
   const [pendingAttachments, setPendingAttachments] = useState<ChatAttachment[]>([]);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [orchestratorStatus, setOrchestratorStatus] = useState<AssistantOrchestratorStatusResult | null>(null);
   const [assistantModeStatus, setAssistantModeStatus] = useState<AssistantModeStatusResult | null>(null);
   const [controlDialogOpen, setControlDialogOpen] = useState(false);
   const [controlPassphrase, setControlPassphrase] = useState("");
-  const [controlTargetMode, setControlTargetMode] = useState<"kernel_debug" | "kernel_repair">("kernel_repair");
-  const [controlReason, setControlReason] = useState("Management AI dev repair");
-  const [repairRepoKey, setRepairRepoKey] = useState<RepairRepoKey>("execute-plans");
-  const [repairDeclaredScope, setRepairDeclaredScope] = useState(repairScopeText("execute-plans"));
-  const [lastRepairMetadata, setLastRepairMetadata] = useState<AssistantRepairMetadata | null>(null);
+  const [controlReason, setControlReason] = useState("Management AI diagnostic session");
   const [controlBusy, setControlBusy] = useState(false);
   const [controlError, setControlError] = useState<string | null>(null);
-  const [devDocsBusy, setDevDocsBusy] = useState(false);
-  const [devDocsNotice, setDevDocsNotice] = useState<AssistantDevDocsGenerateResult | null>(null);
   const [providerReauthBusy, setProviderReauthBusy] = useState(false);
   const [providerReauthNotice, setProviderReauthNotice] = useState<AssistantProviderReauthResult | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -625,11 +417,7 @@ export function AgentPanelBody() {
   const pending = sessionId ? !!pendingSessions[sessionId] : false;
 
   const refreshAssistantRuntimeStatus = useCallback(async () => {
-    const [orchestrator, mode] = await Promise.all([
-      fetchAssistantOrchestratorStatus(),
-      fetchAssistantModeStatus(),
-    ]);
-    setOrchestratorStatus(orchestrator);
+    const mode = await fetchAssistantModeStatus();
     setAssistantModeStatus(mode);
   }, []);
 
@@ -645,6 +433,40 @@ export function AgentPanelBody() {
   useEffect(() => {
     void refreshAssistantRuntimeStatus();
   }, [refreshAssistantRuntimeStatus]);
+
+  // Hydrate the history index from the server so a fresh browser / cleared
+  // localStorage still surfaces past conversations. The left rail is a local
+  // cache, not the source of truth; this merges the authoritative server list
+  // in. Runs once on mount and is independent of provider/OpenClaw health, so
+  // the degraded banner never hides recoverable history.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const res = await fetchManagementAiConversationList(50);
+      if (cancelled || res.kind !== "ok" || res.conversations.length === 0) return;
+      setSessions((prev) => {
+        const byId = new Map<string, SessionIndexEntry>();
+        for (const entry of prev) byId.set(entry.id, entry);
+        for (const conv of res.conversations) {
+          const existing = byId.get(conv.sessionId);
+          const updatedAt = conv.updatedAt
+            ? (Date.parse(conv.updatedAt) || existing?.updatedAt || Date.now())
+            : (existing?.updatedAt ?? Date.now());
+          const hasLocalTitle = !!existing?.title && existing.title !== "新對話";
+          const title = hasLocalTitle
+            ? existing!.title
+            : (conv.title.trim() || existing?.title || "新對話");
+          byId.set(conv.sessionId, { id: conv.sessionId, title, updatedAt });
+        }
+        const list = Array.from(byId.values())
+          .sort((a, b) => b.updatedAt - a.updatedAt)
+          .slice(0, 50);
+        saveSessionIndex(list);
+        return list;
+      });
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const inputContainerRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -736,7 +558,6 @@ export function AgentPanelBody() {
     setText("");
     setActionFeedback({});
     setResyncNotice(null);
-    setDevDocsNotice(null);
     setProviderReauthNotice(null);
     setPendingAttachments([]);
     setAttachmentError(null);
@@ -851,7 +672,6 @@ export function AgentPanelBody() {
     setDegraded(null);
     setText("");
     setActionFeedback({});
-    setDevDocsNotice(null);
     setProviderReauthNotice(null);
     setPendingAttachments([]);
     setAttachmentError(null);
@@ -937,7 +757,7 @@ export function AgentPanelBody() {
     try {
       const result = await activateAssistantControlMode({
         passphrase,
-        mode: controlTargetMode,
+        mode: "kernel_debug",
         reason: controlReason.trim() || "Management AI control mode",
         ttlSeconds: 900,
         idleTtlSeconds: 300,
@@ -950,14 +770,14 @@ export function AgentPanelBody() {
       }
       toast({
         title: "Control mode active",
-        description: result.controlMode.mode ?? controlTargetMode,
+        description: result.controlMode.mode ?? "kernel_debug",
       });
       setControlDialogOpen(false);
       await refreshAssistantRuntimeStatus();
     } finally {
       setControlBusy(false);
     }
-  }, [controlPassphrase, controlTargetMode, controlReason, sessionId, refreshAssistantRuntimeStatus]);
+  }, [controlPassphrase, controlReason, sessionId, refreshAssistantRuntimeStatus]);
 
   const deactivateControlMode = useCallback(async () => {
     setControlBusy(true);
@@ -975,108 +795,6 @@ export function AgentPanelBody() {
       setControlBusy(false);
     }
   }, [refreshAssistantRuntimeStatus]);
-
-  const generateDevDocs = useCallback(async () => {
-    const targetSessionId = sessionId;
-    if (!targetSessionId || isClientSessionId(targetSessionId)) {
-      const result: AssistantDevDocsGenerateResult = {
-        ok: false,
-        kind: "failure",
-        statusCode: null,
-        message: "需要先送出一則訊息，讓 BFF 建立正式 session id。",
-      };
-      setDevDocsNotice(result);
-      toast({ title: "SA/SD 尚未送出", description: result.message, variant: "destructive" });
-      return;
-    }
-
-    const currentControlMode = assistantModeStatus?.ok ? assistantModeStatus.status.controlMode : null;
-    if (!currentControlMode?.active) {
-      const result: AssistantDevDocsGenerateResult = {
-        ok: false,
-        kind: "failure",
-        statusCode: null,
-        message: "需要先啟用 control mode。",
-      };
-      setDevDocsNotice(result);
-      setControlError(null);
-      setControlDialogOpen(true);
-      toast({ title: "需要 Control mode", description: result.message });
-      return;
-    }
-
-    const currentToolPolicy = orchestratorStatus?.ok ? orchestratorStatus.status.openclawToolPolicy : null;
-    if (!saSdGenerateSkill(currentToolPolicy)) {
-      const result: AssistantDevDocsGenerateResult = {
-        ok: false,
-        kind: "failure",
-        statusCode: null,
-        message: "OpenClaw skill policy 尚未允許 assistant.sa_sd.generate。",
-      };
-      setDevDocsNotice(result);
-      toast({ title: "SA/SD 尚未送出", description: result.message, variant: "destructive" });
-      return;
-    }
-
-    const ui = buildUiSnapshot();
-    const affectedModules = Array.from(new Set([
-      "execute-plans:management-ai",
-      "pantheon:bff-assistant",
-      "pantheon:openclaw-dev-bridge",
-      `route:${location.pathname}`,
-      ui.selectedEntity ? `${ui.selectedEntity.kind}:${ui.selectedEntity.id}` : "",
-    ].filter(Boolean)));
-
-    setDevDocsBusy(true);
-    setDevDocsNotice(null);
-    try {
-      const result = await generateAssistantDevDocs({
-        conversationId: targetSessionId,
-        featureSummary: latestFeatureSummary(turns),
-        affectedModules,
-        proposedOwner: "Codex",
-        proposedReviewer: "Claude",
-        archive: true,
-        emitTaskPacket: true,
-        queueTaskPacket: true,
-        extraContext: {
-          route: location.pathname,
-          pageLabel: nlCtx.pageLabel,
-          selectedEntity: ui.selectedEntity,
-          source: "execute-plans.management_ai_panel",
-        },
-      });
-      setDevDocsNotice(result);
-
-      if (result.ok) {
-        appendTurnTo(targetSessionId, {
-          id: turnId("a_devdocs"),
-          role: "assistant",
-          text: devDocsReceiptText(result),
-          createdAt: Date.now(),
-        });
-        toast({
-          title: "SA/SD 已產生",
-          description: result.taskPacketQueued ? "已送進 supervisor dev bridge inbox" : "已產生文件，尚未 queue task packet",
-        });
-        await refreshAssistantRuntimeStatus();
-      } else {
-        toast({ title: "SA/SD 失敗", description: result.message, variant: "destructive" });
-      }
-    } finally {
-      setDevDocsBusy(false);
-    }
-  }, [
-    sessionId,
-    assistantModeStatus,
-    orchestratorStatus,
-    buildUiSnapshot,
-    location.pathname,
-    nlCtx.pageLabel,
-    turns,
-    appendTurnTo,
-    refreshAssistantRuntimeStatus,
-  ]);
 
   // ---- Attachment handlers ----
   const addFiles = useCallback(async (files: File[]) => {
@@ -1179,73 +897,36 @@ export function AgentPanelBody() {
 
     let result: ManagementAiResult | null = null;
     try {
-      let repairMetadata: AssistantRepairMetadata | undefined;
-      const currentControlMode = assistantModeStatus?.ok ? assistantModeStatus.status.controlMode : null;
-      if (currentControlMode?.active && currentControlMode.mode === "kernel_repair") {
-        const declaredScope = parseRepairScope(repairDeclaredScope);
-        if (declaredScope.length === 0) {
-          result = {
-            ok: false,
-            kind: "transport_failure",
-            status: null,
-            message: "Repair scope is empty.",
-          };
-        } else {
-          const taskId = makeRepairTaskId(repairRepoKey);
-          const prepared = await prepareAssistantRepairWorktree({
-            taskId,
-            repoKey: repairRepoKey,
-            declaredScope,
-            expectedBranch: `task/${taskId}`,
-            mergeTarget: repairMergeTarget(repairRepoKey),
-            reason: controlReason.trim() || "Management AI dev repair",
-          }, { signal: controller.signal });
-          if (prepared.ok) {
-            repairMetadata = prepared.repair;
-            setLastRepairMetadata(prepared.repair);
-          } else {
-            result = {
-              ok: false,
-              kind: "transport_failure",
-              status: prepared.statusCode,
-              message: `Repair worktree prepare failed: ${prepared.message}`,
-            };
-          }
-        }
-      }
-      if (result === null) {
-        result = await streamManagementAi({
-          question,
-          focus: "all",
-          sessionId: sessionIdForBff,
-          context: JSON.stringify({
-            route: location.pathname,
-            pageLabel: nlCtx.pageLabel,
-            selectedEntity: ui.selectedEntity,
-          }),
-          conversation: {
-            recentTurns: conv.recentTurns,
-            summary: conv.summary ?? conversationSummary,
-          },
-          ui,
-          attachments: attachmentsForTurn.length > 0
-            ? attachmentsForTurn.map((a) => ({
-                kind: a.kind,
-                mimeType: a.mimeType,
-                filename: a.filename,
-                sizeBytes: a.sizeBytes,
-                dataBase64: a.dataBase64,
-              }))
-            : undefined,
-          openclaw: repairMetadata ? { repair: repairMetadata } : undefined,
-        }, {
-          // Progressive rendering: show tokens as they arrive in a transient
-          // bubble for the thread that initiated the request. The final turn is
-          // still appended by the result-handling below; this preview is cleared
-          // in finally, so existing reconcile/persist logic is untouched.
-          onDelta: (_chunk, full) => setStreamingPreview({ sid: requestBucket, text: full }),
-        }, { signal: controller.signal });
-      }
+      result = await streamManagementAi({
+        question,
+        focus: "all",
+        sessionId: sessionIdForBff,
+        context: JSON.stringify({
+          route: location.pathname,
+          pageLabel: nlCtx.pageLabel,
+          selectedEntity: ui.selectedEntity,
+        }),
+        conversation: {
+          recentTurns: conv.recentTurns,
+          summary: conv.summary ?? conversationSummary,
+        },
+        ui,
+        attachments: attachmentsForTurn.length > 0
+          ? attachmentsForTurn.map((a) => ({
+              kind: a.kind,
+              mimeType: a.mimeType,
+              filename: a.filename,
+              sizeBytes: a.sizeBytes,
+              dataBase64: a.dataBase64,
+            }))
+          : undefined,
+      }, {
+        // Progressive rendering: show tokens as they arrive in a transient
+        // bubble for the thread that initiated the request. The final turn is
+        // still appended by the result-handling below; this preview is cleared
+        // in finally, so existing reconcile/persist logic is untouched.
+        onDelta: (_chunk, full) => setStreamingPreview({ sid: requestBucket, text: full }),
+      }, { signal: controller.signal });
     } catch (err) {
       result = controller.signal.aborted
         ? { ok: false, kind: "aborted" }
@@ -1386,10 +1067,6 @@ export function AgentPanelBody() {
     sessionId,
     pendingSessions,
     buildUiSnapshot,
-    assistantModeStatus,
-    repairDeclaredScope,
-    repairRepoKey,
-    controlReason,
     location.pathname,
     nlCtx.pageLabel,
     conversationSummary,
@@ -1407,32 +1084,10 @@ export function AgentPanelBody() {
   };
 
   const canSubmit = (text.trim().length > 0 || pendingAttachments.length > 0) && !pending;
-  const toolPolicy = orchestratorStatus?.ok ? orchestratorStatus.status.openclawToolPolicy : null;
-  const toolPolicyFailure = orchestratorStatus?.kind === "failure" ? orchestratorStatus : undefined;
   const assistantModeFailure = assistantModeStatus?.kind === "failure" ? assistantModeStatus : undefined;
   const controlMode = assistantModeStatus?.ok ? assistantModeStatus.status.controlMode : null;
   const kernelEnabled = assistantModeStatus?.ok ? assistantModeStatus.status.kernelEnabled : false;
   const controlActive = Boolean(controlMode?.active);
-  const hasBffSession = Boolean(sessionId && !isClientSessionId(sessionId));
-  const hasConversationTurns = turns.length > 0;
-  const saSdSkill = saSdGenerateSkill(toolPolicy);
-  const saSdSkillAvailable = Boolean(saSdSkill);
-  const canGenerateDevDocs = Boolean(
-    hasBffSession && hasConversationTurns && !pending && !devDocsBusy && controlActive && saSdSkillAvailable,
-  );
-  const devDocsButtonTitle = !hasBffSession
-    ? "需要先送出一則訊息，讓 BFF 建立正式 session id"
-    : !hasConversationTurns
-      ? "需要先有對話內容"
-      : pending || devDocsBusy
-        ? "Management AI 正在處理"
-        : !controlActive
-          ? "需要先啟用 control mode"
-          : !saSdSkillAvailable
-            ? "OpenClaw skill policy 尚未允許 assistant.sa_sd.generate"
-            : "產生 SA/SD 並送進 dev bridge";
-  const devDocsSystemDesignPath = devDocsNotice?.ok ? compactPath(devDocsNotice.archiveLocations?.systemDesign) : null;
-  const devDocsQueuePath = devDocsNotice?.ok ? compactPath(devDocsNotice.taskPacketQueuePath) : null;
 
   return (
     <div className="flex flex-1 min-h-0 bg-background">
@@ -1504,9 +1159,6 @@ export function AgentPanelBody() {
             {sessionId ? `session ${sessionId.slice(0, 10)}…` : "new session"}
           </span>
           <span className="text-[10px] text-muted-foreground">· {turns.length} 則訊息</span>
-          {orchestratorStatus && (
-            <ToolPolicyPill policy={toolPolicy} failure={toolPolicyFailure} />
-          )}
           {assistantModeStatus && (
             <ControlModePill status={assistantModeStatus} failure={assistantModeFailure} />
           )}
@@ -1521,17 +1173,6 @@ export function AgentPanelBody() {
               size="sm"
               variant="ghost"
               className="h-6 text-[10px]"
-              onClick={() => void generateDevDocs()}
-              disabled={!canGenerateDevDocs}
-              title={devDocsButtonTitle}
-            >
-              {devDocsBusy ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <FileText className="h-3 w-3 mr-1" />}
-              SA/SD
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-6 text-[10px]"
               onClick={() => {
                 setControlError(null);
                 setControlDialogOpen(true);
@@ -1540,7 +1181,7 @@ export function AgentPanelBody() {
               <KeyRound className="h-3 w-3 mr-1" />Control
             </Button>
             <Button size="sm" variant="ghost" className="h-6 text-[10px]" onClick={() => void refreshAssistantRuntimeStatus()}>
-              OpenClaw
+              Refresh
             </Button>
           </div>
         </div>
@@ -1574,72 +1215,20 @@ export function AgentPanelBody() {
                   className="h-8 text-xs"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Mode</Label>
-                  <Select
-                    value={controlTargetMode}
-                    onValueChange={(value) => setControlTargetMode(value as "kernel_debug" | "kernel_repair")}
-                  >
-                    <SelectTrigger className="h-8 text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="kernel_debug">kernel_debug</SelectItem>
-                      <SelectItem value="kernel_repair">kernel_repair</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="mgmt-ai-control-reason" className="text-xs">Reason</Label>
-                  <Input
-                    id="mgmt-ai-control-reason"
-                    value={controlReason}
-                    onChange={(e) => setControlReason(e.target.value)}
-                    className="h-8 text-xs"
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Repo</Label>
-                  <Select
-                    value={repairRepoKey}
-                    onValueChange={(value) => {
-                      const next = value as RepairRepoKey;
-                      setRepairRepoKey(next);
-                      setRepairDeclaredScope(repairScopeText(next));
-                    }}
-                  >
-                    <SelectTrigger className="h-8 text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="execute-plans">execute-plans</SelectItem>
-                      <SelectItem value="pantheon">pantheon</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Merge</Label>
-                  <Input value={repairMergeTarget(repairRepoKey)} readOnly className="h-8 text-xs" />
-                </div>
-              </div>
               <div className="space-y-1.5">
-                <Label htmlFor="mgmt-ai-repair-scope" className="text-xs">Scope</Label>
-                <Textarea
-                  id="mgmt-ai-repair-scope"
-                  value={repairDeclaredScope}
-                  onChange={(e) => setRepairDeclaredScope(e.target.value)}
-                  className="min-h-20 resize-none text-xs"
+                <Label htmlFor="mgmt-ai-control-reason" className="text-xs">Reason</Label>
+                <Input
+                  id="mgmt-ai-control-reason"
+                  value={controlReason}
+                  onChange={(e) => setControlReason(e.target.value)}
+                  className="h-8 text-xs"
                 />
               </div>
               <div className="rounded border bg-muted/30 px-2 py-1.5 text-[10px] text-muted-foreground">
                 <div>kernel={kernelEnabled ? "on" : "off"}</div>
                 <div>state={controlMode?.state ?? "unknown"}</div>
-                {controlMode?.mode && <div>mode={controlMode.mode}</div>}
+                <div>mode=kernel_debug</div>
                 {controlMode?.idleExpiresAt && <div>idle={controlMode.idleExpiresAt}</div>}
-                {lastRepairMetadata?.task_id && <div>repair={lastRepairMetadata.repo_key ?? repairRepoKey}:{lastRepairMetadata.task_id}</div>}
               </div>
               {controlError && (
                 <div className="rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-xs text-amber-800 dark:text-amber-300">
@@ -1670,7 +1259,7 @@ export function AgentPanelBody() {
           </DialogContent>
         </Dialog>
 
-        {(lastProviderStatus || lastLinks.audit || lastLinks.conversation || traceId || orchestratorStatus?.ok) && (
+        {(lastProviderStatus || lastLinks.audit || lastLinks.conversation || traceId) && (
           <div className="border-b px-2 py-1 bg-muted/10 flex items-center flex-wrap gap-x-2 gap-y-0.5">
             {lastProviderStatus && <ProviderStatusPill s={lastProviderStatus} />}
             {lastLinks.audit && (
@@ -1684,17 +1273,6 @@ export function AgentPanelBody() {
               </a>
             )}
             {traceId && <span className="text-[10px] text-muted-foreground font-mono">trace={traceId.slice(0, 12)}…</span>}
-            {toolPolicy && (
-              <span className="text-[10px] text-muted-foreground font-mono">
-                OpenClaw={toolPolicy.status ?? "unknown"} upstream={toolPolicy.upstreamStatus ?? "unknown"} · SA/SD={saSdSkillAvailable ? "ready" : "blocked"}
-              </span>
-            )}
-            {toolPolicy && (
-              <span className="text-[10px] text-muted-foreground font-mono" title={saSdSkillLabel(saSdSkill)}>
-                skill={saSdSkillAvailable ? SA_SD_GENERATE_SKILL_ID : "missing"}
-              </span>
-            )}
-            {orchestratorStatus?.ok && <SystemStatusDetails status={orchestratorStatus.status} />}
           </div>
         )}
 
@@ -1707,39 +1285,6 @@ export function AgentPanelBody() {
               className="text-muted-foreground hover:text-foreground"
               onClick={() => setResyncNotice(null)}
               aria-label="關閉提示"
-            >
-              ×
-            </button>
-          </div>
-        )}
-
-        {devDocsNotice && (
-          <div
-            className={`border-b px-2 py-1 text-[10px] flex items-start gap-1 ${
-              devDocsNotice.ok
-                ? "bg-emerald-500/5 text-emerald-800 dark:text-emerald-300"
-                : "bg-amber-500/10 text-amber-800 dark:text-amber-300"
-            }`}
-            title={devDocsNotice.ok ? (devDocsNotice.taskPacketQueuePath ?? devDocsNotice.packetId) : devDocsNotice.message}
-          >
-            <FileText className="h-3 w-3 mt-0.5 shrink-0" />
-            <span className="flex-1 min-w-0">
-              {devDocsNotice.ok ? (
-                <>
-                  SA/SD {devDocsNotice.packetId.slice(0, 18)} · tasks {devDocsNotice.taskCount}
-                  {devDocsNotice.taskPacketQueued ? " · queued" : " · not queued"}
-                  {devDocsSystemDesignPath ? <span className="font-mono"> · SD {devDocsSystemDesignPath}</span> : null}
-                  {devDocsQueuePath ? <span className="font-mono"> · inbox {devDocsQueuePath}</span> : null}
-                </>
-              ) : (
-                <>SA/SD 失敗：{devDocsNotice.message}</>
-              )}
-            </span>
-            <button
-              type="button"
-              className="text-muted-foreground hover:text-foreground"
-              onClick={() => setDevDocsNotice(null)}
-              aria-label="關閉 SA/SD 提示"
             >
               ×
             </button>
