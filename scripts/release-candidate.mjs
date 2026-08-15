@@ -1121,7 +1121,9 @@ function pairIdentity({
 }
 
 function pairIdFor(identity) {
-  return sha256(Buffer.from(`${JSON.stringify(identity)}\n`, "utf8"));
+  // Canonical contract: trailing newline is part of the serialized identity.
+  const canonicalizedIdentity = `${JSON.stringify(identity)}\n`;
+  return sha256(Buffer.from(canonicalizedIdentity, "utf8"));
 }
 
 function copyCandidateDist(records, targetRoot, candidate) {
