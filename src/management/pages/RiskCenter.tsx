@@ -17,6 +17,7 @@ import type {
 } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { useNavigate } from "react-router-dom";
+import { safeDateTime } from "@/lib/utils";
 
 const RISK_WEIGHT: Record<RiskLevel, number> = { info: 0, low: 1, medium: 2, high: 3, critical: 4 };
 
@@ -89,7 +90,7 @@ export const RiskCenter = () => {
           <TabsContent value="capital" className="mt-4">
             <DataTable
               rows={data.pools}
-              onRowClick={(r) => navigate(`/management/capital-pools/${r.id}`)}
+              onRowClick={(r) => navigate(`/management/promotion-allocation?tab=quarterly-capital&capital_id=${encodeURIComponent(r.id)}`)}
               columns={[
                 { key: "name", header: t("table.name"), cell: (r) => <span className="font-medium">{r.name}</span> },
                 { key: "alloc", header: t("section.holdings"), cell: (r) => <span className="text-mono text-xs">{safeFixed(r.allocated / 1_000_000, 1)}M {r.currency}</span> },
@@ -196,10 +197,7 @@ export const RiskCenter = () => {
                 { key: "sev", header: t("table.severity"), cell: (r) => <RiskBadge level={r.severity} /> },
                 { key: "title", header: t("table.title"), cell: (r) => <span className="font-medium">{r.title}</span> },
                 { key: "status", header: t("table.status"), cell: (r) => <StatusBadge state={r.status === "resolved" ? "success" : r.status === "mitigating" ? "running" : "warning"} /> },
-                { key: "opened", header: t("table.opened"), cell: (r) => {
-                  const d = r.openedAt ? new Date(r.openedAt) : null;
-                  return <span className="text-mono text-xs text-muted-foreground">{d && !Number.isNaN(d.getTime()) ? d.toLocaleString() : "—"}</span>;
-                } },
+                { key: "opened", header: t("table.opened"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{safeDateTime(r.openedAt)}</span> },
               ]}
             />
             <DataTable
@@ -209,6 +207,7 @@ export const RiskCenter = () => {
                 { key: "sev", header: t("table.severity"), cell: (r) => <RiskBadge level={r.severity} /> },
                 { key: "title", header: t("nav.alerts"), cell: (r) => <span>{r.title}</span> },
                 { key: "src", header: t("table.source"), cell: (r) => <span className="text-mono text-xs">{r.source}</span> },
+                { key: "opened", header: t("table.opened"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{safeDateTime(r.openedAt)}</span> },
                 { key: "act", header: "", cell: () => <Button size="sm" variant="outline">{t("table_actions.open")}</Button> },
               ]}
             />

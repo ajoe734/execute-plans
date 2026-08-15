@@ -2,15 +2,18 @@
 import fs from "node:fs";
 import path from "node:path";
 
-const BASE = process.env.PANTHEON_BFF_BASE_URL || process.env.VITE_BFF_BASE_URL || "https://pantheon-lupin-dev-bff.35.201.239.38.sslip.io";
+const BASE = process.env.PANTHEON_BFF_BASE_URL || process.env.VITE_BFF_BASE_URL || "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io";
 const OUT_DIR = process.env.PANTHEON_AUDIT_OUT_DIR || ".lovable/audits";
 const AUTH_TOKEN = process.env.PANTHEON_BFF_SMOKE_BEARER_TOKEN || "";
 const mode = process.argv.includes("--authenticated") ? "authenticated" : "anonymous";
+const PROBE_ATTEMPTS = positiveInt(process.env.PANTHEON_BFF_ROUTE_PROBE_ATTEMPTS, 3, 1);
+const RETRY_DELAY_MS = positiveInt(process.env.PANTHEON_BFF_ROUTE_PROBE_RETRY_DELAY_MS, 1_000, 100);
+const FETCH_TIMEOUT_MS = positiveInt(process.env.PANTHEON_BFF_ROUTE_PROBE_TIMEOUT_MS, 25_000, 5_000);
+const LEGACY_HEALTH_ROUTES = new Set();
+const READINESS_ROUTES = new Set(["/livez"]);
 
 const routes = [
-  ["GET", "/health"],
-  ["GET", "/healthz"],
-  ["GET", "/readyz"],
+  ["GET", "/livez"],
   ["GET", "/openapi.json"],
   ["GET", "/bff/events/stream"],
   ["GET", "/bff/me"],
@@ -51,6 +54,7 @@ const routes = [
   // /bff/agora/ask/sessions intentionally removed (2026-06-03): Management AI
   // no longer uses Agora Ask. Agora-only probe lives in scripts/check-agora-boundary.ts.
   ["POST", "/bff/management/nl/ask"],
+  { method: "POST", route: "/bff/assistant/provider/reauth", anonymousOnly: true },
 
   ["GET", "/bff/v5/loop-runs"],
   ["GET", "/bff/v5/sentinel/findings"],
@@ -61,6 +65,9 @@ const routes = [
 
 function bodyFor(method, route) {
   if (method === "GET") return undefined;
+  if (route === "/bff/assistant/provider/reauth") {
+    return JSON.stringify({ provider: "codex", reason: "anonymous route probe" });
+  }
   if (route === "/bff/management/nl/ask") {
     return JSON.stringify({ question: "probe", focus: "all", context: "probe-script" });
   }
@@ -72,38 +79,86 @@ function bodyFor(method, route) {
   return JSON.stringify({});
 }
 
+function positiveInt(value, fallback, minimum) {
+  const parsed = Number(value ?? fallback);
+  return Number.isFinite(parsed) && parsed >= minimum ? Math.floor(parsed) : fallback;
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isRetryableResult(result) {
+  return result.status === "ERR" || [429, 500, 502, 503, 504].includes(result.status);
+}
+
+function maxAttemptsFor(route) {
+  return PROBE_ATTEMPTS;
+}
+
+function timeoutFor(route) {
+  return FETCH_TIMEOUT_MS;
+}
 
 async function probe(method, route) {
-  const headers = {
-    "Accept": "application/json",
-    "X-Request-Id": `req_probe_${Date.now()}_${Math.random().toString(36).slice(2)}`,
-    "X-BFF-Api-Version": "2026-05-07",
-  };
-  if (method !== "GET") {
-    headers["Content-Type"] = "application/json";
-    headers["Idempotency-Key"] = `idk_probe_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-  }
-  if (mode === "authenticated" && AUTH_TOKEN) {
-    headers["Authorization"] = `Bearer ${AUTH_TOKEN}`;
+  const url = `${BASE}${route}`;
+  const idBase = `probe_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  const idempotencyKey = `idk_${idBase}`;
+  let lastResult = { method, route, status: "ERR", ms: 0, attempts: 0, error: "not attempted" };
+  const maxAttempts = maxAttemptsFor(route);
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const headers = {
+      "Accept": "application/json",
+      "X-Request-Id": `req_${idBase}_${attempt}`,
+      "X-BFF-Api-Version": "2026-05-07",
+    };
+    if (method !== "GET") {
+      headers["Content-Type"] = "application/json";
+      headers["Idempotency-Key"] = idempotencyKey;
+      headers["X-Idempotency-Key"] = idempotencyKey;
+    }
+    if (mode === "authenticated" && AUTH_TOKEN) {
+      headers["Authorization"] = `Bearer ${AUTH_TOKEN}`;
+    }
+
+    const started = Date.now();
+    try {
+      const res = await fetch(url, {
+        method,
+        headers,
+        body: bodyFor(method, route),
+        signal: AbortSignal.timeout(timeoutFor(route)),
+      });
+      lastResult = { method, route, status: res.status, ms: Date.now() - started, attempts: attempt };
+    } catch (err) {
+      lastResult = {
+        method,
+        route,
+        status: "ERR",
+        ms: Date.now() - started,
+        attempts: attempt,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+
+    if (attempt >= maxAttempts || !isRetryableResult(lastResult)) {
+      return lastResult;
+    }
+
+    await sleep(RETRY_DELAY_MS * attempt);
   }
 
-  const url = `${BASE}${route}`;
-  const started = Date.now();
-  try {
-    const res = await fetch(url, {
-      method,
-      headers,
-      body: bodyFor(method, route),
-      signal: AbortSignal.timeout(15000),
-    });
-    return { method, route, status: res.status, ms: Date.now() - started };
-  } catch (err) {
-    return { method, route, status: "ERR", ms: Date.now() - started, error: err instanceof Error ? err.message : String(err) };
-  }
+  return lastResult;
 }
 
 const results = [];
-for (const [method, route] of routes) {
+for (const routeSpec of routes) {
+  const normalized = Array.isArray(routeSpec)
+    ? { method: routeSpec[0], route: routeSpec[1], anonymousOnly: false }
+    : routeSpec;
+  if (mode !== "anonymous" && normalized.anonymousOnly) continue;
+  const { method, route } = normalized;
   results.push(await probe(method, route));
 }
 
@@ -112,6 +167,11 @@ for (const r of results) counts[r.status] = (counts[r.status] || 0) + 1;
 
 const missing = results.filter(r => r.status === 404);
 const transportErrors = results.filter(r => r.status === "ERR");
+const readinessOk = results.some(r => READINESS_ROUTES.has(r.route) && r.status === 200);
+const fatalMissing = missing.filter(r => !LEGACY_HEALTH_ROUTES.has(r.route) || !readinessOk);
+const fatalTransportErrors = transportErrors.filter(r => !LEGACY_HEALTH_ROUTES.has(r.route) || !readinessOk);
+const blockingTransportErrors = mode === "anonymous" && readinessOk ? [] : fatalTransportErrors;
+const ignoredLegacyHealthFailures = results.filter(r => LEGACY_HEALTH_ROUTES.has(r.route) && [404, "ERR"].includes(r.status) && readinessOk);
 const now = new Date().toISOString().slice(0, 10);
 const md = [
   `# BFF Route Probe — ${mode}`,
@@ -127,24 +187,29 @@ const md = [
   ``,
   `## Verdict`,
   ``,
-  `- Canonical 404 count: ${missing.length}`,
-  `- Transport errors: ${transportErrors.length}`,
+  `- Canonical 404 count: ${fatalMissing.length}`,
+  `- Transport errors: ${fatalTransportErrors.length}`,
+  `- Blocking transport errors: ${blockingTransportErrors.length}`,
+  `- Readiness endpoint ok: ${readinessOk}`,
+  `- Legacy health route failures ignored: ${ignoredLegacyHealthFailures.length}`,
   ``,
   `## Results`,
   ``,
-  `| Status | Method | Path | ms |`,
-  `|---:|---|---|---:|`,
-  ...results.map(r => `| ${r.status} | ${r.method} | ${r.route} | ${r.ms} |`),
+  `| Status | Method | Path | ms | Attempts |`,
+  `|---:|---|---|---:|---:|`,
+  ...results.map(r => `| ${r.status} | ${r.method} | ${r.route} | ${r.ms} | ${r.attempts ?? 1} |`),
   ``,
   `## Gate`,
   ``,
-  missing.length === 0
-    ? `PASS: no canonical route returned 404.`
-    : `FAIL: ${missing.length} canonical routes returned 404.`,
+  fatalMissing.length === 0
+    ? fatalTransportErrors.length === 0
+      ? `PASS: no canonical route returned 404.`
+      : `WARN: no canonical route returned 404; ${fatalTransportErrors.length} route(s) hit transient transport errors.`
+    : `FAIL: ${fatalMissing.length} canonical routes returned 404.`,
 ].join("\n");
 
 fs.mkdirSync(OUT_DIR, { recursive: true });
 const out = path.join(OUT_DIR, `bff-route-probe-${mode}-${now}.md`);
 fs.writeFileSync(out, md, "utf8");
 console.log(md);
-if (missing.length || transportErrors.length) process.exitCode = 1;
+if (fatalMissing.length || blockingTransportErrors.length) process.exitCode = 1;

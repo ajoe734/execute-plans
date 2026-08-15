@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { PermissionAwareButton } from "@/platform/components/PermissionAwareButton";
 import { useT } from "@/platform/hooks";
 import { toast } from "sonner";
+import { commandReceiptDescription } from "@/lib/bff-v1/commandReceipt";
 
 export const AllocationLimitsManager = ({ poolId }: { poolId: string }) => {
   const t = useT();
@@ -28,10 +29,12 @@ export const AllocationLimitsManager = ({ poolId }: { poolId: string }) => {
       poolId, scope, scopeRef, cap: c,
       updatedBy: "capital", updatedAt: new Date().toISOString(),
     };
-    await mutations.setAllocationLimit(poolId, scope, scopeRef, c);
+    const receipt = await mutations.setAllocationLimit(poolId, scope, scopeRef, c);
     setRows((r) => [lim, ...r]);
     setScopeRef("");
-    toast.success(t("phase13.capital.limits.queued"));
+    toast.success(t("phase13.capital.limits.queued"), {
+      description: commandReceiptDescription(receipt, { fallback: `CapitalPool ${poolId} · allocation_limit` }),
+    });
   };
 
   return (

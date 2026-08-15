@@ -15,7 +15,7 @@ import {
   YAxis,
 } from "recharts";
 
-import type { ChartSpecV1 } from "@/lib/bff-v1/agora/types";
+import type { ChartSpecV1 } from "@/lib/bff-v1/agora/tradingRoomTypes";
 
 import {
   chartRendererForKind,
@@ -128,7 +128,7 @@ function ChartFrame({
   const clickable = Boolean(interaction && onInteraction && isWidgetInteractionKind(interaction.kind));
   return (
     <div
-      className="h-full min-h-[180px] rounded-md border border-slate-200 bg-white p-3 text-slate-950"
+      className="h-full min-h-[180px] rounded-md border border-slate-800 bg-[#171b22] p-3 text-[#f0ece4]"
       data-testid="chart-spec-renderer"
       onClick={clickable ? () => onInteraction?.(interaction as ChartInteraction) : undefined}
       onKeyDown={
@@ -143,16 +143,114 @@ function ChartFrame({
       }
       role={clickable ? "button" : undefined}
       tabIndex={clickable ? 0 : undefined}
+      style={{
+        background: "#1e2330",
+        border: "1px solid #2a2e38",
+        color: "#f0ece4",
+        position: "relative",
+      }}
     >
       {children}
     </div>
   );
 }
 
-function ChartNotice({ message }: { message: string }) {
+function ChartNotice({
+  message,
+  widgetType,
+  dataSource,
+}: {
+  message: string;
+  widgetType?: string;
+  dataSource?: string;
+}) {
+  let statusLabel = "DATA UNAVAILABLE";
+  let statusColor = "#8c96a6";
+  let icon = "⚡";
+  let detailedDescription = message;
+
+  if (widgetType === "strategy_status_summary" || widgetType === "research_progress") {
+    statusLabel = "AWAITING TELEMETRY";
+    statusColor = "#8c96a6";
+    icon = "✓";
+    detailedDescription = "No status summary or progress logs have been synchronized.";
+  } else if (widgetType === "candidate_funnel" || widgetType === "candidate_ranking_table") {
+    statusLabel = "NO CANDIDATES";
+    statusColor = "#8c96a6";
+    icon = "🔍";
+    detailedDescription = "Awaiting candidate monitoring telemetry from BFF.";
+  } else if (widgetType?.includes("branch") || widgetType?.includes("winner") || widgetType === "confidence_decomposition") {
+    statusLabel = "AWAITING DISCLOSURES";
+    statusColor = "#8c96a6";
+    icon = "📊";
+    detailedDescription = "Winner branch scoring and relationship indicators are not available.";
+  } else if (widgetType?.includes("migration") || widgetType?.includes("network")) {
+    statusLabel = "MIGRATIONS UNAVAILABLE";
+    statusColor = "#8c96a6";
+    icon = "🔗";
+    detailedDescription = "No capital migration metrics or network topology data are active.";
+  } else if (widgetType?.includes("event") || widgetType === "catalyst_timeline") {
+    statusLabel = "TIMELINE UNAVAILABLE";
+    statusColor = "#8c96a6";
+    icon = "📅";
+    detailedDescription = "No event lead times or catalyst timelines have been synchronized.";
+  } else if (
+    widgetType === "position_action_queue" ||
+    widgetType === "expected_value_distribution" ||
+    widgetType?.includes("positions") ||
+    widgetType?.startsWith("position") ||
+    widgetType === "signal_decision_queue" ||
+    widgetType === "shadow_scoreboard"
+  ) {
+    statusLabel = "NO ACTIVE POSITIONS";
+    statusColor = "#8c96a6";
+    icon = "💼";
+    detailedDescription = "No active positions, sizing events, or decision queues have been loaded.";
+  } else if (widgetType === "evidence_trace" || widgetType === "evidence_references" || widgetType?.includes("evidence")) {
+    statusLabel = "EVIDENCE UNAVAILABLE";
+    statusColor = "#8c96a6";
+    icon = "🛡️";
+    detailedDescription = "No validation evidence, backtest reports, or OOS indices have been synchronized.";
+  }
+
   return (
-    <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900" data-testid="chart-render-notice">
-      {message}
+    <div
+      data-testid="chart-render-notice"
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "center",
+        alignItems: "center",
+        height: "100%",
+        minHeight: 120,
+        background: "#121620",
+        border: "1px solid #2a2e38",
+        borderRadius: 6,
+        padding: 12,
+        textAlign: "center",
+        color: "#f0ece4",
+      }}
+    >
+      <div style={{ fontSize: 20, marginBottom: 6 }}>{icon}</div>
+      <div
+        style={{
+          fontSize: 10,
+          fontWeight: 800,
+          color: statusColor,
+          letterSpacing: "0.08em",
+          marginBottom: 4,
+        }}
+      >
+        {statusLabel}
+      </div>
+      <div style={{ fontSize: 11, color: "#c4ccda", maxWidth: 260, lineHeight: 1.4 }}>
+        {detailedDescription}
+      </div>
+      {dataSource && (
+        <div style={{ fontSize: 9, color: "#8c96a6", marginTop: 6 }}>
+          Source: {dataSource}
+        </div>
+      )}
     </div>
   );
 }
@@ -164,7 +262,7 @@ function MetricRenderer({ rows, spec }: { rows: ChartDataRow[]; spec: ChartSpecV
   return (
     <div className="flex h-full min-h-[140px] flex-col justify-center gap-2" data-testid="chart-renderer-recharts">
       <div className="text-xs font-medium uppercase tracking-wide text-slate-500">{formatValue(valueFrom(firstRow, labelField) || chartTitle(spec))}</div>
-      <div className="text-4xl font-semibold text-slate-950">{formatValue(valueFrom(firstRow, valueField))}</div>
+      <div className="text-4xl font-semibold text-slate-900">{formatValue(valueFrom(firstRow, valueField))}</div>
     </div>
   );
 }
@@ -176,13 +274,13 @@ function RechartsRenderer({ rows, spec, height }: { rows: ChartDataRow[]; spec: 
 
   const xField = firstField(spec, ["x", "time", "label"], "label") ?? "label";
   const yField = firstField(spec, ["y", "value"], "value") ?? "value";
-  const color = "#2563eb";
+  const color = "#e8b750";
   const common = (
     <>
-      <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
-      <XAxis dataKey={xField} tick={{ fill: "#475569", fontSize: 11 }} />
-      <YAxis tick={{ fill: "#475569", fontSize: 11 }} />
-      <Tooltip />
+      <CartesianGrid stroke="#2a2e38" strokeDasharray="3 3" />
+      <XAxis dataKey={xField} tick={{ fill: "#8c96a6", fontSize: 11 }} />
+      <YAxis tick={{ fill: "#8c96a6", fontSize: 11 }} />
+      <Tooltip contentStyle={{ background: "#171b22", borderColor: "#2a2e38", color: "#f0ece4" }} />
     </>
   );
 
@@ -192,7 +290,7 @@ function RechartsRenderer({ rows, spec, height }: { rows: ChartDataRow[]; spec: 
         {spec.kind === "area" ? (
           <AreaChart data={rows}>
             {common}
-            <Area dataKey={yField} fill="#bfdbfe" stroke={color} type="monotone" />
+            <Area dataKey={yField} fill="rgba(232, 183, 80, 0.12)" stroke={color} type="monotone" />
           </AreaChart>
         ) : spec.kind === "bar" ? (
           <BarChart data={rows}>
@@ -290,7 +388,6 @@ function echartOptionFor(kind: ChartSpecKind, spec: ChartSpecV1, rows: ChartData
     };
   }
 
-  // scatter — supports the A3 grammar `size` encoding channel for bubble charts
   const sizeField = firstField(spec, ["size"], undefined);
   const maxSizeValue = sizeField
     ? Math.max(...rows.map((row) => numberFrom(valueFrom(row, sizeField))), 1)
@@ -331,21 +428,21 @@ function TableRenderer({ rows, spec }: { rows: ChartDataRow[]; spec: ChartSpecV1
   const columns = fields.length ? fields : Object.keys(rows[0] ?? {}).slice(0, 8);
   return (
     <div className="overflow-auto" data-testid="chart-renderer-builtin">
-      <table className="w-full border-collapse text-left text-sm">
+      <table className="w-full border-collapse text-left text-sm" style={{ borderCollapse: "collapse", width: "100%" }}>
         <thead>
-          <tr>
+          <tr style={{ borderBottom: "1px solid #2a2e38" }}>
             {columns.map((column) => (
-              <th className="border-b border-slate-200 px-2 py-1 font-medium text-slate-600" key={column}>
-                {column}
+              <th className="px-2 py-1 font-semibold text-[#8c96a6]" key={column} style={{ padding: "6px 8px" }}>
+                {column.toUpperCase()}
               </th>
             ))}
           </tr>
         </thead>
         <tbody>
           {rows.slice(0, 25).map((row, rowIndex) => (
-            <tr key={rowIndex}>
+            <tr key={rowIndex} style={{ borderBottom: "1px solid #2a2e38" }}>
               {columns.map((column) => (
-                <td className="border-b border-slate-100 px-2 py-1 text-slate-900" key={column}>
+                <td className="px-2 py-1 text-[#f0ece4]" key={column} style={{ padding: "6px 8px" }}>
                   {formatValue(row[column])}
                 </td>
               ))}
@@ -361,11 +458,11 @@ function TimelineRenderer({ rows, spec }: { rows: ChartDataRow[]; spec: ChartSpe
   const timeField = firstField(spec, ["time", "x"], "time");
   const labelField = firstField(spec, ["label", "y"], "label");
   return (
-    <ol className="space-y-2" data-testid="chart-renderer-builtin">
+    <ol className="space-y-2" data-testid="chart-renderer-builtin" style={{ margin: 0, padding: 0, listStyle: "none" }}>
       {rows.slice(0, 25).map((row, index) => (
-        <li className="rounded border border-slate-200 px-3 py-2" key={index}>
-          <div className="text-xs text-slate-500">{formatValue(valueFrom(row, timeField))}</div>
-          <div className="text-sm font-medium text-slate-950">{formatValue(valueFrom(row, labelField))}</div>
+        <li className="rounded border border-[#2a2e38] bg-[#121620] px-3 py-2" key={index} style={{ marginBottom: 6 }}>
+          <div className="text-xs text-[#8c96a6]">{formatValue(valueFrom(row, timeField))}</div>
+          <div className="text-sm font-medium text-[#f0ece4]" style={{ marginTop: 2 }}>{formatValue(valueFrom(row, labelField))}</div>
         </li>
       ))}
     </ol>
@@ -381,12 +478,12 @@ function StackedBarFallback({ rows, spec }: { rows: ChartDataRow[]; spec: ChartS
       {rows.slice(0, 20).map((row, index) => {
         const value = numberFrom(valueFrom(row, valueField));
         return (
-          <div className="grid grid-cols-[minmax(96px,1fr)_3fr_auto] items-center gap-2 text-sm" key={index}>
-            <span className="truncate text-slate-600">{formatValue(valueFrom(row, labelField))}</span>
-            <span className="h-2 rounded bg-slate-100">
-              <span className="block h-2 rounded bg-blue-600" style={{ width: `${Math.max((value / max) * 100, 2)}%` }} />
+          <div className="grid grid-cols-[minmax(96px,1fr)_3fr_auto] items-center gap-2 text-sm" key={index} style={{ display: "grid", gridTemplateColumns: "100px 1fr 50px", gap: 8, alignItems: "center", marginBottom: 4 }}>
+            <span className="truncate text-[#8c96a6]">{formatValue(valueFrom(row, labelField))}</span>
+            <span className="h-2 rounded bg-[#2a2e38]" style={{ height: 8, background: "#2a2e38", borderRadius: 4, display: "block" }}>
+              <span className="block h-2 rounded bg-[#e8b750]" style={{ height: 8, background: "#e8b750", borderRadius: 4, display: "block", width: `${Math.max((value / max) * 100, 2)}%` }} />
             </span>
-            <span className="tabular-nums text-slate-900">{formatValue(value)}</span>
+            <span className="tabular-nums text-[#f0ece4]" style={{ textAlign: "right" }}>{formatValue(value)}</span>
           </div>
         );
       })}
@@ -404,19 +501,42 @@ function BuiltinChartRenderer({ rows, spec }: { rows: ChartDataRow[]; spec: Char
   return <TableRenderer rows={rows} spec={spec} />;
 }
 
-export function ChartSpecRenderer({ spec, data, height = 260, onInteraction }: ChartSpecRendererProps) {
+export interface ChartSpecRendererProps {
+  spec: ChartSpecV1;
+  data?: ChartDataRow[];
+  height?: number;
+  onInteraction?: (interaction: ChartInteraction) => void;
+  widgetType?: string;
+  dataSource?: string;
+  dataAvailability?: string;
+}
+
+export function ChartSpecRenderer({
+  spec,
+  data,
+  height = 260,
+  onInteraction,
+  widgetType,
+  dataSource,
+  dataAvailability,
+}: ChartSpecRendererProps) {
   const validationMessage = validateChartSpecForRendering(spec);
   if (validationMessage) {
-    return <ChartNotice message={validationMessage} />;
+    return <ChartNotice message={validationMessage} widgetType={widgetType} dataSource={dataSource} />;
   }
 
+  const isUnavailable = dataAvailability === "unavailable" || (dataAvailability === "partial" && data && data.length === 0);
   const rows = asRows(data);
   const renderer = chartRendererForKind(spec.kind);
 
   return (
     <ChartFrame interaction={spec.click_action} onInteraction={onInteraction}>
-      {rows.length === 0 && spec.kind !== "metric" ? (
-        <ChartNotice message="No chart data is available for this WidgetSpec." />
+      {isUnavailable || rows.length === 0 ? (
+        <ChartNotice
+          message="No chart data is available for this WidgetSpec."
+          widgetType={widgetType}
+          dataSource={dataSource}
+        />
       ) : renderer === "recharts" ? (
         <RechartsRenderer height={height} rows={rows} spec={spec} />
       ) : renderer === "echarts" ? (

@@ -4,11 +4,13 @@ import {
   askManagementAi,
   streamManagementAi,
   fetchAssistantModeStatus,
-  fetchAssistantOrchestratorStatus,
+  fetchAssistantProviderUsageSummary,
+  fetchAssistantProviders,
   fetchAssistantProviderReauthStatus,
-  generateAssistantDevDocs,
-  prepareAssistantRepairWorktree,
+  fetchManagementAiConversationList,
+  registerAssistantProvider,
   startAssistantProviderReauth,
+  submitAssistantProviderReauthCode,
 } from "@/lib/bff-v1/managementAi";
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -31,7 +33,7 @@ function streamResponse(frames: string[], status = 200): Response {
   });
 }
 
-describe("Management AI orchestrator status", () => {
+describe("Management AI provider status", () => {
   const realFetch = globalThis.fetch;
 
   afterEach(() => {
@@ -39,117 +41,158 @@ describe("Management AI orchestrator status", () => {
     vi.unstubAllEnvs();
   });
 
-  it("adapts OpenClaw assistant.command usability from BFF status", async () => {
+  it("reads assistant provider auth readiness with usage quota from the BFF", async () => {
     vi.stubEnv("VITE_BFF_BASE_URL", "https://bff.example.test");
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
-      data: {
-        status: "ready",
-        provider_status: {
-          provider: "codex_cli",
+      status: "ok",
+      data: [
+        {
+          provider: "codex",
+          provider_name: "Codex CLI",
           runtime: "openclaw_gateway_cli_mount",
-          status: "completed",
-          used: true,
-          fallback: null,
-          run_id: "mnl-trace-test",
+          ready: false,
+          status: "degraded",
+          auth_status: "failed",
+          degraded_reason: "refresh token expired",
+          mount_mode: "service_user",
+          usage: {
+            status: "captured",
+            source: "snapshot",
+            remaining: 12,
+            remaining_percent: 24,
+            limit: 50,
+            used: 38,
+            unit: "requests",
+            reset_at: "2026-06-29T00:00:00Z",
+          },
         },
-        openclawToolPolicy: {
-          status: "ready",
-          effectiveStatus: "degraded",
-          upstreamStatus: "degraded",
-          assistantCommandAllowed: true,
-          assistantCommandEffective: true,
-          assistantCommandUsable: true,
-          assistantCommandStatus: "usable",
-          effectiveTools: ["assistant.command", "assistant.sa_sd.generate"],
-          effective_skills: [
-            {
-              id: "assistant.sa_sd.generate",
-              title: "Generate SA/SD",
-              surface: "assistant_command",
-              handler_ref: "bff.route:POST /bff/assistant/dev-docs/generate",
-              result_surface: "assistant_dev_docs_packet",
-              confirm_policy: "control_mode",
-              mode_gate: { allowed_modes: ["kernel_debug", "kernel_repair"] },
-              input_schema: { type: "object" },
-            },
-          ],
-        },
-        snapshotAt: "2026-06-09T12:55:19Z",
-        project: "pantheon",
-        sprint: "2026-06-03-pantheon-assistant-existing-architecture",
-        sourceRefs: [
-          { source_type: "task_status", path: "ai-status.json", available: true, status: "ok", last_modified_at: "2026-06-09T12:48:23Z" },
-        ],
-        supervisor: {
-          lifecycle: "running",
-          mode_status: "active",
-          focus_mode: "execution",
-          last_heartbeat_at: "2026-06-09T12:54:04Z",
-          mode_occupancy: { execution: { running: 2, pending: 0, queued: 1 } },
-        },
-        providerReadiness: {
-          available: true,
-          provider_name: "codex",
-          ready: true,
-          status: "ready",
-          mount_mode: "rw",
-          capabilities: { read: true, repair_write: true },
-          repair_workspace: { root: "/srv/pantheon-assistant/worktrees", ready: true, writable: true, worktree_count: 1 },
-        },
-        assistantDevBridge: {
-          status: "idle",
-          inbox: { path: "/workspace/status-root/.orchestrator/assistant-dev-packets", exists: true, pending_count: 0, processed_count: 1, failed_count: 0, receipt_count: 1 },
-          recent_receipts: [{ packet_id: "bridge_smoke", status: "processed", error_count: 0 }],
-        },
-        tasks: [
-          { id: "MPOS-P1-RISK-001", title: "Create first class RiskPolicy evaluator contract", owner: "Codex", status: "in_progress", last_update: "2026-06-09T12:34:33Z" },
-        ],
-        coordination: { file_count: 669, feature_count: 47, feature_ids: ["PKT-011-health-status-board"] },
-      },
+      ],
+      meta: { auth_probe: true },
     }));
     globalThis.fetch = fetchMock;
 
-    const result = await fetchAssistantOrchestratorStatus();
+    const result = await fetchAssistantProviders({ authProbe: true });
 
     expect(result.kind).toBe("ok");
     if (result.kind !== "ok") throw new Error(result.message);
-    expect(fetchMock.mock.calls[0][0]).toBe("https://bff.example.test/bff/assistant/orchestrator/status");
-    expect(result.status.providerStatus?.runId).toBe("mnl-trace-test");
-    expect(result.status.openclawToolPolicy?.assistantCommandUsable).toBe(true);
-    expect(result.status.openclawToolPolicy?.assistantCommandStatus).toBe("usable");
-    expect(result.status.openclawToolPolicy?.effectiveTools).toEqual(["assistant.command", "assistant.sa_sd.generate"]);
-    expect(result.status.openclawToolPolicy?.effectiveSkills?.[0]).toMatchObject({
-      id: "assistant.sa_sd.generate",
-      title: "Generate SA/SD",
-      surface: "assistant_command",
-      handlerRef: "bff.route:POST /bff/assistant/dev-docs/generate",
-      resultSurface: "assistant_dev_docs_packet",
-      confirmPolicy: "control_mode",
+    expect(fetchMock.mock.calls[0][0]).toBe("https://bff.example.test/bff/assistant/providers?auth_probe=true");
+    expect(result.providers[0]).toMatchObject({
+      provider: "codex",
+      providerName: "Codex CLI",
+      ready: false,
+      authStatus: "failed",
+      degradedReason: "refresh token expired",
     });
-    expect(result.status.openclawToolPolicy?.effectiveSkills?.[0].modeGate).toMatchObject({ allowed_modes: ["kernel_debug", "kernel_repair"] });
-    expect(result.status.snapshotAt).toBe("2026-06-09T12:55:19Z");
-    expect(result.status.sourceRefs?.[0].sourceType).toBe("task_status");
-    expect(result.status.supervisor?.lifecycle).toBe("running");
-    expect(result.status.supervisor?.modeOccupancy?.execution.running).toBe(2);
-    expect(result.status.providerReadiness?.providerName).toBe("codex");
-    expect(result.status.providerReadiness?.capabilities?.repairWrite).toBe(true);
-    expect(result.status.providerReadiness?.repairWorkspace?.worktreeCount).toBe(1);
-    expect(result.status.assistantDevBridge?.inbox?.processedCount).toBe(1);
-    expect(result.status.assistantDevBridge?.recentReceipts?.[0].packetId).toBe("bridge_smoke");
-    expect(result.status.tasks?.[0].id).toBe("MPOS-P1-RISK-001");
-    expect(result.status.coordination?.featureIds).toEqual(["PKT-011-health-status-board"]);
+    expect(result.providers[0].usage).toMatchObject({
+      remaining: 12,
+      remainingPercent: 24,
+      limit: 50,
+      used: 38,
+      resetAt: "2026-06-29T00:00:00Z",
+    });
   });
 
-  it("returns a visible failure when the BFF status endpoint is missing", async () => {
+  it("reads assistant provider usage history and quota summary from the BFF", async () => {
     vi.stubEnv("VITE_BFF_BASE_URL", "https://bff.example.test");
-    globalThis.fetch = vi.fn().mockResolvedValue(jsonResponse({ detail: "Not Found" }, 404));
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
+      status: "ok",
+      data: {
+        providers: [
+          {
+            provider: "codex_cli",
+            provider_name: "Codex CLI",
+            runtime: "openclaw_gateway_cli_mount",
+            ready: true,
+            auth_status: "ready",
+            live_auth: true,
+            calls: 7,
+            success_count: 6,
+            failed_count: 1,
+            prompt_bytes: 1200,
+            input_tokens: 100,
+            output_tokens: 40,
+            total_tokens: 140,
+            quota: {
+              status: "captured",
+              source: "provider_snapshot",
+              remaining: 12,
+              used: 38,
+              limit: 50,
+              unit: "requests",
+            },
+            observed_usage: {
+              source: "management_ai_bff_audit",
+              coverage: "bff_observed_management_ai_only",
+              coverage_label: "BFF observed",
+              stale: true,
+              stale_after_hours: 24,
+              last_observed_at: "2026-06-28T11:07:35Z",
+              calls: 7,
+              total_tokens: 140,
+            },
+            models: [
+              {
+                model: "gpt-5-codex",
+                calls: 7,
+                total_tokens: 140,
+              },
+            ],
+          },
+        ],
+        totals: {
+          providers: 1,
+          live_auth_count: 1,
+          calls: 7,
+          total_tokens: 140,
+        },
+        quota: {
+          truth_policy: "provider_snapshot_only",
+        },
+        usage: {
+          truth_policy: "observed_bff_events_only",
+          source: "management_ai_bff_audit",
+        },
+      },
+      meta: { auth_probe: false },
+    }));
+    globalThis.fetch = fetchMock;
 
-    const result = await fetchAssistantOrchestratorStatus();
+    const result = await fetchAssistantProviderUsageSummary({ windowHours: 168, limit: 500 });
 
-    expect(result.kind).toBe("failure");
-    if (result.kind !== "failure") throw new Error("expected failure");
-    expect(result.statusCode).toBe(404);
-    expect(result.message).toContain("BFF 404");
+    expect(result.kind).toBe("ok");
+    if (result.kind !== "ok") throw new Error(result.message);
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      "https://bff.example.test/bff/assistant/providers/usage-summary?auth_probe=false&window_hours=168&limit=500",
+    );
+    expect(result.totals.liveAuthCount).toBe(1);
+    expect(result.totals.totalTokens).toBe(140);
+    expect(result.providers[0]).toMatchObject({
+      provider: "codex_cli",
+      providerName: "Codex CLI",
+      liveAuth: true,
+      calls: 7,
+      totalTokens: 140,
+    });
+    expect(result.providers[0].quota).toMatchObject({
+      source: "provider_snapshot",
+      remaining: 12,
+      used: 38,
+    });
+    expect(result.providers[0].observedUsage).toMatchObject({
+      source: "management_ai_bff_audit",
+      coverage: "bff_observed_management_ai_only",
+      coverageLabel: "BFF observed",
+      stale: true,
+      staleAfterHours: 24,
+    });
+    expect(result.usage).toMatchObject({
+      truth_policy: "observed_bff_events_only",
+      source: "management_ai_bff_audit",
+    });
+    expect(result.providers[0].models?.[0]).toMatchObject({
+      model: "gpt-5-codex",
+      totalTokens: 140,
+    });
   });
 });
 
@@ -170,7 +213,7 @@ describe("Management AI control mode", () => {
         control_mode: {
           state: "active",
           active: true,
-          mode: "kernel_repair",
+          mode: "kernel_debug",
           activation_id: "act_123",
           expires_at: "2026-06-08T05:00:00Z",
           idle_expires_at: "2026-06-08T04:20:00Z",
@@ -187,7 +230,7 @@ describe("Management AI control mode", () => {
     expect(fetchMock.mock.calls[0][0]).toBe("https://bff.example.test/bff/assistant/mode");
     expect(result.status.kernelEnabled).toBe(true);
     expect(result.status.controlMode?.active).toBe(true);
-    expect(result.status.controlMode?.mode).toBe("kernel_repair");
+    expect(result.status.controlMode?.mode).toBe("kernel_debug");
     expect(result.status.controlMode?.commandClasses).toEqual(["code_search", "file_slice"]);
   });
 
@@ -240,8 +283,8 @@ describe("Management AI control mode", () => {
 
     const result = await activateAssistantControlMode({
       passphrase: "control phrase ok",
-      mode: "kernel_repair",
-      reason: "repair from test",
+      mode: "kernel_debug",
+      reason: "diagnostic from test",
     });
 
     expect(result.kind).toBe("failure");
@@ -326,118 +369,78 @@ describe("Management AI provider reauth", () => {
     expect(result.reauth.verificationUriComplete).toContain("user_code=ABCD-EFGH");
   });
 
-  it("surfaces provider reauth control-mode precondition failures", async () => {
+  it("submits Claude provider reauth authorization code through the assistant BFF route", async () => {
+    vi.stubEnv("VITE_BFF_BASE_URL", "https://bff.example.test");
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
+      data: {
+        provider: "claude",
+        status: "code_submitted",
+        reauth_session_id: "claude_reauth_123",
+        code_submitted_at: "2026-07-01T00:00:00Z",
+      },
+    }));
+    globalThis.fetch = fetchMock;
+
+    const result = await submitAssistantProviderReauthCode({
+      provider: "claude",
+      sessionId: "claude_reauth_123",
+      code: "claude-oauth-code-123",
+      traceId: "trace-code-1",
+    });
+
+    expect(result.kind).toBe("ok");
+    if (result.kind !== "ok") throw new Error(result.message);
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      "https://bff.example.test/bff/assistant/provider/reauth/claude_reauth_123/code?provider=claude",
+    );
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(init.method).toBe("POST");
+    expect(init.credentials).toBe("include");
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      provider: "claude",
+      code: "claude-oauth-code-123",
+      traceId: "trace-code-1",
+    });
+    expect(result.reauth.status).toBe("code_submitted");
+    expect(result.reauth.reauthSessionId).toBe("claude_reauth_123");
+  });
+
+  it("surfaces provider reauth failures", async () => {
     vi.stubEnv("VITE_BFF_BASE_URL", "https://bff.example.test");
     globalThis.fetch = vi.fn().mockResolvedValue(jsonResponse({
       detail: {
         error: {
-          message: "Assistant dev workflow requires active control mode",
+          message: "Assistant provider reauth requires MFA",
         },
       },
-    }, 409));
+    }, 403));
 
     const result = await startAssistantProviderReauth({ provider: "codex" });
 
     expect(result.kind).toBe("failure");
     if (result.kind !== "failure") throw new Error("expected failure");
-    expect(result.statusCode).toBe(409);
-    expect(result.message).toContain("active control mode");
-  });
-});
-
-describe("Management AI SA/SD dev bridge", () => {
-  const realFetch = globalThis.fetch;
-
-  afterEach(() => {
-    globalThis.fetch = realFetch;
-    vi.unstubAllEnvs();
+    expect(result.statusCode).toBe(403);
+    expect(result.message).toContain("requires MFA");
   });
 
-  it("posts archive and queue intent to the assistant dev-docs endpoint", async () => {
+  it("labels missing provider reauth routes as route unavailable", async () => {
     vi.stubEnv("VITE_BFF_BASE_URL", "https://bff.example.test");
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
-      data: {
-        packetId: "devdocs_mgmt_123",
-        conversationId: "mgmt-nl-123",
-        archiveLocations: {
-          requirementCapture: "docs/dev/devdocs_mgmt_123/requirement_capture.md",
-          systemAnalysis: "docs/dev/devdocs_mgmt_123/system_analysis.md",
-          systemDesign: "docs/dev/devdocs_mgmt_123/system_design.md",
-          taskBriefs: ["docs/dev/devdocs_mgmt_123/tasks/task_1.md"],
-        },
-        executionTasks: [{ taskId: "task_1" }],
-      },
-      meta: {
-        archived: true,
-        taskPacketQueued: true,
-        taskPacketQueueReceipt: {
-          queued: true,
-          path: "/repo/.orchestrator/assistant-dev-packets/pending/bridge_devdocs_mgmt_123.json",
-          taskCount: 1,
-        },
-        taskPacket: { packetId: "bridge_devdocs_mgmt_123" },
-      },
-    }, 201));
-    globalThis.fetch = fetchMock;
+    globalThis.fetch = vi.fn().mockResolvedValue(new Response("not found", {
+      status: 404,
+      statusText: "Not Found",
+      headers: { "content-type": "text/plain" },
+    }));
 
-    const result = await generateAssistantDevDocs({
-      conversationId: "mgmt-nl-123",
-      featureSummary: "Let Management AI create SA/SD and queue worker tasks",
-      affectedModules: ["execute-plans:management-ai", "pantheon:bff-assistant"],
-      proposedOwner: "Codex",
-      proposedReviewer: "Claude",
-      archive: true,
-      emitTaskPacket: true,
-      queueTaskPacket: true,
-    });
-
-    expect(result.kind).toBe("ok");
-    if (result.kind !== "ok") throw new Error(result.message);
-    expect(fetchMock.mock.calls[0][0]).toBe("https://bff.example.test/bff/assistant/dev-docs/generate");
-    const init = fetchMock.mock.calls[0][1] as RequestInit;
-    expect(init.method).toBe("POST");
-    expect(init.credentials).toBe("include");
-    expect(JSON.parse(String(init.body))).toMatchObject({
-      conversationId: "mgmt-nl-123",
-      featureSummary: "Let Management AI create SA/SD and queue worker tasks",
-      affectedModules: ["execute-plans:management-ai", "pantheon:bff-assistant"],
-      proposedOwner: "Codex",
-      proposedReviewer: "Claude",
-      archive: true,
-      emitTaskPacket: true,
-      queueTaskPacket: true,
-    });
-    expect(result.packetId).toBe("devdocs_mgmt_123");
-    expect(result.archiveLocations?.systemDesign).toContain("system_design.md");
-    expect(result.taskPacketQueued).toBe(true);
-    expect(result.taskPacketQueuePath).toContain("bridge_devdocs_mgmt_123.json");
-    expect(result.taskCount).toBe(1);
-    expect(result.taskPacket?.packetId).toBe("bridge_devdocs_mgmt_123");
-  });
-
-  it("surfaces BFF control-mode precondition failures", async () => {
-    vi.stubEnv("VITE_BFF_BASE_URL", "https://bff.example.test");
-    globalThis.fetch = vi.fn().mockResolvedValue(jsonResponse({
-      detail: {
-        error: {
-          message: "Control mode is required before generating SA/SD artifacts.",
-        },
-      },
-    }, 403));
-
-    const result = await generateAssistantDevDocs({
-      conversationId: "mgmt-nl-123",
-      featureSummary: "Generate worker-ready SA/SD",
-    });
+    const result = await startAssistantProviderReauth({ provider: "claude" });
 
     expect(result.kind).toBe("failure");
     if (result.kind !== "failure") throw new Error("expected failure");
-    expect(result.statusCode).toBe(403);
-    expect(result.message).toContain("Control mode is required");
+    expect(result.statusCode).toBe(404);
+    expect(result.message).toBe("BFF route unavailable: /bff/assistant/provider/reauth");
   });
 });
 
-describe("Management AI OpenClaw repair worktrees", () => {
+describe("Management AI provider registry", () => {
   const realFetch = globalThis.fetch;
 
   afterEach(() => {
@@ -445,111 +448,45 @@ describe("Management AI OpenClaw repair worktrees", () => {
     vi.unstubAllEnvs();
   });
 
-  it("prepares a repair worktree through the assistant BFF route", async () => {
+  it("registers a new provider through the assistant BFF route", async () => {
     vi.stubEnv("VITE_BFF_BASE_URL", "https://bff.example.test");
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
       data: {
-        created: true,
-        repair: {
-          task_id: "MGMT-AI-REPAIR-FE",
-          taskId: "MGMT-AI-REPAIR-FE",
-          task_worktree: "/srv/pantheon-assistant/worktrees/execute-plans/mgmt-ai-repair-fe",
-          taskWorktree: "/srv/pantheon-assistant/worktrees/execute-plans/mgmt-ai-repair-fe",
-          declared_scope: ["src/management/components/agent", "src/lib/bff-v1"],
-          declaredScope: ["src/management/components/agent", "src/lib/bff-v1"],
-          expected_branch: "task/MGMT-AI-REPAIR-FE",
-          expectedBranch: "task/MGMT-AI-REPAIR-FE",
-          remote: "origin",
-          merge_target: "dev",
-          mergeTarget: "dev",
-          require_clean: true,
-          requireClean: true,
-          repo_key: "execute-plans",
-          repoKey: "execute-plans",
-        },
-        workflow: { clean: true },
+        provider: "gemini_cli",
+        provider_name: "Gemini CLI",
+        runtime: "external_llm",
+        status: "registered",
+        ready: false,
+        auth_status: "not_configured",
+        reauth_supported: false,
       },
       meta: { openclawAdapterStatus: "ok" },
     }, 201));
     globalThis.fetch = fetchMock;
 
-    const result = await prepareAssistantRepairWorktree({
-      taskId: "MGMT-AI-REPAIR-FE",
-      repoKey: "execute-plans",
-      declaredScope: ["src/management/components/agent", "src/lib/bff-v1"],
-      expectedBranch: "task/MGMT-AI-REPAIR-FE",
-      mergeTarget: "dev",
-      reason: "repair frontend Management AI",
+    const result = await registerAssistantProvider({
+      provider: "gemini_cli",
+      providerName: "Gemini CLI",
+      model: "gemini-2.5-pro",
+      authStrategy: "manual",
     });
 
+    expect(fetchMock.mock.calls[0][0]).toBe("https://bff.example.test/bff/assistant/providers");
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(init.method).toBe("POST");
+    expect(init.credentials).toBe("include");
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      provider: "gemini_cli",
+      providerName: "Gemini CLI",
+      model: "gemini-2.5-pro",
+      authStrategy: "manual",
+    });
     expect(result.kind).toBe("ok");
     if (result.kind !== "ok") throw new Error(result.message);
-    expect(fetchMock.mock.calls[0][0]).toBe("https://bff.example.test/bff/assistant/repair-worktrees/prepare");
-    const init = fetchMock.mock.calls[0][1] as RequestInit;
-    expect(JSON.parse(String(init.body))).toMatchObject({
-      taskId: "MGMT-AI-REPAIR-FE",
-      repoKey: "execute-plans",
-      declaredScope: ["src/management/components/agent", "src/lib/bff-v1"],
-      expectedBranch: "task/MGMT-AI-REPAIR-FE",
-      mergeTarget: "dev",
-    });
-    expect(result.repair.repo_key).toBe("execute-plans");
-    expect(result.repair.task_worktree).toContain("/execute-plans/");
-    expect(result.workflow?.clean).toBe(true);
-  });
-
-  it("sends prepared openclaw repair metadata with Management AI ask", async () => {
-    vi.stubEnv("VITE_BFF_BASE_URL", "https://bff.example.test");
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
-      data: {
-        answer: "ok",
-        sessionId: "mgmt-nl-123",
-        traceId: "trace-123",
-        providerStatus: {
-          provider: "codex_cli",
-          runtime: "openclaw_gateway_cli_mount",
-          status: "completed",
-          used: true,
-          fallback: null,
-        },
-      },
-    }, 202));
-    globalThis.fetch = fetchMock;
-
-    const result = await askManagementAi({
-      question: "修 Management AI 前端",
-      openclaw: {
-        repair: {
-          task_id: "MGMT-AI-REPAIR-FE",
-          task_worktree: "/srv/pantheon-assistant/worktrees/execute-plans/mgmt-ai-repair-fe",
-          declared_scope: ["src/management/components/agent"],
-          expected_branch: "task/MGMT-AI-REPAIR-FE",
-          remote: "origin",
-          merge_target: "dev",
-          require_clean: true,
-          repo_key: "execute-plans",
-        },
-      },
-    });
-
-    expect(result.kind).toBe("ok");
-    const init = fetchMock.mock.calls[0][1] as RequestInit;
-    expect(fetchMock.mock.calls[0][0]).toBe("https://bff.example.test/bff/management/nl/ask");
-    expect(JSON.parse(String(init.body))).toMatchObject({
-      question: "修 Management AI 前端",
-      openclaw: {
-        repair: {
-          task_id: "MGMT-AI-REPAIR-FE",
-          task_worktree: "/srv/pantheon-assistant/worktrees/execute-plans/mgmt-ai-repair-fe",
-          declared_scope: ["src/management/components/agent"],
-          expected_branch: "task/MGMT-AI-REPAIR-FE",
-          repo_key: "execute-plans",
-        },
-      },
-    });
+    expect(result.provider.provider).toBe("gemini_cli");
+    expect(result.provider.reauthSupported).toBe(false);
   });
 });
-
 
 describe("Management AI stream", () => {
   const realFetch = globalThis.fetch;
@@ -602,5 +539,80 @@ describe("Management AI stream", () => {
     expect(result.providerStatus?.status).toBe("degraded");
     expect(result.providerStatus?.reasonCode).toBe("OPENCLAW_RESPONSES_FAILED");
     expect(result.message).toBe("provider failed");
+  });
+});
+
+describe("Management AI conversation list (history index hydration)", () => {
+  const realFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+    vi.unstubAllEnvs();
+  });
+
+  it("lists server-side conversations and normalizes snake/camel fields", async () => {
+    vi.stubEnv("VITE_BFF_BASE_URL", "https://bff.example.test");
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
+      data: [
+        { session_id: "mgmt-nl-aaa", title: "first chat", updated_at: "2026-06-20T10:00:00Z", created_at: "2026-06-20T09:00:00Z", turn_count: 4 },
+        { sessionId: "mgmt-nl-bbb", title: "", updatedAt: "2026-06-21T11:00:00Z", turnCount: 2 },
+        { title: "no id — dropped" },
+      ],
+      meta: { count: 2 },
+    }));
+    globalThis.fetch = fetchMock;
+
+    const res = await fetchManagementAiConversationList(50);
+
+    expect(res.ok).toBe(true);
+    if (res.kind !== "ok") throw new Error("expected ok");
+    expect(res.conversations).toHaveLength(2);
+    expect(res.conversations[0]).toEqual({
+      sessionId: "mgmt-nl-aaa",
+      title: "first chat",
+      updatedAt: "2026-06-20T10:00:00Z",
+      createdAt: "2026-06-20T09:00:00Z",
+      turnCount: 4,
+    });
+    expect(res.conversations[1].sessionId).toBe("mgmt-nl-bbb");
+    expect(res.conversations[1].turnCount).toBe(2);
+
+    const calledUrl = String(fetchMock.mock.calls[0][0]);
+    expect(calledUrl).toContain("/management/ai/conversations");
+    expect(calledUrl).toContain("limit=50");
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({ method: "GET" });
+  });
+
+  it("lists server-side conversations when wrapped in nested data.items object structure", async () => {
+    vi.stubEnv("VITE_BFF_BASE_URL", "https://bff.example.test");
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
+      data: {
+        id: "management_ai_conversations",
+        items: [
+          { session_id: "mgmt-nl-aaa", title: "nested chat", updated_at: "2026-06-20T10:00:00Z", created_at: "2026-06-20T09:00:00Z", turn_count: 4 },
+        ]
+      },
+      meta: { count: 1 },
+    }));
+    globalThis.fetch = fetchMock;
+
+    const res = await fetchManagementAiConversationList(10);
+
+    expect(res.ok).toBe(true);
+    if (res.kind !== "ok") throw new Error("expected ok");
+    expect(res.conversations).toHaveLength(1);
+    expect(res.conversations[0].sessionId).toBe("mgmt-nl-aaa");
+    expect(res.conversations[0].title).toBe("nested chat");
+  });
+
+  it("returns a visible failure when the BFF list endpoint errors", async () => {
+    vi.stubEnv("VITE_BFF_BASE_URL", "https://bff.example.test");
+    globalThis.fetch = vi.fn().mockResolvedValue(jsonResponse({ detail: "boom" }, 500));
+
+    const res = await fetchManagementAiConversationList();
+
+    expect(res.ok).toBe(false);
+    if (res.kind !== "failure") throw new Error("expected failure");
+    expect(res.status).toBe(500);
   });
 });
