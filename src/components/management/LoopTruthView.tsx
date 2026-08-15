@@ -53,6 +53,12 @@ export const LoopTruthView: React.FC<LoopTruthViewProps> = ({
   const [search, setSearch] = useState<string>("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
+  const canonicalLoops = loops.filter((l) => (l.classification || "canonical") === "canonical");
+  const compositeLoops = loops.filter((l) => l.classification === "composite_overlay");
+
+  const liveCount = canonicalLoops.filter((l) => l.operator_truth_source?.accepted_as_live).length;
+  const nonLiveCount = canonicalLoops.filter((l) => !l.operator_truth_source?.accepted_as_live).length;
+
   const filtered = loops.filter((l) => {
     if (search) {
       const q = search.toLowerCase();
@@ -61,22 +67,25 @@ export const LoopTruthView: React.FC<LoopTruthViewProps> = ({
       if (!matchName && !matchId) return false;
     }
     if (filter === "live") {
-      return l.operator_truth_source?.accepted_as_live === true;
+      return (
+        (l.classification || "canonical") === "canonical" &&
+        l.operator_truth_source?.accepted_as_live === true
+      );
     }
     if (filter === "degraded") {
-      return l.operator_truth_source?.degraded === true;
+      return (
+        (l.classification || "canonical") === "canonical" &&
+        !l.operator_truth_source?.accepted_as_live
+      );
     }
     if (filter === "canonical") {
-      return l.classification === "canonical";
+      return (l.classification || "canonical") === "canonical";
     }
     if (filter === "composite") {
       return l.classification === "composite_overlay";
     }
     return true;
   });
-
-  const liveCount = loops.filter((l) => l.operator_truth_source?.accepted_as_live).length;
-  const degradedCount = loops.filter((l) => l.operator_truth_source?.degraded).length;
 
   return (
     <div className="space-y-4">
@@ -109,9 +118,13 @@ export const LoopTruthView: React.FC<LoopTruthViewProps> = ({
       {/* Overview Cards */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Card className="p-3">
-          <div className="text-xs text-muted-foreground font-medium">Total Loops</div>
-          <div className="text-2xl font-bold mt-1">{loops.length}</div>
-          <div className="text-[11px] text-muted-foreground mt-0.5">12 canonical catalog loops</div>
+          <div className="text-xs text-muted-foreground font-medium">Canonical Loops</div>
+          <div className="text-2xl font-bold mt-1">{canonicalLoops.length}</div>
+          <div className="text-[11px] text-muted-foreground mt-0.5">
+            {compositeLoops.length > 0
+              ? `${compositeLoops.length} composite overlay${compositeLoops.length > 1 ? "s" : ""}`
+              : "12 canonical catalog loops"}
+          </div>
         </Card>
 
         <Card className="p-3">
@@ -121,9 +134,9 @@ export const LoopTruthView: React.FC<LoopTruthViewProps> = ({
         </Card>
 
         <Card className="p-3">
-          <div className="text-xs text-muted-foreground font-medium">Degraded / Unobserved</div>
-          <div className="text-2xl font-bold mt-1 text-status-warning">{degradedCount}</div>
-          <div className="text-[11px] text-muted-foreground mt-0.5">Static metadata or missing controller</div>
+          <div className="text-xs text-muted-foreground font-medium">Non-Live / Degraded</div>
+          <div className="text-2xl font-bold mt-1 text-status-warning">{nonLiveCount}</div>
+          <div className="text-[11px] text-muted-foreground mt-0.5">Unobserved, missing, or degraded</div>
         </Card>
 
         <Card className="p-3">
@@ -170,7 +183,7 @@ export const LoopTruthView: React.FC<LoopTruthViewProps> = ({
             className="h-7 text-xs px-2.5"
             onClick={() => setFilter("degraded")}
           >
-            Degraded / Non-Live ({degradedCount})
+            Non-Live / Degraded ({nonLiveCount})
           </Button>
         </div>
 

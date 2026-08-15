@@ -101,10 +101,10 @@ const sampleLoops: LoopHealthEntryDTO[] = [
 ];
 
 describe("LoopTruthView Component", () => {
-  it("renders total count and loop items correctly", () => {
+  it("renders canonical count and loop items correctly", () => {
     render(<LoopTruthView loops={sampleLoops} />);
 
-    expect(screen.getByText("Total Loops")).toBeInTheDocument();
+    expect(screen.getByText("Canonical Loops")).toBeInTheDocument();
     expect(screen.getByText("Source Ingestion")).toBeInTheDocument();
     expect(screen.getByText("Strategy Distillation")).toBeInTheDocument();
   });
@@ -119,7 +119,7 @@ describe("LoopTruthView Component", () => {
     ).toBeInTheDocument();
   });
 
-  it("renders explicit error banner and retry button when BFF fails", () => {
+  it("renders explicit error banner and retry button when BFF fails without seed fallback", () => {
     const onRefresh = vi.fn();
     render(
       <LoopTruthView
@@ -141,12 +141,12 @@ describe("LoopTruthView Component", () => {
     expect(onRefresh).toHaveBeenCalledTimes(1);
   });
 
-  it("renders 12 canonical rows when 12 loop items are provided", () => {
-    const twelveLoops: LoopHealthEntryDTO[] = Array.from({ length: 12 }, (_, i) => ({
-      id: `loop_${i + 1}`,
-      loop_id: `loop_${i + 1}`,
+  it("renders exactly 12 canonical rows separately from composite overlays", () => {
+    const twelveCanonical: LoopHealthEntryDTO[] = Array.from({ length: 12 }, (_, i) => ({
+      id: `canonical_loop_${i + 1}`,
+      loop_id: `canonical_loop_${i + 1}`,
       classification: "canonical",
-      name: `Loop ${i + 1}`,
+      name: `Canonical Loop ${i + 1}`,
       current_maturity: "api-only",
       target_maturity: "proven-live",
       read_model: "loop_health",
@@ -156,10 +156,33 @@ describe("LoopTruthView Component", () => {
       },
     }));
 
-    render(<LoopTruthView loops={twelveLoops} />);
+    const oneComposite: LoopHealthEntryDTO = {
+      id: "composite_overlay_1",
+      loop_id: "composite_overlay_1",
+      classification: "composite_overlay",
+      name: "Composite Overlay 1",
+      current_maturity: "api-only",
+      target_maturity: "proven-live",
+      read_model: "loop_health",
+      controller_health: {
+        status: "unobserved",
+        source: "registry_metadata",
+      },
+    };
 
-    expect(screen.getByText("12")).toBeInTheDocument();
-    expect(screen.getByText("Loop 1")).toBeInTheDocument();
-    expect(screen.getByText("Loop 12")).toBeInTheDocument();
+    render(<LoopTruthView loops={[...twelveCanonical, oneComposite]} />);
+
+    expect(screen.getByText("Canonical Loops")).toBeInTheDocument();
+    // Direct assertions for counts
+    const countDivs = screen.getAllByText((content, element) => element?.tagName.toLowerCase() === 'div' && element?.textContent === '12');
+    expect(countDivs.length).toBe(2); // Canonical Loops count (12) and Non-Live/Degraded count (12)
+    expect(screen.getByText("1 composite overlay")).toBeInTheDocument();
+    expect(screen.getByText((content, element) => element?.tagName.toLowerCase() === 'button' && element?.textContent?.includes('All') === true)).toHaveTextContent("All (13)");
+    expect(screen.getByText((content, element) => element?.tagName.toLowerCase() === 'button' && element?.textContent?.includes('Live Proven') === true)).toHaveTextContent("Live Proven (0)");
+    expect(screen.getByText((content, element) => element?.tagName.toLowerCase() === 'button' && element?.textContent?.includes('Non-Live') === true)).toHaveTextContent("Non-Live / Degraded (12)");
+
+    expect(screen.getByText("Canonical Loop 1")).toBeInTheDocument();
+    expect(screen.getByText("Canonical Loop 12")).toBeInTheDocument();
+    expect(screen.getByText("Composite Overlay 1")).toBeInTheDocument();
   });
 });
