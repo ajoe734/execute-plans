@@ -478,15 +478,48 @@ make_agora_compatibility_evidence() {
   "${REAL_NODE}" --input-type=module - \
     "${output}" "${status}" "${backend_commit}" "${frontend_commit}" "${frontend_tree}" <<'NODE'
 import fs from "node:fs";
+import crypto from "node:crypto";
 const [output, status, backendCommit, frontendCommit, frontendTree] = process.argv.slice(2);
 const accepted = status === "accepted";
+const manifestSha = "a".repeat(64);
+const backendTree = "e".repeat(40);
+const releaseCandidateIdentity = {
+  schema_version: "pantheon.dev-release-candidate.v1",
+  environment: "dev",
+  compatibility_status: "compatible",
+  compatibility_manifest: {
+    contract_family: "agora.v1.13",
+    manifest_version: "1.0",
+    sha256: manifestSha,
+    source_status: status,
+  },
+  backend: {
+    repository: "ajoe734/pantheon",
+    branch: "dev",
+    commit: backendCommit,
+    tree: backendTree,
+  },
+  frontend: {
+    repository: "ajoe734/execute-plans",
+    branch: "dev",
+    commit: frontendCommit,
+    tree: frontendTree,
+  },
+};
+const canonicalize = (value) => {
+  if (Array.isArray(value)) return value.map(canonicalize);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.keys(value).sort().map((key) => [key, canonicalize(value[key])]),
+  );
+};
 const evidence = {
   schema_version: "pantheon.agora.compatibility-gate-evidence.v1",
   contract_family: "agora.v1.13",
   environment: "dev",
   compatibility_status: status,
   blocking_reasons: accepted ? [] : [`test-${status}`],
-  manifest_sha256: "a".repeat(64),
+  manifest_sha256: manifestSha,
   gate_controller: {
     repo: "ajoe734/pantheon",
     commit: "c".repeat(40),
@@ -495,7 +528,7 @@ const evidence = {
   backend: {
     repo: "ajoe734/pantheon",
     runtime_commit: backendCommit,
-    tree: "e".repeat(40),
+    tree: backendTree,
   },
   frontend: {
     repo: "ajoe734/execute-plans",
@@ -509,6 +542,12 @@ const evidence = {
   hash_policy: {
     file_hash: "sha256-exact-git-bytes-v1",
     generated_types_hash: "sha256-path-tab-filehash-lf-v1",
+  },
+  release_candidate: {
+    ...releaseCandidateIdentity,
+    release_candidate_id: crypto.createHash("sha256")
+      .update(JSON.stringify(canonicalize(releaseCandidateIdentity)))
+      .digest("hex"),
   },
 };
 fs.writeFileSync(output, `${JSON.stringify(evidence, null, 2)}\n`, "utf8");
@@ -1062,6 +1101,45 @@ test_agora_compatibility_gate_is_consumed_before_switch() {
     "${CASE_AGORA_EVIDENCE}" accepted "$(repeat_character f 40)" "${CANDIDATE_SHA}"
   run_deploy
   [[ "${RUN_STATUS}" -ne 0 ]] || die "mismatched backend compatibility evidence switched"
+  assert_previous_is_live
+  assert_previous_manifest_unchanged
+  assert_probe_not_called candidate_pre_switch
+
+  setup_case agora-release-candidate-id-tampered
+  "${REAL_NODE}" -e '
+    const fs=require("node:fs");const file=process.argv[1];
+    const payload=JSON.parse(fs.readFileSync(file,"utf8"));
+    payload.release_candidate.release_candidate_id="0".repeat(64);
+    fs.writeFileSync(file,`${JSON.stringify(payload,null,2)}\n`);
+  ' "${CASE_AGORA_EVIDENCE}"
+  run_deploy
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "tampered release candidate ID unexpectedly switched"
+  assert_previous_is_live
+  assert_previous_manifest_unchanged
+  assert_probe_not_called candidate_pre_switch
+
+  setup_case agora-release-candidate-backend-mismatch
+  "${REAL_NODE}" -e '
+    const fs=require("node:fs");const file=process.argv[1];
+    const payload=JSON.parse(fs.readFileSync(file,"utf8"));
+    payload.release_candidate.backend.commit="f".repeat(40);
+    fs.writeFileSync(file,`${JSON.stringify(payload,null,2)}\n`);
+  ' "${CASE_AGORA_EVIDENCE}"
+  run_deploy
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "mismatched release candidate backend unexpectedly switched"
+  assert_previous_is_live
+  assert_previous_manifest_unchanged
+  assert_probe_not_called candidate_pre_switch
+
+  setup_case agora-release-candidate-extra-field
+  "${REAL_NODE}" -e '
+    const fs=require("node:fs");const file=process.argv[1];
+    const payload=JSON.parse(fs.readFileSync(file,"utf8"));
+    payload.release_candidate.unexpected=true;
+    fs.writeFileSync(file,`${JSON.stringify(payload,null,2)}\n`);
+  ' "${CASE_AGORA_EVIDENCE}"
+  run_deploy
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "unexpected release candidate field switched"
   assert_previous_is_live
   assert_previous_manifest_unchanged
   assert_probe_not_called candidate_pre_switch

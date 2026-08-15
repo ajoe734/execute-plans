@@ -254,11 +254,25 @@ const sha256 = (value, label) => {
 exactKeys(payload, [
   "backend", "blocking_reasons", "compatibility_status", "contract_family",
   "environment", "frontend", "gate_controller", "hash_policy",
-  "manifest_sha256", "schema_version", "source_handoffs",
+  "manifest_sha256", "release_candidate", "schema_version", "source_handoffs",
 ], "Agora compatibility evidence");
 exactKeys(payload.gate_controller, ["commit", "repo", "tree"], "gate_controller");
 exactKeys(payload.backend, ["repo", "runtime_commit", "tree"], "backend");
 exactKeys(payload.frontend, ["repo", "runtime_commit", "tree"], "frontend");
+exactKeys(payload.release_candidate, [
+  "backend", "compatibility_manifest", "compatibility_status", "environment",
+  "frontend", "release_candidate_id", "schema_version",
+], "release_candidate");
+exactKeys(payload.release_candidate.compatibility_manifest, [
+  "contract_family", "manifest_version", "sha256", "source_status",
+], "release_candidate.compatibility_manifest");
+exactKeys(payload.release_candidate.backend, [
+  "branch", "commit", "repository", "tree",
+], "release_candidate.backend");
+exactKeys(payload.release_candidate.frontend, [
+  "branch", "commit", "repository", "tree",
+], "release_candidate.frontend");
+const releaseCandidate = payload.release_candidate;
 if (payload.schema_version !== "pantheon.agora.compatibility-gate-evidence.v1" ||
     payload.contract_family !== "agora.v1.13" || payload.environment !== "dev" ||
     payload.compatibility_status !== "accepted" ||
@@ -267,20 +281,70 @@ if (payload.schema_version !== "pantheon.agora.compatibility-gate-evidence.v1" |
     payload.backend.repo !== "ajoe734/pantheon" ||
     payload.frontend.repo !== "ajoe734/execute-plans" ||
     payload.hash_policy?.file_hash !== "sha256-exact-git-bytes-v1" ||
-    payload.hash_policy?.generated_types_hash !== "sha256-path-tab-filehash-lf-v1") {
+    payload.hash_policy?.generated_types_hash !== "sha256-path-tab-filehash-lf-v1" ||
+    releaseCandidate.schema_version !== "pantheon.dev-release-candidate.v1" ||
+    releaseCandidate.environment !== "dev" ||
+    releaseCandidate.compatibility_status !== "compatible" ||
+    releaseCandidate.compatibility_manifest.contract_family !== payload.contract_family ||
+    releaseCandidate.compatibility_manifest.manifest_version !== "1.0" ||
+    releaseCandidate.compatibility_manifest.source_status !== payload.compatibility_status ||
+    releaseCandidate.backend.repository !== payload.backend.repo ||
+    releaseCandidate.backend.branch !== "dev" ||
+    releaseCandidate.frontend.repository !== payload.frontend.repo ||
+    releaseCandidate.frontend.branch !== "dev") {
   throw new Error("Agora compatibility evidence is not one accepted dev pair");
 }
 const frontend = sha40(payload.frontend.runtime_commit, "frontend.runtime_commit");
 const frontendTree = sha40(payload.frontend.tree, "frontend.tree");
 const backend = sha40(payload.backend.runtime_commit, "backend.runtime_commit");
-sha40(payload.backend.tree, "backend.tree");
+const backendTree = sha40(payload.backend.tree, "backend.tree");
 sha40(payload.gate_controller.commit, "gate_controller.commit");
 sha40(payload.gate_controller.tree, "gate_controller.tree");
 const manifestSha = sha256(payload.manifest_sha256, "manifest_sha256");
+const candidateManifestSha = sha256(
+  releaseCandidate.compatibility_manifest.sha256,
+  "release_candidate.compatibility_manifest.sha256",
+);
+const candidateBackend = sha40(
+  releaseCandidate.backend.commit,
+  "release_candidate.backend.commit",
+);
+const candidateBackendTree = sha40(
+  releaseCandidate.backend.tree,
+  "release_candidate.backend.tree",
+);
+const candidateFrontend = sha40(
+  releaseCandidate.frontend.commit,
+  "release_candidate.frontend.commit",
+);
+const candidateFrontendTree = sha40(
+  releaseCandidate.frontend.tree,
+  "release_candidate.frontend.tree",
+);
+const releaseCandidateId = sha256(
+  releaseCandidate.release_candidate_id,
+  "release_candidate.release_candidate_id",
+);
+const canonicalize = (value) => {
+  if (Array.isArray(value)) return value.map(canonicalize);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.keys(value).sort().map((key) => [key, canonicalize(value[key])]),
+  );
+};
+const releaseCandidateIdentity = Object.fromEntries(
+  Object.entries(releaseCandidate).filter(([key]) => key !== "release_candidate_id"),
+);
+const computedReleaseCandidateId = crypto.createHash("sha256")
+  .update(JSON.stringify(canonicalize(releaseCandidateIdentity)))
+  .digest("hex");
 if (frontend !== expectedFrontend || frontendTree !== expectedFrontendTree ||
-    backend !== expectedBackend) {
+    backend !== expectedBackend || candidateManifestSha !== manifestSha ||
+    candidateBackend !== backend || candidateBackendTree !== backendTree ||
+    candidateFrontend !== frontend || candidateFrontendTree !== frontendTree ||
+    releaseCandidateId !== computedReleaseCandidateId) {
   throw new Error(
-    `Agora compatibility payload mismatch: frontend=${frontend}/${frontendTree} backend=${backend}`,
+    `Agora compatibility payload mismatch: frontend=${frontend}/${frontendTree} backend=${backend}/${backendTree}`,
   );
 }
 const evidenceSha = crypto.createHash("sha256").update(raw).digest("hex");
