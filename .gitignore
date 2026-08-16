@@ -12,6 +12,8 @@ node_modules
 dist
 dist-ssr
 *.local
+.env*
+!.env*.example
 .lovable/audits/current-run/
 
 # Editor directories and files
@@ -24,3 +26,4 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+__pycache__/

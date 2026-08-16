@@ -5,7 +5,7 @@
 //                    ← Pantheon BFF ← provider
 //
 // FE rules enforced by this client:
-//   • NEVER generate an answer locally. No Lovable AI / Supabase Edge fallback.
+//   • NEVER generate an answer locally. No browser AI or edge-function fallback.
 //   • If providerStatus.used !== true OR status ∈ {degraded, disabled, error},
 //     return a typed `ProviderDegraded` result; UI MUST render degraded banner
 //     (not a synthetic answer).
@@ -37,73 +37,19 @@ export interface ProviderStatus {
   runId?: string | null;
 }
 
-export interface AssistantOpenClawToolPolicyStatus {
-  status?: string;
-  effectiveStatus?: string;
-  upstreamStatus?: string;
-  assistantCommandAllowed?: boolean;
-  assistantCommandEffective?: boolean;
-  assistantCommandUsable?: boolean;
-  assistantCommandStatus?: string;
-  assistantCommandTool?: string;
-  allowedTools?: string[];
-  effectiveTools?: string[];
-  effectiveSkills?: AssistantOpenClawSkillDescriptor[];
-  allowedWorkflows?: string[];
-  defaultPosture?: string | null;
-  source?: string;
-}
-
-export interface AssistantOpenClawSkillDescriptor {
-  id?: string;
-  title?: string;
-  surface?: string;
-  handlerRef?: string;
-  resultSurface?: string;
-  confirmPolicy?: string;
-  role?: string;
-  modeGate?: Record<string, unknown>;
-  inputSchema?: Record<string, unknown>;
-}
-
-export interface AssistantStatusSourceRef {
-  sourceType?: string;
-  path?: string;
-  available?: boolean;
-  status?: string;
-  snapshotAt?: string;
-  lastModifiedAt?: string;
-}
-
-export interface AssistantSupervisorOccupancy {
-  running?: number;
-  pending?: number;
-  queued?: number;
-}
-
-export interface AssistantSupervisorStatus {
-  pid?: number;
-  lifecycle?: string;
-  modeStatus?: string;
-  focusMode?: string;
-  startedAt?: string;
-  lastHeartbeatAt?: string;
-  lastSuccessfulLoopAt?: string;
-  lastLoopStartedAt?: string;
-  lastLoopFinishedAt?: string;
-  lastLoopDurationMs?: number;
-  lastLoopError?: string | null;
-  modeOccupancy?: Record<string, AssistantSupervisorOccupancy>;
-}
-
-export interface AssistantRepairWorkspaceStatus {
-  root?: string;
-  exists?: boolean;
-  isDir?: boolean;
-  writable?: boolean;
-  ready?: boolean;
-  status?: string;
-  worktreeCount?: number;
+export interface AssistantProviderUsage {
+  status?: string | null;
+  source?: string | null;
+  remaining?: number | string | null;
+  remainingPercent?: number | string | null;
+  limit?: number | string | null;
+  used?: number | string | null;
+  unit?: string | null;
+  resetAt?: string | null;
+  updatedAt?: string | null;
+  checkedAt?: string | null;
+  reason?: string | null;
+  [key: string]: unknown;
 }
 
 export interface AssistantProviderReadinessStatus {
@@ -111,90 +57,135 @@ export interface AssistantProviderReadinessStatus {
   provider?: string;
   providerName?: string;
   runtime?: string;
+  model?: string | null;
   ready?: boolean;
   status?: string;
   reason?: string | null;
   degradedReason?: string | null;
   auth?: string;
   authStatus?: string;
+  authStrategy?: string | null;
+  reauthSupported?: boolean;
   version?: string;
   mountMode?: string;
   checkedAt?: string;
   source?: string;
-  capabilities?: { read?: boolean; repairWrite?: boolean };
-  repairWorkspace?: AssistantRepairWorkspaceStatus | null;
+  message?: string | null;
+  usage?: AssistantProviderUsage | Record<string, unknown> | null;
+  quota?: AssistantProviderUsage | Record<string, unknown> | null;
+  capabilities?: { read?: boolean };
 }
 
-export interface AssistantDevBridgeInboxStatus {
-  path?: string;
-  exists?: boolean;
-  pendingCount?: number;
-  processedCount?: number;
+export interface AssistantProviderUsageSummaryModel {
+  model?: string;
+  calls?: number;
+  successCount?: number;
   failedCount?: number;
-  receiptCount?: number;
+  promptBytes?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+  durationMs?: number;
+  averageDurationMs?: number | null;
+  lastUsedAt?: string | null;
+  lastStatus?: string | null;
 }
 
-export interface AssistantDevBridgeReceipt {
-  packetId?: string;
-  status?: string;
-  drainedAt?: string;
-  dryRun?: boolean;
-  errorCount?: number;
-  archivedPath?: string;
-  error?: string | null;
+export interface AssistantProviderUsageObserved {
+  source?: string;
+  coverage?: string;
+  coverageLabel?: string;
+  truthPolicy?: string;
+  calls?: number;
+  successCount?: number;
+  failedCount?: number;
+  promptBytes?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+  lastObservedAt?: string | null;
+  ageHours?: number | null;
+  stale?: boolean;
+  staleAfterHours?: number;
+  windowHours?: number | null;
+  eventLimit?: number;
+  message?: string | null;
 }
 
-export interface AssistantDevBridgeStatus {
-  status?: string;
-  inbox?: AssistantDevBridgeInboxStatus | null;
-  lastDrainAt?: string;
-  recentReceipts?: AssistantDevBridgeReceipt[];
+export interface AssistantProviderUsageSummaryRow {
+  provider?: string;
+  providerName?: string;
+  runtime?: string | null;
+  ready?: boolean;
+  authStatus?: string | null;
+  status?: string | null;
+  liveAuth?: boolean;
+  calls?: number;
+  successCount?: number;
+  failedCount?: number;
+  startedCount?: number;
+  promptBytes?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+  durationMs?: number;
+  averageDurationMs?: number | null;
+  lastUsedAt?: string | null;
+  lastStatus?: string | null;
+  lastError?: string | null;
+  quota?: AssistantProviderUsage | Record<string, unknown> | null;
+  observedUsage?: AssistantProviderUsageObserved | Record<string, unknown> | null;
+  models?: AssistantProviderUsageSummaryModel[];
 }
 
-export interface AssistantTaskStatusSummary {
-  id?: string;
-  title?: string;
-  owner?: string;
-  reviewer?: string;
-  status?: string;
-  phase?: string;
-  next?: string;
-  lastUpdate?: string;
-  waitingFor?: string | null;
-  briefPath?: string | null;
-  blockers?: string[];
+export interface AssistantProviderUsageTotals {
+  providers?: number;
+  liveAuthCount?: number;
+  calls?: number;
+  successCount?: number;
+  failedCount?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
 }
 
-export interface AssistantCoordinationStatus {
-  lastScanAt?: string;
-  fileCount?: number;
-  featureCount?: number;
-  featureIds?: string[];
+export type AssistantProviderUsageSummaryResult =
+  | {
+      ok: true;
+      kind: "ok";
+      status: string | null;
+      providers: AssistantProviderUsageSummaryRow[];
+      totals: AssistantProviderUsageTotals;
+      quota: Record<string, unknown> | null;
+      usage?: Record<string, unknown> | null;
+      meta: Record<string, unknown> | null;
+    }
+  | { ok: false; kind: "failure"; statusCode: number | null; message: string };
+
+export type AssistantProvidersResult =
+  | {
+      ok: true;
+      kind: "ok";
+      status: string | null;
+      providers: AssistantProviderReadinessStatus[];
+      meta: Record<string, unknown> | null;
+    }
+  | { ok: false; kind: "failure"; statusCode: number | null; message: string };
+
+export interface AssistantProviderRegisterInput {
+  provider: string;
+  providerName?: string;
+  runtime?: string;
+  model?: string;
+  authStrategy?: string;
+  binary?: string;
+  binaryEnv?: string;
+  note?: string;
+  traceId?: string;
 }
 
-export interface AssistantOrchestratorStatus {
-  status?: string;
-  snapshotAt?: string;
-  project?: string;
-  sprint?: string;
-  objective?: string;
-  providerStatus?: ProviderStatus | null;
-  openclawToolPolicy?: AssistantOpenClawToolPolicyStatus | null;
-  sourceRefs?: AssistantStatusSourceRef[];
-  tasks?: AssistantTaskStatusSummary[];
-  supervisor?: AssistantSupervisorStatus | null;
-  providerReadiness?: AssistantProviderReadinessStatus | null;
-  assistantDevBridge?: AssistantDevBridgeStatus | null;
-  coordination?: AssistantCoordinationStatus | null;
-  queue?: Record<string, unknown> | unknown[] | null;
-  workers?: Record<string, unknown> | unknown[] | null;
-  handoffs?: unknown[];
-  blockers?: unknown[];
-  providerGuardrails?: Record<string, unknown> | null;
-}
-
-export type AssistantOrchestratorStatusResult =
-  | { ok: true; kind: "ok"; status: AssistantOrchestratorStatus }
+export type AssistantProviderRegisterResult =
+  | { ok: true; kind: "ok"; provider: AssistantProviderReadinessStatus; meta: Record<string, unknown> | null }
   | { ok: false; kind: "failure"; statusCode: number | null; message: string };
 
 export interface AssistantControlModeStatus {
@@ -230,84 +221,12 @@ export type AssistantControlModeMutationResult =
 
 export interface ActivateAssistantControlModeInput {
   passphrase: string;
-  mode: "kernel_debug" | "kernel_repair";
+  mode: "kernel_debug";
   reason: string;
   ttlSeconds?: number;
   idleTtlSeconds?: number;
   managementSessionId?: string | null;
 }
-
-export interface AssistantDevDocsArchiveLocations {
-  requirementCapture?: string | null;
-  systemAnalysis?: string | null;
-  systemDesign?: string | null;
-  taskBriefs: string[];
-}
-
-export interface AssistantDevDocsGenerateInput {
-  conversationId: string;
-  featureSummary: string;
-  affectedModules?: string[];
-  proposedOwner?: string;
-  proposedReviewer?: string;
-  archive?: boolean;
-  emitTaskPacket?: boolean;
-  queueTaskPacket?: boolean;
-  extraContext?: Record<string, unknown>;
-}
-
-export type AssistantDevDocsGenerateResult =
-  | {
-      ok: true;
-      kind: "ok";
-      packetId: string;
-      conversationId: string | null;
-      archiveLocations: AssistantDevDocsArchiveLocations | null;
-      taskPacketQueued: boolean;
-      taskPacketQueuePath: string | null;
-      taskCount: number;
-      taskPacket: Record<string, unknown> | null;
-    }
-  | { ok: false; kind: "failure"; statusCode: number | null; message: string };
-
-export interface AssistantRepairMetadata {
-  task_id: string;
-  taskId?: string;
-  task_worktree: string;
-  taskWorktree?: string;
-  declared_scope: string[];
-  declaredScope?: string[];
-  expected_branch: string;
-  expectedBranch?: string;
-  remote: string;
-  merge_target: string;
-  mergeTarget?: string;
-  require_clean?: boolean;
-  requireClean?: boolean;
-  repo_key?: string;
-  repoKey?: string;
-}
-
-export interface AssistantRepairWorktreePrepareInput {
-  taskId?: string;
-  repoKey?: "pantheon" | "execute-plans" | string;
-  declaredScope: string[];
-  expectedBranch?: string;
-  mergeTarget?: string;
-  remote?: string;
-  reason?: string;
-  traceId?: string;
-}
-
-export type AssistantRepairWorktreePrepareResult =
-  | {
-      ok: true;
-      kind: "ok";
-      repair: AssistantRepairMetadata;
-      created: boolean | null;
-      workflow: Record<string, unknown> | null;
-    }
-  | { ok: false; kind: "failure"; statusCode: number | null; message: string };
 
 export interface AssistantProviderCredentialExchange {
   bffHandlesCredentials?: boolean;
@@ -320,17 +239,33 @@ export interface AssistantProviderReauthSession {
   provider: string | null;
   status: string | null;
   reauthSessionId: string;
+  startedAt?: string | null;
+  updatedAt?: string | null;
+  codeSubmittedAt?: string | null;
+  completedAt?: string | null;
   verificationUri: string | null;
   verificationUriComplete: string | null;
   userCode: string | null;
   expiresAt: string | null;
   intervalSeconds: number | null;
   credentialExchange: AssistantProviderCredentialExchange | null;
+  readiness?: Record<string, unknown> | null;
+  errorCode?: string | null;
+  warningCode?: string | null;
+  message?: string | null;
+  returncode?: number | null;
 }
 
 export interface AssistantProviderReauthInput {
   provider?: string;
   reason?: string;
+  traceId?: string;
+}
+
+export interface AssistantProviderReauthCodeInput {
+  provider?: string;
+  sessionId: string;
+  code: string;
   traceId?: string;
 }
 
@@ -425,9 +360,6 @@ export interface ManagementAiAskInput {
   };
   ui?: ManagementAiUiSnapshot;
   attachments?: ManagementAiAttachment[];
-  openclaw?: {
-    repair?: AssistantRepairMetadata;
-  };
 }
 
 interface RawAskResponse {
@@ -521,97 +453,22 @@ function asRecordArray(value: unknown): Record<string, unknown>[] {
   return Array.isArray(value) ? value.map(asRecord).filter((item): item is Record<string, unknown> => Boolean(item)) : [];
 }
 
-function asUnknownArray(value: unknown): unknown[] | undefined {
-  return Array.isArray(value) ? value : undefined;
-}
-
-function adaptOpenClawToolPolicy(raw: unknown): AssistantOpenClawToolPolicyStatus | null {
+function adaptProviderUsage(raw: unknown): AssistantProviderUsage | Record<string, unknown> | null {
   const r = asRecord(raw);
   if (!r) return null;
   return {
-    status: asString(r.status),
-    effectiveStatus: asString(r.effectiveStatus ?? r.effective_status),
-    upstreamStatus: asString(r.upstreamStatus ?? r.upstream_status),
-    assistantCommandAllowed: asBoolean(r.assistantCommandAllowed ?? r.assistant_command_allowed),
-    assistantCommandEffective: asBoolean(r.assistantCommandEffective ?? r.assistant_command_effective),
-    assistantCommandUsable: asBoolean(r.assistantCommandUsable ?? r.assistant_command_usable),
-    assistantCommandStatus: asString(r.assistantCommandStatus ?? r.assistant_command_status),
-    assistantCommandTool: asString(r.assistantCommandTool ?? r.assistant_command_tool),
-    allowedTools: asStringArray(r.allowedTools ?? r.allowed_tools),
-    effectiveTools: asStringArray(r.effectiveTools ?? r.effective_tools),
-    effectiveSkills: adaptOpenClawSkillDescriptors(r.effectiveSkills ?? r.effective_skills),
-    allowedWorkflows: asStringArray(r.allowedWorkflows ?? r.allowed_workflows),
-    defaultPosture: asString(r.defaultPosture ?? r.default_posture) ?? null,
-    source: asString(r.source),
-  };
-}
-
-function adaptOpenClawSkillDescriptors(raw: unknown): AssistantOpenClawSkillDescriptor[] {
-  return asRecordArray(raw).map((r) => ({
-    id: asString(r.id),
-    title: asString(r.title),
-    surface: asString(r.surface),
-    handlerRef: asString(r.handlerRef ?? r.handler_ref),
-    resultSurface: asString(r.resultSurface ?? r.result_surface),
-    confirmPolicy: asString(r.confirmPolicy ?? r.confirm_policy),
-    role: asString(r.role),
-    modeGate: asRecord(r.modeGate ?? r.mode_gate) ?? undefined,
-    inputSchema: asRecord(r.inputSchema ?? r.input_schema) ?? undefined,
-  }));
-}
-
-function adaptSourceRefs(raw: unknown): AssistantStatusSourceRef[] {
-  return asRecordArray(raw).map((r) => ({
-    sourceType: asString(r.sourceType ?? r.source_type),
-    path: asString(r.path),
-    available: asBoolean(r.available),
-    status: asString(r.status),
-    snapshotAt: asString(r.snapshotAt ?? r.snapshot_at),
-    lastModifiedAt: asString(r.lastModifiedAt ?? r.last_modified_at),
-  }));
-}
-
-function adaptSupervisorStatus(raw: unknown): AssistantSupervisorStatus | null {
-  const r = asRecord(raw);
-  if (!r) return null;
-  const occupancyRaw = asRecord(r.modeOccupancy ?? r.mode_occupancy);
-  const modeOccupancy = occupancyRaw
-    ? Object.fromEntries(Object.entries(occupancyRaw).map(([mode, value]) => {
-        const item = asRecord(value) ?? {};
-        return [mode, {
-          running: asNumber(item.running),
-          pending: asNumber(item.pending),
-          queued: asNumber(item.queued),
-        }];
-      }))
-    : undefined;
-  return {
-    pid: asNumber(r.pid),
-    lifecycle: asString(r.lifecycle),
-    modeStatus: asString(r.modeStatus ?? r.mode_status),
-    focusMode: asString(r.focusMode ?? r.focus_mode),
-    startedAt: asString(r.startedAt ?? r.started_at),
-    lastHeartbeatAt: asString(r.lastHeartbeatAt ?? r.last_heartbeat_at),
-    lastSuccessfulLoopAt: asString(r.lastSuccessfulLoopAt ?? r.last_successful_loop_at),
-    lastLoopStartedAt: asString(r.lastLoopStartedAt ?? r.last_loop_started_at),
-    lastLoopFinishedAt: asString(r.lastLoopFinishedAt ?? r.last_loop_finished_at),
-    lastLoopDurationMs: asNumber(r.lastLoopDurationMs ?? r.last_loop_duration_ms),
-    lastLoopError: asString(r.lastLoopError ?? r.last_loop_error) ?? null,
-    modeOccupancy,
-  };
-}
-
-function adaptRepairWorkspaceStatus(raw: unknown): AssistantRepairWorkspaceStatus | null {
-  const r = asRecord(raw);
-  if (!r) return null;
-  return {
-    root: asString(r.root),
-    exists: asBoolean(r.exists),
-    isDir: asBoolean(r.isDir ?? r.is_dir),
-    writable: asBoolean(r.writable),
-    ready: asBoolean(r.ready),
-    status: asString(r.status),
-    worktreeCount: asNumber(r.worktreeCount ?? r.worktree_count),
+    ...r,
+    status: asString(r.status) ?? null,
+    source: asString(r.source) ?? null,
+    remaining: (r.remaining as number | string | null | undefined) ?? null,
+    remainingPercent: ((r.remainingPercent ?? r.remaining_percent) as number | string | null | undefined) ?? null,
+    limit: (r.limit as number | string | null | undefined) ?? null,
+    used: (r.used as number | string | null | undefined) ?? null,
+    unit: asString(r.unit) ?? null,
+    resetAt: asString(r.resetAt ?? r.reset_at) ?? null,
+    updatedAt: asString(r.updatedAt ?? r.updated_at) ?? null,
+    checkedAt: asString(r.checkedAt ?? r.checked_at) ?? null,
+    reason: asString(r.reason) ?? null,
   };
 }
 
@@ -624,75 +481,329 @@ function adaptProviderReadinessStatus(raw: unknown): AssistantProviderReadinessS
     provider: asString(r.provider),
     providerName: asString(r.providerName ?? r.provider_name),
     runtime: asString(r.runtime),
+    model: asString(r.model) ?? null,
     ready: asBoolean(r.ready),
     status: asString(r.status),
     reason: asString(r.reason) ?? null,
     degradedReason: asString(r.degradedReason ?? r.degraded_reason) ?? null,
     auth: asString(r.auth),
     authStatus: asString(r.authStatus ?? r.auth_status),
+    authStrategy: asString(r.authStrategy ?? r.auth_strategy) ?? null,
+    reauthSupported: asBoolean(r.reauthSupported ?? r.reauth_supported),
     version: asString(r.version),
     mountMode: asString(r.mountMode ?? r.mount_mode),
     checkedAt: asString(r.checkedAt ?? r.checked_at),
     source: asString(r.source),
+    message: asString(r.message) ?? null,
+    usage: adaptProviderUsage(r.usage),
+    quota: adaptProviderUsage(r.quota),
     capabilities: capabilities ? {
       read: asBoolean(capabilities.read),
-      repairWrite: asBoolean(capabilities.repairWrite ?? capabilities.repair_write),
     } : undefined,
-    repairWorkspace: adaptRepairWorkspaceStatus(r.repairWorkspace ?? r.repair_workspace),
   };
 }
 
-function adaptDevBridgeStatus(raw: unknown): AssistantDevBridgeStatus | null {
+function adaptProviderUsageSummaryModel(raw: unknown): AssistantProviderUsageSummaryModel | null {
   const r = asRecord(raw);
   if (!r) return null;
-  const inbox = asRecord(r.inbox);
   return {
-    status: asString(r.status),
-    inbox: inbox ? {
-      path: asString(inbox.path),
-      exists: asBoolean(inbox.exists),
-      pendingCount: asNumber(inbox.pendingCount ?? inbox.pending_count),
-      processedCount: asNumber(inbox.processedCount ?? inbox.processed_count),
-      failedCount: asNumber(inbox.failedCount ?? inbox.failed_count),
-      receiptCount: asNumber(inbox.receiptCount ?? inbox.receipt_count),
-    } : null,
-    lastDrainAt: asString(r.lastDrainAt ?? r.last_drain_at),
-    recentReceipts: asRecordArray(r.recentReceipts ?? r.recent_receipts).map((receipt) => ({
-      packetId: asString(receipt.packetId ?? receipt.packet_id),
-      status: asString(receipt.status),
-      drainedAt: asString(receipt.drainedAt ?? receipt.drained_at),
-      dryRun: asBoolean(receipt.dryRun ?? receipt.dry_run),
-      errorCount: asNumber(receipt.errorCount ?? receipt.error_count),
-      archivedPath: asString(receipt.archivedPath ?? receipt.archived_path),
-      error: asString(receipt.error) ?? null,
-    })),
+    model: asString(r.model),
+    calls: asNumber(r.calls),
+    successCount: asNumber(r.successCount ?? r.success_count),
+    failedCount: asNumber(r.failedCount ?? r.failed_count),
+    promptBytes: asNumber(r.promptBytes ?? r.prompt_bytes),
+    inputTokens: asNumber(r.inputTokens ?? r.input_tokens),
+    outputTokens: asNumber(r.outputTokens ?? r.output_tokens),
+    totalTokens: asNumber(r.totalTokens ?? r.total_tokens),
+    durationMs: asNumber(r.durationMs ?? r.duration_ms),
+    averageDurationMs: asNumber(r.averageDurationMs ?? r.average_duration_ms) ?? null,
+    lastUsedAt: asString(r.lastUsedAt ?? r.last_used_at) ?? null,
+    lastStatus: asString(r.lastStatus ?? r.last_status) ?? null,
   };
 }
 
-function adaptTaskSummaries(raw: unknown): AssistantTaskStatusSummary[] {
-  return asRecordArray(raw).map((r) => ({
-    id: asString(r.id),
-    title: asString(r.title),
-    owner: asString(r.owner),
-    reviewer: asString(r.reviewer),
-    status: asString(r.status),
-    phase: asString(r.phase),
-    next: asString(r.next),
-    lastUpdate: asString(r.lastUpdate ?? r.last_update),
-    waitingFor: asString(r.waitingFor ?? r.waiting_for) ?? null,
-    briefPath: asString(r.briefPath ?? r.brief_path) ?? null,
-    blockers: asStringArray(r.blockers) ?? [],
-  }));
-}
-
-function adaptCoordinationStatus(raw: unknown): AssistantCoordinationStatus | null {
+function adaptProviderObservedUsage(raw: unknown): AssistantProviderUsageObserved | Record<string, unknown> | null {
   const r = asRecord(raw);
   if (!r) return null;
   return {
-    lastScanAt: asString(r.lastScanAt ?? r.last_scan_at),
-    fileCount: asNumber(r.fileCount ?? r.file_count),
-    featureCount: asNumber(r.featureCount ?? r.feature_count),
-    featureIds: asStringArray(r.featureIds ?? r.feature_ids),
+    ...r,
+    source: asString(r.source),
+    coverage: asString(r.coverage),
+    coverageLabel: asString(r.coverageLabel ?? r.coverage_label),
+    truthPolicy: asString(r.truthPolicy ?? r.truth_policy),
+    calls: asNumber(r.calls),
+    successCount: asNumber(r.successCount ?? r.success_count),
+    failedCount: asNumber(r.failedCount ?? r.failed_count),
+    promptBytes: asNumber(r.promptBytes ?? r.prompt_bytes),
+    inputTokens: asNumber(r.inputTokens ?? r.input_tokens),
+    outputTokens: asNumber(r.outputTokens ?? r.output_tokens),
+    totalTokens: asNumber(r.totalTokens ?? r.total_tokens),
+    lastObservedAt: asString(r.lastObservedAt ?? r.last_observed_at) ?? null,
+    ageHours: asNumber(r.ageHours ?? r.age_hours) ?? null,
+    stale: asBoolean(r.stale),
+    staleAfterHours: asNumber(r.staleAfterHours ?? r.stale_after_hours),
+    windowHours: asNumber(r.windowHours ?? r.window_hours) ?? null,
+    eventLimit: asNumber(r.eventLimit ?? r.event_limit),
+    message: asString(r.message) ?? null,
+  };
+}
+
+function adaptProviderUsageSummaryRow(raw: unknown): AssistantProviderUsageSummaryRow | null {
+  const r = asRecord(raw);
+  if (!r) return null;
+  return {
+    provider: asString(r.provider),
+    providerName: asString(r.providerName ?? r.provider_name),
+    runtime: asString(r.runtime) ?? null,
+    ready: asBoolean(r.ready),
+    authStatus: asString(r.authStatus ?? r.auth_status) ?? null,
+    status: asString(r.status) ?? null,
+    liveAuth: asBoolean(r.liveAuth ?? r.live_auth),
+    calls: asNumber(r.calls),
+    successCount: asNumber(r.successCount ?? r.success_count),
+    failedCount: asNumber(r.failedCount ?? r.failed_count),
+    startedCount: asNumber(r.startedCount ?? r.started_count),
+    promptBytes: asNumber(r.promptBytes ?? r.prompt_bytes),
+    inputTokens: asNumber(r.inputTokens ?? r.input_tokens),
+    outputTokens: asNumber(r.outputTokens ?? r.output_tokens),
+    totalTokens: asNumber(r.totalTokens ?? r.total_tokens),
+    durationMs: asNumber(r.durationMs ?? r.duration_ms),
+    averageDurationMs: asNumber(r.averageDurationMs ?? r.average_duration_ms) ?? null,
+    lastUsedAt: asString(r.lastUsedAt ?? r.last_used_at) ?? null,
+    lastStatus: asString(r.lastStatus ?? r.last_status) ?? null,
+    lastError: asString(r.lastError ?? r.last_error) ?? null,
+    quota: adaptProviderUsage(r.quota),
+    observedUsage: adaptProviderObservedUsage(r.observedUsage ?? r.observed_usage),
+    models: asRecordArray(r.models)
+      .map(adaptProviderUsageSummaryModel)
+      .filter((item): item is AssistantProviderUsageSummaryModel => Boolean(item)),
+  };
+}
+
+function adaptProviderUsageTotals(raw: unknown): AssistantProviderUsageTotals {
+  const r = asRecord(raw);
+  if (!r) return {};
+  return {
+    providers: asNumber(r.providers),
+    liveAuthCount: asNumber(r.liveAuthCount ?? r.live_auth_count),
+    calls: asNumber(r.calls),
+    successCount: asNumber(r.successCount ?? r.success_count),
+    failedCount: asNumber(r.failedCount ?? r.failed_count),
+    inputTokens: asNumber(r.inputTokens ?? r.input_tokens),
+    outputTokens: asNumber(r.outputTokens ?? r.output_tokens),
+    totalTokens: asNumber(r.totalTokens ?? r.total_tokens),
+  };
+}
+
+export async function fetchAssistantProviders(
+  options?: { authProbe?: boolean; signal?: AbortSignal },
+): Promise<AssistantProvidersResult> {
+  const base = detectBaseUrl();
+  if (!base) {
+    return {
+      ok: false,
+      kind: "failure",
+      statusCode: null,
+      message: "BFF base URL is not configured (VITE_BFF_BASE_URL missing).",
+    };
+  }
+  const headers = buildHeaders({ method: "GET" });
+  let res: Response;
+  try {
+    res = await fetch(`${base}${paths.assistantProviders(options?.authProbe ?? false)}`, {
+      method: "GET",
+      headers,
+      credentials: "include",
+      signal: options?.signal,
+    });
+  } catch (err) {
+    if ((err as { name?: string })?.name === "AbortError" || options?.signal?.aborted) {
+      return { ok: false, kind: "failure", statusCode: null, message: "aborted" };
+    }
+    return {
+      ok: false,
+      kind: "failure",
+      statusCode: null,
+      message: (err as Error)?.message ?? "Network error contacting Pantheon BFF.",
+    };
+  }
+
+  const text = await res.text();
+  let parsed: { status?: unknown; data?: unknown; meta?: unknown; detail?: unknown; message?: unknown } | undefined;
+  try {
+    parsed = text ? JSON.parse(text) as { status?: unknown; data?: unknown; meta?: unknown; detail?: unknown; message?: unknown } : undefined;
+  } catch {
+    parsed = undefined;
+  }
+
+  if (!res.ok) {
+    return {
+      ok: false,
+      kind: "failure",
+      statusCode: res.status,
+      message: extractBffFailureMessage(parsed) ?? `BFF ${res.status} ${res.statusText || ""}`.trim(),
+    };
+  }
+
+  const providers = asRecordArray(parsed?.data)
+    .map(adaptProviderReadinessStatus)
+    .filter((item): item is AssistantProviderReadinessStatus => Boolean(item));
+  return {
+    ok: true,
+    kind: "ok",
+    status: asString(parsed?.status) ?? null,
+    providers,
+    meta: asRecord(parsed?.meta) ?? null,
+  };
+}
+
+export async function registerAssistantProvider(
+  input: AssistantProviderRegisterInput,
+  options?: { signal?: AbortSignal },
+): Promise<AssistantProviderRegisterResult> {
+  const base = detectBaseUrl();
+  if (!base) {
+    return {
+      ok: false,
+      kind: "failure",
+      statusCode: null,
+      message: "BFF base URL is not configured (VITE_BFF_BASE_URL missing).",
+    };
+  }
+
+  const headers = buildHeaders({ method: "POST", idempotency: newIdempotencyKey() });
+  const body = JSON.stringify({
+    provider: input.provider,
+    providerName: input.providerName,
+    runtime: input.runtime,
+    model: input.model,
+    authStrategy: input.authStrategy,
+    binary: input.binary,
+    binaryEnv: input.binaryEnv,
+    note: input.note,
+    traceId: input.traceId,
+  });
+
+  let res: Response;
+  try {
+    res = await fetch(`${base}${paths.assistantProviderRegister()}`, {
+      method: "POST",
+      headers,
+      body,
+      credentials: "include",
+      signal: options?.signal,
+    });
+  } catch (err) {
+    if ((err as { name?: string })?.name === "AbortError" || options?.signal?.aborted) {
+      return { ok: false, kind: "failure", statusCode: null, message: "aborted" };
+    }
+    return {
+      ok: false,
+      kind: "failure",
+      statusCode: null,
+      message: (err as Error)?.message ?? "Network error contacting Pantheon BFF.",
+    };
+  }
+
+  const text = await res.text();
+  let parsed: { data?: unknown; meta?: unknown; detail?: unknown; message?: unknown } | undefined;
+  try {
+    parsed = text ? JSON.parse(text) as { data?: unknown; meta?: unknown; detail?: unknown; message?: unknown } : undefined;
+  } catch {
+    parsed = undefined;
+  }
+
+  if (!res.ok) {
+    return {
+      ok: false,
+      kind: "failure",
+      statusCode: res.status,
+      message: extractBffFailureMessage(parsed) ?? `BFF ${res.status} ${res.statusText || ""}`.trim(),
+    };
+  }
+
+  const provider = adaptProviderReadinessStatus(parsed?.data);
+  if (!provider) {
+    return {
+      ok: false,
+      kind: "failure",
+      statusCode: res.status,
+      message: "BFF returned no provider registration.",
+    };
+  }
+  return { ok: true, kind: "ok", provider, meta: asRecord(parsed?.meta) ?? null };
+}
+
+export async function fetchAssistantProviderUsageSummary(
+  options?: { authProbe?: boolean; windowHours?: number; limit?: number; signal?: AbortSignal },
+): Promise<AssistantProviderUsageSummaryResult> {
+  const base = detectBaseUrl();
+  if (!base) {
+    return {
+      ok: false,
+      kind: "failure",
+      statusCode: null,
+      message: "BFF base URL is not configured (VITE_BFF_BASE_URL missing).",
+    };
+  }
+  const headers = buildHeaders({ method: "GET" });
+  let res: Response;
+  try {
+    res = await fetch(
+      `${base}${paths.assistantProviderUsageSummary(
+        options?.authProbe ?? false,
+        options?.windowHours ?? 168,
+        options?.limit ?? 500,
+      )}`,
+      {
+        method: "GET",
+        headers,
+        credentials: "include",
+        signal: options?.signal,
+      },
+    );
+  } catch (err) {
+    if ((err as { name?: string })?.name === "AbortError" || options?.signal?.aborted) {
+      return { ok: false, kind: "failure", statusCode: null, message: "aborted" };
+    }
+    return {
+      ok: false,
+      kind: "failure",
+      statusCode: null,
+      message: (err as Error)?.message ?? "Network error contacting Pantheon BFF.",
+    };
+  }
+
+  const text = await res.text();
+  let parsed: { status?: unknown; data?: unknown; meta?: unknown; detail?: unknown; message?: unknown } | undefined;
+  try {
+    parsed = text ? JSON.parse(text) as { status?: unknown; data?: unknown; meta?: unknown; detail?: unknown; message?: unknown } : undefined;
+  } catch {
+    parsed = undefined;
+  }
+
+  if (!res.ok) {
+    return {
+      ok: false,
+      kind: "failure",
+      statusCode: res.status,
+      message: extractBffFailureMessage(parsed) ?? `BFF ${res.status} ${res.statusText || ""}`.trim(),
+    };
+  }
+
+  const data = asRecord(parsed?.data);
+  const providers = asRecordArray(data?.providers)
+    .map(adaptProviderUsageSummaryRow)
+    .filter((item): item is AssistantProviderUsageSummaryRow => Boolean(item));
+  return {
+    ok: true,
+    kind: "ok",
+    status: asString(parsed?.status) ?? null,
+    providers,
+    totals: adaptProviderUsageTotals(data?.totals),
+    quota: asRecord(data?.quota) ?? null,
+    usage: asRecord(data?.usage) ?? null,
+    meta: asRecord(parsed?.meta) ?? null,
   };
 }
 
@@ -717,50 +828,6 @@ function adaptControlModeStatus(raw: unknown): AssistantControlModeStatus | null
   };
 }
 
-function adaptArchiveLocations(raw: unknown): AssistantDevDocsArchiveLocations | null {
-  const r = asRecord(raw);
-  if (!r) return null;
-  return {
-    requirementCapture: asString(r.requirementCapture ?? r.requirement_capture) ?? null,
-    systemAnalysis: asString(r.systemAnalysis ?? r.system_analysis) ?? null,
-    systemDesign: asString(r.systemDesign ?? r.system_design) ?? null,
-    taskBriefs: asStringArray(r.taskBriefs ?? r.task_briefs) ?? [],
-  };
-}
-
-function adaptRepairMetadata(raw: unknown): AssistantRepairMetadata | null {
-  const r = asRecord(raw);
-  if (!r) return null;
-  const taskId = asString(r.task_id ?? r.taskId);
-  const taskWorktree = asString(r.task_worktree ?? r.taskWorktree);
-  const declaredScope = asStringArray(r.declared_scope ?? r.declaredScope);
-  const expectedBranch = asString(r.expected_branch ?? r.expectedBranch);
-  const remote = asString(r.remote);
-  const mergeTarget = asString(r.merge_target ?? r.mergeTarget);
-  if (!taskId || !taskWorktree || !declaredScope?.length || !expectedBranch || !remote || !mergeTarget) {
-    return null;
-  }
-  const requireClean = asBoolean(r.require_clean ?? r.requireClean);
-  const repoKey = asString(r.repo_key ?? r.repoKey);
-  return {
-    task_id: taskId,
-    taskId,
-    task_worktree: taskWorktree,
-    taskWorktree,
-    declared_scope: declaredScope,
-    declaredScope,
-    expected_branch: expectedBranch,
-    expectedBranch,
-    remote,
-    merge_target: mergeTarget,
-    mergeTarget,
-    require_clean: requireClean,
-    requireClean,
-    repo_key: repoKey,
-    repoKey,
-  };
-}
-
 function adaptProviderCredentialExchange(raw: unknown): AssistantProviderCredentialExchange | null {
   const r = asRecord(raw);
   if (!r) return null;
@@ -781,12 +848,21 @@ function adaptProviderReauthSession(raw: unknown): AssistantProviderReauthSessio
     provider: asString(r.provider) ?? null,
     status: asString(r.status) ?? null,
     reauthSessionId,
+    startedAt: asString(r.startedAt ?? r.started_at) ?? null,
+    updatedAt: asString(r.updatedAt ?? r.updated_at) ?? null,
+    codeSubmittedAt: asString(r.codeSubmittedAt ?? r.code_submitted_at) ?? null,
+    completedAt: asString(r.completedAt ?? r.completed_at) ?? null,
     verificationUri: asString(r.verificationUri ?? r.verification_uri) ?? null,
     verificationUriComplete: asString(r.verificationUriComplete ?? r.verification_uri_complete) ?? null,
     userCode: asString(r.userCode ?? r.user_code) ?? null,
     expiresAt: asString(r.expiresAt ?? r.expires_at) ?? null,
     intervalSeconds: asNumber(r.intervalSeconds ?? r.interval_seconds) ?? null,
     credentialExchange: adaptProviderCredentialExchange(r.credentialExchange ?? r.credential_exchange),
+    readiness: asRecord(r.readiness),
+    errorCode: asString(r.errorCode ?? r.error_code) ?? null,
+    warningCode: asString(r.warningCode ?? r.warning_code) ?? null,
+    message: asString(r.message) ?? null,
+    returncode: asNumber(r.returncode) ?? null,
   };
 }
 
@@ -801,6 +877,13 @@ function extractBffFailureMessage(raw: unknown): string | null {
     asString(parsed?.message) ??
     null
   );
+}
+
+function bffRouteFailureMessage(raw: unknown, res: Response, route: string): string {
+  const message = extractBffFailureMessage(raw);
+  if (message) return message;
+  if (res.status === 404) return `BFF route unavailable: ${route}`;
+  return `BFF ${res.status} ${res.statusText || ""}`.trim();
 }
 
 function isDegraded(s: ProviderStatus | null): boolean {
@@ -1085,181 +1168,6 @@ export async function streamManagementAi(
   };
 }
 
-export async function fetchAssistantOrchestratorStatus(
-  options?: { signal?: AbortSignal },
-): Promise<AssistantOrchestratorStatusResult> {
-  const base = detectBaseUrl();
-  if (!base) {
-    return {
-      ok: false,
-      kind: "failure",
-      statusCode: null,
-      message: "BFF base URL is not configured (VITE_BFF_BASE_URL missing).",
-    };
-  }
-  const headers = buildHeaders({ method: "GET" });
-  let res: Response;
-  try {
-    res = await fetch(`${base}${paths.assistantOrchestratorStatus()}`, {
-      method: "GET",
-      headers,
-      credentials: "include",
-      signal: options?.signal,
-    });
-  } catch (err) {
-    if ((err as { name?: string })?.name === "AbortError" || options?.signal?.aborted) {
-      return { ok: false, kind: "failure", statusCode: null, message: "aborted" };
-    }
-    return {
-      ok: false,
-      kind: "failure",
-      statusCode: null,
-      message: (err as Error)?.message ?? "Network error contacting Pantheon BFF.",
-    };
-  }
-
-  const text = await res.text();
-  let parsed: { data?: Record<string, unknown> } | undefined;
-  try { parsed = text ? JSON.parse(text) as { data?: Record<string, unknown> } : undefined; } catch { parsed = undefined; }
-  if (!res.ok) {
-    return {
-      ok: false,
-      kind: "failure",
-      statusCode: res.status,
-      message: `BFF ${res.status} ${res.statusText || ""}`.trim(),
-    };
-  }
-
-  const data = parsed?.data ?? {};
-  const providerRaw = asRecord(data.providerStatus ?? data.provider_status);
-  return {
-    ok: true,
-    kind: "ok",
-    status: {
-      status: asString(data.status),
-      snapshotAt: asString(data.snapshotAt ?? data.snapshot_at),
-      project: asString(data.project),
-      sprint: asString(data.sprint),
-      objective: asString(data.objective),
-      providerStatus: adaptProviderStatus(providerRaw as (Partial<ProviderStatus> & Record<string, unknown>) | undefined),
-      openclawToolPolicy: adaptOpenClawToolPolicy(data.openclawToolPolicy ?? data.openclaw_tool_policy),
-      sourceRefs: adaptSourceRefs(data.sourceRefs ?? data.source_refs),
-      tasks: adaptTaskSummaries(data.tasks),
-      supervisor: adaptSupervisorStatus(data.supervisor),
-      providerReadiness: adaptProviderReadinessStatus(data.providerReadiness ?? data.provider_readiness),
-      assistantDevBridge: adaptDevBridgeStatus(data.assistantDevBridge ?? data.assistant_dev_bridge),
-      coordination: adaptCoordinationStatus(data.coordination),
-      queue: asRecord(data.queue) ?? asUnknownArray(data.queue) ?? null,
-      workers: asRecord(data.workers) ?? asUnknownArray(data.workers) ?? null,
-      handoffs: asUnknownArray(data.handoffs) ?? [],
-      blockers: asUnknownArray(data.blockers) ?? [],
-      providerGuardrails: asRecord(data.providerGuardrails ?? data.provider_guardrails) ?? null,
-    },
-  };
-}
-
-export async function generateAssistantDevDocs(
-  input: AssistantDevDocsGenerateInput,
-  options?: { signal?: AbortSignal },
-): Promise<AssistantDevDocsGenerateResult> {
-  const base = detectBaseUrl();
-  if (!base) {
-    return {
-      ok: false,
-      kind: "failure",
-      statusCode: null,
-      message: "BFF base URL is not configured (VITE_BFF_BASE_URL missing).",
-    };
-  }
-
-  const headers = buildHeaders({ method: "POST", idempotency: newIdempotencyKey() });
-  const body = JSON.stringify({
-    conversationId: input.conversationId,
-    featureSummary: input.featureSummary,
-    affectedModules: input.affectedModules ?? [],
-    proposedOwner: input.proposedOwner,
-    proposedReviewer: input.proposedReviewer,
-    archive: input.archive ?? true,
-    emitTaskPacket: input.emitTaskPacket ?? true,
-    queueTaskPacket: input.queueTaskPacket ?? true,
-    extraContext: input.extraContext,
-  });
-
-  let res: Response;
-  try {
-    res = await fetch(`${base}${paths.assistantDevDocsGenerate()}`, {
-      method: "POST",
-      headers,
-      body,
-      credentials: "include",
-      signal: options?.signal,
-    });
-  } catch (err) {
-    if ((err as { name?: string })?.name === "AbortError" || options?.signal?.aborted) {
-      return { ok: false, kind: "failure", statusCode: null, message: "aborted" };
-    }
-    return {
-      ok: false,
-      kind: "failure",
-      statusCode: null,
-      message: (err as Error)?.message ?? "Network error contacting Pantheon BFF.",
-    };
-  }
-
-  const text = await res.text();
-  let parsed: { data?: unknown; meta?: unknown; detail?: unknown; message?: unknown } | undefined;
-  try {
-    parsed = text ? JSON.parse(text) as { data?: unknown; meta?: unknown; detail?: unknown; message?: unknown } : undefined;
-  } catch {
-    parsed = undefined;
-  }
-
-  if (!res.ok) {
-    return {
-      ok: false,
-      kind: "failure",
-      statusCode: res.status,
-      message: extractBffFailureMessage(parsed) ?? `BFF ${res.status} ${res.statusText || ""}`.trim(),
-    };
-  }
-
-  const data = asRecord(parsed?.data) ?? {};
-  const meta = asRecord(parsed?.meta) ?? {};
-  const queueReceipt = asRecord(meta.taskPacketQueueReceipt ?? meta.task_packet_queue_receipt);
-  const packetId = asString(data.packetId ?? data.packet_id);
-  if (!packetId) {
-    return {
-      ok: false,
-      kind: "failure",
-      statusCode: res.status,
-      message: "BFF returned no dev-doc packetId.",
-    };
-  }
-
-  const executionTasks = Array.isArray(data.executionTasks)
-    ? data.executionTasks
-    : Array.isArray(data.execution_tasks)
-      ? data.execution_tasks
-      : [];
-
-  return {
-    ok: true,
-    kind: "ok",
-    packetId,
-    conversationId: asString(data.conversationId ?? data.conversation_id) ?? null,
-    archiveLocations: adaptArchiveLocations(
-      meta.archiveLocations ??
-      meta.archive_locations ??
-      data.archiveLocations ??
-      data.archive_locations,
-    ),
-    taskPacketQueued: asBoolean(meta.taskPacketQueued ?? meta.task_packet_queued) ?? asBoolean(queueReceipt?.queued) ?? false,
-    taskPacketQueuePath: asString(queueReceipt?.path ?? queueReceipt?.inbox) ?? null,
-    taskCount: asNumber(meta.taskCount ?? meta.task_count ?? queueReceipt?.taskCount ?? queueReceipt?.task_count) ?? executionTasks.length,
-    taskPacket: asRecord(meta.taskPacket ?? meta.task_packet) ?? null,
-  };
-}
-
 export async function startAssistantProviderReauth(
   input: AssistantProviderReauthInput = {},
   options?: { signal?: AbortSignal },
@@ -1274,6 +1182,7 @@ export async function startAssistantProviderReauth(
     };
   }
 
+  const route = paths.assistantProviderReauth();
   const headers = buildHeaders({ method: "POST", idempotency: newIdempotencyKey() });
   const body = JSON.stringify({
     provider: input.provider ?? "codex",
@@ -1283,7 +1192,7 @@ export async function startAssistantProviderReauth(
 
   let res: Response;
   try {
-    res = await fetch(`${base}${paths.assistantProviderReauth()}`, {
+    res = await fetch(`${base}${route}`, {
       method: "POST",
       headers,
       body,
@@ -1315,7 +1224,7 @@ export async function startAssistantProviderReauth(
       ok: false,
       kind: "failure",
       statusCode: res.status,
-      message: extractBffFailureMessage(parsed) ?? `BFF ${res.status} ${res.statusText || ""}`.trim(),
+      message: bffRouteFailureMessage(parsed, res, route),
     };
   }
 
@@ -1346,10 +1255,11 @@ export async function fetchAssistantProviderReauthStatus(
     };
   }
 
+  const route = paths.assistantProviderReauthStatus(sessionId, provider);
   const headers = buildHeaders({ method: "GET" });
   let res: Response;
   try {
-    res = await fetch(`${base}${paths.assistantProviderReauthStatus(sessionId, provider)}`, {
+    res = await fetch(`${base}${route}`, {
       method: "GET",
       headers,
       credentials: "include",
@@ -1380,7 +1290,7 @@ export async function fetchAssistantProviderReauthStatus(
       ok: false,
       kind: "failure",
       statusCode: res.status,
-      message: extractBffFailureMessage(parsed) ?? `BFF ${res.status} ${res.statusText || ""}`.trim(),
+      message: bffRouteFailureMessage(parsed, res, route),
     };
   }
 
@@ -1401,10 +1311,10 @@ export async function fetchAssistantProviderReauthStatus(
   return { ok: true, kind: "ok", reauth };
 }
 
-export async function prepareAssistantRepairWorktree(
-  input: AssistantRepairWorktreePrepareInput,
+export async function submitAssistantProviderReauthCode(
+  input: AssistantProviderReauthCodeInput,
   options?: { signal?: AbortSignal },
-): Promise<AssistantRepairWorktreePrepareResult> {
+): Promise<AssistantProviderReauthResult> {
   const base = detectBaseUrl();
   if (!base) {
     return {
@@ -1415,21 +1325,18 @@ export async function prepareAssistantRepairWorktree(
     };
   }
 
+  const provider = input.provider ?? "claude";
+  const route = paths.assistantProviderReauthCode(input.sessionId, provider);
   const headers = buildHeaders({ method: "POST", idempotency: newIdempotencyKey() });
   const body = JSON.stringify({
-    taskId: input.taskId,
-    repoKey: input.repoKey,
-    declaredScope: input.declaredScope,
-    expectedBranch: input.expectedBranch,
-    mergeTarget: input.mergeTarget,
-    remote: input.remote,
-    reason: input.reason,
+    provider,
+    code: input.code,
     traceId: input.traceId,
   });
 
   let res: Response;
   try {
-    res = await fetch(`${base}${paths.assistantRepairWorktreePrepare()}`, {
+    res = await fetch(`${base}${route}`, {
       method: "POST",
       headers,
       body,
@@ -1449,38 +1356,37 @@ export async function prepareAssistantRepairWorktree(
   }
 
   const text = await res.text();
-  let parsed: { data?: unknown; meta?: unknown; detail?: unknown; message?: unknown } | undefined;
+  let parsed: { data?: unknown; detail?: unknown; message?: unknown } | undefined;
   try {
-    parsed = text ? JSON.parse(text) as { data?: unknown; meta?: unknown; detail?: unknown; message?: unknown } : undefined;
+    parsed = text ? JSON.parse(text) as { data?: unknown; detail?: unknown; message?: unknown } : undefined;
   } catch {
     parsed = undefined;
   }
+
   if (!res.ok) {
     return {
       ok: false,
       kind: "failure",
       statusCode: res.status,
-      message: extractBffFailureMessage(parsed) ?? `BFF ${res.status} ${res.statusText || ""}`.trim(),
+      message: bffRouteFailureMessage(parsed, res, route),
     };
   }
 
   const data = asRecord(parsed?.data) ?? {};
-  const repair = adaptRepairMetadata(data.repair ?? data.repairMetadata);
-  if (!repair) {
+  const reauth = adaptProviderReauthSession({
+    ...data,
+    reauthSessionId: data.reauthSessionId ?? data.reauth_session_id ?? input.sessionId,
+    provider: data.provider ?? provider,
+  });
+  if (!reauth) {
     return {
       ok: false,
       kind: "failure",
       statusCode: res.status,
-      message: "BFF returned no repair metadata.",
+      message: "BFF returned no provider reauth code submission status.",
     };
   }
-  return {
-    ok: true,
-    kind: "ok",
-    repair,
-    created: asBoolean(data.created) ?? null,
-    workflow: asRecord(data.workflow) ?? null,
-  };
+  return { ok: true, kind: "ok", reauth };
 }
 
 export async function fetchAssistantModeStatus(
@@ -1738,4 +1644,81 @@ export async function fetchManagementAiConversation(
     providerStatus: adaptProviderStatus(t.provider_status ?? t.providerStatus),
   }));
   return { ok: true, kind: "ok", sessionId: String(data.sessionId ?? data.session_id ?? sessionId), turns };
+}
+
+
+// ---- Conversation list (server-side history index) ----
+
+export interface ManagementAiConversationSummary {
+  sessionId: string;
+  title: string;
+  updatedAt: string | null;
+  createdAt: string | null;
+  turnCount: number;
+}
+
+export interface ConversationListOk {
+  ok: true;
+  kind: "ok";
+  conversations: ManagementAiConversationSummary[];
+}
+
+export interface ConversationListFailure {
+  ok: false;
+  kind: "failure";
+  status: number | null;
+  message: string;
+}
+
+export type ConversationListResult = ConversationListOk | ConversationListFailure;
+
+/**
+ * List the caller's server-side Management AI conversations.
+ *
+ * The left-rail history index is a localStorage cache, NOT the source of
+ * truth. When localStorage is cleared (fresh browser, cache wipe, FE redeploy
+ * that bumps the storage key) the rail goes empty even though the server still
+ * has every session. This pulls the authoritative list so the FE can rebuild
+ * the index. Independent of OpenClaw / provider health — history readback must
+ * not be gated on the tool-policy degraded banner.
+ */
+export async function fetchManagementAiConversationList(
+  limit = 50,
+): Promise<ConversationListResult> {
+  const base = detectBaseUrl();
+  if (!base) return { ok: false, kind: "failure", status: null, message: "BFF base URL is not configured." };
+  const headers = buildHeaders({ method: "GET" });
+  const url = `${base}${paths.managementAiConversations(limit)}`;
+  let res: Response;
+  try {
+    res = await fetch(url, { method: "GET", headers, credentials: "include" });
+  } catch (err) {
+    return { ok: false, kind: "failure", status: null, message: (err as Error)?.message ?? "Network error." };
+  }
+  const body = await res.text();
+  if (!res.ok) return { ok: false, kind: "failure", status: res.status, message: `BFF ${res.status}` };
+  let parsed: { data?: unknown; items?: unknown } | undefined;
+  try { parsed = body ? JSON.parse(body) as { data?: unknown; items?: unknown } : undefined; } catch { parsed = undefined; }
+  let rawItems: unknown[] = [];
+  if (Array.isArray(parsed?.data)) {
+    rawItems = parsed.data;
+  } else if (parsed?.data && typeof parsed.data === "object" && Array.isArray((parsed.data as Record<string, unknown>).items)) {
+    rawItems = (parsed.data as Record<string, unknown>).items as unknown[];
+  } else if (Array.isArray(parsed?.items)) {
+    rawItems = parsed.items;
+  }
+  const conversations: ManagementAiConversationSummary[] = [];
+  for (const item of rawItems as Array<Record<string, unknown>>) {
+    const sessionId = asString(item.sessionId ?? item.session_id ?? item.id);
+    if (!sessionId) continue;
+    const turnCountRaw = item.turnCount ?? item.turn_count;
+    conversations.push({
+      sessionId,
+      title: asString(item.title) ?? "",
+      updatedAt: asString(item.updatedAt ?? item.updated_at) ?? null,
+      createdAt: asString(item.createdAt ?? item.created_at) ?? null,
+      turnCount: typeof turnCountRaw === "number" ? turnCountRaw : 0,
+    });
+  }
+  return { ok: true, kind: "ok", conversations };
 }

@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { bff } from "@/lib/bff-v1";
 import { mutations } from "@/lib/bff/mutations";
+import { commandReceiptDescription } from "@/lib/bff-v1/commandReceipt";
 import type { EvolutionCandidate, EvolutionProgram, EvolutionRun, PromotionRecord } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { DataTable } from "@/platform/components/DataTable";
@@ -46,8 +47,10 @@ export const PromotionPanel = ({ program }: { program: EvolutionProgram }) => {
 
   const onConfirm = async (memo: string) => {
     if (!confirm) return;
-    await mutations.promoteCandidate(program.id, confirm.candidate.id, confirm.target, memo);
-    toast.success(t("phase13.evolution.promotion.queued"));
+    const receipt = await mutations.promoteCandidate(program.id, confirm.candidate.id, confirm.target, memo);
+    toast.success(t("phase13.evolution.promotion.queued"), {
+      description: commandReceiptDescription(receipt, { fallback: `Evolution ${program.id} · promote ${confirm.candidate.id}` }),
+    });
     setHistory((h) => [
       {
         id: `pr_local_${Date.now()}`,
