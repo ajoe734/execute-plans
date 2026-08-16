@@ -546,7 +546,7 @@ const evidence = {
   release_candidate: {
     ...releaseCandidateIdentity,
     release_candidate_id: crypto.createHash("sha256")
-      .update(JSON.stringify(canonicalize(releaseCandidateIdentity)))
+      .update(`${JSON.stringify(canonicalize(releaseCandidateIdentity))}\n`)
       .digest("hex"),
   },
 };
@@ -1143,6 +1143,11 @@ test_agora_compatibility_gate_is_consumed_before_switch() {
   assert_previous_is_live
   assert_previous_manifest_unchanged
   assert_probe_not_called candidate_pre_switch
+}
+
+test_release_candidate_id_uses_lf_canonical_hash() {
+  grep -Fq '.update(`${JSON.stringify(canonicalize(releaseCandidateIdentity))}\n`)' \
+    "${DEPLOY_SOURCE}" || die "release candidate hash must include canonical LF"
 }
 
 test_tampered_candidate_and_digest_rejected() {
@@ -1884,6 +1889,7 @@ run_test() {
 
 run_test "valid candidate succeeds and evidence hashes verify" test_valid_candidate_success
 run_test "Agora pending/rejected or mismatched evidence cannot switch" test_agora_compatibility_gate_is_consumed_before_switch
+run_test "release candidate hash follows canonical LF contract" test_release_candidate_id_uses_lf_canonical_hash
 run_test "candidate asset and digest tampering reject before switch" test_tampered_candidate_and_digest_rejected
 run_test "candidate pre-probe failure preserves exact previous" test_pre_probe_failure_preserves_previous
 run_test "BFF identity is exact and stable across the switch" test_bff_identity_is_bound_before_and_after_switch

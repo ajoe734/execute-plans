@@ -336,7 +336,7 @@ const releaseCandidateIdentity = Object.fromEntries(
   Object.entries(releaseCandidate).filter(([key]) => key !== "release_candidate_id"),
 );
 const computedReleaseCandidateId = crypto.createHash("sha256")
-  .update(JSON.stringify(canonicalize(releaseCandidateIdentity)))
+  .update(`${JSON.stringify(canonicalize(releaseCandidateIdentity))}\n`)
   .digest("hex");
 if (frontend !== expectedFrontend || frontendTree !== expectedFrontendTree ||
     backend !== expectedBackend || candidateManifestSha !== manifestSha ||
