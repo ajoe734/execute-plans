@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -164,6 +165,41 @@ afterEach(() => {
 });
 
 describe("release candidate preparation and verification", () => {
+  it("binds pair ID to canonical identity JSON with trailing newline", () => {
+    const root = temporaryRoot();
+    const candidateDir = path.join(root, "candidate");
+    const candidate = preparePair(root, {
+      outputDir: candidateDir,
+      readOnlyDistDir: makeDist(path.join(root, "read-only")),
+      writeProofDistDir: makeDist(path.join(root, "write-proof"), {
+        "assets/profile.json": `${JSON.stringify({ profile: "write-proof" })}\n`,
+      }),
+      operatorLiveDistDir: makeDist(path.join(root, "operator-live"), {
+        "assets/profile.json": `${JSON.stringify({ profile: "operator-live" })}\n`,
+      }),
+    });
+    const pair = JSON.parse(
+      fs.readFileSync(path.join(candidateDir, "pair.json"), "utf8"),
+    );
+    const { pairId, ...identity } = pair;
+    const canonicalizedIdentity = `${JSON.stringify(identity)}\n`;
+    const pairIdExpectedWithNewline = crypto
+      .createHash("sha256")
+      .update(canonicalizedIdentity, "utf8")
+      .digest("hex");
+    const pairIdExpectedWithoutNewline = crypto
+      .createHash("sha256")
+      .update(JSON.stringify(identity), "utf8")
+      .digest("hex");
+
+    expect(pair.pairId).toBe(candidate.pairId);
+    expect(candidate.pairId).toBe(pairIdExpectedWithNewline);
+    expect(pair.pairId).not.toBe(pairIdExpectedWithoutNewline);
+    expect(pair.profiles.readOnly.artifactDigestSha256).toBe(
+      candidate.readOnly.artifactDigestSha256,
+    );
+  });
+
   it("produces a deterministic canonical digest and strict deployment aliases", () => {
     const root = temporaryRoot();
     const distDir = makeDist(root);
