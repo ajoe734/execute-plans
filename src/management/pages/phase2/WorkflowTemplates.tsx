@@ -1,37 +1,18 @@
 // Workflow Templates — Spec Part 3 §18.9.
 // Reusable workflow recipes: skill assembly, rebalance run, evolution loop, etc.
 import { useState } from "react";
-import { paths, withLiveOrMock } from "@/lib/bff-v1";
+import { managementConsoleReads, type WorkflowTemplateRecord } from "@/lib/bff-v1";
 import { useV5Live } from "@/management/pages/v5/useV5Live";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { Card } from "@/components/ui/card";
 import { DataTable } from "@/platform/components/DataTable";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useT } from "@/platform/hooks";
-import { toast } from "sonner";
 import { safeDateTime } from "@/lib/utils";
+import { NonProductionActionButton } from "@/management/components/NonProductionActionButton";
 
-interface Template {
-  id: string;
-  name: string;
-  category: "rebalance" | "evolution" | "training" | "incident";
-  steps: string[];
-  inputs: string[];
-  lastRun: string;
-  runs: number;
-  owner: string;
-}
-
-const SEED: Template[] = [
-  { id: "wf_quart_rebal", name: "Quarterly rebalance", category: "rebalance", steps: ["Freeze metrics", "Calculate ranking", "Simulate", "Submit for approval", "Apply"], inputs: ["pool_id", "quarter"], lastRun: "2026-04-01T10:00:00Z", runs: 12, owner: "rebalance-lead" },
-  { id: "wf_evo_loop", name: "Evolution discovery loop", category: "evolution", steps: ["Sample direction", "Mutate", "Backtest", "Score", "Promote"], inputs: ["direction_id", "budget"], lastRun: "2026-04-28T14:00:00Z", runs: 84, owner: "alpha-lead" },
-  { id: "wf_persona_retrain", name: "Persona retraining", category: "training", steps: ["Collect memory", "Filter", "Eval baseline", "Retrain", "Eval candidate", "Promote"], inputs: ["persona_id"], lastRun: "2026-04-30T08:00:00Z", runs: 23, owner: "trainer-lead" },
-  { id: "wf_incident_drill", name: "Incident response drill", category: "incident", steps: ["Trigger synthetic alert", "Auto-page", "Assemble committee", "Postmortem"], inputs: ["scenario"], lastRun: "2026-04-12T09:00:00Z", runs: 4, owner: "ops-commander" },
-];
-
-const catTone = (c: Template["category"]) =>
+const catTone = (c: WorkflowTemplateRecord["category"]) =>
   c === "rebalance" ? "bg-accent/15 text-accent" :
   c === "evolution" ? "bg-status-warning/15 text-status-warning" :
   c === "training" ? "bg-status-running/15 text-status-running" :
@@ -39,25 +20,20 @@ const catTone = (c: Template["category"]) =>
 
 export const WorkflowTemplatesPage = () => {
   const t = useT();
-  const [active, setActive] = useState<Template | null>(null);
-  // Live-wire GET /bff/workflows; fall back to SEED until the registry has data.
+  const [active, setActive] = useState<WorkflowTemplateRecord | null>(null);
   const { data: rows } = useV5Live(
-    () => withLiveOrMock<Template[]>(
-      { method: "GET", path: paths.workflowTemplates() },
-      async () => SEED,
-      (resp: { items?: Template[] }) => (resp?.items?.length ? resp.items : SEED),
-    ),
+    () => managementConsoleReads.workflowTemplates().then((envelope) => envelope.items),
     [],
   );
 
   return (
     <>
       <PageHeader title={t("nav.workflowTemplates")} subtitle={t("workflows.subtitle")} actions={
-        <Button size="sm">{t("workflows.create")}</Button>
+        <NonProductionActionButton size="sm">{t("workflows.create")}</NonProductionActionButton>
       }/>
       <PageBody>
         <Card>
-          <DataTable<Template> rows={rows ?? SEED} onRowClick={setActive} columns={[
+          <DataTable<WorkflowTemplateRecord> rows={rows ?? []} onRowClick={setActive} columns={[
             { key: "id", header: t("table.id"), cell: (r) => <span className="text-mono text-xs">{r.id}</span> },
             { key: "name", header: t("table.name"), cell: (r) => <div className="font-medium">{r.name}</div> },
             { key: "cat", header: t("table.category"), cell: (r) => <Badge variant="outline" className={`text-[10px] uppercase ${catTone(r.category)}`}>{r.category}</Badge> },
@@ -94,8 +70,8 @@ export const WorkflowTemplatesPage = () => {
                   <div className="flex flex-wrap gap-2">{active.inputs.map((i) => <code key={i} className="text-mono text-xs bg-muted px-1.5 py-0.5 rounded">{i}</code>)}</div>
                 </Card>
                 <div className="flex gap-2">
-                  <Button size="sm" onClick={() => toast.success(t("workflows.queued", { id: active.id }))}>{t("workflows.run")}</Button>
-                  <Button size="sm" variant="outline">{t("workflows.edit")}</Button>
+                  <NonProductionActionButton size="sm">{t("workflows.run")}</NonProductionActionButton>
+                  <NonProductionActionButton size="sm" variant="outline">{t("workflows.edit")}</NonProductionActionButton>
                 </div>
               </div>
             </>

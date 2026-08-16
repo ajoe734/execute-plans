@@ -28,7 +28,7 @@ function detectMode(): BffMode {
   }
 }
 
-function detectBaseUrl(): string {
+export function detectBaseUrl(): string {
   try {
     const env = readEnv();
     return env?.VITE_BFF_BASE_URL ?? "";

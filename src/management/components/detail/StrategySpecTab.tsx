@@ -10,6 +10,7 @@ import { PermissionAwareButton } from "@/platform/components/PermissionAwareButt
 import { Lock, Unlock } from "lucide-react";
 import { useT } from "@/platform/hooks";
 import { toast } from "sonner";
+import { commandReceiptDescription } from "@/lib/bff-v1/commandReceipt";
 
 interface ParamRow { key: string; value: string; note: string }
 
@@ -22,9 +23,11 @@ export const StrategySpecTab = ({ strategy, params }: { strategy: Strategy; para
   }, [strategy.id]);
 
   const toggleLock = async () => {
-    await mutations.lockParams(strategy.id, !locked, locked ? "unlock parameters" : "lock parameters");
+    const receipt = await mutations.lockParams(strategy.id, !locked, locked ? "unlock parameters" : "lock parameters");
     setLocked((v) => !v);
-    toast.success(locked ? t("phase13.strategy.spec.unlocked") : t("phase13.strategy.spec.locked"));
+    toast.success(locked ? t("phase13.strategy.spec.unlocked") : t("phase13.strategy.spec.locked"), {
+      description: commandReceiptDescription(receipt, { fallback: `Strategy ${strategy.id} · ${locked ? "unlock_params" : "lock_params"}` }),
+    });
   };
 
   return (

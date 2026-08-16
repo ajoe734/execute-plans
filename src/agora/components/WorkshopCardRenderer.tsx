@@ -12,6 +12,7 @@ import { ConsultResultCard } from "./ConsultResultCard";
 import { ResearchPlanCard } from "./ResearchPlanCard";
 import { PersonaOpinionCard } from "./PersonaOpinionCard";
 import { DebateCard } from "./DebateCard";
+import { GovernedProposalReferences, GovernedProposalWorkshopCard } from "./GovernedProposalWorkshopCard";
 import type { WorkshopCard } from "@/lib/bff-v1/agora/workshops";
 import {
   asRecord,
@@ -500,6 +501,29 @@ function GenericPayload({ payload }: { payload: UnknownRecord }) {
   );
 }
 
+function ConclusionCard({ payload }: { payload: UnknownRecord }) {
+  return (
+    <div className="space-y-4">
+      <KeyValueGrid
+        items={[
+          { label: "Outcome", value: payload.outcome ?? payload.concluded_outcome },
+          { label: "Concluded by", value: payload.concluded_by ?? payload.operator_id },
+          { label: "Concluded at", value: payload.concluded_at },
+        ]}
+      />
+      <Section title="Conclusion Summary">
+        <p className="text-xs leading-5 text-slate-700">{stringValue(payload.summary ?? payload.conclusion_summary ?? payload.notes)}</p>
+      </Section>
+      <Section title="Final Version">
+        <p className="text-xs leading-5 text-slate-600">{stringValue(payload.final_version_id ?? payload.selected_version_id)}</p>
+      </Section>
+      <Section title="Next Recommended Actions">
+        <TextList items={payload.next_actions ?? payload.recommendations} />
+      </Section>
+    </div>
+  );
+}
+
 function CardBody({ card }: { card: WorkshopCard }) {
   const payload = asRecord(card.payload);
 
@@ -521,7 +545,7 @@ function CardBody({ card }: { card: WorkshopCard }) {
     case "research_result":
       return <ResearchResult payload={payload} />;
     case "consult_result":
-      return <ConsultResultCard payload={payload} />;
+      return <><ConsultResultCard payload={payload} /><GovernedProposalReferences payload={payload} /></>;
     case "version_patch_proposal":
       return <PatchProposal payload={payload} />;
     case "version_compare":
@@ -533,6 +557,11 @@ function CardBody({ card }: { card: WorkshopCard }) {
       return <PersonaOpinionCard payload={payload} />;
     case "debate":
       return <DebateCard payload={payload} />;
+    case "governed_proposal":
+      return <GovernedProposalWorkshopCard payload={payload} />;
+    case "workshop_concluded":
+    case "conclusion":
+      return <ConclusionCard payload={payload} />;
     default:
       return <GenericPayload payload={payload} />;
   }

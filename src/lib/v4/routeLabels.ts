@@ -20,6 +20,35 @@ export const ROUTE_LABELS: readonly RouteLabel[] = [
   { path: "/management", i18nKey: "app.management" },
   { path: "/agora", i18nKey: "app.agora" },
 
+  // Oversight
+  { path: "/management/cockpit", i18nKey: "nav.managementCockpit", parent: "/management" },
+  { path: "/management/trade-journeys", i18nKey: "nav.tradeJourneys", parent: "/management" },
+  { path: "/management/persona-fleet", i18nKey: "nav.personaFleet", parent: "/management" },
+  { path: "/management/human-inbox", i18nKey: "nav.humanInbox", parent: "/management" },
+  { path: "/management/trading-pulse", i18nKey: "nav.tradingPulse", parent: "/management" },
+  { path: "/management/evolution-journal", i18nKey: "nav.evolutionJournal", parent: "/management" },
+  { path: "/management/evidence", i18nKey: "nav.evidenceExplorer", parent: "/management" },
+  { path: "/management/persona-intent", i18nKey: "nav.personaIntent", parent: "/management" },
+
+  // MGMT-PERF-IA-001 canonical centers — the entries these three replace
+  // (portfolio-book, promotion-allocation, performance-attribution,
+  // persona-league, quarterly-ranking) are now redirect-only and kept below
+  // for legacy lookups.
+  { path: "/management/performance", i18nKey: "nav.performanceCenter", parent: "/management" },
+  { path: "/management/rankings", i18nKey: "nav.rankingsCenter", parent: "/management" },
+  { path: "/management/governance-decisions", i18nKey: "nav.governanceDecisions", parent: "/management" },
+
+  // Performance & League (legacy — redirect-only, see managementRouteManifest.ts)
+  { path: "/management/portfolio-book", i18nKey: "nav.portfolioBook", parent: "/management" },
+  { path: "/management/promotion-allocation", i18nKey: "nav.promotionAllocation", parent: "/management" },
+  { path: "/management/performance-attribution", i18nKey: "nav.performanceAttribution", parent: "/management" },
+
+  // Live Readiness
+  { path: "/management/readiness/ep5", i18nKey: "readiness.ep5Title", parent: "/management" },
+  { path: "/management/readiness/broker-live", i18nKey: "nav.brokerLiveReadiness", parent: "/management" },
+  { path: "/management/readiness/bff-ha", i18nKey: "nav.bffHaReadiness", parent: "/management" },
+  { path: "/management/readiness/strict-publish", i18nKey: "nav.strictPublishAudit", parent: "/management" },
+
   // v5 closed-loop OS
   { path: "/management/control-room", i18nKey: "nav.controlRoom", subtitleKey: "v5.controlRoom.subtitle", parent: "/management" },
   { path: "/management/loops", i18nKey: "nav.loops", parent: "/management" },
@@ -32,9 +61,6 @@ export const ROUTE_LABELS: readonly RouteLabel[] = [
   // core management
   { path: "/management/strategies", i18nKey: "nav.strategyRegistry", parent: "/management" },
   { path: "/management/personas", i18nKey: "nav.personaRegistry", parent: "/management" },
-  { path: "/management/capital", i18nKey: "nav.capital", parent: "/management" },
-  { path: "/management/ranking", i18nKey: "nav.ranking", parent: "/management" },
-  { path: "/management/rebalance", i18nKey: "nav.rebalance", parent: "/management" },
   { path: "/management/evolution", i18nKey: "nav.evolution", parent: "/management" },
   { path: "/management/alpha-factory", i18nKey: "nav.alphaFactory", parent: "/management" },
 
@@ -76,15 +102,9 @@ export const ROUTE_LABELS: readonly RouteLabel[] = [
   { path: "/management/overview", i18nKey: "nav.overview", parent: "/management" },
 
   // agora
-  { path: "/agora/daily", i18nKey: "nav.daily", parent: "/agora" },
-  { path: "/agora/markets", i18nKey: "nav.markets", parent: "/agora" },
-  { path: "/agora/watchlist", i18nKey: "nav.watchlist", parent: "/agora" },
-  { path: "/agora/signals", i18nKey: "nav.signals", parent: "/agora" },
-  { path: "/agora/notebook", i18nKey: "nav.notebook", parent: "/agora" },
-  { path: "/agora/ask", i18nKey: "nav.askPersonas", parent: "/agora" },
-  { path: "/agora/decisions", i18nKey: "nav.decisions", parent: "/agora" },
-  { path: "/agora/triage", i18nKey: "nav.triage", parent: "/agora" },
-  { path: "/agora/insights", i18nKey: "nav.insights", parent: "/agora" },
+  { path: "/agora/trading-room", i18nKey: "nav.tradingRoom", parent: "/agora" },
+  { path: "/agora/strategy-workshop", i18nKey: "nav.strategyWorkshop", parent: "/agora" },
+  { path: "/agora/strategy-performance", i18nKey: "nav.strategyPerformance", parent: "/agora" },
 ];
 
 const sorted = [...ROUTE_LABELS].sort((a, b) => b.path.length - a.path.length);
