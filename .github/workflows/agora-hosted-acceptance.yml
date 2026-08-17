@@ -26,11 +26,6 @@ on:
         required: true
         default: "tenant-dev"
         type: string
-      run_rollback_drill:
-        description: "Execute failure injection and rollback drill"
-        required: false
-        default: true
-        type: boolean
 
 permissions:
   contents: read
@@ -56,7 +51,7 @@ jobs:
       PANTHEON_BFF_TENANT_ID: ${{ inputs.tenant_id }}
       BFF_AUTH_TOKEN: ${{ secrets.DEV_BFF_OPERATOR_A_TOKEN || secrets.BFF_AUTH_TOKEN }}
       PANTHEON_AUDIT_OUT_DIR: .artifacts/AGORA-HOSTED-PROOF/${{ github.run_id }}-${{ github.run_attempt }}
-      RUN_ROLLBACK_DRILL: ${{ inputs.run_rollback_drill }}
+      EXPECTED_BFF_SHA: ${{ inputs.expected_bff_sha }}
     steps:
       - name: Checkout dispatched revision
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5a
@@ -68,8 +63,25 @@ jobs:
           [[ "${PANTHEON_FE_BASE_URL}" == "https://pantheon-lupin-dev-fe.35.201.204.12.sslip.io" ]]
           [[ "${PANTHEON_BFF_BASE_URL}" == "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io" ]]
           [[ "${AG_UIPOL_011_EXPECTED_FE_SHA}" =~ ^[0-9a-f]{40}$ ]]
-          [[ "${{ inputs.expected_bff_sha }}" =~ ^[0-9a-f]{40}$ ]]
+          [[ "${EXPECTED_BFF_SHA}" =~ ^[0-9a-f]{40}$ ]]
           [[ "${PANTHEON_BFF_TENANT_ID}" == "tenant-dev" ]]
+
+      - name: Bind expected identity to the live served deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          served="$(curl -fsS "${PANTHEON_FE_BASE_URL}/deployment.json")"
+          served_fe="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).commit || "")' "${served}")"
+          served_bff="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).bffCommit || "")' "${served}")"
+          if [[ "${served_fe}" != "${AG_UIPOL_011_EXPECTED_FE_SHA}" ]]; then
+            echo "live FE commit ${served_fe} does not match expected ${AG_UIPOL_011_EXPECTED_FE_SHA}" >&2
+            exit 1
+          fi
+          if [[ "${served_bff}" != "${EXPECTED_BFF_SHA}" ]]; then
+            echo "live BFF commit ${served_bff} does not match expected ${EXPECTED_BFF_SHA}" >&2
+            exit 1
+          fi
+          echo "verified live deployment.json binds fe=${served_fe} bff=${served_bff} to the expected exact pair"
 
       - name: Set up Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -83,25 +95,27 @@ jobs:
       - name: Install Chromium
         run: npx playwright install chromium --with-deps
 
-      - name: Run real Agora winner branch live hosted spec
+      - name: Run real Agora winner branch live hosted spec (desktop + mobile)
         run: |
           set -euo pipefail
           npx playwright test e2e/agora-winner-branch-hosted.spec.ts \
             --project=chromium \
+            --project=mobile-chromium \
             --retries=0 \
             --reporter=list \
             --trace=off
 
-      - name: Run real Agora narrow responsive parity hosted spec
+      - name: Run real Agora narrow responsive parity hosted spec (desktop + mobile)
         run: |
           set -euo pipefail
           npx playwright test e2e/agora-narrow-responsive-hosted.spec.ts \
             --project=chromium \
+            --project=mobile-chromium \
             --retries=0 \
             --reporter=list \
             --trace=off
 
-      - name: Generate structured proof evidence & rollback drill artifact
+      - name: Generate structured proof evidence
         if: always()
         run: |
           set -euo pipefail
@@ -111,20 +125,17 @@ jobs:
             const outDir = process.env.PANTHEON_AUDIT_OUT_DIR || "/tmp";
             fs.mkdirSync(outDir, { recursive: true });
             const payload = {
-              schema_version: "pantheon.agora.hosted-browser-evidence.v1",
+              schema_version: "pantheon.agora.hosted-browser-evidence.v2",
               task_id: "AGORA-HOSTED-BROWSER-PROOF-20260815",
               timestamp: new Date().toISOString(),
               fe_base_url: process.env.PANTHEON_FE_BASE_URL,
               bff_base_url: process.env.PANTHEON_BFF_BASE_URL,
               expected_fe_sha: process.env.AG_UIPOL_011_EXPECTED_FE_SHA,
-              expected_bff_sha: "'"${{ inputs.expected_bff_sha }}"'",
+              expected_bff_sha: process.env.EXPECTED_BFF_SHA,
               tenant_id: process.env.PANTHEON_BFF_TENANT_ID,
-              rollback_drill: {
-                executed: process.env.RUN_ROLLBACK_DRILL === "true",
-                failure_injection_rejected: true,
-                last_accepted_pair_restored: true,
-                evidence: "Simulated candidate deployment rejection; preserved last known good FE/BFF pair."
-              }
+              live_deployment_identity_verified: true,
+              projects_run: ["chromium", "mobile-chromium"],
+              scope_note: "This workflow proves the desktop/mobile browser journey and the exact live FE/BFF identity pair only. Failure-injection and rollback-preservation proof for a bad release candidate is owned by AGORA-HOSTED-DEPLOY-REACCEPT-20260815 (six-gate verifier, scripts/verify_agora_current_hosted_acceptance.py) and scripts/deploy-dev-vm.sh, which have the deploy authority this workflow does not: see its own test suite (scripts/test-deploy-dev-vm.sh) for real reject/rollback coverage. This workflow previously fabricated a rollback_drill field with hardcoded true values instead of leaving that proof to its rightful owner; do not reintroduce it here."
             };
             fs.writeFileSync(path.join(outDir, "agora-hosted-proof-evidence.json"), JSON.stringify(payload, null, 2));
           '
