@@ -1150,6 +1150,45 @@ test_release_candidate_id_uses_lf_canonical_hash() {
     "${DEPLOY_SOURCE}" || die "release candidate hash must include canonical LF"
 }
 
+test_canonical_hash_matches_cross_repo_fixture() {
+  # Behavioral counterpart to the grep check above. The pantheon backend
+  # reimplements this exact algorithm independently in Python
+  # (scripts/agora_compat_manifest.py::canonical_json_sha256) because it
+  # cannot import this file. The two drifted once already -- this repo's
+  # hash was missing the trailing LF byte until
+  # OPS-AGORA-RELEASE-CANDIDATE-LF-20260816, which is exactly what made
+  # AGORA-HOSTED-SERVICE-PROOF-20260815's release candidate get rejected
+  # with "Agora compatibility evidence has an unexpected shape". A grep for
+  # the source snippet only proves the snippet is present, not that it
+  # computes the value the other repo expects. This test loads the same
+  # fixture pantheon's test_agora_compat_manifest.py loads and asserts this
+  # repo's own canonicalize()+sha256 algorithm (copied verbatim from
+  # deploy-dev-vm.sh below) produces the pinned hash. Keep the fixture file
+  # byte-identical across both repos; if this test and the Python one ever
+  # disagree on the same fixture, that is the two contracts diverging again.
+  local fixture="${ROOT_DIR}/docs/contracts/agora/canonical-hash-conformance-fixture.json"
+  [[ -f "${fixture}" ]] || die "missing cross-repo canonical hash fixture: ${fixture}"
+  "${REAL_NODE}" -e '
+    const fs = require("node:fs");
+    const crypto = require("node:crypto");
+    const fixture = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+    const canonicalize = (value) => {
+      if (Array.isArray(value)) return value.map(canonicalize);
+      if (!value || typeof value !== "object") return value;
+      return Object.fromEntries(
+        Object.keys(value).sort().map((key) => [key, canonicalize(value[key])]),
+      );
+    };
+    const actual = crypto.createHash("sha256")
+      .update(`${JSON.stringify(canonicalize(fixture.payload))}\n`)
+      .digest("hex");
+    if (actual !== fixture.expected_sha256) {
+      console.error(`canonical hash mismatch: expected ${fixture.expected_sha256}, got ${actual}`);
+      process.exit(1);
+    }
+  ' "${fixture}" || die "canonical hash algorithm no longer matches the pantheon-shared fixture"
+}
+
 test_tampered_candidate_and_digest_rejected() {
   setup_case tampered-asset
   printf 'tampered\n' >> "${CANDIDATE_DIR}/dist/index.html"
@@ -1890,6 +1929,7 @@ run_test() {
 run_test "valid candidate succeeds and evidence hashes verify" test_valid_candidate_success
 run_test "Agora pending/rejected or mismatched evidence cannot switch" test_agora_compatibility_gate_is_consumed_before_switch
 run_test "release candidate hash follows canonical LF contract" test_release_candidate_id_uses_lf_canonical_hash
+run_test "canonical hash matches cross-repo pantheon fixture" test_canonical_hash_matches_cross_repo_fixture
 run_test "candidate asset and digest tampering reject before switch" test_tampered_candidate_and_digest_rejected
 run_test "candidate pre-probe failure preserves exact previous" test_pre_probe_failure_preserves_previous
 run_test "BFF identity is exact and stable across the switch" test_bff_identity_is_bound_before_and_after_switch
