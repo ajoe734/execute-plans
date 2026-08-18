@@ -2454,9 +2454,20 @@ async function runProbe() {
     ),
   );
   const shellOk = shellStatus >= 200 && shellStatus < 400;
+  // rootChecks is snapshotted right after page.goto(), racing an in-flight
+  // client-side redirect to the auth boundary for an unauthenticated
+  // session: the SPA can legitimately unmount its initial view and be
+  // mid-transition to /auth at the exact instant this snapshot is taken,
+  // leaving #root transiently empty even though the app booted correctly.
+  // anonymousAuthBoundary is resolved later in this function and, when it
+  // passes, is itself proof the app rendered and functioned -- the same
+  // idiom usesIntendedBff already relies on below. Without this, that
+  // ordinary transition was indistinguishable from the app never rendering
+  // at all, and got misreported as a broken deployment.
   const rootRendered = Boolean(
-    rootChecks.bodyTextLength > 0 &&
-    (rootChecks.childElementCount > 0 || rootChecks.rootTextLength > 0),
+    (rootChecks.bodyTextLength > 0 &&
+      (rootChecks.childElementCount > 0 || rootChecks.rootTextLength > 0)) ||
+    anonymousAuthBoundary.pass,
   );
   const optionalCoreResponsesObserved = OPTIONAL_CORE_BFF_PATHS.every(
     (expectedPath) =>
