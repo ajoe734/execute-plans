@@ -109,7 +109,7 @@ export const LoopsPage = () => {
             }`}
             onClick={() => setActiveTab("truth")}
           >
-            Twelve Loop Ground Truth ({loopHealthData.data?.length || 0})
+            Twelve Loop Ground Truth ({loopHealthData.data ? loopHealthData.data.filter((l) => l.classification === "canonical").length : 0})
           </button>
           <button
             className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
@@ -119,7 +119,7 @@ export const LoopsPage = () => {
             }`}
             onClick={() => setActiveTab("runs")}
           >
-            Closed-Loop OS Runs ({data?.items?.length || 0})
+            Closed-Loop OS Runs ({data?.totalCount ?? data?.items?.length ?? 0})
           </button>
         </div>
 
