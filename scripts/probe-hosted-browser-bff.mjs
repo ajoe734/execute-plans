@@ -2467,7 +2467,7 @@ async function runProbe() {
   const rootRendered = Boolean(
     (rootChecks.bodyTextLength > 0 &&
       (rootChecks.childElementCount > 0 || rootChecks.rootTextLength > 0)) ||
-    anonymousAuthBoundary.pass,
+      anonymousAuthBoundary.pass,
   );
   const optionalCoreResponsesObserved = OPTIONAL_CORE_BFF_PATHS.every(
     (expectedPath) =>
