@@ -30,6 +30,19 @@ function detectFallbackMode(): FallbackMode {
   }
 }
 
+/**
+ * True only for the hosted/production posture (`VITE_BFF_MODE=live` +
+ * `VITE_BFF_FALLBACK=strict`, e.g. `.env.staging-live`, the integration
+ * gate). Explicit demo/test profiles (`VITE_BFF_MODE=mock`) and the
+ * dev-default `auto` fallback are unaffected — they may still use seed
+ * fixtures. Strict-live callers use this to refuse a seed/mock substitute
+ * for a real response and surface a typed unavailable/degraded error
+ * instead (PFG-FE-HONEST-LIVE-20260820).
+ */
+export function isStrictLiveFallback(): boolean {
+  return liveStatus.get().mode === "live" && detectFallbackMode() === "strict";
+}
+
 export function realWritesEnabled(): boolean {
   try {
     const env = readBffEnv();

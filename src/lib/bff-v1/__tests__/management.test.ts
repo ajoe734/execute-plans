@@ -1705,3 +1705,47 @@ describe("mgmt façade (PM-Live)", () => {
     expect(paths.mgmtReadinessStrictPublish()).toMatch(/strict-publish$/);
   });
 });
+
+// PFG-FE-HONEST-LIVE-20260820 — strict-live (VITE_BFF_MODE=live +
+// VITE_BFF_FALLBACK=strict, the hosted/production profile) must not mask an
+// HTTP-200-but-contract-mismatch response behind seed data via safeAdapt.
+describe("safeAdapt strict-live contract mismatch", () => {
+  afterEach(() => {
+    delete process.env.VITE_BFF_FALLBACK;
+    liveStatus._reset();
+    vi.restoreAllMocks();
+  });
+
+  it("degrades to seed in dev-default auto fallback when the contract mismatches", async () => {
+    liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({ data: "not-a-cockpit-shape" }));
+
+    const out = await mgmt.cockpit.get();
+
+    const expected = composeCockpit(defaultCockpitSeed());
+    expect(out.strip.fields.length).toBe(expected.strip.fields.length);
+    expect(liveStatus.get().effective).toBe("live");
+  });
+
+  it("never returns seed data in strict-live when the contract mismatches", async () => {
+    process.env.VITE_BFF_FALLBACK = "strict";
+    liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({ data: "not-a-cockpit-shape" }));
+
+    await expect(mgmt.cockpit.get()).rejects.toMatchObject({ name: "BffError" });
+    expect(liveStatus.get().effective).toBe("mock");
+    expect(liveStatus.get().lastError).toMatch(/^strict:/);
+  });
+
+  it("strict-live still returns real data when the contract matches", async () => {
+    process.env.VITE_BFF_FALLBACK = "strict";
+    liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({
+      data: { strip: { fields: [] }, loopFlow: { nodes: [] }, matrix: { phases: [] } },
+    }));
+
+    const out = await mgmt.cockpit.get();
+    expect(out.strip.fields).toEqual([]);
+    expect(liveStatus.get().effective).toBe("live");
+  });
+});

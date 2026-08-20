@@ -1,0 +1,65 @@
+{
+  "task_id": "PFG-FE-HONEST-LIVE-20260820",
+  "program_id": "pantheon-product-functional-closure-20260820",
+  "source_document": "docs/04/pantheon_product_functional_closure_2026-08-20/01_CURRENT_PRODUCT_FUNCTION_GAP_2026-08-20.md",
+  "source_catalog": "docs/04/pantheon_product_functional_closure_2026-08-20/execution-tasks.json",
+  "owner": "Claude",
+  "reviewer": "Antigravity2",
+  "phase": "W1-frontend-truth",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "depends_on": ["PFG-PLAN-FREEZE-20260820"],
+  "gap_closed": [
+    "management.ts::safeAdapt returned seed data on a strict-live HTTP-200-but-contract-mismatch response, masking backend errors as legitimate live data",
+    "writes.ts::runAction/requestConfirmToken fell through to the mock mutation engine and returned a completed receipt + success toast whenever real writes were disabled or the session lacked write authority, even in strict-live"
+  ],
+  "code_change_summary": [
+    "src/lib/bff-v1/liveTransport.ts: new exported isStrictLiveFallback() helper (mode==='live' && VITE_BFF_FALLBACK==='strict') — single definition of the strict/demo boundary",
+    "src/lib/bff-v1/writes.ts: runAction/requestConfirmToken call refuseStrictLiveWrite() (throws typed FEATURE_DISABLED BffError) instead of mockBranch() when isStrictLiveFallback() && write gate is closed; runActionSafe unchanged (already routes any non-ok result to toast.error, never toast.success)",
+    "src/lib/bff-v1/management.ts: safeAdapt rethrows the adapter mismatch instead of degrading to seedFn() when isStrictLiveFallback() is true, letting withLiveOrMock's existing strict branch report the typed unavailable/degraded error"
+  ],
+  "code_disposition": [
+    "Keep runActionSafe; remove mock success and strict-live seed fallback; retain mocks as explicit fixtures."
+  ],
+  "out_of_scope_confirmed": [
+    "enabling hosted real writes",
+    "removing all fixtures",
+    "new UI pages",
+    "security redesign"
+  ],
+  "verification_summary": {
+    "tests_passed": 99,
+    "test_files": [
+      "src/lib/bff-v1/__tests__/writes.test.ts",
+      "src/lib/bff-v1/__tests__/management.test.ts",
+      "src/lib/bff-v1/__tests__/liveTransport.test.ts",
+      "src/lib/bff-v1/__tests__/strictLiveReadOffline.test.ts",
+      "src/lib/bff-v1/__tests__/management-pm12.test.ts",
+      "src/lib/bff/scenarios.test.ts",
+      "src/lib/bff/mutations.test.ts"
+    ],
+    "new_tests_added": [
+      "writes.test.ts: VI-2 strict-live write gate never fakes a completed receipt (6 tests)",
+      "management.test.ts: safeAdapt strict-live contract mismatch (3 tests)"
+    ],
+    "verification_commands": [
+      "npx vitest run src/lib/bff-v1/__tests__/writes.test.ts src/lib/bff-v1/__tests__/management.test.ts src/lib/bff-v1/__tests__/liveTransport.test.ts src/lib/bff-v1/__tests__/strictLiveReadOffline.test.ts src/lib/bff-v1/__tests__/management-pm12.test.ts src/lib/bff/scenarios.test.ts src/lib/bff/mutations.test.ts",
+      "npx vitest run src/lib/bff-v1 src/lib/bff src/management (broader sweep; 672/674 passed, 2 pre-existing timeout flakes under parallel load — PersonaFleetPage.test.tsx and Sentinel.test.tsx both pass cleanly in isolation, unrelated to this change)",
+      "npx tsc -p tsconfig.json --noEmit (clean, exit 0)"
+    ]
+  },
+  "acceptance_proof": {
+    "strict_live_disabled_writes_never_complete": true,
+    "strict_live_disabled_writes_never_success_toast": true,
+    "strict_live_contract_mismatch_stays_typed_unavailable": true,
+    "strict_live_contract_mismatch_never_invokes_seed": true,
+    "demo_test_profile_still_uses_fixtures": true,
+    "auto_fallback_dev_default_behavior_unchanged": true,
+    "production_caller_inventory": "docs/deployment/evidence/PFG-FE-HONEST-LIVE-20260820/caller-inventory.md",
+    "consolidation_target_recorded_without_broad_rewrite": true
+  },
+  "delivery": {
+    "branch": "task/PFG-FE-HONEST-LIVE-20260820",
+    "base_commit": "729baba8f21211074c5aa3983ecd1e79e59c8599"
+  }
+}
