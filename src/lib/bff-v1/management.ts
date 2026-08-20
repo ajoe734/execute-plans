@@ -11,7 +11,7 @@
 // Exception: Human Inbox is strict-live/no-seed. It must never synthesize
 // pending human work from FE mock rows.
 
-import { withLiveOrMock } from "./liveTransport";
+import { withLiveOrMock, isStrictLiveFallback } from "./liveTransport";
 import { strictNotFoundAsUndefined, withStrictLiveOrMock } from "@/lib/bff/liveRead";
 import { liveStatus } from "@/lib/bff-v1/liveStatus";
 import { paths } from "./paths";
@@ -910,13 +910,29 @@ export interface ManagementEvidenceDetail {
   meta: ManagementEvidenceMeta;
 }
 
-/** Wraps `body` so adapter errors degrade to seedFn output. */
+/**
+ * Wraps `body` so adapter errors degrade to seedFn output.
+ *
+ * Strict-live posture (VITE_BFF_MODE=live + VITE_BFF_FALLBACK=strict, the
+ * hosted/production profile) must not mask an HTTP-200-but-contract-mismatch
+ * response by silently substituting seed data — that hides a real backend
+ * error behind what looks like legitimate live data. In that posture this
+ * rethrows instead, so the caller's `withLiveOrMock` catch reports the
+ * typed unavailable/degraded error. The explicit demo/test mock profile and
+ * the dev-default `auto` fallback keep degrading to seedFn
+ * (PFG-FE-HONEST-LIVE-20260820).
+ */
 function safeAdapt<T>(adapt: (raw: unknown) => T | null, seedFn: () => T) {
   return (raw: unknown): T => {
     try {
       const out = adapt(raw);
-      return out ?? seedFn();
-    } catch {
+      if (out !== null && out !== undefined) return out;
+      if (isStrictLiveFallback()) {
+        throw new Error("live adapter contract mismatch (strict mode): adapter returned no data");
+      }
+      return seedFn();
+    } catch (err) {
+      if (isStrictLiveFallback()) throw err;
       return seedFn();
     }
   };
