@@ -11,6 +11,7 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import {
   getCandidatePoolScore,
+  lookupCandidatePool,
   listCandidatePoolMembers,
   reviewCandidateMember,
   triggerCandidatePoolScore,
@@ -41,6 +42,39 @@ afterEach(() => {
   setAuthProvider({ getToken: () => null, getTenantId: () => null });
   vi.unstubAllEnvs();
   vi.restoreAllMocks();
+});
+
+describe("lookupCandidatePool — canonical StrategySpec identity", () => {
+  it("resolves the pool from strategy identity without using a presentation key", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(ok({
+      data: { pool: { pool_id: "pool-strategy-001" } },
+    }));
+    globalThis.fetch = fetchMock;
+
+    await expect(lookupCandidatePool({
+      strategyId: "strat-001",
+      strategyVersion: "registry-001",
+    }, BASE)).resolves.toBe("pool-strategy-001");
+
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      `${BASE}/bff/agora/candidate-pools/lookup?strategy_id=strat-001&strategy_version=registry-001`,
+    );
+    expect(fetchMock.mock.calls[0][1].method).toBe("GET");
+  });
+
+  it("treats a missing strategy pool as an explicit unavailable result", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(ok({ data: null }));
+    globalThis.fetch = fetchMock;
+
+    await expect(lookupCandidatePool({ strategyId: "strat-empty" }, BASE)).resolves.toBeNull();
+  });
+
+  it("returns null for a 404 lookup instead of substituting a local fallback", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(ok({ error: { message: "not found" } }, 404));
+    globalThis.fetch = fetchMock;
+
+    await expect(lookupCandidatePool({ strategyId: "strat-missing" }, BASE)).resolves.toBeNull();
+  });
 });
 
 // ── reviewCandidateMember — header forwarding ────────────────────────────────
