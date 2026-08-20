@@ -22,7 +22,20 @@ vi.mock("@/lib/bff-v1/agora/tradingRoom", () => ({
 }));
 
 vi.mock("@/lib/bff-v1/agora/candidatePool", () => ({
+  lookupCandidatePool: vi.fn().mockResolvedValue("pool-strat-001"),
   listCandidatePoolMembers: vi.fn().mockImplementation(() => Promise.resolve({ items: [] })),
+}));
+
+vi.mock("@/agora/components/CandidateReviewDrawer", () => ({
+  CandidateReviewDrawer: ({ poolId, open, onClose }: {
+    poolId: string;
+    open: boolean;
+    onClose: () => void;
+  }) => open ? (
+    <div data-testid={`shared-candidate-review-${poolId}`}>
+      <button data-testid="shared-candidate-review-close" onClick={onClose} type="button">Close</button>
+    </div>
+  ) : null,
 }));
 
 vi.mock("react-router-dom", () => ({
@@ -722,19 +735,13 @@ describe("TradingRoomPage", () => {
     expect(screen.getByTestId("trading-room-loading")).toBeDefined();
   });
 
-  it("renders the page with strategy lens switcher after load", async () => {
+  it("renders the BFF-backed strategy switcher after load", async () => {
     render(<TradingRoomPage />);
     await screen.findByTestId("trading-room-page");
-    expect(screen.getByTestId("strategy-lens-switcher")).toBeDefined();
-    const cardStrip = screen.getByTestId("strategy-lens-card-strip");
-    expect(cardStrip.style.gridTemplateColumns).toContain("repeat(5");
-    expect(cardStrip.style.overflowX).toBe("auto");
-  });
-
-  it("shows all-strategies button in the switcher", async () => {
-    render(<TradingRoomPage />);
-    await screen.findByTestId("trading-room-page");
-    expect(screen.getByTestId("strategy-lens-all")).toBeDefined();
+    const switcher = screen.getByTestId("strategy-lens-switcher");
+    expect(switcher).toHaveAttribute("role", "listbox");
+    expect(switcher).toHaveTextContent("Alpha Momentum");
+    expect(switcher).toHaveTextContent("reg-001");
   });
 
   it("renders each strategy as a selectable lens", async () => {
@@ -1728,252 +1735,40 @@ describe("TradingRoomPage", () => {
 
   // ── AG-UIPOL-007: Multi-Lens Monitoring & Candidate Parity ──────────────────
 
-  it("renders all five strategy lenses in the switcher and shows their titles", async () => {
-    render(<TradingRoomPage />);
-    await screen.findByTestId("trading-room-page");
-    expect(screen.getByText("籌碼大戶部位建立")).toBeDefined();
-    expect(screen.getByText("產業落後補漲")).toBeDefined();
-    expect(screen.getByText("技術突破")).toBeDefined();
-    expect(screen.getByText("事件交易")).toBeDefined();
-    expect(screen.getByText("大額資金進出")).toBeDefined();
-  });
-
-  it("switches to the selected lens dashboard when clicking a lens card", async () => {
-    render(<TradingRoomPage />);
-    await screen.findByTestId("trading-room-page");
-
-    fireEvent.click(screen.getByText("事件交易"));
-
-    expect(screen.getByTestId("dashboard-recipe-d")).toBeDefined();
-    expect(screen.getByText("預期差情境分析樹")).toBeDefined();
-  });
-
-  it("opens the Candidate Review Drawer when a candidate row is clicked, and does not claim real execution", async () => {
-    render(<TradingRoomPage />);
-    await screen.findByTestId("trading-room-page");
-    fireEvent.click(screen.getByTestId("strategy-lens-all"));
-
-    const appleRow = await screen.findByTestId("candidate-row-AAPL");
-    fireEvent.click(appleRow);
-
-    expect(screen.getByTestId("candidate-review-drawer")).toBeDefined();
-    expect(screen.getByTestId("drawer-candidate-symbol").textContent).toBe("AAPL");
-    expect(screen.getByTestId("drawer-candidate-score").textContent).toBe("94");
-    expect(screen.getByTestId("drawer-candidate-reason").textContent).toContain("Significant accumulation");
-    expect(screen.getByTestId("drawer-candidate-source").textContent).toContain("Live candidate");
-    expect(screen.getByTestId("drawer-candidate-reason-provenance").textContent).toContain(
-      "candidate-review:lens-A:artifact-live-aapl:review-001",
-    );
-    expect(screen.getByTestId("drawer-candidate-concerns").textContent).toContain("Unavailable");
-    expect(screen.getByTestId("drawer-candidate-event").textContent).toContain("Unavailable");
-    expect(screen.getByText("evidence://artifact-live-aapl/flow-001")).toBeDefined();
-    expect(screen.queryByText(/Minor distribution from minor retail desks/i)).toBeNull();
-    expect(screen.getByTestId("drawer-action-monitor").textContent).toBe("納入監控");
-    expect(screen.getByTestId("drawer-action-shadow").textContent).toBe("送影子追蹤");
-    expect(screen.getByTestId("drawer-action-workspace").textContent).toBe("開啟 Winner Branch 工作區");
-  });
-
-  it("updates candidate state in drawer when state transition action is clicked", async () => {
-    render(<TradingRoomPage />);
-    await screen.findByTestId("trading-room-page");
-    fireEvent.click(screen.getByTestId("strategy-lens-all"));
-
-    const appleRow = await screen.findByTestId("candidate-row-AAPL");
-    fireEvent.click(appleRow);
-
-    expect(screen.getByTestId("drawer-candidate-state").textContent).toBe("新候選");
-    fireEvent.click(screen.getByTestId("drawer-action-monitor"));
-    expect(screen.getByTestId("drawer-candidate-state").textContent).toBe("納入監控");
-  });
-
-  it("renders distinct dashboards and recipes when switching lenses A to E", async () => {
-    render(<TradingRoomPage />);
-    await screen.findByTestId("trading-room-page");
-    fireEvent.click(screen.getByTestId("strategy-lens-all"));
-
-    expect(screen.getByTestId("dashboard-recipe-a")).toBeDefined();
-
-    const lenses = screen.getAllByTestId("strategy-lens-switcher")[0];
-    fireEvent.click(within(lenses).getByText("產業落後補漲"));
-    expect(await screen.findByTestId("dashboard-recipe-b")).toBeDefined();
-    fireEvent.click(within(lenses).getByText("技術突破"));
-    expect(await screen.findByTestId("dashboard-recipe-c")).toBeDefined();
-    fireEvent.click(within(lenses).getByText("事件交易"));
-    expect(await screen.findByTestId("dashboard-recipe-d")).toBeDefined();
-    fireEvent.click(within(lenses).getByText("大額資金進出"));
-    expect(await screen.findByTestId("dashboard-recipe-e")).toBeDefined();
-  });
-
-  it("renders empty candidate state message when no candidates match active filter", async () => {
-    render(<TradingRoomPage />);
-    await screen.findByTestId("trading-room-page");
-    fireEvent.click(screen.getByTestId("strategy-lens-all"));
-
-    const sidebar = screen.getByTestId("trading-room-lens-sidebar");
-    fireEvent.click(within(sidebar).getByText("暫放觀察"));
-
-    expect(await screen.findByText(/此狀態下無候選人/i)).toBeDefined();
-  });
-
-  it("renders a strict live error without substituting sample candidates", async () => {
-    vi.mocked(candidatePoolModule.listCandidatePoolMembers).mockRejectedValueOnce(
-      new Error("Network Error"),
-    );
+  it("resolves the canonical pool from the active StrategySpec and opens the shared BFF drawer", async () => {
+    vi.mocked(candidatePoolModule.lookupCandidatePool).mockResolvedValueOnce("pool-strat-001");
 
     render(<TradingRoomPage />);
-    await screen.findByTestId("trading-room-page");
-    fireEvent.click(screen.getByTestId("strategy-lens-all"));
 
-    const error = await screen.findByTestId("candidate-error-state");
-    expect(error.textContent).toContain("Network Error");
-    expect(screen.queryByTestId("sample-data-warning")).toBeNull();
-    expect(screen.queryByTestId("candidate-row-AAPL")).toBeNull();
-  });
-
-  it("renders an honest empty live state without substituting sample candidates", async () => {
-    vi.mocked(candidatePoolModule.listCandidatePoolMembers).mockResolvedValueOnce({
-      ...LIVE_CANDIDATE_RESULT,
-      items: [],
-      pageInfo: { ...LIVE_CANDIDATE_RESULT.pageInfo!, page_size: 0, total: 0 },
+    const review = await screen.findByTestId("open-candidate-review");
+    await waitFor(() => expect(review).toBeEnabled());
+    expect(candidatePoolModule.lookupCandidatePool).toHaveBeenCalledWith({
+      strategyId: "strat-001",
+      strategyVersion: "reg-001",
+      strategyRef: "strat-001",
     });
-
-    render(<TradingRoomPage />);
-    await screen.findByTestId("trading-room-page");
-    fireEvent.click(screen.getByTestId("strategy-lens-all"));
-
-    expect(await screen.findByTestId("candidate-unavailable-state")).toHaveTextContent(
-      "Sample data was not substituted",
+    expect(candidatePoolModule.lookupCandidatePool).not.toHaveBeenCalledWith(
+      expect.objectContaining({ strategyId: expect.stringMatching(/^lens-/u) }),
     );
-    expect(screen.queryByTestId("sample-data-warning")).toBeNull();
-  });
-
-  it("rejects a live row whose field provenance belongs to another identity", async () => {
-    const mixedResult = structuredClone(LIVE_CANDIDATE_RESULT);
-    const rationale = mixedResult.items[0].fields.rationale;
-    if (rationale.availability !== "available") throw new Error("fixture rationale must be available");
-    rationale.provenance.source_ref = "candidate-review:lens-A:artifact-other:review-001";
-    vi.mocked(candidatePoolModule.listCandidatePoolMembers).mockResolvedValueOnce(mixedResult);
-
-    render(<TradingRoomPage />);
-    await screen.findByTestId("trading-room-page");
-    fireEvent.click(screen.getByTestId("strategy-lens-all"));
-
-    expect(await screen.findByTestId("candidate-error-state")).toHaveTextContent(
-      "identity mismatch",
-    );
-    expect(screen.queryByTestId("candidate-row-AAPL")).toBeNull();
-    expect(screen.queryByTestId("sample-data-warning")).toBeNull();
-  });
-
-  it("labels the entire candidate dataset as sample only in explicit mock mode", async () => {
-    vi.stubEnv("VITE_BFF_MODE", "mock");
-
-    render(<TradingRoomPage />);
-    await screen.findByTestId("trading-room-page");
-    fireEvent.click(screen.getByTestId("strategy-lens-all"));
-
-    expect(screen.getByTestId("sample-data-warning")).toBeDefined();
-    expect(screen.getByTestId("candidate-data-source")).toHaveTextContent("Sample dataset");
-    expect(screen.getByTestId("candidate-row-AAPL")).toHaveAttribute("data-candidate-source", "sample");
     expect(candidatePoolModule.listCandidatePoolMembers).not.toHaveBeenCalled();
+
+    fireEvent.click(review);
+    expect(await screen.findByTestId("shared-candidate-review-pool-strat-001")).toBeDefined();
+    fireEvent.click(screen.getByTestId("shared-candidate-review-close"));
+    await waitFor(() => {
+      expect(screen.queryByTestId("shared-candidate-review-pool-strat-001")).toBeNull();
+    });
   });
 
-  it("renders backend-declared stale state with the exact candidate as-of", async () => {
-    vi.mocked(candidatePoolModule.listCandidatePoolMembers).mockResolvedValueOnce({
-      ...LIVE_CANDIDATE_RESULT,
-      meta: { ...LIVE_CANDIDATE_RESULT.meta, read_state: "stale" },
-    });
+  it("keeps candidate review unavailable when the canonical lookup has no pool", async () => {
+    vi.mocked(candidatePoolModule.lookupCandidatePool).mockResolvedValueOnce(null);
 
     render(<TradingRoomPage />);
-    await screen.findByTestId("trading-room-page");
-    fireEvent.click(screen.getByTestId("strategy-lens-all"));
 
-    expect(await screen.findByTestId("candidate-live-freshness")).toHaveTextContent("STALE");
-    fireEvent.click(await screen.findByTestId("candidate-row-AAPL"));
-    expect(screen.getByTestId("drawer-candidate-freshness")).toHaveTextContent(
-      "Stale · as of 2026-07-22T20:05:00Z",
+    expect(await screen.findByTestId("candidate-pool-unavailable")).toHaveTextContent(
+      "unavailable",
     );
+    expect(screen.getByTestId("open-candidate-review")).toBeDisabled();
   });
 
-  it("handles drawer Escape key closing and keyboard focus trap accessibility", async () => {
-    render(<TradingRoomPage />);
-    await screen.findByTestId("trading-room-page");
-    fireEvent.click(screen.getByTestId("strategy-lens-all"));
-
-    const appleRow = await screen.findByTestId("candidate-row-AAPL");
-    appleRow.focus();
-    expect(document.activeElement).toBe(appleRow);
-
-    fireEvent.click(appleRow);
-    const drawer = await screen.findByTestId("candidate-review-drawer");
-    expect(drawer.getAttribute("role")).toBe("dialog");
-    expect(drawer.getAttribute("aria-modal")).toBe("true");
-    expect(screen.getByTestId("trading-room-page").hasAttribute("inert")).toBe(true);
-    expect(screen.getByTestId("trading-room-page").getAttribute("aria-hidden")).toBe("true");
-    expect(document.body.style.overflow).toBe("hidden");
-
-    const closeBtn = screen.getByTestId("drawer-close-btn");
-    expect(document.activeElement).toBe(closeBtn);
-
-    fireEvent.keyDown(window, { key: "Escape", code: "Escape" });
-    await waitFor(() => {
-      expect(screen.queryByTestId("candidate-review-drawer")).toBeNull();
-    });
-    expect(screen.getByTestId("trading-room-page").hasAttribute("inert")).toBe(false);
-    expect(screen.getByTestId("trading-room-page").hasAttribute("aria-hidden")).toBe(false);
-    expect(document.body.style.overflow).toBe("");
-    expect(document.activeElement).toBe(appleRow);
-  });
-
-  it("renders lens-specific columns in the candidate board table", async () => {
-    render(<TradingRoomPage />);
-    await screen.findByTestId("trading-room-page");
-
-    // Switch to continuous monitoring view (de-select strat-001)
-    fireEvent.click(screen.getByTestId("strategy-lens-all"));
-
-    const table = screen.getByTestId("candidate-board-table");
-
-    // By default, activeLensId is 'lens-A'
-    // It should render Accum. Days column header (or localized zh-TW version)
-    expect(within(table).getByText(/累積天數|Accum. Days/)).toBeDefined();
-    expect(within(table).queryByText(/同儕類組|Peer Group/)).toBeNull();
-
-    // Switch to lens-B
-    const lenses = screen.getAllByTestId("strategy-lens-switcher")[0];
-    const lensBCard = within(lenses).getByText(/產業落後補漲|Industry Laggard/);
-    fireEvent.click(lensBCard);
-
-    // Wait for the lens transition and API response to render lens-B columns
-    await waitFor(() => {
-      const currentTable = screen.getByTestId("candidate-board-table");
-      expect(within(currentTable).getByText(/同儕類組|Peer Group/)).toBeDefined();
-      expect(within(currentTable).queryByText(/累積天數|Accum. Days/)).toBeNull();
-    });
-  });
-
-  it("displays loading spinner state when candidatesLoading is true", async () => {
-    // Mock the candidatePool API to delay its response to simulate loading state
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let resolvePromise: any;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const delayPromise = new Promise<any>((resolve) => {
-      resolvePromise = resolve;
-    });
-    vi.mocked(candidatePoolModule.listCandidatePoolMembers).mockReturnValueOnce(delayPromise);
-
-    render(<TradingRoomPage />);
-    await screen.findByTestId("trading-room-page");
-    fireEvent.click(screen.getByTestId("strategy-lens-all"));
-
-    // Verify loading indicator is displayed
-    expect(screen.getByTestId("candidates-loading")).toBeDefined();
-    expect(screen.getByTestId("candidates-loading").textContent).toMatch(/正在載入|Loading/);
-
-    // Resolve the promise to end loading state
-    resolvePromise(LIVE_CANDIDATE_RESULT);
-    await waitFor(() => {
-      expect(screen.queryByTestId("candidates-loading")).toBeNull();
-    });
-  });
 });

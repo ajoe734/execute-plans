@@ -13,11 +13,14 @@ import {
   getWorkshopReadiness,
   listWorkshopCards,
   listWorkshopEvents,
+  listWorkshopVersions,
   openWorkshopStream,
+  reconstructWorkshopStrategy,
   type WorkshopCard,
   type WorkshopCompleteness,
   type WorkshopReadinessAssessment,
   type WorkshopStreamEvent,
+  type WorkshopVersionListEnvelope,
 } from "@/lib/bff-v1/agora/workshops";
 import { WorkshopCardRenderer } from "@/agora/components/WorkshopCardRenderer";
 import {
@@ -177,6 +180,31 @@ function compactTime(workshop: StrategyWorkshop): string {
 function readinessSummary(readiness: WorkshopReadinessAssessment | null): string {
   if (!readiness) return "Readiness: pending";
   return `Readiness: ${readinessHighestGate(readiness) ?? "none"}`;
+}
+
+interface StrategySpecIdentity {
+  strategyId: string;
+  registryId: string;
+  version: string | null;
+}
+
+function canonicalStrategySpecIdentity(
+  versions: WorkshopVersionListEnvelope,
+): StrategySpecIdentity | null {
+  const selectedVersionId = versions.data.selected_version_id;
+  const activeRegistryId = versions.data.active_strategy_spec_registry_id;
+  const selected = versions.data.versions.find((resource) =>
+    resource.version.workshop_version_id === selectedVersionId
+    || resource.strategy_spec.entry.registry_id === activeRegistryId,
+  ) ?? versions.data.versions[0];
+  if (!selected) return null;
+  const entry = selected.strategy_spec.entry;
+  if (!entry.strategy_id || !entry.registry_id) return null;
+  return {
+    strategyId: entry.strategy_id,
+    registryId: entry.registry_id,
+    version: entry.version ?? selected.version.strategy_spec_registry_id ?? null,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -673,6 +701,8 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
   const [dailyRuntimeState, setDailyRuntimeState] = useState<DailyRuntimeState>("loading");
   const [dailyRuntimeMessage, setDailyRuntimeMessage] = useState<string | null>(null);
   const [messageReceiptState, setMessageReceiptState] = useState<"none" | "accepted" | "processing" | "succeeded" | "degraded" | "failed">("none");
+  const [reconstructionState, setReconstructionState] = useState<"none" | "admitted" | "completed" | "failed">("none");
+  const [strategySpecIdentity, setStrategySpecIdentity] = useState<StrategySpecIdentity | null>(null);
 
   // Custom states for PINT-005
   const [selectedMode, setSelectedMode] = useState<WorkshopInteractionMode>(entry?.mode ?? "ask");
@@ -882,7 +912,19 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
 
   const refreshCards = useCallback(() => {
     listWorkshopCards(workshopId)
-      .then((items) => dispatch({ type: "RESET", cards: items }))
+      .then((items) => {
+        dispatch({ type: "RESET", cards: items });
+        const latestReconstruction = items
+          .filter((card) => card.card_type === "servant_reconstruction")
+          .sort((left, right) => right.sequence_no - left.sequence_no)[0];
+        if (latestReconstruction?.status === "completed") {
+          setReconstructionState("completed");
+        } else if (latestReconstruction?.status === "failed") {
+          setReconstructionState("failed");
+        } else if (latestReconstruction?.status === "running") {
+          setReconstructionState("admitted");
+        }
+      })
       .catch(() => undefined);
   }, [workshopId]);
 
@@ -890,6 +932,16 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
     listWorkshopEvents(workshopId)
       .then((response) => setWorkshopEvents(response.items ?? []))
       .catch(() => undefined);
+  }, [workshopId]);
+
+  const refreshStrategySpec = useCallback(() => {
+    try {
+      void listWorkshopVersions(workshopId)
+        .then((versions) => setStrategySpecIdentity(canonicalStrategySpecIdentity(versions)))
+        .catch(() => setStrategySpecIdentity(null));
+    } catch {
+      setStrategySpecIdentity(null);
+    }
   }, [workshopId]);
 
   useEffect(() => {
@@ -920,6 +972,7 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
           case "workshop.version.created":
             refreshCards();
             refreshEvents();
+            refreshStrategySpec();
             break;
           case "interaction.queued":
           case "interaction.running":
@@ -945,7 +998,7 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
       { lastEventId: cardState.lastEventId ?? undefined },
     );
     return teardown;
-  }, [workshopId, refreshCards, refreshCompleteness, refreshDailyInteractions, refreshEvents, refreshReadiness, cardState.lastEventId]);
+  }, [workshopId, refreshCards, refreshCompleteness, refreshDailyInteractions, refreshEvents, refreshReadiness, refreshStrategySpec, cardState.lastEventId]);
 
   // Derive the most recent next_question card for the rail
   const nextQuestion =
@@ -973,6 +1026,20 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
       try {
         setMessageReceiptState("processing");
         await postWorkshopMessage(workshopId, { content });
+
+        // Reconstruction is a BFF-owned durable operation. Its receipt and
+        // subsequent Workshop card/version readback are intentionally kept
+        // separate from the Persona interaction result below.
+        setReconstructionState("admitted");
+        try {
+          const reconstruction = await reconstructWorkshopStrategy(workshopId);
+          setReconstructionState(reconstruction.data.command_receipt.status);
+          refreshCards();
+          refreshEvents();
+          refreshStrategySpec();
+        } catch {
+          setReconstructionState("failed");
+        }
 
         if (selectedParticipants.length === 0) {
           throw new Error("Choose at least one eligible Persona before submitting.");
@@ -1103,6 +1170,7 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
       refreshDailyInteractions,
       refreshEvents,
       refreshReadiness,
+      refreshStrategySpec,
     ],
   );
 
@@ -1522,6 +1590,37 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
               data-testid="message-receipt-state"
             >
               <span>Receipt: {messageReceiptState}</span>
+            </div>
+          )}
+
+          {reconstructionState !== "none" && (
+            <div
+              className={cn(
+                "inline-flex flex-wrap items-center gap-1.5 rounded border px-2.5 py-1 text-xs font-semibold shrink-0",
+                reconstructionState === "admitted" && "border-amber-200 bg-amber-50 text-amber-700 animate-pulse",
+                reconstructionState === "completed" && "border-green-200 bg-green-50 text-green-700",
+                reconstructionState === "failed" && "border-red-200 bg-red-50 text-red-700",
+              )}
+              data-reconstruction-state={reconstructionState}
+              data-testid="workshop-reconstruction-state"
+            >
+              <span>
+                {reconstructionState === "admitted"
+                  ? "Strategy reconstruction admitted"
+                  : reconstructionState === "completed"
+                    ? "Strategy reconstruction receipt recorded"
+                    : "Strategy reconstruction unavailable"}
+              </span>
+              {strategySpecIdentity ? (
+                <span data-testid="workshop-strategy-spec-identity">
+                  StrategySpec {strategySpecIdentity.strategyId} · {strategySpecIdentity.registryId}
+                  {strategySpecIdentity.version ? ` · ${strategySpecIdentity.version}` : ""}
+                </span>
+              ) : reconstructionState === "completed" ? (
+                <span data-testid="workshop-strategy-spec-unavailable">
+                  Canonical StrategySpec identity is not yet available.
+                </span>
+              ) : null}
             </div>
           )}
 

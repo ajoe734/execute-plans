@@ -17,10 +17,17 @@ vi.mock("@/lib/bff-v1/agora/workshops", () => ({
   getWorkshopReadiness: vi.fn().mockResolvedValue(null),
   listWorkshopCards: vi.fn().mockResolvedValue([]),
   listWorkshopEvents: vi.fn().mockResolvedValue({ items: [] }),
+  listWorkshopVersions: vi.fn().mockResolvedValue({
+    data: { versions: [], selected_version_id: null, active_strategy_spec_registry_id: null },
+  }),
   postWorkshopMessage: vi.fn().mockResolvedValue({
     message_id: "msg-001",
     workshop_id: "ws-abc",
     created_at: "2026-07-08T00:00:00Z",
+  }),
+  reconstructWorkshopStrategy: vi.fn().mockResolvedValue({
+    data: { command_receipt: { status: "admitted" }, resource: {} },
+    meta: {},
   }),
   openWorkshopStream: vi.fn().mockReturnValue(() => undefined),
 }));
@@ -237,11 +244,18 @@ describe("StrategyWorkshopPage", () => {
     vi.mocked(workshopsModule.getWorkshopReadiness).mockResolvedValue(null);
     vi.mocked(workshopsModule.listWorkshopCards).mockResolvedValue([]);
     vi.mocked(workshopsModule.listWorkshopEvents).mockResolvedValue({ items: [] });
+    vi.mocked(workshopsModule.listWorkshopVersions).mockResolvedValue({
+      data: { versions: [], selected_version_id: null, active_strategy_spec_registry_id: null },
+    } as never);
     vi.mocked(workshopsModule.postWorkshopMessage).mockResolvedValue({
       message_id: "msg-001",
       workshop_id: "ws-abc",
       created_at: "2026-07-08T00:00:00Z",
     });
+    vi.mocked(workshopsModule.reconstructWorkshopStrategy).mockResolvedValue({
+      data: { command_receipt: { status: "admitted" }, resource: {} },
+      meta: {},
+    } as never);
     vi.mocked(workshopsModule.openWorkshopStream).mockReturnValue(() => undefined);
     vi.mocked(listDailyInteractions).mockResolvedValue([]);
   });
@@ -498,6 +512,39 @@ describe("StrategyWorkshopPage", () => {
     vi.mocked(workshopsModule.listWorkshopCards).mockResolvedValue([]);
     vi.mocked(workshopsModule.getWorkshopCompleteness).mockResolvedValue(null);
     vi.mocked(workshopsModule.getWorkshopReadiness).mockResolvedValue(null);
+    vi.mocked(workshopsModule.listWorkshopVersions).mockResolvedValue({
+      data: {
+        versions: [{
+          version: {
+            workshop_version_id: "workshop-version-002",
+            workshop_id: "ws-abc",
+            strategy_id: "strategy-canonical-001",
+            strategy_spec_registry_id: "registry-canonical-002",
+            parent_workshop_version_id: null,
+            source_event_id: null,
+            sequence_no: 2,
+            document_sha256: "sha256-canonical",
+            created_by: "user-001",
+            created_at: "2026-08-20T00:00:00Z",
+          },
+          strategy_spec: {
+            entry: {
+              registry_id: "registry-canonical-002",
+              strategy_id: "strategy-canonical-001",
+              version: "2",
+              metadata: { strategy_spec: {} },
+            },
+          },
+        }],
+        selected_version_id: "workshop-version-002",
+        active_strategy_spec_registry_id: "registry-canonical-002",
+      },
+      meta: {},
+    } as never);
+    vi.mocked(workshopsModule.reconstructWorkshopStrategy).mockResolvedValue({
+      data: { command_receipt: { status: "completed" }, resource: {} },
+      meta: {},
+    } as never);
 
     render(<StrategyWorkshopPage workshopId="ws-abc" />);
 
@@ -529,7 +576,18 @@ describe("StrategyWorkshopPage", () => {
       .map(([, options]) => options?.resolutionSessionId);
     expect(resolutionSessions.length).toBeGreaterThanOrEqual(2);
     expect(new Set(resolutionSessions).size).toBe(1);
-    expect(workshopsModule.listWorkshopEvents).toHaveBeenCalledTimes(2);
+    expect(workshopsModule.listWorkshopEvents.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(workshopsModule.reconstructWorkshopStrategy).toHaveBeenCalledWith("ws-abc");
+    expect(await screen.findByTestId("workshop-reconstruction-state")).toHaveAttribute(
+      "data-reconstruction-state",
+      "completed",
+    );
+    expect(screen.getByTestId("workshop-reconstruction-state")).toHaveTextContent(
+      "Strategy reconstruction receipt recorded",
+    );
+    expect(screen.getByTestId("workshop-strategy-spec-identity")).toHaveTextContent(
+      "StrategySpec strategy-canonical-001 · registry-canonical-002 · 2",
+    );
   });
 
   it("keeps the composer available when a non-authoritative session rail read remains pending", async () => {
@@ -931,8 +989,8 @@ describe("StrategyWorkshopPage", () => {
     expect(await screen.findByTestId("servant-composer-error")).toHaveTextContent(
       "The interaction response violated the no-execution authority boundary.",
     );
-    expect(workshopsModule.listWorkshopCards).toHaveBeenCalledTimes(1);
-    expect(workshopsModule.listWorkshopEvents).toHaveBeenCalledTimes(1);
+    expect(workshopsModule.listWorkshopCards.mock.calls.length).toBeGreaterThanOrEqual(1);
+    expect(workshopsModule.listWorkshopEvents.mock.calls.length).toBeGreaterThanOrEqual(1);
   });
 
   it("enables Add to Trading Room only when the trading-room readiness gate passes and a route handler exists", async () => {

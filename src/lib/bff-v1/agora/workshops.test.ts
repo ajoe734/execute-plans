@@ -9,6 +9,7 @@ import {
   listWorkshops,
   openWorkshopStream,
   postWorkshopMessage,
+  reconstructWorkshopStrategy,
   type WorkshopCard,
   type WorkshopStreamEvent,
 } from "./workshops";
@@ -247,6 +248,20 @@ describe("postWorkshopMessage", () => {
     const result = await postWorkshopMessage("ws-001", { content: "Continue" });
 
     expect(result).toEqual(message);
+  });
+});
+
+describe("reconstructWorkshopStrategy", () => {
+  it("uses the durable BFF reconstruction route after a workshop message", async () => {
+    const receipt = { data: { command_receipt: { status: "admitted" }, resource: {} }, meta: {} };
+    vi.mocked(bffFetch).mockResolvedValue(receipt);
+
+    await expect(reconstructWorkshopStrategy("ws/001")).resolves.toEqual(receipt);
+
+    expect(bffFetch).toHaveBeenCalledWith({
+      method: "POST",
+      path: "/bff/agora/workshops/ws%2F001/reconstruct",
+    });
   });
 });
 

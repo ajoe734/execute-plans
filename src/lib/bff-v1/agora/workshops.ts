@@ -16,6 +16,7 @@ import type {
   WorkshopResearchRunEnvelope,
   WorkshopConsultationEnvelope,
   WorkshopConcludeEnvelope,
+  WorkshopLiveOperationEnvelope,
   WorkshopVersionCreateRequest,
   WorkshopResearchRunRequest,
   WorkshopConsultationRequest,
@@ -30,6 +31,7 @@ export type {
   WorkshopResearchRunEnvelope,
   WorkshopConsultationEnvelope,
   WorkshopConcludeEnvelope,
+  WorkshopLiveOperationEnvelope,
   WorkshopVersionCreateRequest,
   WorkshopResearchRunRequest,
   WorkshopConsultationRequest,
@@ -219,6 +221,19 @@ export async function postWorkshopMessage(
     body,
   });
   return entityFrom<{ message_id: string; workshop_id: string; created_at: string }>(response);
+}
+
+/**
+ * Request durable StrategySpec reconstruction after a workshop message.
+ * The BFF owns the reconstruction record and its eventual card/event result.
+ */
+export async function reconstructWorkshopStrategy(
+  workshopId: string,
+): Promise<WorkshopLiveOperationEnvelope> {
+  return bffFetch<WorkshopLiveOperationEnvelope>({
+    method: "POST",
+    path: `/bff/agora/workshops/${encodeURIComponent(workshopId)}/reconstruct`,
+  });
 }
 
 // ─── Workshop events ───────────────────────────────────────────────────────────

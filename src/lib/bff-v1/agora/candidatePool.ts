@@ -62,6 +62,7 @@ export type CandidateTruthFields = GeneratedCandidateTruthFields;
 
 export type CandidateScoreSemanticsEntry = GeneratedCandidateScoreSemantics["effective_score"];
 export type CandidateScoreSemantics = GeneratedCandidateScoreSemantics;
+export type CandidatePool = GeneratedCandidatePool;
 
 export type CandidatePoolMember =
   GeneratedCandidatePool["candidates"][number]
@@ -129,10 +130,27 @@ function extractItems<T>(value: unknown): T[] {
   return Array.isArray(items) ? (items as T[]) : [];
 }
 
+function stringFrom(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function candidatePoolIdFrom(value: unknown): string | null {
+  const root = recordFrom(value);
+  const data = recordFrom(root.data ?? root);
+  const pool = recordFrom(data.pool ?? data.candidate_pool ?? data);
+  return stringFrom(pool.pool_id) ?? stringFrom(data.pool_id) ?? stringFrom(root.pool_id);
+}
+
 interface CandidatePoolRequestOptions {
   ifMatch?: string;
   idempotencyKey?: string;
   requestId?: string;
+}
+
+export interface CandidatePoolLookupParams {
+  strategyId?: string;
+  strategyVersion?: string;
+  strategyRef?: string;
 }
 
 function candidatePoolHeaders(
@@ -150,6 +168,37 @@ function candidatePoolHeaders(
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
+
+/**
+ * Resolve the current Candidate Pool for a canonical StrategySpec identity.
+ * Presentation lenses and local dashboard keys are never valid pool IDs.
+ */
+export async function lookupCandidatePool(
+  params: CandidatePoolLookupParams,
+  baseUrl?: string,
+): Promise<string | null> {
+  const query = new URLSearchParams();
+  if (params.strategyId) query.set("strategy_id", params.strategyId);
+  if (params.strategyVersion) query.set("strategy_version", params.strategyVersion);
+  if (params.strategyRef) query.set("strategy_ref", params.strategyRef);
+  const base = resolvedBase(baseUrl);
+  const suffix = query.toString();
+  const url = `${base}/bff/agora/candidate-pools/lookup${suffix ? `?${suffix}` : ""}`;
+  const res = await fetch(url, {
+    method: "GET",
+    credentials: "include",
+    headers: candidatePoolHeaders("GET"),
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    const body = await parseJson(res);
+    const message =
+      recordFrom(recordFrom(body).error).message ??
+      `GET ${url} failed ${res.status}`;
+    throw new Error(String(message));
+  }
+  return candidatePoolIdFrom(await parseJson(res));
+}
 
 /**
  * Get ranked A2 score results for all candidates in a pool.
