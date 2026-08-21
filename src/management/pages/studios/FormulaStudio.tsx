@@ -29,63 +29,37 @@ export const FormulaStudio = () => {
   const intent = params.get("intent");
   
   const [backtestJobs, setBacktestJobs] = useState<Job[]>([]);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [hasJobsError, setHasJobsError] = useState(false);
+  const [hasFormulasError, setHasFormulasError] = useState(false);
 
   const loadBacktestJobs = () => {
-    bff.jobs.list().then((list) => {
-      const filtered = (list || []).filter((j: Job) => j.kind === "backtest");
-      setBacktestJobs(filtered);
-    });
+    bff.jobs.list()
+      .then((list) => {
+        const filtered = (list || []).filter((j: Job) => j.kind === "backtest");
+        setBacktestJobs(filtered);
+        setHasJobsError(false);
+      })
+      .catch(() => {
+        setBacktestJobs([]);
+        setHasJobsError(true);
+      });
   };
 
   useEffect(() => {
     loadBacktestJobs();
-    const interval = setInterval(loadBacktestJobs, 1000);
-    return () => clearInterval(interval);
   }, []);
 
-  const triggerBacktest = async () => {
-    if (isSubmitting) return;
-    setIsSubmitting(true);
-    try {
-      const newJobId = `job_${Math.floor(10000 + Math.random() * 90000)}`;
-      const seedModule = await import("@/mocks/seed");
-      seedModule.jobs.push({
-        id: newJobId,
-        kind: "backtest",
-        status: "running",
-        startedAt: new Date().toISOString(),
-        owner: "pantheon-dev-browser",
-      });
-      
-      toast.success(t("studios.backtestQueued", { defaultValue: "Backtest queued." }));
-      loadBacktestJobs();
-
-      setTimeout(async () => {
-        const seedMod = await import("@/mocks/seed");
-        const targetJob = seedMod.jobs.find((j) => j.id === newJobId);
-        if (targetJob) {
-          targetJob.status = "success";
-          const v5Module = await import("@/lib/v5");
-          v5Module.emitV5Event({
-            channel: "v5.loop.execution",
-            type: "loop.run.advanced",
-            payload: { runId: newJobId, runStatus: "succeeded" },
-          });
-        }
-      }, 5000);
-    } catch (err) {
-      toast.error(String(err));
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
   useEffect(() => {
-    bff.rankingFormulas.list().then((rows) => {
-      setFormulas(rows);
-      if (rows[0]) setActiveId((current) => current ?? rows[0].id);
-    });
+    bff.rankingFormulas.list()
+      .then((rows) => {
+        setFormulas(rows || []);
+        if (rows && rows[0]) setActiveId((current) => current ?? rows[0].id);
+        setHasFormulasError(false);
+      })
+      .catch(() => {
+        setFormulas([]);
+        setHasFormulasError(true);
+      });
   }, []);
 
   // Pack F 短板 1 — receive ?intent=create (G02)
@@ -137,17 +111,27 @@ export const FormulaStudio = () => {
         }
       />
       <PageBody>
-        <Card className="p-4 flex flex-wrap items-center gap-3">
-          <div className="text-xs uppercase tracking-wider text-muted-foreground">{t("nav.rankingFormulas")}</div>
-          <Select value={activeId} onValueChange={select}>
-            <SelectTrigger className="w-72"><SelectValue placeholder={t("studios.pickEntity")} /></SelectTrigger>
-            <SelectContent>
-              {formulas.map((f) => (
-                <SelectItem key={f.id} value={f.id}>{f.name} <span className="text-mono text-[10px] text-muted-foreground ml-2">{f.id}</span></SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </Card>
+        {hasFormulasError ? (
+          runnerUnavailable
+        ) : formulas.length === 0 ? (
+          <EmptyState
+            icon={<FlaskConical className="h-8 w-8" />}
+            title={t("studios.noFormulasTitle", { defaultValue: "No ranking formulas found" })}
+            description={t("studios.noFormulasDescription", { defaultValue: "No governed ranking formulas are currently registered." })}
+          />
+        ) : (
+          <>
+            <Card className="p-4 flex flex-wrap items-center gap-3">
+              <div className="text-xs uppercase tracking-wider text-muted-foreground">{t("nav.rankingFormulas")}</div>
+              <Select value={activeId} onValueChange={select}>
+                <SelectTrigger className="w-72"><SelectValue placeholder={t("studios.pickEntity")} /></SelectTrigger>
+                <SelectContent>
+                  {formulas.map((f) => (
+                    <SelectItem key={f.id} value={f.id}>{f.name} <span className="text-mono text-[10px] text-muted-foreground ml-2">{f.id}</span></SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Card>
 
         {active && (
           <Tabs defaultValue="editor">
@@ -165,99 +149,55 @@ export const FormulaStudio = () => {
             <TabsContent value="backtest" className="mt-4 space-y-4">
               <div className="flex justify-between items-center">
                 <h3 className="text-sm font-semibold">{t("studios.backtest")} 執行歷史</h3>
-                <Button size="sm" onClick={triggerBacktest} disabled={isSubmitting}>
+                <NonProductionActionButton size="sm">
                   {t("studios.runBacktest")}
-                </Button>
+                </NonProductionActionButton>
               </div>
 
               {/* Backtest execution tasks list */}
-              <Card className="p-4">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm text-left">
-                    <thead className="text-xs uppercase text-muted-foreground border-b border-border">
-                      <tr>
-                        <th className="py-2 pr-4">任務 ID</th>
-                        <th className="py-2 px-4">執行狀態</th>
-                        <th className="py-2 px-4">發起人</th>
-                        <th className="py-2 pl-4">啟動時間</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {backtestJobs.map((job) => (
-                        <tr key={job.id} className="border-b border-border/40 text-xs">
-                          <td className="py-2 pr-4 font-mono text-primary font-medium">{job.id}</td>
-                          <td className="py-2 px-4">
-                            <span className={`px-2 py-0.5 rounded-full border text-[10px] ${
-                              job.status === "running" ? "bg-status-running/15 text-status-running border-status-running/30 animate-pulse" :
-                              job.status === "success" || job.status === "succeeded" ? "bg-status-success/15 text-status-success border-status-success/30" :
-                              "bg-status-failed/15 text-status-failed border-status-failed/30"
-                            }`}>
-                              {job.status}
-                            </span>
-                          </td>
-                          <td className="py-2 px-4 text-muted-foreground">{job.owner}</td>
-                          <td className="py-2 pl-4 text-muted-foreground font-mono">
-                            {new Date(job.startedAt).toLocaleString()}
-                          </td>
+              {hasJobsError ? (
+                runnerUnavailable
+              ) : (
+                <Card className="p-4">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm text-left">
+                      <thead className="text-xs uppercase text-muted-foreground border-b border-border">
+                        <tr>
+                          <th className="py-2 pr-4">任務 ID</th>
+                          <th className="py-2 px-4">執行狀態</th>
+                          <th className="py-2 px-4">發起人</th>
+                          <th className="py-2 pl-4">啟動時間</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </Card>
-
-              {/* Show chart and metrics if there are any successful backtests */}
-              {backtestJobs.some((j) => j.status === "success" || j.status === "succeeded") && (
-                <div className="space-y-4">
-                  <div className="grid gap-3 sm:grid-cols-4">
-                    <Card className="p-3 bg-card border border-border/50">
-                      <div className="text-xs text-muted-foreground">年化收益率</div>
-                      <div className="text-lg font-mono font-semibold text-status-success mt-1">+18.42%</div>
-                    </Card>
-                    <Card className="p-3 bg-card border border-border/50">
-                      <div className="text-xs text-muted-foreground">夏普比率 (Sharpe)</div>
-                      <div className="text-lg font-mono font-semibold text-primary mt-1">2.15</div>
-                    </Card>
-                    <Card className="p-3 bg-card border border-border/50">
-                      <div className="text-xs text-muted-foreground">最大回撤 (MaxDD)</div>
-                      <div className="text-lg font-mono font-semibold text-status-failed mt-1">-8.35%</div>
-                    </Card>
-                    <Card className="p-3 bg-card border border-border/50">
-                      <div className="text-xs text-muted-foreground">交易勝率</div>
-                      <div className="text-lg font-mono font-semibold text-foreground mt-1">62.5%</div>
-                    </Card>
+                      </thead>
+                      <tbody>
+                        {backtestJobs.map((job) => (
+                          <tr key={job.id} className="border-b border-border/40 text-xs">
+                            <td className="py-2 pr-4 font-mono text-primary font-medium">{job.id}</td>
+                            <td className="py-2 px-4">
+                              <span className={`px-2 py-0.5 rounded-full border text-[10px] ${
+                                job.status === "running" ? "bg-status-running/15 text-status-running border-status-running/30 animate-pulse" :
+                                job.status === "success" || job.status === "succeeded" ? "bg-status-success/15 text-status-success border-status-success/30" :
+                                "bg-status-failed/15 text-status-failed border-status-failed/30"
+                              }`}>
+                                {job.status}
+                              </span>
+                            </td>
+                            <td className="py-2 px-4 text-muted-foreground">{job.owner}</td>
+                            <td className="py-2 pl-4 text-muted-foreground font-mono">
+                              {new Date(job.startedAt).toLocaleString()}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
-
-                  <Card className="p-4">
-                    <h4 className="text-xs uppercase tracking-wider text-muted-foreground mb-4">累積收益率曲線 (Cumulative Returns)</h4>
-                    <div className="h-64 w-full">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={[
-                          { date: "Day 0", value: 100 },
-                          { date: "Day 10", value: 103 },
-                          { date: "Day 20", value: 102 },
-                          { date: "Day 30", value: 107 },
-                          { date: "Day 40", value: 106 },
-                          { date: "Day 50", value: 111 },
-                          { date: "Day 60", value: 115 },
-                          { date: "Day 70", value: 113 },
-                          { date: "Day 80", value: 120 },
-                          { date: "Day 90", value: 124 },
-                          { date: "Day 100", value: 122 },
-                          { date: "Day 110", value: 128 },
-                          { date: "Day 120", value: 131 },
-                        ]}>
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(var(--border), 0.15)" />
-                          <XAxis dataKey="date" stroke="hsl(var(--muted-foreground))" fontSize={10} tickLine={false} axisLine={false} />
-                          <YAxis stroke="hsl(var(--muted-foreground))" fontSize={10} tickLine={false} axisLine={false} domain={["dataMin - 5", "dataMax + 5"]} />
-                          <ChartTooltip contentStyle={{ background: "hsl(var(--background))", borderColor: "hsl(var(--border))" }} />
-                          <Line type="monotone" dataKey="value" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </Card>
-                </div>
+                </Card>
               )}
+
+              {/* Backtest result readback or explicit empty state */}
+              <div className="p-6 text-center text-xs text-muted-foreground border border-dashed border-border rounded-md">
+                {t("common.awaitingData", { defaultValue: "No backtest execution result metrics available" })}
+              </div>
             </TabsContent>
             <TabsContent value="compare" className="mt-4 space-y-3">
               <Card className="p-4 flex flex-wrap items-center gap-3">
@@ -291,6 +231,8 @@ export const FormulaStudio = () => {
               </div>
             </TabsContent>
           </Tabs>
+        )}
+          </>
         )}
       </PageBody>
     </>
