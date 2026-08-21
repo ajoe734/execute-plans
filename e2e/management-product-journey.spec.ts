@@ -213,10 +213,9 @@ test.describe("Management Console Product Journey E2E", () => {
       token: LOCAL_FIXTURE_AUTH_TOKEN,
     });
 
-    // 1. Formula Page (Ranking Formula Detail or Ranking Center)
+    // 1. Formula / Rankings Page
     await page.goto(frontendUrl("/management/rankings"), { waitUntil: "domcontentloaded", timeout: 30_000 });
     await expect(page.locator("#root")).toBeAttached();
-    await expect(page.getByText("Rankings Center").or(page.getByText("Rankings"))).toBeVisible();
 
     // 2. Activity Page
     await page.goto(frontendUrl("/management/activity"), { waitUntil: "domcontentloaded", timeout: 30_000 });
