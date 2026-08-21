@@ -2,9 +2,12 @@ import { describe, it, expect, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { StrategyPaperLiveTab } from "../StrategyPaperLiveTab";
+import { ActivityMonitor } from "../ActivityMonitor";
+import { FormulaStudio } from "@/management/pages/studios/FormulaStudio";
 import { PostmortemLibraryPage } from "@/management/pages/phase2/PostmortemLibrary";
 import { mgmt } from "@/lib/bff-v1/management";
 import { bff } from "@/lib/bff-v1";
+import type { Incident } from "@/lib/bff/types";
 
 vi.mock("@/platform/hooks", () => ({
   useT: () => (key: string, opts?: { defaultValue?: string }) => opts?.defaultValue || key,
@@ -34,17 +37,56 @@ describe("PFG-MGMT-FE-REAL-20260820 Strict Live & Degraded Tests", () => {
     });
   });
 
-  it("PostmortemLibraryPage renders typed incident postmortem records from bff.incidents.list()", async () => {
-    vi.spyOn(bff.incidents, "list").mockResolvedValue([
+  it("ActivityMonitor displays BFF Stream: unavailable when not connected to live SSE stream", async () => {
+    render(
+      <MemoryRouter>
+        <ActivityMonitor scope="test" />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/BFF Stream: unavailable/i)).toBeInTheDocument();
+      expect(screen.getByText(/Live SSE stream unavailable or no activity events recorded/i)).toBeInTheDocument();
+    });
+  });
+
+  it("FormulaStudio renders empty backtest jobs readback from bff.jobs.list() without synthetic mock metrics", async () => {
+    vi.spyOn(bff.rankingFormulas, "list").mockResolvedValue([
       {
-        id: "inc_99",
-        severity: "critical",
-        title: "Database Lockup",
-        status: "resolved",
-        openedAt: "2026-08-21T10:00:00Z",
-        timeline: [{ ts: "2026-08-21T10:05:00Z", actor: "alice", note: "[postmortem] Connection pool exhausted." }],
-      } as any,
+        id: "rf_01",
+        name: "Test Formula",
+        owner: "alice",
+        updatedAt: "2026-08-21T10:00:00Z",
+        state: "approved",
+        risk: "low",
+        expression: "sharpe * 0.5",
+        appliedTo: 1,
+      },
     ]);
+    vi.spyOn(bff.jobs, "list").mockResolvedValue([]);
+
+    render(
+      <MemoryRouter>
+        <FormulaStudio />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Test Formula")).toBeInTheDocument();
+    });
+  });
+
+  it("PostmortemLibraryPage renders typed incident postmortem records from bff.incidents.list()", async () => {
+    const mockIncident: Incident = {
+      id: "inc_99",
+      severity: "critical",
+      title: "Database Lockup",
+      status: "resolved",
+      openedAt: "2026-08-21T10:00:00Z",
+      timeline: [{ ts: "2026-08-21T10:05:00Z", actor: "alice", note: "[postmortem] Connection pool exhausted." }],
+    };
+
+    vi.spyOn(bff.incidents, "list").mockResolvedValue([mockIncident]);
 
     render(
       <MemoryRouter>
@@ -59,3 +101,4 @@ describe("PFG-MGMT-FE-REAL-20260820 Strict Live & Degraded Tests", () => {
     });
   });
 });
+

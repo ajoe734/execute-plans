@@ -1,8 +1,10 @@
-// Live mock-realtime stream of activity tied to a persona/strategy/etc.
+// Live activity stream tied to a persona/strategy/etc.
+// Consumes canonical BFF/SSE contract or renders typed unavailable state when live stream is unattached.
 import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { realtime } from "@/lib/bff/realtime";
+import { liveStatus } from "@/lib/bff-v1/liveStatus";
 import { useT } from "@/platform/hooks";
 import { safeDateTime } from "@/lib/utils";
 
@@ -11,13 +13,30 @@ interface Event { id: string; ts: string; kind: string; status: string; owner?: 
 export const ActivityMonitor = ({ scope }: { scope: string }) => {
   const t = useT();
   const [events, setEvents] = useState<Event[]>([]);
+  const isLiveMode = liveStatus.get().mode === "live";
+  const [isStreamLive, setIsStreamLive] = useState(isLiveMode && realtime.getStatus() === "live");
 
   useEffect(() => {
+    const checkStatus = () => {
+      const mode = liveStatus.get().mode;
+      const status = realtime.getStatus();
+      setIsStreamLive(mode === "live" && status === "live");
+    };
+
+    checkStatus();
+    const unsubStatus = realtime.onStatus(checkStatus);
+    const unsubMode = liveStatus.subscribe(checkStatus);
+
     const off = realtime.on("job", (p) => {
       const evt = p as { jobId: string; status: string; ts: string; kind?: string; owner?: string };
       setEvents((prev) => [{ id: evt.jobId, ts: evt.ts, kind: evt.kind ?? "job", status: evt.status, owner: evt.owner }, ...prev].slice(0, 20));
     });
-    return () => { off(); };
+
+    return () => {
+      unsubStatus();
+      unsubMode();
+      off();
+    };
   }, [scope]);
 
   const tone = (s: string) =>
@@ -30,15 +49,22 @@ export const ActivityMonitor = ({ scope }: { scope: string }) => {
     <Card className="p-4">
       <div className="flex items-center justify-between mb-3">
         <div className="text-sm font-semibold">{t("persona.activity.title")}</div>
-        <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-          <span className="h-1.5 w-1.5 rounded-full bg-status-success animate-pulse" />
-          live
-        </span>
+        {isStreamLive ? (
+          <span className="flex items-center gap-1.5 text-[10px] text-status-success font-medium">
+            <span className="h-1.5 w-1.5 rounded-full bg-status-success animate-pulse" />
+            live
+          </span>
+        ) : (
+          <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground font-medium">
+            <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40" />
+            BFF Stream: unavailable
+          </span>
+        )}
       </div>
       <div className="space-y-1.5 max-h-[420px] overflow-y-auto">
         {events.length === 0 ? (
           <div className="p-4 text-center text-xs text-muted-foreground">
-            No activity events recorded yet.
+            {isStreamLive ? "No activity events recorded yet." : "Live SSE stream unavailable or no activity events recorded."}
           </div>
         ) : (
           events.map((e) => (
@@ -54,3 +80,4 @@ export const ActivityMonitor = ({ scope }: { scope: string }) => {
     </Card>
   );
 };
+
