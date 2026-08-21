@@ -25,6 +25,8 @@
     "wiredLiveOnlyTradingPulse": true,
     "typedIncidentPostmortemAdapter": true,
     "activityMonitorSseStatusWired": true,
+    "activityMonitorSseEnvelopeParsingWired": true,
+    "formulaStudioPromiseRejectionCatchWired": true,
     "strictLiveTestsExpanded": true
   }
 }

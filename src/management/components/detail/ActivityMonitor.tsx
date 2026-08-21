@@ -27,15 +27,32 @@ export const ActivityMonitor = ({ scope }: { scope: string }) => {
     const unsubStatus = realtime.onStatus(checkStatus);
     const unsubMode = liveStatus.subscribe(checkStatus);
 
-    const off = realtime.on("job", (p) => {
-      const evt = p as { jobId: string; status: string; ts: string; kind?: string; owner?: string };
-      setEvents((prev) => [{ id: evt.jobId, ts: evt.ts, kind: evt.kind ?? "job", status: evt.status, owner: evt.owner }, ...prev].slice(0, 20));
-    });
+    const handleSse = (p: unknown) => {
+      const record = p && typeof p === "object" && !Array.isArray(p) ? (p as Record<string, unknown>) : {};
+      const payloadObj = (record.payload && typeof record.payload === "object" && !Array.isArray(record.payload) ? record.payload : record) as Record<string, unknown>;
+      const jobId = String(record.id || payloadObj.jobId || payloadObj.id || `evt_${Date.now()}`);
+      const ts = String(record.occurredAt || payloadObj.ts || new Date().toISOString());
+      const kind = String(record.channel || record.type || payloadObj.kind || "sse");
+      const status = String(payloadObj.status || record.status || "info");
+      const owner = typeof payloadObj.owner === "string" ? payloadObj.owner : undefined;
+
+      setEvents((prev) => [{ id: jobId, ts, kind, status, owner }, ...prev].slice(0, 20));
+    };
+
+    const offJob = realtime.on("job", handleSse);
+    const offData = realtime.on("data", handleSse);
+    const offSseLoop = realtime.on("sse:loop", handleSse);
+    const offSseSentinel = realtime.on("sse:sentinel", handleSse);
+    const offSseIntervention = realtime.on("sse:intervention", handleSse);
 
     return () => {
       unsubStatus();
       unsubMode();
-      off();
+      offJob();
+      offData();
+      offSseLoop();
+      offSseSentinel();
+      offSseIntervention();
     };
   }, [scope]);
 

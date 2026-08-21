@@ -115,5 +115,41 @@ describe("PFG-MGMT-FE-REAL-20260820 Strict Live & Degraded Tests", () => {
       expect(screen.queryByText(/Showing cached records/i)).not.toBeInTheDocument();
     });
   });
+
+  it("FormulaStudio renders runnerUnavailable state when bff.jobs.list() promise rejects", async () => {
+    vi.spyOn(bff.rankingFormulas, "list").mockResolvedValue([]);
+    vi.spyOn(bff.jobs, "list").mockRejectedValue(new Error("Backtest runner network error"));
+
+    render(
+      <MemoryRouter>
+        <FormulaStudio />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/Backtest runner unavailable/i)).toBeInTheDocument();
+    });
+  });
+
+  it("ActivityMonitor consumes live SSE envelope on sse channel topic and renders activity row", async () => {
+    const { realtime } = await import("@/lib/bff/realtime");
+    render(
+      <MemoryRouter>
+        <ActivityMonitor scope="test" />
+      </MemoryRouter>
+    );
+
+    realtime.emitEnvelope({
+      topic: "sse:loop",
+      channel: "loop",
+      type: "loop.tick",
+      payload: { jobId: "job_sse_100", status: "running", ts: "2026-08-21T11:45:00Z", owner: "loop_worker" },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("job_sse_100")).toBeInTheDocument();
+      expect(screen.getByText("loop_worker")).toBeInTheDocument();
+    });
+  });
 });
 
