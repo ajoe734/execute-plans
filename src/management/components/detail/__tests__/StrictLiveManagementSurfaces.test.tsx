@@ -100,5 +100,20 @@ describe("PFG-MGMT-FE-REAL-20260820 Strict Live & Degraded Tests", () => {
       expect(screen.getByText("alice")).toBeInTheDocument();
     });
   });
+
+  it("PostmortemLibraryPage displays accurate degraded message when bff.incidents.list() transport rejects", async () => {
+    vi.spyOn(bff.incidents, "list").mockRejectedValue(new Error("BFF network failure"));
+
+    render(
+      <MemoryRouter>
+        <PostmortemLibraryPage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/Incident postmortem transport degraded or unavailable/i)).toBeInTheDocument();
+      expect(screen.queryByText(/Showing cached records/i)).not.toBeInTheDocument();
+    });
+  });
 });
 

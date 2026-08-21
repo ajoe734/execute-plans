@@ -70,7 +70,7 @@ export const PostmortemLibraryPage = () => {
       <PageBody>
         {status === "degraded" && (
           <Card className="p-4 mb-4 border-status-warning/40 bg-status-warning/5 text-xs text-status-warning flex items-center gap-2">
-            Incident postmortem transport degraded. Showing cached records.
+            Incident postmortem transport degraded or unavailable.
           </Card>
         )}
         <Card>
