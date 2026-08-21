@@ -113,6 +113,12 @@ export const FormulaStudio = () => {
       <PageBody>
         {hasFormulasError ? (
           runnerUnavailable
+        ) : formulas.length === 0 ? (
+          <EmptyState
+            icon={<FlaskConical className="h-8 w-8" />}
+            title={t("studios.noFormulasTitle", { defaultValue: "No ranking formulas found" })}
+            description={t("studios.noFormulasDescription", { defaultValue: "No governed ranking formulas are currently registered." })}
+          />
         ) : (
           <>
             <Card className="p-4 flex flex-wrap items-center gap-3">
