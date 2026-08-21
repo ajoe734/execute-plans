@@ -23,6 +23,14 @@
       "The proof rejects non-Pantheon dev BFF hosts and fixture, seed, or mock BFF paths."
     ]
   },
+  "code_disposition": {
+    "checked_command": "rg -n 'CandidateReviewDrawer|candidate-review-drawer|FixedLens|fixed lens|fixedLens' src --glob '*.{ts,tsx}'",
+    "result": "TradingRoomPage is the only production caller and imports CandidateReviewDrawer as SharedCandidateReviewDrawer from src/agora/components. No FixedLens or page-local candidate drawer production caller was found.",
+    "ui_duplicate_changes": {
+      "removed": [],
+      "status": "No duplicate removal is claimed before the replacement browser journey passes."
+    }
+  },
   "observed_environment": {
     "checked_at_utc": "2026-08-21T13:19:13Z",
     "fe_deployment_url": "https://pantheon-lupin-dev-fe.35.201.204.12.sslip.io/deployment.json",
