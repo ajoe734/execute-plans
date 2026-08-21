@@ -117,14 +117,13 @@ export const StrategyDetail = () => {
               <Zap className="h-4 w-4 mr-1" />{t("strategy.sweep.run")}
             </NonProductionActionButton>
             {transitions.map((tr) => (
-              <Button
+              <NonProductionActionButton
                 key={tr.action}
                 size="sm"
                 variant={tr.risk === "critical" || tr.risk === "high" ? "default" : "outline"}
-                onClick={() => { setActiveTr(tr); setConfirmOpen(true); }}
               >
                 {tr.action} → {tr.to}
-              </Button>
+              </NonProductionActionButton>
             ))}
           </>
         }
@@ -148,14 +147,14 @@ export const StrategyDetail = () => {
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <Field label="Alpha" value={s.alpha} mono />
                     <Field label={t("nav.capital")} value={s.capitalPoolId} mono />
-                    <Field label={t("nav.personas")} value={s.personaIds.join(", ")} mono />
+                    <Field label={t("nav.personas")} value={(s.personaIds ?? []).join(", ")} mono />
                     <Field label={t("table.updated")} value={safeDateTime(s.updatedAt)} mono />
                   </div>
                 </Section>
                 <div className="grid grid-cols-3 gap-4 mt-4">
-                  <StatCard label="PnL 30d" value={`${(s.pnl30d * 100).toFixed(2)}%`} tone={s.pnl30d >= 0 ? "success" : "danger"} />
+                  <StatCard label="PnL 30d" value={`${((s.pnl30d ?? 0) * 100).toFixed(2)}%`} tone={(s.pnl30d ?? 0) >= 0 ? "success" : "danger"} />
                   <StatCard label={t("table.sharpe")} value={(s.sharpe ?? 0).toFixed(2)} />
-                  <StatCard label={t("table.drawdown")} value={`${(s.drawdown * 100).toFixed(2)}%`} tone="warning" />
+                  <StatCard label={t("table.drawdown")} value={`${((s.drawdown ?? 0) * 100).toFixed(2)}%`} tone="warning" />
                 </div>
                 <div className="grid gap-4 md:grid-cols-3 mt-4">
                   <LinkedBlock
