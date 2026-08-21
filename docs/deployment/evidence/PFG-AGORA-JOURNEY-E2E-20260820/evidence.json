@@ -1,0 +1,58 @@
+{
+  "schema_version": "pantheon.agora.product-journey-evidence.v1",
+  "task_id": "PFG-AGORA-JOURNEY-E2E-20260820",
+  "owner": "Codex2",
+  "reviewer": "Antigravity2",
+  "status": "blocked_external",
+  "scope": {
+    "browser_only_writes": true,
+    "journey": [
+      "create workshop",
+      "post workshop message",
+      "reconstruct strategy",
+      "record persona learning interaction",
+      "create research run",
+      "create version patch",
+      "open consultation",
+      "Trading Room workspace, decision surface, and shared candidate drawer",
+      "reload Trading Room and Strategy Performance"
+    ],
+    "provenance": [
+      "No Playwright request routing or API-request mutation is used by e2e/agora-product-journey.spec.ts.",
+      "The proof records canonical response IDs for every durable browser mutation.",
+      "The proof rejects non-Pantheon dev BFF hosts and fixture, seed, or mock BFF paths."
+    ]
+  },
+  "observed_environment": {
+    "checked_at_utc": "2026-08-21T13:19:13Z",
+    "fe_deployment_url": "https://pantheon-lupin-dev-fe.35.201.204.12.sslip.io/deployment.json",
+    "bff_health_url": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/health",
+    "fe_profile": "read-only",
+    "build_mode": {
+      "VITE_BFF_MODE": "live",
+      "VITE_BFF_FALLBACK": "strict",
+      "VITE_BFF_REAL_WRITES": "false",
+      "VITE_BFF_ALLOW_DEV_STUB_WRITES": "false"
+    },
+    "bff_health": "ok",
+    "result": "The currently served accepted dev pair is healthy for strict reads but intentionally refuses UI writes."
+  },
+  "external_requirements_before_run": [
+    "A Pantheon-owned dev frontend operator-live candidate with VITE_BFF_MODE=live, VITE_BFF_FALLBACK=strict, VITE_BFF_REAL_WRITES=true, VITE_BFF_ALLOW_DEV_STUB_WRITES=false, and no embedded bearer token.",
+    "A short-lived operator BFF token and the public GCP Identity API key supplied only to the governed run environment; neither is recorded in evidence.",
+    "The candidate must remain paired with the Pantheon dev BFF and use tenant-dev or the explicitly governed test tenant."
+  ],
+  "verification": {
+    "implemented_test": "e2e/agora-product-journey.spec.ts",
+    "run_command": "PFG_AGORA_JOURNEY_E2E=1 PANTHEON_FE_BASE_URL=<operator-live-fe> PANTHEON_BFF_BASE_URL=https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io PANTHEON_TENANT_ID=tenant-dev PANTHEON_PUBLIC_GCP_IDENTITY_API_KEY=<public-key> PFG_AGORA_JOURNEY_E2E_OPERATOR_TOKEN=<short-lived-token> PANTHEON_AUDIT_OUT_DIR=.artifacts/PFG-AGORA-JOURNEY-E2E-20260820 npx playwright test e2e/agora-product-journey.spec.ts --project=chromium --reporter=list",
+    "local_checks": [
+      "npx playwright test e2e/agora-product-journey.spec.ts --list",
+      "npx tsc -p tsconfig.json --noEmit"
+    ],
+    "hosted_result": "not_run: external operator-live candidate and governed credentials were not available to this worker."
+  },
+  "review": {
+    "decision": "pending",
+    "review_file_contract": "This manifest is the required task-scoped review evidence file. It must be independently reviewed with the task commit before approval."
+  }
+}
