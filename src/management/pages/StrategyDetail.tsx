@@ -314,15 +314,9 @@ export const StrategyDetail = () => {
                       { key: "act", header: "", cell: (r) => (
                         <div className="flex gap-1 justify-end">
                           {!r.acknowledged && (
-                            <Button size="sm" variant="ghost" onClick={async (e) => {
-                              e.stopPropagation();
-                              const receipt = await bffWrites.acknowledgeAlert(r.id, `from ${s.id}`);
-                              toast.success(t("toast.alertAcknowledged", { id: r.id }), {
-                                description: commandReceiptDescription(receipt, { fallback: `Alert ${r.id} · acknowledge` }),
-                              });
-                              const al = await bff.alerts.list();
-                              setAlerts(al.filter((x) => x.relatedTarget === s.id || x.source.includes(s.id) || x.title.includes(s.id)));
-                            }}><CheckCircle2 className="h-3.5 w-3.5 mr-1" />{t("table_actions.acknowledge")}</Button>
+                            <NonProductionActionButton size="sm" variant="ghost">
+                              <CheckCircle2 className="h-3.5 w-3.5 mr-1" />{t("table_actions.acknowledge")}
+                            </NonProductionActionButton>
                           )}
                           <NonProductionActionButton size="sm" variant="outline">
                             <AlertTriangle className="h-3.5 w-3.5 mr-1" />{t("table_actions.escalateIncident")}

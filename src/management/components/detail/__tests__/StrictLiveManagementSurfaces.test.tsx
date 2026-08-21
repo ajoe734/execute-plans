@@ -151,4 +151,42 @@ describe("PFG-MGMT-FE-REAL-20260820 Strict Live & Degraded Tests", () => {
       expect(screen.getAllByText("loop").length).toBeGreaterThan(0);
     });
   });
+
+  it("StrategyDetail renders disabled NonProductionActionButton for alert acknowledge action", async () => {
+    const { StrategyDetail } = await import("@/management/pages/StrategyDetail");
+    vi.spyOn(bff.strategies, "get").mockResolvedValue({
+      id: "strat_test",
+      name: "Test Strategy",
+      version: "1.0",
+      status: "active",
+      mode: "paper",
+      createdAt: "2026-08-21T10:00:00Z",
+      updatedAt: "2026-08-21T10:00:00Z",
+    });
+    vi.spyOn(bff.alerts, "list").mockResolvedValue([
+      {
+        id: "alt_01",
+        severity: "warning",
+        title: "Test Alert",
+        source: "strat_test",
+        openedAt: "2026-08-21T10:00:00Z",
+        acknowledged: false,
+        relatedTarget: "strat_test",
+      },
+    ]);
+
+    render(
+      <MemoryRouter initialEntries={["/management/strategies/strat_test"]}>
+        <StrategyDetail />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Test Alert")).toBeInTheDocument();
+    });
+
+    const ackButton = screen.getByRole("button", { name: /acknowledge/i });
+    expect(ackButton).toBeDisabled();
+    expect(ackButton).toHaveAttribute("aria-disabled", "true");
+  });
 });
