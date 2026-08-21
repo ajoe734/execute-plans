@@ -29,7 +29,6 @@ export const FormulaStudio = () => {
   const intent = params.get("intent");
   
   const [backtestJobs, setBacktestJobs] = useState<Job[]>([]);
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const loadBacktestJobs = () => {
     bff.jobs.list().then((list) => {
@@ -40,46 +39,7 @@ export const FormulaStudio = () => {
 
   useEffect(() => {
     loadBacktestJobs();
-    const interval = setInterval(loadBacktestJobs, 1000);
-    return () => clearInterval(interval);
   }, []);
-
-  const triggerBacktest = async () => {
-    if (isSubmitting) return;
-    setIsSubmitting(true);
-    try {
-      const newJobId = `job_${Math.floor(10000 + Math.random() * 90000)}`;
-      const seedModule = await import("@/mocks/seed");
-      seedModule.jobs.push({
-        id: newJobId,
-        kind: "backtest",
-        status: "running",
-        startedAt: new Date().toISOString(),
-        owner: "pantheon-dev-browser",
-      });
-      
-      toast.success(t("studios.backtestQueued", { defaultValue: "Backtest queued." }));
-      loadBacktestJobs();
-
-      setTimeout(async () => {
-        const seedMod = await import("@/mocks/seed");
-        const targetJob = seedMod.jobs.find((j) => j.id === newJobId);
-        if (targetJob) {
-          targetJob.status = "success";
-          const v5Module = await import("@/lib/v5");
-          v5Module.emitV5Event({
-            channel: "v5.loop.execution",
-            type: "loop.run.advanced",
-            payload: { runId: newJobId, runStatus: "succeeded" },
-          });
-        }
-      }, 5000);
-    } catch (err) {
-      toast.error(String(err));
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
 
   useEffect(() => {
     bff.rankingFormulas.list().then((rows) => {
@@ -165,9 +125,9 @@ export const FormulaStudio = () => {
             <TabsContent value="backtest" className="mt-4 space-y-4">
               <div className="flex justify-between items-center">
                 <h3 className="text-sm font-semibold">{t("studios.backtest")} 執行歷史</h3>
-                <Button size="sm" onClick={triggerBacktest} disabled={isSubmitting}>
+                <NonProductionActionButton size="sm">
                   {t("studios.runBacktest")}
-                </Button>
+                </NonProductionActionButton>
               </div>
 
               {/* Backtest execution tasks list */}
