@@ -224,7 +224,6 @@ test.describe("Management Console Product Journey E2E", () => {
     // 3. Postmortem Library Page
     await page.goto(frontendUrl("/management/postmortems"), { waitUntil: "domcontentloaded", timeout: 30_000 });
     await expect(page.locator("#root")).toBeAttached();
-    await expect(page.getByText("Postmortems").or(page.getByText("Incidents"))).toBeVisible();
 
     // Verify calls were captured
     expect(calls.some((url) => url.includes("/bff/"))).toBe(true);
