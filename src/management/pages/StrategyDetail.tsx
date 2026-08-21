@@ -117,13 +117,17 @@ export const StrategyDetail = () => {
               <Zap className="h-4 w-4 mr-1" />{t("strategy.sweep.run")}
             </NonProductionActionButton>
             {transitions.map((tr) => (
-              <NonProductionActionButton
+              <Button
                 key={tr.action}
                 size="sm"
                 variant={tr.risk === "critical" || tr.risk === "high" ? "default" : "outline"}
+                onClick={() => {
+                  setActiveTr(tr);
+                  setConfirmOpen(true);
+                }}
               >
                 {tr.action} → {tr.to}
-              </NonProductionActionButton>
+              </Button>
             ))}
           </>
         }
