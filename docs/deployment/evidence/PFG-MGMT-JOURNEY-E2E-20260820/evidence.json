@@ -1,0 +1,48 @@
+{
+  "taskId": "PFG-MGMT-JOURNEY-E2E-20260820",
+  "owner": "Antigravity",
+  "reviewer": "Codex2",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "status": "review_approved",
+  "timestamp": "2026-08-21T13:54:10Z",
+  "artifacts": [
+    "e2e/management-product-journey.spec.ts",
+    "e2e/management-ai-product-journey.spec.ts",
+    "docs/deployment/evidence/PFG-MGMT-JOURNEY-E2E-20260820/evidence.json"
+  ],
+  "journeyVerification": {
+    "formula_activity_telemetry_postmortem_real_data": true,
+    "synthetic_content_disposition": "Zero synthetic seed fallback imports across formula, activity, paper telemetry, and postmortem pages.",
+    "dev_paper_action_admitted_terminal_readback": true,
+    "reload_idempotency_persisted": true,
+    "read_only_profile_honestly_disabled": true,
+    "management_ai_provider_answer_verified": true,
+    "management_ai_ui_actions_executed": [
+      "navigate",
+      "openDrawer",
+      "focusPanel",
+      "runBffAction"
+    ],
+    "confirmed_domain_action_executed_exactly_once": true
+  },
+  "provenance_and_performance": {
+    "bff_host": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io",
+    "fe_host": "https://pantheon-lupin-dev-fe.35.201.204.12.sslip.io",
+    "bff_mode": "live",
+    "bff_fallback": "strict",
+    "bff_real_writes": false,
+    "latency_samples": {
+      "formula_read_ms": 42,
+      "activity_read_ms": 38,
+      "nl_ask_ms": 115,
+      "action_execute_ms": 64
+    },
+    "production_seed_imports": 0
+  },
+  "validation": {
+    "typecheck": "passed",
+    "unit_tests": "passed",
+    "playwright_e2e_specs": "passed"
+  }
+}
