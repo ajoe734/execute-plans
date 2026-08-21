@@ -144,6 +144,12 @@ describe("AgentPanelBody — UI Actions & Confirmation Workflow", () => {
           kind: "persona",
           id: "p_test",
           action: "retire",
+          correlationId: expect.stringContaining("turn_ast_2:0:runBffAction"),
+          idempotencyKey: expect.stringContaining("turn_ast_2:0:runBffAction"),
+        }),
+        expect.objectContaining({
+          correlationId: expect.stringContaining("turn_ast_2:0:runBffAction"),
+          idempotencyKey: expect.stringContaining("turn_ast_2:0:runBffAction"),
         }),
       );
     });
@@ -151,6 +157,164 @@ describe("AgentPanelBody — UI Actions & Confirmation Workflow", () => {
     // Readback description should be rendered as feedback
     await waitFor(() => {
       expect(screen.getByText(/au_persona_retire_999/i)).toBeInTheDocument();
+    });
+  });
+
+  it("passes provider-supplied correlationId and idempotencyKey through to bffWrites.runAction", async () => {
+    const runActionSpy = vi.spyOn(bffWrites, "runAction").mockResolvedValue({
+      ok: true,
+      data: { actionId: "au_pool_freeze_001", status: "completed" },
+      auditEventId: "au_pool_freeze_001",
+      correlationId: "custom_corr_999",
+      idempotencyKey: "custom_idem_888",
+      legacy: { ok: true, audit: { id: "au_pool_freeze_001" } as never },
+    });
+
+    const mockTurn = {
+      id: "turn_ast_3",
+      role: "assistant",
+      text: "請確認凍結資金池。",
+      uiActions: [
+        {
+          id: "action_freeze_pool_1",
+          correlationId: "custom_corr_999",
+          kind: "runBffAction",
+          label: "FREEZE_POOL",
+          rationale: "緊急凍結資金池",
+          params: {
+            entityType: "capitalPool",
+            entityId: "pool_alpha",
+            actionId: "freeze",
+            idempotencyKey: "custom_idem_888",
+          },
+        },
+      ],
+      createdAt: Date.now() - 1000,
+    };
+
+    const sessionId = "ses_test_03";
+    localStorage.setItem("pantheon.mgmtAi.sessions.v1", JSON.stringify([
+      { id: sessionId, title: "凍結對話", updatedAt: Date.now() },
+    ]));
+    localStorage.setItem(`pantheon.mgmtAi.turns.v1.${sessionId}`, JSON.stringify([mockTurn]));
+
+    render(
+      <MemoryRouter initialEntries={["/management/pools"]}>
+        <AgentPanelBody />
+      </MemoryRouter>,
+    );
+
+    const sessionItem = await screen.findByText("凍結對話");
+    fireEvent.click(sessionItem);
+
+    const runBffBtn = await screen.findByRole("button", { name: /FREEZE_POOL/i });
+    fireEvent.click(runBffBtn);
+
+    const dialog = screen.getByRole("dialog");
+    const dialogScope = within(dialog);
+    const memoTextarea = dialog.querySelector("textarea")!;
+    fireEvent.change(memoTextarea, {
+      target: { value: "Detailed memo for capital pool freeze action exceeding forty characters." },
+    });
+
+    const confirmBtn = dialogScope.getByRole("button", { name: "確認" });
+    fireEvent.click(confirmBtn);
+
+    await waitFor(() => {
+      expect(runActionSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind: "capitalPool",
+          id: "pool_alpha",
+          action: "freeze",
+          correlationId: "custom_corr_999",
+          idempotencyKey: "custom_idem_888",
+        }),
+        expect.objectContaining({
+          correlationId: "custom_corr_999",
+          idempotencyKey: "custom_idem_888",
+        }),
+      );
+    });
+  });
+
+  it("blocks replay / double execution when action has already executed", async () => {
+    const runActionSpy = vi.spyOn(bffWrites, "runAction");
+
+    const mockTurn = {
+      id: "turn_ast_4",
+      role: "assistant",
+      text: "先前已執行的動作。",
+      uiActions: [
+        {
+          id: "action_nav_already_done",
+          kind: "navigate",
+          label: "前往已造訪頁面",
+          params: { path: "/management/strategies" },
+        },
+      ],
+      actionFeedback: {
+        action_nav_already_done: "已執行",
+      },
+      createdAt: Date.now() - 1000,
+    };
+
+    const sessionId = "ses_test_04";
+    localStorage.setItem("pantheon.mgmtAi.sessions.v1", JSON.stringify([
+      { id: sessionId, title: "已執行對話", updatedAt: Date.now() },
+    ]));
+    localStorage.setItem(`pantheon.mgmtAi.turns.v1.${sessionId}`, JSON.stringify([mockTurn]));
+
+    render(
+      <MemoryRouter initialEntries={["/management/strategies"]}>
+        <AgentPanelBody />
+      </MemoryRouter>,
+    );
+
+    const sessionItem = await screen.findByText("已執行對話");
+    fireEvent.click(sessionItem);
+
+    const navBtn = await screen.findByRole("button", { name: /前往已造訪頁面/i });
+    expect(navBtn).toBeDisabled();
+    fireEvent.click(navBtn);
+
+    expect(runActionSpy).not.toHaveBeenCalled();
+  });
+
+  it("executes focusPanel for allowlisted panel like governanceQueue", async () => {
+    const mockTurn = {
+      id: "turn_ast_5",
+      role: "assistant",
+      text: "請聚焦治理隊列。",
+      uiActions: [
+        {
+          kind: "focusPanel",
+          label: "聚焦治理審查",
+          params: { panel: "governanceQueue" },
+        },
+      ],
+      createdAt: Date.now() - 1000,
+    };
+
+    const sessionId = "ses_test_05";
+    localStorage.setItem("pantheon.mgmtAi.sessions.v1", JSON.stringify([
+      { id: sessionId, title: "治理對話", updatedAt: Date.now() },
+    ]));
+    localStorage.setItem(`pantheon.mgmtAi.turns.v1.${sessionId}`, JSON.stringify([mockTurn]));
+
+    render(
+      <MemoryRouter initialEntries={["/management/strategies"]}>
+        <AgentPanelBody />
+      </MemoryRouter>,
+    );
+
+    const sessionItem = await screen.findByText("治理對話");
+    fireEvent.click(sessionItem);
+
+    const focusBtn = await screen.findByRole("button", { name: /聚焦治理審查/i });
+    fireEvent.click(focusBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText("已執行")).toBeInTheDocument();
     });
   });
 });

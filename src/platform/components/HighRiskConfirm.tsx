@@ -111,6 +111,7 @@ export const HighRiskConfirm = ({
   const [expiresAt, setExpiresAt] = useState<number | null>(null);
   const [now, setNow] = useState(Date.now());
   const [issuing, setIssuing] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const reqIdRef = useRef(0);
 
   useEffect(() => {
@@ -178,6 +179,7 @@ export const HighRiskConfirm = ({
   const reset = () => {
     setMemo(""); setTyped("");
     setIssuedToken(null); setRequiredPhrase(null); setExpiresAt(null);
+    setSubmitting(false);
   };
 
   return (
@@ -334,17 +336,30 @@ export const HighRiskConfirm = ({
         </ScrollArea>
 
         <DialogFooter>
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>{t("actions.cancel")}</Button>
+          <Button variant="ghost" disabled={submitting} onClick={() => onOpenChange(false)}>{t("actions.cancel")}</Button>
           <Button
             variant={destructive || risk === "critical" ? "destructive" : "default"}
-            disabled={!ok}
+            disabled={!ok || submitting || issuing}
             onClick={async () => {
-              await onConfirm(memo, issuedToken ?? undefined);
-              reset();
-              onOpenChange(false);
+              if (submitting) return;
+              setSubmitting(true);
+              try {
+                await onConfirm(memo, issuedToken ?? undefined);
+                reset();
+                onOpenChange(false);
+              } finally {
+                setSubmitting(false);
+              }
             }}
           >
-            {t("actions.confirm")}
+            {submitting ? (
+              <span className="flex items-center gap-1.5">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                {t("actions.confirming", { defaultValue: "確認中…" })}
+              </span>
+            ) : (
+              t("actions.confirm")
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>

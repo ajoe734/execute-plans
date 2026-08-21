@@ -3,6 +3,7 @@ import {
   AVAILABLE_UI_ACTIONS,
   ALLOWED_ROUTE_PREFIXES,
   SUPPORTED_DRAWERS,
+  SUPPORTED_PANELS,
   executeUiAction,
   getActionCorrelationKey,
   isHighRiskAction,
@@ -44,6 +45,16 @@ describe("uiActionRegistry", () => {
       expect(SUPPORTED_DRAWERS).toContain("entityCreate");
       expect(SUPPORTED_DRAWERS).toContain("bulkResult");
       expect(SUPPORTED_DRAWERS).toContain("rollbackSaga");
+    });
+
+    it("includes standard panel registrations", () => {
+      expect(SUPPORTED_PANELS).toContain("agentPanel");
+      expect(SUPPORTED_PANELS).toContain("governanceQueue");
+      expect(SUPPORTED_PANELS).toContain("operationsOverview");
+      expect(SUPPORTED_PANELS).toContain("strategyWorkspace");
+      expect(SUPPORTED_PANELS).toContain("terminalConsole");
+      expect(SUPPORTED_PANELS).toContain("inspector");
+      expect(SUPPORTED_PANELS).toContain("jobProgress");
     });
   });
 
@@ -243,30 +254,40 @@ describe("uiActionRegistry", () => {
         expect(focusPanel).toHaveBeenCalledWith("agentPanel", { panel: "agentPanel" });
       });
 
-      it("focuses DOM panel by id or data attribute when element exists", async () => {
+      it("succeeds for allowlisted panel when registered", async () => {
+        const res = await executeUiAction(
+          { kind: "focusPanel", params: { panel: "governanceQueue" } },
+          {},
+        );
+        expect(res.ok).toBe(true);
+      });
+
+      it("rejects non-allowlisted panel even if matching DOM element exists (no DOM fallback)", async () => {
         const dummyDiv = document.createElement("div");
-        dummyDiv.id = "telemetryChartPanel";
+        dummyDiv.id = "arbitraryDomElement";
         dummyDiv.scrollIntoView = vi.fn();
         dummyDiv.focus = vi.fn();
         document.body.appendChild(dummyDiv);
 
         const res = await executeUiAction(
-          { kind: "focusPanel", params: { panel: "telemetryChartPanel" } },
+          { kind: "focusPanel", params: { panel: "arbitraryDomElement" } },
           {},
         );
-        expect(res.ok).toBe(true);
-        expect(dummyDiv.scrollIntoView).toHaveBeenCalled();
+        expect(res.ok).toBe(false);
+        expect(res.reason).toContain("not supported or registered");
+        expect(dummyDiv.scrollIntoView).not.toHaveBeenCalled();
 
         document.body.removeChild(dummyDiv);
       });
 
-      it("rejects non-existent panel when no element or handler matches", async () => {
+      it("rejects when ctx.focusPanel explicitly returns false for unsupported panel", async () => {
+        const focusPanel = vi.fn().mockReturnValue(false);
         const res = await executeUiAction(
-          { kind: "focusPanel", params: { panel: "missing_nonexistent_panel" } },
-          {},
+          { kind: "focusPanel", params: { panel: "unknownPanel" } },
+          { focusPanel },
         );
         expect(res.ok).toBe(false);
-        expect(res.reason).toContain("not found or registered");
+        expect(res.reason).toContain("not supported or registered");
       });
 
       it("rejects missing panel param", async () => {

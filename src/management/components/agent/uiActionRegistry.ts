@@ -39,7 +39,7 @@ export const AVAILABLE_UI_ACTIONS: readonly UiActionDescriptor[] = [
   { kind: "openDrawer", description: "Open a registered drawer (inspector, handoff, jobs, entityCreate, bulkResult, rollbackSaga, oodaPacket, loopRun, candidateReview)", paramsSchema: "{ drawer: string; entityId?: string; entityType?: string; entity?: string; [key: string]: unknown }" },
   { kind: "selectEntity", description: "Set the selected entity in NL context", paramsSchema: "{ kind: string; id: string }" },
   { kind: "setFilter", description: "Set a filter via URL search params", paramsSchema: "{ key: string; value: string }" },
-  { kind: "focusPanel", description: "Focus a panel by id or data-panel attribute", paramsSchema: "{ panel: string }" },
+  { kind: "focusPanel", description: "Focus an allowlisted panel (agentPanel, governanceQueue, operationsOverview, strategyWorkspace, terminalConsole, inspector, jobProgress)", paramsSchema: "{ panel: string }" },
   { kind: "refreshCurrentView", description: "Re-fetch the current view", paramsSchema: "{}" },
   {
     kind: "runBffAction",
@@ -75,13 +75,25 @@ export const SUPPORTED_DRAWERS = [
 
 export type SupportedDrawer = typeof SUPPORTED_DRAWERS[number];
 
+export const SUPPORTED_PANELS = [
+  "agentPanel",
+  "governanceQueue",
+  "operationsOverview",
+  "strategyWorkspace",
+  "terminalConsole",
+  "inspector",
+  "jobProgress",
+] as const;
+
+export type SupportedPanel = typeof SUPPORTED_PANELS[number];
+
 export interface UiActionExecuteCtx {
   navigate?: (path: string) => void;
   setSelectedEntity?: (kind: string, id: string) => void;
   setSearchParam?: (key: string, value: string) => void;
   refresh?: () => void;
   openDrawer?: (drawer: string, params?: Record<string, unknown>) => boolean | void | Promise<boolean | void>;
-  focusPanel?: (panel: string, params?: Record<string, unknown>) => boolean | void;
+  focusPanel?: (panel: string, params?: Record<string, unknown>) => boolean | void | Promise<boolean | void>;
   requestConfirmation?: (action: UiAction, params: Record<string, unknown>) => boolean | void;
   runBffAction?: (action: UiAction, params: Record<string, unknown>) => Promise<UiActionExecuteResult> | UiActionExecuteResult;
   isActionExecuted?: (actionKey: string) => boolean;
@@ -216,25 +228,21 @@ export async function executeUiAction(
       if (!panel) {
         return { ok: false, reason: "focusPanel requires { panel: string }" };
       }
+      const isSupported = SUPPORTED_PANELS.includes(panel as SupportedPanel);
+      if (!isSupported && !ctx.focusPanel) {
+        return { ok: false, reason: `Panel '${panel}' not supported or registered` };
+      }
       if (ctx.focusPanel) {
-        const handled = ctx.focusPanel(panel, params);
-        if (handled !== false) {
-          return { ok: true };
+        const handled = await ctx.focusPanel(panel, params);
+        if (handled === false) {
+          return { ok: false, reason: `Panel '${panel}' not supported or registered` };
         }
+        return { ok: true };
       }
-      if (typeof document !== "undefined") {
-        const el =
-          document.getElementById(panel) ??
-          document.querySelector(`[data-panel="${panel}"], [data-panel-id="${panel}"], [data-testid="${panel}"]`);
-        if (el) {
-          el.scrollIntoView?.({ behavior: "smooth", block: "center" });
-          if (typeof (el as HTMLElement).focus === "function") {
-            (el as HTMLElement).focus();
-          }
-          return { ok: true };
-        }
+      if (!isSupported) {
+        return { ok: false, reason: `Panel '${panel}' not supported or registered` };
       }
-      return { ok: false, reason: `Panel '${panel}' not found or registered` };
+      return { ok: true };
     }
 
     case "runBffAction": {
@@ -247,13 +255,17 @@ export async function executeUiAction(
 
       // Backend mutation must ALWAYS flow through HighRiskConfirm confirmation.
       if (ctx.runBffAction) {
-        return await ctx.runBffAction(action, params);
+        const result = await ctx.runBffAction(action, params);
+        return {
+          correlationId: actionKey,
+          ...result,
+        };
       }
       if (ctx.requestConfirmation) {
         ctx.requestConfirmation(action, params);
-        return { ok: true, reason: "Confirmation requested" };
+        return { ok: true, reason: "Confirmation requested", correlationId: actionKey };
       }
-      return { ok: false, reason: "runBffAction must be routed through HighRiskConfirm" };
+      return { ok: false, reason: "runBffAction must be routed through HighRiskConfirm", correlationId: actionKey };
     }
 
     default:
