@@ -46,10 +46,22 @@ import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
   AVAILABLE_UI_ACTIONS,
   executeUiAction,
+  getActionCorrelationKey,
   isHighRiskAction,
+  isKnownUiActionKind,
   type UiAction,
 } from "./uiActionRegistry";
 import { useManagementNlContext, setManagementNlContext } from "@/management/hooks/useManagementNlContext";
+import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
+import { EntityCreateDrawer } from "@/management/components/write/EntityCreateDrawer";
+import { isCreatableEntity, type CreatableEntity } from "@/lib/writeIntents/types";
+import { useInspector } from "@/platform/components/RightDrawer";
+import { useHandoff } from "@/lib/handoff";
+import { useJobDrawer } from "@/platform/components/JobProgressDrawer";
+import { useOverlay } from "@/platform/overlayStore";
+import { agentPanel } from "./useAgentPanel";
+import { bffWrites } from "@/lib/bff/runAction";
+import { commandReceiptDescription } from "@/lib/bff-v1/commandReceipt";
 import {
   type ChatAttachment,
   ATTACHMENT_LIMITS,
@@ -71,6 +83,7 @@ interface ChatTurn {
   conversationHref?: string | null;
   traceId?: string | null;
   uiActions?: ManagementAiUiAction[];
+  actionFeedback?: Record<string, string>;
   attachments?: ChatAttachment[];
   createdAt: number;
 }
@@ -179,7 +192,13 @@ function mergeTurns(local: ChatTurn[], incoming: ChatTurn[]): ChatTurn[] {
   for (const t of local) byId.set(t.id, t);
   for (const t of incoming) {
     const prev = byId.get(t.id);
-    byId.set(t.id, prev ? { ...prev, ...t, attachments: prev.attachments ?? t.attachments } : t);
+    byId.set(t.id, prev ? {
+      ...prev,
+      ...t,
+      uiActions: prev.uiActions ?? t.uiActions,
+      actionFeedback: { ...(prev.actionFeedback ?? {}), ...(t.actionFeedback ?? {}) },
+      attachments: prev.attachments ?? t.attachments,
+    } : t);
   }
   return Array.from(byId.values()).sort((a, b) => a.createdAt - b.createdAt);
 }
@@ -393,6 +412,25 @@ export function AgentPanelBody() {
   const [text, setText] = useState("");
   const [sessions, setSessions] = useState<SessionIndexEntry[]>(() => loadSessionIndex());
   const [actionFeedback, setActionFeedback] = useState<Record<string, string>>({});
+  const [executingKeys, setExecutingKeys] = useState<Record<string, boolean>>({});
+  const [confirmBusy, setConfirmBusy] = useState(false);
+  const [pendingConfirmAction, setPendingConfirmAction] = useState<{
+    action: ManagementAiUiAction;
+    key: string;
+    turnId: string;
+    entityType: string;
+    entityId: string;
+    actionId: string;
+    correlationId: string;
+    idempotencyKey: string;
+    payload?: Record<string, unknown>;
+    memo?: string;
+  } | null>(null);
+  const [entityCreateDrawer, setEntityCreateDrawer] = useState<{
+    open: boolean;
+    entity: CreatableEntity;
+    initialData?: Record<string, unknown>;
+  } | null>(null);
   const [pendingAttachments, setPendingAttachments] = useState<ChatAttachment[]>([]);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -663,6 +701,28 @@ export function AgentPanelBody() {
     }
   }, [assistantModeStatus, traceId, refreshAssistantRuntimeStatus, sessionId, resync]);
 
+  const recordActionFeedback = useCallback((key: string, feedbackText: string, turnId?: string) => {
+    setActionFeedback((prev) => ({ ...prev, [key]: feedbackText }));
+    setTurns((prevTurns) => {
+      const nextTurns = prevTurns.map((t) => {
+        const matchesTurn = turnId ? t.id === turnId : Boolean(t.uiActions);
+        if (matchesTurn) {
+          return {
+            ...t,
+            actionFeedback: {
+              ...(t.actionFeedback ?? {}),
+              [key]: feedbackText,
+            },
+          };
+        }
+        return t;
+      });
+      turnsRef.current = nextTurns;
+      if (sessionId) void saveTurnsCache(sessionId, nextTurns);
+      return nextTurns;
+    });
+  }, [sessionId]);
+
   const loadSession = useCallback(async (id: string) => {
     if (id === sessionId) return;
     activeSessionRef.current = id;
@@ -671,13 +731,19 @@ export function AgentPanelBody() {
     setConversationSummary(undefined);
     setDegraded(null);
     setText("");
-    setActionFeedback({});
     setProviderReauthNotice(null);
     setPendingAttachments([]);
     setAttachmentError(null);
     // Hydrate from local cache FIRST — switching never blanks the screen.
     const cached = loadTurnsCache(id);
     setTurns(cached);
+    const hydratedFeedback: Record<string, string> = {};
+    for (const t of cached) {
+      if (t.actionFeedback) {
+        Object.assign(hydratedFeedback, t.actionFeedback);
+      }
+    }
+    setActionFeedback(hydratedFeedback);
     if (pendingSessions[id]) {
       setResyncNotice("此對話仍在等待 BFF 回覆，請稍候。");
     } else {
@@ -710,8 +776,6 @@ export function AgentPanelBody() {
     if (id === sessionId) startNewConversation();
   }, [sessionId, startNewConversation]);
 
-
-
   // ---- UI snapshot (sent on every turn) ----
   const buildUiSnapshot = useCallback((): ManagementAiUiSnapshot => {
     const filters: Record<string, string> = {};
@@ -729,22 +793,215 @@ export function AgentPanelBody() {
     };
   }, [location.pathname, searchParams, nlCtx.selectedEntityKind, nlCtx.selectedEntityId]);
 
-  const runUiAction = useCallback((action: ManagementAiUiAction, key: string) => {
-    const result = executeUiAction(action as UiAction, {
-      navigate: (p) => navigate(p),
-      setSelectedEntity: (kind, id) => setManagementNlContext({ selectedEntityKind: kind as never, selectedEntityId: id }),
-      setSearchParam: (k, v) => {
-        const next = new URLSearchParams(searchParams);
-        if (v === "") next.delete(k); else next.set(k, v);
-        setSearchParams(next);
-      },
-      refresh: () => window.location.reload(),
-    });
-    setActionFeedback((prev) => ({
-      ...prev,
-      [key]: result.ok ? "已執行" : (result.reason ?? "未執行"),
-    }));
-  }, [navigate, searchParams, setSearchParams]);
+  const handleConfirmAction = useCallback(async (memo: string, token?: string) => {
+    if (!pendingConfirmAction || confirmBusy) return;
+    const { action, key, turnId, entityType, entityId, actionId, payload, correlationId, idempotencyKey } = pendingConfirmAction;
+    setConfirmBusy(true);
+    setExecutingKeys((prev) => ({ ...prev, [key]: true }));
+    try {
+      const res = await bffWrites.runAction(
+        {
+          kind: entityType,
+          id: entityId,
+          action: actionId,
+          memo: memo || undefined,
+          confirmToken: token,
+          correlationId,
+          idempotencyKey,
+          ...(payload ? { newState: payload.newState as string } : {}),
+        },
+        {
+          correlationId,
+          idempotencyKey,
+          confirmToken: token,
+        },
+      );
+      const receiptDesc = commandReceiptDescription(res, {
+        fallback: `${entityType} ${actionId} 已執行`,
+      });
+      recordActionFeedback(key, receiptDesc, turnId);
+      toast({
+        title: `${action.label ?? actionId} 執行成功`,
+        description: receiptDesc,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      recordActionFeedback(key, `執行失敗: ${msg}`, turnId);
+      toast({
+        title: "動作執行失敗",
+        description: msg,
+        variant: "destructive",
+      });
+    } finally {
+      setConfirmBusy(false);
+      setExecutingKeys((prev) => {
+        const { [key]: _dropped, ...rest } = prev;
+        return rest;
+      });
+      setPendingConfirmAction(null);
+    }
+  }, [pendingConfirmAction, confirmBusy, recordActionFeedback]);
+
+  const runUiAction = useCallback(async (action: ManagementAiUiAction, key: string, turnId?: string, idx?: number) => {
+    const correlationKey = key || getActionCorrelationKey(action as UiAction, turnId, idx);
+    const existingFeedback = actionFeedback[correlationKey];
+    if (existingFeedback && (existingFeedback === "已執行" || existingFeedback.startsWith("command/") || existingFeedback.includes("status"))) {
+      toast({
+        title: "動作已執行過",
+        description: "此動作先前已完成執行，避免重複執行。",
+      });
+      return;
+    }
+
+    if (executingKeys[correlationKey] || confirmBusy) {
+      return;
+    }
+
+    if (!isKnownUiActionKind(action.kind)) {
+      recordActionFeedback(correlationKey, `不支援的動作類型 (${String(action.kind)})`, turnId);
+      toast({
+        title: "不支援的動作",
+        description: `動作類型 '${String(action.kind)}' 不在允許的清單中`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (action.kind === "runBffAction") {
+      const params = (action.params ?? {}) as Record<string, unknown>;
+      const entityType = String(params.entityType ?? "entity");
+      const entityId = String(params.entityId ?? "");
+      const actionId = String(params.actionId ?? "");
+      if (!entityType || !entityId || !actionId) {
+        recordActionFeedback(correlationKey, "缺少參數 (entityType/entityId/actionId)", turnId);
+        toast({
+          title: "缺少動作參數",
+          description: "runBffAction 需要 entityType, entityId 與 actionId",
+          variant: "destructive",
+        });
+        return;
+      }
+      const actionCorrelationId = (action as UiAction).correlationId || (action as UiAction).id || correlationKey;
+      const idempotencyKey = (params.idempotencyKey as string) || (params.payload as Record<string, unknown>)?.idempotencyKey as string || actionCorrelationId;
+      setPendingConfirmAction({
+        action,
+        key: correlationKey,
+        turnId: turnId ?? "",
+        entityType,
+        entityId,
+        actionId,
+        correlationId: actionCorrelationId,
+        idempotencyKey,
+        payload: params.payload as Record<string, unknown>,
+        memo: params.memo as string,
+      });
+      return;
+    }
+
+    setExecutingKeys((prev) => ({ ...prev, [correlationKey]: true }));
+    try {
+      const result = await executeUiAction(action as UiAction, {
+        navigate: (p) => navigate(p),
+        setSelectedEntity: (kind, id) => setManagementNlContext({ selectedEntityKind: kind as never, selectedEntityId: id }),
+        setSearchParam: (k, v) => {
+          const next = new URLSearchParams(searchParams);
+          if (v === "") next.delete(k); else next.set(k, v);
+          setSearchParams(next);
+        },
+        refresh: () => window.location.reload(),
+        openDrawer: (drawer, params) => {
+          if (drawer === "inspector" || drawer === "rightDrawer") {
+            useInspector.getState().open({
+              id: String(params?.entityId ?? params?.id ?? "—"),
+              type: String(params?.entityType ?? params?.type ?? "Object"),
+              name: String(params?.name ?? params?.entityId ?? "—"),
+              ...(params as Record<string, unknown>),
+            });
+            return true;
+          }
+          if (drawer === "handoff") {
+            useHandoff.getState().openHandoff(params as never);
+            return true;
+          }
+          if (drawer === "jobs" || drawer === "jobProgress") {
+            useJobDrawer.getState().setExpanded(true);
+            return true;
+          }
+          if (drawer === "bulkResult") {
+            useOverlay.getState().openBulkResult(params?.response as never, params?.title as string);
+            return true;
+          }
+          if (drawer === "rollbackSaga") {
+            useOverlay.getState().openRollbackSaga(params?.saga as never);
+            return true;
+          }
+          if (drawer === "entityCreate" || drawer === "createEntity") {
+            const rawEntity = params?.entity !== undefined ? params?.entity : params?.entityType !== undefined ? params?.entityType : "persona";
+            if (typeof rawEntity !== "string" || !isCreatableEntity(rawEntity.trim())) {
+              return false;
+            }
+            setEntityCreateDrawer({
+              open: true,
+              entity: rawEntity.trim() as CreatableEntity,
+              initialData: (params?.initialData ?? params?.payload) as Record<string, unknown>,
+            });
+            return true;
+          }
+          return false;
+        },
+        focusPanel: (panel) => {
+          if (panel === "agentPanel") {
+            agentPanel.open();
+            return true;
+          }
+          if (panel === "inspector") {
+            useInspector.getState().open({ id: "—", type: "Object", name: "Inspector" });
+            return true;
+          }
+          if (panel === "jobProgress") {
+            useJobDrawer.getState().setExpanded(true);
+            return true;
+          }
+          if (panel === "governanceQueue") {
+            navigate("/management/governance");
+            return true;
+          }
+          if (panel === "operationsOverview") {
+            navigate("/management/operations");
+            return true;
+          }
+          if (panel === "strategyWorkspace") {
+            navigate("/management/strategies");
+            return true;
+          }
+          if (panel === "terminalConsole") {
+            navigate("/platform/terminal");
+            return true;
+          }
+          return false;
+        },
+        isActionExecuted: (k) => {
+          const fb = actionFeedback[k];
+          return Boolean(fb && (fb === "已執行" || fb.startsWith("command/") || fb.includes("status")));
+        },
+      });
+
+      const fb = result.ok ? "已執行" : (result.reason ?? "未執行");
+      recordActionFeedback(correlationKey, fb, turnId);
+      if (!result.ok) {
+        toast({
+          title: "動作無法執行",
+          description: result.reason ?? "未知原因",
+          variant: "destructive",
+        });
+      }
+    } finally {
+      setExecutingKeys((prev) => {
+        const { [correlationKey]: _dropped, ...rest } = prev;
+        return rest;
+      });
+    }
+  }, [actionFeedback, executingKeys, confirmBusy, navigate, searchParams, setSearchParams, recordActionFeedback]);
 
   const activateControlMode = useCallback(async () => {
     const passphrase = controlPassphrase.trim();
@@ -1259,6 +1516,49 @@ export function AgentPanelBody() {
           </DialogContent>
         </Dialog>
 
+        {pendingConfirmAction && (
+          <HighRiskConfirm
+            open={!!pendingConfirmAction}
+            onOpenChange={(open) => {
+              if (!open) setPendingConfirmAction(null);
+            }}
+            operation={pendingConfirmAction.action.label ?? `${pendingConfirmAction.entityType}.${pendingConfirmAction.actionId}`}
+            target={{
+              type: pendingConfirmAction.entityType,
+              id: pendingConfirmAction.entityId,
+              name: pendingConfirmAction.entityId,
+            }}
+            actionId={`${pendingConfirmAction.entityType}.${pendingConfirmAction.actionId}`}
+            confirmEntity={{
+              type: pendingConfirmAction.entityType,
+              id: pendingConfirmAction.entityId,
+            }}
+            risk="high"
+            description={
+              pendingConfirmAction.action.rationale ??
+              `執行 ${pendingConfirmAction.entityType} ${pendingConfirmAction.entityId} 之 ${pendingConfirmAction.actionId} 動作`
+            }
+            onConfirm={handleConfirmAction}
+          />
+        )}
+
+        {entityCreateDrawer && (
+          <EntityCreateDrawer
+            entity={entityCreateDrawer.entity}
+            open={entityCreateDrawer.open}
+            onOpenChange={(open) => {
+              setEntityCreateDrawer((prev) => (prev ? { ...prev, open } : null));
+            }}
+            initialData={entityCreateDrawer.initialData}
+            onCreated={(created) => {
+              toast({
+                title: "實體建立成功",
+                description: String(created.name ?? created.id ?? "已建立"),
+              });
+            }}
+          />
+        )}
+
         {(lastProviderStatus || lastLinks.audit || lastLinks.conversation || traceId) && (
           <div className="border-b px-2 py-1 bg-muted/10 flex items-center flex-wrap gap-x-2 gap-y-0.5">
             {lastProviderStatus && <ProviderStatusPill s={lastProviderStatus} />}
@@ -1318,21 +1618,37 @@ export function AgentPanelBody() {
                 {t.role === "assistant" && t.uiActions && t.uiActions.length > 0 && (
                   <div className="px-4 flex flex-wrap gap-1.5">
                     {t.uiActions.map((a, idx) => {
-                      const key = `${t.id}:${idx}`;
+                      const key = getActionCorrelationKey(a as UiAction, t.id, idx);
                       const highRisk = isHighRiskAction(a as UiAction);
-                      const feedback = actionFeedback[key];
+                      const feedback = actionFeedback[key] ?? t.actionFeedback?.[key];
+                      const isExecuted = Boolean(
+                        feedback &&
+                        (feedback === "已執行" || feedback.startsWith("command/") || feedback.includes("status"))
+                      );
+                      const isRunning = Boolean(executingKeys[key]);
                       return (
                         <Button
                           key={key}
                           size="sm"
                           variant={highRisk ? "outline" : "secondary"}
-                          className="h-7 text-[11px] gap-1"
-                          onClick={() => runUiAction(a, key)}
+                          className={`h-7 text-[11px] gap-1 ${isExecuted ? "opacity-80" : ""}`}
+                          disabled={isExecuted || isRunning || confirmBusy}
+                          onClick={() => void runUiAction(a, key, t.id, idx)}
                           title={a.rationale ?? a.kind}
                         >
-                          {highRisk ? <ShieldAlert className="h-3 w-3" /> : <Play className="h-3 w-3" />}
+                          {isRunning ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : highRisk ? (
+                            <ShieldAlert className="h-3 w-3 text-amber-500" />
+                          ) : (
+                            <Play className="h-3 w-3" />
+                          )}
                           <span>{a.label ?? a.kind}</span>
-                          {feedback && <Badge variant="outline" className="ml-1 text-[9px] px-1 py-0">{feedback}</Badge>}
+                          {feedback && (
+                            <Badge variant="outline" className="ml-1 text-[9px] px-1 py-0 font-normal">
+                              {feedback}
+                            </Badge>
+                          )}
                         </Button>
                       );
                     })}
