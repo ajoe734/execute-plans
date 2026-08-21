@@ -1,0 +1,362 @@
+import { describe, expect, it, vi } from "vitest";
+import {
+  AVAILABLE_UI_ACTIONS,
+  ALLOWED_ROUTE_PREFIXES,
+  SUPPORTED_DRAWERS,
+  executeUiAction,
+  getActionCorrelationKey,
+  isHighRiskAction,
+  isValidUiAction,
+  type UiAction,
+  type UiActionExecuteCtx,
+} from "./uiActionRegistry";
+
+describe("uiActionRegistry", () => {
+  describe("AVAILABLE_UI_ACTIONS schema and allowlist", () => {
+    it("contains all seven registered UI action kinds", () => {
+      const kinds = AVAILABLE_UI_ACTIONS.map((a) => a.kind);
+      expect(kinds).toEqual([
+        "navigate",
+        "openDrawer",
+        "selectEntity",
+        "setFilter",
+        "focusPanel",
+        "refreshCurrentView",
+        "runBffAction",
+      ]);
+    });
+
+    it("marks runBffAction as highRisk", () => {
+      const runBff = AVAILABLE_UI_ACTIONS.find((a) => a.kind === "runBffAction");
+      expect(runBff?.highRisk).toBe(true);
+    });
+
+    it("allows standard application route prefixes", () => {
+      expect(ALLOWED_ROUTE_PREFIXES).toContain("/management/");
+      expect(ALLOWED_ROUTE_PREFIXES).toContain("/platform/");
+      expect(ALLOWED_ROUTE_PREFIXES).toContain("/agora/");
+    });
+
+    it("includes standard drawer registrations", () => {
+      expect(SUPPORTED_DRAWERS).toContain("inspector");
+      expect(SUPPORTED_DRAWERS).toContain("handoff");
+      expect(SUPPORTED_DRAWERS).toContain("jobs");
+      expect(SUPPORTED_DRAWERS).toContain("entityCreate");
+      expect(SUPPORTED_DRAWERS).toContain("bulkResult");
+      expect(SUPPORTED_DRAWERS).toContain("rollbackSaga");
+    });
+  });
+
+  describe("isHighRiskAction", () => {
+    it("returns true for runBffAction", () => {
+      expect(isHighRiskAction({ kind: "runBffAction" })).toBe(true);
+    });
+
+    it("returns true when requiresConfirmation is set", () => {
+      expect(isHighRiskAction({ kind: "navigate", requiresConfirmation: true })).toBe(true);
+    });
+
+    it("returns false for ordinary read/navigation actions without confirmation flag", () => {
+      expect(isHighRiskAction({ kind: "navigate" })).toBe(false);
+      expect(isHighRiskAction({ kind: "selectEntity" })).toBe(false);
+      expect(isHighRiskAction({ kind: "setFilter" })).toBe(false);
+      expect(isHighRiskAction({ kind: "focusPanel" })).toBe(false);
+      expect(isHighRiskAction({ kind: "refreshCurrentView" })).toBe(false);
+      expect(isHighRiskAction({ kind: "openDrawer" })).toBe(false);
+    });
+  });
+
+  describe("getActionCorrelationKey and isValidUiAction", () => {
+    it("uses action id or correlationId when available", () => {
+      expect(getActionCorrelationKey({ id: "act_123", kind: "navigate" })).toBe("act_123");
+      expect(getActionCorrelationKey({ correlationId: "corr_abc", kind: "selectEntity" })).toBe("corr_abc");
+    });
+
+    it("synthesizes deterministic correlation key from turnId, index, and params", () => {
+      const key1 = getActionCorrelationKey(
+        { kind: "navigate", params: { path: "/management/strategies" } },
+        "turn_01",
+        0,
+      );
+      const key2 = getActionCorrelationKey(
+        { kind: "navigate", params: { path: "/management/strategies" } },
+        "turn_01",
+        0,
+      );
+      expect(key1).toBe(key2);
+      expect(key1).toContain("turn_01:0:navigate:");
+    });
+
+    it("validates action structure", () => {
+      expect(isValidUiAction({ kind: "navigate" })).toBe(true);
+      expect(isValidUiAction(null)).toBe(false);
+      expect(isValidUiAction({})).toBe(false);
+      expect(isValidUiAction({ kind: "" })).toBe(false);
+    });
+  });
+
+  describe("executeUiAction — Action Execution & Validation", () => {
+    describe("navigate", () => {
+      it("navigates to allowlisted routes", async () => {
+        const navigate = vi.fn();
+        const res = await executeUiAction(
+          { kind: "navigate", params: { path: "/management/strategies" } },
+          { navigate },
+        );
+        expect(res.ok).toBe(true);
+        expect(navigate).toHaveBeenCalledWith("/management/strategies");
+      });
+
+      it("rejects non-allowlisted routes", async () => {
+        const navigate = vi.fn();
+        const res = await executeUiAction(
+          { kind: "navigate", params: { path: "/admin/secret" } },
+          { navigate },
+        );
+        expect(res.ok).toBe(false);
+        expect(res.reason).toContain("Route not allowlisted");
+        expect(navigate).not.toHaveBeenCalled();
+      });
+
+      it("rejects missing path parameter", async () => {
+        const navigate = vi.fn();
+        const res = await executeUiAction({ kind: "navigate", params: {} }, { navigate });
+        expect(res.ok).toBe(false);
+        expect(res.reason).toContain("navigate requires { path: string }");
+      });
+
+      it("reports missing navigate handler in context", async () => {
+        const res = await executeUiAction(
+          { kind: "navigate", params: { path: "/management/personas" } },
+          {},
+        );
+        expect(res.ok).toBe(false);
+        expect(res.reason).toContain("navigate handler not available");
+      });
+    });
+
+    describe("selectEntity", () => {
+      it("sets selected entity in context", async () => {
+        const setSelectedEntity = vi.fn();
+        const res = await executeUiAction(
+          { kind: "selectEntity", params: { kind: "strategy", id: "strat_alpha_01" } },
+          { setSelectedEntity },
+        );
+        expect(res.ok).toBe(true);
+        expect(setSelectedEntity).toHaveBeenCalledWith("strategy", "strat_alpha_01");
+      });
+
+      it("rejects missing kind or id", async () => {
+        const setSelectedEntity = vi.fn();
+        const res1 = await executeUiAction(
+          { kind: "selectEntity", params: { kind: "strategy" } },
+          { setSelectedEntity },
+        );
+        expect(res1.ok).toBe(false);
+        expect(res1.reason).toContain("selectEntity requires { kind, id }");
+
+        const res2 = await executeUiAction(
+          { kind: "selectEntity", params: { id: "strat_alpha_01" } },
+          { setSelectedEntity },
+        );
+        expect(res2.ok).toBe(false);
+        expect(setSelectedEntity).not.toHaveBeenCalled();
+      });
+
+      it("reports missing setSelectedEntity handler", async () => {
+        const res = await executeUiAction(
+          { kind: "selectEntity", params: { kind: "persona", id: "p_1" } },
+          {},
+        );
+        expect(res.ok).toBe(false);
+        expect(res.reason).toContain("setSelectedEntity handler not available");
+      });
+    });
+
+    describe("setFilter", () => {
+      it("sets search filter param", async () => {
+        const setSearchParam = vi.fn();
+        const res = await executeUiAction(
+          { kind: "setFilter", params: { key: "env", value: "paper" } },
+          { setSearchParam },
+        );
+        expect(res.ok).toBe(true);
+        expect(setSearchParam).toHaveBeenCalledWith("env", "paper");
+      });
+
+      it("rejects missing key", async () => {
+        const setSearchParam = vi.fn();
+        const res = await executeUiAction({ kind: "setFilter", params: {} }, { setSearchParam });
+        expect(res.ok).toBe(false);
+        expect(res.reason).toContain("setFilter requires { key }");
+      });
+    });
+
+    describe("refreshCurrentView", () => {
+      it("invokes refresh handler", async () => {
+        const refresh = vi.fn();
+        const res = await executeUiAction({ kind: "refreshCurrentView" }, { refresh });
+        expect(res.ok).toBe(true);
+        expect(refresh).toHaveBeenCalled();
+      });
+    });
+
+    describe("openDrawer", () => {
+      it("routes supported drawers through ctx.openDrawer", async () => {
+        const openDrawer = vi.fn().mockReturnValue(true);
+        const res = await executeUiAction(
+          { kind: "openDrawer", params: { drawer: "inspector", entityId: "strat_101", entityType: "strategy" } },
+          { openDrawer },
+        );
+        expect(res.ok).toBe(true);
+        expect(openDrawer).toHaveBeenCalledWith("inspector", {
+          drawer: "inspector",
+          entityId: "strat_101",
+          entityType: "strategy",
+        });
+      });
+
+      it("rejects unsupported drawer names", async () => {
+        const res = await executeUiAction(
+          { kind: "openDrawer", params: { drawer: "unsupportedNonExistentDrawer" } },
+          {},
+        );
+        expect(res.ok).toBe(false);
+        expect(res.reason).toContain("not supported or registered");
+      });
+
+      it("rejects missing drawer param", async () => {
+        const res = await executeUiAction({ kind: "openDrawer", params: {} }, {});
+        expect(res.ok).toBe(false);
+        expect(res.reason).toContain("openDrawer requires { drawer: string }");
+      });
+    });
+
+    describe("focusPanel", () => {
+      it("routes panel focus through ctx.focusPanel", async () => {
+        const focusPanel = vi.fn().mockReturnValue(true);
+        const res = await executeUiAction(
+          { kind: "focusPanel", params: { panel: "agentPanel" } },
+          { focusPanel },
+        );
+        expect(res.ok).toBe(true);
+        expect(focusPanel).toHaveBeenCalledWith("agentPanel", { panel: "agentPanel" });
+      });
+
+      it("focuses DOM panel by id or data attribute when element exists", async () => {
+        const dummyDiv = document.createElement("div");
+        dummyDiv.id = "telemetryChartPanel";
+        dummyDiv.scrollIntoView = vi.fn();
+        dummyDiv.focus = vi.fn();
+        document.body.appendChild(dummyDiv);
+
+        const res = await executeUiAction(
+          { kind: "focusPanel", params: { panel: "telemetryChartPanel" } },
+          {},
+        );
+        expect(res.ok).toBe(true);
+        expect(dummyDiv.scrollIntoView).toHaveBeenCalled();
+
+        document.body.removeChild(dummyDiv);
+      });
+
+      it("rejects non-existent panel when no element or handler matches", async () => {
+        const res = await executeUiAction(
+          { kind: "focusPanel", params: { panel: "missing_nonexistent_panel" } },
+          {},
+        );
+        expect(res.ok).toBe(false);
+        expect(res.reason).toContain("not found or registered");
+      });
+
+      it("rejects missing panel param", async () => {
+        const res = await executeUiAction({ kind: "focusPanel", params: {} }, {});
+        expect(res.ok).toBe(false);
+        expect(res.reason).toContain("focusPanel requires { panel: string }");
+      });
+    });
+
+    describe("runBffAction", () => {
+      it("rejects missing parameters", async () => {
+        const res = await executeUiAction(
+          { kind: "runBffAction", params: { entityType: "persona" } },
+          {},
+        );
+        expect(res.ok).toBe(false);
+        expect(res.reason).toContain("runBffAction requires { entityType, entityId, actionId }");
+      });
+
+      it("requires confirmation when invoked without confirmed handler", async () => {
+        const res = await executeUiAction(
+          {
+            kind: "runBffAction",
+            params: { entityType: "persona", entityId: "p_alpha", actionId: "retire" },
+          },
+          {},
+        );
+        expect(res.ok).toBe(false);
+        expect(res.reason).toContain("must be routed through HighRiskConfirm");
+      });
+
+      it("triggers confirmation request when ctx.requestConfirmation is supplied", async () => {
+        const requestConfirmation = vi.fn();
+        const action: UiAction = {
+          kind: "runBffAction",
+          params: { entityType: "persona", entityId: "p_alpha", actionId: "retire" },
+        };
+        const res = await executeUiAction(action, { requestConfirmation });
+        expect(res.ok).toBe(true);
+        expect(res.reason).toBe("Confirmation requested");
+        expect(requestConfirmation).toHaveBeenCalledWith(action, action.params);
+      });
+
+      it("executes confirmed action when ctx.runBffAction is supplied", async () => {
+        const runBffAction = vi.fn().mockResolvedValue({
+          ok: true,
+          receipt: "command/audit au_1234 · status completed · idem id_abc",
+          actionId: "retire",
+        });
+        const action: UiAction = {
+          kind: "runBffAction",
+          params: { entityType: "persona", entityId: "p_alpha", actionId: "retire" },
+        };
+        const res = await executeUiAction(action, { runBffAction });
+        expect(res.ok).toBe(true);
+        expect(res.receipt).toContain("au_1234");
+        expect(runBffAction).toHaveBeenCalledWith(action, action.params);
+      });
+    });
+
+    describe("Replay Prevention & Correlation", () => {
+      it("prevents double execution when action correlation key is already recorded as executed", async () => {
+        const navigate = vi.fn();
+        const action: UiAction = {
+          id: "act_nav_01",
+          kind: "navigate",
+          params: { path: "/management/strategies" },
+        };
+
+        const ctx: UiActionExecuteCtx = {
+          navigate,
+          isActionExecuted: (key) => key === "act_nav_01",
+        };
+
+        const res = await executeUiAction(action, ctx);
+        expect(res.ok).toBe(false);
+        expect(res.reason).toContain("Action already executed (replay prevented)");
+        expect(navigate).not.toHaveBeenCalled();
+      });
+    });
+
+    describe("Unsupported / Unknown Action Kinds", () => {
+      it("returns explicit unsupported error for unknown action kind", async () => {
+        const res = await executeUiAction(
+          { kind: "deleteRepository" as never, params: {} },
+          {},
+        );
+        expect(res.ok).toBe(false);
+        expect(res.reason).toContain("Unknown action kind: deleteRepository");
+      });
+    });
+  });
+});

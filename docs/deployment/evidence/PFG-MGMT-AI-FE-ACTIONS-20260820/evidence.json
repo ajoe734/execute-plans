@@ -1,0 +1,44 @@
+{
+  "task_id": "PFG-MGMT-AI-FE-ACTIONS-20260820",
+  "owner": "Antigravity2",
+  "reviewer": "Codex",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/PFG-MGMT-AI-FE-ACTIONS-20260820",
+  "status": "implementation-ready-for-review",
+  "code_disposition": {
+    "adopted": [
+      "Single canonical UI action registry in uiActionRegistry.ts executing all seven declared action kinds (navigate, openDrawer, selectEntity, setFilter, focusPanel, refreshCurrentView, runBffAction).",
+      "openDrawer dispatches to registered drawers (inspector, handoff, jobs, entityCreate, bulkResult, rollbackSaga, etc.) or returns explicit unsupported for unknown drawers.",
+      "focusPanel resolves registered panels and DOM element targets (id, data-panel, data-panel-id, data-testid) with smooth scrolling and focus, or returns explicit unsupported for missing panels.",
+      "runBffAction strictly requires confirmation and routes through HighRiskConfirm, executing through governed bffWrites.runAction facade with command receipt readback and idempotency protection; never performs direct mutation.",
+      "Action correlation key generated deterministically from turn and action payload, persisting execution status across sessions/reloads and preventing double execution on replay."
+    ],
+    "removed": [
+      "Stub unsupported returns for openDrawer, focusPanel, and unconfirmed runBffAction placeholders."
+    ],
+    "not_changed": [
+      "Backend mutation API contracts, read-only kernel behavior, HighRiskConfirm modal internals, and existing application routing."
+    ]
+  },
+  "acceptance_proof": {
+    "all_seven_action_kinds_wired": "All seven declared UI action kinds either dispatch to their respective registries or return explicit typed reasons on invalid parameters or unknown targets.",
+    "confirmation_and_readback": "runBffAction triggers HighRiskConfirm and records the command receipt description (audit id, status, corr, idem) upon confirmation.",
+    "replay_prevention": "Action correlation keys prevent duplicate execution when an action has already been completed.",
+    "single_registry": "Evidence confirms a unified UI action registry and single dispatch path with no parallel unconfirmed write mechanisms."
+  },
+  "validation": {
+    "focused_tests": {
+      "command": "npm test -- src/management/components/agent/uiActionRegistry.test.ts src/management/components/agent/AgentPanelBody.test.tsx src/management/components/agent/useAgentPanel.test.ts",
+      "result": "passed: 3 files, 38 tests"
+    },
+    "typecheck": {
+      "command": "npm run typecheck",
+      "result": "passed"
+    },
+    "strict_live_build": {
+      "command": "VITE_GCP_IDENTITY_API_KEY=AIza01234567890123456789012345678901234 VITE_GCP_IDENTITY_PROJECT_ID=pantheon-lupin-dev-20260719 VITE_GCP_IDENTITY_AUTH_DOMAIN=pantheon-lupin-dev-20260719.firebaseapp.com VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build",
+      "result": "passed"
+    }
+  }
+}
