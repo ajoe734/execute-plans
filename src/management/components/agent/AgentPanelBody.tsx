@@ -53,7 +53,7 @@ import {
 import { useManagementNlContext, setManagementNlContext } from "@/management/hooks/useManagementNlContext";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
 import { EntityCreateDrawer } from "@/management/components/write/EntityCreateDrawer";
-import type { CreatableEntity } from "@/lib/writeIntents/types";
+import { isCreatableEntity, type CreatableEntity } from "@/lib/writeIntents/types";
 import { useInspector } from "@/platform/components/RightDrawer";
 import { useHandoff } from "@/lib/handoff";
 import { useJobDrawer } from "@/platform/components/JobProgressDrawer";
@@ -925,9 +925,13 @@ export function AgentPanelBody() {
             return true;
           }
           if (drawer === "entityCreate" || drawer === "createEntity") {
+            const rawEntity = params?.entity !== undefined ? params?.entity : params?.entityType !== undefined ? params?.entityType : "persona";
+            if (typeof rawEntity !== "string" || !isCreatableEntity(rawEntity.trim())) {
+              return false;
+            }
             setEntityCreateDrawer({
               open: true,
-              entity: (params?.entity ?? params?.entityType ?? "persona") as CreatableEntity,
+              entity: rawEntity.trim() as CreatableEntity,
               initialData: (params?.initialData ?? params?.payload) as Record<string, unknown>,
             });
             return true;

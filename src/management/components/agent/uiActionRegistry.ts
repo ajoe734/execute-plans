@@ -5,6 +5,14 @@
 // go through the existing BFF action/command endpoint + HighRiskConfirm; this
 // registry never auto-invokes a write.
 
+import {
+  CREATABLE_ENTITIES,
+  isCreatableEntity,
+  type CreatableEntity,
+} from "@/lib/writeIntents/types";
+
+export { CREATABLE_ENTITIES, isCreatableEntity, type CreatableEntity };
+
 export type UiActionKind =
   | "navigate"
   | "openDrawer"
@@ -209,6 +217,12 @@ export async function executeUiAction(
       const isSupported = SUPPORTED_DRAWERS.includes(drawer as SupportedDrawer);
       if (!isSupported && !ctx.openDrawer) {
         return { ok: false, reason: `Drawer '${drawer}' not supported or registered` };
+      }
+      if (drawer === "entityCreate" || drawer === "createEntity") {
+        const rawEntity = params.entity !== undefined ? params.entity : params.entityType !== undefined ? params.entityType : "persona";
+        if (typeof rawEntity !== "string" || !isCreatableEntity(rawEntity.trim())) {
+          return { ok: false, reason: `Entity '${String(rawEntity)}' not supported for ${drawer} drawer` };
+        }
       }
       if (ctx.openDrawer) {
         const handled = await ctx.openDrawer(drawer, params);

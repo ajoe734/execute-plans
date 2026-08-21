@@ -94,6 +94,7 @@ const blankInput = (entity: CreatableEntity): Record<string, unknown> => {
     case "evolutionProgram": return { ...base, parentAlpha: "", population: 10 };
     case "researchExperiment": return { ...base, hypothesis: "", metric: "" };
     case "artifact": return { ...base, kind: "model", version: "" };
+    default: return base;
   }
 };
 
@@ -198,6 +199,8 @@ function entityFields(entity: CreatableEntity): FieldDef[] {
         { name: "sourceExperimentId", labelKey: "sourceExperimentId", type: "text" },
         memo,
       ];
+    default:
+      return [baseName, owner, memo];
   }
 }
 

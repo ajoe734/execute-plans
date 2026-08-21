@@ -4,6 +4,8 @@ import {
   ALLOWED_ROUTE_PREFIXES,
   SUPPORTED_DRAWERS,
   SUPPORTED_PANELS,
+  CREATABLE_ENTITIES,
+  isCreatableEntity,
   executeUiAction,
   getActionCorrelationKey,
   isHighRiskAction,
@@ -55,6 +57,38 @@ describe("uiActionRegistry", () => {
       expect(SUPPORTED_PANELS).toContain("terminalConsole");
       expect(SUPPORTED_PANELS).toContain("inspector");
       expect(SUPPORTED_PANELS).toContain("jobProgress");
+    });
+
+    it("includes all 9 creatable entities in CREATABLE_ENTITIES", () => {
+      expect(CREATABLE_ENTITIES).toEqual([
+        "strategy",
+        "persona",
+        "capitalPool",
+        "rankingFormula",
+        "rebalance",
+        "deployment",
+        "evolutionProgram",
+        "researchExperiment",
+        "artifact",
+      ]);
+    });
+  });
+
+  describe("isCreatableEntity", () => {
+    it("returns true for all valid CreatableEntity members", () => {
+      for (const entity of CREATABLE_ENTITIES) {
+        expect(isCreatableEntity(entity)).toBe(true);
+      }
+    });
+
+    it("returns false for invalid or unknown entity strings", () => {
+      expect(isCreatableEntity("invalid")).toBe(false);
+      expect(isCreatableEntity("user")).toBe(false);
+      expect(isCreatableEntity("evil_payload")).toBe(false);
+      expect(isCreatableEntity("")).toBe(false);
+      expect(isCreatableEntity(null)).toBe(false);
+      expect(isCreatableEntity(undefined)).toBe(false);
+      expect(isCreatableEntity(123)).toBe(false);
     });
   });
 
@@ -240,6 +274,66 @@ describe("uiActionRegistry", () => {
         const res = await executeUiAction({ kind: "openDrawer", params: {} }, {});
         expect(res.ok).toBe(false);
         expect(res.reason).toContain("openDrawer requires { drawer: string }");
+      });
+
+      it("routes entityCreate with allowlisted entity through ctx.openDrawer", async () => {
+        const openDrawer = vi.fn().mockReturnValue(true);
+        const res = await executeUiAction(
+          { kind: "openDrawer", params: { drawer: "entityCreate", entity: "strategy" } },
+          { openDrawer },
+        );
+        expect(res.ok).toBe(true);
+        expect(openDrawer).toHaveBeenCalledWith("entityCreate", {
+          drawer: "entityCreate",
+          entity: "strategy",
+        });
+      });
+
+      it("routes createEntity with allowlisted entityType through ctx.openDrawer", async () => {
+        const openDrawer = vi.fn().mockReturnValue(true);
+        const res = await executeUiAction(
+          { kind: "openDrawer", params: { drawer: "createEntity", entityType: "capitalPool" } },
+          { openDrawer },
+        );
+        expect(res.ok).toBe(true);
+        expect(openDrawer).toHaveBeenCalledWith("createEntity", {
+          drawer: "createEntity",
+          entityType: "capitalPool",
+        });
+      });
+
+      it("defaults to persona when entity/entityType are omitted for entityCreate", async () => {
+        const openDrawer = vi.fn().mockReturnValue(true);
+        const res = await executeUiAction(
+          { kind: "openDrawer", params: { drawer: "entityCreate" } },
+          { openDrawer },
+        );
+        expect(res.ok).toBe(true);
+        expect(openDrawer).toHaveBeenCalledWith("entityCreate", {
+          drawer: "entityCreate",
+        });
+      });
+
+      it("rejects entityCreate with unsupported entity value and does not call ctx.openDrawer", async () => {
+        const openDrawer = vi.fn().mockReturnValue(true);
+        const res = await executeUiAction(
+          { kind: "openDrawer", params: { drawer: "entityCreate", entity: "unknown_entity" } },
+          { openDrawer },
+        );
+        expect(res.ok).toBe(false);
+        expect(res.reason).toContain("Entity 'unknown_entity' not supported for entityCreate drawer");
+        expect(openDrawer).not.toHaveBeenCalled();
+      });
+
+      it("rejects createEntity with unsupported entityType value and does not call ctx.openDrawer", async () => {
+        const openDrawer = vi.fn().mockReturnValue(true);
+        const res = await executeUiAction(
+          { kind: "openDrawer", params: { drawer: "createEntity", entityType: "secret_hacker_entity" } },
+          { openDrawer },
+        );
+        expect(res.ok).toBe(false);
+        expect(res.reason).toContain("Entity 'secret_hacker_entity' not supported for createEntity drawer");
+        expect(openDrawer).not.toHaveBeenCalled();
       });
     });
 

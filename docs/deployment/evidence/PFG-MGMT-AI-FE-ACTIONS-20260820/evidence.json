@@ -9,7 +9,7 @@
   "code_disposition": {
     "adopted": [
       "Single canonical UI action registry in uiActionRegistry.ts executing all seven declared action kinds (navigate, openDrawer, selectEntity, setFilter, focusPanel, refreshCurrentView, runBffAction).",
-      "openDrawer dispatches to registered drawers (inspector, handoff, jobs, entityCreate, bulkResult, rollbackSaga, etc.) or returns explicit unsupported for unknown drawers.",
+      "openDrawer dispatches to registered drawers (inspector, handoff, jobs, entityCreate, bulkResult, rollbackSaga, etc.) and validates entity/entityType against a runtime CreatableEntity allowlist (strategy, persona, capitalPool, rankingFormula, rebalance, deployment, evolutionProgram, researchExperiment, artifact) returning explicit unsupported for unknown targets or entity types.",
       "focusPanel strictly allowlists supported panels (agentPanel, governanceQueue, operationsOverview, strategyWorkspace, terminalConsole, inspector, jobProgress) without arbitrary DOM-selector fallback, returning explicit unsupported for missing panels.",
       "runBffAction strictly requires confirmation and routes through HighRiskConfirm, forwarding provider action correlation key and idempotency key directly to bffWrites.runAction with command receipt readback; never performs direct mutation.",
       "HighRiskConfirm enforces single-submit protection (submitting state lock and disabled controls) preventing rapid double-clicks and duplicate command minting.",
@@ -32,7 +32,7 @@
   "validation": {
     "focused_tests": {
       "command": "npm test -- src/management/components/agent/uiActionRegistry.test.ts src/management/components/agent/AgentPanelBody.test.tsx src/management/components/agent/useAgentPanel.test.ts src/platform/components/HighRiskConfirm.test.tsx",
-      "result": "passed: 4 files, 44 tests"
+      "result": "passed: 4 files, 54 tests"
     },
     "typecheck": {
       "command": "npm run typecheck",

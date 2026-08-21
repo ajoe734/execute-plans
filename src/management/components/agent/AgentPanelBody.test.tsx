@@ -317,4 +317,85 @@ describe("AgentPanelBody — UI Actions & Confirmation Workflow", () => {
       expect(screen.getByText("已執行")).toBeInTheDocument();
     });
   });
+
+  it("opens EntityCreateDrawer when openDrawer has an allowlisted entity type", async () => {
+    const mockTurn = {
+      id: "turn_ast_6",
+      role: "assistant",
+      text: "建立一個新的策略專案。",
+      uiActions: [
+        {
+          kind: "openDrawer",
+          label: "建立策略",
+          params: { drawer: "entityCreate", entity: "strategy" },
+        },
+      ],
+      createdAt: Date.now() - 1000,
+    };
+
+    const sessionId = "ses_test_06";
+    localStorage.setItem("pantheon.mgmtAi.sessions.v1", JSON.stringify([
+      { id: sessionId, title: "建立對話", updatedAt: Date.now() },
+    ]));
+    localStorage.setItem(`pantheon.mgmtAi.turns.v1.${sessionId}`, JSON.stringify([mockTurn]));
+
+    render(
+      <MemoryRouter initialEntries={["/management/strategies"]}>
+        <AgentPanelBody />
+      </MemoryRouter>,
+    );
+
+    const sessionItem = await screen.findByText("建立對話");
+    fireEvent.click(sessionItem);
+
+    const createBtn = await screen.findByRole("button", { name: /建立策略/i });
+    fireEvent.click(createBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText("已執行")).toBeInTheDocument();
+      // EntityCreateDrawer is open and visible
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+    });
+  });
+
+  it("fails closed and does not open EntityCreateDrawer when openDrawer has an unknown entity type", async () => {
+    const mockTurn = {
+      id: "turn_ast_7",
+      role: "assistant",
+      text: "嘗試建立未知實體。",
+      uiActions: [
+        {
+          kind: "openDrawer",
+          label: "建立未知實體",
+          params: { drawer: "entityCreate", entity: "malicious_or_unknown_type" },
+        },
+      ],
+      createdAt: Date.now() - 1000,
+    };
+
+    const sessionId = "ses_test_07";
+    localStorage.setItem("pantheon.mgmtAi.sessions.v1", JSON.stringify([
+      { id: sessionId, title: "未知實體對話", updatedAt: Date.now() },
+    ]));
+    localStorage.setItem(`pantheon.mgmtAi.turns.v1.${sessionId}`, JSON.stringify([mockTurn]));
+
+    render(
+      <MemoryRouter initialEntries={["/management/strategies"]}>
+        <AgentPanelBody />
+      </MemoryRouter>,
+    );
+
+    const sessionItem = await screen.findByText("未知實體對話");
+    fireEvent.click(sessionItem);
+
+    const createBtn = await screen.findByRole("button", { name: /建立未知實體/i });
+    fireEvent.click(createBtn);
+
+    await waitFor(() => {
+      // Must not open dialog
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      // Records explicit unsupported error feedback
+      expect(screen.getByText(/Entity 'malicious_or_unknown_type' not supported/i)).toBeInTheDocument();
+    });
+  });
 });
