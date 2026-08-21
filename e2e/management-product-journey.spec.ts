@@ -213,17 +213,22 @@ test.describe("Management Console Product Journey E2E", () => {
       token: LOCAL_FIXTURE_AUTH_TOKEN,
     });
 
-    // 1. Formula Page
-    await page.goto(frontendUrl("/management/formulas"), { waitUntil: "domcontentloaded", timeout: 30_000 });
+    // 1. Formula Page (Ranking Formula Detail or Ranking Center)
+    await page.goto(frontendUrl("/management/rankings"), { waitUntil: "domcontentloaded", timeout: 30_000 });
+    await expect(page.locator("#root")).toBeAttached();
+    await expect(page.getByText("Rankings Center").or(page.getByText("Rankings"))).toBeVisible();
 
     // 2. Activity Page
     await page.goto(frontendUrl("/management/activity"), { waitUntil: "domcontentloaded", timeout: 30_000 });
+    await expect(page.locator("#root")).toBeAttached();
 
     // 3. Postmortem Library Page
     await page.goto(frontendUrl("/management/postmortems"), { waitUntil: "domcontentloaded", timeout: 30_000 });
-
-    // Verify page container is loaded
     await expect(page.locator("#root")).toBeAttached();
+    await expect(page.getByText("Postmortems").or(page.getByText("Incidents"))).toBeVisible();
+
+    // Verify calls were captured
+    expect(calls.some((url) => url.includes("/bff/"))).toBe(true);
   });
 
   test("Supported dev-paper action progresses admitted to domain terminal and remains after reload; read-only controls honestly disabled", async ({
@@ -247,5 +252,7 @@ test.describe("Management Console Product Journey E2E", () => {
     // Perform reload and verify page remains stable
     await page.reload({ waitUntil: "domcontentloaded" });
     await expect(page.locator("#root")).toBeAttached();
+
+    expect(calls.length).toBeGreaterThan(0);
   });
 });
