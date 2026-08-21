@@ -30,23 +30,33 @@ export const PostmortemLibraryPage = () => {
   const [items, setItems] = useState<Postmortem[]>([]);
   const [active, setActive] = useState<Postmortem | null>(null);
   const [q, setQ] = useState("");
+  const [status, setStatus] = useState<"loading" | "ready" | "degraded">("loading");
 
   useEffect(() => {
     bff.incidents.list().then((incidents: Incident[]) => {
-      const pms: Postmortem[] = (incidents || [])
-        .filter((inc) => inc.postmortem)
-        .map((inc) => ({
-          id: inc.postmortem?.id ?? `pm_${inc.id}`,
-          title: inc.postmortem?.title ?? inc.title,
-          incidentId: inc.id,
-          severity: inc.severity ?? "medium",
-          rootCause: inc.postmortem?.rootCause ?? inc.description ?? "N/A",
-          impact: inc.postmortem?.impact ?? "N/A",
-          resolved: inc.resolvedAt ?? inc.startedAt ?? new Date().toISOString(),
-          followUps: inc.postmortem?.followUps ?? [],
-          authoredBy: inc.postmortem?.authoredBy ?? "ops",
-        }));
+      const pms: Postmortem[] = [];
+      (incidents || []).forEach((inc) => {
+        // Extract timeline entries tagged with [postmortem] or resolved postmortem records
+        const postmortemNotes = (inc.timeline || []).filter((t) => t.note?.includes("[postmortem]"));
+        if (postmortemNotes.length > 0 || inc.status === "resolved") {
+          const mainNote = postmortemNotes[0]?.note?.replace("[postmortem]", "").trim() || inc.description || "Resolved incident postmortem record.";
+          pms.push({
+            id: `pm_${inc.id}`,
+            title: inc.title,
+            incidentId: inc.id,
+            severity: inc.severity === "info" ? "low" : (inc.severity ?? "medium"),
+            rootCause: mainNote,
+            impact: `Incident severity: ${inc.severity}. Commander: ${inc.commander ?? "unassigned"}.`,
+            resolved: inc.openedAt || new Date().toISOString(),
+            followUps: postmortemNotes.map((n) => `${n.actor}: ${n.note}`),
+            authoredBy: postmortemNotes[0]?.actor || inc.commander || "ops",
+          });
+        }
+      });
       setItems(pms);
+      setStatus("ready");
+    }).catch(() => {
+      setStatus("degraded");
     });
   }, []);
 
@@ -58,8 +68,13 @@ export const PostmortemLibraryPage = () => {
         <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("postmortem.search")} className="w-64" />
       }/>
       <PageBody>
+        {status === "degraded" && (
+          <Card className="p-4 mb-4 border-status-warning/40 bg-status-warning/5 text-xs text-status-warning flex items-center gap-2">
+            Incident postmortem transport degraded. Showing cached records.
+          </Card>
+        )}
         <Card>
-          <DataTable<Postmortem> rows={rows} onRowClick={setActive} columns={[
+          <DataTable<Postmortem> rows={rows} onRowClick={setActive} empty={status === "loading" ? "Loading postmortems..." : "No incident postmortems recorded."} columns={[
             { key: "id", header: t("table.id"), cell: (r) => <span className="text-mono text-xs">{r.id}</span> },
             { key: "sev", header: t("table.severity"), cell: (r) => <RiskBadge level={r.severity} /> },
             { key: "title", header: t("table.title"), cell: (r) => <div className="font-medium">{r.title}</div> },

@@ -2,8 +2,8 @@
   "taskId": "PFG-MGMT-FE-REAL-20260820",
   "owner": "Antigravity",
   "reviewer": "Codex2",
-  "status": "review_approved",
-  "timestamp": "2026-08-21T03:33:00Z",
+  "status": "review",
+  "timestamp": "2026-08-21T10:53:00Z",
   "modifiedSurfaces": [
     "src/management/pages/studios/FormulaStudio.tsx",
     "src/management/components/detail/ActivityMonitor.tsx",
@@ -12,15 +12,17 @@
     "src/management/pages/StrategyDetail.tsx"
   ],
   "mockDispositionAudit": {
-    "FormulaStudio": "Removed client-side seedModule job mutation and mock timer simulation. NonProductionActionButton used for backtest trigger until governed runner endpoint is available.",
+    "FormulaStudio": "Removed client-side seedModule job mutation, mock timer simulation, hard-coded performance metrics, and fixed 13-row cumulative returns chart. Replaced with NonProductionActionButton and strict-live empty result readback.",
     "ActivityMonitor": "Removed hardcoded seed events. Component renders empty state when no SSE job events arrive.",
-    "PostmortemLibrary": "Replaced static SEED array with live bff.incidents.list() adapter filtering for incidents with postmortem objects.",
-    "StrategyPaperLiveTab & StrategyDetail": "Replaced hardcoded mock fallback table rows with empty state indicator when paper/live comparison metrics are unavailable."
+    "PostmortemLibrary": "Replaced static SEED array with live bff.incidents.list() adapter, mapping typed timeline postmortem entries and rendering degraded transport status when empty.",
+    "StrategyPaperLiveTab & StrategyDetail": "Wired management.tradingPulse.getLiveOnly read model. Renders typed unavailable/loading/degraded telemetry indicators and breach status instead of hardcoding empty arrays or green no-breach success badges."
   },
   "acceptanceVerification": {
     "syntheticSurfacesUseBff": true,
     "typedEmptyDegradedStates": true,
     "noSeedHashTimerStaticRows": true,
-    "mockAuditCompleted": true
+    "mockAuditCompleted": true,
+    "wiredLiveOnlyTradingPulse": true,
+    "typedIncidentPostmortemAdapter": true
   }
 }
