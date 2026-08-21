@@ -398,4 +398,56 @@ describe("AgentPanelBody — UI Actions & Confirmation Workflow", () => {
       expect(screen.getByText(/Entity 'malicious_or_unknown_type' not supported/i)).toBeInTheDocument();
     });
   });
+
+  it("fails closed and never opens HighRiskConfirm or calls bffWrites when an unknown high-risk action kind is clicked", async () => {
+    const runActionSpy = vi.spyOn(bffWrites, "runAction");
+
+    const mockTurn = {
+      id: "turn_ast_8_unknown_high_risk",
+      role: "assistant",
+      text: "嘗試執行未註冊的高風險動作。",
+      uiActions: [
+        {
+          id: "act_malicious_write",
+          kind: "customDangerousBffMutation",
+          label: "執行危險動作",
+          rationale: "嘗試略過註冊表執行後端寫入",
+          requiresConfirmation: true,
+          params: {
+            entityType: "system",
+            entityId: "kernel",
+            actionId: "wipeData",
+          },
+        },
+      ],
+      createdAt: Date.now() - 1000,
+    };
+
+    const sessionId = "ses_test_08";
+    localStorage.setItem("pantheon.mgmtAi.sessions.v1", JSON.stringify([
+      { id: sessionId, title: "未知高風險對話", updatedAt: Date.now() },
+    ]));
+    localStorage.setItem(`pantheon.mgmtAi.turns.v1.${sessionId}`, JSON.stringify([mockTurn]));
+
+    render(
+      <MemoryRouter initialEntries={["/management/strategies"]}>
+        <AgentPanelBody />
+      </MemoryRouter>,
+    );
+
+    const sessionItem = await screen.findByText("未知高風險對話");
+    fireEvent.click(sessionItem);
+
+    const dangerousBtn = await screen.findByRole("button", { name: /執行危險動作/i });
+    fireEvent.click(dangerousBtn);
+
+    await waitFor(() => {
+      // Must not open HighRiskConfirm dialog
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      // Must not call bffWrites.runAction
+      expect(runActionSpy).not.toHaveBeenCalled();
+      // Feedback records unsupported action type
+      expect(screen.getByText(/不支援的動作類型 \(customDangerousBffMutation\)/i)).toBeInTheDocument();
+    });
+  });
 });

@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   AVAILABLE_UI_ACTIONS,
+  AVAILABLE_UI_ACTION_KINDS,
+  isKnownUiActionKind,
   ALLOWED_ROUTE_PREFIXES,
   SUPPORTED_DRAWERS,
   SUPPORTED_PANELS,
@@ -19,6 +21,18 @@ describe("uiActionRegistry", () => {
     it("contains all seven registered UI action kinds", () => {
       const kinds = AVAILABLE_UI_ACTIONS.map((a) => a.kind);
       expect(kinds).toEqual([
+        "navigate",
+        "openDrawer",
+        "selectEntity",
+        "setFilter",
+        "focusPanel",
+        "refreshCurrentView",
+        "runBffAction",
+      ]);
+    });
+
+    it("exports AVAILABLE_UI_ACTION_KINDS matching AVAILABLE_UI_ACTIONS", () => {
+      expect(AVAILABLE_UI_ACTION_KINDS).toEqual([
         "navigate",
         "openDrawer",
         "selectEntity",
@@ -74,6 +88,23 @@ describe("uiActionRegistry", () => {
     });
   });
 
+  describe("isKnownUiActionKind", () => {
+    it("returns true for all 7 registered action kinds", () => {
+      for (const kind of AVAILABLE_UI_ACTION_KINDS) {
+        expect(isKnownUiActionKind(kind)).toBe(true);
+      }
+    });
+
+    it("returns false for unregistered or invalid action kinds", () => {
+      expect(isKnownUiActionKind("unknownAction")).toBe(false);
+      expect(isKnownUiActionKind("customDangerousBffMutation")).toBe(false);
+      expect(isKnownUiActionKind("")).toBe(false);
+      expect(isKnownUiActionKind(null)).toBe(false);
+      expect(isKnownUiActionKind(undefined)).toBe(false);
+      expect(isKnownUiActionKind(123)).toBe(false);
+    });
+  });
+
   describe("isCreatableEntity", () => {
     it("returns true for all valid CreatableEntity members", () => {
       for (const entity of CREATABLE_ENTITIES) {
@@ -97,8 +128,13 @@ describe("uiActionRegistry", () => {
       expect(isHighRiskAction({ kind: "runBffAction" })).toBe(true);
     });
 
-    it("returns true when requiresConfirmation is set", () => {
+    it("returns true when requiresConfirmation is set for a valid action", () => {
       expect(isHighRiskAction({ kind: "navigate", requiresConfirmation: true })).toBe(true);
+    });
+
+    it("returns false for unregistered action kinds even if requiresConfirmation is true", () => {
+      expect(isHighRiskAction({ kind: "unknownDangerousAction", requiresConfirmation: true })).toBe(false);
+      expect(isHighRiskAction({ kind: "arbitraryAction" })).toBe(false);
     });
 
     it("returns false for ordinary read/navigation actions without confirmation flag", () => {
@@ -261,13 +297,15 @@ describe("uiActionRegistry", () => {
         });
       });
 
-      it("rejects unsupported drawer names", async () => {
+      it("rejects unsupported drawer names and does not call ctx.openDrawer", async () => {
+        const openDrawer = vi.fn().mockReturnValue(true);
         const res = await executeUiAction(
           { kind: "openDrawer", params: { drawer: "unsupportedNonExistentDrawer" } },
-          {},
+          { openDrawer },
         );
         expect(res.ok).toBe(false);
         expect(res.reason).toContain("not supported or registered");
+        expect(openDrawer).not.toHaveBeenCalled();
       });
 
       it("rejects missing drawer param", async () => {
@@ -374,14 +412,15 @@ describe("uiActionRegistry", () => {
         document.body.removeChild(dummyDiv);
       });
 
-      it("rejects when ctx.focusPanel explicitly returns false for unsupported panel", async () => {
-        const focusPanel = vi.fn().mockReturnValue(false);
+      it("rejects non-allowlisted panel and does not call ctx.focusPanel", async () => {
+        const focusPanel = vi.fn().mockReturnValue(true);
         const res = await executeUiAction(
           { kind: "focusPanel", params: { panel: "unknownPanel" } },
           { focusPanel },
         );
         expect(res.ok).toBe(false);
         expect(res.reason).toContain("not supported or registered");
+        expect(focusPanel).not.toHaveBeenCalled();
       });
 
       it("rejects missing panel param", async () => {

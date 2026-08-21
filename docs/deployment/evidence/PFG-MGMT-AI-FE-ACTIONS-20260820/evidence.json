@@ -13,7 +13,9 @@
       "focusPanel strictly allowlists supported panels (agentPanel, governanceQueue, operationsOverview, strategyWorkspace, terminalConsole, inspector, jobProgress) without arbitrary DOM-selector fallback, returning explicit unsupported for missing panels.",
       "runBffAction strictly requires confirmation and routes through HighRiskConfirm, forwarding provider action correlation key and idempotency key directly to bffWrites.runAction with command receipt readback; never performs direct mutation.",
       "HighRiskConfirm enforces single-submit protection (submitting state lock and disabled controls) preventing rapid double-clicks and duplicate command minting.",
-      "Action correlation key generated deterministically from turn and action payload, persisting execution status across sessions/reloads and preventing double execution on replay."
+      "Action correlation key generated deterministically from turn and action payload, persisting execution status across sessions/reloads and preventing double execution on replay.",
+      "Fail-closed allowlist validation in AgentPanelBody: action.kind is validated against AVAILABLE_UI_ACTIONS (isKnownUiActionKind) before the high-risk confirmation branch, preventing unknown action kinds from reaching HighRiskConfirm or bffWrites.",
+      "executeUiAction enforces SUPPORTED_DRAWERS and SUPPORTED_PANELS allowlists directly before invoking execution context handlers (ctx.openDrawer / ctx.focusPanel), ensuring the registry itself is fail-closed."
     ],
     "removed": [
       "Stub unsupported returns for openDrawer and unconfirmed runBffAction placeholders.",
@@ -27,12 +29,12 @@
     "all_seven_action_kinds_wired": "All seven declared UI action kinds either dispatch to their respective registries or return explicit typed reasons on invalid parameters or unknown targets.",
     "confirmation_and_readback": "runBffAction triggers HighRiskConfirm, passes correlationId/idempotencyKey, and records the command receipt description (audit id, status, corr, idem) upon confirmation.",
     "replay_prevention": "Action correlation keys and HighRiskConfirm submitting guards prevent duplicate execution when an action is in-flight or has already been completed.",
-    "single_registry": "Evidence confirms a unified UI action registry and single dispatch path with no parallel unconfirmed write mechanisms and no DOM-selector fallback."
+    "single_registry": "Evidence confirms a unified UI action registry and single dispatch path with no parallel unconfirmed write mechanisms, fail-closed allowlist validation, and no DOM-selector fallback."
   },
   "validation": {
     "focused_tests": {
       "command": "npm test -- src/management/components/agent/uiActionRegistry.test.ts src/management/components/agent/AgentPanelBody.test.tsx src/management/components/agent/useAgentPanel.test.ts src/platform/components/HighRiskConfirm.test.tsx",
-      "result": "passed: 4 files, 54 tests"
+      "result": "passed: 4 files, 59 tests"
     },
     "typecheck": {
       "command": "npm run typecheck",

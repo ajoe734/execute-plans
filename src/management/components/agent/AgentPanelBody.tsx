@@ -48,6 +48,7 @@ import {
   executeUiAction,
   getActionCorrelationKey,
   isHighRiskAction,
+  isKnownUiActionKind,
   type UiAction,
 } from "./uiActionRegistry";
 import { useManagementNlContext, setManagementNlContext } from "@/management/hooks/useManagementNlContext";
@@ -856,7 +857,17 @@ export function AgentPanelBody() {
       return;
     }
 
-    if (action.kind === "runBffAction" || isHighRiskAction(action as UiAction)) {
+    if (!isKnownUiActionKind(action.kind)) {
+      recordActionFeedback(correlationKey, `不支援的動作類型 (${String(action.kind)})`, turnId);
+      toast({
+        title: "不支援的動作",
+        description: `動作類型 '${String(action.kind)}' 不在允許的清單中`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (action.kind === "runBffAction") {
       const params = (action.params ?? {}) as Record<string, unknown>;
       const entityType = String(params.entityType ?? "entity");
       const entityId = String(params.entityId ?? "");

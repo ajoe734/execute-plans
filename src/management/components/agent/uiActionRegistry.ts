@@ -57,6 +57,12 @@ export const AVAILABLE_UI_ACTIONS: readonly UiActionDescriptor[] = [
   },
 ] as const;
 
+export const AVAILABLE_UI_ACTION_KINDS: readonly UiActionKind[] = AVAILABLE_UI_ACTIONS.map((d) => d.kind);
+
+export function isKnownUiActionKind(kind: unknown): kind is UiActionKind {
+  return typeof kind === "string" && AVAILABLE_UI_ACTIONS.some((d) => d.kind === kind);
+}
+
 export const ALLOWED_ROUTE_PREFIXES: readonly string[] = [
   "/management/",
   "/platform/",
@@ -116,6 +122,9 @@ export interface UiActionExecuteResult {
 }
 
 export function isHighRiskAction(action: UiAction): boolean {
+  if (!action || !isKnownUiActionKind(action.kind)) {
+    return false;
+  }
   if (action.requiresConfirmation) return true;
   if (action.kind === "runBffAction") return true;
   const desc = AVAILABLE_UI_ACTIONS.find((d) => d.kind === action.kind);
@@ -137,15 +146,18 @@ export function getActionCorrelationKey(action: UiAction, turnId?: string, index
 export function isValidUiAction(action: unknown): action is UiAction {
   if (!action || typeof action !== "object") return false;
   const a = action as Partial<UiAction>;
-  return typeof a.kind === "string" && a.kind.length > 0;
+  return typeof a.kind === "string" && isKnownUiActionKind(a.kind);
 }
 
 export async function executeUiAction(
   action: UiAction,
   ctx: UiActionExecuteCtx = {},
 ): Promise<UiActionExecuteResult> {
-  if (!isValidUiAction(action)) {
+  if (!action || typeof action !== "object" || !action.kind || typeof action.kind !== "string") {
     return { ok: false, reason: "Invalid UI action structure" };
+  }
+  if (!isKnownUiActionKind(action.kind)) {
+    return { ok: false, reason: `Unknown action kind: ${String(action.kind)}` };
   }
 
   const actionKey = getActionCorrelationKey(action);
@@ -214,8 +226,7 @@ export async function executeUiAction(
       if (!drawer) {
         return { ok: false, reason: "openDrawer requires { drawer: string }" };
       }
-      const isSupported = SUPPORTED_DRAWERS.includes(drawer as SupportedDrawer);
-      if (!isSupported && !ctx.openDrawer) {
+      if (!SUPPORTED_DRAWERS.includes(drawer as SupportedDrawer)) {
         return { ok: false, reason: `Drawer '${drawer}' not supported or registered` };
       }
       if (drawer === "entityCreate" || drawer === "createEntity") {
@@ -231,9 +242,6 @@ export async function executeUiAction(
         }
         return { ok: true };
       }
-      if (!isSupported) {
-        return { ok: false, reason: `Drawer '${drawer}' not supported or registered` };
-      }
       return { ok: true };
     }
 
@@ -242,8 +250,7 @@ export async function executeUiAction(
       if (!panel) {
         return { ok: false, reason: "focusPanel requires { panel: string }" };
       }
-      const isSupported = SUPPORTED_PANELS.includes(panel as SupportedPanel);
-      if (!isSupported && !ctx.focusPanel) {
+      if (!SUPPORTED_PANELS.includes(panel as SupportedPanel)) {
         return { ok: false, reason: `Panel '${panel}' not supported or registered` };
       }
       if (ctx.focusPanel) {
@@ -252,9 +259,6 @@ export async function executeUiAction(
           return { ok: false, reason: `Panel '${panel}' not supported or registered` };
         }
         return { ok: true };
-      }
-      if (!isSupported) {
-        return { ok: false, reason: `Panel '${panel}' not supported or registered` };
       }
       return { ok: true };
     }
