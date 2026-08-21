@@ -16,8 +16,8 @@ import { RiskBadge } from "@/platform/components/RiskBadge";
 import { bff } from "@/lib/bff-v1";
 import { commandReceiptDescription } from "@/lib/bff-v1/commandReceipt";
 import { bffWrites } from "@/lib/bff/runAction";
-import { mutations } from "@/lib/bff/mutations";
 import { runActionSafe } from "@/lib/bff-v1";
+import { NonProductionActionButton } from "@/management/components/NonProductionActionButton";
 import { useT } from "@/platform/hooks";
 import type { Strategy, Job, AuditEvent, ApprovalRequest, Alert, Incident, Artifact, EvolutionProgram, ResearchExperiment } from "@/lib/bff/types";
 import { Inbox, ArrowRight, CheckCircle2, AlertTriangle, FileText, Zap } from "lucide-react";
@@ -113,23 +113,17 @@ export const StrategyDetail = () => {
             })}>
               <Inbox className="h-4 w-4 mr-1" />Inspect
             </Button>
-            <Button size="sm" variant="outline" onClick={async () => {
-              const res = await mutations.runParameterSweep(s.id, { memo: `manual sweep from ${s.id}` });
-              toast.success(t("strategy.sweep.queued"), {
-                description: commandReceiptDescription(res, { fallback: `Strategy ${s.id} · parameter_sweep` }),
-              });
-            }}>
+            <NonProductionActionButton size="sm" variant="outline">
               <Zap className="h-4 w-4 mr-1" />{t("strategy.sweep.run")}
-            </Button>
+            </NonProductionActionButton>
             {transitions.map((tr) => (
-              <Button
+              <NonProductionActionButton
                 key={tr.action}
                 size="sm"
                 variant={tr.risk === "critical" || tr.risk === "high" ? "default" : "outline"}
-                onClick={() => { setActiveTr(tr); setConfirmOpen(true); }}
               >
                 {tr.action} → {tr.to}
-              </Button>
+              </NonProductionActionButton>
             ))}
           </>
         }
@@ -153,14 +147,14 @@ export const StrategyDetail = () => {
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <Field label="Alpha" value={s.alpha} mono />
                     <Field label={t("nav.capital")} value={s.capitalPoolId} mono />
-                    <Field label={t("nav.personas")} value={s.personaIds.join(", ")} mono />
+                    <Field label={t("nav.personas")} value={(s.personaIds ?? []).join(", ")} mono />
                     <Field label={t("table.updated")} value={safeDateTime(s.updatedAt)} mono />
                   </div>
                 </Section>
                 <div className="grid grid-cols-3 gap-4 mt-4">
-                  <StatCard label="PnL 30d" value={`${(s.pnl30d * 100).toFixed(2)}%`} tone={s.pnl30d >= 0 ? "success" : "danger"} />
+                  <StatCard label="PnL 30d" value={`${((s.pnl30d ?? 0) * 100).toFixed(2)}%`} tone={(s.pnl30d ?? 0) >= 0 ? "success" : "danger"} />
                   <StatCard label={t("table.sharpe")} value={(s.sharpe ?? 0).toFixed(2)} />
-                  <StatCard label={t("table.drawdown")} value={`${(s.drawdown * 100).toFixed(2)}%`} tone="warning" />
+                  <StatCard label={t("table.drawdown")} value={`${((s.drawdown ?? 0) * 100).toFixed(2)}%`} tone="warning" />
                 </div>
                 <div className="grid gap-4 md:grid-cols-3 mt-4">
                   <LinkedBlock
@@ -268,20 +262,21 @@ export const StrategyDetail = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {paperLive.map((row) => (
-                        <tr key={row.metric} className="border-b border-border last:border-0">
-                          <td className="p-3 font-medium">{row.metric}</td>
-                          <td className="p-3 text-right text-mono text-sm">{row.paper}</td>
-                          <td className="p-3 text-right text-mono text-sm">{row.live}</td>
-                          <td className={`p-3 text-right text-mono text-sm ${(row.delta ?? "").startsWith("-") ? "text-status-failed" : "text-status-warning"}`}>{row.delta}</td>
-                        </tr>
-                      ))}
-                      {paperLive.length === 0 && (
+                      {paperLive.length === 0 ? (
                         <tr>
-                          <td className="p-4 text-center text-sm text-muted-foreground" colSpan={4}>
-                            {t("common.awaitingData", { defaultValue: "No data yet" })}
+                          <td colSpan={4} className="p-4 text-center text-xs text-muted-foreground">
+                            {t("common.awaitingData", { defaultValue: "No comparison metrics available" })}
                           </td>
                         </tr>
+                      ) : (
+                        paperLive.map((row, i) => (
+                          <tr key={i} className="border-b border-border/50 text-xs">
+                            <td className="p-3 font-medium">{row.metric}</td>
+                            <td className="p-3 text-right font-mono">{row.paper}</td>
+                            <td className="p-3 text-right font-mono">{row.live}</td>
+                            <td className="p-3 text-right font-mono text-muted-foreground">{row.delta}</td>
+                          </tr>
+                        ))
                       )}
                     </tbody>
                   </table>
@@ -318,28 +313,13 @@ export const StrategyDetail = () => {
                       { key: "act", header: "", cell: (r) => (
                         <div className="flex gap-1 justify-end">
                           {!r.acknowledged && (
-                            <Button size="sm" variant="ghost" onClick={async (e) => {
-                              e.stopPropagation();
-                              const receipt = await bffWrites.acknowledgeAlert(r.id, `from ${s.id}`);
-                              toast.success(t("toast.alertAcknowledged", { id: r.id }), {
-                                description: commandReceiptDescription(receipt, { fallback: `Alert ${r.id} · acknowledge` }),
-                              });
-                              const al = await bff.alerts.list();
-                              setAlerts(al.filter((x) => x.relatedTarget === s.id || x.source.includes(s.id) || x.title.includes(s.id)));
-                            }}><CheckCircle2 className="h-3.5 w-3.5 mr-1" />{t("table_actions.acknowledge")}</Button>
+                            <NonProductionActionButton size="sm" variant="ghost">
+                              <CheckCircle2 className="h-3.5 w-3.5 mr-1" />{t("table_actions.acknowledge")}
+                            </NonProductionActionButton>
                           )}
-                          <Button size="sm" variant="outline" onClick={async (e) => {
-                            e.stopPropagation();
-                            const res = await mutations.escalateAlertToIncident(r.id, `from ${s.id}`);
-                            toast.success(t("table_actions.incidentEscalateQueued"), {
-                              description: commandReceiptDescription(res, {
-                                fallback: `Alert ${r.id} · escalate_incident`,
-                                extra: `incident ${res.incidentId}`,
-                              }),
-                            });
-                            const inc = await bff.incidents.list();
-                            setIncidents(inc.filter((x) => x.affected?.includes(s.id)));
-                          }}><AlertTriangle className="h-3.5 w-3.5 mr-1" />{t("table_actions.escalateIncident")}</Button>
+                          <NonProductionActionButton size="sm" variant="outline">
+                            <AlertTriangle className="h-3.5 w-3.5 mr-1" />{t("table_actions.escalateIncident")}
+                          </NonProductionActionButton>
                         </div>
                       ) },
                     ]}
@@ -366,27 +346,12 @@ export const StrategyDetail = () => {
                   { key: "ts", header: t("table.opened"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{safeDateTime(r.openedAt)}</span> },
                   { key: "act", header: "", cell: (r) => (
                     <div className="flex gap-1 justify-end">
-                      {r.status !== "resolved" && (
-                        <Button size="sm" variant="ghost" onClick={async (e) => {
-                          e.stopPropagation();
-                          const status = r.status === "open" ? "mitigating" : "resolved";
-                          const receipt = await mutations.setIncidentStatus(r.id, status);
-                          toast.success(t("toast.incidentAdvanced", { id: r.id, status }), {
-                            description: commandReceiptDescription(receipt, { fallback: `Incident ${r.id} · ${status}` }),
-                          });
-                          const inc = await bff.incidents.list();
-                          setIncidents(inc.filter((x) => x.affected?.includes(s.id)));
-                        }}>
-                          {r.status === "open" ? t("table_actions.startMitigation") : t("table_actions.resolve")}
-                        </Button>
-                      )}
-                      <Button size="sm" variant="outline" onClick={async (e) => {
-                        e.stopPropagation();
-                        const receipt = await mutations.appendPostmortem(r.id, `Initial postmortem draft for ${r.id}`);
-                        toast.success(t("incident.postmortem.appended"), {
-                          description: commandReceiptDescription(receipt, { fallback: `Incident ${r.id} · postmortem` }),
-                        });
-                      }}><FileText className="h-3.5 w-3.5 mr-1" />{t("incident.postmortem.add")}</Button>
+                      <NonProductionActionButton size="sm" variant="ghost">
+                        {r.status === "open" ? t("table_actions.startMitigation") : t("table_actions.resolve")}
+                      </NonProductionActionButton>
+                      <NonProductionActionButton size="sm" variant="outline">
+                        <FileText className="h-3.5 w-3.5 mr-1" />{t("incident.postmortem.add")}
+                      </NonProductionActionButton>
                     </div>
                   ) },
                 ]}
