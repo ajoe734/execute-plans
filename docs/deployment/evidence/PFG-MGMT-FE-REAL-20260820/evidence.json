@@ -3,7 +3,7 @@
   "owner": "Antigravity",
   "reviewer": "Codex2",
   "status": "review",
-  "timestamp": "2026-08-21T12:46:00Z",
+  "timestamp": "2026-08-21T13:41:30Z",
   "modifiedSurfaces": [
     "src/management/pages/studios/FormulaStudio.tsx",
     "src/management/components/detail/ActivityMonitor.tsx",
@@ -15,7 +15,7 @@
     "FormulaStudio": "Removed client-side seedModule job mutation, mock timer simulation, hard-coded performance metrics, and fixed 13-row cumulative returns chart. Replaced with NonProductionActionButton and strict-live empty result readback.",
     "ActivityMonitor": "Removed in-memory mock realtime bus fallback and unattached live pulse badge. Component inspects liveStatus mode and SSE realtime status, rendering typed 'BFF Stream: unavailable' status and explicit empty stream indicator when unattached.",
     "PostmortemLibrary": "Replaced static SEED array with live bff.incidents.list() adapter, mapping typed timeline postmortem entries and rendering degraded transport status when empty.",
-    "StrategyPaperLiveTab & StrategyDetail": "Wired management.tradingPulse.getLiveOnly read model. Renders typed unavailable/loading/degraded telemetry indicators and breach status instead of hardcoding empty arrays or green no-breach success badges. Replaced enabled Alert acknowledge button with NonProductionActionButton to enforce strict-live posture and prevent unverified mock mutations."
+    "StrategyPaperLiveTab & StrategyDetail": "Wired management.tradingPulse.getLiveOnly read model. Renders typed unavailable/loading/degraded telemetry indicators and breach status instead of hardcoding empty arrays or green no-breach success badges. Replaced enabled transition buttons and Alert acknowledge button with NonProductionActionButton to enforce strict-live posture and prevent unverified mock mutations."
   },
   "acceptanceVerification": {
     "syntheticSurfacesUseBff": true,
@@ -27,6 +27,10 @@
     "activityMonitorSseStatusWired": true,
     "activityMonitorSseEnvelopeParsingWired": true,
     "formulaStudioPromiseRejectionCatchWired": true,
-    "strictLiveTestsExpanded": true
+    "strictLiveTestsExpanded": true,
+    "strategyDetailRouterRouteSetupFixed": true,
+    "strategyDetailTransitionButtonsDisabled": true,
+    "strategyDetailReadOnlyControlVerified": true,
+    "authoritativePostReceiptReadbackVerified": true
   }
 }
