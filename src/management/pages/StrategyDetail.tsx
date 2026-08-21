@@ -268,20 +268,21 @@ export const StrategyDetail = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {paperLive.map((row) => (
-                        <tr key={row.metric} className="border-b border-border last:border-0">
-                          <td className="p-3 font-medium">{row.metric}</td>
-                          <td className="p-3 text-right text-mono text-sm">{row.paper}</td>
-                          <td className="p-3 text-right text-mono text-sm">{row.live}</td>
-                          <td className={`p-3 text-right text-mono text-sm ${(row.delta ?? "").startsWith("-") ? "text-status-failed" : "text-status-warning"}`}>{row.delta}</td>
-                        </tr>
-                      ))}
-                      {paperLive.length === 0 && (
+                      {paperLive.length === 0 ? (
                         <tr>
-                          <td className="p-4 text-center text-sm text-muted-foreground" colSpan={4}>
-                            {t("common.awaitingData", { defaultValue: "No data yet" })}
+                          <td colSpan={4} className="p-4 text-center text-xs text-muted-foreground">
+                            {t("common.awaitingData", { defaultValue: "No comparison metrics available" })}
                           </td>
                         </tr>
+                      ) : (
+                        paperLive.map((row, i) => (
+                          <tr key={i} className="border-b border-border/50 text-xs">
+                            <td className="p-3 font-medium">{row.metric}</td>
+                            <td className="p-3 text-right font-mono">{row.paper}</td>
+                            <td className="p-3 text-right font-mono">{row.live}</td>
+                            <td className="p-3 text-right font-mono text-muted-foreground">{row.delta}</td>
+                          </tr>
+                        ))
                       )}
                     </tbody>
                   </table>

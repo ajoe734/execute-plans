@@ -1,6 +1,6 @@
 // Postmortem Library — Spec Part 3 §19.6.
 // List + Detail (entered from Incident `postmortem_id`).
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { Card } from "@/components/ui/card";
 import { DataTable } from "@/platform/components/DataTable";
@@ -10,6 +10,8 @@ import { Field } from "../ObjectDetailLayout";
 import { Input } from "@/components/ui/input";
 import { useT } from "@/platform/hooks";
 import { safeDateTime } from "@/lib/utils";
+import { bff } from "@/lib/bff-v1";
+import type { Incident } from "@/lib/bff/types";
 
 interface Postmortem {
   id: string;
@@ -23,17 +25,32 @@ interface Postmortem {
   authoredBy: string;
 }
 
-const SEED: Postmortem[] = [
-  { id: "pm_001", title: "Binance perp API cascading rejects", incidentId: "inc_201", severity: "high", rootCause: "Upstream rate-limit + naive retry burst.", impact: "12 strategies degraded ~38min, est. PnL impact -0.4%.", resolved: "2026-04-22T03:11:00Z", followUps: ["Add adaptive backoff", "Surface rate-limit metric in Risk Center"], authoredBy: "ops-commander" },
-  { id: "pm_002", title: "Capital pool drift breach", incidentId: "inc_198", severity: "medium", rootCause: "Stale rebalance applied after intraday flow.", impact: "Pool ‘USD-Core’ utilization spiked to 96% for 22min.", resolved: "2026-04-15T10:48:00Z", followUps: ["Block apply when stale > 30min"], authoredBy: "risk-lead" },
-  { id: "pm_003", title: "Persona regression after skill update", incidentId: "inc_188", severity: "low", rootCause: "Skill v3 prompt ablation removed risk caveat.", impact: "1 misleading committee response, no trade impact.", resolved: "2026-04-02T14:00:00Z", followUps: ["Mandatory skill eval gate"], authoredBy: "trainer-lead" },
-];
-
 export const PostmortemLibraryPage = () => {
   const t = useT();
+  const [items, setItems] = useState<Postmortem[]>([]);
   const [active, setActive] = useState<Postmortem | null>(null);
   const [q, setQ] = useState("");
-  const rows = useMemo(() => SEED.filter((p) => !q || p.title.toLowerCase().includes(q.toLowerCase()) || p.incidentId.includes(q)), [q]);
+
+  useEffect(() => {
+    bff.incidents.list().then((incidents: Incident[]) => {
+      const pms: Postmortem[] = (incidents || [])
+        .filter((inc) => inc.postmortem)
+        .map((inc) => ({
+          id: inc.postmortem?.id ?? `pm_${inc.id}`,
+          title: inc.postmortem?.title ?? inc.title,
+          incidentId: inc.id,
+          severity: inc.severity ?? "medium",
+          rootCause: inc.postmortem?.rootCause ?? inc.description ?? "N/A",
+          impact: inc.postmortem?.impact ?? "N/A",
+          resolved: inc.resolvedAt ?? inc.startedAt ?? new Date().toISOString(),
+          followUps: inc.postmortem?.followUps ?? [],
+          authoredBy: inc.postmortem?.authoredBy ?? "ops",
+        }));
+      setItems(pms);
+    });
+  }, []);
+
+  const rows = useMemo(() => items.filter((p) => !q || p.title.toLowerCase().includes(q.toLowerCase()) || p.incidentId.includes(q)), [items, q]);
 
   return (
     <>
