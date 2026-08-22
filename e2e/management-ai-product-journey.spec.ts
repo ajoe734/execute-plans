@@ -258,12 +258,17 @@ test.describe("Management AI Product Journey Hosted E2E", () => {
 
     // Require newly appended assistant response turn to appear in dialogue turn
     const assistantTurns = agentDialog.locator(
-      '[role="article"], [data-role="assistant"], .prose',
+      '[role="article"], [data-role="assistant"], .is-assistant, .prose',
     );
     await expect(assistantTurns.last()).toBeVisible({ timeout: 30_000 });
     const lastAssistantTurn = assistantTurns.last();
     const responseText = (await lastAssistantTurn.innerText()).trim();
     expect(responseText.length, "Expected non-empty assistant answer from live provider").toBeGreaterThan(0);
+
+    // Locate the exact turn container enclosing this newly appended assistant turn
+    const newTurnContainer = agentDialog.locator("div.space-y-1\\.5, [class*='space-y']").filter({
+      has: lastAssistantTurn,
+    }).last();
 
     // Verify conversation header renders provider status / session info
     await expect(
@@ -271,12 +276,12 @@ test.describe("Management AI Product Journey Hosted E2E", () => {
     ).toBeVisible({ timeout: 15_000 });
 
     // =========================================================================
-    // 4. Action 1: execute navigate action (unconditional DOM/action assertion)
+    // 4. Action 1: execute navigate action (scoped to newly appended provider turn)
     // =========================================================================
-    const navBtn = agentDialog.locator("button").filter({
+    const navBtn = newTurnContainer.locator("button").filter({
       hasText: /前往排名中心|Navigate|Rankings/i,
     }).first();
-    await expect(navBtn).toBeVisible({ timeout: 15_000 });
+    await expect(navBtn, "Expected navigate UI action button in newly appended provider turn").toBeVisible({ timeout: 15_000 });
     await navBtn.click();
 
     // Assert DOM navigation executed by the action without page.goto bypass
@@ -288,17 +293,17 @@ test.describe("Management AI Product Journey Hosted E2E", () => {
     expect(page.url()).toContain("/management/rankings");
 
     // =========================================================================
-    // 5. Action 2: execute openDrawer action (unconditional DOM/action assertion)
+    // 5. Action 2: execute openDrawer action (scoped to newly appended provider turn)
     // =========================================================================
     const triggerReopen = page.locator('button[aria-label*="Management AI"], button[aria-label="開啟 Management AI"]').first();
     if (await triggerReopen.isVisible({ timeout: 5000 }).catch(() => false)) {
       await triggerReopen.click({ force: true });
     }
 
-    const openDrawerBtn = agentDialog.locator("button").filter({
+    const openDrawerBtn = newTurnContainer.locator("button").filter({
       hasText: /開啟 Inspector 抽屜|Open Inspector|Inspector/i,
     }).first();
-    await expect(openDrawerBtn).toBeVisible({ timeout: 15_000 });
+    await expect(openDrawerBtn, "Expected openDrawer UI action button in newly appended provider turn").toBeVisible({ timeout: 15_000 });
     await openDrawerBtn.click();
 
     // Assert Inspector drawer is opened and visible in the DOM
@@ -308,12 +313,12 @@ test.describe("Management AI Product Journey Hosted E2E", () => {
     await expect(rightDrawer).toBeVisible({ timeout: 10_000 });
 
     // =========================================================================
-    // 6. Action 3: execute focusPanel action (unconditional DOM/action assertion)
+    // 6. Action 3: execute focusPanel action (scoped to newly appended provider turn)
     // =========================================================================
-    const focusPanelBtn = agentDialog.locator("button").filter({
+    const focusPanelBtn = newTurnContainer.locator("button").filter({
       hasText: /聚焦治理隊列|Focus Governance|治理/i,
     }).first();
-    await expect(focusPanelBtn).toBeVisible({ timeout: 15_000 });
+    await expect(focusPanelBtn, "Expected focusPanel UI action button in newly appended provider turn").toBeVisible({ timeout: 15_000 });
     await focusPanelBtn.click();
 
     // Assert Governance Queue panel is focused and visible in DOM
@@ -331,10 +336,10 @@ test.describe("Management AI Product Journey Hosted E2E", () => {
       await triggerReopenGov.click({ force: true });
     }
 
-    const runBffBtn = agentDialog.locator("button").filter({
+    const runBffBtn = newTurnContainer.locator("button").filter({
       hasText: /隔離 Runtime|Quarantine/i,
     }).first();
-    await expect(runBffBtn).toBeVisible({ timeout: 15_000 });
+    await expect(runBffBtn, "Expected runBffAction button in newly appended provider turn").toBeVisible({ timeout: 15_000 });
     await expect(runBffBtn).not.toBeDisabled();
 
     // Record baseline command count prior to confirmation
@@ -360,6 +365,11 @@ test.describe("Management AI Product Journey Hosted E2E", () => {
 
     // Verify command receipt and button is marked executed / disabled
     await expect(runBffBtn).toBeDisabled({ timeout: 15_000 });
+    await expect(
+      newTurnContainer.locator("[class*='Badge']").filter({
+        hasText: /已執行|command|status/i,
+      }).first(),
+    ).toBeVisible({ timeout: 15_000 });
 
     // =========================================================================
     // 8. Replay Prevention Proof: verify exactly-one POST command minted
