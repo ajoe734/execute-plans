@@ -6,7 +6,7 @@
   "merge_target": "dev",
   "branch": "task/PFG-MGMT-JOURNEY-E2E-20260820",
   "status": "ready_for_review",
-  "timestamp": "2026-08-22T16:37:00Z",
+  "timestamp": "2026-08-22T17:12:00Z",
   "artifacts": [
     "e2e/management-product-journey.spec.ts",
     "e2e/management-ai-product-journey.spec.ts",
@@ -150,7 +150,7 @@
     },
     "playwright_e2e": {
       "command": "npx playwright test e2e/management-product-journey.spec.ts e2e/management-ai-product-journey.spec.ts --project=chromium",
-      "result": "passed: 3 passed (13.5s)"
+      "result": "passed: 3 passed (14.6s)"
     },
     "probe_bff_routes": {
       "command": "npm run probe:bff:routes",
