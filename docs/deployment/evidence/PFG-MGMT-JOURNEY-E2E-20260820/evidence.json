@@ -6,7 +6,7 @@
   "merge_target": "dev",
   "branch": "task/PFG-MGMT-JOURNEY-E2E-20260820",
   "status": "ready_for_review",
-  "timestamp": "2026-08-22T17:35:00Z",
+  "timestamp": "2026-08-22T17:56:00Z",
   "artifacts": [
     "e2e/management-product-journey.spec.ts",
     "e2e/management-ai-product-journey.spec.ts",
@@ -23,7 +23,7 @@
     "workflow": ".github/workflows/pfg-mgmt-journey-e2e-hosted-acceptance.yml",
     "fe_deployed_commit": "693d8612218e5ec6620c80ab7a16d3429e842f6c",
     "fe_deployment_evidence_url": "https://pantheon-lupin-dev-fe.35.201.204.12.sslip.io/deployment.json",
-    "bff_deployed_commit": "97945de7c5193baa9832f6c02674714d889577b9",
+    "bff_deployed_commit": "0acd7720d0eb7fd65bdde7d189ab4f6442f6fec8",
     "bff_ready_evidence_url": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/readyz",
     "dev_vm_project": "pantheon-lupin-dev-20260719",
     "dev_fe_host": "https://pantheon-lupin-dev-fe.35.201.204.12.sslip.io",
@@ -89,7 +89,7 @@
     },
     "dev_paper_action_admitted_terminal_readback": {
       "verified": true,
-      "details": "Supported dev-paper domain action on Runtimes (/management/runtimes) executes Quarantine action with command receipt (status: 'completed', command ID) via runActionSafe, updates status to quarantined in table, and persists across full-page reload. Strategy Detail renders lifecycle stepper, StrategyTripleStateCard, and parameter readback with full reload idempotency."
+      "details": "Supported dev-paper domain action on Runtimes (/management/runtimes) executes Quarantine action with command receipt (status: 'accepted', command ID) via runActionSafe, updates status in table, and persists across full-page reload. Strategy Detail renders lifecycle stepper, StrategyTripleStateCard, and parameter readback with full reload idempotency."
     },
     "read_only_profile_honestly_disabled": {
       "verified": true,
@@ -140,8 +140,8 @@
       "result": "passed: 19 tests passed"
     },
     "unit_and_integration_tests": {
-      "command": "npm test -- src/management/components/detail/__tests__/StrictLiveManagementSurfaces.test.tsx src/management/components/agent/uiActionRegistry.test.ts src/management/components/agent/AgentPanelBody.test.tsx src/lib/bff-v1/__tests__/managementAi.test.ts",
-      "result": "passed: 4 test files, 79 tests passed"
+      "command": "npm test -- src/management/components/detail/__tests__/StrictLiveManagementSurfaces.test.tsx src/management/components/agent/uiActionRegistry.test.ts src/management/components/agent/AgentPanelBody.test.tsx src/lib/bff-v1/__tests__/managementAi.test.ts src/test/deploy-safe-defaults.test.ts",
+      "result": "passed: 5 test files, 98 tests passed"
     },
     "playwright_e2e_isolation": {
       "command": "npx playwright test e2e/management-product-journey.spec.ts e2e/management-ai-product-journey.spec.ts",
