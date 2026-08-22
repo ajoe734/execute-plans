@@ -427,6 +427,11 @@ test.describe("Management Console Product Journey Hosted E2E", () => {
     const targetName = (await targetRow.locator("td").first().innerText()).trim();
     expect(targetName.length, "Expected non-empty target runtime identifier").toBeGreaterThan(0);
 
+    // Record pre-action status
+    const preActionStatusCell = targetRow.locator("td").nth(3).or(targetRow.locator("[class*='Badge'], [class*='status']")).first();
+    await expect(preActionStatusCell).toBeVisible({ timeout: 10_000 });
+    const preActionStatus = (await preActionStatusCell.innerText()).trim();
+
     // Trigger action menu specifically on the target runtime row
     const actionMenuButton = targetRow.locator("button").last();
     await expect(actionMenuButton).toBeVisible({ timeout: 15_000 });
@@ -439,19 +444,22 @@ test.describe("Management Console Product Journey Hosted E2E", () => {
     await expect(quarantineItem).toBeVisible({ timeout: 5000 });
     await quarantineItem.click();
 
-    // Verify command receipt toast appears confirming the specific target action
+    // Verify command receipt toast appears confirming the specific target action with status=accepted / command ID
     const receiptToast = page.locator("[data-sonner-toast], [role='status'], .toast").filter({
       hasText: /Quarantine|隔離|Applied|Command|Action|已執行/i,
     }).first();
     await expect(receiptToast).toBeVisible({ timeout: 15_000 });
     const receiptText = (await receiptToast.innerText()).trim();
     expect(receiptText.length, "Expected receipt toast content").toBeGreaterThan(0);
+    expect(receiptText, "Expected command receipt status or command/audit identifier in toast").toMatch(/status\s+accepted|accepted|command\/audit|cmd_|action|已執行/i);
 
     // Wait for table update and verify domain terminal state in the status cell
+    // Must be a named post-action terminal state distinct from initial running|idle|active
     const statusCell = targetRow.locator("td").nth(3).or(targetRow.locator("[class*='Badge'], [class*='status']")).first();
     await expect(statusCell).toBeVisible({ timeout: 10_000 });
+    await expect(statusCell).toHaveText(/quarantine|quarantined|QUARANTINED|隔離/i, { timeout: 15_000 });
     const terminalStatusText = (await statusCell.innerText()).trim();
-    expect(terminalStatusText, "Expected non-empty terminal status badge").toMatch(/quarantine|quarantined|QUARANTINED|隔離|running|idle|active/i);
+    expect(terminalStatusText.toLowerCase(), "Post-action terminal state must not remain running, idle, or active").not.toMatch(/^(running|idle|active)$/i);
 
     // =========================================================================
     // Part 3: Reload page and assert persisted domain terminal readback (idempotency)
@@ -467,6 +475,7 @@ test.describe("Management Console Product Journey Hosted E2E", () => {
     const reloadedStatusCell = reloadedRow.locator("td").nth(3).or(reloadedRow.locator("[class*='Badge'], [class*='status']")).first();
     await expect(reloadedStatusCell).toBeVisible({ timeout: 10_000 });
     await expect(reloadedStatusCell).toHaveText(terminalStatusText);
+    expect((await reloadedStatusCell.innerText()).trim().toLowerCase(), "Reloaded terminal state must not be running, idle, or active").not.toMatch(/^(running|idle|active)$/i);
 
     // Assert live network requests were tracked including mutation and reload readback
     expect(networkEvents.length, "Expected live BFF requests to be tracked").toBeGreaterThan(0);
