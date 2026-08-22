@@ -1,7 +1,7 @@
 {
   "schema_version": "pantheon.agora.product-journey-evidence.v1",
   "task_id": "PFG-AGORA-JOURNEY-E2E-20260820",
-  "owner": "Codex2",
+  "owner": "Codex",
   "reviewer": "Antigravity2",
   "target_repo": "execute-plans",
   "merge_target": "dev",
@@ -34,8 +34,8 @@
   },
   "runtime_evidence": {
     "artifact": "PANTHEON_AUDIT_OUT_DIR/PFG-AGORA-JOURNEY-E2E-20260820-<run-marker>.json",
-    "status": "pending-governed-session",
-    "reason": "No serialized operator-live candidate and governed short-lived session were provided to this worker. The journey is intentionally not run with a fixture, a seed, or an ungoverned credential."
+    "status": "failing-hosted-browser-session",
+    "reason": "Runs 32605187403 and 32605277086 bound the exact operator-live FE/BFF pair and a governed short-lived session. The first checked out dev without the unmerged spec; the second ran PR head 4cbc390e081f6994f0ecec8f1a9411b920ede8cf but the protected Workshop route did not render. Neither run is accepted product evidence."
   },
   "hosted_execution_harness": {
     "workflow": ".github/workflows/pfg-agora-journey-e2e-hosted-acceptance.yml",

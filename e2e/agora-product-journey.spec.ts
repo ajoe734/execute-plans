@@ -71,6 +71,8 @@ type ObservedRequest = {
   status?: number;
 };
 
+const observedTrafficByPage = new WeakMap<Page, ObservedRequest[]>();
+
 function trimTrailingSlash(value: string): string {
   return value.replace(/\/+$/, "");
 }
@@ -272,6 +274,7 @@ async function recordedMutationForKnownTarget(
 
 function observeBffTraffic(page: Page): ObservedRequest[] {
   const requests: ObservedRequest[] = [];
+  observedTrafficByPage.set(page, requests);
   const byRequest = new Map<object, ObservedRequest>();
   page.on("request", (request) => {
     const parsed = new URL(request.url());
@@ -354,6 +357,52 @@ test.describe(`${TASK_ID} strict-live browser journey`, () => {
     "Set PFG_AGORA_JOURNEY_E2E=1 only with a governed short-lived operator session and a disposable serialized live candidate.",
   );
   test.setTimeout(300_000);
+
+  test.afterEach(async ({ page }, testInfo) => {
+    if (testInfo.status === testInfo.expectedStatus) return;
+
+    const pageState = await page
+      .evaluate(() => ({
+        test_ids: Array.from(
+          new Set(
+            Array.from(document.querySelectorAll<HTMLElement>("[data-testid]"))
+              .map((element) => element.dataset.testid ?? "")
+              .filter(Boolean),
+          ),
+        ).slice(0, 200),
+        title: document.title,
+        url: window.location.href,
+      }))
+      .catch(() => ({ test_ids: [] as string[], title: "", url: page.url() }));
+    const diagnosticPath = `${EVIDENCE_DIR}/${TASK_ID}-failure-${randomUUID()}.json`;
+    mkdirSync(EVIDENCE_DIR, { recursive: true });
+    writeFileSync(
+      diagnosticPath,
+      JSON.stringify(
+        {
+          errors: testInfo.errors.map((error) => error.message.slice(0, 2_000)),
+          observed_requests: (observedTrafficByPage.get(page) ?? []).map(
+            ({ authorization, method, origin, path, status }) => ({
+              authorization,
+              method,
+              origin,
+              path,
+              status,
+            }),
+          ),
+          page: pageState,
+          status: testInfo.status,
+          task_id: TASK_ID,
+        },
+        null,
+        2,
+      ),
+    );
+    await testInfo.attach(`${TASK_ID}-failure-diagnostic`, {
+      path: diagnosticPath,
+      contentType: "application/json",
+    });
+  });
 
   test("creates and reads back the Workshop-to-Governance product journey without mocks", async ({
     page,
