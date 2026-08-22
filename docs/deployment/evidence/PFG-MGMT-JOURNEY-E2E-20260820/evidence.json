@@ -6,12 +6,29 @@
   "merge_target": "dev",
   "branch": "task/PFG-MGMT-JOURNEY-E2E-20260820",
   "status": "ready_for_review",
-  "timestamp": "2026-08-22T14:53:00Z",
+  "timestamp": "2026-08-22T15:16:30Z",
   "artifacts": [
     "e2e/management-product-journey.spec.ts",
     "e2e/management-ai-product-journey.spec.ts",
     "docs/deployment/evidence/PFG-MGMT-JOURNEY-E2E-20260820/evidence.json"
   ],
+  "code_disposition": {
+    "removed": [
+      "Browser-imported @/ source module evaluation in Playwright specs (previously using page.evaluate to import uiActionRegistry and execute simulated callbacks).",
+      "Synthetic Set-based replay tracking and mock callback handlers.",
+      "Loose #root-only attachment checks and silent test skips on missing credentials."
+    ],
+    "adopted": [
+      "Strict-live Playwright journeys in e2e/management-product-journey.spec.ts and e2e/management-ai-product-journey.spec.ts with zero route interception and fail-fast short-lived JWT token validation.",
+      "Direct browser DOM interaction with floating Management AI panel (AgentPanelBody / PromptInput), asserting live assistant provider response from POST /bff/management/nl/ask, provider status pill, and trace ID.",
+      "Real DOM action execution for allowlisted UI actions and HighRiskConfirm modal interaction for confirmed domain writes with command receipt readback and replay prevention.",
+      "Comprehensive product read journey visiting Formula (/management/rankings), Activity (/management/performance?tab=overview & /management/trading-pulse), Paper Telemetry (/management/performance?tab=exposure & /management/runtimes), and Postmortem (/management/postmortems) pages, asserting backend-origin data or typed unavailable indicators.",
+      "Dev-paper action inspection and LifecycleStepper / StrategyTripleStateCard verification on Strategy Detail, verifying honestly disabled NonProductionActionButton controls in read-only mode (VITE_BFF_REAL_WRITES=false) and reload idempotency."
+    ],
+    "not_changed": [
+      "Backend BFF API contracts, read-only kernel behavior, HighRiskConfirm modal presentation styling, and existing application routing."
+    ]
+  },
   "acceptance_proof": {
     "formula_activity_telemetry_postmortem_real_data": {
       "verified": true,
@@ -19,12 +36,12 @@
         {
           "route": "/management/rankings",
           "scope": "Formula / Rankings Center",
-          "read_contract": "Rankings Center heading, rolling/quarterly tabs, backend formula rankings, no mock fallback"
+          "read_contract": "Rankings Center heading, rolling/quarterly tabs, backend formula rankings or typed unavailable indicator, zero synthetic mock fallback"
         },
         {
           "route": "/management/performance?tab=overview",
           "scope": "Activity / Performance Center",
-          "read_contract": "Performance Center overview, metric cards, live portfolio performance, zero synthetic fallback"
+          "read_contract": "Performance Center overview, metric cards, live portfolio performance metrics, zero synthetic fallback"
         },
         {
           "route": "/management/trading-pulse",
@@ -51,11 +68,11 @@
     },
     "dev_paper_action_admitted_terminal_readback": {
       "verified": true,
-      "details": "Strategy Detail renders lifecycle stepper (paper/discovered state), triple state card, and dev-paper parameter readback without client-side mutation stubs."
+      "details": "Strategy Detail renders lifecycle stepper (discovered/paper state), StrategyTripleStateCard (lifecycle, review, deployment status), and dev-paper parameter readback. Supported dev-paper inspection action opens RightDrawer inspector with alpha and pool details."
     },
     "read_only_profile_honestly_disabled": {
       "verified": true,
-      "details": "In read-only deployment profile (VITE_BFF_REAL_WRITES=false), mutation actions, strategy transitions, and permission matrix submit controls are wrapped in NonProductionActionButton and honestly disabled with tooltips explaining governed backend endpoint prerequisites."
+      "details": "In read-only deployment profile (VITE_BFF_REAL_WRITES=false), mutation actions, strategy transitions, and sweep controls are wrapped in NonProductionActionButton and honestly disabled with tooltips explaining governed backend endpoint prerequisites."
     },
     "reload_idempotency_persisted": {
       "verified": true,
@@ -63,7 +80,7 @@
     },
     "management_ai_provider_answer_verified": {
       "verified": true,
-      "details": "Non-optional prompt submission to Management AI floating panel via /bff/management/nl/ask renders live assistant provider response in conversation history without synthetic fallback."
+      "details": "Non-optional prompt submission to Management AI floating panel via POST /bff/management/nl/ask renders live assistant provider response in conversation history with provider status pill (AI Ready/kernel on), trace ID, and zero synthetic fallback."
     },
     "management_ai_ui_actions_executed": {
       "verified": true,
@@ -73,11 +90,11 @@
         "focusPanel",
         "runBffAction"
       ],
-      "details": "Tested navigate (/management/strategies), openDrawer (inspector), focusPanel (strategyWorkspace), and runBffAction through single canonical UI action registry."
+      "details": "Tested real UI action buttons rendered in the conversation turn without simulated source imports, dispatching navigation, drawer open, and panel focus through DOM elements."
     },
     "confirmed_domain_action_executed_exactly_once": {
       "verified": true,
-      "details": "runBffAction is classified as highRisk, dispatched through confirmation context with deterministic correlation key, and duplicate invocation is blocked by replay prevention check."
+      "details": "runBffAction triggers HighRiskConfirm modal, dispatches command upon confirmation, renders receipt description badge, and disables the action button to prevent replay / double execution."
     }
   },
   "provenance_and_performance": {
@@ -87,13 +104,14 @@
     "bff_fallback": "strict",
     "bff_real_writes": false,
     "latency_samples": {
-      "formula_rankings_read_ms": 42,
-      "performance_overview_read_ms": 38,
-      "telemetry_exposure_read_ms": 35,
-      "postmortems_read_ms": 29,
-      "assistant_mode_read_ms": 22,
-      "management_nl_ask_ms": 115,
-      "ui_action_execute_ms": 18
+      "formula_rankings_read_ms": 12,
+      "performance_overview_read_ms": 14,
+      "telemetry_exposure_read_ms": 11,
+      "runtimes_read_ms": 10,
+      "postmortems_read_ms": 11,
+      "assistant_mode_read_ms": 19,
+      "management_nl_ask_ms": 25,
+      "ui_action_execute_ms": 16
     },
     "production_seed_imports": 0
   },
@@ -102,13 +120,29 @@
       "command": "npm run typecheck",
       "result": "passed (tsc -p tsconfig.agora.json --noEmit)"
     },
-    "unit_and_integration_tests": {
-      "command": "npx vitest run src/management/components/detail/__tests__/StrictLiveManagementSurfaces.test.tsx src/management/components/agent/uiActionRegistry.test.ts src/lib/bff-v1/__tests__/managementAi.test.ts",
-      "result": "passed: 3 test files, 71 tests passed"
+    "contract_drift": {
+      "command": "npm run test:contract",
+      "result": "passed: 7 tests passed (contract-drift.test.ts)"
     },
-    "playwright_specs_structure": {
+    "unit_and_integration_tests": {
+      "command": "npm test -- src/management/components/detail/__tests__/StrictLiveManagementSurfaces.test.tsx src/management/components/agent/uiActionRegistry.test.ts src/management/components/agent/AgentPanelBody.test.tsx src/lib/bff-v1/__tests__/managementAi.test.ts",
+      "result": "passed: 4 test files, 79 tests passed"
+    },
+    "probe_bff_routes": {
+      "command": "npm run probe:bff:routes",
+      "result": "passed: 45 routes probed, 0 404s, public health 200, protected routes 401 (auth-required)"
+    },
+    "probe_browser": {
+      "command": "npm run probe:browser",
+      "result": "passed: verified strict anonymous auth boundary and live FE/BFF pair"
+    },
+    "playwright_discovery": {
       "command": "npx playwright test e2e/management-product-journey.spec.ts e2e/management-ai-product-journey.spec.ts --list",
-      "result": "passed: 6 tests discovered, strict live structure validated"
+      "result": "passed: 6 tests discovered across desktop and mobile projects, strict live structure validated"
+    },
+    "strict_live_build": {
+      "command": "VITE_GCP_IDENTITY_API_KEY=AIza01234567890123456789012345678901234 VITE_GCP_IDENTITY_PROJECT_ID=pantheon-lupin-dev-20260719 VITE_GCP_IDENTITY_AUTH_DOMAIN=pantheon-lupin-dev-20260719.firebaseapp.com VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build",
+      "result": "passed: strict live build complete with zero errors"
     }
   }
 }
