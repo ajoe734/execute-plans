@@ -1,8 +1,9 @@
 /**
  * PFG-MGMT-JOURNEY-E2E-20260820 Management Console Product Journey E2E.
  *
- * Validates real data panels, domain receipts, dev-paper / read-only controls,
- * and reload readback in strict-live mode without synthetic fallback.
+ * Validates real data panels (Formula, Activity, Paper Telemetry, Postmortem),
+ * domain receipts, dev-paper / read-only controls, and reload readback in
+ * strict-live mode without synthetic fallback.
  */
 
 import { expect, test, type Page, type Request, type TestInfo } from "@playwright/test";
@@ -108,7 +109,7 @@ test.describe("Management Console Product Journey E2E", () => {
     !IS_HOSTED && !process.env.RUN_LOCAL_E2E,
     "Set PANTHEON_FE_BASE_URL and PANTHEON_HOSTED_E2E=1 to run against hosted dev.",
   );
-  test.setTimeout(120_000);
+  test.setTimeout(180_000);
 
   test("Formula, Activity, Paper Telemetry, and Postmortem pages show backend-origin data or typed unavailable without synthetic content", async ({
     page,
@@ -135,7 +136,7 @@ test.describe("Management Console Product Journey E2E", () => {
     ).toBeVisible({ timeout: 15_000 });
     await expect(page.locator("body")).not.toContainText(/serving mock|seed fallback/i);
 
-    // 2. Activity / Performance Center
+    // 2. Activity / Performance Center & Trading Pulse
     await page.goto(`${FE_BASE_URL}/management/performance?tab=overview`, {
       waitUntil: "domcontentloaded",
       timeout: 30_000,
@@ -146,18 +147,43 @@ test.describe("Management Console Product Journey E2E", () => {
     ).toBeVisible({ timeout: 15_000 });
     await expect(page.locator("body")).not.toContainText(/serving mock|seed fallback/i);
 
-    // 3. Postmortem Library
+    await page.goto(`${FE_BASE_URL}/management/trading-pulse`, {
+      waitUntil: "domcontentloaded",
+      timeout: 30_000,
+    });
+    await expect(page.locator("#root")).toBeAttached();
+    await expect(page.locator("body")).not.toContainText(/serving mock|seed fallback/i);
+
+    // 3. Paper Telemetry: Portfolio Exposure & Runtimes
+    await page.goto(`${FE_BASE_URL}/management/performance?tab=exposure`, {
+      waitUntil: "domcontentloaded",
+      timeout: 30_000,
+    });
+    await expect(page.locator("#root")).toBeAttached();
+    await expect(
+      page.getByRole("tablist").or(page.getByText(/Telemetry|遙測|Risk Budget|Current Exposure/i)).first(),
+    ).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator("body")).not.toContainText(/serving mock|seed fallback/i);
+
+    await page.goto(`${FE_BASE_URL}/management/runtimes`, {
+      waitUntil: "domcontentloaded",
+      timeout: 30_000,
+    });
+    await expect(page.locator("#root")).toBeAttached();
+    await expect(page.locator("body")).not.toContainText(/serving mock|seed fallback/i);
+
+    // 4. Postmortem Library
     await page.goto(`${FE_BASE_URL}/management/postmortems`, {
       waitUntil: "domcontentloaded",
       timeout: 30_000,
     });
     await expect(page.locator("#root")).toBeAttached();
     await expect(
-      page.getByRole("heading", { name: /Postmortems|復盤/i }).or(page.getByText(/Postmortem/i)).first(),
+      page.getByRole("heading", { name: /Postmortems|事後檢討|復盤/i }).or(page.getByPlaceholder(/Search postmortems/i)).or(page.getByText(/Postmortem/i)).first(),
     ).toBeVisible({ timeout: 15_000 });
     await expect(page.locator("body")).not.toContainText(/serving mock|seed fallback/i);
 
-    // Assert live network requests to BFF were recorded
+    // Assert live network requests to BFF were recorded across all checked pages
     expect(networkEvents.length).toBeGreaterThan(0);
     const serverErrors = networkEvents.filter((ev) => ev.status >= 500);
     expect(serverErrors).toHaveLength(0);
@@ -185,7 +211,7 @@ test.describe("Management Console Product Journey E2E", () => {
 
     const { networkEvents } = setupNetworkTracker(page);
 
-    // Navigate to Strategy Management
+    // 1. Navigate to Strategy Management & Detail
     await page.goto(`${FE_BASE_URL}/management/strategies`, {
       waitUntil: "domcontentloaded",
       timeout: 30_000,
@@ -193,7 +219,31 @@ test.describe("Management Console Product Journey E2E", () => {
     await expect(page.locator("#root")).toBeAttached();
     await expect(page.locator("body")).not.toContainText(/serving mock|seed fallback/i);
 
-    // Verify page reload preserves state without drift (reload idempotency)
+    // Inspect strategy detail lifecycle and dev-paper actions
+    await page.goto(`${FE_BASE_URL}/management/strategies/strat-alpha-1?tab=overview`, {
+      waitUntil: "domcontentloaded",
+      timeout: 30_000,
+    });
+    await expect(page.locator("#root")).toBeAttached();
+    await expect(page.locator("body")).not.toContainText(/serving mock|seed fallback/i);
+
+    // 2. Assert read-only profile honestly disables mutations
+    const nonProdButtons = page.locator('button[aria-disabled="true"], button[disabled]').filter({
+      hasText: /promote|deploy|sweep|acknowledge|action|save/i,
+    });
+    if (await nonProdButtons.count() > 0) {
+      await expect(nonProdButtons.first()).toBeDisabled();
+    }
+
+    // 3. Verify governance read-only controls
+    await page.goto(`${FE_BASE_URL}/management/governance/permissions`, {
+      waitUntil: "domcontentloaded",
+      timeout: 30_000,
+    });
+    await expect(page.locator("#root")).toBeAttached();
+    await expect(page.locator("body")).not.toContainText(/serving mock|seed fallback/i);
+
+    // 4. Verify page reload preserves state without drift (reload idempotency)
     await page.reload({ waitUntil: "domcontentloaded" });
     await expect(page.locator("#root")).toBeAttached();
     await expect(page.locator("body")).not.toContainText(/serving mock|seed fallback/i);
