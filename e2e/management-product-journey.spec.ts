@@ -216,14 +216,18 @@ test.describe("Management Console Product Journey E2E", () => {
     // 1. Formula / Rankings Page
     await page.goto(frontendUrl("/management/rankings"), { waitUntil: "domcontentloaded", timeout: 30_000 });
     await expect(page.locator("#root")).toBeAttached();
+    await expect(page.getByRole("heading", { name: /Rankings Center/i })).toBeVisible();
+    await expect(page.getByText("Dev Alpha Momentum 001")).toBeVisible();
 
-    // 2. Activity Page
-    await page.goto(frontendUrl("/management/activity"), { waitUntil: "domcontentloaded", timeout: 30_000 });
+    // 2. Activity / Portfolio Book Page
+    await page.goto(frontendUrl("/management/performance?tab=overview"), { waitUntil: "domcontentloaded", timeout: 30_000 });
     await expect(page.locator("#root")).toBeAttached();
+    await expect(page.getByRole("heading", { name: /Performance Center/i })).toBeVisible();
 
     // 3. Postmortem Library Page
     await page.goto(frontendUrl("/management/postmortems"), { waitUntil: "domcontentloaded", timeout: 30_000 });
     await expect(page.locator("#root")).toBeAttached();
+    await expect(page.getByText("Dev Paper Telemetry Calibration Postmortem")).toBeVisible();
 
     // Verify calls were captured
     expect(calls.some((url) => url.includes("/bff/"))).toBe(true);
@@ -244,12 +248,14 @@ test.describe("Management Console Product Journey E2E", () => {
       token: LOCAL_FIXTURE_AUTH_TOKEN,
     });
 
-    await page.goto(frontendUrl("/management/strategies"), { waitUntil: "domcontentloaded", timeout: 30_000 });
+    await page.goto(frontendUrl("/management/performance?tab=overview"), { waitUntil: "domcontentloaded", timeout: 30_000 });
     await expect(page.locator("#root")).toBeAttached();
+    await expect(page.getByRole("heading", { name: /Performance Center/i })).toBeVisible();
 
     // Perform reload and verify page remains stable
     await page.reload({ waitUntil: "domcontentloaded" });
     await expect(page.locator("#root")).toBeAttached();
+    await expect(page.getByRole("heading", { name: /Performance Center/i })).toBeVisible();
 
     expect(calls.length).toBeGreaterThan(0);
   });
