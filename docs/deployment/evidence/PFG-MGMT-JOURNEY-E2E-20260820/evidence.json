@@ -23,7 +23,7 @@
     "workflow": ".github/workflows/pfg-mgmt-journey-e2e-hosted-acceptance.yml",
     "fe_deployed_commit": "693d8612218e5ec6620c80ab7a16d3429e842f6c",
     "fe_deployment_evidence_url": "https://pantheon-lupin-dev-fe.35.201.204.12.sslip.io/deployment.json",
-    "bff_deployed_commit": "97945de7c5193baa9832f6c02674714d889577b9",
+    "bff_deployed_commit": "ab3377dcad634ee88ce5ad28c54f657098cda67a",
     "bff_ready_evidence_url": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/readyz",
     "dev_vm_project": "pantheon-lupin-dev-20260719",
     "dev_fe_host": "https://pantheon-lupin-dev-fe.35.201.204.12.sslip.io",
