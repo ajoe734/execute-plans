@@ -36,6 +36,12 @@
     "status": "pending-governed-session",
     "reason": "No serialized operator-live candidate and governed short-lived session were provided to this worker. The journey is intentionally not run with a fixture, a seed, or an ungoverned credential."
   },
+  "hosted_execution_harness": {
+    "workflow": ".github/workflows/pfg-agora-journey-e2e-hosted-acceptance.yml",
+    "authentication": "The workflow mints a short-lived dev-login operator bearer and injects it into the browser session; no fixture token or human MFA session is used.",
+    "fail_closed_precondition": "deployment.json must bind the supplied FE/BFF SHAs and report deploymentProfile=operator-live with VITE_BFF_REAL_WRITES=true before Playwright can run.",
+    "artifact": "GitHub Actions artifact pfg-agora-journey-e2e-hosted-acceptance-<run-id>-<attempt>"
+  },
   "local_validation": {
     "typecheck": {
       "command": "npm run typecheck",
