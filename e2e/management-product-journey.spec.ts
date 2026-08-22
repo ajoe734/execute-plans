@@ -328,16 +328,31 @@ test.describe("Management Console Product Journey Hosted E2E", () => {
     const serverErrors = networkEvents.filter((ev) => ev.status >= 500);
     expect(serverErrors, "Expected zero 5xx server errors").toHaveLength(0);
 
-    // Assert per-surface live BFF endpoints were contacted
-    const rankingEvents = networkEvents.filter((ev) => ev.pathname.includes("/ranking"));
-    const perfEvents = networkEvents.filter((ev) => ev.pathname.includes("/performance") || ev.pathname.includes("/metrics"));
-    const activityEvents = networkEvents.filter((ev) => ev.pathname.includes("/activity") || ev.pathname.includes("/events") || ev.pathname.includes("/trading-pulse"));
-    const runtimeEvents = networkEvents.filter((ev) => ev.pathname.includes("/runtimes") || ev.pathname.includes("/persona-fleet"));
-    const incidentEvents = networkEvents.filter((ev) => ev.pathname.includes("/incidents") || ev.pathname.includes("/postmortems"));
+    // Require each surface specifically to have its own 2xx BFF request
+    const rankingEvents = networkEvents.filter(
+      (ev) => ev.status >= 200 && ev.status < 300 && (ev.pathname.includes("/ranking") || ev.pathname.includes("/formulas")),
+    );
+    expect(rankingEvents.length, "Expected specific 2xx BFF request for Formula / Rankings").toBeGreaterThan(0);
 
-    expect(rankingEvents.length + perfEvents.length + activityEvents.length + runtimeEvents.length + incidentEvents.length,
-      "Expected live BFF endpoints for ranking, performance, activity, runtimes, and incidents to be queried",
-    ).toBeGreaterThan(0);
+    const perfEvents = networkEvents.filter(
+      (ev) => ev.status >= 200 && ev.status < 300 && (ev.pathname.includes("/performance") || ev.pathname.includes("/metrics")),
+    );
+    expect(perfEvents.length, "Expected specific 2xx BFF request for Performance").toBeGreaterThan(0);
+
+    const activityEvents = networkEvents.filter(
+      (ev) => ev.status >= 200 && ev.status < 300 && (ev.pathname.includes("/activity") || ev.pathname.includes("/events") || ev.pathname.includes("/trading-pulse")),
+    );
+    expect(activityEvents.length, "Expected specific 2xx BFF request for Activity / Trading Pulse").toBeGreaterThan(0);
+
+    const runtimeEvents = networkEvents.filter(
+      (ev) => ev.status >= 200 && ev.status < 300 && (ev.pathname.includes("/runtimes") || ev.pathname.includes("/persona-fleet")),
+    );
+    expect(runtimeEvents.length, "Expected specific 2xx BFF request for Paper Telemetry / Runtimes").toBeGreaterThan(0);
+
+    const incidentEvents = networkEvents.filter(
+      (ev) => ev.status >= 200 && ev.status < 300 && (ev.pathname.includes("/incidents") || ev.pathname.includes("/postmortems")),
+    );
+    expect(incidentEvents.length, "Expected specific 2xx BFF request for Postmortems").toBeGreaterThan(0);
 
     mkdirSync(EVIDENCE_DIR, { recursive: true });
     const screenshotPath = `${EVIDENCE_DIR}/pfg-mgmt-product-journey-pages.png`;
@@ -381,19 +396,20 @@ test.describe("Management Console Product Journey Hosted E2E", () => {
     await expect(page.locator("#root")).toBeAttached();
     await expect(page.locator("body")).not.toContainText(/serving mock|seed fallback/i);
 
-    // Verify Strategy list loads and contains rows or empty state
-    await expect(page.locator("h1, h2, [role='heading'], main").first()).toBeVisible({ timeout: 15_000 });
-
-    // Navigate to first Strategy Detail row
+    // Verify Strategy list loads and navigate to first Strategy Detail row unconditionally
     const strategyRow = page.locator("table tbody tr, [role='row']").first();
-    if (await strategyRow.isVisible({ timeout: 5000 }).catch(() => false)) {
-      await strategyRow.click();
-      await expect(page.locator("h1, h2, [role='heading'], main").first()).toBeVisible({ timeout: 15_000 });
-      // Mandatory assertion: verify read-only action buttons are honestly disabled on read-only deployment profile
-      const disabledButtons = page.locator("main button[disabled], main button[aria-disabled='true']");
-      await expect(disabledButtons.first()).toBeVisible({ timeout: 15_000 });
-      await expect(disabledButtons.first()).toBeDisabled();
-    }
+    await expect(strategyRow).toBeVisible({ timeout: 15_000 });
+    await strategyRow.click();
+
+    // Mandatory assertions on Strategy Detail: lifecycle / triple state and disabled controls
+    await expect(page.locator("h1, h2, [role='heading'], main").first()).toBeVisible({ timeout: 15_000 });
+    await expect(
+      page.locator("text=Lifecycle").or(page.locator("text=Triple State")).or(page.locator("[class*='Stepper']")).or(page.locator("[class*='Card']")).first(),
+    ).toBeVisible({ timeout: 15_000 });
+
+    const disabledButtons = page.locator("main button[disabled], main button[aria-disabled='true']");
+    await expect(disabledButtons.first()).toBeVisible({ timeout: 15_000 });
+    await expect(disabledButtons.first()).toBeDisabled();
 
     // =========================================================================
     // Part 2: Supported dev-paper domain action on Runtimes (/management/runtimes)
@@ -405,10 +421,11 @@ test.describe("Management Console Product Journey Hosted E2E", () => {
     await expect(page.locator("#root")).toBeAttached();
     await expect(page.locator("body")).not.toContainText(/serving mock|seed fallback/i);
 
-    // Find first actionable runtime row and bind target identifier
+    // Find first actionable runtime row and bind exact target identifier
     const targetRow = page.locator("table tbody tr, [role='row']").first();
     await expect(targetRow).toBeVisible({ timeout: 15_000 });
     const targetName = (await targetRow.locator("td").first().innerText()).trim();
+    expect(targetName.length, "Expected non-empty target runtime identifier").toBeGreaterThan(0);
 
     // Trigger action menu specifically on the target runtime row
     const actionMenuButton = targetRow.locator("button").last();
@@ -427,12 +444,14 @@ test.describe("Management Console Product Journey Hosted E2E", () => {
       hasText: /Quarantine|隔離|Applied|Command|Action|已執行/i,
     }).first();
     await expect(receiptToast).toBeVisible({ timeout: 15_000 });
+    const receiptText = (await receiptToast.innerText()).trim();
+    expect(receiptText.length, "Expected receipt toast content").toBeGreaterThan(0);
 
     // Wait for table update and verify domain terminal state in the status cell
     const statusCell = targetRow.locator("td").nth(3).or(targetRow.locator("[class*='Badge'], [class*='status']")).first();
     await expect(statusCell).toBeVisible({ timeout: 10_000 });
     const terminalStatusText = (await statusCell.innerText()).trim();
-    expect(terminalStatusText.length, "Expected non-empty terminal status badge").toBeGreaterThan(0);
+    expect(terminalStatusText, "Expected non-empty terminal status badge").toMatch(/quarantine|quarantined|QUARANTINED|隔離|running|idle|active/i);
 
     // =========================================================================
     // Part 3: Reload page and assert persisted domain terminal readback (idempotency)
@@ -442,13 +461,12 @@ test.describe("Management Console Product Journey Hosted E2E", () => {
     await expect(page.locator("body")).not.toContainText(/serving mock|seed fallback/i);
     await expect(page.locator("h1, h2, [role='heading'], main").filter({ hasText: /Runtimes|執行環境/i }).first()).toBeVisible();
 
-    // Re-query the target row and assert the exact same domain terminal status remains after reload
-    const reloadedRow = page.locator("table tbody tr, [role='row']").first();
+    // Re-query the target row binding targetName and assert the exact same domain terminal status remains after reload
+    const reloadedRow = page.locator("table tbody tr").filter({ hasText: targetName }).first();
     await expect(reloadedRow).toBeVisible({ timeout: 15_000 });
     const reloadedStatusCell = reloadedRow.locator("td").nth(3).or(reloadedRow.locator("[class*='Badge'], [class*='status']")).first();
     await expect(reloadedStatusCell).toBeVisible({ timeout: 10_000 });
-    const reloadedStatusText = (await reloadedStatusCell.innerText()).trim();
-    expect(reloadedStatusText, "Expected persisted domain terminal status across reload").toBe(terminalStatusText);
+    await expect(reloadedStatusCell).toHaveText(terminalStatusText);
 
     // Assert live network requests were tracked including mutation and reload readback
     expect(networkEvents.length, "Expected live BFF requests to be tracked").toBeGreaterThan(0);
@@ -456,7 +474,7 @@ test.describe("Management Console Product Journey Hosted E2E", () => {
     expect(serverErrors, "Expected zero 5xx server errors").toHaveLength(0);
 
     const mutationEvents = networkEvents.filter(
-      (ev) => ev.method === "POST" && (ev.pathname.includes("/commands") || ev.pathname.includes("/runtimes")),
+      (ev) => ev.method === "POST" && (ev.pathname.includes("/commands") || ev.pathname.includes("/runtimes") || ev.pathname.includes("/actions")),
     );
     expect(mutationEvents.length, "Expected mutation POST request to be tracked").toBeGreaterThanOrEqual(1);
 
