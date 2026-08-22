@@ -88,15 +88,15 @@
     },
     "dev_paper_action_admitted_terminal_readback": {
       "verified": true,
-      "details": "Strategy Detail renders lifecycle stepper (discovered/paper state), StrategyTripleStateCard (lifecycle, review, deployment status), and dev-paper parameter readback. Supported dev-paper inspection action opens RightDrawer inspector with alpha and pool details."
+      "details": "Supported dev-paper domain action on Runtimes (/management/runtimes) executes Quarantine action with command receipt (status: 'completed', command ID) via runActionSafe, updates status to quarantined in table, and persists across full-page reload. Strategy Detail renders lifecycle stepper, StrategyTripleStateCard, and parameter readback with full reload idempotency."
     },
     "read_only_profile_honestly_disabled": {
       "verified": true,
-      "details": "In read-only deployment profile (VITE_BFF_REAL_WRITES=false), mutation actions, strategy transitions, and sweep controls are wrapped in NonProductionActionButton and honestly disabled with tooltips explaining governed backend endpoint prerequisites."
+      "details": "In read-only deployment profile (VITE_BFF_REAL_WRITES=false), mutation actions, strategy transitions, and sweep controls are wrapped in NonProductionActionButton and honestly disabled with tooltips explaining governed backend endpoint prerequisites, verified before and after reload."
     },
     "reload_idempotency_persisted": {
       "verified": true,
-      "details": "Full page reload preserves exact route state, parameters, lifecycle status, and read-only controls without state drift or synthetic resets."
+      "details": "Full page reload preserves exact route state, runtime quarantine terminal state, strategy parameters, lifecycle status, and read-only controls without state drift or synthetic resets."
     },
     "management_ai_provider_answer_verified": {
       "verified": true,
