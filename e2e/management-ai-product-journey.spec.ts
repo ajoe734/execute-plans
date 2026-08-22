@@ -169,7 +169,16 @@ test.describe("Management AI Product Journey E2E", () => {
       token: LOCAL_FIXTURE_AUTH_TOKEN,
     });
 
-    await page.goto(frontendUrl("/management"), { waitUntil: "domcontentloaded", timeout: 30_000 });
+    await page.goto(frontendUrl("/management/cockpit"), { waitUntil: "domcontentloaded", timeout: 30_000 });
     await expect(page.locator("#root")).toBeAttached();
+
+    // Verify AI drawer / ask button is attached
+    const askButton = page.getByRole("button", { name: /ask management/i });
+    if (await askButton.isVisible()) {
+      await askButton.click();
+      await expect(page.getByRole("dialog")).toBeVisible();
+    }
+
+    expect(calls.length).toBeGreaterThan(0);
   });
 });
