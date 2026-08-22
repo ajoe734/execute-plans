@@ -133,6 +133,24 @@ function envelope(data: unknown, route: string): Record<string, unknown> {
 }
 
 async function installLoopbackProductFixtures(page: Page): Promise<void> {
+  let runtimeState = [
+    {
+      id: "runtime-paper-01",
+      runtime_id: "runtime-paper-01",
+      runtimeId: "runtime-paper-01",
+      name: "Dev Paper Execution Runtime",
+      env: "paper",
+      kind: "executor",
+      status: "running",
+      cpu: 0.28,
+      memory: 0.42,
+      latencyP95Ms: 68,
+      uptimePct: 99.98,
+      personaId: "persona-alpha-1",
+      updatedAt: new Date().toISOString(),
+    },
+  ];
+
   await page.route(/^https?:\/\/[^/]+\/(?:bff|health|healthz|readyz).*/, async (route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -301,23 +319,42 @@ async function installLoopbackProductFixtures(page: Page): Promise<void> {
 
     // Paper Telemetry / Runtimes
     if (path === "/bff/runtimes") {
-      await fulfillJson(route, envelope([
-        {
-          id: "runtime-paper-01",
-          runtime_id: "runtime-paper-01",
-          runtimeId: "runtime-paper-01",
-          name: "Dev Paper Execution Runtime",
-          env: "paper",
-          kind: "executor",
-          status: "running",
-          cpu: 0.28,
-          memory: 0.42,
-          latencyP95Ms: 68,
-          uptimePct: 99.98,
-          personaId: "persona-alpha-1",
-          updatedAt: new Date().toISOString(),
+      await fulfillJson(route, envelope(runtimeState, path));
+      return;
+    }
+
+    // Supported dev-paper commands & actions
+    if (path === "/bff/v1/commands" || path.startsWith("/bff/actions")) {
+      const commandId = "cmd-runtime-paper-01-quarantine";
+      runtimeState = runtimeState.map((r) =>
+        r.id === "runtime-paper-01" ? { ...r, status: "quarantined", updatedAt: new Date().toISOString() } : r,
+      );
+      await fulfillJson(route, {
+        status: "accepted",
+        data: {
+          commandId,
+          command_id: commandId,
+          actionId: commandId,
+          receipt_id: `rcpt-${commandId}`,
+          status: "completed",
+          receipt: {
+            commandId,
+            command_id: commandId,
+            receipt_id: `rcpt-${commandId}`,
+            status: "completed",
+            trackingUrl: `/management/jobs/${commandId}`,
+          },
         },
-      ], path));
+        meta: {
+          contract: "PFG-MGMT-JOURNEY-E2E-20260820",
+          durable: true,
+          liveCapitalSideEffects: false,
+          idempotency: {
+            idempotencyKey: request.headers()["idempotency-key"] || "idem-key",
+            replayed: false,
+          },
+        },
+      });
       return;
     }
 
@@ -343,7 +380,7 @@ async function installLoopbackProductFixtures(page: Page): Promise<void> {
       return;
     }
 
-    // Strategy Detail & Actions
+    // Strategy Detail & Collections
     if (path === "/bff/strategies/strat-alpha-1" || path === "/bff/strategies/strat-alpha-1?tab=overview") {
       const strategyData = {
         id: "strat-alpha-1",
@@ -385,7 +422,17 @@ async function installLoopbackProductFixtures(page: Page): Promise<void> {
       return;
     }
 
-    if (path === "/bff/jobs" || path === "/bff/audit" || path === "/bff/approvals" || path === "/bff/alerts" || path === "/bff/artifacts" || path === "/bff/research" || path === "/bff/evolution") {
+    if (
+      path === "/bff/jobs" ||
+      path === "/bff/audit" ||
+      path === "/bff/approvals" ||
+      path === "/bff/alerts" ||
+      path === "/bff/artifacts" ||
+      path === "/bff/research-experiments" ||
+      path === "/bff/evolution-programs" ||
+      path === "/bff/research" ||
+      path === "/bff/evolution"
+    ) {
       await fulfillJson(route, envelope([], path));
       return;
     }
@@ -574,11 +621,23 @@ test.describe("Management Console Product Journey E2E", () => {
           PANTHEON_FE_BASE_URL: effectiveFeBaseUrl,
         },
       });
+      await page.addInitScript(() => {
+        try {
+          window.sessionStorage.setItem("pantheon.e2e.realWrites", "true");
+          (window as unknown as { __PANTHEON_BFF_RUNTIME__?: Record<string, unknown> }).__PANTHEON_BFF_RUNTIME__ = {
+            VITE_BFF_REAL_WRITES: "true",
+          };
+        } catch {
+          // ignore
+        }
+      });
     }
 
     const { networkEvents } = setupNetworkTracker(page);
 
-    // 1. Navigate to Strategy Detail (/management/strategies/strat-alpha-1?tab=overview)
+    // =========================================================================
+    // Part 1: Read-only controls are honestly disabled on Strategy Detail
+    // =========================================================================
     await page.goto(`${effectiveFeBaseUrl}/management/strategies/strat-alpha-1?tab=overview`, {
       waitUntil: "domcontentloaded",
       timeout: 30_000,
@@ -591,41 +650,78 @@ test.describe("Management Console Product Journey E2E", () => {
       page.locator("main").getByText(/strat-alpha-1|Alpha Momentum Strategy 1|Strategy/i).first(),
     ).toBeVisible({ timeout: 15_000 });
 
-    // 2. Strict check: Assert concrete read-only control is disabled (wrapped in NonProductionActionButton)
-    // NonProductionActionButton wraps action in span with title reason and renders disabled button
-    const readOnlyActionButton = page.locator("main button[disabled], main button[aria-disabled='true']").filter({
+    // Assert read-only action buttons (NonProductionActionButton) are disabled with tooltip/reason
+    const readOnlyActionButtons = page.locator("main button[disabled], main button[aria-disabled='true']").filter({
       hasText: /sweep|promote|transition|deploy|run/i,
+    });
+    await expect(readOnlyActionButtons.first()).toBeVisible({ timeout: 10_000 });
+    await expect(readOnlyActionButtons.first()).toBeDisabled();
+
+    // =========================================================================
+    // Part 2: Supported dev-paper domain action: Execute Runtime Quarantine/Action
+    // =========================================================================
+    await page.goto(`${effectiveFeBaseUrl}/management/runtimes`, {
+      waitUntil: "domcontentloaded",
+      timeout: 30_000,
+    });
+    await expect(page.locator("#root")).toBeAttached();
+    await expect(page.locator("body")).not.toContainText(/serving mock|seed fallback/i);
+
+    // Locate the dev-paper runtime row
+    const runtimeRow = page.locator("tr, [role='row']").filter({
+      hasText: /runtime-paper-01|Dev Paper Execution Runtime/i,
     }).first();
-    await expect(readOnlyActionButton).toBeVisible({ timeout: 10_000 });
-    await expect(readOnlyActionButton).toBeDisabled();
+    await expect(runtimeRow).toBeVisible({ timeout: 15_000 });
 
-    // 3. Supported dev-paper domain action: Execute Inspect action to open inspector drawer
-    const inspectBtn = page.locator("main button").filter({ hasText: /Inspect/i }).first();
-    await expect(inspectBtn).toBeVisible({ timeout: 10_000 });
-    await inspectBtn.click();
+    // Open row action menu dropdown
+    const actionMenuTrigger = runtimeRow.locator("button").last();
+    await expect(actionMenuTrigger).toBeVisible({ timeout: 10_000 });
+    await actionMenuTrigger.click();
 
-    // Assert RightDrawer / Inspector panel opens with strat-alpha-1 details
-    const inspectorDrawer = page.locator('[data-testid="right-drawer"], [role="dialog"], [data-state="open"]').filter({
-      hasText: /strat-alpha-1|Alpha Momentum|Strategy|Inspect/i,
+    // Click Quarantine domain action item
+    const quarantineMenuItem = page.locator('[role="menuitem"]').filter({
+      hasText: /隔離|quarantine/i,
     }).first();
-    await expect(inspectorDrawer).toBeVisible({ timeout: 10_000 });
+    await expect(quarantineMenuItem).toBeVisible({ timeout: 10_000 });
+    await quarantineMenuItem.click();
 
-    // 4. Reload page and assert exact persisted readback without state drift (reload idempotency)
+    // Verify command receipt toast notification (admitted -> terminal confirmation)
+    const toastReceipt = page.locator("[data-sonner-toast]").filter({
+      hasText: /quarantine|隔離|Action applied|套用/i,
+    }).first();
+    await expect(toastReceipt).toBeVisible({ timeout: 15_000 });
+
+    // Verify terminal state readback in table before reload
+    await expect(
+      page.locator("tr, [role='row']").filter({ hasText: /runtime-paper-01/i }).getByText(/quarantined|隔離/i).first(),
+    ).toBeVisible({ timeout: 10_000 });
+
+    // =========================================================================
+    // Part 3: Reload page and assert persisted terminal readback (idempotency)
+    // =========================================================================
     await page.reload({ waitUntil: "domcontentloaded" });
     await expect(page.locator("#root")).toBeAttached();
     await expect(page.locator("body")).not.toContainText(/serving mock|seed fallback/i);
 
-    // Verify strategy header persists
+    // Verify persisted terminal state remains after reload
+    await expect(
+      page.locator("tr, [role='row']").filter({ hasText: /runtime-paper-01/i }).getByText(/quarantined|隔離/i).first(),
+    ).toBeVisible({ timeout: 15_000 });
+
+    // Re-verify on strategy detail that read-only control remains honestly disabled after reload
+    await page.goto(`${effectiveFeBaseUrl}/management/strategies/strat-alpha-1?tab=overview`, {
+      waitUntil: "domcontentloaded",
+      timeout: 30_000,
+    });
+    await expect(page.locator("#root")).toBeAttached();
     await expect(
       page.locator("main").getByText(/strat-alpha-1|Alpha Momentum Strategy 1/i).first(),
     ).toBeVisible({ timeout: 15_000 });
-
-    // Verify read-only button remains disabled after reload
-    const readOnlyActionButtonAfterReload = page.locator("main button[disabled], main button[aria-disabled='true']").filter({
+    const readOnlyButtonAfterReload = page.locator("main button[disabled], main button[aria-disabled='true']").filter({
       hasText: /sweep|promote|transition|deploy|run/i,
     }).first();
-    await expect(readOnlyActionButtonAfterReload).toBeVisible({ timeout: 10_000 });
-    await expect(readOnlyActionButtonAfterReload).toBeDisabled();
+    await expect(readOnlyButtonAfterReload).toBeVisible({ timeout: 10_000 });
+    await expect(readOnlyButtonAfterReload).toBeDisabled();
 
     // Mandatory assertion: live network requests were tracked
     expect(networkEvents.length, "Expected live BFF requests to be tracked").toBeGreaterThan(0);
