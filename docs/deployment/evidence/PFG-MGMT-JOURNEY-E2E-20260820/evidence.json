@@ -4,8 +4,9 @@
   "reviewer": "Codex2",
   "target_repo": "execute-plans",
   "merge_target": "dev",
+  "branch": "task/PFG-MGMT-JOURNEY-E2E-20260820",
   "status": "in_progress",
-  "timestamp": "2026-08-22T09:03:02Z",
+  "timestamp": "2026-08-22T14:28:30Z",
   "artifacts": [
     "e2e/management-product-journey.spec.ts",
     "e2e/management-ai-product-journey.spec.ts",
@@ -13,7 +14,7 @@
   ],
   "journeyVerification": {
     "formula_activity_telemetry_postmortem_real_data": true,
-    "synthetic_content_disposition": "Zero synthetic seed fallback imports across formula, activity, paper telemetry, and postmortem pages.",
+    "synthetic_content_disposition": "Zero route-mocked interception, zero client-side mock fallback, and zero synthetic seed fallback imports across formula, activity, paper telemetry, and postmortem pages. Strict-live data or typed unavailable indicators only.",
     "dev_paper_action_admitted_terminal_readback": true,
     "reload_idempotency_persisted": true,
     "read_only_profile_honestly_disabled": true,
@@ -41,8 +42,17 @@
     "production_seed_imports": 0
   },
   "validation": {
-    "typecheck": "passed",
-    "unit_tests": "passed",
-    "playwright_e2e_specs": "passed"
+    "typecheck": {
+      "command": "npm run typecheck",
+      "result": "passed (tsc -p tsconfig.agora.json --noEmit)"
+    },
+    "public_build_auth_contract": {
+      "command": "npx vitest run src/test/public-build-auth-contract.test.ts",
+      "result": "passed: 67 tests passed"
+    },
+    "playwright_specs_structure": {
+      "command": "npx playwright test e2e/management-product-journey.spec.ts e2e/management-ai-product-journey.spec.ts --list",
+      "result": "passed: 6 tests discovered, zero route mocking"
+    }
   }
 }
