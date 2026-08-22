@@ -7,7 +7,7 @@
  */
 
 import { expect, test, type Page, type Request, type Route, type TestInfo } from "@playwright/test";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import {
   LOCAL_FIXTURE_AUTH_TOKEN,
   gcpIdentityStorageKey,
@@ -310,7 +310,7 @@ async function installLoopbackAiFixtures(page: Page): Promise<void> {
           kind: "runBffAction",
           label: "Execute Strategy Transition",
           rationale: "Transition strategy to paper validation stage",
-          params: { entityType: "strategy", entityId: "strat-alpha-1", actionId: "transition", payload: { newState: "paper" } },
+          params: { entityType: "strategy", entityId: "strat-alpha-1", actionId: "promote_paper", payload: { newState: "paper" } },
           requiresConfirmation: true,
         },
       ];
@@ -355,9 +355,12 @@ async function installLoopbackAiFixtures(page: Page): Promise<void> {
     if (path === "/bff/confirm-tokens") {
       await fulfillJson(route, {
         data: {
+          tokenId: "tok-confirm-e2e-12345",
+          commandId: "tok-confirm-e2e-12345",
           confirmToken: "tok-confirm-e2e-12345",
-          requiredPhrase: "CONFIRM_ACTION",
+          requiredPhrase: "PROMOTE PAPER strat-alpha-1",
           expiresAt: new Date(Date.now() + 600_000).toISOString(),
+          ttlSeconds: 600,
         },
       });
       return;
@@ -367,11 +370,11 @@ async function installLoopbackAiFixtures(page: Page): Promise<void> {
       await fulfillJson(route, {
         status: "accepted",
         data: {
-          commandId: "cmd-strat-alpha-1-transition",
+          commandId: "cmd-strat-alpha-1-promote-paper",
           receipt: {
-            command: "StrategyTransition",
+            command: "StrategyPromotePaper",
             status: "accepted",
-            trackingUrl: "/management/jobs/cmd-strat-alpha-1-transition",
+            trackingUrl: "/management/jobs/cmd-strat-alpha-1-promote-paper",
           },
           status: "accepted",
         },
@@ -458,6 +461,16 @@ test.describe("Management AI Product Journey E2E", () => {
           PANTHEON_FE_BASE_URL: effectiveFeBaseUrl,
         },
       });
+      await page.addInitScript(() => {
+        try {
+          window.sessionStorage.setItem("pantheon.e2e.realWrites", "true");
+          (window as unknown as { __PANTHEON_BFF_RUNTIME__?: Record<string, unknown> }).__PANTHEON_BFF_RUNTIME__ = {
+            VITE_BFF_REAL_WRITES: "true",
+          };
+        } catch {
+          // ignore
+        }
+      });
     }
 
     const { networkEvents } = setupNetworkTracker(page);
@@ -494,50 +507,73 @@ test.describe("Management AI Product Journey E2E", () => {
       await textarea.press("Enter");
     }
 
-    // 5. Assert conversation responds with provider reply or typed provider status
-    const messageResponse = page.locator('[data-testid="chat-message-assistant"], .ai-message-response, [role="log"], div:has-text("AI Ready"), div:has-text("kernel on"), div:has-text("Portfolio exposure")').first();
+    // 5. Require /bff/management/nl/ask provider output
+    const messageResponse = page.locator('[role="dialog"][aria-label="Management AI"]').getByText(/Portfolio exposure/i).first();
     await expect(messageResponse).toBeVisible({ timeout: 30_000 });
+    await expect(page.locator('[role="dialog"][aria-label="Management AI"]').getByText(/AI Ready/i).first()).toBeVisible({ timeout: 15_000 });
 
-    // 6. Test real UI actions rendered in conversation / panel
-    // Allowlisted UI actions: navigate, openDrawer, focusPanel, runBffAction
-    const actionButtons = page.locator('.conversation-content button, [aria-label="Management AI"] button').filter({
-      hasText: /navigate|drawer|inspect|strategies|focus|action|Execute|Transition|Open/i,
-    });
+    // 6. Strict allowlisted UI action executions (MANDATORY, NO OPTIONAL IF-GUARDS)
+    // Action 1: navigate -> Navigate to Strategies
+    const navActionBtn = page.locator('[role="dialog"][aria-label="Management AI"] button').filter({ hasText: /Navigate to Strategies/i }).first();
+    await expect(navActionBtn).toBeVisible({ timeout: 10_000 });
+    await navActionBtn.click();
+    await expect(page).toHaveURL(/.*\/management\/strategies/);
+    await expect(navActionBtn.getByText("已執行")).toBeVisible({ timeout: 10_000 });
 
-    const actionCount = await actionButtons.count();
-    if (actionCount > 0) {
-      // Find a confirmed domain action button (runBffAction / HighRiskConfirm) or the first action button
-      const writeActionBtn = actionButtons.filter({
-        hasText: /Transition|Execute|Action|Deploy/i,
-      }).first();
+    // Action 2: openDrawer -> Open Strategy Inspector
+    const drawerActionBtn = page.locator('[role="dialog"][aria-label="Management AI"] button').filter({ hasText: /Open Strategy Inspector/i }).first();
+    await expect(drawerActionBtn).toBeVisible({ timeout: 10_000 });
+    await drawerActionBtn.click();
+    const inspectorDrawer = page.locator('div[role="dialog"]:not([aria-label="Management AI"])').filter({
+      hasText: /strat-alpha-1|Alpha Momentum|Strategy/i,
+    }).first();
+    await expect(inspectorDrawer).toBeVisible({ timeout: 10_000 });
+    await expect(drawerActionBtn.getByText("已執行")).toBeVisible({ timeout: 10_000 });
 
-      const actionToClick = await writeActionBtn.isVisible().catch(() => false) ? writeActionBtn : actionButtons.first();
-      await actionToClick.click();
+    // Close the inspector sheet so focus returns to the Management AI panel
+    await page.keyboard.press("Escape");
+    await expect(inspectorDrawer).toBeHidden({ timeout: 5000 });
 
-      // If action is high-risk, verify HighRiskConfirm modal appears, fill memo and confirm
-      const confirmDialog = page.locator('[role="dialog"]').filter({ hasText: /HighRiskConfirm|確認高風險動作|Confirm|動作確認/i });
-      if (await confirmDialog.isVisible({ timeout: 5000 }).catch(() => false)) {
-        // Fill memo
-        const memoInput = confirmDialog.locator('textarea').first();
-        if (await memoInput.isVisible().catch(() => false)) {
-          await memoInput.fill("Confirmed by operator for E2E journey verification");
-        }
+    // Action 3: focusPanel -> Focus Governance Queue
+    const focusActionBtn = page.locator('[role="dialog"][aria-label="Management AI"] button').filter({ hasText: /Focus Governance Queue/i }).first();
+    await expect(focusActionBtn).toBeVisible({ timeout: 10_000 });
+    await focusActionBtn.click();
+    await expect(page).toHaveURL(/.*\/management\/governance/);
+    await expect(focusActionBtn.getByText("已執行")).toBeVisible({ timeout: 10_000 });
 
-        // Fill token if required
-        const tokenInput = confirmDialog.locator('input[type="text"]').first();
-        if (await tokenInput.isVisible().catch(() => false) && await tokenInput.isEnabled().catch(() => false)) {
-          await tokenInput.fill("CONFIRM_ACTION");
-        }
+    // Action 4: runBffAction with HighRiskConfirm -> Execute Strategy Transition
+    const writeActionBtn = page.locator('[role="dialog"][aria-label="Management AI"] button').filter({ hasText: /Execute Strategy Transition/i }).first();
+    await expect(writeActionBtn).toBeVisible({ timeout: 10_000 });
+    await writeActionBtn.click();
 
-        const confirmBtn = confirmDialog.locator('button:has-text("Confirm"), button:has-text("確認")').first();
-        if (await confirmBtn.isVisible() && await confirmBtn.isEnabled()) {
-          await confirmBtn.click();
-        }
-      }
+    // HighRiskConfirm modal must open (distinct from Management AI panel)
+    const confirmDialog = page.locator('div[role="dialog"]:not([aria-label="Management AI"])').first();
+    await expect(confirmDialog).toBeVisible({ timeout: 10_000 });
 
-      // Assert replay rejection: executed action button shows executed state or is disabled
-      await expect(actionToClick).toBeVisible();
+    // Fill audit memo (required >= 10 chars by policy)
+    const memoInput = confirmDialog.locator('textarea').first();
+    await expect(memoInput).toBeVisible({ timeout: 5000 });
+    await memoInput.fill("Confirmed by operator for E2E journey verification");
+
+    // Fill confirm phrase token if required
+    const tokenInput = confirmDialog.locator('input').first();
+    if (await tokenInput.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await tokenInput.fill("PROMOTE PAPER strat-alpha-1");
     }
+
+    // Submit confirmation
+    const confirmBtn = confirmDialog.locator('button').filter({ hasText: /Confirm|確認/i }).last();
+    await expect(confirmBtn).toBeEnabled({ timeout: 10_000 });
+    await confirmBtn.click();
+
+    // Confirm dialog must close
+    await expect(confirmDialog).toBeHidden({ timeout: 10_000 });
+
+    // Command receipt readback must appear in action button feedback badge
+    await expect(writeActionBtn.getByText(/accepted|已執行|Strategy/i).first()).toBeVisible({ timeout: 10_000 });
+
+    // Replay rejection: Action button must be disabled to prevent duplicate execution
+    await expect(writeActionBtn).toBeDisabled();
 
     // 7. Assert no synthetic fallback indicator in page body
     await expect(page.locator("body")).not.toContainText(/serving mock|seed fallback/i);
@@ -550,6 +586,11 @@ test.describe("Management AI Product Journey E2E", () => {
     mkdirSync(EVIDENCE_DIR, { recursive: true });
     const screenshotPath = `${EVIDENCE_DIR}/pfg-mgmt-ai-journey.png`;
     await page.screenshot({ path: screenshotPath, fullPage: true });
+
+    // Persist immutable latency & route evidence artifact
+    const networkEvidencePath = `${EVIDENCE_DIR}/pfg-mgmt-ai-network.json`;
+    writeFileSync(networkEvidencePath, JSON.stringify(networkEvents, null, 2), "utf8");
+
     await testInfo.attach("mgmt-ai-network-events", {
       body: Buffer.from(JSON.stringify(networkEvents, null, 2)),
       contentType: "application/json",
