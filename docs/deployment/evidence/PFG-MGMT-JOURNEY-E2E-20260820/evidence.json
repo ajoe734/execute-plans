@@ -6,7 +6,7 @@
   "merge_target": "dev",
   "branch": "task/PFG-MGMT-JOURNEY-E2E-20260820",
   "status": "ready_for_review",
-  "timestamp": "2026-08-22T18:38:30Z",
+  "timestamp": "2026-08-22T23:26:00Z",
   "artifacts": [
     "e2e/management-product-journey.spec.ts",
     "e2e/management-ai-product-journey.spec.ts",
@@ -33,9 +33,9 @@
       "pfg-mgmt-product-journey-pages.png": "eb30ac79355d4ccec02ddabc674b72d451a78f2785e9528e0797a6292975229e",
       "pfg-mgmt-action-reload.png": "8b4d3d665daef93017021f04ca451662313bd32c12ef3b783fc7dc027484c491",
       "pfg-mgmt-ai-journey.png": "6a757eefa19f0bf5050f9e6c3be738f23fb0b9a18d65618c72724f67684883ba",
-      "pfg-mgmt-product-journey-network.json": "5548cef89cf1d8a3ede25ff0c13af149d98335c1972177b76317619bda56d00c",
-      "pfg-mgmt-action-network.json": "f4fcc3f95142fbcaeb1c393e2d6c0d5ff99c218f3423003ba9743d07b9663efb",
-      "pfg-mgmt-ai-network.json": "bffce2f4bcf63d26a489e3a5b10607227337a118c7b4f644d24e3dc042c89697"
+      "pfg-mgmt-product-journey-network.json": "a99e05cedef504a1384b095e1a7c613604f9a51b098af62c597e3f577e94649c",
+      "pfg-mgmt-action-network.json": "eb8d7a9b5a07d79f075ef99332410374fd30109ca6bdf301c966f077bb3e9617",
+      "pfg-mgmt-ai-network.json": "97ccb6ec6c6b1b6df9e87651ad1a97a37d67e8d66b641bcc0c6d8baf53965e7b"
     }
   },
   "code_disposition": {
