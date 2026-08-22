@@ -5,7 +5,7 @@
     "pathname": "/bff/me",
     "status": 200,
     "durationMs": 5,
-    "timestamp": "2026-08-22T18:38:20.100Z"
+    "timestamp": "2026-08-22T23:18:20.100Z"
   },
   {
     "method": "GET",
@@ -13,7 +13,7 @@
     "pathname": "/bff/auth/readiness",
     "status": 200,
     "durationMs": 7,
-    "timestamp": "2026-08-22T18:38:20.108Z"
+    "timestamp": "2026-08-22T23:18:20.108Z"
   },
   {
     "method": "GET",
@@ -21,7 +21,7 @@
     "pathname": "/bff/assistant/mode",
     "status": 200,
     "durationMs": 15,
-    "timestamp": "2026-08-22T18:38:20.120Z"
+    "timestamp": "2026-08-22T23:18:20.120Z"
   },
   {
     "method": "GET",
@@ -29,7 +29,7 @@
     "pathname": "/bff/assistant/providers",
     "status": 200,
     "durationMs": 18,
-    "timestamp": "2026-08-22T18:38:20.140Z"
+    "timestamp": "2026-08-22T23:18:20.140Z"
   },
   {
     "method": "GET",
@@ -37,7 +37,7 @@
     "pathname": "/bff/management/cockpit",
     "status": 200,
     "durationMs": 35,
-    "timestamp": "2026-08-22T18:38:20.500Z"
+    "timestamp": "2026-08-22T23:18:20.500Z"
   },
   {
     "method": "POST",
@@ -45,7 +45,7 @@
     "pathname": "/bff/management/nl/ask",
     "status": 202,
     "durationMs": 125,
-    "timestamp": "2026-08-22T18:38:22.300Z"
+    "timestamp": "2026-08-22T23:18:22.300Z"
   },
   {
     "method": "GET",
@@ -53,7 +53,7 @@
     "pathname": "/bff/ranking-formulas",
     "status": 200,
     "durationMs": 24,
-    "timestamp": "2026-08-22T18:38:23.100Z"
+    "timestamp": "2026-08-22T23:18:23.100Z"
   },
   {
     "method": "GET",
@@ -61,7 +61,7 @@
     "pathname": "/bff/governance",
     "status": 200,
     "durationMs": 29,
-    "timestamp": "2026-08-22T18:38:24.200Z"
+    "timestamp": "2026-08-22T23:18:24.200Z"
   },
   {
     "method": "POST",
@@ -69,6 +69,6 @@
     "pathname": "/bff/v1/commands",
     "status": 200,
     "durationMs": 95,
-    "timestamp": "2026-08-22T18:38:25.400Z"
+    "timestamp": "2026-08-22T23:18:25.400Z"
   }
 ]

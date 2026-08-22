@@ -5,7 +5,7 @@
     "pathname": "/bff/me",
     "status": 200,
     "durationMs": 6,
-    "timestamp": "2026-08-22T18:38:10.050Z"
+    "timestamp": "2026-08-22T23:18:10.050Z"
   },
   {
     "method": "GET",
@@ -13,7 +13,7 @@
     "pathname": "/bff/auth/readiness",
     "status": 200,
     "durationMs": 7,
-    "timestamp": "2026-08-22T18:38:10.060Z"
+    "timestamp": "2026-08-22T23:18:10.060Z"
   },
   {
     "method": "GET",
@@ -21,7 +21,7 @@
     "pathname": "/bff/management/shell-summary",
     "status": 200,
     "durationMs": 20,
-    "timestamp": "2026-08-22T18:38:10.400Z"
+    "timestamp": "2026-08-22T23:18:10.400Z"
   },
   {
     "method": "GET",
@@ -29,7 +29,7 @@
     "pathname": "/bff/strategies",
     "status": 200,
     "durationMs": 28,
-    "timestamp": "2026-08-22T18:38:10.405Z"
+    "timestamp": "2026-08-22T23:18:10.405Z"
   },
   {
     "method": "GET",
@@ -37,7 +37,7 @@
     "pathname": "/bff/strategies/strat-alpha-1",
     "status": 200,
     "durationMs": 32,
-    "timestamp": "2026-08-22T18:38:11.200Z"
+    "timestamp": "2026-08-22T23:18:11.200Z"
   },
   {
     "method": "GET",
@@ -45,7 +45,7 @@
     "pathname": "/bff/jobs",
     "status": 200,
     "durationMs": 25,
-    "timestamp": "2026-08-22T18:38:11.205Z"
+    "timestamp": "2026-08-22T23:18:11.205Z"
   },
   {
     "method": "GET",
@@ -53,7 +53,7 @@
     "pathname": "/bff/audit",
     "status": 200,
     "durationMs": 31,
-    "timestamp": "2026-08-22T18:38:11.210Z"
+    "timestamp": "2026-08-22T23:18:11.210Z"
   },
   {
     "method": "GET",
@@ -61,7 +61,7 @@
     "pathname": "/bff/approvals",
     "status": 200,
     "durationMs": 22,
-    "timestamp": "2026-08-22T18:38:11.215Z"
+    "timestamp": "2026-08-22T23:18:11.215Z"
   },
   {
     "method": "GET",
@@ -69,7 +69,7 @@
     "pathname": "/bff/alerts",
     "status": 200,
     "durationMs": 21,
-    "timestamp": "2026-08-22T18:38:11.220Z"
+    "timestamp": "2026-08-22T23:18:11.220Z"
   },
   {
     "method": "GET",
@@ -77,7 +77,7 @@
     "pathname": "/bff/incidents",
     "status": 200,
     "durationMs": 26,
-    "timestamp": "2026-08-22T18:38:11.225Z"
+    "timestamp": "2026-08-22T23:18:11.225Z"
   },
   {
     "method": "GET",
@@ -85,7 +85,7 @@
     "pathname": "/bff/runtimes",
     "status": 200,
     "durationMs": 24,
-    "timestamp": "2026-08-22T18:38:12.300Z"
+    "timestamp": "2026-08-22T23:18:12.300Z"
   },
   {
     "method": "POST",
@@ -93,7 +93,7 @@
     "pathname": "/bff/actions/runtime/rt_prod_001/quarantine",
     "status": 200,
     "durationMs": 85,
-    "timestamp": "2026-08-22T18:38:13.400Z"
+    "timestamp": "2026-08-22T23:18:13.400Z"
   },
   {
     "method": "GET",
@@ -101,6 +101,6 @@
     "pathname": "/bff/runtimes",
     "status": 200,
     "durationMs": 23,
-    "timestamp": "2026-08-22T18:38:14.500Z"
+    "timestamp": "2026-08-22T23:18:14.500Z"
   }
 ]

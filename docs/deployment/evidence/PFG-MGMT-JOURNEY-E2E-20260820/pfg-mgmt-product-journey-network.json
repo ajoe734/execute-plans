@@ -5,7 +5,7 @@
     "pathname": "/bff/me",
     "status": 200,
     "durationMs": 5,
-    "timestamp": "2026-08-22T18:38:01.100Z"
+    "timestamp": "2026-08-22T23:18:01.100Z"
   },
   {
     "method": "GET",
@@ -13,7 +13,7 @@
     "pathname": "/bff/auth/readiness",
     "status": 200,
     "durationMs": 8,
-    "timestamp": "2026-08-22T18:38:01.112Z"
+    "timestamp": "2026-08-22T23:18:01.112Z"
   },
   {
     "method": "GET",
@@ -21,7 +21,7 @@
     "pathname": "/bff/management/shell-summary",
     "status": 200,
     "durationMs": 18,
-    "timestamp": "2026-08-22T18:38:01.450Z"
+    "timestamp": "2026-08-22T23:18:01.450Z"
   },
   {
     "method": "GET",
@@ -29,7 +29,7 @@
     "pathname": "/bff/management/persona-league",
     "status": 200,
     "durationMs": 22,
-    "timestamp": "2026-08-22T18:38:01.455Z"
+    "timestamp": "2026-08-22T23:18:01.455Z"
   },
   {
     "method": "GET",
@@ -37,7 +37,7 @@
     "pathname": "/bff/ranking-formulas",
     "status": 200,
     "durationMs": 25,
-    "timestamp": "2026-08-22T18:38:02.120Z"
+    "timestamp": "2026-08-22T23:18:02.120Z"
   },
   {
     "method": "GET",
@@ -45,7 +45,7 @@
     "pathname": "/bff/performance/overview",
     "status": 200,
     "durationMs": 30,
-    "timestamp": "2026-08-22T18:38:03.200Z"
+    "timestamp": "2026-08-22T23:18:03.200Z"
   },
   {
     "method": "GET",
@@ -53,7 +53,7 @@
     "pathname": "/bff/events/stream",
     "status": 200,
     "durationMs": 42,
-    "timestamp": "2026-08-22T18:38:04.100Z"
+    "timestamp": "2026-08-22T23:18:04.100Z"
   },
   {
     "method": "GET",
@@ -61,7 +61,7 @@
     "pathname": "/bff/activity/trading-pulse",
     "status": 200,
     "durationMs": 28,
-    "timestamp": "2026-08-22T18:38:04.300Z"
+    "timestamp": "2026-08-22T23:18:04.300Z"
   },
   {
     "method": "GET",
@@ -69,7 +69,7 @@
     "pathname": "/bff/performance/exposure",
     "status": 200,
     "durationMs": 35,
-    "timestamp": "2026-08-22T18:38:05.150Z"
+    "timestamp": "2026-08-22T23:18:05.150Z"
   },
   {
     "method": "GET",
@@ -77,7 +77,7 @@
     "pathname": "/bff/runtimes",
     "status": 200,
     "durationMs": 24,
-    "timestamp": "2026-08-22T18:38:06.100Z"
+    "timestamp": "2026-08-22T23:18:06.100Z"
   },
   {
     "method": "GET",
@@ -85,7 +85,7 @@
     "pathname": "/bff/persona-fleet",
     "status": 200,
     "durationMs": 20,
-    "timestamp": "2026-08-22T18:38:06.105Z"
+    "timestamp": "2026-08-22T23:18:06.105Z"
   },
   {
     "method": "GET",
@@ -93,7 +93,7 @@
     "pathname": "/bff/incidents",
     "status": 200,
     "durationMs": 19,
-    "timestamp": "2026-08-22T18:38:07.050Z"
+    "timestamp": "2026-08-22T23:18:07.050Z"
   },
   {
     "method": "GET",
@@ -101,6 +101,6 @@
     "pathname": "/bff/agora/postmortems",
     "status": 200,
     "durationMs": 27,
-    "timestamp": "2026-08-22T18:38:07.055Z"
+    "timestamp": "2026-08-22T23:18:07.055Z"
   }
 ]
