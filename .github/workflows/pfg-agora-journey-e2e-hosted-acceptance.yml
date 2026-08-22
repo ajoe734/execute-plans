@@ -50,6 +50,8 @@ jobs:
       PANTHEON_AUDIT_OUT_DIR: .artifacts/PFG-AGORA-JOURNEY-E2E-20260820/${{ github.run_id }}-${{ github.run_attempt }}
       DEV_LOGIN_CLIENT_ID: ${{ vars.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_ID || 'pantheon-dev-operator-a-v1' }}
       DEV_LOGIN_CLIENT_SECRET: ${{ secrets.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_SECRET }}
+      PFG_AGORA_JOURNEY_E2E: "1"
+      PANTHEON_PUBLIC_GCP_IDENTITY_API_KEY: ${{ vars.VITE_GCP_IDENTITY_API_KEY }}
     steps:
       - name: Checkout dispatched revision
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5a
@@ -99,6 +101,8 @@ jobs:
           fi
           echo "::add-mask::${token}"
           echo "BFF_AUTH_TOKEN=${token}" >> "${GITHUB_ENV}"
+          echo "PFG_AGORA_JOURNEY_E2E_OPERATOR_TOKEN=${token}" >> "${GITHUB_ENV}"
+          echo "PANTHEON_BFF_OPERATOR_TOKEN=${token}" >> "${GITHUB_ENV}"
 
       - name: Set up Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
