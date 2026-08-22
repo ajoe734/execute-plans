@@ -1,0 +1,250 @@
+[
+  {
+    "method": "GET",
+    "url": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/bff/me",
+    "pathname": "/bff/me",
+    "status": 200,
+    "durationMs": 7,
+    "timestamp": "2026-08-22T16:38:16.017Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/bff/auth/readiness",
+    "pathname": "/bff/auth/readiness",
+    "status": 200,
+    "durationMs": 9,
+    "timestamp": "2026-08-22T16:38:16.030Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/bff/me",
+    "pathname": "/bff/me",
+    "status": 200,
+    "durationMs": 55,
+    "timestamp": "2026-08-22T16:38:16.409Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/bff/management/shell-summary",
+    "pathname": "/bff/management/shell-summary",
+    "status": 200,
+    "durationMs": 62,
+    "timestamp": "2026-08-22T16:38:16.425Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/bff/strategies/strat-alpha-1",
+    "pathname": "/bff/strategies/strat-alpha-1",
+    "status": 200,
+    "durationMs": 58,
+    "timestamp": "2026-08-22T16:38:16.425Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/bff/jobs",
+    "pathname": "/bff/jobs",
+    "status": 200,
+    "durationMs": 55,
+    "timestamp": "2026-08-22T16:38:16.425Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/bff/audit",
+    "pathname": "/bff/audit",
+    "status": 200,
+    "durationMs": 55,
+    "timestamp": "2026-08-22T16:38:16.426Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/bff/approvals",
+    "pathname": "/bff/approvals",
+    "status": 200,
+    "durationMs": 53,
+    "timestamp": "2026-08-22T16:38:16.426Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/bff/alerts",
+    "pathname": "/bff/alerts",
+    "status": 200,
+    "durationMs": 51,
+    "timestamp": "2026-08-22T16:38:16.426Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/bff/incidents",
+    "pathname": "/bff/incidents",
+    "status": 200,
+    "durationMs": 49,
+    "timestamp": "2026-08-22T16:38:16.426Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/bff/artifacts",
+    "pathname": "/bff/artifacts",
+    "status": 200,
+    "durationMs": 48,
+    "timestamp": "2026-08-22T16:38:16.426Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/bff/research-experiments",
+    "pathname": "/bff/research-experiments",
+    "status": 200,
+    "durationMs": 47,
+    "timestamp": "2026-08-22T16:38:16.427Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/bff/evolution-programs",
+    "pathname": "/bff/evolution-programs",
+    "status": 200,
+    "durationMs": 44,
+    "timestamp": "2026-08-22T16:38:16.427Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/bff/agora/journal",
+    "pathname": "/bff/agora/journal",
+    "status": 200,
+    "durationMs": 39,
+    "timestamp": "2026-08-22T16:38:16.427Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/bff/events/stream?lastEventId=MT4LR1AA-3",
+    "pathname": "/bff/events/stream",
+    "status": 200,
+    "durationMs": 30,
+    "timestamp": "2026-08-22T16:38:16.434Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/bff/audit",
+    "pathname": "/bff/audit",
+    "status": 200,
+    "durationMs": 10,
+    "timestamp": "2026-08-22T16:38:17.130Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/bff/me",
+    "pathname": "/bff/me",
+    "status": 200,
+    "durationMs": 7,
+    "timestamp": "2026-08-22T16:38:17.433Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/bff/auth/readiness",
+    "pathname": "/bff/auth/readiness",
+    "status": 200,
+    "durationMs": 10,
+    "timestamp": "2026-08-22T16:38:17.446Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/bff/me",
+    "pathname": "/bff/me",
+    "status": 200,
+    "durationMs": 39,
+    "timestamp": "2026-08-22T16:38:17.772Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/bff/management/shell-summary",
+    "pathname": "/bff/management/shell-summary",
+    "status": 200,
+    "durationMs": 36,
+    "timestamp": "2026-08-22T16:38:17.774Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/bff/strategies/strat-alpha-1",
+    "pathname": "/bff/strategies/strat-alpha-1",
+    "status": 200,
+    "durationMs": 32,
+    "timestamp": "2026-08-22T16:38:17.774Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/bff/jobs",
+    "pathname": "/bff/jobs",
+    "status": 200,
+    "durationMs": 34,
+    "timestamp": "2026-08-22T16:38:17.779Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/bff/audit",
+    "pathname": "/bff/audit",
+    "status": 200,
+    "durationMs": 32,
+    "timestamp": "2026-08-22T16:38:17.779Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/bff/approvals",
+    "pathname": "/bff/approvals",
+    "status": 200,
+    "durationMs": 30,
+    "timestamp": "2026-08-22T16:38:17.779Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/bff/alerts",
+    "pathname": "/bff/alerts",
+    "status": 200,
+    "durationMs": 28,
+    "timestamp": "2026-08-22T16:38:17.779Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/bff/incidents",
+    "pathname": "/bff/incidents",
+    "status": 200,
+    "durationMs": 28,
+    "timestamp": "2026-08-22T16:38:17.781Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/bff/artifacts",
+    "pathname": "/bff/artifacts",
+    "status": 200,
+    "durationMs": 26,
+    "timestamp": "2026-08-22T16:38:17.781Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/bff/research-experiments",
+    "pathname": "/bff/research-experiments",
+    "status": 200,
+    "durationMs": 18,
+    "timestamp": "2026-08-22T16:38:17.782Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/bff/evolution-programs",
+    "pathname": "/bff/evolution-programs",
+    "status": 200,
+    "durationMs": 16,
+    "timestamp": "2026-08-22T16:38:17.782Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/bff/agora/journal",
+    "pathname": "/bff/agora/journal",
+    "status": 200,
+    "durationMs": 16,
+    "timestamp": "2026-08-22T16:38:17.783Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/bff/events/stream",
+    "pathname": "/bff/events/stream",
+    "status": 200,
+    "durationMs": 15,
+    "timestamp": "2026-08-22T16:38:17.785Z"
+  }
+]

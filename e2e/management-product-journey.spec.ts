@@ -7,7 +7,7 @@
  */
 
 import { expect, test, type Page, type Request, type Route, type TestInfo } from "@playwright/test";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import {
   LOCAL_FIXTURE_AUTH_TOKEN,
   gcpIdentityStorageKey,
@@ -246,17 +246,56 @@ async function installLoopbackProductFixtures(page: Page): Promise<void> {
       return;
     }
     if (path === "/bff/management/trading-pulse") {
-      await fulfillJson(route, envelope([
-        {
-          surface: "paper",
-          current: 1.45,
-          baselineKind: "previous_artifact",
-          baselineValue: 1.32,
-          rollbackReady: true,
-          killSwitchReady: true,
-          updatedAt: new Date().toISOString(),
-        },
-      ], path));
+      await fulfillJson(route, envelope({
+        surface: "live_trading_pulse",
+        asOf: new Date().toISOString(),
+        cards: [
+          {
+            cardId: "runtime-status",
+            label: "Runtime status",
+            value: "3/3 active",
+            details: { byStatus: "3 active", byStage: "3 paper" },
+          },
+          {
+            cardId: "row-health",
+            label: "Row health",
+            value: "100%",
+            details: { rowHealthStatusCounts: "3 ok", degradedRuntimeIds: [] },
+          },
+          {
+            cardId: "pnl",
+            label: "PnL",
+            value: "+$15.4k",
+            details: { telemetryCoverageCount: "100%", metricCoverage: "3/3" },
+          },
+          {
+            cardId: "drawdown",
+            label: "Drawdown",
+            value: "-1.2%",
+            details: { metricCoverage: "3/3" },
+          },
+          {
+            cardId: "execution-quality",
+            label: "Execution quality",
+            value: "0.4 bps",
+            details: { worstSlippageBps: "0.8 bps", metricCoverage: "3/3" },
+          },
+          {
+            cardId: "baseline-comparison",
+            label: "Baseline comparison",
+            value: "Aligned",
+            details: { baselineComparisonCount: "3/3", byBaselineStatus: "3 ok", missingBaselineRuntimeIds: [] },
+          },
+        ],
+        surfaces: [
+          {
+            surfaceId: "paper-sleeve",
+            name: "Dev Paper Sleeve",
+            status: "ok",
+            runtimes: ["runtime-paper-01"],
+          },
+        ],
+      }, path));
       return;
     }
 
@@ -266,6 +305,7 @@ async function installLoopbackProductFixtures(page: Page): Promise<void> {
         {
           id: "runtime-paper-01",
           runtime_id: "runtime-paper-01",
+          runtimeId: "runtime-paper-01",
           name: "Dev Paper Execution Runtime",
           env: "paper",
           kind: "executor",
@@ -274,6 +314,7 @@ async function installLoopbackProductFixtures(page: Page): Promise<void> {
           memory: 0.42,
           latencyP95Ms: 68,
           uptimePct: 99.98,
+          personaId: "persona-alpha-1",
           updatedAt: new Date().toISOString(),
         },
       ], path));
@@ -284,50 +325,73 @@ async function installLoopbackProductFixtures(page: Page): Promise<void> {
     if (path === "/bff/incidents" || path === "/bff/agora/postmortems") {
       await fulfillJson(route, envelope([
         {
-          id: "pm-2026-001",
+          id: "inc-001",
           title: "Execution slippage anomaly resolution postmortem",
           severity: "low",
-          status: "closed",
-          rootCause: "Transient order routing delay on secondary venue",
-          remediation: "Configured tighter route timeout and fallback pool",
-          resolvedAt: new Date().toISOString(),
+          status: "resolved",
+          description: "Transient order routing delay on secondary venue resolved.",
+          commander: "ops",
+          openedAt: new Date().toISOString(),
+          timeline: [
+            {
+              actor: "ops",
+              note: "[postmortem] Transient order routing delay resolved. Route fallback configured.",
+            },
+          ],
         },
       ], path));
       return;
     }
 
     // Strategy Detail & Actions
-    if (path === "/bff/strategies" || path.startsWith("/bff/strategies/")) {
+    if (path === "/bff/strategies/strat-alpha-1" || path === "/bff/strategies/strat-alpha-1?tab=overview") {
       const strategyData = {
         id: "strat-alpha-1",
-        strategy_id: "strat-alpha-1",
         name: "Alpha Momentum Strategy 1",
-        archetype: "momentum",
-        lifecycle_state: "paper",
+        alpha: "alpha-momentum",
+        capitalPoolId: "pool-core-1",
         state: "paper",
-        review_state: "approved",
-        deployment_state: "paper_active",
-        triple_state: {
-          lifecycle: "paper",
-          review: "approved",
-          deployment: "paper_active",
-        },
-        capital_pool_id: "pool-core-1",
-        runtime_id: "runtime-paper-01",
-        parameters: {
-          lookbackDays: 30,
-          volatilityThreshold: 0.18,
-          allocationWeight: 0.42,
-        },
-        allowed_actions: ["inspect", "view_telemetry"],
-        disabled_actions: ["promote_live", "sweep_capital", "transition_prod"],
+        lifecycleStatus: "paper",
+        reviewStatus: "approved",
+        deploymentStatus: "paper_active",
+        personaIds: ["persona-alpha-1"],
+        risk: "medium",
+        owner: "ops",
+        availableActions: ["inspect", "view_telemetry"],
         updatedAt: new Date().toISOString(),
       };
-      if (path === "/bff/strategies") {
-        await fulfillJson(route, envelope([strategyData], path));
-      } else {
-        await fulfillJson(route, envelope(strategyData, path));
-      }
+      await fulfillJson(route, envelope(strategyData, path));
+      return;
+    }
+
+    if (path === "/bff/strategies") {
+      await fulfillJson(route, envelope([
+        {
+          id: "strat-alpha-1",
+          name: "Alpha Momentum Strategy 1",
+          alpha: "alpha-momentum",
+          capitalPoolId: "pool-core-1",
+          state: "paper",
+          lifecycleStatus: "paper",
+          reviewStatus: "approved",
+          deploymentStatus: "paper_active",
+          personaIds: ["persona-alpha-1"],
+          risk: "medium",
+          owner: "ops",
+          availableActions: ["inspect", "view_telemetry"],
+          updatedAt: new Date().toISOString(),
+        },
+      ], path));
+      return;
+    }
+
+    if (path === "/bff/jobs" || path === "/bff/audit" || path === "/bff/approvals" || path === "/bff/alerts" || path === "/bff/artifacts" || path === "/bff/research" || path === "/bff/evolution") {
+      await fulfillJson(route, envelope([], path));
+      return;
+    }
+
+    if (path.startsWith("/bff/watchers/") || path.startsWith("/bff/decision-journal/")) {
+      await fulfillJson(route, []);
       return;
     }
 
@@ -402,46 +466,51 @@ test.describe("Management Console Product Journey E2E", () => {
 
     const { networkEvents } = setupNetworkTracker(page);
 
-    // 1. Formula / Rankings Center
+    // 1. Formula / Rankings Center (/management/rankings)
     await page.goto(`${effectiveFeBaseUrl}/management/rankings`, {
       waitUntil: "domcontentloaded",
       timeout: 30_000,
     });
     await expect(page.locator("#root")).toBeAttached();
     await expect(
-      page.locator("main").getByRole("heading", { name: /Rankings Center|排名中心|Formula|Ranking/i }).or(page.locator("main h1, main h2, main [role='heading']")).first(),
+      page.locator("section[aria-label*='Rankings'], main").getByRole("heading", { name: /Rankings Center|排名中心|Formula|Ranking/i }).or(page.locator("main h1, main h2, main [role='heading']")).first(),
     ).toBeVisible({ timeout: 15_000 });
     await expect(page.locator("body")).not.toContainText(/serving mock|seed fallback/i);
 
-    // 2. Activity / Performance Center & Trading Pulse
+    // 2. Activity / Performance Overview (/management/performance?tab=overview)
     await page.goto(`${effectiveFeBaseUrl}/management/performance?tab=overview`, {
       waitUntil: "domcontentloaded",
       timeout: 30_000,
     });
     await expect(page.locator("#root")).toBeAttached();
     await expect(
-      page.locator("main").getByRole("heading", { name: /Performance Center|績效中心|Performance/i }).or(page.locator("main h1, main h2, main [role='heading']")).first(),
+      page.locator("section[aria-label*='Performance'], main").getByRole("heading", { name: /Performance Center|績效中心|Performance/i }).or(page.locator("main h1, main h2, main [role='heading']")).first(),
     ).toBeVisible({ timeout: 15_000 });
     await expect(page.locator("body")).not.toContainText(/serving mock|seed fallback/i);
 
+    // Activity / Trading Pulse (/management/trading-pulse)
     await page.goto(`${effectiveFeBaseUrl}/management/trading-pulse`, {
       waitUntil: "domcontentloaded",
       timeout: 30_000,
     });
     await expect(page.locator("#root")).toBeAttached();
+    await expect(
+      page.locator("section[aria-label*='Trading Pulse'], main").getByRole("heading", { name: /Trading Pulse|交易脈搏/i }).or(page.locator("main h1, main h2, main [role='heading']")).first(),
+    ).toBeVisible({ timeout: 15_000 });
     await expect(page.locator("body")).not.toContainText(/serving mock|seed fallback/i);
 
-    // 3. Paper Telemetry: Portfolio Exposure & Runtimes
+    // 3. Paper Telemetry: Portfolio Exposure (/management/performance?tab=exposure)
     await page.goto(`${effectiveFeBaseUrl}/management/performance?tab=exposure`, {
       waitUntil: "domcontentloaded",
       timeout: 30_000,
     });
     await expect(page.locator("#root")).toBeAttached();
     await expect(
-      page.locator("main").getByRole("tablist").or(page.locator("main").getByText(/Telemetry|遙測|Risk Budget|Current Exposure|Exposure/i)).first(),
+      page.locator("main").getByRole("tablist").or(page.locator("main").getByText(/Exposure|Telemetry|遙測|Risk Budget/i)).first(),
     ).toBeVisible({ timeout: 15_000 });
     await expect(page.locator("body")).not.toContainText(/serving mock|seed fallback/i);
 
+    // Paper Telemetry: Runtimes (/management/runtimes)
     await page.goto(`${effectiveFeBaseUrl}/management/runtimes`, {
       waitUntil: "domcontentloaded",
       timeout: 30_000,
@@ -452,7 +521,7 @@ test.describe("Management Console Product Journey E2E", () => {
     ).toBeVisible({ timeout: 15_000 });
     await expect(page.locator("body")).not.toContainText(/serving mock|seed fallback/i);
 
-    // 4. Postmortem Library
+    // 4. Postmortem Library (/management/postmortems)
     await page.goto(`${effectiveFeBaseUrl}/management/postmortems`, {
       waitUntil: "domcontentloaded",
       timeout: 30_000,
@@ -471,6 +540,11 @@ test.describe("Management Console Product Journey E2E", () => {
     mkdirSync(EVIDENCE_DIR, { recursive: true });
     const screenshotPath = `${EVIDENCE_DIR}/pfg-mgmt-product-journey-pages.png`;
     await page.screenshot({ path: screenshotPath, fullPage: true });
+
+    // Persist immutable latency & route evidence artifact
+    const networkEvidencePath = `${EVIDENCE_DIR}/pfg-mgmt-product-journey-network.json`;
+    writeFileSync(networkEvidencePath, JSON.stringify(networkEvents, null, 2), "utf8");
+
     await testInfo.attach("product-journey-network-events", {
       body: Buffer.from(JSON.stringify(networkEvents, null, 2)),
       contentType: "application/json",
@@ -504,15 +578,7 @@ test.describe("Management Console Product Journey E2E", () => {
 
     const { networkEvents } = setupNetworkTracker(page);
 
-    // 1. Navigate to Strategy Management & Detail
-    await page.goto(`${effectiveFeBaseUrl}/management/strategies`, {
-      waitUntil: "domcontentloaded",
-      timeout: 30_000,
-    });
-    await expect(page.locator("#root")).toBeAttached();
-    await expect(page.locator("body")).not.toContainText(/serving mock|seed fallback/i);
-
-    // Inspect strategy detail lifecycle, triple state card, and dev-paper actions
+    // 1. Navigate to Strategy Detail (/management/strategies/strat-alpha-1?tab=overview)
     await page.goto(`${effectiveFeBaseUrl}/management/strategies/strat-alpha-1?tab=overview`, {
       waitUntil: "domcontentloaded",
       timeout: 30_000,
@@ -520,49 +586,46 @@ test.describe("Management Console Product Journey E2E", () => {
     await expect(page.locator("#root")).toBeAttached();
     await expect(page.locator("body")).not.toContainText(/serving mock|seed fallback/i);
 
-    // Verify strategy detail header or state indicator
+    // Verify strategy detail header, triple state card, and lifecycle stepper
     await expect(
-      page.locator("main").getByText(/strat-alpha-1|Alpha Momentum|Strategy|策略/i).first(),
+      page.locator("main").getByText(/strat-alpha-1|Alpha Momentum Strategy 1|Strategy/i).first(),
     ).toBeVisible({ timeout: 15_000 });
 
-    // 2. Assert read-only profile honestly disables non-production mutation buttons
-    // In read-only mode, mutation actions are wrapped in NonProductionActionButton and disabled
-    const actionButtons = page.locator("main").locator('button').filter({
-      hasText: /promote|sweep|transition|deploy|execute|action|啟用|推進/i,
-    });
-    const actionButtonCount = await actionButtons.count();
-    if (actionButtonCount > 0) {
-      const disabledControl = actionButtons.filter({
-        has: page.locator('[aria-disabled="true"], [disabled]'),
-      }).or(actionButtons.first());
-      await expect(disabledControl.first()).toBeVisible({ timeout: 10_000 });
-    }
+    // 2. Strict check: Assert concrete read-only control is disabled (wrapped in NonProductionActionButton)
+    // NonProductionActionButton wraps action in span with title reason and renders disabled button
+    const readOnlyActionButton = page.locator("main button[disabled], main button[aria-disabled='true']").filter({
+      hasText: /sweep|promote|transition|deploy|run/i,
+    }).first();
+    await expect(readOnlyActionButton).toBeVisible({ timeout: 10_000 });
+    await expect(readOnlyActionButton).toBeDisabled();
 
-    // 3. Execute supported dev-paper inspection action
-    // Opening RightDrawer / Inspector for alpha/pool details
-    const inspectBtn = page.locator("main").getByRole("button", { name: /Inspect|檢視|Details|詳細/i }).or(page.locator('button[title*="Inspect"], button[aria-label*="Inspect"]')).first();
-    if (await inspectBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
-      await inspectBtn.click();
-      await expect(
-        page.locator('[data-testid="right-drawer"], [role="dialog"], [data-testid="inspector-panel"], div:has-text("Alpha")').first(),
-      ).toBeVisible({ timeout: 10_000 });
-    }
+    // 3. Supported dev-paper domain action: Execute Inspect action to open inspector drawer
+    const inspectBtn = page.locator("main button").filter({ hasText: /Inspect/i }).first();
+    await expect(inspectBtn).toBeVisible({ timeout: 10_000 });
+    await inspectBtn.click();
 
-    // 4. Verify governance read-only controls
-    await page.goto(`${effectiveFeBaseUrl}/management/governance/permissions`, {
-      waitUntil: "domcontentloaded",
-      timeout: 30_000,
-    });
-    await expect(page.locator("#root")).toBeAttached();
-    await expect(page.locator("body")).not.toContainText(/serving mock|seed fallback/i);
+    // Assert RightDrawer / Inspector panel opens with strat-alpha-1 details
+    const inspectorDrawer = page.locator('[data-testid="right-drawer"], [role="dialog"], [data-state="open"]').filter({
+      hasText: /strat-alpha-1|Alpha Momentum|Strategy|Inspect/i,
+    }).first();
+    await expect(inspectorDrawer).toBeVisible({ timeout: 10_000 });
 
-    // 5. Verify page reload preserves state without drift (reload idempotency)
+    // 4. Reload page and assert exact persisted readback without state drift (reload idempotency)
     await page.reload({ waitUntil: "domcontentloaded" });
     await expect(page.locator("#root")).toBeAttached();
     await expect(page.locator("body")).not.toContainText(/serving mock|seed fallback/i);
+
+    // Verify strategy header persists
     await expect(
-      page.locator("main").getByRole("heading", { name: /Permissions|權限|Governance/i }).or(page.locator("main h1, main h2, main [role='heading']")).first(),
+      page.locator("main").getByText(/strat-alpha-1|Alpha Momentum Strategy 1/i).first(),
     ).toBeVisible({ timeout: 15_000 });
+
+    // Verify read-only button remains disabled after reload
+    const readOnlyActionButtonAfterReload = page.locator("main button[disabled], main button[aria-disabled='true']").filter({
+      hasText: /sweep|promote|transition|deploy|run/i,
+    }).first();
+    await expect(readOnlyActionButtonAfterReload).toBeVisible({ timeout: 10_000 });
+    await expect(readOnlyActionButtonAfterReload).toBeDisabled();
 
     // Mandatory assertion: live network requests were tracked
     expect(networkEvents.length, "Expected live BFF requests to be tracked").toBeGreaterThan(0);
@@ -572,6 +635,11 @@ test.describe("Management Console Product Journey E2E", () => {
     mkdirSync(EVIDENCE_DIR, { recursive: true });
     const screenshotPath = `${EVIDENCE_DIR}/pfg-mgmt-action-reload.png`;
     await page.screenshot({ path: screenshotPath, fullPage: true });
+
+    // Persist immutable latency & route evidence artifact
+    const networkEvidencePath = `${EVIDENCE_DIR}/pfg-mgmt-action-network.json`;
+    writeFileSync(networkEvidencePath, JSON.stringify(networkEvents, null, 2), "utf8");
+
     await testInfo.attach("mgmt-action-network-events", {
       body: Buffer.from(JSON.stringify(networkEvents, null, 2)),
       contentType: "application/json",
