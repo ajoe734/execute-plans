@@ -1,0 +1,50 @@
+{
+  "task_id": "PFG-AGORA-JOURNEY-E2E-20260820",
+  "owner": "Codex2",
+  "reviewer": "Antigravity2",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "status": "implementation-in-progress",
+  "scope": {
+    "journey": [
+      "fresh Workshop creation",
+      "durable reconstruction and StrategySpec identity readback",
+      "research-run receipt and readiness handoff",
+      "Trading Room workspace proposal and accept receipt",
+      "shared candidate drawer decision and canonical member readback",
+      "Trading Room decision, consultation, performance learning receipt, and reload persistence"
+    ],
+    "not_changed": [
+      "shared hosted auth helper ownership",
+      "BFF implementation or persistence schema",
+      "deployment configuration or real-write policy"
+    ]
+  },
+  "strict_live_contract": {
+    "opt_in": "PFG_AGORA_JOURNEY_E2E=1",
+    "required_session": "Explicit governed short-lived operator BFF_AUTH_TOKEN plus Pantheon dev FE/BFF URLs.",
+    "forbidden": [
+      "page.route or route fulfillment",
+      "fixture or seed data",
+      "prebuilt Workshop, candidate, pool, proposal, workspace, event, or suggestion IDs",
+      "in-memory-only mutation claims"
+    ],
+    "identity_proof": "The browser response to every mutation supplies a canonical identity. Later steps use only those response-derived IDs, with reload readbacks through the shared drawer and performance receipt." 
+  },
+  "runtime_evidence": {
+    "artifact": "PANTHEON_AUDIT_OUT_DIR/PFG-AGORA-JOURNEY-E2E-20260820-<run-marker>.json",
+    "status": "pending-governed-session",
+    "reason": "No serialized operator-live candidate and governed short-lived session were provided to this worker. The journey is intentionally not run with a fixture, a seed, or an ungoverned credential."
+  },
+  "code_disposition": {
+    "production_duplicate_review_drawers_removed_before_this_task": [
+      "TradingRoomPage already composes the shared CandidateReviewDrawer; it does not retain a page-local candidate review implementation."
+    ],
+    "additional_removal_authority": "No further UI duplicate is removed until this replacement strict-live journey completes successfully."
+  },
+  "planned_validation": [
+    "npx playwright test e2e/agora-product-journey.spec.ts --project=chromium with the governed environment",
+    "npm run typecheck",
+    "strict-live build using the Pantheon dev BFF variables and VITE_BFF_REAL_WRITES=false"
+  ]
+}
