@@ -159,7 +159,7 @@ test.describe("Management AI Product Journey E2E", () => {
   }) => {
     test.skip(
       targetsExternalE2eEnvironment(),
-      "route-mocked fixture coverage is loopback-only",
+      "route-mocked journey specs require loopback target or authenticated GCP identity session",
     );
     const calls: string[] = [];
 
