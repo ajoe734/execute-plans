@@ -203,7 +203,7 @@ test.describe("Management Console Product Journey E2E", () => {
   }) => {
     test.skip(
       targetsExternalE2eEnvironment(),
-      "route-mocked fixture coverage is loopback-only",
+      "route-mocked journey specs require loopback target or authenticated GCP identity session",
     );
     const calls: string[] = [];
 
@@ -219,7 +219,7 @@ test.describe("Management Console Product Journey E2E", () => {
     await expect(page.getByRole("heading", { name: /Rankings Center/i })).toBeVisible();
     await expect(page.getByText("Dev Alpha Momentum 001")).toBeVisible();
 
-    // 2. Activity / Portfolio Book Page
+    // 2. Activity / Performance Page
     await page.goto(frontendUrl("/management/performance?tab=overview"), { waitUntil: "domcontentloaded", timeout: 30_000 });
     await expect(page.locator("#root")).toBeAttached();
     await expect(page.getByRole("heading", { name: /Performance Center/i })).toBeVisible();
@@ -238,7 +238,7 @@ test.describe("Management Console Product Journey E2E", () => {
   }) => {
     test.skip(
       targetsExternalE2eEnvironment(),
-      "route-mocked fixture coverage is loopback-only",
+      "route-mocked journey specs require loopback target or authenticated GCP identity session",
     );
     const calls: string[] = [];
 
