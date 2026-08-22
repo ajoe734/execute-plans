@@ -111,65 +111,8 @@ async function installHostedSession(
     "AIza00000000000000000000000000000000000",
   ];
 
-  const initialSessionId = "ses_mgmt_ai_journey";
-  const initialTurns = [
-    {
-      id: "turn_user_init",
-      role: "user",
-      text: "Review active strategies and perform operations triage",
-      createdAt: Date.now() - 5000,
-    },
-    {
-      id: "turn_ast_init",
-      role: "assistant",
-      text: "I have analyzed current system state. You can navigate to rankings, inspect strategy details, check governance queue, or quarantine unhealthy runtimes.",
-      uiActions: [
-        {
-          id: "act_nav_rankings",
-          kind: "navigate",
-          label: "前往排名中心",
-          params: { path: "/management/rankings" },
-        },
-        {
-          id: "act_open_inspector",
-          kind: "openDrawer",
-          label: "開啟 Inspector 抽屜",
-          params: { drawer: "inspector", entityId: "strat_prod_001", entityType: "Strategy" },
-        },
-        {
-          id: "act_focus_gov",
-          kind: "focusPanel",
-          label: "聚焦治理隊列",
-          params: { panel: "governanceQueue" },
-        },
-        {
-          id: "act_run_bff_quarantine",
-          kind: "runBffAction",
-          label: "隔離 Runtime",
-          rationale: "Quarantine runtime rt_prod_001 for dev-paper verification",
-          params: {
-            entityType: "Runtime",
-            entityId: "rt_prod_001",
-            actionId: "quarantine",
-            idempotencyKey: "idem_ai_quarantine_001",
-          },
-        },
-      ],
-      createdAt: Date.now() - 4000,
-      providerStatus: {
-        provider: "codex_cli",
-        runtime: "openclaw_gateway_cli_mount",
-        status: "completed",
-        used: true,
-        fallback: null,
-        runId: "trace_ai_journey_001",
-      },
-      traceId: "trace_ai_journey_001",
-    },
-  ];
-
   await page.addInitScript(
-    ({ candidateKeys, operatorId, token, exp, initialSessionId, initialTurns }) => {
+    ({ candidateKeys, operatorId, token, exp }) => {
       for (const apiKey of candidateKeys) {
         const key = `firebase:authUser:${apiKey}:[DEFAULT]`;
         const session = {
@@ -199,18 +142,8 @@ async function installHostedSession(
           // Handled on origin navigation
         }
       }
-
-      // Seed verified session history with all 4 required allowlisted UI actions
-      try {
-        window.localStorage.setItem("pantheon.mgmtAi.sessions.v1", JSON.stringify([
-          { id: initialSessionId, title: "Operations Triage", updatedAt: Date.now() },
-        ]));
-        window.localStorage.setItem(`pantheon.mgmtAi.turns.v1.${initialSessionId}`, JSON.stringify(initialTurns));
-      } catch {
-        // Handled on origin navigation
-      }
     },
-    { candidateKeys, operatorId: input.operatorId, token: validToken, exp, initialSessionId, initialTurns },
+    { candidateKeys, operatorId: input.operatorId, token: validToken, exp },
   );
 }
 
