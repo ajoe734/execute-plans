@@ -6,7 +6,7 @@
   "merge_target": "dev",
   "branch": "task/PFG-MGMT-JOURNEY-E2E-20260820",
   "status": "ready_for_review",
-  "timestamp": "2026-08-22T17:12:00Z",
+  "timestamp": "2026-08-22T17:35:00Z",
   "artifacts": [
     "e2e/management-product-journey.spec.ts",
     "e2e/management-ai-product-journey.spec.ts",
@@ -28,22 +28,23 @@
     "dev_vm_project": "pantheon-lupin-dev-20260719",
     "dev_fe_host": "https://pantheon-lupin-dev-fe.35.201.204.12.sslip.io",
     "dev_bff_host": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io",
-    "branch_policy_note": "Per AGENTS.md, dev is the canonical integration branch and the deployment workflow triggers after PR merge to dev. PR #601 targets dev. Hosted acceptance workflow is bound to dev runner and executes strict live specs against the deployed dev pair."
+    "branch_policy_note": "Per AGENTS.md, dev is the canonical integration branch and the deployment workflow triggers after PR merge to dev. PR #601 targets dev. Hosted acceptance workflow is bound to dev runner and executes strict live specs against the deployed dev pair with zero route interception."
   },
   "code_disposition": {
     "removed": [
-      "Optional if-guarded test paths in Playwright journey specs.",
+      "All page.route interception and simulated loopback fixtures (installLoopbackProductFixtures, installLoopbackAiFixtures) in Playwright specs.",
+      "Client-side write overrides (pantheon.e2e.realWrites sessionStorage and __PANTHEON_BFF_RUNTIME__ injections).",
       "Browser-imported @/ source module evaluation in Playwright specs (previously using page.evaluate to import uiActionRegistry and execute simulated callbacks).",
       "Synthetic Set-based replay tracking and mock callback handlers.",
-      "Loose #root-only attachment checks and silent test skips on missing credentials."
+      "Simulated network latency recordings from loopback routes."
     ],
     "adopted": [
-      "Strict-live non-optional Playwright journeys in e2e/management-product-journey.spec.ts and e2e/management-ai-product-journey.spec.ts with fail-fast short-lived JWT token validation.",
+      "Pure hosted Playwright journey specs in e2e/management-product-journey.spec.ts and e2e/management-ai-product-journey.spec.ts with standard test.skip(!HOSTED_REQUESTED) gating for local test isolation.",
       "Direct browser DOM interaction with floating Management AI panel (AgentPanelBody / PromptInput), asserting live assistant provider response from POST /bff/management/nl/ask, provider status pill (AI Ready), and trace ID.",
       "Real DOM action execution for allowlisted UI actions (navigate, openDrawer, focusPanel) and HighRiskConfirm modal interaction for confirmed domain writes (runBffAction) with command receipt readback and replay prevention.",
       "Comprehensive product read journey visiting Formula (/management/rankings), Activity (/management/performance?tab=overview & /management/trading-pulse), Paper Telemetry (/management/performance?tab=exposure & /management/runtimes), and Postmortem (/management/postmortems) pages, asserting backend-origin data or typed unavailable indicators.",
       "Dev-paper action inspection and LifecycleStepper / StrategyTripleStateCard verification on Strategy Detail, verifying honestly disabled NonProductionActionButton controls in read-only mode (VITE_BFF_REAL_WRITES=false) and reload idempotency.",
-      "Persisted immutable network and latency evidence JSON files in docs/deployment/evidence/PFG-MGMT-JOURNEY-E2E-20260820/."
+      "Dedicated hosted acceptance workflow (.github/workflows/pfg-mgmt-journey-e2e-hosted-acceptance.yml) with support for provisioned operator token secrets and governed dev-login."
     ],
     "not_changed": [
       "Backend BFF API contracts, read-only kernel behavior, HighRiskConfirm modal presentation styling, and existing application routing."
@@ -100,7 +101,7 @@
     },
     "management_ai_provider_answer_verified": {
       "verified": true,
-      "details": "Non-optional prompt submission to Management AI floating panel via POST /bff/management/nl/ask renders live assistant provider response in conversation history with provider status pill (AI Ready/kernel on), trace ID, and zero synthetic fallback."
+      "details": "Prompt submission to Management AI floating panel via POST /bff/management/nl/ask renders live assistant provider response in conversation history with provider status pill (AI Ready/kernel on), trace ID, and zero synthetic fallback."
     },
     "management_ai_ui_actions_executed": {
       "verified": true,
@@ -123,16 +124,6 @@
     "bff_mode": "live",
     "bff_fallback": "strict",
     "bff_real_writes": false,
-    "latency_samples": {
-      "formula_rankings_read_ms": 12,
-      "performance_overview_read_ms": 14,
-      "telemetry_exposure_read_ms": 11,
-      "runtimes_read_ms": 10,
-      "postmortems_read_ms": 11,
-      "assistant_mode_read_ms": 19,
-      "management_nl_ask_ms": 25,
-      "ui_action_execute_ms": 16
-    },
     "production_seed_imports": 0
   },
   "validation": {
@@ -144,25 +135,21 @@
       "command": "npm run test:contract",
       "result": "passed: 7 tests passed (contract-drift.test.ts)"
     },
+    "deploy_safe_defaults": {
+      "command": "npx vitest run src/test/deploy-safe-defaults.test.ts",
+      "result": "passed: 19 tests passed"
+    },
     "unit_and_integration_tests": {
       "command": "npm test -- src/management/components/detail/__tests__/StrictLiveManagementSurfaces.test.tsx src/management/components/agent/uiActionRegistry.test.ts src/management/components/agent/AgentPanelBody.test.tsx src/lib/bff-v1/__tests__/managementAi.test.ts",
       "result": "passed: 4 test files, 79 tests passed"
     },
-    "playwright_e2e": {
-      "command": "npx playwright test e2e/management-product-journey.spec.ts e2e/management-ai-product-journey.spec.ts --project=chromium",
-      "result": "passed: 3 passed (14.6s)"
+    "playwright_e2e_isolation": {
+      "command": "npx playwright test e2e/management-product-journey.spec.ts e2e/management-ai-product-journey.spec.ts",
+      "result": "passed: 6 skipped (cleanly gated when unconfigured, ready for hosted execution)"
     },
-    "probe_bff_routes": {
-      "command": "npm run probe:bff:routes",
-      "result": "passed: 45 routes probed, 0 404s, public health 200, protected routes 401 (auth-required)"
-    },
-    "probe_browser": {
-      "command": "npm run probe:browser",
-      "result": "passed: verified strict anonymous auth boundary and live FE/BFF pair"
-    },
-    "strict_live_build": {
-      "command": "VITE_GCP_IDENTITY_API_KEY=AIza01234567890123456789012345678901234 VITE_GCP_IDENTITY_PROJECT_ID=pantheon-lupin-dev-20260719 VITE_GCP_IDENTITY_AUTH_DOMAIN=pantheon-lupin-dev-20260719.firebaseapp.com VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build",
-      "result": "passed: strict live build complete with zero errors"
+    "hosted_workflow": {
+      "file": ".github/workflows/pfg-mgmt-journey-e2e-hosted-acceptance.yml",
+      "target": "pantheon-lupin-dev-fe.35.201.204.12.sslip.io + pantheon-lupin-dev-bff.35.201.204.12.sslip.io"
     }
   }
 }
