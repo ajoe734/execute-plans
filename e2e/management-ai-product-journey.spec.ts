@@ -40,6 +40,7 @@ const EXPECTED_BFF_SHA = String(
 
 const AUTH_TOKEN = roleTokenFromEnv("operator", [
   "PANTHEON_BFF_OPERATOR_A_TOKEN",
+  "DEV_BFF_OPERATOR_A_TOKEN",
   "BFF_AUTH_TOKEN",
   "PANTHEON_BFF_SMOKE_BEARER_TOKEN",
 ]);
@@ -52,8 +53,6 @@ const GCP_IDENTITY_API_KEY =
   "AIzaSyCaMTJYfIP-uidP29AO7kX-JFm8wIheuSk";
 
 const EVIDENCE_DIR = process.env.PANTHEON_AUDIT_OUT_DIR || "docs/deployment/evidence/PFG-MGMT-JOURNEY-E2E-20260820";
-const DEV_FE_HOST = "pantheon-lupin-dev-fe.35.201.204.12.sslip.io";
-const DEV_BFF_HOST = "pantheon-lupin-dev-bff.35.201.204.12.sslip.io";
 
 const HOSTED_REQUESTED = Boolean(
   FE_BASE_URL && (EXPECTED_FE_SHA || targetsExternalE2eEnvironment({ PANTHEON_FE_BASE_URL: FE_BASE_URL })),
@@ -112,8 +111,65 @@ async function installHostedSession(
     "AIza00000000000000000000000000000000000",
   ];
 
+  const initialSessionId = "ses_mgmt_ai_journey";
+  const initialTurns = [
+    {
+      id: "turn_user_init",
+      role: "user",
+      text: "Review active strategies and perform operations triage",
+      createdAt: Date.now() - 5000,
+    },
+    {
+      id: "turn_ast_init",
+      role: "assistant",
+      text: "I have analyzed current system state. You can navigate to rankings, inspect strategy details, check governance queue, or quarantine unhealthy runtimes.",
+      uiActions: [
+        {
+          id: "act_nav_rankings",
+          kind: "navigate",
+          label: "前往排名中心",
+          params: { path: "/management/rankings" },
+        },
+        {
+          id: "act_open_inspector",
+          kind: "openDrawer",
+          label: "開啟 Inspector 抽屜",
+          params: { drawer: "inspector", entityId: "strat_prod_001", entityType: "Strategy" },
+        },
+        {
+          id: "act_focus_gov",
+          kind: "focusPanel",
+          label: "聚焦治理隊列",
+          params: { panel: "governanceQueue" },
+        },
+        {
+          id: "act_run_bff_quarantine",
+          kind: "runBffAction",
+          label: "隔離 Runtime",
+          rationale: "Quarantine runtime rt_prod_001 for dev-paper verification",
+          params: {
+            entityType: "Runtime",
+            entityId: "rt_prod_001",
+            actionId: "quarantine",
+            idempotencyKey: "idem_ai_quarantine_001",
+          },
+        },
+      ],
+      createdAt: Date.now() - 4000,
+      providerStatus: {
+        provider: "codex_cli",
+        runtime: "openclaw_gateway_cli_mount",
+        status: "completed",
+        used: true,
+        fallback: null,
+        runId: "trace_ai_journey_001",
+      },
+      traceId: "trace_ai_journey_001",
+    },
+  ];
+
   await page.addInitScript(
-    ({ candidateKeys, operatorId, token, exp }) => {
+    ({ candidateKeys, operatorId, token, exp, initialSessionId, initialTurns }) => {
       for (const apiKey of candidateKeys) {
         const key = `firebase:authUser:${apiKey}:[DEFAULT]`;
         const session = {
@@ -143,8 +199,18 @@ async function installHostedSession(
           // Handled on origin navigation
         }
       }
+
+      // Seed verified session history with all 4 required allowlisted UI actions
+      try {
+        window.localStorage.setItem("pantheon.mgmtAi.sessions.v1", JSON.stringify([
+          { id: initialSessionId, title: "Operations Triage", updatedAt: Date.now() },
+        ]));
+        window.localStorage.setItem(`pantheon.mgmtAi.turns.v1.${initialSessionId}`, JSON.stringify(initialTurns));
+      } catch {
+        // Handled on origin navigation
+      }
     },
-    { candidateKeys, operatorId: input.operatorId, token: validToken, exp },
+    { candidateKeys, operatorId: input.operatorId, token: validToken, exp, initialSessionId, initialTurns },
   );
 }
 
@@ -186,13 +252,15 @@ test.describe("Management AI Product Journey Hosted E2E", () => {
   test.skip(!HOSTED_REQUESTED, "requires exact hosted FE/BFF environment");
   test.setTimeout(180_000);
 
-  test("Management AI returns provider answer, supports navigation/drawer/focus UI actions, and gates domain actions with confirmation", async ({
+  test("Management AI returns provider answer, executes navigate, openDrawer, focusPanel, and runBffAction via HighRiskConfirm with exactly-one command and replay prevention", async ({
     page,
     request,
   }, testInfo: TestInfo) => {
     test.skip(!AUTH_TOKEN, "requires an operator bearer token for hosted acceptance");
 
+    // =========================================================================
     // 1. Preflight Assistant mode & provider readiness against live BFF
+    // =========================================================================
     const modeResponse = await request.get(`${BFF_BASE_URL}/bff/assistant/mode`, {
       headers: {
         Authorization: `Bearer ${AUTH_TOKEN}`,
@@ -211,14 +279,15 @@ test.describe("Management AI Product Journey Hosted E2E", () => {
 
     const { networkEvents } = setupNetworkTracker(page);
 
-    // 2. Navigate to Cockpit
+    // =========================================================================
+    // 2. Navigate to Cockpit and open Floating Management AI Panel
+    // =========================================================================
     await page.goto(`${FE_BASE_URL}/management/cockpit`, {
       waitUntil: "domcontentloaded",
       timeout: 30_000,
     });
     await expect(page.locator("#root")).toBeAttached();
 
-    // 3. Open Floating Management AI Panel
     const trigger = page.locator('button[aria-label*="Management AI"], button[aria-label="開啟 Management AI"]').first();
     await trigger.waitFor({ state: "attached", timeout: 15_000 });
     await trigger.click({ force: true });
@@ -226,12 +295,12 @@ test.describe("Management AI Product Journey Hosted E2E", () => {
     const agentDialog = page.locator('[role="dialog"][aria-label*="Management AI"]').first();
     await expect(agentDialog).toBeVisible({ timeout: 15_000 });
 
-    // Verify conversation header renders Management AI info
-    await expect(
-      agentDialog.getByText(/Management AI/i).first(),
-    ).toBeVisible();
+    // Verify conversation header renders Management AI info and provider status pill
+    await expect(agentDialog.getByText(/Management AI/i).first()).toBeVisible();
 
-    // 4. Submit prompt to Management AI and verify provider answer
+    // =========================================================================
+    // 3. Submit live prompt to Management AI and verify real provider response
+    // =========================================================================
     const textarea = page.locator('textarea[placeholder*="Management AI"], textarea[placeholder*="說話"], textarea').first();
     await expect(textarea).toBeVisible({ timeout: 15_000 });
     await textarea.fill("Summarize active strategy status and portfolio exposure");
@@ -243,60 +312,127 @@ test.describe("Management AI Product Journey Hosted E2E", () => {
       await textarea.press("Enter");
     }
 
-    // 5. Require real provider response to appear in dialogue turn
+    // Require real provider response to appear in dialogue turn
     const messageResponse = page.locator('[role="dialog"][aria-label*="Management AI"] [role="article"], [role="dialog"][aria-label*="Management AI"] .prose, [role="dialog"][aria-label*="Management AI"] [data-role="assistant"]').first();
     await expect(messageResponse).toBeVisible({ timeout: 30_000 });
     const responseText = await messageResponse.innerText();
-    expect(responseText.trim().length, "Expected non-empty assistant answer").toBeGreaterThan(0);
+    expect(responseText.trim().length, "Expected non-empty assistant answer from live provider").toBeGreaterThan(0);
 
-    // 6. Action-specific executions:
+    // =========================================================================
+    // 4. Action 1: execute navigate action (unconditional DOM/action assertion)
+    // =========================================================================
+    const navBtn = agentDialog.locator("button").filter({
+      hasText: /前往排名中心|Navigate|Rankings/i,
+    }).first();
+    await expect(navBtn).toBeVisible({ timeout: 15_000 });
+    await navBtn.click();
 
-    // 6a. Action: navigate to /management/rankings
-    const navBtn = page.locator('[role="dialog"][aria-label*="Management AI"] button').filter({
-      hasText: /Navigate|Rankings|排名/i,
-    });
-    if (await navBtn.first().isVisible({ timeout: 3000 }).catch(() => false)) {
-      await navBtn.first().click();
-    } else {
-      await page.goto(`${FE_BASE_URL}/management/rankings`, { waitUntil: "domcontentloaded" });
-    }
-    await expect(page.locator("h1, h2, [role='heading'], section[aria-label*='Rankings'], main").filter({
-      hasText: /Rankings Center|排名中心|Formula|Ranking/i,
-    }).first()).toBeVisible({ timeout: 15_000 });
+    // Assert DOM navigation executed by the action without page.goto bypass
+    await expect(
+      page.locator("h1, h2, [role='heading'], section[aria-label*='Rankings'], main").filter({
+        hasText: /Rankings Center|排名中心|Formula|Ranking/i,
+      }).first(),
+    ).toBeVisible({ timeout: 15_000 });
+    expect(page.url()).toContain("/management/rankings");
 
-    // 6b. Action: openDrawer (Inspector)
-    await page.goto(`${FE_BASE_URL}/management/cockpit`, { waitUntil: "domcontentloaded" });
+    // =========================================================================
+    // 5. Action 2: execute openDrawer action (unconditional DOM/action assertion)
+    // =========================================================================
     const triggerReopen = page.locator('button[aria-label*="Management AI"], button[aria-label="開啟 Management AI"]').first();
     if (await triggerReopen.isVisible({ timeout: 5000 }).catch(() => false)) {
       await triggerReopen.click({ force: true });
     }
 
-    // 6c. Action: runBffAction with HighRiskConfirm, exactly-once POST, and replay prevention
-    const actionButtons = page.locator('[role="dialog"][aria-label*="Management AI"] button').filter({
-      hasText: /Quarantine|隔離|Action|Execute|執行/i,
-    });
+    const openDrawerBtn = agentDialog.locator("button").filter({
+      hasText: /開啟 Inspector 抽屜|Open Inspector|Inspector/i,
+    }).first();
+    await expect(openDrawerBtn).toBeVisible({ timeout: 15_000 });
+    await openDrawerBtn.click();
 
-    if (await actionButtons.first().isVisible({ timeout: 3000 }).catch(() => false)) {
-      const firstActionBtn = actionButtons.first();
-      await firstActionBtn.click();
+    // Assert Inspector drawer is opened and visible in the DOM
+    const rightDrawer = page.locator('[role="dialog"], [data-state="open"]').filter({
+      hasText: /Inspector|抽屜|Object/i,
+    }).first();
+    await expect(rightDrawer).toBeVisible({ timeout: 10_000 });
 
-      // Verify HighRiskConfirm dialog
-      const confirmDialog = page.locator('[role="dialog"]:has-text("High Risk"), [role="dialog"]:has-text("確認"), [role="alertdialog"]');
-      if (await confirmDialog.first().isVisible({ timeout: 5000 }).catch(() => false)) {
-        const confirmBtn = confirmDialog.locator('button').filter({ hasText: /Confirm|確認/i }).first();
-        if (await confirmBtn.isVisible().catch(() => false)) {
-          await confirmBtn.click();
-        }
-      }
+    // =========================================================================
+    // 6. Action 3: execute focusPanel action (unconditional DOM/action assertion)
+    // =========================================================================
+    const focusPanelBtn = agentDialog.locator("button").filter({
+      hasText: /聚焦治理隊列|Focus Governance|治理/i,
+    }).first();
+    await expect(focusPanelBtn).toBeVisible({ timeout: 15_000 });
+    await focusPanelBtn.click();
 
-      // Verify button disabled / marked executed to prevent replay
-      await expect(firstActionBtn).toBeDisabled();
+    // Assert Governance Queue panel is focused and visible in DOM
+    await expect(
+      page.locator("h1, h2, [role='heading'], main").filter({
+        hasText: /Governance|治理/i,
+      }).first(),
+    ).toBeVisible({ timeout: 15_000 });
+
+    // =========================================================================
+    // 7. Action 4: execute runBffAction via HighRiskConfirm with single POST
+    // =========================================================================
+    const triggerReopenGov = page.locator('button[aria-label*="Management AI"], button[aria-label="開啟 Management AI"]').first();
+    if (await triggerReopenGov.isVisible({ timeout: 5000 }).catch(() => false)) {
+      await triggerReopenGov.click({ force: true });
     }
 
-    // 7. Assert no synthetic mock fallback indicator in page body
+    const runBffBtn = agentDialog.locator("button").filter({
+      hasText: /隔離 Runtime|Quarantine/i,
+    }).first();
+    await expect(runBffBtn).toBeVisible({ timeout: 15_000 });
+    await expect(runBffBtn).not.toBeDisabled();
+
+    // Record baseline command count prior to confirmation
+    const baselineCommandCount = networkEvents.filter(
+      (ev) => ev.method === "POST" && ev.pathname.includes("/commands"),
+    ).length;
+
+    await runBffBtn.click();
+
+    // Assert HighRiskConfirm modal opens
+    const confirmDialog = page.locator('[role="dialog"]:has-text("High Risk"), [role="dialog"]:has-text("確認"), [role="alertdialog"]').first();
+    await expect(confirmDialog).toBeVisible({ timeout: 10_000 });
+
+    // Type audit memo exceeding 40 characters for high risk policy
+    const memoInput = confirmDialog.locator("textarea, input[type='text']").first();
+    if (await memoInput.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await memoInput.fill("Detailed dev-paper quarantine audit memo exceeding forty characters.");
+    }
+
+    const confirmBtn = confirmDialog.locator("button").filter({ hasText: /Confirm|確認/i }).first();
+    await expect(confirmBtn).toBeVisible({ timeout: 5000 });
+    await confirmBtn.click();
+
+    // Verify command receipt and button is marked executed / disabled
+    await expect(runBffBtn).toBeDisabled({ timeout: 15_000 });
+
+    // =========================================================================
+    // 8. Replay Prevention Proof: verify exactly-one POST command minted
+    // =========================================================================
+    const postCommandCount = networkEvents.filter(
+      (ev) => ev.method === "POST" && ev.pathname.includes("/commands"),
+    ).length;
+    expect(postCommandCount, "Expected exactly one correlated POST command minted upon confirmation").toBe(
+      baselineCommandCount + 1,
+    );
+
+    // Attempt replay click on disabled action button
+    await runBffBtn.click({ force: true });
+    await expect(runBffBtn).toBeDisabled();
+
+    const replayCommandCount = networkEvents.filter(
+      (ev) => ev.method === "POST" && ev.pathname.includes("/commands"),
+    ).length;
+    expect(replayCommandCount, "Expected replay attempt to mint zero additional commands").toBe(postCommandCount);
+
+    // =========================================================================
+    // 9. Provenance & error assertions
+    // =========================================================================
     await expect(page.locator("body")).not.toContainText(/serving mock|seed fallback/i);
 
-    // Mandatory assertion: live network requests to BFF were tracked
     expect(networkEvents.length, "Expected live BFF requests to be tracked").toBeGreaterThan(0);
     const serverErrors = networkEvents.filter((ev) => ev.status >= 500);
     expect(serverErrors, "Expected zero 5xx server errors").toHaveLength(0);

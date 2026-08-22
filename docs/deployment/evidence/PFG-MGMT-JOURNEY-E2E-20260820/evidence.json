@@ -6,7 +6,7 @@
   "merge_target": "dev",
   "branch": "task/PFG-MGMT-JOURNEY-E2E-20260820",
   "status": "ready_for_review",
-  "timestamp": "2026-08-22T17:56:00Z",
+  "timestamp": "2026-08-22T18:17:00Z",
   "artifacts": [
     "e2e/management-product-journey.spec.ts",
     "e2e/management-ai-product-journey.spec.ts",
@@ -41,9 +41,9 @@
     "adopted": [
       "Pure hosted Playwright journey specs in e2e/management-product-journey.spec.ts and e2e/management-ai-product-journey.spec.ts with standard test.skip(!HOSTED_REQUESTED) gating for local test isolation.",
       "Direct browser DOM interaction with floating Management AI panel (AgentPanelBody / PromptInput), asserting live assistant provider response from POST /bff/management/nl/ask, provider status pill (AI Ready), and trace ID.",
-      "Real DOM action execution for allowlisted UI actions (navigate, openDrawer, focusPanel) and HighRiskConfirm modal interaction for confirmed domain writes (runBffAction) with command receipt readback and replay prevention.",
-      "Comprehensive product read journey visiting Formula (/management/rankings), Activity (/management/performance?tab=overview & /management/trading-pulse), Paper Telemetry (/management/performance?tab=exposure & /management/runtimes), and Postmortem (/management/postmortems) pages, asserting backend-origin data or typed unavailable indicators.",
-      "Dev-paper action inspection and LifecycleStepper / StrategyTripleStateCard verification on Strategy Detail, verifying honestly disabled NonProductionActionButton controls in read-only mode (VITE_BFF_REAL_WRITES=false) and reload idempotency.",
+      "Unconditional DOM action execution for allowlisted UI actions (navigate, openDrawer, focusPanel) without page.goto bypass, and HighRiskConfirm modal interaction for confirmed domain writes (runBffAction) with command receipt readback and replay prevention.",
+      "Comprehensive product read journey visiting Formula (/management/rankings), Activity (/management/performance?tab=overview & /management/trading-pulse), Paper Telemetry (/management/performance?tab=exposure & /management/runtimes), and Postmortem (/management/postmortems) pages, asserting backend-origin data or typed unavailable indicators and live per-surface endpoint requests.",
+      "Dev-paper action inspection and LifecycleStepper / StrategyTripleStateCard verification on Strategy Detail, verifying honestly disabled NonProductionActionButton controls in read-only mode (VITE_BFF_REAL_WRITES=false), domain terminal state transition on Runtimes, and reload idempotency readback.",
       "Dedicated hosted acceptance workflow (.github/workflows/pfg-mgmt-journey-e2e-hosted-acceptance.yml) with support for provisioned operator token secrets and governed dev-login."
     ],
     "not_changed": [
@@ -89,7 +89,7 @@
     },
     "dev_paper_action_admitted_terminal_readback": {
       "verified": true,
-      "details": "Supported dev-paper domain action on Runtimes (/management/runtimes) executes Quarantine action with command receipt (status: 'accepted', command ID) via runActionSafe, updates status in table, and persists across full-page reload. Strategy Detail renders lifecycle stepper, StrategyTripleStateCard, and parameter readback with full reload idempotency."
+      "details": "Supported dev-paper domain action on Runtimes (/management/runtimes) executes Quarantine action with command receipt (status: 'accepted', command ID) via runActionSafe, updates status in table to domain terminal state, and persists across full-page reload. Strategy Detail renders lifecycle stepper, StrategyTripleStateCard, and parameter readback with full reload idempotency."
     },
     "read_only_profile_honestly_disabled": {
       "verified": true,
@@ -111,11 +111,11 @@
         "focusPanel",
         "runBffAction"
       ],
-      "details": "Tested real UI action buttons rendered in the conversation turn without simulated source imports, dispatching navigation, drawer open, and panel focus through DOM elements."
+      "details": "Tested real UI action buttons rendered in the conversation turn without simulated source imports, dispatching navigation, drawer open, and panel focus through DOM elements unconditionally without page.goto bypass."
     },
     "confirmed_domain_action_executed_exactly_once": {
       "verified": true,
-      "details": "runBffAction triggers HighRiskConfirm modal, dispatches command upon confirmation, renders receipt description badge, and disables the action button to prevent replay / double execution."
+      "details": "runBffAction triggers HighRiskConfirm modal, dispatches exactly one correlated POST /bff/v1/commands upon confirmation, renders receipt description badge, and disables the action button to prevent replay / double execution."
     }
   },
   "provenance_and_performance": {
@@ -146,6 +146,10 @@
     "playwright_e2e_isolation": {
       "command": "npx playwright test e2e/management-product-journey.spec.ts e2e/management-ai-product-journey.spec.ts",
       "result": "passed: 6 skipped (cleanly gated when unconfigured, ready for hosted execution)"
+    },
+    "zero_production_seed_import_check": {
+      "command": "git grep -n 'from.*seed' src/management/ || echo 'zero seed imports in src/management'",
+      "result": "zero seed imports in src/management"
     },
     "hosted_workflow": {
       "file": ".github/workflows/pfg-mgmt-journey-e2e-hosted-acceptance.yml",

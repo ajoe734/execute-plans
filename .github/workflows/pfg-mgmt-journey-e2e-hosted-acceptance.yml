@@ -49,7 +49,7 @@ jobs:
       EXPECTED_FE_SHA: ${{ inputs.expected_fe_sha }}
       EXPECTED_BFF_SHA: ${{ inputs.expected_bff_sha }}
       PANTHEON_AUDIT_OUT_DIR: .artifacts/PFG-MGMT-JOURNEY-E2E-20260820/${{ github.run_id }}-${{ github.run_attempt }}
-      BFF_AUTH_TOKEN: ${{ secrets.DEV_BFF_OPERATOR_A_TOKEN || secrets.BFF_AUTH_TOKEN || '' }}
+      BFF_AUTH_TOKEN: ${{ secrets.PANTHEON_BFF_OPERATOR_A_TOKEN || secrets.DEV_BFF_OPERATOR_A_TOKEN || secrets.PANTHEON_BFF_SMOKE_BEARER_TOKEN || secrets.BFF_AUTH_TOKEN || '' }}
       DEV_LOGIN_CLIENT_ID: ${{ vars.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_ID || 'pantheon-dev-operator-a-v1' }}
       DEV_LOGIN_CLIENT_SECRET: ${{ secrets.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_SECRET || '' }}
     steps:
