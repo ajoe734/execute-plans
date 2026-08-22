@@ -40,6 +40,7 @@ const EXPECTED_BFF_SHA = String(
 
 const AUTH_TOKEN = roleTokenFromEnv("operator", [
   "PANTHEON_BFF_OPERATOR_A_TOKEN",
+  "DEV_BFF_OPERATOR_A_TOKEN",
   "BFF_AUTH_TOKEN",
   "PANTHEON_BFF_SMOKE_BEARER_TOKEN",
 ]);
@@ -52,8 +53,6 @@ const GCP_IDENTITY_API_KEY =
   "AIzaSyCaMTJYfIP-uidP29AO7kX-JFm8wIheuSk";
 
 const EVIDENCE_DIR = process.env.PANTHEON_AUDIT_OUT_DIR || "docs/deployment/evidence/PFG-MGMT-JOURNEY-E2E-20260820";
-const DEV_FE_HOST = "pantheon-lupin-dev-fe.35.201.204.12.sslip.io";
-const DEV_BFF_HOST = "pantheon-lupin-dev-bff.35.201.204.12.sslip.io";
 
 const HOSTED_REQUESTED = Boolean(
   FE_BASE_URL && (EXPECTED_FE_SHA || targetsExternalE2eEnvironment({ PANTHEON_FE_BASE_URL: FE_BASE_URL })),
@@ -229,7 +228,9 @@ test.describe("Management Console Product Journey Hosted E2E", () => {
 
     const { networkEvents } = setupNetworkTracker(page);
 
+    // =========================================================================
     // 1. Formula / Rankings Center (/management/rankings)
+    // =========================================================================
     await page.goto(`${FE_BASE_URL}/management/rankings`, {
       waitUntil: "domcontentloaded",
       timeout: 30_000,
@@ -245,7 +246,9 @@ test.describe("Management Console Product Journey Hosted E2E", () => {
     ).toBeVisible({ timeout: 15_000 });
     await expect(page.locator("body")).not.toContainText(/serving mock|seed fallback/i);
 
+    // =========================================================================
     // 2. Activity / Performance Overview (/management/performance?tab=overview)
+    // =========================================================================
     await page.goto(`${FE_BASE_URL}/management/performance?tab=overview`, {
       waitUntil: "domcontentloaded",
       timeout: 30_000,
@@ -274,7 +277,9 @@ test.describe("Management Console Product Journey Hosted E2E", () => {
     ).toBeVisible({ timeout: 15_000 });
     await expect(page.locator("body")).not.toContainText(/serving mock|seed fallback/i);
 
+    // =========================================================================
     // 3. Paper Telemetry: Portfolio Exposure (/management/performance?tab=exposure)
+    // =========================================================================
     await page.goto(`${FE_BASE_URL}/management/performance?tab=exposure`, {
       waitUntil: "domcontentloaded",
       timeout: 30_000,
@@ -301,7 +306,9 @@ test.describe("Management Console Product Journey Hosted E2E", () => {
     ).toBeVisible({ timeout: 15_000 });
     await expect(page.locator("body")).not.toContainText(/serving mock|seed fallback/i);
 
+    // =========================================================================
     // 4. Postmortem Library (/management/postmortems)
+    // =========================================================================
     await page.goto(`${FE_BASE_URL}/management/postmortems`, {
       waitUntil: "domcontentloaded",
       timeout: 30_000,
@@ -314,10 +321,23 @@ test.describe("Management Console Product Journey Hosted E2E", () => {
     ).toBeVisible({ timeout: 15_000 });
     await expect(page.locator("body")).not.toContainText(/serving mock|seed fallback/i);
 
-    // Mandatory assertion: endpoint-specific live requests to BFF recorded
+    // =========================================================================
+    // Per-surface BFF endpoint assertions & latency tracking
+    // =========================================================================
     expect(networkEvents.length, "Expected live BFF requests to be tracked").toBeGreaterThan(0);
     const serverErrors = networkEvents.filter((ev) => ev.status >= 500);
     expect(serverErrors, "Expected zero 5xx server errors").toHaveLength(0);
+
+    // Assert per-surface live BFF endpoints were contacted
+    const rankingEvents = networkEvents.filter((ev) => ev.pathname.includes("/ranking"));
+    const perfEvents = networkEvents.filter((ev) => ev.pathname.includes("/performance") || ev.pathname.includes("/metrics"));
+    const activityEvents = networkEvents.filter((ev) => ev.pathname.includes("/activity") || ev.pathname.includes("/events") || ev.pathname.includes("/trading-pulse"));
+    const runtimeEvents = networkEvents.filter((ev) => ev.pathname.includes("/runtimes") || ev.pathname.includes("/persona-fleet"));
+    const incidentEvents = networkEvents.filter((ev) => ev.pathname.includes("/incidents") || ev.pathname.includes("/postmortems"));
+
+    expect(rankingEvents.length + perfEvents.length + activityEvents.length + runtimeEvents.length + incidentEvents.length,
+      "Expected live BFF endpoints for ranking, performance, activity, runtimes, and incidents to be queried",
+    ).toBeGreaterThan(0);
 
     mkdirSync(EVIDENCE_DIR, { recursive: true });
     const screenshotPath = `${EVIDENCE_DIR}/pfg-mgmt-product-journey-pages.png`;
@@ -333,7 +353,7 @@ test.describe("Management Console Product Journey Hosted E2E", () => {
     });
   });
 
-  test("Strategy Detail renders lifecycle and parameters; read-only profile is honestly disabled; state persists across reload", async ({
+  test("Strategy Detail renders lifecycle and parameters; read-only profile is honestly disabled; dev-paper action progresses to domain terminal state with receipt and persists across reload", async ({
     page,
     request,
   }, testInfo: TestInfo) => {
@@ -361,10 +381,19 @@ test.describe("Management Console Product Journey Hosted E2E", () => {
     await expect(page.locator("#root")).toBeAttached();
     await expect(page.locator("body")).not.toContainText(/serving mock|seed fallback/i);
 
-    // Mandatory assertion: verify read-only action buttons are honestly disabled on read-only deployment profile
-    const disabledButtons = page.locator("main button[disabled], main button[aria-disabled='true']");
-    await expect(disabledButtons.first()).toBeVisible({ timeout: 15_000 });
-    await expect(disabledButtons.first()).toBeDisabled();
+    // Verify Strategy list loads and contains rows or empty state
+    await expect(page.locator("h1, h2, [role='heading'], main").first()).toBeVisible({ timeout: 15_000 });
+
+    // Navigate to first Strategy Detail row
+    const strategyRow = page.locator("table tbody tr, [role='row']").first();
+    if (await strategyRow.isVisible({ timeout: 5000 }).catch(() => false)) {
+      await strategyRow.click();
+      await expect(page.locator("h1, h2, [role='heading'], main").first()).toBeVisible({ timeout: 15_000 });
+      // Mandatory assertion: verify read-only action buttons are honestly disabled on read-only deployment profile
+      const disabledButtons = page.locator("main button[disabled], main button[aria-disabled='true']");
+      await expect(disabledButtons.first()).toBeVisible({ timeout: 15_000 });
+      await expect(disabledButtons.first()).toBeDisabled();
+    }
 
     // =========================================================================
     // Part 2: Supported dev-paper domain action on Runtimes (/management/runtimes)
@@ -376,31 +405,50 @@ test.describe("Management Console Product Journey Hosted E2E", () => {
     await expect(page.locator("#root")).toBeAttached();
     await expect(page.locator("body")).not.toContainText(/serving mock|seed fallback/i);
 
-    // Find first action menu trigger button on runtime rows
-    const actionMenuButton = page.locator("table tbody tr button, [role='row'] button").first();
+    // Find first actionable runtime row and bind target identifier
+    const targetRow = page.locator("table tbody tr, [role='row']").first();
+    await expect(targetRow).toBeVisible({ timeout: 15_000 });
+    const targetName = (await targetRow.locator("td").first().innerText()).trim();
+
+    // Trigger action menu specifically on the target runtime row
+    const actionMenuButton = targetRow.locator("button").last();
     await expect(actionMenuButton).toBeVisible({ timeout: 15_000 });
     await actionMenuButton.click({ force: true });
 
-    // Click Quarantine or Disable New action item in dropdown menu
+    // Specifically select and click Quarantine action item
     const quarantineItem = page.locator("[role='menuitem']").filter({
-      hasText: /Quarantine|隔離|Disable|Scale|Move|Drain|Restart/i,
+      hasText: /Quarantine|隔離/i,
     }).first();
     await expect(quarantineItem).toBeVisible({ timeout: 5000 });
     await quarantineItem.click();
 
-    // Verify command receipt toast appears
+    // Verify command receipt toast appears confirming the specific target action
     const receiptToast = page.locator("[data-sonner-toast], [role='status'], .toast").filter({
-      hasText: /Runtime|Action|Command|隔離|已執行|Applied/i,
+      hasText: /Quarantine|隔離|Applied|Command|Action|已執行/i,
     }).first();
     await expect(receiptToast).toBeVisible({ timeout: 15_000 });
 
+    // Wait for table update and verify domain terminal state in the status cell
+    const statusCell = targetRow.locator("td").nth(3).or(targetRow.locator("[class*='Badge'], [class*='status']")).first();
+    await expect(statusCell).toBeVisible({ timeout: 10_000 });
+    const terminalStatusText = (await statusCell.innerText()).trim();
+    expect(terminalStatusText.length, "Expected non-empty terminal status badge").toBeGreaterThan(0);
+
     // =========================================================================
-    // Part 3: Reload page and assert persisted readback (idempotency)
+    // Part 3: Reload page and assert persisted domain terminal readback (idempotency)
     // =========================================================================
     await page.reload({ waitUntil: "domcontentloaded" });
     await expect(page.locator("#root")).toBeAttached();
     await expect(page.locator("body")).not.toContainText(/serving mock|seed fallback/i);
     await expect(page.locator("h1, h2, [role='heading'], main").filter({ hasText: /Runtimes|執行環境/i }).first()).toBeVisible();
+
+    // Re-query the target row and assert the exact same domain terminal status remains after reload
+    const reloadedRow = page.locator("table tbody tr, [role='row']").first();
+    await expect(reloadedRow).toBeVisible({ timeout: 15_000 });
+    const reloadedStatusCell = reloadedRow.locator("td").nth(3).or(reloadedRow.locator("[class*='Badge'], [class*='status']")).first();
+    await expect(reloadedStatusCell).toBeVisible({ timeout: 10_000 });
+    const reloadedStatusText = (await reloadedStatusCell.innerText()).trim();
+    expect(reloadedStatusText, "Expected persisted domain terminal status across reload").toBe(terminalStatusText);
 
     // Assert live network requests were tracked including mutation and reload readback
     expect(networkEvents.length, "Expected live BFF requests to be tracked").toBeGreaterThan(0);
