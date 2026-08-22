@@ -29,7 +29,7 @@
       "prebuilt Workshop, candidate, pool, proposal, workspace, event, or suggestion IDs",
       "in-memory-only mutation claims"
     ],
-    "identity_proof": "The browser response to every mutation supplies a canonical identity. Later steps use only those response-derived IDs, with reload readbacks through the shared drawer and performance receipt." 
+    "identity_proof": "The browser response to every mutation supplies a canonical identity. Later steps use only those response-derived IDs, with reload readbacks through the shared drawer and performance receipt."
   },
   "runtime_evidence": {
     "artifact": "PANTHEON_AUDIT_OUT_DIR/PFG-AGORA-JOURNEY-E2E-20260820-<run-marker>.json",
