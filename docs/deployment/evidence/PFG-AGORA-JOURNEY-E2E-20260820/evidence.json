@@ -1,4 +1,5 @@
 {
+  "schema_version": "pantheon.agora.product-journey-evidence.v1",
   "task_id": "PFG-AGORA-JOURNEY-E2E-20260820",
   "owner": "Codex2",
   "reviewer": "Antigravity2",
@@ -22,7 +23,7 @@
   },
   "strict_live_contract": {
     "opt_in": "PFG_AGORA_JOURNEY_E2E=1",
-    "required_session": "Explicit governed short-lived operator BFF_AUTH_TOKEN plus Pantheon dev FE/BFF URLs.",
+    "required_session": "Explicit governed short-lived operator BFF_AUTH_TOKEN, public GCP Identity API key, and Pantheon dev FE/BFF URLs.",
     "forbidden": [
       "page.route or route fulfillment",
       "fixture or seed data",
@@ -62,10 +63,12 @@
     }
   },
   "code_disposition": {
-    "production_duplicate_review_drawers_removed_before_this_task": [
-      "TradingRoomPage already composes the shared CandidateReviewDrawer; it does not retain a page-local candidate review implementation."
-    ],
-    "additional_removal_authority": "No further UI duplicate is removed until this replacement strict-live journey completes successfully."
+    "verification_command": "rg -n 'CandidateReviewDrawer|candidate-review-drawer|FixedLens|fixed lens|fixedLens' src/agora --glob '*.{ts,tsx}'",
+    "result": "TradingRoomPage is the only production caller and imports CandidateReviewDrawer as SharedCandidateReviewDrawer from src/agora/components; no FixedLens or page-local candidate-review caller is present.",
+    "ui_duplicate_changes": {
+      "removed": [],
+      "status": "No duplicate removal is claimed before the replacement strict-live journey passes."
+    }
   },
   "planned_validation": [
     "npx playwright test e2e/agora-product-journey.spec.ts --project=chromium with the governed environment",
