@@ -219,6 +219,7 @@ test.describe(`${TASK_ID} strict-live browser journey`, () => {
     const workshopTitle = `PFG Agora journey ${runMarker}`;
     let strategyId = "";
     let strategyVersion = "";
+    let poolLookup: Promise<Response> | undefined;
 
     await installOidcDevLogin(page, {
       goto: false,
@@ -272,6 +273,9 @@ test.describe(`${TASK_ID} strict-live browser journey`, () => {
     });
 
     await test.step("create and accept the real Trading Room workspace", async () => {
+      poolLookup = page.waitForResponse((response) => (
+        response.request().method() === "GET" && responsePath(response) === "/bff/agora/candidate-pools/lookup"
+      ));
       const proposalResponse = waitForResponse(
         page,
         "POST",
@@ -292,10 +296,7 @@ test.describe(`${TASK_ID} strict-live browser journey`, () => {
     });
 
     await test.step("record a canonical candidate decision and read it back through the shared drawer", async () => {
-      const poolLookup = page.waitForResponse((response) => (
-        response.request().method() === "GET" && responsePath(response) === "/bff/agora/candidate-pools/lookup"
-      ));
-      await page.reload();
+      if (!poolLookup) throw new Error("Trading Room did not start the required candidate pool lookup.");
       const poolId = requiredId(await jsonBody(await poolLookup), "candidate pool", ["pool_id"]);
       await expect(page.getByTestId("open-candidate-review")).toBeEnabled({ timeout: 60_000 });
       const members = waitForResponse(page, "GET", `/bff/agora/candidate-pools/${encodeURIComponent(poolId)}/members`);

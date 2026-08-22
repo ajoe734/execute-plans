@@ -36,6 +36,25 @@
     "status": "pending-governed-session",
     "reason": "No serialized operator-live candidate and governed short-lived session were provided to this worker. The journey is intentionally not run with a fixture, a seed, or an ungoverned credential."
   },
+  "local_validation": {
+    "typecheck": {
+      "command": "npm run typecheck",
+      "result": "passed"
+    },
+    "lint": {
+      "command": "npx eslint e2e/agora-product-journey.spec.ts",
+      "result": "passed"
+    },
+    "playwright_opt_in_guard": {
+      "command": "npx playwright test e2e/agora-product-journey.spec.ts --project=chromium",
+      "result": "passed; 1 skipped because PFG_AGORA_JOURNEY_E2E is not set"
+    },
+    "strict_live_build": {
+      "command": "VITE_GCP_IDENTITY_API_KEY=<syntactically-valid non-deployed placeholder> VITE_GCP_IDENTITY_PROJECT_ID=pantheon-lupin-dev-20260719 VITE_GCP_IDENTITY_AUTH_DOMAIN=pantheon-lupin-dev-20260719.firebaseapp.com VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build",
+      "result": "passed",
+      "note": "Compile verification only; the placeholder identity configuration is not deployable."
+    }
+  },
   "code_disposition": {
     "production_duplicate_review_drawers_removed_before_this_task": [
       "TradingRoomPage already composes the shared CandidateReviewDrawer; it does not retain a page-local candidate review implementation."
