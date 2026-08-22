@@ -10,17 +10,14 @@
  *   PFG_AGORA_JOURNEY_E2E=1
  *   PANTHEON_FE_BASE_URL=<Pantheon dev FE>
  *   PANTHEON_BFF_BASE_URL=<Pantheon dev BFF>
- *   BFF_AUTH_TOKEN=<short-lived governed operator bearer token>
+ *   PFG_AGORA_JOURNEY_E2E_GCP_EMAIL=<verified operator account>
+ *   PFG_AGORA_JOURNEY_E2E_GCP_PASSWORD=<operator password>
+ *   PFG_AGORA_JOURNEY_E2E_GCP_TOTP_SECRET=<enrolled TOTP secret>
  */
 
 import { expect, test, type Page, type Response } from "@playwright/test";
 import { mkdirSync, writeFileSync } from "node:fs";
-import { randomUUID } from "node:crypto";
-import {
-  gcpIdentityStorageKey,
-  gcpIdentityStoredUser,
-  roleTokenFromEnv,
-} from "./helpers/auth";
+import { createHmac, randomUUID } from "node:crypto";
 
 const TASK_ID = "PFG-AGORA-JOURNEY-E2E-20260820";
 const ENABLED = process.env.PFG_AGORA_JOURNEY_E2E === "1";
@@ -28,18 +25,15 @@ const FE_BASE_URL = trimTrailingSlash(process.env.PANTHEON_FE_BASE_URL ?? "");
 const BFF_BASE_URL = trimTrailingSlash(
   process.env.PANTHEON_BFF_BASE_URL ?? process.env.VITE_BFF_BASE_URL ?? "",
 );
-const AUTH_TOKEN = roleTokenFromEnv("operator", [
-  "PFG_AGORA_JOURNEY_E2E_OPERATOR_TOKEN",
-  "PANTHEON_BFF_OPERATOR_A_TOKEN",
-  "BFF_AUTH_TOKEN",
-  "PANTHEON_BFF_SMOKE_BEARER_TOKEN",
-]);
 const TENANT_ID =
   process.env.PANTHEON_BFF_TENANT_ID ??
   process.env.PANTHEON_TENANT_ID ??
   "pantheon-dev";
-const GCP_IDENTITY_API_KEY =
-  process.env.PANTHEON_PUBLIC_GCP_IDENTITY_API_KEY ?? "";
+const GCP_IDENTITY_EMAIL = process.env.PFG_AGORA_JOURNEY_E2E_GCP_EMAIL ?? "";
+const GCP_IDENTITY_PASSWORD =
+  process.env.PFG_AGORA_JOURNEY_E2E_GCP_PASSWORD ?? "";
+const GCP_IDENTITY_TOTP_SECRET =
+  process.env.PFG_AGORA_JOURNEY_E2E_GCP_TOTP_SECRET ?? "";
 const EVIDENCE_DIR =
   process.env.PANTHEON_AUDIT_OUT_DIR ?? "/tmp/pfg-agora-product-journey";
 const DEV_FE_HOST = "pantheon-lupin-dev-fe.35.201.204.12.sslip.io";
@@ -47,10 +41,14 @@ const DEV_BFF_HOST = "pantheon-lupin-dev-bff.35.201.204.12.sslip.io";
 
 if (
   ENABLED &&
-  (!FE_BASE_URL || !BFF_BASE_URL || !AUTH_TOKEN || !GCP_IDENTITY_API_KEY)
+  (!FE_BASE_URL ||
+    !BFF_BASE_URL ||
+    !GCP_IDENTITY_EMAIL ||
+    !GCP_IDENTITY_PASSWORD ||
+    !GCP_IDENTITY_TOTP_SECRET)
 ) {
   throw new Error(
-    `${TASK_ID} requires Pantheon FE/BFF URLs, PANTHEON_PUBLIC_GCP_IDENTITY_API_KEY, and an explicit short-lived BFF_AUTH_TOKEN.`,
+    `${TASK_ID} requires Pantheon FE/BFF URLs plus a verified, TOTP-enrolled GCP Identity operator account.`,
   );
 }
 
@@ -83,47 +81,81 @@ function asRecord(value: unknown): JsonRecord {
     : {};
 }
 
-function bearerClaims(token: string): JsonRecord {
-  const parts = token.split(".");
-  if (parts.length !== 3) return {};
-  try {
-    return asRecord(
-      JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8")),
-    );
-  } catch {
-    return {};
+function base32Bytes(value: string): Buffer {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  const normalized = value.toUpperCase().replace(/[^A-Z2-7]/gu, "");
+  let bits = "";
+  for (const character of normalized) {
+    const index = alphabet.indexOf(character);
+    if (index < 0) throw new Error("Invalid base32 TOTP secret");
+    bits += index.toString(2).padStart(5, "0");
   }
+  const bytes: number[] = [];
+  for (let offset = 0; offset + 8 <= bits.length; offset += 8) {
+    bytes.push(Number.parseInt(bits.slice(offset, offset + 8), 2));
+  }
+  return Buffer.from(bytes);
+}
+
+function currentTotp(secret: string): string {
+  const counter = Buffer.alloc(8);
+  counter.writeBigUInt64BE(BigInt(Math.floor(Date.now() / 30_000)));
+  const digest = createHmac("sha1", base32Bytes(secret))
+    .update(counter)
+    .digest();
+  const offset = digest[digest.length - 1] & 0x0f;
+  const code =
+    (((digest[offset] & 0x7f) << 24) |
+      ((digest[offset + 1] & 0xff) << 16) |
+      ((digest[offset + 2] & 0xff) << 8) |
+      (digest[offset + 3] & 0xff)) %
+    1_000_000;
+  return String(code).padStart(6, "0");
+}
+
+function rolesFromMe(value: unknown): string[] {
+  const root = asRecord(value);
+  const data = asRecord(root.data);
+  const roles = data.roles ?? root.roles;
+  return Array.isArray(roles)
+    ? roles.filter((role): role is string => typeof role === "string")
+    : [];
 }
 
 async function installHostedOperatorSession(page: Page): Promise<void> {
-  expect(
-    GCP_IDENTITY_API_KEY,
-    "operator-live run needs the public GCP Identity API key",
-  ).toMatch(/^AIza[A-Za-z0-9_-]{35}$/u);
-  const claims = bearerClaims(AUTH_TOKEN);
-  const operatorId = String(claims.sub ?? "").trim();
-  const expiresAt = Number(claims.exp ?? 0);
-  expect(operatorId, "operator token must bind a subject").not.toBe("");
-  expect(
-    expiresAt,
-    "operator token must remain valid for the browser journey",
-  ).toBeGreaterThan(Math.floor(Date.now() / 1000) + 240);
-
-  const storageKey = gcpIdentityStorageKey(GCP_IDENTITY_API_KEY);
-  const storedSession = gcpIdentityStoredUser({
-    apiKey: GCP_IDENTITY_API_KEY,
-    email:
-      typeof claims.email === "string"
-        ? claims.email
-        : `${operatorId}@pantheon-dev.invalid`,
-    token: AUTH_TOKEN,
-    uid: operatorId,
+  const fromRoute = "/agora/strategy-workshop";
+  await page.goto(`${FE_BASE_URL}/auth?from=${encodeURIComponent(fromRoute)}`, {
+    waitUntil: "domcontentloaded",
   });
-  await page.addInitScript(
-    ({ key, session }) =>
-      window.sessionStorage.setItem(key, JSON.stringify(session)),
-    { key: storageKey, session: storedSession },
+  await page.getByPlaceholder("Email").fill(GCP_IDENTITY_EMAIL);
+  await page.getByPlaceholder("Password").fill(GCP_IDENTITY_PASSWORD);
+  const meResponse = page.waitForResponse(
+    (response) =>
+      response.request().method() === "GET" &&
+      responsePath(response) === "/bff/me",
   );
+  await page.getByRole("button", { exact: true, name: "Sign in" }).click();
+
+  const mfaHeading = page.getByText("Authenticator verification", {
+    exact: true,
+  });
+  await Promise.race([
+    page.waitForURL((url) => url.pathname === fromRoute),
+    mfaHeading.waitFor({ state: "visible" }),
+  ]);
+  if (new URL(page.url()).pathname !== fromRoute) {
+    await page
+      .getByPlaceholder("123456")
+      .fill(currentTotp(GCP_IDENTITY_TOTP_SECRET));
+    await page.getByRole("button", { name: "Verify and sign in" }).click();
+    await page.waitForURL((url) => url.pathname === fromRoute);
+  }
+
+  const me = await meResponse;
+  expect(me.ok(), `GCP browser session /bff/me returned ${me.status()}`).toBe(
+    true,
+  );
+  expect(rolesFromMe(await jsonBody(me))).toContain("operator");
 }
 
 async function assertOperatorLiveCandidate(page: Page): Promise<void> {
@@ -419,7 +451,6 @@ test.describe(`${TASK_ID} strict-live browser journey`, () => {
     await installHostedOperatorSession(page);
 
     await test.step("create a fresh Workshop and derive its id from the POST response", async () => {
-      await page.goto(`${FE_BASE_URL}/agora/strategy-workshop`);
       await expect(page.getByTestId("strategy-workshop-page-list")).toBeVisible(
         { timeout: 30_000 },
       );

@@ -23,7 +23,7 @@
   },
   "strict_live_contract": {
     "opt_in": "PFG_AGORA_JOURNEY_E2E=1",
-    "required_session": "Explicit governed short-lived operator BFF_AUTH_TOKEN, public GCP Identity API key, and Pantheon dev FE/BFF URLs.",
+    "required_session": "Verified, TOTP-enrolled GCP Identity operator credentials and Pantheon dev FE/BFF URLs. The browser signs in through the real hosted auth UI; BFF dev-login remains a separate operator authority preflight.",
     "forbidden": [
       "page.route or route fulfillment",
       "fixture or seed data",
@@ -34,12 +34,12 @@
   },
   "runtime_evidence": {
     "artifact": "PANTHEON_AUDIT_OUT_DIR/PFG-AGORA-JOURNEY-E2E-20260820-<run-marker>.json",
-    "status": "failing-hosted-browser-session",
-    "reason": "Runs 32605187403 and 32605277086 bound the exact operator-live FE/BFF pair and a governed short-lived session. The first checked out dev without the unmerged spec; the second ran PR head 4cbc390e081f6994f0ecec8f1a9411b920ede8cf but the protected Workshop route did not render. Neither run is accepted product evidence."
+    "status": "blocked-missing-gcp-identity-secrets",
+    "reason": "Runs 32605277086 and 32605521309 proved that a BFF dev-login bearer cannot rehydrate the post-migration GCP Identity browser session: the protected Workshop route redirected to /auth before any BFF request. The dev GitHub environment has no task-scoped verified GCP Identity email/password/TOTP secrets. No failed run is accepted product evidence."
   },
   "hosted_execution_harness": {
     "workflow": ".github/workflows/pfg-agora-journey-e2e-hosted-acceptance.yml",
-    "authentication": "The workflow mints a short-lived dev-login operator bearer and injects it into the browser session; no fixture token or human MFA session is used.",
+    "authentication": "The workflow verifies BFF operator authority through dev-login, then the browser signs in through hosted GCP Identity with a verified, TOTP-enrolled task account. It does not inject a fixture or synthesize Firebase session storage.",
     "fail_closed_precondition": "deployment.json must bind the supplied FE/BFF SHAs and report deploymentProfile=operator-live with VITE_BFF_REAL_WRITES=true before Playwright can run.",
     "artifact": "GitHub Actions artifact pfg-agora-journey-e2e-hosted-acceptance-<run-id>-<attempt>"
   },
@@ -71,7 +71,7 @@
     }
   },
   "planned_validation": [
-    "npx playwright test e2e/agora-product-journey.spec.ts --project=chromium with the governed environment",
+    "npx playwright test e2e/agora-product-journey.spec.ts --project=chromium with task-scoped GCP Identity credentials in the governed environment",
     "npm run typecheck",
     "strict-live build using the Pantheon dev BFF variables and VITE_BFF_REAL_WRITES=false"
   ]
