@@ -28,7 +28,15 @@
     "dev_vm_project": "pantheon-lupin-dev-20260719",
     "dev_fe_host": "https://pantheon-lupin-dev-fe.35.201.204.12.sslip.io",
     "dev_bff_host": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io",
-    "branch_policy_note": "Per AGENTS.md, dev is the canonical integration branch and the deployment workflow triggers after PR merge to dev. PR #601 targets dev. Hosted acceptance workflow is bound to dev runner and executes strict live specs against the deployed dev pair with zero route interception."
+    "branch_policy_note": "Per AGENTS.md, dev is the canonical integration branch and the deployment workflow triggers after PR merge to dev. PR #601 targets dev. Hosted acceptance workflow is bound to dev runner and executes strict live specs against the deployed dev pair with zero route interception.",
+    "artifact_hashes": {
+      "pfg-mgmt-product-journey-pages.png": "eb30ac79355d4ccec02ddabc674b72d451a78f2785e9528e0797a6292975229e",
+      "pfg-mgmt-action-reload.png": "8b4d3d665daef93017021f04ca451662313bd32c12ef3b783fc7dc027484c491",
+      "pfg-mgmt-ai-journey.png": "6a757eefa19f0bf5050f9e6c3be738f23fb0b9a18d65618c72724f67684883ba",
+      "pfg-mgmt-product-journey-network.json": "5548cef89cf1d8a3ede25ff0c13af149d98335c1972177b76317619bda56d00c",
+      "pfg-mgmt-action-network.json": "f4fcc3f95142fbcaeb1c393e2d6c0d5ff99c218f3423003ba9743d07b9663efb",
+      "pfg-mgmt-ai-network.json": "bffce2f4bcf63d26a489e3a5b10607227337a118c7b4f644d24e3dc042c89697"
+    }
   },
   "code_disposition": {
     "removed": [

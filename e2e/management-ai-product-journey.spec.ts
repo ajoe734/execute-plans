@@ -238,6 +238,14 @@ test.describe("Management AI Product Journey Hosted E2E", () => {
     await expect(textarea).toBeVisible({ timeout: 15_000 });
     await textarea.fill("Summarize active strategy status and portfolio exposure");
 
+    // Track newly submitted POST /bff/management/nl/ask or stream response
+    const askResponsePromise = page.waitForResponse(
+      (res) =>
+        (res.url().includes("/bff/management/nl/ask") || res.url().includes("/bff/management/nl/ask/stream")) &&
+        res.request().method() === "POST",
+      { timeout: 45_000 },
+    );
+
     const submitBtn = page.locator('button[type="submit"], button[aria-label="Send"], button[aria-label="送出"]').first();
     if (await submitBtn.isVisible().catch(() => false)) {
       await submitBtn.click();
@@ -245,11 +253,22 @@ test.describe("Management AI Product Journey Hosted E2E", () => {
       await textarea.press("Enter");
     }
 
-    // Require real provider response to appear in dialogue turn
-    const messageResponse = page.locator('[role="dialog"][aria-label*="Management AI"] [role="article"], [role="dialog"][aria-label*="Management AI"] .prose, [role="dialog"][aria-label*="Management AI"] [data-role="assistant"]').first();
-    await expect(messageResponse).toBeVisible({ timeout: 30_000 });
-    const responseText = await messageResponse.innerText();
-    expect(responseText.trim().length, "Expected non-empty assistant answer from live provider").toBeGreaterThan(0);
+    const askResponse = await askResponsePromise;
+    expect(askResponse.status(), `Expected successful 2xx status from ask endpoint, got ${askResponse.status()}`).toBeLessThan(400);
+
+    // Require newly appended assistant response turn to appear in dialogue turn
+    const assistantTurns = agentDialog.locator(
+      '[role="article"], [data-role="assistant"], .prose',
+    );
+    await expect(assistantTurns.last()).toBeVisible({ timeout: 30_000 });
+    const lastAssistantTurn = assistantTurns.last();
+    const responseText = (await lastAssistantTurn.innerText()).trim();
+    expect(responseText.length, "Expected non-empty assistant answer from live provider").toBeGreaterThan(0);
+
+    // Verify conversation header renders provider status / session info
+    await expect(
+      agentDialog.locator("text=/session|AI Ready|kernel on|Provider/i").first(),
+    ).toBeVisible({ timeout: 15_000 });
 
     // =========================================================================
     // 4. Action 1: execute navigate action (unconditional DOM/action assertion)
