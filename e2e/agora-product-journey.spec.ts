@@ -492,6 +492,11 @@ test.describe(`${TASK_ID} strict-live browser journey`, () => {
         "GET",
         `/bff/agora/workshops/${encodeURIComponent(workshopId)}`,
       );
+      const durableMessageEvents = waitForResponse(
+        page,
+        "GET",
+        `/bff/agora/workshops/${encodeURIComponent(workshopId)}/events`,
+      );
       const reconstruction = waitForResponse(
         page,
         "POST",
@@ -514,13 +519,29 @@ test.describe(`${TASK_ID} strict-live browser journey`, () => {
         messageResponse.request().headers()["if-match"],
         "the Workshop message must forward that exact current ETag without rewriting it",
       ).toBe(currentWorkshopEtag);
-      mutations.push(
-        await recordedMutation(
-          messageResponse,
-          ["message_id"],
-          "Workshop message",
-        ),
+      const messageReceipt = await jsonBody(messageResponse);
+      const messageEventId = requiredId(
+        messageReceipt,
+        "Workshop message event receipt",
+        ["event_id"],
       );
+      const durableMessageEvent = recordWithId(
+        await jsonBody(await durableMessageEvents),
+        "event_id",
+        messageEventId,
+      );
+      expect(
+        durableMessageEvent,
+        "the accepted Workshop message event must be read back before reconstruction",
+      ).toBeTruthy();
+      expect(durableMessageEvent?.workshop_id).toBe(workshopId);
+      expect(durableMessageEvent?.event_type).toBe("message");
+      mutations.push({
+        id: messageEventId,
+        method: "POST",
+        path: responsePath(messageResponse),
+        status: messageResponse.status(),
+      });
       mutations.push(
         await recordedMutation(
           await reconstruction,

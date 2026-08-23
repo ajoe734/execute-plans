@@ -1035,7 +1035,23 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
           throw new Error("This Workshop is concluded and cannot accept another message.");
         }
         setWorkshop(currentReadback.workshop);
-        await postWorkshopMessage(workshopId, { content }, { ifMatch: currentReadback.etag });
+        const messageReceipt = await postWorkshopMessage(
+          workshopId,
+          { content },
+          { ifMatch: currentReadback.etag },
+        );
+        const messageEventId = String(messageReceipt.event_id ?? "").trim();
+        if (!messageEventId) {
+          throw new Error("Workshop message receipt omitted its durable event id.");
+        }
+        // A 202 only acknowledges the append. Confirm the accepted event is
+        // present in the canonical projection before launching reconstruction,
+        // so no later write is based on an in-memory-only message claim.
+        const messageEventReadback = await listWorkshopEvents(workshopId);
+        if (!messageEventReadback.items.some((event) => event.event_id === messageEventId)) {
+          throw new Error("Workshop message receipt was not found in the durable event readback; reconstruction has not been started.");
+        }
+        setWorkshopEvents(messageEventReadback.items);
 
         // Reconstruction is a BFF-owned durable operation. Its receipt and
         // subsequent Workshop card/version readback are intentionally kept

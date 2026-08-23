@@ -9,7 +9,7 @@
   "scope": {
     "journey": [
       "fresh Workshop creation",
-      "durable reconstruction and StrategySpec identity readback",
+      "durable Workshop message event readback before reconstruction and StrategySpec identity readback",
       "research-run receipt and readiness handoff",
       "Trading Room workspace proposal and accept receipt",
       "shared candidate drawer decision and canonical member readback",
@@ -34,14 +34,14 @@
   },
   "runtime_evidence": {
     "artifact": "PANTHEON_AUDIT_OUT_DIR/PFG-AGORA-JOURNEY-E2E-20260820-<run-marker>.json",
-    "status": "repairing-workshop-precondition",
-    "reason": "Run 32613840861 proved the real hosted GCP Identity browser session and exact operator-live FE/BFF pair, then correctly rejected the obsolete Workshop-create payload with HTTP 422; that repair also corrected the plural /research-runs route. The later exact-pair run 32617780476 reached its first real Workshop message POST and failed with HTTP 428 because the frontend omitted If-Match. The accepted BFF contract requires the complete ETag issued by a fresh GET /bff/agora/workshops/{id}; this repair forwards that value unchanged and preserves missing/stale failures. Both failed runs are diagnostic only, never acceptance evidence."
+    "status": "repairing-message-event-readback",
+    "reason": "Runs 32613840861 and 32617780476 were diagnostic only: they respectively exposed the obsolete Workshop-create payload and the missing If-Match precondition. Hosted run 32622159616 then passed exact operator-live deployment identity, governed dev-login, and real GCP Identity browser authentication on FE 745aed1e504ca2d807052e5f440f3aad0c92d23d / BFF a2c7ba01f4b7cc33b457d924ba54b7cb0d775515. Its POST /messages correctly returned HTTP 202 with a durable event receipt, but the previous UI/E2E incorrectly expected a message_id and began reconstruction without proving the event projection. Artifact 9488685171 is diagnostic only, never acceptance evidence."
   },
   "workshop_message_precondition": {
     "source": "Pantheon BFF commit ab3377dcad634ee88ce5ad28c54f657098cda67a strategy-workshop router: GET emits W/\"workshop:{id}:vN\" as ETag and meta.etag; message mutations reject a missing precondition with 428 and a stale value with 409.",
-    "frontend_behavior": "Immediately before each Workshop message POST, StrategyWorkshopPage fresh-reads the canonical Workshop, requires its non-empty BFF-issued meta.etag, and passes the exact value through the client headers option so the generic numeric-lock quoting helper cannot rewrite it.",
-    "hosted_assertion": "The strict-live Playwright journey captures the fresh GET and message POST and requires the POST If-Match header to byte-match that GET response ETag.",
-    "failure_behavior": "A missing ETag stops before the message/reconstruction/Persona writes; a server 409 stays visible and no fallback or follow-on write is attempted."
+    "frontend_behavior": "Immediately before each Workshop message POST, StrategyWorkshopPage fresh-reads the canonical Workshop, requires its non-empty BFF-issued meta.etag, and passes the exact value through the client headers option so the generic numeric-lock quoting helper cannot rewrite it. The 202 body is treated only as an event receipt (event_id, sequence_no); StrategyWorkshopPage GETs the canonical events projection and requires the receipt event_id to be present before starting reconstruction.",
+    "hosted_assertion": "The strict-live Playwright journey captures the fresh GET and message POST, requires the POST If-Match header to byte-match that GET response ETag, then requires the 202 event_id to occur in a browser-observed GET /events response before the reconstruction POST.",
+    "failure_behavior": "A missing ETag, absent event receipt, or absent durable event readback stops before reconstruction and Persona writes; a server 409 stays visible and no fallback or follow-on write is attempted."
   },
   "hosted_execution_harness": {
     "workflow": ".github/workflows/pfg-agora-journey-e2e-hosted-acceptance.yml",
@@ -60,8 +60,8 @@
     },
     "workshop_precondition_regression": {
       "command": "npx vitest run src/lib/bff-v1/agora/workshops.test.ts src/agora/pages/strategy-workshop/StrategyWorkshopPage.test.tsx --maxWorkers=2 --testTimeout=15000 --hookTimeout=30000",
-      "result": "passed; 64 tests",
-      "coverage": "BFF-issued ETag retention, fail-closed missing ETag, exact header forwarding, UI missing-precondition stop, and visible stale-precondition failure without follow-on writes."
+      "result": "passed; 65 tests",
+      "coverage": "BFF-issued ETag retention, fail-closed missing ETag, exact header forwarding, durable 202 event receipt normalization, UI event readback before reconstruction, UI missing-precondition stop, and visible stale-precondition failure without follow-on writes."
     },
     "playwright_opt_in_guard": {
       "command": "npx playwright test e2e/agora-product-journey.spec.ts --project=chromium",
@@ -83,6 +83,6 @@
   },
   "planned_validation": [
     "Deploy the reviewed frontend commit as the operator-live Pantheon dev FE paired with the accepted BFF commit, then run the governed hosted journey workflow with its matching FE SHA.",
-    "Require the hosted journey artifact to include the new exact GET ETag to POST If-Match assertion before calling this repair accepted."
+    "Require the hosted journey artifact to include the exact GET ETag to POST If-Match assertion and the 202 event receipt to GET /events readback before the reconstruction POST before calling this repair accepted."
   ]
 }

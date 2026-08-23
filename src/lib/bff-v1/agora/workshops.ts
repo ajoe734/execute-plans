@@ -247,7 +247,7 @@ export async function postWorkshopMessage(
   workshopId: string,
   body: { content: string; metadata?: Record<string, unknown> },
   precondition: { ifMatch: string },
-): Promise<{ message_id: string; workshop_id: string; created_at: string }> {
+): Promise<{ event_id: string; sequence_no: number }> {
   const ifMatch = precondition.ifMatch.trim();
   if (!ifMatch) {
     throw new Error("Workshop message requires the current If-Match precondition.");
@@ -260,7 +260,10 @@ export async function postWorkshopMessage(
     // carries an already-quoted weak ETag, so send the BFF-issued value exactly.
     headers: { "If-Match": ifMatch },
   });
-  return entityFrom<{ message_id: string; workshop_id: string; created_at: string }>(response);
+  // The live route acknowledges an accepted, durable Workshop event with 202.
+  // It does not synthesize a chat-style message resource, so callers must use
+  // this receipt to read the event projection before starting dependent work.
+  return entityFrom<{ event_id: string; sequence_no: number }>(response);
 }
 
 /**
