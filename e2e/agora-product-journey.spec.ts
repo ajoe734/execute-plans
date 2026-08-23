@@ -318,33 +318,6 @@ async function recordedMutationForKnownTarget(
 }
 
 /**
- * Some durable Workshop commands admit an operation before their resource is
- * materialized. Their response proves command admission; the following
- * canonical readback provides the created resource identity.
- */
-async function recordedCommandAdmission(
-  response: Response,
-  label: string,
-  canonicalResourceId: string,
-): Promise<MutationEvidence> {
-  expect(response.ok(), `${label} mutation failed at ${response.url()}`).toBe(
-    true,
-  );
-  const body = asRecord(await jsonBody(response));
-  const receipt = asRecord(asRecord(body.data).command_receipt);
-  expect(
-    receipt.status,
-    `${label} must return an admitted or completed durable command receipt`,
-  ).toMatch(/^(admitted|completed)$/);
-  return {
-    id: canonicalResourceId,
-    method: response.request().method() as "POST" | "PATCH",
-    path: responsePath(response),
-    status: response.status(),
-  };
-}
-
-/**
  * The hosted journey must tolerate an asynchronously materialized 202 receipt
  * without allowing reconstruction before its canonical event projection. The
  * timeout path is intentionally fail-closed: it reports a missing projection
@@ -669,17 +642,20 @@ test.describe(`${TASK_ID} strict-live browser journey`, () => {
         ["strategy_spec_registry_id", "registry_id"],
       );
       mutations.push(
-        await recordedCommandAdmission(
+        await recordedMutation(
           reconstructionResponse,
+          ["reconstruction_id"],
           "Strategy reconstruction",
-          strategyId,
         ),
       );
       await expect(
         page.getByTestId("workshop-reconstruction-state"),
-      ).toHaveAttribute("data-reconstruction-state", /admitted|completed/, {
+      ).toHaveAttribute("data-reconstruction-state", "completed", {
         timeout: 60_000,
       });
+      await expect(
+        page.getByTestId("workshop-reconstruction-state"),
+      ).toHaveAttribute("data-reconstruction-id", mutations[mutations.length - 1].id);
       await expect(
         page.getByTestId("workshop-strategy-spec-identity"),
       ).toContainText(strategyId, { timeout: 60_000 });

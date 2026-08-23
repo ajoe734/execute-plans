@@ -268,7 +268,9 @@ export async function postWorkshopMessage(
 
 /**
  * Request durable StrategySpec reconstruction after a workshop message.
- * The BFF owns the reconstruction record and its eventual card/event result.
+ * The BFF response identifies the reconstruction itself with
+ * `data.reconstruction_id`; canonical Strategy and Registry identities remain
+ * owned by the following versions readback.
  */
 export async function reconstructWorkshopStrategy(
   workshopId: string,

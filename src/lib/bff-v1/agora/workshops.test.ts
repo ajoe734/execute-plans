@@ -313,11 +313,11 @@ describe("postWorkshopMessage", () => {
 });
 
 describe("reconstructWorkshopStrategy", () => {
-  it("uses the durable BFF reconstruction route after a workshop message", async () => {
-    const receipt = { data: { command_receipt: { status: "admitted" }, resource: {} }, meta: {} };
-    vi.mocked(bffFetch).mockResolvedValue(receipt);
+  it("returns the canonical reconstruction result identity from the durable BFF route", async () => {
+    const result = { data: { reconstruction_id: "reconstruction-001" }, meta: {} };
+    vi.mocked(bffFetch).mockResolvedValue(result);
 
-    await expect(reconstructWorkshopStrategy("ws/001")).resolves.toEqual(receipt);
+    await expect(reconstructWorkshopStrategy("ws/001")).resolves.toEqual(result);
 
     expect(bffFetch).toHaveBeenCalledWith({
       method: "POST",

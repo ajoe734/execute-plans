@@ -3683,8 +3683,8 @@ export interface NoDirectActionProof {
 
 export interface WorkshopLiveOperationEnvelope {
   "data": {
-    "command_receipt": WorkshopCommandReceipt;
-    "resource": Record<string, never>;
+    "reconstruction_id": string;
+    [key: string]: unknown;
   };
   "meta": {
     "snapshot_at"?: string;
