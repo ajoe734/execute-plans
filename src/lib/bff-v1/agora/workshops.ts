@@ -189,7 +189,9 @@ export async function listWorkshops(params?: {
 }
 
 export async function createWorkshop(body: {
-  subject: StrategyWorkshop["subject"];
+  initial_message: string;
+  title?: string;
+  strategy_spec_ref?: string;
   participant_persona_ids?: string[];
   metadata?: Record<string, unknown>;
 }): Promise<StrategyWorkshop> {
@@ -318,8 +320,8 @@ export async function dispatchWorkshopResearchRun(
 ): Promise<WorkshopResearchRunEnvelope> {
   return bffFetch<WorkshopResearchRunEnvelope>({
     method: "POST",
-    path: `/bff/agora/workshops/${encodeURIComponent(workshopId)}/research-run`,
-    body: body ?? {},
+    path: `/bff/agora/workshops/${encodeURIComponent(workshopId)}/research-runs`,
+    body,
   });
 }
 

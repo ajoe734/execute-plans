@@ -52,6 +52,9 @@ jobs:
       DEV_LOGIN_CLIENT_ID: ${{ vars.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_ID || 'pantheon-dev-operator-a-v1' }}
       DEV_LOGIN_CLIENT_SECRET: ${{ secrets.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_SECRET }}
       PFG_AGORA_JOURNEY_E2E: "1"
+      PFG_AGORA_JOURNEY_E2E_GCP_EMAIL: ${{ secrets.PFG_AGORA_JOURNEY_E2E_GCP_EMAIL }}
+      PFG_AGORA_JOURNEY_E2E_GCP_PASSWORD: ${{ secrets.PFG_AGORA_JOURNEY_E2E_GCP_PASSWORD }}
+      PFG_AGORA_JOURNEY_E2E_GCP_TOTP_SECRET: ${{ secrets.PFG_AGORA_JOURNEY_E2E_GCP_TOTP_SECRET }}
       PANTHEON_PUBLIC_GCP_IDENTITY_API_KEY: ${{ vars.VITE_GCP_IDENTITY_API_KEY }}
     steps:
       - name: Checkout dispatched revision
@@ -68,6 +71,10 @@ jobs:
           [[ "${PANTHEON_BFF_TENANT_ID}" == "tenant-dev" ]]
           if [[ -z "${DEV_LOGIN_CLIENT_SECRET}" ]]; then
             echo "::error::DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_SECRET is not provisioned; refusing to run an unauthenticated hosted journey." >&2
+            exit 1
+          fi
+          if [[ -z "${PFG_AGORA_JOURNEY_E2E_GCP_EMAIL}" || -z "${PFG_AGORA_JOURNEY_E2E_GCP_PASSWORD}" || -z "${PFG_AGORA_JOURNEY_E2E_GCP_TOTP_SECRET}" ]]; then
+            echo "::error::Task-scoped verified GCP Identity email/password/TOTP secrets are not provisioned; refusing to synthesize a browser session." >&2
             exit 1
           fi
 
@@ -107,9 +114,8 @@ jobs:
             exit 1
           fi
           echo "::add-mask::${token}"
-          echo "BFF_AUTH_TOKEN=${token}" >> "${GITHUB_ENV}"
-          echo "PFG_AGORA_JOURNEY_E2E_OPERATOR_TOKEN=${token}" >> "${GITHUB_ENV}"
-          echo "PANTHEON_BFF_OPERATOR_TOKEN=${token}" >> "${GITHUB_ENV}"
+          me="$(curl -fsS "${PANTHEON_BROWSER_BFF_BASE_URL}/bff/me" -H "Authorization: Bearer ${token}")"
+          node -e 'const r=JSON.parse(process.argv[1]); const d=r.data ?? r; if (!Array.isArray(d.roles) || !d.roles.includes("operator")) process.exit(1)' "${me}"
 
       - name: Set up Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020

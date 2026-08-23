@@ -1,0 +1,78 @@
+{
+  "schema_version": "pantheon.agora.product-journey-evidence.v1",
+  "task_id": "PFG-AGORA-JOURNEY-E2E-20260820",
+  "owner": "Codex2",
+  "reviewer": "Antigravity2",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "status": "implementation-in-progress",
+  "scope": {
+    "journey": [
+      "fresh Workshop creation",
+      "durable reconstruction and StrategySpec identity readback",
+      "research-run receipt and readiness handoff",
+      "Trading Room workspace proposal and accept receipt",
+      "shared candidate drawer decision and canonical member readback",
+      "Trading Room decision, consultation, performance learning receipt, and reload persistence"
+    ],
+    "not_changed": [
+      "shared hosted auth helper ownership",
+      "BFF implementation or persistence schema",
+      "deployment configuration or real-write policy"
+    ]
+  },
+  "strict_live_contract": {
+    "opt_in": "PFG_AGORA_JOURNEY_E2E=1",
+    "required_session": "Verified, TOTP-enrolled GCP Identity operator credentials and Pantheon dev FE/BFF URLs. The browser signs in through the real hosted auth UI; BFF dev-login remains a separate operator authority preflight.",
+    "forbidden": [
+      "page.route or route fulfillment",
+      "fixture or seed data",
+      "prebuilt Workshop, candidate, pool, proposal, workspace, event, or suggestion IDs",
+      "in-memory-only mutation claims"
+    ],
+    "identity_proof": "The browser response to every mutation supplies a canonical identity. Later steps use only those response-derived IDs, with reload readbacks through the shared drawer and performance receipt."
+  },
+  "runtime_evidence": {
+    "artifact": "PANTHEON_AUDIT_OUT_DIR/PFG-AGORA-JOURNEY-E2E-20260820-<run-marker>.json",
+    "status": "repairing-live-contract-drift",
+    "reason": "Run 32613840861 proved the real hosted GCP Identity browser session and exact operator-live FE/BFF pair, then correctly rejected the production Workshop create request with HTTP 422. Live OpenAPI identifies the retired FE payload as the cause: POST /bff/agora/workshops requires initial_message (with optional title/strategy_spec_ref/metadata), not the obsolete subject object. The same contract audit found the client and observer must use the deployed plural /research-runs endpoint with an omitted optional body. This failed run is diagnostic only, never acceptance evidence."
+  },
+  "hosted_execution_harness": {
+    "workflow": ".github/workflows/pfg-agora-journey-e2e-hosted-acceptance.yml",
+    "authentication": "The workflow verifies BFF operator authority through dev-login, then the browser signs in through hosted GCP Identity with a verified, TOTP-enrolled task account. It does not inject a fixture or synthesize Firebase session storage.",
+    "fail_closed_precondition": "deployment.json must bind the supplied FE/BFF SHAs and report deploymentProfile=operator-live with VITE_BFF_REAL_WRITES=true before Playwright can run.",
+    "artifact": "GitHub Actions artifact pfg-agora-journey-e2e-hosted-acceptance-<run-id>-<attempt>"
+  },
+  "local_validation": {
+    "typecheck": {
+      "command": "npm run typecheck",
+      "result": "passed"
+    },
+    "lint": {
+      "command": "npx eslint e2e/agora-product-journey.spec.ts",
+      "result": "passed"
+    },
+    "playwright_opt_in_guard": {
+      "command": "npx playwright test e2e/agora-product-journey.spec.ts --project=chromium",
+      "result": "passed; 1 skipped because PFG_AGORA_JOURNEY_E2E is not set"
+    },
+    "strict_live_build": {
+      "command": "VITE_GCP_IDENTITY_API_KEY=<syntactically-valid non-deployed placeholder> VITE_GCP_IDENTITY_PROJECT_ID=pantheon-lupin-dev-20260719 VITE_GCP_IDENTITY_AUTH_DOMAIN=pantheon-lupin-dev-20260719.firebaseapp.com VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build",
+      "result": "passed",
+      "note": "Compile verification only; the placeholder identity configuration is not deployable."
+    }
+  },
+  "code_disposition": {
+    "verification_command": "rg -n 'CandidateReviewDrawer|candidate-review-drawer|FixedLens|fixed lens|fixedLens' src/agora --glob '*.{ts,tsx}'",
+    "result": "TradingRoomPage is the only production caller and imports CandidateReviewDrawer as SharedCandidateReviewDrawer from src/agora/components; no FixedLens or page-local candidate-review caller is present.",
+    "ui_duplicate_changes": {
+      "removed": [],
+      "status": "No duplicate removal is claimed before the replacement strict-live journey passes."
+    }
+  },
+  "planned_validation": [
+    "npx playwright test e2e/agora-product-journey.spec.ts --project=chromium with task-scoped GCP Identity credentials in the governed environment",
+    "npm run typecheck",
+    "strict-live build using the Pantheon dev BFF variables and VITE_BFF_REAL_WRITES=false"
+  ]
+}
