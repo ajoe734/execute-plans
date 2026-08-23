@@ -79,30 +79,60 @@ function bearerClaims(token: string): Record<string, unknown> {
   }
 }
 
+async function getOrMintAuthToken(request: APIRequestContext): Promise<string> {
+  const token = roleTokenFromEnv("operator", [
+    "PANTHEON_BFF_OPERATOR_A_TOKEN",
+    "DEV_BFF_OPERATOR_A_TOKEN",
+    "BFF_AUTH_TOKEN",
+    "PANTHEON_BFF_SMOKE_BEARER_TOKEN",
+  ]);
+  if (token) {
+    try {
+      const res = await request.get(`${BFF_BASE_URL}/bff/me`, {
+        headers: { Authorization: `Bearer ${token}`, "X-Tenant-Id": TENANT_ID },
+      });
+      if (res.ok()) return token;
+    } catch {
+      // probe failed, fallback to dev-login
+    }
+  }
+
+  const clientId = process.env.DEV_LOGIN_CLIENT_ID || process.env.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_ID || "pantheon-dev-operator-a-v1";
+  const clientSecret = process.env.DEV_LOGIN_CLIENT_SECRET || process.env.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_SECRET;
+  if (clientSecret) {
+    try {
+      const res = await request.post(`${BFF_BASE_URL}/bff/auth/dev-login`, {
+        data: {
+          grant_type: "client_credentials",
+          client_id: clientId,
+          client_secret: clientSecret,
+        },
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+      });
+      if (res.ok()) {
+        const payload = (await res.json()) as JsonRecord;
+        if (typeof payload.access_token === "string" && payload.access_token) {
+          return payload.access_token;
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  return token;
+}
+
 async function installHostedSession(
   page: Page,
   input: { operatorId: string; roles: string[]; token: string },
 ): Promise<void> {
   const claims = bearerClaims(input.token);
+  const operatorId = String(claims.sub || input.operatorId);
   const nowSeconds = Math.floor(Date.now() / 1000);
   const exp = Number(claims.exp ?? 0) || nowSeconds + 3600;
 
-  const validToken = input.token.split(".").length === 3
-    ? input.token
-    : [
-        Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url"),
-        Buffer.from(JSON.stringify({
-          aud: "pantheon-dev",
-          auth_time: nowSeconds,
-          email: `${input.operatorId}@pantheon-dev.invalid`,
-          email_verified: true,
-          exp,
-          roles: input.roles,
-          sub: input.operatorId,
-          tenant_id: TENANT_ID,
-        })).toString("base64url"),
-        "dev-signature",
-      ].join(".");
+  const validToken = input.token;
 
   const candidateKeys = [
     GCP_IDENTITY_API_KEY,
@@ -143,7 +173,7 @@ async function installHostedSession(
         }
       }
     },
-    { candidateKeys, operatorId: input.operatorId, token: validToken, exp },
+    { candidateKeys, operatorId, token: validToken, exp },
   );
 }
 
@@ -214,7 +244,8 @@ test.describe("Management Console Product Journey Hosted E2E", () => {
     page,
     request,
   }, testInfo: TestInfo) => {
-    test.skip(!AUTH_TOKEN, "requires an operator bearer token for hosted acceptance");
+    const token = await getOrMintAuthToken(request);
+    test.skip(!token, "requires an operator bearer token for hosted acceptance");
 
     if (EXPECTED_FE_SHA && EXPECTED_BFF_SHA) {
       await assertDeploymentPair(request);
@@ -223,7 +254,7 @@ test.describe("Management Console Product Journey Hosted E2E", () => {
     await installHostedSession(page, {
       operatorId: "op-fe-gate",
       roles: ["operator", "reviewer", "approver", "admin"],
-      token: AUTH_TOKEN,
+      token,
     });
 
     const { networkEvents } = setupNetworkTracker(page);
@@ -372,7 +403,8 @@ test.describe("Management Console Product Journey Hosted E2E", () => {
     page,
     request,
   }, testInfo: TestInfo) => {
-    test.skip(!AUTH_TOKEN, "requires an operator bearer token for hosted acceptance");
+    const token = await getOrMintAuthToken(request);
+    test.skip(!token, "requires an operator bearer token for hosted acceptance");
 
     if (EXPECTED_FE_SHA && EXPECTED_BFF_SHA) {
       await assertDeploymentPair(request);
@@ -381,7 +413,7 @@ test.describe("Management Console Product Journey Hosted E2E", () => {
     await installHostedSession(page, {
       operatorId: "op-fe-gate",
       roles: ["operator", "reviewer", "approver", "admin"],
-      token: AUTH_TOKEN,
+      token,
     });
 
     const { networkEvents } = setupNetworkTracker(page);
