@@ -166,6 +166,25 @@ async function navigateWithAuth(page: Page, url: string): Promise<void> {
       await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30_000 });
     });
   }
+
+  await page.waitForFunction(
+    () => window.location.pathname === "/auth" || Boolean(document.querySelector("main")),
+    undefined,
+    { timeout: 15_000 },
+  ).catch(() => undefined);
+  const diagnostic = await page.evaluate(() => ({
+    pathname: window.location.pathname,
+    authReason: new URLSearchParams(window.location.search).get("reason"),
+    headings: Array.from(document.querySelectorAll("h1, h2"))
+      .slice(0, 5)
+      .map((element) => element.textContent?.trim() || ""),
+    hasAuthError: Boolean(document.querySelector('[aria-label="auth-error"]')),
+    isVerifying: document.body.innerText.includes("Verifying Pantheon session"),
+  }));
+  console.log(`[PFG NAV] ${JSON.stringify(diagnostic)}`);
+  if (diagnostic.pathname === "/auth") {
+    throw new Error(`Hosted browser session redirected to /auth (reason=${diagnostic.authReason ?? "unknown"})`);
+  }
 }
 
 async function assertDeploymentPair(request: APIRequestContext): Promise<{
