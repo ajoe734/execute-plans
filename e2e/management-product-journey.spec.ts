@@ -220,6 +220,9 @@ async function assertDeploymentPair(request: APIRequestContext): Promise<{
   if (EXPECTED_FE_SHA) {
     expect(String(deployment.commit ?? "").toLowerCase()).toBe(EXPECTED_FE_SHA);
   }
+  if (EXPECTED_BFF_SHA) {
+    expect(String(deployment.bffCommit ?? deployment.bffSourceCommitSha ?? "").toLowerCase()).toBe(EXPECTED_BFF_SHA);
+  }
   expect(deployment.sourceBranch).toBe("dev");
   expect(buildMode.VITE_BFF_MODE).toBe("live");
   expect(buildMode.VITE_BFF_FALLBACK).toBe("strict");
@@ -412,6 +415,12 @@ test.describe("Management Console Product Journey Hosted E2E", () => {
       (pathname) => pathname.includes("/incidents")
         || pathname.includes("/postmortems"),
     );
+    await expect(page.getByText(/Loading postmortems/i)).toBeHidden({ timeout: 15_000 });
+    await expect(
+      page.locator("main tbody tr").first().or(
+        page.getByText(/No incident postmortems recorded|transport degraded or unavailable/i).first(),
+      ),
+    ).toBeVisible({ timeout: 15_000 });
 
     // =========================================================================
     // Per-surface BFF endpoint assertions & latency tracking
@@ -476,6 +485,10 @@ test.describe("Management Console Product Journey Hosted E2E", () => {
     const token = await getOrMintAuthToken(request);
     test.skip(!token, "requires an operator bearer token for hosted acceptance");
 
+    const { deployment } = await assertDeploymentPair(request);
+    const buildMode = (deployment.buildMode ?? {}) as JsonRecord;
+    const realWritesEnabled = String(buildMode.VITE_BFF_REAL_WRITES ?? "false").toLowerCase() === "true";
+
     const session = await assertStrictSession(request, token);
     await installHostedSession(page, { ...session, token });
 
@@ -489,15 +502,21 @@ test.describe("Management Console Product Journey Hosted E2E", () => {
     await expect(page.locator("body")).not.toContainText(/serving mock|seed fallback/i);
 
     // Verify Strategy list loads and navigate to first Strategy Detail row unconditionally
-    const strategyRow = page.locator("table tbody tr, [role='row']").first();
+    const strategyRow = page.locator("table tbody tr").first();
     await expect(strategyRow).toBeVisible({ timeout: 15_000 });
-    await strategyRow.click();
+    await Promise.all([
+      page.waitForURL((current) => /\/management\/strategies\/[^/]+$/u.test(current.pathname), { timeout: 15_000 }),
+      strategyRow.click(),
+    ]);
 
     // Mandatory assertions on Strategy Detail: lifecycle / triple state and disabled controls
     await expect(page.locator("h1, h2, [role='heading'], main").first()).toBeVisible({ timeout: 15_000 });
     await expect(
-      page.locator("text=Lifecycle").or(page.locator("text=Triple State")).or(page.locator("[class*='Stepper']")).or(page.locator("[class*='Card']")).first(),
-    ).toBeVisible({ timeout: 15_000 });
+      page.getByText("Strategy state · lifecycle × review × deployment", { exact: true }),
+    ).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText("lifecycle", { exact: true })).toBeVisible();
+    await expect(page.getByText("review", { exact: true })).toBeVisible();
+    await expect(page.getByText("deployment", { exact: true })).toBeVisible();
 
     const disabledButtons = page.locator("main button[disabled], main button[aria-disabled='true']");
     await expect(disabledButtons.first()).toBeVisible({ timeout: 15_000 });
@@ -511,7 +530,7 @@ test.describe("Management Console Product Journey Hosted E2E", () => {
     await expect(page.locator("body")).not.toContainText(/serving mock|seed fallback/i);
 
     // Find first actionable runtime row and bind exact target identifier
-    const targetRow = page.locator("table tbody tr, [role='row']").first();
+    const targetRow = page.locator("table tbody tr").first();
     await expect(targetRow).toBeVisible({ timeout: 15_000 });
     const targetName = (await targetRow.locator("td").first().innerText()).trim();
     expect(targetName.length, "Expected non-empty target runtime identifier").toBeGreaterThan(0);
@@ -524,6 +543,21 @@ test.describe("Management Console Product Journey Hosted E2E", () => {
     // Trigger action menu specifically on the target runtime row
     const actionMenuButton = targetRow.locator("button").last();
     await expect(actionMenuButton).toBeVisible({ timeout: 15_000 });
+    if (!realWritesEnabled) {
+      await expect(
+        actionMenuButton,
+        "Read-only deployment must disable runtime mutation controls instead of falling through to synthetic client mutations",
+      ).toBeDisabled();
+
+      mkdirSync(EVIDENCE_DIR, { recursive: true });
+      await page.screenshot({ path: `${EVIDENCE_DIR}/pfg-mgmt-action-reload.png`, fullPage: true });
+      writeFileSync(
+        `${EVIDENCE_DIR}/pfg-mgmt-action-network.json`,
+        JSON.stringify(networkEvents, null, 2),
+        "utf8",
+      );
+      return;
+    }
     await actionMenuButton.click({ force: true });
 
     // Specifically select and click Quarantine action item
