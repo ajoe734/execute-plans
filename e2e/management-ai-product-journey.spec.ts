@@ -10,8 +10,6 @@
 import { expect, test, type APIRequestContext, type Page, type Request, type TestInfo } from "@playwright/test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import {
-  gcpIdentityStorageKey,
-  gcpIdentityStoredUser,
   roleTokenFromEnv,
   targetsExternalE2eEnvironment,
 } from "./helpers/auth";
@@ -47,11 +45,6 @@ const AUTH_TOKEN = roleTokenFromEnv("operator", [
 
 const TENANT_ID = process.env.PANTHEON_BFF_TENANT_ID || process.env.PANTHEON_TENANT_ID || "tenant-dev";
 
-const GCP_IDENTITY_API_KEY =
-  process.env.PANTHEON_PUBLIC_GCP_IDENTITY_API_KEY ||
-  process.env.VITE_GCP_IDENTITY_API_KEY ||
-  "AIzaSyCaMTJYfIP-uidP29AO7kX-JFm8wIheuSk";
-
 const EVIDENCE_DIR = process.env.PANTHEON_AUDIT_OUT_DIR || "docs/deployment/evidence/PFG-MGMT-JOURNEY-E2E-20260820";
 
 const HOSTED_REQUESTED = Boolean(
@@ -68,16 +61,6 @@ type LatencySample = {
 };
 
 type JsonRecord = Record<string, unknown>;
-
-function bearerClaims(token: string): Record<string, unknown> {
-  const parts = token.split(".");
-  if (parts.length !== 3) return {};
-  try {
-    return JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8")) as Record<string, unknown>;
-  } catch {
-    return {};
-  }
-}
 
 async function getOrMintAuthToken(request: APIRequestContext): Promise<string> {
   const token = roleTokenFromEnv("operator", [
@@ -147,86 +130,13 @@ async function assertStrictSession(
 
 async function installHostedSession(
   page: Page,
-  input: { operatorId: string; roles: string[]; token: string },
+  _input: { operatorId: string; roles: string[]; token: string },
 ): Promise<void> {
-  const claims = bearerClaims(input.token);
-  const operatorId = input.operatorId || String(claims.sub ?? "operator_a");
-  const nowSeconds = Math.floor(Date.now() / 1000);
-
-  // Fulfill 3rd-party Google Identity SDK background validation so Firebase Auth SDK rehydrates locally
-  await page.route("https://identitytoolkit.googleapis.com/**", async (route) => {
-    const url = new URL(route.request().url());
-    if (url.pathname.includes("/accounts:lookup")) {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          kind: "identitytoolkit#GetAccountInfoResponse",
-          users: [{
-            localId: operatorId,
-            email: `${operatorId}@pantheon-dev.invalid`,
-            emailVerified: true,
-            displayName: operatorId,
-            providerUserInfo: [{
-              providerId: "password",
-              displayName: operatorId,
-              email: `${operatorId}@pantheon-dev.invalid`,
-              federatedId: operatorId,
-              rawId: operatorId,
-            }],
-            validSince: String(nowSeconds),
-            lastLoginAt: String(Date.now()),
-            createdAt: String(Date.now()),
-          }],
-        }),
-      });
-      return;
-    }
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        idToken: input.token,
-        refreshToken: "dev-refresh-token",
-        expiresIn: "3600",
-        localId: operatorId,
-        isNewUser: false,
-      }),
-    });
-  });
-
-  await page.route("https://securetoken.googleapis.com/**", async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        access_token: input.token,
-        id_token: input.token,
-        refresh_token: "dev-refresh-token",
-        token_type: "Bearer",
-        expires_in: "3600",
-        user_id: operatorId,
-        project_id: "pantheon-dev",
-      }),
-    });
-  });
-
-  const storageKey = gcpIdentityStorageKey(GCP_IDENTITY_API_KEY);
-  const storedSession = gcpIdentityStoredUser({
-    apiKey: GCP_IDENTITY_API_KEY,
-    email: typeof claims.email === "string"
-      ? claims.email
-      : `${operatorId}@pantheon-dev.invalid`,
-    tenantId: TENANT_ID,
-    token: input.token,
-    uid: operatorId,
-  });
-
   const clientId = process.env.DEV_LOGIN_CLIENT_ID || process.env.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_ID || "pantheon-dev-operator-a-v1";
   const clientSecret = process.env.DEV_LOGIN_CLIENT_SECRET || process.env.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_SECRET || "";
 
   await page.addInitScript(
-    ({ key, session, clientId, clientSecret, tenantId }) => {
+    ({ clientId, clientSecret, tenantId }) => {
       if (clientId && clientSecret) {
         const config = {
           VITE_BFF_DEV_LOGIN_CLIENT_ID: clientId,
@@ -236,15 +146,8 @@ async function installHostedSession(
         (window as unknown as Record<string, unknown>).__PANTHEON_RUNTIME_CONFIG__ = config;
         (window as unknown as Record<string, unknown>).__PANTHEON_BFF_RUNTIME__ = config;
       }
-      try {
-        window.sessionStorage.setItem(key, JSON.stringify(session));
-        window.localStorage.setItem(key, JSON.stringify(session));
-        window.sessionStorage.setItem("pantheon_tenant_id", tenantId);
-      } catch {
-        // Retried automatically on origin navigation
-      }
     },
-    { key: storageKey, session: storedSession, clientId, clientSecret, tenantId: TENANT_ID },
+    { clientId, clientSecret, tenantId: TENANT_ID },
   );
 }
 
@@ -256,6 +159,7 @@ async function navigateWithAuth(page: Page, url: string): Promise<void> {
     });
   }
 }
+
 
 function setupNetworkTracker(page: Page) {
   const networkEvents: LatencySample[] = [];

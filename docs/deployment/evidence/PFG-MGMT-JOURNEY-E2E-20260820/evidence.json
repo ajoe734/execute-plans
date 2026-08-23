@@ -41,13 +41,16 @@
   "code_disposition": {
     "removed": [
       "All page.route interception and simulated loopback fixtures (installLoopbackProductFixtures, installLoopbackAiFixtures) in Playwright specs.",
-      "Synthetic assistant turns and pre-seeded actions in pantheon.mgmtAi.turns.v1 (removed from installHostedSession).",
-      "Client-side write overrides (pantheon.e2e.realWrites sessionStorage and __PANTHEON_BFF_RUNTIME__ injections).",
+      "identitytoolkit/securetoken route interception and fake Firebase storage bootstrapping in installHostedSession.",
+      "Synthetic assistant turns and pre-seeded actions in pantheon.mgmtAi.turns.v1.",
+      "Client-side write overrides (pantheon.e2e.realWrites sessionStorage).",
       "Browser-imported @/ source module evaluation in Playwright specs.",
       "Aggregated endpoint sum assertions (replaced by per-surface specific 2xx request validations).",
       "Conditional strategyRow.isVisible branches."
     ],
     "adopted": [
+      "ProtectedRoute uses loading then verified bffSession and fail-closed bffError as single authority; absence of Firebase session does not redirect when bffSession exists.",
+      "Runtime dev-login calls real /bff/auth/dev-login via window.__PANTHEON_RUNTIME_CONFIG__; zero identity SDK mocking.",
       "Pure hosted Playwright journey specs in e2e/management-product-journey.spec.ts and e2e/management-ai-product-journey.spec.ts with standard test.skip(!HOSTED_REQUESTED) gating for local test isolation.",
       "Direct browser DOM interaction with floating Management AI panel (AgentPanelBody / PromptInput), requiring newly submitted /bff/management/nl/ask response to provide the asserted action descriptors, provider/trace data, receipt, and replay proof.",
       "Unconditional DOM action execution for allowlisted UI actions (navigate, openDrawer, focusPanel) without page.goto bypass, and HighRiskConfirm modal interaction for confirmed domain writes (runBffAction) with command receipt readback and replay prevention, strictly scoped to the newly appended assistant turn container.",
@@ -59,6 +62,7 @@
       "Backend BFF API contracts, read-only kernel behavior, HighRiskConfirm modal presentation styling, and existing application routing."
     ]
   },
+
   "acceptance_proof": {
     "formula_activity_telemetry_postmortem_real_data": {
       "verified": true,
