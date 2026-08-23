@@ -1348,6 +1348,7 @@ jobs:
             -f release_controller_run_id="$RELEASE_CONTROLLER_RUN_ID" \
             -f persona_interaction_write_proof=true \
             -f pint_hosted_probe=true \
+            -f functional_closure_write_proof=true \
             -f soft_fail=false
           expected_title="PINT proof ${CORRELATION_ID}"
           for _ in $(seq 1 60); do

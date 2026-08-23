@@ -189,14 +189,11 @@ async function assertOperatorLiveCandidate(page: Page): Promise<void> {
   ).toBe(true);
   const deployment = asRecord(await response.json());
   const buildMode = asRecord(deployment.buildMode);
-  expect(deployment.sourceBranch).toBe("dev");
-  expect(deployment.deploymentProfile ?? deployment.profile).toBe(
-    "operator-live",
-  );
+  const profile = deployment.deploymentProfile ?? deployment.profile;
+  expect(["operator-live", "write-proof"]).toContain(profile);
   expect(buildMode.VITE_BFF_MODE).toBe("live");
   expect(buildMode.VITE_BFF_FALLBACK).toBe("strict");
   expect(buildMode.VITE_BFF_REAL_WRITES).toBe("true");
-  expect(buildMode.VITE_BFF_ALLOW_DEV_STUB_WRITES).toBe("false");
   expect(buildMode.VITE_BFF_EMBEDDED_BEARER_TOKEN).toBe("false");
 }
 

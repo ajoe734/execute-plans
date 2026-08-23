@@ -182,7 +182,7 @@ describe("paired Pantheon release workflow", () => {
     expect(integration).not.toContain("needs: proof-authorization");
     expect(integration).toContain("!cancelled()");
     expect(integration).toContain(
-      "(inputs.pint_hosted_probe == 'true' || inputs.persona_interaction_write_proof == 'true')",
+      "(inputs.pint_hosted_probe == 'true' || inputs.persona_interaction_write_proof == 'true' || inputs.functional_closure_write_proof == 'true')",
     );
     expect(authorizedProof).toContain("PANTHEON_BFF_OPERATOR_A_TOKEN");
   });
@@ -307,7 +307,7 @@ describe("paired Pantheon release workflow", () => {
     );
     expect(
       authorized.match(/secrets\.PANTHEON_BFF_OPERATOR_A_TOKEN/gu),
-    ).toHaveLength(5);
+    ).toHaveLength(6);
     expect(
       authorized.match(/secrets\.PANTHEON_BFF_VIEWER_TOKEN/gu),
     ).toHaveLength(4);
@@ -315,7 +315,7 @@ describe("paired Pantheon release workflow", () => {
       authorized.match(/secrets\.PANTHEON_BFF_RBAC_TOKENS_JSON/gu),
     ).toHaveLength(2);
     expect(integrationWorkflow.match(/secrets\.PANTHEON_BFF_/gu)).toHaveLength(
-      11,
+      12,
     );
     expect(integrationWorkflow).not.toContain(
       "secrets.PANTHEON_BFF_ADMIN_TOKEN",
@@ -552,7 +552,7 @@ describe("paired Pantheon release workflow", () => {
     ).toHaveLength(1);
     expect(deployWorkflow.match(/actions: write/gu)).toHaveLength(1);
     expect(integrationWorkflow.match(/secrets\.PANTHEON_BFF_/gu)).toHaveLength(
-      11,
+      12,
     );
   });
 
@@ -610,5 +610,29 @@ describe("paired Pantheon release workflow", () => {
     expect(branchWorkflow).toContain("name: Checkout Pantheon contract bundle");
     expect(branchWorkflow).toContain("PANTHEON_CONTRACT_ROOT: pantheon-contract");
     expect(branchWorkflow).toContain("run: npm run test:contract");
+  });
+
+  it("authorizes functional-closure write proof under the single parent coordinator and watchdog", () => {
+    const authorization = integrationWorkflow.slice(
+      integrationWorkflow.indexOf("  proof-authorization:"),
+      integrationWorkflow.indexOf("  integration-gate:"),
+    );
+    const authorizedProof = integrationWorkflow.slice(
+      integrationWorkflow.indexOf("  authorized-write-proof:"),
+    );
+
+    expect(authorization).toContain(
+      "inputs.functional_closure_write_proof == 'true'",
+    );
+    expect(authorization).toContain("hasFunctionalClosureProof");
+    expect(authorizedProof).toContain(
+      "inputs.functional_closure_write_proof == 'true'",
+    );
+    expect(authorizedProof).toContain(
+      "Run Agora functional-closure hosted journey",
+    );
+    expect(authorizedProof).toContain(
+      "Run Management and Management AI functional-closure hosted journeys",
+    );
   });
 });
