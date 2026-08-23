@@ -13,6 +13,7 @@ import type {
 vi.mock("@/lib/bff-v1/agora/workshops", () => ({
   listWorkshops: vi.fn().mockResolvedValue([]),
   getWorkshop: vi.fn().mockResolvedValue(null),
+  createWorkshop: vi.fn(),
   getWorkshopCompleteness: vi.fn().mockResolvedValue(null),
   getWorkshopReadiness: vi.fn().mockResolvedValue(null),
   listWorkshopCards: vi.fn().mockResolvedValue([]),
@@ -280,6 +281,27 @@ describe("StrategyWorkshopPage", () => {
     vi.mocked(workshopsModule.listWorkshops).mockResolvedValue([]);
     render(<StrategyWorkshopPage />);
     await screen.findByTestId("workshop-list-empty");
+  });
+
+  it("creates a free-form workshop with the title as its durable initial message", async () => {
+    const title = "Live trend-following strategy";
+    vi.mocked(workshopsModule.createWorkshop).mockResolvedValue(MOCK_WORKSHOP);
+    vi.mocked(workshopsModule.listWorkshops).mockResolvedValue([MOCK_WORKSHOP]);
+    render(<StrategyWorkshopPage />);
+
+    await screen.findByTestId("create-workshop-btn");
+    fireEvent.click(screen.getByTestId("create-workshop-btn"));
+    fireEvent.change(screen.getByTestId("create-workshop-title-input"), {
+      target: { value: title },
+    });
+    fireEvent.click(screen.getByTestId("create-workshop-submit"));
+
+    await waitFor(() => {
+      expect(workshopsModule.createWorkshop).toHaveBeenCalledWith({
+        initial_message: title,
+        title,
+      });
+    });
   });
 
   it("shows workshop list items when workshops are returned", async () => {

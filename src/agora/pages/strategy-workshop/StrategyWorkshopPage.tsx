@@ -297,7 +297,8 @@ function WorkshopListView({ onAddToTradingRoom }: WorkshopListViewProps): JSX.El
     setCreateError(null);
     try {
       const created = await createWorkshop({
-        subject: { title, kind: "free_form" },
+        initial_message: title,
+        title,
       });
       const ordered = await fetchWorkshops();
       const targetId = created?.workshop_id || ordered[0]?.workshop_id || null;
