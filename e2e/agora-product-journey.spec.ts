@@ -538,7 +538,7 @@ test.describe(`${TASK_ID} strict-live browser journey`, () => {
       const research = waitForResponse(
         page,
         "POST",
-        `/bff/agora/workshops/${encodeURIComponent(workshopId)}/research-run`,
+        `/bff/agora/workshops/${encodeURIComponent(workshopId)}/research-runs`,
       );
       await page.getByTestId("cmd-research-btn").click();
       mutations.push(

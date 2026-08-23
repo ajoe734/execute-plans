@@ -320,8 +320,8 @@ export async function dispatchWorkshopResearchRun(
 ): Promise<WorkshopResearchRunEnvelope> {
   return bffFetch<WorkshopResearchRunEnvelope>({
     method: "POST",
-    path: `/bff/agora/workshops/${encodeURIComponent(workshopId)}/research-run`,
-    body: body ?? {},
+    path: `/bff/agora/workshops/${encodeURIComponent(workshopId)}/research-runs`,
+    body,
   });
 }
 

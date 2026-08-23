@@ -35,7 +35,7 @@
   "runtime_evidence": {
     "artifact": "PANTHEON_AUDIT_OUT_DIR/PFG-AGORA-JOURNEY-E2E-20260820-<run-marker>.json",
     "status": "repairing-live-contract-drift",
-    "reason": "Run 32613840861 proved the real hosted GCP Identity browser session and exact operator-live FE/BFF pair, then correctly rejected the production Workshop create request with HTTP 422. Live OpenAPI identifies the retired FE payload as the cause: POST /bff/agora/workshops requires initial_message (with optional title/strategy_spec_ref/metadata), not the obsolete subject object. This failed run is diagnostic only, never acceptance evidence."
+    "reason": "Run 32613840861 proved the real hosted GCP Identity browser session and exact operator-live FE/BFF pair, then correctly rejected the production Workshop create request with HTTP 422. Live OpenAPI identifies the retired FE payload as the cause: POST /bff/agora/workshops requires initial_message (with optional title/strategy_spec_ref/metadata), not the obsolete subject object. The same contract audit found the client and observer must use the deployed plural /research-runs endpoint with an omitted optional body. This failed run is diagnostic only, never acceptance evidence."
   },
   "hosted_execution_harness": {
     "workflow": ".github/workflows/pfg-agora-journey-e2e-hosted-acceptance.yml",
