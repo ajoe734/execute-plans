@@ -222,17 +222,39 @@ async function installHostedSession(
     uid: operatorId,
   });
 
+  const clientId = process.env.DEV_LOGIN_CLIENT_ID || process.env.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_ID || "pantheon-dev-operator-a-v1";
+  const clientSecret = process.env.DEV_LOGIN_CLIENT_SECRET || process.env.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_SECRET || "";
+
   await page.addInitScript(
-    ({ key, session }) => {
+    ({ key, session, clientId, clientSecret, tenantId }) => {
+      if (clientId && clientSecret) {
+        const config = {
+          VITE_BFF_DEV_LOGIN_CLIENT_ID: clientId,
+          VITE_BFF_DEV_LOGIN_CLIENT_SECRET: clientSecret,
+          VITE_BFF_TENANT_ID: tenantId,
+        };
+        (window as unknown as Record<string, unknown>).__PANTHEON_RUNTIME_CONFIG__ = config;
+        (window as unknown as Record<string, unknown>).__PANTHEON_BFF_RUNTIME__ = config;
+      }
       try {
         window.sessionStorage.setItem(key, JSON.stringify(session));
         window.localStorage.setItem(key, JSON.stringify(session));
+        window.sessionStorage.setItem("pantheon_tenant_id", tenantId);
       } catch {
         // Retried automatically on origin navigation
       }
     },
-    { key: storageKey, session: storedSession },
+    { key: storageKey, session: storedSession, clientId, clientSecret, tenantId: TENANT_ID },
   );
+}
+
+async function navigateWithAuth(page: Page, url: string): Promise<void> {
+  await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30_000 });
+  if (page.url().includes("/auth")) {
+    await page.waitForURL((current) => !current.pathname.includes("/auth"), { timeout: 15_000 }).catch(async () => {
+      await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30_000 });
+    });
+  }
 }
 
 function setupNetworkTracker(page: Page) {
@@ -316,10 +338,7 @@ test.describe("Management AI Product Journey Hosted E2E", () => {
     // =========================================================================
     // 2. Navigate to Cockpit and open Floating Management AI Panel
     // =========================================================================
-    await page.goto(`${FE_BASE_URL}/management/cockpit`, {
-      waitUntil: "domcontentloaded",
-      timeout: 30_000,
-    });
+    await navigateWithAuth(page, `${FE_BASE_URL}/management/cockpit`);
     await expect(page.locator("#root")).toBeAttached();
 
     const trigger = page.locator('button[aria-label*="Management AI"], button[aria-label="開啟 Management AI"]').first();

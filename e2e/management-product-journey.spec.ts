@@ -222,17 +222,39 @@ async function installHostedSession(
     uid: operatorId,
   });
 
+  const clientId = process.env.DEV_LOGIN_CLIENT_ID || process.env.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_ID || "pantheon-dev-operator-a-v1";
+  const clientSecret = process.env.DEV_LOGIN_CLIENT_SECRET || process.env.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_SECRET || "";
+
   await page.addInitScript(
-    ({ key, session }) => {
+    ({ key, session, clientId, clientSecret, tenantId }) => {
+      if (clientId && clientSecret) {
+        const config = {
+          VITE_BFF_DEV_LOGIN_CLIENT_ID: clientId,
+          VITE_BFF_DEV_LOGIN_CLIENT_SECRET: clientSecret,
+          VITE_BFF_TENANT_ID: tenantId,
+        };
+        (window as unknown as Record<string, unknown>).__PANTHEON_RUNTIME_CONFIG__ = config;
+        (window as unknown as Record<string, unknown>).__PANTHEON_BFF_RUNTIME__ = config;
+      }
       try {
         window.sessionStorage.setItem(key, JSON.stringify(session));
         window.localStorage.setItem(key, JSON.stringify(session));
+        window.sessionStorage.setItem("pantheon_tenant_id", tenantId);
       } catch {
         // Retried automatically on origin navigation
       }
     },
-    { key: storageKey, session: storedSession },
+    { key: storageKey, session: storedSession, clientId, clientSecret, tenantId: TENANT_ID },
   );
+}
+
+async function navigateWithAuth(page: Page, url: string): Promise<void> {
+  await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30_000 });
+  if (page.url().includes("/auth")) {
+    await page.waitForURL((current) => !current.pathname.includes("/auth"), { timeout: 15_000 }).catch(async () => {
+      await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30_000 });
+    });
+  }
 }
 
 async function assertDeploymentPair(request: APIRequestContext): Promise<{
@@ -332,10 +354,7 @@ test.describe("Management Console Product Journey Hosted E2E", () => {
     // =========================================================================
     // 1. Formula / Rankings Center (/management/rankings)
     // =========================================================================
-    await page.goto(`${FE_BASE_URL}/management/rankings`, {
-      waitUntil: "domcontentloaded",
-      timeout: 30_000,
-    });
+    await navigateWithAuth(page, `${FE_BASE_URL}/management/rankings`);
     await expect(page.locator("#root")).toBeAttached();
     await expect(
       page.locator("h1, h2, [role='heading'], section[aria-label*='Rankings'], main").filter({
@@ -350,10 +369,7 @@ test.describe("Management Console Product Journey Hosted E2E", () => {
     // =========================================================================
     // 2. Activity / Performance Overview (/management/performance?tab=overview)
     // =========================================================================
-    await page.goto(`${FE_BASE_URL}/management/performance?tab=overview`, {
-      waitUntil: "domcontentloaded",
-      timeout: 30_000,
-    });
+    await navigateWithAuth(page, `${FE_BASE_URL}/management/performance?tab=overview`);
     await expect(page.locator("#root")).toBeAttached();
     await expect(
       page.locator("h1, h2, [role='heading'], section[aria-label*='Performance'], main").filter({
@@ -366,10 +382,7 @@ test.describe("Management Console Product Journey Hosted E2E", () => {
     await expect(page.locator("body")).not.toContainText(/serving mock|seed fallback/i);
 
     // Activity / Trading Pulse (/management/trading-pulse)
-    await page.goto(`${FE_BASE_URL}/management/trading-pulse`, {
-      waitUntil: "domcontentloaded",
-      timeout: 30_000,
-    });
+    await navigateWithAuth(page, `${FE_BASE_URL}/management/trading-pulse`);
     await expect(page.locator("#root")).toBeAttached();
     await expect(
       page.locator("h1, h2, [role='heading'], section[aria-label*='Trading Pulse'], main").filter({
@@ -381,10 +394,7 @@ test.describe("Management Console Product Journey Hosted E2E", () => {
     // =========================================================================
     // 3. Paper Telemetry: Portfolio Exposure (/management/performance?tab=exposure)
     // =========================================================================
-    await page.goto(`${FE_BASE_URL}/management/performance?tab=exposure`, {
-      waitUntil: "domcontentloaded",
-      timeout: 30_000,
-    });
+    await navigateWithAuth(page, `${FE_BASE_URL}/management/performance?tab=exposure`);
     await expect(page.locator("#root")).toBeAttached();
     await expect(
       page.locator("main").getByRole("tablist").or(page.locator("main").getByText(/Exposure|Telemetry|遙測|Risk Budget|No telemetry/i)).first(),
@@ -392,10 +402,7 @@ test.describe("Management Console Product Journey Hosted E2E", () => {
     await expect(page.locator("body")).not.toContainText(/serving mock|seed fallback/i);
 
     // Paper Telemetry: Runtimes (/management/runtimes)
-    await page.goto(`${FE_BASE_URL}/management/runtimes`, {
-      waitUntil: "domcontentloaded",
-      timeout: 30_000,
-    });
+    await navigateWithAuth(page, `${FE_BASE_URL}/management/runtimes`);
     await expect(page.locator("#root")).toBeAttached();
     await expect(
       page.locator("h1, h2, [role='heading'], main").filter({
@@ -410,10 +417,7 @@ test.describe("Management Console Product Journey Hosted E2E", () => {
     // =========================================================================
     // 4. Postmortem Library (/management/postmortems)
     // =========================================================================
-    await page.goto(`${FE_BASE_URL}/management/postmortems`, {
-      waitUntil: "domcontentloaded",
-      timeout: 30_000,
-    });
+    await navigateWithAuth(page, `${FE_BASE_URL}/management/postmortems`);
     await expect(page.locator("#root")).toBeAttached();
     await expect(
       page.locator("h1, h2, [role='heading'], main").filter({
@@ -484,10 +488,7 @@ test.describe("Management Console Product Journey Hosted E2E", () => {
     // =========================================================================
     // Part 1: Strategy Detail & Read-only controls honestly disabled
     // =========================================================================
-    await page.goto(`${FE_BASE_URL}/management/strategies`, {
-      waitUntil: "domcontentloaded",
-      timeout: 30_000,
-    });
+    await navigateWithAuth(page, `${FE_BASE_URL}/management/strategies`);
     await expect(page.locator("#root")).toBeAttached();
     await expect(page.locator("body")).not.toContainText(/serving mock|seed fallback/i);
 
@@ -509,10 +510,7 @@ test.describe("Management Console Product Journey Hosted E2E", () => {
     // =========================================================================
     // Part 2: Supported dev-paper domain action on Runtimes (/management/runtimes)
     // =========================================================================
-    await page.goto(`${FE_BASE_URL}/management/runtimes`, {
-      waitUntil: "domcontentloaded",
-      timeout: 30_000,
-    });
+    await navigateWithAuth(page, `${FE_BASE_URL}/management/runtimes`);
     await expect(page.locator("#root")).toBeAttached();
     await expect(page.locator("body")).not.toContainText(/serving mock|seed fallback/i);
 
