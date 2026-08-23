@@ -18,14 +18,15 @@ vi.mock("@/lib/bff-v1/agora/workshops", () => ({
   getWorkshopCompleteness: vi.fn().mockResolvedValue(null),
   getWorkshopReadiness: vi.fn().mockResolvedValue(null),
   listWorkshopCards: vi.fn().mockResolvedValue([]),
-  listWorkshopEvents: vi.fn().mockResolvedValue({ items: [] }),
+  listWorkshopEvents: vi.fn().mockResolvedValue({
+    items: [{ event_id: "evt-message-001", event_type: "message", workshop_id: "ws-abc" }],
+  }),
   listWorkshopVersions: vi.fn().mockResolvedValue({
     data: { versions: [], selected_version_id: null, active_strategy_spec_registry_id: null },
   }),
   postWorkshopMessage: vi.fn().mockResolvedValue({
-    message_id: "msg-001",
-    workshop_id: "ws-abc",
-    created_at: "2026-07-08T00:00:00Z",
+    event_id: "evt-message-001",
+    sequence_no: 2,
   }),
   reconstructWorkshopStrategy: vi.fn().mockResolvedValue({
     data: { command_receipt: { status: "admitted" }, resource: {} },
@@ -249,14 +250,15 @@ describe("StrategyWorkshopPage", () => {
     vi.mocked(workshopsModule.getWorkshopCompleteness).mockResolvedValue(null);
     vi.mocked(workshopsModule.getWorkshopReadiness).mockResolvedValue(null);
     vi.mocked(workshopsModule.listWorkshopCards).mockResolvedValue([]);
-    vi.mocked(workshopsModule.listWorkshopEvents).mockResolvedValue({ items: [] });
+    vi.mocked(workshopsModule.listWorkshopEvents).mockResolvedValue({
+      items: [{ event_id: "evt-message-001", event_type: "message", workshop_id: "ws-abc" }],
+    } as never);
     vi.mocked(workshopsModule.listWorkshopVersions).mockResolvedValue({
       data: { versions: [], selected_version_id: null, active_strategy_spec_registry_id: null },
     } as never);
     vi.mocked(workshopsModule.postWorkshopMessage).mockResolvedValue({
-      message_id: "msg-001",
-      workshop_id: "ws-abc",
-      created_at: "2026-07-08T00:00:00Z",
+      event_id: "evt-message-001",
+      sequence_no: 2,
     });
     vi.mocked(workshopsModule.reconstructWorkshopStrategy).mockResolvedValue({
       data: { command_receipt: { status: "admitted" }, resource: {} },
@@ -667,6 +669,31 @@ describe("StrategyWorkshopPage", () => {
       "ws-abc",
       { content: "Preserve the server's stale-precondition result" },
       { ifMatch: staleEtag },
+    );
+    expect(workshopsModule.reconstructWorkshopStrategy).not.toHaveBeenCalled();
+    expect(submitDailyInteraction).not.toHaveBeenCalled();
+  });
+
+  it("requires the accepted message event to be read back before reconstruction", async () => {
+    vi.mocked(workshopsModule.getWorkshop).mockResolvedValue(MOCK_WORKSHOP);
+    vi.mocked(workshopsModule.getWorkshopWithEtag).mockResolvedValue({
+      workshop: MOCK_WORKSHOP,
+      etag: 'W/"workshop:ws-abc:v7"',
+    });
+    vi.mocked(workshopsModule.postWorkshopMessage).mockResolvedValue({
+      event_id: "evt-message-awaiting-readback",
+      sequence_no: 8,
+    });
+    vi.mocked(workshopsModule.listWorkshopEvents).mockResolvedValue({ items: [] });
+
+    render(<StrategyWorkshopPage workshopId="ws-abc" />);
+    fireEvent.change(await screen.findByTestId("servant-composer-input"), {
+      target: { value: "Do not reconstruct before durable event readback" },
+    });
+    fireEvent.click(screen.getByTestId("servant-composer-submit"));
+
+    expect(await screen.findByTestId("servant-composer-error")).toHaveTextContent(
+      "Workshop message receipt was not found in the durable event readback; reconstruction has not been started.",
     );
     expect(workshopsModule.reconstructWorkshopStrategy).not.toHaveBeenCalled();
     expect(submitDailyInteraction).not.toHaveBeenCalled();

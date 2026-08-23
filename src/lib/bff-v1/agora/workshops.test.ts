@@ -285,18 +285,17 @@ describe("listWorkshopEvents", () => {
 });
 
 describe("postWorkshopMessage", () => {
-  it("unwraps a data envelope for created message reads", async () => {
-    const message = {
-      message_id: "msg-001",
-      workshop_id: "ws-001",
-      created_at: "2026-07-08T00:00:00Z",
+  it("unwraps the durable 202 Workshop event receipt", async () => {
+    const receipt = {
+      event_id: "evt-001",
+      sequence_no: 2,
     };
-    vi.mocked(bffFetch).mockResolvedValue({ data: message });
+    vi.mocked(bffFetch).mockResolvedValue({ data: receipt });
 
     const etag = 'W/"workshop:ws-001:v17"';
     const result = await postWorkshopMessage("ws-001", { content: "Continue" }, { ifMatch: etag });
 
-    expect(result).toEqual(message);
+    expect(result).toEqual(receipt);
     expect(bffFetch).toHaveBeenCalledWith({
       method: "POST",
       path: "/bff/agora/workshops/ws-001/messages",
