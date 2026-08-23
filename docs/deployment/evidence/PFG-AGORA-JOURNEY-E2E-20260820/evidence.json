@@ -60,7 +60,7 @@
     },
     "workshop_precondition_regression": {
       "command": "npx vitest run src/lib/bff-v1/agora/workshops.test.ts src/agora/pages/strategy-workshop/StrategyWorkshopPage.test.tsx --maxWorkers=2 --testTimeout=15000 --hookTimeout=30000",
-      "result": "passed; 63 tests",
+      "result": "passed; 64 tests",
       "coverage": "BFF-issued ETag retention, fail-closed missing ETag, exact header forwarding, UI missing-precondition stop, and visible stale-precondition failure without follow-on writes."
     },
     "playwright_opt_in_guard": {
