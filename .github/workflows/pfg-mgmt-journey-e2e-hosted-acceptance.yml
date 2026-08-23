@@ -49,9 +49,9 @@ jobs:
       EXPECTED_FE_SHA: ${{ inputs.expected_fe_sha }}
       EXPECTED_BFF_SHA: ${{ inputs.expected_bff_sha }}
       PANTHEON_AUDIT_OUT_DIR: .artifacts/PFG-MGMT-JOURNEY-E2E-20260820/${{ github.run_id }}-${{ github.run_attempt }}
-      BFF_AUTH_TOKEN: ${{ secrets.PANTHEON_BFF_OPERATOR_A_TOKEN || secrets.DEV_BFF_OPERATOR_A_TOKEN || secrets.PANTHEON_BFF_SMOKE_BEARER_TOKEN || secrets.BFF_AUTH_TOKEN || '' }}
+      PANTHEON_CREDENTIALED_PLAYWRIGHT_NO_ARTIFACTS: "1"
       DEV_LOGIN_CLIENT_ID: ${{ vars.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_ID || 'pantheon-dev-operator-a-v1' }}
-      DEV_LOGIN_CLIENT_SECRET: ${{ secrets.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_SECRET || '' }}
+      DEV_LOGIN_CLIENT_SECRET: ${{ secrets.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_SECRET }}
     steps:
       - name: Checkout dispatched revision
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5a
@@ -65,6 +65,10 @@ jobs:
           [[ "${EXPECTED_FE_SHA}" =~ ^[0-9a-f]{40}$ ]]
           [[ "${EXPECTED_BFF_SHA}" =~ ^[0-9a-f]{40}$ ]]
           [[ "${PANTHEON_BFF_TENANT_ID}" == "tenant-dev" ]]
+          if [[ -z "${DEV_LOGIN_CLIENT_SECRET}" ]]; then
+            echo "::error::DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_SECRET is not provisioned; refusing to run an unauthenticated hosted journey." >&2
+            exit 1
+          fi
 
       - name: Bind expected identity to the live served deployment
         shell: bash
@@ -83,28 +87,20 @@ jobs:
           fi
           echo "verified live deployment.json binds fe=${served_fe} bff=${served_bff} to the expected exact pair"
 
-      - name: Mint or verify operator bearer token
+      - name: Mint a short-lived operator bearer token via governed dev-login
         shell: bash
         run: |
           set -euo pipefail
-          if [[ -n "${BFF_AUTH_TOKEN:-}" ]]; then
-            echo "Using provisioned BFF_AUTH_TOKEN secret"
-            echo "::add-mask::${BFF_AUTH_TOKEN}"
-          elif [[ -n "${DEV_LOGIN_CLIENT_SECRET:-}" ]]; then
-            response="$(curl -fsS -X POST "${PANTHEON_BROWSER_BFF_BASE_URL}/bff/auth/dev-login" \
-              -H 'Content-Type: application/json' \
-              -d "$(node -e 'process.stdout.write(JSON.stringify({grant_type:"client_credentials",client_id:process.env.DEV_LOGIN_CLIENT_ID,client_secret:process.env.DEV_LOGIN_CLIENT_SECRET}))')")"
-            token="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).access_token || "")' "${response}")"
-            if [[ -z "${token}" ]]; then
-              echo "::error::dev-login did not return access_token" >&2
-              exit 1
-            fi
-            echo "::add-mask::${token}"
-            echo "BFF_AUTH_TOKEN=${token}" >> "${GITHUB_ENV}"
-          else
-            echo "::error::Neither BFF_AUTH_TOKEN nor DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_SECRET is provisioned; refusing to run an unauthenticated hosted journey." >&2
+          response="$(curl -fsS -X POST "${PANTHEON_BROWSER_BFF_BASE_URL}/bff/auth/dev-login" \
+            -H 'Content-Type: application/json' \
+            -d "$(node -e 'process.stdout.write(JSON.stringify({grant_type:"client_credentials",client_id:process.env.DEV_LOGIN_CLIENT_ID,client_secret:process.env.DEV_LOGIN_CLIENT_SECRET}))')")"
+          token="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).access_token || "")' "${response}")"
+          if [[ -z "${token}" ]]; then
+            echo "::error::dev-login did not return access_token" >&2
             exit 1
           fi
+          echo "::add-mask::${token}"
+          echo "BFF_AUTH_TOKEN=${token}" >> "${GITHUB_ENV}"
 
       - name: Set up Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020

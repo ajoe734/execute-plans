@@ -2,8 +2,9 @@ import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "./AuthProvider";
 
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { session, bffSession, loading } = useAuth();
+  const { bffSession, bffError, loading } = useAuth();
   const loc = useLocation();
+
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center p-8 text-muted-foreground">
@@ -11,7 +12,8 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
       </div>
     );
   }
-  if (!session || !bffSession) {
+
+  if (bffError || !bffSession) {
     const from = `${loc.pathname}${loc.search}${loc.hash}`;
     return (
       <Navigate
@@ -20,5 +22,6 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
       />
     );
   }
+
   return <>{children}</>;
 }

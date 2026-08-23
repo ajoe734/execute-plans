@@ -55,7 +55,15 @@ beforeEach(() => {
 });
 
 describe("Persona and Agora auth route boundary", () => {
-  it("redirects an unauthenticated browser to /auth", () => {
+  it("shows loading screen while session verification is in progress", () => {
+    state.value.loading = true;
+    renderRoute();
+    expect(screen.getByText("Verifying Pantheon session…")).toBeInTheDocument();
+    expect(screen.queryByText("Persona interaction")).not.toBeInTheDocument();
+    expect(screen.queryByText("Authentication page")).not.toBeInTheDocument();
+  });
+
+  it("redirects an unauthenticated browser (no Firebase, no BFF) to /auth", () => {
     renderRoute();
     expect(screen.getByText("Authentication page")).toBeInTheDocument();
     expect(screen.getByTestId("auth-location")).toHaveTextContent(
@@ -64,11 +72,36 @@ describe("Persona and Agora auth route boundary", () => {
     expect(screen.queryByText("Persona interaction")).not.toBeInTheDocument();
   });
 
-  it("does not admit a GCP first-factor session before BFF verification", () => {
+  it("does not admit a GCP first-factor session before BFF verification (Firebase present, no BFF)", () => {
     state.value.session = { idToken: "gcp-first-factor-only" };
+    state.value.bffSession = null;
     renderRoute();
     expect(screen.getByText("Authentication page")).toBeInTheDocument();
     expect(screen.queryByText("Persona interaction")).not.toBeInTheDocument();
+  });
+
+  it("fails closed and redirects to /auth when BFF verification returns an error (bffError)", () => {
+    state.value.session = { idToken: "some-token" };
+    state.value.bffSession = {
+      identity: { roles: ["operator"], capabilities: [] },
+      readiness: { authReady: true, operatorRoleReady: true },
+    };
+    state.value.bffError = new Error("BFF verification network error");
+    renderRoute();
+    expect(screen.getByText("Authentication page")).toBeInTheDocument();
+    expect(screen.queryByText("Persona interaction")).not.toBeInTheDocument();
+  });
+
+  it("admits a verified BFF session even when Firebase session is absent (no-Firebase + verified-BFF)", () => {
+    state.value.session = null;
+    state.value.bffSession = {
+      identity: { roles: ["operator"], capabilities: [] },
+      readiness: { authReady: true, operatorRoleReady: true },
+    };
+    state.value.bffError = null;
+    renderRoute();
+    expect(screen.getByText("Persona interaction")).toBeInTheDocument();
+    expect(screen.queryByText("Authentication page")).not.toBeInTheDocument();
   });
 
   it("admits a BFF-authenticated viewer to read while write gates remain separate", () => {

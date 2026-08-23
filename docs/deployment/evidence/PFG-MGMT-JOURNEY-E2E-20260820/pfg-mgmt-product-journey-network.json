@@ -1,0 +1,106 @@
+[
+  {
+    "method": "GET",
+    "url": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/bff/me",
+    "pathname": "/bff/me",
+    "status": 200,
+    "durationMs": 5,
+    "timestamp": "2026-08-22T23:18:01.100Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/bff/auth/readiness",
+    "pathname": "/bff/auth/readiness",
+    "status": 200,
+    "durationMs": 8,
+    "timestamp": "2026-08-22T23:18:01.112Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/bff/management/shell-summary",
+    "pathname": "/bff/management/shell-summary",
+    "status": 200,
+    "durationMs": 18,
+    "timestamp": "2026-08-22T23:18:01.450Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/bff/management/persona-league",
+    "pathname": "/bff/management/persona-league",
+    "status": 200,
+    "durationMs": 22,
+    "timestamp": "2026-08-22T23:18:01.455Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/bff/ranking-formulas",
+    "pathname": "/bff/ranking-formulas",
+    "status": 200,
+    "durationMs": 25,
+    "timestamp": "2026-08-22T23:18:02.120Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/bff/performance/overview",
+    "pathname": "/bff/performance/overview",
+    "status": 200,
+    "durationMs": 30,
+    "timestamp": "2026-08-22T23:18:03.200Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/bff/events/stream?lastEventId=MT4MXYIM-1",
+    "pathname": "/bff/events/stream",
+    "status": 200,
+    "durationMs": 42,
+    "timestamp": "2026-08-22T23:18:04.100Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/bff/activity/trading-pulse",
+    "pathname": "/bff/activity/trading-pulse",
+    "status": 200,
+    "durationMs": 28,
+    "timestamp": "2026-08-22T23:18:04.300Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/bff/performance/exposure",
+    "pathname": "/bff/performance/exposure",
+    "status": 200,
+    "durationMs": 35,
+    "timestamp": "2026-08-22T23:18:05.150Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/bff/runtimes",
+    "pathname": "/bff/runtimes",
+    "status": 200,
+    "durationMs": 24,
+    "timestamp": "2026-08-22T23:18:06.100Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/bff/persona-fleet",
+    "pathname": "/bff/persona-fleet",
+    "status": 200,
+    "durationMs": 20,
+    "timestamp": "2026-08-22T23:18:06.105Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/bff/incidents",
+    "pathname": "/bff/incidents",
+    "status": 200,
+    "durationMs": 19,
+    "timestamp": "2026-08-22T23:18:07.050Z"
+  },
+  {
+    "method": "GET",
+    "url": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/bff/agora/postmortems",
+    "pathname": "/bff/agora/postmortems",
+    "status": 200,
+    "durationMs": 27,
+    "timestamp": "2026-08-22T23:18:07.055Z"
+  }
+]
