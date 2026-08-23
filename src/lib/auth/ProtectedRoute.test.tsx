@@ -114,4 +114,3 @@ describe("Persona and Agora auth route boundary", () => {
     expect(screen.getByText("Persona interaction")).toBeInTheDocument();
   });
 });
-
