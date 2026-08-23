@@ -246,6 +246,32 @@ async function navigateWithAuth(page: Page, url: string): Promise<void> {
   await waitForHostedRouteReady(page);
 }
 
+async function assertDeploymentPair(request: APIRequestContext): Promise<{ realWritesEnabled: boolean }> {
+  const deploymentResponse = await request.get(`${FE_BASE_URL}/deployment.json?pfg_mgmt_ai=${Date.now()}`);
+  expect(deploymentResponse.ok(), `deployment.json returned ${deploymentResponse.status()}`).toBe(true);
+  const deployment = (await deploymentResponse.json()) as JsonRecord;
+  const buildMode = (deployment.buildMode ?? {}) as JsonRecord;
+
+  expect(deployment.app).toBe("execute-plans");
+  expect(deployment.environment).toBe("pantheon-dev-fe");
+  if (EXPECTED_FE_SHA) {
+    expect(String(deployment.commit ?? "").toLowerCase()).toBe(EXPECTED_FE_SHA);
+  }
+  if (EXPECTED_BFF_SHA) {
+    expect(String(deployment.bffCommit ?? deployment.bffSourceCommitSha ?? "").toLowerCase()).toBe(EXPECTED_BFF_SHA);
+  }
+  expect(deployment.sourceBranch).toBe("dev");
+  expect(buildMode.VITE_BFF_MODE).toBe("live");
+  expect(buildMode.VITE_BFF_FALLBACK).toBe("strict");
+
+  const readyResponse = await request.get(`${BFF_BASE_URL}/readyz`);
+  expect(readyResponse.ok(), `/readyz returned ${readyResponse.status()}`).toBe(true);
+
+  return {
+    realWritesEnabled: String(buildMode.VITE_BFF_REAL_WRITES ?? "false").toLowerCase() === "true",
+  };
+}
+
 
 function setupNetworkTracker(page: Page) {
   const networkEvents: LatencySample[] = [];
@@ -306,6 +332,7 @@ test.describe("Management AI Product Journey Hosted E2E", () => {
   }, testInfo: TestInfo) => {
     const token = await getOrMintAuthToken(request);
     test.skip(!token, "requires an operator bearer token for hosted acceptance");
+    const { realWritesEnabled } = await assertDeploymentPair(request);
 
     // =========================================================================
     // 1. Preflight Assistant mode & provider readiness against live BFF
@@ -469,6 +496,23 @@ test.describe("Management AI Product Journey Hosted E2E", () => {
       hasText: /隔離 Runtime|Quarantine/i,
     }).first();
     await expect(runBffBtn, "Expected runBffAction button in newly appended provider turn").toBeVisible({ timeout: 15_000 });
+    if (!realWritesEnabled) {
+      await expect(
+        runBffBtn,
+        "Read-only deployment must keep Management AI domain-write actions disabled",
+      ).toBeDisabled();
+
+      mkdirSync(EVIDENCE_DIR, { recursive: true });
+      await page.screenshot({ path: `${EVIDENCE_DIR}/pfg-mgmt-ai-journey.png`, fullPage: true });
+      writeFileSync(
+        `${EVIDENCE_DIR}/pfg-mgmt-ai-network.json`,
+        JSON.stringify(networkEvents, null, 2),
+        "utf8",
+      );
+      throw new Error(
+        "Read-only action-disable proof completed; exactly-once confirmed action acceptance requires an explicitly authorized governed write-enabled deployment profile",
+      );
+    }
     await expect(runBffBtn).not.toBeDisabled();
 
     // Record baseline command count prior to confirmation
