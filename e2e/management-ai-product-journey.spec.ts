@@ -415,6 +415,17 @@ test.describe("Management AI Product Journey Hosted E2E", () => {
       const safeProviderDiagnostic = (await degradedNotice.locator("xpath=..").innerText().catch(() => "provider degraded"))
         .replace(/\s+/gu, " ")
         .slice(0, 300);
+      mkdirSync(EVIDENCE_DIR, { recursive: true });
+      await page.screenshot({ path: `${EVIDENCE_DIR}/pfg-mgmt-ai-journey.png`, fullPage: true });
+      writeFileSync(
+        `${EVIDENCE_DIR}/pfg-mgmt-ai-network.json`,
+        JSON.stringify(networkEvents, null, 2),
+        "utf8",
+      );
+      await testInfo.attach("mgmt-ai-provider-degraded-network-events", {
+        body: Buffer.from(JSON.stringify(networkEvents, null, 2)),
+        contentType: "application/json",
+      });
       throw new Error(`Management AI provider returned no assistant turn: ${safeProviderDiagnostic}`);
     }
     const lastAssistantTurn = assistantTurns.last();

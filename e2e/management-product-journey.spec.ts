@@ -419,7 +419,7 @@ test.describe("Management Console Product Journey Hosted E2E", () => {
     await expect(
       page.locator("main tbody tr").first().or(
         page.getByText(/No incident postmortems recorded|transport degraded or unavailable/i).first(),
-      ),
+      ).first(),
     ).toBeVisible({ timeout: 15_000 });
 
     // =========================================================================
@@ -529,8 +529,35 @@ test.describe("Management Console Product Journey Hosted E2E", () => {
     await expect(page.locator("#root")).toBeAttached();
     await expect(page.locator("body")).not.toContainText(/serving mock|seed fallback/i);
 
-    // Find first actionable runtime row and bind exact target identifier
-    const targetRow = page.locator("table tbody tr").first();
+    const runtimeRows = page.locator("table tbody tr");
+    await expect(runtimeRows.first()).toBeVisible({ timeout: 15_000 });
+    const actionMenuButtons = runtimeRows.locator("button");
+    await expect.poll(
+      () => actionMenuButtons.count(),
+      { message: "Expected runtime rows to expose governed action-menu controls", timeout: 15_000 },
+    ).toBeGreaterThan(0);
+
+    if (!realWritesEnabled) {
+      mkdirSync(EVIDENCE_DIR, { recursive: true });
+      await page.screenshot({ path: `${EVIDENCE_DIR}/pfg-mgmt-action-reload.png`, fullPage: true });
+      writeFileSync(
+        `${EVIDENCE_DIR}/pfg-mgmt-action-network.json`,
+        JSON.stringify(networkEvents, null, 2),
+        "utf8",
+      );
+
+      const actionMenuCount = await actionMenuButtons.count();
+      for (let index = 0; index < actionMenuCount; index += 1) {
+        await expect(
+          actionMenuButtons.nth(index),
+          `Read-only deployment must disable runtime mutation control ${index + 1}/${actionMenuCount} instead of falling through to synthetic client mutations`,
+        ).toBeDisabled();
+      }
+      return;
+    }
+
+    // Find first actionable runtime row and bind exact target identifier.
+    const targetRow = runtimeRows.filter({ has: page.locator("button:not([disabled])") }).first();
     await expect(targetRow).toBeVisible({ timeout: 15_000 });
     const targetName = (await targetRow.locator("td").first().innerText()).trim();
     expect(targetName.length, "Expected non-empty target runtime identifier").toBeGreaterThan(0);
@@ -543,21 +570,6 @@ test.describe("Management Console Product Journey Hosted E2E", () => {
     // Trigger action menu specifically on the target runtime row
     const actionMenuButton = targetRow.locator("button").last();
     await expect(actionMenuButton).toBeVisible({ timeout: 15_000 });
-    if (!realWritesEnabled) {
-      await expect(
-        actionMenuButton,
-        "Read-only deployment must disable runtime mutation controls instead of falling through to synthetic client mutations",
-      ).toBeDisabled();
-
-      mkdirSync(EVIDENCE_DIR, { recursive: true });
-      await page.screenshot({ path: `${EVIDENCE_DIR}/pfg-mgmt-action-reload.png`, fullPage: true });
-      writeFileSync(
-        `${EVIDENCE_DIR}/pfg-mgmt-action-network.json`,
-        JSON.stringify(networkEvents, null, 2),
-        "utf8",
-      );
-      return;
-    }
     await actionMenuButton.click({ force: true });
 
     // Specifically select and click Quarantine action item
