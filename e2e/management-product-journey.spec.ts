@@ -143,6 +143,11 @@ async function installHostedSession(
         const config = {
           VITE_BFF_DEV_LOGIN_CLIENT_ID: clientId,
           VITE_BFF_DEV_LOGIN_CLIENT_SECRET: clientSecret,
+          // The read-only build intentionally leaves the VITE keys blank. The
+          // deployed helper treats that blank value as authoritative, so also
+          // provide its existing runtime-only aliases for hosted acceptance.
+          PANTHEON_DEV_BFF_OIDC_CLIENT_ID: clientId,
+          PANTHEON_DEV_BFF_OIDC_CLIENT_SECRET: clientSecret,
           VITE_BFF_TENANT_ID: tenantId,
         };
         (window as unknown as Record<string, unknown>).__PANTHEON_RUNTIME_CONFIG__ = config;
