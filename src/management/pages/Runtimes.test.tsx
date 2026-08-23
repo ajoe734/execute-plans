@@ -1,11 +1,16 @@
-import { render, screen } from "@testing-library/react";
+import { cleanup, configure, render, screen, waitFor } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import i18n from "@/i18n";
 import type { RuntimeListItem } from "@/lib/bff-v1";
+import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
 import { RuntimesPage } from "./Runtimes";
+
+configure({
+  getElementError: (message) => new Error(message ?? "Element not found"),
+});
 
 const mocks = vi.hoisted(() => ({
   useLiveListV1: vi.fn(),
@@ -23,6 +28,20 @@ vi.mock("@/lib/bff-v1", async (importOriginal) => {
 
 void i18n.changeLanguage("en-US");
 
+class MockPointerEvent extends MouseEvent {
+  pointerId?: number;
+  constructor(type: string, params: PointerEventInit = {}) {
+    super(type, params);
+    this.pointerId = params.pointerId ?? 1;
+  }
+}
+if (typeof window !== "undefined") {
+  window.PointerEvent = MockPointerEvent as unknown as typeof PointerEvent;
+  window.HTMLElement.prototype.hasPointerCapture = () => false;
+  window.HTMLElement.prototype.setPointerCapture = () => {};
+  window.HTMLElement.prototype.releasePointerCapture = () => {};
+}
+
 function renderRuntimes(initialEntry: string) {
   return render(
     <I18nextProvider i18n={i18n}>
@@ -36,9 +55,23 @@ function renderRuntimes(initialEntry: string) {
 }
 
 describe("RuntimesPage", () => {
-  beforeEach(() => {
+  const originalRealWrites = process.env.VITE_BFF_REAL_WRITES;
+
+  beforeEach(async () => {
+    await i18n.changeLanguage("en-US");
     mocks.useLiveListV1.mockReset();
     mocks.runActionSafe.mockReset();
+    delete process.env.VITE_BFF_REAL_WRITES;
+  });
+
+  afterEach(() => {
+    cleanup();
+    document.body.innerHTML = "";
+    if (originalRealWrites !== undefined) {
+      process.env.VITE_BFF_REAL_WRITES = originalRealWrites;
+    } else {
+      delete process.env.VITE_BFF_REAL_WRITES;
+    }
   });
 
   it("focuses live runtime binding rows and renders missing telemetry as nan", () => {
@@ -108,5 +141,247 @@ describe("RuntimesPage", () => {
     expect(screen.getByText("No runtime rows.")).toBeInTheDocument();
     expect(screen.queryByText("rt-other")).not.toBeInTheDocument();
     expect(screen.queryByText("persona-other")).not.toBeInTheDocument();
+  });
+
+  it("disables all runtime action controls when VITE_BFF_REAL_WRITES is false (read-only dev profile)", () => {
+    process.env.VITE_BFF_REAL_WRITES = "false";
+    const rows: RuntimeListItem[] = [{
+      id: "rt-prod-01",
+      name: "rt-prod-01",
+      kind: "live" as RuntimeListItem["kind"],
+      env: "live",
+      status: "active",
+      cpu: 0.2,
+      memory: 0.4,
+      latencyP95Ms: 25,
+      uptimePct: 99.95,
+      region: "ap-northeast-1",
+      updatedAt: "2026-08-23T12:00:00Z",
+      runtimeId: "rt-prod-01",
+      runtimeBindingId: "rb-prod-01",
+      personaId: "persona-alpha",
+    }];
+    mocks.useLiveListV1.mockReturnValue({
+      items: rows,
+      refresh: vi.fn(),
+      loading: false,
+    });
+
+    renderRuntimes("/management/runtimes");
+
+    const actionBtn = screen.getByRole("button", { name: "Runtime actions" });
+    expect(actionBtn).toBeDisabled();
+    expect(actionBtn).toHaveAttribute("title", "Disabled until this action is backed by a governed command endpoint, command id, audit receipt, and dry-run/no-side-effect proof.");
+    expect(mocks.runActionSafe).not.toHaveBeenCalled();
+  });
+
+  it("enables runtime action controls and executes restart mutation when VITE_BFF_REAL_WRITES is true", async () => {
+    process.env.VITE_BFF_REAL_WRITES = "true";
+    const refreshMock = vi.fn();
+    mocks.runActionSafe.mockResolvedValue({ ok: true });
+    const rows: RuntimeListItem[] = [{
+      id: "rt-prod-01",
+      name: "rt-prod-01",
+      kind: "live" as RuntimeListItem["kind"],
+      env: "live",
+      status: "active",
+      cpu: 0.2,
+      memory: 0.4,
+      latencyP95Ms: 25,
+      uptimePct: 99.95,
+      region: "ap-northeast-1",
+      updatedAt: "2026-08-23T12:00:00Z",
+      runtimeId: "rt-prod-01",
+      runtimeBindingId: "rb-prod-01",
+      personaId: "persona-alpha",
+    }];
+    mocks.useLiveListV1.mockReturnValue({
+      items: rows,
+      refresh: refreshMock,
+      loading: false,
+    });
+
+    renderRuntimes("/management/runtimes");
+
+    const actionBtn = screen.getByRole("button", { name: "Runtime actions" });
+    expect(actionBtn).toBeEnabled();
+    expect(actionBtn).not.toHaveAttribute("title");
+
+    const { fireEvent, waitFor } = await import("@testing-library/react");
+    actionBtn.focus();
+    fireEvent.keyDown(actionBtn, { key: "ArrowDown", code: "ArrowDown", keyCode: 40 });
+
+    const restartItem = screen.getByText("Restart");
+    fireEvent.click(restartItem);
+
+    await waitFor(() => {
+      expect(mocks.runActionSafe).toHaveBeenCalledWith(
+        {
+          kind: "Runtime",
+          id: "rt-prod-01",
+          action: "restart",
+          memo: "from runtimes table",
+        },
+        expect.objectContaining({
+          successTitle: "Restart dispatched: rt-prod-01",
+        }),
+      );
+      expect(refreshMock).toHaveBeenCalled();
+    });
+  });
+
+  it("maps disable_new to quarantine with correct memo in real-write mode", async () => {
+    process.env.VITE_BFF_REAL_WRITES = "true";
+    const refreshMock = vi.fn();
+    mocks.runActionSafe.mockResolvedValue({ ok: true });
+    const rows: RuntimeListItem[] = [{
+      id: "rt-prod-01",
+      name: "rt-prod-01",
+      kind: "live" as RuntimeListItem["kind"],
+      env: "live",
+      status: "active",
+      cpu: 0.2,
+      memory: 0.4,
+      latencyP95Ms: 25,
+      uptimePct: 99.95,
+      region: "ap-northeast-1",
+      updatedAt: "2026-08-23T12:00:00Z",
+      runtimeId: "rt-prod-01",
+      runtimeBindingId: "rb-prod-01",
+      personaId: "persona-alpha",
+    }];
+    mocks.useLiveListV1.mockReturnValue({
+      items: rows,
+      refresh: refreshMock,
+      loading: false,
+    });
+
+    renderRuntimes("/management/runtimes");
+
+    const actionBtn = screen.getByRole("button", { name: "Runtime actions" });
+    const { fireEvent, waitFor } = await import("@testing-library/react");
+    actionBtn.focus();
+    fireEvent.keyDown(actionBtn, { key: "ArrowDown", code: "ArrowDown", keyCode: 40 });
+
+    const disableNewItem = screen.getByText("Disable new deployments");
+    fireEvent.click(disableNewItem);
+
+    await waitFor(() => {
+      expect(mocks.runActionSafe).toHaveBeenCalledWith(
+        {
+          kind: "Runtime",
+          id: "rt-prod-01",
+          action: "quarantine",
+          memo: "disable_new_deployments",
+        },
+        expect.objectContaining({
+          successTitle: "Disabled new deployments on: rt-prod-01",
+        }),
+      );
+      expect(refreshMock).toHaveBeenCalled();
+    });
+  });
+
+  it("opens HighRiskConfirm for emergency_kill and runs safe action when confirmed in real-write mode", async () => {
+    process.env.VITE_BFF_REAL_WRITES = "true";
+    const refreshMock = vi.fn();
+    mocks.runActionSafe.mockResolvedValue({ ok: true });
+    const rows: RuntimeListItem[] = [{
+      id: "rt-prod-01",
+      name: "rt-prod-01",
+      kind: "live" as RuntimeListItem["kind"],
+      env: "live",
+      status: "active",
+      cpu: 0.2,
+      memory: 0.4,
+      latencyP95Ms: 25,
+      uptimePct: 99.95,
+      region: "ap-northeast-1",
+      updatedAt: "2026-08-23T12:00:00Z",
+      runtimeId: "rt-prod-01",
+      runtimeBindingId: "rb-prod-01",
+      personaId: "persona-alpha",
+    }];
+    mocks.useLiveListV1.mockReturnValue({
+      items: rows,
+      refresh: refreshMock,
+      loading: false,
+    });
+
+    renderRuntimes("/management/runtimes");
+
+    const actionBtn = screen.getByRole("button", { name: "Runtime actions" });
+    const { fireEvent, waitFor } = await import("@testing-library/react");
+    actionBtn.focus();
+    fireEvent.keyDown(actionBtn, { key: "ArrowDown", code: "ArrowDown", keyCode: 40 });
+
+    const killItem = screen.getByText("Emergency kill");
+    fireEvent.click(killItem);
+
+    await waitFor(() => {
+      expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+    });
+    const dialog = document.querySelector('[role="dialog"]')!;
+    expect(dialog.textContent).toContain("runtime.emergency_kill");
+
+    const memoInput = dialog.querySelector("textarea")!;
+    const tokenInput = dialog.querySelector("input")!;
+    const confirmBtn = dialog.querySelector('button[type="button"].bg-destructive, button.bg-destructive') as HTMLButtonElement
+      || Array.from(dialog.querySelectorAll("button")).find((b) => b.textContent?.includes("Confirm"))!;
+
+    expect(confirmBtn.disabled).toBe(true);
+
+    // Type memo (critical risk requires >= 80 characters) and token
+    const testMemo = "Emergency operator kill for runaway runtime instance to prevent capital allocation loss on live broker.";
+    fireEvent.change(memoInput, { target: { value: testMemo } });
+    fireEvent.change(tokenInput, { target: { value: "KILL" } });
+
+    expect(confirmBtn.disabled).toBe(false);
+    fireEvent.click(confirmBtn);
+
+    await waitFor(() => {
+      expect(mocks.runActionSafe).toHaveBeenCalledWith(
+        {
+          kind: "Runtime",
+          id: "rt-prod-01",
+          action: "emergency_kill",
+          memo: testMemo,
+        },
+        expect.objectContaining({
+          successTitle: "Emergency kill dispatched: rt-prod-01",
+        }),
+      );
+      expect(refreshMock).toHaveBeenCalled();
+    });
+  });
+
+  it("keeps action button disabled for fleetDerived runtime rows even when real writes are enabled", () => {
+    process.env.VITE_BFF_REAL_WRITES = "true";
+    const rows = [{
+      id: "rt-fleet-01",
+      name: "rt-fleet-01",
+      kind: "paper" as RuntimeListItem["kind"],
+      env: "paper",
+      status: "declared" as RuntimeListItem["status"],
+      cpu: Number.NaN,
+      memory: Number.NaN,
+      latencyP95Ms: Number.NaN,
+      uptimePct: Number.NaN,
+      region: "",
+      updatedAt: "",
+      runtimeId: "rt-fleet-01",
+      fleetDerived: true,
+    }];
+    mocks.useLiveListV1.mockReturnValue({
+      items: rows,
+      refresh: vi.fn(),
+      loading: false,
+    });
+
+    renderRuntimes("/management/runtimes");
+
+    const actionBtn = screen.getByRole("button", { name: "Runtime actions" });
+    expect(actionBtn).toBeDisabled();
+    expect(mocks.runActionSafe).not.toHaveBeenCalled();
   });
 });
