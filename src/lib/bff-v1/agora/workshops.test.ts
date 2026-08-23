@@ -127,6 +127,20 @@ describe("dispatchWorkshopResearchRun", () => {
   });
 });
 
+describe("dispatchWorkshopResearchRun", () => {
+  it("uses the deployed plural research-runs route without inventing an empty payload", async () => {
+    vi.mocked(bffFetch).mockResolvedValue({ data: { research_run_id: "run-001" } });
+
+    await dispatchWorkshopResearchRun("ws/001");
+
+    expect(bffFetch).toHaveBeenCalledWith({
+      method: "POST",
+      path: "/bff/agora/workshops/ws%2F001/research-runs",
+      body: undefined,
+    });
+  });
+});
+
 describe("getWorkshopCompleteness", () => {
   it("returns null for a not-yet-assessed `{ data: null }` envelope instead of a truthy placeholder", async () => {
     // AG-DYNUI-PROD-006: the hosted dev BFF returns `{"data": null}` (200 OK)
