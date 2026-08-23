@@ -60,13 +60,13 @@
     },
     "workshop_precondition_regression": {
       "command": "npx vitest run src/lib/bff-v1/agora/workshops.test.ts src/agora/pages/strategy-workshop/StrategyWorkshopPage.test.tsx --maxWorkers=2 --testTimeout=15000 --hookTimeout=30000",
-      "result": "passed; 67 tests",
-      "coverage": "BFF-issued ETag retention, fail-closed missing ETag, exact header forwarding, durable 202 event receipt normalization, delayed projection retry, finite-deadline timeout without reconstruction, Workshop-change safety, UI receipt readback before reconstruction, and visible stale-precondition failure without follow-on writes."
+      "result": "passed; 68 tests",
+      "coverage": "BFF-issued ETag retention, fail-closed missing ETag, exact header forwarding, durable 202 event receipt normalization, delayed projection retry, finite-deadline timeout without reconstruction, Workshop-change safety, reconstruction data.reconstruction_id positive and missing-ID negative UI coverage, canonical Strategy/Registry versions readback, and visible stale-precondition failure without follow-on writes."
     },
     "component_gate_regression": {
       "command": "npx vitest related --run src/agora/pages/strategy-workshop/StrategyWorkshopPage.tsx src/agora/pages/strategy-workshop/StrategyWorkshopPage.test.tsx --silent",
-      "result": "passed; 55 tests under the CI-equivalent default runner",
-      "coverage": "The finite-deadline negative regression declares its own 15-second test timeout, which intentionally exceeds the 8-second application deadline and avoids relying on a local CLI timeout override."
+      "result": "passed; 8 selected tests under the CI-equivalent default runner",
+      "coverage": "The current related-test graph selects the Agora route composition suite. The finite-deadline negative regression declares its own 15-second test timeout, which intentionally exceeds the 8-second application deadline and avoids relying on a local CLI timeout override."
     },
     "playwright_opt_in_guard": {
       "command": "npx playwright test e2e/agora-product-journey.spec.ts --project=chromium",

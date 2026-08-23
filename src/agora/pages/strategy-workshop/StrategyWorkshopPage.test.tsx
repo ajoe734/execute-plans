@@ -630,6 +630,7 @@ describe("StrategyWorkshopPage", () => {
   });
 
   it("fails the reconstruction UI state when the BFF result omits reconstruction_id", async () => {
+    vi.mocked(workshopsModule.getWorkshop).mockResolvedValue(MOCK_WORKSHOP);
     vi.mocked(workshopsModule.reconstructWorkshopStrategy).mockResolvedValue({
       data: {},
       meta: {},
@@ -639,7 +640,9 @@ describe("StrategyWorkshopPage", () => {
     fireEvent.change(await screen.findByTestId("servant-composer-input"), {
       target: { value: "Reject an unidentified reconstruction result" },
     });
-    fireEvent.click(screen.getByTestId("servant-composer-submit"));
+    const submit = screen.getByTestId("servant-composer-submit");
+    await waitFor(() => expect(submit).toBeEnabled());
+    fireEvent.click(submit);
 
     await waitFor(() => {
       expect(workshopsModule.reconstructWorkshopStrategy).toHaveBeenCalledWith("ws-abc");
@@ -654,6 +657,14 @@ describe("StrategyWorkshopPage", () => {
     expect(screen.getByTestId("workshop-reconstruction-state")).not.toHaveAttribute(
       "data-reconstruction-id",
     );
+    await waitFor(() => {
+      expect(submitDailyInteraction).toHaveBeenCalledWith(expect.objectContaining({
+        workshop_id: "ws-abc",
+        human_request: expect.objectContaining({
+          request_text: "Reject an unidentified reconstruction result",
+        }),
+      }));
+    });
   });
 
   it("does not issue a Workshop write when the current readback omits its ETag", async () => {
