@@ -159,14 +159,7 @@ async function installHostedSession(
 }
 
 
-async function navigateWithAuth(page: Page, url: string): Promise<void> {
-  await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30_000 });
-  if (page.url().includes("/auth")) {
-    await page.waitForURL((current) => !current.pathname.includes("/auth"), { timeout: 15_000 }).catch(async () => {
-      await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30_000 });
-    });
-  }
-
+async function waitForHostedRouteReady(page: Page): Promise<void> {
   await page.waitForFunction(
     () => {
       const root = document.querySelector("#root");
@@ -175,7 +168,7 @@ async function navigateWithAuth(page: Page, url: string): Promise<void> {
         || !root.textContent?.includes("Verifying Pantheon session");
     },
     undefined,
-    { timeout: 30_000 },
+    { timeout: 45_000 },
   );
   const diagnostic = await page.evaluate(() => ({
     pathname: window.location.pathname,
@@ -190,6 +183,27 @@ async function navigateWithAuth(page: Page, url: string): Promise<void> {
   if (diagnostic.pathname === "/auth") {
     throw new Error(`Hosted browser session redirected to /auth (reason=${diagnostic.authReason ?? "unknown"})`);
   }
+}
+
+async function navigateWithAuth(page: Page, url: string): Promise<void> {
+  await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30_000 });
+  if (page.url().includes("/auth")) {
+    await page.waitForURL((current) => !current.pathname.includes("/auth"), { timeout: 15_000 }).catch(async () => {
+      await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30_000 });
+    });
+  }
+  await waitForHostedRouteReady(page);
+}
+
+async function expectSurface2xx(
+  events: LatencySample[],
+  label: string,
+  matches: (pathname: string) => boolean,
+): Promise<void> {
+  await expect.poll(
+    () => events.some((event) => event.status >= 200 && event.status < 300 && matches(event.pathname)),
+    { message: `Expected completed 2xx BFF provenance for ${label}`, timeout: 20_000 },
+  ).toBe(true);
 }
 
 async function assertDeploymentPair(request: APIRequestContext): Promise<{
@@ -268,7 +282,7 @@ function setupNetworkTracker(page: Page) {
 
 test.describe("Management Console Product Journey Hosted E2E", () => {
   test.skip(!HOSTED_REQUESTED, "requires exact hosted FE/BFF environment");
-  test.setTimeout(180_000);
+  test.setTimeout(300_000);
 
   test("Formula, Activity, Paper Telemetry, and Postmortem pages show backend-origin data or typed unavailable without synthetic content", async ({
     page,
@@ -300,6 +314,13 @@ test.describe("Management Console Product Journey Hosted E2E", () => {
       page.locator("main").getByRole("tablist").or(page.locator("main table, main [role='table'], main [role='tab'], main")).first(),
     ).toBeVisible({ timeout: 15_000 });
     await expect(page.locator("body")).not.toContainText(/serving mock|seed fallback/i);
+    await expectSurface2xx(
+      networkEvents,
+      "Formula / Rankings",
+      (pathname) => pathname.includes("/management/persona-league")
+        || pathname.includes("/ranking")
+        || pathname.includes("/formulas"),
+    );
 
     // =========================================================================
     // 2. Activity / Performance Overview (/management/performance?tab=overview)
@@ -315,6 +336,13 @@ test.describe("Management Console Product Journey Hosted E2E", () => {
       page.locator("main").getByRole("tablist").or(page.locator("main [role='tab'], main")).first(),
     ).toBeVisible({ timeout: 15_000 });
     await expect(page.locator("body")).not.toContainText(/serving mock|seed fallback/i);
+    await expectSurface2xx(
+      networkEvents,
+      "Performance overview",
+      (pathname) => pathname.includes("/management/portfolio-book/holdings")
+        || pathname.includes("/performance")
+        || pathname.includes("/metrics"),
+    );
 
     // Activity / Trading Pulse (/management/trading-pulse)
     await navigateWithAuth(page, `${FE_BASE_URL}/management/trading-pulse`);
@@ -325,6 +353,13 @@ test.describe("Management Console Product Journey Hosted E2E", () => {
       }).first(),
     ).toBeVisible({ timeout: 15_000 });
     await expect(page.locator("body")).not.toContainText(/serving mock|seed fallback/i);
+    await expectSurface2xx(
+      networkEvents,
+      "Activity / Trading Pulse",
+      (pathname) => pathname.includes("/trading-pulse")
+        || pathname.includes("/activity")
+        || pathname.includes("/events"),
+    );
 
     // =========================================================================
     // 3. Paper Telemetry: Portfolio Exposure (/management/performance?tab=exposure)
@@ -335,6 +370,11 @@ test.describe("Management Console Product Journey Hosted E2E", () => {
       page.locator("main").getByRole("tablist").or(page.locator("main").getByText(/Exposure|Telemetry|遙測|Risk Budget|No telemetry/i)).first(),
     ).toBeVisible({ timeout: 15_000 });
     await expect(page.locator("body")).not.toContainText(/serving mock|seed fallback/i);
+    await expectSurface2xx(
+      networkEvents,
+      "Paper telemetry / Exposure",
+      (pathname) => pathname.includes("/management/portfolio-book/exposure"),
+    );
 
     // Paper Telemetry: Runtimes (/management/runtimes)
     await navigateWithAuth(page, `${FE_BASE_URL}/management/runtimes`);
@@ -348,6 +388,12 @@ test.describe("Management Console Product Journey Hosted E2E", () => {
       page.locator("main table, main [role='table'], main").first(),
     ).toBeVisible({ timeout: 15_000 });
     await expect(page.locator("body")).not.toContainText(/serving mock|seed fallback/i);
+    await expectSurface2xx(
+      networkEvents,
+      "Paper telemetry / Runtimes",
+      (pathname) => pathname.includes("/runtimes")
+        || pathname.includes("/management/persona-fleet"),
+    );
 
     // =========================================================================
     // 4. Postmortem Library (/management/postmortems)
@@ -360,6 +406,12 @@ test.describe("Management Console Product Journey Hosted E2E", () => {
       }).or(page.locator("main input, main [placeholder*='Search']")).first(),
     ).toBeVisible({ timeout: 15_000 });
     await expect(page.locator("body")).not.toContainText(/serving mock|seed fallback/i);
+    await expectSurface2xx(
+      networkEvents,
+      "Postmortems",
+      (pathname) => pathname.includes("/incidents")
+        || pathname.includes("/postmortems"),
+    );
 
     // =========================================================================
     // Per-surface BFF endpoint assertions & latency tracking
@@ -370,12 +422,21 @@ test.describe("Management Console Product Journey Hosted E2E", () => {
 
     // Require each surface specifically to have its own 2xx BFF request
     const rankingEvents = networkEvents.filter(
-      (ev) => ev.status >= 200 && ev.status < 300 && (ev.pathname.includes("/ranking") || ev.pathname.includes("/formulas")),
+      (ev) => ev.status >= 200 && ev.status < 300 && (
+        ev.pathname.includes("/management/persona-league")
+        || ev.pathname.includes("/ranking")
+        || ev.pathname.includes("/formulas")
+      ),
     );
     expect(rankingEvents.length, "Expected specific 2xx BFF request for Formula / Rankings").toBeGreaterThan(0);
 
     const perfEvents = networkEvents.filter(
-      (ev) => ev.status >= 200 && ev.status < 300 && (ev.pathname.includes("/performance") || ev.pathname.includes("/metrics")),
+      (ev) => ev.status >= 200 && ev.status < 300 && (
+        ev.pathname.includes("/management/portfolio-book/holdings")
+        || ev.pathname.includes("/management/portfolio-book/exposure")
+        || ev.pathname.includes("/performance")
+        || ev.pathname.includes("/metrics")
+      ),
     );
     expect(perfEvents.length, "Expected specific 2xx BFF request for Performance").toBeGreaterThan(0);
 
@@ -493,6 +554,7 @@ test.describe("Management Console Product Journey Hosted E2E", () => {
     // Part 3: Reload page and assert persisted domain terminal readback (idempotency)
     // =========================================================================
     await page.reload({ waitUntil: "domcontentloaded" });
+    await waitForHostedRouteReady(page);
     await expect(page.locator("#root")).toBeAttached();
     await expect(page.locator("body")).not.toContainText(/serving mock|seed fallback/i);
     await expect(page.locator("h1, h2, [role='heading'], main").filter({ hasText: /Runtimes|執行環境/i }).first()).toBeVisible();

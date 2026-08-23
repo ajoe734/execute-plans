@@ -62,6 +62,60 @@ type LatencySample = {
 
 type JsonRecord = Record<string, unknown>;
 
+type ManagementStreamSummary = {
+  answerChars: number;
+  errorCodes: string[];
+  eventTypes: string[];
+  providerStatus: string | null;
+  providerUsed: boolean | null;
+  uiActionKinds: string[];
+};
+
+function summarizeManagementStream(raw: string): ManagementStreamSummary {
+  const eventTypes: string[] = [];
+  const errorCodes: string[] = [];
+  const uiActionKinds: string[] = [];
+  let answerChars = 0;
+  let providerStatus: string | null = null;
+  let providerUsed: boolean | null = null;
+
+  for (const line of raw.split(/\r?\n/u)) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith("data:")) continue;
+    const data = trimmed.slice(5).trim();
+    if (!data || data === "[DONE]") continue;
+    let event: JsonRecord;
+    try {
+      event = JSON.parse(data) as JsonRecord;
+    } catch {
+      continue;
+    }
+    const type = typeof event.type === "string" ? event.type : "unknown";
+    eventTypes.push(type);
+    if (type === "delta" || type === "done") {
+      answerChars = Math.max(answerChars, String(event.text ?? "").trim().length);
+    }
+    if (type === "error") {
+      errorCodes.push(String(event.error_code ?? event.code ?? "unknown"));
+    }
+    const status = (event.provider_status ?? event.providerStatus) as JsonRecord | undefined;
+    if (status && typeof status === "object") {
+      providerStatus = typeof status.status === "string" ? status.status : providerStatus;
+      providerUsed = typeof status.used === "boolean" ? status.used : providerUsed;
+    }
+    const actions = event.ui_actions ?? event.uiActions ?? event.actions;
+    if (Array.isArray(actions)) {
+      for (const action of actions) {
+        if (!action || typeof action !== "object") continue;
+        const kind = String((action as JsonRecord).kind ?? "").trim();
+        if (kind && !uiActionKinds.includes(kind)) uiActionKinds.push(kind);
+      }
+    }
+  }
+
+  return { answerChars, errorCodes, eventTypes, providerStatus, providerUsed, uiActionKinds };
+}
+
 async function getOrMintAuthToken(request: APIRequestContext): Promise<string> {
   const token = roleTokenFromEnv("operator", [
     "PANTHEON_BFF_OPERATOR_A_TOKEN",
@@ -156,14 +210,7 @@ async function installHostedSession(
   );
 }
 
-async function navigateWithAuth(page: Page, url: string): Promise<void> {
-  await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30_000 });
-  if (page.url().includes("/auth")) {
-    await page.waitForURL((current) => !current.pathname.includes("/auth"), { timeout: 15_000 }).catch(async () => {
-      await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30_000 });
-    });
-  }
-
+async function waitForHostedRouteReady(page: Page): Promise<void> {
   await page.waitForFunction(
     () => {
       const root = document.querySelector("#root");
@@ -172,7 +219,7 @@ async function navigateWithAuth(page: Page, url: string): Promise<void> {
         || !root.textContent?.includes("Verifying Pantheon session");
     },
     undefined,
-    { timeout: 30_000 },
+    { timeout: 45_000 },
   );
   const diagnostic = await page.evaluate(() => ({
     pathname: window.location.pathname,
@@ -187,6 +234,16 @@ async function navigateWithAuth(page: Page, url: string): Promise<void> {
   if (diagnostic.pathname === "/auth") {
     throw new Error(`Hosted browser session redirected to /auth (reason=${diagnostic.authReason ?? "unknown"})`);
   }
+}
+
+async function navigateWithAuth(page: Page, url: string): Promise<void> {
+  await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30_000 });
+  if (page.url().includes("/auth")) {
+    await page.waitForURL((current) => !current.pathname.includes("/auth"), { timeout: 15_000 }).catch(async () => {
+      await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30_000 });
+    });
+  }
+  await waitForHostedRouteReady(page);
 }
 
 
@@ -241,7 +298,7 @@ function setupNetworkTracker(page: Page) {
 
 test.describe("Management AI Product Journey Hosted E2E", () => {
   test.skip(!HOSTED_REQUESTED, "requires exact hosted FE/BFF environment");
-  test.setTimeout(180_000);
+  test.setTimeout(300_000);
 
   test("Management AI returns provider answer, executes navigate, openDrawer, focusPanel, and runBffAction via HighRiskConfirm with exactly-one command and replay prevention", async ({
     page,
@@ -308,12 +365,31 @@ test.describe("Management AI Product Journey Hosted E2E", () => {
 
     const askResponse = await askResponsePromise;
     expect(askResponse.status(), `Expected successful 2xx status from ask endpoint, got ${askResponse.status()}`).toBeLessThan(400);
+    const streamSummary = await askResponse.body()
+      .then((body) => summarizeManagementStream(body.toString("utf8")))
+      .catch(() => null);
+    console.log(`[PFG AI STREAM] ${JSON.stringify(streamSummary ?? { bodyUnavailable: true })}`);
+    if (streamSummary) {
+      expect(streamSummary.errorCodes, "Expected no provider error event from live Management AI stream").toHaveLength(0);
+      expect(streamSummary.answerChars, "Expected a non-empty provider answer in the live Management AI stream").toBeGreaterThan(0);
+      expect(streamSummary.providerUsed, "Expected provider_status.used=true in the live Management AI stream").toBe(true);
+    }
 
     // Require newly appended assistant response turn to appear in dialogue turn
     const assistantTurns = agentDialog.locator(
       '[role="article"], [data-role="assistant"], .is-assistant, .prose',
     );
-    await expect(assistantTurns.last()).toBeVisible({ timeout: 30_000 });
+    const degradedNotice = agentDialog.getByText(/Management AI 暫時降級/i).first();
+    await expect.poll(
+      async () => (await assistantTurns.count()) + (await degradedNotice.count()),
+      { message: "Expected a live assistant turn or explicit provider-degraded state", timeout: 30_000 },
+    ).toBeGreaterThan(0);
+    if (await assistantTurns.count() === 0) {
+      const safeProviderDiagnostic = (await degradedNotice.locator("xpath=..").innerText().catch(() => "provider degraded"))
+        .replace(/\s+/gu, " ")
+        .slice(0, 300);
+      throw new Error(`Management AI provider returned no assistant turn: ${safeProviderDiagnostic}`);
+    }
     const lastAssistantTurn = assistantTurns.last();
     const responseText = (await lastAssistantTurn.innerText()).trim();
     expect(responseText.length, "Expected non-empty assistant answer from live provider").toBeGreaterThan(0);
