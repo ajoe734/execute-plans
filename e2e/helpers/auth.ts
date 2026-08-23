@@ -275,6 +275,7 @@ export function gcpIdentityStoredUser(input: {
   apiKey: string;
   email: string;
   emailVerified?: boolean;
+  tenantId?: string | null;
   token: string;
   uid: string;
 }): Record<string, unknown> {
@@ -305,7 +306,7 @@ export function gcpIdentityStoredUser(input: {
       expirationTime,
       refreshToken: "",
     },
-    tenantId: null,
+    tenantId: input.tenantId ?? null,
     uid: input.uid,
   };
 }

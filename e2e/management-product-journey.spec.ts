@@ -217,6 +217,7 @@ async function installHostedSession(
     email: typeof claims.email === "string"
       ? claims.email
       : `${operatorId}@pantheon-dev.invalid`,
+    tenantId: TENANT_ID,
     token: input.token,
     uid: operatorId,
   });

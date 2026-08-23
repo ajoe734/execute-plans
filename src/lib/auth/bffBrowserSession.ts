@@ -63,7 +63,8 @@ export function signedTenantId(session: GcpIdentitySession | null): string | nul
   const nestedTenant = record(claims.tenant);
   return nonBlank(claims.tenant_id)
     ?? nonBlank(claims.tenantId)
-    ?? nonBlank(nestedTenant.id);
+    ?? nonBlank(nestedTenant.id)
+    ?? nonBlank(session?.user?.tenantId);
 }
 
 /** Register the current GCP Identity ID token as an in-memory BFF source. */
