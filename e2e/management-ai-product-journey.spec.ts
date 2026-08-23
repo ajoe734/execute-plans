@@ -123,79 +123,53 @@ async function getOrMintAuthToken(request: APIRequestContext): Promise<string> {
   return token;
 }
 
+async function assertStrictSession(
+  request: APIRequestContext,
+  token: string,
+): Promise<{ operatorId: string; roles: string[] }> {
+  const meResponse = await request.get(`${BFF_BASE_URL}/bff/me`, {
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${token}`,
+      "X-Tenant-Id": TENANT_ID,
+    },
+  });
+  expect(meResponse.ok(), `/bff/me returned ${meResponse.status()}`).toBe(true);
+  const body = (await meResponse.json()) as JsonRecord;
+  const me = ((body.data ?? body) || {}) as JsonRecord;
+  const roles = Array.isArray(me.roles)
+    ? (me.roles as string[]).map((r) => String(r).toLowerCase())
+    : [];
+  const operatorId = String(me.operator_id ?? me.operatorId ?? (me.user as JsonRecord)?.id ?? "").trim();
+  expect(operatorId).not.toBe("");
+  return { operatorId, roles };
+}
+
 async function installHostedSession(
   page: Page,
   input: { operatorId: string; roles: string[]; token: string },
 ): Promise<void> {
   const claims = bearerClaims(input.token);
-  const operatorId = String(claims.sub || input.operatorId);
-  const nowSeconds = Math.floor(Date.now() / 1000);
-  const exp = Number(claims.exp ?? 0) || nowSeconds + 3600;
-
-  // Provide local response for Firebase SDK's Google account lookup so SDK initializes without contacting Google Identity
-  await page.route("https://identitytoolkit.googleapis.com/**", async (route) => {
-    const url = new URL(route.request().url());
-    if (url.pathname.endsWith("/accounts:lookup")) {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          users: [{
-            createdAt: String(Date.now()),
-            email: `${operatorId}@pantheon-dev.invalid`,
-            emailVerified: true,
-            lastLoginAt: String(Date.now()),
-            localId: operatorId,
-            passwordHash: "pantheon-operator-dev",
-          }],
-        }),
-      });
-      return;
-    }
-    await route.abort("blockedbyclient");
+  const operatorId = input.operatorId || String(claims.sub ?? "operator_a");
+  const storageKey = gcpIdentityStorageKey(GCP_IDENTITY_API_KEY);
+  const storedSession = gcpIdentityStoredUser({
+    apiKey: GCP_IDENTITY_API_KEY,
+    email: typeof claims.email === "string"
+      ? claims.email
+      : `${operatorId}@pantheon-dev.invalid`,
+    token: input.token,
+    uid: operatorId,
   });
-  await page.route("https://securetoken.googleapis.com/**", async (route) => {
-    await route.abort("blockedbyclient");
-  });
-
-  const candidateKeys = [
-    GCP_IDENTITY_API_KEY,
-    "AIzaSyCaMTJYfIP-uidP29AO7kX-JFm8wIheuSk",
-  ];
 
   await page.addInitScript(
-    ({ candidateKeys, operatorId, token, exp, tenantId }) => {
-      for (const apiKey of candidateKeys) {
-        const key = `firebase:authUser:${apiKey}:[DEFAULT]`;
-        const session = {
-          apiKey,
-          appName: "[DEFAULT]",
-          createdAt: String(Date.now()),
-          displayName: null,
-          email: `${operatorId}@pantheon-dev.invalid`,
-          emailVerified: true,
-          isAnonymous: false,
-          lastLoginAt: String(Date.now()),
-          phoneNumber: null,
-          photoURL: null,
-          providerData: [],
-          stsTokenManager: {
-            accessToken: token,
-            expirationTime: exp * 1000,
-            refreshToken: "",
-          },
-          tenantId: tenantId,
-          uid: operatorId,
-        };
-        try {
-          window.sessionStorage.setItem(key, JSON.stringify(session));
-          window.localStorage.setItem(key, JSON.stringify(session));
-        } catch {
-          // Handled on origin navigation
-        }
+    ({ key, session }) => {
+      try {
+        window.sessionStorage.setItem(key, JSON.stringify(session));
+      } catch {
+        // Retried automatically when the hosted origin is established.
       }
     },
-    { candidateKeys, operatorId, token: input.token, exp, tenantId: TENANT_ID },
+    { key: storageKey, session: storedSession },
   );
 }
 
@@ -204,9 +178,7 @@ function setupNetworkTracker(page: Page) {
   const requestStartTimes = new Map<Request, number>();
 
   page.on("console", (msg) => {
-    if (msg.type() === "error") {
-      console.log(`[PAGE CONSOLE ERROR] ${msg.text()}`);
-    }
+    console.log(`[PAGE CONSOLE ${msg.type()}] ${msg.text()}`);
   });
   page.on("pageerror", (err) => {
     console.log(`[PAGE ERROR] ${err.message}`);
@@ -266,11 +238,8 @@ test.describe("Management AI Product Journey Hosted E2E", () => {
     const modePayload = (await modeResponse.json()) as JsonRecord;
     expect(modePayload).toBeTruthy();
 
-    await installHostedSession(page, {
-      operatorId: "op-fe-gate",
-      roles: ["operator", "reviewer", "approver", "admin"],
-      token,
-    });
+    const session = await assertStrictSession(request, token);
+    await installHostedSession(page, { ...session, token });
 
     const { networkEvents } = setupNetworkTracker(page);
 
