@@ -132,24 +132,46 @@ async function installHostedSession(
   const nowSeconds = Math.floor(Date.now() / 1000);
   const exp = Number(claims.exp ?? 0) || nowSeconds + 3600;
 
-  const validToken = input.token;
+  // Provide local response for Firebase SDK's Google account lookup so SDK initializes without contacting Google Identity
+  await page.route("https://identitytoolkit.googleapis.com/**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith("/accounts:lookup")) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          users: [{
+            createdAt: String(Date.now()),
+            email: `${operatorId}@pantheon-dev.invalid`,
+            emailVerified: true,
+            lastLoginAt: String(Date.now()),
+            localId: operatorId,
+            passwordHash: "pantheon-operator-dev",
+          }],
+        }),
+      });
+      return;
+    }
+    await route.abort("blockedbyclient");
+  });
+  await page.route("https://securetoken.googleapis.com/**", async (route) => {
+    await route.abort("blockedbyclient");
+  });
 
   const candidateKeys = [
     GCP_IDENTITY_API_KEY,
     "AIzaSyCaMTJYfIP-uidP29AO7kX-JFm8wIheuSk",
-    "AIza01234567890123456789012345678901234",
-    "AIza00000000000000000000000000000000000",
   ];
 
   await page.addInitScript(
-    ({ candidateKeys, operatorId, token, exp }) => {
+    ({ candidateKeys, operatorId, token, exp, tenantId }) => {
       for (const apiKey of candidateKeys) {
         const key = `firebase:authUser:${apiKey}:[DEFAULT]`;
         const session = {
           apiKey,
           appName: "[DEFAULT]",
           createdAt: String(Date.now()),
-          displayName: operatorId,
+          displayName: null,
           email: `${operatorId}@pantheon-dev.invalid`,
           emailVerified: true,
           isAnonymous: false,
@@ -162,7 +184,7 @@ async function installHostedSession(
             expirationTime: exp * 1000,
             refreshToken: "",
           },
-          tenantId: null,
+          tenantId: tenantId,
           uid: operatorId,
         };
         try {
@@ -173,7 +195,7 @@ async function installHostedSession(
         }
       }
     },
-    { candidateKeys, operatorId, token: validToken, exp },
+    { candidateKeys, operatorId, token: input.token, exp, tenantId: TENANT_ID },
   );
 }
 
@@ -205,6 +227,15 @@ async function assertDeploymentPair(request: APIRequestContext): Promise<{
 function setupNetworkTracker(page: Page) {
   const networkEvents: LatencySample[] = [];
   const requestStartTimes = new Map<Request, number>();
+
+  page.on("console", (msg) => {
+    if (msg.type() === "error") {
+      console.log(`[PAGE CONSOLE ERROR] ${msg.text()}`);
+    }
+  });
+  page.on("pageerror", (err) => {
+    console.log(`[PAGE ERROR] ${err.message}`);
+  });
 
   page.on("request", (req) => {
     if (req.url().includes("/bff/")) {
