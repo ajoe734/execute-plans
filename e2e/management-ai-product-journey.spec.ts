@@ -165,10 +165,15 @@ async function navigateWithAuth(page: Page, url: string): Promise<void> {
   }
 
   await page.waitForFunction(
-    () => window.location.pathname === "/auth" || Boolean(document.querySelector("main")),
+    () => {
+      const root = document.querySelector("#root");
+      if (!root || root.childElementCount === 0) return false;
+      return window.location.pathname === "/auth"
+        || !root.textContent?.includes("Verifying Pantheon session");
+    },
     undefined,
-    { timeout: 15_000 },
-  ).catch(() => undefined);
+    { timeout: 30_000 },
+  );
   const diagnostic = await page.evaluate(() => ({
     pathname: window.location.pathname,
     authReason: new URLSearchParams(window.location.search).get("reason"),
