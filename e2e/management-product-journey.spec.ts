@@ -151,6 +151,66 @@ async function installHostedSession(
 ): Promise<void> {
   const claims = bearerClaims(input.token);
   const operatorId = input.operatorId || String(claims.sub ?? "operator_a");
+  const nowSeconds = Math.floor(Date.now() / 1000);
+
+  // Fulfill 3rd-party Google Identity SDK background validation so Firebase Auth SDK rehydrates locally
+  await page.route("https://identitytoolkit.googleapis.com/**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname.includes("/accounts:lookup")) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          kind: "identitytoolkit#GetAccountInfoResponse",
+          users: [{
+            localId: operatorId,
+            email: `${operatorId}@pantheon-dev.invalid`,
+            emailVerified: true,
+            displayName: operatorId,
+            providerUserInfo: [{
+              providerId: "password",
+              displayName: operatorId,
+              email: `${operatorId}@pantheon-dev.invalid`,
+              federatedId: operatorId,
+              rawId: operatorId,
+            }],
+            validSince: String(nowSeconds),
+            lastLoginAt: String(Date.now()),
+            createdAt: String(Date.now()),
+          }],
+        }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        idToken: input.token,
+        refreshToken: "dev-refresh-token",
+        expiresIn: "3600",
+        localId: operatorId,
+        isNewUser: false,
+      }),
+    });
+  });
+
+  await page.route("https://securetoken.googleapis.com/**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        access_token: input.token,
+        id_token: input.token,
+        refresh_token: "dev-refresh-token",
+        token_type: "Bearer",
+        expires_in: "3600",
+        user_id: operatorId,
+        project_id: "pantheon-dev",
+      }),
+    });
+  });
+
   const storageKey = gcpIdentityStorageKey(GCP_IDENTITY_API_KEY);
   const storedSession = gcpIdentityStoredUser({
     apiKey: GCP_IDENTITY_API_KEY,
@@ -165,8 +225,9 @@ async function installHostedSession(
     ({ key, session }) => {
       try {
         window.sessionStorage.setItem(key, JSON.stringify(session));
+        window.localStorage.setItem(key, JSON.stringify(session));
       } catch {
-        // Retried automatically when the hosted origin is established.
+        // Retried automatically on origin navigation
       }
     },
     { key: storageKey, session: storedSession },
@@ -207,6 +268,14 @@ function setupNetworkTracker(page: Page) {
   });
   page.on("pageerror", (err) => {
     console.log(`[PAGE ERROR] ${err.message}`);
+  });
+  page.on("requestfailed", (req) => {
+    console.log(`[PAGE REQUEST FAILED] ${req.method()} ${req.url()} - ${req.failure()?.errorText}`);
+  });
+  page.on("response", (res) => {
+    if (res.status() >= 400) {
+      console.log(`[PAGE HTTP ${res.status()}] ${res.request().method()} ${res.url()}`);
+    }
   });
 
   page.on("request", (req) => {
