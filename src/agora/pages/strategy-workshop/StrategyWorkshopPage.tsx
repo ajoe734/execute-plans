@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 import {
   listWorkshops,
   getWorkshop,
+  getWorkshopWithEtag,
   createWorkshop,
   postWorkshopMessage,
   dispatchWorkshopResearchRun,
@@ -1026,7 +1027,15 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
       setMessageReceiptState("accepted");
       try {
         setMessageReceiptState("processing");
-        await postWorkshopMessage(workshopId, { content });
+        // Workshop mutations require the exact current weak ETag. Fresh-read
+        // immediately before the write instead of deriving a lock version from
+        // the page projection; any concurrent change must remain a visible 409.
+        const currentReadback = await getWorkshopWithEtag(workshopId);
+        if (currentReadback.workshop.status === "concluded") {
+          throw new Error("This Workshop is concluded and cannot accept another message.");
+        }
+        setWorkshop(currentReadback.workshop);
+        await postWorkshopMessage(workshopId, { content }, { ifMatch: currentReadback.etag });
 
         // Reconstruction is a BFF-owned durable operation. Its receipt and
         // subsequent Workshop card/version readback are intentionally kept
