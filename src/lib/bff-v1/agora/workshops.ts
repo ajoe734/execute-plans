@@ -16,7 +16,6 @@ import type {
   WorkshopResearchRunEnvelope,
   WorkshopConsultationEnvelope,
   WorkshopConcludeEnvelope,
-  WorkshopLiveOperationEnvelope,
   WorkshopVersionCreateRequest,
   WorkshopResearchRunRequest,
   WorkshopConsultationRequest,
@@ -31,7 +30,6 @@ export type {
   WorkshopResearchRunEnvelope,
   WorkshopConsultationEnvelope,
   WorkshopConcludeEnvelope,
-  WorkshopLiveOperationEnvelope,
   WorkshopVersionCreateRequest,
   WorkshopResearchRunRequest,
   WorkshopConsultationRequest,
@@ -140,6 +138,20 @@ export interface WorkshopCompletenessSnapshot {
 }
 
 export type WorkshopCompleteness = StrategyCompleteness | WorkshopCompletenessSnapshot;
+
+/**
+ * Runtime response shape for the deployed reconstruction operation.
+ *
+ * This response is not represented by the generated Workshop live-operation
+ * DTO: the page only consumes the BFF-owned reconstruction identity, then
+ * reads canonical Strategy and Registry identities from versions separately.
+ */
+export interface WorkshopReconstructionResponse {
+  data: {
+    reconstruction_id: string;
+  };
+  meta?: Record<string, unknown>;
+}
 
 // ─── Response normalization ──────────────────────────────────────────────────
 
@@ -274,8 +286,8 @@ export async function postWorkshopMessage(
  */
 export async function reconstructWorkshopStrategy(
   workshopId: string,
-): Promise<WorkshopLiveOperationEnvelope> {
-  return bffFetch<WorkshopLiveOperationEnvelope>({
+): Promise<WorkshopReconstructionResponse> {
+  return bffFetch<WorkshopReconstructionResponse>({
     method: "POST",
     path: `/bff/agora/workshops/${encodeURIComponent(workshopId)}/reconstruct`,
   });

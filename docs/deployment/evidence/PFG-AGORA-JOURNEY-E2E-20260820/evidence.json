@@ -18,7 +18,8 @@
     "not_changed": [
       "shared hosted auth helper ownership",
       "BFF implementation or persistence schema",
-      "deployment configuration or real-write policy"
+      "deployment configuration or real-write policy",
+      "generated Agora type snapshot or upstream contract bundle"
     ]
   },
   "strict_live_contract": {
@@ -34,7 +35,8 @@
   },
   "runtime_evidence": {
     "artifact": "PANTHEON_AUDIT_OUT_DIR/PFG-AGORA-JOURNEY-E2E-20260820-<run-marker>.json",
-    "status": "repairing-reconstruction-readback-identity",
+    "status": "ready-for-independent-review",
+    "repair_disposition": "The generated Agora type snapshot is restored unchanged. workshops.ts owns a narrow runtime-only reconstruction response envelope for data.reconstruction_id; no hosted acceptance is claimed until this reviewed commit is merged and deployed.",
     "reason": "Runs 32613840861 and 32617780476 were diagnostic only: they respectively exposed the obsolete Workshop-create payload and the missing If-Match precondition. Hosted run 32622159616 then passed exact operator-live deployment identity, governed dev-login, and real GCP Identity browser authentication on FE 745aed1e504ca2d807052e5f440f3aad0c92d23d / BFF a2c7ba01f4b7cc33b457d924ba54b7cb0d775515. Hosted run 32624955293 on FE d4b166c3a1ac404fe2d48e25ba101fe9fa34ba2f / BFF a2c7ba01f4b7cc33b457d924ba54b7cb0d775515 correctly withheld reconstruction when the immediate canonical events GET did not yet include the 202 receipt event_id, but failed because the prior client made only one readback. Hosted run 32630508519 passed exact operator-live pair binding, governed dev-login, real GCP Identity browser authentication, fresh Workshop creation, the 202 message write, and durable event readback on FE 420bae98d87da180398122719b5c55c7378f34fa / BFF a2c7ba01f4b7cc33b457d924ba54b7cb0d775515, then failed only because the E2E required a reconstruction command ID that the observed envelope did not provide. The repaired journey requires non-empty data.reconstruction_id from the reconstruction result and records durable Strategy and Registry identities only from its immediately following canonical versions readback. All prior artifacts remain diagnostic only."
   },
   "workshop_message_precondition": {
@@ -50,6 +52,10 @@
     "artifact": "GitHub Actions artifact pfg-agora-journey-e2e-hosted-acceptance-<run-id>-<attempt>"
   },
   "local_validation": {
+    "contract_drift": {
+      "command": "npm run test:contract",
+      "result": "passed; generated Agora bundle aligned and 7 contract-drift tests passed"
+    },
     "typecheck": {
       "command": "npm run typecheck",
       "result": "passed"
