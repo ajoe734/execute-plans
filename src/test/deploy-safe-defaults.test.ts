@@ -516,14 +516,14 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
       "operatorSubject === viewerSubject",
     );
     expect(authorizedProof).toContain("--retries=0 --reporter=list,json");
-    // Both credentialed browser suites run desktop and mobile with artifacts
-    // disabled: Persona (2 invocations) and Trade Journeys (2 invocations).
-    expect(authorizedProof.match(/--trace=off/gu)).toHaveLength(4);
+    // Credentialed browser suites run with artifacts disabled:
+    // Persona (2), Trade Journeys (2), Agora (1), and Management (1).
+    expect(authorizedProof.match(/--trace=off/gu)).toHaveLength(6);
     expect(
       authorizedProof.match(
         /PANTHEON_CREDENTIALED_PLAYWRIGHT_NO_ARTIFACTS=1/gu,
       ),
-    ).toHaveLength(4);
+    ).toHaveLength(6);
     expect(playwrightConfig).toContain(
       'process.env.PANTHEON_CREDENTIALED_PLAYWRIGHT_NO_ARTIFACTS === "1"',
     );
@@ -833,6 +833,42 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     );
     expect(deployWorkflow).not.toContain(
       "needs.deploy.outputs.deployment_profile == 'operator-live'",
+    );
+  });
+
+  it("integrates functional-closure Agora and Management journeys into the bounded write-proof coordinator", () => {
+    expect(integrationWorkflow).toContain("functional_closure_write_proof:");
+    expect(deployWorkflow).toContain("-f functional_closure_write_proof=true");
+
+    const authorizedProof = integrationWorkflow.slice(
+      integrationWorkflow.indexOf("  authorized-write-proof:"),
+    );
+    expect(authorizedProof).toContain(
+      "inputs.functional_closure_write_proof == 'true'",
+    );
+    expect(authorizedProof).toContain(
+      "Run Agora functional-closure hosted journey",
+    );
+    expect(authorizedProof).toContain(
+      "Run Management and Management AI functional-closure hosted journeys",
+    );
+    expect(authorizedProof).toContain(
+      "npx playwright test e2e/agora-product-journey.spec.ts",
+    );
+    expect(authorizedProof).toContain(
+      "e2e/management-product-journey.spec.ts",
+    );
+    expect(authorizedProof).toContain(
+      "e2e/management-ai-product-journey.spec.ts",
+    );
+
+    // Watchdog and parent deploy coordination remain single and bounded
+    expect(deployWorkflow.match(/proof-coordinator:/gu)).toHaveLength(1);
+    expect(
+      deployWorkflow.match(/proof-restore-confirmation:/gu),
+    ).toHaveLength(1);
+    expect(deployWorkflow.match(/pantheon-proof-watchdog\.yml/gu)).toHaveLength(
+      2,
     );
   });
 });

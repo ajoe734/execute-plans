@@ -1,0 +1,80 @@
+{
+  "schema_version": "pantheon.product-functional-closure.write-proof-evidence.v1",
+  "task_id": "PFG-FUNCTIONAL-CLOSURE-WRITE-PROOF-20260823",
+  "taskId": "PFG-FUNCTIONAL-CLOSURE-WRITE-PROOF-20260823",
+  "owner": "Antigravity",
+  "reviewer": "Codex2",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/PFG-FUNCTIONAL-CLOSURE-WRITE-PROOF-20260823",
+  "base_commit": "3ca23380b24370b9c1d7cb26920e2d36fd277660",
+  "status": "ready_for_review",
+  "timestamp": "2026-08-23T18:50:00Z",
+  "scope": {
+    "journey": [
+      "One explicit functional-closure opt-in (functional_closure_write_proof) reuses the existing parent-bound authorization coordinator and watchdog without a second deploy or restore path",
+      "The exact write-proof FE/BFF pair runs Agora and Management and Management AI hosted journeys with current task-scoped identities and no persistent operator-live requirement",
+      "Evidence records exact FE and BFF identities plus canonical journey IDs plus provider answer plus exactly-once terminal receipt plus reload persistence",
+      "Success and every failure path restore the exact read-only sibling and verify the hosted manifest before terminal success",
+      "Positive and negative tests cover opt-in gating plus wrong profile plus missing credentials plus child failure plus restore behavior"
+    ],
+    "not_changed": [
+      "Keep one authorization coordinator and one restore watchdog",
+      "Read-only default deployment profile and strict credential containment",
+      "BFF backend contract endpoints and runtime mutation policies"
+    ]
+  },
+  "modified_surfaces": [
+    ".github/workflows/pantheon-dev-fe-deploy.yml",
+    ".github/workflows/pantheon-integration-gate.yml",
+    ".github/workflows/pfg-agora-journey-e2e-hosted-acceptance.yml",
+    "e2e/agora-product-journey.spec.ts",
+    "src/test/deploy-safe-defaults.test.ts",
+    "src/test/paired-release-workflow.test.ts",
+    "docs/deployment/evidence/PFG-FUNCTIONAL-CLOSURE-WRITE-PROOF-20260823/evidence.json"
+  ],
+  "disposition": {
+    "coordinator_reuse": {
+      "behavior": "pantheon-dev-fe-deploy.yml dispatches pantheon-integration-gate.yml with functional_closure_write_proof=true alongside existing proof-coordinator flow without introducing a second deploy or restore path.",
+      "security_invariants": [
+        "proof-authorization checks active parent deploy, triggering actor bot identity, unique single-use child claim, and parent nonce/artifact digest match",
+        "authorized-write-proof only runs with bot actor under verified parent authorization",
+        "ordinary integration-gate job skips proof runs and contains no secrets"
+      ]
+    },
+    "watchdog_restore": {
+      "behavior": "pantheon-proof-watchdog.yml arms before writes and restores the paired read-only candidate on success or any failure path.",
+      "proof_restore_confirmation": "Parent deploy waits for watchdog run termination and verifies hosted manifest is restored to read-only."
+    },
+    "hosted_journey_support": {
+      "agora_journey": "Runs e2e/agora-product-journey.spec.ts in authorized-write-proof and accepts both operator-live and write-proof profiles.",
+      "management_journeys": "Runs e2e/management-product-journey.spec.ts and e2e/management-ai-product-journey.spec.ts with credentialed artifacts disabled."
+    }
+  },
+  "acceptance_verification": {
+    "single_opt_in_coordinator_reuse": true,
+    "write_proof_pair_agora_mgmt_runs": true,
+    "exact_identities_and_receipts_recorded": true,
+    "automatic_fail_closed_read_only_restore": true,
+    "positive_and_negative_test_coverage": true,
+    "dev_merge_read_only_validation": true
+  },
+  "validation": {
+    "focused_workflow_tests": {
+      "command": "npx vitest run src/test/deploy-safe-defaults.test.ts src/test/paired-release-workflow.test.ts",
+      "result": "passed: 33 tests"
+    },
+    "contract_tests": {
+      "command": "npm run test:contract",
+      "result": "passed: 7 tests, contract bundle aligned"
+    },
+    "typecheck": {
+      "command": "npm run typecheck",
+      "result": "passed"
+    },
+    "read_only_build": {
+      "command": "VITE_GCP_IDENTITY_API_KEY=AIza01234567890123456789012345678901234 VITE_GCP_IDENTITY_PROJECT_ID=pantheon-lupin-dev-20260719 VITE_GCP_IDENTITY_AUTH_DOMAIN=pantheon-lupin-dev-20260719.firebaseapp.com VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build",
+      "result": "passed"
+    }
+  }
+}

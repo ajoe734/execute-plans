@@ -95,11 +95,11 @@ jobs:
             echo "live BFF commit ${served_bff} does not match expected ${EXPECTED_BFF_SHA}" >&2
             exit 1
           fi
-          if [[ "${served_profile}" != "operator-live" || "${real_writes}" != "true" ]]; then
-            echo "hosted journey requires operator-live real-writes deployment; got profile=${served_profile:-missing} VITE_BFF_REAL_WRITES=${real_writes:-missing}" >&2
+          if [[ ("${served_profile}" != "operator-live" && "${served_profile}" != "write-proof") || "${real_writes}" != "true" ]]; then
+            echo "hosted journey requires operator-live or write-proof real-writes deployment; got profile=${served_profile:-missing} VITE_BFF_REAL_WRITES=${real_writes:-missing}" >&2
             exit 1
           fi
-          echo "verified operator-live deployment.json binds fe=${served_fe} bff=${served_bff} to the expected exact pair"
+          echo "verified real-writes deployment.json binds fe=${served_fe} bff=${served_bff} to the expected exact pair"
 
       - name: Mint a short-lived operator bearer token via governed dev-login
         shell: bash
