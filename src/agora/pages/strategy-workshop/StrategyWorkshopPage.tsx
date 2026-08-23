@@ -676,6 +676,81 @@ function sameOrderedIds(left: string[], right: string[]): boolean {
   return left.length === right.length && left.every((id, index) => id === right[index]);
 }
 
+const MESSAGE_EVENT_READBACK_DEADLINE_MS = 8_000;
+const MESSAGE_EVENT_READBACK_BACKOFF_MS = [250, 500, 1_000, 2_000, 4_000] as const;
+
+function messageEventReadbackTimeoutError(): Error {
+  return new Error(
+    "Workshop message receipt was not found in the durable event readback before the finite deadline; reconstruction has not been started.",
+  );
+}
+
+function workshopChangedBeforeMessageReadbackError(): Error {
+  return new Error(
+    "Workshop changed before the message receipt reached durable event readback; reconstruction has not been started.",
+  );
+}
+
+function waitForReadbackDelay(durationMs: number): Promise<void> {
+  return new Promise((resolve) => {
+    globalThis.setTimeout(resolve, durationMs);
+  });
+}
+
+function listWorkshopEventsBeforeDeadline(
+  workshopId: string,
+  remainingMs: number,
+): Promise<{ kind: "readback"; response: Awaited<ReturnType<typeof listWorkshopEvents>> } | { kind: "deadline" }> {
+  return new Promise((resolve, reject) => {
+    const timer = globalThis.setTimeout(() => resolve({ kind: "deadline" }), remainingMs);
+    void listWorkshopEvents(workshopId).then(
+      (response) => {
+        globalThis.clearTimeout(timer);
+        resolve({ kind: "readback", response });
+      },
+      (error: unknown) => {
+        globalThis.clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
+/**
+ * A message POST is accepted asynchronously (202). Keep reconstruction behind
+ * the canonical event projection, but do not turn the page into a perpetual
+ * poller: every invocation has one finite deadline and a bounded backoff.
+ */
+async function readMessageEventUntilDurable(
+  workshopId: string,
+  messageEventId: string,
+  isCurrentWorkshop: () => boolean,
+): Promise<WorkshopStreamEvent[]> {
+  const deadlineAt = Date.now() + MESSAGE_EVENT_READBACK_DEADLINE_MS;
+
+  for (let attempt = 0; Date.now() < deadlineAt; attempt += 1) {
+    if (!isCurrentWorkshop()) throw workshopChangedBeforeMessageReadbackError();
+
+    const remainingMs = deadlineAt - Date.now();
+    const readback = await listWorkshopEventsBeforeDeadline(workshopId, remainingMs);
+    if (readback.kind === "deadline") break;
+    if (!isCurrentWorkshop()) throw workshopChangedBeforeMessageReadbackError();
+
+    if (readback.response.items.some((event) => event.event_id === messageEventId)) {
+      return readback.response.items;
+    }
+
+    const backoffMs = MESSAGE_EVENT_READBACK_BACKOFF_MS[attempt];
+    if (backoffMs === undefined) break;
+    const remainingAfterReadbackMs = deadlineAt - Date.now();
+    if (remainingAfterReadbackMs <= 0) break;
+    await waitForReadbackDelay(Math.min(backoffMs, remainingAfterReadbackMs));
+    if (!isCurrentWorkshop()) throw workshopChangedBeforeMessageReadbackError();
+  }
+
+  throw messageEventReadbackTimeoutError();
+}
+
 async function sha256(value: string): Promise<string> {
   if (!globalThis.crypto?.subtle) throw new Error("Secure request digest support is unavailable in this browser.");
   const bytes = new TextEncoder().encode(value);
@@ -686,6 +761,13 @@ async function sha256(value: string): Promise<string> {
 function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoom, entry }: SessionViewProps): JSX.Element {
   const writeAccess = useAgoraWriteAccess();
   const contextResolutionSessionRef = useRef<string | null>(null);
+  const activeWorkshopIdRef = useRef<string | null>(workshopId);
+  // Assign during render so an in-flight receipt poll observes a route change
+  // before it can issue reconstruction for the prior Workshop.
+  activeWorkshopIdRef.current = workshopId;
+  useEffect(() => () => {
+    activeWorkshopIdRef.current = null;
+  }, []);
   const contextResolutionSessionId = useCallback((): string => {
     if (contextResolutionSessionRef.current) return contextResolutionSessionRef.current;
     if (!globalThis.crypto?.randomUUID) {
@@ -1031,6 +1113,9 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
         // immediately before the write instead of deriving a lock version from
         // the page projection; any concurrent change must remain a visible 409.
         const currentReadback = await getWorkshopWithEtag(workshopId);
+        if (activeWorkshopIdRef.current !== workshopId) {
+          throw workshopChangedBeforeMessageReadbackError();
+        }
         if (currentReadback.workshop.status === "concluded") {
           throw new Error("This Workshop is concluded and cannot accept another message.");
         }
@@ -1044,14 +1129,15 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
         if (!messageEventId) {
           throw new Error("Workshop message receipt omitted its durable event id.");
         }
-        // A 202 only acknowledges the append. Confirm the accepted event is
-        // present in the canonical projection before launching reconstruction,
-        // so no later write is based on an in-memory-only message claim.
-        const messageEventReadback = await listWorkshopEvents(workshopId);
-        if (!messageEventReadback.items.some((event) => event.event_id === messageEventId)) {
-          throw new Error("Workshop message receipt was not found in the durable event readback; reconstruction has not been started.");
-        }
-        setWorkshopEvents(messageEventReadback.items);
+        // A 202 only acknowledges the append. Its projection can lag, so use
+        // bounded canonical readback before reconstruction rather than making
+        // an in-memory receipt claim or creating another message pipeline.
+        const messageEvents = await readMessageEventUntilDurable(
+          workshopId,
+          messageEventId,
+          () => activeWorkshopIdRef.current === workshopId,
+        );
+        setWorkshopEvents(messageEvents);
 
         // Reconstruction is a BFF-owned durable operation. Its receipt and
         // subsequent Workshop card/version readback are intentionally kept

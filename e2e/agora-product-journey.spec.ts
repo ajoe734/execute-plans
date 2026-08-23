@@ -15,7 +15,7 @@
  *   PFG_AGORA_JOURNEY_E2E_GCP_TOTP_SECRET=<enrolled TOTP secret>
  */
 
-import { expect, test, type Page, type Response } from "@playwright/test";
+import { expect, test, type Page, type Request, type Response } from "@playwright/test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { createHmac, randomUUID } from "node:crypto";
 
@@ -38,6 +38,7 @@ const EVIDENCE_DIR =
   process.env.PANTHEON_AUDIT_OUT_DIR ?? "/tmp/pfg-agora-product-journey";
 const DEV_FE_HOST = "pantheon-lupin-dev-fe.35.201.204.12.sslip.io";
 const DEV_BFF_HOST = "pantheon-lupin-dev-bff.35.201.204.12.sslip.io";
+const MESSAGE_EVENT_PROJECTION_TIMEOUT_MS = 12_000;
 
 if (
   ENABLED &&
@@ -67,6 +68,18 @@ type ObservedRequest = {
   origin: string;
   path: string;
   status?: number;
+};
+
+type OrderedResponse = {
+  response: Response;
+  sequence: number;
+};
+
+type MessageEventProjectionEvidence = {
+  event: JsonRecord;
+  event_id: string;
+  readback_attempts: number;
+  timeout_ms: number;
 };
 
 const observedTrafficByPage = new WeakMap<Page, ObservedRequest[]>();
@@ -304,6 +317,64 @@ async function recordedMutationForKnownTarget(
   };
 }
 
+/**
+ * The hosted journey must tolerate an asynchronously materialized 202 receipt
+ * without allowing reconstruction before its canonical event projection. The
+ * timeout path is intentionally fail-closed: it reports a missing projection
+ * and asserts no reconstruction request was made before the deadline.
+ */
+async function waitForDurableMessageEvent(
+  page: Page,
+  messageEventId: string,
+  eventReadbacks: OrderedResponse[],
+  reconstructionRequestSequences: number[],
+): Promise<MessageEventProjectionEvidence> {
+  const deadlineAt = Date.now() + MESSAGE_EVENT_PROJECTION_TIMEOUT_MS;
+  let processedReadbacks = 0;
+
+  while (Date.now() < deadlineAt) {
+    while (processedReadbacks < eventReadbacks.length) {
+      const readback = eventReadbacks[processedReadbacks];
+      processedReadbacks += 1;
+      const durableEvent = recordWithId(
+        await jsonBody(readback.response),
+        "event_id",
+        messageEventId,
+      );
+      if (!durableEvent) continue;
+
+      const prematureReconstruction = reconstructionRequestSequences.filter(
+        (sequence) => sequence < readback.sequence,
+      );
+      expect(
+        prematureReconstruction,
+        "reconstruction must remain withheld until the receipt occurs in canonical event readback",
+      ).toHaveLength(0);
+      return {
+        event: durableEvent,
+        event_id: messageEventId,
+        readback_attempts: processedReadbacks,
+        timeout_ms: MESSAGE_EVENT_PROJECTION_TIMEOUT_MS,
+      };
+    }
+
+    if (reconstructionRequestSequences.length > 0) {
+      throw new Error(
+        "Reconstruction started before the Workshop message receipt reached canonical event readback.",
+      );
+    }
+    await page.waitForTimeout(Math.min(100, Math.max(1, deadlineAt - Date.now())));
+  }
+
+  expect(
+    reconstructionRequestSequences,
+    "a missing event projection must time out before reconstruction is requested",
+  ).toHaveLength(0);
+  throw new Error(
+    `Workshop message receipt ${messageEventId} did not reach canonical event readback within ${MESSAGE_EVENT_PROJECTION_TIMEOUT_MS}ms; reconstruction remained withheld.`,
+  );
+}
+
 function observeBffTraffic(page: Page): ObservedRequest[] {
   const requests: ObservedRequest[] = [];
   observedTrafficByPage.set(page, requests);
@@ -446,6 +517,7 @@ test.describe(`${TASK_ID} strict-live browser journey`, () => {
     let strategyId = "";
     let strategyVersion = "";
     let poolLookup: Promise<Response> | undefined;
+    let messageEventProjection: MessageEventProjectionEvidence | undefined;
 
     await assertOperatorLiveCandidate(page);
     await installHostedOperatorSession(page);
@@ -492,15 +564,27 @@ test.describe(`${TASK_ID} strict-live browser journey`, () => {
         "GET",
         `/bff/agora/workshops/${encodeURIComponent(workshopId)}`,
       );
-      const durableMessageEvents = waitForResponse(
-        page,
-        "GET",
-        `/bff/agora/workshops/${encodeURIComponent(workshopId)}/events`,
-      );
+      const eventReadbackPath = `/bff/agora/workshops/${encodeURIComponent(workshopId)}/events`;
+      const reconstructionPath = `/bff/agora/workshops/${encodeURIComponent(workshopId)}/reconstruct`;
+      const eventReadbacks: OrderedResponse[] = [];
+      const reconstructionRequestSequences: number[] = [];
+      let networkSequence = 0;
+      const observeRequest = (request: Request) => {
+        if (request.method() === "POST" && new URL(request.url()).pathname === reconstructionPath) {
+          reconstructionRequestSequences.push(++networkSequence);
+        }
+      };
+      const observeResponse = (response: Response) => {
+        if (response.request().method() === "GET" && responsePath(response) === eventReadbackPath) {
+          eventReadbacks.push({ response, sequence: ++networkSequence });
+        }
+      };
+      page.on("request", observeRequest);
+      page.on("response", observeResponse);
       const reconstruction = waitForResponse(
         page,
         "POST",
-        `/bff/agora/workshops/${encodeURIComponent(workshopId)}/reconstruct`,
+        reconstructionPath,
       );
       const versions = waitForResponse(
         page,
@@ -525,17 +609,22 @@ test.describe(`${TASK_ID} strict-live browser journey`, () => {
         "Workshop message event receipt",
         ["event_id"],
       );
-      const durableMessageEvent = recordWithId(
-        await jsonBody(await durableMessageEvents),
-        "event_id",
-        messageEventId,
-      );
-      expect(
-        durableMessageEvent,
-        "the accepted Workshop message event must be read back before reconstruction",
-      ).toBeTruthy();
-      expect(durableMessageEvent?.workshop_id).toBe(workshopId);
-      expect(durableMessageEvent?.event_type).toBe("message");
+      try {
+        messageEventProjection = await waitForDurableMessageEvent(
+          page,
+          messageEventId,
+          eventReadbacks,
+          reconstructionRequestSequences,
+        );
+      } finally {
+        page.off("request", observeRequest);
+        page.off("response", observeResponse);
+      }
+      if (!messageEventProjection) {
+        throw new Error("Hosted message event projection assertion completed without evidence.");
+      }
+      expect(messageEventProjection.event.workshop_id).toBe(workshopId);
+      expect(messageEventProjection.event.event_type).toBe("message");
       mutations.push({
         id: messageEventId,
         method: "POST",
@@ -840,6 +929,7 @@ test.describe(`${TASK_ID} strict-live browser journey`, () => {
           bff_base_url: BFF_BASE_URL,
           fe_base_url: FE_BASE_URL,
           mutation_ids: mutations,
+          workshop_message_event_readback: messageEventProjection,
           observed_requests: observedRequests.map(
             ({ authorization, method, origin, path, status }) => ({
               authorization,

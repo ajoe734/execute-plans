@@ -674,7 +674,48 @@ describe("StrategyWorkshopPage", () => {
     expect(submitDailyInteraction).not.toHaveBeenCalled();
   });
 
-  it("requires the accepted message event to be read back before reconstruction", async () => {
+  it("retries the canonical event projection until a delayed message receipt is durable", async () => {
+    let messageSubmitted = false;
+    let receiptReadbackCalls = 0;
+    vi.mocked(workshopsModule.getWorkshop).mockResolvedValue(MOCK_WORKSHOP);
+    vi.mocked(workshopsModule.getWorkshopWithEtag).mockResolvedValue({
+      workshop: MOCK_WORKSHOP,
+      etag: 'W/"workshop:ws-abc:v7"',
+    });
+    vi.mocked(workshopsModule.postWorkshopMessage).mockImplementation(async () => {
+      messageSubmitted = true;
+      return { event_id: "evt-message-delayed", sequence_no: 8 };
+    });
+    vi.mocked(workshopsModule.listWorkshopEvents).mockImplementation(async () => {
+      if (!messageSubmitted) return { items: [] } as never;
+      receiptReadbackCalls += 1;
+      return receiptReadbackCalls === 1
+        ? { items: [] } as never
+        : {
+          items: [{
+            event_id: "evt-message-delayed",
+            event_type: "message",
+            workshop_id: "ws-abc",
+          }],
+        } as never;
+    });
+
+    render(<StrategyWorkshopPage workshopId="ws-abc" />);
+    await waitFor(() => expect(workshopsModule.listWorkshopEvents).toHaveBeenCalledWith("ws-abc"));
+    fireEvent.change(await screen.findByTestId("servant-composer-input"), {
+      target: { value: "Wait for the delayed durable event projection" },
+    });
+    fireEvent.click(screen.getByTestId("servant-composer-submit"));
+
+    await waitFor(() => expect(workshopsModule.reconstructWorkshopStrategy).toHaveBeenCalledWith("ws-abc"));
+    expect(receiptReadbackCalls).toBeGreaterThanOrEqual(2);
+    await waitFor(() => expect(submitDailyInteraction).toHaveBeenCalledWith(expect.objectContaining({
+      workshop_id: "ws-abc",
+      human_request: expect.objectContaining({ request_text: "Wait for the delayed durable event projection" }),
+    })));
+  });
+
+  it("times out without reconstruction when the accepted message event never reaches canonical readback", async () => {
     vi.mocked(workshopsModule.getWorkshop).mockResolvedValue(MOCK_WORKSHOP);
     vi.mocked(workshopsModule.getWorkshopWithEtag).mockResolvedValue({
       workshop: MOCK_WORKSHOP,
@@ -692,9 +733,64 @@ describe("StrategyWorkshopPage", () => {
     });
     fireEvent.click(screen.getByTestId("servant-composer-submit"));
 
-    expect(await screen.findByTestId("servant-composer-error")).toHaveTextContent(
-      "Workshop message receipt was not found in the durable event readback; reconstruction has not been started.",
-    );
+    await waitFor(() => expect(workshopsModule.postWorkshopMessage).toHaveBeenCalledWith(
+      "ws-abc",
+      { content: "Do not reconstruct before durable event readback" },
+      { ifMatch: 'W/"workshop:ws-abc:v7"' },
+    ));
+    await waitFor(() => expect(screen.getByTestId("servant-composer-error")).toHaveTextContent(
+      "Workshop message receipt was not found in the durable event readback before the finite deadline; reconstruction has not been started.",
+    ), { timeout: 12_000 });
+    expect(workshopsModule.listWorkshopEvents.mock.calls.length).toBeGreaterThanOrEqual(5);
+    expect(workshopsModule.reconstructWorkshopStrategy).not.toHaveBeenCalled();
+    expect(submitDailyInteraction).not.toHaveBeenCalled();
+  }, 15_000);
+
+  it("does not reconstruct a previous Workshop when its receipt projection resolves after navigation", async () => {
+    let messageSubmitted = false;
+    const pendingReadbacks = new Map<string, (value: { items: WorkshopStreamEvent[] }) => void>();
+    vi.mocked(workshopsModule.getWorkshop).mockImplementation(async (id) => ({
+      ...MOCK_WORKSHOP,
+      workshop_id: id,
+    }));
+    vi.mocked(workshopsModule.getWorkshopWithEtag).mockResolvedValue({
+      workshop: MOCK_WORKSHOP,
+      etag: 'W/"workshop:ws-abc:v7"',
+    });
+    vi.mocked(workshopsModule.postWorkshopMessage).mockImplementation(async () => {
+      messageSubmitted = true;
+      return { event_id: "evt-message-route-change", sequence_no: 8 };
+    });
+    vi.mocked(workshopsModule.listWorkshopEvents).mockImplementation((id) => {
+      if (!messageSubmitted) return Promise.resolve({ items: [] } as never);
+      return new Promise((resolve) => {
+        pendingReadbacks.set(id, resolve as (value: { items: WorkshopStreamEvent[] }) => void);
+      }) as never;
+    });
+
+    const { rerender } = render(<StrategyWorkshopPage workshopId="ws-abc" />);
+    await waitFor(() => expect(workshopsModule.listWorkshopEvents).toHaveBeenCalledWith("ws-abc"));
+    fireEvent.change(await screen.findByTestId("servant-composer-input"), {
+      target: { value: "Do not reconstruct after changing Workshops" },
+    });
+    fireEvent.click(screen.getByTestId("servant-composer-submit"));
+    await waitFor(() => expect(pendingReadbacks.get("ws-abc")).toBeDefined());
+
+    rerender(<StrategyWorkshopPage workshopId="ws-def" />);
+    await act(async () => {
+      pendingReadbacks.get("ws-abc")?.({
+        items: [{
+          event_id: "evt-message-route-change",
+          event_type: "message",
+          workshop_id: "ws-abc",
+        }],
+      });
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      await new Promise((resolve) => globalThis.setTimeout(resolve, 25));
+    });
     expect(workshopsModule.reconstructWorkshopStrategy).not.toHaveBeenCalled();
     expect(submitDailyInteraction).not.toHaveBeenCalled();
   });
