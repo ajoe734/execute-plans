@@ -744,7 +744,7 @@ describe("StrategyWorkshopPage", () => {
     expect(workshopsModule.listWorkshopEvents.mock.calls.length).toBeGreaterThanOrEqual(5);
     expect(workshopsModule.reconstructWorkshopStrategy).not.toHaveBeenCalled();
     expect(submitDailyInteraction).not.toHaveBeenCalled();
-  });
+  }, 15_000);
 
   it("does not reconstruct a previous Workshop when its receipt projection resolves after navigation", async () => {
     let messageSubmitted = false;

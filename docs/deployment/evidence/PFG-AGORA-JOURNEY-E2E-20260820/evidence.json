@@ -63,6 +63,11 @@
       "result": "passed; 67 tests",
       "coverage": "BFF-issued ETag retention, fail-closed missing ETag, exact header forwarding, durable 202 event receipt normalization, delayed projection retry, finite-deadline timeout without reconstruction, Workshop-change safety, UI receipt readback before reconstruction, and visible stale-precondition failure without follow-on writes."
     },
+    "component_gate_regression": {
+      "command": "npx vitest related --run src/agora/pages/strategy-workshop/StrategyWorkshopPage.tsx src/agora/pages/strategy-workshop/StrategyWorkshopPage.test.tsx --silent",
+      "result": "passed; 55 tests under the CI-equivalent default runner",
+      "coverage": "The finite-deadline negative regression declares its own 15-second test timeout, which intentionally exceeds the 8-second application deadline and avoids relying on a local CLI timeout override."
+    },
     "playwright_opt_in_guard": {
       "command": "npx playwright test e2e/agora-product-journey.spec.ts --project=chromium",
       "result": "passed; 1 skipped because PFG_AGORA_JOURNEY_E2E is not set"
