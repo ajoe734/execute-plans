@@ -487,6 +487,11 @@ test.describe(`${TASK_ID} strict-live browser journey`, () => {
         "POST",
         `/bff/agora/workshops/${encodeURIComponent(workshopId)}/messages`,
       );
+      const currentWorkshopReadback = waitForResponse(
+        page,
+        "GET",
+        `/bff/agora/workshops/${encodeURIComponent(workshopId)}`,
+      );
       const reconstruction = waitForResponse(
         page,
         "POST",
@@ -498,9 +503,20 @@ test.describe(`${TASK_ID} strict-live browser journey`, () => {
         `/bff/agora/workshops/${encodeURIComponent(workshopId)}/versions`,
       );
       await page.getByTestId("servant-composer-submit").click();
+      const messageResponse = await message;
+      const currentWorkshopResponse = await currentWorkshopReadback;
+      const currentWorkshopEtag = currentWorkshopResponse.headers()["etag"];
+      expect(
+        currentWorkshopEtag,
+        "the fresh Workshop readback must expose the BFF-issued current ETag",
+      ).toBeTruthy();
+      expect(
+        messageResponse.request().headers()["if-match"],
+        "the Workshop message must forward that exact current ETag without rewriting it",
+      ).toBe(currentWorkshopEtag);
       mutations.push(
         await recordedMutation(
-          await message,
+          messageResponse,
           ["message_id"],
           "Workshop message",
         ),

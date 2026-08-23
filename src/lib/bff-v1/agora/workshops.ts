@@ -211,16 +211,54 @@ export async function getWorkshop(workshopId: string): Promise<StrategyWorkshop>
   return entityFrom<StrategyWorkshop>(response);
 }
 
+export interface WorkshopReadback {
+  workshop: StrategyWorkshop;
+  /**
+   * Authoritative optimistic-lock precondition from the immediately preceding
+   * Workshop readback. This is already a complete weak ETag; callers must not
+   * quote, synthesize, or otherwise transform it before forwarding it.
+   */
+  etag: string;
+}
+
+/**
+ * Read the current Workshop projection together with its BFF-issued ETag.
+ *
+ * The deployed Workshop route provides this same value in both the HTTP ETag
+ * header and response metadata. `bffFetch` intentionally returns the decoded
+ * envelope, so retain the metadata value here rather than deriving a lock
+ * version from an incomplete UI projection.
+ */
+export async function getWorkshopWithEtag(workshopId: string): Promise<WorkshopReadback> {
+  const response = await bffFetch<unknown>({
+    method: "GET",
+    path: `/bff/agora/workshops/${encodeURIComponent(workshopId)}`,
+  });
+  const etag = recordFrom(recordFrom(response).meta).etag;
+  if (typeof etag !== "string" || !etag.trim()) {
+    throw new Error("Authoritative Workshop readback omitted its current ETag precondition.");
+  }
+  return { workshop: entityFrom<StrategyWorkshop>(response), etag: etag.trim() };
+}
+
 // ─── Workshop messages ─────────────────────────────────────────────────────────
 
 export async function postWorkshopMessage(
   workshopId: string,
   body: { content: string; metadata?: Record<string, unknown> },
+  precondition: { ifMatch: string },
 ): Promise<{ message_id: string; workshop_id: string; created_at: string }> {
+  const ifMatch = precondition.ifMatch.trim();
+  if (!ifMatch) {
+    throw new Error("Workshop message requires the current If-Match precondition.");
+  }
   const response = await bffFetch<unknown>({
     method: "POST",
     path: `/bff/agora/workshops/${encodeURIComponent(workshopId)}/messages`,
     body,
+    // `ifMatchVersion` quotes its input for numeric legacy locks. Workshop
+    // carries an already-quoted weak ETag, so send the BFF-issued value exactly.
+    headers: { "If-Match": ifMatch },
   });
   return entityFrom<{ message_id: string; workshop_id: string; created_at: string }>(response);
 }

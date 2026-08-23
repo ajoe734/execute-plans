@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { bffFetch } from "@/lib/bff-v1/client";
 import {
   getWorkshop,
+  getWorkshopWithEtag,
   getWorkshopCompleteness,
   getWorkshopReadiness,
   dispatchWorkshopResearchRun,
@@ -91,6 +92,38 @@ describe("getWorkshop", () => {
     const result = await getWorkshop("ws-001");
 
     expect(result).toEqual(mockWorkshop);
+  });
+
+  it("retains the BFF-issued current ETag without deriving a version from the body", async () => {
+    const etag = 'W/"workshop:ws-001:v17"';
+    vi.mocked(bffFetch).mockResolvedValue({ data: mockWorkshop, meta: { etag } });
+
+    await expect(getWorkshopWithEtag("ws-001")).resolves.toEqual({
+      workshop: mockWorkshop,
+      etag,
+    });
+  });
+
+  it("fails closed when the authoritative Workshop readback omits its ETag", async () => {
+    vi.mocked(bffFetch).mockResolvedValue({ data: mockWorkshop, meta: {} });
+
+    await expect(getWorkshopWithEtag("ws-001")).rejects.toThrow(
+      "Authoritative Workshop readback omitted its current ETag precondition.",
+    );
+  });
+});
+
+describe("dispatchWorkshopResearchRun", () => {
+  it("uses the deployed plural research-runs route without inventing an empty payload", async () => {
+    vi.mocked(bffFetch).mockResolvedValue({ data: { research_run_id: "run-001" } });
+
+    await dispatchWorkshopResearchRun("ws/001");
+
+    expect(bffFetch).toHaveBeenCalledWith({
+      method: "POST",
+      path: "/bff/agora/workshops/ws%2F001/research-runs",
+      body: undefined,
+    });
   });
 });
 
@@ -260,9 +293,23 @@ describe("postWorkshopMessage", () => {
     };
     vi.mocked(bffFetch).mockResolvedValue({ data: message });
 
-    const result = await postWorkshopMessage("ws-001", { content: "Continue" });
+    const etag = 'W/"workshop:ws-001:v17"';
+    const result = await postWorkshopMessage("ws-001", { content: "Continue" }, { ifMatch: etag });
 
     expect(result).toEqual(message);
+    expect(bffFetch).toHaveBeenCalledWith({
+      method: "POST",
+      path: "/bff/agora/workshops/ws-001/messages",
+      body: { content: "Continue" },
+      headers: { "If-Match": etag },
+    });
+  });
+
+  it("fails closed instead of issuing a mutation without an If-Match precondition", async () => {
+    await expect(
+      postWorkshopMessage("ws-001", { content: "Continue" }, { ifMatch: "   " }),
+    ).rejects.toThrow("Workshop message requires the current If-Match precondition.");
+    expect(bffFetch).not.toHaveBeenCalled();
   });
 });
 

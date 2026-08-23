@@ -34,8 +34,14 @@
   },
   "runtime_evidence": {
     "artifact": "PANTHEON_AUDIT_OUT_DIR/PFG-AGORA-JOURNEY-E2E-20260820-<run-marker>.json",
-    "status": "repairing-live-contract-drift",
-    "reason": "Run 32613840861 proved the real hosted GCP Identity browser session and exact operator-live FE/BFF pair, then correctly rejected the production Workshop create request with HTTP 422. Live OpenAPI identifies the retired FE payload as the cause: POST /bff/agora/workshops requires initial_message (with optional title/strategy_spec_ref/metadata), not the obsolete subject object. The same contract audit found the client and observer must use the deployed plural /research-runs endpoint with an omitted optional body. This failed run is diagnostic only, never acceptance evidence."
+    "status": "repairing-workshop-precondition",
+    "reason": "Run 32613840861 proved the real hosted GCP Identity browser session and exact operator-live FE/BFF pair, then correctly rejected the obsolete Workshop-create payload with HTTP 422; that repair also corrected the plural /research-runs route. The later exact-pair run 32617780476 reached its first real Workshop message POST and failed with HTTP 428 because the frontend omitted If-Match. The accepted BFF contract requires the complete ETag issued by a fresh GET /bff/agora/workshops/{id}; this repair forwards that value unchanged and preserves missing/stale failures. Both failed runs are diagnostic only, never acceptance evidence."
+  },
+  "workshop_message_precondition": {
+    "source": "Pantheon BFF commit ab3377dcad634ee88ce5ad28c54f657098cda67a strategy-workshop router: GET emits W/\"workshop:{id}:vN\" as ETag and meta.etag; message mutations reject a missing precondition with 428 and a stale value with 409.",
+    "frontend_behavior": "Immediately before each Workshop message POST, StrategyWorkshopPage fresh-reads the canonical Workshop, requires its non-empty BFF-issued meta.etag, and passes the exact value through the client headers option so the generic numeric-lock quoting helper cannot rewrite it.",
+    "hosted_assertion": "The strict-live Playwright journey captures the fresh GET and message POST and requires the POST If-Match header to byte-match that GET response ETag.",
+    "failure_behavior": "A missing ETag stops before the message/reconstruction/Persona writes; a server 409 stays visible and no fallback or follow-on write is attempted."
   },
   "hosted_execution_harness": {
     "workflow": ".github/workflows/pfg-agora-journey-e2e-hosted-acceptance.yml",
@@ -49,8 +55,13 @@
       "result": "passed"
     },
     "lint": {
-      "command": "npx eslint e2e/agora-product-journey.spec.ts",
-      "result": "passed"
+      "command": "npx eslint src/lib/bff-v1/agora/workshops.ts src/lib/bff-v1/agora/workshops.test.ts src/agora/pages/strategy-workshop/StrategyWorkshopPage.tsx src/agora/pages/strategy-workshop/StrategyWorkshopPage.test.tsx e2e/agora-product-journey.spec.ts",
+      "result": "passed; only two pre-existing Fast Refresh warnings in StrategyWorkshopPage.tsx"
+    },
+    "workshop_precondition_regression": {
+      "command": "npx vitest run src/lib/bff-v1/agora/workshops.test.ts src/agora/pages/strategy-workshop/StrategyWorkshopPage.test.tsx --maxWorkers=2 --testTimeout=15000 --hookTimeout=30000",
+      "result": "passed; 64 tests",
+      "coverage": "BFF-issued ETag retention, fail-closed missing ETag, exact header forwarding, UI missing-precondition stop, and visible stale-precondition failure without follow-on writes."
     },
     "playwright_opt_in_guard": {
       "command": "npx playwright test e2e/agora-product-journey.spec.ts --project=chromium",
@@ -71,8 +82,7 @@
     }
   },
   "planned_validation": [
-    "npx playwright test e2e/agora-product-journey.spec.ts --project=chromium with task-scoped GCP Identity credentials in the governed environment",
-    "npm run typecheck",
-    "strict-live build using the Pantheon dev BFF variables and VITE_BFF_REAL_WRITES=false"
+    "Deploy the reviewed frontend commit as the operator-live Pantheon dev FE paired with the accepted BFF commit, then run the governed hosted journey workflow with its matching FE SHA.",
+    "Require the hosted journey artifact to include the new exact GET ETag to POST If-Match assertion before calling this repair accepted."
   ]
 }

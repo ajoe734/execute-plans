@@ -13,6 +13,7 @@ import type {
 vi.mock("@/lib/bff-v1/agora/workshops", () => ({
   listWorkshops: vi.fn().mockResolvedValue([]),
   getWorkshop: vi.fn().mockResolvedValue(null),
+  getWorkshopWithEtag: vi.fn(),
   createWorkshop: vi.fn(),
   getWorkshopCompleteness: vi.fn().mockResolvedValue(null),
   getWorkshopReadiness: vi.fn().mockResolvedValue(null),
@@ -241,6 +242,10 @@ describe("StrategyWorkshopPage", () => {
     vi.mocked(submitDailyInteraction).mockResolvedValue({ interaction_id: "int-1", workshop_id: "ws-abc", status: "queued" } as never);
     vi.mocked(workshopsModule.listWorkshops).mockResolvedValue([]);
     vi.mocked(workshopsModule.getWorkshop).mockRejectedValue(new Error("No workshop fixture"));
+    vi.mocked(workshopsModule.getWorkshopWithEtag).mockResolvedValue({
+      workshop: MOCK_WORKSHOP,
+      etag: 'W/"workshop:ws-abc:v7"',
+    });
     vi.mocked(workshopsModule.getWorkshopCompleteness).mockResolvedValue(null);
     vi.mocked(workshopsModule.getWorkshopReadiness).mockResolvedValue(null);
     vi.mocked(workshopsModule.listWorkshopCards).mockResolvedValue([]);
@@ -600,6 +605,12 @@ describe("StrategyWorkshopPage", () => {
     expect(new Set(resolutionSessions).size).toBe(1);
     expect(workshopsModule.listWorkshopEvents.mock.calls.length).toBeGreaterThanOrEqual(2);
     expect(workshopsModule.reconstructWorkshopStrategy).toHaveBeenCalledWith("ws-abc");
+    expect(workshopsModule.getWorkshopWithEtag).toHaveBeenCalledWith("ws-abc");
+    expect(workshopsModule.postWorkshopMessage).toHaveBeenCalledWith(
+      "ws-abc",
+      { content: "What evidence is missing?" },
+      { ifMatch: 'W/"workshop:ws-abc:v7"' },
+    );
     expect(await screen.findByTestId("workshop-reconstruction-state")).toHaveAttribute(
       "data-reconstruction-state",
       "completed",
@@ -610,6 +621,55 @@ describe("StrategyWorkshopPage", () => {
     expect(screen.getByTestId("workshop-strategy-spec-identity")).toHaveTextContent(
       "StrategySpec strategy-canonical-001 · registry-canonical-002 · 2",
     );
+  });
+
+  it("does not issue a Workshop write when the current readback omits its ETag", async () => {
+    vi.mocked(workshopsModule.getWorkshop).mockResolvedValue(MOCK_WORKSHOP);
+    vi.mocked(workshopsModule.getWorkshopWithEtag).mockRejectedValue(
+      new Error("Authoritative Workshop readback omitted its current ETag precondition."),
+    );
+
+    render(<StrategyWorkshopPage workshopId="ws-abc" />);
+    fireEvent.change(await screen.findByTestId("servant-composer-input"), {
+      target: { value: "Do not send without a current precondition" },
+    });
+    fireEvent.click(screen.getByTestId("servant-composer-submit"));
+
+    expect(await screen.findByTestId("servant-composer-error")).toHaveTextContent(
+      "Authoritative Workshop readback omitted its current ETag precondition.",
+    );
+    expect(workshopsModule.postWorkshopMessage).not.toHaveBeenCalled();
+    expect(workshopsModule.reconstructWorkshopStrategy).not.toHaveBeenCalled();
+    expect(submitDailyInteraction).not.toHaveBeenCalled();
+  });
+
+  it("keeps a stale Workshop precondition failure visible and does not continue the journey", async () => {
+    const staleEtag = 'W/"workshop:ws-abc:v7"';
+    vi.mocked(workshopsModule.getWorkshop).mockResolvedValue(MOCK_WORKSHOP);
+    vi.mocked(workshopsModule.getWorkshopWithEtag).mockResolvedValue({
+      workshop: MOCK_WORKSHOP,
+      etag: staleEtag,
+    });
+    vi.mocked(workshopsModule.postWorkshopMessage).mockRejectedValue(
+      new Error("HTTP 409: Workshop version is stale"),
+    );
+
+    render(<StrategyWorkshopPage workshopId="ws-abc" />);
+    fireEvent.change(await screen.findByTestId("servant-composer-input"), {
+      target: { value: "Preserve the server's stale-precondition result" },
+    });
+    fireEvent.click(screen.getByTestId("servant-composer-submit"));
+
+    expect(await screen.findByTestId("servant-composer-error")).toHaveTextContent(
+      "HTTP 409: Workshop version is stale",
+    );
+    expect(workshopsModule.postWorkshopMessage).toHaveBeenCalledWith(
+      "ws-abc",
+      { content: "Preserve the server's stale-precondition result" },
+      { ifMatch: staleEtag },
+    );
+    expect(workshopsModule.reconstructWorkshopStrategy).not.toHaveBeenCalled();
+    expect(submitDailyInteraction).not.toHaveBeenCalled();
   });
 
   it("keeps the composer available when a non-authoritative session rail read remains pending", async () => {
