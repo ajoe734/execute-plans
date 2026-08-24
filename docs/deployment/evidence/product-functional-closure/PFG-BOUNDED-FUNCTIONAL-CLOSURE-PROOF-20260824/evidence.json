@@ -9,7 +9,7 @@
   "branch": "task/PFG-BOUNDED-FUNCTIONAL-CLOSURE-PROOF-20260824",
   "base_commit": "cc4007f7f78a31c73548ce85457af17a45a4c4b9",
   "status": "ready_for_review",
-  "timestamp": "2026-08-24T17:25:00Z",
+  "timestamp": "2026-08-24T18:07:00Z",
   "authorization": {
     "date": "2026-08-24",
     "scope": "one bounded paper-only functional-closure write-proof",
@@ -29,6 +29,7 @@
   "scope": {
     "deploy_controller_and_manifest_repair": [
       "The deployment workflow and deploy script allow write-proof profile activation on the exact accepted and served release commit when subsequent task PRs have advanced the dev tip.",
+      "The switch-time candidate order guard extends the exact-live served candidate write-proof exception while retaining controller identity and live-target CAS checks.",
       "The deployment workflow pins namespaced compatibility refs per run/attempt (refs/pantheon-proof/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}/*) before generating the Agora compatibility manifest and running the Agora deployment gate.",
       "The independent watchdog namespaces compatibility refs per run/attempt, asserting both namespaced refs resolve to the authorized CANDIDATE_SHA and BFF_SHA before Agora gate revalidation.",
       "The watchdog restore step is marked `if: always()` and pre-restore compatibility revalidation is marked `continue-on-error: true` so pre-restore errors unconditionally fall through to exact same-pair read-only restoration."
@@ -47,6 +48,8 @@
     ".github/workflows/pantheon-dev-fe-deploy.yml",
     ".github/workflows/pantheon-proof-watchdog.yml",
     "scripts/deploy-dev-vm.sh",
+    "scripts/release-evidence.mjs",
+    "scripts/test-deploy-dev-vm.sh",
     "docs/deployment/evidence/product-functional-closure/PFG-BOUNDED-FUNCTIONAL-CLOSURE-PROOF-20260824/evidence.json"
   ],
   "acceptance_coverage": {
@@ -60,8 +63,8 @@
   },
   "validation": {
     "focused_tests": {
-      "command": "npx vitest run --maxWorkers=2 --testTimeout=15000 --hookTimeout=30000 src/management/pages/trade-journeys/TradeJourneysHostedProof.contract.test.ts src/test/paired-release-workflow.test.ts src/test/deploy-safe-defaults.test.ts src/test/persona-hosted-proof-credentials.test.ts src/test/persona-hosted-proof-env.test.ts",
-      "result": "passed: 5 files, 50 tests"
+      "command": "npx vitest run --maxWorkers=2 --testTimeout=15000 --hookTimeout=30000 src/management/pages/trade-journeys/TradeJourneysHostedProof.contract.test.ts src/test/paired-release-workflow.test.ts src/test/deploy-safe-defaults.test.ts src/test/persona-hosted-proof-credentials.test.ts src/test/persona-hosted-proof-env.test.ts src/test/release-evidence.test.ts",
+      "result": "passed: 6 files, 70 tests"
     },
     "contract_tests": {
       "command": "npm run test:contract",
@@ -69,7 +72,7 @@
     },
     "deploy_controller_harness": {
       "command": "bash scripts/test-deploy-dev-vm.sh",
-      "result": "passed: 31 passed, 0 failed"
+      "result": "passed: 32 passed, 0 failed"
     },
     "typecheck_and_lint": {
       "command": "npm run typecheck && npm run lint",
@@ -79,6 +82,8 @@
   "review_request": {
     "reviewer_must_confirm": [
       "The deployment workflow and deploy-dev-vm.sh allow write-proof profile activation when the requested candidate matches the currently served release commit, even after dev tip advances.",
+      "The pre-switch guard in deploy-dev-vm.sh extends the served candidate write-proof exception through atomic switch while preserving controller identity and live-target CAS checks.",
+      "The deployment test harness validates advanced dev + exact served read-only candidate -> successful bounded write-proof, plus negative cases for non-served and changed-live candidates (32/32 passed).",
       "The deployment workflow pins namespaced refs by ${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT} before Agora manifest generation.",
       "The watchdog workflow namespaces refs by ${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}, eliminating shared static ref race conditions.",
       "Both namespaced refs are verified to resolve to the authorized candidate and BFF SHAs before manifest generation.",

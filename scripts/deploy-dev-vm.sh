@@ -1887,11 +1887,14 @@ if [[ "${CONTROLLER_SHA}" != "${REMOTE_DEV_SHA_AT_SWITCH}" ]]; then
   exit 2
 fi
 if [[ "${SHA}" != "${REMOTE_DEV_SHA_AT_SWITCH}" && "${EMERGENCY_OVERRIDE}" != "true" ]]; then
-  echo "Dev advanced after candidate probe; refusing stale switch." >&2
-  evidence_append candidate.order_at_switch failed "currentDevSha=${REMOTE_DEV_SHA_AT_SWITCH}"
-  exit 2
-fi
-if [[ "${SHA}" != "${REMOTE_DEV_SHA_AT_SWITCH}" ]]; then
+  if [[ "${DEPLOY_PROFILE}" == "write-proof" && -n "${PREVIOUS_COMMIT:-}" && "${SHA}" == "${PREVIOUS_COMMIT}" ]]; then
+    evidence_append candidate.order_at_switch passed "currentDevSha=${REMOTE_DEV_SHA_AT_SWITCH}" "liveCandidateSha=${PREVIOUS_COMMIT}"
+  else
+    echo "Dev advanced after candidate probe; refusing stale switch." >&2
+    evidence_append candidate.order_at_switch failed "currentDevSha=${REMOTE_DEV_SHA_AT_SWITCH}"
+    exit 2
+  fi
+elif [[ "${SHA}" != "${REMOTE_DEV_SHA_AT_SWITCH}" ]]; then
   evidence_append candidate.order_at_switch overridden "currentDevSha=${REMOTE_DEV_SHA_AT_SWITCH}"
 else
   evidence_append candidate.order_at_switch passed "currentDevSha=${REMOTE_DEV_SHA_AT_SWITCH}"
