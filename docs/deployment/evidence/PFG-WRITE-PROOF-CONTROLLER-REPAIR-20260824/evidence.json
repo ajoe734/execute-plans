@@ -9,7 +9,7 @@
   "branch": "task/PFG-WRITE-PROOF-CONTROLLER-REPAIR-20260824",
   "base_commit": "5447d2a09b5c83a4f9ee2d405f57c642913e0055",
   "status": "ready_for_review",
-  "timestamp": "2026-08-24T00:35:00Z",
+  "timestamp": "2026-08-24T00:53:00Z",
   "scope": {
     "credential_controller": [
       "The authorized child proof obtains a new operator and a new viewer JWT from the governed dev-login endpoint immediately before its credentialed phase.",
@@ -36,6 +36,7 @@
     "src/test/paired-release-workflow.test.ts",
     "src/test/persona-hosted-proof-credentials.test.ts",
     "src/test/persona-hosted-proof-env.test.ts",
+    "src/management/pages/trade-journeys/TradeJourneysHostedProof.contract.test.ts",
     "docs/deployment/evidence/PFG-WRITE-PROOF-CONTROLLER-REPAIR-20260824/evidence.json"
   ],
   "acceptance_coverage": {
@@ -60,6 +61,14 @@
       "command": "npx vitest run --maxWorkers=2 --testTimeout=15000 --hookTimeout=30000 src/test/persona-hosted-proof-env.test.ts src/test/persona-hosted-proof-credentials.test.ts src/test/deploy-safe-defaults.test.ts src/test/paired-release-workflow.test.ts",
       "result": "passed: 4 files, 43 tests"
     },
+    "review_repair_tests": {
+      "command": "npx vitest run --maxWorkers=2 --testTimeout=15000 --hookTimeout=30000 src/management/pages/trade-journeys/TradeJourneysHostedProof.contract.test.ts src/test/paired-release-workflow.test.ts src/test/deploy-safe-defaults.test.ts src/test/persona-hosted-proof-credentials.test.ts src/test/persona-hosted-proof-env.test.ts",
+      "result": "passed: 5 files, 48 tests"
+    },
+    "full_vitest": {
+      "command": "npm test",
+      "result": "passed: 187 files, 1870 tests"
+    },
     "deploy_controller_harness": {
       "command": "bash scripts/test-deploy-dev-vm.sh",
       "result": "passed; includes the exact-pair watchdog compatibility-pin contract assertion"
@@ -69,6 +78,7 @@
     "reviewer_must_confirm": [
       "No issued JWT is referenced by any repository secret expression in the authorized proof job.",
       "Minting precedes the freshness/TTL preflight, which precedes persona provisioning and every proof write.",
+      "The Trade Journey hosted-proof contract rejects the retired static operator/viewer bearer-token secrets and requires the fresh dev-login credential flow.",
       "The watchdog restore gate does not read refs/remotes/origin/dev and uses only refs pinned to inputs.candidate_sha and inputs.bff_sha.",
       "The exact PR head carries this manifest before review approval."
     ],
