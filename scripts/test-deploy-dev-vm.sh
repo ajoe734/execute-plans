@@ -1982,22 +1982,38 @@ test_restore_reaches_safe_sibling_when_agora_evidence_is_absent_or_rejected() {
   live_profile="$(json_field "${safe_target}/deployment.json" deploymentProfile)"
   [[ "${live_profile}" == "read-only" ]] || show_deploy_failure "live deployment profile is not read-only"
 
-  # Case 3: Contrast with normal deployment profiles rejecting absent/rejected Agora evidence
+  # Case 3: Contrast with normal deployment profiles rejecting absent/rejected Agora evidence (3x2 matrix)
   setup_case agora-read-only-absent
   run_deploy PANTHEON_DEPLOY_AGORA_COMPAT_EVIDENCE=""
   [[ "${RUN_STATUS}" -ne 0 ]] || die "absent Agora evidence unexpectedly switched normal read-only deploy"
   assert_previous_is_live
+  assert_previous_manifest_unchanged
 
   setup_case agora-write-proof-absent
   run_write_deploy PANTHEON_DEPLOY_AGORA_COMPAT_EVIDENCE=""
   [[ "${RUN_STATUS}" -ne 0 ]] || die "absent Agora evidence unexpectedly switched write-proof deploy"
   assert_previous_is_live
+  assert_previous_manifest_unchanged
+
+  setup_case agora-write-proof-rejected
+  make_agora_compatibility_evidence "${CASE_AGORA_EVIDENCE}" "rejected"
+  run_write_deploy
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "rejected Agora evidence unexpectedly switched write-proof deploy"
+  assert_previous_is_live
+  assert_previous_manifest_unchanged
+
+  setup_case agora-operator-live-absent
+  run_operator_live_deploy PANTHEON_DEPLOY_AGORA_COMPAT_EVIDENCE=""
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "absent Agora evidence unexpectedly switched operator-live deploy"
+  assert_previous_is_live
+  assert_previous_manifest_unchanged
 
   setup_case agora-operator-live-rejected
   make_agora_compatibility_evidence "${CASE_AGORA_EVIDENCE}" "rejected"
   run_operator_live_deploy
   [[ "${RUN_STATUS}" -ne 0 ]] || die "rejected Agora evidence unexpectedly switched operator-live deploy"
   assert_previous_is_live
+  assert_previous_manifest_unchanged
 }
 
 run_test() {
