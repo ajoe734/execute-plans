@@ -1,0 +1,77 @@
+{
+  "schema_version": "pantheon.product-functional-closure.bounded-functional-closure-proof-evidence.v1",
+  "task_id": "PFG-BOUNDED-FUNCTIONAL-CLOSURE-PROOF-20260824",
+  "taskId": "PFG-BOUNDED-FUNCTIONAL-CLOSURE-PROOF-20260824",
+  "owner": "Antigravity",
+  "reviewer": "Codex2",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/PFG-BOUNDED-FUNCTIONAL-CLOSURE-PROOF-20260824",
+  "base_commit": "cc4007f7f78a31c73548ce85457af17a45a4c4b9",
+  "status": "ready_for_review",
+  "timestamp": "2026-08-24T02:37:00Z",
+  "authorization": {
+    "date": "2026-08-24",
+    "scope": "one bounded paper-only functional-closure write-proof",
+    "source": "operator chat"
+  },
+  "exact_pair": {
+    "frontend_sha": "cc4007f7f78a31c73548ce85457af17a45a4c4b9",
+    "bff_sha": "40de8fcb1c69fad0bf5e54d4c0bd6e508c9162e0",
+    "pair_id": "0d36e1dd5beb48a21dc5c9f7467c3ab85f86f246d20568a58a2fb534208aafa4",
+    "release_candidate_id": "a24edf1f6a7b8e4ba8e47ec389b2370891ab8b354950c6e0f2b6ea0113cbd19b",
+    "compatibility_manifest_sha256": "9ec375982c3251395e5693573a5f17c379692a3ea3c002b495daa7290c865531",
+    "read_only_artifact_digest_sha256": "55382dbba2e04d1f858392c81120efdceda4afcedfd9ae6b79382ce710e4a669",
+    "write_proof_artifact_digest_sha256": "d5f27b4c300bafefb0b967e4322b99e0d562b0f7e90e74a4d1b2e83bdf2cad41",
+    "release_controller_run_id": "32679566250",
+    "source_gate_run_id": "32679780054"
+  },
+  "scope": {
+    "watchdog_manifest_repair": [
+      "The independent watchdog dynamically generates the release compatibility manifest with the exact candidate and BFF runtime commits before invoking the Agora deployment gate.",
+      "This prevents static repository manifest mismatch errors during the automated read-only restore transaction.",
+      "The watchdog pins frontend and backend compatibility refs to ensure restore safety across any dev-tip drift."
+    ],
+    "credential_controller": [
+      "Repository actions secret DEV_BFF_DEV_LOGIN_VIEWER_CLIENT_SECRET provisioned on execute-plans repository to supply required dedicated viewer client credentials alongside DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_SECRET.",
+      "Both operator and viewer tokens are freshly minted at runtime via /bff/auth/dev-login with strict TTL (>1200s) and max-age (<120s) preflight."
+    ],
+    "not_changed": [
+      "Product runtime contracts, BFF API contracts, and default read-only deployment profile.",
+      "No live capital action and no outbound Source Ingestion external pulls.",
+      "Watchdog single-coordinator architecture and fail-closed restore semantics."
+    ]
+  },
+  "modified_surfaces": [
+    ".github/workflows/pantheon-proof-watchdog.yml",
+    "docs/deployment/evidence/product-functional-closure/PFG-BOUNDED-FUNCTIONAL-CLOSURE-PROOF-20260824/evidence.json"
+  ],
+  "acceptance_coverage": {
+    "exact_pair_preflight_verified": true,
+    "authenticated_write_proof_workflow_inputs_aligned": true,
+    "paper_only_no_live_capital_no_source_external_pull": true,
+    "independent_watchdog_exact_pair_read_only_restore": true,
+    "workflow_and_hosted_readback_evidence_recorded": true
+  },
+  "validation": {
+    "focused_tests": {
+      "command": "npx vitest run --maxWorkers=2 --testTimeout=15000 --hookTimeout=30000 src/management/pages/trade-journeys/TradeJourneysHostedProof.contract.test.ts src/test/paired-release-workflow.test.ts src/test/deploy-safe-defaults.test.ts src/test/persona-hosted-proof-credentials.test.ts src/test/persona-hosted-proof-env.test.ts",
+      "result": "passed: 5 files, 48 tests"
+    },
+    "deploy_controller_harness": {
+      "command": "bash scripts/test-deploy-dev-vm.sh",
+      "result": "passed: 30 passed, 0 failed"
+    },
+    "agora_compat_manifest_test": {
+      "command": "python3 scripts/agora_compat_manifest.py write + deployment-gate",
+      "result": "passed: deployment gate passed"
+    }
+  },
+  "review_request": {
+    "reviewer_must_confirm": [
+      "The watchdog workflow dynamically generates the compatibility manifest for the exact candidate and BFF runtime commits.",
+      "The dedicated viewer client secret is set in repository secrets and required by proof credential minting.",
+      "The exact PR head carries this manifest before review approval."
+    ]
+  }
+}
