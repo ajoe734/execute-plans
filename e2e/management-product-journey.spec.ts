@@ -226,6 +226,18 @@ async function assertDeploymentPair(request: APIRequestContext): Promise<{
   expect(deployment.sourceBranch).toBe("dev");
   expect(buildMode.VITE_BFF_MODE).toBe("live");
   expect(buildMode.VITE_BFF_FALLBACK).toBe("strict");
+  const deploymentProfile = String(deployment.deploymentProfile ?? deployment.profile ?? "");
+  expect(
+    ["read-only", "write-proof"],
+    `Management journey must run only against read-only or bounded write-proof, got ${deploymentProfile || "missing"}`,
+  ).toContain(deploymentProfile);
+  if (deploymentProfile === "read-only") {
+    expect(buildMode.VITE_BFF_REAL_WRITES).toBe("false");
+    expect(buildMode.VITE_BFF_ALLOW_DEV_STUB_WRITES).toBe("false");
+  } else {
+    expect(buildMode.VITE_BFF_REAL_WRITES).toBe("true");
+    expect(buildMode.VITE_BFF_ALLOW_DEV_STUB_WRITES).toBe("true");
+  }
 
   const readyResponse = await request.get(`${BFF_BASE_URL}/readyz`);
   expect(readyResponse.ok(), `/readyz returned ${readyResponse.status()}`).toBe(true);
@@ -540,9 +552,15 @@ test.describe("Management Console Product Journey Hosted E2E", () => {
     if (!realWritesEnabled) {
       mkdirSync(EVIDENCE_DIR, { recursive: true });
       await page.screenshot({ path: `${EVIDENCE_DIR}/pfg-mgmt-action-reload.png`, fullPage: true });
+      const readOnlyEvidence = {
+        schema_version: "pantheon.pfg-management-action-network.v2",
+        deployment_profile: "read-only",
+        mutation_controls_disabled: true,
+        network_events: networkEvents,
+      };
       writeFileSync(
         `${EVIDENCE_DIR}/pfg-mgmt-action-network.json`,
-        JSON.stringify(networkEvents, null, 2),
+        JSON.stringify(readOnlyEvidence, null, 2),
         "utf8",
       );
 
@@ -553,19 +571,44 @@ test.describe("Management Console Product Journey Hosted E2E", () => {
           `Read-only deployment must disable runtime mutation control ${index + 1}/${actionMenuCount} instead of falling through to synthetic client mutations`,
         ).toBeDisabled();
       }
+      await testInfo.attach("mgmt-read-only-action-network-events", {
+        body: Buffer.from(JSON.stringify(readOnlyEvidence, null, 2)),
+        contentType: "application/json",
+      });
       return;
     }
 
-    // Find first actionable runtime row and bind exact target identifier.
-    const targetRow = runtimeRows.filter({ has: page.locator("button:not([disabled])") }).first();
+    // Select only an actionable, non-terminal paper runtime. Never allow this
+    // bounded proof to fall through to a live runtime row.
+    let targetRowIndex = -1;
+    const runtimeRowCount = await runtimeRows.count();
+    for (let index = 0; index < runtimeRowCount; index += 1) {
+      const candidate = runtimeRows.nth(index);
+      const environment = (await candidate.locator("td").nth(2).innerText().catch(() => "")).trim().toLowerCase();
+      const status = (await candidate.locator("td").nth(3).innerText().catch(() => "")).trim().toLowerCase();
+      const enabledActionCount = await candidate.locator("button:not([disabled])").count();
+      if (environment === "paper" && !/quarantin/iu.test(status) && enabledActionCount > 0) {
+        targetRowIndex = index;
+        break;
+      }
+    }
+    expect(
+      targetRowIndex,
+      "Expected an actionable, non-quarantined paper runtime; refusing to select a live or already-terminal row",
+    ).toBeGreaterThanOrEqual(0);
+    const targetRow = runtimeRows.nth(targetRowIndex);
     await expect(targetRow).toBeVisible({ timeout: 15_000 });
     const targetName = (await targetRow.locator("td").first().innerText()).trim();
     expect(targetName.length, "Expected non-empty target runtime identifier").toBeGreaterThan(0);
+    await expect(targetRow.locator("td").nth(2)).toHaveText(/^\s*paper\s*$/i);
 
     // Record pre-action status
     const preActionStatusCell = targetRow.locator("td").nth(3).or(targetRow.locator("[class*='Badge'], [class*='status']")).first();
     await expect(preActionStatusCell).toBeVisible({ timeout: 10_000 });
     const preActionStatus = (await preActionStatusCell.innerText()).trim();
+    const baselineMutationCount = networkEvents.filter(
+      (event) => event.method === "POST" && (event.pathname.includes("/commands") || event.pathname.includes("/runtimes") || event.pathname.includes("/actions")),
+    ).length;
 
     // Trigger action menu specifically on the target runtime row
     const actionMenuButton = targetRow.locator("button").last();
@@ -590,11 +633,16 @@ test.describe("Management Console Product Journey Hosted E2E", () => {
 
     // Wait for table update and verify domain terminal state in the status cell
     // Must be a named post-action terminal state distinct from initial running|idle|active
-    const statusCell = targetRow.locator("td").nth(3).or(targetRow.locator("[class*='Badge'], [class*='status']")).first();
+    const updatedTargetRow = runtimeRows.filter({ hasText: targetName }).first();
+    const statusCell = updatedTargetRow.locator("td").nth(3).or(updatedTargetRow.locator("[class*='Badge'], [class*='status']")).first();
     await expect(statusCell).toBeVisible({ timeout: 10_000 });
-    await expect(statusCell).toHaveText(/quarantine|quarantined|QUARANTINED|隔離/i, { timeout: 15_000 });
+    await expect(statusCell).toHaveText(/quarantine|quarantined|QUARANTINED|隔離/i, { timeout: 30_000 });
     const terminalStatusText = (await statusCell.innerText()).trim();
     expect(terminalStatusText.toLowerCase(), "Post-action terminal state must not remain running, idle, or active").not.toMatch(/^(running|idle|active)$/i);
+    expect(
+      terminalStatusText.toLowerCase(),
+      "Post-action terminal state must differ from the pre-action state",
+    ).not.toBe(preActionStatus.toLowerCase());
 
     // =========================================================================
     // Part 3: Reload page and assert persisted domain terminal readback (idempotency)
@@ -621,18 +669,31 @@ test.describe("Management Console Product Journey Hosted E2E", () => {
     const mutationEvents = networkEvents.filter(
       (ev) => ev.method === "POST" && (ev.pathname.includes("/commands") || ev.pathname.includes("/runtimes") || ev.pathname.includes("/actions")),
     );
-    expect(mutationEvents.length, "Expected mutation POST request to be tracked").toBeGreaterThanOrEqual(1);
+    expect(mutationEvents.length, "Expected exactly one bounded paper mutation POST").toBe(baselineMutationCount + 1);
 
     mkdirSync(EVIDENCE_DIR, { recursive: true });
     const screenshotPath = `${EVIDENCE_DIR}/pfg-mgmt-action-reload.png`;
     await page.screenshot({ path: screenshotPath, fullPage: true });
 
-    // Persist immutable latency & route evidence artifact
+    const actionEvidence = {
+      schema_version: "pantheon.pfg-management-action-network.v2",
+      deployment_profile: "write-proof",
+      target_runtime: targetName,
+      target_environment: "paper",
+      pre_action_status: preActionStatus,
+      receipt: receiptText,
+      terminal_status: terminalStatusText,
+      reloaded_terminal_status: (await reloadedStatusCell.innerText()).trim(),
+      mutation_post_count: mutationEvents.length - baselineMutationCount,
+      network_events: networkEvents,
+    };
+
+    // Persist immutable latency, receipt, terminal readback, and route evidence.
     const networkEvidencePath = `${EVIDENCE_DIR}/pfg-mgmt-action-network.json`;
-    writeFileSync(networkEvidencePath, JSON.stringify(networkEvents, null, 2), "utf8");
+    writeFileSync(networkEvidencePath, JSON.stringify(actionEvidence, null, 2), "utf8");
 
     await testInfo.attach("mgmt-action-network-events", {
-      body: Buffer.from(JSON.stringify(networkEvents, null, 2)),
+      body: Buffer.from(JSON.stringify(actionEvidence, null, 2)),
       contentType: "application/json",
     });
   });

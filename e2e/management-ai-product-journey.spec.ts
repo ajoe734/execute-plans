@@ -246,7 +246,10 @@ async function navigateWithAuth(page: Page, url: string): Promise<void> {
   await waitForHostedRouteReady(page);
 }
 
-async function assertDeploymentPair(request: APIRequestContext): Promise<{ realWritesEnabled: boolean }> {
+async function assertDeploymentPair(request: APIRequestContext): Promise<{
+  deploymentProfile: "read-only" | "write-proof";
+  realWritesEnabled: boolean;
+}> {
   const deploymentResponse = await request.get(`${FE_BASE_URL}/deployment.json?pfg_mgmt_ai=${Date.now()}`);
   expect(deploymentResponse.ok(), `deployment.json returned ${deploymentResponse.status()}`).toBe(true);
   const deployment = (await deploymentResponse.json()) as JsonRecord;
@@ -263,11 +266,24 @@ async function assertDeploymentPair(request: APIRequestContext): Promise<{ realW
   expect(deployment.sourceBranch).toBe("dev");
   expect(buildMode.VITE_BFF_MODE).toBe("live");
   expect(buildMode.VITE_BFF_FALLBACK).toBe("strict");
+  const deploymentProfile = String(deployment.deploymentProfile ?? deployment.profile ?? "");
+  expect(
+    ["read-only", "write-proof"],
+    `Management AI journey must run only against read-only or bounded write-proof, got ${deploymentProfile || "missing"}`,
+  ).toContain(deploymentProfile);
+  if (deploymentProfile === "read-only") {
+    expect(buildMode.VITE_BFF_REAL_WRITES).toBe("false");
+    expect(buildMode.VITE_BFF_ALLOW_DEV_STUB_WRITES).toBe("false");
+  } else {
+    expect(buildMode.VITE_BFF_REAL_WRITES).toBe("true");
+    expect(buildMode.VITE_BFF_ALLOW_DEV_STUB_WRITES).toBe("true");
+  }
 
   const readyResponse = await request.get(`${BFF_BASE_URL}/readyz`);
   expect(readyResponse.ok(), `/readyz returned ${readyResponse.status()}`).toBe(true);
 
   return {
+    deploymentProfile: deploymentProfile as "read-only" | "write-proof",
     realWritesEnabled: String(buildMode.VITE_BFF_REAL_WRITES ?? "false").toLowerCase() === "true",
   };
 }
@@ -332,7 +348,7 @@ test.describe("Management AI Product Journey Hosted E2E", () => {
   }, testInfo: TestInfo) => {
     const token = await getOrMintAuthToken(request);
     test.skip(!token, "requires an operator bearer token for hosted acceptance");
-    const { realWritesEnabled } = await assertDeploymentPair(request);
+    const { deploymentProfile, realWritesEnabled } = await assertDeploymentPair(request);
 
     // =========================================================================
     // 1. Preflight Assistant mode & provider readiness against live BFF
@@ -373,7 +389,11 @@ test.describe("Management AI Product Journey Hosted E2E", () => {
     // =========================================================================
     const textarea = page.locator('textarea[placeholder*="Management AI"], textarea[placeholder*="說話"], textarea').first();
     await expect(textarea).toBeVisible({ timeout: 15_000 });
-    await textarea.fill("Summarize active strategy status and portfolio exposure");
+    const assistantTurns = agentDialog.locator(".is-assistant");
+    const initialAssistantTurnCount = await assistantTurns.count();
+    await textarea.fill(
+      "Summarize active strategy status and portfolio exposure, then return allowlisted actions to navigate to Rankings, open the Inspector drawer, focus Governance, and propose (without auto-executing) quarantine of an eligible dev-paper runtime. Never target live or capital-bearing resources.",
+    );
 
     // Track newly submitted POST /bff/management/nl/ask or stream response
     const askResponsePromise = page.waitForResponse(
@@ -396,34 +416,54 @@ test.describe("Management AI Product Journey Hosted E2E", () => {
       .then((body) => summarizeManagementStream(body.toString("utf8")))
       .catch(() => null);
     console.log(`[PFG AI STREAM] ${JSON.stringify(streamSummary ?? { bodyUnavailable: true })}`);
-    if (streamSummary) {
-      expect(streamSummary.errorCodes, "Expected no provider error event from live Management AI stream").toHaveLength(0);
-      expect(streamSummary.answerChars, "Expected a non-empty provider answer in the live Management AI stream").toBeGreaterThan(0);
-      expect(streamSummary.providerUsed, "Expected provider_status.used=true in the live Management AI stream").toBe(true);
-    }
+    mkdirSync(EVIDENCE_DIR, { recursive: true });
+    writeFileSync(
+      `${EVIDENCE_DIR}/pfg-mgmt-ai-network.json`,
+      JSON.stringify({
+        schema_version: "pantheon.pfg-management-ai-network.v2",
+        deployment_profile: deploymentProfile,
+        provider_stream: streamSummary,
+        provider_state: streamSummary?.errorCodes.length ? "degraded" : "answered",
+        network_events: networkEvents,
+      }, null, 2),
+      "utf8",
+    );
+    expect(streamSummary, "Expected readable live Management AI stream evidence").not.toBeNull();
+    expect(streamSummary!.errorCodes, "Expected no provider error event from live Management AI stream").toHaveLength(0);
+    expect(streamSummary!.answerChars, "Expected a non-empty provider answer in the live Management AI stream").toBeGreaterThan(0);
+    expect(streamSummary!.providerUsed, "Expected provider_status.used=true in the live Management AI stream").toBe(true);
+    expect(streamSummary!.uiActionKinds).toEqual(expect.arrayContaining([
+      "navigate",
+      "openDrawer",
+      "focusPanel",
+      "runBffAction",
+    ]));
 
     // Require newly appended assistant response turn to appear in dialogue turn
-    const assistantTurns = agentDialog.locator(
-      '[role="article"], [data-role="assistant"], .is-assistant, .prose',
-    );
     const degradedNotice = agentDialog.getByText(/Management AI 暫時降級/i).first();
     await expect.poll(
-      async () => (await assistantTurns.count()) + (await degradedNotice.count()),
-      { message: "Expected a live assistant turn or explicit provider-degraded state", timeout: 30_000 },
-    ).toBeGreaterThan(0);
-    if (await assistantTurns.count() === 0) {
+      async () => await assistantTurns.count(),
+      { message: "Expected one newly appended live assistant turn", timeout: 30_000 },
+    ).toBeGreaterThan(initialAssistantTurnCount);
+    if (await assistantTurns.count() <= initialAssistantTurnCount) {
       const safeProviderDiagnostic = (await degradedNotice.locator("xpath=..").innerText().catch(() => "provider degraded"))
         .replace(/\s+/gu, " ")
         .slice(0, 300);
       mkdirSync(EVIDENCE_DIR, { recursive: true });
       await page.screenshot({ path: `${EVIDENCE_DIR}/pfg-mgmt-ai-journey.png`, fullPage: true });
+      const degradedEvidence = {
+        schema_version: "pantheon.pfg-management-ai-network.v2",
+        provider_stream: streamSummary,
+        provider_state: "degraded",
+        network_events: networkEvents,
+      };
       writeFileSync(
         `${EVIDENCE_DIR}/pfg-mgmt-ai-network.json`,
-        JSON.stringify(networkEvents, null, 2),
+        JSON.stringify(degradedEvidence, null, 2),
         "utf8",
       );
       await testInfo.attach("mgmt-ai-provider-degraded-network-events", {
-        body: Buffer.from(JSON.stringify(networkEvents, null, 2)),
+        body: Buffer.from(JSON.stringify(degradedEvidence, null, 2)),
         contentType: "application/json",
       });
       throw new Error(`Management AI provider returned no assistant turn: ${safeProviderDiagnostic}`);
@@ -433,9 +473,9 @@ test.describe("Management AI Product Journey Hosted E2E", () => {
     expect(responseText.length, "Expected non-empty assistant answer from live provider").toBeGreaterThan(0);
 
     // Locate the exact turn container enclosing this newly appended assistant turn
-    const newTurnContainer = agentDialog.locator("div.space-y-1\\.5, [class*='space-y']").filter({
-      has: lastAssistantTurn,
-    }).last();
+    const newTurnContainer = lastAssistantTurn.locator(
+      "xpath=ancestor::div[contains(concat(' ', normalize-space(@class), ' '), ' space-y-1 ')][1]",
+    );
 
     // Verify conversation header renders provider status / session info
     await expect(
@@ -515,14 +555,28 @@ test.describe("Management AI Product Journey Hosted E2E", () => {
 
       mkdirSync(EVIDENCE_DIR, { recursive: true });
       await page.screenshot({ path: `${EVIDENCE_DIR}/pfg-mgmt-ai-journey.png`, fullPage: true });
+      const readOnlyEvidence = {
+        schema_version: "pantheon.pfg-management-ai-network.v2",
+        deployment_profile: "read-only",
+        provider_stream: streamSummary,
+        executed_ui_actions: ["navigate", "openDrawer", "focusPanel"],
+        run_bff_action_disabled: true,
+        domain_command_post_count: networkEvents.filter(
+          (event) => event.method === "POST" && event.pathname.includes("/commands"),
+        ).length,
+        network_events: networkEvents,
+      };
       writeFileSync(
         `${EVIDENCE_DIR}/pfg-mgmt-ai-network.json`,
-        JSON.stringify(networkEvents, null, 2),
+        JSON.stringify(readOnlyEvidence, null, 2),
         "utf8",
       );
-      throw new Error(
-        "Read-only action-disable proof completed; exactly-once confirmed action acceptance requires an explicitly authorized governed write-enabled deployment profile",
-      );
+      await testInfo.attach("mgmt-ai-read-only-network-events", {
+        body: Buffer.from(JSON.stringify(readOnlyEvidence, null, 2)),
+        contentType: "application/json",
+      });
+      expect(readOnlyEvidence.domain_command_post_count, "Read-only journey must mint no domain command").toBe(0);
+      return;
     }
     await expect(runBffBtn).not.toBeDisabled();
 
@@ -549,11 +603,10 @@ test.describe("Management AI Product Journey Hosted E2E", () => {
 
     // Verify command receipt and button is marked executed / disabled
     await expect(runBffBtn).toBeDisabled({ timeout: 15_000 });
-    await expect(
-      newTurnContainer.locator("[class*='Badge']").filter({
-        hasText: /已執行|command|status/i,
-      }).first(),
-    ).toBeVisible({ timeout: 15_000 });
+    await expect(runBffBtn).toContainText(/command\/audit\s+\S+.*status\s+(accepted|completed).*corr\s+\S+/i, {
+      timeout: 15_000,
+    });
+    const commandReceiptText = (await runBffBtn.innerText()).replace(/\s+/gu, " ").trim();
 
     // =========================================================================
     // 8. Replay Prevention Proof: verify exactly-one POST command minted
@@ -590,12 +643,23 @@ test.describe("Management AI Product Journey Hosted E2E", () => {
     const screenshotPath = `${EVIDENCE_DIR}/pfg-mgmt-ai-journey.png`;
     await page.screenshot({ path: screenshotPath, fullPage: true });
 
-    // Persist immutable latency & route evidence artifact
+    const aiEvidence = {
+      schema_version: "pantheon.pfg-management-ai-network.v2",
+      deployment_profile: "write-proof",
+      provider_stream: streamSummary,
+      executed_ui_actions: ["navigate", "openDrawer", "focusPanel", "runBffAction"],
+      command_receipt: commandReceiptText,
+      domain_command_post_count: postCommandCount - baselineCommandCount,
+      replay_domain_command_post_count: replayCommandCount - postCommandCount,
+      network_events: networkEvents,
+    };
+
+    // Persist immutable provider, receipt, replay, latency, and route evidence.
     const networkEvidencePath = `${EVIDENCE_DIR}/pfg-mgmt-ai-network.json`;
-    writeFileSync(networkEvidencePath, JSON.stringify(networkEvents, null, 2), "utf8");
+    writeFileSync(networkEvidencePath, JSON.stringify(aiEvidence, null, 2), "utf8");
 
     await testInfo.attach("mgmt-ai-network-events", {
-      body: Buffer.from(JSON.stringify(networkEvents, null, 2)),
+      body: Buffer.from(JSON.stringify(aiEvidence, null, 2)),
       contentType: "application/json",
     });
   });
