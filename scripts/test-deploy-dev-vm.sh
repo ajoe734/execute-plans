@@ -399,6 +399,19 @@ if (
     { stdio: "ignore" },
   );
 }
+if (
+  phase === "candidate_pre_switch" &&
+  process.env.MOCK_CHANGE_LIVE_TARGET_IN_PROBE &&
+  process.env.PANTHEON_DEV_FE_ROOT
+) {
+  const target = process.env.MOCK_CHANGE_LIVE_TARGET_IN_PROBE;
+  const liveLink = process.env.PANTHEON_DEV_FE_ROOT;
+  const tempLink = `${liveLink}.external`;
+  try {
+    fs.symlinkSync(target, tempLink);
+    fs.renameSync(tempLink, liveLink);
+  } catch {}
+}
 if (output) {
   fs.mkdirSync(path.dirname(output), { recursive: true });
   fs.writeFileSync(output, `${JSON.stringify({ phase, pass: true })}\n`, "utf8");
@@ -778,6 +791,7 @@ run_deploy() {
       PANTHEON_DEPLOY_DURABLE_EVIDENCE_ROOT="${CASE_DURABLE}" \
       PANTHEON_DEPLOY_DURABLE_EVIDENCE_PREFIX="${CASE_DIR}" \
       PANTHEON_DEPLOY_CANDIDATE_DIR="${CANDIDATE_DIR}" \
+      PANTHEON_DEPLOY_CANDIDATE_SHA="${CANDIDATE_SHA}" \
       PANTHEON_DEPLOY_AGORA_COMPAT_EVIDENCE="${CASE_AGORA_EVIDENCE}" \
       PANTHEON_DEPLOY_REF="${CANDIDATE_SHA}" \
       PANTHEON_DEPLOY_BRANCH="dev" \
@@ -2016,6 +2030,72 @@ test_restore_reaches_safe_sibling_when_agora_evidence_is_absent_or_rejected() {
   assert_previous_manifest_unchanged
 }
 
+test_write_proof_advanced_dev_served_candidate_and_guards() {
+  local advanced_dev_sha external_target external_digest
+
+  # Case 1: Advanced dev + exact served read-only candidate -> successful bounded write-proof
+  setup_case advanced-dev-served-write-proof "${CANDIDATE_SHA}" auto
+  advanced_dev_sha="$(git -C "${CASE_REPO}" commit-tree "${CANDIDATE_SHA}^{tree}" -p "${CANDIDATE_SHA}" -m "advanced dev tip")"
+  git -C "${CASE_REPO}" push -q origin "${advanced_dev_sha}:refs/heads/dev"
+  git -C "${CASE_REPO}" update-ref refs/heads/dev "${advanced_dev_sha}"
+  git -C "${CASE_REPO}" reset -q --hard "${advanced_dev_sha}"
+
+  run_write_deploy PANTHEON_DEPLOY_EXPECTED_DEV_SHA="${advanced_dev_sha}"
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "advanced dev write-proof deploy of exact served candidate should succeed"
+  assert_live_profile write-proof accepted
+  assert_probe_called safe_sibling_pre_switch
+  assert_probe_called candidate_pre_switch
+  assert_probe_called post_switch
+  assert_probe_pair_context \
+    candidate_pre_switch write-proof "${PAIR_ID}" \
+    "${CANDIDATE_DIGEST}" "${OPERATOR_LIVE_DIGEST}" "${WRITE_PROOF_DIGEST}"
+  assert_probe_pair_context \
+    post_switch write-proof "${PAIR_ID}" \
+    "${CANDIDATE_DIGEST}" "${OPERATOR_LIVE_DIGEST}" "${WRITE_PROOF_DIGEST}"
+  verify_evidence_pair
+
+  # Case 2: Advanced dev + non-served candidate -> rejected
+  setup_case advanced-dev-nonserved-write-proof "${PREVIOUS_SHA}" auto
+  advanced_dev_sha="$(git -C "${CASE_REPO}" commit-tree "${CANDIDATE_SHA}^{tree}" -p "${CANDIDATE_SHA}" -m "advanced dev tip")"
+  git -C "${CASE_REPO}" push -q origin "${advanced_dev_sha}:refs/heads/dev"
+  git -C "${CASE_REPO}" update-ref refs/heads/dev "${advanced_dev_sha}"
+  git -C "${CASE_REPO}" reset -q --hard "${advanced_dev_sha}"
+
+  run_write_deploy PANTHEON_DEPLOY_EXPECTED_DEV_SHA="${advanced_dev_sha}"
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "advanced dev write-proof with non-served candidate unexpectedly succeeded"
+  assert_previous_is_live
+  assert_probe_not_called candidate_pre_switch
+  grep -Fq "Out-of-order candidate rejected" "${RUN_OUTPUT}" || \
+    show_deploy_failure "missing out-of-order rejection for non-served candidate"
+
+  # Case 3: Advanced dev + changed live target during probe -> rejected
+  setup_case advanced-dev-changed-live-write-proof "${CANDIDATE_SHA}" auto
+  advanced_dev_sha="$(git -C "${CASE_REPO}" commit-tree "${CANDIDATE_SHA}^{tree}" -p "${CANDIDATE_SHA}" -m "advanced dev tip")"
+  git -C "${CASE_REPO}" push -q origin "${advanced_dev_sha}:refs/heads/dev"
+  git -C "${CASE_REPO}" update-ref refs/heads/dev "${advanced_dev_sha}"
+  git -C "${CASE_REPO}" reset -q --hard "${advanced_dev_sha}"
+
+  external_target="${CASE_RELEASES}/external-interrupted"
+  mkdir -p "${external_target}"
+  printf '<!doctype html><html><body>external</body></html>\n' > "${external_target}/index.html"
+  external_digest="$(env -i PATH="${SYSTEM_PATH}" HOME="${CASE_HOME}" \
+    "${REAL_NODE}" "${CASE_REPO}/scripts/release-candidate.mjs" digest --dist-dir "${external_target}")"
+  make_previous_manifest "${external_target}/deployment.json" "${PREVIOUS_SHA}" "${external_digest}"
+
+  run_write_deploy \
+    PANTHEON_DEPLOY_EXPECTED_DEV_SHA="${advanced_dev_sha}" \
+    MOCK_CHANGE_LIVE_TARGET_IN_PROBE="${external_target}"
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "advanced dev write-proof with changed live release unexpectedly succeeded"
+  [[ "$(readlink -f "${CASE_LIVE}")" == "${external_target}" ]] || \
+    show_deploy_failure "deploy overwrote an externally changed live release"
+  assert_probe_called candidate_pre_switch
+  assert_probe_not_called post_switch
+  assert_summary_outcome rejected_before_switch
+  grep -Fq "Live release changed during candidate probe" "${RUN_OUTPUT}" || \
+    show_deploy_failure "missing changed live release rejection"
+  verify_evidence_pair
+}
+
 run_test() {
   local name="$1"
   shift
@@ -2059,6 +2139,7 @@ run_test "explicit restore switches safe before network and never rolls back to 
 run_test "restore network failure preserves the safe release" test_restore_network_failure_preserves_safe_release
 run_test "restore rejects a nonprivate or tampered locator before switch" test_restore_rejects_nonprivate_or_tampered_locator_before_switch
 run_test "restore reaches safe sibling when Agora evidence is absent or rejected" test_restore_reaches_safe_sibling_when_agora_evidence_is_absent_or_rejected
+run_test "advanced dev write-proof on served candidate succeeds with guards" test_write_proof_advanced_dev_served_candidate_and_guards
 
 echo "deploy contract harness: ${PASSED} passed, ${FAILED} failed"
 if [[ "${FAILED}" -ne 0 ]]; then

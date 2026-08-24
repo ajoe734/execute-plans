@@ -1475,16 +1475,6 @@ if [[ "${CONTROLLER_SHA}" != "${REMOTE_DEV_SHA}" ]]; then
   evidence_append controller.order failed "currentDevSha=${REMOTE_DEV_SHA}" "validatedDevSha=${CONTROLLER_SHA}"
   exit 2
 fi
-if [[ "${SHA}" != "${REMOTE_DEV_SHA}" && "${EMERGENCY_OVERRIDE}" != "true" ]]; then
-  echo "Out-of-order candidate rejected: dev=${REMOTE_DEV_SHA} candidate=${SHA}." >&2
-  evidence_append candidate.order failed "currentDevSha=${REMOTE_DEV_SHA}"
-  exit 2
-fi
-if [[ "${SHA}" != "${REMOTE_DEV_SHA}" ]]; then
-  evidence_append candidate.order overridden "currentDevSha=${REMOTE_DEV_SHA}"
-else
-  evidence_append candidate.order passed "currentDevSha=${REMOTE_DEV_SHA}"
-fi
 
 if [[ -L "${DEPLOY_ROOT}" ]]; then
   PREVIOUS_TARGET="$(current_live_target)"
@@ -1555,6 +1545,20 @@ else
   exit 2
 fi
 LIVE_TARGET_AT_START="${PREVIOUS_TARGET}"
+
+if [[ "${SHA}" != "${REMOTE_DEV_SHA}" && "${EMERGENCY_OVERRIDE}" != "true" ]]; then
+  if [[ "${DEPLOY_PROFILE}" == "write-proof" && -n "${PREVIOUS_COMMIT:-}" && "${SHA}" == "${PREVIOUS_COMMIT}" ]]; then
+    evidence_append candidate.order passed "currentDevSha=${REMOTE_DEV_SHA}" "liveCandidateSha=${PREVIOUS_COMMIT}"
+  else
+    echo "Out-of-order candidate rejected: dev=${REMOTE_DEV_SHA} candidate=${SHA}." >&2
+    evidence_append candidate.order failed "currentDevSha=${REMOTE_DEV_SHA}"
+    exit 2
+  fi
+elif [[ "${SHA}" != "${REMOTE_DEV_SHA}" ]]; then
+  evidence_append candidate.order overridden "currentDevSha=${REMOTE_DEV_SHA}"
+else
+  evidence_append candidate.order passed "currentDevSha=${REMOTE_DEV_SHA}"
+fi
 
 if [[ -n "${PREVIOUS_COMMIT}" ]]; then
   if [[ "${PREVIOUS_PROFILE}" == "write-proof" ]]; then
@@ -1883,11 +1887,14 @@ if [[ "${CONTROLLER_SHA}" != "${REMOTE_DEV_SHA_AT_SWITCH}" ]]; then
   exit 2
 fi
 if [[ "${SHA}" != "${REMOTE_DEV_SHA_AT_SWITCH}" && "${EMERGENCY_OVERRIDE}" != "true" ]]; then
-  echo "Dev advanced after candidate probe; refusing stale switch." >&2
-  evidence_append candidate.order_at_switch failed "currentDevSha=${REMOTE_DEV_SHA_AT_SWITCH}"
-  exit 2
-fi
-if [[ "${SHA}" != "${REMOTE_DEV_SHA_AT_SWITCH}" ]]; then
+  if [[ "${DEPLOY_PROFILE}" == "write-proof" && -n "${PREVIOUS_COMMIT:-}" && "${SHA}" == "${PREVIOUS_COMMIT}" ]]; then
+    evidence_append candidate.order_at_switch passed "currentDevSha=${REMOTE_DEV_SHA_AT_SWITCH}" "liveCandidateSha=${PREVIOUS_COMMIT}"
+  else
+    echo "Dev advanced after candidate probe; refusing stale switch." >&2
+    evidence_append candidate.order_at_switch failed "currentDevSha=${REMOTE_DEV_SHA_AT_SWITCH}"
+    exit 2
+  fi
+elif [[ "${SHA}" != "${REMOTE_DEV_SHA_AT_SWITCH}" ]]; then
   evidence_append candidate.order_at_switch overridden "currentDevSha=${REMOTE_DEV_SHA_AT_SWITCH}"
 else
   evidence_append candidate.order_at_switch passed "currentDevSha=${REMOTE_DEV_SHA_AT_SWITCH}"

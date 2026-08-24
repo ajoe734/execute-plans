@@ -222,6 +222,7 @@ const DETAIL_VALIDATORS = Object.freeze({
   integrationGateRunId: validateRunId,
   integrationGateRunUrl: validateGateUrl,
   integrationGateStatus: validateStatus,
+  liveCandidateSha: validateSha40,
   lockFile: (value) => validatePath(value),
   observedTarget: (value) => validatePath(value, ["missing"]),
   outcome: (value) => {
