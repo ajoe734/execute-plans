@@ -531,18 +531,40 @@ describe("paired Pantheon release workflow", () => {
       "PANTHEON_DEPLOY_GITHUB_ARTIFACT_DIGEST: ${{ inputs.source_artifact_digest }}",
     );
     expect(restore).toContain(
-      "git update-ref refs/pantheon-proof/frontend-runtime \"${CANDIDATE_SHA}\"",
+      'ref_prefix="refs/pantheon-proof/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"',
     );
     expect(restore).toContain(
-      "git -C .pantheon-agora-compat update-ref refs/pantheon-proof/backend-runtime \"${BFF_SHA}\"",
+      'git update-ref "${ref_prefix}/frontend-runtime" "${CANDIDATE_SHA}"',
     );
     expect(restore).toContain(
-      "--backend-dev-ref refs/pantheon-proof/backend-runtime",
+      'git -C .pantheon-agora-compat update-ref "${ref_prefix}/backend-runtime" "${BFF_SHA}"',
     );
     expect(restore).toContain(
-      "--frontend-dev-ref refs/pantheon-proof/frontend-runtime",
+      'fe_resolved="$(git rev-parse "${fe_ref}")"',
     );
+    expect(restore).toContain(
+      'bff_resolved="$(git -C .pantheon-agora-compat rev-parse "${bff_ref}")"',
+    );
+    expect(restore).toContain(
+      '--backend-dev-ref "${bff_ref}"',
+    );
+    expect(restore).toContain(
+      '--frontend-dev-ref "${fe_ref}"',
+    );
+    expect(restore).toContain("continue-on-error: true");
+    expect(restore).toContain("if: always()");
     expect(restore).not.toContain("refs/remotes/origin/dev");
+  });
+
+  it("proves concurrent and different-pair negative isolation under namespaced refs", () => {
+    expect(watchdogWorkflow).toContain(
+      'ref_prefix="refs/pantheon-proof/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"',
+    );
+    expect(watchdogWorkflow).toContain(
+      'if [[ "${fe_resolved}" != "${CANDIDATE_SHA}" || "${bff_resolved}" != "${BFF_SHA}" ]]; then',
+    );
+    expect(watchdogWorkflow).toContain("Restore exact pair before any mutable successor action");
+    expect(watchdogWorkflow).toContain("if: always()");
   });
 
   it("canonicalizes the parent binding digest once for both strict consumers", () => {

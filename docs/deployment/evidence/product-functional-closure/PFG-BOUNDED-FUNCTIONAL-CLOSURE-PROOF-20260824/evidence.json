@@ -9,7 +9,7 @@
   "branch": "task/PFG-BOUNDED-FUNCTIONAL-CLOSURE-PROOF-20260824",
   "base_commit": "cc4007f7f78a31c73548ce85457af17a45a4c4b9",
   "status": "ready_for_review",
-  "timestamp": "2026-08-24T02:37:00Z",
+  "timestamp": "2026-08-24T02:40:00Z",
   "authorization": {
     "date": "2026-08-24",
     "scope": "one bounded paper-only functional-closure write-proof",
@@ -28,9 +28,10 @@
   },
   "scope": {
     "watchdog_manifest_repair": [
-      "The independent watchdog dynamically generates the release compatibility manifest with the exact candidate and BFF runtime commits before invoking the Agora deployment gate.",
-      "This prevents static repository manifest mismatch errors during the automated read-only restore transaction.",
-      "The watchdog pins frontend and backend compatibility refs to ensure restore safety across any dev-tip drift."
+      "The independent watchdog namespaces compatibility refs per run/attempt (refs/pantheon-proof/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}/*), eliminating shared static ref collisions across concurrent runs.",
+      "The watchdog asserts both namespaced refs resolve to the authorized CANDIDATE_SHA and BFF_SHA immediately before generating the runtime compatibility manifest.",
+      "The watchdog dynamically generates the release compatibility manifest with exact runtime commits before invoking the Agora deployment gate.",
+      "The watchdog restore step is marked `if: always()` and the compatibility revalidation step is marked `continue-on-error: true` so any pre-restore failure or race condition unconditionally falls through to the exact same-pair read-only restore path."
     ],
     "credential_controller": [
       "Repository actions secret DEV_BFF_DEV_LOGIN_VIEWER_CLIENT_SECRET provisioned on execute-plans repository to supply required dedicated viewer client credentials alongside DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_SECRET.",
@@ -44,6 +45,7 @@
   },
   "modified_surfaces": [
     ".github/workflows/pantheon-proof-watchdog.yml",
+    "src/test/paired-release-workflow.test.ts",
     "docs/deployment/evidence/product-functional-closure/PFG-BOUNDED-FUNCTIONAL-CLOSURE-PROOF-20260824/evidence.json"
   ],
   "acceptance_coverage": {
@@ -51,27 +53,30 @@
     "authenticated_write_proof_workflow_inputs_aligned": true,
     "paper_only_no_live_capital_no_source_external_pull": true,
     "independent_watchdog_exact_pair_read_only_restore": true,
+    "namespaced_refs_and_negative_isolation_proven": true,
+    "unconditional_restore_fallback_guaranteed": true,
     "workflow_and_hosted_readback_evidence_recorded": true
   },
   "validation": {
     "focused_tests": {
       "command": "npx vitest run --maxWorkers=2 --testTimeout=15000 --hookTimeout=30000 src/management/pages/trade-journeys/TradeJourneysHostedProof.contract.test.ts src/test/paired-release-workflow.test.ts src/test/deploy-safe-defaults.test.ts src/test/persona-hosted-proof-credentials.test.ts src/test/persona-hosted-proof-env.test.ts",
-      "result": "passed: 5 files, 48 tests"
+      "result": "passed: 5 files, 49 tests"
     },
     "deploy_controller_harness": {
       "command": "bash scripts/test-deploy-dev-vm.sh",
       "result": "passed: 30 passed, 0 failed"
     },
-    "agora_compat_manifest_test": {
-      "command": "python3 scripts/agora_compat_manifest.py write + deployment-gate",
-      "result": "passed: deployment gate passed"
+    "namespaced_ref_resolution_and_negative_isolation": {
+      "command": "python3 scripts/agora_compat_manifest.py write + deployment-gate with namespaced refs",
+      "result": "passed: authorized pair passes gate, mismatched pair is rejected before switch"
     }
   },
   "review_request": {
     "reviewer_must_confirm": [
-      "The watchdog workflow dynamically generates the compatibility manifest for the exact candidate and BFF runtime commits.",
-      "The dedicated viewer client secret is set in repository secrets and required by proof credential minting.",
-      "The exact PR head carries this manifest before review approval."
+      "The watchdog workflow namespaces refs by ${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}, eliminating shared static ref race conditions.",
+      "Both namespaced refs are verified to resolve to the authorized candidate and BFF SHAs before manifest generation.",
+      "Pre-restore compatibility gate failure unconditionally falls through to exact same-pair read-only restoration.",
+      "The dedicated viewer client secret is set in repository secrets and required by proof credential minting."
     ]
   }
 }
