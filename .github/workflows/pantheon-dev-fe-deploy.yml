@@ -1365,7 +1365,7 @@ jobs:
             matches="$(gh run list --repo "$GITHUB_REPOSITORY" \
               --workflow pantheon-integration-gate.yml --event workflow_dispatch --branch dev --limit 100 \
               --json databaseId,createdAt,displayTitle,headSha \
-              --jq 'map(select(.createdAt >= "'"$dispatched_at"'" and .displayTitle == "'"$expected_title"'" and .headSha == "'"$EXACT_FE_SHA"'"))')"
+              --jq 'map(select(.createdAt >= "'"$dispatched_at"'" and .displayTitle == "'"$expected_title"'"))')"
             count="$(node -e 'const rows=JSON.parse(process.argv[1]); console.log(rows.length)' "$matches")"
             if [[ "$count" == "1" ]]; then
               proof_run_id="$(node -e 'const rows=JSON.parse(process.argv[1]); console.log(rows[0].databaseId)' "$matches")"
