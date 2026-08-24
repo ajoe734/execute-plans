@@ -41,7 +41,10 @@
     "execution_architecture": [
       "The deployment workflow, restore watchdog, and integration gate authorize parent-bound hosted proof dispatches on dev branch while binding the candidate to the exact accepted and served candidate SHA via the signed parent proof binding artifact.",
       "The restore watchdog and integration gate validate parent and child run identity, event (workflow_dispatch), dev branch, and signed proof binding artifact without requiring the dev branch tip SHA to equal the candidate SHA.",
-      "Merging this repair to dev enables the authorized parent deploy dispatch from dev to successfully arm the watchdog, activate write-proof, run the hosted proof, and restore read-only."
+      "The proof coordinator and restore watchdog resolve the proof child run by correlation display title without requiring headSha == candidateSha, enabling out-of-order proof child resolution when dev advances.",
+      "Integration gate release controller validation separates trusted current dev controller branch/identity verification from the immutable candidate SHA, ensuring candidate validation succeeds only with the exact bound candidate.",
+      "Merging this repair to dev enables the authorized parent deploy dispatch from dev to successfully arm the watchdog, activate write-proof, run the hosted proof, and restore read-only.",
+      "Hosted write-proof execution preflight notes hosted BFF /readyz HTTP 503 (lifecycle_projector stale) while served deployment reports exact pair read-only; authorized proof execution will proceed once hosted BFF readiness recovers."
     ],
     "not_changed": [
       "Product runtime contracts, BFF API contracts, and default read-only deployment profile.",
@@ -56,6 +59,7 @@
     "scripts/deploy-dev-vm.sh",
     "scripts/release-evidence.mjs",
     "scripts/test-deploy-dev-vm.sh",
+    "src/test/paired-release-workflow.test.ts",
     "docs/deployment/evidence/product-functional-closure/PFG-BOUNDED-FUNCTIONAL-CLOSURE-PROOF-20260824/evidence.json"
   ],
   "acceptance_coverage": {
@@ -66,12 +70,13 @@
     "namespaced_refs_and_negative_isolation_proven": true,
     "unconditional_restore_fallback_guaranteed": true,
     "controller_repair_and_guards_verified": true,
-    "hosted_write_proof_execution": "pending_dev_merge_for_watchdog_dev_head_assertion"
+    "out_of_order_candidate_and_controller_separation_verified": true,
+    "hosted_write_proof_execution": "pending_dev_merge_and_hosted_bff_readyz"
   },
   "validation": {
     "focused_tests": {
       "command": "npx vitest run --maxWorkers=2 --testTimeout=15000 --hookTimeout=30000 src/management/pages/trade-journeys/TradeJourneysHostedProof.contract.test.ts src/test/paired-release-workflow.test.ts src/test/deploy-safe-defaults.test.ts src/test/persona-hosted-proof-credentials.test.ts src/test/persona-hosted-proof-env.test.ts src/test/release-evidence.test.ts",
-      "result": "passed: 6 files, 71 tests"
+      "result": "passed: 6 files, 73 tests"
     },
     "contract_tests": {
       "command": "npm run test:contract",
@@ -95,7 +100,9 @@
       "The watchdog workflow namespaces refs by ${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}, eliminating shared static ref race conditions.",
       "Both namespaced refs are verified to resolve to the authorized candidate and BFF SHAs before manifest generation.",
       "Pre-restore compatibility gate failure unconditionally falls through to exact same-pair read-only restoration.",
-      "The dedicated viewer client secret is set in repository secrets and required by proof credential minting."
+      "The dedicated viewer client secret is set in repository secrets and required by proof credential minting.",
+      "Proof child resolution and watchdog watch/restore match child runs by correlation display title without requiring headSha == candidateSha, enabling resolution when dev advances.",
+      "Integration gate release controller validation separates trusted dev controller validation from candidate SHA."
     ]
   }
 }

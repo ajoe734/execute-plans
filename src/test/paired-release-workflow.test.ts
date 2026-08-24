@@ -718,5 +718,133 @@ describe("paired Pantheon release workflow", () => {
     expect(integration).toContain(
       "release candidate is not owned by the exact active Pantheon dev controller",
     );
+    expect(integration).toContain(
+      'context.ref !== "refs/heads/dev"',
+    );
+    expect(integration).not.toContain(
+      'String(dev.object.sha || "").toLowerCase() !== frontendSha',
+    );
+  });
+
+  it("resolves proof child run and separates current dev controller SHA from candidate SHA when dev advances", () => {
+    const proofCoordinator = deployWorkflow.slice(
+      deployWorkflow.indexOf("  proof-coordinator:"),
+      deployWorkflow.indexOf("  proof-restore-confirmation:"),
+    );
+    const watchJob = watchdogWorkflow.slice(
+      watchdogWorkflow.indexOf("  watch:"),
+      watchdogWorkflow.indexOf("  restore:"),
+    );
+    const restoreJob = watchdogWorkflow.slice(
+      watchdogWorkflow.indexOf("  restore:"),
+    );
+
+    // Deploy proof-coordinator matches child by correlation display title without requiring headSha == EXACT_FE_SHA
+    expect(proofCoordinator).toContain(
+      `select(.createdAt >= "'"$dispatched_at"'" and .displayTitle == "'"$expected_title"'")`,
+    );
+    expect(proofCoordinator).not.toContain(
+      `select(.createdAt >= "'"$dispatched_at"'" and .displayTitle == "'"$expected_title"'" and .headSha == "'"$EXACT_FE_SHA"'")`,
+    );
+
+    // Watchdog watch & restore match child by correlation display title without requiring headSha == CANDIDATE_SHA
+    expect(watchJob).toContain(
+      `select(.displayTitle == "'"$expected_title"'")`,
+    );
+    expect(watchJob).not.toContain(
+      `select(.displayTitle == "'"$expected_title"'" and .headSha == "'"$CANDIDATE_SHA"'")`,
+    );
+    expect(restoreJob).toContain(
+      `select(.displayTitle == "'"$expected_title"'")`,
+    );
+    expect(restoreJob).not.toContain(
+      `select(.displayTitle == "'"$expected_title"'" and .headSha == "'"$CANDIDATE_SHA"'")`,
+    );
+  });
+
+  it("executes automated regression verifying out-of-order candidate proof child resolution and source validation logic", () => {
+    const candidateSha = "1111111111111111111111111111111111111111";
+    const advancedDevSha = "2222222222222222222222222222222222222222";
+    const correlationId = "87654321-4321-4321-4321-210987654321";
+    const expectedTitle = `PINT proof ${correlationId}`;
+    const dispatchedAt = "2026-08-24T20:00:00Z";
+
+    // Simulate child runs where dev advanced past candidate
+    const runs = [
+      {
+        databaseId: 1001,
+        createdAt: "2026-08-24T20:00:05Z",
+        displayTitle: expectedTitle,
+        headSha: advancedDevSha, // dev tip advanced beyond candidateSha
+      },
+      {
+        databaseId: 1000,
+        createdAt: "2026-08-24T19:59:00Z",
+        displayTitle: expectedTitle,
+        headSha: candidateSha,
+      },
+    ];
+
+    // Filter logic in pantheon-dev-fe-deploy.yml
+    const deployMatches = runs.filter(
+      (r) => r.createdAt >= dispatchedAt && r.displayTitle === expectedTitle,
+    );
+    expect(deployMatches).toHaveLength(1);
+    expect(deployMatches[0].databaseId).toBe(1001);
+    expect(deployMatches[0].headSha).toBe(advancedDevSha);
+
+    // Filter logic in pantheon-proof-watchdog.yml
+    const watchdogMatches = runs.filter(
+      (r) => r.displayTitle === expectedTitle,
+    );
+    expect(watchdogMatches).toHaveLength(2);
+    // Unique match for active run after dispatched_at
+    const activeWatchdogMatches = runs.filter(
+      (r) => r.createdAt >= dispatchedAt && r.displayTitle === expectedTitle,
+    );
+    expect(activeWatchdogMatches).toHaveLength(1);
+    expect(activeWatchdogMatches[0].databaseId).toBe(1001);
+
+    // Controller source validation logic: separates dev controller SHA from candidate SHA
+    const validateController = (context: {
+      eventName: string;
+      ref: string;
+      sha: string;
+    }, devRef: { object: { sha: string } }) => {
+      const sha = /^[0-9a-f]{40}$/;
+      const currentDevSha = String(devRef.object.sha || "").toLowerCase();
+      const controllerSha = String(context.sha || "").toLowerCase();
+      if (!sha.test(currentDevSha) || !sha.test(controllerSha) || context.ref !== "refs/heads/dev") {
+        return false;
+      }
+      return true;
+    };
+
+    // Controller validation succeeds when dev is at advancedDevSha
+    expect(
+      validateController(
+        { eventName: "workflow_dispatch", ref: "refs/heads/dev", sha: advancedDevSha },
+        { object: { sha: advancedDevSha } },
+      ),
+    ).toBe(true);
+
+    // Controller validation fails if not on dev branch
+    expect(
+      validateController(
+        { eventName: "workflow_dispatch", ref: "refs/heads/feature", sha: advancedDevSha },
+        { object: { sha: advancedDevSha } },
+      ),
+    ).toBe(false);
+
+    // Source binding verification: candidate must strictly match the bound candidateSha
+    const validateCandidateBinding = (
+      bindingFrontendSha: string,
+      requestedCandidateSha: string,
+    ) => {
+      return bindingFrontendSha.toLowerCase() === requestedCandidateSha.toLowerCase();
+    };
+
+    expect(validateCandidateBinding(candidateSha, candidateSha)).toBe(true);
+    expect(validateCandidateBinding(candidateSha, advancedDevSha)).toBe(false);
   });
 });

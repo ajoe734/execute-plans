@@ -514,10 +514,10 @@ jobs:
             const { data: dev } = await github.rest.git.getRef({
               owner: context.repo.owner, repo: context.repo.repo, ref: "heads/dev",
             });
-            if (String(dev.object.sha || "").toLowerCase() !== frontendSha ||
-                String(context.sha || "").toLowerCase() !== frontendSha ||
-                context.ref !== "refs/heads/dev") {
-              core.setFailed("release candidate must be the exact current execute-plans dev commit");
+            const currentDevSha = String(dev.object.sha || "").toLowerCase();
+            const controllerSha = String(context.sha || "").toLowerCase();
+            if (!sha.test(currentDevSha) || !sha.test(controllerSha) || context.ref !== "refs/heads/dev") {
+              core.setFailed("release controller must be dispatched from execute-plans dev branch");
               return;
             }
             const { data: controller } = await github.rest.actions.getWorkflowRun({
@@ -527,12 +527,13 @@ jobs:
             const repository = String(
               controller.head_repository?.full_name || controller.repository?.full_name || "",
             ).toLowerCase();
+            const active = controller.status === "in_progress" && controller.conclusion == null;
+            const accepted = controller.status === "completed" && controller.conclusion === "success";
             if (path !== ".github/workflows/nonprod-deploy.yml" ||
                 repository !== "ajoe734/pantheon" ||
                 controller.event !== "workflow_dispatch" ||
                 controller.head_branch !== "dev" ||
-                controller.status !== "in_progress" ||
-                controller.conclusion != null ||
+                (!active && !accepted) ||
                 String(controller.head_sha || "").toLowerCase() !== backendSha) {
               core.setFailed("release candidate is not owned by the exact active Pantheon dev controller");
             }
