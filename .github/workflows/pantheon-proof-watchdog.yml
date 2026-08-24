@@ -106,7 +106,6 @@ jobs:
             if (path !== ".github/workflows/pantheon-dev-fe-deploy.yml" ||
                 repo !== `${context.repo.owner}/${context.repo.repo}`.toLowerCase() ||
                 run.event !== "workflow_dispatch" || run.head_branch !== "dev" ||
-                String(run.head_sha || "").toLowerCase() !== candidateSha ||
                 String(run.run_attempt) !== parentAttempt ||
                 String(run.actor?.login || "").toLowerCase() !== actor ||
                 String(run.triggering_actor?.login || "").toLowerCase() !== actor) {

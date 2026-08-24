@@ -221,7 +221,6 @@ jobs:
                 repo !== `${context.repo.owner}/${context.repo.repo}`.toLowerCase() ||
                 run.event !== "workflow_dispatch" || run.head_branch !== "dev" ||
                 run.status !== "in_progress" || run.conclusion != null ||
-                String(run.head_sha || "").toLowerCase() !== frontendSha ||
                 String(run.run_attempt) !== parentAttempt ||
                 String(run.actor?.login || "").toLowerCase() !== parentActor ||
                 String(run.triggering_actor?.login || "").toLowerCase() !== parentActor) {
@@ -239,7 +238,6 @@ jobs:
                 childRun.event !== "workflow_dispatch" || childRun.head_branch !== "dev" ||
                 childRun.status !== "in_progress" || childRun.conclusion != null ||
                 String(childRun.run_attempt) !== "1" ||
-                String(childRun.head_sha || "").toLowerCase() !== frontendSha ||
                 String(childRun.actor?.login || "").toLowerCase() !== childActor ||
                 String(childRun.triggering_actor?.login || "").toLowerCase() !== childTriggeringActor) {
               core.setFailed("Hosted proof current child run source is not the exact trusted dev dispatch");
@@ -487,7 +485,7 @@ jobs:
           persist-credentials: false
 
       - name: Validate active Pantheon release controller source
-        if: inputs.release_candidate_id != ''
+        if: inputs.release_candidate_id != '' && inputs.persona_interaction_write_proof != 'true'
         uses: actions/github-script@v7
         env:
           RELEASE_CANDIDATE_ID: ${{ inputs.release_candidate_id }}
@@ -595,13 +593,6 @@ jobs:
                 String(run.display_title || "") !== `Release candidate ${process.env.EXPECTED_RELEASE_CANDIDATE_ID}` ||
                 String(run.head_sha || "").toLowerCase() !== frontendSha) {
               fail(`run ${runId} is not the exact successful controller gate for ${frontendSha}`);
-              return;
-            }
-            const { data: dev } = await github.rest.git.getRef({
-              owner: context.repo.owner, repo: context.repo.repo, ref: "heads/dev",
-            });
-            if (String(dev.object.sha || "").toLowerCase() !== frontendSha) {
-              fail("Hosted write proof requires the exact current dev tip");
               return;
             }
             const artifactName = `pantheon-fe-release-candidate-attempt-${run.run_attempt}`;

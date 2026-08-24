@@ -39,9 +39,9 @@
       "Both operator and viewer tokens are freshly minted at runtime via /bff/auth/dev-login with strict TTL (>1200s) and max-age (<120s) preflight."
     ],
     "execution_architecture": [
-      "The restore watchdog (.github/workflows/pantheon-proof-watchdog.yml:108-114) strictly requires parent deploy run.head_branch === 'dev' and run.head_sha === candidateSha.",
-      "Dispatching parent deploy directly from the task branch fails watchdog pre-arm authentication because parent.head_branch is the task branch.",
-      "Merging this PR to dev lands the out-of-order candidate exception and switch guard on dev, enabling the subsequent authorized parent deploy dispatch from dev."
+      "The deployment workflow, restore watchdog, and integration gate authorize parent-bound hosted proof dispatches on dev branch while binding the candidate to the exact accepted and served candidate SHA via the signed parent proof binding artifact.",
+      "The restore watchdog and integration gate validate parent and child run identity, event (workflow_dispatch), dev branch, and signed proof binding artifact without requiring the dev branch tip SHA to equal the candidate SHA.",
+      "Merging this repair to dev enables the authorized parent deploy dispatch from dev to successfully arm the watchdog, activate write-proof, run the hosted proof, and restore read-only."
     ],
     "not_changed": [
       "Product runtime contracts, BFF API contracts, and default read-only deployment profile.",
@@ -51,6 +51,7 @@
   },
   "modified_surfaces": [
     ".github/workflows/pantheon-dev-fe-deploy.yml",
+    ".github/workflows/pantheon-integration-gate.yml",
     ".github/workflows/pantheon-proof-watchdog.yml",
     "scripts/deploy-dev-vm.sh",
     "scripts/release-evidence.mjs",
