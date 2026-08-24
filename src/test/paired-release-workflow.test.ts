@@ -699,4 +699,24 @@ describe("paired Pantheon release workflow", () => {
       "Run Management and Management AI functional-closure hosted journeys",
     );
   });
+
+  it("preserves active release controller source validation on release candidates across functional-closure paths", () => {
+    const integrationStart = integrationWorkflow.indexOf("  integration-gate:");
+    const authorizedProofStart = integrationWorkflow.indexOf("  authorized-write-proof:");
+    const integration = integrationWorkflow.slice(integrationStart, authorizedProofStart);
+
+    expect(integration).toContain(
+      "- name: Validate active Pantheon release controller source",
+    );
+    expect(integration).toContain("if: inputs.release_candidate_id != ''");
+    expect(integration).not.toContain(
+      "inputs.release_candidate_id != '' && inputs.persona_interaction_write_proof != 'true'",
+    );
+    expect(integration).not.toContain(
+      "inputs.persona_interaction_write_proof != 'true'",
+    );
+    expect(integration).toContain(
+      "release candidate is not owned by the exact active Pantheon dev controller",
+    );
+  });
 });

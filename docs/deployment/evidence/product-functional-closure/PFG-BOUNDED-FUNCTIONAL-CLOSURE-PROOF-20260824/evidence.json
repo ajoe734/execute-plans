@@ -71,7 +71,7 @@
   "validation": {
     "focused_tests": {
       "command": "npx vitest run --maxWorkers=2 --testTimeout=15000 --hookTimeout=30000 src/management/pages/trade-journeys/TradeJourneysHostedProof.contract.test.ts src/test/paired-release-workflow.test.ts src/test/deploy-safe-defaults.test.ts src/test/persona-hosted-proof-credentials.test.ts src/test/persona-hosted-proof-env.test.ts src/test/release-evidence.test.ts",
-      "result": "passed: 6 files, 70 tests"
+      "result": "passed: 6 files, 71 tests"
     },
     "contract_tests": {
       "command": "npm run test:contract",
