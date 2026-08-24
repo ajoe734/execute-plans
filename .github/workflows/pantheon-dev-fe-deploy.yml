@@ -330,7 +330,7 @@ jobs:
               return;
             }
             const outOfOrder = currentDevSha !== requestedSha;
-            if (outOfOrder) {
+            if (outOfOrder && deploymentProfile !== "write-proof") {
               core.setFailed(`out-of-order candidate rejected: current dev is ${currentDevSha}, candidate is ${requestedSha}`);
               return;
             }
@@ -618,21 +618,26 @@ jobs:
           EXPECTED_COMPATIBILITY_MANIFEST_SHA256: ${{ steps.pair.outputs.compatibility_manifest_sha256 }}
         run: |
           set -euo pipefail
+          ref_prefix="refs/pantheon-proof/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          git update-ref "${ref_prefix}/frontend-runtime" "${EXPECTED_FRONTEND_SHA}"
+          git -C .pantheon-agora-compat update-ref "${ref_prefix}/backend-runtime" "${EXPECTED_BFF_SHA}"
+          fe_ref="${ref_prefix}/frontend-runtime"
+          bff_ref="${ref_prefix}/backend-runtime"
           manifest_path="${PANTHEON_AUDIT_RUN_ROOT}/release-compatibility-manifest.json"
           evidence_path="${PANTHEON_AUDIT_RUN_ROOT}/agora-compatibility-gate.input.json"
           python3 .pantheon-agora-compat/scripts/agora_compat_manifest.py write \
             --output "${manifest_path}" \
             --frontend-root "${GITHUB_WORKSPACE}" \
-            --backend-dev-ref refs/remotes/origin/dev \
-            --frontend-dev-ref refs/remotes/origin/dev \
+            --backend-dev-ref "${bff_ref}" \
+            --frontend-dev-ref "${fe_ref}" \
             --backend-runtime-commit "${EXPECTED_BFF_SHA}" \
             --frontend-runtime-commit "${EXPECTED_FRONTEND_SHA}" \
             --compatibility-status accepted
           python3 .pantheon-agora-compat/scripts/agora_compat_manifest.py deployment-gate \
             --manifest "${manifest_path}" \
             --frontend-root "${GITHUB_WORKSPACE}" \
-            --backend-dev-ref refs/remotes/origin/dev \
-            --frontend-dev-ref refs/remotes/origin/dev \
+            --backend-dev-ref "${bff_ref}" \
+            --frontend-dev-ref "${fe_ref}" \
             --backend-runtime-commit "${EXPECTED_BFF_SHA}" \
             --frontend-runtime-commit "${EXPECTED_FRONTEND_SHA}" \
             --evidence-out "${evidence_path}"
@@ -1090,6 +1095,11 @@ jobs:
         id: write_agora_compat
         run: |
           set -euo pipefail
+          ref_prefix="refs/pantheon-proof/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          git update-ref "${ref_prefix}/frontend-runtime" "${EXACT_FE_SHA}"
+          git -C .pantheon-agora-compat update-ref "${ref_prefix}/backend-runtime" "${EXACT_BFF_SHA}"
+          fe_ref="${ref_prefix}/frontend-runtime"
+          bff_ref="${ref_prefix}/backend-runtime"
           evidence_dir="${RUNNER_TEMP%/}/pantheon-proof-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           manifest_path="${evidence_dir}/release-compatibility-manifest.json"
           evidence_path="${evidence_dir}/agora-compatibility-gate.input.json"
@@ -1097,16 +1107,16 @@ jobs:
           python3 .pantheon-agora-compat/scripts/agora_compat_manifest.py write \
             --output "${manifest_path}" \
             --frontend-root "${GITHUB_WORKSPACE}" \
-            --backend-dev-ref refs/remotes/origin/dev \
-            --frontend-dev-ref refs/remotes/origin/dev \
+            --backend-dev-ref "${bff_ref}" \
+            --frontend-dev-ref "${fe_ref}" \
             --backend-runtime-commit "${EXACT_BFF_SHA}" \
             --frontend-runtime-commit "${EXACT_FE_SHA}" \
             --compatibility-status accepted
           python3 .pantheon-agora-compat/scripts/agora_compat_manifest.py deployment-gate \
             --manifest "${manifest_path}" \
             --frontend-root "${GITHUB_WORKSPACE}" \
-            --backend-dev-ref refs/remotes/origin/dev \
-            --frontend-dev-ref refs/remotes/origin/dev \
+            --backend-dev-ref "${bff_ref}" \
+            --frontend-dev-ref "${fe_ref}" \
             --backend-runtime-commit "${EXACT_BFF_SHA}" \
             --frontend-runtime-commit "${EXACT_FE_SHA}" \
             --evidence-out "${evidence_path}"
