@@ -38,7 +38,7 @@ Every candidate is evaluated against strict caller-traceability rules defined in
 | 4 | `src/lib/bff-v1/management.ts:safeAdapt` | Management BFF-v1 | Catches adapter errors on 200 responses and falls back to seed (rethrows under strict-live) | 24 call sites in `management.ts`, 1 test suite, 8 audit/doc files | `replace_then_delete` | Typed error envelopes / `withStrictLiveOrMock` across 24 adapter call sites |
 | 5 | `src/management/pages/studios/FormulaStudio.tsx:triggerBacktest` | Management Studios | Synthetic in-memory job runner with 5s timeout & fake event | 0 callers (verified retired) | `replace_then_delete` | Governed backtest runner API (`bff.jobs.list()`) / `NonProductionActionButton` |
 | 6 | `src/management/components/detail/ActivityMonitor.tsx:seed` | Management Detail | Hardcoded synthetic events with fake pulsing "live" badge | 3 prod detail pages + 1 test file (component callers, seed generator deleted) | `delete` | Canonical audit/SSE feed (`/bff/audit`, `/bff/sse/events`) |
-| 7 | `src/management/pages/phase2/PostmortemLibrary.tsx:SEED` | Management Oversight | Static 3-row mock postmortem array | 1 page component + 1 route re-export + 2 App.tsx routes + 2 nav manifests + 2 link helpers + 1 test + 3 i18n locales + 2 bff-v1 path/types + 1 script + 1 evidence doc | `replace_then_delete` | Canonical BFF postmortem/incident adapter (`bff.incidents.list()`) |
+| 7 | `src/management/pages/phase2/PostmortemLibrary.tsx:SEED` | Management Oversight | Static 3-row mock postmortem array | 1 page component + 1 route re-export + 2 App.tsx routes + 2 nav manifests + 2 link helpers + 1 test + 2 i18n locales (en-US, zh-TW) + 2 bff-v1 path/types + 1 script + 1 evidence doc | `replace_then_delete` | Canonical BFF postmortem/incident adapter (`bff.incidents.list()`) |
 | 8 | `src/mocks/seed.ts` | Test / Mock Fixture | Domain mock data for 40+ entities | 18 references across 15 files (14 static import callers in 14 test/mock/adapter files + 4 dynamic test imports in 1 test file) | `retain` (fixture-only) | Tree-shaken from live bundle; retained for unit tests |
 | 9 | `src/lib/bff/` vs `src/lib/bff-v1/` Overlap | BFF Client Layer | Duplicate legacy client & mutation overlays coexisting with `bff-v1` | 189 static module references across 156 files (188 static imports + 1 static re-export; 16 internal legacy refs in 11 files, 173 external refs in 145 files) | `replace_then_delete` | Canonical `src/lib/bff-v1/` adapters |
 | 10 | `src/lib/bff-v1/runActionSafe.ts` | Management Mutations | Toast-aware mutation wrapper with idempotency headers | 29 files (11 prod pages, 5 lib files, 5 tests, 2 scripts, 6 docs/evidence) | `retain` | Canonical implementation |
@@ -63,7 +63,7 @@ Every candidate is evaluated against strict caller-traceability rules defined in
     "Route /trading-room candidate review drawer interaction"
   ],
   "replacement": "src/agora/components/CandidateReviewDrawer.tsx",
-  "replacement_proof": "src/agora/components/CandidateReviewDrawer.test.tsx (27 tests passing) verifies A2 score decomposition, top positive/penalty drivers, data quality badge, and review decisions via reviewCandidateMember with If-Match concurrency headers. src/agora/pages/trading-room/TradingRoomPage.test.tsx (77 tests passing) verifies TradingRoomPage renders SharedCandidateReviewDrawer.",
+  "replacement_proof": "src/agora/components/CandidateReviewDrawer.test.tsx (27 tests passing) verifies A2 score decomposition, top positive/penalty drivers, data quality badge, and review decisions via reviewCandidateMember with If-Match concurrency headers. src/agora/pages/trading-room/TradingRoomPage.test.tsx (64 tests passing) verifies TradingRoomPage renders SharedCandidateReviewDrawer.",
   "disposition": "replace_then_delete",
   "validation": [
     "npm --prefix /home/lupin/code/execute-plans test -- --run src/agora/components/CandidateReviewDrawer.test.tsx",
@@ -168,7 +168,7 @@ Every candidate is evaluated against strict caller-traceability rules defined in
     "Management console live reads under VITE_BFF_MODE=live with VITE_BFF_FALLBACK=strict"
   ],
   "replacement": "withStrictLiveOrMock with typed degradation envelopes, optionalAdapt, or explicit error boundaries across 24 management.ts adapter call sites",
-  "replacement_proof": "src/lib/bff-v1/__tests__/strictLiveReadOffline.test.ts (2 tests passing), src/lib/bff-v1/__tests__/management.test.ts (34 tests passing) proving strict-live contract mismatch propagation and envelope handling without silent seed masking",
+  "replacement_proof": "src/lib/bff-v1/__tests__/strictLiveReadOffline.test.ts (2 tests passing), src/lib/bff-v1/__tests__/management.test.ts (37 tests passing) proving strict-live contract mismatch propagation and envelope handling without silent seed masking",
   "disposition": "replace_then_delete",
   "validation": [
     "npm --prefix /home/lupin/code/execute-plans test -- --run src/lib/bff-v1/__tests__/strictLiveReadOffline.test.ts",
@@ -209,9 +209,9 @@ Every candidate is evaluated against strict caller-traceability rules defined in
   "path_or_symbol": "src/management/components/detail/ActivityMonitor.tsx:seed",
   "behavior": "Formerly generated 3 hardcoded static events (seed_${scope}_1..3) and rendered a green pulsing live indicator when disconnected from real backend telemetry. Replaced with canonical realtime and SSE subscriptions (realtime.on('job'|'data'|'sse:loop'|'sse:sentinel'|'sse:intervention')).",
   "callers": [
-    "src/management/pages/PersonaDetail.tsx:28 (import ActivityMonitor), line 348 (<ActivityMonitor scope='persona' />)",
-    "src/management/pages/McpDetail.tsx:16 (import ActivityMonitor), line 68 (<ActivityMonitor scope='mcp' />)",
-    "src/management/pages/ToolDetail.tsx:14 (import ActivityMonitor), line 108 (<ActivityMonitor scope='tool' />)",
+    "src/management/pages/PersonaDetail.tsx:25 (import ActivityMonitor), line 437 (<ActivityMonitor scope={p.id} />)",
+    "src/management/pages/McpDetail.tsx:17 (import ActivityMonitor), line 127 (<ActivityMonitor scope={s.id} />)",
+    "src/management/pages/ToolDetail.tsx:12 (import ActivityMonitor), line 125 (<ActivityMonitor scope={tool.id} />)",
     "src/management/components/detail/__tests__/StrictLiveManagementSurfaces.test.tsx:5, 18, 29, 48, 60 (tests ActivityMonitor behavior under disconnected, connected, and SSE live streams)"
   ],
   "runtime_or_deploy_refs": [
