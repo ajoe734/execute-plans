@@ -1,0 +1,77 @@
+{
+  "schema_version": "pantheon.product-functional-closure.write-proof-controller-repair-evidence.v1",
+  "task_id": "PFG-WRITE-PROOF-CONTROLLER-REPAIR-20260824",
+  "taskId": "PFG-WRITE-PROOF-CONTROLLER-REPAIR-20260824",
+  "owner": "Codex2",
+  "reviewer": "Antigravity2",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/PFG-WRITE-PROOF-CONTROLLER-REPAIR-20260824",
+  "base_commit": "5447d2a09b5c83a4f9ee2d405f57c642913e0055",
+  "status": "ready_for_review",
+  "timestamp": "2026-08-24T00:35:00Z",
+  "scope": {
+    "credential_controller": [
+      "The authorized child proof obtains a new operator and a new viewer JWT from the governed dev-login endpoint immediately before its credentialed phase.",
+      "Only dev-login client credentials remain in Actions secrets; issued bearer JWTs are masked and passed to subsequent proof steps through GITHUB_ENV without being persisted in the repository.",
+      "The preflight rejects missing, malformed, expired, insufficient-lifetime, stale-issued, future-issued, and shared-subject JWTs before the first proof write."
+    ],
+    "watchdog_restore": [
+      "The independent watchdog pins frontend and backend compatibility refs to the authorized candidate and BFF SHAs before its restore compatibility gate.",
+      "A later frontend or backend dev-tip advance therefore cannot redirect or block the exact-pair read-only restore.",
+      "The watchdog still quiesces a failed or timed-out child before it invokes the existing paired safe-sibling restore controller."
+    ],
+    "not_changed": [
+      "Product feature behavior and BFF runtime contracts.",
+      "Read-only default deployment profile, pair identity checks, and the existing watchdog restore transaction.",
+      "Live Actions secret values, hosted proof dispatch, and any capital-affecting operation."
+    ]
+  },
+  "modified_surfaces": [
+    ".github/workflows/pantheon-integration-gate.yml",
+    ".github/workflows/pantheon-proof-watchdog.yml",
+    "scripts/validate-persona-hosted-proof-env.mjs",
+    "scripts/test-deploy-dev-vm.sh",
+    "src/test/deploy-safe-defaults.test.ts",
+    "src/test/paired-release-workflow.test.ts",
+    "src/test/persona-hosted-proof-credentials.test.ts",
+    "src/test/persona-hosted-proof-env.test.ts",
+    "docs/deployment/evidence/PFG-WRITE-PROOF-CONTROLLER-REPAIR-20260824/evidence.json"
+  ],
+  "acceptance_coverage": {
+    "fresh_short_lived_distinct_subject_credentials": true,
+    "ttl_and_immediate_preflight_window_fail_closed": true,
+    "same_pair_read_only_restore_survives_dev_ref_drift": true,
+    "expired_credential_and_failed_child_restore_paths_preserved": true,
+    "hosted_write_proof_execution": "pending_explicit_human_ops_authorization"
+  },
+  "validation": {
+    "syntax": [
+      {
+        "command": "node --check scripts/validate-persona-hosted-proof-env.mjs",
+        "result": "passed"
+      },
+      {
+        "command": "bash -n scripts/test-deploy-dev-vm.sh",
+        "result": "passed"
+      }
+    ],
+    "focused_tests": {
+      "command": "npx vitest run --maxWorkers=2 --testTimeout=15000 --hookTimeout=30000 src/test/persona-hosted-proof-env.test.ts src/test/persona-hosted-proof-credentials.test.ts src/test/deploy-safe-defaults.test.ts src/test/paired-release-workflow.test.ts",
+      "result": "passed: 4 files, 43 tests"
+    },
+    "deploy_controller_harness": {
+      "command": "bash scripts/test-deploy-dev-vm.sh",
+      "result": "passed; includes the exact-pair watchdog compatibility-pin contract assertion"
+    }
+  },
+  "review_request": {
+    "reviewer_must_confirm": [
+      "No issued JWT is referenced by any repository secret expression in the authorized proof job.",
+      "Minting precedes the freshness/TTL preflight, which precedes persona provisioning and every proof write.",
+      "The watchdog restore gate does not read refs/remotes/origin/dev and uses only refs pinned to inputs.candidate_sha and inputs.bff_sha.",
+      "The exact PR head carries this manifest before review approval."
+    ],
+    "hosted_execution_boundary": "Do not dispatch functional_closure_write_proof until explicit Human/Ops authorization is recorded; this task supplies source-level safety repair and review evidence only."
+  }
+}

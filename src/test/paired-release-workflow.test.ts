@@ -184,7 +184,13 @@ describe("paired Pantheon release workflow", () => {
     expect(integration).toContain(
       "(inputs.pint_hosted_probe == 'true' || inputs.persona_interaction_write_proof == 'true' || inputs.functional_closure_write_proof == 'true')",
     );
-    expect(authorizedProof).toContain("PANTHEON_BFF_OPERATOR_A_TOKEN");
+    expect(authorizedProof).toContain(
+      "Mint fresh short-lived proof credentials immediately before writes",
+    );
+    expect(authorizedProof).toContain(
+      "DEV_LOGIN_OPERATOR_CLIENT_SECRET: ${{ secrets.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_SECRET }}",
+    );
+    expect(authorizedProof).not.toContain("secrets.PANTHEON_BFF_");
   });
 
   it("registers one exact child run so an unallowlisted collaborator cannot replay the parent nonce", () => {
@@ -572,9 +578,7 @@ describe("paired Pantheon release workflow", () => {
       coordinator.match(/steps\.binding_upload\.outputs\.artifact-digest/gu),
     ).toHaveLength(1);
     expect(deployWorkflow.match(/actions: write/gu)).toHaveLength(1);
-    expect(integrationWorkflow.match(/secrets\.PANTHEON_BFF_/gu)).toHaveLength(
-      12,
-    );
+    expect(integrationWorkflow).not.toContain("secrets.PANTHEON_BFF_");
   });
 
   it("binds hosted proof and manifests to the exact source pair", () => {
