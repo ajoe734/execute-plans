@@ -9,7 +9,7 @@
   "branch": "task/PFG-BOUNDED-FUNCTIONAL-CLOSURE-PROOF-20260824",
   "base_commit": "cc4007f7f78a31c73548ce85457af17a45a4c4b9",
   "status": "ready_for_review",
-  "timestamp": "2026-08-24T18:07:00Z",
+  "timestamp": "2026-08-24T18:45:00Z",
   "authorization": {
     "date": "2026-08-24",
     "scope": "one bounded paper-only functional-closure write-proof",
@@ -38,6 +38,11 @@
       "Repository actions secret DEV_BFF_DEV_LOGIN_VIEWER_CLIENT_SECRET provisioned on execute-plans repository to supply required dedicated viewer client credentials alongside DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_SECRET.",
       "Both operator and viewer tokens are freshly minted at runtime via /bff/auth/dev-login with strict TTL (>1200s) and max-age (<120s) preflight."
     ],
+    "execution_architecture": [
+      "The restore watchdog (.github/workflows/pantheon-proof-watchdog.yml:108-114) strictly requires parent deploy run.head_branch === 'dev' and run.head_sha === candidateSha.",
+      "Dispatching parent deploy directly from the task branch fails watchdog pre-arm authentication because parent.head_branch is the task branch.",
+      "Merging this PR to dev lands the out-of-order candidate exception and switch guard on dev, enabling the subsequent authorized parent deploy dispatch from dev."
+    ],
     "not_changed": [
       "Product runtime contracts, BFF API contracts, and default read-only deployment profile.",
       "No live capital action and no outbound Source Ingestion external pulls.",
@@ -59,7 +64,8 @@
     "independent_watchdog_exact_pair_read_only_restore": true,
     "namespaced_refs_and_negative_isolation_proven": true,
     "unconditional_restore_fallback_guaranteed": true,
-    "workflow_and_hosted_readback_evidence_recorded": true
+    "controller_repair_and_guards_verified": true,
+    "hosted_write_proof_execution": "pending_dev_merge_for_watchdog_dev_head_assertion"
   },
   "validation": {
     "focused_tests": {
@@ -71,8 +77,8 @@
       "result": "passed: 1 file, 7 tests (49 schemas, 156 routes, 75 sha256 entries aligned)"
     },
     "deploy_controller_harness": {
-      "command": "bash scripts/test-deploy-dev-vm.sh",
-      "result": "passed: 32 passed, 0 failed"
+      "command": "npm run test:deploy-release",
+      "result": "passed: 7 CAS tests, 5 manifest tests, 32 deploy harness tests (44 passed, 0 failed)"
     },
     "typecheck_and_lint": {
       "command": "npm run typecheck && npm run lint",
