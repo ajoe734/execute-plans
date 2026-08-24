@@ -37,7 +37,27 @@ function roleTokens() {
   return tokens;
 }
 
-const HOSTED_PROOF_MIN_CREDENTIAL_TTL_SECONDS = 1200;
+function positiveIntegerEnv(name, fallback) {
+  const value = String(process.env[name] ?? fallback).trim();
+  if (!/^[1-9][0-9]*$/u.test(value)) {
+    throw new Error(`${name} must be a positive whole number of seconds.`);
+  }
+  return Number(value);
+}
+
+// The proof runner mints these immediately before the credentialed phase. Keep
+// the remaining-TTL floor and issuance-age ceiling explicit: the former gives
+// the proof a bounded execution window, while the latter rejects a repository
+// secret or a token cached before this proof attempt.
+const HOSTED_PROOF_MIN_CREDENTIAL_TTL_SECONDS = positiveIntegerEnv(
+  "PANTHEON_HOSTED_PROOF_MIN_CREDENTIAL_TTL_SECONDS",
+  "1200",
+);
+const HOSTED_PROOF_MAX_CREDENTIAL_AGE_SECONDS = positiveIntegerEnv(
+  "PANTHEON_HOSTED_PROOF_MAX_CREDENTIAL_AGE_SECONDS",
+  "120",
+);
+const HOSTED_PROOF_CLOCK_SKEW_SECONDS = 60;
 
 function verifiedJwtIdentity(token, role) {
   const parts = token.split(".");
@@ -52,9 +72,16 @@ function verifiedJwtIdentity(token, role) {
   }
   const subject = typeof claims?.sub === "string" ? claims.sub.trim() : "";
   const expiresAt = Number(claims?.exp ?? 0);
+  const issuedAt = Number(claims?.iat ?? 0);
   const nowSeconds = Math.floor(Date.now() / 1000);
-  if (!subject || !Number.isFinite(expiresAt)) {
-    throw new Error(`${role} credential is missing a subject or expiry.`);
+  if (!subject || !Number.isFinite(expiresAt) || !Number.isFinite(issuedAt)) {
+    throw new Error(`${role} credential is missing a subject, issuance time, or expiry.`);
+  }
+  if (issuedAt > nowSeconds + HOSTED_PROOF_CLOCK_SKEW_SECONDS || issuedAt < nowSeconds - HOSTED_PROOF_MAX_CREDENTIAL_AGE_SECONDS) {
+    throw new Error(`${role} credential was not minted within the hosted proof preflight window.`);
+  }
+  if (expiresAt <= issuedAt) {
+    throw new Error(`${role} credential expiry must follow its issuance time.`);
   }
   if (expiresAt <= nowSeconds + HOSTED_PROOF_MIN_CREDENTIAL_TTL_SECONDS) {
     throw new Error(

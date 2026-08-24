@@ -680,33 +680,60 @@ jobs:
             --profile write-proof)"
           [[ "$ro" == "$EXPECTED_READ_ONLY_DIGEST" && "$wp" == "$EXPECTED_WRITE_PROOF_DIGEST" ]]
 
-      - name: Checkout protected Pantheon Agora gate controller
+      - name: Checkout exact pair compatibility controller
         uses: actions/checkout@v4
         with:
           repository: ajoe734/pantheon
-          ref: dev
+          ref: ${{ inputs.bff_sha }}
           path: .pantheon-agora-compat
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Revalidate exact Agora pair before restore
-        id: restore_agora_compat
+      - name: Pin exact compatibility refs despite dev-tip drift
         run: |
           set -euo pipefail
+          ref_prefix="refs/pantheon-proof/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          git update-ref "${ref_prefix}/frontend-runtime" "${CANDIDATE_SHA}"
+          git -C .pantheon-agora-compat update-ref "${ref_prefix}/backend-runtime" "${BFF_SHA}"
+
+      - name: Revalidate exact Agora pair before restore
+        id: restore_agora_compat
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          ref_prefix="refs/pantheon-proof/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          fe_ref="${ref_prefix}/frontend-runtime"
+          bff_ref="${ref_prefix}/backend-runtime"
+          fe_resolved="$(git rev-parse "${fe_ref}")"
+          bff_resolved="$(git -C .pantheon-agora-compat rev-parse "${bff_ref}")"
+          if [[ "${fe_resolved}" != "${CANDIDATE_SHA}" || "${bff_resolved}" != "${BFF_SHA}" ]]; then
+            echo "Namespaced ref resolution mismatch: fe=${fe_resolved} (expected ${CANDIDATE_SHA}), bff=${bff_resolved} (expected ${BFF_SHA})" >&2
+            exit 1
+          fi
           evidence_dir="${RUNNER_TEMP%/}/pantheon-proof-watchdog-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          manifest_path="${evidence_dir}/release-compatibility-manifest.json"
           evidence_path="${evidence_dir}/agora-compatibility-gate.input.json"
           mkdir -p "${evidence_dir}"
-          python3 .pantheon-agora-compat/scripts/agora_compat_manifest.py deployment-gate \
-            --manifest .pantheon-agora-compat/docs/contracts/agora/dev-compatibility-manifest.json \
+          python3 .pantheon-agora-compat/scripts/agora_compat_manifest.py write \
+            --output "${manifest_path}" \
             --frontend-root "${GITHUB_WORKSPACE}" \
-            --backend-dev-ref refs/remotes/origin/dev \
-            --frontend-dev-ref refs/remotes/origin/dev \
+            --backend-dev-ref "${bff_ref}" \
+            --frontend-dev-ref "${fe_ref}" \
+            --backend-runtime-commit "${BFF_SHA}" \
+            --frontend-runtime-commit "${CANDIDATE_SHA}" \
+            --compatibility-status accepted
+          python3 .pantheon-agora-compat/scripts/agora_compat_manifest.py deployment-gate \
+            --manifest "${manifest_path}" \
+            --frontend-root "${GITHUB_WORKSPACE}" \
+            --backend-dev-ref "${bff_ref}" \
+            --frontend-dev-ref "${fe_ref}" \
             --backend-runtime-commit "${BFF_SHA}" \
             --frontend-runtime-commit "${CANDIDATE_SHA}" \
             --evidence-out "${evidence_path}"
           echo "evidence_path=${evidence_path}" >> "$GITHUB_OUTPUT"
 
       - name: Restore exact pair before any mutable successor action
+        if: always()
         timeout-minutes: 30
         env:
           PANTHEON_AUDIT_OUT_DIR: ${{ runner.temp }}/pantheon-proof-watchdog-${{ github.run_id }}-${{ github.run_attempt }}/restore-controller

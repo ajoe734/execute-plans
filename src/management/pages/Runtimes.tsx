@@ -8,11 +8,12 @@ import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
-import { runActionSafe, useLiveListV1 } from "@/lib/bff-v1";
+import { realWritesEnabled, runActionSafe, useLiveListV1 } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { Badge } from "@/components/ui/badge";
 import { MoreHorizontal, RotateCcw, PowerOff, Move, Maximize2, ShieldAlert, ScrollText, Ban, Skull } from "lucide-react";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
+import { NON_PRODUCTION_COMMAND_REASON } from "@/management/components/NonProductionActionButton";
 import { runtimesWithFleetFallback, type FleetRuntimeRow } from "./runtimeFleetFallback";
 
 const NAN = "nan";
@@ -130,15 +131,16 @@ export const RuntimesPage = () => {
   const hasFocus = Boolean(personaFocus || runtimeFocus || bindingFocus);
   const visibleRows = focusFiltered.rows;
 
-  const run = async (r: RuntimeRow, action: RuntimeAction) => {
+  const run = async (r: RuntimeRow, action: RuntimeAction, memoOverride?: string) => {
+    if (!realWritesEnabled()) return;
     const id = actionTargetId(r);
-    if (!id) return;
+    if (!id || r.fleetDerived) return;
     const mappedAction = action === "disable_new" ? "quarantine" : action;
     const receipt = await runActionSafe({
       kind: "Runtime",
       id,
       action: mappedAction,
-      memo: action === "disable_new" ? "disable_new_deployments" : "from runtimes table",
+      memo: memoOverride ?? (action === "disable_new" ? "disable_new_deployments" : "from runtimes table"),
     }, {
       successTitle: t(`runtime.actions.${action}.toast`, { name: textOrNan(r.name, runtimeIdOf(r)) }),
     });
@@ -216,25 +218,34 @@ export const RuntimesPage = () => {
             { key: "up", header: "Uptime", cell: (r) => <span className="text-mono text-xs">{formatUptime(r.uptimePct)}</span> },
             { key: "region", header: t("table.region"), cell: (r) => <span className="text-mono text-xs">{textOrNan(r.region)}</span> },
             { key: "act", header: "", cell: (r) => {
-              const canAct = Boolean(actionTargetId(r)) && !r.fleetDerived;
+              const writesAllowed = realWritesEnabled();
+              const canAct = writesAllowed && Boolean(actionTargetId(r)) && !r.fleetDerived;
               return (
-                <DropdownMenu>
+                <DropdownMenu modal={false}>
                   <DropdownMenuTrigger asChild>
-                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0" disabled={!canAct} onClick={(e) => e.stopPropagation()}>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 w-7 p-0"
+                      disabled={!canAct}
+                      aria-disabled={!canAct}
+                      title={!writesAllowed ? NON_PRODUCTION_COMMAND_REASON : undefined}
+                      aria-label={t("runtime.actions.menu", { defaultValue: "Runtime actions" })}
+                    >
                       <MoreHorizontal className="h-4 w-4" />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-48">
-                    <DropdownMenuItem onClick={() => run(r, "restart")}><RotateCcw className="h-3.5 w-3.5 mr-2" />{t("runtime.actions.restart.label")}</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => run(r, "drain")}><PowerOff className="h-3.5 w-3.5 mr-2" />{t("runtime.actions.drain.label")}</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => run(r, "move")}><Move className="h-3.5 w-3.5 mr-2" />{t("runtime.actions.move.label")}</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => run(r, "scale")}><Maximize2 className="h-3.5 w-3.5 mr-2" />{t("runtime.actions.scale.label")}</DropdownMenuItem>
+                    <DropdownMenuItem disabled={!canAct} onClick={() => run(r, "restart")}><RotateCcw className="h-3.5 w-3.5 mr-2" />{t("runtime.actions.restart.label")}</DropdownMenuItem>
+                    <DropdownMenuItem disabled={!canAct} onClick={() => run(r, "drain")}><PowerOff className="h-3.5 w-3.5 mr-2" />{t("runtime.actions.drain.label")}</DropdownMenuItem>
+                    <DropdownMenuItem disabled={!canAct} onClick={() => run(r, "move")}><Move className="h-3.5 w-3.5 mr-2" />{t("runtime.actions.move.label")}</DropdownMenuItem>
+                    <DropdownMenuItem disabled={!canAct} onClick={() => run(r, "scale")}><Maximize2 className="h-3.5 w-3.5 mr-2" />{t("runtime.actions.scale.label")}</DropdownMenuItem>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => run(r, "disable_new")}><Ban className="h-3.5 w-3.5 mr-2" />{t("runtime.actions.disable_new.label")}</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => run(r, "quarantine")} className="text-status-warning"><ShieldAlert className="h-3.5 w-3.5 mr-2" />{t("runtime.actions.quarantine.label")}</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => run(r, "inspect_logs")}><ScrollText className="h-3.5 w-3.5 mr-2" />{t("runtime.actions.inspect_logs.label")}</DropdownMenuItem>
+                    <DropdownMenuItem disabled={!canAct} onClick={() => run(r, "disable_new")}><Ban className="h-3.5 w-3.5 mr-2" />{t("runtime.actions.disable_new.label")}</DropdownMenuItem>
+                    <DropdownMenuItem disabled={!canAct} onClick={() => run(r, "quarantine")} className="text-status-warning"><ShieldAlert className="h-3.5 w-3.5 mr-2" />{t("runtime.actions.quarantine.label")}</DropdownMenuItem>
+                    <DropdownMenuItem disabled={!canAct} onClick={() => run(r, "inspect_logs")}><ScrollText className="h-3.5 w-3.5 mr-2" />{t("runtime.actions.inspect_logs.label")}</DropdownMenuItem>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => setKillTarget(r)} className="text-destructive"><Skull className="h-3.5 w-3.5 mr-2" />{t("runtime.actions.emergency_kill.label")}</DropdownMenuItem>
+                    <DropdownMenuItem disabled={!canAct} onClick={() => { if (!canAct) return; setKillTarget(r); }} className="text-destructive"><Skull className="h-3.5 w-3.5 mr-2" />{t("runtime.actions.emergency_kill.label")}</DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
               );
@@ -244,7 +255,7 @@ export const RuntimesPage = () => {
       </PageBody>
       {killTarget && (
         <HighRiskConfirm
-          open={!!killTarget}
+          open={!!killTarget && realWritesEnabled()}
           onOpenChange={(o) => !o && setKillTarget(null)}
           operation="runtime.emergency_kill"
           target={{ type: "Runtime", id: actionTargetId(killTarget) ?? textOrNan(killTarget.id), name: textOrNan(killTarget.name, runtimeIdOf(killTarget)) }}
@@ -253,18 +264,10 @@ export const RuntimesPage = () => {
           riskImpact={t("runtime.actions.emergency_kill.impact")}
           confirmToken="KILL"
           onConfirm={async (memo) => {
-            const id = actionTargetId(killTarget);
-            if (!id) return;
-            const receipt = await runActionSafe({
-              kind: "Runtime",
-              id,
-              action: "emergency_kill",
-              memo,
-            }, {
-              successTitle: t("runtime.actions.emergency_kill.toast", { name: textOrNan(killTarget.name, runtimeIdOf(killTarget)) }),
-            });
-            if (!receipt.ok) return;
-            refresh();
+            if (!killTarget || !realWritesEnabled()) return;
+            const target = killTarget;
+            setKillTarget(null);
+            await run(target, "emergency_kill", memo);
           }}
         />
       )}

@@ -29,7 +29,7 @@ vi.mock("@/lib/bff-v1/agora/workshops", () => ({
     sequence_no: 2,
   }),
   reconstructWorkshopStrategy: vi.fn().mockResolvedValue({
-    data: { command_receipt: { status: "admitted" }, resource: {} },
+    data: { reconstruction_id: "reconstruction-default-001" },
     meta: {},
   }),
   openWorkshopStream: vi.fn().mockReturnValue(() => undefined),
@@ -261,7 +261,7 @@ describe("StrategyWorkshopPage", () => {
       sequence_no: 2,
     });
     vi.mocked(workshopsModule.reconstructWorkshopStrategy).mockResolvedValue({
-      data: { command_receipt: { status: "admitted" }, resource: {} },
+      data: { reconstruction_id: "reconstruction-default-001" },
       meta: {},
     } as never);
     vi.mocked(workshopsModule.openWorkshopStream).mockReturnValue(() => undefined);
@@ -536,7 +536,7 @@ describe("StrategyWorkshopPage", () => {
     expect(screen.getByTestId("servant-composer")).toBeDefined();
   });
 
-  it("resolves canonical context, rechecks eligibility, and submits a no-authority Persona interaction", async () => {
+  it("records the reconstruction response identity before reading canonical Strategy and Registry identities", async () => {
     vi.mocked(workshopsModule.getWorkshop).mockResolvedValue(MOCK_WORKSHOP);
     vi.mocked(workshopsModule.listWorkshopCards).mockResolvedValue([]);
     vi.mocked(workshopsModule.getWorkshopCompleteness).mockResolvedValue(null);
@@ -571,7 +571,7 @@ describe("StrategyWorkshopPage", () => {
       meta: {},
     } as never);
     vi.mocked(workshopsModule.reconstructWorkshopStrategy).mockResolvedValue({
-      data: { command_receipt: { status: "completed" }, resource: {} },
+      data: { reconstruction_id: "reconstruction-canonical-001" },
       meta: {},
     } as never);
 
@@ -618,11 +618,53 @@ describe("StrategyWorkshopPage", () => {
       "completed",
     );
     expect(screen.getByTestId("workshop-reconstruction-state")).toHaveTextContent(
-      "Strategy reconstruction receipt recorded",
+      "Strategy reconstruction result recorded",
+    );
+    expect(screen.getByTestId("workshop-reconstruction-state")).toHaveAttribute(
+      "data-reconstruction-id",
+      "reconstruction-canonical-001",
     );
     expect(screen.getByTestId("workshop-strategy-spec-identity")).toHaveTextContent(
       "StrategySpec strategy-canonical-001 · registry-canonical-002 · 2",
     );
+  });
+
+  it("fails the reconstruction UI state when the BFF result omits reconstruction_id", async () => {
+    vi.mocked(workshopsModule.getWorkshop).mockResolvedValue(MOCK_WORKSHOP);
+    vi.mocked(workshopsModule.reconstructWorkshopStrategy).mockResolvedValue({
+      data: {},
+      meta: {},
+    } as never);
+
+    render(<StrategyWorkshopPage workshopId="ws-abc" />);
+    fireEvent.change(await screen.findByTestId("servant-composer-input"), {
+      target: { value: "Reject an unidentified reconstruction result" },
+    });
+    const submit = screen.getByTestId("servant-composer-submit");
+    await waitFor(() => expect(submit).toBeEnabled());
+    fireEvent.click(submit);
+
+    await waitFor(() => {
+      expect(workshopsModule.reconstructWorkshopStrategy).toHaveBeenCalledWith("ws-abc");
+      expect(screen.getByTestId("workshop-reconstruction-state")).toHaveAttribute(
+        "data-reconstruction-state",
+        "failed",
+      );
+    });
+    expect(screen.getByTestId("workshop-reconstruction-state")).toHaveTextContent(
+      "Strategy reconstruction unavailable",
+    );
+    expect(screen.getByTestId("workshop-reconstruction-state")).not.toHaveAttribute(
+      "data-reconstruction-id",
+    );
+    await waitFor(() => {
+      expect(submitDailyInteraction).toHaveBeenCalledWith(expect.objectContaining({
+        workshop_id: "ws-abc",
+        human_request: expect.objectContaining({
+          request_text: "Reject an unidentified reconstruction result",
+        }),
+      }));
+    });
   });
 
   it("does not issue a Workshop write when the current readback omits its ETag", async () => {

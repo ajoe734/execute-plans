@@ -7,10 +7,10 @@ const validator = resolve(
   "scripts/validate-persona-hosted-proof-env.mjs",
 );
 
-function jwt(subject: string, expiresAt: number): string {
+function jwt(subject: string, expiresAt: number, issuedAt = Math.floor(Date.now() / 1000)): string {
   const encode = (value: unknown) =>
     Buffer.from(JSON.stringify(value)).toString("base64url");
-  return `${encode({ alg: "none", typ: "JWT" })}.${encode({ sub: subject, exp: expiresAt })}.proof-signature`;
+  return `${encode({ alg: "none", typ: "JWT" })}.${encode({ sub: subject, iat: issuedAt, exp: expiresAt })}.proof-signature`;
 }
 
 function validate(operator: string, viewer: string) {
@@ -50,6 +50,16 @@ describe("Persona hosted proof credential validation", () => {
     const result = validate(jwt("operator-proof", expiresAt), jwt("viewer-proof", expiresAt));
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("does not cover the bounded hosted proof window");
+  });
+
+  it("rejects an otherwise valid JWT minted before the immediate preflight window", () => {
+    const now = Math.floor(Date.now() / 1000);
+    const result = validate(
+      jwt("operator-proof", now + 3600, now - 121),
+      jwt("viewer-proof", now + 3600, now - 121),
+    );
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("was not minted within the hosted proof preflight window");
   });
 
   it("rejects one credential reused for operator and viewer", () => {

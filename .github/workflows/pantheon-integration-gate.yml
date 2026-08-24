@@ -109,6 +109,14 @@ on:
         options:
           - "true"
           - "false"
+      functional_closure_write_proof:
+        description: "Run the authorized Agora and Management/Management AI functional-closure write-proof journeys"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "true"
+          - "false"
       pint_hosted_probe:
         description: "Opt in to the PINT-010-R2 paper-only hosted proposal and targeted desktop/mobile proof."
         required: false
@@ -129,7 +137,15 @@ concurrency:
 jobs:
   proof-authorization:
     name: Authorize parent-bound hosted write proof
-    if: github.event_name == 'workflow_dispatch' && (inputs.pint_hosted_probe == 'true' || inputs.persona_interaction_write_proof == 'true')
+    if: >-
+      ${{
+        github.event_name == 'workflow_dispatch' &&
+        (
+          inputs.pint_hosted_probe == 'true' ||
+          inputs.persona_interaction_write_proof == 'true' ||
+          inputs.functional_closure_write_proof == 'true'
+        )
+      }}
     timeout-minutes: 10
     permissions:
       contents: read
@@ -159,9 +175,13 @@ jobs:
             const noncePattern = /^[0-9a-f]{64}$/i;
             const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
             const value = (name) => String(process.env[name] || "").trim();
-            if (String(context.payload.inputs?.pint_hosted_probe) !== "true" ||
-                String(context.payload.inputs?.persona_interaction_write_proof) !== "true") {
-              core.setFailed("Hosted proof requires both explicit proof opt-ins");
+            const hasLegacyPersonaProof =
+              String(context.payload.inputs?.pint_hosted_probe) === "true" &&
+              String(context.payload.inputs?.persona_interaction_write_proof) === "true";
+            const hasFunctionalClosureProof =
+              String(context.payload.inputs?.functional_closure_write_proof) === "true";
+            if (!hasLegacyPersonaProof && !hasFunctionalClosureProof) {
+              core.setFailed("Hosted proof requires explicit proof opt-in");
               return;
             }
             const frontendSha = value("FRONTEND_SHA").toLowerCase();
@@ -405,7 +425,7 @@ jobs:
         !cancelled() &&
         !(
           github.event_name == 'workflow_dispatch' &&
-          (inputs.pint_hosted_probe == 'true' || inputs.persona_interaction_write_proof == 'true')
+          (inputs.pint_hosted_probe == 'true' || inputs.persona_interaction_write_proof == 'true' || inputs.functional_closure_write_proof == 'true')
         )
       }}
     runs-on: ubuntu-latest
@@ -1496,8 +1516,10 @@ jobs:
         github.run_attempt == 1 &&
         github.actor == 'github-actions[bot]' &&
         github.triggering_actor == 'github-actions[bot]' &&
-        inputs.pint_hosted_probe == 'true' &&
-        inputs.persona_interaction_write_proof == 'true'
+        (
+          (inputs.pint_hosted_probe == 'true' && inputs.persona_interaction_write_proof == 'true') ||
+          inputs.functional_closure_write_proof == 'true'
+        )
       }}
     timeout-minutes: 145
     permissions:
@@ -1651,29 +1673,66 @@ jobs:
           if (!valid) throw new Error("fresh child claim does not authorize this credentialed job attempt");
           NODE
 
-      - name: Validate hosted proof credentials before writes
+      - name: Mint fresh short-lived proof credentials immediately before writes
         env:
-          PANTHEON_PERSONA_INTERACTION_OPERATOR_TOKEN: ${{ secrets.PANTHEON_BFF_OPERATOR_A_TOKEN }}
-          PANTHEON_PERSONA_INTERACTION_VIEWER_TOKEN: ${{ secrets.PANTHEON_BFF_VIEWER_TOKEN }}
-          PANTHEON_BFF_RBAC_TOKENS_JSON: ${{ secrets.PANTHEON_BFF_RBAC_TOKENS_JSON }}
-        run: node scripts/validate-persona-hosted-proof-env.mjs
+          DEV_LOGIN_OPERATOR_CLIENT_ID: ${{ vars.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_ID || 'pantheon-dev-operator-a-v1' }}
+          DEV_LOGIN_OPERATOR_CLIENT_SECRET: ${{ secrets.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_SECRET }}
+          DEV_LOGIN_VIEWER_CLIENT_ID: ${{ vars.DEV_BFF_DEV_LOGIN_VIEWER_CLIENT_ID || 'pantheon-dev-viewer-v1' }}
+          DEV_LOGIN_VIEWER_CLIENT_SECRET: ${{ secrets.DEV_BFF_DEV_LOGIN_VIEWER_CLIENT_SECRET }}
+        run: |
+          set -euo pipefail
+          [[ -n "$DEV_LOGIN_OPERATOR_CLIENT_SECRET" && -n "$DEV_LOGIN_VIEWER_CLIENT_SECRET" ]] || {
+            echo "Dedicated operator and viewer dev-login client credentials are required for the bounded proof." >&2
+            exit 1
+          }
+          mint_token() {
+            local client_id="$1"
+            local client_secret="$2"
+            local response
+            local request_body
+            request_body="$(CLIENT_ID="$client_id" CLIENT_SECRET="$client_secret" node -e 'process.stdout.write(JSON.stringify({grant_type:"client_credentials",client_id:process.env.CLIENT_ID,client_secret:process.env.CLIENT_SECRET}))')"
+            response="$(curl --fail-with-body --silent --show-error --location \
+              --retry 2 --retry-all-errors --connect-timeout 5 --max-time 20 \
+              -X POST "${PANTHEON_BFF_BASE_URL%/}/bff/auth/dev-login" \
+              -H 'Content-Type: application/json' \
+              -d "$request_body")"
+            MINTED_TOKEN="$(node -e '
+              const payload=JSON.parse(process.argv[1]);
+              const token=String(payload.access_token||"").trim();
+              if (!token || token.split(".").length !== 3) process.exit(1);
+              process.stdout.write(token);
+            ' "$response")"
+            printf '::add-mask::%s\n' "$MINTED_TOKEN"
+          }
+          mint_token "$DEV_LOGIN_OPERATOR_CLIENT_ID" "$DEV_LOGIN_OPERATOR_CLIENT_SECRET"
+          operator_token="$MINTED_TOKEN"
+          mint_token "$DEV_LOGIN_VIEWER_CLIENT_ID" "$DEV_LOGIN_VIEWER_CLIENT_SECRET"
+          viewer_token="$MINTED_TOKEN"
+          {
+            printf 'PANTHEON_PERSONA_INTERACTION_OPERATOR_TOKEN=%s\n' "$operator_token"
+            printf 'PANTHEON_PERSONA_INTERACTION_VIEWER_TOKEN=%s\n' "$viewer_token"
+            printf 'PANTHEON_PINT_OPERATOR_TOKEN=%s\n' "$operator_token"
+            printf 'PANTHEON_PINT_VIEWER_TOKEN=%s\n' "$viewer_token"
+          } >> "$GITHUB_ENV"
+
+      - name: Validate freshly minted hosted proof credentials before writes
+        env:
+          PANTHEON_HOSTED_PROOF_MIN_CREDENTIAL_TTL_SECONDS: "1200"
+          PANTHEON_HOSTED_PROOF_MAX_CREDENTIAL_AGE_SECONDS: "120"
+        run: |
+          set -euo pipefail
+          node scripts/validate-persona-hosted-proof-env.mjs
 
       - name: Ensure stable user-private Persona for hosted proof
         env:
           PANTHEON_EXPECTED_BFF_SHA: ${{ inputs.bff_sha }}
-          PANTHEON_PERSONA_INTERACTION_OPERATOR_TOKEN: ${{ secrets.PANTHEON_BFF_OPERATOR_A_TOKEN }}
         run: node scripts/ensure-persona-hosted-proof-servant.mjs
 
       - name: Run governed and Persona proof with proof-only credentials
         env:
           PANTHEON_EXPECTED_BFF_SHA: ${{ inputs.bff_sha }}
           PANTHEON_PINT_PROBE_ALLOW_WRITES: "true"
-          PANTHEON_PINT_OPERATOR_TOKEN: ${{ secrets.PANTHEON_BFF_OPERATOR_A_TOKEN }}
-          PANTHEON_PINT_VIEWER_TOKEN: ${{ secrets.PANTHEON_BFF_VIEWER_TOKEN }}
           PANTHEON_PERSONA_INTERACTION_WRITE_PROOF: "1"
-          PANTHEON_PERSONA_INTERACTION_OPERATOR_TOKEN: ${{ secrets.PANTHEON_BFF_OPERATOR_A_TOKEN }}
-          PANTHEON_PERSONA_INTERACTION_VIEWER_TOKEN: ${{ secrets.PANTHEON_BFF_VIEWER_TOKEN }}
-          PANTHEON_BFF_RBAC_TOKENS_JSON: ${{ secrets.PANTHEON_BFF_RBAC_TOKENS_JSON }}
         run: |
           set -euo pipefail
           node scripts/probe-persona-governed-proposal-live.mjs
@@ -1710,9 +1769,6 @@ jobs:
           NODE
 
       - name: Run Trade Journey no-interception desktop mobile and a11y proof
-        env:
-          PANTHEON_PERSONA_INTERACTION_OPERATOR_TOKEN: ${{ secrets.PANTHEON_BFF_OPERATOR_A_TOKEN }}
-          PANTHEON_PERSONA_INTERACTION_VIEWER_TOKEN: ${{ secrets.PANTHEON_BFF_VIEWER_TOKEN }}
         run: |
           set -euo pipefail
           desktop_results="$PANTHEON_AUDIT_OUT_DIR/trade-journey-hosted-desktop-results.json"
@@ -1746,6 +1802,61 @@ jobs:
             throw new Error(`Trade Journey hosted proof requires desktop 2/2 and mobile 1/1 with no skipped/unexpected/flaky; got ${JSON.stringify({ desktop, mobile })}`);
           }
           NODE
+
+      - name: Run Agora functional-closure hosted journey
+        if: inputs.functional_closure_write_proof == 'true' || inputs.persona_interaction_write_proof == 'true'
+        env:
+          PANTHEON_FE_BASE_URL: ${{ inputs.fe_base_url }}
+          PANTHEON_BFF_BASE_URL: ${{ inputs.bff_base_url }}
+          PANTHEON_BROWSER_BFF_BASE_URL: ${{ inputs.bff_base_url }}
+          PANTHEON_BFF_TENANT_ID: tenant-dev
+          PANTHEON_HOSTED_E2E: "1"
+          EXPECTED_FE_SHA: ${{ inputs.fe_sha }}
+          EXPECTED_BFF_SHA: ${{ inputs.bff_sha }}
+          PANTHEON_AUDIT_OUT_DIR: .lovable/audits/authorized-write-proof/agora
+          DEV_LOGIN_CLIENT_ID: ${{ vars.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_ID || 'pantheon-dev-operator-a-v1' }}
+          DEV_LOGIN_CLIENT_SECRET: ${{ secrets.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_SECRET }}
+          PFG_AGORA_JOURNEY_E2E: "1"
+          PFG_AGORA_JOURNEY_E2E_GCP_EMAIL: ${{ secrets.PFG_AGORA_JOURNEY_E2E_GCP_EMAIL }}
+          PFG_AGORA_JOURNEY_E2E_GCP_PASSWORD: ${{ secrets.PFG_AGORA_JOURNEY_E2E_GCP_PASSWORD }}
+          PFG_AGORA_JOURNEY_E2E_GCP_TOTP_SECRET: ${{ secrets.PFG_AGORA_JOURNEY_E2E_GCP_TOTP_SECRET }}
+          PANTHEON_PUBLIC_GCP_IDENTITY_API_KEY: ${{ vars.VITE_GCP_IDENTITY_API_KEY }}
+          PANTHEON_CREDENTIALED_PLAYWRIGHT_NO_ARTIFACTS: "1"
+        run: |
+          set -euo pipefail
+          mkdir -p "$PANTHEON_AUDIT_OUT_DIR"
+          PANTHEON_CREDENTIALED_PLAYWRIGHT_NO_ARTIFACTS=1 \
+            npx playwright test e2e/agora-product-journey.spec.ts \
+              --project=chromium \
+              --retries=0 \
+              --reporter=list \
+              --trace=off
+
+      - name: Run Management and Management AI functional-closure hosted journeys
+        if: inputs.functional_closure_write_proof == 'true' || inputs.persona_interaction_write_proof == 'true'
+        env:
+          PANTHEON_FE_BASE_URL: ${{ inputs.fe_base_url }}
+          PANTHEON_BROWSER_BFF_BASE_URL: ${{ inputs.bff_base_url }}
+          PANTHEON_BFF_BASE_URL: ${{ inputs.bff_base_url }}
+          PANTHEON_BFF_TENANT_ID: tenant-dev
+          PANTHEON_HOSTED_E2E: "1"
+          EXPECTED_FE_SHA: ${{ inputs.fe_sha }}
+          EXPECTED_BFF_SHA: ${{ inputs.bff_sha }}
+          PANTHEON_AUDIT_OUT_DIR: .lovable/audits/authorized-write-proof/management
+          PANTHEON_CREDENTIALED_PLAYWRIGHT_NO_ARTIFACTS: "1"
+          DEV_LOGIN_CLIENT_ID: ${{ vars.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_ID || 'pantheon-dev-operator-a-v1' }}
+          DEV_LOGIN_CLIENT_SECRET: ${{ secrets.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_SECRET }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$PANTHEON_AUDIT_OUT_DIR"
+          PANTHEON_CREDENTIALED_PLAYWRIGHT_NO_ARTIFACTS=1 \
+            npx playwright test \
+              e2e/management-product-journey.spec.ts \
+              e2e/management-ai-product-journey.spec.ts \
+              --project=chromium \
+              --retries=0 \
+              --reporter=list \
+              --trace=off
 
       - name: Verify exact write-proof deployment after credentialed proof
         if: always()

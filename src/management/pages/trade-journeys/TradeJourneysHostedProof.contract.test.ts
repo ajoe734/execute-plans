@@ -37,10 +37,14 @@ describe("TJ-E2E-012 hosted browser proof contract", () => {
     expect(spec).not.toContain("const paper = await openPaperList(page)");
   });
 
-  it("runs desktop, viewer-RBAC, and mobile proof inside the existing authorized window", () => {
+  it("mints fresh proof credentials before the desktop, viewer-RBAC, and mobile checks", () => {
     expect(workflow).toContain("e2e/trade-journeys-cross-repo-hosted.spec.ts");
-    expect(workflow).toContain("secrets.PANTHEON_BFF_OPERATOR_A_TOKEN");
-    expect(workflow).toContain("secrets.PANTHEON_BFF_VIEWER_TOKEN");
+    expect(workflow).toContain("Mint fresh short-lived proof credentials immediately before writes");
+    expect(workflow).toContain("/bff/auth/dev-login");
+    expect(workflow).toContain("PANTHEON_PERSONA_INTERACTION_OPERATOR_TOKEN");
+    expect(workflow).toContain("PANTHEON_PERSONA_INTERACTION_VIEWER_TOKEN");
+    expect(workflow).not.toContain("secrets.PANTHEON_BFF_OPERATOR_A_TOKEN");
+    expect(workflow).not.toContain("secrets.PANTHEON_BFF_VIEWER_TOKEN");
     expect(workflow).toContain("PANTHEON_CREDENTIALED_PLAYWRIGHT_NO_ARTIFACTS=1");
     expect(workflow).toContain("--grep '@desktop-full'");
     expect(workflow).toContain("--grep '@mobile-basic'");

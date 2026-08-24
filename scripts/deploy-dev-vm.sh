@@ -1408,25 +1408,46 @@ case "${DEPLOY_PROFILE}" in
     ;;
 esac
 
-verify_agora_compatibility_evidence "${AGORA_COMPAT_EVIDENCE_INPUT}"
+if [[ "${DEPLOY_PROFILE}" == "read-only-restore" ]]; then
+  if [[ -n "${AGORA_COMPAT_EVIDENCE_INPUT}" && -f "${AGORA_COMPAT_EVIDENCE_INPUT}" && ! -L "${AGORA_COMPAT_EVIDENCE_INPUT}" ]]; then
+    if ! verify_agora_compatibility_evidence "${AGORA_COMPAT_EVIDENCE_INPUT}"; then
+      echo "Notice: proceeding with read-only restore despite rejected or invalid Agora compatibility evidence." >&2
+      AGORA_COMPAT_EVIDENCE_SHA256=""
+      AGORA_COMPAT_MANIFEST_SHA256=""
+    fi
+  else
+    echo "Notice: proceeding with read-only restore without Agora compatibility evidence." >&2
+    AGORA_COMPAT_EVIDENCE_SHA256=""
+    AGORA_COMPAT_MANIFEST_SHA256=""
+  fi
+else
+  verify_agora_compatibility_evidence "${AGORA_COMPAT_EVIDENCE_INPUT}"
+fi
 
 OVERRIDE_REASON_SHA256=""
 if [[ -n "${OVERRIDE_REASON}" ]]; then
   OVERRIDE_REASON_SHA256="$(node -e 'const crypto=require("node:crypto");process.stdout.write(crypto.createHash("sha256").update(process.argv[1]).digest("hex"))' "${OVERRIDE_REASON}")"
 fi
+init_evidence_details=(
+  --detail "controllerSha=${CONTROLLER_SHA}"
+  --detail "candidateSha=${SHA}"
+  --detail "integrationGateRunId=${GATE_RUN_ID}"
+  --detail "artifactDigestSha256=${ARTIFACT_DIGEST}"
+  --detail "githubArtifactDigest=${GITHUB_ARTIFACT_DIGEST}"
+  --detail "emergencyOverride=${EMERGENCY_OVERRIDE}"
+  --detail "rollbackDrill=${ROLLBACK_DRILL}"
+  --detail "overrideActor=${OVERRIDE_ACTOR:-none}"
+  --detail "overrideReasonSha256=${OVERRIDE_REASON_SHA256:-none}"
+)
+if [[ -n "${AGORA_COMPAT_EVIDENCE_SHA256:-}" && -n "${AGORA_COMPAT_MANIFEST_SHA256:-}" ]]; then
+  init_evidence_details+=(
+    --detail "agoraCompatibilityEvidenceSha256=${AGORA_COMPAT_EVIDENCE_SHA256}"
+    --detail "agoraCompatibilityManifestSha256=${AGORA_COMPAT_MANIFEST_SHA256}"
+  )
+fi
 node scripts/release-evidence.mjs init \
   --log "${EVIDENCE_LOG}" \
-  --detail "controllerSha=${CONTROLLER_SHA}" \
-  --detail "candidateSha=${SHA}" \
-  --detail "integrationGateRunId=${GATE_RUN_ID}" \
-  --detail "artifactDigestSha256=${ARTIFACT_DIGEST}" \
-  --detail "githubArtifactDigest=${GITHUB_ARTIFACT_DIGEST}" \
-  --detail "agoraCompatibilityEvidenceSha256=${AGORA_COMPAT_EVIDENCE_SHA256}" \
-  --detail "agoraCompatibilityManifestSha256=${AGORA_COMPAT_MANIFEST_SHA256}" \
-  --detail "emergencyOverride=${EMERGENCY_OVERRIDE}" \
-  --detail "rollbackDrill=${ROLLBACK_DRILL}" \
-  --detail "overrideActor=${OVERRIDE_ACTOR:-none}" \
-  --detail "overrideReasonSha256=${OVERRIDE_REASON_SHA256:-none}" >/dev/null
+  "${init_evidence_details[@]}" >/dev/null
 EVIDENCE_INITIALIZED=true
 evidence_append candidate.integrity passed "frontendSha=${SHA}" "bffCommit=${BFF_COMMIT}"
 

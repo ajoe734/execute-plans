@@ -19,6 +19,10 @@ const branchWorkflow = readFileSync(
   resolve(root, ".github/workflows/branch-ci.yml"),
   "utf8",
 );
+const deployScript = readFileSync(
+  resolve(root, "scripts/deploy-dev-vm.sh"),
+  "utf8",
+);
 
 describe("paired Pantheon release workflow", () => {
   it("builds one authenticated three-profile set while normal gates consume read-only", () => {
@@ -182,9 +186,15 @@ describe("paired Pantheon release workflow", () => {
     expect(integration).not.toContain("needs: proof-authorization");
     expect(integration).toContain("!cancelled()");
     expect(integration).toContain(
-      "(inputs.pint_hosted_probe == 'true' || inputs.persona_interaction_write_proof == 'true')",
+      "(inputs.pint_hosted_probe == 'true' || inputs.persona_interaction_write_proof == 'true' || inputs.functional_closure_write_proof == 'true')",
     );
-    expect(authorizedProof).toContain("PANTHEON_BFF_OPERATOR_A_TOKEN");
+    expect(authorizedProof).toContain(
+      "Mint fresh short-lived proof credentials immediately before writes",
+    );
+    expect(authorizedProof).toContain(
+      "DEV_LOGIN_OPERATOR_CLIENT_SECRET: ${{ secrets.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_SECRET }}",
+    );
+    expect(authorizedProof).not.toContain("secrets.PANTHEON_BFF_");
   });
 
   it("registers one exact child run so an unallowlisted collaborator cannot replay the parent nonce", () => {
@@ -305,18 +315,17 @@ describe("paired Pantheon release workflow", () => {
     expect(authorized.slice(0, authorized.indexOf("    steps:"))).not.toContain(
       "secrets.PANTHEON_BFF_",
     );
-    expect(
-      authorized.match(/secrets\.PANTHEON_BFF_OPERATOR_A_TOKEN/gu),
-    ).toHaveLength(5);
-    expect(
-      authorized.match(/secrets\.PANTHEON_BFF_VIEWER_TOKEN/gu),
-    ).toHaveLength(4);
-    expect(
-      authorized.match(/secrets\.PANTHEON_BFF_RBAC_TOKENS_JSON/gu),
-    ).toHaveLength(2);
-    expect(integrationWorkflow.match(/secrets\.PANTHEON_BFF_/gu)).toHaveLength(
-      11,
+    expect(authorized).toContain(
+      "Mint fresh short-lived proof credentials immediately before writes",
     );
+    expect(authorized).toContain(
+      "DEV_LOGIN_OPERATOR_CLIENT_SECRET: ${{ secrets.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_SECRET }}",
+    );
+    expect(authorized).toContain(
+      "DEV_LOGIN_VIEWER_CLIENT_SECRET: ${{ secrets.DEV_BFF_DEV_LOGIN_VIEWER_CLIENT_SECRET }}",
+    );
+    expect(authorized).not.toContain("secrets.PANTHEON_BFF_");
+    expect(integrationWorkflow).not.toContain("secrets.PANTHEON_BFF_");
     expect(integrationWorkflow).not.toContain(
       "secrets.PANTHEON_BFF_ADMIN_TOKEN",
     );
@@ -330,7 +339,11 @@ describe("paired Pantheon release workflow", () => {
       authorized.indexOf(
         "Verify exact write-proof deployment before credentials",
       ),
-    ).toBeLessThan(authorized.indexOf("secrets.PANTHEON_BFF_OPERATOR_A_TOKEN"));
+    ).toBeLessThan(
+      authorized.indexOf(
+        "Mint fresh short-lived proof credentials immediately before writes",
+      ),
+    );
   });
 
   it("rejects a collaborator rerun of the credentialed leaf after parent completion", () => {
@@ -468,10 +481,15 @@ describe("paired Pantheon release workflow", () => {
     expect(
       restore.indexOf("Checkout protected restore controller"),
     ).toBeLessThan(
-      restore.indexOf("Checkout protected Pantheon Agora gate controller"),
+      restore.indexOf("Checkout exact pair compatibility controller"),
     );
     expect(
-      restore.indexOf("Checkout protected Pantheon Agora gate controller"),
+      restore.indexOf("Checkout exact pair compatibility controller"),
+    ).toBeLessThan(
+      restore.indexOf("Pin exact compatibility refs despite dev-tip drift"),
+    );
+    expect(
+      restore.indexOf("Pin exact compatibility refs despite dev-tip drift"),
     ).toBeLessThan(
       restore.indexOf("Revalidate exact Agora pair before restore"),
     );
@@ -516,6 +534,54 @@ describe("paired Pantheon release workflow", () => {
     expect(watchdogWorkflow).toContain(
       "PANTHEON_DEPLOY_GITHUB_ARTIFACT_DIGEST: ${{ inputs.source_artifact_digest }}",
     );
+    expect(restore).toContain(
+      'ref_prefix="refs/pantheon-proof/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"',
+    );
+    expect(restore).toContain(
+      'git update-ref "${ref_prefix}/frontend-runtime" "${CANDIDATE_SHA}"',
+    );
+    expect(restore).toContain(
+      'git -C .pantheon-agora-compat update-ref "${ref_prefix}/backend-runtime" "${BFF_SHA}"',
+    );
+    expect(restore).toContain(
+      'fe_resolved="$(git rev-parse "${fe_ref}")"',
+    );
+    expect(restore).toContain(
+      'bff_resolved="$(git -C .pantheon-agora-compat rev-parse "${bff_ref}")"',
+    );
+    expect(restore).toContain(
+      '--backend-dev-ref "${bff_ref}"',
+    );
+    expect(restore).toContain(
+      '--frontend-dev-ref "${fe_ref}"',
+    );
+    expect(restore).toContain("continue-on-error: true");
+    expect(restore).toContain("if: always()");
+    expect(restore).not.toContain("refs/remotes/origin/dev");
+  });
+
+  it("proves concurrent and different-pair negative isolation under namespaced refs", () => {
+    expect(watchdogWorkflow).toContain(
+      'ref_prefix="refs/pantheon-proof/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"',
+    );
+    expect(watchdogWorkflow).toContain(
+      'if [[ "${fe_resolved}" != "${CANDIDATE_SHA}" || "${bff_resolved}" != "${BFF_SHA}" ]]; then',
+    );
+    expect(watchdogWorkflow).toContain("Restore exact pair before any mutable successor action");
+    expect(watchdogWorkflow).toContain("if: always()");
+  });
+
+  it("proves read-only restore falls back to safe sibling CAS when Agora evidence revalidation fails", () => {
+    expect(watchdogWorkflow).toContain("Revalidate exact Agora pair before restore");
+    expect(watchdogWorkflow).toContain("continue-on-error: true");
+    expect(watchdogWorkflow).toContain("Restore exact pair before any mutable successor action");
+    expect(watchdogWorkflow).toContain("if: always()");
+    expect(watchdogWorkflow).toContain("PANTHEON_DEPLOY_PROFILE: read-only-restore");
+    expect(deployScript).toContain('if [[ "${DEPLOY_PROFILE}" == "read-only-restore" ]]; then');
+    expect(deployScript).toContain(
+      "Notice: proceeding with read-only restore despite rejected or invalid Agora compatibility evidence.",
+    );
+    expect(deployScript).toContain("restore_paired_safe_release");
   });
 
   it("canonicalizes the parent binding digest once for both strict consumers", () => {
@@ -551,9 +617,7 @@ describe("paired Pantheon release workflow", () => {
       coordinator.match(/steps\.binding_upload\.outputs\.artifact-digest/gu),
     ).toHaveLength(1);
     expect(deployWorkflow.match(/actions: write/gu)).toHaveLength(1);
-    expect(integrationWorkflow.match(/secrets\.PANTHEON_BFF_/gu)).toHaveLength(
-      11,
-    );
+    expect(integrationWorkflow).not.toContain("secrets.PANTHEON_BFF_");
   });
 
   it("binds hosted proof and manifests to the exact source pair", () => {
@@ -610,5 +674,29 @@ describe("paired Pantheon release workflow", () => {
     expect(branchWorkflow).toContain("name: Checkout Pantheon contract bundle");
     expect(branchWorkflow).toContain("PANTHEON_CONTRACT_ROOT: pantheon-contract");
     expect(branchWorkflow).toContain("run: npm run test:contract");
+  });
+
+  it("authorizes functional-closure write proof under the single parent coordinator and watchdog", () => {
+    const authorization = integrationWorkflow.slice(
+      integrationWorkflow.indexOf("  proof-authorization:"),
+      integrationWorkflow.indexOf("  integration-gate:"),
+    );
+    const authorizedProof = integrationWorkflow.slice(
+      integrationWorkflow.indexOf("  authorized-write-proof:"),
+    );
+
+    expect(authorization).toContain(
+      "inputs.functional_closure_write_proof == 'true'",
+    );
+    expect(authorization).toContain("hasFunctionalClosureProof");
+    expect(authorizedProof).toContain(
+      "inputs.functional_closure_write_proof == 'true'",
+    );
+    expect(authorizedProof).toContain(
+      "Run Agora functional-closure hosted journey",
+    );
+    expect(authorizedProof).toContain(
+      "Run Management and Management AI functional-closure hosted journeys",
+    );
   });
 });

@@ -1,0 +1,96 @@
+{
+  "taskId": "PFG-MGMT-FE-READONLY-RUNTIME-ACTIONS-20260823",
+  "owner": "Antigravity",
+  "reviewer": "Codex2",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/PFG-MGMT-FE-READONLY-RUNTIME-ACTIONS-20260823",
+  "base_commit": "2b45d9dd4f27d9125db2afdae70cc9db1e168f6c",
+  "status": "review",
+  "timestamp": "2026-08-23T13:48:00Z",
+  "modifiedSurfaces": [
+    "src/management/pages/Runtimes.tsx",
+    "src/management/pages/Runtimes.test.tsx",
+    "docs/deployment/evidence/product-functional-closure/PFG-MGMT-FE-READONLY-RUNTIME-ACTIONS-20260823/evidence.json"
+  ],
+  "observed_dev_deployment": {
+    "observed_at": "2026-08-23T13:44:00Z",
+    "url": "https://pantheon-lupin-dev-fe.35.201.204.12.sslip.io/deployment.json",
+    "fe_commit": "2b45d9dd4f27d9125db2afdae70cc9db1e168f6c",
+    "bff_commit": "a7fdb263cfd4808ca67c4afec0690fb72c036428",
+    "profile": "read-only",
+    "buildMode": {
+      "VITE_BFF_MODE": "live",
+      "VITE_BFF_FALLBACK": "strict",
+      "VITE_BFF_REAL_WRITES": "false",
+      "VITE_BFF_ALLOW_DEV_STUB_WRITES": "false",
+      "VITE_BFF_EMBEDDED_BEARER_TOKEN": "false"
+    },
+    "deploymentState": "accepted",
+    "releaseName": "20260823T121738Z-2b45d9dd4f27-gate-32638053870-32638656350-1-3244774",
+    "candidate_deployed": false,
+    "note": "Currently served dev FE runs base commit 2b45d9dd; candidate head will deploy after PR merge into dev."
+  },
+  "hosted_read_only_build_verification": {
+    "build_profile": "read-only",
+    "command": "VITE_GCP_IDENTITY_API_KEY=AIza01234567890123456789012345678901234 VITE_GCP_IDENTITY_PROJECT_ID=pantheon-lupin-dev-20260719 VITE_GCP_IDENTITY_AUTH_DOMAIN=pantheon-lupin-dev-20260719.firebaseapp.com VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build",
+    "result": "passed",
+    "behavior": "Production build bundles read-only profile where realWritesEnabled() evaluates to false, rendering runtime action triggers and menu items disabled with NON_PRODUCTION_COMMAND_REASON title and preventing any runActionSafe or HighRiskConfirm invocation."
+  },
+  "disposition": {
+    "readOnlyProfile": {
+      "behavior": "When VITE_BFF_REAL_WRITES is false, runtime action controls are disabled across the UI.",
+      "uiGuards": [
+        "Dropdown trigger button is disabled with aria-disabled='true' and title set to NON_PRODUCTION_COMMAND_REASON",
+        "All DropdownMenuItems (restart, drain, move, scale, disable_new, quarantine, inspect_logs, emergency_kill) are disabled when canAct is false",
+        "run() mutation handler validates realWritesEnabled() and returns early if writes are disabled",
+        "HighRiskConfirm modal open prop is conditioned on realWritesEnabled() and onConfirm validates realWritesEnabled() before dispatching"
+      ]
+    },
+    "realWriteProfile": {
+      "behavior": "When VITE_BFF_REAL_WRITES is true, governed runtime mutations are enabled for non-fleetDerived rows.",
+      "supportedActions": [
+        "restart: dispatches restart mutation to runActionSafe with success toast",
+        "disable_new: maps to quarantine action with memo 'disable_new_deployments'",
+        "emergency_kill: opens HighRiskConfirm dialog enforcing minimum 80-character audit memo and confirmation token before dispatching",
+        "fleetDerived: remains disabled even in real-write mode to prevent invalid mutations on derived fleet aggregates"
+      ]
+    }
+  },
+  "acceptanceVerification": {
+    "readOnlyControlsDisabled": true,
+    "nonProductionReasonTitlePresent": true,
+    "runActionSafeGuardedAgainstReadOnly": true,
+    "highRiskConfirmGuardedAgainstReadOnly": true,
+    "realWriteRestartEnabled": true,
+    "realWriteDisableNewMappedToQuarantine": true,
+    "realWriteEmergencyKillConfirmedViaHighRiskConfirm": true,
+    "fleetDerivedRowsDisabledInRealWrite": true,
+    "focusedComponentTestsPassed": true,
+    "managementSuitePassed": true,
+    "typecheckPassed": true,
+    "readOnlyProductionBuildPassed": true
+  },
+  "validation": {
+    "focused_tests": {
+      "command": "vitest run src/management/pages/Runtimes.test.tsx",
+      "result": "passed: 7 tests"
+    },
+    "management_suite": {
+      "command": "vitest run src/management",
+      "result": "passed: 47 files, 297 tests"
+    },
+    "contract_tests": {
+      "command": "npm run test:contract",
+      "result": "passed: 7 tests, contract bundle aligned"
+    },
+    "typecheck": {
+      "command": "npm run typecheck",
+      "result": "passed"
+    },
+    "read_only_build": {
+      "command": "npm run build (with strict-live read-only environment variables)",
+      "result": "passed"
+    }
+  }
+}

@@ -458,11 +458,15 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
       "node scripts/validate-persona-hosted-proof-env.mjs",
     );
     expect(authorizedProof).toContain(
-      "PANTHEON_BFF_RBAC_TOKENS_JSON: ${{ secrets.PANTHEON_BFF_RBAC_TOKENS_JSON }}",
+      "Mint fresh short-lived proof credentials immediately before writes",
     );
+    expect(authorizedProof).toContain(
+      "DEV_LOGIN_VIEWER_CLIENT_SECRET: ${{ secrets.DEV_BFF_DEV_LOGIN_VIEWER_CLIENT_SECRET }}",
+    );
+    expect(authorizedProof).not.toContain("secrets.PANTHEON_BFF_");
     expect(
       authorizedProof.indexOf(
-        "node scripts/validate-persona-hosted-proof-env.mjs",
+        "Validate freshly minted hosted proof credentials before writes",
       ),
     ).toBeLessThan(
       authorizedProof.indexOf(
@@ -509,21 +513,27 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     expect(hostedPersonaInteractionSpec).not.toContain("page.route(");
     expect(hostedPersonaInteractionSpec).toContain("minimumTtlSeconds: 480");
     expect(hostedPersonaCredentialValidator).toContain(
-      "HOSTED_PROOF_MIN_CREDENTIAL_TTL_SECONDS = 1200",
+      "PANTHEON_HOSTED_PROOF_MIN_CREDENTIAL_TTL_SECONDS",
+    );
+    expect(hostedPersonaCredentialValidator).toContain(
+      "PANTHEON_HOSTED_PROOF_MAX_CREDENTIAL_AGE_SECONDS",
+    );
+    expect(hostedPersonaCredentialValidator).toContain(
+      "was not minted within the hosted proof preflight window",
     );
     expect(hostedPersonaCredentialValidator).toContain("parts.length !== 3");
     expect(hostedPersonaCredentialValidator).toContain(
       "operatorSubject === viewerSubject",
     );
     expect(authorizedProof).toContain("--retries=0 --reporter=list,json");
-    // Both credentialed browser suites run desktop and mobile with artifacts
-    // disabled: Persona (2 invocations) and Trade Journeys (2 invocations).
-    expect(authorizedProof.match(/--trace=off/gu)).toHaveLength(4);
+    // Credentialed browser suites run with artifacts disabled:
+    // Persona (2), Trade Journeys (2), Agora (1), and Management (1).
+    expect(authorizedProof.match(/--trace=off/gu)).toHaveLength(6);
     expect(
       authorizedProof.match(
         /PANTHEON_CREDENTIALED_PLAYWRIGHT_NO_ARTIFACTS=1/gu,
       ),
-    ).toHaveLength(4);
+    ).toHaveLength(6);
     expect(playwrightConfig).toContain(
       'process.env.PANTHEON_CREDENTIALED_PLAYWRIGHT_NO_ARTIFACTS === "1"',
     );
@@ -833,6 +843,42 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     );
     expect(deployWorkflow).not.toContain(
       "needs.deploy.outputs.deployment_profile == 'operator-live'",
+    );
+  });
+
+  it("integrates functional-closure Agora and Management journeys into the bounded write-proof coordinator", () => {
+    expect(integrationWorkflow).toContain("functional_closure_write_proof:");
+    expect(deployWorkflow).toContain("-f functional_closure_write_proof=true");
+
+    const authorizedProof = integrationWorkflow.slice(
+      integrationWorkflow.indexOf("  authorized-write-proof:"),
+    );
+    expect(authorizedProof).toContain(
+      "inputs.functional_closure_write_proof == 'true'",
+    );
+    expect(authorizedProof).toContain(
+      "Run Agora functional-closure hosted journey",
+    );
+    expect(authorizedProof).toContain(
+      "Run Management and Management AI functional-closure hosted journeys",
+    );
+    expect(authorizedProof).toContain(
+      "npx playwright test e2e/agora-product-journey.spec.ts",
+    );
+    expect(authorizedProof).toContain(
+      "e2e/management-product-journey.spec.ts",
+    );
+    expect(authorizedProof).toContain(
+      "e2e/management-ai-product-journey.spec.ts",
+    );
+
+    // Watchdog and parent deploy coordination remain single and bounded
+    expect(deployWorkflow.match(/proof-coordinator:/gu)).toHaveLength(1);
+    expect(
+      deployWorkflow.match(/proof-restore-confirmation:/gu),
+    ).toHaveLength(1);
+    expect(deployWorkflow.match(/pantheon-proof-watchdog\.yml/gu)).toHaveLength(
+      2,
     );
   });
 });

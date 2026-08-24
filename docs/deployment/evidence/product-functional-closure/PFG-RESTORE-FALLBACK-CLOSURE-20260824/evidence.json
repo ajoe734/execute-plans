@@ -1,0 +1,63 @@
+{
+  "schema_version": "pantheon.product-functional-closure.restore-fallback-closure-evidence.v1",
+  "task_id": "PFG-RESTORE-FALLBACK-CLOSURE-20260824",
+  "taskId": "PFG-RESTORE-FALLBACK-CLOSURE-20260824",
+  "owner": "Antigravity2",
+  "reviewer": "Codex2",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/PFG-RESTORE-FALLBACK-CLOSURE-20260824",
+  "base_commit": "92681e62e4c9e465d9c53a62d07fafa0baafbeef",
+  "status": "ready_for_review",
+  "timestamp": "2026-08-24T03:36:00Z",
+  "scope": {
+    "restore_fallback_repair": [
+      "Allow read-only-restore profile to proceed with atomic CAS switch to the existing safe sibling release even when Agora compatibility evidence is absent or rejected.",
+      "Preserve strict Agora compatibility evidence enforcement on standard deployment profiles (read-only, operator-live, and write-proof).",
+      "Ensure evidence logging initializes cleanly without invalid details when Agora evidence is omitted during restore.",
+      "Verify exact candidate pair preservation and ensure no writable successor directory is created during restore."
+    ],
+    "not_changed": [
+      "No change to scripts/release-evidence.mjs or global validator contracts.",
+      "Normal read-only, operator-live, and write-proof profiles continue to reject absent, invalid, or mismatched Agora compatibility evidence.",
+      "Source Ingestion remains reconcile-only and no proof is executed by this repair.",
+      "No live capital action or unauthenticated deployment mutation."
+    ]
+  },
+  "modified_surfaces": [
+    "scripts/deploy-dev-vm.sh",
+    "scripts/test-deploy-dev-vm.sh",
+    "src/test/paired-release-workflow.test.ts",
+    "docs/deployment/evidence/product-functional-closure/PFG-RESTORE-FALLBACK-CLOSURE-20260824/evidence.json"
+  ],
+  "acceptance_coverage": {
+    "readonly_restore_cas_on_absent_or_rejected_agora_evidence": true,
+    "normal_profiles_reject_absent_or_invalid_agora_evidence": true,
+    "watchdog_compat_failure_safely_restores_without_leaving_write_proof_live": true,
+    "positive_and_negative_tests_prove_pair_preservation_and_no_writable_successor": true,
+    "source_ingestion_reconcile_only_no_proof_executed": true,
+    "exact_reviewed_head_merged_with_durable_evidence": true
+  },
+  "validation": {
+    "deploy_controller_harness": {
+      "command": "bash scripts/test-deploy-dev-vm.sh",
+      "result": "passed: 31 passed, 0 failed"
+    },
+    "vitest_paired_release_workflow": {
+      "command": "npx vitest run src/test/paired-release-workflow.test.ts",
+      "result": "passed: 1 file, 15 tests"
+    },
+    "vitest_full_suite": {
+      "command": "npm test -- --run",
+      "result": "passed: 187 files, 1872 tests"
+    }
+  },
+  "review_request": {
+    "reviewer_must_confirm": [
+      "read-only-restore profile reaches the existing paired safe-sibling CAS after exact candidate pair validation even when Agora compatibility evidence is absent or rejected.",
+      "Standard read-only, operator-live, and write-proof profiles continue to reject absent, invalid, or mismatched Agora compatibility evidence.",
+      "No writable successor directory is created during restore and exact pair identity is retained.",
+      "Full deploy test harness (31/31) and Vitest suite (187/187 files, 1872/1872 tests) pass green."
+    ]
+  }
+}

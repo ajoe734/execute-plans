@@ -691,6 +691,16 @@ function workshopChangedBeforeMessageReadbackError(): Error {
   );
 }
 
+function reconstructionIdentityFrom(
+  response: Awaited<ReturnType<typeof reconstructWorkshopStrategy>>,
+): string {
+  const reconstructionId = response?.data?.reconstruction_id;
+  if (typeof reconstructionId !== "string" || !reconstructionId.trim()) {
+    throw new Error("Reconstruction result omitted its canonical reconstruction_id.");
+  }
+  return reconstructionId.trim();
+}
+
 function waitForReadbackDelay(durationMs: number): Promise<void> {
   return new Promise((resolve) => {
     globalThis.setTimeout(resolve, durationMs);
@@ -786,6 +796,7 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
   const [dailyRuntimeMessage, setDailyRuntimeMessage] = useState<string | null>(null);
   const [messageReceiptState, setMessageReceiptState] = useState<"none" | "accepted" | "processing" | "succeeded" | "degraded" | "failed">("none");
   const [reconstructionState, setReconstructionState] = useState<"none" | "admitted" | "completed" | "failed">("none");
+  const [reconstructionId, setReconstructionId] = useState<string | null>(null);
   const [strategySpecIdentity, setStrategySpecIdentity] = useState<StrategySpecIdentity | null>(null);
 
   // Custom states for PINT-005
@@ -1139,17 +1150,20 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
         );
         setWorkshopEvents(messageEvents);
 
-        // Reconstruction is a BFF-owned durable operation. Its receipt and
-        // subsequent Workshop card/version readback are intentionally kept
-        // separate from the Persona interaction result below.
+        // Reconstruction is a BFF-owned durable operation. Its response owns
+        // the reconstruction identity; a subsequent versions readback owns
+        // durable Strategy and Registry identities.
         setReconstructionState("admitted");
+        setReconstructionId(null);
         try {
           const reconstruction = await reconstructWorkshopStrategy(workshopId);
-          setReconstructionState(reconstruction.data.command_receipt.status);
+          setReconstructionId(reconstructionIdentityFrom(reconstruction));
+          setReconstructionState("completed");
           refreshCards();
           refreshEvents();
           refreshStrategySpec();
         } catch {
+          setReconstructionId(null);
           setReconstructionState("failed");
         }
 
@@ -1714,13 +1728,14 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
                 reconstructionState === "failed" && "border-red-200 bg-red-50 text-red-700",
               )}
               data-reconstruction-state={reconstructionState}
+              data-reconstruction-id={reconstructionId ?? undefined}
               data-testid="workshop-reconstruction-state"
             >
               <span>
                 {reconstructionState === "admitted"
                   ? "Strategy reconstruction admitted"
                   : reconstructionState === "completed"
-                    ? "Strategy reconstruction receipt recorded"
+                    ? "Strategy reconstruction result recorded"
                     : "Strategy reconstruction unavailable"}
               </span>
               {strategySpecIdentity ? (

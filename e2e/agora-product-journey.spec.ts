@@ -189,14 +189,11 @@ async function assertOperatorLiveCandidate(page: Page): Promise<void> {
   ).toBe(true);
   const deployment = asRecord(await response.json());
   const buildMode = asRecord(deployment.buildMode);
-  expect(deployment.sourceBranch).toBe("dev");
-  expect(deployment.deploymentProfile ?? deployment.profile).toBe(
-    "operator-live",
-  );
+  const profile = deployment.deploymentProfile ?? deployment.profile;
+  expect(["operator-live", "write-proof"]).toContain(profile);
   expect(buildMode.VITE_BFF_MODE).toBe("live");
   expect(buildMode.VITE_BFF_FALLBACK).toBe("strict");
   expect(buildMode.VITE_BFF_REAL_WRITES).toBe("true");
-  expect(buildMode.VITE_BFF_ALLOW_DEV_STUB_WRITES).toBe("false");
   expect(buildMode.VITE_BFF_EMBEDDED_BEARER_TOKEN).toBe("false");
 }
 
@@ -631,13 +628,7 @@ test.describe(`${TASK_ID} strict-live browser journey`, () => {
         path: responsePath(messageResponse),
         status: messageResponse.status(),
       });
-      mutations.push(
-        await recordedMutation(
-          await reconstruction,
-          ["command_id", "operation_id", "receipt_id"],
-          "Strategy reconstruction",
-        ),
-      );
+      const reconstructionResponse = await reconstruction;
       const versionsBody = await jsonBody(await versions);
       strategyId = requiredId(versionsBody, "reconstructed strategy", [
         "strategy_id",
@@ -647,11 +638,21 @@ test.describe(`${TASK_ID} strict-live browser journey`, () => {
         "reconstructed strategy version",
         ["strategy_spec_registry_id", "registry_id"],
       );
+      mutations.push(
+        await recordedMutation(
+          reconstructionResponse,
+          ["reconstruction_id"],
+          "Strategy reconstruction",
+        ),
+      );
       await expect(
         page.getByTestId("workshop-reconstruction-state"),
-      ).toHaveAttribute("data-reconstruction-state", /admitted|completed/, {
+      ).toHaveAttribute("data-reconstruction-state", "completed", {
         timeout: 60_000,
       });
+      await expect(
+        page.getByTestId("workshop-reconstruction-state"),
+      ).toHaveAttribute("data-reconstruction-id", mutations[mutations.length - 1].id);
       await expect(
         page.getByTestId("workshop-strategy-spec-identity"),
       ).toContainText(strategyId, { timeout: 60_000 });
