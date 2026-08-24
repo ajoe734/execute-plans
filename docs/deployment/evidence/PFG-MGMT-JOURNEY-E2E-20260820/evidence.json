@@ -1,5 +1,5 @@
 {
-  "schema_version": "pantheon.pfg-management-journey-e2e-evidence.v2",
+  "schema_version": "pantheon.pfg-management-journey-e2e-evidence.v3",
   "task_id": "PFG-MGMT-JOURNEY-E2E-20260820",
   "owner": "Codex",
   "reviewer": "Antigravity2",
@@ -12,20 +12,20 @@
     "draft": true,
     "base": "dev"
   },
-  "status": "blocked_external_hosted_acceptance",
-  "updated_at": "2026-08-23T13:16:14Z",
+  "status": "in_progress_external_runtime",
+  "updated_at": "2026-08-24T15:46:03Z",
   "source_binding": {
-    "deployed_frontend_baseline": "2b45d9dd4f27d9125db2afdae70cc9db1e168f6c",
-    "deployed_backend": "a7fdb263cfd4808ca67c4afec0690fb72c036428",
-    "journey_spec_commit": "f5f842a0355b9d078ee0c064eca0722564a42fcd",
+    "deployed_frontend_baseline": "cc4007f7f78a31c73548ce85457af17a45a4c4b9",
+    "deployed_backend": "40de8fcb1c69fad0bf5e54d4c0bd6e508c9162e0",
+    "journey_spec_commit": "1a35cae8e6d4e0b223ab4386f30dc2ae04213ece",
     "workflow_head_branch": "task/PFG-MGMT-JOURNEY-E2E-20260820",
     "workflow_dispatch_exact_pair_enforced": true
   },
   "deployment": {
     "frontend_url": "https://pantheon-lupin-dev-fe.35.201.204.12.sslip.io",
     "bff_url": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io",
-    "frontend_commit": "2b45d9dd4f27d9125db2afdae70cc9db1e168f6c",
-    "bff_commit": "a7fdb263cfd4808ca67c4afec0690fb72c036428",
+    "frontend_commit": "cc4007f7f78a31c73548ce85457af17a45a4c4b9",
+    "bff_commit": "40de8fcb1c69fad0bf5e54d4c0bd6e508c9162e0",
     "profile": "read-only",
     "build_mode": {
       "VITE_BFF_MODE": "live",
@@ -33,19 +33,19 @@
       "VITE_BFF_REAL_WRITES": "false",
       "VITE_BFF_ALLOW_DEV_STUB_WRITES": "false"
     },
-    "deployment_state": "accepted",
+    "deployment_state": "standby",
     "release_controller_run": {
-      "id": 32636397681,
+      "id": 32679566250,
       "repository": "ajoe734/pantheon",
       "workflow": "nonprod-deploy.yml"
     },
     "integration_gate_run": {
-      "id": 32638053870,
-      "url": "https://github.com/ajoe734/execute-plans/actions/runs/32638053870"
+      "id": 32679780054,
+      "url": "https://github.com/ajoe734/execute-plans/actions/runs/32679780054"
     },
     "deployment_evidence_url": "https://pantheon-lupin-dev-fe.35.201.204.12.sslip.io/deployment.json"
   },
-  "hosted_acceptance": {
+  "historical_hosted_acceptance": {
     "workflow": ".github/workflows/pfg-mgmt-journey-e2e-hosted-acceptance.yml",
     "run_id": 32641449292,
     "run_url": "https://github.com/ajoe734/execute-plans/actions/runs/32641449292",
@@ -77,6 +77,26 @@
       "digest_sha256": "75381a941c097e71a81358ec0dca4c649e00a565d1c31e1933fc349ec7f0a133",
       "size_bytes": 225816,
       "retention_expires_at": "2026-11-21T13:08:34Z"
+    }
+  },
+  "continuation": {
+    "source_anchor": "1a35cae8e6d4e0b223ab4386f30dc2ae04213ece",
+    "read_only_contract": "The hosted journey now treats provider-backed navigate/openDrawer/focusPanel plus disabled runBffAction and zero command POSTs as a successful read-only proof.",
+    "bounded_write_contract": "Only deploymentProfile=write-proof with VITE_BFF_REAL_WRITES=true and VITE_BFF_ALLOW_DEV_STUB_WRITES=true may execute the mutation branches.",
+    "paper_only_guard": "Runtime quarantine selects only an enabled, non-quarantined row whose environment cell is exactly paper; live rows are rejected before click.",
+    "write_proof_controller": {
+      "workflow": ".github/workflows/pantheon-integration-gate.yml",
+      "input": "functional_closure_write_proof=true",
+      "authorization_record": "docs/deployment/evidence/product-functional-closure/PFG-BOUNDED-FUNCTIONAL-CLOSURE-PROOF-20260824/evidence.json",
+      "authorization_scope": "one bounded paper-only functional-closure write-proof",
+      "automatic_restore": "paired read-only sibling via pantheon-proof-watchdog.yml"
+    },
+    "current_external_state": {
+      "observed_at": "2026-08-24T15:40:59Z",
+      "healthz_http_status": 200,
+      "readyz_http_status": 503,
+      "bff_status": "degraded",
+      "reason": "lifecycle_projector last_error InvalidLifecycleEvent: source row/payload created_at mismatch; last_poll_stale"
     }
   },
   "task_scoped_artifacts": [
@@ -132,22 +152,23 @@
     },
     "read_only_profile_honestly_disabled": {
       "verified": false,
-      "status": "failed_enabled_runtime_control",
-      "observed": "Runtime mutation control 4/23 was enabled while VITE_BFF_REAL_WRITES=false.",
-      "safety_disposition": "The E2E stopped before clicking any mutation control."
+      "status": "source_fix_deployed_pending_hosted_rerun",
+      "historical_observation": "Run 32641449292 found runtime mutation control 4/23 enabled while VITE_BFF_REAL_WRITES=false and stopped before click.",
+      "repair": "PFG-MGMT-FE-READONLY-RUNTIME-ACTIONS-20260823 merged as 77acead34e65f65ce46655c68b9ebcbc4a0afd6e; merge d1a13551 is an ancestor of served FE cc4007f7.",
+      "required_rerun": "All Runtime action-menu buttons and the provider-returned runBffAction must be disabled with zero domain command POSTs."
     },
     "dev_paper_action_admitted_terminal_readback": {
       "verified": false,
-      "status": "not_executed",
-      "reason": "The served deployment is read-only and the operator did not authorize governed write testing. The enabled-control defect must not be bypassed with a client mock."
+      "status": "pending_authorized_bounded_write_proof",
+      "reason": "The current served profile is read-only and the BFF is not ready. The already-authorized bounded controller must deploy the paired write-proof artifact, run only against an eligible paper runtime, and restore the read-only sibling."
     },
     "reload_idempotency_persisted": {
       "verified": false,
-      "status": "not_executed_without_governed_write_profile"
+      "status": "pending_authorized_bounded_write_proof"
     },
     "management_ai_provider_answer_verified": {
       "verified": false,
-      "status": "provider_unreachable",
+      "status": "historical_provider_unreachable_pending_healthy_rerun",
       "error_code": "OPENCLAW_RESPONSES_UNREACHABLE",
       "stream_summary": {
         "answerChars": 0,
@@ -162,7 +183,7 @@
     },
     "management_ai_ui_actions_executed": {
       "verified": false,
-      "status": "not_reached_without_provider_turn",
+      "status": "pending_healthy_read_only_and_write_proof_reruns",
       "required_actions": [
         "navigate",
         "openDrawer",
@@ -172,8 +193,8 @@
     },
     "confirmed_domain_action_executed_exactly_once": {
       "verified": false,
-      "status": "not_executed",
-      "reason": "No provider turn was available and the deployment had real writes disabled."
+      "status": "pending_authorized_bounded_write_proof",
+      "reason": "The source now requires one receipt-bearing command POST and zero replay POSTs, but the hosted BFF must be ready before the controller can execute it."
     }
   },
   "network_and_latency": {
@@ -209,7 +230,9 @@
       "Per-surface completed 2xx BFF provenance assertions",
       "Safe SSE event summaries that expose provider errors without credentials or prompt payloads",
       "All-row read-only runtime control assertions before any click",
-      "Sanitized task-scoped screenshots and network response metadata only"
+      "Sanitized task-scoped screenshots and network response metadata only",
+      "Separate successful read-only and bounded write-proof acceptance branches",
+      "Exact paper-row selection with pre-action state, receipt, terminal state, reload state, and replay counters"
     ],
     "production_seed_import_check": {
       "command": "git grep -n -E 'from[[:space:]].*seed|import\\(.*seed' -- src/management",
@@ -223,8 +246,8 @@
     ]
   },
   "validation": {
-    "status": "source_passed_hosted_blocked",
-    "completed_at": "2026-08-23T13:16:14Z",
+    "status": "source_passed_hosted_blocked_external_runtime",
+    "completed_at": "2026-08-24T15:46:03Z",
     "checks": [
       {
         "command": "git diff --check",
@@ -240,7 +263,11 @@
       },
       {
         "command": "npx vitest run src/lib/auth/bffBrowserSession.test.ts src/test/deploy-safe-defaults.test.ts",
-        "result": "passed; 2 files and 25 tests passed"
+        "result": "historical source check passed; superseded by the focused 51-test continuation check"
+      },
+      {
+        "command": "npx vitest run --maxWorkers=2 --testTimeout=15000 --hookTimeout=30000 src/management/pages/Runtimes.test.tsx src/management/components/agent/AgentPanelBody.test.tsx src/lib/bff-v1/__tests__/managementAi.test.ts src/test/deploy-safe-defaults.test.ts",
+        "result": "passed; 4 files and 51 tests passed"
       },
       {
         "command": "git grep -n -E 'from[[:space:]].*seed|import\\(.*seed' -- src/management",
@@ -248,23 +275,19 @@
       },
       {
         "command": "hosted workflow run 32641449292",
-        "result": "1 passed, 2 failed for the two explicitly recorded external acceptance blockers"
+        "result": "historical diagnostic only; 1 passed and 2 failed before the runtime-control repair and profile-split source anchor"
+      },
+      {
+        "command": "curl /healthz and /readyz on the declared Pantheon dev BFF",
+        "result": "healthz HTTP 200 degraded; readyz HTTP 503; InvalidLifecycleEvent source row/payload created_at mismatch"
       }
     ]
   },
   "blockers": [
     {
-      "scope": "external_provider_runtime",
-      "detail": "Management AI live stream emitted OPENCLAW_RESPONSES_UNREACHABLE and no provider-backed assistant turn."
-    },
-    {
-      "scope": "external_product_behavior",
-      "detail": "The accepted read-only frontend deployment exposes enabled runtime mutation controls; the E2E detected control 4/23 as enabled."
-    },
-    {
-      "scope": "governed_write_authorization",
-      "detail": "Exactly-once action and terminal reload proof requires a separately authorized governed write-enabled dev-paper profile; no such authorization was provided for this dispatch."
+      "scope": "external_bff_readiness",
+      "detail": "The declared dev BFF /readyz returns HTTP 503 because lifecycle_projector is stale after InvalidLifecycleEvent source row/payload created_at mismatch. No exact-pair hosted journey or bounded write proof can start while this remains degraded."
     }
   ],
-  "final_disposition": "Do not mark done or merge as acceptance-complete. Re-run the same exact-pair workflow after the provider runtime is healthy and read-only mutation controls are disabled. Execute the exactly-once write branch only under an explicitly authorized governed write-enabled dev-paper profile."
+  "final_disposition": "Do not mark done or claim hosted acceptance complete. After external BFF readiness is restored, run the read-only workflow on the exact served pair, then run the already-authorized single bounded functional-closure write proof through the parent controller and record its automatic read-only restore."
 }
