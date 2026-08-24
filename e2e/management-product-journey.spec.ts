@@ -143,6 +143,11 @@ async function installHostedSession(
         const config = {
           VITE_BFF_DEV_LOGIN_CLIENT_ID: clientId,
           VITE_BFF_DEV_LOGIN_CLIENT_SECRET: clientSecret,
+          // The read-only build intentionally leaves the VITE keys blank. The
+          // deployed helper treats that blank value as authoritative, so also
+          // provide its existing runtime-only aliases for hosted acceptance.
+          PANTHEON_DEV_BFF_OIDC_CLIENT_ID: clientId,
+          PANTHEON_DEV_BFF_OIDC_CLIENT_SECRET: clientSecret,
           VITE_BFF_TENANT_ID: tenantId,
         };
         (window as unknown as Record<string, unknown>).__PANTHEON_RUNTIME_CONFIG__ = config;
@@ -154,6 +159,32 @@ async function installHostedSession(
 }
 
 
+async function waitForHostedRouteReady(page: Page): Promise<void> {
+  await page.waitForFunction(
+    () => {
+      const root = document.querySelector("#root");
+      if (!root || root.childElementCount === 0) return false;
+      return window.location.pathname === "/auth"
+        || !root.textContent?.includes("Verifying Pantheon session");
+    },
+    undefined,
+    { timeout: 45_000 },
+  );
+  const diagnostic = await page.evaluate(() => ({
+    pathname: window.location.pathname,
+    authReason: new URLSearchParams(window.location.search).get("reason"),
+    headings: Array.from(document.querySelectorAll("h1, h2"))
+      .slice(0, 5)
+      .map((element) => element.textContent?.trim() || ""),
+    hasAuthError: Boolean(document.querySelector('[aria-label="auth-error"]')),
+    isVerifying: document.body.innerText.includes("Verifying Pantheon session"),
+  }));
+  console.log(`[PFG NAV] ${JSON.stringify(diagnostic)}`);
+  if (diagnostic.pathname === "/auth") {
+    throw new Error(`Hosted browser session redirected to /auth (reason=${diagnostic.authReason ?? "unknown"})`);
+  }
+}
+
 async function navigateWithAuth(page: Page, url: string): Promise<void> {
   await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30_000 });
   if (page.url().includes("/auth")) {
@@ -161,6 +192,18 @@ async function navigateWithAuth(page: Page, url: string): Promise<void> {
       await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30_000 });
     });
   }
+  await waitForHostedRouteReady(page);
+}
+
+async function expectSurface2xx(
+  events: LatencySample[],
+  label: string,
+  matches: (pathname: string) => boolean,
+): Promise<void> {
+  await expect.poll(
+    () => events.some((event) => event.status >= 200 && event.status < 300 && matches(event.pathname)),
+    { message: `Expected completed 2xx BFF provenance for ${label}`, timeout: 20_000 },
+  ).toBe(true);
 }
 
 async function assertDeploymentPair(request: APIRequestContext): Promise<{
@@ -177,9 +220,24 @@ async function assertDeploymentPair(request: APIRequestContext): Promise<{
   if (EXPECTED_FE_SHA) {
     expect(String(deployment.commit ?? "").toLowerCase()).toBe(EXPECTED_FE_SHA);
   }
+  if (EXPECTED_BFF_SHA) {
+    expect(String(deployment.bffCommit ?? deployment.bffSourceCommitSha ?? "").toLowerCase()).toBe(EXPECTED_BFF_SHA);
+  }
   expect(deployment.sourceBranch).toBe("dev");
   expect(buildMode.VITE_BFF_MODE).toBe("live");
   expect(buildMode.VITE_BFF_FALLBACK).toBe("strict");
+  const deploymentProfile = String(deployment.deploymentProfile ?? deployment.profile ?? "");
+  expect(
+    ["read-only", "write-proof"],
+    `Management journey must run only against read-only or bounded write-proof, got ${deploymentProfile || "missing"}`,
+  ).toContain(deploymentProfile);
+  if (deploymentProfile === "read-only") {
+    expect(buildMode.VITE_BFF_REAL_WRITES).toBe("false");
+    expect(buildMode.VITE_BFF_ALLOW_DEV_STUB_WRITES).toBe("false");
+  } else {
+    expect(buildMode.VITE_BFF_REAL_WRITES).toBe("true");
+    expect(buildMode.VITE_BFF_ALLOW_DEV_STUB_WRITES).toBe("true");
+  }
 
   const readyResponse = await request.get(`${BFF_BASE_URL}/readyz`);
   expect(readyResponse.ok(), `/readyz returned ${readyResponse.status()}`).toBe(true);
@@ -239,7 +297,7 @@ function setupNetworkTracker(page: Page) {
 
 test.describe("Management Console Product Journey Hosted E2E", () => {
   test.skip(!HOSTED_REQUESTED, "requires exact hosted FE/BFF environment");
-  test.setTimeout(180_000);
+  test.setTimeout(300_000);
 
   test("Formula, Activity, Paper Telemetry, and Postmortem pages show backend-origin data or typed unavailable without synthetic content", async ({
     page,
@@ -271,6 +329,13 @@ test.describe("Management Console Product Journey Hosted E2E", () => {
       page.locator("main").getByRole("tablist").or(page.locator("main table, main [role='table'], main [role='tab'], main")).first(),
     ).toBeVisible({ timeout: 15_000 });
     await expect(page.locator("body")).not.toContainText(/serving mock|seed fallback/i);
+    await expectSurface2xx(
+      networkEvents,
+      "Formula / Rankings",
+      (pathname) => pathname.includes("/management/persona-league")
+        || pathname.includes("/ranking")
+        || pathname.includes("/formulas"),
+    );
 
     // =========================================================================
     // 2. Activity / Performance Overview (/management/performance?tab=overview)
@@ -286,6 +351,13 @@ test.describe("Management Console Product Journey Hosted E2E", () => {
       page.locator("main").getByRole("tablist").or(page.locator("main [role='tab'], main")).first(),
     ).toBeVisible({ timeout: 15_000 });
     await expect(page.locator("body")).not.toContainText(/serving mock|seed fallback/i);
+    await expectSurface2xx(
+      networkEvents,
+      "Performance overview",
+      (pathname) => pathname.includes("/management/portfolio-book/holdings")
+        || pathname.includes("/performance")
+        || pathname.includes("/metrics"),
+    );
 
     // Activity / Trading Pulse (/management/trading-pulse)
     await navigateWithAuth(page, `${FE_BASE_URL}/management/trading-pulse`);
@@ -296,6 +368,13 @@ test.describe("Management Console Product Journey Hosted E2E", () => {
       }).first(),
     ).toBeVisible({ timeout: 15_000 });
     await expect(page.locator("body")).not.toContainText(/serving mock|seed fallback/i);
+    await expectSurface2xx(
+      networkEvents,
+      "Activity / Trading Pulse",
+      (pathname) => pathname.includes("/trading-pulse")
+        || pathname.includes("/activity")
+        || pathname.includes("/events"),
+    );
 
     // =========================================================================
     // 3. Paper Telemetry: Portfolio Exposure (/management/performance?tab=exposure)
@@ -306,6 +385,11 @@ test.describe("Management Console Product Journey Hosted E2E", () => {
       page.locator("main").getByRole("tablist").or(page.locator("main").getByText(/Exposure|Telemetry|遙測|Risk Budget|No telemetry/i)).first(),
     ).toBeVisible({ timeout: 15_000 });
     await expect(page.locator("body")).not.toContainText(/serving mock|seed fallback/i);
+    await expectSurface2xx(
+      networkEvents,
+      "Paper telemetry / Exposure",
+      (pathname) => pathname.includes("/management/portfolio-book/exposure"),
+    );
 
     // Paper Telemetry: Runtimes (/management/runtimes)
     await navigateWithAuth(page, `${FE_BASE_URL}/management/runtimes`);
@@ -319,6 +403,12 @@ test.describe("Management Console Product Journey Hosted E2E", () => {
       page.locator("main table, main [role='table'], main").first(),
     ).toBeVisible({ timeout: 15_000 });
     await expect(page.locator("body")).not.toContainText(/serving mock|seed fallback/i);
+    await expectSurface2xx(
+      networkEvents,
+      "Paper telemetry / Runtimes",
+      (pathname) => pathname.includes("/runtimes")
+        || pathname.includes("/management/persona-fleet"),
+    );
 
     // =========================================================================
     // 4. Postmortem Library (/management/postmortems)
@@ -331,6 +421,18 @@ test.describe("Management Console Product Journey Hosted E2E", () => {
       }).or(page.locator("main input, main [placeholder*='Search']")).first(),
     ).toBeVisible({ timeout: 15_000 });
     await expect(page.locator("body")).not.toContainText(/serving mock|seed fallback/i);
+    await expectSurface2xx(
+      networkEvents,
+      "Postmortems",
+      (pathname) => pathname.includes("/incidents")
+        || pathname.includes("/postmortems"),
+    );
+    await expect(page.getByText(/Loading postmortems/i)).toBeHidden({ timeout: 15_000 });
+    await expect(
+      page.locator("main tbody tr").first().or(
+        page.getByText(/No incident postmortems recorded|transport degraded or unavailable/i).first(),
+      ).first(),
+    ).toBeVisible({ timeout: 15_000 });
 
     // =========================================================================
     // Per-surface BFF endpoint assertions & latency tracking
@@ -341,12 +443,21 @@ test.describe("Management Console Product Journey Hosted E2E", () => {
 
     // Require each surface specifically to have its own 2xx BFF request
     const rankingEvents = networkEvents.filter(
-      (ev) => ev.status >= 200 && ev.status < 300 && (ev.pathname.includes("/ranking") || ev.pathname.includes("/formulas")),
+      (ev) => ev.status >= 200 && ev.status < 300 && (
+        ev.pathname.includes("/management/persona-league")
+        || ev.pathname.includes("/ranking")
+        || ev.pathname.includes("/formulas")
+      ),
     );
     expect(rankingEvents.length, "Expected specific 2xx BFF request for Formula / Rankings").toBeGreaterThan(0);
 
     const perfEvents = networkEvents.filter(
-      (ev) => ev.status >= 200 && ev.status < 300 && (ev.pathname.includes("/performance") || ev.pathname.includes("/metrics")),
+      (ev) => ev.status >= 200 && ev.status < 300 && (
+        ev.pathname.includes("/management/portfolio-book/holdings")
+        || ev.pathname.includes("/management/portfolio-book/exposure")
+        || ev.pathname.includes("/performance")
+        || ev.pathname.includes("/metrics")
+      ),
     );
     expect(perfEvents.length, "Expected specific 2xx BFF request for Performance").toBeGreaterThan(0);
 
@@ -386,6 +497,10 @@ test.describe("Management Console Product Journey Hosted E2E", () => {
     const token = await getOrMintAuthToken(request);
     test.skip(!token, "requires an operator bearer token for hosted acceptance");
 
+    const { deployment } = await assertDeploymentPair(request);
+    const buildMode = (deployment.buildMode ?? {}) as JsonRecord;
+    const realWritesEnabled = String(buildMode.VITE_BFF_REAL_WRITES ?? "false").toLowerCase() === "true";
+
     const session = await assertStrictSession(request, token);
     await installHostedSession(page, { ...session, token });
 
@@ -399,15 +514,21 @@ test.describe("Management Console Product Journey Hosted E2E", () => {
     await expect(page.locator("body")).not.toContainText(/serving mock|seed fallback/i);
 
     // Verify Strategy list loads and navigate to first Strategy Detail row unconditionally
-    const strategyRow = page.locator("table tbody tr, [role='row']").first();
+    const strategyRow = page.locator("table tbody tr").first();
     await expect(strategyRow).toBeVisible({ timeout: 15_000 });
-    await strategyRow.click();
+    await Promise.all([
+      page.waitForURL((current) => /\/management\/strategies\/[^/]+$/u.test(current.pathname), { timeout: 15_000 }),
+      strategyRow.click(),
+    ]);
 
     // Mandatory assertions on Strategy Detail: lifecycle / triple state and disabled controls
     await expect(page.locator("h1, h2, [role='heading'], main").first()).toBeVisible({ timeout: 15_000 });
     await expect(
-      page.locator("text=Lifecycle").or(page.locator("text=Triple State")).or(page.locator("[class*='Stepper']")).or(page.locator("[class*='Card']")).first(),
-    ).toBeVisible({ timeout: 15_000 });
+      page.getByText("Strategy state · lifecycle × review × deployment", { exact: true }),
+    ).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText("lifecycle", { exact: true })).toBeVisible();
+    await expect(page.getByText("review", { exact: true })).toBeVisible();
+    await expect(page.getByText("deployment", { exact: true })).toBeVisible();
 
     const disabledButtons = page.locator("main button[disabled], main button[aria-disabled='true']");
     await expect(disabledButtons.first()).toBeVisible({ timeout: 15_000 });
@@ -420,16 +541,74 @@ test.describe("Management Console Product Journey Hosted E2E", () => {
     await expect(page.locator("#root")).toBeAttached();
     await expect(page.locator("body")).not.toContainText(/serving mock|seed fallback/i);
 
-    // Find first actionable runtime row and bind exact target identifier
-    const targetRow = page.locator("table tbody tr, [role='row']").first();
+    const runtimeRows = page.locator("table tbody tr");
+    await expect(runtimeRows.first()).toBeVisible({ timeout: 15_000 });
+    const actionMenuButtons = runtimeRows.locator("button");
+    await expect.poll(
+      () => actionMenuButtons.count(),
+      { message: "Expected runtime rows to expose governed action-menu controls", timeout: 15_000 },
+    ).toBeGreaterThan(0);
+
+    if (!realWritesEnabled) {
+      mkdirSync(EVIDENCE_DIR, { recursive: true });
+      await page.screenshot({ path: `${EVIDENCE_DIR}/pfg-mgmt-action-reload.png`, fullPage: true });
+      const readOnlyEvidence = {
+        schema_version: "pantheon.pfg-management-action-network.v2",
+        deployment_profile: "read-only",
+        mutation_controls_disabled: true,
+        network_events: networkEvents,
+      };
+      writeFileSync(
+        `${EVIDENCE_DIR}/pfg-mgmt-action-network.json`,
+        JSON.stringify(readOnlyEvidence, null, 2),
+        "utf8",
+      );
+
+      const actionMenuCount = await actionMenuButtons.count();
+      for (let index = 0; index < actionMenuCount; index += 1) {
+        await expect(
+          actionMenuButtons.nth(index),
+          `Read-only deployment must disable runtime mutation control ${index + 1}/${actionMenuCount} instead of falling through to synthetic client mutations`,
+        ).toBeDisabled();
+      }
+      await testInfo.attach("mgmt-read-only-action-network-events", {
+        body: Buffer.from(JSON.stringify(readOnlyEvidence, null, 2)),
+        contentType: "application/json",
+      });
+      return;
+    }
+
+    // Select only an actionable, non-terminal paper runtime. Never allow this
+    // bounded proof to fall through to a live runtime row.
+    let targetRowIndex = -1;
+    const runtimeRowCount = await runtimeRows.count();
+    for (let index = 0; index < runtimeRowCount; index += 1) {
+      const candidate = runtimeRows.nth(index);
+      const environment = (await candidate.locator("td").nth(2).innerText().catch(() => "")).trim().toLowerCase();
+      const status = (await candidate.locator("td").nth(3).innerText().catch(() => "")).trim().toLowerCase();
+      const enabledActionCount = await candidate.locator("button:not([disabled])").count();
+      if (environment === "paper" && !/quarantin/iu.test(status) && enabledActionCount > 0) {
+        targetRowIndex = index;
+        break;
+      }
+    }
+    expect(
+      targetRowIndex,
+      "Expected an actionable, non-quarantined paper runtime; refusing to select a live or already-terminal row",
+    ).toBeGreaterThanOrEqual(0);
+    const targetRow = runtimeRows.nth(targetRowIndex);
     await expect(targetRow).toBeVisible({ timeout: 15_000 });
     const targetName = (await targetRow.locator("td").first().innerText()).trim();
     expect(targetName.length, "Expected non-empty target runtime identifier").toBeGreaterThan(0);
+    await expect(targetRow.locator("td").nth(2)).toHaveText(/^\s*paper\s*$/i);
 
     // Record pre-action status
     const preActionStatusCell = targetRow.locator("td").nth(3).or(targetRow.locator("[class*='Badge'], [class*='status']")).first();
     await expect(preActionStatusCell).toBeVisible({ timeout: 10_000 });
     const preActionStatus = (await preActionStatusCell.innerText()).trim();
+    const baselineMutationCount = networkEvents.filter(
+      (event) => event.method === "POST" && (event.pathname.includes("/commands") || event.pathname.includes("/runtimes") || event.pathname.includes("/actions")),
+    ).length;
 
     // Trigger action menu specifically on the target runtime row
     const actionMenuButton = targetRow.locator("button").last();
@@ -454,16 +633,22 @@ test.describe("Management Console Product Journey Hosted E2E", () => {
 
     // Wait for table update and verify domain terminal state in the status cell
     // Must be a named post-action terminal state distinct from initial running|idle|active
-    const statusCell = targetRow.locator("td").nth(3).or(targetRow.locator("[class*='Badge'], [class*='status']")).first();
+    const updatedTargetRow = runtimeRows.filter({ hasText: targetName }).first();
+    const statusCell = updatedTargetRow.locator("td").nth(3).or(updatedTargetRow.locator("[class*='Badge'], [class*='status']")).first();
     await expect(statusCell).toBeVisible({ timeout: 10_000 });
-    await expect(statusCell).toHaveText(/quarantine|quarantined|QUARANTINED|隔離/i, { timeout: 15_000 });
+    await expect(statusCell).toHaveText(/quarantine|quarantined|QUARANTINED|隔離/i, { timeout: 30_000 });
     const terminalStatusText = (await statusCell.innerText()).trim();
     expect(terminalStatusText.toLowerCase(), "Post-action terminal state must not remain running, idle, or active").not.toMatch(/^(running|idle|active)$/i);
+    expect(
+      terminalStatusText.toLowerCase(),
+      "Post-action terminal state must differ from the pre-action state",
+    ).not.toBe(preActionStatus.toLowerCase());
 
     // =========================================================================
     // Part 3: Reload page and assert persisted domain terminal readback (idempotency)
     // =========================================================================
     await page.reload({ waitUntil: "domcontentloaded" });
+    await waitForHostedRouteReady(page);
     await expect(page.locator("#root")).toBeAttached();
     await expect(page.locator("body")).not.toContainText(/serving mock|seed fallback/i);
     await expect(page.locator("h1, h2, [role='heading'], main").filter({ hasText: /Runtimes|執行環境/i }).first()).toBeVisible();
@@ -484,18 +669,31 @@ test.describe("Management Console Product Journey Hosted E2E", () => {
     const mutationEvents = networkEvents.filter(
       (ev) => ev.method === "POST" && (ev.pathname.includes("/commands") || ev.pathname.includes("/runtimes") || ev.pathname.includes("/actions")),
     );
-    expect(mutationEvents.length, "Expected mutation POST request to be tracked").toBeGreaterThanOrEqual(1);
+    expect(mutationEvents.length, "Expected exactly one bounded paper mutation POST").toBe(baselineMutationCount + 1);
 
     mkdirSync(EVIDENCE_DIR, { recursive: true });
     const screenshotPath = `${EVIDENCE_DIR}/pfg-mgmt-action-reload.png`;
     await page.screenshot({ path: screenshotPath, fullPage: true });
 
-    // Persist immutable latency & route evidence artifact
+    const actionEvidence = {
+      schema_version: "pantheon.pfg-management-action-network.v2",
+      deployment_profile: "write-proof",
+      target_runtime: targetName,
+      target_environment: "paper",
+      pre_action_status: preActionStatus,
+      receipt: receiptText,
+      terminal_status: terminalStatusText,
+      reloaded_terminal_status: (await reloadedStatusCell.innerText()).trim(),
+      mutation_post_count: mutationEvents.length - baselineMutationCount,
+      network_events: networkEvents,
+    };
+
+    // Persist immutable latency, receipt, terminal readback, and route evidence.
     const networkEvidencePath = `${EVIDENCE_DIR}/pfg-mgmt-action-network.json`;
-    writeFileSync(networkEvidencePath, JSON.stringify(networkEvents, null, 2), "utf8");
+    writeFileSync(networkEvidencePath, JSON.stringify(actionEvidence, null, 2), "utf8");
 
     await testInfo.attach("mgmt-action-network-events", {
-      body: Buffer.from(JSON.stringify(networkEvents, null, 2)),
+      body: Buffer.from(JSON.stringify(actionEvidence, null, 2)),
       contentType: "application/json",
     });
   });
