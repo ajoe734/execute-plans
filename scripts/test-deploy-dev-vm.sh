@@ -60,10 +60,11 @@ if "refs/remotes/origin/dev" in restore:
     raise SystemExit("watchdog restore compatibility gate must not follow a drifting dev ref")
 for marker in (
     "Pin exact compatibility refs despite dev-tip drift",
-    "git update-ref refs/pantheon-proof/frontend-runtime \"${CANDIDATE_SHA}\"",
-    "git -C .pantheon-agora-compat update-ref refs/pantheon-proof/backend-runtime \"${BFF_SHA}\"",
-    "--backend-dev-ref refs/pantheon-proof/backend-runtime",
-    "--frontend-dev-ref refs/pantheon-proof/frontend-runtime",
+    'ref_prefix="refs/pantheon-proof/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"',
+    'git update-ref "${ref_prefix}/frontend-runtime" "${CANDIDATE_SHA}"',
+    'git -C .pantheon-agora-compat update-ref "${ref_prefix}/backend-runtime" "${BFF_SHA}"',
+    '--backend-dev-ref "${bff_ref}"',
+    '--frontend-dev-ref "${fe_ref}"',
 ):
     if marker not in restore:
         raise SystemExit(f"watchdog restore is missing exact-pair compatibility pin: {marker}")
