@@ -6,8 +6,9 @@ const script = resolve(process.cwd(), "scripts/validate-persona-hosted-proof-env
 
 function hostedProofJwt(subject: string) {
   const encode = (value: object) => Buffer.from(JSON.stringify(value)).toString("base64url");
+  const issuedAt = Math.floor(Date.now() / 1000);
   const expiresAt = Math.floor(Date.now() / 1000) + 3600;
-  return `${encode({ alg: "HS256", typ: "JWT" })}.${encode({ sub: subject, exp: expiresAt })}.test-signature`;
+  return `${encode({ alg: "HS256", typ: "JWT" })}.${encode({ sub: subject, iat: issuedAt, exp: expiresAt })}.test-signature`;
 }
 
 function validate(extraEnv: Record<string, string>) {

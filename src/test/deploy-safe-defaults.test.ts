@@ -458,11 +458,15 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
       "node scripts/validate-persona-hosted-proof-env.mjs",
     );
     expect(authorizedProof).toContain(
-      "PANTHEON_BFF_RBAC_TOKENS_JSON: ${{ secrets.PANTHEON_BFF_RBAC_TOKENS_JSON }}",
+      "Mint fresh short-lived proof credentials immediately before writes",
     );
+    expect(authorizedProof).toContain(
+      "DEV_LOGIN_VIEWER_CLIENT_SECRET: ${{ secrets.DEV_BFF_DEV_LOGIN_VIEWER_CLIENT_SECRET }}",
+    );
+    expect(authorizedProof).not.toContain("secrets.PANTHEON_BFF_");
     expect(
       authorizedProof.indexOf(
-        "node scripts/validate-persona-hosted-proof-env.mjs",
+        "Validate freshly minted hosted proof credentials before writes",
       ),
     ).toBeLessThan(
       authorizedProof.indexOf(
@@ -509,7 +513,13 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     expect(hostedPersonaInteractionSpec).not.toContain("page.route(");
     expect(hostedPersonaInteractionSpec).toContain("minimumTtlSeconds: 480");
     expect(hostedPersonaCredentialValidator).toContain(
-      "HOSTED_PROOF_MIN_CREDENTIAL_TTL_SECONDS = 1200",
+      "PANTHEON_HOSTED_PROOF_MIN_CREDENTIAL_TTL_SECONDS",
+    );
+    expect(hostedPersonaCredentialValidator).toContain(
+      "PANTHEON_HOSTED_PROOF_MAX_CREDENTIAL_AGE_SECONDS",
+    );
+    expect(hostedPersonaCredentialValidator).toContain(
+      "was not minted within the hosted proof preflight window",
     );
     expect(hostedPersonaCredentialValidator).toContain("parts.length !== 3");
     expect(hostedPersonaCredentialValidator).toContain(
