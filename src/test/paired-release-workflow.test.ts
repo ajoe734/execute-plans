@@ -19,6 +19,10 @@ const branchWorkflow = readFileSync(
   resolve(root, ".github/workflows/branch-ci.yml"),
   "utf8",
 );
+const deployScript = readFileSync(
+  resolve(root, "scripts/deploy-dev-vm.sh"),
+  "utf8",
+);
 
 describe("paired Pantheon release workflow", () => {
   it("builds one authenticated three-profile set while normal gates consume read-only", () => {
@@ -565,6 +569,19 @@ describe("paired Pantheon release workflow", () => {
     );
     expect(watchdogWorkflow).toContain("Restore exact pair before any mutable successor action");
     expect(watchdogWorkflow).toContain("if: always()");
+  });
+
+  it("proves read-only restore falls back to safe sibling CAS when Agora evidence revalidation fails", () => {
+    expect(watchdogWorkflow).toContain("Revalidate exact Agora pair before restore");
+    expect(watchdogWorkflow).toContain("continue-on-error: true");
+    expect(watchdogWorkflow).toContain("Restore exact pair before any mutable successor action");
+    expect(watchdogWorkflow).toContain("if: always()");
+    expect(watchdogWorkflow).toContain("PANTHEON_DEPLOY_PROFILE: read-only-restore");
+    expect(deployScript).toContain('if [[ "${DEPLOY_PROFILE}" == "read-only-restore" ]]; then');
+    expect(deployScript).toContain(
+      "Notice: proceeding with read-only restore despite rejected or invalid Agora compatibility evidence.",
+    );
+    expect(deployScript).toContain("restore_paired_safe_release");
   });
 
   it("canonicalizes the parent binding digest once for both strict consumers", () => {

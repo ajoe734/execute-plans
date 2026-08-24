@@ -894,6 +894,13 @@ live_locator_file() {
     "${CASE_RELEASES}" "$(basename -- "${observed}")"
 }
 
+live_safe_sibling_target() {
+  local locator safe_name
+  locator="$(live_locator_file)"
+  safe_name="$(json_field "${locator}" safeReleaseName)"
+  printf '%s/%s' "${CASE_RELEASES}" "${safe_name}"
+}
+
 assert_probe_called() {
   local phase="$1"
   grep -Fxq "probe:${phase}" "${CASE_CALL_LOG}" || \
@@ -1927,6 +1934,72 @@ test_restore_rejects_nonprivate_or_tampered_locator_before_switch() {
     show_deploy_failure "missing private locator rejection"
 }
 
+test_restore_reaches_safe_sibling_when_agora_evidence_is_absent_or_rejected() {
+  local safe_target releases_before releases_after live_pair live_profile
+
+  # Case 1: Restore with completely absent Agora compatibility evidence
+  setup_case paired-restore-absent-agora
+  run_write_deploy
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "write setup for absent agora restore should succeed"
+  safe_target="$(live_safe_sibling_target)"
+  releases_before="$(find "${CASE_RELEASES}" -maxdepth 1 -mindepth 1 | sort)"
+
+  run_restore_deploy PANTHEON_DEPLOY_AGORA_COMPAT_EVIDENCE=""
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "restore without agora evidence should succeed"
+  [[ "$(readlink -f "${CASE_LIVE}")" == "${safe_target}" ]] || \
+    show_deploy_failure "restore without agora evidence did not select safe sibling"
+  assert_live_profile read-only accepted
+
+  releases_after="$(find "${CASE_RELEASES}" -maxdepth 1 -mindepth 1 | sort)"
+  [[ "${releases_before}" == "${releases_after}" ]] || \
+    show_deploy_failure "restore unexpectedly created a new release directory"
+
+  live_pair="$(json_field "${safe_target}/deployment.json" pairId)"
+  [[ "${live_pair}" == "${PAIR_ID}" ]] || show_deploy_failure "live pair ID altered after restore"
+  live_profile="$(json_field "${safe_target}/deployment.json" deploymentProfile)"
+  [[ "${live_profile}" == "read-only" ]] || show_deploy_failure "live deployment profile is not read-only"
+
+  # Case 2: Restore with rejected Agora compatibility evidence
+  setup_case paired-restore-rejected-agora
+  run_write_deploy
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "write setup for rejected agora restore should succeed"
+  safe_target="$(live_safe_sibling_target)"
+  make_agora_compatibility_evidence "${CASE_AGORA_EVIDENCE}" "rejected"
+  releases_before="$(find "${CASE_RELEASES}" -maxdepth 1 -mindepth 1 | sort)"
+
+  run_restore_deploy
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "restore with rejected agora evidence should succeed"
+  [[ "$(readlink -f "${CASE_LIVE}")" == "${safe_target}" ]] || \
+    show_deploy_failure "restore with rejected agora evidence did not select safe sibling"
+  assert_live_profile read-only accepted
+
+  releases_after="$(find "${CASE_RELEASES}" -maxdepth 1 -mindepth 1 | sort)"
+  [[ "${releases_before}" == "${releases_after}" ]] || \
+    show_deploy_failure "restore unexpectedly created a new release directory"
+
+  live_pair="$(json_field "${safe_target}/deployment.json" pairId)"
+  [[ "${live_pair}" == "${PAIR_ID}" ]] || show_deploy_failure "live pair ID altered after restore"
+  live_profile="$(json_field "${safe_target}/deployment.json" deploymentProfile)"
+  [[ "${live_profile}" == "read-only" ]] || show_deploy_failure "live deployment profile is not read-only"
+
+  # Case 3: Contrast with normal deployment profiles rejecting absent/rejected Agora evidence
+  setup_case agora-read-only-absent
+  run_deploy PANTHEON_DEPLOY_AGORA_COMPAT_EVIDENCE=""
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "absent Agora evidence unexpectedly switched normal read-only deploy"
+  assert_previous_is_live
+
+  setup_case agora-write-proof-absent
+  run_write_deploy PANTHEON_DEPLOY_AGORA_COMPAT_EVIDENCE=""
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "absent Agora evidence unexpectedly switched write-proof deploy"
+  assert_previous_is_live
+
+  setup_case agora-operator-live-rejected
+  make_agora_compatibility_evidence "${CASE_AGORA_EVIDENCE}" "rejected"
+  run_operator_live_deploy
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "rejected Agora evidence unexpectedly switched operator-live deploy"
+  assert_previous_is_live
+}
+
 run_test() {
   local name="$1"
   shift
@@ -1969,6 +2042,7 @@ run_test "write failure restores the paired safe sibling" test_write_failure_res
 run_test "explicit restore switches safe before network and never rolls back to write" test_explicit_restore_switches_safe_before_network_and_never_rolls_back_write
 run_test "restore network failure preserves the safe release" test_restore_network_failure_preserves_safe_release
 run_test "restore rejects a nonprivate or tampered locator before switch" test_restore_rejects_nonprivate_or_tampered_locator_before_switch
+run_test "restore reaches safe sibling when Agora evidence is absent or rejected" test_restore_reaches_safe_sibling_when_agora_evidence_is_absent_or_rejected
 
 echo "deploy contract harness: ${PASSED} passed, ${FAILED} failed"
 if [[ "${FAILED}" -ne 0 ]]; then
