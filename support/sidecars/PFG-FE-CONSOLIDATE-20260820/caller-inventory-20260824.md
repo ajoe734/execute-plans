@@ -39,7 +39,7 @@ Every candidate is evaluated against strict caller-traceability rules defined in
 | 5 | `src/management/pages/studios/FormulaStudio.tsx:triggerBacktest` | Management Studios | Synthetic in-memory job runner with 5s timeout & fake event | 0 callers (verified retired) | `replace_then_delete` | Governed backtest runner API (`bff.jobs.list()`) / `NonProductionActionButton` |
 | 6 | `src/management/components/detail/ActivityMonitor.tsx:seed` | Management Detail | Hardcoded synthetic events with fake pulsing "live" badge | 3 prod detail pages + 1 test file (component callers, seed generator deleted) | `delete` | Canonical audit/SSE feed (`/bff/audit`, `/bff/sse/events`) |
 | 7 | `src/management/pages/phase2/PostmortemLibrary.tsx:SEED` | Management Oversight | Static 3-row mock postmortem array | 1 page component + 1 route re-export + 2 App.tsx routes + 2 nav manifests + 2 link helpers + 1 test + 3 i18n locales + 2 bff-v1 path/types + 1 script + 1 evidence doc | `replace_then_delete` | Canonical BFF postmortem/incident adapter (`bff.incidents.list()`) |
-| 8 | `src/mocks/seed.ts` | Test / Mock Fixture | Domain mock data for 40+ entities | 14 import callers across 14 test/mock/adapter files | `retain` (fixture-only) | Tree-shaken from live bundle; retained for unit tests |
+| 8 | `src/mocks/seed.ts` | Test / Mock Fixture | Domain mock data for 40+ entities | 18 references across 15 files (14 static import callers in 14 test/mock/adapter files + 4 dynamic test imports in 1 test file) | `retain` (fixture-only) | Tree-shaken from live bundle; retained for unit tests |
 | 9 | `src/lib/bff/` vs `src/lib/bff-v1/` Overlap | BFF Client Layer | Duplicate legacy client & mutation overlays coexisting with `bff-v1` | 176 import sites across 147 files | `replace_then_delete` | Canonical `src/lib/bff-v1/` adapters |
 | 10 | `src/lib/bff-v1/runActionSafe.ts` | Management Mutations | Toast-aware mutation wrapper with idempotency headers | 29 files (11 prod pages, 5 lib files, 5 tests, 2 scripts, 6 docs/evidence) | `retain` | Canonical implementation |
 | 11 | `src/management/components/NonProductionActionButton.tsx` | UI Safety Guard | Honestly disabled action button with tooltip explanation | 69 literal JSX sites across 28 files (68 sites in 27 prod UI files + 1 in test file), 28 import files | `retain` | Canonical implementation |
@@ -269,23 +269,32 @@ Every candidate is evaluated against strict caller-traceability rules defined in
 ```json
 {
   "path_or_symbol": "src/mocks/seed.ts",
-  "behavior": "Comprehensive in-memory mock fixture dataset covering 40+ domain entities (personas, strategies, capital pools, runtimes, incidents, watchers, decision journals, performance series, etc.).",
+  "behavior": "Comprehensive in-memory mock fixture dataset covering 40+ domain entities (personas, strategies, capital pools, runtimes, incidents, watchers, decision journals, performance series, etc.). Total callers: 18 references across 15 files (14 static imports in 14 files + 4 dynamic test-import references in 1 test file).",
   "callers": [
-    "src/lib/bff-v1/lists.ts:13 (import * as seed from '@/mocks/seed')",
-    "src/lib/bff-v1/seed.ts:18 (import * as seed from '@/mocks/seed')",
-    "src/lib/bff-v1/tradeJournal.ts:4 (import * as seed from '@/mocks/seed')",
-    "src/lib/bff/agora.ts:1 (import * as seed from '@/mocks/seed')",
-    "src/lib/bff/client.ts:49 (import * as seed from '@/mocks/seed')",
-    "src/lib/bff/mutations.test.ts:3 (import * as seed from '@/mocks/seed')",
-    "src/lib/bff/mutations.ts:6 (import * as seed from '@/mocks/seed')",
-    "src/lib/bff/persistence.ts:9 (import * as seed from '@/mocks/seed')",
-    "src/lib/bff/scenarios.ts:11 (import * as seed from '@/mocks/seed')",
-    "src/lib/bff/v5.ts:6 (import * as seed from '@/mocks/seed')",
-    "src/lib/bff/writeOverlay.ts:10 (import { auditEvents } from '@/mocks/seed')",
-    "src/lib/v5/__tests__/overlay.test.ts:3 (import * as seed from '@/mocks/seed')",
-    "src/lib/v5/__tests__/sentinel.test.ts:3 (import * as seed from '@/mocks/seed')",
-    "src/test/e2e-scenarios.test.ts:5 (import * as seed from '@/mocks/seed')"
+    "src/lib/bff-v1/lists.ts:13 (static import * as seed from '@/mocks/seed')",
+    "src/lib/bff-v1/seed.ts:18 (static import * as seed from '@/mocks/seed')",
+    "src/lib/bff-v1/tradeJournal.ts:4 (static import * as seed from '@/mocks/seed')",
+    "src/lib/bff/agora.ts:1 (static import * as seed from '@/mocks/seed')",
+    "src/lib/bff/client.ts:49 (static import * as seed from '@/mocks/seed')",
+    "src/lib/bff/mutations.test.ts:3 (static import * as seed from '@/mocks/seed')",
+    "src/lib/bff/mutations.ts:6 (static import * as seed from '@/mocks/seed')",
+    "src/lib/bff/persistence.ts:9 (static import * as seed from '@/mocks/seed')",
+    "src/lib/bff/scenarios.ts:11 (static import * as seed from '@/mocks/seed')",
+    "src/lib/bff/v5.ts:6 (static import * as seed from '@/mocks/seed')",
+    "src/lib/bff/writeOverlay.ts:10 (static import { auditEvents } from '@/mocks/seed')",
+    "src/lib/v5/__tests__/overlay.test.ts:3 (static import * as seed from '@/mocks/seed')",
+    "src/lib/v5/__tests__/sentinel.test.ts:3 (static import * as seed from '@/mocks/seed')",
+    "src/test/e2e-scenarios.test.ts:5 (static import * as seed from '@/mocks/seed')",
+    "src/lib/bff/__tests__/runAction.test.ts:109, 118, 175, 191 (4 dynamic import('@/mocks/seed') references in test cases)"
   ],
+  "caller_breakdown": {
+    "static_import_references": 14,
+    "static_import_files": 14,
+    "dynamic_test_import_references": 4,
+    "dynamic_test_import_files": 1,
+    "total_references": 18,
+    "total_files": 15
+  },
   "runtime_or_deploy_refs": [
     "Demo mode (VITE_BFF_MODE=mock) and unit test mocks; excluded from strict-live production build chunks"
   ],
@@ -293,6 +302,7 @@ Every candidate is evaluated against strict caller-traceability rules defined in
   "replacement_proof": "Bundle budget checks (scripts/bundle-budget-check.mjs, scripts/contract-drift-check.mjs)",
   "disposition": "retain",
   "validation": [
+    "npm --prefix /home/lupin/code/execute-plans test -- --run src/lib/bff/__tests__/runAction.test.ts",
     "npm --prefix /home/lupin/code/execute-plans run build",
     "node /home/lupin/code/execute-plans/scripts/bundle-budget-check.mjs"
   ]
@@ -656,8 +666,9 @@ Every candidate is evaluated against strict caller-traceability rules defined in
 |                                                    Management AI Operations       |
 |                                                    (7 declared action kinds)      |
 |                                                                                   |
-|  src/mocks/seed.ts (14 import sites) -----------[retain fixture only]------->     |
+|  src/mocks/seed.ts (18 refs / 15 files) --------[retain fixture only]------->     |
 |                                                    Unit / Mock Test Suites        |
+|                                                    (14 static + 4 dynamic test)   |
 +-----------------------------------------------------------------------------------+
 ```
 
@@ -672,7 +683,7 @@ Every candidate is evaluated against strict caller-traceability rules defined in
 2. **Parent Task Execution Sequence:**
    - **Step 1 (Agora):** Adopt `src/agora/components/CandidateReviewDrawer.tsx` in `TradingRoomPage.tsx`; remove inline drawer; replace hardcoded lens candidate pools with dynamic workshop recipes; rerun Agora tests.
    - **Step 2 (Management Live Hygiene):** Migrate 24 `safeAdapt` call sites in `management.ts` to `withStrictLiveOrMock` / typed error envelopes, then delete `safeAdapt` helper; remove static `seed` events and fake "live" badge in `ActivityMonitor.tsx`; wire `PostmortemLibrary.tsx` to canonical incident API; rerun Management tests.
-   - **Step 3 (Adapter Convergence & Safety):** Migrate remaining `src/lib/bff/` callers to `src/lib/bff-v1/`; verify tree-shaking isolates `src/mocks/seed.ts` from strict-live production build bundle; retain canonical `uiActionRegistry.ts` allowlist for Management AI assistant operations and `NonProductionActionButton.tsx` for unbacked action safety.
+   - **Step 3 (Adapter Convergence & Safety):** Migrate remaining `src/lib/bff/` callers to `src/lib/bff-v1/`; verify tree-shaking isolates `src/mocks/seed.ts` (18 references across 15 files: 14 static import files + 1 dynamic test file `runAction.test.ts`) from strict-live production build bundle; retain canonical `uiActionRegistry.ts` allowlist for Management AI assistant operations and `NonProductionActionButton.tsx` for unbacked action safety.
    - **Step 4 (Validation):** Execute full browser E2E test suites in both Agora and Management Console.
 
 ---
@@ -680,6 +691,7 @@ Every candidate is evaluated against strict caller-traceability rules defined in
 ## 6. Verification Summary
 
 Focused validation performed in `execute-plans` pinned to `0eec7659c9503ba3799ed5666cfa00f2b031e7fa`:
+- `src/lib/bff/__tests__/runAction.test.ts` (30 tests passed)
 - `src/management/components/agent/uiActionRegistry.test.ts` (47 tests passed)
 - `src/agora/components/CandidateReviewDrawer.test.tsx` (27 tests passed)
 - `src/agora/pages/trading-room/TradingRoomPage.test.tsx` (64 tests passed)
@@ -689,4 +701,4 @@ Focused validation performed in `execute-plans` pinned to `0eec7659c9503ba3799ed
 - `src/lib/bff-v1/__tests__/writes.test.ts` (25 tests passed)
 - `src/lib/bff-v1/__tests__/strictLiveReadOffline.test.ts` (2 tests passed)
 - `src/lib/bff-v1/__tests__/management.test.ts` (37 tests passed)
-- Total: **209 passed / 209 tests** across 9 test suites.
+- Total: **239 passed / 239 tests** across 10 test suites.
