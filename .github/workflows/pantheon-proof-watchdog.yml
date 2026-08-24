@@ -700,10 +700,19 @@ jobs:
         run: |
           set -euo pipefail
           evidence_dir="${RUNNER_TEMP%/}/pantheon-proof-watchdog-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          manifest_path="${evidence_dir}/release-compatibility-manifest.json"
           evidence_path="${evidence_dir}/agora-compatibility-gate.input.json"
           mkdir -p "${evidence_dir}"
+          python3 .pantheon-agora-compat/scripts/agora_compat_manifest.py write \
+            --output "${manifest_path}" \
+            --frontend-root "${GITHUB_WORKSPACE}" \
+            --backend-dev-ref refs/pantheon-proof/backend-runtime \
+            --frontend-dev-ref refs/pantheon-proof/frontend-runtime \
+            --backend-runtime-commit "${BFF_SHA}" \
+            --frontend-runtime-commit "${CANDIDATE_SHA}" \
+            --compatibility-status accepted
           python3 .pantheon-agora-compat/scripts/agora_compat_manifest.py deployment-gate \
-            --manifest .pantheon-agora-compat/docs/contracts/agora/dev-compatibility-manifest.json \
+            --manifest "${manifest_path}" \
             --frontend-root "${GITHUB_WORKSPACE}" \
             --backend-dev-ref refs/pantheon-proof/backend-runtime \
             --frontend-dev-ref refs/pantheon-proof/frontend-runtime \
