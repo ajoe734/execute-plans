@@ -55,6 +55,18 @@ if not (deploy_gate < deploy_harness < deploy_switch and write_gate < write_swit
     raise SystemExit("frontend deploy workflow does not gate every candidate switch")
 if not restore_gate < restore_switch:
     raise SystemExit("watchdog restore workflow does not gate its switch")
+restore = watchdog[watchdog.index("  restore:"):]
+if "refs/remotes/origin/dev" in restore:
+    raise SystemExit("watchdog restore compatibility gate must not follow a drifting dev ref")
+for marker in (
+    "Pin exact compatibility refs despite dev-tip drift",
+    "git update-ref refs/pantheon-proof/frontend-runtime \"${CANDIDATE_SHA}\"",
+    "git -C .pantheon-agora-compat update-ref refs/pantheon-proof/backend-runtime \"${BFF_SHA}\"",
+    "--backend-dev-ref refs/pantheon-proof/backend-runtime",
+    "--frontend-dev-ref refs/pantheon-proof/frontend-runtime",
+):
+    if marker not in restore:
+        raise SystemExit(f"watchdog restore is missing exact-pair compatibility pin: {marker}")
 for workflow in (deploy, watchdog):
     if "--allow-pending" in workflow:
         raise SystemExit("accepting frontend deployment path exposes --allow-pending")

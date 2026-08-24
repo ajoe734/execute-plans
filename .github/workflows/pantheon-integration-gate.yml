@@ -1673,29 +1673,66 @@ jobs:
           if (!valid) throw new Error("fresh child claim does not authorize this credentialed job attempt");
           NODE
 
-      - name: Validate hosted proof credentials before writes
+      - name: Mint fresh short-lived proof credentials immediately before writes
         env:
-          PANTHEON_PERSONA_INTERACTION_OPERATOR_TOKEN: ${{ secrets.PANTHEON_BFF_OPERATOR_A_TOKEN }}
-          PANTHEON_PERSONA_INTERACTION_VIEWER_TOKEN: ${{ secrets.PANTHEON_BFF_VIEWER_TOKEN }}
-          PANTHEON_BFF_RBAC_TOKENS_JSON: ${{ secrets.PANTHEON_BFF_RBAC_TOKENS_JSON }}
-        run: node scripts/validate-persona-hosted-proof-env.mjs
+          DEV_LOGIN_OPERATOR_CLIENT_ID: ${{ vars.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_ID || 'pantheon-dev-operator-a-v1' }}
+          DEV_LOGIN_OPERATOR_CLIENT_SECRET: ${{ secrets.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_SECRET }}
+          DEV_LOGIN_VIEWER_CLIENT_ID: ${{ vars.DEV_BFF_DEV_LOGIN_VIEWER_CLIENT_ID || 'pantheon-dev-viewer-v1' }}
+          DEV_LOGIN_VIEWER_CLIENT_SECRET: ${{ secrets.DEV_BFF_DEV_LOGIN_VIEWER_CLIENT_SECRET }}
+        run: |
+          set -euo pipefail
+          [[ -n "$DEV_LOGIN_OPERATOR_CLIENT_SECRET" && -n "$DEV_LOGIN_VIEWER_CLIENT_SECRET" ]] || {
+            echo "Dedicated operator and viewer dev-login client credentials are required for the bounded proof." >&2
+            exit 1
+          }
+          mint_token() {
+            local client_id="$1"
+            local client_secret="$2"
+            local response
+            local request_body
+            request_body="$(CLIENT_ID="$client_id" CLIENT_SECRET="$client_secret" node -e 'process.stdout.write(JSON.stringify({grant_type:"client_credentials",client_id:process.env.CLIENT_ID,client_secret:process.env.CLIENT_SECRET}))')"
+            response="$(curl --fail-with-body --silent --show-error --location \
+              --retry 2 --retry-all-errors --connect-timeout 5 --max-time 20 \
+              -X POST "${PANTHEON_BFF_BASE_URL%/}/bff/auth/dev-login" \
+              -H 'Content-Type: application/json' \
+              -d "$request_body")"
+            MINTED_TOKEN="$(node -e '
+              const payload=JSON.parse(process.argv[1]);
+              const token=String(payload.access_token||"").trim();
+              if (!token || token.split(".").length !== 3) process.exit(1);
+              process.stdout.write(token);
+            ' "$response")"
+            printf '::add-mask::%s\n' "$MINTED_TOKEN"
+          }
+          mint_token "$DEV_LOGIN_OPERATOR_CLIENT_ID" "$DEV_LOGIN_OPERATOR_CLIENT_SECRET"
+          operator_token="$MINTED_TOKEN"
+          mint_token "$DEV_LOGIN_VIEWER_CLIENT_ID" "$DEV_LOGIN_VIEWER_CLIENT_SECRET"
+          viewer_token="$MINTED_TOKEN"
+          {
+            printf 'PANTHEON_PERSONA_INTERACTION_OPERATOR_TOKEN=%s\n' "$operator_token"
+            printf 'PANTHEON_PERSONA_INTERACTION_VIEWER_TOKEN=%s\n' "$viewer_token"
+            printf 'PANTHEON_PINT_OPERATOR_TOKEN=%s\n' "$operator_token"
+            printf 'PANTHEON_PINT_VIEWER_TOKEN=%s\n' "$viewer_token"
+          } >> "$GITHUB_ENV"
+
+      - name: Validate freshly minted hosted proof credentials before writes
+        env:
+          PANTHEON_HOSTED_PROOF_MIN_CREDENTIAL_TTL_SECONDS: "1200"
+          PANTHEON_HOSTED_PROOF_MAX_CREDENTIAL_AGE_SECONDS: "120"
+        run: |
+          set -euo pipefail
+          node scripts/validate-persona-hosted-proof-env.mjs
 
       - name: Ensure stable user-private Persona for hosted proof
         env:
           PANTHEON_EXPECTED_BFF_SHA: ${{ inputs.bff_sha }}
-          PANTHEON_PERSONA_INTERACTION_OPERATOR_TOKEN: ${{ secrets.PANTHEON_BFF_OPERATOR_A_TOKEN }}
         run: node scripts/ensure-persona-hosted-proof-servant.mjs
 
       - name: Run governed and Persona proof with proof-only credentials
         env:
           PANTHEON_EXPECTED_BFF_SHA: ${{ inputs.bff_sha }}
           PANTHEON_PINT_PROBE_ALLOW_WRITES: "true"
-          PANTHEON_PINT_OPERATOR_TOKEN: ${{ secrets.PANTHEON_BFF_OPERATOR_A_TOKEN }}
-          PANTHEON_PINT_VIEWER_TOKEN: ${{ secrets.PANTHEON_BFF_VIEWER_TOKEN }}
           PANTHEON_PERSONA_INTERACTION_WRITE_PROOF: "1"
-          PANTHEON_PERSONA_INTERACTION_OPERATOR_TOKEN: ${{ secrets.PANTHEON_BFF_OPERATOR_A_TOKEN }}
-          PANTHEON_PERSONA_INTERACTION_VIEWER_TOKEN: ${{ secrets.PANTHEON_BFF_VIEWER_TOKEN }}
-          PANTHEON_BFF_RBAC_TOKENS_JSON: ${{ secrets.PANTHEON_BFF_RBAC_TOKENS_JSON }}
         run: |
           set -euo pipefail
           node scripts/probe-persona-governed-proposal-live.mjs
@@ -1732,9 +1769,6 @@ jobs:
           NODE
 
       - name: Run Trade Journey no-interception desktop mobile and a11y proof
-        env:
-          PANTHEON_PERSONA_INTERACTION_OPERATOR_TOKEN: ${{ secrets.PANTHEON_BFF_OPERATOR_A_TOKEN }}
-          PANTHEON_PERSONA_INTERACTION_VIEWER_TOKEN: ${{ secrets.PANTHEON_BFF_VIEWER_TOKEN }}
         run: |
           set -euo pipefail
           desktop_results="$PANTHEON_AUDIT_OUT_DIR/trade-journey-hosted-desktop-results.json"
@@ -1812,7 +1846,6 @@ jobs:
           PANTHEON_CREDENTIALED_PLAYWRIGHT_NO_ARTIFACTS: "1"
           DEV_LOGIN_CLIENT_ID: ${{ vars.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_ID || 'pantheon-dev-operator-a-v1' }}
           DEV_LOGIN_CLIENT_SECRET: ${{ secrets.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_SECRET }}
-          PANTHEON_BFF_OPERATOR_A_TOKEN: ${{ secrets.PANTHEON_BFF_OPERATOR_A_TOKEN }}
         run: |
           set -euo pipefail
           mkdir -p "$PANTHEON_AUDIT_OUT_DIR"

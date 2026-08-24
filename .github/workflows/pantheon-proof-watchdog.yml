@@ -680,14 +680,20 @@ jobs:
             --profile write-proof)"
           [[ "$ro" == "$EXPECTED_READ_ONLY_DIGEST" && "$wp" == "$EXPECTED_WRITE_PROOF_DIGEST" ]]
 
-      - name: Checkout protected Pantheon Agora gate controller
+      - name: Checkout exact pair compatibility controller
         uses: actions/checkout@v4
         with:
           repository: ajoe734/pantheon
-          ref: dev
+          ref: ${{ inputs.bff_sha }}
           path: .pantheon-agora-compat
           fetch-depth: 0
           persist-credentials: false
+
+      - name: Pin exact compatibility refs despite dev-tip drift
+        run: |
+          set -euo pipefail
+          git update-ref refs/pantheon-proof/frontend-runtime "${CANDIDATE_SHA}"
+          git -C .pantheon-agora-compat update-ref refs/pantheon-proof/backend-runtime "${BFF_SHA}"
 
       - name: Revalidate exact Agora pair before restore
         id: restore_agora_compat
@@ -699,8 +705,8 @@ jobs:
           python3 .pantheon-agora-compat/scripts/agora_compat_manifest.py deployment-gate \
             --manifest .pantheon-agora-compat/docs/contracts/agora/dev-compatibility-manifest.json \
             --frontend-root "${GITHUB_WORKSPACE}" \
-            --backend-dev-ref refs/remotes/origin/dev \
-            --frontend-dev-ref refs/remotes/origin/dev \
+            --backend-dev-ref refs/pantheon-proof/backend-runtime \
+            --frontend-dev-ref refs/pantheon-proof/frontend-runtime \
             --backend-runtime-commit "${BFF_SHA}" \
             --frontend-runtime-commit "${CANDIDATE_SHA}" \
             --evidence-out "${evidence_path}"
