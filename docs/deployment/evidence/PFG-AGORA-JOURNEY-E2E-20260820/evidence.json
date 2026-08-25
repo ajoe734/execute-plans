@@ -49,7 +49,22 @@
     "workflow": ".github/workflows/pfg-agora-journey-e2e-hosted-acceptance.yml",
     "authentication": "The workflow verifies BFF operator authority through dev-login, then the browser signs in through hosted GCP Identity with a verified, TOTP-enrolled task account. It does not inject a fixture or synthesize Firebase session storage.",
     "fail_closed_precondition": "deployment.json must bind the supplied FE/BFF SHAs and report deploymentProfile=operator-live with VITE_BFF_REAL_WRITES=true before Playwright can run.",
-    "artifact": "GitHub Actions artifact pfg-agora-journey-e2e-hosted-acceptance-<run-id>-<attempt>"
+    "artifact": "GitHub Actions artifact pfg-agora-journey-e2e-hosted-acceptance-<run-id>-<attempt>",
+    "standby_preflight_20260825": {
+      "run_id": "32828513839",
+      "run_url": "https://github.com/ajoe734/execute-plans/actions/runs/32828513839",
+      "served_pair": {
+        "fe_sha": "cc4007f7f78a31c73548ce85457af17a45a4c4b9",
+        "bff_sha": "40de8fcb1c69fad0bf5e54d4c0bd6e508c9162e0",
+        "deployment_profile": "read-only",
+        "deployment_state": "standby",
+        "vite_bff_real_writes": "false"
+      },
+      "result": "Passed unsafe-input validation, then failed closed at Bind expected operator-live deployment identity. Dev-login, browser authentication, Chromium installation, and the Playwright journey were all skipped.",
+      "product_writes_attempted": false,
+      "runtime_artifact": "none; the preflight stops before the hosted spec creates its audit evidence",
+      "acceptance_disposition": "Diagnostic standby evidence only. It proves that the task workflow does not bypass the real-writes deployment gate and is not a successful Agora journey."
+    }
   },
   "local_validation": {
     "contract_drift": {
