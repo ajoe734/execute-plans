@@ -194,11 +194,18 @@ export function DataSourceCommandDialog({
       setExecuting(false);
       setPolling(false);
       const e = err as { message?: string; code?: string; details?: { reason?: string } };
-      setErrorMsg(e.message || t("mgmt.dataSources.dialog.commandFailedGeneric"));
+      const formatted = e.code ? `[${e.code}] ${e.message || t("mgmt.dataSources.dialog.commandFailedGeneric")}` : e.message || t("mgmt.dataSources.dialog.commandFailedGeneric");
+      setErrorMsg(formatted);
     }
   };
 
   const actionLabel = actionDef ? t(actionDef.labelKey) : actionKey;
+  const isStaleRevision = Boolean(
+    errorMsg &&
+      (/stale_revision/i.test(errorMsg) ||
+        /revision mismatch/i.test(errorMsg) ||
+        /stale revision/i.test(errorMsg)),
+  );
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -381,9 +388,42 @@ export function DataSourceCommandDialog({
             </Card>
           )}
 
-          {/* Error Banner */}
-          {errorMsg && (
-            <Card className="p-3 bg-status-failed/10 border-status-failed/30 text-xs text-status-failed flex items-start gap-2">
+          {/* STALE_REVISION Corrective Action Banner */}
+          {isStaleRevision && (
+            <Card className="p-3 bg-status-warning/15 border-status-warning/40 text-xs space-y-2" data-testid="stale-revision-alert">
+              <div className="flex items-center gap-2 text-status-warning font-semibold">
+                <AlertTriangle className="h-4 w-4" />
+                {t("mgmt.dataSources.dialog.staleRevisionTitle")}
+              </div>
+              <p className="text-muted-foreground text-[11px]">
+                {t("mgmt.dataSources.dialog.staleRevisionDesc")}
+              </p>
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-xs h-7 border-status-warning/30 hover:bg-status-warning/10"
+                onClick={() => {
+                  onCommandSuccess?.(
+                    receipt ?? {
+                      receipt_id: `reload-${sourceId}`,
+                      command_id: `reload-${sourceId}`,
+                      source_instance_id: sourceId,
+                      command_type: actionKey,
+                      status: "rejected",
+                    },
+                  );
+                  handleClose();
+                }}
+              >
+                <RefreshCw className="h-3.5 w-3.5 mr-1" />
+                {t("mgmt.dataSources.dialog.reloadRevisionAction")}
+              </Button>
+            </Card>
+          )}
+
+          {/* General Error Banner */}
+          {errorMsg && !isStaleRevision && (
+            <Card className="p-3 bg-status-failed/10 border-status-failed/30 text-xs text-status-failed flex items-start gap-2" data-testid="command-error-banner">
               <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
               <div>
                 <p className="font-semibold">{t("mgmt.dataSources.dialog.errorTitle")}</p>
@@ -394,7 +434,7 @@ export function DataSourceCommandDialog({
 
           {/* Success Receipt Details */}
           {receipt && receipt.status === "succeeded" && (
-            <Card className="p-3 border-status-success/30 bg-status-success/5 text-xs space-y-2">
+            <Card className="p-3 border-status-success/30 bg-status-success/5 text-xs space-y-2" data-testid="command-success-card">
               <div className="flex items-center gap-2 text-status-success font-medium">
                 <CheckCircle2 className="h-4 w-4" />
                 {t("mgmt.dataSources.dialog.commandSucceededTitle")}
@@ -437,9 +477,11 @@ export function DataSourceCommandDialog({
                 disabled={
                   executing ||
                   polling ||
+                  !writesLive ||
                   (actionDef?.reasonRequired && !reason.trim()) ||
                   (actionDef?.confirmationRequired && !confirmation)
                 }
+                title={!writesLive ? t("mgmt.dataSources.realWritesRequired") : undefined}
               >
                 {executing ? (
                   <Loader2 className="h-4 w-4 mr-1 animate-spin" />

@@ -302,6 +302,36 @@ export function DataSourceControlCenter() {
   const focusCount = visibleRecords.length;
   const sourceLabel = sourceFocus || t("mgmt.dataSources.allSources");
 
+  const meta = data?.meta;
+  const metaStatus = (meta?.status ?? "").toLowerCase();
+  const metaSource = (meta?.source ?? "").toLowerCase();
+
+  const isAuthoritativeEmpty = useMemo(() => {
+    if (loading || focusLoading) return false;
+    if (visibleRecords.length > 0) return false;
+    if (!data) return false;
+    if (metaStatus === "unavailable" || metaStatus === "error" || metaStatus === "failed") return false;
+    return (
+      metaStatus === "ok" ||
+      metaStatus === "empty" ||
+      metaStatus === "converged" ||
+      metaSource === "service_client" ||
+      metaSource === "live" ||
+      Array.isArray(data?.items)
+    );
+  }, [loading, focusLoading, visibleRecords.length, data, metaStatus, metaSource]);
+
+  const isUnavailable = useMemo(() => {
+    if (loading || focusLoading) return false;
+    if (visibleRecords.length > 0) return false;
+    return !data || metaStatus === "unavailable" || metaStatus === "error" || metaStatus === "failed";
+  }, [loading, focusLoading, visibleRecords.length, data, metaStatus]);
+
+  const isDegradedLegacy = useMemo(() => {
+    if (metaStatus === "degraded" || metaSource === "legacy_projection") return true;
+    return visibleRecords.length > 0 && visibleRecords.some((r) => !isV2(r));
+  }, [metaStatus, metaSource, visibleRecords]);
+
   const writesLive = realWritesEnabled();
 
   const handleTabChange = (tab: string) => {
@@ -367,6 +397,8 @@ export function DataSourceControlCenter() {
               setWizardPreselectedDef(null);
               setWizardOpen(true);
             }}
+            disabled={!writesLive}
+            title={!writesLive ? t("mgmt.dataSources.realWritesRequired") : undefined}
             className="shadow-sm"
           >
             <Plus className="h-4 w-4 mr-1" />
@@ -446,13 +478,13 @@ export function DataSourceControlCenter() {
       {personaFocus ? (
         <div className="space-y-4">
           {(loading || focusLoading) && visibleRecords.length === 0 && (
-            <Card className="p-8 text-center text-sm text-muted-foreground">
+            <Card className="p-8 text-center text-sm text-muted-foreground" data-testid="persona-loading">
               {t("mgmt.dataSources.loadingLive")}
             </Card>
           )}
 
           {!loading && !focusLoading && visibleRecords.length === 0 && (
-            <Card className="p-8 text-center text-sm">
+            <Card className="p-8 text-center text-sm" data-testid="persona-no-rows">
               <div className="font-medium text-foreground">
                 {t("mgmt.dataSources.focusNoRowsTitle")}
               </div>
@@ -490,23 +522,82 @@ export function DataSourceControlCenter() {
 
           {/* Tab 1: Instances Table */}
           <TabsContent value="instances" className="space-y-4">
+            {/* Loading State */}
             {loading && visibleRecords.length === 0 && (
-              <Card className="p-8 text-center text-sm text-muted-foreground">
-                {t("mgmt.dataSources.loadingLive")}
+              <Card className="p-8 text-center text-sm text-muted-foreground" data-testid="data-sources-loading">
+                <div className="flex items-center justify-center gap-2">
+                  <RefreshCcw className="h-4 w-4 animate-spin text-primary" />
+                  <span>{t("mgmt.dataSources.loadingLive")}</span>
+                </div>
               </Card>
             )}
 
-            {!loading && visibleRecords.length === 0 && (
-              <Card className="p-8 text-center text-sm">
-                <div className="font-medium text-foreground">
+            {/* Authoritative Empty State */}
+            {!loading && visibleRecords.length === 0 && isAuthoritativeEmpty && !isUnavailable && (
+              <Card className="p-8 text-center text-sm space-y-3" data-testid="data-sources-authoritative-empty">
+                <div className="mx-auto w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+                  <Database className="h-5 w-5" />
+                </div>
+                <div className="font-semibold text-foreground text-base">
+                  {t("mgmt.dataSources.emptyTitle")}
+                </div>
+                <p className="text-muted-foreground text-xs max-w-md mx-auto">
+                  {t("mgmt.dataSources.emptyBody")}
+                </p>
+                <div className="pt-2">
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      setWizardPreselectedDef(null);
+                      setWizardOpen(true);
+                    }}
+                    disabled={!writesLive}
+                    title={!writesLive ? t("mgmt.dataSources.realWritesRequired") : undefined}
+                  >
+                    <Plus className="h-4 w-4 mr-1" />
+                    {t("mgmt.dataSources.header.addDataSource")}
+                  </Button>
+                </div>
+              </Card>
+            )}
+
+            {/* Unavailable State */}
+            {!loading && visibleRecords.length === 0 && (isUnavailable || !isAuthoritativeEmpty) && (
+              <Card className="p-8 text-center text-sm space-y-3 border-status-warning/30 bg-status-warning/5" data-testid="data-sources-unavailable">
+                <div className="mx-auto w-10 h-10 rounded-full bg-status-warning/10 flex items-center justify-center text-status-warning">
+                  <Shield className="h-5 w-5" />
+                </div>
+                <div className="font-semibold text-foreground text-base">
                   {t("mgmt.dataSources.liveDataUnavailableTitle")}
                 </div>
-                <p className="mt-1 text-muted-foreground text-xs">
+                <p className="text-muted-foreground text-xs max-w-md mx-auto">
                   {t("mgmt.dataSources.liveDataUnavailableBody")}
                 </p>
+                <div className="pt-2">
+                  <Button size="sm" variant="outline" onClick={refresh} disabled={loading}>
+                    <RefreshCcw className={`h-4 w-4 mr-1 ${loading ? "animate-spin" : ""}`} />
+                    {t("mgmt.actions.refresh")}
+                  </Button>
+                </div>
               </Card>
             )}
 
+            {/* Degraded Legacy Projection Banner */}
+            {visibleRecords.length > 0 && isDegradedLegacy && (
+              <Card className="p-3.5 border-status-warning/40 bg-status-warning/10 text-xs flex items-start gap-2.5 text-status-warning" data-testid="degraded-legacy-banner">
+                <Shield className="h-4 w-4 shrink-0 mt-0.5" />
+                <div className="space-y-0.5">
+                  <div className="font-semibold text-foreground">
+                    {t("mgmt.dataSources.degradedLegacyBannerTitle")}
+                  </div>
+                  <p className="text-muted-foreground">
+                    {t("mgmt.dataSources.degradedLegacyBannerDesc")}
+                  </p>
+                </div>
+              </Card>
+            )}
+
+            {/* Instances Table */}
             {visibleRecords.length > 0 && (
               <DataSourceInstancesTable
                 records={visibleRecords}

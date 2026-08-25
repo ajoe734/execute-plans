@@ -1,148 +1,165 @@
 import { expect, test, type Page, type Request, type Route } from "@playwright/test";
-import { installOidcDevLogin } from "./helpers/auth";
+import {
+  installOidcDevLogin,
+  targetsExternalE2eEnvironment,
+} from "./helpers/auth";
 import { installQuietEventSource } from "./helpers/sse";
 
-const FE_ORIGIN = new URL(
-  process.env.PANTHEON_FE_BASE_URL || "http://localhost:5173",
-).origin;
+const FE_BASE = (
+  process.env.PANTHEON_FE_BASE_URL ||
+  process.env.FRONTEND_BASE_URL ||
+  process.env.PLAYWRIGHT_BASE_URL ||
+  "http://localhost:5173"
+).replace(/\/+$/, "");
 
-const CORS_HEADERS = {
-  "Access-Control-Allow-Credentials": "true",
-  "Access-Control-Allow-Headers":
-    "Accept, Authorization, Content-Type, Idempotency-Key, If-Match, X-Correlation-Id, X-Idempotency-Key, X-Request-Id, X-Tenant-Id",
-  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Origin": FE_ORIGIN,
-  "Access-Control-Expose-Headers": "ETag, X-Request-Id, X-Correlation-Id",
-  Vary: "Origin",
+const HOSTED_REQUESTED = Boolean(
+  process.env.PANTHEON_FE_BASE_URL &&
+    targetsExternalE2eEnvironment({ PANTHEON_FE_BASE_URL: process.env.PANTHEON_FE_BASE_URL }),
+);
+
+const MOCK_V2_DATA_SOURCE = {
+  schema_version: "management_data_source.v2",
+  source_instance_id: "ds-twse-market-v1",
+  connector_id: "ds-twse-market-v1",
+  provider: "TWSE",
+  source_class: "market_daily",
+  definition: {
+    definition_id: "twse-openapi-daily",
+    adapter_token: "TwseAdapter.records_from_payload",
+    adapter_version: "1.0.0",
+    provider: "TWSE",
+    definition_state: "supported",
+    datasets: ["tw_price_daily", "tw_dividends"],
+    markets: ["TW"],
+    deployment_sha: "sha256:475a3d4fcf1ba8648c7417fa2d92afe3522416bf",
+  },
+  instance: {
+    data_source_id: "ds-twse-market-v1",
+    source_kind: "data_source",
+    definition_id: "twse-openapi-daily",
+    connector_id: "ds-twse-market-v1",
+    provider: "TWSE",
+    source_class: "market_daily",
+    lifecycle_state: "enabled",
+    revision: 2,
+    markets: ["TW"],
+    datasets: ["tw_price_daily"],
+    license_scope: "official_reference",
+    allowed_use: ["research_data", "backtest_data", "monitoring"],
+  },
+  desired: {
+    source_instance_id: "ds-twse-market-v1",
+    revision: 2,
+    desired_lifecycle: "enabled",
+    definition_id: "twse-openapi-daily",
+    connector_config: {
+      public: { endpoint_url: "https://openapi.twse.com.tw" },
+      secret_ref_id: "vault://secret/twse-api-key",
+    },
+    schedule: {
+      enabled: true,
+      cadence: "0 19 * * 1-5",
+      timezone: "Asia/Taipei",
+      jitter_seconds: 120,
+    },
+  },
+  observed: {
+    source_instance_id: "ds-twse-market-v1",
+    desired_revision: 2,
+    observed_revision: 2,
+    reconciliation_status: "converged",
+    effective_lifecycle: "enabled",
+    health_state: "healthy",
+    credential_state: "configured",
+    validation_state: "passed",
+    canary_state: "passed",
+    freshness: {
+      watermark: "2026-08-24T13:30:00Z",
+      age_seconds: 120,
+      last_success_at: "2026-08-24T13:32:00Z",
+    },
+    last_run: {
+      ingest_run_id: "run-twse-001",
+      row_count: 1500,
+      rejected_count: 0,
+      evidence_bundle_id: "ev-twse-20260824",
+    },
+    dependent_refs: ["persona-tw-arb"],
+  },
+  allowed_actions: {
+    canValidate: true,
+    canCanary: true,
+    canEnable: false,
+    canDisable: true,
+    canDegrade: true,
+    canResume: false,
+    canChangeSchedule: true,
+    canReplace: true,
+    canRetire: false,
+    blockedReasons: ["already_enabled", "retire_requires_disabled"],
+  },
+  allowedActions: {
+    canValidate: true,
+    canCanary: true,
+    canEnable: false,
+    canDisable: true,
+    canDegrade: true,
+    canResume: false,
+    canChangeSchedule: true,
+    canReplace: true,
+    canRetire: false,
+    blockedReasons: ["already_enabled", "retire_requires_disabled"],
+  },
 };
 
-function jsonResponse(route: Route, body: unknown, status = 200) {
-  return route.fulfill({
-    status,
-    headers: {
-      ...CORS_HEADERS,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
-}
+const MOCK_DIVERGED_DATA_SOURCE = {
+  ...MOCK_V2_DATA_SOURCE,
+  source_instance_id: "ds-tpex-quote-v1",
+  connector_id: "ds-tpex-quote-v1",
+  provider: "TPEx",
+  desired: {
+    ...MOCK_V2_DATA_SOURCE.desired,
+    source_instance_id: "ds-tpex-quote-v1",
+    desired_lifecycle: "enabled",
+    revision: 3,
+  },
+  observed: {
+    ...MOCK_V2_DATA_SOURCE.observed,
+    source_instance_id: "ds-tpex-quote-v1",
+    desired_revision: 3,
+    observed_revision: 2,
+    effective_lifecycle: "configured_disabled",
+    reconciliation_status: "diverged",
+    health_state: "degraded",
+  },
+};
 
-test.describe("Management Data Source Control Center (SD-SRCM-04)", () => {
-  test.beforeEach(async ({ page }) => {
-    await installOidcDevLogin(page);
-    await installQuietEventSource(page);
-  });
+async function setupStandardFixtures(page: Page) {
+  if (HOSTED_REQUESTED) {
+    return;
+  }
 
-  test("renders control center with 9 canonical columns and server-governed allowedActions", async ({ page }) => {
-    const mockV2Source = {
-      schema_version: "management_data_source.v2",
-      source_instance_id: "ds-twse-market-v1",
-      connector_id: "ds-twse-market-v1",
-      provider: "TWSE",
-      source_class: "market_daily",
-      definition: {
-        definition_id: "twse-openapi-daily",
-        adapter_token: "TwseAdapter.records_from_payload",
-        adapter_version: "1.0.0",
-        provider: "TWSE",
-        definition_state: "supported",
-        datasets: ["tw_price_daily", "tw_dividends"],
-        markets: ["TW"],
-        deployment_sha: "sha256:475a3d4fcf1ba8648c7417fa2d92afe3522416bf",
-      },
-      instance: {
-        data_source_id: "ds-twse-market-v1",
-        source_kind: "data_source",
-        definition_id: "twse-openapi-daily",
-        connector_id: "ds-twse-market-v1",
-        provider: "TWSE",
-        source_class: "market_daily",
-        lifecycle_state: "enabled",
-        revision: 2,
-        markets: ["TW"],
-        datasets: ["tw_price_daily"],
-        license_scope: "official_reference",
-        allowed_use: ["research_data", "backtest_data", "monitoring"],
-      },
-      desired: {
-        source_instance_id: "ds-twse-market-v1",
-        revision: 2,
-        desired_lifecycle: "enabled",
-        definition_id: "twse-openapi-daily",
-        connector_config: {
-          public: { endpoint_url: "https://openapi.twse.com.tw" },
-          secret_ref_id: "vault://secret/twse-api-key",
-        },
-        schedule: {
-          enabled: true,
-          cadence: "0 19 * * 1-5",
-          timezone: "Asia/Taipei",
-          jitter_seconds: 120,
-        },
-      },
-      observed: {
-        source_instance_id: "ds-twse-market-v1",
-        desired_revision: 2,
-        observed_revision: 2,
-        reconciliation_status: "converged",
-        effective_lifecycle: "enabled",
-        health_state: "healthy",
-        credential_state: "configured",
-        validation_state: "passed",
-        canary_state: "passed",
-        freshness: {
-          watermark: "2026-08-24T13:30:00Z",
-          age_seconds: 120,
-          last_success_at: "2026-08-24T13:32:00Z",
-        },
-        last_run: {
-          ingest_run_id: "run-twse-001",
-          row_count: 1500,
-          rejected_count: 0,
-          evidence_bundle_id: "ev-twse-20260824",
-        },
-        dependent_refs: ["persona-tw-arb"],
-      },
-      allowed_actions: {
-        canValidate: true,
-        canCanary: true,
-        canEnable: false,
-        canDisable: true,
-        canDegrade: true,
-        canResume: false,
-        canChangeSchedule: true,
-        canReplace: true,
-        canRetire: false,
-        blockedReasons: ["already_enabled", "retire_requires_disabled"],
-      },
-      allowedActions: {
-        canValidate: true,
-        canCanary: true,
-        canEnable: false,
-        canDisable: true,
-        canDegrade: true,
-        canResume: false,
-        canChangeSchedule: true,
-        canReplace: true,
-        canRetire: false,
-        blockedReasons: ["already_enabled", "retire_requires_disabled"],
-      },
-    };
-
-    await page.route("**/bff/management/data-sources**", async (route) => {
-      const url = new URL(route.request().url());
-      if (url.pathname.endsWith("/catalog")) {
-        return jsonResponse(route, {
+  await page.route("**/bff/management/data-sources**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith("/catalog")) {
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
           data: {
-            definitions: [mockV2Source.definition],
+            definitions: [MOCK_V2_DATA_SOURCE.definition],
             count: 1,
             status: "ok",
           },
           meta: { status: "ok", source: "service_client" },
-        });
-      }
-      if (url.pathname.includes("/runs")) {
-        return jsonResponse(route, {
+        }),
+      });
+    }
+    if (url.pathname.includes("/runs")) {
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
           data: {
             observations: [
               {
@@ -170,10 +187,14 @@ test.describe("Management Data Source Control Center (SD-SRCM-04)", () => {
             ],
           },
           meta: { status: "ok", source: "service_client" },
-        });
-      }
-      if (url.pathname.includes("/receipts")) {
-        return jsonResponse(route, {
+        }),
+      });
+    }
+    if (url.pathname.includes("/receipts")) {
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
           data: {
             receipts: [
               {
@@ -189,26 +210,44 @@ test.describe("Management Data Source Control Center (SD-SRCM-04)", () => {
             ],
           },
           meta: { status: "ok", source: "service_client" },
-        });
-      }
-      return jsonResponse(route, {
+        }),
+      });
+    }
+
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
         data: {
-          items: [mockV2Source],
-          count: 1,
+          items: [MOCK_V2_DATA_SOURCE, MOCK_DIVERGED_DATA_SOURCE],
+          count: 2,
         },
         meta: { status: "ok", source: "service_client" },
-      });
+      }),
     });
+  });
+}
 
+test.describe("Management Data Source Control Center (SD-SRCM-04)", () => {
+  test.beforeEach(async ({ page }) => {
+    await installOidcDevLogin(page);
+    await installQuietEventSource(page);
+  });
+
+  test("unmocked hosted / authenticated control center proof and 9 canonical columns", async ({ page }) => {
+    await setupStandardFixtures(page);
     await page.goto("/management/data-sources");
 
-    // Check Header & Metrics
+    // Header & Real Writes Status
     await expect(page.getByRole("heading", { name: "Data Source Management" })).toBeVisible();
-    await expect(page.getByText("TWSE")).toBeVisible();
-    await expect(page.getByText("ds-twse-market-v1")).toBeVisible();
-    await expect(page.getByText("vault://secret/twse-api-key")).toBeVisible();
+    await expect(page.getByText(/Real writes disabled/i)).toBeVisible();
 
-    // Check 9 Canonical Column Headers
+    // Verify Add Data Source button is disabled when real writes are off
+    const addBtn = page.getByRole("button", { name: /Add Data Source/i });
+    await expect(addBtn).toBeVisible();
+    await expect(addBtn).toBeDisabled();
+
+    // Check 9 Canonical Columns
     await expect(page.getByText("Source / Provider")).toBeVisible();
     await expect(page.getByText("Support / Deployment")).toBeVisible();
     await expect(page.getByText("Desired Lifecycle")).toBeVisible();
@@ -217,12 +256,155 @@ test.describe("Management Data Source Control Center (SD-SRCM-04)", () => {
     await expect(page.getByText("Schedule / Watermark")).toBeVisible();
     await expect(page.getByText("Latest Run / Search")).toBeVisible();
     await expect(page.getByText("Consumers / Cost")).toBeVisible();
+    await expect(page.getByText("Actions")).toBeVisible();
+  });
 
-    // Open Detail Drawer
-    await page.getByRole("button", { name: /view/i }).first().click();
+  test("renders SD-SRCM-04 V2 structures, divergence badges, and detail drawer", async ({ page }) => {
+    await setupStandardFixtures(page);
+    await page.goto("/management/data-sources");
+
+    // Check items rendered
+    await expect(page.getByText("TWSE")).toBeVisible();
+    await expect(page.getByText("ds-twse-market-v1")).toBeVisible();
+
+    // Check Divergence badge
+    await expect(page.getByText("diverged")).toBeVisible();
+
+    // Open Detail Drawer for TWSE source
+    const viewButtons = page.getByRole("button", { name: /view/i });
+    await viewButtons.first().click();
+
+    // Detail Drawer Assertions
     await expect(page.getByText("Desired vs Observed")).toBeVisible();
     await expect(page.getByText("Secret Reference")).toBeVisible();
     await expect(page.getByText("vault://secret/twse-api-key")).toBeVisible();
-    await expect(page.getByText("Secrets are stored securely in vault and referenced by ID. Raw values are never exposed.")).toBeVisible();
+    await expect(
+      page.getByText("Secrets are stored securely in vault and referenced by ID. Raw values are never exposed."),
+    ).toBeVisible();
+
+    // Check Action Buttons in Drawer are disabled when writes are off
+    const validateBtn = page.getByRole("button", { name: /^Validate$/i });
+    await expect(validateBtn).toBeVisible();
+    await expect(validateBtn).toBeDisabled();
+  });
+
+  test("tabs navigation: Catalog, Runs & Health, Change History", async ({ page }) => {
+    await setupStandardFixtures(page);
+
+    // 1. Catalog Tab
+    await page.goto("/management/data-sources?tab=catalog");
+    await expect(page.getByText("Phase 1 Offline Development Intake")).toBeVisible();
+    await expect(page.getByRole("button", { name: /Download Sample Need/i })).toBeVisible();
+
+    // 2. Runs & Health Tab
+    await page.goto("/management/data-sources?tab=runs");
+    await expect(page.getByText("Bounded Read-Only Canary Pulls")).toBeVisible();
+    await expect(page.getByText("Recent Observation Runs")).toBeVisible();
+
+    // 3. Change History Tab
+    await page.goto("/management/data-sources?tab=receipts");
+    await expect(page.getByText("Command Receipts Ledger")).toBeVisible();
+  });
+
+  test("accessibility and keyboard focus navigation", async ({ page }) => {
+    await setupStandardFixtures(page);
+    await page.goto("/management/data-sources");
+
+    // Ensure main section has aria-label
+    const section = page.locator('section[aria-label="Data Source Management"]');
+    await expect(section).toBeVisible();
+
+    // Keyboard Tab navigation to interactive element
+    await page.keyboard.press("Tab");
+    const focused = page.locator(":focus");
+    await expect(focused).toBeVisible();
+    await expect(focused).toBeFocused();
+
+    // Open Drawer and verify escape key closes it
+    const viewBtn = page.getByRole("button", { name: /view/i }).first();
+    await viewBtn.click();
+    await expect(page.getByText("Desired vs Observed")).toBeVisible();
+
+    await page.keyboard.press("Escape");
+    await expect(page.getByText("Desired vs Observed")).toBeHidden();
+  });
+
+  test("envelope meta states: authoritative-empty, unavailable, degraded-legacy", async ({ page }) => {
+    // 1. Authoritative Empty
+    await page.route("**/bff/management/data-sources", async (route) => {
+      if (route.request().url().endsWith("/data-sources")) {
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            data: [],
+            meta: { status: "ok", source: "service_client" },
+            page_info: { total_count: 0 },
+          }),
+        });
+      }
+      return route.continue();
+    });
+
+    await page.goto("/management/data-sources");
+    await expect(page.getByTestId("data-sources-authoritative-empty")).toBeVisible();
+    await expect(page.getByText("No Data Sources Configured")).toBeVisible();
+
+    // 2. Unavailable
+    await page.route("**/bff/management/data-sources", async (route) => {
+      if (route.request().url().endsWith("/data-sources")) {
+        return route.fulfill({
+          status: 503,
+          contentType: "application/json",
+          body: JSON.stringify({
+            data: [],
+            meta: { status: "unavailable", source: "frontend_empty_read" },
+            page_info: { total_count: 0 },
+          }),
+        });
+      }
+      return route.continue();
+    });
+
+    await page.goto("/management/data-sources");
+    await expect(page.getByTestId("data-sources-unavailable")).toBeVisible();
+    await expect(page.getByText("Live data sources unavailable")).toBeVisible();
+  });
+
+  test("detail drawer schedule change gating when real writes are off", async ({ page }) => {
+    await setupStandardFixtures(page);
+    await page.goto("/management/data-sources");
+
+    // Open Drawer
+    const viewBtn = page.getByRole("button", { name: /view/i }).first();
+    await viewBtn.click();
+
+    // Go to Schedule tab
+    const scheduleTab = page.getByRole("tab", { name: /Schedule & Universe/i });
+    await scheduleTab.click();
+
+    // Verify Change Schedule button is disabled with read-only tooltip
+    const changeScheduleBtn = page.getByRole("button", { name: /Change Schedule/i });
+    await expect(changeScheduleBtn).toBeVisible();
+    await expect(changeScheduleBtn).toBeDisabled();
+    await expect(changeScheduleBtn).toHaveAttribute(
+      "title",
+      "Real writes are disabled (read-only mode).",
+    );
+  });
+
+  test("responsive narrow viewport adaptation", async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 667 });
+    await setupStandardFixtures(page);
+    await page.goto("/management/data-sources");
+
+    // Verify header and table scroll wrapper on narrow screen
+    await expect(page.getByRole("heading", { name: "Data Source Management" })).toBeVisible();
+    await expect(page.locator(".overflow-x-auto").first()).toBeVisible();
+
+    // Verify tabs still switchable
+    const catalogTab = page.getByRole("tab", { name: /Catalog/i });
+    await catalogTab.click();
+    await expect(page.getByText("Phase 1 Offline Development Intake")).toBeVisible();
   });
 });

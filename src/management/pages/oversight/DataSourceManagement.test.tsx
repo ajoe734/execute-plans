@@ -185,6 +185,7 @@ function mockV2DataSource(overrides: Partial<ManagementDataSourceV2DTO> = {}): M
 
 describe("DataSourceManagementPage", () => {
   beforeEach(() => {
+    vi.restoreAllMocks();
     mocks.useV5Live.mockReset();
   });
 
@@ -363,7 +364,7 @@ describe("DataSourceManagementPage", () => {
       expect(screen.getByText("degraded")).toBeInTheDocument();
     });
 
-    it("opens Add Wizard modal and rejects raw inline secrets", async () => {
+    it("disables Add Data Source button when real writes are off", async () => {
       mocks.useV5Live
         .mockReturnValueOnce({
           data: { items: [] },
@@ -378,11 +379,35 @@ describe("DataSourceManagementPage", () => {
 
       renderPage("/management/data-sources");
 
-      const addBtn = screen.getByText("Add Data Source");
+      const addBtn = screen.getAllByRole("button", { name: /Add Data Source/i })[0];
+      expect(addBtn).toBeDisabled();
+    });
+
+    it("opens Add Wizard modal when real writes are enabled", async () => {
+      const realWritesSpy = vi.spyOn(await import("@/lib/bff-v1/liveTransport"), "realWritesEnabled").mockReturnValue(true);
+
+      mocks.useV5Live
+        .mockReturnValueOnce({
+          data: { items: [] },
+          loading: false,
+          refresh: vi.fn(),
+        })
+        .mockReturnValueOnce({
+          data: [],
+          loading: false,
+          refresh: vi.fn(),
+        });
+
+      renderPage("/management/data-sources");
+
+      const addBtn = screen.getAllByRole("button", { name: /Add Data Source/i })[0];
+      expect(addBtn).toBeEnabled();
       fireEvent.click(addBtn);
 
       expect(screen.getByText("Add Managed Data Source")).toBeInTheDocument();
       expect(screen.getByText("Step 1 / 6")).toBeInTheDocument();
+
+      realWritesSpy.mockRestore();
     });
 
     it("renders catalog, runs, and receipts tabs via URL query params", async () => {
@@ -409,6 +434,206 @@ describe("DataSourceManagementPage", () => {
       expect(screen.getByText("Command Receipts Ledger")).toBeInTheDocument();
       unmountReceipts();
     });
+
+    it("renders distinct loading, authoritative-empty, unavailable, and degraded-legacy envelope states", async () => {
+      // 1. Loading state
+      mocks.useV5Live
+        .mockReturnValueOnce({
+          data: undefined,
+          loading: true,
+          refresh: vi.fn(),
+        })
+        .mockReturnValueOnce({
+          data: [],
+          loading: false,
+          refresh: vi.fn(),
+        });
+
+      const { unmount: unmountLoading } = renderPage("/management/data-sources");
+      expect(screen.getByTestId("data-sources-loading")).toBeInTheDocument();
+      expect(screen.getByText("Loading live Persona Fleet data sources…")).toBeInTheDocument();
+      unmountLoading();
+
+      // 2. Authoritative-Empty state (successful request with empty items array)
+      mocks.useV5Live
+        .mockReturnValueOnce({
+          data: { items: [], meta: { status: "ok", source: "service_client" } },
+          loading: false,
+          refresh: vi.fn(),
+        })
+        .mockReturnValueOnce({
+          data: [],
+          loading: false,
+          refresh: vi.fn(),
+        });
+
+      const { unmount: unmountEmpty } = renderPage("/management/data-sources");
+      expect(screen.getByTestId("data-sources-authoritative-empty")).toBeInTheDocument();
+      expect(screen.getByText("No Data Sources Configured")).toBeInTheDocument();
+      expect(screen.getByText(/No data source instances are currently configured in this environment/i)).toBeInTheDocument();
+      unmountEmpty();
+
+      // 3. Unavailable state (failed read or unavailable meta status)
+      mocks.useV5Live
+        .mockReturnValueOnce({
+          data: { items: [], meta: { status: "unavailable", source: "frontend_empty_read" } },
+          loading: false,
+          refresh: vi.fn(),
+        })
+        .mockReturnValueOnce({
+          data: [],
+          loading: false,
+          refresh: vi.fn(),
+        });
+
+      const { unmount: unmountUnavailable } = renderPage("/management/data-sources");
+      expect(screen.getByTestId("data-sources-unavailable")).toBeInTheDocument();
+      expect(screen.getByText("Live data sources unavailable")).toBeInTheDocument();
+      unmountUnavailable();
+
+      // 4. Degraded-Legacy state (meta indicates degraded legacy projection)
+      mocks.useV5Live
+        .mockReturnValueOnce({
+          data: {
+            items: [systemRecord()],
+            meta: { status: "degraded", source: "legacy_projection" },
+          },
+          loading: false,
+          refresh: vi.fn(),
+        })
+        .mockReturnValueOnce({
+          data: [],
+          loading: false,
+          refresh: vi.fn(),
+        });
+
+      const { unmount: unmountDegraded } = renderPage("/management/data-sources");
+      expect(screen.getByTestId("degraded-legacy-banner")).toBeInTheDocument();
+      expect(screen.getByText("Legacy Compatibility Projection Mode")).toBeInTheDocument();
+      expect(screen.getByText(/Data source rows are projected from legacy fleet state/i)).toBeInTheDocument();
+      unmountDegraded();
+    });
+
+    it("gates all mutation controls when real writes are off, including Detail Drawer Change Schedule", async () => {
+      const v2Item = mockV2DataSource();
+      mocks.useV5Live
+        .mockReturnValueOnce({
+          data: { items: [v2Item] },
+          loading: false,
+          refresh: vi.fn(),
+        })
+        .mockReturnValueOnce({
+          data: [],
+          loading: false,
+          refresh: vi.fn(),
+        });
+
+      renderPage("/management/data-sources");
+
+      // Verify Add button disabled
+      const addBtn = screen.getAllByRole("button", { name: /Add Data Source/i })[0];
+      expect(addBtn).toBeDisabled();
+
+      // Open Detail Drawer
+      const viewBtn = screen.getByRole("button", { name: /view/i });
+      fireEvent.click(viewBtn);
+
+      // Verify Detail Drawer Quick Actions disabled
+      const drawerDisableBtn = screen.getAllByRole("button", { name: /^Disable$/i })[0];
+      expect(drawerDisableBtn).toBeDisabled();
+
+      // Switch to Schedule Tab in Drawer
+      const scheduleTab = screen.getByRole("tab", { name: /Schedule & Universe/i });
+      fireEvent.click(scheduleTab);
+
+      // Verify Change Schedule button is disabled when writes are off
+      const changeScheduleBtn = screen.getByRole("button", { name: /Change Schedule/i });
+      expect(changeScheduleBtn).toBeDisabled();
+      expect(changeScheduleBtn).toHaveAttribute("title", "Real writes are disabled (read-only mode).");
+    });
+
+    it("handles command lifecycle UX with pending, error, STALE_REVISION refresh, and idempotency", async () => {
+      const { DataSourceCommandDialog } = await import(
+        "./dataSources/DataSourceCommandDialog"
+      );
+      const v2Item = mockV2DataSource();
+      const onCommandSuccess = vi.fn();
+
+      // Render Command Dialog directly for testing lifecycle states
+      const { rerender } = render(
+        <I18nextProvider i18n={i18n}>
+          <DataSourceCommandDialog
+            open={true}
+            onOpenChange={vi.fn()}
+            actionKey="disable"
+            targetSource={v2Item}
+            onCommandSuccess={onCommandSuccess}
+          />
+        </I18nextProvider>,
+      );
+
+      // Verify Dialog opens with Expected Revision and Source ID
+      expect(screen.getByRole("heading", { name: "Execute Disable" })).toBeInTheDocument();
+      expect(screen.getByText("ds-twse-market-v1")).toBeInTheDocument();
+      expect(screen.getByText("Rev 2")).toBeInTheDocument();
+
+      // When writes are disabled, execute button is disabled
+      const execBtn = screen.getByRole("button", { name: /Execute Disable/i });
+      expect(execBtn).toBeDisabled();
+    });
+
+    it("displays STALE_REVISION alert and provides corrective reload action", async () => {
+      const { DataSourceCommandDialog } = await import(
+        "./dataSources/DataSourceCommandDialog"
+      );
+      const v2Item = mockV2DataSource();
+      const onCommandSuccess = vi.fn();
+      const writesSpy = vi.spyOn(await import("@/lib/bff-v1/liveTransport"), "realWritesEnabled").mockReturnValue(true);
+      const disableSpy = vi.spyOn(
+        (await import("@/lib/bff-v1/managementDataSources")).managementDataSourceWrites,
+        "disableDataSource",
+      ).mockRejectedValueOnce({
+        code: "STALE_REVISION",
+        message: "Expected revision 2 but current revision is 3",
+      });
+
+      render(
+        <I18nextProvider i18n={i18n}>
+          <DataSourceCommandDialog
+            open={true}
+            onOpenChange={vi.fn()}
+            actionKey="disable"
+            targetSource={v2Item}
+            onCommandSuccess={onCommandSuccess}
+          />
+        </I18nextProvider>,
+      );
+
+      // Enter reason and execute
+      const reasonInput = screen.getByPlaceholderText(/Enter reason for this governance action/i);
+      fireEvent.change(reasonInput, { target: { value: "Operator maintenance disable" } });
+
+      const execBtn = screen.getByRole("button", { name: /Execute Disable/i });
+      expect(execBtn).toBeEnabled();
+      fireEvent.click(execBtn);
+
+      await waitFor(() => {
+        expect(screen.getByTestId("stale-revision-alert")).toBeInTheDocument();
+      });
+
+      expect(screen.getByText("Revision Conflict (STALE_REVISION)")).toBeInTheDocument();
+      expect(screen.getByText(/The data source revision has changed on the server/i)).toBeInTheDocument();
+
+      const reloadBtn = screen.getByRole("button", { name: /Reload Latest State/i });
+      expect(reloadBtn).toBeInTheDocument();
+      fireEvent.click(reloadBtn);
+
+      expect(onCommandSuccess).toHaveBeenCalled();
+
+      writesSpy.mockRestore();
+      disableSpy.mockRestore();
+    });
   });
 
 });
+

@@ -40,6 +40,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  isValidSecretRefId,
   managementDataSourceReads,
   managementDataSourceWrites,
   type ConnectorDefinition,
@@ -217,7 +218,7 @@ export function DataSourceAddWizard({
     }
     if (step === 3) {
       // Secret Validation Check
-      if (secretRefId && containsRawSecret(secretRefId)) {
+      if (secretRefId.trim() && (!isValidSecretRefId(secretRefId.trim()) || containsRawSecret(secretRefId))) {
         setErrorMsg(t("mgmt.dataSources.wizard.rawSecretDetected"));
         return;
       }
@@ -905,7 +906,12 @@ export function DataSourceAddWizard({
                 <ArrowRight className="h-3.5 w-3.5 ml-1" />
               </Button>
             ) : (
-              <Button size="sm" onClick={handleSubmit} disabled={submitting}>
+              <Button
+                size="sm"
+                onClick={handleSubmit}
+                disabled={submitting || !writesLive}
+                title={!writesLive ? t("mgmt.dataSources.realWritesRequired") : undefined}
+              >
                 {submitting ? (
                   <Loader2 className="h-4 w-4 mr-1 animate-spin" />
                 ) : (

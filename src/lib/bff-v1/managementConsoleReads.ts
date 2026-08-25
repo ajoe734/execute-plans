@@ -7,6 +7,14 @@ import type {
   PermissionMatrix,
   RiskLevel,
 } from "@/lib/bff/types";
+import type {
+  ConnectorDefinition,
+  DataSourceInstance,
+  ManagementDataSourceV2DTO,
+  SourceAllowedActions,
+  SourceDesiredState,
+  SourceObservedState,
+} from "./managementDataSources";
 import { paths } from "./paths";
 
 type UnknownRecord = Record<string, unknown>;
@@ -249,7 +257,7 @@ const healthTone = (status: string): CanonicalDataSourceRecord["tone"] => {
   return "muted";
 };
 
-const adaptDataSource = (record: UnknownRecord, index: number): CanonicalDataSourceRecord => {
+export const adaptDataSource = (record: UnknownRecord, index: number): CanonicalDataSourceRecord => {
   const status = asString(record.health, record.status, record.state) ?? "unknown";
   const providerKey = asString(record.providerKey, record.provider_key, record.connector_id, record.id, record.provider) ?? `data-source-${index + 1}`;
   const provider = asString(record.provider, record.name, record.display_name, record.connector_id, providerKey) ?? providerKey;
@@ -273,6 +281,90 @@ const adaptDataSource = (record: UnknownRecord, index: number): CanonicalDataSou
     unavailableRefs: stringList(record.unavailableRefs, record.unavailable_refs),
     orderCapableProvider: asBoolean(record.orderCapableProvider ?? record.order_capable_provider, false),
   };
+};
+
+export const adaptDataSourceV2OrLegacy = (
+  record: UnknownRecord,
+  index: number,
+): ManagementDataSourceV2DTO | CanonicalDataSourceRecord => {
+  if (
+    record.schema_version === "management_data_source.v2" ||
+    (record.source_instance_id && record.definition && record.instance)
+  ) {
+    const rawAllowed = (record.allowed_actions ?? record.allowedActions ?? {}) as Record<string, unknown>;
+    const allowedActions: SourceAllowedActions = {
+      canValidate: asBoolean(rawAllowed.canValidate, false),
+      canCanary: asBoolean(rawAllowed.canCanary, false),
+      canEnable: asBoolean(rawAllowed.canEnable, false),
+      canDisable: asBoolean(rawAllowed.canDisable, false),
+      canDegrade: asBoolean(rawAllowed.canDegrade, false),
+      canResume: asBoolean(rawAllowed.canResume, false),
+      canChangeSchedule: asBoolean(rawAllowed.canChangeSchedule, false),
+      canReplace: asBoolean(rawAllowed.canReplace, false),
+      canRetire: asBoolean(rawAllowed.canRetire, false),
+      blockedReasons: stringList(rawAllowed.blockedReasons, rawAllowed.blocked_reasons),
+    };
+
+    const def = (record.definition ?? {}) as Record<string, unknown>;
+    const inst = (record.instance ?? {}) as Record<string, unknown>;
+    const des = (record.desired ?? {}) as Record<string, unknown>;
+    const obs = (record.observed ?? {}) as Record<string, unknown>;
+
+    const sourceInstanceId = asString(
+      record.source_instance_id,
+      record.data_source_id,
+      inst.data_source_id,
+      record.id,
+    ) ?? `source-${index + 1}`;
+    const connectorId = asString(
+      record.connector_id,
+      inst.connector_id,
+      def.definition_id,
+      record.provider,
+    ) ?? `connector-${index + 1}`;
+    const provider = asString(record.provider, inst.provider, def.provider) ?? "unknown";
+    const sourceClass = asString(record.source_class, record.sourceClass, inst.source_class) ?? "market";
+
+    return {
+      schema_version: "management_data_source.v2",
+      source_instance_id: sourceInstanceId,
+      connector_id: connectorId,
+      provider,
+      source_class: sourceClass,
+      definition: (record.definition ?? {
+        definition_id: connectorId,
+        adapter_token: "unknown",
+        provider,
+        definition_state: "supported",
+      }) as ConnectorDefinition,
+      instance: (record.instance ?? {
+        data_source_id: sourceInstanceId,
+        source_kind: "data_source",
+        definition_id: connectorId,
+        connector_id: connectorId,
+        provider,
+        source_class: sourceClass,
+        lifecycle_state: "configured_disabled",
+        revision: 1,
+      }) as DataSourceInstance,
+      desired: (record.desired ?? {
+        source_instance_id: sourceInstanceId,
+        revision: 1,
+        desired_lifecycle: "configured_disabled",
+      }) as SourceDesiredState,
+      observed: (record.observed ?? {
+        source_instance_id: sourceInstanceId,
+        effective_lifecycle: "configured_disabled",
+        health_state: "healthy",
+        reconciliation_status: "converged",
+      }) as SourceObservedState,
+      allowed_actions: allowedActions,
+      allowedActions,
+      lineage_summary: record.lineage_summary as ManagementDataSourceV2DTO["lineage_summary"],
+    };
+  }
+
+  return adaptDataSource(record, index);
 };
 
 const permissionInstances: PermissionInstance[] = ["persona-tool", "persona-mcp", "persona-skill", "persona-lifecycle"];
@@ -474,7 +566,11 @@ const adaptLineageEdge = (record: UnknownRecord): LineageEdgeRecord | undefined 
 
 export const managementConsoleReads = {
   dataSources: () =>
-    readRecords(paths.mgmtDataSources(), "data_sources", adaptDataSource),
+    readRecords<ManagementDataSourceV2DTO | CanonicalDataSourceRecord>(
+      paths.mgmtDataSources(),
+      "data_sources",
+      adaptDataSourceV2OrLegacy,
+    ),
 
   permissions: async () => {
     const envelope = await readRecords(paths.mgmtPermissions(), "permissions", adaptPermissionMatrix);
