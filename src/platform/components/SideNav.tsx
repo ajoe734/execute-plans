@@ -46,7 +46,7 @@ export const SideNav = ({ groups }: { groups: NavGroup[] }) => {
   const { pathname } = useLocation();
   const losers = findActiveDedupes(groups, pathname);
   return (
-    <nav className="w-60 shrink-0 bg-sidebar text-sidebar-foreground border-r border-sidebar-border sticky top-14 self-start h-[calc(100vh-3.5rem)] overflow-y-auto overscroll-contain scrollbar-thin py-4 px-2">
+    <nav className="hidden w-60 shrink-0 bg-sidebar text-sidebar-foreground border-r border-sidebar-border py-4 px-2 lg:block lg:h-full lg:self-stretch lg:overflow-y-auto lg:overscroll-contain lg:scrollbar-thin">
       {groups.map((g) => (
         <div key={g.label} className="mb-5">
           <div className="text-[10px] font-bold uppercase tracking-widest text-sidebar-foreground/80 px-3 mb-1">

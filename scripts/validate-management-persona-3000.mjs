@@ -90,9 +90,9 @@ const roles = [
 const readRoutes = [
   { route: "/bff/me", family: "identity", shape: "object" },
   { route: "/bff/management/cockpit", family: "cockpit", shape: "cockpit" },
-  { route: "/bff/management/fleet", family: "persona-fleet", shape: "list" },
   { route: "/bff/management/persona-fleet", family: "persona-fleet", shape: "list" },
-  { route: "/bff/management/fleet", family: "data-source", shape: "list" },
+  { route: "/bff/management/persona-fleet", family: "persona-fleet", shape: "list" },
+  { route: "/bff/management/persona-fleet", family: "data-source", shape: "list" },
   { route: "/bff/management/human-inbox", family: "human-inbox", shape: "list" },
   { route: "/bff/management/trading-pulse", family: "trading-pulse", shape: "list" },
   { route: "/bff/management/trading-pulse/rankings", family: "trading-ranking", shape: "list" },

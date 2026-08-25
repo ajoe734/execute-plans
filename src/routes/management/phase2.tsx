@@ -1,0 +1,8 @@
+export { SettingsPage as SettingsRoute } from "@/management/pages/phase2/Settings";
+export { LineageExplorerPage as LineageExplorerRoute } from "@/management/pages/phase2/LineageExplorer";
+export { KnowledgeInboxPage as KnowledgeInboxRoute } from "@/management/pages/phase2/KnowledgeInbox";
+export { PostmortemLibraryPage as PostmortemLibraryRoute } from "@/management/pages/phase2/PostmortemLibrary";
+export { GovernanceQueuePage as GovernanceQueuePhase2Route } from "@/management/pages/phase2/GovernanceQueue";
+export { WorkflowTemplatesPage as WorkflowTemplatesRoute } from "@/management/pages/phase2/WorkflowTemplates";
+export { HookCronManagerPage as HookCronManagerRoute } from "@/management/pages/phase2/HookCronManager";
+export { AlphaFactoryBoardPage as AlphaFactoryRoute } from "@/management/pages/phase2/AlphaFactoryBoard";

@@ -356,7 +356,7 @@ test.describe("F17 axe a11y gate for v5 pages", () => {
     await expect(trigger).toBeFocused();
   });
 
-  test("ESC closes only the top overlay before closing the underlying drawer", async ({ page }) => {
+  test("ESC closes the read-only Sentinel investigation drawer and restores focus", async ({ page }) => {
     await gotoReady(page, "/management/sentinel", /Sentinel|Findings|critical|confidence/i);
 
     const findingTriggers = page.locator("ul button").filter({ hasText: /critical|warning|watch/i });
@@ -367,20 +367,13 @@ test.describe("F17 axe a11y gate for v5 pages", () => {
 
     const drawer = page.getByRole("dialog").first();
     await expect(drawer).toBeVisible();
-
-    const emergencyRun = drawer
-      .getByRole("button")
-      .filter({ hasText: /run|執行/i })
-      .last();
-    await emergencyRun.click();
-
-    const overlays = page.locator('[role="dialog"]');
-    await expect(overlays).toHaveCount(2);
-    await expect(overlays.filter({ hasText: /高風險|Confirm|pause_persona_routing|Emergency rollback/i }).last()).toBeVisible();
-
-    await page.keyboard.press("Escape");
     await expect(page.locator('[role="dialog"]')).toHaveCount(1);
-    await expect(drawer).toBeVisible();
+    await expect(drawer).toContainText(/Investigation summary|調查摘要/i);
+    await expect(drawer).toContainText(/Governance handling|治理處理/i);
+    await expect(drawer.getByRole("button", { name: /run|執行/i })).toHaveCount(0);
+    await expect(
+      page.getByRole("dialog").filter({ hasText: /高風險|Confirm high-risk action|pause_persona_routing/i }),
+    ).toHaveCount(0);
 
     await page.keyboard.press("Escape");
     await expect(page.locator('[role="dialog"]')).toHaveCount(0);

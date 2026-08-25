@@ -1,32 +1,16 @@
+import { normalizeBearerToken as normalizeStrictBearerToken } from "../../scripts/lib/bearer-token.mjs";
+import type { Page, Route } from "@playwright/test";
+
 export const DEFAULT_FE_OPERATOR_ID = "op-fe-gate";
 export const DEFAULT_FE_TENANT_ID = "tenant-dev";
 export const DEFAULT_FE_AUTH_ROLES = ["operator", "reviewer", "approver"] as const;
-export const DEFAULT_DEV_AUTH_TOKEN = `${DEFAULT_FE_OPERATOR_ID}:${DEFAULT_FE_AUTH_ROLES.join(
+export const LOCAL_FIXTURE_AUTH_TOKEN = `${DEFAULT_FE_OPERATOR_ID}:${DEFAULT_FE_AUTH_ROLES.join(
   ",",
 )}:mfa`;
 
-export const BFF_AUTH_STORAGE_KEYS = {
-  bearerToken: "pantheon.bff.bearerToken",
-  legacyBearerToken: "pantheon_operator_token",
-  tenantId: "pantheon.bff.tenantId",
-  legacyTenantId: "pantheon_tenant_id",
-  devOidcSession: "pantheon.e2e.devOidcSession",
-} as const;
-
 export type HeaderMap = Record<string, string>;
 
-export type E2ePage = {
-  addInitScript<Arg>(
-    script: (arg: Arg) => unknown | Promise<unknown>,
-    arg: Arg,
-  ): Promise<void>;
-  evaluate<Result>(script: () => Result | Promise<Result>): Promise<Result>;
-  evaluate<Result, Arg>(
-    script: (arg: Arg) => Result | Promise<Result>,
-    arg: Arg,
-  ): Promise<Result>;
-  goto(url: string): Promise<unknown>;
-};
+export type E2ePage = Pick<Page, "addInitScript" | "evaluate" | "goto" | "route">;
 
 export type DevLoginSession = {
   authorization: string;
@@ -47,10 +31,12 @@ export type AuthHeaderOptions = {
 };
 
 export type DevLoginOptions = {
+  env?: Record<string, string | undefined>;
   goto?: string | false;
   operatorId?: string;
   pageBaseUrl?: string;
   roles?: string[];
+  /** Loopback fixtures support same-tab Supabase storage only. */
   storage?: "session" | "local" | "both";
   tenantId?: string;
   token?: string;
@@ -64,15 +50,152 @@ function envValue(env: Record<string, string | undefined>, keys: string[]): stri
   return undefined;
 }
 
+function credentialEnvValue(
+  env: Record<string, string | undefined>,
+  keys: string[],
+): string | undefined {
+  for (const key of keys) {
+    const value = env[key];
+    if (value !== undefined && value !== "") return value;
+  }
+  return undefined;
+}
+
 function defaultEnv(): Record<string, string | undefined> {
   return typeof process === "undefined" ? {} : process.env;
 }
 
+function explicitAuthToken(
+  env: Record<string, string | undefined>,
+  token?: string,
+): string | undefined {
+  if (token !== undefined) return token;
+  for (const key of [
+    "BFF_AUTH_TOKEN",
+    "PANTHEON_BFF_SMOKE_BEARER_TOKEN",
+    "PANTHEON_BFF_SMOKE_TOKEN",
+  ]) {
+    if (env[key] !== undefined) return env[key];
+  }
+  return undefined;
+}
+
+function isLoopbackTarget(value: string): boolean {
+  try {
+    const target = new URL(value);
+    if (target.protocol !== "http:" && target.protocol !== "https:") return false;
+
+    const hostname = target.hostname.toLowerCase().replace(/\.$/u, "");
+    if (hostname === "localhost" || hostname === "0.0.0.0") return true;
+    if (hostname === "::1" || hostname === "[::1]") return true;
+
+    const ipv4 = hostname.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/u);
+    if (!ipv4) return false;
+    const octets = ipv4.slice(1).map(Number);
+    return octets.every((octet) => octet >= 0 && octet <= 255) && octets[0] === 127;
+  } catch {
+    return false;
+  }
+}
+
+function effectiveFrontendTarget(
+  options: Pick<DevLoginOptions, "goto" | "pageBaseUrl">,
+  env: Record<string, string | undefined>,
+): string {
+  let configuredTarget = options.pageBaseUrl;
+  if (!configuredTarget) {
+    for (const key of [
+      "PANTHEON_FE_BASE_URL",
+      "FRONTEND_BASE_URL",
+      "PLAYWRIGHT_BASE_URL",
+    ]) {
+      if (env[key] !== undefined && env[key] !== "") {
+        configuredTarget = env[key];
+        break;
+      }
+    }
+  }
+  configuredTarget ??= "http://localhost:5173";
+
+  if (typeof options.goto === "string") {
+    try {
+      return new URL(options.goto, configuredTarget).origin;
+    } catch {
+      return "";
+    }
+  }
+  return configuredTarget;
+}
+
+export function localFixtureFrontendIsLoopback(
+  options: Pick<DevLoginOptions, "goto" | "pageBaseUrl"> = {},
+  env: Record<string, string | undefined> = defaultEnv(),
+): boolean {
+  return isLoopbackTarget(effectiveFrontendTarget(options, env));
+}
+
+export function targetsExternalE2eEnvironment(
+  env: Record<string, string | undefined> = defaultEnv(),
+): boolean {
+  if (
+    env.PANTHEON_HOSTED_E2E === "1"
+    || env.FE_INT_GATE_LIVE_BFF === "1"
+    || env.F08_CREATE_INTENT_LIVE_BFF === "1"
+    || env.RUN_LIVE_BFF_CONTRACTS === "1"
+  ) {
+    return true;
+  }
+
+  // The upstream BFF can be external while a loopback Vite server remains the
+  // browser-visible E2E boundary and proxies same-origin /bff requests. Raw
+  // upstream/proxy variables therefore cannot classify the browser session.
+  if (!isLoopbackTarget(effectiveFrontendTarget({}, env))) return true;
+
+  const browserBffTarget = env.PANTHEON_BROWSER_BFF_BASE_URL?.trim();
+  return Boolean(browserBffTarget && !isLoopbackTarget(browserBffTarget));
+}
+
+function missingExternalCredential(): Error {
+  return new Error(
+    "A short-lived BFF_AUTH_TOKEN is required for hosted or external E2E; tracked fixture credentials are local-only",
+  );
+}
+
+function localFixtureExternalFrontend(): Error {
+  return new Error(
+    "LOCAL_FIXTURE_AUTH_TOKEN may be installed only for a proven loopback-only E2E target",
+  );
+}
+
 export function normalizeBearerToken(token: string): string {
-  const trimmed = token.trim();
-  return trimmed.toLowerCase().startsWith("bearer ")
-    ? trimmed.slice("bearer ".length).trim()
-    : trimmed;
+  return normalizeStrictBearerToken(token, "Explicit BFF credential");
+}
+
+export function roleTokenFromEnv(
+  role: string,
+  explicitKeys: string[] = [],
+  env: Record<string, string | undefined> = defaultEnv(),
+): string {
+  const normalizedRole = role.trim().toLowerCase().replaceAll("-", "_");
+  const explicit = credentialEnvValue(env, [
+    ...explicitKeys,
+    `PANTHEON_BFF_${normalizedRole.toUpperCase()}_TOKEN`,
+  ]);
+  if (explicit) return normalizeBearerToken(explicit);
+
+  const encoded = env.PANTHEON_BFF_RBAC_TOKENS_JSON?.trim();
+  if (!encoded) return "";
+  let tokens: Record<string, unknown>;
+  try {
+    tokens = JSON.parse(encoded) as Record<string, unknown>;
+  } catch {
+    return "";
+  }
+  for (const [candidateRole, token] of Object.entries(tokens)) {
+    if (candidateRole.trim().toLowerCase().replaceAll("-", "_") !== normalizedRole) continue;
+    return typeof token === "string" ? normalizeBearerToken(token) : "";
+  }
+  return "";
 }
 
 export function makeDevAuthToken(options: {
@@ -88,16 +211,19 @@ export function makeDevAuthToken(options: {
 
 export function authToken(options: AuthHeaderOptions = {}): string {
   const env = options.env ?? defaultEnv();
-  return normalizeBearerToken(
-    options.token ??
-      envValue(env, [
-        "BFF_AUTH_TOKEN",
-        "PANTHEON_BFF_SMOKE_BEARER_TOKEN",
-        "PANTHEON_BFF_SMOKE_TOKEN",
-        "VITE_BFF_DEV_BEARER_TOKEN",
-      ]) ??
-      DEFAULT_DEV_AUTH_TOKEN,
-  );
+  const explicit = explicitAuthToken(env, options.token);
+  if (explicit !== undefined) {
+    const normalized = normalizeBearerToken(explicit);
+    if (
+      normalized === LOCAL_FIXTURE_AUTH_TOKEN
+      && targetsExternalE2eEnvironment(env)
+    ) {
+      throw missingExternalCredential();
+    }
+    return normalized;
+  }
+  if (targetsExternalE2eEnvironment(env)) throw missingExternalCredential();
+  return LOCAL_FIXTURE_AUTH_TOKEN;
 }
 
 export function bearerHeader(token?: string): string {
@@ -143,9 +269,23 @@ export function actorFromAuthorization(value: string | undefined): string {
 
 export function devLoginSession(options: DevLoginOptions = {}): DevLoginSession {
   const roles = options.roles ?? [...DEFAULT_FE_AUTH_ROLES];
-  const token = authToken({
-    token: options.token ?? makeDevAuthToken({ operatorId: options.operatorId, roles }),
-  });
+  const env = options.env ?? defaultEnv();
+  const explicit = explicitAuthToken(env, options.token);
+  if (explicit === undefined && targetsExternalE2eEnvironment(env)) {
+    throw missingExternalCredential();
+  }
+  const token = normalizeBearerToken(
+    explicit ?? makeDevAuthToken({ operatorId: options.operatorId, roles }),
+  );
+  if (
+    (explicit === undefined || token === LOCAL_FIXTURE_AUTH_TOKEN)
+    && (
+      !localFixtureFrontendIsLoopback(options, env)
+      || targetsExternalE2eEnvironment(env)
+    )
+  ) {
+    throw localFixtureExternalFrontend();
+  }
   return {
     authorization: bearerHeader(token),
     operatorId: (options.operatorId ?? actorFromAuthorization(token)) || DEFAULT_FE_OPERATOR_ID,
@@ -159,64 +299,121 @@ export async function installOidcDevLogin(
   page: E2ePage,
   options: DevLoginOptions = {},
 ): Promise<DevLoginSession> {
-  const session = devLoginSession(options);
-  const storage = options.storage ?? "both";
+  const env = options.env ?? defaultEnv();
+  const session = devLoginSession({ ...options, env });
+  if (
+    !localFixtureFrontendIsLoopback(options, env)
+    || targetsExternalE2eEnvironment(env)
+  ) {
+    throw new Error(
+      "installOidcDevLogin cannot synthesize hosted auth; establish a real Supabase/BFF strict browser session instead",
+    );
+  }
+  if (options.storage === "local" || options.storage === "both") {
+    throw new Error("Loopback auth fixtures may use same-tab sessionStorage only");
+  }
+
+  const configuredSupabaseUrl = envValue(env, [
+    "VITE_SUPABASE_URL",
+    "PANTHEON_PUBLIC_SUPABASE_URL",
+  ]) ?? "http://127.0.0.1:54321";
+  const projectRef = new URL(configuredSupabaseUrl).hostname.split(".")[0];
+  const storageKey = `sb-${projectRef}-auth-token`;
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const operatorReady = session.roles.some((role) =>
+    ["admin", "platform_admin", "operator", "ops", "reviewer", "approver", "research_lead"]
+      .includes(role.toLowerCase()),
+  );
+  const capabilities = operatorReady
+    ? ["agora.workshop.v1", "agora.persona.interaction.v1"]
+    : [];
+  const supabaseSession = {
+    access_token: session.token,
+    refresh_token: `loopback-fixture-refresh-${session.operatorId}`,
+    expires_in: 3600,
+    expires_at: nowSeconds + 3600,
+    token_type: "bearer",
+    user: {
+      id: session.operatorId,
+      aud: "authenticated",
+      role: "authenticated",
+      email: `${session.operatorId}@loopback.invalid`,
+      app_metadata: {
+        provider: "loopback-fixture",
+        providers: ["loopback-fixture"],
+        roles: session.roles,
+        tenant_id: session.tenantId,
+      },
+      user_metadata: {},
+      created_at: new Date(nowSeconds * 1000).toISOString(),
+    },
+  };
+
+  const fulfillJson = async (route: Route, body: unknown) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(body),
+    });
+  };
+  await page.route("**/bff/me", async (route) => {
+    await fulfillJson(route, {
+      data: {
+        user: { id: session.operatorId, display_name: session.operatorId },
+        tenant: { id: session.tenantId },
+        roles: session.roles,
+        capabilities,
+        environment: { name: "dev", strict_auth: true },
+        session: { authenticated: true, session_kind: "bearer" },
+      },
+      meta: { route: "GET /bff/me", contract: "PINT-016-LOOPBACK-FIXTURE" },
+    });
+  });
+  await page.route("**/bff/auth/readiness", async (route) => {
+    await fulfillJson(route, {
+      data: {
+        ready: operatorReady,
+        authReady: operatorReady,
+        providerReady: true,
+        sourceCommitSha: "0".repeat(40),
+        auth: {
+          mode: "strict",
+          strict: true,
+          stub: false,
+          sessionKind: "bearer",
+          operatorRoleReady: operatorReady,
+          interactionCapabilityReady: operatorReady,
+        },
+        identity: {
+          operatorId: session.operatorId,
+          roles: session.roles,
+          tenantId: session.tenantId,
+          capabilities,
+        },
+        provider: { provider: "loopback-fixture", ready: true, status: "ready" },
+        authority: { interaction: "advisory", execution: "none", broker: "none", capital: "none" },
+      },
+      meta: { route: "GET /bff/auth/readiness", contract: "PINT-016-LOOPBACK-FIXTURE" },
+    });
+  });
 
   await page.addInitScript(
-    ({ keys, session: nextSession, storageMode }) => {
-      const write = (target: Storage | undefined) => {
-        if (!target) return;
-        target.setItem(keys.bearerToken, nextSession.token);
-        target.setItem(keys.legacyBearerToken, nextSession.token);
-        target.setItem(keys.tenantId, nextSession.tenantId);
-        target.setItem(keys.legacyTenantId, nextSession.tenantId);
-        target.setItem(
-          keys.devOidcSession,
-          JSON.stringify({
-            aud: "pantheon-bff",
-            auth_time: Math.floor(Date.now() / 1000),
-            iss: "pantheon-e2e-dev-login",
-            roles: nextSession.roles,
-            sub: nextSession.operatorId,
-            tenant_id: nextSession.tenantId,
-          }),
-        );
-      };
+    ({ key, storedSession }) => {
       try {
-        if (storageMode === "session" || storageMode === "both") write(window.sessionStorage);
-        if (storageMode === "local" || storageMode === "both") write(window.localStorage);
+        window.sessionStorage.setItem(key, JSON.stringify(storedSession));
       } catch {
         // Init scripts can run before the page has a durable origin.
       }
     },
-    { keys: BFF_AUTH_STORAGE_KEYS, session, storageMode: storage },
+    { key: storageKey, storedSession: supabaseSession },
   );
 
   await page
     .evaluate(
-      ({ keys, session: nextSession, storageMode }) => {
-        const write = (target: Storage | undefined) => {
-          if (!target) return;
-          target.setItem(keys.bearerToken, nextSession.token);
-          target.setItem(keys.legacyBearerToken, nextSession.token);
-          target.setItem(keys.tenantId, nextSession.tenantId);
-          target.setItem(keys.legacyTenantId, nextSession.tenantId);
-          target.setItem(
-            keys.devOidcSession,
-            JSON.stringify({
-              aud: "pantheon-bff",
-              auth_time: Math.floor(Date.now() / 1000),
-              iss: "pantheon-e2e-dev-login",
-              roles: nextSession.roles,
-              sub: nextSession.operatorId,
-              tenant_id: nextSession.tenantId,
-            }),
-          );
-        };
-        if (storageMode === "session" || storageMode === "both") write(window.sessionStorage);
-        if (storageMode === "local" || storageMode === "both") write(window.localStorage);
+      ({ key, storedSession }) => {
+        window.sessionStorage.setItem(key, JSON.stringify(storedSession));
       },
-      { keys: BFF_AUTH_STORAGE_KEYS, session, storageMode: storage },
+      { key: storageKey, storedSession: supabaseSession },
     )
     .catch(() => undefined);
 
