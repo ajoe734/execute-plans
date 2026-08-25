@@ -552,15 +552,45 @@ describe("DataSourceManagementPage", () => {
       expect(changeScheduleBtn).toHaveAttribute("title", "Real writes are disabled (read-only mode).");
     });
 
-    it("handles command lifecycle UX with pending, error, STALE_REVISION refresh, and idempotency", async () => {
+    it("handles command lifecycle UX with pending, polling, and succeeded readback", async () => {
       const { DataSourceCommandDialog } = await import(
         "./dataSources/DataSourceCommandDialog"
       );
       const v2Item = mockV2DataSource();
       const onCommandSuccess = vi.fn();
+      const writesSpy = vi
+        .spyOn(await import("@/lib/bff-v1/liveTransport"), "realWritesEnabled")
+        .mockReturnValue(true);
 
-      // Render Command Dialog directly for testing lifecycle states
-      const { rerender } = render(
+      const writesModule = await import("@/lib/bff-v1/managementDataSources");
+      const disableSpy = vi
+        .spyOn(writesModule.managementDataSourceWrites, "disableDataSource")
+        .mockResolvedValueOnce({
+          receipt_id: "rcp-disable-001",
+          command_id: "cmd-001",
+          source_instance_id: "ds-twse-market-v1",
+          command_type: "disable",
+          status: "accepted",
+          before_revision: 2,
+        });
+      const pollSpy = vi
+        .spyOn(writesModule.managementDataSourceWrites, "pollReceiptUntilTerminal")
+        .mockResolvedValueOnce({
+          receipt_id: "rcp-disable-001",
+          command_id: "cmd-001",
+          source_instance_id: "ds-twse-market-v1",
+          command_type: "disable",
+          status: "succeeded",
+          before_revision: 2,
+          after_revision: 3,
+          readback: {
+            desired_revision: 3,
+            observed_revision: 3,
+            reconciliation_status: "converged",
+          },
+        });
+
+      render(
         <I18nextProvider i18n={i18n}>
           <DataSourceCommandDialog
             open={true}
@@ -572,14 +602,175 @@ describe("DataSourceManagementPage", () => {
         </I18nextProvider>,
       );
 
-      // Verify Dialog opens with Expected Revision and Source ID
+      // Verify dialog is initialized with target info
       expect(screen.getByRole("heading", { name: "Execute Disable" })).toBeInTheDocument();
       expect(screen.getByText("ds-twse-market-v1")).toBeInTheDocument();
       expect(screen.getByText("Rev 2")).toBeInTheDocument();
 
-      // When writes are disabled, execute button is disabled
+      // Provide reason and submit command
+      const reasonInput = screen.getByPlaceholderText(/Enter reason for this governance action/i);
+      fireEvent.change(reasonInput, { target: { value: "Scheduled maintenance window" } });
+
       const execBtn = screen.getByRole("button", { name: /Execute Disable/i });
-      expect(execBtn).toBeDisabled();
+      expect(execBtn).toBeEnabled();
+      fireEvent.click(execBtn);
+
+      // Verify command submission was triggered and polled
+      await waitFor(() => {
+        expect(disableSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            sourceInstanceId: "ds-twse-market-v1",
+            expectedRevision: 2,
+            reason: "Scheduled maintenance window",
+          }),
+        );
+        expect(pollSpy).toHaveBeenCalledWith("rcp-disable-001");
+      });
+
+      // Verify success card renders with receipt ID, revisions, and callback fired
+      await waitFor(() => {
+        expect(screen.getByTestId("command-success-card")).toBeInTheDocument();
+      });
+      expect(screen.getByText(/Command Succeeded/i)).toBeInTheDocument();
+      expect(screen.getByText(/Receipt ID: rcp-disable-001/i)).toBeInTheDocument();
+      expect(screen.getByText(/Revision: 2 → 3/i)).toBeInTheDocument();
+      expect(screen.getByText(/Reconciliation: converged/i)).toBeInTheDocument();
+      expect(onCommandSuccess).toHaveBeenCalledWith(
+        expect.objectContaining({ receipt_id: "rcp-disable-001", status: "succeeded" }),
+      );
+
+      writesSpy.mockRestore();
+      disableSpy.mockRestore();
+      pollSpy.mockRestore();
+    });
+
+    it("handles command failure and rejection lifecycle states", async () => {
+      const { DataSourceCommandDialog } = await import(
+        "./dataSources/DataSourceCommandDialog"
+      );
+      const v2Item = mockV2DataSource();
+      const onCommandSuccess = vi.fn();
+      const writesSpy = vi
+        .spyOn(await import("@/lib/bff-v1/liveTransport"), "realWritesEnabled")
+        .mockReturnValue(true);
+
+      const writesModule = await import("@/lib/bff-v1/managementDataSources");
+      const disableSpy = vi
+        .spyOn(writesModule.managementDataSourceWrites, "disableDataSource")
+        .mockResolvedValueOnce({
+          receipt_id: "rcp-disable-rejected",
+          command_id: "cmd-002",
+          source_instance_id: "ds-twse-market-v1",
+          command_type: "disable",
+          status: "rejected",
+          failure: {
+            code: "DEPENDENCY_BLOCK",
+            message: "Disabling primary market feed is forbidden while active strategies are dependent",
+          },
+        });
+
+      render(
+        <I18nextProvider i18n={i18n}>
+          <DataSourceCommandDialog
+            open={true}
+            onOpenChange={vi.fn()}
+            actionKey="disable"
+            targetSource={v2Item}
+            onCommandSuccess={onCommandSuccess}
+          />
+        </I18nextProvider>,
+      );
+
+      const reasonInput = screen.getByPlaceholderText(/Enter reason for this governance action/i);
+      fireEvent.change(reasonInput, { target: { value: "Attempting maintenance disable" } });
+
+      const execBtn = screen.getByRole("button", { name: /Execute Disable/i });
+      fireEvent.click(execBtn);
+
+      await waitFor(() => {
+        expect(screen.getByTestId("command-error-banner")).toBeInTheDocument();
+      });
+      expect(
+        screen.getByText(/Disabling primary market feed is forbidden while active strategies are dependent/i),
+      ).toBeInTheDocument();
+      expect(onCommandSuccess).not.toHaveBeenCalled();
+
+      writesSpy.mockRestore();
+      disableSpy.mockRestore();
+    });
+
+    it("handles poll exhaustion for accepted/running receipt by re-enabling Execute and minting a fresh idempotency key", async () => {
+      const { DataSourceCommandDialog } = await import(
+        "./dataSources/DataSourceCommandDialog"
+      );
+      const v2Item = mockV2DataSource();
+      const onCommandSuccess = vi.fn();
+      const writesSpy = vi
+        .spyOn(await import("@/lib/bff-v1/liveTransport"), "realWritesEnabled")
+        .mockReturnValue(true);
+
+      const writesModule = await import("@/lib/bff-v1/managementDataSources");
+      const disableSpy = vi
+        .spyOn(writesModule.managementDataSourceWrites, "disableDataSource")
+        .mockResolvedValue({
+          receipt_id: "rcp-running-001",
+          command_id: "cmd-003",
+          source_instance_id: "ds-twse-market-v1",
+          command_type: "disable",
+          status: "running",
+          before_revision: 2,
+        });
+
+      // Polling exhausts and returns receipt still in 'running' status
+      const pollSpy = vi
+        .spyOn(writesModule.managementDataSourceWrites, "pollReceiptUntilTerminal")
+        .mockResolvedValueOnce({
+          receipt_id: "rcp-running-001",
+          command_id: "cmd-003",
+          source_instance_id: "ds-twse-market-v1",
+          command_type: "disable",
+          status: "running",
+          before_revision: 2,
+        });
+
+      render(
+        <I18nextProvider i18n={i18n}>
+          <DataSourceCommandDialog
+            open={true}
+            onOpenChange={vi.fn()}
+            actionKey="disable"
+            targetSource={v2Item}
+            onCommandSuccess={onCommandSuccess}
+          />
+        </I18nextProvider>,
+      );
+
+      const reasonInput = screen.getByPlaceholderText(/Enter reason for this governance action/i);
+      fireEvent.change(reasonInput, { target: { value: "Initial attempt" } });
+
+      const execBtn = screen.getByRole("button", { name: /Execute Disable/i });
+      fireEvent.click(execBtn);
+
+      // First execution is submitted and polled
+      await waitFor(() => {
+        expect(disableSpy).toHaveBeenCalledTimes(1);
+        expect(pollSpy).toHaveBeenCalledTimes(1);
+      });
+
+      // After poll exhaustion, the button is re-enabled for operator re-try
+      await waitFor(() => {
+        expect(execBtn).toBeEnabled();
+      });
+
+      // Operator clicks Execute again; a second command invocation is submitted with a new idempotency key
+      fireEvent.click(execBtn);
+      await waitFor(() => {
+        expect(disableSpy).toHaveBeenCalledTimes(2);
+      });
+
+      writesSpy.mockRestore();
+      disableSpy.mockRestore();
+      pollSpy.mockRestore();
     });
 
     it("displays STALE_REVISION alert and provides corrective reload action", async () => {
@@ -588,14 +779,18 @@ describe("DataSourceManagementPage", () => {
       );
       const v2Item = mockV2DataSource();
       const onCommandSuccess = vi.fn();
-      const writesSpy = vi.spyOn(await import("@/lib/bff-v1/liveTransport"), "realWritesEnabled").mockReturnValue(true);
-      const disableSpy = vi.spyOn(
-        (await import("@/lib/bff-v1/managementDataSources")).managementDataSourceWrites,
-        "disableDataSource",
-      ).mockRejectedValueOnce({
-        code: "STALE_REVISION",
-        message: "Expected revision 2 but current revision is 3",
-      });
+      const writesSpy = vi
+        .spyOn(await import("@/lib/bff-v1/liveTransport"), "realWritesEnabled")
+        .mockReturnValue(true);
+      const disableSpy = vi
+        .spyOn(
+          (await import("@/lib/bff-v1/managementDataSources")).managementDataSourceWrites,
+          "disableDataSource",
+        )
+        .mockRejectedValueOnce({
+          code: "STALE_REVISION",
+          message: "Expected revision 2 but current revision is 3",
+        });
 
       render(
         <I18nextProvider i18n={i18n}>
@@ -634,6 +829,4 @@ describe("DataSourceManagementPage", () => {
       disableSpy.mockRestore();
     });
   });
-
 });
-

@@ -3092,6 +3092,9 @@ export default {
       askManagement: "詢問 Management",
       cancel: "取消",
       close: "關閉",
+      view: "檢視",
+      back: "上一步",
+      next: "下一步",
     },
     governance: {
       submitting: "送審中…",

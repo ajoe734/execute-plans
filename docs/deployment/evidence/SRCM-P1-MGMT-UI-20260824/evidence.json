@@ -60,19 +60,20 @@
   ],
   "verification": {
     "typecheck": "tsc --noEmit (passed with 0 errors)",
-    "unit_tests": "vitest run src/management/pages/oversight/DataSourceManagement.test.tsx (12/12 passed)",
+    "unit_tests": "vitest run src/management/pages/oversight/DataSourceManagement.test.tsx (14/14 passed)",
     "client_tests": "vitest run src/lib/bff-v1/managementDataSources.test.ts (20/20 passed)",
-    "full_vitest_suite": "vitest run (188 files, 1912 tests passed)",
-    "build": "vite build (succeeded)",
-    "lint": "eslint . (0 errors, 61 warnings)"
+    "e2e_tests": "playwright test e2e/30-management-data-source-control.spec.ts (14/14 passed across chromium and mobile-chromium in 37.5s)",
+    "build": "npm run build (succeeded in 46.17s)",
+    "whitespace_check": "git diff --check (0 errors)"
   },
   "review_rejection_repairs": {
     "commit_subject_gate": "Enforced commit subject length <= 70 chars with required trailers (LLM-Agent, Task-ID, Reviewer, Verified)",
-    "envelope_meta_states": "Rendered and tested 5 distinct states: loading, authoritative-empty, unavailable, degraded-legacy banner, current-v2",
+    "envelope_meta_states": "Rendered and tested 5 distinct states: loading, authoritative-empty, unavailable, degraded-legacy banner, current-v2 in unit tests and Playwright E2E",
     "adapter_tests": "Added direct V2-preserving adapter test (asserting allowedActions, desired, observed, definition) and legacy projection test",
-    "command_lifecycle_ux": "Completed pending, terminal success with receipt readback reload, typed errors, STALE_REVISION corrective action card and button, and duplicate click prevention",
-    "mutation_write_gating": "Gated all mutation controls including Detail Drawer Change Schedule button when real writes are off, verified with unit tests",
-    "e2e_evidence_truthfulness": "Replaced vacuous expect(locator).toBeDefined with toBeFocused and toBeVisible, added envelope state tests, drawer schedule gating tests, and responsive tests"
+    "command_lifecycle_ux": "Completed real pending, terminal success with receipt readback reload, typed errors, STALE_REVISION corrective action card and button, and poll exhaustion re-enabling Execute with fresh idempotency key",
+    "mutation_write_gating": "Gated all mutation controls including Detail Drawer Change Schedule button when real writes are off, verified with unit tests and E2E",
+    "bilingual_e2e_locators": "Fixed all locators in e2e/30-management-data-source-control.spec.ts to support zh-TW and en-US locales, scoped TWSE row matching, dialog scoping for secret refs and reconciliation comparison, and full degraded-legacy assertion",
+    "clean_whitespace": "Removed EOF trailing blank lines in test files ensuring git diff --check exits cleanly with 0 errors"
   },
   "acceptance_checklist": {
     "sd_srcm_04_states_tables_wizard_detail_dialogs_receipts": true,

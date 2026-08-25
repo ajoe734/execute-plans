@@ -3110,6 +3110,9 @@ export default {
       askManagement: "Ask Management",
       cancel: "Cancel",
       close: "Close",
+      view: "View",
+      back: "Back",
+      next: "Next",
     },
     governance: {
       submitting: "Submitting…",

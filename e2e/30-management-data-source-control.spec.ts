@@ -214,6 +214,18 @@ async function setupStandardFixtures(page: Page) {
       });
     }
 
+    if (url.pathname.endsWith("/ds-twse-market-v1") || url.pathname.endsWith("/ds-tpex-quote-v1")) {
+      const match = url.pathname.endsWith("/ds-tpex-quote-v1") ? MOCK_DIVERGED_DATA_SOURCE : MOCK_V2_DATA_SOURCE;
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: match,
+          meta: { status: "ok", source: "service_client" },
+        }),
+      });
+    }
+
     return route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -230,7 +242,14 @@ async function setupStandardFixtures(page: Page) {
 
 test.describe("Management Data Source Control Center (SD-SRCM-04)", () => {
   test.beforeEach(async ({ page }) => {
-    await installOidcDevLogin(page);
+    await installOidcDevLogin(page, {
+      env: {
+        ...process.env,
+        VITE_GCP_IDENTITY_API_KEY:
+          process.env.VITE_GCP_IDENTITY_API_KEY ||
+          "AIza01234567890123456789012345678901234",
+      },
+    });
     await installQuietEventSource(page);
   });
 
@@ -239,51 +258,65 @@ test.describe("Management Data Source Control Center (SD-SRCM-04)", () => {
     await page.goto("/management/data-sources");
 
     // Header & Real Writes Status
-    await expect(page.getByRole("heading", { name: "Data Source Management" })).toBeVisible();
-    await expect(page.getByText(/Real writes disabled/i)).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Data Source Management|資料源管理/i })).toBeVisible();
+    await expect(page.getByText(/Real writes disabled|實體寫入已停用/i)).toBeVisible();
 
     // Verify Add Data Source button is disabled when real writes are off
-    const addBtn = page.getByRole("button", { name: /Add Data Source/i });
+    const addBtn = page.getByRole("button", { name: /Add Data Source|新增資料來源/i });
     await expect(addBtn).toBeVisible();
     await expect(addBtn).toBeDisabled();
 
     // Check 9 Canonical Columns
-    await expect(page.getByText("Source / Provider")).toBeVisible();
-    await expect(page.getByText("Support / Deployment")).toBeVisible();
-    await expect(page.getByText("Desired Lifecycle")).toBeVisible();
-    await expect(page.getByText("Observed Health")).toBeVisible();
-    await expect(page.getByText("Credential / License")).toBeVisible();
-    await expect(page.getByText("Schedule / Watermark")).toBeVisible();
-    await expect(page.getByText("Latest Run / Search")).toBeVisible();
-    await expect(page.getByText("Consumers / Cost")).toBeVisible();
-    await expect(page.getByText("Actions")).toBeVisible();
+    await expect(page.getByText(/Source \/ Provider|來源 \/ 提供者/i)).toBeVisible();
+    await expect(page.getByText(/Support \/ Deployment|支援 \/ 部署版本/i)).toBeVisible();
+    await expect(page.getByText(/Desired Lifecycle|目標生命週期/i)).toBeVisible();
+    await expect(page.getByText(/Observed Health|觀測健康與新鮮度/i)).toBeVisible();
+    await expect(page.getByText(/Credential \/ License|憑證 \/ 授權範疇/i)).toBeVisible();
+    await expect(page.getByText(/Schedule \/ Watermark|排程 \/ 水位線/i)).toBeVisible();
+    await expect(page.getByText(/Latest Run \/ Search|最近執行 \/ 搜尋索引/i)).toBeVisible();
+    await expect(page.getByText(/Consumers \/ Cost|取用 Persona \/ 成本/i)).toBeVisible();
+    await expect(page.getByText(/Actions|操作/i).first()).toBeVisible();
   });
 
   test("renders SD-SRCM-04 V2 structures, divergence badges, and detail drawer", async ({ page }) => {
     await setupStandardFixtures(page);
     await page.goto("/management/data-sources");
 
-    // Check items rendered
-    await expect(page.getByText("TWSE")).toBeVisible();
-    await expect(page.getByText("ds-twse-market-v1")).toBeVisible();
+    // Check items rendered with row scoping to avoid non-unique TWSE matches
+    const twseRow = page.locator("tr").filter({ hasText: "ds-twse-market-v1" });
+    await expect(twseRow).toBeVisible();
+    await expect(twseRow.getByText("TWSE", { exact: true })).toBeVisible();
+    await expect(twseRow.getByText("ds-twse-market-v1")).toBeVisible();
 
-    // Check Divergence badge
-    await expect(page.getByText("diverged")).toBeVisible();
+    // Check Divergence badge on diverged row
+    const divergedRow = page.locator("tr").filter({ hasText: "ds-tpex-quote-v1" });
+    await expect(divergedRow.getByText(/diverged|分歧/i)).toBeVisible();
 
     // Open Detail Drawer for TWSE source
-    const viewButtons = page.getByRole("button", { name: /view/i });
-    await viewButtons.first().click();
+    const viewBtn = twseRow.getByRole("button", { name: /view|檢視/i });
+    await viewBtn.click();
 
-    // Detail Drawer Assertions
-    await expect(page.getByText("Desired vs Observed")).toBeVisible();
-    await expect(page.getByText("Secret Reference")).toBeVisible();
-    await expect(page.getByText("vault://secret/twse-api-key")).toBeVisible();
+    // Detail Drawer Assertions (scoped to dialog)
+    const drawer = page.getByRole("dialog");
+    await expect(drawer.getByRole("heading", { name: "ds-twse-market-v1" })).toBeVisible();
+
+    // Switch to Config Tab to assert secret reference security
+    const configTab = drawer.getByRole("tab", { name: /Config|連線與設定/i });
+    await configTab.click();
+    await expect(drawer.getByText("vault://secret/twse-api-key")).toBeVisible();
     await expect(
-      page.getByText("Secrets are stored securely in vault and referenced by ID. Raw values are never exposed."),
+      drawer.getByText(/Secrets are stored securely|以 ID 參考|金鑰保存庫/i),
     ).toBeVisible();
 
+    // Switch to Desired vs Observed Tab
+    const desiredObservedTab = drawer.getByRole("tab", { name: /Desired vs Observed|目標與觀測/i });
+    await desiredObservedTab.click();
+    await expect(drawer.getByText(/Desired State|設定目標意圖/i)).toBeVisible();
+    await expect(drawer.getByText(/Observed State|即時觀測事實/i)).toBeVisible();
+    await expect(drawer.getByText("converged")).toBeVisible();
+
     // Check Action Buttons in Drawer are disabled when writes are off
-    const validateBtn = page.getByRole("button", { name: /^Validate$/i });
+    const validateBtn = drawer.getByRole("button", { name: /Validate|驗證設定/i }).first();
     await expect(validateBtn).toBeVisible();
     await expect(validateBtn).toBeDisabled();
   });
@@ -293,17 +326,17 @@ test.describe("Management Data Source Control Center (SD-SRCM-04)", () => {
 
     // 1. Catalog Tab
     await page.goto("/management/data-sources?tab=catalog");
-    await expect(page.getByText("Phase 1 Offline Development Intake")).toBeVisible();
-    await expect(page.getByRole("button", { name: /Download Sample Need/i })).toBeVisible();
+    await expect(page.getByText(/Phase 1 (Offline Development Intake|離線開發需求)/i)).toBeVisible();
+    await expect(page.getByRole("button", { name: /Download.*Need|下載需求/i })).toBeVisible();
 
     // 2. Runs & Health Tab
     await page.goto("/management/data-sources?tab=runs");
-    await expect(page.getByText("Bounded Read-Only Canary Pulls")).toBeVisible();
-    await expect(page.getByText("Recent Observation Runs")).toBeVisible();
+    await expect(page.getByText(/Bounded Read-Only Canary Pulls|受限唯讀金絲雀拉取/i)).toBeVisible();
+    await expect(page.getByText(/Observation & Ingestion History|觀測與擷取歷史記錄/i)).toBeVisible();
 
     // 3. Change History Tab
     await page.goto("/management/data-sources?tab=receipts");
-    await expect(page.getByText("Command Receipts Ledger")).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Command Receipts Ledger|指令收據稽核帳冊/i })).toBeVisible();
   });
 
   test("accessibility and keyboard focus navigation", async ({ page }) => {
@@ -311,7 +344,7 @@ test.describe("Management Data Source Control Center (SD-SRCM-04)", () => {
     await page.goto("/management/data-sources");
 
     // Ensure main section has aria-label
-    const section = page.locator('section[aria-label="Data Source Management"]');
+    const section = page.locator('section[aria-label="Data Source Management"], section[aria-label="資料源管理"]');
     await expect(section).toBeVisible();
 
     // Keyboard Tab navigation to interactive element
@@ -321,12 +354,12 @@ test.describe("Management Data Source Control Center (SD-SRCM-04)", () => {
     await expect(focused).toBeFocused();
 
     // Open Drawer and verify escape key closes it
-    const viewBtn = page.getByRole("button", { name: /view/i }).first();
+    const viewBtn = page.getByRole("button", { name: /view|檢視/i }).first();
     await viewBtn.click();
-    await expect(page.getByText("Desired vs Observed")).toBeVisible();
+    await expect(page.getByText("ds-twse-market-v1").first()).toBeVisible();
 
     await page.keyboard.press("Escape");
-    await expect(page.getByText("Desired vs Observed")).toBeHidden();
+    await expect(page.getByText(/Desired vs Observed|目標與觀測/i)).toBeHidden();
   });
 
   test("envelope meta states: authoritative-empty, unavailable, degraded-legacy", async ({ page }) => {
@@ -348,7 +381,7 @@ test.describe("Management Data Source Control Center (SD-SRCM-04)", () => {
 
     await page.goto("/management/data-sources");
     await expect(page.getByTestId("data-sources-authoritative-empty")).toBeVisible();
-    await expect(page.getByText("No Data Sources Configured")).toBeVisible();
+    await expect(page.getByText(/No Data Sources Configured|尚未設定資料源/i)).toBeVisible();
 
     // 2. Unavailable
     await page.route("**/bff/management/data-sources", async (route) => {
@@ -368,7 +401,31 @@ test.describe("Management Data Source Control Center (SD-SRCM-04)", () => {
 
     await page.goto("/management/data-sources");
     await expect(page.getByTestId("data-sources-unavailable")).toBeVisible();
-    await expect(page.getByText("Live data sources unavailable")).toBeVisible();
+    await expect(page.getByText(/Live data sources unavailable|目前沒有 live 資料源資料/i)).toBeVisible();
+
+    // 3. Degraded-Legacy
+    await page.route("**/bff/management/data-sources", async (route) => {
+      if (route.request().url().endsWith("/data-sources")) {
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            data: {
+              items: [MOCK_V2_DATA_SOURCE],
+              count: 1,
+            },
+            meta: { status: "degraded", source: "legacy_projection" },
+            page_info: { total_count: 1 },
+          }),
+        });
+      }
+      return route.continue();
+    });
+
+    await page.goto("/management/data-sources");
+    await expect(page.getByTestId("degraded-legacy-banner")).toBeVisible();
+    await expect(page.getByText(/Legacy Compatibility Projection Mode|舊版相容投影模式/i)).toBeVisible();
+    await expect(page.getByText(/Data source rows are projected from legacy fleet state|部分資料源紀錄來自舊版 Fleet 狀態投影/i)).toBeVisible();
   });
 
   test("detail drawer schedule change gating when real writes are off", async ({ page }) => {
@@ -376,20 +433,20 @@ test.describe("Management Data Source Control Center (SD-SRCM-04)", () => {
     await page.goto("/management/data-sources");
 
     // Open Drawer
-    const viewBtn = page.getByRole("button", { name: /view/i }).first();
+    const viewBtn = page.getByRole("button", { name: /view|檢視/i }).first();
     await viewBtn.click();
 
     // Go to Schedule tab
-    const scheduleTab = page.getByRole("tab", { name: /Schedule & Universe/i });
+    const scheduleTab = page.getByRole("tab", { name: /Schedule|排程/i });
     await scheduleTab.click();
 
-    // Verify Change Schedule button is disabled with read-only tooltip
-    const changeScheduleBtn = page.getByRole("button", { name: /Change Schedule/i });
+    // Verify Change Schedule button in schedule tabpanel is disabled with read-only tooltip
+    const changeScheduleBtn = page.getByRole("tabpanel").getByRole("button", { name: /Change Schedule|修改排程/i });
     await expect(changeScheduleBtn).toBeVisible();
     await expect(changeScheduleBtn).toBeDisabled();
     await expect(changeScheduleBtn).toHaveAttribute(
       "title",
-      "Real writes are disabled (read-only mode).",
+      /Real writes are disabled|實體寫入已停用/,
     );
   });
 
@@ -399,12 +456,12 @@ test.describe("Management Data Source Control Center (SD-SRCM-04)", () => {
     await page.goto("/management/data-sources");
 
     // Verify header and table scroll wrapper on narrow screen
-    await expect(page.getByRole("heading", { name: "Data Source Management" })).toBeVisible();
-    await expect(page.locator(".overflow-x-auto").first()).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Data Source Management|資料源管理/i })).toBeVisible();
+    await expect(page.locator(".overflow-x-auto, [data-testid='table-scroll']").first()).toBeVisible();
 
     // Verify tabs still switchable
-    const catalogTab = page.getByRole("tab", { name: /Catalog/i });
+    const catalogTab = page.getByRole("tab", { name: /Catalog|連接器目錄/i });
     await catalogTab.click();
-    await expect(page.getByText("Phase 1 Offline Development Intake")).toBeVisible();
+    await expect(page.getByText(/Phase 1 (Offline Development Intake|離線開發需求)/i)).toBeVisible();
   });
 });
