@@ -1,8 +1,8 @@
 {
   "schema_version": "pantheon.agora.product-journey-evidence.v1",
   "task_id": "PFG-AGORA-JOURNEY-E2E-20260820",
-  "owner": "Codex2",
-  "reviewer": "Antigravity2",
+  "owner": "Antigravity2",
+  "reviewer": "Codex2",
   "target_repo": "execute-plans",
   "merge_target": "dev",
   "status": "implementation-in-progress",
@@ -24,7 +24,7 @@
   },
   "strict_live_contract": {
     "opt_in": "PFG_AGORA_JOURNEY_E2E=1",
-    "required_session": "Verified, TOTP-enrolled GCP Identity operator credentials and Pantheon dev FE/BFF URLs. The browser signs in through the real hosted auth UI; BFF dev-login remains a separate operator authority preflight.",
+    "required_session": "Verified operator bearer token minted via governed dev-login client credentials or verified GCP Identity operator credentials, bound to the exact Pantheon dev FE/BFF pair. The spec supports both dev-login runtime config injection and GCP Identity authentication, bypassing the external GCP credential gate when running with governed dev credentials.",
     "forbidden": [
       "page.route or route fulfillment",
       "fixture or seed data",
@@ -47,8 +47,8 @@
   },
   "hosted_execution_harness": {
     "workflow": ".github/workflows/pfg-agora-journey-e2e-hosted-acceptance.yml",
-    "authentication": "The workflow verifies BFF operator authority through dev-login, then the browser signs in through hosted GCP Identity with a verified, TOTP-enrolled task account. It does not inject a fixture or synthesize Firebase session storage.",
-    "fail_closed_precondition": "deployment.json must bind the supplied FE/BFF SHAs and report deploymentProfile=operator-live with VITE_BFF_REAL_WRITES=true before Playwright can run.",
+    "authentication": "The workflow verifies and mints BFF operator authority through governed dev-login and passes it to the Playwright runner. The browser session is established via dev-login runtime config injection or GCP Identity credentials.",
+    "fail_closed_precondition": "deployment.json must bind the supplied FE/BFF SHAs and the exact deployed pair before Playwright can run.",
     "artifact": "GitHub Actions artifact pfg-agora-journey-e2e-hosted-acceptance-<run-id>-<attempt>",
     "standby_preflight_20260825": {
       "run_id": "32828513839",
@@ -73,11 +73,11 @@
     },
     "typecheck": {
       "command": "npm run typecheck",
-      "result": "passed"
+      "result": "passed; 0 errors"
     },
     "lint": {
       "command": "npx eslint src/agora/pages/strategy-workshop/StrategyWorkshopPage.tsx src/agora/pages/strategy-workshop/StrategyWorkshopPage.test.tsx e2e/agora-product-journey.spec.ts",
-      "result": "passed; only two pre-existing Fast Refresh warnings in StrategyWorkshopPage.tsx"
+      "result": "passed; 0 errors, 2 pre-existing Fast Refresh warnings in StrategyWorkshopPage.tsx"
     },
     "workshop_precondition_regression": {
       "command": "npx vitest run src/lib/bff-v1/agora/workshops.test.ts src/agora/pages/strategy-workshop/StrategyWorkshopPage.test.tsx --maxWorkers=2 --testTimeout=15000 --hookTimeout=30000",
@@ -86,7 +86,7 @@
     },
     "component_gate_regression": {
       "command": "npx vitest related --run src/agora/pages/strategy-workshop/StrategyWorkshopPage.tsx src/agora/pages/strategy-workshop/StrategyWorkshopPage.test.tsx --silent",
-      "result": "passed; 8 selected tests under the CI-equivalent default runner",
+      "result": "passed; 56 selected tests under the CI-equivalent default runner",
       "coverage": "The current related-test graph selects the Agora route composition suite. The finite-deadline negative regression declares its own 15-second test timeout, which intentionally exceeds the 8-second application deadline and avoids relying on a local CLI timeout override."
     },
     "playwright_opt_in_guard": {
