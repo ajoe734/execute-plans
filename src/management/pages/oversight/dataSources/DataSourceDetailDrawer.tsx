@@ -38,6 +38,7 @@ import {
   type SourceCommandReceipt,
   type SourceObservation,
 } from "@/lib/bff-v1/managementDataSources";
+import { realWritesEnabled } from "@/lib/bff-v1/liveTransport";
 import {
   canaryTone,
   credentialTone,
@@ -94,7 +95,7 @@ export function DataSourceDetailDrawer({
     }
   }, [initialSource, sourceInstanceId]);
 
-  const loadData = async () => {
+  const loadData = React.useCallback(async () => {
     if (!sourceInstanceId) return;
     setLoading(true);
     try {
@@ -118,13 +119,13 @@ export function DataSourceDetailDrawer({
     } finally {
       setLoading(false);
     }
-  };
+  }, [sourceInstanceId]);
 
   useEffect(() => {
     if (open && sourceInstanceId) {
       loadData();
     }
-  }, [open, sourceInstanceId]);
+  }, [open, sourceInstanceId, loadData]);
 
   if (!source && !loading) return null;
 
@@ -163,16 +164,16 @@ export function DataSourceDetailDrawer({
                     variant="outline"
                     className={lifecycleTone(currentSource?.instance?.lifecycle_state)}
                   >
-                    {fmtToken(currentSource?.instance?.lifecycle_state)}
+                    {fmtToken(currentSource?.instance?.lifecycle_state || "unknown")}
                   </Badge>
                   <Badge
                     variant="outline"
                     className={healthStateTone(currentSource?.observed?.health_state)}
                   >
-                    {fmtToken(currentSource?.observed?.health_state)}
+                    {fmtToken(currentSource?.observed?.health_state || "unknown")}
                   </Badge>
                   <Badge variant="outline" className="font-mono text-xs">
-                    Rev {currentSource?.desired?.revision ?? currentSource?.instance?.revision ?? 1}
+                    Rev {currentSource?.desired?.revision !== undefined && currentSource.desired.revision >= 1 ? currentSource.desired.revision : (currentSource?.instance?.revision !== undefined && currentSource.instance.revision >= 1 ? currentSource.instance.revision : "—")}
                   </Badge>
                 </div>
                 <SheetDescription className="text-xs text-muted-foreground">
@@ -220,15 +221,22 @@ export function DataSourceDetailDrawer({
             {/* Quick Action Buttons */}
             <div className="flex flex-wrap gap-1.5 pt-1">
               {DATA_SOURCE_ACTIONS.map((action) => {
-                const { allowed, reasons } = isActionAllowed(action.key, allowedActions);
+                const writesLive = realWritesEnabled();
+                const { allowed, reasons } = isActionAllowed(action.key, allowedActions, writesLive);
+                const actionDisabled = !allowed || loading;
+                const tooltip = !writesLive
+                  ? t("mgmt.dataSources.realWritesRequired")
+                  : !allowed
+                    ? reasons.join(", ")
+                    : undefined;
                 return (
                   <Button
                     key={action.key}
                     size="sm"
                     variant={action.destructive ? "outline" : "secondary"}
                     className={`h-7 px-2.5 text-xs ${action.destructive && allowed ? "text-status-failed hover:bg-status-failed/10" : ""}`}
-                    disabled={!allowed || loading}
-                    title={!allowed ? reasons.join(", ") : undefined}
+                    disabled={actionDisabled}
+                    title={tooltip}
                     onClick={() => openAction(action.key)}
                   >
                     {t(action.labelKey)}
@@ -391,17 +399,17 @@ export function DataSourceDetailDrawer({
                       <div className="space-y-1.5">
                         <div>
                           <span className="text-muted-foreground">{t("mgmt.dataSources.detail.revision")}:</span>
-                          <p className="font-mono font-medium">Rev {currentSource?.desired?.revision ?? 1}</p>
+                          <p className="font-mono font-medium">Rev {currentSource?.desired?.revision !== undefined && currentSource.desired.revision >= 1 ? currentSource.desired.revision : "—"}</p>
                         </div>
                         <div>
                           <span className="text-muted-foreground">{t("mgmt.dataSources.detail.lifecycle")}:</span>
                           <Badge variant="outline" className={lifecycleTone(currentSource?.desired?.desired_lifecycle)}>
-                            {fmtToken(currentSource?.desired?.desired_lifecycle)}
+                            {fmtToken(currentSource?.desired?.desired_lifecycle || "unknown")}
                           </Badge>
                         </div>
                         <div>
                           <span className="text-muted-foreground">{t("mgmt.dataSources.detail.scheduleStatus")}:</span>
-                          <p>{currentSource?.desired?.schedule?.enabled ? t("mgmt.dataSources.liveOn") : t("mgmt.dataSources.liveOff")}</p>
+                          <p>{currentSource?.desired?.schedule?.enabled !== undefined ? (currentSource.desired.schedule.enabled ? t("mgmt.dataSources.liveOn") : t("mgmt.dataSources.liveOff")) : "—"}</p>
                         </div>
                         <div>
                           <span className="text-muted-foreground">{t("mgmt.dataSources.detail.definitionSha")}:</span>
@@ -419,35 +427,35 @@ export function DataSourceDetailDrawer({
                         <div>
                           <span className="text-muted-foreground">{t("mgmt.dataSources.detail.observedRevision")}:</span>
                           <p className="font-mono font-medium">
-                            Rev {currentSource?.observed?.observed_revision ?? currentSource?.desired?.revision ?? 1}
+                            Rev {currentSource?.observed?.observed_revision !== undefined && currentSource.observed.observed_revision >= 1 ? currentSource.observed.observed_revision : "—"}
                           </p>
                         </div>
                         <div>
                           <span className="text-muted-foreground">{t("mgmt.dataSources.detail.effectiveLifecycle")}:</span>
                           <Badge variant="outline" className={lifecycleTone(currentSource?.observed?.effective_lifecycle)}>
-                            {fmtToken(currentSource?.observed?.effective_lifecycle)}
+                            {fmtToken(currentSource?.observed?.effective_lifecycle || "unknown")}
                           </Badge>
                         </div>
                         <div>
                           <span className="text-muted-foreground">{t("mgmt.dataSources.detail.health")}:</span>
                           <Badge variant="outline" className={healthStateTone(currentSource?.observed?.health_state)}>
-                            {fmtToken(currentSource?.observed?.health_state)}
+                            {fmtToken(currentSource?.observed?.health_state || "unknown")}
                           </Badge>
                         </div>
                         <div>
                           <span className="text-muted-foreground">{t("mgmt.dataSources.detail.credentialState")}:</span>
                           <Badge variant="outline" className={credentialTone(currentSource?.observed?.credential_state)}>
-                            {fmtToken(currentSource?.observed?.credential_state)}
+                            {fmtToken(currentSource?.observed?.credential_state || "unknown")}
                           </Badge>
                         </div>
                         <div>
                           <span className="text-muted-foreground">{t("mgmt.dataSources.detail.validationState")}:</span>
-                          <Badge variant="outline">{fmtToken(currentSource?.observed?.validation_state)}</Badge>
+                          <Badge variant="outline">{fmtToken(currentSource?.observed?.validation_state || "unknown")}</Badge>
                         </div>
                         <div>
                           <span className="text-muted-foreground">{t("mgmt.dataSources.detail.canaryState")}:</span>
                           <Badge variant="outline" className={canaryTone(currentSource?.observed?.canary_state)}>
-                            {fmtToken(currentSource?.observed?.canary_state)}
+                            {fmtToken(currentSource?.observed?.canary_state || "unknown")}
                           </Badge>
                         </div>
                       </div>
@@ -529,7 +537,7 @@ export function DataSourceDetailDrawer({
                       <div className="space-y-1 mt-1 text-[11px] font-mono">
                         <div>Max Records: {currentSource?.desired?.limits?.max_records ?? currentSource?.definition?.default_limits?.max_records ?? "—"}</div>
                         <div>Max Bytes: {formatBytes(currentSource?.desired?.limits?.max_bytes ?? currentSource?.definition?.default_limits?.max_bytes)}</div>
-                        <div>Timeout: {currentSource?.desired?.limits?.timeout_seconds ?? currentSource?.definition?.default_limits?.timeout_seconds ?? 15}s</div>
+                        <div>Timeout: {currentSource?.desired?.limits?.timeout_seconds !== undefined ? `${currentSource.desired.limits.timeout_seconds}s` : (currentSource?.definition?.default_limits?.timeout_seconds !== undefined ? `${currentSource.definition.default_limits.timeout_seconds}s` : "—")}</div>
                       </div>
                     </div>
                   </div>
@@ -548,7 +556,8 @@ export function DataSourceDetailDrawer({
                       size="sm"
                       variant="outline"
                       onClick={() => openAction("schedule")}
-                      disabled={!allowedActions?.canChangeSchedule || loading}
+                      disabled={!realWritesEnabled() || !allowedActions?.canChangeSchedule || loading}
+                      title={!realWritesEnabled() ? t("mgmt.dataSources.realWritesRequired") : undefined}
                       className="h-7 text-xs"
                     >
                       {t("mgmt.dataSources.actions.changeSchedule")}
@@ -559,7 +568,7 @@ export function DataSourceDetailDrawer({
                     <div>
                       <span className="text-muted-foreground">{t("mgmt.dataSources.detail.scheduleStatus")}:</span>
                       <Badge variant="outline" className={currentSource?.desired?.schedule?.enabled ? toneClass.ok : toneClass.muted}>
-                        {currentSource?.desired?.schedule?.enabled ? t("mgmt.dataSources.liveOn") : t("mgmt.dataSources.liveOff")}
+                        {currentSource?.desired?.schedule?.enabled !== undefined ? (currentSource.desired.schedule.enabled ? t("mgmt.dataSources.liveOn") : t("mgmt.dataSources.liveOff")) : "—"}
                       </Badge>
                     </div>
                     <div>
@@ -572,7 +581,7 @@ export function DataSourceDetailDrawer({
                     </div>
                     <div>
                       <span className="text-muted-foreground">{t("mgmt.dataSources.detail.jitterSeconds")}:</span>
-                      <p className="font-mono">{currentSource?.desired?.schedule?.jitter_seconds ?? 0}s</p>
+                      <p className="font-mono">{currentSource?.desired?.schedule?.jitter_seconds !== undefined ? `${currentSource.desired.schedule.jitter_seconds}s` : "—"}</p>
                     </div>
                     <div className="col-span-2">
                       <span className="text-muted-foreground">{t("mgmt.dataSources.detail.universePolicyRef")}:</span>
@@ -605,7 +614,7 @@ export function DataSourceDetailDrawer({
                             </Badge>
                           </div>
                           <div className="flex justify-between text-muted-foreground text-[11px]">
-                            <span>Rows: {canary.row_count ?? 0} (rej: {canary.rejected_count ?? 0})</span>
+                            <span>Rows: {canary.row_count !== undefined ? canary.row_count : "—"} (rej: {canary.rejected_count !== undefined ? canary.rejected_count : "—"})</span>
                             <span>{formatTime(canary.completed_at || canary.started_at)}</span>
                           </div>
                         </div>
@@ -637,7 +646,7 @@ export function DataSourceDetailDrawer({
                           {runs.observations.slice(0, 10).map((obs, idx) => (
                             <tr key={idx} className="border-b border-border/50">
                               <td className="py-1.5 font-mono">{formatTime(obs.observed_at)}</td>
-                              <td className="py-1.5 font-mono">r{obs.observed_revision}</td>
+                              <td className="py-1.5 font-mono">{obs.observed_revision !== undefined && obs.observed_revision >= 1 ? `r${obs.observed_revision}` : "—"}</td>
                               <td className="py-1.5">
                                 <Badge variant="outline" className={healthStateTone(obs.health_state)}>
                                   {obs.health_state}

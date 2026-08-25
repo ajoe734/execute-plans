@@ -27,6 +27,7 @@ import {
   type ConnectorDefinition,
   type SourceDevelopmentNeed,
 } from "@/lib/bff-v1/managementDataSources";
+import { realWritesEnabled } from "@/lib/bff-v1/liveTransport";
 import { fmtToken, formatBytes, joinOrDash, toneClass } from "./dataSourceModels";
 
 export interface DataSourceCatalogPanelProps {
@@ -35,6 +36,7 @@ export interface DataSourceCatalogPanelProps {
 
 export function DataSourceCatalogPanel({ onCreateFromDefinition }: DataSourceCatalogPanelProps) {
   const { t } = useTranslation();
+  const writesLive = realWritesEnabled();
   const [definitions, setDefinitions] = useState<ConnectorDefinition[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
@@ -230,7 +232,8 @@ export function DataSourceCatalogPanel({ onCreateFromDefinition }: DataSourceCat
                     size="sm"
                     variant={isSupported ? "default" : "outline"}
                     className="h-8 text-xs"
-                    disabled={!isSupported}
+                    disabled={!isSupported || !writesLive}
+                    title={!writesLive ? t("mgmt.dataSources.realWritesRequired") : undefined}
                     onClick={() => onCreateFromDefinition(def.definition_id)}
                   >
                     <Plus className="h-3.5 w-3.5 mr-1" />

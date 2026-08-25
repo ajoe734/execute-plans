@@ -27,6 +27,7 @@ import {
 import { ManagementTableScroll } from "@/management/components/ManagementTableScroll";
 import type { ManagementDataSourceV2DTO } from "@/lib/bff-v1/managementDataSources";
 import type { SystemDataSourceRecord } from "@/lib/v5/management/systemDataSources";
+import { realWritesEnabled } from "@/lib/bff-v1/liveTransport";
 import {
   canaryTone,
   credentialTone,
@@ -120,6 +121,8 @@ function V2DataSourceRow({
   const allowedActions = dto.allowed_actions || dto.allowedActions;
   const isEnabled = dto.desired?.desired_lifecycle === "enabled";
 
+  const writesLive = realWritesEnabled();
+
   return (
     <tr className="hover:bg-muted/30 transition-colors align-top">
       {/* 1. Source / Provider */}
@@ -160,7 +163,7 @@ function V2DataSourceRow({
                 : "text-[10px]"
             }
           >
-            {fmtToken(dto.definition?.definition_state || "supported")}
+            {fmtToken(dto.definition?.definition_state || "unknown")}
           </Badge>
         </div>
         <div className="font-mono text-[10px] text-muted-foreground mt-1 truncate max-w-[150px]">
@@ -177,10 +180,10 @@ function V2DataSourceRow({
       <td className="px-3 py-3 min-w-[150px]">
         <div className="flex items-center gap-1.5">
           <Badge variant="outline" className={lifecycleTone(dto.desired?.desired_lifecycle)}>
-            {fmtToken(dto.desired?.desired_lifecycle || dto.instance?.lifecycle_state || "configured_disabled")}
+            {fmtToken(dto.desired?.desired_lifecycle || dto.instance?.lifecycle_state || "unknown")}
           </Badge>
           <Badge variant="outline" className="font-mono text-[10px]">
-            r{dto.desired?.revision ?? dto.instance?.revision ?? 1}
+            {dto.desired?.revision !== undefined && dto.desired.revision >= 1 ? `r${dto.desired.revision}` : (dto.instance?.revision !== undefined && dto.instance.revision >= 1 ? `r${dto.instance.revision}` : "r—")}
           </Badge>
         </div>
       </td>
@@ -189,10 +192,10 @@ function V2DataSourceRow({
       <td className="px-3 py-3 min-w-[200px]">
         <div className="flex items-center gap-1.5">
           <Badge variant="outline" className={healthStateTone(dto.observed?.health_state)}>
-            {fmtToken(dto.observed?.health_state || "healthy")}
+            {fmtToken(dto.observed?.health_state || "unknown")}
           </Badge>
           <Badge variant="outline" className={reconciliationTone(dto.observed?.reconciliation_status)}>
-            {fmtToken(dto.observed?.reconciliation_status || "converged")}
+            {fmtToken(dto.observed?.reconciliation_status || "unknown")}
           </Badge>
         </div>
         <div className="text-[11px] text-muted-foreground mt-1 space-y-0.5">
@@ -209,7 +212,7 @@ function V2DataSourceRow({
       <td className="px-3 py-3 min-w-[160px]">
         <div className="flex items-center gap-1">
           <Badge variant="outline" className={credentialTone(dto.observed?.credential_state)}>
-            {fmtToken(dto.observed?.credential_state || "configured")}
+            {fmtToken(dto.observed?.credential_state || "unknown")}
           </Badge>
         </div>
         <div className="text-[11px] font-mono text-muted-foreground mt-1 truncate max-w-[150px]">
@@ -227,7 +230,7 @@ function V2DataSourceRow({
       <td className="px-3 py-3 min-w-[160px]">
         <div className="flex items-center gap-1.5">
           <Badge variant="outline" className={dto.desired?.schedule?.enabled ? toneClass.ok : toneClass.muted}>
-            {dto.desired?.schedule?.enabled ? t("mgmt.dataSources.liveOn") : t("mgmt.dataSources.liveOff")}
+            {dto.desired?.schedule?.enabled !== undefined ? (dto.desired.schedule.enabled ? t("mgmt.dataSources.liveOn") : t("mgmt.dataSources.liveOff")) : "—"}
           </Badge>
         </div>
         {dto.desired?.schedule?.cadence && (
@@ -242,7 +245,7 @@ function V2DataSourceRow({
         {dto.observed?.last_run ? (
           <div className="space-y-0.5">
             <div>
-              Rows: <span className="font-mono font-medium">{dto.observed.last_run.row_count ?? 0}</span>
+              Rows: <span className="font-mono font-medium">{dto.observed.last_run.row_count !== undefined ? dto.observed.last_run.row_count : "—"}</span>
               {dto.observed.last_run.rejected_count ? (
                 <span className="text-status-failed ml-1 font-mono">
                   (rej: {dto.observed.last_run.rejected_count})
@@ -263,20 +266,50 @@ function V2DataSourceRow({
       </td>
 
       {/* 8. Consumers / Cost */}
-      <td className="px-3 py-3 min-w-[160px]">
-        <div className="flex flex-wrap gap-1">
-          {(dto.observed?.dependent_refs ?? []).length === 0 ? (
-            <span className="text-muted-foreground text-[11px]">—</span>
+      <td className="px-3 py-3 min-w-[170px]">
+        <div className="space-y-1">
+          <div className="flex flex-wrap gap-1 items-center">
+            {(dto.observed?.dependent_refs ?? []).length === 0 ? (
+              <span className="text-muted-foreground text-[11px]">—</span>
+            ) : (
+              <>
+                <span className="text-[10px] text-muted-foreground font-medium mr-0.5">
+                  {t("mgmt.dataSources.consumersCount", { count: dto.observed!.dependent_refs!.length })}:
+                </span>
+                {dto.observed!.dependent_refs!.slice(0, 3).map((ref) => (
+                  <Link
+                    key={ref}
+                    to={`/management/personas/${encodeURIComponent(ref)}`}
+                    className="font-mono text-[10px] text-primary hover:underline bg-primary/5 px-1 py-0.5 rounded border border-primary/20"
+                  >
+                    {ref}
+                  </Link>
+                ))}
+              </>
+            )}
+          </div>
+          {/* Usage & Cost Summary */}
+          {(dto.observed?.usage || dto.observed?.quota) ? (
+            <div className="text-[10px] text-muted-foreground font-mono flex flex-wrap gap-x-2 gap-y-0.5">
+              {dto.observed?.usage?.cost_usd !== undefined && (
+                <span>{t("mgmt.dataSources.costLabel")}: ${Number(dto.observed.usage.cost_usd).toFixed(2)}</span>
+              )}
+              {dto.observed?.usage?.calls_today !== undefined && (
+                <span>({dto.observed.usage.calls_today} reqs)</span>
+              )}
+              {dto.observed?.quota?.used_percent !== undefined && (
+                <span>{t("mgmt.dataSources.quotaLabel")}: {dto.observed.quota.used_percent}%</span>
+              )}
+              {dto.observed?.dlq_unresolved_count !== undefined && dto.observed.dlq_unresolved_count > 0 && (
+                <Badge variant="outline" className="bg-status-failed/10 text-status-failed text-[9px] px-1 py-0 font-mono">
+                  DLQ: {dto.observed.dlq_unresolved_count}
+                </Badge>
+              )}
+            </div>
           ) : (
-            dto.observed!.dependent_refs!.slice(0, 3).map((ref) => (
-              <Link
-                key={ref}
-                to={`/management/personas/${encodeURIComponent(ref)}`}
-                className="font-mono text-[10px] text-primary hover:underline bg-primary/5 px-1 py-0.5 rounded border border-primary/20"
-              >
-                {ref}
-              </Link>
-            ))
+            <div className="text-[10px] text-muted-foreground font-mono">
+              {t("mgmt.dataSources.costLabel")}: —
+            </div>
           )}
         </div>
       </td>
@@ -301,7 +334,8 @@ function V2DataSourceRow({
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
               {DATA_SOURCE_ACTIONS.map((act) => {
-                const { allowed, reasons } = isActionAllowed(act.key, allowedActions);
+                const { allowed, reasons } = isActionAllowed(act.key, allowedActions, writesLive);
+                const displayReason = !writesLive ? t("mgmt.dataSources.realWritesRequired") : reasons[0];
                 return (
                   <DropdownMenuItem
                     key={act.key}
@@ -311,9 +345,9 @@ function V2DataSourceRow({
                   >
                     <div className="flex flex-col">
                       <span>{t(act.labelKey)}</span>
-                      {!allowed && reasons.length > 0 && (
+                      {!allowed && displayReason && (
                         <span className="text-[10px] text-muted-foreground font-normal">
-                          {reasons[0]}
+                          {displayReason}
                         </span>
                       )}
                     </div>

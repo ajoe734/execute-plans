@@ -40,6 +40,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  isValidSecretRefId,
   managementDataSourceReads,
   managementDataSourceWrites,
   type ConnectorDefinition,
@@ -48,7 +49,7 @@ import {
   type SourceDevelopmentNeed,
 } from "@/lib/bff-v1/managementDataSources";
 import { realWritesEnabled } from "@/lib/bff-v1/liveTransport";
-import { fmtToken } from "./dataSourceModels";
+import { fmtToken, joinOrDash } from "./dataSourceModels";
 
 export interface DataSourceAddWizardProps {
   open: boolean;
@@ -123,6 +124,7 @@ export function DataSourceAddWizard({
 
   // Connection & Config
   const [secretRefId, setSecretRefId] = useState<string>("");
+  const [secretScope, setSecretScope] = useState<string>("runtime_read_only");
   const [publicConfigPairs, setPublicConfigPairs] = useState<Array<{ key: string; value: string }>>([]);
 
   // Governance & Policy
@@ -216,8 +218,12 @@ export function DataSourceAddWizard({
       }
     }
     if (step === 3) {
+      if (!secretScope) {
+        setErrorMsg(t("mgmt.dataSources.wizard.secretScopeRequired"));
+        return;
+      }
       // Secret Validation Check
-      if (secretRefId && containsRawSecret(secretRefId)) {
+      if (secretRefId.trim() && (!isValidSecretRefId(secretRefId.trim()) || containsRawSecret(secretRefId))) {
         setErrorMsg(t("mgmt.dataSources.wizard.rawSecretDetected"));
         return;
       }
@@ -243,6 +249,7 @@ export function DataSourceAddWizard({
     setConnectorId("");
     setProvider("");
     setSecretRefId("");
+    setSecretScope("runtime_read_only");
     setPublicConfigPairs([]);
     setUnsupportedMode(false);
     setErrorMsg(null);
@@ -314,6 +321,7 @@ export function DataSourceAddWizard({
       datasets: datasetsInput ? datasetsInput.split(",").map((s) => s.trim()).filter(Boolean) : [],
       markets: marketsInput ? marketsInput.split(",").map((s) => s.trim()).filter(Boolean) : [],
       license_scope: licenseScope,
+      secret_scope: secretScope,
       allowed_use: allowedUses,
       retention_policy_ref: retentionPolicyRef.trim(),
       deletion_policy_ref: deletionPolicyRef.trim(),
@@ -322,6 +330,7 @@ export function DataSourceAddWizard({
       connector_config: {
         public: publicConfig,
         secret_ref_id: secretRefId.trim() || null,
+        secret_scope: secretScope,
       },
       schedule: {
         enabled: false, // MANDATORY: Created disabled
@@ -354,7 +363,7 @@ export function DataSourceAddWizard({
 
   return (
     <Dialog open={open} onOpenChange={handleReset}>
-      <DialogContent className="sm:max-w-[620px] max-h-[90vh] overflow-y-auto" aria-describedby="wizard-dialog-description">
+      <DialogContent className="sm:max-w-[620px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <div className="flex items-center justify-between">
             <DialogTitle className="flex items-center gap-2">
@@ -365,7 +374,7 @@ export function DataSourceAddWizard({
               Step {step} / 6
             </Badge>
           </div>
-          <DialogDescription id="wizard-dialog-description">
+          <DialogDescription>
             {t("mgmt.dataSources.wizard.subtitle")}
           </DialogDescription>
         </DialogHeader>
@@ -598,8 +607,8 @@ export function DataSourceAddWizard({
                 {t("mgmt.dataSources.wizard.step3Title")}
               </Label>
 
-              {/* Secret Reference Input */}
-              <Card className="p-3 bg-muted/40 space-y-2 border-primary/20">
+              {/* Secret Reference & Scope Input */}
+              <Card className="p-3 bg-muted/40 space-y-3 border-primary/20">
                 <div className="flex items-center gap-1.5 font-medium text-foreground">
                   <KeyRound className="h-4 w-4 text-primary" />
                   {t("mgmt.dataSources.wizard.secretReferenceTitle")}
@@ -618,6 +627,37 @@ export function DataSourceAddWizard({
                     placeholder="vault://path/to/secret-ref"
                     className="text-xs font-mono mt-1"
                   />
+                </div>
+
+                <div className="pt-1 space-y-1">
+                  <Label htmlFor="secretScopeSelect" className="text-xs">
+                    {t("mgmt.dataSources.wizard.secretScope")} *
+                  </Label>
+                  <Select value={secretScope} onValueChange={setSecretScope}>
+                    <SelectTrigger id="secretScopeSelect" className="text-xs">
+                      <SelectValue placeholder="Select secret scope" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="runtime_read_only">
+                        {t("mgmt.dataSources.wizard.scopes.runtime_read_only")} (runtime_read_only)
+                      </SelectItem>
+                      <SelectItem value="tenant_isolated">
+                        {t("mgmt.dataSources.wizard.scopes.tenant_isolated")} (tenant_isolated)
+                      </SelectItem>
+                      <SelectItem value="operator_shared">
+                        {t("mgmt.dataSources.wizard.scopes.operator_shared")} (operator_shared)
+                      </SelectItem>
+                      <SelectItem value="restricted_canary">
+                        {t("mgmt.dataSources.wizard.scopes.restricted_canary")} (restricted_canary)
+                      </SelectItem>
+                      <SelectItem value="production_market_data">
+                        {t("mgmt.dataSources.wizard.scopes.production_market_data")} (production_market_data)
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[10px] text-muted-foreground">
+                    {t("mgmt.dataSources.wizard.secretScopeNotice")}
+                  </p>
                 </div>
               </Card>
 
@@ -905,7 +945,12 @@ export function DataSourceAddWizard({
                 <ArrowRight className="h-3.5 w-3.5 ml-1" />
               </Button>
             ) : (
-              <Button size="sm" onClick={handleSubmit} disabled={submitting}>
+              <Button
+                size="sm"
+                onClick={handleSubmit}
+                disabled={submitting || !writesLive}
+                title={!writesLive ? t("mgmt.dataSources.realWritesRequired") : undefined}
+              >
                 {submitting ? (
                   <Loader2 className="h-4 w-4 mr-1 animate-spin" />
                 ) : (

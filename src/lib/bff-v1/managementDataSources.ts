@@ -51,6 +51,7 @@ export interface DataSourceInstance {
   datasets?: string[];
   markets?: string[];
   license_scope?: string;
+  secret_scope?: string;
   entitlement_tags?: string[];
   allowed_use?: string[];
   retention_policy_ref?: string;
@@ -58,7 +59,7 @@ export interface DataSourceInstance {
   freshness_sla_seconds?: number;
   sensitivity?: string;
   lifecycle_state: "configured_disabled" | "validated_disabled" | "canary_passed_disabled" | "enabled" | "degraded" | "disabled" | "retired" | string;
-  revision: number;
+  revision?: number;
   created_by?: string;
   created_at?: string;
   updated_by?: string;
@@ -68,13 +69,14 @@ export interface DataSourceInstance {
 export interface SourceDesiredState {
   schema_version?: string;
   source_instance_id: string;
-  revision: number;
+  revision?: number;
   desired_lifecycle: string;
   definition_id?: string;
   definition_deployment_sha?: string;
   connector_config?: {
     public?: Record<string, unknown>;
     secret_ref_id?: string | null;
+    secret_scope?: string;
     [key: string]: unknown;
   };
   schedule?: {
@@ -247,6 +249,7 @@ export interface CreateSourceInput {
   datasets?: string[];
   markets?: string[];
   license_scope?: string;
+  secret_scope?: string;
   entitlement_tags?: string[];
   allowed_use?: string[];
   retention_policy_ref?: string;
@@ -256,6 +259,7 @@ export interface CreateSourceInput {
   connector_config?: {
     public?: Record<string, unknown>;
     secret_ref_id?: string | null;
+    secret_scope?: string;
   };
   schedule?: {
     enabled: boolean;
@@ -330,6 +334,12 @@ const SECRET_KEYWORDS = new Set([
   "secret_value",
 ]);
 
+export function isValidSecretRefId(value: unknown): boolean {
+  if (value === undefined || value === null || value === "") return true;
+  if (typeof value !== "string") return false;
+  return value.startsWith("vault://") || value.startsWith("env://") || value.startsWith("ref://");
+}
+
 export function assertNoRawSecrets(obj: unknown, path = ""): void {
   if (!obj || typeof obj !== "object") return;
   if (Array.isArray(obj)) {
@@ -339,6 +349,22 @@ export function assertNoRawSecrets(obj: unknown, path = ""): void {
   for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
     const currPath = path ? `${path}.${k}` : k;
     const lowerKey = k.toLowerCase();
+
+    if (
+      (lowerKey === "secret_ref_id" ||
+        lowerKey === "secretrefid" ||
+        lowerKey === "secret_ref" ||
+        lowerKey.endsWith("_secret_ref_id")) &&
+      typeof v === "string" &&
+      v !== ""
+    ) {
+      if (!isValidSecretRefId(v)) {
+        throw new Error(
+          `Invalid secret_ref_id at ${currPath}: secret_ref_id must start with explicit 'vault://', 'env://', or 'ref://' URI scheme. Raw value '${v}' is forbidden.`,
+        );
+      }
+    }
+
     if (SECRET_KEYWORDS.has(lowerKey) && typeof v === "string") {
       if (!v.startsWith("env://") && !v.startsWith("vault://") && !v.startsWith("ref://") && v !== "") {
         throw new Error(
@@ -405,6 +431,165 @@ export interface SourceCommandReceiptRead {
   meta: ManagementListMeta;
 }
 
+const isObjectRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const asStr = (...values: unknown[]): string | undefined => {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) return value.trim();
+    if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  }
+  return undefined;
+};
+
+const asBool = (value: unknown, fallback = false): boolean =>
+  typeof value === "boolean" ? value : fallback;
+
+const toStrList = (...values: unknown[]): string[] => {
+  const out: string[] = [];
+  for (const value of values) {
+    if (Array.isArray(value)) {
+      value.forEach((item) => {
+        const next = asStr(item);
+        if (next) out.push(next);
+      });
+    } else {
+      const next = asStr(value);
+      if (next) out.push(next);
+    }
+  }
+  return Array.from(new Set(out));
+};
+
+export function normalizeManagementDataSourceDetail(
+  raw: unknown,
+  fallbackId?: string,
+): ManagementDataSourceV2DTO {
+  const root = isObjectRecord(raw) ? raw : {};
+  const rawData = isObjectRecord(root.data) ? (root.data as Record<string, unknown>) : root;
+
+  const def = isObjectRecord(rawData.definition) ? (rawData.definition as Record<string, unknown>) : {};
+  const inst = isObjectRecord(rawData.instance) ? (rawData.instance as Record<string, unknown>) : {};
+  const des = isObjectRecord(rawData.desired) ? (rawData.desired as Record<string, unknown>) : {};
+  const obs = isObjectRecord(rawData.observed) ? (rawData.observed as Record<string, unknown>) : {};
+
+  const sourceInstanceId =
+    asStr(
+      rawData.source_instance_id,
+      rawData.data_source_id,
+      inst.data_source_id,
+      des.source_instance_id,
+      obs.source_instance_id,
+      fallbackId,
+    ) ?? "unknown-source";
+
+  const connectorId =
+    asStr(
+      rawData.connector_id,
+      inst.connector_id,
+      def.definition_id,
+      rawData.provider,
+      inst.provider,
+      def.provider,
+    ) ?? sourceInstanceId;
+
+  const provider = asStr(rawData.provider, inst.provider, def.provider) ?? "unknown";
+  const sourceClass = asStr(rawData.source_class, rawData.sourceClass, inst.source_class) ?? "market";
+
+  const rawAllowed = (rawData.allowed_actions ?? rawData.allowedActions ?? {}) as Record<string, unknown>;
+  const allowedActions: SourceAllowedActions = {
+    canValidate: asBool(rawAllowed.canValidate, false),
+    canCanary: asBool(rawAllowed.canCanary, false),
+    canEnable: asBool(rawAllowed.canEnable, false),
+    canDisable: asBool(rawAllowed.canDisable, false),
+    canDegrade: asBool(rawAllowed.canDegrade, false),
+    canResume: asBool(rawAllowed.canResume, false),
+    canChangeSchedule: asBool(rawAllowed.canChangeSchedule, false),
+    canReplace: asBool(rawAllowed.canReplace, false),
+    canRetire: asBool(rawAllowed.canRetire, false),
+    blockedReasons: toStrList(rawAllowed.blockedReasons, rawAllowed.blocked_reasons),
+  };
+
+  const definitionState = asStr(def.definition_state) ?? "unknown";
+  const adapterToken = asStr(def.adapter_token) ?? "unknown";
+  const definitionId = asStr(def.definition_id) ?? connectorId;
+
+  const lifecycleState = asStr(inst.lifecycle_state) ?? "unknown";
+  const instanceRevision = typeof inst.revision === "number" && inst.revision >= 1 ? inst.revision : undefined;
+
+  const desiredLifecycle = asStr(des.desired_lifecycle) ?? "unknown";
+  const desiredRevision = typeof des.revision === "number" && des.revision >= 1 ? des.revision : undefined;
+
+  const effectiveLifecycle = asStr(obs.effective_lifecycle) ?? "unknown";
+  const healthState = asStr(obs.health_state) ?? "unknown";
+  const reconciliationStatus = asStr(obs.reconciliation_status) ?? "unknown";
+  const credentialState = asStr(obs.credential_state) ?? "unknown";
+  const observedRevision = typeof obs.observed_revision === "number" && obs.observed_revision >= 1 ? obs.observed_revision : undefined;
+  const desiredObservedRevision = typeof obs.desired_revision === "number" && obs.desired_revision >= 1 ? obs.desired_revision : undefined;
+
+  const definitionObj: ConnectorDefinition = {
+    ...(isObjectRecord(rawData.definition) ? rawData.definition : {}),
+    definition_id: definitionId,
+    adapter_token: adapterToken,
+    provider: asStr(def.provider, provider) ?? "unknown",
+    definition_state: definitionState as ConnectorDefinition["definition_state"],
+  };
+
+  const instanceObj: DataSourceInstance = {
+    ...(isObjectRecord(rawData.instance) ? rawData.instance : {}),
+    data_source_id: sourceInstanceId,
+    source_kind: asStr(inst.source_kind) ?? "data_source",
+    definition_id: definitionId,
+    connector_id: connectorId,
+    provider,
+    source_class: sourceClass,
+    lifecycle_state: lifecycleState,
+    ...(instanceRevision !== undefined ? { revision: instanceRevision } : {}),
+  };
+  if (instanceRevision === undefined) {
+    delete (instanceObj as Record<string, unknown>).revision;
+  }
+
+  const desiredObj: SourceDesiredState = {
+    ...(isObjectRecord(rawData.desired) ? rawData.desired : {}),
+    source_instance_id: sourceInstanceId,
+    desired_lifecycle: desiredLifecycle,
+    ...(desiredRevision !== undefined ? { revision: desiredRevision } : {}),
+  };
+  if (desiredRevision === undefined) {
+    delete (desiredObj as Record<string, unknown>).revision;
+  }
+
+  const observedObj: SourceObservedState = {
+    ...(isObjectRecord(rawData.observed) ? rawData.observed : {}),
+    source_instance_id: sourceInstanceId,
+    effective_lifecycle: effectiveLifecycle,
+    health_state: healthState,
+    reconciliation_status: reconciliationStatus,
+    credential_state: credentialState,
+    ...(observedRevision !== undefined ? { observed_revision: observedRevision } : {}),
+    ...(desiredObservedRevision !== undefined ? { desired_revision: desiredObservedRevision } : {}),
+  };
+  if (observedRevision === undefined) {
+    delete (observedObj as Record<string, unknown>).observed_revision;
+  }
+
+  return {
+    schema_version: "management_data_source.v2",
+    source_instance_id: sourceInstanceId,
+    connector_id: connectorId,
+    provider,
+    source_class: sourceClass,
+    definition: definitionObj,
+    instance: instanceObj,
+    desired: desiredObj,
+    observed: observedObj,
+    allowed_actions: allowedActions,
+    allowedActions,
+    lineage_summary: (rawData.lineage_summary as ManagementDataSourceV2DTO["lineage_summary"]) ?? undefined,
+  };
+}
+
 export const managementDataSourceReads = {
   catalog: (): Promise<DataSourceCatalogRead> =>
     withStrictLiveOrMock<DataSourceCatalogRead, unknown>(
@@ -436,12 +621,7 @@ export const managementDataSourceReads = {
     withStrictLiveOrMock<DataSourceDetailRead, unknown>(
       { method: "GET", path: paths.mgmtDataSourceDetail(sourceInstanceId) },
       async () => ({
-        data: {
-          schema_version: "management_data_source.v2",
-          source_instance_id: sourceInstanceId,
-          connector_id: sourceInstanceId,
-          provider: "mock",
-          source_class: "market",
+        data: normalizeManagementDataSourceDetail({
           definition: {
             definition_id: "mock-definition",
             adapter_token: "MockAdapter",
@@ -482,24 +662,12 @@ export const managementDataSourceReads = {
             canRetire: true,
             blockedReasons: ["canary_required"],
           },
-          allowedActions: {
-            canValidate: true,
-            canCanary: false,
-            canEnable: false,
-            canDisable: false,
-            canDegrade: false,
-            canResume: false,
-            canChangeSchedule: true,
-            canReplace: false,
-            canRetire: true,
-            blockedReasons: ["canary_required"],
-          },
-        },
+        }, sourceInstanceId),
         meta: { status: "ok", source: "mock" },
       }),
       (raw) => {
         const root = (raw ?? {}) as Record<string, unknown>;
-        const data = (root.data ?? {}) as ManagementDataSourceV2DTO;
+        const data = normalizeManagementDataSourceDetail(raw, sourceInstanceId);
         return {
           data,
           meta: (root.meta ?? { status: "ok", source: "service_client" }) as ManagementListMeta,
@@ -555,9 +723,9 @@ export const managementDataSourceReads = {
           command_id: `cmd-${receiptId}`,
           source_instance_id: "unknown",
           command_type: "unknown",
-          status: "succeeded",
+          status: "accepted",
         },
-        meta: { status: "ok", source: "mock" },
+        meta: { status: "unavailable", source: "mock" },
       }),
       (raw) => {
         const root = (raw ?? {}) as Record<string, unknown>;
@@ -581,34 +749,33 @@ async function executeCommand<T>(
   body: unknown,
   idempotencyKey: string,
   correlationId: string,
-  mockResponse: () => Promise<T>,
 ): Promise<T> {
   const gated = await liveWriteGated();
-  if (gated) {
-    return withLiveOrMock<T, { data?: { receipt?: SourceCommandReceipt; [key: string]: unknown } }>(
-      {
-        method,
-        path,
-        body,
-        idempotencyKey,
-        correlationId,
-        headers: {
-          "X-Idempotency-Key": idempotencyKey,
-          "X-Correlation-Id": correlationId,
-        },
-      },
-      mockResponse,
-      (rawData) => {
-        const d = (rawData?.data ?? rawData) as T;
-        return d;
-      },
-    );
-  }
-
-  if (isStrictLiveFallback()) {
+  if (!gated) {
     refuseStrictLiveWrite(correlationId);
   }
-  return mockResponse();
+
+  return withLiveOrMock<T, { data?: { receipt?: SourceCommandReceipt; [key: string]: unknown } }>(
+    {
+      method,
+      path,
+      body,
+      mode: "live",
+      idempotencyKey,
+      correlationId,
+      headers: {
+        "X-Idempotency-Key": idempotencyKey,
+        "X-Correlation-Id": correlationId,
+      },
+    },
+    async () => {
+      refuseStrictLiveWrite(correlationId);
+    },
+    (rawData) => {
+      const d = (rawData?.data ?? rawData) as T;
+      return d;
+    },
+  );
 }
 
 export const managementDataSourceWrites = {
@@ -616,18 +783,6 @@ export const managementDataSourceWrites = {
     assertNoRawSecrets(input);
     const correlationId = newCorrelationId();
     const idempotencyKey = input.idempotencyKey || mintIdemKey();
-
-    const mockResponse = async (): Promise<SourceCommandReceipt> => ({
-      receipt_id: `srcrcp-mock-create-${Date.now()}`,
-      command_id: `srcmd-mock-${Date.now()}`,
-      source_instance_id: input.source_instance_id,
-      command_type: "create",
-      status: "succeeded",
-      after_revision: 1,
-      readback: { desired_revision: 1, observed_revision: 1, reconciliation_status: "converged" },
-      created_at: new Date().toISOString(),
-      completed_at: new Date().toISOString(),
-    });
 
     const body = {
       source_instance_id: input.source_instance_id,
@@ -638,6 +793,7 @@ export const managementDataSourceWrites = {
       datasets: input.datasets ?? [],
       markets: input.markets ?? [],
       license_scope: input.license_scope,
+      secret_scope: input.secret_scope,
       entitlement_tags: input.entitlement_tags,
       allowed_use: input.allowed_use,
       retention_policy_ref: input.retention_policy_ref,
@@ -659,7 +815,6 @@ export const managementDataSourceWrites = {
       body,
       idempotencyKey,
       correlationId,
-      mockResponse,
     );
     return ((res as { receipt?: SourceCommandReceipt }).receipt ?? res) as SourceCommandReceipt;
   },
@@ -668,19 +823,6 @@ export const managementDataSourceWrites = {
     assertNoRawSecrets(input.parameters);
     const correlationId = input.traceId || newCorrelationId();
     const idempotencyKey = input.idempotencyKey || mintIdemKey();
-
-    const mockResponse = async (): Promise<SourceCommandReceipt> => ({
-      receipt_id: `srcrcp-mock-val-${Date.now()}`,
-      command_id: `srcmd-mock-${Date.now()}`,
-      source_instance_id: input.sourceInstanceId,
-      command_type: "validate",
-      status: "succeeded",
-      before_revision: input.expectedRevision,
-      after_revision: input.expectedRevision,
-      readback: { desired_revision: input.expectedRevision, observed_revision: input.expectedRevision, reconciliation_status: "converged" },
-      created_at: new Date().toISOString(),
-      completed_at: new Date().toISOString(),
-    });
 
     const body = {
       expected_revision: input.expectedRevision,
@@ -695,7 +837,6 @@ export const managementDataSourceWrites = {
       body,
       idempotencyKey,
       correlationId,
-      mockResponse,
     );
     return ((res as { receipt?: SourceCommandReceipt }).receipt ?? res) as SourceCommandReceipt;
   },
@@ -704,19 +845,6 @@ export const managementDataSourceWrites = {
     assertNoRawSecrets(input.parameters);
     const correlationId = input.traceId || newCorrelationId();
     const idempotencyKey = input.idempotencyKey || mintIdemKey();
-
-    const mockResponse = async (): Promise<SourceCommandReceipt> => ({
-      receipt_id: `srcrcp-mock-can-${Date.now()}`,
-      command_id: `srcmd-mock-${Date.now()}`,
-      source_instance_id: input.sourceInstanceId,
-      command_type: "canary",
-      status: "succeeded",
-      before_revision: input.expectedRevision,
-      after_revision: input.expectedRevision,
-      readback: { desired_revision: input.expectedRevision, observed_revision: input.expectedRevision, reconciliation_status: "converged" },
-      created_at: new Date().toISOString(),
-      completed_at: new Date().toISOString(),
-    });
 
     const body = {
       expected_revision: input.expectedRevision,
@@ -731,7 +859,6 @@ export const managementDataSourceWrites = {
       body,
       idempotencyKey,
       correlationId,
-      mockResponse,
     );
     return ((res as { receipt?: SourceCommandReceipt }).receipt ?? res) as SourceCommandReceipt;
   },
@@ -740,19 +867,6 @@ export const managementDataSourceWrites = {
     assertNoRawSecrets(input.parameters);
     const correlationId = input.traceId || newCorrelationId();
     const idempotencyKey = input.idempotencyKey || mintIdemKey();
-
-    const mockResponse = async (): Promise<SourceCommandReceipt> => ({
-      receipt_id: `srcrcp-mock-enable-${Date.now()}`,
-      command_id: `srcmd-mock-${Date.now()}`,
-      source_instance_id: input.sourceInstanceId,
-      command_type: "enable",
-      status: "succeeded",
-      before_revision: input.expectedRevision,
-      after_revision: input.expectedRevision + 1,
-      readback: { desired_revision: input.expectedRevision + 1, observed_revision: input.expectedRevision + 1, reconciliation_status: "converged" },
-      created_at: new Date().toISOString(),
-      completed_at: new Date().toISOString(),
-    });
 
     const body = {
       expected_revision: input.expectedRevision,
@@ -768,7 +882,6 @@ export const managementDataSourceWrites = {
       body,
       idempotencyKey,
       correlationId,
-      mockResponse,
     );
     return ((res as { receipt?: SourceCommandReceipt }).receipt ?? res) as SourceCommandReceipt;
   },
@@ -777,19 +890,6 @@ export const managementDataSourceWrites = {
     assertNoRawSecrets(input.parameters);
     const correlationId = input.traceId || newCorrelationId();
     const idempotencyKey = input.idempotencyKey || mintIdemKey();
-
-    const mockResponse = async (): Promise<SourceCommandReceipt> => ({
-      receipt_id: `srcrcp-mock-disable-${Date.now()}`,
-      command_id: `srcmd-mock-${Date.now()}`,
-      source_instance_id: input.sourceInstanceId,
-      command_type: "disable",
-      status: "succeeded",
-      before_revision: input.expectedRevision,
-      after_revision: input.expectedRevision + 1,
-      readback: { desired_revision: input.expectedRevision + 1, observed_revision: input.expectedRevision + 1, reconciliation_status: "converged" },
-      created_at: new Date().toISOString(),
-      completed_at: new Date().toISOString(),
-    });
 
     const body = {
       expected_revision: input.expectedRevision,
@@ -804,7 +904,6 @@ export const managementDataSourceWrites = {
       body,
       idempotencyKey,
       correlationId,
-      mockResponse,
     );
     return ((res as { receipt?: SourceCommandReceipt }).receipt ?? res) as SourceCommandReceipt;
   },
@@ -813,19 +912,6 @@ export const managementDataSourceWrites = {
     assertNoRawSecrets(input.parameters);
     const correlationId = input.traceId || newCorrelationId();
     const idempotencyKey = input.idempotencyKey || mintIdemKey();
-
-    const mockResponse = async (): Promise<SourceCommandReceipt> => ({
-      receipt_id: `srcrcp-mock-degrade-${Date.now()}`,
-      command_id: `srcmd-mock-${Date.now()}`,
-      source_instance_id: input.sourceInstanceId,
-      command_type: "degrade",
-      status: "succeeded",
-      before_revision: input.expectedRevision,
-      after_revision: input.expectedRevision + 1,
-      readback: { desired_revision: input.expectedRevision + 1, observed_revision: input.expectedRevision + 1, reconciliation_status: "converged" },
-      created_at: new Date().toISOString(),
-      completed_at: new Date().toISOString(),
-    });
 
     const body = {
       expected_revision: input.expectedRevision,
@@ -840,7 +926,6 @@ export const managementDataSourceWrites = {
       body,
       idempotencyKey,
       correlationId,
-      mockResponse,
     );
     return ((res as { receipt?: SourceCommandReceipt }).receipt ?? res) as SourceCommandReceipt;
   },
@@ -849,19 +934,6 @@ export const managementDataSourceWrites = {
     assertNoRawSecrets(input.parameters);
     const correlationId = input.traceId || newCorrelationId();
     const idempotencyKey = input.idempotencyKey || mintIdemKey();
-
-    const mockResponse = async (): Promise<SourceCommandReceipt> => ({
-      receipt_id: `srcrcp-mock-resume-${Date.now()}`,
-      command_id: `srcmd-mock-${Date.now()}`,
-      source_instance_id: input.sourceInstanceId,
-      command_type: "resume",
-      status: "succeeded",
-      before_revision: input.expectedRevision,
-      after_revision: input.expectedRevision + 1,
-      readback: { desired_revision: input.expectedRevision + 1, observed_revision: input.expectedRevision + 1, reconciliation_status: "converged" },
-      created_at: new Date().toISOString(),
-      completed_at: new Date().toISOString(),
-    });
 
     const body = {
       expected_revision: input.expectedRevision,
@@ -876,7 +948,6 @@ export const managementDataSourceWrites = {
       body,
       idempotencyKey,
       correlationId,
-      mockResponse,
     );
     return ((res as { receipt?: SourceCommandReceipt }).receipt ?? res) as SourceCommandReceipt;
   },
@@ -884,19 +955,6 @@ export const managementDataSourceWrites = {
   changeSchedule: async (input: ChangeScheduleInput): Promise<SourceCommandReceipt> => {
     const correlationId = input.traceId || newCorrelationId();
     const idempotencyKey = input.idempotencyKey || mintIdemKey();
-
-    const mockResponse = async (): Promise<SourceCommandReceipt> => ({
-      receipt_id: `srcrcp-mock-sched-${Date.now()}`,
-      command_id: `srcmd-mock-${Date.now()}`,
-      source_instance_id: input.sourceInstanceId,
-      command_type: "change_schedule",
-      status: "succeeded",
-      before_revision: input.expectedRevision,
-      after_revision: input.expectedRevision + 1,
-      readback: { desired_revision: input.expectedRevision + 1, observed_revision: input.expectedRevision + 1, reconciliation_status: "converged" },
-      created_at: new Date().toISOString(),
-      completed_at: new Date().toISOString(),
-    });
 
     const body = {
       expected_revision: input.expectedRevision,
@@ -911,7 +969,6 @@ export const managementDataSourceWrites = {
       body,
       idempotencyKey,
       correlationId,
-      mockResponse,
     );
     return ((res as { receipt?: SourceCommandReceipt }).receipt ?? res) as SourceCommandReceipt;
   },
@@ -919,19 +976,6 @@ export const managementDataSourceWrites = {
   replaceDataSource: async (input: ReplaceSourceInput): Promise<SourceCommandReceipt> => {
     const correlationId = input.traceId || newCorrelationId();
     const idempotencyKey = input.idempotencyKey || mintIdemKey();
-
-    const mockResponse = async (): Promise<SourceCommandReceipt> => ({
-      receipt_id: `srcrcp-mock-repl-${Date.now()}`,
-      command_id: `srcmd-mock-${Date.now()}`,
-      source_instance_id: input.sourceInstanceId,
-      command_type: "replace",
-      status: "succeeded",
-      before_revision: input.expectedRevision,
-      after_revision: input.expectedRevision + 1,
-      readback: { desired_revision: input.expectedRevision + 1, observed_revision: input.expectedRevision + 1, reconciliation_status: "converged" },
-      created_at: new Date().toISOString(),
-      completed_at: new Date().toISOString(),
-    });
 
     const body = {
       expected_revision: input.expectedRevision,
@@ -947,7 +991,6 @@ export const managementDataSourceWrites = {
       body,
       idempotencyKey,
       correlationId,
-      mockResponse,
     );
     return ((res as { receipt?: SourceCommandReceipt }).receipt ?? res) as SourceCommandReceipt;
   },
@@ -955,19 +998,6 @@ export const managementDataSourceWrites = {
   retireDataSource: async (input: RetireSourceInput): Promise<SourceCommandReceipt> => {
     const correlationId = input.traceId || newCorrelationId();
     const idempotencyKey = input.idempotencyKey || mintIdemKey();
-
-    const mockResponse = async (): Promise<SourceCommandReceipt> => ({
-      receipt_id: `srcrcp-mock-retire-${Date.now()}`,
-      command_id: `srcmd-mock-${Date.now()}`,
-      source_instance_id: input.sourceInstanceId,
-      command_type: "retire",
-      status: "succeeded",
-      before_revision: input.expectedRevision,
-      after_revision: input.expectedRevision + 1,
-      readback: { desired_revision: input.expectedRevision + 1, observed_revision: input.expectedRevision + 1, reconciliation_status: "converged" },
-      created_at: new Date().toISOString(),
-      completed_at: new Date().toISOString(),
-    });
 
     const body = {
       expected_revision: input.expectedRevision,
@@ -982,7 +1012,6 @@ export const managementDataSourceWrites = {
       body,
       idempotencyKey,
       correlationId,
-      mockResponse,
     );
     return ((res as { receipt?: SourceCommandReceipt }).receipt ?? res) as SourceCommandReceipt;
   },

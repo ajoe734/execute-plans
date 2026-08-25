@@ -40,31 +40,46 @@ Pantheon follows an asynchronous reconciliation model. When an operator issues a
 
 ---
 
-## 4. Governed Lifecycle Actions & Command Dialog
+## 4. Governed Lifecycle Actions & Command Dialog (SD-SRCM-04 § 6.6)
 
 All mutating actions are derived exclusively from the server-provided `allowed_actions` / `allowedActions` object:
 
-| Action | Allowed Key | Confirmation Required | Description |
-|--------|-------------|-----------------------|-------------|
-| **Validate** | `canValidate` | No | Validates configuration against definition schema. |
-| **Run Canary** | `canCanary` | No | Executes bounded, read-only pull within strict host allowlists. |
-| **Enable** | `canEnable` | **Yes** | Starts scheduled ingestion. Requires passed validation and canary. |
-| **Disable** | `canDisable` | No | Immediately pauses ingestion and halts schedule. |
-| **Degrade** | `canDegrade` | No | Isolates source for maintenance while blocking automated consumers. |
-| **Resume** | `canResume` | No | Resumes disabled source and re-evaluates stale canaries. |
-| **Change Schedule** | `canChangeSchedule` | No | Updates Cron cadence, timezone, or jitter. |
-| **Replace** | `canReplace` | **Yes** | Replaces with an alternative source ID and migrates dependents. |
-| **Retire** | `canRetire` | **Yes** | Permanently decommissions instance (terminal state). |
+| Action | Allowed Key | Confirmation Required | Description | SD-SRCM-04 § 6.6 Command UX |
+|--------|-------------|-----------------------|-------------|-----------------------------|
+| **Validate** | `canValidate` | No | Validates configuration against definition schema. | Validates connector config against deployed definition and security policies. |
+| **Run Canary** | `canCanary` | No | Executes bounded, read-only pull within strict host allowlists. | Displays bounded limits (`max_records`, `max_bytes`, `timeout_seconds`), allowed target hosts, and no-order/safety statement. |
+| **Enable** | `canEnable` | **Yes** | Starts scheduled ingestion. Requires passed validation and canary. | Displays prerequisite health gate checklist (validation state, canary state, credential status) with warning when incomplete. |
+| **Disable** | `canDisable` | No | Immediately pauses ingestion and halts schedule. | Pauses ingestion and suspends recurring cron schedule. |
+| **Degrade** | `canDegrade` | No | Isolates source for maintenance while blocking automated consumers. | Maintenance mode isolation. |
+| **Resume** | `canResume` | No | Resumes disabled source and reactivates scheduled ingestion. | Explains server truth: updates desired lifecycle to resume schedule without automated validation or canary reruns. |
+| **Change Schedule** | `canChangeSchedule` | No | Updates Cron cadence, timezone, or jitter. | Pre-fills inputs from authoritative desired schedule, preventing accidental overwrites. |
+| **Replace** | `canReplace` | **Yes** | Replaces with an alternative source ID and records migration plan. | Displays affected dependent personas and records replacement target without claiming executed rebind. |
+| **Retire** | `canRetire` | **Yes (Typed)** | Permanently decommissions instance (terminal state). | Requires typing `"RETIRE"` into confirmation text field before execution. |
 
 ### Security & Secret Governance
 - **Raw Secrets Forbidden**: The UI and client strictly reject passwords, API keys, and raw tokens. Only `vault://...`, `env://...`, or `ref://...` references are accepted.
+- **Secret Scope Selection & Transport**: Every source instance configures an authorization boundary scope (`runtime_read_only`, `tenant_isolated`, `operator_shared`, `restricted_canary`, `production_market_data`) transported top-level and in `connector_config.secret_scope`.
 - **Real-Write Gating**: Writes require `liveWriteGated()` / `realWritesEnabled()`. In read-only mode, mutation attempts display explicit guidance.
 
 ---
 
-## 5. Phase-1 Offline Development Intake
+## 5. Lineage, Cost & Quota Observability
+
+- **Consumers & Lineage**: Column 8 renders active consumer count, persona badges linking to `/management/personas/{id}`, daily usage/cost estimate, quota usage %, and dead-letter queue (DLQ) alert badges.
+- **Runs & Health Observability**: Dedicated Quota, Usage & DLQ card section showing unresolved DLQ count (with alert badge), quota usage %, estimated cost in USD, and active consumer count.
+
+---
+
+## 6. Phase-1 Offline Development Intake
 
 When a financial provider is not present in the deployed build:
 - The UI **does not call OpenClaw or Management AI** directly.
 - The operator can export a structured `source_development_need.v1` artifact via JSON copy or file download.
 - The artifact is submitted offline to the engineering team for Phase-2 adapter implementation.
+
+---
+
+## 7. Hosted Acceptance & E2E Validation
+
+- **Mocked Test Suite**: 14 Playwright E2E cases covering 9 canonical columns, V2 DTO divergence, detail drawer, catalog offline intake, accessibility focus, error envelope meta states, and responsive viewports.
+- **Unmocked Hosted Acceptance**: Isolated read-only test running against the live dev FE/BFF deployment pair via `.github/workflows/srcm-p1-mgmt-ui-hosted-acceptance.yml`, minting short-lived operator tokens through `POST /bff/auth/dev-login` and asserting successful `GET /bff/management/data-sources` (status 200).

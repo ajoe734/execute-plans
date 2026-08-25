@@ -108,7 +108,11 @@ export const DATA_SOURCE_ACTIONS: ActionDefinition[] = [
 export function isActionAllowed(
   actionKey: DataSourceActionKey,
   allowedActions?: SourceAllowedActions,
+  writesLive = true,
 ): { allowed: boolean; reasons: string[] } {
+  if (!writesLive) {
+    return { allowed: false, reasons: ["real_writes_disabled"] };
+  }
   if (!allowedActions) {
     return { allowed: false, reasons: ["no_allowed_actions_provided"] };
   }

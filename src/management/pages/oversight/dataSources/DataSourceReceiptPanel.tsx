@@ -51,7 +51,7 @@ export function DataSourceReceiptPanel({ sources }: DataSourceReceiptPanelProps)
     }
   }, [sources, selectedSourceId]);
 
-  const loadReceipts = async () => {
+  const loadReceipts = React.useCallback(async () => {
     if (!selectedSourceId) return;
     setLoading(true);
     try {
@@ -62,13 +62,13 @@ export function DataSourceReceiptPanel({ sources }: DataSourceReceiptPanelProps)
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedSourceId]);
 
   useEffect(() => {
     if (selectedSourceId) {
       loadReceipts();
     }
-  }, [selectedSourceId]);
+  }, [selectedSourceId, loadReceipts]);
 
   const filtered = receipts.filter((rcp) => {
     if (filterType === "all") return true;
@@ -172,19 +172,19 @@ export function DataSourceReceiptPanel({ sources }: DataSourceReceiptPanelProps)
 
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] font-mono text-muted-foreground pl-8">
                     <div>
-                      Actor: <span className="text-foreground">{rcp.actor_id || "operator"}</span>
+                      Actor: <span className="text-foreground">{rcp.actor_id || "—"}</span>
                     </div>
                     <div>
                       Revision:{" "}
                       <span className="text-foreground">
-                        {rcp.before_revision ?? "—"} → {rcp.after_revision ?? "—"}
+                        {rcp.before_revision !== undefined && rcp.before_revision >= 1 ? `r${rcp.before_revision}` : "—"} → {rcp.after_revision !== undefined && rcp.after_revision >= 1 ? `r${rcp.after_revision}` : "—"}
                       </span>
                     </div>
                     {rcp.readback && (
                       <div>
                         Readback:{" "}
                         <span className="text-foreground">
-                          {rcp.readback.reconciliation_status || "converged"}
+                          {rcp.readback.reconciliation_status || "—"}
                         </span>
                       </div>
                     )}
@@ -197,7 +197,7 @@ export function DataSourceReceiptPanel({ sources }: DataSourceReceiptPanelProps)
 
                   {rcp.failure && (
                     <div className="ml-8 p-2 rounded bg-status-failed/10 border-status-failed/20 text-status-failed text-[11px]">
-                      <span className="font-semibold">Failure ({rcp.failure.code || "ERROR"}): </span>
+                      <span className="font-semibold">Failure ({rcp.failure.code || "—"}): </span>
                       {rcp.failure.message}
                     </div>
                   )}

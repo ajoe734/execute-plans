@@ -1,5 +1,4 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { I18nextProvider } from "react-i18next";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -185,6 +184,7 @@ function mockV2DataSource(overrides: Partial<ManagementDataSourceV2DTO> = {}): M
 
 describe("DataSourceManagementPage", () => {
   beforeEach(() => {
+    vi.restoreAllMocks();
     mocks.useV5Live.mockReset();
   });
 
@@ -363,7 +363,7 @@ describe("DataSourceManagementPage", () => {
       expect(screen.getByText("degraded")).toBeInTheDocument();
     });
 
-    it("opens Add Wizard modal and rejects raw inline secrets", async () => {
+    it("disables Add Data Source button when real writes are off", async () => {
       mocks.useV5Live
         .mockReturnValueOnce({
           data: { items: [] },
@@ -378,11 +378,37 @@ describe("DataSourceManagementPage", () => {
 
       renderPage("/management/data-sources");
 
-      const addBtn = screen.getByText("Add Data Source");
+      const addBtn = screen.getAllByRole("button", { name: /Add Data Source/i })[0];
+      expect(addBtn).toBeDisabled();
+    });
+
+    it("opens Add Wizard modal when real writes are enabled", async () => {
+      const realWritesSpy = vi.spyOn(await import("@/lib/bff-v1/liveTransport"), "realWritesEnabled").mockReturnValue(true);
+
+      mocks.useV5Live
+        .mockReturnValueOnce({
+          data: { items: [] },
+          loading: false,
+          refresh: vi.fn(),
+        })
+        .mockReturnValueOnce({
+          data: [],
+          loading: false,
+          refresh: vi.fn(),
+        });
+
+      renderPage("/management/data-sources");
+
+      const addBtn = screen.getAllByRole("button", { name: /Add Data Source/i })[0];
+      expect(addBtn).toBeEnabled();
       fireEvent.click(addBtn);
 
-      expect(screen.getByText("Add Managed Data Source")).toBeInTheDocument();
-      expect(screen.getByText("Step 1 / 6")).toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.getByText("Add Managed Data Source")).toBeInTheDocument();
+        expect(screen.getByText("Step 1 / 6")).toBeInTheDocument();
+      });
+
+      realWritesSpy.mockRestore();
     });
 
     it("renders catalog, runs, and receipts tabs via URL query params", async () => {
@@ -409,6 +435,1288 @@ describe("DataSourceManagementPage", () => {
       expect(screen.getByText("Command Receipts Ledger")).toBeInTheDocument();
       unmountReceipts();
     });
-  });
 
+    it("renders distinct loading, authoritative-empty, unavailable, and degraded-legacy envelope states", async () => {
+      // 1. Loading state
+      mocks.useV5Live
+        .mockReturnValueOnce({
+          data: undefined,
+          loading: true,
+          refresh: vi.fn(),
+        })
+        .mockReturnValueOnce({
+          data: [],
+          loading: false,
+          refresh: vi.fn(),
+        });
+
+      const { unmount: unmountLoading } = renderPage("/management/data-sources");
+      expect(screen.getByTestId("data-sources-loading")).toBeInTheDocument();
+      expect(screen.getByText("Loading live Persona Fleet data sources…")).toBeInTheDocument();
+      unmountLoading();
+
+      // 2. Authoritative-Empty state (successful request with empty items array)
+      mocks.useV5Live
+        .mockReturnValueOnce({
+          data: { items: [], meta: { status: "ok", source: "service_client" } },
+          loading: false,
+          refresh: vi.fn(),
+        })
+        .mockReturnValueOnce({
+          data: [],
+          loading: false,
+          refresh: vi.fn(),
+        });
+
+      const { unmount: unmountEmpty } = renderPage("/management/data-sources");
+      expect(screen.getByTestId("data-sources-authoritative-empty")).toBeInTheDocument();
+      expect(screen.getByText("No Data Sources Configured")).toBeInTheDocument();
+      expect(screen.getByText(/No data source instances are currently configured in this environment/i)).toBeInTheDocument();
+      unmountEmpty();
+
+      // 3. Unavailable state (failed read or unavailable meta status)
+      mocks.useV5Live
+        .mockReturnValueOnce({
+          data: { items: [], meta: { status: "unavailable", source: "frontend_empty_read" } },
+          loading: false,
+          refresh: vi.fn(),
+        })
+        .mockReturnValueOnce({
+          data: [],
+          loading: false,
+          refresh: vi.fn(),
+        });
+
+      const { unmount: unmountUnavailable } = renderPage("/management/data-sources");
+      expect(screen.getByTestId("data-sources-unavailable")).toBeInTheDocument();
+      expect(screen.getByText("Live data sources unavailable")).toBeInTheDocument();
+      unmountUnavailable();
+
+      // 4. Degraded-Legacy state (meta indicates degraded legacy projection)
+      mocks.useV5Live
+        .mockReturnValueOnce({
+          data: {
+            items: [systemRecord()],
+            meta: { status: "degraded", source: "legacy_projection" },
+          },
+          loading: false,
+          refresh: vi.fn(),
+        })
+        .mockReturnValueOnce({
+          data: [],
+          loading: false,
+          refresh: vi.fn(),
+        });
+
+      const { unmount: unmountDegraded } = renderPage("/management/data-sources");
+      expect(screen.getByTestId("degraded-legacy-banner")).toBeInTheDocument();
+      expect(screen.getByText("Legacy Compatibility Projection Mode")).toBeInTheDocument();
+      expect(screen.getByText(/Data source rows are projected from legacy fleet state/i)).toBeInTheDocument();
+      unmountDegraded();
+    });
+
+    it("gates all mutation controls when real writes are off, including Detail Drawer Change Schedule", async () => {
+      const v2Item = mockV2DataSource();
+      mocks.useV5Live
+        .mockReturnValueOnce({
+          data: { items: [v2Item] },
+          loading: false,
+          refresh: vi.fn(),
+        })
+        .mockReturnValueOnce({
+          data: [],
+          loading: false,
+          refresh: vi.fn(),
+        });
+
+      renderPage("/management/data-sources");
+
+      // Verify Add button disabled
+      const addBtn = screen.getAllByRole("button", { name: /Add Data Source/i })[0];
+      expect(addBtn).toBeDisabled();
+
+      // Open Detail Drawer
+      const viewBtn = screen.getByRole("button", { name: /view/i });
+      fireEvent.click(viewBtn);
+
+      await waitFor(() => {
+        expect(screen.getByRole("tab", { name: /Schedule & Universe/i })).toBeInTheDocument();
+      });
+
+      // Verify Detail Drawer Quick Actions disabled
+      const drawerDisableBtn = screen.getAllByRole("button", { name: /^Disable$/i })[0];
+      expect(drawerDisableBtn).toBeDisabled();
+
+      // Switch to Schedule Tab in Drawer
+      const scheduleTab = screen.getByRole("tab", { name: /Schedule & Universe/i });
+      fireEvent.click(scheduleTab);
+
+      // Verify Change Schedule button is disabled when writes are off
+      const changeScheduleBtn = screen.getByRole("button", { name: /Change Schedule/i });
+      expect(changeScheduleBtn).toBeDisabled();
+      expect(changeScheduleBtn).toHaveAttribute("title", "Real writes are disabled (read-only mode).");
+    });
+
+    it("handles command lifecycle UX with pending, polling, and succeeded readback", async () => {
+      const { DataSourceCommandDialog } = await import(
+        "./dataSources/DataSourceCommandDialog"
+      );
+      const v2Item = mockV2DataSource();
+      const onCommandSuccess = vi.fn();
+      const writesSpy = vi
+        .spyOn(await import("@/lib/bff-v1/liveTransport"), "realWritesEnabled")
+        .mockReturnValue(true);
+
+      const writesModule = await import("@/lib/bff-v1/managementDataSources");
+      const disableSpy = vi
+        .spyOn(writesModule.managementDataSourceWrites, "disableDataSource")
+        .mockResolvedValueOnce({
+          receipt_id: "rcp-disable-001",
+          command_id: "cmd-001",
+          source_instance_id: "ds-twse-market-v1",
+          command_type: "disable",
+          status: "accepted",
+          before_revision: 2,
+        });
+      const pollSpy = vi
+        .spyOn(writesModule.managementDataSourceWrites, "pollReceiptUntilTerminal")
+        .mockResolvedValueOnce({
+          receipt_id: "rcp-disable-001",
+          command_id: "cmd-001",
+          source_instance_id: "ds-twse-market-v1",
+          command_type: "disable",
+          status: "succeeded",
+          before_revision: 2,
+          after_revision: 3,
+          readback: {
+            desired_revision: 3,
+            observed_revision: 3,
+            reconciliation_status: "converged",
+          },
+        });
+
+      render(
+        <I18nextProvider i18n={i18n}>
+          <DataSourceCommandDialog
+            open={true}
+            onOpenChange={vi.fn()}
+            actionKey="disable"
+            targetSource={v2Item}
+            onCommandSuccess={onCommandSuccess}
+          />
+        </I18nextProvider>,
+      );
+
+      // Verify dialog is initialized with target info
+      expect(screen.getByRole("heading", { name: "Execute Disable" })).toBeInTheDocument();
+      expect(screen.getByText("ds-twse-market-v1")).toBeInTheDocument();
+      expect(screen.getByText("Rev 2")).toBeInTheDocument();
+
+      // Provide reason and submit command
+      const reasonInput = screen.getByPlaceholderText(/Enter reason for this governance action/i);
+      fireEvent.change(reasonInput, { target: { value: "Scheduled maintenance window" } });
+
+      const execBtn = screen.getByRole("button", { name: /Execute Disable/i });
+      expect(execBtn).toBeEnabled();
+      fireEvent.click(execBtn);
+
+      // Verify command submission was triggered and polled
+      await waitFor(() => {
+        expect(disableSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            sourceInstanceId: "ds-twse-market-v1",
+            expectedRevision: 2,
+            reason: "Scheduled maintenance window",
+          }),
+        );
+        expect(pollSpy).toHaveBeenCalledWith("rcp-disable-001");
+      });
+
+      // Verify success card renders with receipt ID, revisions, and callback fired
+      await waitFor(() => {
+        expect(screen.getByTestId("command-success-card")).toBeInTheDocument();
+      });
+      expect(screen.getByText(/Command Succeeded/i)).toBeInTheDocument();
+      expect(screen.getByText(/Receipt ID: rcp-disable-001/i)).toBeInTheDocument();
+      expect(screen.getByText(/Revision: 2 → 3/i)).toBeInTheDocument();
+      expect(screen.getByText(/Reconciliation: converged/i)).toBeInTheDocument();
+      expect(onCommandSuccess).toHaveBeenCalledWith(
+        expect.objectContaining({ receipt_id: "rcp-disable-001", status: "succeeded" }),
+      );
+
+      writesSpy.mockRestore();
+      disableSpy.mockRestore();
+      pollSpy.mockRestore();
+    });
+
+    it("handles command failure and rejection lifecycle states", async () => {
+      const { DataSourceCommandDialog } = await import(
+        "./dataSources/DataSourceCommandDialog"
+      );
+      const v2Item = mockV2DataSource();
+      const onCommandSuccess = vi.fn();
+      const writesSpy = vi
+        .spyOn(await import("@/lib/bff-v1/liveTransport"), "realWritesEnabled")
+        .mockReturnValue(true);
+
+      const writesModule = await import("@/lib/bff-v1/managementDataSources");
+      const disableSpy = vi
+        .spyOn(writesModule.managementDataSourceWrites, "disableDataSource")
+        .mockResolvedValueOnce({
+          receipt_id: "rcp-disable-rejected",
+          command_id: "cmd-002",
+          source_instance_id: "ds-twse-market-v1",
+          command_type: "disable",
+          status: "rejected",
+          failure: {
+            code: "DEPENDENCY_BLOCK",
+            message: "Disabling primary market feed is forbidden while active strategies are dependent",
+          },
+        });
+
+      render(
+        <I18nextProvider i18n={i18n}>
+          <DataSourceCommandDialog
+            open={true}
+            onOpenChange={vi.fn()}
+            actionKey="disable"
+            targetSource={v2Item}
+            onCommandSuccess={onCommandSuccess}
+          />
+        </I18nextProvider>,
+      );
+
+      const reasonInput = screen.getByPlaceholderText(/Enter reason for this governance action/i);
+      fireEvent.change(reasonInput, { target: { value: "Attempting maintenance disable" } });
+
+      const execBtn = screen.getByRole("button", { name: /Execute Disable/i });
+      fireEvent.click(execBtn);
+
+      await waitFor(() => {
+        expect(screen.getByTestId("command-error-banner")).toBeInTheDocument();
+      });
+      expect(
+        screen.getByText(/Disabling primary market feed is forbidden while active strategies are dependent/i),
+      ).toBeInTheDocument();
+      expect(onCommandSuccess).not.toHaveBeenCalled();
+
+      writesSpy.mockRestore();
+      disableSpy.mockRestore();
+    });
+
+    it("handles poll exhaustion for accepted/running receipt by re-enabling Execute and minting a fresh idempotency key", async () => {
+      const { DataSourceCommandDialog } = await import(
+        "./dataSources/DataSourceCommandDialog"
+      );
+      const v2Item = mockV2DataSource();
+      const onCommandSuccess = vi.fn();
+      const writesSpy = vi
+        .spyOn(await import("@/lib/bff-v1/liveTransport"), "realWritesEnabled")
+        .mockReturnValue(true);
+
+      const writesModule = await import("@/lib/bff-v1/managementDataSources");
+      const disableSpy = vi
+        .spyOn(writesModule.managementDataSourceWrites, "disableDataSource")
+        .mockResolvedValue({
+          receipt_id: "rcp-running-001",
+          command_id: "cmd-003",
+          source_instance_id: "ds-twse-market-v1",
+          command_type: "disable",
+          status: "running",
+          before_revision: 2,
+        });
+
+      // Polling exhausts and returns receipt still in 'running' status
+      const pollSpy = vi
+        .spyOn(writesModule.managementDataSourceWrites, "pollReceiptUntilTerminal")
+        .mockResolvedValueOnce({
+          receipt_id: "rcp-running-001",
+          command_id: "cmd-003",
+          source_instance_id: "ds-twse-market-v1",
+          command_type: "disable",
+          status: "running",
+          before_revision: 2,
+        });
+
+      render(
+        <I18nextProvider i18n={i18n}>
+          <DataSourceCommandDialog
+            open={true}
+            onOpenChange={vi.fn()}
+            actionKey="disable"
+            targetSource={v2Item}
+            onCommandSuccess={onCommandSuccess}
+          />
+        </I18nextProvider>,
+      );
+
+      const reasonInput = screen.getByPlaceholderText(/Enter reason for this governance action/i);
+      fireEvent.change(reasonInput, { target: { value: "Initial attempt" } });
+
+      const execBtn = screen.getByRole("button", { name: /Execute Disable/i });
+      fireEvent.click(execBtn);
+
+      // First execution is submitted and polled
+      await waitFor(() => {
+        expect(disableSpy).toHaveBeenCalledTimes(1);
+        expect(pollSpy).toHaveBeenCalledTimes(1);
+      });
+
+      // After poll exhaustion, the button is re-enabled for operator re-try
+      await waitFor(() => {
+        expect(execBtn).toBeEnabled();
+      });
+
+      // Operator clicks Execute again; a second command invocation is submitted with a new idempotency key
+      fireEvent.click(execBtn);
+      await waitFor(() => {
+        expect(disableSpy).toHaveBeenCalledTimes(2);
+      });
+
+      writesSpy.mockRestore();
+      disableSpy.mockRestore();
+      pollSpy.mockRestore();
+    });
+
+    it("displays STALE_REVISION alert and provides corrective reload action", async () => {
+      const { DataSourceCommandDialog } = await import(
+        "./dataSources/DataSourceCommandDialog"
+      );
+      const v2Item = mockV2DataSource();
+      const onCommandSuccess = vi.fn();
+      const writesSpy = vi
+        .spyOn(await import("@/lib/bff-v1/liveTransport"), "realWritesEnabled")
+        .mockReturnValue(true);
+      const disableSpy = vi
+        .spyOn(
+          (await import("@/lib/bff-v1/managementDataSources")).managementDataSourceWrites,
+          "disableDataSource",
+        )
+        .mockRejectedValueOnce({
+          code: "STALE_REVISION",
+          message: "Expected revision 2 but current revision is 3",
+        });
+
+      render(
+        <I18nextProvider i18n={i18n}>
+          <DataSourceCommandDialog
+            open={true}
+            onOpenChange={vi.fn()}
+            actionKey="disable"
+            targetSource={v2Item}
+            onCommandSuccess={onCommandSuccess}
+          />
+        </I18nextProvider>,
+      );
+
+      // Enter reason and execute
+      const reasonInput = screen.getByPlaceholderText(/Enter reason for this governance action/i);
+      fireEvent.change(reasonInput, { target: { value: "Operator maintenance disable" } });
+
+      const execBtn = screen.getByRole("button", { name: /Execute Disable/i });
+      expect(execBtn).toBeEnabled();
+      fireEvent.click(execBtn);
+
+      await waitFor(() => {
+        expect(screen.getByTestId("stale-revision-alert")).toBeInTheDocument();
+      });
+
+      expect(screen.getByText("Revision Conflict (STALE_REVISION)")).toBeInTheDocument();
+      expect(screen.getByText(/The data source revision has changed on the server/i)).toBeInTheDocument();
+
+      const reloadBtn = screen.getByRole("button", { name: /Reload Latest State/i });
+      expect(reloadBtn).toBeInTheDocument();
+      fireEvent.click(reloadBtn);
+
+      expect(onCommandSuccess).toHaveBeenCalled();
+
+      writesSpy.mockRestore();
+      disableSpy.mockRestore();
+    });
+
+    it("renders Canary limits, allowed hosts, and safety statement in command dialog", async () => {
+      const { DataSourceCommandDialog } = await import(
+        "./dataSources/DataSourceCommandDialog"
+      );
+      const v2ItemWithLimits = mockV2DataSource({
+        desired: {
+          ...mockV2DataSource().desired,
+          limits: { max_records: 500, max_bytes: 2097152, timeout_seconds: 30 },
+          allowed_hosts: ["openapi.twse.com.tw", "mis.twse.com.tw"],
+        },
+      });
+
+      const { rerender } = render(
+        <I18nextProvider i18n={i18n}>
+          <DataSourceCommandDialog
+            open={true}
+            onOpenChange={vi.fn()}
+            actionKey="canary"
+            targetSource={v2ItemWithLimits}
+          />
+        </I18nextProvider>,
+      );
+
+      expect(screen.getByText("Canary Safety & Allowlist Parameters")).toBeInTheDocument();
+      expect(screen.getByText("500")).toBeInTheDocument();
+      expect(screen.getByText("2097152 B")).toBeInTheDocument();
+      expect(screen.getByText("30s")).toBeInTheDocument();
+      expect(screen.getByText("openapi.twse.com.tw, mis.twse.com.tw")).toBeInTheDocument();
+      expect(
+        screen.getByText(/Bounded Read-Only Pull: No orders will be placed, capital accounts remain untouched/i),
+      ).toBeInTheDocument();
+
+      // Test when limits and allowed hosts are absent / unspecified on DTO
+      const v2ItemNoLimits = mockV2DataSource({
+        definition: {
+          ...mockV2DataSource().definition,
+          default_limits: undefined,
+          allowed_host_patterns: undefined,
+        },
+        desired: {
+          ...mockV2DataSource().desired,
+          limits: undefined,
+          allowed_hosts: undefined,
+        },
+      });
+
+      rerender(
+        <I18nextProvider i18n={i18n}>
+          <DataSourceCommandDialog
+            open={true}
+            onOpenChange={vi.fn()}
+            actionKey="canary"
+            targetSource={v2ItemNoLimits}
+          />
+        </I18nextProvider>,
+      );
+
+      expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(3);
+      expect(screen.getByText("None declared / unrestricted")).toBeInTheDocument();
+    });
+
+    it("renders Enable preconditions gate and status badges in command dialog", async () => {
+      const { DataSourceCommandDialog } = await import(
+        "./dataSources/DataSourceCommandDialog"
+      );
+      const v2Item = mockV2DataSource({
+        definition: {
+          ...mockV2DataSource().definition,
+          definition_state: "supported",
+        },
+        observed: {
+          ...mockV2DataSource().observed,
+          validation_state: "passed",
+          canary_state: "passed",
+          credential_state: "configured",
+        },
+        desired: {
+          ...mockV2DataSource().desired,
+          schedule: { enabled: true, cadence: "0 19 * * 1-5" },
+          allowed_hosts: ["openapi.twse.com.tw"],
+        },
+        allowed_actions: {
+          canValidate: true,
+          canCanary: true,
+          canEnable: true,
+          canDisable: false,
+          canDegrade: false,
+          canResume: false,
+          canChangeSchedule: true,
+          canReplace: true,
+          canRetire: false,
+          blockedReasons: [],
+        },
+      });
+
+      const { rerender } = render(
+        <I18nextProvider i18n={i18n}>
+          <DataSourceCommandDialog
+            open={true}
+            onOpenChange={vi.fn()}
+            actionKey="enable"
+            targetSource={v2Item}
+          />
+        </I18nextProvider>,
+      );
+
+      expect(screen.getByText("Prerequisite Health & Validation Gates")).toBeInTheDocument();
+      expect(screen.getByText("Preconditions Passed")).toBeInTheDocument();
+      expect(screen.getByText("supported")).toBeInTheDocument();
+      expect(screen.getByText("0 19 * * 1-5")).toBeInTheDocument();
+      expect(screen.getByText("1 hosts")).toBeInTheDocument();
+      expect(screen.getByText("All prerequisite validation and canary gates have passed.")).toBeInTheDocument();
+
+      // Rerender with blocked reasons
+      const v2Blocked = mockV2DataSource({
+        ...v2Item,
+        allowed_actions: {
+          ...v2Item.allowed_actions,
+          canEnable: false,
+          blockedReasons: ["canary_evidence_expired", "quota_exhausted"],
+        },
+      });
+
+      rerender(
+        <I18nextProvider i18n={i18n}>
+          <DataSourceCommandDialog
+            open={true}
+            onOpenChange={vi.fn()}
+            actionKey="enable"
+            targetSource={v2Blocked}
+          />
+        </I18nextProvider>,
+      );
+
+      expect(screen.getByText("Preconditions Incomplete")).toBeInTheDocument();
+      expect(screen.getByText(/canary_evidence_expired, quota_exhausted/i)).toBeInTheDocument();
+    });
+
+    it("renders server-supported Resume truth notice without inferred automated rerun claims", async () => {
+      const { DataSourceCommandDialog } = await import(
+        "./dataSources/DataSourceCommandDialog"
+      );
+      const v2Item = mockV2DataSource({
+        observed: {
+          ...mockV2DataSource().observed,
+          validation_state: "passed",
+          canary_state: "passed",
+        },
+      });
+
+      render(
+        <I18nextProvider i18n={i18n}>
+          <DataSourceCommandDialog
+            open={true}
+            onOpenChange={vi.fn()}
+            actionKey="resume"
+            targetSource={v2Item}
+          />
+        </I18nextProvider>,
+      );
+
+      expect(screen.getByText("Resume Data Source")).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          /Resuming updates the desired lifecycle to resume scheduled ingestion. It does not automatically run validation or canary checks/i,
+        ),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByText(/trigger an automated validation and canary rerun/i),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByText(/stale canaries will be re-evaluated/i),
+      ).not.toBeInTheDocument();
+    });
+
+    it("initializes Change Schedule inputs from targetSource.desired.schedule and submits preserved fields on write payload without silent overwrites", async () => {
+      const { DataSourceCommandDialog } = await import(
+        "./dataSources/DataSourceCommandDialog"
+      );
+      const writesModule = await import("@/lib/bff-v1/managementDataSources");
+      const scheduleSpy = vi
+        .spyOn(writesModule.managementDataSourceWrites, "changeSchedule")
+        .mockResolvedValue({
+          receipt_id: "rcp-sched-001",
+          command_id: "cmd-sched-001",
+          source_instance_id: "ds-twse-market-v1",
+          command_type: "change_schedule",
+          status: "succeeded",
+        });
+      const writesSpy = vi
+        .spyOn(await import("@/lib/bff-v1/liveTransport"), "realWritesEnabled")
+        .mockReturnValue(true);
+
+      const v2Item = mockV2DataSource({
+        desired: {
+          ...mockV2DataSource().desired,
+          schedule: {
+            enabled: false,
+            cadence: "0 8 * * 1-5",
+            timezone: "America/New_York",
+            jitter_seconds: 45,
+          },
+          revision: 7,
+        },
+      });
+
+      render(
+        <I18nextProvider i18n={i18n}>
+          <DataSourceCommandDialog
+            open={true}
+            onOpenChange={vi.fn()}
+            actionKey="schedule"
+            targetSource={v2Item}
+          />
+        </I18nextProvider>,
+      );
+
+      // Verify form inputs are initialized from targetSource.desired.schedule
+      const enabledCheckbox = screen.getByLabelText(/Schedule Active/i);
+      expect(enabledCheckbox).not.toBeChecked();
+
+      const cadenceInput = screen.getByLabelText(/Cadence \(Cron\)/i) as HTMLInputElement;
+      expect(cadenceInput.value).toBe("0 8 * * 1-5");
+
+      const timezoneInput = screen.getByLabelText(/Timezone/i) as HTMLInputElement;
+      expect(timezoneInput.value).toBe("America/New_York");
+
+      const jitterInput = screen.getByLabelText(/Jitter \(Seconds\)/i) as HTMLInputElement;
+      expect(jitterInput.value).toBe("45");
+
+      // Change ONLY the cadence input
+      fireEvent.change(cadenceInput, { target: { value: "0 10 * * 1-5" } });
+      expect(cadenceInput.value).toBe("0 10 * * 1-5");
+
+      // Fill reason
+      const reasonInput = screen.getByPlaceholderText(/Enter reason for this governance action/i);
+      fireEvent.change(reasonInput, { target: { value: "Shift ingestion window by 2 hours" } });
+
+      // Execute command
+      const executeBtn = screen.getByRole("button", { name: /Execute Change Schedule/i });
+      fireEvent.click(executeBtn);
+
+      await waitFor(() => {
+        expect(scheduleSpy).toHaveBeenCalledWith({
+          sourceInstanceId: "ds-twse-market-v1",
+          expectedRevision: 7,
+          reason: "Shift ingestion window by 2 hours",
+          schedule: {
+            enabled: false,
+            cadence: "0 10 * * 1-5",
+            timezone: "America/New_York",
+            jitter_seconds: 45,
+          },
+        });
+      });
+
+      writesSpy.mockRestore();
+      scheduleSpy.mockRestore();
+    });
+
+    it("renders Replace dependent migration list and gates execution on acknowledgement", async () => {
+      const { DataSourceCommandDialog } = await import(
+        "./dataSources/DataSourceCommandDialog"
+      );
+      const writesModule = await import("@/lib/bff-v1/managementDataSources");
+      const replaceSpy = vi
+        .spyOn(writesModule.managementDataSourceWrites, "replaceDataSource")
+        .mockResolvedValue({
+          receipt_id: "rcp-replace-001",
+          command_id: "cmd-replace-001",
+          source_instance_id: "ds-twse-market-v1",
+          command_type: "replace",
+          status: "succeeded",
+        });
+      const writesSpy = vi
+        .spyOn(await import("@/lib/bff-v1/liveTransport"), "realWritesEnabled")
+        .mockReturnValue(true);
+
+      const v2Item = mockV2DataSource({
+        observed: {
+          ...mockV2DataSource().observed,
+          dependent_refs: ["persona-tw-arb", "persona-alpha-momentum"],
+        },
+      });
+
+      render(
+        <I18nextProvider i18n={i18n}>
+          <DataSourceCommandDialog
+            open={true}
+            onOpenChange={vi.fn()}
+            actionKey="replace"
+            targetSource={v2Item}
+          />
+        </I18nextProvider>,
+      );
+
+      expect(screen.getByText("Affected Dependent Consumers (Migration Plan)")).toBeInTheDocument();
+      expect(screen.getByText("persona-tw-arb")).toBeInTheDocument();
+      expect(screen.getByText("persona-alpha-momentum")).toBeInTheDocument();
+
+      const execBtn = screen.getByRole("button", { name: /Execute Replace/i });
+      expect(execBtn).toBeDisabled();
+
+      // Enter replacement source id
+      const replacementInput = screen.getByPlaceholderText("e.g. ds-twse-market-v2");
+      fireEvent.change(replacementInput, { target: { value: "ds-twse-market-v2" } });
+      expect(execBtn).toBeDisabled();
+
+      // Enter reason
+      const reasonInput = screen.getByPlaceholderText(/Enter reason for this governance action/i);
+      fireEvent.change(reasonInput, { target: { value: "Migrating to v2 connector" } });
+
+      // Confirm action checkbox
+      const confirmCheckbox = screen.getByLabelText(/I confirm execution of Replace on this source/i);
+      fireEvent.click(confirmCheckbox);
+
+      // acknowledgeMigrationPlan is checked by default, so execBtn is now enabled
+      expect(execBtn).toBeEnabled();
+
+      // Uncheck acknowledgeMigrationPlan -> execBtn must be disabled!
+      const checkbox = screen.getByLabelText("Confirm replacement target and acknowledge dependent migration plan");
+      fireEvent.click(checkbox);
+      expect(execBtn).toBeDisabled();
+
+      // Recheck acknowledgeMigrationPlan -> execBtn is enabled and click executes
+      fireEvent.click(checkbox);
+      expect(execBtn).toBeEnabled();
+      fireEvent.click(execBtn);
+
+      await waitFor(() => {
+        expect(replaceSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            sourceInstanceId: "ds-twse-market-v1",
+            replacementSourceId: "ds-twse-market-v2",
+            confirmation: true,
+          }),
+        );
+      });
+
+      writesSpy.mockRestore();
+      replaceSpy.mockRestore();
+    });
+
+    it("requires typed 'RETIRE' confirmation for retire action command", async () => {
+      const { DataSourceCommandDialog } = await import(
+        "./dataSources/DataSourceCommandDialog"
+      );
+      const v2Item = mockV2DataSource();
+      const writesSpy = vi
+        .spyOn(await import("@/lib/bff-v1/liveTransport"), "realWritesEnabled")
+        .mockReturnValue(true);
+
+      render(
+        <I18nextProvider i18n={i18n}>
+          <DataSourceCommandDialog
+            open={true}
+            onOpenChange={vi.fn()}
+            actionKey="retire"
+            targetSource={v2Item}
+          />
+        </I18nextProvider>,
+      );
+
+      const execBtn = screen.getByRole("button", { name: /Execute Retire/i });
+      expect(execBtn).toBeDisabled();
+
+      // Enter reason
+      const reasonInput = screen.getByPlaceholderText(/Enter reason for this governance action/i);
+      fireEvent.change(reasonInput, { target: { value: "Decommissioning old source" } });
+      expect(execBtn).toBeDisabled();
+
+      // Type wrong confirmation
+      const retireInput = screen.getByPlaceholderText("Type RETIRE to confirm");
+      fireEvent.change(retireInput, { target: { value: "retire" } });
+      expect(execBtn).toBeDisabled();
+
+      // Type exact "RETIRE"
+      fireEvent.change(retireInput, { target: { value: "RETIRE" } });
+      expect(execBtn).toBeEnabled();
+
+      writesSpy.mockRestore();
+    });
+
+    it("renders Column 8 consumers count, links, and actual usage/cost/quota/DLQ in DataSourceInstancesTable", async () => {
+      const { DataSourceInstancesTable } = await import(
+        "./dataSources/DataSourceInstancesTable"
+      );
+      const v2Item = mockV2DataSource({
+        observed: {
+          ...mockV2DataSource().observed,
+          dependent_refs: ["persona-arb-1"],
+          usage: {
+            calls_today: 320,
+            cost_usd: 1.25,
+          },
+          quota: {
+            daily_limit: 10000,
+            remaining_calls: 9680,
+            used_percent: 4,
+          },
+          dlq_unresolved_count: 2,
+        },
+      });
+
+      render(
+        <MemoryRouter>
+          <I18nextProvider i18n={i18n}>
+            <DataSourceInstancesTable
+              records={[v2Item]}
+              onSelectSource={vi.fn()}
+              onExecuteAction={vi.fn()}
+            />
+          </I18nextProvider>
+        </MemoryRouter>,
+      );
+
+      expect(screen.getByText("1 consumer(s):")).toBeInTheDocument();
+      expect(screen.getByText("persona-arb-1")).toBeInTheDocument();
+      expect(screen.getByText(/Cost: \$1.25/i)).toBeInTheDocument();
+      expect(screen.getByText("(320 reqs)")).toBeInTheDocument();
+      expect(screen.getByText("Quota: 4%")).toBeInTheDocument();
+      expect(screen.getByText("DLQ: 2")).toBeInTheDocument();
+    });
+
+    it("renders Quota, Usage & DLQ card in DataSourceRunsPanel", async () => {
+      const { DataSourceRunsPanel } = await import(
+        "./dataSources/DataSourceRunsPanel"
+      );
+      const v2Item = mockV2DataSource({
+        observed: {
+          ...mockV2DataSource().observed,
+          dependent_refs: ["persona-arb-1", "persona-arb-2"],
+          usage: {
+            cost_usd: 8.5,
+          },
+          quota: {
+            daily_limit: 50000,
+            used_percent: 12,
+          },
+          dlq_unresolved_count: 0,
+        },
+      });
+
+      render(
+        <I18nextProvider i18n={i18n}>
+          <DataSourceRunsPanel sources={[v2Item]} />
+        </I18nextProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId("runs-quota-usage-card")).toBeInTheDocument();
+      });
+      expect(screen.getByText("Quota, Usage & DLQ Observability")).toBeInTheDocument();
+      expect(screen.getByText("12%")).toBeInTheDocument();
+      expect(screen.getByText("$8.50")).toBeInTheDocument();
+      expect(screen.getByText(/2 Consumer personas/i)).toBeInTheDocument();
+      expect(screen.getByText("Healthy")).toBeInTheDocument();
+    });
+
+    it("transports secret_scope and enforces configured_disabled in DataSourceAddWizard", async () => {
+      const { DataSourceAddWizard } = await import(
+        "./dataSources/DataSourceAddWizard"
+      );
+      const onSourceCreated = vi.fn();
+      const writesSpy = vi
+        .spyOn(await import("@/lib/bff-v1/liveTransport"), "realWritesEnabled")
+        .mockReturnValue(true);
+
+      const writesModule = await import("@/lib/bff-v1/managementDataSources");
+      vi.spyOn(writesModule.managementDataSourceReads, "catalog").mockResolvedValue({
+        definitions: [
+          {
+            definition_id: "twse-openapi-daily",
+            adapter_token: "TwseAdapter.records_from_payload",
+            adapter_version: "1.0.0",
+            provider: "TWSE",
+            definition_state: "supported",
+            source_classes: ["market_daily"],
+            datasets: ["tw_price_daily"],
+            markets: ["TW"],
+            deployment_sha: "sha256:475a3d4f",
+          },
+        ],
+        count: 1,
+      });
+
+      const createSpy = vi
+        .spyOn(writesModule.managementDataSourceWrites, "createDataSource")
+        .mockResolvedValue({
+          receipt_id: "rcp-create-001",
+          command_id: "cmd-create-001",
+          source_instance_id: "ds-twse-test",
+          command_type: "create",
+          status: "succeeded",
+        });
+
+      render(
+        <I18nextProvider i18n={i18n}>
+          <DataSourceAddWizard
+            open={true}
+            onOpenChange={vi.fn()}
+            onSourceCreated={onSourceCreated}
+          />
+        </I18nextProvider>,
+      );
+
+      // Step 1: Select Definition
+      await waitFor(() => {
+        expect(screen.getByText(/twse-openapi-daily/)).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByText(/twse-openapi-daily/));
+
+      const nextBtn = screen.getByRole("button", { name: /Next/i });
+      fireEvent.click(nextBtn);
+
+      // Step 2: Source Instance Identity
+      await waitFor(() => {
+        expect(screen.getByText("Define Source Instance Identity")).toBeInTheDocument();
+      });
+      fireEvent.click(nextBtn);
+
+      // Step 3: Connection & Secrets & Scope
+      await waitFor(() => {
+        expect(screen.getByText("Connection & Secret References")).toBeInTheDocument();
+      });
+      expect(screen.getByText(/Define the authorization boundary and access privilege scope/i)).toBeInTheDocument();
+
+      const secretInput = screen.getByPlaceholderText("vault://path/to/secret-ref");
+      fireEvent.change(secretInput, { target: { value: "vault://secrets/twse" } });
+
+      fireEvent.click(nextBtn);
+
+      // Step 4: Governance & Policies
+      await waitFor(() => {
+        expect(screen.getByText("Governance, Entitlements & Policies")).toBeInTheDocument();
+      });
+      fireEvent.click(nextBtn);
+
+      // Step 5: Scheduling
+      await waitFor(() => {
+        expect(screen.getByText("Universe Policy & Scheduling")).toBeInTheDocument();
+      });
+      fireEvent.click(nextBtn);
+
+      // Step 6: Review & Confirm
+      await waitFor(() => {
+        expect(screen.getByText("Review & Confirm Creation")).toBeInTheDocument();
+      });
+      expect(screen.getByText("Creation Starts in Configured-Disabled State")).toBeInTheDocument();
+
+      const createBtn = screen.getByRole("button", { name: /Create Source \(Disabled\)/i });
+      fireEvent.click(createBtn);
+
+      await waitFor(() => {
+        expect(createSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            secret_scope: "runtime_read_only",
+            connector_config: expect.objectContaining({
+              secret_ref_id: "vault://secrets/twse",
+              secret_scope: "runtime_read_only",
+            }),
+            schedule: expect.objectContaining({
+              enabled: false,
+            }),
+          }),
+        );
+        expect(onSourceCreated).toHaveBeenCalled();
+      });
+
+      writesSpy.mockRestore();
+      createSpy.mockRestore();
+    });
+
+    it("renders partial V2 records in DataSourceInstancesTable without synthetic positive truths", async () => {
+      const { DataSourceInstancesTable } = await import(
+        "./dataSources/DataSourceInstancesTable"
+      );
+
+      const partialDTO: ManagementDataSourceV2DTO = {
+        schema_version: "management_data_source.v2",
+        source_instance_id: "ds-partial-table-01",
+        connector_id: "conn-partial",
+        provider: "Partial Provider",
+        source_class: "market",
+        definition: {
+          definition_id: "conn-partial",
+          adapter_token: "unknown",
+          provider: "Partial Provider",
+          definition_state: "unknown",
+        },
+        instance: {
+          data_source_id: "ds-partial-table-01",
+          source_kind: "data_source",
+          definition_id: "conn-partial",
+          connector_id: "conn-partial",
+          provider: "Partial Provider",
+          source_class: "market",
+          lifecycle_state: "unknown",
+          revision: 0,
+        },
+        desired: {
+          source_instance_id: "ds-partial-table-01",
+          revision: 0,
+          desired_lifecycle: "unknown",
+        },
+        observed: {
+          source_instance_id: "ds-partial-table-01",
+          effective_lifecycle: "unknown",
+          health_state: "unknown",
+          reconciliation_status: "unknown",
+          credential_state: "unknown",
+        },
+        allowed_actions: {
+          canValidate: false,
+          canCanary: false,
+          canEnable: false,
+          canDisable: false,
+          canDegrade: false,
+          canResume: false,
+          canChangeSchedule: false,
+          canReplace: false,
+          canRetire: false,
+          blockedReasons: [],
+        },
+        allowedActions: {
+          canValidate: false,
+          canCanary: false,
+          canEnable: false,
+          canDisable: false,
+          canDegrade: false,
+          canResume: false,
+          canChangeSchedule: false,
+          canReplace: false,
+          canRetire: false,
+          blockedReasons: [],
+        },
+      };
+
+      render(
+        <I18nextProvider i18n={i18n}>
+          <MemoryRouter>
+            <DataSourceInstancesTable
+              records={[partialDTO]}
+              onSelectSource={vi.fn()}
+              onExecuteAction={vi.fn()}
+            />
+          </MemoryRouter>
+        </I18nextProvider>,
+      );
+
+      expect(screen.getByText("ds-partial-table-01")).toBeInTheDocument();
+      // Definition state and health must show unknown
+      const unknownBadges = screen.getAllByText("unknown");
+      expect(unknownBadges.length).toBeGreaterThanOrEqual(3);
+      // Must not render positive defaults
+      expect(screen.queryByText("supported")).not.toBeInTheDocument();
+      expect(screen.queryByText("converged")).not.toBeInTheDocument();
+    });
+
+    it("renders partial V2 limits and states in DataSourceDetailDrawer without synthetic 15s timeout", async () => {
+      const { DataSourceDetailDrawer } = await import(
+        "./dataSources/DataSourceDetailDrawer"
+      );
+
+      const minimalDTO: ManagementDataSourceV2DTO = {
+        schema_version: "management_data_source.v2",
+        source_instance_id: "ds-minimal-drawer",
+        connector_id: "conn-minimal",
+        provider: "Minimal Provider",
+        source_class: "market",
+        definition: {
+          definition_id: "conn-minimal",
+          adapter_token: "unknown",
+          provider: "Minimal Provider",
+          definition_state: "unknown",
+        },
+        instance: {
+          data_source_id: "ds-minimal-drawer",
+          source_kind: "data_source",
+          definition_id: "conn-minimal",
+          connector_id: "conn-minimal",
+          provider: "Minimal Provider",
+          source_class: "market",
+          lifecycle_state: "unknown",
+          revision: 0,
+        },
+        desired: {
+          source_instance_id: "ds-minimal-drawer",
+          revision: 0,
+          desired_lifecycle: "unknown",
+        },
+        observed: {
+          source_instance_id: "ds-minimal-drawer",
+          effective_lifecycle: "unknown",
+          health_state: "unknown",
+          reconciliation_status: "unknown",
+          credential_state: "unknown",
+        },
+        allowed_actions: {
+          canValidate: false,
+          canCanary: false,
+          canEnable: false,
+          canDisable: false,
+          canDegrade: false,
+          canResume: false,
+          canChangeSchedule: false,
+          canReplace: false,
+          canRetire: false,
+          blockedReasons: [],
+        },
+        allowedActions: {
+          canValidate: false,
+          canCanary: false,
+          canEnable: false,
+          canDisable: false,
+          canDegrade: false,
+          canResume: false,
+          canChangeSchedule: false,
+          canReplace: false,
+          canRetire: false,
+          blockedReasons: [],
+        },
+      };
+
+      const reads = (await import("@/lib/bff-v1/managementDataSources")).managementDataSourceReads;
+      const detailSpy = vi.spyOn(reads, "detail").mockResolvedValue({
+        data: minimalDTO,
+        meta: { status: "ok", source: "service_client" },
+      });
+      const runsSpy = vi.spyOn(reads, "runs").mockResolvedValue({
+        observations: [],
+        canaries: [],
+        meta: { status: "ok", source: "service_client" },
+      });
+      const receiptsSpy = vi.spyOn(reads, "receipts").mockResolvedValue({
+        receipts: [],
+        meta: { status: "ok", source: "service_client" },
+      });
+
+      render(
+        <I18nextProvider i18n={i18n}>
+          <MemoryRouter>
+            <DataSourceDetailDrawer
+              open={true}
+              onOpenChange={vi.fn()}
+              sourceInstanceId="ds-minimal-drawer"
+              initialSource={minimalDTO}
+            />
+          </MemoryRouter>
+        </I18nextProvider>,
+      );
+
+      // Wait for drawer to finish loading
+      await waitFor(() => {
+        expect(screen.getByRole("heading", { name: "ds-minimal-drawer" })).toBeInTheDocument();
+      });
+
+      // Verify that partial drawer renders unknown and dash without positive truth fallbacks
+      expect(screen.getAllByText("unknown").length).toBeGreaterThanOrEqual(2);
+      expect(screen.queryByText("supported")).not.toBeInTheDocument();
+      expect(screen.queryByText("converged")).not.toBeInTheDocument();
+      expect(screen.queryByText("healthy")).not.toBeInTheDocument();
+      expect(screen.queryByText("15s")).not.toBeInTheDocument();
+
+      detailSpy.mockRestore();
+      runsSpy.mockRestore();
+      receiptsSpy.mockRestore();
+    });
+
+    it("renders partial receipt readback in DataSourceReceiptPanel without synthetic 'converged'", async () => {
+      const { DataSourceReceiptPanel } = await import(
+        "./dataSources/DataSourceReceiptPanel"
+      );
+
+      const partialReceiptsReadsSpy = vi
+        .spyOn(
+          (await import("@/lib/bff-v1/managementDataSources")).managementDataSourceReads,
+          "receipts",
+        )
+        .mockResolvedValue({
+          receipts: [
+            {
+              receipt_id: "rcp-partial-001",
+              command_id: "cmd-partial-001",
+              source_instance_id: "ds-twse-market-v1",
+              command_type: "validate",
+              status: "succeeded",
+              readback: {
+                reconciliation_status: undefined,
+              },
+            },
+          ],
+          meta: { status: "ok", source: "service_client" },
+        });
+
+      render(
+        <I18nextProvider i18n={i18n}>
+          <DataSourceReceiptPanel sources={[mockV2DataSource()]} />
+        </I18nextProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText("rcp-partial-001")).toBeInTheDocument();
+      });
+
+      // Readback line should render Readback: — without "converged"
+      expect(screen.getByText("Readback:")).toBeInTheDocument();
+      expect(screen.queryByText("converged")).not.toBeInTheDocument();
+
+      partialReceiptsReadsSpy.mockRestore();
+    });
+
+    it("disables command execution and renders dash when authoritative revision is unavailable", async () => {
+      const { DataSourceCommandDialog } = await import(
+        "./dataSources/DataSourceCommandDialog"
+      );
+      const transportModule = await import("@/lib/bff-v1/liveTransport");
+      const realWritesSpy = vi.spyOn(transportModule, "realWritesEnabled").mockReturnValue(true);
+
+      const sourceWithoutRevision = mockV2DataSource();
+      delete (sourceWithoutRevision.desired as Record<string, unknown>).revision;
+      delete (sourceWithoutRevision.instance as Record<string, unknown>).revision;
+
+      const validateSpy = vi.spyOn(
+        (await import("@/lib/bff-v1/managementDataSources")).managementDataSourceWrites,
+        "validateDataSource",
+      );
+
+      render(
+        <I18nextProvider i18n={i18n}>
+          <DataSourceCommandDialog
+            open={true}
+            onOpenChange={() => {}}
+            actionKey="validate"
+            targetSource={sourceWithoutRevision}
+          />
+        </I18nextProvider>,
+      );
+
+      // Expected revision badge should render dash —
+      const badge = screen.getByTestId("command-expected-revision-badge");
+      expect(badge).toHaveTextContent("—");
+
+      // Missing revision warning alert should be displayed
+      expect(screen.getByTestId("missing-revision-alert")).toBeInTheDocument();
+      expect(screen.getByText(/Authoritative Revision Unavailable|權威伺服器版本不可用/i)).toBeInTheDocument();
+
+      // Execute button should be disabled
+      const executeBtn = screen.getByRole("button", { name: /Execute Validate|執行驗證/i });
+      expect(executeBtn).toBeDisabled();
+
+      // Attempting to click execute button should not trigger validateDataSource
+      fireEvent.click(executeBtn);
+      expect(validateSpy).not.toHaveBeenCalled();
+
+      validateSpy.mockRestore();
+      realWritesSpy.mockRestore();
+    });
+
+    it("renders r— in instances table when authoritative revision is missing", async () => {
+      const { DataSourceInstancesTable } = await import(
+        "./dataSources/DataSourceInstancesTable"
+      );
+
+      const sourceWithoutRevision = mockV2DataSource();
+      delete (sourceWithoutRevision.desired as Record<string, unknown>).revision;
+      delete (sourceWithoutRevision.instance as Record<string, unknown>).revision;
+
+      render(
+        <I18nextProvider i18n={i18n}>
+          <MemoryRouter>
+            <DataSourceInstancesTable
+              records={[sourceWithoutRevision]}
+              onSelectSource={vi.fn()}
+              onExecuteAction={vi.fn()}
+            />
+          </MemoryRouter>
+        </I18nextProvider>,
+      );
+
+      // Should render r— badge
+      expect(screen.getByText("r—")).toBeInTheDocument();
+      expect(screen.queryByText("r0")).not.toBeInTheDocument();
+    });
+  });
 });

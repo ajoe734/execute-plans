@@ -57,7 +57,7 @@ export function DataSourceRunsPanel({ sources, onSelectSource }: DataSourceRunsP
     }
   }, [sources, selectedSourceId]);
 
-  const loadRuns = async () => {
+  const loadRuns = React.useCallback(async () => {
     if (!selectedSourceId) return;
     setLoading(true);
     try {
@@ -68,13 +68,13 @@ export function DataSourceRunsPanel({ sources, onSelectSource }: DataSourceRunsP
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedSourceId]);
 
   useEffect(() => {
     if (selectedSourceId) {
       loadRuns();
     }
-  }, [selectedSourceId]);
+  }, [selectedSourceId, loadRuns]);
 
   const activeSource = sources.find(
     (s) => (s.source_instance_id || s.connector_id) === selectedSourceId,
@@ -140,11 +140,71 @@ export function DataSourceRunsPanel({ sources, onSelectSource }: DataSourceRunsP
             <span className="text-muted-foreground">{t("mgmt.dataSources.detail.health")}</span>
             <div className="mt-1 font-medium text-sm">
               <Badge variant="outline" className={healthStateTone(activeSource.observed?.health_state)}>
-                {fmtToken(activeSource.observed?.health_state || "healthy")}
+                {fmtToken(activeSource.observed?.health_state || "unknown")}
               </Badge>
             </div>
           </Card>
         </div>
+      )}
+
+      {/* Quota, Usage & DLQ Observability Summary */}
+      {activeSource && (
+        <Card className="p-4 space-y-3" data-testid="runs-quota-usage-card">
+          <h3 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+            <Database className="h-4 w-4 text-primary" />
+            {t("mgmt.dataSources.runs.usageQuotaDlqTitle")}
+          </h3>
+          <div className="grid gap-3 grid-cols-2 md:grid-cols-4 text-xs">
+            <div className="p-2.5 rounded border bg-card space-y-1">
+              <span className="text-muted-foreground text-[11px]">{t("mgmt.dataSources.runs.unresolvedDlqTitle")}</span>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className="font-mono font-semibold text-sm">
+                  {activeSource.observed?.dlq_unresolved_count !== undefined ? activeSource.observed.dlq_unresolved_count : "—"}
+                </span>
+                {activeSource.observed?.dlq_unresolved_count !== undefined && (
+                  activeSource.observed.dlq_unresolved_count > 0 ? (
+                    <Badge variant="outline" className="bg-status-failed/10 text-status-failed text-[10px]">
+                      Alert
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="bg-status-success/10 text-status-success text-[10px]">
+                      Healthy
+                    </Badge>
+                  )
+                )}
+              </div>
+            </div>
+
+            <div className="p-2.5 rounded border bg-card space-y-1">
+              <span className="text-muted-foreground text-[11px]">{t("mgmt.dataSources.runs.quotaUsageTitle")}</span>
+              <div className="font-mono font-semibold text-sm mt-0.5">
+                {activeSource.observed?.quota?.used_percent !== undefined
+                  ? `${activeSource.observed.quota.used_percent}%`
+                  : activeSource.observed?.quota?.daily_limit
+                    ? `${activeSource.observed.quota.daily_limit} req/day`
+                    : "—"}
+              </div>
+            </div>
+
+            <div className="p-2.5 rounded border bg-card space-y-1">
+              <span className="text-muted-foreground text-[11px]">{t("mgmt.dataSources.runs.costEstimateTitle")}</span>
+              <div className="font-mono font-semibold text-sm mt-0.5">
+                {activeSource.observed?.usage?.cost_usd !== undefined
+                  ? `$${Number(activeSource.observed.usage.cost_usd).toFixed(2)}`
+                  : "—"}
+              </div>
+            </div>
+
+            <div className="p-2.5 rounded border bg-card space-y-1">
+              <span className="text-muted-foreground text-[11px]">{t("mgmt.dataSources.runs.activeConsumersTitle")}</span>
+              <div className="font-mono font-semibold text-sm mt-0.5">
+                {activeSource.observed?.dependent_refs !== undefined
+                  ? `${activeSource.observed.dependent_refs.length} ${t("mgmt.dataSources.consumers")}`
+                  : "—"}
+              </div>
+            </div>
+          </div>
+        </Card>
       )}
 
       {/* Canaries Timeline */}
@@ -190,8 +250,8 @@ export function DataSourceRunsPanel({ sources, onSelectSource }: DataSourceRunsP
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] text-muted-foreground font-mono">
-                  <div>Rows Ingested: <span className="font-semibold text-foreground">{canary.row_count ?? 0}</span></div>
-                  <div>Rejected: <span className="font-semibold text-foreground">{canary.rejected_count ?? 0}</span></div>
+                  <div>Rows Ingested: <span className="font-semibold text-foreground">{canary.row_count !== undefined ? canary.row_count : "—"}</span></div>
+                  <div>Rejected: <span className="font-semibold text-foreground">{canary.rejected_count !== undefined ? canary.rejected_count : "—"}</span></div>
                   <div>License: <span className="text-foreground">{canary.license_scope || "—"}</span></div>
                   <div>Hosts: <span className="text-foreground">{(canary.allowed_hosts ?? []).join(", ") || "—"}</span></div>
                 </div>
@@ -263,7 +323,7 @@ export function DataSourceRunsPanel({ sources, onSelectSource }: DataSourceRunsP
                 {runs.observations.map((obs, idx) => (
                   <tr key={idx} className="hover:bg-muted/30">
                     <td className="py-2 px-3">{formatTime(obs.observed_at)}</td>
-                    <td className="py-2 px-3">r{obs.observed_revision}</td>
+                    <td className="py-2 px-3">{obs.observed_revision !== undefined && obs.observed_revision >= 1 ? `r${obs.observed_revision}` : "—"}</td>
                     <td className="py-2 px-3 font-sans">
                       <Badge variant="outline" className={healthStateTone(obs.health_state)}>
                         {fmtToken(obs.health_state)}
