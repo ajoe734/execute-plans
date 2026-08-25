@@ -48,6 +48,22 @@ describe("SRCM-P1-MGMT-UI hosted acceptance source contract", () => {
     expect(e2eSpec).toContain("/management/data-sources");
   });
 
+  it("strictly requires exact HTTP 200 data-source response status rather than generic 2xx range", () => {
+    expect(e2eSpec).toContain("ev.status === 200 && ev.pathname.includes(\"/management/data-sources\")");
+    expect(e2eSpec).not.toMatch(/ev\.status\s*>=\s*200\s*&&\s*ev\.status\s*<\s*300\s*&&\s*ev\.pathname\.includes\("\/management\/data-sources"\)/);
+    expect(e2eSpec).toContain("Expected specific HTTP 200 BFF request for Data Sources");
+  });
+
+  it("isolates hosted acceptance workflow execution to unmocked hosted tests via --grep", () => {
+    expect(workflow).toContain("--grep \"unmocked hosted\"");
+  });
+
+  it("gates mocked fixture tests from executing against external/hosted environments and cleanly skips them", () => {
+    expect(e2eSpec).toContain("testInfo.title.includes(\"unmocked hosted\")");
+    expect(e2eSpec).toContain("test.skip(");
+    expect(e2eSpec).toContain("route-mocked fixture coverage is loopback-only; hosted candidates use live acceptance specs");
+  });
+
   it("hosted acceptance workflow binds checkout SHA, live deployment, live /bff/version, and uploads fail-closed evidence", () => {
     expect(workflow).toContain("git rev-parse HEAD");
     expect(workflow).toContain("${PANTHEON_FE_BASE_URL}/deployment.json");

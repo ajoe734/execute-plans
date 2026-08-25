@@ -553,7 +553,7 @@ async function setupStandardFixtures(page: Page) {
 }
 
 test.describe("Management Data Source Control Center (SD-SRCM-04)", () => {
-  test.beforeEach(async ({ page }) => {
+  test.beforeEach(async ({ page }, testInfo) => {
     const isHosted =
       HOSTED_REQUESTED &&
       targetsExternalE2eEnvironment({
@@ -561,7 +561,12 @@ test.describe("Management Data Source Control Center (SD-SRCM-04)", () => {
         PANTHEON_FE_BASE_URL: process.env.PANTHEON_FE_BASE_URL || FE_BASE_URL,
       });
 
-    if (!isHosted) {
+    const isHostedOnlyTest = testInfo.title.includes("unmocked hosted");
+    if (!isHostedOnlyTest) {
+      test.skip(
+        isHosted,
+        "route-mocked fixture coverage is loopback-only; hosted candidates use live acceptance specs",
+      );
       await installOidcDevLogin(page, {
         env: {
           ...process.env,
@@ -648,9 +653,9 @@ test.describe("Management Data Source Control Center (SD-SRCM-04)", () => {
     expect(serverErrors, "Expected zero 5xx server errors").toHaveLength(0);
 
     const dataSourceEvents = networkEvents.filter(
-      (ev) => ev.status >= 200 && ev.status < 300 && ev.pathname.includes("/management/data-sources"),
+      (ev) => ev.status === 200 && ev.pathname.includes("/management/data-sources"),
     );
-    expect(dataSourceEvents.length, "Expected specific 2xx BFF request for Data Sources").toBeGreaterThan(0);
+    expect(dataSourceEvents.length, "Expected specific HTTP 200 BFF request for Data Sources").toBeGreaterThan(0);
 
     mkdirSync(EVIDENCE_DIR, { recursive: true });
     const screenshotPath = `${EVIDENCE_DIR}/srcm-p1-mgmt-ui-pages.png`;

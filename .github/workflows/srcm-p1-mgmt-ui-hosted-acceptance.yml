@@ -151,6 +151,7 @@ jobs:
           npx playwright test \
             e2e/30-management-data-source-control.spec.ts \
             --project=chromium \
+            --grep "unmocked hosted" \
             --retries=0 \
             --reporter=list \
             --trace=off
