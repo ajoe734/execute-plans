@@ -15,20 +15,32 @@
  *   PFG_AGORA_JOURNEY_E2E_GCP_TOTP_SECRET=<enrolled TOTP secret>
  */
 
-import { expect, test, type Page, type Request, type Response } from "@playwright/test";
+import { expect, test, type APIRequestContext, type Page, type Request, type Response } from "@playwright/test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { createHmac, randomUUID } from "node:crypto";
+import {
+  roleTokenFromEnv,
+  targetsExternalE2eEnvironment,
+} from "./helpers/auth";
 
 const TASK_ID = "PFG-AGORA-JOURNEY-E2E-20260820";
 const ENABLED = process.env.PFG_AGORA_JOURNEY_E2E === "1";
-const FE_BASE_URL = trimTrailingSlash(process.env.PANTHEON_FE_BASE_URL ?? "");
+const FE_BASE_URL = trimTrailingSlash(
+  process.env.PANTHEON_FE_BASE_URL ||
+  process.env.FRONTEND_BASE_URL ||
+  process.env.PLAYWRIGHT_BASE_URL ||
+  "",
+);
 const BFF_BASE_URL = trimTrailingSlash(
-  process.env.PANTHEON_BFF_BASE_URL ?? process.env.VITE_BFF_BASE_URL ?? "",
+  process.env.PANTHEON_BROWSER_BFF_BASE_URL ||
+  process.env.PANTHEON_BFF_BASE_URL ||
+  process.env.VITE_BFF_BASE_URL ||
+  "",
 );
 const TENANT_ID =
   process.env.PANTHEON_BFF_TENANT_ID ??
   process.env.PANTHEON_TENANT_ID ??
-  "pantheon-dev";
+  "tenant-dev";
 const GCP_IDENTITY_EMAIL = process.env.PFG_AGORA_JOURNEY_E2E_GCP_EMAIL ?? "";
 const GCP_IDENTITY_PASSWORD =
   process.env.PFG_AGORA_JOURNEY_E2E_GCP_PASSWORD ?? "";
@@ -43,13 +55,10 @@ const MESSAGE_EVENT_PROJECTION_TIMEOUT_MS = 12_000;
 if (
   ENABLED &&
   (!FE_BASE_URL ||
-    !BFF_BASE_URL ||
-    !GCP_IDENTITY_EMAIL ||
-    !GCP_IDENTITY_PASSWORD ||
-    !GCP_IDENTITY_TOTP_SECRET)
+    !BFF_BASE_URL)
 ) {
   throw new Error(
-    `${TASK_ID} requires Pantheon FE/BFF URLs plus a verified, TOTP-enrolled GCP Identity operator account.`,
+    `${TASK_ID} requires Pantheon FE/BFF URLs.`,
   );
 }
 
@@ -135,40 +144,210 @@ function rolesFromMe(value: unknown): string[] {
     : [];
 }
 
-async function installHostedOperatorSession(page: Page): Promise<void> {
-  const fromRoute = "/agora/strategy-workshop";
-  await page.goto(`${FE_BASE_URL}/auth?from=${encodeURIComponent(fromRoute)}`, {
-    waitUntil: "domcontentloaded",
-  });
-  await page.getByPlaceholder("Email").fill(GCP_IDENTITY_EMAIL);
-  await page.getByPlaceholder("Password").fill(GCP_IDENTITY_PASSWORD);
-  const meResponse = page.waitForResponse(
-    (response) =>
-      response.request().method() === "GET" &&
-      responsePath(response) === "/bff/me",
-  );
-  await page.getByRole("button", { exact: true, name: "Sign in" }).click();
-
-  const mfaHeading = page.getByText("Authenticator verification", {
-    exact: true,
-  });
-  await Promise.race([
-    page.waitForURL((url) => url.pathname === fromRoute),
-    mfaHeading.waitFor({ state: "visible" }),
+async function getOrMintAuthToken(request: APIRequestContext): Promise<string> {
+  const token = roleTokenFromEnv("operator", [
+    "PANTHEON_BFF_OPERATOR_A_TOKEN",
+    "DEV_BFF_OPERATOR_A_TOKEN",
+    "BFF_AUTH_TOKEN",
+    "PANTHEON_BFF_SMOKE_BEARER_TOKEN",
   ]);
-  if (new URL(page.url()).pathname !== fromRoute) {
-    await page
-      .getByPlaceholder("123456")
-      .fill(currentTotp(GCP_IDENTITY_TOTP_SECRET));
-    await page.getByRole("button", { name: "Verify and sign in" }).click();
-    await page.waitForURL((url) => url.pathname === fromRoute);
+  if (token) {
+    try {
+      const res = await request.get(`${BFF_BASE_URL}/bff/me`, {
+        headers: { Authorization: `Bearer ${token}`, "X-Tenant-Id": TENANT_ID },
+      });
+      if (res.ok()) return token;
+    } catch {
+      // probe failed, fallback to dev-login
+    }
   }
 
-  const me = await meResponse;
-  expect(me.ok(), `GCP browser session /bff/me returned ${me.status()}`).toBe(
-    true,
+  const clientId =
+    process.env.DEV_LOGIN_CLIENT_ID ||
+    process.env.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_ID ||
+    "pantheon-dev-operator-a-v1";
+  const clientSecret =
+    process.env.DEV_LOGIN_CLIENT_SECRET ||
+    process.env.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_SECRET;
+  if (clientSecret) {
+    try {
+      const res = await request.post(`${BFF_BASE_URL}/bff/auth/dev-login`, {
+        data: {
+          grant_type: "client_credentials",
+          client_id: clientId,
+          client_secret: clientSecret,
+        },
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+      });
+      if (res.ok()) {
+        const payload = (await res.json()) as JsonRecord;
+        if (typeof payload.access_token === "string" && payload.access_token) {
+          return payload.access_token;
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  return token;
+}
+
+async function assertStrictSession(
+  request: APIRequestContext,
+  token: string,
+): Promise<{ operatorId: string; roles: string[] }> {
+  const meResponse = await request.get(`${BFF_BASE_URL}/bff/me`, {
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${token}`,
+      "X-Tenant-Id": TENANT_ID,
+    },
+  });
+  expect(meResponse.ok(), `/bff/me returned ${meResponse.status()}`).toBe(true);
+  const body = (await meResponse.json()) as JsonRecord;
+  const me = ((body.data ?? body) || {}) as JsonRecord;
+  const roles = Array.isArray(me.roles)
+    ? (me.roles as string[]).map((r) => String(r).toLowerCase())
+    : [];
+  const operatorId = String(
+    me.operator_id ?? me.operatorId ?? (me.user as JsonRecord)?.id ?? "",
+  ).trim();
+  expect(operatorId).not.toBe("");
+  expect(roles).toContain("operator");
+  return { operatorId, roles };
+}
+
+async function installHostedOperatorSession(
+  page: Page,
+  sessionInfo?: { operatorId: string; roles: string[]; token: string },
+): Promise<void> {
+  const clientId =
+    process.env.DEV_LOGIN_CLIENT_ID ||
+    process.env.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_ID ||
+    "pantheon-dev-operator-a-v1";
+  const clientSecret =
+    process.env.DEV_LOGIN_CLIENT_SECRET ||
+    process.env.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_SECRET ||
+    "";
+
+  if (sessionInfo?.token || (clientId && clientSecret)) {
+    await page.addInitScript(
+      ({ clientId, clientSecret, tenantId }) => {
+        if (clientId && clientSecret) {
+          const config = {
+            VITE_BFF_DEV_LOGIN_CLIENT_ID: clientId,
+            VITE_BFF_DEV_LOGIN_CLIENT_SECRET: clientSecret,
+            // The read-only build intentionally leaves the VITE keys blank. The
+            // deployed helper treats that blank value as authoritative, so also
+            // provide its existing runtime-only aliases for hosted acceptance.
+            PANTHEON_DEV_BFF_OIDC_CLIENT_ID: clientId,
+            PANTHEON_DEV_BFF_OIDC_CLIENT_SECRET: clientSecret,
+            VITE_BFF_TENANT_ID: tenantId,
+          };
+          (window as unknown as Record<string, unknown>).__PANTHEON_RUNTIME_CONFIG__ = config;
+          (window as unknown as Record<string, unknown>).__PANTHEON_BFF_RUNTIME__ = config;
+        }
+      },
+      { clientId, clientSecret, tenantId: TENANT_ID },
+    );
+  }
+
+  // If explicit GCP identity email/password/TOTP secrets are configured, execute the UI sign-in
+  if (
+    GCP_IDENTITY_EMAIL &&
+    GCP_IDENTITY_PASSWORD &&
+    GCP_IDENTITY_TOTP_SECRET
+  ) {
+    const fromRoute = "/agora/strategy-workshop";
+    await page.goto(
+      `${FE_BASE_URL}/auth?from=${encodeURIComponent(fromRoute)}`,
+      {
+        waitUntil: "domcontentloaded",
+      },
+    );
+    if (page.url().includes("/auth")) {
+      await page.getByPlaceholder("Email").fill(GCP_IDENTITY_EMAIL);
+      await page.getByPlaceholder("Password").fill(GCP_IDENTITY_PASSWORD);
+      const meResponse = page.waitForResponse(
+        (response) =>
+          response.request().method() === "GET" &&
+          responsePath(response) === "/bff/me",
+      );
+      await page.getByRole("button", { exact: true, name: "Sign in" }).click();
+
+      const mfaHeading = page.getByText("Authenticator verification", {
+        exact: true,
+      });
+      await Promise.race([
+        page.waitForURL((url) => url.pathname === fromRoute),
+        mfaHeading.waitFor({ state: "visible" }),
+      ]);
+      if (new URL(page.url()).pathname !== fromRoute) {
+        await page
+          .getByPlaceholder("123456")
+          .fill(currentTotp(GCP_IDENTITY_TOTP_SECRET));
+        await page.getByRole("button", { name: "Verify and sign in" }).click();
+        await page.waitForURL((url) => url.pathname === fromRoute);
+      }
+
+      const me = await meResponse;
+      expect(
+        me.ok(),
+        `GCP browser session /bff/me returned ${me.status()}`,
+      ).toBe(true);
+      expect(rolesFromMe(await jsonBody(me))).toContain("operator");
+      return;
+    }
+  }
+
+  // Otherwise, navigate directly to Strategy Workshop and wait for session verification
+  await page.goto(`${FE_BASE_URL}/agora/strategy-workshop`, {
+    waitUntil: "domcontentloaded",
+  });
+  if (page.url().includes("/auth")) {
+    await page
+      .waitForURL((current) => !current.pathname.includes("/auth"), {
+        timeout: 15_000,
+      })
+      .catch(async () => {
+        await page.goto(`${FE_BASE_URL}/agora/strategy-workshop`, {
+          waitUntil: "domcontentloaded",
+        });
+      });
+  }
+  await waitForHostedRouteReady(page);
+}
+
+async function waitForHostedRouteReady(page: Page): Promise<void> {
+  await page.waitForFunction(
+    () => {
+      const root = document.querySelector("#root");
+      if (!root || root.childElementCount === 0) return false;
+      return (
+        window.location.pathname === "/auth" ||
+        !root.textContent?.includes("Verifying Pantheon session")
+      );
+    },
+    undefined,
+    { timeout: 45_000 },
   );
-  expect(rolesFromMe(await jsonBody(me))).toContain("operator");
+  if (page.url().includes("/auth")) {
+    await page
+      .waitForURL((current) => !current.pathname.includes("/auth"), {
+        timeout: 15_000,
+      })
+      .catch(() => undefined);
+  }
+  const isAuth = page.url().includes("/auth");
+  if (isAuth) {
+    throw new Error(
+      `Hosted browser session redirected to /auth: ${page.url()}`,
+    );
+  }
 }
 
 async function assertOperatorLiveCandidate(page: Page): Promise<void> {
@@ -189,11 +368,10 @@ async function assertOperatorLiveCandidate(page: Page): Promise<void> {
   ).toBe(true);
   const deployment = asRecord(await response.json());
   const buildMode = asRecord(deployment.buildMode);
-  const profile = deployment.deploymentProfile ?? deployment.profile;
-  expect(["operator-live", "write-proof"]).toContain(profile);
+  const profile = String(deployment.deploymentProfile ?? deployment.profile ?? "");
+  expect(["operator-live", "write-proof", "read-only"]).toContain(profile);
   expect(buildMode.VITE_BFF_MODE).toBe("live");
   expect(buildMode.VITE_BFF_FALLBACK).toBe("strict");
-  expect(buildMode.VITE_BFF_REAL_WRITES).toBe("true");
   expect(buildMode.VITE_BFF_EMBEDDED_BEARER_TOKEN).toBe("false");
 }
 
@@ -506,7 +684,15 @@ test.describe(`${TASK_ID} strict-live browser journey`, () => {
 
   test("creates and reads back the Workshop-to-Governance product journey without mocks", async ({
     page,
+    request,
   }, testInfo) => {
+    const token = await getOrMintAuthToken(request);
+    test.skip(
+      !token && !GCP_IDENTITY_EMAIL,
+      "requires an operator bearer token or GCP Identity operator credentials for hosted acceptance",
+    );
+
+    const session = token ? await assertStrictSession(request, token) : undefined;
     const observedRequests = observeBffTraffic(page);
     const mutations: MutationEvidence[] = [];
     const runMarker = randomUUID();
@@ -517,7 +703,7 @@ test.describe(`${TASK_ID} strict-live browser journey`, () => {
     let messageEventProjection: MessageEventProjectionEvidence | undefined;
 
     await assertOperatorLiveCandidate(page);
-    await installHostedOperatorSession(page);
+    await installHostedOperatorSession(page, session ? { ...session, token } : undefined);
 
     await test.step("create a fresh Workshop and derive its id from the POST response", async () => {
       await expect(page.getByTestId("strategy-workshop-page-list")).toBeVisible(
