@@ -160,6 +160,7 @@ export function DataSourceCommandDialog({
             ...baseInput,
             confirmation: true,
             replacementSourceId: replacementSourceId.trim(),
+            migrateDependents: dependentRefs.length > 0 ? migrateDependents : false,
           });
           break;
         case "retire":
@@ -216,41 +217,47 @@ export function DataSourceCommandDialog({
         /stale revision/i.test(errorMsg)),
   );
 
+  const dependentRefs = targetSource.observed?.dependent_refs ?? [];
+
   const isExecuteDisabled =
     executing ||
     polling ||
     !writesLive ||
     (actionDef?.reasonRequired && !reason.trim()) ||
     (actionKey === "replace" && !replacementSourceId.trim()) ||
+    (actionKey === "replace" && dependentRefs.length > 0 && !migrateDependents) ||
     (actionKey === "retire" && retireConfirmText.trim() !== "RETIRE") ||
     (actionKey !== "retire" && actionDef?.confirmationRequired && !confirmation);
 
-  const canaryMaxRecords =
-    targetSource.desired?.limits?.max_records ??
-    targetSource.definition?.default_limits?.max_records ??
-    100;
-  const canaryMaxBytes =
-    targetSource.desired?.limits?.max_bytes ??
-    targetSource.definition?.default_limits?.max_bytes ??
-    1048576;
-  const canaryTimeout =
-    targetSource.desired?.limits?.timeout_seconds ??
-    targetSource.definition?.default_limits?.timeout_seconds ??
-    15;
+  const canaryLimits =
+    targetSource.desired?.limits ?? targetSource.definition?.default_limits;
+  const canaryMaxRecords = canaryLimits?.max_records;
+  const canaryMaxBytes = canaryLimits?.max_bytes;
+  const canaryTimeout = canaryLimits?.timeout_seconds;
   const canaryAllowedHosts =
     targetSource.desired?.allowed_hosts ??
     targetSource.definition?.allowed_host_patterns ??
-    ["openapi.twse.com.tw"];
+    [];
 
+  const definitionState = targetSource.definition?.definition_state || "unknown";
   const validationState = targetSource.observed?.validation_state || "pending";
   const canaryState = targetSource.observed?.canary_state || "not_run";
   const credentialState = targetSource.observed?.credential_state || "configured";
-  const enablePreconditionsMet = validationState === "passed" && canaryState === "passed";
-  const dependentRefs = targetSource.observed?.dependent_refs ?? [];
+  const scheduleActive = Boolean(targetSource.desired?.schedule?.enabled);
+  const scheduleCadenceText = targetSource.desired?.schedule?.cadence || (scheduleActive ? "Enabled" : "Disabled");
+  const egressText = canaryAllowedHosts.length > 0 ? `${canaryAllowedHosts.length} hosts` : t("mgmt.dataSources.dialog.canaryAllowedHostsNone", "None declared / unrestricted");
+  const serverAllowedActions = targetSource.allowed_actions ?? targetSource.allowedActions;
+  const serverBlockedReasons = serverAllowedActions?.blockedReasons ?? [];
+  const enablePreconditionsMet = Boolean(
+    serverAllowedActions?.canEnable ??
+      (validationState === "passed" && canaryState === "passed" && definitionState === "supported"),
+  );
+
+  const resumeWillRerunChecks = validationState !== "passed" || canaryState !== "passed";
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[540px]" aria-describedby="command-dialog-description">
+      <DialogContent className="sm:max-w-[540px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             {actionDef?.destructive ? (
@@ -260,7 +267,7 @@ export function DataSourceCommandDialog({
             )}
             {t("mgmt.dataSources.dialog.title", { action: actionLabel })}
           </DialogTitle>
-          <DialogDescription id="command-dialog-description">
+          <DialogDescription>
             {actionDef ? t(actionDef.descKey) : ""}
           </DialogDescription>
         </DialogHeader>
@@ -315,20 +322,28 @@ export function DataSourceCommandDialog({
               <div className="grid grid-cols-3 gap-2 text-[11px] font-mono">
                 <div className="p-1.5 rounded bg-background border">
                   <span className="text-muted-foreground block text-[10px]">{t("mgmt.dataSources.dialog.canaryMaxRecords")}</span>
-                  <span className="font-semibold text-foreground">{canaryMaxRecords}</span>
+                  <span className="font-semibold text-foreground">
+                    {canaryMaxRecords !== undefined ? canaryMaxRecords : "—"}
+                  </span>
                 </div>
                 <div className="p-1.5 rounded bg-background border">
                   <span className="text-muted-foreground block text-[10px]">{t("mgmt.dataSources.dialog.canaryMaxBytes")}</span>
-                  <span className="font-semibold text-foreground">{canaryMaxBytes} B</span>
+                  <span className="font-semibold text-foreground">
+                    {canaryMaxBytes !== undefined ? `${canaryMaxBytes} B` : "—"}
+                  </span>
                 </div>
                 <div className="p-1.5 rounded bg-background border">
                   <span className="text-muted-foreground block text-[10px]">{t("mgmt.dataSources.dialog.canaryTimeout")}</span>
-                  <span className="font-semibold text-foreground">{canaryTimeout}s</span>
+                  <span className="font-semibold text-foreground">
+                    {canaryTimeout !== undefined ? `${canaryTimeout}s` : "—"}
+                  </span>
                 </div>
               </div>
               <div className="text-[11px] font-mono">
                 <span className="text-muted-foreground block text-[10px]">{t("mgmt.dataSources.dialog.canaryAllowedHosts")}:</span>
-                <span className="text-foreground">{canaryAllowedHosts.join(", ")}</span>
+                <span className="text-foreground">
+                  {canaryAllowedHosts.length > 0 ? canaryAllowedHosts.join(", ") : t("mgmt.dataSources.dialog.canaryAllowedHostsNone", "None declared / unrestricted")}
+                </span>
               </div>
               <div className="p-2 rounded bg-muted/60 text-[11px] text-muted-foreground border">
                 {t("mgmt.dataSources.dialog.canarySafetyNotice")}
@@ -347,6 +362,12 @@ export function DataSourceCommandDialog({
               </div>
               <div className="grid grid-cols-3 gap-2 text-[11px] font-mono">
                 <div className="p-1.5 rounded bg-muted/40 border">
+                  <span className="text-muted-foreground block text-[10px]">{t("mgmt.dataSources.dialog.definitionStateLabel")}</span>
+                  <span className={definitionState === "supported" ? "text-status-success font-semibold" : "text-status-warning font-semibold"}>
+                    {definitionState}
+                  </span>
+                </div>
+                <div className="p-1.5 rounded bg-muted/40 border">
                   <span className="text-muted-foreground block text-[10px]">{t("mgmt.dataSources.dialog.validationStateLabel")}</span>
                   <span className={validationState === "passed" ? "text-status-success font-semibold" : "text-status-warning font-semibold"}>
                     {validationState}
@@ -362,7 +383,21 @@ export function DataSourceCommandDialog({
                   <span className="text-muted-foreground block text-[10px]">{t("mgmt.dataSources.dialog.credentialStateLabel")}</span>
                   <span className="text-foreground font-semibold">{credentialState}</span>
                 </div>
+                <div className="p-1.5 rounded bg-muted/40 border">
+                  <span className="text-muted-foreground block text-[10px]">{t("mgmt.dataSources.dialog.scheduleStateLabel")}</span>
+                  <span className="text-foreground font-semibold">{scheduleCadenceText}</span>
+                </div>
+                <div className="p-1.5 rounded bg-muted/40 border">
+                  <span className="text-muted-foreground block text-[10px]">{t("mgmt.dataSources.dialog.egressStateLabel")}</span>
+                  <span className="text-foreground font-semibold">{egressText}</span>
+                </div>
               </div>
+              {serverBlockedReasons.length > 0 && (
+                <div className="p-1.5 rounded bg-status-failed/10 border border-status-failed/20 text-[10px] text-status-failed">
+                  <span className="font-semibold block">{t("mgmt.dataSources.dialog.serverBlockedReasonsLabel")}:</span>
+                  <span>{serverBlockedReasons.join(", ")}</span>
+                </div>
+              )}
               <p className="text-[11px] text-muted-foreground">
                 {enablePreconditionsMet
                   ? t("mgmt.dataSources.dialog.preconditionsPassed")
@@ -376,7 +411,12 @@ export function DataSourceCommandDialog({
             <Card className="p-3 bg-primary/5 border-primary/20 text-xs space-y-1.5">
               <p className="font-medium text-foreground">{t("mgmt.dataSources.dialog.resumeRerunTruthTitle")}</p>
               <p className="text-[11px] text-muted-foreground">
-                {t("mgmt.dataSources.dialog.resumeRerunTruthDesc")}
+                {resumeWillRerunChecks
+                  ? t("mgmt.dataSources.dialog.resumeRerunRequiredDesc", {
+                      val: validationState,
+                      can: canaryState,
+                    })
+                  : t("mgmt.dataSources.dialog.resumeDirectRestoreDesc")}
               </p>
             </Card>
           )}

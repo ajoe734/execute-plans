@@ -363,7 +363,7 @@ export function DataSourceAddWizard({
 
   return (
     <Dialog open={open} onOpenChange={handleReset}>
-      <DialogContent className="sm:max-w-[620px] max-h-[90vh] overflow-y-auto" aria-describedby="wizard-dialog-description">
+      <DialogContent className="sm:max-w-[620px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <div className="flex items-center justify-between">
             <DialogTitle className="flex items-center gap-2">
@@ -374,7 +374,7 @@ export function DataSourceAddWizard({
               Step {step} / 6
             </Badge>
           </div>
-          <DialogDescription id="wizard-dialog-description">
+          <DialogDescription>
             {t("mgmt.dataSources.wizard.subtitle")}
           </DialogDescription>
         </DialogHeader>

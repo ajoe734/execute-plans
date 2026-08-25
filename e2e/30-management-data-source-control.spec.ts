@@ -314,8 +314,14 @@ test.describe("Management Data Source Control Center (SD-SRCM-04)", () => {
           "DEV_BFF_OPERATOR_A_TOKEN",
           "BFF_AUTH_TOKEN",
           "PANTHEON_BFF_SMOKE_BEARER_TOKEN",
-        ]) ||
-        "placeholder-hosted-bearer-token";
+        ]);
+
+      if (!explicitToken) {
+        throw new Error(
+          "Hosted E2E test requires an explicit validated short-lived external credential/session (e.g. BFF_AUTH_TOKEN or PANTHEON_BFF_SMOKE_BEARER_TOKEN). Failing closed instead of injecting placeholder.",
+        );
+      }
+
       await installHostedAuthSession(page, {
         token: explicitToken,
         operatorId: DEFAULT_FE_OPERATOR_ID,
@@ -334,7 +340,7 @@ test.describe("Management Data Source Control Center (SD-SRCM-04)", () => {
     await installQuietEventSource(page);
   });
 
-  test("unmocked hosted / authenticated control center proof and 9 canonical columns", async ({ page }) => {
+  test("mocked / authenticated control center proof and 9 canonical columns", async ({ page }) => {
     await setupStandardFixtures(page);
     await page.goto("/management/data-sources");
 
@@ -362,6 +368,22 @@ test.describe("Management Data Source Control Center (SD-SRCM-04)", () => {
     const twseRow = page.locator("tr").filter({ hasText: "ds-twse-market-v1" });
     await expect(twseRow.getByText("persona-tw-arb")).toBeVisible();
     await expect(twseRow.getByText(/Cost|成本/i)).toBeVisible();
+  });
+
+  test("unmocked hosted read-only control center proof against live BFF", async ({ page }) => {
+    const isHosted =
+      HOSTED_REQUESTED ||
+      targetsExternalE2eEnvironment({
+        ...process.env,
+        PANTHEON_FE_BASE_URL: process.env.PANTHEON_FE_BASE_URL || FE_BASE,
+      });
+    test.skip(!isHosted, "Set PANTHEON_HOSTED_E2E=1 or configure hosted dev URL to run unmocked hosted proof.");
+
+    // Genuinely unmocked - no route interception
+    await page.goto("/management/data-sources");
+    await expect(page.getByRole("heading", { name: /Data Source Management|資料源管理/i })).toBeVisible();
+    await expect(page.getByText(/Real writes disabled|實體寫入已停用/i)).toBeVisible();
+    await expect(page.locator('section[aria-label="Data Source Management"], section[aria-label="資料源管理"]')).toBeVisible();
   });
 
   test("renders SD-SRCM-04 V2 structures, divergence badges, and detail drawer", async ({ page }) => {
@@ -441,11 +463,19 @@ test.describe("Management Data Source Control Center (SD-SRCM-04)", () => {
     await expect(focused).toBeVisible();
     await expect(focused).toBeFocused();
 
-    // Open Drawer and verify escape key closes it
+    // Open Detail Drawer and verify dialog role and escape key closes it
     const viewBtn = page.getByRole("button", { name: /view|檢視/i }).first();
     await viewBtn.click();
-    await expect(page.getByText("ds-twse-market-v1").first()).toBeVisible();
+    const drawerDialog = page.getByRole("dialog");
+    await expect(drawerDialog).toBeVisible();
+    await expect(drawerDialog.getByRole("heading", { name: "ds-twse-market-v1" })).toBeVisible();
 
+    // Test tab key inside drawer navigates to close button or tab list
+    await page.keyboard.press("Tab");
+    const drawerFocused = page.locator(":focus");
+    await expect(drawerFocused).toBeVisible();
+
+    // Escape closes drawer
     await page.keyboard.press("Escape");
     await expect(page.getByText(/Desired vs Observed|目標與觀測/i)).toBeHidden();
   });

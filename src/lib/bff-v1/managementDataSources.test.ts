@@ -237,6 +237,97 @@ describe("managementDataSources client", () => {
     });
   });
 
+  describe("managementDataSourceWrites client transport assertions", () => {
+    it("transports secret_scope and all fields in createDataSource payload", async () => {
+      const writeGateModule = await import("./writeGate");
+      const clientModule = await import("./client");
+      const liveStatusModule = await import("./liveStatus");
+      liveStatusModule.liveStatus._reset({ mode: "live", effective: "live" });
+      const liveGateSpy = vi.spyOn(writeGateModule, "liveWriteGated").mockResolvedValue(true);
+      const bffFetchSpy = vi.spyOn(clientModule, "bffFetch").mockResolvedValue({
+        data: {
+          receipt: {
+            receipt_id: "rcp-test-create-001",
+            command_id: "cmd-test-create-001",
+            source_instance_id: "ds-test-create",
+            command_type: "create",
+            status: "succeeded",
+          },
+        },
+      } as any);
+
+      try {
+        const receipt = await managementDataSourceWrites.createDataSource({
+          source_instance_id: "ds-test-create",
+          definition_id: "twse-openapi-daily",
+          provider: "TWSE",
+          source_class: "market_daily",
+          secret_scope: "env_isolated",
+          license_scope: "official_reference",
+          connector_config: {
+            public: { endpoint: "https://openapi.twse.com.tw" },
+            secret_ref_id: "vault://secret/twse",
+          },
+        });
+
+        expect(receipt.receipt_id).toBe("rcp-test-create-001");
+        expect(bffFetchSpy).toHaveBeenCalled();
+        const calledReq = bffFetchSpy.mock.calls[0][0];
+        expect(calledReq.method).toBe("POST");
+        expect(calledReq.path).toBe("/bff/management/data-sources");
+        expect((calledReq.body as any).secret_scope).toBe("env_isolated");
+        expect((calledReq.body as any).source_instance_id).toBe("ds-test-create");
+        expect((calledReq.body as any).license_scope).toBe("official_reference");
+      } finally {
+        liveGateSpy.mockRestore();
+        bffFetchSpy.mockRestore();
+        liveStatusModule.liveStatus._reset();
+      }
+    });
+
+    it("transports migrate_dependents in replaceDataSource payload", async () => {
+      const writeGateModule = await import("./writeGate");
+      const clientModule = await import("./client");
+      const liveStatusModule = await import("./liveStatus");
+      liveStatusModule.liveStatus._reset({ mode: "live", effective: "live" });
+      const liveGateSpy = vi.spyOn(writeGateModule, "liveWriteGated").mockResolvedValue(true);
+      const bffFetchSpy = vi.spyOn(clientModule, "bffFetch").mockResolvedValue({
+        data: {
+          receipt: {
+            receipt_id: "rcp-test-replace-001",
+            command_id: "cmd-test-replace-001",
+            source_instance_id: "ds-test-old",
+            command_type: "replace",
+            status: "succeeded",
+          },
+        },
+      } as any);
+
+      try {
+        const receipt = await managementDataSourceWrites.replaceDataSource({
+          sourceInstanceId: "ds-test-old",
+          expectedRevision: 2,
+          reason: "Upgrading to v2",
+          confirmation: true,
+          replacementSourceId: "ds-test-new",
+          migrateDependents: true,
+        });
+
+        expect(receipt.receipt_id).toBe("rcp-test-replace-001");
+        expect(bffFetchSpy).toHaveBeenCalled();
+        const calledReq = bffFetchSpy.mock.calls[0][0];
+        expect(calledReq.method).toBe("POST");
+        expect(calledReq.path).toBe("/bff/management/data-sources/ds-test-old/actions/replace");
+        expect((calledReq.body as any).replacement_source_id).toBe("ds-test-new");
+        expect((calledReq.body as any).migrate_dependents).toBe(true);
+      } finally {
+        liveGateSpy.mockRestore();
+        bffFetchSpy.mockRestore();
+        liveStatusModule.liveStatus._reset();
+      }
+    });
+  });
+
   describe("direct V2-preserving and legacy projection adapters", () => {
     it("preserves full V2 structures and allowedActions through adaptDataSourceV2OrLegacy", async () => {
       const { adaptDataSourceV2OrLegacy } = await import("./managementConsoleReads");

@@ -23,6 +23,10 @@ export default defineConfig({
         reuseExistingServer: true,
         timeout: 60_000,
         env: {
+          VITE_BFF_MODE: process.env.VITE_BFF_MODE || "live",
+          VITE_BFF_BASE_URL: process.env.VITE_BFF_BASE_URL || "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io",
+          VITE_BFF_FALLBACK: process.env.VITE_BFF_FALLBACK || "strict",
+          VITE_BFF_REAL_WRITES: process.env.VITE_BFF_REAL_WRITES || "false",
           VITE_GCP_IDENTITY_API_KEY: process.env.VITE_GCP_IDENTITY_API_KEY || "AIza01234567890123456789012345678901234",
           VITE_GCP_IDENTITY_PROJECT_ID: process.env.VITE_GCP_IDENTITY_PROJECT_ID || "pantheon-lupin-dev-20260719",
           VITE_GCP_IDENTITY_AUTH_DOMAIN: process.env.VITE_GCP_IDENTITY_AUTH_DOMAIN || "pantheon-lupin-dev-20260719.firebaseapp.com",

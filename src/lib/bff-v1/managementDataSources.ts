@@ -309,6 +309,7 @@ export interface ReplaceSourceInput {
   reason: string;
   confirmation: boolean;
   replacementSourceId: string;
+  migrateDependents?: boolean;
   idempotencyKey?: string;
   traceId?: string;
 }
@@ -618,6 +619,7 @@ async function executeCommand<T>(
       method,
       path,
       body,
+      mode: "live",
       idempotencyKey,
       correlationId,
       headers: {
@@ -650,6 +652,7 @@ export const managementDataSourceWrites = {
       datasets: input.datasets ?? [],
       markets: input.markets ?? [],
       license_scope: input.license_scope,
+      secret_scope: input.secret_scope,
       entitlement_tags: input.entitlement_tags,
       allowed_use: input.allowed_use,
       retention_policy_ref: input.retention_policy_ref,
@@ -838,6 +841,7 @@ export const managementDataSourceWrites = {
       reason: input.reason,
       confirmation: input.confirmation,
       replacement_source_id: input.replacementSourceId,
+      migrate_dependents: input.migrateDependents ?? false,
       trace_id: correlationId,
     };
 
