@@ -234,27 +234,33 @@ async function installHostedOperatorSession(
     process.env.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_SECRET ||
     "";
 
-  if (sessionInfo?.token || (clientId && clientSecret)) {
-    await page.addInitScript(
-      ({ clientId, clientSecret, tenantId }) => {
-        if (clientId && clientSecret) {
-          const config = {
-            VITE_BFF_DEV_LOGIN_CLIENT_ID: clientId,
-            VITE_BFF_DEV_LOGIN_CLIENT_SECRET: clientSecret,
-            // The read-only build intentionally leaves the VITE keys blank. The
-            // deployed helper treats that blank value as authoritative, so also
-            // provide its existing runtime-only aliases for hosted acceptance.
-            PANTHEON_DEV_BFF_OIDC_CLIENT_ID: clientId,
-            PANTHEON_DEV_BFF_OIDC_CLIENT_SECRET: clientSecret,
-            VITE_BFF_TENANT_ID: tenantId,
-          };
-          (window as unknown as Record<string, unknown>).__PANTHEON_RUNTIME_CONFIG__ = config;
-          (window as unknown as Record<string, unknown>).__PANTHEON_BFF_RUNTIME__ = config;
-        }
-      },
-      { clientId, clientSecret, tenantId: TENANT_ID },
-    );
-  }
+  await page.addInitScript(
+    ({ clientId, clientSecret, tenantId, token }) => {
+      // Enable runtime real-write override on allowlisted dev host
+      window.sessionStorage.setItem("pantheon.e2e.realWrites", "true");
+      window.localStorage.setItem("pantheon.e2e.realWrites", "true");
+      if (token) {
+        window.sessionStorage.setItem("pantheon.e2e.bearerToken", token);
+        window.localStorage.setItem("pantheon.e2e.bearerToken", token);
+      }
+      if (clientId && clientSecret) {
+        const config = {
+          VITE_BFF_DEV_LOGIN_CLIENT_ID: clientId,
+          VITE_BFF_DEV_LOGIN_CLIENT_SECRET: clientSecret,
+          // The read-only build intentionally leaves the VITE keys blank. The
+          // deployed helper treats that blank value as authoritative, so also
+          // provide its existing runtime-only aliases for hosted acceptance.
+          PANTHEON_DEV_BFF_OIDC_CLIENT_ID: clientId,
+          PANTHEON_DEV_BFF_OIDC_CLIENT_SECRET: clientSecret,
+          VITE_BFF_TENANT_ID: tenantId,
+          VITE_BFF_REAL_WRITES: "true",
+        };
+        (window as unknown as Record<string, unknown>).__PANTHEON_RUNTIME_CONFIG__ = config;
+        (window as unknown as Record<string, unknown>).__PANTHEON_BFF_RUNTIME__ = config;
+      }
+    },
+    { clientId, clientSecret, tenantId: TENANT_ID, token: sessionInfo?.token },
+  );
 
   // If explicit GCP identity email/password/TOTP secrets are configured, execute the UI sign-in
   if (
@@ -369,9 +375,10 @@ async function assertOperatorLiveCandidate(page: Page): Promise<void> {
   const deployment = asRecord(await response.json());
   const buildMode = asRecord(deployment.buildMode);
   const profile = String(deployment.deploymentProfile ?? deployment.profile ?? "");
-  expect(["operator-live", "write-proof", "read-only"]).toContain(profile);
+  expect(["operator-live", "write-proof"]).toContain(profile);
   expect(buildMode.VITE_BFF_MODE).toBe("live");
   expect(buildMode.VITE_BFF_FALLBACK).toBe("strict");
+  expect(buildMode.VITE_BFF_REAL_WRITES).toBe("true");
   expect(buildMode.VITE_BFF_EMBEDDED_BEARER_TOKEN).toBe("false");
 }
 
