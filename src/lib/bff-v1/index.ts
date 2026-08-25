@@ -38,3 +38,7 @@ export * from "./agora/governance";
 export * from "./tradeJournal";
 // 2026-07-12 Agora Interactions.
 export * from "./agora/interaction";
+// 2026-08-24 SD-SRCM-04 Management Data Source Control Center.
+export * from "./managementDataSources";
+
+

@@ -160,6 +160,32 @@ export const paths = {
   lineage: (rootId?: string) =>
     `${BASE}/lineage${rootId ? `?root_id=${enc(rootId)}` : ""}`,
   mgmtDataSources: () => `${BASE}/management/data-sources`,
+  mgmtDataSourcesCatalog: () => `${BASE}/management/data-sources/catalog`,
+  mgmtDataSourceDetail: (id: string) => `${BASE}/management/data-sources/${enc(id)}`,
+  mgmtDataSourceRuns: (id: string, limit?: number) =>
+    `${BASE}/management/data-sources/${enc(id)}/runs${limit ? `?limit=${enc(String(limit))}` : ""}`,
+  mgmtDataSourceReceipts: (id: string, limit?: number) =>
+    `${BASE}/management/data-sources/${enc(id)}/receipts${limit ? `?limit=${enc(String(limit))}` : ""}`,
+  mgmtDataSourceActionValidate: (id: string) =>
+    `${BASE}/management/data-sources/${enc(id)}/actions/validate`,
+  mgmtDataSourceActionCanary: (id: string) =>
+    `${BASE}/management/data-sources/${enc(id)}/actions/canary`,
+  mgmtDataSourceActionEnable: (id: string) =>
+    `${BASE}/management/data-sources/${enc(id)}/actions/enable`,
+  mgmtDataSourceActionDisable: (id: string) =>
+    `${BASE}/management/data-sources/${enc(id)}/actions/disable`,
+  mgmtDataSourceActionDegrade: (id: string) =>
+    `${BASE}/management/data-sources/${enc(id)}/actions/degrade`,
+  mgmtDataSourceActionResume: (id: string) =>
+    `${BASE}/management/data-sources/${enc(id)}/actions/resume`,
+  mgmtDataSourceSchedule: (id: string) =>
+    `${BASE}/management/data-sources/${enc(id)}/schedule`,
+  mgmtDataSourceActionReplace: (id: string) =>
+    `${BASE}/management/data-sources/${enc(id)}/actions/replace`,
+  mgmtDataSourceActionRetire: (id: string) =>
+    `${BASE}/management/data-sources/${enc(id)}/actions/retire`,
+  mgmtSourceCommandReceipt: (receiptId: string) =>
+    `${BASE}/management/source-commands/${enc(receiptId)}`,
   mgmtPermissions: () => `${BASE}/management/permissions`,
   mgmtMemoryGovernance: () => `${BASE}/management/memory-governance`,
   mgmtConsultRules: () => `${BASE}/management/consult-rules`,
