@@ -3148,6 +3148,7 @@ export default {
       focusNoRowsTitle: "沒有聚焦資料源列",
       focusNoRowsBody: "啟用 persona 或資料源篩選時，不會回退顯示全域資料源列。",
       showAll: "顯示全部資料源",
+      realWritesRequired: "實體寫入已停用（唯讀模式）。",
       header: {
         realWritesOn: "實體寫入已啟用",
         realWritesOff: "實體寫入已停用 (唯讀模式)",

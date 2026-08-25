@@ -3167,6 +3167,7 @@ export default {
       focusNoRowsTitle: "No focused data source rows",
       focusNoRowsBody: "No global data source rows are shown while a persona or source filter is active.",
       showAll: "Show all data sources",
+      realWritesRequired: "Real writes are disabled (read-only mode).",
       header: {
         realWritesOn: "Real writes enabled",
         realWritesOff: "Real writes disabled (read-only)",

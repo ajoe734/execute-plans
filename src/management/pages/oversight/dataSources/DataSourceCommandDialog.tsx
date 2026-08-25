@@ -437,9 +437,11 @@ export function DataSourceCommandDialog({
                 disabled={
                   executing ||
                   polling ||
+                  !writesLive ||
                   (actionDef?.reasonRequired && !reason.trim()) ||
                   (actionDef?.confirmationRequired && !confirmation)
                 }
+                title={!writesLive ? t("mgmt.dataSources.realWritesRequired") : undefined}
               >
                 {executing ? (
                   <Loader2 className="h-4 w-4 mr-1 animate-spin" />

@@ -330,6 +330,12 @@ const SECRET_KEYWORDS = new Set([
   "secret_value",
 ]);
 
+export function isValidSecretRefId(value: unknown): boolean {
+  if (value === undefined || value === null || value === "") return true;
+  if (typeof value !== "string") return false;
+  return value.startsWith("vault://") || value.startsWith("env://") || value.startsWith("ref://");
+}
+
 export function assertNoRawSecrets(obj: unknown, path = ""): void {
   if (!obj || typeof obj !== "object") return;
   if (Array.isArray(obj)) {
@@ -339,6 +345,22 @@ export function assertNoRawSecrets(obj: unknown, path = ""): void {
   for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
     const currPath = path ? `${path}.${k}` : k;
     const lowerKey = k.toLowerCase();
+
+    if (
+      (lowerKey === "secret_ref_id" ||
+        lowerKey === "secretrefid" ||
+        lowerKey === "secret_ref" ||
+        lowerKey.endsWith("_secret_ref_id")) &&
+      typeof v === "string" &&
+      v !== ""
+    ) {
+      if (!isValidSecretRefId(v)) {
+        throw new Error(
+          `Invalid secret_ref_id at ${currPath}: secret_ref_id must start with explicit 'vault://', 'env://', or 'ref://' URI scheme. Raw value '${v}' is forbidden.`,
+        );
+      }
+    }
+
     if (SECRET_KEYWORDS.has(lowerKey) && typeof v === "string") {
       if (!v.startsWith("env://") && !v.startsWith("vault://") && !v.startsWith("ref://") && v !== "") {
         throw new Error(
@@ -581,34 +603,32 @@ async function executeCommand<T>(
   body: unknown,
   idempotencyKey: string,
   correlationId: string,
-  mockResponse: () => Promise<T>,
 ): Promise<T> {
   const gated = await liveWriteGated();
-  if (gated) {
-    return withLiveOrMock<T, { data?: { receipt?: SourceCommandReceipt; [key: string]: unknown } }>(
-      {
-        method,
-        path,
-        body,
-        idempotencyKey,
-        correlationId,
-        headers: {
-          "X-Idempotency-Key": idempotencyKey,
-          "X-Correlation-Id": correlationId,
-        },
-      },
-      mockResponse,
-      (rawData) => {
-        const d = (rawData?.data ?? rawData) as T;
-        return d;
-      },
-    );
-  }
-
-  if (isStrictLiveFallback()) {
+  if (!gated) {
     refuseStrictLiveWrite(correlationId);
   }
-  return mockResponse();
+
+  return withLiveOrMock<T, { data?: { receipt?: SourceCommandReceipt; [key: string]: unknown } }>(
+    {
+      method,
+      path,
+      body,
+      idempotencyKey,
+      correlationId,
+      headers: {
+        "X-Idempotency-Key": idempotencyKey,
+        "X-Correlation-Id": correlationId,
+      },
+    },
+    async () => {
+      refuseStrictLiveWrite(correlationId);
+    },
+    (rawData) => {
+      const d = (rawData?.data ?? rawData) as T;
+      return d;
+    },
+  );
 }
 
 export const managementDataSourceWrites = {
@@ -616,18 +636,6 @@ export const managementDataSourceWrites = {
     assertNoRawSecrets(input);
     const correlationId = newCorrelationId();
     const idempotencyKey = input.idempotencyKey || mintIdemKey();
-
-    const mockResponse = async (): Promise<SourceCommandReceipt> => ({
-      receipt_id: `srcrcp-mock-create-${Date.now()}`,
-      command_id: `srcmd-mock-${Date.now()}`,
-      source_instance_id: input.source_instance_id,
-      command_type: "create",
-      status: "succeeded",
-      after_revision: 1,
-      readback: { desired_revision: 1, observed_revision: 1, reconciliation_status: "converged" },
-      created_at: new Date().toISOString(),
-      completed_at: new Date().toISOString(),
-    });
 
     const body = {
       source_instance_id: input.source_instance_id,
@@ -659,7 +667,6 @@ export const managementDataSourceWrites = {
       body,
       idempotencyKey,
       correlationId,
-      mockResponse,
     );
     return ((res as { receipt?: SourceCommandReceipt }).receipt ?? res) as SourceCommandReceipt;
   },
@@ -668,19 +675,6 @@ export const managementDataSourceWrites = {
     assertNoRawSecrets(input.parameters);
     const correlationId = input.traceId || newCorrelationId();
     const idempotencyKey = input.idempotencyKey || mintIdemKey();
-
-    const mockResponse = async (): Promise<SourceCommandReceipt> => ({
-      receipt_id: `srcrcp-mock-val-${Date.now()}`,
-      command_id: `srcmd-mock-${Date.now()}`,
-      source_instance_id: input.sourceInstanceId,
-      command_type: "validate",
-      status: "succeeded",
-      before_revision: input.expectedRevision,
-      after_revision: input.expectedRevision,
-      readback: { desired_revision: input.expectedRevision, observed_revision: input.expectedRevision, reconciliation_status: "converged" },
-      created_at: new Date().toISOString(),
-      completed_at: new Date().toISOString(),
-    });
 
     const body = {
       expected_revision: input.expectedRevision,
@@ -695,7 +689,6 @@ export const managementDataSourceWrites = {
       body,
       idempotencyKey,
       correlationId,
-      mockResponse,
     );
     return ((res as { receipt?: SourceCommandReceipt }).receipt ?? res) as SourceCommandReceipt;
   },
@@ -704,19 +697,6 @@ export const managementDataSourceWrites = {
     assertNoRawSecrets(input.parameters);
     const correlationId = input.traceId || newCorrelationId();
     const idempotencyKey = input.idempotencyKey || mintIdemKey();
-
-    const mockResponse = async (): Promise<SourceCommandReceipt> => ({
-      receipt_id: `srcrcp-mock-can-${Date.now()}`,
-      command_id: `srcmd-mock-${Date.now()}`,
-      source_instance_id: input.sourceInstanceId,
-      command_type: "canary",
-      status: "succeeded",
-      before_revision: input.expectedRevision,
-      after_revision: input.expectedRevision,
-      readback: { desired_revision: input.expectedRevision, observed_revision: input.expectedRevision, reconciliation_status: "converged" },
-      created_at: new Date().toISOString(),
-      completed_at: new Date().toISOString(),
-    });
 
     const body = {
       expected_revision: input.expectedRevision,
@@ -731,7 +711,6 @@ export const managementDataSourceWrites = {
       body,
       idempotencyKey,
       correlationId,
-      mockResponse,
     );
     return ((res as { receipt?: SourceCommandReceipt }).receipt ?? res) as SourceCommandReceipt;
   },
@@ -740,19 +719,6 @@ export const managementDataSourceWrites = {
     assertNoRawSecrets(input.parameters);
     const correlationId = input.traceId || newCorrelationId();
     const idempotencyKey = input.idempotencyKey || mintIdemKey();
-
-    const mockResponse = async (): Promise<SourceCommandReceipt> => ({
-      receipt_id: `srcrcp-mock-enable-${Date.now()}`,
-      command_id: `srcmd-mock-${Date.now()}`,
-      source_instance_id: input.sourceInstanceId,
-      command_type: "enable",
-      status: "succeeded",
-      before_revision: input.expectedRevision,
-      after_revision: input.expectedRevision + 1,
-      readback: { desired_revision: input.expectedRevision + 1, observed_revision: input.expectedRevision + 1, reconciliation_status: "converged" },
-      created_at: new Date().toISOString(),
-      completed_at: new Date().toISOString(),
-    });
 
     const body = {
       expected_revision: input.expectedRevision,
@@ -768,7 +734,6 @@ export const managementDataSourceWrites = {
       body,
       idempotencyKey,
       correlationId,
-      mockResponse,
     );
     return ((res as { receipt?: SourceCommandReceipt }).receipt ?? res) as SourceCommandReceipt;
   },
@@ -777,19 +742,6 @@ export const managementDataSourceWrites = {
     assertNoRawSecrets(input.parameters);
     const correlationId = input.traceId || newCorrelationId();
     const idempotencyKey = input.idempotencyKey || mintIdemKey();
-
-    const mockResponse = async (): Promise<SourceCommandReceipt> => ({
-      receipt_id: `srcrcp-mock-disable-${Date.now()}`,
-      command_id: `srcmd-mock-${Date.now()}`,
-      source_instance_id: input.sourceInstanceId,
-      command_type: "disable",
-      status: "succeeded",
-      before_revision: input.expectedRevision,
-      after_revision: input.expectedRevision + 1,
-      readback: { desired_revision: input.expectedRevision + 1, observed_revision: input.expectedRevision + 1, reconciliation_status: "converged" },
-      created_at: new Date().toISOString(),
-      completed_at: new Date().toISOString(),
-    });
 
     const body = {
       expected_revision: input.expectedRevision,
@@ -804,7 +756,6 @@ export const managementDataSourceWrites = {
       body,
       idempotencyKey,
       correlationId,
-      mockResponse,
     );
     return ((res as { receipt?: SourceCommandReceipt }).receipt ?? res) as SourceCommandReceipt;
   },
@@ -813,19 +764,6 @@ export const managementDataSourceWrites = {
     assertNoRawSecrets(input.parameters);
     const correlationId = input.traceId || newCorrelationId();
     const idempotencyKey = input.idempotencyKey || mintIdemKey();
-
-    const mockResponse = async (): Promise<SourceCommandReceipt> => ({
-      receipt_id: `srcrcp-mock-degrade-${Date.now()}`,
-      command_id: `srcmd-mock-${Date.now()}`,
-      source_instance_id: input.sourceInstanceId,
-      command_type: "degrade",
-      status: "succeeded",
-      before_revision: input.expectedRevision,
-      after_revision: input.expectedRevision + 1,
-      readback: { desired_revision: input.expectedRevision + 1, observed_revision: input.expectedRevision + 1, reconciliation_status: "converged" },
-      created_at: new Date().toISOString(),
-      completed_at: new Date().toISOString(),
-    });
 
     const body = {
       expected_revision: input.expectedRevision,
@@ -840,7 +778,6 @@ export const managementDataSourceWrites = {
       body,
       idempotencyKey,
       correlationId,
-      mockResponse,
     );
     return ((res as { receipt?: SourceCommandReceipt }).receipt ?? res) as SourceCommandReceipt;
   },
@@ -849,19 +786,6 @@ export const managementDataSourceWrites = {
     assertNoRawSecrets(input.parameters);
     const correlationId = input.traceId || newCorrelationId();
     const idempotencyKey = input.idempotencyKey || mintIdemKey();
-
-    const mockResponse = async (): Promise<SourceCommandReceipt> => ({
-      receipt_id: `srcrcp-mock-resume-${Date.now()}`,
-      command_id: `srcmd-mock-${Date.now()}`,
-      source_instance_id: input.sourceInstanceId,
-      command_type: "resume",
-      status: "succeeded",
-      before_revision: input.expectedRevision,
-      after_revision: input.expectedRevision + 1,
-      readback: { desired_revision: input.expectedRevision + 1, observed_revision: input.expectedRevision + 1, reconciliation_status: "converged" },
-      created_at: new Date().toISOString(),
-      completed_at: new Date().toISOString(),
-    });
 
     const body = {
       expected_revision: input.expectedRevision,
@@ -876,7 +800,6 @@ export const managementDataSourceWrites = {
       body,
       idempotencyKey,
       correlationId,
-      mockResponse,
     );
     return ((res as { receipt?: SourceCommandReceipt }).receipt ?? res) as SourceCommandReceipt;
   },
@@ -884,19 +807,6 @@ export const managementDataSourceWrites = {
   changeSchedule: async (input: ChangeScheduleInput): Promise<SourceCommandReceipt> => {
     const correlationId = input.traceId || newCorrelationId();
     const idempotencyKey = input.idempotencyKey || mintIdemKey();
-
-    const mockResponse = async (): Promise<SourceCommandReceipt> => ({
-      receipt_id: `srcrcp-mock-sched-${Date.now()}`,
-      command_id: `srcmd-mock-${Date.now()}`,
-      source_instance_id: input.sourceInstanceId,
-      command_type: "change_schedule",
-      status: "succeeded",
-      before_revision: input.expectedRevision,
-      after_revision: input.expectedRevision + 1,
-      readback: { desired_revision: input.expectedRevision + 1, observed_revision: input.expectedRevision + 1, reconciliation_status: "converged" },
-      created_at: new Date().toISOString(),
-      completed_at: new Date().toISOString(),
-    });
 
     const body = {
       expected_revision: input.expectedRevision,
@@ -911,7 +821,6 @@ export const managementDataSourceWrites = {
       body,
       idempotencyKey,
       correlationId,
-      mockResponse,
     );
     return ((res as { receipt?: SourceCommandReceipt }).receipt ?? res) as SourceCommandReceipt;
   },
@@ -919,19 +828,6 @@ export const managementDataSourceWrites = {
   replaceDataSource: async (input: ReplaceSourceInput): Promise<SourceCommandReceipt> => {
     const correlationId = input.traceId || newCorrelationId();
     const idempotencyKey = input.idempotencyKey || mintIdemKey();
-
-    const mockResponse = async (): Promise<SourceCommandReceipt> => ({
-      receipt_id: `srcrcp-mock-repl-${Date.now()}`,
-      command_id: `srcmd-mock-${Date.now()}`,
-      source_instance_id: input.sourceInstanceId,
-      command_type: "replace",
-      status: "succeeded",
-      before_revision: input.expectedRevision,
-      after_revision: input.expectedRevision + 1,
-      readback: { desired_revision: input.expectedRevision + 1, observed_revision: input.expectedRevision + 1, reconciliation_status: "converged" },
-      created_at: new Date().toISOString(),
-      completed_at: new Date().toISOString(),
-    });
 
     const body = {
       expected_revision: input.expectedRevision,
@@ -947,7 +843,6 @@ export const managementDataSourceWrites = {
       body,
       idempotencyKey,
       correlationId,
-      mockResponse,
     );
     return ((res as { receipt?: SourceCommandReceipt }).receipt ?? res) as SourceCommandReceipt;
   },
@@ -955,19 +850,6 @@ export const managementDataSourceWrites = {
   retireDataSource: async (input: RetireSourceInput): Promise<SourceCommandReceipt> => {
     const correlationId = input.traceId || newCorrelationId();
     const idempotencyKey = input.idempotencyKey || mintIdemKey();
-
-    const mockResponse = async (): Promise<SourceCommandReceipt> => ({
-      receipt_id: `srcrcp-mock-retire-${Date.now()}`,
-      command_id: `srcmd-mock-${Date.now()}`,
-      source_instance_id: input.sourceInstanceId,
-      command_type: "retire",
-      status: "succeeded",
-      before_revision: input.expectedRevision,
-      after_revision: input.expectedRevision + 1,
-      readback: { desired_revision: input.expectedRevision + 1, observed_revision: input.expectedRevision + 1, reconciliation_status: "converged" },
-      created_at: new Date().toISOString(),
-      completed_at: new Date().toISOString(),
-    });
 
     const body = {
       expected_revision: input.expectedRevision,
@@ -982,7 +864,6 @@ export const managementDataSourceWrites = {
       body,
       idempotencyKey,
       correlationId,
-      mockResponse,
     );
     return ((res as { receipt?: SourceCommandReceipt }).receipt ?? res) as SourceCommandReceipt;
   },

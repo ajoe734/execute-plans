@@ -38,6 +38,7 @@ import {
   type SourceCommandReceipt,
   type SourceObservation,
 } from "@/lib/bff-v1/managementDataSources";
+import { realWritesEnabled } from "@/lib/bff-v1/liveTransport";
 import {
   canaryTone,
   credentialTone,
@@ -220,15 +221,22 @@ export function DataSourceDetailDrawer({
             {/* Quick Action Buttons */}
             <div className="flex flex-wrap gap-1.5 pt-1">
               {DATA_SOURCE_ACTIONS.map((action) => {
-                const { allowed, reasons } = isActionAllowed(action.key, allowedActions);
+                const writesLive = realWritesEnabled();
+                const { allowed, reasons } = isActionAllowed(action.key, allowedActions, writesLive);
+                const actionDisabled = !allowed || loading;
+                const tooltip = !writesLive
+                  ? t("mgmt.dataSources.realWritesRequired")
+                  : !allowed
+                    ? reasons.join(", ")
+                    : undefined;
                 return (
                   <Button
                     key={action.key}
                     size="sm"
                     variant={action.destructive ? "outline" : "secondary"}
                     className={`h-7 px-2.5 text-xs ${action.destructive && allowed ? "text-status-failed hover:bg-status-failed/10" : ""}`}
-                    disabled={!allowed || loading}
-                    title={!allowed ? reasons.join(", ") : undefined}
+                    disabled={actionDisabled}
+                    title={tooltip}
                     onClick={() => openAction(action.key)}
                   >
                     {t(action.labelKey)}

@@ -367,6 +367,8 @@ export function DataSourceControlCenter() {
               setWizardPreselectedDef(null);
               setWizardOpen(true);
             }}
+            disabled={!writesLive}
+            title={!writesLive ? t("mgmt.dataSources.realWritesRequired") : undefined}
             className="shadow-sm"
           >
             <Plus className="h-4 w-4 mr-1" />

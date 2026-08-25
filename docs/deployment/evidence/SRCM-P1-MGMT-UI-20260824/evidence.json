@@ -8,20 +8,23 @@
   "merge_target": "dev",
   "branch": "task/SRCM-P1-MGMT-UI-20260824",
   "status": "ready_for_review",
-  "timestamp": "2026-08-25T05:30:00Z",
+  "timestamp": "2026-08-25T06:00:00Z",
   "scope": {
     "delivered": [
       "Retained existing route /management/data-sources and route-level component DataSourceManagementPage",
       "Created unified DataSourceControlCenter with 4 main tabs: Instances, Catalog, Runs, Receipts",
       "Implemented 9 canonical columns in Instances Table (Source/Provider, Support/Deployment, Desired Lifecycle, Observed Health, Credential/License, Schedule/Watermark, Latest Run/Search, Consumers/Cost, Actions)",
+      "Wired live list through a V2-preserving adapter in managementConsoleReads.dataSources to preserve allowedActions, desired, observed, and definition",
+      "Enforced fail-closed writes when real writes are disabled, disabling mutation buttons in UI and refusing strict live writes in client",
+      "Enforced strict secret_ref_id URI scheme (vault://, env://, ref://) and rejected short or raw tokens in assertNoRawSecrets and wizard form",
       "Implemented desired vs observed state divergence detection and clear alert banners",
       "Added ConnectorDefinition Catalog panel with dataset badges and Phase-1 offline source_development_need.v1 export",
-      "Added multi-step Add Wizard with initial configured_disabled lifecycle enforcement and secret reference URI validation (vault://, env://)",
-      "Added DataSourceCommandDialog for server-governed allowedActions (validate, canary, enable, disable, degrade, resume, schedule, replace, retire) with confirmation gates",
+      "Added multi-step Add Wizard with initial configured_disabled lifecycle enforcement and secret reference URI validation",
+      "Added DataSourceCommandDialog for server-governed allowedActions with confirmation gates and typed error handling",
       "Added DataSourceDetailDrawer showing configuration, schedule, observations, canary logs, and command receipts",
       "Added DataSourceReceiptPanel with polling and cryptographic receipt readback",
-      "Added typed BFF client in src/lib/bff-v1/managementDataSources.ts supporting strict-live mode and mock fallbacks",
-      "Added comprehensive Vitest tests and Playwright E2E test covering UI rendering, allowedActions, divergence, wizard secret check, and URL tabs",
+      "Added typed BFF client in src/lib/bff-v1/managementDataSources.ts supporting strict-live mode and fail-closed posture",
+      "Replaced mock E2E with authenticated unmocked hosted-path proof and complete SD-SRCM-04 coverage (stale revision, idempotency, a11y focus, responsive)",
       "Added bilingual i18n support (en-US, zh-TW)",
       "Added architectural and operational documentation at docs/management/data-source-control-center.md"
     ],
@@ -43,6 +46,7 @@
     "src/management/pages/oversight/dataSources/DataSourceCommandDialog.tsx",
     "src/management/pages/oversight/dataSources/dataSourceActions.ts",
     "src/management/pages/oversight/dataSources/dataSourceModels.ts",
+    "src/lib/bff-v1/managementConsoleReads.ts",
     "src/lib/bff-v1/managementDataSources.ts",
     "src/lib/bff-v1/managementDataSources.test.ts",
     "src/lib/bff-v1/paths.ts",
@@ -56,10 +60,11 @@
   ],
   "verification": {
     "typecheck": "tsc --noEmit (passed with 0 errors)",
-    "unit_tests": "vitest run src/management/pages/oversight/DataSourceManagement.test.tsx (7/7 passed)",
-    "client_tests": "vitest run src/lib/bff-v1/managementDataSources.test.ts (17/17 passed)",
-    "full_vitest_suite": "vitest run (188 files, 1896 tests passed)",
-    "lint": "eslint . (0 errors)"
+    "unit_tests": "vitest run src/management/pages/oversight/DataSourceManagement.test.tsx (8/8 passed)",
+    "client_tests": "vitest run src/lib/bff-v1/managementDataSources.test.ts (18/18 passed)",
+    "full_vitest_suite": "vitest run (188 files, 1898 tests passed)",
+    "build": "vite build (succeeded)",
+    "lint": "eslint . (0 errors, 61 warnings)"
   },
   "acceptance_checklist": {
     "sd_srcm_04_states_tables_wizard_detail_dialogs_receipts": true,

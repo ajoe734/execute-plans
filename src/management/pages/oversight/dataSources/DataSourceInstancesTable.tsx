@@ -27,6 +27,7 @@ import {
 import { ManagementTableScroll } from "@/management/components/ManagementTableScroll";
 import type { ManagementDataSourceV2DTO } from "@/lib/bff-v1/managementDataSources";
 import type { SystemDataSourceRecord } from "@/lib/v5/management/systemDataSources";
+import { realWritesEnabled } from "@/lib/bff-v1/liveTransport";
 import {
   canaryTone,
   credentialTone,
@@ -119,6 +120,8 @@ function V2DataSourceRow({
   const divergence = hasDivergence(dto);
   const allowedActions = dto.allowed_actions || dto.allowedActions;
   const isEnabled = dto.desired?.desired_lifecycle === "enabled";
+
+  const writesLive = realWritesEnabled();
 
   return (
     <tr className="hover:bg-muted/30 transition-colors align-top">
@@ -301,7 +304,8 @@ function V2DataSourceRow({
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
               {DATA_SOURCE_ACTIONS.map((act) => {
-                const { allowed, reasons } = isActionAllowed(act.key, allowedActions);
+                const { allowed, reasons } = isActionAllowed(act.key, allowedActions, writesLive);
+                const displayReason = !writesLive ? t("mgmt.dataSources.realWritesRequired") : reasons[0];
                 return (
                   <DropdownMenuItem
                     key={act.key}
@@ -311,9 +315,9 @@ function V2DataSourceRow({
                   >
                     <div className="flex flex-col">
                       <span>{t(act.labelKey)}</span>
-                      {!allowed && reasons.length > 0 && (
+                      {!allowed && displayReason && (
                         <span className="text-[10px] text-muted-foreground font-normal">
-                          {reasons[0]}
+                          {displayReason}
                         </span>
                       )}
                     </div>

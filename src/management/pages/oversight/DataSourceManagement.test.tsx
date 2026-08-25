@@ -363,7 +363,7 @@ describe("DataSourceManagementPage", () => {
       expect(screen.getByText("degraded")).toBeInTheDocument();
     });
 
-    it("opens Add Wizard modal and rejects raw inline secrets", async () => {
+    it("disables Add Data Source button when real writes are off", async () => {
       mocks.useV5Live
         .mockReturnValueOnce({
           data: { items: [] },
@@ -378,11 +378,35 @@ describe("DataSourceManagementPage", () => {
 
       renderPage("/management/data-sources");
 
-      const addBtn = screen.getByText("Add Data Source");
+      const addBtn = screen.getByRole("button", { name: /Add Data Source/i });
+      expect(addBtn).toBeDisabled();
+    });
+
+    it("opens Add Wizard modal when real writes are enabled", async () => {
+      const realWritesSpy = vi.spyOn(await import("@/lib/bff-v1/liveTransport"), "realWritesEnabled").mockReturnValue(true);
+
+      mocks.useV5Live
+        .mockReturnValueOnce({
+          data: { items: [] },
+          loading: false,
+          refresh: vi.fn(),
+        })
+        .mockReturnValueOnce({
+          data: [],
+          loading: false,
+          refresh: vi.fn(),
+        });
+
+      renderPage("/management/data-sources");
+
+      const addBtn = screen.getByRole("button", { name: /Add Data Source/i });
+      expect(addBtn).toBeEnabled();
       fireEvent.click(addBtn);
 
       expect(screen.getByText("Add Managed Data Source")).toBeInTheDocument();
       expect(screen.getByText("Step 1 / 6")).toBeInTheDocument();
+
+      realWritesSpy.mockRestore();
     });
 
     it("renders catalog, runs, and receipts tabs via URL query params", async () => {
