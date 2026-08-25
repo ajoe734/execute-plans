@@ -173,7 +173,7 @@ export function DataSourceDetailDrawer({
                     {fmtToken(currentSource?.observed?.health_state || "unknown")}
                   </Badge>
                   <Badge variant="outline" className="font-mono text-xs">
-                    Rev {currentSource?.desired?.revision !== undefined ? currentSource.desired.revision : (currentSource?.instance?.revision !== undefined ? currentSource.instance.revision : "—")}
+                    Rev {currentSource?.desired?.revision !== undefined && currentSource.desired.revision >= 1 ? currentSource.desired.revision : (currentSource?.instance?.revision !== undefined && currentSource.instance.revision >= 1 ? currentSource.instance.revision : "—")}
                   </Badge>
                 </div>
                 <SheetDescription className="text-xs text-muted-foreground">
@@ -399,7 +399,7 @@ export function DataSourceDetailDrawer({
                       <div className="space-y-1.5">
                         <div>
                           <span className="text-muted-foreground">{t("mgmt.dataSources.detail.revision")}:</span>
-                          <p className="font-mono font-medium">Rev {currentSource?.desired?.revision !== undefined ? currentSource.desired.revision : "—"}</p>
+                          <p className="font-mono font-medium">Rev {currentSource?.desired?.revision !== undefined && currentSource.desired.revision >= 1 ? currentSource.desired.revision : "—"}</p>
                         </div>
                         <div>
                           <span className="text-muted-foreground">{t("mgmt.dataSources.detail.lifecycle")}:</span>
@@ -427,7 +427,7 @@ export function DataSourceDetailDrawer({
                         <div>
                           <span className="text-muted-foreground">{t("mgmt.dataSources.detail.observedRevision")}:</span>
                           <p className="font-mono font-medium">
-                            Rev {currentSource?.observed?.observed_revision !== undefined ? currentSource.observed.observed_revision : "—"}
+                            Rev {currentSource?.observed?.observed_revision !== undefined && currentSource.observed.observed_revision >= 1 ? currentSource.observed.observed_revision : "—"}
                           </p>
                         </div>
                         <div>
@@ -646,7 +646,7 @@ export function DataSourceDetailDrawer({
                           {runs.observations.slice(0, 10).map((obs, idx) => (
                             <tr key={idx} className="border-b border-border/50">
                               <td className="py-1.5 font-mono">{formatTime(obs.observed_at)}</td>
-                              <td className="py-1.5 font-mono">r{obs.observed_revision}</td>
+                              <td className="py-1.5 font-mono">{obs.observed_revision !== undefined && obs.observed_revision >= 1 ? `r${obs.observed_revision}` : "—"}</td>
                               <td className="py-1.5">
                                 <Badge variant="outline" className={healthStateTone(obs.health_state)}>
                                   {obs.health_state}

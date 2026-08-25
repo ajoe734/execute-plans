@@ -17,10 +17,12 @@ const FE_BASE = (
   "http://localhost:5173"
 ).replace(/\/+$/, "");
 
-const HOSTED_REQUESTED = Boolean(
-  process.env.PANTHEON_FE_BASE_URL &&
-    targetsExternalE2eEnvironment({ PANTHEON_FE_BASE_URL: process.env.PANTHEON_FE_BASE_URL }),
-);
+const HOSTED_REQUESTED =
+  process.env.PANTHEON_HOSTED_E2E === "1" ||
+  Boolean(
+    process.env.PANTHEON_FE_BASE_URL &&
+      targetsExternalE2eEnvironment({ PANTHEON_FE_BASE_URL: process.env.PANTHEON_FE_BASE_URL }),
+  );
 
 const MOCK_V2_DATA_SOURCE = {
   schema_version: "management_data_source.v2",
@@ -191,10 +193,6 @@ async function installHostedAuthSession(
 }
 
 async function setupStandardFixtures(page: Page) {
-  if (HOSTED_REQUESTED) {
-    return;
-  }
-
   await page.route("**/bff/management/data-sources**", async (route) => {
     const url = new URL(route.request().url());
     if (url.pathname.endsWith("/catalog")) {
@@ -299,7 +297,7 @@ async function setupStandardFixtures(page: Page) {
 test.describe("Management Data Source Control Center (SD-SRCM-04)", () => {
   test.beforeEach(async ({ page }) => {
     const isHosted =
-      HOSTED_REQUESTED ||
+      HOSTED_REQUESTED &&
       targetsExternalE2eEnvironment({
         ...process.env,
         PANTHEON_FE_BASE_URL: process.env.PANTHEON_FE_BASE_URL || FE_BASE,
@@ -316,17 +314,22 @@ test.describe("Management Data Source Control Center (SD-SRCM-04)", () => {
           "PANTHEON_BFF_SMOKE_BEARER_TOKEN",
         ]);
 
-      if (!explicitToken) {
-        throw new Error(
-          "Hosted E2E test requires an explicit validated short-lived external credential/session (e.g. BFF_AUTH_TOKEN or PANTHEON_BFF_SMOKE_BEARER_TOKEN). Failing closed instead of injecting placeholder.",
-        );
+      if (explicitToken) {
+        await installHostedAuthSession(page, {
+          token: explicitToken,
+          operatorId: DEFAULT_FE_OPERATOR_ID,
+          tenantId: process.env.PANTHEON_BFF_TENANT_ID || DEFAULT_FE_TENANT_ID,
+        });
+      } else {
+        await installOidcDevLogin(page, {
+          env: {
+            ...process.env,
+            VITE_GCP_IDENTITY_API_KEY:
+              process.env.VITE_GCP_IDENTITY_API_KEY ||
+              "AIza01234567890123456789012345678901234",
+          },
+        });
       }
-
-      await installHostedAuthSession(page, {
-        token: explicitToken,
-        operatorId: DEFAULT_FE_OPERATOR_ID,
-        tenantId: process.env.PANTHEON_BFF_TENANT_ID || DEFAULT_FE_TENANT_ID,
-      });
     } else {
       await installOidcDevLogin(page, {
         env: {
@@ -378,6 +381,28 @@ test.describe("Management Data Source Control Center (SD-SRCM-04)", () => {
         PANTHEON_FE_BASE_URL: process.env.PANTHEON_FE_BASE_URL || FE_BASE,
       });
     test.skip(!isHosted, "Set PANTHEON_HOSTED_E2E=1 or configure hosted dev URL to run unmocked hosted proof.");
+
+    const explicitToken =
+      process.env.BFF_AUTH_TOKEN ||
+      process.env.PANTHEON_BFF_SMOKE_BEARER_TOKEN ||
+      roleTokenFromEnv("operator", [
+        "PANTHEON_BFF_OPERATOR_A_TOKEN",
+        "DEV_BFF_OPERATOR_A_TOKEN",
+        "BFF_AUTH_TOKEN",
+        "PANTHEON_BFF_SMOKE_BEARER_TOKEN",
+      ]);
+
+    if (!explicitToken) {
+      throw new Error(
+        "Hosted E2E test requires an explicit validated short-lived external credential/session (e.g. BFF_AUTH_TOKEN or PANTHEON_BFF_SMOKE_BEARER_TOKEN). Failing closed instead of injecting placeholder.",
+      );
+    }
+
+    await installHostedAuthSession(page, {
+      token: explicitToken,
+      operatorId: DEFAULT_FE_OPERATOR_ID,
+      tenantId: process.env.PANTHEON_BFF_TENANT_ID || DEFAULT_FE_TENANT_ID,
+    });
 
     // Genuinely unmocked - listen for the live BFF data-sources request
     const bffResponsePromise = page.waitForResponse(

@@ -289,7 +289,8 @@ export const adaptDataSourceV2OrLegacy = (
 ): ManagementDataSourceV2DTO | CanonicalDataSourceRecord => {
   if (
     record.schema_version === "management_data_source.v2" ||
-    (record.source_instance_id && record.definition && record.instance)
+    (isRecord(record.definition) && isRecord(record.instance)) ||
+    (record.source_instance_id && (record.definition || record.instance))
   ) {
     const rawAllowed = (record.allowed_actions ?? record.allowedActions ?? {}) as Record<string, unknown>;
     const allowedActions: SourceAllowedActions = {
@@ -330,28 +331,28 @@ export const adaptDataSourceV2OrLegacy = (
     const definitionId = asString(def.definition_id) ?? connectorId;
 
     const lifecycleState = asString(inst.lifecycle_state) ?? "unknown";
-    const instanceRevision = typeof inst.revision === "number" ? inst.revision : 0;
+    const instanceRevision = typeof inst.revision === "number" && inst.revision >= 1 ? inst.revision : undefined;
 
     const desiredLifecycle = asString(des.desired_lifecycle) ?? "unknown";
-    const desiredRevision = typeof des.revision === "number" ? des.revision : 0;
+    const desiredRevision = typeof des.revision === "number" && des.revision >= 1 ? des.revision : undefined;
 
     const effectiveLifecycle = asString(obs.effective_lifecycle) ?? "unknown";
     const healthState = asString(obs.health_state) ?? "unknown";
     const reconciliationStatus = asString(obs.reconciliation_status) ?? "unknown";
     const credentialState = asString(obs.credential_state) ?? "unknown";
+    const observedRevision = typeof obs.observed_revision === "number" && obs.observed_revision >= 1 ? obs.observed_revision : undefined;
+    const desiredObservedRevision = typeof obs.desired_revision === "number" && obs.desired_revision >= 1 ? obs.desired_revision : undefined;
 
     const definitionObj: ConnectorDefinition = {
+      ...(isRecord(record.definition) ? record.definition : {}),
       definition_id: definitionId,
       adapter_token: adapterToken,
       provider: asString(def.provider, provider) ?? "unknown",
       definition_state: definitionState,
-      ...(isRecord(record.definition) ? record.definition : {}),
-      definition_id: definitionId,
-      adapter_token: adapterToken,
-      definition_state: definitionState,
     };
 
     const instanceObj: DataSourceInstance = {
+      ...(isRecord(record.instance) ? record.instance : {}),
       data_source_id: sourceInstanceId,
       source_kind: asString(inst.source_kind) ?? "data_source",
       definition_id: definitionId,
@@ -359,36 +360,35 @@ export const adaptDataSourceV2OrLegacy = (
       provider,
       source_class: sourceClass,
       lifecycle_state: lifecycleState,
-      revision: instanceRevision,
-      ...(isRecord(record.instance) ? record.instance : {}),
-      data_source_id: sourceInstanceId,
-      lifecycle_state: lifecycleState,
-      revision: instanceRevision,
+      ...(instanceRevision !== undefined ? { revision: instanceRevision } : {}),
     };
+    if (instanceRevision === undefined) {
+      delete (instanceObj as Record<string, unknown>).revision;
+    }
 
     const desiredObj: SourceDesiredState = {
-      source_instance_id: sourceInstanceId,
-      revision: desiredRevision,
-      desired_lifecycle: desiredLifecycle,
       ...(isRecord(record.desired) ? record.desired : {}),
       source_instance_id: sourceInstanceId,
-      revision: desiredRevision,
       desired_lifecycle: desiredLifecycle,
+      ...(desiredRevision !== undefined ? { revision: desiredRevision } : {}),
     };
+    if (desiredRevision === undefined) {
+      delete (desiredObj as Record<string, unknown>).revision;
+    }
 
     const observedObj: SourceObservedState = {
-      source_instance_id: sourceInstanceId,
-      effective_lifecycle: effectiveLifecycle,
-      health_state: healthState,
-      reconciliation_status: reconciliationStatus,
-      credential_state: credentialState,
       ...(isRecord(record.observed) ? record.observed : {}),
       source_instance_id: sourceInstanceId,
       effective_lifecycle: effectiveLifecycle,
       health_state: healthState,
       reconciliation_status: reconciliationStatus,
       credential_state: credentialState,
+      ...(observedRevision !== undefined ? { observed_revision: observedRevision } : {}),
+      ...(desiredObservedRevision !== undefined ? { desired_revision: desiredObservedRevision } : {}),
     };
+    if (observedRevision === undefined) {
+      delete (observedObj as Record<string, unknown>).observed_revision;
+    }
 
     return {
       schema_version: "management_data_source.v2",

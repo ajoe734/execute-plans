@@ -4,6 +4,7 @@ import {
   isValidSecretRefId,
   managementDataSourceReads,
   managementDataSourceWrites,
+  normalizeManagementDataSourceDetail,
 } from "./managementDataSources";
 
 describe("managementDataSources client", () => {
@@ -254,7 +255,7 @@ describe("managementDataSources client", () => {
             status: "succeeded",
           },
         },
-      } as any);
+      } as unknown as Awaited<ReturnType<typeof clientModule.bffFetch>>);
 
       try {
         const receipt = await managementDataSourceWrites.createDataSource({
@@ -275,9 +276,10 @@ describe("managementDataSources client", () => {
         const calledReq = bffFetchSpy.mock.calls[0][0];
         expect(calledReq.method).toBe("POST");
         expect(calledReq.path).toBe("/bff/management/data-sources");
-        expect((calledReq.body as any).secret_scope).toBe("env_isolated");
-        expect((calledReq.body as any).source_instance_id).toBe("ds-test-create");
-        expect((calledReq.body as any).license_scope).toBe("official_reference");
+        const body = (calledReq.body ?? {}) as Record<string, unknown>;
+        expect(body.secret_scope).toBe("env_isolated");
+        expect(body.source_instance_id).toBe("ds-test-create");
+        expect(body.license_scope).toBe("official_reference");
       } finally {
         liveGateSpy.mockRestore();
         bffFetchSpy.mockRestore();
@@ -301,7 +303,7 @@ describe("managementDataSources client", () => {
             status: "succeeded",
           },
         },
-      } as any);
+      } as unknown as Awaited<ReturnType<typeof clientModule.bffFetch>>);
 
       try {
         const receipt = await managementDataSourceWrites.replaceDataSource({
@@ -317,11 +319,12 @@ describe("managementDataSources client", () => {
         const calledReq = bffFetchSpy.mock.calls[0][0];
         expect(calledReq.method).toBe("POST");
         expect(calledReq.path).toBe("/bff/management/data-sources/ds-test-old/actions/replace");
-        expect((calledReq.body as any).replacement_source_id).toBe("ds-test-new");
-        expect((calledReq.body as any).expected_revision).toBe(2);
-        expect((calledReq.body as any).confirmation).toBe(true);
-        expect((calledReq.body as any).reason).toBe("Upgrading to v2");
-        expect((calledReq.body as any).migrate_dependents).toBeUndefined();
+        const body = (calledReq.body ?? {}) as Record<string, unknown>;
+        expect(body.replacement_source_id).toBe("ds-test-new");
+        expect(body.expected_revision).toBe(2);
+        expect(body.confirmation).toBe(true);
+        expect(body.reason).toBe("Upgrading to v2");
+        expect(body.migrate_dependents).toBeUndefined();
       } finally {
         liveGateSpy.mockRestore();
         bffFetchSpy.mockRestore();
@@ -520,9 +523,9 @@ describe("managementDataSources client", () => {
       expect(v2.definition.definition_state).toBe("unknown");
       expect(v2.definition.adapter_token).toBe("unknown");
       expect(v2.instance.lifecycle_state).toBe("unknown");
-      expect(v2.instance.revision).toBe(0);
+      expect(v2.instance.revision).toBeUndefined();
       expect(v2.desired.desired_lifecycle).toBe("unknown");
-      expect(v2.desired.revision).toBe(0);
+      expect(v2.desired.revision).toBeUndefined();
       expect(v2.observed.effective_lifecycle).toBe("unknown");
       expect(v2.observed.health_state).toBe("unknown");
       expect(v2.observed.reconciliation_status).toBe("unknown");
@@ -600,6 +603,119 @@ describe("managementDataSources client", () => {
       expect(projected.tone).toBe("muted");
       expect(projected.credentialState).toBe("unknown");
       expect(projected.liveIngestionEnabled).toBe(false);
+    });
+  });
+
+  describe("normalizeManagementDataSourceDetail", () => {
+    it("normalizes accepted BFF detail envelope lacking top-level list DTO fields", () => {
+      const bffDetailPayload = {
+        data: {
+          definition: {
+            definition_id: "twse-openapi-daily",
+            adapter_token: "TwseAdapter.records_from_payload",
+            provider: "TWSE",
+            definition_state: "supported",
+          },
+          instance: {
+            data_source_id: "ds-twse-market-v1",
+            source_kind: "data_source",
+            definition_id: "twse-openapi-daily",
+            connector_id: "ds-twse-market-v1",
+            provider: "TWSE",
+            source_class: "market_daily",
+            lifecycle_state: "enabled",
+            revision: 3,
+          },
+          desired: {
+            source_instance_id: "ds-twse-market-v1",
+            revision: 3,
+            desired_lifecycle: "enabled",
+          },
+          observed: {
+            source_instance_id: "ds-twse-market-v1",
+            effective_lifecycle: "enabled",
+            health_state: "healthy",
+            reconciliation_status: "converged",
+            observed_revision: 3,
+            desired_revision: 3,
+          },
+          allowed_actions: {
+            canValidate: true,
+            canCanary: true,
+            canEnable: false,
+            canDisable: true,
+            canDegrade: true,
+            canResume: false,
+            canChangeSchedule: true,
+            canReplace: false,
+            canRetire: false,
+            blockedReasons: [],
+          },
+        },
+        meta: { status: "ok", source: "service_client" },
+      };
+
+      const normalized = normalizeManagementDataSourceDetail(bffDetailPayload, "ds-twse-market-v1");
+      expect(normalized.schema_version).toBe("management_data_source.v2");
+      expect(normalized.source_instance_id).toBe("ds-twse-market-v1");
+      expect(normalized.connector_id).toBe("ds-twse-market-v1");
+      expect(normalized.provider).toBe("TWSE");
+      expect(normalized.source_class).toBe("market_daily");
+      expect(normalized.definition.definition_id).toBe("twse-openapi-daily");
+      expect(normalized.instance.revision).toBe(3);
+      expect(normalized.desired.revision).toBe(3);
+      expect(normalized.observed.observed_revision).toBe(3);
+      expect(normalized.allowed_actions.canDisable).toBe(true);
+      expect(normalized.allowedActions.canDisable).toBe(true);
+    });
+
+    it("preserves missing or invalid revision as undefined instead of synthesizing 0", () => {
+      const bffDetailWithoutRevision = {
+        data: {
+          definition: {
+            definition_id: "conn-partial",
+            adapter_token: "MockAdapter",
+            provider: "MockProvider",
+            definition_state: "supported",
+          },
+          instance: {
+            data_source_id: "ds-partial-norev",
+            source_kind: "data_source",
+            definition_id: "conn-partial",
+            connector_id: "conn-partial",
+            provider: "MockProvider",
+            source_class: "market",
+            lifecycle_state: "configured_disabled",
+          },
+          desired: {
+            source_instance_id: "ds-partial-norev",
+            desired_lifecycle: "configured_disabled",
+          },
+          observed: {
+            source_instance_id: "ds-partial-norev",
+            effective_lifecycle: "configured_disabled",
+          },
+          allowed_actions: {
+            canValidate: true,
+            canCanary: false,
+            canEnable: false,
+            canDisable: false,
+            canDegrade: false,
+            canResume: false,
+            canChangeSchedule: false,
+            canReplace: false,
+            canRetire: true,
+            blockedReasons: [],
+          },
+        },
+      };
+
+      const normalized = normalizeManagementDataSourceDetail(bffDetailWithoutRevision, "ds-partial-norev");
+      expect(normalized.instance.revision).toBeUndefined();
+      expect(normalized.desired.revision).toBeUndefined();
+      expect(normalized.observed.observed_revision).toBeUndefined();
+      expect(normalized.instance.data_source_id).toBe("ds-partial-norev");
+      expect(normalized.source_instance_id).toBe("ds-partial-norev");
     });
   });
 });

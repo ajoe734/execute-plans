@@ -323,7 +323,7 @@ export function DataSourceRunsPanel({ sources, onSelectSource }: DataSourceRunsP
                 {runs.observations.map((obs, idx) => (
                   <tr key={idx} className="hover:bg-muted/30">
                     <td className="py-2 px-3">{formatTime(obs.observed_at)}</td>
-                    <td className="py-2 px-3">r{obs.observed_revision}</td>
+                    <td className="py-2 px-3">{obs.observed_revision !== undefined && obs.observed_revision >= 1 ? `r${obs.observed_revision}` : "—"}</td>
                     <td className="py-2 px-3 font-sans">
                       <Badge variant="outline" className={healthStateTone(obs.health_state)}>
                         {fmtToken(obs.health_state)}

@@ -183,7 +183,7 @@ function V2DataSourceRow({
             {fmtToken(dto.desired?.desired_lifecycle || dto.instance?.lifecycle_state || "unknown")}
           </Badge>
           <Badge variant="outline" className="font-mono text-[10px]">
-            {dto.desired?.revision !== undefined ? `r${dto.desired.revision}` : (dto.instance?.revision !== undefined ? `r${dto.instance.revision}` : "r—")}
+            {dto.desired?.revision !== undefined && dto.desired.revision >= 1 ? `r${dto.desired.revision}` : (dto.instance?.revision !== undefined && dto.instance.revision >= 1 ? `r${dto.instance.revision}` : "r—")}
           </Badge>
         </div>
       </td>

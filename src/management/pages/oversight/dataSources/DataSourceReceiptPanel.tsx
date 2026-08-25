@@ -177,7 +177,7 @@ export function DataSourceReceiptPanel({ sources }: DataSourceReceiptPanelProps)
                     <div>
                       Revision:{" "}
                       <span className="text-foreground">
-                        {rcp.before_revision ?? "—"} → {rcp.after_revision ?? "—"}
+                        {rcp.before_revision !== undefined && rcp.before_revision >= 1 ? `r${rcp.before_revision}` : "—"} → {rcp.after_revision !== undefined && rcp.after_revision >= 1 ? `r${rcp.after_revision}` : "—"}
                       </span>
                     </div>
                     {rcp.readback && (

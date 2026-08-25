@@ -73,7 +73,9 @@ export function DataSourceCommandDialog({
 
   const actionDef = DATA_SOURCE_ACTIONS.find((a) => a.key === actionKey);
   const sourceId = targetSource.source_instance_id || targetSource.connector_id;
-  const currentRevision = targetSource.desired?.revision ?? targetSource.instance?.revision ?? 1;
+  const rawRevision = targetSource.desired?.revision ?? targetSource.instance?.revision;
+  const hasValidRevision = typeof rawRevision === "number" && rawRevision >= 1;
+  const currentRevision = hasValidRevision ? rawRevision : undefined;
   const writesLive = realWritesEnabled();
 
   const handleClose = () => {
@@ -89,6 +91,10 @@ export function DataSourceCommandDialog({
   };
 
   const handleExecute = async () => {
+    if (!hasValidRevision || currentRevision === undefined) {
+      setErrorMsg(t("mgmt.dataSources.dialog.missingRevisionMsg"));
+      return;
+    }
     if (actionDef?.reasonRequired && !reason.trim()) {
       setErrorMsg(t("mgmt.dataSources.dialog.reasonRequiredMsg"));
       return;
@@ -222,6 +228,7 @@ export function DataSourceCommandDialog({
     executing ||
     polling ||
     !writesLive ||
+    !hasValidRevision ||
     (actionDef?.reasonRequired && !reason.trim()) ||
     (actionKey === "replace" && !replacementSourceId.trim()) ||
     (actionKey === "replace" && dependentRefs.length > 0 && !acknowledgeMigrationPlan) ||
@@ -280,8 +287,8 @@ export function DataSourceCommandDialog({
             </div>
             <div className="flex justify-between items-center">
               <span className="text-muted-foreground">{t("mgmt.dataSources.dialog.expectedRevision")}:</span>
-              <Badge variant="outline" className="font-mono">
-                Rev {currentRevision}
+              <Badge variant="outline" className="font-mono" data-testid="command-expected-revision-badge">
+                {hasValidRevision ? `Rev ${currentRevision}` : "—"}
               </Badge>
             </div>
             <div className="flex justify-between items-center">
@@ -289,6 +296,19 @@ export function DataSourceCommandDialog({
               <span className="font-medium text-foreground">{targetSource.provider}</span>
             </div>
           </Card>
+
+          {/* Missing revision warning if absent */}
+          {!hasValidRevision && (
+            <Card className="p-3 bg-status-warning/10 border-status-warning/30 text-xs text-status-warning flex items-start gap-2" data-testid="missing-revision-alert">
+              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-medium">{t("mgmt.dataSources.dialog.missingRevisionTitle")}</p>
+                <p className="mt-0.5 text-muted-foreground">
+                  {t("mgmt.dataSources.dialog.missingRevisionDesc")}
+                </p>
+              </div>
+            </Card>
+          )}
 
           {/* Real write warning if disabled */}
           {!writesLive && (
@@ -655,7 +675,7 @@ export function DataSourceCommandDialog({
                 <div>Status: {receipt.status}</div>
                 {receipt.after_revision !== undefined && (
                   <div>
-                    Revision: {receipt.before_revision ?? currentRevision} → {receipt.after_revision}
+                    Revision: {receipt.before_revision ?? (hasValidRevision ? currentRevision : "—")} → {receipt.after_revision}
                   </div>
                 )}
                 {receipt.readback?.reconciliation_status && (

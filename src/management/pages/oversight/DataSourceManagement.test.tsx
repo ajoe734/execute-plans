@@ -1554,7 +1554,7 @@ describe("DataSourceManagementPage", () => {
               command_type: "validate",
               status: "succeeded",
               readback: {
-                reconciliation_status: undefined as any,
+                reconciliation_status: undefined,
               },
             },
           ],
@@ -1576,6 +1576,79 @@ describe("DataSourceManagementPage", () => {
       expect(screen.queryByText("converged")).not.toBeInTheDocument();
 
       partialReceiptsReadsSpy.mockRestore();
+    });
+
+    it("disables command execution and renders dash when authoritative revision is unavailable", async () => {
+      const { DataSourceCommandDialog } = await import(
+        "./dataSources/DataSourceCommandDialog"
+      );
+      const transportModule = await import("@/lib/bff-v1/liveTransport");
+      const realWritesSpy = vi.spyOn(transportModule, "realWritesEnabled").mockReturnValue(true);
+
+      const sourceWithoutRevision = mockV2DataSource();
+      delete (sourceWithoutRevision.desired as Record<string, unknown>).revision;
+      delete (sourceWithoutRevision.instance as Record<string, unknown>).revision;
+
+      const validateSpy = vi.spyOn(
+        (await import("@/lib/bff-v1/managementDataSources")).managementDataSourceWrites,
+        "validateDataSource",
+      );
+
+      render(
+        <I18nextProvider i18n={i18n}>
+          <DataSourceCommandDialog
+            open={true}
+            onOpenChange={() => {}}
+            actionKey="validate"
+            targetSource={sourceWithoutRevision}
+          />
+        </I18nextProvider>,
+      );
+
+      // Expected revision badge should render dash —
+      const badge = screen.getByTestId("command-expected-revision-badge");
+      expect(badge).toHaveTextContent("—");
+
+      // Missing revision warning alert should be displayed
+      expect(screen.getByTestId("missing-revision-alert")).toBeInTheDocument();
+      expect(screen.getByText(/Authoritative Revision Unavailable|權威伺服器版本不可用/i)).toBeInTheDocument();
+
+      // Execute button should be disabled
+      const executeBtn = screen.getByRole("button", { name: /Execute Validate|執行驗證/i });
+      expect(executeBtn).toBeDisabled();
+
+      // Attempting to click execute button should not trigger validateDataSource
+      fireEvent.click(executeBtn);
+      expect(validateSpy).not.toHaveBeenCalled();
+
+      validateSpy.mockRestore();
+      realWritesSpy.mockRestore();
+    });
+
+    it("renders r— in instances table when authoritative revision is missing", async () => {
+      const { DataSourceInstancesTable } = await import(
+        "./dataSources/DataSourceInstancesTable"
+      );
+
+      const sourceWithoutRevision = mockV2DataSource();
+      delete (sourceWithoutRevision.desired as Record<string, unknown>).revision;
+      delete (sourceWithoutRevision.instance as Record<string, unknown>).revision;
+
+      render(
+        <I18nextProvider i18n={i18n}>
+          <MemoryRouter>
+            <DataSourceInstancesTable
+              records={[sourceWithoutRevision]}
+              onSelectSource={vi.fn()}
+              onExecuteAction={vi.fn()}
+            />
+          </MemoryRouter>
+        </I18nextProvider>,
+      );
+
+      // Should render r— badge
+      expect(screen.getByText("r—")).toBeInTheDocument();
+      expect(screen.queryByText("r0")).not.toBeInTheDocument();
     });
   });
 });

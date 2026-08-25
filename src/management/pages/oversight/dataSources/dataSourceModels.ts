@@ -138,7 +138,7 @@ export function hasDivergence(dto: ManagementDataSourceV2DTO): boolean {
   }
   const desiredRev = dto.desired?.revision;
   const observedRev = dto.observed?.desired_revision;
-  if (desiredRev !== undefined && observedRev !== undefined && desiredRev !== observedRev) {
+  if (desiredRev !== undefined && desiredRev >= 1 && observedRev !== undefined && observedRev >= 1 && desiredRev !== observedRev) {
     return true;
   }
   return false;
