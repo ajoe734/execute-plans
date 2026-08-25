@@ -410,104 +410,144 @@ function setupNetworkTracker(page: Page) {
   return { networkEvents };
 }
 
+function corsHeaders(route: Route): Record<string, string> {
+  const origin = route.request().headers()["origin"] ?? "*";
+  return {
+    "Access-Control-Allow-Credentials": "true",
+    "Access-Control-Allow-Headers":
+      "accept,authorization,content-type,idempotency-key,if-match,x-bff-api-version,x-correlation-id,x-locale,x-request-id,x-tenant-id,x-trace-id",
+    "Access-Control-Allow-Methods": "GET,POST,PATCH,PUT,DELETE,OPTIONS",
+    "Access-Control-Allow-Origin": origin,
+    "Access-Control-Expose-Headers": "x-bff-api-version,x-correlation-id,x-request-id",
+  };
+}
+
+async function fulfillJson(route: Route, body: unknown, status = 200): Promise<void> {
+  await route.fulfill({
+    body: JSON.stringify(body),
+    contentType: "application/json",
+    headers: corsHeaders(route),
+    status,
+  });
+}
+
 async function setupStandardFixtures(page: Page) {
-  await page.route("**/bff/management/data-sources**", async (route) => {
-    const url = new URL(route.request().url());
-    if (url.pathname.endsWith("/catalog")) {
-      return route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          data: {
-            definitions: [MOCK_V2_DATA_SOURCE.definition],
-            count: 1,
-            status: "ok",
-          },
-          meta: { status: "ok", source: "service_client" },
-        }),
+  await page.route(/^https?:\/\/[^/]+\/bff\/management\/(?:data-sources|persona-fleet).*/, async (route) => {
+    const request = route.request();
+    if (request.method() === "OPTIONS") {
+      await route.fulfill({
+        status: 204,
+        headers: corsHeaders(route),
       });
+      return;
     }
-    if (url.pathname.includes("/runs")) {
-      return route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          data: {
-            observations: [
-              {
-                source_instance_id: "ds-twse-market-v1",
-                observed_revision: 2,
-                reconciliation_status: "converged",
-                effective_lifecycle: "enabled",
-                health_state: "healthy",
-                observed_at: "2026-08-24T13:32:00Z",
-                watermark: "2026-08-24T13:30:00Z",
-                row_count: 1500,
-                rejected_count: 0,
-              },
-            ],
-            canaries: [
-              {
-                canary_id: "canary-twse-001",
-                source_instance_id: "ds-twse-market-v1",
-                status: "passed",
-                row_count: 10,
-                rejected_count: 0,
-                started_at: "2026-08-24T13:31:00Z",
-                completed_at: "2026-08-24T13:31:05Z",
-              },
-            ],
-          },
-          meta: { status: "ok", source: "service_client" },
-        }),
-      });
-    }
-    if (url.pathname.includes("/receipts")) {
-      return route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          data: {
-            receipts: [
-              {
-                receipt_id: "rcp-twse-001",
-                command_id: "cmd-001",
-                source_instance_id: "ds-twse-market-v1",
-                command_type: "enable",
-                status: "succeeded",
-                before_revision: 1,
-                after_revision: 2,
-                created_at: "2026-08-24T13:00:00Z",
-              },
-            ],
-          },
-          meta: { status: "ok", source: "service_client" },
-        }),
-      });
-    }
+    const url = new URL(request.url());
+    const pathname = url.pathname;
 
-    if (url.pathname.endsWith("/ds-twse-market-v1") || url.pathname.endsWith("/ds-tpex-quote-v1")) {
-      const match = url.pathname.endsWith("/ds-tpex-quote-v1") ? MOCK_DIVERGED_DATA_SOURCE : MOCK_V2_DATA_SOURCE;
-      return route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          data: match,
-          meta: { status: "ok", source: "service_client" },
-        }),
-      });
-    }
-
-    return route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
+    if (pathname.startsWith("/bff/management/persona-fleet")) {
+      return fulfillJson(route, {
         data: {
-          items: [MOCK_V2_DATA_SOURCE, MOCK_DIVERGED_DATA_SOURCE],
-          count: 2,
+          items: [
+            {
+              personaId: "persona-tw-arb",
+              persona_id: "persona-tw-arb",
+              name: "TW Arbitrage",
+              displayName: "TW Arbitrage",
+              status: "active",
+              dataSources: ["ds-twse-market-v1"],
+            },
+          ],
+        },
+        items: [
+          {
+            personaId: "persona-tw-arb",
+            persona_id: "persona-tw-arb",
+            name: "TW Arbitrage",
+            displayName: "TW Arbitrage",
+            status: "active",
+            dataSources: ["ds-twse-market-v1"],
+          },
+        ],
+        meta: { status: "ok", source: "service_client" },
+        page_info: { total: 1, page_size: 100 },
+      });
+    }
+
+    if (pathname.endsWith("/catalog")) {
+      return fulfillJson(route, {
+        data: {
+          definitions: [MOCK_V2_DATA_SOURCE.definition],
+          count: 1,
+          status: "ok",
         },
         meta: { status: "ok", source: "service_client" },
-      }),
+      });
+    }
+    if (pathname.includes("/runs")) {
+      return fulfillJson(route, {
+        data: {
+          observations: [
+            {
+              source_instance_id: "ds-twse-market-v1",
+              observed_revision: 2,
+              reconciliation_status: "converged",
+              effective_lifecycle: "enabled",
+              health_state: "healthy",
+              observed_at: "2026-08-24T13:32:00Z",
+              watermark: "2026-08-24T13:30:00Z",
+              row_count: 1500,
+              rejected_count: 0,
+            },
+          ],
+          canaries: [
+            {
+              canary_id: "canary-twse-001",
+              source_instance_id: "ds-twse-market-v1",
+              status: "passed",
+              row_count: 10,
+              rejected_count: 0,
+              started_at: "2026-08-24T13:31:00Z",
+              completed_at: "2026-08-24T13:31:05Z",
+            },
+          ],
+        },
+        meta: { status: "ok", source: "service_client" },
+      });
+    }
+    if (pathname.includes("/receipts")) {
+      return fulfillJson(route, {
+        data: {
+          receipts: [
+            {
+              receipt_id: "rcp-twse-001",
+              command_id: "cmd-001",
+              source_instance_id: "ds-twse-market-v1",
+              command_type: "enable",
+              status: "succeeded",
+              before_revision: 1,
+              after_revision: 2,
+              created_at: "2026-08-24T13:00:00Z",
+            },
+          ],
+        },
+        meta: { status: "ok", source: "service_client" },
+      });
+    }
+
+    if (pathname.endsWith("/ds-twse-market-v1") || pathname.endsWith("/ds-tpex-quote-v1")) {
+      const match = pathname.endsWith("/ds-tpex-quote-v1") ? MOCK_DIVERGED_DATA_SOURCE : MOCK_V2_DATA_SOURCE;
+      return fulfillJson(route, {
+        data: match,
+        meta: { status: "ok", source: "service_client" },
+      });
+    }
+
+    return fulfillJson(route, {
+      data: {
+        items: [MOCK_V2_DATA_SOURCE, MOCK_DIVERGED_DATA_SOURCE],
+        count: 2,
+      },
+      meta: { status: "ok", source: "service_client" },
     });
   });
 }
@@ -743,16 +783,17 @@ test.describe("Management Data Source Control Center (SD-SRCM-04)", () => {
 
   test("envelope meta states: authoritative-empty, unavailable, degraded-legacy", async ({ page }) => {
     // 1. Authoritative Empty
-    await page.route("**/bff/management/data-sources", async (route) => {
+    await page.route("**/bff/management/data-sources**", async (route) => {
+      if (route.request().method() === "OPTIONS") {
+        await route.fulfill({ status: 204, headers: corsHeaders(route) });
+        return;
+      }
       if (route.request().url().endsWith("/data-sources")) {
-        return route.fulfill({
-          status: 200,
-          contentType: "application/json",
-          body: JSON.stringify({
-            data: [],
-            meta: { status: "ok", source: "service_client" },
-            page_info: { total_count: 0 },
-          }),
+        return fulfillJson(route, {
+          data: { items: [], count: 0 },
+          items: [],
+          meta: { status: "ok", source: "service_client" },
+          page_info: { total_count: 0 },
         });
       }
       return route.continue();
@@ -763,17 +804,21 @@ test.describe("Management Data Source Control Center (SD-SRCM-04)", () => {
     await expect(page.getByText(/No Data Sources Configured|尚未設定資料源/i)).toBeVisible();
 
     // 2. Unavailable
-    await page.route("**/bff/management/data-sources", async (route) => {
+    await page.route("**/bff/management/data-sources**", async (route) => {
+      if (route.request().method() === "OPTIONS") {
+        await route.fulfill({ status: 204, headers: corsHeaders(route) });
+        return;
+      }
       if (route.request().url().endsWith("/data-sources")) {
-        return route.fulfill({
-          status: 503,
-          contentType: "application/json",
-          body: JSON.stringify({
+        return fulfillJson(
+          route,
+          {
             data: [],
             meta: { status: "unavailable", source: "frontend_empty_read" },
             page_info: { total_count: 0 },
-          }),
-        });
+          },
+          503,
+        );
       }
       return route.continue();
     });
@@ -783,19 +828,20 @@ test.describe("Management Data Source Control Center (SD-SRCM-04)", () => {
     await expect(page.getByText(/Live data sources unavailable|目前沒有 live 資料源資料/i)).toBeVisible();
 
     // 3. Degraded-Legacy
-    await page.route("**/bff/management/data-sources", async (route) => {
+    await page.route("**/bff/management/data-sources**", async (route) => {
+      if (route.request().method() === "OPTIONS") {
+        await route.fulfill({ status: 204, headers: corsHeaders(route) });
+        return;
+      }
       if (route.request().url().endsWith("/data-sources")) {
-        return route.fulfill({
-          status: 200,
-          contentType: "application/json",
-          body: JSON.stringify({
-            data: {
-              items: [MOCK_V2_DATA_SOURCE],
-              count: 1,
-            },
-            meta: { status: "degraded", source: "legacy_projection" },
-            page_info: { total_count: 1 },
-          }),
+        return fulfillJson(route, {
+          data: {
+            items: [MOCK_V2_DATA_SOURCE],
+            count: 1,
+          },
+          items: [MOCK_V2_DATA_SOURCE],
+          meta: { status: "degraded", source: "legacy_projection" },
+          page_info: { total_count: 1 },
         });
       }
       return route.continue();
