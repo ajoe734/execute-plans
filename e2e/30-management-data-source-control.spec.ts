@@ -404,11 +404,11 @@ test.describe("Management Data Source Control Center (SD-SRCM-04)", () => {
       tenantId: process.env.PANTHEON_BFF_TENANT_ID || DEFAULT_FE_TENANT_ID,
     });
 
-    // Genuinely unmocked - listen for the live BFF data-sources request
+    // Genuinely unmocked - listen for the live BFF data-sources request and require successful status (200)
     const bffResponsePromise = page.waitForResponse(
       (resp) =>
         resp.url().includes("/bff/management/data-sources") &&
-        (resp.status() === 200 || resp.status() === 503 || resp.status() === 401),
+        resp.status() === 200,
       { timeout: 15000 },
     ).catch(() => null);
 
@@ -419,6 +419,7 @@ test.describe("Management Data Source Control Center (SD-SRCM-04)", () => {
 
     const bffResponse = await bffResponsePromise;
     expect(bffResponse).not.toBeNull();
+    expect(bffResponse!.ok()).toBeTruthy();
 
     // Assert that the page reached an authoritative result: table, authoritative-empty, degraded-legacy, or unavailable alert
     const authoritativeState = page.locator(

@@ -1,6 +1,6 @@
 // Governed action command dialog with real-write gating, confirmations, and receipt polling (SD-SRCM-04).
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import {
   AlertCircle,
@@ -59,15 +59,32 @@ export function DataSourceCommandDialog({
   const [retireConfirmText, setRetireConfirmText] = useState("");
   const [acknowledgeMigrationPlan, setAcknowledgeMigrationPlan] = useState(true);
   const [replacementSourceId, setReplacementSourceId] = useState("");
-  const [scheduleCadence, setScheduleCadence] = useState("0 19 * * 1-5");
-  const [scheduleTimezone, setScheduleTimezone] = useState("Asia/Taipei");
-  const [scheduleJitter, setScheduleJitter] = useState(120);
-  const [scheduleEnabled, setScheduleEnabled] = useState(true);
+  const [scheduleCadence, setScheduleCadence] = useState(targetSource?.desired?.schedule?.cadence ?? "");
+  const [scheduleTimezone, setScheduleTimezone] = useState(targetSource?.desired?.schedule?.timezone ?? "Asia/Taipei");
+  const [scheduleJitter, setScheduleJitter] = useState(targetSource?.desired?.schedule?.jitter_seconds ?? 0);
+  const [scheduleEnabled, setScheduleEnabled] = useState(Boolean(targetSource?.desired?.schedule?.enabled));
 
   const [executing, setExecuting] = useState(false);
   const [polling, setPolling] = useState(false);
   const [receipt, setReceipt] = useState<SourceCommandReceipt | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (open && targetSource) {
+      const sch = targetSource.desired?.schedule;
+      setScheduleEnabled(Boolean(sch?.enabled));
+      setScheduleCadence(sch?.cadence ?? "");
+      setScheduleTimezone(sch?.timezone ?? "Asia/Taipei");
+      setScheduleJitter(sch?.jitter_seconds ?? 0);
+      setReason("");
+      setConfirmation(false);
+      setRetireConfirmText("");
+      setAcknowledgeMigrationPlan(true);
+      setReplacementSourceId("");
+      setReceipt(null);
+      setErrorMsg(null);
+    }
+  }, [open, targetSource, actionKey]);
 
   if (!actionKey || !targetSource) return null;
 
@@ -85,6 +102,13 @@ export function DataSourceCommandDialog({
     setRetireConfirmText("");
     setAcknowledgeMigrationPlan(true);
     setReplacementSourceId("");
+    if (targetSource?.desired?.schedule) {
+      const sch = targetSource.desired.schedule;
+      setScheduleEnabled(Boolean(sch.enabled));
+      setScheduleCadence(sch.cadence ?? "");
+      setScheduleTimezone(sch.timezone ?? "Asia/Taipei");
+      setScheduleJitter(sch.jitter_seconds ?? 0);
+    }
     setReceipt(null);
     setErrorMsg(null);
     onOpenChange(false);
@@ -259,8 +283,6 @@ export function DataSourceCommandDialog({
       (validationState === "passed" && canaryState === "passed" && definitionState === "supported"),
   );
 
-  const resumeWillRerunChecks = validationState !== "passed" || canaryState !== "passed";
-
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-[540px]">
@@ -425,17 +447,12 @@ export function DataSourceCommandDialog({
             </Card>
           )}
 
-          {/* Resume UX: Rerun Truth Description */}
+          {/* Resume UX: Server-Supported Truth Description */}
           {actionKey === "resume" && !receipt && (
-            <Card className="p-3 bg-primary/5 border-primary/20 text-xs space-y-1.5">
-              <p className="font-medium text-foreground">{t("mgmt.dataSources.dialog.resumeRerunTruthTitle")}</p>
+            <Card className="p-3 bg-primary/5 border-primary/20 text-xs space-y-1.5" data-testid="resume-truth-notice">
+              <p className="font-medium text-foreground">{t("mgmt.dataSources.dialog.resumeTruthTitle")}</p>
               <p className="text-[11px] text-muted-foreground">
-                {resumeWillRerunChecks
-                  ? t("mgmt.dataSources.dialog.resumeRerunRequiredDesc", {
-                      val: validationState,
-                      can: canaryState,
-                    })
-                  : t("mgmt.dataSources.dialog.resumeDirectRestoreDesc")}
+                {t("mgmt.dataSources.dialog.resumeTruthDesc")}
               </p>
             </Card>
           )}

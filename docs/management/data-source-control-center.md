@@ -51,8 +51,8 @@ All mutating actions are derived exclusively from the server-provided `allowed_a
 | **Enable** | `canEnable` | **Yes** | Starts scheduled ingestion. Requires passed validation and canary. | Displays prerequisite health gate checklist (validation state, canary state, credential status) with warning when incomplete. |
 | **Disable** | `canDisable` | No | Immediately pauses ingestion and halts schedule. | Pauses ingestion and suspends recurring cron schedule. |
 | **Degrade** | `canDegrade` | No | Isolates source for maintenance while blocking automated consumers. | Maintenance mode isolation. |
-| **Resume** | `canResume` | No | Resumes disabled source and re-evaluates stale canaries. | Explains rerun truth: reactivates schedule, re-evaluates stale canaries, triggers observation poll, and reconciles observed revision. |
-| **Change Schedule** | `canChangeSchedule` | No | Updates Cron cadence, timezone, or jitter. | Updates Cron cadence, timezone, or jitter. |
+| **Resume** | `canResume` | No | Resumes disabled source and reactivates scheduled ingestion. | Explains server truth: updates desired lifecycle to resume schedule without automated validation or canary reruns. |
+| **Change Schedule** | `canChangeSchedule` | No | Updates Cron cadence, timezone, or jitter. | Pre-fills inputs from authoritative desired schedule, preventing accidental overwrites. |
 | **Replace** | `canReplace` | **Yes** | Replaces with an alternative source ID and records migration plan. | Displays affected dependent personas and records replacement target without claiming executed rebind. |
 | **Retire** | `canRetire` | **Yes (Typed)** | Permanently decommissions instance (terminal state). | Requires typing `"RETIRE"` into confirmation text field before execution. |
 
@@ -76,3 +76,10 @@ When a financial provider is not present in the deployed build:
 - The UI **does not call OpenClaw or Management AI** directly.
 - The operator can export a structured `source_development_need.v1` artifact via JSON copy or file download.
 - The artifact is submitted offline to the engineering team for Phase-2 adapter implementation.
+
+---
+
+## 7. Hosted Acceptance & E2E Validation
+
+- **Mocked Test Suite**: 14 Playwright E2E cases covering 9 canonical columns, V2 DTO divergence, detail drawer, catalog offline intake, accessibility focus, error envelope meta states, and responsive viewports.
+- **Unmocked Hosted Acceptance**: Isolated read-only test running against the live dev FE/BFF deployment pair via `.github/workflows/srcm-p1-mgmt-ui-hosted-acceptance.yml`, minting short-lived operator tokens through `POST /bff/auth/dev-login` and asserting successful `GET /bff/management/data-sources` (status 200).

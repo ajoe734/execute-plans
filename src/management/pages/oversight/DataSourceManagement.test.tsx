@@ -972,12 +972,11 @@ describe("DataSourceManagementPage", () => {
       expect(screen.getByText(/canary_evidence_expired, quota_exhausted/i)).toBeInTheDocument();
     });
 
-    it("renders Resume rerun truth reconciliation notice in command dialog", async () => {
+    it("renders server-supported Resume truth notice without inferred automated rerun claims", async () => {
       const { DataSourceCommandDialog } = await import(
         "./dataSources/DataSourceCommandDialog"
       );
-      // Case 1: validation and canary passed -> direct restore without rerun
-      const v2ItemPassed = mockV2DataSource({
+      const v2Item = mockV2DataSource({
         observed: {
           ...mockV2DataSource().observed,
           validation_state: "passed",
@@ -985,45 +984,114 @@ describe("DataSourceManagementPage", () => {
         },
       });
 
-      const { rerender } = render(
+      render(
         <I18nextProvider i18n={i18n}>
           <DataSourceCommandDialog
             open={true}
             onOpenChange={vi.fn()}
             actionKey="resume"
-            targetSource={v2ItemPassed}
+            targetSource={v2Item}
           />
         </I18nextProvider>,
       );
 
-      expect(screen.getByText("Resume & Ingestion Truth Reconciliation")).toBeInTheDocument();
+      expect(screen.getByText("Resume Data Source")).toBeInTheDocument();
       expect(
-        screen.getByText(/Validation and canary gates are in passed state. Resuming will immediately restore/i),
+        screen.getByText(
+          /Resuming updates the desired lifecycle to resume scheduled ingestion. It does not automatically run validation or canary checks/i,
+        ),
       ).toBeInTheDocument();
+      expect(
+        screen.queryByText(/trigger an automated validation and canary rerun/i),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByText(/stale canaries will be re-evaluated/i),
+      ).not.toBeInTheDocument();
+    });
 
-      // Case 2: validation or canary not passed -> automated validation and canary rerun required
-      const v2ItemStale = mockV2DataSource({
-        observed: {
-          ...mockV2DataSource().observed,
-          validation_state: "stale",
-          canary_state: "not_run",
+    it("initializes Change Schedule inputs from targetSource.desired.schedule and submits preserved fields on write payload without silent overwrites", async () => {
+      const { DataSourceCommandDialog } = await import(
+        "./dataSources/DataSourceCommandDialog"
+      );
+      const writesModule = await import("@/lib/bff-v1/managementDataSources");
+      const scheduleSpy = vi
+        .spyOn(writesModule.managementDataSourceWrites, "changeSchedule")
+        .mockResolvedValue({
+          receipt_id: "rcp-sched-001",
+          command_id: "cmd-sched-001",
+          source_instance_id: "ds-twse-market-v1",
+          command_type: "change_schedule",
+          status: "succeeded",
+        });
+      const writesSpy = vi
+        .spyOn(await import("@/lib/bff-v1/liveTransport"), "realWritesEnabled")
+        .mockReturnValue(true);
+
+      const v2Item = mockV2DataSource({
+        desired: {
+          ...mockV2DataSource().desired,
+          schedule: {
+            enabled: false,
+            cadence: "0 8 * * 1-5",
+            timezone: "America/New_York",
+            jitter_seconds: 45,
+          },
+          revision: 7,
         },
       });
 
-      rerender(
+      render(
         <I18nextProvider i18n={i18n}>
           <DataSourceCommandDialog
             open={true}
             onOpenChange={vi.fn()}
-            actionKey="resume"
-            targetSource={v2ItemStale}
+            actionKey="schedule"
+            targetSource={v2Item}
           />
         </I18nextProvider>,
       );
 
-      expect(
-        screen.getByText(/Validation or canary state is incomplete/i),
-      ).toBeInTheDocument();
+      // Verify form inputs are initialized from targetSource.desired.schedule
+      const enabledCheckbox = screen.getByLabelText(/Schedule Active/i);
+      expect(enabledCheckbox).not.toBeChecked();
+
+      const cadenceInput = screen.getByLabelText(/Cadence \(Cron\)/i) as HTMLInputElement;
+      expect(cadenceInput.value).toBe("0 8 * * 1-5");
+
+      const timezoneInput = screen.getByLabelText(/Timezone/i) as HTMLInputElement;
+      expect(timezoneInput.value).toBe("America/New_York");
+
+      const jitterInput = screen.getByLabelText(/Jitter \(Seconds\)/i) as HTMLInputElement;
+      expect(jitterInput.value).toBe("45");
+
+      // Change ONLY the cadence input
+      fireEvent.change(cadenceInput, { target: { value: "0 10 * * 1-5" } });
+      expect(cadenceInput.value).toBe("0 10 * * 1-5");
+
+      // Fill reason
+      const reasonInput = screen.getByPlaceholderText(/Enter reason for this governance action/i);
+      fireEvent.change(reasonInput, { target: { value: "Shift ingestion window by 2 hours" } });
+
+      // Execute command
+      const executeBtn = screen.getByRole("button", { name: /Execute Change Schedule/i });
+      fireEvent.click(executeBtn);
+
+      await waitFor(() => {
+        expect(scheduleSpy).toHaveBeenCalledWith({
+          sourceInstanceId: "ds-twse-market-v1",
+          expectedRevision: 7,
+          reason: "Shift ingestion window by 2 hours",
+          schedule: {
+            enabled: false,
+            cadence: "0 10 * * 1-5",
+            timezone: "America/New_York",
+            jitter_seconds: 45,
+          },
+        });
+      });
+
+      writesSpy.mockRestore();
+      scheduleSpy.mockRestore();
     });
 
     it("renders Replace dependent migration list and gates execution on acknowledgement", async () => {

@@ -8,7 +8,7 @@
   "merge_target": "dev",
   "branch": "task/SRCM-P1-MGMT-UI-20260824",
   "status": "ready_for_review",
-  "timestamp": "2026-08-25T08:35:00Z",
+  "timestamp": "2026-08-25T10:20:00Z",
   "scope": {
     "delivered": [
       "Retained existing route /management/data-sources and route-level component DataSourceManagementPage",
@@ -21,10 +21,12 @@
       "Added ConnectorDefinition Catalog panel with dataset badges and Phase-1 offline source_development_need.v1 export",
       "Added multi-step Add Wizard with initial configured_disabled lifecycle enforcement, secret_scope configuration, and secret reference URI validation",
       "Added DataSourceCommandDialog for server-governed allowedActions with Authoritative Command Truth (SD-SRCM-04 §6.6), prerequisite gates, and typed error handling",
+      "Initialized and reset Change Schedule form inputs from targetSource.desired.schedule, preserving authoritative server values and preventing silent overwrites on partial edits",
+      "Removed inferred automated Resume rerun claim, aligning Resume UX and documentation with server-supported truth",
       "Added DataSourceDetailDrawer showing configuration, schedule, observations, canary logs, and command receipts",
       "Added DataSourceReceiptPanel with polling and cryptographic receipt readback",
       "Added typed BFF client in src/lib/bff-v1/managementDataSources.ts supporting strict-live mode, secret_scope, and migrate_dependents transport",
-      "Replaced mock E2E with authenticated unmocked hosted-path proof and complete SD-SRCM-04 coverage (stale revision, idempotency, a11y focus, responsive)",
+      "Wired isolated unmocked hosted read-only test requiring live status 200 response and provided .github/workflows/srcm-p1-mgmt-ui-hosted-acceptance.yml for exact-candidate FE/BFF execution",
       "Added bilingual i18n support (en-US, zh-TW)",
       "Added architectural and operational documentation at docs/management/data-source-control-center.md"
     ],
@@ -55,21 +57,26 @@
     "src/i18n/locales/zh-TW.ts",
     "src/management/pages/oversight/DataSourceManagement.test.tsx",
     "e2e/30-management-data-source-control.spec.ts",
+    ".github/workflows/srcm-p1-mgmt-ui-hosted-acceptance.yml",
     "playwright.config.ts",
     "docs/management/data-source-control-center.md",
     "docs/deployment/evidence/SRCM-P1-MGMT-UI-20260824/evidence.json"
   ],
   "verification": {
     "typecheck": "npm run typecheck (passed with 0 errors)",
-    "unit_tests": "vitest run src/management/pages/oversight/DataSourceManagement.test.tsx (27/27 passed, 0 warnings)",
+    "unit_tests": "vitest run src/management/pages/oversight/DataSourceManagement.test.tsx (28/28 passed including Change Schedule payload preservation and server-supported Resume truth)",
     "client_tests": "vitest run src/lib/bff-v1/managementDataSources.test.ts (26/26 passed including detail envelope normalization and revision handling)",
-    "eslint": "./node_modules/.bin/eslint across all task-scoped and changed files (passed with 0 errors, 0 warnings)",
     "system_data_sources_tests": "vitest run src/lib/v5/management/systemDataSources.test.ts (2/2 passed)",
-    "e2e_tests": "playwright test e2e/30-management-data-source-control.spec.ts (14/14 passed across chromium and mobile-chromium in 44.1s, 2 unmocked hosted tests isolated and cleanly skipped in local runs without external credentials)",
-    "build": "npm run build with governed dev env (succeeded in 57.28s with 0 duplicate key warnings)",
+    "total_vitest": "56/56 passed across 3 test suites in 13.87s",
+    "eslint": "./node_modules/.bin/eslint across all task-scoped and changed files (passed with 0 errors, 0 warnings)",
+    "e2e_tests": "playwright test e2e/30-management-data-source-control.spec.ts (14/14 passed across chromium and mobile-chromium in 42.6s, 2 unmocked hosted tests isolated and cleanly skipped in local runs without external credentials)",
+    "build": "npm run build with governed dev env (succeeded in 56.24s with 0 duplicate key warnings)",
     "whitespace_check": "git diff --check (0 errors)"
   },
   "review_rejection_repairs": {
+    "schedule_input_initialization_and_reset": "Initialized scheduleEnabled, scheduleCadence, scheduleTimezone, and scheduleJitter from targetSource.desired.schedule in DataSourceCommandDialog via useEffect and reset on dialog close/open. Added unit test in DataSourceManagement.test.tsx verifying partial field edits preserve authoritative server schedule without silent overwrites.",
+    "server_supported_resume_truth": "Removed inferred resumeWillRerunChecks and automated validation/canary rerun claims across DataSourceCommandDialog, en-US.ts, zh-TW.ts, and data-source-control-center.md. The UI and documentation now strictly reflect server truth: Resume updates desired lifecycle to resume scheduled ingestion without automated verification reruns. Added unit tests asserting server-supported truth.",
+    "hosted_acceptance_workflow_and_live_200_gate": "Created .github/workflows/srcm-p1-mgmt-ui-hosted-acceptance.yml to invoke e2e/30-management-data-source-control.spec.ts with short-lived operator tokens minted via POST /bff/auth/dev-login against exact deployment.json candidate pairs. Updated unmocked hosted test to strictly require live BFF status === 200 response.",
     "authoritative_revision_gate_and_dash_rendering": "Preserved missing or non-numeric revisions as undefined instead of synthesizing 0. DataSourceCommandDialog renders Rev — and missing-revision warning alert, disabling Execute when server revision is not >= 1. Table, detail drawer, runs panel, and receipts panel render r— or — when revision is absent or < 1. Added focused unit tests in DataSourceManagement.test.tsx and managementDataSources.test.ts.",
     "bff_detail_envelope_normalization": "Implemented normalizeManagementDataSourceDetail in managementDataSources.ts to extract and normalize schema_version, source_instance_id, connector_id, provider, source_class, and allowedActions from accepted BFF detail envelope data payloads lacking top-level list DTO fields. Added comprehensive unit tests in managementDataSources.test.ts.",
     "isolated_hosted_e2e_gate": "Updated e2e/30-management-data-source-control.spec.ts so setupStandardFixtures is always active for the 14 mocked test cases regardless of HOSTED_REQUESTED, while unmocked hosted tests remain isolated, requiring explicit token validation and waiting for live BFF responses.",
@@ -77,7 +84,7 @@
     "no_synthetic_truth_fallbacks": "Eliminated positive/synthetic defaults ('supported', 'configured_disabled', 'healthy', 'configured', 'converged', 15s timeout, 'Within limits', dlq_unresolved_count: 0) across managementConsoleReads.ts, managementDataSources.ts, dataSourceModels.ts, DataSourceInstancesTable.tsx, DataSourceRunsPanel.tsx, DataSourceDetailDrawer.tsx, and DataSourceReceiptPanel.tsx. Partial V2 and receipt payloads now strictly render 'unknown', 'unavailable', or '—'.",
     "replace_migration_truth": "Aligned Replace command with accepted BFF head 6d0ba1bb semantics: dropped migrate_dependents from request payload, updated DataSourceCommandDialog, en-US.ts, zh-TW.ts, and data-source-control-center.md to reflect that replacement records the target and dependent personas follow migration-plan/governed manual rebind without automated rebind execution claims.",
     "secret_scope_transport": "Added secret_scope to createDataSource BFF body and added unit tests in managementDataSources.test.ts asserting secret_scope client transport end to end.",
-    "authoritative_command_truth": "Eliminated synthetic canary limits and fallback hosts, displaying '—' and 'None declared / unrestricted' when absent. Added all 6 enable prerequisites and server blockedReasons. Added dynamic resume rerun truth description.",
+    "authoritative_command_truth": "Eliminated synthetic canary limits and fallback hosts, displaying '—' and 'None declared / unrestricted' when absent. Added all 6 enable prerequisites and server blockedReasons.",
     "commit_subject_gate": "Enforced commit subject length <= 70 chars with required trailers (LLM-Agent, Task-ID, Reviewer, Verified)"
   },
   "acceptance_checklist": {
