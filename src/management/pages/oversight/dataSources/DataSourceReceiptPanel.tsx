@@ -51,7 +51,7 @@ export function DataSourceReceiptPanel({ sources }: DataSourceReceiptPanelProps)
     }
   }, [sources, selectedSourceId]);
 
-  const loadReceipts = async () => {
+  const loadReceipts = React.useCallback(async () => {
     if (!selectedSourceId) return;
     setLoading(true);
     try {
@@ -62,13 +62,13 @@ export function DataSourceReceiptPanel({ sources }: DataSourceReceiptPanelProps)
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedSourceId]);
 
   useEffect(() => {
     if (selectedSourceId) {
       loadReceipts();
     }
-  }, [selectedSourceId]);
+  }, [selectedSourceId, loadReceipts]);
 
   const filtered = receipts.filter((rcp) => {
     if (filterType === "all") return true;

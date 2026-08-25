@@ -94,7 +94,7 @@ export function DataSourceDetailDrawer({
     }
   }, [initialSource, sourceInstanceId]);
 
-  const loadData = async () => {
+  const loadData = React.useCallback(async () => {
     if (!sourceInstanceId) return;
     setLoading(true);
     try {
@@ -118,13 +118,13 @@ export function DataSourceDetailDrawer({
     } finally {
       setLoading(false);
     }
-  };
+  }, [sourceInstanceId]);
 
   useEffect(() => {
     if (open && sourceInstanceId) {
       loadData();
     }
-  }, [open, sourceInstanceId]);
+  }, [open, sourceInstanceId, loadData]);
 
   if (!source && !loading) return null;
 

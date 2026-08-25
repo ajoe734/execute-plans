@@ -1,0 +1,75 @@
+{
+  "schema_version": "pantheon.data-source-management-ui.v1",
+  "task_id": "SRCM-P1-MGMT-UI-20260824",
+  "taskId": "SRCM-P1-MGMT-UI-20260824",
+  "owner": "Antigravity2",
+  "reviewer": "Codex",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/SRCM-P1-MGMT-UI-20260824",
+  "status": "ready_for_review",
+  "timestamp": "2026-08-25T05:30:00Z",
+  "scope": {
+    "delivered": [
+      "Retained existing route /management/data-sources and route-level component DataSourceManagementPage",
+      "Created unified DataSourceControlCenter with 4 main tabs: Instances, Catalog, Runs, Receipts",
+      "Implemented 9 canonical columns in Instances Table (Source/Provider, Support/Deployment, Desired Lifecycle, Observed Health, Credential/License, Schedule/Watermark, Latest Run/Search, Consumers/Cost, Actions)",
+      "Implemented desired vs observed state divergence detection and clear alert banners",
+      "Added ConnectorDefinition Catalog panel with dataset badges and Phase-1 offline source_development_need.v1 export",
+      "Added multi-step Add Wizard with initial configured_disabled lifecycle enforcement and secret reference URI validation (vault://, env://)",
+      "Added DataSourceCommandDialog for server-governed allowedActions (validate, canary, enable, disable, degrade, resume, schedule, replace, retire) with confirmation gates",
+      "Added DataSourceDetailDrawer showing configuration, schedule, observations, canary logs, and command receipts",
+      "Added DataSourceReceiptPanel with polling and cryptographic receipt readback",
+      "Added typed BFF client in src/lib/bff-v1/managementDataSources.ts supporting strict-live mode and mock fallbacks",
+      "Added comprehensive Vitest tests and Playwright E2E test covering UI rendering, allowedActions, divergence, wizard secret check, and URL tabs",
+      "Added bilingual i18n support (en-US, zh-TW)",
+      "Added architectural and operational documentation at docs/management/data-source-control-center.md"
+    ],
+    "not_changed": [
+      "Did not call OpenClaw or Management AI for unsupported connectors",
+      "Retained persona fleet provider status aggregation for backward compatibility and persona focus links",
+      "Preserved existing strict-live read transport and live-write gating rules"
+    ]
+  },
+  "artifacts": [
+    "src/management/pages/oversight/DataSourceManagement.tsx",
+    "src/management/pages/oversight/dataSources/DataSourceControlCenter.tsx",
+    "src/management/pages/oversight/dataSources/DataSourceInstancesTable.tsx",
+    "src/management/pages/oversight/dataSources/DataSourceCatalogPanel.tsx",
+    "src/management/pages/oversight/dataSources/DataSourceRunsPanel.tsx",
+    "src/management/pages/oversight/dataSources/DataSourceReceiptPanel.tsx",
+    "src/management/pages/oversight/dataSources/DataSourceDetailDrawer.tsx",
+    "src/management/pages/oversight/dataSources/DataSourceAddWizard.tsx",
+    "src/management/pages/oversight/dataSources/DataSourceCommandDialog.tsx",
+    "src/management/pages/oversight/dataSources/dataSourceActions.ts",
+    "src/management/pages/oversight/dataSources/dataSourceModels.ts",
+    "src/lib/bff-v1/managementDataSources.ts",
+    "src/lib/bff-v1/managementDataSources.test.ts",
+    "src/lib/bff-v1/paths.ts",
+    "src/lib/bff-v1/index.ts",
+    "src/i18n/locales/en-US.ts",
+    "src/i18n/locales/zh-TW.ts",
+    "src/management/pages/oversight/DataSourceManagement.test.tsx",
+    "e2e/30-management-data-source-control.spec.ts",
+    "docs/management/data-source-control-center.md",
+    "docs/deployment/evidence/SRCM-P1-MGMT-UI-20260824/evidence.json"
+  ],
+  "verification": {
+    "typecheck": "tsc --noEmit (passed with 0 errors)",
+    "unit_tests": "vitest run src/management/pages/oversight/DataSourceManagement.test.tsx (7/7 passed)",
+    "client_tests": "vitest run src/lib/bff-v1/managementDataSources.test.ts (17/17 passed)",
+    "full_vitest_suite": "vitest run (188 files, 1896 tests passed)",
+    "lint": "eslint . (0 errors)"
+  },
+  "acceptance_checklist": {
+    "sd_srcm_04_states_tables_wizard_detail_dialogs_receipts": true,
+    "retain_existing_route_and_component": true,
+    "strict_live_bff_reads_and_real_write_gate": true,
+    "create_disabled_only_and_secret_refs_only": true,
+    "actions_derived_only_from_server_allowed_actions": true,
+    "desired_observed_divergence_and_typed_failures": true,
+    "component_accessibility_responsive_and_e2e": true,
+    "no_openclaw_management_ai_for_unsupported": true,
+    "deliver_through_execute_plans_base_dev": true
+  }
+}

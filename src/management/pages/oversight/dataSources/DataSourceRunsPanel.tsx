@@ -57,7 +57,7 @@ export function DataSourceRunsPanel({ sources, onSelectSource }: DataSourceRunsP
     }
   }, [sources, selectedSourceId]);
 
-  const loadRuns = async () => {
+  const loadRuns = React.useCallback(async () => {
     if (!selectedSourceId) return;
     setLoading(true);
     try {
@@ -68,13 +68,13 @@ export function DataSourceRunsPanel({ sources, onSelectSource }: DataSourceRunsP
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedSourceId]);
 
   useEffect(() => {
     if (selectedSourceId) {
       loadRuns();
     }
-  }, [selectedSourceId]);
+  }, [selectedSourceId, loadRuns]);
 
   const activeSource = sources.find(
     (s) => (s.source_instance_id || s.connector_id) === selectedSourceId,
