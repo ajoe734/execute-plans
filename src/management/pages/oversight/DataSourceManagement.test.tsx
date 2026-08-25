@@ -1,5 +1,4 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { I18nextProvider } from "react-i18next";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -1063,7 +1062,7 @@ describe("DataSourceManagementPage", () => {
         </I18nextProvider>,
       );
 
-      expect(screen.getByText("Dependent Consumers Migration")).toBeInTheDocument();
+      expect(screen.getByText("Affected Dependent Consumers (Migration Plan)")).toBeInTheDocument();
       expect(screen.getByText("persona-tw-arb")).toBeInTheDocument();
       expect(screen.getByText("persona-alpha-momentum")).toBeInTheDocument();
 
@@ -1083,15 +1082,15 @@ describe("DataSourceManagementPage", () => {
       const confirmCheckbox = screen.getByLabelText(/I confirm execution of Replace on this source/i);
       fireEvent.click(confirmCheckbox);
 
-      // migrateDependents is checked by default, so execBtn is now enabled
+      // acknowledgeMigrationPlan is checked by default, so execBtn is now enabled
       expect(execBtn).toBeEnabled();
 
-      // Uncheck migrateDependents -> execBtn must be disabled!
-      const checkbox = screen.getByLabelText("Migrate dependent persona bindings to replacement source");
+      // Uncheck acknowledgeMigrationPlan -> execBtn must be disabled!
+      const checkbox = screen.getByLabelText("Confirm replacement target and acknowledge dependent migration plan");
       fireEvent.click(checkbox);
       expect(execBtn).toBeDisabled();
 
-      // Recheck migrateDependents -> execBtn is enabled and click executes
+      // Recheck acknowledgeMigrationPlan -> execBtn is enabled and click executes
       fireEvent.click(checkbox);
       expect(execBtn).toBeEnabled();
       fireEvent.click(execBtn);
@@ -1101,7 +1100,6 @@ describe("DataSourceManagementPage", () => {
           expect.objectContaining({
             sourceInstanceId: "ds-twse-market-v1",
             replacementSourceId: "ds-twse-market-v2",
-            migrateDependents: true,
             confirmation: true,
           }),
         );
@@ -1339,6 +1337,245 @@ describe("DataSourceManagementPage", () => {
 
       writesSpy.mockRestore();
       createSpy.mockRestore();
+    });
+
+    it("renders partial V2 records in DataSourceInstancesTable without synthetic positive truths", async () => {
+      const { DataSourceInstancesTable } = await import(
+        "./dataSources/DataSourceInstancesTable"
+      );
+
+      const partialDTO: ManagementDataSourceV2DTO = {
+        schema_version: "management_data_source.v2",
+        source_instance_id: "ds-partial-table-01",
+        connector_id: "conn-partial",
+        provider: "Partial Provider",
+        source_class: "market",
+        definition: {
+          definition_id: "conn-partial",
+          adapter_token: "unknown",
+          provider: "Partial Provider",
+          definition_state: "unknown",
+        },
+        instance: {
+          data_source_id: "ds-partial-table-01",
+          source_kind: "data_source",
+          definition_id: "conn-partial",
+          connector_id: "conn-partial",
+          provider: "Partial Provider",
+          source_class: "market",
+          lifecycle_state: "unknown",
+          revision: 0,
+        },
+        desired: {
+          source_instance_id: "ds-partial-table-01",
+          revision: 0,
+          desired_lifecycle: "unknown",
+        },
+        observed: {
+          source_instance_id: "ds-partial-table-01",
+          effective_lifecycle: "unknown",
+          health_state: "unknown",
+          reconciliation_status: "unknown",
+          credential_state: "unknown",
+        },
+        allowed_actions: {
+          canValidate: false,
+          canCanary: false,
+          canEnable: false,
+          canDisable: false,
+          canDegrade: false,
+          canResume: false,
+          canChangeSchedule: false,
+          canReplace: false,
+          canRetire: false,
+          blockedReasons: [],
+        },
+        allowedActions: {
+          canValidate: false,
+          canCanary: false,
+          canEnable: false,
+          canDisable: false,
+          canDegrade: false,
+          canResume: false,
+          canChangeSchedule: false,
+          canReplace: false,
+          canRetire: false,
+          blockedReasons: [],
+        },
+      };
+
+      render(
+        <I18nextProvider i18n={i18n}>
+          <MemoryRouter>
+            <DataSourceInstancesTable
+              records={[partialDTO]}
+              onSelectSource={vi.fn()}
+              onExecuteAction={vi.fn()}
+            />
+          </MemoryRouter>
+        </I18nextProvider>,
+      );
+
+      expect(screen.getByText("ds-partial-table-01")).toBeInTheDocument();
+      // Definition state and health must show unknown
+      const unknownBadges = screen.getAllByText("unknown");
+      expect(unknownBadges.length).toBeGreaterThanOrEqual(3);
+      // Must not render positive defaults
+      expect(screen.queryByText("supported")).not.toBeInTheDocument();
+      expect(screen.queryByText("converged")).not.toBeInTheDocument();
+    });
+
+    it("renders partial V2 limits and states in DataSourceDetailDrawer without synthetic 15s timeout", async () => {
+      const { DataSourceDetailDrawer } = await import(
+        "./dataSources/DataSourceDetailDrawer"
+      );
+
+      const minimalDTO: ManagementDataSourceV2DTO = {
+        schema_version: "management_data_source.v2",
+        source_instance_id: "ds-minimal-drawer",
+        connector_id: "conn-minimal",
+        provider: "Minimal Provider",
+        source_class: "market",
+        definition: {
+          definition_id: "conn-minimal",
+          adapter_token: "unknown",
+          provider: "Minimal Provider",
+          definition_state: "unknown",
+        },
+        instance: {
+          data_source_id: "ds-minimal-drawer",
+          source_kind: "data_source",
+          definition_id: "conn-minimal",
+          connector_id: "conn-minimal",
+          provider: "Minimal Provider",
+          source_class: "market",
+          lifecycle_state: "unknown",
+          revision: 0,
+        },
+        desired: {
+          source_instance_id: "ds-minimal-drawer",
+          revision: 0,
+          desired_lifecycle: "unknown",
+        },
+        observed: {
+          source_instance_id: "ds-minimal-drawer",
+          effective_lifecycle: "unknown",
+          health_state: "unknown",
+          reconciliation_status: "unknown",
+          credential_state: "unknown",
+        },
+        allowed_actions: {
+          canValidate: false,
+          canCanary: false,
+          canEnable: false,
+          canDisable: false,
+          canDegrade: false,
+          canResume: false,
+          canChangeSchedule: false,
+          canReplace: false,
+          canRetire: false,
+          blockedReasons: [],
+        },
+        allowedActions: {
+          canValidate: false,
+          canCanary: false,
+          canEnable: false,
+          canDisable: false,
+          canDegrade: false,
+          canResume: false,
+          canChangeSchedule: false,
+          canReplace: false,
+          canRetire: false,
+          blockedReasons: [],
+        },
+      };
+
+      const reads = (await import("@/lib/bff-v1/managementDataSources")).managementDataSourceReads;
+      const detailSpy = vi.spyOn(reads, "detail").mockResolvedValue({
+        data: minimalDTO,
+        meta: { status: "ok", source: "service_client" },
+      });
+      const runsSpy = vi.spyOn(reads, "runs").mockResolvedValue({
+        observations: [],
+        canaries: [],
+        meta: { status: "ok", source: "service_client" },
+      });
+      const receiptsSpy = vi.spyOn(reads, "receipts").mockResolvedValue({
+        receipts: [],
+        meta: { status: "ok", source: "service_client" },
+      });
+
+      render(
+        <I18nextProvider i18n={i18n}>
+          <MemoryRouter>
+            <DataSourceDetailDrawer
+              open={true}
+              onOpenChange={vi.fn()}
+              sourceInstanceId="ds-minimal-drawer"
+              initialSource={minimalDTO}
+            />
+          </MemoryRouter>
+        </I18nextProvider>,
+      );
+
+      // Wait for drawer to finish loading
+      await waitFor(() => {
+        expect(screen.getByRole("heading", { name: "ds-minimal-drawer" })).toBeInTheDocument();
+      });
+
+      // Verify that partial drawer renders unknown and dash without positive truth fallbacks
+      expect(screen.getAllByText("unknown").length).toBeGreaterThanOrEqual(2);
+      expect(screen.queryByText("supported")).not.toBeInTheDocument();
+      expect(screen.queryByText("converged")).not.toBeInTheDocument();
+      expect(screen.queryByText("healthy")).not.toBeInTheDocument();
+      expect(screen.queryByText("15s")).not.toBeInTheDocument();
+
+      detailSpy.mockRestore();
+      runsSpy.mockRestore();
+      receiptsSpy.mockRestore();
+    });
+
+    it("renders partial receipt readback in DataSourceReceiptPanel without synthetic 'converged'", async () => {
+      const { DataSourceReceiptPanel } = await import(
+        "./dataSources/DataSourceReceiptPanel"
+      );
+
+      const partialReceiptsReadsSpy = vi
+        .spyOn(
+          (await import("@/lib/bff-v1/managementDataSources")).managementDataSourceReads,
+          "receipts",
+        )
+        .mockResolvedValue({
+          receipts: [
+            {
+              receipt_id: "rcp-partial-001",
+              command_id: "cmd-partial-001",
+              source_instance_id: "ds-twse-market-v1",
+              command_type: "validate",
+              status: "succeeded",
+              readback: {
+                reconciliation_status: undefined as any,
+              },
+            },
+          ],
+          meta: { status: "ok", source: "service_client" },
+        });
+
+      render(
+        <I18nextProvider i18n={i18n}>
+          <DataSourceReceiptPanel sources={[mockV2DataSource()]} />
+        </I18nextProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText("rcp-partial-001")).toBeInTheDocument();
+      });
+
+      // Readback line should render Readback: — without "converged"
+      expect(screen.getByText("Readback:")).toBeInTheDocument();
+      expect(screen.queryByText("converged")).not.toBeInTheDocument();
+
+      partialReceiptsReadsSpy.mockRestore();
     });
   });
 });

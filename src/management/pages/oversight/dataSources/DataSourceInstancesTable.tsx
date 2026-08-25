@@ -163,7 +163,7 @@ function V2DataSourceRow({
                 : "text-[10px]"
             }
           >
-            {fmtToken(dto.definition?.definition_state || "supported")}
+            {fmtToken(dto.definition?.definition_state || "unknown")}
           </Badge>
         </div>
         <div className="font-mono text-[10px] text-muted-foreground mt-1 truncate max-w-[150px]">
@@ -180,10 +180,10 @@ function V2DataSourceRow({
       <td className="px-3 py-3 min-w-[150px]">
         <div className="flex items-center gap-1.5">
           <Badge variant="outline" className={lifecycleTone(dto.desired?.desired_lifecycle)}>
-            {fmtToken(dto.desired?.desired_lifecycle || dto.instance?.lifecycle_state || "configured_disabled")}
+            {fmtToken(dto.desired?.desired_lifecycle || dto.instance?.lifecycle_state || "unknown")}
           </Badge>
           <Badge variant="outline" className="font-mono text-[10px]">
-            r{dto.desired?.revision ?? dto.instance?.revision ?? 1}
+            {dto.desired?.revision !== undefined ? `r${dto.desired.revision}` : (dto.instance?.revision !== undefined ? `r${dto.instance.revision}` : "r—")}
           </Badge>
         </div>
       </td>
@@ -192,10 +192,10 @@ function V2DataSourceRow({
       <td className="px-3 py-3 min-w-[200px]">
         <div className="flex items-center gap-1.5">
           <Badge variant="outline" className={healthStateTone(dto.observed?.health_state)}>
-            {fmtToken(dto.observed?.health_state || "healthy")}
+            {fmtToken(dto.observed?.health_state || "unknown")}
           </Badge>
           <Badge variant="outline" className={reconciliationTone(dto.observed?.reconciliation_status)}>
-            {fmtToken(dto.observed?.reconciliation_status || "converged")}
+            {fmtToken(dto.observed?.reconciliation_status || "unknown")}
           </Badge>
         </div>
         <div className="text-[11px] text-muted-foreground mt-1 space-y-0.5">
@@ -212,7 +212,7 @@ function V2DataSourceRow({
       <td className="px-3 py-3 min-w-[160px]">
         <div className="flex items-center gap-1">
           <Badge variant="outline" className={credentialTone(dto.observed?.credential_state)}>
-            {fmtToken(dto.observed?.credential_state || "configured")}
+            {fmtToken(dto.observed?.credential_state || "unknown")}
           </Badge>
         </div>
         <div className="text-[11px] font-mono text-muted-foreground mt-1 truncate max-w-[150px]">
@@ -230,7 +230,7 @@ function V2DataSourceRow({
       <td className="px-3 py-3 min-w-[160px]">
         <div className="flex items-center gap-1.5">
           <Badge variant="outline" className={dto.desired?.schedule?.enabled ? toneClass.ok : toneClass.muted}>
-            {dto.desired?.schedule?.enabled ? t("mgmt.dataSources.liveOn") : t("mgmt.dataSources.liveOff")}
+            {dto.desired?.schedule?.enabled !== undefined ? (dto.desired.schedule.enabled ? t("mgmt.dataSources.liveOn") : t("mgmt.dataSources.liveOff")) : "—"}
           </Badge>
         </div>
         {dto.desired?.schedule?.cadence && (
@@ -245,7 +245,7 @@ function V2DataSourceRow({
         {dto.observed?.last_run ? (
           <div className="space-y-0.5">
             <div>
-              Rows: <span className="font-mono font-medium">{dto.observed.last_run.row_count ?? 0}</span>
+              Rows: <span className="font-mono font-medium">{dto.observed.last_run.row_count !== undefined ? dto.observed.last_run.row_count : "—"}</span>
               {dto.observed.last_run.rejected_count ? (
                 <span className="text-status-failed ml-1 font-mono">
                   (rej: {dto.observed.last_run.rejected_count})

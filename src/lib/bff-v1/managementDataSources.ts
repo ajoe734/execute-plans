@@ -309,7 +309,6 @@ export interface ReplaceSourceInput {
   reason: string;
   confirmation: boolean;
   replacementSourceId: string;
-  migrateDependents?: boolean;
   idempotencyKey?: string;
   traceId?: string;
 }
@@ -582,9 +581,9 @@ export const managementDataSourceReads = {
           command_id: `cmd-${receiptId}`,
           source_instance_id: "unknown",
           command_type: "unknown",
-          status: "succeeded",
+          status: "accepted",
         },
-        meta: { status: "ok", source: "mock" },
+        meta: { status: "unavailable", source: "mock" },
       }),
       (raw) => {
         const root = (raw ?? {}) as Record<string, unknown>;
@@ -841,7 +840,6 @@ export const managementDataSourceWrites = {
       reason: input.reason,
       confirmation: input.confirmation,
       replacement_source_id: input.replacementSourceId,
-      migrate_dependents: input.migrateDependents ?? false,
       trace_id: correlationId,
     };
 

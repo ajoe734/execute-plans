@@ -285,7 +285,7 @@ describe("managementDataSources client", () => {
       }
     });
 
-    it("transports migrate_dependents in replaceDataSource payload", async () => {
+    it("transports replaceDataSource payload without migrate_dependents", async () => {
       const writeGateModule = await import("./writeGate");
       const clientModule = await import("./client");
       const liveStatusModule = await import("./liveStatus");
@@ -310,7 +310,6 @@ describe("managementDataSources client", () => {
           reason: "Upgrading to v2",
           confirmation: true,
           replacementSourceId: "ds-test-new",
-          migrateDependents: true,
         });
 
         expect(receipt.receipt_id).toBe("rcp-test-replace-001");
@@ -319,7 +318,10 @@ describe("managementDataSources client", () => {
         expect(calledReq.method).toBe("POST");
         expect(calledReq.path).toBe("/bff/management/data-sources/ds-test-old/actions/replace");
         expect((calledReq.body as any).replacement_source_id).toBe("ds-test-new");
-        expect((calledReq.body as any).migrate_dependents).toBe(true);
+        expect((calledReq.body as any).expected_revision).toBe(2);
+        expect((calledReq.body as any).confirmation).toBe(true);
+        expect((calledReq.body as any).reason).toBe("Upgrading to v2");
+        expect((calledReq.body as any).migrate_dependents).toBeUndefined();
       } finally {
         liveGateSpy.mockRestore();
         bffFetchSpy.mockRestore();
@@ -498,6 +500,106 @@ describe("managementDataSources client", () => {
       expect(projected.readOnly).toBe(true);
       expect(projected.consumerPersonaIds).toEqual(["persona-alpha-arb"]);
       expect(projected.evidenceRefs).toEqual(["ev-shioaji-001"]);
+    });
+
+    it("adapts minimal/partial V2 payloads without synthetic positive truth fallbacks", async () => {
+      const { adaptDataSourceV2OrLegacy } = await import("./managementConsoleReads");
+
+      const partialV2 = {
+        schema_version: "management_data_source.v2",
+        source_instance_id: "ds-partial-01",
+      };
+
+      const adapted = adaptDataSourceV2OrLegacy(partialV2, 0);
+      expect(adapted).toBeDefined();
+      expect("schema_version" in adapted && adapted.schema_version).toBe("management_data_source.v2");
+
+      const v2 = adapted as import("./managementDataSources").ManagementDataSourceV2DTO;
+      expect(v2.source_instance_id).toBe("ds-partial-01");
+      expect(v2.provider).toBe("unknown");
+      expect(v2.definition.definition_state).toBe("unknown");
+      expect(v2.definition.adapter_token).toBe("unknown");
+      expect(v2.instance.lifecycle_state).toBe("unknown");
+      expect(v2.instance.revision).toBe(0);
+      expect(v2.desired.desired_lifecycle).toBe("unknown");
+      expect(v2.desired.revision).toBe(0);
+      expect(v2.observed.effective_lifecycle).toBe("unknown");
+      expect(v2.observed.health_state).toBe("unknown");
+      expect(v2.observed.reconciliation_status).toBe("unknown");
+      expect(v2.observed.credential_state).toBe("unknown");
+    });
+
+    it("projects partial V2 record to legacy record without positive defaults", async () => {
+      const { v2ToLegacyRecord } = await import(
+        "@/management/pages/oversight/dataSources/dataSourceModels"
+      );
+
+      const partialV2Dto = {
+        schema_version: "management_data_source.v2" as const,
+        source_instance_id: "ds-partial-02",
+        connector_id: "conn-partial",
+        provider: "PartialProvider",
+        source_class: "market",
+        definition: {
+          definition_id: "conn-partial",
+          adapter_token: "unknown",
+          provider: "PartialProvider",
+          definition_state: "unknown" as const,
+        },
+        instance: {
+          data_source_id: "ds-partial-02",
+          source_kind: "data_source",
+          definition_id: "conn-partial",
+          connector_id: "conn-partial",
+          provider: "PartialProvider",
+          source_class: "market",
+          lifecycle_state: "unknown" as const,
+          revision: 0,
+        },
+        desired: {
+          source_instance_id: "ds-partial-02",
+          revision: 0,
+          desired_lifecycle: "unknown" as const,
+        },
+        observed: {
+          source_instance_id: "ds-partial-02",
+          effective_lifecycle: "unknown" as const,
+          health_state: "unknown" as const,
+          reconciliation_status: "unknown" as const,
+        },
+        allowed_actions: {
+          canValidate: false,
+          canCanary: false,
+          canEnable: false,
+          canDisable: false,
+          canDegrade: false,
+          canResume: false,
+          canChangeSchedule: false,
+          canReplace: false,
+          canRetire: false,
+          blockedReasons: [],
+        },
+        allowedActions: {
+          canValidate: false,
+          canCanary: false,
+          canEnable: false,
+          canDisable: false,
+          canDegrade: false,
+          canResume: false,
+          canChangeSchedule: false,
+          canReplace: false,
+          canRetire: false,
+          blockedReasons: [],
+        },
+      };
+
+      const projected = v2ToLegacyRecord(partialV2Dto);
+      expect(projected.providerKey).toBe("conn-partial");
+      expect(projected.provider).toBe("PartialProvider");
+      expect(projected.status).toBe("unknown");
+      expect(projected.tone).toBe("muted");
+      expect(projected.credentialState).toBe("unknown");
+      expect(projected.liveIngestionEnabled).toBe(false);
     });
   });
 });

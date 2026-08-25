@@ -153,9 +153,9 @@ export function isV2(item: unknown): item is ManagementDataSourceV2DTO {
 }
 
 export function v2ToLegacyRecord(v2: ManagementDataSourceV2DTO): SystemDataSourceRecord {
-  const status = v2.observed?.effective_lifecycle || v2.instance?.lifecycle_state || "configured_disabled";
-  const health = v2.observed?.health_state || "healthy";
-  const tone: HealthTone = health === "error" ? "bad" : health === "stale" || status === "degraded" ? "warn" : status === "enabled" ? "ok" : "muted";
+  const status = v2.observed?.effective_lifecycle || v2.instance?.lifecycle_state || "unknown";
+  const health = v2.observed?.health_state || "unknown";
+  const tone: HealthTone = health === "error" || health === "bad" ? "bad" : health === "stale" || health === "warn" || status === "degraded" ? "warn" : status === "enabled" && health === "healthy" ? "ok" : "muted";
 
   let credState: SystemDataSourceRecord["credentialState"] = "unknown";
   const rawCred = v2.observed?.credential_state?.toLowerCase();

@@ -379,11 +379,27 @@ test.describe("Management Data Source Control Center (SD-SRCM-04)", () => {
       });
     test.skip(!isHosted, "Set PANTHEON_HOSTED_E2E=1 or configure hosted dev URL to run unmocked hosted proof.");
 
-    // Genuinely unmocked - no route interception
+    // Genuinely unmocked - listen for the live BFF data-sources request
+    const bffResponsePromise = page.waitForResponse(
+      (resp) =>
+        resp.url().includes("/bff/management/data-sources") &&
+        (resp.status() === 200 || resp.status() === 503 || resp.status() === 401),
+      { timeout: 15000 },
+    ).catch(() => null);
+
     await page.goto("/management/data-sources");
     await expect(page.getByRole("heading", { name: /Data Source Management|資料源管理/i })).toBeVisible();
     await expect(page.getByText(/Real writes disabled|實體寫入已停用/i)).toBeVisible();
     await expect(page.locator('section[aria-label="Data Source Management"], section[aria-label="資料源管理"]')).toBeVisible();
+
+    const bffResponse = await bffResponsePromise;
+    expect(bffResponse).not.toBeNull();
+
+    // Assert that the page reached an authoritative result: table, authoritative-empty, degraded-legacy, or unavailable alert
+    const authoritativeState = page.locator(
+      "table[aria-label], [data-testid='data-sources-authoritative-empty'], [data-testid='data-sources-unavailable'], [data-testid='degraded-legacy-banner']",
+    ).first();
+    await expect(authoritativeState).toBeVisible({ timeout: 10000 });
   });
 
   test("renders SD-SRCM-04 V2 structures, divergence badges, and detail drawer", async ({ page }) => {

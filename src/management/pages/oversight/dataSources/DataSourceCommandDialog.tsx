@@ -57,7 +57,7 @@ export function DataSourceCommandDialog({
   const [reason, setReason] = useState("");
   const [confirmation, setConfirmation] = useState(false);
   const [retireConfirmText, setRetireConfirmText] = useState("");
-  const [migrateDependents, setMigrateDependents] = useState(true);
+  const [acknowledgeMigrationPlan, setAcknowledgeMigrationPlan] = useState(true);
   const [replacementSourceId, setReplacementSourceId] = useState("");
   const [scheduleCadence, setScheduleCadence] = useState("0 19 * * 1-5");
   const [scheduleTimezone, setScheduleTimezone] = useState("Asia/Taipei");
@@ -81,7 +81,7 @@ export function DataSourceCommandDialog({
     setReason("");
     setConfirmation(false);
     setRetireConfirmText("");
-    setMigrateDependents(true);
+    setAcknowledgeMigrationPlan(true);
     setReplacementSourceId("");
     setReceipt(null);
     setErrorMsg(null);
@@ -160,7 +160,6 @@ export function DataSourceCommandDialog({
             ...baseInput,
             confirmation: true,
             replacementSourceId: replacementSourceId.trim(),
-            migrateDependents: dependentRefs.length > 0 ? migrateDependents : false,
           });
           break;
         case "retire":
@@ -225,7 +224,7 @@ export function DataSourceCommandDialog({
     !writesLive ||
     (actionDef?.reasonRequired && !reason.trim()) ||
     (actionKey === "replace" && !replacementSourceId.trim()) ||
-    (actionKey === "replace" && dependentRefs.length > 0 && !migrateDependents) ||
+    (actionKey === "replace" && dependentRefs.length > 0 && !acknowledgeMigrationPlan) ||
     (actionKey === "retire" && retireConfirmText.trim() !== "RETIRE") ||
     (actionKey !== "retire" && actionDef?.confirmationRequired && !confirmation);
 
@@ -240,9 +239,9 @@ export function DataSourceCommandDialog({
     [];
 
   const definitionState = targetSource.definition?.definition_state || "unknown";
-  const validationState = targetSource.observed?.validation_state || "pending";
-  const canaryState = targetSource.observed?.canary_state || "not_run";
-  const credentialState = targetSource.observed?.credential_state || "configured";
+  const validationState = targetSource.observed?.validation_state || "unknown";
+  const canaryState = targetSource.observed?.canary_state || "unknown";
+  const credentialState = targetSource.observed?.credential_state || "unknown";
   const scheduleActive = Boolean(targetSource.desired?.schedule?.enabled);
   const scheduleCadenceText = targetSource.desired?.schedule?.cadence || (scheduleActive ? "Enabled" : "Disabled");
   const egressText = canaryAllowedHosts.length > 0 ? `${canaryAllowedHosts.length} hosts` : t("mgmt.dataSources.dialog.canaryAllowedHostsNone", "None declared / unrestricted");
@@ -461,8 +460,8 @@ export function DataSourceCommandDialog({
                     <div className="flex items-center space-x-2 pt-1">
                       <Checkbox
                         id="migrateDependentsCheck"
-                        checked={migrateDependents}
-                        onCheckedChange={(checked) => setMigrateDependents(Boolean(checked))}
+                        checked={acknowledgeMigrationPlan}
+                        onCheckedChange={(checked) => setAcknowledgeMigrationPlan(Boolean(checked))}
                         disabled={executing || polling}
                       />
                       <Label htmlFor="migrateDependentsCheck" className="text-xs cursor-pointer">

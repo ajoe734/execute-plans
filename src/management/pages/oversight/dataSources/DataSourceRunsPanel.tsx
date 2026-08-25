@@ -140,7 +140,7 @@ export function DataSourceRunsPanel({ sources, onSelectSource }: DataSourceRunsP
             <span className="text-muted-foreground">{t("mgmt.dataSources.detail.health")}</span>
             <div className="mt-1 font-medium text-sm">
               <Badge variant="outline" className={healthStateTone(activeSource.observed?.health_state)}>
-                {fmtToken(activeSource.observed?.health_state || "healthy")}
+                {fmtToken(activeSource.observed?.health_state || "unknown")}
               </Badge>
             </div>
           </Card>
@@ -159,16 +159,18 @@ export function DataSourceRunsPanel({ sources, onSelectSource }: DataSourceRunsP
               <span className="text-muted-foreground text-[11px]">{t("mgmt.dataSources.runs.unresolvedDlqTitle")}</span>
               <div className="flex items-center gap-1.5 mt-0.5">
                 <span className="font-mono font-semibold text-sm">
-                  {activeSource.observed?.dlq_unresolved_count ?? 0}
+                  {activeSource.observed?.dlq_unresolved_count !== undefined ? activeSource.observed.dlq_unresolved_count : "—"}
                 </span>
-                {(activeSource.observed?.dlq_unresolved_count ?? 0) > 0 ? (
-                  <Badge variant="outline" className="bg-status-failed/10 text-status-failed text-[10px]">
-                    Alert
-                  </Badge>
-                ) : (
-                  <Badge variant="outline" className="bg-status-success/10 text-status-success text-[10px]">
-                    Healthy
-                  </Badge>
+                {activeSource.observed?.dlq_unresolved_count !== undefined && (
+                  activeSource.observed.dlq_unresolved_count > 0 ? (
+                    <Badge variant="outline" className="bg-status-failed/10 text-status-failed text-[10px]">
+                      Alert
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="bg-status-success/10 text-status-success text-[10px]">
+                      Healthy
+                    </Badge>
+                  )
                 )}
               </div>
             </div>
@@ -180,7 +182,7 @@ export function DataSourceRunsPanel({ sources, onSelectSource }: DataSourceRunsP
                   ? `${activeSource.observed.quota.used_percent}%`
                   : activeSource.observed?.quota?.daily_limit
                     ? `${activeSource.observed.quota.daily_limit} req/day`
-                    : "Within limits"}
+                    : "—"}
               </div>
             </div>
 
@@ -196,7 +198,9 @@ export function DataSourceRunsPanel({ sources, onSelectSource }: DataSourceRunsP
             <div className="p-2.5 rounded border bg-card space-y-1">
               <span className="text-muted-foreground text-[11px]">{t("mgmt.dataSources.runs.activeConsumersTitle")}</span>
               <div className="font-mono font-semibold text-sm mt-0.5">
-                {activeSource.observed?.dependent_refs?.length ?? 0} {t("mgmt.dataSources.consumers")}
+                {activeSource.observed?.dependent_refs !== undefined
+                  ? `${activeSource.observed.dependent_refs.length} ${t("mgmt.dataSources.consumers")}`
+                  : "—"}
               </div>
             </div>
           </div>
@@ -246,8 +250,8 @@ export function DataSourceRunsPanel({ sources, onSelectSource }: DataSourceRunsP
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] text-muted-foreground font-mono">
-                  <div>Rows Ingested: <span className="font-semibold text-foreground">{canary.row_count ?? 0}</span></div>
-                  <div>Rejected: <span className="font-semibold text-foreground">{canary.rejected_count ?? 0}</span></div>
+                  <div>Rows Ingested: <span className="font-semibold text-foreground">{canary.row_count !== undefined ? canary.row_count : "—"}</span></div>
+                  <div>Rejected: <span className="font-semibold text-foreground">{canary.rejected_count !== undefined ? canary.rejected_count : "—"}</span></div>
                   <div>License: <span className="text-foreground">{canary.license_scope || "—"}</span></div>
                   <div>Hosts: <span className="text-foreground">{(canary.allowed_hosts ?? []).join(", ") || "—"}</span></div>
                 </div>

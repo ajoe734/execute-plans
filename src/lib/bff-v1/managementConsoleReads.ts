@@ -271,7 +271,7 @@ export const adaptDataSource = (record: UnknownRecord, index: number): Canonical
     tone: healthTone(status),
     lastReadbackAt: asString(record.lastReadbackAt, record.last_readback_at, record.lastHeartbeatAt, record.last_heartbeat_at),
     credentialState: asString(record.credentialState, record.credential_state, record.credentials, record.credential) ?? "unknown",
-    liveIngestionEnabled: asBoolean(record.liveIngestionEnabled ?? record.live_ingestion_enabled, healthTone(status) === "ok"),
+    liveIngestionEnabled: asBoolean(record.liveIngestionEnabled ?? record.live_ingestion_enabled, false),
     readOnly: asBoolean(record.readOnly ?? record.read_only, true),
     orderSideEffectsAllowed: asBoolean(record.orderSideEffectsAllowed ?? record.order_side_effects_allowed, false),
     capitalSideEffectsAllowed: asBoolean(record.capitalSideEffectsAllowed ?? record.capital_side_effects_allowed, false),
@@ -325,39 +325,81 @@ export const adaptDataSourceV2OrLegacy = (
     const provider = asString(record.provider, inst.provider, def.provider) ?? "unknown";
     const sourceClass = asString(record.source_class, record.sourceClass, inst.source_class) ?? "market";
 
+    const definitionState = asString(def.definition_state) ?? "unknown";
+    const adapterToken = asString(def.adapter_token) ?? "unknown";
+    const definitionId = asString(def.definition_id) ?? connectorId;
+
+    const lifecycleState = asString(inst.lifecycle_state) ?? "unknown";
+    const instanceRevision = typeof inst.revision === "number" ? inst.revision : 0;
+
+    const desiredLifecycle = asString(des.desired_lifecycle) ?? "unknown";
+    const desiredRevision = typeof des.revision === "number" ? des.revision : 0;
+
+    const effectiveLifecycle = asString(obs.effective_lifecycle) ?? "unknown";
+    const healthState = asString(obs.health_state) ?? "unknown";
+    const reconciliationStatus = asString(obs.reconciliation_status) ?? "unknown";
+    const credentialState = asString(obs.credential_state) ?? "unknown";
+
+    const definitionObj: ConnectorDefinition = {
+      definition_id: definitionId,
+      adapter_token: adapterToken,
+      provider: asString(def.provider, provider) ?? "unknown",
+      definition_state: definitionState,
+      ...(isRecord(record.definition) ? record.definition : {}),
+      definition_id: definitionId,
+      adapter_token: adapterToken,
+      definition_state: definitionState,
+    };
+
+    const instanceObj: DataSourceInstance = {
+      data_source_id: sourceInstanceId,
+      source_kind: asString(inst.source_kind) ?? "data_source",
+      definition_id: definitionId,
+      connector_id: connectorId,
+      provider,
+      source_class: sourceClass,
+      lifecycle_state: lifecycleState,
+      revision: instanceRevision,
+      ...(isRecord(record.instance) ? record.instance : {}),
+      data_source_id: sourceInstanceId,
+      lifecycle_state: lifecycleState,
+      revision: instanceRevision,
+    };
+
+    const desiredObj: SourceDesiredState = {
+      source_instance_id: sourceInstanceId,
+      revision: desiredRevision,
+      desired_lifecycle: desiredLifecycle,
+      ...(isRecord(record.desired) ? record.desired : {}),
+      source_instance_id: sourceInstanceId,
+      revision: desiredRevision,
+      desired_lifecycle: desiredLifecycle,
+    };
+
+    const observedObj: SourceObservedState = {
+      source_instance_id: sourceInstanceId,
+      effective_lifecycle: effectiveLifecycle,
+      health_state: healthState,
+      reconciliation_status: reconciliationStatus,
+      credential_state: credentialState,
+      ...(isRecord(record.observed) ? record.observed : {}),
+      source_instance_id: sourceInstanceId,
+      effective_lifecycle: effectiveLifecycle,
+      health_state: healthState,
+      reconciliation_status: reconciliationStatus,
+      credential_state: credentialState,
+    };
+
     return {
       schema_version: "management_data_source.v2",
       source_instance_id: sourceInstanceId,
       connector_id: connectorId,
       provider,
       source_class: sourceClass,
-      definition: (record.definition ?? {
-        definition_id: connectorId,
-        adapter_token: "unknown",
-        provider,
-        definition_state: "supported",
-      }) as ConnectorDefinition,
-      instance: (record.instance ?? {
-        data_source_id: sourceInstanceId,
-        source_kind: "data_source",
-        definition_id: connectorId,
-        connector_id: connectorId,
-        provider,
-        source_class: sourceClass,
-        lifecycle_state: "configured_disabled",
-        revision: 1,
-      }) as DataSourceInstance,
-      desired: (record.desired ?? {
-        source_instance_id: sourceInstanceId,
-        revision: 1,
-        desired_lifecycle: "configured_disabled",
-      }) as SourceDesiredState,
-      observed: (record.observed ?? {
-        source_instance_id: sourceInstanceId,
-        effective_lifecycle: "configured_disabled",
-        health_state: "healthy",
-        reconciliation_status: "converged",
-      }) as SourceObservedState,
+      definition: definitionObj,
+      instance: instanceObj,
+      desired: desiredObj,
+      observed: observedObj,
       allowed_actions: allowedActions,
       allowedActions,
       lineage_summary: record.lineage_summary as ManagementDataSourceV2DTO["lineage_summary"],

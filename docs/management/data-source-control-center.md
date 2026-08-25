@@ -53,7 +53,7 @@ All mutating actions are derived exclusively from the server-provided `allowed_a
 | **Degrade** | `canDegrade` | No | Isolates source for maintenance while blocking automated consumers. | Maintenance mode isolation. |
 | **Resume** | `canResume` | No | Resumes disabled source and re-evaluates stale canaries. | Explains rerun truth: reactivates schedule, re-evaluates stale canaries, triggers observation poll, and reconciles observed revision. |
 | **Change Schedule** | `canChangeSchedule` | No | Updates Cron cadence, timezone, or jitter. | Updates Cron cadence, timezone, or jitter. |
-| **Replace** | `canReplace` | **Yes** | Replaces with an alternative source ID and migrates dependents. | Displays dependent persona migration list with auto-rebind confirmation. |
+| **Replace** | `canReplace` | **Yes** | Replaces with an alternative source ID and records migration plan. | Displays affected dependent personas and records replacement target without claiming executed rebind. |
 | **Retire** | `canRetire` | **Yes (Typed)** | Permanently decommissions instance (terminal state). | Requires typing `"RETIRE"` into confirmation text field before execution. |
 
 ### Security & Secret Governance
