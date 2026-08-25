@@ -56,6 +56,8 @@ export function DataSourceCommandDialog({
   const { t } = useTranslation();
   const [reason, setReason] = useState("");
   const [confirmation, setConfirmation] = useState(false);
+  const [retireConfirmText, setRetireConfirmText] = useState("");
+  const [migrateDependents, setMigrateDependents] = useState(true);
   const [replacementSourceId, setReplacementSourceId] = useState("");
   const [scheduleCadence, setScheduleCadence] = useState("0 19 * * 1-5");
   const [scheduleTimezone, setScheduleTimezone] = useState("Asia/Taipei");
@@ -78,6 +80,8 @@ export function DataSourceCommandDialog({
     if (executing || polling) return;
     setReason("");
     setConfirmation(false);
+    setRetireConfirmText("");
+    setMigrateDependents(true);
     setReplacementSourceId("");
     setReceipt(null);
     setErrorMsg(null);
@@ -89,7 +93,12 @@ export function DataSourceCommandDialog({
       setErrorMsg(t("mgmt.dataSources.dialog.reasonRequiredMsg"));
       return;
     }
-    if (actionDef?.confirmationRequired && !confirmation) {
+    if (actionKey === "retire") {
+      if (retireConfirmText.trim() !== "RETIRE") {
+        setErrorMsg(t("mgmt.dataSources.dialog.retireTypedPrompt"));
+        return;
+      }
+    } else if (actionDef?.confirmationRequired && !confirmation) {
       setErrorMsg(t("mgmt.dataSources.dialog.confirmationRequiredMsg"));
       return;
     }
@@ -108,7 +117,7 @@ export function DataSourceCommandDialog({
         sourceInstanceId: sourceId,
         expectedRevision: currentRevision,
         reason: reason.trim(),
-        confirmation,
+        confirmation: actionKey === "retire" ? true : confirmation,
       };
 
       switch (actionKey) {
@@ -207,6 +216,38 @@ export function DataSourceCommandDialog({
         /stale revision/i.test(errorMsg)),
   );
 
+  const isExecuteDisabled =
+    executing ||
+    polling ||
+    !writesLive ||
+    (actionDef?.reasonRequired && !reason.trim()) ||
+    (actionKey === "replace" && !replacementSourceId.trim()) ||
+    (actionKey === "retire" && retireConfirmText.trim() !== "RETIRE") ||
+    (actionKey !== "retire" && actionDef?.confirmationRequired && !confirmation);
+
+  const canaryMaxRecords =
+    targetSource.desired?.limits?.max_records ??
+    targetSource.definition?.default_limits?.max_records ??
+    100;
+  const canaryMaxBytes =
+    targetSource.desired?.limits?.max_bytes ??
+    targetSource.definition?.default_limits?.max_bytes ??
+    1048576;
+  const canaryTimeout =
+    targetSource.desired?.limits?.timeout_seconds ??
+    targetSource.definition?.default_limits?.timeout_seconds ??
+    15;
+  const canaryAllowedHosts =
+    targetSource.desired?.allowed_hosts ??
+    targetSource.definition?.allowed_host_patterns ??
+    ["openapi.twse.com.tw"];
+
+  const validationState = targetSource.observed?.validation_state || "pending";
+  const canaryState = targetSource.observed?.canary_state || "not_run";
+  const credentialState = targetSource.observed?.credential_state || "configured";
+  const enablePreconditionsMet = validationState === "passed" && canaryState === "passed";
+  const dependentRefs = targetSource.observed?.dependent_refs ?? [];
+
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-[540px]" aria-describedby="command-dialog-description">
@@ -264,23 +305,137 @@ export function DataSourceCommandDialog({
             </Card>
           )}
 
-          {/* Command Specific Input Fields */}
+          {/* Canary UX: Limits, Hosts, and No-Order Safety Statement */}
+          {actionKey === "canary" && !receipt && (
+            <Card className="p-3 bg-primary/5 border-primary/20 text-xs space-y-2.5">
+              <div className="flex items-center gap-1.5 font-medium text-foreground">
+                <CheckCircle2 className="h-4 w-4 text-primary" />
+                {t("mgmt.dataSources.dialog.canaryLimitsTitle")}
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-[11px] font-mono">
+                <div className="p-1.5 rounded bg-background border">
+                  <span className="text-muted-foreground block text-[10px]">{t("mgmt.dataSources.dialog.canaryMaxRecords")}</span>
+                  <span className="font-semibold text-foreground">{canaryMaxRecords}</span>
+                </div>
+                <div className="p-1.5 rounded bg-background border">
+                  <span className="text-muted-foreground block text-[10px]">{t("mgmt.dataSources.dialog.canaryMaxBytes")}</span>
+                  <span className="font-semibold text-foreground">{canaryMaxBytes} B</span>
+                </div>
+                <div className="p-1.5 rounded bg-background border">
+                  <span className="text-muted-foreground block text-[10px]">{t("mgmt.dataSources.dialog.canaryTimeout")}</span>
+                  <span className="font-semibold text-foreground">{canaryTimeout}s</span>
+                </div>
+              </div>
+              <div className="text-[11px] font-mono">
+                <span className="text-muted-foreground block text-[10px]">{t("mgmt.dataSources.dialog.canaryAllowedHosts")}:</span>
+                <span className="text-foreground">{canaryAllowedHosts.join(", ")}</span>
+              </div>
+              <div className="p-2 rounded bg-muted/60 text-[11px] text-muted-foreground border">
+                {t("mgmt.dataSources.dialog.canarySafetyNotice")}
+              </div>
+            </Card>
+          )}
+
+          {/* Enable UX: Preconditions Gate */}
+          {actionKey === "enable" && !receipt && (
+            <Card className="p-3 border text-xs space-y-2">
+              <div className="font-medium text-foreground flex items-center justify-between">
+                <span>{t("mgmt.dataSources.dialog.enablePreconditionsTitle")}</span>
+                <Badge variant="outline" className={enablePreconditionsMet ? toneClass.ok : toneClass.warning}>
+                  {enablePreconditionsMet ? "Preconditions Passed" : "Preconditions Incomplete"}
+                </Badge>
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-[11px] font-mono">
+                <div className="p-1.5 rounded bg-muted/40 border">
+                  <span className="text-muted-foreground block text-[10px]">{t("mgmt.dataSources.dialog.validationStateLabel")}</span>
+                  <span className={validationState === "passed" ? "text-status-success font-semibold" : "text-status-warning font-semibold"}>
+                    {validationState}
+                  </span>
+                </div>
+                <div className="p-1.5 rounded bg-muted/40 border">
+                  <span className="text-muted-foreground block text-[10px]">{t("mgmt.dataSources.dialog.canaryStateLabel")}</span>
+                  <span className={canaryState === "passed" ? "text-status-success font-semibold" : "text-status-warning font-semibold"}>
+                    {canaryState}
+                  </span>
+                </div>
+                <div className="p-1.5 rounded bg-muted/40 border">
+                  <span className="text-muted-foreground block text-[10px]">{t("mgmt.dataSources.dialog.credentialStateLabel")}</span>
+                  <span className="text-foreground font-semibold">{credentialState}</span>
+                </div>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                {enablePreconditionsMet
+                  ? t("mgmt.dataSources.dialog.preconditionsPassed")
+                  : t("mgmt.dataSources.dialog.preconditionsWarning")}
+              </p>
+            </Card>
+          )}
+
+          {/* Resume UX: Rerun Truth Description */}
+          {actionKey === "resume" && !receipt && (
+            <Card className="p-3 bg-primary/5 border-primary/20 text-xs space-y-1.5">
+              <p className="font-medium text-foreground">{t("mgmt.dataSources.dialog.resumeRerunTruthTitle")}</p>
+              <p className="text-[11px] text-muted-foreground">
+                {t("mgmt.dataSources.dialog.resumeRerunTruthDesc")}
+              </p>
+            </Card>
+          )}
+
+          {/* Replace UX: Replacement ID and Dependent Migration */}
           {actionKey === "replace" && !receipt && (
-            <div className="space-y-1.5">
-              <Label htmlFor="replacementSourceId" className="text-xs">
-                {t("mgmt.dataSources.dialog.replacementSourceId")} *
-              </Label>
-              <Input
-                id="replacementSourceId"
-                placeholder="e.g. ds-twse-market-v2"
-                value={replacementSourceId}
-                onChange={(e) => setReplacementSourceId(e.target.value)}
-                disabled={executing || polling}
-                className="text-xs font-mono"
-              />
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="replacementSourceId" className="text-xs">
+                  {t("mgmt.dataSources.dialog.replacementSourceId")} *
+                </Label>
+                <Input
+                  id="replacementSourceId"
+                  placeholder="e.g. ds-twse-market-v2"
+                  value={replacementSourceId}
+                  onChange={(e) => setReplacementSourceId(e.target.value)}
+                  disabled={executing || polling}
+                  className="text-xs font-mono"
+                />
+              </div>
+
+              <Card className="p-3 bg-muted/30 border text-xs space-y-2">
+                <div className="font-medium text-foreground">
+                  {t("mgmt.dataSources.dialog.replaceMigrationTitle")}
+                </div>
+                {dependentRefs.length === 0 ? (
+                  <p className="text-[11px] text-muted-foreground">
+                    {t("mgmt.dataSources.dialog.noDependentsToMigrate")}
+                  </p>
+                ) : (
+                  <>
+                    <p className="text-[11px] text-muted-foreground">
+                      {t("mgmt.dataSources.dialog.replaceMigrationDesc")}
+                    </p>
+                    <div className="flex flex-wrap gap-1">
+                      {dependentRefs.map((ref) => (
+                        <Badge key={ref} variant="outline" className="font-mono text-[10px] bg-primary/5 text-primary">
+                          {ref}
+                        </Badge>
+                      ))}
+                    </div>
+                    <div className="flex items-center space-x-2 pt-1">
+                      <Checkbox
+                        id="migrateDependentsCheck"
+                        checked={migrateDependents}
+                        onCheckedChange={(checked) => setMigrateDependents(Boolean(checked))}
+                        disabled={executing || polling}
+                      />
+                      <Label htmlFor="migrateDependentsCheck" className="text-xs cursor-pointer">
+                        {t("mgmt.dataSources.dialog.confirmMigrateDependents")}
+                      </Label>
+                    </div>
+                  </>
+                )}
+              </Card>
             </div>
           )}
 
+          {/* Schedule UX */}
           {actionKey === "schedule" && !receipt && (
             <div className="space-y-3 p-3 border rounded-md bg-card">
               <div className="flex items-center justify-between">
@@ -336,6 +491,23 @@ export function DataSourceCommandDialog({
             </div>
           )}
 
+          {/* Retire UX: Typed "RETIRE" Confirmation Input */}
+          {actionKey === "retire" && !receipt && (
+            <div className="space-y-2 p-3 border rounded-md bg-status-failed/5 border-status-failed/30">
+              <Label htmlFor="retireConfirmText" className="text-xs font-medium text-status-failed block">
+                {t("mgmt.dataSources.dialog.retireTypedPrompt")}
+              </Label>
+              <Input
+                id="retireConfirmText"
+                placeholder={t("mgmt.dataSources.dialog.retireTypedPlaceholder")}
+                value={retireConfirmText}
+                onChange={(e) => setRetireConfirmText(e.target.value)}
+                disabled={executing || polling}
+                className="text-xs font-mono border-status-failed/40 text-status-failed"
+              />
+            </div>
+          )}
+
           {/* Reason Input */}
           {!receipt && (
             <div className="space-y-1.5">
@@ -354,8 +526,8 @@ export function DataSourceCommandDialog({
             </div>
           )}
 
-          {/* Confirmation Checkbox */}
-          {actionDef?.confirmationRequired && !receipt && (
+          {/* Generic Confirmation Checkbox (for actions other than retire) */}
+          {actionDef?.confirmationRequired && actionKey !== "retire" && !receipt && (
             <div className="flex items-start space-x-2 pt-1">
               <Checkbox
                 id="confirmCheckbox"
@@ -474,13 +646,7 @@ export function DataSourceCommandDialog({
                 variant={actionDef?.destructive ? "destructive" : "default"}
                 size="sm"
                 onClick={handleExecute}
-                disabled={
-                  executing ||
-                  polling ||
-                  !writesLive ||
-                  (actionDef?.reasonRequired && !reason.trim()) ||
-                  (actionDef?.confirmationRequired && !confirmation)
-                }
+                disabled={isExecuteDisabled}
                 title={!writesLive ? t("mgmt.dataSources.realWritesRequired") : undefined}
               >
                 {executing ? (

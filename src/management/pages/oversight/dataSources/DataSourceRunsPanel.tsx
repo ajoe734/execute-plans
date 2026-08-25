@@ -147,6 +147,62 @@ export function DataSourceRunsPanel({ sources, onSelectSource }: DataSourceRunsP
         </div>
       )}
 
+      {/* Quota, Usage & DLQ Observability Summary */}
+      {activeSource && (
+        <Card className="p-4 space-y-3" data-testid="runs-quota-usage-card">
+          <h3 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+            <Database className="h-4 w-4 text-primary" />
+            {t("mgmt.dataSources.runs.usageQuotaDlqTitle")}
+          </h3>
+          <div className="grid gap-3 grid-cols-2 md:grid-cols-4 text-xs">
+            <div className="p-2.5 rounded border bg-card space-y-1">
+              <span className="text-muted-foreground text-[11px]">{t("mgmt.dataSources.runs.unresolvedDlqTitle")}</span>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className="font-mono font-semibold text-sm">
+                  {activeSource.observed?.dlq_unresolved_count ?? 0}
+                </span>
+                {(activeSource.observed?.dlq_unresolved_count ?? 0) > 0 ? (
+                  <Badge variant="outline" className="bg-status-failed/10 text-status-failed text-[10px]">
+                    Alert
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="bg-status-success/10 text-status-success text-[10px]">
+                    Healthy
+                  </Badge>
+                )}
+              </div>
+            </div>
+
+            <div className="p-2.5 rounded border bg-card space-y-1">
+              <span className="text-muted-foreground text-[11px]">{t("mgmt.dataSources.runs.quotaUsageTitle")}</span>
+              <div className="font-mono font-semibold text-sm mt-0.5">
+                {activeSource.observed?.quota?.used_percent !== undefined
+                  ? `${activeSource.observed.quota.used_percent}%`
+                  : activeSource.observed?.quota?.daily_limit
+                    ? `${activeSource.observed.quota.daily_limit} req/day`
+                    : "Within limits"}
+              </div>
+            </div>
+
+            <div className="p-2.5 rounded border bg-card space-y-1">
+              <span className="text-muted-foreground text-[11px]">{t("mgmt.dataSources.runs.costEstimateTitle")}</span>
+              <div className="font-mono font-semibold text-sm mt-0.5">
+                {activeSource.observed?.usage?.cost_usd !== undefined
+                  ? `$${Number(activeSource.observed.usage.cost_usd).toFixed(2)}`
+                  : "—"}
+              </div>
+            </div>
+
+            <div className="p-2.5 rounded border bg-card space-y-1">
+              <span className="text-muted-foreground text-[11px]">{t("mgmt.dataSources.runs.activeConsumersTitle")}</span>
+              <div className="font-mono font-semibold text-sm mt-0.5">
+                {activeSource.observed?.dependent_refs?.length ?? 0} {t("mgmt.dataSources.consumers")}
+              </div>
+            </div>
+          </div>
+        </Card>
+      )}
+
       {/* Canaries Timeline */}
       <Card className="p-4 space-y-3">
         <div className="flex items-center justify-between">

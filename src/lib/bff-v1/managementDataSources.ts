@@ -51,6 +51,7 @@ export interface DataSourceInstance {
   datasets?: string[];
   markets?: string[];
   license_scope?: string;
+  secret_scope?: string;
   entitlement_tags?: string[];
   allowed_use?: string[];
   retention_policy_ref?: string;
@@ -75,6 +76,7 @@ export interface SourceDesiredState {
   connector_config?: {
     public?: Record<string, unknown>;
     secret_ref_id?: string | null;
+    secret_scope?: string;
     [key: string]: unknown;
   };
   schedule?: {
@@ -247,6 +249,7 @@ export interface CreateSourceInput {
   datasets?: string[];
   markets?: string[];
   license_scope?: string;
+  secret_scope?: string;
   entitlement_tags?: string[];
   allowed_use?: string[];
   retention_policy_ref?: string;
@@ -256,6 +259,7 @@ export interface CreateSourceInput {
   connector_config?: {
     public?: Record<string, unknown>;
     secret_ref_id?: string | null;
+    secret_scope?: string;
   };
   schedule?: {
     enabled: boolean;

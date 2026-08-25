@@ -266,20 +266,50 @@ function V2DataSourceRow({
       </td>
 
       {/* 8. Consumers / Cost */}
-      <td className="px-3 py-3 min-w-[160px]">
-        <div className="flex flex-wrap gap-1">
-          {(dto.observed?.dependent_refs ?? []).length === 0 ? (
-            <span className="text-muted-foreground text-[11px]">—</span>
+      <td className="px-3 py-3 min-w-[170px]">
+        <div className="space-y-1">
+          <div className="flex flex-wrap gap-1 items-center">
+            {(dto.observed?.dependent_refs ?? []).length === 0 ? (
+              <span className="text-muted-foreground text-[11px]">—</span>
+            ) : (
+              <>
+                <span className="text-[10px] text-muted-foreground font-medium mr-0.5">
+                  {t("mgmt.dataSources.consumersCount", { count: dto.observed!.dependent_refs!.length })}:
+                </span>
+                {dto.observed!.dependent_refs!.slice(0, 3).map((ref) => (
+                  <Link
+                    key={ref}
+                    to={`/management/personas/${encodeURIComponent(ref)}`}
+                    className="font-mono text-[10px] text-primary hover:underline bg-primary/5 px-1 py-0.5 rounded border border-primary/20"
+                  >
+                    {ref}
+                  </Link>
+                ))}
+              </>
+            )}
+          </div>
+          {/* Usage & Cost Summary */}
+          {(dto.observed?.usage || dto.observed?.quota) ? (
+            <div className="text-[10px] text-muted-foreground font-mono flex flex-wrap gap-x-2 gap-y-0.5">
+              {dto.observed?.usage?.cost_usd !== undefined && (
+                <span>{t("mgmt.dataSources.costLabel")}: ${Number(dto.observed.usage.cost_usd).toFixed(2)}</span>
+              )}
+              {dto.observed?.usage?.calls_today !== undefined && (
+                <span>({dto.observed.usage.calls_today} reqs)</span>
+              )}
+              {dto.observed?.quota?.used_percent !== undefined && (
+                <span>{t("mgmt.dataSources.quotaLabel")}: {dto.observed.quota.used_percent}%</span>
+              )}
+              {dto.observed?.dlq_unresolved_count !== undefined && dto.observed.dlq_unresolved_count > 0 && (
+                <Badge variant="outline" className="bg-status-failed/10 text-status-failed text-[9px] px-1 py-0 font-mono">
+                  DLQ: {dto.observed.dlq_unresolved_count}
+                </Badge>
+              )}
+            </div>
           ) : (
-            dto.observed!.dependent_refs!.slice(0, 3).map((ref) => (
-              <Link
-                key={ref}
-                to={`/management/personas/${encodeURIComponent(ref)}`}
-                className="font-mono text-[10px] text-primary hover:underline bg-primary/5 px-1 py-0.5 rounded border border-primary/20"
-              >
-                {ref}
-              </Link>
-            ))
+            <div className="text-[10px] text-muted-foreground font-mono">
+              {t("mgmt.dataSources.costLabel")}: —
+            </div>
           )}
         </div>
       </td>

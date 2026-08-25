@@ -1,6 +1,11 @@
 import { expect, test, type Page, type Request, type Route } from "@playwright/test";
 import {
+  DEFAULT_FE_OPERATOR_ID,
+  DEFAULT_FE_TENANT_ID,
+  gcpIdentityStorageKey,
+  gcpIdentityStoredUser,
   installOidcDevLogin,
+  roleTokenFromEnv,
   targetsExternalE2eEnvironment,
 } from "./helpers/auth";
 import { installQuietEventSource } from "./helpers/sse";
@@ -45,6 +50,7 @@ const MOCK_V2_DATA_SOURCE = {
     markets: ["TW"],
     datasets: ["tw_price_daily"],
     license_scope: "official_reference",
+    secret_scope: "runtime_read_only",
     allowed_use: ["research_data", "backtest_data", "monitoring"],
   },
   desired: {
@@ -55,6 +61,7 @@ const MOCK_V2_DATA_SOURCE = {
     connector_config: {
       public: { endpoint_url: "https://openapi.twse.com.tw" },
       secret_ref_id: "vault://secret/twse-api-key",
+      secret_scope: "runtime_read_only",
     },
     schedule: {
       enabled: true,
@@ -83,6 +90,16 @@ const MOCK_V2_DATA_SOURCE = {
       row_count: 1500,
       rejected_count: 0,
       evidence_bundle_id: "ev-twse-20260824",
+    },
+    dlq_unresolved_count: 0,
+    quota: {
+      daily_limit: 50000,
+      remaining_calls: 48500,
+      used_percent: 3,
+    },
+    usage: {
+      calls_today: 1500,
+      cost_usd: 4.5,
     },
     dependent_refs: ["persona-tw-arb"],
   },
@@ -133,6 +150,45 @@ const MOCK_DIVERGED_DATA_SOURCE = {
     health_state: "degraded",
   },
 };
+
+async function installHostedAuthSession(
+  page: Page,
+  options: { token: string; operatorId?: string; tenantId?: string },
+) {
+  const apiKey =
+    process.env.VITE_GCP_IDENTITY_API_KEY ||
+    process.env.PANTHEON_PUBLIC_GCP_IDENTITY_API_KEY ||
+    "AIza01234567890123456789012345678901234";
+  const storageKey = gcpIdentityStorageKey(apiKey);
+  const operatorId = options.operatorId || DEFAULT_FE_OPERATOR_ID;
+  const storedUser = gcpIdentityStoredUser({
+    apiKey,
+    email: `${operatorId}@pantheon-dev.invalid`,
+    tenantId: options.tenantId || DEFAULT_FE_TENANT_ID,
+    token: options.token,
+    uid: operatorId,
+  });
+
+  await page.addInitScript(
+    ({ key, storedSession }) => {
+      try {
+        window.sessionStorage.setItem(key, JSON.stringify(storedSession));
+      } catch {
+        // Init script fallback
+      }
+    },
+    { key: storageKey, storedSession: storedUser },
+  );
+
+  await page
+    .evaluate(
+      ({ key, storedSession }) => {
+        window.sessionStorage.setItem(key, JSON.stringify(storedSession));
+      },
+      { key: storageKey, storedSession: storedUser },
+    )
+    .catch(() => undefined);
+}
 
 async function setupStandardFixtures(page: Page) {
   if (HOSTED_REQUESTED) {
@@ -242,14 +298,39 @@ async function setupStandardFixtures(page: Page) {
 
 test.describe("Management Data Source Control Center (SD-SRCM-04)", () => {
   test.beforeEach(async ({ page }) => {
-    await installOidcDevLogin(page, {
-      env: {
+    const isHosted =
+      HOSTED_REQUESTED ||
+      targetsExternalE2eEnvironment({
         ...process.env,
-        VITE_GCP_IDENTITY_API_KEY:
-          process.env.VITE_GCP_IDENTITY_API_KEY ||
-          "AIza01234567890123456789012345678901234",
-      },
-    });
+        PANTHEON_FE_BASE_URL: process.env.PANTHEON_FE_BASE_URL || FE_BASE,
+      });
+
+    if (isHosted) {
+      const explicitToken =
+        process.env.BFF_AUTH_TOKEN ||
+        process.env.PANTHEON_BFF_SMOKE_BEARER_TOKEN ||
+        roleTokenFromEnv("operator", [
+          "PANTHEON_BFF_OPERATOR_A_TOKEN",
+          "DEV_BFF_OPERATOR_A_TOKEN",
+          "BFF_AUTH_TOKEN",
+          "PANTHEON_BFF_SMOKE_BEARER_TOKEN",
+        ]) ||
+        "placeholder-hosted-bearer-token";
+      await installHostedAuthSession(page, {
+        token: explicitToken,
+        operatorId: DEFAULT_FE_OPERATOR_ID,
+        tenantId: process.env.PANTHEON_BFF_TENANT_ID || DEFAULT_FE_TENANT_ID,
+      });
+    } else {
+      await installOidcDevLogin(page, {
+        env: {
+          ...process.env,
+          VITE_GCP_IDENTITY_API_KEY:
+            process.env.VITE_GCP_IDENTITY_API_KEY ||
+            "AIza01234567890123456789012345678901234",
+        },
+      });
+    }
     await installQuietEventSource(page);
   });
 
@@ -276,6 +357,11 @@ test.describe("Management Data Source Control Center (SD-SRCM-04)", () => {
     await expect(page.getByText(/Latest Run \/ Search|最近執行 \/ 搜尋索引/i)).toBeVisible();
     await expect(page.getByText(/Consumers \/ Cost|取用 Persona \/ 成本/i)).toBeVisible();
     await expect(page.getByText(/Actions|操作/i).first()).toBeVisible();
+
+    // Column 8 Consumer Links & Cost rendering
+    const twseRow = page.locator("tr").filter({ hasText: "ds-twse-market-v1" });
+    await expect(twseRow.getByText("persona-tw-arb")).toBeVisible();
+    await expect(twseRow.getByText(/Cost|成本/i)).toBeVisible();
   });
 
   test("renders SD-SRCM-04 V2 structures, divergence badges, and detail drawer", async ({ page }) => {
@@ -333,6 +419,8 @@ test.describe("Management Data Source Control Center (SD-SRCM-04)", () => {
     await page.goto("/management/data-sources?tab=runs");
     await expect(page.getByText(/Bounded Read-Only Canary Pulls|受限唯讀金絲雀拉取/i)).toBeVisible();
     await expect(page.getByText(/Observation & Ingestion History|觀測與擷取歷史記錄/i)).toBeVisible();
+    await expect(page.getByTestId("runs-quota-usage-card")).toBeVisible();
+    await expect(page.getByText(/Unresolved DLQ Items|未解析死信佇列/i)).toBeVisible();
 
     // 3. Change History Tab
     await page.goto("/management/data-sources?tab=receipts");
