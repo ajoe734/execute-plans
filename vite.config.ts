@@ -10,12 +10,44 @@ const bffProxyTarget =
   process.env.VITE_BFF_PROXY_TARGET ||
   process.env.VITE_BFF_BASE_URL;
 
+const mockFixtureModule = path.resolve(__dirname, "./src/mocks/seed.ts");
+const strictLiveFixtureStub = path.resolve(__dirname, "./src/mocks/strictLiveFixtureUnavailable.ts");
+
+function isStrictLiveBuild(env: Record<string, string | undefined>): boolean {
+  return env.VITE_BFF_MODE === "live" && env.VITE_BFF_FALLBACK === "strict";
+}
+
+function assertStrictLiveFixtureIsolation() {
+  return {
+    name: "pantheon-strict-live-fixture-isolation",
+    generateBundle(_: unknown, bundle: Record<string, { type: string; modules?: Record<string, unknown> }>) {
+      const containsMockFixture = Object.values(bundle).some((output) =>
+        output.type === "chunk"
+        && Object.keys(output.modules ?? {}).some((moduleId) =>
+          path.resolve(moduleId.split("?")[0]) === mockFixtureModule),
+      );
+      if (containsMockFixture) {
+        throw new Error(
+          "Strict-live production bundle must not contain src/mocks/seed.ts. "
+          + "Use a typed unavailable state instead of a mock fixture fallback.",
+        );
+      }
+    },
+  };
+}
+
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   // VITE_* values are transformed into browser-visible source in both serve
   // and build modes. Validate while the config is loading so `vite` cannot
   // bind a development server with a privileged ambient credential either.
   const loadedEnv = loadEnv(mode, process.cwd(), "VITE_");
+  const buildEnv = {
+    ...loadedEnv,
+    VITE_BFF_MODE: process.env.VITE_BFF_MODE ?? loadedEnv.VITE_BFF_MODE,
+    VITE_BFF_FALLBACK: process.env.VITE_BFF_FALLBACK ?? loadedEnv.VITE_BFF_FALLBACK,
+  };
+  const strictLiveBuild = isStrictLiveBuild(buildEnv);
   validatePublicBuildBearerToken(
     process.env.VITE_BFF_DEV_BEARER_TOKEN ?? loadedEnv.VITE_BFF_DEV_BEARER_TOKEN,
   );
@@ -65,11 +97,20 @@ export default defineConfig(({ mode }) => {
           }
         : undefined,
     },
-    plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
+    plugins: [
+      react(),
+      mode === "development" && componentTagger(),
+      strictLiveBuild && assertStrictLiveFixtureIsolation(),
+    ].filter(Boolean),
     resolve: {
-      alias: {
-        "@": path.resolve(__dirname, "./src"),
-      },
+      alias: strictLiveBuild
+        ? [
+            { find: "@/mocks/seed", replacement: strictLiveFixtureStub },
+            { find: "@", replacement: path.resolve(__dirname, "./src") },
+          ]
+        : {
+            "@": path.resolve(__dirname, "./src"),
+          },
       dedupe: [
         "react",
         "react-dom",

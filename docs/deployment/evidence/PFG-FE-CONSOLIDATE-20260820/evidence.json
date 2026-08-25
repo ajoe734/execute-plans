@@ -1,0 +1,129 @@
+{
+  "schema_version": "pantheon.pfg-fe-consolidation-evidence.v1",
+  "task_id": "PFG-FE-CONSOLIDATE-20260820",
+  "owner": "Codex2",
+  "reviewer": "Antigravity2",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "status": "ready_for_independent_review",
+  "source_binding": {
+    "branch": "task/PFG-FE-CONSOLIDATE-20260820",
+    "base_commit": "93ae07faeff3546e1d4c4cb1a7ccab686580868f",
+    "fixture_isolation_anchor": "33a3593a01009974fe4c7bbf9a61b0ae77b95574",
+    "reviewed_inventory": "support/sidecars/PFG-FE-CONSOLIDATE-20260820/caller-inventory-20260824.md",
+    "dependency_tracks": {
+      "PFG-AGORA-JOURNEY-E2E-20260820": "functional complete; hosted proof remains final-gate-only",
+      "PFG-MGMT-JOURNEY-E2E-20260820": "complete"
+    }
+  },
+  "scope": {
+    "owned": [
+      "Remove strict-live production access to the src/mocks/seed.ts fixture graph.",
+      "Prove current Agora and Management production callers use replacement-proven paths or typed unavailable behavior.",
+      "Record the bounded disposition of src/lib/bff and src/lib/bff-v1 without misrepresenting live shared primitives as dead code."
+    ],
+    "not_changed": [
+      "Backend BFF contracts, persistence, or deployment configuration.",
+      "Mock, test, and auto-fallback fixtures outside the strict-live build profile.",
+      "Unrelated UI redesign or wholesale removal of the shared BFF type/transport layer."
+    ]
+  },
+  "code_disposition": {
+    "removed_or_rejected_production_paths": [
+      {
+        "path_or_symbol": "TradingRoomPage page-local CandidateReviewDrawer",
+        "replacement": "src/agora/components/CandidateReviewDrawer.tsx",
+        "current_proof": "TradingRoomPage imports the shared drawer and passes only a resolved BFF candidate-pool id; no local drawer declaration remains."
+      },
+      {
+        "path_or_symbol": "TradingRoomPage fixed STRATEGY_LENSES identity",
+        "replacement": "canonical workspace and candidate-pool projections",
+        "current_proof": "No STRATEGY_LENSES, FixedLens, or fixedLens production reference remains under src/."
+      },
+      {
+        "path_or_symbol": "FormulaStudio triggerBacktest synthetic completed-write path",
+        "replacement": "bff.jobs.list() readback plus NonProductionActionButton",
+        "current_proof": "No production triggerBacktest reference remains; unavailable execution is visibly disabled rather than reported as complete."
+      },
+      {
+        "path_or_symbol": "ActivityMonitor synthetic seed events and disconnected fake-live state",
+        "replacement": "realtime BFF/SSE subscriptions and typed unattached state",
+        "current_proof": "The component starts with no events and subscribes to canonical job/data/SSE channels; no seed_ event generator remains."
+      },
+      {
+        "path_or_symbol": "PostmortemLibrary static SEED records",
+        "replacement": "bff.incidents.list()",
+        "current_proof": "No SEED declaration remains; strict-live/degraded coverage asserts canonical records or an explicit unavailable state."
+      }
+    ],
+    "strict_live_guards": [
+      "src/lib/bff-v1/management.ts safeAdapt rethrows a live contract mismatch when VITE_BFF_MODE=live and VITE_BFF_FALLBACK=strict, rather than returning seed data.",
+      "src/lib/bff-v1/writes.ts rejects strict-live writes without governed authority before the mock-completed branch can run.",
+      "vite.config.ts resolves @/mocks/seed to src/mocks/strictLiveFixtureUnavailable.ts only for the strict-live build profile and fails the Rollup build if src/mocks/seed.ts enters any emitted chunk."
+    ],
+    "retained_with_explicit_boundary": [
+      {
+        "path": "src/mocks/seed.ts",
+        "boundary": "Retained for mock, test, and explicit auto-fallback development profiles only. It is excluded from the strict-live Rollup graph; any unexpected strict-live access fails closed."
+      },
+      {
+        "path": "src/lib/bff/",
+        "boundary": "Not dead code. commandClient, strict-live read helpers, realtime plumbing, and shared types remain dependencies of the canonical bff-v1 seam. The mock mutation/overlay/scenario modules remain reachable only through explicit mock/test or auto-fallback behavior and cannot report success under strict-live guards."
+      },
+      {
+        "path": "src/lib/bff-v1/",
+        "boundary": "Canonical UI-facing BFF contract seam for live REST/SSE reads and governed mutation handling. Production callers converge here; its shared-primitives dependency does not create a second live-success path."
+      },
+      {
+        "path": "src/management/components/NonProductionActionButton.tsx and management/components/agent/uiActionRegistry.ts",
+        "boundary": "Retained canonical safety surfaces: unsupported operations stay disabled, and Management AI actions remain allowlisted and confirmation-gated."
+      }
+    ]
+  },
+  "production_fixture_isolation": {
+    "profile": {
+      "VITE_BFF_MODE": "live",
+      "VITE_BFF_BASE_URL": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io",
+      "VITE_BFF_FALLBACK": "strict",
+      "VITE_BFF_REAL_WRITES": "false"
+    },
+    "resolver": "vite.config.ts aliases @/mocks/seed to strictLiveFixtureUnavailable.ts only in the strict-live profile.",
+    "rollup_module_gate": "pantheon-strict-live-fixture-isolation rejects a build containing the real src/mocks/seed.ts module.",
+    "result": "passed: strict-live build completed with the module gate active. The gate inspects Rollup module IDs directly, avoiding false attribution from identifiers that may also occur in independent product example data.",
+    "direct_page_import_check": {
+      "command": "git grep -l -E 'from[[:space:]].*mocks/seed|import\\(.*mocks/seed' -- src/agora src/management",
+      "result": "passed; zero direct imports in audited Agora and Management page source."
+    }
+  },
+  "validation": {
+    "typecheck": {
+      "command": "npm run typecheck",
+      "result": "passed"
+    },
+    "focused_regression": {
+      "command": "npx vitest run src/agora/components/CandidateReviewDrawer.test.tsx src/agora/pages/trading-room/TradingRoomPage.test.tsx src/management/components/detail/__tests__/StrictLiveManagementSurfaces.test.tsx src/lib/bff-v1/__tests__/writes.test.ts src/lib/bff-v1/__tests__/management.test.ts --maxWorkers=2 --testTimeout=15000 --hookTimeout=30000",
+      "result": "passed; 5 files, 161 tests",
+      "coverage": "shared Agora candidate drawer, Trading Room integration, strict-live Management degraded behavior, strict write rejection, and safeAdapt contract-mismatch rejection"
+    },
+    "strict_live_production_build": {
+      "command": "VITE_GCP_IDENTITY_API_KEY=<format-valid-nonsecret-build-value> VITE_GCP_IDENTITY_PROJECT_ID=<format-valid-project-id> VITE_GCP_IDENTITY_AUTH_DOMAIN=<format-valid-auth-domain> VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build",
+      "result": "passed; Rollup fixture-isolation gate active",
+      "diagnostics": "Build retains an existing Rollup warning about legacy.ts re-exporting runActionSafe across chunks; it is not a fixture fallback and did not prevent output."
+    },
+    "caller_negative_scans": {
+      "result": "passed",
+      "checks": {
+        "inline_candidate_drawer_in_TradingRoomPage": 0,
+        "fixed_lens_production_references": 0,
+        "triggerBacktest_production_references": 0,
+        "ActivityMonitor_seed_event_references": 0,
+        "PostmortemLibrary_static_SEED_declarations": 0,
+        "audited_Agora_and_Management_direct_seed_imports": 0
+      }
+    }
+  },
+  "review_request": {
+    "requested_decision": "Verify that the strict-live alias and Rollup module gate exclude the real mock fixture without changing mock/test/auto behavior, then independently rerun the listed focused checks and review the caller dispositions.",
+    "review_file_binding": "docs/deployment/evidence/PFG-FE-CONSOLIDATE-20260820/evidence.json"
+  }
+}
