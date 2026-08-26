@@ -25,6 +25,7 @@ AUDIT_DIR="${PANTHEON_AUDIT_OUT_DIR:-.lovable/audits/current-run}"
 CANDIDATE_INPUT="${PANTHEON_DEPLOY_CANDIDATE_DIR:-}"
 AGORA_COMPAT_EVIDENCE_INPUT="${PANTHEON_DEPLOY_AGORA_COMPAT_EVIDENCE:-}"
 SOURCE_BRANCH="${PANTHEON_DEPLOY_BRANCH:-dev}"
+FRONTEND_REF="${PANTHEON_DEPLOY_FRONTEND_REF:-dev}"
 GATE_RUN_ID="${PANTHEON_DEPLOY_GATE_RUN_ID:-}"
 GITHUB_ARTIFACT_DIGEST="${PANTHEON_DEPLOY_GITHUB_ARTIFACT_DIGEST:-}"
 EXPECTED_DEV_SHA="${PANTHEON_DEPLOY_EXPECTED_DEV_SHA:-}"
@@ -39,6 +40,7 @@ PROOF_WINDOW_ACK="${PANTHEON_DEPLOY_PROOF_WINDOW_ACK:-false}"
 EXPECTED_PAIR_ID="${PANTHEON_DEPLOY_EXPECTED_PAIR_ID:-}"
 SKIP_PROBE="${PANTHEON_DEPLOY_SKIP_PROBE:-false}"
 ALLOW_BOOTSTRAP="${PANTHEON_DEPLOY_ALLOW_BOOTSTRAP:-false}"
+ALLOW_OUT_OF_ORDER_CANDIDATE="${PANTHEON_DEPLOY_ALLOW_OUT_OF_ORDER_CANDIDATE:-false}"
 KEEP_RELEASES="${PANTHEON_DEV_FE_KEEP_RELEASES:-8}"
 LOCK_FILE="${PANTHEON_DEPLOY_LOCK_FILE:-/tmp/pantheon-dev-fe-deploy.lock}"
 STRICT_LOCK_PREFIX="${PANTHEON_DEPLOY_LOCK_PREFIX:-/tmp}"
@@ -1235,9 +1237,19 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-for boolean_name in EMERGENCY_OVERRIDE ROLLBACK_DRILL REAL_WRITES ALLOW_DEV_STUB_WRITES PROOF_WINDOW_ACK SKIP_PROBE ALLOW_BOOTSTRAP; do
+for boolean_name in EMERGENCY_OVERRIDE ROLLBACK_DRILL REAL_WRITES ALLOW_DEV_STUB_WRITES PROOF_WINDOW_ACK SKIP_PROBE ALLOW_BOOTSTRAP ALLOW_OUT_OF_ORDER_CANDIDATE; do
   bool_value "${boolean_name}"
 done
+
+if [[ ! "${FRONTEND_REF}" =~ ^[A-Za-z0-9._/-]+$ || "${FRONTEND_REF}" == /* || "${FRONTEND_REF}" == */ ||
+  "${FRONTEND_REF}" == *..* || "${FRONTEND_REF}" == *//* ]]; then
+  echo "PANTHEON_DEPLOY_FRONTEND_REF must be one exact safe branch ref." >&2
+  exit 2
+fi
+if [[ "${FRONTEND_REF}" == "dev" && "${ALLOW_OUT_OF_ORDER_CANDIDATE}" == "true" ]]; then
+  echo "Out-of-order candidate mode requires a non-dev frontend ref." >&2
+  exit 2
+fi
 
 case "${DEPLOY_PROFILE}" in
   read-only)
@@ -1508,6 +1520,14 @@ if [[ "${CONTROLLER_SHA}" != "${REMOTE_DEV_SHA}" ]]; then
   evidence_append controller.order failed "currentDevSha=${REMOTE_DEV_SHA}" "validatedDevSha=${CONTROLLER_SHA}"
   exit 2
 fi
+if [[ "${FRONTEND_REF}" != "dev" ]]; then
+  REMOTE_FRONTEND_SHA="$(git ls-remote --exit-code origin "refs/heads/${FRONTEND_REF}" | awk '{print $1}')"
+  if [[ ! "${REMOTE_FRONTEND_SHA}" =~ ^[0-9a-f]{40}$ || "${SHA}" != "${REMOTE_FRONTEND_SHA}" ]]; then
+    echo "Frontend ref ${FRONTEND_REF} does not resolve to the exact candidate SHA." >&2
+    evidence_append candidate.ref failed "frontendRef=${FRONTEND_REF}" "resolvedSha=${REMOTE_FRONTEND_SHA:-none}"
+    exit 2
+  fi
+fi
 
 if [[ -L "${DEPLOY_ROOT}" ]]; then
   PREVIOUS_TARGET="$(current_live_target)"
@@ -1580,7 +1600,9 @@ fi
 LIVE_TARGET_AT_START="${PREVIOUS_TARGET}"
 
 if [[ "${SHA}" != "${REMOTE_DEV_SHA}" && "${EMERGENCY_OVERRIDE}" != "true" ]]; then
-  if [[ "${DEPLOY_PROFILE}" == "write-proof" && -n "${PREVIOUS_COMMIT:-}" && "${SHA}" == "${PREVIOUS_COMMIT}" ]]; then
+  if [[ "${ALLOW_OUT_OF_ORDER_CANDIDATE}" == "true" && "${GITHUB_EVENT_NAME:-}" == "workflow_dispatch" && "${FRONTEND_REF}" != "dev" ]]; then
+    evidence_append candidate.order passed "currentDevSha=${REMOTE_DEV_SHA}" "candidateRef=${FRONTEND_REF}" "candidateSha=${SHA}"
+  elif [[ "${DEPLOY_PROFILE}" == "write-proof" && -n "${PREVIOUS_COMMIT:-}" && "${SHA}" == "${PREVIOUS_COMMIT}" ]]; then
     evidence_append candidate.order passed "currentDevSha=${REMOTE_DEV_SHA}" "liveCandidateSha=${PREVIOUS_COMMIT}"
   else
     echo "Out-of-order candidate rejected: dev=${REMOTE_DEV_SHA} candidate=${SHA}." >&2
@@ -1922,8 +1944,18 @@ if [[ "${CONTROLLER_SHA}" != "${REMOTE_DEV_SHA_AT_SWITCH}" ]]; then
   evidence_append controller.order_at_switch failed "currentDevSha=${REMOTE_DEV_SHA_AT_SWITCH}"
   exit 2
 fi
+if [[ "${FRONTEND_REF}" != "dev" ]]; then
+  REMOTE_FRONTEND_SHA_AT_SWITCH="$(git ls-remote --exit-code origin "refs/heads/${FRONTEND_REF}" | awk '{print $1}')"
+  if [[ "${REMOTE_FRONTEND_SHA_AT_SWITCH}" != "${SHA}" ]]; then
+    echo "Frontend ref ${FRONTEND_REF} advanced during candidate probe; refusing stale switch." >&2
+    evidence_append candidate.ref_at_switch failed "resolvedSha=${REMOTE_FRONTEND_SHA_AT_SWITCH:-none}"
+    exit 2
+  fi
+fi
 if [[ "${SHA}" != "${REMOTE_DEV_SHA_AT_SWITCH}" && "${EMERGENCY_OVERRIDE}" != "true" ]]; then
-  if [[ "${DEPLOY_PROFILE}" == "write-proof" && -n "${PREVIOUS_COMMIT:-}" && "${SHA}" == "${PREVIOUS_COMMIT}" ]]; then
+  if [[ "${ALLOW_OUT_OF_ORDER_CANDIDATE}" == "true" && "${GITHUB_EVENT_NAME:-}" == "workflow_dispatch" && "${FRONTEND_REF}" != "dev" ]]; then
+    evidence_append candidate.order_at_switch passed "currentDevSha=${REMOTE_DEV_SHA_AT_SWITCH}" "candidateRef=${FRONTEND_REF}" "candidateSha=${SHA}"
+  elif [[ "${DEPLOY_PROFILE}" == "write-proof" && -n "${PREVIOUS_COMMIT:-}" && "${SHA}" == "${PREVIOUS_COMMIT}" ]]; then
     evidence_append candidate.order_at_switch passed "currentDevSha=${REMOTE_DEV_SHA_AT_SWITCH}" "liveCandidateSha=${PREVIOUS_COMMIT}"
   else
     echo "Dev advanced after candidate probe; refusing stale switch." >&2
@@ -2024,6 +2056,7 @@ cat > "${AUDIT_DIR}/dev-fe-deploy-${TIMESTAMP}.md" <<EOF
 - bff_commit: ${BFF_COMMIT}
 - source_ref: ${SOURCE_REF}
 - source_branch: ${SOURCE_BRANCH}
+- frontend_ref: ${FRONTEND_REF}
 - release_dir: ${RELEASE_DIR}
 - previous_commit: ${PREVIOUS_COMMIT:-bootstrap}
 - emergency_override: ${EMERGENCY_OVERRIDE}

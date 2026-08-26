@@ -626,6 +626,9 @@ describe("paired Pantheon release workflow", () => {
     );
     expect(integrationWorkflow).toContain('run.event !== "workflow_dispatch"');
     expect(integrationWorkflow).toContain('run.head_branch !== "dev"');
+    expect(integrationWorkflow).toContain("frontendRef");
+    expect(integrationWorkflow).toContain("heads/${frontendRef}");
+    expect(integrationWorkflow).toContain('context.ref !== "refs/heads/dev"');
     expect(integrationWorkflow).toContain(
       "`Release candidate ${process.env.EXPECTED_RELEASE_CANDIDATE_ID}`",
     );
