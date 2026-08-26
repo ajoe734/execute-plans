@@ -20,6 +20,8 @@ on:
         type: string
 
 permissions:
+  actions: write
+  checks: read
   contents: write
   pull-requests: write
   issues: read
