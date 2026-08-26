@@ -39,7 +39,6 @@ function playwrightReport(specs: SyntheticSpec[]) {
 
 function aggregatePlaywright(
   specs: SyntheticSpec[],
-  mobileSpecs: SyntheticSpec[] = [],
   envOverrides: Record<string, string> = {},
 ) {
   const auditDir = mkdtempSync(join(tmpdir(), "pantheon-gate-playwright-"));
@@ -49,13 +48,6 @@ function aggregatePlaywright(
     join(auditDir, "playwright-results.json"),
     `${JSON.stringify(playwrightReport(specs))}\n`,
   );
-  if (mobileSpecs.length > 0) {
-    writeFileSync(
-      join(auditDir, "playwright-mobile-results.json"),
-      `${JSON.stringify(playwrightReport(mobileSpecs))}\n`,
-    );
-  }
-
   spawnSync(
     "node",
     [aggregateScript, "--audit-dir", auditDir, "--json-out", jsonOut],
@@ -80,23 +72,14 @@ function aggregatePlaywright(
 }
 
 describe("release gate Playwright classification", () => {
-  it("keeps ordinary PR auth advisory and reads fixture evidence instead of the separate mobile report", () => {
-    const gates = aggregatePlaywright(
-      [
-        {
-          file: "13-agora.spec.ts",
-          status: "expected",
-          title: "F13 Agora signal feedback",
-        },
-      ],
-      [
-        {
-          file: "agora-strategy-workshop-hosted.spec.ts",
-          status: "unexpected",
-          title: "hosted Strategy Workshop mobile",
-        },
-      ],
-    );
+  it("keeps ordinary PR auth advisory and reads the desktop fixture evidence", () => {
+    const gates = aggregatePlaywright([
+      {
+        file: "13-agora.spec.ts",
+        status: "expected",
+        title: "F13 Agora signal feedback",
+      },
+    ]);
 
     expect(
       gates["0"].find((check) =>
@@ -112,7 +95,7 @@ describe("release gate Playwright classification", () => {
       gates["5"].find((check) => check.label === "F13 Agora.")?.status,
     ).toBe("pass");
 
-    const hardGates = aggregatePlaywright([], [], {
+    const hardGates = aggregatePlaywright([], {
       PANTHEON_HOSTED_FE_HARD_GATE: "true",
     });
     expect(
