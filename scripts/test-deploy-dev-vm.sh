@@ -1139,6 +1139,42 @@ test_valid_candidate_success() {
   assert_probe_called post_switch
   assert_summary_outcome accepted
   verify_evidence_pair
+
+  setup_case valid-standby-read-only-previous
+  upgrade_previous_manifest_to_paired_modern "${PREVIOUS_TARGET}/deployment.json"
+  "${REAL_NODE}" -e '
+    const fs=require("node:fs");const file=process.argv[1];
+    const payload=JSON.parse(fs.readFileSync(file,"utf8"));
+    payload.deploymentState="standby";
+    fs.writeFileSync(file,`${JSON.stringify(payload,null,2)}\n`);
+  ' "${PREVIOUS_TARGET}/deployment.json"
+  run_deploy
+  [[ "${RUN_STATUS}" -eq 0 ]] || \
+    show_deploy_failure "a qualified read-only standby predecessor should succeed"
+  assert_candidate_is_live
+  assert_probe_called previous_target_pre_switch
+  assert_probe_called candidate_pre_switch
+  assert_probe_called post_switch
+  assert_summary_outcome accepted
+  verify_evidence_pair
+
+  setup_case invalid-standby-operator-live-previous
+  upgrade_previous_manifest_to_paired_modern "${PREVIOUS_TARGET}/deployment.json"
+  "${REAL_NODE}" -e '
+    const fs=require("node:fs");const file=process.argv[1];
+    const payload=JSON.parse(fs.readFileSync(file,"utf8"));
+    payload.profile="operator-live";
+    payload.deploymentProfile="operator-live";
+    payload.buildMode.VITE_BFF_REAL_WRITES="true";
+    payload.deploymentState="standby";
+    fs.writeFileSync(file,`${JSON.stringify(payload,null,2)}\n`);
+  ' "${PREVIOUS_TARGET}/deployment.json"
+  cp "${PREVIOUS_TARGET}/deployment.json" "${PREVIOUS_MANIFEST_SNAPSHOT}"
+  run_deploy
+  [[ "${RUN_STATUS}" -ne 0 ]] || \
+    show_deploy_failure "an operator-live standby predecessor must remain rejected"
+  assert_previous_is_live
+  assert_previous_manifest_unchanged
 }
 
 test_origin_dev_lookup_retries_transient_failure() {
