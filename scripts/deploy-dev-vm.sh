@@ -665,6 +665,34 @@ NODE
   evidence_append "bff.identity.${stage}" passed "bffCommit=${BFF_COMMIT}"
 }
 
+resolve_remote_dev_sha() {
+  local attempt raw remote_sha error_file
+  local -a delays=(0 2 5)
+  for attempt in 1 2 3; do
+    error_file="${TMP_DIR}/origin-dev-${attempt}.stderr"
+    raw=""
+    if raw="$(git ls-remote --exit-code --refs origin refs/heads/dev 2>"${error_file}")"; then
+      remote_sha="$(awk '$2 == "refs/heads/dev" { print $1; exit }' <<<"${raw}")"
+      if [[ "${remote_sha}" =~ ^[0-9a-f]{40}$ ]]; then
+        printf '%s\n' "${remote_sha}"
+        return 0
+      fi
+    fi
+    if (( attempt < 3 )); then
+      sleep "${delays[$attempt]}"
+    fi
+  done
+  echo "Unable to resolve current origin/dev after 3 attempts." >&2
+  for attempt in 1 2 3; do
+    error_file="${TMP_DIR}/origin-dev-${attempt}.stderr"
+    if [[ -s "${error_file}" ]]; then
+      echo "origin/dev attempt ${attempt} error:" >&2
+      sed -n '1,20p' "${error_file}" >&2
+    fi
+  done
+  return 1
+}
+
 run_release_probe() {
   local phase="$1"
   local candidate_dir="$2"
@@ -1465,9 +1493,8 @@ if [[ "${DEPLOY_PROFILE}" == "read-only-restore" ]]; then
   exit 0
 fi
 
-REMOTE_DEV_SHA="$(git ls-remote --exit-code origin refs/heads/dev | awk '{print $1}')"
-if [[ ! "${REMOTE_DEV_SHA}" =~ ^[0-9a-f]{40}$ ]]; then
-  echo "Unable to resolve current origin/dev." >&2
+if ! REMOTE_DEV_SHA="$(resolve_remote_dev_sha)"; then
+  evidence_append controller.order failed "reason=origin_dev_unavailable" "attempts=3"
   exit 2
 fi
 if [[ "${CONTROLLER_SHA}" != "${REMOTE_DEV_SHA}" ]]; then
