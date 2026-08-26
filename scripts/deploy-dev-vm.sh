@@ -1907,7 +1907,10 @@ run_release_probe candidate_pre_switch "${RELEASE_DIR}" "${SHA}" "${ARTIFACT_DIG
 evidence_append candidate.pre_switch passed "releaseDir=${RELEASE_DIR}"
 
 verify_bff_identity pre_switch
-REMOTE_DEV_SHA_AT_SWITCH="$(git ls-remote --exit-code origin refs/heads/dev | awk '{print $1}')"
+if ! REMOTE_DEV_SHA_AT_SWITCH="$(resolve_remote_dev_sha)"; then
+  evidence_append controller.order_at_switch failed "reason=origin_dev_unavailable" "attempts=3"
+  exit 2
+fi
 if [[ "${CONTROLLER_SHA}" != "${REMOTE_DEV_SHA_AT_SWITCH}" ]]; then
   echo "Dev advanced after candidate probe; refusing a switch from a stale controller." >&2
   evidence_append controller.order_at_switch failed "currentDevSha=${REMOTE_DEV_SHA_AT_SWITCH}"

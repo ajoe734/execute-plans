@@ -152,6 +152,20 @@ cat > "${MOCK_BIN}/git" <<'MOCK'
 #!/usr/bin/env bash
 set -Eeuo pipefail
 last_arg="${@: -1}"
+if [[ "${1:-}" == "ls-remote" && "${last_arg}" == "refs/heads/dev" ]]; then
+  lookup_count_file="${MOCK_ALLOWED_ROOT:?}/.origin-dev-lookup-count"
+  lookup_count=0
+  if [[ -f "${lookup_count_file}" ]]; then
+    lookup_count="$(<"${lookup_count_file}")"
+  fi
+  lookup_count=$((lookup_count + 1))
+  printf '%s\n' "${lookup_count}" > "${lookup_count_file}"
+  if [[ "${MOCK_FAIL_ORIGIN_DEV_SECOND_LOOKUP:-false}" == "true" &&
+        "${lookup_count}" -eq 2 ]]; then
+    echo "mock transient origin/dev switch lookup failure" >&2
+    exit 128
+  fi
+fi
 if [[ "${1:-}" == "ls-remote" && "${last_arg}" == "refs/heads/dev" &&
       "${MOCK_FAIL_ORIGIN_DEV_ONCE:-false}" == "true" ]]; then
   marker="${MOCK_ALLOWED_ROOT:?}/.origin-dev-failed-once"
@@ -792,6 +806,7 @@ run_deploy() {
       MOCK_FAIL_PROBE_PHASES="" \
       MOCK_FAIL_DURABLE_RSYNC_ONCE="false" \
       MOCK_FAIL_ORIGIN_DEV_ONCE="false" \
+      MOCK_FAIL_ORIGIN_DEV_SECOND_LOOKUP="false" \
       MOCK_BAD_GITHUB_DIGEST="false" \
       MOCK_PUBLIC_HEALTH_STATUS_SEQUENCE="" \
       MOCK_TAMPER_ROLLBACK_PAIR="false" \
@@ -1133,6 +1148,15 @@ test_origin_dev_lookup_retries_transient_failure() {
   assert_candidate_is_live
   grep -Fq 'release.completed' "${CASE_AUDIT}/evidence.jsonl" || \
     show_deploy_failure "retried origin/dev lookup did not complete the release"
+}
+
+test_origin_dev_switch_lookup_retries_transient_failure() {
+  setup_case transient-origin-dev-switch
+  run_deploy MOCK_FAIL_ORIGIN_DEV_SECOND_LOOKUP=true
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "transient switch origin/dev failure should be retried"
+  assert_candidate_is_live
+  grep -Fq 'release.completed' "${CASE_AUDIT}/evidence.jsonl" || \
+    show_deploy_failure "retried switch origin/dev lookup did not complete the release"
 }
 
 test_agora_compatibility_gate_is_consumed_before_switch() {
@@ -2138,6 +2162,7 @@ run_test() {
 
 run_test "valid candidate succeeds and evidence hashes verify" test_valid_candidate_success
 run_test "origin/dev lookup retries a transient git failure" test_origin_dev_lookup_retries_transient_failure
+run_test "switch origin/dev lookup retries a transient git failure" test_origin_dev_switch_lookup_retries_transient_failure
 run_test "Agora pending/rejected or mismatched evidence cannot switch" test_agora_compatibility_gate_is_consumed_before_switch
 run_test "release candidate hash follows canonical LF contract" test_release_candidate_id_uses_lf_canonical_hash
 run_test "canonical hash matches cross-repo pantheon fixture" test_canonical_hash_matches_cross_repo_fixture
