@@ -1,0 +1,91 @@
+name: Pantheon canonical review gate
+
+# execute-plans/dev carries the same required status context as Pantheon/dev,
+# but this repository must not duplicate the review policy.  Run the trusted
+# verifier from Pantheon/dev and publish the status against this PR's exact
+# head.  The verifier treats delivery:tooling as the explicit Human/Ops
+# tooling path; product PRs still require the exact-head review-proof tag.
+# pull_request_target is intentional: candidate workflow code is never
+# executed for the status that controls mergeability.
+
+on:
+  pull_request_target:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+      - labeled
+    branches:
+      - dev
+      - main
+  workflow_dispatch:
+    inputs:
+      head_ref:
+        description: "Exact PR head branch"
+        required: true
+        type: string
+      head_sha:
+        description: "Exact PR head SHA"
+        required: true
+        type: string
+      delivery_class:
+        description: "Explicit delivery class (product or tooling)"
+        required: true
+        type: choice
+        options:
+          - product
+          - tooling
+
+permissions:
+  contents: read
+  pull-requests: read
+  statuses: write
+
+concurrency:
+  group: pantheon-canonical-review-${{ github.event.pull_request.number || github.event.inputs.head_sha }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    name: Publish canonical review status
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      HEAD_REF: ${{ github.event.inputs.head_ref || github.event.pull_request.head.ref }}
+      HEAD_SHA: ${{ github.event.inputs.head_sha || github.event.pull_request.head.sha }}
+      DELIVERY_CLASS: ${{ github.event.inputs.delivery_class || (contains(github.event.pull_request.labels.*.name, 'delivery:tooling') && 'tooling' || 'product') }}
+      TARGET_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Checkout trusted Pantheon verifier
+        uses: actions/checkout@v4
+        with:
+          repository: ajoe734/pantheon
+          ref: dev
+          path: pantheon-verifier
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Validate exact head identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "head_sha must be a full lowercase commit SHA" >&2; exit 1; }
+          [[ "$HEAD_REF" =~ ^[A-Za-z0-9._/-]+$ ]] || { echo "head_ref contains unsafe characters" >&2; exit 1; }
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request_target" ]]; then
+            [[ "$HEAD_SHA" == "${{ github.event.pull_request.head.sha }}" ]] || { echo "event head SHA changed" >&2; exit 1; }
+            [[ "$HEAD_REF" == "${{ github.event.pull_request.head.ref }}" ]] || { echo "event head ref changed" >&2; exit 1; }
+          fi
+
+      - name: Publish canonical review status
+        working-directory: pantheon-verifier
+        run: |
+          set -euo pipefail
+          python3 scripts/git/canonical_review_gate_ci.py \
+            --repo "$REPO" \
+            --head-ref "$HEAD_REF" \
+            --head-sha "$HEAD_SHA" \
+            --delivery-class "$DELIVERY_CLASS" \
+            --target-url "$TARGET_URL"
+

@@ -80,6 +80,10 @@ for workflow in (deploy, watchdog):
     ):
         if marker not in workflow:
             raise SystemExit(f"frontend deployment wiring is missing {marker}")
+if '--ref dev' not in deploy:
+    raise SystemExit("candidate workflow definitions must be dispatched from trusted execute-plans/dev")
+if 'frontend_ref' not in deploy or 'PANTHEON_DEPLOY_FRONTEND_REF' not in deploy:
+    raise SystemExit("candidate source ref is not carried through FE deployment")
 PY
 
 HARNESS_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/deploy-dev-vm-contract.XXXXXX")"
