@@ -79,8 +79,10 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.authListener = null;
   mocks.initialUser = { uid: "gcp-user" } as User;
-  mocks.identitySession.mockImplementation(async (user: User) =>
-    session(user === mocks.initialUser ? "initial-token" : "refreshed-token"));
+  mocks.identitySession.mockImplementation(async (user: User, forceRefresh = false) =>
+    session(forceRefresh
+      ? "forced-refresh-token"
+      : user === mocks.initialUser ? "initial-token" : "refreshed-token"));
   mocks.identitySignOut.mockResolvedValue(undefined);
   mocks.verify.mockResolvedValue(verified);
   mocks.refreshVerify.mockResolvedValue(verified);
@@ -153,6 +155,30 @@ describe("AuthProvider strict BFF bridge", () => {
     expect(result.current.bffSession).toBeNull();
     expect(result.current.bffError?.message).toContain("401");
     expect(mocks.clear).toHaveBeenCalled();
+  });
+
+  it("retries BFF verification with a refreshed existing identity instead of signing in again", async () => {
+    mocks.verify.mockRejectedValueOnce(new Error("BFF returned 401"));
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.bffError?.message).toContain("401"));
+    mocks.register.mockClear();
+    mocks.refreshVerify.mockClear();
+
+    await act(async () => {
+      await result.current.retryBffSession();
+    });
+
+    expect(mocks.identitySession).toHaveBeenLastCalledWith(
+      mocks.initialUser,
+      true,
+    );
+    expect(mocks.register).toHaveBeenCalledWith(
+      expect.objectContaining({ idToken: "forced-refresh-token" }),
+    );
+    expect(mocks.refreshVerify).toHaveBeenCalledOnce();
+    await waitFor(() => expect(result.current.bffSession).toEqual(verified));
+    expect(result.current.bffError).toBeNull();
+    expect(mocks.identitySignOut).not.toHaveBeenCalled();
   });
 
   it("clears local privilege even when BFF logout is unavailable", async () => {
