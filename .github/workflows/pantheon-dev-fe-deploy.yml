@@ -1375,7 +1375,6 @@ jobs:
             -f expected_write_proof_digest="$EXPECTED_WRITE_PROOF_DIGEST" \
             -f bff_base_url="$PANTHEON_BFF_BASE_URL" \
             -f bff_sha="$EXACT_BFF_SHA" \
-            -f pantheon_contract_ref="$EXACT_BFF_SHA" \
             -f release_candidate_id="$RELEASE_CANDIDATE_ID" \
             -f compatibility_manifest_sha256="$COMPATIBILITY_MANIFEST_SHA256" \
             -f release_controller_run_id="$RELEASE_CONTROLLER_RUN_ID" \

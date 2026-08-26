@@ -60,6 +60,34 @@ describe("paired Pantheon release workflow", () => {
     expect(upload).not.toContain("github.event_name == 'push'");
   });
 
+  it("keeps workflow dispatch within GitHub's 25-input limit without duplicate contract refs", () => {
+    const dispatch = integrationWorkflow.slice(
+      integrationWorkflow.indexOf("  workflow_dispatch:"),
+      integrationWorkflow.indexOf("\n\npermissions:"),
+    );
+    const inputNames = [...dispatch.matchAll(/^      ([a-z][a-z0-9_]*):$/gmu)].map(
+      ([, name]) => name,
+    );
+    const declared = [
+      "fe_base_url", "fe_sha", "frontend_ref", "proof_correlation_id",
+      "parent_deploy_run_id", "parent_deploy_run_attempt", "parent_deploy_actor",
+      "parent_proof_nonce", "parent_binding_artifact_id", "parent_binding_artifact_digest",
+      "source_gate_run_id", "source_artifact_id", "source_artifact_digest", "expected_pair_id",
+      "expected_read_only_digest", "expected_write_proof_digest", "bff_base_url", "bff_sha",
+      "release_candidate_id", "compatibility_manifest_sha256", "release_controller_run_id",
+      "persona_interaction_write_proof", "soft_fail", "functional_closure_write_proof", "pint_hosted_probe",
+    ];
+    // The regex only matches top-level input declarations, not nested
+    // description/type/options fields.
+    expect(inputNames).toHaveLength(25);
+    expect(inputNames).toEqual(declared);
+    expect(integrationWorkflow).not.toContain("      pantheon_contract_ref:");
+    expect(deployWorkflow).not.toContain('-f pantheon_contract_ref=');
+    expect(integrationWorkflow).toContain(
+      "PANTHEON_AGORA_CONTRACT_REF: ${{ inputs.bff_sha || vars.PANTHEON_AGORA_CONTRACT_REF || 'dev' }}",
+    );
+  });
+
   it("keeps normal deploys read-only and isolates actions write to the gated proof coordinator", () => {
     const deployJobStart = deployWorkflow.indexOf("  deploy:");
     const proofJobStart = deployWorkflow.indexOf("  proof-coordinator:");
