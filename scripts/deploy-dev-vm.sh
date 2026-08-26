@@ -522,8 +522,14 @@ if (
 if (expectedState && String(payload.deploymentState || "") !== expectedState) {
   throw new Error("deployment manifest state mismatch");
 }
-if (!expectedState && payload.deploymentState && payload.deploymentState !== "accepted") {
-  throw new Error("deployment manifest is not an accepted release");
+if (
+  !expectedState &&
+  payload.deploymentState &&
+  payload.deploymentState !== "accepted" &&
+  !(payload.deploymentState === "standby" &&
+    (payload.deploymentProfile || payload.profile) === "read-only")
+) {
+  throw new Error("deployment manifest is not an accepted or read-only standby release");
 }
 if (expectedProfile) {
   if (payload.profile !== expectedProfile || payload.deploymentProfile !== expectedProfile) {
@@ -1535,7 +1541,7 @@ if [[ -L "${DEPLOY_ROOT}" ]]; then
       /^[0-9a-f]{40}$/.test(manifestBff)&&p.bffCommitEvidence===true&&
       ["","read-only","operator-live","write-proof"].includes(profile)&&
       (!profile||/^[0-9a-f]{64}$/.test(String(p.pairId||"")))&&
-      ["","accepted","candidate"].includes(state);
+      ["","accepted","candidate","standby"].includes(state);
     if(!/^[0-9a-f]{40}$/.test(commit)||!safe)process.exit(1);
     process.stdout.write(commit);
   ' "${PREVIOUS_TARGET}/deployment.json")"
