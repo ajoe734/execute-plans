@@ -37,7 +37,7 @@ describe("TJ-E2E-012 hosted browser proof contract", () => {
     expect(spec).not.toContain("const paper = await openPaperList(page)");
   });
 
-  it("mints fresh proof credentials before the desktop, viewer-RBAC, and mobile checks", () => {
+  it("mints fresh proof credentials before the desktop and viewer-RBAC checks", () => {
     expect(workflow).toContain("e2e/trade-journeys-cross-repo-hosted.spec.ts");
     expect(workflow).toContain("Mint fresh short-lived proof credentials immediately before writes");
     expect(workflow).toContain("/bff/auth/dev-login");
@@ -47,7 +47,8 @@ describe("TJ-E2E-012 hosted browser proof contract", () => {
     expect(workflow).not.toContain("secrets.PANTHEON_BFF_VIEWER_TOKEN");
     expect(workflow).toContain("PANTHEON_CREDENTIALED_PLAYWRIGHT_NO_ARTIFACTS=1");
     expect(workflow).toContain("--grep '@desktop-full'");
-    expect(workflow).toContain("--grep '@mobile-basic'");
+    expect(workflow).not.toContain("mobile-chromium");
+    expect(workflow).not.toContain("@mobile-basic");
   });
 
   it("uses the canonical hosted data-plane tenant", () => {

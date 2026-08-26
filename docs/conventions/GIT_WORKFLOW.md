@@ -68,6 +68,13 @@ labeled `regression/v<...>` (or `hold-promote` / `regression`).
 `main-release.yml` tags `prod/<v>` when the promote PR merges. No
 direct pushes to main.
 
+Promote PRs are created with the workflow's `GITHUB_TOKEN`, so GitHub does not
+recursively emit a usable `pull_request` run for them. The promote workflow
+therefore dispatches `branch-ci.yml` explicitly on the exact `promote/*` head,
+binds the run to the expected head SHA and PR number, materializes any
+`action_required` placeholder, and fails unless every main-protection check
+context attaches to that exact head before auto-merge is requested.
+
 ## 5. Commit Conventions
 
 Subject: `<TASK-ID>: <imperative summary>`, ≤ 72 chars.
@@ -100,11 +107,15 @@ Provided by `.github/workflows/branch-ci.yml`:
 |-------------------------|------------------------------------------------------|
 | `Commit trailers`       | Enforce subject prefix + LLM-Agent / Task-ID / Reviewer |
 | `Generated files guard` | Reject build/audit artifacts from the diff           |
-| `Smoke acceptance`      | `npm ci && npm run build`                            |
+| `Component merge gate`  | Focused tests, contract checks, typecheck, and build |
+| `Smoke acceptance`      | Fail-closed compatibility context over the component merge gate |
 
-Branch protection on `dev` and `main`: require PR, the 3 checks above +
-base up-to-date, 0 approvals (gating discipline is in CI, mirroring
-pantheon), force push and deletion blocked.
+Branch protection requires PRs and an up-to-date base. `dev` requires
+`Commit trailers`, `Generated files guard`, `Component merge gate`, and the
+canonical review gate. The historical `main` protection still requires
+`Commit trailers`, `Generated files guard`, and `Smoke acceptance`; the latter
+is emitted only after `Component merge gate` succeeds, so it cannot weaken the
+underlying gate. Force push and branch deletion remain blocked.
 
 The pre-existing `pantheon-integration-gate.yml` (FE-BFF live release
 gate) keeps running on PRs/pushes as an informational check; it is not

@@ -1,10 +1,9 @@
 name: Branch CI Gate
 
 # Gate every push and PR that participates in the task / publish / main
-# pipeline. Ported from pantheon .github/workflows/branch-ci.yml. The
-# three jobs below ("Commit trailers", "Generated files guard", "Smoke
-# acceptance") are the required status checks on the dev and main
-# branch protections.
+# pipeline. Promote PRs created by publish-promote use the explicit
+# workflow_dispatch path because GitHub does not recursively emit pull_request
+# events for a PR created with that workflow's GITHUB_TOKEN.
 
 on:
   push:
@@ -18,6 +17,16 @@ on:
     branches:
       - "dev"
       - "main"
+  workflow_dispatch:
+    inputs:
+      expected_head_sha:
+        description: "Exact promote PR head that must receive the required checks"
+        required: true
+        type: string
+      promote_pr_number:
+        description: "Promote PR number for audit output"
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -31,12 +40,35 @@ jobs:
     name: Commit trailers
     runs-on: ubuntu-latest
     steps:
+      - name: Validate explicit promote dispatch
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          EXPECTED_HEAD_SHA: ${{ inputs.expected_head_sha }}
+          HEAD_SHA: ${{ github.sha }}
+          PROMOTE_PR_NUMBER: ${{ inputs.promote_pr_number }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [[ ! "$EXPECTED_HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "expected_head_sha must be a full lowercase commit SHA" >&2
+            exit 1
+          fi
+          if [[ "$REF_NAME" != promote/* ]]; then
+            echo "manual Branch CI dispatch is restricted to promote/* refs" >&2
+            exit 1
+          fi
+          if [[ "$HEAD_SHA" != "$EXPECTED_HEAD_SHA" ]]; then
+            echo "dispatch head mismatch for promote PR #${PROMOTE_PR_NUMBER}: expected ${EXPECTED_HEAD_SHA}, got ${HEAD_SHA}" >&2
+            exit 1
+          fi
+          echo "Validated exact promote PR #${PROMOTE_PR_NUMBER} head ${HEAD_SHA}"
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
       - name: Determine commit range
+        if: github.event_name != 'workflow_dispatch'
         id: range
         env:
           EVENT: ${{ github.event_name }}
@@ -58,7 +90,12 @@ jobs:
           HEAD_REF: ${{ github.event.pull_request.head.ref || github.ref_name }}
           REF_NAME: ${{ github.ref_name }}
           HEAD_SHA: ${{ github.sha }}
+          RANGE: ${{ steps.range.outputs.range }}
         run: |
+          if [[ "$EVENT" == "workflow_dispatch" && "$REF_NAME" == promote/* ]]; then
+            echo "Skipping commit trailer re-scan for exact-head promote dispatch ${REF_NAME}; publish history was already validated before snapshot cut."
+            exit 0
+          fi
           if [[ "$EVENT" == "pull_request" && "$HEAD_REF" == promote/* ]]; then
             echo "Skipping commit trailer re-scan for promote PR ${HEAD_REF}; publish history was already validated before snapshot cut."
             exit 0
@@ -70,14 +107,40 @@ jobs:
               exit 0
             fi
           fi
+          if [[ -z "$RANGE" ]]; then
+            echo "commit range was not resolved; refusing to skip the trailer gate" >&2
+            exit 1
+          fi
           python3 scripts/git/check_commit_trailers.py \
-            --range "${{ steps.range.outputs.range }}" \
+            --range "$RANGE" \
             --skip-merge
 
   generated-files:
     name: Generated files guard
     runs-on: ubuntu-latest
     steps:
+      - name: Validate explicit promote dispatch
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          EXPECTED_HEAD_SHA: ${{ inputs.expected_head_sha }}
+          HEAD_SHA: ${{ github.sha }}
+          PROMOTE_PR_NUMBER: ${{ inputs.promote_pr_number }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [[ ! "$EXPECTED_HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "expected_head_sha must be a full lowercase commit SHA" >&2
+            exit 1
+          fi
+          if [[ "$REF_NAME" != promote/* ]]; then
+            echo "manual Branch CI dispatch is restricted to promote/* refs" >&2
+            exit 1
+          fi
+          if [[ "$HEAD_SHA" != "$EXPECTED_HEAD_SHA" ]]; then
+            echo "dispatch head mismatch for promote PR #${PROMOTE_PR_NUMBER}: expected ${EXPECTED_HEAD_SHA}, got ${HEAD_SHA}" >&2
+            exit 1
+          fi
+          echo "Validated exact promote PR #${PROMOTE_PR_NUMBER} head ${HEAD_SHA}"
+
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -128,6 +191,10 @@ jobs:
           HEAD_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
+          if [[ -z "$BASE_SHA" || "$BASE_SHA" == "0000000000000000000000000000000000000000" ]] \
+            || ! git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
+            BASE_SHA="${HEAD_SHA}~1"
+          fi
           mapfile -t component_paths < <(
             git diff --name-only --diff-filter=ACMRTUXB "$BASE_SHA" "$HEAD_SHA" -- \
               ':(glob)src/**/*.ts' ':(glob)src/**/*.tsx'
@@ -163,3 +230,20 @@ jobs:
           VITE_GCP_IDENTITY_PROJECT_ID: ${{ vars.VITE_GCP_IDENTITY_PROJECT_ID }}
           VITE_GCP_IDENTITY_AUTH_DOMAIN: ${{ vars.VITE_GCP_IDENTITY_AUTH_DOMAIN }}
         run: npm run build
+
+  smoke-alias:
+    name: Smoke acceptance
+    runs-on: ubuntu-latest
+    needs:
+      - component-merge
+    if: always()
+    steps:
+      - name: Preserve the protected main check context
+        env:
+          COMPONENT_MERGE_RESULT: ${{ needs.component-merge.result }}
+        run: |
+          if [[ "$COMPONENT_MERGE_RESULT" != "success" ]]; then
+            echo "Component merge gate did not succeed: ${COMPONENT_MERGE_RESULT}" >&2
+            exit 1
+          fi
+          echo "Component merge gate succeeded"

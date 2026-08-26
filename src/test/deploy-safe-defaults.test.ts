@@ -230,16 +230,18 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     );
   });
 
-  it("splits exact-candidate Chromium from the later mobile-only suite", () => {
-    const start = integrationWorkflow.indexOf("- name: Playwright E2E");
+  it("runs the release-gate browser suite on Chromium only", () => {
+    const start = integrationWorkflow.indexOf(
+      "- name: Playwright desktop E2E",
+    );
     const end = integrationWorkflow.indexOf(
       "- name: Verify live BFF release identity remained stable",
     );
     expect(start).toBeGreaterThan(-1);
     expect(end).toBeGreaterThan(start);
-    const mobileBlock = integrationWorkflow.slice(start, end);
+    const desktopBlock = integrationWorkflow.slice(start, end);
 
-    expect(mobileBlock).toContain("npx playwright test \\");
+    expect(desktopBlock).toContain("npx playwright test \\");
     for (const spec of [
       "01-startup-session",
       "02-control-room",
@@ -260,17 +262,19 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
       "17-a11y-v5",
       "18-perf",
     ]) {
-      expect(mobileBlock).toMatch(new RegExp(`e2e/${spec}\\.spec\\.ts`, "u"));
+      expect(desktopBlock).toMatch(new RegExp(`e2e/${spec}\\.spec\\.ts`, "u"));
     }
-    expect(mobileBlock).toContain(
-      'PLAYWRIGHT_JSON_OUTPUT_FILE="$PANTHEON_AUDIT_OUT_DIR/playwright-mobile-results.json"',
+    expect(desktopBlock).toContain(
+      'PLAYWRIGHT_JSON_OUTPUT_FILE="$PANTHEON_AUDIT_OUT_DIR/playwright-desktop-results.json"',
     );
-    expect(mobileBlock).not.toContain(
+    expect(desktopBlock).not.toContain(
       'PLAYWRIGHT_JSON_OUTPUT_FILE="$PANTHEON_AUDIT_OUT_DIR/playwright-results.json"',
     );
-    expect(mobileBlock).toContain("--project=mobile-chromium");
-    expect(mobileBlock).not.toMatch(/e2e\/\S*hosted\S*\.spec\.ts/u);
-    expect(mobileBlock).toContain(
+    expect(desktopBlock).toContain("--project=chromium");
+    expect(desktopBlock).not.toContain("mobile-chromium");
+    expect(desktopBlock).not.toContain("@mobile-basic");
+    expect(desktopBlock).not.toMatch(/e2e\/\S*hosted\S*\.spec\.ts/u);
+    expect(desktopBlock).toContain(
       '--grep-invert "asserts MeResponse tenant/env/user/capabilities shape"',
     );
   });
@@ -310,6 +314,8 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     );
     expect(deployWorkflow).toContain('run.event === "workflow_dispatch"');
     expect(deployWorkflow).toContain('run.head_branch === "dev"');
+    expect(deployWorkflow).toContain("requestedFrontendRef");
+    expect(deployWorkflow).toContain("heads/${requestedFrontendRef}");
     expect(deployWorkflow).toContain('run.conclusion === "success"');
     expect(deployWorkflow).toContain(
       "`Release candidate ${releaseCandidateId}`",
@@ -494,9 +500,8 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     expect(authorizedProof).toContain(
       "--project=chromium --grep '@desktop-full'",
     );
-    expect(authorizedProof).toContain(
-      "--project=mobile-chromium --grep '@mobile-basic'",
-    );
+    expect(authorizedProof).not.toContain("mobile-chromium");
+    expect(authorizedProof).not.toContain("@mobile-basic");
     expect(authorizedProof).toContain(
       "node scripts/ensure-persona-hosted-proof-servant.mjs",
     );
@@ -527,13 +532,13 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     );
     expect(authorizedProof).toContain("--retries=0 --reporter=list,json");
     // Credentialed browser suites run with artifacts disabled:
-    // Persona (2), Trade Journeys (2), Agora (1), and Management (1).
-    expect(authorizedProof.match(/--trace=off/gu)).toHaveLength(6);
+    // Persona (1), Trade Journeys (1), Agora (1), and Management (1).
+    expect(authorizedProof.match(/--trace=off/gu)).toHaveLength(4);
     expect(
       authorizedProof.match(
         /PANTHEON_CREDENTIALED_PLAYWRIGHT_NO_ARTIFACTS=1/gu,
       ),
-    ).toHaveLength(6);
+    ).toHaveLength(4);
     expect(playwrightConfig).toContain(
       'process.env.PANTHEON_CREDENTIALED_PLAYWRIGHT_NO_ARTIFACTS === "1"',
     );
@@ -555,7 +560,7 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     expect(authorizedArtifact).not.toContain("playwright-report");
     expect(authorizedArtifact).not.toContain("test-results");
     expect(authorizedProof).toContain("desktop.expected !== 3");
-    expect(authorizedProof).toContain("mobile.expected !== 1");
+    expect(authorizedProof).not.toContain("mobile.expected !== 1");
     expect(authorizedProof).toContain("skipped !== 0");
     expect(authorizedProof).toContain("unexpected !== 0");
     expect(authorizedProof).toContain("flaky !== 0");
