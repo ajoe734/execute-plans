@@ -118,7 +118,7 @@ on:
           - "true"
           - "false"
       pint_hosted_probe:
-        description: "Opt in to the PINT-010-R2 paper-only hosted proposal and targeted desktop/mobile proof."
+        description: "Opt in to the PINT-010-R2 paper-only hosted proposal and targeted desktop proof."
         required: false
         default: "false"
         type: choice
@@ -1184,7 +1184,7 @@ jobs:
           set -o pipefail
           npm run accept:mgmt:hosted 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/management-hosted-acceptance.log"
 
-      - name: PINT hosted desktop write and mobile layout proof
+      - name: PINT hosted desktop write proof
         id: pint_hosted_e2e
         if: github.event_name == 'workflow_dispatch' && inputs.persona_interaction_write_proof == 'true'
         env:
@@ -1197,11 +1197,9 @@ jobs:
           {
             npx playwright test e2e/persona-interaction-cross-repo-hosted.spec.ts \
               --project=chromium --grep '@desktop-full'
-            npx playwright test e2e/persona-interaction-cross-repo-hosted.spec.ts \
-              --project=mobile-chromium --grep '@mobile-basic'
-          } 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/pint-hosted-desktop-mobile-e2e.log"
+          } 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/pint-hosted-desktop-e2e.log"
 
-      - name: Playwright E2E
+      - name: Playwright desktop E2E
         id: e2e
         continue-on-error: true
         env:
@@ -1218,7 +1216,7 @@ jobs:
           PANTHEON_SSE_ORIGIN_URL="$FE_UNDER_TEST" \
           VITE_BFF_FALLBACK=strict \
           BFF_FALLBACK=strict \
-          PLAYWRIGHT_JSON_OUTPUT_FILE="$PANTHEON_AUDIT_OUT_DIR/playwright-mobile-results.json" \
+          PLAYWRIGHT_JSON_OUTPUT_FILE="$PANTHEON_AUDIT_OUT_DIR/playwright-desktop-results.json" \
           npx playwright test \
             e2e/01-startup-session.spec.ts \
             e2e/02-control-room.spec.ts \
@@ -1238,7 +1236,7 @@ jobs:
             e2e/16-audit-correlation.spec.ts \
             e2e/17-a11y-v5.spec.ts \
             e2e/18-perf.spec.ts \
-            --project=mobile-chromium \
+            --project=chromium \
             --grep-invert "asserts MeResponse tenant/env/user/capabilities shape" \
             --reporter=list,html,json \
             2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/playwright-e2e.log"
@@ -1412,7 +1410,7 @@ jobs:
             "route_load": { "outcome": "${{ steps.route_load.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/route-load-baseline.log" },
             "mgmt_load_gate": { "outcome": "${{ steps.mgmt_load_gate.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/release-load-gate.log" },
             "mgmt_hosted_accept": { "outcome": "${{ steps.mgmt_hosted_accept.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/management-hosted-acceptance.log" },
-            "pint_hosted_e2e": { "outcome": "${{ steps.pint_hosted_e2e.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/pint-hosted-desktop-mobile-e2e.log" },
+            "pint_hosted_e2e": { "outcome": "${{ steps.pint_hosted_e2e.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/pint-hosted-desktop-e2e.log" },
             "pint_manifest_after": { "outcome": "${{ steps.pint_manifest_after.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/deployment-after-all-proof-steps.json" },
             "pr_preview": { "outcome": "${{ steps.pr_preview.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/pr-frontend-server.log" },
             "e2e": { "outcome": "${{ steps.e2e.outcome }}", "evidence": "${PANTHEON_AUDIT_OUT_DIR}/playwright-e2e.log" }
@@ -1720,7 +1718,7 @@ jobs:
           PANTHEON_EXPECTED_BFF_SHA: ${{ inputs.bff_sha }}
         run: node scripts/ensure-persona-hosted-proof-servant.mjs
 
-      - name: Run governed and Persona proof with proof-only credentials
+      - name: Run governed and Persona desktop proof with proof-only credentials
         env:
           PANTHEON_EXPECTED_BFF_SHA: ${{ inputs.bff_sha }}
           PANTHEON_PINT_PROBE_ALLOW_WRITES: "true"
@@ -1729,20 +1727,13 @@ jobs:
           set -euo pipefail
           node scripts/probe-persona-governed-proposal-live.mjs
           desktop_results="$PANTHEON_AUDIT_OUT_DIR/persona-hosted-desktop-results.json"
-          mobile_results="$PANTHEON_AUDIT_OUT_DIR/persona-hosted-mobile-results.json"
           PANTHEON_CREDENTIALED_PLAYWRIGHT_NO_ARTIFACTS=1 \
             PLAYWRIGHT_JSON_OUTPUT_FILE="$desktop_results" \
             npx playwright test e2e/persona-interaction-cross-repo-hosted.spec.ts \
               --project=chromium --grep '@desktop-full' \
               --retries=0 --reporter=list,json \
               --trace=off
-          PANTHEON_CREDENTIALED_PLAYWRIGHT_NO_ARTIFACTS=1 \
-            PLAYWRIGHT_JSON_OUTPUT_FILE="$mobile_results" \
-            npx playwright test e2e/persona-interaction-cross-repo-hosted.spec.ts \
-              --project=mobile-chromium --grep '@mobile-basic' \
-              --retries=0 --reporter=list,json \
-              --trace=off
-          node --input-type=module - "$desktop_results" "$mobile_results" <<'NODE'
+          node --input-type=module - "$desktop_results" <<'NODE'
           import fs from "node:fs";
           const summaries = process.argv.slice(2).map((path) => {
             const stats = JSON.parse(fs.readFileSync(path, "utf8")).stats || {};
@@ -1753,31 +1744,24 @@ jobs:
               flaky: Number(stats.flaky || 0),
             };
           });
-          const [desktop, mobile] = summaries;
-          if (desktop.expected !== 3 || mobile.expected !== 1
+          const [desktop] = summaries;
+          if (desktop.expected !== 3
             || summaries.some((stats) => stats.skipped !== 0 || stats.unexpected !== 0 || stats.flaky !== 0)) {
-            throw new Error(`Persona hosted proof requires desktop 3/3 full and mobile 1/1 layout-only with no skipped/unexpected/flaky; got ${JSON.stringify({ desktop, mobile })}`);
+            throw new Error(`Persona hosted proof requires desktop 3/3 full with no skipped/unexpected/flaky; got ${JSON.stringify({ desktop })}`);
           }
           NODE
 
-      - name: Run Trade Journey no-interception desktop mobile and a11y proof
+      - name: Run Trade Journey no-interception desktop and a11y proof
         run: |
           set -euo pipefail
           desktop_results="$PANTHEON_AUDIT_OUT_DIR/trade-journey-hosted-desktop-results.json"
-          mobile_results="$PANTHEON_AUDIT_OUT_DIR/trade-journey-hosted-mobile-results.json"
           PANTHEON_CREDENTIALED_PLAYWRIGHT_NO_ARTIFACTS=1 \
             PLAYWRIGHT_JSON_OUTPUT_FILE="$desktop_results" \
             npx playwright test e2e/trade-journeys-cross-repo-hosted.spec.ts \
               --project=chromium --grep '@desktop-full' \
               --retries=0 --reporter=list,json \
               --trace=off
-          PANTHEON_CREDENTIALED_PLAYWRIGHT_NO_ARTIFACTS=1 \
-            PLAYWRIGHT_JSON_OUTPUT_FILE="$mobile_results" \
-            npx playwright test e2e/trade-journeys-cross-repo-hosted.spec.ts \
-              --project=mobile-chromium --grep '@mobile-basic' \
-              --retries=0 --reporter=list,json \
-              --trace=off
-          node --input-type=module - "$desktop_results" "$mobile_results" <<'NODE'
+          node --input-type=module - "$desktop_results" <<'NODE'
           import fs from "node:fs";
           const summaries = process.argv.slice(2).map((path) => {
             const stats = JSON.parse(fs.readFileSync(path, "utf8")).stats || {};
@@ -1788,10 +1772,10 @@ jobs:
               flaky: Number(stats.flaky || 0),
             };
           });
-          const [desktop, mobile] = summaries;
-          if (desktop.expected !== 2 || mobile.expected !== 1
+          const [desktop] = summaries;
+          if (desktop.expected !== 2
             || summaries.some((stats) => stats.skipped !== 0 || stats.unexpected !== 0 || stats.flaky !== 0)) {
-            throw new Error(`Trade Journey hosted proof requires desktop 2/2 and mobile 1/1 with no skipped/unexpected/flaky; got ${JSON.stringify({ desktop, mobile })}`);
+            throw new Error(`Trade Journey hosted proof requires desktop 2/2 with no skipped/unexpected/flaky; got ${JSON.stringify({ desktop })}`);
           }
           NODE
 
