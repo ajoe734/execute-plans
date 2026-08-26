@@ -28,7 +28,9 @@ vi.mock("firebase/auth", () => ({
   sendPasswordResetEmail: mocks.resetPassword,
   signInWithEmailAndPassword: mocks.signIn,
   signInWithPopup: mocks.signInWithPopup,
-  GoogleAuthProvider: class GoogleAuthProvider {},
+  GoogleAuthProvider: class GoogleAuthProvider {
+    providerId = "google.com";
+  },
   signOut: mocks.identitySignOut,
   TotpMultiFactorGenerator: {
     FACTOR_ID: "totp",
@@ -116,6 +118,9 @@ describe("Pantheon auth recovery page", () => {
       {},
       expect.any(Object),
     );
+    expect(mocks.signInWithPopup.mock.calls[0][1]).toMatchObject({
+      providerId: "google.com",
+    });
   });
 
   it("offers required TOTP enrollment before showing a BFF first-factor rejection", () => {
