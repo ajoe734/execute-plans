@@ -81,10 +81,6 @@ on:
         description: "Pantheon backend/BFF SHA"
         required: false
         default: ""
-      pantheon_contract_ref:
-        description: "Pantheon ref used for the Agora OpenAPI/schema contract bundle"
-        required: false
-        default: "dev"
       release_candidate_id:
         description: "Exact Pantheon-owned cross-repo release candidate ID."
         required: false
@@ -467,7 +463,10 @@ jobs:
       # gates must never inherit a stale repository variable: live
       # /bff/version is the exact release identity source of truth.
       PANTHEON_EXPECTED_BFF_SHA: ${{ inputs.bff_sha || '' }}
-      PANTHEON_AGORA_CONTRACT_REF: ${{ inputs.pantheon_contract_ref || vars.PANTHEON_AGORA_CONTRACT_REF || 'dev' }}
+      # The BFF SHA is also the Pantheon contract ref for a paired release.
+      # Reuse that input instead of maintaining a second dispatch parameter;
+      # GitHub limits workflow_dispatch to 25 inputs.
+      PANTHEON_AGORA_CONTRACT_REF: ${{ inputs.bff_sha || vars.PANTHEON_AGORA_CONTRACT_REF || 'dev' }}
       PANTHEON_RELEASE_GATE_AUTH_MODE: ${{ vars.PANTHEON_RELEASE_GATE_AUTH_MODE || 'permissive' }}
       PANTHEON_RELEASE_GATE_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
       # A deployable dev candidate is always hard-gated. Observation-mode
