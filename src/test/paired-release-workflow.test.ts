@@ -293,7 +293,7 @@ describe("paired Pantheon release workflow", () => {
       "Verify exact write-proof deployment before credentials",
     );
     expect(authorized).toContain(
-      "Run governed and Persona proof with proof-only credentials",
+      "Run governed and Persona desktop proof with proof-only credentials",
     );
     expect(authorized).toContain(
       "Fresh-check active parent and one-time child claim before credentials",
@@ -309,7 +309,7 @@ describe("paired Pantheon release workflow", () => {
       authorized.indexOf("fresh child claim does not authorize"),
     ).toBeLessThan(
       authorized.indexOf(
-        "Run governed and Persona proof with proof-only credentials",
+        "Run governed and Persona desktop proof with proof-only credentials",
       ),
     );
     expect(authorized.slice(0, authorized.indexOf("    steps:"))).not.toContain(
