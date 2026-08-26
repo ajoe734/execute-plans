@@ -2,8 +2,10 @@
 // Overview · Spec & Parameters · Experiments · Paper-Live · Risk & Alerts ·
 // Incidents · Artifacts · Evolution · Governance · Lineage · Audit
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { canonicalCenterUrl } from "@/management/navigation/managementRouteManifest";
+import { tradeJourneyHref } from "@/management/navigation/tradeJourneyLinks";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { StatCard } from "@/platform/components/StatCard";
@@ -12,8 +14,10 @@ import { DataTable } from "@/platform/components/DataTable";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { RiskBadge } from "@/platform/components/RiskBadge";
 import { bff } from "@/lib/bff-v1";
-import { mutations } from "@/lib/bff/mutations";
+import { commandReceiptDescription } from "@/lib/bff-v1/commandReceipt";
+import { bffWrites } from "@/lib/bff/runAction";
 import { runActionSafe } from "@/lib/bff-v1";
+import { NonProductionActionButton } from "@/management/components/NonProductionActionButton";
 import { useT } from "@/platform/hooks";
 import type { Strategy, Job, AuditEvent, ApprovalRequest, Alert, Incident, Artifact, EvolutionProgram, ResearchExperiment } from "@/lib/bff/types";
 import { Inbox, ArrowRight, CheckCircle2, AlertTriangle, FileText, Zap } from "lucide-react";
@@ -41,6 +45,7 @@ export const StrategyDetail = () => {
   const { id } = useParams();
   const t = useT();
   const nav = useNavigate();
+  const location = useLocation();
   const { can } = usePermissions();
   const [s, setS] = useState<Strategy | undefined>();
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -91,22 +96,8 @@ export const StrategyDetail = () => {
 
   if (!s) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
 
-  // ─── Mock data scoped to this strategy ───
-  const params = [
-    { key: "lookback_days", value: "120", note: "Sampling window" },
-    { key: "rebalance_freq", value: "weekly", note: "Cron: 0 2 * * 1" },
-    { key: "max_position_pct", value: "8.0%", note: "Per-leg cap" },
-    { key: "stop_loss_pct", value: "2.5%", note: "Hard stop" },
-    { key: "leverage_cap", value: "3.0x", note: "Cross-margin" },
-  ];
-
-  const paperLive = [
-    { metric: "Sharpe",      paper: (s.sharpe + 0.3).toFixed(2), live: (s.sharpe ?? 0).toFixed(2),  delta: "-0.30" },
-    { metric: "PnL 30d",     paper: `${((s.pnl30d + 0.012) * 100).toFixed(2)}%`, live: `${(s.pnl30d * 100).toFixed(2)}%`, delta: "-1.20%" },
-    { metric: "Max Drawdown",paper: `${((s.drawdown + 0.005) * 100).toFixed(2)}%`, live: `${(s.drawdown * 100).toFixed(2)}%`, delta: "+0.50%" },
-    { metric: "Win Rate",    paper: "57.4%", live: "54.1%", delta: "-3.30%" },
-    { metric: "Avg Slippage",paper: "1.2 bps", live: "2.4 bps", delta: "+1.20" },
-  ];
+  const params: { key: string; value: string; note: string }[] = [];
+  const paperLive: { metric: string; paper: string; live: string; delta: string }[] = [];
 
   return (
     <>
@@ -122,21 +113,17 @@ export const StrategyDetail = () => {
             })}>
               <Inbox className="h-4 w-4 mr-1" />Inspect
             </Button>
-            <Button size="sm" variant="outline" onClick={async () => {
-              const res = await mutations.runParameterSweep(s.id, { memo: `manual sweep from ${s.id}` });
-              toast.success(t("strategy.sweep.queued"), { description: res.job.id });
-            }}>
+            <NonProductionActionButton size="sm" variant="outline">
               <Zap className="h-4 w-4 mr-1" />{t("strategy.sweep.run")}
-            </Button>
+            </NonProductionActionButton>
             {transitions.map((tr) => (
-              <Button
+              <NonProductionActionButton
                 key={tr.action}
                 size="sm"
                 variant={tr.risk === "critical" || tr.risk === "high" ? "default" : "outline"}
-                onClick={() => { setActiveTr(tr); setConfirmOpen(true); }}
               >
                 {tr.action} → {tr.to}
-              </Button>
+              </NonProductionActionButton>
             ))}
           </>
         }
@@ -160,14 +147,14 @@ export const StrategyDetail = () => {
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <Field label="Alpha" value={s.alpha} mono />
                     <Field label={t("nav.capital")} value={s.capitalPoolId} mono />
-                    <Field label={t("nav.personas")} value={s.personaIds.join(", ")} mono />
+                    <Field label={t("nav.personas")} value={(s.personaIds ?? []).join(", ")} mono />
                     <Field label={t("table.updated")} value={safeDateTime(s.updatedAt)} mono />
                   </div>
                 </Section>
                 <div className="grid grid-cols-3 gap-4 mt-4">
-                  <StatCard label="PnL 30d" value={`${(s.pnl30d * 100).toFixed(2)}%`} tone={s.pnl30d >= 0 ? "success" : "danger"} />
+                  <StatCard label="PnL 30d" value={`${((s.pnl30d ?? 0) * 100).toFixed(2)}%`} tone={(s.pnl30d ?? 0) >= 0 ? "success" : "danger"} />
                   <StatCard label={t("table.sharpe")} value={(s.sharpe ?? 0).toFixed(2)} />
-                  <StatCard label={t("table.drawdown")} value={`${(s.drawdown * 100).toFixed(2)}%`} tone="warning" />
+                  <StatCard label={t("table.drawdown")} value={`${((s.drawdown ?? 0) * 100).toFixed(2)}%`} tone="warning" />
                 </div>
                 <div className="grid gap-4 md:grid-cols-3 mt-4">
                   <LinkedBlock
@@ -187,6 +174,13 @@ export const StrategyDetail = () => {
                     items={journal.slice(0, 4).map((d) => ({ id: d.id, label: d.title, meta: `${d.decidedBy} · ${safeDateTime(d.decidedAt, "date")}` }))}
                     emptyHint={t("empty.noResults")}
                   />
+                </div>
+                <div className="flex justify-end mt-4">
+                  <Button asChild variant="outline" size="sm">
+                    <Link aria-label={`${s.id} trade journeys`} to={tradeJourneyHref(location, { strategyId: s.id }, `Strategy ${s.id}`)}>
+                      {t("detail.tradeJourneys.viewTradeJourneys", { defaultValue: "View Trade Journeys" })} →
+                    </Link>
+                  </Button>
                 </div>
               </>
             ),
@@ -219,13 +213,13 @@ export const StrategyDetail = () => {
             content: (
               <Section title={t("strategyDetail.costsTab", { defaultValue: "Costs & Slippage" })}>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <StatCard label="Avg fee (bps)" value="3.2" hint="taker" />
-                  <StatCard label="Avg slippage (bps)" value="6.8" tone="warning" />
-                  <StatCard label="Funding (30d)" value={`${(s.pnl30d * 0.05 * 100).toFixed(2)}%`} />
-                  <StatCard label="Borrow cost (30d)" value="0.18%" />
+                  <StatCard label="Avg fee (bps)" value="—" />
+                  <StatCard label="Avg slippage (bps)" value="—" />
+                  <StatCard label="Funding (30d)" value="—" />
+                  <StatCard label="Borrow cost (30d)" value="—" />
                 </div>
                 <p className="text-xs text-muted-foreground mt-3">
-                  Mock cost decomposition. v3 §13 — Costs & Slippage tab.
+                  {t("common.awaitingData", { defaultValue: "No data yet" })}
                 </p>
               </Section>
             ),
@@ -268,17 +262,32 @@ export const StrategyDetail = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {paperLive.map((row) => (
-                        <tr key={row.metric} className="border-b border-border last:border-0">
-                          <td className="p-3 font-medium">{row.metric}</td>
-                          <td className="p-3 text-right text-mono text-sm">{row.paper}</td>
-                          <td className="p-3 text-right text-mono text-sm">{row.live}</td>
-                          <td className={`p-3 text-right text-mono text-sm ${(row.delta ?? "").startsWith("-") ? "text-status-failed" : "text-status-warning"}`}>{row.delta}</td>
+                      {paperLive.length === 0 ? (
+                        <tr>
+                          <td colSpan={4} className="p-4 text-center text-xs text-muted-foreground">
+                            {t("common.awaitingData", { defaultValue: "No comparison metrics available" })}
+                          </td>
                         </tr>
-                      ))}
+                      ) : (
+                        paperLive.map((row, i) => (
+                          <tr key={i} className="border-b border-border/50 text-xs">
+                            <td className="p-3 font-medium">{row.metric}</td>
+                            <td className="p-3 text-right font-mono">{row.paper}</td>
+                            <td className="p-3 text-right font-mono">{row.live}</td>
+                            <td className="p-3 text-right font-mono text-muted-foreground">{row.delta}</td>
+                          </tr>
+                        ))
+                      )}
                     </tbody>
                   </table>
                 </Card>
+                <div className="flex justify-end mt-4">
+                  <Button asChild variant="outline" size="sm">
+                    <Link to={canonicalCenterUrl("performance", "attribution", { strategy: s.id })}>
+                      {t("strategyDetail.openFormalAttribution", { defaultValue: "View Formal Attribution" })} →
+                    </Link>
+                  </Button>
+                </div>
               </>
             ),
           },
@@ -289,16 +298,13 @@ export const StrategyDetail = () => {
             content: (
               <>
                 <div className="grid grid-cols-3 gap-4">
-                  <StatCard label={t("strategyDetail.var95")} value={`${(s.drawdown * 1.6 * 100).toFixed(2)}%`} tone="warning" />
-                  <StatCard label={t("strategyDetail.beta")} value="0.78" />
-                  <StatCard label={t("strategyDetail.exposure")} value={`${(s.pnl30d * 0 + 4.2).toFixed(1)}M`} hint="USD notional" />
+                  <StatCard label={t("strategyDetail.var95")} value="—" />
+                  <StatCard label={t("strategyDetail.beta")} value="—" />
+                  <StatCard label={t("strategyDetail.exposure")} value="—" />
                 </div>
                 <Section title={t("strategyDetail.activeAlerts")}>
                   <DataTable<Alert>
-                    rows={alerts.length ? alerts : [
-                      { id: "alt_demo_01", severity: "medium", title: "Realized vol > 30d avg + 1σ", source: s.id, openedAt: new Date(Date.now() - 3600_000).toISOString(), acknowledged: false },
-                      { id: "alt_demo_02", severity: "low", title: "Slippage uptick on US session", source: s.id, openedAt: new Date(Date.now() - 7 * 3600_000).toISOString(), acknowledged: true },
-                    ]}
+                    rows={alerts}
                     columns={[
                       { key: "sev", header: t("table.severity"), cell: (r) => <RiskBadge level={r.severity} /> },
                       { key: "t", header: t("table.title"), cell: (r) => <div className="font-medium">{r.title}</div> },
@@ -307,24 +313,17 @@ export const StrategyDetail = () => {
                       { key: "act", header: "", cell: (r) => (
                         <div className="flex gap-1 justify-end">
                           {!r.acknowledged && (
-                            <Button size="sm" variant="ghost" onClick={async (e) => {
-                              e.stopPropagation();
-                              await mutations.acknowledgeAlert(r.id, `from ${s.id}`);
-                              toast.success(t("toast.alertAcknowledged", { id: r.id }));
-                              const al = await bff.alerts.list();
-                              setAlerts(al.filter((x) => x.relatedTarget === s.id || x.source.includes(s.id) || x.title.includes(s.id)));
-                            }}><CheckCircle2 className="h-3.5 w-3.5 mr-1" />{t("table_actions.acknowledge")}</Button>
+                            <NonProductionActionButton size="sm" variant="ghost">
+                              <CheckCircle2 className="h-3.5 w-3.5 mr-1" />{t("table_actions.acknowledge")}
+                            </NonProductionActionButton>
                           )}
-                          <Button size="sm" variant="outline" onClick={async (e) => {
-                            e.stopPropagation();
-                            const res = await mutations.escalateAlertToIncident(r.id, `from ${s.id}`);
-                            toast.success(t("table_actions.incidentEscalateQueued"), { description: res.incidentId });
-                            const inc = await bff.incidents.list();
-                            setIncidents(inc.filter((x) => x.affected?.includes(s.id)));
-                          }}><AlertTriangle className="h-3.5 w-3.5 mr-1" />{t("table_actions.escalateIncident")}</Button>
+                          <NonProductionActionButton size="sm" variant="outline">
+                            <AlertTriangle className="h-3.5 w-3.5 mr-1" />{t("table_actions.escalateIncident")}
+                          </NonProductionActionButton>
                         </div>
                       ) },
                     ]}
+                    empty={t("empty.noResults")}
                   />
                 </Section>
               </>
@@ -347,22 +346,12 @@ export const StrategyDetail = () => {
                   { key: "ts", header: t("table.opened"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{safeDateTime(r.openedAt)}</span> },
                   { key: "act", header: "", cell: (r) => (
                     <div className="flex gap-1 justify-end">
-                      {r.status !== "resolved" && (
-                        <Button size="sm" variant="ghost" onClick={async (e) => {
-                          e.stopPropagation();
-                          await mutations.setIncidentStatus(r.id, r.status === "open" ? "mitigating" : "resolved");
-                          toast.success(t("toast.incidentAdvanced", { id: r.id, status: r.status === "open" ? "mitigating" : "resolved" }));
-                          const inc = await bff.incidents.list();
-                          setIncidents(inc.filter((x) => x.affected?.includes(s.id)));
-                        }}>
-                          {r.status === "open" ? t("table_actions.startMitigation") : t("table_actions.resolve")}
-                        </Button>
-                      )}
-                      <Button size="sm" variant="outline" onClick={async (e) => {
-                        e.stopPropagation();
-                        await mutations.appendPostmortem(r.id, `Initial postmortem draft for ${r.id}`);
-                        toast.success(t("incident.postmortem.appended"));
-                      }}><FileText className="h-3.5 w-3.5 mr-1" />{t("incident.postmortem.add")}</Button>
+                      <NonProductionActionButton size="sm" variant="ghost">
+                        {r.status === "open" ? t("table_actions.startMitigation") : t("table_actions.resolve")}
+                      </NonProductionActionButton>
+                      <NonProductionActionButton size="sm" variant="outline">
+                        <FileText className="h-3.5 w-3.5 mr-1" />{t("incident.postmortem.add")}
+                      </NonProductionActionButton>
                     </div>
                   ) },
                 ]}
@@ -493,17 +482,20 @@ export const StrategyDetail = () => {
             actionId={v3ActionId}
             confirmEntity={v3ActionId ? { type: "strategy", id: s.id } : undefined}
             onConfirm={async (memo, token) => {
-              await runActionSafe({
+              const receipt = await runActionSafe({
                 kind: "Strategy", id: s.id, action: activeTr.action,
                 newState: ["paused", "deployed", "approved", "review", "draft", "retired"].includes(activeTr.to)
                   ? activeTr.to : undefined,
                 memo,
-              }, { confirmToken: token });
+              }, {
+                confirmToken: token,
+                successTitle: `${activeTr.action} requested`,
+              });
+              if (!receipt.ok) return;
               const fresh = await bff.strategies.get(s.id);
               if (fresh) setS(fresh);
               const a = await bff.audit.list();
               setAudit(a.filter((x) => x.target === s.id));
-              toast.success(`${activeTr.action} requested · memo: ${memo.slice(0, 40)}…`);
             }}
           />
         );

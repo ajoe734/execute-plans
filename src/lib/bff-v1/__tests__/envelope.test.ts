@@ -86,5 +86,13 @@ describe("bff-v1 path builders", () => {
     expect(paths.mcpServerImportTools("srv_1")).toBe("/bff/mcp-servers/srv_1/import-tools");
     expect(paths.agoraAskSession("ask_1")).toBe("/bff/agora/ask/sessions/ask_1");
     expect(paths.sse()).toBe("/bff/events/stream");
+    expect(paths.loopInventoryList()).toBe("/bff/v5/loop-inventory");
+    expect(paths.loopInventoryDetail("source/ingestion")).toBe(
+      "/bff/v5/loop-inventory/source%2Fingestion"
+    );
+    expect(paths.loopHealthList()).toBe("/bff/v5/loop-health");
+    expect(paths.loopHealthDetail("source/ingestion")).toBe(
+      "/bff/v5/loop-health/source%2Fingestion"
+    );
   });
 });

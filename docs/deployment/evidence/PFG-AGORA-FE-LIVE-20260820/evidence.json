@@ -1,0 +1,48 @@
+{
+  "task_id": "PFG-AGORA-FE-LIVE-20260820",
+  "owner": "Codex2",
+  "reviewer": "Antigravity2",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/PFG-AGORA-FE-LIVE-20260820",
+  "status": "implementation-ready-for-review",
+  "code_disposition": {
+    "adopted": [
+      "Trading Room uses the shared CandidateReviewDrawer and its BFF-backed decision readback journey.",
+      "Candidate pool resolution uses GET /bff/agora/candidate-pools/lookup with canonical strategy_id and strategy_spec_registry_id.",
+      "Workshop message submission requests durable reconstruction through POST /bff/agora/workshops/{workshop_id}/reconstruct and reads StrategySpec identity from the workshop versions endpoint."
+    ],
+    "removed": [
+      "TradingRoomPage's fixed lens-A through lens-E candidate-pool routing.",
+      "TradingRoomPage's page-local CandidateReviewDrawer duplicate and presentation candidate fixtures."
+    ],
+    "not_changed": [
+      "BFF implementation, candidate decision authority, order routing, and real-write policy."
+    ]
+  },
+  "acceptance_proof": {
+    "workshop_reconstruction_receipt": "The UI distinguishes admitted, completed, and failed durable reconstruction states; a completed receipt test reads the canonical strategy ID, registry ID, and version.",
+    "candidate_pool_identity": "Trading Room passes the selected BFF aggregate's strategy_id and strategy_spec_registry_id to lookupCandidatePool; no presentation lens identifier is a pool ID.",
+    "shared_review_journey": "The only Trading Room review drawer is the shared CandidateReviewDrawer. After a decision it re-reads candidate members and reports confirmed or unavailable canonical readback.",
+    "widget_truth_boundary": "Trading Room retains the existing BFF projection/unavailable-widget behavior; this task introduces no page-local sample candidate or widget fallback."
+  },
+  "contract_evidence": {
+    "dev_bff_openapi": "2026-08-20: unauthenticated OpenAPI fetch returned both /bff/agora/candidate-pools/lookup and /bff/agora/workshops/{workshop_id}/reconstruct paths.",
+    "runtime_note": "Protected live data routes require the normal browser authentication session; no real writes were enabled for this task."
+  },
+  "validation": {
+    "focused_tests": {
+      "command": "npm test -- --run src/agora/pages/trading-room/TradingRoomPage.test.tsx src/agora/pages/strategy-workshop/StrategyWorkshopPage.test.tsx src/agora/components/CandidateReviewDrawer.test.tsx src/lib/bff-v1/agora/candidatePool.test.ts src/lib/bff-v1/agora/workshops.test.ts",
+      "result": "passed: 5 files, 164 tests"
+    },
+    "typecheck": {
+      "command": "npm run typecheck",
+      "result": "passed"
+    },
+    "strict_live_build": {
+      "command": "VITE_GCP_IDENTITY_API_KEY=<syntactically-valid non-deployed placeholder> VITE_GCP_IDENTITY_PROJECT_ID=pantheon-lupin-dev-20260719 VITE_GCP_IDENTITY_AUTH_DOMAIN=pantheon-lupin-dev-20260719.firebaseapp.com VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build",
+      "result": "passed",
+      "note": "Compile verification only; the placeholder identity configuration is not deployable."
+    }
+  }
+}

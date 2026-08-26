@@ -19,13 +19,11 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { Conversation, ConversationContent, ConversationEmptyState, ConversationScrollButton } from "@/components/ai-elements/conversation";
 import { Message, MessageContent, MessageResponse } from "@/components/ai-elements/message";
 import { PromptInput, PromptInputTextarea, PromptInputFooter, PromptInputSubmit } from "@/components/ai-elements/prompt-input";
 import { Shimmer } from "@/components/ai-elements/shimmer";
-import { AlertCircle, ExternalLink, RefreshCcw, Plus, Trash2, MessagesSquare, Play, ShieldAlert, Info, Paperclip, X as XIcon, ChevronDown, LogIn, Loader2, KeyRound, FileText } from "lucide-react";
+import { AlertCircle, ExternalLink, RefreshCcw, Plus, Trash2, MessagesSquare, Play, ShieldAlert, Info, Paperclip, X as XIcon, ChevronDown, LogIn, Loader2, KeyRound } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import {
   activateAssistantControlMode,
@@ -33,33 +31,37 @@ import {
   deactivateAssistantControlMode,
   fetchAssistantModeStatus,
   fetchManagementAiConversation,
-  fetchAssistantOrchestratorStatus,
-  generateAssistantDevDocs,
-  prepareAssistantRepairWorktree,
+  fetchManagementAiConversationList,
   startAssistantProviderReauth,
-  type AssistantRepairMetadata,
   type ManagementAiResult,
   type ManagementAiUiAction,
   type ManagementAiUiSnapshot,
   type ManagementAiRecentTurn,
   type ProviderStatus,
-  type AssistantOpenClawSkillDescriptor,
-  type AssistantOpenClawToolPolicyStatus,
   type AssistantControlModeStatus,
   type AssistantModeStatusResult,
-  type AssistantOrchestratorStatus,
-  type AssistantOrchestratorStatusResult,
-  type AssistantDevDocsGenerateResult,
   type AssistantProviderReauthResult,
 } from "@/lib/bff-v1/managementAi";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
   AVAILABLE_UI_ACTIONS,
   executeUiAction,
+  getActionCorrelationKey,
   isHighRiskAction,
+  isKnownUiActionKind,
   type UiAction,
 } from "./uiActionRegistry";
 import { useManagementNlContext, setManagementNlContext } from "@/management/hooks/useManagementNlContext";
+import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
+import { EntityCreateDrawer } from "@/management/components/write/EntityCreateDrawer";
+import { isCreatableEntity, type CreatableEntity } from "@/lib/writeIntents/types";
+import { useInspector } from "@/platform/components/RightDrawer";
+import { useHandoff } from "@/lib/handoff";
+import { useJobDrawer } from "@/platform/components/JobProgressDrawer";
+import { useOverlay } from "@/platform/overlayStore";
+import { agentPanel } from "./useAgentPanel";
+import { bffWrites } from "@/lib/bff/runAction";
+import { commandReceiptDescription } from "@/lib/bff-v1/commandReceipt";
 import {
   type ChatAttachment,
   ATTACHMENT_LIMITS,
@@ -71,46 +73,6 @@ import {
   validateNewFiles,
 } from "./attachmentUtils";
 
-type RepairRepoKey = "execute-plans" | "pantheon";
-
-const REPAIR_SCOPE_DEFAULTS: Record<RepairRepoKey, string[]> = {
-  "execute-plans": [
-    "src/management/components/agent",
-    "src/lib/bff-v1",
-    "src/lib/bff-v1/paths.ts",
-    "AGENTS.md",
-  ],
-  pantheon: [
-    "services/control-plane/bff",
-    "services/openclaw-gateway-adapter",
-    "scripts",
-    "docs",
-    "docker-compose.yml",
-  ],
-};
-
-function repairScopeText(repoKey: RepairRepoKey): string {
-  return REPAIR_SCOPE_DEFAULTS[repoKey].join("\n");
-}
-
-function parseRepairScope(value: string): string[] {
-  return Array.from(new Set(
-    value
-      .split(/[\n,]/)
-      .map((item) => item.trim())
-      .filter(Boolean),
-  ));
-}
-
-function repairMergeTarget(_repoKey: RepairRepoKey): string {
-  return "dev";
-}
-
-function makeRepairTaskId(repoKey: RepairRepoKey): string {
-  const stamp = new Date().toISOString().replace(/[-:.]/g, "").replace("Z", "Z");
-  const suffix = Math.random().toString(36).slice(2, 8).toUpperCase();
-  return `MGMT-AI-REPAIR-${repoKey.toUpperCase()}-${stamp}-${suffix}`;
-}
 
 interface ChatTurn {
   id: string;
@@ -121,6 +83,7 @@ interface ChatTurn {
   conversationHref?: string | null;
   traceId?: string | null;
   uiActions?: ManagementAiUiAction[];
+  actionFeedback?: Record<string, string>;
   attachments?: ChatAttachment[];
   createdAt: number;
 }
@@ -229,7 +192,13 @@ function mergeTurns(local: ChatTurn[], incoming: ChatTurn[]): ChatTurn[] {
   for (const t of local) byId.set(t.id, t);
   for (const t of incoming) {
     const prev = byId.get(t.id);
-    byId.set(t.id, prev ? { ...prev, ...t, attachments: prev.attachments ?? t.attachments } : t);
+    byId.set(t.id, prev ? {
+      ...prev,
+      ...t,
+      uiActions: prev.uiActions ?? t.uiActions,
+      actionFeedback: { ...(prev.actionFeedback ?? {}), ...(t.actionFeedback ?? {}) },
+      attachments: prev.attachments ?? t.attachments,
+    } : t);
   }
   return Array.from(byId.values()).sort((a, b) => a.createdAt - b.createdAt);
 }
@@ -295,127 +264,10 @@ function ProviderStatusPill({ s }: { s: ProviderStatus | null }) {
   );
 }
 
-const SA_SD_GENERATE_SKILL_ID = "assistant.sa_sd.generate";
-const SA_SD_GENERATE_HANDLER_REF = "bff.route:POST /bff/assistant/dev-docs/generate";
-
-function commandPolicyIsUsable(policy: AssistantOpenClawToolPolicyStatus | null | undefined): boolean {
-  if (!policy) return false;
-  return policy.assistantCommandUsable ?? policy.assistantCommandAllowed ?? false;
-}
-
-function commandPolicyLabel(policy: AssistantOpenClawToolPolicyStatus | null | undefined): string {
-  if (!policy) return "assistant.command unknown";
-  return `assistant.command ${policy.assistantCommandStatus ?? (commandPolicyIsUsable(policy) ? "usable" : "blocked")}`;
-}
-
-function saSdGenerateSkill(policy: AssistantOpenClawToolPolicyStatus | null | undefined): AssistantOpenClawSkillDescriptor | null {
-  return policy?.effectiveSkills?.find((skill) => (
-    skill.id === SA_SD_GENERATE_SKILL_ID && skill.handlerRef === SA_SD_GENERATE_HANDLER_REF
-  )) ?? null;
-}
-
-function saSdSkillLabel(skill: AssistantOpenClawSkillDescriptor | null): string {
-  return skill ? `${skill.id} via ${skill.handlerRef}` : `${SA_SD_GENERATE_SKILL_ID} unavailable`;
-}
-
-function ToolPolicyPill({ policy, failure }: {
-  policy?: AssistantOpenClawToolPolicyStatus | null;
-  failure?: Extract<AssistantOrchestratorStatusResult, { ok: false }>;
-}) {
-  if (failure) {
-    return (
-      <span
-        className="inline-flex items-center rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400"
-        title={failure.message}
-      >
-        OpenClaw status unavailable
-      </span>
-    );
-  }
-  const usable = commandPolicyIsUsable(policy);
-  const cls = usable
-    ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
-    : "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400";
-  return (
-    <span
-      className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${cls}`}
-      title={`OpenClaw ${policy?.status ?? "unknown"} / upstream ${policy?.upstreamStatus ?? "unknown"}`}
-    >
-      {commandPolicyLabel(policy)}
-    </span>
-  );
-}
-
 function controlModeLabel(status: AssistantControlModeStatus | null | undefined): string {
   if (!status) return "control unknown";
   if (status.active) return `control ${status.mode ?? "active"}`;
   return "control inactive";
-}
-
-function taskStatusCounts(tasks: AssistantOrchestratorStatus["tasks"]): string {
-  const counts = new Map<string, number>();
-  for (const task of tasks ?? []) {
-    const key = task.status ?? "unknown";
-    counts.set(key, (counts.get(key) ?? 0) + 1);
-  }
-  return Array.from(counts.entries()).map(([status, count]) => `${status}:${count}`).join(" · ") || "none";
-}
-
-function compactList(items: Array<string | undefined>, limit = 3): string {
-  const values = items.filter((item): item is string => Boolean(item));
-  if (values.length <= limit) return values.join(", ");
-  return `${values.slice(0, limit).join(", ")} +${values.length - limit}`;
-}
-
-function SystemStatusDetails({ status }: { status: AssistantOrchestratorStatus | null | undefined }) {
-  if (!status) return null;
-  const supervisor = status.supervisor;
-  const provider = status.providerReadiness;
-  const bridge = status.assistantDevBridge;
-  const inbox = bridge?.inbox;
-  const tasks = status.tasks ?? [];
-  const activeTasks = tasks
-    .filter((task) => ["in_progress", "running", "review_approved", "todo"].includes(task.status ?? ""))
-    .slice(0, 4);
-  const execution = supervisor?.modeOccupancy?.execution;
-  const sourceSummary = compactList((status.sourceRefs ?? []).map((ref) => `${ref.sourceType ?? ref.path}:${ref.status ?? (ref.available ? "ok" : "missing")}`), 4);
-  const taskSummary = taskStatusCounts(tasks);
-
-  return (
-    <details className="w-full group rounded border bg-background/60 px-2 py-1 text-[10px] text-muted-foreground">
-      <summary className="flex cursor-pointer select-none flex-wrap items-center gap-x-2 gap-y-0.5 list-none">
-        <ChevronDown className="h-2.5 w-2.5 transition-transform group-open:rotate-0 -rotate-90" />
-        <span className="font-medium text-foreground">System</span>
-        <span>snapshot={status.snapshotAt ?? "unknown"}</span>
-        <span>supervisor={supervisor?.lifecycle ?? "unknown"}/{supervisor?.modeStatus ?? "unknown"}</span>
-        <span>tasks={tasks.length}</span>
-        <span>bridge={bridge?.status ?? "unknown"}:p{inbox?.pendingCount ?? 0}/f{inbox?.failedCount ?? 0}</span>
-      </summary>
-      <div className="mt-1 grid gap-1 sm:grid-cols-2">
-        <div className="rounded bg-muted/30 p-1.5 font-mono leading-relaxed">
-          <div>project={status.project ?? "unknown"}</div>
-          <div>provider={provider?.providerName ?? provider?.provider ?? "unknown"} ready={String(provider?.ready ?? false)} read={String(provider?.capabilities?.read ?? false)} repair={String(provider?.capabilities?.repairWrite ?? false)}</div>
-          <div>workspace={provider?.repairWorkspace?.status ?? "unknown"} writable={String(provider?.repairWorkspace?.writable ?? false)} worktrees={provider?.repairWorkspace?.worktreeCount ?? 0}</div>
-          <div>supervisor_focus={supervisor?.focusMode ?? "unknown"} execution={execution ? `r${execution.running ?? 0}/p${execution.pending ?? 0}/q${execution.queued ?? 0}` : "unknown"}</div>
-        </div>
-        <div className="rounded bg-muted/30 p-1.5 font-mono leading-relaxed">
-          <div>dev_bridge={bridge?.status ?? "unknown"} pending={inbox?.pendingCount ?? 0} processed={inbox?.processedCount ?? 0} failed={inbox?.failedCount ?? 0}</div>
-          <div>sources={sourceSummary || "none"}</div>
-          <div>coordination=files:{status.coordination?.fileCount ?? 0} features:{status.coordination?.featureCount ?? 0}</div>
-          <div>task_status={taskSummary}</div>
-        </div>
-      </div>
-      {activeTasks.length > 0 && (
-        <div className="mt-1 space-y-0.5 font-mono">
-          {activeTasks.map((task) => (
-            <div key={task.id ?? task.title} className="truncate" title={task.next ?? task.title ?? task.id}>
-              {task.status ?? "unknown"}:{task.owner ?? "?"}:{task.id ?? task.title}
-            </div>
-          ))}
-        </div>
-      )}
-    </details>
-  );
 }
 
 function ControlModePill({ status, failure }: {
@@ -542,40 +394,6 @@ function AttachmentThumbs({ items, onRemove }: { items: ChatAttachment[]; onRemo
   );
 }
 
-type AssistantDevDocsOk = Extract<AssistantDevDocsGenerateResult, { ok: true }>;
-
-function latestFeatureSummary(turns: ChatTurn[]): string {
-  for (let i = turns.length - 1; i >= 0; i--) {
-    const turn = turns[i];
-    if (turn.role !== "user") continue;
-    const text = turn.text.trim().replace(/\s+/g, " ");
-    if (text) return text.slice(0, 240);
-  }
-  return "Management AI conversation requested a Pantheon development change.";
-}
-
-function compactPath(path: string | null | undefined): string | null {
-  if (!path) return null;
-  const parts = path.split("/").filter(Boolean);
-  return parts.slice(-4).join("/");
-}
-
-function devDocsReceiptText(result: AssistantDevDocsOk): string {
-  const archive = result.archiveLocations;
-  const lines = [
-    "SA/SD packet generated for supervisor/autoworker pickup.",
-    `packet: ${result.packetId}`,
-    `tasks: ${result.taskCount}`,
-    archive?.requirementCapture ? `requirements: ${archive.requirementCapture}` : null,
-    archive?.systemAnalysis ? `SA: ${archive.systemAnalysis}` : null,
-    archive?.systemDesign ? `SD: ${archive.systemDesign}` : null,
-    result.taskPacketQueued
-      ? `dev bridge queue: ${result.taskPacketQueuePath ?? "queued"}`
-      : "dev bridge queue: not queued",
-  ].filter((line): line is string => Boolean(line));
-  return lines.join("\n");
-}
-
 export function AgentPanelBody() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -594,22 +412,34 @@ export function AgentPanelBody() {
   const [text, setText] = useState("");
   const [sessions, setSessions] = useState<SessionIndexEntry[]>(() => loadSessionIndex());
   const [actionFeedback, setActionFeedback] = useState<Record<string, string>>({});
+  const [executingKeys, setExecutingKeys] = useState<Record<string, boolean>>({});
+  const [confirmBusy, setConfirmBusy] = useState(false);
+  const [pendingConfirmAction, setPendingConfirmAction] = useState<{
+    action: ManagementAiUiAction;
+    key: string;
+    turnId: string;
+    entityType: string;
+    entityId: string;
+    actionId: string;
+    correlationId: string;
+    idempotencyKey: string;
+    payload?: Record<string, unknown>;
+    memo?: string;
+  } | null>(null);
+  const [entityCreateDrawer, setEntityCreateDrawer] = useState<{
+    open: boolean;
+    entity: CreatableEntity;
+    initialData?: Record<string, unknown>;
+  } | null>(null);
   const [pendingAttachments, setPendingAttachments] = useState<ChatAttachment[]>([]);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [orchestratorStatus, setOrchestratorStatus] = useState<AssistantOrchestratorStatusResult | null>(null);
   const [assistantModeStatus, setAssistantModeStatus] = useState<AssistantModeStatusResult | null>(null);
   const [controlDialogOpen, setControlDialogOpen] = useState(false);
   const [controlPassphrase, setControlPassphrase] = useState("");
-  const [controlTargetMode, setControlTargetMode] = useState<"kernel_debug" | "kernel_repair">("kernel_repair");
-  const [controlReason, setControlReason] = useState("Management AI dev repair");
-  const [repairRepoKey, setRepairRepoKey] = useState<RepairRepoKey>("execute-plans");
-  const [repairDeclaredScope, setRepairDeclaredScope] = useState(repairScopeText("execute-plans"));
-  const [lastRepairMetadata, setLastRepairMetadata] = useState<AssistantRepairMetadata | null>(null);
+  const [controlReason, setControlReason] = useState("Management AI diagnostic session");
   const [controlBusy, setControlBusy] = useState(false);
   const [controlError, setControlError] = useState<string | null>(null);
-  const [devDocsBusy, setDevDocsBusy] = useState(false);
-  const [devDocsNotice, setDevDocsNotice] = useState<AssistantDevDocsGenerateResult | null>(null);
   const [providerReauthBusy, setProviderReauthBusy] = useState(false);
   const [providerReauthNotice, setProviderReauthNotice] = useState<AssistantProviderReauthResult | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -625,11 +455,7 @@ export function AgentPanelBody() {
   const pending = sessionId ? !!pendingSessions[sessionId] : false;
 
   const refreshAssistantRuntimeStatus = useCallback(async () => {
-    const [orchestrator, mode] = await Promise.all([
-      fetchAssistantOrchestratorStatus(),
-      fetchAssistantModeStatus(),
-    ]);
-    setOrchestratorStatus(orchestrator);
+    const mode = await fetchAssistantModeStatus();
     setAssistantModeStatus(mode);
   }, []);
 
@@ -645,6 +471,40 @@ export function AgentPanelBody() {
   useEffect(() => {
     void refreshAssistantRuntimeStatus();
   }, [refreshAssistantRuntimeStatus]);
+
+  // Hydrate the history index from the server so a fresh browser / cleared
+  // localStorage still surfaces past conversations. The left rail is a local
+  // cache, not the source of truth; this merges the authoritative server list
+  // in. Runs once on mount and is independent of provider/OpenClaw health, so
+  // the degraded banner never hides recoverable history.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const res = await fetchManagementAiConversationList(50);
+      if (cancelled || res.kind !== "ok" || res.conversations.length === 0) return;
+      setSessions((prev) => {
+        const byId = new Map<string, SessionIndexEntry>();
+        for (const entry of prev) byId.set(entry.id, entry);
+        for (const conv of res.conversations) {
+          const existing = byId.get(conv.sessionId);
+          const updatedAt = conv.updatedAt
+            ? (Date.parse(conv.updatedAt) || existing?.updatedAt || Date.now())
+            : (existing?.updatedAt ?? Date.now());
+          const hasLocalTitle = !!existing?.title && existing.title !== "新對話";
+          const title = hasLocalTitle
+            ? existing!.title
+            : (conv.title.trim() || existing?.title || "新對話");
+          byId.set(conv.sessionId, { id: conv.sessionId, title, updatedAt });
+        }
+        const list = Array.from(byId.values())
+          .sort((a, b) => b.updatedAt - a.updatedAt)
+          .slice(0, 50);
+        saveSessionIndex(list);
+        return list;
+      });
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const inputContainerRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -736,7 +596,6 @@ export function AgentPanelBody() {
     setText("");
     setActionFeedback({});
     setResyncNotice(null);
-    setDevDocsNotice(null);
     setProviderReauthNotice(null);
     setPendingAttachments([]);
     setAttachmentError(null);
@@ -842,6 +701,28 @@ export function AgentPanelBody() {
     }
   }, [assistantModeStatus, traceId, refreshAssistantRuntimeStatus, sessionId, resync]);
 
+  const recordActionFeedback = useCallback((key: string, feedbackText: string, turnId?: string) => {
+    setActionFeedback((prev) => ({ ...prev, [key]: feedbackText }));
+    setTurns((prevTurns) => {
+      const nextTurns = prevTurns.map((t) => {
+        const matchesTurn = turnId ? t.id === turnId : Boolean(t.uiActions);
+        if (matchesTurn) {
+          return {
+            ...t,
+            actionFeedback: {
+              ...(t.actionFeedback ?? {}),
+              [key]: feedbackText,
+            },
+          };
+        }
+        return t;
+      });
+      turnsRef.current = nextTurns;
+      if (sessionId) void saveTurnsCache(sessionId, nextTurns);
+      return nextTurns;
+    });
+  }, [sessionId]);
+
   const loadSession = useCallback(async (id: string) => {
     if (id === sessionId) return;
     activeSessionRef.current = id;
@@ -850,14 +731,19 @@ export function AgentPanelBody() {
     setConversationSummary(undefined);
     setDegraded(null);
     setText("");
-    setActionFeedback({});
-    setDevDocsNotice(null);
     setProviderReauthNotice(null);
     setPendingAttachments([]);
     setAttachmentError(null);
     // Hydrate from local cache FIRST — switching never blanks the screen.
     const cached = loadTurnsCache(id);
     setTurns(cached);
+    const hydratedFeedback: Record<string, string> = {};
+    for (const t of cached) {
+      if (t.actionFeedback) {
+        Object.assign(hydratedFeedback, t.actionFeedback);
+      }
+    }
+    setActionFeedback(hydratedFeedback);
     if (pendingSessions[id]) {
       setResyncNotice("此對話仍在等待 BFF 回覆，請稍候。");
     } else {
@@ -890,8 +776,6 @@ export function AgentPanelBody() {
     if (id === sessionId) startNewConversation();
   }, [sessionId, startNewConversation]);
 
-
-
   // ---- UI snapshot (sent on every turn) ----
   const buildUiSnapshot = useCallback((): ManagementAiUiSnapshot => {
     const filters: Record<string, string> = {};
@@ -909,22 +793,215 @@ export function AgentPanelBody() {
     };
   }, [location.pathname, searchParams, nlCtx.selectedEntityKind, nlCtx.selectedEntityId]);
 
-  const runUiAction = useCallback((action: ManagementAiUiAction, key: string) => {
-    const result = executeUiAction(action as UiAction, {
-      navigate: (p) => navigate(p),
-      setSelectedEntity: (kind, id) => setManagementNlContext({ selectedEntityKind: kind as never, selectedEntityId: id }),
-      setSearchParam: (k, v) => {
-        const next = new URLSearchParams(searchParams);
-        if (v === "") next.delete(k); else next.set(k, v);
-        setSearchParams(next);
-      },
-      refresh: () => window.location.reload(),
-    });
-    setActionFeedback((prev) => ({
-      ...prev,
-      [key]: result.ok ? "已執行" : (result.reason ?? "未執行"),
-    }));
-  }, [navigate, searchParams, setSearchParams]);
+  const handleConfirmAction = useCallback(async (memo: string, token?: string) => {
+    if (!pendingConfirmAction || confirmBusy) return;
+    const { action, key, turnId, entityType, entityId, actionId, payload, correlationId, idempotencyKey } = pendingConfirmAction;
+    setConfirmBusy(true);
+    setExecutingKeys((prev) => ({ ...prev, [key]: true }));
+    try {
+      const res = await bffWrites.runAction(
+        {
+          kind: entityType,
+          id: entityId,
+          action: actionId,
+          memo: memo || undefined,
+          confirmToken: token,
+          correlationId,
+          idempotencyKey,
+          ...(payload ? { newState: payload.newState as string } : {}),
+        },
+        {
+          correlationId,
+          idempotencyKey,
+          confirmToken: token,
+        },
+      );
+      const receiptDesc = commandReceiptDescription(res, {
+        fallback: `${entityType} ${actionId} 已執行`,
+      });
+      recordActionFeedback(key, receiptDesc, turnId);
+      toast({
+        title: `${action.label ?? actionId} 執行成功`,
+        description: receiptDesc,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      recordActionFeedback(key, `執行失敗: ${msg}`, turnId);
+      toast({
+        title: "動作執行失敗",
+        description: msg,
+        variant: "destructive",
+      });
+    } finally {
+      setConfirmBusy(false);
+      setExecutingKeys((prev) => {
+        const { [key]: _dropped, ...rest } = prev;
+        return rest;
+      });
+      setPendingConfirmAction(null);
+    }
+  }, [pendingConfirmAction, confirmBusy, recordActionFeedback]);
+
+  const runUiAction = useCallback(async (action: ManagementAiUiAction, key: string, turnId?: string, idx?: number) => {
+    const correlationKey = key || getActionCorrelationKey(action as UiAction, turnId, idx);
+    const existingFeedback = actionFeedback[correlationKey];
+    if (existingFeedback && (existingFeedback === "已執行" || existingFeedback.startsWith("command/") || existingFeedback.includes("status"))) {
+      toast({
+        title: "動作已執行過",
+        description: "此動作先前已完成執行，避免重複執行。",
+      });
+      return;
+    }
+
+    if (executingKeys[correlationKey] || confirmBusy) {
+      return;
+    }
+
+    if (!isKnownUiActionKind(action.kind)) {
+      recordActionFeedback(correlationKey, `不支援的動作類型 (${String(action.kind)})`, turnId);
+      toast({
+        title: "不支援的動作",
+        description: `動作類型 '${String(action.kind)}' 不在允許的清單中`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (action.kind === "runBffAction") {
+      const params = (action.params ?? {}) as Record<string, unknown>;
+      const entityType = String(params.entityType ?? "entity");
+      const entityId = String(params.entityId ?? "");
+      const actionId = String(params.actionId ?? "");
+      if (!entityType || !entityId || !actionId) {
+        recordActionFeedback(correlationKey, "缺少參數 (entityType/entityId/actionId)", turnId);
+        toast({
+          title: "缺少動作參數",
+          description: "runBffAction 需要 entityType, entityId 與 actionId",
+          variant: "destructive",
+        });
+        return;
+      }
+      const actionCorrelationId = (action as UiAction).correlationId || (action as UiAction).id || correlationKey;
+      const idempotencyKey = (params.idempotencyKey as string) || (params.payload as Record<string, unknown>)?.idempotencyKey as string || actionCorrelationId;
+      setPendingConfirmAction({
+        action,
+        key: correlationKey,
+        turnId: turnId ?? "",
+        entityType,
+        entityId,
+        actionId,
+        correlationId: actionCorrelationId,
+        idempotencyKey,
+        payload: params.payload as Record<string, unknown>,
+        memo: params.memo as string,
+      });
+      return;
+    }
+
+    setExecutingKeys((prev) => ({ ...prev, [correlationKey]: true }));
+    try {
+      const result = await executeUiAction(action as UiAction, {
+        navigate: (p) => navigate(p),
+        setSelectedEntity: (kind, id) => setManagementNlContext({ selectedEntityKind: kind as never, selectedEntityId: id }),
+        setSearchParam: (k, v) => {
+          const next = new URLSearchParams(searchParams);
+          if (v === "") next.delete(k); else next.set(k, v);
+          setSearchParams(next);
+        },
+        refresh: () => window.location.reload(),
+        openDrawer: (drawer, params) => {
+          if (drawer === "inspector" || drawer === "rightDrawer") {
+            useInspector.getState().open({
+              id: String(params?.entityId ?? params?.id ?? "—"),
+              type: String(params?.entityType ?? params?.type ?? "Object"),
+              name: String(params?.name ?? params?.entityId ?? "—"),
+              ...(params as Record<string, unknown>),
+            });
+            return true;
+          }
+          if (drawer === "handoff") {
+            useHandoff.getState().openHandoff(params as never);
+            return true;
+          }
+          if (drawer === "jobs" || drawer === "jobProgress") {
+            useJobDrawer.getState().setExpanded(true);
+            return true;
+          }
+          if (drawer === "bulkResult") {
+            useOverlay.getState().openBulkResult(params?.response as never, params?.title as string);
+            return true;
+          }
+          if (drawer === "rollbackSaga") {
+            useOverlay.getState().openRollbackSaga(params?.saga as never);
+            return true;
+          }
+          if (drawer === "entityCreate" || drawer === "createEntity") {
+            const rawEntity = params?.entity !== undefined ? params?.entity : params?.entityType !== undefined ? params?.entityType : "persona";
+            if (typeof rawEntity !== "string" || !isCreatableEntity(rawEntity.trim())) {
+              return false;
+            }
+            setEntityCreateDrawer({
+              open: true,
+              entity: rawEntity.trim() as CreatableEntity,
+              initialData: (params?.initialData ?? params?.payload) as Record<string, unknown>,
+            });
+            return true;
+          }
+          return false;
+        },
+        focusPanel: (panel) => {
+          if (panel === "agentPanel") {
+            agentPanel.open();
+            return true;
+          }
+          if (panel === "inspector") {
+            useInspector.getState().open({ id: "—", type: "Object", name: "Inspector" });
+            return true;
+          }
+          if (panel === "jobProgress") {
+            useJobDrawer.getState().setExpanded(true);
+            return true;
+          }
+          if (panel === "governanceQueue") {
+            navigate("/management/governance");
+            return true;
+          }
+          if (panel === "operationsOverview") {
+            navigate("/management/operations");
+            return true;
+          }
+          if (panel === "strategyWorkspace") {
+            navigate("/management/strategies");
+            return true;
+          }
+          if (panel === "terminalConsole") {
+            navigate("/platform/terminal");
+            return true;
+          }
+          return false;
+        },
+        isActionExecuted: (k) => {
+          const fb = actionFeedback[k];
+          return Boolean(fb && (fb === "已執行" || fb.startsWith("command/") || fb.includes("status")));
+        },
+      });
+
+      const fb = result.ok ? "已執行" : (result.reason ?? "未執行");
+      recordActionFeedback(correlationKey, fb, turnId);
+      if (!result.ok) {
+        toast({
+          title: "動作無法執行",
+          description: result.reason ?? "未知原因",
+          variant: "destructive",
+        });
+      }
+    } finally {
+      setExecutingKeys((prev) => {
+        const { [correlationKey]: _dropped, ...rest } = prev;
+        return rest;
+      });
+    }
+  }, [actionFeedback, executingKeys, confirmBusy, navigate, searchParams, setSearchParams, recordActionFeedback]);
 
   const activateControlMode = useCallback(async () => {
     const passphrase = controlPassphrase.trim();
@@ -937,7 +1014,7 @@ export function AgentPanelBody() {
     try {
       const result = await activateAssistantControlMode({
         passphrase,
-        mode: controlTargetMode,
+        mode: "kernel_debug",
         reason: controlReason.trim() || "Management AI control mode",
         ttlSeconds: 900,
         idleTtlSeconds: 300,
@@ -950,14 +1027,14 @@ export function AgentPanelBody() {
       }
       toast({
         title: "Control mode active",
-        description: result.controlMode.mode ?? controlTargetMode,
+        description: result.controlMode.mode ?? "kernel_debug",
       });
       setControlDialogOpen(false);
       await refreshAssistantRuntimeStatus();
     } finally {
       setControlBusy(false);
     }
-  }, [controlPassphrase, controlTargetMode, controlReason, sessionId, refreshAssistantRuntimeStatus]);
+  }, [controlPassphrase, controlReason, sessionId, refreshAssistantRuntimeStatus]);
 
   const deactivateControlMode = useCallback(async () => {
     setControlBusy(true);
@@ -975,108 +1052,6 @@ export function AgentPanelBody() {
       setControlBusy(false);
     }
   }, [refreshAssistantRuntimeStatus]);
-
-  const generateDevDocs = useCallback(async () => {
-    const targetSessionId = sessionId;
-    if (!targetSessionId || isClientSessionId(targetSessionId)) {
-      const result: AssistantDevDocsGenerateResult = {
-        ok: false,
-        kind: "failure",
-        statusCode: null,
-        message: "需要先送出一則訊息，讓 BFF 建立正式 session id。",
-      };
-      setDevDocsNotice(result);
-      toast({ title: "SA/SD 尚未送出", description: result.message, variant: "destructive" });
-      return;
-    }
-
-    const currentControlMode = assistantModeStatus?.ok ? assistantModeStatus.status.controlMode : null;
-    if (!currentControlMode?.active) {
-      const result: AssistantDevDocsGenerateResult = {
-        ok: false,
-        kind: "failure",
-        statusCode: null,
-        message: "需要先啟用 control mode。",
-      };
-      setDevDocsNotice(result);
-      setControlError(null);
-      setControlDialogOpen(true);
-      toast({ title: "需要 Control mode", description: result.message });
-      return;
-    }
-
-    const currentToolPolicy = orchestratorStatus?.ok ? orchestratorStatus.status.openclawToolPolicy : null;
-    if (!saSdGenerateSkill(currentToolPolicy)) {
-      const result: AssistantDevDocsGenerateResult = {
-        ok: false,
-        kind: "failure",
-        statusCode: null,
-        message: "OpenClaw skill policy 尚未允許 assistant.sa_sd.generate。",
-      };
-      setDevDocsNotice(result);
-      toast({ title: "SA/SD 尚未送出", description: result.message, variant: "destructive" });
-      return;
-    }
-
-    const ui = buildUiSnapshot();
-    const affectedModules = Array.from(new Set([
-      "execute-plans:management-ai",
-      "pantheon:bff-assistant",
-      "pantheon:openclaw-dev-bridge",
-      `route:${location.pathname}`,
-      ui.selectedEntity ? `${ui.selectedEntity.kind}:${ui.selectedEntity.id}` : "",
-    ].filter(Boolean)));
-
-    setDevDocsBusy(true);
-    setDevDocsNotice(null);
-    try {
-      const result = await generateAssistantDevDocs({
-        conversationId: targetSessionId,
-        featureSummary: latestFeatureSummary(turns),
-        affectedModules,
-        proposedOwner: "Codex",
-        proposedReviewer: "Claude",
-        archive: true,
-        emitTaskPacket: true,
-        queueTaskPacket: true,
-        extraContext: {
-          route: location.pathname,
-          pageLabel: nlCtx.pageLabel,
-          selectedEntity: ui.selectedEntity,
-          source: "execute-plans.management_ai_panel",
-        },
-      });
-      setDevDocsNotice(result);
-
-      if (result.ok) {
-        appendTurnTo(targetSessionId, {
-          id: turnId("a_devdocs"),
-          role: "assistant",
-          text: devDocsReceiptText(result),
-          createdAt: Date.now(),
-        });
-        toast({
-          title: "SA/SD 已產生",
-          description: result.taskPacketQueued ? "已送進 supervisor dev bridge inbox" : "已產生文件，尚未 queue task packet",
-        });
-        await refreshAssistantRuntimeStatus();
-      } else {
-        toast({ title: "SA/SD 失敗", description: result.message, variant: "destructive" });
-      }
-    } finally {
-      setDevDocsBusy(false);
-    }
-  }, [
-    sessionId,
-    assistantModeStatus,
-    orchestratorStatus,
-    buildUiSnapshot,
-    location.pathname,
-    nlCtx.pageLabel,
-    turns,
-    appendTurnTo,
-    refreshAssistantRuntimeStatus,
-  ]);
 
   // ---- Attachment handlers ----
   const addFiles = useCallback(async (files: File[]) => {
@@ -1179,73 +1154,36 @@ export function AgentPanelBody() {
 
     let result: ManagementAiResult | null = null;
     try {
-      let repairMetadata: AssistantRepairMetadata | undefined;
-      const currentControlMode = assistantModeStatus?.ok ? assistantModeStatus.status.controlMode : null;
-      if (currentControlMode?.active && currentControlMode.mode === "kernel_repair") {
-        const declaredScope = parseRepairScope(repairDeclaredScope);
-        if (declaredScope.length === 0) {
-          result = {
-            ok: false,
-            kind: "transport_failure",
-            status: null,
-            message: "Repair scope is empty.",
-          };
-        } else {
-          const taskId = makeRepairTaskId(repairRepoKey);
-          const prepared = await prepareAssistantRepairWorktree({
-            taskId,
-            repoKey: repairRepoKey,
-            declaredScope,
-            expectedBranch: `task/${taskId}`,
-            mergeTarget: repairMergeTarget(repairRepoKey),
-            reason: controlReason.trim() || "Management AI dev repair",
-          }, { signal: controller.signal });
-          if (prepared.ok) {
-            repairMetadata = prepared.repair;
-            setLastRepairMetadata(prepared.repair);
-          } else {
-            result = {
-              ok: false,
-              kind: "transport_failure",
-              status: prepared.statusCode,
-              message: `Repair worktree prepare failed: ${prepared.message}`,
-            };
-          }
-        }
-      }
-      if (result === null) {
-        result = await streamManagementAi({
-          question,
-          focus: "all",
-          sessionId: sessionIdForBff,
-          context: JSON.stringify({
-            route: location.pathname,
-            pageLabel: nlCtx.pageLabel,
-            selectedEntity: ui.selectedEntity,
-          }),
-          conversation: {
-            recentTurns: conv.recentTurns,
-            summary: conv.summary ?? conversationSummary,
-          },
-          ui,
-          attachments: attachmentsForTurn.length > 0
-            ? attachmentsForTurn.map((a) => ({
-                kind: a.kind,
-                mimeType: a.mimeType,
-                filename: a.filename,
-                sizeBytes: a.sizeBytes,
-                dataBase64: a.dataBase64,
-              }))
-            : undefined,
-          openclaw: repairMetadata ? { repair: repairMetadata } : undefined,
-        }, {
-          // Progressive rendering: show tokens as they arrive in a transient
-          // bubble for the thread that initiated the request. The final turn is
-          // still appended by the result-handling below; this preview is cleared
-          // in finally, so existing reconcile/persist logic is untouched.
-          onDelta: (_chunk, full) => setStreamingPreview({ sid: requestBucket, text: full }),
-        }, { signal: controller.signal });
-      }
+      result = await streamManagementAi({
+        question,
+        focus: "all",
+        sessionId: sessionIdForBff,
+        context: JSON.stringify({
+          route: location.pathname,
+          pageLabel: nlCtx.pageLabel,
+          selectedEntity: ui.selectedEntity,
+        }),
+        conversation: {
+          recentTurns: conv.recentTurns,
+          summary: conv.summary ?? conversationSummary,
+        },
+        ui,
+        attachments: attachmentsForTurn.length > 0
+          ? attachmentsForTurn.map((a) => ({
+              kind: a.kind,
+              mimeType: a.mimeType,
+              filename: a.filename,
+              sizeBytes: a.sizeBytes,
+              dataBase64: a.dataBase64,
+            }))
+          : undefined,
+      }, {
+        // Progressive rendering: show tokens as they arrive in a transient
+        // bubble for the thread that initiated the request. The final turn is
+        // still appended by the result-handling below; this preview is cleared
+        // in finally, so existing reconcile/persist logic is untouched.
+        onDelta: (_chunk, full) => setStreamingPreview({ sid: requestBucket, text: full }),
+      }, { signal: controller.signal });
     } catch (err) {
       result = controller.signal.aborted
         ? { ok: false, kind: "aborted" }
@@ -1386,10 +1324,6 @@ export function AgentPanelBody() {
     sessionId,
     pendingSessions,
     buildUiSnapshot,
-    assistantModeStatus,
-    repairDeclaredScope,
-    repairRepoKey,
-    controlReason,
     location.pathname,
     nlCtx.pageLabel,
     conversationSummary,
@@ -1407,32 +1341,10 @@ export function AgentPanelBody() {
   };
 
   const canSubmit = (text.trim().length > 0 || pendingAttachments.length > 0) && !pending;
-  const toolPolicy = orchestratorStatus?.ok ? orchestratorStatus.status.openclawToolPolicy : null;
-  const toolPolicyFailure = orchestratorStatus?.kind === "failure" ? orchestratorStatus : undefined;
   const assistantModeFailure = assistantModeStatus?.kind === "failure" ? assistantModeStatus : undefined;
   const controlMode = assistantModeStatus?.ok ? assistantModeStatus.status.controlMode : null;
   const kernelEnabled = assistantModeStatus?.ok ? assistantModeStatus.status.kernelEnabled : false;
   const controlActive = Boolean(controlMode?.active);
-  const hasBffSession = Boolean(sessionId && !isClientSessionId(sessionId));
-  const hasConversationTurns = turns.length > 0;
-  const saSdSkill = saSdGenerateSkill(toolPolicy);
-  const saSdSkillAvailable = Boolean(saSdSkill);
-  const canGenerateDevDocs = Boolean(
-    hasBffSession && hasConversationTurns && !pending && !devDocsBusy && controlActive && saSdSkillAvailable,
-  );
-  const devDocsButtonTitle = !hasBffSession
-    ? "需要先送出一則訊息，讓 BFF 建立正式 session id"
-    : !hasConversationTurns
-      ? "需要先有對話內容"
-      : pending || devDocsBusy
-        ? "Management AI 正在處理"
-        : !controlActive
-          ? "需要先啟用 control mode"
-          : !saSdSkillAvailable
-            ? "OpenClaw skill policy 尚未允許 assistant.sa_sd.generate"
-            : "產生 SA/SD 並送進 dev bridge";
-  const devDocsSystemDesignPath = devDocsNotice?.ok ? compactPath(devDocsNotice.archiveLocations?.systemDesign) : null;
-  const devDocsQueuePath = devDocsNotice?.ok ? compactPath(devDocsNotice.taskPacketQueuePath) : null;
 
   return (
     <div className="flex flex-1 min-h-0 bg-background">
@@ -1504,9 +1416,6 @@ export function AgentPanelBody() {
             {sessionId ? `session ${sessionId.slice(0, 10)}…` : "new session"}
           </span>
           <span className="text-[10px] text-muted-foreground">· {turns.length} 則訊息</span>
-          {orchestratorStatus && (
-            <ToolPolicyPill policy={toolPolicy} failure={toolPolicyFailure} />
-          )}
           {assistantModeStatus && (
             <ControlModePill status={assistantModeStatus} failure={assistantModeFailure} />
           )}
@@ -1521,17 +1430,6 @@ export function AgentPanelBody() {
               size="sm"
               variant="ghost"
               className="h-6 text-[10px]"
-              onClick={() => void generateDevDocs()}
-              disabled={!canGenerateDevDocs}
-              title={devDocsButtonTitle}
-            >
-              {devDocsBusy ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <FileText className="h-3 w-3 mr-1" />}
-              SA/SD
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-6 text-[10px]"
               onClick={() => {
                 setControlError(null);
                 setControlDialogOpen(true);
@@ -1540,7 +1438,7 @@ export function AgentPanelBody() {
               <KeyRound className="h-3 w-3 mr-1" />Control
             </Button>
             <Button size="sm" variant="ghost" className="h-6 text-[10px]" onClick={() => void refreshAssistantRuntimeStatus()}>
-              OpenClaw
+              Refresh
             </Button>
           </div>
         </div>
@@ -1574,72 +1472,20 @@ export function AgentPanelBody() {
                   className="h-8 text-xs"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Mode</Label>
-                  <Select
-                    value={controlTargetMode}
-                    onValueChange={(value) => setControlTargetMode(value as "kernel_debug" | "kernel_repair")}
-                  >
-                    <SelectTrigger className="h-8 text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="kernel_debug">kernel_debug</SelectItem>
-                      <SelectItem value="kernel_repair">kernel_repair</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="mgmt-ai-control-reason" className="text-xs">Reason</Label>
-                  <Input
-                    id="mgmt-ai-control-reason"
-                    value={controlReason}
-                    onChange={(e) => setControlReason(e.target.value)}
-                    className="h-8 text-xs"
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Repo</Label>
-                  <Select
-                    value={repairRepoKey}
-                    onValueChange={(value) => {
-                      const next = value as RepairRepoKey;
-                      setRepairRepoKey(next);
-                      setRepairDeclaredScope(repairScopeText(next));
-                    }}
-                  >
-                    <SelectTrigger className="h-8 text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="execute-plans">execute-plans</SelectItem>
-                      <SelectItem value="pantheon">pantheon</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Merge</Label>
-                  <Input value={repairMergeTarget(repairRepoKey)} readOnly className="h-8 text-xs" />
-                </div>
-              </div>
               <div className="space-y-1.5">
-                <Label htmlFor="mgmt-ai-repair-scope" className="text-xs">Scope</Label>
-                <Textarea
-                  id="mgmt-ai-repair-scope"
-                  value={repairDeclaredScope}
-                  onChange={(e) => setRepairDeclaredScope(e.target.value)}
-                  className="min-h-20 resize-none text-xs"
+                <Label htmlFor="mgmt-ai-control-reason" className="text-xs">Reason</Label>
+                <Input
+                  id="mgmt-ai-control-reason"
+                  value={controlReason}
+                  onChange={(e) => setControlReason(e.target.value)}
+                  className="h-8 text-xs"
                 />
               </div>
               <div className="rounded border bg-muted/30 px-2 py-1.5 text-[10px] text-muted-foreground">
                 <div>kernel={kernelEnabled ? "on" : "off"}</div>
                 <div>state={controlMode?.state ?? "unknown"}</div>
-                {controlMode?.mode && <div>mode={controlMode.mode}</div>}
+                <div>mode=kernel_debug</div>
                 {controlMode?.idleExpiresAt && <div>idle={controlMode.idleExpiresAt}</div>}
-                {lastRepairMetadata?.task_id && <div>repair={lastRepairMetadata.repo_key ?? repairRepoKey}:{lastRepairMetadata.task_id}</div>}
               </div>
               {controlError && (
                 <div className="rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-xs text-amber-800 dark:text-amber-300">
@@ -1670,7 +1516,50 @@ export function AgentPanelBody() {
           </DialogContent>
         </Dialog>
 
-        {(lastProviderStatus || lastLinks.audit || lastLinks.conversation || traceId || orchestratorStatus?.ok) && (
+        {pendingConfirmAction && (
+          <HighRiskConfirm
+            open={!!pendingConfirmAction}
+            onOpenChange={(open) => {
+              if (!open) setPendingConfirmAction(null);
+            }}
+            operation={pendingConfirmAction.action.label ?? `${pendingConfirmAction.entityType}.${pendingConfirmAction.actionId}`}
+            target={{
+              type: pendingConfirmAction.entityType,
+              id: pendingConfirmAction.entityId,
+              name: pendingConfirmAction.entityId,
+            }}
+            actionId={`${pendingConfirmAction.entityType}.${pendingConfirmAction.actionId}`}
+            confirmEntity={{
+              type: pendingConfirmAction.entityType,
+              id: pendingConfirmAction.entityId,
+            }}
+            risk="high"
+            description={
+              pendingConfirmAction.action.rationale ??
+              `執行 ${pendingConfirmAction.entityType} ${pendingConfirmAction.entityId} 之 ${pendingConfirmAction.actionId} 動作`
+            }
+            onConfirm={handleConfirmAction}
+          />
+        )}
+
+        {entityCreateDrawer && (
+          <EntityCreateDrawer
+            entity={entityCreateDrawer.entity}
+            open={entityCreateDrawer.open}
+            onOpenChange={(open) => {
+              setEntityCreateDrawer((prev) => (prev ? { ...prev, open } : null));
+            }}
+            initialData={entityCreateDrawer.initialData}
+            onCreated={(created) => {
+              toast({
+                title: "實體建立成功",
+                description: String(created.name ?? created.id ?? "已建立"),
+              });
+            }}
+          />
+        )}
+
+        {(lastProviderStatus || lastLinks.audit || lastLinks.conversation || traceId) && (
           <div className="border-b px-2 py-1 bg-muted/10 flex items-center flex-wrap gap-x-2 gap-y-0.5">
             {lastProviderStatus && <ProviderStatusPill s={lastProviderStatus} />}
             {lastLinks.audit && (
@@ -1684,17 +1573,6 @@ export function AgentPanelBody() {
               </a>
             )}
             {traceId && <span className="text-[10px] text-muted-foreground font-mono">trace={traceId.slice(0, 12)}…</span>}
-            {toolPolicy && (
-              <span className="text-[10px] text-muted-foreground font-mono">
-                OpenClaw={toolPolicy.status ?? "unknown"} upstream={toolPolicy.upstreamStatus ?? "unknown"} · SA/SD={saSdSkillAvailable ? "ready" : "blocked"}
-              </span>
-            )}
-            {toolPolicy && (
-              <span className="text-[10px] text-muted-foreground font-mono" title={saSdSkillLabel(saSdSkill)}>
-                skill={saSdSkillAvailable ? SA_SD_GENERATE_SKILL_ID : "missing"}
-              </span>
-            )}
-            {orchestratorStatus?.ok && <SystemStatusDetails status={orchestratorStatus.status} />}
           </div>
         )}
 
@@ -1707,39 +1585,6 @@ export function AgentPanelBody() {
               className="text-muted-foreground hover:text-foreground"
               onClick={() => setResyncNotice(null)}
               aria-label="關閉提示"
-            >
-              ×
-            </button>
-          </div>
-        )}
-
-        {devDocsNotice && (
-          <div
-            className={`border-b px-2 py-1 text-[10px] flex items-start gap-1 ${
-              devDocsNotice.ok
-                ? "bg-emerald-500/5 text-emerald-800 dark:text-emerald-300"
-                : "bg-amber-500/10 text-amber-800 dark:text-amber-300"
-            }`}
-            title={devDocsNotice.ok ? (devDocsNotice.taskPacketQueuePath ?? devDocsNotice.packetId) : devDocsNotice.message}
-          >
-            <FileText className="h-3 w-3 mt-0.5 shrink-0" />
-            <span className="flex-1 min-w-0">
-              {devDocsNotice.ok ? (
-                <>
-                  SA/SD {devDocsNotice.packetId.slice(0, 18)} · tasks {devDocsNotice.taskCount}
-                  {devDocsNotice.taskPacketQueued ? " · queued" : " · not queued"}
-                  {devDocsSystemDesignPath ? <span className="font-mono"> · SD {devDocsSystemDesignPath}</span> : null}
-                  {devDocsQueuePath ? <span className="font-mono"> · inbox {devDocsQueuePath}</span> : null}
-                </>
-              ) : (
-                <>SA/SD 失敗：{devDocsNotice.message}</>
-              )}
-            </span>
-            <button
-              type="button"
-              className="text-muted-foreground hover:text-foreground"
-              onClick={() => setDevDocsNotice(null)}
-              aria-label="關閉 SA/SD 提示"
             >
               ×
             </button>
@@ -1773,21 +1618,37 @@ export function AgentPanelBody() {
                 {t.role === "assistant" && t.uiActions && t.uiActions.length > 0 && (
                   <div className="px-4 flex flex-wrap gap-1.5">
                     {t.uiActions.map((a, idx) => {
-                      const key = `${t.id}:${idx}`;
+                      const key = getActionCorrelationKey(a as UiAction, t.id, idx);
                       const highRisk = isHighRiskAction(a as UiAction);
-                      const feedback = actionFeedback[key];
+                      const feedback = actionFeedback[key] ?? t.actionFeedback?.[key];
+                      const isExecuted = Boolean(
+                        feedback &&
+                        (feedback === "已執行" || feedback.startsWith("command/") || feedback.includes("status"))
+                      );
+                      const isRunning = Boolean(executingKeys[key]);
                       return (
                         <Button
                           key={key}
                           size="sm"
                           variant={highRisk ? "outline" : "secondary"}
-                          className="h-7 text-[11px] gap-1"
-                          onClick={() => runUiAction(a, key)}
+                          className={`h-7 text-[11px] gap-1 ${isExecuted ? "opacity-80" : ""}`}
+                          disabled={isExecuted || isRunning || confirmBusy}
+                          onClick={() => void runUiAction(a, key, t.id, idx)}
                           title={a.rationale ?? a.kind}
                         >
-                          {highRisk ? <ShieldAlert className="h-3 w-3" /> : <Play className="h-3 w-3" />}
+                          {isRunning ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : highRisk ? (
+                            <ShieldAlert className="h-3 w-3 text-amber-500" />
+                          ) : (
+                            <Play className="h-3 w-3" />
+                          )}
                           <span>{a.label ?? a.kind}</span>
-                          {feedback && <Badge variant="outline" className="ml-1 text-[9px] px-1 py-0">{feedback}</Badge>}
+                          {feedback && (
+                            <Badge variant="outline" className="ml-1 text-[9px] px-1 py-0 font-normal">
+                              {feedback}
+                            </Badge>
+                          )}
                         </Button>
                       );
                     })}

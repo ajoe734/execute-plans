@@ -21,12 +21,16 @@ export * from "./personas";
 export * from "./liveStatus";
 export * from "./liveTransport";
 export * from "./seedTaxonomy";
+export * from "./capitalPools";
 // Batch VII — escape hatch for legacy seed accessors during migration.
 export * from "./legacy";
 // Batch VII-c — v5 closed-loop OS namespace (single entrypoint).
 export * from "./v5";
 // 2026-05-22 PM-Live — Management Oversight live wiring (PM-1..PM-11).
 export * from "./management";
+export * from "./managementConsoleReads";
+// MGMT-LOAD-003 — cheap shell badge counts, deferred full-list fallback.
+export * from "./shellSummary";
 // AG-XR-002 — generated Agora v1 schema/OpenAPI contract types.
 export * from "./agora/types";
 export * from "./agora/governance";
@@ -34,3 +38,7 @@ export * from "./agora/governance";
 export * from "./tradeJournal";
 // 2026-07-12 Agora Interactions.
 export * from "./agora/interaction";
+// 2026-08-24 SD-SRCM-04 Management Data Source Control Center.
+export * from "./managementDataSources";
+
+

@@ -1,0 +1,135 @@
+name: PFG-MGMT-JOURNEY-E2E-20260820 Hosted Acceptance
+
+on:
+  workflow_dispatch:
+    inputs:
+      bff_base_url:
+        description: "Pantheon dev BFF base URL"
+        required: true
+        default: "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io"
+        type: string
+      fe_base_url:
+        description: "Pantheon dev frontend base URL"
+        required: true
+        default: "https://pantheon-lupin-dev-fe.35.201.204.12.sslip.io"
+        type: string
+      expected_bff_sha:
+        description: "Exact deployed Pantheon BFF commit SHA"
+        required: true
+        type: string
+      expected_fe_sha:
+        description: "Exact deployed execute-plans commit SHA"
+        required: true
+        type: string
+      tenant_id:
+        description: "Strict dev acceptance tenant"
+        required: true
+        default: "tenant-dev"
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pfg-mgmt-journey-e2e-hosted-acceptance-dev
+  cancel-in-progress: false
+
+jobs:
+  hosted-acceptance:
+    name: Management + Management AI real read/action journeys hosted proof
+    runs-on: ubuntu-latest
+    environment: dev
+    timeout-minutes: 30
+    env:
+      PANTHEON_FE_BASE_URL: ${{ inputs.fe_base_url }}
+      PANTHEON_BROWSER_BFF_BASE_URL: ${{ inputs.bff_base_url }}
+      PANTHEON_BFF_BASE_URL: ${{ inputs.bff_base_url }}
+      PANTHEON_BFF_TENANT_ID: ${{ inputs.tenant_id }}
+      PANTHEON_HOSTED_E2E: "1"
+      EXPECTED_FE_SHA: ${{ inputs.expected_fe_sha }}
+      EXPECTED_BFF_SHA: ${{ inputs.expected_bff_sha }}
+      PANTHEON_AUDIT_OUT_DIR: .artifacts/PFG-MGMT-JOURNEY-E2E-20260820/${{ github.run_id }}-${{ github.run_attempt }}
+      PANTHEON_CREDENTIALED_PLAYWRIGHT_NO_ARTIFACTS: "1"
+      DEV_LOGIN_CLIENT_ID: ${{ vars.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_ID || 'pantheon-dev-operator-a-v1' }}
+      DEV_LOGIN_CLIENT_SECRET: ${{ secrets.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_SECRET }}
+    steps:
+      - name: Checkout dispatched revision
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5a
+
+      - name: Reject unsafe target or incomplete proof inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "${PANTHEON_FE_BASE_URL}" == "https://pantheon-lupin-dev-fe.35.201.204.12.sslip.io" ]]
+          [[ "${PANTHEON_BROWSER_BFF_BASE_URL}" == "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io" ]]
+          [[ "${EXPECTED_FE_SHA}" =~ ^[0-9a-f]{40}$ ]]
+          [[ "${EXPECTED_BFF_SHA}" =~ ^[0-9a-f]{40}$ ]]
+          [[ "${PANTHEON_BFF_TENANT_ID}" == "tenant-dev" ]]
+          if [[ -z "${DEV_LOGIN_CLIENT_SECRET}" ]]; then
+            echo "::error::DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_SECRET is not provisioned; refusing to run an unauthenticated hosted journey." >&2
+            exit 1
+          fi
+
+      - name: Bind expected identity to the live served deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          served="$(curl -fsS "${PANTHEON_FE_BASE_URL}/deployment.json")"
+          served_fe="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).commit || "")' "${served}")"
+          served_bff="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).bffCommit || "")' "${served}")"
+          if [[ "${served_fe}" != "${EXPECTED_FE_SHA}" ]]; then
+            echo "live FE commit ${served_fe} does not match expected ${EXPECTED_FE_SHA}" >&2
+            exit 1
+          fi
+          if [[ "${served_bff}" != "${EXPECTED_BFF_SHA}" ]]; then
+            echo "live BFF commit ${served_bff} does not match expected ${EXPECTED_BFF_SHA}" >&2
+            exit 1
+          fi
+          echo "verified live deployment.json binds fe=${served_fe} bff=${served_bff} to the expected exact pair"
+
+      - name: Mint a short-lived operator bearer token via governed dev-login
+        shell: bash
+        run: |
+          set -euo pipefail
+          response="$(curl -fsS -X POST "${PANTHEON_BROWSER_BFF_BASE_URL}/bff/auth/dev-login" \
+            -H 'Content-Type: application/json' \
+            -d "$(node -e 'process.stdout.write(JSON.stringify({grant_type:"client_credentials",client_id:process.env.DEV_LOGIN_CLIENT_ID,client_secret:process.env.DEV_LOGIN_CLIENT_SECRET}))')")"
+          token="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).access_token || "")' "${response}")"
+          if [[ -z "${token}" ]]; then
+            echo "::error::dev-login did not return access_token" >&2
+            exit 1
+          fi
+          echo "::add-mask::${token}"
+          echo "BFF_AUTH_TOKEN=${token}" >> "${GITHUB_ENV}"
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install chromium --with-deps
+
+      - name: Run real Management + Management AI product journey hosted specs
+        run: |
+          set -euo pipefail
+          npx playwright test \
+            e2e/management-product-journey.spec.ts \
+            e2e/management-ai-product-journey.spec.ts \
+            --project=chromium \
+            --retries=0 \
+            --reporter=list \
+            --trace=off
+
+      - name: Upload sanitized acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pfg-mgmt-journey-e2e-hosted-acceptance-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .artifacts/PFG-MGMT-JOURNEY-E2E-20260820/${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: warn
+          retention-days: 90

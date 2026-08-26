@@ -1,0 +1,293 @@
+{
+  "schema_version": "pantheon.pfg-management-journey-e2e-evidence.v3",
+  "task_id": "PFG-MGMT-JOURNEY-E2E-20260820",
+  "owner": "Codex",
+  "reviewer": "Antigravity2",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/PFG-MGMT-JOURNEY-E2E-20260820",
+  "pull_request": {
+    "number": 613,
+    "url": "https://github.com/ajoe734/execute-plans/pull/613",
+    "draft": true,
+    "base": "dev"
+  },
+  "status": "in_progress_external_runtime",
+  "updated_at": "2026-08-24T15:46:03Z",
+  "source_binding": {
+    "deployed_frontend_baseline": "cc4007f7f78a31c73548ce85457af17a45a4c4b9",
+    "deployed_backend": "40de8fcb1c69fad0bf5e54d4c0bd6e508c9162e0",
+    "journey_spec_commit": "1a35cae8e6d4e0b223ab4386f30dc2ae04213ece",
+    "workflow_head_branch": "task/PFG-MGMT-JOURNEY-E2E-20260820",
+    "workflow_dispatch_exact_pair_enforced": true
+  },
+  "deployment": {
+    "frontend_url": "https://pantheon-lupin-dev-fe.35.201.204.12.sslip.io",
+    "bff_url": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io",
+    "frontend_commit": "cc4007f7f78a31c73548ce85457af17a45a4c4b9",
+    "bff_commit": "40de8fcb1c69fad0bf5e54d4c0bd6e508c9162e0",
+    "profile": "read-only",
+    "build_mode": {
+      "VITE_BFF_MODE": "live",
+      "VITE_BFF_FALLBACK": "strict",
+      "VITE_BFF_REAL_WRITES": "false",
+      "VITE_BFF_ALLOW_DEV_STUB_WRITES": "false"
+    },
+    "deployment_state": "standby",
+    "release_controller_run": {
+      "id": 32679566250,
+      "repository": "ajoe734/pantheon",
+      "workflow": "nonprod-deploy.yml"
+    },
+    "integration_gate_run": {
+      "id": 32679780054,
+      "url": "https://github.com/ajoe734/execute-plans/actions/runs/32679780054"
+    },
+    "deployment_evidence_url": "https://pantheon-lupin-dev-fe.35.201.204.12.sslip.io/deployment.json"
+  },
+  "historical_hosted_acceptance": {
+    "workflow": ".github/workflows/pfg-mgmt-journey-e2e-hosted-acceptance.yml",
+    "run_id": 32641449292,
+    "run_url": "https://github.com/ajoe734/execute-plans/actions/runs/32641449292",
+    "job_id": 97199049427,
+    "head_sha": "f5f842a0355b9d078ee0c064eca0722564a42fcd",
+    "started_at": "2026-08-23T13:08:33Z",
+    "completed_at": "2026-08-23T13:14:15Z",
+    "conclusion": "failure",
+    "tests": {
+      "passed": 1,
+      "failed": 2,
+      "total": 3,
+      "passed_test": "Formula, Activity, Paper Telemetry, and Postmortem pages show backend-origin data or typed unavailable without synthetic content",
+      "failed_tests": [
+        {
+          "journey": "Management AI provider answer and action journey",
+          "reason": "The live SSE stream emitted OPENCLAW_RESPONSES_UNREACHABLE with answerChars=0 and no provider-backed assistant turn."
+        },
+        {
+          "journey": "Strategy/read-only/dev-paper action journey",
+          "reason": "The read-only deployment exposed runtime mutation control 4 of 23 as enabled. The test stopped before click; no domain command POST was sent."
+        }
+      ]
+    },
+    "artifact": {
+      "id": 9493772203,
+      "name": "pfg-mgmt-journey-e2e-hosted-acceptance-32641449292-1",
+      "url": "https://github.com/ajoe734/execute-plans/actions/runs/32641449292/artifacts/9493772203",
+      "digest_sha256": "75381a941c097e71a81358ec0dca4c649e00a565d1c31e1933fc349ec7f0a133",
+      "size_bytes": 225816,
+      "retention_expires_at": "2026-11-21T13:08:34Z"
+    }
+  },
+  "continuation": {
+    "source_anchor": "1a35cae8e6d4e0b223ab4386f30dc2ae04213ece",
+    "read_only_contract": "The hosted journey now treats provider-backed navigate/openDrawer/focusPanel plus disabled runBffAction and zero command POSTs as a successful read-only proof.",
+    "bounded_write_contract": "Only deploymentProfile=write-proof with VITE_BFF_REAL_WRITES=true and VITE_BFF_ALLOW_DEV_STUB_WRITES=true may execute the mutation branches.",
+    "paper_only_guard": "Runtime quarantine selects only an enabled, non-quarantined row whose environment cell is exactly paper; live rows are rejected before click.",
+    "write_proof_controller": {
+      "workflow": ".github/workflows/pantheon-integration-gate.yml",
+      "input": "functional_closure_write_proof=true",
+      "authorization_record": "docs/deployment/evidence/product-functional-closure/PFG-BOUNDED-FUNCTIONAL-CLOSURE-PROOF-20260824/evidence.json",
+      "authorization_scope": "one bounded paper-only functional-closure write-proof",
+      "automatic_restore": "paired read-only sibling via pantheon-proof-watchdog.yml"
+    },
+    "current_external_state": {
+      "observed_at": "2026-08-24T15:40:59Z",
+      "healthz_http_status": 200,
+      "readyz_http_status": 503,
+      "bff_status": "degraded",
+      "reason": "lifecycle_projector last_error InvalidLifecycleEvent: source row/payload created_at mismatch; last_poll_stale"
+    }
+  },
+  "task_scoped_artifacts": [
+    {
+      "file": "pfg-mgmt-product-journey-pages.png",
+      "sha256": "b38c85cd899cb7438400de1191f5bf75581b1b6c519050fd63494e4642026e19",
+      "provenance": "hosted run 32641449292",
+      "description": "Settled Postmortem typed-empty state on the exact read-only deployment."
+    },
+    {
+      "file": "pfg-mgmt-product-journey-network.json",
+      "sha256": "18a6fcf6f37e41baab7888cb792bc3e89eabda763697de63b4fcc3f5e83fe44c",
+      "provenance": "hosted run 32641449292",
+      "description": "43 completed strict-live BFF response samples for the real-read journey."
+    },
+    {
+      "file": "pfg-mgmt-action-reload.png",
+      "sha256": "3763e0f4692bcdca7fc2a38011fe336a42fcab0335ef3ce6e5a67b257a95cf48",
+      "provenance": "hosted run 32641449292",
+      "description": "Runtime table immediately before the read-only control assertion stopped the journey."
+    },
+    {
+      "file": "pfg-mgmt-action-network.json",
+      "sha256": "6053222ab4afc1fc6344ebe69412c0e330a97ea5273c14cb08401ee0e0a2f7f2",
+      "provenance": "hosted run 32641449292",
+      "description": "25 completed BFF response samples; the only POSTs were two governed dev-login requests and no domain command POST occurred."
+    }
+  ],
+  "acceptance_proof": {
+    "formula_activity_telemetry_postmortem_real_data": {
+      "verified": true,
+      "status": "passed_exact_pair",
+      "evidence": [
+        "Hosted test 2 passed in 2.3 minutes.",
+        "All 43 recorded responses returned HTTP 200.",
+        "The final Postmortem UI rendered the typed empty state 'No incident postmortems recorded.'",
+        "The browser asserted that no 'serving mock' or 'seed fallback' marker was present."
+      ],
+      "endpoint_counts": {
+        "GET /bff/management/persona-league": 1,
+        "GET /bff/management/portfolio-book/exposure": 1,
+        "GET /bff/management/portfolio-book/holdings": 1,
+        "GET /bff/management/trading-pulse": 1,
+        "GET /bff/management/persona-fleet": 1,
+        "GET /bff/runtimes": 1,
+        "GET /bff/incidents": 1
+      }
+    },
+    "strategy_detail_triple_state": {
+      "verified": true,
+      "status": "passed_before_action_gate",
+      "evidence": "The exact lifecycle × review × deployment card and all three axes were visible after URL-bound Strategy Detail navigation."
+    },
+    "read_only_profile_honestly_disabled": {
+      "verified": false,
+      "status": "source_fix_deployed_pending_hosted_rerun",
+      "historical_observation": "Run 32641449292 found runtime mutation control 4/23 enabled while VITE_BFF_REAL_WRITES=false and stopped before click.",
+      "repair": "PFG-MGMT-FE-READONLY-RUNTIME-ACTIONS-20260823 merged as 77acead34e65f65ce46655c68b9ebcbc4a0afd6e; merge d1a13551 is an ancestor of served FE cc4007f7.",
+      "required_rerun": "All Runtime action-menu buttons and the provider-returned runBffAction must be disabled with zero domain command POSTs."
+    },
+    "dev_paper_action_admitted_terminal_readback": {
+      "verified": false,
+      "status": "pending_authorized_bounded_write_proof",
+      "reason": "The current served profile is read-only and the BFF is not ready. The already-authorized bounded controller must deploy the paired write-proof artifact, run only against an eligible paper runtime, and restore the read-only sibling."
+    },
+    "reload_idempotency_persisted": {
+      "verified": false,
+      "status": "pending_authorized_bounded_write_proof"
+    },
+    "management_ai_provider_answer_verified": {
+      "verified": false,
+      "status": "historical_provider_unreachable_pending_healthy_rerun",
+      "error_code": "OPENCLAW_RESPONSES_UNREACHABLE",
+      "stream_summary": {
+        "answerChars": 0,
+        "eventTypes": [
+          "meta",
+          "error"
+        ],
+        "providerUsed": null,
+        "uiActionKinds": []
+      },
+      "authoritative_evidence": "Hosted run 32641449292 job log lines 539-540 and failure lines 574-589."
+    },
+    "management_ai_ui_actions_executed": {
+      "verified": false,
+      "status": "pending_healthy_read_only_and_write_proof_reruns",
+      "required_actions": [
+        "navigate",
+        "openDrawer",
+        "focusPanel",
+        "runBffAction"
+      ]
+    },
+    "confirmed_domain_action_executed_exactly_once": {
+      "verified": false,
+      "status": "pending_authorized_bounded_write_proof",
+      "reason": "The source now requires one receipt-bearing command POST and zero replay POSTs, but the hosted BFF must be ready before the controller can execute it."
+    }
+  },
+  "network_and_latency": {
+    "product_read_events": 43,
+    "product_read_http_statuses": [
+      200
+    ],
+    "read_only_action_events": 25,
+    "read_only_domain_command_posts": 0,
+    "observed_max_duration_ms": {
+      "GET /bff/auth/readiness": 20377,
+      "GET /bff/management/persona-fleet": 8313,
+      "GET /bff/runtimes": 8313,
+      "GET /bff/management/persona-league": 2870,
+      "GET /bff/management/portfolio-book/holdings": 716,
+      "GET /bff/management/portfolio-book/exposure": 651,
+      "GET /bff/incidents": 519,
+      "GET /bff/management/trading-pulse": 496
+    },
+    "note": "Aborted event-stream or superseded page-load requests are emitted to the workflow console for diagnosis but are not represented as completed response samples in the sanitized network JSON."
+  },
+  "code_disposition": {
+    "removed_or_rejected": [
+      "Playwright route interception and simulated loopback fixtures",
+      "Synthetic assistant turns and pre-seeded UI actions",
+      "Client-side real-write overrides",
+      "Treating client mock receipts as successful governed commands",
+      "Obsolete AI image/network files from an earlier non-candidate deployment pair"
+    ],
+    "adopted": [
+      "Exact frontend and backend SHA assertions against deployment.json",
+      "Fail-closed hosted authentication settle checks",
+      "Per-surface completed 2xx BFF provenance assertions",
+      "Safe SSE event summaries that expose provider errors without credentials or prompt payloads",
+      "All-row read-only runtime control assertions before any click",
+      "Sanitized task-scoped screenshots and network response metadata only",
+      "Separate successful read-only and bounded write-proof acceptance branches",
+      "Exact paper-row selection with pre-action state, receipt, terminal state, reload state, and replay counters"
+    ],
+    "production_seed_import_check": {
+      "command": "git grep -n -E 'from[[:space:]].*seed|import\\(.*seed' -- src/management",
+      "result": "passed; zero matches"
+    },
+    "not_changed": [
+      "Backend BFF contracts or OpenClaw runtime",
+      "Runtime action product implementation",
+      "Deployment profile or write authorization",
+      "Supervisor state outside governed lifecycle commands"
+    ]
+  },
+  "validation": {
+    "status": "source_passed_hosted_blocked_external_runtime",
+    "completed_at": "2026-08-24T15:46:03Z",
+    "checks": [
+      {
+        "command": "git diff --check",
+        "result": "passed"
+      },
+      {
+        "command": "npm run typecheck",
+        "result": "passed"
+      },
+      {
+        "command": "npx playwright test e2e/management-product-journey.spec.ts e2e/management-ai-product-journey.spec.ts --list",
+        "result": "passed; 6 tests discovered across chromium and mobile-chromium"
+      },
+      {
+        "command": "npx vitest run src/lib/auth/bffBrowserSession.test.ts src/test/deploy-safe-defaults.test.ts",
+        "result": "historical source check passed; superseded by the focused 51-test continuation check"
+      },
+      {
+        "command": "npx vitest run --maxWorkers=2 --testTimeout=15000 --hookTimeout=30000 src/management/pages/Runtimes.test.tsx src/management/components/agent/AgentPanelBody.test.tsx src/lib/bff-v1/__tests__/managementAi.test.ts src/test/deploy-safe-defaults.test.ts",
+        "result": "passed; 4 files and 51 tests passed"
+      },
+      {
+        "command": "git grep -n -E 'from[[:space:]].*seed|import\\(.*seed' -- src/management",
+        "result": "passed; zero matches"
+      },
+      {
+        "command": "hosted workflow run 32641449292",
+        "result": "historical diagnostic only; 1 passed and 2 failed before the runtime-control repair and profile-split source anchor"
+      },
+      {
+        "command": "curl /healthz and /readyz on the declared Pantheon dev BFF",
+        "result": "healthz HTTP 200 degraded; readyz HTTP 503; InvalidLifecycleEvent source row/payload created_at mismatch"
+      }
+    ]
+  },
+  "blockers": [
+    {
+      "scope": "external_bff_readiness",
+      "detail": "The declared dev BFF /readyz returns HTTP 503 because lifecycle_projector is stale after InvalidLifecycleEvent source row/payload created_at mismatch. No exact-pair hosted journey or bounded write proof can start while this remains degraded."
+    }
+  ],
+  "final_disposition": "Do not mark done or claim hosted acceptance complete. After external BFF readiness is restored, run the read-only workflow on the exact served pair, then run the already-authorized single bounded functional-closure write proof through the parent controller and record its automatic read-only restore."
+}

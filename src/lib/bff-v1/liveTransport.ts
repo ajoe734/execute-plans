@@ -30,6 +30,19 @@ function detectFallbackMode(): FallbackMode {
   }
 }
 
+/**
+ * True only for the hosted/production posture (`VITE_BFF_MODE=live` +
+ * `VITE_BFF_FALLBACK=strict`, e.g. `.env.staging-live`, the integration
+ * gate). Explicit demo/test profiles (`VITE_BFF_MODE=mock`) and the
+ * dev-default `auto` fallback are unaffected — they may still use seed
+ * fixtures. Strict-live callers use this to refuse a seed/mock substitute
+ * for a real response and surface a typed unavailable/degraded error
+ * instead (PFG-FE-HONEST-LIVE-20260820).
+ */
+export function isStrictLiveFallback(): boolean {
+  return liveStatus.get().mode === "live" && detectFallbackMode() === "strict";
+}
+
 export function realWritesEnabled(): boolean {
   try {
     const env = readBffEnv();
@@ -44,7 +57,14 @@ export async function withLiveOrMock<T, TLive = T>(
   mockFn: () => Promise<T>,
   adaptLive?: (data: TLive) => T,
 ): Promise<T> {
-  if (!shouldUseLive()) return mockFn();
+  if (!shouldUseLive()) {
+    // liveStatus is flagged offline (a prior live read fell back). In strict + live mode we must
+    // NOT mask that with mock seed — re-attempt live so the real result (or a typed error)
+    // surfaces, and so the surface self-heals once the BFF recovers. Only a genuinely configured
+    // mock mode (VITE_BFF_MODE=mock) short-circuits to mock here.
+    const strictLive = liveStatus.get().mode === "live" && detectFallbackMode() === "strict";
+    if (!strictLive) return mockFn();
+  }
   try {
     const data = await bffFetch<TLive>({ ...req, mode: "live" });
     liveStatus.reportSuccess();

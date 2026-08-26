@@ -360,6 +360,27 @@ describe("CandidateReviewDrawer — decision flow", () => {
     expect(onDecisionRecorded).toHaveBeenCalledWith("cand-001", "approve_for_monitoring");
   });
 
+  it("reads the canonical member list back after recording a decision", async () => {
+    mockReview.mockResolvedValueOnce({});
+    render(
+      <CandidateReviewDrawer
+        poolId="pool-alpha"
+        open={true}
+        onClose={() => undefined}
+      />,
+    );
+    await screen.findByTestId("candidate-decide-approve_for_monitoring-cand-001");
+    fireEvent.click(screen.getByTestId("candidate-decide-approve_for_monitoring-cand-001"));
+    fireEvent.click(screen.getByTestId("candidate-confirm-cand-001"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("candidate-decision-readback-cand-001")).toHaveTextContent(
+        "canonical candidate pool",
+      );
+    });
+    expect(mockListMembers).toHaveBeenCalledTimes(2);
+  });
+
   it("park decision requires rationale input before confirming", async () => {
     mockReview.mockResolvedValueOnce({});
     render(

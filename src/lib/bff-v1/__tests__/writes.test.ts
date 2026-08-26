@@ -2,6 +2,12 @@ import { afterEach, describe, it, expect, vi } from "vitest";
 import { liveWriteGated, runAction, sessionKindAllowsWrite, tryRunAction, requestConfirmToken } from "@/lib/bff-v1";
 import { BffError } from "@/lib/bff-v1";
 import { liveStatus } from "@/lib/bff-v1/liveStatus";
+import { runActionSafe } from "@/lib/bff-v1/runActionSafe";
+import { toast } from "sonner";
+
+vi.mock("sonner", () => ({
+  toast: { success: vi.fn(), error: vi.fn() },
+}));
 
 function setWriteEnv(realWrites: boolean, token: string | null = null) {
   process.env.VITE_BFF_REAL_WRITES = realWrites ? "true" : "false";
@@ -14,6 +20,7 @@ afterEach(() => {
   setWriteEnv(false, null);
   delete process.env.VITE_BFF_FALLBACK;
   delete process.env.VITE_BFF_STRICT_WRITES;
+  delete process.env.VITE_BFF_ALLOW_DEV_STUB_WRITES;
   liveStatus._reset();
   vi.restoreAllMocks();
 });
@@ -258,6 +265,45 @@ describe("VI-2 session-kind write gate", () => {
     expect(sessionKindAllowsWrite("stub", { production: false, strict: true })).toBe(false);
   });
 
+  it("admits a strict stub session only for an explicitly enabled dev environment", async () => {
+    setWriteEnv(true, "pantheon-dev-browser:operator,approver:mfa");
+    process.env.VITE_BFF_FALLBACK = "strict";
+    process.env.VITE_BFF_ALLOW_DEV_STUB_WRITES = "true";
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      makeJsonResponse(meSession("stub", { env: "dev" }), 200),
+    );
+
+    await expect(liveWriteGated()).resolves.toBe(true);
+  });
+
+  it("never admits a production stub session through the dev override", async () => {
+    setWriteEnv(true, "pantheon-dev-browser:operator,approver:mfa");
+    process.env.VITE_BFF_FALLBACK = "strict";
+    process.env.VITE_BFF_ALLOW_DEV_STUB_WRITES = "true";
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      makeJsonResponse(meSession("stub", { env: "production" }), 200),
+    );
+
+    await expect(liveWriteGated()).resolves.toBe(false);
+  });
+
+  it("fails closed when any BFF environment marker says production", async () => {
+    setWriteEnv(true, "pantheon-dev-browser:operator,approver:mfa");
+    process.env.VITE_BFF_FALLBACK = "strict";
+    process.env.VITE_BFF_ALLOW_DEV_STUB_WRITES = "true";
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      makeJsonResponse({
+        data: {
+          env: "dev",
+          session: { authenticated: true, session_kind: "stub" },
+          environment: { name: "production", strict_auth: false },
+        },
+      }, 200),
+    );
+
+    await expect(liveWriteGated()).resolves.toBe(false);
+  });
+
   it("runAction stays in mock when /bff/me rejects the session", async () => {
     setWriteEnv(true, null);
     const fetcher = vi.fn().mockResolvedValue(
@@ -290,5 +336,89 @@ describe("VI-2 session-kind write gate", () => {
     expect(env.ok).toBe(true);
     expect(env.data.confirmToken).toBe(tokenId);
     expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+});
+
+// PFG-FE-HONEST-LIVE-20260820 — strict-live (VITE_BFF_MODE=live +
+// VITE_BFF_FALLBACK=strict, the hosted/production profile) must never
+// synthesize a completed mutation receipt when real writes are off or the
+// session lacks write authority. Only the explicit demo/test mock profile
+// and the dev-default `auto` fallback may still route through the mock
+// mutation fixtures.
+describe("VI-2 strict-live write gate never fakes a completed receipt", () => {
+  afterEach(() => {
+    setWriteEnv(false, null);
+    delete process.env.VITE_BFF_FALLBACK;
+    liveStatus._reset();
+    vi.restoreAllMocks();
+    vi.mocked(toast.success).mockClear();
+    vi.mocked(toast.error).mockClear();
+  });
+
+  it("runAction rejects with a typed error instead of a mock-completed receipt when writes are disabled", async () => {
+    process.env.VITE_BFF_FALLBACK = "strict";
+    liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
+
+    await expect(
+      runAction({ kind: "Strategy", id: "stg_001", action: "noop" }),
+    ).rejects.toMatchObject({ name: "BffError", code: "FEATURE_DISABLED" });
+  });
+
+  it("runAction rejects when writes are enabled but the session is not admitted", async () => {
+    setWriteEnv(true, null);
+    process.env.VITE_BFF_FALLBACK = "strict";
+    liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ error: { code: "INVALID_TOKEN", message: "missing" } }), { status: 401 }),
+    );
+
+    await expect(
+      runAction({ kind: "Strategy", id: "stg_001", action: "noop" }),
+    ).rejects.toMatchObject({ name: "BffError", code: "FEATURE_DISABLED" });
+  });
+
+  it("runActionSafe surfaces the strict-live disabled write as a failure toast, never a success toast", async () => {
+    process.env.VITE_BFF_FALLBACK = "strict";
+    liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
+
+    const result = await runActionSafe({ kind: "Strategy", id: "stg_001", action: "noop" });
+
+    expect(result.ok).toBe(false);
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(toast.error).toHaveBeenCalled();
+  });
+
+  it("still returns a mock-completed receipt in the dev-default auto fallback (unchanged)", async () => {
+    liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
+
+    const env = await runAction({ kind: "Strategy", id: "stg_001", action: "noop" });
+    expect(env.ok).toBe(true);
+    expect(env.data.status).toBe("completed");
+  });
+
+  it("still returns a mock-completed receipt in the explicit demo/test mock profile (unchanged)", async () => {
+    process.env.VITE_BFF_FALLBACK = "strict";
+    // mode defaults to "mock" under NODE_ENV=test unless explicitly reset to live.
+    liveStatus._reset();
+
+    const env = await runAction({ kind: "Strategy", id: "stg_001", action: "noop" });
+    expect(env.ok).toBe(true);
+    expect(env.data.status).toBe("completed");
+  });
+
+  it("requestConfirmToken rejects in strict-live when writes are disabled", async () => {
+    process.env.VITE_BFF_FALLBACK = "strict";
+    liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
+
+    await expect(
+      requestConfirmToken({
+        actionId: "strategy.deploy_live",
+        entityType: "strategy",
+        entityId: "stg_001",
+        payloadHash: "mock",
+        tradingEnvironment: "live",
+        platformEnvironment: "production",
+      }),
+    ).rejects.toMatchObject({ name: "BffError", code: "FEATURE_DISABLED" });
   });
 });

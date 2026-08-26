@@ -2,16 +2,23 @@
 // NOT final backend DTO. UI-side write intent only.
 // All mutations land in src/lib/bff/writeOverlay.ts (30min TTL, never touches seed).
 
-export type CreatableEntity =
-  | "strategy"
-  | "persona"
-  | "capitalPool"
-  | "rankingFormula"
-  | "rebalance"
-  | "deployment"
-  | "evolutionProgram"
-  | "researchExperiment"
-  | "artifact";
+export const CREATABLE_ENTITIES = [
+  "strategy",
+  "persona",
+  "capitalPool",
+  "rankingFormula",
+  "rebalance",
+  "deployment",
+  "evolutionProgram",
+  "researchExperiment",
+  "artifact",
+] as const;
+
+export type CreatableEntity = (typeof CREATABLE_ENTITIES)[number];
+
+export function isCreatableEntity(val: unknown): val is CreatableEntity {
+  return typeof val === "string" && (CREATABLE_ENTITIES as readonly string[]).includes(val);
+}
 
 // Pack D D40 — 5-tier risk severity (info added in spec-conflict-G C1).
 export type RiskDefault = "info" | "low" | "medium" | "high" | "critical";
@@ -29,7 +36,7 @@ export const PERSONA_ARCHETYPES = [
 ] as const;
 export type PersonaArchetype = (typeof PERSONA_ARCHETYPES)[number];
 
-export const PERSONA_INITIAL_MODES = ["shadow", "suspended"] as const;
+export const PERSONA_INITIAL_MODES = ["paper"] as const;
 export type PersonaInitialMode = (typeof PERSONA_INITIAL_MODES)[number];
 
 export interface BaseCreateInput {

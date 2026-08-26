@@ -1,0 +1,42 @@
+{
+  "task_id": "L12-FE-TRUTH-001",
+  "program_id": "pantheon-twelve-loop-gap-2026-07-26",
+  "task_doc": "docs/bff/execution-tasks/2026-07-26-twelve-loop-gap/L12-FE-TRUTH-001.md",
+  "owner": "Antigravity",
+  "reviewer": "Claude2",
+  "phase": "Twelve Loop Remediation / Frontend Truth",
+  "wave": 3,
+  "fleet_lane": "frontend-truth",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "status": "review_approved",
+  "verification_summary": {
+    "units_passed": 20,
+    "components_tested": [
+      "src/management/pages/v5/LoopTruthView.tsx",
+      "src/management/pages/v5/V5Pages.tsx",
+      "src/management/navigation/managementRouteManifest.ts"
+    ],
+    "test_files": [
+      "src/management/pages/v5/LoopTruthView.test.tsx",
+      "src/management/navigation/managementRouteManifest.test.ts",
+      "src/management/pages/v5/ResearchLoop.test.ts",
+      "src/management/pages/v5/Sentinel.test.tsx",
+      "src/management/pages/v5/Interventions.test.tsx",
+      "src/management/pages/v5/useV5Live.test.tsx"
+    ],
+    "verification_command": "npx vitest run src/management/pages/v5/ src/management/navigation/managementRouteManifest.test.ts"
+  },
+  "acceptance_proof": {
+    "all_twelve_loops_rendered": true,
+    "truth_levels_distinguished": true,
+    "seed_fixtures_not_live": true,
+    "stale_records_not_green": true,
+    "strict_live_bff_endpoints": [
+      "/bff/v5/loop-inventory",
+      "/bff/v5/loop-inventory/{loop_id}",
+      "/bff/v5/loop-health",
+      "/bff/v5/loop-health/{loop_id}"
+    ]
+  }
+}

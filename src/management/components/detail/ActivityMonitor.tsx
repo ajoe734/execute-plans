@@ -1,8 +1,10 @@
-// Live mock-realtime stream of activity tied to a persona/strategy/etc.
+// Live activity stream tied to a persona/strategy/etc.
+// Consumes canonical BFF/SSE contract or renders typed unavailable state when live stream is unattached.
 import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { realtime } from "@/lib/bff/realtime";
+import { liveStatus } from "@/lib/bff-v1/liveStatus";
 import { useT } from "@/platform/hooks";
 import { safeDateTime } from "@/lib/utils";
 
@@ -11,19 +13,47 @@ interface Event { id: string; ts: string; kind: string; status: string; owner?: 
 export const ActivityMonitor = ({ scope }: { scope: string }) => {
   const t = useT();
   const [events, setEvents] = useState<Event[]>([]);
+  const isLiveMode = liveStatus.get().mode === "live";
+  const [isStreamLive, setIsStreamLive] = useState(isLiveMode && realtime.getStatus() === "live");
 
   useEffect(() => {
-    const seed: Event[] = [
-      { id: `seed_${scope}_1`, ts: new Date(Date.now() - 60_000).toISOString(), kind: "route.invoke", status: "success", owner: "scheduler" },
-      { id: `seed_${scope}_2`, ts: new Date(Date.now() - 180_000).toISOString(), kind: "memory.update", status: "queued", owner: "ai_trainer" },
-      { id: `seed_${scope}_3`, ts: new Date(Date.now() - 300_000).toISOString(), kind: "skill.eval", status: "running", owner: "evaluator" },
-    ];
-    setEvents(seed);
-    const off = realtime.on("job", (p) => {
-      const evt = p as { jobId: string; status: string; ts: string; kind?: string; owner?: string };
-      setEvents((prev) => [{ id: evt.jobId, ts: evt.ts, kind: evt.kind ?? "job", status: evt.status, owner: evt.owner }, ...prev].slice(0, 20));
-    });
-    return () => { off(); };
+    const checkStatus = () => {
+      const mode = liveStatus.get().mode;
+      const status = realtime.getStatus();
+      setIsStreamLive(mode === "live" && status === "live");
+    };
+
+    checkStatus();
+    const unsubStatus = realtime.onStatus(checkStatus);
+    const unsubMode = liveStatus.subscribe(checkStatus);
+
+    const handleSse = (p: unknown) => {
+      const record = p && typeof p === "object" && !Array.isArray(p) ? (p as Record<string, unknown>) : {};
+      const payloadObj = (record.payload && typeof record.payload === "object" && !Array.isArray(record.payload) ? record.payload : record) as Record<string, unknown>;
+      const jobId = String(record.id || payloadObj.jobId || payloadObj.id || `evt_${Date.now()}`);
+      const ts = String(record.occurredAt || payloadObj.ts || new Date().toISOString());
+      const kind = String(record.channel || record.type || payloadObj.kind || "sse");
+      const status = String(payloadObj.status || record.status || "info");
+      const owner = typeof payloadObj.owner === "string" ? payloadObj.owner : undefined;
+
+      setEvents((prev) => [{ id: jobId, ts, kind, status, owner }, ...prev].slice(0, 20));
+    };
+
+    const offJob = realtime.on("job", handleSse);
+    const offData = realtime.on("data", handleSse);
+    const offSseLoop = realtime.on("sse:loop", handleSse);
+    const offSseSentinel = realtime.on("sse:sentinel", handleSse);
+    const offSseIntervention = realtime.on("sse:intervention", handleSse);
+
+    return () => {
+      unsubStatus();
+      unsubMode();
+      offJob();
+      offData();
+      offSseLoop();
+      offSseSentinel();
+      offSseIntervention();
+    };
   }, [scope]);
 
   const tone = (s: string) =>
@@ -36,20 +66,33 @@ export const ActivityMonitor = ({ scope }: { scope: string }) => {
     <Card className="p-4">
       <div className="flex items-center justify-between mb-3">
         <div className="text-sm font-semibold">{t("persona.activity.title")}</div>
-        <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-          <span className="h-1.5 w-1.5 rounded-full bg-status-success animate-pulse" />
-          live
-        </span>
+        {isStreamLive ? (
+          <span className="flex items-center gap-1.5 text-[10px] text-status-success font-medium">
+            <span className="h-1.5 w-1.5 rounded-full bg-status-success animate-pulse" />
+            live
+          </span>
+        ) : (
+          <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground font-medium">
+            <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40" />
+            BFF Stream: unavailable
+          </span>
+        )}
       </div>
       <div className="space-y-1.5 max-h-[420px] overflow-y-auto">
-        {events.map((e) => (
-          <div key={e.id} className="flex items-center gap-3 text-xs p-2 rounded-md border border-border">
-            <span className="text-mono text-[10px] text-muted-foreground w-32 shrink-0">{safeDateTime(e.ts, "time")}</span>
-            <span className="text-mono flex-1 truncate">{e.kind}</span>
-            {e.owner && <span className="text-mono text-[10px] text-muted-foreground">{e.owner}</span>}
-            <Badge variant="outline" className={`text-[10px] uppercase ${tone(e.status)}`}>{e.status}</Badge>
+        {events.length === 0 ? (
+          <div className="p-4 text-center text-xs text-muted-foreground">
+            {isStreamLive ? "No activity events recorded yet." : "Live SSE stream unavailable or no activity events recorded."}
           </div>
-        ))}
+        ) : (
+          events.map((e) => (
+            <div key={e.id} className="flex items-center gap-3 text-xs p-2 rounded-md border border-border">
+              <span className="text-mono text-[10px] text-muted-foreground w-32 shrink-0">{safeDateTime(e.ts, "time")}</span>
+              <span className="text-mono flex-1 truncate">{e.kind}</span>
+              {e.owner && <span className="text-mono text-[10px] text-muted-foreground">{e.owner}</span>}
+              <Badge variant="outline" className={`text-[10px] uppercase ${tone(e.status)}`}>{e.status}</Badge>
+            </div>
+          ))
+        )}
       </div>
     </Card>
   );

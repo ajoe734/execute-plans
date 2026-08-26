@@ -17,7 +17,7 @@
  * No order routing, no capital binding — review/score surface only.
  */
 
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   getCandidatePoolScore,
   listCandidatePoolMembers,
@@ -552,6 +552,7 @@ export interface CandidateReviewDrawerProps {
 }
 
 type LoadState = "loading" | "loaded" | "error";
+type DecisionReadbackState = "loading" | "confirmed" | "error";
 
 export function CandidateReviewDrawer({
   poolId,
@@ -564,6 +565,24 @@ export function CandidateReviewDrawer({
   const [members, setMembers] = useState<CandidatePoolMember[]>([]);
   const [poolEtag, setPoolEtag] = useState<string | null>(null);
   const [decompositionTarget, setDecompositionTarget] = useState<string | null>(null);
+  const [decisionReadback, setDecisionReadback] = useState<{
+    artifactId: string;
+    state: DecisionReadbackState;
+  } | null>(null);
+
+  const readBackDecision = useCallback((artifactId: string, decision: CandidateReviewDecision) => {
+    onDecisionRecorded?.(artifactId, decision);
+    setDecisionReadback({ artifactId, state: "loading" });
+    void listCandidatePoolMembers(poolId)
+      .then((membersResult) => {
+        setMembers(membersResult.items);
+        setPoolEtag(membersResult.etag);
+        setDecisionReadback({ artifactId, state: "confirmed" });
+      })
+      .catch(() => {
+        setDecisionReadback({ artifactId, state: "error" });
+      });
+  }, [onDecisionRecorded, poolId]);
 
   useEffect(() => {
     if (!open) return;
@@ -574,6 +593,7 @@ export function CandidateReviewDrawer({
     setMembers([]);
     setPoolEtag(null);
     setDecompositionTarget(null);
+    setDecisionReadback(null);
 
     Promise.all([getCandidatePoolScore(poolId), listCandidatePoolMembers(poolId)])
       .then(([scoreResults, membersResult]) => {
@@ -699,6 +719,28 @@ export function CandidateReviewDrawer({
             ×
           </button>
         </div>
+
+        {decisionReadback && (
+          <div
+            data-testid={`candidate-decision-readback-${decisionReadback.artifactId}`}
+            style={{
+              borderBottom: "1px solid #e2e8f0",
+              color: decisionReadback.state === "confirmed"
+                ? "#15803d"
+                : decisionReadback.state === "error"
+                  ? "#b91c1c"
+                  : "#1d4ed8",
+              fontSize: 12,
+              padding: "8px 20px",
+            }}
+          >
+            {decisionReadback.state === "loading"
+              ? "Reading back the recorded decision…"
+              : decisionReadback.state === "confirmed"
+                ? "Decision read back from the canonical candidate pool."
+                : "Decision was recorded, but its canonical readback is unavailable."}
+          </div>
+        )}
 
         {/* Content */}
         <div style={{ flex: 1, overflow: "auto" }}>
@@ -938,7 +980,7 @@ export function CandidateReviewDrawer({
                           candidateTitle={title}
                           lifecycleState={lifecycle}
                           poolEtag={poolEtag}
-                          onDecisionRecorded={onDecisionRecorded}
+                          onDecisionRecorded={readBackDecision}
                         />
                       </td>
                     </tr>

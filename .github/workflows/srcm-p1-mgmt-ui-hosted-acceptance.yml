@@ -1,0 +1,166 @@
+name: SRCM-P1-MGMT-UI Hosted Acceptance
+
+on:
+  workflow_dispatch:
+    inputs:
+      bff_base_url:
+        description: "Pantheon dev BFF base URL"
+        required: true
+        default: "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io"
+        type: string
+      fe_base_url:
+        description: "Pantheon dev frontend base URL"
+        required: true
+        default: "https://pantheon-lupin-dev-fe.35.201.204.12.sslip.io"
+        type: string
+      expected_bff_sha:
+        description: "Exact deployed Pantheon BFF commit SHA"
+        required: true
+        type: string
+      expected_fe_sha:
+        description: "Exact deployed execute-plans commit SHA"
+        required: true
+        type: string
+      tenant_id:
+        description: "Strict dev acceptance tenant"
+        required: true
+        default: "tenant-dev"
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: srcm-p1-mgmt-ui-hosted-acceptance-dev
+  cancel-in-progress: false
+
+jobs:
+  hosted-acceptance:
+    name: Management Data Source Control Center unmocked hosted proof
+    runs-on: ubuntu-latest
+    environment: dev
+    timeout-minutes: 30
+    env:
+      PANTHEON_FE_BASE_URL: ${{ inputs.fe_base_url }}
+      PANTHEON_BROWSER_BFF_BASE_URL: ${{ inputs.bff_base_url }}
+      PANTHEON_BFF_BASE_URL: ${{ inputs.bff_base_url }}
+      PANTHEON_BFF_TENANT_ID: ${{ inputs.tenant_id }}
+      PANTHEON_HOSTED_E2E: "1"
+      EXPECTED_FE_SHA: ${{ inputs.expected_fe_sha }}
+      EXPECTED_BFF_SHA: ${{ inputs.expected_bff_sha }}
+      PANTHEON_AUDIT_OUT_DIR: .artifacts/SRCM-P1-MGMT-UI-20260824/${{ github.run_id }}-${{ github.run_attempt }}
+      PANTHEON_CREDENTIALED_PLAYWRIGHT_NO_ARTIFACTS: "1"
+      DEV_LOGIN_CLIENT_ID: ${{ vars.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_ID || 'pantheon-dev-operator-a-v1' }}
+      DEV_LOGIN_CLIENT_SECRET: ${{ secrets.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_SECRET }}
+      PANTHEON_PUBLIC_GCP_IDENTITY_API_KEY: ${{ vars.VITE_GCP_IDENTITY_API_KEY }}
+      VITE_GCP_IDENTITY_API_KEY: ${{ vars.VITE_GCP_IDENTITY_API_KEY }}
+      VITE_GCP_IDENTITY_PROJECT_ID: ${{ vars.VITE_GCP_IDENTITY_PROJECT_ID }}
+      VITE_GCP_IDENTITY_AUTH_DOMAIN: ${{ vars.VITE_GCP_IDENTITY_AUTH_DOMAIN }}
+    steps:
+      - name: Checkout dispatched revision
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5a
+
+      - name: Reject unsafe target or incomplete proof inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "${PANTHEON_FE_BASE_URL}" == "https://pantheon-lupin-dev-fe.35.201.204.12.sslip.io" ]]
+          [[ "${PANTHEON_BROWSER_BFF_BASE_URL}" == "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io" ]]
+          [[ "${EXPECTED_FE_SHA}" =~ ^[0-9a-f]{40}$ ]]
+          [[ "${EXPECTED_BFF_SHA}" =~ ^[0-9a-f]{40}$ ]]
+          [[ "${PANTHEON_BFF_TENANT_ID}" == "tenant-dev" ]]
+          if [[ -z "${DEV_LOGIN_CLIENT_SECRET}" ]]; then
+            echo "::error::DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_SECRET is not provisioned; refusing to run an unauthenticated hosted journey." >&2
+            exit 1
+          fi
+          if [[ -n "${PANTHEON_PUBLIC_GCP_IDENTITY_API_KEY:-}" ]] && ! [[ "${PANTHEON_PUBLIC_GCP_IDENTITY_API_KEY}" =~ ^AIza[A-Za-z0-9_-]{35}$ ]]; then
+            echo "::error::PANTHEON_PUBLIC_GCP_IDENTITY_API_KEY format is invalid." >&2
+            exit 1
+          fi
+
+      - name: Bind checkout + live FE + live /bff/version exact SHAs
+        shell: bash
+        run: |
+          set -euo pipefail
+          checkout_sha="$(git rev-parse HEAD)"
+          if [[ "${checkout_sha}" != "${EXPECTED_FE_SHA}" ]]; then
+            echo "checked out commit ${checkout_sha} does not match expected ${EXPECTED_FE_SHA}" >&2
+            exit 1
+          fi
+
+          served="$(curl -fsS "${PANTHEON_FE_BASE_URL}/deployment.json")"
+          served_fe="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).commit || "")' "${served}")"
+          served_bff="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).bffCommit || JSON.parse(process.argv[1]).bffSourceCommitSha || "")' "${served}")"
+          if [[ "${served_fe}" != "${EXPECTED_FE_SHA}" ]]; then
+            echo "live FE commit ${served_fe} does not match expected ${EXPECTED_FE_SHA}" >&2
+            exit 1
+          fi
+          if [[ "${served_bff}" != "${EXPECTED_BFF_SHA}" ]]; then
+            echo "live BFF commit in deployment.json ${served_bff} does not match expected ${EXPECTED_BFF_SHA}" >&2
+            exit 1
+          fi
+
+          bff_version_res="$(curl -fsS "${PANTHEON_BROWSER_BFF_BASE_URL}/bff/version")"
+          live_bff_sha="$(node -e 'const v=JSON.parse(process.argv[1]); process.stdout.write(v.source_commit_sha || v.commit || "")' "${bff_version_res}")"
+          live_bff_known="$(node -e 'const v=JSON.parse(process.argv[1]); process.stdout.write(String(v.source_commit_known ?? ""))' "${bff_version_res}")"
+          if [[ "${live_bff_known}" != "true" ]]; then
+            echo "live BFF /bff/version source_commit_known is not true" >&2
+            exit 1
+          fi
+          if [[ "${live_bff_sha}" != "${EXPECTED_BFF_SHA}" ]]; then
+            echo "live BFF /bff/version source_commit_sha ${live_bff_sha} does not match expected ${EXPECTED_BFF_SHA}" >&2
+            exit 1
+          fi
+          echo "verified exact SHA bindings: checkout=${checkout_sha}, live FE=${served_fe}, live /bff/version=${live_bff_sha}"
+
+      - name: Mint a short-lived operator bearer token via governed dev-login and prove operator readiness
+        shell: bash
+        run: |
+          set -euo pipefail
+          response="$(curl -fsS -X POST "${PANTHEON_BROWSER_BFF_BASE_URL}/bff/auth/dev-login" \
+            -H 'Content-Type: application/json' \
+            -d "$(node -e 'process.stdout.write(JSON.stringify({grant_type:"client_credentials",client_id:process.env.DEV_LOGIN_CLIENT_ID,client_secret:process.env.DEV_LOGIN_CLIENT_SECRET}))')")"
+          token="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).access_token || "")' "${response}")"
+          if [[ -z "${token}" ]]; then
+            echo "::error::dev-login did not return access_token" >&2
+            exit 1
+          fi
+          echo "::add-mask::${token}"
+          echo "BFF_AUTH_TOKEN=${token}" >> "${GITHUB_ENV}"
+
+          me="$(curl -fsS "${PANTHEON_BROWSER_BFF_BASE_URL}/bff/me" -H "Authorization: Bearer ${token}" -H "X-Tenant-Id: ${PANTHEON_BFF_TENANT_ID}")"
+          node -e 'const r=JSON.parse(process.argv[1]); const d=r.data ?? r; if (!Array.isArray(d.roles) || !d.roles.includes("operator")) process.exit(1)' "${me}"
+          readiness="$(curl -fsS "${PANTHEON_BROWSER_BFF_BASE_URL}/bff/auth/readiness" -H "Authorization: Bearer ${token}" -H "X-Tenant-Id: ${PANTHEON_BFF_TENANT_ID}")"
+          node -e 'const r=JSON.parse(process.argv[1]); const d=r.data ?? r; if (d.ready !== true || d.authReady !== true) process.exit(1)' "${readiness}"
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install chromium --with-deps
+
+      - name: Run real Management Data Source Control Center hosted spec
+        run: |
+          set -euo pipefail
+          npx playwright test \
+            e2e/30-management-data-source-control.spec.ts \
+            --project=chromium \
+            --grep "unmocked hosted" \
+            --retries=0 \
+            --reporter=list \
+            --trace=off
+
+      - name: Upload sanitized acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: srcm-p1-mgmt-ui-hosted-acceptance-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .artifacts/SRCM-P1-MGMT-UI-20260824/${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: 90

@@ -14,7 +14,7 @@ import type { CommandResponse, ActionCommandResponseData } from "./dto";
 import { idempotencyKey as mintIdemKey } from "./headers";
 import { newCorrelationId } from "@/lib/v4/correlation";
 import { makeBffError, BffError } from "./errors";
-import { withLiveOrMock } from "./liveTransport";
+import { withLiveOrMock, isStrictLiveFallback } from "./liveTransport";
 import { liveWriteGated, sessionKindAllowsWrite } from "./writeGate";
 import { paths } from "./paths";
 import {
@@ -25,6 +25,23 @@ import {
 } from "@/lib/bff/commandClient";
 
 export { liveWriteGated, sessionKindAllowsWrite };
+
+/**
+ * Strict-live posture (VITE_BFF_MODE=live + VITE_BFF_FALLBACK=strict, the
+ * hosted/production profile) must never synthesize a completed mutation
+ * receipt when real writes are off or the session lacks write authority.
+ * Only the explicit demo/test mock profile and the dev-default `auto`
+ * fallback may still route through the mock mutation fixtures
+ * (PFG-FE-HONEST-LIVE-20260820).
+ */
+function refuseStrictLiveWrite(correlationId: string): never {
+  throw makeBffError({
+    code: "FEATURE_DISABLED",
+    message: "Live writes are unavailable: real writes are disabled or the session lacks write authority.",
+    correlationId,
+    details: { reason: "write_unavailable" },
+  });
+}
 
 export interface RunActionEnvelope extends CommandResponse<ActionCommandResponseData> {
   /** Pass-through to the underlying mock MutationResult for legacy consumers. */
@@ -97,6 +114,7 @@ export async function runAction(
       (rawData) => adaptRunActionCommandResponse(rawData, commandOpts),
     );
   }
+  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
   return mockBranch();
 }
 
@@ -176,6 +194,7 @@ export async function requestConfirmToken(
       },
     );
   }
+  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
   return mockBranch();
 }
 

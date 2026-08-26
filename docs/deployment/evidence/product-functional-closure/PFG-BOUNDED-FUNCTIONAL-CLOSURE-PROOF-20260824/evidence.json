@@ -1,0 +1,108 @@
+{
+  "schema_version": "pantheon.product-functional-closure.bounded-functional-closure-proof-evidence.v1",
+  "task_id": "PFG-BOUNDED-FUNCTIONAL-CLOSURE-PROOF-20260824",
+  "taskId": "PFG-BOUNDED-FUNCTIONAL-CLOSURE-PROOF-20260824",
+  "owner": "Antigravity",
+  "reviewer": "Codex2",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/PFG-BOUNDED-FUNCTIONAL-CLOSURE-PROOF-20260824",
+  "base_commit": "cc4007f7f78a31c73548ce85457af17a45a4c4b9",
+  "status": "ready_for_review",
+  "timestamp": "2026-08-24T18:45:00Z",
+  "authorization": {
+    "date": "2026-08-24",
+    "scope": "one bounded paper-only functional-closure write-proof",
+    "source": "operator chat"
+  },
+  "exact_pair": {
+    "frontend_sha": "cc4007f7f78a31c73548ce85457af17a45a4c4b9",
+    "bff_sha": "40de8fcb1c69fad0bf5e54d4c0bd6e508c9162e0",
+    "pair_id": "0d36e1dd5beb48a21dc5c9f7467c3ab85f86f246d20568a58a2fb534208aafa4",
+    "release_candidate_id": "a24edf1f6a7b8e4ba8e47ec389b2370891ab8b354950c6e0f2b6ea0113cbd19b",
+    "compatibility_manifest_sha256": "9ec375982c3251395e5693573a5f17c379692a3ea3c002b495daa7290c865531",
+    "read_only_artifact_digest_sha256": "55382dbba2e04d1f858392c81120efdceda4afcedfd9ae6b79382ce710e4a669",
+    "write_proof_artifact_digest_sha256": "d5f27b4c300bafefb0b967e4322b99e0d562b0f7e90e74a4d1b2e83bdf2cad41",
+    "release_controller_run_id": "32679566250",
+    "source_gate_run_id": "32679780054"
+  },
+  "scope": {
+    "deploy_controller_and_manifest_repair": [
+      "The deployment workflow and deploy script allow write-proof profile activation on the exact accepted and served release commit when subsequent task PRs have advanced the dev tip.",
+      "The switch-time candidate order guard extends the exact-live served candidate write-proof exception while retaining controller identity and live-target CAS checks.",
+      "The deployment workflow pins namespaced compatibility refs per run/attempt (refs/pantheon-proof/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}/*) before generating the Agora compatibility manifest and running the Agora deployment gate.",
+      "The independent watchdog namespaces compatibility refs per run/attempt, asserting both namespaced refs resolve to the authorized CANDIDATE_SHA and BFF_SHA before Agora gate revalidation.",
+      "The watchdog restore step is marked `if: always()` and pre-restore compatibility revalidation is marked `continue-on-error: true` so pre-restore errors unconditionally fall through to exact same-pair read-only restoration."
+    ],
+    "credential_controller": [
+      "Repository actions secret DEV_BFF_DEV_LOGIN_VIEWER_CLIENT_SECRET provisioned on execute-plans repository to supply required dedicated viewer client credentials alongside DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_SECRET.",
+      "Both operator and viewer tokens are freshly minted at runtime via /bff/auth/dev-login with strict TTL (>1200s) and max-age (<120s) preflight."
+    ],
+    "execution_architecture": [
+      "The deployment workflow, restore watchdog, and integration gate authorize parent-bound hosted proof dispatches on dev branch while binding the candidate to the exact accepted and served candidate SHA via the signed parent proof binding artifact.",
+      "The restore watchdog and integration gate validate parent and child run identity, event (workflow_dispatch), dev branch, and signed proof binding artifact without requiring the dev branch tip SHA to equal the candidate SHA.",
+      "The proof coordinator and restore watchdog resolve the proof child run by correlation display title without requiring headSha == candidateSha, enabling out-of-order proof child resolution when dev advances.",
+      "Integration gate release controller validation separates trusted current dev controller branch/identity verification from the immutable candidate SHA, ensuring candidate validation succeeds only with the exact bound candidate.",
+      "Merging this repair to dev enables the authorized parent deploy dispatch from dev to successfully arm the watchdog, activate write-proof, run the hosted proof, and restore read-only.",
+      "Hosted write-proof execution preflight notes hosted BFF /readyz HTTP 503 (lifecycle_projector stale) while served deployment reports exact pair read-only; authorized proof execution will proceed once hosted BFF readiness recovers."
+    ],
+    "not_changed": [
+      "Product runtime contracts, BFF API contracts, and default read-only deployment profile.",
+      "No live capital action and no outbound Source Ingestion external pulls.",
+      "Watchdog single-coordinator architecture and fail-closed restore semantics."
+    ]
+  },
+  "modified_surfaces": [
+    ".github/workflows/pantheon-dev-fe-deploy.yml",
+    ".github/workflows/pantheon-integration-gate.yml",
+    ".github/workflows/pantheon-proof-watchdog.yml",
+    "scripts/deploy-dev-vm.sh",
+    "scripts/release-evidence.mjs",
+    "scripts/test-deploy-dev-vm.sh",
+    "src/test/paired-release-workflow.test.ts",
+    "docs/deployment/evidence/product-functional-closure/PFG-BOUNDED-FUNCTIONAL-CLOSURE-PROOF-20260824/evidence.json"
+  ],
+  "acceptance_coverage": {
+    "exact_pair_preflight_verified": true,
+    "authenticated_write_proof_workflow_inputs_aligned": true,
+    "paper_only_no_live_capital_no_source_external_pull": true,
+    "independent_watchdog_exact_pair_read_only_restore": true,
+    "namespaced_refs_and_negative_isolation_proven": true,
+    "unconditional_restore_fallback_guaranteed": true,
+    "controller_repair_and_guards_verified": true,
+    "out_of_order_candidate_and_controller_separation_verified": true,
+    "hosted_write_proof_execution": "pending_dev_merge_and_hosted_bff_readyz"
+  },
+  "validation": {
+    "focused_tests": {
+      "command": "npx vitest run --maxWorkers=2 --testTimeout=15000 --hookTimeout=30000 src/management/pages/trade-journeys/TradeJourneysHostedProof.contract.test.ts src/test/paired-release-workflow.test.ts src/test/deploy-safe-defaults.test.ts src/test/persona-hosted-proof-credentials.test.ts src/test/persona-hosted-proof-env.test.ts src/test/release-evidence.test.ts",
+      "result": "passed: 6 files, 73 tests"
+    },
+    "contract_tests": {
+      "command": "npm run test:contract",
+      "result": "passed: 1 file, 7 tests (49 schemas, 156 routes, 75 sha256 entries aligned)"
+    },
+    "deploy_controller_harness": {
+      "command": "npm run test:deploy-release",
+      "result": "passed: 7 CAS tests, 5 manifest tests, 32 deploy harness tests (44 passed, 0 failed)"
+    },
+    "typecheck_and_lint": {
+      "command": "npm run typecheck && npm run lint",
+      "result": "passed: 0 errors"
+    }
+  },
+  "review_request": {
+    "reviewer_must_confirm": [
+      "The deployment workflow and deploy-dev-vm.sh allow write-proof profile activation when the requested candidate matches the currently served release commit, even after dev tip advances.",
+      "The pre-switch guard in deploy-dev-vm.sh extends the served candidate write-proof exception through atomic switch while preserving controller identity and live-target CAS checks.",
+      "The deployment test harness validates advanced dev + exact served read-only candidate -> successful bounded write-proof, plus negative cases for non-served and changed-live candidates (32/32 passed).",
+      "The deployment workflow pins namespaced refs by ${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT} before Agora manifest generation.",
+      "The watchdog workflow namespaces refs by ${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}, eliminating shared static ref race conditions.",
+      "Both namespaced refs are verified to resolve to the authorized candidate and BFF SHAs before manifest generation.",
+      "Pre-restore compatibility gate failure unconditionally falls through to exact same-pair read-only restoration.",
+      "The dedicated viewer client secret is set in repository secrets and required by proof credential minting.",
+      "Proof child resolution and watchdog watch/restore match child runs by correlation display title without requiring headSha == candidateSha, enabling resolution when dev advances.",
+      "Integration gate release controller validation separates trusted dev controller validation from candidate SHA."
+    ]
+  }
+}

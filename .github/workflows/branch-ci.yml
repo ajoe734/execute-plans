@@ -1,0 +1,249 @@
+name: Branch CI Gate
+
+# Gate every push and PR that participates in the task / publish / main
+# pipeline. Promote PRs created by publish-promote use the explicit
+# workflow_dispatch path because GitHub does not recursively emit pull_request
+# events for a PR created with that workflow's GITHUB_TOKEN.
+
+on:
+  push:
+    branches:
+      - "task/**"
+      - "hotfix/**"
+      - "dev"
+      - "publish/**"
+      - "main"
+  pull_request:
+    branches:
+      - "dev"
+      - "main"
+  workflow_dispatch:
+    inputs:
+      expected_head_sha:
+        description: "Exact promote PR head that must receive the required checks"
+        required: true
+        type: string
+      promote_pr_number:
+        description: "Promote PR number for audit output"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: branch-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  trailers:
+    name: Commit trailers
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate explicit promote dispatch
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          EXPECTED_HEAD_SHA: ${{ inputs.expected_head_sha }}
+          HEAD_SHA: ${{ github.sha }}
+          PROMOTE_PR_NUMBER: ${{ inputs.promote_pr_number }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [[ ! "$EXPECTED_HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "expected_head_sha must be a full lowercase commit SHA" >&2
+            exit 1
+          fi
+          if [[ "$REF_NAME" != promote/* ]]; then
+            echo "manual Branch CI dispatch is restricted to promote/* refs" >&2
+            exit 1
+          fi
+          if [[ "$HEAD_SHA" != "$EXPECTED_HEAD_SHA" ]]; then
+            echo "dispatch head mismatch for promote PR #${PROMOTE_PR_NUMBER}: expected ${EXPECTED_HEAD_SHA}, got ${HEAD_SHA}" >&2
+            exit 1
+          fi
+          echo "Validated exact promote PR #${PROMOTE_PR_NUMBER} head ${HEAD_SHA}"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine commit range
+        if: github.event_name != 'workflow_dispatch'
+        id: range
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+          REF_NAME: ${{ github.ref_name }}
+          PR_BASE_REF: ${{ github.event.pull_request.base.ref || '' }}
+        run: |
+          python3 scripts/git/resolve_commit_trailer_range.py \
+            --event "$EVENT" \
+            --base-sha "$BASE_SHA" \
+            --head-sha "$HEAD_SHA" \
+            --ref-name "$REF_NAME" \
+            --pr-base-ref "$PR_BASE_REF" >> "$GITHUB_OUTPUT"
+
+      - name: Check commit trailers
+        env:
+          EVENT: ${{ github.event_name }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref || github.ref_name }}
+          REF_NAME: ${{ github.ref_name }}
+          HEAD_SHA: ${{ github.sha }}
+          RANGE: ${{ steps.range.outputs.range }}
+        run: |
+          if [[ "$EVENT" == "workflow_dispatch" && "$REF_NAME" == promote/* ]]; then
+            echo "Skipping commit trailer re-scan for exact-head promote dispatch ${REF_NAME}; publish history was already validated before snapshot cut."
+            exit 0
+          fi
+          if [[ "$EVENT" == "pull_request" && "$HEAD_REF" == promote/* ]]; then
+            echo "Skipping commit trailer re-scan for promote PR ${HEAD_REF}; publish history was already validated before snapshot cut."
+            exit 0
+          fi
+          if [[ "$EVENT" == "push" && "$REF_NAME" == "main" ]]; then
+            subject="$(git log -1 --format=%s "$HEAD_SHA")"
+            if [[ "$subject" == Merge\ pull\ request*promote/* ]]; then
+              echo "Skipping commit trailer re-scan for main promote merge: ${subject}"
+              exit 0
+            fi
+          fi
+          if [[ -z "$RANGE" ]]; then
+            echo "commit range was not resolved; refusing to skip the trailer gate" >&2
+            exit 1
+          fi
+          python3 scripts/git/check_commit_trailers.py \
+            --range "$RANGE" \
+            --skip-merge
+
+  generated-files:
+    name: Generated files guard
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate explicit promote dispatch
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          EXPECTED_HEAD_SHA: ${{ inputs.expected_head_sha }}
+          HEAD_SHA: ${{ github.sha }}
+          PROMOTE_PR_NUMBER: ${{ inputs.promote_pr_number }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [[ ! "$EXPECTED_HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "expected_head_sha must be a full lowercase commit SHA" >&2
+            exit 1
+          fi
+          if [[ "$REF_NAME" != promote/* ]]; then
+            echo "manual Branch CI dispatch is restricted to promote/* refs" >&2
+            exit 1
+          fi
+          if [[ "$HEAD_SHA" != "$EXPECTED_HEAD_SHA" ]]; then
+            echo "dispatch head mismatch for promote PR #${PROMOTE_PR_NUMBER}: expected ${EXPECTED_HEAD_SHA}, got ${HEAD_SHA}" >&2
+            exit 1
+          fi
+          echo "Validated exact promote PR #${PROMOTE_PR_NUMBER} head ${HEAD_SHA}"
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Diff against base
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          # Deleting a previously tracked artifact is remediation, not a new
+          # artifact entering history. Inspect every change type except D.
+          if [[ -n "$BASE_SHA" && "$BASE_SHA" != "0000000000000000000000000000000000000000" ]] && git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
+            CHANGED=$(git diff --diff-filter=ACMRTUXB --name-only "$BASE_SHA" "$HEAD_SHA" || true)
+          else
+            CHANGED=$(git diff --diff-filter=ACMRTUXB --name-only "$HEAD_SHA~1" "$HEAD_SHA" 2>/dev/null || true)
+          fi
+          if [[ -z "$CHANGED" ]]; then exit 0; fi
+          echo "$CHANGED" | xargs python3 scripts/git/check_generated_files.py
+
+  component-merge:
+    name: Component merge gate
+    runs-on: ubuntu-latest
+    needs:
+      - trailers
+      - generated-files
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Publish promotion planner
+        run: python3 scripts/git/test_publish_promote.py
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install
+        run: npm ci
+
+      - name: Deploy safety contract
+        run: npx vitest run src/test/deploy-safe-defaults.test.ts
+
+      - name: Changed component tests
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$BASE_SHA" || "$BASE_SHA" == "0000000000000000000000000000000000000000" ]] \
+            || ! git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
+            BASE_SHA="${HEAD_SHA}~1"
+          fi
+          mapfile -t component_paths < <(
+            git diff --name-only --diff-filter=ACMRTUXB "$BASE_SHA" "$HEAD_SHA" -- \
+              ':(glob)src/**/*.ts' ':(glob)src/**/*.tsx'
+          )
+          if [[ "${#component_paths[@]}" -eq 0 ]]; then
+            echo "No component source changed; no product unit suite to run."
+            exit 0
+          fi
+          printf 'Running tests related to changed components:\n%s\n' "${component_paths[*]}"
+          npx vitest related --run "${component_paths[@]}"
+
+      - name: Checkout Pantheon contract bundle
+        uses: actions/checkout@v4
+        with:
+          repository: ajoe734/pantheon
+          ref: dev
+          path: pantheon-contract
+          token: ${{ github.token }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: BFF contract tests
+        env:
+          PANTHEON_CONTRACT_ROOT: pantheon-contract
+        run: npm run test:contract
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        env:
+          VITE_GCP_IDENTITY_API_KEY: ${{ vars.VITE_GCP_IDENTITY_API_KEY }}
+          VITE_GCP_IDENTITY_PROJECT_ID: ${{ vars.VITE_GCP_IDENTITY_PROJECT_ID }}
+          VITE_GCP_IDENTITY_AUTH_DOMAIN: ${{ vars.VITE_GCP_IDENTITY_AUTH_DOMAIN }}
+        run: npm run build
+
+  smoke-alias:
+    name: Smoke acceptance
+    runs-on: ubuntu-latest
+    needs:
+      - component-merge
+    if: always()
+    steps:
+      - name: Preserve the protected main check context
+        env:
+          COMPONENT_MERGE_RESULT: ${{ needs.component-merge.result }}
+        run: |
+          if [[ "$COMPONENT_MERGE_RESULT" != "success" ]]; then
+            echo "Component merge gate did not succeed: ${COMPONENT_MERGE_RESULT}" >&2
+            exit 1
+          fi
+          echo "Component merge gate succeeded"

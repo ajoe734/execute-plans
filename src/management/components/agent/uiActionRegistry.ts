@@ -5,6 +5,14 @@
 // go through the existing BFF action/command endpoint + HighRiskConfirm; this
 // registry never auto-invokes a write.
 
+import {
+  CREATABLE_ENTITIES,
+  isCreatableEntity,
+  type CreatableEntity,
+} from "@/lib/writeIntents/types";
+
+export { CREATABLE_ENTITIES, isCreatableEntity, type CreatableEntity };
+
 export type UiActionKind =
   | "navigate"
   | "openDrawer"
@@ -16,12 +24,13 @@ export type UiActionKind =
 
 export interface UiAction {
   id?: string;
-  kind: UiActionKind;
+  kind: UiActionKind | string;
   label?: string;
   rationale?: string;
   params?: Record<string, unknown>;
-  /** When true, FE never auto-executes — user must click. */
+  /** When true, FE never auto-executes — user must click / confirm. */
   requiresConfirmation?: boolean;
+  correlationId?: string;
 }
 
 export interface UiActionDescriptor {
@@ -34,74 +43,249 @@ export interface UiActionDescriptor {
 
 /** What the assistant is told it may request. Sent in every nl/ask payload. */
 export const AVAILABLE_UI_ACTIONS: readonly UiActionDescriptor[] = [
-  { kind: "navigate", description: "Switch to a /management/* route", paramsSchema: "{ path: string }" },
-  { kind: "openDrawer", description: "Open a registered drawer", paramsSchema: "{ drawer: string; entityId?: string }" },
+  { kind: "navigate", description: "Switch to an allowlisted route (/management/*, /platform/*, /agora/*)", paramsSchema: "{ path: string }" },
+  { kind: "openDrawer", description: "Open a registered drawer (inspector, handoff, jobs, entityCreate, bulkResult, rollbackSaga, oodaPacket, loopRun, candidateReview)", paramsSchema: "{ drawer: string; entityId?: string; entityType?: string; entity?: string; [key: string]: unknown }" },
   { kind: "selectEntity", description: "Set the selected entity in NL context", paramsSchema: "{ kind: string; id: string }" },
   { kind: "setFilter", description: "Set a filter via URL search params", paramsSchema: "{ key: string; value: string }" },
-  { kind: "focusPanel", description: "Focus a panel by id", paramsSchema: "{ panel: string }" },
+  { kind: "focusPanel", description: "Focus an allowlisted panel (agentPanel, governanceQueue, operationsOverview, strategyWorkspace, terminalConsole, inspector, jobProgress)", paramsSchema: "{ panel: string }" },
   { kind: "refreshCurrentView", description: "Re-fetch the current view", paramsSchema: "{}" },
   {
     kind: "runBffAction",
     description: "Invoke an allowlisted BFF action via HighRiskConfirm flow",
-    paramsSchema: "{ entityType: string; entityId: string; actionId: string; payload?: object }",
+    paramsSchema: "{ entityType: string; entityId: string; actionId: string; payload?: object; memo?: string }",
     highRisk: true,
   },
 ] as const;
 
-const ALLOWED_ROUTE_PREFIXES = ["/management/"];
+export const AVAILABLE_UI_ACTION_KINDS: readonly UiActionKind[] = AVAILABLE_UI_ACTIONS.map((d) => d.kind);
+
+export function isKnownUiActionKind(kind: unknown): kind is UiActionKind {
+  return typeof kind === "string" && AVAILABLE_UI_ACTIONS.some((d) => d.kind === kind);
+}
+
+export const ALLOWED_ROUTE_PREFIXES: readonly string[] = [
+  "/management/",
+  "/platform/",
+  "/agora/",
+  "/management",
+  "/platform",
+  "/agora",
+] as const;
+
+export const SUPPORTED_DRAWERS = [
+  "inspector",
+  "rightDrawer",
+  "handoff",
+  "jobs",
+  "jobProgress",
+  "entityCreate",
+  "createEntity",
+  "bulkResult",
+  "rollbackSaga",
+  "oodaPacket",
+  "loopRun",
+  "candidateReview",
+] as const;
+
+export type SupportedDrawer = typeof SUPPORTED_DRAWERS[number];
+
+export const SUPPORTED_PANELS = [
+  "agentPanel",
+  "governanceQueue",
+  "operationsOverview",
+  "strategyWorkspace",
+  "terminalConsole",
+  "inspector",
+  "jobProgress",
+] as const;
+
+export type SupportedPanel = typeof SUPPORTED_PANELS[number];
 
 export interface UiActionExecuteCtx {
-  navigate: (path: string) => void;
-  setSelectedEntity: (kind: string, id: string) => void;
-  setSearchParam: (key: string, value: string) => void;
-  refresh: () => void;
+  navigate?: (path: string) => void;
+  setSelectedEntity?: (kind: string, id: string) => void;
+  setSearchParam?: (key: string, value: string) => void;
+  refresh?: () => void;
+  openDrawer?: (drawer: string, params?: Record<string, unknown>) => boolean | void | Promise<boolean | void>;
+  focusPanel?: (panel: string, params?: Record<string, unknown>) => boolean | void | Promise<boolean | void>;
+  requestConfirmation?: (action: UiAction, params: Record<string, unknown>) => boolean | void;
+  runBffAction?: (action: UiAction, params: Record<string, unknown>) => Promise<UiActionExecuteResult> | UiActionExecuteResult;
+  isActionExecuted?: (actionKey: string) => boolean;
 }
 
 export interface UiActionExecuteResult {
   ok: boolean;
   reason?: string;
+  receipt?: string;
+  actionId?: string;
+  correlationId?: string;
 }
 
 export function isHighRiskAction(action: UiAction): boolean {
+  if (!action || !isKnownUiActionKind(action.kind)) {
+    return false;
+  }
   if (action.requiresConfirmation) return true;
+  if (action.kind === "runBffAction") return true;
   const desc = AVAILABLE_UI_ACTIONS.find((d) => d.kind === action.kind);
   return Boolean(desc?.highRisk);
 }
 
-export function executeUiAction(action: UiAction, ctx: UiActionExecuteCtx): UiActionExecuteResult {
+/**
+ * Generate a stable correlation key for an action to track execution status and prevent replay.
+ */
+export function getActionCorrelationKey(action: UiAction, turnId?: string, index?: number): string {
+  if (action.id) return action.id;
+  if (action.correlationId) return action.correlationId;
+  const prefix = turnId ? `${turnId}:` : "";
+  const idx = index !== undefined ? `${index}:` : "";
+  const paramsKey = action.params ? JSON.stringify(action.params) : "";
+  return `${prefix}${idx}${action.kind}:${paramsKey}`;
+}
+
+export function isValidUiAction(action: unknown): action is UiAction {
+  if (!action || typeof action !== "object") return false;
+  const a = action as Partial<UiAction>;
+  return typeof a.kind === "string" && isKnownUiActionKind(a.kind);
+}
+
+export async function executeUiAction(
+  action: UiAction,
+  ctx: UiActionExecuteCtx = {},
+): Promise<UiActionExecuteResult> {
+  if (!action || typeof action !== "object" || !action.kind || typeof action.kind !== "string") {
+    return { ok: false, reason: "Invalid UI action structure" };
+  }
+  if (!isKnownUiActionKind(action.kind)) {
+    return { ok: false, reason: `Unknown action kind: ${String(action.kind)}` };
+  }
+
+  const actionKey = getActionCorrelationKey(action);
+  if (ctx.isActionExecuted?.(actionKey)) {
+    return { ok: false, reason: "Action already executed (replay prevented)" };
+  }
+
   const params = (action.params ?? {}) as Record<string, unknown>;
+
   switch (action.kind) {
     case "navigate": {
-      const path = String(params.path ?? "");
-      if (!ALLOWED_ROUTE_PREFIXES.some((p) => path.startsWith(p))) {
-        return { ok: false, reason: `Route not allowlisted: ${path}` };
+      const rawPath = typeof params.path === "string" ? params.path.trim() : "";
+      if (!rawPath) {
+        return { ok: false, reason: "navigate requires { path: string }" };
       }
-      ctx.navigate(path);
+      if (!ALLOWED_ROUTE_PREFIXES.some((p) => rawPath === p || rawPath.startsWith(p.endsWith("/") ? p : `${p}/`))) {
+        return { ok: false, reason: `Route not allowlisted: ${rawPath}` };
+      }
+      if (!ctx.navigate) {
+        return { ok: false, reason: "navigate handler not available in execution context" };
+      }
+      ctx.navigate(rawPath);
       return { ok: true };
     }
+
     case "selectEntity": {
-      const kind = params.kind ? String(params.kind) : "";
-      const id = params.id ? String(params.id) : "";
-      if (!kind || !id) return { ok: false, reason: "selectEntity requires { kind, id }" };
+      const kind = params.kind !== undefined && params.kind !== null ? String(params.kind).trim() : "";
+      const id = params.id !== undefined && params.id !== null ? String(params.id).trim() : "";
+      if (!kind || !id) {
+        return { ok: false, reason: "selectEntity requires { kind, id }" };
+      }
+      if (!ctx.setSelectedEntity) {
+        return { ok: false, reason: "setSelectedEntity handler not available in execution context" };
+      }
       ctx.setSelectedEntity(kind, id);
       return { ok: true };
     }
+
     case "setFilter": {
-      const key = params.key ? String(params.key) : "";
-      if (!key) return { ok: false, reason: "setFilter requires { key }" };
-      ctx.setSearchParam(key, String(params.value ?? ""));
+      const key = params.key !== undefined && params.key !== null ? String(params.key).trim() : "";
+      if (!key) {
+        return { ok: false, reason: "setFilter requires { key }" };
+      }
+      if (!ctx.setSearchParam) {
+        return { ok: false, reason: "setSearchParam handler not available in execution context" };
+      }
+      const value = params.value !== undefined && params.value !== null ? String(params.value) : "";
+      ctx.setSearchParam(key, value);
       return { ok: true };
     }
+
     case "refreshCurrentView": {
-      ctx.refresh();
+      if (ctx.refresh) {
+        ctx.refresh();
+        return { ok: true };
+      }
+      if (typeof window !== "undefined" && typeof window.location?.reload === "function") {
+        window.location.reload();
+        return { ok: true };
+      }
       return { ok: true };
     }
-    case "openDrawer":
-    case "focusPanel":
-      return { ok: false, reason: `${action.kind} not yet wired to a panel registry` };
-    case "runBffAction":
-      // Backend mutation must always go through HighRiskConfirm; FE never auto-runs.
-      return { ok: false, reason: "runBffAction must be routed through HighRiskConfirm" };
+
+    case "openDrawer": {
+      const drawer = params.drawer !== undefined && params.drawer !== null ? String(params.drawer).trim() : "";
+      if (!drawer) {
+        return { ok: false, reason: "openDrawer requires { drawer: string }" };
+      }
+      if (!SUPPORTED_DRAWERS.includes(drawer as SupportedDrawer)) {
+        return { ok: false, reason: `Drawer '${drawer}' not supported or registered` };
+      }
+      if (drawer === "entityCreate" || drawer === "createEntity") {
+        const rawEntity = params.entity !== undefined ? params.entity : params.entityType !== undefined ? params.entityType : "persona";
+        if (typeof rawEntity !== "string" || !isCreatableEntity(rawEntity.trim())) {
+          return { ok: false, reason: `Entity '${String(rawEntity)}' not supported for ${drawer} drawer` };
+        }
+      }
+      if (ctx.openDrawer) {
+        const handled = await ctx.openDrawer(drawer, params);
+        if (handled === false) {
+          return { ok: false, reason: `Drawer '${drawer}' not supported or registered` };
+        }
+        return { ok: true };
+      }
+      return { ok: true };
+    }
+
+    case "focusPanel": {
+      const panel = params.panel !== undefined && params.panel !== null ? String(params.panel).trim() : "";
+      if (!panel) {
+        return { ok: false, reason: "focusPanel requires { panel: string }" };
+      }
+      if (!SUPPORTED_PANELS.includes(panel as SupportedPanel)) {
+        return { ok: false, reason: `Panel '${panel}' not supported or registered` };
+      }
+      if (ctx.focusPanel) {
+        const handled = await ctx.focusPanel(panel, params);
+        if (handled === false) {
+          return { ok: false, reason: `Panel '${panel}' not supported or registered` };
+        }
+        return { ok: true };
+      }
+      return { ok: true };
+    }
+
+    case "runBffAction": {
+      const entityType = params.entityType !== undefined && params.entityType !== null ? String(params.entityType).trim() : "";
+      const entityId = params.entityId !== undefined && params.entityId !== null ? String(params.entityId).trim() : "";
+      const actionId = params.actionId !== undefined && params.actionId !== null ? String(params.actionId).trim() : "";
+      if (!entityType || !entityId || !actionId) {
+        return { ok: false, reason: "runBffAction requires { entityType, entityId, actionId }" };
+      }
+
+      // Backend mutation must ALWAYS flow through HighRiskConfirm confirmation.
+      if (ctx.runBffAction) {
+        const result = await ctx.runBffAction(action, params);
+        return {
+          correlationId: actionKey,
+          ...result,
+        };
+      }
+      if (ctx.requestConfirmation) {
+        ctx.requestConfirmation(action, params);
+        return { ok: true, reason: "Confirmation requested", correlationId: actionKey };
+      }
+      return { ok: false, reason: "runBffAction must be routed through HighRiskConfirm", correlationId: actionKey };
+    }
+
     default:
       return { ok: false, reason: `Unknown action kind: ${(action as UiAction).kind}` };
   }
