@@ -65,7 +65,7 @@ describe("paired Pantheon release workflow", () => {
       integrationWorkflow.indexOf("  workflow_dispatch:"),
       integrationWorkflow.indexOf("\n\npermissions:"),
     );
-    const inputNames = [...dispatch.matchAll(/^      ([a-z][a-z0-9_]*):$/gmu)].map(
+    const inputNames = [...dispatch.matchAll(/^ {6}([a-z][a-z0-9_]*):$/gmu)].map(
       ([, name]) => name,
     );
     const declared = [
