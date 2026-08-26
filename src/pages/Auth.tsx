@@ -6,8 +6,10 @@ import {
   multiFactor,
   sendEmailVerification,
   sendPasswordResetEmail,
+  signInWithPopup,
   signInWithEmailAndPassword,
   signOut as signOutGcpIdentity,
+  GoogleAuthProvider,
   TotpMultiFactorGenerator,
   type MultiFactorError,
   type MultiFactorResolver,
@@ -47,6 +49,27 @@ export default function AuthPage() {
     setBusy(true);
     try {
       await signInWithEmailAndPassword(gcpIdentityAuth, email, password);
+    } catch (error: unknown) {
+      if (
+        error instanceof FirebaseError
+        && error.code === "auth/multi-factor-auth-required"
+      ) {
+        setMfaResolver(
+          getMultiFactorResolver(gcpIdentityAuth, error as MultiFactorError),
+        );
+        setOtp("");
+      } else {
+        toast.error(error instanceof Error ? error.message : String(error));
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const signInWithGoogle = async () => {
+    setBusy(true);
+    try {
+      await signInWithPopup(gcpIdentityAuth, new GoogleAuthProvider());
     } catch (error: unknown) {
       if (
         error instanceof FirebaseError
@@ -317,6 +340,14 @@ export default function AuthPage() {
             <TabsTrigger value="signup">Sign up</TabsTrigger>
           </TabsList>
           <TabsContent value="signin" className="space-y-3 pt-4">
+            <Button className="w-full" variant="outline" onClick={() => void signInWithGoogle()} disabled={busy}>
+              Continue with Google
+            </Button>
+            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+              <span className="h-px flex-1 bg-border" />
+              <span>or use email</span>
+              <span className="h-px flex-1 bg-border" />
+            </div>
             <Input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
             <Input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} />
             <Button className="w-full" onClick={signIn} disabled={busy}>Sign in</Button>

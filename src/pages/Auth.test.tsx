@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   createUser: vi.fn(),
   signIn: vi.fn(),
+  signInWithPopup: vi.fn(),
   sendVerification: vi.fn(),
   resetPassword: vi.fn(),
   identitySignOut: vi.fn(),
@@ -26,6 +27,8 @@ vi.mock("firebase/auth", () => ({
   sendEmailVerification: mocks.sendVerification,
   sendPasswordResetEmail: mocks.resetPassword,
   signInWithEmailAndPassword: mocks.signIn,
+  signInWithPopup: mocks.signInWithPopup,
+  GoogleAuthProvider: class GoogleAuthProvider {},
   signOut: mocks.identitySignOut,
   TotpMultiFactorGenerator: {
     FACTOR_ID: "totp",
@@ -64,6 +67,7 @@ beforeEach(() => {
     signOut: mocks.signOut,
   };
   mocks.signIn.mockResolvedValue({ user: { uid: "gcp-user" } });
+  mocks.signInWithPopup.mockResolvedValue({ user: { uid: "gcp-user" } });
   mocks.createUser.mockResolvedValue({ user: { uid: "gcp-user" } });
   mocks.sendVerification.mockResolvedValue(undefined);
   mocks.identitySignOut.mockResolvedValue(undefined);
@@ -98,6 +102,19 @@ describe("Pantheon auth recovery page", () => {
       {},
       "operator@example.test",
       "correct-password",
+    );
+  });
+
+  it("supports Google OAuth through the same Firebase Identity session", async () => {
+    renderAuth("/auth?reason=auth-required&from=%2Fmanagement%2Fcockpit");
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Continue with Google" }));
+    });
+
+    expect(mocks.signInWithPopup).toHaveBeenCalledWith(
+      {},
+      expect.any(Object),
     );
   });
 
