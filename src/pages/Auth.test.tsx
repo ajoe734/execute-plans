@@ -9,15 +9,6 @@ const mocks = vi.hoisted(() => ({
   sendVerification: vi.fn(),
   resetPassword: vi.fn(),
   identitySignOut: vi.fn(),
-  getIdToken: vi.fn(),
-  generateSecret: vi.fn(),
-  assertionForEnrollment: vi.fn(),
-  multiFactorState: {
-    enrolledFactors: [] as unknown[],
-    getSession: vi.fn(),
-    enroll: vi.fn(),
-  },
-  multiFactor: vi.fn(() => mocks.multiFactorState),
   retryBffSession: vi.fn(),
   signOut: vi.fn(),
   auth: {
@@ -32,8 +23,6 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("firebase/auth", () => ({
   createUserWithEmailAndPassword: mocks.createUser,
-  getMultiFactorResolver: vi.fn(),
-  multiFactor: mocks.multiFactor,
   sendEmailVerification: mocks.sendVerification,
   sendPasswordResetEmail: mocks.resetPassword,
   signInWithEmailAndPassword: mocks.signIn,
@@ -42,12 +31,6 @@ vi.mock("firebase/auth", () => ({
     providerId = "google.com";
   },
   signOut: mocks.identitySignOut,
-  TotpMultiFactorGenerator: {
-    FACTOR_ID: "totp",
-    assertionForSignIn: vi.fn(),
-    assertionForEnrollment: mocks.assertionForEnrollment,
-    generateSecret: mocks.generateSecret,
-  },
 }));
 
 vi.mock("@/integrations/gcp/identity", () => ({ gcpIdentityAuth: {} }));
@@ -81,15 +64,6 @@ beforeEach(() => {
     retryBffSession: mocks.retryBffSession,
     signOut: mocks.signOut,
   };
-  mocks.multiFactorState.enrolledFactors = [];
-  mocks.multiFactorState.getSession.mockResolvedValue({});
-  mocks.multiFactorState.enroll.mockResolvedValue(undefined);
-  mocks.getIdToken.mockResolvedValue("refreshed-token");
-  mocks.generateSecret.mockResolvedValue({
-    generateQrCodeUrl: () => "otpauth://totp/Pantheon:test",
-    secretKey: "TEST-SECRET",
-  });
-  mocks.assertionForEnrollment.mockReturnValue({ factor: "totp" });
   mocks.retryBffSession.mockResolvedValue(undefined);
   mocks.signIn.mockResolvedValue({ user: { uid: "gcp-user" } });
   mocks.signInWithPopup.mockResolvedValue({ user: { uid: "gcp-user" } });
@@ -155,7 +129,7 @@ describe("Pantheon auth recovery page", () => {
     });
   });
 
-  it("offers required TOTP enrollment before showing a BFF first-factor rejection", () => {
+  it("shows the authoritative BFF rejection without prompting for an authenticator code", () => {
     mocks.auth = {
       ...mocks.auth,
       session: {
@@ -165,15 +139,15 @@ describe("Pantheon auth recovery page", () => {
           uid: "gcp-user",
         },
       },
-      bffError: new Error("MFA proof required"),
+      bffError: new Error("BFF returned 401"),
     };
 
     renderAuth("/auth");
 
-    expect(screen.getByText("Set up authenticator MFA")).toBeInTheDocument();
-    expect(
-      screen.queryByText("Pantheon session verification failed."),
-    ).not.toBeInTheDocument();
+    expect(screen.getByText("Pantheon session verification failed.")).toBeInTheDocument();
+    expect(screen.getByText("BFF returned 401")).toBeInTheDocument();
+    expect(screen.queryByText(/authenticator/iu)).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText("123456")).not.toBeInTheDocument();
   });
 
   it("keeps the existing identity visible while BFF verification is in progress", () => {
@@ -197,7 +171,6 @@ describe("Pantheon auth recovery page", () => {
   });
 
   it("retries BFF verification without rendering or resubmitting credentials", async () => {
-    mocks.multiFactorState.enrolledFactors = [{ factorId: "totp" }];
     mocks.auth = {
       ...mocks.auth,
       session: {
@@ -218,40 +191,6 @@ describe("Pantheon auth recovery page", () => {
     });
     expect(mocks.retryBffSession).toHaveBeenCalledOnce();
     expect(mocks.signIn).not.toHaveBeenCalled();
-  });
-
-  it("continues the existing sign-in after TOTP enrollment instead of signing out", async () => {
-    const reload = vi.fn().mockResolvedValue(undefined);
-    const user = {
-      email: "operator@example.test",
-      emailVerified: true,
-      getIdToken: mocks.getIdToken,
-      reload,
-      uid: "gcp-user",
-    };
-    mocks.auth = {
-      ...mocks.auth,
-      session: { user },
-    };
-
-    renderAuth("/agora/auth?from=%2Fagora%2Ftrading-room");
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Start MFA setup" }));
-    });
-    fireEvent.change(await screen.findByPlaceholderText("123456"), {
-      target: { value: "123456" },
-    });
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Confirm authenticator" }));
-    });
-
-    expect(mocks.multiFactorState.enroll).toHaveBeenCalledWith(
-      { factor: "totp" },
-      "Pantheon Authenticator",
-    );
-    expect(mocks.getIdToken).toHaveBeenCalledWith(true);
-    expect(mocks.identitySignOut).not.toHaveBeenCalled();
   });
 
   it("rejects a protocol-relative return target", () => {

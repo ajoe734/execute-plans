@@ -12,12 +12,11 @@
  *   PANTHEON_BFF_BASE_URL=<Pantheon dev BFF>
  *   PFG_AGORA_JOURNEY_E2E_GCP_EMAIL=<verified operator account>
  *   PFG_AGORA_JOURNEY_E2E_GCP_PASSWORD=<operator password>
- *   PFG_AGORA_JOURNEY_E2E_GCP_TOTP_SECRET=<enrolled TOTP secret>
  */
 
 import { expect, test, type APIRequestContext, type Page, type Request, type Response } from "@playwright/test";
 import { mkdirSync, writeFileSync } from "node:fs";
-import { createHmac, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import {
   roleTokenFromEnv,
   targetsExternalE2eEnvironment,
@@ -44,8 +43,6 @@ const TENANT_ID =
 const GCP_IDENTITY_EMAIL = process.env.PFG_AGORA_JOURNEY_E2E_GCP_EMAIL ?? "";
 const GCP_IDENTITY_PASSWORD =
   process.env.PFG_AGORA_JOURNEY_E2E_GCP_PASSWORD ?? "";
-const GCP_IDENTITY_TOTP_SECRET =
-  process.env.PFG_AGORA_JOURNEY_E2E_GCP_TOTP_SECRET ?? "";
 const EVIDENCE_DIR =
   process.env.PANTHEON_AUDIT_OUT_DIR ?? "/tmp/pfg-agora-product-journey";
 const DEV_FE_HOST = "pantheon-lupin-dev-fe.35.201.204.12.sslip.io";
@@ -101,38 +98,6 @@ function asRecord(value: unknown): JsonRecord {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as JsonRecord)
     : {};
-}
-
-function base32Bytes(value: string): Buffer {
-  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
-  const normalized = value.toUpperCase().replace(/[^A-Z2-7]/gu, "");
-  let bits = "";
-  for (const character of normalized) {
-    const index = alphabet.indexOf(character);
-    if (index < 0) throw new Error("Invalid base32 TOTP secret");
-    bits += index.toString(2).padStart(5, "0");
-  }
-  const bytes: number[] = [];
-  for (let offset = 0; offset + 8 <= bits.length; offset += 8) {
-    bytes.push(Number.parseInt(bits.slice(offset, offset + 8), 2));
-  }
-  return Buffer.from(bytes);
-}
-
-function currentTotp(secret: string): string {
-  const counter = Buffer.alloc(8);
-  counter.writeBigUInt64BE(BigInt(Math.floor(Date.now() / 30_000)));
-  const digest = createHmac("sha1", base32Bytes(secret))
-    .update(counter)
-    .digest();
-  const offset = digest[digest.length - 1] & 0x0f;
-  const code =
-    (((digest[offset] & 0x7f) << 24) |
-      ((digest[offset + 1] & 0xff) << 16) |
-      ((digest[offset + 2] & 0xff) << 8) |
-      (digest[offset + 3] & 0xff)) %
-    1_000_000;
-  return String(code).padStart(6, "0");
 }
 
 function rolesFromMe(value: unknown): string[] {
@@ -262,11 +227,10 @@ async function installHostedOperatorSession(
     { clientId, clientSecret, tenantId: TENANT_ID, token: sessionInfo?.token },
   );
 
-  // If explicit GCP identity email/password/TOTP secrets are configured, execute the UI sign-in
+  // If explicit GCP identity credentials are configured, execute the one-step UI sign-in.
   if (
     GCP_IDENTITY_EMAIL &&
-    GCP_IDENTITY_PASSWORD &&
-    GCP_IDENTITY_TOTP_SECRET
+    GCP_IDENTITY_PASSWORD
   ) {
     const fromRoute = "/agora/strategy-workshop";
     await page.goto(
@@ -284,21 +248,7 @@ async function installHostedOperatorSession(
           responsePath(response) === "/bff/me",
       );
       await page.getByRole("button", { exact: true, name: "Sign in" }).click();
-
-      const mfaHeading = page.getByText("Authenticator verification", {
-        exact: true,
-      });
-      await Promise.race([
-        page.waitForURL((url) => url.pathname === fromRoute),
-        mfaHeading.waitFor({ state: "visible" }),
-      ]);
-      if (new URL(page.url()).pathname !== fromRoute) {
-        await page
-          .getByPlaceholder("123456")
-          .fill(currentTotp(GCP_IDENTITY_TOTP_SECRET));
-        await page.getByRole("button", { name: "Verify and sign in" }).click();
-        await page.waitForURL((url) => url.pathname === fromRoute);
-      }
+      await page.waitForURL((url) => url.pathname === fromRoute);
 
       const me = await meResponse;
       expect(
