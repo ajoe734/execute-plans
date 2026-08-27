@@ -105,6 +105,12 @@ function finiteNumber(value: unknown, fallback: number | null = null): number | 
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 
+function requiredFiniteNumber(value: unknown, label: string): number {
+  const normalized = finiteNumber(value);
+  if (normalized !== null) return normalized;
+  throw typedError(502, `Operational readiness omitted ${label}.`);
+}
+
 function errorCodeForStatus(status: number): ErrorCode {
   if (status === 400 || status === 422) return "VALIDATION_FAILED";
   if (status === 401) return "AUTH_REQUIRED";
@@ -154,7 +160,7 @@ function normalizeSurface(value: unknown, name: string): AgoraOperationalReadine
   const source = requiredRecord(value, `surface ${name}`);
   return {
     status: requiredStatus(source.status, `surface ${name}`),
-    count: finiteNumber(source.count, 0) ?? 0,
+    count: requiredFiniteNumber(source.count, `surface ${name} count`),
     reason: nullableString(source.reason),
     freshness: nullableString(source.freshness),
     cursor: nullableString(source.cursor),
@@ -190,7 +196,7 @@ function normalizeReadiness(payload: unknown): AgoraOperationalReadiness {
       source_instance_id: nullableString(source.source_instance_id),
       source_timestamp: nullableString(source.source_timestamp),
       age_seconds: finiteNumber(source.age_seconds),
-      sla_seconds: finiteNumber(source.sla_seconds, 86400) ?? 86400,
+      sla_seconds: requiredFiniteNumber(source.sla_seconds, "source SLA"),
       freshness: requiredFreshness(source.freshness),
       desired_state: nullableString(source.desired_state),
       observed_state: nullableString(source.observed_state),
@@ -202,7 +208,7 @@ function normalizeReadiness(payload: unknown): AgoraOperationalReadiness {
       active_binding: nullableString(producer.active_binding),
       consumed_snapshot_id: nullableString(producer.consumed_snapshot_id),
       last_success_at: nullableString(producer.last_success_at),
-      enqueued: finiteNumber(producer.enqueued, 0) ?? 0,
+      enqueued: requiredFiniteNumber(producer.enqueued, "signal producer enqueue count"),
       reason: nullableString(producer.reason),
     },
     surfaces,
