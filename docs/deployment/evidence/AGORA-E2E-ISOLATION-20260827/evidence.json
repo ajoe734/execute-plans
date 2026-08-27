@@ -1,0 +1,53 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "AGORA-E2E-ISOLATION-20260827",
+  "owner": "Antigravity",
+  "reviewer": "Codex2",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/AGORA-E2E-ISOLATION-20260827",
+  "status": "ready-for-independent-exact-head-review",
+  "recorded_at": "2026-08-27T21:10:00Z",
+  "scope": {
+    "adopted": [
+      "Dynamic ephemeral port resolution in Playwright config, eliminating fixed shared 5173 port collisions across task worktrees.",
+      "Configured reuseExistingServer: false in Playwright webServer to prevent attaching to stale preview servers or cross-worktree processes.",
+      "Dedicated build:e2e and scripts/build-e2e-server.mjs pipeline creating an isolated build with strict live / mock-write environment and writing deployment.json bound to current execute-plans HEAD commit SHA.",
+      "Server identity assertion in e2e/agora-persona-workshop-navigation.spec.ts verifying that the serving instance reports exact execute-plans HEAD commit SHA and live/mock-write configuration.",
+      "Removed mobile-chromium project from Playwright config to run exclusively desktop Chromium for Agora journeys.",
+      "scripts/test-decoy-port-5173.mjs proving that E2E tests pass cleanly while a decoy server actively occupies port 5173."
+    ],
+    "not_changed": [
+      "Agora Persona / Workshop backend APIs and business logic.",
+      "BFF authentication, authorization, or proxy route mappings.",
+      "Other task-specific E2E journeys or hosted validation suites."
+    ]
+  },
+  "validation": {
+    "playwright_isolated_e2e": {
+      "command": "npx playwright test e2e/agora-persona-workshop-navigation.spec.ts",
+      "result": "passed: 3 tests passed on desktop Chromium (server identity + 2 Agora journeys)"
+    },
+    "decoy_5173_isolation_proof": {
+      "command": "node scripts/test-decoy-port-5173.mjs",
+      "result": "passed: 3 tests passed while port 5173 was actively occupied by decoy HTTP server"
+    },
+    "typecheck": {
+      "command": "npm run typecheck",
+      "result": "passed"
+    },
+    "unit_tests": {
+      "command": "npm run test",
+      "result": "passed: 192 test files passed (1965 tests)"
+    }
+  },
+  "review_binding": {
+    "sha_disposition": "Independent approval must bind the final PR head containing this implementation, dynamic port isolation, server identity assertions, and review evidence manifest."
+  },
+  "independent_review_required": [
+    "Confirm Playwright config allocates dynamic ephemeral ports, sets reuseExistingServer: false, and runs only desktop Chromium.",
+    "Confirm self-building E2E server script builds with exact live/mock-write environment and produces deployment.json matching execute-plans HEAD.",
+    "Confirm e2e/agora-persona-workshop-navigation.spec.ts asserts server identity bound to execute-plans HEAD.",
+    "Confirm E2E tests pass when port 5173 is occupied by a decoy server."
+  ]
+}
