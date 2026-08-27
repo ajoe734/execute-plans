@@ -2009,6 +2009,40 @@ NODE
     show_deploy_failure "restore retry reselected a write or unknown predecessor"
 }
 
+test_restore_accepts_current_read_only_accepted_release() {
+  local live_target
+  setup_case paired-restore-already-safe
+  # Model the controller-abort path: the requested pair is already served in
+  # its normal accepted read-only state, so restore must be a safe no-op.
+  rm -rf -- "${PREVIOUS_TARGET:?}"/*
+  cp -a "${CANDIDATE_DIR}/dist/." "${PREVIOUS_TARGET}/"
+  "${REAL_NODE}" - "${PREVIOUS_TARGET}/deployment.json" "${PAIR_ID}" "${CANDIDATE_DIGEST}" "${OPERATOR_LIVE_DIGEST}" "${WRITE_PROOF_DIGEST}" <<'NODE'
+const fs = require("node:fs");
+const [file, pairId, readOnlyDigest, operatorLiveDigest, writeProofDigest] = process.argv.slice(2);
+const payload = JSON.parse(fs.readFileSync(file, "utf8"));
+payload.profile = "read-only";
+payload.deploymentProfile = "read-only";
+payload.pairId = pairId;
+payload.pair = {
+  pairId,
+  readOnlyArtifactDigestSha256: readOnlyDigest,
+  operatorLiveArtifactDigestSha256: operatorLiveDigest,
+  writeProofArtifactDigestSha256: writeProofDigest,
+};
+payload.deploymentState = "accepted";
+payload.releaseName = "previous";
+payload.githubArtifactDigest = `sha256:${payload.artifactDigestSha256}`;
+fs.writeFileSync(file, `${JSON.stringify(payload, null, 2)}\n`);
+NODE
+
+  run_restore_deploy
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "restore of an already-safe accepted release should succeed"
+  assert_live_profile read-only accepted
+  live_target="$(readlink -f "${CASE_LIVE}")"
+  [[ "${live_target}" == "${PREVIOUS_TARGET}" ]] || \
+    show_deploy_failure "already-safe restore unexpectedly switched the live target"
+}
+
 test_restore_network_failure_preserves_safe_release() {
   local safe_target restore_summary
   setup_case paired-restore-network-failure
@@ -2230,6 +2264,7 @@ run_test "operator-live persists only through the strict BFF path" test_operator
 run_test "paired write installs a qualified safe sibling and private locator" test_paired_write_installs_safe_sibling_and_private_locator
 run_test "write failure restores the paired safe sibling" test_write_failure_restores_paired_safe_sibling
 run_test "explicit restore switches safe before network and never rolls back to write" test_explicit_restore_switches_safe_before_network_and_never_rolls_back_write
+run_test "restore accepts an already-safe accepted read-only release" test_restore_accepts_current_read_only_accepted_release
 run_test "restore network failure preserves the safe release" test_restore_network_failure_preserves_safe_release
 run_test "restore rejects a nonprivate or tampered locator before switch" test_restore_rejects_nonprivate_or_tampered_locator_before_switch
 run_test "restore reaches safe sibling when Agora evidence is absent or rejected" test_restore_reaches_safe_sibling_when_agora_evidence_is_absent_or_rejected

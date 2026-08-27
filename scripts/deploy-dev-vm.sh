@@ -1005,7 +1005,7 @@ prepare_interrupted_recovery() {
 
 restore_paired_safe_release() {
   local write_target write_manifest locator_file safe_release_name safe_target
-  local locator_mode observed_write_digest current_profile current_state current_pair
+  local locator_mode observed_write_digest current_profile current_state current_pair safe_state
 
   # Cancellation must not interrupt the only fail-closed local state change.
   # Network, package installation, and hosted probes are intentionally absent
@@ -1036,6 +1036,11 @@ restore_paired_safe_release() {
       "${write_manifest}" "${SHA}" "${READ_ONLY_ARTIFACT_DIGEST}" "${GATE_RUN_ID}" \
       "${BFF_COMMIT}" "${current_state}" "${GITHUB_ARTIFACT_DIGEST}" "read-only" "${PAIR_ID}"
     safe_target="${write_target}"
+    # An already-safe release may be either accepted (the normal steady state)
+    # or standby (the pre-switch state). Preserve that observed state for the
+    # first hosted verification below; requiring standby here incorrectly
+    # fails a no-op restore after a controller aborts before any switch.
+    safe_state="${current_state}"
     SAFE_RESTORE_SELECTED=true
     RESTORE_SWITCH_COMPLETED=true
     RELEASE_DIR="${safe_target}"
@@ -1101,6 +1106,7 @@ NODE
   fi
   ROLLBACK_LINK_CREATED=false
   SAFE_RESTORE_SELECTED=true
+  safe_state="standby"
   RESTORE_SWITCH_COMPLETED=true
   RELEASE_DIR="${safe_target}"
   evidence_append restore.safe_switch passed "releaseDir=${safe_target}"
@@ -1115,7 +1121,7 @@ NODE
   verify_bff_identity restore_after_safe_switch
   verify_public_manifest \
     "${SHA}" "${READ_ONLY_ARTIFACT_DIGEST}" "${GATE_RUN_ID}" \
-    "${AUDIT_DIR}/restore-standby-deployment.json" "${BFF_COMMIT}" "standby" \
+    "${AUDIT_DIR}/restore-standby-deployment.json" "${BFF_COMMIT}" "${safe_state}" \
     "${GITHUB_ARTIFACT_DIGEST}" "read-only" "${PAIR_ID}"
   run_release_probe restore_after_safe_switch "" "${SHA}" "${READ_ONLY_ARTIFACT_DIGEST}" true
   node --input-type=module - "${safe_target}/deployment.json" "${TMP_DIR}/restored-deployment.json" <<'NODE'
