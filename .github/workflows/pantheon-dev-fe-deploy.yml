@@ -393,6 +393,15 @@ jobs:
             exit 1
           fi
 
+      - name: Checkout exact candidate source for compatibility verification
+        uses: actions/checkout@v4
+        with:
+          repository: ajoe734/execute-plans
+          ref: ${{ steps.gate.outputs.candidate_sha }}
+          path: .candidate-source
+          fetch-depth: 0
+          persist-credentials: false
+
       - name: Download, authenticate, and safely extract exact artifact
         id: artifact_transport
         shell: bash
@@ -635,7 +644,7 @@ jobs:
         run: |
           set -euo pipefail
           ref_prefix="refs/pantheon-proof/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          git update-ref "${ref_prefix}/frontend-runtime" "${EXPECTED_FRONTEND_SHA}"
+          git -C .candidate-source update-ref "${ref_prefix}/frontend-runtime" "${EXPECTED_FRONTEND_SHA}"
           git -C .pantheon-agora-compat update-ref "${ref_prefix}/backend-runtime" "${EXPECTED_BFF_SHA}"
           fe_ref="${ref_prefix}/frontend-runtime"
           bff_ref="${ref_prefix}/backend-runtime"
@@ -643,7 +652,7 @@ jobs:
           evidence_path="${PANTHEON_AUDIT_RUN_ROOT}/agora-compatibility-gate.input.json"
           python3 .pantheon-agora-compat/scripts/agora_compat_manifest.py write \
             --output "${manifest_path}" \
-            --frontend-root "${GITHUB_WORKSPACE}" \
+            --frontend-root "${GITHUB_WORKSPACE}/.candidate-source" \
             --backend-dev-ref "${bff_ref}" \
             --frontend-dev-ref "${fe_ref}" \
             --backend-runtime-commit "${EXPECTED_BFF_SHA}" \
@@ -651,7 +660,7 @@ jobs:
             --compatibility-status accepted
           python3 .pantheon-agora-compat/scripts/agora_compat_manifest.py deployment-gate \
             --manifest "${manifest_path}" \
-            --frontend-root "${GITHUB_WORKSPACE}" \
+            --frontend-root "${GITHUB_WORKSPACE}/.candidate-source" \
             --backend-dev-ref "${bff_ref}" \
             --frontend-dev-ref "${fe_ref}" \
             --backend-runtime-commit "${EXPECTED_BFF_SHA}" \

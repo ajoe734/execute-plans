@@ -124,6 +124,30 @@ describe("paired Pantheon release workflow", () => {
     );
   });
 
+  it("verifies an out-of-order candidate from its own source checkout", () => {
+    const compatStart = deployWorkflow.indexOf(
+      "      - name: Enforce exact accepted Agora pair before release controller",
+    );
+    const compatEnd = deployWorkflow.indexOf(
+      "      - name: Run target-runner controller regression harness",
+      compatStart,
+    );
+    const compat = deployWorkflow.slice(compatStart, compatEnd);
+    expect(deployWorkflow).toContain(
+      "- name: Checkout exact candidate source for compatibility verification",
+    );
+    expect(deployWorkflow).toContain("path: .candidate-source");
+    expect(compat).toContain(
+      'git -C .candidate-source update-ref "${ref_prefix}/frontend-runtime"',
+    );
+    expect(compat).toContain(
+      '--frontend-root "${GITHUB_WORKSPACE}/.candidate-source"',
+    );
+    expect(compat).not.toContain(
+      '--frontend-root "${GITHUB_WORKSPACE}"',
+    );
+  });
+
   it("keeps operator-live persistent and outside proof watchdog coordination", () => {
     const deployJobStart = deployWorkflow.indexOf("  deploy:");
     const proofJobStart = deployWorkflow.indexOf("  proof-coordinator:");
