@@ -156,7 +156,7 @@ function loadBundle(pantheonRoot) {
     fail(`Backend generation handoff file missing at ${handoffPath}`);
   }
   const handoff = readJson(handoffPath);
-  const expectedContractCommit = "9e909de182f9f2379d23e8e6b81eefec29ffbce7";
+  const expectedContractCommit = "6ad99d2e5abe4f31c9f48892ae7f44bf3bbab980";
   if (handoff.backend?.contract_commit !== expectedContractCommit) {
     fail(`Backend handoff contract_commit mismatch: expected ${expectedContractCommit}, actual ${handoff.backend?.contract_commit}`);
   }
