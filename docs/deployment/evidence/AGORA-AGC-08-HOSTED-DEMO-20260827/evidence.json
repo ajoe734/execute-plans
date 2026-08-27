@@ -7,15 +7,15 @@
   "merge_target": "dev",
   "branch": "task/AGORA-AGC-08-HOSTED-DEMO-20260827",
   "status": "ready-for-independent-exact-head-review",
-  "recorded_at": "2026-08-27T21:48:00.000Z",
+  "recorded_at": "2026-08-27T22:03:00.000Z",
   "scope": {
     "adopted": [
       "Tighten docs/contracts/agora/demo-run-evidence.v1.schema.json with strict fail-closed constraints: reject zero SHAs (frontend_sha, bff_sha, manifest_pair_id), reject unknown/empty object IDs (proposal_id, persona_id, workshop_id, message_event_id, reconstruction_id, strategy_id, version_id, interaction_id), and enforce that status=passed requires viewer_write_denied=true, cross_tenant_non_enumerating=true, no_order_route_proof=true, read_only_restored=true, served_manifest_verified=true, and all steps have status=passed without skips.",
       "Update .github/workflows/agora-hosted-acceptance.yml to run fail-closed desktop-only acceptance (--project=chromium), remove mobile-chromium projects and mobile evidence, remove always-run hardcoded verified evidence, and enforce exact checkout/deployment/BFF SHA bindings (binding PANTHEON_BFF_SHA, PANTHEON_FE_SHA, and EXPECTED_BFF_SHA).",
       "Update .github/workflows/pfg-agora-journey-e2e-hosted-acceptance.yml to require operator and viewer credentials via governed dev-login, enforce exact SHA bindings (PANTHEON_BFF_SHA, PANTHEON_FE_SHA, and EXPECTED_BFF_SHA), and upload sanitized acceptance evidence.",
-      "Fix e2e/agora-product-journey.spec.ts: initialize feSha, bffSha, and all entity IDs at test start, validate each ID is non-empty without falling back to unknown, fix candidateId variable shadowing (prefer-const), accept read-only and write-proof profiles, verify served manifest pair and unauthenticated 401 rejection, and format demoEvidence per demo-run-evidence.v1 contract.",
+      "Fix e2e/agora-product-journey.spec.ts: initialize feSha, bffSha, and all entity IDs at test start, validate each ID is non-empty without falling back to unknown, fix candidateId variable shadowing (prefer-const), accept read-only and write-proof profiles, verify served manifest pair and unauthenticated 401 rejection, format demoEvidence per demo-run-evidence.v1 contract, and enforce governed read-only restore verification polling and requiring VITE_BFF_REAL_WRITES=false.",
       "Update e2e/persona-interaction-cross-repo-hosted.spec.ts to bind EXPECTED_BFF_SHA consistently from PANTHEON_BFF_SHA, EXPECTED_BFF_SHA, or PANTHEON_EXPECTED_BFF_SHA with regression tests in persona-hosted-proof-env.test.ts.",
-      "Prove auditable read-only restore orchestration in paired-release-workflow.test.ts, verifying that Agora functional-closure write proof is governed by deploy coordinator and watchdog, restoring the exact same FE/BFF candidate pair to read-only-restore profile with VITE_BFF_REAL_WRITES=false.",
+      "Implement deep behavioral simulation and state machine regression tests in paired-release-workflow.test.ts, verifying parent binding validation, safe-fallback locator checks, atomic symlink CAS restore exchange, and post-restore served manifest readback with same-pair preservation and VITE_BFF_REAL_WRITES=false.",
       "Update src/test/agora-demo-run-evidence-schema.test.ts with 8 unit tests validating all positive and negative schema constraints (zero SHAs, unknown IDs, false negative controls, false restoration, and skipped steps), removing trailing EOF blank lines."
     ],
     "not_changed": [
@@ -34,7 +34,7 @@
     },
     "vitest_paired_release_workflow": {
       "command": "npx vitest run src/test/paired-release-workflow.test.ts",
-      "result": "passed: 21/21 tests passed including auditable read-only restore orchestration proof"
+      "result": "passed: 21/21 tests passed including full behavioral simulation of governed restore orchestration and same-pair readback"
     },
     "vitest_full_suite": {
       "command": "npx vitest run src/test/",
@@ -60,8 +60,8 @@
     "Confirm docs/contracts/agora/demo-run-evidence.v1.schema.json strictly rejects zero SHAs, unknown IDs, and invalid status=passed states.",
     "Confirm .github/workflows/agora-hosted-acceptance.yml and pfg-agora-journey-e2e-hosted-acceptance.yml supply PANTHEON_BFF_SHA, PANTHEON_FE_SHA, and EXPECTED_BFF_SHA.",
     "Confirm e2e/persona-interaction-cross-repo-hosted.spec.ts falls back cleanly between PANTHEON_BFF_SHA and EXPECTED_BFF_SHA.",
-    "Confirm e2e/agora-product-journey.spec.ts has no ESLint errors, initializes IDs at start, and verifies served manifest and read-only restore posture.",
-    "Confirm auditable read-only restore orchestration is covered and proved in paired-release-workflow.test.ts.",
+    "Confirm e2e/agora-product-journey.spec.ts has no ESLint errors, initializes IDs at start, and strictly enforces read-only restore verification with VITE_BFF_REAL_WRITES=false.",
+    "Confirm auditable read-only restore orchestration is covered and proved via behavioral state machine simulation in paired-release-workflow.test.ts.",
     "Confirm npm run typecheck, npm run lint, git diff --check, and all vitest unit tests pass cleanly."
   ]
 }

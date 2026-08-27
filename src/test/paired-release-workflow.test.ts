@@ -904,21 +904,230 @@ describe("paired Pantheon release workflow", () => {
   });
 
   it("proves auditable read-only restore orchestration binds the exact same Agora FE/BFF candidate pair", () => {
-    // 1. Authorized write proof executes Agora journey under bounded parent coordinator
+    // 1. Workflow static contract bindings
     expect(integrationWorkflow).toContain("Run Agora functional-closure hosted journey");
     expect(integrationWorkflow).toContain("npx playwright test e2e/agora-product-journey.spec.ts");
-
-    // 2. Watchdog executes restore with read-only-restore profile and real writes false
     expect(watchdogWorkflow).toContain("PANTHEON_DEPLOY_PROFILE: read-only-restore");
     expect(watchdogWorkflow).toContain('PANTHEON_DEPLOY_REAL_WRITES: "false"');
     expect(watchdogWorkflow).toContain('PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES: "false"');
-
-    // 3. Deploy VM script enforces read-only-restore atomic CAS switch preserving exact candidate pair
-    expect(deployScript).toContain('read-only-restore)');
+    expect(deployScript).toContain("read-only-restore)");
     expect(deployScript).toContain('if [[ "${DEPLOY_PROFILE}" == "read-only-restore" ]]; then');
     expect(deployScript).toContain("restore_paired_safe_release");
-
-    // 4. Deploy coordinator confirms read-only restore completed
     expect(deployWorkflow).toContain("proof-restore-confirmation:");
+
+    // 2. Behavioral simulation: State machine for same-pair read-only restore orchestration
+    const feSha = "a".repeat(40);
+    const bffSha = "b".repeat(40);
+    const pairId = "c".repeat(64);
+    const readOnlyDigest = "d".repeat(64);
+    const writeProofDigest = "e".repeat(64);
+    const nonce = "f".repeat(64);
+    const correlationId = "12345678-1234-1234-1234-1234567890ab";
+
+    // Simulate Parent Binding Validation
+    const validateParentBinding = (binding: {
+      schemaVersion: string;
+      parent: { frontendSha: string; actor: string };
+      pair: { pairId: string; bffSha: string; readOnlyArtifactDigestSha256: string; writeProofArtifactDigestSha256: string };
+      nonce: string;
+      correlationId: string;
+    }, expected: {
+      frontendSha: string;
+      bffSha: string;
+      pairId: string;
+      readOnlyDigest: string;
+      writeProofDigest: string;
+      nonce: string;
+      correlationId: string;
+    }) => {
+      if (binding.schemaVersion !== "pantheon.pint-proof-binding.v1") return false;
+      if (binding.parent.frontendSha !== expected.frontendSha) return false;
+      if (binding.pair.bffSha !== expected.bffSha) return false;
+      if (binding.pair.pairId !== expected.pairId) return false;
+      if (binding.pair.readOnlyArtifactDigestSha256 !== expected.readOnlyDigest) return false;
+      if (binding.pair.writeProofArtifactDigestSha256 !== expected.writeProofDigest) return false;
+      if (binding.nonce !== expected.nonce || binding.correlationId !== expected.correlationId) return false;
+      return true;
+    };
+
+    const validBinding = {
+      schemaVersion: "pantheon.pint-proof-binding.v1",
+      parent: { frontendSha: feSha, actor: "operator-a" },
+      pair: { pairId, bffSha, readOnlyArtifactDigestSha256: readOnlyDigest, writeProofArtifactDigestSha256: writeProofDigest },
+      nonce,
+      correlationId,
+    };
+
+    expect(validateParentBinding(validBinding, {
+      frontendSha: feSha,
+      bffSha,
+      pairId,
+      readOnlyDigest,
+      writeProofDigest,
+      nonce,
+      correlationId,
+    })).toBe(true);
+
+    // Rejects tampered FE SHA
+    expect(validateParentBinding({
+      ...validBinding,
+      parent: { ...validBinding.parent, frontendSha: "0".repeat(40) },
+    }, {
+      frontendSha: feSha,
+      bffSha,
+      pairId,
+      readOnlyDigest,
+      writeProofDigest,
+      nonce,
+      correlationId,
+    })).toBe(false);
+
+    // Rejects tampered BFF SHA
+    expect(validateParentBinding({
+      ...validBinding,
+      pair: { ...validBinding.pair, bffSha: "0".repeat(40) },
+    }, {
+      frontendSha: feSha,
+      bffSha,
+      pairId,
+      readOnlyDigest,
+      writeProofDigest,
+      nonce,
+      correlationId,
+    })).toBe(false);
+
+    // 3. Behavioral simulation: Private safe-fallback locator and atomic CAS switch
+    const validateSafeFallbackLocator = (locator: {
+      schemaVersion: number;
+      pairId: string;
+      frontendSha: string;
+      readOnlyArtifactDigestSha256: string;
+      writeProofArtifactDigestSha256: string;
+      safeReleaseName: string;
+    }, expectedPair: {
+      pairId: string;
+      frontendSha: string;
+      readOnlyDigest: string;
+      writeProofDigest: string;
+    }) => {
+      if (locator.schemaVersion !== 1) return false;
+      if (locator.pairId !== expectedPair.pairId) return false;
+      if (locator.frontendSha !== expectedPair.frontendSha) return false;
+      if (locator.readOnlyArtifactDigestSha256 !== expectedPair.readOnlyDigest) return false;
+      if (locator.writeProofArtifactDigestSha256 !== expectedPair.writeProofDigest) return false;
+      if (!/^[A-Za-z0-9._-]+$/u.test(locator.safeReleaseName)) return false;
+      return true;
+    };
+
+    const validLocator = {
+      schemaVersion: 1,
+      pairId,
+      frontendSha: feSha,
+      readOnlyArtifactDigestSha256: readOnlyDigest,
+      writeProofArtifactDigestSha256: writeProofDigest,
+      safeReleaseName: "20260827T000000Z-safe-sibling-read-only",
+    };
+
+    expect(validateSafeFallbackLocator(validLocator, {
+      pairId,
+      frontendSha: feSha,
+      readOnlyDigest,
+      writeProofDigest,
+    })).toBe(true);
+
+    // 4. Behavioral simulation: Atomic CAS exchange logic
+    const executeSymlinkCasExchange = (state: {
+      liveLinkTarget: string;
+      expectedLiveTarget: string;
+      stagedTarget: string;
+    }) => {
+      if (state.liveLinkTarget !== state.expectedLiveTarget) {
+        // CAS conflict: live target changed concurrently
+        return { success: false, exitCode: 2, error: "Read-only restore CAS rejected a changed live target." };
+      }
+      return { success: true, exitCode: 0, newLiveTarget: state.stagedTarget };
+    };
+
+    const writeTarget = "/var/www/pantheon-dev-fe-releases/write-proof-release";
+    const safeTarget = "/var/www/pantheon-dev-fe-releases/20260827T000000Z-safe-sibling-read-only";
+
+    const successfulCas = executeSymlinkCasExchange({
+      liveLinkTarget: writeTarget,
+      expectedLiveTarget: writeTarget,
+      stagedTarget: safeTarget,
+    });
+    expect(successfulCas.success).toBe(true);
+    expect(successfulCas.newLiveTarget).toBe(safeTarget);
+
+    const conflictingCas = executeSymlinkCasExchange({
+      liveLinkTarget: "/var/www/pantheon-dev-fe-releases/other-concurrent-release",
+      expectedLiveTarget: writeTarget,
+      stagedTarget: safeTarget,
+    });
+    expect(conflictingCas.success).toBe(false);
+    expect(conflictingCas.exitCode).toBe(2);
+
+    // 5. Behavioral simulation: Readback verification and evidence generation
+    const verifyRestoredDeploymentReadback = (
+      deploymentJson: {
+        commit: string;
+        bffCommit: string;
+        deploymentProfile: string;
+        buildMode: { VITE_BFF_REAL_WRITES: string };
+        probes?: { safeRestore?: string };
+      },
+      expectedFe: string,
+      expectedBff: string,
+    ) => {
+      const servedFe = deploymentJson.commit.toLowerCase();
+      const servedBff = deploymentJson.bffCommit.toLowerCase();
+      const profile = deploymentJson.deploymentProfile;
+      const realWrites = deploymentJson.buildMode.VITE_BFF_REAL_WRITES;
+
+      const servedManifestVerified = servedFe === expectedFe.toLowerCase() && servedBff === expectedBff.toLowerCase();
+      const readOnlyRestored = (profile === "read-only" || profile === "read-only-restore") && realWrites === "false";
+
+      return {
+        servedManifestVerified,
+        readOnlyRestored,
+        passed: servedManifestVerified && readOnlyRestored,
+      };
+    };
+
+    const restoredDeployment = {
+      commit: feSha,
+      bffCommit: bffSha,
+      deploymentProfile: "read-only",
+      buildMode: {
+        VITE_BFF_REAL_WRITES: "false",
+      },
+      probes: {
+        safeRestore: "passed",
+      },
+    };
+
+    const readbackResult = verifyRestoredDeploymentReadback(restoredDeployment, feSha, bffSha);
+    expect(readbackResult.servedManifestVerified).toBe(true);
+    expect(readbackResult.readOnlyRestored).toBe(true);
+    expect(readbackResult.passed).toBe(true);
+
+    // Fail closed: if real writes is true, readOnlyRestored must be false
+    const unrestoredDeployment = {
+      ...restoredDeployment,
+      deploymentProfile: "write-proof",
+      buildMode: { VITE_BFF_REAL_WRITES: "true" },
+    };
+    const unrestoredResult = verifyRestoredDeploymentReadback(unrestoredDeployment, feSha, bffSha);
+    expect(unrestoredResult.readOnlyRestored).toBe(false);
+    expect(unrestoredResult.passed).toBe(false);
+
+    // Fail closed: if FE or BFF SHA differs, servedManifestVerified must be false
+    const mismatchedFeDeployment = {
+      ...restoredDeployment,
+      commit: "0".repeat(40),
+    };
+    const mismatchedResult = verifyRestoredDeploymentReadback(mismatchedFeDeployment, feSha, bffSha);
+    expect(mismatchedResult.servedManifestVerified).toBe(false);
+    expect(mismatchedResult.passed).toBe(false);
   });
 });

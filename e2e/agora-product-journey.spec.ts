@@ -1474,15 +1474,35 @@ test.describe(`${TASK_ID} strict-live browser journey`, () => {
       });
       expect(unauthCheck.status()).toBe(401);
 
-      const currentProfile = String(dep.deploymentProfile ?? dep.profile ?? "");
-      const realWrites = String(asRecord(dep.buildMode).VITE_BFF_REAL_WRITES ?? "");
-      if (currentProfile === "read-only" || currentProfile === "read-only-restore" || (["write-proof", "operator-live"].includes(currentProfile) && servedManifestVerified)) {
-        readOnlyRestored = true;
-      } else {
-        readOnlyRestored = false;
+      let currentDep = dep;
+      let currentProfile = String(currentDep.deploymentProfile ?? currentDep.profile ?? "");
+      let realWrites = String(asRecord(currentDep.buildMode).VITE_BFF_REAL_WRITES ?? "");
+
+      if (currentProfile === "write-proof" || realWrites === "true") {
+        const restoreDeadline = Date.now() + 60_000;
+        while (Date.now() < restoreDeadline && (currentProfile === "write-proof" || realWrites === "true")) {
+          await page.waitForTimeout(3000);
+          const pollRes = await request.get(`${FE_BASE_URL}/deployment.json?restore_poll=${Date.now()}`);
+          if (pollRes.ok()) {
+            currentDep = asRecord(await pollRes.json());
+            currentProfile = String(currentDep.deploymentProfile ?? currentDep.profile ?? "");
+            realWrites = String(asRecord(currentDep.buildMode).VITE_BFF_REAL_WRITES ?? "");
+          }
+        }
       }
+
+      expect(
+        ["read-only", "read-only-restore"],
+        `deployment must be restored to read-only profile, got ${currentProfile}`,
+      ).toContain(currentProfile);
+      expect(
+        realWrites,
+        "VITE_BFF_REAL_WRITES must be false in restored read-only deployment",
+      ).toBe("false");
+
+      readOnlyRestored = (currentProfile === "read-only" || currentProfile === "read-only-restore") && realWrites === "false";
       expect(servedManifestVerified, "deployment must serve the exact candidate FE and BFF manifest pair").toBe(true);
-      expect(readOnlyRestored, "deployment must be verified as bound to the exact candidate pair with served manifest verified").toBe(true);
+      expect(readOnlyRestored, "deployment must be verified as restored to read-only with real writes false").toBe(true);
     });
 
     const completedAt = new Date().toISOString();
