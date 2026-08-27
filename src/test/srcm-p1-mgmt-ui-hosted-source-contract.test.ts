@@ -25,6 +25,8 @@ describe("SRCM-P1 hosted acceptance producer contract", () => {
     expect(workflow).toContain("(expires-now)<900000");
     expect(workflow).toContain("pantheon_verifier_sha");
     expect(workflow).toContain("expected_source_definitions_sha");
+    expect(workflow).toContain("srcm-source-catalog-${GITHUB_RUN_ID}.json");
+    expect(workflow).toContain("steps.prepare.outcome != 'skipped'");
     expect(workflow).toContain("EXPECTED_FE_SHA");
     expect(workflow).toContain("EXPECTED_BFF_SHA");
     expect(workflow).toContain("deployment.json");

@@ -169,13 +169,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          catalog="$(curl -fsS "${PANTHEON_BROWSER_BFF_BASE_URL}/bff/management/data-sources/catalog" \
+          catalog_file="${RUNNER_TEMP%/}/srcm-source-catalog-${GITHUB_RUN_ID}.json"
+          curl -fsS "${PANTHEON_BROWSER_BFF_BASE_URL}/bff/management/data-sources/catalog" \
             -H "Authorization: Bearer ${PANTHEON_BFF_AUTH_TOKEN}" \
-            -H "X-Tenant-Id: ${PANTHEON_BFF_TENANT_ID}")"
-          node -e 'const fs=require("node:fs");const p=JSON.parse(process.argv[1]);const r=p.data??p;const d=Array.isArray(r.definitions)?r.definitions:[];const s=[...new Set(d.map(x=>String(x.deployment_sha||"")))];if(!d.length||s.length!==1||s[0]!==process.env.EXPECTED_SOURCE_DEFINITIONS_SHA)process.exit(1);fs.writeFileSync(process.argv[2],JSON.stringify({schema_version:"pantheon.external-source-management.source-definition-identity.v1",observed_at:new Date().toISOString(),definition_count:d.length,deployment_sha:s[0]},null,2)+"\n")' \
-            "${catalog}" "${PANTHEON_AUDIT_OUT_DIR}/source-definition-identity.json"
+            -H "X-Tenant-Id: ${PANTHEON_BFF_TENANT_ID}" \
+            -o "${catalog_file}"
+          node -e 'const fs=require("node:fs");const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));const r=p.data??p;const d=Array.isArray(r.definitions)?r.definitions:[];const s=[...new Set(d.map(x=>String(x.deployment_sha||"")))];fs.writeFileSync(process.argv[2],JSON.stringify({schema_version:"pantheon.external-source-management.source-definition-identity.v1",observed_at:new Date().toISOString(),definition_count:d.length,deployment_sha:s.length===1?s[0]:null,expected_deployment_sha:process.env.EXPECTED_SOURCE_DEFINITIONS_SHA,identity_match:d.length>0&&s.length===1&&s[0]===process.env.EXPECTED_SOURCE_DEFINITIONS_SHA},null,2)+"\n");if(!d.length||s.length!==1||s[0]!==process.env.EXPECTED_SOURCE_DEFINITIONS_SHA)process.exit(1)' \
+            "${catalog_file}" "${PANTHEON_AUDIT_OUT_DIR}/source-definition-identity.json"
+          rm -f "${catalog_file}"
 
       - name: Prepare bounded Source proof runtime and execute one exact official-provider tick
+        id: prepare
         if: inputs.operation == 'capture'
         shell: bash
         run: |
@@ -230,7 +234,7 @@ jobs:
           fi
 
       - name: Record sanitized post-proof posture
-        if: always() && inputs.operation == 'capture'
+        if: always() && inputs.operation == 'capture' && steps.prepare.outcome != 'skipped'
         shell: bash
         run: |
           set -euo pipefail
