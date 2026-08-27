@@ -4,7 +4,7 @@
   "generated": true,
   "frontend": {
     "repo": "ajoe734/execute-plans",
-    "runtime_commit": "c76a838342b08331849f994d8f756155d2e3b961",
+    "runtime_commit": "95d03944c8c4d595ed50ca6d499c4d2af3752f06",
     "generated_from_contract_commit": "6ad99d2e5abe4f31c9f48892ae7f44bf3bbab980",
     "bundle_index_sha256": "bd11b4f152e7808e71d146fd6ade26c5394b2a74031abb9eb1b04c7f70ff1948",
     "openapi_sha256": "56f12e43bb6041a0f83bf4ff69bf13ae86a335a38246f68a10f0a4ef3a856087",
