@@ -8,6 +8,10 @@ const gridCallbacks = vi.hoisted(() => ({
   onLayoutChange: undefined as ((layout: Layout[]) => void) | undefined,
 }));
 
+const operationalReadinessMocks = vi.hoisted(() => ({
+  getAgoraOperationalReadiness: vi.fn(),
+}));
+
 vi.mock("@/lib/bff-v1/agora/tradingRoom", () => ({
   acceptTradingRoomWorkspaceProposalWithMeta: vi.fn(),
   acceptWidgetRevisionProposal: vi.fn(),
@@ -19,6 +23,10 @@ vi.mock("@/lib/bff-v1/agora/tradingRoom", () => ({
   patchTradingRoomWorkspaceLayout: vi.fn(),
   rollbackTradingRoomWorkspaceVersion: vi.fn(),
   decideOnEvent: vi.fn(),
+}));
+
+vi.mock("@/lib/bff-v1/agora/operationalReadiness", () => ({
+  getAgoraOperationalReadiness: operationalReadinessMocks.getAgoraOperationalReadiness,
 }));
 
 vi.mock("@/lib/bff-v1/agora/candidatePool", () => ({
@@ -132,6 +140,7 @@ import type {
   TradingRoomWorkspaceProposal,
   WidgetRevisionProposal,
 } from "@/lib/bff-v1/agora/tradingRoomTypes";
+import type { AgoraOperationalReadiness } from "@/lib/bff-v1/agora/operationalReadiness";
 
 function makeBffError(status: number, code: ErrorCode, message: string): BffError {
   return new BffError(status, {
@@ -172,6 +181,38 @@ const MOCK_AGGREGATE = {
   risk_summary: { state: "normal" as const },
   snapshot_at: "2026-06-22T10:00:00Z",
   data_cutoff: "2026-06-22T09:55:00Z",
+};
+
+const MOCK_OPERATIONAL_READINESS: AgoraOperationalReadiness = {
+  status: "ok",
+  snapshot_at: "2026-08-27T06:02:00Z",
+  capability: "agora.operational_readiness.v1",
+  source: {
+    snapshot_id: "snapshot-twse-001",
+    source_instance_id: "source-twse-daily",
+    source_timestamp: "2026-08-27T06:00:00Z",
+    age_seconds: 120,
+    sla_seconds: 86400,
+    freshness: "fresh",
+    desired_state: "enabled",
+    observed_state: "healthy",
+    last_failure: null,
+  },
+  signal_producer: {
+    status: "ok",
+    producer_id: "paper-signal-producer",
+    active_binding: "binding-paper-twse",
+    consumed_snapshot_id: "snapshot-twse-001",
+    last_success_at: "2026-08-27T06:01:00Z",
+    enqueued: 3,
+    reason: "healthy",
+  },
+  surfaces: {
+    signals: { status: "ok", count: 3, reason: "healthy", freshness: "fresh", cursor: "signal-3" },
+    decision_events: { status: "ok", count: 1, reason: "healthy", freshness: "fresh", cursor: "event-1" },
+    candidates: { status: "ok", count: 3, reason: "healthy", freshness: "fresh", cursor: "candidate-3" },
+  },
+  deployment: null,
 };
 
 const LIVE_CANDIDATE_MEMBER: CandidatePoolMember = {
@@ -719,6 +760,8 @@ describe("TradingRoomPage", () => {
       version: { ...MOCK_VERSION_2, id: "version-003", dashboardVersion: 3 },
       workspace: { ...MOCK_WORKSPACE, dashboardVersion: 3, generatedBy: "user_modified" },
     });
+    operationalReadinessMocks.getAgoraOperationalReadiness.mockReset();
+    operationalReadinessMocks.getAgoraOperationalReadiness.mockResolvedValue(MOCK_OPERATIONAL_READINESS);
   });
 
   afterEach(() => {
@@ -731,6 +774,7 @@ describe("TradingRoomPage", () => {
     vi.mocked(tradingRoomModule.listDecisionEvents).mockReturnValue(
       new Promise<{ items: typeof MOCK_DECISION_EVENT[], etag: null }>(() => {}),
     );
+    operationalReadinessMocks.getAgoraOperationalReadiness.mockReturnValue(new Promise(() => {}));
     render(<TradingRoomPage />);
     expect(screen.getByTestId("trading-room-loading")).toBeDefined();
   });
@@ -874,6 +918,42 @@ describe("TradingRoomPage", () => {
     render(<TradingRoomPage />);
     await screen.findByTestId("trading-room-page");
     expect(tradingRoomModule.listDecisionEvents).toHaveBeenCalled();
+  });
+
+  it("explains source snapshot, producer identity, and downstream stale or empty truth", async () => {
+    operationalReadinessMocks.getAgoraOperationalReadiness.mockResolvedValue({
+      ...MOCK_OPERATIONAL_READINESS,
+      status: "degraded",
+      source: { ...MOCK_OPERATIONAL_READINESS.source, freshness: "stale", age_seconds: 90000 },
+      signal_producer: { ...MOCK_OPERATIONAL_READINESS.signal_producer, status: "degraded", reason: "source_snapshot_stale" },
+      surfaces: {
+        ...MOCK_OPERATIONAL_READINESS.surfaces,
+        signals: { status: "unavailable", count: 0, reason: "upstream_stale", freshness: "stale", cursor: null },
+      },
+    });
+    render(<TradingRoomPage />);
+
+    const readiness = await screen.findByTestId("trading-room-operational-readiness");
+    expect(readiness).toHaveAttribute("data-source-freshness", "stale");
+    expect(readiness).toHaveTextContent("Source snapshot is stale");
+    expect(screen.getByTestId("trading-room-readiness-source")).toHaveTextContent("source-twse-daily");
+    expect(screen.getByTestId("trading-room-readiness-producer")).toHaveTextContent("paper-signal-producer");
+    expect(screen.getByTestId("trading-room-readiness-surface-signals")).toHaveTextContent("upstream_stale");
+  });
+
+  it("keeps a fresh empty result distinct from unavailable readiness", async () => {
+    operationalReadinessMocks.getAgoraOperationalReadiness.mockResolvedValue({
+      ...MOCK_OPERATIONAL_READINESS,
+      status: "empty_fresh",
+      source: { ...MOCK_OPERATIONAL_READINESS.source, freshness: "empty_fresh" },
+      signal_producer: { ...MOCK_OPERATIONAL_READINESS.signal_producer, status: "empty_fresh", enqueued: 0, reason: "rule_evaluation_zero_signals" },
+    });
+    render(<TradingRoomPage />);
+
+    const readiness = await screen.findByTestId("trading-room-operational-readiness");
+    expect(readiness).toHaveAttribute("data-source-freshness", "empty_fresh");
+    expect(readiness).toHaveTextContent("fresh but produced zero qualifying signals");
+    expect(readiness).not.toHaveTextContent("cannot be confirmed");
   });
 
   it("shows position action queue panel", async () => {

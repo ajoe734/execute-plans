@@ -2,10 +2,10 @@
 // Retains the existing route /management/data-sources and delegates to DataSourceControlCenter.
 
 import React from "react";
-import { DataSourceControlCenter } from "./dataSources/DataSourceControlCenter";
+import { DataSourcesPage } from "../DataSourcesPage";
 
 export function DataSourceManagementPage() {
-  return <DataSourceControlCenter />;
+  return <DataSourcesPage />;
 }
 
 export default DataSourceManagementPage;
