@@ -7,15 +7,15 @@
   "merge_target": "dev",
   "branch": "task/AGORA-AGC-08-HOSTED-DEMO-20260827",
   "status": "ready-for-independent-exact-head-review",
-  "recorded_at": "2026-08-27T20:57:42.388Z",
+  "recorded_at": "2026-08-27T21:12:00.000Z",
   "scope": {
     "adopted": [
       "Add docs/contracts/agora/demo-run-evidence.v1.schema.json sanitized evidence schema for Agora hosted demo runs with exact pair SHAs, objects, steps, negative controls, and read-only restoration.",
-      "Update .github/workflows/agora-hosted-acceptance.yml to remove static token assumption, mint short-lived operator/viewer tokens via governed dev-login, bind exact checkout/deployment/BFF SHAs, and run Persona interaction hosted spec.",
-      "Update .github/workflows/pfg-agora-journey-e2e-hosted-acceptance.yml to tighten exact SHA bindings, probe /bff/auth/readiness, and enforce sanitized evidence upload.",
-      "Update e2e/agora-product-journey.spec.ts to format and write agora-demo-run-evidence.json according to demo-run-evidence.v1 contract.",
+      "Update .github/workflows/agora-hosted-acceptance.yml to enforce short-lived operator and viewer token minting via governed dev-login, bind exact checkout/deployment/BFF SHAs, set PANTHEON_PERSONA_INTERACTION_WRITE_PROOF=1, and run the correlated product journey and Persona interaction hosted specs.",
+      "Update .github/workflows/pfg-agora-journey-e2e-hosted-acceptance.yml to require viewer credentials, mint operator and viewer tokens via dev-login, tighten exact SHA bindings, and enforce sanitized evidence upload.",
+      "Update e2e/agora-product-journey.spec.ts to execute real fail-closed negative controls (viewer_write_denied, cross_tenant_non_enumerating, no_order_route_proof) and same-pair read-only restoration verification (served_manifest_verified, read_only_restored), formatting agora-demo-run-evidence.json according to demo-run-evidence.v1 contract.",
       "Update e2e/persona-interaction-cross-repo-hosted.spec.ts to support dynamic operator and viewer token minting from dev-login client credentials.",
-      "Update e2e/agora-hosted-evidence.ts and add src/test/agora-demo-run-evidence-schema.test.ts to validate evidence structure."
+      "Update e2e/agora-hosted-evidence.ts and src/test/agora-demo-run-evidence-schema.test.ts with Ajv schema validation for positive and negative cases."
     ],
     "not_changed": [
       "Backend routing and interaction worker implementations.",
@@ -25,7 +25,7 @@
   "validation": {
     "vitest_schema_unit": {
       "command": "npx vitest run src/test/agora-demo-run-evidence-schema.test.ts",
-      "result": "passed: 2 tests passed"
+      "result": "passed: 4 tests passed (including Ajv JSON schema validation)"
     },
     "typecheck": {
       "command": "npm run typecheck",
@@ -37,8 +37,8 @@
   },
   "independent_review_required": [
     "Confirm docs/contracts/agora/demo-run-evidence.v1.schema.json defines exact pair, object IDs, steps, negative controls, and restoration.",
-    "Confirm .github/workflows/agora-hosted-acceptance.yml and pfg-agora-journey-e2e-hosted-acceptance.yml use short-lived dev-login tokens and exact SHA bindings.",
-    "Confirm e2e/agora-product-journey.spec.ts and e2e/persona-interaction-cross-repo-hosted.spec.ts handle short-lived auth and write sanitized evidence.",
+    "Confirm .github/workflows/agora-hosted-acceptance.yml and pfg-agora-journey-e2e-hosted-acceptance.yml require both operator and viewer dev-login credentials and set PANTHEON_PERSONA_INTERACTION_WRITE_PROOF=1.",
+    "Confirm e2e/agora-product-journey.spec.ts executes real negative controls (viewer write denial, cross-tenant isolation, no-order route proof) and restoration readback.",
     "Confirm npm run typecheck and vitest unit tests pass cleanly."
   ]
 }

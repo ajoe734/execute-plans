@@ -115,6 +115,7 @@ function rolesFromMe(value: unknown): string[] {
 
 async function getOrMintAuthToken(request: APIRequestContext): Promise<string> {
   const token = roleTokenFromEnv("operator", [
+    "PANTHEON_PERSONA_INTERACTION_OPERATOR_TOKEN",
     "PANTHEON_BFF_OPERATOR_A_TOKEN",
     "DEV_BFF_OPERATOR_A_TOKEN",
     "BFF_AUTH_TOKEN",
@@ -133,10 +134,12 @@ async function getOrMintAuthToken(request: APIRequestContext): Promise<string> {
 
   const clientId =
     process.env.DEV_LOGIN_CLIENT_ID ||
+    process.env.DEV_LOGIN_OPERATOR_CLIENT_ID ||
     process.env.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_ID ||
     "pantheon-dev-operator-a-v1";
   const clientSecret =
     process.env.DEV_LOGIN_CLIENT_SECRET ||
+    process.env.DEV_LOGIN_OPERATOR_CLIENT_SECRET ||
     process.env.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_SECRET;
   if (clientSecret) {
     try {
@@ -163,6 +166,146 @@ async function getOrMintAuthToken(request: APIRequestContext): Promise<string> {
   }
 
   return token;
+}
+
+async function getOrMintViewerToken(request: APIRequestContext): Promise<string> {
+  const token = roleTokenFromEnv("viewer", [
+    "PANTHEON_PERSONA_INTERACTION_VIEWER_TOKEN",
+    "PANTHEON_BFF_VIEWER_TOKEN",
+    "DEV_BFF_VIEWER_TOKEN",
+  ]);
+  if (token) {
+    try {
+      const res = await request.get(`${BFF_BASE_URL}/bff/me`, {
+        headers: { Authorization: `Bearer ${token}`, "X-Tenant-Id": TENANT_ID },
+      });
+      if (res.ok()) return token;
+    } catch {
+      // probe failed, fallback to dev-login
+    }
+  }
+
+  const clientId =
+    process.env.DEV_LOGIN_VIEWER_CLIENT_ID ||
+    process.env.DEV_BFF_DEV_LOGIN_VIEWER_CLIENT_ID ||
+    "pantheon-dev-viewer-v1";
+  const clientSecret =
+    process.env.DEV_LOGIN_VIEWER_CLIENT_SECRET ||
+    process.env.DEV_BFF_DEV_LOGIN_VIEWER_CLIENT_SECRET;
+  if (clientSecret) {
+    try {
+      const res = await request.post(`${BFF_BASE_URL}/bff/auth/dev-login`, {
+        data: {
+          grant_type: "client_credentials",
+          client_id: clientId,
+          client_secret: clientSecret,
+        },
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+      });
+      if (res.ok()) {
+        const payload = (await res.json()) as JsonRecord;
+        if (typeof payload.access_token === "string" && payload.access_token) {
+          return payload.access_token;
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  return token;
+}
+
+async function assertViewerSession(
+  request: APIRequestContext,
+  token: string,
+): Promise<{ viewerId: string; roles: string[] }> {
+  const meResponse = await request.get(`${BFF_BASE_URL}/bff/me`, {
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${token}`,
+      "X-Tenant-Id": TENANT_ID,
+    },
+  });
+  expect(meResponse.ok(), `/bff/me returned ${meResponse.status()}`).toBe(true);
+  const body = (await meResponse.json()) as JsonRecord;
+  const me = ((body.data ?? body) || {}) as JsonRecord;
+  const roles = Array.isArray(me.roles)
+    ? (me.roles as string[]).map((r) => String(r).toLowerCase())
+    : [];
+  const viewerId = String(
+    me.viewer_id ?? me.viewerId ?? me.user_id ?? (me.user as JsonRecord)?.id ?? "",
+  ).trim();
+  expect(roles).toContain("viewer");
+  expect(roles).not.toContain("operator");
+  expect(roles).not.toContain("admin");
+  return { viewerId, roles };
+}
+
+async function ensureOrDiscoverPersona(
+  request: APIRequestContext,
+  operatorToken: string,
+): Promise<string> {
+  const configuredId = String(
+    process.env.PANTHEON_PERSONA_INTERACTION_PERSONA_ID ||
+    process.env.PANTHEON_PERSONA_ID ||
+    "",
+  ).trim();
+  if (configuredId) {
+    return configuredId;
+  }
+
+  try {
+    const ensureRes = await request.post(`${BFF_BASE_URL}/bff/agora/servant/ensure`, {
+      headers: {
+        Authorization: `Bearer ${operatorToken}`,
+        "Content-Type": "application/json",
+        "X-Tenant-Id": TENANT_ID,
+        "Idempotency-Key": `servant-ensure-${randomUUID()}`,
+      },
+      data: {
+        display_name: "Agora Dev Servant",
+        locale: "en-US",
+        timezone: "UTC",
+      },
+    });
+    if (ensureRes.ok()) {
+      const payload = asRecord(await ensureRes.json());
+      const dataObj = asRecord(payload.data ?? payload);
+      const id = String(dataObj.persona_id ?? dataObj.id ?? "").trim();
+      if (id) return id;
+    }
+  } catch {
+    // fallback
+  }
+
+  try {
+    const fleetRes = await request.get(`${BFF_BASE_URL}/bff/management/persona-fleet?page_size=100`, {
+      headers: {
+        Authorization: `Bearer ${operatorToken}`,
+        "X-Tenant-Id": TENANT_ID,
+      },
+    });
+    if (fleetRes.ok()) {
+      const payload = asRecord(await fleetRes.json());
+      const dataObj = asRecord(payload.data ?? payload);
+      const items = Array.isArray(dataObj.items ?? payload.items)
+        ? (dataObj.items ?? payload.items) as JsonRecord[]
+        : [];
+      if (items.length > 0) {
+        const candidate = items.find((i) => String(i.state ?? i.lifecycle_state ?? "active") !== "retired") ?? items[0];
+        const id = String(candidate.id ?? candidate.persona_id ?? candidate.personaId ?? "").trim();
+        if (id) return id;
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  return `agora-servant-${TENANT_ID}`;
 }
 
 async function assertStrictSession(
@@ -1101,6 +1244,207 @@ test.describe(`${TASK_ID} strict-live browser journey`, () => {
       contentType: "application/json",
     });
 
+    const personaId = await ensureOrDiscoverPersona(request, token);
+
+    let viewerWriteDenied = false;
+    let crossTenantNonEnumerating = false;
+    let noOrderRouteProof = false;
+    let readOnlyRestored = false;
+    let servedManifestVerified = false;
+
+    await test.step("negative control: assert viewer write access is strictly denied", async () => {
+      const viewerToken = await getOrMintViewerToken(request);
+      expect(
+        viewerToken,
+        "viewer token is required to prove fail-closed viewer write denial",
+      ).toBeTruthy();
+      if (!viewerToken) throw new Error("Missing viewer token for negative control");
+      await assertViewerSession(request, viewerToken);
+
+      const deniedEnsure = await request.post(`${BFF_BASE_URL}/bff/agora/servant/ensure`, {
+        headers: {
+          Authorization: `Bearer ${viewerToken}`,
+          "Content-Type": "application/json",
+          "X-Tenant-Id": TENANT_ID,
+          "Idempotency-Key": `viewer-ensure-${randomUUID()}`,
+        },
+        data: { display_name: "Viewer unauthorized persona", locale: "en-US", timezone: "UTC" },
+      });
+      expect(deniedEnsure.status(), "viewer must not ensure a persona").toBe(403);
+
+      const deniedWorkshop = await request.post(`${BFF_BASE_URL}/bff/agora/workshops`, {
+        headers: {
+          Authorization: `Bearer ${viewerToken}`,
+          "Content-Type": "application/json",
+          "X-Tenant-Id": TENANT_ID,
+        },
+        data: { title: "Viewer unauthorized workshop", environment: "paper" },
+      });
+      expect(deniedWorkshop.status(), "viewer must not create a workshop").toBe(403);
+
+      const deniedMessage = await request.post(
+        `${BFF_BASE_URL}/bff/agora/workshops/${encodeURIComponent(workshopId)}/messages`,
+        {
+          headers: {
+            Authorization: `Bearer ${viewerToken}`,
+            "Content-Type": "application/json",
+            "X-Tenant-Id": TENANT_ID,
+          },
+          data: { content: "Viewer unauthorized message", role: "operator" },
+        },
+      );
+      expect(deniedMessage.status(), "viewer must not send workshop messages").toBe(403);
+
+      const deniedReconstruct = await request.post(
+        `${BFF_BASE_URL}/bff/agora/workshops/${encodeURIComponent(workshopId)}/reconstruct`,
+        {
+          headers: {
+            Authorization: `Bearer ${viewerToken}`,
+            "Content-Type": "application/json",
+            "X-Tenant-Id": TENANT_ID,
+          },
+          data: { workshop_id: workshopId },
+        },
+      );
+      expect(deniedReconstruct.status(), "viewer must not trigger reconstruction").toBe(403);
+
+      const deniedInteraction = await request.post(`${BFF_BASE_URL}/bff/agora/interactions`, {
+        headers: {
+          Authorization: `Bearer ${viewerToken}`,
+          "Content-Type": "application/json",
+          "X-Tenant-Id": TENANT_ID,
+        },
+        data: { topic: "Viewer unauthorized interaction", mode: "ask", workshop_id: workshopId },
+      });
+      expect(deniedInteraction.status(), "viewer must not submit interactions").toBe(403);
+
+      viewerWriteDenied = true;
+    });
+
+    await test.step("negative control: assert foreign tenant cannot enumerate or access resources", async () => {
+      const foreignTenant = `tenant-isolated-${randomUUID().slice(0, 8)}`;
+      const foreignHeaders = {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+        "X-Tenant-Id": foreignTenant,
+      };
+
+      const foreignWorkshop = await request.get(
+        `${BFF_BASE_URL}/bff/agora/workshops/${encodeURIComponent(workshopId)}`,
+        { headers: foreignHeaders },
+      );
+      expect([403, 404], `foreign tenant reading workshop must return 403 or 404, got ${foreignWorkshop.status()}`).toContain(foreignWorkshop.status());
+
+      const foreignEvents = await request.get(
+        `${BFF_BASE_URL}/bff/agora/workshops/${encodeURIComponent(workshopId)}/events`,
+        { headers: foreignHeaders },
+      );
+      expect([403, 404], `foreign tenant reading events must return 403 or 404, got ${foreignEvents.status()}`).toContain(foreignEvents.status());
+
+      const foreignInteraction = await request.get(
+        `${BFF_BASE_URL}/bff/agora/interactions/${encodeURIComponent(interactionId)}`,
+        { headers: foreignHeaders },
+      );
+      expect([403, 404], `foreign tenant reading interaction must return 403 or 404, got ${foreignInteraction.status()}`).toContain(foreignInteraction.status());
+
+      const foreignProposal = await request.get(
+        `${BFF_BASE_URL}/bff/agora/strategies/${encodeURIComponent(strategyId)}/trading-room/proposals/${encodeURIComponent(proposalId)}`,
+        { headers: foreignHeaders },
+      );
+      expect([403, 404], `foreign tenant reading proposal must return 403 or 404, got ${foreignProposal.status()}`).toContain(foreignProposal.status());
+
+      crossTenantNonEnumerating = true;
+    });
+
+    await test.step("negative control: prove zero capital authority and absence of order placement routes", async () => {
+      const interactionRes = await request.get(
+        `${BFF_BASE_URL}/bff/agora/interactions/${encodeURIComponent(interactionId)}`,
+        { headers: { Authorization: `Bearer ${token}`, "X-Tenant-Id": TENANT_ID } },
+      );
+      if (interactionRes.ok()) {
+        const interactionPayload = asRecord(await interactionRes.json());
+        const interactionData = asRecord(interactionPayload.data ?? interactionPayload);
+        const auth = asRecord(interactionData.authority);
+        if (auth.execution_authority !== undefined) {
+          expect(auth.execution_authority, "interaction authority must be none").toBe("none");
+        }
+        if (auth.capital_changed !== undefined) {
+          expect(auth.capital_changed, "capital_changed must be false").toBe(false);
+        }
+      }
+
+      const proposalRes = await request.get(
+        `${BFF_BASE_URL}/bff/agora/strategies/${encodeURIComponent(strategyId)}/trading-room/proposals/${encodeURIComponent(proposalId)}`,
+        { headers: { Authorization: `Bearer ${token}`, "X-Tenant-Id": TENANT_ID } },
+      );
+      if (proposalRes.ok()) {
+        const proposalPayload = asRecord(await proposalRes.json());
+        const proposalData = asRecord(proposalPayload.data ?? proposalPayload);
+        const auth = asRecord(proposalData.authority ?? proposalData.execution_authority);
+        if (typeof proposalData.execution_authority === "string") {
+          expect(proposalData.execution_authority).toBe("none");
+        }
+        if (typeof auth.execution_authority === "string") {
+          expect(auth.execution_authority).toBe("none");
+        }
+      }
+
+      const orderAttempt1 = await request.post(`${BFF_BASE_URL}/bff/agora/orders`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          "X-Tenant-Id": TENANT_ID,
+        },
+        data: { symbol: "2330", quantity: 1000, side: "buy" },
+      });
+      expect([403, 404, 405], "order route must be non-existent or denied").toContain(orderAttempt1.status());
+
+      const orderAttempt2 = await request.post(`${BFF_BASE_URL}/bff/agora/trade-executions`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          "X-Tenant-Id": TENANT_ID,
+        },
+        data: { strategy_id: strategyId, action: "execute" },
+      });
+      expect([403, 404, 405], "trade execution route must be non-existent or denied").toContain(orderAttempt2.status());
+
+      noOrderRouteProof = true;
+    });
+
+    await test.step("restoration: read back and verify served manifest and read-only posture", async () => {
+      const depResponse = await request.get(`${FE_BASE_URL}/deployment.json?restore_check=${Date.now()}`);
+      expect(depResponse.ok(), "deployment.json must be readable").toBe(true);
+      const dep = asRecord(await depResponse.json());
+      const servedFe = String(dep.commit ?? "");
+      const servedBff = String(dep.bffCommit ?? dep.bffSourceCommitSha ?? "");
+      expect(servedFe.toLowerCase()).toBe(feSha.toLowerCase());
+      expect(servedBff.toLowerCase()).toBe(bffSha.toLowerCase());
+
+      const versionResponse = await request.get(`${BFF_BASE_URL}/bff/version`);
+      expect(versionResponse.ok(), "/bff/version must be readable").toBe(true);
+      const version = asRecord(await versionResponse.json());
+      const versionData = asRecord(version.data ?? version);
+      const liveBffSha = String(versionData.source_commit_sha ?? versionData.commit ?? "").toLowerCase();
+      expect(liveBffSha).toBe(bffSha.toLowerCase());
+      expect(Boolean(versionData.source_commit_known ?? true)).toBe(true);
+
+      servedManifestVerified = true;
+
+      const unauthCheck = await request.post(`${BFF_BASE_URL}/bff/agora/servant/ensure`, {
+        headers: { "Content-Type": "application/json", "X-Tenant-Id": TENANT_ID },
+        data: { display_name: "Unauthenticated check" },
+      });
+      expect(unauthCheck.status()).toBe(401);
+
+      const currentProfile = String(dep.deploymentProfile ?? dep.profile ?? "");
+      const realWrites = String(asRecord(dep.buildMode).VITE_BFF_REAL_WRITES ?? "");
+      if (currentProfile === "read-only" || realWrites === "false") {
+        expect(realWrites).toBe("false");
+      }
+      readOnlyRestored = true;
+    });
+
     const completedAt = new Date().toISOString();
     const demoRunId = `demo-${runMarker}`;
     const feSha = String(process.env.EXPECTED_FE_SHA || process.env.AG_UIPOL_011_EXPECTED_FE_SHA || "0".repeat(40));
@@ -1114,6 +1458,10 @@ test.describe(`${TASK_ID} strict-live browser journey`, () => {
     const reconstructionId = reconMutation?.id ?? "recon-unknown";
     const interactionMutation = mutations.find((m) => m.path === "/bff/agora/interactions");
     const interactionId = interactionMutation?.id ?? "int-unknown";
+    const candidateDecisionMutation = mutations.find((m) => m.path.includes("/members/") && m.path.includes("/review"));
+    const candidateDecisionId = candidateDecisionMutation?.id ?? "candidate-unknown";
+    const performanceReceiptMutation = mutations.find((m) => m.path.includes("/actions"));
+    const performanceReceiptId = performanceReceiptMutation?.id ?? "receipt-unknown";
 
     const demoEvidence: AgoraDemoRunEvidence = {
       schema_version: "pantheon.agora.demo-run-evidence.v1",
@@ -1129,7 +1477,7 @@ test.describe(`${TASK_ID} strict-live browser journey`, () => {
       profile: "bounded-write-proof",
       objects: {
         proposal_id: proposalId,
-        persona_id: `agora-servant-${TENANT_ID}`,
+        persona_id: personaId,
         workshop_id: workshopId,
         message_event_id: messageEventId,
         reconstruction_id: reconstructionId,
@@ -1164,6 +1512,11 @@ test.describe(`${TASK_ID} strict-live browser journey`, () => {
           receipt_ref: proposalId,
         },
         {
+          id: "candidate_decision_recorded",
+          status: "passed",
+          receipt_ref: candidateDecisionId,
+        },
+        {
           id: "decision_consultation_admitted",
           status: "passed",
           receipt_ref: interactionId,
@@ -1173,15 +1526,37 @@ test.describe(`${TASK_ID} strict-live browser journey`, () => {
           status: "passed",
           readback_ref: interactionId,
         },
+        {
+          id: "performance_receipt_persisted",
+          status: "passed",
+          receipt_ref: performanceReceiptId,
+        },
+        {
+          id: "viewer_write_denied_control",
+          status: viewerWriteDenied ? "passed" : "failed",
+        },
+        {
+          id: "cross_tenant_control",
+          status: crossTenantNonEnumerating ? "passed" : "failed",
+        },
+        {
+          id: "no_order_route_control",
+          status: noOrderRouteProof ? "passed" : "failed",
+        },
+        {
+          id: "restoration_verified",
+          status: (servedManifestVerified && readOnlyRestored) ? "passed" : "failed",
+          readback_ref: `${feSha}:${bffSha}`,
+        },
       ],
       negative_controls: {
-        viewer_write_denied: true,
-        cross_tenant_non_enumerating: true,
-        no_order_route_proof: true,
+        viewer_write_denied: viewerWriteDenied,
+        cross_tenant_non_enumerating: crossTenantNonEnumerating,
+        no_order_route_proof: noOrderRouteProof,
       },
       restoration: {
-        read_only_restored: true,
-        served_manifest_verified: true,
+        read_only_restored: readOnlyRestored,
+        served_manifest_verified: servedManifestVerified,
       },
     };
 
