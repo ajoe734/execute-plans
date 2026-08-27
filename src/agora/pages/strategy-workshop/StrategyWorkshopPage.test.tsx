@@ -1238,6 +1238,12 @@ describe("StrategyWorkshopPage", () => {
     );
     expect(workshopsModule.listWorkshopCards.mock.calls.length).toBeGreaterThanOrEqual(1);
     expect(workshopsModule.listWorkshopEvents.mock.calls.length).toBeGreaterThanOrEqual(1);
+    // The message and its reconstruction already reached durable readback
+    // before the daily-interaction submission failed; the earned receipt and
+    // reconstruction id stay visible instead of collapsing to a bare failure.
+    expect(screen.getByTestId("message-receipt-state")).toHaveAttribute("data-message-receipt", "degraded");
+    expect(screen.getByTestId("workshop-reconstruction-state")).toHaveAttribute("data-reconstruction-state", "completed");
+    expect(screen.getByTestId("servant-composer-input")).toHaveValue("Place this trade directly");
   });
 
   it("enables Add to Trading Room only when the trading-room readiness gate passes and a route handler exists", async () => {

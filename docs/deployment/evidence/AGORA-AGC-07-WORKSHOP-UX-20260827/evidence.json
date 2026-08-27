@@ -1,0 +1,37 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "AGORA-AGC-07-WORKSHOP-UX-20260827",
+  "owner": "Antigravity",
+  "reviewer": "Codex2",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/AGORA-AGC-07-WORKSHOP-UX-20260827",
+  "status": "ready-for-independent-exact-head-review",
+  "recorded_at": "2026-08-27T20:33:00Z",
+  "scope": {
+    "adopted": [
+      "Persona -> Workshop handoff navigation passes resumed mode and participants query parameters and preserves them across page reloads.",
+      "Persona detail \"Talk with\" action reuses the initial resolver receipt without duplicate context resolution when participant eligibility is unchanged.",
+      "Strategy Workshop composer input and submission remain operational and submittable even when daily interaction history readback fails.",
+      "e2e/agora-persona-workshop-navigation.spec.ts verifies the handoff flow and URL reloading with aligned localhost/127.0.0.1 origin and prioritized BFF auth readiness route ordering."
+    ],
+    "not_changed": [
+      "Persona model, backend API contracts, and server-side interaction resolution logic.",
+      "Governed write access checks and security boundaries."
+    ]
+  },
+  "validation": {
+    "playwright_chromium": {
+      "command": "npx playwright test e2e/agora-persona-workshop-navigation.spec.ts --project=chromium",
+      "result": "passed: 2 tests passed"
+    }
+  },
+  "review_binding": {
+    "sha_disposition": "Independent approval must bind the final PR head that contains this implementation and evidence manifest."
+  },
+  "independent_review_required": [
+    "Confirm e2e/agora-persona-workshop-navigation.spec.ts runs and passes with Chromium.",
+    "Confirm the localhost/127.0.0.1 desktop origin handling is aligned and installOidcDevLogin routes take precedence over catch-all fixtures.",
+    "Confirm Persona -> Workshop handoff and resumable composer UX are verified."
+  ]
+}

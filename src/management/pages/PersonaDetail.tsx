@@ -101,6 +101,10 @@ function selectPersonaEntryParticipants(
   return comparison ? [personaId, comparison.persona_id] : [];
 }
 
+function sameOrderedIds(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((id, index) => id === right[index]);
+}
+
 export const PersonaDetail = () => {
   const { id } = useParams();
   const t = useT();
@@ -226,19 +230,26 @@ export const PersonaDetail = () => {
             ? "No second eligible Persona is available for comparison."
             : "This Persona is not available in the canonical eligibility snapshot.");
       }
-      const rebound = await interaction.resolveContext({
-        workshop_id: initialBinding.workshop_id,
-        context_refs: contextRefs,
-        environment: initialBinding.advice_environment,
-        source_route: initialBinding.source_route,
-        focused_object: initialBinding.focused_object,
-        evidence_cutoff: initialBinding.evidence_cutoff,
-        selected_persona_ids: participantIds,
-        initial_mode: mode,
-        return_route: initialBinding.return_route,
-      });
-      const binding = rebound.data.context_binding;
-      if (!rebound.data.verified || !binding
+      // The first resolver receipt already contains the exact participant set
+      // for the common single-Persona entry. Reusing it avoids a second
+      // resolver round-trip (and a second durable binding) when eligibility did
+      // not change the selection. Compare still re-resolves after adding its
+      // second participant.
+      const bindingResponse = sameOrderedIds(initialBinding.selected_persona_ids, participantIds)
+        ? resolved.data
+        : (await interaction.resolveContext({
+          workshop_id: initialBinding.workshop_id,
+          context_refs: contextRefs,
+          environment: initialBinding.advice_environment,
+          source_route: initialBinding.source_route,
+          focused_object: initialBinding.focused_object,
+          evidence_cutoff: initialBinding.evidence_cutoff,
+          selected_persona_ids: participantIds,
+          initial_mode: mode,
+          return_route: initialBinding.return_route,
+        })).data;
+      const binding = bindingResponse.context_binding;
+      if (!bindingResponse.verified || !binding
         || binding.focused_object.kind !== "persona" || binding.focused_object.id !== p.id
         || binding.selected_persona_ids.length !== participantIds.length
         || binding.selected_persona_ids.some((id, index) => id !== participantIds[index])) {

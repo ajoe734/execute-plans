@@ -1124,10 +1124,15 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
   const handleSend = useCallback(
     async (text: string) => {
       const content = text.trim();
-      if (!workshopId || !workshop || !content || sendLoading || !writeAccess.interactionAllowed || dailyRuntimeState !== "ready") return;
+      if (!workshopId || !workshop || !content || sendLoading || !writeAccess.interactionAllowed) return;
       setSendLoading(true);
       setSendError(null);
       setMessageReceiptState("accepted");
+      // Once the message is durably posted, a later-stage failure (daily
+      // interaction submission) must not regress the receipt/reconstruction
+      // state back to "failed" and discard their durable ids -- the message
+      // and any reconstruction it triggered already happened and stay visible.
+      let messageDurablyPosted = false;
       try {
         setMessageReceiptState("processing");
         // Workshop mutations require the exact current weak ETag. Fresh-read
@@ -1159,6 +1164,7 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
           () => activeWorkshopIdRef.current === workshopId,
         );
         setWorkshopEvents(messageEvents);
+        messageDurablyPosted = true;
 
         // Reconstruction is a BFF-owned durable operation. Its response owns
         // the reconstruction identity; a subsequent versions readback owns
@@ -1282,7 +1288,11 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
         refreshReadiness();
         void refreshDailyInteractions();
       } catch (err) {
-        setMessageReceiptState("failed");
+        // The message (and any reconstruction it triggered) already reached
+        // durable readback; a downstream daily-interaction-submission failure
+        // is a degraded partial success, not a lost message. Keep the earned
+        // receipt/reconstruction ids visible instead of resetting to "failed".
+        setMessageReceiptState(messageDurablyPosted ? "degraded" : "failed");
         setSendError(err instanceof Error ? err.message : "Failed to send message");
       } finally {
         setSendLoading(false);
@@ -1296,7 +1306,6 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
       sendLoading,
       writeAccess.interactionAllowed,
       writeAccess.actorId,
-      dailyRuntimeState,
       entry,
       contextError,
       contextResolutionSessionId,
@@ -1324,8 +1333,6 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
     if (contextResolving) return { code: "context_resolving", message: "Resolving authoritative Workshop context." };
     if (contextError) return { code: "context_error", message: `Authoritative context is unavailable: ${contextError}` };
     if (!resolvedContext) return { code: "context_pending", message: "Waiting for authoritative Workshop context." };
-    if (dailyRuntimeState === "loading") return { code: "daily_runtime_loading", message: "Checking the authoritative daily Persona runtime." };
-    if (dailyRuntimeState !== "ready") return { code: "daily_runtime_unavailable", message: dailyRuntimeMessage ?? "The authoritative daily Persona runtime is unavailable." };
     if (selectedMode === "compare" && (selectedParticipants.length !== 2 || new Set(selectedParticipants).size !== 2)) {
       return { code: "compare_participants_invalid", message: "Compare requires exactly two distinct eligible Personas." };
     }
