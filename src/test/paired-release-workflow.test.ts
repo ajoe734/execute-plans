@@ -908,7 +908,7 @@ describe("paired Pantheon release workflow", () => {
   });
 
   it("proves auditable read-only restore orchestration binds the exact same Agora FE/BFF candidate pair", () => {
-    // 1. Workflow static contract bindings
+    // Integration gate and watchdog static contract bindings
     expect(integrationWorkflow).toContain("Run Agora functional-closure hosted journey");
     expect(integrationWorkflow).toContain("npx playwright test e2e/agora-product-journey.spec.ts");
     expect(watchdogWorkflow).toContain("PANTHEON_DEPLOY_PROFILE: read-only-restore");
@@ -921,231 +921,17 @@ describe("paired Pantheon release workflow", () => {
     expect(deployWorkflow).toContain("proof-restore-confirmation:");
     expect(deployWorkflow).toContain("Verify post-child same-pair read-only deployment readback");
     expect(deployWorkflow).toContain("Attest final same-pair restoration bound to child demo evidence");
-
-    // 2. Behavioral simulation: State machine for same-pair read-only restore orchestration
-    const feSha = "a".repeat(40);
-    const bffSha = "b".repeat(40);
-    const pairId = "c".repeat(64);
-    const readOnlyDigest = "d".repeat(64);
-    const writeProofDigest = "e".repeat(64);
-    const nonce = "f".repeat(64);
-    const correlationId = "12345678-1234-1234-1234-1234567890ab";
-
-    // Simulate Parent Binding Validation
-    const validateParentBinding = (binding: {
-      schemaVersion: string;
-      parent: { frontendSha: string; actor: string };
-      pair: { pairId: string; bffSha: string; readOnlyArtifactDigestSha256: string; writeProofArtifactDigestSha256: string };
-      nonce: string;
-      correlationId: string;
-    }, expected: {
-      frontendSha: string;
-      bffSha: string;
-      pairId: string;
-      readOnlyDigest: string;
-      writeProofDigest: string;
-      nonce: string;
-      correlationId: string;
-    }) => {
-      if (binding.schemaVersion !== "pantheon.pint-proof-binding.v1") return false;
-      if (binding.parent.frontendSha !== expected.frontendSha) return false;
-      if (binding.pair.bffSha !== expected.bffSha) return false;
-      if (binding.pair.pairId !== expected.pairId) return false;
-      if (binding.pair.readOnlyArtifactDigestSha256 !== expected.readOnlyDigest) return false;
-      if (binding.pair.writeProofArtifactDigestSha256 !== expected.writeProofDigest) return false;
-      if (binding.nonce !== expected.nonce || binding.correlationId !== expected.correlationId) return false;
-      return true;
-    };
-
-    const validBinding = {
-      schemaVersion: "pantheon.pint-proof-binding.v1",
-      parent: { frontendSha: feSha, actor: "operator-a" },
-      pair: { pairId, bffSha, readOnlyArtifactDigestSha256: readOnlyDigest, writeProofArtifactDigestSha256: writeProofDigest },
-      nonce,
-      correlationId,
-    };
-
-    expect(validateParentBinding(validBinding, {
-      frontendSha: feSha,
-      bffSha,
-      pairId,
-      readOnlyDigest,
-      writeProofDigest,
-      nonce,
-      correlationId,
-    })).toBe(true);
-
-    // Rejects tampered FE SHA
-    expect(validateParentBinding({
-      ...validBinding,
-      parent: { ...validBinding.parent, frontendSha: "0".repeat(40) },
-    }, {
-      frontendSha: feSha,
-      bffSha,
-      pairId,
-      readOnlyDigest,
-      writeProofDigest,
-      nonce,
-      correlationId,
-    })).toBe(false);
-
-    // Rejects tampered BFF SHA
-    expect(validateParentBinding({
-      ...validBinding,
-      pair: { ...validBinding.pair, bffSha: "0".repeat(40) },
-    }, {
-      frontendSha: feSha,
-      bffSha,
-      pairId,
-      readOnlyDigest,
-      writeProofDigest,
-      nonce,
-      correlationId,
-    })).toBe(false);
-
-    // 3. Behavioral simulation: Private safe-fallback locator and atomic CAS switch
-    const validateSafeFallbackLocator = (locator: {
-      schemaVersion: number;
-      pairId: string;
-      frontendSha: string;
-      readOnlyArtifactDigestSha256: string;
-      writeProofArtifactDigestSha256: string;
-      safeReleaseName: string;
-    }, expectedPair: {
-      pairId: string;
-      frontendSha: string;
-      readOnlyDigest: string;
-      writeProofDigest: string;
-    }) => {
-      if (locator.schemaVersion !== 1) return false;
-      if (locator.pairId !== expectedPair.pairId) return false;
-      if (locator.frontendSha !== expectedPair.frontendSha) return false;
-      if (locator.readOnlyArtifactDigestSha256 !== expectedPair.readOnlyDigest) return false;
-      if (locator.writeProofArtifactDigestSha256 !== expectedPair.writeProofDigest) return false;
-      if (!/^[A-Za-z0-9._-]+$/u.test(locator.safeReleaseName)) return false;
-      return true;
-    };
-
-    const validLocator = {
-      schemaVersion: 1,
-      pairId,
-      frontendSha: feSha,
-      readOnlyArtifactDigestSha256: readOnlyDigest,
-      writeProofArtifactDigestSha256: writeProofDigest,
-      safeReleaseName: "20260827T000000Z-safe-sibling-read-only",
-    };
-
-    expect(validateSafeFallbackLocator(validLocator, {
-      pairId,
-      frontendSha: feSha,
-      readOnlyDigest,
-      writeProofDigest,
-    })).toBe(true);
-
-    // 4. Behavioral simulation: Atomic CAS exchange logic
-    const executeSymlinkCasExchange = (state: {
-      liveLinkTarget: string;
-      expectedLiveTarget: string;
-      stagedTarget: string;
-    }) => {
-      if (state.liveLinkTarget !== state.expectedLiveTarget) {
-        // CAS conflict: live target changed concurrently
-        return { success: false, exitCode: 2, error: "Read-only restore CAS rejected a changed live target." };
-      }
-      return { success: true, exitCode: 0, newLiveTarget: state.stagedTarget };
-    };
-
-    const writeTarget = "/var/www/pantheon-dev-fe-releases/write-proof-release";
-    const safeTarget = "/var/www/pantheon-dev-fe-releases/20260827T000000Z-safe-sibling-read-only";
-
-    const successfulCas = executeSymlinkCasExchange({
-      liveLinkTarget: writeTarget,
-      expectedLiveTarget: writeTarget,
-      stagedTarget: safeTarget,
-    });
-    expect(successfulCas.success).toBe(true);
-    expect(successfulCas.newLiveTarget).toBe(safeTarget);
-
-    const conflictingCas = executeSymlinkCasExchange({
-      liveLinkTarget: "/var/www/pantheon-dev-fe-releases/other-concurrent-release",
-      expectedLiveTarget: writeTarget,
-      stagedTarget: safeTarget,
-    });
-    expect(conflictingCas.success).toBe(false);
-    expect(conflictingCas.exitCode).toBe(2);
-
-    // 5. Behavioral simulation: Readback verification and evidence generation
-    const verifyRestoredDeploymentReadback = (
-      deploymentJson: {
-        commit: string;
-        bffCommit: string;
-        deploymentProfile: string;
-        buildMode: { VITE_BFF_REAL_WRITES: string };
-        probes?: { safeRestore?: string };
-      },
-      expectedFe: string,
-      expectedBff: string,
-    ) => {
-      const servedFe = deploymentJson.commit.toLowerCase();
-      const servedBff = deploymentJson.bffCommit.toLowerCase();
-      const profile = deploymentJson.deploymentProfile;
-      const realWrites = deploymentJson.buildMode.VITE_BFF_REAL_WRITES;
-
-      const servedManifestVerified = servedFe === expectedFe.toLowerCase() && servedBff === expectedBff.toLowerCase();
-      const readOnlyRestored = (profile === "read-only" || profile === "read-only-restore") && realWrites === "false";
-
-      return {
-        servedManifestVerified,
-        readOnlyRestored,
-        passed: servedManifestVerified && readOnlyRestored,
-      };
-    };
-
-    const restoredDeployment = {
-      commit: feSha,
-      bffCommit: bffSha,
-      deploymentProfile: "read-only",
-      buildMode: {
-        VITE_BFF_REAL_WRITES: "false",
-      },
-      probes: {
-        safeRestore: "passed",
-      },
-    };
-
-    const readbackResult = verifyRestoredDeploymentReadback(restoredDeployment, feSha, bffSha);
-    expect(readbackResult.servedManifestVerified).toBe(true);
-    expect(readbackResult.readOnlyRestored).toBe(true);
-    expect(readbackResult.passed).toBe(true);
-
-    // Fail closed: if real writes is true, readOnlyRestored must be false
-    const unrestoredDeployment = {
-      ...restoredDeployment,
-      deploymentProfile: "write-proof",
-      buildMode: { VITE_BFF_REAL_WRITES: "true" },
-    };
-    const unrestoredResult = verifyRestoredDeploymentReadback(unrestoredDeployment, feSha, bffSha);
-    expect(unrestoredResult.readOnlyRestored).toBe(false);
-    expect(unrestoredResult.passed).toBe(false);
-
-    // Fail closed: if FE or BFF SHA differs, servedManifestVerified must be false
-    const mismatchedFeDeployment = {
-      ...restoredDeployment,
-      commit: "0".repeat(40),
-    };
-    const mismatchedResult = verifyRestoredDeploymentReadback(mismatchedFeDeployment, feSha, bffSha);
-    expect(mismatchedResult.servedManifestVerified).toBe(false);
-    expect(mismatchedResult.passed).toBe(false);
   });
 
   it("proves workflow ordering has no child-waits-for-restore cycle and attestation binds to candidate pair", () => {
-    // 1. Static contract verification: child spec does NOT wait for read-only restore
+    // 1. Child spec static verification: does NOT poll/wait for read-only restore
     expect(agoraProductJourneySpec).not.toContain("restore_poll");
     expect(agoraProductJourneySpec).not.toContain("restoreDeadline");
     expect(agoraProductJourneySpec).toContain("servedManifestVerified = true");
     expect(agoraProductJourneySpec).toContain("writeDemoRunEvidence(EVIDENCE_DIR, demoEvidence)");
+    expect(agoraProductJourneySpec).not.toContain("mobile-chromium");
 
-    // 2. Static contract verification: watchdog restore runs post-child and verifies readback
+    // 2. Watchdog workflow ordering: restore runs strictly after child completion
     const watchStart = watchdogWorkflow.indexOf("  watch:");
     const restoreStart = watchdogWorkflow.indexOf("  restore:");
     expect(watchStart).toBeGreaterThan(0);
@@ -1156,121 +942,25 @@ describe("paired Pantheon release workflow", () => {
     expect(watchJob).toContain('[[ "$status" == "completed" ]] && exit 0');
     expect(restoreJob).toContain("needs:");
     expect(restoreJob).toContain("- watch");
+    expect(restoreJob).toContain("Quiesce parent and terminalize exact credentialed child before restore");
+    expect(restoreJob).toContain("Restore exact pair before any mutable successor action");
     expect(restoreJob).toContain("Verify restored same-pair read-only deployment readback");
 
-    // 3. Static contract verification: parent deploy workflow post-child confirmation stage
+    // 3. Parent deploy workflow ordering: post-child confirmation stage
     const proofCoordinatorStart = deployWorkflow.indexOf("  proof-coordinator:");
     const confirmationStart = deployWorkflow.indexOf("  proof-restore-confirmation:");
     expect(proofCoordinatorStart).toBeGreaterThan(0);
     expect(confirmationStart).toBeGreaterThan(proofCoordinatorStart);
+    const proofCoordinatorJob = deployWorkflow.slice(proofCoordinatorStart, confirmationStart);
     const confirmationJob = deployWorkflow.slice(confirmationStart);
 
+    expect(proofCoordinatorJob).toContain('gh run watch "$PROOF_RUN_ID" --repo "$GITHUB_REPOSITORY" --exit-status');
     expect(confirmationJob).toContain("Wait for independent restore watchdog");
+    expect(confirmationJob).toContain('gh run watch "$WATCHDOG_RUN_ID" --repo "$GITHUB_REPOSITORY" --exit-status');
     expect(confirmationJob).toContain("Verify post-child same-pair read-only deployment readback");
     expect(confirmationJob).toContain("Attest final same-pair restoration bound to child demo evidence");
-
-    // 4. Behavioral simulation of workflow state machine: deadlock-free execution
-    interface StageState {
-      childState: "not_started" | "in_progress" | "completed";
-      deploymentProfile: "write-proof" | "read-only-restore";
-      realWrites: "true" | "false";
-      watchdogState: "armed" | "watching" | "restored";
-      confirmationState: "pending" | "attested";
-    }
-
-    const state: StageState = {
-      childState: "not_started",
-      deploymentProfile: "write-proof",
-      realWrites: "true",
-      watchdogState: "armed",
-      confirmationState: "pending",
-    };
-
-    // Stage 1: Child proof starts under write-proof
-    state.childState = "in_progress";
-    state.watchdogState = "watching";
-
-    // Stage 2: Child executes without blocking on restore
-    // Child produces evidence and exits with status "completed"
-    const childFinishedCleanly = (currentState: StageState) => {
-      // Child only checks served manifest during its run, NOT waiting for read-only
-      const servedManifestOk = true;
-      if (!servedManifestOk) return false;
-      currentState.childState = "completed";
-      return true;
-    };
-    expect(childFinishedCleanly(state)).toBe(true);
-    expect(state.childState).toBe("completed");
-
-    // Stage 3: Watchdog sees child "completed", triggers atomic restore
-    const watchdogRestores = (currentState: StageState) => {
-      if (currentState.childState !== "completed") {
-        return { restored: false, error: "Child still active; cannot restore without quiescing" };
-      }
-      currentState.deploymentProfile = "read-only-restore";
-      currentState.realWrites = "false";
-      currentState.watchdogState = "restored";
-      return { restored: true };
-    };
-    const restoreResult = watchdogRestores(state);
-    expect(restoreResult.restored).toBe(true);
-    expect(state.deploymentProfile).toBe("read-only-restore");
-    expect(state.realWrites).toBe("false");
-    expect(state.watchdogState).toBe("restored");
-
-    // Stage 4: Post-child confirmation verifies live readback and attests restoration
-    const confirmAndAttest = (
-      currentState: StageState,
-      candidateFeSha: string,
-      candidateBffSha: string,
-      servedFeSha: string,
-      servedBffSha: string,
-    ) => {
-      if (currentState.watchdogState !== "restored") return false;
-      if (currentState.deploymentProfile !== "read-only-restore" || currentState.realWrites !== "false") return false;
-      if (candidateFeSha.toLowerCase() !== servedFeSha.toLowerCase() || candidateBffSha.toLowerCase() !== servedBffSha.toLowerCase()) {
-        return false;
-      }
-      currentState.confirmationState = "attested";
-      return true;
-    };
-
-    const candidateFe = "a".repeat(40);
-    const candidateBff = "b".repeat(40);
-    expect(confirmAndAttest(state, candidateFe, candidateBff, candidateFe, candidateBff)).toBe(true);
-    expect(state.confirmationState).toBe("attested");
-
-    // 5. Negative behavioral simulation: prove a child that waits for restore would deadlock
-    const deadlockedChildState: StageState = {
-      childState: "in_progress",
-      deploymentProfile: "write-proof",
-      realWrites: "true",
-      watchdogState: "watching",
-      confirmationState: "pending",
-    };
-
-    const simulateCyclicDependency = (s: StageState, maxTicks = 5) => {
-      let ticks = 0;
-      while (ticks < maxTicks) {
-        ticks++;
-        // Watchdog waits for child to be "completed" before restoring
-        if (s.childState === "completed") {
-          s.deploymentProfile = "read-only-restore";
-          s.realWrites = "false";
-          s.watchdogState = "restored";
-        }
-        // If child waits for deploymentProfile to become "read-only-restore" before completing:
-        if (s.deploymentProfile === "read-only-restore") {
-          s.childState = "completed";
-          return { deadlocked: false, ticks };
-        }
-      }
-      return { deadlocked: true, ticks };
-    };
-
-    const cycleOutcome = simulateCyclicDependency(deadlockedChildState);
-    expect(cycleOutcome.deadlocked).toBe(true);
-    expect(deadlockedChildState.childState).toBe("in_progress");
-    expect(deadlockedChildState.deploymentProfile).toBe("write-proof");
+    expect(confirmationJob).toContain("EXACT_FE_SHA: ${{ needs.deploy.outputs.candidate_sha }}");
+    expect(confirmationJob).toContain("EXACT_BFF_SHA: ${{ needs.deploy.outputs.bff_sha }}");
+    expect(confirmationJob).toContain("PROOF_RUN_ID: ${{ needs.proof-coordinator.outputs.proof_run_id }}");
   });
 });

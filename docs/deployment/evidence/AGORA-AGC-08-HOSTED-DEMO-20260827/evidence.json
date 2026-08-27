@@ -16,7 +16,7 @@
       "Fix e2e/agora-product-journey.spec.ts: remove child-waits-for-restore polling loop to eliminate deadlock cycle with watchdog restore, initialize feSha, bffSha, and all entity IDs at test start, validate each ID is non-empty without falling back to unknown case-insensitively, fix candidateId variable shadowing (prefer-const), accept read-only and write-proof profiles, verify served manifest pair and unauthenticated 401 rejection, and format demoEvidence per demo-run-evidence.v1 contract.",
       "Update .github/workflows/pantheon-proof-watchdog.yml and pantheon-dev-fe-deploy.yml: move same-pair read-only readback and final restoration attestation to post-child parent/watchdog confirmation stage bound to child demo evidence's exact candidate FE/BFF pair.",
       "Update e2e/persona-interaction-cross-repo-hosted.spec.ts to bind EXPECTED_BFF_SHA consistently from PANTHEON_BFF_SHA, EXPECTED_BFF_SHA, or PANTHEON_EXPECTED_BFF_SHA with regression tests in persona-hosted-proof-env.test.ts.",
-      "Implement deep behavioral simulation and state machine regression tests in paired-release-workflow.test.ts, verifying parent binding validation, safe-fallback locator checks, atomic symlink CAS restore exchange, post-restore served manifest readback with same-pair preservation, and regression proving workflow ordering has no child-waits-for-restore cycle.",
+      "Update paired-release-workflow.test.ts to test real workflow ordering, artifact wiring, and post-restore readback without test-local mock simulation duplication, verifying that workflow ordering has no child-waits-for-restore cycle and attestation binds to candidate pair.",
       "Update src/test/agora-demo-run-evidence-schema.test.ts with 8 unit tests validating all positive and negative schema constraints (zero SHAs, UNKNOWN/Unknown/unknown IDs, false negative controls, false restoration, and skipped steps), removing trailing EOF blank lines."
     ],
     "not_changed": [
@@ -35,7 +35,7 @@
     },
     "vitest_paired_release_workflow": {
       "command": "npx vitest run src/test/paired-release-workflow.test.ts",
-      "result": "passed: 22/22 tests passed including full behavioral simulation of governed restore orchestration, deadlock-free cycle proof, and same-pair readback"
+      "result": "passed: 22/22 tests passed verifying real workflow ordering, deadlock cycle prevention, and same-pair readback"
     },
     "vitest_full_suite": {
       "command": "npx vitest run src/test/",
@@ -63,7 +63,7 @@
     "Confirm e2e/persona-interaction-cross-repo-hosted.spec.ts falls back cleanly between PANTHEON_BFF_SHA and EXPECTED_BFF_SHA.",
     "Confirm e2e/agora-product-journey.spec.ts eliminates the child-side restore polling deadlock, initializes IDs at start, rejects unknown case-insensitively, and verifies served manifest.",
     "Confirm same-pair read-only readback and final restoration attestation are placed in post-child parent/watchdog confirmation stage in pantheon-dev-fe-deploy.yml and pantheon-proof-watchdog.yml.",
-    "Confirm auditable read-only restore orchestration and deadlock cycle prevention are proved via behavioral state machine simulation in paired-release-workflow.test.ts.",
+    "Confirm auditable read-only restore orchestration and deadlock cycle prevention test the real workflow ordering and artifact wiring in paired-release-workflow.test.ts without test-local simulation duplication.",
     "Confirm npm run typecheck, npm run lint, git diff --check, and all vitest unit tests pass cleanly."
   ]
 }
