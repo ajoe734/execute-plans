@@ -16,7 +16,7 @@ const PERSONA_ID = "per_quant";
 const PERSONA_NAME = "Quant Architect";
 const WORKSHOP_ID = "ws-agc-07-nav";
 const FE_ORIGIN = new URL(
-  process.env.PANTHEON_FE_BASE_URL || "http://localhost:5173",
+  process.env.PANTHEON_FE_BASE_URL || "http://127.0.0.1:5173",
 ).origin;
 
 type JsonRecord = Record<string, unknown>;
@@ -32,15 +32,18 @@ type FixtureState = {
   requests: CapturedRequest[];
 };
 
-const CORS_HEADERS = {
-  "Access-Control-Allow-Credentials": "true",
-  "Access-Control-Allow-Headers":
-    "Accept, Authorization, Content-Type, Idempotency-Key, If-Match, X-Request-Id, X-Tenant-Id",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Origin": FE_ORIGIN,
-  "Access-Control-Expose-Headers": "ETag, X-Request-Id",
-  Vary: "Origin",
-};
+function corsHeaders(request?: Request): Record<string, string> {
+  const origin = request?.headers()?.origin || FE_ORIGIN;
+  return {
+    "Access-Control-Allow-Credentials": "true",
+    "Access-Control-Allow-Headers":
+      "Accept, Authorization, Content-Type, Idempotency-Key, If-Match, X-Request-Id, X-Tenant-Id",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Origin": origin,
+    "Access-Control-Expose-Headers": "ETag, X-Request-Id",
+    Vary: "Origin",
+  };
+}
 
 function requestBody(request: Request): unknown {
   const data = request.postData();
@@ -60,7 +63,7 @@ async function json(
   await route.fulfill({
     body: JSON.stringify(body),
     contentType: "application/json",
-    headers: { ...CORS_HEADERS, ...options.headers },
+    headers: { ...corsHeaders(route.request()), ...options.headers },
     status: options.status ?? 200,
   });
 }
@@ -105,11 +108,6 @@ async function installFixture(page: Page): Promise<FixtureState> {
     window.sessionStorage.setItem("pantheon.e2e.realWrites", "true");
   });
 
-  await installOidcDevLogin(page, {
-    goto: false,
-    roles: ["operator", "reviewer", "approver"],
-    tenantId: "pantheon-dev",
-  });
   await installQuietEventSource(page);
 
   await page.route(
@@ -120,7 +118,12 @@ async function installFixture(page: Page): Promise<FixtureState> {
       const path = new URL(request.url()).pathname;
 
       if (method === "OPTIONS") {
-        await route.fulfill({ headers: CORS_HEADERS, status: 204 });
+        await route.fulfill({ headers: corsHeaders(request), status: 204 });
+        return;
+      }
+
+      if (path.startsWith("/bff/auth/") || path === "/bff/me") {
+        await route.fallback();
         return;
       }
 
@@ -130,22 +133,6 @@ async function installFixture(page: Page): Promise<FixtureState> {
 
       if (method === "GET" && path === "/health") {
         return json(route, { status: "ok", service: "agc-07-fixture" });
-      }
-      if (method === "GET" && path === "/bff/me") {
-        return json(route, {
-          data: {
-            user: { id: "op-fe-gate", displayName: "AGC-07 Operator", email: "agc-07@pantheon.local" },
-            tenant: { id: "pantheon-dev", name: "Pantheon Dev", tz: "UTC", locale: "en-US", baseCurrency: "USD" },
-            roles: ["operator", "reviewer", "approver"],
-            capabilities: ["management.read", "persona.view", "archive"],
-            session: { authenticated: true, session_kind: "bearer" },
-            env: "dev",
-            featureFlags: {},
-            serverTime: NOW,
-            sessionExpiresAt: "2026-07-15T12:00:00Z",
-            permissionsVersion: "agc-07-v1",
-          },
-        });
       }
       if (method === "GET" && path === "/bff/agora/capabilities") {
         return json(route, {
@@ -166,20 +153,28 @@ async function installFixture(page: Page): Promise<FixtureState> {
         const selectedPersonaIds = Array.isArray(captured.selected_persona_ids)
           ? captured.selected_persona_ids
           : [PERSONA_ID];
+        const capturedRefs = Array.isArray(captured.context_refs)
+          ? (captured.context_refs as JsonRecord[])
+          : [];
+        const bindingContextRefs = capturedRefs.map((ref) => ({
+          kind: String(ref.type ?? ref.kind ?? "persona"),
+          id: String(ref.id ?? PERSONA_ID),
+          version: ref.version_id ? String(ref.version_id) : (ref.version ? String(ref.version) : null),
+        }));
         return json(route, {
           data: {
             workshop_id: WORKSHOP_ID,
             verified: true,
             environment: captured.environment ?? "paper",
             context_digest: "sha256:agc-07-nav",
-            context_refs: captured.context_refs ?? [],
+            context_refs: capturedRefs,
             context_binding: {
               binding_id: `binding-${state.requests.length}`,
               workshop_id: WORKSHOP_ID,
               tenant_id: "pantheon-dev",
               source_route: captured.source_route ?? `/management/personas/${PERSONA_ID}`,
               return_route: captured.return_route ?? `/management/personas/${PERSONA_ID}`,
-              context_refs: captured.context_refs ?? [],
+              context_refs: bindingContextRefs,
               context_digest: "sha256:agc-07-nav",
               advice_environment: captured.environment ?? "paper",
               evidence_cutoff: captured.evidence_cutoff ?? NOW,
@@ -253,6 +248,18 @@ async function installFixture(page: Page): Promise<FixtureState> {
       );
     },
   );
+
+  await installOidcDevLogin(page, {
+    env: {
+      ...process.env,
+      VITE_GCP_IDENTITY_API_KEY:
+        process.env.VITE_GCP_IDENTITY_API_KEY ||
+        "AIza01234567890123456789012345678901234",
+    },
+    goto: false,
+    roles: ["operator", "reviewer", "approver"],
+    tenantId: "pantheon-dev",
+  });
 
   return state;
 }
