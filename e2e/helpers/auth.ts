@@ -115,7 +115,10 @@ function effectiveFrontendTarget(
       }
     }
   }
-  configuredTarget ??= "http://localhost:5173";
+  if (!configuredTarget && env.PANTHEON_FE_PORT) {
+    configuredTarget = `http://127.0.0.1:${env.PANTHEON_FE_PORT}`;
+  }
+  configuredTarget ??= "http://127.0.0.1:5173";
 
   if (typeof options.goto === "string") {
     try {

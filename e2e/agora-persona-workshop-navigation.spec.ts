@@ -8,6 +8,7 @@
  * interaction history readback.
  */
 import { expect, test, type Page, type Request, type Route } from "@playwright/test";
+import { execSync } from "node:child_process";
 import { installOidcDevLogin } from "./helpers/auth";
 import { installQuietEventSource } from "./helpers/sse";
 
@@ -15,9 +16,42 @@ const NOW = "2026-07-14T12:00:00Z";
 const PERSONA_ID = "per_quant";
 const PERSONA_NAME = "Quant Architect";
 const WORKSHOP_ID = "ws-agc-07-nav";
-const FE_ORIGIN = new URL(
-  process.env.PANTHEON_FE_BASE_URL || "http://127.0.0.1:5173",
-).origin;
+
+function feOrigin(): string {
+  return new URL(
+    process.env.PANTHEON_FE_BASE_URL || "http://127.0.0.1:5173",
+  ).origin;
+}
+
+function expectedFrontendSha(): string {
+  if (process.env.EXPECTED_FE_SHA) {
+    return process.env.EXPECTED_FE_SHA.trim().toLowerCase();
+  }
+  try {
+    return execSync("git rev-parse HEAD", { encoding: "utf8" }).trim().toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+async function assertServerIdentity(page: Page): Promise<void> {
+  const expectedSha = expectedFrontendSha();
+  const response = await page.request.get(`/deployment.json?agora_e2e_isolation=${Date.now()}`);
+  expect(response.ok(), `deployment.json returned ${response.status()}`).toBe(true);
+  const deployment = (await response.json()) as JsonRecord;
+  const buildMode = (deployment.buildMode ?? {}) as JsonRecord;
+
+  expect(deployment.app).toBe("execute-plans");
+  if (expectedSha) {
+    const deploymentCommit = String(
+      deployment.commit ?? (deployment.frontend as JsonRecord)?.commitSha ?? "",
+    ).toLowerCase();
+    expect(deploymentCommit, "server identity commit must match execute-plans HEAD").toBe(expectedSha);
+  }
+  expect(buildMode.VITE_BFF_MODE).toBe("live");
+  expect(buildMode.VITE_BFF_FALLBACK).toBe("strict");
+  expect(buildMode.VITE_BFF_REAL_WRITES).toBe("false");
+}
 
 type JsonRecord = Record<string, unknown>;
 
@@ -33,7 +67,7 @@ type FixtureState = {
 };
 
 function corsHeaders(request?: Request): Record<string, string> {
-  const origin = request?.headers()?.origin || FE_ORIGIN;
+  const origin = request?.headers()?.origin || feOrigin();
   return {
     "Access-Control-Allow-Credentials": "true",
     "Access-Control-Allow-Headers":
@@ -268,7 +302,12 @@ function mutationRequests(state: FixtureState, path: string): CapturedRequest[] 
   return state.requests.filter((request) => request.path === path);
 }
 
+test("isolated server identity matches execute-plans HEAD in live/mock-write mode", async ({ page }) => {
+  await assertServerIdentity(page);
+});
+
 test("Talk with Persona hands off to the canonical Workshop with a resumed mode and participant", async ({ page }) => {
+  await assertServerIdentity(page);
   const state = await installFixture(page);
 
   await page.goto(`/management/personas/${PERSONA_ID}`);
@@ -300,6 +339,7 @@ test("Talk with Persona hands off to the canonical Workshop with a resumed mode 
 });
 
 test("reloading the Workshop entry URL resumes the same mode and participant selection", async ({ page }) => {
+  await assertServerIdentity(page);
   await installFixture(page);
 
   await page.goto(
