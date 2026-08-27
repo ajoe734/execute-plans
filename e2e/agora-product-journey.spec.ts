@@ -802,8 +802,28 @@ test.describe(`${TASK_ID} strict-live browser journey`, () => {
     const startedAt = new Date().toISOString();
     const runMarker = randomUUID();
     const workshopTitle = `PFG Agora journey ${runMarker}`;
+    const feSha = String(
+      process.env.EXPECTED_FE_SHA ||
+      process.env.AG_UIPOL_011_EXPECTED_FE_SHA ||
+      "",
+    ).trim().toLowerCase();
+    const bffSha = String(
+      process.env.EXPECTED_BFF_SHA ||
+      "",
+    ).trim().toLowerCase();
+    let workshopId = "";
+    let messageEventId = "";
+    let reconstructionId = "";
     let strategyId = "";
     let strategyVersion = "";
+    let proposalId = "";
+    let workspaceId = "";
+    let candidateId = "";
+    let candidateDecisionId = "";
+    let decisionEventId = "";
+    let interactionId = "";
+    let performanceReceiptId = "";
+    let personaId = "";
     let poolLookup: Promise<Response> | undefined;
     let messageEventProjection: MessageEventProjectionEvidence | undefined;
 
@@ -818,19 +838,18 @@ test.describe(`${TASK_ID} strict-live browser journey`, () => {
       await page.getByTestId("create-workshop-title-input").fill(workshopTitle);
       const created = waitForResponse(page, "POST", "/bff/agora/workshops");
       await page.getByTestId("create-workshop-submit").click();
-      mutations.push(
-        await recordedMutation(
-          await created,
-          ["workshop_id"],
-          "Workshop create",
-        ),
+      const createdMutation = await recordedMutation(
+        await created,
+        ["workshop_id"],
+        "Workshop create",
       );
+      mutations.push(createdMutation);
+      workshopId = createdMutation.id;
+      expect(workshopId, "Workshop ID must be valid").toMatch(/^(?!.*unknown)[a-zA-Z0-9_.:-]+$/);
       await expect(
-        page.getByTestId(`workshop-item-${mutations[0].id}`),
+        page.getByTestId(`workshop-item-${workshopId}`),
       ).toBeVisible({ timeout: 30_000 });
     });
-
-    const workshopId = mutations[0].id;
 
     await test.step("submit a real reconstruction input and read its authoritative identifiers", async () => {
       await expect(
@@ -892,11 +911,12 @@ test.describe(`${TASK_ID} strict-live browser journey`, () => {
         "the Workshop message must forward that exact current ETag without rewriting it",
       ).toBe(currentWorkshopEtag);
       const messageReceipt = await jsonBody(messageResponse);
-      const messageEventId = requiredId(
+      messageEventId = requiredId(
         messageReceipt,
         "Workshop message event receipt",
         ["event_id"],
       );
+      expect(messageEventId, "Message event ID must be valid").toMatch(/^(?!.*unknown)[a-zA-Z0-9_.:-]+$/);
       try {
         messageEventProjection = await waitForDurableMessageEvent(
           page,
@@ -924,18 +944,21 @@ test.describe(`${TASK_ID} strict-live browser journey`, () => {
       strategyId = requiredId(versionsBody, "reconstructed strategy", [
         "strategy_id",
       ]);
+      expect(strategyId, "Strategy ID must be valid").toMatch(/^(?!.*unknown)[a-zA-Z0-9_.:-]+$/);
       strategyVersion = requiredId(
         versionsBody,
         "reconstructed strategy version",
         ["strategy_spec_registry_id", "registry_id"],
       );
-      mutations.push(
-        await recordedMutation(
-          reconstructionResponse,
-          ["reconstruction_id"],
-          "Strategy reconstruction",
-        ),
+      expect(strategyVersion, "Strategy version must be valid").toMatch(/^(?!.*unknown)[a-zA-Z0-9_.:-]+$/);
+      const reconMutation = await recordedMutation(
+        reconstructionResponse,
+        ["reconstruction_id"],
+        "Strategy reconstruction",
       );
+      mutations.push(reconMutation);
+      reconstructionId = reconMutation.id;
+      expect(reconstructionId, "Reconstruction ID must be valid").toMatch(/^(?!.*unknown)[a-zA-Z0-9_.:-]+$/);
       await expect(
         page.getByTestId("workshop-reconstruction-state"),
       ).toHaveAttribute("data-reconstruction-state", "completed", {
@@ -943,7 +966,7 @@ test.describe(`${TASK_ID} strict-live browser journey`, () => {
       });
       await expect(
         page.getByTestId("workshop-reconstruction-state"),
-      ).toHaveAttribute("data-reconstruction-id", mutations[mutations.length - 1].id);
+      ).toHaveAttribute("data-reconstruction-id", reconstructionId);
       await expect(
         page.getByTestId("workshop-strategy-spec-identity"),
       ).toContainText(strategyId, { timeout: 60_000 });
@@ -989,22 +1012,25 @@ test.describe(`${TASK_ID} strict-live browser journey`, () => {
         "Trading Room workspace proposal",
       );
       mutations.push(proposal);
+      proposalId = proposal.id;
+      expect(proposalId, "Proposal ID must be valid").toMatch(/^(?!.*unknown)[a-zA-Z0-9_.:-]+$/);
       await expect(page.getByTestId("workspace-proposal-preview")).toBeVisible({
         timeout: 60_000,
       });
       const accepted = waitForResponse(
         page,
         "POST",
-        `/bff/agora/strategies/${encodeURIComponent(strategyId)}/trading-room/proposals/${encodeURIComponent(proposal.id)}/accept`,
+        `/bff/agora/strategies/${encodeURIComponent(strategyId)}/trading-room/proposals/${encodeURIComponent(proposalId)}/accept`,
       );
       await page.getByTestId("workspace-proposal-accept").click();
-      mutations.push(
-        await recordedMutation(
-          await accepted,
-          ["workspace_id", "workspaceId", "id"],
-          "Trading Room workspace accept",
-        ),
+      const acceptedMutation = await recordedMutation(
+        await accepted,
+        ["workspace_id", "workspaceId", "id"],
+        "Trading Room workspace accept",
       );
+      mutations.push(acceptedMutation);
+      workspaceId = acceptedMutation.id;
+      expect(workspaceId, "Workspace ID must be valid").toMatch(/^(?!.*unknown)[a-zA-Z0-9_.:-]+$/);
       await expect(
         page.getByTestId("trading-room-workspace-shell"),
       ).toBeVisible({ timeout: 60_000 });
@@ -1034,6 +1060,7 @@ test.describe(`${TASK_ID} strict-live browser journey`, () => {
         "candidate pool member",
         ["artifact_id", "candidate_id"],
       );
+      expect(candidateId, "Candidate ID must be valid").toMatch(/^(?!.*unknown)[a-zA-Z0-9_.:-]+$/);
       await expect(
         page.getByTestId(`candidate-review-drawer-${poolId}`),
       ).toBeVisible({ timeout: 30_000 });
@@ -1051,24 +1078,26 @@ test.describe(`${TASK_ID} strict-live browser journey`, () => {
         `/bff/agora/candidate-pools/${encodeURIComponent(poolId)}/members/${encodeURIComponent(candidateId)}/review`,
       );
       await page.getByTestId(`candidate-confirm-${candidateId}`).click();
-      mutations.push(
-        await recordedMutationForKnownTarget(
-          await candidateDecision,
-          "Candidate review",
-          candidateId,
-        ),
+      const candidateDecisionMutation = await recordedMutationForKnownTarget(
+        await candidateDecision,
+        "Candidate review",
+        candidateId,
       );
+      mutations.push(candidateDecisionMutation);
+      candidateDecisionId = candidateDecisionMutation.id;
+      expect(candidateDecisionId, "Candidate decision ID must be valid").toMatch(/^(?!.*unknown)[a-zA-Z0-9_.:-]+$/);
       await expect(
         page.getByTestId(`candidate-decision-readback-${candidateId}`),
       ).toContainText(/canonical candidate pool/i, { timeout: 30_000 });
     });
 
     await test.step("take a governed Trading Room decision and launch its consultation", async () => {
-      const decisionEventId = await idFromTestId(
+      decisionEventId = await idFromTestId(
         page,
         "event-row-",
         "decision event",
       );
+      expect(decisionEventId, "Decision event ID must be valid").toMatch(/^(?!.*unknown)[a-zA-Z0-9_.:-]+$/);
       await page.getByTestId(`event-row-${decisionEventId}`).click();
       await expect(
         page.getByTestId(`trade-decision-card-${decisionEventId}`),
@@ -1103,13 +1132,14 @@ test.describe(`${TASK_ID} strict-live browser journey`, () => {
         "/bff/agora/interactions",
       );
       await page.getByTestId(`consult-panel-submit-${decisionEventId}`).click();
-      mutations.push(
-        await recordedMutation(
-          await consultation,
-          ["interaction_id", "consultation_id", "session_id"],
-          "Decision consultation",
-        ),
+      const consultationMutation = await recordedMutation(
+        await consultation,
+        ["interaction_id", "consultation_id", "session_id"],
+        "Decision consultation",
       );
+      mutations.push(consultationMutation);
+      interactionId = consultationMutation.id;
+      expect(interactionId, "Interaction ID must be valid").toMatch(/^(?!.*unknown)[a-zA-Z0-9_.:-]+$/);
       await expect(page).toHaveURL(
         new RegExp(`/agora/strategy-workshop/[^/]+\\?mode=consult`),
         { timeout: 60_000 },
@@ -1184,6 +1214,8 @@ test.describe(`${TASK_ID} strict-live browser journey`, () => {
         "Performance learning action",
       );
       mutations.push(performanceAction);
+      performanceReceiptId = performanceAction.id;
+      expect(performanceReceiptId, "Performance receipt ID must be valid").toMatch(/^(?!.*unknown)[a-zA-Z0-9_.:-]+$/);
       const receiptId = requiredId(
         await jsonBody(await receiptReadback),
         "performance receipt readback",
@@ -1244,7 +1276,8 @@ test.describe(`${TASK_ID} strict-live browser journey`, () => {
       contentType: "application/json",
     });
 
-    const personaId = await ensureOrDiscoverPersona(request, token);
+    personaId = await ensureOrDiscoverPersona(request, token);
+    expect(personaId, "Persona ID must be valid").toMatch(/^(?!.*unknown)[a-zA-Z0-9_.:-]+$/);
 
     let viewerWriteDenied = false;
     let crossTenantNonEnumerating = false;
@@ -1416,17 +1449,17 @@ test.describe(`${TASK_ID} strict-live browser journey`, () => {
       const depResponse = await request.get(`${FE_BASE_URL}/deployment.json?restore_check=${Date.now()}`);
       expect(depResponse.ok(), "deployment.json must be readable").toBe(true);
       const dep = asRecord(await depResponse.json());
-      const servedFe = String(dep.commit ?? "");
-      const servedBff = String(dep.bffCommit ?? dep.bffSourceCommitSha ?? "");
-      expect(servedFe.toLowerCase()).toBe(feSha.toLowerCase());
-      expect(servedBff.toLowerCase()).toBe(bffSha.toLowerCase());
+      const servedFe = String(dep.commit ?? dep.frontendSha ?? (asRecord(dep.frontend)).commitSha ?? "").toLowerCase();
+      const servedBff = String(dep.bffCommit ?? dep.bffSourceCommitSha ?? (asRecord(dep.bff)).sourceCommitSha ?? "").toLowerCase();
+      expect(servedFe, "served FE commit must match expected FE SHA").toBe(feSha);
+      expect(servedBff, "served BFF commit in deployment.json must match expected BFF SHA").toBe(bffSha);
 
-      const versionResponse = await request.get(`${BFF_BASE_URL}/bff/version`);
+      const versionResponse = await request.get(`${BFF_BASE_URL}/bff/version?restore_check=${Date.now()}`);
       expect(versionResponse.ok(), "/bff/version must be readable").toBe(true);
       const version = asRecord(await versionResponse.json());
       const versionData = asRecord(version.data ?? version);
       const liveBffSha = String(versionData.source_commit_sha ?? versionData.commit ?? "").toLowerCase();
-      expect(liveBffSha).toBe(bffSha.toLowerCase());
+      expect(liveBffSha, "live BFF /bff/version source commit must match expected BFF SHA").toBe(bffSha);
       expect(Boolean(versionData.source_commit_known ?? true)).toBe(true);
 
       servedManifestVerified = true;
@@ -1439,29 +1472,29 @@ test.describe(`${TASK_ID} strict-live browser journey`, () => {
 
       const currentProfile = String(dep.deploymentProfile ?? dep.profile ?? "");
       const realWrites = String(asRecord(dep.buildMode).VITE_BFF_REAL_WRITES ?? "");
-      if (currentProfile === "read-only" || realWrites === "false") {
-        expect(realWrites).toBe("false");
+      if (currentProfile === "read-only" && realWrites === "false") {
+        readOnlyRestored = true;
+      } else {
+        readOnlyRestored = false;
       }
-      readOnlyRestored = true;
+      expect(readOnlyRestored, "deployment must be verified as restored to read-only with VITE_BFF_REAL_WRITES=false").toBe(true);
     });
 
     const completedAt = new Date().toISOString();
     const demoRunId = `demo-${runMarker}`;
-    const feSha = String(process.env.EXPECTED_FE_SHA || process.env.AG_UIPOL_011_EXPECTED_FE_SHA || "0".repeat(40));
-    const bffSha = String(process.env.EXPECTED_BFF_SHA || "0".repeat(40));
 
-    const proposalMutation = mutations.find((m) => m.path.includes("/proposals") && !m.path.includes("/accept"));
-    const proposalId = proposalMutation?.id ?? "prop-unknown";
-    const messageMutation = mutations.find((m) => m.path.includes("/messages"));
-    const messageEventId = messageMutation?.id ?? messageEventProjection?.event_id ?? "evt-unknown";
-    const reconMutation = mutations.find((m) => m.path.includes("/reconstruct"));
-    const reconstructionId = reconMutation?.id ?? "recon-unknown";
-    const interactionMutation = mutations.find((m) => m.path === "/bff/agora/interactions");
-    const interactionId = interactionMutation?.id ?? "int-unknown";
-    const candidateDecisionMutation = mutations.find((m) => m.path.includes("/members/") && m.path.includes("/review"));
-    const candidateDecisionId = candidateDecisionMutation?.id ?? "candidate-unknown";
-    const performanceReceiptMutation = mutations.find((m) => m.path.includes("/actions"));
-    const performanceReceiptId = performanceReceiptMutation?.id ?? "receipt-unknown";
+    expect(feSha, "FE SHA must be a 40-char hex string").toMatch(/^(?!0{40}$)[0-9a-f]{40}$/);
+    expect(bffSha, "BFF SHA must be a 40-char hex string").toMatch(/^(?!0{40}$)[0-9a-f]{40}$/);
+    expect(proposalId, "Proposal ID must be valid").toMatch(/^(?!.*unknown)[a-zA-Z0-9_.:-]+$/);
+    expect(personaId, "Persona ID must be valid").toMatch(/^(?!.*unknown)[a-zA-Z0-9_.:-]+$/);
+    expect(workshopId, "Workshop ID must be valid").toMatch(/^(?!.*unknown)[a-zA-Z0-9_.:-]+$/);
+    expect(messageEventId, "Message event ID must be valid").toMatch(/^(?!.*unknown)[a-zA-Z0-9_.:-]+$/);
+    expect(reconstructionId, "Reconstruction ID must be valid").toMatch(/^(?!.*unknown)[a-zA-Z0-9_.:-]+$/);
+    expect(strategyId, "Strategy ID must be valid").toMatch(/^(?!.*unknown)[a-zA-Z0-9_.:-]+$/);
+    expect(strategyVersion, "Strategy version must be valid").toMatch(/^(?!.*unknown)[a-zA-Z0-9_.:-]+$/);
+    expect(interactionId, "Interaction ID must be valid").toMatch(/^(?!.*unknown)[a-zA-Z0-9_.:-]+$/);
+    expect(candidateDecisionId, "Candidate decision ID must be valid").toMatch(/^(?!.*unknown)[a-zA-Z0-9_.:-]+$/);
+    expect(performanceReceiptId, "Performance receipt ID must be valid").toMatch(/^(?!.*unknown)[a-zA-Z0-9_.:-]+$/);
 
     const demoEvidence: AgoraDemoRunEvidence = {
       schema_version: "pantheon.agora.demo-run-evidence.v1",
