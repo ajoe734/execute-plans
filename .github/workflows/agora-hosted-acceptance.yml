@@ -59,6 +59,9 @@ jobs:
       DEV_LOGIN_VIEWER_CLIENT_ID: ${{ vars.DEV_BFF_DEV_LOGIN_VIEWER_CLIENT_ID || 'pantheon-dev-viewer-v1' }}
       DEV_LOGIN_VIEWER_CLIENT_SECRET: ${{ secrets.DEV_BFF_DEV_LOGIN_VIEWER_CLIENT_SECRET }}
       PANTHEON_PUBLIC_GCP_IDENTITY_API_KEY: ${{ vars.VITE_GCP_IDENTITY_API_KEY }}
+      PANTHEON_PERSONA_INTERACTION_WRITE_PROOF: "1"
+      PANTHEON_PINT_PROBE_ALLOW_WRITES: "true"
+      PFG_AGORA_JOURNEY_E2E: "1"
     steps:
       - name: Checkout dispatched revision
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5a
@@ -74,6 +77,10 @@ jobs:
           [[ "${PANTHEON_BFF_TENANT_ID}" == "tenant-dev" ]]
           if [[ -z "${DEV_LOGIN_CLIENT_SECRET}" ]]; then
             echo "::error::DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_SECRET is not provisioned; refusing to run an unauthenticated hosted journey." >&2
+            exit 1
+          fi
+          if [[ -z "${DEV_LOGIN_VIEWER_CLIENT_SECRET}" ]]; then
+            echo "::error::DEV_BFF_DEV_LOGIN_VIEWER_CLIENT_SECRET is not provisioned; refusing to run without viewer negative controls." >&2
             exit 1
           fi
 
@@ -127,6 +134,7 @@ jobs:
           echo "::add-mask::${token}"
           echo "BFF_AUTH_TOKEN=${token}" >> "${GITHUB_ENV}"
           echo "PANTHEON_PERSONA_INTERACTION_OPERATOR_TOKEN=${token}" >> "${GITHUB_ENV}"
+          echo "DEV_BFF_OPERATOR_A_TOKEN=${token}" >> "${GITHUB_ENV}"
 
           me="$(curl -fsS "${PANTHEON_BROWSER_BFF_BASE_URL}/bff/me" -H "Authorization: Bearer ${token}" -H "X-Tenant-Id: ${PANTHEON_BFF_TENANT_ID}")"
           node -e 'const r=JSON.parse(process.argv[1]); const d=r.data ?? r; if (!Array.isArray(d.roles) || !d.roles.includes("operator")) process.exit(1)' "${me}"
@@ -134,7 +142,6 @@ jobs:
           node -e 'const r=JSON.parse(process.argv[1]); const d=r.data ?? r; if (d.ready !== true || d.authReady !== true) process.exit(1)' "${readiness}"
 
       - name: Mint a short-lived viewer bearer token via governed dev-login
-        if: env.DEV_LOGIN_VIEWER_CLIENT_SECRET != ''
         shell: bash
         run: |
           set -euo pipefail
@@ -142,10 +149,13 @@ jobs:
             -H 'Content-Type: application/json' \
             -d "$(node -e 'process.stdout.write(JSON.stringify({grant_type:"client_credentials",client_id:process.env.DEV_LOGIN_VIEWER_CLIENT_ID,client_secret:process.env.DEV_LOGIN_VIEWER_CLIENT_SECRET}))')")"
           token="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).access_token || "")' "${response}")"
-          if [[ -n "${token}" ]]; then
-            echo "::add-mask::${token}"
-            echo "PANTHEON_PERSONA_INTERACTION_VIEWER_TOKEN=${token}" >> "${GITHUB_ENV}"
+          if [[ -z "${token}" ]]; then
+            echo "::error::dev-login did not return viewer access_token" >&2
+            exit 1
           fi
+          echo "::add-mask::${token}"
+          echo "PANTHEON_PERSONA_INTERACTION_VIEWER_TOKEN=${token}" >> "${GITHUB_ENV}"
+          echo "DEV_BFF_VIEWER_TOKEN=${token}" >> "${GITHUB_ENV}"
 
       - name: Set up Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -158,6 +168,15 @@ jobs:
 
       - name: Install Chromium
         run: npx playwright install chromium --with-deps
+
+      - name: Run real Agora product journey hosted spec
+        run: |
+          set -euo pipefail
+          npx playwright test e2e/agora-product-journey.spec.ts \
+            --project=chromium \
+            --retries=0 \
+            --reporter=list \
+            --trace=off
 
       - name: Run real Agora winner branch live hosted spec (desktop + mobile)
         run: |
