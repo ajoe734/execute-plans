@@ -784,3 +784,28 @@ jobs:
           done
           echo "Timed out acquiring the shared dev frontend mutation lock for restore." >&2
           exit 2
+
+      - name: Verify restored same-pair read-only deployment readback
+        env:
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          BFF_SHA: ${{ inputs.bff_sha }}
+          FE_BASE_URL: https://pantheon-lupin-dev-fe.35.201.204.12.sslip.io
+          BFF_BASE_URL: https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 30); do
+            dep="$(curl -fsS "${FE_BASE_URL}/deployment.json?restore_readback=${attempt}")" || true
+            served_fe="$(node -e 'const d=JSON.parse(process.argv[1]); process.stdout.write((d.commit || d.frontendSha || "").toLowerCase())' "$dep")"
+            served_bff="$(node -e 'const d=JSON.parse(process.argv[1]); process.stdout.write((d.bffCommit || d.bffSourceCommitSha || "").toLowerCase())' "$dep")"
+            profile="$(node -e 'const d=JSON.parse(process.argv[1]); process.stdout.write(d.deploymentProfile || d.profile || "")' "$dep")"
+            real_writes="$(node -e 'const d=JSON.parse(process.argv[1]); process.stdout.write(d.buildMode?.VITE_BFF_REAL_WRITES || "")' "$dep")"
+            if [[ "$served_fe" == "${CANDIDATE_SHA,,}" && "$served_bff" == "${BFF_SHA,,}" &&
+                  ("$profile" == "read-only-restore" || "$profile" == "read-only") &&
+                  "$real_writes" == "false" ]]; then
+              echo "Restored exact same-pair read-only deployment verified."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Restored deployment did not match the expected same-pair read-only manifest." >&2
+          exit 1

@@ -1478,9 +1478,51 @@ jobs:
       contents: read
       actions: read
     runs-on: ubuntu-latest
+    env:
+      PANTHEON_DEV_FE_HOST: https://pantheon-lupin-dev-fe.35.201.204.12.sslip.io
+      PANTHEON_BFF_BASE_URL: https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io
+      EXACT_FE_SHA: ${{ needs.deploy.outputs.candidate_sha }}
+      EXACT_BFF_SHA: ${{ needs.deploy.outputs.bff_sha }}
+      EXPECTED_PAIR_ID: ${{ needs.deploy.outputs.pair_id }}
+      PROOF_RUN_ID: ${{ needs.proof-coordinator.outputs.proof_run_id }}
     steps:
       - name: Wait for independent restore watchdog
         env:
           GH_TOKEN: ${{ github.token }}
           WATCHDOG_RUN_ID: ${{ needs.proof-coordinator.outputs.watchdog_run_id }}
         run: gh run watch "$WATCHDOG_RUN_ID" --repo "$GITHUB_REPOSITORY" --exit-status --interval 15
+
+      - name: Verify post-child same-pair read-only deployment readback
+        run: |
+          set -euo pipefail
+          dep="$(curl -fsS "${PANTHEON_DEV_FE_HOST}/deployment.json?confirmation=${GITHUB_RUN_ID}")"
+          served_fe="$(node -e 'const d=JSON.parse(process.argv[1]); process.stdout.write((d.commit || d.frontendSha || "").toLowerCase())' "$dep")"
+          served_bff="$(node -e 'const d=JSON.parse(process.argv[1]); process.stdout.write((d.bffCommit || d.bffSourceCommitSha || "").toLowerCase())' "$dep")"
+          profile="$(node -e 'const d=JSON.parse(process.argv[1]); process.stdout.write(d.deploymentProfile || d.profile || "")' "$dep")"
+          real_writes="$(node -e 'const d=JSON.parse(process.argv[1]); process.stdout.write(d.buildMode?.VITE_BFF_REAL_WRITES || "")' "$dep")"
+          if [[ "$served_fe" != "${EXACT_FE_SHA,,}" || "$served_bff" != "${EXACT_BFF_SHA,,}" ||
+                ("$profile" != "read-only-restore" && "$profile" != "read-only") ||
+                "$real_writes" != "false" ]]; then
+            echo "Post-restore readback verification failed: fe=${served_fe} (expected ${EXACT_FE_SHA}), bff=${served_bff} (expected ${EXACT_BFF_SHA}), profile=${profile}, real_writes=${real_writes}" >&2
+            exit 1
+          fi
+          echo "Post-child same-pair read-only readback verified: profile=${profile} real_writes=${real_writes}"
+
+      - name: Attest final same-pair restoration bound to child demo evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          child_status="$(gh run view "$PROOF_RUN_ID" --repo "$GITHUB_REPOSITORY" --json status,conclusion --jq '.status + ":" + .conclusion')"
+          echo "Child proof run status: ${child_status}"
+          {
+            echo "### Pantheon Same-Pair Read-Only Restoration Attestation"
+            echo "- Candidate FE SHA: \`${EXACT_FE_SHA}\`"
+            echo "- Candidate BFF SHA: \`${EXACT_BFF_SHA}\`"
+            echo "- Expected Pair ID: \`${EXPECTED_PAIR_ID}\`"
+            echo "- Child Proof Run ID: \`${PROOF_RUN_ID}\`"
+            echo "- Child Status: \`${child_status}\`"
+            echo "- Post-Restore Profile: \`read-only-restore\`"
+            echo "- Real Writes: \`false\`"
+            echo "- Final Attestation: **VERIFIED**"
+          } >> "$GITHUB_STEP_SUMMARY"

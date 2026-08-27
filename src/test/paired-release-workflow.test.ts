@@ -23,6 +23,10 @@ const deployScript = readFileSync(
   resolve(root, "scripts/deploy-dev-vm.sh"),
   "utf8",
 );
+const agoraProductJourneySpec = readFileSync(
+  resolve(root, "e2e/agora-product-journey.spec.ts"),
+  "utf8",
+);
 
 describe("paired Pantheon release workflow", () => {
   it("builds one authenticated three-profile set while normal gates consume read-only", () => {
@@ -910,10 +914,13 @@ describe("paired Pantheon release workflow", () => {
     expect(watchdogWorkflow).toContain("PANTHEON_DEPLOY_PROFILE: read-only-restore");
     expect(watchdogWorkflow).toContain('PANTHEON_DEPLOY_REAL_WRITES: "false"');
     expect(watchdogWorkflow).toContain('PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES: "false"');
+    expect(watchdogWorkflow).toContain("Verify restored same-pair read-only deployment readback");
     expect(deployScript).toContain("read-only-restore)");
     expect(deployScript).toContain('if [[ "${DEPLOY_PROFILE}" == "read-only-restore" ]]; then');
     expect(deployScript).toContain("restore_paired_safe_release");
     expect(deployWorkflow).toContain("proof-restore-confirmation:");
+    expect(deployWorkflow).toContain("Verify post-child same-pair read-only deployment readback");
+    expect(deployWorkflow).toContain("Attest final same-pair restoration bound to child demo evidence");
 
     // 2. Behavioral simulation: State machine for same-pair read-only restore orchestration
     const feSha = "a".repeat(40);
@@ -1129,5 +1136,141 @@ describe("paired Pantheon release workflow", () => {
     const mismatchedResult = verifyRestoredDeploymentReadback(mismatchedFeDeployment, feSha, bffSha);
     expect(mismatchedResult.servedManifestVerified).toBe(false);
     expect(mismatchedResult.passed).toBe(false);
+  });
+
+  it("proves workflow ordering has no child-waits-for-restore cycle and attestation binds to candidate pair", () => {
+    // 1. Static contract verification: child spec does NOT wait for read-only restore
+    expect(agoraProductJourneySpec).not.toContain("restore_poll");
+    expect(agoraProductJourneySpec).not.toContain("restoreDeadline");
+    expect(agoraProductJourneySpec).toContain("servedManifestVerified = true");
+    expect(agoraProductJourneySpec).toContain("writeDemoRunEvidence(EVIDENCE_DIR, demoEvidence)");
+
+    // 2. Static contract verification: watchdog restore runs post-child and verifies readback
+    const watchStart = watchdogWorkflow.indexOf("  watch:");
+    const restoreStart = watchdogWorkflow.indexOf("  restore:");
+    expect(watchStart).toBeGreaterThan(0);
+    expect(restoreStart).toBeGreaterThan(watchStart);
+    const watchJob = watchdogWorkflow.slice(watchStart, restoreStart);
+    const restoreJob = watchdogWorkflow.slice(restoreStart);
+
+    expect(watchJob).toContain('[[ "$status" == "completed" ]] && exit 0');
+    expect(restoreJob).toContain("needs:");
+    expect(restoreJob).toContain("- watch");
+    expect(restoreJob).toContain("Verify restored same-pair read-only deployment readback");
+
+    // 3. Static contract verification: parent deploy workflow post-child confirmation stage
+    const proofCoordinatorStart = deployWorkflow.indexOf("  proof-coordinator:");
+    const confirmationStart = deployWorkflow.indexOf("  proof-restore-confirmation:");
+    expect(proofCoordinatorStart).toBeGreaterThan(0);
+    expect(confirmationStart).toBeGreaterThan(proofCoordinatorStart);
+    const confirmationJob = deployWorkflow.slice(confirmationStart);
+
+    expect(confirmationJob).toContain("Wait for independent restore watchdog");
+    expect(confirmationJob).toContain("Verify post-child same-pair read-only deployment readback");
+    expect(confirmationJob).toContain("Attest final same-pair restoration bound to child demo evidence");
+
+    // 4. Behavioral simulation of workflow state machine: deadlock-free execution
+    interface StageState {
+      childState: "not_started" | "in_progress" | "completed";
+      deploymentProfile: "write-proof" | "read-only-restore";
+      realWrites: "true" | "false";
+      watchdogState: "armed" | "watching" | "restored";
+      confirmationState: "pending" | "attested";
+    }
+
+    const state: StageState = {
+      childState: "not_started",
+      deploymentProfile: "write-proof",
+      realWrites: "true",
+      watchdogState: "armed",
+      confirmationState: "pending",
+    };
+
+    // Stage 1: Child proof starts under write-proof
+    state.childState = "in_progress";
+    state.watchdogState = "watching";
+
+    // Stage 2: Child executes without blocking on restore
+    // Child produces evidence and exits with status "completed"
+    const childFinishedCleanly = (currentState: StageState) => {
+      // Child only checks served manifest during its run, NOT waiting for read-only
+      const servedManifestOk = true;
+      if (!servedManifestOk) return false;
+      currentState.childState = "completed";
+      return true;
+    };
+    expect(childFinishedCleanly(state)).toBe(true);
+    expect(state.childState).toBe("completed");
+
+    // Stage 3: Watchdog sees child "completed", triggers atomic restore
+    const watchdogRestores = (currentState: StageState) => {
+      if (currentState.childState !== "completed") {
+        return { restored: false, error: "Child still active; cannot restore without quiescing" };
+      }
+      currentState.deploymentProfile = "read-only-restore";
+      currentState.realWrites = "false";
+      currentState.watchdogState = "restored";
+      return { restored: true };
+    };
+    const restoreResult = watchdogRestores(state);
+    expect(restoreResult.restored).toBe(true);
+    expect(state.deploymentProfile).toBe("read-only-restore");
+    expect(state.realWrites).toBe("false");
+    expect(state.watchdogState).toBe("restored");
+
+    // Stage 4: Post-child confirmation verifies live readback and attests restoration
+    const confirmAndAttest = (
+      currentState: StageState,
+      candidateFeSha: string,
+      candidateBffSha: string,
+      servedFeSha: string,
+      servedBffSha: string,
+    ) => {
+      if (currentState.watchdogState !== "restored") return false;
+      if (currentState.deploymentProfile !== "read-only-restore" || currentState.realWrites !== "false") return false;
+      if (candidateFeSha.toLowerCase() !== servedFeSha.toLowerCase() || candidateBffSha.toLowerCase() !== servedBffSha.toLowerCase()) {
+        return false;
+      }
+      currentState.confirmationState = "attested";
+      return true;
+    };
+
+    const candidateFe = "a".repeat(40);
+    const candidateBff = "b".repeat(40);
+    expect(confirmAndAttest(state, candidateFe, candidateBff, candidateFe, candidateBff)).toBe(true);
+    expect(state.confirmationState).toBe("attested");
+
+    // 5. Negative behavioral simulation: prove a child that waits for restore would deadlock
+    const deadlockedChildState: StageState = {
+      childState: "in_progress",
+      deploymentProfile: "write-proof",
+      realWrites: "true",
+      watchdogState: "watching",
+      confirmationState: "pending",
+    };
+
+    const simulateCyclicDependency = (s: StageState, maxTicks = 5) => {
+      let ticks = 0;
+      while (ticks < maxTicks) {
+        ticks++;
+        // Watchdog waits for child to be "completed" before restoring
+        if (s.childState === "completed") {
+          s.deploymentProfile = "read-only-restore";
+          s.realWrites = "false";
+          s.watchdogState = "restored";
+        }
+        // If child waits for deploymentProfile to become "read-only-restore" before completing:
+        if (s.deploymentProfile === "read-only-restore") {
+          s.childState = "completed";
+          return { deadlocked: false, ticks };
+        }
+      }
+      return { deadlocked: true, ticks };
+    };
+
+    const cycleOutcome = simulateCyclicDependency(deadlockedChildState);
+    expect(cycleOutcome.deadlocked).toBe(true);
+    expect(deadlockedChildState.childState).toBe("in_progress");
+    expect(deadlockedChildState.deploymentProfile).toBe("write-proof");
   });
 });

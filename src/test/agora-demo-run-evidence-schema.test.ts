@@ -138,8 +138,8 @@ describe("Agora Demo Run Evidence Schema", () => {
     expect(validate(bffZeroSample)).toBe(false);
   });
 
-  it("fails validation if object IDs contain unknown or are empty", () => {
-    const sampleWithUnknown: AgoraDemoRunEvidence = {
+  it("fails validation if object IDs contain unknown or are empty (case-insensitively)", () => {
+    const baseSample: AgoraDemoRunEvidence = {
       schema_version: "pantheon.agora.demo-run-evidence.v1",
       demo_run_id: "demo-test-123",
       started_at: new Date().toISOString(),
@@ -152,7 +152,7 @@ describe("Agora Demo Run Evidence Schema", () => {
       },
       profile: "bounded-write-proof",
       objects: {
-        proposal_id: "prop-unknown",
+        proposal_id: "prop-123",
         persona_id: "agora-servant-dev",
         workshop_id: "ws-123",
         message_event_id: "evt-123",
@@ -175,12 +175,57 @@ describe("Agora Demo Run Evidence Schema", () => {
         no_order_route_proof: true,
       },
       restoration: {
-        read_only_restored: true,
+        read_only_restored: false,
         served_manifest_verified: true,
       },
     };
 
-    expect(validate(sampleWithUnknown)).toBe(false);
+    // Rejects lowercase "unknown"
+    expect(validate({
+      ...baseSample,
+      objects: { ...baseSample.objects, proposal_id: "prop-unknown" },
+    })).toBe(false);
+
+    // Rejects uppercase "UNKNOWN"
+    expect(validate({
+      ...baseSample,
+      objects: { ...baseSample.objects, proposal_id: "prop-UNKNOWN" },
+    })).toBe(false);
+
+    // Rejects mixed-case "Unknown" and "UnKnOwN"
+    expect(validate({
+      ...baseSample,
+      objects: { ...baseSample.objects, persona_id: "agora-Unknown-dev" },
+    })).toBe(false);
+
+    expect(validate({
+      ...baseSample,
+      objects: { ...baseSample.objects, workshop_id: "ws-UnKnOwN-99" },
+    })).toBe(false);
+
+    // Rejects UNKNOWN in demo_run_id
+    expect(validate({
+      ...baseSample,
+      demo_run_id: "demo-UNKNOWN-123",
+    })).toBe(false);
+
+    // Rejects UNKNOWN in step receipt_ref or readback_ref
+    expect(validate({
+      ...baseSample,
+      steps: [
+        {
+          id: "interaction_terminal_readback",
+          status: "passed",
+          receipt_ref: "receipt-UNKNOWN",
+        },
+      ],
+    })).toBe(false);
+
+    // Rejects empty ID
+    expect(validate({
+      ...baseSample,
+      objects: { ...baseSample.objects, interaction_id: "" },
+    })).toBe(false);
   });
 
   it("fails validation if negative controls or restoration are false when status=passed", () => {
@@ -220,15 +265,31 @@ describe("Agora Demo Run Evidence Schema", () => {
         no_order_route_proof: true,
       },
       restoration: {
-        read_only_restored: true,
+        read_only_restored: false,
         served_manifest_verified: true,
       },
     };
 
     expect(validate(sampleWithFalseNegControl)).toBe(false);
 
-    const sampleWithFalseRestore = {
+    const sampleWithFalseServedManifest = {
       ...sampleWithFalseNegControl,
+      negative_controls: {
+        viewer_write_denied: true,
+        cross_tenant_non_enumerating: true,
+        no_order_route_proof: true,
+      },
+      restoration: {
+        read_only_restored: true,
+        served_manifest_verified: false,
+      },
+    };
+    expect(validate(sampleWithFalseServedManifest)).toBe(false);
+
+    // Profile read-only with read_only_restored false must fail
+    const readOnlyUnrestoredSample: AgoraDemoRunEvidence = {
+      ...sampleWithFalseNegControl,
+      profile: "read-only",
       negative_controls: {
         viewer_write_denied: true,
         cross_tenant_non_enumerating: true,
@@ -239,7 +300,7 @@ describe("Agora Demo Run Evidence Schema", () => {
         served_manifest_verified: true,
       },
     };
-    expect(validate(sampleWithFalseRestore)).toBe(false);
+    expect(validate(readOnlyUnrestoredSample)).toBe(false);
   });
 
   it("fails validation if steps are skipped or failed when status=passed", () => {

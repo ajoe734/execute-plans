@@ -23,7 +23,7 @@
     },
     "demo_run_id": {
       "type": "string",
-      "pattern": "^(?!.*unknown)[a-zA-Z0-9_.:-]+$",
+      "pattern": "^(?!.*[uU][nN][kK][nN][oO][wW][nN])[a-zA-Z0-9_.:-]+$",
       "minLength": 1
     },
     "started_at": {
@@ -88,42 +88,42 @@
       "properties": {
         "proposal_id": {
           "type": "string",
-          "pattern": "^(?!.*unknown)[a-zA-Z0-9_.:-]+$",
+          "pattern": "^(?!.*[uU][nN][kK][nN][oO][wW][nN])[a-zA-Z0-9_.:-]+$",
           "minLength": 1
         },
         "persona_id": {
           "type": "string",
-          "pattern": "^(?!.*unknown)[a-zA-Z0-9_.:-]+$",
+          "pattern": "^(?!.*[uU][nN][kK][nN][oO][wW][nN])[a-zA-Z0-9_.:-]+$",
           "minLength": 1
         },
         "workshop_id": {
           "type": "string",
-          "pattern": "^(?!.*unknown)[a-zA-Z0-9_.:-]+$",
+          "pattern": "^(?!.*[uU][nN][kK][nN][oO][wW][nN])[a-zA-Z0-9_.:-]+$",
           "minLength": 1
         },
         "message_event_id": {
           "type": "string",
-          "pattern": "^(?!.*unknown)[a-zA-Z0-9_.:-]+$",
+          "pattern": "^(?!.*[uU][nN][kK][nN][oO][wW][nN])[a-zA-Z0-9_.:-]+$",
           "minLength": 1
         },
         "reconstruction_id": {
           "type": "string",
-          "pattern": "^(?!.*unknown)[a-zA-Z0-9_.:-]+$",
+          "pattern": "^(?!.*[uU][nN][kK][nN][oO][wW][nN])[a-zA-Z0-9_.:-]+$",
           "minLength": 1
         },
         "strategy_id": {
           "type": "string",
-          "pattern": "^(?!.*unknown)[a-zA-Z0-9_.:-]+$",
+          "pattern": "^(?!.*[uU][nN][kK][nN][oO][wW][nN])[a-zA-Z0-9_.:-]+$",
           "minLength": 1
         },
         "version_id": {
           "type": "string",
-          "pattern": "^(?!.*unknown)[a-zA-Z0-9_.:-]+$",
+          "pattern": "^(?!.*[uU][nN][kK][nN][oO][wW][nN])[a-zA-Z0-9_.:-]+$",
           "minLength": 1
         },
         "interaction_id": {
           "type": "string",
-          "pattern": "^(?!.*unknown)[a-zA-Z0-9_.:-]+$",
+          "pattern": "^(?!.*[uU][nN][kK][nN][oO][wW][nN])[a-zA-Z0-9_.:-]+$",
           "minLength": 1
         }
       },
@@ -141,7 +141,7 @@
         "properties": {
           "id": {
             "type": "string",
-            "pattern": "^(?!.*unknown)[a-zA-Z0-9_.:-]+$",
+            "pattern": "^(?!.*[uU][nN][kK][nN][oO][wW][nN])[a-zA-Z0-9_.:-]+$",
             "minLength": 1
           },
           "status": {
@@ -154,12 +154,12 @@
           },
           "receipt_ref": {
             "type": "string",
-            "pattern": "^(?!.*unknown)[a-zA-Z0-9_.:-]+$",
+            "pattern": "^(?!.*[uU][nN][kK][nN][oO][wW][nN])[a-zA-Z0-9_.:-]+$",
             "minLength": 1
           },
           "readback_ref": {
             "type": "string",
-            "pattern": "^(?!.*unknown)[a-zA-Z0-9_.:-]+$",
+            "pattern": "^(?!.*[uU][nN][kK][nN][oO][wW][nN])[a-zA-Z0-9_.:-]+$",
             "minLength": 1
           }
         },
@@ -229,9 +229,6 @@
           },
           "restoration": {
             "properties": {
-              "read_only_restored": {
-                "const": true
-              },
               "served_manifest_verified": {
                 "const": true
               }
@@ -243,6 +240,29 @@
                 "status": {
                   "const": "passed"
                 }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "passed"
+          },
+          "profile": {
+            "const": "read-only"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "restoration": {
+            "properties": {
+              "read_only_restored": {
+                "const": true
               }
             }
           }
