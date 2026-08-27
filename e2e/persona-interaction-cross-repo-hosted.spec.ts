@@ -16,8 +16,17 @@ import {
 const FE_BASE = (process.env.PANTHEON_FE_BASE_URL ?? "").replace(/\/$/, "");
 const BFF_BASE = (process.env.PANTHEON_BFF_BASE_URL ?? "").replace(/\/$/, "");
 const TENANT_ID = process.env.PANTHEON_TENANT_ID ?? "tenant-dev";
-const OPERATOR_TOKEN = roleTokenFromEnv("operator", ["PANTHEON_PERSONA_INTERACTION_OPERATOR_TOKEN"]);
-const VIEWER_TOKEN = roleTokenFromEnv("viewer", ["PANTHEON_PERSONA_INTERACTION_VIEWER_TOKEN"]);
+const OPERATOR_TOKEN = roleTokenFromEnv("operator", [
+  "PANTHEON_PERSONA_INTERACTION_OPERATOR_TOKEN",
+  "PANTHEON_BFF_OPERATOR_A_TOKEN",
+  "DEV_BFF_OPERATOR_A_TOKEN",
+  "BFF_AUTH_TOKEN",
+]);
+const VIEWER_TOKEN = roleTokenFromEnv("viewer", [
+  "PANTHEON_PERSONA_INTERACTION_VIEWER_TOKEN",
+  "PANTHEON_BFF_VIEWER_TOKEN",
+  "DEV_BFF_VIEWER_TOKEN",
+]);
 const WRITE_PROOF = process.env.PANTHEON_PERSONA_INTERACTION_WRITE_PROOF === "1";
 const ENSURED_PERSONA_ID = String(process.env.PANTHEON_PERSONA_INTERACTION_PERSONA_ID ?? "").trim();
 const EXPECTED_BFF_SHA = String(process.env.PANTHEON_BFF_SHA ?? "").trim().toLowerCase();
@@ -43,6 +52,70 @@ const DEV_LOGIN_VIEWER_CLIENT_SECRET = String(
 ).trim();
 const DEV_BFF_HOST = "pantheon-lupin-dev-bff.35.201.204.12.sslip.io";
 const DEV_FE_HOST = "pantheon-lupin-dev-fe.35.201.204.12.sslip.io";
+
+async function getOrMintOperatorToken(request: APIRequestContext): Promise<string> {
+  if (OPERATOR_TOKEN) {
+    try {
+      const res = await request.get(`${BFF_BASE}/bff/me`, { headers: headers(OPERATOR_TOKEN) });
+      if (res.ok()) return OPERATOR_TOKEN;
+    } catch {
+      // probe failed, try dev-login
+    }
+  }
+  if (DEV_LOGIN_OPERATOR_CLIENT_ID && DEV_LOGIN_OPERATOR_CLIENT_SECRET) {
+    try {
+      const res = await request.post(`${BFF_BASE}/bff/auth/dev-login`, {
+        data: {
+          grant_type: "client_credentials",
+          client_id: DEV_LOGIN_OPERATOR_CLIENT_ID,
+          client_secret: DEV_LOGIN_OPERATOR_CLIENT_SECRET,
+        },
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+      });
+      if (res.ok()) {
+        const payload = (await res.json()) as JsonRecord;
+        if (typeof payload.access_token === "string" && payload.access_token) {
+          return payload.access_token;
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+  return OPERATOR_TOKEN;
+}
+
+async function getOrMintViewerToken(request: APIRequestContext): Promise<string> {
+  if (VIEWER_TOKEN) {
+    try {
+      const res = await request.get(`${BFF_BASE}/bff/me`, { headers: headers(VIEWER_TOKEN) });
+      if (res.ok()) return VIEWER_TOKEN;
+    } catch {
+      // probe failed, try dev-login
+    }
+  }
+  if (DEV_LOGIN_VIEWER_CLIENT_ID && DEV_LOGIN_VIEWER_CLIENT_SECRET) {
+    try {
+      const res = await request.post(`${BFF_BASE}/bff/auth/dev-login`, {
+        data: {
+          grant_type: "client_credentials",
+          client_id: DEV_LOGIN_VIEWER_CLIENT_ID,
+          client_secret: DEV_LOGIN_VIEWER_CLIENT_SECRET,
+        },
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+      });
+      if (res.ok()) {
+        const payload = (await res.json()) as JsonRecord;
+        if (typeof payload.access_token === "string" && payload.access_token) {
+          return payload.access_token;
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+  return VIEWER_TOKEN;
+}
 
 type JsonRecord = Record<string, unknown>;
 
@@ -310,10 +383,11 @@ test.describe("Persona Detail → canonical Workshop cross-repo proof", () => {
   test.skip(!FE_BASE || !BFF_BASE, "requires hosted Pantheon FE and BFF URLs");
 
   test("operator resolves, checks eligibility, submits no-authority interaction, reads it back, and returns @desktop-full", async ({ page, request }) => {
-    test.skip(!WRITE_PROOF || !OPERATOR_TOKEN, "requires explicit write-proof opt-in and operator token");
+    const operatorToken = await getOrMintOperatorToken(request);
+    test.skip(!WRITE_PROOF || !operatorToken, "requires explicit write-proof opt-in and operator token");
     test.setTimeout(180_000);
-    await assertOperatorSession(request, OPERATOR_TOKEN);
-    const persona = await discoverEligiblePersona(request, OPERATOR_TOKEN);
+    await assertOperatorSession(request, operatorToken);
+    const persona = await discoverEligiblePersona(request, operatorToken);
     await installVerifiedHostedProofSession(page, "operator");
     await page.addInitScript(() => {
       // runtimeEnv accepts this only on the allowlisted Pantheon dev host.
@@ -373,7 +447,7 @@ test.describe("Persona Detail → canonical Workshop cross-repo proof", () => {
 
     await expect.poll(async () => {
       const response = await request.get(`${BFF_BASE}/bff/agora/workshops/${encodeURIComponent(workshopId)}/events`, {
-        headers: headers(OPERATOR_TOKEN),
+        headers: headers(operatorToken),
       });
       if (!response.ok()) return false;
       return JSON.stringify(await response.json()).includes(interactionId);
@@ -386,12 +460,13 @@ test.describe("Persona Detail → canonical Workshop cross-repo proof", () => {
   });
 
   test("daily Persona measure supports durable modify, defer, accept-for-review, validation, reject, and reload @desktop-full", async ({ page, request }) => {
-    test.skip(!WRITE_PROOF || !OPERATOR_TOKEN, "requires explicit write-proof opt-in and operator token");
+    const operatorToken = await getOrMintOperatorToken(request);
+    test.skip(!WRITE_PROOF || !operatorToken, "requires explicit write-proof opt-in and operator token");
     test.setTimeout(360_000);
-    const operatorSession = await assertOperatorSession(request, OPERATOR_TOKEN);
+    const operatorSession = await assertOperatorSession(request, operatorToken);
     const { operatorId } = operatorSession;
-    await discoverEligiblePersona(request, OPERATOR_TOKEN);
-    const target = await prepareImmutableStrategyWorkshop(request, OPERATOR_TOKEN, operatorId);
+    await discoverEligiblePersona(request, operatorToken);
+    const target = await prepareImmutableStrategyWorkshop(request, operatorToken, operatorId);
     await installVerifiedHostedProofSession(page, "operator");
     await page.addInitScript(() => window.sessionStorage.setItem("pantheon.e2e.realWrites", "true"));
     await page.goto(`${FE_BASE}/agora/strategy-workshop/${encodeURIComponent(target.workshopId)}`);
@@ -417,7 +492,7 @@ test.describe("Persona Detail → canonical Workshop cross-repo proof", () => {
     let measureSha = "";
     await expect.poll(async () => {
       const response = await request.get(`${BFF_BASE}/bff/agora/interactions/${encodeURIComponent(interactionId)}`, {
-        headers: headers(OPERATOR_TOKEN),
+        headers: headers(operatorToken),
       });
       if (!response.ok()) return false;
       const interaction = record(data(await response.json()));
@@ -494,7 +569,7 @@ test.describe("Persona Detail → canonical Workshop cross-repo proof", () => {
     expect(validationReceipts.at(-1)?.authority).toBe("canonical_validation_service");
 
     const readinessHttp = await request.get(`${BFF_BASE}/bff/agora/proposals/${proposalId}/review-readiness`, {
-      headers: headers(OPERATOR_TOKEN),
+      headers: headers(operatorToken),
     });
     expect(readinessHttp.ok(), await readinessHttp.text()).toBe(true);
     const readiness = record(data(await readinessHttp.json()));
@@ -511,27 +586,28 @@ test.describe("Persona Detail → canonical Workshop cross-repo proof", () => {
   });
 
   test("viewer sees a disabled reason and cannot produce an interaction POST @desktop-full", async ({ page, request }) => {
-    test.skip(!VIEWER_TOKEN, "requires an explicit or RBAC-matrix viewer token");
+    const viewerToken = await getOrMintViewerToken(request);
+    test.skip(!viewerToken, "requires an explicit or RBAC-matrix viewer token");
     test.setTimeout(120_000);
     const unauthenticated = await request.get(`${BFF_BASE}/bff/me`, {
       headers: { Accept: "application/json", "X-Request-Id": `persona-unauth-${randomUUID()}` },
     });
     expect(unauthenticated.status()).toBe(401);
 
-    const viewerMeResponse = await request.get(`${BFF_BASE}/bff/me`, { headers: headers(VIEWER_TOKEN) });
+    const viewerMeResponse = await request.get(`${BFF_BASE}/bff/me`, { headers: headers(viewerToken) });
     expect(viewerMeResponse.ok(), `viewer /bff/me returned ${viewerMeResponse.status()}`).toBe(true);
     const viewerMe = record(data(await viewerMeResponse.json()));
     const viewerRoles = rolesFromMe(viewerMe);
     expect(viewerRoles).toContain("viewer");
     expect(viewerRoles).not.toContain("operator");
     expect(viewerRoles).not.toContain("admin");
-    await assertHostedBearerSession(request, VIEWER_TOKEN, viewerMe, viewerRoles);
+    await assertHostedBearerSession(request, viewerToken, viewerMe, viewerRoles);
     const deniedEnsure = await request.post(`${BFF_BASE}/bff/agora/servant/ensure`, {
-      headers: headers(VIEWER_TOKEN, { "Idempotency-Key": randomUUID() }),
+      headers: headers(viewerToken, { "Idempotency-Key": randomUUID() }),
       data: { display_name: "Viewer must not ensure a Persona", locale: "en-US", timezone: "UTC" },
     });
     expect(deniedEnsure.status()).toBe(403);
-    const persona = await matchEnsuredPersonaFromFleet(request, VIEWER_TOKEN);
+    const persona = await matchEnsuredPersonaFromFleet(request, viewerToken);
     const browserInteractionPosts: string[] = [];
     page.on("request", (browserRequest) => {
       const path = new URL(browserRequest.url()).pathname;
@@ -546,7 +622,7 @@ test.describe("Persona Detail → canonical Workshop cross-repo proof", () => {
     expect(browserInteractionPosts).toEqual([]);
 
     const denied = await request.post(`${BFF_BASE}/bff/agora/interactions/context:resolve`, {
-      headers: headers(VIEWER_TOKEN, { "Idempotency-Key": `viewer-denied-${randomUUID()}` }),
+      headers: headers(viewerToken, { "Idempotency-Key": `viewer-denied-${randomUUID()}` }),
       data: { context_refs: [{ type: "persona", id: persona.id }], environment: "paper" },
     });
     expect(denied.status()).toBe(403);
@@ -554,10 +630,11 @@ test.describe("Persona Detail → canonical Workshop cross-repo proof", () => {
   });
 
   test("mobile Persona detail remains usable without producing writes @mobile-basic", async ({ page, request }) => {
-    test.skip(!OPERATOR_TOKEN, "requires an operator token for hosted readback");
+    const operatorToken = await getOrMintOperatorToken(request);
+    test.skip(!operatorToken, "requires an operator token for hosted readback");
     test.setTimeout(120_000);
-    await assertOperatorSession(request, OPERATOR_TOKEN);
-    const persona = await matchEnsuredPersonaFromFleet(request, OPERATOR_TOKEN);
+    await assertOperatorSession(request, operatorToken);
+    const persona = await matchEnsuredPersonaFromFleet(request, operatorToken);
     const browserInteractionPosts: string[] = [];
     page.on("request", (browserRequest) => {
       const path = new URL(browserRequest.url()).pathname;

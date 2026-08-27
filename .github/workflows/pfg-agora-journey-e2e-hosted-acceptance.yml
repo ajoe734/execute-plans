@@ -49,6 +49,7 @@ jobs:
       EXPECTED_FE_SHA: ${{ inputs.expected_fe_sha }}
       EXPECTED_BFF_SHA: ${{ inputs.expected_bff_sha }}
       PANTHEON_AUDIT_OUT_DIR: .artifacts/PFG-AGORA-JOURNEY-E2E-20260820/${{ github.run_id }}-${{ github.run_attempt }}
+      PANTHEON_CREDENTIALED_PLAYWRIGHT_NO_ARTIFACTS: "1"
       DEV_LOGIN_CLIENT_ID: ${{ vars.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_ID || 'pantheon-dev-operator-a-v1' }}
       DEV_LOGIN_CLIENT_SECRET: ${{ secrets.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_SECRET }}
       PFG_AGORA_JOURNEY_E2E: "1"
@@ -77,9 +78,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          checkout_sha="$(git rev-parse HEAD)"
+          if [[ "${checkout_sha}" != "${EXPECTED_FE_SHA}" ]]; then
+            echo "checked out commit ${checkout_sha} does not match expected ${EXPECTED_FE_SHA}" >&2
+            exit 1
+          fi
+
           served="$(curl -fsS "${PANTHEON_FE_BASE_URL}/deployment.json")"
           served_fe="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).commit || "")' "${served}")"
-          served_bff="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).bffCommit || "")' "${served}")"
+          served_bff="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).bffCommit || JSON.parse(process.argv[1]).bffSourceCommitSha || "")' "${served}")"
           served_profile="$(node -e 'const d=JSON.parse(process.argv[1]); process.stdout.write(d.deploymentProfile || d.profile || "")' "${served}")"
           real_writes="$(node -e 'const d=JSON.parse(process.argv[1]); process.stdout.write(d.buildMode?.VITE_BFF_REAL_WRITES || "")' "${served}")"
           if [[ "${served_fe}" != "${EXPECTED_FE_SHA}" ]]; then
@@ -87,16 +94,28 @@ jobs:
             exit 1
           fi
           if [[ "${served_bff}" != "${EXPECTED_BFF_SHA}" ]]; then
-            echo "live BFF commit ${served_bff} does not match expected ${EXPECTED_BFF_SHA}" >&2
+            echo "live BFF commit in deployment.json ${served_bff} does not match expected ${EXPECTED_BFF_SHA}" >&2
             exit 1
           fi
           if [[ ("${served_profile}" != "operator-live" && "${served_profile}" != "write-proof") || "${real_writes}" != "true" ]]; then
             echo "hosted journey requires operator-live or write-proof real-writes deployment; got profile=${served_profile:-missing} VITE_BFF_REAL_WRITES=${real_writes:-missing}" >&2
             exit 1
           fi
+
+          bff_version_res="$(curl -fsS "${PANTHEON_BROWSER_BFF_BASE_URL}/bff/version")"
+          live_bff_sha="$(node -e 'const v=JSON.parse(process.argv[1]); process.stdout.write(v.source_commit_sha || v.commit || "")' "${bff_version_res}")"
+          live_bff_known="$(node -e 'const v=JSON.parse(process.argv[1]); process.stdout.write(String(v.source_commit_known ?? ""))' "${bff_version_res}")"
+          if [[ "${live_bff_known}" != "true" ]]; then
+            echo "live BFF /bff/version source_commit_known is not true" >&2
+            exit 1
+          fi
+          if [[ "${live_bff_sha}" != "${EXPECTED_BFF_SHA}" ]]; then
+            echo "live BFF /bff/version source_commit_sha ${live_bff_sha} does not match expected ${EXPECTED_BFF_SHA}" >&2
+            exit 1
+          fi
           echo "verified real-writes deployment.json binds fe=${served_fe} bff=${served_bff} to the expected exact pair"
 
-      - name: Mint a short-lived operator bearer token via governed dev-login
+      - name: Mint a short-lived operator bearer token via governed dev-login and prove operator readiness
         shell: bash
         run: |
           set -euo pipefail
@@ -110,8 +129,10 @@ jobs:
           fi
           echo "::add-mask::${token}"
           echo "BFF_AUTH_TOKEN=${token}" >> "${GITHUB_ENV}"
-          me="$(curl -fsS "${PANTHEON_BROWSER_BFF_BASE_URL}/bff/me" -H "Authorization: Bearer ${token}")"
+          me="$(curl -fsS "${PANTHEON_BROWSER_BFF_BASE_URL}/bff/me" -H "Authorization: Bearer ${token}" -H "X-Tenant-Id: ${PANTHEON_BFF_TENANT_ID}")"
           node -e 'const r=JSON.parse(process.argv[1]); const d=r.data ?? r; if (!Array.isArray(d.roles) || !d.roles.includes("operator")) process.exit(1)' "${me}"
+          readiness="$(curl -fsS "${PANTHEON_BROWSER_BFF_BASE_URL}/bff/auth/readiness" -H "Authorization: Bearer ${token}" -H "X-Tenant-Id: ${PANTHEON_BFF_TENANT_ID}")"
+          node -e 'const r=JSON.parse(process.argv[1]); const d=r.data ?? r; if (d.ready !== true || d.authReady !== true) process.exit(1)' "${readiness}"
 
       - name: Set up Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -140,5 +161,5 @@ jobs:
         with:
           name: pfg-agora-journey-e2e-hosted-acceptance-${{ github.run_id }}-${{ github.run_attempt }}
           path: .artifacts/PFG-AGORA-JOURNEY-E2E-20260820/${{ github.run_id }}-${{ github.run_attempt }}
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 90

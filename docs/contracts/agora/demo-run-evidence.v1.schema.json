@@ -1,0 +1,181 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Pantheon Agora Demo Run Evidence v1",
+  "description": "Sanitized evidence schema for Agora hosted demo runs, tracking object identities, steps, negative controls, and exact read-only restoration without secrets.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "demo_run_id",
+    "started_at",
+    "completed_at",
+    "status",
+    "exact_pair",
+    "profile",
+    "objects",
+    "steps",
+    "negative_controls",
+    "restoration"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "pantheon.agora.demo-run-evidence.v1"
+    },
+    "demo_run_id": {
+      "type": "string"
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "completed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "passed",
+        "failed",
+        "degraded"
+      ]
+    },
+    "exact_pair": {
+      "type": "object",
+      "required": [
+        "frontend_sha",
+        "bff_sha",
+        "manifest_pair_id"
+      ],
+      "properties": {
+        "frontend_sha": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "bff_sha": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "manifest_pair_id": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "profile": {
+      "type": "string",
+      "enum": [
+        "bounded-write-proof",
+        "operator-live",
+        "read-only"
+      ]
+    },
+    "objects": {
+      "type": "object",
+      "required": [
+        "proposal_id",
+        "persona_id",
+        "workshop_id",
+        "message_event_id",
+        "reconstruction_id",
+        "strategy_id",
+        "version_id",
+        "interaction_id"
+      ],
+      "properties": {
+        "proposal_id": {
+          "type": "string"
+        },
+        "persona_id": {
+          "type": "string"
+        },
+        "workshop_id": {
+          "type": "string"
+        },
+        "message_event_id": {
+          "type": "string"
+        },
+        "reconstruction_id": {
+          "type": "string"
+        },
+        "strategy_id": {
+          "type": "string"
+        },
+        "version_id": {
+          "type": "string"
+        },
+        "interaction_id": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "status"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "passed",
+              "failed",
+              "skipped"
+            ]
+          },
+          "receipt_ref": {
+            "type": "string"
+          },
+          "readback_ref": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "negative_controls": {
+      "type": "object",
+      "required": [
+        "viewer_write_denied",
+        "cross_tenant_non_enumerating",
+        "no_order_route_proof"
+      ],
+      "properties": {
+        "viewer_write_denied": {
+          "type": "boolean"
+        },
+        "cross_tenant_non_enumerating": {
+          "type": "boolean"
+        },
+        "no_order_route_proof": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": true
+    },
+    "restoration": {
+      "type": "object",
+      "required": [
+        "read_only_restored",
+        "served_manifest_verified"
+      ],
+      "properties": {
+        "read_only_restored": {
+          "type": "boolean"
+        },
+        "served_manifest_verified": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": false
+}
