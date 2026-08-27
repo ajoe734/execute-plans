@@ -34,6 +34,7 @@ function renderRoute() {
     <MemoryRouter initialEntries={["/agora/strategy-workshop/ws-1?mode=challenge"]}>
       <Routes>
         <Route path="/auth" element={<AuthenticationPage />} />
+        <Route path="/agora/auth" element={<AuthenticationPage />} />
         <Route
           path="/agora/strategy-workshop/:id"
           element={<ProtectedRoute><div>Persona interaction</div></ProtectedRoute>}
@@ -58,16 +59,16 @@ describe("Persona and Agora auth route boundary", () => {
   it("shows loading screen while session verification is in progress", () => {
     state.value.loading = true;
     renderRoute();
-    expect(screen.getByText("Verifying Pantheon session…")).toBeInTheDocument();
+    expect(screen.getByText("Verifying Agora access…")).toBeInTheDocument();
     expect(screen.queryByText("Persona interaction")).not.toBeInTheDocument();
     expect(screen.queryByText("Authentication page")).not.toBeInTheDocument();
   });
 
-  it("redirects an unauthenticated browser (no Firebase, no BFF) to /auth", () => {
+  it("redirects an unauthenticated Agora browser to the branded Agora auth entry", () => {
     renderRoute();
     expect(screen.getByText("Authentication page")).toBeInTheDocument();
     expect(screen.getByTestId("auth-location")).toHaveTextContent(
-      "/auth?reason=auth-required&from=%2Fagora%2Fstrategy-workshop%2Fws-1%3Fmode%3Dchallenge",
+      "/agora/auth?reason=auth-required&from=%2Fagora%2Fstrategy-workshop%2Fws-1%3Fmode%3Dchallenge",
     );
     expect(screen.queryByText("Persona interaction")).not.toBeInTheDocument();
   });

@@ -1,0 +1,64 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "AGORA-AUTH-SINGLE-SIGNON-20260826",
+  "owner": "Codex",
+  "reviewer": "Codex2",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/AGORA-AUTH-SINGLE-SIGNON-20260826",
+  "pull_request": 657,
+  "status": "ready-for-independent-exact-head-review",
+  "scope": {
+    "adopted": [
+      "Agora routes redirect unauthenticated users to the branded /agora/auth entry while retaining the requested same-origin return path.",
+      "Agora and Pantheon Management share the same GCP Identity Platform user and BFF-verified browser session; Agora does not introduce a second credential store or password.",
+      "A first-factor Firebase identity remains visible while authoritative BFF verification is pending or rejected, and retry refreshes that same identity token before BFF readback.",
+      "TOTP enrollment refreshes the existing signed-in identity after enrollment instead of signing it out and requesting the same credentials again."
+    ],
+    "not_changed": [
+      "GCP Identity Platform configuration, Firebase persistence, BFF authentication contracts, server-side authorization, role or capability gates, and real-write policy.",
+      "Management authentication routes other than sharing the retry and single-session behavior.",
+      "Hosted deployment state; this manifest records source and build verification only."
+    ]
+  },
+  "security_boundaries": {
+    "authoritative_admission": "Protected routes still require a VerifiedBffBrowserSession. A Firebase session alone, a BFF verification error, or a missing BFF session fails closed to the appropriate auth entry.",
+    "credential_storage": "No new credential persistence or browser-editable authorization claim is introduced. The existing in-memory Firebase-to-BFF bearer bridge remains the only registration path.",
+    "redirect_safety": "The auth page accepts only root-relative return targets and rejects protocol-relative targets before navigation.",
+    "retry_behavior": "Retry force-refreshes the current Firebase token and repeats authoritative BFF verification without silently admitting the first-factor identity.",
+    "logout_behavior": "Explicit account switching still clears both BFF and Firebase state; the single-sign-on change removes only the forced logout after successful TOTP enrollment."
+  },
+  "review_binding": {
+    "pull_request": "https://github.com/ajoe734/execute-plans/pull/657",
+    "owner_implementation_commit": "40d0447bd63a8d55bdc0684cf49cd958c8cbeae6",
+    "superseded_brief_sha": "0f089abff85554d4fe60927817ef029ef1083132",
+    "sha_disposition": "The superseded SHA and owner implementation commit have identical Git trees; only the required Reviewer trailer changed from pending to Codex2. Independent approval must bind the final PR head that contains this manifest and the current dev merge."
+  },
+  "validation": {
+    "focused_auth_and_agora_tests": {
+      "command": "npm test -- src/lib/auth/AuthProvider.test.tsx src/lib/auth/ProtectedRoute.test.tsx src/pages/Auth.test.tsx src/test/strict-browser-auth-source-contract.test.ts src/test/ppl-alloc-009-hosted-auth-source-contract.test.ts",
+      "result": "passed: 5 files, 29 tests"
+    },
+    "typecheck": {
+      "command": "npm run typecheck",
+      "result": "passed"
+    },
+    "task_scoped_lint": {
+      "command": "npx eslint src/App.tsx src/lib/auth/AuthProvider.tsx src/lib/auth/AuthProvider.test.tsx src/lib/auth/ProtectedRoute.tsx src/lib/auth/ProtectedRoute.test.tsx src/pages/Auth.tsx src/pages/Auth.test.tsx",
+      "result": "passed with 0 errors and 2 pre-existing warnings in AuthProvider.tsx"
+    },
+    "strict_live_read_only_build": {
+      "command": "VITE_GCP_IDENTITY_API_KEY=<syntactically-valid non-deployed placeholder> VITE_GCP_IDENTITY_PROJECT_ID=pantheon-lupin-dev-20260719 VITE_GCP_IDENTITY_AUTH_DOMAIN=pantheon-lupin-dev-20260719.firebaseapp.com VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build",
+      "result": "passed",
+      "warnings": "Existing Rollup circular-chunk and large-chunk warnings remain; no auth build failure occurred."
+    },
+    "diff_integrity": {
+      "command": "git diff --check origin/dev...HEAD",
+      "result": "passed"
+    }
+  },
+  "independent_review_required": [
+    "Review the final PR head for authentication correctness, fail-closed admission, redirect safety, and absence of a second Agora credential path.",
+    "Confirm all required PR checks are green on that exact head before approval and merge to dev."
+  ]
+}

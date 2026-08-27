@@ -28,6 +28,9 @@ on:
       candidate_sha:
         required: true
         type: string
+      frontend_ref:
+        required: true
+        type: string
       bff_sha:
         required: true
         type: string
@@ -78,6 +81,7 @@ jobs:
           BINDING_ARTIFACT_ID: ${{ inputs.parent_binding_artifact_id }}
           BINDING_ARTIFACT_DIGEST: ${{ inputs.parent_binding_artifact_digest }}
           CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          FRONTEND_REF: ${{ inputs.frontend_ref }}
         with:
           script: |
             const numeric = /^[1-9][0-9]*$/;
@@ -89,10 +93,12 @@ jobs:
             const artifactId = String(process.env.BINDING_ARTIFACT_ID || "");
             const artifactDigest = String(process.env.BINDING_ARTIFACT_DIGEST || "").toLowerCase();
             const candidateSha = String(process.env.CANDIDATE_SHA || "").toLowerCase();
+            const frontendRef = String(process.env.FRONTEND_REF || "").trim();
             const operators = new Set(String(process.env.AUTHORIZED_OPERATORS || "")
               .split(",").map((value) => value.trim().toLowerCase()).filter(Boolean));
             if (!numeric.test(parentRunText) || !numeric.test(parentAttempt) ||
                 !numeric.test(artifactId) || !sha.test(candidateSha) ||
+                !/^[A-Za-z0-9._/-]+$/.test(frontendRef) || frontendRef.includes("..") ||
                 !digest.test(artifactDigest) || !operators.has(actor)) {
               core.setFailed("watchdog parent identity is malformed or unauthorized");
               return;
@@ -137,6 +143,7 @@ jobs:
           PROOF_NONCE: ${{ inputs.parent_proof_nonce }}
           CORRELATION_ID: ${{ inputs.proof_correlation_id }}
           CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          FRONTEND_REF: ${{ inputs.frontend_ref }}
           BFF_SHA: ${{ inputs.bff_sha }}
           SOURCE_GATE_RUN_ID: ${{ inputs.source_gate_run_id }}
           SOURCE_ARTIFACT_ID: ${{ inputs.source_artifact_id }}
@@ -426,6 +433,7 @@ jobs:
       PANTHEON_BFF_BASE_URL: https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io
       PANTHEON_OLD_BFF_URL: https://pantheon-lupin-dev-bff.34.81.75.241.sslip.io
       CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+      FRONTEND_REF: ${{ inputs.frontend_ref }}
       BFF_SHA: ${{ inputs.bff_sha }}
       SOURCE_GATE_RUN_ID: ${{ inputs.source_gate_run_id }}
       SOURCE_ARTIFACT_ID: ${{ inputs.source_artifact_id }}

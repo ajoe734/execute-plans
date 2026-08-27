@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
   createUserWithEmailAndPassword,
   getMultiFactorResolver,
@@ -25,13 +25,18 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 
 export default function AuthPage() {
-  const { session, bffSession, bffError, loading, signOut } = useAuth();
+  const { session, bffSession, bffError, loading, retryBffSession, signOut } = useAuth();
+  const location = useLocation();
   const nav = useNavigate();
   const [params] = useSearchParams();
   const requestedFrom = params.get("from");
+  const agoraEntry = location.pathname === "/agora/auth";
   const from = requestedFrom?.startsWith("/") && !requestedFrom.startsWith("//")
     ? requestedFrom
-    : "/management/cockpit";
+    : agoraEntry ? "/agora/trading-room" : "/management/cockpit";
+  const isAgora = agoraEntry || from === "/agora" || from.startsWith("/agora/");
+  const productName = isAgora ? "Agora" : "Pantheon Management";
+  const productArea = isAgora ? "trading workbench" : "cockpit";
   const authRequired = params.get("reason") === "auth-required";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -96,7 +101,7 @@ export default function AuthPage() {
         password,
       );
       await sendEmailVerification(credential.user, {
-        url: `${window.location.origin}/auth`,
+        url: `${window.location.origin}${agoraEntry ? "/agora/auth" : "/auth"}`,
       });
       await signOutGcpIdentity(gcpIdentityAuth);
       toast.success("Account created. Check your email to verify it, then sign in.");
@@ -115,7 +120,7 @@ export default function AuthPage() {
     setBusy(true);
     try {
       await sendPasswordResetEmail(gcpIdentityAuth, email, {
-        url: `${window.location.origin}/auth`,
+        url: `${window.location.origin}${agoraEntry ? "/agora/auth" : "/auth"}`,
       });
       toast.success("Password reset email sent.");
     } catch (error: unknown) {
@@ -155,7 +160,7 @@ export default function AuthPage() {
     setBusy(true);
     try {
       await sendEmailVerification(session.user, {
-        url: `${window.location.origin}/auth`,
+        url: `${window.location.origin}${agoraEntry ? "/agora/auth" : "/auth"}`,
       });
       toast.success("Verification email sent.");
     } catch (error: unknown) {
@@ -194,7 +199,7 @@ export default function AuthPage() {
       setTotpSecret(secret);
       setTotpQrUrl(secret.generateQrCodeUrl(
         session.user.email ?? session.user.uid,
-        "Pantheon Management",
+        "Pantheon",
       ));
       setOtp("");
     } catch (error: unknown) {
@@ -213,11 +218,25 @@ export default function AuthPage() {
         otp,
       );
       await multiFactor(session.user).enroll(assertion, "Pantheon Authenticator");
-      await signOutGcpIdentity(gcpIdentityAuth);
       setTotpSecret(null);
       setTotpQrUrl("");
       setOtp("");
-      toast.success("Authenticator enrolled. Sign in again with your verification code.");
+      toast.success("Authenticator enrolled. Verifying your existing sign-in…");
+      // Enrollment changes the signed claims. Refresh the existing Firebase
+      // session so AuthProvider can re-run BFF verification without asking for
+      // the same account credentials a second time.
+      await session.user.getIdToken(true);
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const retryAccessVerification = async () => {
+    setBusy(true);
+    try {
+      await retryBffSession();
     } catch (error: unknown) {
       toast.error(error instanceof Error ? error.message : String(error));
     } finally {
@@ -229,14 +248,14 @@ export default function AuthPage() {
     <div className="min-h-screen flex items-center justify-center bg-background p-6">
       <div className="w-full max-w-sm space-y-6">
         <div className="text-center space-y-1">
-          <h1 className="text-2xl font-semibold">Pantheon Management</h1>
-          <p className="text-sm text-muted-foreground">Sign in to access the cockpit.</p>
+          <h1 className="text-2xl font-semibold">{productName}</h1>
+          <p className="text-sm text-muted-foreground">Sign in once to access the {productArea}.</p>
         </div>
         {authRequired && !session ? (
           <div role="status" className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
-            <p className="font-medium">Your Pantheon session is missing or expired.</p>
+            <p className="font-medium">Your {isAgora ? "Agora" : "Pantheon"} session is missing or expired.</p>
             <p className="mt-1 text-muted-foreground">
-              Sign in again to reconnect live data. Pantheon did not substitute fallback data.
+              Sign in once to reconnect live data. {isAgora ? "Agora" : "Pantheon"} did not substitute fallback data.
             </p>
           </div>
         ) : null}
@@ -270,6 +289,13 @@ export default function AuthPage() {
               Cancel
             </Button>
           </div>
+        ) : loading ? (
+          <div role="status" className="rounded-md border p-4 text-sm">
+            <p className="font-medium">Verifying {isAgora ? "Agora access" : "your Pantheon session"}…</p>
+            <p className="mt-1 text-muted-foreground">
+              Your identity is already signed in. You do not need to enter it again.
+            </p>
+          </div>
         ) : session?.user && !session.user.emailVerified ? (
           <div className="space-y-3 rounded-md border p-4">
             <p className="font-medium">Verify your email</p>
@@ -290,7 +316,7 @@ export default function AuthPage() {
           <div className="space-y-3 rounded-md border p-4">
             <p className="font-medium">Set up authenticator MFA</p>
             <p className="text-sm text-muted-foreground">
-              A TOTP authenticator is required before this GCP Identity account can access Pantheon.
+              A TOTP authenticator is required before this identity can access {productName}.
             </p>
             {totpSecret && totpQrUrl ? (
               <>
@@ -327,10 +353,18 @@ export default function AuthPage() {
           </div>
         ) : session && !loading && bffError ? (
           <div role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm">
-            <p className="font-medium">Pantheon session verification failed.</p>
+            <p className="font-medium">{isAgora ? "Agora access" : "Pantheon session"} verification failed.</p>
             <p className="mt-1 text-muted-foreground">{bffError.message}</p>
-            <Button className="mt-3 w-full" variant="outline" onClick={() => void signOut()}>
-              Clear session and sign in again
+            <Button
+              className="mt-3 w-full"
+              variant="outline"
+              onClick={() => void retryAccessVerification()}
+              disabled={busy}
+            >
+              Retry access verification
+            </Button>
+            <Button className="mt-2 w-full" variant="ghost" onClick={() => void signOut()} disabled={busy}>
+              Use another account
             </Button>
           </div>
         ) : (
@@ -363,7 +397,9 @@ export default function AuthPage() {
         </Tabs>
         )}
         <p className="text-center text-xs text-muted-foreground">
-          Authentication is provided by GCP Identity Platform.
+          {isAgora
+            ? "Agora uses your Pantheon single sign-on identity; there is no separate Agora password."
+            : "Authentication is provided by GCP Identity Platform."}
         </p>
       </div>
     </div>

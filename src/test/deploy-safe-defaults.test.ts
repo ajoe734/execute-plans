@@ -314,6 +314,8 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     );
     expect(deployWorkflow).toContain('run.event === "workflow_dispatch"');
     expect(deployWorkflow).toContain('run.head_branch === "dev"');
+    expect(deployWorkflow).toContain("requestedFrontendRef");
+    expect(deployWorkflow).toContain("heads/${requestedFrontendRef}");
     expect(deployWorkflow).toContain('run.conclusion === "success"');
     expect(deployWorkflow).toContain(
       "`Release candidate ${releaseCandidateId}`",
