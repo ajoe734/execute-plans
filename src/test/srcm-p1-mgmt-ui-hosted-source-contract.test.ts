@@ -2,78 +2,85 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
-const e2eSpec = readFileSync(
-  resolve(process.cwd(), "e2e/30-management-data-source-control.spec.ts"),
+const proofSpec = readFileSync(
+  resolve(process.cwd(), "e2e/31-external-source-management-hosted.spec.ts"),
   "utf8",
 );
-
 const workflow = readFileSync(
   resolve(process.cwd(), ".github/workflows/srcm-p1-mgmt-ui-hosted-acceptance.yml"),
   "utf8",
 );
+const runtime = readFileSync(
+  resolve(process.cwd(), "scripts/srcm-hosted-proof-runtime.sh"),
+  "utf8",
+);
 
-describe("SRCM-P1-MGMT-UI hosted acceptance source contract", () => {
-  it("uses the established credentialed hosted browser auth/session harness without synthetic Firebase injection", () => {
-    expect(e2eSpec).not.toContain("gcpIdentityStoredUser");
-    expect(e2eSpec).not.toContain("gcpIdentityStorageKey");
-    expect(e2eSpec).not.toContain("window.sessionStorage.setItem");
-    expect(e2eSpec).toContain("installHostedSession");
-    expect(e2eSpec).toContain("VITE_BFF_DEV_LOGIN_CLIENT_ID");
-    expect(e2eSpec).toContain("VITE_BFF_DEV_LOGIN_CLIENT_SECRET");
-    expect(e2eSpec).toContain("__PANTHEON_RUNTIME_CONFIG__");
-    expect(e2eSpec).toContain("__PANTHEON_BFF_RUNTIME__");
+describe("SRCM-P1 hosted acceptance producer contract", () => {
+  it("runs on the dev VM under one explicit qualification lease and exact hosted identities", () => {
+    expect(workflow).toContain("pantheon-dev-vm");
+    expect(workflow).toContain("execute-plans-deploy");
+    expect(workflow).toContain("qualification_lease_id");
+    expect(workflow).toContain("EXPECTED_FE_SHA");
+    expect(workflow).toContain("EXPECTED_BFF_SHA");
+    expect(workflow).toContain("deployment.json");
+    expect(workflow).toContain("/bff/version");
   });
 
-  it("binds deployment pair and exact /bff/version source commit sha in hosted test", () => {
-    expect(e2eSpec).toContain("assertDeploymentPair");
-    expect(e2eSpec).toContain("deployment.json");
-    expect(e2eSpec).toContain("/bff/version");
-    expect(e2eSpec).toContain("source_commit_known");
-    expect(e2eSpec).toContain("source_commit_sha");
+  it("admits only one bounded free official connector pull", () => {
+    expect(runtime).toContain('PROOF_CONNECTOR="tw-twse-tpex-official-market"');
+    expect(runtime).toContain('PROOF_HOSTS="openapi.twse.com.tw,www.tpex.org.tw"');
+    expect(runtime).toContain("SOURCE_INGEST_CONTROLLER_MODE=reconcile_and_pull");
+    expect(runtime).toContain("SOURCE_INGEST_CONTROLLER_MAX_TICKS=1");
+    expect(runtime).toContain('--connector "${PROOF_CONNECTOR}"');
+    expect(runtime).toContain('--force-connector "${PROOF_CONNECTOR}"');
+    expect(runtime).not.toMatch(/AlphaVantage|Polygon|IBKR|Shioaji/u);
   });
 
-  it("proves operator /bff/me and /bff/auth/readiness in hosted test", () => {
-    expect(e2eSpec).toContain("assertStrictSession");
-    expect(e2eSpec).toContain("/bff/me");
-    expect(e2eSpec).toContain("/bff/auth/readiness");
-    expect(e2eSpec).toContain("roles");
+  it("arms a recovery watchdog before switching the immutable write-proof sibling", () => {
+    const watchdog = runtime.indexOf("systemd-run");
+    const switchToWrite = runtime.indexOf('atomic_link "${write_target}"');
+    expect(watchdog).toBeGreaterThan(0);
+    expect(switchToWrite).toBeGreaterThan(watchdog);
+    expect(runtime).toContain('atomic_link "${read_target}"');
+    expect(workflow).toContain("Restore and verify safe runtime posture");
+    expect(workflow).toContain("if: always()");
   });
 
-  it("tracks network events and writes sanitized fail-closed evidence including data-sources HTTP 200", () => {
-    expect(e2eSpec).toContain("setupNetworkTracker");
-    expect(e2eSpec).toContain("PANTHEON_AUDIT_OUT_DIR");
-    expect(e2eSpec).toContain("srcm-p1-mgmt-ui-pages.png");
-    expect(e2eSpec).toContain("srcm-p1-mgmt-ui-network.json");
-    expect(e2eSpec).toContain("srcm-p1-mgmt-ui-evidence.json");
-    expect(e2eSpec).toContain("/management/data-sources");
+  it("restores command flags, egress deny, read-only FE, and a stopped no-restart scheduler", () => {
+    expect(runtime).toContain('[[ "${source_commands}" == "0" ]]');
+    expect(runtime).toContain('[[ "${bff_commands}" == "0" ]]');
+    expect(runtime).toContain('[[ "${egress}" == "deny" ]]');
+    expect(runtime).toContain("--mode reconcile_only");
+    expect(runtime).toContain("docker update --restart=no");
+    expect(runtime).toContain("assert_live_pair read-only");
   });
 
-  it("strictly requires exact HTTP 200 data-source response status rather than generic 2xx range", () => {
-    expect(e2eSpec).toContain("ev.status === 200 && ev.pathname.includes(\"/management/data-sources\")");
-    expect(e2eSpec).not.toMatch(/ev\.status\s*>=\s*200\s*&&\s*ev\.status\s*<\s*300\s*&&\s*ev\.pathname\.includes\("\/management\/data-sources"\)/);
-    expect(e2eSpec).toContain("Expected specific HTTP 200 BFF request for Data Sources");
+  it("captures all ten required journeys without route interception", () => {
+    for (let index = 1; index <= 10; index += 1) {
+      expect(proofSpec).toContain(`journey_${String(index).padStart(2, "0")}_`);
+    }
+    expect(proofSpec).toContain("route_interception_count: 0");
+    expect(proofSpec).not.toContain("page.route(");
+    expect(proofSpec).not.toContain("context.route(");
+    expect(workflow).toContain('--grep "@hosted-srcm"');
   });
 
-  it("isolates hosted acceptance workflow execution to unmocked hosted tests via --grep", () => {
-    expect(workflow).toContain("--grep \"unmocked hosted\"");
-  });
-
-  it("gates mocked fixture tests from executing against external/hosted environments and cleanly skips them", () => {
-    expect(e2eSpec).toContain("testInfo.title.includes(\"unmocked hosted\")");
-    expect(e2eSpec).toContain("test.skip(");
-    expect(e2eSpec).toContain("route-mocked fixture coverage is loopback-only; hosted candidates use live acceptance specs");
-  });
-
-  it("hosted acceptance workflow binds checkout SHA, live deployment, live /bff/version, and uploads fail-closed evidence", () => {
-    expect(workflow).toContain("git rev-parse HEAD");
-    expect(workflow).toContain("${PANTHEON_FE_BASE_URL}/deployment.json");
-    expect(workflow).toContain("${PANTHEON_BROWSER_BFF_BASE_URL}/bff/version");
-    expect(workflow).toContain("source_commit_known");
-    expect(workflow).toContain("source_commit_sha");
-    expect(workflow).toContain("${PANTHEON_BROWSER_BFF_BASE_URL}/bff/me");
-    expect(workflow).toContain("${PANTHEON_BROWSER_BFF_BASE_URL}/bff/auth/readiness");
-    expect(workflow).toContain("VITE_GCP_IDENTITY_API_KEY");
-    expect(workflow).toContain("PANTHEON_PUBLIC_GCP_IDENTITY_API_KEY");
+  it("binds a sanitized HAR and one real screenshot to every journey", () => {
+    expect(proofSpec).toContain('recordHar: { path: HAR_PATH, mode: "full"');
+    expect(proofSpec).toContain('mapped.value = "[REDACTED]"');
+    expect(proofSpec).toContain('asMap(request.postData).text = "[REDACTED]"');
+    expect(proofSpec).toContain("screenshot_sha256");
+    expect(proofSpec).toContain("har_entry_indices");
+    expect(proofSpec).toContain("browser_journeys_count");
     expect(workflow).toContain("if-no-files-found: error");
+  });
+
+  it("proves RBAC, stale revision, secret-ref safety, and no capital/order mutation", () => {
+    expect(proofSpec).toContain("DEV_LOGIN_VIEWER_CLIENT_SECRET");
+    expect(proofSpec).toContain("expect(unauthorized.status).toBe(403)");
+    expect(proofSpec).toContain("expect(stale.status).toBe(409)");
+    expect(proofSpec).toContain("vault://pantheon/dev/");
+    expect(proofSpec).toContain("expect(inlineSecret.status).toBe(400)");
+    expect(proofSpec).toContain("mutatingOrderOrCapital");
   });
 });

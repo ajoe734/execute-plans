@@ -4,12 +4,12 @@ on:
   workflow_dispatch:
     inputs:
       bff_base_url:
-        description: "Pantheon dev BFF base URL"
+        description: "Exact Pantheon dev BFF base URL"
         required: true
         default: "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io"
         type: string
       fe_base_url:
-        description: "Pantheon dev frontend base URL"
+        description: "Exact Pantheon dev frontend base URL"
         required: true
         default: "https://pantheon-lupin-dev-fe.35.201.204.12.sslip.io"
         type: string
@@ -18,7 +18,11 @@ on:
         required: true
         type: string
       expected_fe_sha:
-        description: "Exact deployed execute-plans commit SHA"
+        description: "Exact served execute-plans commit SHA"
+        required: true
+        type: string
+      qualification_lease_id:
+        description: "Active Pantheon qualification lease held by the task owner"
         required: true
         type: string
       tenant_id:
@@ -36,10 +40,15 @@ concurrency:
 
 jobs:
   hosted-acceptance:
-    name: Management Data Source Control Center unmocked hosted proof
-    runs-on: ubuntu-latest
+    name: Ten-journey bounded Source Management hosted proof
+    runs-on:
+      - self-hosted
+      - Linux
+      - X64
+      - pantheon-dev-vm
+      - execute-plans-deploy
     environment: dev
-    timeout-minutes: 30
+    timeout-minutes: 40
     env:
       PANTHEON_FE_BASE_URL: ${{ inputs.fe_base_url }}
       PANTHEON_BROWSER_BFF_BASE_URL: ${{ inputs.bff_base_url }}
@@ -48,19 +57,32 @@ jobs:
       PANTHEON_HOSTED_E2E: "1"
       EXPECTED_FE_SHA: ${{ inputs.expected_fe_sha }}
       EXPECTED_BFF_SHA: ${{ inputs.expected_bff_sha }}
-      PANTHEON_AUDIT_OUT_DIR: .artifacts/SRCM-P1-MGMT-UI-20260824/${{ github.run_id }}-${{ github.run_attempt }}
+      QUALIFICATION_LEASE_ID: ${{ inputs.qualification_lease_id }}
       PANTHEON_CREDENTIALED_PLAYWRIGHT_NO_ARTIFACTS: "1"
       DEV_LOGIN_CLIENT_ID: ${{ vars.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_ID || 'pantheon-dev-operator-a-v1' }}
       DEV_LOGIN_CLIENT_SECRET: ${{ secrets.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_SECRET }}
+      DEV_LOGIN_VIEWER_CLIENT_ID: ${{ vars.DEV_BFF_DEV_LOGIN_VIEWER_CLIENT_ID || 'pantheon-dev-viewer-v1' }}
+      DEV_LOGIN_VIEWER_CLIENT_SECRET: ${{ secrets.DEV_BFF_DEV_LOGIN_VIEWER_CLIENT_SECRET }}
       PANTHEON_PUBLIC_GCP_IDENTITY_API_KEY: ${{ vars.VITE_GCP_IDENTITY_API_KEY }}
       VITE_GCP_IDENTITY_API_KEY: ${{ vars.VITE_GCP_IDENTITY_API_KEY }}
       VITE_GCP_IDENTITY_PROJECT_ID: ${{ vars.VITE_GCP_IDENTITY_PROJECT_ID }}
       VITE_GCP_IDENTITY_AUTH_DOMAIN: ${{ vars.VITE_GCP_IDENTITY_AUTH_DOMAIN }}
+
     steps:
-      - name: Checkout dispatched revision
+      - name: Checkout dispatched proof runner revision
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5a
 
-      - name: Reject unsafe target or incomplete proof inputs
+      - name: Initialize isolated evidence directory
+        shell: bash
+        run: |
+          set -euo pipefail
+          audit_dir="${RUNNER_TEMP%/}/srcm-p1-hosted-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          rm -rf "${audit_dir}"
+          mkdir -p "${audit_dir}"
+          echo "PANTHEON_AUDIT_OUT_DIR=${audit_dir}" >> "${GITHUB_ENV}"
+          echo "SRCM_PROOF_RUNTIME_SCRIPT=${GITHUB_WORKSPACE}/scripts/srcm-hosted-proof-runtime.sh" >> "${GITHUB_ENV}"
+
+      - name: Reject unsafe target, identity, credentials, or lease input
         shell: bash
         run: |
           set -euo pipefail
@@ -69,69 +91,38 @@ jobs:
           [[ "${EXPECTED_FE_SHA}" =~ ^[0-9a-f]{40}$ ]]
           [[ "${EXPECTED_BFF_SHA}" =~ ^[0-9a-f]{40}$ ]]
           [[ "${PANTHEON_BFF_TENANT_ID}" == "tenant-dev" ]]
-          if [[ -z "${DEV_LOGIN_CLIENT_SECRET}" ]]; then
-            echo "::error::DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_SECRET is not provisioned; refusing to run an unauthenticated hosted journey." >&2
-            exit 1
-          fi
-          if [[ -n "${PANTHEON_PUBLIC_GCP_IDENTITY_API_KEY:-}" ]] && ! [[ "${PANTHEON_PUBLIC_GCP_IDENTITY_API_KEY}" =~ ^AIza[A-Za-z0-9_-]{35}$ ]]; then
-            echo "::error::PANTHEON_PUBLIC_GCP_IDENTITY_API_KEY format is invalid." >&2
-            exit 1
-          fi
+          [[ "${QUALIFICATION_LEASE_ID}" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]
+          [[ -n "${DEV_LOGIN_CLIENT_SECRET}" ]]
+          [[ -n "${DEV_LOGIN_VIEWER_CLIENT_SECRET}" ]]
+          [[ "${GITHUB_RUN_ATTEMPT}" == "1" ]]
 
-      - name: Bind checkout + live FE + live /bff/version exact SHAs
+      - name: Bind live read-only FE/BFF pair before mutation
         shell: bash
         run: |
           set -euo pipefail
-          checkout_sha="$(git rev-parse HEAD)"
-          if [[ "${checkout_sha}" != "${EXPECTED_FE_SHA}" ]]; then
-            echo "checked out commit ${checkout_sha} does not match expected ${EXPECTED_FE_SHA}" >&2
-            exit 1
-          fi
-
           served="$(curl -fsS "${PANTHEON_FE_BASE_URL}/deployment.json")"
-          served_fe="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).commit || "")' "${served}")"
-          served_bff="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).bffCommit || JSON.parse(process.argv[1]).bffSourceCommitSha || "")' "${served}")"
-          if [[ "${served_fe}" != "${EXPECTED_FE_SHA}" ]]; then
-            echo "live FE commit ${served_fe} does not match expected ${EXPECTED_FE_SHA}" >&2
-            exit 1
-          fi
-          if [[ "${served_bff}" != "${EXPECTED_BFF_SHA}" ]]; then
-            echo "live BFF commit in deployment.json ${served_bff} does not match expected ${EXPECTED_BFF_SHA}" >&2
-            exit 1
-          fi
+          served_fe="$(node -e 'const v=JSON.parse(process.argv[1]);process.stdout.write(v.commit||"")' "${served}")"
+          served_bff="$(node -e 'const v=JSON.parse(process.argv[1]);process.stdout.write(v.bffCommit||v.bffSourceCommitSha||"")' "${served}")"
+          served_profile="$(node -e 'const v=JSON.parse(process.argv[1]);process.stdout.write(v.deploymentProfile||v.profile||"")' "${served}")"
+          served_writes="$(node -e 'const v=JSON.parse(process.argv[1]);process.stdout.write(String(v.buildMode?.VITE_BFF_REAL_WRITES||""))' "${served}")"
+          [[ "${served_fe}" == "${EXPECTED_FE_SHA}" ]]
+          [[ "${served_bff}" == "${EXPECTED_BFF_SHA}" ]]
+          [[ "${served_profile}" == "read-only" ]]
+          [[ "${served_writes}" == "false" ]]
+          version="$(curl -fsS "${PANTHEON_BROWSER_BFF_BASE_URL}/bff/version")"
+          live_bff="$(node -e 'const v=JSON.parse(process.argv[1]);process.stdout.write(v.source_commit_sha||"")' "${version}")"
+          live_known="$(node -e 'const v=JSON.parse(process.argv[1]);process.stdout.write(String(v.source_commit_known||false))' "${version}")"
+          [[ "${live_bff}" == "${EXPECTED_BFF_SHA}" ]]
+          [[ "${live_known}" == "true" ]]
 
-          bff_version_res="$(curl -fsS "${PANTHEON_BROWSER_BFF_BASE_URL}/bff/version")"
-          live_bff_sha="$(node -e 'const v=JSON.parse(process.argv[1]); process.stdout.write(v.source_commit_sha || v.commit || "")' "${bff_version_res}")"
-          live_bff_known="$(node -e 'const v=JSON.parse(process.argv[1]); process.stdout.write(String(v.source_commit_known ?? ""))' "${bff_version_res}")"
-          if [[ "${live_bff_known}" != "true" ]]; then
-            echo "live BFF /bff/version source_commit_known is not true" >&2
-            exit 1
-          fi
-          if [[ "${live_bff_sha}" != "${EXPECTED_BFF_SHA}" ]]; then
-            echo "live BFF /bff/version source_commit_sha ${live_bff_sha} does not match expected ${EXPECTED_BFF_SHA}" >&2
-            exit 1
-          fi
-          echo "verified exact SHA bindings: checkout=${checkout_sha}, live FE=${served_fe}, live /bff/version=${live_bff_sha}"
-
-      - name: Mint a short-lived operator bearer token via governed dev-login and prove operator readiness
+      - name: Prepare bounded Source proof runtime and execute one exact official-provider tick
         shell: bash
         run: |
           set -euo pipefail
-          response="$(curl -fsS -X POST "${PANTHEON_BROWSER_BFF_BASE_URL}/bff/auth/dev-login" \
-            -H 'Content-Type: application/json' \
-            -d "$(node -e 'process.stdout.write(JSON.stringify({grant_type:"client_credentials",client_id:process.env.DEV_LOGIN_CLIENT_ID,client_secret:process.env.DEV_LOGIN_CLIENT_SECRET}))')")"
-          token="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).access_token || "")' "${response}")"
-          if [[ -z "${token}" ]]; then
-            echo "::error::dev-login did not return access_token" >&2
-            exit 1
-          fi
-          echo "::add-mask::${token}"
-          echo "BFF_AUTH_TOKEN=${token}" >> "${GITHUB_ENV}"
-
-          me="$(curl -fsS "${PANTHEON_BROWSER_BFF_BASE_URL}/bff/me" -H "Authorization: Bearer ${token}" -H "X-Tenant-Id: ${PANTHEON_BFF_TENANT_ID}")"
-          node -e 'const r=JSON.parse(process.argv[1]); const d=r.data ?? r; if (!Array.isArray(d.roles) || !d.roles.includes("operator")) process.exit(1)' "${me}"
-          readiness="$(curl -fsS "${PANTHEON_BROWSER_BFF_BASE_URL}/bff/auth/readiness" -H "Authorization: Bearer ${token}" -H "X-Tenant-Id: ${PANTHEON_BFF_TENANT_ID}")"
-          node -e 'const r=JSON.parse(process.argv[1]); const d=r.data ?? r; if (d.ready !== true || d.authReady !== true) process.exit(1)' "${readiness}"
+          sudo bash "${SRCM_PROOF_RUNTIME_SCRIPT}" prepare "${GITHUB_RUN_ID}" "${EXPECTED_FE_SHA}" "${EXPECTED_BFF_SHA}"
+          sudo install -o "$(id -u)" -g "$(id -g)" -m 600 \
+            "/run/pantheon-srcm-proof-${GITHUB_RUN_ID}/bounded-provider-tick.json" \
+            "${PANTHEON_AUDIT_OUT_DIR}/bounded-provider-tick.json"
 
       - name: Set up Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -139,28 +130,75 @@ jobs:
           node-version: "20"
           cache: npm
 
-      - name: Install frontend dependencies
-        run: npm ci
+      - name: Install frontend dependencies and Chromium
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci
+          npx playwright install chromium
 
-      - name: Install Chromium
-        run: npx playwright install chromium --with-deps
-
-      - name: Run real Management Data Source Control Center hosted spec
+      - name: Run ten real browser journeys and restore read-only before journey ten
+        shell: bash
         run: |
           set -euo pipefail
           npx playwright test \
-            e2e/30-management-data-source-control.spec.ts \
+            e2e/31-external-source-management-hosted.spec.ts \
             --project=chromium \
-            --grep "unmocked hosted" \
+            --grep "@hosted-srcm" \
             --retries=0 \
             --reporter=list \
             --trace=off
+
+      - name: Restore and verify safe runtime posture
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          state_dir="/run/pantheon-srcm-proof-${GITHUB_RUN_ID}"
+          if sudo test -d "${state_dir}"; then
+            sudo bash "${SRCM_PROOF_RUNTIME_SCRIPT}" restore "${GITHUB_RUN_ID}" "${EXPECTED_FE_SHA}" "${EXPECTED_BFF_SHA}"
+            sudo bash "${SRCM_PROOF_RUNTIME_SCRIPT}" status "${GITHUB_RUN_ID}" "${EXPECTED_FE_SHA}" "${EXPECTED_BFF_SHA}"
+            if sudo test -f "${state_dir}/restore-reconcile-only.json"; then
+              sudo install -o "$(id -u)" -g "$(id -g)" -m 600 \
+                "${state_dir}/restore-reconcile-only.json" \
+                "${PANTHEON_AUDIT_OUT_DIR}/restore-reconcile-only.json"
+            fi
+          fi
+
+      - name: Record sanitized post-proof posture
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_commands="$(sudo docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' pantheon-source-ingest-1 | sed -n 's/^SOURCE_MANAGEMENT_COMMANDS_ENABLED=//p' | tail -1)"
+          bff_commands="$(sudo docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' pantheon-operator-bff-1 | sed -n 's/^PANTHEON_BFF_SOURCE_MANAGEMENT_COMMANDS_ENABLED=//p' | tail -1)"
+          egress="$(sudo docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' pantheon-source-ingest-1 | sed -n 's/^PANTHEON_EXTERNAL_EGRESS=//p' | tail -1)"
+          scheduler_restart="$(sudo docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' pantheon-source-ingest-scheduler-1)"
+          scheduler_running="$(sudo docker inspect -f '{{.State.Running}}' pantheon-source-ingest-scheduler-1)"
+          node -e 'const fs=require("node:fs");fs.writeFileSync(process.argv[1],JSON.stringify({schema_version:"pantheon.external-source-management.runtime-posture.v1",observed_at:new Date().toISOString(),SOURCE_MANAGEMENT_COMMANDS_ENABLED:process.argv[2],PANTHEON_BFF_SOURCE_MANAGEMENT_COMMANDS_ENABLED:process.argv[3],PANTHEON_EXTERNAL_EGRESS:process.argv[4],SOURCE_INGEST_CONTROLLER_MODE:"reconcile_only",SOURCE_INGEST_CONTROLLER_MAX_TICKS:"1",SOURCE_INGEST_CONTROLLER_RESTART_POLICY:process.argv[5],SOURCE_INGEST_CONTROLLER_RUNNING:process.argv[6],VITE_BFF_REAL_WRITES:"false",qualification_lease_id:process.argv[7]},null,2)+"\n")' \
+            "${PANTHEON_AUDIT_OUT_DIR}/runtime-posture.json" \
+            "${source_commands}" "${bff_commands}" "${egress}" "${scheduler_restart}" "${scheduler_running}" "${QUALIFICATION_LEASE_ID}"
+          [[ "${source_commands}" == "0" ]]
+          [[ "${bff_commands}" == "0" ]]
+          [[ "${egress}" == "deny" ]]
+          [[ "${scheduler_restart}" == "no" ]]
+          [[ "${scheduler_running}" == "false" ]]
 
       - name: Upload sanitized acceptance evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: srcm-p1-mgmt-ui-hosted-acceptance-${{ github.run_id }}-${{ github.run_attempt }}
-          path: .artifacts/SRCM-P1-MGMT-UI-20260824/${{ github.run_id }}-${{ github.run_attempt }}
+          name: srcm-p1-hosted-acceptance-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.PANTHEON_AUDIT_OUT_DIR }}
           if-no-files-found: error
           retention-days: 90
+
+      - name: Remove root-only temporary proof state
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          state_dir="/run/pantheon-srcm-proof-${GITHUB_RUN_ID}"
+          if sudo test -d "${state_dir}"; then
+            sudo rm -rf -- "${state_dir}"
+          fi
