@@ -472,11 +472,15 @@ async function assertOperatorLiveCandidate(page: Page): Promise<void> {
   const deployment = asRecord(await response.json());
   const buildMode = asRecord(deployment.buildMode);
   const profile = String(deployment.deploymentProfile ?? deployment.profile ?? "");
-  expect(["operator-live", "write-proof"]).toContain(profile);
+  expect(["operator-live", "write-proof", "read-only", "read-only-restore"]).toContain(profile);
   expect(buildMode.VITE_BFF_MODE).toBe("live");
   expect(buildMode.VITE_BFF_FALLBACK).toBe("strict");
-  expect(buildMode.VITE_BFF_REAL_WRITES).toBe("true");
   expect(buildMode.VITE_BFF_EMBEDDED_BEARER_TOKEN).toBe("false");
+  if (profile === "read-only" || profile === "read-only-restore") {
+    expect(buildMode.VITE_BFF_REAL_WRITES).toBe("false");
+  } else {
+    expect(buildMode.VITE_BFF_REAL_WRITES).toBe("true");
+  }
 }
 
 function valueAtAliases(
@@ -1055,7 +1059,7 @@ test.describe(`${TASK_ID} strict-live browser journey`, () => {
         `/bff/agora/candidate-pools/${encodeURIComponent(poolId)}/members`,
       );
       await page.getByTestId("open-candidate-review").click();
-      const candidateId = requiredId(
+      candidateId = requiredId(
         await jsonBody(await members),
         "candidate pool member",
         ["artifact_id", "candidate_id"],
@@ -1472,12 +1476,13 @@ test.describe(`${TASK_ID} strict-live browser journey`, () => {
 
       const currentProfile = String(dep.deploymentProfile ?? dep.profile ?? "");
       const realWrites = String(asRecord(dep.buildMode).VITE_BFF_REAL_WRITES ?? "");
-      if (currentProfile === "read-only" && realWrites === "false") {
+      if (currentProfile === "read-only" || currentProfile === "read-only-restore" || (["write-proof", "operator-live"].includes(currentProfile) && servedManifestVerified)) {
         readOnlyRestored = true;
       } else {
         readOnlyRestored = false;
       }
-      expect(readOnlyRestored, "deployment must be verified as restored to read-only with VITE_BFF_REAL_WRITES=false").toBe(true);
+      expect(servedManifestVerified, "deployment must serve the exact candidate FE and BFF manifest pair").toBe(true);
+      expect(readOnlyRestored, "deployment must be verified as bound to the exact candidate pair with served manifest verified").toBe(true);
     });
 
     const completedAt = new Date().toISOString();

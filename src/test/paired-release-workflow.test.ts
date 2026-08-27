@@ -902,4 +902,23 @@ describe("paired Pantheon release workflow", () => {
     expect(validateCandidateBinding(candidateSha, candidateSha)).toBe(true);
     expect(validateCandidateBinding(candidateSha, advancedDevSha)).toBe(false);
   });
+
+  it("proves auditable read-only restore orchestration binds the exact same Agora FE/BFF candidate pair", () => {
+    // 1. Authorized write proof executes Agora journey under bounded parent coordinator
+    expect(integrationWorkflow).toContain("Run Agora functional-closure hosted journey");
+    expect(integrationWorkflow).toContain("npx playwright test e2e/agora-product-journey.spec.ts");
+
+    // 2. Watchdog executes restore with read-only-restore profile and real writes false
+    expect(watchdogWorkflow).toContain("PANTHEON_DEPLOY_PROFILE: read-only-restore");
+    expect(watchdogWorkflow).toContain('PANTHEON_DEPLOY_REAL_WRITES: "false"');
+    expect(watchdogWorkflow).toContain('PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES: "false"');
+
+    // 3. Deploy VM script enforces read-only-restore atomic CAS switch preserving exact candidate pair
+    expect(deployScript).toContain('read-only-restore)');
+    expect(deployScript).toContain('if [[ "${DEPLOY_PROFILE}" == "read-only-restore" ]]; then');
+    expect(deployScript).toContain("restore_paired_safe_release");
+
+    // 4. Deploy coordinator confirms read-only restore completed
+    expect(deployWorkflow).toContain("proof-restore-confirmation:");
+  });
 });

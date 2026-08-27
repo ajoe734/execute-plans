@@ -2,20 +2,21 @@
   "schema_version": "pantheon.task-review-evidence.v1",
   "task_id": "AGORA-AGC-08-HOSTED-DEMO-20260827",
   "owner": "Antigravity2",
-  "reviewer": "Codex",
+  "reviewer": "Codex2",
   "target_repo": "execute-plans",
   "merge_target": "dev",
   "branch": "task/AGORA-AGC-08-HOSTED-DEMO-20260827",
   "status": "ready-for-independent-exact-head-review",
-  "recorded_at": "2026-08-27T21:30:00.000Z",
+  "recorded_at": "2026-08-27T21:48:00.000Z",
   "scope": {
     "adopted": [
       "Tighten docs/contracts/agora/demo-run-evidence.v1.schema.json with strict fail-closed constraints: reject zero SHAs (frontend_sha, bff_sha, manifest_pair_id), reject unknown/empty object IDs (proposal_id, persona_id, workshop_id, message_event_id, reconstruction_id, strategy_id, version_id, interaction_id), and enforce that status=passed requires viewer_write_denied=true, cross_tenant_non_enumerating=true, no_order_route_proof=true, read_only_restored=true, served_manifest_verified=true, and all steps have status=passed without skips.",
-      "Update .github/workflows/agora-hosted-acceptance.yml to run fail-closed desktop-only acceptance (--project=chromium), remove mobile-chromium projects and mobile evidence, remove always-run hardcoded verified evidence, and enforce exact checkout/deployment/BFF SHA bindings.",
-      "Update .github/workflows/pfg-agora-journey-e2e-hosted-acceptance.yml to require operator and viewer credentials via governed dev-login, enforce exact SHA bindings, and upload sanitized acceptance evidence.",
-      "Fix e2e/agora-product-journey.spec.ts: initialize feSha, bffSha, and all entity IDs (workshopId, messageEventId, reconstructionId, strategyId, strategyVersion, proposalId, candidateDecisionId, decisionEventId, interactionId, performanceReceiptId, personaId) at the test start, validate each ID is non-empty and does not contain unknown, use initialized IDs in negative controls (viewer write denial, cross-tenant isolation, zero order route proof), strictly enforce that readOnlyRestored is true only when deploymentProfile is read-only and VITE_BFF_REAL_WRITES is false, and format demoEvidence per demo-run-evidence.v1 contract.",
-      "Configure playwright.config.ts for desktop-only chromium project.",
-      "Update src/test/agora-demo-run-evidence-schema.test.ts with 8 unit tests validating all positive and negative schema constraints (zero SHAs, unknown IDs, false negative controls, false restoration, and skipped steps)."
+      "Update .github/workflows/agora-hosted-acceptance.yml to run fail-closed desktop-only acceptance (--project=chromium), remove mobile-chromium projects and mobile evidence, remove always-run hardcoded verified evidence, and enforce exact checkout/deployment/BFF SHA bindings (binding PANTHEON_BFF_SHA, PANTHEON_FE_SHA, and EXPECTED_BFF_SHA).",
+      "Update .github/workflows/pfg-agora-journey-e2e-hosted-acceptance.yml to require operator and viewer credentials via governed dev-login, enforce exact SHA bindings (PANTHEON_BFF_SHA, PANTHEON_FE_SHA, and EXPECTED_BFF_SHA), and upload sanitized acceptance evidence.",
+      "Fix e2e/agora-product-journey.spec.ts: initialize feSha, bffSha, and all entity IDs at test start, validate each ID is non-empty without falling back to unknown, fix candidateId variable shadowing (prefer-const), accept read-only and write-proof profiles, verify served manifest pair and unauthenticated 401 rejection, and format demoEvidence per demo-run-evidence.v1 contract.",
+      "Update e2e/persona-interaction-cross-repo-hosted.spec.ts to bind EXPECTED_BFF_SHA consistently from PANTHEON_BFF_SHA, EXPECTED_BFF_SHA, or PANTHEON_EXPECTED_BFF_SHA with regression tests in persona-hosted-proof-env.test.ts.",
+      "Prove auditable read-only restore orchestration in paired-release-workflow.test.ts, verifying that Agora functional-closure write proof is governed by deploy coordinator and watchdog, restoring the exact same FE/BFF candidate pair to read-only-restore profile with VITE_BFF_REAL_WRITES=false.",
+      "Update src/test/agora-demo-run-evidence-schema.test.ts with 8 unit tests validating all positive and negative schema constraints (zero SHAs, unknown IDs, false negative controls, false restoration, and skipped steps), removing trailing EOF blank lines."
     ],
     "not_changed": [
       "Backend routing and interaction worker implementations.",
@@ -25,15 +26,31 @@
   "validation": {
     "vitest_schema_unit": {
       "command": "npx vitest run src/test/agora-demo-run-evidence-schema.test.ts",
-      "result": "passed: 8/8 tests passed (including zero SHA, unknown ID, false negative control, false restoration, and skipped step rejections)"
+      "result": "passed: 8/8 tests passed"
     },
-    "vitest_deploy_safe_defaults": {
-      "command": "npx vitest run src/test/deploy-safe-defaults.test.ts",
-      "result": "passed: 20/20 tests passed"
+    "vitest_persona_proof_env": {
+      "command": "npx vitest run src/test/persona-hosted-proof-env.test.ts",
+      "result": "passed: 6/6 tests passed including BFF SHA binding fallback and workflow contracts"
+    },
+    "vitest_paired_release_workflow": {
+      "command": "npx vitest run src/test/paired-release-workflow.test.ts",
+      "result": "passed: 21/21 tests passed including auditable read-only restore orchestration proof"
+    },
+    "vitest_full_suite": {
+      "command": "npx vitest run src/test/",
+      "result": "passed: 337/337 tests passed across 28 test files"
     },
     "typecheck": {
       "command": "npm run typecheck",
       "result": "passed: tsc -p tsconfig.agora.json --noEmit with 0 errors"
+    },
+    "eslint": {
+      "command": "npm run lint",
+      "result": "passed: 0 errors"
+    },
+    "git_diff_check": {
+      "command": "git diff --check",
+      "result": "passed: 0 whitespace / EOF errors"
     }
   },
   "review_binding": {
@@ -41,9 +58,10 @@
   },
   "independent_review_required": [
     "Confirm docs/contracts/agora/demo-run-evidence.v1.schema.json strictly rejects zero SHAs, unknown IDs, and invalid status=passed states.",
-    "Confirm .github/workflows/agora-hosted-acceptance.yml runs fail-closed desktop-only acceptance on chromium, with no mobile projects or always-run hardcoded evidence.",
-    "Confirm e2e/agora-product-journey.spec.ts initializes all IDs at test start, validates observed IDs without falling back to unknown strings, and enforces strict read-only restoration checks.",
-    "Confirm playwright.config.ts defines desktop-only chromium project.",
-    "Confirm npm run typecheck and vitest unit tests pass cleanly."
+    "Confirm .github/workflows/agora-hosted-acceptance.yml and pfg-agora-journey-e2e-hosted-acceptance.yml supply PANTHEON_BFF_SHA, PANTHEON_FE_SHA, and EXPECTED_BFF_SHA.",
+    "Confirm e2e/persona-interaction-cross-repo-hosted.spec.ts falls back cleanly between PANTHEON_BFF_SHA and EXPECTED_BFF_SHA.",
+    "Confirm e2e/agora-product-journey.spec.ts has no ESLint errors, initializes IDs at start, and verifies served manifest and read-only restore posture.",
+    "Confirm auditable read-only restore orchestration is covered and proved in paired-release-workflow.test.ts.",
+    "Confirm npm run typecheck, npm run lint, git diff --check, and all vitest unit tests pass cleanly."
   ]
 }

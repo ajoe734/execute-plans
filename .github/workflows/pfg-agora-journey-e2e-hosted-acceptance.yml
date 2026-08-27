@@ -48,6 +48,9 @@ jobs:
       PANTHEON_HOSTED_E2E: "1"
       EXPECTED_FE_SHA: ${{ inputs.expected_fe_sha }}
       EXPECTED_BFF_SHA: ${{ inputs.expected_bff_sha }}
+      PANTHEON_FE_SHA: ${{ inputs.expected_fe_sha }}
+      PANTHEON_BFF_SHA: ${{ inputs.expected_bff_sha }}
+      PANTHEON_EXPECTED_BFF_SHA: ${{ inputs.expected_bff_sha }}
       PANTHEON_AUDIT_OUT_DIR: .artifacts/PFG-AGORA-JOURNEY-E2E-20260820/${{ github.run_id }}-${{ github.run_attempt }}
       PANTHEON_CREDENTIALED_PLAYWRIGHT_NO_ARTIFACTS: "1"
       DEV_LOGIN_CLIENT_ID: ${{ vars.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_ID || 'pantheon-dev-operator-a-v1' }}

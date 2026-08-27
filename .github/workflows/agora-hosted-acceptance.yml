@@ -52,6 +52,9 @@ jobs:
       PANTHEON_BFF_TENANT_ID: ${{ inputs.tenant_id }}
       EXPECTED_FE_SHA: ${{ inputs.expected_fe_sha }}
       EXPECTED_BFF_SHA: ${{ inputs.expected_bff_sha }}
+      PANTHEON_FE_SHA: ${{ inputs.expected_fe_sha }}
+      PANTHEON_BFF_SHA: ${{ inputs.expected_bff_sha }}
+      PANTHEON_EXPECTED_BFF_SHA: ${{ inputs.expected_bff_sha }}
       PANTHEON_AUDIT_OUT_DIR: .artifacts/AGORA-HOSTED-PROOF/${{ github.run_id }}-${{ github.run_attempt }}
       PANTHEON_CREDENTIALED_PLAYWRIGHT_NO_ARTIFACTS: "1"
       DEV_LOGIN_CLIENT_ID: ${{ vars.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_ID || 'pantheon-dev-operator-a-v1' }}

@@ -84,4 +84,29 @@ describe("hosted Persona proof prerequisites", () => {
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("frontend URL, BFF URL");
   });
+
+  it("binds EXPECTED_BFF_SHA from either PANTHEON_BFF_SHA or EXPECTED_BFF_SHA in the hosted persona spec", async () => {
+    const { readFileSync } = await import("node:fs");
+    const spec = readFileSync(
+      resolve(process.cwd(), "e2e/persona-interaction-cross-repo-hosted.spec.ts"),
+      "utf8",
+    );
+    expect(spec).toContain("PANTHEON_BFF_SHA");
+    expect(spec).toContain("EXPECTED_BFF_SHA");
+    expect(spec).toContain("PANTHEON_EXPECTED_BFF_SHA");
+
+    const agoraWorkflow = readFileSync(
+      resolve(process.cwd(), ".github/workflows/agora-hosted-acceptance.yml"),
+      "utf8",
+    );
+    expect(agoraWorkflow).toContain("PANTHEON_BFF_SHA: ${{ inputs.expected_bff_sha }}");
+    expect(agoraWorkflow).toContain("EXPECTED_BFF_SHA: ${{ inputs.expected_bff_sha }}");
+
+    const pfgAgoraWorkflow = readFileSync(
+      resolve(process.cwd(), ".github/workflows/pfg-agora-journey-e2e-hosted-acceptance.yml"),
+      "utf8",
+    );
+    expect(pfgAgoraWorkflow).toContain("PANTHEON_BFF_SHA: ${{ inputs.expected_bff_sha }}");
+    expect(pfgAgoraWorkflow).toContain("EXPECTED_BFF_SHA: ${{ inputs.expected_bff_sha }}");
+  });
 });

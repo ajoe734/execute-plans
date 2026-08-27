@@ -337,4 +337,3 @@ describe("Agora Demo Run Evidence Schema", () => {
     expect(parsed.objects.proposal_id).toBe("prop-123");
   });
 });
-

@@ -29,7 +29,12 @@ const VIEWER_TOKEN = roleTokenFromEnv("viewer", [
 ]);
 const WRITE_PROOF = process.env.PANTHEON_PERSONA_INTERACTION_WRITE_PROOF === "1";
 const ENSURED_PERSONA_ID = String(process.env.PANTHEON_PERSONA_INTERACTION_PERSONA_ID ?? "").trim();
-const EXPECTED_BFF_SHA = String(process.env.PANTHEON_BFF_SHA ?? "").trim().toLowerCase();
+const EXPECTED_BFF_SHA = String(
+  process.env.PANTHEON_BFF_SHA
+    ?? process.env.EXPECTED_BFF_SHA
+    ?? process.env.PANTHEON_EXPECTED_BFF_SHA
+    ?? "",
+).trim().toLowerCase();
 const DEV_LOGIN_OPERATOR_CLIENT_ID = String(
   process.env.DEV_LOGIN_OPERATOR_CLIENT_ID
     ?? process.env.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_ID
