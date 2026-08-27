@@ -9,8 +9,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { expect, test, type APIRequestContext, type Page, type TestInfo } from "@playwright/test";
 import {
-  gcpIdentityStorageKey,
-  gcpIdentityStoredUser,
+  installHostedDevLogin,
   roleTokenFromEnv,
 } from "./helpers/auth";
 
@@ -21,11 +20,28 @@ const EXPECTED_BFF_SHA = String(process.env.PANTHEON_BFF_SHA ?? "").trim().toLow
 // `pantheon-dev` names the hosted environment; `tenant-dev` is the canonical
 // data-plane tenant used by its lifecycle projector and short-lived proof JWTs.
 const TENANT_ID = String(process.env.PANTHEON_TENANT_ID ?? "tenant-dev").trim();
-const GCP_IDENTITY_API_KEY = String(
-  process.env.PANTHEON_PUBLIC_GCP_IDENTITY_API_KEY ?? "",
-).trim();
 const OPERATOR_TOKEN = roleTokenFromEnv("operator", ["PANTHEON_PERSONA_INTERACTION_OPERATOR_TOKEN"]);
 const VIEWER_TOKEN = roleTokenFromEnv("viewer", ["PANTHEON_PERSONA_INTERACTION_VIEWER_TOKEN"]);
+const DEV_LOGIN_OPERATOR_CLIENT_ID = String(
+  process.env.DEV_LOGIN_OPERATOR_CLIENT_ID
+    ?? process.env.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_ID
+    ?? "pantheon-dev-operator-a-v1",
+).trim();
+const DEV_LOGIN_OPERATOR_CLIENT_SECRET = String(
+  process.env.DEV_LOGIN_OPERATOR_CLIENT_SECRET
+    ?? process.env.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_SECRET
+    ?? "",
+).trim();
+const DEV_LOGIN_VIEWER_CLIENT_ID = String(
+  process.env.DEV_LOGIN_VIEWER_CLIENT_ID
+    ?? process.env.DEV_BFF_DEV_LOGIN_VIEWER_CLIENT_ID
+    ?? "pantheon-dev-viewer-v1",
+).trim();
+const DEV_LOGIN_VIEWER_CLIENT_SECRET = String(
+  process.env.DEV_LOGIN_VIEWER_CLIENT_SECRET
+    ?? process.env.DEV_BFF_DEV_LOGIN_VIEWER_CLIENT_SECRET
+    ?? "",
+).trim();
 const EVIDENCE_DIR = process.env.PANTHEON_AUDIT_OUT_DIR || "/tmp/tj-e2e-012-hosted-browser";
 const DEV_FE_HOST = "pantheon-lupin-dev-fe.35.201.204.12.sslip.io";
 const DEV_BFF_HOST = "pantheon-lupin-dev-bff.35.201.204.12.sslip.io";
@@ -70,16 +86,6 @@ function items(value: unknown): JsonRecord[] {
   return Array.isArray(rows)
     ? rows.filter((row): row is JsonRecord => Boolean(row) && typeof row === "object" && !Array.isArray(row))
     : [];
-}
-
-function bearerClaims(token: string): JsonRecord {
-  const parts = token.split(".");
-  if (parts.length !== 3) return {};
-  try {
-    return record(JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8")));
-  } catch {
-    return {};
-  }
 }
 
 function bffHeaders(token: string): Record<string, string> {
@@ -165,33 +171,17 @@ async function assertStrictSession(
 
 async function installHostedSession(
   page: Page,
-  input: { operatorId: string; roles: string[]; token: string },
+  role: "operator" | "viewer",
 ): Promise<void> {
-  expect(GCP_IDENTITY_API_KEY).toMatch(/^AIza[A-Za-z0-9_-]{35}$/u);
-  const claims = bearerClaims(input.token);
-  const nowSeconds = Math.floor(Date.now() / 1000);
-  const expiresAt = Number(claims.exp ?? 0);
-  expect(String(claims.sub ?? "")).toBe(input.operatorId);
-  expect(expiresAt).toBeGreaterThan(nowSeconds + 240);
-  const storageKey = gcpIdentityStorageKey(GCP_IDENTITY_API_KEY);
-  const storedSession = gcpIdentityStoredUser({
-    apiKey: GCP_IDENTITY_API_KEY,
-    email: typeof claims.email === "string"
-      ? claims.email
-      : `${input.operatorId}@pantheon-dev.invalid`,
-    token: input.token,
-    uid: input.operatorId,
-  });
-  await page.addInitScript(
-    ({ key, session }) => {
-      try {
-        window.sessionStorage.setItem(key, JSON.stringify(session));
-      } catch {
-        // Retried automatically when the hosted origin is established.
-      }
-    },
-    { key: storageKey, session: storedSession },
-  );
+  const clientId = role === "operator"
+    ? DEV_LOGIN_OPERATOR_CLIENT_ID
+    : DEV_LOGIN_VIEWER_CLIENT_ID;
+  const clientSecret = role === "operator"
+    ? DEV_LOGIN_OPERATOR_CLIENT_SECRET
+    : DEV_LOGIN_VIEWER_CLIENT_SECRET;
+  expect(clientId, `${role} hosted dev-login client id is required`).not.toBe("");
+  expect(clientSecret, `${role} hosted dev-login client secret is required`).not.toBe("");
+  await installHostedDevLogin(page, { clientId, clientSecret, tenantId: TENANT_ID });
 }
 
 function observeBffResponses(page: Page): NetworkRecord[] {
@@ -273,11 +263,11 @@ test.describe("TJ-E2E-012 hosted Trade Journey browser proof", () => {
     page,
     request,
   }, testInfo) => {
-    test.skip(!OPERATOR_TOKEN || !GCP_IDENTITY_API_KEY, "requires an operator token and GCP Identity config");
+    test.skip(!OPERATOR_TOKEN || !DEV_LOGIN_OPERATOR_CLIENT_SECRET, "requires operator and hosted dev-login credentials");
     test.setTimeout(180_000);
     const deployment = await assertDeploymentPair(request);
-    const session = await assertStrictSession(request, OPERATOR_TOKEN, "operator");
-    await installHostedSession(page, { ...session, token: OPERATOR_TOKEN });
+    await assertStrictSession(request, OPERATOR_TOKEN, "operator");
+    await installHostedSession(page, "operator");
     const network = observeBffResponses(page);
     // The shared tenant contains thousands of genuine journeys. Restrict the
     // real server-composed list to the scenario namespace instead of assuming
@@ -328,11 +318,11 @@ test.describe("TJ-E2E-012 hosted Trade Journey browser proof", () => {
     page,
     request,
   }, testInfo) => {
-    test.skip(!VIEWER_TOKEN || !GCP_IDENTITY_API_KEY, "requires a viewer token and GCP Identity config");
+    test.skip(!VIEWER_TOKEN || !DEV_LOGIN_VIEWER_CLIENT_SECRET, "requires viewer and hosted dev-login credentials");
     test.setTimeout(120_000);
     const deployment = await assertDeploymentPair(request);
-    const session = await assertStrictSession(request, VIEWER_TOKEN, "viewer");
-    await installHostedSession(page, { ...session, token: VIEWER_TOKEN });
+    await assertStrictSession(request, VIEWER_TOKEN, "viewer");
+    await installHostedSession(page, "viewer");
     const network = observeBffResponses(page);
     const live = await openJourneyList(page, { environment: "live", query: "tj-scenario-10" });
     const row = live.rows.find((item) => item.journey_id === "tj-scenario-10");
@@ -362,11 +352,11 @@ test.describe("TJ-E2E-012 hosted Trade Journey browser proof", () => {
     page,
     request,
   }, testInfo) => {
-    test.skip(!OPERATOR_TOKEN || !GCP_IDENTITY_API_KEY, "requires an operator token and GCP Identity config");
+    test.skip(!OPERATOR_TOKEN || !DEV_LOGIN_OPERATOR_CLIENT_SECRET, "requires operator and hosted dev-login credentials");
     test.setTimeout(120_000);
     const deployment = await assertDeploymentPair(request);
-    const session = await assertStrictSession(request, OPERATOR_TOKEN, "operator");
-    await installHostedSession(page, { ...session, token: OPERATOR_TOKEN });
+    await assertStrictSession(request, OPERATOR_TOKEN, "operator");
+    await installHostedSession(page, "operator");
     const network = observeBffResponses(page);
     const paper = await openJourneyList(page, { environment: "paper", query: "tj-scenario-7" });
     expect(paper.rows.some((row) => row.journey_id === "tj-scenario-7")).toBe(true);
