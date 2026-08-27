@@ -81,12 +81,9 @@ describe("Persona and Agora auth route boundary", () => {
     expect(screen.queryByText("Persona interaction")).not.toBeInTheDocument();
   });
 
-  it("fails closed and redirects to /auth when BFF verification returns an error (bffError)", () => {
+  it("redirects when BFF verification has not produced an auth-ready session", () => {
     state.value.session = { idToken: "some-token" };
-    state.value.bffSession = {
-      identity: { roles: ["operator"], capabilities: [] },
-      readiness: { authReady: true, operatorRoleReady: true },
-    };
+    state.value.bffSession = null;
     state.value.bffError = new Error("BFF verification network error");
     renderRoute();
     expect(screen.getByText("Authentication page")).toBeInTheDocument();
@@ -105,13 +102,25 @@ describe("Persona and Agora auth route boundary", () => {
     expect(screen.queryByText("Authentication page")).not.toBeInTheDocument();
   });
 
-  it("admits a BFF-authenticated viewer to read while write gates remain separate", () => {
+  it("does not redirect an auth-ready session when provider readiness is degraded", () => {
     state.value.session = { idToken: "viewer-token" };
     state.value.bffSession = {
       identity: { roles: ["viewer"], capabilities: [] },
-      readiness: { authReady: false, operatorRoleReady: false },
+      readiness: { authReady: true, providerReady: false, operatorRoleReady: false },
     };
+    state.value.bffError = new Error("provider offline");
     renderRoute();
     expect(screen.getByText("Persona interaction")).toBeInTheDocument();
+  });
+
+  it("redirects a BFF identity whose strict auth readiness is false", () => {
+    state.value.session = { idToken: "viewer-token" };
+    state.value.bffSession = {
+      identity: { roles: ["viewer"], capabilities: [] },
+      readiness: { authReady: false, providerReady: true, operatorRoleReady: false },
+    };
+    renderRoute();
+    expect(screen.getByText("Authentication page")).toBeInTheDocument();
+    expect(screen.queryByText("Persona interaction")).not.toBeInTheDocument();
   });
 });

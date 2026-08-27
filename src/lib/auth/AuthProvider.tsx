@@ -60,7 +60,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (syncVersion.current !== version) return;
     sessionRef.current = next;
     setSession(next);
-    setBffSession(null);
+    const sameUser = prior?.user.uid === next?.user.uid;
+    if (!sameUser) setBffSession(null);
     setBffError(null);
 
     if (!next) {
@@ -88,10 +89,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false);
     } catch (error: unknown) {
       if (syncVersion.current !== version) return;
-      // A first-factor-only Identity Platform session is never enough to cross the product route
-      // boundary. Drop the header provider and retain the error for the auth UI.
-      clearBffBrowserSession();
-      setBffSession(null);
+      // A provider readback failure must not erase a session that was already
+      // strictly authenticated for this same GCP Identity user. ProtectedRoute
+      // decides from that session's BFF-owned authReady signal, not bffError.
       setBffError(error instanceof Error ? error : new Error(String(error)));
       setLoading(false);
     }
@@ -126,7 +126,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const retryBffSession = useCallback(async () => {
     const current = sessionRef.current;
-    setBffSession(null);
     setBffError(null);
     setLoading(true);
 

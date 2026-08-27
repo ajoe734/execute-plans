@@ -2,7 +2,7 @@ import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "./AuthProvider";
 
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { bffSession, bffError, loading } = useAuth();
+  const { bffSession, loading } = useAuth();
   const loc = useLocation();
 
   if (loading) {
@@ -16,7 +16,9 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (bffError || !bffSession) {
+  // Provider readiness governs provider-dependent features, not browser
+  // authentication. A strict BFF authReady readback is the route boundary.
+  if (!bffSession || bffSession.readiness.authReady !== true) {
     const from = `${loc.pathname}${loc.search}${loc.hash}`;
     const authPath = loc.pathname === "/agora" || loc.pathname.startsWith("/agora/")
       ? "/agora/auth"
