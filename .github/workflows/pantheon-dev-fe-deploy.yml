@@ -1647,8 +1647,10 @@ jobs:
               raise SystemExit(f"Negative controls not fully passed: {neg}")
 
           restoration = data.get("restoration") or {}
-          if restoration.get("read_only_restored") is not True or restoration.get("served_manifest_verified") is not True:
-              raise SystemExit(f"Restoration fields not fully true: {restoration}")
+          if restoration.get("served_manifest_verified") is not True:
+              raise SystemExit(f"served_manifest_verified must be true in evidence: {restoration}")
+          if data.get("profile") == "read-only" and restoration.get("read_only_restored") is not True:
+              raise SystemExit(f"read_only_restored must be true when profile is read-only: {restoration}")
 
           print(json.dumps({
               "demo_run_id": data.get("demo_run_id"),

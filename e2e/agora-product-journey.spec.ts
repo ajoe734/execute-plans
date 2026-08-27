@@ -1472,7 +1472,7 @@ test.describe(`${TASK_ID} strict-live browser journey`, () => {
       const versionData = asRecord(version.data ?? version);
       const liveBffSha = String(versionData.source_commit_sha ?? versionData.commit ?? "").toLowerCase();
       expect(liveBffSha, "live BFF /bff/version source commit must match expected BFF SHA").toBe(bffSha);
-      expect(Boolean(versionData.source_commit_known ?? true)).toBe(true);
+      expect(versionData.source_commit_known, "live BFF /bff/version source_commit_known must be explicitly true").toBe(true);
 
       servedManifestVerified = true;
 
