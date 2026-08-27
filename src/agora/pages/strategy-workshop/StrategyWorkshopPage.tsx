@@ -1114,7 +1114,7 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
   const handleSend = useCallback(
     async (text: string) => {
       const content = text.trim();
-      if (!workshopId || !workshop || !content || sendLoading || !writeAccess.interactionAllowed || dailyRuntimeState !== "ready") return;
+      if (!workshopId || !workshop || !content || sendLoading || !writeAccess.interactionAllowed) return;
       setSendLoading(true);
       setSendError(null);
       setMessageReceiptState("accepted");
@@ -1286,7 +1286,6 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
       sendLoading,
       writeAccess.interactionAllowed,
       writeAccess.actorId,
-      dailyRuntimeState,
       entry,
       contextError,
       contextResolutionSessionId,
@@ -1314,8 +1313,6 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
     if (contextResolving) return { code: "context_resolving", message: "Resolving authoritative Workshop context." };
     if (contextError) return { code: "context_error", message: `Authoritative context is unavailable: ${contextError}` };
     if (!resolvedContext) return { code: "context_pending", message: "Waiting for authoritative Workshop context." };
-    if (dailyRuntimeState === "loading") return { code: "daily_runtime_loading", message: "Checking the authoritative daily Persona runtime." };
-    if (dailyRuntimeState !== "ready") return { code: "daily_runtime_unavailable", message: dailyRuntimeMessage ?? "The authoritative daily Persona runtime is unavailable." };
     if (selectedMode === "compare" && (selectedParticipants.length !== 2 || new Set(selectedParticipants).size !== 2)) {
       return { code: "compare_participants_invalid", message: "Compare requires exactly two distinct eligible Personas." };
     }
