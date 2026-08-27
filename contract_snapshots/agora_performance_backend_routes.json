@@ -1,0 +1,23 @@
+{
+  "metadata": {
+    "snapshot_date": "2026-08-27",
+    "backend_repo": "ajoe734/pantheon",
+    "backend_commit": "3294632db4285fa3520c6d0097084584eab62093",
+    "backend_manifest_path": "services/control-plane/bff/contract_snapshots/backend_routes_manifest.json",
+    "source_task": "AGORA-AGC-05-PERFORMANCE-BFF-20260827",
+    "notes": [
+      "Pinned subset of the Pantheon backend route manifest covering the",
+      "owner-scoped Agora Strategy Performance surface consumed by",
+      "src/lib/bff-v1/agora/performance.ts.",
+      "e2e/agora-contract-route-drift.spec.ts binds against this file so a",
+      "path/method change on either side of the boundary fails the FE gate",
+      "instead of silently drifting."
+    ]
+  },
+  "entries": [
+    { "method": "GET", "path": "/bff/agora/trading-room/strategies/{param}/performance", "family": "agora-core", "status": "implemented" },
+    { "method": "GET", "path": "/bff/agora/performance/action-receipts/{param}", "family": "agora-core", "status": "implemented" },
+    { "method": "POST", "path": "/bff/agora/trading-room/strategies/{param}/performance/suggestions/{param}/actions", "family": "agora-core", "status": "implemented" },
+    { "method": "GET", "path": "/bff/agora/trading-room/performance-attribution/by-strategy", "family": "agora-core", "status": "implemented" }
+  ]
+}

@@ -1,0 +1,81 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "AGORA-AGC-05-PERFORMANCE-FE-20260827",
+  "owner": "Antigravity",
+  "reviewer": "Codex2",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/AGORA-AGC-05-PERFORMANCE-FE-20260827",
+  "status": "ready-for-independent-exact-head-review",
+  "recorded_at": "2026-08-27T20:18:00Z",
+  "scope": {
+    "adopted": [
+      "Strategy Performance client and page consume owner-scoped Agora routes (GET /bff/agora/trading-room/strategies/{strategy_id}/performance, GET /bff/agora/performance/action-receipts/{receipt_id}, POST /bff/agora/trading-room/strategies/{strategy_id}/performance/suggestions/{suggestion_id}/actions, and GET /bff/agora/trading-room/performance-attribution/by-strategy) with typed empty/partial states and no order-routing authority.",
+      "Added cross-repo contract binding and route drift gate: contract_snapshots/agora_performance_backend_routes.json pinned to Pantheon backend manifest, and e2e/agora-contract-route-drift.spec.ts.",
+      "e2e/agora-contract-route-drift.spec.ts extracts every concrete request from performance.ts and proves full normalized path and HTTP method against the pinned backend manifest, failing closed if any route disappears, drifts in method, or alters path segments."
+    ],
+    "not_changed": [
+      "Backend Agora performance truth engine, projection calculations, receipt persistence, or order routing isolation.",
+      "Management fleet-wide performance attribution endpoints or non-Agora trading room routes.",
+      "Shared write-gate policy or authentication session models."
+    ]
+  },
+  "bff_contract_binding": {
+    "dependency_task": "AGORA-AGC-05-PERFORMANCE-BFF-20260827",
+    "backend_repo": "ajoe734/pantheon",
+    "backend_commit": "3294632db4285fa3520c6d0097084584eab62093",
+    "backend_manifest_path": "services/control-plane/bff/contract_snapshots/backend_routes_manifest.json",
+    "pinned_routes": [
+      {
+        "method": "GET",
+        "path": "/bff/agora/trading-room/strategies/{param}/performance",
+        "family": "agora-core",
+        "status": "implemented"
+      },
+      {
+        "method": "GET",
+        "path": "/bff/agora/performance/action-receipts/{param}",
+        "family": "agora-core",
+        "status": "implemented"
+      },
+      {
+        "method": "POST",
+        "path": "/bff/agora/trading-room/strategies/{param}/performance/suggestions/{param}/actions",
+        "family": "agora-core",
+        "status": "implemented"
+      },
+      {
+        "method": "GET",
+        "path": "/bff/agora/trading-room/performance-attribution/by-strategy",
+        "family": "agora-core",
+        "status": "implemented"
+      }
+    ]
+  },
+  "validation": {
+    "route_drift_gate": {
+      "command": "npx playwright test e2e/agora-contract-route-drift.spec.ts",
+      "result": "passed: 12 tests (6 Chromium, 6 Mobile Chromium)"
+    },
+    "focused_unit_tests": {
+      "command": "npx vitest run src/lib/bff-v1/agora/performance.test.ts src/agora/pages/strategy-performance/StrategyPerformancePage.test.tsx",
+      "result": "passed: 2 files, 26 tests"
+    },
+    "typecheck": {
+      "command": "npx tsc --noEmit -p .",
+      "result": "passed"
+    },
+    "diff_integrity": {
+      "command": "git diff --check origin/dev...HEAD",
+      "result": "passed"
+    }
+  },
+  "review_binding": {
+    "sha_disposition": "Independent approval must bind the final PR head that contains this implementation, route drift gate repair, and evidence manifest."
+  },
+  "independent_review_required": [
+    "Confirm e2e/agora-contract-route-drift.spec.ts statically extracts all concrete client requests from performance.ts and proves both HTTP method and full normalized path against contract_snapshots/agora_performance_backend_routes.json.",
+    "Confirm suggestion action route is proved as POST /bff/agora/trading-room/strategies/{param}/performance/suggestions/{param}/actions and fails closed on method change or path truncation.",
+    "Confirm unit tests and typecheck pass cleanly."
+  ]
+}
