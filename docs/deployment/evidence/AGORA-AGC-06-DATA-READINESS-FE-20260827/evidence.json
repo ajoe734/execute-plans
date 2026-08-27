@@ -1,0 +1,69 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "AGORA-AGC-06-DATA-READINESS-FE-20260827",
+  "owner": "Codex2",
+  "reviewer": "Claude",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/AGORA-AGC-06-DATA-READINESS-FE-20260827",
+  "status": "ready-for-independent-exact-head-review",
+  "scope": {
+    "adopted": [
+      "Data Sources renders the active Agora source snapshot, source-instance identity, freshness/SLA, dependent signal producer, and selected downstream surface reasons from GET /bff/agora/operational-readiness.",
+      "Trading Room renders the same source and producer lineage and distinguishes stale, empty_fresh, and unavailable readiness rather than inferring an empty queue from a failed read.",
+      "The readiness client accepts only the BFF capability's required non-auth-critical and read-only proofs, makes a GET request only, and has no mutation helper."
+    ],
+    "not_changed": [
+      "BFF operational readiness implementation, deployment, source ingestion, producer scheduling, or downstream projection ownership.",
+      "Existing Data Source Control Center mutation controls and their VITE_BFF_REAL_WRITES gate.",
+      "Trading Room decision, candidate-review, workspace, broker, or capital mutation routes."
+    ]
+  },
+  "bff_contract_binding": {
+    "dependency_task": "AGORA-AGC-06-DATA-READINESS-BFF-20260827",
+    "delivery_commit": "b9b1b922793e6c763a0be03c4be43432c71d584c",
+    "path": "GET /bff/agora/operational-readiness",
+    "required_proofs": {
+      "capability": "agora.operational_readiness.v1",
+      "requiredForAuthentication": false,
+      "no_order_route_proof": "agora_operational_readiness_read_only"
+    }
+  },
+  "runtime_observation": {
+    "target": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/bff/agora/operational-readiness",
+    "observed_on": "2026-08-27",
+    "result": "HTTP 404. The dev deployment has not yet exposed the merged dependency route. The frontend intentionally renders its unavailable state and does not fabricate source freshness or producer lineage."
+  },
+  "validation": {
+    "focused_ui_and_client_tests": {
+      "command": "npm test -- --run src/lib/bff-v1/agora/operationalReadiness.test.ts src/management/pages/DataSourcesPage.test.tsx src/management/pages/oversight/DataSourceManagement.test.tsx src/agora/pages/trading-room/TradingRoomPage.test.tsx",
+      "result": "passed: 4 files, 100 tests"
+    },
+    "typecheck": {
+      "command": "npm run typecheck",
+      "result": "passed"
+    },
+    "task_scoped_lint": {
+      "command": "npx eslint src/lib/bff-v1/agora/operationalReadiness.ts src/lib/bff-v1/agora/operationalReadiness.test.ts src/management/pages/DataSourcesPage.tsx src/management/pages/DataSourcesPage.test.tsx src/management/pages/oversight/DataSourceManagement.tsx src/management/pages/oversight/DataSourceManagement.test.tsx src/agora/pages/trading-room/TradingRoomPage.tsx src/agora/pages/trading-room/TradingRoomPage.test.tsx",
+      "result": "passed with no errors; one pre-existing exhaustive-deps warning remains in TradingRoomPage's candidate-pool effect."
+    },
+    "strict_live_read_only_build": {
+      "command": "VITE_GCP_IDENTITY_API_KEY=<syntactically-valid public placeholder> VITE_GCP_IDENTITY_PROJECT_ID=pantheon-test VITE_GCP_IDENTITY_AUTH_DOMAIN=pantheon-test.firebaseapp.com VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build",
+      "result": "passed",
+      "note": "The public identity values were syntactically valid non-deployed placeholders; no credential was introduced. Existing Browserslist freshness warning remains."
+    },
+    "diff_integrity": {
+      "command": "git diff --check",
+      "result": "passed before commit"
+    }
+  },
+  "review_binding": {
+    "sha_disposition": "Independent approval must bind the final PR head that contains this implementation and evidence manifest."
+  },
+  "independent_review_required": [
+    "Confirm the readiness client is GET-only and rejects a payload that lacks the non-auth-critical or read-only proof.",
+    "Confirm Data Sources displays snapshot/source/producer lineage and the no-mutation boundary without altering existing governed controls.",
+    "Confirm Trading Room preserves stale, empty_fresh, and unavailable as distinct operator-facing states, including downstream unavailable reasons.",
+    "Confirm the current dev BFF 404 is represented as an unavailable read rather than presentation fallback data."
+  ]
+}
