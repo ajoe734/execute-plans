@@ -133,7 +133,7 @@ run_reconcile_only() {
     -e SOURCE_INGEST_CONTROLLER_EXCLUSIVE_CONNECTOR_IDS= \
     -e SOURCE_INGEST_SCHEDULER_MAX_CONCURRENCY=1 \
     "${scheduler_image}" \
-    python scripts/source_ingest_scheduler_once.py \
+    python -m scripts.source_ingest_scheduler_once \
       --mode reconcile_only \
       --max-concurrency 1 \
       --operation-key "${operation_key}" \
@@ -210,7 +210,7 @@ prepare() {
     -e SOURCE_INGEST_CONTROLLER_EXCLUSIVE_CONNECTOR_IDS="${PROOF_CONNECTOR}" \
     -e SOURCE_INGEST_SCHEDULER_MAX_CONCURRENCY=1 \
     "${scheduler_image}" \
-    python scripts/source_ingest_scheduler_once.py \
+    python -m scripts.source_ingest_scheduler_once \
       --mode reconcile_and_pull \
       --connector "${PROOF_CONNECTOR}" \
       --force-connector "${PROOF_CONNECTOR}" \
@@ -268,6 +268,8 @@ restore() {
   source_commands="$(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "${SOURCE_CONTAINER}" | sed -n 's/^SOURCE_MANAGEMENT_COMMANDS_ENABLED=//p' | tail -1)"
   bff_commands="$(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "${BFF_CONTAINER}" | sed -n 's/^PANTHEON_BFF_SOURCE_MANAGEMENT_COMMANDS_ENABLED=//p' | tail -1)"
   egress="$(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "${SOURCE_CONTAINER}" | sed -n 's/^PANTHEON_EXTERNAL_EGRESS=//p' | tail -1)"
+  source_commands="${source_commands:-0}"
+  bff_commands="${bff_commands:-0}"
   [[ "${source_commands}" == "0" ]]
   [[ "${bff_commands}" == "0" ]]
   [[ "${egress}" == "deny" ]]

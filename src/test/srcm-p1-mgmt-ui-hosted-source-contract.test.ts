@@ -27,6 +27,7 @@ describe("SRCM-P1 hosted acceptance producer contract", () => {
     expect(workflow).toContain("expected_source_definitions_sha");
     expect(workflow).toContain("srcm-source-catalog-${GITHUB_RUN_ID}.json");
     expect(workflow).toContain("steps.prepare.outcome != 'skipped'");
+    expect(workflow).toContain("SOURCE_MANAGEMENT_COMMANDS_EFFECTIVE_DEFAULT_APPLIED");
     expect(workflow).toContain("EXPECTED_FE_SHA");
     expect(workflow).toContain("EXPECTED_BFF_SHA");
     expect(workflow).toContain("deployment.json");
@@ -40,6 +41,7 @@ describe("SRCM-P1 hosted acceptance producer contract", () => {
     expect(runtime).toContain("SOURCE_INGEST_CONTROLLER_MAX_TICKS=1");
     expect(runtime).toContain('--connector "${PROOF_CONNECTOR}"');
     expect(runtime).toContain('--force-connector "${PROOF_CONNECTOR}"');
+    expect(runtime).toContain("python -m scripts.source_ingest_scheduler_once");
     expect(runtime).not.toMatch(/AlphaVantage|Polygon|IBKR|Shioaji/u);
   });
 
