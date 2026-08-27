@@ -135,6 +135,24 @@ jobs:
           [[ "${live_bff}" == "${EXPECTED_BFF_SHA}" ]]
           [[ "${live_known}" == "true" ]]
 
+      - name: Verify active task-owned qualification lease from GitHub server time
+        if: inputs.operation == 'capture'
+        shell: bash
+        env:
+          GITHUB_API_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          headers_file="$(mktemp)"
+          response="$(curl -fsS -D "${headers_file}" \
+            -H "Authorization: Bearer ${GITHUB_API_TOKEN}" \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            'https://api.github.com/repos/ajoe734/execute-plans/contents/.pantheon/environment-leases/pantheon-dev-environment.json?ref=environment-coordination')"
+          server_date="$(sed -n 's/^[Dd]ate:[[:space:]]*//p' "${headers_file}" | tr -d '\r' | tail -1)"
+          rm -f "${headers_file}"
+          node -e 'const fs=require("node:fs");const r=JSON.parse(process.argv[1]);const l=JSON.parse(Buffer.from(r.content,"base64").toString("utf8"));const now=Date.parse(process.argv[2]);const expires=Date.parse(l.expiresAt);if(l.leaseId!==process.env.QUALIFICATION_LEASE_ID||l.owner!=="SRCM-P1-HOSTED-ACCEPTANCE-20260824/Codex"||l.mode!=="qualification"||l.expectedBackendSha!==process.env.EXPECTED_BFF_SHA||l.runUrl!=="https://github.com/ajoe734/pantheon/pull/5238"||!Number.isFinite(now)||!Number.isFinite(expires)||(expires-now)<900000)process.exit(1);fs.writeFileSync(process.argv[3],JSON.stringify({schema_version:"pantheon.dev-environment-qualification-lease.v1",verified_at_github_server_time:new Date(now).toISOString(),lease_id:l.leaseId,owner:l.owner,mode:l.mode,expected_backend_sha:l.expectedBackendSha,expires_at:l.expiresAt,run_url:l.runUrl},null,2)+"\n")' \
+            "${response}" "${server_date}" "${PANTHEON_AUDIT_OUT_DIR}/qualification-lease.json"
+
       - name: Mint short-lived operator token for identity and verifier probes
         shell: bash
         run: |

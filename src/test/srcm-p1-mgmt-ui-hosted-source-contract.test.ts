@@ -20,6 +20,9 @@ describe("SRCM-P1 hosted acceptance producer contract", () => {
     expect(workflow).toContain("pantheon-dev-vm");
     expect(workflow).toContain("execute-plans-deploy");
     expect(workflow).toContain("qualification_lease_id");
+    expect(workflow).toContain("Verify active task-owned qualification lease from GitHub server time");
+    expect(workflow).toContain("environment-coordination");
+    expect(workflow).toContain("(expires-now)<900000");
     expect(workflow).toContain("pantheon_verifier_sha");
     expect(workflow).toContain("expected_source_definitions_sha");
     expect(workflow).toContain("EXPECTED_FE_SHA");
