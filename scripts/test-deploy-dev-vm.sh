@@ -17,6 +17,7 @@ DEPLOY_WORKFLOW_SOURCE="${ROOT_DIR}/.github/workflows/pantheon-dev-fe-deploy.yml
 WATCHDOG_WORKFLOW_SOURCE="${ROOT_DIR}/.github/workflows/pantheon-proof-watchdog.yml"
 SYSTEM_PATH="${PATH}"
 REAL_NODE="$(command -v node)"
+REAL_GIT="$(command -v git)"
 
 for required_file in \
   "${DEPLOY_SOURCE}" \
@@ -145,6 +146,36 @@ cat > "${MOCK_BIN}/npm" <<'MOCK'
 set -Eeuo pipefail
 printf 'npm\n' >> "${MOCK_CALL_LOG:?}"
 printf 'npm-command:%s\n' "$*" >> "${MOCK_CALL_LOG:?}"
+MOCK
+
+cat > "${MOCK_BIN}/git" <<'MOCK'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+last_arg="${@: -1}"
+if [[ "${1:-}" == "ls-remote" && "${last_arg}" == "refs/heads/dev" ]]; then
+  lookup_count_file="${MOCK_ALLOWED_ROOT:?}/.origin-dev-lookup-count"
+  lookup_count=0
+  if [[ -f "${lookup_count_file}" ]]; then
+    lookup_count="$(<"${lookup_count_file}")"
+  fi
+  lookup_count=$((lookup_count + 1))
+  printf '%s\n' "${lookup_count}" > "${lookup_count_file}"
+  if [[ "${MOCK_FAIL_ORIGIN_DEV_SECOND_LOOKUP:-false}" == "true" &&
+        "${lookup_count}" -eq 2 ]]; then
+    echo "mock transient origin/dev switch lookup failure" >&2
+    exit 128
+  fi
+fi
+if [[ "${1:-}" == "ls-remote" && "${last_arg}" == "refs/heads/dev" &&
+      "${MOCK_FAIL_ORIGIN_DEV_ONCE:-false}" == "true" ]]; then
+  marker="${MOCK_ALLOWED_ROOT:?}/.origin-dev-failed-once"
+  if [[ ! -e "${marker}" ]]; then
+    : > "${marker}"
+    echo "mock transient origin/dev lookup failure" >&2
+    exit 128
+  fi
+fi
+exec "${REAL_GIT:?}" "$@"
 MOCK
 
 cat > "${MOCK_BIN}/npx" <<'MOCK'
@@ -309,7 +340,7 @@ esac
 MOCK
 
 chmod +x "${MOCK_BIN}/npm" "${MOCK_BIN}/npx" "${MOCK_BIN}/rsync" \
-  "${MOCK_BIN}/sudo" "${MOCK_BIN}/curl"
+  "${MOCK_BIN}/sudo" "${MOCK_BIN}/curl" "${MOCK_BIN}/git"
 
 mkdir -p "${BASE_SOURCE}/scripts"
 cp "${DEPLOY_SOURCE}" "${BASE_SOURCE}/scripts/deploy-dev-vm.sh"
@@ -759,6 +790,7 @@ run_deploy() {
     cd "${CASE_REPO}"
     env -i \
       PATH="${MOCK_BIN}:${SYSTEM_PATH}" \
+      REAL_GIT="${REAL_GIT}" \
       HOME="${CASE_HOME}" \
       LANG=C \
       TMPDIR="${CASE_TMP}" \
@@ -773,6 +805,8 @@ run_deploy() {
       MOCK_CALL_LOG="${CASE_CALL_LOG}" \
       MOCK_FAIL_PROBE_PHASES="" \
       MOCK_FAIL_DURABLE_RSYNC_ONCE="false" \
+      MOCK_FAIL_ORIGIN_DEV_ONCE="false" \
+      MOCK_FAIL_ORIGIN_DEV_SECOND_LOOKUP="false" \
       MOCK_BAD_GITHUB_DIGEST="false" \
       MOCK_PUBLIC_HEALTH_STATUS_SEQUENCE="" \
       MOCK_TAMPER_ROLLBACK_PAIR="false" \
@@ -1105,6 +1139,60 @@ test_valid_candidate_success() {
   assert_probe_called post_switch
   assert_summary_outcome accepted
   verify_evidence_pair
+
+  setup_case valid-standby-read-only-previous
+  upgrade_previous_manifest_to_paired_modern "${PREVIOUS_TARGET}/deployment.json"
+  "${REAL_NODE}" -e '
+    const fs=require("node:fs");const file=process.argv[1];
+    const payload=JSON.parse(fs.readFileSync(file,"utf8"));
+    payload.deploymentState="standby";
+    fs.writeFileSync(file,`${JSON.stringify(payload,null,2)}\n`);
+  ' "${PREVIOUS_TARGET}/deployment.json"
+  run_deploy
+  [[ "${RUN_STATUS}" -eq 0 ]] || \
+    show_deploy_failure "a qualified read-only standby predecessor should succeed"
+  assert_candidate_is_live
+  assert_probe_called previous_target_pre_switch
+  assert_probe_called candidate_pre_switch
+  assert_probe_called post_switch
+  assert_summary_outcome accepted
+  verify_evidence_pair
+
+  setup_case invalid-standby-operator-live-previous
+  upgrade_previous_manifest_to_paired_modern "${PREVIOUS_TARGET}/deployment.json"
+  "${REAL_NODE}" -e '
+    const fs=require("node:fs");const file=process.argv[1];
+    const payload=JSON.parse(fs.readFileSync(file,"utf8"));
+    payload.profile="operator-live";
+    payload.deploymentProfile="operator-live";
+    payload.buildMode.VITE_BFF_REAL_WRITES="true";
+    payload.deploymentState="standby";
+    fs.writeFileSync(file,`${JSON.stringify(payload,null,2)}\n`);
+  ' "${PREVIOUS_TARGET}/deployment.json"
+  cp "${PREVIOUS_TARGET}/deployment.json" "${PREVIOUS_MANIFEST_SNAPSHOT}"
+  run_deploy
+  [[ "${RUN_STATUS}" -ne 0 ]] || \
+    show_deploy_failure "an operator-live standby predecessor must remain rejected"
+  assert_previous_is_live
+  assert_previous_manifest_unchanged
+}
+
+test_origin_dev_lookup_retries_transient_failure() {
+  setup_case transient-origin-dev
+  run_deploy MOCK_FAIL_ORIGIN_DEV_ONCE=true
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "transient origin/dev failure should be retried"
+  assert_candidate_is_live
+  grep -Fq 'release.completed' "${CASE_AUDIT}/evidence.jsonl" || \
+    show_deploy_failure "retried origin/dev lookup did not complete the release"
+}
+
+test_origin_dev_switch_lookup_retries_transient_failure() {
+  setup_case transient-origin-dev-switch
+  run_deploy MOCK_FAIL_ORIGIN_DEV_SECOND_LOOKUP=true
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "transient switch origin/dev failure should be retried"
+  assert_candidate_is_live
+  grep -Fq 'release.completed' "${CASE_AUDIT}/evidence.jsonl" || \
+    show_deploy_failure "retried switch origin/dev lookup did not complete the release"
 }
 
 test_agora_compatibility_gate_is_consumed_before_switch() {
@@ -2109,6 +2197,8 @@ run_test() {
 }
 
 run_test "valid candidate succeeds and evidence hashes verify" test_valid_candidate_success
+run_test "origin/dev lookup retries a transient git failure" test_origin_dev_lookup_retries_transient_failure
+run_test "switch origin/dev lookup retries a transient git failure" test_origin_dev_switch_lookup_retries_transient_failure
 run_test "Agora pending/rejected or mismatched evidence cannot switch" test_agora_compatibility_gate_is_consumed_before_switch
 run_test "release candidate hash follows canonical LF contract" test_release_candidate_id_uses_lf_canonical_hash
 run_test "canonical hash matches cross-repo pantheon fixture" test_canonical_hash_matches_cross_repo_fixture

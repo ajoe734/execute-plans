@@ -522,8 +522,14 @@ if (
 if (expectedState && String(payload.deploymentState || "") !== expectedState) {
   throw new Error("deployment manifest state mismatch");
 }
-if (!expectedState && payload.deploymentState && payload.deploymentState !== "accepted") {
-  throw new Error("deployment manifest is not an accepted release");
+if (
+  !expectedState &&
+  payload.deploymentState &&
+  payload.deploymentState !== "accepted" &&
+  !(payload.deploymentState === "standby" &&
+    (payload.deploymentProfile || payload.profile) === "read-only")
+) {
+  throw new Error("deployment manifest is not an accepted or read-only standby release");
 }
 if (expectedProfile) {
   if (payload.profile !== expectedProfile || payload.deploymentProfile !== expectedProfile) {
@@ -663,6 +669,34 @@ NODE
     evidence_append "bff.strict_health.${stage}" passed "probeStatus=passed"
   fi
   evidence_append "bff.identity.${stage}" passed "bffCommit=${BFF_COMMIT}"
+}
+
+resolve_remote_dev_sha() {
+  local attempt raw remote_sha error_file
+  local -a delays=(0 2 5)
+  for attempt in 1 2 3; do
+    error_file="${TMP_DIR}/origin-dev-${attempt}.stderr"
+    raw=""
+    if raw="$(git ls-remote --exit-code --refs origin refs/heads/dev 2>"${error_file}")"; then
+      remote_sha="$(awk '$2 == "refs/heads/dev" { print $1; exit }' <<<"${raw}")"
+      if [[ "${remote_sha}" =~ ^[0-9a-f]{40}$ ]]; then
+        printf '%s\n' "${remote_sha}"
+        return 0
+      fi
+    fi
+    if (( attempt < 3 )); then
+      sleep "${delays[$attempt]}"
+    fi
+  done
+  echo "Unable to resolve current origin/dev after 3 attempts." >&2
+  for attempt in 1 2 3; do
+    error_file="${TMP_DIR}/origin-dev-${attempt}.stderr"
+    if [[ -s "${error_file}" ]]; then
+      echo "origin/dev attempt ${attempt} error:" >&2
+      sed -n '1,20p' "${error_file}" >&2
+    fi
+  done
+  return 1
 }
 
 run_release_probe() {
@@ -1465,9 +1499,8 @@ if [[ "${DEPLOY_PROFILE}" == "read-only-restore" ]]; then
   exit 0
 fi
 
-REMOTE_DEV_SHA="$(git ls-remote --exit-code origin refs/heads/dev | awk '{print $1}')"
-if [[ ! "${REMOTE_DEV_SHA}" =~ ^[0-9a-f]{40}$ ]]; then
-  echo "Unable to resolve current origin/dev." >&2
+if ! REMOTE_DEV_SHA="$(resolve_remote_dev_sha)"; then
+  evidence_append controller.order failed "reason=origin_dev_unavailable" "attempts=3"
   exit 2
 fi
 if [[ "${CONTROLLER_SHA}" != "${REMOTE_DEV_SHA}" ]]; then
@@ -1508,7 +1541,7 @@ if [[ -L "${DEPLOY_ROOT}" ]]; then
       /^[0-9a-f]{40}$/.test(manifestBff)&&p.bffCommitEvidence===true&&
       ["","read-only","operator-live","write-proof"].includes(profile)&&
       (!profile||/^[0-9a-f]{64}$/.test(String(p.pairId||"")))&&
-      ["","accepted","candidate"].includes(state);
+      ["","accepted","candidate","standby"].includes(state);
     if(!/^[0-9a-f]{40}$/.test(commit)||!safe)process.exit(1);
     process.stdout.write(commit);
   ' "${PREVIOUS_TARGET}/deployment.json")"
@@ -1880,7 +1913,10 @@ run_release_probe candidate_pre_switch "${RELEASE_DIR}" "${SHA}" "${ARTIFACT_DIG
 evidence_append candidate.pre_switch passed "releaseDir=${RELEASE_DIR}"
 
 verify_bff_identity pre_switch
-REMOTE_DEV_SHA_AT_SWITCH="$(git ls-remote --exit-code origin refs/heads/dev | awk '{print $1}')"
+if ! REMOTE_DEV_SHA_AT_SWITCH="$(resolve_remote_dev_sha)"; then
+  evidence_append controller.order_at_switch failed "reason=origin_dev_unavailable" "attempts=3"
+  exit 2
+fi
 if [[ "${CONTROLLER_SHA}" != "${REMOTE_DEV_SHA_AT_SWITCH}" ]]; then
   echo "Dev advanced after candidate probe; refusing a switch from a stale controller." >&2
   evidence_append controller.order_at_switch failed "currentDevSha=${REMOTE_DEV_SHA_AT_SWITCH}"
