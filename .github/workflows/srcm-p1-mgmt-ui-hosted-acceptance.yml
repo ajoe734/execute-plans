@@ -21,6 +21,22 @@ on:
         description: "Exact served execute-plans commit SHA"
         required: true
         type: string
+      expected_source_definitions_sha:
+        description: "Exact deployed Source definitions commit SHA"
+        required: true
+        type: string
+      pantheon_verifier_sha:
+        description: "Exact Pantheon task commit containing evidence and verifier"
+        required: true
+        type: string
+      operation:
+        description: "Capture once, or verify already committed evidence without mutation"
+        required: true
+        default: "capture"
+        type: choice
+        options:
+          - capture
+          - verify-only
       qualification_lease_id:
         description: "Active Pantheon qualification lease held by the task owner"
         required: true
@@ -57,6 +73,8 @@ jobs:
       PANTHEON_HOSTED_E2E: "1"
       EXPECTED_FE_SHA: ${{ inputs.expected_fe_sha }}
       EXPECTED_BFF_SHA: ${{ inputs.expected_bff_sha }}
+      EXPECTED_SOURCE_DEFINITIONS_SHA: ${{ inputs.expected_source_definitions_sha }}
+      PANTHEON_VERIFIER_SHA: ${{ inputs.pantheon_verifier_sha }}
       QUALIFICATION_LEASE_ID: ${{ inputs.qualification_lease_id }}
       PANTHEON_CREDENTIALED_PLAYWRIGHT_NO_ARTIFACTS: "1"
       DEV_LOGIN_CLIENT_ID: ${{ vars.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_ID || 'pantheon-dev-operator-a-v1' }}
@@ -90,6 +108,8 @@ jobs:
           [[ "${PANTHEON_BROWSER_BFF_BASE_URL}" == "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io" ]]
           [[ "${EXPECTED_FE_SHA}" =~ ^[0-9a-f]{40}$ ]]
           [[ "${EXPECTED_BFF_SHA}" =~ ^[0-9a-f]{40}$ ]]
+          [[ "${EXPECTED_SOURCE_DEFINITIONS_SHA}" =~ ^[0-9a-f]{40}$ ]]
+          [[ "${PANTHEON_VERIFIER_SHA}" =~ ^[0-9a-f]{40}$ ]]
           [[ "${PANTHEON_BFF_TENANT_ID}" == "tenant-dev" ]]
           [[ "${QUALIFICATION_LEASE_ID}" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]
           [[ -n "${DEV_LOGIN_CLIENT_SECRET}" ]]
@@ -115,7 +135,30 @@ jobs:
           [[ "${live_bff}" == "${EXPECTED_BFF_SHA}" ]]
           [[ "${live_known}" == "true" ]]
 
+      - name: Mint short-lived operator token for identity and verifier probes
+        shell: bash
+        run: |
+          set -euo pipefail
+          response="$(curl -fsS -X POST "${PANTHEON_BROWSER_BFF_BASE_URL}/bff/auth/dev-login" \
+            -H 'Content-Type: application/json' \
+            -d "$(node -e 'process.stdout.write(JSON.stringify({grant_type:"client_credentials",client_id:process.env.DEV_LOGIN_CLIENT_ID,client_secret:process.env.DEV_LOGIN_CLIENT_SECRET}))')")"
+          token="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).access_token||"")' "${response}")"
+          [[ -n "${token}" ]]
+          echo "::add-mask::${token}"
+          echo "PANTHEON_BFF_AUTH_TOKEN=${token}" >> "${GITHUB_ENV}"
+
+      - name: Record exact live Source definition identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          catalog="$(curl -fsS "${PANTHEON_BROWSER_BFF_BASE_URL}/bff/management/data-sources/catalog" \
+            -H "Authorization: Bearer ${PANTHEON_BFF_AUTH_TOKEN}" \
+            -H "X-Tenant-Id: ${PANTHEON_BFF_TENANT_ID}")"
+          node -e 'const fs=require("node:fs");const p=JSON.parse(process.argv[1]);const r=p.data??p;const d=Array.isArray(r.definitions)?r.definitions:[];const s=[...new Set(d.map(x=>String(x.deployment_sha||"")))];if(!d.length||s.length!==1||s[0]!==process.env.EXPECTED_SOURCE_DEFINITIONS_SHA)process.exit(1);fs.writeFileSync(process.argv[2],JSON.stringify({schema_version:"pantheon.external-source-management.source-definition-identity.v1",observed_at:new Date().toISOString(),definition_count:d.length,deployment_sha:s[0]},null,2)+"\n")' \
+            "${catalog}" "${PANTHEON_AUDIT_OUT_DIR}/source-definition-identity.json"
+
       - name: Prepare bounded Source proof runtime and execute one exact official-provider tick
+        if: inputs.operation == 'capture'
         shell: bash
         run: |
           set -euo pipefail
@@ -125,12 +168,14 @@ jobs:
             "${PANTHEON_AUDIT_OUT_DIR}/bounded-provider-tick.json"
 
       - name: Set up Node
+        if: inputs.operation == 'capture'
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: "20"
           cache: npm
 
       - name: Install frontend dependencies and Chromium
+        if: inputs.operation == 'capture'
         shell: bash
         run: |
           set -euo pipefail
@@ -138,6 +183,7 @@ jobs:
           npx playwright install chromium
 
       - name: Run ten real browser journeys and restore read-only before journey ten
+        if: inputs.operation == 'capture'
         shell: bash
         run: |
           set -euo pipefail
@@ -150,7 +196,7 @@ jobs:
             --trace=off
 
       - name: Restore and verify safe runtime posture
-        if: always()
+        if: always() && inputs.operation == 'capture'
         shell: bash
         run: |
           set -euo pipefail
@@ -166,7 +212,7 @@ jobs:
           fi
 
       - name: Record sanitized post-proof posture
-        if: always()
+        if: always() && inputs.operation == 'capture'
         shell: bash
         run: |
           set -euo pipefail
@@ -184,6 +230,39 @@ jobs:
           [[ "${scheduler_restart}" == "no" ]]
           [[ "${scheduler_running}" == "false" ]]
 
+      - name: Check out exact Pantheon verifier and committed evidence
+        if: inputs.operation == 'verify-only'
+        shell: bash
+        run: |
+          set -euo pipefail
+          verifier_root="${RUNNER_TEMP%/}/pantheon-srcm-verifier"
+          git init -q "${verifier_root}"
+          git -C "${verifier_root}" remote add origin https://github.com/ajoe734/pantheon.git
+          git -C "${verifier_root}" fetch -q --depth=1 origin "${PANTHEON_VERIFIER_SHA}"
+          git -C "${verifier_root}" checkout -q --detach FETCH_HEAD
+          [[ "$(git -C "${verifier_root}" rev-parse HEAD)" == "${PANTHEON_VERIFIER_SHA}" ]]
+          echo "PANTHEON_VERIFIER_ROOT=${verifier_root}" >> "${GITHUB_ENV}"
+
+      - name: Run official offline and live hosted acceptance verifier
+        if: inputs.operation == 'verify-only'
+        shell: bash
+        run: |
+          set -euo pipefail
+          evidence_dir="${PANTHEON_VERIFIER_ROOT}/docs/deployment/evidence/external-source-management-phase1"
+          python3 "${PANTHEON_VERIFIER_ROOT}/scripts/verify_external_source_management_acceptance.py" \
+            --evidence-dir "${evidence_dir}" \
+            --offline-only \
+            --expected-fe-sha "${EXPECTED_FE_SHA}" \
+            --expected-bff-sha "${EXPECTED_BFF_SHA}" \
+            --expected-source-definitions-sha "${EXPECTED_SOURCE_DEFINITIONS_SHA}" \
+            --output "${PANTHEON_AUDIT_OUT_DIR}/offline-verifier-result.json"
+          python3 "${PANTHEON_VERIFIER_ROOT}/scripts/verify_external_source_management_acceptance.py" \
+            --evidence-dir "${evidence_dir}" \
+            --expected-fe-sha "${EXPECTED_FE_SHA}" \
+            --expected-bff-sha "${EXPECTED_BFF_SHA}" \
+            --expected-source-definitions-sha "${EXPECTED_SOURCE_DEFINITIONS_SHA}" \
+            --output "${PANTHEON_AUDIT_OUT_DIR}/live-verifier-result.json"
+
       - name: Upload sanitized acceptance evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -194,7 +273,7 @@ jobs:
           retention-days: 90
 
       - name: Remove root-only temporary proof state
-        if: always()
+        if: always() && inputs.operation == 'capture'
         shell: bash
         run: |
           set -euo pipefail

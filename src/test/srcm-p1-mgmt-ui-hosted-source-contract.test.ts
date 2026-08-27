@@ -20,6 +20,8 @@ describe("SRCM-P1 hosted acceptance producer contract", () => {
     expect(workflow).toContain("pantheon-dev-vm");
     expect(workflow).toContain("execute-plans-deploy");
     expect(workflow).toContain("qualification_lease_id");
+    expect(workflow).toContain("pantheon_verifier_sha");
+    expect(workflow).toContain("expected_source_definitions_sha");
     expect(workflow).toContain("EXPECTED_FE_SHA");
     expect(workflow).toContain("EXPECTED_BFF_SHA");
     expect(workflow).toContain("deployment.json");
@@ -53,6 +55,14 @@ describe("SRCM-P1 hosted acceptance producer contract", () => {
     expect(runtime).toContain("--mode reconcile_only");
     expect(runtime).toContain("docker update --restart=no");
     expect(runtime).toContain("assert_live_pair read-only");
+  });
+
+  it("supports a non-mutating second pass of the exact Pantheon verifier", () => {
+    expect(workflow).toContain("verify-only");
+    expect(workflow).toContain("verify_external_source_management_acceptance.py");
+    expect(workflow).toContain("--offline-only");
+    expect(workflow).toContain("live-verifier-result.json");
+    expect(workflow).toContain("inputs.operation == 'capture'");
   });
 
   it("captures all ten required journeys without route interception", () => {
