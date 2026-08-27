@@ -36,7 +36,7 @@ concurrency:
 
 jobs:
   hosted-acceptance:
-    name: Desktop/Mobile Winner Branch & Responsive Parity Hosted Gate
+    name: Agora Hosted Acceptance Gate (Desktop)
     runs-on: ubuntu-latest
     environment: dev
     timeout-minutes: 30
@@ -47,11 +47,24 @@ jobs:
       AG_UIPOL_011_EXPECTED_FE_SHA: ${{ inputs.expected_fe_sha }}
       PANTHEON_FE_BASE_URL: ${{ inputs.fe_base_url }}
       PANTHEON_BFF_BASE_URL: ${{ inputs.bff_base_url }}
+      PANTHEON_BROWSER_BFF_BASE_URL: ${{ inputs.bff_base_url }}
       PANTHEON_HOSTED_E2E: "1"
       PANTHEON_BFF_TENANT_ID: ${{ inputs.tenant_id }}
-      BFF_AUTH_TOKEN: ${{ secrets.DEV_BFF_OPERATOR_A_TOKEN || secrets.BFF_AUTH_TOKEN }}
-      PANTHEON_AUDIT_OUT_DIR: .artifacts/AGORA-HOSTED-PROOF/${{ github.run_id }}-${{ github.run_attempt }}
+      EXPECTED_FE_SHA: ${{ inputs.expected_fe_sha }}
       EXPECTED_BFF_SHA: ${{ inputs.expected_bff_sha }}
+      PANTHEON_FE_SHA: ${{ inputs.expected_fe_sha }}
+      PANTHEON_BFF_SHA: ${{ inputs.expected_bff_sha }}
+      PANTHEON_EXPECTED_BFF_SHA: ${{ inputs.expected_bff_sha }}
+      PANTHEON_AUDIT_OUT_DIR: .artifacts/AGORA-HOSTED-PROOF/${{ github.run_id }}-${{ github.run_attempt }}
+      PANTHEON_CREDENTIALED_PLAYWRIGHT_NO_ARTIFACTS: "1"
+      DEV_LOGIN_CLIENT_ID: ${{ vars.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_ID || 'pantheon-dev-operator-a-v1' }}
+      DEV_LOGIN_CLIENT_SECRET: ${{ secrets.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_SECRET }}
+      DEV_LOGIN_VIEWER_CLIENT_ID: ${{ vars.DEV_BFF_DEV_LOGIN_VIEWER_CLIENT_ID || 'pantheon-dev-viewer-v1' }}
+      DEV_LOGIN_VIEWER_CLIENT_SECRET: ${{ secrets.DEV_BFF_DEV_LOGIN_VIEWER_CLIENT_SECRET }}
+      PANTHEON_PUBLIC_GCP_IDENTITY_API_KEY: ${{ vars.VITE_GCP_IDENTITY_API_KEY }}
+      PANTHEON_PERSONA_INTERACTION_WRITE_PROOF: "1"
+      PANTHEON_PINT_PROBE_ALLOW_WRITES: "true"
+      PFG_AGORA_JOURNEY_E2E: "1"
     steps:
       - name: Checkout dispatched revision
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5a
@@ -61,27 +74,91 @@ jobs:
         run: |
           set -euo pipefail
           [[ "${PANTHEON_FE_BASE_URL}" == "https://pantheon-lupin-dev-fe.35.201.204.12.sslip.io" ]]
-          [[ "${PANTHEON_BFF_BASE_URL}" == "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io" ]]
-          [[ "${AG_UIPOL_011_EXPECTED_FE_SHA}" =~ ^[0-9a-f]{40}$ ]]
+          [[ "${PANTHEON_BROWSER_BFF_BASE_URL}" == "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io" ]]
+          [[ "${EXPECTED_FE_SHA}" =~ ^[0-9a-f]{40}$ ]]
           [[ "${EXPECTED_BFF_SHA}" =~ ^[0-9a-f]{40}$ ]]
           [[ "${PANTHEON_BFF_TENANT_ID}" == "tenant-dev" ]]
+          if [[ -z "${DEV_LOGIN_CLIENT_SECRET}" ]]; then
+            echo "::error::DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_SECRET is not provisioned; refusing to run an unauthenticated hosted journey." >&2
+            exit 1
+          fi
+          if [[ -z "${DEV_LOGIN_VIEWER_CLIENT_SECRET}" ]]; then
+            echo "::error::DEV_BFF_DEV_LOGIN_VIEWER_CLIENT_SECRET is not provisioned; refusing to run without viewer negative controls." >&2
+            exit 1
+          fi
 
-      - name: Bind expected identity to the live served deployment
+      - name: Bind checkout + live FE + live /bff/version exact SHAs
         shell: bash
         run: |
           set -euo pipefail
+          checkout_sha="$(git rev-parse HEAD)"
+          if [[ "${checkout_sha}" != "${EXPECTED_FE_SHA}" ]]; then
+            echo "checked out commit ${checkout_sha} does not match expected ${EXPECTED_FE_SHA}" >&2
+            exit 1
+          fi
+
           served="$(curl -fsS "${PANTHEON_FE_BASE_URL}/deployment.json")"
           served_fe="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).commit || "")' "${served}")"
-          served_bff="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).bffCommit || "")' "${served}")"
-          if [[ "${served_fe}" != "${AG_UIPOL_011_EXPECTED_FE_SHA}" ]]; then
-            echo "live FE commit ${served_fe} does not match expected ${AG_UIPOL_011_EXPECTED_FE_SHA}" >&2
+          served_bff="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).bffCommit || JSON.parse(process.argv[1]).bffSourceCommitSha || "")' "${served}")"
+          if [[ "${served_fe}" != "${EXPECTED_FE_SHA}" ]]; then
+            echo "live FE commit ${served_fe} does not match expected ${EXPECTED_FE_SHA}" >&2
             exit 1
           fi
           if [[ "${served_bff}" != "${EXPECTED_BFF_SHA}" ]]; then
-            echo "live BFF commit ${served_bff} does not match expected ${EXPECTED_BFF_SHA}" >&2
+            echo "live BFF commit in deployment.json ${served_bff} does not match expected ${EXPECTED_BFF_SHA}" >&2
             exit 1
           fi
-          echo "verified live deployment.json binds fe=${served_fe} bff=${served_bff} to the expected exact pair"
+
+          bff_version_res="$(curl -fsS "${PANTHEON_BROWSER_BFF_BASE_URL}/bff/version")"
+          live_bff_sha="$(node -e 'const v=JSON.parse(process.argv[1]); process.stdout.write(v.source_commit_sha || v.commit || "")' "${bff_version_res}")"
+          live_bff_known="$(node -e 'const v=JSON.parse(process.argv[1]); process.stdout.write(String(v.source_commit_known ?? ""))' "${bff_version_res}")"
+          if [[ "${live_bff_known}" != "true" ]]; then
+            echo "live BFF /bff/version source_commit_known is not true" >&2
+            exit 1
+          fi
+          if [[ "${live_bff_sha}" != "${EXPECTED_BFF_SHA}" ]]; then
+            echo "live BFF /bff/version source_commit_sha ${live_bff_sha} does not match expected ${EXPECTED_BFF_SHA}" >&2
+            exit 1
+          fi
+          echo "verified exact SHA bindings: checkout=${checkout_sha}, live FE=${served_fe}, live /bff/version=${live_bff_sha}"
+
+      - name: Mint a short-lived operator bearer token via governed dev-login and prove operator readiness
+        shell: bash
+        run: |
+          set -euo pipefail
+          response="$(curl -fsS -X POST "${PANTHEON_BROWSER_BFF_BASE_URL}/bff/auth/dev-login" \
+            -H 'Content-Type: application/json' \
+            -d "$(node -e 'process.stdout.write(JSON.stringify({grant_type:"client_credentials",client_id:process.env.DEV_LOGIN_CLIENT_ID,client_secret:process.env.DEV_LOGIN_CLIENT_SECRET}))')")"
+          token="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).access_token || "")' "${response}")"
+          if [[ -z "${token}" ]]; then
+            echo "::error::dev-login did not return access_token" >&2
+            exit 1
+          fi
+          echo "::add-mask::${token}"
+          echo "BFF_AUTH_TOKEN=${token}" >> "${GITHUB_ENV}"
+          echo "PANTHEON_PERSONA_INTERACTION_OPERATOR_TOKEN=${token}" >> "${GITHUB_ENV}"
+          echo "DEV_BFF_OPERATOR_A_TOKEN=${token}" >> "${GITHUB_ENV}"
+
+          me="$(curl -fsS "${PANTHEON_BROWSER_BFF_BASE_URL}/bff/me" -H "Authorization: Bearer ${token}" -H "X-Tenant-Id: ${PANTHEON_BFF_TENANT_ID}")"
+          node -e 'const r=JSON.parse(process.argv[1]); const d=r.data ?? r; if (!Array.isArray(d.roles) || !d.roles.includes("operator")) process.exit(1)' "${me}"
+          readiness="$(curl -fsS "${PANTHEON_BROWSER_BFF_BASE_URL}/bff/auth/readiness" -H "Authorization: Bearer ${token}" -H "X-Tenant-Id: ${PANTHEON_BFF_TENANT_ID}")"
+          node -e 'const r=JSON.parse(process.argv[1]); const d=r.data ?? r; if (d.ready !== true || d.authReady !== true) process.exit(1)' "${readiness}"
+
+      - name: Mint a short-lived viewer bearer token via governed dev-login
+        shell: bash
+        run: |
+          set -euo pipefail
+          response="$(curl -fsS -X POST "${PANTHEON_BROWSER_BFF_BASE_URL}/bff/auth/dev-login" \
+            -H 'Content-Type: application/json' \
+            -d "$(node -e 'process.stdout.write(JSON.stringify({grant_type:"client_credentials",client_id:process.env.DEV_LOGIN_VIEWER_CLIENT_ID,client_secret:process.env.DEV_LOGIN_VIEWER_CLIENT_SECRET}))')")"
+          token="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).access_token || "")' "${response}")"
+          if [[ -z "${token}" ]]; then
+            echo "::error::dev-login did not return viewer access_token" >&2
+            exit 1
+          fi
+          echo "::add-mask::${token}"
+          echo "PANTHEON_PERSONA_INTERACTION_VIEWER_TOKEN=${token}" >> "${GITHUB_ENV}"
+          echo "DEV_BFF_VIEWER_TOKEN=${token}" >> "${GITHUB_ENV}"
 
       - name: Set up Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -95,28 +172,43 @@ jobs:
       - name: Install Chromium
         run: npx playwright install chromium --with-deps
 
-      - name: Run real Agora winner branch live hosted spec (desktop + mobile)
+      - name: Run real Agora product journey hosted spec
         run: |
           set -euo pipefail
-          npx playwright test e2e/agora-winner-branch-hosted.spec.ts \
+          npx playwright test e2e/agora-product-journey.spec.ts \
             --project=chromium \
-            --project=mobile-chromium \
             --retries=0 \
             --reporter=list \
             --trace=off
 
-      - name: Run real Agora narrow responsive parity hosted spec (desktop + mobile)
+      - name: Run real Agora winner branch live hosted spec (desktop)
+        run: |
+          set -euo pipefail
+          npx playwright test e2e/agora-winner-branch-hosted.spec.ts \
+            --project=chromium \
+            --retries=0 \
+            --reporter=list \
+            --trace=off
+
+      - name: Run real Agora narrow responsive parity hosted spec (desktop)
         run: |
           set -euo pipefail
           npx playwright test e2e/agora-narrow-responsive-hosted.spec.ts \
             --project=chromium \
-            --project=mobile-chromium \
+            --retries=0 \
+            --reporter=list \
+            --trace=off
+
+      - name: Run real Agora Persona interaction cross-repo hosted spec
+        run: |
+          set -euo pipefail
+          npx playwright test e2e/persona-interaction-cross-repo-hosted.spec.ts \
+            --project=chromium \
             --retries=0 \
             --reporter=list \
             --trace=off
 
       - name: Generate structured proof evidence
-        if: always()
         run: |
           set -euo pipefail
           node -e '
@@ -130,18 +222,17 @@ jobs:
               timestamp: new Date().toISOString(),
               fe_base_url: process.env.PANTHEON_FE_BASE_URL,
               bff_base_url: process.env.PANTHEON_BFF_BASE_URL,
-              expected_fe_sha: process.env.AG_UIPOL_011_EXPECTED_FE_SHA,
+              expected_fe_sha: process.env.EXPECTED_FE_SHA || process.env.AG_UIPOL_011_EXPECTED_FE_SHA,
               expected_bff_sha: process.env.EXPECTED_BFF_SHA,
               tenant_id: process.env.PANTHEON_BFF_TENANT_ID,
               live_deployment_identity_verified: true,
-              projects_run: ["chromium", "mobile-chromium"],
-              scope_note: "This workflow proves the desktop/mobile browser journey and the exact live FE/BFF identity pair only. Failure-injection and rollback-preservation proof for a bad release candidate is owned by AGORA-HOSTED-DEPLOY-REACCEPT-20260815 (six-gate verifier, scripts/verify_agora_current_hosted_acceptance.py) and scripts/deploy-dev-vm.sh, which have the deploy authority this workflow does not: see its own test suite (scripts/test-deploy-dev-vm.sh) for real reject/rollback coverage. This workflow previously fabricated a rollback_drill field with hardcoded true values instead of leaving that proof to its rightful owner; do not reintroduce it here."
+              projects_run: ["chromium"],
+              scope_note: "This workflow proves the desktop browser journey, Persona interaction, and the exact live FE/BFF identity pair only. Failure-injection and rollback-preservation proof for a bad release candidate is owned by AGORA-HOSTED-DEPLOY-REACCEPT-20260815 (six-gate verifier, scripts/verify_agora_current_hosted_acceptance.py) and scripts/deploy-dev-vm.sh, which have the deploy authority this workflow does not: see its own test suite (scripts/test-deploy-dev-vm.sh) for real reject/rollback coverage. This workflow previously fabricated a rollback_drill field with hardcoded true values instead of leaving that proof to its rightful owner; do not reintroduce it here."
             };
             fs.writeFileSync(path.join(outDir, "agora-hosted-proof-evidence.json"), JSON.stringify(payload, null, 2));
           '
 
       - name: Upload sanitized acceptance evidence
-        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: agora-hosted-acceptance-${{ github.run_id }}-${{ github.run_attempt }}

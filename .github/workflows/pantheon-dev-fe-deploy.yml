@@ -1478,9 +1478,203 @@ jobs:
       contents: read
       actions: read
     runs-on: ubuntu-latest
+    env:
+      PANTHEON_DEV_FE_HOST: https://pantheon-lupin-dev-fe.35.201.204.12.sslip.io
+      PANTHEON_BFF_BASE_URL: https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io
+      EXACT_FE_SHA: ${{ needs.deploy.outputs.candidate_sha }}
+      EXACT_BFF_SHA: ${{ needs.deploy.outputs.bff_sha }}
+      EXPECTED_PAIR_ID: ${{ needs.deploy.outputs.pair_id }}
+      PROOF_RUN_ID: ${{ needs.proof-coordinator.outputs.proof_run_id }}
     steps:
       - name: Wait for independent restore watchdog
         env:
           GH_TOKEN: ${{ github.token }}
           WATCHDOG_RUN_ID: ${{ needs.proof-coordinator.outputs.watchdog_run_id }}
         run: gh run watch "$WATCHDOG_RUN_ID" --repo "$GITHUB_REPOSITORY" --exit-status --interval 15
+
+      - name: Verify post-child same-pair read-only deployment readback
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 30); do
+            set +e
+            verified="$(node --input-type=module - <<'NODE' 2>/dev/null
+          const feUrl = `${process.env.PANTHEON_DEV_FE_HOST.replace(/\/+$/, "")}/deployment.json?confirmation=${Date.now()}`;
+          const bffUrl = `${process.env.PANTHEON_BFF_BASE_URL.replace(/\/+$/, "")}/bff/version?confirmation=${Date.now()}`;
+          const expectedFe = String(process.env.EXACT_FE_SHA || "").toLowerCase();
+          const expectedBff = String(process.env.EXACT_BFF_SHA || "").toLowerCase();
+
+          try {
+            const feRes = await fetch(feUrl, { signal: AbortSignal.timeout(5000) });
+            if (!feRes.ok) process.exit(1);
+            const dep = await feRes.json();
+            const servedFe = String(dep.commit || dep.frontendSha || "").toLowerCase();
+            const servedBff = String(dep.bffCommit || dep.bffSourceCommitSha || "").toLowerCase();
+            const profile = String(dep.deploymentProfile || dep.profile || "");
+            const realWrites = String(dep.buildMode?.VITE_BFF_REAL_WRITES ?? "");
+
+            if (servedFe !== expectedFe || servedBff !== expectedBff) process.exit(1);
+            if (profile !== "read-only-restore" && profile !== "read-only") process.exit(1);
+            if (realWrites !== "false") process.exit(1);
+
+            const bffRes = await fetch(bffUrl, { signal: AbortSignal.timeout(5000) });
+            if (!bffRes.ok) process.exit(1);
+            const bffVer = await bffRes.json();
+            if (bffVer.source_commit_known !== true) process.exit(1);
+            const liveBffSha = String(bffVer.source_commit_sha || bffVer.commit || "").toLowerCase();
+            if (liveBffSha !== expectedBff) process.exit(1);
+
+            process.stdout.write("VERIFIED");
+          } catch {
+            process.exit(1);
+          }
+          NODE
+            )"
+            set -e
+            if [[ "$verified" == "VERIFIED" ]]; then
+              echo "Post-child same-pair read-only readback and live /bff/version verified: profile=read-only-restore real_writes=false"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Post-child readback failed to verify same-pair read-only deployment and /bff/version within 30 attempts." >&2
+          exit 1
+
+      - name: Attest final same-pair restoration bound to child demo evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          child_view="$(gh run view "$PROOF_RUN_ID" --repo "$GITHUB_REPOSITORY" --json status,conclusion)"
+          child_status="$(node -e 'const v=JSON.parse(process.argv[1]); process.stdout.write(v.status||"")' "$child_view")"
+          child_conclusion="$(node -e 'const v=JSON.parse(process.argv[1]); process.stdout.write(v.conclusion||"")' "$child_view")"
+          echo "Child proof run status: ${child_status}:${child_conclusion}"
+          if [[ "$child_status" != "completed" || "$child_conclusion" != "success" ]]; then
+            echo "Child proof run failed or nonterminal: status=${child_status} conclusion=${child_conclusion}" >&2
+            exit 1
+          fi
+
+          artifacts_res="$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "/repos/${GITHUB_REPOSITORY}/actions/runs/${PROOF_RUN_ID}/artifacts?per_page=100")"
+
+          artifact_metadata="$(node -e '
+            const payload = JSON.parse(process.argv[1]);
+            const artifacts = (payload.artifacts || []).filter(
+              (a) => a.name === "pantheon-authorized-write-proof-attempt-1" || a.name.startsWith("pantheon-authorized-write-proof-attempt-")
+            ).filter((a) => !a.expired);
+            if (artifacts.length !== 1) {
+              console.error(`Expected exactly 1 pantheon-authorized-write-proof artifact, found ${artifacts.length}`);
+              process.exit(1);
+            }
+            const a = artifacts[0];
+            const digest = String(a.digest || "").toLowerCase();
+            if (!/^sha256:[0-9a-f]{64}$/.test(digest)) {
+              console.error(`Invalid artifact digest: ${digest}`);
+              process.exit(1);
+            }
+            process.stdout.write(`${a.id}\t${digest}`);
+          ' "$artifacts_res")"
+
+          IFS=$'\t' read -r child_artifact_id child_artifact_digest <<< "$artifact_metadata"
+          [[ "$child_artifact_id" =~ ^[1-9][0-9]*$ && "$child_artifact_digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+
+          archive="${RUNNER_TEMP%/}/child-write-proof.zip"
+          rm -f "$archive"
+          curl --fail-with-body --silent --show-error --location \
+            --retry 3 --retry-all-errors --connect-timeout 10 --max-time 180 \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/artifacts/${child_artifact_id}/zip" \
+            --output "$archive"
+
+          actual_digest="sha256:$(sha256sum "$archive" | awk '{print $1}')"
+          if [[ "$actual_digest" != "$child_artifact_digest" ]]; then
+            echo "Child proof artifact digest mismatch: expected=${child_artifact_digest} actual=${actual_digest}" >&2
+            exit 1
+          fi
+
+          evidence_summary="$(python3 - "$archive" "$EXACT_FE_SHA" "$EXACT_BFF_SHA" <<'PY'
+          import json
+          import pathlib
+          import sys
+          import zipfile
+
+          archive_path = pathlib.Path(sys.argv[1])
+          expected_fe = sys.argv[2].lower()
+          expected_bff = sys.argv[3].lower()
+          expected_pair = f"{expected_fe}:{expected_bff}"
+
+          with zipfile.ZipFile(archive_path) as bundle:
+              names = bundle.namelist()
+              evidence_names = [n for n in names if pathlib.PurePosixPath(n).name == "agora-demo-run-evidence.json"]
+              if len(evidence_names) != 1:
+                  raise SystemExit(f"Expected 1 agora-demo-run-evidence.json in proof artifact, found {len(evidence_names)}: {names}")
+              raw = bundle.read(evidence_names[0]).decode("utf-8")
+              data = json.loads(raw)
+
+          if data.get("schema_version") != "pantheon.agora.demo-run-evidence.v1":
+              raise SystemExit(f"Invalid schema_version: {data.get('schema_version')}")
+          if data.get("status") != "passed":
+              raise SystemExit(f"Demo status is not passed: {data.get('status')}")
+
+          pair = data.get("exact_pair") or {}
+          fe_sha = str(pair.get("frontend_sha") or "").lower()
+          bff_sha = str(pair.get("bff_sha") or "").lower()
+          manifest_pair = str(pair.get("manifest_pair_id") or "").lower()
+
+          if fe_sha != expected_fe or bff_sha != expected_bff:
+              raise SystemExit(f"Pair SHA mismatch in evidence: fe={fe_sha} (expected {expected_fe}), bff={bff_sha} (expected {expected_bff})")
+          if manifest_pair != expected_pair:
+              raise SystemExit(f"manifest_pair_id mismatch in evidence: {manifest_pair} (expected {expected_pair})")
+
+          if data.get("profile") != "bounded-write-proof":
+              raise SystemExit(f"Invalid profile: {data.get('profile')}")
+
+          objects = data.get("objects") or {}
+          for key in ["proposal_id", "persona_id", "workshop_id", "message_event_id", "reconstruction_id", "strategy_id", "version_id", "interaction_id"]:
+              val = str(objects.get(key) or "")
+              if not val or "unknown" in val.lower():
+                  raise SystemExit(f"Object {key} is invalid or contains unknown: {val}")
+
+          steps = data.get("steps") or []
+          if not any(s.get("id") == "interaction_terminal_readback" and s.get("status") == "passed" for s in steps):
+              raise SystemExit("Missing passed interaction_terminal_readback step in evidence")
+
+          neg = data.get("negative_controls") or {}
+          if neg.get("viewer_write_denied") is not True or neg.get("cross_tenant_non_enumerating") is not True or neg.get("no_order_route_proof") is not True:
+              raise SystemExit(f"Negative controls not fully passed: {neg}")
+
+          restoration = data.get("restoration") or {}
+          if restoration.get("served_manifest_verified") is not True:
+              raise SystemExit(f"served_manifest_verified must be true in evidence: {restoration}")
+          if data.get("profile") == "read-only" and restoration.get("read_only_restored") is not True:
+              raise SystemExit(f"read_only_restored must be true when profile is read-only: {restoration}")
+
+          print(json.dumps({
+              "demo_run_id": data.get("demo_run_id"),
+              "proposal_id": objects.get("proposal_id"),
+              "persona_id": objects.get("persona_id"),
+              "interaction_id": objects.get("interaction_id"),
+          }))
+          PY
+          )"
+
+          demo_run_id="$(node -e 'const s=JSON.parse(process.argv[1]); process.stdout.write(s.demo_run_id||"")' "$evidence_summary")"
+          echo "Verified child proof evidence: demo_run_id=${demo_run_id}"
+
+          {
+            echo "### Pantheon Same-Pair Read-Only Restoration Attestation"
+            echo "- Candidate FE SHA: \`${EXACT_FE_SHA}\`"
+            echo "- Candidate BFF SHA: \`${EXACT_BFF_SHA}\`"
+            echo "- Expected Pair ID: \`${EXPECTED_PAIR_ID}\`"
+            echo "- Child Proof Run ID: \`${PROOF_RUN_ID}\`"
+            echo "- Child Status: \`${child_status}:${child_conclusion}\`"
+            echo "- Child Proof Artifact ID: \`${child_artifact_id}\`"
+            echo "- Child Proof Artifact Digest: \`${child_artifact_digest}\`"
+            echo "- Demo Run ID: \`${demo_run_id}\`"
+            echo "- Post-Restore Profile: \`read-only-restore\`"
+            echo "- Real Writes: \`false\`"
+            echo "- Final Attestation: **VERIFIED**"
+          } >> "$GITHUB_STEP_SUMMARY"

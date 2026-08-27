@@ -1,0 +1,69 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "AGORA-AGC-08-HOSTED-DEMO-20260827",
+  "owner": "Antigravity2",
+  "reviewer": "Codex2",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/AGORA-AGC-08-HOSTED-DEMO-20260827",
+  "status": "ready-for-independent-exact-head-review",
+  "recorded_at": "2026-08-27T22:17:00.000Z",
+  "scope": {
+    "adopted": [
+      "Tighten docs/contracts/agora/demo-run-evidence.v1.schema.json with strict fail-closed constraints: reject zero SHAs (frontend_sha, bff_sha, manifest_pair_id), reject unknown/empty object IDs case-insensitively covering UNKNOWN/mixed-case sentinels, and enforce that status=passed requires viewer_write_denied=true, cross_tenant_non_enumerating=true, no_order_route_proof=true, served_manifest_verified=true, all steps passed without skips, and read_only_restored=true when profile=read-only.",
+      "Update .github/workflows/agora-hosted-acceptance.yml to run fail-closed desktop-only acceptance (--project=chromium), remove mobile-chromium projects and mobile evidence, remove always-run hardcoded verified evidence, and enforce exact checkout/deployment/BFF SHA bindings (binding PANTHEON_BFF_SHA, PANTHEON_FE_SHA, and EXPECTED_BFF_SHA).",
+      "Update .github/workflows/pfg-agora-journey-e2e-hosted-acceptance.yml to require operator and viewer credentials via governed dev-login, enforce exact SHA bindings (PANTHEON_BFF_SHA, PANTHEON_FE_SHA, and EXPECTED_BFF_SHA), and upload sanitized acceptance evidence.",
+      "Fix e2e/agora-product-journey.spec.ts: remove child-waits-for-restore polling loop to eliminate deadlock cycle with watchdog restore, initialize feSha, bffSha, and all entity IDs at test start, validate each ID is non-empty without falling back to unknown case-insensitively, fix candidateId variable shadowing (prefer-const), accept read-only and write-proof profiles, verify served manifest pair and unauthenticated 401 rejection, and format demoEvidence per demo-run-evidence.v1 contract.",
+      "Update .github/workflows/pantheon-proof-watchdog.yml and pantheon-dev-fe-deploy.yml: move same-pair read-only readback and final restoration attestation to post-child parent/watchdog confirmation stage, independently querying GET /bff/version (requiring source_commit_known===true and exact candidate BFF SHA) alongside deployment.json, handling transient network/parse errors gracefully in retry loops, removing credential_status early exit so watchdog waits for full child run completion, requiring child completed:success, downloading/digest-validating pantheon-authorized-write-proof, and validating agora-demo-run-evidence.v1.",
+      "Update e2e/persona-interaction-cross-repo-hosted.spec.ts to bind EXPECTED_BFF_SHA consistently from PANTHEON_BFF_SHA, EXPECTED_BFF_SHA, or PANTHEON_EXPECTED_BFF_SHA with regression tests in persona-hosted-proof-env.test.ts.",
+      "Update paired-release-workflow.test.ts to test real workflow ordering, artifact wiring, and post-restore readback without test-local mock simulation duplication, verifying that workflow ordering has no child-waits-for-restore cycle and attestation binds to candidate pair.",
+      "Update src/test/agora-demo-run-evidence-schema.test.ts with 8 unit tests validating all positive and negative schema constraints (zero SHAs, UNKNOWN/Unknown/unknown IDs, false negative controls, false restoration, and skipped steps), removing trailing EOF blank lines."
+    ],
+    "not_changed": [
+      "Backend routing and interaction worker implementations.",
+      "Read-only vs real-writes security boundary."
+    ]
+  },
+  "validation": {
+    "vitest_schema_unit": {
+      "command": "npx vitest run src/test/agora-demo-run-evidence-schema.test.ts",
+      "result": "passed: 8/8 tests passed including case-insensitive unknown sentinel checks"
+    },
+    "vitest_persona_proof_env": {
+      "command": "npx vitest run src/test/persona-hosted-proof-env.test.ts",
+      "result": "passed: 6/6 tests passed including BFF SHA binding fallback and workflow contracts"
+    },
+    "vitest_paired_release_workflow": {
+      "command": "npx vitest run src/test/paired-release-workflow.test.ts",
+      "result": "passed: 22/22 tests passed verifying real workflow ordering, deadlock cycle prevention, and same-pair readback"
+    },
+    "vitest_full_suite": {
+      "command": "npx vitest run src/test/",
+      "result": "passed: 338/338 tests passed across 28 test files"
+    },
+    "typecheck": {
+      "command": "npm run typecheck",
+      "result": "passed: tsc -p tsconfig.agora.json --noEmit with 0 errors"
+    },
+    "eslint": {
+      "command": "npm run lint",
+      "result": "passed: 0 errors"
+    },
+    "git_diff_check": {
+      "command": "git diff --check",
+      "result": "passed: 0 whitespace / EOF errors"
+    }
+  },
+  "review_binding": {
+    "sha_disposition": "Independent approval must bind the final PR head that contains this implementation and evidence manifest."
+  },
+  "independent_review_required": [
+    "Confirm docs/contracts/agora/demo-run-evidence.v1.schema.json strictly rejects zero SHAs, unknown/UNKNOWN/mixed-case IDs, and invalid status=passed states.",
+    "Confirm .github/workflows/agora-hosted-acceptance.yml and pfg-agora-journey-e2e-hosted-acceptance.yml supply PANTHEON_BFF_SHA, PANTHEON_FE_SHA, and EXPECTED_BFF_SHA.",
+    "Confirm e2e/persona-interaction-cross-repo-hosted.spec.ts falls back cleanly between PANTHEON_BFF_SHA and EXPECTED_BFF_SHA.",
+    "Confirm e2e/agora-product-journey.spec.ts eliminates the child-side restore polling deadlock, initializes IDs at start, rejects unknown case-insensitively, and verifies served manifest.",
+    "Confirm same-pair read-only readback and final restoration attestation are placed in post-child parent/watchdog confirmation stage in pantheon-dev-fe-deploy.yml and pantheon-proof-watchdog.yml.",
+    "Confirm auditable read-only restore orchestration and deadlock cycle prevention test the real workflow ordering and artifact wiring in paired-release-workflow.test.ts without test-local simulation duplication.",
+    "Confirm npm run typecheck, npm run lint, git diff --check, and all vitest unit tests pass cleanly."
+  ]
+}
