@@ -177,6 +177,25 @@ class SsePerfHarness {
       payload,
     };
   }
+
+  /**
+   * Fulfill browser SSE requests without crossing the fixture's protocol
+   * boundary. Playwright cannot continue an external HTTPS request to this
+   * local HTTP harness, so the route adapter returns the same typed frames
+   * directly while preserving request accounting and reconnect behaviour.
+   */
+  fixtureBody(requestUrl: string): string {
+    this.requests.push(requestUrl);
+    return [
+      sseBlock(this.nextEvent("system", "system.connected")),
+      sseBlock(
+        this.nextEvent("sentinel", "sentinel.finding.status_changed", {
+          findingId: "finding-f18-001",
+          status: "open",
+        }),
+      ),
+    ].join("");
+  }
 }
 
 function sseCorsHeaders(req: IncomingMessage): Record<string, string> {
@@ -427,6 +446,28 @@ const COCKPIT_RESPONSE = {
       links: { manageHref: "/management/sentinel", evidenceHref: "/management/evidence" },
     },
   ],
+};
+
+const QUARTERLY_FORMULA_RESPONSE = {
+  formulaId: "quarterly-f18",
+  version: "1.0.0",
+  activeFrom: "2026-04-01",
+  weights: {
+    pnl: 0.25,
+    sharpe: 0.2,
+    drawdownControl: 0.15,
+    executionQuality: 0.15,
+    riskCompliance: 0.15,
+    improvement: 0.05,
+    humanInterventionPenalty: 0.05,
+  },
+  hardPenalties: {
+    riskPolicyViolation: 5,
+    unresolvedCriticalIncident: 10,
+    missingEvidence: 3,
+    capitalBreach: 15,
+  },
+  minDataRequirements: { minTradingDays: 45, minPaperDays: 10, minCanaryDays: 10, minTrades: 200 },
 };
 
 const PORTFOLIO_SUMMARY_RESPONSE = {
@@ -792,6 +833,12 @@ async function installPerfRoutes(page: Page, counters: RouteCounters): Promise<v
   await page.route(/\/bff\/management\/persona-league(?:\?.*)?$/, async (route) => {
     await fulfillJson(route, { data: PERSONA_LEAGUE_RESPONSE, meta: { snapshot_at: nowIso() } });
   });
+  await page.route(/\/bff\/management\/quarterly-ranking(?:\?.*)?$/, async (route) => {
+    await fulfillJson(route, { data: [], meta: { snapshot_at: nowIso(), surfaces: { quarterly_ranking: { status: "ok" } } } });
+  });
+  await page.route(/\/bff\/management\/quarterly-ranking\/formula(?:\?.*)?$/, async (route) => {
+    await fulfillJson(route, { data: QUARTERLY_FORMULA_RESPONSE, meta: { snapshot_at: nowIso() } });
+  });
   await page.route(/\/bff\/management\/persona-fleet(?:\?.*)?$/, async (route) => {
     await fulfillJson(route, { data: PERSONA_FLEET_RESPONSE, meta: { snapshot_at: nowIso() } });
   });
@@ -859,7 +906,26 @@ async function installPerfRoutes(page: Page, counters: RouteCounters): Promise<v
   await installContainedLoopbackAuthAuthority(page);
 }
 
-async function installEventSourceRedirect(page: Page, baseUrl: string): Promise<void> {
+async function installEventSourceRedirect(page: Page, harness: SsePerfHarness): Promise<void> {
+  // The live connector uses native EventSource for cookie sessions and
+  // fetch-based SSE when a bearer token is present. Keep both transports on
+  // the local harness; otherwise the latter would hit the configured external
+  // BFF and trip strict fallback in an otherwise contained fixture.
+  await page.route(/\/bff\/events\/stream(?:\?.*)?$/, async (route) => {
+    const request = route.request();
+    await route.fulfill({
+      status: 200,
+      headers: {
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+        "Content-Type": "text/event-stream",
+        "X-Accel-Buffering": "no",
+        "Access-Control-Allow-Credentials": "true",
+        "Access-Control-Allow-Origin": request.headers().origin ?? "*",
+      },
+      body: harness.fixtureBody(request.url()),
+    });
+  });
   await page.addInitScript(
     ({ redirectedBaseUrl }) => {
       const NativeEventSource = window.EventSource;
@@ -885,7 +951,7 @@ async function installEventSourceRedirect(page: Page, baseUrl: string): Promise<
       });
       window.EventSource = RedirectedEventSource as typeof EventSource;
     },
-    { redirectedBaseUrl: baseUrl },
+    { redirectedBaseUrl: harness.baseUrl },
   );
 }
 
@@ -1005,11 +1071,14 @@ test.describe("F18 perf and stability soft-fail budgets", () => {
     const harness = new SsePerfHarness();
     await harness.start();
     try {
-      await installEventSourceRedirect(page, harness.baseUrl);
       await installStrictFallbackRuntime(page);
       const counters = routeCounters();
       const failures = collectPageFailures(page);
       await installPerfRoutes(page, counters);
+      // AGC-04 uses fetch-based SSE when the loopback fixture has a bearer
+      // token. Register the redirect after the deny-by-default BFF route so
+      // both EventSource and fetch transports stay contained in the harness.
+      await installEventSourceRedirect(page, harness);
 
       const loadMs = await gotoAndWaitForText(
         page,
