@@ -2,21 +2,13 @@ import { useEffect, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
   createUserWithEmailAndPassword,
-  getMultiFactorResolver,
-  multiFactor,
   sendEmailVerification,
   sendPasswordResetEmail,
   signInWithPopup,
   signInWithEmailAndPassword,
   signOut as signOutGcpIdentity,
   GoogleAuthProvider,
-  TotpMultiFactorGenerator,
-  type MultiFactorError,
-  type MultiFactorResolver,
-  type TotpSecret,
 } from "firebase/auth";
-import { FirebaseError } from "firebase/app";
-import { QRCodeSVG } from "qrcode.react";
 import { gcpIdentityAuth } from "@/integrations/gcp/identity";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { Button } from "@/components/ui/button";
@@ -40,11 +32,7 @@ export default function AuthPage() {
   const authRequired = params.get("reason") === "auth-required";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [otp, setOtp] = useState("");
   const [busy, setBusy] = useState(false);
-  const [mfaResolver, setMfaResolver] = useState<MultiFactorResolver | null>(null);
-  const [totpSecret, setTotpSecret] = useState<TotpSecret | null>(null);
-  const [totpQrUrl, setTotpQrUrl] = useState("");
 
   useEffect(() => {
     if (bffSession) nav(from, { replace: true });
@@ -55,17 +43,7 @@ export default function AuthPage() {
     try {
       await signInWithEmailAndPassword(gcpIdentityAuth, email, password);
     } catch (error: unknown) {
-      if (
-        error instanceof FirebaseError
-        && error.code === "auth/multi-factor-auth-required"
-      ) {
-        setMfaResolver(
-          getMultiFactorResolver(gcpIdentityAuth, error as MultiFactorError),
-        );
-        setOtp("");
-      } else {
-        toast.error(error instanceof Error ? error.message : String(error));
-      }
+      toast.error(error instanceof Error ? error.message : String(error));
     } finally {
       setBusy(false);
     }
@@ -76,17 +54,7 @@ export default function AuthPage() {
     try {
       await signInWithPopup(gcpIdentityAuth, new GoogleAuthProvider());
     } catch (error: unknown) {
-      if (
-        error instanceof FirebaseError
-        && error.code === "auth/multi-factor-auth-required"
-      ) {
-        setMfaResolver(
-          getMultiFactorResolver(gcpIdentityAuth, error as MultiFactorError),
-        );
-        setOtp("");
-      } else {
-        toast.error(error instanceof Error ? error.message : String(error));
-      }
+      toast.error(error instanceof Error ? error.message : String(error));
     } finally {
       setBusy(false);
     }
@@ -130,31 +98,6 @@ export default function AuthPage() {
     }
   };
 
-  const finishMfaSignIn = async () => {
-    if (!mfaResolver) return;
-    const hint = mfaResolver.hints.find(
-      (candidate) => candidate.factorId === TotpMultiFactorGenerator.FACTOR_ID,
-    );
-    if (!hint) {
-      toast.error("This account has no supported authenticator factor.");
-      return;
-    }
-    setBusy(true);
-    try {
-      const assertion = TotpMultiFactorGenerator.assertionForSignIn(
-        hint.uid,
-        otp,
-      );
-      await mfaResolver.resolveSignIn(assertion);
-      setMfaResolver(null);
-      setOtp("");
-    } catch (error: unknown) {
-      toast.error(error instanceof Error ? error.message : String(error));
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const resendVerification = async () => {
     if (!session?.user) return;
     setBusy(true);
@@ -179,53 +122,6 @@ export default function AuthPage() {
       if (!session.user.emailVerified) {
         toast.error("Email is not verified yet.");
       }
-    } catch (error: unknown) {
-      toast.error(error instanceof Error ? error.message : String(error));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const beginTotpEnrollment = async () => {
-    if (!session?.user) return;
-    setBusy(true);
-    try {
-      await session.user.reload();
-      if (!session.user.emailVerified) {
-        throw new Error("Verify your email before setting up MFA.");
-      }
-      const enrollmentSession = await multiFactor(session.user).getSession();
-      const secret = await TotpMultiFactorGenerator.generateSecret(enrollmentSession);
-      setTotpSecret(secret);
-      setTotpQrUrl(secret.generateQrCodeUrl(
-        session.user.email ?? session.user.uid,
-        "Pantheon",
-      ));
-      setOtp("");
-    } catch (error: unknown) {
-      toast.error(error instanceof Error ? error.message : String(error));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const finishTotpEnrollment = async () => {
-    if (!session?.user || !totpSecret) return;
-    setBusy(true);
-    try {
-      const assertion = TotpMultiFactorGenerator.assertionForEnrollment(
-        totpSecret,
-        otp,
-      );
-      await multiFactor(session.user).enroll(assertion, "Pantheon Authenticator");
-      setTotpSecret(null);
-      setTotpQrUrl("");
-      setOtp("");
-      toast.success("Authenticator enrolled. Verifying your existing sign-in…");
-      // Enrollment changes the signed claims. Refresh the existing Firebase
-      // session so AuthProvider can re-run BFF verification without asking for
-      // the same account credentials a second time.
-      await session.user.getIdToken(true);
     } catch (error: unknown) {
       toast.error(error instanceof Error ? error.message : String(error));
     } finally {
@@ -259,37 +155,7 @@ export default function AuthPage() {
             </p>
           </div>
         ) : null}
-        {mfaResolver ? (
-          <div className="space-y-3 rounded-md border p-4">
-            <p className="font-medium">Authenticator verification</p>
-            <p className="text-sm text-muted-foreground">
-              Enter the 6-digit code from your authenticator app.
-            </p>
-            <Input
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              maxLength={6}
-              placeholder="123456"
-              value={otp}
-              onChange={(event) => setOtp(event.target.value.replace(/\D/gu, ""))}
-            />
-            <Button
-              className="w-full"
-              onClick={() => void finishMfaSignIn()}
-              disabled={busy || otp.length !== 6}
-            >
-              Verify and sign in
-            </Button>
-            <Button
-              className="w-full"
-              variant="ghost"
-              onClick={() => setMfaResolver(null)}
-              disabled={busy}
-            >
-              Cancel
-            </Button>
-          </div>
-        ) : loading ? (
+        {loading ? (
           <div role="status" className="rounded-md border p-4 text-sm">
             <p className="font-medium">Verifying {isAgora ? "Agora access" : "your Pantheon session"}…</p>
             <p className="mt-1 text-muted-foreground">
@@ -308,45 +174,6 @@ export default function AuthPage() {
             <Button className="w-full" variant="outline" onClick={() => void resendVerification()} disabled={busy}>
               Resend verification email
             </Button>
-            <Button className="w-full" variant="ghost" onClick={() => void signOut()} disabled={busy}>
-              Use another account
-            </Button>
-          </div>
-        ) : session?.user && multiFactor(session.user).enrolledFactors.length === 0 ? (
-          <div className="space-y-3 rounded-md border p-4">
-            <p className="font-medium">Set up authenticator MFA</p>
-            <p className="text-sm text-muted-foreground">
-              A TOTP authenticator is required before this identity can access {productName}.
-            </p>
-            {totpSecret && totpQrUrl ? (
-              <>
-                <div className="mx-auto w-fit rounded-md bg-white p-3">
-                  <QRCodeSVG value={totpQrUrl} size={176} />
-                </div>
-                <p className="break-all rounded bg-muted p-2 text-center font-mono text-xs">
-                  {totpSecret.secretKey}
-                </p>
-                <Input
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  maxLength={6}
-                  placeholder="123456"
-                  value={otp}
-                  onChange={(event) => setOtp(event.target.value.replace(/\D/gu, ""))}
-                />
-                <Button
-                  className="w-full"
-                  onClick={() => void finishTotpEnrollment()}
-                  disabled={busy || otp.length !== 6}
-                >
-                  Confirm authenticator
-                </Button>
-              </>
-            ) : (
-              <Button className="w-full" onClick={() => void beginTotpEnrollment()} disabled={busy}>
-                Start MFA setup
-              </Button>
-            )}
             <Button className="w-full" variant="ghost" onClick={() => void signOut()} disabled={busy}>
               Use another account
             </Button>

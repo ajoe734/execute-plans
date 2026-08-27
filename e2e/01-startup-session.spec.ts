@@ -485,7 +485,7 @@ test.describe("F01 startup session", () => {
     expect(new URL(page.url()).pathname).toBe("/auth");
     expect(new URL(page.url()).searchParams.get("reason")).toBe("auth-required");
     expect(text).toMatch(
-      /Pantheon session verification failed|Sign in once to access the cockpit|Set up authenticator MFA/i,
+      /Pantheon session verification failed|Sign in once to access the cockpit/i,
     );
     expect(text).not.toMatch(SERVING_MOCK_BANNER);
     expect(text).not.toMatch(/op-fe-gate|portfolio_manager|mock operator/i);
