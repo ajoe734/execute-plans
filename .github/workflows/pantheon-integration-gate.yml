@@ -1762,6 +1762,10 @@ jobs:
           PANTHEON_EXPECTED_BFF_SHA: ${{ inputs.bff_sha }}
           PANTHEON_PINT_PROBE_ALLOW_WRITES: "true"
           PANTHEON_PERSONA_INTERACTION_WRITE_PROOF: "1"
+          DEV_LOGIN_OPERATOR_CLIENT_ID: ${{ vars.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_ID || 'pantheon-dev-operator-a-v1' }}
+          DEV_LOGIN_OPERATOR_CLIENT_SECRET: ${{ secrets.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_SECRET }}
+          DEV_LOGIN_VIEWER_CLIENT_ID: ${{ vars.DEV_BFF_DEV_LOGIN_VIEWER_CLIENT_ID || 'pantheon-dev-viewer-v1' }}
+          DEV_LOGIN_VIEWER_CLIENT_SECRET: ${{ secrets.DEV_BFF_DEV_LOGIN_VIEWER_CLIENT_SECRET }}
         run: |
           set -euo pipefail
           node scripts/probe-persona-governed-proposal-live.mjs
@@ -1791,6 +1795,11 @@ jobs:
           NODE
 
       - name: Run Trade Journey no-interception desktop and a11y proof
+        env:
+          DEV_LOGIN_OPERATOR_CLIENT_ID: ${{ vars.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_ID || 'pantheon-dev-operator-a-v1' }}
+          DEV_LOGIN_OPERATOR_CLIENT_SECRET: ${{ secrets.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_SECRET }}
+          DEV_LOGIN_VIEWER_CLIENT_ID: ${{ vars.DEV_BFF_DEV_LOGIN_VIEWER_CLIENT_ID || 'pantheon-dev-viewer-v1' }}
+          DEV_LOGIN_VIEWER_CLIENT_SECRET: ${{ secrets.DEV_BFF_DEV_LOGIN_VIEWER_CLIENT_SECRET }}
         run: |
           set -euo pipefail
           desktop_results="$PANTHEON_AUDIT_OUT_DIR/trade-journey-hosted-desktop-results.json"

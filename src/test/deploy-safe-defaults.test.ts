@@ -516,7 +516,9 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     );
     expect(hostedPersonaInteractionSpec).not.toContain("installOidcDevLogin");
     expect(hostedPersonaInteractionSpec).not.toContain("page.route(");
-    expect(hostedPersonaInteractionSpec).toContain("minimumTtlSeconds: 480");
+    expect(hostedPersonaInteractionSpec).toContain("installHostedDevLogin");
+    expect(hostedPersonaInteractionSpec).toContain("DEV_LOGIN_OPERATOR_CLIENT_SECRET");
+    expect(hostedPersonaInteractionSpec).not.toContain("gcpIdentityStoredUser");
     expect(hostedPersonaCredentialValidator).toContain(
       "PANTHEON_HOSTED_PROOF_MIN_CREDENTIAL_TTL_SECONDS",
     );
