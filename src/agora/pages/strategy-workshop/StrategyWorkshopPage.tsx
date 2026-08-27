@@ -1090,7 +1090,17 @@ function WorkshopSessionView({ governedProposalId, workshopId, onAddToTradingRoo
             break;
         }
       },
-      { lastEventId: cardState.lastEventId ?? undefined },
+      {
+        lastEventId: cardState.lastEventId ?? undefined,
+        onResync: () => {
+          refreshCards();
+          refreshCompleteness();
+          refreshReadiness();
+          refreshEvents();
+          refreshStrategySpec();
+          void refreshDailyInteractions();
+        },
+      },
     );
     return teardown;
   }, [workshopId, refreshCards, refreshCompleteness, refreshDailyInteractions, refreshEvents, refreshReadiness, refreshStrategySpec, cardState.lastEventId]);

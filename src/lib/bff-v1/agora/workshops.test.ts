@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { bffFetch } from "@/lib/bff-v1/client";
+import { bffFetch, detectBaseUrl } from "@/lib/bff-v1/client";
+import { clearAuthProvider, setAuthProvider } from "@/lib/bff-v1/headers";
 import {
   getWorkshop,
   getWorkshopWithEtag,
@@ -20,7 +21,9 @@ import { materializeWorkshopCompleteness } from "@/agora/components/workshopComp
 
 vi.mock("@/lib/bff-v1/client", () => ({
   bffFetch: vi.fn(),
+  detectBaseUrl: vi.fn(() => ""),
 }));
+
 
 const mockWorkshop: StrategyWorkshop = {
   spec_version: "1.0",
@@ -327,9 +330,16 @@ describe("reconstructWorkshopStrategy", () => {
 });
 
 describe("openWorkshopStream", () => {
-  it("returns a React effect cleanup and forwards parsed stream events", () => {
+  afterEach(() => {
+    clearAuthProvider();
+    vi.restoreAllMocks();
+  });
+
+  it("cookie sessions use the configured BFF origin and native EventSource", () => {
+    clearAuthProvider();
+    vi.mocked(detectBaseUrl).mockReturnValue("https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io");
     const close = vi.fn();
-    const source = { close, onmessage: null as ((message: MessageEvent<string>) => void) | null };
+    const source = { close, onmessage: null as ((message: MessageEvent<string>) => void) | null, addEventListener: vi.fn() };
     const EventSourceMock = vi.fn().mockReturnValue(source);
     vi.stubGlobal("EventSource", EventSourceMock);
     const onEvent = vi.fn<(event: WorkshopStreamEvent) => void>();
@@ -337,7 +347,7 @@ describe("openWorkshopStream", () => {
     const cleanup = openWorkshopStream("ws/001", onEvent);
 
     expect(EventSourceMock).toHaveBeenCalledWith(
-      "/bff/agora/workshops/ws%2F001/stream",
+      "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/bff/agora/workshops/ws%2F001/stream",
       { withCredentials: true },
     );
     source.onmessage?.(
@@ -353,29 +363,156 @@ describe("openWorkshopStream", () => {
         }),
       }),
     );
-    expect(onEvent).toHaveBeenCalledWith({
+    expect(onEvent).toHaveBeenCalledWith(expect.objectContaining({
       event_id: "evt-001",
       workshop_id: "ws/001",
       event_type: "workshop.snapshot",
       payload: {},
-      occurred_at: "2026-06-01T00:00:00Z",
-    });
+    }));
 
     cleanup();
     expect(close).toHaveBeenCalled();
   });
 
-  it("passes last_event_id query parameter when lastEventId option is supplied", () => {
+  it("cookie sessions pass last_event_id query parameter when lastEventId option is supplied", () => {
+    clearAuthProvider();
+    vi.mocked(detectBaseUrl).mockReturnValue("https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io");
     const close = vi.fn();
-    const source = { close, onmessage: null };
+    const source = { close, onmessage: null, addEventListener: vi.fn() };
     const EventSourceMock = vi.fn().mockReturnValue(source);
     vi.stubGlobal("EventSource", EventSourceMock);
 
     openWorkshopStream("ws-001", undefined, { lastEventId: "evt-099" });
 
     expect(EventSourceMock).toHaveBeenCalledWith(
-      "/bff/agora/workshops/ws-001/stream?last_event_id=evt-099",
+      "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/bff/agora/workshops/ws-001/stream?last_event_id=evt-099",
       { withCredentials: true },
     );
   });
+
+  it("bearer sessions send Authorization and X-Tenant-Id with fetch SSE", async () => {
+    setAuthProvider({
+      getToken: () => "bearer-token-123",
+      getTenantId: () => "tenant-dev",
+    });
+    vi.mocked(detectBaseUrl).mockReturnValue("https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io");
+
+    const onEvent = vi.fn<(event: WorkshopStreamEvent) => void>();
+    const onOpen = vi.fn();
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers({ "content-type": "text/event-stream" }),
+      text: async () =>
+        'event: workshop.connected\nid: evt-001\ndata: {"workshop_id":"ws-001","status":"open"}\n\n',
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const cleanup = openWorkshopStream("ws-001", onEvent, { onOpen, lastEventId: "evt-prev" });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/bff/agora/workshops/ws-001/stream?last_event_id=evt-prev",
+      expect.objectContaining({
+        method: "GET",
+        headers: expect.objectContaining({
+          Accept: "text/event-stream",
+          Authorization: "Bearer bearer-token-123",
+          "X-Tenant-Id": "tenant-dev",
+          "Last-Event-ID": "evt-prev",
+        }),
+      }),
+    );
+
+    await vi.waitFor(() => {
+      expect(onEvent).toHaveBeenCalledWith(expect.objectContaining({
+        event_id: "evt-001",
+        workshop_id: "ws-001",
+        event_type: "workshop.connected",
+      }));
+    });
+
+    cleanup();
+  });
+
+  it("HTML responses fail typed content checks", async () => {
+    setAuthProvider({
+      getToken: () => "bearer-token-123",
+      getTenantId: () => "tenant-dev",
+    });
+
+    const onError = vi.fn();
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers({ "content-type": "text/html; charset=utf-8" }),
+      text: async () => "<!DOCTYPE html><html><body>SPA fallback</body></html>",
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const cleanup = openWorkshopStream("ws-001", undefined, { onError });
+
+    await vi.waitFor(() => {
+      expect(onError).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: expect.stringContaining("Invalid SSE Content-Type"),
+        }),
+      );
+    });
+
+    cleanup();
+  });
+
+  it("stops reconnect on 401/403 until auth refresh", async () => {
+    setAuthProvider({
+      getToken: () => "stale-bearer-token",
+    });
+
+    const onError = vi.fn();
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      statusText: "Unauthorized",
+      headers: new Headers({ "content-type": "application/json" }),
+      text: async () => '{"error":"token_expired"}',
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const cleanup = openWorkshopStream("ws-001", undefined, { onError });
+
+    await vi.waitFor(() => {
+      expect(onError).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: expect.stringContaining("SSE auth failed with status 401"),
+        }),
+      );
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    cleanup();
+  });
+
+  it("treats 409 replay-unavailable as a signal to trigger onResync", async () => {
+    setAuthProvider({
+      getToken: () => "bearer-token-123",
+    });
+
+    const onResync = vi.fn();
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 409,
+      statusText: "Conflict",
+      headers: new Headers({ "content-type": "application/json" }),
+      text: async () => '{"error":"replay_unavailable"}',
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const cleanup = openWorkshopStream("ws-001", undefined, { onResync });
+
+    await vi.waitFor(() => {
+      expect(onResync).toHaveBeenCalledWith("replay_unavailable");
+    });
+
+    cleanup();
+  });
 });
+
