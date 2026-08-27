@@ -68,7 +68,10 @@ describe("SRCM-P1 hosted acceptance producer contract", () => {
   it("binds a sanitized HAR and one real screenshot to every journey", () => {
     expect(proofSpec).toContain('recordHar: { path: HAR_PATH, mode: "full"');
     expect(proofSpec).toContain('mapped.value = "[REDACTED]"');
-    expect(proofSpec).toContain('asMap(request.postData).text = "[REDACTED]"');
+    expect(proofSpec).toContain("request.cookies = []");
+    expect(proofSpec).toContain("response.cookies = []");
+    expect(proofSpec).toContain('postData.text = "[REDACTED]"');
+    expect(proofSpec).toContain("height: 880 + journeyOrdinal * 2");
     expect(proofSpec).toContain("screenshot_sha256");
     expect(proofSpec).toContain("har_entry_indices");
     expect(proofSpec).toContain("browser_journeys_count");

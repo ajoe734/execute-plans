@@ -210,6 +210,13 @@ async function frontendFetch(page: Page, tag: string): Promise<Exchange> {
 }
 
 async function showControlCenter(page: Page, journeyId: string): Promise<void> {
+  const journeyOrdinal = JOURNEY_IDS.indexOf(journeyId as (typeof JOURNEY_IDS)[number]);
+  if (journeyOrdinal >= 0) {
+    // Keep every screenshot a real hosted UI capture while making its viewport
+    // identity unambiguous even for negative/idempotent journeys that leave the
+    // rendered source state unchanged.
+    await page.setViewportSize({ width: 1440, height: 880 + journeyOrdinal * 2 });
+  }
   await page.goto(`${FE_BASE}/management/data-sources?proof_screen=${encodeURIComponent(journeyId)}`, {
     waitUntil: "domcontentloaded",
     timeout: 45_000,
@@ -234,10 +241,16 @@ function sanitizeHar(): JsonMap {
     for (const header of [...(Array.isArray(request.headers) ? request.headers : []), ...(Array.isArray(response.headers) ? response.headers : [])]) {
       const mapped = asMap(header);
       const name = String(mapped.name || "").toLowerCase();
-      if (["authorization", "cookie", "set-cookie", "x-api-key"].includes(name)) mapped.value = "[REDACTED]";
+      if (["authorization", "cookie", "proxy-authorization", "set-cookie", "x-api-key"].includes(name)) mapped.value = "[REDACTED]";
     }
+    request.cookies = [];
+    response.cookies = [];
     if (request.postData && typeof request.postData === "object") {
-      asMap(request.postData).text = "[REDACTED]";
+      const postData = asMap(request.postData);
+      postData.text = "[REDACTED]";
+      if (Array.isArray(postData.params)) {
+        for (const param of postData.params) asMap(param).value = "[REDACTED]";
+      }
     }
     const content = asMap(response.content);
     if (Object.hasOwn(content, "text")) content.text = "[REDACTED]";
