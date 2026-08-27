@@ -3,6 +3,7 @@ import type { User } from "firebase/auth";
 import type { GcpIdentitySession } from "@/integrations/gcp/identity";
 import { buildHeaders, clearAuthProvider } from "@/lib/bff-v1/headers";
 import {
+  BFF_BROWSER_SESSION_VERIFICATION_TIMEOUT_MS,
   clearBffBrowserSession,
   refreshAndVerifyBffBrowserSession,
   registerBffBrowserSession,
@@ -40,12 +41,12 @@ function me(roles = ["viewer"]) {
   };
 }
 
-function readiness(operator = false) {
+function readiness(operator = false, providerReady = true) {
   return {
     data: {
-      ready: operator,
-      authReady: operator,
-      providerReady: true,
+      ready: operator && providerReady,
+      authReady: true,
+      providerReady,
       sourceCommitSha: "1".repeat(40),
       auth: {
         mode: "strict",
@@ -61,6 +62,7 @@ function readiness(operator = false) {
 
 afterEach(() => {
   clearBffBrowserSession();
+  vi.useRealTimers();
   vi.restoreAllMocks();
   window.localStorage.clear();
   window.sessionStorage.clear();
@@ -104,7 +106,7 @@ describe("strict browser BFF session bridge", () => {
 
     expect(verified.identity.roles).toEqual(["viewer"]);
     expect(verified.identity.capabilities).toEqual([]);
-    expect(verified.readiness.authReady).toBe(false);
+    expect(verified.readiness.authReady).toBe(true);
     expect(verified.readiness.operatorRoleReady).toBe(false);
     for (const call of fetcher.mock.calls) {
       expect((call[1] as RequestInit).headers).toMatchObject({
@@ -112,6 +114,38 @@ describe("strict browser BFF session bridge", () => {
         "X-Tenant-Id": "tenant-signed",
       });
     }
+  });
+
+  it("keeps strict auth readiness independent when a provider is degraded", async () => {
+    registerBffBrowserSession(session());
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(response(me(["viewer"])))
+      .mockResolvedValueOnce(response(readiness(false, false)));
+
+    await expect(verifyBffBrowserSession()).resolves.toMatchObject({
+      identity: { authenticated: true, roles: ["viewer"] },
+      readiness: { authReady: true, providerReady: false },
+    });
+  });
+
+  it("bounds combined identity and readiness verification", async () => {
+    vi.useFakeTimers();
+    registerBffBrowserSession(session());
+    const fetcher = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(response(me(["viewer"])))
+      .mockImplementationOnce((_url, init) => new Promise<Response>((_resolve, reject) => {
+        const signal = (init as RequestInit).signal;
+        signal?.addEventListener("abort", () => reject(signal.reason), { once: true });
+      }));
+
+    const verification = verifyBffBrowserSession();
+    await vi.advanceTimersByTimeAsync(BFF_BROWSER_SESSION_VERIFICATION_TIMEOUT_MS);
+
+    await expect(verification).rejects.toThrow(/verification timed out/);
+    expect(fetcher.mock.calls.map(([url]) => String(url))).toEqual([
+      "/bff/me",
+      "/bff/auth/readiness",
+    ]);
   });
 
   it("refreshes the BFF session before /me and readiness readback", async () => {

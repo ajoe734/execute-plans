@@ -61,7 +61,7 @@ const verified = {
   },
   readiness: {
     ready: false,
-    authReady: false,
+    authReady: true,
     providerReady: true,
     sourceCommitSha: "1".repeat(40),
     authMode: "strict",
@@ -146,7 +146,7 @@ describe("AuthProvider strict BFF bridge", () => {
     expect(result.current.bffSession).toBeNull();
   });
 
-  it("fails closed when GCP Identity authenticates but BFF verification rejects", async () => {
+  it("reports BFF verification failure without erasing the GCP session", async () => {
     mocks.verify.mockRejectedValue(new Error("BFF returned 401"));
     const { result } = renderHook(() => useAuth(), { wrapper });
 
@@ -154,7 +154,22 @@ describe("AuthProvider strict BFF bridge", () => {
     expect(result.current.session?.idToken).toBe("initial-token");
     expect(result.current.bffSession).toBeNull();
     expect(result.current.bffError?.message).toContain("401");
-    expect(mocks.clear).toHaveBeenCalled();
+    expect(mocks.clear).not.toHaveBeenCalled();
+  });
+
+  it("retains a verified session when a later provider verification fails", async () => {
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.bffSession).toEqual(verified));
+    mocks.refreshVerify.mockRejectedValue(new Error("provider offline"));
+    mocks.clear.mockClear();
+
+    act(() => {
+      mocks.authListener?.({ uid: "gcp-user" } as User);
+    });
+
+    await waitFor(() => expect(result.current.bffError?.message).toContain("provider offline"));
+    expect(result.current.bffSession).toEqual(verified);
+    expect(mocks.clear).not.toHaveBeenCalled();
   });
 
   it("retries BFF verification with a refreshed existing identity instead of signing in again", async () => {
