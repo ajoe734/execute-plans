@@ -3,7 +3,10 @@
 // Live strict — pages must not call fetch() directly; use this module.
 // Agora-scoped paths only; no Management routes.
 
-import { bffFetch } from "@/lib/bff-v1/client";
+import { bffFetch, detectBaseUrl } from "@/lib/bff-v1/client";
+import { getAuthProvider } from "@/lib/bff-v1/headers";
+import { fetchSse } from "@/lib/bff-v1/sse/liveSse";
+
 import type {
   StrategyWorkshop,
   StrategyCompleteness,
@@ -408,20 +411,100 @@ export async function concludeWorkshop(
 
 // ─── Streaming (SSE) ──────────────────────────────────────────────────────────
 
+export interface WorkshopStreamOptions {
+  lastEventId?: string;
+  sessionKind?: "bearer" | "cookie";
+  baseUrl?: string;
+  onOpen?: () => void;
+  onError?: (error: Error) => void;
+  onResync?: (reason?: string) => void;
+}
+
+function normalizeWorkshopStreamEvent(
+  raw: unknown,
+  frame: { id?: string; event?: string },
+  workshopId: string,
+): WorkshopStreamEvent {
+  const unwrapped = entityFrom<Record<string, unknown>>(raw);
+  const data = (unwrapped.data && typeof unwrapped.data === "object" && !Array.isArray(unwrapped.data))
+    ? (unwrapped.data as Record<string, unknown>)
+    : unwrapped;
+
+  const eventId = String(unwrapped.event_id ?? data.event_id ?? unwrapped.id ?? data.id ?? frame.id ?? "").trim();
+  const eventType = String(unwrapped.event_type ?? data.event_type ?? unwrapped.type ?? data.type ?? frame.event ?? "workshop.event").trim();
+  const occurredAt = String(unwrapped.occurred_at ?? data.occurred_at ?? unwrapped.timestamp ?? data.timestamp ?? new Date().toISOString()).trim();
+  const payload = (unwrapped.payload && typeof unwrapped.payload === "object")
+    ? (unwrapped.payload as Record<string, unknown>)
+    : (unwrapped.data && typeof unwrapped.data === "object" && !unwrapped.event_id)
+      ? (unwrapped.data as Record<string, unknown>)
+      : data;
+
+  const wsId = String(unwrapped.workshop_id ?? data.workshop_id ?? (payload as Record<string, unknown>).workshop_id ?? workshopId).trim();
+
+  return {
+    ...unwrapped,
+    event_id: eventId,
+    workshop_id: wsId,
+    event_type: eventType as WorkshopStreamEvent["event_type"],
+    payload,
+    occurred_at: occurredAt,
+    id: eventId,
+    type: eventType,
+    timestamp: occurredAt,
+    data: payload,
+  } as unknown as WorkshopStreamEvent;
+}
+
 export function openWorkshopStream(
   workshopId: string,
   onEvent?: (event: WorkshopStreamEvent) => void,
-  options?: { lastEventId?: string },
+  options?: WorkshopStreamOptions,
 ): () => void {
+  const token = getAuthProvider().getToken();
+  const sessionKind = options?.sessionKind ?? (token ? "bearer" : "cookie");
+  const baseUrl = options?.baseUrl ?? detectBaseUrl();
   const query = options?.lastEventId ? `?last_event_id=${encodeURIComponent(options.lastEventId)}` : "";
-  const source = new EventSource(
-    `/bff/agora/workshops/${encodeURIComponent(workshopId)}/stream${query}`,
-    { withCredentials: true },
-  );
+  const url = `${baseUrl}/bff/agora/workshops/${encodeURIComponent(workshopId)}/stream${query}`;
+
+  if (sessionKind === "bearer") {
+    const controller = fetchSse({
+      url,
+      lastEventId: options?.lastEventId,
+      autoReconnect: true,
+      onOpen: () => options?.onOpen?.(),
+      onError: (err) => options?.onError?.(err),
+      onResyncRequired: (reason) => options?.onResync?.(reason),
+      onMessage: (frame) => {
+        if (!frame.data) return;
+        try {
+          const raw = JSON.parse(frame.data);
+          const normalized = normalizeWorkshopStreamEvent(raw, frame, workshopId);
+          onEvent?.(normalized);
+        } catch {
+          // Ignore malformed keepalive or compatibility messages.
+        }
+      },
+    });
+    return () => controller.close();
+  }
+
+  if (typeof EventSource === "undefined") {
+    return () => {};
+  }
+
+  const source = new EventSource(url, { withCredentials: true });
+  if (options?.onOpen) {
+    source.addEventListener("open", () => options.onOpen?.());
+  }
+  if (options?.onError) {
+    source.addEventListener("error", () => options.onError?.(new Error("EventSource connection error")));
+  }
   if (onEvent) {
     source.onmessage = (message) => {
       try {
-        onEvent(entityFrom<WorkshopStreamEvent>(JSON.parse(message.data)));
+        const raw = typeof message.data === "string" ? JSON.parse(message.data) : message.data;
+        const normalized = normalizeWorkshopStreamEvent(raw, { id: message.lastEventId }, workshopId);
+        onEvent(normalized);
       } catch {
         // Ignore malformed keepalive or compatibility messages.
       }
@@ -429,6 +512,7 @@ export function openWorkshopStream(
   }
   return () => source.close();
 }
+
 
 // ─── v1.3: Cards ──────────────────────────────────────────────────────────────
 
