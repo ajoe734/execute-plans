@@ -138,10 +138,10 @@ describe("strict browser BFF session bridge", () => {
         signal?.addEventListener("abort", () => reject(signal.reason), { once: true });
       }));
 
-    const verification = verifyBffBrowserSession();
+    const verification = expect(verifyBffBrowserSession()).rejects.toThrow(/verification timed out/);
     await vi.advanceTimersByTimeAsync(BFF_BROWSER_SESSION_VERIFICATION_TIMEOUT_MS);
 
-    await expect(verification).rejects.toThrow(/verification timed out/);
+    await verification;
     expect(fetcher.mock.calls.map(([url]) => String(url))).toEqual([
       "/bff/me",
       "/bff/auth/readiness",

@@ -1,0 +1,65 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "AGORA-AGC-01-AUTH-FE-20260827",
+  "owner": "Codex2",
+  "reviewer": "Antigravity",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/AGORA-AGC-01-AUTH-FE-20260827",
+  "status": "ready-for-independent-exact-head-review",
+  "recorded_at": "2026-08-27T07:14:00Z",
+  "scope": {
+    "adopted": [
+      "Protected routes admit only a BFF-verified browser session whose strict BFF-owned authReady signal is true.",
+      "Provider readiness is not an authentication decision: an auth-ready session remains admitted when providerReady is false or a later provider verification reports an error.",
+      "A re-verification failure for the same GCP Identity user retains a previously strict BFF session instead of clearing its in-memory bearer bridge.",
+      "The combined BFF /me and /bff/auth/readiness verification is aborted after 5000 ms, so a provider-related stall cannot leave the route guard loading indefinitely."
+    ],
+    "not_changed": [
+      "The AGORA-AGC-01-AUTH-BFF-20260827 server contract, server-side authorization, roles, capabilities, or real-write policy.",
+      "Firebase/GCP Identity authentication, browser credential persistence, tenant-claim selection, sign-out semantics, or auth return-target validation.",
+      "Provider-dependent feature gates, which continue to decide availability separately from protected-route admission."
+    ]
+  },
+  "security_boundaries": {
+    "authoritative_admission": "Only a strict BFF readback with authReady=true admits a protected route. Firebase identity alone, a missing BFF session, and authReady=false still redirect to the applicable auth route.",
+    "provider_isolation": "providerReady is deliberately excluded from the route decision. A provider outage cannot discard a previously verified same-user session or turn it into a login redirect.",
+    "timeout_behavior": "The timeout aborts the in-flight BFF requests rather than weakening authentication. With no previous auth-ready BFF session, the route remains fail closed after the bounded verification error.",
+    "credential_storage": "No persistent bearer or browser-editable authorization state is introduced; the existing in-memory Firebase-to-BFF header provider remains the sole bearer bridge."
+  },
+  "review_binding": {
+    "owner_implementation_commit": "58086f2db6994b15c82af00f4330dd0fe2b60ddc",
+    "sha_disposition": "Independent approval must bind the final task PR head containing this manifest, the bounded-timeout test correction, and the authReady-only route behavior."
+  },
+  "validation": {
+    "focused_auth_tests": {
+      "command": "npm test -- src/lib/auth/bffBrowserSession.test.ts src/lib/auth/AuthProvider.test.tsx src/lib/auth/ProtectedRoute.test.tsx",
+      "result": "passed: 3 files, 22 tests"
+    },
+    "typecheck": {
+      "command": "npm run typecheck",
+      "result": "passed"
+    },
+    "task_scoped_lint": {
+      "command": "npx eslint src/lib/auth/bffBrowserSession.ts src/lib/auth/AuthProvider.tsx src/lib/auth/ProtectedRoute.tsx src/lib/auth/bffBrowserSession.test.ts src/lib/auth/AuthProvider.test.tsx src/lib/auth/ProtectedRoute.test.tsx",
+      "result": "passed with 0 errors; AuthProvider.tsx retains 2 pre-existing React hook/fast-refresh warnings"
+    },
+    "strict_live_read_only_build": {
+      "command": "VITE_GCP_IDENTITY_API_KEY=<syntactically-valid non-deployed placeholder> VITE_GCP_IDENTITY_PROJECT_ID=pantheon-test VITE_GCP_IDENTITY_AUTH_DOMAIN=pantheon-test.firebaseapp.com VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build",
+      "result": "passed; existing Browserslist data-age warning only"
+    },
+    "related_auth_source_contract": {
+      "command": "npm test -- src/test/strict-browser-auth-source-contract.test.ts",
+      "result": "passed: 1 file, 5 tests"
+    },
+    "diff_integrity": {
+      "command": "git diff --check origin/dev...HEAD",
+      "result": "passed"
+    }
+  },
+  "independent_review_required": [
+    "Review the final exact PR head and confirm ProtectedRoute uses authReady rather than providerReady or an informational provider error as its authentication decision.",
+    "Confirm a providerReady=false readback and a later same-user provider verification error retain an earlier strict auth-ready session, while a missing session or authReady=false remains fail closed.",
+    "Confirm the timeout aborts the combined BFF readback, all listed checks are green on the reviewed head, and no BFF server-side authorization boundary changed."
+  ]
+}
