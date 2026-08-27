@@ -64,6 +64,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { TradingRoomReadinessHandoff } from "./StrategyWorkshopPage";
+import { resolveSubmissionTenant } from "./submissionTenant";
 
 export type WorkshopInteractionMode = DailyInteractionMode;
 
@@ -894,7 +895,6 @@ export function WorkshopSessionView({ governedProposalId, workshopId, onAddToTra
         if (currentReadback.workshop.status === "concluded") {
           throw new Error("This Workshop is concluded and cannot accept another message.");
         }
-        setWorkshop(currentReadback.workshop);
         const messageReceipt = await postWorkshopMessage(
           workshopId,
           { content },
@@ -988,13 +988,13 @@ export function WorkshopSessionView({ governedProposalId, workshopId, onAddToTra
           throw new Error("The BFF eligibility response did not include v1.9 immutable Persona snapshots. PINT-012 runtime support is required.");
         }
         const operatorId = writeAccess.actorId?.trim();
-        const tenantId = getAuthProvider().getTenantId()?.trim();
-        if (!operatorId || !tenantId) {
-          throw new Error("The authenticated BFF operator and tenant are required for an immutable v1.9 request.");
+        if (!operatorId) {
+          throw new Error("The authenticated BFF operator is required for an immutable v1.9 request.");
         }
-        if (tenantId !== truth.tenantId) {
-          throw new Error("The resolver tenant binding does not match the authenticated tenant.");
-        }
+        const tenantId = resolveSubmissionTenant(
+          truth.tenantId,
+          getAuthProvider().getTenantId(),
+        );
         if (!globalThis.crypto?.randomUUID) {
           throw new Error("Secure request identity support is unavailable in this browser.");
         }

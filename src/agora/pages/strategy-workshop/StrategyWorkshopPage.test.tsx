@@ -88,6 +88,7 @@ vi.mock("@/agora/components/ConnectedGovernedProposalCard", () => ({
 }));
 
 import { StrategyWorkshopPage } from "./StrategyWorkshopPage";
+import { resolveSubmissionTenant } from "./submissionTenant";
 import { pickerParticipants } from "@/agora/participantPicker";
 import * as workshopsModule from "@/lib/bff-v1/agora/workshops";
 import { interaction } from "@/lib/bff-v1/agora/interaction";
@@ -213,6 +214,14 @@ const LIVE_COMPLETENESS_CARD: WorkshopCard = {
 afterEach(cleanup);
 
 describe("StrategyWorkshopPage", () => {
+  it("uses the authoritative resolver tenant when the browser bridge has no tenant hint", () => {
+    expect(resolveSubmissionTenant("tenant-1", null)).toBe("tenant-1");
+    expect(resolveSubmissionTenant(" tenant-1 ", undefined)).toBe("tenant-1");
+    expect(() => resolveSubmissionTenant("tenant-1", "tenant-other")).toThrow(
+      "The resolver tenant binding does not match the authenticated tenant.",
+    );
+  });
+
   it("uses truthful eligibility-order pickers without inferring style or role from names", () => {
     const included = [
       { persona_id: "persona-z", display_name: "Red Team-ish Name", eligible: true, reasons: [], recommended: false },
