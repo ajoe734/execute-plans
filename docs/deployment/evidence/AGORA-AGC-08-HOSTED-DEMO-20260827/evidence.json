@@ -1,0 +1,44 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "AGORA-AGC-08-HOSTED-DEMO-20260827",
+  "owner": "Antigravity2",
+  "reviewer": "Codex2",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/AGORA-AGC-08-HOSTED-DEMO-20260827",
+  "status": "ready-for-independent-exact-head-review",
+  "recorded_at": "2026-08-27T20:57:42.388Z",
+  "scope": {
+    "adopted": [
+      "Add docs/contracts/agora/demo-run-evidence.v1.schema.json sanitized evidence schema for Agora hosted demo runs with exact pair SHAs, objects, steps, negative controls, and read-only restoration.",
+      "Update .github/workflows/agora-hosted-acceptance.yml to remove static token assumption, mint short-lived operator/viewer tokens via governed dev-login, bind exact checkout/deployment/BFF SHAs, and run Persona interaction hosted spec.",
+      "Update .github/workflows/pfg-agora-journey-e2e-hosted-acceptance.yml to tighten exact SHA bindings, probe /bff/auth/readiness, and enforce sanitized evidence upload.",
+      "Update e2e/agora-product-journey.spec.ts to format and write agora-demo-run-evidence.json according to demo-run-evidence.v1 contract.",
+      "Update e2e/persona-interaction-cross-repo-hosted.spec.ts to support dynamic operator and viewer token minting from dev-login client credentials.",
+      "Update e2e/agora-hosted-evidence.ts and add src/test/agora-demo-run-evidence-schema.test.ts to validate evidence structure."
+    ],
+    "not_changed": [
+      "Backend routing and interaction worker implementations.",
+      "Read-only vs real-writes security boundary."
+    ]
+  },
+  "validation": {
+    "vitest_schema_unit": {
+      "command": "npx vitest run src/test/agora-demo-run-evidence-schema.test.ts",
+      "result": "passed: 2 tests passed"
+    },
+    "typecheck": {
+      "command": "npm run typecheck",
+      "result": "passed"
+    }
+  },
+  "review_binding": {
+    "sha_disposition": "Independent approval must bind the final PR head that contains this implementation and evidence manifest."
+  },
+  "independent_review_required": [
+    "Confirm docs/contracts/agora/demo-run-evidence.v1.schema.json defines exact pair, object IDs, steps, negative controls, and restoration.",
+    "Confirm .github/workflows/agora-hosted-acceptance.yml and pfg-agora-journey-e2e-hosted-acceptance.yml use short-lived dev-login tokens and exact SHA bindings.",
+    "Confirm e2e/agora-product-journey.spec.ts and e2e/persona-interaction-cross-repo-hosted.spec.ts handle short-lived auth and write sanitized evidence.",
+    "Confirm npm run typecheck and vitest unit tests pass cleanly."
+  ]
+}

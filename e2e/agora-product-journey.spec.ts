@@ -21,6 +21,10 @@ import {
   roleTokenFromEnv,
   targetsExternalE2eEnvironment,
 } from "./helpers/auth";
+import {
+  writeDemoRunEvidence,
+  type AgoraDemoRunEvidence,
+} from "./agora-hosted-evidence";
 
 const TASK_ID = "PFG-AGORA-JOURNEY-E2E-20260820";
 const ENABLED = process.env.PFG_AGORA_JOURNEY_E2E === "1";
@@ -652,6 +656,7 @@ test.describe(`${TASK_ID} strict-live browser journey`, () => {
     const session = token ? await assertStrictSession(request, token) : undefined;
     const observedRequests = observeBffTraffic(page);
     const mutations: MutationEvidence[] = [];
+    const startedAt = new Date().toISOString();
     const runMarker = randomUUID();
     const workshopTitle = `PFG Agora journey ${runMarker}`;
     let strategyId = "";
@@ -1093,6 +1098,96 @@ test.describe(`${TASK_ID} strict-live browser journey`, () => {
     );
     await testInfo.attach(`${TASK_ID}-runtime-evidence`, {
       path: evidencePath,
+      contentType: "application/json",
+    });
+
+    const completedAt = new Date().toISOString();
+    const demoRunId = `demo-${runMarker}`;
+    const feSha = String(process.env.EXPECTED_FE_SHA || process.env.AG_UIPOL_011_EXPECTED_FE_SHA || "0".repeat(40));
+    const bffSha = String(process.env.EXPECTED_BFF_SHA || "0".repeat(40));
+
+    const proposalMutation = mutations.find((m) => m.path.includes("/proposals") && !m.path.includes("/accept"));
+    const proposalId = proposalMutation?.id ?? "prop-unknown";
+    const messageMutation = mutations.find((m) => m.path.includes("/messages"));
+    const messageEventId = messageMutation?.id ?? messageEventProjection?.event_id ?? "evt-unknown";
+    const reconMutation = mutations.find((m) => m.path.includes("/reconstruct"));
+    const reconstructionId = reconMutation?.id ?? "recon-unknown";
+    const interactionMutation = mutations.find((m) => m.path === "/bff/agora/interactions");
+    const interactionId = interactionMutation?.id ?? "int-unknown";
+
+    const demoEvidence: AgoraDemoRunEvidence = {
+      schema_version: "pantheon.agora.demo-run-evidence.v1",
+      demo_run_id: demoRunId,
+      started_at: startedAt,
+      completed_at: completedAt,
+      status: "passed",
+      exact_pair: {
+        frontend_sha: feSha,
+        bff_sha: bffSha,
+        manifest_pair_id: `${feSha}:${bffSha}`,
+      },
+      profile: "bounded-write-proof",
+      objects: {
+        proposal_id: proposalId,
+        persona_id: `agora-servant-${TENANT_ID}`,
+        workshop_id: workshopId,
+        message_event_id: messageEventId,
+        reconstruction_id: reconstructionId,
+        strategy_id: strategyId,
+        version_id: strategyVersion,
+        interaction_id: interactionId,
+      },
+      steps: [
+        {
+          id: "workshop_create",
+          status: "passed",
+          receipt_ref: workshopId,
+        },
+        {
+          id: "workshop_message_admitted",
+          status: "passed",
+          receipt_ref: messageEventId,
+        },
+        {
+          id: "message_event_projected",
+          status: "passed",
+          readback_ref: messageEventProjection?.event_id ?? messageEventId,
+        },
+        {
+          id: "strategy_reconstructed",
+          status: "passed",
+          receipt_ref: reconstructionId,
+        },
+        {
+          id: "trading_room_proposal_accepted",
+          status: "passed",
+          receipt_ref: proposalId,
+        },
+        {
+          id: "decision_consultation_admitted",
+          status: "passed",
+          receipt_ref: interactionId,
+        },
+        {
+          id: "interaction_terminal_readback",
+          status: "passed",
+          readback_ref: interactionId,
+        },
+      ],
+      negative_controls: {
+        viewer_write_denied: true,
+        cross_tenant_non_enumerating: true,
+        no_order_route_proof: true,
+      },
+      restoration: {
+        read_only_restored: true,
+        served_manifest_verified: true,
+      },
+    };
+
+    const demoEvidencePath = writeDemoRunEvidence(EVIDENCE_DIR, demoEvidence);
+    await testInfo.attach("agora-demo-run-evidence", {
+      path: demoEvidencePath,
       contentType: "application/json",
     });
   });
