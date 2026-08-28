@@ -1,0 +1,104 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "AGORA-AUTH-NO-OTP-20260827",
+  "owner": "Codex",
+  "reviewer": "Antigravity2",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/AGORA-AUTH-NO-OTP-20260827",
+  "pull_request": 664,
+  "status": "ready-for-independent-exact-head-review",
+  "recorded_at": "2026-08-27T02:49:52Z",
+  "scope": {
+    "adopted": [
+      "Agora and Pantheon shared sign-in no longer renders, enrolls, or challenges for a six-digit authenticator/TOTP code.",
+      "The hosted Agora journey now signs in with the configured Identity Platform email and password without a TOTP secret.",
+      "The unused qrcode.react dependency and hosted TOTP secret wiring are removed.",
+      "Identity Platform project MFA and its TOTP provider are disabled in pantheon-lupin-dev-20260719, and the three existing dev TOTP enrollments are cleared."
+    ],
+    "not_changed": [
+      "Firebase email verification and the existing Identity Platform credential flow.",
+      "BFF-owned browser session verification, server-side RBAC, capability checks, or high-risk real-write authorization.",
+      "Identity Platform account passwords, email addresses, provider links, custom claims, or disabled state."
+    ]
+  },
+  "security_boundaries": {
+    "authoritative_admission": "Protected routes still require the BFF-verified browser session; a Firebase identity alone never grants product access.",
+    "authorization": "This change removes only login TOTP. Server-side RBAC, capability gates, and governed high-risk write authorization remain unchanged.",
+    "credential_storage": "No new credential persistence is introduced. The hosted journey no longer receives or computes a TOTP secret.",
+    "redirect_safety": "The existing root-relative return-target validation remains in place.",
+    "cloud_change_scope": "The authorized Identity Platform administration changed only project MFA/TOTP configuration and each targeted user's MFA enrollment list. No account identifiers or access tokens are retained in this evidence."
+  },
+  "review_binding": {
+    "pull_request": "https://github.com/ajoe734/execute-plans/pull/664",
+    "owner_implementation_commit": "56c104279d8913ea415901c693b8d5d31d869548",
+    "sha_disposition": "Independent approval must bind the final PR head that contains both the implementation and this evidence manifest."
+  },
+  "validation": {
+    "auth_component": {
+      "command": "npx vitest run src/pages/Auth.test.tsx --maxWorkers=2 --testTimeout=15000 --hookTimeout=30000",
+      "result": "passed: 1 file, 8 tests"
+    },
+    "public_auth_boundary": {
+      "command": "npx vitest run src/test/public-build-auth-contract.test.ts --maxWorkers=2 --testTimeout=15000 --hookTimeout=30000",
+      "result": "passed: 1 file, 67 tests"
+    },
+    "related_auth_source_contracts": {
+      "command": "npx vitest run src/test/strict-browser-auth-source-contract.test.ts src/test/srcm-p1-mgmt-ui-hosted-source-contract.test.ts --maxWorkers=2 --testTimeout=15000 --hookTimeout=30000",
+      "result": "passed: 2 files, 13 tests"
+    },
+    "typecheck": {
+      "command": "npm run typecheck",
+      "result": "passed"
+    },
+    "task_scoped_lint": {
+      "command": "npx eslint src/pages/Auth.tsx src/pages/Auth.test.tsx e2e/agora-product-journey.spec.ts e2e/01-startup-session.spec.ts",
+      "result": "passed"
+    },
+    "strict_live_read_only_build": {
+      "command": "VITE_GCP_IDENTITY_API_KEY=<syntactically-valid non-deployed placeholder> VITE_GCP_IDENTITY_PROJECT_ID=pantheon-test VITE_GCP_IDENTITY_AUTH_DOMAIN=pantheon-test.firebaseapp.com VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build",
+      "result": "passed",
+      "warnings": "Existing Browserslist, Rollup circular-chunk, and large-chunk warnings remain; no auth build failure occurred."
+    },
+    "hosted_journey_discovery": {
+      "command": "npx playwright test e2e/agora-product-journey.spec.ts --list",
+      "result": "passed: 2 projects list the Agora product journey"
+    },
+    "diff_integrity": {
+      "command": "git diff --check origin/dev...HEAD",
+      "result": "passed"
+    }
+  },
+  "identity_platform_evidence": {
+    "project_id": "pantheon-lupin-dev-20260719",
+    "authorization": "Human/Ops explicitly approved disabling login TOTP and clearing the three existing dev account enrollments, as recorded in PR #664.",
+    "api_scope": [
+      "PATCH /admin/v2/projects/pantheon-lupin-dev-20260719/config with updateMask=mfa.state,mfa.providerConfigs",
+      "POST /v1/projects/pantheon-lupin-dev-20260719/accounts:update with mfa.enrollments=[] for exactly the three preflight-matched accounts",
+      "GET project config and accounts:batchGet before and after the change"
+    ],
+    "preflight": {
+      "mfa_state": "ENABLED",
+      "totp_provider_state": "ENABLED",
+      "total_accounts": 4,
+      "accounts_with_mfa": 3,
+      "total_mfa_enrollments": 3,
+      "totp_enrollments": 3,
+      "next_page_token_present": false
+    },
+    "post_change": {
+      "mfa_state": "DISABLED",
+      "totp_provider_state": "DISABLED",
+      "total_accounts": 4,
+      "accounts_with_mfa": 0,
+      "total_mfa_enrollments": 0,
+      "totp_enrollments": 0,
+      "next_page_token_present": false
+    }
+  },
+  "independent_review_required": [
+    "Review PR #664 at its final exact head and confirm the UI and hosted journey no longer contain a TOTP login or enrollment path.",
+    "Confirm Firebase-to-BFF session verification remains fail closed and that RBAC or governed high-risk write authorization did not change.",
+    "Confirm this manifest was already present at the reviewed head, required PR checks are green on that head, and the cloud-state evidence satisfies the no-TOTP acceptance contract."
+  ]
+}

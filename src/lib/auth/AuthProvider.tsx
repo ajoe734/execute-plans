@@ -31,6 +31,7 @@ export interface AuthContextValue {
   bffSession: VerifiedBffBrowserSession | null;
   bffError: Error | null;
   loading: boolean;
+  retryBffSession: () => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -40,6 +41,7 @@ const AuthContext = createContext<AuthContextValue>({
   bffSession: null,
   bffError: null,
   loading: true,
+  retryBffSession: async () => {},
   signOut: async () => {},
 });
 
@@ -51,14 +53,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const sessionRef = useRef<GcpIdentitySession | null>(null);
   const syncVersion = useRef(0);
 
-  const applyUser = useCallback(async (user: User | null) => {
+  const applyUser = useCallback(async (user: User | null, forceRefresh = false) => {
     const version = ++syncVersion.current;
     const prior = sessionRef.current;
-    const next = user ? await gcpIdentitySession(user) : null;
+    const next = user ? await gcpIdentitySession(user, forceRefresh) : null;
     if (syncVersion.current !== version) return;
     sessionRef.current = next;
     setSession(next);
-    setBffSession(null);
+    const sameUser = prior?.user.uid === next?.user.uid;
+    if (!sameUser) setBffSession(null);
     setBffError(null);
 
     if (!next) {
@@ -78,22 +81,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       ? refreshAndVerifyBffBrowserSession()
       : verifyBffBrowserSession();
 
-    void verification
-      .then((verified) => {
-        if (syncVersion.current !== version) return;
-        setBffSession(verified);
-        setBffError(null);
-        setLoading(false);
-      })
-      .catch((error: unknown) => {
-        if (syncVersion.current !== version) return;
-        // A first-factor-only Identity Platform session is never enough to cross the product route
-        // boundary. Drop the header provider and retain the error for the auth UI.
-        clearBffBrowserSession();
-        setBffSession(null);
-        setBffError(error instanceof Error ? error : new Error(String(error)));
-        setLoading(false);
-      });
+    try {
+      const verified = await verification;
+      if (syncVersion.current !== version) return;
+      setBffSession(verified);
+      setBffError(null);
+      setLoading(false);
+    } catch (error: unknown) {
+      if (syncVersion.current !== version) return;
+      // A provider readback failure must not erase a session that was already
+      // strictly authenticated for this same GCP Identity user. ProtectedRoute
+      // decides from that session's BFF-owned authReady signal, not bffError.
+      setBffError(error instanceof Error ? error : new Error(String(error)));
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -121,6 +122,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       ++syncVersion.current;
       clearBffBrowserSession();
     };
+  }, [applyUser]);
+
+  const retryBffSession = useCallback(async () => {
+    const current = sessionRef.current;
+    setBffError(null);
+    setLoading(true);
+
+    if (!current) {
+      const error = new Error("GCP Identity session is unavailable; choose an account to continue.");
+      setBffError(error);
+      setLoading(false);
+      throw error;
+    }
+
+    try {
+      // Refresh the existing first-factor token and re-run authoritative BFF
+      // readback. This never asks the user to enter the same credentials again.
+      await applyUser(current.user, true);
+    } catch (error: unknown) {
+      const normalized = error instanceof Error ? error : new Error(String(error));
+      setBffError(normalized);
+      setLoading(false);
+      throw normalized;
+    }
   }, [applyUser]);
 
   const signOut = useCallback(async () => {
@@ -165,6 +190,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         bffSession,
         bffError,
         loading,
+        retryBffSession,
         signOut,
       }}
     >

@@ -9,8 +9,7 @@
 import { randomUUID } from "node:crypto";
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 import {
-  gcpIdentityStorageKey,
-  gcpIdentityStoredUser,
+  installHostedDevLogin,
   roleTokenFromEnv,
 } from "./helpers/auth";
 
@@ -22,8 +21,25 @@ const VIEWER_TOKEN = roleTokenFromEnv("viewer", ["PANTHEON_PERSONA_INTERACTION_V
 const WRITE_PROOF = process.env.PANTHEON_PERSONA_INTERACTION_WRITE_PROOF === "1";
 const ENSURED_PERSONA_ID = String(process.env.PANTHEON_PERSONA_INTERACTION_PERSONA_ID ?? "").trim();
 const EXPECTED_BFF_SHA = String(process.env.PANTHEON_BFF_SHA ?? "").trim().toLowerCase();
-const GCP_IDENTITY_API_KEY = String(
-  process.env.PANTHEON_PUBLIC_GCP_IDENTITY_API_KEY ?? "",
+const DEV_LOGIN_OPERATOR_CLIENT_ID = String(
+  process.env.DEV_LOGIN_OPERATOR_CLIENT_ID
+    ?? process.env.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_ID
+    ?? "pantheon-dev-operator-a-v1",
+).trim();
+const DEV_LOGIN_OPERATOR_CLIENT_SECRET = String(
+  process.env.DEV_LOGIN_OPERATOR_CLIENT_SECRET
+    ?? process.env.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_SECRET
+    ?? "",
+).trim();
+const DEV_LOGIN_VIEWER_CLIENT_ID = String(
+  process.env.DEV_LOGIN_VIEWER_CLIENT_ID
+    ?? process.env.DEV_BFF_DEV_LOGIN_VIEWER_CLIENT_ID
+    ?? "pantheon-dev-viewer-v1",
+).trim();
+const DEV_LOGIN_VIEWER_CLIENT_SECRET = String(
+  process.env.DEV_LOGIN_VIEWER_CLIENT_SECRET
+    ?? process.env.DEV_BFF_DEV_LOGIN_VIEWER_CLIENT_SECRET
+    ?? "",
 ).trim();
 const DEV_BFF_HOST = "pantheon-lupin-dev-bff.35.201.204.12.sslip.io";
 const DEV_FE_HOST = "pantheon-lupin-dev-fe.35.201.204.12.sslip.io";
@@ -129,58 +145,23 @@ async function assertHostedBearerSession(
   return { operatorId, roles, sessionKind: "bearer" };
 }
 
-function hostedBearerClaims(token: string): JsonRecord {
-  const parts = token.split(".");
-  if (parts.length !== 3) return {};
-  try {
-    return record(JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8")));
-  } catch {
-    return {};
-  }
-}
-
 async function installVerifiedHostedProofSession(
   page: Page,
-  input: {
-    operatorId: string;
-    roles: string[];
-    sessionKind: "bearer";
-    token: string;
-    minimumTtlSeconds: number;
-  },
+  role: "operator" | "viewer",
 ): Promise<void> {
   expect(WRITE_PROOF, "hosted session bootstrap is proof-only").toBe(true);
   expect(new URL(FE_BASE).hostname).toBe(DEV_FE_HOST);
   expect(new URL(BFF_BASE).hostname).toBe(DEV_BFF_HOST);
   expect(EXPECTED_BFF_SHA).toMatch(/^[0-9a-f]{40}$/);
-  expect(GCP_IDENTITY_API_KEY).toMatch(/^AIza[A-Za-z0-9_-]{35}$/u);
-
-  const nowSeconds = Math.floor(Date.now() / 1000);
-  const claims = hostedBearerClaims(input.token);
-  expect(input.sessionKind).toBe("bearer");
-  expect(String(claims.sub ?? "")).toBe(input.operatorId);
-  expect(input.minimumTtlSeconds).toBeGreaterThanOrEqual(240);
-  expect(Number(claims.exp ?? 0)).toBeGreaterThan(nowSeconds + input.minimumTtlSeconds);
-
-  const storageKey = gcpIdentityStorageKey(GCP_IDENTITY_API_KEY);
-  const storedSession = gcpIdentityStoredUser({
-    apiKey: GCP_IDENTITY_API_KEY,
-    email: typeof claims.email === "string"
-      ? claims.email
-      : `${input.operatorId}@pantheon-dev.invalid`,
-    token: input.token,
-    uid: input.operatorId,
-  });
-  await page.addInitScript(
-    ({ key, session }) => {
-      try {
-        window.sessionStorage.setItem(key, JSON.stringify(session));
-      } catch {
-        // The init script is retried for the hosted origin during navigation.
-      }
-    },
-    { key: storageKey, session: storedSession },
-  );
+  const clientId = role === "operator"
+    ? DEV_LOGIN_OPERATOR_CLIENT_ID
+    : DEV_LOGIN_VIEWER_CLIENT_ID;
+  const clientSecret = role === "operator"
+    ? DEV_LOGIN_OPERATOR_CLIENT_SECRET
+    : DEV_LOGIN_VIEWER_CLIENT_SECRET;
+  expect(clientId, `${role} hosted dev-login client id is required`).not.toBe("");
+  expect(clientSecret, `${role} hosted dev-login client secret is required`).not.toBe("");
+  await installHostedDevLogin(page, { clientId, clientSecret, tenantId: TENANT_ID });
 }
 
 function personaId(row: JsonRecord): string {
@@ -331,13 +312,9 @@ test.describe("Persona Detail → canonical Workshop cross-repo proof", () => {
   test("operator resolves, checks eligibility, submits no-authority interaction, reads it back, and returns @desktop-full", async ({ page, request }) => {
     test.skip(!WRITE_PROOF || !OPERATOR_TOKEN, "requires explicit write-proof opt-in and operator token");
     test.setTimeout(180_000);
-    const operatorSession = await assertOperatorSession(request, OPERATOR_TOKEN);
+    await assertOperatorSession(request, OPERATOR_TOKEN);
     const persona = await discoverEligiblePersona(request, OPERATOR_TOKEN);
-    await installVerifiedHostedProofSession(page, {
-      ...operatorSession,
-      token: OPERATOR_TOKEN,
-      minimumTtlSeconds: 300,
-    });
+    await installVerifiedHostedProofSession(page, "operator");
     await page.addInitScript(() => {
       // runtimeEnv accepts this only on the allowlisted Pantheon dev host.
       window.sessionStorage.setItem("pantheon.e2e.realWrites", "true");
@@ -415,11 +392,7 @@ test.describe("Persona Detail → canonical Workshop cross-repo proof", () => {
     const { operatorId } = operatorSession;
     await discoverEligiblePersona(request, OPERATOR_TOKEN);
     const target = await prepareImmutableStrategyWorkshop(request, OPERATOR_TOKEN, operatorId);
-    await installVerifiedHostedProofSession(page, {
-      ...operatorSession,
-      token: OPERATOR_TOKEN,
-      minimumTtlSeconds: 480,
-    });
+    await installVerifiedHostedProofSession(page, "operator");
     await page.addInitScript(() => window.sessionStorage.setItem("pantheon.e2e.realWrites", "true"));
     await page.goto(`${FE_BASE}/agora/strategy-workshop/${encodeURIComponent(target.workshopId)}`);
     await expect(page.getByTestId("servant-composer")).toBeVisible({ timeout: 30_000 });
@@ -552,7 +525,7 @@ test.describe("Persona Detail → canonical Workshop cross-repo proof", () => {
     expect(viewerRoles).toContain("viewer");
     expect(viewerRoles).not.toContain("operator");
     expect(viewerRoles).not.toContain("admin");
-    const viewerSession = await assertHostedBearerSession(request, VIEWER_TOKEN, viewerMe, viewerRoles);
+    await assertHostedBearerSession(request, VIEWER_TOKEN, viewerMe, viewerRoles);
     const deniedEnsure = await request.post(`${BFF_BASE}/bff/agora/servant/ensure`, {
       headers: headers(VIEWER_TOKEN, { "Idempotency-Key": randomUUID() }),
       data: { display_name: "Viewer must not ensure a Persona", locale: "en-US", timezone: "UTC" },
@@ -566,11 +539,7 @@ test.describe("Persona Detail → canonical Workshop cross-repo proof", () => {
         browserInteractionPosts.push(path);
       }
     });
-    await installVerifiedHostedProofSession(page, {
-      ...viewerSession,
-      token: VIEWER_TOKEN,
-      minimumTtlSeconds: 240,
-    });
+    await installVerifiedHostedProofSession(page, "viewer");
     await openPersonaDetail(page, persona);
     await expect(page.getByRole("button", { name: /^Talk with / })).toBeDisabled();
     await expect(page.getByTestId("persona-interaction-disabled-reason")).toContainText(/requires|disabled|eligible/i);
@@ -587,7 +556,7 @@ test.describe("Persona Detail → canonical Workshop cross-repo proof", () => {
   test("mobile Persona detail remains usable without producing writes @mobile-basic", async ({ page, request }) => {
     test.skip(!OPERATOR_TOKEN, "requires an operator token for hosted readback");
     test.setTimeout(120_000);
-    const operatorSession = await assertOperatorSession(request, OPERATOR_TOKEN);
+    await assertOperatorSession(request, OPERATOR_TOKEN);
     const persona = await matchEnsuredPersonaFromFleet(request, OPERATOR_TOKEN);
     const browserInteractionPosts: string[] = [];
     page.on("request", (browserRequest) => {
@@ -596,11 +565,7 @@ test.describe("Persona Detail → canonical Workshop cross-repo proof", () => {
         browserInteractionPosts.push(path);
       }
     });
-    await installVerifiedHostedProofSession(page, {
-      ...operatorSession,
-      token: OPERATOR_TOKEN,
-      minimumTtlSeconds: 240,
-    });
+    await installVerifiedHostedProofSession(page, "operator");
     await openPersonaDetail(page, persona);
     await expect(page.getByRole("button", { name: /^Talk with / })).toBeVisible();
     await expect(page.getByRole("tab", { name: /trade journal/i })).toBeVisible();

@@ -34,6 +34,7 @@ function renderRoute() {
     <MemoryRouter initialEntries={["/agora/strategy-workshop/ws-1?mode=challenge"]}>
       <Routes>
         <Route path="/auth" element={<AuthenticationPage />} />
+        <Route path="/agora/auth" element={<AuthenticationPage />} />
         <Route
           path="/agora/strategy-workshop/:id"
           element={<ProtectedRoute><div>Persona interaction</div></ProtectedRoute>}
@@ -58,16 +59,16 @@ describe("Persona and Agora auth route boundary", () => {
   it("shows loading screen while session verification is in progress", () => {
     state.value.loading = true;
     renderRoute();
-    expect(screen.getByText("Verifying Pantheon session…")).toBeInTheDocument();
+    expect(screen.getByText("Verifying Agora access…")).toBeInTheDocument();
     expect(screen.queryByText("Persona interaction")).not.toBeInTheDocument();
     expect(screen.queryByText("Authentication page")).not.toBeInTheDocument();
   });
 
-  it("redirects an unauthenticated browser (no Firebase, no BFF) to /auth", () => {
+  it("redirects an unauthenticated Agora browser to the branded Agora auth entry", () => {
     renderRoute();
     expect(screen.getByText("Authentication page")).toBeInTheDocument();
     expect(screen.getByTestId("auth-location")).toHaveTextContent(
-      "/auth?reason=auth-required&from=%2Fagora%2Fstrategy-workshop%2Fws-1%3Fmode%3Dchallenge",
+      "/agora/auth?reason=auth-required&from=%2Fagora%2Fstrategy-workshop%2Fws-1%3Fmode%3Dchallenge",
     );
     expect(screen.queryByText("Persona interaction")).not.toBeInTheDocument();
   });
@@ -80,12 +81,9 @@ describe("Persona and Agora auth route boundary", () => {
     expect(screen.queryByText("Persona interaction")).not.toBeInTheDocument();
   });
 
-  it("fails closed and redirects to /auth when BFF verification returns an error (bffError)", () => {
+  it("redirects when BFF verification has not produced an auth-ready session", () => {
     state.value.session = { idToken: "some-token" };
-    state.value.bffSession = {
-      identity: { roles: ["operator"], capabilities: [] },
-      readiness: { authReady: true, operatorRoleReady: true },
-    };
+    state.value.bffSession = null;
     state.value.bffError = new Error("BFF verification network error");
     renderRoute();
     expect(screen.getByText("Authentication page")).toBeInTheDocument();
@@ -104,13 +102,25 @@ describe("Persona and Agora auth route boundary", () => {
     expect(screen.queryByText("Authentication page")).not.toBeInTheDocument();
   });
 
-  it("admits a BFF-authenticated viewer to read while write gates remain separate", () => {
+  it("does not redirect an auth-ready session when provider readiness is degraded", () => {
     state.value.session = { idToken: "viewer-token" };
     state.value.bffSession = {
       identity: { roles: ["viewer"], capabilities: [] },
-      readiness: { authReady: false, operatorRoleReady: false },
+      readiness: { authReady: true, providerReady: false, operatorRoleReady: false },
     };
+    state.value.bffError = new Error("provider offline");
     renderRoute();
     expect(screen.getByText("Persona interaction")).toBeInTheDocument();
+  });
+
+  it("redirects a BFF identity whose strict auth readiness is false", () => {
+    state.value.session = { idToken: "viewer-token" };
+    state.value.bffSession = {
+      identity: { roles: ["viewer"], capabilities: [] },
+      readiness: { authReady: false, providerReady: true, operatorRoleReady: false },
+    };
+    renderRoute();
+    expect(screen.getByText("Authentication page")).toBeInTheDocument();
+    expect(screen.queryByText("Persona interaction")).not.toBeInTheDocument();
   });
 });

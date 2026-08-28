@@ -13,6 +13,10 @@ import {
   type DecisionChoice,
   type TradingRoomWorkspaceResult,
 } from "@/lib/bff-v1/agora/tradingRoom";
+import {
+  getAgoraOperationalReadiness,
+  type AgoraOperationalReadiness,
+} from "@/lib/bff-v1/agora/operationalReadiness";
 import { BffError } from "@/lib/bff-v1/errors";
 import type {
   TradingRoomWorkspaceProposal,
@@ -831,6 +835,102 @@ function StrategyWorkspaceView({
 // ── Root Page ─────────────────────────────────────────────────────────────────
 
 type LoadState = "loading" | "loaded" | "error";
+type OperationalReadinessLoadState = "loading" | "ready" | "unavailable";
+
+const TRADING_ROOM_READINESS_SURFACES = ["signals", "decision_events", "candidates"];
+
+function operationalReadinessMessage(readiness: AgoraOperationalReadiness): string {
+  switch (readiness.source.freshness) {
+    case "stale":
+      return "Source snapshot is stale. Dependent Trading Room data is unavailable until a fresh snapshot arrives.";
+    case "empty_fresh":
+      return "Source is fresh but produced zero qualifying signals. Empty queues are expected, not an outage.";
+    case "unavailable":
+    case "not_configured":
+      return "Source availability cannot be confirmed. The downstream reasons identify the blocked dependency.";
+    case "degraded":
+      return "The source or signal producer is degraded. Treat dependent values as incomplete.";
+    default:
+      return "Source snapshot and producer identity are current in the operational readiness projection.";
+  }
+}
+
+function operationalReadinessColor(readiness: AgoraOperationalReadiness): string {
+  if (readiness.source.freshness === "fresh") return "#56d98b";
+  if (readiness.source.freshness === "empty_fresh") return "#e8b750";
+  return "#f87171";
+}
+
+function TradingRoomOperationalReadiness({
+  readiness,
+  state,
+}: {
+  readiness: AgoraOperationalReadiness | null;
+  state: OperationalReadinessLoadState;
+}): JSX.Element {
+  if (state === "loading") {
+    return (
+      <div
+        data-testid="trading-room-operational-readiness-loading"
+        style={{ background: "#171b22", borderBottom: "1px solid #2a2e38", color: "#8c96a6", fontSize: 12, padding: "7px 16px" }}
+      >
+        Loading source and producer readiness…
+      </div>
+    );
+  }
+
+  if (state === "unavailable" || !readiness) {
+    return (
+      <div
+        data-testid="trading-room-operational-readiness-unavailable"
+        style={{ background: "#2a1d1d", borderBottom: "1px solid #5c3232", color: "#f3b1b1", fontSize: 12, padding: "7px 16px" }}
+      >
+        Operational readiness could not be read. Source freshness and downstream causes are not inferred from this failure.
+      </div>
+    );
+  }
+
+  const source = readiness.source;
+  const producer = readiness.signal_producer;
+  const sourceIdentity = source.source_instance_id ?? source.snapshot_id ?? "source not reported";
+  const sourceSnapshot = source.snapshot_id ?? "snapshot not reported";
+  return (
+    <section
+      data-operational-status={readiness.status}
+      data-source-freshness={source.freshness}
+      data-testid="trading-room-operational-readiness"
+      style={{ background: "#171b22", borderBottom: "1px solid #2a2e38", display: "grid", gap: 6, padding: "8px 16px" }}
+    >
+      <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 8 }}>
+        <strong style={{ color: "#f0ece4", fontSize: 12 }}>Operational readiness</strong>
+        <span
+          style={{ border: `1px solid ${operationalReadinessColor(readiness)}`, borderRadius: 999, color: operationalReadinessColor(readiness), fontSize: 11, fontWeight: 700, padding: "2px 7px", textTransform: "uppercase" }}
+        >
+          {source.freshness}
+        </span>
+        <span data-testid="trading-room-readiness-source" style={{ color: "#c4ccda", fontSize: 12 }}>
+          Source: {sourceIdentity} · snapshot {sourceSnapshot}
+        </span>
+        <span data-testid="trading-room-readiness-producer" style={{ color: "#c4ccda", fontSize: 12 }}>
+          Producer: {producer.producer_id}{producer.active_binding ? ` · ${producer.active_binding}` : ""}
+        </span>
+        <span style={{ color: "#8c96a6", fontSize: 11, marginLeft: "auto" }}>Read-only BFF projection</span>
+      </div>
+      <div style={{ color: "#aab1bc", fontSize: 12 }}>{operationalReadinessMessage(readiness)}</div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
+        {TRADING_ROOM_READINESS_SURFACES.map((name) => {
+          const surface = readiness.surfaces[name];
+          if (!surface) return null;
+          return (
+            <span data-testid={`trading-room-readiness-surface-${name}`} key={name} style={{ color: "#c4ccda", fontSize: 11 }}>
+              {name.replace(/_/g, " ")}: {surface.status} ({surface.count}){surface.reason ? ` · ${surface.reason}` : ""}
+            </span>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
 
 interface TradingRoomPageProps {
   strategyId?: string;
@@ -857,6 +957,8 @@ export function TradingRoomPage({
   const [events, setEvents] = useState<TradingDecisionEvent[]>([]);
   const [eventsLoading, setEventsLoading] = useState(true);
   const [eventsEtag, setEventsEtag] = useState<string | null>(null);
+  const [operationalReadiness, setOperationalReadiness] = useState<AgoraOperationalReadiness | null>(null);
+  const [operationalReadinessState, setOperationalReadinessState] = useState<OperationalReadinessLoadState>("loading");
 
   const [candidateReviewOpen, setCandidateReviewOpen] = useState(false);
   const [candidatePoolId, setCandidatePoolId] = useState<string | null>(null);
@@ -882,6 +984,20 @@ export function TradingRoomPage({
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    getAgoraOperationalReadiness()
+      .then((next) => {
+        if (cancelled) return;
+        setOperationalReadiness(next);
+        setOperationalReadinessState("ready");
+      })
+      .catch(() => {
+        if (!cancelled) setOperationalReadinessState("unavailable");
+      });
+    return () => { cancelled = true; };
   }, []);
 
   const defaultReadyStrategyForPool = aggregate
@@ -966,11 +1082,14 @@ export function TradingRoomPage({
 
   if (loadState === "error" || !aggregate) {
     return (
-      <div
-        data-testid="trading-room-error"
-        style={{ display: "flex", height: "100%", alignItems: "center", justifyContent: "center", fontSize: 13, color: "#f87171", background: "#111417" }}
-      >
-        {t("agora.tradingRoom.page.loadFailed")}
+      <div style={{ background: "#111417", color: "#f0ece4", display: "flex", flexDirection: "column", height: "100%" }}>
+        <TradingRoomOperationalReadiness readiness={operationalReadiness} state={operationalReadinessState} />
+        <div
+          data-testid="trading-room-error"
+          style={{ alignItems: "center", color: "#f87171", display: "flex", flex: 1, fontSize: 13, justifyContent: "center" }}
+        >
+          {t("agora.tradingRoom.page.loadFailed")}
+        </div>
       </div>
     );
   }
@@ -1017,6 +1136,8 @@ export function TradingRoomPage({
           {mobileNavigationOpen ? "Hide strategies" : "Strategies"}
         </button>
       </div>
+
+      <TradingRoomOperationalReadiness readiness={operationalReadiness} state={operationalReadinessState} />
 
       <div data-mobile-collapsed={!mobileNavigationOpen} data-testid="trading-room-navigation">
         <StrategyLensSwitcher
