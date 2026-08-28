@@ -16,7 +16,7 @@ import {
   ChevronRight,
   Sparkles,
 } from "lucide-react";
-import type { LoopHealthEntryDTO, TruthSourceInfo } from "@/lib/bff-v1/loopTruthTypes";
+import type { LoopHealthEntryDTO } from "@/lib/bff-v1/loopTruthTypes";
 
 interface LoopTruthViewProps {
   loops: LoopHealthEntryDTO[];
@@ -56,10 +56,12 @@ export const LoopTruthView: React.FC<LoopTruthViewProps> = ({
   const canonicalLoops = loops.filter((l) => (l.classification || "canonical") === "canonical");
   const compositeLoops = loops.filter((l) => l.classification === "composite_overlay");
 
-  const liveCount = canonicalLoops.filter((l) => l.operator_truth_source?.accepted_as_live).length;
-  const nonLiveCount = canonicalLoops.filter((l) => !l.operator_truth_source?.accepted_as_live).length;
+  const liveCount = canonicalLoops.filter(
+    (l) => l.live_status.operator_truth.accepted_as_live,
+  ).length;
+  const nonLiveCount = canonicalLoops.length - liveCount;
 
-  const filtered = loops.filter((l) => {
+  const filtered = canonicalLoops.filter((l) => {
     if (search) {
       const q = search.toLowerCase();
       const matchName = (l.name || l.loop_id).toLowerCase().includes(q);
@@ -69,20 +71,14 @@ export const LoopTruthView: React.FC<LoopTruthViewProps> = ({
     if (filter === "live") {
       return (
         (l.classification || "canonical") === "canonical" &&
-        l.operator_truth_source?.accepted_as_live === true
+        l.live_status.operator_truth.accepted_as_live === true
       );
     }
     if (filter === "degraded") {
       return (
         (l.classification || "canonical") === "canonical" &&
-        !l.operator_truth_source?.accepted_as_live
+        !l.live_status.operator_truth.accepted_as_live
       );
-    }
-    if (filter === "canonical") {
-      return (l.classification || "canonical") === "canonical";
-    }
-    if (filter === "composite") {
-      return l.classification === "composite_overlay";
     }
     return true;
   });
@@ -122,8 +118,8 @@ export const LoopTruthView: React.FC<LoopTruthViewProps> = ({
           <div className="text-2xl font-bold mt-1">{canonicalLoops.length}</div>
           <div className="text-[11px] text-muted-foreground mt-0.5">
             {compositeLoops.length > 0
-              ? `${compositeLoops.length} composite overlay${compositeLoops.length > 1 ? "s" : ""}`
-              : "12 canonical catalog loops"}
+              ? `${compositeLoops.length} composite overlay${compositeLoops.length > 1 ? "s" : ""} excluded`
+              : `${canonicalLoops.length} canonical runtime rows`}
           </div>
         </Card>
 
@@ -167,7 +163,7 @@ export const LoopTruthView: React.FC<LoopTruthViewProps> = ({
             className="h-7 text-xs px-2.5"
             onClick={() => setFilter("all")}
           >
-            All ({loops.length})
+            All ({canonicalLoops.length})
           </Button>
           <Button
             size="sm"
@@ -207,9 +203,9 @@ export const LoopTruthView: React.FC<LoopTruthViewProps> = ({
       <div className="space-y-2.5">
         {filtered.map((loop) => {
           const isExpanded = expandedId === loop.loop_id;
-          const opTruth = loop.operator_truth_source;
-          const isLive = opTruth?.accepted_as_live ?? false;
-          const truthLevel = opTruth?.truth_level ?? "registry_metadata";
+          const opTruth = loop.live_status.operator_truth;
+          const isLive = opTruth.accepted_as_live;
+          const truthLevel = opTruth.truth_level;
 
           return (
             <Card
@@ -231,7 +227,10 @@ export const LoopTruthView: React.FC<LoopTruthViewProps> = ({
                     </Badge>
                   </div>
                   <div className="text-xs text-muted-foreground flex flex-wrap items-center gap-3">
-                    <span>Maturity: <strong className="text-foreground">{loop.current_maturity}</strong> (Target: {loop.target_maturity})</span>
+                    <span>
+                      Runtime maturity:{" "}
+                      <strong className="text-foreground">{loop.runtime_maturity.state}</strong>
+                    </span>
                     {loop.controller?.controller_name && (
                       <span>Controller: <code className="text-foreground">{loop.controller.controller_name}</code></span>
                     )}
@@ -259,6 +258,7 @@ export const LoopTruthView: React.FC<LoopTruthViewProps> = ({
                     size="sm"
                     variant="ghost"
                     className="h-7 w-7 p-0"
+                    aria-label={`${isExpanded ? "Hide" : "Show"} truth details for ${loop.name || loop.loop_id}`}
                     onClick={() => setExpandedId(isExpanded ? null : loop.loop_id)}
                   >
                     {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
@@ -267,7 +267,7 @@ export const LoopTruthView: React.FC<LoopTruthViewProps> = ({
               </div>
 
               {/* Degraded Note if any */}
-              {opTruth?.degraded_reason && !isLive && (
+              {opTruth.degraded_reason && !isLive && (
                 <div className="mt-2.5 text-xs bg-status-warning/10 border border-status-warning/20 text-status-warning p-2 rounded flex items-start gap-1.5">
                   <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
                   <span>{opTruth.degraded_reason}</span>
@@ -330,14 +330,14 @@ export const LoopTruthView: React.FC<LoopTruthViewProps> = ({
                   </div>
 
                   {/* 5-Level Truth Ladder Breakdown */}
-                  {loop.truth_sources && loop.truth_sources.length > 0 && (
+                  {loop.evidence_packet.truth_sources.length > 0 && (
                     <div className="space-y-1.5">
                       <div className="font-semibold text-foreground flex items-center gap-1.5">
                         <Sparkles className="h-3.5 w-3.5 text-primary" />
                         Truth Provenance Ladder
                       </div>
                       <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
-                        {loop.truth_sources.map((ts) => (
+                        {loop.evidence_packet.truth_sources.map((ts) => (
                           <div
                             key={ts.truth_level}
                             className={`p-2 rounded border text-[11px] space-y-1 ${

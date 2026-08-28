@@ -1,0 +1,56 @@
+{
+  "schema_version": "pantheon.frontend-loop-truth-evidence.v1",
+  "task_id": "ACG-FE-LOOP-TRUTH-20260828",
+  "owner": "Codex",
+  "reviewer": "Antigravity",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "status": "implementation-ready-for-review",
+  "scope": {
+    "canonical_owner": "Pantheon GET /bff/v5/loop-health response contract",
+    "frontend_surfaces": [
+      "src/lib/bff-v1/loopTruthTypes.ts",
+      "src/components/management/LoopTruthView.tsx",
+      "src/components/management/LoopTruthView.test.tsx"
+    ],
+    "not_changed": [
+      "Pantheon backend loop-health projection",
+      "loop catalog membership",
+      "runtime controller evidence admission",
+      "deployment or real-write policy"
+    ]
+  },
+  "contract_alignment": {
+    "runtime_maturity": "UI reads runtime_maturity.state and does not retain catalog current_maturity or target_maturity fields.",
+    "operator_truth": "Live and degraded counts, filters, badges, and degraded reason use live_status.operator_truth.",
+    "truth_sources": "Expanded provenance uses evidence_packet.truth_sources.",
+    "canonical_rows": "Only classification=canonical rows are rendered or counted; composite overlays are explicitly excluded."
+  },
+  "removed_expectations": [
+    "LoopInventoryEntryDTO.maturity",
+    "LoopInventoryEntryDTO.current_maturity",
+    "LoopInventoryEntryDTO.target_maturity",
+    "LoopHealthEntryDTO.operator_truth_source",
+    "LoopHealthEntryDTO.truth_sources",
+    "LoopHealthEntryDTO.highest_present_truth_source"
+  ],
+  "validation": {
+    "focused_component": {
+      "command": "npx vitest run src/components/management/LoopTruthView.test.tsx --maxWorkers=2",
+      "result": "passed: 1 file, 4 tests",
+      "coverage": "nested accepted truth, explicit degraded truth, runtime maturity, nested provenance, exactly 12 canonical rows, and composite-overlay exclusion"
+    },
+    "typecheck": {
+      "command": "npx tsc -p tsconfig.json --noEmit",
+      "result": "passed"
+    },
+    "diff_check": {
+      "command": "git diff --check",
+      "result": "passed"
+    }
+  },
+  "delivery": {
+    "branch": "task/ACG-FE-LOOP-TRUTH-20260828",
+    "review_binding": "The canonical review handoff binds this manifest to the exact pushed head."
+  }
+}

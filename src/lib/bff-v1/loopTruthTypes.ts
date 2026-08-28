@@ -56,6 +56,39 @@ export interface ControllerContractDeclaration {
   note?: string;
 }
 
+export interface LoopLiveStatus {
+  is_live: boolean;
+  is_reconciled: boolean;
+  has_live_evidence: boolean;
+  reason?: string;
+  operator_truth?: OperatorTruthSource;
+}
+
+export interface RuntimeMaturity {
+  state: "unobserved" | "observed" | "reconciled" | "proven-live" | string;
+  source: string;
+  truth_level: string;
+  current_record_accepted: boolean;
+  reason: string;
+}
+
+export interface LoopEvidencePacket {
+  id: string;
+  packet_id: string;
+  loop_id: string;
+  source: string;
+  registry_ref: string;
+  highest_truth_level: string;
+  highest_truth_rank?: number;
+  accepted_live_liveness: boolean;
+  can_claim_reconciled: boolean;
+  can_claim_proven_live: boolean;
+  operator_truth: OperatorTruthSource;
+  truth_sources: TruthSourceInfo[];
+  captured_at?: string | null;
+  refs?: string[];
+}
+
 export interface LoopInventoryEntryDTO {
   id: string;
   loop_id: string;
@@ -75,12 +108,6 @@ export interface LoopInventoryEntryDTO {
   };
   desired_state?: Record<string, unknown>;
   actual_state?: Record<string, unknown>;
-  maturity?: {
-    current: string;
-    target: string;
-  };
-  current_maturity: string;
-  target_maturity: string;
   controller?: {
     status?: string;
     controller_name?: string;
@@ -89,21 +116,6 @@ export interface LoopInventoryEntryDTO {
     restart_behavior?: string;
     liveness_metric?: string;
   };
-  evidence?: Record<string, unknown>;
-  evidence_statuses?: Record<string, string>;
-  execution_tasks?: Array<{
-    id?: string;
-    task_id?: string;
-    repo?: string;
-    status?: string;
-  }>;
-  maturity_projection?: {
-    source?: string;
-    declared_only?: boolean;
-    eligible_live_truth_levels?: string[];
-    task_completion_policy?: string;
-    archived_task_completion_accepted?: boolean;
-  };
   controller_contract_declaration?: ControllerContractDeclaration;
   truth_source?: {
     level?: string;
@@ -111,13 +123,7 @@ export interface LoopInventoryEntryDTO {
     registry_ref?: string;
     live_truth_levels?: string[];
   };
-  live_status?: {
-    is_live: boolean;
-    is_reconciled: boolean;
-    has_live_evidence: boolean;
-    catalog_claim_eligible: boolean;
-    reason?: string;
-  };
+  live_status: LoopLiveStatus;
 }
 
 export interface ControllerHealthDetail {
@@ -129,21 +135,22 @@ export interface ControllerHealthDetail {
   evidence_bases?: string[];
   runtime_evidence_refs?: string[];
   runtime_record_qualified?: boolean;
+  current_record_accepted?: boolean;
   rejection_reason?: string | null;
   freshness?: {
-    is_fresh?: boolean;
+    current?: boolean;
     last_heartbeat_at?: string;
     age_seconds?: number;
+    max_age_seconds?: number;
   };
 }
 
 export interface LoopHealthEntryDTO extends LoopInventoryEntryDTO {
   read_model: "loop_health";
+  runtime_maturity: RuntimeMaturity;
   controller_health: ControllerHealthDetail;
-  evidence_packet?: Record<string, unknown>;
-  truth_sources?: TruthSourceInfo[];
-  highest_present_truth_source?: TruthSourceInfo;
-  operator_truth_source?: OperatorTruthSource;
+  evidence_packet: LoopEvidencePacket;
+  live_status: LoopLiveStatus & { operator_truth: OperatorTruthSource };
 }
 
 export interface LoopInventoryListEnvelope {

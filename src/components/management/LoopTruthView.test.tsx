@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 import { LoopTruthView } from "./LoopTruthView";
 import type { LoopHealthEntryDTO } from "@/lib/bff-v1/loopTruthTypes";
@@ -10,9 +10,14 @@ const sampleLoops: LoopHealthEntryDTO[] = [
     loop_id: "source_ingestion",
     classification: "canonical",
     name: "Source Ingestion",
-    current_maturity: "reconciled",
-    target_maturity: "proven-live",
     read_model: "loop_health",
+    runtime_maturity: {
+      state: "reconciled",
+      source: "controller_store",
+      truth_level: "reconciled_live_proof",
+      current_record_accepted: true,
+      reason: "derived from the current accepted controller-runtime record",
+    },
     controller: {
       status: "implemented",
       controller_name: "SourceIngestionController",
@@ -26,46 +31,78 @@ const sampleLoops: LoopHealthEntryDTO[] = [
       source: "controller_store",
       evidence_basis: "controller_runtime",
       runtime_record_qualified: true,
+      current_record_accepted: true,
     },
-    operator_truth_source: {
-      truth_level: "reconciled_live_proof",
-      source: "controller_store",
-      rank: 3,
-      status: "present",
-      label: "Reconciled Live Proof",
-      accepted_as_live: true,
-      is_live_truth: true,
-      degraded: false,
-    },
-    truth_sources: [
-      {
-        truth_level: "seed_fixture",
-        rank: 0,
-        status: "present",
-        source: "seed_fixture",
-        label: "Seed / Fixture",
-        accepted_as_live: false,
-        operator_note: "Seed or fixture data is not live proof.",
-      },
-      {
+    live_status: {
+      is_live: false,
+      is_reconciled: true,
+      has_live_evidence: true,
+      operator_truth: {
         truth_level: "reconciled_live_proof",
+        source: "controller_store",
         rank: 3,
         status: "present",
-        source: "controller_store",
-        label: "Reconciled Live Proof",
+        label: "Reconciled live truth",
         accepted_as_live: true,
-        operator_note: "Accepted as live liveness proof.",
+        is_live_truth: true,
+        degraded: false,
       },
-    ],
+    },
+    evidence_packet: {
+      id: "loop-health-source_ingestion",
+      packet_id: "loop-health-source_ingestion",
+      loop_id: "source_ingestion",
+      source: "controller_store",
+      registry_ref: "docs/deployment/loop-catalog.registry.json",
+      highest_truth_level: "reconciled_live_proof",
+      accepted_live_liveness: true,
+      can_claim_reconciled: true,
+      can_claim_proven_live: false,
+      operator_truth: {
+        truth_level: "reconciled_live_proof",
+        source: "controller_store",
+        rank: 3,
+        status: "present",
+        label: "Reconciled live truth",
+        accepted_as_live: true,
+        is_live_truth: true,
+        degraded: false,
+      },
+      truth_sources: [
+        {
+          truth_level: "seed_fixture",
+          rank: 0,
+          status: "present",
+          source: "seed_fixture",
+          label: "Seed / fixture",
+          accepted_as_live: false,
+          operator_note: "Seed or fixture data is not live proof.",
+        },
+        {
+          truth_level: "reconciled_live_proof",
+          rank: 3,
+          status: "present",
+          source: "controller_store",
+          label: "Reconciled live truth",
+          accepted_as_live: true,
+          operator_note: "Accepted as live liveness proof.",
+        },
+      ],
+    },
   },
   {
     id: "strategy_distillation",
     loop_id: "strategy_distillation",
     classification: "canonical",
     name: "Strategy Distillation",
-    current_maturity: "api-only",
-    target_maturity: "reconciled",
     read_model: "loop_health",
+    runtime_maturity: {
+      state: "unobserved",
+      source: "missing",
+      truth_level: "registry_metadata",
+      current_record_accepted: false,
+      reason: "record lacks accepted current controller-runtime provenance",
+    },
     controller: {
       status: "not_implemented",
     },
@@ -74,29 +111,57 @@ const sampleLoops: LoopHealthEntryDTO[] = [
       source: "registry_metadata",
       evidence_basis: "missing",
       runtime_record_qualified: false,
+      current_record_accepted: false,
     },
-    operator_truth_source: {
-      truth_level: "registry_metadata",
-      source: "static_json_registry",
-      rank: 1,
-      status: "present",
-      label: "Registry Metadata",
-      accepted_as_live: false,
-      is_live_truth: false,
-      degraded: true,
-      degraded_reason: "Registry metadata identifies the loop but does not prove runtime liveness.",
-    },
-    truth_sources: [
-      {
+    live_status: {
+      is_live: false,
+      is_reconciled: false,
+      has_live_evidence: false,
+      operator_truth: {
         truth_level: "registry_metadata",
+        source: "static_json_registry",
         rank: 1,
         status: "present",
-        source: "static_json_registry",
-        label: "Registry Metadata",
+        label: "Registry metadata",
         accepted_as_live: false,
-        operator_note: "Registry metadata identifies the loop but does not prove runtime liveness.",
+        is_live_truth: false,
+        degraded: true,
+        degraded_reason: "Registry metadata identifies the loop but does not prove runtime liveness.",
       },
-    ],
+    },
+    evidence_packet: {
+      id: "loop-health-strategy_distillation",
+      packet_id: "loop-health-strategy_distillation",
+      loop_id: "strategy_distillation",
+      source: "bff_local_registry",
+      registry_ref: "docs/deployment/loop-catalog.registry.json",
+      highest_truth_level: "registry_metadata",
+      accepted_live_liveness: false,
+      can_claim_reconciled: false,
+      can_claim_proven_live: false,
+      operator_truth: {
+        truth_level: "registry_metadata",
+        source: "static_json_registry",
+        rank: 1,
+        status: "present",
+        label: "Registry metadata",
+        accepted_as_live: false,
+        is_live_truth: false,
+        degraded: true,
+        degraded_reason: "Registry metadata identifies the loop but does not prove runtime liveness.",
+      },
+      truth_sources: [
+        {
+          truth_level: "registry_metadata",
+          rank: 1,
+          status: "present",
+          source: "static_json_registry",
+          label: "Registry metadata",
+          accepted_as_live: false,
+          operator_note: "Registry metadata identifies the loop but does not prove runtime liveness.",
+        },
+      ],
+    },
   },
 ];
 
@@ -117,6 +182,12 @@ describe("LoopTruthView Component", () => {
     expect(
       screen.getByText("Registry metadata identifies the loop but does not prove runtime liveness.")
     ).toBeInTheDocument();
+    expect(screen.getByText("reconciled")).toBeInTheDocument();
+    expect(screen.getByText("unobserved")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Show truth details for Source Ingestion" }));
+    expect(screen.getByText("Truth Provenance Ladder")).toBeInTheDocument();
+    expect(screen.getByText("Reconciled live truth")).toBeInTheDocument();
   });
 
   it("renders explicit error banner and retry button when BFF fails without seed fallback", () => {
@@ -147,12 +218,54 @@ describe("LoopTruthView Component", () => {
       loop_id: `canonical_loop_${i + 1}`,
       classification: "canonical",
       name: `Canonical Loop ${i + 1}`,
-      current_maturity: "api-only",
-      target_maturity: "proven-live",
       read_model: "loop_health",
+      runtime_maturity: {
+        state: "unobserved",
+        source: "missing",
+        truth_level: "registry_metadata",
+        current_record_accepted: false,
+        reason: "no accepted current controller-runtime record",
+      },
       controller_health: {
         status: "unobserved",
         source: "registry_metadata",
+      },
+      live_status: {
+        is_live: false,
+        is_reconciled: false,
+        has_live_evidence: false,
+        operator_truth: {
+          truth_level: "registry_metadata",
+          source: "static_json_registry",
+          rank: 1,
+          status: "present",
+          label: "Registry metadata",
+          accepted_as_live: false,
+          is_live_truth: false,
+          degraded: true,
+        },
+      },
+      evidence_packet: {
+        id: `loop-health-canonical_loop_${i + 1}`,
+        packet_id: `loop-health-canonical_loop_${i + 1}`,
+        loop_id: `canonical_loop_${i + 1}`,
+        source: "bff_local_registry",
+        registry_ref: "docs/deployment/loop-catalog.registry.json",
+        highest_truth_level: "registry_metadata",
+        accepted_live_liveness: false,
+        can_claim_reconciled: false,
+        can_claim_proven_live: false,
+        operator_truth: {
+          truth_level: "registry_metadata",
+          source: "static_json_registry",
+          rank: 1,
+          status: "present",
+          label: "Registry metadata",
+          accepted_as_live: false,
+          is_live_truth: false,
+          degraded: true,
+        },
+        truth_sources: [],
       },
     }));
 
@@ -161,12 +274,54 @@ describe("LoopTruthView Component", () => {
       loop_id: "composite_overlay_1",
       classification: "composite_overlay",
       name: "Composite Overlay 1",
-      current_maturity: "api-only",
-      target_maturity: "proven-live",
       read_model: "loop_health",
+      runtime_maturity: {
+        state: "unobserved",
+        source: "missing",
+        truth_level: "registry_metadata",
+        current_record_accepted: false,
+        reason: "composite overlay loops do not accept direct controller runtime records",
+      },
       controller_health: {
         status: "unobserved",
         source: "registry_metadata",
+      },
+      live_status: {
+        is_live: false,
+        is_reconciled: false,
+        has_live_evidence: false,
+        operator_truth: {
+          truth_level: "registry_metadata",
+          source: "static_json_registry",
+          rank: 1,
+          status: "present",
+          label: "Registry metadata",
+          accepted_as_live: false,
+          is_live_truth: false,
+          degraded: true,
+        },
+      },
+      evidence_packet: {
+        id: "loop-health-composite_overlay_1",
+        packet_id: "loop-health-composite_overlay_1",
+        loop_id: "composite_overlay_1",
+        source: "bff_local_registry",
+        registry_ref: "docs/deployment/loop-catalog.registry.json",
+        highest_truth_level: "registry_metadata",
+        accepted_live_liveness: false,
+        can_claim_reconciled: false,
+        can_claim_proven_live: false,
+        operator_truth: {
+          truth_level: "registry_metadata",
+          source: "static_json_registry",
+          rank: 1,
+          status: "present",
+          label: "Registry metadata",
+          accepted_as_live: false,
+          is_live_truth: false,
+          degraded: true,
+        },
+        truth_sources: [],
       },
     };
 
@@ -176,13 +331,13 @@ describe("LoopTruthView Component", () => {
     // Direct assertions for counts
     const countDivs = screen.getAllByText((content, element) => element?.tagName.toLowerCase() === 'div' && element?.textContent === '12');
     expect(countDivs.length).toBe(2); // Canonical Loops count (12) and Non-Live/Degraded count (12)
-    expect(screen.getByText("1 composite overlay")).toBeInTheDocument();
-    expect(screen.getByText((content, element) => element?.tagName.toLowerCase() === 'button' && element?.textContent?.includes('All') === true)).toHaveTextContent("All (13)");
+    expect(screen.getByText("1 composite overlay excluded")).toBeInTheDocument();
+    expect(screen.getByText((content, element) => element?.tagName.toLowerCase() === 'button' && element?.textContent?.includes('All') === true)).toHaveTextContent("All (12)");
     expect(screen.getByText((content, element) => element?.tagName.toLowerCase() === 'button' && element?.textContent?.includes('Live Proven') === true)).toHaveTextContent("Live Proven (0)");
     expect(screen.getByText((content, element) => element?.tagName.toLowerCase() === 'button' && element?.textContent?.includes('Non-Live') === true)).toHaveTextContent("Non-Live / Degraded (12)");
 
     expect(screen.getByText("Canonical Loop 1")).toBeInTheDocument();
     expect(screen.getByText("Canonical Loop 12")).toBeInTheDocument();
-    expect(screen.getByText("Composite Overlay 1")).toBeInTheDocument();
+    expect(screen.queryByText("Composite Overlay 1")).not.toBeInTheDocument();
   });
 });
