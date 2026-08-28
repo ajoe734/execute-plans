@@ -12,6 +12,7 @@ import {
 import {
   RANKING_BLOCKS, defaultPulseRankings,
 } from "@/lib/v5/management/tradingRankings";
+import { askManagementNl, ManagementNlError } from "@/lib/bff-v1/managementNl";
 import { paths } from "@/lib/bff-v1/paths";
 
 describe("PM-3 composeCockpit", () => {
@@ -62,6 +63,29 @@ describe("PM-4 trading rankings", () => {
     const blocks = defaultPulseRankings();
     expect(blocks).toHaveLength(8);
     expect(blocks.every((b) => b.rows.every((r) => !!r.links.manageHref))).toBe(true);
+  });
+});
+
+describe("PM-8 NL: explain intents in fixed mock", () => {
+  it("answers explain_current_page without throwing", () => {
+    const ans = askManagementNl(
+      { prompt: "explain this page" },
+      { provider: "fixed_mock", gatewayEnabled: false, strict: false },
+    );
+    expect(ans.intent).toBe("explain_current_page");
+    expect(ans.provider).toBe("fixed_mock");
+  });
+  it("strict mode refuses (no silent mock fallback)", () => {
+    expect(() => askManagementNl(
+      { prompt: "anything" },
+      { provider: "fixed_mock", gatewayEnabled: false, strict: true },
+    )).toThrow(ManagementNlError);
+  });
+  it("gateway enabled is forbidden in Phase 1", () => {
+    expect(() => askManagementNl(
+      { prompt: "anything" },
+      { provider: "fixed_mock", gatewayEnabled: true, strict: false },
+    )).toThrow(ManagementNlError);
   });
 });
 
