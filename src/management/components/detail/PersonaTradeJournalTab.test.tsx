@@ -6,6 +6,9 @@ import { MemoryRouter } from "react-router-dom";
 
 // Mock the BFF APIs
 vi.mock("@/lib/bff-v1", () => ({
+  bffV1: {
+    detectMode: () => "mock",
+  },
   lists: {
     personas: vi.fn().mockResolvedValue([]),
   },
