@@ -257,7 +257,7 @@ export async function getObjectVersionsForSubject(kind: string, id: string): Pro
           spec: (asRecord(version) ?? {}) as Record<string, unknown>,
         })),
     );
-    return versions as ObjectVersion[];
+    return versions as unknown as ObjectVersion[];
   }
   return delay((seed.objectVersions as ObjectVersion[]).filter((v) => v.subjectKind === kind && v.subjectId === id));
 }
