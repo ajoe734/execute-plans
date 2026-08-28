@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { bffV1, mgmt } from "@/lib/bff-v1";
-import { bffV1, runActionSafe } from "@/lib/bff-v1";
+import { bffV1, mgmt, runActionSafe } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import type { AuditEvent, ResearchExperiment } from "@/lib/bff-v1";
 import type { ManagementPersonaFleetRow, ManagementResearchProject } from "@/lib/bff-v1/management";

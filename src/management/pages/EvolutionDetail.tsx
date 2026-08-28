@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { bffV1 } from "@/lib/bff-v1";
 import { bffV1, runActionSafe } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import type { Alert, ApprovalRequest, AuditEvent, EvolutionProgram, ResearchExperiment } from "@/lib/bff-v1";

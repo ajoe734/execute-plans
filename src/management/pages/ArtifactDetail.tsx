@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { safeDateTime } from "@/lib/utils";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { bffV1 } from "@/lib/bff-v1";
 import { bffV1, runActionSafe } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import type { Artifact, AuditEvent, Deployment } from "@/lib/bff-v1";

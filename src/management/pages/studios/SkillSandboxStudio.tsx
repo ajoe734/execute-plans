@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { bffV1, bffV1 } from "@/lib/bff-v1";
+import { bffV1 } from "@/lib/bff-v1";
 import type { Skill } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { Play, TerminalSquare, Loader2 } from "lucide-react";

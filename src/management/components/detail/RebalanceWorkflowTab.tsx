@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { bffV1, writes } from "@/lib/bff-v1";
+import { bffV1, writes, realtime } from "@/lib/bff-v1";
 import type { WorkflowStep } from "@/lib/bff-v1";
 import { WorkflowStepper } from "./WorkflowStepper";
 import { Section } from "@/management/pages/ObjectDetailLayout";
@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ChevronRight, RefreshCw, Snowflake, PlayCircle } from "lucide-react";
 import { toast } from "sonner";
-import { bffV1, realtime } from "@/lib/bff-v1";
 import { commandReceiptDescription } from "@/lib/bff-v1/commandReceipt";
 
 interface StepX extends WorkflowStep { jobKind?: string }

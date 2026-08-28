@@ -7,7 +7,6 @@ import { Slider } from "@/components/ui/slider";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Rocket, Undo2, TrendingDown, CalendarClock } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { bffV1 } from "@/lib/bff-v1";
 import { bffV1, runActionSafe } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import type { ApprovalRequest, AuditEvent, Deployment, Runtime } from "@/lib/bff-v1";

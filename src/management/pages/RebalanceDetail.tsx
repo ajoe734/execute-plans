@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { safePercent } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { bffV1 } from "@/lib/bff-v1";
 import { bffV1, runActionSafe } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import type { ApprovalRequest, AuditEvent, Rebalance, CapitalPool, Strategy } from "@/lib/bff-v1";

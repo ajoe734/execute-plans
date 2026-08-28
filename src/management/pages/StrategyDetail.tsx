@@ -13,7 +13,6 @@ import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
 import { DataTable } from "@/platform/components/DataTable";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { RiskBadge } from "@/platform/components/RiskBadge";
-import { bffV1 } from "@/lib/bff-v1";
 import { bffWrites } from "@/lib/bff-v1/writes";
 import { bffV1, runActionSafe } from "@/lib/bff-v1";
 import { NonProductionActionButton } from "@/management/components/NonProductionActionButton";

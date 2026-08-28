@@ -11,7 +11,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useT } from "@/platform/hooks";
-import { bffV1 } from "@/lib/bff-v1";
 import { bffV1, realtime } from "@/lib/bff-v1";
 import { normalizeAlertTimestampFields } from "@/lib/bff-v1/eventTimestamps";
 import { RiskBadge } from "./RiskBadge";
