@@ -1,48 +1,86 @@
 // ACG-FE-DEPGRAPH-20260828 — production import graph gate.
 //
-// Guards two failure modes discovered in the bff-v1 module graph:
-//   1. Strongly-connected components (import cycles) among production
-//      modules — including type-only edges, since both runtime and
-//      `import type` cycles confuse bundlers/tsc project references and
-//      make the module graph impossible to reason about incrementally.
-//   2. "Self-barrel" imports: a module inside src/lib/bff-v1 pulling its
-//      own dependencies back in through the package's own `@/lib/bff-v1`
-//      barrel (index.ts) instead of importing the concrete file directly.
-//      That pattern trivially creates a cycle through index.ts for any
-//      module index.ts re-exports.
-//
-// This test statically parses `import ... from "..."` specifiers (comments
-// stripped) across production .ts/.tsx files under src/lib/bff-v1 (excluding
-// __tests__ and mocks fixtures) and asserts the resulting directed graph is
-// acyclic, with no self-barrel edges.
+// The graph includes every TypeScript module under src/lib/bff-v1 that can be
+// shipped as source, including the mock adapters currently imported by
+// client.ts. Tests, generated sources, and build output are deliberately
+// excluded. Both runtime and type-only static edges are audited.
 
 import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
+import * as ts from "typescript";
 
 const BFF_V1_ROOT = path.join(process.cwd(), "src/lib/bff-v1");
+const EXCLUDED_DIRECTORY_NAMES = new Set([
+  "__tests__",
+  "tests",
+  "test",
+  "__generated__",
+  "generated",
+  "dist",
+  "build",
+  "coverage",
+]);
+const SOURCE_EXTENSION_RE = /\.(?:ts|tsx|mts|cts)$/;
+const TEST_SOURCE_RE = /\.(?:test|spec)\.(?:ts|tsx|mts|cts)$/;
+const GENERATED_SOURCE_RE = /(?:^|[._-])generated\.(?:ts|tsx|mts|cts)$/;
+
+function isProductionSourceFile(file: string): boolean {
+  const relative = path.relative(BFF_V1_ROOT, file);
+  if (relative.startsWith("..") || path.isAbsolute(relative)) return false;
+  const segments = relative.split(path.sep);
+  if (segments.slice(0, -1).some((segment) => EXCLUDED_DIRECTORY_NAMES.has(segment))) return false;
+  const basename = path.basename(file);
+  return (
+    SOURCE_EXTENSION_RE.test(basename) &&
+    !TEST_SOURCE_RE.test(basename) &&
+    !GENERATED_SOURCE_RE.test(basename) &&
+    !basename.endsWith(".d.ts")
+  );
+}
 
 function collectProductionFiles(dir: string): string[] {
   const out: string[] = [];
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    if (entry.name === "__tests__" || entry.name === "mocks") continue;
+  const entries = fs
+    .readdirSync(dir, { withFileTypes: true })
+    .sort((left, right) => left.name.localeCompare(right.name));
+
+  for (const entry of entries) {
+    if (entry.isDirectory() && EXCLUDED_DIRECTORY_NAMES.has(entry.name)) continue;
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
       out.push(...collectProductionFiles(full));
-      continue;
+    } else if (entry.isFile() && isProductionSourceFile(full)) {
+      out.push(path.normalize(full));
     }
-    if (!/\.(ts|tsx)$/.test(entry.name)) continue;
-    if (/\.test\.(ts|tsx)$/.test(entry.name)) continue;
-    out.push(full);
   }
-  return out;
+  return out.sort();
 }
 
-function stripComments(src: string): string {
-  return src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
-}
+function extractModuleSpecifiers(file: string): string[] {
+  const source = fs.readFileSync(file, "utf8");
+  const scriptKind = file.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
+  const sourceFile = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, scriptKind);
+  const specifiers: string[] = [];
 
-const IMPORT_RE = /from\s+["']([^"']+)["']/g;
+  function addStringLiteral(node: ts.Expression | undefined): void {
+    if (node && ts.isStringLiteralLike(node)) specifiers.push(node.text);
+  }
+
+  function visit(node: ts.Node): void {
+    if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) {
+      addStringLiteral(node.moduleSpecifier);
+    } else if (ts.isCallExpression(node) && node.arguments.length === 1) {
+      const isDynamicImport = node.expression.kind === ts.SyntaxKind.ImportKeyword;
+      const isRequire = ts.isIdentifier(node.expression) && node.expression.text === "require";
+      if (isDynamicImport || isRequire) addStringLiteral(node.arguments[0]);
+    }
+    ts.forEachChild(node, visit);
+  }
+
+  visit(sourceFile);
+  return specifiers;
+}
 
 function resolveSpecifier(fromFile: string, specifier: string): string | null {
   let base: string;
@@ -54,55 +92,76 @@ function resolveSpecifier(fromFile: string, specifier: string): string | null {
   } else {
     return null;
   }
-  const candidates = [base, `${base}.ts`, `${base}.tsx`, path.join(base, "index.ts")];
-  return candidates.find((c) => fs.existsSync(c) && fs.statSync(c).isFile()) ?? null;
+
+  const extensionlessBase = base.replace(/\.(?:js|jsx|mjs|cjs)$/, "");
+  const candidates = [
+    base,
+    extensionlessBase,
+    `${extensionlessBase}.ts`,
+    `${extensionlessBase}.tsx`,
+    `${extensionlessBase}.mts`,
+    `${extensionlessBase}.cts`,
+    path.join(extensionlessBase, "index.ts"),
+    path.join(extensionlessBase, "index.tsx"),
+  ];
+  return candidates.find((candidate) => fs.existsSync(candidate) && fs.statSync(candidate).isFile()) ?? null;
 }
 
 function buildGraph(files: string[]): Map<string, Set<string>> {
+  const productionFiles = new Set(files.map((file) => path.normalize(file)));
   const graph = new Map<string, Set<string>>();
-  for (const file of files) {
-    const source = stripComments(fs.readFileSync(file, "utf8"));
-    const deps = new Set<string>();
-    for (const match of source.matchAll(IMPORT_RE)) {
-      const specifier = match[1];
+  for (const file of [...productionFiles].sort()) {
+    const dependencies = new Set<string>();
+    for (const specifier of extractModuleSpecifiers(file)) {
       if (!specifier.startsWith(".") && !specifier.startsWith("@/lib/bff-v1")) continue;
       const resolved = resolveSpecifier(file, specifier);
-      if (resolved && resolved !== file) deps.add(resolved);
+      if (resolved && productionFiles.has(path.normalize(resolved))) {
+        dependencies.add(path.normalize(resolved));
+      }
     }
-    graph.set(file, deps);
+    graph.set(file, dependencies);
   }
   return graph;
 }
 
-function findCycles(graph: Map<string, Set<string>>): string[][] {
-  const state = new Map<string, 0 | 1 | 2>();
-  const stack: string[] = [];
-  const cycles: string[][] = [];
-
-  function visit(node: string) {
-    state.set(node, 1);
-    stack.push(node);
-    for (const dep of graph.get(node) ?? []) {
-      const depState = state.get(dep);
-      if (depState === undefined) {
-        visit(dep);
-      } else if (depState === 1) {
-        const idx = stack.indexOf(dep);
-        cycles.push([...stack.slice(idx), dep]);
-      }
-    }
-    stack.pop();
-    state.set(node, 2);
-  }
-
-  for (const node of graph.keys()) {
-    if (!state.has(node)) visit(node);
-  }
-  return cycles;
+function compareCycles(left: string[], right: string[]): number {
+  const edgeCount = left.length - right.length;
+  if (edgeCount !== 0) return edgeCount;
+  return left.join("\u0000").localeCompare(right.join("\u0000"));
 }
 
-function relPath(p: string): string {
-  return path.relative(process.cwd(), p);
+function shortestCycleFrom(graph: Map<string, Set<string>>, start: string): string[] | null {
+  const queue: string[][] = [[start]];
+  const shortestDepth = new Map<string, number>([[start, 0]]);
+
+  for (let index = 0; index < queue.length; index += 1) {
+    const pathToNode = queue[index];
+    const node = pathToNode[pathToNode.length - 1];
+    const neighbors = [...(graph.get(node) ?? [])].sort();
+    for (const neighbor of neighbors) {
+      if (neighbor === start) return [...pathToNode, start];
+      if (pathToNode.includes(neighbor)) continue;
+      const nextDepth = pathToNode.length;
+      const seenDepth = shortestDepth.get(neighbor);
+      if (seenDepth !== undefined && seenDepth < nextDepth) continue;
+      shortestDepth.set(neighbor, nextDepth);
+      queue.push([...pathToNode, neighbor]);
+    }
+  }
+  return null;
+}
+
+function findShortestCycle(graph: Map<string, Set<string>>): string[] | null {
+  let shortest: string[] | null = null;
+  for (const start of [...graph.keys()].sort()) {
+    const candidate = shortestCycleFrom(graph, start);
+    if (candidate && (!shortest || compareCycles(candidate, shortest) < 0)) shortest = candidate;
+  }
+  return shortest;
+}
+
+function relPath(file: string): string {
+  return path.relative(process.cwd(), file);
 }
 
 const productionFiles = collectProductionFiles(BFF_V1_ROOT);
@@ -110,28 +169,40 @@ const graph = buildGraph(productionFiles);
 
 describe("bff-v1 production import graph gate", () => {
   it("has no import cycles (runtime or type-only) among production modules", () => {
-    const cycles = findCycles(graph);
-    const rendered = cycles.map((c) => c.map(relPath).join(" -> "));
-    expect(rendered, "found cycle(s) in src/lib/bff-v1 production import graph").toEqual([]);
+    const cycle = findShortestCycle(graph);
+    const rendered = cycle?.map(relPath).join(" -> ") ?? null;
+    expect(rendered, "shortest cycle in src/lib/bff-v1 production import graph").toBeNull();
   });
 
-  it("forbids self-barrel imports (a bff-v1 module importing its own @/lib/bff-v1 barrel)", () => {
-    const offenders: string[] = [];
-    for (const file of productionFiles) {
-      if (path.resolve(file) === path.resolve(BFF_V1_ROOT, "index.ts")) continue;
-      const source = stripComments(fs.readFileSync(file, "utf8"));
-      for (const match of source.matchAll(IMPORT_RE)) {
-        const specifier = match[1];
-        if (specifier === "@/lib/bff-v1") {
-          offenders.push(relPath(file));
-          break;
-        }
-      }
-    }
+  it("reports the deterministic shortest offending cycle", () => {
+    const synthetic = new Map<string, Set<string>>([
+      ["a", new Set(["c", "b"])],
+      ["b", new Set(["a"])],
+      ["c", new Set(["d"])],
+      ["d", new Set(["a"])],
+    ]);
+    expect(findShortestCycle(synthetic)).toEqual(["a", "b", "a"]);
+  });
+
+  it("includes shipped mock adapters while excluding tests, generated files, and build output", () => {
+    expect(productionFiles).toContain(path.join(BFF_V1_ROOT, "mocks/adapters.ts"));
+    expect(productionFiles).toContain(path.join(BFF_V1_ROOT, "mocks/registry.ts"));
+    expect(isProductionSourceFile(path.join(BFF_V1_ROOT, "feature.test.ts"))).toBe(false);
+    expect(isProductionSourceFile(path.join(BFF_V1_ROOT, "generated/contract.ts"))).toBe(false);
+    expect(isProductionSourceFile(path.join(BFF_V1_ROOT, "contract.generated.ts"))).toBe(false);
+    expect(isProductionSourceFile(path.join(BFF_V1_ROOT, "dist/client.ts"))).toBe(false);
+  });
+
+  it("forbids self-barrel imports from bff-v1 implementation modules", () => {
+    const offenders = productionFiles
+      .filter((file) => path.resolve(file) !== path.resolve(BFF_V1_ROOT, "index.ts"))
+      .filter((file) => extractModuleSpecifiers(file).includes("@/lib/bff-v1"))
+      .map(relPath)
+      .sort();
     expect(offenders, "modules importing the bff-v1 barrel from within bff-v1 itself").toEqual([]);
   });
 
-  it("sanity-checks the graph builder actually walked the bff-v1 module set", () => {
+  it("walks the public barrel and the complete production module set", () => {
     expect(productionFiles.length).toBeGreaterThan(20);
     expect(graph.has(path.join(BFF_V1_ROOT, "index.ts"))).toBe(true);
   });

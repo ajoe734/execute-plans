@@ -1,0 +1,75 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "ACG-FE-DEPGRAPH-20260828",
+  "owner": "Codex",
+  "reviewer": "Antigravity",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/ACG-FE-DEPGRAPH-20260828",
+  "pull_request": 680,
+  "status": "ready-for-independent-exact-head-review",
+  "scope": {
+    "corrected": [
+      "The bff-v1 production graph includes every shipped TypeScript source, including the mock adapters imported by client.ts, while excluding tests, generated sources, and build output.",
+      "Static import, export-from, side-effect import, dynamic import, and require specifiers are parsed with the TypeScript AST instead of a from-only regular expression.",
+      "Cycle failure output is bound to one deterministic shortest offending cycle and a synthetic regression proves the selection behavior.",
+      "ManagementListMeta and ManagementSurfaceState have one lower-level owner in dto.ts; managementConsoleReads preserves its existing public type re-export while managementDataSources imports the canonical type directly."
+    ],
+    "preserved": [
+      "The existing direct runActionSafe to writes import and client/liveStatus BffMode ownership repair.",
+      "All existing public ManagementListMeta type import paths and the surfaces field.",
+      "The existing bff-v1 public barrel and current production callers."
+    ],
+    "not_changed": [
+      "No fourth transport directory, shared-types facade, product route, or backend contract was introduced.",
+      "No 53-caller legacy migration, frontend deployment, or hosted acceptance is claimed by this task."
+    ]
+  },
+  "review_binding": {
+    "pull_request": "https://github.com/ajoe734/execute-plans/pull/680",
+    "superseded_approved_head": "249503cbd59d735f5246a1cf6431e7f354d60a1f",
+    "recovery_base": "c230fc76bef78fc297135152f2acba690314bb9d",
+    "recovered_original_diff_commit": "0cae31142",
+    "required_final_binding": "Independent approval must bind the final PR head containing this manifest; the prior approval did not include a committed task-scoped evidence file."
+  },
+  "acceptance": {
+    "production_runtime_scc_count": 0,
+    "audited_type_only_scc_count": 0,
+    "self_barrel_importers": [],
+    "shortest_cycle_reporting": "verified by a synthetic short-versus-long directed-cycle regression",
+    "excluded_nonproduction_inputs": [
+      "test and spec sources",
+      "generated source files and directories",
+      "dist, build, and coverage output"
+    ],
+    "shared_management_meta_owner": "src/lib/bff-v1/dto.ts"
+  },
+  "validation": {
+    "graph_gate": {
+      "command": "npx vitest run src/lib/bff-v1/__tests__/productionImportGraph.test.ts --maxWorkers=2 --testTimeout=15000 --hookTimeout=30000",
+      "result": "passed: 1 file, 5 tests"
+    },
+    "focused_management_and_graph": {
+      "command": "npx vitest run src/lib/bff-v1/managementDataSources.test.ts src/lib/bff-v1/__tests__/management.test.ts src/lib/bff-v1/__tests__/productionImportGraph.test.ts --maxWorkers=2 --testTimeout=15000 --hookTimeout=30000",
+      "result": "passed: 3 files, 68 tests"
+    },
+    "typecheck": {
+      "command": "npx tsc -p tsconfig.agora.json --noEmit",
+      "result": "passed"
+    },
+    "task_scoped_lint": {
+      "command": "npx eslint src/lib/bff-v1/dto.ts src/lib/bff-v1/managementConsoleReads.ts src/lib/bff-v1/managementDataSources.ts src/lib/bff-v1/client.ts src/lib/bff-v1/liveStatus.ts src/lib/bff-v1/runActionSafe.ts src/lib/bff-v1/__tests__/productionImportGraph.test.ts",
+      "result": "passed with 0 errors; one pre-existing unused eslint-disable warning remains in liveStatus.ts"
+    },
+    "diff_integrity": {
+      "command": "git diff --check c230fc76bef78fc297135152f2acba690314bb9d...HEAD",
+      "result": "passed"
+    }
+  },
+  "independent_review_required": [
+    "Verify the final PR head is based on current execute-plans dev and contains this manifest before approval.",
+    "Confirm the graph gate includes production-imported mocks, rejects a deterministic shortest cycle, and has no self-barrel importer.",
+    "Confirm both Management clients consume the one dto.ts meta contract without recreating a type-only cycle.",
+    "Bind this file through REVIEW_FILE during governed exact-head approval."
+  ]
+}

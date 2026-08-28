@@ -8,20 +8,7 @@ import { paths } from "./paths";
 import { idempotencyKey as mintIdemKey } from "./headers";
 import { newCorrelationId } from "@/lib/v4/correlation";
 import { makeBffError } from "./errors";
-
-/**
- * Local envelope-meta shape mirroring `ManagementListMeta` (managementConsoleReads.ts)
- * structurally. Kept separate (not imported) so this module does not form a
- * type-level import cycle with managementConsoleReads.ts, which itself imports
- * the data-source DTOs defined below.
- */
-interface DataSourceEnvelopeMeta {
-  status?: string;
-  source?: string;
-  snapshot_at?: string;
-  snapshotAt?: string;
-  [key: string]: unknown;
-}
+import type { ManagementListMeta } from "./dto";
 
 export interface ConnectorDefinition {
   schema_version?: string;
@@ -419,29 +406,29 @@ export interface DataSourceCatalogRead {
   source: string;
   policy_registry?: unknown;
   financial_data_source_catalog?: unknown;
-  meta: DataSourceEnvelopeMeta;
+  meta: ManagementListMeta;
 }
 
 export interface DataSourceDetailRead {
   data: ManagementDataSourceV2DTO;
-  meta: DataSourceEnvelopeMeta;
+  meta: ManagementListMeta;
 }
 
 export interface DataSourceRunsRead {
   observations: SourceObservation[];
   canaries: SourceCanaryResult[];
-  meta: DataSourceEnvelopeMeta;
+  meta: ManagementListMeta;
 }
 
 export interface DataSourceReceiptsRead {
   receipts: SourceCommandReceipt[];
   count: number;
-  meta: DataSourceEnvelopeMeta;
+  meta: ManagementListMeta;
 }
 
 export interface SourceCommandReceiptRead {
   receipt: SourceCommandReceipt;
-  meta: DataSourceEnvelopeMeta;
+  meta: ManagementListMeta;
 }
 
 const isObjectRecord = (value: unknown): value is Record<string, unknown> =>
@@ -625,7 +612,7 @@ export const managementDataSourceReads = {
           source: String(data.source ?? "service_client"),
           policy_registry: data.policy_registry,
           financial_data_source_catalog: data.financial_data_source_catalog,
-          meta: (root.meta ?? { status: "ok", source: "service_client" }) as DataSourceEnvelopeMeta,
+          meta: (root.meta ?? { status: "ok", source: "service_client" }) as ManagementListMeta,
         };
       },
     ),
@@ -683,7 +670,7 @@ export const managementDataSourceReads = {
         const data = normalizeManagementDataSourceDetail(raw, sourceInstanceId);
         return {
           data,
-          meta: (root.meta ?? { status: "ok", source: "service_client" }) as DataSourceEnvelopeMeta,
+          meta: (root.meta ?? { status: "ok", source: "service_client" }) as ManagementListMeta,
         };
       },
     ),
@@ -702,7 +689,7 @@ export const managementDataSourceReads = {
         return {
           observations: (Array.isArray(data.observations) ? data.observations : []) as SourceObservation[],
           canaries: (Array.isArray(data.canaries) ? data.canaries : []) as SourceCanaryResult[],
-          meta: (root.meta ?? { status: "ok", source: "service_client" }) as DataSourceEnvelopeMeta,
+          meta: (root.meta ?? { status: "ok", source: "service_client" }) as ManagementListMeta,
         };
       },
     ),
@@ -722,7 +709,7 @@ export const managementDataSourceReads = {
         return {
           receipts,
           count: receipts.length,
-          meta: (root.meta ?? { status: "ok", source: "service_client" }) as DataSourceEnvelopeMeta,
+          meta: (root.meta ?? { status: "ok", source: "service_client" }) as ManagementListMeta,
         };
       },
     ),
@@ -746,7 +733,7 @@ export const managementDataSourceReads = {
         const receipt = (data.receipt ?? data) as SourceCommandReceipt;
         return {
           receipt,
-          meta: (root.meta ?? { status: "ok", source: "service_client" }) as DataSourceEnvelopeMeta,
+          meta: (root.meta ?? { status: "ok", source: "service_client" }) as ManagementListMeta,
         };
       },
     ),

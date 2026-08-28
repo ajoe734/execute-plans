@@ -15,6 +15,29 @@ export interface ListEnvelope<T> {
   meta?: unknown;
 }
 
+/** Shared Management envelope state used by console and data-source reads. */
+export interface ManagementSurfaceState {
+  status: string;
+  source?: string;
+  message?: string;
+  [key: string]: unknown;
+}
+
+/**
+ * Canonical metadata shape for Management list/detail envelopes.
+ *
+ * This lives in the lower-level DTO module so domain clients can share the
+ * contract without importing one another and recreating a type-only cycle.
+ */
+export interface ManagementListMeta {
+  status?: string;
+  source?: string;
+  snapshot_at?: string;
+  snapshotAt?: string;
+  surfaces?: Record<string, ManagementSurfaceState>;
+  [key: string]: unknown;
+}
+
 /** C.2 / Section 2.2 — `data` is REQUIRED. Use CommandResponse<null> when no payload. */
 export interface CommandResponse<T> {
   ok: true;

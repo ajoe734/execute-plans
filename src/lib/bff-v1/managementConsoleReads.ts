@@ -15,25 +15,13 @@ import type {
   SourceDesiredState,
   SourceObservedState,
 } from "./managementDataSources";
+import type { ManagementListMeta, ManagementSurfaceState } from "./dto";
 import { paths } from "./paths";
 
 type UnknownRecord = Record<string, unknown>;
 
-export interface ManagementSurfaceState {
-  status: string;
-  source?: string;
-  message?: string;
-  [key: string]: unknown;
-}
-
-export interface ManagementListMeta {
-  status?: string;
-  source?: string;
-  snapshot_at?: string;
-  snapshotAt?: string;
-  surfaces?: Record<string, ManagementSurfaceState>;
-  [key: string]: unknown;
-}
+// Preserve the existing public type-import path while dto.ts owns the shape.
+export type { ManagementListMeta, ManagementSurfaceState } from "./dto";
 
 export interface ManagementPageInfo {
   total?: number;
