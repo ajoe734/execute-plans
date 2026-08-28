@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ManagementTableScroll } from "@/management/components/ManagementTableScroll";
 import { tradeJourneyHref } from "@/management/navigation/tradeJourneyLinks";
-import { mgmt } from "@/lib/bff-v1";
+import { mgmt, sendRankingRecommendation } from "@/lib/bff-v1";
 import { useV5Live } from "@/management/pages/v5/useV5Live";
 import {
   type QuarterlyRankingFormula,
@@ -19,7 +19,6 @@ import {
   currentPm12QuarterId,
   isGovernedRankingRecommendationAction,
   makeRankingRecommendationId,
-  sendRankingRecommendation,
   type RankingRecommendationSubmitResult,
 } from "@/lib/v5/management/rankingGovernance";
 import {

@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ManagementTableScroll } from "@/management/components/ManagementTableScroll";
-import { mgmt } from "@/lib/bff-v1";
+import { mgmt, sendRankingRecommendation } from "@/lib/bff-v1";
 import { useV5Live } from "@/management/pages/v5/useV5Live";
 import {
   sortByPreset,
@@ -22,7 +22,6 @@ import {
   currentPm12QuarterId,
   isGovernedRankingRecommendationAction,
   makeRankingRecommendationId,
-  sendRankingRecommendation,
   type RankingRecommendationAction,
   type RankingRecommendationSubmitResult,
 } from "@/lib/v5/management/rankingGovernance";

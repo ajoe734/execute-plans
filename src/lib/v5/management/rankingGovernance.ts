@@ -2,14 +2,16 @@
 // Ranking recommendations are advisory. Submitting one creates or queues a
 // governed Human Inbox review through the BFF command seam; it never mutates
 // persona / capital / live deployment directly.
+//
+// ACG-03-015: this module is pure request-building only (v5 must have no
+// network auth mutation or transport import). The actual submit call
+// (sendRankingRecommendation) is owned by src/lib/bff-v1/v5.ts, the live
+// V5 API owner.
 
 import type { LeagueRecommendedAction } from "./personaLeague";
 import type { HumanInboxItem } from "./humanInbox";
 import { buildLinkSet } from "./links";
-import {
-  mgmt,
-  type RankingRecommendationSubmitResult,
-} from "@/lib/bff-v1/management";
+import type { RankingRecommendationSubmitResult } from "@/lib/bff-v1/management";
 
 export type { RankingRecommendationSubmitResult } from "@/lib/bff-v1/management";
 export type RankingRecommendationAction = Exclude<LeagueRecommendedAction, "no_change">;
@@ -96,23 +98,4 @@ export function isGovernedRankingRecommendationAction(
   action: LeagueRecommendedAction | undefined,
 ): action is RankingRecommendationAction {
   return Boolean(action && action !== "no_change");
-}
-
-/** Submits the advisory recommendation into the BFF governed write seam. */
-export function sendRankingRecommendation(
-  input: SendRankingRecommendationInput & { recommendation: RankingRecommendationAction },
-  opts: { idempotencyKey?: string } = {},
-): Promise<RankingRecommendationSubmitResult> {
-  const recommendationId = input.recommendationId ?? makeRankingRecommendationId(input);
-  return mgmt.quarterlyRanking.submitRecommendation({
-    recommendationId,
-    actionId: input.recommendation,
-    quarter: input.quarter,
-    personaId: input.personaId,
-    personaName: input.personaName,
-    source: input.source,
-    evidenceRefs: input.evidenceRefs ?? [],
-    governanceDestinations: input.governanceDestinations,
-    liveCapitalMutation: false,
-  }, opts);
 }
