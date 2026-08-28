@@ -8,7 +8,7 @@ import { paths } from "./paths";
 import { idempotencyKey as mintIdemKey } from "./headers";
 import { newCorrelationId } from "@/lib/v4/correlation";
 import { makeBffError } from "./errors";
-import type { ManagementListMeta } from "./managementConsoleReads";
+import type { ManagementListMeta } from "./dto";
 
 export interface ConnectorDefinition {
   schema_version?: string;
