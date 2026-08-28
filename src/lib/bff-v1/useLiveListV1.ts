@@ -56,13 +56,23 @@ export function useLiveListV1<T>(
     };
   };
 
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
   const refresh = () => {
     setLoading(true);
     void loaderRef.current().then((next) => {
+      if (!mountedRef.current) return;
       setEnv(next);
       setPending(0);
       setLoading(false);
     }).catch((err) => {
+      if (!mountedRef.current) return;
       setEnv(degradedEnv(err));
       setPending(0);
       setLoading(false);
@@ -76,9 +86,13 @@ export function useLiveListV1<T>(
       if (!kind) return;
       if (kind !== "*" && !kinds.includes(kind)) return;
       if (auto) {
-        void loaderRef.current().then((next) => setEnv(next)).catch((err) => setEnv(degradedEnv(err)));
+        void loaderRef.current().then((next) => {
+          if (mountedRef.current) setEnv(next);
+        }).catch((err) => {
+          if (mountedRef.current) setEnv(degradedEnv(err));
+        });
       } else {
-        setPending((n) => n + 1);
+        if (mountedRef.current) setPending((n) => n + 1);
       }
     });
     return () => { off?.(); };
