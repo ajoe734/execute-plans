@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { StatusBadge } from "./StatusBadge";
 import { RiskBadge } from "./RiskBadge";
 import { useT } from "@/platform/hooks";
-import type { BaseObject } from "@/lib/bff/types";
+import type { BaseObject } from "@/lib/bff-v1";
 import { resolveEntity, lineageHref, decisionsHref, auditHref } from "@/lib/entityLinks";
 import { safeDateTime } from "@/lib/utils";
 

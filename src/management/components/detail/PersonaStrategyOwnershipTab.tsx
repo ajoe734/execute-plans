@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import type { Strategy } from "@/lib/bff/types";
+import type { Strategy } from "@/lib/bff-v1";
 import { DataTable } from "@/platform/components/DataTable";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { RiskBadge } from "@/platform/components/RiskBadge";

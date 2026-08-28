@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { RiskBadge } from "@/platform/components/RiskBadge";
 import { lists, useLiveListV1, useLiveStatus, type ListEnvelope } from "@/lib/bff-v1";
-import type { Strategy } from "@/lib/bff/types";
+import type { Strategy } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { ArrowRight } from "lucide-react";
 import { ALPHA_FACTORY_COLUMNS, buildAlphaFactoryBuckets, classifyAlphaFactorySource } from "./alphaFactoryData";

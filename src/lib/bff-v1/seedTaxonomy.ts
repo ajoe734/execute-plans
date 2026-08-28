@@ -37,7 +37,8 @@ export function isLiveBffModeConfigured(
 }
 
 export function getSeedTaxonomyEntry(helperName: string): SeedTaxonomyEntry | undefined {
-  return helperByName.get(helperName);
+  const normalized = helperName.startsWith("bff.") ? helperName : `bff.${helperName}`;
+  return helperByName.get(normalized) ?? helperByName.get(helperName);
 }
 
 export function getSeedHelperCategory(helperName: string): SeedHelperCategory | undefined {

@@ -1,4 +1,4 @@
-import { bffFetch, bffV1, detectBaseUrl } from "./client";
+import { bffFetch, detectMode, detectBaseUrl } from "./client";
 import { buildHeaders } from "./headers";
 
 export type JourneyReadState = "formal" | "partial" | "degraded" | "unavailable";
@@ -107,7 +107,8 @@ export function subscribeTradeJourneys(
 ): JourneyLiveSubscription {
   // Mock mode has no live invalidation channel; report live so the seeded
   // dataset does not render a permanently-stale badge.
-  if (bffV1.detectMode() === "mock") {
+  const isMock = typeof detectMode === "function" ? detectMode() === "mock" : true;
+  if (isMock) {
     handlers.onState("live");
     return { close() {} };
   }

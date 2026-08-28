@@ -7,7 +7,7 @@ import { cn, safeDateTime } from "@/lib/utils";
 import { useT } from "@/platform/hooks";
 import { SlaCountdown } from "./SlaCountdown";
 import { PermissionAwareButton } from "./PermissionAwareButton";
-import type { ApprovalStage } from "@/lib/bff/types";
+import type { ApprovalStage } from "@/lib/bff-v1";
 
 interface Props {
   stages: ApprovalStage[];

@@ -1,5 +1,4 @@
 // BFF Contract v1 — public surface.
-// FROZEN. Source: .lovable/feedback/2026-05-07-final/ (4-file bundle).
 // VITE_BFF_MODE = "mock" (default) | "live".
 
 export * from "./dto";
@@ -22,23 +21,29 @@ export * from "./liveStatus";
 export * from "./liveTransport";
 export * from "./seedTaxonomy";
 export * from "./capitalPools";
-// Batch VII — escape hatch for legacy seed accessors during migration.
-export * from "./legacy";
-// Batch VII-c — v5 closed-loop OS namespace (single entrypoint).
+export * from "./strategies";
+export * from "./rankingFormulas";
+export * from "./rebalances";
+export * from "./deployments";
+export * from "./evolution";
+export * from "./research";
+export * from "./artifacts";
+export * from "./capabilities";
+export * from "./operations";
+export * from "./governance";
+export * from "./search";
+export * from "./writeOverlay";
+export * from "./evidenceOperations";
+export * from "./agora/agoraReads";
 export * from "./v5";
-// 2026-05-22 PM-Live — Management Oversight live wiring (PM-1..PM-11).
 export * from "./management";
 export * from "./managementConsoleReads";
-// MGMT-LOAD-003 — cheap shell badge counts, deferred full-list fallback.
 export * from "./shellSummary";
-// AG-XR-002 — generated Agora v1 schema/OpenAPI contract types.
 export * from "./agora/types";
 export * from "./agora/governance";
-// 2026-07-11 Persona Trade Journal.
 export * from "./tradeJournal";
-// 2026-07-12 Agora Interactions.
 export * from "./agora/interaction";
-// 2026-08-24 SD-SRCM-04 Management Data Source Control Center.
 export * from "./managementDataSources";
-
-
+export * from "./bffV1";
+export { runActionSafe, type RunActionSafeOpts } from "./runActionSafe";
+export { useLiveList, useRealtimeStatus } from "./useLiveList";

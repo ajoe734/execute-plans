@@ -3,10 +3,10 @@
 
 import { describe, it, expect, beforeAll } from "vitest";
 import * as seed from "@/mocks/seed";
-import { mutations } from "@/lib/bff/mutations";
+import { mutations } from "@/lib/bff-v1/mocks/mutations";
 import { issueConfirmTokenV4, redeemConfirmToken } from "@/lib/v4/confirmToken";
 import { computeHandoffSla } from "@/lib/v4/handoffRuntime";
-import { realtime } from "@/lib/bff/realtime";
+import { realtime } from "@/lib/bff-v1";
 import { z } from "zod";
 
 beforeAll(() => {

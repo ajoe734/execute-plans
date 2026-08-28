@@ -4,9 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { bff, writes } from "@/lib/bff-v1";
+import { bffV1, writes } from "@/lib/bff-v1";
 import { commandReceiptDescription } from "@/lib/bff-v1/commandReceipt";
-import type { EvolutionCandidate, EvolutionProgram, EvolutionRun, PromotionRecord } from "@/lib/bff/types";
+import type { EvolutionCandidate, EvolutionProgram, EvolutionRun, PromotionRecord } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { DataTable } from "@/platform/components/DataTable";
 import { PermissionAwareButton } from "@/platform/components/PermissionAwareButton";
@@ -24,13 +24,13 @@ export const PromotionPanel = ({ program }: { program: EvolutionProgram }) => {
   const [confirm, setConfirm] = useState<{ candidate: EvolutionCandidate; target: PromotionTarget } | null>(null);
 
   useEffect(() => {
-    bff.evolutionRuns.forProgram(program.id).then(setRuns);
-    bff.promotions.forProgram(program.id).then(setHistory);
+    bffV1.evolutionRuns.forProgram(program.id).then(setRuns);
+    bffV1.promotions.forProgram(program.id).then(setHistory);
   }, [program.id]);
 
   useEffect(() => {
     if (!runs.length) return;
-    Promise.all(runs.map((r) => bff.evolutionCandidates.forRun(r.id))).then((all) =>
+    Promise.all(runs.map((r) => bffV1.evolutionCandidates.forRun(r.id))).then((all) =>
       setCandidates(all.flat().filter((c) => c.state !== "discarded")),
     );
   }, [runs]);

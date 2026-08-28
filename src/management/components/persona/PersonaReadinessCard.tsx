@@ -16,7 +16,7 @@ import {
   derivePersonaReadiness, reasonI18nKey, reasonNextStepI18nKey,
   type HealthStatus,
 } from "@/management/lib/personaReadiness";
-import type { Persona } from "@/lib/bff/types";
+import type { Persona } from "@/lib/bff-v1";
 
 interface Props {
   personaId: string;

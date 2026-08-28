@@ -6,8 +6,8 @@ import {
   readCursor,
 } from "../listEnvelope";
 import { makeSseEnvelope, isSseEventEnvelope, SSE_SCHEMA_VERSION } from "../sseEnvelope";
-import { realtime } from "@/lib/bff/realtime";
-import { bff } from "@/lib/bff-v1";
+import { realtime } from "@/lib/bff-v1";
+import { me } from "@/lib/bff-v1";
 
 describe("Pack D Batch III — listEnvelope", () => {
   beforeEach(() => clearCursorStore());
@@ -76,15 +76,15 @@ describe("Pack D Batch III — SseEventEnvelope", () => {
 });
 
 describe("Pack D Batch III — bff.me facade", () => {
-  it("bff.me.get returns MeResponse and invalidate clears cache", async () => {
-    bff.me.invalidate();
-    const a = await bff.me.get();
+  it("me.get returns MeResponse and invalidate clears cache", async () => {
+    me.invalidate();
+    const a = await me.get();
     expect(a.user.id).toBeTruthy();
     expect(a.tenant.locale).toBeTruthy();
-    const b = await bff.me.get();
+    const b = await me.get();
     expect(b).toBe(a);
-    bff.me.invalidate();
-    const c = await bff.me.get();
+    me.invalidate();
+    const c = await me.get();
     expect(c).not.toBe(a);
   });
 });

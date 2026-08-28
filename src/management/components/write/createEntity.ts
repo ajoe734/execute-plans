@@ -41,7 +41,7 @@ export async function createEntityFromInput<K extends CreatableEntity>(
     refuseStrictLiveWrite(opts.idempotencyKey ?? newCorrelationId());
   }
 
-  const { writeOverlay } = await import("@/lib/bff/writeOverlay");
+  const { writeOverlay } = await import("@/lib/bff-v1/writeOverlay");
   writeOverlay.add(entity, built, { idempotencyKey: opts.idempotencyKey });
   return { entity, data: built, persistence: "overlay" };
 }
@@ -74,7 +74,7 @@ export async function updateEntityFromInput<K extends CreatableEntity>(
     try {
       const data = await runPersonaAction(id, "edit", clean, { idempotencyKey: opts.idempotencyKey });
       if (!isStrictLiveFallback()) {
-        const { writeOverlay } = await import("@/lib/bff/writeOverlay");
+        const { writeOverlay } = await import("@/lib/bff-v1/writeOverlay");
         writeOverlay.update(entity, id, clean, { idempotencyKey: opts.idempotencyKey });
       }
       return { entity, data: { id, ...clean, ...(data as Record<string, unknown>) }, persistence: "bff" };
@@ -90,7 +90,7 @@ export async function updateEntityFromInput<K extends CreatableEntity>(
     refuseStrictLiveWrite(opts.idempotencyKey ?? newCorrelationId());
   }
 
-  const { writeOverlay } = await import("@/lib/bff/writeOverlay");
+  const { writeOverlay } = await import("@/lib/bff-v1/writeOverlay");
   writeOverlay.update(entity, id, clean, { idempotencyKey: opts.idempotencyKey });
   return { entity, data: { id, ...clean }, persistence: "overlay" };
 }
@@ -114,7 +114,7 @@ export async function deleteEntity(
   if (isStrictLiveFallback()) {
     refuseStrictLiveWrite(opts.idempotencyKey ?? newCorrelationId());
   }
-  const { writeOverlay } = await import("@/lib/bff/writeOverlay");
+  const { writeOverlay } = await import("@/lib/bff-v1/writeOverlay");
   writeOverlay.softDelete(entity, id, { idempotencyKey: opts.idempotencyKey });
   return "overlay";
 }

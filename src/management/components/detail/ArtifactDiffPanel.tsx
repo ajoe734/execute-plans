@@ -1,7 +1,7 @@
 // Artifact diff vs previous version — mock side-by-side metadata diff.
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import type { Artifact } from "@/lib/bff/types";
+import type { Artifact } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { ArrowRight } from "lucide-react";
 

@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
-import type { RoutePolicy, RoutePolicyRule, RouteTargetKind } from "@/lib/bff/types";
+import type { RoutePolicy, RoutePolicyRule, RouteTargetKind } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { NonProductionActionButton } from "@/management/components/NonProductionActionButton";
 

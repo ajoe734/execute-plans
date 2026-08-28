@@ -1,10 +1,9 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { bff, mgmt } from "@/lib/bff-v1";
-import { runActionSafe } from "@/lib/bff-v1";
+import { bffV1, mgmt, runActionSafe } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
-import type { AuditEvent, ResearchExperiment } from "@/lib/bff/types";
+import type { AuditEvent, ResearchExperiment } from "@/lib/bff-v1";
 import type { ManagementPersonaFleetRow, ManagementResearchProject } from "@/lib/bff-v1/management";
 import { Beaker, Package } from "lucide-react";
 import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
@@ -91,8 +90,8 @@ export const ResearchDetail = () => {
 
   useEffect(() => {
     if (!id) return;
-    bff.research.get(id).then((value) => setX(value as ResearchExperimentLive | undefined));
-    bff.audit.list().then((a) => setAudit(a.filter((e) => e.target === id || e.action?.startsWith("research."))));
+    bffV1.research.get(id).then((value) => setX(value as ResearchExperimentLive | undefined));
+    bffV1.audit.list().then((a) => setAudit(a.filter((e) => e.target === id || e.action?.startsWith("research."))));
     mgmt.personaFleet.get().then(setFleetRows).catch(() => setFleetRows([]));
   }, [id]);
 

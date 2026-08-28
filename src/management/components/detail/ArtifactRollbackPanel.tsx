@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Undo2 } from "lucide-react";
 import { toast } from "sonner";
-import type { Artifact } from "@/lib/bff/types";
+import type { Artifact } from "@/lib/bff-v1";
 import { writes } from "@/lib/bff-v1";
 import { commandReceiptDescription } from "@/lib/bff-v1/commandReceipt";
 import { useT } from "@/platform/hooks";

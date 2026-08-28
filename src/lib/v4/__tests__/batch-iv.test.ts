@@ -12,7 +12,7 @@ import {
   transitionTimeoutFor,
 } from "../asyncTransitions";
 import { METRIC_REGISTRY, findMetric } from "../metricRegistry";
-import { writeOverlay } from "@/lib/bff/writeOverlay";
+import { writeOverlay } from "@/lib/bff-v1/writeOverlay";
 
 describe("Pack D Batch IV — correlation chain", () => {
   it("newUuid produces v4-shaped string", () => {

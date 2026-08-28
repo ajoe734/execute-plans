@@ -10,8 +10,8 @@ import { Field } from "../ObjectDetailLayout";
 import { Input } from "@/components/ui/input";
 import { useT } from "@/platform/hooks";
 import { safeDateTime } from "@/lib/utils";
-import { bff } from "@/lib/bff-v1";
-import type { Incident } from "@/lib/bff/types";
+import { bffV1 } from "@/lib/bff-v1";
+import type { Incident } from "@/lib/bff-v1";
 
 interface Postmortem {
   id: string;
@@ -33,7 +33,7 @@ export const PostmortemLibraryPage = () => {
   const [status, setStatus] = useState<"loading" | "ready" | "degraded">("loading");
 
   useEffect(() => {
-    bff.incidents.list().then((incidents: Incident[]) => {
+    bffV1.incidents.list().then((incidents: Incident[]) => {
       const pms: Postmortem[] = [];
       (incidents || []).forEach((inc) => {
         // Extract timeline entries tagged with [postmortem] or resolved postmortem records

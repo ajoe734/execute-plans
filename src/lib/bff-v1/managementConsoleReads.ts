@@ -10,7 +10,7 @@ import type {
   PermissionInstance,
   PermissionMatrix,
   RiskLevel,
-} from "@/lib/bff/types";
+} from "./dto";
 import type {
   ConnectorDefinition,
   DataSourceInstance,

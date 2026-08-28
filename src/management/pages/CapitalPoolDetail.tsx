@@ -3,10 +3,10 @@ import { useParams, useNavigate } from "react-router-dom";
 import { safePercent, safeRatio } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
-import { bff, runActionSafe, mgmt } from "@/lib/bff-v1";
+import { bffV1, runActionSafe, mgmt } from "@/lib/bff-v1";
 import { capitalPoolWithFleetFallback, getPersonaIdsForPoolId } from "./capitalPoolsFleetFallback";
 import { useT } from "@/platform/hooks";
-import type { ApprovalRequest, AuditEvent, CapitalPool, Rebalance, Strategy } from "@/lib/bff/types";
+import type { ApprovalRequest, AuditEvent, CapitalPool, Rebalance, Strategy } from "@/lib/bff-v1";
 import type { ManagementPersonaFleetRow } from "@/lib/bff-v1/management";
 import { Edit, Inbox, ShieldAlert } from "lucide-react";
 import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
@@ -67,7 +67,7 @@ export const CapitalPoolDetail = () => {
         let pool: CapitalPool | undefined;
         let detailError: string | undefined;
         try {
-          pool = await bff.capitalPools.get(id);
+          pool = await bffV1.capitalPools.get(id);
         } catch (err) {
           detailError = err instanceof Error ? err.message : String(err);
         }
@@ -85,10 +85,10 @@ export const CapitalPoolDetail = () => {
         const mentionsPool = (value?: string) => Boolean(value && Array.from(poolIds).some((poolId) => value.includes(poolId)));
 
         const [allStrategies, allRebalances, allApprovals, allAudit, fleetRows] = await Promise.all([
-          bff.strategies.list().catch((): Strategy[] => []),
-          bff.rebalances.list().catch((): Rebalance[] => []),
-          bff.approvals.list().catch((): ApprovalRequest[] => []),
-          bff.audit.list().catch((): AuditEvent[] => []),
+          bffV1.strategies.list().catch((): Strategy[] => []),
+          bffV1.rebalances.list().catch((): Rebalance[] => []),
+          bffV1.approvals.list().catch((): ApprovalRequest[] => []),
+          bffV1.audit.list().catch((): AuditEvent[] => []),
           mgmt.personaFleet.get().catch(() => [] as unknown[]),
         ]);
         if (cancelled) return;

@@ -1,7 +1,7 @@
 import * as seed from "@/mocks/seed";
-import type { DecisionJournalEntry, RiskLevel, Strategy } from "@/lib/bff/types";
-import { paths } from "@/lib/bff-v1/paths";
-import { strictItemsFrom, withStrictLiveOrMock } from "@/lib/bff-v1/liveTransport";
+import type { DecisionJournalEntry, RiskLevel, Strategy } from "../dto";
+import { paths } from "../paths";
+import { strictItemsFrom, withStrictLiveOrMock } from "../liveTransport";
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -61,8 +61,8 @@ export interface AgoraAskSession {
 
 const mockSignalSymbols = ["TSM", "NVDA", "AAPL", "JPM", "BTCUSD", "XOM"];
 
-function mockSignals(strategies: readonly Strategy[]): AgoraSignal[] {
-  return strategies.slice(0, 5).map((s, i) => ({
+function mockSignals(strategiesList: readonly Strategy[]): AgoraSignal[] {
+  return strategiesList.slice(0, 5).map((s, i) => ({
     id: `sig_${i}`,
     strategyId: s.id,
     strategyName: s.name,

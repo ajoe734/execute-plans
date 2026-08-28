@@ -7,8 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { bff, bffV1 } from "@/lib/bff-v1";
-import type { Skill } from "@/lib/bff/types";
+import { bffV1 } from "@/lib/bff-v1";
+import type { Skill } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { Play, TerminalSquare, Loader2 } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -42,7 +42,7 @@ export const SkillSandboxStudio = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    bff.skills.list().then((rows) => {
+    bffV1.skills.list().then((rows) => {
       setSkills(rows);
       if (rows[0]) setActiveId((current) => current ?? rows[0].id);
     });

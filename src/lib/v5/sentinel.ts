@@ -1,6 +1,6 @@
 // Q9 — Deterministic Sentinel derivation map from alerts/incidents/jobs/runtime/persona-health.
 
-import type { Alert, Incident, Job, Runtime } from "@/lib/bff/types";
+import type { Alert, Incident, Job, Runtime } from "@/lib/bff-v1";
 import type {
   SentinelFinding, EvidenceRef,
 } from "./types";

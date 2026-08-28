@@ -15,7 +15,7 @@ function readEnv(): Record<string, string | undefined> {
   return { ...viteEnv, ...nodeEnv };
 }
 
-function detectMode(): BffMode {
+export function detectMode(): BffMode {
   try {
     // Vite-style env access; defaults to mock.
     const env = readEnv();
@@ -168,9 +168,3 @@ export async function bffRequest<T = unknown>(req: BffRequest): Promise<BffResul
     return { ok: false, error: wrapped };
   }
 }
-
-export const bffV1 = {
-  fetch: bffFetch,
-  request: bffRequest,
-  detectMode,
-};

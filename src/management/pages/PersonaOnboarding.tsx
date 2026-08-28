@@ -23,7 +23,7 @@ import { getPersona, runPersonaAction } from "@/lib/bff-v1/personas";
 import { commandReceiptDescription } from "@/lib/bff-v1/commandReceipt";
 import { lists } from "@/lib/bff-v1/lists";
 import { useT } from "@/platform/hooks";
-import type { Persona } from "@/lib/bff/types";
+import type { Persona } from "@/lib/bff-v1";
 
 interface CapitalPoolOption { id: string; name?: string; status?: string }
 

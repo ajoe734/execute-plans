@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { fetchMock } = vi.hoisted(() => ({ fetchMock: vi.fn() }));
-vi.mock("../client", () => ({ bffFetch: fetchMock, detectBaseUrl: () => "https://bff.example", bffV1: { detectMode: () => "live" } }));
+vi.mock("../client", () => ({ bffFetch: fetchMock, detectBaseUrl: () => "https://bff.example", detectMode: () => "live" }));
 
 import { getTradeJourney, getTradeJourneyEvidence, getTradeJourneyTimeline, listTradeJourneys, resolveTradeJourney, subscribeTradeJourneys } from "../tradeJourneys";
 

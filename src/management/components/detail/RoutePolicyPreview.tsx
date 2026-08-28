@@ -5,8 +5,8 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { bff } from "@/lib/bff-v1";
-import type { PolicyVersion, RoutePolicy } from "@/lib/bff/types";
+import { bffV1 } from "@/lib/bff-v1";
+import type { PolicyVersion, RoutePolicy } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { safeDateTime } from "@/lib/utils";
 
@@ -22,9 +22,9 @@ export const RoutePolicyPreview = ({ personaId }: { personaId: string }) => {
   const [versions, setVersions] = useState<PolicyVersion[]>([]);
 
   useEffect(() => {
-    bff.routePolicies.forPersona(personaId).then((p) => {
+    bffV1.routePolicies.forPersona(personaId).then((p) => {
       setPolicy(p);
-      if (p) bff.policyVersions.list(p.id).then(setVersions);
+      if (p) bffV1.policyVersions.list(p.id).then(setVersions);
     });
   }, [personaId]);
 

@@ -1,7 +1,7 @@
-// E3 — Loop run mutation overlay + bff.v5.loops.* end-to-end.
+// E3 — Loop run mutation overlay + bffV5.loops.* end-to-end.
 
 import { describe, it, expect, beforeEach } from "vitest";
-import { bff } from "@/lib/bff-v1";
+import { bffV5 } from "@/lib/bff-v1";
 import {
   applyLoopOverlay,
   loopRunOverlay,
@@ -77,19 +77,19 @@ describe("E3 stageTimeoutState", () => {
   });
 });
 
-describe("E3 bff.v5.loops mutations", () => {
+describe("E3 bffV5.loops mutations", () => {
   it("advance returns ok and emits via overlay", async () => {
-    const list = await bff.v5.loops.list("execution");
+    const list = await bffV5.loops.list("execution");
     const target = list.items[0];
     if (!target) return;
-    const r = await bff.v5.loops.advance(target.id);
+    const r = await bffV5.loops.advance(target.id);
     expect(r.ok).toBe(true);
-    const next = await bff.v5.loops.get(target.id);
+    const next = await bffV5.loops.get(target.id);
     expect(next?.id).toBe(target.id);
   });
 
   it("returns not_found for unknown id", async () => {
-    const r = await bff.v5.loops.pause("lr_does_not_exist");
+    const r = await bffV5.loops.pause("lr_does_not_exist");
     expect(r.ok).toBe(false);
     if (r.ok === false) expect(r.reason).toBe("not_found");
   });

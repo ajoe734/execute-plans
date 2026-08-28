@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useT } from "@/platform/hooks";
 import { usePlatform } from "@/platform/store";
-import { bff } from "@/lib/bff-v1";
+import { bffV1 } from "@/lib/bff-v1";
 import { MockDataBadge } from "@/components/data/MockDataBadge";
 import { NON_PRODUCTION_COMMAND_REASON, NonProductionActionButton } from "@/management/components/NonProductionActionButton";
 import {
@@ -106,7 +106,7 @@ export const SettingsPage = () => {
   const t = useT();
   const locale = usePlatform((s) => s.locale);
   const setLocale = usePlatform((s) => s.setLocale);
-  const acceptLanguage = bff.getAcceptLanguage();
+  const acceptLanguage = bffV1.getAcceptLanguage();
 
   return (
     <>
@@ -196,7 +196,7 @@ export const SettingsPage = () => {
                 {acceptLanguage ? (
                   <Badge variant="outline" className="text-mono text-[10px]">{acceptLanguage}</Badge>
                 ) : (
-                  <MockDataBadge helperName="bff.getAcceptLanguage" />
+                  <MockDataBadge helperName="getAcceptLanguage" />
                 )}
               </Row>
             </Section>

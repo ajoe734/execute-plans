@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { safeDateTime } from "@/lib/utils";
 import { useParams } from "react-router-dom";
-import { bff } from "@/lib/bff-v1";
-import type { AuditEvent, Channel } from "@/lib/bff/types";
+import { bffV1 } from "@/lib/bff-v1";
+import type { AuditEvent, Channel } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
 import { StatCard } from "@/platform/components/StatCard";
@@ -18,8 +18,8 @@ export const ChannelDetail = () => {
   const [audit, setAudit] = useState<AuditEvent[]>([]);
   useEffect(() => {
     if (!id) return;
-    bff.channels.get(id).then(setC);
-    bff.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action?.startsWith("channel."))));
+    bffV1.channels.get(id).then(setC);
+    bffV1.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action?.startsWith("channel."))));
   }, [id]);
 
   const recent: { id: string; ts: string; title: string; severity: string }[] = [];

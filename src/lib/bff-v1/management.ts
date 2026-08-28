@@ -17,7 +17,7 @@ import {
   strictNotFoundAsUndefined,
   withStrictLiveOrMock,
 } from "./liveTransport";
-import { liveStatus } from "@/lib/bff-v1/liveStatus";
+import { liveStatus } from "./liveStatus";
 import { paths } from "./paths";
 import { bffFetch, type BffRequest } from "./client";
 import { idempotencyKey as mintIdempotencyKey } from "./headers";

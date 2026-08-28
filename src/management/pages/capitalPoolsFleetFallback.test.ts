@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { lists, mgmt } from "@/lib/bff-v1";
 import type { ListEnvelope } from "@/lib/bff-v1";
-import type { CapitalPool } from "@/lib/bff/types";
+import type { CapitalPool } from "@/lib/bff-v1";
 import type { ManagementPersonaFleetRow } from "@/lib/bff-v1/management";
 import { capitalPoolBindingDetail, capitalPoolMatchesFocus, capitalPoolsWithFleetFallback, capitalPoolWithFleetFallback } from "./capitalPoolsFleetFallback";
 

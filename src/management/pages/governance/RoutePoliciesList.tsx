@@ -6,8 +6,8 @@ import { DataTable } from "@/platform/components/DataTable";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { RiskBadge } from "@/platform/components/RiskBadge";
 import { Badge } from "@/components/ui/badge";
-import { bff } from "@/lib/bff-v1";
-import type { Persona, RoutePolicy } from "@/lib/bff/types";
+import { bffV1 } from "@/lib/bff-v1";
+import type { Persona, RoutePolicy } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { safeDateTime } from "@/lib/utils";
 
@@ -18,8 +18,8 @@ export const RoutePoliciesList = () => {
   const [personas, setPersonas] = useState<Record<string, Persona>>({});
 
   useEffect(() => {
-    bff.routePolicies.list().then(setRows);
-    bff.personas.list().then((ps) => setPersonas(Object.fromEntries(ps.map((p) => [p.id, p]))));
+    bffV1.routePolicies.list().then(setRows);
+    bffV1.personas.list().then((ps) => setPersonas(Object.fromEntries(ps.map((p) => [p.id, p]))));
   }, []);
 
   return (

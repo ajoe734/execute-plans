@@ -6,7 +6,7 @@ import { Snowflake } from "lucide-react";
 import { toast } from "sonner";
 import { writes } from "@/lib/bff-v1";
 import { commandReceiptDescription } from "@/lib/bff-v1/commandReceipt";
-import type { EvolutionProgram } from "@/lib/bff/types";
+import type { EvolutionProgram } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { Section } from "@/management/pages/ObjectDetailLayout";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";

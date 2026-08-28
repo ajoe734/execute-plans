@@ -4,7 +4,7 @@ import { Card } from "@/components/ui/card";
 import { PageBody } from "@/platform/components/PageHeader";
 import { EntityHeader } from "@/platform/components/EntityHeader";
 import { useT } from "@/platform/hooks";
-import type { BaseObject } from "@/lib/bff/types";
+import type { BaseObject } from "@/lib/bff-v1";
 
 export interface DetailTab {
   value: string;

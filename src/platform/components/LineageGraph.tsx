@@ -1,7 +1,7 @@
 // Lightweight DAG renderer for lineage — Part 7 §LineageGraph.
 // Auto-layouts nodes by depth (BFS layer) and renders SVG. No external deps.
 import { useMemo } from "react";
-import type { RiskLevel } from "@/lib/bff/types";
+import type { RiskLevel } from "@/lib/bff-v1";
 import { LINEAGE_NODE_LIMITS } from "@/lib/v4/uiBudgets";
 
 export interface LineageNode {

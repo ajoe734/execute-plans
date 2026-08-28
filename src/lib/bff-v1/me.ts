@@ -12,6 +12,13 @@ export {
   mockMe,
 } from "@/lib/v4/session/me";
 
+import { fetchMe, invalidateMe } from "@/lib/v4/session/me";
+
+export const me = {
+  get: fetchMe,
+  invalidate: invalidateMe,
+};
+
 export type {
   MeResponse,
   MeUser,

@@ -4,8 +4,8 @@ import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
-import { bff } from "@/lib/bff-v1";
-import type { McpServer, McpTool } from "@/lib/bff/types";
+import { bffV1 } from "@/lib/bff-v1";
+import type { McpServer, McpTool } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { envBadge, scopeTone } from "@/management/pages/CapabilitiesLists";
 
@@ -75,7 +75,7 @@ export const McpServerSchemaPanel = ({ server }: { server: McpServer }) => {
   const t = useT();
   const [tools, setTools] = useState<McpTool[]>([]);
   useEffect(() => {
-    bff.mcpTools.list().then((all) => setTools(all.filter((tt) => tt.serverId === server.id)));
+    bffV1.mcpTools.list().then((all) => setTools(all.filter((tt) => tt.serverId === server.id)));
   }, [server.id]);
 
   return (

@@ -1,7 +1,7 @@
 // State machine type contracts — Part 7 §17 (18 lifecycle/workflow machines).
 // Generic shape so all 18 entity machines share one runtime.
 
-import type { RiskLevel } from "@/lib/bff/types";
+import type { RiskLevel } from "@/lib/bff-v1";
 
 export type UiPattern =
   | "standard_action"

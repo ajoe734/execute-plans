@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { bff, writes } from "@/lib/bff-v1";
-import type { RebalanceOverride, Strategy } from "@/lib/bff/types";
+import { bffV1, writes } from "@/lib/bff-v1";
+import type { RebalanceOverride, Strategy } from "@/lib/bff-v1";
 import { DataTable } from "@/platform/components/DataTable";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { Section } from "@/management/pages/ObjectDetailLayout";
@@ -19,7 +19,7 @@ export const OverrideManager = ({ rebalanceId, strategies }: { rebalanceId: stri
   const [stratId, setStratId] = useState<string>(strategies[0]?.id ?? "");
   const [delta, setDelta] = useState("0.02");
   const [reason, setReason] = useState("");
-  useEffect(() => { bff.rebalanceOverrides.forRebalance(rebalanceId).then(setRows); }, [rebalanceId]);
+  useEffect(() => { bffV1.rebalanceOverrides.forRebalance(rebalanceId).then(setRows); }, [rebalanceId]);
 
   const submit = async () => {
     const parsed = Number(delta);

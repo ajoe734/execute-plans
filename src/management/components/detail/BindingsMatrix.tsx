@@ -2,7 +2,7 @@
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import type { Strategy } from "@/lib/bff/types";
+import type { Strategy } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { tradeJourneyHref } from "@/management/navigation/tradeJourneyLinks";
 

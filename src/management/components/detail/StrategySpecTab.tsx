@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { bff, writes } from "@/lib/bff-v1";
-import type { Strategy, ObjectVersion } from "@/lib/bff/types";
+import { bffV1, writes } from "@/lib/bff-v1";
+import type { Strategy, ObjectVersion } from "@/lib/bff-v1";
 import { Section } from "@/management/pages/ObjectDetailLayout";
 import { VersionDiffViewer } from "./VersionDiffViewer";
 import { StrategyParamsEditor } from "./StrategyParamsEditor";
@@ -18,7 +18,7 @@ export const StrategySpecTab = ({ strategy, params }: { strategy: Strategy; para
   const [versions, setVersions] = useState<ObjectVersion[]>([]);
   const [locked, setLocked] = useState(false);
   useEffect(() => {
-    bff.objectVersions.forSubject("Strategy", strategy.id).then(setVersions);
+    bffV1.objectVersions.forSubject("Strategy", strategy.id).then(setVersions);
   }, [strategy.id]);
 
   const toggleLock = async () => {

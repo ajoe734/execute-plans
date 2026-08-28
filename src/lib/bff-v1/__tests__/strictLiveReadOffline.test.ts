@@ -3,7 +3,7 @@
 // error, so clicking a pool whose detail endpoint 404s took liveStatus offline, which then cascaded
 // every other live read to mock seed via withLiveOrMock's offline path.
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { bff, liveStatus, BffError } from "@/lib/bff-v1";
+import { capitalPools, liveStatus, BffError } from "@/lib/bff-v1";
 
 describe("strictLiveRead — real backend errors do not take the app offline", () => {
   const realFetch = globalThis.fetch;
@@ -27,7 +27,7 @@ describe("strictLiveRead — real backend errors do not take the app offline", (
     globalThis.fetch = vi.fn().mockResolvedValue(
       new Response(JSON.stringify(envelope), { status: 404, headers: { "Content-Type": "application/json" } }),
     );
-    await expect(bff.capitalPools.get("pool-crypto-paper")).rejects.toBeInstanceOf(BffError);
+    await expect(capitalPools.get("pool-crypto-paper")).rejects.toBeInstanceOf(BffError);
     // The whole console must not go offline just because one pool's detail 404s.
     expect(liveStatus.get().effective).toBe("live");
     expect(liveStatus.get().lastError).toBeUndefined();
@@ -35,7 +35,7 @@ describe("strictLiveRead — real backend errors do not take the app offline", (
 
   it("a 5xx detail read IS a transport failure and does report a fallback", async () => {
     globalThis.fetch = vi.fn().mockResolvedValue(new Response("boom", { status: 503 }));
-    await expect(bff.capitalPools.get("pool-x")).rejects.toBeInstanceOf(BffError);
+    await expect(capitalPools.get("pool-x")).rejects.toBeInstanceOf(BffError);
     expect(liveStatus.get().effective).toBe("mock");
   });
 });

@@ -1,7 +1,7 @@
 // Q11 — Unified Human Intervention Queue: approvals + sentinel + incidents +
 // policy exceptions + emergency reviews. Approvals NOT removed; HIQ is unified entry.
 
-import type { ApprovalRequest, Incident } from "@/lib/bff/types";
+import type { ApprovalRequest, Incident } from "@/lib/bff-v1";
 import type { InterventionItem, SentinelFinding, EvidenceRef } from "../types";
 import type { InterventionDecision, InterventionSeverity } from "../enums";
 

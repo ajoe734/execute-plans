@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { safeDateTime } from "@/lib/utils";
-import { bff } from "@/lib/bff-v1";
-import type { EvaluationRun } from "@/lib/bff/types";
+import { bffV1 } from "@/lib/bff-v1";
+import type { EvaluationRun } from "@/lib/bff-v1";
 import { DataTable } from "@/platform/components/DataTable";
 import { Badge } from "@/components/ui/badge";
 import { LineChart, Line, ResponsiveContainer } from "recharts";
@@ -11,7 +11,7 @@ export const PersonaEvaluationsTab = ({ personaId }: { personaId: string }) => {
   const t = useT();
   const [rows, setRows] = useState<EvaluationRun[]>([]);
   useEffect(() => {
-    bff.evaluationRuns.forSubject("Persona", personaId).then(setRows);
+    bffV1.evaluationRuns.forSubject("Persona", personaId).then(setRows);
   }, [personaId]);
   return (
     <DataTable

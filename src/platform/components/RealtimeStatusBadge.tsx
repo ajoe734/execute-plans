@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Wifi, WifiOff, Activity, Plug, PlugZap } from "lucide-react";
 import { useLiveStatus, useRealtimeStatus } from "@/lib/bff-v1";
-import { realtime } from "@/lib/bff/realtime";
+import { realtime } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { safeDateTime } from "@/lib/utils";
 

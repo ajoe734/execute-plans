@@ -2,8 +2,8 @@
 import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { KeyRound } from "lucide-react";
-import { bff } from "@/lib/bff-v1";
-import type { McpSecret, McpServer } from "@/lib/bff/types";
+import { bffV1 } from "@/lib/bff-v1";
+import type { McpSecret, McpServer } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import {
   MockDataEmptyState,
@@ -19,15 +19,15 @@ const fmtAge = (iso: string) => {
 export const McpSecretsPanel = ({ server }: { server: McpServer }) => {
   const t = useT();
   const liveStatus = useLiveStatusSnapshot();
-  const secretsGate = getMockDataBadgeModel("bff.mcpSecrets.forServer", liveStatus);
+  const secretsGate = getMockDataBadgeModel("bffV1.mcpSecrets.forServer", liveStatus);
   const [secrets, setSecrets] = useState<McpSecret[]>([]);
-  useEffect(() => { bff.mcpSecrets.forServer(server.id).then(setSecrets); }, [server.id]);
+  useEffect(() => { bffV1.mcpSecrets.forServer(server.id).then(setSecrets); }, [server.id]);
 
   return (
     <>
       <Card className="p-0 divide-y divide-border">
         {secrets.length === 0 && secretsGate ? (
-          <MockDataEmptyState helperName="bff.mcpSecrets.forServer" className="border-0" />
+          <MockDataEmptyState helperName="bffV1.mcpSecrets.forServer" className="border-0" />
         ) : secrets.length === 0 ? (
           <div className="text-xs text-muted-foreground text-center py-6">{t("empty.none")}</div>
         ) : null}

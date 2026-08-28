@@ -13,12 +13,11 @@ import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
 import { DataTable } from "@/platform/components/DataTable";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { RiskBadge } from "@/platform/components/RiskBadge";
-import { bff } from "@/lib/bff-v1";
 import { bffWrites } from "@/lib/bff-v1/writes";
-import { runActionSafe } from "@/lib/bff-v1";
+import { bffV1, runActionSafe } from "@/lib/bff-v1";
 import { NonProductionActionButton } from "@/management/components/NonProductionActionButton";
 import { useT } from "@/platform/hooks";
-import type { Strategy, Job, AuditEvent, ApprovalRequest, Alert, Incident, Artifact, EvolutionProgram, ResearchExperiment } from "@/lib/bff/types";
+import type { Strategy, Job, AuditEvent, ApprovalRequest, Alert, Incident, Artifact, EvolutionProgram, ResearchExperiment } from "@/lib/bff-v1";
 import { Inbox, ArrowRight, CheckCircle2, AlertTriangle, FileText, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
@@ -36,7 +35,7 @@ import { StrategyDataFeaturesTab } from "@/management/components/detail/Strategy
 import { StrategyPerformanceTab } from "@/management/components/detail/StrategyPerformanceTab";
 import { StrategyPaperLiveTab } from "@/management/components/detail/StrategyPaperLiveTab";
 import { LinkedBlock } from "@/management/components/detail/LinkedBlock";
-import type { Watcher, DecisionJournalEntry } from "@/lib/bff/types";
+import type { Watcher, DecisionJournalEntry } from "@/lib/bff-v1";
 import { Eye, BookOpen, User } from "lucide-react";
 import { safeDateTime } from "@/lib/utils";
 
@@ -63,10 +62,10 @@ export const StrategyDetail = () => {
   useEffect(() => {
     if (!id) return;
     Promise.all([
-      bff.strategies.get(id), bff.jobs.list(), bff.audit.list(),
-      bff.approvals.list(), bff.alerts.list(), bff.incidents.list(),
-      bff.artifacts.list(), bff.research.list(), bff.evolution.list(),
-      bff.watchers.forSubject("Strategy", id), bff.decisionJournal.forSubject("Strategy", id),
+      bffV1.strategies.get(id), bffV1.jobs.list(), bffV1.audit.list(),
+      bffV1.approvals.list(), bffV1.alerts.list(), bffV1.incidents.list(),
+      bffV1.artifacts.list(), bffV1.research.list(), bffV1.evolution.list(),
+      bffV1.watchers.forSubject("Strategy", id), bffV1.decisionJournal.forSubject("Strategy", id),
     ]).then(([strat, j, a, ap, al, inc, ar, ex, ev, w, dj]) => {
       setS(strat); setJobs(j);
       setAudit(a.filter((x) => x.target === id || (x.target ?? "").includes(id)));
@@ -491,9 +490,9 @@ export const StrategyDetail = () => {
                 successTitle: `${activeTr.action} requested`,
               });
               if (!receipt.ok) return;
-              const fresh = await bff.strategies.get(s.id);
+              const fresh = await bffV1.strategies.get(s.id);
               if (fresh) setS(fresh);
-              const a = await bff.audit.list();
+              const a = await bffV1.audit.list();
               setAudit(a.filter((x) => x.target === s.id));
             }}
           />

@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import i18n from "@/i18n";
-import type { ResearchExperiment } from "@/lib/bff/types";
+import type { ResearchExperiment } from "@/lib/bff-v1";
 import type { ManagementPersonaFleetRow } from "@/lib/bff-v1/management";
 import { ResearchDetail } from "./ResearchDetail";
 
@@ -19,10 +19,10 @@ vi.mock("@/lib/bff-v1", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/bff-v1")>();
   return {
     ...actual,
-    bff: {
-      ...actual.bff,
-      research: { ...actual.bff.research, get: mocks.researchGet },
-      audit: { ...actual.bff.audit, list: mocks.auditList },
+    bffV1: {
+      ...actual.bffV1,
+      research: { ...actual.bffV1.research, get: mocks.researchGet },
+      audit: { ...actual.bffV1.audit, list: mocks.auditList },
     },
     mgmt: {
       ...actual.mgmt,

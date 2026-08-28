@@ -1,3 +1,4 @@
+import { bffV1 } from "@/lib/bff-v1";
 // E3 — In-memory overlay for LoopRun stage progress + run status.
 // Same TTL semantics as v5ActionOverlay (Q10/Q27): 30 min, NEVER persisted.
 // Used by ExecutionLoop drawer to drive advance/pause/resume/cancel without
@@ -65,7 +66,7 @@ export function applyLoopOverlay(runs: LoopRun[]): LoopRun[] {
   });
 }
 
-// ---------- Mutators returning the new patch (for bff.v5.loops.*) ----------
+// ---------- Mutators returning the new patch (for bffV1.v5.loops.*) ----------
 
 function firstIndexBy(stages: LoopStage[], pred: (s: LoopStage) => boolean): number {
   return stages.findIndex(pred);

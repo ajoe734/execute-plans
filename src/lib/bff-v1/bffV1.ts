@@ -1,0 +1,79 @@
+import * as clientModule from "./client";
+import * as strategiesModule from "./strategies";
+import * as personasModule from "./personas";
+import * as capitalPoolsModule from "./capitalPools";
+import * as rankingFormulasModule from "./rankingFormulas";
+import * as rebalancesModule from "./rebalances";
+import * as deploymentsModule from "./deployments";
+import * as evolutionModule from "./evolution";
+import * as researchModule from "./research";
+import * as artifactsModule from "./artifacts";
+import * as capabilitiesModule from "./capabilities";
+import * as operationsModule from "./operations";
+import * as governanceModule from "./governance";
+import * as searchModule from "./search";
+import * as meModule from "./me";
+import * as headersModule from "./headers";
+import * as writesModule from "./writes";
+import * as managementModule from "./management";
+import * as v5Module from "./v5";
+import * as agoraModule from "./agora/agoraReads";
+
+export const bffV1 = {
+  get fetch() { return clientModule.bffFetch; },
+  get request() { return clientModule.bffRequest; },
+  get detectMode() { return clientModule.detectMode; },
+  get strategies() { return strategiesModule.strategies; },
+  get personas() { return personasModule.personas; },
+  get capitalPools() { return capitalPoolsModule.capitalPools; },
+  get rankingFormulas() { return rankingFormulasModule.rankingFormulas; },
+  get rebalances() { return rebalancesModule.rebalances; },
+  get rebalanceWorkflow() { return rebalancesModule.rebalanceWorkflow; },
+  get rebalanceOverrides() { return rebalancesModule.rebalanceOverrides; },
+  get allocationSimulations() { return rebalancesModule.allocationSimulations; },
+  get metricFreezes() { return rebalancesModule.metricFreezes; },
+  get deployments() { return deploymentsModule.deployments; },
+  get deploymentStages() { return deploymentsModule.deploymentStages; },
+  get evolution() { return evolutionModule.evolution; },
+  get evolutionRuns() { return evolutionModule.evolutionRuns; },
+  get evolutionCandidates() { return evolutionModule.evolutionCandidates; },
+  get promotions() { return evolutionModule.promotions; },
+  get fitnessFormulas() { return evolutionModule.fitnessFormulas; },
+  get mutationRules() { return evolutionModule.mutationRules; },
+  get research() { return researchModule.research; },
+  get artifacts() { return artifactsModule.artifacts; },
+  get tools() { return capabilitiesModule.tools; },
+  get mcpServers() { return capabilitiesModule.mcpServers; },
+  get mcpTools() { return capabilitiesModule.mcpTools; },
+  get skills() { return capabilitiesModule.skills; },
+  get channels() { return capabilitiesModule.channels; },
+  get mcpSecrets() { return capabilitiesModule.mcpSecrets; },
+  get jobs() { return operationsModule.jobs; },
+  get runtimes() { return operationsModule.runtimes; },
+  get alerts() { return operationsModule.alerts; },
+  get incidents() { return operationsModule.incidents; },
+  get approvals() { return operationsModule.approvals; },
+  get audit() { return operationsModule.audit; },
+  get routePolicies() { return governanceModule.routePolicies; },
+  get policyVersions() { return governanceModule.policyVersions; },
+  get permissionMatrix() { return governanceModule.permissionMatrix; },
+  get permissionMatrices() { return governanceModule.permissionMatrices; },
+  get memoryUpdates() { return governanceModule.memoryUpdates; },
+  get consultRules() { return governanceModule.consultRules; },
+  get policyViolations() { return governanceModule.policyViolations; },
+  get evaluationRuns() { return governanceModule.evaluationRuns; },
+  get objectVersions() { return governanceModule.objectVersions; },
+  get featureSets() { return governanceModule.featureSets; },
+  get performanceSeries() { return governanceModule.performanceSeries; },
+  get watchers() { return governanceModule.watchers; },
+  get decisionJournal() { return governanceModule.decisionJournal; },
+  get allocationLimits() { return governanceModule.allocationLimits; },
+  get poolFreezes() { return governanceModule.poolFreezes; },
+  get search() { return searchModule.search; },
+  get me() { return meModule.me; },
+  get getAcceptLanguage() { return headersModule.getAcceptLanguage; },
+  get writes() { return writesModule.bffWrites; },
+  get mgmt() { return managementModule.mgmt; },
+  get v5() { return v5Module.bffV5; },
+  get agora() { return agoraModule.bffAgora; },
+};
