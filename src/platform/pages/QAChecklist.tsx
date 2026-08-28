@@ -7,7 +7,7 @@ import { Check, Circle, RotateCcw } from "lucide-react";
 import { useT } from "@/platform/hooks";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
 import { toast } from "sonner";
-import { realtime } from "@/lib/bff/realtime";
+import { realtime } from "@/lib/bff-v1";
 import { useRealtimeStatus } from "@/lib/bff-v1";
 import { ScenarioRunnerCard } from "@/platform/components/ScenarioRunnerCard";
 
@@ -153,13 +153,13 @@ export const QAChecklist = () => {
 
   const [resetPersistOpen, setResetPersistOpen] = useState(false);
   const handleResetPersist = async () => {
-    const { clearPersisted } = await import("@/lib/bff/persistence");
+    const { clearPersisted } = await import("@/lib/bff-v1/mocks/persistence");
     clearPersisted();
     toast.success(t("qa.persistResetDone"));
     setTimeout(() => window.location.reload(), 400);
   };
   const handleSnapshotNow = async () => {
-    const { persistNow } = await import("@/lib/bff/persistence");
+    const { persistNow } = await import("@/lib/bff-v1/mocks/persistence");
     persistNow();
     toast.success(t("qa.persistSnapshotDone"));
   };

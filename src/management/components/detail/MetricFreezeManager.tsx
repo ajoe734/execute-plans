@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { safeDateTime } from "@/lib/utils";
-import { bff, writes } from "@/lib/bff-v1";
-import type { MetricFreeze } from "@/lib/bff/types";
+import { bffV1, writes } from "@/lib/bff-v1";
+import type { MetricFreeze } from "@/lib/bff-v1";
 import { DataTable } from "@/platform/components/DataTable";
 import { MetricFreezeBadge } from "./MetricFreezeBadge";
 import { PermissionAwareButton } from "@/platform/components/PermissionAwareButton";
@@ -14,7 +14,7 @@ export const MetricFreezeManager = ({ rebalanceId }: { rebalanceId: string }) =>
   const t = useT();
   const [rows, setRows] = useState<MetricFreeze[]>([]);
   const [pending, setPending] = useState<MetricFreeze | null>(null);
-  useEffect(() => { bff.metricFreezes.forRebalance(rebalanceId).then(setRows); }, [rebalanceId]);
+  useEffect(() => { bffV1.metricFreezes.forRebalance(rebalanceId).then(setRows); }, [rebalanceId]);
 
   const toggle = (m: MetricFreeze) => setPending(m);
 

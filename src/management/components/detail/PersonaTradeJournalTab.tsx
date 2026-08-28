@@ -33,7 +33,7 @@ import {
   AlertCircle,
   ChevronRight
 } from "lucide-react";
-import { bffV1 } from "@/lib/bff-v1/client";
+import { bffV1 } from "@/lib/bff-v1";
 import { useAgoraWriteAccess } from "@/agora/useAgoraWriteAccess";
 
 const errorMessage = (error: unknown, fallback: string) =>

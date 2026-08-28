@@ -1,7 +1,7 @@
 // Rebalance Constraints checker (mock pass/fail list).
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import type { Rebalance } from "@/lib/bff/types";
+import type { Rebalance } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { CheckCircle2, AlertTriangle } from "lucide-react";
 

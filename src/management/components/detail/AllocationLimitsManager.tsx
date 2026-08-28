@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { safeDateTime } from "@/lib/utils";
-import { bff, writes } from "@/lib/bff-v1";
-import type { AllocationLimit } from "@/lib/bff/types";
+import { bffV1, writes } from "@/lib/bff-v1";
+import type { AllocationLimit } from "@/lib/bff-v1";
 import { DataTable } from "@/platform/components/DataTable";
 import { Section } from "@/management/pages/ObjectDetailLayout";
 import { Badge } from "@/components/ui/badge";
@@ -18,7 +18,7 @@ export const AllocationLimitsManager = ({ poolId }: { poolId: string }) => {
   const [scope, setScope] = useState<"strategy" | "sector">("strategy");
   const [scopeRef, setScopeRef] = useState("");
   const [cap, setCap] = useState("0.30");
-  useEffect(() => { bff.allocationLimits.forPool(poolId).then(setRows); }, [poolId]);
+  useEffect(() => { bffV1.allocationLimits.forPool(poolId).then(setRows); }, [poolId]);
 
   const submit = async () => {
     const c = Number(cap);

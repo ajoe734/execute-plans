@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { safeDateTime } from "@/lib/utils";
-import { bff, writes } from "@/lib/bff-v1";
-import type { PoolFreeze } from "@/lib/bff/types";
+import { bffV1, writes } from "@/lib/bff-v1";
+import type { PoolFreeze } from "@/lib/bff-v1";
 import { DataTable } from "@/platform/components/DataTable";
 import { Section } from "@/management/pages/ObjectDetailLayout";
 import { Badge } from "@/components/ui/badge";
@@ -18,7 +18,7 @@ export const FreezeUnfreezePanel = ({ poolId }: { poolId: string }) => {
   const [reason, setReason] = useState("");
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [unfreezeTarget, setUnfreezeTarget] = useState<PoolFreeze | null>(null);
-  useEffect(() => { bff.poolFreezes.forPool(poolId).then(setRows); }, [poolId]);
+  useEffect(() => { bffV1.poolFreezes.forPool(poolId).then(setRows); }, [poolId]);
 
   const active = rows.filter((r) => r.active);
   const history = rows.filter((r) => !r.active);

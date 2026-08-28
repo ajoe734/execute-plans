@@ -7,7 +7,7 @@
 // SSE bridge replaces it (VI-3+), only this hook needs swapping.
 
 import { useEffect, useRef, useState } from "react";
-import { realtime } from "@/lib/bff/realtime";
+import { realtime } from "./sse/bridge";
 import type { ListEnvelope } from "./dto";
 import { BffError } from "./errors";
 import { liveStatus } from "./liveStatus";

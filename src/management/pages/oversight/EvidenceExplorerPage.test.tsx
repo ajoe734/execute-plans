@@ -19,7 +19,7 @@ vi.mock("@/management/pages/v5/useV5Live", () => ({
   useV5Live: mocks.useV5Live,
 }));
 
-vi.mock("@/lib/bff/evidenceOperations", () => ({
+vi.mock("@/lib/bff-v1", () => ({
   submitEvidenceOperation: mocks.submitEvidenceOperation,
 }));
 

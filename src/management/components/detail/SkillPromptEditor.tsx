@@ -4,7 +4,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import type { Skill } from "@/lib/bff/types";
+import type { Skill } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { NonProductionActionButton } from "@/management/components/NonProductionActionButton";
 

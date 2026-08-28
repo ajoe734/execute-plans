@@ -5,9 +5,8 @@ import { StrategyPaperLiveTab } from "../StrategyPaperLiveTab";
 import { ActivityMonitor } from "../ActivityMonitor";
 import { FormulaStudio } from "@/management/pages/studios/FormulaStudio";
 import { PostmortemLibraryPage } from "@/management/pages/phase2/PostmortemLibrary";
-import { mgmt } from "@/lib/bff-v1/management";
-import { bff } from "@/lib/bff-v1";
-import type { Incident } from "@/lib/bff/types";
+import { bffV1, mgmt } from "@/lib/bff-v1";
+import type { Incident } from "@/lib/bff-v1";
 
 vi.mock("@/platform/hooks", () => ({
   useT: () => (key: string, opts?: { defaultValue?: string }) => opts?.defaultValue || key,
@@ -51,7 +50,7 @@ describe("PFG-MGMT-FE-REAL-20260820 Strict Live & Degraded Tests", () => {
   });
 
   it("FormulaStudio renders empty backtest jobs readback from bff.jobs.list() without synthetic mock metrics", async () => {
-    vi.spyOn(bff.rankingFormulas, "list").mockResolvedValue([
+    vi.spyOn(bffV1.rankingFormulas, "list").mockResolvedValue([
       {
         id: "rf_01",
         name: "Test Formula",
@@ -63,7 +62,7 @@ describe("PFG-MGMT-FE-REAL-20260820 Strict Live & Degraded Tests", () => {
         appliedTo: 1,
       },
     ]);
-    vi.spyOn(bff.jobs, "list").mockResolvedValue([]);
+    vi.spyOn(bffV1.jobs, "list").mockResolvedValue([]);
 
     render(
       <MemoryRouter>
@@ -86,7 +85,7 @@ describe("PFG-MGMT-FE-REAL-20260820 Strict Live & Degraded Tests", () => {
       timeline: [{ ts: "2026-08-21T10:05:00Z", actor: "alice", note: "[postmortem] Connection pool exhausted." }],
     };
 
-    vi.spyOn(bff.incidents, "list").mockResolvedValue([mockIncident]);
+    vi.spyOn(bffV1.incidents, "list").mockResolvedValue([mockIncident]);
 
     render(
       <MemoryRouter>
@@ -102,7 +101,7 @@ describe("PFG-MGMT-FE-REAL-20260820 Strict Live & Degraded Tests", () => {
   });
 
   it("PostmortemLibraryPage displays accurate degraded message when bff.incidents.list() transport rejects", async () => {
-    vi.spyOn(bff.incidents, "list").mockImplementation(async () => {
+    vi.spyOn(bffV1.incidents, "list").mockImplementation(async () => {
       throw new Error("BFF network failure");
     });
 
@@ -119,8 +118,8 @@ describe("PFG-MGMT-FE-REAL-20260820 Strict Live & Degraded Tests", () => {
   });
 
   it("FormulaStudio renders runnerUnavailable state when bff.rankingFormulas.list() promise rejects", async () => {
-    vi.spyOn(bff.rankingFormulas, "list").mockRejectedValue(new Error("Formula studio network error"));
-    vi.spyOn(bff.jobs, "list").mockResolvedValue([]);
+    vi.spyOn(bffV1.rankingFormulas, "list").mockRejectedValue(new Error("Formula studio network error"));
+    vi.spyOn(bffV1.jobs, "list").mockResolvedValue([]);
 
     render(
       <MemoryRouter>
@@ -134,7 +133,7 @@ describe("PFG-MGMT-FE-REAL-20260820 Strict Live & Degraded Tests", () => {
   });
 
   it("ActivityMonitor consumes live SSE envelope on sse channel topic and renders activity row", async () => {
-    const { realtime } = await import("@/lib/bff/realtime");
+    const { realtime } = await import("@/lib/bff-v1");
     render(
       <MemoryRouter>
         <ActivityMonitor scope="test" />
@@ -156,7 +155,7 @@ describe("PFG-MGMT-FE-REAL-20260820 Strict Live & Degraded Tests", () => {
 
   it("StrategyDetail renders disabled NonProductionActionButton for alert acknowledge action", async () => {
     const { StrategyDetail } = await import("@/management/pages/StrategyDetail");
-    vi.spyOn(bff.strategies, "get").mockResolvedValue({
+    vi.spyOn(bffV1.strategies, "get").mockResolvedValue({
       id: "strat_test",
       name: "Test Strategy",
       alpha: "alpha_test",
@@ -170,11 +169,11 @@ describe("PFG-MGMT-FE-REAL-20260820 Strict Live & Degraded Tests", () => {
       mode: "paper",
       createdAt: "2026-08-21T10:00:00Z",
       updatedAt: "2026-08-21T10:00:00Z",
-    });
-    vi.spyOn(bff.jobs, "list").mockResolvedValue([]);
-    vi.spyOn(bff.audit, "list").mockResolvedValue([]);
-    vi.spyOn(bff.approvals, "list").mockResolvedValue([]);
-    vi.spyOn(bff.alerts, "list").mockResolvedValue([
+    } as unknown as import("@/lib/bff-v1").Strategy);
+    vi.spyOn(bffV1.jobs, "list").mockResolvedValue([]);
+    vi.spyOn(bffV1.audit, "list").mockResolvedValue([]);
+    vi.spyOn(bffV1.approvals, "list").mockResolvedValue([]);
+    vi.spyOn(bffV1.alerts, "list").mockResolvedValue([
       {
         id: "alt_01",
         severity: "warning",
@@ -183,14 +182,14 @@ describe("PFG-MGMT-FE-REAL-20260820 Strict Live & Degraded Tests", () => {
         openedAt: "2026-08-21T10:00:00Z",
         acknowledged: false,
         relatedTarget: "strat_test",
-      },
+      } as unknown as import("@/lib/bff-v1").Alert,
     ]);
-    vi.spyOn(bff.incidents, "list").mockResolvedValue([]);
-    vi.spyOn(bff.artifacts, "list").mockResolvedValue([]);
-    vi.spyOn(bff.research, "list").mockResolvedValue([]);
-    vi.spyOn(bff.evolution, "list").mockResolvedValue([]);
-    vi.spyOn(bff.watchers, "forSubject").mockResolvedValue([]);
-    vi.spyOn(bff.decisionJournal, "forSubject").mockResolvedValue([]);
+    vi.spyOn(bffV1.incidents, "list").mockResolvedValue([]);
+    vi.spyOn(bffV1.artifacts, "list").mockResolvedValue([]);
+    vi.spyOn(bffV1.research, "list").mockResolvedValue([]);
+    vi.spyOn(bffV1.evolution, "list").mockResolvedValue([]);
+    vi.spyOn(bffV1.watchers, "forSubject").mockResolvedValue([]);
+    vi.spyOn(bffV1.decisionJournal, "forSubject").mockResolvedValue([]);
 
     render(
       <MemoryRouter initialEntries={["/management/strategies/strat_test"]}>

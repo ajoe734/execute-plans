@@ -11,12 +11,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useT } from "@/platform/hooks";
-import { bff } from "@/lib/bff-v1";
-import { realtime } from "@/lib/bff/realtime";
+import { bffV1 } from "@/lib/bff-v1";
+import { bffV1, realtime } from "@/lib/bff-v1";
 import { normalizeAlertTimestampFields } from "@/lib/bff-v1/eventTimestamps";
 import { RiskBadge } from "./RiskBadge";
 import { StatusBadge } from "./StatusBadge";
-import type { Alert, ApprovalRequest, Job, Incident } from "@/lib/bff/types";
+import type { Alert, ApprovalRequest, Job, Incident } from "@/lib/bff-v1";
 import { AlertTriangle, ClipboardCheck, Loader2, ShieldAlert } from "lucide-react";
 import { safeDateTime } from "@/lib/utils";
 
@@ -42,7 +42,7 @@ export const NotificationCenter = () => {
 
   useEffect(() => {
     if (!open) return;
-    void Promise.all([bff.alerts.list(), bff.approvals.list(), bff.jobs.list(), bff.incidents.list()]).then(
+    void Promise.all([bffV1.alerts.list(), bffV1.approvals.list(), bffV1.jobs.list(), bffV1.incidents.list()]).then(
       ([a, ap, j, inc]) => { setAlerts(a); setApprovals(ap); setJobs(j); setIncidents(inc); },
     );
     const offAlert = realtime.on("alert", (p) => {
@@ -55,7 +55,7 @@ export const NotificationCenter = () => {
     });
     const offData = realtime.on("data", (e) => {
       const event = e as { kind?: string } | undefined;
-      if (event?.kind === "Incident") void bff.incidents.list().then(setIncidents);
+      if (event?.kind === "Incident") void bffV1.incidents.list().then(setIncidents);
     });
     return () => { offAlert?.(); offJob?.(); offData?.(); };
   }, [open]);

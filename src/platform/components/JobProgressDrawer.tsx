@@ -6,7 +6,7 @@
 // racing TopBar's shell-summary badge count for the same /bff/jobs request.
 import { useEffect, useState } from "react";
 import { create } from "zustand";
-import { realtime } from "@/lib/bff/realtime";
+import { realtime } from "@/lib/bff-v1";
 import { lists, useLiveStatus } from "@/lib/bff-v1";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";

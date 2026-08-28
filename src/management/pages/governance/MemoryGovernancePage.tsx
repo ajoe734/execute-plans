@@ -6,8 +6,8 @@ import { Card } from "@/components/ui/card";
 import { ManagementTableScroll } from "@/management/components/ManagementTableScroll";
 import { Badge } from "@/components/ui/badge";
 import { GitMerge, AlertTriangle, Check, X } from "lucide-react";
-import { bff, managementConsoleReads } from "@/lib/bff-v1";
-import type { MemoryUpdate, Persona } from "@/lib/bff/types";
+import { bffV1, managementConsoleReads } from "@/lib/bff-v1";
+import type { MemoryUpdate, Persona } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { safeDateTime } from "@/lib/utils";
 import { NonProductionActionButton } from "@/management/components/NonProductionActionButton";
@@ -27,7 +27,7 @@ export const MemoryGovernancePage = () => {
 
   useEffect(() => {
     managementConsoleReads.memoryGovernance().then((envelope) => setItems(envelope.items));
-    bff.personas.list().then(setPersonas);
+    bffV1.personas.list().then(setPersonas);
   }, []);
 
   const personaName = (id: string) => personas.find((p) => p.id === id)?.name ?? id;

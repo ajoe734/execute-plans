@@ -1,7 +1,7 @@
 // Phase 11.1 — Side-by-side diff between two PolicyVersions.
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import type { PolicyVersion, RoutePolicyRule } from "@/lib/bff/types";
+import type { PolicyVersion, RoutePolicyRule } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { Plus, Minus, ArrowRight } from "lucide-react";
 

@@ -2,7 +2,7 @@
 // Mutations only ever prepend to the audit array; never edit/delete.
 // This wrapper turns each event into a frozen object at write time.
 
-import type { AuditEvent } from "@/lib/bff/types";
+import type { AuditEvent } from "@/lib/bff-v1";
 
 export function freezeAudit(ev: AuditEvent): Readonly<AuditEvent> {
   return Object.freeze({ ...ev });

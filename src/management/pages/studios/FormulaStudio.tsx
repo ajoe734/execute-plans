@@ -8,8 +8,8 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { bff } from "@/lib/bff-v1";
-import type { RankingFormula, Job } from "@/lib/bff/types";
+import { bffV1 } from "@/lib/bff-v1";
+import type { RankingFormula, Job } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { FormulaEditor } from "@/management/components/studios/FormulaEditor";
 import { toast } from "sonner";
@@ -33,7 +33,7 @@ export const FormulaStudio = () => {
   const [hasFormulasError, setHasFormulasError] = useState(false);
 
   const loadBacktestJobs = () => {
-    bff.jobs.list()
+    bffV1.jobs.list()
       .then((list) => {
         const filtered = (list || []).filter((j: Job) => j.kind === "backtest");
         setBacktestJobs(filtered);
@@ -50,7 +50,7 @@ export const FormulaStudio = () => {
   }, []);
 
   useEffect(() => {
-    bff.rankingFormulas.list()
+    bffV1.rankingFormulas.list()
       .then((rows) => {
         setFormulas(rows || []);
         if (rows && rows[0]) setActiveId((current) => current ?? rows[0].id);

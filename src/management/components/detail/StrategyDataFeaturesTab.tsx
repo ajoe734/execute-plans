@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
-import { bff } from "@/lib/bff-v1";
-import type { FeatureSet } from "@/lib/bff/types";
+import { bffV1 } from "@/lib/bff-v1";
+import type { FeatureSet } from "@/lib/bff-v1";
 import { DataTable } from "@/platform/components/DataTable";
 import { useT } from "@/platform/hooks";
 
 export const StrategyDataFeaturesTab = ({ strategyId }: { strategyId: string }) => {
   const t = useT();
   const [rows, setRows] = useState<FeatureSet[]>([]);
-  useEffect(() => { bff.featureSets.forStrategy(strategyId).then(setRows); }, [strategyId]);
+  useEffect(() => { featureSets.forStrategy(strategyId).then(setRows); }, [strategyId]);
   return (
     <DataTable
       rows={rows}

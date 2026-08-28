@@ -1,6 +1,6 @@
 // seed.strategy → v5 StrategyExecutionHealth.
 
-import type { Strategy, Alert, Incident } from "@/lib/bff/types";
+import type { Strategy, Alert, Incident } from "@/lib/bff-v1";
 import { computeStrategyHealthScore } from "../health";
 import { v5ActionOverlay } from "../overlay";
 import type { StrategyExecutionHealth } from "../types";

@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { bff } from "@/lib/bff-v1";
+import { bffAgora, bffV5, realtime } from "@/lib/bff-v1";
 import { liveStatus } from "@/lib/bff-v1/liveStatus";
 import { connectLiveSse, _resetLiveSse } from "@/lib/bff-v1/sse/liveSse";
-import { realtime } from "@/lib/bff/realtime";
-import { bffV5 } from "@/lib/bff/v5";
+
+
 import { BffError } from "@/lib/bff-v1/errors";
 
 const realFetch = globalThis.fetch;
@@ -78,7 +78,7 @@ describe("BFF live read adapters", () => {
     );
     globalThis.fetch = fetchMock;
 
-    const signals = await bff.agora.signals.list();
+    const signals = await bffAgora.signals.list();
 
     expect(fetchMock.mock.calls[0][0]).toBe("https://bff.example.test/bff/agora/signals");
     expect(signals[0].id).toBe("sig-live-001");
@@ -103,7 +103,7 @@ describe("BFF live read adapters", () => {
     );
     globalThis.fetch = fetchMock;
 
-    const signal = await bff.agora.signals.get("sig-live-001");
+    const signal = await bffAgora.signals.get("sig-live-001");
 
     expect(fetchMock.mock.calls[0][0]).toBe("https://bff.example.test/bff/agora/signals");
     expect(signal?.id).toBe("sig-live-001");
@@ -117,7 +117,7 @@ describe("BFF live read adapters", () => {
     );
     globalThis.fetch = fetchMock;
 
-    const signal = await bff.agora.signals.get("sig_missing");
+    const signal = await bffAgora.signals.get("sig_missing");
 
     expect(fetchMock.mock.calls[0][0]).toBe("https://bff.example.test/bff/agora/signals");
     expect(signal).toBeUndefined();

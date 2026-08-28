@@ -5,7 +5,7 @@
 // `owner`/`updatedAt` reach EntityHeader/StatusBadge/RiskBadge as `undefined`
 // (rendered as literal `status.undefined` / `risk.undefined` / blank fields).
 import { describe, it, expect } from "vitest";
-import { normalizeBaseObjectFields } from "@/lib/bff-v1/seed";
+import { normalizeBaseObjectFields } from "../domainReads";
 
 describe("normalizeBaseObjectFields", () => {
   it("recovers state/risk/owner/updatedAt/name from common snake_case aliases", () => {

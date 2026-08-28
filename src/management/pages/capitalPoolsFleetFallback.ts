@@ -1,5 +1,5 @@
 import { lists, mgmt, type ListEnvelope } from "@/lib/bff-v1";
-import type { CapitalPool } from "@/lib/bff/types";
+import type { CapitalPool } from "@/lib/bff-v1";
 import type { ManagementPersonaFleetRow } from "@/lib/bff-v1/management";
 
 export type FleetCapitalPoolBinding = {

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { safeDateTime } from "@/lib/utils";
 import { useLocation, useNavigate, useParams, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { bff } from "@/lib/bff-v1";
+import { bffV1 } from "@/lib/bff-v1";
 import { canonicalCenterUrl } from "@/management/navigation/managementRouteManifest";
 import { tradeJourneyHref } from "@/management/navigation/tradeJourneyLinks";
 import { runPersonaAction, testPersonaPrompt } from "@/lib/bff-v1/personas";
@@ -10,7 +10,7 @@ import { interaction, type EligibilityResponse } from "@/lib/bff-v1/agora/intera
 import { commandReceiptDescription } from "@/lib/bff-v1/commandReceipt";
 import { useT } from "@/platform/hooks";
 import { usePermissions } from "@/lib/usePermissions";
-import type { Persona, Strategy, AuditEvent } from "@/lib/bff/types";
+import type { Persona, Strategy, AuditEvent } from "@/lib/bff-v1";
 import { Pause, Edit, Beaker, Play, Lock, Archive, Inbox, MessageSquare, GitCompare, Lightbulb, History } from "lucide-react";
 import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
 import { DataTable } from "@/platform/components/DataTable";
@@ -140,8 +140,8 @@ export const PersonaDetail = () => {
 
     Promise.all([
       resolvePersonaForDetail(id),
-      bff.strategies.list().catch(() => [] as Strategy[]),
-      bff.audit.list().catch(() => [] as AuditEvent[]),
+      bffV1.strategies.list().catch(() => [] as Strategy[]),
+      bffV1.audit.list().catch(() => [] as AuditEvent[]),
     ])
       .then(([persona, allStrategies, allAudit]) => {
         if (cancelled) return;

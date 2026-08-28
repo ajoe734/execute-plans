@@ -11,6 +11,8 @@
 // in memory via `setAuthProvider({ getToken, getTenantId })`. Persistent browser
 // storage is deliberately not an authentication source.
 
+import { seedHelperMustReturnEmptyInLive } from "./seedTaxonomy";
+
 const HTTP_MUTATION_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
 export function isMutation(method: string): boolean {
@@ -42,6 +44,11 @@ export function acceptLanguage(locale?: string): string {
   if (typeof navigator !== "undefined" && navigator.language)
     return navigator.language;
   return "en-US";
+}
+
+export function getAcceptLanguage(): string | null {
+  if (seedHelperMustReturnEmptyInLive("bff.getAcceptLanguage")) return null;
+  return acceptLanguage();
 }
 
 /** H1 closed — aligned with OpenAPI `components.parameters.BffApiVersion.default`. */

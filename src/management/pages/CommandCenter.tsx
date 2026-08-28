@@ -10,10 +10,10 @@ import { RiskBadge } from "@/platform/components/RiskBadge";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { bff } from "@/lib/bff-v1";
+import { bffV1 } from "@/lib/bff-v1";
 import type {
   Alert, ApprovalRequest, Job, Strategy, Incident, CapitalPool, AuditEvent, Persona,
-} from "@/lib/bff/types";
+} from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { usePlatform } from "@/platform/store";
 import { useNavigate } from "react-router-dom";
@@ -50,9 +50,9 @@ export const CommandCenter = () => {
 
   useEffect(() => {
     Promise.all([
-      bff.strategies.list(), bff.personas.list(), bff.capitalPools.list(),
-      bff.alerts.list(), bff.incidents.list(), bff.approvals.list(),
-      bff.jobs.list(), bff.audit.list(),
+      bffV1.strategies.list(), bffV1.personas.list(), bffV1.capitalPools.list(),
+      bffV1.alerts.list(), bffV1.incidents.list(), bffV1.approvals.list(),
+      bffV1.jobs.list(), bffV1.audit.list(),
     ]).then(([strategies, personas, pools, alerts, incidents, approvals, jobs, audit]) =>
       setD({ strategies, personas, pools, alerts, incidents, approvals, jobs, audit }),
     );

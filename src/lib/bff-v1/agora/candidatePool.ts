@@ -12,7 +12,7 @@
  * AG-BE-CP-001 rejects writes that omit these headers.
  */
 
-import { buildHeaders } from "@/lib/bff-v1/headers";
+import { buildHeaders } from "../headers";
 import type {
   ComponentDigest as GeneratedCandidateComponentDigest,
   CandidateConcernsValue as GeneratedCandidateConcernsValue,

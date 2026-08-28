@@ -2,9 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from "@/components/ui/command";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { bff } from "@/lib/bff-v1";
+import { bffV1 } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
-import type { SearchResult } from "@/lib/bff/types";
+import type { SearchResult } from "@/lib/bff-v1";
 import { canonicalCenterUrl, MANAGEMENT_SIDEBAR_GROUPS } from "@/management/navigation/managementRouteManifest";
 
 const entityRoute: Record<string, (id: string) => string> = {
@@ -58,7 +58,7 @@ export const CommandPalette = ({ open, onOpenChange }: { open: boolean; onOpenCh
       setResults([]);
       return;
     }
-    bff.search(q)
+    bffV1.search(q)
       .then((r) => { if (active) setResults(r as SearchResult[]); })
       .catch(() => { if (active) setResults([]); });
     return () => { active = false; };

@@ -10,7 +10,7 @@ import {
   normalizeRuntimeListResponse,
   type ListEnvelope,
 } from "@/lib/bff-v1";
-import { realtime } from "@/lib/bff/realtime";
+import { realtime } from "@/lib/bff-v1";
 
 describe("VI-1 lists facade", () => {
   it("wraps legacy reader into ListEnvelope shape", async () => {

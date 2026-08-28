@@ -4,8 +4,8 @@ import { Card } from "@/components/ui/card";
 import { Slider } from "@/components/ui/slider";
 import { StatCard } from "@/platform/components/StatCard";
 import { Button } from "@/components/ui/button";
-import { bff } from "@/lib/bff-v1";
-import type { Rebalance } from "@/lib/bff/types";
+import { bffV1 } from "@/lib/bff-v1";
+import type { Rebalance } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { NonProductionActionButton } from "@/management/components/NonProductionActionButton";
 import {
@@ -16,14 +16,14 @@ import { useLiveStatusSnapshot } from "@/lib/bff-v1/liveTransport";
 export const AllocationSimulationPanel = ({ rebalance }: { rebalance: Rebalance }) => {
   const t = useT();
   const liveStatus = useLiveStatusSnapshot();
-  const simulationGate = getMockDataBadgeModel("bff.allocationSimulations.forRebalance", liveStatus);
+  const simulationGate = getMockDataBadgeModel("bffV1.allocationSimulations.forRebalance", liveStatus);
   const lines = useMemo(() => rebalance.lines ?? [], [rebalance.lines]);
   const [weights, setWeights] = useState<Record<string, number>>(() =>
     Object.fromEntries(lines.map((l) => [l.strategyId, l.proposedWeight * 100]))
   );
 
   useEffect(() => {
-    bff.allocationSimulations.forRebalance(rebalance.id).then(() => { /* warm cache */ });
+    bffV1.allocationSimulations.forRebalance(rebalance.id).then(() => { /* warm cache */ });
   }, [rebalance.id]);
 
   const total = useMemo(() => Object.values(weights).reduce((a, b) => a + b, 0), [weights]);
@@ -38,7 +38,7 @@ export const AllocationSimulationPanel = ({ rebalance }: { rebalance: Rebalance 
   const dd = (rebalance.expectedDrawdown ?? -0.05) - turnover * 0.02;
 
   if (simulationGate?.behavior === "disabled") {
-    return <MockDataEmptyState helperName="bff.allocationSimulations.forRebalance" />;
+    return <MockDataEmptyState helperName="bffV1.allocationSimulations.forRebalance" />;
   }
 
   return (

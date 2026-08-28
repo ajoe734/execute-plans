@@ -5,7 +5,7 @@ import {
   DISABLED_REASON_CODES, isDisabledReasonCode, disabledReasonI18nKey,
 } from "@/lib/v4/errorCodes";
 import { RISK_LEVELS as INTENT_RISK_LEVELS } from "@/lib/writeIntents/types";
-import { RISK_LEVELS as BFF_RISK_LEVELS } from "@/lib/bff/types";
+import { RISK_LEVELS as BFF_RISK_LEVELS } from "@/lib/bff-v1";
 
 describe("spec-conflict-G C1 — RiskLevel 5-tier (Pack D D40)", () => {
   it("BFF RiskLevel includes info", () => {

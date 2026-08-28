@@ -2,10 +2,10 @@ import { useEffect, useState } from "react";
 import { safeDateTime } from "@/lib/utils";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { bff } from "@/lib/bff-v1";
-import { runActionSafe } from "@/lib/bff-v1";
+import { bffV1 } from "@/lib/bff-v1";
+import { bffV1, runActionSafe } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
-import type { Artifact, AuditEvent, Deployment } from "@/lib/bff/types";
+import type { Artifact, AuditEvent, Deployment } from "@/lib/bff-v1";
 import { Download, Trash2 } from "lucide-react";
 import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
 import { StatCard } from "@/platform/components/StatCard";
@@ -27,9 +27,9 @@ export const ArtifactDetail = () => {
 
   useEffect(() => {
     if (!id) return;
-    bff.artifacts.get(id).then(setA);
-    bff.deployments.list().then((all) => setDeployments(all.filter((d) => d.artifactId === id)));
-    bff.audit.list().then((au) => setAudit(au.filter((x) => x.target === id || x.action?.startsWith("artifact."))));
+    bffV1.artifacts.get(id).then(setA);
+    bffV1.deployments.list().then((all) => setDeployments(all.filter((d) => d.artifactId === id)));
+    bffV1.audit.list().then((au) => setAudit(au.filter((x) => x.target === id || x.action?.startsWith("artifact."))));
   }, [id]);
 
   if (!a) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;

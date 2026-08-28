@@ -1,3 +1,4 @@
+import { bffV1 } from "@/lib/bff-v1";
 // Governance Queue — Spec Part 3 §9.6.
 // Phase 17 — adds batch approve/reject + per-row stage progress preview.
 import { useEffect, useMemo, useState } from "react";
@@ -11,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { bffWrites } from "@/lib/bff-v1/writes";
 import { commandBatchReceiptDescription } from "@/lib/bff-v1/commandReceipt";
-import type { ApprovalRequest } from "@/lib/bff/types";
+import type { ApprovalRequest } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { SlaCountdown } from "@/platform/components/SlaCountdown";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
@@ -38,7 +39,7 @@ export const GovernanceQueuePage = () => {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [batchDecision, setBatchDecision] = useState<"approve" | "reject" | null>(null);
 
-  const reload = () => bff.approvals.list().then(setRows);
+  const reload = () => bffV1.approvals.list().then(setRows);
   useEffect(() => { reload(); }, []);
 
   const filtered = useMemo(

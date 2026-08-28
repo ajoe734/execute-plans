@@ -12,9 +12,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { RiskBadge } from "@/platform/components/RiskBadge";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
-import { bff, writes } from "@/lib/bff-v1";
+import { bffV1, writes } from "@/lib/bff-v1";
 import { commandReceiptDescription } from "@/lib/bff-v1/commandReceipt";
-import type { Incident, Alert, Strategy, Runtime } from "@/lib/bff/types";
+import type { Incident, Alert, Strategy, Runtime } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { usePermissions } from "@/lib/usePermissions";
 import { Field } from "./ObjectDetailLayout";
@@ -84,8 +84,8 @@ export const IncidentDetail = () => {
 
   useEffect(() => {
     Promise.all([
-      bff.incidents.get(id), bff.alerts.list(),
-      bff.strategies.list(), bff.runtimes.list(),
+      bffV1.incidents.get(id), bffV1.alerts.list(),
+      bffV1.strategies.list(), bffV1.runtimes.list(),
     ]).then(([i, a, s, r]) => {
       setIncident(i ?? null);
       setAlerts(a);

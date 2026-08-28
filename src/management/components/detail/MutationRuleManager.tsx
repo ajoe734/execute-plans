@@ -4,8 +4,8 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Plus } from "lucide-react";
-import { bff } from "@/lib/bff-v1";
-import type { MutationRule } from "@/lib/bff/types";
+import { bffV1 } from "@/lib/bff-v1";
+import type { MutationRule } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { DataTable } from "@/platform/components/DataTable";
 import { Section } from "@/management/pages/ObjectDetailLayout";
@@ -15,7 +15,7 @@ import { NonProductionActionButton } from "@/management/components/NonProduction
 export const MutationRuleManager = () => {
   const t = useT();
   const [rules, setRules] = useState<MutationRule[]>([]);
-  useEffect(() => { bff.mutationRules.list().then(setRules); }, []);
+  useEffect(() => { bffV1.mutationRules.list().then(setRules); }, []);
 
   return (
     <Section title={t("evolution.tabs.mutation")}>

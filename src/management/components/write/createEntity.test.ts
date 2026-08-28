@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { writeOverlay } from "@/lib/bff/writeOverlay";
+import { writeOverlay } from "@/lib/bff-v1/writeOverlay";
 import { createPersona } from "@/lib/bff-v1/personas";
 import { createEntityFromInput } from "./createEntity";
 

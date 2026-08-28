@@ -5,8 +5,8 @@
 // agora_user_id are always derived server-side from the authenticated subject.
 
 import type { AgoraCapability, AgoraServantPolicy } from "./identity";
-import { bffFetch } from "@/lib/bff-v1/client";
-import { liveStatus } from "@/lib/bff-v1/liveStatus";
+import { bffFetch } from "../client";
+import { liveStatus } from "../liveStatus";
 
 export type ServantStatus = "active" | "suspended" | "paper_only" | "shadow_only" | "retired";
 

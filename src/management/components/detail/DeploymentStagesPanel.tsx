@@ -1,7 +1,7 @@
 // Deployment stages — environment promotion stepper (research → paper → live).
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import type { Deployment } from "@/lib/bff/types";
+import type { Deployment } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { ApprovalStagesStepper } from "@/platform/components/LifecycleStepper";
 import { Check, AlertTriangle } from "lucide-react";

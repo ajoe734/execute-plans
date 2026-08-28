@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { safeDateTime } from "@/lib/utils";
 import { useNavigate, useParams } from "react-router-dom";
-import { bff } from "@/lib/bff-v1";
-import type { AuditEvent, Persona, Skill } from "@/lib/bff/types";
+import { bffV1 } from "@/lib/bff-v1";
+import type { AuditEvent, Persona, Skill } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
 import { DataTable } from "@/platform/components/DataTable";
@@ -31,9 +31,9 @@ export const SkillDetail = () => {
   useEffect(() => {
     if (!id) return;
     setLoaded(false);
-    bff.skills.get(id).then((row) => { setSkill(row); setLoaded(true); }).catch(() => setLoaded(true));
-    bff.personas.list().then(setPersonas);
-    bff.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action?.startsWith("skill."))));
+    bffV1.skills.get(id).then((row) => { setSkill(row); setLoaded(true); }).catch(() => setLoaded(true));
+    bffV1.personas.list().then(setPersonas);
+    bffV1.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action?.startsWith("skill."))));
   }, [id]);
 
   const machineState: SkillState = useMemo(() => {

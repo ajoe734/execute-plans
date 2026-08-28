@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildAlphaFactoryBuckets, classifyAlphaFactorySource } from "./alphaFactoryData";
-import type { Strategy } from "@/lib/bff/types";
+import type { Strategy } from "@/lib/bff-v1";
 
 const t = (key: string) => key;
 

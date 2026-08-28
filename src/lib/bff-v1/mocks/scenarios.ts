@@ -10,7 +10,7 @@
 
 import * as seed from "@/mocks/seed";
 import { mutations } from "./mutations";
-import type { Strategy, Rebalance, ApprovalRequest, Alert, Incident } from "./types";
+import type { Strategy, Rebalance, ApprovalRequest, Alert, Incident } from "../dto";
 
 export interface ScenarioStepResult {
   label: string;

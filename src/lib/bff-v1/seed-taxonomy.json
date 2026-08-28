@@ -39,7 +39,7 @@
     {
       "name": "bff.mutations",
       "category": "deprecated",
-      "seed_source": "@/lib/bff/mutations",
+      "seed_source": "src/lib/bff-v1/mocks/mutations",
       "live_routes": [
         "POST /bff/v1/commands",
         "POST /bff/actions/{entityType}/{entityId}/{actionId}"
@@ -57,7 +57,7 @@
     {
       "name": "bff.agora",
       "category": "live_required",
-      "seed_source": "@/lib/bff/agora",
+      "seed_source": "src/lib/bff-v1/agora/agoraReads",
       "live_routes": [
         "GET /bff/agora/daily",
         "GET /bff/agora/signals",
@@ -77,7 +77,7 @@
     {
       "name": "bff.v5",
       "category": "live_required",
-      "seed_source": "@/lib/bff/v5",
+      "seed_source": "src/lib/bff-v1/v5",
       "live_routes": [
         "GET /bff/v5/control-room",
         "GET /bff/v5/loop-runs",

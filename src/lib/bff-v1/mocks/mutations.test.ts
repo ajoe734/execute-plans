@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { mutations } from "@/lib/bff/mutations";
+import { mutations } from "./mutations";
 import * as seed from "@/mocks/seed";
-import { realtime } from "@/lib/bff/realtime";
+import { realtime } from "../sse/bridge";
 
 describe("mutations + audit", () => {
   beforeEach(() => {

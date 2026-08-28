@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { bff } from "@/lib/bff-v1";
-import type { AuditEvent, Strategy, Tool } from "@/lib/bff/types";
+import { bffV1 } from "@/lib/bff-v1";
+import type { AuditEvent, Strategy, Tool } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
 import { StatCard } from "@/platform/components/StatCard";
@@ -33,9 +33,9 @@ export const ToolDetail = () => {
   useEffect(() => {
     if (!id) return;
     setLoaded(false);
-    bff.tools.get(id).then((row) => { setTool(row); setLoaded(true); }).catch(() => setLoaded(true));
-    bff.strategies.list().then((s) => setConsumers(s.slice(0, 4)));
-    bff.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action?.startsWith("tool."))));
+    bffV1.tools.get(id).then((row) => { setTool(row); setLoaded(true); }).catch(() => setLoaded(true));
+    bffV1.strategies.list().then((s) => setConsumers(s.slice(0, 4)));
+    bffV1.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action?.startsWith("tool."))));
   }, [id]);
   if (!tool) {
     return loaded

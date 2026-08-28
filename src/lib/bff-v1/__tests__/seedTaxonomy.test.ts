@@ -1,6 +1,33 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { bff, getSeedHelperUnavailableReason } from "@/lib/bff-v1/seed";
+import {
+  allocationLimits,
+  allocationSimulations,
+  consultRules,
+  evaluationRuns,
+  evolutionCandidates,
+  evolutionRuns,
+  featureSets,
+  fitnessFormulas,
+  getAcceptLanguage,
+  mcpSecrets,
+  memoryUpdates,
+  metricFreezes,
+  mutationRules,
+  objectVersions,
+  performanceSeries,
+  permissionMatrices,
+  permissionMatrix,
+  policyVersions,
+  policyViolations,
+  poolFreezes,
+  promotions,
+  rebalanceOverrides,
+  routePolicies,
+  strategies,
+  watchers,
+} from "@/lib/bff-v1";
+import { getSeedHelperUnavailableReason } from "@/lib/bff-v1/domainReads";
 import seedTaxonomy from "@/lib/bff-v1/seed-taxonomy.json";
 import {
   getSeedHelperCategory,
@@ -57,47 +84,42 @@ describe("seed taxonomy live gating", () => {
     }
   });
 
-  it("does not expose deprecated write helpers from the seed accessor", () => {
-    expect(Object.prototype.hasOwnProperty.call(bff, "mutations")).toBe(false);
-    expect(Object.prototype.hasOwnProperty.call(bff, "commands")).toBe(false);
-  });
-
   it("does not disable seed helpers in mock mode", async () => {
-    const watchers = await bff.watchers.forSubject("Strategy", "stg_001");
+    const watcherList = await watchers.forSubject("Strategy", "stg_001");
 
     expect(seedHelperMustReturnEmptyInLive("bff.watchers.forSubject")).toBe(false);
-    expect(watchers.length).toBeGreaterThan(0);
-    expect(bff.getAcceptLanguage()).toMatch(/en-US|zh-TW/);
+    expect(watcherList.length).toBeGreaterThan(0);
+    expect(getAcceptLanguage()).toMatch(/en-US|zh-TW/);
   });
 
   it("disables mock_only_dev helpers in live mode instead of returning seed rows", async () => {
     stubLiveEnv();
 
-    await expect(bff.allocationSimulations.forRebalance("rb_q2_2026")).resolves.toEqual([]);
-    await expect(bff.watchers.forSubject("Strategy", "stg_001")).resolves.toEqual([]);
-    await expect(bff.mcpSecrets.forServer("mcp_alpha")).resolves.toEqual([]);
-    expect(bff.getAcceptLanguage()).toBeNull();
+    await expect(allocationSimulations.forRebalance("rb_q2_2026")).resolves.toEqual([]);
+    await expect(watchers.forSubject("Strategy", "stg_001")).resolves.toEqual([]);
+    await expect(mcpSecrets.forServer("mcp_alpha")).resolves.toEqual([]);
+    expect(getAcceptLanguage()).toBeNull();
     expect(getSeedHelperUnavailableReason("bff.watchers.forSubject")).toMatch(/Development-only/);
   });
 
   it("returns explicit empty values for deferred helpers in live mode", async () => {
     stubLiveEnv();
 
-    await expect(bff.policyVersions.list("rp_quant_v2")).resolves.toEqual([]);
-    await expect(bff.permissionMatrix.get("persona-tool")).resolves.toBeUndefined();
-    await expect(bff.permissionMatrices.list()).resolves.toEqual([]);
-    await expect(bff.fitnessFormulas.list()).resolves.toEqual([]);
-    await expect(bff.fitnessFormulas.get("ff_default")).resolves.toBeUndefined();
-    await expect(bff.mutationRules.list()).resolves.toEqual([]);
-    await expect(bff.policyViolations.list()).resolves.toEqual([]);
-    await expect(bff.policyViolations.forSubject("Persona", "per_quant")).resolves.toEqual([]);
-    await expect(bff.featureSets.forStrategy("stg_001")).resolves.toEqual([]);
-    await expect(bff.performanceSeries.forStrategy("stg_001", "day")).resolves.toBeUndefined();
-    await expect(bff.allocationLimits.forPool("cp_alpha")).resolves.toEqual([]);
-    await expect(bff.poolFreezes.forPool("cp_alpha")).resolves.toEqual([]);
-    await expect(bff.promotions.forProgram("ev_001")).resolves.toEqual([]);
-    await expect(bff.metricFreezes.forRebalance("rb_q2_2026")).resolves.toEqual([]);
-    await expect(bff.rebalanceOverrides.forRebalance("rb_q2_2026")).resolves.toEqual([]);
+    await expect(policyVersions.list("rp_quant_v2")).resolves.toEqual([]);
+    await expect(permissionMatrix.get("persona-tool")).resolves.toBeUndefined();
+    await expect(permissionMatrices.list()).resolves.toEqual([]);
+    await expect(fitnessFormulas.list()).resolves.toEqual([]);
+    await expect(fitnessFormulas.get("ff_default")).resolves.toBeUndefined();
+    await expect(mutationRules.list()).resolves.toEqual([]);
+    await expect(policyViolations.list()).resolves.toEqual([]);
+    await expect(policyViolations.forSubject("Persona", "per_quant")).resolves.toEqual([]);
+    await expect(featureSets.forStrategy("stg_001")).resolves.toEqual([]);
+    await expect(performanceSeries.forStrategy("stg_001", "day")).resolves.toBeUndefined();
+    await expect(allocationLimits.forPool("cp_alpha")).resolves.toEqual([]);
+    await expect(poolFreezes.forPool("cp_alpha")).resolves.toEqual([]);
+    await expect(promotions.forProgram("ev_001")).resolves.toEqual([]);
+    await expect(metricFreezes.forRebalance("rb_q2_2026")).resolves.toEqual([]);
+    await expect(rebalanceOverrides.forRebalance("rb_q2_2026")).resolves.toEqual([]);
     expect(getSeedHelperUnavailableReason("bff.fitnessFormulas.list")).toMatch(/Live route deferred/);
   });
 
@@ -154,34 +176,34 @@ describe("seed taxonomy live gating", () => {
     });
     globalThis.fetch = fetchSpy as unknown as typeof fetch;
 
-    await expect(bff.routePolicies.list()).resolves.toEqual([
+    await expect(routePolicies.list()).resolves.toEqual([
       expect.objectContaining({ id: "rp_live", personaId: "per_live" }),
     ]);
-    await expect(bff.routePolicies.get("rp_live")).resolves.toEqual(expect.objectContaining({ id: "rp_live" }));
-    await expect(bff.memoryUpdates.list()).resolves.toEqual([
+    await expect(routePolicies.get("rp_live")).resolves.toEqual(expect.objectContaining({ id: "rp_live" }));
+    await expect(memoryUpdates.list()).resolves.toEqual([
       expect.objectContaining({ id: "mem_live", personaId: "per_live" }),
     ]);
-    await expect(bff.consultRules.list()).resolves.toEqual([
+    await expect(consultRules.list()).resolves.toEqual([
       expect.objectContaining({ id: "cr_live", fromPersonaId: "per_live", trigger: "risk.high" }),
     ]);
-    await expect(bff.consultRules.get("cr_live")).resolves.toEqual(expect.objectContaining({ id: "cr_live" }));
-    await expect(bff.evolutionRuns.list()).resolves.toEqual([
+    await expect(consultRules.get("cr_live")).resolves.toEqual(expect.objectContaining({ id: "cr_live" }));
+    await expect(evolutionRuns.list()).resolves.toEqual([
       expect.objectContaining({ id: "run_live", programId: "evp_live" }),
     ]);
-    await expect(bff.evolutionCandidates.forRun("run_live")).resolves.toEqual([
+    await expect(evolutionCandidates.forRun("run_live")).resolves.toEqual([
       expect.objectContaining({ id: "cand_live", runId: "run_live" }),
     ]);
-    await expect(bff.evaluationRuns.list()).resolves.toEqual([
+    await expect(evaluationRuns.list()).resolves.toEqual([
       expect.objectContaining({ id: "eval_live", subjectKind: "Persona", subjectId: "per_live" }),
     ]);
-    await expect(bff.evaluationRuns.forSubject("Persona", "per_live")).resolves.toEqual([
+    await expect(evaluationRuns.forSubject("Persona", "per_live")).resolves.toEqual([
       expect.objectContaining({ id: "eval_live", subjectKind: "Persona", subjectId: "per_live" }),
     ]);
-    await expect(bff.evaluationRuns.forSubject("Skill", "sk_signal_review")).resolves.toEqual([]);
-    await expect(bff.objectVersions.forSubject("Strategy", "stg_live")).resolves.toEqual([
+    await expect(evaluationRuns.forSubject("Skill", "sk_signal_review")).resolves.toEqual([]);
+    await expect(objectVersions.forSubject("Strategy", "stg_live")).resolves.toEqual([
       expect.objectContaining({ id: "spec_live", subjectKind: "Strategy", subjectId: "stg_live" }),
     ]);
-    await expect(bff.objectVersions.forSubject("Persona", "per_live")).resolves.toEqual([]);
+    await expect(objectVersions.forSubject("Persona", "per_live")).resolves.toEqual([]);
 
     const calledPaths = fetchSpy.mock.calls.map(([input]) => pathFromFetchInput(input));
     expect(calledPaths).toContain("/bff/personas/per_live/route-policy");
@@ -203,7 +225,7 @@ describe("seed taxonomy live gating", () => {
     globalThis.fetch = fetchSpy;
 
     expect(seedHelperMustReturnEmptyInLive("bff.strategies.list")).toBe(false);
-    await expect(bff.strategies.list()).resolves.toEqual([{ id: "live_strategy", name: "Live Strategy" }]);
+    await expect(strategies.list()).resolves.toEqual([{ id: "live_strategy", name: "Live Strategy" }]);
     expect(fetchSpy).toHaveBeenCalledOnce();
     expect(String(fetchSpy.mock.calls[0][0])).toContain("/bff/strategies");
   });

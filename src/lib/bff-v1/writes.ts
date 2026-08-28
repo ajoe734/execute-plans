@@ -33,7 +33,7 @@ import type {
   ConsultRule,
   RiskLevel,
   ApprovalRequest,
-} from "@/lib/bff/types";
+} from "./dto";
 import type { ConfirmTokenRequest, ConfirmTokenResponse } from "@/lib/v3/highRiskActions";
 import { getHighRiskAction, buildConfirmPhrase } from "@/lib/v3/highRiskActions";
 
@@ -431,7 +431,7 @@ async function mockRunActionEnvelope(
   input: RunActionInput,
   resolved: { correlationId: string; idempotencyKey: string; confirmToken?: string },
 ): Promise<RunActionEnvelope> {
-  const { mutations } = await import("@/lib/bff/mutations");
+  const { mutations } = await import("./mocks/mutations");
   const legacy = await mutations.runAction({
     ...input,
     correlationId: resolved.correlationId,
@@ -588,7 +588,7 @@ export async function requestConfirmToken(
   const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
 
   const mockBranch = async (): Promise<ConfirmTokenEnvelope> => {
-    const { mutations } = await import("@/lib/bff/mutations");
+    const { mutations } = await import("./mocks/mutations");
     const r = await mutations.requestConfirmToken(req, params);
     if (!r.ok) {
       throw makeBffError({
@@ -783,7 +783,7 @@ export async function decideApproval(
   const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
 
   const mockBranch = async (): Promise<ApprovalDecisionEnvelope> => {
-    const { mutations } = await import("@/lib/bff/mutations");
+    const { mutations } = await import("./mocks/mutations");
     const r = await mutations.decideApproval(id, decision, memo, { stageName: opts.stageName });
     if (!r.ok) {
       throw makeBffError({ code: "VALIDATION_FAILED", message: r.message ?? "decision rejected", correlationId });
@@ -832,7 +832,7 @@ export async function acknowledgeAlert(
   const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
 
   const mockBranch = async (): Promise<AlertAckEnvelope> => {
-    const { mutations } = await import("@/lib/bff/mutations");
+    const { mutations } = await import("./mocks/mutations");
     const r = await mutations.acknowledgeAlert(id, memo);
     return { ok: true, data: { alertId: id }, auditEventId: r.audit.id, correlationId, idempotencyKey };
   };
@@ -990,7 +990,7 @@ export async function freezePool(
     return runAction({ kind: "CapitalPool", id: poolId, action: "freeze_pool", memo: reason }, { ...opts, correlationId, idempotencyKey });
   }
   if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("@/lib/bff/mutations");
+  const { mutations } = await import("./mocks/mutations");
   const res = await mutations.freezePool(poolId, reason);
   return {
     ok: true,
@@ -1014,7 +1014,7 @@ export async function unfreezePool(
     return runAction({ kind: "CapitalPool", id: poolId, action: "unfreeze_pool", memo: memo ?? freezeId }, { ...opts, correlationId, idempotencyKey });
   }
   if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("@/lib/bff/mutations");
+  const { mutations } = await import("./mocks/mutations");
   const res = await mutations.unfreezePool(poolId, freezeId, memo);
   return {
     ok: true,
@@ -1038,7 +1038,7 @@ export async function lockParams(
     return runAction({ kind: "Strategy", id: strategyId, action: lock ? "lock_params" : "unlock_params", memo }, { ...opts, correlationId, idempotencyKey });
   }
   if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("@/lib/bff/mutations");
+  const { mutations } = await import("./mocks/mutations");
   const res = await mutations.lockParams(strategyId, lock, memo);
   return {
     ok: true,
@@ -1062,7 +1062,7 @@ export async function rollback(
     return runAction({ kind, id, action: "rollback", memo }, { ...opts, correlationId, idempotencyKey });
   }
   if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("@/lib/bff/mutations");
+  const { mutations } = await import("./mocks/mutations");
   const res = await mutations.rollback(kind, id, memo);
   return {
     ok: true,
@@ -1086,7 +1086,7 @@ export async function pause(
     return runAction({ kind, id, action: "pause", memo }, { ...opts, correlationId, idempotencyKey });
   }
   if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("@/lib/bff/mutations");
+  const { mutations } = await import("./mocks/mutations");
   const res = await mutations.pause(kind, id, memo);
   return {
     ok: true,
@@ -1111,7 +1111,7 @@ export async function promoteCandidate(
     return runAction({ kind: "Evolution", id: programId, action: `promote_${target}`, memo: memo ?? candidateId }, { ...opts, correlationId, idempotencyKey });
   }
   if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("@/lib/bff/mutations");
+  const { mutations } = await import("./mocks/mutations");
   const res = await mutations.promoteCandidate(programId, candidateId, target, memo);
   return {
     ok: true,
@@ -1134,7 +1134,7 @@ export async function freezeGeneration(
     return runAction({ kind: "Evolution", id: programId, action: "freeze_generation", memo }, { ...opts, correlationId, idempotencyKey });
   }
   if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("@/lib/bff/mutations");
+  const { mutations } = await import("./mocks/mutations");
   const res = await mutations.freezeGeneration(programId, memo);
   return {
     ok: true,
@@ -1159,7 +1159,7 @@ export async function submitOverride(
     return runAction({ kind: "Rebalance", id: rebalanceId, action: "submit_override", memo: `${strategyId} Δ${delta}: ${reason}` }, { ...opts, correlationId, idempotencyKey });
   }
   if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("@/lib/bff/mutations");
+  const { mutations } = await import("./mocks/mutations");
   const res = await mutations.submitOverride(rebalanceId, strategyId, delta, reason);
   return {
     ok: true,
@@ -1183,7 +1183,7 @@ export async function advanceRebalanceStep(
     return { ...env, stepId: undefined, jobId: undefined };
   }
   if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("@/lib/bff/mutations");
+  const { mutations } = await import("./mocks/mutations");
   const res = await mutations.advanceRebalanceStep(rebalanceId, memo);
   return {
     ok: res.ok,
@@ -1210,7 +1210,7 @@ export async function rerunRebalanceStep(
     return { ...env, jobId: undefined };
   }
   if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("@/lib/bff/mutations");
+  const { mutations } = await import("./mocks/mutations");
   const res = await mutations.rerunRebalanceStep(rebalanceId, stepId);
   return {
     ok: res.ok,
@@ -1236,7 +1236,7 @@ export async function setAllocationLimit(
     return runAction({ kind: "CapitalPool", id: poolId, action: "set_limit", memo: `${scope}:${scopeRef} cap ${(cap * 100).toFixed(0)}%` }, { ...opts, correlationId, idempotencyKey });
   }
   if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("@/lib/bff/mutations");
+  const { mutations } = await import("./mocks/mutations");
   const res = await mutations.setAllocationLimit(poolId, scope as never, scopeRef, cap);
   return {
     ok: true,
@@ -1261,7 +1261,7 @@ export async function freezeMetric(
     return runAction({ kind: "Rebalance", id: rebalanceId, action: frozen ? "freeze_metric" : "unfreeze_metric", memo: memo ?? metric }, { ...opts, correlationId, idempotencyKey });
   }
   if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("@/lib/bff/mutations");
+  const { mutations } = await import("./mocks/mutations");
   const res = await mutations.freezeMetric(rebalanceId, metric, frozen, memo);
   return {
     ok: true,
@@ -1285,7 +1285,7 @@ export async function setIncidentStatus(
     return runAction({ kind: "Incident", id, action: status, memo }, { ...opts, correlationId, idempotencyKey });
   }
   if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("@/lib/bff/mutations");
+  const { mutations } = await import("./mocks/mutations");
   const res = await mutations.setIncidentStatus(id, status, memo);
   return {
     ok: true,
@@ -1308,7 +1308,7 @@ export async function appendIncidentMitigation(
     return runAction({ kind: "Incident", id: incidentId, action: "append_mitigation", memo: content }, { ...opts, correlationId, idempotencyKey });
   }
   if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("@/lib/bff/mutations");
+  const { mutations } = await import("./mocks/mutations");
   const res = await mutations.appendIncidentMitigation(incidentId, content);
   return {
     ok: true,
@@ -1331,7 +1331,7 @@ export async function appendPostmortem(
     return runAction({ kind: "Incident", id: incidentId, action: "append_postmortem", memo: note }, { ...opts, correlationId, idempotencyKey });
   }
   if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("@/lib/bff/mutations");
+  const { mutations } = await import("./mocks/mutations");
   const res = await mutations.appendPostmortem(incidentId, note);
   return {
     ok: true,
@@ -1356,7 +1356,7 @@ export async function createTrainingFeedback(
     return { ...env, feedbackId: env.auditEventId };
   }
   if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("@/lib/bff/mutations");
+  const { mutations } = await import("./mocks/mutations");
   const res = await mutations.createTrainingFeedback(incidentId, content, target);
   return {
     ok: true,
@@ -1381,7 +1381,7 @@ export async function createEvolutionConstraint(
     return { ...env, constraintId: env.auditEventId };
   }
   if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("@/lib/bff/mutations");
+  const { mutations } = await import("./mocks/mutations");
   const res = await mutations.createEvolutionConstraint(incidentId, content);
   return {
     ok: true,
@@ -1405,7 +1405,7 @@ export async function promoteLive(
     return runAction({ kind: "Strategy", id: strategyId, action: "promote_live", memo }, { ...opts, correlationId, idempotencyKey });
   }
   if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("@/lib/bff/mutations");
+  const { mutations } = await import("./mocks/mutations");
   const res = await mutations.promoteLive(strategyId, memo);
   return {
     ok: true,
@@ -1428,7 +1428,7 @@ export async function emergencyKill(
     return runAction({ kind: target.kind, id: target.id, action: "emergency_kill", memo }, { ...opts, correlationId, idempotencyKey });
   }
   if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("@/lib/bff/mutations");
+  const { mutations } = await import("./mocks/mutations");
   const res = await mutations.emergencyKill(target, memo);
   return {
     ok: true,
@@ -1451,7 +1451,7 @@ export async function rotateMcpSecret(
     return runAction({ kind: "McpSecret", id: secretId, action: "rotate_secret", memo }, { ...opts, correlationId, idempotencyKey });
   }
   if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("@/lib/bff/mutations");
+  const { mutations } = await import("./mocks/mutations");
   const res = await mutations.rotateMcpSecret(secretId, memo);
   return {
     ok: true,
@@ -1475,7 +1475,7 @@ export async function promoteStage(
     return runAction({ kind: "Deployment", id: deploymentId, action: "promote_stage", memo: memo ?? stageId }, { ...opts, correlationId, idempotencyKey });
   }
   if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("@/lib/bff/mutations");
+  const { mutations } = await import("./mocks/mutations");
   const res = await mutations.promoteStage(deploymentId, stageId, memo);
   return {
     ok: true,
@@ -1499,7 +1499,7 @@ export async function reduceAllocation(
     return runAction({ kind: "Deployment", id: deploymentId, action: "reduce_allocation", memo: memo ?? `→ ${newPct}%` }, { ...opts, correlationId, idempotencyKey });
   }
   if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("@/lib/bff/mutations");
+  const { mutations } = await import("./mocks/mutations");
   const res = await mutations.reduceAllocation(deploymentId, newPct, memo);
   return {
     ok: true,
@@ -1523,7 +1523,7 @@ export async function runParameterSweep(
     return { ...env, job: undefined };
   }
   if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("@/lib/bff/mutations");
+  const { mutations } = await import("./mocks/mutations");
   const res = await mutations.runParameterSweep(strategyId, sweepOpts);
   return {
     ok: true,
@@ -1549,7 +1549,7 @@ export async function runtimeAction(
     return { ...env, job: undefined };
   }
   if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("@/lib/bff/mutations");
+  const { mutations } = await import("./mocks/mutations");
   const res = await mutations.runtimeAction(runtimeId, action, memo);
   return {
     ok: true,
@@ -1575,7 +1575,7 @@ export async function rankingAction(
     return { ...env, job: undefined };
   }
   if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("@/lib/bff/mutations");
+  const { mutations } = await import("./mocks/mutations");
   const res = await mutations.rankingAction(scope, action, memo);
   return {
     ok: true,
@@ -1599,7 +1599,7 @@ export async function setActiveRankingFormula(
     return runAction({ kind: "RankingFormula", id: formulaId, action: "set_active", memo }, { ...opts, correlationId, idempotencyKey });
   }
   if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("@/lib/bff/mutations");
+  const { mutations } = await import("./mocks/mutations");
   const res = await mutations.setActiveRankingFormula(formulaId, memo);
   return {
     ok: true,
@@ -1623,7 +1623,7 @@ export async function scheduleDeployment(
     return runAction({ kind: "Deployment", id: deploymentId, action: "schedule", memo: memo ?? when }, { ...opts, correlationId, idempotencyKey });
   }
   if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("@/lib/bff/mutations");
+  const { mutations } = await import("./mocks/mutations");
   const res = await mutations.scheduleDeployment(deploymentId, when, memo);
   return {
     ok: true,
@@ -1648,7 +1648,7 @@ export async function personaOps(
     return { ...env, job: undefined };
   }
   if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("@/lib/bff/mutations");
+  const { mutations } = await import("./mocks/mutations");
   const res = await mutations.personaOps(personaId, op, memo);
   return {
     ok: true,
@@ -1672,7 +1672,7 @@ export async function publishRebalanceReport(
     return runAction({ kind: "Rebalance", id: rebalanceId, action: "publish_report", memo }, { ...opts, correlationId, idempotencyKey });
   }
   if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("@/lib/bff/mutations");
+  const { mutations } = await import("./mocks/mutations");
   const res = await mutations.publishRebalanceReport(rebalanceId, memo);
   return {
     ok: true,
@@ -1696,7 +1696,7 @@ export async function updatePermissionMatrix(
     return runAction({ kind: "PermissionMatrix", id: instance, action: "update_cells", memo: memo ?? `${updates.length} cell(s)` }, { ...opts, correlationId, idempotencyKey });
   }
   if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("@/lib/bff/mutations");
+  const { mutations } = await import("./mocks/mutations");
   const res = await mutations.updatePermissionMatrix(instance, updates, memo);
   return {
     ok: true,
@@ -1720,7 +1720,7 @@ export async function publishRoutePolicy(
     return runAction({ kind: "RoutePolicy", id: policyId, action: "submit_review", memo: memo ?? `${rules.length} rule(s)` }, { ...opts, correlationId, idempotencyKey });
   }
   if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("@/lib/bff/mutations");
+  const { mutations } = await import("./mocks/mutations");
   const res = await mutations.publishRoutePolicy(policyId, rules, memo);
   return {
     ok: true,
@@ -1743,7 +1743,7 @@ export async function updateConsultRules(
     return runAction({ kind: "ConsultRule", id: "consult-rules", action: "update_rules", memo: memo ?? `${rules.length} rule(s)` }, { ...opts, correlationId, idempotencyKey });
   }
   if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("@/lib/bff/mutations");
+  const { mutations } = await import("./mocks/mutations");
   const res = await mutations.updateConsultRules(rules, memo);
   return {
     ok: true,
@@ -1774,7 +1774,7 @@ export async function createApproval(
     return { ...env, approval: undefined };
   }
   if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("@/lib/bff/mutations");
+  const { mutations } = await import("./mocks/mutations");
   const res = await mutations.createApproval(input);
   return {
     ok: true,
@@ -1798,7 +1798,7 @@ export async function approve(
     return decideApproval(id, "approve", memo ?? "approved", { ...opts, correlationId, idempotencyKey }) as unknown as RunActionEnvelope;
   }
   if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("@/lib/bff/mutations");
+  const { mutations } = await import("./mocks/mutations");
   const res = await mutations.approve(id, memo);
   return {
     ok: true,
@@ -1821,7 +1821,7 @@ export async function reject(
     return decideApproval(id, "reject", memo ?? "rejected", { ...opts, correlationId, idempotencyKey }) as unknown as RunActionEnvelope;
   }
   if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("@/lib/bff/mutations");
+  const { mutations } = await import("./mocks/mutations");
   const res = await mutations.reject(id, memo);
   return {
     ok: true,
@@ -1850,7 +1850,7 @@ export async function batchDecideApproval(
     return { ok: true, results };
   }
   if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("@/lib/bff/mutations");
+  const { mutations } = await import("./mocks/mutations");
   const res = await mutations.batchDecideApproval(ids, decision, memo);
   return {
     ok: res.ok,
@@ -1873,7 +1873,7 @@ export async function tickApprovalSla(
     return { ok: true, escalated: [] };
   }
   if (isStrictLiveFallback()) return { ok: true, escalated: [] };
-  const { mutations } = await import("@/lib/bff/mutations");
+  const { mutations } = await import("./mocks/mutations");
   return mutations.tickApprovalSla(nowIso);
 }
 
@@ -1889,7 +1889,7 @@ export async function escalateAlertToIncident(
     return { ...env, incidentId: env.auditEventId };
   }
   if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("@/lib/bff/mutations");
+  const { mutations } = await import("./mocks/mutations");
   const res = await mutations.escalateAlertToIncident(alertId, memo);
   return {
     ok: true,
@@ -1914,7 +1914,7 @@ export async function createResearchTaskFromNote(
     return { ...env, job: undefined };
   }
   if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("@/lib/bff/mutations");
+  const { mutations } = await import("./mocks/mutations");
   const res = await mutations.createResearchTaskFromNote(noteId, memo);
   return {
     ok: true,

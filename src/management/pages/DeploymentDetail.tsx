@@ -7,10 +7,10 @@ import { Slider } from "@/components/ui/slider";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Rocket, Undo2, TrendingDown, CalendarClock } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { bff } from "@/lib/bff-v1";
-import { runActionSafe } from "@/lib/bff-v1";
+import { bffV1 } from "@/lib/bff-v1";
+import { bffV1, runActionSafe } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
-import type { ApprovalRequest, AuditEvent, Deployment, Runtime } from "@/lib/bff/types";
+import type { ApprovalRequest, AuditEvent, Deployment, Runtime } from "@/lib/bff-v1";
 import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
 import { StatCard } from "@/platform/components/StatCard";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
@@ -41,10 +41,10 @@ export const DeploymentDetail = () => {
 
   useEffect(() => {
     if (!id) return;
-    bff.deployments.get(id).then(setD);
-    bff.runtimes.list().then(setRuntimes);
-    bff.approvals.list().then(setApprovals);
-    bff.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action?.startsWith("deployment."))));
+    bffV1.deployments.get(id).then(setD);
+    bffV1.runtimes.list().then(setRuntimes);
+    bffV1.approvals.list().then(setApprovals);
+    bffV1.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action?.startsWith("deployment."))));
   }, [id]);
   if (!d) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
 
@@ -199,7 +199,7 @@ export const DeploymentDetail = () => {
               });
               if (!receipt.ok) return;
               setReduceOpen(false);
-              const fresh = await bff.deployments.get(d.id);
+              const fresh = await bffV1.deployments.get(d.id);
               if (fresh) setD(fresh);
             }}>{t("actions.confirm")}</Button>
           </DialogFooter>

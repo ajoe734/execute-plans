@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { safeDateTime } from "@/lib/utils";
-import { bff } from "@/lib/bff-v1";
-import type { PerformanceSeries } from "@/lib/bff/types";
+import { bffV1 } from "@/lib/bff-v1";
+import type { PerformanceSeries } from "@/lib/bff-v1";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
@@ -49,9 +49,9 @@ export const StrategyPerformanceTab = ({ strategyId }: { strategyId: string }) =
 
   useEffect(() => {
     Promise.all([
-      bff.performanceSeries.forStrategy(strategyId, "day"),
-      bff.performanceSeries.forStrategy(strategyId, "week"),
-      bff.performanceSeries.forStrategy(strategyId, "month"),
+      performanceSeries.forStrategy(strategyId, "day"),
+      performanceSeries.forStrategy(strategyId, "week"),
+      performanceSeries.forStrategy(strategyId, "month"),
     ]).then(([d, w, m]) => setSeries({ day: d, week: w, month: m }));
   }, [strategyId]);
 

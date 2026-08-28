@@ -13,7 +13,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { Plus, RefreshCw, Inbox } from "lucide-react";
 import { useT } from "@/platform/hooks";
 import { safeDateTime } from "@/lib/utils";
-import type { BaseObject } from "@/lib/bff/types";
+import type { BaseObject } from "@/lib/bff-v1";
 import { useLiveStatusSnapshot } from "@/lib/bff-v1/liveTransport";
 import { useLiveListV1, extractDegradation, isStrictLiveFallback, type ListEnvelope } from "@/lib/bff-v1";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -64,7 +64,7 @@ export function ObjectListPage<T extends BaseObject>({
     if (!shouldMergeOverlay || !createBehavior) {
       return loader();
     }
-    const { withOverlay } = await import("@/lib/bff/writeOverlay");
+    const { withOverlay } = await import("@/lib/bff-v1/writeOverlay");
     const items = await withOverlay<T>(createBehavior.entity, async () => (await loader()).items)();
     return {
       items,

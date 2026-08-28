@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Persona } from "@/lib/bff/types";
+import type { Persona } from "@/lib/bff-v1";
 import { isCompletePaperBundle, repairStepFor } from "./PersonaOnboarding";
 
 const persona = (overrides: Record<string, unknown> = {}) => ({

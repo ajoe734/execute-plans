@@ -1,4 +1,4 @@
-import type { Strategy } from "@/lib/bff/types";
+import type { Strategy } from "@/lib/bff-v1";
 
 export interface AlphaFactoryCard {
   id: string;

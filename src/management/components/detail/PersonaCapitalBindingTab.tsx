@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { bff } from "@/lib/bff-v1";
-import type { CapitalPool, Strategy } from "@/lib/bff/types";
+import { bffV1 } from "@/lib/bff-v1";
+import type { CapitalPool, Strategy } from "@/lib/bff-v1";
 import { DataTable } from "@/platform/components/DataTable";
 import { Button } from "@/components/ui/button";
 import { Section } from "@/management/pages/ObjectDetailLayout";
@@ -14,7 +14,7 @@ export const PersonaCapitalBindingTab = ({ personaId }: { personaId: string }) =
   const location = useLocation();
   const [rows, setRows] = useState<Array<CapitalPool & { boundStrategies: Strategy[] }>>([]);
   useEffect(() => {
-    Promise.all([bff.capitalPools.list(), bff.strategies.list()]).then(([pools, strs]) => {
+    Promise.all([bffV1.capitalPools.list(), bffV1.strategies.list()]).then(([pools, strs]) => {
       const filtered = pools
         .map((pool) => ({
           ...pool,

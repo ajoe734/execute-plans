@@ -2,7 +2,7 @@ import { ObjectListPage } from "./ObjectListPage";
 import { lists } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { Badge } from "@/components/ui/badge";
-import type { Tool, McpServer, Skill, Channel } from "@/lib/bff/types";
+import type { Tool, McpServer, Skill, Channel } from "@/lib/bff-v1";
 import { Inbox } from "lucide-react";
 
 const capabilityCreateDisabled = {

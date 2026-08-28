@@ -5,7 +5,7 @@
 // (`ListEnvelope<T>`) usage with cursor + estimatedTotal, use
 // `useLiveListV1` instead.
 import { useEffect, useState, useRef, useSyncExternalStore } from "react";
-import { realtime, type RealtimeStatus } from "@/lib/bff/realtime";
+import { realtime, type RealtimeStatus } from "./sse/bridge";
 import { liveStatus } from "./liveStatus";
 import { connectLiveSse } from "./sse/liveSse";
 

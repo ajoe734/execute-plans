@@ -5,10 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { bff } from "@/lib/bff-v1";
-import { runActionSafe } from "@/lib/bff-v1";
+import { bffV1 } from "@/lib/bff-v1";
+import { bffV1, runActionSafe } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
-import type { Alert, ApprovalRequest, AuditEvent, EvolutionProgram, ResearchExperiment } from "@/lib/bff/types";
+import type { Alert, ApprovalRequest, AuditEvent, EvolutionProgram, ResearchExperiment } from "@/lib/bff-v1";
 import { Pause, Play, GitBranch } from "lucide-react";
 import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
 import { StatCard } from "@/platform/components/StatCard";
@@ -51,11 +51,11 @@ export const EvolutionDetail = () => {
 
   useEffect(() => {
     if (!id) return;
-    bff.evolution.get(id).then(setE);
-    bff.research.list().then(setExperiments);
-    bff.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action?.startsWith("evolution."))));
-    bff.alerts.list().then((a) => setAlerts(a.filter((x) => x.relatedTarget === id || x.source?.includes("evolution"))));
-    bff.approvals.list().then((a) => setApprovals(a.filter((x) => x.subject?.includes(id ?? "") || x.kind?.includes("evolution"))));
+    bffV1.evolution.get(id).then(setE);
+    bffV1.research.list().then(setExperiments);
+    bffV1.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action?.startsWith("evolution."))));
+    bffV1.alerts.list().then((a) => setAlerts(a.filter((x) => x.relatedTarget === id || x.source?.includes("evolution"))));
+    bffV1.approvals.list().then((a) => setApprovals(a.filter((x) => x.subject?.includes(id ?? "") || x.kind?.includes("evolution"))));
   }, [id]);
 
   if (!e) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { bffFetch, detectBaseUrl } from "@/lib/bff-v1/client";
-import { clearAuthProvider, setAuthProvider } from "@/lib/bff-v1/headers";
+import { bffFetch, detectBaseUrl } from "../client";
+import { clearAuthProvider, setAuthProvider } from "../headers";
 import {
   getWorkshop,
   getWorkshopWithEtag,
@@ -19,7 +19,7 @@ import {
 import type { StrategyWorkshop } from "./types";
 import { materializeWorkshopCompleteness } from "@/agora/components/workshopCompletenessDisplay";
 
-vi.mock("@/lib/bff-v1/client", () => ({
+vi.mock("../client", () => ({
   bffFetch: vi.fn(),
   detectBaseUrl: vi.fn(() => ""),
 }));

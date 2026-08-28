@@ -1,4 +1,4 @@
-import type { Alert, Incident } from "@/lib/bff/types";
+import type { Alert, Incident } from "./dto";
 
 type UnknownRecord = Record<string, unknown>;
 

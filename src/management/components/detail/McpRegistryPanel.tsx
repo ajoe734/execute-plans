@@ -1,7 +1,7 @@
 // MCP server registry readback; env-grant writes stay disabled until command receipts exist.
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import type { McpServer } from "@/lib/bff/types";
+import type { McpServer } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { envBadge } from "@/management/pages/CapabilitiesLists";
 import { ShieldCheck } from "lucide-react";
