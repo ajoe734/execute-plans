@@ -135,6 +135,11 @@ export interface AssistantProviderUsageSummaryRow {
   lastError?: string | null;
   quota?: AssistantProviderUsage | Record<string, unknown> | null;
   observedUsage?: AssistantProviderUsageObserved | Record<string, unknown> | null;
+  providerAuth?: Record<string, unknown> | null;
+  liveSmoke?: Record<string, unknown> | null;
+  readiness?: Record<string, unknown> | null;
+  personaDependencies?: Record<string, unknown> | null;
+  reauth?: Record<string, unknown> | null;
   models?: AssistantProviderUsageSummaryModel[];
 }
 
@@ -574,6 +579,11 @@ function adaptProviderUsageSummaryRow(raw: unknown): AssistantProviderUsageSumma
     lastError: asString(r.lastError ?? r.last_error) ?? null,
     quota: adaptProviderUsage(r.quota),
     observedUsage: adaptProviderObservedUsage(r.observedUsage ?? r.observed_usage),
+    providerAuth: asRecord(r.providerAuth ?? r.provider_auth),
+    liveSmoke: asRecord(r.liveSmoke ?? r.live_smoke),
+    readiness: asRecord(r.readiness),
+    personaDependencies: asRecord(r.personaDependencies ?? r.persona_dependencies),
+    reauth: asRecord(r.reauth),
     models: asRecordArray(r.models)
       .map(adaptProviderUsageSummaryModel)
       .filter((item): item is AssistantProviderUsageSummaryModel => Boolean(item)),
