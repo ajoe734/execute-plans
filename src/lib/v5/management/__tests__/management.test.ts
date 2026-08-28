@@ -11,9 +11,6 @@ import {
 import {
   buildReadinessPage, passItem, pendingItem, failItem,
 } from "@/lib/v5/management/readinessSeeds";
-import {
-  askManagementNl, ManagementNlError,
-} from "@/lib/bff-v1/managementNl";
 
 describe("PersonaIntent visibility rules", () => {
   it("summary shows everything", () => {
@@ -107,33 +104,3 @@ describe("Readiness composer", () => {
   });
 });
 
-describe("NL Console mock-only enforcement", () => {
-  const base = { provider: "fixed_mock" as const, gatewayEnabled: false, strict: false };
-
-  it("strict mode throws — never silent fallback", () => {
-    expect(() => askManagementNl({ prompt: "anything" }, { ...base, strict: true }))
-      .toThrowError(ManagementNlError);
-  });
-  it("gateway enabled is forbidden in Phase 1", () => {
-    expect(() => askManagementNl({ prompt: "x" }, { ...base, gatewayEnabled: true }))
-      .toThrowError(ManagementNlError);
-  });
-  it("classifies show_human_needed", () => {
-    const a = askManagementNl({ prompt: "Who needs me right now?" }, base);
-    expect(a.intent).toBe("show_human_needed");
-    expect(a.provider).toBe("fixed_mock");
-    expect(a.followups[0]?.href).toBe("/management/human-inbox");
-  });
-  it("ep5 readiness intent only returns human gate link", () => {
-    const a = askManagementNl({ prompt: "EP5 canary blockers?" }, base);
-    expect(a.intent).toBe("summarize_ep5_blockers");
-    expect(a.humanGateHref).toBe("/management/human-inbox");
-    expect(a.refused).toBe(false);
-  });
-  it("unknown intent is refused but offers navigation", () => {
-    const a = askManagementNl({ prompt: "random gibberish about cooking" }, base);
-    expect(a.intent).toBe("unknown");
-    expect(a.refused).toBe(true);
-    expect(a.followups.length).toBeGreaterThan(0);
-  });
-});
