@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
-import { bff } from "@/lib/bff-v1";
-import { mutations } from "@/lib/bff/mutations";
+import { bff, writes } from "@/lib/bff-v1";
 import type { RebalanceOverride, Strategy } from "@/lib/bff/types";
 import { DataTable } from "@/platform/components/DataTable";
 import { StatusBadge } from "@/platform/components/StatusBadge";
@@ -34,7 +33,7 @@ export const OverrideManager = ({ rebalanceId, strategies }: { rebalanceId: stri
       reason: reason.trim(), state: "review",
       proposedBy: "ops", proposedAt: new Date().toISOString(),
     };
-    const receipt = await mutations.submitOverride(rebalanceId, stratId, parsed, reason.trim());
+    const receipt = await writes.submitOverride(rebalanceId, stratId, parsed, reason.trim());
     setRows((r) => [ov, ...r]);
     setReason("");
     toast.success(t("phase13.rebalance.override.queued"), {

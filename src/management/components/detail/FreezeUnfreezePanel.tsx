@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { safeDateTime } from "@/lib/utils";
-import { bff } from "@/lib/bff-v1";
-import { mutations } from "@/lib/bff/mutations";
+import { bff, writes } from "@/lib/bff-v1";
 import type { PoolFreeze } from "@/lib/bff/types";
 import { DataTable } from "@/platform/components/DataTable";
 import { Section } from "@/management/pages/ObjectDetailLayout";
@@ -69,7 +68,7 @@ export const FreezeUnfreezePanel = ({ poolId }: { poolId: string }) => {
         confirmToken="FREEZE"
         destructive
         onConfirm={async () => {
-          const receipt = await mutations.freezePool(poolId, reason);
+          const receipt = await writes.freezePool(poolId, reason);
           setRows((r) => [{ id: `pf_new_${Date.now().toString(36)}`, poolId, reason, frozenBy: "capital", frozenAt: new Date().toISOString(), active: true }, ...r]);
           setReason("");
           toast.success(t("phase13.capital.freeze.queued"), {
@@ -85,7 +84,7 @@ export const FreezeUnfreezePanel = ({ poolId }: { poolId: string }) => {
           description={t("detail.confirm.unfreezePool")}
           confirmToken="UNFREEZE"
           onConfirm={async (memo) => {
-            const receipt = await mutations.unfreezePool(poolId, unfreezeTarget.id, memo);
+            const receipt = await writes.unfreezePool(poolId, unfreezeTarget.id, memo);
             setRows((r) => r.map((x) => x.id === unfreezeTarget.id ? { ...x, active: false } : x));
             toast.success(t("phase13.capital.freeze.queued"), {
               description: commandReceiptDescription(receipt, { fallback: `CapitalPool ${poolId} · unfreeze_pool` }),

@@ -22,7 +22,18 @@ import { makeBffError, BffError } from "./errors";
 import { withLiveOrMock, isStrictLiveFallback } from "./liveTransport";
 import { liveWriteGated, sessionKindAllowsWrite } from "./writeGate";
 import { paths } from "./paths";
-import type { AuditEvent, LifecycleState } from "@/lib/bff/types";
+import type {
+  AuditEvent,
+  LifecycleState,
+  Incident,
+  AllocationLimit,
+  Job,
+  PermissionGrant,
+  RoutePolicyRule,
+  ConsultRule,
+  RiskLevel,
+  ApprovalRequest,
+} from "@/lib/bff/types";
 import type { ConfirmTokenRequest, ConfirmTokenResponse } from "@/lib/v3/highRiskActions";
 import { getHighRiskAction, buildConfirmPhrase } from "@/lib/v3/highRiskActions";
 
@@ -966,6 +977,956 @@ export async function decideEvolutionReview(
   );
 }
 
+// ---------- Domain Writes ----------
+
+export async function freezePool(
+  poolId: string,
+  reason: string,
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope> {
+  const correlationId = opts.correlationId ?? newCorrelationId();
+  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+  if (await liveWriteGated()) {
+    return runAction({ kind: "CapitalPool", id: poolId, action: "freeze_pool", memo: reason }, { ...opts, correlationId, idempotencyKey });
+  }
+  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
+  const { mutations } = await import("@/lib/bff/mutations");
+  const res = await mutations.freezePool(poolId, reason);
+  return {
+    ok: true,
+    data: { actionId: res.audit.id, status: "completed" },
+    auditEventId: res.audit.id,
+    correlationId,
+    idempotencyKey,
+    legacy: res,
+  };
+}
+
+export async function unfreezePool(
+  poolId: string,
+  freezeId: string,
+  memo?: string,
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope> {
+  const correlationId = opts.correlationId ?? newCorrelationId();
+  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+  if (await liveWriteGated()) {
+    return runAction({ kind: "CapitalPool", id: poolId, action: "unfreeze_pool", memo: memo ?? freezeId }, { ...opts, correlationId, idempotencyKey });
+  }
+  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
+  const { mutations } = await import("@/lib/bff/mutations");
+  const res = await mutations.unfreezePool(poolId, freezeId, memo);
+  return {
+    ok: true,
+    data: { actionId: res.audit.id, status: "completed" },
+    auditEventId: res.audit.id,
+    correlationId,
+    idempotencyKey,
+    legacy: res,
+  };
+}
+
+export async function lockParams(
+  strategyId: string,
+  lock: boolean,
+  memo?: string,
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope> {
+  const correlationId = opts.correlationId ?? newCorrelationId();
+  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+  if (await liveWriteGated()) {
+    return runAction({ kind: "Strategy", id: strategyId, action: lock ? "lock_params" : "unlock_params", memo }, { ...opts, correlationId, idempotencyKey });
+  }
+  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
+  const { mutations } = await import("@/lib/bff/mutations");
+  const res = await mutations.lockParams(strategyId, lock, memo);
+  return {
+    ok: true,
+    data: { actionId: res.audit.id, status: "completed" },
+    auditEventId: res.audit.id,
+    correlationId,
+    idempotencyKey,
+    legacy: res,
+  };
+}
+
+export async function rollback(
+  kind: string,
+  id: string,
+  memo?: string,
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope> {
+  const correlationId = opts.correlationId ?? newCorrelationId();
+  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+  if (await liveWriteGated()) {
+    return runAction({ kind, id, action: "rollback", memo }, { ...opts, correlationId, idempotencyKey });
+  }
+  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
+  const { mutations } = await import("@/lib/bff/mutations");
+  const res = await mutations.rollback(kind, id, memo);
+  return {
+    ok: true,
+    data: { actionId: res.audit.id, status: "completed" },
+    auditEventId: res.audit.id,
+    correlationId,
+    idempotencyKey,
+    legacy: res,
+  };
+}
+
+export async function pause(
+  kind: string,
+  id: string,
+  memo?: string,
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope> {
+  const correlationId = opts.correlationId ?? newCorrelationId();
+  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+  if (await liveWriteGated()) {
+    return runAction({ kind, id, action: "pause", memo }, { ...opts, correlationId, idempotencyKey });
+  }
+  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
+  const { mutations } = await import("@/lib/bff/mutations");
+  const res = await mutations.pause(kind, id, memo);
+  return {
+    ok: true,
+    data: { actionId: res.audit.id, status: "completed" },
+    auditEventId: res.audit.id,
+    correlationId,
+    idempotencyKey,
+    legacy: res,
+  };
+}
+
+export async function promoteCandidate(
+  programId: string,
+  candidateId: string,
+  target: "paper" | "live",
+  memo?: string,
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope> {
+  const correlationId = opts.correlationId ?? newCorrelationId();
+  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+  if (await liveWriteGated()) {
+    return runAction({ kind: "Evolution", id: programId, action: `promote_${target}`, memo: memo ?? candidateId }, { ...opts, correlationId, idempotencyKey });
+  }
+  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
+  const { mutations } = await import("@/lib/bff/mutations");
+  const res = await mutations.promoteCandidate(programId, candidateId, target, memo);
+  return {
+    ok: true,
+    data: { actionId: res.audit.id, status: "completed" },
+    auditEventId: res.audit.id,
+    correlationId,
+    idempotencyKey,
+    legacy: res,
+  };
+}
+
+export async function freezeGeneration(
+  programId: string,
+  memo?: string,
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope> {
+  const correlationId = opts.correlationId ?? newCorrelationId();
+  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+  if (await liveWriteGated()) {
+    return runAction({ kind: "Evolution", id: programId, action: "freeze_generation", memo }, { ...opts, correlationId, idempotencyKey });
+  }
+  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
+  const { mutations } = await import("@/lib/bff/mutations");
+  const res = await mutations.freezeGeneration(programId, memo);
+  return {
+    ok: true,
+    data: { actionId: res.audit.id, status: "completed" },
+    auditEventId: res.audit.id,
+    correlationId,
+    idempotencyKey,
+    legacy: res,
+  };
+}
+
+export async function submitOverride(
+  rebalanceId: string,
+  strategyId: string,
+  delta: number,
+  reason: string,
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope> {
+  const correlationId = opts.correlationId ?? newCorrelationId();
+  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+  if (await liveWriteGated()) {
+    return runAction({ kind: "Rebalance", id: rebalanceId, action: "submit_override", memo: `${strategyId} Δ${delta}: ${reason}` }, { ...opts, correlationId, idempotencyKey });
+  }
+  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
+  const { mutations } = await import("@/lib/bff/mutations");
+  const res = await mutations.submitOverride(rebalanceId, strategyId, delta, reason);
+  return {
+    ok: true,
+    data: { actionId: res.audit.id, status: "completed" },
+    auditEventId: res.audit.id,
+    correlationId,
+    idempotencyKey,
+    legacy: res,
+  };
+}
+
+export async function advanceRebalanceStep(
+  rebalanceId: string,
+  memo?: string,
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope & { stepId?: string; jobId?: string }> {
+  const correlationId = opts.correlationId ?? newCorrelationId();
+  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+  if (await liveWriteGated()) {
+    const env = await runAction({ kind: "Rebalance", id: rebalanceId, action: "advance_workflow_step", memo }, { ...opts, correlationId, idempotencyKey });
+    return { ...env, stepId: undefined, jobId: undefined };
+  }
+  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
+  const { mutations } = await import("@/lib/bff/mutations");
+  const res = await mutations.advanceRebalanceStep(rebalanceId, memo);
+  return {
+    ok: res.ok,
+    data: { actionId: res.audit.id, status: res.ok ? "completed" : "rejected" },
+    auditEventId: res.audit.id,
+    correlationId,
+    idempotencyKey,
+    message: res.message,
+    stepId: res.stepId,
+    jobId: res.jobId,
+    legacy: res,
+  };
+}
+
+export async function rerunRebalanceStep(
+  rebalanceId: string,
+  stepId: string,
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope & { jobId?: string }> {
+  const correlationId = opts.correlationId ?? newCorrelationId();
+  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+  if (await liveWriteGated()) {
+    const env = await runAction({ kind: "Rebalance", id: rebalanceId, action: "rerun_workflow_step", memo: stepId }, { ...opts, correlationId, idempotencyKey });
+    return { ...env, jobId: undefined };
+  }
+  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
+  const { mutations } = await import("@/lib/bff/mutations");
+  const res = await mutations.rerunRebalanceStep(rebalanceId, stepId);
+  return {
+    ok: res.ok,
+    data: { actionId: res.audit.id, status: res.ok ? "completed" : "rejected" },
+    auditEventId: res.audit.id,
+    correlationId,
+    idempotencyKey,
+    jobId: res.jobId,
+    legacy: res,
+  };
+}
+
+export async function setAllocationLimit(
+  poolId: string,
+  scope: AllocationLimit["scope"] | string,
+  scopeRef: string,
+  cap: number,
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope> {
+  const correlationId = opts.correlationId ?? newCorrelationId();
+  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+  if (await liveWriteGated()) {
+    return runAction({ kind: "CapitalPool", id: poolId, action: "set_limit", memo: `${scope}:${scopeRef} cap ${(cap * 100).toFixed(0)}%` }, { ...opts, correlationId, idempotencyKey });
+  }
+  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
+  const { mutations } = await import("@/lib/bff/mutations");
+  const res = await mutations.setAllocationLimit(poolId, scope as never, scopeRef, cap);
+  return {
+    ok: true,
+    data: { actionId: res.audit.id, status: "completed" },
+    auditEventId: res.audit.id,
+    correlationId,
+    idempotencyKey,
+    legacy: res,
+  };
+}
+
+export async function freezeMetric(
+  rebalanceId: string,
+  metric: string,
+  frozen: boolean,
+  memo?: string,
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope> {
+  const correlationId = opts.correlationId ?? newCorrelationId();
+  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+  if (await liveWriteGated()) {
+    return runAction({ kind: "Rebalance", id: rebalanceId, action: frozen ? "freeze_metric" : "unfreeze_metric", memo: memo ?? metric }, { ...opts, correlationId, idempotencyKey });
+  }
+  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
+  const { mutations } = await import("@/lib/bff/mutations");
+  const res = await mutations.freezeMetric(rebalanceId, metric, frozen, memo);
+  return {
+    ok: true,
+    data: { actionId: res.audit.id, status: "completed" },
+    auditEventId: res.audit.id,
+    correlationId,
+    idempotencyKey,
+    legacy: res,
+  };
+}
+
+export async function setIncidentStatus(
+  id: string,
+  status: Incident["status"],
+  memo?: string,
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope> {
+  const correlationId = opts.correlationId ?? newCorrelationId();
+  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+  if (await liveWriteGated()) {
+    return runAction({ kind: "Incident", id, action: status, memo }, { ...opts, correlationId, idempotencyKey });
+  }
+  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
+  const { mutations } = await import("@/lib/bff/mutations");
+  const res = await mutations.setIncidentStatus(id, status, memo);
+  return {
+    ok: true,
+    data: { actionId: res.audit.id, status: "completed" },
+    auditEventId: res.audit.id,
+    correlationId,
+    idempotencyKey,
+    legacy: res,
+  };
+}
+
+export async function appendIncidentMitigation(
+  incidentId: string,
+  content: string,
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope> {
+  const correlationId = opts.correlationId ?? newCorrelationId();
+  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+  if (await liveWriteGated()) {
+    return runAction({ kind: "Incident", id: incidentId, action: "append_mitigation", memo: content }, { ...opts, correlationId, idempotencyKey });
+  }
+  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
+  const { mutations } = await import("@/lib/bff/mutations");
+  const res = await mutations.appendIncidentMitigation(incidentId, content);
+  return {
+    ok: true,
+    data: { actionId: res.audit.id, status: "completed" },
+    auditEventId: res.audit.id,
+    correlationId,
+    idempotencyKey,
+    legacy: res,
+  };
+}
+
+export async function appendPostmortem(
+  incidentId: string,
+  note: string,
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope> {
+  const correlationId = opts.correlationId ?? newCorrelationId();
+  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+  if (await liveWriteGated()) {
+    return runAction({ kind: "Incident", id: incidentId, action: "append_postmortem", memo: note }, { ...opts, correlationId, idempotencyKey });
+  }
+  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
+  const { mutations } = await import("@/lib/bff/mutations");
+  const res = await mutations.appendPostmortem(incidentId, note);
+  return {
+    ok: true,
+    data: { actionId: res.audit.id, status: "completed" },
+    auditEventId: res.audit.id,
+    correlationId,
+    idempotencyKey,
+    legacy: res,
+  };
+}
+
+export async function createTrainingFeedback(
+  incidentId: string,
+  content: string,
+  target?: { kind: string; id: string },
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope & { feedbackId: string }> {
+  const correlationId = opts.correlationId ?? newCorrelationId();
+  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+  if (await liveWriteGated()) {
+    const env = await runAction({ kind: "Incident", id: incidentId, action: "create_training_feedback", memo: target ? `${target.kind}:${target.id}: ${content}` : content }, { ...opts, correlationId, idempotencyKey });
+    return { ...env, feedbackId: env.auditEventId };
+  }
+  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
+  const { mutations } = await import("@/lib/bff/mutations");
+  const res = await mutations.createTrainingFeedback(incidentId, content, target);
+  return {
+    ok: true,
+    data: { actionId: res.audit.id, status: "completed" },
+    auditEventId: res.audit.id,
+    correlationId,
+    idempotencyKey,
+    feedbackId: res.feedbackId,
+    legacy: res,
+  };
+}
+
+export async function createEvolutionConstraint(
+  incidentId: string,
+  content: string,
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope & { constraintId: string }> {
+  const correlationId = opts.correlationId ?? newCorrelationId();
+  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+  if (await liveWriteGated()) {
+    const env = await runAction({ kind: "Incident", id: incidentId, action: "create_evolution_constraint", memo: content }, { ...opts, correlationId, idempotencyKey });
+    return { ...env, constraintId: env.auditEventId };
+  }
+  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
+  const { mutations } = await import("@/lib/bff/mutations");
+  const res = await mutations.createEvolutionConstraint(incidentId, content);
+  return {
+    ok: true,
+    data: { actionId: res.audit.id, status: "completed" },
+    auditEventId: res.audit.id,
+    correlationId,
+    idempotencyKey,
+    constraintId: res.constraintId,
+    legacy: res,
+  };
+}
+
+export async function promoteLive(
+  strategyId: string,
+  memo?: string,
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope> {
+  const correlationId = opts.correlationId ?? newCorrelationId();
+  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+  if (await liveWriteGated()) {
+    return runAction({ kind: "Strategy", id: strategyId, action: "promote_live", memo }, { ...opts, correlationId, idempotencyKey });
+  }
+  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
+  const { mutations } = await import("@/lib/bff/mutations");
+  const res = await mutations.promoteLive(strategyId, memo);
+  return {
+    ok: true,
+    data: { actionId: res.audit.id, status: "completed" },
+    auditEventId: res.audit.id,
+    correlationId,
+    idempotencyKey,
+    legacy: res,
+  };
+}
+
+export async function emergencyKill(
+  target: { kind: string; id: string },
+  memo: string,
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope> {
+  const correlationId = opts.correlationId ?? newCorrelationId();
+  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+  if (await liveWriteGated()) {
+    return runAction({ kind: target.kind, id: target.id, action: "emergency_kill", memo }, { ...opts, correlationId, idempotencyKey });
+  }
+  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
+  const { mutations } = await import("@/lib/bff/mutations");
+  const res = await mutations.emergencyKill(target, memo);
+  return {
+    ok: true,
+    data: { actionId: res.audit.id, status: "completed" },
+    auditEventId: res.audit.id,
+    correlationId,
+    idempotencyKey,
+    legacy: res,
+  };
+}
+
+export async function rotateMcpSecret(
+  secretId: string,
+  memo?: string,
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope> {
+  const correlationId = opts.correlationId ?? newCorrelationId();
+  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+  if (await liveWriteGated()) {
+    return runAction({ kind: "McpSecret", id: secretId, action: "rotate_secret", memo }, { ...opts, correlationId, idempotencyKey });
+  }
+  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
+  const { mutations } = await import("@/lib/bff/mutations");
+  const res = await mutations.rotateMcpSecret(secretId, memo);
+  return {
+    ok: true,
+    data: { actionId: res.audit.id, status: "completed" },
+    auditEventId: res.audit.id,
+    correlationId,
+    idempotencyKey,
+    legacy: res,
+  };
+}
+
+export async function promoteStage(
+  deploymentId: string,
+  stageId: string,
+  memo?: string,
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope> {
+  const correlationId = opts.correlationId ?? newCorrelationId();
+  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+  if (await liveWriteGated()) {
+    return runAction({ kind: "Deployment", id: deploymentId, action: "promote_stage", memo: memo ?? stageId }, { ...opts, correlationId, idempotencyKey });
+  }
+  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
+  const { mutations } = await import("@/lib/bff/mutations");
+  const res = await mutations.promoteStage(deploymentId, stageId, memo);
+  return {
+    ok: true,
+    data: { actionId: res.audit.id, status: "completed" },
+    auditEventId: res.audit.id,
+    correlationId,
+    idempotencyKey,
+    legacy: res,
+  };
+}
+
+export async function reduceAllocation(
+  deploymentId: string,
+  newPct: number,
+  memo?: string,
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope> {
+  const correlationId = opts.correlationId ?? newCorrelationId();
+  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+  if (await liveWriteGated()) {
+    return runAction({ kind: "Deployment", id: deploymentId, action: "reduce_allocation", memo: memo ?? `→ ${newPct}%` }, { ...opts, correlationId, idempotencyKey });
+  }
+  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
+  const { mutations } = await import("@/lib/bff/mutations");
+  const res = await mutations.reduceAllocation(deploymentId, newPct, memo);
+  return {
+    ok: true,
+    data: { actionId: res.audit.id, status: "completed" },
+    auditEventId: res.audit.id,
+    correlationId,
+    idempotencyKey,
+    legacy: res,
+  };
+}
+
+export async function runParameterSweep(
+  strategyId: string,
+  sweepOpts: { params?: string[]; memo?: string } = {},
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope & { job?: Job }> {
+  const correlationId = opts.correlationId ?? newCorrelationId();
+  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+  if (await liveWriteGated()) {
+    const env = await runAction({ kind: "Strategy", id: strategyId, action: "run_sweep", memo: sweepOpts.memo ?? (sweepOpts.params?.join(",") ?? "all") }, { ...opts, correlationId, idempotencyKey });
+    return { ...env, job: undefined };
+  }
+  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
+  const { mutations } = await import("@/lib/bff/mutations");
+  const res = await mutations.runParameterSweep(strategyId, sweepOpts);
+  return {
+    ok: true,
+    data: { actionId: res.audit.id, status: "completed" },
+    auditEventId: res.audit.id,
+    correlationId,
+    idempotencyKey,
+    job: res.job,
+    legacy: res,
+  };
+}
+
+export async function runtimeAction(
+  runtimeId: string,
+  action: "restart" | "drain" | "move" | "scale" | "quarantine" | "inspect_logs",
+  memo?: string,
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope & { job?: Job }> {
+  const correlationId = opts.correlationId ?? newCorrelationId();
+  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+  if (await liveWriteGated()) {
+    const env = await runAction({ kind: "Runtime", id: runtimeId, action, memo }, { ...opts, correlationId, idempotencyKey });
+    return { ...env, job: undefined };
+  }
+  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
+  const { mutations } = await import("@/lib/bff/mutations");
+  const res = await mutations.runtimeAction(runtimeId, action, memo);
+  return {
+    ok: true,
+    data: { actionId: res.audit.id, status: "completed" },
+    auditEventId: res.audit.id,
+    correlationId,
+    idempotencyKey,
+    job: res.job,
+    legacy: res,
+  };
+}
+
+export async function rankingAction(
+  scope: "persona" | "strategy" | "alphaFamily" | "capitalPool" | "paper" | "live",
+  action: "recalculate" | "freeze" | "publish" | "override" | "compare",
+  memo?: string,
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope & { job?: Job }> {
+  const correlationId = opts.correlationId ?? newCorrelationId();
+  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+  if (await liveWriteGated()) {
+    const env = await runAction({ kind: "Ranking", id: `ranking:${scope}`, action, memo }, { ...opts, correlationId, idempotencyKey });
+    return { ...env, job: undefined };
+  }
+  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
+  const { mutations } = await import("@/lib/bff/mutations");
+  const res = await mutations.rankingAction(scope, action, memo);
+  return {
+    ok: true,
+    data: { actionId: res.audit.id, status: "completed" },
+    auditEventId: res.audit.id,
+    correlationId,
+    idempotencyKey,
+    job: res.job,
+    legacy: res,
+  };
+}
+
+export async function setActiveRankingFormula(
+  formulaId: string,
+  memo?: string,
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope> {
+  const correlationId = opts.correlationId ?? newCorrelationId();
+  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+  if (await liveWriteGated()) {
+    return runAction({ kind: "RankingFormula", id: formulaId, action: "set_active", memo }, { ...opts, correlationId, idempotencyKey });
+  }
+  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
+  const { mutations } = await import("@/lib/bff/mutations");
+  const res = await mutations.setActiveRankingFormula(formulaId, memo);
+  return {
+    ok: true,
+    data: { actionId: res.audit.id, status: "completed" },
+    auditEventId: res.audit.id,
+    correlationId,
+    idempotencyKey,
+    legacy: res,
+  };
+}
+
+export async function scheduleDeployment(
+  deploymentId: string,
+  when: string,
+  memo?: string,
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope> {
+  const correlationId = opts.correlationId ?? newCorrelationId();
+  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+  if (await liveWriteGated()) {
+    return runAction({ kind: "Deployment", id: deploymentId, action: "schedule", memo: memo ?? when }, { ...opts, correlationId, idempotencyKey });
+  }
+  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
+  const { mutations } = await import("@/lib/bff/mutations");
+  const res = await mutations.scheduleDeployment(deploymentId, when, memo);
+  return {
+    ok: true,
+    data: { actionId: res.audit.id, status: "completed" },
+    auditEventId: res.audit.id,
+    correlationId,
+    idempotencyKey,
+    legacy: res,
+  };
+}
+
+export async function personaOps(
+  personaId: string,
+  op: "test" | "run_eval" | "restrict_tools",
+  memo?: string,
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope & { job?: Job }> {
+  const correlationId = opts.correlationId ?? newCorrelationId();
+  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+  if (await liveWriteGated()) {
+    const env = await runAction({ kind: "Persona", id: personaId, action: op, memo }, { ...opts, correlationId, idempotencyKey });
+    return { ...env, job: undefined };
+  }
+  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
+  const { mutations } = await import("@/lib/bff/mutations");
+  const res = await mutations.personaOps(personaId, op, memo);
+  return {
+    ok: true,
+    data: { actionId: res.audit.id, status: "completed" },
+    auditEventId: res.audit.id,
+    correlationId,
+    idempotencyKey,
+    job: res.job,
+    legacy: res,
+  };
+}
+
+export async function publishRebalanceReport(
+  rebalanceId: string,
+  memo?: string,
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope> {
+  const correlationId = opts.correlationId ?? newCorrelationId();
+  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+  if (await liveWriteGated()) {
+    return runAction({ kind: "Rebalance", id: rebalanceId, action: "publish_report", memo }, { ...opts, correlationId, idempotencyKey });
+  }
+  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
+  const { mutations } = await import("@/lib/bff/mutations");
+  const res = await mutations.publishRebalanceReport(rebalanceId, memo);
+  return {
+    ok: true,
+    data: { actionId: res.audit.id, status: "completed" },
+    auditEventId: res.audit.id,
+    correlationId,
+    idempotencyKey,
+    legacy: res,
+  };
+}
+
+export async function updatePermissionMatrix(
+  instance: string,
+  updates: { rowId: string; colId: string; grant: PermissionGrant }[],
+  memo?: string,
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope> {
+  const correlationId = opts.correlationId ?? newCorrelationId();
+  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+  if (await liveWriteGated()) {
+    return runAction({ kind: "PermissionMatrix", id: instance, action: "update_cells", memo: memo ?? `${updates.length} cell(s)` }, { ...opts, correlationId, idempotencyKey });
+  }
+  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
+  const { mutations } = await import("@/lib/bff/mutations");
+  const res = await mutations.updatePermissionMatrix(instance, updates, memo);
+  return {
+    ok: true,
+    data: { actionId: res.audit.id, status: "completed" },
+    auditEventId: res.audit.id,
+    correlationId,
+    idempotencyKey,
+    legacy: res,
+  };
+}
+
+export async function publishRoutePolicy(
+  policyId: string,
+  rules: RoutePolicyRule[],
+  memo?: string,
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope> {
+  const correlationId = opts.correlationId ?? newCorrelationId();
+  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+  if (await liveWriteGated()) {
+    return runAction({ kind: "RoutePolicy", id: policyId, action: "submit_review", memo: memo ?? `${rules.length} rule(s)` }, { ...opts, correlationId, idempotencyKey });
+  }
+  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
+  const { mutations } = await import("@/lib/bff/mutations");
+  const res = await mutations.publishRoutePolicy(policyId, rules, memo);
+  return {
+    ok: true,
+    data: { actionId: res.audit.id, status: "completed" },
+    auditEventId: res.audit.id,
+    correlationId,
+    idempotencyKey,
+    legacy: res,
+  };
+}
+
+export async function updateConsultRules(
+  rules: ConsultRule[],
+  memo?: string,
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope> {
+  const correlationId = opts.correlationId ?? newCorrelationId();
+  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+  if (await liveWriteGated()) {
+    return runAction({ kind: "ConsultRule", id: "consult-rules", action: "update_rules", memo: memo ?? `${rules.length} rule(s)` }, { ...opts, correlationId, idempotencyKey });
+  }
+  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
+  const { mutations } = await import("@/lib/bff/mutations");
+  const res = await mutations.updateConsultRules(rules, memo);
+  return {
+    ok: true,
+    data: { actionId: res.audit.id, status: "completed" },
+    auditEventId: res.audit.id,
+    correlationId,
+    idempotencyKey,
+    legacy: res,
+  };
+}
+
+export async function createApproval(
+  input: {
+    kind: string;
+    subject: string;
+    rationale?: string;
+    diffSummary?: string;
+    riskLevel?: RiskLevel;
+    stages?: { name: string; slaHours: number; escalateTo?: string }[];
+    handoffId?: string;
+  },
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope & { approval?: ApprovalRequest }> {
+  const correlationId = opts.correlationId ?? newCorrelationId();
+  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+  if (await liveWriteGated()) {
+    const env = await runAction({ kind: "Approval", id: "new", action: "create", memo: input.subject }, { ...opts, correlationId, idempotencyKey });
+    return { ...env, approval: undefined };
+  }
+  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
+  const { mutations } = await import("@/lib/bff/mutations");
+  const res = await mutations.createApproval(input);
+  return {
+    ok: true,
+    data: { actionId: res.audit.id, status: "completed" },
+    auditEventId: res.audit.id,
+    correlationId,
+    idempotencyKey,
+    approval: res.approval,
+    legacy: res,
+  };
+}
+
+export async function approve(
+  id: string,
+  memo?: string,
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope> {
+  const correlationId = opts.correlationId ?? newCorrelationId();
+  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+  if (await liveWriteGated()) {
+    return decideApproval(id, "approve", memo ?? "approved", { ...opts, correlationId, idempotencyKey }) as unknown as RunActionEnvelope;
+  }
+  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
+  const { mutations } = await import("@/lib/bff/mutations");
+  const res = await mutations.approve(id, memo);
+  return {
+    ok: true,
+    data: { actionId: res.audit.id, status: "completed" },
+    auditEventId: res.audit.id,
+    correlationId,
+    idempotencyKey,
+    legacy: res,
+  };
+}
+
+export async function reject(
+  id: string,
+  memo?: string,
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope> {
+  const correlationId = opts.correlationId ?? newCorrelationId();
+  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+  if (await liveWriteGated()) {
+    return decideApproval(id, "reject", memo ?? "rejected", { ...opts, correlationId, idempotencyKey }) as unknown as RunActionEnvelope;
+  }
+  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
+  const { mutations } = await import("@/lib/bff/mutations");
+  const res = await mutations.reject(id, memo);
+  return {
+    ok: true,
+    data: { actionId: res.audit.id, status: "completed" },
+    auditEventId: res.audit.id,
+    correlationId,
+    idempotencyKey,
+    legacy: res,
+  };
+}
+
+export async function batchDecideApproval(
+  ids: string[],
+  decision: "approve" | "reject",
+  memo: string,
+  opts: RunActionOptions = {},
+): Promise<{ ok: boolean; results: RunActionEnvelope[] }> {
+  const correlationId = opts.correlationId ?? newCorrelationId();
+  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+  if (await liveWriteGated()) {
+    const results: RunActionEnvelope[] = [];
+    for (const id of ids) {
+      const res = await decideApproval(id, decision, memo, { ...opts, correlationId, idempotencyKey });
+      results.push(res as unknown as RunActionEnvelope);
+    }
+    return { ok: true, results };
+  }
+  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
+  const { mutations } = await import("@/lib/bff/mutations");
+  const res = await mutations.batchDecideApproval(ids, decision, memo);
+  return {
+    ok: res.ok,
+    results: res.results.map((r) => ({
+      ok: r.ok,
+      data: { actionId: r.audit.id, status: "completed" },
+      auditEventId: r.audit.id,
+      correlationId,
+      idempotencyKey,
+      legacy: r,
+    })),
+  };
+}
+
+export async function tickApprovalSla(
+  nowIso: string = new Date().toISOString(),
+  opts: RunActionOptions = {},
+): Promise<{ ok: true; escalated: AuditEvent[] }> {
+  if (await liveWriteGated()) {
+    return { ok: true, escalated: [] };
+  }
+  if (isStrictLiveFallback()) return { ok: true, escalated: [] };
+  const { mutations } = await import("@/lib/bff/mutations");
+  return mutations.tickApprovalSla(nowIso);
+}
+
+export async function escalateAlertToIncident(
+  alertId: string,
+  memo?: string,
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope & { incidentId?: string }> {
+  const correlationId = opts.correlationId ?? newCorrelationId();
+  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+  if (await liveWriteGated()) {
+    const env = await runAction({ kind: "Alert", id: alertId, action: "escalate_incident", memo }, { ...opts, correlationId, idempotencyKey });
+    return { ...env, incidentId: env.auditEventId };
+  }
+  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
+  const { mutations } = await import("@/lib/bff/mutations");
+  const res = await mutations.escalateAlertToIncident(alertId, memo);
+  return {
+    ok: true,
+    data: { actionId: res.audit.id, status: "completed" },
+    auditEventId: res.audit.id,
+    correlationId,
+    idempotencyKey,
+    incidentId: res.incidentId,
+    legacy: res,
+  };
+}
+
+export async function createResearchTaskFromNote(
+  noteId: string,
+  memo?: string,
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope & { job?: Job }> {
+  const correlationId = opts.correlationId ?? newCorrelationId();
+  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+  if (await liveWriteGated()) {
+    const env = await runAction({ kind: "Research", id: noteId, action: "convert_research_task", memo }, { ...opts, correlationId, idempotencyKey });
+    return { ...env, job: undefined };
+  }
+  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
+  const { mutations } = await import("@/lib/bff/mutations");
+  const res = await mutations.createResearchTaskFromNote(noteId, memo);
+  return {
+    ok: true,
+    data: { actionId: res.audit.id, status: "completed" },
+    auditEventId: res.audit.id,
+    correlationId,
+    idempotencyKey,
+    job: res.job,
+    legacy: res,
+  };
+}
+
 export const bffWrites = {
   runAction,
   tryRunAction,
@@ -978,19 +1939,47 @@ export const bffWrites = {
   decideIntervention,
   decideEvolutionReview,
   liveWriteGated,
+  freezePool,
+  unfreezePool,
+  lockParams,
+  rollback,
+  pause,
+  promoteCandidate,
+  freezeGeneration,
+  submitOverride,
+  advanceRebalanceStep,
+  rerunRebalanceStep,
+  setAllocationLimit,
+  freezeMetric,
+  setIncidentStatus,
+  appendIncidentMitigation,
+  appendPostmortem,
+  createTrainingFeedback,
+  createEvolutionConstraint,
+  promoteLive,
+  emergencyKill,
+  rotateMcpSecret,
+  promoteStage,
+  reduceAllocation,
+  runParameterSweep,
+  runtimeAction,
+  rankingAction,
+  setActiveRankingFormula,
+  scheduleDeployment,
+  personaOps,
+  publishRebalanceReport,
+  updatePermissionMatrix,
+  publishRoutePolicy,
+  updateConsultRules,
+  createApproval,
+  approve,
+  reject,
+  batchDecideApproval,
+  tickApprovalSla,
+  escalateAlertToIncident,
+  createResearchTaskFromNote,
 };
 
-export const writes = {
-  runAction,
-  tryRunAction,
-  requestConfirmToken,
-  readConfirmToken,
-  redeemConfirmToken,
-  deleteConfirmToken,
-  decideApproval,
-  acknowledgeAlert,
-  decideIntervention,
-  decideEvolutionReview,
-  liveWriteGated,
-};
+export const writes = bffWrites;
+
 
