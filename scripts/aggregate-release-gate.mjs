@@ -403,6 +403,16 @@ function requiredStepCheck(stepOutcomes, key, label, fallbackEvidence, owner) {
   };
 }
 
+function releaseOnlyStepCheck(stepOutcomes, key, label, fallbackEvidence, owner) {
+  if (isPullRequestContext()) {
+    return makeCheck(label, "skip", {
+      evidence: evidencePath(fallbackEvidence) || stepOutcomes.file,
+      note: "bound by the post-merge release transaction",
+    });
+  }
+  return requiredStepCheck(stepOutcomes, key, label, fallbackEvidence, owner);
+}
+
 function missingEvidenceStatus(stepStatus) {
   if (stepStatus === "fail") return "fail";
   if (stepStatus === "skip") return "skip";
@@ -491,12 +501,14 @@ function buildGate0(hosted) {
     ),
     makeCheck(
       "`pantheon` backend/BFF SHA is recorded.",
-      bffShaPresent ? "pass" : "missing",
+      isPullRequestContext() ? "skip" : bffShaPresent ? "pass" : "missing",
       {
-        owner: bffShaPresent ? "" : GATE_OWNERS[0],
+        owner: bffShaPresent || isPullRequestContext() ? "" : GATE_OWNERS[0],
         evidence: RUN_URL || ROOT,
         note: bffShaPresent
           ? "backend/BFF SHA env present"
+          : isPullRequestContext()
+            ? "bound by the post-merge release transaction"
           : "set PANTHEON_BFF_SHA or PANTHEON_BACKEND_SHA",
       },
     ),
@@ -559,7 +571,7 @@ function buildGate1(stepOutcomes) {
       ".lovable/audits/npm-ci.log",
       GATE_OWNERS[1],
     ),
-    requiredStepCheck(
+    releaseOnlyStepCheck(
       stepOutcomes,
       "release_identity",
       "Release identity was captured before validation.",
@@ -580,7 +592,7 @@ function buildGate1(stepOutcomes) {
       ".lovable/audits/npm-run-test.log",
       GATE_OWNERS[1],
     ),
-    requiredStepCheck(
+    releaseOnlyStepCheck(
       stepOutcomes,
       "deploy_controller",
       "`npm run test:deploy-release` passes (deployment controller regression).",
@@ -594,7 +606,7 @@ function buildGate1(stepOutcomes) {
       ".lovable/audits/npm-run-build.log",
       GATE_OWNERS[1],
     ),
-    requiredStepCheck(
+    releaseOnlyStepCheck(
       stepOutcomes,
       "candidate",
       "Immutable release candidate was prepared.",
@@ -629,7 +641,7 @@ function buildGate1(stepOutcomes) {
       ".lovable/audits/playwright-fixture-e2e.log",
       GATE_OWNERS[1],
     ),
-    requiredStepCheck(
+    releaseOnlyStepCheck(
       stepOutcomes,
       "release_identity_final",
       "BFF release identity was revalidated after validation.",
@@ -1828,13 +1840,15 @@ function buildGate7(previousGates) {
     ),
     makeCheck(
       "Backend SHA + frontend SHA + BFF URL recorded.",
-      shaRecorded ? "pass" : "missing",
+      shaRecorded ? "pass" : isPullRequestContext() ? "skip" : "missing",
       {
-        owner: shaRecorded ? "" : GATE_OWNERS[7],
+        owner: shaRecorded || isPullRequestContext() ? "" : GATE_OWNERS[7],
         evidence: RUN_URL || ROOT,
         note: shaRecorded
           ? "release identifiers present"
-          : "one or more release identifiers missing",
+          : isPullRequestContext()
+            ? "bound by the post-merge release transaction"
+            : "one or more release identifiers missing",
       },
     ),
   ];

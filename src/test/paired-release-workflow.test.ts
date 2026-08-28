@@ -29,7 +29,7 @@ const agoraProductJourneySpec = readFileSync(
 );
 
 describe("paired Pantheon release workflow", () => {
-  it("builds one authenticated three-profile set while normal gates consume read-only", () => {
+  it("keeps PR component previews separate from the three-profile release candidate", () => {
     expect(integrationWorkflow).toContain("Build read-only release profile");
     expect(integrationWorkflow).toContain(
       "Build bounded write-proof release profile",
@@ -49,8 +49,10 @@ describe("paired Pantheon release workflow", () => {
     );
     expect(integrationWorkflow).toContain("--output-dir .release-candidate");
     expect(integrationWorkflow).toContain("release-candidate.mjs verify-pair");
+    expect(integrationWorkflow).toContain('preview_root="dist"');
+    expect(integrationWorkflow).toContain('preview_root=".release-candidate/dist"');
     expect(integrationWorkflow).toContain(
-      "node scripts/serve-release-candidate.mjs .release-candidate/dist",
+      'if: github.event_name != \'pull_request\'',
     );
     expect(integrationWorkflow).toContain(
       "name: pantheon-fe-release-candidate-attempt-${{ github.run_attempt }}",
