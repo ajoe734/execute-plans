@@ -4,7 +4,14 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useLocation } from "react-router-dom";
-import type { ManagementNlContext } from "@/lib/v5/management/nl";
+
+export interface ManagementNlContext {
+  routePath: string;
+  pageLabel?: string;
+  selectedEntityKind?: "persona" | "strategy" | "capital_pool" | "deployment" | "anomaly" | "evidence";
+  selectedEntityId?: string;
+  visibleAnomalyIds?: string[];
+}
 
 type Listener = (v: Partial<ManagementNlContext>) => void;
 
