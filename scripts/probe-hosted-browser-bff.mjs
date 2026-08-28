@@ -72,7 +72,6 @@ export const HOSTED_UX_PROFILES = Object.freeze([
     height: 900,
     mobile: false,
   }),
-  Object.freeze({ id: "mobile-390", width: 390, height: 844, mobile: true }),
 ]);
 export const HOSTED_UX_PERFORMANCE_BUDGETS = Object.freeze({
   responseEndMs: 3_000,
@@ -371,7 +370,10 @@ export async function fetchPublicHealthWithRetry(
     }
     statuses.push(lastResult.status);
 
-    if (lastResult.ok || lastResult.status !== 502) {
+    if (
+      lastResult.ok ||
+      (lastResult.status !== 0 && lastResult.status !== 502)
+    ) {
       return {
         ...lastResult,
         attemptCount: attempt,
