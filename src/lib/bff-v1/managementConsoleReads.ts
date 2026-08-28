@@ -1,4 +1,8 @@
-import { withStrictLiveOrMock } from "@/lib/bff/liveRead";
+import {
+  withStrictLiveOrMock,
+  strictDataFrom,
+  strictNotFoundAsUndefined,
+} from "./liveTransport";
 import type {
   ConsultRule,
   MemoryUpdate,
@@ -17,6 +21,8 @@ import type {
 } from "./managementDataSources";
 import type { ManagementListMeta, ManagementSurfaceState } from "./dto";
 import { paths } from "./paths";
+import type { OodaLoopPacket, OodaPacketDetail, OodaPacketMeta } from "@/lib/ooda/packets";
+
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -654,4 +660,35 @@ export const managementConsoleReads = {
 
   knowledgeInbox: () =>
     readRecords(paths.knowledgeInbox(), "knowledge", adaptKnowledge),
+
+  oodaPacket: oodaPacketDetail,
+  oodaPackets: {
+    get: oodaPacketDetail,
+  },
 };
+
+function adaptOodaPacketDetail(body: unknown): OodaPacketDetail | undefined {
+  const envelope = asRecord(body);
+  const rawPacket = asRecord(strictDataFrom(body) ?? body);
+  const id = String(rawPacket.packet_id ?? rawPacket.id ?? "").trim();
+  if (!id) return undefined;
+  const packet = {
+    ...rawPacket,
+    packet_id: id,
+  } as OodaLoopPacket;
+  const meta = asRecord(envelope.meta) as OodaPacketMeta;
+  return {
+    packet,
+    meta: Object.keys(meta).length > 0 ? meta : undefined,
+  };
+}
+
+export function oodaPacketDetail(id: string): Promise<OodaPacketDetail | undefined> {
+  return withStrictLiveOrMock<OodaPacketDetail | undefined, unknown>(
+    { method: "GET", path: paths.oodaPacket(id) },
+    async () => undefined,
+    adaptOodaPacketDetail,
+    strictNotFoundAsUndefined,
+  );
+}
+

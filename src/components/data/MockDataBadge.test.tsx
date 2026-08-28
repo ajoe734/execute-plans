@@ -7,7 +7,7 @@ import {
 } from "@/components/data/MockDataBadge";
 import { getMockDataBadgeModel } from "@/components/data/mockDataBadgeModel";
 import { liveStatus } from "@/lib/bff-v1/liveStatus";
-import type { LiveStatusSnapshot } from "@/lib/bff/liveTransport";
+import type { LiveStatusSnapshot } from "@/lib/bff-v1/liveTransport";
 
 const liveSnapshot: LiveStatusSnapshot = {
   configuredMode: "hybrid",

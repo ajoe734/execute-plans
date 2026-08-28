@@ -1,6 +1,6 @@
 // Generic object list page generator for the Management Console
 // VI-1 — migrated to bffV1: loader returns ListEnvelope<T>; refresh via useLiveListV1.
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import type { ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
@@ -14,11 +14,10 @@ import { Plus, RefreshCw, Inbox } from "lucide-react";
 import { useT } from "@/platform/hooks";
 import { safeDateTime } from "@/lib/utils";
 import type { BaseObject } from "@/lib/bff/types";
-import { useLiveStatusSnapshot } from "@/lib/bff/liveTransport";
-import { useLiveListV1, extractDegradation, type ListEnvelope } from "@/lib/bff-v1";
+import { useLiveStatusSnapshot } from "@/lib/bff-v1/liveTransport";
+import { useLiveListV1, extractDegradation, isStrictLiveFallback, type ListEnvelope } from "@/lib/bff-v1";
 import { EmptyState } from "@/components/ui/empty-state";
 import type { CreateBehavior } from "@/lib/writeIntents/types";
-import { withOverlay } from "@/lib/bff/writeOverlay";
 import { EntityCreateDrawer } from "@/management/components/write/EntityCreateDrawer";
 import { PaperPersonaBundleIncompleteError } from "@/lib/bff-v1/personas";
 
@@ -60,12 +59,21 @@ export function ObjectListPage<T extends BaseObject>({
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const focusId = focusParam ? searchParams.get(focusParam)?.trim() ?? "" : "";
-  const shouldMergeOverlay = createBehavior?.kind === "drawer" && createBehavior.entity !== "persona";
-  const wrappedLoader: () => Promise<ListEnvelope<T>> = shouldMergeOverlay
-    ? (() => withOverlay<T>(createBehavior.entity, async () => (await loader()).items)().then((items) => ({
-        items, cursor: {}, pageSize: items.length, estimatedTotal: items.length, totalCountExact: true,
-      })))
-    : loader;
+  const shouldMergeOverlay = !isStrictLiveFallback() && createBehavior?.kind === "drawer" && createBehavior.entity !== "persona";
+  const wrappedLoader: () => Promise<ListEnvelope<T>> = useCallback(async () => {
+    if (!shouldMergeOverlay || !createBehavior) {
+      return loader();
+    }
+    const { withOverlay } = await import("@/lib/bff/writeOverlay");
+    const items = await withOverlay<T>(createBehavior.entity, async () => (await loader()).items)();
+    return {
+      items,
+      cursor: {},
+      pageSize: items.length,
+      estimatedTotal: items.length,
+      totalCountExact: true,
+    };
+  }, [loader, shouldMergeOverlay, createBehavior]);
   const { items: rows, pending, refresh, meta } = useLiveListV1<T>(wrappedLoader, liveKinds, { auto: false });
   const [drawerOpen, setDrawerOpen] = useState(false);
   const degradation = extractDegradation(meta);

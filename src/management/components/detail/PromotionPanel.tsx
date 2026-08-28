@@ -4,8 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { bff } from "@/lib/bff-v1";
-import { mutations } from "@/lib/bff/mutations";
+import { bff, writes } from "@/lib/bff-v1";
 import { commandReceiptDescription } from "@/lib/bff-v1/commandReceipt";
 import type { EvolutionCandidate, EvolutionProgram, EvolutionRun, PromotionRecord } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
@@ -47,7 +46,7 @@ export const PromotionPanel = ({ program }: { program: EvolutionProgram }) => {
 
   const onConfirm = async (memo: string) => {
     if (!confirm) return;
-    const receipt = await mutations.promoteCandidate(program.id, confirm.candidate.id, confirm.target, memo);
+    const receipt = await writes.promoteCandidate(program.id, confirm.candidate.id, confirm.target, memo);
     toast.success(t("phase13.evolution.promotion.queued"), {
       description: commandReceiptDescription(receipt, { fallback: `Evolution ${program.id} · promote ${confirm.candidate.id}` }),
     });

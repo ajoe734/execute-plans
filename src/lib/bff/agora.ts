@@ -1,7 +1,7 @@
 import * as seed from "@/mocks/seed";
 import type { DecisionJournalEntry, RiskLevel, Strategy } from "@/lib/bff/types";
 import { paths } from "@/lib/bff-v1/paths";
-import { strictItemsFrom, withStrictLiveOrMock } from "./liveRead";
+import { strictItemsFrom, withStrictLiveOrMock } from "@/lib/bff-v1/liveTransport";
 
 type UnknownRecord = Record<string, unknown>;
 

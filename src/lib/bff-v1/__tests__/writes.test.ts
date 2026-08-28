@@ -1,5 +1,6 @@
 import { afterEach, describe, it, expect, vi } from "vitest";
 import { liveWriteGated, runAction, sessionKindAllowsWrite, tryRunAction, requestConfirmToken } from "@/lib/bff-v1";
+import { writes } from "@/lib/bff-v1/writes";
 import { BffError } from "@/lib/bff-v1";
 import { liveStatus } from "@/lib/bff-v1/liveStatus";
 import { runActionSafe } from "@/lib/bff-v1/runActionSafe";
@@ -31,7 +32,7 @@ describe("VI-2 writes seam", () => {
     expect(env.ok).toBe(true);
     expect(env.data.status).toBe("completed");
     expect(env.data.actionId).toMatch(/^au_/);
-    expect(env.correlationId).toMatch(/^corr_/);
+    expect(env.correlationId).toMatch(/^(corr_|cid_)/);
     expect(env.idempotencyKey).toMatch(/^idk_/);
     expect(env.auditEventId).toBe(env.data.actionId);
   });
@@ -78,7 +79,7 @@ describe("VI-2 writes seam", () => {
     expect(env.ok).toBe(true);
     expect(env.data.confirmToken).toBeTruthy();
     expect(env.data.requiredPhrase).toBeTruthy();
-    expect(env.correlationId).toMatch(/^corr_/);
+    expect(env.correlationId).toMatch(/^(corr_|cid_)/);
   });
 
   it("requestConfirmToken throws BffError for unknown action", async () => {
@@ -421,4 +422,32 @@ describe("VI-2 strict-live write gate never fakes a completed receipt", () => {
       }),
     ).rejects.toMatchObject({ name: "BffError", code: "FEATURE_DISABLED" });
   });
+
+  it("decideApproval rejects in strict-live when writes are disabled", async () => {
+    process.env.VITE_BFF_FALLBACK = "strict";
+    liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
+
+    await expect(
+      writes.decideApproval("appr_001", "approve", "approved"),
+    ).rejects.toMatchObject({ name: "BffError", code: "FEATURE_DISABLED" });
+  });
+
+  it("acknowledgeAlert rejects in strict-live when writes are disabled", async () => {
+    process.env.VITE_BFF_FALLBACK = "strict";
+    liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
+
+    await expect(
+      writes.acknowledgeAlert("alt_001", "ack memo"),
+    ).rejects.toMatchObject({ name: "BffError", code: "FEATURE_DISABLED" });
+  });
+
+  it("decideIntervention rejects in strict-live when writes are disabled", async () => {
+    process.env.VITE_BFF_FALLBACK = "strict";
+    liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
+
+    await expect(
+      writes.decideIntervention("iv_001", "approve", "intervention memo"),
+    ).rejects.toMatchObject({ name: "BffError", code: "FEATURE_DISABLED" });
+  });
 });
+

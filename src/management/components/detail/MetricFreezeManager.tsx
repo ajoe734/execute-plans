@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { safeDateTime } from "@/lib/utils";
-import { bff } from "@/lib/bff-v1";
-import { mutations } from "@/lib/bff/mutations";
+import { bff, writes } from "@/lib/bff-v1";
 import type { MetricFreeze } from "@/lib/bff/types";
 import { DataTable } from "@/platform/components/DataTable";
 import { MetricFreezeBadge } from "./MetricFreezeBadge";
@@ -46,7 +45,7 @@ export const MetricFreezeManager = ({ rebalanceId }: { rebalanceId: string }) =>
           description={`Toggle freeze on ${pending.metric}. Frozen metrics will not update during the rebalance window.`}
           confirmToken={pending.frozen ? "UNFREEZE" : "FREEZE"}
           onConfirm={async (memo) => {
-            const r = await mutations.freezeMetric(rebalanceId, pending.metric, !pending.frozen, memo);
+            const r = await writes.freezeMetric(rebalanceId, pending.metric, !pending.frozen, memo);
             if (!r.ok) { toast.error(t("toast.illegalTransition")); return; }
             setRows((rs) => rs.map((x) => x.id === pending.id ? { ...x, frozen: !pending.frozen, frozenBy: "ops", frozenAt: new Date().toISOString() } : x));
             toast.success(t("toast.actionQueued"), {

@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { bff } from "@/lib/bff-v1";
-import { mutations } from "@/lib/bff/mutations";
+import { bff, writes } from "@/lib/bff-v1";
 import type { WorkflowStep } from "@/lib/bff/types";
 import { WorkflowStepper } from "./WorkflowStepper";
 import { Section } from "@/management/pages/ObjectDetailLayout";
@@ -37,7 +36,7 @@ export const RebalanceWorkflowTab = ({ rebalanceId }: { rebalanceId: string }) =
 
   const advance = async () => {
     setBusy(true);
-    const res = await mutations.advanceRebalanceStep(rebalanceId);
+    const res = await writes.advanceRebalanceStep(rebalanceId);
     setBusy(false);
     if (res.ok) {
       toast.success(t("phase21.rebalance.workflow.advanced"), {
@@ -55,7 +54,7 @@ export const RebalanceWorkflowTab = ({ rebalanceId }: { rebalanceId: string }) =
   const rerun = async () => {
     if (!cur) return;
     setBusy(true);
-    const res = await mutations.rerunRebalanceStep(rebalanceId, cur.id);
+    const res = await writes.rerunRebalanceStep(rebalanceId, cur.id);
     setBusy(false);
     if (res.ok) {
       toast.success(t("phase21.rebalance.workflow.rerun"), {

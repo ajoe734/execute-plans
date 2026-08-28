@@ -2,7 +2,7 @@ import { Ban, Database, ShieldAlert } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { cn } from "@/lib/utils";
-import { useLiveStatusSnapshot } from "@/lib/bff/liveTransport";
+import { useLiveStatusSnapshot } from "@/lib/bff-v1/liveTransport";
 import { getMockDataBadgeModel } from "@/components/data/mockDataBadgeModel";
 
 export function MockDataBadge({

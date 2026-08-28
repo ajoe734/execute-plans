@@ -8,8 +8,7 @@ import { useT } from "@/platform/hooks";
 import {
   MockDataEmptyState,
 } from "@/components/data/MockDataBadge";
-import { getMockDataBadgeModel } from "@/components/data/mockDataBadgeModel";
-import { useLiveStatusSnapshot } from "@/lib/bff/liveTransport";
+import { useLiveStatusSnapshot } from "@/lib/bff-v1/liveTransport";
 import { NonProductionActionButton } from "@/management/components/NonProductionActionButton";
 
 const fmtAge = (iso: string) => {

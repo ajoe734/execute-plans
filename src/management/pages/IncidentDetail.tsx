@@ -12,9 +12,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { RiskBadge } from "@/platform/components/RiskBadge";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
-import { bff } from "@/lib/bff-v1";
+import { bff, writes } from "@/lib/bff-v1";
 import { commandReceiptDescription } from "@/lib/bff-v1/commandReceipt";
-import { mutations } from "@/lib/bff/mutations";
 import type { Incident, Alert, Strategy, Runtime } from "@/lib/bff/types";
 import { useT } from "@/platform/hooks";
 import { usePermissions } from "@/lib/usePermissions";
@@ -118,14 +117,14 @@ export const IncidentDetail = () => {
   const requirePostmortem = isHighSev && postmortem.trim().length < 20;
 
   const close = async () => {
-    const receipt = await mutations.setIncidentStatus(incident.id, "resolved", postmortem);
+    const receipt = await writes.setIncidentStatus(incident.id, "resolved", postmortem);
     setIncident({ ...incident, status: "resolved", timeline: [...(incident.timeline ?? []), { ts: new Date().toISOString(), actor: perms.role, note: `Incident closed. Postmortem: ${postmortem.slice(0, 80)}…` }] });
     toast.success(t("incident.closed"), {
       description: commandReceiptDescription(receipt, { fallback: `Incident ${incident.id} · resolved` }),
     });
   };
   const advance = async (status: Incident["status"]) => {
-    const receipt = await mutations.setIncidentStatus(incident.id, status);
+    const receipt = await writes.setIncidentStatus(incident.id, status);
     setIncident({ ...incident, status, timeline: [...(incident.timeline ?? []), { ts: new Date().toISOString(), actor: perms.role, note: `Status → ${status}` }] });
     toast.success(t("toast.incidentAdvanced", { id: incident.id, status }), {
       description: commandReceiptDescription(receipt, { fallback: `Incident ${incident.id} · ${status}` }),
@@ -286,7 +285,7 @@ export const IncidentDetail = () => {
               <Textarea value={mitigation} onChange={(e) => setMitigation(e.target.value)} placeholder={t("incident.mitigation.placeholder")} rows={3} />
               <div>
                 <Button size="sm" disabled={mitigation.trim().length < 8} onClick={async () => {
-                  const receipt = await mutations.appendIncidentMitigation(incident.id, mitigation);
+                  const receipt = await writes.appendIncidentMitigation(incident.id, mitigation);
                   toast.success(t("incident.mitigation.logged"), {
                     description: commandReceiptDescription(receipt, { fallback: `Incident ${incident.id} · mitigation` }),
                   });
@@ -311,7 +310,7 @@ export const IncidentDetail = () => {
               )}
               <div>
                 <Button size="sm" disabled={postmortem.trim().length < 10} onClick={async () => {
-                  const receipt = await mutations.appendPostmortem(incident.id, postmortem);
+                  const receipt = await writes.appendPostmortem(incident.id, postmortem);
                   toast.success(t("incident.postmortem.appended"), {
                     description: commandReceiptDescription(receipt, { fallback: `Incident ${incident.id} · postmortem` }),
                   });
@@ -330,7 +329,7 @@ export const IncidentDetail = () => {
               </ul>
               <div>
                 <Button size="sm" variant="outline" disabled={postmortem.trim().length < 10} onClick={async () => {
-                  const res = await mutations.createTrainingFeedback(incident.id, postmortem, affectedStrategies[0] ? { kind: "Strategy", id: affectedStrategies[0].id } : undefined);
+                  const res = await writes.createTrainingFeedback(incident.id, postmortem, affectedStrategies[0] ? { kind: "Strategy", id: affectedStrategies[0].id } : undefined);
                   toast.success(t("incident.feedbackQueued"), {
                     description: commandReceiptDescription(res, {
                       fallback: `Incident ${incident.id} · training_feedback`,
@@ -353,7 +352,7 @@ export const IncidentDetail = () => {
               <Textarea value={constraint} onChange={(e) => setConstraint(e.target.value)} placeholder={t("incident.constraint.placeholder")} rows={3} />
               <div>
                 <Button size="sm" variant="outline" disabled={constraint.trim().length < 8} onClick={async () => {
-                  const res = await mutations.createEvolutionConstraint(incident.id, constraint);
+                  const res = await writes.createEvolutionConstraint(incident.id, constraint);
                   toast.success(t("incident.constraint.created"), {
                     description: commandReceiptDescription(res, {
                       fallback: `Incident ${incident.id} · evolution_constraint`,

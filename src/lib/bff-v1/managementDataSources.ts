@@ -1,8 +1,7 @@
 // Management Data Source Control Center BFF client (SD-SRCM-04).
 // Reads use strict-live BFF endpoints; writes require liveWriteGated() and forbid inline secrets.
 
-import { withStrictLiveOrMock } from "@/lib/bff/liveRead";
-import { withLiveOrMock, isStrictLiveFallback } from "./liveTransport";
+import { withStrictLiveOrMock, withLiveOrMock, isStrictLiveFallback } from "./liveTransport";
 import { liveWriteGated } from "./writeGate";
 import { paths } from "./paths";
 import { idempotencyKey as mintIdemKey } from "./headers";

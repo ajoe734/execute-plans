@@ -22,7 +22,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { managementClient } from "@/lib/bff/client";
+import { managementConsoleReads } from "@/lib/bff-v1/managementConsoleReads";
 import {
   collectOodaAuditRefs,
   deriveOodaStageRows,
@@ -132,7 +132,7 @@ export function OodaPacketDrawer({
     setLoading(true);
     setError(undefined);
     try {
-      const detail = await managementClient.oodaPackets.get(id);
+      const detail = await managementConsoleReads.oodaPacket(id);
       if (!detail) {
         setLoaded(undefined);
         setError("OODA packet unavailable");

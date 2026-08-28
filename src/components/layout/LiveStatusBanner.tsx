@@ -19,7 +19,7 @@
 import { AlertTriangle, Database, RefreshCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { liveStatus, connectLiveSse, BFF_API_VERSION } from "@/lib/bff-v1";
-import { useLiveStatusSnapshot, type LiveStatusSnapshot } from "@/lib/bff/liveTransport";
+import { useLiveStatusSnapshot, type LiveStatusSnapshot } from "@/lib/bff-v1/liveTransport";
 
 function VersionMismatchStrip({
   serverApiVersion,
