@@ -53,8 +53,8 @@ export const LoopTruthView: React.FC<LoopTruthViewProps> = ({
   const [search, setSearch] = useState<string>("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  const canonicalLoops = loops.filter((l) => (l.classification || "canonical") === "canonical");
-  const compositeLoops = loops.filter((l) => l.classification === "composite_overlay");
+  const canonicalLoops = loops.filter((loop) => loop.classification === "canonical");
+  const compositeLoops = loops.filter((loop) => loop.classification === "composite_overlay");
 
   const liveCount = canonicalLoops.filter(
     (l) => l.live_status.operator_truth.accepted_as_live,
@@ -69,16 +69,10 @@ export const LoopTruthView: React.FC<LoopTruthViewProps> = ({
       if (!matchName && !matchId) return false;
     }
     if (filter === "live") {
-      return (
-        (l.classification || "canonical") === "canonical" &&
-        l.live_status.operator_truth.accepted_as_live === true
-      );
+      return l.live_status.operator_truth.accepted_as_live === true;
     }
     if (filter === "degraded") {
-      return (
-        (l.classification || "canonical") === "canonical" &&
-        !l.live_status.operator_truth.accepted_as_live
-      );
+      return !l.live_status.operator_truth.accepted_as_live;
     }
     return true;
   });

@@ -4,6 +4,21 @@ import React from "react";
 import { LoopTruthView } from "./LoopTruthView";
 import type { LoopHealthEntryDTO } from "@/lib/bff-v1/loopTruthTypes";
 
+const canonicalLoopIds = [
+  "source_ingestion",
+  "strategy_distillation",
+  "alpha_replication",
+  "persona_teaching",
+  "agora_interaction_evidence",
+  "human_imitation_shadow_evaluation",
+  "consultation",
+  "promotion_deployment",
+  "capital_pool_execution",
+  "telemetry_reconciliation",
+  "evolution",
+  "bff_health_monitoring",
+] as const;
+
 const sampleLoops: LoopHealthEntryDTO[] = [
   {
     id: "source_ingestion",
@@ -213,11 +228,11 @@ describe("LoopTruthView Component", () => {
   });
 
   it("renders exactly 12 canonical rows separately from composite overlays", () => {
-    const twelveCanonical: LoopHealthEntryDTO[] = Array.from({ length: 12 }, (_, i) => ({
-      id: `canonical_loop_${i + 1}`,
-      loop_id: `canonical_loop_${i + 1}`,
+    const twelveCanonical: LoopHealthEntryDTO[] = canonicalLoopIds.map((loopId) => ({
+      id: loopId,
+      loop_id: loopId,
       classification: "canonical",
-      name: `Canonical Loop ${i + 1}`,
+      name: loopId.replaceAll("_", " "),
       read_model: "loop_health",
       runtime_maturity: {
         state: "unobserved",
@@ -246,9 +261,9 @@ describe("LoopTruthView Component", () => {
         },
       },
       evidence_packet: {
-        id: `loop-health-canonical_loop_${i + 1}`,
-        packet_id: `loop-health-canonical_loop_${i + 1}`,
-        loop_id: `canonical_loop_${i + 1}`,
+        id: `loop-health-${loopId}`,
+        packet_id: `loop-health-${loopId}`,
+        loop_id: loopId,
         source: "bff_local_registry",
         registry_ref: "docs/deployment/loop-catalog.registry.json",
         highest_truth_level: "registry_metadata",
@@ -270,10 +285,10 @@ describe("LoopTruthView Component", () => {
     }));
 
     const oneComposite: LoopHealthEntryDTO = {
-      id: "composite_overlay_1",
-      loop_id: "composite_overlay_1",
+      id: "per_persona_ooda",
+      loop_id: "per_persona_ooda",
       classification: "composite_overlay",
-      name: "Composite Overlay 1",
+      name: "Per-persona OODA",
       read_model: "loop_health",
       runtime_maturity: {
         state: "unobserved",
@@ -302,9 +317,9 @@ describe("LoopTruthView Component", () => {
         },
       },
       evidence_packet: {
-        id: "loop-health-composite_overlay_1",
-        packet_id: "loop-health-composite_overlay_1",
-        loop_id: "composite_overlay_1",
+        id: "loop-health-per_persona_ooda",
+        packet_id: "loop-health-per_persona_ooda",
+        loop_id: "per_persona_ooda",
         source: "bff_local_registry",
         registry_ref: "docs/deployment/loop-catalog.registry.json",
         highest_truth_level: "registry_metadata",
@@ -336,8 +351,10 @@ describe("LoopTruthView Component", () => {
     expect(screen.getByText((content, element) => element?.tagName.toLowerCase() === 'button' && element?.textContent?.includes('Live Proven') === true)).toHaveTextContent("Live Proven (0)");
     expect(screen.getByText((content, element) => element?.tagName.toLowerCase() === 'button' && element?.textContent?.includes('Non-Live') === true)).toHaveTextContent("Non-Live / Degraded (12)");
 
-    expect(screen.getByText("Canonical Loop 1")).toBeInTheDocument();
-    expect(screen.getByText("Canonical Loop 12")).toBeInTheDocument();
-    expect(screen.queryByText("Composite Overlay 1")).not.toBeInTheDocument();
+    for (const loopId of canonicalLoopIds) {
+      expect(screen.getByText(loopId, { selector: "code" })).toBeInTheDocument();
+    }
+    expect(screen.queryByText("per_persona_ooda", { selector: "code" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Per-persona OODA")).not.toBeInTheDocument();
   });
 });
