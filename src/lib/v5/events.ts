@@ -1,7 +1,7 @@
-// Q15 + Q19 — v5 typed event envelope. Transport reuses src/lib/bff/realtime.ts.
+// Q15 + Q19 — v5 typed event envelope. Pure DTO only; ACG-03-014 moved the
+// transport (emit/subscribe) side effect to src/lib/bff-v1/v5.ts, the live
+// V5 API owner. This module must not import bff/bff-v1 runtime code.
 // NOT the final backend SSE schema (D26 may revise).
-
-import { realtime } from "@/lib/bff/realtime";
 
 export const V5_EVENT_SCHEMA_VERSION = 1 as const;
 
@@ -26,13 +26,15 @@ export const V5_EVENT_TOPIC = "v5";
 
 let seq = 0;
 
-export function emitV5Event<P>(args: {
+/** Pure envelope builder — no transport side effect. Emission is owned by
+ *  src/lib/bff-v1/v5.ts (ACG-03-015), the live V5 API owner. */
+export function makeV5Event<P>(args: {
   channel: V5EventChannel;
   type: string;
   payload: P;
   correlationId?: string;
 }): V5EventEnvelope<P> {
-  const env: V5EventEnvelope<P> = {
+  return {
     id: `v5_${Date.now().toString(36)}_${(++seq).toString(36)}`,
     schemaVersion: V5_EVENT_SCHEMA_VERSION,
     channel: args.channel,
@@ -41,12 +43,4 @@ export function emitV5Event<P>(args: {
     correlationId: args.correlationId,
     payload: args.payload,
   };
-  realtime.emit(V5_EVENT_TOPIC, env);
-  // Q22 — also emit legacy data refresh for useLiveList listeners.
-  realtime.emit("data", { kind: "v5", channel: args.channel, type: args.type });
-  return env;
-}
-
-export function onV5Event(handler: (env: V5EventEnvelope) => void): () => void {
-  return realtime.on(V5_EVENT_TOPIC, (p) => handler(p as V5EventEnvelope));
 }
