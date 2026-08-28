@@ -5,9 +5,9 @@ import { buildHeaders, isMutation, BFF_API_VERSION } from "./headers";
 import { BffError, makeBffError, normalizeBffErrorEnvelope } from "./errors";
 import { bootstrapMockAdapters } from "./mocks/adapters";
 import { resolveMock } from "./mocks/registry";
-import { liveStatus } from "./liveStatus";
+import { liveStatus, type BffMode } from "./liveStatus";
 
-export type BffMode = "mock" | "live";
+export type { BffMode };
 
 function readEnv(): Record<string, string | undefined> {
   const viteEnv = ((import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {});

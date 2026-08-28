@@ -12,7 +12,7 @@
 
 import { useSyncExternalStore } from "react";
 
-import type { BffMode } from "./client";
+export type BffMode = "mock" | "live";
 
 export interface LiveStatus {
   mode: BffMode;
