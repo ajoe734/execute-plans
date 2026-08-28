@@ -1238,10 +1238,11 @@ describe("StrategyWorkshopPage", () => {
     );
     expect(workshopsModule.listWorkshopCards.mock.calls.length).toBeGreaterThanOrEqual(1);
     expect(workshopsModule.listWorkshopEvents.mock.calls.length).toBeGreaterThanOrEqual(1);
-    // The message and its reconstruction already reached durable readback
-    // before the daily-interaction submission failed; the earned receipt and
-    // reconstruction id stay visible instead of collapsing to a bare failure.
-    expect(screen.getByTestId("message-receipt-state")).toHaveAttribute("data-message-receipt", "degraded");
+    // The Workshop message and its reconstruction already reached durable readback
+    // before the daily-interaction submission failed; the message receipt remains
+    // truthfully "succeeded" while the separate Persona receipt records the failure.
+    expect(screen.getByTestId("message-receipt-state")).toHaveAttribute("data-message-receipt", "succeeded");
+    expect(screen.getByTestId("persona-receipt-state")).toHaveAttribute("data-persona-receipt", "failed");
     expect(screen.getByTestId("workshop-reconstruction-state")).toHaveAttribute("data-reconstruction-state", "completed");
     expect(screen.getByTestId("servant-composer-input")).toHaveValue("Place this trade directly");
   });
@@ -1536,5 +1537,62 @@ describe("StrategyWorkshopPage", () => {
     expect(header).toBeDefined();
     const contextBar = screen.getByTestId("context-bar");
     expect(contextBar.textContent).toContain("Focused object: workshop:ws-no-subject");
+  });
+
+  it("performs exactly one canonical Workshop projection GET on session load", async () => {
+    vi.mocked(workshopsModule.getWorkshop).mockResolvedValue(MOCK_WORKSHOP);
+    vi.mocked(workshopsModule.getWorkshopCompleteness).mockResolvedValue(null);
+    vi.mocked(workshopsModule.getWorkshopReadiness).mockResolvedValue(null);
+    vi.mocked(workshopsModule.listWorkshopCards).mockResolvedValue([]);
+    vi.mocked(workshopsModule.listWorkshopEvents).mockResolvedValue({ items: [] });
+
+    render(<StrategyWorkshopPage workshopId="ws-abc" />);
+
+    await screen.findByTestId("strategy-workshop-page-session");
+    expect(workshopsModule.getWorkshop).toHaveBeenCalledTimes(1);
+    expect(workshopsModule.getWorkshop).toHaveBeenCalledWith("ws-abc");
+  });
+
+  it("does not reconnect SSE stream on every event", async () => {
+    let handleEvent: ((event: WorkshopStreamEvent) => void) | undefined;
+    const teardown = vi.fn();
+    vi.mocked(workshopsModule.openWorkshopStream).mockImplementation((_id, onEvent) => {
+      handleEvent = onEvent;
+      return teardown;
+    });
+    vi.mocked(workshopsModule.getWorkshop).mockResolvedValue(MOCK_WORKSHOP);
+    vi.mocked(workshopsModule.getWorkshopCompleteness).mockResolvedValue(null);
+    vi.mocked(workshopsModule.getWorkshopReadiness).mockResolvedValue(null);
+    vi.mocked(workshopsModule.listWorkshopCards).mockResolvedValue([]);
+    vi.mocked(workshopsModule.listWorkshopEvents).mockResolvedValue({ items: [] });
+
+    render(<StrategyWorkshopPage workshopId="ws-abc" />);
+
+    await waitFor(() => expect(handleEvent).toBeDefined());
+    expect(workshopsModule.openWorkshopStream).toHaveBeenCalledTimes(1);
+
+    // Simulate multiple incoming stream events
+    act(() => {
+      handleEvent?.({
+        event_id: "evt-stream-1",
+        workshop_id: "ws-abc",
+        event_type: "workshop.event",
+        payload: {},
+        occurred_at: "2026-08-28T00:00:01Z",
+      });
+    });
+    act(() => {
+      handleEvent?.({
+        event_id: "evt-stream-2",
+        workshop_id: "ws-abc",
+        event_type: "workshop.event",
+        payload: {},
+        occurred_at: "2026-08-28T00:00:02Z",
+      });
+    });
+
+    // openWorkshopStream should still only have been called once and not torn down
+    expect(workshopsModule.openWorkshopStream).toHaveBeenCalledTimes(1);
+    expect(teardown).not.toHaveBeenCalled();
   });
 });
