@@ -1,0 +1,77 @@
+{
+  "schema_version": "pantheon.frontend-loop-truth-evidence.v1",
+  "task_id": "ACG-FE-LOOP-TRUTH-20260828",
+  "owner": "Codex",
+  "reviewer": "Antigravity",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "status": "implementation-ready-for-review",
+  "scope": {
+    "canonical_owner": "Pantheon GET /bff/v5/loop-health response contract",
+    "frontend_surfaces": [
+      "src/lib/bff-v1/loopTruthTypes.ts",
+      "src/components/management/LoopTruthView.tsx",
+      "src/components/management/LoopTruthView.test.tsx",
+      "src/management/pages/v5/V5Pages.tsx (inspected; no source change required)"
+    ],
+    "not_changed": [
+      "Pantheon backend loop-health projection",
+      "loop catalog membership",
+      "runtime controller evidence admission",
+      "deployment or real-write policy"
+    ]
+  },
+  "contract_alignment": {
+    "runtime_maturity": "UI reads runtime_maturity.state and does not retain catalog current_maturity or target_maturity fields.",
+    "operator_truth": "Live and degraded counts, filters, badges, and degraded reason use live_status.operator_truth.",
+    "truth_sources": "Expanded provenance uses evidence_packet.truth_sources.",
+    "canonical_rows": "Only strict classification=canonical rows are rendered or counted; the test binds all twelve stable backend loop IDs and explicitly excludes per_persona_ooda."
+  },
+  "removed_expectations": [
+    "LoopInventoryEntryDTO.maturity",
+    "LoopInventoryEntryDTO.current_maturity",
+    "LoopInventoryEntryDTO.target_maturity",
+    "LoopHealthEntryDTO.operator_truth_source",
+    "LoopHealthEntryDTO.truth_sources",
+    "LoopHealthEntryDTO.highest_present_truth_source"
+  ],
+  "validation": {
+    "focused_component": {
+      "command": "npx vitest run src/components/management/LoopTruthView.test.tsx --maxWorkers=2",
+      "result": "passed: 1 file, 4 tests",
+      "coverage": "nested accepted truth, explicit degraded truth, runtime maturity, nested provenance, all 12 stable canonical loop IDs, and per_persona_ooda exclusion"
+    },
+    "bff_v5_regression_suite": {
+      "command": "npx vitest run src/management/pages/v5/ src/lib/bff-v1/ --maxWorkers=2",
+      "result": "passed: 42 files, 423 tests"
+    },
+    "typecheck": {
+      "commands": [
+        "npx tsc -p tsconfig.json --noEmit",
+        "npm run typecheck"
+      ],
+      "result": "passed: application and Agora TypeScript projects"
+    },
+    "focused_lint": {
+      "command": "npx eslint src/lib/bff-v1/loopTruthTypes.ts src/components/management/LoopTruthView.tsx src/components/management/LoopTruthView.test.tsx src/management/pages/v5/V5Pages.tsx",
+      "result": "passed with 0 errors; 2 pre-existing react-refresh warnings on exported badge maps"
+    },
+    "strict_live_build": {
+      "command": "VITE_GCP_IDENTITY_API_KEY=<syntactically-valid non-deployed placeholder> VITE_GCP_IDENTITY_PROJECT_ID=pantheon-test VITE_GCP_IDENTITY_AUTH_DOMAIN=pantheon-test.firebaseapp.com VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build",
+      "result": "passed"
+    },
+    "known_external_gate_drift": {
+      "command": "PANTHEON_CONTRACT_ROOT=/home/lupin/pantheon-ci-deploy/coordination-root npm run test:contract",
+      "result": "not attributable to this task: gate expected backend handoff 6ad99d2e5abe4f31c9f48892ae7f44bf3bbab980 while canonical root reports 9e909de182f9f2379d23e8e6b81eefec29ffbce7",
+      "baseline_proof": "git diff --quiet origin/dev -- scripts/contract-drift-check.mjs docs/contracts/agora src/lib/bff-v1/agora passed; this task changes none of the Agora drift surfaces"
+    },
+    "diff_check": {
+      "command": "git diff --check",
+      "result": "passed"
+    }
+  },
+  "delivery": {
+    "branch": "task/ACG-FE-LOOP-TRUTH-20260828",
+    "review_binding": "The canonical review handoff binds this manifest to the exact pushed head."
+  }
+}
