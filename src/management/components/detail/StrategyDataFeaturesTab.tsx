@@ -7,7 +7,7 @@ import { useT } from "@/platform/hooks";
 export const StrategyDataFeaturesTab = ({ strategyId }: { strategyId: string }) => {
   const t = useT();
   const [rows, setRows] = useState<FeatureSet[]>([]);
-  useEffect(() => { featureSets.forStrategy(strategyId).then(setRows); }, [strategyId]);
+  useEffect(() => { bffV1.featureSets.forStrategy(strategyId).then(setRows); }, [strategyId]);
   return (
     <DataTable
       rows={rows}

@@ -49,9 +49,9 @@ export const StrategyPerformanceTab = ({ strategyId }: { strategyId: string }) =
 
   useEffect(() => {
     Promise.all([
-      performanceSeries.forStrategy(strategyId, "day"),
-      performanceSeries.forStrategy(strategyId, "week"),
-      performanceSeries.forStrategy(strategyId, "month"),
+      bffV1.performanceSeries.forStrategy(strategyId, "day"),
+      bffV1.performanceSeries.forStrategy(strategyId, "week"),
+      bffV1.performanceSeries.forStrategy(strategyId, "month"),
     ]).then(([d, w, m]) => setSeries({ day: d, week: w, month: m }));
   }, [strategyId]);
 
