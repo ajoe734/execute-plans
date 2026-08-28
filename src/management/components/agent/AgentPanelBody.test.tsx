@@ -2,7 +2,7 @@ import { render, screen, fireEvent, waitFor, within } from "@testing-library/rea
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import { AgentPanelBody } from "./AgentPanelBody";
-import { bffWrites } from "@/lib/bff/runAction";
+import { bffWrites } from "@/lib/bff-v1/writes";
 
 vi.mock("@/lib/bff-v1/managementAi", async () => {
   const actual = await vi.importActual<typeof import("@/lib/bff-v1/managementAi")>("@/lib/bff-v1/managementAi");

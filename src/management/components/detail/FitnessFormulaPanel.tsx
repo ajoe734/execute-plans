@@ -8,8 +8,7 @@ import { useT } from "@/platform/hooks";
 import {
   MockDataEmptyState,
 } from "@/components/data/MockDataBadge";
-import { getMockDataBadgeModel } from "@/components/data/mockDataBadgeModel";
-import { useLiveStatusSnapshot } from "@/lib/bff/liveTransport";
+import { useLiveStatusSnapshot } from "@/lib/bff-v1/liveTransport";
 
 export const FitnessFormulaPanel = ({ mode = "all" }: { mode?: "all" | "fitness" | "mutation" }) => {
   const t = useT();

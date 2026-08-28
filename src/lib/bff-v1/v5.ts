@@ -15,7 +15,7 @@ import { bffFetch } from "./client";
 import { paths } from "./paths";
 import { idempotencyKey as mintIdempotencyKey } from "./headers";
 import { mgmt } from "./management";
-import { strictDataFrom, strictItemsFrom, strictNotFoundAsUndefined, withStrictLiveOrMock } from "@/lib/bff/liveRead";
+import { strictDataFrom, strictItemsFrom, strictNotFoundAsUndefined, withStrictLiveOrMock } from "./liveTransport";
 import { realtime } from "./sse/bridge";
 import {
   v5List,

@@ -6,7 +6,7 @@ import { DataTable } from "@/platform/components/DataTable";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { RiskBadge } from "@/platform/components/RiskBadge";
 import { lists, runActionSafe } from "@/lib/bff-v1";
-import { bffWrites } from "@/lib/bff/runAction";
+import { bffWrites } from "@/lib/bff-v1/writes";
 import { commandReceiptDescription } from "@/lib/bff-v1/commandReceipt";
 import { normalizeAlertTimestampFields } from "@/lib/bff-v1/eventTimestamps";
 import type { Job, Alert, Incident, ApprovalRequest, AuditEvent } from "@/lib/bff/types";

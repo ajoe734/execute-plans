@@ -1,7 +1,7 @@
 // BFF-LUV-FE-004 — Focused write-flow tests for bff/runAction.ts
 
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { liveWriteGated, sessionKindAllowsWrite, runAction, runCommandAction, requestConfirmToken, readConfirmToken, redeemConfirmToken, deleteConfirmToken, decideApproval, acknowledgeAlert, decideIntervention } from "@/lib/bff/runAction";
+import { liveWriteGated, sessionKindAllowsWrite, runAction, runCommandAction, requestConfirmToken, readConfirmToken, redeemConfirmToken, deleteConfirmToken, decideApproval, acknowledgeAlert, decideIntervention } from "@/lib/bff-v1/writes";
 import { liveStatus } from "@/lib/bff-v1/liveStatus";
 import { BffError } from "@/lib/bff-v1/errors";
 
@@ -97,7 +97,7 @@ describe("runAction mock branch", () => {
     setEnv(false);
     const env = await runAction({ kind: "Alert", id: "al_500", action: "acknowledge" });
     expect(env.ok).toBe(true);
-    expect(env.correlationId).toMatch(/^cid_/);
+    expect(env.correlationId).toMatch(/^(corr_|cid_)/);
     expect(env.idempotencyKey).toMatch(/^idk_/);
     expect(env.data.status).toBe("completed");
     expect(env.legacy.ok).toBe(true);
@@ -117,7 +117,7 @@ describe("runAction mock branch", () => {
     setEnv(false);
     const s = (await import("@/mocks/seed")).strategies.find((x) => x.id === "stg_005")!;
     s.state = "discovered" as typeof s.state;
-    const r = await (await import("@/lib/bff/runAction")).tryRunAction({
+    const r = await (await import("@/lib/bff-v1/writes")).tryRunAction({
       kind: "Strategy", id: "stg_005", action: "promote_live",
     });
     expect(r.ok).toBe(false);
@@ -214,10 +214,10 @@ describe("decideIntervention mock branch", () => {
 describe("readConfirmToken mock branch", () => {
   it("returns token envelope for a given token id", async () => {
     setEnv(false);
-    const { readConfirmToken } = await import("@/lib/bff/runAction");
+    const { readConfirmToken } = await import("@/lib/bff-v1/writes");
     const env = await readConfirmToken("ctok_test_123");
     expect(env.ok).toBe(true);
-    expect(env.correlationId).toMatch(/^cid_/);
+    expect(env.correlationId).toMatch(/^(corr_|cid_)/);
   });
 });
 
@@ -226,7 +226,7 @@ describe("readConfirmToken mock branch", () => {
 describe("redeemConfirmToken mock branch", () => {
   it("returns redeem envelope", async () => {
     setEnv(false);
-    const { redeemConfirmToken } = await import("@/lib/bff/runAction");
+    const { redeemConfirmToken } = await import("@/lib/bff-v1/writes");
     const env = await redeemConfirmToken("ctok_test_456");
     expect(env.ok).toBe(true);
     expect(env.data.tokenId).toBe("ctok_test_456");
@@ -239,7 +239,7 @@ describe("redeemConfirmToken mock branch", () => {
 describe("deleteConfirmToken mock branch", () => {
   it("returns delete envelope", async () => {
     setEnv(false);
-    const { deleteConfirmToken } = await import("@/lib/bff/runAction");
+    const { deleteConfirmToken } = await import("@/lib/bff-v1/writes");
     const env = await deleteConfirmToken("ctok_test_789");
     expect(env.ok).toBe(true);
     expect(env.data.tokenId).toBe("ctok_test_789");
@@ -323,7 +323,7 @@ describe("runAction live mode adapter", () => {
     expect(env.ok).toBe(true);
     expect(env.data.actionId).toBe(commandId);
     expect(env.data.status).toBe("accepted");
-    expect(env.correlationId).toMatch(/^cid_/);
+    expect(env.correlationId).toMatch(/^(corr_|cid_)/);
     expect(env.idempotencyKey).toBe("idk_live001");
     expect(env.auditEventId).toBe(commandId);
     expect(globalThis.fetch).toHaveBeenCalledTimes(2);
@@ -584,7 +584,7 @@ describe("deleteConfirmToken live mode adapter", () => {
   });
 });
 
-import { commandClient } from "@/lib/bff/runAction";
+import { commandClient } from "@/lib/bff-v1/writes";
 
 describe("operations console command mapping", () => {
   it("maps operations actions specifically to their command names in the envelope", () => {

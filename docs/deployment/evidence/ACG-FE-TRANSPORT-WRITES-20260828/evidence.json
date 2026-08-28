@@ -1,0 +1,68 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "ACG-FE-TRANSPORT-WRITES-20260828",
+  "owner": "Antigravity2",
+  "reviewer": "Claude2",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/ACG-FE-TRANSPORT-WRITES-20260828",
+  "status": "ready-for-independent-exact-head-review",
+  "recorded_at": "2026-08-28T13:21:00.000Z",
+  "scope": {
+    "consolidated": [
+      "Consolidated liveTransport.ts and liveRead.ts into src/lib/bff-v1/liveTransport.ts with liveStatus snapshot types/hook and strict read helpers (strictNotFoundAsUndefined, withStrictLiveOrMock, strictItemsFrom, strictDataFrom).",
+      "Consolidated commandClient and runAction writes into src/lib/bff-v1/writes.ts with submitCommand, runAction, tryRunAction, confirm token lifecycle, and governance decision writes (decideApproval, acknowledgeAlert, decideIntervention, decideEvolutionReview).",
+      "Extended src/lib/bff-v1/managementConsoleReads.ts with oodaPacket and oodaPackets.get accessors, migrating OodaPacketDrawer from legacy client.ts.",
+      "Migrated all callers across src/ from legacy bff/liveRead, bff/liveTransport, bff/client, bff/runAction, bff/commandClient, and bff-v1/writeFallback to canonical bff-v1 owners.",
+      "Cleaned src/main.tsx to eliminate mock rehydrate() persistence and background approval SLA ticker reachability from application startup.",
+      "Migrated PersonaOnboarding.tsx to direct typed writes with truthful error surfacing and removed writeFallback overlay degradation."
+    ],
+    "deleted_legacy_files": [
+      "src/lib/bff/liveRead.ts",
+      "src/lib/bff/liveTransport.ts",
+      "src/lib/bff/client.ts",
+      "src/lib/bff/runAction.ts",
+      "src/lib/bff/commandClient.ts",
+      "src/lib/bff-v1/writeFallback.ts"
+    ],
+    "not_changed": [
+      "No backend contracts or product routes altered.",
+      "Preserved all bff-v1 domain API contracts and public barrel exports."
+    ]
+  },
+  "acceptance": {
+    "bff_v1_sole_transport_and_write_owner": true,
+    "local_overlay_and_mock_bootstrap_unreachable": true,
+    "strict_live_failures_remain_typed": true,
+    "focused_domain_clients_for_ooda_and_commands": true,
+    "zero_caller_legacy_file_deletion": true
+  },
+  "validation": {
+    "typecheck": {
+      "command": "npm run typecheck",
+      "result": "passed: tsc -p tsconfig.agora.json --noEmit with 0 errors"
+    },
+    "eslint": {
+      "command": "npm run lint",
+      "result": "passed: 0 errors"
+    },
+    "vitest_full_suite": {
+      "command": "vitest run --maxWorkers=2",
+      "result": "passed: 193 files, 1962 tests passed"
+    },
+    "strict_live_build": {
+      "command": "VITE_GCP_IDENTITY_API_KEY=AIza01234567890123456789012345678901234 VITE_GCP_IDENTITY_PROJECT_ID=pantheon-lupin-dev-20260719 VITE_GCP_IDENTITY_AUTH_DOMAIN=pantheon-lupin-dev-20260719.firebaseapp.com VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build",
+      "result": "passed: assertStrictLiveFixtureIsolation verified 0 mock fixture leakage into production bundle"
+    }
+  },
+  "review_binding": {
+    "sha_disposition": "Independent approval must bind the exact pushed PR head containing this implementation and evidence manifest."
+  },
+  "independent_review_required": [
+    "Verify that bff-v1 is the sole production transport status and write owner.",
+    "Confirm that deleted legacy modules (bff/liveRead.ts, bff/liveTransport.ts, bff/client.ts, bff/runAction.ts, bff/commandClient.ts, bff-v1/writeFallback.ts) have zero remaining callers.",
+    "Verify that src/main.tsx does not execute mock bootstrap persistence or mutation tickers.",
+    "Verify that strict-live negative tests and typed write errors behave truthfully.",
+    "Verify npm run typecheck, npm run lint, and full vitest suite pass cleanly on the exact PR head."
+  ]
+}

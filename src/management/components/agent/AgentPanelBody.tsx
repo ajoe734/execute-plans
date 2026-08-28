@@ -59,8 +59,7 @@ import { useInspector } from "@/platform/components/RightDrawer";
 import { useHandoff } from "@/lib/handoff";
 import { useJobDrawer } from "@/platform/components/JobProgressDrawer";
 import { useOverlay } from "@/platform/overlayStore";
-import { agentPanel } from "./useAgentPanel";
-import { bffWrites } from "@/lib/bff/runAction";
+import { bffWrites } from "@/lib/bff-v1/writes";
 import { commandReceiptDescription } from "@/lib/bff-v1/commandReceipt";
 import {
   type ChatAttachment,

@@ -4,7 +4,7 @@ import { I18nextProvider } from "react-i18next";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import i18n from "@/i18n";
-import { managementClient } from "@/lib/bff/client";
+import { managementConsoleReads } from "@/lib/bff-v1/managementConsoleReads";
 import type { OodaLoopPacket, OodaPacketMeta } from "@/lib/ooda/packets";
 import { OodaPacketDrawer } from "./OodaPacketDrawer";
 
@@ -129,7 +129,7 @@ describe("OodaPacketDrawer", () => {
 
   it("loads a packet from the management OODA client when only packetId is provided", async () => {
     const getSpy = vi
-      .spyOn(managementClient.oodaPackets, "get")
+      .spyOn(managementConsoleReads, "oodaPacket")
       .mockResolvedValue({ packet: completePacket, meta });
 
     renderDrawer({

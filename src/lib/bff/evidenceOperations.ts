@@ -3,7 +3,7 @@ import {
   type BackendCommandReceiptData,
   type BackendCommandResponse,
   type FinalCommandEnvelope,
-} from "@/lib/bff/commandClient";
+} from "@/lib/bff-v1/writes";
 import { idempotencyKey as mintIdempotencyKey } from "@/lib/bff-v1/headers";
 import { newCorrelationId } from "@/lib/v4/correlation";
 

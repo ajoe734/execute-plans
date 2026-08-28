@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { getLiveStatusSnapshot } from "@/lib/bff/liveTransport";
+import { getLiveStatusSnapshot } from "@/lib/bff-v1/liveTransport";
 import { liveStatus } from "@/lib/bff-v1/liveStatus";
 
 function stubLiveEnv(fallback: "auto" | "strict" = "auto") {

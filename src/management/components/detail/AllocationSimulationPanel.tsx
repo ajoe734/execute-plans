@@ -11,8 +11,7 @@ import { NonProductionActionButton } from "@/management/components/NonProduction
 import {
   MockDataEmptyState,
 } from "@/components/data/MockDataBadge";
-import { getMockDataBadgeModel } from "@/components/data/mockDataBadgeModel";
-import { useLiveStatusSnapshot } from "@/lib/bff/liveTransport";
+import { useLiveStatusSnapshot } from "@/lib/bff-v1/liveTransport";
 
 export const AllocationSimulationPanel = ({ rebalance }: { rebalance: Rebalance }) => {
   const t = useT();

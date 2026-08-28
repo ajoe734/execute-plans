@@ -14,7 +14,7 @@ import { Plus, RefreshCw, Inbox } from "lucide-react";
 import { useT } from "@/platform/hooks";
 import { safeDateTime } from "@/lib/utils";
 import type { BaseObject } from "@/lib/bff/types";
-import { useLiveStatusSnapshot } from "@/lib/bff/liveTransport";
+import { useLiveStatusSnapshot } from "@/lib/bff-v1/liveTransport";
 import { useLiveListV1, extractDegradation, type ListEnvelope } from "@/lib/bff-v1";
 import { EmptyState } from "@/components/ui/empty-state";
 import type { CreateBehavior } from "@/lib/writeIntents/types";
