@@ -1,0 +1,84 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "ACG-FE-INTEGRATION-20260828",
+  "owner": "Antigravity2",
+  "reviewer": "Claude2",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/ACG-FE-INTEGRATION-20260828",
+  "status": "ready-for-independent-exact-head-review",
+  "recorded_at": "2026-08-28T21:08:00.000Z",
+  "scope": {
+    "integrated": [
+      "Completed bff-v1 public barrel exports in src/lib/bff-v1/index.ts (managementAi, loopTruthTypes, tradeJourneys, commandReceipt, eventTimestamps, domainReads, runtimeEnv).",
+      "Verified complete frontend acceptance suite across typecheck, lint, production import graph, full vitest suite (193 files, 1964 tests), and strict-live production build.",
+      "Verified zero SCCs (runtime and type-only) in bff-v1 production import graph, zero self-barrel imports, and zero forbidden inverse imports.",
+      "Verified strict-live production bundle fixture isolation with 0 mock seed fixture leakage, 0 synthetic write success, and 0 dead NL mock responder.",
+      "Verified Workshop, Management loop truth, and active Management AI journeys pass cleanly.",
+      "Verified hosted smoke routes probe (0 canonical 404s), browser probe, bundle budget, and deployment safe defaults."
+    ],
+    "not_changed": [
+      "Preserved existing bff-v1 domain API contracts, DTO types, and lane implementations.",
+      "No backend contracts or product routes altered."
+    ]
+  },
+  "acceptance": {
+    "typecheck_lint_unit_contract_and_production_build_all_pass": true,
+    "runtime_and_type_scc_counts_zero_and_no_forbidden_inverse_import": true,
+    "production_chunks_contain_no_seed_overlay_fixed_nl_responder_or_synthetic_write_success": true,
+    "workshop_management_loop_truth_and_active_management_ai_journeys_pass": true,
+    "hosted_smoke_binds_exact_fe_and_bff_identities_with_live_mode_strict_fallback_and_safe_write_defaults": true
+  },
+  "validation": {
+    "typecheck": {
+      "command": "npm run typecheck",
+      "result": "passed: tsc -p tsconfig.agora.json --noEmit with 0 errors"
+    },
+    "eslint": {
+      "command": "npm run lint",
+      "result": "passed: 0 errors (61 warnings)"
+    },
+    "vitest_full_suite": {
+      "command": "npm test",
+      "result": "passed: 193 files, 1964 tests passed with 0 failures"
+    },
+    "graph_gate": {
+      "command": "npx vitest run src/lib/bff-v1/__tests__/productionImportGraph.test.ts",
+      "result": "passed: 5 tests passed with 0 cycles and 0 self-barrel imports"
+    },
+    "contract_drift_test": {
+      "command": "npx vitest run src/lib/bff-v1/__tests__/contract-drift.test.ts",
+      "result": "passed: 7 tests passed"
+    },
+    "strict_live_build": {
+      "command": "VITE_GCP_IDENTITY_API_KEY=AIza01234567890123456789012345678901234 VITE_GCP_IDENTITY_PROJECT_ID=pantheon-lupin-dev-20260719 VITE_GCP_IDENTITY_AUTH_DOMAIN=pantheon-lupin-dev-20260719.firebaseapp.com VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build",
+      "result": "passed: assertStrictLiveFixtureIsolation verified 0 mock fixture leakage into production bundle"
+    },
+    "probe_bff_routes": {
+      "command": "node scripts/probe-bff-routes.mjs --anonymous",
+      "result": "passed: 0 canonical 404s, readiness endpoint ok"
+    },
+    "probe_bundle_budget": {
+      "command": "node scripts/bundle-budget-check.mjs",
+      "result": "passed: entry chunk 297kB <= 819kB, evidence chunk 52kB <= 154kB"
+    },
+    "probe_browser": {
+      "command": "node scripts/probe-hosted-browser-bff.mjs",
+      "result": "passed: anonymous auth boundary verified, no embedded bearer tokens"
+    },
+    "deploy_safe_defaults": {
+      "command": "npx vitest run src/test/deploy-safe-defaults.test.ts src/test/public-build-auth-contract.test.ts",
+      "result": "passed: 2 files, 87 tests passed"
+    }
+  },
+  "review_binding": {
+    "sha_disposition": "Independent approval must bind the final PR head that contains this implementation and evidence manifest."
+  },
+  "independent_review_required": [
+    "Verify bff-v1 index barrel exports all domain and helper modules cleanly without circular dependencies or name collisions.",
+    "Confirm production import graph test passes with 0 cycles and 0 self-barrel imports.",
+    "Confirm full test suite (193 files, 1964 tests), typecheck, lint, and strict-live production build pass.",
+    "Confirm strict live bundle isolation prevents mock fixture and synthetic write leaks.",
+    "Bind this manifest via REVIEW_FILE during exact-head review approval."
+  ]
+}
