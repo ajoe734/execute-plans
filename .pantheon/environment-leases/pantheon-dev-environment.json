@@ -1,8 +1,8 @@
 {
   "acquiredAt": "2026-08-29T17:37:25Z",
   "branch": "environment-coordination",
-  "expiresAt": "2026-08-29T17:45:02Z",
-  "heartbeatAt": "2026-08-29T17:40:02Z",
+  "expiresAt": "2026-08-29T17:45:33Z",
+  "heartbeatAt": "2026-08-29T17:40:33Z",
   "leaseId": "73c1b137-5945-424f-9e25-33a588dcb66b",
   "mode": "deployment",
   "owner": "pantheon:local:AGORA-SOURCE-FRONTIER-RECOVERY-V1-20260829",
