@@ -23,6 +23,10 @@ const deployScript = readFileSync(
   resolve(root, "scripts/deploy-dev-vm.sh"),
   "utf8",
 );
+const agoraProductJourneySpec = readFileSync(
+  resolve(root, "e2e/agora-product-journey.spec.ts"),
+  "utf8",
+);
 
 describe("paired Pantheon release workflow", () => {
   it("builds one authenticated three-profile set while normal gates consume read-only", () => {
@@ -901,5 +905,71 @@ describe("paired Pantheon release workflow", () => {
 
     expect(validateCandidateBinding(candidateSha, candidateSha)).toBe(true);
     expect(validateCandidateBinding(candidateSha, advancedDevSha)).toBe(false);
+  });
+
+  it("proves auditable read-only restore orchestration binds the exact same Agora FE/BFF candidate pair", () => {
+    // Integration gate and watchdog static contract bindings
+    expect(integrationWorkflow).toContain("Run Agora functional-closure hosted journey");
+    expect(integrationWorkflow).toContain("npx playwright test e2e/agora-product-journey.spec.ts");
+    expect(watchdogWorkflow).toContain("PANTHEON_DEPLOY_PROFILE: read-only-restore");
+    expect(watchdogWorkflow).toContain('PANTHEON_DEPLOY_REAL_WRITES: "false"');
+    expect(watchdogWorkflow).toContain('PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES: "false"');
+    expect(watchdogWorkflow).toContain("Verify restored same-pair read-only deployment readback");
+    expect(watchdogWorkflow).toContain("/bff/version");
+    expect(watchdogWorkflow).toContain("source_commit_known !== true");
+    expect(deployScript).toContain("read-only-restore)");
+    expect(deployScript).toContain('if [[ "${DEPLOY_PROFILE}" == "read-only-restore" ]]; then');
+    expect(deployScript).toContain("restore_paired_safe_release");
+    expect(deployWorkflow).toContain("proof-restore-confirmation:");
+    expect(deployWorkflow).toContain("Verify post-child same-pair read-only deployment readback");
+    expect(deployWorkflow).toContain("/bff/version");
+    expect(deployWorkflow).toContain("source_commit_known !== true");
+    expect(deployWorkflow).toContain("Attest final same-pair restoration bound to child demo evidence");
+    expect(deployWorkflow).toContain("pantheon-authorized-write-proof");
+    expect(deployWorkflow).toContain("agora-demo-run-evidence.json");
+    expect(deployWorkflow).toContain("pantheon.agora.demo-run-evidence.v1");
+  });
+
+  it("proves workflow ordering has no child-waits-for-restore cycle and attestation binds to candidate pair", () => {
+    // 1. Child spec static verification: does NOT poll/wait for read-only restore
+    expect(agoraProductJourneySpec).not.toContain("restore_poll");
+    expect(agoraProductJourneySpec).not.toContain("restoreDeadline");
+    expect(agoraProductJourneySpec).toContain("servedManifestVerified = true");
+    expect(agoraProductJourneySpec).toContain("writeDemoRunEvidence(EVIDENCE_DIR, demoEvidence)");
+    expect(agoraProductJourneySpec).not.toContain("mobile-chromium");
+
+    // 2. Watchdog workflow ordering: restore runs strictly after child completion
+    const watchStart = watchdogWorkflow.indexOf("  watch:");
+    const restoreStart = watchdogWorkflow.indexOf("  restore:");
+    expect(watchStart).toBeGreaterThan(0);
+    expect(restoreStart).toBeGreaterThan(watchStart);
+    const watchJob = watchdogWorkflow.slice(watchStart, restoreStart);
+    const restoreJob = watchdogWorkflow.slice(restoreStart);
+
+    expect(watchJob).toContain('[[ "$status" == "completed" ]] && exit 0');
+    expect(restoreJob).toContain("needs:");
+    expect(restoreJob).toContain("- watch");
+    expect(restoreJob).toContain("Quiesce parent and terminalize exact credentialed child before restore");
+    expect(restoreJob).not.toContain('credential_status=="completed"');
+    expect(restoreJob).toContain("Restore exact pair before any mutable successor action");
+    expect(restoreJob).toContain("Verify restored same-pair read-only deployment readback");
+
+    // 3. Parent deploy workflow ordering: post-child confirmation stage
+    const proofCoordinatorStart = deployWorkflow.indexOf("  proof-coordinator:");
+    const confirmationStart = deployWorkflow.indexOf("  proof-restore-confirmation:");
+    expect(proofCoordinatorStart).toBeGreaterThan(0);
+    expect(confirmationStart).toBeGreaterThan(proofCoordinatorStart);
+    const proofCoordinatorJob = deployWorkflow.slice(proofCoordinatorStart, confirmationStart);
+    const confirmationJob = deployWorkflow.slice(confirmationStart);
+
+    expect(proofCoordinatorJob).toContain('gh run watch "$PROOF_RUN_ID" --repo "$GITHUB_REPOSITORY" --exit-status');
+    expect(confirmationJob).toContain("Wait for independent restore watchdog");
+    expect(confirmationJob).toContain('gh run watch "$WATCHDOG_RUN_ID" --repo "$GITHUB_REPOSITORY" --exit-status');
+    expect(confirmationJob).toContain("Verify post-child same-pair read-only deployment readback");
+    expect(confirmationJob).toContain("Attest final same-pair restoration bound to child demo evidence");
+    expect(confirmationJob).toContain('child_status" != "completed" || "$child_conclusion" != "success"');
+    expect(confirmationJob).toContain("EXACT_FE_SHA: ${{ needs.deploy.outputs.candidate_sha }}");
+    expect(confirmationJob).toContain("EXACT_BFF_SHA: ${{ needs.deploy.outputs.bff_sha }}");
+    expect(confirmationJob).toContain("PROOF_RUN_ID: ${{ needs.proof-coordinator.outputs.proof_run_id }}");
   });
 });

@@ -1,6 +1,6 @@
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { emitV5Event } from "@/lib/v5";
+import { emitV5Event } from "@/lib/bff-v1";
 import { __resetV5LiveCacheForTests, useV5Live } from "./useV5Live";
 
 interface TestData {

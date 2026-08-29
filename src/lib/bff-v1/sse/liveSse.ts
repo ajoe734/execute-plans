@@ -8,7 +8,7 @@
 // reports fallback to liveStatus and the existing in-memory mock bus
 // continues to drive UI.
 
-import { realtime } from "@/lib/bff/realtime";
+import { realtime } from "./bridge";
 import { liveStatus } from "../liveStatus";
 import { buildHeaders, getAuthProvider } from "../headers";
 import { isSseEvent, type SseEvent } from "./channels";

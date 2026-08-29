@@ -24,8 +24,8 @@ vi.mock("@/management/pages/v5/useV5Live", () => ({
   useV5Live: mocks.useV5Live,
 }));
 
-vi.mock("@/lib/v5/management/rankingGovernance", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/v5/management/rankingGovernance")>();
+vi.mock("@/lib/bff-v1", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/bff-v1")>();
   return {
     ...actual,
     sendRankingRecommendation: mocks.sendRankingRecommendation,

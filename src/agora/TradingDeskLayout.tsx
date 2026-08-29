@@ -167,11 +167,11 @@ type ServantWorkshopState =
   | { status: "loaded"; workshop: StrategyWorkshop }
   | { status: "error"; message: string };
 
-function useServantWorkshopContext(workshopId: string | undefined): ServantWorkshopState {
+function useServantWorkshopContext(workshopId: string | undefined, open: boolean): ServantWorkshopState {
   const [state, setState] = useState<ServantWorkshopState>({ status: "idle" });
 
   useEffect(() => {
-    if (!workshopId) {
+    if (!workshopId || !open) {
       setState({ status: "idle" });
       return;
     }
@@ -192,7 +192,7 @@ function useServantWorkshopContext(workshopId: string | undefined): ServantWorks
     return () => {
       cancelled = true;
     };
-  }, [workshopId]);
+  }, [workshopId, open]);
 
   return state;
 }
@@ -210,7 +210,7 @@ function ServantDrawer({
   onOpenChange: (open: boolean) => void;
   triggerRef: React.RefObject<HTMLButtonElement>;
 }) {
-  const contextState = useServantWorkshopContext(workshopId);
+  const contextState = useServantWorkshopContext(workshopId, open);
 
   const context = (
     <div className="flex-1 overflow-auto p-3" data-testid="servant-drawer-context">

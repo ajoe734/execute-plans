@@ -15,8 +15,9 @@ import {
   defaultPerformanceAttribution, ATTRIBUTION_DIMENSIONS,
 } from "@/lib/v5/management/performanceAttribution";
 import {
-  buildRankingInboxItem, makeRankingRecommendationId, requiredRoleFor, sendRankingRecommendation,
+  buildRankingInboxItem, makeRankingRecommendationId, requiredRoleFor,
 } from "@/lib/v5/management/rankingGovernance";
+import { sendRankingRecommendation } from "@/lib/bff-v1";
 
 describe("PM12 portfolio", () => {
   it("composes totals from pools + holdings", () => {

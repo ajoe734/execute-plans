@@ -1,8 +1,9 @@
 // Pack E E2/E3 — small hook: load async data + refresh on v5 events.
-// Re-uses src/lib/bff/realtime.ts via onV5Event (Q15/Q22).
+// onV5Event is owned by src/lib/bff-v1/v5.ts, the live V5 API owner
+// (ACG-03-014/015); src/lib/v5 only builds the pure event DTO.
 
 import { useEffect, useState, useCallback, useRef } from "react";
-import { onV5Event } from "@/lib/v5";
+import { onV5Event } from "@/lib/bff-v1";
 
 interface UseV5LiveOptions {
   cacheKey?: string;

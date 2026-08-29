@@ -178,6 +178,138 @@ describe("hosted browser strict release policy", () => {
     expect(sleepCount).toBe(3);
   });
 
+  it("retries a transient status 0 network exception and recovers on later 200", async () => {
+    let fetchCount = 0;
+    const sleeps: number[] = [];
+
+    const result = await fetchPublicHealthWithRetry(
+      "https://pantheon.example/readyz",
+      {
+        fetchImpl: async () => {
+          fetchCount += 1;
+          if (fetchCount === 1) {
+            throw new Error("fetch failed: connection refused");
+          }
+          return { ok: true, status: 200 };
+        },
+        maxAttempts: 4,
+        retryDelayMs: 25,
+        remainingMs: () => 10_000,
+        sleepImpl: async (milliseconds: number) => {
+          sleeps.push(milliseconds);
+        },
+      },
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      status: 200,
+      attemptCount: 2,
+      statuses: [0, 200],
+    });
+    expect(fetchCount).toBe(2);
+    expect(sleeps).toEqual([25]);
+  });
+
+  it("retries mixed transient status 0 and 502 failures and recovers on later 200", async () => {
+    let fetchCount = 0;
+    const sleeps: number[] = [];
+
+    const result = await fetchPublicHealthWithRetry(
+      "https://pantheon.example/readyz",
+      {
+        fetchImpl: async () => {
+          fetchCount += 1;
+          if (fetchCount === 1) {
+            throw new Error("fetch failed: socket hang up");
+          }
+          if (fetchCount === 2) {
+            return { ok: false, status: 502 };
+          }
+          return { ok: true, status: 200 };
+        },
+        maxAttempts: 4,
+        retryDelayMs: 25,
+        remainingMs: () => 10_000,
+        sleepImpl: async (milliseconds: number) => {
+          sleeps.push(milliseconds);
+        },
+      },
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      status: 200,
+      attemptCount: 3,
+      statuses: [0, 502, 200],
+    });
+    expect(fetchCount).toBe(3);
+    expect(sleeps).toEqual([25, 25]);
+  });
+
+  it("fails closed after the bounded status 0 budget is exhausted", async () => {
+    let fetchCount = 0;
+    let sleepCount = 0;
+
+    const result = await fetchPublicHealthWithRetry(
+      "https://pantheon.example/health",
+      {
+        fetchImpl: async () => {
+          fetchCount += 1;
+          throw new Error("fetch failed: network timeout");
+        },
+        maxAttempts: 99,
+        retryDelayMs: 25,
+        remainingMs: () => 10_000,
+        sleepImpl: async () => {
+          sleepCount += 1;
+        },
+      },
+    );
+
+    expect(result).toMatchObject({
+      ok: false,
+      status: 0,
+      attemptCount: 4,
+      statuses: [0, 0, 0, 0],
+    });
+    expect(fetchCount).toBe(4);
+    expect(sleepCount).toBe(3);
+  });
+
+  it.each([400, 401, 403, 404, 500, 503])(
+    "does not retry nontransient HTTP %i responses",
+    async (httpStatus) => {
+      let fetchCount = 0;
+      let sleepCount = 0;
+
+      const result = await fetchPublicHealthWithRetry(
+        "https://pantheon.example/readyz",
+        {
+          fetchImpl: async () => {
+            fetchCount += 1;
+            return { ok: false, status: httpStatus };
+          },
+          maxAttempts: 4,
+          retryDelayMs: 25,
+          remainingMs: () => 10_000,
+          sleepImpl: async () => {
+            sleepCount += 1;
+          },
+        },
+      );
+
+      expect(result).toMatchObject({
+        ok: false,
+        status: httpStatus,
+        attemptCount: 1,
+        statuses: [httpStatus],
+      });
+      expect(fetchCount).toBe(1);
+      expect(sleepCount).toBe(0);
+    },
+  );
+
   it("keeps the required cold-start response within the overall probe budget", () => {
     const probeSource = readFileSync(
       resolve("scripts/probe-hosted-browser-bff.mjs"),
@@ -660,10 +792,9 @@ describe("hosted browser strict release policy", () => {
     ]);
   });
 
-  it("defines exact desktop and mobile viewports with hard performance budgets", () => {
+  it("defines exact desktop viewport with hard performance budgets", () => {
     expect(HOSTED_UX_PROFILES).toEqual([
       { id: "desktop-1440", width: 1440, height: 900, mobile: false },
-      { id: "mobile-390", width: 390, height: 844, mobile: true },
     ]);
     expect(HOSTED_UX_PERFORMANCE_BUDGETS).toEqual({
       responseEndMs: 3_000,
@@ -1015,7 +1146,7 @@ describe("hosted browser strict release policy", () => {
     expect(source).toContain("window.sessionStorage");
     expect(source).toContain("installCandidateRoute");
     expect(source).toContain('id: "desktop-1440"');
-    expect(source).toContain('id: "mobile-390"');
+    expect(source).not.toContain('id: "mobile-390"');
     expect(source).toContain("@axe-core/playwright");
     expect(source).toContain('reducedMotion: "reduce"');
     expect(source).toContain('element.matches(":focus-visible")');
