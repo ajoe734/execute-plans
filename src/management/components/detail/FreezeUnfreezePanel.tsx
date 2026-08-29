@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 import { safeDateTime } from "@/lib/utils";
-import { bff } from "@/lib/bff-v1";
-import { mutations } from "@/lib/bff/mutations";
-import type { PoolFreeze } from "@/lib/bff/types";
+import { bffV1, writes } from "@/lib/bff-v1";
+import type { PoolFreeze } from "@/lib/bff-v1";
 import { DataTable } from "@/platform/components/DataTable";
 import { Section } from "@/management/pages/ObjectDetailLayout";
 import { Badge } from "@/components/ui/badge";
@@ -19,7 +18,7 @@ export const FreezeUnfreezePanel = ({ poolId }: { poolId: string }) => {
   const [reason, setReason] = useState("");
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [unfreezeTarget, setUnfreezeTarget] = useState<PoolFreeze | null>(null);
-  useEffect(() => { bff.poolFreezes.forPool(poolId).then(setRows); }, [poolId]);
+  useEffect(() => { bffV1.poolFreezes.forPool(poolId).then(setRows); }, [poolId]);
 
   const active = rows.filter((r) => r.active);
   const history = rows.filter((r) => !r.active);
@@ -69,7 +68,7 @@ export const FreezeUnfreezePanel = ({ poolId }: { poolId: string }) => {
         confirmToken="FREEZE"
         destructive
         onConfirm={async () => {
-          const receipt = await mutations.freezePool(poolId, reason);
+          const receipt = await writes.freezePool(poolId, reason);
           setRows((r) => [{ id: `pf_new_${Date.now().toString(36)}`, poolId, reason, frozenBy: "capital", frozenAt: new Date().toISOString(), active: true }, ...r]);
           setReason("");
           toast.success(t("phase13.capital.freeze.queued"), {
@@ -85,7 +84,7 @@ export const FreezeUnfreezePanel = ({ poolId }: { poolId: string }) => {
           description={t("detail.confirm.unfreezePool")}
           confirmToken="UNFREEZE"
           onConfirm={async (memo) => {
-            const receipt = await mutations.unfreezePool(poolId, unfreezeTarget.id, memo);
+            const receipt = await writes.unfreezePool(poolId, unfreezeTarget.id, memo);
             setRows((r) => r.map((x) => x.id === unfreezeTarget.id ? { ...x, active: false } : x));
             toast.success(t("phase13.capital.freeze.queued"), {
               description: commandReceiptDescription(receipt, { fallback: `CapitalPool ${poolId} · unfreeze_pool` }),

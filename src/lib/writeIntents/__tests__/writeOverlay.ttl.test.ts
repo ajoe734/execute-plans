@@ -1,6 +1,6 @@
 // Pack F 短板 4 — extended TTL & GC behaviour for writeOverlay.
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
-import { writeOverlay, withOverlay, WRITE_OVERLAY_TTL_MS } from "@/lib/bff/writeOverlay";
+import { writeOverlay, withOverlay, WRITE_OVERLAY_TTL_MS } from "@/lib/bff-v1/writeOverlay";
 
 describe("writeOverlay TTL", () => {
   beforeEach(() => {

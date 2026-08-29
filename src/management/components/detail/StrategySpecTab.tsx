@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
-import { bff } from "@/lib/bff-v1";
-import { mutations } from "@/lib/bff/mutations";
-import type { Strategy, ObjectVersion } from "@/lib/bff/types";
+import { bffV1, writes } from "@/lib/bff-v1";
+import type { Strategy, ObjectVersion } from "@/lib/bff-v1";
 import { Section } from "@/management/pages/ObjectDetailLayout";
 import { VersionDiffViewer } from "./VersionDiffViewer";
 import { StrategyParamsEditor } from "./StrategyParamsEditor";
@@ -19,11 +18,11 @@ export const StrategySpecTab = ({ strategy, params }: { strategy: Strategy; para
   const [versions, setVersions] = useState<ObjectVersion[]>([]);
   const [locked, setLocked] = useState(false);
   useEffect(() => {
-    bff.objectVersions.forSubject("Strategy", strategy.id).then(setVersions);
+    bffV1.objectVersions.forSubject("Strategy", strategy.id).then(setVersions);
   }, [strategy.id]);
 
   const toggleLock = async () => {
-    const receipt = await mutations.lockParams(strategy.id, !locked, locked ? "unlock parameters" : "lock parameters");
+    const receipt = await writes.lockParams(strategy.id, !locked, locked ? "unlock parameters" : "lock parameters");
     setLocked((v) => !v);
     toast.success(locked ? t("phase13.strategy.spec.unlocked") : t("phase13.strategy.spec.locked"), {
       description: commandReceiptDescription(receipt, { fallback: `Strategy ${strategy.id} · ${locked ? "unlock_params" : "lock_params"}` }),

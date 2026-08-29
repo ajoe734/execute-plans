@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { resolvePersonaForDetail } from "./personaDetailData";
 import { personaHumanInboxUrl, personaWorkshopEntryUrl } from "./PersonaDetail";
-import type { Persona } from "@/lib/bff/types";
+import type { Persona } from "@/lib/bff-v1";
 import { getPersona } from "@/lib/bff-v1/personas";
 
 vi.mock("@/lib/bff-v1/personas", () => ({

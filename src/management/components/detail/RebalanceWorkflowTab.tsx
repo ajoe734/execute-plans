@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { bff } from "@/lib/bff-v1";
-import { mutations } from "@/lib/bff/mutations";
-import type { WorkflowStep } from "@/lib/bff/types";
+import { bffV1, writes, realtime } from "@/lib/bff-v1";
+import type { WorkflowStep } from "@/lib/bff-v1";
 import { WorkflowStepper } from "./WorkflowStepper";
 import { Section } from "@/management/pages/ObjectDetailLayout";
 import { useT } from "@/platform/hooks";
@@ -9,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ChevronRight, RefreshCw, Snowflake, PlayCircle } from "lucide-react";
 import { toast } from "sonner";
-import { realtime } from "@/lib/bff/realtime";
 import { commandReceiptDescription } from "@/lib/bff-v1/commandReceipt";
 
 interface StepX extends WorkflowStep { jobKind?: string }
@@ -20,7 +18,7 @@ export const RebalanceWorkflowTab = ({ rebalanceId }: { rebalanceId: string }) =
   const [busy, setBusy] = useState(false);
 
   const refresh = useCallback(() =>
-    bff.rebalanceWorkflow.forRebalance(rebalanceId).then((arr) => setSteps(arr as unknown as StepX[])),
+    bffV1.rebalanceWorkflow.forRebalance(rebalanceId).then((arr) => setSteps(arr as unknown as StepX[])),
   [rebalanceId]);
 
   useEffect(() => {
@@ -37,7 +35,7 @@ export const RebalanceWorkflowTab = ({ rebalanceId }: { rebalanceId: string }) =
 
   const advance = async () => {
     setBusy(true);
-    const res = await mutations.advanceRebalanceStep(rebalanceId);
+    const res = await writes.advanceRebalanceStep(rebalanceId);
     setBusy(false);
     if (res.ok) {
       toast.success(t("phase21.rebalance.workflow.advanced"), {
@@ -55,7 +53,7 @@ export const RebalanceWorkflowTab = ({ rebalanceId }: { rebalanceId: string }) =
   const rerun = async () => {
     if (!cur) return;
     setBusy(true);
-    const res = await mutations.rerunRebalanceStep(rebalanceId, cur.id);
+    const res = await writes.rerunRebalanceStep(rebalanceId, cur.id);
     setBusy(false);
     if (res.ok) {
       toast.success(t("phase21.rebalance.workflow.rerun"), {

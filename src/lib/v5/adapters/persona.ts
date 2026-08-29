@@ -1,6 +1,6 @@
 // Q4 — seed.persona → v5 PersonaExecutionHealth. Read-only over seed; honours overlay.
 
-import type { Persona, Alert } from "@/lib/bff/types";
+import type { Persona, Alert } from "@/lib/bff-v1";
 import { computePersonaHealthScore } from "../health";
 import { v5ActionOverlay } from "../overlay";
 import type { PersonaExecutionHealth } from "../types";

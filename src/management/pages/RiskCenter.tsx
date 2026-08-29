@@ -10,11 +10,11 @@ import { StatusBadge } from "@/platform/components/StatusBadge";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { bff } from "@/lib/bff-v1";
+import { bffV1 } from "@/lib/bff-v1";
 import type {
   Strategy, Persona, CapitalPool, Runtime, Tool, McpServer, Skill,
   Alert, Incident, RiskLevel,
-} from "@/lib/bff/types";
+} from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { useNavigate } from "react-router-dom";
 import { safeDateTime } from "@/lib/utils";
@@ -37,9 +37,9 @@ export const RiskCenter = () => {
 
   useEffect(() => {
     Promise.all([
-      bff.strategies.list(), bff.personas.list(), bff.capitalPools.list(),
-      bff.runtimes.list(), bff.tools.list(), bff.mcpServers.list(), bff.skills.list(),
-      bff.alerts.list(), bff.incidents.list(),
+      bffV1.strategies.list(), bffV1.personas.list(), bffV1.capitalPools.list(),
+      bffV1.runtimes.list(), bffV1.tools.list(), bffV1.mcpServers.list(), bffV1.skills.list(),
+      bffV1.alerts.list(), bffV1.incidents.list(),
     ]).then(([strategies, personas, pools, runtimes, tools, mcp, skills, alerts, incidents]) =>
       setData({ strategies, personas, pools, runtimes, tools, mcp, skills, alerts, incidents }),
     );

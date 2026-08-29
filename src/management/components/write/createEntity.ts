@@ -1,5 +1,5 @@
 import { createPersona, runPersonaAction } from "@/lib/bff-v1/personas";
-import { writeOverlay } from "@/lib/bff/writeOverlay";
+import { isStrictLiveFallback, refuseStrictLiveWrite, newCorrelationId } from "@/lib/bff-v1";
 import { buildEntity } from "@/lib/writeIntents/createDefaults";
 import type { CreatableEntity, CreateInputMap } from "@/lib/writeIntents/types";
 
@@ -37,6 +37,11 @@ export async function createEntityFromInput<K extends CreatableEntity>(
     return { entity, data: data as unknown as Record<string, unknown>, persistence: "bff" };
   }
 
+  if (isStrictLiveFallback()) {
+    refuseStrictLiveWrite(opts.idempotencyKey ?? newCorrelationId());
+  }
+
+  const { writeOverlay } = await import("@/lib/bff-v1/writeOverlay");
   writeOverlay.add(entity, built, { idempotencyKey: opts.idempotencyKey });
   return { entity, data: built, persistence: "overlay" };
 }
@@ -68,13 +73,24 @@ export async function updateEntityFromInput<K extends CreatableEntity>(
     }
     try {
       const data = await runPersonaAction(id, "edit", clean, { idempotencyKey: opts.idempotencyKey });
-      writeOverlay.update(entity, id, clean, { idempotencyKey: opts.idempotencyKey });
+      if (!isStrictLiveFallback()) {
+        const { writeOverlay } = await import("@/lib/bff-v1/writeOverlay");
+        writeOverlay.update(entity, id, clean, { idempotencyKey: opts.idempotencyKey });
+      }
       return { entity, data: { id, ...clean, ...(data as Record<string, unknown>) }, persistence: "bff" };
-    } catch {
+    } catch (err) {
+      if (isStrictLiveFallback()) {
+        throw err;
+      }
       // BFF edit not available — fall through to overlay patch.
     }
   }
 
+  if (isStrictLiveFallback()) {
+    refuseStrictLiveWrite(opts.idempotencyKey ?? newCorrelationId());
+  }
+
+  const { writeOverlay } = await import("@/lib/bff-v1/writeOverlay");
   writeOverlay.update(entity, id, clean, { idempotencyKey: opts.idempotencyKey });
   return { entity, data: { id, ...clean }, persistence: "overlay" };
 }
@@ -95,6 +111,10 @@ export async function deleteEntity(
       "Persona is an audit entity and cannot be deleted. Use `runPersonaAction(id, 'retire', ...)` to archive it (terminal state, audit retained 7 years).",
     );
   }
+  if (isStrictLiveFallback()) {
+    refuseStrictLiveWrite(opts.idempotencyKey ?? newCorrelationId());
+  }
+  const { writeOverlay } = await import("@/lib/bff-v1/writeOverlay");
   writeOverlay.softDelete(entity, id, { idempotencyKey: opts.idempotencyKey });
   return "overlay";
 }

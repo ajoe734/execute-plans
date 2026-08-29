@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { agoraServantClient } from "./servant";
-import { liveStatus } from "@/lib/bff-v1/liveStatus";
+import { liveStatus } from "../liveStatus";
 
 const realFetch = globalThis.fetch;
 

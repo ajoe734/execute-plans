@@ -2,10 +2,9 @@ import { useEffect, useState } from "react";
 import { safeDateTime } from "@/lib/utils";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { bff } from "@/lib/bff-v1";
-import { runActionSafe } from "@/lib/bff-v1";
+import { bffV1, runActionSafe } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
-import type { AuditEvent, RankingFormula, Strategy } from "@/lib/bff/types";
+import type { AuditEvent, RankingFormula, Strategy } from "@/lib/bff-v1";
 import { CheckCircle2, Edit, Inbox } from "lucide-react";
 import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
@@ -31,9 +30,9 @@ export const RankingFormulaDetail = () => {
     }
     setLoading(true);
     Promise.all([
-      bff.rankingFormulas.list().then((rows) => setF(rows.find((x) => x.id === id))),
-      bff.strategies.list().then(setStrategies),
-      bff.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action?.startsWith("ranking.")))),
+      bffV1.rankingFormulas.list().then((rows) => setF(rows.find((x) => x.id === id))),
+      bffV1.strategies.list().then(setStrategies),
+      bffV1.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action?.startsWith("ranking.")))),
     ])
       .catch(() => {})
       .finally(() => setLoading(false));

@@ -26,7 +26,7 @@ import {
 } from "@/lib/v4";
 import type { RankingMetricDefinition } from "@/lib/v4";
 import type { PersonaLabRun } from "@/lib/v4";
-import type { AuditEvent } from "@/lib/bff/types";
+import type { AuditEvent } from "@/lib/bff-v1";
 
 describe("Pack C-H2 wiring", () => {
   it("C033 handoff SLA phases progress ok → warning → breached", () => {

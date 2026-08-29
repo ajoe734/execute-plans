@@ -1,7 +1,7 @@
 // Mock realtime ticker — emits periodic job & alert events through realtime bus.
 // Started once at PlatformShell mount.
 import { useEffect } from "react";
-import { realtime, type RealtimeJobEvent } from "./bff/realtime";
+import { realtime, type RealtimeJobEvent } from "@/lib/bff-v1";
 import { liveStatus } from "@/lib/bff-v1/liveStatus";
 
 let started = false;

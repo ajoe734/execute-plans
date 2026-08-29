@@ -1,3 +1,4 @@
+import { bffV1 } from "@/lib/bff-v1";
 // Governance Review — Spec Part 3 §17.
 // Layout: left summary / center evidence + validator results / right decision panel /
 // bottom audit timeline. Decisions require a memo (HighRiskConfirm enforces it).
@@ -9,10 +10,9 @@ import { Button } from "@/components/ui/button";
 import { RiskBadge } from "@/platform/components/RiskBadge";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
-import { bff } from "@/lib/bff-v1";
-import { bffWrites } from "@/lib/bff/runAction";
+import { bffWrites } from "@/lib/bff-v1/writes";
 import { commandReceiptDescription } from "@/lib/bff-v1/commandReceipt";
-import type { ApprovalRequest, AuditEvent } from "@/lib/bff/types";
+import type { ApprovalRequest, AuditEvent } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { usePermissions } from "@/lib/usePermissions";
 import { Field } from "./ObjectDetailLayout";
@@ -38,10 +38,10 @@ export const GovernanceReview = () => {
   const [decision, setDecision] = useState<Decision | null>(null);
   const [stageDecision, setStageDecision] = useState<StageDecision | null>(null);
 
-  const reload = () => bff.approvals.get(id).then((r) => setReq(r ?? null));
+  const reload = () => bffV1.approvals.get(id).then((r) => setReq(r ?? null));
 
   useEffect(() => {
-    Promise.all([bff.approvals.get(id), bff.audit.list()])
+    Promise.all([bffV1.approvals.get(id), bffV1.audit.list()])
       .then(([r, a]) => { setReq(r ?? null); setAudit(a); });
   }, [id]);
 

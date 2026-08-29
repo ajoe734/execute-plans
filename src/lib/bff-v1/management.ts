@@ -11,9 +11,13 @@
 // Exception: Human Inbox is strict-live/no-seed. It must never synthesize
 // pending human work from FE mock rows.
 
-import { withLiveOrMock, isStrictLiveFallback } from "./liveTransport";
-import { strictNotFoundAsUndefined, withStrictLiveOrMock } from "@/lib/bff/liveRead";
-import { liveStatus } from "@/lib/bff-v1/liveStatus";
+import {
+  withLiveOrMock,
+  isStrictLiveFallback,
+  strictNotFoundAsUndefined,
+  withStrictLiveOrMock,
+} from "./liveTransport";
+import { liveStatus } from "./liveStatus";
 import { paths } from "./paths";
 import { bffFetch, type BffRequest } from "./client";
 import { idempotencyKey as mintIdempotencyKey } from "./headers";

@@ -2,10 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { safePercent } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { bff } from "@/lib/bff-v1";
-import { runActionSafe } from "@/lib/bff-v1";
+import { bffV1, runActionSafe } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
-import type { ApprovalRequest, AuditEvent, Rebalance, CapitalPool, Strategy } from "@/lib/bff/types";
+import type { ApprovalRequest, AuditEvent, Rebalance, CapitalPool, Strategy } from "@/lib/bff-v1";
 import { Download, Send, Inbox } from "lucide-react";
 import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
@@ -57,19 +56,19 @@ export const RebalanceDetail = () => {
       return;
     }
     setLoading(true);
-    bff.rebalances.get(id)
+    bffV1.rebalances.get(id)
       .then((rb) => {
         setR(rb);
         if (rb) {
           setMachineState(mapState(rb.state));
-          bff.capitalPools.get(rb.targetPoolId).then(setPool);
+          bffV1.capitalPools.get(rb.targetPoolId).then(setPool);
         }
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-    bff.approvals.list().then((all) => setApprovals(all.filter((a) => (a.subject ?? "").includes(id) || (a.kind ?? "").includes("rebalance"))));
-    bff.audit.list().then((all) => setAudit(all.filter((a) => a.target === id || a.action?.startsWith("rebalance."))));
-    bff.strategies.list().then(setStrategies);
+    bffV1.approvals.list().then((all) => setApprovals(all.filter((a) => (a.subject ?? "").includes(id) || (a.kind ?? "").includes("rebalance"))));
+    bffV1.audit.list().then((all) => setAudit(all.filter((a) => a.target === id || a.action?.startsWith("rebalance."))));
+    bffV1.strategies.list().then(setStrategies);
   }, [id]);
 
   const transitions = useMemo(

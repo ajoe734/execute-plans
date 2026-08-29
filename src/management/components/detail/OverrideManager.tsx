@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
-import { bff } from "@/lib/bff-v1";
-import { mutations } from "@/lib/bff/mutations";
-import type { RebalanceOverride, Strategy } from "@/lib/bff/types";
+import { bffV1, writes } from "@/lib/bff-v1";
+import type { RebalanceOverride, Strategy } from "@/lib/bff-v1";
 import { DataTable } from "@/platform/components/DataTable";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { Section } from "@/management/pages/ObjectDetailLayout";
@@ -20,7 +19,7 @@ export const OverrideManager = ({ rebalanceId, strategies }: { rebalanceId: stri
   const [stratId, setStratId] = useState<string>(strategies[0]?.id ?? "");
   const [delta, setDelta] = useState("0.02");
   const [reason, setReason] = useState("");
-  useEffect(() => { bff.rebalanceOverrides.forRebalance(rebalanceId).then(setRows); }, [rebalanceId]);
+  useEffect(() => { bffV1.rebalanceOverrides.forRebalance(rebalanceId).then(setRows); }, [rebalanceId]);
 
   const submit = async () => {
     const parsed = Number(delta);
@@ -34,7 +33,7 @@ export const OverrideManager = ({ rebalanceId, strategies }: { rebalanceId: stri
       reason: reason.trim(), state: "review",
       proposedBy: "ops", proposedAt: new Date().toISOString(),
     };
-    const receipt = await mutations.submitOverride(rebalanceId, stratId, parsed, reason.trim());
+    const receipt = await writes.submitOverride(rebalanceId, stratId, parsed, reason.trim());
     setRows((r) => [ov, ...r]);
     setReason("");
     toast.success(t("phase13.rebalance.override.queued"), {

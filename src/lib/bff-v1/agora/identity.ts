@@ -3,7 +3,7 @@
 // Schemas: agora_user_scope.schema.json, servant_profile.schema.json.
 // Strict live-only — no mock fallback on network errors. Throws BffError on non-2xx.
 
-import { withStrictLiveOrMock } from "@/lib/bff/liveRead";
+import { withStrictLiveOrMock } from "../liveTransport";
 
 export type AgoraCapability =
   | "agora.identity.v1"

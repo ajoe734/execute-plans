@@ -6,10 +6,10 @@ import { DataTable } from "@/platform/components/DataTable";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { RiskBadge } from "@/platform/components/RiskBadge";
 import { lists, runActionSafe } from "@/lib/bff-v1";
-import { bffWrites } from "@/lib/bff/runAction";
+import { bffWrites } from "@/lib/bff-v1/writes";
 import { commandReceiptDescription } from "@/lib/bff-v1/commandReceipt";
 import { normalizeAlertTimestampFields } from "@/lib/bff-v1/eventTimestamps";
-import type { Job, Alert, Incident, ApprovalRequest, AuditEvent } from "@/lib/bff/types";
+import type { Job, Alert, Incident, ApprovalRequest, AuditEvent } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -104,7 +104,7 @@ export const JobsPage = () => {
   const [rows, setRows] = useCachedOperationList<Job>("operations.jobs", lists.jobs);
   const [liveCount, setLiveCount] = useState(0);
   useEffect(() => {
-    import("@/lib/bff/realtime").then(({ realtime }) => {
+    import("@/lib/bff-v1").then(({ realtime }) => {
       const off = realtime.on("job", (p) => {
         const e = p as { jobId: string; kind: string; status: Job["status"]; owner: string; ts: string };
         setRows((rs) => {
@@ -138,7 +138,7 @@ export const AlertsPage = () => {
   const [rows, setRows] = useCachedOperationList<Alert>("operations.alerts", lists.alerts);
   const [active, setActive] = useState<Alert | null>(null);
   useEffect(() => {
-    import("@/lib/bff/realtime").then(({ realtime }) => {
+    import("@/lib/bff-v1").then(({ realtime }) => {
       const off = realtime.on("alert", (p) => {
         const alert = normalizeAlertTimestampFields(p as Alert) ?? (p as Alert);
         setRows((rs) => {
@@ -449,7 +449,7 @@ export const AuditPage = () => {
   const [outcome, setOutcome] = useState<string>("all");
   useEffect(() => { loadListItems<AuditEvent>(lists.audit).then(setRows); }, []);
   useEffect(() => {
-    import("@/lib/bff/realtime").then(({ realtime }) => {
+    import("@/lib/bff-v1").then(({ realtime }) => {
       const off = realtime.on("audit", (p) => {
         setRows((rs) => [p as AuditEvent, ...rs].slice(0, 200));
       });

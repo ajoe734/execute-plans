@@ -9,8 +9,12 @@
 // (no toast, custom UI), import `tryRunAction` from `@/lib/bff-v1` directly.
 
 import { toast } from "sonner";
-import type { RunActionInput, MutationResult } from "@/lib/bff/mutations";
-import { tryRunAction, type RunActionV1Options } from "@/lib/bff-v1";
+import {
+  tryRunAction,
+  type RunActionInput,
+  type MutationResult,
+  type RunActionV1Options,
+} from "./writes";
 import { commandReceiptDescription } from "./commandReceipt";
 import i18n from "@/i18n";
 

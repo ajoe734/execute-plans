@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { writeOverlay, withOverlay } from "@/lib/bff/writeOverlay";
+import { writeOverlay, withOverlay } from "@/lib/bff-v1/writeOverlay";
 
 describe("writeOverlay", () => {
   beforeEach(() => writeOverlay.clear());

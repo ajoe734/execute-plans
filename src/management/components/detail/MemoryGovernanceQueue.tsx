@@ -3,8 +3,8 @@ import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { bff } from "@/lib/bff-v1";
-import type { MemoryUpdate } from "@/lib/bff/types";
+import { bffV1 } from "@/lib/bff-v1";
+import type { MemoryUpdate } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { useNavigate } from "react-router-dom";
 import { safeDateTime } from "@/lib/utils";
@@ -24,7 +24,7 @@ export const MemoryGovernanceQueue = ({ personaId }: { personaId: string }) => {
   const [items, setItems] = useState<MemoryUpdate[]>([]);
 
   useEffect(() => {
-    bff.memoryUpdates.forPersona(personaId).then(setItems);
+    bffV1.memoryUpdates.forPersona(personaId).then(setItems);
   }, [personaId]);
 
   return (

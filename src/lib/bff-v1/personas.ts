@@ -1,7 +1,9 @@
-import type { Persona } from "@/lib/bff/types";
+import * as seed from "@/mocks/seed";
+import type { Persona } from "./dto";
 import { bffFetch } from "./client";
 import { BffError } from "./errors";
 import { paths } from "./paths";
+import { liveListOrSeed } from "./domainReads";
 
 type BffEnvelope<T> = { data?: T; meta?: unknown } | T;
 
@@ -71,6 +73,10 @@ export async function createPersona(
   return bundle;
 }
 
+export async function listPersonas(): Promise<Persona[]> {
+  return liveListOrSeed("personas.list", paths.personas(), seed.personas);
+}
+
 export async function getPersona(id: string): Promise<Persona | undefined> {
   try {
     const raw = await bffFetch<BffEnvelope<Persona>>({
@@ -90,7 +96,6 @@ export async function runPersonaAction(
   payload: Record<string, unknown> = {},
   opts: PersonaWriteOptions = {},
 ): Promise<Record<string, unknown>> {
-  // 2026-05-20 PM-10 — canonical write path: /bff/actions/{entityType}/{entityId}/{actionId}
   return bffFetch<Record<string, unknown>>({
     method: "POST",
     path: paths.action("persona", id, action),
@@ -113,3 +118,11 @@ export async function testPersonaPrompt(
     correlationId: opts.correlationId,
   });
 }
+
+export const personas = {
+  list: listPersonas,
+  get: getPersona,
+  create: createPersona,
+  runAction: runPersonaAction,
+  testPrompt: testPersonaPrompt,
+};

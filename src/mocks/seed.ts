@@ -9,7 +9,7 @@ import type {
   PolicyViolation, EvaluationRun, ObjectVersion, FeatureSet, PerformanceSeries,
   Watcher, DecisionJournalEntry, AllocationLimit, PoolFreeze, DeploymentStage,
   McpSecret, PromotionRecord, MetricFreeze, RebalanceOverride,
-} from "@/lib/bff/types";
+} from "@/lib/bff-v1";
 import type {
   PersonaTradeReflection,
   TradeEpisodeProjection,
@@ -341,7 +341,7 @@ export const allocationSimulations: AllocationSimulation[] = [
 
 // ---------- Action catalog (Part 6 §availableActions) ----------
 // Drives BFF-declared availableActions per state; RBAC further filters at the UI layer.
-type ActionMap = Partial<Record<import("@/lib/bff/types").LifecycleState, string[]>>;
+type ActionMap = Partial<Record<import("@/lib/bff-v1").LifecycleState, string[]>>;
 const ACTIONS_BY_TYPE: Record<string, ActionMap> = {
   Strategy: {
     draft: ["edit", "submit_review", "delete"],

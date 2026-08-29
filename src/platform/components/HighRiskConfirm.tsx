@@ -23,7 +23,7 @@ import { usePlatform } from "@/platform/store";
 import { AlertTriangle, ArrowRight, Loader2 } from "lucide-react";
 import { RiskBadge } from "./RiskBadge";
 import { StatusBadge } from "./StatusBadge";
-import type { RiskLevel } from "@/lib/bff/types";
+import type { RiskLevel } from "@/lib/bff-v1";
 import { requestConfirmToken as requestConfirmTokenV1 } from "@/lib/bff-v1";
 import { getHighRiskAction } from "@/lib/v3/highRiskActions";
 import { validateMemo, MEMO_POLICY_BY_RISK, type ActionRiskClass } from "@/lib/v4/memoPolicy";

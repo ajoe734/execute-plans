@@ -2,8 +2,8 @@
 import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { bff } from "@/lib/bff-v1";
-import type { EvolutionCandidate, EvolutionRun } from "@/lib/bff/types";
+import { bffV1 } from "@/lib/bff-v1";
+import type { EvolutionCandidate, EvolutionRun } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { safeDateTime } from "@/lib/utils";
@@ -16,7 +16,7 @@ export const EvolutionRunsPanel = ({ programId, mode = "all" }: { programId: str
   const [cands, setCands] = useState<EvolutionCandidate[]>([]);
 
   useEffect(() => {
-    bff.evolutionRuns.forProgram(programId).then((rs) => {
+    bffV1.evolutionRuns.forProgram(programId).then((rs) => {
       setRuns(rs);
       if (rs[0]) setActive(rs[0].id);
     });
@@ -24,7 +24,7 @@ export const EvolutionRunsPanel = ({ programId, mode = "all" }: { programId: str
 
   useEffect(() => {
     if (!active) return;
-    bff.evolutionCandidates.forRun(active).then(setCands);
+    bffV1.evolutionCandidates.forRun(active).then(setCands);
   }, [active]);
 
   const showRuns = mode === "all" || mode === "runs";

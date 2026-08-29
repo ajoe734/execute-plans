@@ -19,12 +19,11 @@ import { ArrowLeft, ArrowRight, CheckCircle2, AlertTriangle, Loader2 } from "luc
 import { toast } from "sonner";
 import { bffFetch } from "@/lib/bff-v1/client";
 import { paths } from "@/lib/bff-v1/paths";
-import { withWriteFallback } from "@/lib/bff-v1/writeFallback";
 import { getPersona, runPersonaAction } from "@/lib/bff-v1/personas";
 import { commandReceiptDescription } from "@/lib/bff-v1/commandReceipt";
 import { lists } from "@/lib/bff-v1/lists";
 import { useT } from "@/platform/hooks";
-import type { Persona } from "@/lib/bff/types";
+import type { Persona } from "@/lib/bff-v1";
 
 interface CapitalPoolOption { id: string; name?: string; status?: string }
 
@@ -122,20 +121,17 @@ export default function PersonaOnboarding() {
   const run = async <T,>(n: StepNum, endpoint: string, fn: () => Promise<T>) => {
     update(n, { status: "running" });
     try {
-      const r = await withWriteFallback(fn, { endpoint });
-      if (r.degraded) {
-        update(n, { status: "degraded", reason: r.reason });
-        toast.warning(t("persona.onboarding.banner.degraded"));
-      } else {
-        update(n, { status: "done", payload: r.data as Record<string, unknown> });
-        toast.success(`Step ${n} ${t("persona.onboarding.stageStatus.done")}`, {
-          description: commandReceiptDescription(r.data, { fallback: `Persona onboarding step ${n} · ${endpoint}` }),
-        });
-        if (n < 5) setStep((n + 1) as StepNum);
-      }
+      const data = await fn();
+      update(n, { status: "done", payload: data as Record<string, unknown> });
+      toast.success(`Step ${n} ${t("persona.onboarding.stageStatus.done")}`, {
+        description: commandReceiptDescription(data, { fallback: `Persona onboarding step ${n} · ${endpoint}` }),
+      });
+      if (n < 5) setStep((n + 1) as StepNum);
     } catch (err) {
       const e = err as { code?: string; message?: string };
-      update(n, { status: "failed", reason: e.code ?? e.message ?? "error" });
+      const reason = e.code ?? e.message ?? "error";
+      update(n, { status: "failed", reason });
+      toast.error(`Step ${n} failed: ${reason}`);
     }
   };
 
@@ -169,7 +165,7 @@ export default function PersonaOnboarding() {
   }));
 
   const allDone = (["1", "2", "3", "4", "5"] as const).every(
-    (k) => states[Number(k) as StepNum].status === "done" || states[Number(k) as StepNum].status === "degraded",
+    (k) => states[Number(k) as StepNum].status === "done",
   );
 
   if (!personaLoaded) {

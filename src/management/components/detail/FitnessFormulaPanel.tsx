@@ -2,25 +2,24 @@
 import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { bff } from "@/lib/bff-v1";
-import type { FitnessFormula, MutationRule } from "@/lib/bff/types";
+import { bffV1 } from "@/lib/bff-v1";
+import type { FitnessFormula, MutationRule } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import {
   MockDataEmptyState,
 } from "@/components/data/MockDataBadge";
-import { getMockDataBadgeModel } from "@/components/data/mockDataBadgeModel";
-import { useLiveStatusSnapshot } from "@/lib/bff/liveTransport";
+import { useLiveStatusSnapshot } from "@/lib/bff-v1/liveTransport";
 
 export const FitnessFormulaPanel = ({ mode = "all" }: { mode?: "all" | "fitness" | "mutation" }) => {
   const t = useT();
   const liveStatus = useLiveStatusSnapshot();
-  const fitnessGate = getMockDataBadgeModel("bff.fitnessFormulas.list", liveStatus);
-  const mutationGate = getMockDataBadgeModel("bff.mutationRules.list", liveStatus);
+  const fitnessGate = getMockDataBadgeModel("bffV1.fitnessFormulas.list", liveStatus);
+  const mutationGate = getMockDataBadgeModel("bffV1.mutationRules.list", liveStatus);
   const [formulas, setFormulas] = useState<FitnessFormula[]>([]);
   const [rules, setRules] = useState<MutationRule[]>([]);
   useEffect(() => {
-    bff.fitnessFormulas.list().then(setFormulas);
-    bff.mutationRules.list().then(setRules);
+    bffV1.fitnessFormulas.list().then(setFormulas);
+    bffV1.mutationRules.list().then(setRules);
   }, []);
   const showFitness = mode === "all" || mode === "fitness";
   const showMutation = mode === "all" || mode === "mutation";
@@ -40,7 +39,7 @@ export const FitnessFormulaPanel = ({ mode = "all" }: { mode?: "all" | "fitness"
           </div>
         ))}
         {formulas.length === 0 && fitnessGate ? (
-          <MockDataEmptyState helperName="bff.fitnessFormulas.list" className="border-0 p-4" />
+          <MockDataEmptyState helperName="bffV1.fitnessFormulas.list" className="border-0 p-4" />
         ) : formulas.length === 0 ? (
           <div className="text-xs text-muted-foreground">{t("empty.none")}</div>
         ) : null}
@@ -62,7 +61,7 @@ export const FitnessFormulaPanel = ({ mode = "all" }: { mode?: "all" | "fitness"
           </div>
         ))}
         {rules.length === 0 && mutationGate ? (
-          <MockDataEmptyState helperName="bff.mutationRules.list" className="border-0 p-4" />
+          <MockDataEmptyState helperName="bffV1.mutationRules.list" className="border-0 p-4" />
         ) : rules.length === 0 ? (
           <div className="text-xs text-muted-foreground">{t("empty.none")}</div>
         ) : null}

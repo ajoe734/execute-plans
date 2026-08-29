@@ -3,9 +3,9 @@
 // Live strict — pages must not call fetch() directly; use this module.
 // Agora-scoped paths only; no Management routes.
 
-import { bffFetch, detectBaseUrl } from "@/lib/bff-v1/client";
-import { getAuthProvider } from "@/lib/bff-v1/headers";
-import { fetchSse } from "@/lib/bff-v1/sse/liveSse";
+import { bffFetch, detectBaseUrl } from "../client";
+import { getAuthProvider } from "../headers";
+import { fetchSse } from "../sse/liveSse";
 
 import type {
   StrategyWorkshop,

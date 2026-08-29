@@ -1,7 +1,7 @@
 import { Section, Field } from "@/management/pages/ObjectDetailLayout";
 import { Badge } from "@/components/ui/badge";
 import { useT } from "@/platform/hooks";
-import type { Persona } from "@/lib/bff/types";
+import type { Persona } from "@/lib/bff-v1";
 
 export const PersonaIdentityTab = ({ p }: { p: Persona }) => {
   const t = useT();

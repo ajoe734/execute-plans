@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach } from "vitest";
-import { mutations } from "@/lib/bff/mutations";
+import { mutations } from "@/lib/bff-v1/mocks/mutations";
 import { __resetIdempotencyForTests } from "@/lib/v4/idempotency";
 import {
   issueConfirmTokenV4, redeemConfirmToken, revokeConfirmToken,

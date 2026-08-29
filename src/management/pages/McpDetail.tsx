@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { bff } from "@/lib/bff-v1";
-import type { McpServer, McpTool } from "@/lib/bff/types";
+import { bffV1 } from "@/lib/bff-v1";
+import type { McpServer, McpTool } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
 import { AuditTimeline } from "@/platform/components/AuditTimeline";
@@ -34,8 +34,8 @@ export const McpServerDetail = () => {
   useEffect(() => {
     if (!id) return;
     setLoaded(false);
-    bff.mcpServers.get(id).then((row) => { setS(row); setLoaded(true); }).catch(() => setLoaded(true));
-    bff.mcpTools.list().then((all) => setTools(all.filter((t) => t.serverId === id)));
+    bffV1.mcpServers.get(id).then((row) => { setS(row); setLoaded(true); }).catch(() => setLoaded(true));
+    bffV1.mcpTools.list().then((all) => setTools(all.filter((t) => t.serverId === id)));
   }, [id]);
   if (!s) {
     return loaded
@@ -176,7 +176,7 @@ export const McpToolDetail = () => {
   useEffect(() => {
     if (!id) return;
     setLoaded(false);
-    bff.mcpTools.get(id).then((row) => { setTool(row); setLoaded(true); }).catch(() => setLoaded(true));
+    bffV1.mcpTools.get(id).then((row) => { setTool(row); setLoaded(true); }).catch(() => setLoaded(true));
   }, [id]);
   if (!tool) {
     return loaded

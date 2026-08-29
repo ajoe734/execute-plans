@@ -161,7 +161,7 @@ export const TopBar = () => {
         deferHydrateFromFullLists();
       });
 
-      import("@/lib/bff/realtime").then(({ realtime }) => {
+      import("@/lib/bff-v1").then(({ realtime }) => {
         if (disposed) return;
         const offJob = realtime.on("job", (p) => {
           const source = liveStatus.get();

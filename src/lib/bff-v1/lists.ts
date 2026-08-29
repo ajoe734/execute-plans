@@ -11,7 +11,7 @@
 // canonical Management read surfaces have a real adapter when live mode is on.
 
 import * as seed from "@/mocks/seed";
-import type { Alert, Incident, Runtime } from "@/lib/bff/types";
+import type { Alert, Incident, Runtime } from "./dto";
 import type { ListEnvelope } from "./dto";
 import { withLiveOrMock } from "./liveTransport";
 import { paths } from "./paths";
@@ -20,7 +20,7 @@ import {
   normalizeIncidentTimestampFields,
 } from "./eventTimestamps";
 import { normalizeCapitalPool } from "./capitalPools";
-import { normalizeBaseObjectFields } from "./seed";
+import { normalizeBaseObjectFields } from "./domainReads";
 
 /**
  * Pack D D22 list-class taxonomy. Drives `totalCountExact` + whether

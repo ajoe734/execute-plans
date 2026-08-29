@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { safeDateTime } from "@/lib/utils";
-import { bff } from "@/lib/bff-v1";
-import type { PolicyViolation } from "@/lib/bff/types";
+import { bffV1 } from "@/lib/bff-v1";
+import type { PolicyViolation } from "@/lib/bff-v1";
 import { DataTable } from "@/platform/components/DataTable";
 import { RiskBadge } from "@/platform/components/RiskBadge";
 import { Badge } from "@/components/ui/badge";
@@ -17,7 +17,7 @@ export const PersonaPolicyViolationsTab = ({ personaId }: { personaId: string })
   const t = useT();
   const [rows, setRows] = useState<PolicyViolation[]>([]);
   useEffect(() => {
-    bff.policyViolations.forSubject("Persona", personaId).then(setRows);
+    bffV1.policyViolations.forSubject("Persona", personaId).then(setRows);
   }, [personaId]);
   return (
     <DataTable

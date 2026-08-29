@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { ManagementTableScroll } from "@/management/components/ManagementTableScroll";
 import { Badge } from "@/components/ui/badge";
 import { ShieldAlert } from "lucide-react";
-import type { PermissionGrant, PermissionMatrix as Matrix } from "@/lib/bff/types";
+import type { PermissionGrant, PermissionMatrix as Matrix } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { RiskBadge } from "@/platform/components/RiskBadge";
 import { NonProductionActionButton } from "@/management/components/NonProductionActionButton";

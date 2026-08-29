@@ -8,7 +8,7 @@
 //
 // Tolerant of missing fields — degrades gracefully when BFF F4 surface isn't live yet.
 
-import type { Persona } from "@/lib/bff/types";
+import type { Persona } from "@/lib/bff-v1";
 
 export type PersonaStageKey = "lifecycle" | "binding" | "plan" | "approval" | "runtime";
 

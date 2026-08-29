@@ -4,8 +4,8 @@ import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { bff } from "@/lib/bff-v1";
-import type { PermissionInstance, PermissionMatrix } from "@/lib/bff/types";
+import { bffV1 } from "@/lib/bff-v1";
+import type { PermissionInstance, PermissionMatrix } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 
 const grantTone: Record<string, string> = {
@@ -27,7 +27,7 @@ export const PermissionMatrixEmbed = ({ personaId }: { personaId: string }) => {
   const [matrices, setMatrices] = useState<Record<string, PermissionMatrix | undefined>>({});
 
   useEffect(() => {
-    Promise.all(instances.map((i) => bff.permissionMatrix.get(i.key).then((m) => [i.key, m] as const)))
+    Promise.all(instances.map((i) => bffV1.permissionMatrix.get(i.key).then((m) => [i.key, m] as const)))
       .then((entries) => setMatrices(Object.fromEntries(entries)));
   }, []);
 

@@ -3,8 +3,8 @@ import {
   type BackendCommandReceiptData,
   type BackendCommandResponse,
   type FinalCommandEnvelope,
-} from "@/lib/bff/commandClient";
-import { idempotencyKey as mintIdempotencyKey } from "@/lib/bff-v1/headers";
+} from "./writes";
+import { idempotencyKey as mintIdempotencyKey } from "./headers";
 import { newCorrelationId } from "@/lib/v4/correlation";
 
 export type EvidenceOperationAction =

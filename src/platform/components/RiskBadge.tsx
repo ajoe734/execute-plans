@@ -1,6 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import type { RiskLevel } from "@/lib/bff/types";
+import type { RiskLevel } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 
 const map: Record<RiskLevel, string> = {

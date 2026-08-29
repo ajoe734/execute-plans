@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Check, X, Play, PlayCircle, Loader2 } from "lucide-react";
 import { useT } from "@/platform/hooks";
-import { runAllScenarios, runScenario, getScenarioMeta, type ScenarioResult } from "@/lib/bff/scenarios";
+import { runAllScenarios, runScenario, getScenarioMeta, type ScenarioResult } from "@/lib/bff-v1/mocks/scenarios";
 import i18n from "@/i18n";
 import { toast } from "sonner";
 

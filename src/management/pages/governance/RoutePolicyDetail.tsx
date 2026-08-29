@@ -8,8 +8,8 @@ import { Card } from "@/components/ui/card";
 import { ManagementTableScroll } from "@/management/components/ManagementTableScroll";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, GitCompare } from "lucide-react";
-import { bff } from "@/lib/bff-v1";
-import type { Persona, PolicyVersion, RoutePolicy } from "@/lib/bff/types";
+import { bffV1 } from "@/lib/bff-v1";
+import type { Persona, PolicyVersion, RoutePolicy } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { RoutePolicyEditor } from "@/management/components/governance/RoutePolicyEditor";
 import { PolicyVersionDiff } from "@/management/components/governance/PolicyVersionDiff";
@@ -29,11 +29,11 @@ export const RoutePolicyDetail = () => {
 
   useEffect(() => {
     if (!id) return;
-    bff.routePolicies.get(id).then((p) => {
+    bffV1.routePolicies.get(id).then((p) => {
       setPolicy(p);
-      if (p) bff.personas.get(p.personaId).then(setPersona);
+      if (p) bffV1.personas.get(p.personaId).then(setPersona);
     });
-    bff.policyVersions.list(id).then((v) => {
+    bffV1.policyVersions.list(id).then((v) => {
       setVersions(v);
       if (v.length >= 2) {
         setLeftV(v[0].id);

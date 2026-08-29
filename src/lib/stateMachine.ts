@@ -1,5 +1,5 @@
 // Lifecycle state machine — Part 8 §state machine
-import type { LifecycleState } from "./bff/types";
+import type { LifecycleState } from "./bff-v1";
 
 export const TRANSITIONS: Record<LifecycleState, LifecycleState[]> = {
   draft: ["review", "retired"],

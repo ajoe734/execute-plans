@@ -1,0 +1,50 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "ACG-FE-DEAD-NL-20260828",
+  "owner": "Claude",
+  "reviewer": "Antigravity",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/ACG-FE-DEAD-NL-20260828",
+  "status": "ready-for-independent-exact-head-review",
+  "recorded_at": "2026-08-28T12:45:00.000Z",
+  "scope": {
+    "adopted": [
+      "Delete src/management/components/nl/NlAssistantDrawer.tsx, src/management/pages/oversight/NlConsole.tsx, and the unrouted src/management/pages/oversight/_stubs.tsx barrel: App.tsx and routes/management/oversight.tsx already import every real oversight page directly, so nothing routed through these files.",
+      "Delete the fixed mock NL responder src/lib/bff-v1/managementNl.ts and the corresponding dead code in src/lib/v5/management/nl.ts, trimming the re-export barrel in src/lib/v5/management/index.ts to match.",
+      "Relocate the still-live ManagementNlContext interface into src/management/hooks/useManagementNlContext.ts instead of deleting it, because it is consumed by useManagementNlContext.ts -> AgentPanelBody.tsx -> the mounted FloatingAgentPanel on every /management/* route.",
+      "Remove NL-only imports/describe blocks from src/lib/v5/management/__tests__/management.test.ts and revamp-2026-05-20.test.ts that exercised only the deleted mock responder, while keeping their other coverage (readiness, trading baseline, persona intent) intact."
+    ],
+    "not_changed": [
+      "The active Management AI provider path: src/lib/bff-v1/managementAi.ts and its live /management/nl/ask and /management/nl/ask/stream routes (src/lib/bff-v1/paths.ts), consumed by AgentPanelBody.tsx / FloatingAgentPanel.",
+      ".env.example and src/i18n/locales/ -- neither referenced the deleted NL console/stub/mock-responder surfaces, so no entries were touched."
+    ]
+  },
+  "validation": {
+    "typecheck": {
+      "command": "npm run typecheck",
+      "result": "passed: tsc -p tsconfig.agora.json --noEmit with 0 errors"
+    },
+    "eslint": {
+      "command": "npm run lint",
+      "result": "passed: 0 errors, 63 pre-existing warnings unrelated to this change"
+    },
+    "vitest_full_suite": {
+      "command": "npm test",
+      "result": "passed: 1979/1979 tests passed across 193 test files"
+    },
+    "dead_surface_grep": {
+      "command": "grep -ril \"NlConsole|NlAssistantDrawer|managementNl|_stubs\" src .env.example src/i18n/locales",
+      "result": "only remaining hits are the live managementAi.ts / AgentPanelBody.tsx / useManagementNlContext.ts / paths.ts Management AI provider path; zero references to the deleted console/stub/mock-responder files"
+    }
+  },
+  "review_binding": {
+    "sha_disposition": "Independent approval must bind the final PR head that contains this implementation and evidence manifest."
+  },
+  "independent_review_required": [
+    "Confirm NlAssistantDrawer.tsx, NlConsole.tsx, oversight/_stubs.tsx, lib/bff-v1/managementNl.ts, and the removed portion of lib/v5/management/nl.ts have zero remaining production callers, routes, or chunks.",
+    "Confirm ManagementNlContext still exists (relocated to useManagementNlContext.ts) and AgentPanelBody.tsx / FloatingAgentPanel / the live /management/nl/ask(-stream) routes remain functional and unmodified in behavior.",
+    "Confirm .env.example and src/i18n/locales/ needed no changes because they never referenced the deleted surfaces.",
+    "Confirm npm run typecheck, npm run lint, and the full vitest suite pass cleanly on the exact reviewed PR head."
+  ]
+}

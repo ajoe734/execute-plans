@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 import { safeDateTime } from "@/lib/utils";
-import { bff } from "@/lib/bff-v1";
-import { mutations } from "@/lib/bff/mutations";
-import type { MetricFreeze } from "@/lib/bff/types";
+import { bffV1, writes } from "@/lib/bff-v1";
+import type { MetricFreeze } from "@/lib/bff-v1";
 import { DataTable } from "@/platform/components/DataTable";
 import { MetricFreezeBadge } from "./MetricFreezeBadge";
 import { PermissionAwareButton } from "@/platform/components/PermissionAwareButton";
@@ -15,7 +14,7 @@ export const MetricFreezeManager = ({ rebalanceId }: { rebalanceId: string }) =>
   const t = useT();
   const [rows, setRows] = useState<MetricFreeze[]>([]);
   const [pending, setPending] = useState<MetricFreeze | null>(null);
-  useEffect(() => { bff.metricFreezes.forRebalance(rebalanceId).then(setRows); }, [rebalanceId]);
+  useEffect(() => { bffV1.metricFreezes.forRebalance(rebalanceId).then(setRows); }, [rebalanceId]);
 
   const toggle = (m: MetricFreeze) => setPending(m);
 
@@ -46,7 +45,7 @@ export const MetricFreezeManager = ({ rebalanceId }: { rebalanceId: string }) =>
           description={`Toggle freeze on ${pending.metric}. Frozen metrics will not update during the rebalance window.`}
           confirmToken={pending.frozen ? "UNFREEZE" : "FREEZE"}
           onConfirm={async (memo) => {
-            const r = await mutations.freezeMetric(rebalanceId, pending.metric, !pending.frozen, memo);
+            const r = await writes.freezeMetric(rebalanceId, pending.metric, !pending.frozen, memo);
             if (!r.ok) { toast.error(t("toast.illegalTransition")); return; }
             setRows((rs) => rs.map((x) => x.id === pending.id ? { ...x, frozen: !pending.frozen, frozenBy: "ops", frozenAt: new Date().toISOString() } : x));
             toast.success(t("toast.actionQueued"), {

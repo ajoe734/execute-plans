@@ -1,6 +1,6 @@
 import { Check, Circle, Loader2, AlertCircle, MinusCircle } from "lucide-react";
 import { cn, safeDateTime } from "@/lib/utils";
-import type { WorkflowStep } from "@/lib/bff/types";
+import type { WorkflowStep } from "@/lib/bff-v1";
 
 interface Props {
   steps: ReadonlyArray<WorkflowStep>;

@@ -1,7 +1,7 @@
 import {
   getLiveStatusSnapshot,
   type LiveStatusSnapshot,
-} from "@/lib/bff/liveTransport";
+} from "@/lib/bff-v1/liveTransport";
 import {
   getSeedHelperLiveBehavior,
   getSeedTaxonomyEntry,

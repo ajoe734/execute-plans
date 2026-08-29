@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import i18n from "@/i18n";
-import type { CapitalPool, Strategy } from "@/lib/bff/types";
+import type { CapitalPool, Strategy } from "@/lib/bff-v1";
 import type { ListEnvelope } from "@/lib/bff-v1";
 import type { ManagementPersonaFleetRow } from "@/lib/bff-v1/management";
 import { CapitalPoolDetail } from "./CapitalPoolDetail";
@@ -24,13 +24,13 @@ vi.mock("@/lib/bff-v1", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/bff-v1")>();
   return {
     ...actual,
-    bff: {
-      ...actual.bff,
-      capitalPools: { ...actual.bff.capitalPools, get: mocks.capitalGet },
-      strategies: { ...actual.bff.strategies, list: mocks.strategiesList },
-      rebalances: { ...actual.bff.rebalances, list: mocks.rebalancesList },
-      approvals: { ...actual.bff.approvals, list: mocks.approvalsList },
-      audit: { ...actual.bff.audit, list: mocks.auditList },
+    bffV1: {
+      ...actual.bffV1,
+      capitalPools: { ...actual.bffV1.capitalPools, get: mocks.capitalGet },
+      strategies: { ...actual.bffV1.strategies, list: mocks.strategiesList },
+      rebalances: { ...actual.bffV1.rebalances, list: mocks.rebalancesList },
+      approvals: { ...actual.bffV1.approvals, list: mocks.approvalsList },
+      audit: { ...actual.bffV1.audit, list: mocks.auditList },
     },
     lists: {
       ...actual.lists,

@@ -5,9 +5,9 @@ import { buildHeaders, isMutation, BFF_API_VERSION } from "./headers";
 import { BffError, makeBffError, normalizeBffErrorEnvelope } from "./errors";
 import { bootstrapMockAdapters } from "./mocks/adapters";
 import { resolveMock } from "./mocks/registry";
-import { liveStatus } from "./liveStatus";
+import { liveStatus, type BffMode } from "./liveStatus";
 
-export type BffMode = "mock" | "live";
+export type { BffMode };
 
 function readEnv(): Record<string, string | undefined> {
   const viteEnv = ((import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {});
@@ -15,7 +15,7 @@ function readEnv(): Record<string, string | undefined> {
   return { ...viteEnv, ...nodeEnv };
 }
 
-function detectMode(): BffMode {
+export function detectMode(): BffMode {
   try {
     // Vite-style env access; defaults to mock.
     const env = readEnv();
@@ -168,9 +168,3 @@ export async function bffRequest<T = unknown>(req: BffRequest): Promise<BffResul
     return { ok: false, error: wrapped };
   }
 }
-
-export const bffV1 = {
-  fetch: bffFetch,
-  request: bffRequest,
-  detectMode,
-};

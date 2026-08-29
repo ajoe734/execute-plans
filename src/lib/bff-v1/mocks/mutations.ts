@@ -9,9 +9,9 @@ import type {
   LifecycleState, Strategy, Job, RiskLevel,
   MetricFreeze, RebalanceOverride, PromotionRecord, McpSecret,
   AllocationLimit, PoolFreeze, DeploymentStage,
-} from "./types";
-import type { RoutePolicy, RoutePolicyRule, PermissionMatrix, PermissionGrant, ConsultRule, PolicyVersion } from "./types";
-import { realtime } from "./realtime";
+} from "../dto";
+import type { RoutePolicy, RoutePolicyRule, PermissionMatrix, PermissionGrant, ConsultRule, PolicyVersion } from "../dto";
+import { realtime } from "../sse/bridge";
 import { usePlatform } from "@/platform/store";
 import { machines, type MachineKey } from "@/lib/stateMachines";
 import { findTransition } from "@/lib/stateMachines/types";

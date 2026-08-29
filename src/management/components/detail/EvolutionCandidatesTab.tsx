@@ -7,8 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { bff } from "@/lib/bff-v1";
-import type { EvolutionCandidate, EvolutionRun } from "@/lib/bff/types";
+import { bffV1 } from "@/lib/bff-v1";
+import type { EvolutionCandidate, EvolutionRun } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { NonProductionActionButton } from "@/management/components/NonProductionActionButton";
 
@@ -23,10 +23,10 @@ export const EvolutionCandidatesTab = ({ programId }: { programId: string }) => 
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [inspect, setInspect] = useState<EvolutionCandidate | null>(null);
 
-  useEffect(() => { bff.evolutionRuns.forProgram(programId).then(setRuns); }, [programId]);
+  useEffect(() => { bffV1.evolutionRuns.forProgram(programId).then(setRuns); }, [programId]);
   useEffect(() => {
     if (!runs.length) return;
-    Promise.all(runs.map((r) => bff.evolutionCandidates.forRun(r.id))).then((res) => setAll(res.flat()));
+    Promise.all(runs.map((r) => bffV1.evolutionCandidates.forRun(r.id))).then((res) => setAll(res.flat()));
   }, [runs]);
 
   const filtered = useMemo(() => all.filter((c) => {

@@ -52,7 +52,7 @@ import {
 import {
   submitEvidenceOperation,
   type EvidenceOperationAction,
-} from "@/lib/bff/evidenceOperations";
+} from "@/lib/bff-v1";
 import { useV5Live } from "@/management/pages/v5/useV5Live";
 import { CodeBlock } from "@/components/ai-elements/code-block";
 import {

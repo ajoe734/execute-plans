@@ -13,8 +13,8 @@ import { StatusBadge } from "./StatusBadge";
 import { useT } from "@/platform/hooks";
 import { usePermissions } from "@/lib/usePermissions";
 import { useEffect, useState } from "react";
-import { bff } from "@/lib/bff-v1";
-import type { AuditEvent } from "@/lib/bff/types";
+import { bffV1 } from "@/lib/bff-v1";
+import type { AuditEvent } from "@/lib/bff-v1";
 import { useNavigate } from "react-router-dom";
 import { safeDateTime } from "@/lib/utils";
 
@@ -61,7 +61,7 @@ export const RightDrawer = () => {
 
   useEffect(() => {
     if (!target) return;
-    bff.audit.list().then((rows) =>
+    bffV1.audit.list().then((rows) =>
       setAudit(rows.filter((r) => r.target === target.id).slice(0, 6)),
     );
   }, [target]);

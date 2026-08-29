@@ -1,7 +1,7 @@
 // Phase 13.G — Skill risk score + historical incidents.
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import type { Skill } from "@/lib/bff/types";
+import type { Skill } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { StatCard } from "@/platform/components/StatCard";
 import { DataTable } from "@/platform/components/DataTable";

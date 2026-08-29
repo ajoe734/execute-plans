@@ -4,7 +4,7 @@ import { Card } from "@/components/ui/card";
 import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import type { CapitalPool } from "@/lib/bff/types";
+import type { CapitalPool } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { NonProductionActionButton } from "@/management/components/NonProductionActionButton";
 

@@ -16,7 +16,7 @@ import {
   reviewCandidateMember,
   triggerCandidatePoolScore,
 } from "./candidatePool";
-import { setAuthProvider } from "@/lib/bff-v1/headers";
+import { setAuthProvider } from "../headers";
 
 const BASE = "https://test.example";
 const SESSION_TOKEN = "signed-candidate-pool-session";

@@ -1,4 +1,8 @@
-import { withStrictLiveOrMock } from "@/lib/bff/liveRead";
+import {
+  withStrictLiveOrMock,
+  strictDataFrom,
+  strictNotFoundAsUndefined,
+} from "./liveTransport";
 import type {
   ConsultRule,
   MemoryUpdate,
@@ -6,7 +10,7 @@ import type {
   PermissionInstance,
   PermissionMatrix,
   RiskLevel,
-} from "@/lib/bff/types";
+} from "./dto";
 import type {
   ConnectorDefinition,
   DataSourceInstance,
@@ -15,25 +19,15 @@ import type {
   SourceDesiredState,
   SourceObservedState,
 } from "./managementDataSources";
+import type { ManagementListMeta, ManagementSurfaceState } from "./dto";
 import { paths } from "./paths";
+import type { OodaLoopPacket, OodaPacketDetail, OodaPacketMeta } from "@/lib/ooda/packets";
+
 
 type UnknownRecord = Record<string, unknown>;
 
-export interface ManagementSurfaceState {
-  status: string;
-  source?: string;
-  message?: string;
-  [key: string]: unknown;
-}
-
-export interface ManagementListMeta {
-  status?: string;
-  source?: string;
-  snapshot_at?: string;
-  snapshotAt?: string;
-  surfaces?: Record<string, ManagementSurfaceState>;
-  [key: string]: unknown;
-}
+// Preserve the existing public type-import path while dto.ts owns the shape.
+export type { ManagementListMeta, ManagementSurfaceState } from "./dto";
 
 export interface ManagementPageInfo {
   total?: number;
@@ -666,4 +660,35 @@ export const managementConsoleReads = {
 
   knowledgeInbox: () =>
     readRecords(paths.knowledgeInbox(), "knowledge", adaptKnowledge),
+
+  oodaPacket: oodaPacketDetail,
+  oodaPackets: {
+    get: oodaPacketDetail,
+  },
 };
+
+function adaptOodaPacketDetail(body: unknown): OodaPacketDetail | undefined {
+  const envelope = asRecord(body);
+  const rawPacket = asRecord(strictDataFrom(body) ?? body);
+  const id = String(rawPacket.packet_id ?? rawPacket.id ?? "").trim();
+  if (!id) return undefined;
+  const packet = {
+    ...rawPacket,
+    packet_id: id,
+  } as OodaLoopPacket;
+  const meta = asRecord(envelope.meta) as OodaPacketMeta;
+  return {
+    packet,
+    meta: Object.keys(meta).length > 0 ? meta : undefined,
+  };
+}
+
+export function oodaPacketDetail(id: string): Promise<OodaPacketDetail | undefined> {
+  return withStrictLiveOrMock<OodaPacketDetail | undefined, unknown>(
+    { method: "GET", path: paths.oodaPacket(id) },
+    async () => undefined,
+    adaptOodaPacketDetail,
+    strictNotFoundAsUndefined,
+  );
+}
+
