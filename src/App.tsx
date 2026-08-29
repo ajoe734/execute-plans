@@ -185,6 +185,7 @@ const App = () => (
             <Routes>
             <Route path="/" element={<Navigate to="/management" replace />} />
             <Route path="/auth" element={<AuthRoute />} />
+            <Route path="/agora/auth" element={<AuthRoute />} />
             <Route path="/management/agent" element={<ManagementAgentRedirectRoute />} />
             <Route path="/management/agent/:threadId" element={<ManagementAgentRedirectRoute />} />
             <Route path="/management/control-room-legacy" element={<Navigate to="/management/cockpit" replace />} />

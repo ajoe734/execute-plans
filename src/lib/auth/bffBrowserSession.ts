@@ -32,6 +32,12 @@ export interface VerifiedBffBrowserSession {
   readiness: BffBrowserReadiness;
 }
 
+/**
+ * Authentication readback must never leave the route guard in a perpetual
+ * loading state when an unrelated provider is unhealthy.
+ */
+export const BFF_BROWSER_SESSION_VERIFICATION_TIMEOUT_MS = 5_000;
+
 function record(value: unknown): JsonRecord {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as JsonRecord
@@ -149,14 +155,37 @@ export async function verifyBffBrowserSession(): Promise<VerifiedBffBrowserSessi
     }
   }
 
-  const me = await bffFetch<unknown>({ method: "GET", path: paths.me(), mode: "live" });
-  const identity = parseMe(me);
-  const readinessResponse = await bffFetch<unknown>({
-    method: "GET",
-    path: paths.authReadiness(),
-    mode: "live",
-  });
-  return { identity, readiness: parseReadiness(readinessResponse) };
+  const controller = new AbortController();
+  const timeout = setTimeout(
+    () => controller.abort(),
+    BFF_BROWSER_SESSION_VERIFICATION_TIMEOUT_MS,
+  );
+
+  try {
+    const me = await bffFetch<unknown>({
+      method: "GET",
+      path: paths.me(),
+      mode: "live",
+      signal: controller.signal,
+    });
+    const identity = parseMe(me);
+    const readinessResponse = await bffFetch<unknown>({
+      method: "GET",
+      path: paths.authReadiness(),
+      mode: "live",
+      signal: controller.signal,
+    });
+    return { identity, readiness: parseReadiness(readinessResponse) };
+  } catch (error: unknown) {
+    if (controller.signal.aborted) {
+      throw new Error(
+        `BFF browser session verification timed out after ${BFF_BROWSER_SESSION_VERIFICATION_TIMEOUT_MS}ms`,
+      );
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 /** Tell the BFF about a refreshed bearer before authoritative readback. */

@@ -60,6 +60,34 @@ describe("paired Pantheon release workflow", () => {
     expect(upload).not.toContain("github.event_name == 'push'");
   });
 
+  it("keeps workflow dispatch within GitHub's 25-input limit without duplicate contract refs", () => {
+    const dispatch = integrationWorkflow.slice(
+      integrationWorkflow.indexOf("  workflow_dispatch:"),
+      integrationWorkflow.indexOf("\n\npermissions:"),
+    );
+    const inputNames = [...dispatch.matchAll(/^ {6}([a-z][a-z0-9_]*):$/gmu)].map(
+      ([, name]) => name,
+    );
+    const declared = [
+      "fe_base_url", "fe_sha", "frontend_ref", "proof_correlation_id",
+      "parent_deploy_run_id", "parent_deploy_run_attempt", "parent_deploy_actor",
+      "parent_proof_nonce", "parent_binding_artifact_id", "parent_binding_artifact_digest",
+      "source_gate_run_id", "source_artifact_id", "source_artifact_digest", "expected_pair_id",
+      "expected_read_only_digest", "expected_write_proof_digest", "bff_base_url", "bff_sha",
+      "release_candidate_id", "compatibility_manifest_sha256", "release_controller_run_id",
+      "persona_interaction_write_proof", "soft_fail", "functional_closure_write_proof", "pint_hosted_probe",
+    ];
+    // The regex only matches top-level input declarations, not nested
+    // description/type/options fields.
+    expect(inputNames).toHaveLength(25);
+    expect(inputNames).toEqual(declared);
+    expect(integrationWorkflow).not.toContain("      pantheon_contract_ref:");
+    expect(deployWorkflow).not.toContain('-f pantheon_contract_ref=');
+    expect(integrationWorkflow).toContain(
+      "PANTHEON_AGORA_CONTRACT_REF: ${{ inputs.bff_sha || vars.PANTHEON_AGORA_CONTRACT_REF || 'dev' }}",
+    );
+  });
+
   it("keeps normal deploys read-only and isolates actions write to the gated proof coordinator", () => {
     const deployJobStart = deployWorkflow.indexOf("  deploy:");
     const proofJobStart = deployWorkflow.indexOf("  proof-coordinator:");
@@ -93,6 +121,30 @@ describe("paired Pantheon release workflow", () => {
     expect(proofCoordinator).toContain('PANTHEON_DEPLOY_REAL_WRITES: "true"');
     expect(proofCoordinator).toContain(
       'PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES: "true"',
+    );
+  });
+
+  it("verifies an out-of-order candidate from its own source checkout", () => {
+    const compatStart = deployWorkflow.indexOf(
+      "      - name: Enforce exact accepted Agora pair before release controller",
+    );
+    const compatEnd = deployWorkflow.indexOf(
+      "      - name: Run target-runner controller regression harness",
+      compatStart,
+    );
+    const compat = deployWorkflow.slice(compatStart, compatEnd);
+    expect(deployWorkflow).toContain(
+      "- name: Checkout exact candidate source for compatibility verification",
+    );
+    expect(deployWorkflow).toContain("path: .candidate-source");
+    expect(compat).toContain(
+      'git -C .candidate-source update-ref "${ref_prefix}/frontend-runtime"',
+    );
+    expect(compat).toContain(
+      '--frontend-root "${GITHUB_WORKSPACE}/.candidate-source"',
+    );
+    expect(compat).not.toContain(
+      '--frontend-root "${GITHUB_WORKSPACE}"',
     );
   });
 
@@ -626,6 +678,9 @@ describe("paired Pantheon release workflow", () => {
     );
     expect(integrationWorkflow).toContain('run.event !== "workflow_dispatch"');
     expect(integrationWorkflow).toContain('run.head_branch !== "dev"');
+    expect(integrationWorkflow).toContain("frontendRef");
+    expect(integrationWorkflow).toContain("heads/${frontendRef}");
+    expect(integrationWorkflow).toContain('context.ref !== "refs/heads/dev"');
     expect(integrationWorkflow).toContain(
       "`Release candidate ${process.env.EXPECTED_RELEASE_CANDIDATE_ID}`",
     );

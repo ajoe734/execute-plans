@@ -9,6 +9,11 @@ on:
         required: true
         default: ""
         type: string
+      frontend_ref:
+        description: "Exact execute-plans ref that owns candidate_sha."
+        required: true
+        default: "dev"
+        type: string
       gate_run_id:
         description: "Successful controller-dispatched Pantheon FE-BFF Integration Gate run."
         required: true
@@ -81,6 +86,7 @@ jobs:
     outputs:
       deployment_profile: ${{ steps.gate.outputs.deployment_profile }}
       candidate_sha: ${{ steps.gate.outputs.candidate_sha }}
+      frontend_ref: ${{ steps.gate.outputs.frontend_ref }}
       current_dev_sha: ${{ steps.gate.outputs.current_dev_sha }}
       bff_sha: ${{ steps.pair.outputs.bff_sha }}
       source_gate_run_id: ${{ steps.gate.outputs.gate_run_id }}
@@ -127,6 +133,7 @@ jobs:
         env:
           REQUESTED_GATE_RUN_ID: ${{ inputs.gate_run_id }}
           REQUESTED_CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          REQUESTED_FRONTEND_REF: ${{ inputs.frontend_ref }}
           RELEASE_CANDIDATE_ID: ${{ inputs.release_candidate_id }}
           COMPATIBILITY_MANIFEST_SHA256: ${{ inputs.compatibility_manifest_sha256 }}
           RELEASE_CONTROLLER_RUN_ID: ${{ inputs.release_controller_run_id }}
@@ -146,6 +153,7 @@ jobs:
             const digestPattern = /^sha256:[0-9a-f]{64}$/i;
             const gateRunIdText = String(process.env.REQUESTED_GATE_RUN_ID || "").trim();
             const requestedSha = String(process.env.REQUESTED_CANDIDATE_SHA || "").trim().toLowerCase();
+            const requestedFrontendRef = String(process.env.REQUESTED_FRONTEND_REF || "").trim();
             const releaseCandidateId = String(process.env.RELEASE_CANDIDATE_ID || "").trim().toLowerCase();
             const compatibilityManifestSha256 = String(process.env.COMPATIBILITY_MANIFEST_SHA256 || "").trim().toLowerCase();
             const releaseControllerRunId = String(process.env.RELEASE_CONTROLLER_RUN_ID || "").trim();
@@ -171,6 +179,10 @@ jobs:
             }
             if (!shaPattern.test(requestedSha)) {
               core.setFailed("candidate_sha must be one exact 40-character commit SHA");
+              return;
+            }
+            if (!/^[A-Za-z0-9._/-]+$/.test(requestedFrontendRef) || requestedFrontendRef.includes("..")) {
+              core.setFailed("frontend_ref must be one exact branch ref");
               return;
             }
             if (!/^[0-9a-f]{64}$/.test(releaseCandidateId) ||
@@ -247,6 +259,11 @@ jobs:
               repo: context.repo.repo,
               run_id: gateRunId,
             });
+            const { data: sourceRef } = await github.rest.git.getRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: `heads/${requestedFrontendRef}`,
+            });
             const runPath = String(run.path || "").split("@")[0];
             const runRepo = run.head_repository?.full_name || run.repository?.full_name || "";
             const validRun =
@@ -256,9 +273,9 @@ jobs:
               run.head_branch === "dev" &&
               run.status === "completed" &&
               run.conclusion === "success" &&
-              String(run.head_sha || "").toLowerCase() === requestedSha &&
               String(run.display_title || "") === `Release candidate ${releaseCandidateId}`;
-            if (!validRun) {
+            const sourceRefMatches = String(sourceRef.object?.sha || "").toLowerCase() === requestedSha;
+            if (!validRun || !sourceRefMatches) {
               core.setFailed(`run ${gateRunId} is not the successful controller-dispatched integration gate for ${requestedSha}`);
               return;
             }
@@ -329,13 +346,12 @@ jobs:
               core.setFailed("current dev ref did not resolve to one exact commit SHA");
               return;
             }
-            const outOfOrder = currentDevSha !== requestedSha;
-            if (outOfOrder && deploymentProfile !== "write-proof") {
-              core.setFailed(`out-of-order candidate rejected: current dev is ${currentDevSha}, candidate is ${requestedSha}`);
+            if (String(run.head_sha || "").toLowerCase() !== currentDevSha) {
+              core.setFailed(`integration gate ${gateRunId} was not run from the current trusted dev workflow ref`);
               return;
             }
-
             core.setOutput("candidate_sha", requestedSha);
+            core.setOutput("frontend_ref", requestedFrontendRef);
             core.setOutput("gate_run_id", gateRunIdText);
             core.setOutput("gate_run_attempt", String(producerAttempt));
             core.setOutput("artifact_id", String(artifacts[0].id));
@@ -376,6 +392,15 @@ jobs:
             echo "Trusted controller is stale: expected dev=$TRUSTED_CONTROLLER_SHA current dev=$current_dev_sha" >&2
             exit 1
           fi
+
+      - name: Checkout exact candidate source for compatibility verification
+        uses: actions/checkout@v4
+        with:
+          repository: ajoe734/execute-plans
+          ref: ${{ steps.gate.outputs.candidate_sha }}
+          path: .candidate-source
+          fetch-depth: 0
+          persist-credentials: false
 
       - name: Download, authenticate, and safely extract exact artifact
         id: artifact_transport
@@ -619,7 +644,7 @@ jobs:
         run: |
           set -euo pipefail
           ref_prefix="refs/pantheon-proof/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          git update-ref "${ref_prefix}/frontend-runtime" "${EXPECTED_FRONTEND_SHA}"
+          git -C .candidate-source update-ref "${ref_prefix}/frontend-runtime" "${EXPECTED_FRONTEND_SHA}"
           git -C .pantheon-agora-compat update-ref "${ref_prefix}/backend-runtime" "${EXPECTED_BFF_SHA}"
           fe_ref="${ref_prefix}/frontend-runtime"
           bff_ref="${ref_prefix}/backend-runtime"
@@ -627,7 +652,7 @@ jobs:
           evidence_path="${PANTHEON_AUDIT_RUN_ROOT}/agora-compatibility-gate.input.json"
           python3 .pantheon-agora-compat/scripts/agora_compat_manifest.py write \
             --output "${manifest_path}" \
-            --frontend-root "${GITHUB_WORKSPACE}" \
+            --frontend-root "${GITHUB_WORKSPACE}/.candidate-source" \
             --backend-dev-ref "${bff_ref}" \
             --frontend-dev-ref "${fe_ref}" \
             --backend-runtime-commit "${EXPECTED_BFF_SHA}" \
@@ -635,7 +660,7 @@ jobs:
             --compatibility-status accepted
           python3 .pantheon-agora-compat/scripts/agora_compat_manifest.py deployment-gate \
             --manifest "${manifest_path}" \
-            --frontend-root "${GITHUB_WORKSPACE}" \
+            --frontend-root "${GITHUB_WORKSPACE}/.candidate-source" \
             --backend-dev-ref "${bff_ref}" \
             --frontend-dev-ref "${fe_ref}" \
             --backend-runtime-commit "${EXPECTED_BFF_SHA}" \
@@ -669,6 +694,7 @@ jobs:
         env:
           PANTHEON_DEPLOY_CANDIDATE_SHA: ${{ steps.gate.outputs.candidate_sha }}
           PANTHEON_DEPLOY_BRANCH: dev
+          PANTHEON_DEPLOY_FRONTEND_REF: ${{ steps.gate.outputs.frontend_ref }}
           PANTHEON_DEPLOY_CANDIDATE_DIR: .release-candidate
           PANTHEON_DEPLOY_AGORA_COMPAT_EVIDENCE: ${{ steps.agora_compat.outputs.evidence_path }}
           PANTHEON_DEPLOY_GATE_RUN_ID: ${{ steps.gate.outputs.gate_run_id }}
@@ -684,6 +710,7 @@ jobs:
           PANTHEON_DEPLOY_REAL_WRITES: ${{ steps.gate.outputs.deployment_profile == 'operator-live' && 'true' || 'false' }}
           PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES: "false"
           PANTHEON_DEPLOY_ALLOW_BOOTSTRAP: ${{ steps.gate.outputs.deployment_profile == 'read-only' && 'true' || 'false' }}
+          PANTHEON_DEPLOY_ALLOW_OUT_OF_ORDER_CANDIDATE: ${{ steps.gate.outputs.frontend_ref != 'dev' && 'true' || 'false' }}
         run: bash scripts/deploy-dev-vm.sh
 
       - name: Write redacted workflow envelope
@@ -944,6 +971,7 @@ jobs:
       PANTHEON_BFF_BASE_URL: https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io
       PANTHEON_OLD_BFF_URL: https://pantheon-lupin-dev-bff.34.81.75.241.sslip.io
       EXACT_FE_SHA: ${{ needs.deploy.outputs.candidate_sha }}
+      EXACT_FE_REF: ${{ needs.deploy.outputs.frontend_ref }}
       EXACT_BFF_SHA: ${{ needs.deploy.outputs.bff_sha }}
       SOURCE_GATE_RUN_ID: ${{ needs.deploy.outputs.source_gate_run_id }}
       SOURCE_ARTIFACT_ID: ${{ needs.deploy.outputs.source_artifact_id }}
@@ -1226,6 +1254,7 @@ jobs:
             -f parent_binding_artifact_id="$BINDING_ARTIFACT_ID" \
             -f parent_binding_artifact_digest="$BINDING_ARTIFACT_DIGEST" \
             -f candidate_sha="$EXACT_FE_SHA" \
+            -f frontend_ref="$EXACT_FE_REF" \
             -f bff_sha="$EXACT_BFF_SHA" \
             -f source_gate_run_id="$SOURCE_GATE_RUN_ID" \
             -f source_artifact_id="$SOURCE_ARTIFACT_ID" \
@@ -1302,6 +1331,7 @@ jobs:
           PANTHEON_AUDIT_OUT_DIR: ${{ runner.temp }}/pantheon-proof-${{ github.run_id }}-${{ github.run_attempt }}/write-controller
           PANTHEON_DEPLOY_CANDIDATE_SHA: ${{ needs.deploy.outputs.candidate_sha }}
           PANTHEON_DEPLOY_BRANCH: dev
+          PANTHEON_DEPLOY_FRONTEND_REF: ${{ needs.deploy.outputs.frontend_ref }}
           PANTHEON_DEPLOY_CANDIDATE_DIR: .release-candidate
           PANTHEON_DEPLOY_AGORA_COMPAT_EVIDENCE: ${{ steps.write_agora_compat.outputs.evidence_path }}
           PANTHEON_DEPLOY_GATE_RUN_ID: ${{ needs.deploy.outputs.source_gate_run_id }}
@@ -1314,6 +1344,7 @@ jobs:
           PANTHEON_DEPLOY_PROOF_WINDOW_ACK: "true"
           PANTHEON_DEPLOY_REAL_WRITES: "true"
           PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES: "true"
+          PANTHEON_DEPLOY_ALLOW_OUT_OF_ORDER_CANDIDATE: ${{ needs.deploy.outputs.frontend_ref != 'dev' && 'true' || 'false' }}
           PANTHEON_DEPLOY_RELEASE_INSTANCE: ${{ github.run_id }}-${{ github.run_attempt }}-write-proof
         run: |
           set -euo pipefail
@@ -1337,6 +1368,7 @@ jobs:
             --repo "$GITHUB_REPOSITORY" --ref dev \
             -f fe_base_url="$PANTHEON_DEV_FE_HOST" \
             -f fe_sha="$EXACT_FE_SHA" \
+            -f frontend_ref="$EXACT_FE_REF" \
             -f proof_correlation_id="$CORRELATION_ID" \
             -f parent_deploy_run_id="$GITHUB_RUN_ID" \
             -f parent_deploy_run_attempt="$GITHUB_RUN_ATTEMPT" \
@@ -1352,7 +1384,6 @@ jobs:
             -f expected_write_proof_digest="$EXPECTED_WRITE_PROOF_DIGEST" \
             -f bff_base_url="$PANTHEON_BFF_BASE_URL" \
             -f bff_sha="$EXACT_BFF_SHA" \
-            -f pantheon_contract_ref="$EXACT_BFF_SHA" \
             -f release_candidate_id="$RELEASE_CANDIDATE_ID" \
             -f compatibility_manifest_sha256="$COMPATIBILITY_MANIFEST_SHA256" \
             -f release_controller_run_id="$RELEASE_CONTROLLER_RUN_ID" \

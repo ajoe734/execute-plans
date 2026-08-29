@@ -84,8 +84,8 @@ export const AGORA_CONTRACT_SNAPSHOT = {
     "specs/agora/v13/candidate_member_truth_projection.schema.json": "7ed59957adc97dd48af20aab19f8476acb84c29e8832d3ad076fe8625e610b00",
     "specs/agora/v13/capability_manifest_v1_12.json": "d35999b82e6b606f22de5baf4e6d260f03ce85d0cc871f5c1aa68145a0543188",
     "openapi/agora_v1_12.openapi.yaml": "88a707090a1e58ebe3159d530ab437f6f0bb0d130f26e396edf6f1de3678f53f",
-    "specs/agora/v14/capability_manifest_v1_13.json": "7dfddaf220c00eddb7cbd0862eaa6f2aba7423dbd02e54d15db1d67a0cb4ded1",
-    "openapi/agora_v1_13.openapi.yaml": "36d1be5bc033ea1a55610f3f523fc478704fdfad1f06fec620e741bed9bf6f86"
+    "specs/agora/v14/capability_manifest_v1_13.json": "8b44dd85412b6ba7a0b9686b25d657fa9e3f95efdd4b0f280ff97d2be1186ff5",
+    "openapi/agora_v1_13.openapi.yaml": "56f12e43bb6041a0f83bf4ff69bf13ae86a335a38246f68a10f0a4ef3a856087"
   },
   "requiredDefinitionChecksums": {
     "services/control-plane/specs/agora/v11/performance_truth.schema.json#/definitions/AdjustmentSuggestion": "4beb66a7c297d6fc8471687e8656c3e56725e54259b182b28c4ac749de0cc362",
@@ -860,6 +860,7 @@ export const AGORA_ROUTE_PATHS = [
   "/bff/agora/workshops/{workshop_id}/conclude",
   "/bff/agora/candidate-pools/{pool_id}/members",
   "/bff/agora/candidate-pools/{pool_id}/members/{artifact_id}",
+  "/bff/agora/trading-room/performance-attribution/by-strategy",
   "/bff/agora/servant",
   "/bff/agora/servant/ensure",
   "/bff/agora/servant/reconcile",

@@ -7,7 +7,7 @@ import i18n from "@/i18n";
 import type { ManagementPersonaFleetRow } from "@/lib/bff-v1/management";
 import type { ManagementDataSourceV2DTO } from "@/lib/bff-v1/managementDataSources";
 import type { SystemDataSourceRecord } from "@/lib/v5/management/systemDataSources";
-import { DataSourceManagementPage } from "./DataSourceManagement";
+import { DataSourceControlCenter } from "./dataSources/DataSourceControlCenter";
 
 const mocks = vi.hoisted(() => ({
   useV5Live: vi.fn(),
@@ -26,7 +26,7 @@ function renderPage(initialEntry = `/management/data-sources?persona=${PERSONA_I
     <I18nextProvider i18n={i18n}>
       <MemoryRouter initialEntries={[initialEntry]}>
         <Routes>
-          <Route path="/management/data-sources" element={<DataSourceManagementPage />} />
+          <Route path="/management/data-sources" element={<DataSourceControlCenter />} />
         </Routes>
       </MemoryRouter>
     </I18nextProvider>,

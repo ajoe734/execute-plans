@@ -311,6 +311,38 @@ export function gcpIdentityStoredUser(input: {
   };
 }
 
+/**
+ * Install the hosted dev-login bootstrap used by strict Pantheon browser
+ * proofs.  The BFF dev-login token is a server-issued bearer token, not a
+ * Firebase Identity token, so it must be obtained by the app's own
+ * dev-login path rather than written into Firebase's persisted-user storage.
+ */
+export async function installHostedDevLogin(
+  page: E2ePage,
+  options: { clientId: string; clientSecret: string; tenantId?: string },
+): Promise<void> {
+  const clientId = options.clientId.trim();
+  const clientSecret = options.clientSecret.trim();
+  if (!clientId || !clientSecret) {
+    throw new Error("hosted dev-login requires a client id and client secret");
+  }
+
+  await page.addInitScript(
+    ({ clientId: runtimeClientId, clientSecret: runtimeClientSecret, tenantId }) => {
+      const runtimeWindow = window as unknown as Record<string, unknown>;
+      const config = { VITE_BFF_DEV_LOGIN_CLIENT_ID: runtimeClientId, VITE_BFF_DEV_LOGIN_CLIENT_SECRET: runtimeClientSecret, ...(tenantId ? { VITE_BFF_TENANT_ID: tenantId } : {}) };
+      for (const key of ["__PANTHEON_BFF_RUNTIME__", "__PANTHEON_RUNTIME_CONFIG__"]) {
+        const existing = runtimeWindow[key];
+        const base = existing && typeof existing === "object" && !Array.isArray(existing)
+          ? existing as Record<string, unknown>
+          : {};
+        runtimeWindow[key] = { ...base, ...config };
+      }
+    },
+    { clientId, clientSecret, tenantId: options.tenantId?.trim() },
+  );
+}
+
 function loopbackFirebaseToken(session: DevLoginSession): string {
   if (session.token.split(".").length === 3) return session.token;
   const now = Math.floor(Date.now() / 1000);

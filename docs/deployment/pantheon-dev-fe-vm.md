@@ -84,6 +84,13 @@ comma-separated repository variable `PANTHEON_DEV_FE_DEPLOY_OPERATORS`. The over
 only; it cannot relax candidate integrity, BFF identity, read-only posture, or
 probes.
 
+Pre-merge candidates carry an explicit `frontend_ref`. The integration gate,
+FE deploy, and proof watchdog workflows are dispatched from trusted
+`execute-plans/dev` definitions, while each workflow verifies that
+`frontend_ref` still points to the requested candidate SHA. This permits a
+bounded hosted acceptance of a branch that is not yet merged without executing
+unreviewed workflow code or weakening the atomic/read-only rollback path.
+
 To install the daily strict operator profile, dispatch once with the exact
 current `candidate_sha` and successful `gate_run_id`, set
 `deployment_profile=operator-live`, leave `proof_window_ack=false`, and leave

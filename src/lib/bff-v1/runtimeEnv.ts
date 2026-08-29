@@ -73,6 +73,13 @@ function readStorageValue(key: string): string | undefined {
 }
 
 function readBooleanOverride(keys: string[]): string | undefined {
+  for (const key of ["VITE_BFF_REAL_WRITES", "realWrites", ...keys]) {
+    const runtimeVal = readRuntimeConfigValue(key);
+    if (runtimeVal !== undefined) {
+      if (truthy(runtimeVal)) return "true";
+      if (falsey(runtimeVal)) return "false";
+    }
+  }
   for (const key of keys) {
     const value = readStorageValue(key);
     if (value === undefined) continue;

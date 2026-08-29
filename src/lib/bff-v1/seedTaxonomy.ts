@@ -29,8 +29,9 @@ function readEnv(): Record<string, string | undefined> {
   return { ...viteEnv, ...nodeEnv };
 }
 
-export function isLiveBffModeConfigured(): boolean {
-  const env = readEnv();
+export function isLiveBffModeConfigured(
+  env: Record<string, string | undefined> = readEnv(),
+): boolean {
   if (env.MODE === "test" || env.NODE_ENV === "test") return false;
   return env.VITE_BFF_MODE === "live";
 }
