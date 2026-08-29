@@ -1,0 +1,34 @@
+{
+  "schema_version": "pantheon.agora.hosted-demo-restore-attestation.v1",
+  "task_id": "AGORA-AGC-14-HOSTED-DEMO-AUTHENTIC-V5-20260829",
+  "status": "safe-baseline-preserved",
+  "observed_at": "2026-08-29T20:27:59Z",
+  "observation_source": {
+    "frontend_manifest_url": "https://pantheon-lupin-dev-fe.35.201.204.12.sslip.io/deployment.json",
+    "backend_version_url": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/bff/version",
+    "backend_readiness_url": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/readyz"
+  },
+  "served_baseline": {
+    "frontend_sha": "c230fc76bef78fc297135152f2acba690314bb9d",
+    "bff_sha": "dcb14231d29f08f1646a4ee962b83fd2d4b67560",
+    "profile": "read-only",
+    "deployment_profile": "read-only",
+    "vite_bff_real_writes": "false",
+    "vite_bff_allow_dev_stub_writes": "false",
+    "deployment_state": "accepted",
+    "bff_source_commit_known": true,
+    "bff_version_http_status": 200,
+    "bff_readyz_http_status": 200,
+    "bff_ready": true
+  },
+  "failed_attempts": [
+    33271922125,
+    33271993547,
+    33272385942
+  ],
+  "requested_pair_write_proof_activated": false,
+  "requested_pair_watchdog_armed": false,
+  "same_requested_pair_read_only_restored": false,
+  "baseline_preserved_after_failed_pre_frontend_admission_runs": true,
+  "acceptance_restore_claimed": false
+}

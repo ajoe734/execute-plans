@@ -1,0 +1,36 @@
+{
+  "schema_version": "pantheon.agora.hosted-demo-browser-results.v1",
+  "task_id": "AGORA-AGC-14-HOSTED-DEMO-AUTHENTIC-V5-20260829",
+  "status": "not-run",
+  "recorded_at": "2026-08-29T20:27:59Z",
+  "reason": "The requested exact pair was never admitted or served because the parent nonprod deployment failed its source freshness and paper producer health gate. Mutating browser acceptance was therefore not authorized or dispatched.",
+  "prerequisite": {
+    "repository": "ajoe734/pantheon",
+    "workflow": "nonprod-deploy.yml",
+    "run_id": 33272385942,
+    "run_url": "https://github.com/ajoe734/pantheon/actions/runs/33272385942",
+    "conclusion": "failure",
+    "requested_frontend_sha": "5ffee3db8c2b37b4070d43d091ed4207ef5d70e5",
+    "requested_bff_sha": "9e9ab338ce0ede9c7c4c3686ff31bf63dc7ec35a"
+  },
+  "login": {
+    "status": "not-run",
+    "under_five_seconds_claimed": false
+  },
+  "page_journeys": {
+    "persona_list_fleet_detail_talk": "not-run",
+    "workshop_create_message_event_reconstruction_strategy_version": "not-run",
+    "trading_room_proposal_candidate_decision_consultation_terminal_readback": "not-run",
+    "strategy_performance_receipt_reload_readback": "not-run"
+  },
+  "negative_controls": {
+    "unauthenticated": "not-run",
+    "viewer_write_denial": "not-run",
+    "cross_tenant_non_enumeration": "not-run",
+    "order_or_trade_execution_absent_or_denied": "not-run"
+  },
+  "runtime_objects": {},
+  "screenshots": [],
+  "network_receipts": [],
+  "pass_claimed": false
+}

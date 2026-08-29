@@ -1,0 +1,80 @@
+{
+  "schema_version": "pantheon.agora.hosted-demo-evidence-summary.v1",
+  "task_id": "AGORA-AGC-14-HOSTED-DEMO-AUTHENTIC-V5-20260829",
+  "owner": "Codex",
+  "reviewer": "Antigravity",
+  "status": "blocked-external",
+  "recorded_at": "2026-08-29T20:27:59Z",
+  "evidence_policy": "observed_immutable_only",
+  "requested_exact_pair": {
+    "frontend_sha": "5ffee3db8c2b37b4070d43d091ed4207ef5d70e5",
+    "frontend_ref": "task/AGORA-SOURCE-FRONTIER-RECOVERY-V1-20260829-frontend-candidate",
+    "bff_sha": "9e9ab338ce0ede9c7c4c3686ff31bf63dc7ec35a"
+  },
+  "workflow_runs": [
+    {
+      "repository": "ajoe734/pantheon",
+      "workflow": "nonprod-deploy.yml",
+      "run_id": 33271922125,
+      "run_url": "https://github.com/ajoe734/pantheon/actions/runs/33271922125",
+      "status": "completed",
+      "conclusion": "failure",
+      "outcome": "rejected-before-deploy",
+      "observed_reason": "frontend_ref=dev resolved to bd03c863e3c2c1c64b9b7797f27cefaf84df17c1 instead of the requested historical exact candidate",
+      "backend_stack_started": false,
+      "frontend_release_admission_executed": false
+    },
+    {
+      "repository": "ajoe734/pantheon",
+      "workflow": "nonprod-deploy.yml",
+      "run_id": 33271993547,
+      "run_url": "https://github.com/ajoe734/pantheon/actions/runs/33271993547",
+      "status": "completed",
+      "conclusion": "failure",
+      "outcome": "lease-guard-terminated",
+      "observed_reason": "environment-coordination heartbeat received GitHub API 409: Timed out validating rule",
+      "backend_stack_started": false,
+      "frontend_release_admission_executed": false
+    },
+    {
+      "repository": "ajoe734/pantheon",
+      "workflow": "nonprod-deploy.yml",
+      "run_id": 33272385942,
+      "run_url": "https://github.com/ajoe734/pantheon/actions/runs/33272385942",
+      "status": "completed",
+      "conclusion": "failure",
+      "outcome": "runtime-source-freshness-gate-rejected",
+      "observed_reason": "active paper snapshot is outside 24h for 2330.TW",
+      "backend_stack_started": true,
+      "frontend_release_admission_executed": false,
+      "compensated_to_exact_hosted_baseline": true
+    }
+  ],
+  "blocking_observation": {
+    "source_run_id": 33272385942,
+    "failed_step": "Deploy dev VM stack under lease",
+    "required_loop_workers_activated": 28,
+    "duplicate_legacy_workers_detected": false,
+    "source_symbol": "2330.TW",
+    "source_snapshot_event_time": "2026-08-28T00:00:00Z",
+    "source_snapshot_age_seconds": 159946,
+    "source_freshness_limit": "24h",
+    "source_ingest_readyz_http_status": 200,
+    "paper_signal_producer_state": "health-starting-degraded",
+    "paper_signal_producer_reason": "market_input_insufficient: requires 2 closes, got 1"
+  },
+  "acceptance_claims": {
+    "requested_pair_admitted": false,
+    "requested_pair_served": false,
+    "browser_acceptance_executed": false,
+    "write_proof_activated": false,
+    "watchdog_armed": false,
+    "task_passed": false
+  },
+  "required_next": "Repair or explicitly govern market-calendar-aware freshness and the two-close paper producer precondition, then rerun the same exact FE/BFF pair through successful read-only admission before any parent-bound browser write proof.",
+  "artifacts": [
+    "docs/deployment/evidence/AGORA-AGC-14-HOSTED-DEMO-AUTHENTIC-V5-20260829/summary.json",
+    "docs/deployment/evidence/AGORA-AGC-14-HOSTED-DEMO-AUTHENTIC-V5-20260829/browser-results.json",
+    "docs/deployment/evidence/AGORA-AGC-14-HOSTED-DEMO-AUTHENTIC-V5-20260829/restore-attestation.json"
+  ]
+}
