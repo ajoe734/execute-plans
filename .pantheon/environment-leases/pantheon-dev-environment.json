@@ -1,15 +1,15 @@
 {
-  "acquiredAt": "2026-08-29T17:45:34Z",
+  "acquiredAt": "2026-08-29T18:17:33Z",
   "branch": "environment-coordination",
   "expectedBackendSha": "b3b26a72fda63e12d1f53fb3e141e8f2a6d5a757",
-  "expiresAt": "2026-08-29T18:15:00Z",
-  "heartbeatAt": "2026-08-29T18:10:00Z",
-  "leaseId": "20bfe21d-bdc0-4d96-8885-d6112f29d9a1",
+  "expiresAt": "2026-08-29T18:22:33Z",
+  "heartbeatAt": "2026-08-29T18:17:33Z",
+  "leaseId": "aa87ab28-7edd-495e-a59f-66f55ef6d5a4",
   "mode": "deployment",
-  "owner": "pantheon:ajoe734/pantheon:33266252692:1",
+  "owner": "pantheon:local:AGORA-SOURCE-FRONTIER-RECOVERY-V1-20260829-final",
   "path": ".pantheon/environment-leases/pantheon-dev-environment.json",
   "repository": "ajoe734/execute-plans",
   "resource": "pantheon-dev-environment",
-  "runUrl": "https://github.com/ajoe734/pantheon/actions/runs/33266252692",
+  "runUrl": "https://github.com/ajoe734/pantheon/actions/runs/33264137876",
   "schemaVersion": 1
 }
