@@ -1014,7 +1014,7 @@ export function WorkshopSessionView({ governedProposalId, workshopId, onAddToTra
             request_sha256: await sha256(content),
           },
           context_snapshot: {
-            tenant_id: truth.tenantId,
+            tenant_id: tenantId,
             source_route: truth.sourceRoute,
             focused_object: truth.focusedObject,
             context_refs: truth.contextRefs,

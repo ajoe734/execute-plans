@@ -1,0 +1,68 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "PFG-AGORA-PAPER-WRITE-PROOF-FIX-20260827",
+  "owner": "Codex",
+  "reviewer": "Codex2",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/AGORA-PAPER-WRITE-PROOF-FIX-20260827",
+  "pull_request": 667,
+  "status": "ready-for-independent-exact-head-review",
+  "recorded_at": "2026-08-29T16:08:00Z",
+  "scope": {
+    "adopted": [
+      "The pre-write Workshop ETag readback no longer replaces the active Workshop state while a message and Persona interaction submission are in flight, so it cannot restart eligibility and context resolution during the transaction.",
+      "The BFF resolver binding is authoritative for the immutable v1.9 tenant when the browser auth bridge has no tenant hint; a non-empty contradictory browser hint still fails closed.",
+      "The submitted context snapshot uses the normalized resolver-authoritative tenant, and a full composer-to-submit regression covers the missing browser tenant-hint path."
+    ],
+    "not_changed": [
+      "BFF resolver verification, server-side tenant authorization, roles, capabilities, and participant eligibility contracts.",
+      "The bounded paper-only execution-authority boundary and the default VITE_BFF_REAL_WRITES=false deployment policy.",
+      "Workshop message ETag preconditions, durable event readback, or fail-closed rejection of contradictory tenant bindings."
+    ]
+  },
+  "dependency": {
+    "task_id": "AGORA-AGC-08-HOSTED-DEMO-20260827",
+    "canonical_status": "done",
+    "satisfied": true
+  },
+  "acceptance": {
+    "pr_667_reconciled_with_current_dev": true,
+    "paper_only_submission_uses_resolver_tenant_without_browser_hint": true,
+    "contradictory_tenant_hint_remains_fail_closed": true,
+    "focused_strategy_workshop_and_write_tests_pass": true,
+    "typecheck_lint_and_diff_checks_pass": true,
+    "independent_exact_head_review_and_merge": "pending"
+  },
+  "validation": {
+    "focused_strategy_workshop_and_writes": {
+      "command": "npx vitest run --maxWorkers=2 --testTimeout=15000 --hookTimeout=30000 src/agora/pages/strategy-workshop/StrategyWorkshopPage.test.tsx src/lib/bff-v1/__tests__/writes.test.ts",
+      "result": "passed: 2 files, 80 tests",
+      "notes": "The suite retains existing React act(...) warnings; no test failed."
+    },
+    "typecheck": {
+      "command": "npm run typecheck",
+      "result": "passed: tsc -p tsconfig.agora.json --noEmit with 0 errors"
+    },
+    "task_scoped_lint": {
+      "command": "npx eslint src/agora/pages/strategy-workshop/WorkshopSessionView.tsx src/agora/pages/strategy-workshop/submissionTenant.ts src/agora/pages/strategy-workshop/StrategyWorkshopPage.test.tsx",
+      "result": "passed: 0 errors; 2 pre-existing react-refresh/only-export-components warnings in WorkshopSessionView.tsx"
+    },
+    "diff_integrity": {
+      "command": "git diff --check",
+      "result": "passed"
+    }
+  },
+  "review_binding": {
+    "pull_request": "https://github.com/ajoe734/execute-plans/pull/667",
+    "adopted_owner_commit": "23845e190b92d0eb838974c255a4e9e3fd449f18",
+    "dev_reconciliation_commit": "f3741d581703adf8f52173955901c9d506f4852f",
+    "sha_disposition": "Independent approval must bind the final PR #667 head containing the reconciled implementation, the end-to-end tenant regression, and this evidence manifest."
+  },
+  "independent_review_required": [
+    "Confirm the pre-write readback no longer resets active Workshop state during the submission journey.",
+    "Confirm a missing browser tenant hint submits the resolver-authoritative tenant while a contradictory non-empty hint fails closed.",
+    "Confirm the listed checks and required PR checks pass on the exact reviewed head, bind this manifest with REVIEW_FILE, and merge PR #667 only after approval."
+  ],
+  "hosted_proof_boundary": "This repair closes the source-level blocker observed by the prior hosted proof. It does not claim a new deployment or capital-affecting hosted write run before PR #667 is independently approved and merged."
+}
