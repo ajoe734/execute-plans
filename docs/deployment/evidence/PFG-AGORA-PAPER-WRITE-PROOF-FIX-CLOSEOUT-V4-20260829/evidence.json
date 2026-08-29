@@ -1,0 +1,96 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "PFG-AGORA-PAPER-WRITE-PROOF-FIX-CLOSEOUT-V4-20260829",
+  "owner": "Antigravity2",
+  "reviewer": "Codex",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/PFG-AGORA-PAPER-WRITE-PROOF-FIX-CLOSEOUT-V4-20260829",
+  "status": "ready-for-independent-exact-head-review",
+  "recorded_at": "2026-08-29T16:53:00Z",
+  "scope": {
+    "adopted": [
+      "Bind PR #667 merged deliverable at frozen head 303882e4d86fe0190797c2fb7d0d606e26e637d6 and merge commit 5ffee3db8c2b37b4070d43d091ed4207ef5d70e5 on execute-plans dev.",
+      "Record the successful exact-head review status context Pantheon canonical review gate, the review proof tag refs/tags/pantheon-review/approve/303882e4d86fe0190797c2fb7d0d606e26e637d6, and the audited Codex2-to-Antigravity reviewer reassignment.",
+      "Add only this V4 task-scoped review evidence manifest so the task PR follows the standard execute-plans per-task branch and review-merge gate without modifying product source."
+    ],
+    "not_changed": [
+      "Workshop source code, BFF contracts, authorization, participant eligibility, or real-write policy.",
+      "Retain existing Workshop paper-only submission repair and test suite in execute-plans dev without modification."
+    ]
+  },
+  "merged_source_delivery": {
+    "pull_request": 667,
+    "pull_request_url": "https://github.com/ajoe734/execute-plans/pull/667",
+    "head_branch": "task/AGORA-PAPER-WRITE-PROOF-FIX-20260827",
+    "frozen_head_sha": "303882e4d86fe0190797c2fb7d0d606e26e637d6",
+    "merge_commit": "5ffee3db8c2b37b4070d43d091ed4207ef5d70e5",
+    "merged_at": "2026-08-29T16:33:17Z",
+    "base": "dev",
+    "review_proof_tag": "refs/tags/pantheon-review/approve/303882e4d86fe0190797c2fb7d0d606e26e637d6",
+    "review_proof_tag_sha": "303882e4d86fe0190797c2fb7d0d606e26e637d6",
+    "review_status_context": "Pantheon canonical review gate",
+    "review_status_state": "success",
+    "reviewer_reassignment": {
+      "from": "Codex2",
+      "to": "Antigravity",
+      "reason": "terminal_quota:codex2-1 provider failure on Codex2",
+      "audit_record": "task_reassigned event in ai-activity-log.jsonl at 2026-08-29T16:28:01Z"
+    }
+  },
+  "supersession_history": {
+    "v2_task": {
+      "task_id": "PFG-AGORA-PAPER-WRITE-PROOF-FIX-REVIEW-V2-20260829",
+      "terminal_outcome": "superseded",
+      "supersession_reason": "PR #667 was validly reviewed and merged as 5ffee3db8c2b37b4070d43d091ed4207ef5d70e5, but V2 could not pass governed done because the adopted PR branch task/AGORA-PAPER-WRITE-PROOF-FIX-20260827 and supervisor-leased task branch task/PFG-AGORA-PAPER-WRITE-PROOF-FIX-REVIEW-V2-20260829 were mutually exclusive in the done verification gate."
+    },
+    "v3_task": {
+      "task_id": "PFG-AGORA-PAPER-WRITE-PROOF-FIX-CLOSEOUT-V3-20260829",
+      "terminal_outcome": "superseded",
+      "supersession_reason": "V3 verified PR #667 read-only evidence and received independent review approval, but could not pass governed done because the delivery binding kind artifact_contract had no task-id commit on its leased branch. V4 uses a standard per-task branch and evidence-only PR."
+    },
+    "product_source_disposition": "Product source was merged to dev via PR #667 (5ffee3db8c2b37b4070d43d091ed4207ef5d70e5) and remains unmodified."
+  },
+  "acceptance": {
+    "pr_667_frozen_head_recorded": true,
+    "pr_667_merge_commit_recorded": true,
+    "review_proof_tag_and_status_recorded": true,
+    "reviewer_reassignment_audited": true,
+    "v2_and_v3_supersession_reasons_recorded": true,
+    "product_source_unmodified": true,
+    "v4_evidence_only_pr_created": true,
+    "independent_exact_head_approval": "pending",
+    "v4_pr_merged_to_dev": "pending"
+  },
+  "validation": {
+    "focused_strategy_workshop_and_writes": {
+      "command": "npx vitest run --maxWorkers=2 --testTimeout=15000 --hookTimeout=30000 src/agora/pages/strategy-workshop/StrategyWorkshopPage.test.tsx src/lib/bff-v1/__tests__/writes.test.ts",
+      "result": "passed: 2 files, 80 tests"
+    },
+    "typecheck": {
+      "command": "npm run typecheck",
+      "result": "passed: tsc -p tsconfig.agora.json --noEmit with 0 errors"
+    },
+    "task_scoped_lint": {
+      "command": "npx eslint src/agora/pages/strategy-workshop/WorkshopSessionView.tsx src/agora/pages/strategy-workshop/submissionTenant.ts src/agora/pages/strategy-workshop/StrategyWorkshopPage.test.tsx",
+      "result": "passed: 0 errors; 2 pre-existing react-refresh/only-export-components warnings in WorkshopSessionView.tsx"
+    },
+    "diff_integrity": {
+      "command": "git diff --check",
+      "result": "passed"
+    }
+  },
+  "review_binding": {
+    "pull_request": "pending",
+    "head_branch": "task/PFG-AGORA-PAPER-WRITE-PROOF-FIX-CLOSEOUT-V4-20260829",
+    "base": "dev",
+    "review_file": "docs/deployment/evidence/PFG-AGORA-PAPER-WRITE-PROOF-FIX-CLOSEOUT-V4-20260829/evidence.json"
+  },
+  "independent_review_required": [
+    "Verify PR #667 frozen head 303882e4d86fe0190797c2fb7d0d606e26e637d6 merged to dev as 5ffee3db8c2b37b4070d43d091ed4207ef5d70e5.",
+    "Verify the pantheon review-proof tag refs/tags/pantheon-review/approve/303882e4d86fe0190797c2fb7d0d606e26e637d6 and successful canonical review gate status on PR #667 head.",
+    "Verify the audited reviewer reassignment from Codex2 to Antigravity on V2.",
+    "Verify that this V4 PR adds only the task-scoped evidence manifest without modifying product source.",
+    "Verify that all required Branch CI checks pass on the exact head of the V4 PR before approving."
+  ]
+}
