@@ -2,7 +2,7 @@
   "schema_version": "pantheon.hosted-demo-authentic-evidence.v5",
   "task_id": "AGORA-AGC-14-HOSTED-DEMO-AUTHENTIC-V5-20260829",
   "status": "blocked-external",
-  "recorded_at": "2026-08-30T16:50:35Z",
+  "recorded_at": "2026-08-30T16:55:11Z",
   "acceptance_scope": "Exact-pair governed write-proof attempt with immutable workflow artifacts, authentic hosted Persona browser coverage, durable governed proposal readback, and independent same-pair watchdog restore.",
   "exact_pair": {
     "frontend_commit": "7d30e78476be61222af63a089e7ab141aa43b809",
@@ -163,8 +163,13 @@
   },
   "blocker": {
     "kind": "external",
-    "owner_layer": "Pantheon BFF Persona eligibility and Persona Fleet read-model projection",
-    "detail": "The exact BFF returns deterministic HTTP 500 responses for both authoritative participants eligibility and Persona Fleet after fresh credential validation and successful user-private Persona ensure. This blocks the first required hosted Persona suite, so Agora, Workshop, Trade Journey, and Management/AI coverage cannot truthfully be claimed.",
-    "required_next": "Repair or diagnose POST /bff/agora/interactions/participants:eligible and GET /bff/management/persona-fleet for the ensured user-private Persona, admit the corrected exact pair through a new governed controller/gate/switch if the backend SHA changes, then rerun the bounded write-proof parent."
+    "owner_layer": "Pantheon BFF port contracts for Persona eligibility and Persona Fleet projection",
+    "hosted_traceback": {
+      "eligibility": "TypeError: PersonaFleetPort.list_personas() got an unexpected keyword argument 'include_market_persona_defaults' at persona_capital_runtime.py:863",
+      "persona_fleet": "TypeError: RankingProjectionPort.list_persona_league() got an unexpected keyword argument 'include_market_persona_defaults' at persona_capital_runtime.py:915",
+      "reconciliation_warning": "ReadSurfacePorts has no update_persona"
+    },
+    "detail": "The exact BFF returns deterministic HTTP 500 responses for authoritative participants eligibility and Persona Fleet because the hosted port implementations do not accept the include_market_persona_defaults contract used by the routes. Fresh credential validation and user-private Persona ensure had already succeeded. This blocks the first required hosted Persona suite, so Agora, Workshop, Trade Journey, and Management/AI coverage cannot truthfully be claimed.",
+    "required_next": "Repair the PersonaFleetPort and RankingProjectionPort list contract mismatches and the reported ReadSurfacePorts update_persona gap, admit the corrected exact pair through a new governed controller/gate/switch, then rerun the bounded write-proof parent."
   }
 }

@@ -2,7 +2,7 @@
   "schema_version": "pantheon.hosted-demo-browser-results.v5",
   "task_id": "AGORA-AGC-14-HOSTED-DEMO-AUTHENTIC-V5-20260829",
   "status": "failed",
-  "recorded_at": "2026-08-30T16:50:35Z",
+  "recorded_at": "2026-08-30T16:55:11Z",
   "run_id": 33323122321,
   "job_id": 99288504174,
   "parent_run_id": 33322457191,
@@ -90,6 +90,19 @@
         "endpoint": "GET /bff/management/persona-fleet?page_size=100"
       }
     ]
+  },
+  "hosted_traceback": {
+    "eligibility": {
+      "exception": "TypeError",
+      "message": "PersonaFleetPort.list_personas() got an unexpected keyword argument 'include_market_persona_defaults'",
+      "source": "persona_capital_runtime.py:863"
+    },
+    "persona_fleet": {
+      "exception": "TypeError",
+      "message": "RankingProjectionPort.list_persona_league() got an unexpected keyword argument 'include_market_persona_defaults'",
+      "source": "persona_capital_runtime.py:915"
+    },
+    "reconciliation_warning": "ReadSurfacePorts has no update_persona"
   },
   "required_page_journeys": {
     "agora": "not-run-after-required-Persona-failure",
