@@ -2,7 +2,7 @@
   "schema_version": "pantheon.agora.hosted-demo-restore-attestation.v1",
   "task_id": "AGORA-AGC-14-HOSTED-DEMO-AUTHENTIC-V5-20260829",
   "status": "safe-baseline-preserved",
-  "observed_at": "2026-08-30T02:36:22Z",
+  "observed_at": "2026-08-30T04:40:23Z",
   "observation_source": {
     "frontend_manifest_url": "https://pantheon-lupin-dev-fe.35.201.204.12.sslip.io/deployment.json",
     "backend_version_url": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/bff/version",
@@ -20,6 +20,9 @@
     "release_name": "20260828T061410Z-c230fc76bef7-gate-33146133499-33146881332-1-3278704",
     "pair_id": "0429052ba5ef5e392248990dedcbdf7705a5fea42d5a370a4de26222156596f1",
     "bff_source_commit_known": true,
+    "bff_auth_mode": "strict",
+    "bff_auth_stub": false,
+    "bff_build_time": "2026-08-30T04:37:05Z",
     "bff_version_http_status": 200,
     "bff_readyz_http_status": 200,
     "bff_ready": true
@@ -29,8 +32,20 @@
     33271993547,
     33272385942,
     33283640789,
-    33287442245
+    33287442245,
+    33291750319
   ],
+  "last_failed_attempt": {
+    "run_id": 33291750319,
+    "requested_backend_sha": "c6f7cc2340011624a8b22814ad2dc1d549617d1b",
+    "requested_frontend_sha": "5ffee3db8c2b37b4070d43d091ed4207ef5d70e5",
+    "candidate_root_deploy_completed": true,
+    "failed_step": "Ensure governed dev paper baseline under lease",
+    "failure_reason": "HTTP 500 INTERNAL_SERVER_ERROR",
+    "frontend_admission_skipped": true,
+    "compensation_step_conclusion": "success",
+    "lease_shutdown_step_conclusion": "success"
+  },
   "requested_pair_write_proof_activated": false,
   "requested_pair_watchdog_armed": false,
   "same_requested_pair_read_only_restored": false,

@@ -4,12 +4,12 @@
   "owner": "Codex",
   "reviewer": "Antigravity",
   "status": "blocked-external",
-  "recorded_at": "2026-08-30T02:36:22Z",
+  "recorded_at": "2026-08-30T04:40:23Z",
   "evidence_policy": "observed_immutable_only",
   "requested_exact_pair": {
     "frontend_sha": "5ffee3db8c2b37b4070d43d091ed4207ef5d70e5",
     "frontend_ref": "task/AGORA-SOURCE-FRONTIER-RECOVERY-V1-20260829-frontend-candidate",
-    "bff_sha": "65341ab6ade3ee0d6aa5f42c72c6111c1fd3a6ab"
+    "bff_sha": "c6f7cc2340011624a8b22814ad2dc1d549617d1b"
   },
   "workflow_runs": [
     {
@@ -84,11 +84,30 @@
       "release_admission_artifact_digest": "sha256:0809e87586c81b55b2419b77f627a05d7f0498a495dfbbf7ad95d810dc0edae3",
       "release_candidate_id": "1c447a6d13bb0269331325d4ccf4765ab845695e0ad7fe5e267c02d3dcb54ac3",
       "compatibility_manifest_sha256": "f7e91e716b82023f78161e37ada425b3f501cf8b701c8c6f34c0f3b3c0fac7c5"
+    },
+    {
+      "repository": "ajoe734/pantheon",
+      "workflow": "nonprod-deploy.yml",
+      "run_id": 33291750319,
+      "run_url": "https://github.com/ajoe734/pantheon/actions/runs/33291750319",
+      "status": "completed",
+      "conclusion": "failure",
+      "outcome": "governed-dev-paper-baseline-provisioning-rejected",
+      "observed_reason": "the exact candidate root stack and bounded source-to-Agora projection readback completed, but governed paper baseline provisioning returned HTTP 500 INTERNAL_SERVER_ERROR and exit code 75",
+      "backend_stack_started": true,
+      "candidate_root_deploy_completed": true,
+      "frontend_release_admission_executed": false,
+      "compensated_to_exact_hosted_baseline": true,
+      "release_admission_artifact": "pantheon-dev-release-admission-33291750319-1",
+      "release_admission_artifact_id": 9726178275,
+      "release_admission_artifact_digest": "sha256:7a8b1f01e69f2452597ed0222fd47ba46a02c378c3d2b708da61e13042665546",
+      "release_candidate_id": "04007aa0719fa2aae1916cdfdfc6380fb5c2cf1edf5a4dad218139888fb94b7f",
+      "compatibility_manifest_sha256": "30f93d56903a65e95997ed6fd3928d44557f6d6effbb451b7c03b103b1a466a0"
     }
   ],
   "blocking_observation": {
-    "source_run_id": 33287442245,
-    "failed_step": "Deploy dev VM stack under lease",
+    "source_run_id": 33291750319,
+    "failed_step": "Ensure governed dev paper baseline under lease",
     "required_loop_workers_activated": 28,
     "duplicate_legacy_workers_detected": false,
     "source_symbol": "2330.TW",
@@ -96,14 +115,20 @@
     "bounded_source_refresh_requested": true,
     "source_ingest_service_state": "healthy",
     "source_ingest_scheduler_state": "exited-zero",
-    "source_receipts_readback_http_status": 200,
-    "source_controller_readback_http_status": 200,
-    "agora_projection_state": "rejected",
-    "agora_projection_error": "Agora projection does not bind the new receipt/run/source",
-    "paper_signal_producer_container_state": "running",
-    "paper_signal_producer_health": "healthy",
-    "paper_signal_active_binding_id": "rb-b62e3af4f5a541059588e1388512a041",
-    "paper_signal_enqueued_per_tick": 1,
+    "source_ingest_run_id": "ingest-74161e7930d7",
+    "source_identity": "tw-official:tw_price_daily:TWSE:2330:1d2c1ebd0307b7e1",
+    "source_freshness_reported": "stale",
+    "source_receipt_and_projection_readback": "advanced",
+    "agora_projection_state": "advanced",
+    "candidate_root_deploy_state": "success",
+    "paper_baseline_provisioning_state": "failed",
+    "paper_baseline_http_status": 500,
+    "paper_baseline_error_code": "INTERNAL_ERROR",
+    "paper_baseline_error_reason": "INTERNAL_SERVER_ERROR",
+    "paper_baseline_exit_code": 75,
+    "frontend_admission_job_state": "skipped",
+    "parent_bound_child_proof_dispatched": false,
+    "proof_watchdog_dispatched": false,
     "safe_baseline_frontend_sha": "c230fc76bef78fc297135152f2acba690314bb9d",
     "safe_baseline_bff_sha": "dcb14231d29f08f1646a4ee962b83fd2d4b67560"
   },
@@ -115,7 +140,7 @@
     "watchdog_armed": false,
     "task_passed": false
   },
-  "required_next": "Repair the downstream source-ingest Agora projection so its one-shot readback deterministically binds the same new official connector receipt, ingest run, and source identity already accepted by controller readback; then rerun exact FE 5ffee3db8c2b37b4070d43d091ed4207ef5d70e5 with the repaired Pantheon dev head through successful read-only admission before any parent-bound browser write proof.",
+  "required_next": "Diagnose and repair the external governed dev paper baseline bootstrap path that returned HTTP 500 INTERNAL_SERVER_ERROR after the exact c6f7cc2340011624a8b22814ad2dc1d549617d1b root deploy and repaired source-to-Agora projection succeeded. Do not retry the unchanged head as browser proof; require a corrected or independently proven healthy paper provisioning path before redispatching exact FE 5ffee3db8c2b37b4070d43d091ed4207ef5d70e5.",
   "artifacts": [
     "docs/deployment/evidence/AGORA-AGC-14-HOSTED-DEMO-AUTHENTIC-V5-20260829/summary.json",
     "docs/deployment/evidence/AGORA-AGC-14-HOSTED-DEMO-AUTHENTIC-V5-20260829/browser-results.json",
