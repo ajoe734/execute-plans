@@ -2,35 +2,35 @@
   "schema_version": "pantheon.hosted-demo-authentic-evidence.v5",
   "task_id": "AGORA-AGC-14-HOSTED-DEMO-AUTHENTIC-V5-20260829",
   "status": "blocked-external",
-  "recorded_at": "2026-08-30T16:55:11Z",
+  "recorded_at": "2026-08-30T18:52:30Z",
   "acceptance_scope": "Exact-pair governed write-proof attempt with immutable workflow artifacts, authentic hosted Persona browser coverage, durable governed proposal readback, and independent same-pair watchdog restore.",
   "exact_pair": {
     "frontend_commit": "7d30e78476be61222af63a089e7ab141aa43b809",
-    "backend_commit": "2bcb4465399af83190c5027073f3b2296e377256",
-    "pair_fingerprint": "9de4cd001a8b7aaf18a1094fb1699ece19f0efd86d3d24994cd9f3562fe33727",
-    "release_candidate_id": "9783e78bd8e28608f2c335d566fd798db5b995c50da129876401170b45852e9a",
-    "compatibility_manifest_sha256": "4cc8e5239023ac9d8e1e1a0e0c39f4f9be2b821486ed10052a629b640a7474a6"
+    "backend_commit": "4f0994be548f56da627740f5b7fb193844c1faed",
+    "pair_fingerprint": "b9209d6382cf109fda2504d7622fe7d9f137a084b0214988cc5588fffdeabc93",
+    "release_candidate_id": "1497419171e98b33b42a01ebfd76c60368ab20e75ea45ac5fda61636a289e1cd",
+    "compatibility_manifest_sha256": "c5e27c9facfde7ddf34e22dd81a7ae5b15c128e81a4c4a2045ed349901981a09"
   },
   "governed_release": {
-    "controller_run_id": 33319323262,
-    "integration_gate_run_id": 33320810888,
-    "read_only_switch_run_id": 33321494484,
+    "controller_run_id": 33325479949,
+    "integration_gate_run_id": 33327155009,
+    "read_only_switch_run_id": 33327736542,
     "controller_conclusion": "success",
     "gate_conclusion": "success",
     "switch_conclusion": "success"
   },
   "proof_attempt": {
-    "parent_run_id": 33322457191,
+    "parent_run_id": 33328350776,
     "parent_conclusion": "failure",
-    "correlation_id": "c0986812-0fd4-4457-8fc0-5364c59ce905",
+    "correlation_id": "1f254dea-54e0-45d3-9e2c-3ca277770d87",
     "proof_window_ack": true,
     "emergency_override": false,
-    "watchdog_run_id": 33322992146,
+    "watchdog_run_id": 33328840641,
     "watchdog_conclusion": "success",
-    "child_run_id": 33323122321,
+    "child_run_id": 33328934580,
     "child_conclusion": "failure",
-    "write_proof_release_name": "20260830T163823Z-7d30e78476be-gate-33320810888-33322457191-1-write-proof",
-    "write_proof_accepted_at": "2026-08-30T16:40:29Z",
+    "write_proof_release_name": "20260830T184303Z-7d30e78476be-gate-33327155009-33328350776-1-write-proof",
+    "write_proof_accepted_at": "2026-08-30T18:44:35Z",
     "write_proof_profile": "write-proof",
     "write_proof_frontend_real_writes": true,
     "write_proof_bff_real_writes": true,
@@ -43,10 +43,10 @@
     "persona_preflight": {
       "ensure_succeeded": true,
       "schema_version": "pantheon.persona-hosted-proof-servant.v1",
-      "request_id": "a734b25d-d75b-485d-a0a5-cb1f475cb239",
-      "version_request_id": "f4481610-5584-42e7-9c92-971fba343130",
-      "me_request_id": "447dda7b-9b4d-41b5-bcb6-45e5f92230d6",
-      "readiness_request_id": "07a9051f-02cb-4f26-acaa-0ddca8b87dbf",
+      "request_id": "8d9beca0-33f6-49e3-849a-d424824069e9",
+      "version_request_id": "ddb4503a-7f8f-47c3-a20b-b512f542dccf",
+      "me_request_id": "9d7ed072-ca58-4996-abd3-f0e248f3e2aa",
+      "readiness_request_id": "a1ec1a8c-9111-41c3-98f4-526024ad8ad8",
       "idempotency_key": "124badd0-3ac6-53db-9664-aee4a1b2d936",
       "tenant_id": "tenant-dev",
       "persona_id": "agora-servant-fbeaee01e8f34c786555",
@@ -60,7 +60,7 @@
     },
     "governed_proposal_write_proof": {
       "succeeded": true,
-      "proposal_id": "prop_df8b1c3cfbfe4d008dc0036998ba7e0b",
+      "proposal_id": "prop_29a63e36477e454b9849382cf65d8690",
       "created_status": 201,
       "modified_status": 200,
       "validated_status": 200,
@@ -78,7 +78,7 @@
       "execution_authority": "none",
       "downstream_execution_attempted": false,
       "tokens_recorded": false,
-      "generated_at": "2026-08-30T16:42:17.224Z"
+      "generated_at": "2026-08-30T18:46:05.431Z"
     },
     "browser_result": {
       "suite": "persona-interaction-cross-repo-hosted.spec.ts",
@@ -86,10 +86,10 @@
       "unexpected": 3,
       "skipped": 0,
       "flaky": 0,
-      "duration_ms": 63221.12,
-      "operator_failure": "POST /bff/agora/interactions/participants:eligible returned 500",
-      "daily_measure_failure": "POST /bff/agora/interactions/participants:eligible returned 500",
-      "viewer_failure": "GET /bff/management/persona-fleet?page_size=100 returned 500"
+      "duration_ms": 85150.892,
+      "operator_failure": "Ensured Persona was excluded by authoritative eligibility with persona_not_active",
+      "daily_measure_failure": "Ensured Persona was excluded by authoritative eligibility with persona_not_active",
+      "viewer_failure": "Persona detail did not render the Agora Servant level-1 heading within 30000 ms"
     },
     "failed_step": "Run governed and Persona desktop proof with proof-only credentials",
     "later_hosted_journeys": "skipped_after_required_Persona_suite_failure",
@@ -97,15 +97,19 @@
   },
   "safe_restore": {
     "restored": true,
-    "restored_at": "2026-08-30T16:46:51.788Z",
+    "restored_at": "2026-08-30T18:51:23.227Z",
     "profile": "read-only",
-    "release_name": "20260830T163823Z-7d30e78476be-gate-33320810888-33322457191-1-write-proof-read-only",
+    "release_name": "20260830T184303Z-7d30e78476be-gate-33327155009-33328350776-1-write-proof-read-only",
     "frontend_real_writes": false,
+    "frontend_stub_writes": false,
     "bff_real_writes": false,
     "pair_matches": true,
     "safe_restore_probe": "passed",
     "rollback_required": false,
-    "direct_readback_at": "2026-08-30T16:51:03Z",
+    "direct_readback_at": "2026-08-30T18:52:30Z",
+    "direct_manifest_sha256": "38e0902c834e22bc276b0d93a0805739375008efbc97700d2cb8e8925e255f11",
+    "bff_version_sha256": "7b80dca61b464adf06503c928c20c8b738b74770ac4157a157e492727b4f5e10",
+    "bff_readiness_sha256": "8b1e33729274cba6227594e2c200b87abcf811e785e811d8278177907acdab0f",
     "bff_ready": true,
     "lifecycle_projector_ready": true,
     "lifecycle_backlog": 0,
@@ -113,40 +117,46 @@
   },
   "immutable_artifacts": [
     {
-      "run_id": 33319323262,
-      "artifact_id": 9735156323,
-      "name": "pantheon-cross-repo-release-33319323262-1",
-      "digest": "sha256:296754c9d5d8d9e34cf4514827b7524a44e52343bf914839cf403cbb48978ccc"
+      "run_id": 33325479949,
+      "artifact_id": 9736853869,
+      "name": "pantheon-cross-repo-release-33325479949-1",
+      "digest": "sha256:1fbf36be53cfd2c315a52490d6eeba20c10722be9ae4ec63aa7dea035f6037e9"
     },
     {
-      "run_id": 33320810888,
-      "artifact_id": 9734999970,
+      "run_id": 33327155009,
+      "artifact_id": 9736715291,
       "name": "pantheon-fe-release-candidate-attempt-1",
-      "digest": "sha256:627e97f9423bb288c1a61dbbdcb389a7690006631a5fa60b74726d19a62498f9"
+      "digest": "sha256:6bbe82b64fb2eda251a4bfaa87329ec2e94f745ebcd73c7924dc0944d9920c31"
     },
     {
-      "run_id": 33321494484,
-      "artifact_id": 9735150744,
+      "run_id": 33327736542,
+      "artifact_id": 9736848493,
       "name": "pantheon-dev-fe-deploy-evidence-attempt-1",
-      "digest": "sha256:29f639a8cabcbbefe24b2f263c5cbc2429c3906438cc36cd1718a7c6ccc04cd6"
+      "digest": "sha256:9139ce0d861398595edd9dc802bbe442be62db9818fbae01b1970e64e06de645"
     },
     {
-      "run_id": 33322457191,
-      "artifact_id": 9735415552,
+      "run_id": 33328350776,
+      "artifact_id": 9737008292,
+      "name": "pantheon-dev-fe-deploy-evidence-attempt-1",
+      "digest": "sha256:9ef5a284d8ddb69b98650b1e4e89f6bd7800a8a3fca8dc0aee394a24403159d2"
+    },
+    {
+      "run_id": 33328350776,
+      "artifact_id": 9737030612,
       "name": "pantheon-proof-binding-attempt-1",
-      "digest": "sha256:ad171b164de65b0f8b49d37259ff790a4129f7ac37d4d5427a78033d77612095"
+      "digest": "sha256:f2cc739795171bfe4e95d99bcd1e973af0270b3eb3e4415889dc131da1c10edf"
     },
     {
-      "run_id": 33322457191,
-      "artifact_id": 9735454136,
+      "run_id": 33328350776,
+      "artifact_id": 9737060855,
       "name": "pantheon-proof-child-claim-attempt-1",
-      "digest": "sha256:15011924df0c5461cabbfd7cadc74768391151c4203694f8c1861a401acff773"
+      "digest": "sha256:b84716dc05c70b816e2f6b36d8368e445966404b6c7be34ea3b7f15a3b3ec7f4"
     },
     {
-      "run_id": 33323122321,
-      "artifact_id": 9735486972,
+      "run_id": 33328934580,
+      "artifact_id": 9737097099,
       "name": "pantheon-authorized-write-proof-attempt-1",
-      "digest": "sha256:5f779c9c4417c295992e6eb344b806fe63e12c233ee519743c732cf53f99078e"
+      "digest": "sha256:27d970481bf3454f4ad91a7cacb49277bb1b16631d12233a9577dbac5fd0ded1"
     }
   ],
   "acceptance_claims": {
@@ -163,13 +173,13 @@
   },
   "blocker": {
     "kind": "external",
-    "owner_layer": "Pantheon BFF port contracts for Persona eligibility and Persona Fleet projection",
-    "hosted_traceback": {
-      "eligibility": "TypeError: PersonaFleetPort.list_personas() got an unexpected keyword argument 'include_market_persona_defaults' at persona_capital_runtime.py:863",
-      "persona_fleet": "TypeError: RankingProjectionPort.list_persona_league() got an unexpected keyword argument 'include_market_persona_defaults' at persona_capital_runtime.py:915",
-      "reconciliation_warning": "ReadSurfacePorts has no update_persona"
+    "owner_layer": "Pantheon BFF Agora servant lifecycle admission and hosted Persona detail readback",
+    "repaired_behavior": "The repaired exact BFF no longer returns HTTP 500 from authoritative eligibility or Persona Fleet. Both routes returned successful responses in the immutable browser result.",
+    "hosted_failure": {
+      "operator_and_daily_measure": "The exact user-private Persona returned by POST /bff/agora/servant/ensure was excluded from POST /bff/agora/interactions/participants:eligible with persona_not_active.",
+      "viewer": "GET /bff/management/persona-fleet exposed the ensured Persona, but /management/personas/agora-servant-fbeaee01e8f34c786555 did not render the expected Agora Servant heading within 30000 ms."
     },
-    "detail": "The exact BFF returns deterministic HTTP 500 responses for authoritative participants eligibility and Persona Fleet because the hosted port implementations do not accept the include_market_persona_defaults contract used by the routes. Fresh credential validation and user-private Persona ensure had already succeeded. This blocks the first required hosted Persona suite, so Agora, Workshop, Trade Journey, and Management/AI coverage cannot truthfully be claimed.",
-    "required_next": "Repair the PersonaFleetPort and RankingProjectionPort list contract mismatches and the reported ReadSurfacePorts update_persona gap, admit the corrected exact pair through a new governed controller/gate/switch, then rerun the bounded write-proof parent."
+    "detail": "Fresh credential validation and stable user-private Persona ensure succeeded, and the governed proposal write/readback proof passed. The required Persona desktop suite still cannot proceed because the ensured Persona is not active for authoritative eligibility and its viewer detail is not renderable. Trade Journey, Agora/Firebase, and Management/AI journeys were then skipped by the required fail-closed sequence.",
+    "required_next": "Repair the stable servant ensure/lifecycle projection so the ensured Persona is active and eligible, and make the same fleet Persona readable on the viewer detail route with the disabled-interaction control. Admit the repaired exact pair through the governed controller/gate/switch, then rerun the bounded write-proof parent."
   }
 }

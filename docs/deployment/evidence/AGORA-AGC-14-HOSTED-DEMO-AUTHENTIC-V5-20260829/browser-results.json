@@ -2,16 +2,16 @@
   "schema_version": "pantheon.hosted-demo-browser-results.v5",
   "task_id": "AGORA-AGC-14-HOSTED-DEMO-AUTHENTIC-V5-20260829",
   "status": "failed",
-  "recorded_at": "2026-08-30T16:55:11Z",
-  "run_id": 33323122321,
-  "job_id": 99288504174,
-  "parent_run_id": 33322457191,
-  "watchdog_run_id": 33322992146,
-  "correlation_id": "c0986812-0fd4-4457-8fc0-5364c59ce905",
+  "recorded_at": "2026-08-30T18:52:30Z",
+  "run_id": 33328934580,
+  "job_id": 99303931001,
+  "parent_run_id": 33328350776,
+  "watchdog_run_id": 33328840641,
+  "correlation_id": "1f254dea-54e0-45d3-9e2c-3ca277770d87",
   "exact_pair": {
     "frontend_commit": "7d30e78476be61222af63a089e7ab141aa43b809",
-    "backend_commit": "2bcb4465399af83190c5027073f3b2296e377256",
-    "pair_fingerprint": "9de4cd001a8b7aaf18a1094fb1699ece19f0efd86d3d24994cd9f3562fe33727"
+    "backend_commit": "4f0994be548f56da627740f5b7fb193844c1faed",
+    "pair_fingerprint": "b9209d6382cf109fda2504d7622fe7d9f137a084b0214988cc5588fffdeabc93"
   },
   "authentication": {
     "fresh_short_lived_credentials_minted": true,
@@ -30,13 +30,14 @@
     "memory_scope": "private_user",
     "execution_authority": "none",
     "registry_backed": true,
-    "request_id": "a734b25d-d75b-485d-a0a5-cb1f475cb239",
-    "me_request_id": "447dda7b-9b4d-41b5-bcb6-45e5f92230d6",
-    "readiness_request_id": "07a9051f-02cb-4f26-acaa-0ddca8b87dbf"
+    "request_id": "8d9beca0-33f6-49e3-849a-d424824069e9",
+    "version_request_id": "ddb4503a-7f8f-47c3-a20b-b512f542dccf",
+    "me_request_id": "9d7ed072-ca58-4996-abd3-f0e248f3e2aa",
+    "readiness_request_id": "a1ec1a8c-9111-41c3-98f4-526024ad8ad8"
   },
   "successful_partial_proof": {
     "kind": "governed-proposal-api-write-and-durable-readback",
-    "proposal_id": "prop_df8b1c3cfbfe4d008dc0036998ba7e0b",
+    "proposal_id": "prop_29a63e36477e454b9849382cf65d8690",
     "operator_statuses": [
       201,
       200,
@@ -58,8 +59,8 @@
   },
   "persona_desktop_suite": {
     "file": "e2e/persona-interaction-cross-repo-hosted.spec.ts",
-    "started_at": "2026-08-30T16:42:17.914Z",
-    "duration_ms": 63221.12,
+    "started_at": "2026-08-30T18:46:06.472Z",
+    "duration_ms": 85150.892,
     "expected": 0,
     "unexpected": 3,
     "skipped": 0,
@@ -67,42 +68,38 @@
     "cases": [
       {
         "name": "operator resolves, checks eligibility, submits no-authority interaction, reads it back, and returns",
-        "started_at": "2026-08-30T16:42:18.466Z",
-        "duration_ms": 22055,
+        "started_at": "2026-08-30T18:46:07.315Z",
+        "duration_ms": 16977,
         "status": "failed",
-        "failure": "Authoritative Persona eligibility returned 500",
-        "endpoint": "POST /bff/agora/interactions/participants:eligible"
+        "failure": "No ensured Persona is included by authoritative eligibility; excluded_reason_counts={\"persona_not_active\":1}",
+        "endpoint": "POST /bff/agora/interactions/participants:eligible",
+        "endpoint_transport_succeeded": true
       },
       {
         "name": "daily Persona measure supports durable modify, defer, accept-for-review, validation, reject, and reload",
-        "started_at": "2026-08-30T16:42:43.712Z",
-        "duration_ms": 16895,
+        "started_at": "2026-08-30T18:46:25.136Z",
+        "duration_ms": 15150,
         "status": "failed",
-        "failure": "Authoritative Persona eligibility returned 500",
-        "endpoint": "POST /bff/agora/interactions/participants:eligible"
+        "failure": "No ensured Persona is included by authoritative eligibility; excluded_reason_counts={\"persona_not_active\":1}",
+        "endpoint": "POST /bff/agora/interactions/participants:eligible",
+        "endpoint_transport_succeeded": true
       },
       {
         "name": "viewer sees a disabled reason and cannot produce an interaction POST",
-        "started_at": "2026-08-30T16:43:01.073Z",
-        "duration_ms": 19941,
+        "started_at": "2026-08-30T18:46:40.990Z",
+        "duration_ms": 50477,
         "status": "failed",
-        "failure": "Persona Fleet match returned 500",
-        "endpoint": "GET /bff/management/persona-fleet?page_size=100"
+        "failure": "Expected level-1 heading Agora Servant was not attached within 30000 ms",
+        "route": "/management/personas/agora-servant-fbeaee01e8f34c786555",
+        "persona_fleet_read_succeeded": true
       }
     ]
   },
-  "hosted_traceback": {
-    "eligibility": {
-      "exception": "TypeError",
-      "message": "PersonaFleetPort.list_personas() got an unexpected keyword argument 'include_market_persona_defaults'",
-      "source": "persona_capital_runtime.py:863"
-    },
-    "persona_fleet": {
-      "exception": "TypeError",
-      "message": "RankingProjectionPort.list_persona_league() got an unexpected keyword argument 'include_market_persona_defaults'",
-      "source": "persona_capital_runtime.py:915"
-    },
-    "reconciliation_warning": "ReadSurfacePorts has no update_persona"
+  "repaired_behavior": {
+    "eligibility_http_500_reproduced": false,
+    "persona_fleet_http_500_reproduced": false,
+    "new_authoritative_failure": "persona_not_active",
+    "new_viewer_failure": "Persona detail heading absent"
   },
   "required_page_journeys": {
     "agora": "not-run-after-required-Persona-failure",
@@ -120,16 +117,17 @@
   "screenshots": [],
   "screenshot_note": "The credentialed workflow disables Playwright artifact capture and the required Persona suite failed before page-journey screenshot checkpoints.",
   "immutable_artifact": {
-    "artifact_id": 9735486972,
+    "artifact_id": 9737097099,
     "name": "pantheon-authorized-write-proof-attempt-1",
-    "digest": "sha256:5f779c9c4417c295992e6eb344b806fe63e12c233ee519743c732cf53f99078e",
+    "digest": "sha256:27d970481bf3454f4ad91a7cacb49277bb1b16631d12233a9577dbac5fd0ded1",
+    "download_digest_reverified": true,
     "files": {
-      "deployment-before-pint.json": "sha256:c6590c7e50ca42bd6ec9f44c8fbc17b7590a4470531ae6da730a0969ee040c5f",
-      "deployment-after-pint.json": "sha256:c6590c7e50ca42bd6ec9f44c8fbc17b7590a4470531ae6da730a0969ee040c5f",
-      "persona-hosted-desktop-results.json": "sha256:86a61a1942d60bf4d7f2ac4a13ba9051a018d70d9cd75f1d4c276990c6d4d631",
-      "persona-servant-preflight.json": "sha256:40cec53051331475f8ae1102db2d188620bf02e760bfc7fbf13051f4d6881c4c",
-      "pint-010-r2-governed-proposal-20260830T164217224Z.json": "sha256:5031381807d430f4e4013f9e159e8be607aa73f95aad4e402f73d9d724da4cb3",
-      "pint-010-r2-governed-proposal-20260830T164217224Z.md": "sha256:bf5e91e54ac554b3d4b5198051dc9b737cf86177992caf21e500c68e10eb0628"
+      "deployment-before-pint.json": "sha256:ceae6817ebc522352c824f9f4b596ded61e02b30c21b6521eb307467f0592dd7",
+      "deployment-after-pint.json": "sha256:ceae6817ebc522352c824f9f4b596ded61e02b30c21b6521eb307467f0592dd7",
+      "persona-hosted-desktop-results.json": "sha256:ee2a45377bbd24a20c9e95dfbaae0c45cb9026dec1a490f492570ceedbc60ec5",
+      "persona-servant-preflight.json": "sha256:f195d2c2768c69af5e5687f25e54f664b40a04a67bd6be1d8e2f6627d5df7047",
+      "pint-010-r2-governed-proposal-20260830T184605431Z.json": "sha256:2b9a5c517c4d2bb5c946ae3d217a46daa3e89ddde5d51e6821c5d7f617bbd237",
+      "pint-010-r2-governed-proposal-20260830T184605431Z.md": "sha256:69a70dd0e5ab64073e4e4dc9490f484a2cd5ea520bed3cc868fa731e7f1a3750"
     }
   },
   "pass_claimed": false
