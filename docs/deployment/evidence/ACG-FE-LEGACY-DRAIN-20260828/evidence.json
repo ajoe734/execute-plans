@@ -1,0 +1,71 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "ACG-FE-LEGACY-DRAIN-20260828",
+  "owner": "Claude",
+  "reviewer": "Antigravity2",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/ACG-FE-LEGACY-DRAIN-20260828",
+  "status": "merged-retroactive-evidence-manifest",
+  "recorded_at": "2026-08-28T00:00:00.000Z",
+  "note": "This manifest documents the review evidence for PR #687 (merged 2026-08-28T16:34:33Z, merge commit 54238be21942b186cd565dc03fe02e5734554b7a) after the fact. The task-scoped review evidence manifest was not committed to the PR diff before Antigravity2's independent exact-head approval of e509404fce1b7d7c194014c4012b34bdd924b56a, which is a process gap relative to the program convention used by sibling ARCH-CLEANUP-20260828 tasks. The underlying code review was genuinely independent and exact-head (see github_review_bridge review_proof_ref refs/tags/pantheon-review/approve/e509404fce1b7d7c194014c4012b34bdd924b56a, status_state=success). Recorded now, at closeout, to make the review record durable and auditable; no functional commit was added or altered to satisfy this field.",
+  "scope": {
+    "migrated": [
+      "Migrated all 53 audited production UI callers from legacy @/lib/bff/* and bff/types imports to typed @/lib/bff-v1 domain clients and DTO contracts (src/management/pages/**, src/management/components/detail/**, src/management/components/governance/**, src/platform/components/**, src/lib/v4/**, src/lib/v5/**, src/lib/stateMachine.ts, src/lib/stateMachines/types.ts, src/lib/useMockRealtime.ts).",
+      "Relocated legacy-only bff modules with production callers into bff-v1 (agora.ts -> bff-v1/agora/agoraReads.ts, mutations.ts/persistence.ts/scenarios.ts -> bff-v1/mocks/*, writeOverlay.ts -> bff-v1/writeOverlay.ts, evidenceOperations.ts -> bff-v1/evidenceOperations.ts, __tests__/liveAdapters.test.ts, __tests__/runAction.test.ts, __tests__/liveTransportSnapshot.test.ts).",
+      "Deleted legacy.ts, seed.ts, and src/lib/bff/types.ts, src/lib/bff/realtime.ts, src/lib/bff/v5.ts, and the old src/lib/bff/ directory after zero-caller proof.",
+      "Fixed follow-up caller/type-check fallout across four small commits: deduplicated bffV1 imports across 10 files (TS2300), exported bffV1/detectMode in the @/lib/bff-v1 vitest mock for PersonaTradeJournalTab, fixed LifecycleState import and bffV1 call prefixes in stateMachine.ts/StrategyDataFeaturesTab.tsx/StrategyPerformanceTab.tsx, and routed governance.ts's getObjectVersionsForSubject cast through unknown first to resolve TS2352."
+    ],
+    "deleted_legacy_files": [
+      "src/lib/bff-v1/legacy.ts",
+      "src/lib/bff-v1/seed.ts",
+      "src/lib/bff/types.ts",
+      "src/lib/bff/realtime.ts",
+      "src/lib/bff/v5.ts"
+    ],
+    "not_changed": [
+      "No backend contracts or product routes altered.",
+      "bff-v1 domain API contracts and public barrel exports preserved."
+    ]
+  },
+  "acceptance": {
+    "all_53_audited_production_legacy_consumers_use_typed_bff_v1_domain_clients": true,
+    "production_imports_from_legacy_bff_implementations_are_zero": true,
+    "legacy_ts_seed_ts_and_old_barrels_deleted_only_after_zero_caller_proof": true,
+    "bff_types_replaced_by_domain_contracts_not_broad_mechanical_relocation": true,
+    "no_forwarding_compatibility_facade_remains": true
+  },
+  "validation": {
+    "typecheck": {
+      "command": "npx tsc -p tsconfig.app.json --noEmit",
+      "result": "passed: 343 pre-existing diagnostics, diffed against merge-base 9c9f8a16b with zero new diagnostics introduced by this task (confirmed at closeout on the merged dev head 54238be21942b186cd565dc03fe02e5734554b7a)"
+    },
+    "vitest_full_suite": {
+      "command": "npm test -- --run",
+      "result": "passed: 193 files / 1964 tests passed (per commit trailers on 5b4bd9cc1, 834112f3e, 968400327, 59b82b6ed, e509404fc); reconfirmed at closeout"
+    },
+    "vite_build": {
+      "command": "npm run build",
+      "result": "passed: vite build green (per commit trailer on 5b4bd9cc1)"
+    },
+    "legacy_caller_grep": {
+      "command": "grep -rn \"lib/bff/legacy\\|lib/bff/seed\\|lib/bff/types\" src/ --include=*.ts --include=*.tsx",
+      "result": "zero import matches; only two stale doc comments referencing the old path in writeIntents/createDefaults.ts and governanceDecisionState.ts"
+    }
+  },
+  "review_binding": {
+    "pr": 687,
+    "head_sha": "e509404fce1b7d7c194014c4012b34bdd924b56a",
+    "merge_commit": "54238be21942b186cd565dc03fe02e5734554b7a",
+    "merged_at": "2026-08-28T16:34:33Z",
+    "review_proof_ref": "refs/tags/pantheon-review/approve/e509404fce1b7d7c194014c4012b34bdd924b56a",
+    "independent_review_message": "Independent review passed: governance.ts unknown-first cast verified, zero new TypeScript diagnostics vs 9c9f8a16b, 193 files/1964 tests passed, vite build green, zero legacy callers/facades remaining. Approved."
+  },
+  "independent_review_required": [
+    "Verify all 53 audited production legacy consumers use typed bff-v1 domain clients.",
+    "Confirm production imports from legacy bff implementations (legacy.ts, seed.ts, bff/types.ts) are zero.",
+    "Verify legacy.ts, seed.ts, and old barrels were deleted only after zero-caller proof.",
+    "Confirm no forwarding compatibility facade remains.",
+    "Verify npx tsc -p tsconfig.app.json --noEmit, npm test -- --run, and npm run build pass cleanly on the merged head."
+  ]
+}
