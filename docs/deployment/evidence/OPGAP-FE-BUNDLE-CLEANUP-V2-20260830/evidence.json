@@ -1,0 +1,69 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "OPGAP-FE-BUNDLE-CLEANUP-V2-20260830",
+  "owner": "Antigravity",
+  "reviewer": "Codex",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/OPGAP-FE-BUNDLE-CLEANUP-V2-20260830",
+  "pull_request": 705,
+  "status": "ready-for-independent-exact-head-review",
+  "scope": {
+    "corrected": [
+      "Cleaned up all legacy frontend mock fallbacks, dead seeds, and overlays in execute-plans bff-v1 modules.",
+      "Verified zero mock, seed, overlay, writeFallback, withLiveOrMock, withStrictLiveOrMock, or liveOrSeed reachability in the production Rollup graph.",
+      "bff-v1/v5.ts contains only DTO/view models and pure transforms; consolidated liveSse remains the network owner.",
+      "Domain writes and unavailable reads fail closed under strict-live fallback posture.",
+      "Created and validated scripts/check_bundle_mock_reachability.ts."
+    ],
+    "preserved": [
+      "Production import graph gate (productionImportGraph.test.ts) remains passing with 0 cycles.",
+      "All existing delivered paths remain intact."
+    ],
+    "not_changed": [
+      "No deleted bff/writeFallback/seed/legacy/NL path was recreated."
+    ]
+  },
+  "review_binding": {
+    "pull_request": "https://github.com/ajoe734/execute-plans/pull/705",
+    "required_final_binding": "Independent approval must bind the final PR head containing this manifest."
+  },
+  "acceptance": {
+    "production_rollup_mock_reachability": 0,
+    "production_import_graph_cycles": 0,
+    "full_test_suite_passed": true,
+    "check_bundle_mock_reachability": "passed"
+  },
+  "validation": {
+    "bundle_mock_check": {
+      "command": "npx tsx scripts/check_bundle_mock_reachability.ts",
+      "result": "passed: Production Rollup graph has zero mock/seed/fallback reachability"
+    },
+    "production_import_graph": {
+      "command": "npx vitest run src/lib/bff-v1/__tests__/productionImportGraph.test.ts",
+      "result": "passed: 5/5 tests"
+    },
+    "full_test_suite": {
+      "command": "npm test",
+      "result": "passed: 193 files, 1964 tests"
+    },
+    "typecheck": {
+      "command": "npx tsc --noEmit",
+      "result": "passed"
+    },
+    "lint": {
+      "command": "npm run lint",
+      "result": "passed: 0 errors"
+    },
+    "production_build": {
+      "command": "VITE_BFF_MODE=live VITE_BFF_FALLBACK=strict npm run build",
+      "result": "passed: zero mock fixture in bundle"
+    }
+  },
+  "independent_review_required": [
+    "Confirm production Rollup bundle graph has zero mock reachability via scripts/check_bundle_mock_reachability.ts.",
+    "Confirm productionImportGraph.test.ts passes with 0 cycles.",
+    "Confirm all 193 test files in the test suite pass.",
+    "Bind this file through REVIEW_FILE during governed exact-head approval."
+  ]
+}
