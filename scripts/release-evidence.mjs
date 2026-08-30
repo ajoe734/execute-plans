@@ -159,6 +159,27 @@ function validateActor(value) {
   return value;
 }
 
+function validateBranchRef(value) {
+  const segments = value.split("/");
+  if (
+    value.length > 255 ||
+    !/^[A-Za-z0-9][A-Za-z0-9._/-]*$/u.test(value) ||
+    value.endsWith("/") ||
+    value.endsWith(".") ||
+    value.includes("..") ||
+    value.includes("//") ||
+    value.includes("@{") ||
+    segments.some(
+      (segment) =>
+        segment.length === 0 ||
+        segment.startsWith(".") ||
+        segment.endsWith(".lock"),
+    )
+  )
+    invalidDetail();
+  return value;
+}
+
 function validatePath(value, placeholders = []) {
   if (placeholders.includes(value)) return value;
   if (value.length > 4096 || /[\0\r\n]/u.test(value) || !path.isAbsolute(value))
@@ -205,6 +226,7 @@ const DETAIL_VALIDATORS = Object.freeze({
   auditDir: (value) => validatePath(value),
   bffCommit: validateSha40,
   candidateDir: (value) => validatePath(value),
+  candidateRef: validateBranchRef,
   candidateSha: validateSha40,
   controllerSha: validateSha40,
   currentDevSha: validateSha40,
