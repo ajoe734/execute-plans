@@ -1,0 +1,105 @@
+{
+  "schema_version": 1,
+  "task_id": "OPGAP-FE-RELEASE-CONTROLLER-OWNERSHIP-20260830",
+  "title": "Accept an exact-pair controller transaction independently of unrelated parent smoke failures",
+  "recorded_at": "2026-08-30T22:38:00Z",
+  "scope": {
+    "implemented": [
+      "The frontend release controller still requires the exact Pantheon nonprod workflow, repository, workflow_dispatch event, dev branch, and backend SHA before it accepts a transaction.",
+      "An active controller and an overall-success controller retain their prior acceptance behavior.",
+      "A completed parent with conclusion=failure is accepted only when its single exact job named 'Admit and switch exact FE/BFF release' completed successfully on the same run attempt.",
+      "The immutable release candidate remains authenticated before controller ownership is evaluated, including its release-candidate ID, compatibility-manifest digest, controller run ID, frontend SHA, and backend SHA."
+    ],
+    "not_changed": [
+      "Pantheon nonprod deployment workflow behavior or its OpenClaw smoke checks.",
+      "Release-candidate admission generation, immutable artifact verification, deployment profiles, write authorization, credential handling, or environment configuration.",
+      "The bounded write-proof watchdog and read-only restoration contract."
+    ],
+    "fail_closed": [
+      "A non-Pantheon repository, wrong workflow path, non-dispatch event, non-dev branch, or wrong backend head is rejected even if a coordination job reports success.",
+      "A parent failure without exactly one successful exact-pair coordination job is rejected.",
+      "Completed controller outcomes other than success or the narrowly accepted failure-plus-coordination case remain rejected."
+    ]
+  },
+  "reproduction": {
+    "parent_controller_run": {
+      "repository": "ajoe734/pantheon",
+      "workflow": ".github/workflows/nonprod-deploy.yml",
+      "run_id": 33332882810,
+      "run_attempt": 1,
+      "event": "workflow_dispatch",
+      "branch": "dev",
+      "backend_sha": "cbf4e0a7303de1c0e9a51614c99ac2d8ddd96cfe",
+      "overall_conclusion": "failure",
+      "jobs": {
+        "deploy_dev": {
+          "name": "Deploy dev under shared environment lease",
+          "conclusion": "failure",
+          "context": "The parent job includes unrelated post-deploy OpenClaw smoke coverage."
+        },
+        "exact_pair_coordination": {
+          "job_id": 99319306942,
+          "name": "Admit and switch exact FE/BFF release",
+          "conclusion": "success",
+          "evidence": "The job's 'Dispatch exact frontend gate and switch' and terminal accepted-or-compensated outcome steps both succeeded."
+        }
+      }
+    },
+    "blocked_frontend_run": {
+      "repository": "ajoe734/execute-plans",
+      "workflow": ".github/workflows/pantheon-dev-fe-deploy.yml",
+      "run_id": 33336021909,
+      "run_attempt": 1,
+      "event": "workflow_dispatch",
+      "branch": "dev",
+      "frontend_sha": "7d30e78476be61222af63a089e7ab141aa43b809",
+      "release_candidate_id": "9122d0fecd5cf9d5ae574c4c5e802df1d336dd2fd778a54019d2ad4995a2843d",
+      "conclusion": "failure",
+      "observation": "The deploy job failed before the bounded proof coordinator; the proof coordinator and restore-confirmation jobs were skipped."
+    },
+    "diagnosis": "The old ownership check accepted only active or overall-success parent runs. It therefore rejected the verified completed exact-pair transaction solely because the parent carried an unrelated smoke failure."
+  },
+  "delivery": {
+    "branch": "task/OPGAP-FE-RELEASE-CONTROLLER-OWNERSHIP-20260830",
+    "implementation_anchor_commit": "4c65b31966c68eef9fb2dfd367f058b5e4c46f73",
+    "implementation_files": [
+      ".github/workflows/pantheon-dev-fe-deploy.yml",
+      "src/test/deploy-safe-defaults.test.ts"
+    ],
+    "review_evidence_binding": "This committed manifest must be bound by the independent Claude review to the exact pushed PR head before owner closeout."
+  },
+  "verification": {
+    "commands": [
+      {
+        "command": "node_modules/.bin/vitest run src/test/deploy-safe-defaults.test.ts --maxWorkers=2 --testTimeout=15000 --hookTimeout=30000",
+        "result": "passed: 1 file, 21 tests"
+      },
+      {
+        "command": "node_modules/.bin/eslint src/test/deploy-safe-defaults.test.ts",
+        "result": "passed: no output, exit 0"
+      },
+      {
+        "command": "node -e \"const fs=require('node:fs'); const YAML=require('yaml'); YAML.parse(fs.readFileSync('.github/workflows/pantheon-dev-fe-deploy.yml','utf8'));\"",
+        "result": "passed: workflow YAML parsed"
+      },
+      {
+        "command": "git diff --check",
+        "result": "passed"
+      }
+    ],
+    "contract_cases": [
+      "active trusted controller accepts",
+      "overall-success trusted controller accepts",
+      "unrelated parent smoke failure with successful exact-pair coordination accepts",
+      "failed or absent exact-pair coordination rejects",
+      "wrong backend head rejects",
+      "wrong workflow rejects",
+      "wrong repository rejects"
+    ]
+  },
+  "review": {
+    "reviewer": "Claude",
+    "status": "pending_independent_review",
+    "required_decision": "Verify the exact reviewed head retains the narrow completed-failure exception, confirms exact-pair job identity and success, and does not weaken any write or credential guard."
+  }
+}
