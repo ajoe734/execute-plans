@@ -2,7 +2,7 @@
   "schema_version": "pantheon.agora.hosted-demo-restore-attestation.v1",
   "task_id": "AGORA-AGC-14-HOSTED-DEMO-AUTHENTIC-V5-20260829",
   "status": "safe-baseline-preserved",
-  "observed_at": "2026-08-29T20:27:59Z",
+  "observed_at": "2026-08-30T00:58:24Z",
   "observation_source": {
     "frontend_manifest_url": "https://pantheon-lupin-dev-fe.35.201.204.12.sslip.io/deployment.json",
     "backend_version_url": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/bff/version",
@@ -15,7 +15,10 @@
     "deployment_profile": "read-only",
     "vite_bff_real_writes": "false",
     "vite_bff_allow_dev_stub_writes": "false",
+    "vite_bff_embedded_bearer_token": "false",
     "deployment_state": "accepted",
+    "release_name": "20260828T061410Z-c230fc76bef7-gate-33146133499-33146881332-1-3278704",
+    "pair_id": "0429052ba5ef5e392248990dedcbdf7705a5fea42d5a370a4de26222156596f1",
     "bff_source_commit_known": true,
     "bff_version_http_status": 200,
     "bff_readyz_http_status": 200,
@@ -24,7 +27,8 @@
   "failed_attempts": [
     33271922125,
     33271993547,
-    33272385942
+    33272385942,
+    33283640789
   ],
   "requested_pair_write_proof_activated": false,
   "requested_pair_watchdog_armed": false,

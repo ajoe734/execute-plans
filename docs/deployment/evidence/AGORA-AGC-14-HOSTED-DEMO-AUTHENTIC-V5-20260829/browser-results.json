@@ -2,16 +2,19 @@
   "schema_version": "pantheon.agora.hosted-demo-browser-results.v1",
   "task_id": "AGORA-AGC-14-HOSTED-DEMO-AUTHENTIC-V5-20260829",
   "status": "not-run",
-  "recorded_at": "2026-08-29T20:27:59Z",
-  "reason": "The requested exact pair was never admitted or served because the parent nonprod deployment failed its source freshness and paper producer health gate. Mutating browser acceptance was therefore not authorized or dispatched.",
+  "recorded_at": "2026-08-30T00:58:24Z",
+  "reason": "The requested exact pair was never admitted or served because the parent nonprod deployment failed closed while its one-shot official-source scheduler reported freshness_not_accepted. The workflow compensated to the accepted read-only baseline, so mutating browser acceptance was not authorized or dispatched.",
   "prerequisite": {
     "repository": "ajoe734/pantheon",
     "workflow": "nonprod-deploy.yml",
-    "run_id": 33272385942,
-    "run_url": "https://github.com/ajoe734/pantheon/actions/runs/33272385942",
+    "run_id": 33283640789,
+    "run_url": "https://github.com/ajoe734/pantheon/actions/runs/33283640789",
     "conclusion": "failure",
     "requested_frontend_sha": "5ffee3db8c2b37b4070d43d091ed4207ef5d70e5",
-    "requested_bff_sha": "9e9ab338ce0ede9c7c4c3686ff31bf63dc7ec35a"
+    "requested_bff_sha": "ef66ef0d5b192028b08eb6267ce46e2cd68f689b",
+    "release_admission_artifact": "pantheon-dev-release-admission-33283640789-1",
+    "release_admission_artifact_digest": "sha256:04fbc90164899e612cdbeeea930b6568dbd5717af9a532a175f1331830c9768d",
+    "release_candidate_id": "1814d7197f51fee24473a4a7979f00245e49460ca52800147aa762f5bd341ef6"
   },
   "login": {
     "status": "not-run",
