@@ -1,0 +1,99 @@
+{
+  "schema_version": "pantheon.frontend-loop-truth-evidence.v1",
+  "task_id": "OPGAP-FE-AGORA-WORKSHOP-V2-20260830",
+  "owner": "Antigravity2",
+  "reviewer": "Codex2",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "status": "implementation-ready-for-review",
+  "scope": {
+    "canonical_owner": "Pantheon Agora workshop and trading room view surface delivery",
+    "artifacts_created_in_task": [
+      "src/agora/pages/trading-room/TradingRoomWorkspace.tsx",
+      "src/agora/pages/trading-room/AttributionReportView.tsx",
+      "src/agora/pages/trading-room/TradingRoomWorkspace.test.tsx",
+      "src/agora/pages/trading-room/AttributionReportView.test.tsx"
+    ],
+    "artifacts_modified_in_task": [
+      "src/agora/pages/trading-room/TradingRoomPage.tsx"
+    ],
+    "preexisting_base_artifacts_verified": [
+      "src/agora/pages/strategy-workshop/WorkshopSessionView.tsx",
+      "src/agora/pages/strategy-performance/StrategyPerformancePage.tsx"
+    ],
+    "total_declared_artifacts_present": [
+      "src/agora/pages/strategy-workshop/WorkshopSessionView.tsx",
+      "src/agora/pages/trading-room/TradingRoomWorkspace.tsx",
+      "src/agora/pages/trading-room/AttributionReportView.tsx",
+      "src/agora/pages/strategy-performance/StrategyPerformancePage.tsx"
+    ],
+    "not_changed": [
+      "Backend BFF routes or schemas",
+      "Live write proof permissions",
+      "Persona entity definition or authentication contracts"
+    ]
+  },
+  "residual_acceptance_proof": {
+    "capability_badge_backend_contract_driven": {
+      "description": "Capability badges and execution boundaries are strictly backend-contract driven (agora.performance.truth.v1, BackendModeBadge backend.mode/payload.backend_mode, CAPABILITY_MISSING handling, and role/capability write enforcement).",
+      "test_files": [
+        "src/agora/pages/strategy-performance/StrategyPerformancePage.test.tsx",
+        "src/agora/components/BacktestResultCard.test.tsx",
+        "src/agora/pages/trading-room/TradingRoomPage.test.tsx",
+        "src/agora/pages/trading-room/TradingRoomWorkspace.test.tsx",
+        "src/agora/useAgoraWriteAccess.test.ts"
+      ]
+    },
+    "non_real_candidates_cannot_appear_admitted": {
+      "description": "Candidate admission state transitions only upon authoritative backend receipts with durable reconstruction_id and verified event projection readbacks; candidate pool scoring decomposition enforces data quality badge and band constraints.",
+      "test_files": [
+        "src/agora/pages/strategy-workshop/StrategyWorkshopPage.test.tsx",
+        "src/agora/components/CandidateReviewDrawer.test.tsx"
+      ]
+    },
+    "suggestion_reload_uses_durable_trigger_identity": {
+      "description": "Adjustment suggestions use deterministic trigger/action fingerprints and client UUID idempotency keys; receipt readback replaces suggestion state in-place, and reloads/refreshes query the authoritative projection without state leakage.",
+      "test_files": [
+        "src/agora/pages/strategy-performance/StrategyPerformancePage.test.tsx"
+      ]
+    }
+  },
+  "contract_alignment": {
+    "artifact_contract": "All 4 declared task artifacts are present, typed, and covered by automated unit tests in their canonical module paths.",
+    "trading_room_workspace": "StrategyWorkspaceView and workspace subcomponents are modularized into TradingRoomWorkspace.tsx with full proposal lifecycle and grid editor support.",
+    "attribution_report": "AttributionReportView.tsx renders multi-dimension performance attribution, KPI summaries, and provenance tracking backed by getTradingRoomPerformanceAttribution."
+  },
+  "validation": {
+    "agora_full_unit_tests": {
+      "command": "npx vitest run src/agora",
+      "result": "passed: 27 files, 410 tests"
+    },
+    "agora_pages_unit_tests": {
+      "command": "npx vitest run src/agora/pages",
+      "result": "passed: 5 files, 153 tests"
+    },
+    "residual_acceptance_focused_tests": {
+      "command": "npx vitest run src/agora/pages/strategy-workshop/StrategyWorkshopPage.test.tsx src/agora/pages/strategy-performance/StrategyPerformancePage.test.tsx src/agora/pages/trading-room/TradingRoomPage.test.tsx src/agora/pages/trading-room/TradingRoomWorkspace.test.tsx src/agora/pages/trading-room/AttributionReportView.test.tsx src/agora/components/CandidateReviewDrawer.test.tsx src/agora/components/BacktestResultCard.test.tsx src/agora/useAgoraWriteAccess.test.ts",
+      "result": "passed: 8 files, 205 tests"
+    },
+    "typecheck": {
+      "commands": [
+        "npm run typecheck",
+        "npx tsc -p tsconfig.json --noEmit"
+      ],
+      "result": "passed: 0 errors across tsconfig.agora.json and tsconfig.json"
+    },
+    "strict_live_build": {
+      "command": "VITE_GCP_IDENTITY_API_KEY=AIzaSyD12345678901234567890123456789012 VITE_GCP_IDENTITY_PROJECT_ID=pantheon-dev VITE_GCP_IDENTITY_AUTH_DOMAIN=pantheon-dev.firebaseapp.com VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build",
+      "result": "passed: built successfully in 1m 41s"
+    },
+    "diff_check": {
+      "command": "git diff --check",
+      "result": "passed: clean patch without whitespace errors"
+    }
+  },
+  "delivery": {
+    "branch": "task/OPGAP-FE-AGORA-WORKSHOP-V2-20260830",
+    "review_binding": "The canonical review handoff binds this manifest to the exact pushed head."
+  }
+}
