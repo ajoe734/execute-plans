@@ -128,7 +128,35 @@ describe("strict browser BFF session bridge", () => {
     });
   });
 
-  it("bounds combined identity and readiness verification", async () => {
+  it("starts independent identity and readiness readback concurrently", async () => {
+    registerBffBrowserSession(session());
+    let resolveMe!: (value: Response) => void;
+    let resolveReadiness!: (value: Response) => void;
+    const fetcher = vi.spyOn(globalThis, "fetch")
+      .mockImplementationOnce(() => new Promise<Response>((resolve) => {
+        resolveMe = resolve;
+      }))
+      .mockImplementationOnce(() => new Promise<Response>((resolve) => {
+        resolveReadiness = resolve;
+      }));
+
+    const verification = verifyBffBrowserSession();
+
+    expect(fetcher.mock.calls.map(([url]) => String(url))).toEqual([
+      "/bff/me",
+      "/bff/auth/readiness",
+    ]);
+
+    resolveMe(response(me(["viewer"])));
+    resolveReadiness(response(readiness(false)));
+
+    await expect(verification).resolves.toMatchObject({
+      identity: { authenticated: true, roles: ["viewer"] },
+      readiness: { authReady: true },
+    });
+  });
+
+  it("bounds concurrent identity and readiness verification", async () => {
     vi.useFakeTimers();
     registerBffBrowserSession(session());
     const fetcher = vi.spyOn(globalThis, "fetch")
