@@ -453,8 +453,8 @@ async function installHostedOperatorSession(
       const readinessData = asRecord(readinessBody.data ?? readinessBody);
       expect(readinessData.ready).toBe(true);
       expect(readinessData.authReady).toBe(true);
-      await waitForHostedRouteReady(page);
       const durationMs = Date.now() - loginStartedAt;
+      await waitForHostedRouteReady(page);
       expect(
         durationMs,
         "real GCP email/password login must reach BFF authenticated readiness in under 5 seconds",
