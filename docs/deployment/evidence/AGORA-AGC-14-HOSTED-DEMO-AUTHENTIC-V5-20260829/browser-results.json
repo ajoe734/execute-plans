@@ -2,21 +2,35 @@
   "schema_version": "pantheon.agora.hosted-demo-browser-results.v1",
   "task_id": "AGORA-AGC-14-HOSTED-DEMO-AUTHENTIC-V5-20260829",
   "status": "not-run",
-  "recorded_at": "2026-08-30T10:15:02Z",
-  "reason": "The exact task candidate passed release admission and integration gate 33304410236, but deploy run 33304974209 rejected it before the frontend switch because immutable evidence did not accept the emitted candidateRef detail. The controller compensated to the accepted read-only baseline; no write-proof or mutating browser journey was authorized.",
+  "recorded_at": "2026-08-30T12:53:39Z",
+  "reason": "The exact pair was deployed and the parent-bound write-proof was authorized only after watchdog arming. The child minted and validated fresh short-lived proof credentials, but POST /bff/agora/servant/ensure returned HTTP 500 INTERNAL_ERROR before any Playwright Persona, Trade Journey, real GCP email/password Agora, or Management journey began. The child uploaded only before/after exact write-proof manifests; no browser pass is claimed.",
   "prerequisite": {
-    "requested_frontend_sha": "4ec9d1b69b32fcf3e2bf8c42feff5e5dc40b0c67",
+    "requested_frontend_sha": "7d30e78476be61222af63a089e7ab141aa43b809",
     "requested_bff_sha": "d2bca5bc70bfae897e1ef3ca736ad3680a587679",
-    "integration_gate_run_id": 33304410236,
+    "required_frontend_ancestor": "5ffee3db8c2b37b4070d43d091ed4207ef5d70e5",
+    "pair_id": "fd30ca36a429e4d5ffed736cb88c6c2888dca43f1b7b1f8f08dab8d1ff794002",
+    "release_candidate_id": "c7689dac823a2a63db13feb7244c56bd251b23c922c697f30ded41acb289bf18",
+    "controller_run_id": 33309378482,
+    "controller_conclusion": "success",
+    "integration_gate_run_id": 33310783633,
     "integration_gate_conclusion": "success",
-    "release_candidate_id": "63e531ac780a419662da33e3dce58c62e7b9f914d46814560ceb26c2975bec2e",
-    "deploy_run_id": 33304974209,
-    "deploy_conclusion": "failure",
-    "deploy_outcome": "rejected_before_switch",
-    "frontend_switched": false,
-    "compensation_conclusion": "success",
-    "repair_pull_request": 699,
-    "repair_exact_head_sha": "96bdc6056fcfd3fdeb0a22d81dae4be57fc417e2"
+    "read_only_deploy_run_id": 33311312819,
+    "read_only_deploy_conclusion": "success",
+    "proof_parent_run_id": 33311774034,
+    "proof_parent_conclusion": "failure",
+    "proof_window_ack": true,
+    "watchdog_run_id": 33312362653,
+    "watchdog_armed": true,
+    "watchdog_conclusion": "success",
+    "child_run_id": 33312470963,
+    "child_conclusion": "failure",
+    "proof_authorization": "success",
+    "exact_write_proof_manifest_before_credentials": "success",
+    "fresh_parent_and_child_claim_check": "success",
+    "fresh_short_lived_proof_credentials": "minted-and-validated",
+    "failed_step": "Ensure stable user-private Persona for hosted proof",
+    "failure_http_status": 500,
+    "failure_error_code": "INTERNAL_ERROR"
   },
   "login": {
     "status": "not-run",
@@ -39,5 +53,21 @@
   "runtime_objects": {},
   "screenshots": [],
   "network_receipts": [],
+  "immutable_child_artifact": {
+    "artifact_id": 9732417632,
+    "name": "pantheon-authorized-write-proof-attempt-1",
+    "digest": "sha256:160023b933e40a435873c8a85d10c8440150d1025224dba09165200e888a448d",
+    "contents": [
+      {
+        "path": "deployment-before-pint.json",
+        "sha256": "3cc2fca1747153894881efb5e4c209af5018e8c839665a609c3842201d702d62"
+      },
+      {
+        "path": "deployment-after-pint.json",
+        "sha256": "3cc2fca1747153894881efb5e4c209af5018e8c839665a609c3842201d702d62"
+      }
+    ],
+    "agora_demo_run_evidence_present": false
+  },
   "pass_claimed": false
 }
