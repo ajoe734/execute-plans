@@ -10,6 +10,10 @@ import type {
   WorkshopStreamEvent,
 } from "@/lib/bff-v1/agora/workshops";
 
+const authProviderState = vi.hoisted(() => ({
+  tenantId: "tenant-1" as string | null,
+}));
+
 vi.mock("@/lib/bff-v1/agora/workshops", () => ({
   listWorkshops: vi.fn().mockResolvedValue([]),
   getWorkshop: vi.fn().mockResolvedValue(null),
@@ -64,7 +68,13 @@ vi.mock("@/lib/bff-v1/agora/dailyInteractions", async (importOriginal) => {
 
 vi.mock("@/lib/bff-v1/headers", async (importOriginal) => {
   const original = await importOriginal<typeof import("@/lib/bff-v1/headers")>();
-  return { ...original, getAuthProvider: () => ({ getToken: () => null, getTenantId: () => "tenant-1" }) };
+  return {
+    ...original,
+    getAuthProvider: () => ({
+      getToken: () => null,
+      getTenantId: () => authProviderState.tenantId,
+    }),
+  };
 });
 
 vi.mock("@/agora/useAgoraWriteAccess", () => ({
@@ -88,6 +98,7 @@ vi.mock("@/agora/components/ConnectedGovernedProposalCard", () => ({
 }));
 
 import { StrategyWorkshopPage } from "./StrategyWorkshopPage";
+import { resolveSubmissionTenant } from "./submissionTenant";
 import { pickerParticipants } from "@/agora/participantPicker";
 import * as workshopsModule from "@/lib/bff-v1/agora/workshops";
 import { interaction } from "@/lib/bff-v1/agora/interaction";
@@ -213,6 +224,14 @@ const LIVE_COMPLETENESS_CARD: WorkshopCard = {
 afterEach(cleanup);
 
 describe("StrategyWorkshopPage", () => {
+  it("uses the authoritative resolver tenant when the browser bridge has no tenant hint", () => {
+    expect(resolveSubmissionTenant("tenant-1", null)).toBe("tenant-1");
+    expect(resolveSubmissionTenant(" tenant-1 ", undefined)).toBe("tenant-1");
+    expect(() => resolveSubmissionTenant("tenant-1", "tenant-other")).toThrow(
+      "The resolver tenant binding does not match the authenticated tenant.",
+    );
+  });
+
   it("uses truthful eligibility-order pickers without inferring style or role from names", () => {
     const included = [
       { persona_id: "persona-z", display_name: "Red Team-ish Name", eligible: true, reasons: [], recommended: false },
@@ -228,6 +247,7 @@ describe("StrategyWorkshopPage", () => {
   });
 
   beforeEach(() => {
+    authProviderState.tenantId = "tenant-1";
     vi.mocked(interaction.resolveContext).mockImplementation(resolvedContextFixture);
     vi.mocked(interaction.participants).mockResolvedValue({
       data: {
@@ -266,6 +286,29 @@ describe("StrategyWorkshopPage", () => {
     } as never);
     vi.mocked(workshopsModule.openWorkshopStream).mockReturnValue(() => undefined);
     vi.mocked(listDailyInteractions).mockResolvedValue([]);
+  });
+
+  it("submits with the authoritative tenant when the browser bridge has no tenant hint", async () => {
+    authProviderState.tenantId = null;
+    vi.mocked(workshopsModule.getWorkshop).mockResolvedValue(MOCK_WORKSHOP);
+
+    render(<StrategyWorkshopPage workshopId="ws-abc" />);
+
+    const input = await screen.findByTestId("servant-composer-input");
+    fireEvent.change(input, { target: { value: "Evaluate this paper-only interaction" } });
+    const submit = screen.getByTestId("servant-composer-submit");
+    await waitFor(() => expect(submit).toBeEnabled());
+    fireEvent.click(submit);
+
+    await waitFor(() => expect(submitDailyInteraction).toHaveBeenCalledWith(expect.objectContaining({
+      workshop_id: "ws-abc",
+      human_request: expect.objectContaining({
+        request_text: "Evaluate this paper-only interaction",
+      }),
+      context_snapshot: expect.objectContaining({
+        tenant_id: "tenant-1",
+      }),
+    })));
   });
 
   afterEach(() => {

@@ -1,0 +1,101 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "PFG-AGORA-PAPER-WRITE-PROOF-FIX-REVIEW-V2-20260829",
+  "owner": "Codex",
+  "reviewer": "Codex2",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/AGORA-PAPER-WRITE-PROOF-FIX-20260827",
+  "pull_request": 667,
+  "status": "ready-for-independent-exact-head-review",
+  "recorded_at": "2026-08-29T16:23:15Z",
+  "scope": {
+    "adopted": [
+      "Adopt PR #667 source head 2537a26eaf98d801ba029b63c7f0cf706dbb22cb without changing its Workshop paper-only submission repair.",
+      "Retain the source manifest and green exact-head Branch CI evidence that cover resolver-authoritative tenant fallback, contradictory-hint fail closure, removal of the pre-write Workshop state reset, and the full composer submission regression.",
+      "Add only this V2 task-scoped review manifest so the governed handoff can freeze PR #667 as a pull_request delivery binding with an in-contract REVIEW_FILE."
+    ],
+    "not_changed": [
+      "Workshop source code, BFF contracts, authorization, participant eligibility, or real-write policy.",
+      "The paper-only execution-authority boundary or the default VITE_BFF_REAL_WRITES=false deployment policy.",
+      "The source task's committed validation results; final exact-head CI and independent review remain required after this manifest commit."
+    ]
+  },
+  "replacement_context": {
+    "source_task": {
+      "task_id": "PFG-AGORA-PAPER-WRITE-PROOF-FIX-20260827",
+      "terminal_outcome": "superseded",
+      "implementation_disposition": "valid and retained",
+      "supersession_reason": "The source repair and CI were valid, but the canonical handoff froze an artifact_contract instead of PR #667 because the existing PR branch differed from task/{id} and the task artifact contract omitted its committed review manifest. The replacement corrects delivery/review coordination; it does not reject or rewrite the implementation."
+    },
+    "prior_review_task": {
+      "task_id": "PFG-AGORA-PAPER-WRITE-PROOF-FIX-REVIEW-20260829",
+      "terminal_outcome": "superseded",
+      "supersession_reason": "V1 repaired the review artifact scope but declared the terminal-superseded source task as an immutable dependency. The dependency resolver correctly could not dispatch it, so V2 preserves the same exact-head review objective with no declared dependency."
+    },
+    "declared_dependencies": [],
+    "dependency_disposition": "No dependency is declared. The retained source delivery is identified by immutable PR head and committed evidence rather than by treating a terminal-superseded coordination row as dispatchable."
+  },
+  "source_delivery": {
+    "pull_request": "https://github.com/ajoe734/execute-plans/pull/667",
+    "head_branch": "task/AGORA-PAPER-WRITE-PROOF-FIX-20260827",
+    "head_at_adoption": "2537a26eaf98d801ba029b63c7f0cf706dbb22cb",
+    "base_at_adoption": "e20564350eec28aff242b3c90817004e3e3ca5ee",
+    "owner_repair_commit": "23845e190b92d0eb838974c255a4e9e3fd449f18",
+    "dev_reconciliation_commit": "f3741d581703adf8f52173955901c9d506f4852f",
+    "source_evidence": {
+      "path": "docs/deployment/evidence/PFG-AGORA-PAPER-WRITE-PROOF-FIX-20260827/evidence.json",
+      "git_blob_sha": "27ddf78c10906161338852f0c639d91e294b3e10",
+      "sha256": "6c4a65fc132eef93885eee3dd1b0ee973516dcd029c4f18509b551e554e4a20c"
+    }
+  },
+  "acceptance": {
+    "valid_source_repair_and_evidence_retained": true,
+    "prior_artifact_only_handoff_supersession_recorded": true,
+    "prior_invalid_dependency_supersession_recorded": true,
+    "delivery_binding_kind": "pull_request",
+    "final_exact_head_includes_v2_manifest": "pending governed handoff",
+    "codex2_independent_exact_head_approval": "pending",
+    "canonical_github_review_status": "pending",
+    "pr_667_merge_to_dev": "pending"
+  },
+  "validation": {
+    "source_focused_strategy_workshop_and_writes": {
+      "command": "npx vitest run --maxWorkers=2 --testTimeout=15000 --hookTimeout=30000 src/agora/pages/strategy-workshop/StrategyWorkshopPage.test.tsx src/lib/bff-v1/__tests__/writes.test.ts",
+      "result": "adopted committed evidence: passed 2 files, 80 tests"
+    },
+    "source_typecheck": {
+      "command": "npm run typecheck",
+      "result": "adopted committed evidence: passed with 0 errors"
+    },
+    "source_task_scoped_lint": {
+      "command": "npx eslint src/agora/pages/strategy-workshop/WorkshopSessionView.tsx src/agora/pages/strategy-workshop/submissionTenant.ts src/agora/pages/strategy-workshop/StrategyWorkshopPage.test.tsx",
+      "result": "adopted committed evidence: 0 errors and 2 pre-existing warnings"
+    },
+    "source_exact_head_branch_ci": {
+      "head_sha": "2537a26eaf98d801ba029b63c7f0cf706dbb22cb",
+      "runs": [
+        "https://github.com/ajoe734/execute-plans/actions/runs/33262178099",
+        "https://github.com/ajoe734/execute-plans/actions/runs/33262177442"
+      ],
+      "result": "passed Commit trailers, Generated files guard, Component merge gate, and Smoke acceptance; the canonical review gate remains intentionally pending until independent approval"
+    },
+    "final_exact_head_branch_ci": {
+      "result": "pending after V2 manifest commit; all required Branch CI checks must be green before approval"
+    }
+  },
+  "review_binding": {
+    "kind": "pull_request",
+    "pull_request": 667,
+    "head_branch": "task/AGORA-PAPER-WRITE-PROOF-FIX-20260827",
+    "base": "dev",
+    "review_file": "docs/deployment/evidence/PFG-AGORA-PAPER-WRITE-PROOF-FIX-REVIEW-V2-20260829/evidence.json",
+    "sha_disposition": "The governed handoff must freeze the final PR #667 head that contains source head 2537a26eaf98d801ba029b63c7f0cf706dbb22cb and this V2 manifest. Codex2 must approve that exact frozen head; any later commit requires a fresh independent review."
+  },
+  "independent_review_required": [
+    "Confirm PR #667 retains the source repair at 2537a26eaf98d801ba029b63c7f0cf706dbb22cb and adds no V2 task-owned change other than this manifest.",
+    "Confirm the source evidence and implementation prove resolver-authoritative tenant fallback, contradictory-hint fail closure, removal of the pre-write state reset, and the composer submission regression.",
+    "Confirm the final frozen head contains current dev, all exact-head Branch CI checks pass, and REVIEW_PR, REVIEW_HEAD_SHA, REVIEW_HEAD_BRANCH, REVIEW_BASE, and REVIEW_FILE match the governed delivery binding.",
+    "Approve only the frozen exact head, allow the canonical GitHub review status to succeed, and merge PR #667 to dev only after that approval."
+  ]
+}
