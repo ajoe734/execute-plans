@@ -613,14 +613,45 @@ jobs:
             const repository = String(
               run.head_repository?.full_name || run.repository?.full_name || "",
             ).toLowerCase();
-            const active = run.status === "in_progress" && run.conclusion == null;
-            const accepted = run.status === "completed" && run.conclusion === "success";
-            if (path !== ".github/workflows/nonprod-deploy.yml" ||
-                repository !== "ajoe734/pantheon" ||
-                run.event !== "workflow_dispatch" ||
-                run.head_branch !== "dev" ||
-                String(run.head_sha || "").toLowerCase() !== process.env.EXPECTED_BACKEND_SHA ||
-                (!active && !accepted)) {
+            const trustedController =
+              path === ".github/workflows/nonprod-deploy.yml" &&
+              repository === "ajoe734/pantheon" &&
+              run.event === "workflow_dispatch" &&
+              run.head_branch === "dev" &&
+              String(run.head_sha || "").toLowerCase() === process.env.EXPECTED_BACKEND_SHA;
+            const activeController = run.status === "in_progress" && run.conclusion == null;
+            const overallSuccess = run.status === "completed" && run.conclusion === "success";
+            const failedParent = run.status === "completed" && run.conclusion === "failure";
+            let completedExactPairCoordination = false;
+
+            // The authenticated release candidate and its admission digest were
+            // independently bound by the preceding pair verification. A failed
+            // parent may still own that exact admitted pair when an unrelated
+            // post-deploy smoke fails, but only its one successful coordinator
+            // job may establish that completed transaction.
+            if (trustedController && failedParent) {
+              if (!Number.isSafeInteger(run.run_attempt) || run.run_attempt <= 0) {
+                core.setFailed("Pantheon controller returned an invalid run attempt");
+                return;
+              }
+              const { data: jobsPage } = await github.rest.actions.listJobsForWorkflowRunAttempt({
+                owner: "ajoe734",
+                repo: "pantheon",
+                run_id: Number(process.env.RELEASE_CONTROLLER_RUN_ID),
+                attempt_number: run.run_attempt,
+                per_page: 100,
+              });
+              const exactPairCoordination = jobsPage.jobs.filter(
+                (job) => job.name === "Admit and switch exact FE/BFF release",
+              );
+              completedExactPairCoordination =
+                exactPairCoordination.length === 1 &&
+                exactPairCoordination[0].status === "completed" &&
+                exactPairCoordination[0].conclusion === "success";
+            }
+            if (!trustedController ||
+                (!activeController && !overallSuccess &&
+                 !(failedParent && completedExactPairCoordination))) {
               core.setFailed("Pantheon controller does not own an active or accepted exact-pair transaction");
             }
 
