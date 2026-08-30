@@ -1,157 +1,170 @@
 {
-  "schema_version": "pantheon.agora.hosted-demo-evidence-summary.v1",
+  "schema_version": "pantheon.hosted-demo-authentic-evidence.v5",
   "task_id": "AGORA-AGC-14-HOSTED-DEMO-AUTHENTIC-V5-20260829",
-  "owner": "Codex",
-  "reviewer": "Antigravity",
   "status": "blocked-external",
-  "recorded_at": "2026-08-30T12:53:39Z",
-  "evidence_policy": "observed_immutable_only",
-  "acceptance_scope": "exact pair deployed and bounded write-proof safely restored; browser acceptance did not run and no task pass is claimed",
+  "recorded_at": "2026-08-30T16:50:35Z",
+  "acceptance_scope": "Exact-pair governed write-proof attempt with immutable workflow artifacts, authentic hosted Persona browser coverage, durable governed proposal readback, and independent same-pair watchdog restore.",
   "exact_pair": {
-    "frontend_sha": "7d30e78476be61222af63a089e7ab141aa43b809",
-    "frontend_ref": "dev",
-    "required_frontend_ancestor": "5ffee3db8c2b37b4070d43d091ed4207ef5d70e5",
-    "bff_sha": "d2bca5bc70bfae897e1ef3ca736ad3680a587679",
-    "pair_id": "fd30ca36a429e4d5ffed736cb88c6c2888dca43f1b7b1f8f08dab8d1ff794002",
-    "release_candidate_id": "c7689dac823a2a63db13feb7244c56bd251b23c922c697f30ded41acb289bf18",
-    "compatibility_manifest_sha256": "208583ca0568959ffbbcc8eec7fbd1cb8223f9ad70dcaad7bcc2c912334b0812"
+    "frontend_commit": "7d30e78476be61222af63a089e7ab141aa43b809",
+    "backend_commit": "2bcb4465399af83190c5027073f3b2296e377256",
+    "pair_fingerprint": "9de4cd001a8b7aaf18a1094fb1699ece19f0efd86d3d24994cd9f3562fe33727",
+    "release_candidate_id": "9783e78bd8e28608f2c335d566fd798db5b995c50da129876401170b45852e9a",
+    "compatibility_manifest_sha256": "4cc8e5239023ac9d8e1e1a0e0c39f4f9be2b821486ed10052a629b640a7474a6"
   },
   "governed_release": {
-    "controller_run_id": 33309378482,
-    "controller_run_url": "https://github.com/ajoe734/pantheon/actions/runs/33309378482",
+    "controller_run_id": 33319323262,
+    "integration_gate_run_id": 33320810888,
+    "read_only_switch_run_id": 33321494484,
     "controller_conclusion": "success",
-    "environment_lease_id": "eb1f800f-f98a-4385-bb04-af9e35b0a45f",
-    "environment_lease_owner": "pantheon:ajoe734/pantheon:33309378482:1",
-    "environment_lease_mode": "deployment",
-    "integration_gate_run_id": 33310783633,
-    "integration_gate_run_url": "https://github.com/ajoe734/execute-plans/actions/runs/33310783633",
-    "integration_gate_conclusion": "success",
-    "read_only_deploy_run_id": 33311312819,
-    "read_only_deploy_run_url": "https://github.com/ajoe734/execute-plans/actions/runs/33311312819",
-    "read_only_deploy_conclusion": "success",
-    "served_frontend_sha": "7d30e78476be61222af63a089e7ab141aa43b809",
-    "served_bff_sha": "d2bca5bc70bfae897e1ef3ca736ad3680a587679",
-    "served_pair_id": "fd30ca36a429e4d5ffed736cb88c6c2888dca43f1b7b1f8f08dab8d1ff794002",
-    "deployment_state": "accepted",
-    "profile": "read-only",
-    "vite_bff_real_writes": "false",
-    "vite_bff_allow_dev_stub_writes": "false",
-    "lifecycle_projector_ready": true,
-    "lifecycle_projector_backlog": 0
+    "gate_conclusion": "success",
+    "switch_conclusion": "success"
   },
   "proof_attempt": {
-    "parent_run_id": 33311774034,
-    "parent_run_url": "https://github.com/ajoe734/execute-plans/actions/runs/33311774034",
+    "parent_run_id": 33322457191,
     "parent_conclusion": "failure",
+    "correlation_id": "c0986812-0fd4-4457-8fc0-5364c59ce905",
     "proof_window_ack": true,
-    "parent_pair_revalidation": "success",
-    "watchdog_armed_before_write_activation": true,
-    "write_proof_activation": "success",
-    "write_profile": "write-proof",
-    "write_profile_vite_bff_real_writes": "true",
-    "write_profile_vite_bff_allow_dev_stub_writes": "true",
-    "proof_correlation_id": "b7754f27-e69e-4454-a861-7d456adf51dc",
-    "watchdog_run_id": 33312362653,
-    "watchdog_run_url": "https://github.com/ajoe734/execute-plans/actions/runs/33312362653",
+    "emergency_override": false,
+    "watchdog_run_id": 33322992146,
     "watchdog_conclusion": "success",
-    "child_run_id": 33312470963,
-    "child_run_url": "https://github.com/ajoe734/execute-plans/actions/runs/33312470963",
+    "child_run_id": 33323122321,
     "child_conclusion": "failure",
-    "proof_authorization": "success",
-    "fresh_short_lived_credentials_minted": true,
-    "fresh_credentials_validated": true,
-    "failed_step": "Ensure stable user-private Persona for hosted proof",
-    "failed_request": "POST /bff/agora/servant/ensure",
-    "observed_error": {
-      "http_status": 500,
-      "error_code": "INTERNAL_ERROR"
+    "write_proof_release_name": "20260830T163823Z-7d30e78476be-gate-33320810888-33322457191-1-write-proof",
+    "write_proof_accepted_at": "2026-08-30T16:40:29Z",
+    "write_proof_profile": "write-proof",
+    "write_proof_frontend_real_writes": true,
+    "write_proof_bff_real_writes": true,
+    "authorization_and_credentials": {
+      "parent_authority_verified": true,
+      "one_time_child_claim_verified": true,
+      "fresh_short_lived_credentials_minted": true,
+      "fresh_credentials_validated": true
     },
-    "browser_journey_started": false,
-    "gcp_email_password_login_executed": false,
-    "persona_trade_journey_agora_management_steps": "skipped_after_preflight_failure",
-    "post_failure_write_pair_revalidation": "success"
+    "persona_preflight": {
+      "ensure_succeeded": true,
+      "schema_version": "pantheon.persona-hosted-proof-servant.v1",
+      "request_id": "a734b25d-d75b-485d-a0a5-cb1f475cb239",
+      "version_request_id": "f4481610-5584-42e7-9c92-971fba343130",
+      "me_request_id": "447dda7b-9b4d-41b5-bcb6-45e5f92230d6",
+      "readiness_request_id": "07a9051f-02cb-4f26-acaa-0ddca8b87dbf",
+      "idempotency_key": "124badd0-3ac6-53db-9664-aee4a1b2d936",
+      "tenant_id": "tenant-dev",
+      "persona_id": "agora-servant-fbeaee01e8f34c786555",
+      "session_kind": "bearer",
+      "auth_ready": true,
+      "persona_class": "agora_servant",
+      "owner_scope": "user_private",
+      "memory_scope": "private_user",
+      "execution_authority": "none",
+      "registry_backed": true
+    },
+    "governed_proposal_write_proof": {
+      "succeeded": true,
+      "proposal_id": "prop_df8b1c3cfbfe4d008dc0036998ba7e0b",
+      "created_status": 201,
+      "modified_status": 200,
+      "validated_status": 200,
+      "final_revision": 3,
+      "replay_revision": 3,
+      "audit_actions": [
+        "create",
+        "modify",
+        "validate"
+      ],
+      "unauthenticated_create_status": 401,
+      "unauthenticated_create_code": "AUTH_REQUIRED",
+      "viewer_create_status": 403,
+      "viewer_modify_status": 403,
+      "execution_authority": "none",
+      "downstream_execution_attempted": false,
+      "tokens_recorded": false,
+      "generated_at": "2026-08-30T16:42:17.224Z"
+    },
+    "browser_result": {
+      "suite": "persona-interaction-cross-repo-hosted.spec.ts",
+      "expected": 0,
+      "unexpected": 3,
+      "skipped": 0,
+      "flaky": 0,
+      "duration_ms": 63221.12,
+      "operator_failure": "POST /bff/agora/interactions/participants:eligible returned 500",
+      "daily_measure_failure": "POST /bff/agora/interactions/participants:eligible returned 500",
+      "viewer_failure": "GET /bff/management/persona-fleet?page_size=100 returned 500"
+    },
+    "failed_step": "Run governed and Persona desktop proof with proof-only credentials",
+    "later_hosted_journeys": "skipped_after_required_Persona_suite_failure",
+    "post_failure_write_proof_manifest_check": "passed"
   },
   "safe_restore": {
-    "watchdog_authenticate_parent_authority": "success",
-    "watchdog_observe_child_terminal": "success",
-    "watchdog_restore_exact_pair": "success",
-    "independent_live_readback_at": "2026-08-30T12:53:39Z",
-    "frontend_sha": "7d30e78476be61222af63a089e7ab141aa43b809",
-    "bff_sha": "d2bca5bc70bfae897e1ef3ca736ad3680a587679",
-    "pair_id": "fd30ca36a429e4d5ffed736cb88c6c2888dca43f1b7b1f8f08dab8d1ff794002",
+    "restored": true,
+    "restored_at": "2026-08-30T16:46:51.788Z",
     "profile": "read-only",
-    "deployment_state": "accepted",
-    "vite_bff_real_writes": "false",
-    "vite_bff_allow_dev_stub_writes": "false",
-    "bff_source_commit_known": true,
+    "release_name": "20260830T163823Z-7d30e78476be-gate-33320810888-33322457191-1-write-proof-read-only",
+    "frontend_real_writes": false,
+    "bff_real_writes": false,
+    "pair_matches": true,
+    "safe_restore_probe": "passed",
+    "rollback_required": false,
+    "direct_readback_at": "2026-08-30T16:51:03Z",
+    "bff_ready": true,
     "lifecycle_projector_ready": true,
-    "lifecycle_projector_backlog": 0
+    "lifecycle_backlog": 0,
+    "lifecycle_quarantine_count": 0
   },
   "immutable_artifacts": [
     {
-      "repository": "ajoe734/pantheon",
-      "run_id": 33309378482,
-      "artifact_id": 9731505118,
-      "name": "pantheon-dev-release-admission-33309378482-1",
-      "digest": "sha256:10fa7222fc248892e9138888396e9d16f20705d3d6a27c43fb12a9882967a873"
+      "run_id": 33319323262,
+      "artifact_id": 9735156323,
+      "name": "pantheon-cross-repo-release-33319323262-1",
+      "digest": "sha256:296754c9d5d8d9e34cf4514827b7524a44e52343bf914839cf403cbb48978ccc"
     },
     {
-      "repository": "ajoe734/pantheon",
-      "run_id": 33309378482,
-      "artifact_id": 9732179116,
-      "name": "pantheon-cross-repo-release-33309378482-1",
-      "digest": "sha256:e0fd8749632f282e982977c4ba65cebb481ffc138b15119c1ccd135bb4e9fffd"
-    },
-    {
-      "repository": "ajoe734/execute-plans",
-      "run_id": 33310783633,
-      "artifact_id": 9732051467,
+      "run_id": 33320810888,
+      "artifact_id": 9734999970,
       "name": "pantheon-fe-release-candidate-attempt-1",
-      "digest": "sha256:4643c561249d398d3486f95638d7c87f0452676d7f428ae99586a9799c8e7aac"
+      "digest": "sha256:627e97f9423bb288c1a61dbbdcb389a7690006631a5fa60b74726d19a62498f9"
     },
     {
-      "repository": "ajoe734/execute-plans",
-      "run_id": 33311312819,
-      "artifact_id": 9732173796,
+      "run_id": 33321494484,
+      "artifact_id": 9735150744,
       "name": "pantheon-dev-fe-deploy-evidence-attempt-1",
-      "digest": "sha256:9a37d8e0c9e838dbffb264fc900c78e5f8989e848e68b68d63e56bca5bcd9299"
+      "digest": "sha256:29f639a8cabcbbefe24b2f263c5cbc2429c3906438cc36cd1718a7c6ccc04cd6"
     },
     {
-      "repository": "ajoe734/execute-plans",
-      "run_id": 33311774034,
-      "artifact_id": 9732368072,
+      "run_id": 33322457191,
+      "artifact_id": 9735415552,
       "name": "pantheon-proof-binding-attempt-1",
-      "digest": "sha256:c57a59557b2ef668cc97a33117059e8aa2835c3ab3647a7f5650e9115f144322"
+      "digest": "sha256:ad171b164de65b0f8b49d37259ff790a4129f7ac37d4d5427a78033d77612095"
     },
     {
-      "repository": "ajoe734/execute-plans",
-      "run_id": 33311774034,
-      "artifact_id": 9732402686,
+      "run_id": 33322457191,
+      "artifact_id": 9735454136,
       "name": "pantheon-proof-child-claim-attempt-1",
-      "digest": "sha256:8958c731c077271e89b52a678420bd03128dbd9945fc5388c01740efa7b90d63"
+      "digest": "sha256:15011924df0c5461cabbfd7cadc74768391151c4203694f8c1861a401acff773"
     },
     {
-      "repository": "ajoe734/execute-plans",
-      "run_id": 33312470963,
-      "artifact_id": 9732417632,
+      "run_id": 33323122321,
+      "artifact_id": 9735486972,
       "name": "pantheon-authorized-write-proof-attempt-1",
-      "digest": "sha256:160023b933e40a435873c8a85d10c8440150d1025224dba09165200e888a448d"
+      "digest": "sha256:5f779c9c4417c295992e6eb344b806fe63e12c233ee519743c732cf53f99078e"
     }
   ],
   "acceptance_claims": {
-    "requested_pair_admitted": true,
-    "requested_pair_served": true,
-    "browser_acceptance_executed": false,
-    "real_gcp_login_under_five_seconds_proven": false,
-    "write_proof_activated": true,
-    "watchdog_armed": true,
-    "same_pair_read_only_restored_after_write_proof": true,
-    "task_passed": false
+    "requested_pair_admitted_and_served": true,
+    "governed_proposal_write_and_readback_proven": true,
+    "persona_preflight_proven": true,
+    "real_firebase_browser_login_proven": false,
+    "persona_browser_suite_passed": false,
+    "all_four_hosted_journeys_passed": false,
+    "authenticated_readiness_timing_proven": false,
+    "same_pair_watchdog_restore_proven": true,
+    "final_read_only_manifest_accepted": true,
+    "task_pass": false
   },
-  "required_next": "Repair or independently prove healthy the Pantheon BFF POST /bff/agora/servant/ensure path that returned HTTP 500 INTERNAL_ERROR after exact-pair, strict-auth, parent-binding, short-lived credential, and write-proof validation succeeded. Do not retry the unchanged BFF d2bca5bc70bfae897e1ef3ca736ad3680a587679 as a hosted browser proof; deploy a corrected exact Pantheon dev head under a valid environment lease, then repeat the same-parent proof and require watchdog restoration.",
-  "artifacts": [
-    "docs/deployment/evidence/AGORA-AGC-14-HOSTED-DEMO-AUTHENTIC-V5-20260829/summary.json",
-    "docs/deployment/evidence/AGORA-AGC-14-HOSTED-DEMO-AUTHENTIC-V5-20260829/browser-results.json",
-    "docs/deployment/evidence/AGORA-AGC-14-HOSTED-DEMO-AUTHENTIC-V5-20260829/restore-attestation.json"
-  ]
+  "blocker": {
+    "kind": "external",
+    "owner_layer": "Pantheon BFF Persona eligibility and Persona Fleet read-model projection",
+    "detail": "The exact BFF returns deterministic HTTP 500 responses for both authoritative participants eligibility and Persona Fleet after fresh credential validation and successful user-private Persona ensure. This blocks the first required hosted Persona suite, so Agora, Workshop, Trade Journey, and Management/AI coverage cannot truthfully be claimed.",
+    "required_next": "Repair or diagnose POST /bff/agora/interactions/participants:eligible and GET /bff/management/persona-fleet for the ensured user-private Persona, admit the corrected exact pair through a new governed controller/gate/switch if the backend SHA changes, then rerun the bounded write-proof parent."
+  }
 }

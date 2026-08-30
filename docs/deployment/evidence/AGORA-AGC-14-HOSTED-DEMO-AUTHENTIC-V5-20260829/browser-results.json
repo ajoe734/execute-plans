@@ -1,73 +1,123 @@
 {
-  "schema_version": "pantheon.agora.hosted-demo-browser-results.v1",
+  "schema_version": "pantheon.hosted-demo-browser-results.v5",
   "task_id": "AGORA-AGC-14-HOSTED-DEMO-AUTHENTIC-V5-20260829",
-  "status": "not-run",
-  "recorded_at": "2026-08-30T12:53:39Z",
-  "reason": "The exact pair was deployed and the parent-bound write-proof was authorized only after watchdog arming. The child minted and validated fresh short-lived proof credentials, but POST /bff/agora/servant/ensure returned HTTP 500 INTERNAL_ERROR before any Playwright Persona, Trade Journey, real GCP email/password Agora, or Management journey began. The child uploaded only before/after exact write-proof manifests; no browser pass is claimed.",
-  "prerequisite": {
-    "requested_frontend_sha": "7d30e78476be61222af63a089e7ab141aa43b809",
-    "requested_bff_sha": "d2bca5bc70bfae897e1ef3ca736ad3680a587679",
-    "required_frontend_ancestor": "5ffee3db8c2b37b4070d43d091ed4207ef5d70e5",
-    "pair_id": "fd30ca36a429e4d5ffed736cb88c6c2888dca43f1b7b1f8f08dab8d1ff794002",
-    "release_candidate_id": "c7689dac823a2a63db13feb7244c56bd251b23c922c697f30ded41acb289bf18",
-    "controller_run_id": 33309378482,
-    "controller_conclusion": "success",
-    "integration_gate_run_id": 33310783633,
-    "integration_gate_conclusion": "success",
-    "read_only_deploy_run_id": 33311312819,
-    "read_only_deploy_conclusion": "success",
-    "proof_parent_run_id": 33311774034,
-    "proof_parent_conclusion": "failure",
-    "proof_window_ack": true,
-    "watchdog_run_id": 33312362653,
-    "watchdog_armed": true,
-    "watchdog_conclusion": "success",
-    "child_run_id": 33312470963,
-    "child_conclusion": "failure",
-    "proof_authorization": "success",
-    "exact_write_proof_manifest_before_credentials": "success",
-    "fresh_parent_and_child_claim_check": "success",
-    "fresh_short_lived_proof_credentials": "minted-and-validated",
-    "failed_step": "Ensure stable user-private Persona for hosted proof",
-    "failure_http_status": 500,
-    "failure_error_code": "INTERNAL_ERROR"
+  "status": "failed",
+  "recorded_at": "2026-08-30T16:50:35Z",
+  "run_id": 33323122321,
+  "job_id": 99288504174,
+  "parent_run_id": 33322457191,
+  "watchdog_run_id": 33322992146,
+  "correlation_id": "c0986812-0fd4-4457-8fc0-5364c59ce905",
+  "exact_pair": {
+    "frontend_commit": "7d30e78476be61222af63a089e7ab141aa43b809",
+    "backend_commit": "2bcb4465399af83190c5027073f3b2296e377256",
+    "pair_fingerprint": "9de4cd001a8b7aaf18a1094fb1699ece19f0efd86d3d24994cd9f3562fe33727"
   },
-  "login": {
-    "status": "not-run",
-    "provider": "gcp-email-password",
-    "route_mocking": false,
-    "under_five_seconds_claimed": false
+  "authentication": {
+    "fresh_short_lived_credentials_minted": true,
+    "fresh_credentials_validated": true,
+    "session_kind": "bearer",
+    "tenant_id": "tenant-dev",
+    "auth_ready": true,
+    "real_firebase_email_password_browser_login_executed": false,
+    "authenticated_readiness_under_five_seconds_proven": false
   },
-  "page_journeys": {
-    "persona_list_fleet_detail_talk": "not-run",
-    "workshop_create_message_event_reconstruction_strategy_version": "not-run",
-    "trading_room_proposal_candidate_decision_consultation_terminal_readback": "not-run",
-    "strategy_performance_receipt_reload_readback": "not-run"
+  "persona_preflight": {
+    "ensure_succeeded": true,
+    "persona_id": "agora-servant-fbeaee01e8f34c786555",
+    "persona_class": "agora_servant",
+    "owner_scope": "user_private",
+    "memory_scope": "private_user",
+    "execution_authority": "none",
+    "registry_backed": true,
+    "request_id": "a734b25d-d75b-485d-a0a5-cb1f475cb239",
+    "me_request_id": "447dda7b-9b4d-41b5-bcb6-45e5f92230d6",
+    "readiness_request_id": "07a9051f-02cb-4f26-acaa-0ddca8b87dbf"
   },
-  "negative_controls": {
-    "unauthenticated": "not-run",
-    "viewer_write_denial": "not-run",
-    "cross_tenant_non_enumeration": "not-run",
-    "order_or_trade_execution_absent_or_denied": "not-run"
+  "successful_partial_proof": {
+    "kind": "governed-proposal-api-write-and-durable-readback",
+    "proposal_id": "prop_df8b1c3cfbfe4d008dc0036998ba7e0b",
+    "operator_statuses": [
+      201,
+      200,
+      200
+    ],
+    "final_revision": 3,
+    "replay_revision": 3,
+    "audit_actions": [
+      "create",
+      "modify",
+      "validate"
+    ],
+    "unauthenticated_create_status": 401,
+    "viewer_create_status": 403,
+    "viewer_modify_status": 403,
+    "execution_authority": "none",
+    "downstream_execution_attempted": false,
+    "tokens_recorded": false
   },
-  "runtime_objects": {},
-  "screenshots": [],
-  "network_receipts": [],
-  "immutable_child_artifact": {
-    "artifact_id": 9732417632,
-    "name": "pantheon-authorized-write-proof-attempt-1",
-    "digest": "sha256:160023b933e40a435873c8a85d10c8440150d1025224dba09165200e888a448d",
-    "contents": [
+  "persona_desktop_suite": {
+    "file": "e2e/persona-interaction-cross-repo-hosted.spec.ts",
+    "started_at": "2026-08-30T16:42:17.914Z",
+    "duration_ms": 63221.12,
+    "expected": 0,
+    "unexpected": 3,
+    "skipped": 0,
+    "flaky": 0,
+    "cases": [
       {
-        "path": "deployment-before-pint.json",
-        "sha256": "3cc2fca1747153894881efb5e4c209af5018e8c839665a609c3842201d702d62"
+        "name": "operator resolves, checks eligibility, submits no-authority interaction, reads it back, and returns",
+        "started_at": "2026-08-30T16:42:18.466Z",
+        "duration_ms": 22055,
+        "status": "failed",
+        "failure": "Authoritative Persona eligibility returned 500",
+        "endpoint": "POST /bff/agora/interactions/participants:eligible"
       },
       {
-        "path": "deployment-after-pint.json",
-        "sha256": "3cc2fca1747153894881efb5e4c209af5018e8c839665a609c3842201d702d62"
+        "name": "daily Persona measure supports durable modify, defer, accept-for-review, validation, reject, and reload",
+        "started_at": "2026-08-30T16:42:43.712Z",
+        "duration_ms": 16895,
+        "status": "failed",
+        "failure": "Authoritative Persona eligibility returned 500",
+        "endpoint": "POST /bff/agora/interactions/participants:eligible"
+      },
+      {
+        "name": "viewer sees a disabled reason and cannot produce an interaction POST",
+        "started_at": "2026-08-30T16:43:01.073Z",
+        "duration_ms": 19941,
+        "status": "failed",
+        "failure": "Persona Fleet match returned 500",
+        "endpoint": "GET /bff/management/persona-fleet?page_size=100"
       }
-    ],
-    "agora_demo_run_evidence_present": false
+    ]
+  },
+  "required_page_journeys": {
+    "agora": "not-run-after-required-Persona-failure",
+    "persona": "failed-before-page-journey-completion",
+    "workshop": "not-run-after-required-Persona-failure",
+    "trade_journey": "not-run-after-required-Persona-failure",
+    "management_ai": "not-run-after-required-Persona-failure"
+  },
+  "negative_controls": {
+    "governed_proposal_unauthenticated_rejected": true,
+    "governed_proposal_viewer_write_rejected": true,
+    "order_or_trade_execution_attempted": false,
+    "persona_page_viewer_control_proven": false
+  },
+  "screenshots": [],
+  "screenshot_note": "The credentialed workflow disables Playwright artifact capture and the required Persona suite failed before page-journey screenshot checkpoints.",
+  "immutable_artifact": {
+    "artifact_id": 9735486972,
+    "name": "pantheon-authorized-write-proof-attempt-1",
+    "digest": "sha256:5f779c9c4417c295992e6eb344b806fe63e12c233ee519743c732cf53f99078e",
+    "files": {
+      "deployment-before-pint.json": "sha256:c6590c7e50ca42bd6ec9f44c8fbc17b7590a4470531ae6da730a0969ee040c5f",
+      "deployment-after-pint.json": "sha256:c6590c7e50ca42bd6ec9f44c8fbc17b7590a4470531ae6da730a0969ee040c5f",
+      "persona-hosted-desktop-results.json": "sha256:86a61a1942d60bf4d7f2ac4a13ba9051a018d70d9cd75f1d4c276990c6d4d631",
+      "persona-servant-preflight.json": "sha256:40cec53051331475f8ae1102db2d188620bf02e760bfc7fbf13051f4d6881c4c",
+      "pint-010-r2-governed-proposal-20260830T164217224Z.json": "sha256:5031381807d430f4e4013f9e159e8be607aa73f95aad4e402f73d9d724da4cb3",
+      "pint-010-r2-governed-proposal-20260830T164217224Z.md": "sha256:bf5e91e54ac554b3d4b5198051dc9b737cf86177992caf21e500c68e10eb0628"
+    }
   },
   "pass_claimed": false
 }
