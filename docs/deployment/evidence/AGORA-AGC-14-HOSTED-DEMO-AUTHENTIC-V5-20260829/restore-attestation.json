@@ -2,7 +2,7 @@
   "schema_version": "pantheon.agora.hosted-demo-restore-attestation.v1",
   "task_id": "AGORA-AGC-14-HOSTED-DEMO-AUTHENTIC-V5-20260829",
   "status": "safe-baseline-preserved",
-  "observed_at": "2026-08-30T00:58:24Z",
+  "observed_at": "2026-08-30T02:36:22Z",
   "observation_source": {
     "frontend_manifest_url": "https://pantheon-lupin-dev-fe.35.201.204.12.sslip.io/deployment.json",
     "backend_version_url": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/bff/version",
@@ -28,7 +28,8 @@
     33271922125,
     33271993547,
     33272385942,
-    33283640789
+    33283640789,
+    33287442245
   ],
   "requested_pair_write_proof_activated": false,
   "requested_pair_watchdog_armed": false,
