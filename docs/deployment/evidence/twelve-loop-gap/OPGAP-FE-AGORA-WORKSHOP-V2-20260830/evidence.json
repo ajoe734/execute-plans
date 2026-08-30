@@ -1,0 +1,60 @@
+{
+  "schema_version": "pantheon.frontend-loop-truth-evidence.v1",
+  "task_id": "OPGAP-FE-AGORA-WORKSHOP-V2-20260830",
+  "owner": "Antigravity2",
+  "reviewer": "Codex2",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "status": "implementation-ready-for-review",
+  "scope": {
+    "canonical_owner": "Pantheon Agora workshop and trading room view surface delivery",
+    "frontend_surfaces": [
+      "src/agora/pages/strategy-workshop/WorkshopSessionView.tsx",
+      "src/agora/pages/trading-room/TradingRoomWorkspace.tsx",
+      "src/agora/pages/trading-room/AttributionReportView.tsx",
+      "src/agora/pages/strategy-performance/StrategyPerformancePage.tsx",
+      "src/agora/pages/trading-room/TradingRoomPage.tsx"
+    ],
+    "not_changed": [
+      "Backend BFF routes or schemas",
+      "Live write proof permissions",
+      "Persona entity definition or authentication contracts"
+    ]
+  },
+  "contract_alignment": {
+    "artifacts_delivered": [
+      "src/agora/pages/strategy-workshop/WorkshopSessionView.tsx",
+      "src/agora/pages/trading-room/TradingRoomWorkspace.tsx",
+      "src/agora/pages/trading-room/AttributionReportView.tsx",
+      "src/agora/pages/strategy-performance/StrategyPerformancePage.tsx"
+    ],
+    "artifact_contract": "All 4 declared task artifacts are created, typed, and unit-tested in their explicit canonical module paths.",
+    "trading_room_workspace": "StrategyWorkspaceView and workspace subcomponents are modularized into TradingRoomWorkspace.tsx with full proposal lifecycle and grid editor support.",
+    "attribution_report": "AttributionReportView.tsx renders multi-dimension performance attribution, KPI summaries, and provenance tracking backed by getTradingRoomPerformanceAttribution."
+  },
+  "validation": {
+    "agora_pages_unit_tests": {
+      "command": "npx vitest run src/agora/pages",
+      "result": "passed: 5 files, 153 tests"
+    },
+    "typecheck": {
+      "commands": [
+        "npm run typecheck",
+        "npx tsc -p tsconfig.json --noEmit"
+      ],
+      "result": "passed: 0 errors across tsconfig.agora.json and tsconfig.json"
+    },
+    "strict_live_build": {
+      "command": "VITE_GCP_IDENTITY_API_KEY=AIzaSyD12345678901234567890123456789012 VITE_GCP_IDENTITY_PROJECT_ID=pantheon-dev VITE_GCP_IDENTITY_AUTH_DOMAIN=pantheon-dev.firebaseapp.com VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build",
+      "result": "passed: built 7267 modules in 2m 18s"
+    },
+    "diff_check": {
+      "command": "git diff --check",
+      "result": "passed: clean patch without whitespace errors"
+    }
+  },
+  "delivery": {
+    "branch": "task/OPGAP-FE-AGORA-WORKSHOP-V2-20260830",
+    "review_binding": "The canonical review handoff binds this manifest to the exact pushed head."
+  }
+}
