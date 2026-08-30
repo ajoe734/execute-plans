@@ -92,10 +92,39 @@ type MessageEventProjectionEvidence = {
   timeout_ms: number;
 };
 
+type HostedLoginEvidence = {
+  authenticated_readiness: boolean;
+  duration_ms: number | null;
+  provider: "gcp_identity_platform" | "governed_dev_login";
+  route_mocking: false;
+};
+
+type WorkshopSseEvidence = {
+  content_type: string;
+  path: string;
+  status: number;
+  x_sse_channel: string;
+};
+
 const observedTrafficByPage = new WeakMap<Page, ObservedRequest[]>();
 
 function trimTrailingSlash(value: string): string {
   return value.replace(/\/+$/, "");
+}
+
+async function captureEvidenceScreenshot(
+  page: Page,
+  runMarker: string,
+  label: string,
+): Promise<string> {
+  mkdirSync(EVIDENCE_DIR, { recursive: true });
+  const filename = `${runMarker}-${label}.png`;
+  await page.screenshot({
+    animations: "disabled",
+    fullPage: true,
+    path: `${EVIDENCE_DIR}/${filename}`,
+  });
+  return filename;
 }
 
 function asRecord(value: unknown): JsonRecord {
@@ -336,7 +365,7 @@ async function assertStrictSession(
 async function installHostedOperatorSession(
   page: Page,
   sessionInfo?: { operatorId: string; roles: string[]; token: string },
-): Promise<void> {
+): Promise<HostedLoginEvidence> {
   const clientId =
     process.env.DEV_LOGIN_CLIENT_ID ||
     process.env.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_ID ||
@@ -346,6 +375,7 @@ async function installHostedOperatorSession(
     process.env.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_SECRET ||
     "";
 
+  const useGcpIdentity = Boolean(GCP_IDENTITY_EMAIL && GCP_IDENTITY_PASSWORD);
   await page.addInitScript(
     ({ clientId, clientSecret, tenantId, token }) => {
       // Enable runtime real-write override on allowlisted dev host
@@ -371,14 +401,19 @@ async function installHostedOperatorSession(
         (window as unknown as Record<string, unknown>).__PANTHEON_BFF_RUNTIME__ = config;
       }
     },
-    { clientId, clientSecret, tenantId: TENANT_ID, token: sessionInfo?.token },
+    {
+      clientId,
+      clientSecret,
+      tenantId: TENANT_ID,
+      // A real GCP email/password proof must establish the browser bearer from
+      // Firebase itself.  Do not let the already-minted API proof token bypass
+      // the hosted sign-in form or BFF-owned browser-session verification.
+      token: useGcpIdentity ? undefined : sessionInfo?.token,
+    },
   );
 
   // If explicit GCP identity credentials are configured, execute the one-step UI sign-in.
-  if (
-    GCP_IDENTITY_EMAIL &&
-    GCP_IDENTITY_PASSWORD
-  ) {
+  if (useGcpIdentity) {
     const fromRoute = "/agora/strategy-workshop";
     await page.goto(
       `${FE_BASE_URL}/auth?from=${encodeURIComponent(fromRoute)}`,
@@ -394,6 +429,12 @@ async function installHostedOperatorSession(
           response.request().method() === "GET" &&
           responsePath(response) === "/bff/me",
       );
+      const readinessResponse = page.waitForResponse(
+        (response) =>
+          response.request().method() === "GET" &&
+          responsePath(response) === "/bff/auth/readiness",
+      );
+      const loginStartedAt = Date.now();
       await page.getByRole("button", { exact: true, name: "Sign in" }).click();
       await page.waitForURL((url) => url.pathname === fromRoute);
 
@@ -403,7 +444,27 @@ async function installHostedOperatorSession(
         `GCP browser session /bff/me returned ${me.status()}`,
       ).toBe(true);
       expect(rolesFromMe(await jsonBody(me))).toContain("operator");
-      return;
+      const readiness = await readinessResponse;
+      expect(
+        readiness.ok(),
+        `GCP browser session /bff/auth/readiness returned ${readiness.status()}`,
+      ).toBe(true);
+      const readinessBody = asRecord(await jsonBody(readiness));
+      const readinessData = asRecord(readinessBody.data ?? readinessBody);
+      expect(readinessData.ready).toBe(true);
+      expect(readinessData.authReady).toBe(true);
+      const durationMs = Date.now() - loginStartedAt;
+      await waitForHostedRouteReady(page);
+      expect(
+        durationMs,
+        "real GCP email/password login must reach BFF authenticated readiness in under 5 seconds",
+      ).toBeLessThan(5_000);
+      return {
+        authenticated_readiness: true,
+        duration_ms: durationMs,
+        provider: "gcp_identity_platform",
+        route_mocking: false,
+      };
     }
   }
 
@@ -423,6 +484,12 @@ async function installHostedOperatorSession(
       });
   }
   await waitForHostedRouteReady(page);
+  return {
+    authenticated_readiness: true,
+    duration_ms: null,
+    provider: "governed_dev_login",
+    route_mocking: false,
+  };
 }
 
 async function waitForHostedRouteReady(page: Page): Promise<void> {
@@ -838,9 +905,18 @@ test.describe(`${TASK_ID} strict-live browser journey`, () => {
     let personaId = "";
     let poolLookup: Promise<Response> | undefined;
     let messageEventProjection: MessageEventProjectionEvidence | undefined;
+    let workshopSseEvidence: WorkshopSseEvidence | undefined;
+    let operationalReadinessEvidence: JsonRecord | undefined;
+    const screenshots: string[] = [];
 
     await assertOperatorLiveCandidate(page);
-    await installHostedOperatorSession(page, session ? { ...session, token } : undefined);
+    const loginEvidence = await installHostedOperatorSession(
+      page,
+      session ? { ...session, token } : undefined,
+    );
+    screenshots.push(
+      await captureEvidenceScreenshot(page, runMarker, "01-authenticated-workshop-list"),
+    );
 
     await test.step("create a fresh Workshop and derive its id from the POST response", async () => {
       await expect(page.getByTestId("strategy-workshop-page-list")).toBeVisible(
@@ -849,6 +925,14 @@ test.describe(`${TASK_ID} strict-live browser journey`, () => {
       await page.getByTestId("create-workshop-btn").click();
       await page.getByTestId("create-workshop-title-input").fill(workshopTitle);
       const created = waitForResponse(page, "POST", "/bff/agora/workshops");
+      const workshopStream = page.waitForResponse(
+        (response) => {
+          const path = responsePath(response);
+          return response.request().method() === "GET" &&
+            path.startsWith("/bff/agora/workshops/") &&
+            path.endsWith("/stream");
+        },
+      );
       await page.getByTestId("create-workshop-submit").click();
       const createdMutation = await recordedMutation(
         await created,
@@ -861,6 +945,16 @@ test.describe(`${TASK_ID} strict-live browser journey`, () => {
       await expect(
         page.getByTestId(`workshop-item-${workshopId}`),
       ).toBeVisible({ timeout: 30_000 });
+      const streamResponse = await workshopStream;
+      expect(streamResponse.status()).toBe(200);
+      expect(streamResponse.headers()["content-type"] ?? "").toContain("text/event-stream");
+      workshopSseEvidence = {
+        content_type: streamResponse.headers()["content-type"] ?? "",
+        path: responsePath(streamResponse),
+        status: streamResponse.status(),
+        x_sse_channel: streamResponse.headers()["x-sse-channel"] ?? "",
+      };
+      expect(workshopSseEvidence.x_sse_channel).toContain(workshopId);
     });
 
     await test.step("submit a real reconstruction input and read its authoritative identifiers", async () => {
@@ -985,6 +1079,9 @@ test.describe(`${TASK_ID} strict-live browser journey`, () => {
       await expect(
         page.getByTestId("workshop-strategy-spec-identity"),
       ).toContainText(strategyVersion);
+      screenshots.push(
+        await captureEvidenceScreenshot(page, runMarker, "02-workshop-reconstruction"),
+      );
     });
 
     await test.step("dispatch research and wait for a real Trading Room handoff", async () => {
@@ -1046,6 +1143,49 @@ test.describe(`${TASK_ID} strict-live browser journey`, () => {
       await expect(
         page.getByTestId("trading-room-workspace-shell"),
       ).toBeVisible({ timeout: 60_000 });
+
+      const readinessResponse = await request.get(
+        `${BFF_BASE_URL}/bff/agora/operational-readiness`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "X-Tenant-Id": TENANT_ID,
+          },
+        },
+      );
+      expect(
+        readinessResponse.ok(),
+        `operational readiness returned ${readinessResponse.status()}`,
+      ).toBe(true);
+      const readinessEnvelope = asRecord(await readinessResponse.json());
+      const readiness = asRecord(readinessEnvelope.data ?? readinessEnvelope);
+      const source = asRecord(readiness.source);
+      const producer = asRecord(readiness.signal_producer);
+      const freshness = String(source.freshness ?? "");
+      const snapshotId = String(source.snapshot_id ?? "");
+      const producerId = String(producer.producer_id ?? "");
+      const consumedSnapshotId = String(producer.consumed_snapshot_id ?? "");
+      expect(["fresh", "empty_fresh"]).toContain(freshness);
+      expect(snapshotId).not.toBe("");
+      expect(producerId).not.toBe("");
+      expect(consumedSnapshotId).toBe(snapshotId);
+      const readinessDeployment = asRecord(readiness.deployment);
+      expect(String(readinessDeployment.source_commit_sha ?? "").toLowerCase()).toBe(bffSha);
+      const readinessSurface = page.getByTestId("trading-room-operational-readiness");
+      await expect(readinessSurface).toHaveAttribute("data-source-freshness", freshness, {
+        timeout: 30_000,
+      });
+      await expect(page.getByTestId("trading-room-readiness-producer")).toContainText(producerId);
+      operationalReadinessEvidence = {
+        consumed_snapshot_id: consumedSnapshotId,
+        freshness,
+        producer_id: producerId,
+        snapshot_id: snapshotId,
+        source_commit_sha: String(readinessDeployment.source_commit_sha ?? "").toLowerCase(),
+      };
+      screenshots.push(
+        await captureEvidenceScreenshot(page, runMarker, "03-trading-room-readiness"),
+      );
     });
 
     await test.step("record a canonical candidate decision and read it back through the shared drawer", async () => {
@@ -1159,6 +1299,9 @@ test.describe(`${TASK_ID} strict-live browser journey`, () => {
       await expect(
         page.getByTestId("consultation-context-banner"),
       ).toContainText(decisionEventId, { timeout: 60_000 });
+      screenshots.push(
+        await captureEvidenceScreenshot(page, runMarker, "04-consultation-workshop"),
+      );
     });
 
     await test.step("verify performance receipt persistence after reload", async () => {
@@ -1247,6 +1390,9 @@ test.describe(`${TASK_ID} strict-live browser journey`, () => {
       await expect(
         page.getByTestId(`performance-suggestion-${suggestionId}`),
       ).not.toContainText(/proposed|提議中/i, { timeout: 60_000 });
+      screenshots.push(
+        await captureEvidenceScreenshot(page, runMarker, "05-performance-reload-readback"),
+      );
     });
 
     const bodyText = await page.locator("body").innerText();
@@ -1264,7 +1410,11 @@ test.describe(`${TASK_ID} strict-live browser journey`, () => {
         {
           bff_base_url: BFF_BASE_URL,
           fe_base_url: FE_BASE_URL,
+          login: loginEvidence,
           mutation_ids: mutations,
+          operational_readiness: operationalReadinessEvidence,
+          screenshots,
+          workshop_sse: workshopSseEvidence,
           workshop_message_event_readback: messageEventProjection,
           observed_requests: observedRequests.map(
             ({ authorization, method, origin, path, status }) => ({
@@ -1519,9 +1669,15 @@ test.describe(`${TASK_ID} strict-live browser journey`, () => {
       },
       profile: "bounded-write-proof",
       objects: {
+        candidate_decision_id: candidateDecisionId,
+        network_receipts: mutations,
+        operational_readiness: operationalReadinessEvidence,
+        performance_receipt_id: performanceReceiptId,
         proposal_id: proposalId,
         persona_id: personaId,
+        screenshots,
         workshop_id: workshopId,
+        workshop_sse: workshopSseEvidence,
         message_event_id: messageEventId,
         reconstruction_id: reconstructionId,
         strategy_id: strategyId,
@@ -1530,9 +1686,28 @@ test.describe(`${TASK_ID} strict-live browser journey`, () => {
       },
       steps: [
         {
+          id: "gcp_email_password_login",
+          status: loginEvidence.provider === "gcp_identity_platform" &&
+            loginEvidence.authenticated_readiness &&
+            loginEvidence.duration_ms !== null &&
+            loginEvidence.duration_ms < 5_000
+            ? "passed"
+            : "failed",
+          authenticated_readiness: loginEvidence.authenticated_readiness,
+          duration_ms: loginEvidence.duration_ms,
+          provider: loginEvidence.provider,
+          route_mocking: loginEvidence.route_mocking,
+        },
+        {
           id: "workshop_create",
           status: "passed",
           receipt_ref: workshopId,
+        },
+        {
+          id: "workshop_sse_connected",
+          status: workshopSseEvidence?.status === 200 ? "passed" : "failed",
+          path: workshopSseEvidence?.path,
+          x_sse_channel: workshopSseEvidence?.x_sse_channel,
         },
         {
           id: "workshop_message_admitted",
@@ -1553,6 +1728,13 @@ test.describe(`${TASK_ID} strict-live browser journey`, () => {
           id: "trading_room_proposal_accepted",
           status: "passed",
           receipt_ref: proposalId,
+        },
+        {
+          id: "source_freshness_and_producer_lineage",
+          status: operationalReadinessEvidence ? "passed" : "failed",
+          freshness: operationalReadinessEvidence?.freshness,
+          producer_id: operationalReadinessEvidence?.producer_id,
+          readback_ref: String(operationalReadinessEvidence?.snapshot_id ?? ""),
         },
         {
           id: "candidate_decision_recorded",

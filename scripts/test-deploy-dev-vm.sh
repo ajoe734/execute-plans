@@ -1705,6 +1705,28 @@ test_out_of_order_and_expected_dev_mismatch_rejected() {
     show_deploy_failure "missing served-ancestry rejection"
 }
 
+test_governed_task_branch_candidate_can_deploy_out_of_order() {
+  setup_case governed-task-branch-candidate
+  git --git-dir="${CASE_ORIGIN}" update-ref \
+    refs/heads/task/AGORA-AGC-14-HOSTED-DEMO-AUTHENTIC-V5-20260829 \
+    "${CANDIDATE_SHA}"
+  git --git-dir="${CASE_ORIGIN}" update-ref refs/heads/dev "${PREVIOUS_SHA}"
+  git -C "${CASE_REPO}" reset -q --hard "${PREVIOUS_SHA}"
+
+  run_deploy \
+    GITHUB_EVENT_NAME=workflow_dispatch \
+    PANTHEON_DEPLOY_EXPECTED_DEV_SHA="${PREVIOUS_SHA}" \
+    PANTHEON_DEPLOY_ALLOW_OUT_OF_ORDER_CANDIDATE=true \
+    PANTHEON_DEPLOY_FRONTEND_REF=task/AGORA-AGC-14-HOSTED-DEMO-AUTHENTIC-V5-20260829
+  [[ "${RUN_STATUS}" -eq 0 ]] || \
+    show_deploy_failure "governed task-branch candidate should deploy from the trusted dev controller"
+  assert_candidate_is_live
+  grep -Fq '"candidateRef":"task/AGORA-AGC-14-HOSTED-DEMO-AUTHENTIC-V5-20260829"' \
+    "${CASE_AUDIT}/evidence.jsonl" || \
+    show_deploy_failure "task-branch identity is missing from immutable release evidence"
+  verify_evidence_pair
+}
+
 test_concurrent_flock_rejected() {
   setup_case concurrent-lock
   local holder_fd
@@ -2225,6 +2247,9 @@ test_write_proof_advanced_dev_served_candidate_and_guards() {
 run_test() {
   local name="$1"
   shift
+  if [[ -n "${PANTHEON_TEST_FILTER:-}" && "${name}" != *"${PANTHEON_TEST_FILTER}"* ]]; then
+    return 0
+  fi
   if ("$@"); then
     PASSED=$((PASSED + 1))
     echo "ok - ${name}"
@@ -2254,6 +2279,7 @@ run_test "manual rollback drill restores and re-probes exact previous release" t
 run_test "rollback re-probe failure stays nonzero with previous live" test_rollback_reprobe_failure_is_explicit
 run_test "external live switch is preserved by rollback CAS" test_external_live_switch_is_never_overwritten
 run_test "out-of-order and expected-dev mismatches reject" test_out_of_order_and_expected_dev_mismatch_rejected
+run_test "governed task-branch candidate can deploy out of order" test_governed_task_branch_candidate_can_deploy_out_of_order
 run_test "concurrent flock rejects" test_concurrent_flock_rejected
 run_test "same SHA with a different digest rejects" test_same_sha_different_digest_rejected
 run_test "exact same SHA and digest revalidates the live release" test_exact_candidate_noop_revalidates_live_release

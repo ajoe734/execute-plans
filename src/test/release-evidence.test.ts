@@ -178,6 +178,8 @@ describe("release evidence hash chain", () => {
       "--detail",
       `candidateSha=${"1".repeat(40)}`,
       "--detail",
+      "candidateRef=task/AGORA-AGC-14-HOSTED-DEMO-AUTHENTIC-V5-20260829",
+      "--detail",
       `controllerSha=${"2".repeat(40)}`,
       "--detail",
       `frontendSha=${"3".repeat(40)}`,
@@ -253,6 +255,8 @@ describe("release evidence hash chain", () => {
     expect(details).toMatchObject({
       integrationGateRunId: "456",
       integrationGateStatus: "success",
+      candidateRef:
+        "task/AGORA-AGC-14-HOSTED-DEMO-AUTHENTIC-V5-20260829",
       outcome: "rolled_back",
       probeStatus: "passed",
       rollbackStatus: "verified",
@@ -320,6 +324,11 @@ describe("release evidence hash chain", () => {
     for (const details of [
       ["--detail", "frontendSha=not-a-sha"],
       ["--detail", "probeStatus=anything-goes"],
+      ["--detail", "candidateRef=task/../dev"],
+      ["--detail", "candidateRef=task/bad branch"],
+      ["--detail", "candidateRef=.hidden"],
+      ["--detail", "candidateRef=task/bad.lock"],
+      ["--detail", "candidateRef=task//bad"],
       [
         "--detail",
         `frontendSha=${"1".repeat(40)}`,
