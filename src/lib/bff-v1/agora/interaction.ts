@@ -1,7 +1,8 @@
 // BFF client for agora.interaction capability.
 // Routes: /bff/agora/interactions/*
 
-import { withLiveOrMock } from "../liveTransport";
+import { bffFetch, detectMode } from "../client";
+import { strictLiveRead } from "../domainReads";
 import { makeBffError } from "../errors";
 import { paths } from "../paths";
 import { liveWriteGated } from "../writeGate";
@@ -187,7 +188,7 @@ export const interaction = {
   resolveContext: async (body: ResolveContextRequest, options?: ResolveContextOptions): Promise<ResolveContextEnvelope> => {
     await requireInteractionWrite();
     const idempotencyKey = await resolveContextIdempotencyKey(body, resolutionSessionId(options));
-    const mockFn = async (): Promise<ResolveContextEnvelope> => {
+    const mockFn = (): ResolveContextEnvelope => {
       const replay = mockContextReceipts.get(idempotencyKey);
       if (replay) return replay;
       const wid = body.workshop_id || `wksp-mock-${idempotencyKey.slice(-9)}`;
@@ -233,20 +234,22 @@ export const interaction = {
       return receipt;
     };
 
-    return withLiveOrMock<ResolveContextEnvelope>(
+    if (detectMode() === "mock") {
+      return mockFn();
+    }
+    return strictLiveRead<ResolveContextEnvelope>(
+      "agora.interaction.resolveContext",
       {
         method: "POST",
         path: paths.agoraInteractionsResolve(),
         body,
         idempotencyKey,
       },
-      mockFn,
     );
   },
 
   participants: (body: EligibilityRequest): Promise<EligibilityEnvelope> => {
-    const mockFn = async (): Promise<EligibilityEnvelope> => {
-      // Mock some default personas
+    const mockFn = (): EligibilityEnvelope => {
       const list = [
         {
           persona_id: "per_quant",
@@ -289,19 +292,22 @@ export const interaction = {
       };
     };
 
-    return withLiveOrMock<EligibilityEnvelope>(
+    if (detectMode() === "mock") {
+      return Promise.resolve(mockFn());
+    }
+    return strictLiveRead<EligibilityEnvelope>(
+      "agora.interaction.participants",
       {
         method: "POST",
         path: paths.agoraInteractionsEligible(),
         body,
       },
-      mockFn,
     );
   },
 
   submit: async (body: SubmitInteractionRequest): Promise<SubmitInteractionEnvelope> => {
     await requireInteractionWrite();
-    const mockFn = async (): Promise<SubmitInteractionEnvelope> => {
+    const mockFn = (): SubmitInteractionEnvelope => {
       const interactionId = body.interaction_id || `int-mock-${Math.random().toString(36).substr(2, 9)}`;
       return {
         data: {
@@ -319,14 +325,18 @@ export const interaction = {
       };
     };
 
-    return withLiveOrMock<SubmitInteractionEnvelope>(
+    if (detectMode() === "mock") {
+      return mockFn();
+    }
+    return strictLiveRead<SubmitInteractionEnvelope>(
+      "agora.interaction.submit",
       {
         method: "POST",
         path: paths.agoraInteractionsSubmit(),
         body,
         idempotencyKey: `idem-submit-int-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       },
-      mockFn,
     );
   },
 };
+

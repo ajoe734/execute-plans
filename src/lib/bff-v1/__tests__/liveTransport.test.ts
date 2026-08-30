@@ -1,15 +1,16 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import { liveStatus } from "@/lib/bff-v1/liveStatus";
-import { withLiveOrMock } from "@/lib/bff-v1/liveTransport";
+import { strictLiveRead } from "@/lib/bff-v1/domainReads";
 import { BffError, makeBffError } from "@/lib/bff-v1";
 
-describe("BFF live transport — fallback to mock on failure", () => {
+describe("BFF live transport — strictLiveRead behavior", () => {
   const realFetch = globalThis.fetch;
 
   beforeEach(() => {
-    // These cases exercise the auto (mock-fallback) path explicitly; the product default is
-    // now strict (VITE_BFF_FALLBACK=strict in .env), so pin auto here rather than rely on it.
-    vi.stubEnv("VITE_BFF_FALLBACK", "auto");
+    vi.stubEnv("MODE", "production");
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("VITE_BFF_MODE", "live");
+    vi.stubEnv("VITE_BFF_FALLBACK", "strict");
     liveStatus._reset({ mode: "live", effective: "live", baseUrl: "https://example.test" });
   });
   afterEach(() => {
@@ -18,26 +19,22 @@ describe("BFF live transport — fallback to mock on failure", () => {
     liveStatus._reset();
   });
 
-  it("network error → falls back to mock + reports error", async () => {
+  it("network error → reports fallback error and throws BffError", async () => {
     globalThis.fetch = vi.fn().mockRejectedValue(new Error("ECONNREFUSED"));
-    const out = await withLiveOrMock(
-      { method: "GET", path: "/bff/strategies" },
-      async () => ({ items: ["mock"] }),
-    );
-    expect(out).toEqual({ items: ["mock"] });
+    await expect(
+      strictLiveRead("test.network", { method: "GET", path: "/bff/strategies" }),
+    ).rejects.toBeInstanceOf(BffError);
     expect(liveStatus.get().effective).toBe("mock");
     expect(liveStatus.get().lastError).toMatch(/ECONNREFUSED/);
   });
 
-  it("5xx → fallback (transport-class failure)", async () => {
+  it("5xx → reports fallback error (transport-class failure)", async () => {
     globalThis.fetch = vi.fn().mockResolvedValue(
       new Response("oops", { status: 503 }),
     );
-    const out = await withLiveOrMock(
-      { method: "GET", path: "/bff/strategies" },
-      async () => "fallback",
-    );
-    expect(out).toBe("fallback");
+    await expect(
+      strictLiveRead("test.503", { method: "GET", path: "/bff/strategies" }),
+    ).rejects.toBeInstanceOf(BffError);
     expect(liveStatus.get().effective).toBe("mock");
   });
 
@@ -47,9 +44,9 @@ describe("BFF live transport — fallback to mock on failure", () => {
       new Response(JSON.stringify(err.envelope), { status: 400, headers: { "Content-Type": "application/json" } }),
     );
     await expect(
-      withLiveOrMock({ method: "GET", path: "/bff/strategies" }, async () => "x"),
+      strictLiveRead("test.400", { method: "GET", path: "/bff/strategies" }),
     ).rejects.toBeInstanceOf(BffError);
-    // Did NOT fall back.
+    // Did NOT fall back to mock.
     expect(liveStatus.get().effective).toBe("live");
   });
 
@@ -57,70 +54,17 @@ describe("BFF live transport — fallback to mock on failure", () => {
     liveStatus.reportFallback("prior");
     expect(liveStatus.get().effective).toBe("mock");
     globalThis.fetch = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "Content-Type": "application/json" } }),
+      new Response(JSON.stringify({ data: { ok: true } }), { status: 200, headers: { "Content-Type": "application/json" } }),
     );
     // Manual retry to re-attempt live.
     liveStatus.retry();
-    const out = await withLiveOrMock<{ ok: boolean }>(
+    const out = await strictLiveRead<{ ok: boolean }>(
+      "test.success",
       { method: "GET", path: "/bff/strategies" },
-      async () => ({ ok: false }),
     );
     expect(out.ok).toBe(true);
     expect(liveStatus.get().effective).toBe("live");
     expect(liveStatus.get().lastError).toBeUndefined();
-  });
-
-  it("strict + live + flagged offline: retries live instead of serving mock", async () => {
-    // Once a prior read flips liveStatus offline (effective→mock), a strict live surface must NOT
-    // be masked with mock seed — it re-attempts live so real data (or a typed error) surfaces and
-    // the surface self-heals when the BFF recovers.
-    vi.stubEnv("VITE_BFF_FALLBACK", "strict");
-    liveStatus._reset({ mode: "live", effective: "mock", baseUrl: "https://example.test" });
-    const fetchSpy = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "Content-Type": "application/json" } }),
-    );
-    globalThis.fetch = fetchSpy;
-    const out = await withLiveOrMock<{ ok: boolean }>(
-      { method: "GET", path: "/bff/strategies" },
-      async () => ({ ok: false }),
-    );
-    expect(out.ok).toBe(true); // live, not the mock's { ok: false }
-    expect(fetchSpy).toHaveBeenCalled();
-    expect(liveStatus.get().effective).toBe("live");
-  });
-
-  it("strict typed errors stay visible until retry even when another live read succeeds", async () => {
-    vi.stubEnv("VITE_BFF_FALLBACK", "strict");
-    liveStatus.reportFallback("strict: primary surface failed");
-    expect(liveStatus.get().effective).toBe("mock");
-
-    globalThis.fetch = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "Content-Type": "application/json" } }),
-    );
-
-    const out = await withLiveOrMock<{ ok: boolean }>(
-      { method: "GET", path: "/bff/alerts" },
-      async () => ({ ok: false }),
-    );
-
-    expect(out.ok).toBe(true);
-    expect(liveStatus.get().effective).toBe("mock");
-    expect(liveStatus.get().lastError).toBe("strict: primary surface failed");
-
-    liveStatus.retry();
-    expect(liveStatus.get().effective).toBe("live");
-    expect(liveStatus.get().lastError).toBeUndefined();
-  });
-
-  it("mock mode: never touches fetch", async () => {
-    liveStatus._reset({ mode: "mock", effective: "mock" });
-    const fetchSpy = vi.fn();
-    globalThis.fetch = fetchSpy;
-    const out = await withLiveOrMock(
-      { method: "GET", path: "/bff/x" },
-      async () => "mock-only",
-    );
-    expect(out).toBe("mock-only");
-    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });
+

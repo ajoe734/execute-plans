@@ -1,17 +1,17 @@
-import * as seed from "@/mocks/seed";
 import type { ResearchExperiment } from "./dto";
 import { paths } from "./paths";
-import { detailPath, liveDetailOrSeedNormalized, liveListOrSeedNormalized } from "./domainReads";
+import { detailPath, strictLiveDetailNormalized, strictLiveListNormalized } from "./domainReads";
 
 export async function listResearchExperiments(): Promise<ResearchExperiment[]> {
-  return liveListOrSeedNormalized("research.list", paths.researchExperiments(), seed.researchExperiments);
+  return strictLiveListNormalized("research.list", paths.researchExperiments());
 }
 
 export async function getResearchExperiment(id: string): Promise<ResearchExperiment | undefined> {
-  return liveDetailOrSeedNormalized("research.get", detailPath(paths.researchExperiments(), id), seed.researchExperiments.find((s) => s.id === id));
+  return strictLiveDetailNormalized("research.get", detailPath(paths.researchExperiments(), id));
 }
 
 export const research = {
   list: listResearchExperiments,
   get: getResearchExperiment,
 };
+

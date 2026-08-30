@@ -1,29 +1,27 @@
-import * as seed from "@/mocks/seed";
 import type { Deployment, DeploymentStage } from "./dto";
 import { paths } from "./paths";
 import {
   asRecord,
   firstArray,
-  liveDerivedListOrSeed,
   liveDetailFrom,
-  liveDetailOrSeedNormalized,
-  liveListOrSeedNormalized,
+  strictLiveDetailNormalized,
+  strictLiveListNormalized,
+  strictLiveRead,
   type UnknownRecord,
 } from "./domainReads";
 
 export async function listDeployments(): Promise<Deployment[]> {
-  return liveListOrSeedNormalized("deployments.list", paths.deployments(), seed.deployments);
+  return strictLiveListNormalized("deployments.list", paths.deployments());
 }
 
 export async function getDeployment(id: string): Promise<Deployment | undefined> {
-  return liveDetailOrSeedNormalized("deployments.get", paths.deployment(id), seed.deployments.find((s) => s.id === id));
+  return strictLiveDetailNormalized("deployments.get", paths.deployment(id));
 }
 
 export async function getDeploymentStages(id: string): Promise<DeploymentStage[]> {
-  return liveDerivedListOrSeed(
+  return strictLiveRead(
     "deploymentStages.forDeployment",
-    paths.deployment(id),
-    seed.deploymentStages.filter((s) => s.deploymentId === id),
+    { method: "GET", path: paths.deployment(id) },
     (body) => {
       const detail = asRecord(liveDetailFrom<UnknownRecord>(body));
       return firstArray(
@@ -44,3 +42,4 @@ export const deployments = {
 export const deploymentStages = {
   forDeployment: getDeploymentStages,
 };
+

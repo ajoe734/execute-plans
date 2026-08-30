@@ -1,17 +1,17 @@
-import * as seed from "@/mocks/seed";
 import type { RankingFormula } from "./dto";
 import { paths } from "./paths";
-import { detailPath, liveDetailOrSeedNormalized, liveListOrSeedNormalized } from "./domainReads";
+import { detailPath, strictLiveDetailNormalized, strictLiveListNormalized } from "./domainReads";
 
 export async function listRankingFormulas(): Promise<RankingFormula[]> {
-  return liveListOrSeedNormalized("rankingFormulas.list", paths.rankingFormulas(), seed.rankingFormulas);
+  return strictLiveListNormalized("rankingFormulas.list", paths.rankingFormulas());
 }
 
 export async function getRankingFormula(id: string): Promise<RankingFormula | undefined> {
-  return liveDetailOrSeedNormalized("rankingFormulas.get", detailPath(paths.rankingFormulas(), id), seed.rankingFormulas.find((s) => s.id === id));
+  return strictLiveDetailNormalized("rankingFormulas.get", detailPath(paths.rankingFormulas(), id));
 }
 
 export const rankingFormulas = {
   list: listRankingFormulas,
   get: getRankingFormula,
 };
+

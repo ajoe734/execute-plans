@@ -1,8 +1,5 @@
-import {
-  withStrictLiveOrMock,
-  strictDataFrom,
-  strictNotFoundAsUndefined,
-} from "./liveTransport";
+import { strictDataFrom } from "./liveTransport";
+import { strictLiveRead } from "./domainReads";
 import type {
   ConsultRule,
   MemoryUpdate,
@@ -224,13 +221,9 @@ const readRecords = async <T>(
   surface: string,
   adapt: (record: UnknownRecord, index: number) => T | undefined,
 ): Promise<ManagementRecordsEnvelope<T>> =>
-  withStrictLiveOrMock<ManagementRecordsEnvelope<T>, unknown>(
+  strictLiveRead<ManagementRecordsEnvelope<T>>(
+    `managementConsoleReads.${surface}`,
     { method: "GET", path },
-    async () => ({
-      items: [],
-      meta: envelopeMeta(undefined, surface),
-      page_info: envelopePageInfo(undefined, 0),
-    }),
     (raw) => {
       const items = envelopeRecords(raw)
         .map(adapt)
@@ -620,9 +613,9 @@ export const managementConsoleReads = {
     readRecords(paths.mgmtConsultRules(), "consult_rules", adaptConsultRule),
 
   lineage: (rootId?: string): Promise<LineageRead> =>
-    withStrictLiveOrMock<LineageRead, unknown>(
+    strictLiveRead<LineageRead>(
+      "managementConsoleReads.lineage",
       { method: "GET", path: paths.lineage(rootId) },
-      async () => ({ nodes: [], edges: [], meta: envelopeMeta(undefined, "lineage") }),
       (raw) => {
         const root = asRecord(raw);
         const data = asRecord(root?.data);
@@ -639,9 +632,9 @@ export const managementConsoleReads = {
     readRecords(paths.workflowTemplates(), "workflows", adaptWorkflow),
 
   hookRegistry: (): Promise<HookRegistryRead> =>
-    withStrictLiveOrMock<HookRegistryRead, unknown>(
+    strictLiveRead<HookRegistryRead>(
+      "managementConsoleReads.hookRegistry",
       { method: "GET", path: paths.hookRegistry() },
-      async () => ({ crons: [], hooks: [], meta: envelopeMeta(undefined, "hooks") }),
       (raw) => {
         const root = asRecord(raw);
         const data = asRecord(root?.data);
@@ -684,11 +677,11 @@ function adaptOodaPacketDetail(body: unknown): OodaPacketDetail | undefined {
 }
 
 export function oodaPacketDetail(id: string): Promise<OodaPacketDetail | undefined> {
-  return withStrictLiveOrMock<OodaPacketDetail | undefined, unknown>(
+  return strictLiveRead<OodaPacketDetail | undefined>(
+    "managementConsoleReads.oodaPacket",
     { method: "GET", path: paths.oodaPacket(id) },
-    async () => undefined,
     adaptOodaPacketDetail,
-    strictNotFoundAsUndefined,
   );
 }
+
 

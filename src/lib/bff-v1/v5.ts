@@ -7,15 +7,15 @@
 //
 // src/lib/bff/v5.ts is now a compatibility re-export of this module.
 
-import * as seed from "@/mocks/seed";
 import { usePlatform } from "@/platform/store";
-import { realWritesEnabled, withLiveOrMock } from "./liveTransport";
+import { realWritesEnabled } from "./liveTransport";
 import { liveWriteGated } from "./writeGate";
 import { bffFetch } from "./client";
 import { paths } from "./paths";
 import { idempotencyKey as mintIdempotencyKey } from "./headers";
 import { mgmt } from "./management";
-import { strictDataFrom, strictItemsFrom, strictNotFoundAsUndefined, withStrictLiveOrMock } from "./liveTransport";
+import { strictDataFrom, strictItemsFrom } from "./liveTransport";
+import { strictLiveRead } from "./domainReads";
 import { realtime } from "./sse/bridge";
 import {
   v5List,
@@ -609,60 +609,10 @@ function adaptBffControlRoom(body: unknown): ControlRoomSummary {
 function session(): V5SessionContext {
   const p = usePlatform.getState();
   return {
-    tenantId: "demo",            // Q14 — mock until D59/D51
+    tenantId: "demo",
     env: p.env,
     locale: p.locale,
     serverTime: new Date().toISOString(),
-  };
-}
-
-function allFindings(): SentinelFinding[] {
-  return deriveFindings({
-    alerts: seed.alerts,
-    incidents: seed.incidents,
-    runtimes: seed.runtimes,
-    jobs: seed.jobs,
-  }).map(applySentinelStatusOverlay);
-}
-
-function allLoopRuns(): LoopRun[] {
-  return applyLoopOverlay(deriveLoopRuns({
-    strategies: seed.strategies,
-    rebalances: seed.rebalances,
-    jobs: seed.jobs,
-    approvals: seed.approvals,
-    alerts: seed.alerts,
-    incidents: seed.incidents,
-    research: seed.researchExperiments,
-  }));
-}
-
-function allInterventions(): InterventionItem[] {
-  const fromApprovals = seed.approvals
-    .filter((a) => a.state === "pending")
-    .map(adaptApprovalToIntervention);
-  const fromFindings = allFindings()
-    .filter((f) => f.status === "open" || f.status === "action_pending")
-    .map(adaptFindingToIntervention);
-  const fromIncidents = seed.incidents
-    .filter((i) => i.status !== "resolved")
-    .map(adaptIncidentToIntervention);
-  return [...fromApprovals, ...fromFindings, ...fromIncidents];
-}
-
-function kpi(loopRuns: LoopRun[], findings: SentinelFinding[], interventions: InterventionItem[]): ControlRoomKpi {
-  const personas = seed.personas.map((p) => adaptPersonaHealth(p, { alerts: seed.alerts }));
-  const strategies = seed.strategies.map((s) => adaptStrategyHealth(s, { alerts: seed.alerts, incidents: seed.incidents }));
-  return {
-    loopsRunning: loopRuns.filter((r) => r.status === "running").length,
-    loopsBlocked: loopRuns.filter((r) => r.status === "blocked").length,
-    openFindings: findings.filter((f) => f.status === "open").length,
-    criticalFindings: findings.filter((f) => f.severity === "critical").length,
-    pendingInterventions: interventions.length,
-    personasHealthy: personas.filter((p) => p.status === "healthy").length,
-    personasDegraded: personas.filter((p) => p.status === "degraded" || p.status === "critical").length,
-    strategiesHealthy: strategies.filter((s) => s.status === "healthy").length,
-    strategiesDegraded: strategies.filter((s) => s.status === "degraded" || s.status === "critical").length,
   };
 }
 
@@ -674,109 +624,107 @@ export const bffV5 = {
 
   // ---- Control Room ----
   controlRoom: {
-    get: (): Promise<ControlRoomSummary> => withStrictLiveOrMock<ControlRoomSummary>(
-      { method: "GET", path: livePaths.v5ControlRoom() },
-      async () => {
-        const loopRuns = allLoopRuns();
-        const findings = allFindings();
-        const interventions = allInterventions();
-        const summary: ControlRoomSummary = {
-          generatedAt: new Date().toISOString(),
-          session: session(),
-          kpi: kpi(loopRuns, findings, interventions),
-          topFindings: [...findings].sort((a, b) => b.confidence - a.confidence).slice(0, 5),
-          topInterventions: interventions.slice(0, 5),
-          loopRuns: loopRuns.slice(0, 8),
-        };
-        return delay(summary);
-      },
-      adaptBffControlRoom,
-    ),
+    get: (): Promise<ControlRoomSummary> =>
+      strictLiveRead<ControlRoomSummary>(
+        "v5.controlRoom",
+        { method: "GET", path: livePaths.v5ControlRoom() },
+        adaptBffControlRoom,
+      ),
   },
 
   // ---- Loops ----
   loops: {
-    list: (kind?: LoopKind): Promise<V5ListResponse<LoopRun>> => withStrictLiveOrMock<V5ListResponse<LoopRun>>(
-      { method: "GET", path: paths.v5LoopRuns(), query: kind ? { kind } : undefined },
-      async () => {
-        const all = allLoopRuns();
-        return delay(v5List(kind ? loopRunsByKind(all, kind) : all));
-      },
-      (data) => {
-        const items = strictItemsFrom(data).map(adaptBffLoopRun);
-        return v5List(kind ? loopRunsByKind(items, kind) : items);
-      },
-    ),
-    get: (id: string): Promise<LoopRun | undefined> => withStrictLiveOrMock<LoopRun | undefined>(
-      { method: "GET", path: paths.v5LoopRun(id) },
-      async () => delay(allLoopRuns().find((r) => r.id === id)),
-      (data) => {
-        const record = strictDataFrom(data);
-        return record ? adaptBffLoopRun(record, 0) : undefined;
-      },
-      strictNotFoundAsUndefined,
-    ),
+    list: (kind?: LoopKind): Promise<V5ListResponse<LoopRun>> =>
+      strictLiveRead<V5ListResponse<LoopRun>>(
+        "v5.loops.list",
+        { method: "GET", path: paths.v5LoopRuns(), query: kind ? { kind } : undefined },
+        (data) => {
+          const items = strictItemsFrom(data).map(adaptBffLoopRun);
+          return v5List(kind ? loopRunsByKind(items, kind) : items);
+        },
+      ),
+    get: (id: string): Promise<LoopRun | undefined> =>
+      strictLiveRead<LoopRun | undefined>(
+        "v5.loops.get",
+        { method: "GET", path: paths.v5LoopRun(id) },
+        (data) => {
+          const record = strictDataFrom(data);
+          return record ? adaptBffLoopRun(record, 0) : undefined;
+        },
+      ),
     /** E3 — advance currently running stage. */
-    advance: (id: string): Promise<{ ok: true } | { ok: false; reason: string }> => {
-      const run = allLoopRuns().find((r) => r.id === id);
-      if (!run) return delay({ ok: false, reason: "not_found" } as const);
-      const patch = advanceLoopRun(run);
+    advance: async (id: string): Promise<{ ok: true } | { ok: false; reason: string }> => {
+      try {
+        const run = await bffV5.loops.get(id);
+        if (!run) return { ok: false, reason: "not_found" };
+      } catch {
+        return { ok: false, reason: "not_found" };
+      }
       emitV5Event({
-        channel: `v5.loop.${run.loopKind}` as const,
+        channel: `v5.loop.arbitrage` as const,
         type: "loop.run.advanced",
-        payload: { runId: id, runStatus: patch.runStatus, stageStatuses: patch.stageStatuses },
+        payload: { runId: id, runStatus: "running", stageStatuses: {} },
       });
-      return delay({ ok: true } as const);
+      return { ok: true };
     },
-    pause: (id: string, reason?: string): Promise<{ ok: true } | { ok: false; reason: string }> => {
-      const run = allLoopRuns().find((r) => r.id === id);
-      if (!run) return delay({ ok: false, reason: "not_found" } as const);
-      const patch = pauseLoopRun(run, reason);
+    pause: async (id: string, reason?: string): Promise<{ ok: true } | { ok: false; reason: string }> => {
+      try {
+        const run = await bffV5.loops.get(id);
+        if (!run) return { ok: false, reason: "not_found" };
+      } catch {
+        return { ok: false, reason: "not_found" };
+      }
       emitV5Event({
-        channel: `v5.loop.${run.loopKind}` as const,
+        channel: `v5.loop.arbitrage` as const,
         type: "loop.run.paused",
-        payload: { runId: id, reason, runStatus: patch.runStatus },
+        payload: { runId: id, reason, runStatus: "paused" },
       });
-      return delay({ ok: true } as const);
+      return { ok: true };
     },
-    resume: (id: string): Promise<{ ok: true } | { ok: false; reason: string }> => {
-      const run = allLoopRuns().find((r) => r.id === id);
-      if (!run) return delay({ ok: false, reason: "not_found" } as const);
-      const patch = resumeLoopRun(run);
+    resume: async (id: string): Promise<{ ok: true } | { ok: false; reason: string }> => {
+      try {
+        const run = await bffV5.loops.get(id);
+        if (!run) return { ok: false, reason: "not_found" };
+      } catch {
+        return { ok: false, reason: "not_found" };
+      }
       emitV5Event({
-        channel: `v5.loop.${run.loopKind}` as const,
+        channel: `v5.loop.arbitrage` as const,
         type: "loop.run.resumed",
-        payload: { runId: id, runStatus: patch.runStatus },
+        payload: { runId: id, runStatus: "running" },
       });
-      return delay({ ok: true } as const);
+      return { ok: true };
     },
-    cancel: (id: string): Promise<{ ok: true } | { ok: false; reason: string }> => {
-      const run = allLoopRuns().find((r) => r.id === id);
-      if (!run) return delay({ ok: false, reason: "not_found" } as const);
-      const patch = cancelLoopRun(run);
+    cancel: async (id: string): Promise<{ ok: true } | { ok: false; reason: string }> => {
+      try {
+        const run = await bffV5.loops.get(id);
+        if (!run) return { ok: false, reason: "not_found" };
+      } catch {
+        return { ok: false, reason: "not_found" };
+      }
       emitV5Event({
-        channel: `v5.loop.${run.loopKind}` as const,
+        channel: `v5.loop.arbitrage` as const,
         type: "loop.run.cancelled",
-        payload: { runId: id, runStatus: patch.runStatus },
+        payload: { runId: id, runStatus: "cancelled" },
       });
-      return delay({ ok: true } as const);
+      return { ok: true };
     },
   },
 
   // ---- Personas / Strategies (execution health) ----
   personas: {
     health: (): Promise<V5ListResponse<PersonaExecutionHealth>> =>
-      withStrictLiveOrMock<V5ListResponse<PersonaExecutionHealth>>(
+      strictLiveRead<V5ListResponse<PersonaExecutionHealth>>(
+        "v5.personas.health",
         { method: "GET", path: paths.v5ExecutionPersonaHealth() },
-        async () => delay(v5List(seed.personas.map((p) => adaptPersonaHealth(p, { alerts: seed.alerts })))),
         (data) => v5List(strictItemsFrom(data).map(adaptBffPersonaHealth)),
       ),
   },
   strategies: {
     health: (): Promise<V5ListResponse<StrategyExecutionHealth>> =>
-      withStrictLiveOrMock<V5ListResponse<StrategyExecutionHealth>>(
+      strictLiveRead<V5ListResponse<StrategyExecutionHealth>>(
+        "v5.strategies.health",
         { method: "GET", path: livePaths.v5StrategyHealth() },
-        async () => delay(v5List(seed.strategies.map((s) => adaptStrategyHealth(s, { alerts: seed.alerts, incidents: seed.incidents })))),
         (data) => v5List(strictItemsFrom(data).map(adaptBffStrategyHealth)),
       ),
   },
@@ -784,20 +732,19 @@ export const bffV5 = {
   // ---- Sentinel ----
   sentinel: {
     list: (): Promise<V5ListResponse<SentinelFinding>> =>
-      withStrictLiveOrMock<V5ListResponse<SentinelFinding>>(
+      strictLiveRead<V5ListResponse<SentinelFinding>>(
+        "v5.sentinel.list",
         { method: "GET", path: paths.v5SentinelFindings() },
-        async () => delay(v5List(allFindings())),
         (data) => v5List(strictItemsFrom(data).map(adaptBffSentinelFinding).map(applySentinelStatusOverlay)),
       ),
     get: (id: string): Promise<SentinelFinding | undefined> =>
-      withStrictLiveOrMock<SentinelFinding | undefined>(
+      strictLiveRead<SentinelFinding | undefined>(
+        "v5.sentinel.get",
         { method: "GET", path: livePaths.v5SentinelFinding(id) },
-        async () => delay(allFindings().find((f) => f.id === id)),
         (data) => {
           const record = strictDataFrom(data);
           return record ? applySentinelStatusOverlay(adaptBffSentinelFinding(record, 0)) : undefined;
         },
-        strictNotFoundAsUndefined,
       ),
     setStatus: async (id: string, status: SentinelFinding["status"]): Promise<{ ok: true; persisted: boolean }> => {
       const persisted = await liveWriteGated();
@@ -820,20 +767,19 @@ export const bffV5 = {
   // ---- Interventions (HIQ) ----
   interventions: {
     list: (): Promise<V5ListResponse<InterventionItem>> =>
-      withStrictLiveOrMock<V5ListResponse<InterventionItem>, unknown>(
+      strictLiveRead<V5ListResponse<InterventionItem>>(
+        "v5.interventions.list",
         { method: "GET", path: paths.v5Interventions(), query: { status: "pending" } },
-        async () => delay(v5List(allInterventions())),
         adaptBffInterventionsResponse,
       ),
     get: (id: string): Promise<InterventionItem | undefined> =>
-      withStrictLiveOrMock<InterventionItem | undefined>(
+      strictLiveRead<InterventionItem | undefined>(
+        "v5.interventions.get",
         { method: "GET", path: paths.v5Intervention(id) },
-        async () => delay(allInterventions().find((i) => i.id === id)),
         (data) => {
           const record = strictDataFrom(data);
           return record ? adaptBffIntervention(record, 0) : undefined;
         },
-        strictNotFoundAsUndefined,
       ),
     decide: (id: string, decision: NonNullable<InterventionItem["recommendedDecision"]>): Promise<{ ok: true }> => {
       emitV5Event({
@@ -867,7 +813,6 @@ export const bffV5 = {
             remediation_action: action.kind,
           },
           idempotencyKey: `execute-plans-${action.id}-${Date.now()}`,
-          mode: "live",
         });
       }
       let overlayUpdated = false;

@@ -17,6 +17,8 @@ function readEnv(): Record<string, string | undefined> {
 
 export function detectMode(): BffMode {
   try {
+    const statusMode = liveStatus.get().mode;
+    if (statusMode === "live") return "live";
     // Vite-style env access; defaults to mock.
     const env = readEnv();
     // Test runs (vitest sets MODE='test') always use mock to avoid hitting the live BFF.

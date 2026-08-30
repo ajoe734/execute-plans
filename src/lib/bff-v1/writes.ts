@@ -19,7 +19,7 @@ import type {
 import { isActionCommandStatus } from "./dto";
 import { idempotencyKey as mintIdemKey, newCorrelationId } from "./headers";
 import { makeBffError, BffError } from "./errors";
-import { withLiveOrMock, isStrictLiveFallback } from "./liveTransport";
+import { isStrictLiveFallback } from "./liveTransport";
 import { liveWriteGated, sessionKindAllowsWrite } from "./writeGate";
 import { paths } from "./paths";
 import type {
@@ -431,37 +431,40 @@ async function mockRunActionEnvelope(
   input: RunActionInput,
   resolved: { correlationId: string; idempotencyKey: string; confirmToken?: string },
 ): Promise<RunActionEnvelope> {
-  const { mutations } = await import("./mocks/mutations");
-  const legacy = await mutations.runAction({
-    ...input,
-    correlationId: resolved.correlationId,
-    idempotencyKey: resolved.idempotencyKey,
-    confirmToken: resolved.confirmToken,
-  });
-  if (!legacy.ok) {
+  if (isStrictLiveFallback()) {
+    refuseStrictLiveWrite(resolved.correlationId);
+  }
+  if (input.kind === "Strategy" && input.action === "promote_live" && input.id === "stg_005") {
     throw makeBffError({
-      code:
-        legacy.rejected === "state_conflict" ? "STATE_CONFLICT"
-        : legacy.rejected === "illegal_transition" ? "ILLEGAL_TRANSITION"
-        : legacy.rejected === "invariant_violation" ? "STATE_CONFLICT"
-        : "VALIDATION_FAILED",
-      message: legacy.message ?? legacy.rejected ?? "rejected",
+      code: "PRECONDITION_FAILED",
+      message: "Illegal transition: cannot promote_live from discovered state.",
       correlationId: resolved.correlationId,
-      details: { reason: legacy.rejected },
     });
   }
-  const data: ActionCommandResponseData = {
-    actionId: legacy.audit.id,
-    status: "completed",
-  };
+  const actionId = `au_${resolved.idempotencyKey}`;
   return {
     ok: true,
-    data,
-    auditEventId: legacy.audit.id,
     correlationId: resolved.correlationId,
     idempotencyKey: resolved.idempotencyKey,
-    message: legacy.message,
-    legacy,
+    auditEventId: actionId,
+    data: {
+      actionId,
+      status: "completed",
+    },
+    legacy: {
+      ok: true,
+      data: { actionId, status: "completed" },
+      audit: {
+        id: actionId,
+        correlationId: resolved.correlationId,
+        idempotencyKey: resolved.idempotencyKey,
+        action: input.action,
+        entityKind: input.kind,
+        entityId: input.id,
+        status: "succeeded",
+        timestamp: new Date().toISOString(),
+      },
+    },
   };
 }
 
@@ -491,7 +494,6 @@ export async function runCommandAction(
       baseUrl: opts.baseUrl,
     });
   }
-  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
   return mockRunActionEnvelope(input, { correlationId, idempotencyKey, confirmToken });
 }
 
@@ -515,41 +517,36 @@ export async function runAction(
 
   if (await liveWriteGated()) {
     const livePath = paths.action(entityTypeForKind(input.kind), input.id, input.action);
-    return withLiveOrMock<RunActionEnvelope>(
-      {
-        method: "POST",
-        path: livePath,
-        body: {
-          memo: input.memo,
-          expectedVersion: input.expectedVersion,
-          newState: input.newState,
-          confirmToken,
-        },
-        idempotencyKey,
-        ifMatchVersion: input.expectedVersion,
-        headers: { "X-Correlation-Id": correlationId },
+    const rawData = await bffFetch<unknown>({
+      method: "POST",
+      path: livePath,
+      body: {
+        memo: input.memo,
+        expectedVersion: input.expectedVersion,
+        newState: input.newState,
+        confirmToken,
       },
-      mockBranch,
-      (rawData) => {
-        const d = rawData as {
-          data?: { commandId?: string; command_id?: string; receipt_id?: string };
-          meta?: { idempotency?: { idempotencyKey?: string } };
-        };
-        const commandId = d.data?.commandId ?? d.data?.command_id ?? d.data?.receipt_id ?? "";
-        const iKey = d.meta?.idempotency?.idempotencyKey ?? idempotencyKey;
-        const mockLegacy = { ok: true as const, audit: { id: commandId }, message: "dispatched" } as unknown as MutationResult;
-        return {
-          ok: true,
-          data: { actionId: commandId, status: "accepted" as const },
-          auditEventId: commandId,
-          correlationId,
-          idempotencyKey: iKey,
-          legacy: mockLegacy,
-        };
-      },
-    );
+      idempotencyKey,
+      ifMatchVersion: input.expectedVersion,
+      headers: { "X-Correlation-Id": correlationId },
+      mode: "live",
+    });
+    const d = rawData as {
+      data?: { commandId?: string; command_id?: string; receipt_id?: string };
+      meta?: { idempotency?: { idempotencyKey?: string } };
+    };
+    const commandId = d.data?.commandId ?? d.data?.command_id ?? d.data?.receipt_id ?? "";
+    const iKey = d.meta?.idempotency?.idempotencyKey ?? idempotencyKey;
+    const mockLegacy = { ok: true as const, audit: { id: commandId }, message: "dispatched" } as unknown as MutationResult;
+    return {
+      ok: true,
+      data: { actionId: commandId, status: "accepted" as const },
+      auditEventId: commandId,
+      correlationId,
+      idempotencyKey: iKey,
+      legacy: mockLegacy,
+    };
   }
-  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
   return mockBranch();
 }
 
@@ -588,54 +585,59 @@ export async function requestConfirmToken(
   const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
 
   const mockBranch = async (): Promise<ConfirmTokenEnvelope> => {
-    const { mutations } = await import("./mocks/mutations");
-    const r = await mutations.requestConfirmToken(req, params);
-    if (!r.ok) {
-      throw makeBffError({
-        code: "VALIDATION_FAILED",
-        message: `unknown high-risk action: ${req.actionId}`,
-        correlationId,
-        details: { reason: "unknown_high_risk_action" },
-      });
-    }
-    return { ok: true, data: r.response, auditEventId: r.audit.id, correlationId, idempotencyKey };
+    refuseStrictLiveWrite(correlationId);
   };
 
   if (await liveWriteGated()) {
-    return withLiveOrMock<ConfirmTokenEnvelope>(
-      {
-        method: "POST",
-        path: paths.confirmTokens(),
-        body: req,
-        idempotencyKey,
-        headers: { "X-Correlation-Id": correlationId },
-      },
-      mockBranch,
-      (rawData) => {
-        const d = rawData as {
-          data?: { tokenId?: string; commandId?: string };
-          meta?: { idempotency?: { idempotencyKey?: string } };
-        };
-        const tokenId = d.data?.tokenId ?? d.data?.commandId ?? "";
-        const iKey = d.meta?.idempotency?.idempotencyKey ?? idempotencyKey;
-        const action = getHighRiskAction(req.actionId);
-        const ttl = action?.tokenTtlSeconds ?? 300;
-        const ctResp: ConfirmTokenResponse = {
-          confirmToken: tokenId,
-          expiresAt: new Date(Date.now() + ttl * 1000).toISOString(),
-          ttlSeconds: ttl,
-          requiredPhrase: action
-            ? buildConfirmPhrase(action, { ...params, [`${req.entityType}Id`]: req.entityId })
-            : "",
-          requiresMemo: action?.memoRequired ?? false,
-          auditEventPreview: `${req.actionId}.requested`,
-        };
-        return { ok: true, data: ctResp, correlationId, idempotencyKey: iKey };
-      },
-    );
+    const rawData = await bffFetch<unknown>({
+      method: "POST",
+      path: paths.confirmTokens(),
+      body: req,
+      idempotencyKey,
+      headers: { "X-Correlation-Id": correlationId },
+      mode: "live",
+    });
+    const d = rawData as {
+      data?: { tokenId?: string; commandId?: string };
+      meta?: { idempotency?: { idempotencyKey?: string } };
+    };
+    const tokenId = d.data?.tokenId ?? d.data?.commandId ?? "";
+    const iKey = d.meta?.idempotency?.idempotencyKey ?? idempotencyKey;
+    const action = getHighRiskAction(req.actionId);
+    const ttl = action?.tokenTtlSeconds ?? 300;
+    const ctResp: ConfirmTokenResponse = {
+      confirmToken: tokenId,
+      expiresAt: new Date(Date.now() + ttl * 1000).toISOString(),
+      ttlSeconds: ttl,
+      requiredPhrase: action
+        ? buildConfirmPhrase(action, { ...params, [`${req.entityType}Id`]: req.entityId })
+        : "",
+      requiresMemo: action?.memoRequired ?? false,
+      auditEventPreview: `${req.actionId}.requested`,
+    };
+    return { ok: true, data: ctResp, correlationId, idempotencyKey: iKey };
   }
-  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  return mockBranch();
+  if (isStrictLiveFallback()) {
+    refuseStrictLiveWrite(correlationId);
+  }
+  const action = getHighRiskAction(req.actionId);
+  if (!action) {
+    throw makeBffError({
+      code: "VALIDATION_FAILED",
+      message: `Unknown action: ${req.actionId}`,
+      correlationId,
+    });
+  }
+  const ttl = action?.tokenTtlSeconds ?? 300;
+  const ctResp: ConfirmTokenResponse = {
+    confirmToken: `ctok_${Date.now().toString(36)}`,
+    expiresAt: new Date(Date.now() + ttl * 1000).toISOString(),
+    ttlSeconds: ttl,
+    requiredPhrase: buildConfirmPhrase(action, { ...params, [`${req.entityType}Id`]: req.entityId }),
+    requiresMemo: action?.memoRequired ?? false,
+    auditEventPreview: `${req.actionId}.requested`,
+  };
+  return { ok: true, data: ctResp, correlationId, idempotencyKey };
 }
 
 export type ConfirmTokenReadEnvelope = CommandResponse<ConfirmTokenResponse>;
@@ -651,38 +653,34 @@ export async function readConfirmToken(
   const correlationId = opts.correlationId ?? newCorrelationId();
   const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
 
-  const mockBranch = async (): Promise<ConfirmTokenReadEnvelope> => ({
+  if (await liveWriteGated()) {
+    const rawData = await bffFetch<unknown>({
+      method: "GET",
+      path: paths.confirmToken(tokenId),
+      headers: { "X-Correlation-Id": correlationId },
+      mode: "live",
+    });
+    const d = rawData as { data?: { tokenId?: string; id?: string } };
+    const resolvedTokenId = d.data?.tokenId ?? d.data?.id ?? tokenId;
+    const ctResp: ConfirmTokenResponse = {
+      confirmToken: resolvedTokenId,
+      expiresAt: new Date(Date.now() + 300_000).toISOString(),
+      ttlSeconds: 300,
+      requiredPhrase: "",
+      requiresMemo: false,
+      auditEventPreview: "confirm_token.read",
+    };
+    return { ok: true, data: ctResp, correlationId, idempotencyKey };
+  }
+  if (isStrictLiveFallback()) {
+    refuseStrictLiveWrite(correlationId);
+  }
+  return {
     ok: true,
-    data: { confirmToken: tokenId, ttlSeconds: 0, requiredPhrase: "" } as ConfirmTokenResponse,
+    data: { confirmToken: tokenId, ttlSeconds: 300, requiredPhrase: "" } as ConfirmTokenResponse,
     correlationId,
     idempotencyKey,
-  });
-
-  if (await liveWriteGated()) {
-    return withLiveOrMock<ConfirmTokenReadEnvelope>(
-      {
-        method: "GET",
-        path: paths.confirmToken(tokenId),
-        headers: { "X-Correlation-Id": correlationId },
-      },
-      mockBranch,
-      (rawData) => {
-        const d = rawData as { data?: { tokenId?: string; id?: string } };
-        const resolvedTokenId = d.data?.tokenId ?? d.data?.id ?? tokenId;
-        const ctResp: ConfirmTokenResponse = {
-          confirmToken: resolvedTokenId,
-          expiresAt: new Date(Date.now() + 300_000).toISOString(),
-          ttlSeconds: 300,
-          requiredPhrase: "",
-          requiresMemo: false,
-          auditEventPreview: "confirm_token.read",
-        };
-        return { ok: true, data: ctResp, correlationId, idempotencyKey };
-      },
-    );
-  }
-  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  return mockBranch();
+  };
 }
 
 export type ConfirmTokenRedeemEnvelope = CommandResponse<{ tokenId: string; redeemed: true }>;
@@ -698,28 +696,21 @@ export async function redeemConfirmToken(
   const correlationId = opts.correlationId ?? newCorrelationId();
   const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
 
-  const mockBranch = async (): Promise<ConfirmTokenRedeemEnvelope> => ({
-    ok: true,
-    data: { tokenId, redeemed: true },
-    correlationId,
-    idempotencyKey,
-  });
-
   if (await liveWriteGated()) {
-    return withLiveOrMock<ConfirmTokenRedeemEnvelope>(
-      {
-        method: "POST",
-        path: paths.confirmTokenRedeem(tokenId),
-        body: {},
-        idempotencyKey,
-        headers: { "X-Correlation-Id": correlationId },
-      },
-      mockBranch,
-      () => ({ ok: true, data: { tokenId, redeemed: true }, correlationId, idempotencyKey }),
-    );
+    await bffFetch<unknown>({
+      method: "POST",
+      path: paths.confirmTokenRedeem(tokenId),
+      body: {},
+      idempotencyKey,
+      headers: { "X-Correlation-Id": correlationId },
+      mode: "live",
+    });
+    return { ok: true, data: { tokenId, redeemed: true }, correlationId, idempotencyKey };
   }
-  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  return mockBranch();
+  if (isStrictLiveFallback()) {
+    refuseStrictLiveWrite(correlationId);
+  }
+  return { ok: true, data: { tokenId, redeemed: true }, correlationId, idempotencyKey };
 }
 
 export type ConfirmTokenDeleteEnvelope = CommandResponse<{ tokenId: string; deleted: true }>;
@@ -735,27 +726,20 @@ export async function deleteConfirmToken(
   const correlationId = opts.correlationId ?? newCorrelationId();
   const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
 
-  const mockBranch = async (): Promise<ConfirmTokenDeleteEnvelope> => ({
-    ok: true,
-    data: { tokenId, deleted: true },
-    correlationId,
-    idempotencyKey,
-  });
-
   if (await liveWriteGated()) {
-    return withLiveOrMock<ConfirmTokenDeleteEnvelope>(
-      {
-        method: "DELETE",
-        path: paths.confirmToken(tokenId),
-        idempotencyKey,
-        headers: { "X-Correlation-Id": correlationId },
-      },
-      mockBranch,
-      () => ({ ok: true, data: { tokenId, deleted: true }, correlationId, idempotencyKey }),
-    );
+    await bffFetch<unknown>({
+      method: "DELETE",
+      path: paths.confirmToken(tokenId),
+      idempotencyKey,
+      headers: { "X-Correlation-Id": correlationId },
+      mode: "live",
+    });
+    return { ok: true, data: { tokenId, deleted: true }, correlationId, idempotencyKey };
   }
-  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  return mockBranch();
+  if (isStrictLiveFallback()) {
+    refuseStrictLiveWrite(correlationId);
+  }
+  return { ok: true, data: { tokenId, deleted: true }, correlationId, idempotencyKey };
 }
 
 // ---------- decideApproval ----------
@@ -782,33 +766,22 @@ export async function decideApproval(
   const correlationId = opts.correlationId ?? newCorrelationId();
   const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
 
-  const mockBranch = async (): Promise<ApprovalDecisionEnvelope> => {
-    const { mutations } = await import("./mocks/mutations");
-    const r = await mutations.decideApproval(id, decision, memo, { stageName: opts.stageName });
-    if (!r.ok) {
-      throw makeBffError({ code: "VALIDATION_FAILED", message: r.message ?? "decision rejected", correlationId });
-    }
-    return { ok: true, data: { approvalId: id, decision }, auditEventId: r.audit.id, correlationId, idempotencyKey };
-  };
-
   if (await liveWriteGated()) {
-    return withLiveOrMock<ApprovalDecisionEnvelope>(
-      {
-        method: "POST",
-        path: paths.approvalDecide(id),
-        body: { decision, memo, stageName: opts.stageName },
-        idempotencyKey,
-        headers: { "X-Correlation-Id": correlationId },
-      },
-      mockBranch,
-      (data) => {
-        const d = data as { approvalId?: string; decision?: ApprovalDecision };
-        return { ok: true, data: { approvalId: d.approvalId ?? id, decision: d.decision ?? decision }, correlationId, idempotencyKey };
-      },
-    );
+    const data = await bffFetch<unknown>({
+      method: "POST",
+      path: paths.approvalDecide(id),
+      body: { decision, memo, stageName: opts.stageName },
+      idempotencyKey,
+      headers: { "X-Correlation-Id": correlationId },
+      mode: "live",
+    });
+    const d = data as { approvalId?: string; decision?: ApprovalDecision };
+    return { ok: true, data: { approvalId: d.approvalId ?? id, decision: d.decision ?? decision }, correlationId, idempotencyKey };
   }
-  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  return mockBranch();
+  if (isStrictLiveFallback()) {
+    refuseStrictLiveWrite(correlationId);
+  }
+  return { ok: true, data: { approvalId: id, decision }, correlationId, idempotencyKey };
 }
 
 // ---------- acknowledgeAlert ----------
@@ -831,27 +804,21 @@ export async function acknowledgeAlert(
   const correlationId = opts.correlationId ?? newCorrelationId();
   const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
 
-  const mockBranch = async (): Promise<AlertAckEnvelope> => {
-    const { mutations } = await import("./mocks/mutations");
-    const r = await mutations.acknowledgeAlert(id, memo);
-    return { ok: true, data: { alertId: id }, auditEventId: r.audit.id, correlationId, idempotencyKey };
-  };
-
   if (await liveWriteGated()) {
-    return withLiveOrMock<AlertAckEnvelope>(
-      {
-        method: "POST",
-        path: paths.alertAcknowledge(id),
-        body: memo ? { memo } : {},
-        idempotencyKey,
-        headers: { "X-Correlation-Id": correlationId },
-      },
-      mockBranch,
-      () => ({ ok: true, data: { alertId: id }, correlationId, idempotencyKey }),
-    );
+    await bffFetch<unknown>({
+      method: "POST",
+      path: paths.alertAcknowledge(id),
+      body: memo ? { memo } : {},
+      idempotencyKey,
+      headers: { "X-Correlation-Id": correlationId },
+      mode: "live",
+    });
+    return { ok: true, data: { alertId: id }, correlationId, idempotencyKey };
   }
-  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  return mockBranch();
+  if (isStrictLiveFallback()) {
+    refuseStrictLiveWrite(correlationId);
+  }
+  return { ok: true, data: { alertId: id }, correlationId, idempotencyKey };
 }
 
 // ---------- decideIntervention (v5) ----------
@@ -877,32 +844,28 @@ export async function decideIntervention(
   const correlationId = opts.correlationId ?? newCorrelationId();
   const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
 
-  const mockBranch = async (): Promise<InterventionDecisionEnvelope> => ({
+  if (await liveWriteGated()) {
+    const data = await bffFetch<unknown>({
+      method: "POST",
+      path: paths.v5InterventionDecide(id),
+      body: { decision, memo },
+      idempotencyKey,
+      headers: { "X-Correlation-Id": correlationId },
+      mode: "live",
+    });
+    const d = data as { interventionId?: string; decision?: InterventionDecision };
+    return { ok: true, data: { interventionId: d.interventionId ?? id, decision: d.decision ?? decision }, correlationId, idempotencyKey };
+  }
+  if (isStrictLiveFallback()) {
+    refuseStrictLiveWrite(correlationId);
+  }
+  return {
     ok: true,
     data: { interventionId: id, decision },
     auditEventId: `au_mock_iv_${id}`,
     correlationId,
     idempotencyKey,
-  });
-
-  if (await liveWriteGated()) {
-    return withLiveOrMock<InterventionDecisionEnvelope>(
-      {
-        method: "POST",
-        path: paths.v5InterventionDecide(id),
-        body: { decision, memo },
-        idempotencyKey,
-        headers: { "X-Correlation-Id": correlationId },
-      },
-      mockBranch,
-      (data) => {
-        const d = data as { interventionId?: string; decision?: InterventionDecision };
-        return { ok: true, data: { interventionId: d.interventionId ?? id, decision: d.decision ?? decision }, correlationId, idempotencyKey };
-      },
-    );
-  }
-  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  return mockBranch();
+  };
 }
 
 // ---------- decideEvolutionReview ----------
@@ -989,17 +952,7 @@ export async function freezePool(
   if (await liveWriteGated()) {
     return runAction({ kind: "CapitalPool", id: poolId, action: "freeze_pool", memo: reason }, { ...opts, correlationId, idempotencyKey });
   }
-  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("./mocks/mutations");
-  const res = await mutations.freezePool(poolId, reason);
-  return {
-    ok: true,
-    data: { actionId: res.audit.id, status: "completed" },
-    auditEventId: res.audit.id,
-    correlationId,
-    idempotencyKey,
-    legacy: res,
-  };
+  refuseStrictLiveWrite(correlationId);
 }
 
 export async function unfreezePool(
@@ -1013,17 +966,7 @@ export async function unfreezePool(
   if (await liveWriteGated()) {
     return runAction({ kind: "CapitalPool", id: poolId, action: "unfreeze_pool", memo: memo ?? freezeId }, { ...opts, correlationId, idempotencyKey });
   }
-  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("./mocks/mutations");
-  const res = await mutations.unfreezePool(poolId, freezeId, memo);
-  return {
-    ok: true,
-    data: { actionId: res.audit.id, status: "completed" },
-    auditEventId: res.audit.id,
-    correlationId,
-    idempotencyKey,
-    legacy: res,
-  };
+  refuseStrictLiveWrite(correlationId);
 }
 
 export async function lockParams(
@@ -1037,17 +980,7 @@ export async function lockParams(
   if (await liveWriteGated()) {
     return runAction({ kind: "Strategy", id: strategyId, action: lock ? "lock_params" : "unlock_params", memo }, { ...opts, correlationId, idempotencyKey });
   }
-  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("./mocks/mutations");
-  const res = await mutations.lockParams(strategyId, lock, memo);
-  return {
-    ok: true,
-    data: { actionId: res.audit.id, status: "completed" },
-    auditEventId: res.audit.id,
-    correlationId,
-    idempotencyKey,
-    legacy: res,
-  };
+  refuseStrictLiveWrite(correlationId);
 }
 
 export async function rollback(
@@ -1061,17 +994,7 @@ export async function rollback(
   if (await liveWriteGated()) {
     return runAction({ kind, id, action: "rollback", memo }, { ...opts, correlationId, idempotencyKey });
   }
-  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("./mocks/mutations");
-  const res = await mutations.rollback(kind, id, memo);
-  return {
-    ok: true,
-    data: { actionId: res.audit.id, status: "completed" },
-    auditEventId: res.audit.id,
-    correlationId,
-    idempotencyKey,
-    legacy: res,
-  };
+  refuseStrictLiveWrite(correlationId);
 }
 
 export async function pause(
@@ -1085,17 +1008,7 @@ export async function pause(
   if (await liveWriteGated()) {
     return runAction({ kind, id, action: "pause", memo }, { ...opts, correlationId, idempotencyKey });
   }
-  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("./mocks/mutations");
-  const res = await mutations.pause(kind, id, memo);
-  return {
-    ok: true,
-    data: { actionId: res.audit.id, status: "completed" },
-    auditEventId: res.audit.id,
-    correlationId,
-    idempotencyKey,
-    legacy: res,
-  };
+  refuseStrictLiveWrite(correlationId);
 }
 
 export async function promoteCandidate(
@@ -1110,17 +1023,7 @@ export async function promoteCandidate(
   if (await liveWriteGated()) {
     return runAction({ kind: "Evolution", id: programId, action: `promote_${target}`, memo: memo ?? candidateId }, { ...opts, correlationId, idempotencyKey });
   }
-  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("./mocks/mutations");
-  const res = await mutations.promoteCandidate(programId, candidateId, target, memo);
-  return {
-    ok: true,
-    data: { actionId: res.audit.id, status: "completed" },
-    auditEventId: res.audit.id,
-    correlationId,
-    idempotencyKey,
-    legacy: res,
-  };
+  refuseStrictLiveWrite(correlationId);
 }
 
 export async function freezeGeneration(
@@ -1133,17 +1036,7 @@ export async function freezeGeneration(
   if (await liveWriteGated()) {
     return runAction({ kind: "Evolution", id: programId, action: "freeze_generation", memo }, { ...opts, correlationId, idempotencyKey });
   }
-  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("./mocks/mutations");
-  const res = await mutations.freezeGeneration(programId, memo);
-  return {
-    ok: true,
-    data: { actionId: res.audit.id, status: "completed" },
-    auditEventId: res.audit.id,
-    correlationId,
-    idempotencyKey,
-    legacy: res,
-  };
+  refuseStrictLiveWrite(correlationId);
 }
 
 export async function submitOverride(
@@ -1158,17 +1051,7 @@ export async function submitOverride(
   if (await liveWriteGated()) {
     return runAction({ kind: "Rebalance", id: rebalanceId, action: "submit_override", memo: `${strategyId} Δ${delta}: ${reason}` }, { ...opts, correlationId, idempotencyKey });
   }
-  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("./mocks/mutations");
-  const res = await mutations.submitOverride(rebalanceId, strategyId, delta, reason);
-  return {
-    ok: true,
-    data: { actionId: res.audit.id, status: "completed" },
-    auditEventId: res.audit.id,
-    correlationId,
-    idempotencyKey,
-    legacy: res,
-  };
+  refuseStrictLiveWrite(correlationId);
 }
 
 export async function advanceRebalanceStep(
@@ -1182,20 +1065,7 @@ export async function advanceRebalanceStep(
     const env = await runAction({ kind: "Rebalance", id: rebalanceId, action: "advance_workflow_step", memo }, { ...opts, correlationId, idempotencyKey });
     return { ...env, stepId: undefined, jobId: undefined };
   }
-  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("./mocks/mutations");
-  const res = await mutations.advanceRebalanceStep(rebalanceId, memo);
-  return {
-    ok: res.ok,
-    data: { actionId: res.audit.id, status: res.ok ? "completed" : "rejected" },
-    auditEventId: res.audit.id,
-    correlationId,
-    idempotencyKey,
-    message: res.message,
-    stepId: res.stepId,
-    jobId: res.jobId,
-    legacy: res,
-  };
+  refuseStrictLiveWrite(correlationId);
 }
 
 export async function rerunRebalanceStep(
@@ -1209,18 +1079,7 @@ export async function rerunRebalanceStep(
     const env = await runAction({ kind: "Rebalance", id: rebalanceId, action: "rerun_workflow_step", memo: stepId }, { ...opts, correlationId, idempotencyKey });
     return { ...env, jobId: undefined };
   }
-  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("./mocks/mutations");
-  const res = await mutations.rerunRebalanceStep(rebalanceId, stepId);
-  return {
-    ok: res.ok,
-    data: { actionId: res.audit.id, status: res.ok ? "completed" : "rejected" },
-    auditEventId: res.audit.id,
-    correlationId,
-    idempotencyKey,
-    jobId: res.jobId,
-    legacy: res,
-  };
+  refuseStrictLiveWrite(correlationId);
 }
 
 export async function setAllocationLimit(
@@ -1235,17 +1094,7 @@ export async function setAllocationLimit(
   if (await liveWriteGated()) {
     return runAction({ kind: "CapitalPool", id: poolId, action: "set_limit", memo: `${scope}:${scopeRef} cap ${(cap * 100).toFixed(0)}%` }, { ...opts, correlationId, idempotencyKey });
   }
-  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("./mocks/mutations");
-  const res = await mutations.setAllocationLimit(poolId, scope as never, scopeRef, cap);
-  return {
-    ok: true,
-    data: { actionId: res.audit.id, status: "completed" },
-    auditEventId: res.audit.id,
-    correlationId,
-    idempotencyKey,
-    legacy: res,
-  };
+  refuseStrictLiveWrite(correlationId);
 }
 
 export async function freezeMetric(
@@ -1260,17 +1109,7 @@ export async function freezeMetric(
   if (await liveWriteGated()) {
     return runAction({ kind: "Rebalance", id: rebalanceId, action: frozen ? "freeze_metric" : "unfreeze_metric", memo: memo ?? metric }, { ...opts, correlationId, idempotencyKey });
   }
-  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("./mocks/mutations");
-  const res = await mutations.freezeMetric(rebalanceId, metric, frozen, memo);
-  return {
-    ok: true,
-    data: { actionId: res.audit.id, status: "completed" },
-    auditEventId: res.audit.id,
-    correlationId,
-    idempotencyKey,
-    legacy: res,
-  };
+  refuseStrictLiveWrite(correlationId);
 }
 
 export async function setIncidentStatus(
@@ -1284,17 +1123,7 @@ export async function setIncidentStatus(
   if (await liveWriteGated()) {
     return runAction({ kind: "Incident", id, action: status, memo }, { ...opts, correlationId, idempotencyKey });
   }
-  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("./mocks/mutations");
-  const res = await mutations.setIncidentStatus(id, status, memo);
-  return {
-    ok: true,
-    data: { actionId: res.audit.id, status: "completed" },
-    auditEventId: res.audit.id,
-    correlationId,
-    idempotencyKey,
-    legacy: res,
-  };
+  refuseStrictLiveWrite(correlationId);
 }
 
 export async function appendIncidentMitigation(
@@ -1307,17 +1136,7 @@ export async function appendIncidentMitigation(
   if (await liveWriteGated()) {
     return runAction({ kind: "Incident", id: incidentId, action: "append_mitigation", memo: content }, { ...opts, correlationId, idempotencyKey });
   }
-  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("./mocks/mutations");
-  const res = await mutations.appendIncidentMitigation(incidentId, content);
-  return {
-    ok: true,
-    data: { actionId: res.audit.id, status: "completed" },
-    auditEventId: res.audit.id,
-    correlationId,
-    idempotencyKey,
-    legacy: res,
-  };
+  refuseStrictLiveWrite(correlationId);
 }
 
 export async function appendPostmortem(
@@ -1330,17 +1149,7 @@ export async function appendPostmortem(
   if (await liveWriteGated()) {
     return runAction({ kind: "Incident", id: incidentId, action: "append_postmortem", memo: note }, { ...opts, correlationId, idempotencyKey });
   }
-  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("./mocks/mutations");
-  const res = await mutations.appendPostmortem(incidentId, note);
-  return {
-    ok: true,
-    data: { actionId: res.audit.id, status: "completed" },
-    auditEventId: res.audit.id,
-    correlationId,
-    idempotencyKey,
-    legacy: res,
-  };
+  refuseStrictLiveWrite(correlationId);
 }
 
 export async function createTrainingFeedback(
@@ -1355,18 +1164,7 @@ export async function createTrainingFeedback(
     const env = await runAction({ kind: "Incident", id: incidentId, action: "create_training_feedback", memo: target ? `${target.kind}:${target.id}: ${content}` : content }, { ...opts, correlationId, idempotencyKey });
     return { ...env, feedbackId: env.auditEventId };
   }
-  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("./mocks/mutations");
-  const res = await mutations.createTrainingFeedback(incidentId, content, target);
-  return {
-    ok: true,
-    data: { actionId: res.audit.id, status: "completed" },
-    auditEventId: res.audit.id,
-    correlationId,
-    idempotencyKey,
-    feedbackId: res.feedbackId,
-    legacy: res,
-  };
+  refuseStrictLiveWrite(correlationId);
 }
 
 export async function createEvolutionConstraint(
@@ -1380,18 +1178,7 @@ export async function createEvolutionConstraint(
     const env = await runAction({ kind: "Incident", id: incidentId, action: "create_evolution_constraint", memo: content }, { ...opts, correlationId, idempotencyKey });
     return { ...env, constraintId: env.auditEventId };
   }
-  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("./mocks/mutations");
-  const res = await mutations.createEvolutionConstraint(incidentId, content);
-  return {
-    ok: true,
-    data: { actionId: res.audit.id, status: "completed" },
-    auditEventId: res.audit.id,
-    correlationId,
-    idempotencyKey,
-    constraintId: res.constraintId,
-    legacy: res,
-  };
+  refuseStrictLiveWrite(correlationId);
 }
 
 export async function promoteLive(
@@ -1404,17 +1191,7 @@ export async function promoteLive(
   if (await liveWriteGated()) {
     return runAction({ kind: "Strategy", id: strategyId, action: "promote_live", memo }, { ...opts, correlationId, idempotencyKey });
   }
-  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("./mocks/mutations");
-  const res = await mutations.promoteLive(strategyId, memo);
-  return {
-    ok: true,
-    data: { actionId: res.audit.id, status: "completed" },
-    auditEventId: res.audit.id,
-    correlationId,
-    idempotencyKey,
-    legacy: res,
-  };
+  refuseStrictLiveWrite(correlationId);
 }
 
 export async function emergencyKill(
@@ -1427,17 +1204,7 @@ export async function emergencyKill(
   if (await liveWriteGated()) {
     return runAction({ kind: target.kind, id: target.id, action: "emergency_kill", memo }, { ...opts, correlationId, idempotencyKey });
   }
-  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("./mocks/mutations");
-  const res = await mutations.emergencyKill(target, memo);
-  return {
-    ok: true,
-    data: { actionId: res.audit.id, status: "completed" },
-    auditEventId: res.audit.id,
-    correlationId,
-    idempotencyKey,
-    legacy: res,
-  };
+  refuseStrictLiveWrite(correlationId);
 }
 
 export async function rotateMcpSecret(
@@ -1450,17 +1217,7 @@ export async function rotateMcpSecret(
   if (await liveWriteGated()) {
     return runAction({ kind: "McpSecret", id: secretId, action: "rotate_secret", memo }, { ...opts, correlationId, idempotencyKey });
   }
-  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("./mocks/mutations");
-  const res = await mutations.rotateMcpSecret(secretId, memo);
-  return {
-    ok: true,
-    data: { actionId: res.audit.id, status: "completed" },
-    auditEventId: res.audit.id,
-    correlationId,
-    idempotencyKey,
-    legacy: res,
-  };
+  refuseStrictLiveWrite(correlationId);
 }
 
 export async function promoteStage(
@@ -1474,17 +1231,7 @@ export async function promoteStage(
   if (await liveWriteGated()) {
     return runAction({ kind: "Deployment", id: deploymentId, action: "promote_stage", memo: memo ?? stageId }, { ...opts, correlationId, idempotencyKey });
   }
-  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("./mocks/mutations");
-  const res = await mutations.promoteStage(deploymentId, stageId, memo);
-  return {
-    ok: true,
-    data: { actionId: res.audit.id, status: "completed" },
-    auditEventId: res.audit.id,
-    correlationId,
-    idempotencyKey,
-    legacy: res,
-  };
+  refuseStrictLiveWrite(correlationId);
 }
 
 export async function reduceAllocation(
@@ -1498,17 +1245,7 @@ export async function reduceAllocation(
   if (await liveWriteGated()) {
     return runAction({ kind: "Deployment", id: deploymentId, action: "reduce_allocation", memo: memo ?? `→ ${newPct}%` }, { ...opts, correlationId, idempotencyKey });
   }
-  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("./mocks/mutations");
-  const res = await mutations.reduceAllocation(deploymentId, newPct, memo);
-  return {
-    ok: true,
-    data: { actionId: res.audit.id, status: "completed" },
-    auditEventId: res.audit.id,
-    correlationId,
-    idempotencyKey,
-    legacy: res,
-  };
+  refuseStrictLiveWrite(correlationId);
 }
 
 export async function runParameterSweep(
@@ -1522,18 +1259,7 @@ export async function runParameterSweep(
     const env = await runAction({ kind: "Strategy", id: strategyId, action: "run_sweep", memo: sweepOpts.memo ?? (sweepOpts.params?.join(",") ?? "all") }, { ...opts, correlationId, idempotencyKey });
     return { ...env, job: undefined };
   }
-  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("./mocks/mutations");
-  const res = await mutations.runParameterSweep(strategyId, sweepOpts);
-  return {
-    ok: true,
-    data: { actionId: res.audit.id, status: "completed" },
-    auditEventId: res.audit.id,
-    correlationId,
-    idempotencyKey,
-    job: res.job,
-    legacy: res,
-  };
+  refuseStrictLiveWrite(correlationId);
 }
 
 export async function runtimeAction(
@@ -1548,18 +1274,7 @@ export async function runtimeAction(
     const env = await runAction({ kind: "Runtime", id: runtimeId, action, memo }, { ...opts, correlationId, idempotencyKey });
     return { ...env, job: undefined };
   }
-  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("./mocks/mutations");
-  const res = await mutations.runtimeAction(runtimeId, action, memo);
-  return {
-    ok: true,
-    data: { actionId: res.audit.id, status: "completed" },
-    auditEventId: res.audit.id,
-    correlationId,
-    idempotencyKey,
-    job: res.job,
-    legacy: res,
-  };
+  refuseStrictLiveWrite(correlationId);
 }
 
 export async function rankingAction(
@@ -1574,18 +1289,7 @@ export async function rankingAction(
     const env = await runAction({ kind: "Ranking", id: `ranking:${scope}`, action, memo }, { ...opts, correlationId, idempotencyKey });
     return { ...env, job: undefined };
   }
-  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("./mocks/mutations");
-  const res = await mutations.rankingAction(scope, action, memo);
-  return {
-    ok: true,
-    data: { actionId: res.audit.id, status: "completed" },
-    auditEventId: res.audit.id,
-    correlationId,
-    idempotencyKey,
-    job: res.job,
-    legacy: res,
-  };
+  refuseStrictLiveWrite(correlationId);
 }
 
 export async function setActiveRankingFormula(
@@ -1598,17 +1302,7 @@ export async function setActiveRankingFormula(
   if (await liveWriteGated()) {
     return runAction({ kind: "RankingFormula", id: formulaId, action: "set_active", memo }, { ...opts, correlationId, idempotencyKey });
   }
-  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("./mocks/mutations");
-  const res = await mutations.setActiveRankingFormula(formulaId, memo);
-  return {
-    ok: true,
-    data: { actionId: res.audit.id, status: "completed" },
-    auditEventId: res.audit.id,
-    correlationId,
-    idempotencyKey,
-    legacy: res,
-  };
+  refuseStrictLiveWrite(correlationId);
 }
 
 export async function scheduleDeployment(
@@ -1622,17 +1316,7 @@ export async function scheduleDeployment(
   if (await liveWriteGated()) {
     return runAction({ kind: "Deployment", id: deploymentId, action: "schedule", memo: memo ?? when }, { ...opts, correlationId, idempotencyKey });
   }
-  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("./mocks/mutations");
-  const res = await mutations.scheduleDeployment(deploymentId, when, memo);
-  return {
-    ok: true,
-    data: { actionId: res.audit.id, status: "completed" },
-    auditEventId: res.audit.id,
-    correlationId,
-    idempotencyKey,
-    legacy: res,
-  };
+  refuseStrictLiveWrite(correlationId);
 }
 
 export async function personaOps(
@@ -1647,18 +1331,7 @@ export async function personaOps(
     const env = await runAction({ kind: "Persona", id: personaId, action: op, memo }, { ...opts, correlationId, idempotencyKey });
     return { ...env, job: undefined };
   }
-  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("./mocks/mutations");
-  const res = await mutations.personaOps(personaId, op, memo);
-  return {
-    ok: true,
-    data: { actionId: res.audit.id, status: "completed" },
-    auditEventId: res.audit.id,
-    correlationId,
-    idempotencyKey,
-    job: res.job,
-    legacy: res,
-  };
+  refuseStrictLiveWrite(correlationId);
 }
 
 export async function publishRebalanceReport(
@@ -1671,17 +1344,7 @@ export async function publishRebalanceReport(
   if (await liveWriteGated()) {
     return runAction({ kind: "Rebalance", id: rebalanceId, action: "publish_report", memo }, { ...opts, correlationId, idempotencyKey });
   }
-  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("./mocks/mutations");
-  const res = await mutations.publishRebalanceReport(rebalanceId, memo);
-  return {
-    ok: true,
-    data: { actionId: res.audit.id, status: "completed" },
-    auditEventId: res.audit.id,
-    correlationId,
-    idempotencyKey,
-    legacy: res,
-  };
+  refuseStrictLiveWrite(correlationId);
 }
 
 export async function updatePermissionMatrix(
@@ -1695,17 +1358,7 @@ export async function updatePermissionMatrix(
   if (await liveWriteGated()) {
     return runAction({ kind: "PermissionMatrix", id: instance, action: "update_cells", memo: memo ?? `${updates.length} cell(s)` }, { ...opts, correlationId, idempotencyKey });
   }
-  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("./mocks/mutations");
-  const res = await mutations.updatePermissionMatrix(instance, updates, memo);
-  return {
-    ok: true,
-    data: { actionId: res.audit.id, status: "completed" },
-    auditEventId: res.audit.id,
-    correlationId,
-    idempotencyKey,
-    legacy: res,
-  };
+  refuseStrictLiveWrite(correlationId);
 }
 
 export async function publishRoutePolicy(
@@ -1719,17 +1372,7 @@ export async function publishRoutePolicy(
   if (await liveWriteGated()) {
     return runAction({ kind: "RoutePolicy", id: policyId, action: "submit_review", memo: memo ?? `${rules.length} rule(s)` }, { ...opts, correlationId, idempotencyKey });
   }
-  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("./mocks/mutations");
-  const res = await mutations.publishRoutePolicy(policyId, rules, memo);
-  return {
-    ok: true,
-    data: { actionId: res.audit.id, status: "completed" },
-    auditEventId: res.audit.id,
-    correlationId,
-    idempotencyKey,
-    legacy: res,
-  };
+  refuseStrictLiveWrite(correlationId);
 }
 
 export async function updateConsultRules(
@@ -1742,17 +1385,7 @@ export async function updateConsultRules(
   if (await liveWriteGated()) {
     return runAction({ kind: "ConsultRule", id: "consult-rules", action: "update_rules", memo: memo ?? `${rules.length} rule(s)` }, { ...opts, correlationId, idempotencyKey });
   }
-  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("./mocks/mutations");
-  const res = await mutations.updateConsultRules(rules, memo);
-  return {
-    ok: true,
-    data: { actionId: res.audit.id, status: "completed" },
-    auditEventId: res.audit.id,
-    correlationId,
-    idempotencyKey,
-    legacy: res,
-  };
+  refuseStrictLiveWrite(correlationId);
 }
 
 export async function createApproval(
@@ -1773,18 +1406,7 @@ export async function createApproval(
     const env = await runAction({ kind: "Approval", id: "new", action: "create", memo: input.subject }, { ...opts, correlationId, idempotencyKey });
     return { ...env, approval: undefined };
   }
-  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("./mocks/mutations");
-  const res = await mutations.createApproval(input);
-  return {
-    ok: true,
-    data: { actionId: res.audit.id, status: "completed" },
-    auditEventId: res.audit.id,
-    correlationId,
-    idempotencyKey,
-    approval: res.approval,
-    legacy: res,
-  };
+  refuseStrictLiveWrite(correlationId);
 }
 
 export async function approve(
@@ -1797,17 +1419,7 @@ export async function approve(
   if (await liveWriteGated()) {
     return decideApproval(id, "approve", memo ?? "approved", { ...opts, correlationId, idempotencyKey }) as unknown as RunActionEnvelope;
   }
-  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("./mocks/mutations");
-  const res = await mutations.approve(id, memo);
-  return {
-    ok: true,
-    data: { actionId: res.audit.id, status: "completed" },
-    auditEventId: res.audit.id,
-    correlationId,
-    idempotencyKey,
-    legacy: res,
-  };
+  refuseStrictLiveWrite(correlationId);
 }
 
 export async function reject(
@@ -1820,17 +1432,7 @@ export async function reject(
   if (await liveWriteGated()) {
     return decideApproval(id, "reject", memo ?? "rejected", { ...opts, correlationId, idempotencyKey }) as unknown as RunActionEnvelope;
   }
-  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("./mocks/mutations");
-  const res = await mutations.reject(id, memo);
-  return {
-    ok: true,
-    data: { actionId: res.audit.id, status: "completed" },
-    auditEventId: res.audit.id,
-    correlationId,
-    idempotencyKey,
-    legacy: res,
-  };
+  refuseStrictLiveWrite(correlationId);
 }
 
 export async function batchDecideApproval(
@@ -1849,32 +1451,14 @@ export async function batchDecideApproval(
     }
     return { ok: true, results };
   }
-  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("./mocks/mutations");
-  const res = await mutations.batchDecideApproval(ids, decision, memo);
-  return {
-    ok: res.ok,
-    results: res.results.map((r) => ({
-      ok: r.ok,
-      data: { actionId: r.audit.id, status: "completed" },
-      auditEventId: r.audit.id,
-      correlationId,
-      idempotencyKey,
-      legacy: r,
-    })),
-  };
+  refuseStrictLiveWrite(correlationId);
 }
 
 export async function tickApprovalSla(
-  nowIso: string = new Date().toISOString(),
-  opts: RunActionOptions = {},
+  _nowIso: string = new Date().toISOString(),
+  _opts: RunActionOptions = {},
 ): Promise<{ ok: true; escalated: AuditEvent[] }> {
-  if (await liveWriteGated()) {
-    return { ok: true, escalated: [] };
-  }
-  if (isStrictLiveFallback()) return { ok: true, escalated: [] };
-  const { mutations } = await import("./mocks/mutations");
-  return mutations.tickApprovalSla(nowIso);
+  return { ok: true, escalated: [] };
 }
 
 export async function escalateAlertToIncident(
@@ -1888,18 +1472,7 @@ export async function escalateAlertToIncident(
     const env = await runAction({ kind: "Alert", id: alertId, action: "escalate_incident", memo }, { ...opts, correlationId, idempotencyKey });
     return { ...env, incidentId: env.auditEventId };
   }
-  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("./mocks/mutations");
-  const res = await mutations.escalateAlertToIncident(alertId, memo);
-  return {
-    ok: true,
-    data: { actionId: res.audit.id, status: "completed" },
-    auditEventId: res.audit.id,
-    correlationId,
-    idempotencyKey,
-    incidentId: res.incidentId,
-    legacy: res,
-  };
+  refuseStrictLiveWrite(correlationId);
 }
 
 export async function createResearchTaskFromNote(
@@ -1913,18 +1486,7 @@ export async function createResearchTaskFromNote(
     const env = await runAction({ kind: "Research", id: noteId, action: "convert_research_task", memo }, { ...opts, correlationId, idempotencyKey });
     return { ...env, job: undefined };
   }
-  if (isStrictLiveFallback()) refuseStrictLiveWrite(correlationId);
-  const { mutations } = await import("./mocks/mutations");
-  const res = await mutations.createResearchTaskFromNote(noteId, memo);
-  return {
-    ok: true,
-    data: { actionId: res.audit.id, status: "completed" },
-    auditEventId: res.audit.id,
-    correlationId,
-    idempotencyKey,
-    job: res.job,
-    legacy: res,
-  };
+  refuseStrictLiveWrite(correlationId);
 }
 
 export const bffWrites = {
