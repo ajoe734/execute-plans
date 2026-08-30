@@ -29,10 +29,6 @@ type LoadState =
 
 const DIMENSIONS: { value: TradingRoomPerformanceAttributionDimension; labelKey: string; fallback: string }[] = [
   { value: "strategy", labelKey: "agora.tradingRoom.attribution.dimensions.strategy", fallback: "Strategy" },
-  { value: "persona", labelKey: "agora.tradingRoom.attribution.dimensions.persona", fallback: "Persona" },
-  { value: "asset_class", labelKey: "agora.tradingRoom.attribution.dimensions.assetClass", fallback: "Asset Class" },
-  { value: "model", labelKey: "agora.tradingRoom.attribution.dimensions.model", fallback: "Model" },
-  { value: "market_session", labelKey: "agora.tradingRoom.attribution.dimensions.marketSession", fallback: "Market Session" },
 ];
 
 const PERIODS = [
@@ -82,7 +78,8 @@ export function AttributionReportView({
   className,
 }: AttributionReportViewProps): JSX.Element {
   const { i18n, t } = useTranslation();
-  const [dimension, setDimension] = useState<TradingRoomPerformanceAttributionDimension>(initialDimension);
+  // Backend /bff/management/performance-attribution/by-strategy only supports "strategy" dimension.
+  const dimension: TradingRoomPerformanceAttributionDimension = "strategy";
   const [period, setPeriod] = useState<string>(initialPeriod);
   const [loadState, setLoadState] = useState<LoadState>({ status: "loading" });
   const [refreshKey, setRefreshKey] = useState(0);
@@ -94,7 +91,6 @@ export function AttributionReportView({
     setLoadState({ status: "loading" });
 
     const query: TradingRoomPerformanceAttributionQuery = {
-      dimension,
       pageSize: 50,
       period,
     };
@@ -113,10 +109,9 @@ export function AttributionReportView({
     return () => {
       cancelled = true;
     };
-  }, [dimension, period, refreshKey]);
+  }, [period, refreshKey]);
 
   const handleDimensionSelect = (nextDim: TradingRoomPerformanceAttributionDimension) => {
-    setDimension(nextDim);
     onDimensionChange?.(nextDim);
   };
 

@@ -61,20 +61,20 @@
   "contract_alignment": {
     "artifact_contract": "All 4 declared task artifacts are present, typed, and covered by automated unit tests in their canonical module paths.",
     "trading_room_workspace": "StrategyWorkspaceView and workspace subcomponents are modularized into TradingRoomWorkspace.tsx with full proposal lifecycle and grid editor support.",
-    "attribution_report": "AttributionReportView.tsx renders multi-dimension performance attribution, KPI summaries, and provenance tracking backed by getTradingRoomPerformanceAttribution."
+    "attribution_report": "AttributionReportView.tsx renders Strategy dimension performance attribution (strictly restricted to the backend-supported /bff/management/performance-attribution/by-strategy contract), KPI summaries, and provenance tracking backed by getTradingRoomPerformanceAttribution with actual client fetch regression test coverage."
   },
   "validation": {
     "agora_full_unit_tests": {
       "command": "npx vitest run src/agora",
-      "result": "passed: 27 files, 410 tests"
+      "result": "passed: 27 files, 411 tests"
     },
     "agora_pages_unit_tests": {
       "command": "npx vitest run src/agora/pages",
-      "result": "passed: 5 files, 153 tests"
+      "result": "passed: 5 files, 154 tests"
     },
     "residual_acceptance_focused_tests": {
       "command": "npx vitest run src/agora/pages/strategy-workshop/StrategyWorkshopPage.test.tsx src/agora/pages/strategy-performance/StrategyPerformancePage.test.tsx src/agora/pages/trading-room/TradingRoomPage.test.tsx src/agora/pages/trading-room/TradingRoomWorkspace.test.tsx src/agora/pages/trading-room/AttributionReportView.test.tsx src/agora/components/CandidateReviewDrawer.test.tsx src/agora/components/BacktestResultCard.test.tsx src/agora/useAgoraWriteAccess.test.ts",
-      "result": "passed: 8 files, 205 tests"
+      "result": "passed: 8 files, 206 tests"
     },
     "typecheck": {
       "commands": [
