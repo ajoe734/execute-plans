@@ -1,6 +1,6 @@
-// Pack F F1 — v0 mock write-intent contracts.
-// NOT final backend DTO. UI-side write intent only.
-// All mutations land in src/lib/bff/writeOverlay.ts (30min TTL, never touches seed).
+// Pack F F1 — UI-side write-intent contracts.
+// NOT final backend DTO. A drawer is enabled only when a typed, durable BFF
+// owner is registered below; writeOverlay is never a persistence owner.
 
 export const CREATABLE_ENTITIES = [
   "strategy",
@@ -15,6 +15,25 @@ export const CREATABLE_ENTITIES = [
 ] as const;
 
 export type CreatableEntity = (typeof CREATABLE_ENTITIES)[number];
+
+/**
+ * Registry of generic-drawer entities that have a durable typed create owner.
+ * Keep this deliberately narrow: adding an entry is an API-contract decision,
+ * not a way to make a frontend-only mutation appear successful.
+ */
+export const DURABLE_CREATE_OWNERS = {
+  persona: "POST /bff/management/personas/create-paper-bundle",
+} as const satisfies Partial<Record<CreatableEntity, string>>;
+
+export type DurableCreateEntity = keyof typeof DURABLE_CREATE_OWNERS;
+
+export function hasDurableCreateOwner(entity: CreatableEntity): entity is DurableCreateEntity {
+  return Object.prototype.hasOwnProperty.call(DURABLE_CREATE_OWNERS, entity);
+}
+
+export function durableCreateOwner(entity: CreatableEntity): string | undefined {
+  return hasDurableCreateOwner(entity) ? DURABLE_CREATE_OWNERS[entity] : undefined;
+}
 
 export function isCreatableEntity(val: unknown): val is CreatableEntity {
   return typeof val === "string" && (CREATABLE_ENTITIES as readonly string[]).includes(val);
@@ -151,6 +170,9 @@ export interface EntityUpdateInput<TPatch> {
 
 // --- ObjectListPage CreateBehavior ---
 export type CreateBehavior =
+  // ObjectListPage fail-closes drawer entries that are not in DURABLE_CREATE_OWNERS.
+  // The broad entity type remains for compatibility with legacy list declarations,
+  // which now render a visibly disabled action instead of an overlay-backed drawer.
   | { kind: "drawer"; entity: CreatableEntity }
   | { kind: "redirect"; to: string; intent?: string }
   | { kind: "disabled"; reasonI18nKey: string };
