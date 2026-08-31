@@ -380,6 +380,78 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     );
   });
 
+  it("accepts only a trusted exact-pair controller transaction after unrelated parent smoke fails", () => {
+    const controllerStart = deployWorkflow.indexOf(
+      "- name: Validate Pantheon release controller owns the exact pair",
+    );
+    const controllerEnd = deployWorkflow.indexOf(
+      "- name: Checkout protected Pantheon Agora gate controller",
+      controllerStart,
+    );
+    expect(controllerStart).toBeGreaterThan(-1);
+    expect(controllerEnd).toBeGreaterThan(controllerStart);
+    const controller = deployWorkflow.slice(controllerStart, controllerEnd);
+
+    expect(controller).toContain('path === ".github/workflows/nonprod-deploy.yml"');
+    expect(controller).toContain('repository === "ajoe734/pantheon"');
+    expect(controller).toContain('run.event === "workflow_dispatch"');
+    expect(controller).toContain('run.head_branch === "dev"');
+    expect(controller).toContain(
+      'String(run.head_sha || "").toLowerCase() === process.env.EXPECTED_BACKEND_SHA',
+    );
+    expect(controller).toContain(
+      'const activeController = run.status === "in_progress" && run.conclusion == null;',
+    );
+    expect(controller).toContain(
+      'const overallSuccess = run.status === "completed" && run.conclusion === "success";',
+    );
+    expect(controller).toContain(
+      'const failedParent = run.status === "completed" && run.conclusion === "failure";',
+    );
+    expect(controller).toContain(
+      "github.rest.actions.listJobsForWorkflowRunAttempt",
+    );
+    expect(controller).toContain(
+      'job.name === "Admit and switch exact FE/BFF release"',
+    );
+    expect(controller).toContain("exactPairCoordination.length === 1");
+    expect(controller).toContain(
+      'exactPairCoordination[0].status === "completed"',
+    );
+    expect(controller).toContain(
+      'exactPairCoordination[0].conclusion === "success"',
+    );
+    expect(controller).toContain(
+      "!(failedParent && completedExactPairCoordination)",
+    );
+
+    const accepts = ({
+      workflow = true,
+      repository = true,
+      branch = true,
+      head = true,
+      active = false,
+      overallSuccess = false,
+      failedParent = false,
+      exactPairCoordination = false,
+    }) =>
+      workflow &&
+      repository &&
+      branch &&
+      head &&
+      (active || overallSuccess || (failedParent && exactPairCoordination));
+
+    expect(accepts({ active: true })).toBe(true);
+    expect(accepts({ overallSuccess: true })).toBe(true);
+    expect(
+      accepts({ failedParent: true, exactPairCoordination: true }),
+    ).toBe(true);
+    expect(accepts({ failedParent: true, exactPairCoordination: false })).toBe(false);
+    expect(accepts({ head: false, failedParent: true, exactPairCoordination: true })).toBe(false);
+    expect(accepts({ workflow: false, failedParent: true, exactPairCoordination: true })).toBe(false);
+    expect(accepts({ repository: false, failedParent: true, exactPairCoordination: true })).toBe(false);
+  });
+
   it("pre-probes, atomically switches, and conditionally restores and re-probes", () => {
     expect(deployScript).toContain("flock -n 9");
     expect(deployScript).toContain("candidate.order_at_switch");
