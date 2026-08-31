@@ -1,7 +1,6 @@
 // BFF client for agora.interaction capability.
 // Routes: /bff/agora/interactions/*
 
-import { bffFetch, detectMode } from "../client";
 import { strictLiveRead } from "../domainReads";
 import { makeBffError } from "../errors";
 import { paths } from "../paths";
@@ -182,61 +181,18 @@ export async function resolveContextIdempotencyKey(body: ResolveContextRequest, 
   return `pint15-context-${hex}`;
 }
 
-const mockContextReceipts = new Map<string, ResolveContextEnvelope>();
+function asEnvelope<T>(body: unknown): { data: T; meta?: Record<string, unknown> } {
+  const rec = (body && typeof body === "object" && !Array.isArray(body)) ? body as Record<string, unknown> : {};
+  if ("data" in rec && rec.data !== undefined) {
+    return rec as { data: T; meta?: Record<string, unknown> };
+  }
+  return { data: body as T };
+}
 
 export const interaction = {
   resolveContext: async (body: ResolveContextRequest, options?: ResolveContextOptions): Promise<ResolveContextEnvelope> => {
     await requireInteractionWrite();
     const idempotencyKey = await resolveContextIdempotencyKey(body, resolutionSessionId(options));
-    const mockFn = (): ResolveContextEnvelope => {
-      const replay = mockContextReceipts.get(idempotencyKey);
-      if (replay) return replay;
-      const wid = body.workshop_id || `wksp-mock-${idempotencyKey.slice(-9)}`;
-      const resolvedAt = new Date().toISOString();
-      const sourceRoute = body.source_route ?? `/agora/strategy-workshop/${encodeURIComponent(wid)}`;
-      const focusedObject = body.focused_object ?? { kind: "workshop", id: wid };
-      const evidenceCutoff = body.evidence_cutoff ?? resolvedAt;
-      const selectedPersonaIds = body.selected_persona_ids ?? body.context_refs.filter((ref) => ref.type === "persona").map((ref) => ref.id);
-      const initialMode = body.initial_mode ?? "ask";
-      const returnRoute = body.return_route ?? sourceRoute;
-      const strategy = body.context_refs.find((ref) => ref.type === "strategy" && ref.version_id);
-      const contextDigest = "mock-digest-sha256";
-      const receipt: ResolveContextEnvelope = {
-        data: {
-          workshop_id: wid,
-          context_refs: body.context_refs,
-          context_digest: contextDigest,
-          environment: body.environment || "research",
-          verified: true,
-          resolved_at: resolvedAt,
-          context_binding: {
-            binding_id: `binding-${wid}`,
-            workshop_id: wid,
-            tenant_id: "tenant-mock",
-            source_route: sourceRoute,
-            focused_object: focusedObject,
-            context_refs: body.context_refs.map((ref) => ({ kind: ref.type, id: ref.id, version: ref.version_id ?? null })),
-            strategy_ref: strategy?.version_id ? { strategy_id: strategy.id, version_id: strategy.version_id } : null,
-            decision_ref: body.context_refs.find((ref) => ref.type === "decision_event")?.id ?? null,
-            journal_ref: body.context_refs.find((ref) => ref.type === "journal_entry")?.id ?? null,
-            position_risk_snapshot_refs: body.context_refs.filter((ref) => ref.type === "position").map((ref) => ref.id),
-            evidence_cutoff: evidenceCutoff,
-            selected_persona_ids: selectedPersonaIds,
-            initial_mode: initialMode,
-            return_route: returnRoute,
-            advice_environment: body.environment ?? "research",
-            context_digest: contextDigest,
-            resolved_at: resolvedAt,
-          },
-        },
-      };
-      mockContextReceipts.set(idempotencyKey, receipt);
-      return receipt;
-    };
-
-    if (detectMode() === "mock") {
-      return mockFn();
-    }
     return strictLiveRead<ResolveContextEnvelope>(
       "agora.interaction.resolveContext",
       {
@@ -245,56 +201,11 @@ export const interaction = {
         body,
         idempotencyKey,
       },
+      asEnvelope<ResolveContextResponse>,
     );
   },
 
   participants: (body: EligibilityRequest): Promise<EligibilityEnvelope> => {
-    const mockFn = (): EligibilityEnvelope => {
-      const list = [
-        {
-          persona_id: "per_quant",
-          display_name: "Quant Architect",
-          eligible: true,
-          reasons: [],
-          recommended: body.mode in { challenge: 1, consult: 1 },
-          capability_snapshot_id: "snap-quant-1",
-        },
-        {
-          persona_id: "per_macro",
-          display_name: "Macro Strategist",
-          eligible: true,
-          reasons: [],
-          recommended: body.mode in { challenge: 1, consult: 1 },
-          capability_snapshot_id: "snap-macro-1",
-        },
-        {
-          persona_id: "per_risk",
-          display_name: "Risk Officer Bot",
-          eligible: true,
-          reasons: [],
-          recommended: body.mode in { challenge: 1, consult: 1 },
-          capability_snapshot_id: "snap-risk-1",
-        },
-        {
-          persona_id: "per_red",
-          display_name: "Red Team Adversary",
-          eligible: body.environment !== "live",
-          reasons: body.environment === "live" ? ["environment_ceiling_exceeded"] : [],
-          recommended: body.mode === "challenge",
-          capability_snapshot_id: "snap-red-1",
-        },
-      ];
-      return {
-        data: {
-          included: list.filter((x) => x.eligible),
-          excluded: list.filter((x) => !x.eligible),
-        },
-      };
-    };
-
-    if (detectMode() === "mock") {
-      return Promise.resolve(mockFn());
-    }
     return strictLiveRead<EligibilityEnvelope>(
       "agora.interaction.participants",
       {
@@ -302,32 +213,12 @@ export const interaction = {
         path: paths.agoraInteractionsEligible(),
         body,
       },
+      asEnvelope<EligibilityResponse>,
     );
   },
 
   submit: async (body: SubmitInteractionRequest): Promise<SubmitInteractionEnvelope> => {
     await requireInteractionWrite();
-    const mockFn = (): SubmitInteractionEnvelope => {
-      const interactionId = body.interaction_id || `int-mock-${Math.random().toString(36).substr(2, 9)}`;
-      return {
-        data: {
-          interaction_id: interactionId,
-          workshop_id: body.workshop_id,
-          mode: body.mode,
-          topic: body.topic,
-          participants: body.participant_persona_ids,
-          context_refs: body.context_refs,
-          status: "queued",
-          execution_authority: "none",
-          no_capital_authority_proof: "persona_interaction_event_no_capital_or_order_authority",
-          submitted_at: new Date().toISOString(),
-        },
-      };
-    };
-
-    if (detectMode() === "mock") {
-      return mockFn();
-    }
     return strictLiveRead<SubmitInteractionEnvelope>(
       "agora.interaction.submit",
       {
@@ -336,6 +227,7 @@ export const interaction = {
         body,
         idempotencyKey: `idem-submit-int-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       },
+      asEnvelope<SubmitInteractionResponse>,
     );
   },
 };

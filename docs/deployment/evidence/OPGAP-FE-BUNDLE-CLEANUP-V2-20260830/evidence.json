@@ -14,13 +14,17 @@
       "Verified zero mock, seed, overlay, writeFallback, withLiveOrMock, withStrictLiveOrMock, or liveOrSeed reachability in the production Rollup graph.",
       "bff-v1/v5.ts contains only DTO/view models and pure transforms; consolidated liveSse remains the network owner.",
       "Domain writes and unavailable reads fail closed under strict-live fallback posture.",
-      "Created and validated scripts/check_bundle_mock_reachability.ts with conflicting namespace detection.",
+      "Created and validated scripts/check_bundle_mock_reachability.ts with conflicting namespace detection and extended inline mock marker guards.",
       "Removed duplicate isLiveBffModeConfigured from domainReads.ts, eliminating Rollup conflicting namespace warning and preserving seedTaxonomy export in bff-v1 barrel.",
       "Added test in seedTaxonomy.test.ts asserting barrel exports isLiveBffModeConfigured without conflict.",
-      "Fixed all 21 blank-line-at-EOF issues across modified files for clean git diff --check.",
+      "Fixed all blank-line-at-EOF issues across modified files for clean git diff --check.",
       "Strict-live mock persistence stub fails closed with typed StrictLiveMockPersistenceError and QAChecklist renders explicit unavailable/error outcome with focused test coverage.",
       "Established resolver-before-render ordering in main.tsx and added browser/bootstrap-level test proving first mock-mode BFF request succeeds without preloaded registry.",
-      "Removed all wall-clock reads from v5 DTO/view-model transforms (src/lib/bff-v1/v5.ts isoFrom and adaptBffIntervention) with deterministic/caller-injected fallbacks, and added regression test in src/lib/bff-v1/__tests__/v5PureTransforms.test.ts proving identical input yields identical output across time."
+      "Removed all wall-clock reads from v5 DTO/view-model transforms (src/lib/bff-v1/v5.ts isoFrom and adaptBffIntervention) with deterministic/caller-injected fallbacks, and added regression test in src/lib/bff-v1/__tests__/v5PureTransforms.test.ts proving identical input yields identical output across time.",
+      "Isolated explicit mock-mode implementations behind mock-only modules excluded or strict-aliased out of the live production graph: removed mockContextReceipts, mock-digest, tenant-mock, and hardcoded persona eligibility from src/lib/bff-v1/agora/interaction.ts, routing interaction methods directly through strictLiveRead.",
+      "Removed mockShellSummary from shellSummary.ts, au_mock_iv_ from writes.ts, and mock-readiness/mock_unavailable strings from management.ts and strictLiveMockScenariosUnavailable.ts.",
+      "Removed mockSignalSymbols and wall-clock timestamp fallbacks from src/lib/bff-v1/agora/agoraReads.ts and workshops.ts, ensuring deterministic fail-closed behavior for missing live DTO fields.",
+      "Added deterministic adapter regression tests in src/lib/bff-v1/__tests__/agoraReadsDeterministic.test.ts."
     ],
     "preserved": [
       "Production import graph gate (productionImportGraph.test.ts) remains passing with 0 cycles.",
@@ -45,11 +49,15 @@
   "validation": {
     "bundle_mock_check": {
       "command": "npx tsx scripts/check_bundle_mock_reachability.ts",
-      "result": "passed: zero mock/seed/fallback reachability and zero conflicting namespace warnings"
+      "result": "passed: zero mock/seed/fallback reachability and zero inline mock markers"
     },
     "production_import_graph": {
       "command": "npx vitest run src/lib/bff-v1/__tests__/productionImportGraph.test.ts",
       "result": "passed: 5/5 tests"
+    },
+    "agora_reads_deterministic": {
+      "command": "npx vitest run src/lib/bff-v1/__tests__/agoraReadsDeterministic.test.ts",
+      "result": "passed: 2/2 tests"
     },
     "v5_pure_transforms": {
       "command": "npx vitest run src/lib/bff-v1/__tests__/v5PureTransforms.test.ts",
@@ -57,7 +65,7 @@
     },
     "full_test_suite": {
       "command": "npm test",
-      "result": "passed: 197 files, 1986 tests"
+      "result": "passed: 198 files, 1988 tests"
     },
     "typecheck": {
       "command": "npm run typecheck",
@@ -77,10 +85,11 @@
     }
   },
   "independent_review_required": [
-    "Confirm production Rollup bundle graph has zero mock reachability and no conflicting namespace warnings via scripts/check_bundle_mock_reachability.ts.",
+    "Confirm production Rollup bundle graph has zero mock reachability, zero inline mock markers, and no conflicting namespace warnings via scripts/check_bundle_mock_reachability.ts.",
     "Confirm productionImportGraph.test.ts passes with 0 cycles.",
+    "Confirm src/lib/bff-v1/agora/agoraReads.ts deterministic behavior with src/lib/bff-v1/__tests__/agoraReadsDeterministic.test.ts passing.",
     "Confirm src/lib/bff-v1/v5.ts transforms are pure with zero wall-clock reads and src/lib/bff-v1/__tests__/v5PureTransforms.test.ts passes (9/9 tests).",
-    "Confirm all 197 test files in the test suite pass (1986/1986 tests).",
+    "Confirm all 198 test files in the test suite pass (1988/1988 tests).",
     "Confirm git diff --check origin/dev passes cleanly without EOF whitespace issues.",
     "Confirm strict-live mock persistence snapshot/reset fails closed with typed StrictLiveMockPersistenceError.",
     "Confirm resolver-before-render ordering in main.tsx and bootstrap test passing.",

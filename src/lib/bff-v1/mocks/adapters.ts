@@ -157,64 +157,125 @@ export function bootstrapMockAdapters(): void {
     });
   });
 
-  // POST /bff/agora/interactions/resolve
-  registerMock("POST", "/bff/agora/interactions/resolve", () =>
-    ok({
-      workshop_id: "wksp-mock-001",
-      context_refs: [{ type: "persona", id: "per_quant" }],
-      context_digest: "mock-digest",
-      environment: "paper",
+  // POST /bff/agora/interactions/context:resolve
+  registerMock("POST", paths.agoraInteractionsResolve(), (req) => {
+    const body = (req.body ?? {}) as {
+      workshop_id?: string;
+      context_refs?: Array<{ type: string; id: string; version_id?: string }>;
+      environment?: string;
+      source_route?: string;
+      focused_object?: { kind: string; id: string; version?: string | null };
+      evidence_cutoff?: string;
+      selected_persona_ids?: string[];
+      initial_mode?: string;
+      return_route?: string;
+    };
+    const wid = body.workshop_id || "wksp-mock-001";
+    const resolvedAt = new Date().toISOString();
+    const sourceRoute = body.source_route ?? `/agora/strategy-workshop/${encodeURIComponent(wid)}`;
+    const focusedObject = body.focused_object ?? { kind: "workshop", id: wid };
+    const evidenceCutoff = body.evidence_cutoff ?? resolvedAt;
+    const selectedPersonaIds = body.selected_persona_ids ?? (body.context_refs ?? []).filter((ref) => ref.type === "persona").map((ref) => ref.id);
+    const initialMode = body.initial_mode ?? "ask";
+    const returnRoute = body.return_route ?? sourceRoute;
+    const strategy = (body.context_refs ?? []).find((ref) => ref.type === "strategy" && ref.version_id);
+    const contextDigest = "mock-digest-sha256";
+    return ok({
+      workshop_id: wid,
+      context_refs: body.context_refs ?? [{ type: "persona", id: "per_quant" }],
+      context_digest: contextDigest,
+      environment: body.environment || "research",
       verified: true,
-      resolved_at: new Date().toISOString(),
+      resolved_at: resolvedAt,
       context_binding: {
-        binding_id: "cb_001",
-        workshop_id: "wksp-mock-001",
-        tenant_id: "mock-tenant",
-        source_route: "/management/personas",
-        focused_object: { kind: "persona", id: "per_quant" },
-        context_refs: [],
-        evidence_cutoff: new Date().toISOString(),
-        selected_persona_ids: ["per_quant"],
-        initial_mode: "reflect",
-        return_route: "/management",
-        advice_environment: "paper",
-        context_digest: "mock-digest",
-        resolved_at: new Date().toISOString(),
+        binding_id: `binding-${wid}`,
+        workshop_id: wid,
+        tenant_id: "tenant-mock",
+        source_route: sourceRoute,
+        focused_object: focusedObject,
+        context_refs: (body.context_refs ?? []).map((ref) => ({ kind: ref.type, id: ref.id, version: ref.version_id ?? null })),
+        strategy_ref: strategy?.version_id ? { strategy_id: strategy.id, version_id: strategy.version_id } : null,
+        decision_ref: (body.context_refs ?? []).find((ref) => ref.type === "decision_event")?.id ?? null,
+        journal_ref: (body.context_refs ?? []).find((ref) => ref.type === "journal_entry")?.id ?? null,
+        position_risk_snapshot_refs: (body.context_refs ?? []).filter((ref) => ref.type === "position").map((ref) => ref.id),
+        evidence_cutoff: evidenceCutoff,
+        selected_persona_ids: selectedPersonaIds,
+        initial_mode: initialMode,
+        return_route: returnRoute,
+        advice_environment: body.environment ?? "research",
+        context_digest: contextDigest,
+        resolved_at: resolvedAt,
       },
-    }),
-  );
+    });
+  });
 
-  // POST /bff/agora/interactions/eligible
-  registerMock("POST", "/bff/agora/interactions/eligible", () =>
-    ok({
-      included: [
-        {
-          persona_id: "per_quant",
-          display_name: "Quant Persona",
-          eligible: true,
-          reasons: [],
-          recommended: true,
-        },
-      ],
-      excluded: [],
-    }),
-  );
+  // POST /bff/agora/interactions/participants:eligible
+  registerMock("POST", paths.agoraInteractionsEligible(), (req) => {
+    const body = (req.body ?? {}) as { mode?: string; environment?: string };
+    const list = [
+      {
+        persona_id: "per_quant",
+        display_name: "Quant Architect",
+        eligible: true,
+        reasons: [],
+        recommended: body.mode === "challenge" || body.mode === "consult",
+        capability_snapshot_id: "snap-quant-1",
+      },
+      {
+        persona_id: "per_macro",
+        display_name: "Macro Strategist",
+        eligible: true,
+        reasons: [],
+        recommended: body.mode === "challenge" || body.mode === "consult",
+        capability_snapshot_id: "snap-macro-1",
+      },
+      {
+        persona_id: "per_risk",
+        display_name: "Risk Officer Bot",
+        eligible: true,
+        reasons: [],
+        recommended: body.mode === "challenge" || body.mode === "consult",
+        capability_snapshot_id: "snap-risk-1",
+      },
+      {
+        persona_id: "per_red",
+        display_name: "Red Team Adversary",
+        eligible: body.environment !== "live",
+        reasons: body.environment === "live" ? ["environment_ceiling_exceeded"] : [],
+        recommended: body.mode === "challenge",
+        capability_snapshot_id: "snap-red-1",
+      },
+    ];
+    return ok({
+      included: list.filter((x) => x.eligible),
+      excluded: list.filter((x) => !x.eligible),
+    });
+  });
 
-  // POST /bff/agora/interactions/submit
-  registerMock("POST", "/bff/agora/interactions/submit", () =>
-    ok({
-      interaction_id: "int_001",
-      workshop_id: "wksp-1",
-      mode: "consult",
-      topic: "Review risk",
-      participants: ["per_quant"],
-      context_refs: [],
+  // POST /bff/agora/interactions
+  registerMock("POST", paths.agoraInteractionsSubmit(), (req) => {
+    const body = (req.body ?? {}) as {
+      interaction_id?: string;
+      workshop_id?: string;
+      mode?: string;
+      topic?: string;
+      participant_persona_ids?: string[];
+      context_refs?: unknown[];
+    };
+    const interactionId = body.interaction_id || "int_001";
+    return ok({
+      interaction_id: interactionId,
+      workshop_id: body.workshop_id ?? "wksp-1",
+      mode: body.mode ?? "consult",
+      topic: body.topic ?? "Review risk",
+      participants: body.participant_persona_ids ?? ["per_quant"],
+      context_refs: body.context_refs ?? [],
       status: "queued",
       execution_authority: "none",
       no_capital_authority_proof: "proof_mock",
       submitted_at: new Date().toISOString(),
-    }),
-  );
+    });
+  });
 }
 
 bootstrapMockAdapters();

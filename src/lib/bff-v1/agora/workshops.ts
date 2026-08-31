@@ -432,7 +432,7 @@ function normalizeWorkshopStreamEvent(
 
   const eventId = String(unwrapped.event_id ?? data.event_id ?? unwrapped.id ?? data.id ?? frame.id ?? "").trim();
   const eventType = String(unwrapped.event_type ?? data.event_type ?? unwrapped.type ?? data.type ?? frame.event ?? "workshop.event").trim();
-  const occurredAt = String(unwrapped.occurred_at ?? data.occurred_at ?? unwrapped.timestamp ?? data.timestamp ?? new Date().toISOString()).trim();
+  const occurredAt = String(unwrapped.occurred_at ?? data.occurred_at ?? unwrapped.timestamp ?? data.timestamp ?? "").trim();
   const payload = (unwrapped.payload && typeof unwrapped.payload === "object")
     ? (unwrapped.payload as Record<string, unknown>)
     : (unwrapped.data && typeof unwrapped.data === "object" && !unwrapped.event_id)

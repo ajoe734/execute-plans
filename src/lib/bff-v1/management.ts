@@ -1825,15 +1825,15 @@ export function defaultManagementEvidenceOverview(): ManagementEvidenceOverview 
     items: [
       {
         id: "evref-demo-readiness-001",
-        title: "Readiness evidence unavailable in mock mode",
+        title: "Readiness evidence unavailable",
         sourceType: "unknown",
         linkType: "supporting_evidence",
         capturedAt: "2026-06-15T13:02:00Z",
         credibility: { tier: "unverified", verified: false },
         linkedObjectSummary: {
           entity_type: "readiness",
-          entity_ref: "mock-readiness",
-          display_label: "Mock readiness gate",
+          entity_ref: "readiness-gate",
+          display_label: "Readiness gate",
         },
         resolvedLink: {
           availability: "unavailable",
@@ -1844,7 +1844,7 @@ export function defaultManagementEvidenceOverview(): ManagementEvidenceOverview 
         actionability: {
           state: "unresolved_source",
           severity: "warning",
-          reasons: ["mock_unavailable", "resolved_link_unavailable"],
+          reasons: ["unavailable", "resolved_link_unavailable"],
           can_trace: false,
           can_open_source: false,
           can_open_linked_object: false,
@@ -1869,10 +1869,10 @@ export function defaultManagementEvidenceOverview(): ManagementEvidenceOverview 
       },
     ],
     meta: {
-      snapshot_at: "mock",
+      snapshot_at: "unavailable",
       surfaces: {
-        management_evidence: { status: "mock", source: "local_snapshot" },
-        evidence_refs: { status: "mock", source: "local_snapshot" },
+        management_evidence: { status: "unavailable", source: "local_snapshot" },
+        evidence_refs: { status: "unavailable", source: "local_snapshot" },
       },
       redacted_evidence_count: 0,
     },
@@ -1883,7 +1883,7 @@ export function defaultManagementEvidenceDetail(refId = "evref-demo-readiness-00
   return adaptManagementEvidenceDetail({
     ref_id: refId,
     source_document: {
-      title: "Readiness evidence unavailable in mock mode",
+      title: "Readiness evidence unavailable",
       source_type: "unknown",
       excerpt: null,
       storage_preview: { available: false, preview_type: "unavailable" },
@@ -1905,14 +1905,14 @@ export function defaultManagementEvidenceDetail(refId = "evref-demo-readiness-00
     },
     linked_object_summary: {
       entity_type: "readiness",
-      entity_ref: "mock-readiness",
-      display_label: "Mock readiness gate",
+      entity_ref: "readiness-gate",
+      display_label: "Readiness gate",
     },
     linked_object_link: {
       availability: "unavailable",
       route_href: null,
-      display_label: "Mock readiness gate",
-      reason: "mock_unavailable",
+      display_label: "Readiness gate",
+      reason: "unavailable",
     },
     linked_decisions: [],
     source_note_context: null,
@@ -1921,7 +1921,7 @@ export function defaultManagementEvidenceDetail(refId = "evref-demo-readiness-00
     actionability: {
       state: "unresolved_source",
       severity: "warning",
-      reasons: ["mock_unavailable", "resolved_link_unavailable"],
+      reasons: ["unavailable", "resolved_link_unavailable"],
       can_trace: false,
       can_open_source: false,
       can_open_linked_object: false,
@@ -1931,19 +1931,19 @@ export function defaultManagementEvidenceDetail(refId = "evref-demo-readiness-00
       readiness: [
         {
           entity_type: "readiness",
-          entity_ref: "mock-readiness",
-          display_label: "Mock readiness gate",
+          entity_ref: "readiness-gate",
+          display_label: "Readiness gate",
           route_href: null,
           link_type: "supporting_evidence",
-          source: "mock",
+          source: "local_snapshot",
         },
       ],
     },
     chain: {
       nodes: [],
       edges: [],
-      empty_reason: "mock_unavailable",
-      degraded_reasons: ["mock_unavailable"],
+      empty_reason: "unavailable",
+      degraded_reasons: ["unavailable"],
     },
     tasks: [],
     auditEvents: [],
@@ -1963,11 +1963,11 @@ export function defaultManagementEvidenceDetail(refId = "evref-demo-readiness-00
       canResolve: "No open evidence operation exists to resolve.",
     },
     meta: {
-      snapshot_at: "mock",
+      snapshot_at: "unavailable",
       surfaces: {
-        evidence_ref_detail: "mock",
-        resolved_link: "mock",
-        linked_decisions: "mock",
+        evidence_ref_detail: "unavailable",
+        resolved_link: "unavailable",
+        linked_decisions: "unavailable",
       },
       redacted_evidence_count: 0,
     },

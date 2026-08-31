@@ -29,7 +29,7 @@ export async function runScenario(id: string): Promise<ScenarioResult> {
   return {
     id,
     ok: false,
-    steps: [{ label: "mock_unavailable", ok: false, durationMs: 0, message: "Mock scenarios unavailable in strict-live production build" }],
+    steps: [{ label: "unavailable", ok: false, durationMs: 0, message: "Mock scenarios unavailable in strict-live production build" }],
     totalMs: 0,
   };
 }
@@ -39,7 +39,7 @@ export async function runAllScenarios(): Promise<ScenarioResult[]> {
   return meta.map((m) => ({
     id: m.id,
     ok: false,
-    steps: [{ label: "mock_unavailable", ok: false, durationMs: 0, message: "Mock scenarios unavailable in strict-live production build" }],
+    steps: [{ label: "unavailable", ok: false, durationMs: 0, message: "Mock scenarios unavailable in strict-live production build" }],
     totalMs: 0,
   }));
 }
