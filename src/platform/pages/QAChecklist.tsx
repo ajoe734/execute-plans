@@ -152,16 +152,50 @@ export const QAChecklist = () => {
   };
 
   const [resetPersistOpen, setResetPersistOpen] = useState(false);
+  const [persistOutcome, setPersistOutcome] = useState<{
+    type: "success" | "error";
+    message: string;
+    detail?: string;
+  } | null>(null);
+
   const handleResetPersist = async () => {
-    const { clearPersisted } = await import("@/lib/bff-v1/mocks/persistence");
-    clearPersisted();
-    toast.success(t("qa.persistResetDone"));
-    setTimeout(() => window.location.reload(), 400);
+    try {
+      const { clearPersisted } = await import("@/lib/bff-v1/mocks/persistence");
+      clearPersisted();
+      setPersistOutcome({
+        type: "success",
+        message: t("qa.persistResetDone"),
+      });
+      toast.success(t("qa.persistResetDone"));
+      setTimeout(() => window.location.reload(), 400);
+    } catch (err) {
+      const errorMsg = (err as Error).message || t("qa.persistUnavailable");
+      setPersistOutcome({
+        type: "error",
+        message: t("qa.persistError"),
+        detail: errorMsg,
+      });
+      toast.error(t("qa.persistError"), { description: errorMsg });
+    }
   };
   const handleSnapshotNow = async () => {
-    const { persistNow } = await import("@/lib/bff-v1/mocks/persistence");
-    persistNow();
-    toast.success(t("qa.persistSnapshotDone"));
+    try {
+      const { persistNow } = await import("@/lib/bff-v1/mocks/persistence");
+      persistNow();
+      setPersistOutcome({
+        type: "success",
+        message: t("qa.persistSnapshotDone"),
+      });
+      toast.success(t("qa.persistSnapshotDone"));
+    } catch (err) {
+      const errorMsg = (err as Error).message || t("qa.persistUnavailable");
+      setPersistOutcome({
+        type: "error",
+        message: t("qa.persistError"),
+        detail: errorMsg,
+      });
+      toast.error(t("qa.persistError"), { description: errorMsg });
+    }
   };
 
   return (
@@ -203,6 +237,19 @@ export const QAChecklist = () => {
               </Button>
             </div>
           </div>
+          {persistOutcome && (
+            <div
+              className={`mt-3 p-2.5 rounded text-xs border ${
+                persistOutcome.type === "error"
+                  ? "bg-destructive/10 border-destructive/30 text-destructive"
+                  : "bg-status-success/10 border-status-success/30 text-status-success"
+              }`}
+              data-testid="qa-persist-outcome"
+            >
+              <div className="font-semibold">{persistOutcome.message}</div>
+              {persistOutcome.detail && <div className="mt-0.5 text-muted-foreground">{persistOutcome.detail}</div>}
+            </div>
+          )}
         </Card>
 
         <RealtimeControlCard />

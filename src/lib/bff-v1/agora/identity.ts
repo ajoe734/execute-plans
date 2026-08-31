@@ -3,7 +3,7 @@
 // Schemas: agora_user_scope.schema.json, servant_profile.schema.json.
 // Strict live-only — no mock fallback on network errors. Throws BffError on non-2xx.
 
-import { withStrictLiveOrMock } from "../liveTransport";
+import { strictLiveRead } from "../domainReads";
 
 export type AgoraCapability =
   | "agora.identity.v1"
@@ -82,31 +82,6 @@ export class AgoraIdentityError extends Error {
 
 // ── /bff/agora/me and /bff/agora/capabilities ─────────────────────────────
 
-const MOCK_USER_SCOPE: AgoraUserScope = {
-  spec_version: "1.0",
-  scope_id: "mock-scope",
-  tenant_id: "mock-tenant",
-  user_id: "mock-user",
-  operator_id: "mock-operator",
-  granted_capabilities: [],
-  read_predicate: {
-    tenant_id: "mock-tenant",
-    user_id: "mock-user",
-    required_fields: ["tenant_id", "user_id"],
-    fail_closed: true,
-  },
-  servant_policy: {
-    persona_class: "agora_servant",
-    owner_scope: "user_private",
-    visibility_scope: "private",
-    memory_scope: "private_user",
-    persona_registry_backed: true,
-    execution_authority: "none",
-    prohibited_authority: ["runtime_binding", "broker_order", "capital_binding"],
-  },
-  created_at: "2026-01-01T00:00:00Z",
-};
-
 function adaptUserScope(body: unknown): AgoraUserScope {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     throw new Error("Invalid /bff/agora/me response");
@@ -151,17 +126,17 @@ function adaptCapabilities(body: unknown): AgoraCapability[] {
 }
 
 async function getMe(): Promise<AgoraUserScope> {
-  return withStrictLiveOrMock<AgoraUserScope>(
+  return strictLiveRead<AgoraUserScope>(
+    "agora.identity.me",
     { method: "GET", path: "/bff/agora/me" },
-    async () => MOCK_USER_SCOPE,
     adaptUserScope,
   );
 }
 
 async function getCapabilities(): Promise<AgoraCapability[]> {
-  return withStrictLiveOrMock<AgoraCapability[]>(
+  return strictLiveRead<AgoraCapability[]>(
+    "agora.identity.capabilities",
     { method: "GET", path: "/bff/agora/capabilities" },
-    async () => [],
     adaptCapabilities,
   );
 }

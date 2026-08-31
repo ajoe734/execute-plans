@@ -16,7 +16,7 @@ import * as meModule from "./me";
 import * as headersModule from "./headers";
 import * as writesModule from "./writes";
 import * as managementModule from "./management";
-import * as v5Module from "./v5";
+import * as v5Module from "./v5Client";
 import * as agoraModule from "./agora/agoraReads";
 
 export const bffV1 = {

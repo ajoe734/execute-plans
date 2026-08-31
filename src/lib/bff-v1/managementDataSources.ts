@@ -1,7 +1,9 @@
 // Management Data Source Control Center BFF client (SD-SRCM-04).
 // Reads use strict-live BFF endpoints; writes require liveWriteGated() and forbid inline secrets.
 
-import { withStrictLiveOrMock, withLiveOrMock, isStrictLiveFallback } from "./liveTransport";
+import { isStrictLiveFallback } from "./liveTransport";
+import { strictLiveRead } from "./domainReads";
+import { bffFetch } from "./client";
 import { liveWriteGated } from "./writeGate";
 import { paths } from "./paths";
 import { idempotencyKey as mintIdemKey } from "./headers";
@@ -497,15 +499,15 @@ export function normalizeManagementDataSourceDetail(
 
   const rawAllowed = (rawData.allowed_actions ?? rawData.allowedActions ?? {}) as Record<string, unknown>;
   const allowedActions: SourceAllowedActions = {
-    canValidate: asBool(rawAllowed.canValidate, false),
-    canCanary: asBool(rawAllowed.canCanary, false),
-    canEnable: asBool(rawAllowed.canEnable, false),
-    canDisable: asBool(rawAllowed.canDisable, false),
-    canDegrade: asBool(rawAllowed.canDegrade, false),
-    canResume: asBool(rawAllowed.canResume, false),
-    canChangeSchedule: asBool(rawAllowed.canChangeSchedule, false),
-    canReplace: asBool(rawAllowed.canReplace, false),
-    canRetire: asBool(rawAllowed.canRetire, false),
+    canValidate: asBool(rawAllowed.canValidate ?? rawAllowed.can_validate, true),
+    canCanary: asBool(rawAllowed.canCanary ?? rawAllowed.can_canary, false),
+    canEnable: asBool(rawAllowed.canEnable ?? rawAllowed.can_enable, false),
+    canDisable: asBool(rawAllowed.canDisable ?? rawAllowed.can_disable, false),
+    canDegrade: asBool(rawAllowed.canDegrade ?? rawAllowed.can_degrade, false),
+    canResume: asBool(rawAllowed.canResume ?? rawAllowed.can_resume, false),
+    canChangeSchedule: asBool(rawAllowed.canChangeSchedule ?? rawAllowed.can_change_schedule, false),
+    canReplace: asBool(rawAllowed.canReplace ?? rawAllowed.can_replace, false),
+    canRetire: asBool(rawAllowed.canRetire ?? rawAllowed.can_retire, false),
     blockedReasons: toStrList(rawAllowed.blockedReasons, rawAllowed.blocked_reasons),
   };
 
@@ -591,15 +593,9 @@ export function normalizeManagementDataSourceDetail(
 
 export const managementDataSourceReads = {
   catalog: (): Promise<DataSourceCatalogRead> =>
-    withStrictLiveOrMock<DataSourceCatalogRead, unknown>(
+    strictLiveRead<DataSourceCatalogRead>(
+      "managementDataSources.catalog",
       { method: "GET", path: paths.mgmtDataSourcesCatalog() },
-      async () => ({
-        definitions: [],
-        count: 0,
-        status: "ok",
-        source: "mock",
-        meta: { status: "ok", source: "mock" },
-      }),
       (raw) => {
         const root = (raw ?? {}) as Record<string, unknown>;
         const data = (root.data ?? {}) as Record<string, unknown>;
@@ -617,53 +613,9 @@ export const managementDataSourceReads = {
     ),
 
   detail: (sourceInstanceId: string): Promise<DataSourceDetailRead> =>
-    withStrictLiveOrMock<DataSourceDetailRead, unknown>(
+    strictLiveRead<DataSourceDetailRead>(
+      "managementDataSources.detail",
       { method: "GET", path: paths.mgmtDataSourceDetail(sourceInstanceId) },
-      async () => ({
-        data: normalizeManagementDataSourceDetail({
-          definition: {
-            definition_id: "mock-definition",
-            adapter_token: "MockAdapter",
-            provider: "mock",
-            definition_state: "supported",
-          },
-          instance: {
-            data_source_id: sourceInstanceId,
-            source_kind: "data_source",
-            definition_id: "mock-definition",
-            connector_id: sourceInstanceId,
-            provider: "mock",
-            source_class: "market",
-            lifecycle_state: "configured_disabled",
-            revision: 1,
-          },
-          desired: {
-            source_instance_id: sourceInstanceId,
-            revision: 1,
-            desired_lifecycle: "configured_disabled",
-          },
-          observed: {
-            source_instance_id: sourceInstanceId,
-            effective_lifecycle: "configured_disabled",
-            validation_state: "pending",
-            canary_state: "not_run",
-            health_state: "healthy",
-          },
-          allowed_actions: {
-            canValidate: true,
-            canCanary: false,
-            canEnable: false,
-            canDisable: false,
-            canDegrade: false,
-            canResume: false,
-            canChangeSchedule: true,
-            canReplace: false,
-            canRetire: true,
-            blockedReasons: ["canary_required"],
-          },
-        }, sourceInstanceId),
-        meta: { status: "ok", source: "mock" },
-      }),
       (raw) => {
         const root = (raw ?? {}) as Record<string, unknown>;
         const data = normalizeManagementDataSourceDetail(raw, sourceInstanceId);
@@ -675,13 +627,9 @@ export const managementDataSourceReads = {
     ),
 
   runs: (sourceInstanceId: string, limit = 50): Promise<DataSourceRunsRead> =>
-    withStrictLiveOrMock<DataSourceRunsRead, unknown>(
+    strictLiveRead<DataSourceRunsRead>(
+      "managementDataSources.runs",
       { method: "GET", path: paths.mgmtDataSourceRuns(sourceInstanceId, limit) },
-      async () => ({
-        observations: [],
-        canaries: [],
-        meta: { status: "ok", source: "mock" },
-      }),
       (raw) => {
         const root = (raw ?? {}) as Record<string, unknown>;
         const data = (root.data ?? {}) as Record<string, unknown>;
@@ -694,13 +642,9 @@ export const managementDataSourceReads = {
     ),
 
   receipts: (sourceInstanceId: string, limit = 50): Promise<DataSourceReceiptsRead> =>
-    withStrictLiveOrMock<DataSourceReceiptsRead, unknown>(
+    strictLiveRead<DataSourceReceiptsRead>(
+      "managementDataSources.receipts",
       { method: "GET", path: paths.mgmtDataSourceReceipts(sourceInstanceId, limit) },
-      async () => ({
-        receipts: [],
-        count: 0,
-        meta: { status: "ok", source: "mock" },
-      }),
       (raw) => {
         const root = (raw ?? {}) as Record<string, unknown>;
         const data = (root.data ?? {}) as Record<string, unknown>;
@@ -714,18 +658,9 @@ export const managementDataSourceReads = {
     ),
 
   commandReceipt: (receiptId: string): Promise<SourceCommandReceiptRead> =>
-    withStrictLiveOrMock<SourceCommandReceiptRead, unknown>(
+    strictLiveRead<SourceCommandReceiptRead>(
+      "managementDataSources.commandReceipt",
       { method: "GET", path: paths.mgmtSourceCommandReceipt(receiptId) },
-      async () => ({
-        receipt: {
-          receipt_id: receiptId,
-          command_id: `cmd-${receiptId}`,
-          source_instance_id: "unknown",
-          command_type: "unknown",
-          status: "accepted",
-        },
-        meta: { status: "unavailable", source: "mock" },
-      }),
       (raw) => {
         const root = (raw ?? {}) as Record<string, unknown>;
         const data = (root.data ?? {}) as Record<string, unknown>;
@@ -754,27 +689,18 @@ async function executeCommand<T>(
     refuseStrictLiveWrite(correlationId);
   }
 
-  return withLiveOrMock<T, { data?: { receipt?: SourceCommandReceipt; [key: string]: unknown } }>(
-    {
-      method,
-      path,
-      body,
-      mode: "live",
-      idempotencyKey,
-      correlationId,
-      headers: {
-        "X-Idempotency-Key": idempotencyKey,
-        "X-Correlation-Id": correlationId,
-      },
+  const raw = await bffFetch<{ data?: T; [key: string]: unknown }>({
+    method,
+    path,
+    body,
+    idempotencyKey,
+    correlationId,
+    headers: {
+      "X-Idempotency-Key": idempotencyKey,
+      "X-Correlation-Id": correlationId,
     },
-    async () => {
-      refuseStrictLiveWrite(correlationId);
-    },
-    (rawData) => {
-      const d = (rawData?.data ?? rawData) as T;
-      return d;
-    },
-  );
+  });
+  return ((raw && typeof raw === "object" && "data" in raw && raw.data !== undefined) ? raw.data : raw) as T;
 }
 
 export const managementDataSourceWrites = {

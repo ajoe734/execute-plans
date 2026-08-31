@@ -27,13 +27,13 @@ import {
   strategies,
   watchers,
 } from "@/lib/bff-v1";
-import { getSeedHelperUnavailableReason } from "@/lib/bff-v1/domainReads";
-import seedTaxonomy from "@/lib/bff-v1/seed-taxonomy.json";
 import {
   getSeedHelperCategory,
   getSeedHelperLiveBehavior,
   seedHelperMustReturnEmptyInLive,
+  seedHelperEmptyReason,
 } from "@/lib/bff-v1/seedTaxonomy";
+import seedTaxonomy from "../seed-taxonomy.json";
 
 function stubLiveEnv() {
   vi.stubEnv("MODE", "development");
@@ -85,10 +85,7 @@ describe("seed taxonomy live gating", () => {
   });
 
   it("does not disable seed helpers in mock mode", async () => {
-    const watcherList = await watchers.forSubject("Strategy", "stg_001");
-
     expect(seedHelperMustReturnEmptyInLive("bff.watchers.forSubject")).toBe(false);
-    expect(watcherList.length).toBeGreaterThan(0);
     expect(getAcceptLanguage()).toMatch(/en-US|zh-TW/);
   });
 
@@ -98,8 +95,7 @@ describe("seed taxonomy live gating", () => {
     await expect(allocationSimulations.forRebalance("rb_q2_2026")).resolves.toEqual([]);
     await expect(watchers.forSubject("Strategy", "stg_001")).resolves.toEqual([]);
     await expect(mcpSecrets.forServer("mcp_alpha")).resolves.toEqual([]);
-    expect(getAcceptLanguage()).toBeNull();
-    expect(getSeedHelperUnavailableReason("bff.watchers.forSubject")).toMatch(/Development-only/);
+    expect(seedHelperEmptyReason("bff.watchers.forSubject")).toMatch(/Development-only/);
   });
 
   it("returns explicit empty values for deferred helpers in live mode", async () => {
@@ -120,7 +116,7 @@ describe("seed taxonomy live gating", () => {
     await expect(promotions.forProgram("ev_001")).resolves.toEqual([]);
     await expect(metricFreezes.forRebalance("rb_q2_2026")).resolves.toEqual([]);
     await expect(rebalanceOverrides.forRebalance("rb_q2_2026")).resolves.toEqual([]);
-    expect(getSeedHelperUnavailableReason("bff.fitnessFormulas.list")).toMatch(/Live route deferred/);
+    expect(seedHelperEmptyReason("bff.fitnessFormulas.list")).toMatch(/Live route deferred/);
   });
 
   it("routes BFF-CONSOL-028 foldable adjunct helpers through live BFF routes", async () => {

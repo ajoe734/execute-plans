@@ -3,7 +3,9 @@
 
 import { useEffect, useState } from "react";
 import { paths } from "@/lib/bff-v1/paths";
-import { withLiveOrMock } from "@/lib/bff-v1/liveTransport";
+import { bffFetch, detectMode } from "@/lib/bff-v1/client";
+import { isStrictLiveFallback } from "@/lib/bff-v1/liveTransport";
+import { liveStatus } from "@/lib/bff-v1/liveStatus";
 
 export type Role =
   | "platform_admin"
@@ -107,11 +109,23 @@ function normalizeMeResponse(value: unknown): MeResponse {
 }
 
 async function loadLiveOrMockMe(): Promise<MeResponse> {
-  return withLiveOrMock<MeResponse, unknown>(
-    { method: "GET", path: paths.me() },
-    async () => mockMe(),
-    normalizeMeResponse,
-  );
+  if (detectMode() === "mock") {
+    return mockMe();
+  }
+  try {
+    const raw = await bffFetch<unknown>({
+      method: "GET",
+      path: paths.me(),
+      mode: "live",
+    });
+    return normalizeMeResponse(raw);
+  } catch (err) {
+    if (!isStrictLiveFallback()) {
+      liveStatus.reportFallback(err instanceof Error ? err.message : String(err));
+      return mockMe();
+    }
+    throw err;
+  }
 }
 
 export async function fetchMe(force = false): Promise<MeResponse> {
@@ -136,21 +150,33 @@ export function invalidateMe(): void {
 }
 
 export async function refreshSession(): Promise<MeResponse> {
-  const value = await withLiveOrMock<MeResponse, unknown>(
-    { method: "POST", path: paths.authRefresh() },
-    async () => mockMe(),
-    normalizeMeResponse,
-  );
+  if (detectMode() === "mock") {
+    const value = mockMe();
+    cache = { value, fetchedAt: Date.now() };
+    inflight = null;
+    return value;
+  }
+  const raw = await bffFetch<unknown>({
+    method: "POST",
+    path: paths.authRefresh(),
+    mode: "live",
+  });
+  const value = normalizeMeResponse(raw);
   cache = { value, fetchedAt: Date.now() };
   inflight = null;
   return value;
 }
 
 export async function logoutSession(): Promise<{ ok: true }> {
-  await withLiveOrMock<unknown>(
-    { method: "POST", path: paths.logout() },
-    async () => ({ ok: true }),
-  );
+  if (detectMode() === "mock") {
+    invalidateMe();
+    return { ok: true };
+  }
+  await bffFetch<unknown>({
+    method: "POST",
+    path: paths.logout(),
+    mode: "live",
+  });
   invalidateMe();
   return { ok: true };
 }

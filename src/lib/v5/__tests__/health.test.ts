@@ -52,3 +52,50 @@ describe("v5 health scorer (Q8/Q25)", () => {
     expect(a.score).toBeGreaterThan(b.score);
   });
 });
+
+import { adaptPersonaHealth } from "@/lib/v5/adapters/persona";
+import type { Persona, Alert } from "@/lib/bff-v1";
+
+describe("adaptPersonaHealth", () => {
+  it("handles suspended persona safely without ReferenceError", () => {
+    const p: Persona = {
+      id: "per_test_suspended",
+      name: "Suspended Persona",
+      state: "suspended",
+      risk: "high",
+      successRate: 0.65,
+      routedStrategies: 1,
+      updatedAt: "2026-08-30T12:00:00Z",
+    } as unknown as Persona;
+
+    const health = adaptPersonaHealth(p);
+    expect(health.personaId).toBe("per_test_suspended");
+    expect(health.mode).toBe("suspended");
+    expect(health.suspendedReason).toBe("seed-lifecycle");
+  });
+
+  it("maps states to expected modes and handles critical alert overrides", () => {
+    const liveP: Persona = {
+      id: "per_live",
+      name: "Live Persona",
+      state: "live",
+      risk: "low",
+      successRate: 0.95,
+      routedStrategies: 3,
+      updatedAt: "2026-08-30T12:00:00Z",
+    } as unknown as Persona;
+
+    const criticalAlert: Alert = {
+      id: "alt_1",
+      relatedTarget: "per_live",
+      severity: "critical",
+      acknowledged: false,
+    } as unknown as Alert;
+
+    const liveHealth = adaptPersonaHealth(liveP, { alerts: [criticalAlert] });
+    expect(liveHealth.mode).toBe("live");
+    expect(liveHealth.suspendedReason).toBeUndefined();
+    expect(liveHealth.status).toBe("critical");
+    expect(liveHealth.openFindings).toBe(1);
+  });
+});
