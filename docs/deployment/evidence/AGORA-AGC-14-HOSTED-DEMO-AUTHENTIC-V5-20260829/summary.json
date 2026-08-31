@@ -1,0 +1,123 @@
+{
+  "schema_version": "pantheon.agora.hosted-demo-evidence-summary.v1",
+  "task_id": "AGORA-AGC-14-HOSTED-DEMO-AUTHENTIC-V5-20260829",
+  "owner": "Codex",
+  "reviewer": "Antigravity",
+  "status": "prerequisite-review",
+  "recorded_at": "2026-08-30T10:15:02Z",
+  "evidence_policy": "observed_immutable_only",
+  "acceptance_scope": "intermediate controller repair only; no hosted-demo pass claimed",
+  "requested_exact_pair": {
+    "frontend_sha": "4ec9d1b69b32fcf3e2bf8c42feff5e5dc40b0c67",
+    "frontend_ref": "task/AGORA-AGC-14-HOSTED-DEMO-AUTHENTIC-V5-20260829",
+    "required_frontend_ancestor": "5ffee3db8c2b37b4070d43d091ed4207ef5d70e5",
+    "bff_sha": "d2bca5bc70bfae897e1ef3ca736ad3680a587679"
+  },
+  "repaired_baseline": {
+    "controller_run_id": 33302120321,
+    "controller_run_url": "https://github.com/ajoe734/pantheon/actions/runs/33302120321",
+    "controller_conclusion": "failure",
+    "controller_non_agora_failure": "Dev OpenClaw assistant live smoke under lease",
+    "paper_baseline_step": "success",
+    "public_bff_exact_version_step": "success",
+    "integration_gate_run_id": 33303235915,
+    "integration_gate_run_url": "https://github.com/ajoe734/execute-plans/actions/runs/33303235915",
+    "integration_gate_conclusion": "success",
+    "deploy_run_id": 33303831532,
+    "deploy_run_url": "https://github.com/ajoe734/execute-plans/actions/runs/33303831532",
+    "deploy_conclusion": "success",
+    "served_frontend_sha": "bd03c863e3c2c1c64b9b7797f27cefaf84df17c1",
+    "served_bff_sha": "d2bca5bc70bfae897e1ef3ca736ad3680a587679",
+    "served_pair_id": "c426db52184193a4063e57e6d8f06b14d8743336db7ab50f06b8325165d5902e",
+    "deployment_state": "accepted",
+    "profile": "read-only"
+  },
+  "candidate_attempt": {
+    "controller_run_id": 33304197062,
+    "controller_run_url": "https://github.com/ajoe734/pantheon/actions/runs/33304197062",
+    "controller_conclusion": "failure",
+    "public_bff_exact_version_step": "success",
+    "agora_restart_persistence_step": "success",
+    "integration_gate_run_id": 33304410236,
+    "integration_gate_run_url": "https://github.com/ajoe734/execute-plans/actions/runs/33304410236",
+    "integration_gate_conclusion": "success",
+    "release_candidate_id": "63e531ac780a419662da33e3dce58c62e7b9f914d46814560ceb26c2975bec2e",
+    "compatibility_manifest_sha256": "c92c40672df6781e088108c41189df6318a32724f7eb7b85911626dcf1159577",
+    "deploy_run_id": 33304974209,
+    "deploy_run_url": "https://github.com/ajoe734/execute-plans/actions/runs/33304974209",
+    "deploy_conclusion": "failure",
+    "failed_step": "Deploy verified persistent candidate profile",
+    "outcome": "rejected_before_switch",
+    "observed_error": "release evidence error: unsupported or invalid evidence detail",
+    "diagnosis": "the controller emitted candidateRef for the governed out-of-order task branch, but the immutable evidence detail allowlist had no candidateRef validator",
+    "frontend_switched": false,
+    "write_proof_activated": false,
+    "compensation_step": "success"
+  },
+  "repair_under_review": {
+    "pull_request": 699,
+    "pull_request_url": "https://github.com/ajoe734/execute-plans/pull/699",
+    "exact_head_sha": "96bdc6056fcfd3fdeb0a22d81dae4be57fc417e2",
+    "changes": [
+      "constrained candidateRef branch validator",
+      "invalid-ref unit coverage",
+      "trusted-dev-controller out-of-order task-branch regression",
+      "real GCP login timing and Persona/Workshop/Trading Room evidence harness"
+    ],
+    "verified": [
+      "release-evidence unit tests 20/20",
+      "existing deploy-controller cases 35 passed before the focused repair rerun",
+      "focused governed task-branch deploy regression passed",
+      "ESLint passed",
+      "typecheck passed",
+      "bash syntax passed",
+      "git diff check passed"
+    ]
+  },
+  "immutable_artifacts": [
+    {
+      "repository": "ajoe734/pantheon",
+      "run_id": 33304197062,
+      "artifact_id": 9729928335,
+      "name": "pantheon-dev-release-admission-33304197062-1",
+      "digest": "sha256:b151417aeb3bbb09247c0b01de40fecab53b7f87c74e3b44dba31d1aa5914b22"
+    },
+    {
+      "repository": "ajoe734/execute-plans",
+      "run_id": 33304410236,
+      "artifact_id": 9730151389,
+      "name": "pantheon-fe-release-candidate-attempt-1",
+      "digest": "sha256:b795e93d20c01074c005f8e72fa7b753deef704d6f5ba19cc6497e2713fcd8c4"
+    },
+    {
+      "repository": "ajoe734/execute-plans",
+      "run_id": 33304974209,
+      "artifact_id": 9730234496,
+      "name": "pantheon-dev-fe-deploy-evidence-attempt-1",
+      "digest": "sha256:56937a62ea4bf3c4135c374792843a4d425645fc95fa8a2b0a3043c6305b2bc4"
+    },
+    {
+      "repository": "ajoe734/pantheon",
+      "run_id": 33304197062,
+      "artifact_id": 9730276117,
+      "name": "pantheon-cross-repo-release-33304197062-1",
+      "digest": "sha256:c2559f9e700a0d9ad67598c0e9b40e70005b6472ae355cffbc9f34b4d7c456bd"
+    }
+  ],
+  "acceptance_claims": {
+    "requested_pair_admitted": true,
+    "requested_pair_served": false,
+    "browser_acceptance_executed": false,
+    "real_gcp_login_under_five_seconds_proven": false,
+    "write_proof_activated": false,
+    "watchdog_armed": false,
+    "same_pair_read_only_restored_after_write_proof": false,
+    "task_passed": false
+  },
+  "required_next": "Review and merge PR #699 so the trusted dev deployment controller accepts the typed candidateRef detail. Then deploy the new dev exact head with BFF d2bca5bc70bfae897e1ef3ca736ad3680a587679, run the parent-bound proof and real GCP browser journey, require watchdog exact-pair read-only restore, and replace these intermediate records with final observed evidence.",
+  "artifacts": [
+    "docs/deployment/evidence/AGORA-AGC-14-HOSTED-DEMO-AUTHENTIC-V5-20260829/summary.json",
+    "docs/deployment/evidence/AGORA-AGC-14-HOSTED-DEMO-AUTHENTIC-V5-20260829/browser-results.json",
+    "docs/deployment/evidence/AGORA-AGC-14-HOSTED-DEMO-AUTHENTIC-V5-20260829/restore-attestation.json"
+  ]
+}

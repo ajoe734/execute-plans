@@ -7,6 +7,7 @@
  * an interaction POST from the browser.
  */
 import { randomUUID } from "node:crypto";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 import {
   installHostedDevLogin,
@@ -57,6 +58,22 @@ const DEV_LOGIN_VIEWER_CLIENT_SECRET = String(
 ).trim();
 const DEV_BFF_HOST = "pantheon-lupin-dev-bff.35.201.204.12.sslip.io";
 const DEV_FE_HOST = "pantheon-lupin-dev-fe.35.201.204.12.sslip.io";
+const EVIDENCE_DIR = `${process.env.PANTHEON_AUDIT_OUT_DIR ?? "/tmp/persona-hosted-proof"}/persona-pages`;
+
+async function capturePageEvidence(
+  page: Page,
+  runMarker: string,
+  label: string,
+): Promise<string> {
+  mkdirSync(EVIDENCE_DIR, { recursive: true });
+  const filename = `${runMarker}-${label}.png`;
+  await page.screenshot({
+    animations: "disabled",
+    fullPage: true,
+    path: `${EVIDENCE_DIR}/${filename}`,
+  });
+  return filename;
+}
 
 async function getOrMintOperatorToken(request: APIRequestContext): Promise<string> {
   if (OPERATOR_TOKEN) {
@@ -387,18 +404,42 @@ async function revealWorkshopComposerOptions(page: Page): Promise<void> {
 test.describe("Persona Detail → canonical Workshop cross-repo proof", () => {
   test.skip(!FE_BASE || !BFF_BASE, "requires hosted Pantheon FE and BFF URLs");
 
-  test("operator resolves, checks eligibility, submits no-authority interaction, reads it back, and returns @desktop-full", async ({ page, request }) => {
+  test("operator resolves, checks eligibility, submits no-authority interaction, reads it back, and returns @desktop-full", async ({ page, request }, testInfo) => {
     const operatorToken = await getOrMintOperatorToken(request);
     test.skip(!WRITE_PROOF || !operatorToken, "requires explicit write-proof opt-in and operator token");
     test.setTimeout(180_000);
     await assertOperatorSession(request, operatorToken);
     const persona = await discoverEligiblePersona(request, operatorToken);
+    const runMarker = randomUUID();
+    const screenshots: string[] = [];
     await installVerifiedHostedProofSession(page, "operator");
     await page.addInitScript(() => {
       // runtimeEnv accepts this only on the allowlisted Pantheon dev host.
       window.sessionStorage.setItem("pantheon.e2e.realWrites", "true");
     });
+
+    const personaListResponse = page.waitForResponse((response) =>
+      new URL(response.url()).pathname === "/bff/personas"
+      && response.request().method() === "GET",
+    );
+    await page.goto(`${FE_BASE}/management/personas`);
+    expect((await personaListResponse).ok()).toBe(true);
+    await expect(page.getByText(persona.name, { exact: true }).first()).toBeVisible({ timeout: 30_000 });
+    screenshots.push(await capturePageEvidence(page, runMarker, "01-persona-list"));
+
+    const fleetResponse = page.waitForResponse((response) =>
+      new URL(response.url()).pathname === "/bff/management/persona-fleet"
+      && response.request().method() === "GET",
+    );
+    await page.goto(`${FE_BASE}/management/persona-fleet?persona=${encodeURIComponent(persona.id)}`);
+    expect((await fleetResponse).ok()).toBe(true);
+    await expect(page.getByText(persona.name, { exact: true }).first()).toBeVisible({ timeout: 30_000 });
+    screenshots.push(await capturePageEvidence(page, runMarker, "02-persona-fleet"));
+
     await openPersonaDetail(page, persona);
+    const talkButton = page.getByRole("button", { name: /^Talk with / });
+    await expect(talkButton).toBeEnabled();
+    screenshots.push(await capturePageEvidence(page, runMarker, "03-persona-detail-talk"));
 
     const resolveResponse = page.waitForResponse((response) =>
       new URL(response.url()).pathname === "/bff/agora/interactions/context:resolve"
@@ -408,8 +449,6 @@ test.describe("Persona Detail → canonical Workshop cross-repo proof", () => {
       new URL(response.url()).pathname === "/bff/agora/interactions/participants:eligible"
       && response.request().method() === "POST",
     );
-    const talkButton = page.getByRole("button", { name: /^Talk with / });
-    await expect(talkButton).toBeEnabled();
     await talkButton.click();
 
     const resolvedHttp = await resolveResponse;
@@ -422,6 +461,7 @@ test.describe("Persona Detail → canonical Workshop cross-repo proof", () => {
     expect(workshopId).not.toBe("");
     expect(items({ data: { items: eligibility.included } }).some((row) => row.persona_id === persona.id)).toBe(true);
     await expect(page).toHaveURL(new RegExp(`/agora/strategy-workshop/${encodeURIComponent(workshopId)}`));
+    screenshots.push(await capturePageEvidence(page, runMarker, "04-persona-talk-workshop"));
 
     const topic = `Hosted Persona reflection ${randomUUID()}`;
     await page.getByTestId("servant-composer-input").fill(topic);
@@ -462,6 +502,35 @@ test.describe("Persona Detail → canonical Workshop cross-repo proof", () => {
     await expect(returnLink).toHaveAttribute("href", `/management/personas/${persona.id}`);
     await returnLink.click();
     await expect(page).toHaveURL(new RegExp(`/management/personas/${encodeURIComponent(persona.id)}$`));
+    screenshots.push(await capturePageEvidence(page, runMarker, "05-persona-talk-return-readback"));
+
+    const evidencePath = `${EVIDENCE_DIR}/${runMarker}-persona-page-journey.json`;
+    writeFileSync(
+      evidencePath,
+      JSON.stringify(
+        {
+          interaction_id: interactionId,
+          page_journey: [
+            "/management/personas",
+            `/management/persona-fleet?persona=${persona.id}`,
+            `/management/personas/${persona.id}`,
+            `/agora/strategy-workshop/${workshopId}`,
+            `/management/personas/${persona.id}`,
+          ],
+          persona_id: persona.id,
+          route_mocking: false,
+          run_marker: runMarker,
+          screenshots,
+          workshop_id: workshopId,
+        },
+        null,
+        2,
+      ),
+    );
+    await testInfo.attach("persona-page-journey-evidence", {
+      contentType: "application/json",
+      path: evidencePath,
+    });
   });
 
   test("daily Persona measure supports durable modify, defer, accept-for-review, validation, reject, and reload @desktop-full", async ({ page, request }) => {
