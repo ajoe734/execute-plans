@@ -1,57 +1,63 @@
 {
   "schema_version": "pantheon.hosted-demo-restore-attestation.v5",
   "task_id": "AGORA-AGC-14-HOSTED-DEMO-AUTHENTIC-V5-20260829",
-  "status": "restored-safe-read-only",
-  "observed_at": "2026-08-30T18:52:30Z",
+  "status": "safe-read-only-baseline-restored",
+  "observed_at": "2026-08-31T04:04:02Z",
   "observation_urls": {
     "frontend_manifest": "https://pantheon-lupin-dev-fe.35.201.204.12.sslip.io/deployment.json",
     "backend_version": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/bff/version",
     "backend_readiness": "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/readyz"
   },
   "observation_sha256": {
-    "frontend_manifest": "38e0902c834e22bc276b0d93a0805739375008efbc97700d2cb8e8925e255f11",
-    "backend_version": "7b80dca61b464adf06503c928c20c8b738b74770ac4157a157e492727b4f5e10",
-    "backend_readiness": "8b1e33729274cba6227594e2c200b87abcf811e785e811d8278177907acdab0f"
+    "frontend_manifest": "5a288c17b3096a6f8088d26a121c05197adbf71a41bf1a4d9b1fb058c1c5a105",
+    "backend_version": "78d728d0886dd45fe9725c7133dd477c014e3b9283ef880a03a90c354f1f9b4a",
+    "backend_readiness": "1938cc10ed94879ef5a87e65c0a876d13b691299828fc78540b9f88f9cece155"
   },
-  "exact_pair": {
+  "candidate_pair_not_admitted": {
+    "frontend_commit": "c77dc7b60f8df8982866859ffb3eeb954b2264cb",
+    "backend_commit": "bc142c9a2041ef9e3345f24187be29f491681120",
+    "release_candidate_id": "e35aae3ee40b67432fae2d972889fa105d95f4988b423359eb847d76f1061555",
+    "compatibility_manifest_sha256": "fefe5d6f12b4b1f802179b6295b87c9b23cb42fc9d210492f11e8b77ebf7f7a1"
+  },
+  "pre_attempt_baseline": {
     "frontend_commit": "7d30e78476be61222af63a089e7ab141aa43b809",
-    "backend_commit": "4f0994be548f56da627740f5b7fb193844c1faed",
-    "pair_fingerprint": "b9209d6382cf109fda2504d7622fe7d9f137a084b0214988cc5588fffdeabc93",
-    "release_candidate_id": "1497419171e98b33b42a01ebfd76c60368ab20e75ea45ac5fda61636a289e1cd",
-    "compatibility_manifest_sha256": "c5e27c9facfde7ddf34e22dd81a7ae5b15c128e81a4c4a2045ed349901981a09"
+    "backend_commit": "3395914ff350ad7ccdb79dad9af44dca5c011bf1",
+    "pair_id": "6fc13d1d8c61ce0b0b305962c4a950081e0cab61d9471a8b206f5be0af411144"
   },
   "write_proof_window": {
-    "parent_run_id": 33328350776,
-    "child_run_id": 33328934580,
-    "correlation_id": "1f254dea-54e0-45d3-9e2c-3ca277770d87",
-    "release_name": "20260830T184303Z-7d30e78476be-gate-33327155009-33328350776-1-write-proof",
-    "accepted_at": "2026-08-30T18:44:35Z",
-    "profile": "write-proof",
-    "frontend_real_writes": true,
-    "bff_real_writes": true,
-    "post_failure_exact_manifest_check": "passed"
+    "activated": false,
+    "parent_run_id": null,
+    "child_run_id": null,
+    "watchdog_run_id": null,
+    "real_writes_enabled": false,
+    "reason": "Deployment admission failed before the FE switch or any proof authorization dispatch."
   },
-  "independent_watchdog": {
-    "run_id": 33328840641,
-    "conclusion": "success",
-    "authenticate_job_id": 99303652599,
-    "authenticate_started_at": "2026-08-30T18:42:34Z",
-    "authenticate_completed_at": "2026-08-30T18:42:56Z",
-    "watch_job_id": 99303700483,
-    "watch_started_at": "2026-08-30T18:42:59Z",
-    "watch_completed_at": "2026-08-30T18:47:41Z",
-    "restore_job_id": 99304279472,
-    "restore_started_at": "2026-08-30T18:48:02Z",
-    "restore_completed_at": "2026-08-30T18:51:32Z"
+  "deployment_compensation": {
+    "controller_run_id": 33354645302,
+    "deploy_step_conclusion": "failure",
+    "deploy_process_exit_code": 75,
+    "candidate_backend_was_temporarily_served": true,
+    "candidate_frontend_was_served": false,
+    "baseline_backend_restored": true,
+    "baseline_frontend_unchanged": true,
+    "compensation_step_conclusion": "success-with-continue-on-error",
+    "compensation_process_exit_code": 75,
+    "post_restore_failure": "Strict browser readiness still reported OPENCLAW_GATEWAY_TIMEOUT after exact baseline restoration.",
+    "lease": {
+      "lease_id": "3fd045b4-14ee-4f9d-b844-3a53295732b5",
+      "owner": "pantheon:ajoe734/pantheon:33354645302:1:rollback",
+      "expected_backend_sha": "3395914ff350ad7ccdb79dad9af44dca5c011bf1",
+      "quarantined_until": "2026-08-31T04:03:44Z",
+      "expired_before_final_observation": true
+    }
   },
   "restored_manifest": {
     "deployment_state": "accepted",
     "profile": "read-only",
-    "release_name": "20260830T184303Z-7d30e78476be-gate-33327155009-33328350776-1-write-proof-read-only",
-    "accepted_at": "2026-08-30T18:51:23.227Z",
+    "release_name": "20260830T221921Z-7d30e78476be-gate-33336555863-33337854851-1-write-proof-read-only",
     "frontend_commit": "7d30e78476be61222af63a089e7ab141aa43b809",
-    "backend_commit": "4f0994be548f56da627740f5b7fb193844c1faed",
-    "pair_fingerprint": "b9209d6382cf109fda2504d7622fe7d9f137a084b0214988cc5588fffdeabc93",
+    "backend_commit": "3395914ff350ad7ccdb79dad9af44dca5c011bf1",
+    "pair_id": "6fc13d1d8c61ce0b0b305962c4a950081e0cab61d9471a8b206f5be0af411144",
     "vite_bff_mode": "live",
     "vite_bff_fallback": "strict",
     "frontend_real_writes": false,
@@ -62,41 +68,31 @@
   },
   "backend_readback": {
     "service": "operator-bff",
-    "source_commit_sha": "4f0994be548f56da627740f5b7fb193844c1faed",
+    "source_commit_sha": "3395914ff350ad7ccdb79dad9af44dca5c011bf1",
     "source_commit_known": true,
     "auth_stub": false,
     "auth_mode": "strict",
-    "dev_login_enabled": true,
     "ready": true,
     "lifecycle_projector": {
       "ready": true,
       "status": "ready",
       "writer_backend": "postgres",
       "reader_backend": "postgres",
-      "deployment_sha": "4f0994be548f56da627740f5b7fb193844c1faed",
-      "expected_deployment_sha": "4f0994be548f56da627740f5b7fb193844c1faed",
-      "checkpoint": 7676348,
-      "source_high_watermark": 7676348,
+      "deployment_sha": "3395914ff350ad7ccdb79dad9af44dca5c011bf1",
+      "expected_deployment_sha": "3395914ff350ad7ccdb79dad9af44dca5c011bf1",
       "backlog": 0,
       "quarantine_count": 0,
       "accepted_live": true
     }
   },
-  "parent_restore_confirmation": {
-    "job_id": 99304314799,
-    "wait_for_watchdog": "success",
-    "post_child_same_pair_read_only_readback": "success",
-    "final_attestation": "failure",
-    "final_attestation_reason": "The child demo evidence failed and the parent correctly refused to attest a passed proof."
-  },
   "restore_claims": {
-    "watchdog_independent_of_child": true,
-    "watchdog_conclusion_success": true,
-    "same_pair_restored": true,
+    "candidate_pair_required_watchdog_restore_proven": false,
+    "pre_attempt_baseline_restored": true,
     "read_only_restored": true,
     "writes_disabled": true,
     "direct_manifest_accepted": true,
     "backend_ready": true,
+    "lease_quarantine_expired": true,
     "task_pass": false
   }
 }

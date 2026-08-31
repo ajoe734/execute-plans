@@ -2,184 +2,146 @@
   "schema_version": "pantheon.hosted-demo-authentic-evidence.v5",
   "task_id": "AGORA-AGC-14-HOSTED-DEMO-AUTHENTIC-V5-20260829",
   "status": "blocked-external",
-  "recorded_at": "2026-08-30T18:52:30Z",
-  "acceptance_scope": "Exact-pair governed write-proof attempt with immutable workflow artifacts, authentic hosted Persona browser coverage, durable governed proposal readback, and independent same-pair watchdog restore.",
-  "exact_pair": {
-    "frontend_commit": "7d30e78476be61222af63a089e7ab141aa43b809",
-    "backend_commit": "4f0994be548f56da627740f5b7fb193844c1faed",
-    "pair_fingerprint": "b9209d6382cf109fda2504d7622fe7d9f137a084b0214988cc5588fffdeabc93",
-    "release_candidate_id": "1497419171e98b33b42a01ebfd76c60368ab20e75ea45ac5fda61636a289e1cd",
-    "compatibility_manifest_sha256": "c5e27c9facfde7ddf34e22dd81a7ae5b15c128e81a4c4a2045ed349901981a09"
+  "recorded_at": "2026-08-31T04:04:02Z",
+  "acceptance_scope": "Deploy a governed exact FE/BFF pair containing the approved lifecycle repair, execute the parent-bound no-mock hosted browser proof with one-shot authorization, and restore the admitted pair to accepted read-only.",
+  "current_retry": {
+    "required_lifecycle_merge": "55bcfd2fe97a2cda431b2686b5b49286aab6bd2f",
+    "required_lifecycle_merge_contained_by_candidate_backend": true,
+    "candidate_frontend_commit": "c77dc7b60f8df8982866859ffb3eeb954b2264cb",
+    "candidate_backend_commit": "bc142c9a2041ef9e3345f24187be29f491681120",
+    "release_candidate_id": "e35aae3ee40b67432fae2d972889fa105d95f4988b423359eb847d76f1061555",
+    "compatibility_manifest_sha256": "fefe5d6f12b4b1f802179b6295b87c9b23cb42fc9d210492f11e8b77ebf7f7a1",
+    "compatibility_status": "accepted",
+    "candidate_pair_admitted_and_switched": false
   },
-  "governed_release": {
-    "controller_run_id": 33325479949,
-    "integration_gate_run_id": 33327155009,
-    "read_only_switch_run_id": 33327736542,
-    "controller_conclusion": "success",
-    "gate_conclusion": "success",
-    "switch_conclusion": "success"
-  },
-  "proof_attempt": {
-    "parent_run_id": 33328350776,
-    "parent_conclusion": "failure",
-    "correlation_id": "1f254dea-54e0-45d3-9e2c-3ca277770d87",
-    "proof_window_ack": true,
-    "emergency_override": false,
-    "watchdog_run_id": 33328840641,
-    "watchdog_conclusion": "success",
-    "child_run_id": 33328934580,
-    "child_conclusion": "failure",
-    "write_proof_release_name": "20260830T184303Z-7d30e78476be-gate-33327155009-33328350776-1-write-proof",
-    "write_proof_accepted_at": "2026-08-30T18:44:35Z",
-    "write_proof_profile": "write-proof",
-    "write_proof_frontend_real_writes": true,
-    "write_proof_bff_real_writes": true,
-    "authorization_and_credentials": {
-      "parent_authority_verified": true,
-      "one_time_child_claim_verified": true,
-      "fresh_short_lived_credentials_minted": true,
-      "fresh_credentials_validated": true
-    },
-    "persona_preflight": {
-      "ensure_succeeded": true,
-      "schema_version": "pantheon.persona-hosted-proof-servant.v1",
-      "request_id": "8d9beca0-33f6-49e3-849a-d424824069e9",
-      "version_request_id": "ddb4503a-7f8f-47c3-a20b-b512f542dccf",
-      "me_request_id": "9d7ed072-ca58-4996-abd3-f0e248f3e2aa",
-      "readiness_request_id": "a1ec1a8c-9111-41c3-98f4-526024ad8ad8",
-      "idempotency_key": "124badd0-3ac6-53db-9664-aee4a1b2d936",
-      "tenant_id": "tenant-dev",
-      "persona_id": "agora-servant-fbeaee01e8f34c786555",
-      "session_kind": "bearer",
-      "auth_ready": true,
-      "persona_class": "agora_servant",
-      "owner_scope": "user_private",
-      "memory_scope": "private_user",
-      "execution_authority": "none",
-      "registry_backed": true
-    },
-    "governed_proposal_write_proof": {
-      "succeeded": true,
-      "proposal_id": "prop_29a63e36477e454b9849382cf65d8690",
-      "created_status": 201,
-      "modified_status": 200,
-      "validated_status": 200,
-      "final_revision": 3,
-      "replay_revision": 3,
-      "audit_actions": [
-        "create",
-        "modify",
-        "validate"
-      ],
-      "unauthenticated_create_status": 401,
-      "unauthenticated_create_code": "AUTH_REQUIRED",
-      "viewer_create_status": 403,
-      "viewer_modify_status": 403,
-      "execution_authority": "none",
-      "downstream_execution_attempted": false,
-      "tokens_recorded": false,
-      "generated_at": "2026-08-30T18:46:05.431Z"
-    },
-    "browser_result": {
-      "suite": "persona-interaction-cross-repo-hosted.spec.ts",
-      "expected": 0,
-      "unexpected": 3,
-      "skipped": 0,
-      "flaky": 0,
-      "duration_ms": 85150.892,
-      "operator_failure": "Ensured Persona was excluded by authoritative eligibility with persona_not_active",
-      "daily_measure_failure": "Ensured Persona was excluded by authoritative eligibility with persona_not_active",
-      "viewer_failure": "Persona detail did not render the Agora Servant level-1 heading within 30000 ms"
-    },
-    "failed_step": "Run governed and Persona desktop proof with proof-only credentials",
-    "later_hosted_journeys": "skipped_after_required_Persona_suite_failure",
-    "post_failure_write_proof_manifest_check": "passed"
-  },
-  "safe_restore": {
-    "restored": true,
-    "restored_at": "2026-08-30T18:51:23.227Z",
-    "profile": "read-only",
-    "release_name": "20260830T184303Z-7d30e78476be-gate-33327155009-33328350776-1-write-proof-read-only",
-    "frontend_real_writes": false,
-    "frontend_stub_writes": false,
-    "bff_real_writes": false,
-    "pair_matches": true,
-    "safe_restore_probe": "passed",
-    "rollback_required": false,
-    "direct_readback_at": "2026-08-30T18:52:30Z",
-    "direct_manifest_sha256": "38e0902c834e22bc276b0d93a0805739375008efbc97700d2cb8e8925e255f11",
-    "bff_version_sha256": "7b80dca61b464adf06503c928c20c8b738b74770ac4157a157e492727b4f5e10",
-    "bff_readiness_sha256": "8b1e33729274cba6227594e2c200b87abcf811e785e811d8278177907acdab0f",
-    "bff_ready": true,
-    "lifecycle_projector_ready": true,
-    "lifecycle_backlog": 0,
-    "lifecycle_quarantine_count": 0
-  },
-  "immutable_artifacts": [
+  "deployment_attempts": [
     {
-      "run_id": 33325479949,
-      "artifact_id": 9736853869,
-      "name": "pantheon-cross-repo-release-33325479949-1",
-      "digest": "sha256:1fbf36be53cfd2c315a52490d6eeba20c10722be9ae4ec63aa7dea035f6037e9"
+      "controller_run_id": 33353978323,
+      "controller_commit": "93aed489ca61e241f10ee352c1a779fb2ff88194",
+      "frontend_commit": "c77dc7b60f8df8982866859ffb3eeb954b2264cb",
+      "release_candidate_id": "a365da8feb9117cfb2c75ba35349f16eac4fdb73fce41cbbcaa5f3522f37930f",
+      "compatibility_manifest_sha256": "111ef7e27b33ff05479a64b836f5e1cac1d4144a30c513543c6a680d5405d2bd",
+      "component": "bff",
+      "conclusion": "failure",
+      "failed_at": "2026-08-31T03:33:56Z",
+      "failed_step": "Deploy dev VM stack under lease",
+      "exit_code": 75,
+      "failure": "The identity-bound environment lease heartbeat received GitHub API 403 rate-limit exhaustion and the lease guard terminated the deploy process group.",
+      "candidate_backend_mutation_reached": false,
+      "frontend_switch_reached": false,
+      "baseline_preserved": true
     },
     {
-      "run_id": 33327155009,
-      "artifact_id": 9736715291,
-      "name": "pantheon-fe-release-candidate-attempt-1",
-      "digest": "sha256:6bbe82b64fb2eda251a4bfaa87329ec2e94f745ebcd73c7924dc0944d9920c31"
-    },
-    {
-      "run_id": 33327736542,
-      "artifact_id": 9736848493,
-      "name": "pantheon-dev-fe-deploy-evidence-attempt-1",
-      "digest": "sha256:9139ce0d861398595edd9dc802bbe442be62db9818fbae01b1970e64e06de645"
-    },
-    {
-      "run_id": 33328350776,
-      "artifact_id": 9737008292,
-      "name": "pantheon-dev-fe-deploy-evidence-attempt-1",
-      "digest": "sha256:9ef5a284d8ddb69b98650b1e4e89f6bd7800a8a3fca8dc0aee394a24403159d2"
-    },
-    {
-      "run_id": 33328350776,
-      "artifact_id": 9737030612,
-      "name": "pantheon-proof-binding-attempt-1",
-      "digest": "sha256:f2cc739795171bfe4e95d99bcd1e973af0270b3eb3e4415889dc131da1c10edf"
-    },
-    {
-      "run_id": 33328350776,
-      "artifact_id": 9737060855,
-      "name": "pantheon-proof-child-claim-attempt-1",
-      "digest": "sha256:b84716dc05c70b816e2f6b36d8368e445966404b6c7be34ea3b7f15a3b3ec7f4"
-    },
-    {
-      "run_id": 33328934580,
-      "artifact_id": 9737097099,
-      "name": "pantheon-authorized-write-proof-attempt-1",
-      "digest": "sha256:27d970481bf3454f4ad91a7cacb49277bb1b16631d12233a9577dbac5fd0ded1"
+      "controller_run_id": 33354645302,
+      "controller_commit": "bc142c9a2041ef9e3345f24187be29f491681120",
+      "frontend_commit": "c77dc7b60f8df8982866859ffb3eeb954b2264cb",
+      "release_candidate_id": "e35aae3ee40b67432fae2d972889fa105d95f4988b423359eb847d76f1061555",
+      "compatibility_manifest_sha256": "fefe5d6f12b4b1f802179b6295b87c9b23cb42fc9d210492f11e8b77ebf7f7a1",
+      "component": "bff",
+      "conclusion": "failure",
+      "failed_at": "2026-08-31T03:49:46Z",
+      "failed_step": "Deploy dev VM stack under lease",
+      "exit_code": 75,
+      "candidate_backend_deployed": true,
+      "candidate_backend_exact_sha_verified": true,
+      "candidate_backend_lifecycle_ready": true,
+      "candidate_backend_lifecycle_backlog": 0,
+      "candidate_backend_lifecycle_quarantine_count": 0,
+      "frontend_switch_reached": false,
+      "failure": "Strict authenticated browser readiness remained degraded for 120 seconds: providerReady=false, provider=openclaw, reason=OPENCLAW_GATEWAY_TIMEOUT.",
+      "compensation": {
+        "baseline_backend_restored": true,
+        "baseline_frontend_unchanged": true,
+        "rollback_process_exit_code": 75,
+        "rollback_post_restore_failure": "The same strict browser readiness check returned OPENCLAW_GATEWAY_TIMEOUT after the baseline BFF was restored.",
+        "lease_quarantined_until": "2026-08-31T04:03:44Z",
+        "lease_quarantine_expired_before_final_readback": true
+      }
     }
   ],
+  "proof_attempt": {
+    "status": "not-started",
+    "reason": "No candidate pair reached governed admission, so no bounded write-proof deployment or parent authorization was dispatched.",
+    "parent_run_id": null,
+    "child_run_id": null,
+    "watchdog_run_id": null,
+    "proof_window_ack_submitted": false,
+    "one_shot_child_authorization_claimed": false,
+    "fresh_proof_credentials_minted": false,
+    "browser_proof_executed": false,
+    "real_writes_enabled": false
+  },
+  "safe_restore": {
+    "status": "accepted-read-only-baseline",
+    "observed_at": "2026-08-31T04:04:02Z",
+    "frontend_commit": "7d30e78476be61222af63a089e7ab141aa43b809",
+    "backend_commit": "3395914ff350ad7ccdb79dad9af44dca5c011bf1",
+    "pair_id": "6fc13d1d8c61ce0b0b305962c4a950081e0cab61d9471a8b206f5be0af411144",
+    "profile": "read-only",
+    "deployment_state": "accepted",
+    "frontend_real_writes": false,
+    "frontend_stub_writes": false,
+    "embedded_bearer_token": false,
+    "bff_auth_stub": false,
+    "bff_auth_mode": "strict",
+    "bff_ready": true,
+    "lifecycle_projector_ready": true,
+    "lifecycle_deployment_sha_exact": true,
+    "lifecycle_backlog": 0,
+    "lifecycle_quarantine_count": 0,
+    "safe_restore_probe": "passed",
+    "rollback_required": false,
+    "frontend_manifest_sha256": "5a288c17b3096a6f8088d26a121c05197adbf71a41bf1a4d9b1fb058c1c5a105",
+    "bff_version_sha256": "78d728d0886dd45fe9725c7133dd477c014e3b9283ef880a03a90c354f1f9b4a",
+    "bff_readiness_sha256": "1938cc10ed94879ef5a87e65c0a876d13b691299828fc78540b9f88f9cece155"
+  },
+  "immutable_workflow_evidence": [
+    {
+      "run_id": 33353978323,
+      "artifact_id": 9744536482,
+      "name": "pantheon-dev-release-admission-33353978323-1",
+      "digest": "sha256:97980c2c24a67e2455c3048e96f58ea82842150981b962340f5036293d48fe6e"
+    },
+    {
+      "run_id": 33354645302,
+      "artifact_id": 9744740804,
+      "name": "pantheon-dev-release-admission-33354645302-1",
+      "digest": "sha256:b670dfe8a5370ca66aab632981ddbb471b928e1db782f96b3592b2d3e7cf24ae"
+    },
+    {
+      "run_id": 33353978323,
+      "name": "authenticated-workflow-log-archive",
+      "download_sha256": "3f4d9f3b9b894c1bae01d262130b4ff9364024335ca5f83c2bbd534408de4e08"
+    },
+    {
+      "run_id": 33354645302,
+      "name": "authenticated-workflow-log-archive",
+      "download_sha256": "408184d6a4354565baa8a9470ccd86775328fe04050596cc18dcf88aec06ca53"
+    }
+  ],
+  "superseded_prior_attempt": {
+    "parent_run_id": 33328350776,
+    "child_run_id": 33328934580,
+    "watchdog_run_id": 33328840641,
+    "status": "failed",
+    "acceptance_reuse_allowed": false,
+    "note": "The prior persona_not_active/detail-render failure remains historical context only and is not acceptance evidence for this retry."
+  },
   "acceptance_claims": {
-    "requested_pair_admitted_and_served": true,
-    "governed_proposal_write_and_readback_proven": true,
-    "persona_preflight_proven": true,
+    "candidate_pair_admitted_and_served": false,
+    "parent_bound_authorization_proven": false,
+    "one_shot_child_claim_proven": false,
     "real_firebase_browser_login_proven": false,
-    "persona_browser_suite_passed": false,
-    "all_four_hosted_journeys_passed": false,
-    "authenticated_readiness_timing_proven": false,
-    "same_pair_watchdog_restore_proven": true,
-    "final_read_only_manifest_accepted": true,
+    "all_required_hosted_journeys_passed": false,
+    "negative_controls_proven": false,
+    "candidate_same_pair_watchdog_restore_proven": false,
+    "final_safe_read_only_baseline_verified": true,
     "task_pass": false
   },
   "blocker": {
     "kind": "external",
-    "owner_layer": "Pantheon BFF Agora servant lifecycle admission and hosted Persona detail readback",
-    "repaired_behavior": "The repaired exact BFF no longer returns HTTP 500 from authoritative eligibility or Persona Fleet. Both routes returned successful responses in the immutable browser result.",
-    "hosted_failure": {
-      "operator_and_daily_measure": "The exact user-private Persona returned by POST /bff/agora/servant/ensure was excluded from POST /bff/agora/interactions/participants:eligible with persona_not_active.",
-      "viewer": "GET /bff/management/persona-fleet exposed the ensured Persona, but /management/personas/agora-servant-fbeaee01e8f34c786555 did not render the expected Agora Servant heading within 30000 ms."
-    },
-    "detail": "Fresh credential validation and stable user-private Persona ensure succeeded, and the governed proposal write/readback proof passed. The required Persona desktop suite still cannot proceed because the ensured Persona is not active for authoritative eligibility and its viewer detail is not renderable. Trade Journey, Agora/Firebase, and Management/AI journeys were then skipped by the required fail-closed sequence.",
-    "required_next": "Repair the stable servant ensure/lifecycle projection so the ensured Persona is active and eligible, and make the same fleet Persona readable on the viewer detail route with the disabled-interaction control. Admit the repaired exact pair through the governed controller/gate/switch, then rerun the bounded write-proof parent."
+    "owner_layer": "Pantheon dev OpenClaw provider readiness and nonprod deployment admission",
+    "detail": "The repaired candidate BFF reached exact-SHA lifecycle readiness, but the controller cannot complete strict authenticated browser readiness because OpenClaw remains degraded with OPENCLAW_GATEWAY_TIMEOUT. The same check also failed after restoring the accepted baseline, so a third blind retry is not justified.",
+    "required_next": "Restore stable OpenClaw gateway/provider readiness on the Pantheon dev host, then rerun nonprod deployment for the current exact FE/BFF tips. Only after the pair is admitted should the bounded parent write-proof and its child/watchdog sequence be dispatched."
   }
 }
