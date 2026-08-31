@@ -20,9 +20,11 @@
     ],
     "preserved": [
       "Production import graph gate (productionImportGraph.test.ts) remains passing with 0 cycles.",
+      "src/lib/bff-v1/index.ts is preserved byte-identical to origin/dev with zero diff; internal bffV5 and sendRankingRecommendation callers use explicit v5Client imports.",
       "All existing delivered paths remain intact."
     ],
     "not_changed": [
+      "src/lib/bff-v1/index.ts public surface is unchanged from origin/dev.",
       "No deleted bff/writeFallback/seed/legacy/NL path was recreated."
     ]
   },

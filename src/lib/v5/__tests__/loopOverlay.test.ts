@@ -1,7 +1,7 @@
 // E3 — Loop run mutation overlay + bffV5.loops.* end-to-end.
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { bffV5 } from "@/lib/bff-v1";
+import { bffV5 } from "@/lib/bff-v1/v5Client";
 import {
   applyLoopOverlay,
   loopRunOverlay,

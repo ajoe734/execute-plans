@@ -1,5 +1,5 @@
 import { afterEach, describe, it, expect, vi } from "vitest";
-import { bffV5 } from "@/lib/bff-v1";
+import { bffV5 } from "@/lib/bff-v1/v5Client";
 
 const realFetch = globalThis.fetch;
 

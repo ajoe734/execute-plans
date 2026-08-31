@@ -9,7 +9,7 @@ import { StatCard } from "@/platform/components/StatCard";
 import { Card } from "@/components/ui/card";
 import { ManagementTableScroll } from "@/management/components/ManagementTableScroll";
 import { Badge } from "@/components/ui/badge";
-import { v5 } from "@/lib/bff-v1";
+import { v5 } from "@/lib/bff-v1/v5Client";
 import { useT } from "@/platform/hooks";
 import { useV5Live } from "./useV5Live";
 import { PersonaHealthMatrix } from "./PersonaHealthMatrix";
