@@ -14,7 +14,9 @@
       "Verified zero mock, seed, overlay, writeFallback, withLiveOrMock, withStrictLiveOrMock, or liveOrSeed reachability in the production Rollup graph.",
       "bff-v1/v5.ts contains only DTO/view models and pure transforms; consolidated liveSse remains the network owner.",
       "Domain writes and unavailable reads fail closed under strict-live fallback posture.",
-      "Created and validated scripts/check_bundle_mock_reachability.ts."
+      "Created and validated scripts/check_bundle_mock_reachability.ts.",
+      "Strict-live mock persistence stub fails closed with typed StrictLiveMockPersistenceError and QAChecklist renders explicit unavailable/error outcome with focused test coverage.",
+      "Established resolver-before-render ordering in main.tsx and added browser/bootstrap-level test proving first mock-mode BFF request succeeds without preloaded registry."
     ],
     "preserved": [
       "Production import graph gate (productionImportGraph.test.ts) remains passing with 0 cycles.",
@@ -45,7 +47,7 @@
     },
     "full_test_suite": {
       "command": "npm test",
-      "result": "passed: 193 files, 1966 tests"
+      "result": "passed: 196 files, 1976 tests"
     },
     "typecheck": {
       "command": "npm run typecheck",
@@ -63,7 +65,10 @@
   "independent_review_required": [
     "Confirm production Rollup bundle graph has zero mock reachability via scripts/check_bundle_mock_reachability.ts.",
     "Confirm productionImportGraph.test.ts passes with 0 cycles.",
-    "Confirm all 193 test files in the test suite pass.",
+    "Confirm all 196 test files in the test suite pass.",
+    "Confirm strict-live mock persistence snapshot/reset fails closed with typed StrictLiveMockPersistenceError.",
+    "Confirm resolver-before-render ordering in main.tsx and bootstrap test passing.",
     "Bind this file through REVIEW_FILE during governed exact-head approval."
   ]
 }
+

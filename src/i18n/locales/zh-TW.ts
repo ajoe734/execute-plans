@@ -2582,6 +2582,8 @@ export default {
     persistSnapshotDone: "持久化快照已寫入",
     persistReset: "重設持久化",
     persistResetDone: "持久化已清除 — 重新載入中…",
+    persistUnavailable: "嚴格 Live 模式下無法使用 Mock 持久化。",
+    persistError: "Mock 持久化操作失敗",
     realtimeTitle: "即時通道模擬器",
     realtimeDesc: "切換 mock realtime 匯流排以模擬斷線／重連。頁面應切換為 stale/offline 指示，重連時自動再同步。",
     realtimeDisconnect: "斷線",
