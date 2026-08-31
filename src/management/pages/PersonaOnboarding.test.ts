@@ -1,6 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Persona } from "@/lib/bff-v1";
-import { isCompletePaperBundle, repairStepFor } from "./PersonaOnboarding";
+import { bffFetch } from "@/lib/bff-v1/client";
+import { isCompletePaperBundle, reconcilePersonaProvisioning } from "./PersonaOnboarding";
+
+vi.mock("@/lib/bff-v1/client", () => ({ bffFetch: vi.fn() }));
 
 const persona = (overrides: Record<string, unknown> = {}) => ({
   id: "persona-1",
@@ -15,19 +18,35 @@ const persona = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 }) as unknown as Persona;
 
-describe("PersonaOnboarding repair guard", () => {
+describe("PersonaOnboarding durable repair", () => {
+  beforeEach(() => vi.clearAllMocks());
+
   it("recognizes only a complete running paper bundle", () => {
     expect(isCompletePaperBundle(persona({ paperLedgerId: "ledger-1", runtimeBindingId: "binding-1" }))).toBe(true);
     expect(isCompletePaperBundle(persona({ paperLedgerId: "ledger-1" }))).toBe(false);
     expect(isCompletePaperBundle(persona({ state: "approved", paperLedgerId: "ledger-1", runtimeBindingId: "binding-1" }))).toBe(false);
   });
 
-  it("opens a repair request at its failed setup step", () => {
-    expect(repairStepFor("binding")).toBe(2);
-    expect(repairStepFor("deployment_plan")).toBe(3);
-    expect(repairStepFor("approval")).toBe(4);
-    expect(repairStepFor("runtime_binding")).toBe(5);
-    expect(repairStepFor(null)).toBe(1);
-    expect(repairStepFor("unknown_step")).toBe(1);
+  it("uses only the Persona provisioning controller for repair", async () => {
+    const readback = persona({ paperLedgerId: "ledger-1", runtimeBindingId: "binding-1" });
+    vi.mocked(bffFetch).mockResolvedValue({
+      data: readback,
+      meta: { status: "ok", reconciled_by: "persona_provisioning_controller" },
+    });
+
+    await expect(reconcilePersonaProvisioning(" persona/1 ")).resolves.toEqual({
+      persona: readback,
+      meta: { status: "ok", reconciled_by: "persona_provisioning_controller" },
+    });
+    expect(bffFetch).toHaveBeenCalledTimes(1);
+    expect(bffFetch).toHaveBeenCalledWith({
+      method: "POST",
+      path: "/bff/personas/persona%2F1/provisioning/reconcile",
+    });
+  });
+
+  it("refuses a repair without a canonical Persona id", async () => {
+    await expect(reconcilePersonaProvisioning("  ")).rejects.toThrow("Persona id is required");
+    expect(bffFetch).not.toHaveBeenCalled();
   });
 });

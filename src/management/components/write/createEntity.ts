@@ -1,9 +1,12 @@
-import { createPersona, runPersonaAction } from "@/lib/bff-v1/personas";
-import { isStrictLiveFallback, refuseStrictLiveWrite, newCorrelationId } from "@/lib/bff-v1";
+import { createPersona } from "@/lib/bff-v1/personas";
 import { buildEntity } from "@/lib/writeIntents/createDefaults";
-import type { CreatableEntity, CreateInputMap } from "@/lib/writeIntents/types";
+import {
+  durableCreateOwner,
+  type CreatableEntity,
+  type CreateInputMap,
+} from "@/lib/writeIntents/types";
 
-export type CreatePersistence = "bff" | "overlay";
+export type CreatePersistence = "bff";
 
 export interface CreateEntityOptions {
   idempotencyKey?: string;
@@ -13,10 +16,22 @@ export interface CreateEntityResult {
   entity: CreatableEntity;
   data: Record<string, unknown>;
   persistence: CreatePersistence;
-  /** True when BFF write failed and we fell back to overlay. */
-  degraded?: boolean;
-  /** When degraded, holds the typed error envelope for drawer display. */
-  error?: { status?: number; code?: string; message?: string };
+}
+
+export type EntityMutationOperation = "create" | "update" | "delete";
+
+export class UnsupportedEntityMutationError extends Error {
+  readonly code = "DURABLE_WRITE_OWNER_REQUIRED";
+
+  constructor(
+    readonly entity: CreatableEntity,
+    readonly operation: EntityMutationOperation,
+  ) {
+    super(
+      `${operation} is disabled for ${entity}: no typed durable BFF owner is registered.`,
+    );
+    this.name = "UnsupportedEntityMutationError";
+  }
 }
 
 export async function createEntityFromInput<K extends CreatableEntity>(
@@ -24,75 +39,33 @@ export async function createEntityFromInput<K extends CreatableEntity>(
   input: CreateInputMap[K],
   opts: CreateEntityOptions = {},
 ): Promise<CreateEntityResult> {
+  if (durableCreateOwner(entity) === undefined || entity !== "persona") {
+    throw new UnsupportedEntityMutationError(entity, "create");
+  }
+
   const built = buildEntity(entity, input);
-
-  if (entity === "persona") {
-    const personaInput = input as CreateInputMap["persona"];
-    const data = await createPersona({
-      ...built,
-      description: personaInput.description,
-      memo: personaInput.memo,
-      initialMode: personaInput.initialMode ?? "paper",
-    }, { idempotencyKey: opts.idempotencyKey });
-    return { entity, data: data as unknown as Record<string, unknown>, persistence: "bff" };
-  }
-
-  if (isStrictLiveFallback()) {
-    refuseStrictLiveWrite(opts.idempotencyKey ?? newCorrelationId());
-  }
-
-  const { writeOverlay } = await import("@/lib/bff-v1/writeOverlay");
-  writeOverlay.add(entity, built, { idempotencyKey: opts.idempotencyKey });
-  return { entity, data: built, persistence: "overlay" };
+  const personaInput = input as CreateInputMap["persona"];
+  const data = await createPersona({
+    ...built,
+    description: personaInput.description,
+    memo: personaInput.memo,
+    initialMode: personaInput.initialMode ?? "paper",
+  }, { idempotencyKey: opts.idempotencyKey });
+  return { entity, data: data as unknown as Record<string, unknown>, persistence: "bff" };
 }
 
-
-/** Update an entity. For persona, tries BFF "edit" action then falls back to overlay patch.
- *  All other entities are overlay-only for now (pending BFF endpoints). */
+/**
+ * Generic update remains unavailable until an entity-specific typed owner is
+ * registered. In particular, the legacy Persona "edit" action is not a live
+ * contract and must not degrade to an overlay patch.
+ */
 export async function updateEntityFromInput<K extends CreatableEntity>(
   entity: K,
-  id: string,
-  input: CreateInputMap[K],
-  opts: CreateEntityOptions = {},
+  _id: string,
+  _input: CreateInputMap[K],
+  _opts: CreateEntityOptions = {},
 ): Promise<CreateEntityResult> {
-  const patch = buildEntity(entity, input);
-  // Strip auto-generated id from create defaults so we patch the actual entity id.
-  const { id: _ignore, createdAt: _c, ...clean } = patch as Record<string, unknown>;
-  void _ignore; void _c;
-
-  if (entity === "persona") {
-    if (!(input as CreateInputMap["persona"]).initialMode) {
-      delete clean.state;
-      delete clean.lifecycleStatus;
-      delete clean.executionMode;
-      delete clean.capitalMode;
-      delete clean.deploymentStage;
-      delete clean.liveCapitalEnabled;
-      delete clean.orderSideEffectsAllowed;
-      delete clean.capitalSideEffectsAllowed;
-    }
-    try {
-      const data = await runPersonaAction(id, "edit", clean, { idempotencyKey: opts.idempotencyKey });
-      if (!isStrictLiveFallback()) {
-        const { writeOverlay } = await import("@/lib/bff-v1/writeOverlay");
-        writeOverlay.update(entity, id, clean, { idempotencyKey: opts.idempotencyKey });
-      }
-      return { entity, data: { id, ...clean, ...(data as Record<string, unknown>) }, persistence: "bff" };
-    } catch (err) {
-      if (isStrictLiveFallback()) {
-        throw err;
-      }
-      // BFF edit not available — fall through to overlay patch.
-    }
-  }
-
-  if (isStrictLiveFallback()) {
-    refuseStrictLiveWrite(opts.idempotencyKey ?? newCorrelationId());
-  }
-
-  const { writeOverlay } = await import("@/lib/bff-v1/writeOverlay");
-  writeOverlay.update(entity, id, clean, { idempotencyKey: opts.idempotencyKey });
-  return { entity, data: { id, ...clean }, persistence: "overlay" };
+  throw new UnsupportedEntityMutationError(entity, "update");
 }
 
 /** Soft-delete an entity.
@@ -103,18 +76,13 @@ export async function updateEntityFromInput<K extends CreatableEntity>(
  *  This is wired into PersonaDetail's "Retire" button via HighRiskConfirm. */
 export async function deleteEntity(
   entity: CreatableEntity,
-  id: string,
-  opts: CreateEntityOptions & { memo?: string; confirmToken?: string } = {},
+  _id: string,
+  _opts: CreateEntityOptions & { memo?: string; confirmToken?: string } = {},
 ): Promise<CreatePersistence> {
   if (entity === "persona") {
     throw new Error(
       "Persona is an audit entity and cannot be deleted. Use `runPersonaAction(id, 'retire', ...)` to archive it (terminal state, audit retained 7 years).",
     );
   }
-  if (isStrictLiveFallback()) {
-    refuseStrictLiveWrite(opts.idempotencyKey ?? newCorrelationId());
-  }
-  const { writeOverlay } = await import("@/lib/bff-v1/writeOverlay");
-  writeOverlay.softDelete(entity, id, { idempotencyKey: opts.idempotencyKey });
-  return "overlay";
+  throw new UnsupportedEntityMutationError(entity, "delete");
 }
