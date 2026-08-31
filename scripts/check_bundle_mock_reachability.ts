@@ -46,6 +46,16 @@ const FORBIDDEN_CODE_SYMBOLS = [
   "applySentinelStatusOverlay",
   "writeFallback",
   "liveWriteFallback",
+  "mockContextReceipts",
+  "mockSignalSymbols",
+  "mockShellSummary",
+  "execute-plans-mock-bff",
+  "au_mock_iv_",
+  "mock-readiness",
+  "Mock readiness gate",
+  "mock_unavailable",
+  "mock-digest",
+  "tenant-mock",
 ];
 
 async function checkBundle() {

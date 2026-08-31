@@ -537,14 +537,14 @@ export async function runAction(
     };
     const commandId = d.data?.commandId ?? d.data?.command_id ?? d.data?.receipt_id ?? "";
     const iKey = d.meta?.idempotency?.idempotencyKey ?? idempotencyKey;
-    const mockLegacy = { ok: true as const, audit: { id: commandId }, message: "dispatched" } as unknown as MutationResult;
+    const legacyResult = { ok: true as const, audit: { id: commandId }, message: "dispatched" } as unknown as MutationResult;
     return {
       ok: true,
       data: { actionId: commandId, status: "accepted" as const },
       auditEventId: commandId,
       correlationId,
       idempotencyKey: iKey,
-      legacy: mockLegacy,
+      legacy: legacyResult,
     };
   }
   return mockBranch();
@@ -862,7 +862,7 @@ export async function decideIntervention(
   return {
     ok: true,
     data: { interventionId: id, decision },
-    auditEventId: `au_mock_iv_${id}`,
+    auditEventId: `au_iv_${id}`,
     correlationId,
     idempotencyKey,
   };
