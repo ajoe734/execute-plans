@@ -35,6 +35,7 @@ interface PersonaProvisioningReconcileEnvelope {
   meta?: PersonaProvisioningReconcileMeta;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export async function reconcilePersonaProvisioning(
   personaId: string,
 ): Promise<PersonaProvisioningReconcileResult> {
@@ -51,6 +52,7 @@ export async function reconcilePersonaProvisioning(
   return { persona: response.data, meta: response.meta ?? {} };
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function isCompletePaperBundle(persona: Persona | undefined): boolean {
   if (!persona) return false;
   const bundle = persona as RepairablePersona;

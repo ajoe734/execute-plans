@@ -128,16 +128,11 @@ export function ObjectListPage<T extends BaseObject>({
     if (!hasDurableCreateOwner(createBehavior.entity)) {
       const reason = `Create disabled: ${createBehavior.entity} has no typed durable BFF owner.`;
       return (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span tabIndex={0} title={reason}>
-              <Button size="sm" disabled aria-label={reason}>
-                <Plus className="h-4 w-4 mr-1" />{t("actions.create")}
-              </Button>
-            </span>
-          </TooltipTrigger>
-          <TooltipContent>{reason}</TooltipContent>
-        </Tooltip>
+        <span tabIndex={0} title={reason}>
+          <Button size="sm" disabled aria-label={reason}>
+            <Plus className="h-4 w-4 mr-1" />{t("actions.create")}
+          </Button>
+        </span>
       );
     }
     // drawer

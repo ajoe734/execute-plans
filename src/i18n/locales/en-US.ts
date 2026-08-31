@@ -2927,9 +2927,9 @@ export default {
       validator: { schema: "Schema check", consistency: "Consistency", impact: "Impact analysis", precedence: "Precedence", coverage: "Coverage" },
     },
   },
-  // spec-conflict-G G10 — single i18n source for EntityCreateDrawer.
+  // EntityCreateDrawer persistence boundary.
   entityCreate: {
-    footerNote: "v0 mock create · 30-min overlay TTL · not persisted to seed",
+    footerNote: "Writes require a typed durable BFF owner. Unsupported generic CRUD is disabled.",
     required: "Required",
     submitting: "Submitting…",
     cooldown: {

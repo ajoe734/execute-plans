@@ -2909,9 +2909,9 @@ export default {
       validator: { schema: "Schema 檢查", consistency: "一致性", impact: "影響分析", precedence: "優先順序", coverage: "涵蓋率" },
     },
   },
-  // spec-conflict-G G10 — EntityCreateDrawer 單一 i18n 來源
+  // EntityCreateDrawer 持久化邊界
   entityCreate: {
-    footerNote: "v0 mock 建立 · overlay 30 分鐘 TTL · 不寫入 seed",
+    footerNote: "寫入必須有 typed durable BFF owner；不支援的 generic CRUD 已停用。",
     required: "必填",
     submitting: "送出中…",
     cooldown: {
