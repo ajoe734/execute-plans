@@ -683,5 +683,3 @@ export function oodaPacketDetail(id: string): Promise<OodaPacketDetail | undefin
     adaptOodaPacketDetail,
   );
 }
-
-

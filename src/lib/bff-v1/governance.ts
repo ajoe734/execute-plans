@@ -339,4 +339,3 @@ export const allocationLimits = {
 export const poolFreezes = {
   forPool: getPoolFreezesForPool,
 };
-

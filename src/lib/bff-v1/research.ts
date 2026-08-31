@@ -14,4 +14,3 @@ export const research = {
   list: listResearchExperiments,
   get: getResearchExperiment,
 };
-

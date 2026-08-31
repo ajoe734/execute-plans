@@ -33,5 +33,3 @@ export async function bootstrapApp(
 if (typeof document !== "undefined" && document.getElementById("root")) {
   void bootstrapApp();
 }
-
-

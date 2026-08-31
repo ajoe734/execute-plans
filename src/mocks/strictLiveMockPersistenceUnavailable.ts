@@ -19,4 +19,3 @@ export function persistNow(): void {
 export function clearPersisted(): void {
   throw new StrictLiveMockPersistenceError("Mock persistence reset is unavailable in a strict-live build.");
 }
-

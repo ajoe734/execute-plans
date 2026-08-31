@@ -14,4 +14,3 @@ export const artifacts = {
   list: listArtifacts,
   get: getArtifact,
 };
-

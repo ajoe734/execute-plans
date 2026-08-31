@@ -131,4 +131,3 @@ export const fitnessFormulas = {
 export const mutationRules = {
   list: listMutationRules,
 };
-

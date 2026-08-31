@@ -14,4 +14,3 @@ export const rankingFormulas = {
   list: listRankingFormulas,
   get: getRankingFormula,
 };
-

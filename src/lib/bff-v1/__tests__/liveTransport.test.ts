@@ -67,4 +67,3 @@ describe("BFF live transport — strictLiveRead behavior", () => {
     expect(liveStatus.get().lastError).toBeUndefined();
   });
 });
-

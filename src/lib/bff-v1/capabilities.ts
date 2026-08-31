@@ -80,4 +80,3 @@ export const channels = {
 export const mcpSecrets = {
   forServer: getMcpSecretsForServer,
 };
-

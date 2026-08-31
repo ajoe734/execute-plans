@@ -2,10 +2,6 @@ import { bffFetch, type BffRequest } from "./client";
 import { BffError, makeBffError } from "./errors";
 import { liveStatus } from "./liveStatus";
 
-export function isLiveBffModeConfigured(): boolean {
-  return liveStatus.get().mode === "live";
-}
-
 export const delay = <T>(v: T, ms = 220): Promise<T> => new Promise<T>((r) => setTimeout(() => r(v), ms));
 
 export type UnknownRecord = Record<string, unknown>;
@@ -177,4 +173,3 @@ export const strictLiveListNormalized = <T>(
   path: string,
 ): Promise<T[]> =>
   strictLiveList<T>(helperName, path).then(normalizeBaseObjectList);
-

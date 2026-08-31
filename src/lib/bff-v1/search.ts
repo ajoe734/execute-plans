@@ -9,4 +9,3 @@ export async function search(q: string): Promise<SearchResult[]> {
     (body) => liveItemsFrom<SearchResult>(body).slice(0, 20),
   );
 }
-

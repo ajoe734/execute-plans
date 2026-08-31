@@ -14,4 +14,3 @@ export const strategies = {
   list: listStrategies,
   get: getStrategy,
 };
-

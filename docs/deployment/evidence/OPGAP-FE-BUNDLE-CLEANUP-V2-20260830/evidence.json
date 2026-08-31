@@ -14,7 +14,10 @@
       "Verified zero mock, seed, overlay, writeFallback, withLiveOrMock, withStrictLiveOrMock, or liveOrSeed reachability in the production Rollup graph.",
       "bff-v1/v5.ts contains only DTO/view models and pure transforms; consolidated liveSse remains the network owner.",
       "Domain writes and unavailable reads fail closed under strict-live fallback posture.",
-      "Created and validated scripts/check_bundle_mock_reachability.ts.",
+      "Created and validated scripts/check_bundle_mock_reachability.ts with conflicting namespace detection.",
+      "Removed duplicate isLiveBffModeConfigured from domainReads.ts, eliminating Rollup conflicting namespace warning and preserving seedTaxonomy export in bff-v1 barrel.",
+      "Added test in seedTaxonomy.test.ts asserting barrel exports isLiveBffModeConfigured without conflict.",
+      "Fixed all 21 blank-line-at-EOF issues across modified files for clean git diff --check.",
       "Strict-live mock persistence stub fails closed with typed StrictLiveMockPersistenceError and QAChecklist renders explicit unavailable/error outcome with focused test coverage.",
       "Established resolver-before-render ordering in main.tsx and added browser/bootstrap-level test proving first mock-mode BFF request succeeds without preloaded registry."
     ],
@@ -41,7 +44,7 @@
   "validation": {
     "bundle_mock_check": {
       "command": "npx tsx scripts/check_bundle_mock_reachability.ts",
-      "result": "passed: Production Rollup graph has zero mock/seed/fallback reachability"
+      "result": "passed: zero mock/seed/fallback reachability and zero conflicting namespace warnings"
     },
     "production_import_graph": {
       "command": "npx vitest run src/lib/bff-v1/__tests__/productionImportGraph.test.ts",
@@ -49,7 +52,7 @@
     },
     "full_test_suite": {
       "command": "npm test",
-      "result": "passed: 196 files, 1976 tests"
+      "result": "passed: 196 files, 1977 tests"
     },
     "typecheck": {
       "command": "npm run typecheck",
@@ -59,18 +62,22 @@
       "command": "npm run lint",
       "result": "passed: 0 errors"
     },
+    "git_diff_check": {
+      "command": "git diff --check origin/dev",
+      "result": "passed: clean with 0 whitespace/blank-line-at-EOF issues"
+    },
     "production_build": {
       "command": "VITE_BFF_MODE=live VITE_BFF_FALLBACK=strict VITE_GCP_IDENTITY_API_KEY=AIza00000000000000000000000000000000000 VITE_GCP_IDENTITY_PROJECT_ID=pantheon-dev VITE_GCP_IDENTITY_AUTH_DOMAIN=pantheon-dev.firebaseapp.com npm run build",
       "result": "passed: zero mock fixture in bundle"
     }
   },
   "independent_review_required": [
-    "Confirm production Rollup bundle graph has zero mock reachability via scripts/check_bundle_mock_reachability.ts.",
+    "Confirm production Rollup bundle graph has zero mock reachability and no conflicting namespace warnings via scripts/check_bundle_mock_reachability.ts.",
     "Confirm productionImportGraph.test.ts passes with 0 cycles.",
-    "Confirm all 196 test files in the test suite pass.",
+    "Confirm all 196 test files in the test suite pass (1977/1977 tests).",
+    "Confirm git diff --check origin/dev passes cleanly without EOF whitespace issues.",
     "Confirm strict-live mock persistence snapshot/reset fails closed with typed StrictLiveMockPersistenceError.",
     "Confirm resolver-before-render ordering in main.tsx and bootstrap test passing.",
     "Bind this file through REVIEW_FILE during governed exact-head approval."
   ]
 }
-

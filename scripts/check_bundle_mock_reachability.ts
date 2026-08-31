@@ -56,6 +56,15 @@ async function checkBundle() {
     build: {
       write: false,
       minify: false, // Keep identifiers inspectable
+      rollupOptions: {
+        onwarn(warning, defaultHandler) {
+          if (warning.code === "CONFLICTING_NAMESPACES") {
+            console.error(`[VIOLATION] Conflicting namespace detected: ${warning.message}`);
+            violations += 1;
+          }
+          defaultHandler(warning);
+        },
+      },
     },
     logLevel: "warn",
   });

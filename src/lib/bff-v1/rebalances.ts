@@ -75,4 +75,3 @@ export const allocationSimulations = {
 export const metricFreezes = {
   forRebalance: getMetricFreezes,
 };
-
