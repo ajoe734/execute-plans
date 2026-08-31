@@ -77,7 +77,7 @@ export interface PersonaCreateInput extends BaseCreateInput {
   // Kept as the backend-facing DTO key; the UI presents it as "role type".
   archetype: PersonaArchetype;
   description?: string;
-  // v0 overlay execution mode, mapped to a canonical lifecycle status at build time.
+  // Initial paper execution mode, mapped to a canonical lifecycle status at build time.
   initialMode?: PersonaInitialMode;
   // Real persona identity + trading-character traits. These flow through the BFF
   // (create_persona) into the persona's OpenClaw agent SOUL so it runs as itself,

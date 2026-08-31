@@ -6,7 +6,7 @@ import { ActivityMonitor } from "../ActivityMonitor";
 import { FormulaStudio } from "@/management/pages/studios/FormulaStudio";
 import { PostmortemLibraryPage } from "@/management/pages/phase2/PostmortemLibrary";
 import { bffV1, mgmt } from "@/lib/bff-v1";
-import type { Incident } from "@/lib/bff-v1";
+import { postmortemClient } from "@/lib/bff-v1/postmortemClient";
 
 vi.mock("@/platform/hooks", () => ({
   useT: () => (key: string, opts?: { defaultValue?: string }) => opts?.defaultValue || key,
@@ -75,17 +75,23 @@ describe("PFG-MGMT-FE-REAL-20260820 Strict Live & Degraded Tests", () => {
     });
   });
 
-  it("PostmortemLibraryPage renders typed incident postmortem records from bff.incidents.list()", async () => {
-    const mockIncident: Incident = {
-      id: "inc_99",
-      severity: "critical",
-      title: "Database Lockup",
-      status: "resolved",
-      openedAt: "2026-08-21T10:00:00Z",
-      timeline: [{ ts: "2026-08-21T10:05:00Z", actor: "alice", note: "[postmortem] Connection pool exhausted." }],
-    };
-
-    vi.spyOn(bffV1.incidents, "list").mockResolvedValue([mockIncident]);
+  it("PostmortemLibraryPage renders canonical postmortem records", async () => {
+    vi.spyOn(postmortemClient, "list").mockResolvedValue({
+      items: [{
+        id: "pm_99",
+        postmortem_id: "pm_99",
+        incident_id: "inc_99",
+        title: "Database Lockup",
+        status: "published",
+        created_at: "2026-08-21T10:00:00Z",
+        published_at: "2026-08-21T10:05:00Z",
+        root_cause: "Connection pool exhausted.",
+        contributing_factors: [],
+        action_items: [],
+        author_ids: ["alice"],
+      }],
+      meta: { surfaces: { agora_postmortems: { status: "ok", source: "service_store" } } },
+    });
 
     render(
       <MemoryRouter>
@@ -95,13 +101,13 @@ describe("PFG-MGMT-FE-REAL-20260820 Strict Live & Degraded Tests", () => {
 
     await waitFor(() => {
       expect(screen.getByText("Database Lockup")).toBeInTheDocument();
-      expect(screen.getByText("pm_inc_99")).toBeInTheDocument();
+      expect(screen.getByText("pm_99")).toBeInTheDocument();
       expect(screen.getByText("alice")).toBeInTheDocument();
     });
   });
 
-  it("PostmortemLibraryPage displays accurate degraded message when bff.incidents.list() transport rejects", async () => {
-    vi.spyOn(bffV1.incidents, "list").mockImplementation(async () => {
+  it("PostmortemLibraryPage displays accurate error when canonical list transport rejects", async () => {
+    vi.spyOn(postmortemClient, "list").mockImplementation(async () => {
       throw new Error("BFF network failure");
     });
 
@@ -112,9 +118,40 @@ describe("PFG-MGMT-FE-REAL-20260820 Strict Live & Degraded Tests", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText(/Incident postmortem transport degraded or unavailable/i)).toBeInTheDocument();
+      expect(screen.getByText(/Canonical postmortem transport unavailable/i)).toBeInTheDocument();
       expect(screen.queryByText(/Showing cached records/i)).not.toBeInTheDocument();
     });
+  });
+
+  it("PostmortemLibraryPage reloads detail from canonical item query id", async () => {
+    vi.spyOn(postmortemClient, "list").mockResolvedValue({ items: [], meta: {} });
+    vi.spyOn(postmortemClient, "get").mockResolvedValue({
+      item: {
+        id: "pm_reload_001",
+        postmortem_id: "pm_reload_001",
+        incident_id: "inc_reload_001",
+        title: "Reloaded canonical postmortem",
+        status: "approved",
+        created_at: "2026-08-21T10:00:00Z",
+        root_cause: "Canonical detail readback",
+        contributing_factors: [],
+        action_items: ["Keep canonical ids"],
+        author_ids: ["reviewer"],
+      },
+      meta: {},
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/management/postmortems?item=pm_reload_001"]}>
+        <PostmortemLibraryPage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Reloaded canonical postmortem")).toBeInTheDocument();
+      expect(screen.getByText("Canonical detail readback")).toBeInTheDocument();
+    });
+    expect(postmortemClient.get).toHaveBeenCalledWith("pm_reload_001");
   });
 
   it("FormulaStudio renders runnerUnavailable state when bff.rankingFormulas.list() promise rejects", async () => {
