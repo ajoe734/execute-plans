@@ -20,15 +20,16 @@ import { build } from "vite";
 import type { RollupOutput, OutputChunk } from "rollup";
 
 const FORBIDDEN_MODULE_SUBSTRINGS = [
-  "src/mocks/seed",
-  "src/mocks/strictLiveFixtureUnavailable",
+  "src/mocks/seed.ts",
   "src/lib/bff-v1/mocks/adapters",
   "src/lib/bff-v1/mocks/registry",
   "src/lib/bff-v1/mocks/persistence",
   "src/lib/bff-v1/mocks/mutations",
   "src/lib/bff-v1/mocks/scenarios",
-  "seed-taxonomy.json",
+  "src/lib/bff-v1/seed-taxonomy.json",
   "src/lib/bff-v1/writeOverlay",
+  "src/lib/v5/overlay",
+  "src/lib/v5/loopOverlay",
 ];
 
 const FORBIDDEN_CODE_SYMBOLS = [
@@ -41,7 +42,10 @@ const FORBIDDEN_CODE_SYMBOLS = [
   "liveListOrSeedArtifact",
   "liveDetailOrSeedNormalized",
   "liveListOrSeedNormalized",
-  "v5ActionOverlay",
+  "applyLoopOverlay",
+  "applySentinelStatusOverlay",
+  "writeFallback",
+  "liveWriteFallback",
 ];
 
 async function checkBundle() {

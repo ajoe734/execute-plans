@@ -153,15 +153,14 @@ export const QAChecklist = () => {
 
   const [resetPersistOpen, setResetPersistOpen] = useState(false);
   const handleResetPersist = async () => {
-    try {
-      localStorage.removeItem("pantheon.bff.persist.v1");
-    } catch {
-      // ignore storage errors
-    }
+    const { clearPersisted } = await import("@/lib/bff-v1/mocks/persistence");
+    clearPersisted();
     toast.success(t("qa.persistResetDone"));
     setTimeout(() => window.location.reload(), 400);
   };
   const handleSnapshotNow = async () => {
+    const { persistNow } = await import("@/lib/bff-v1/mocks/persistence");
+    persistNow();
     toast.success(t("qa.persistSnapshotDone"));
   };
 

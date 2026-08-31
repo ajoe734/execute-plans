@@ -4,112 +4,30 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Check, X, Play, PlayCircle, Loader2 } from "lucide-react";
 import { useT } from "@/platform/hooks";
+import { runAllScenarios, runScenario, getScenarioMeta, type ScenarioResult } from "@/lib/bff-v1/mocks/scenarios";
 import i18n from "@/i18n";
 import { toast } from "sonner";
 
 const tt = (key: string, fallback: string) => (i18n.exists(key) ? i18n.t(key) : fallback);
-export interface ScenarioStepResult {
-  label: string;
-  ok: boolean;
-  durationMs: number;
-  message?: string;
-}
-
-export interface ScenarioResult {
-  id: string;
-  ok: boolean;
-  steps: ScenarioStepResult[];
-  totalMs: number;
-}
-
-const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-const SCENARIO_METAS = [
-  {
-    id: "strategy-lifecycle",
-    labelKey: "qa.scenario.strategy",
-    fallbackLabel: "Strategy Lifecycle: Draft → Canary → Promote",
-    stepCount: 4,
-    steps: ["Validate Strategy Invariants", "Transition to Paper", "Canary Benchmark", "Promote to Live"],
-  },
-  {
-    id: "approval-multi-stage",
-    labelKey: "qa.scenario.approval",
-    fallbackLabel: "Multi-stage Approval: Submit → 2-Eye Signoff",
-    stepCount: 3,
-    steps: ["Submit Proposal", "First Signoff", "Second Signoff"],
-  },
-  {
-    id: "rebalance-flow",
-    labelKey: "qa.scenario.rebalance",
-    fallbackLabel: "Quarterly Rebalance: Freeze → Simulate → Override → Apply",
-    stepCount: 4,
-    steps: ["Freeze Portfolio", "Run Simulation", "Check Overrides", "Apply Target Weights"],
-  },
-  {
-    id: "incident-triage",
-    labelKey: "qa.scenario.incident",
-    fallbackLabel: "Incident Triage: Open → Assign → Mitigate → Resolve",
-    stepCount: 4,
-    steps: ["Open Incident", "Assign Responder", "Mitigate Impact", "Resolve Incident"],
-  },
-  {
-    id: "governance-policy",
-    labelKey: "qa.scenario.governance",
-    fallbackLabel: "Governance: Deploy Policy → Canary Pass → Enact",
-    stepCount: 3,
-    steps: ["Deploy Policy Draft", "Verify Canary", "Enact Policy"],
-  },
-  {
-    id: "signal-handoff",
-    labelKey: "qa.scenario.signal",
-    fallbackLabel: "Agora Handoff: Signal → Triage → Accept to Stage",
-    stepCount: 3,
-    steps: ["Signal Generation", "Triage Signal", "Stage Acceptance"],
-  },
-  {
-    id: "skill-sandbox",
-    labelKey: "qa.scenario.skill",
-    fallbackLabel: "Skill Sandbox: Test Run → Verify Output → Approve",
-    stepCount: 3,
-    steps: ["Load Sandbox", "Verify Execution", "Approve Skill"],
-  },
-];
 
 export const ScenarioRunnerCard = () => {
   const t = useT();
+  const meta = getScenarioMeta();
   const [results, setResults] = useState<Record<string, ScenarioResult>>({});
   const [running, setRunning] = useState<string | null>(null);
 
-  const executeScenario = async (meta: typeof SCENARIO_METAS[number]): Promise<ScenarioResult> => {
-    const t0 = performance.now();
-    const steps: ScenarioStepResult[] = [];
-    for (const stepLabel of meta.steps) {
-      const s0 = performance.now();
-      await delay(40);
-      steps.push({
-        label: stepLabel,
-        ok: true,
-        durationMs: Math.round(performance.now() - s0),
-        message: "passed",
-      });
-    }
-    return {
-      id: meta.id,
-      ok: true,
-      steps,
-      totalMs: Math.round(performance.now() - t0),
-    };
-  };
-
   const runOne = async (id: string) => {
-    const meta = SCENARIO_METAS.find((s) => s.id === id);
-    if (!meta) return;
     setRunning(id);
     try {
-      const r = await executeScenario(meta);
+      const r = await runScenario(id);
       setResults((prev) => ({ ...prev, [id]: r }));
-      toast.success(t("qa.scenario.passed", { defaultValue: "Scenario passed" }), { description: id });
+      if (r.ok) {
+        toast.success(t("qa.scenario.passed", { defaultValue: "Scenario passed" }), { description: id });
+      } else {
+        toast.error(t("qa.scenario.failed", { defaultValue: "Scenario failed" }), { description: id });
+      }
+    } catch (err) {
+      toast.error(t("qa.scenario.failed", { defaultValue: "Scenario failed" }), { description: (err as Error).message });
     } finally {
       setRunning(null);
     }
@@ -118,15 +36,18 @@ export const ScenarioRunnerCard = () => {
   const runAll = async () => {
     setRunning("__all__");
     try {
+      const all = await runAllScenarios();
       const map: Record<string, ScenarioResult> = {};
-      for (const meta of SCENARIO_METAS) {
-        const r = await executeScenario(meta);
-        map[meta.id] = r;
-      }
-      setResults(map);
-      toast.success(t("qa.scenario.allDone", { defaultValue: "Scenarios complete" }), {
-        description: `${SCENARIO_METAS.length} / ${SCENARIO_METAS.length}`,
+      all.forEach((r) => {
+        map[r.id] = r;
       });
+      setResults(map);
+      const passed = all.filter((r) => r.ok).length;
+      toast.success(t("qa.scenario.allDone", { defaultValue: "Scenarios complete" }), {
+        description: `${passed} / ${all.length}`,
+      });
+    } catch (err) {
+      toast.error(t("qa.scenario.failed", { defaultValue: "Scenario failed" }), { description: (err as Error).message });
     } finally {
       setRunning(null);
     }
@@ -150,7 +71,7 @@ export const ScenarioRunnerCard = () => {
         </Button>
       </div>
       <ul className="space-y-2">
-        {SCENARIO_METAS.map((m) => {
+        {meta.map((m) => {
           const r = results[m.id];
           const isRunning = running === m.id || running === "__all__";
           return (

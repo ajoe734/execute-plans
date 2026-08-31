@@ -16,6 +16,9 @@ const strictLiveSeedTaxonomyStub = path.resolve(__dirname, "./src/mocks/strictLi
 const strictLiveWriteOverlayStub = path.resolve(__dirname, "./src/mocks/strictLiveWriteOverlayUnavailable.ts");
 const strictLiveMockAdaptersStub = path.resolve(__dirname, "./src/mocks/strictLiveMockAdaptersUnavailable.ts");
 const strictLiveMockRegistryStub = path.resolve(__dirname, "./src/mocks/strictLiveMockRegistryUnavailable.ts");
+const strictLiveMockPersistenceStub = path.resolve(__dirname, "./src/mocks/strictLiveMockPersistenceUnavailable.ts");
+const strictLiveMockScenariosStub = path.resolve(__dirname, "./src/mocks/strictLiveMockScenariosUnavailable.ts");
+const strictLiveMockMutationsStub = path.resolve(__dirname, "./src/mocks/strictLiveMockMutationsUnavailable.ts");
 
 const FORBIDDEN_STRICT_LIVE_MODULES = [
   path.resolve(__dirname, "./src/mocks/seed.ts"),
@@ -133,6 +136,12 @@ export default defineConfig(({ mode }) => {
             { find: "./mocks/adapters", replacement: strictLiveMockAdaptersStub },
             { find: "@/lib/bff-v1/mocks/registry", replacement: strictLiveMockRegistryStub },
             { find: "./mocks/registry", replacement: strictLiveMockRegistryStub },
+            { find: "@/lib/bff-v1/mocks/persistence", replacement: strictLiveMockPersistenceStub },
+            { find: "./mocks/persistence", replacement: strictLiveMockPersistenceStub },
+            { find: "@/lib/bff-v1/mocks/scenarios", replacement: strictLiveMockScenariosStub },
+            { find: "./mocks/scenarios", replacement: strictLiveMockScenariosStub },
+            { find: "@/lib/bff-v1/mocks/mutations", replacement: strictLiveMockMutationsStub },
+            { find: "./mocks/mutations", replacement: strictLiveMockMutationsStub },
             { find: "@/lib/v5/overlay", replacement: strictLiveWriteOverlayStub },
             { find: "./overlay", replacement: strictLiveWriteOverlayStub },
             { find: "@/lib/v5/loopOverlay", replacement: strictLiveWriteOverlayStub },

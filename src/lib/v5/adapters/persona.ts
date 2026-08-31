@@ -66,7 +66,7 @@ export function adaptPersonaHealth(
     score,
     formulaVersion,
     inputs,
-    suspendedReason: mode === "suspended" ? overlay?.reason ?? "seed-lifecycle" : undefined,
+    suspendedReason: mode === "suspended" ? "seed-lifecycle" : undefined,
     routedStrategies: persona.routedStrategies,
     openFindings: (ctx.alerts ?? []).filter((a) => a.relatedTarget === persona.id && !a.acknowledged).length,
     updatedAt: persona.updatedAt,

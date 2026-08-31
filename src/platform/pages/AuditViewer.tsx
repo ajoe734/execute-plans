@@ -1,29 +1,11 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 
-const reportMd = `# Spec Gap Audit — Pack D
-
-Historical audit reports are preserved in repository source under .lovable/audits/.
-`;
-
-const blockersMd = `# Spec Gap Audit — Pack D Blockers
-
-Historical blocker tracking is preserved in repository source under .lovable/audits/.
-`;
-
-const summaryCsv = `ID,Category,Severity,Status
-GAP-001,Governance,Medium,Resolved
-`;
-
-const packEQuestionsMd = `# Pack E Planner Questions
-
-Historical planner questions and disposition records are preserved under .lovable/feedback/.
-`;
-
-const packEConflictMd = `# Pack E Spec Conflict Audit
-
-Historical conflict resolution records are preserved in repository source under .lovable/audits/.
-`;
+import reportMd from "../../../.lovable/audits/spec-gap-2026-05-06-D.md?raw";
+import blockersMd from "../../../.lovable/audits/spec-gap-2026-05-06-D-blockers.md?raw";
+import summaryCsv from "../../../.lovable/audits/spec-gap-2026-05-06-D-summary.csv?raw";
+import packEQuestionsMd from "../../../.lovable/feedback/2026-05-06-E/Pack_E_Planner_Questions.md?raw";
+import packEConflictMd from "../../../.lovable/audits/spec-conflict-2026-05-06-E.md?raw";
 
 const indexMd = `# Spec Gap Audit Index
 

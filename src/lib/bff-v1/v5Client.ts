@@ -1,11 +1,13 @@
 // BFF Contract v1 — Live V5 API Client
 // Strict live transport and fail-closed commands.
 
+import { usePlatform } from "@/platform/store";
 import { bffFetch } from "./client";
 import { paths } from "./paths";
 import { idempotencyKey as mintIdempotencyKey } from "./headers";
 import { strictLiveRead } from "./domainReads";
 import { strictDataFrom, strictItemsFrom } from "./liveTransport";
+import { liveWriteGated } from "./writeGate";
 import {
   v5List,
   type V5ListResponse,
@@ -19,7 +21,6 @@ import {
   adaptBffStrategyHealth,
   adaptBffSentinelFinding,
   adaptBffControlRoom,
-  session,
   type LoopRun,
   type SentinelFinding,
   type InterventionItem,
@@ -45,6 +46,16 @@ const livePaths = {
   v5SentinelStatus: paths.v5SentinelFindingStatus,
 };
 
+export function session(): V5SessionContext {
+  const p = usePlatform.getState();
+  return {
+    tenantId: "demo",
+    env: p.env,
+    locale: p.locale,
+    serverTime: new Date().toISOString(),
+  };
+}
+
 export const bffV5 = {
   // ---- Session ----
   session: {
@@ -57,7 +68,7 @@ export const bffV5 = {
       strictLiveRead<ControlRoomSummary>(
         "v5.controlRoom",
         { method: "GET", path: livePaths.v5ControlRoom() },
-        adaptBffControlRoom,
+        (data) => adaptBffControlRoom(data, session()),
       ),
   },
 
@@ -81,7 +92,10 @@ export const bffV5 = {
           return record ? adaptBffLoopRun(record, 0) : undefined;
         },
       ),
-    advance: async (id: string): Promise<{ ok: true }> => {
+    advance: async (id: string): Promise<{ ok: boolean; reason?: string }> => {
+      if (!(await liveWriteGated())) {
+        return { ok: false, reason: "writes_disabled" };
+      }
       await bffFetch<unknown>({
         method: "POST",
         path: `${paths.v5LoopRun(id)}/advance`,
@@ -90,7 +104,10 @@ export const bffV5 = {
       });
       return { ok: true };
     },
-    pause: async (id: string, reason?: string): Promise<{ ok: true }> => {
+    pause: async (id: string, reason?: string): Promise<{ ok: boolean; reason?: string }> => {
+      if (!(await liveWriteGated())) {
+        return { ok: false, reason: "writes_disabled" };
+      }
       await bffFetch<unknown>({
         method: "POST",
         path: `${paths.v5LoopRun(id)}/pause`,
@@ -100,7 +117,10 @@ export const bffV5 = {
       });
       return { ok: true };
     },
-    resume: async (id: string): Promise<{ ok: true }> => {
+    resume: async (id: string): Promise<{ ok: boolean; reason?: string }> => {
+      if (!(await liveWriteGated())) {
+        return { ok: false, reason: "writes_disabled" };
+      }
       await bffFetch<unknown>({
         method: "POST",
         path: `${paths.v5LoopRun(id)}/resume`,
@@ -109,7 +129,10 @@ export const bffV5 = {
       });
       return { ok: true };
     },
-    cancel: async (id: string): Promise<{ ok: true }> => {
+    cancel: async (id: string): Promise<{ ok: boolean; reason?: string }> => {
+      if (!(await liveWriteGated())) {
+        return { ok: false, reason: "writes_disabled" };
+      }
       await bffFetch<unknown>({
         method: "POST",
         path: `${paths.v5LoopRun(id)}/cancel`,
@@ -156,6 +179,9 @@ export const bffV5 = {
         },
       ),
     setStatus: async (id: string, status: SentinelFinding["status"]): Promise<{ ok: true; persisted: boolean }> => {
+      if (!(await liveWriteGated())) {
+        return { ok: true, persisted: false };
+      }
       await bffFetch<unknown>({
         method: "POST",
         path: livePaths.v5SentinelStatus(id),
@@ -184,7 +210,10 @@ export const bffV5 = {
           return record ? adaptBffIntervention(record, 0) : undefined;
         },
       ),
-    decide: async (id: string, decision: NonNullable<InterventionItem["recommendedDecision"]>): Promise<{ ok: true }> => {
+    decide: async (id: string, decision: NonNullable<InterventionItem["recommendedDecision"]>): Promise<{ ok: boolean; reason?: string }> => {
+      if (!(await liveWriteGated())) {
+        return { ok: false, reason: "writes_disabled" };
+      }
       await bffFetch<unknown>({
         method: "POST",
         path: `${paths.v5Intervention(id)}/decide`,
@@ -207,7 +236,10 @@ export const bffV5 = {
         targetId: args.targetId,
       });
     },
-    execute: async (action: RemediationAction): Promise<{ ok: true; overlayUpdated: boolean }> => {
+    execute: async (action: RemediationAction): Promise<{ ok: boolean; overlayUpdated: boolean; reason?: string }> => {
+      if (!(await liveWriteGated())) {
+        return { ok: false, overlayUpdated: false, reason: "writes_disabled" };
+      }
       await bffFetch<unknown>({
         method: "POST",
         path: `${paths.v5Intervention(action.id)}/remediate`,

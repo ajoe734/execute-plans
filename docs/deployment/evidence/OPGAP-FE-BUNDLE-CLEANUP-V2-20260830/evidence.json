@@ -45,7 +45,7 @@
     },
     "full_test_suite": {
       "command": "npm test",
-      "result": "passed: 193 files, 1964 tests"
+      "result": "passed: 193 files, 1966 tests"
     },
     "typecheck": {
       "command": "npm run typecheck",
@@ -56,7 +56,7 @@
       "result": "passed: 0 errors"
     },
     "production_build": {
-      "command": "VITE_BFF_MODE=live VITE_BFF_FALLBACK=strict npm run build",
+      "command": "VITE_BFF_MODE=live VITE_BFF_FALLBACK=strict VITE_GCP_IDENTITY_API_KEY=AIza00000000000000000000000000000000000 VITE_GCP_IDENTITY_PROJECT_ID=pantheon-dev VITE_GCP_IDENTITY_AUTH_DOMAIN=pantheon-dev.firebaseapp.com npm run build",
       "result": "passed: zero mock fixture in bundle"
     }
   },

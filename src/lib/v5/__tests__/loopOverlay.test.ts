@@ -85,10 +85,19 @@ describe("E3 bffV5.loops mutations", () => {
     vi.restoreAllMocks();
   });
 
-  it("advance returns ok and emits via overlay", async () => {
+  it("advance returns ok when write-gated", async () => {
     vi.stubEnv("VITE_BFF_BASE_URL", "https://bff.example.test");
+    vi.stubEnv("VITE_BFF_REAL_WRITES", "true");
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
+      if (url.endsWith("/bff/me")) {
+        return new Response(JSON.stringify({
+          data: {
+            session: { authenticated: true, session_kind: "cookie" },
+            environment: { name: "dev", strict_auth: false },
+          },
+        }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
       if (url.includes("/advance")) {
         return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "Content-Type": "application/json" } });
       }
@@ -100,9 +109,19 @@ describe("E3 bffV5.loops mutations", () => {
     expect(r.ok).toBe(true);
   });
 
-  it("rejects for unknown id", async () => {
+  it("rejects for unknown id when write-gated and backend errors", async () => {
     vi.stubEnv("VITE_BFF_BASE_URL", "https://bff.example.test");
-    const fetchMock = vi.fn(async () => {
+    vi.stubEnv("VITE_BFF_REAL_WRITES", "true");
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/bff/me")) {
+        return new Response(JSON.stringify({
+          data: {
+            session: { authenticated: true, session_kind: "cookie" },
+            environment: { name: "dev", strict_auth: false },
+          },
+        }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
       return new Response(JSON.stringify({ error: { code: "NOT_FOUND", message: "not found" } }), { status: 404, headers: { "Content-Type": "application/json" } });
     });
     globalThis.fetch = fetchMock;

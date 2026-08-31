@@ -2,7 +2,6 @@
 // ACG-03-015: DTOs, view models, and pure adapters.
 // Network and command execution belong to ./v5Client.ts.
 
-import { usePlatform } from "@/platform/store";
 import { strictItemsFrom } from "./liveTransport";
 import {
   v5List,
@@ -573,7 +572,7 @@ export function liveKpi(
   };
 }
 
-export function adaptBffControlRoom(body: unknown): ControlRoomSummary {
+export function adaptBffControlRoom(body: unknown, sessionContext?: V5SessionContext): ControlRoomSummary {
   const record = asRecord(body);
   const loops = asRecord(record.loops);
   const sentinel = asRecord(record.sentinel);
@@ -581,22 +580,19 @@ export function adaptBffControlRoom(body: unknown): ControlRoomSummary {
   const loopRuns = strictItemsFrom(loops).map(adaptBffLoopRun);
   const findings = strictItemsFrom(sentinel).map(adaptBffSentinelFinding);
   const interventionItems = strictItemsFrom(interventions).map(adaptBffIntervention);
+  const rawSession = asRecord(record.session);
+  const session: V5SessionContext = sessionContext ?? {
+    tenantId: asString(rawSession.tenantId ?? rawSession.tenant_id, "demo"),
+    env: (asString(rawSession.env, "dev") as V5SessionContext["env"]),
+    locale: (asString(rawSession.locale, "en-US") as V5SessionContext["locale"]),
+    serverTime: isoFrom(rawSession.serverTime ?? rawSession.server_time, new Date(0).toISOString()),
+  };
   return {
     generatedAt: isoFrom(asRecord(record.meta).snapshot_at ?? record.generatedAt ?? record.generated_at),
-    session: session(),
+    session,
     kpi: liveKpi(loopRuns, findings, interventionItems),
     topFindings: findings.slice(0, 5),
     topInterventions: interventionItems.slice(0, 5),
     loopRuns: loopRuns.slice(0, 8),
-  };
-}
-
-export function session(): V5SessionContext {
-  const p = usePlatform.getState();
-  return {
-    tenantId: "demo",
-    env: p.env,
-    locale: p.locale,
-    serverTime: new Date().toISOString(),
   };
 }
