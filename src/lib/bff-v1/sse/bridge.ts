@@ -243,3 +243,33 @@ export function publish<P>(args: {
   realtime.emit(`sse:${args.channel}`, event);
   return event;
 }
+
+export function emitV5Event<P>(args: {
+  channel: string;
+  type: string;
+  payload: P;
+  correlationId?: string;
+}): {
+  id: string;
+  channel: string;
+  type: string;
+  payload: P;
+  correlationId?: string;
+  occurredAt: string;
+} {
+  const env = {
+    id: nextId(),
+    channel: args.channel,
+    type: args.type,
+    payload: args.payload,
+    correlationId: args.correlationId,
+    occurredAt: new Date().toISOString(),
+  };
+  realtime.emit("v5.events", env);
+  realtime.emit("data", { kind: "v5", channel: args.channel, type: args.type });
+  return env;
+}
+
+export function onV5Event(handler: (env: unknown) => void): () => void {
+  return realtime.on("v5.events", (p) => handler(p));
+}

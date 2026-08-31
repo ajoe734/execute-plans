@@ -3,11 +3,29 @@
 
 import { buildHeaders, isMutation, BFF_API_VERSION } from "./headers";
 import { BffError, makeBffError, normalizeBffErrorEnvelope } from "./errors";
-import { bootstrapMockAdapters } from "./mocks/adapters";
-import { resolveMock } from "./mocks/registry";
 import { liveStatus, type BffMode } from "./liveStatus";
 
 export type { BffMode };
+
+export type MockHandler = (req: {
+  method: string;
+  path: string;
+  query: Record<string, string>;
+  headers: Record<string, string>;
+  body?: unknown;
+}) => { kind: "json"; status: number; body: unknown } | { kind: "error"; error: BffError } | Promise<{ kind: "json"; status: number; body: unknown } | { kind: "error"; error: BffError }>;
+
+export type MockHandlerResolver = (method: string, path: string) => MockHandler | undefined;
+
+let mockResolver: MockHandlerResolver | undefined;
+
+export function setMockResolver(resolver: MockHandlerResolver | undefined): void {
+  mockResolver = resolver;
+}
+
+export function getMockResolver(): MockHandlerResolver | undefined {
+  return mockResolver;
+}
 
 function readEnv(): Record<string, string | undefined> {
   const viteEnv = ((import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {});
@@ -17,6 +35,8 @@ function readEnv(): Record<string, string | undefined> {
 
 export function detectMode(): BffMode {
   try {
+    const statusMode = liveStatus.get().mode;
+    if (statusMode === "live") return "live";
     // Vite-style env access; defaults to mock.
     const env = readEnv();
     // Test runs (vitest sets MODE='test') always use mock to avoid hitting the live BFF.
@@ -87,8 +107,8 @@ export async function bffFetch<T = unknown>(req: BffRequest): Promise<T> {
   });
 
   if (mode === "mock") {
-    bootstrapMockAdapters();
-    const handler = resolveMock(req.method, req.path);
+    const resolver = getMockResolver();
+    const handler = resolver?.(req.method, req.path);
     if (!handler) {
       throw makeBffError({
         code: "RESOURCE_NOT_FOUND",

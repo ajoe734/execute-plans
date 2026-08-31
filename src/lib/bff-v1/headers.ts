@@ -11,8 +11,6 @@
 // in memory via `setAuthProvider({ getToken, getTenantId })`. Persistent browser
 // storage is deliberately not an authentication source.
 
-import { seedHelperMustReturnEmptyInLive } from "./seedTaxonomy";
-
 const HTTP_MUTATION_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
 export function isMutation(method: string): boolean {
@@ -47,7 +45,6 @@ export function acceptLanguage(locale?: string): string {
 }
 
 export function getAcceptLanguage(): string | null {
-  if (seedHelperMustReturnEmptyInLive("bff.getAcceptLanguage")) return null;
   return acceptLanguage();
 }
 

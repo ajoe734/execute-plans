@@ -88,7 +88,7 @@ export const JOURNEY_EVENTS_POLL_MS = 15_000;
 interface SseFrame { id?: string; event?: string; data?: string }
 
 /** Minimal text/event-stream frame parser (id/event/data lines only). */
-export function parseSseFrames(text: string): SseFrame[] {
+function parseSseFrames(text: string): SseFrame[] {
   return text.split(/\n\n+/).map(block => {
     const frame: SseFrame = {};
     for (const line of block.split("\n")) {

@@ -1,4 +1,3 @@
-import * as seed from "@/mocks/seed";
 import type {
   AllocationSimulation,
   MetricFreeze,
@@ -9,28 +8,27 @@ import type {
 import { paths } from "./paths";
 import {
   asRecord,
-  delaySeed,
   firstArray,
-  liveDerivedListOrSeed,
   liveDetailFrom,
-  liveDetailOrSeedNormalized,
-  liveListOrSeedNormalized,
+  liveItemsFrom,
+  strictLiveDetailNormalized,
+  strictLiveListNormalized,
+  strictLiveRead,
   type UnknownRecord,
 } from "./domainReads";
 
 export async function listRebalances(): Promise<Rebalance[]> {
-  return liveListOrSeedNormalized("rebalances.list", paths.rebalances(), seed.rebalances);
+  return strictLiveListNormalized("rebalances.list", paths.rebalances());
 }
 
 export async function getRebalance(id: string): Promise<Rebalance | undefined> {
-  return liveDetailOrSeedNormalized("rebalances.get", paths.rebalance(id), seed.rebalances.find((s) => s.id === id));
+  return strictLiveDetailNormalized("rebalances.get", paths.rebalance(id));
 }
 
 export async function getRebalanceWorkflow(id: string): Promise<WorkflowStep[]> {
-  return liveDerivedListOrSeed(
+  return strictLiveRead(
     "rebalanceWorkflow.forRebalance",
-    paths.rebalance(id),
-    seed.rebalanceWorkflowSteps(id),
+    { method: "GET", path: paths.rebalance(id) },
     (body) => {
       const detail = asRecord(liveDetailFrom<UnknownRecord>(body));
       const commandAudit = asRecord(detail?.command_audit ?? detail?.commandAudit);
@@ -45,16 +43,16 @@ export async function getRebalanceWorkflow(id: string): Promise<WorkflowStep[]> 
   );
 }
 
-export async function getRebalanceOverrides(id: string): Promise<RebalanceOverride[]> {
-  return delaySeed("rebalanceOverrides.forRebalance", seed.rebalanceOverrides.filter((o) => o.rebalanceId === id), []);
+export async function getRebalanceOverrides(_id: string): Promise<RebalanceOverride[]> {
+  return [];
 }
 
-export async function getAllocationSimulations(id: string): Promise<AllocationSimulation[]> {
-  return delaySeed("allocationSimulations.forRebalance", seed.allocationSimulations.filter((s) => s.rebalanceId === id), []);
+export async function getAllocationSimulations(_id: string): Promise<AllocationSimulation[]> {
+  return [];
 }
 
-export async function getMetricFreezes(id: string): Promise<MetricFreeze[]> {
-  return delaySeed("metricFreezes.forRebalance", seed.metricFreezes.filter((m) => m.rebalanceId === id), []);
+export async function getMetricFreezes(_id: string): Promise<MetricFreeze[]> {
+  return [];
 }
 
 export const rebalances = {

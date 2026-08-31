@@ -1,9 +1,8 @@
-import * as seed from "@/mocks/seed";
 import type { Persona } from "./dto";
 import { bffFetch } from "./client";
 import { BffError } from "./errors";
 import { paths } from "./paths";
-import { liveListOrSeed } from "./domainReads";
+import { strictLiveList } from "./domainReads";
 
 type BffEnvelope<T> = { data?: T; meta?: unknown } | T;
 
@@ -74,7 +73,7 @@ export async function createPersona(
 }
 
 export async function listPersonas(): Promise<Persona[]> {
-  return liveListOrSeed("personas.list", paths.personas(), seed.personas);
+  return strictLiveList("personas.list", paths.personas());
 }
 
 export async function getPersona(id: string): Promise<Persona | undefined> {

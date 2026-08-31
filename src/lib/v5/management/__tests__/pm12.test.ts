@@ -17,7 +17,7 @@ import {
 import {
   buildRankingInboxItem, makeRankingRecommendationId, requiredRoleFor,
 } from "@/lib/v5/management/rankingGovernance";
-import { sendRankingRecommendation } from "@/lib/bff-v1";
+import { sendRankingRecommendation } from "@/lib/bff-v1/v5Client";
 
 describe("PM12 portfolio", () => {
   it("composes totals from pools + holdings", () => {

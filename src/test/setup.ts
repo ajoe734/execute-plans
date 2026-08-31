@@ -1,5 +1,7 @@
 import "@testing-library/jest-dom";
 import { randomUUID } from "node:crypto";
+import "@/lib/bff-v1/mocks/adapters";
+import "@/lib/bff-v1/mocks/registry";
 
 // Mock crypto.randomUUID for environments where it is missing (like jsdom in older Node)
 if (typeof window !== "undefined") {

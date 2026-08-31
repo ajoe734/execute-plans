@@ -1,4 +1,3 @@
-import * as seed from "@/mocks/seed";
 import type {
   EvolutionCandidate,
   EvolutionProgram,
@@ -10,23 +9,20 @@ import type {
 import { paths } from "./paths";
 import {
   asRecord,
-  delay,
-  delaySeed,
-  isLiveBffModeConfigured,
-  liveDetailOrSeed,
   liveItemsFrom,
-  liveListOrSeed,
   recordString,
+  strictLiveDetail,
+  strictLiveList,
   strictLiveRead,
   type UnknownRecord,
 } from "./domainReads";
 
 export async function listEvolutionPrograms(): Promise<EvolutionProgram[]> {
-  return liveListOrSeed("evolution.list", paths.evolutionPrograms(), seed.evolutionPrograms);
+  return strictLiveList("evolution.list", paths.evolutionPrograms());
 }
 
 export async function getEvolutionProgram(id: string): Promise<EvolutionProgram | undefined> {
-  return liveDetailOrSeed("evolution.get", paths.evolutionProgram(id), seed.evolutionPrograms.find((s) => s.id === id));
+  return strictLiveDetail("evolution.get", paths.evolutionProgram(id));
 }
 
 async function fetchLiveEvolutionRuns(helperName: string): Promise<EvolutionRun[]> {
@@ -60,56 +56,53 @@ async function fetchLiveEvolutionRuns(helperName: string): Promise<EvolutionRun[
 }
 
 export async function listEvolutionRuns(): Promise<EvolutionRun[]> {
-  return isLiveBffModeConfigured() ? fetchLiveEvolutionRuns("evolutionRuns.list") : delay(seed.evolutionRuns);
+  return fetchLiveEvolutionRuns("evolutionRuns.list");
 }
 
 export async function getEvolutionRunsForProgram(programId: string): Promise<EvolutionRun[]> {
-  return liveListOrSeed("evolutionRuns.forProgram", paths.evolutionProgramRuns(programId), seed.evolutionRuns.filter((r) => r.programId === programId));
+  return strictLiveList("evolutionRuns.forProgram", paths.evolutionProgramRuns(programId));
 }
 
 export async function getEvolutionCandidatesForRun(runId: string): Promise<EvolutionCandidate[]> {
-  if (isLiveBffModeConfigured()) {
-    const runs = await fetchLiveEvolutionRuns("evolutionCandidates.forRun");
-    const run = runs.find((candidateRun) => {
-      const record = asRecord(candidateRun);
-      return recordString(record, "id", "run_id", "runId") === runId;
-    });
-    const runRecord = asRecord(run);
-    const programId = recordString(runRecord, "programId", "program_id");
-    if (!programId) return [];
-    return strictLiveRead<UnknownRecord[]>(
-      "evolutionCandidates.forRun",
-      { method: "GET", path: paths.evolutionProgramCandidates(programId) },
-      (body) =>
-        liveItemsFrom<UnknownRecord>(body)
-          .filter((candidate) => {
-            const candidateRunId = recordString(candidate, "runId", "run_id", "evolution_run_id");
-            return !candidateRunId || candidateRunId === runId;
-          })
-          .map((candidate) => ({
-            ...candidate,
-            id: recordString(candidate, "id", "candidate_id", "candidateId") ?? `${runId}:candidate`,
-            runId: recordString(candidate, "runId", "run_id", "evolution_run_id") ?? runId,
-          })),
-    ) as unknown as Promise<EvolutionCandidate[]>;
-  }
-  return delay(seed.evolutionCandidates.filter((c) => c.runId === runId));
+  const runs = await fetchLiveEvolutionRuns("evolutionCandidates.forRun");
+  const run = runs.find((candidateRun) => {
+    const record = asRecord(candidateRun);
+    return recordString(record, "id", "run_id", "runId") === runId;
+  });
+  const runRecord = asRecord(run);
+  const programId = recordString(runRecord, "programId", "program_id");
+  if (!programId) return [];
+  return strictLiveRead<UnknownRecord[]>(
+    "evolutionCandidates.forRun",
+    { method: "GET", path: paths.evolutionProgramCandidates(programId) },
+    (body) =>
+      liveItemsFrom<UnknownRecord>(body)
+        .filter((candidate) => {
+          const candidateRunId = recordString(candidate, "runId", "run_id", "evolution_run_id");
+          return !candidateRunId || candidateRunId === runId;
+        })
+        .map((candidate) => ({
+          ...candidate,
+          id: recordString(candidate, "id", "candidate_id", "candidateId") ?? `${runId}:candidate`,
+          runId: recordString(candidate, "runId", "run_id", "evolution_run_id") ?? runId,
+        })),
+  ) as unknown as Promise<EvolutionCandidate[]>;
 }
 
-export async function getPromotionsForProgram(programId: string): Promise<PromotionRecord[]> {
-  return delaySeed("promotions.forProgram", seed.promotions.filter((p) => p.programId === programId), []);
+export async function getPromotionsForProgram(_programId: string): Promise<PromotionRecord[]> {
+  return [];
 }
 
 export async function listFitnessFormulas(): Promise<FitnessFormula[]> {
-  return delaySeed("fitnessFormulas.list", seed.fitnessFormulas, []);
+  return [];
 }
 
-export async function getFitnessFormula(id: string): Promise<FitnessFormula | undefined> {
-  return delaySeed("fitnessFormulas.get", seed.fitnessFormulas.find((f) => f.id === id), undefined);
+export async function getFitnessFormula(_id: string): Promise<FitnessFormula | undefined> {
+  return undefined;
 }
 
 export async function listMutationRules(): Promise<MutationRule[]> {
-  return delaySeed("mutationRules.list", seed.mutationRules, []);
+  return [];
 }
 
 export const evolution = {
