@@ -1,4 +1,3 @@
-import * as seed from "@/mocks/seed";
 import type {
   Alert,
   ApprovalRequest,
@@ -10,8 +9,8 @@ import type {
 import { paths } from "./paths";
 import {
   detailPath,
-  liveDetailOrSeed,
-  liveListOrSeed,
+  strictLiveDetail,
+  strictLiveList,
 } from "./domainReads";
 import {
   normalizeAlertTimestampFields,
@@ -21,43 +20,43 @@ import {
 } from "./eventTimestamps";
 
 export async function listJobs(): Promise<Job[]> {
-  return liveListOrSeed("jobs.list", paths.jobs(), seed.jobs);
+  return strictLiveList("jobs.list", paths.jobs());
 }
 
 export async function listRuntimes(): Promise<Runtime[]> {
-  return liveListOrSeed("runtimes.list", paths.runtimes(), seed.runtimes);
+  return strictLiveList("runtimes.list", paths.runtimes());
 }
 
 export async function getRuntime(id: string): Promise<Runtime | undefined> {
-  return liveDetailOrSeed("runtimes.get", detailPath(paths.runtimes(), id), seed.runtimes.find((r) => r.id === id));
+  return strictLiveDetail("runtimes.get", detailPath(paths.runtimes(), id));
 }
 
 export async function listAlerts(): Promise<Alert[]> {
-  return liveListOrSeed<Alert>("alerts.list", paths.alerts(), seed.alerts as Alert[]).then(normalizeAlertTimestampList);
+  return strictLiveList<Alert>("alerts.list", paths.alerts()).then(normalizeAlertTimestampList);
 }
 
 export async function getAlert(id: string): Promise<Alert | undefined> {
-  return liveDetailOrSeed<Alert>("alerts.get", detailPath(paths.alerts(), id), seed.alerts.find((a) => a.id === id) as Alert | undefined).then(normalizeAlertTimestampFields);
+  return strictLiveDetail<Alert>("alerts.get", detailPath(paths.alerts(), id)).then(normalizeAlertTimestampFields);
 }
 
 export async function listIncidents(): Promise<Incident[]> {
-  return liveListOrSeed<Incident>("incidents.list", paths.incidents(), seed.incidents as Incident[]).then(normalizeIncidentTimestampList);
+  return strictLiveList<Incident>("incidents.list", paths.incidents()).then(normalizeIncidentTimestampList);
 }
 
 export async function getIncident(id: string): Promise<Incident | undefined> {
-  return liveDetailOrSeed<Incident>("incidents.get", paths.incident(id), seed.incidents.find((i) => i.id === id) as Incident | undefined).then(normalizeIncidentTimestampFields);
+  return strictLiveDetail<Incident>("incidents.get", paths.incident(id)).then(normalizeIncidentTimestampFields);
 }
 
 export async function listApprovals(): Promise<ApprovalRequest[]> {
-  return liveListOrSeed("approvals.list", paths.approvals(), seed.approvals);
+  return strictLiveList("approvals.list", paths.approvals());
 }
 
 export async function getApproval(id: string): Promise<ApprovalRequest | undefined> {
-  return liveDetailOrSeed("approvals.get", paths.approval(id), seed.approvals.find((a) => a.id === id));
+  return strictLiveDetail("approvals.get", paths.approval(id));
 }
 
 export async function listAudit(): Promise<AuditEvent[]> {
-  return liveListOrSeed("audit.list", paths.audit(), seed.auditEvents);
+  return strictLiveList("audit.list", paths.audit());
 }
 
 export const jobs = {

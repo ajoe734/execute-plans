@@ -1,4 +1,3 @@
-import * as seed from "@/mocks/seed";
 import type {
   AllocationLimit,
   ConsultRule,
@@ -18,15 +17,12 @@ import type {
 import { paths } from "./paths";
 import {
   asRecord,
-  delay,
-  delaySeed,
   firstArray,
-  isLiveBffModeConfigured,
   liveDetailFrom,
-  liveDetailOrSeed,
   liveItemsFrom,
-  liveListOrSeed,
   recordString,
+  strictLiveDetail,
+  strictLiveList,
   strictLiveRead,
   type UnknownRecord,
 } from "./domainReads";
@@ -98,31 +94,28 @@ async function liveRoutePolicies(helperName: string): Promise<RoutePolicy[]> {
 }
 
 export async function listRoutePolicies(): Promise<RoutePolicy[]> {
-  return isLiveBffModeConfigured() ? liveRoutePolicies("routePolicies.list") : delay(seed.routePolicies as unknown as RoutePolicy[]);
+  return liveRoutePolicies("routePolicies.list");
 }
 
 export async function getRoutePolicy(id: string): Promise<RoutePolicy | undefined> {
-  if (isLiveBffModeConfigured()) {
-    const policies = await liveRoutePolicies("routePolicies.get");
-    return policies.find((policy) => routePolicyIdentifier(asRecord(policy)) === id);
-  }
-  return delay(seed.routePolicies.find((p) => p.id === id) as unknown as RoutePolicy | undefined);
+  const policies = await liveRoutePolicies("routePolicies.get");
+  return policies.find((policy) => routePolicyIdentifier(asRecord(policy)) === id);
 }
 
 export async function getRoutePolicyForPersona(personaId: string): Promise<RoutePolicy | undefined> {
-  return liveDetailOrSeed("routePolicies.forPersona", paths.personaRoutePolicy(personaId), seed.routePolicies.find((p) => p.personaId === personaId) as unknown as RoutePolicy | undefined);
+  return strictLiveDetail("routePolicies.forPersona", paths.personaRoutePolicy(personaId));
 }
 
-export async function listPolicyVersions(policyId: string): Promise<PolicyVersion[]> {
-  return delaySeed("policyVersions.list", seed.policyVersions.filter((v) => v.policyId === policyId), []);
+export async function listPolicyVersions(_policyId: string): Promise<PolicyVersion[]> {
+  return [];
 }
 
-export async function getPermissionMatrix(instance: string): Promise<PermissionMatrix | undefined> {
-  return delaySeed("permissionMatrix.get", seed.permissionMatrices.find((m) => m.instance === instance), undefined);
+export async function getPermissionMatrix(_instance: string): Promise<PermissionMatrix | undefined> {
+  return undefined;
 }
 
 export async function listPermissionMatrices(): Promise<PermissionMatrix[]> {
-  return delaySeed("permissionMatrices.list", seed.permissionMatrices, []);
+  return [];
 }
 
 async function liveMemoryUpdates(helperName: string): Promise<MemoryUpdate[]> {
@@ -140,11 +133,11 @@ async function liveMemoryUpdates(helperName: string): Promise<MemoryUpdate[]> {
 }
 
 export async function listMemoryUpdates(): Promise<MemoryUpdate[]> {
-  return isLiveBffModeConfigured() ? liveMemoryUpdates("memoryUpdates.list") : delay(seed.memoryUpdates as MemoryUpdate[]);
+  return liveMemoryUpdates("memoryUpdates.list");
 }
 
 export async function getMemoryUpdatesForPersona(personaId: string): Promise<MemoryUpdate[]> {
-  return liveListOrSeed("memoryUpdates.forPersona", paths.personaMemory(personaId), (seed.memoryUpdates as MemoryUpdate[]).filter((m) => m.personaId === personaId));
+  return strictLiveList("memoryUpdates.forPersona", paths.personaMemory(personaId));
 }
 
 async function liveConsultRules(helperName: string): Promise<ConsultRule[]> {
@@ -165,20 +158,15 @@ async function liveConsultRules(helperName: string): Promise<ConsultRule[]> {
       return {
         id,
         name: recordString(rule, "name", "description", "condition") ?? id,
+        personaId,
         fromPersonaId: personaId,
-        toPersonaId: recordString(
-          rule,
-          "toPersonaId",
-          "to_persona_id",
-          "responder_persona_id",
-          "reviewer_persona_id",
-        ) ?? "",
-        trigger: recordString(rule, "trigger", "condition", "route") ?? "",
-        mode: (recordString(rule, "mode", "decision_mode") ?? "advisory") as ConsultRule["mode"],
-        envScope: (envScope.length ? envScope : ["paper", "live"]) as ConsultRule["envScope"],
-        enabled: typeof rule.enabled === "boolean" ? rule.enabled : true,
-        owner: recordString(rule, "owner", "updated_by") ?? recordString(consultPolicy, "owner") ?? "pantheon-bff",
-        updatedAt: recordString(rule, "updatedAt", "updated_at") ?? recordString(consultPolicy, "updatedAt", "updated_at") ?? "",
+        trigger: recordString(rule, "trigger", "condition", "name") ?? "risk.high",
+        condition: recordString(rule, "condition", "name") ?? "risk.high",
+        mode: recordString(rule, "mode", "decision_mode") === "blocking" ? "blocking" as const : "advisory" as const,
+        description: recordString(rule, "description", "summary"),
+        envScope: envScope.filter((s): s is "live" | "paper" | "backtest" =>
+          s === "live" || s === "paper" || s === "backtest"),
+        toPersonaId: recordString(rule, "toPersonaId", "to_persona_id", "target_persona_id"),
       };
     });
   });
@@ -186,23 +174,20 @@ async function liveConsultRules(helperName: string): Promise<ConsultRule[]> {
 }
 
 export async function listConsultRules(): Promise<ConsultRule[]> {
-  return isLiveBffModeConfigured() ? liveConsultRules("consultRules.list") : delay(seed.consultRules as ConsultRule[]);
+  return liveConsultRules("consultRules.list");
 }
 
 export async function getConsultRule(id: string): Promise<ConsultRule | undefined> {
-  if (isLiveBffModeConfigured()) {
-    const rules = await liveConsultRules("consultRules.get");
-    return rules.find((rule) => rule.id === id);
-  }
-  return delay((seed.consultRules as ConsultRule[]).find((c) => c.id === id));
+  const rules = await liveConsultRules("consultRules.get");
+  return rules.find((rule) => rule.id === id);
 }
 
 export async function listPolicyViolations(): Promise<PolicyViolation[]> {
-  return delaySeed("policyViolations.list", seed.policyViolations as PolicyViolation[], []);
+  return [];
 }
 
-export async function getPolicyViolationsForSubject(kind: string, id: string): Promise<PolicyViolation[]> {
-  return delaySeed("policyViolations.forSubject", (seed.policyViolations as PolicyViolation[]).filter((v) => v.subjectKind === kind && v.subjectId === id), []);
+export async function getPolicyViolationsForSubject(_kind: string, _id: string): Promise<PolicyViolation[]> {
+  return [];
 }
 
 const adaptPersonaEvaluations = (body: unknown, personaId: string): UnknownRecord[] =>
@@ -223,62 +208,52 @@ async function liveEvaluationRuns(helperName: string): Promise<EvaluationRun[]> 
 }
 
 export async function listEvaluationRuns(): Promise<EvaluationRun[]> {
-  return isLiveBffModeConfigured() ? liveEvaluationRuns("evaluationRuns.list") : delay(seed.evaluationRuns as EvaluationRun[]);
+  return liveEvaluationRuns("evaluationRuns.list");
 }
 
 export async function getEvaluationRunsForSubject(kind: string, id: string): Promise<EvaluationRun[]> {
-  if (isLiveBffModeConfigured()) {
-    if (!isPersonaKind(kind)) return [];
-    const evaluations = await strictLiveRead<UnknownRecord[]>(
-      "evaluationRuns.forSubject",
-      { method: "GET", path: paths.personaEvaluations(id) },
-      (body) => adaptPersonaEvaluations(body, id),
-    );
-    return evaluations as unknown as EvaluationRun[];
-  }
-  return delay((seed.evaluationRuns as EvaluationRun[]).filter((e) => e.subjectKind === kind && e.subjectId === id));
+  if (!isPersonaKind(kind)) return [];
+  const evaluations = await strictLiveRead<UnknownRecord[]>(
+    "evaluationRuns.forSubject",
+    { method: "GET", path: paths.personaEvaluations(id) },
+    (body) => adaptPersonaEvaluations(body, id),
+  );
+  return evaluations as unknown as EvaluationRun[];
 }
 
 export async function getObjectVersionsForSubject(kind: string, id: string): Promise<ObjectVersion[]> {
-  if (isLiveBffModeConfigured()) {
-    if (!isStrategyKind(kind)) return [];
-    const versions = await strictLiveRead<UnknownRecord[]>(
-      "objectVersions.forSubject",
-      { method: "GET", path: paths.strategySpecs(id) },
-      (body) =>
-        liveItemsFrom<UnknownRecord>(body).map((version, index) => ({
-          id: recordString(version, "id", "spec_version_id", "version_id") ?? `${id}:version:${index + 1}`,
-          subjectKind: "Strategy" as const,
-          subjectId: id,
-          version: recordString(version, "version", "spec_version", "spec_version_id") ?? String(index + 1),
-          author: recordString(version, "author", "created_by", "updated_by") ?? "pantheon-bff",
-          createdAt: recordString(version, "createdAt", "created_at", "updated_at") ?? "",
-          note: recordString(version, "note", "lifecycle_state", "state") ?? "",
-          spec: (asRecord(version) ?? {}) as Record<string, unknown>,
-        })),
-    );
-    return versions as unknown as ObjectVersion[];
-  }
-  return delay((seed.objectVersions as ObjectVersion[]).filter((v) => v.subjectKind === kind && v.subjectId === id));
+  if (!isStrategyKind(kind)) return [];
+  const versions = await strictLiveRead<UnknownRecord[]>(
+    "objectVersions.forSubject",
+    { method: "GET", path: paths.strategySpecs(id) },
+    (body) =>
+      liveItemsFrom<UnknownRecord>(body).map((version, index) => ({
+        id: recordString(version, "id", "spec_version_id", "version_id") ?? `${id}:version:${index + 1}`,
+        subjectKind: "Strategy" as const,
+        subjectId: id,
+        version: recordString(version, "version", "spec_version", "spec_version_id") ?? String(index + 1),
+        author: recordString(version, "author", "created_by", "updated_by") ?? "pantheon-bff",
+        createdAt: recordString(version, "createdAt", "created_at", "updated_at") ?? "",
+        note: recordString(version, "note", "lifecycle_state", "state") ?? "",
+        spec: (asRecord(version) ?? {}) as Record<string, unknown>,
+      })),
+  );
+  return versions as unknown as ObjectVersion[];
 }
 
-export async function getFeatureSetsForStrategy(id: string): Promise<FeatureSet[]> {
-  return delaySeed("featureSets.forStrategy", seed.featureSets.filter((f) => f.strategyId === id), []);
+export async function getFeatureSetsForStrategy(_id: string): Promise<FeatureSet[]> {
+  return [];
 }
 
 export async function getPerformanceSeriesForStrategy(
-  id: string,
-  granularity: "day" | "week" | "month",
+  _id: string,
+  _granularity: "day" | "week" | "month",
 ): Promise<PerformanceSeries | undefined> {
-  return delaySeed(
-    "performanceSeries.forStrategy",
-    seed.performanceSeries.find((s) => s.strategyId === id && s.granularity === granularity),
-    undefined,
-  );
+  return undefined;
 }
 
-export async function getWatchersForSubject(kind: string, id: string): Promise<Watcher[]> {
-  return delaySeed("watchers.forSubject", (seed.watchers as Watcher[]).filter((w) => w.subjectKind === kind && w.subjectId === id), []);
+export async function getWatchersForSubject(_kind: string, _id: string): Promise<Watcher[]> {
+  return [];
 }
 
 export async function listDecisionJournal(): Promise<DecisionJournalEntry[]> {
@@ -290,12 +265,12 @@ export async function getDecisionJournalForSubject(kind: string, id: string): Pr
   return items.filter((d) => d.subjectKind === kind && d.subjectId === id);
 }
 
-export async function getAllocationLimitsForPool(id: string): Promise<AllocationLimit[]> {
-  return delaySeed("allocationLimits.forPool", seed.allocationLimits.filter((l) => l.poolId === id), []);
+export async function getAllocationLimitsForPool(_id: string): Promise<AllocationLimit[]> {
+  return [];
 }
 
-export async function getPoolFreezesForPool(id: string): Promise<PoolFreeze[]> {
-  return delaySeed("poolFreezes.forPool", seed.poolFreezes.filter((f) => f.poolId === id), []);
+export async function getPoolFreezesForPool(_id: string): Promise<PoolFreeze[]> {
+  return [];
 }
 
 export const routePolicies = {

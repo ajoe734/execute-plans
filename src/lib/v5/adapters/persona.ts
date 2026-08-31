@@ -2,7 +2,6 @@
 
 import type { Persona, Alert } from "@/lib/bff-v1";
 import { computePersonaHealthScore } from "../health";
-import { v5ActionOverlay } from "../overlay";
 import type { PersonaExecutionHealth } from "../types";
 import type { AutonomyMode } from "../enums";
 
@@ -38,9 +37,7 @@ export function adaptPersonaHealth(
   persona: Persona,
   ctx: { alerts?: Alert[] } = {},
 ): PersonaExecutionHealth {
-  const overlay = v5ActionOverlay.getPersona(persona.id);
-  const baseMode = mapStateToMode(persona.state);
-  const mode: AutonomyMode = overlay?.forcedMode ?? baseMode;
+  const mode: AutonomyMode = mapStateToMode(persona.state);
 
   const sentinelPenalty = (ctx.alerts ?? []).filter(
     (a) => a.relatedTarget === persona.id && (a.severity === "high" || a.severity === "critical"),
@@ -69,7 +66,7 @@ export function adaptPersonaHealth(
     score,
     formulaVersion,
     inputs,
-    suspendedReason: mode === "suspended" ? overlay?.reason ?? "seed-lifecycle" : undefined,
+    suspendedReason: mode === "suspended" ? "seed-lifecycle" : undefined,
     routedStrategies: persona.routedStrategies,
     openFindings: (ctx.alerts ?? []).filter((a) => a.relatedTarget === persona.id && !a.acknowledged).length,
     updatedAt: persona.updatedAt,

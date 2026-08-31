@@ -10,10 +10,9 @@
 // (jobs, runtimes, alerts, incidents, approvals, audit, mcpTools) so all
 // canonical Management read surfaces have a real adapter when live mode is on.
 
-import * as seed from "@/mocks/seed";
 import type { Alert, Incident, Runtime } from "./dto";
 import type { ListEnvelope } from "./dto";
-import { withLiveOrMock } from "./liveTransport";
+import { bffFetch } from "./client";
 import { paths } from "./paths";
 import {
   normalizeAlertTimestampFields,
@@ -51,83 +50,135 @@ function envelope<T>(items: T[], cls: ListClass): ListEnvelope<T> {
     pageSize: items.length,
     totalCountExact: rule.totalCountExact,
   };
-  if (rule.emitEstimatedTotal) out.estimatedTotal = items.length;
+  if (rule.emitEstimatedTotal) {
+    out.estimatedTotal = items.length;
+  }
   return out;
 }
 
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? value as Record<string, unknown>
+const asRecord = (value: unknown): Record<string, unknown> | null =>
+  typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
     : null;
-}
 
-function firstArray<T>(...values: unknown[]): T[] {
+const stringFrom = (...values: unknown[]): string | undefined => {
   for (const value of values) {
-    if (Array.isArray(value)) return value as T[];
+    if (typeof value === "string" && value.trim().length > 0) return value.trim();
   }
-  return [];
-}
+  return undefined;
+};
 
-function numberFrom(...values: unknown[]): number | undefined {
+const numberFrom = (...values: unknown[]): number | undefined => {
   for (const value of values) {
     if (typeof value === "number" && Number.isFinite(value)) return value;
+    if (typeof value === "string" && value.trim().length > 0) {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) return parsed;
+    }
   }
   return undefined;
-}
-
-function stringFrom(...values: unknown[]): string | undefined {
-  for (const value of values) {
-    if (typeof value === "string" && value.trim()) return value.trim();
-    if (typeof value === "number" && Number.isFinite(value)) return String(value);
-  }
-  return undefined;
-}
-
-function cursorFrom(payload: Record<string, unknown> | null): ListEnvelope<unknown>["cursor"] {
-  const direct = asRecord(payload?.cursor);
-  const pageInfo = asRecord(payload?.page_info ?? payload?.pageInfo);
-  return {
-    next: String(direct?.next ?? pageInfo?.next_page_token ?? pageInfo?.nextPageToken ?? "").trim() || undefined,
-    prev: String(direct?.prev ?? pageInfo?.prev_page_token ?? pageInfo?.prevPageToken ?? "").trim() || undefined,
-  };
-}
+};
 
 export function normalizeLiveListResponse<T>(payload: unknown, cls: ListClass): ListEnvelope<T> {
-  const record = asRecord(payload);
-  const data = record ? record.data : undefined;
-  const dataRecord = asRecord(data);
-  const pageInfo = asRecord(record?.page_info ?? record?.pageInfo);
-  const meta = asRecord(record?.meta);
-  const items = firstArray<T>(
-    payload,
-    record?.items,
-    data,
-    dataRecord?.items,
-    record?.alerts,
-    dataRecord?.alerts,
-    record?.incidents,
-    dataRecord?.incidents,
-    record?.events,
-    dataRecord?.events,
-    record?.jobs,
-    dataRecord?.jobs,
-  );
-  const pageSize = numberFrom(record?.pageSize, record?.page_size, pageInfo?.page_size, pageInfo?.pageSize) ?? items.length;
-  const estimatedTotal = numberFrom(record?.estimatedTotal, record?.estimated_total, record?.count, pageInfo?.total, meta?.total);
-
   const rule = LIST_CLASS_RULES[cls];
+  if (Array.isArray(payload)) {
+    return envelope(payload as T[], cls);
+  }
+
+  const record = asRecord(payload);
+  const data = asRecord(record?.data);
+  const meta = asRecord(record?.meta);
+  const rawItems = (
+    (Array.isArray(record?.items) && record.items) ||
+    (Array.isArray(record?.data) && record.data) ||
+    (Array.isArray(data?.items) && data.items) ||
+    (Array.isArray(record?.alerts) && record.alerts) ||
+    (Array.isArray(record?.incidents) && record.incidents) ||
+    (Array.isArray(record?.approvals) && record.approvals) ||
+    (Array.isArray(record?.jobs) && record.jobs) ||
+    (Array.isArray(record?.runtimes) && record.runtimes) ||
+    (Array.isArray(record?.events) && record.events) ||
+    (Array.isArray(record?.mcp_tools) && record.mcp_tools) ||
+    (Array.isArray(record?.mcpTools) && record.mcpTools) ||
+    (Array.isArray(record?.results) && record.results) ||
+    (Array.isArray(record?.search_results) && record.search_results) ||
+    []
+  ) as T[];
+
+  const rawCursor = asRecord(record?.cursor) ?? asRecord(data?.cursor) ?? asRecord(meta?.cursor) ?? {};
+  const rawPageInfo = asRecord(record?.page_info) ?? asRecord(data?.page_info) ?? asRecord(meta?.page_info) ?? {};
+
+  const totalCandidates = [
+    record?.total,
+    record?.totalCount,
+    record?.total_count,
+    data?.total,
+    data?.totalCount,
+    data?.total_count,
+    meta?.total,
+    meta?.totalCount,
+    meta?.total_count,
+    rawPageInfo.total,
+    rawPageInfo.totalCount,
+    rawPageInfo.total_count,
+  ];
+
+  const estimatedCandidates = [
+    record?.estimatedTotal,
+    record?.estimated_total,
+    data?.estimatedTotal,
+    data?.estimated_total,
+    meta?.estimatedTotal,
+    meta?.estimated_total,
+  ];
+
+  const explicitTotal = numberFrom(...totalCandidates);
+  const explicitEstimated = numberFrom(...estimatedCandidates);
+
+  const exactFlag = [
+    record?.totalCountExact,
+    record?.total_count_exact,
+    data?.totalCountExact,
+    data?.total_count_exact,
+    meta?.totalCountExact,
+    meta?.total_count_exact,
+  ].find((v) => typeof v === "boolean");
+
+  const totalCountExact = typeof exactFlag === "boolean" ? exactFlag : rule.totalCountExact;
+
   const out: ListEnvelope<T> = {
-    items,
-    cursor: cursorFrom(record),
-    pageSize,
-    totalCountExact: typeof record?.totalCountExact === "boolean" ? record.totalCountExact : rule.totalCountExact,
+    items: rawItems,
+    cursor: {
+      next: stringFrom(rawCursor.next, rawCursor.next_cursor, rawPageInfo.next_cursor, rawPageInfo.next_page_token),
+      prev: stringFrom(rawCursor.prev, rawCursor.prev_cursor, rawPageInfo.prev_cursor),
+    },
+    pageSize: numberFrom(record?.pageSize, record?.page_size, data?.pageSize, data?.page_size, rawPageInfo.page_size) ?? rawItems.length,
+    totalCountExact,
   };
-  if (meta) out.meta = meta;
-  if (rule.emitEstimatedTotal) out.estimatedTotal = estimatedTotal ?? items.length;
+
+  if (totalCountExact) {
+    if (explicitTotal !== undefined) {
+      out.total = explicitTotal;
+    }
+  }
+
+  if (rule.emitEstimatedTotal) {
+    if (explicitEstimated !== undefined) {
+      out.estimatedTotal = explicitEstimated;
+    } else if (explicitTotal !== undefined) {
+      out.estimatedTotal = explicitTotal;
+    } else {
+      out.estimatedTotal = rawItems.length;
+    }
+  }
+
+  if (record && typeof record.meta === "object" && record.meta !== null && !Array.isArray(record.meta)) {
+    out.meta = record.meta as Record<string, unknown>;
+  }
+
   return out;
 }
 
-/** Adapt a legacy `() => Promise<T[]>` reader into a v1 envelope reader. */
 export function asListEnvelope<T>(
   loader: () => Promise<T[]>,
   cls: ListClass = "entityRegistry",
@@ -135,36 +186,24 @@ export function asListEnvelope<T>(
   return () => loader().then((xs) => envelope(xs, cls));
 }
 
-/**
- * Build a list reader that prefers live BFF (when VITE_BFF_MODE=live and the
- * runtime hasn't fallen back), and otherwise serves the in-process mock.
- * Live response is expected to already be a `ListEnvelope<T>`; mock returns
- * the locally wrapped envelope.
- */
-function liveOrMockList<T>(
+function strictLiveListLoader<T>(
   path: string,
-  loader: () => Promise<T[]>,
   cls: ListClass,
   adaptItem?: (value: unknown) => T | undefined,
 ): () => Promise<ListEnvelope<T>> {
   const adaptItems = (items: unknown[]): T[] => adaptItem
     ? items.map((item) => adaptItem(item)).filter((item): item is T => Boolean(item))
     : items as T[];
-  const mockFn = async (): Promise<ListEnvelope<T>> => envelope(adaptItems(await loader()), cls);
-  return () =>
-    withLiveOrMock<ListEnvelope<T>, unknown>(
-      { method: "GET", path },
-      mockFn,
-      (data) => {
-        const env = normalizeLiveListResponse<unknown>(data, cls);
-        const items = adaptItems(env.items);
-        return {
-          ...env,
-          items,
-          pageSize: items.length,
-        };
-      },
-    );
+  return async () => {
+    const data = await bffFetch<unknown>({ method: "GET", path });
+    const env = normalizeLiveListResponse<unknown>(data, cls);
+    const items = adaptItems(env.items);
+    return {
+      ...env,
+      items,
+      pageSize: items.length,
+    };
+  };
 }
 
 export function normalizeAlertListResponse(payload: unknown, cls: ListClass = "realtimeFeed"): ListEnvelope<Alert> {
@@ -183,32 +222,24 @@ export function normalizeIncidentListResponse(payload: unknown, cls: ListClass =
   };
 }
 
-function liveOrMockAlertList(
+function strictLiveAlertListLoader(
   path: string,
-  loader: () => Promise<Alert[]>,
-  cls: ListClass,
+  cls: ListClass = "realtimeFeed",
 ): () => Promise<ListEnvelope<Alert>> {
-  const mockFn = async (): Promise<ListEnvelope<Alert>> => envelope(await loader(), cls);
-  return () =>
-    withLiveOrMock<ListEnvelope<Alert>, unknown>(
-      { method: "GET", path },
-      mockFn,
-      (data) => normalizeAlertListResponse(data, cls),
-    );
+  return async () => {
+    const data = await bffFetch<unknown>({ method: "GET", path });
+    return normalizeAlertListResponse(data, cls);
+  };
 }
 
-function liveOrMockIncidentList(
+function strictLiveIncidentListLoader(
   path: string,
-  loader: () => Promise<Incident[]>,
-  cls: ListClass,
+  cls: ListClass = "governanceQueue",
 ): () => Promise<ListEnvelope<Incident>> {
-  const mockFn = async (): Promise<ListEnvelope<Incident>> => envelope(await loader(), cls);
-  return () =>
-    withLiveOrMock<ListEnvelope<Incident>, unknown>(
-      { method: "GET", path },
-      mockFn,
-      (data) => normalizeIncidentListResponse(data, cls),
-    );
+  return async () => {
+    const data = await bffFetch<unknown>({ method: "GET", path });
+    return normalizeIncidentListResponse(data, cls);
+  };
 }
 
 export type RuntimeListItem = Runtime & {
@@ -306,18 +337,14 @@ export function normalizeRuntimeListResponse(payload: unknown, cls: ListClass = 
   };
 }
 
-function liveOrMockRuntimeList(
+function strictLiveRuntimeListLoader(
   path: string,
-  loader: () => Promise<Runtime[]>,
-  cls: ListClass,
+  cls: ListClass = "entityRegistry",
 ): () => Promise<ListEnvelope<RuntimeListItem>> {
-  const mockFn = async (): Promise<ListEnvelope<RuntimeListItem>> => envelope(await loader(), cls);
-  return () =>
-    withLiveOrMock<ListEnvelope<RuntimeListItem>, unknown>(
-      { method: "GET", path },
-      mockFn,
-      (data) => normalizeRuntimeListResponse(data, cls),
-    );
+  return async () => {
+    const data = await bffFetch<unknown>({ method: "GET", path });
+    return normalizeRuntimeListResponse(data, cls);
+  };
 }
 
 /** Per-entity list-class map (Pack D D22).
@@ -347,29 +374,28 @@ export const LIST_CLASS_BY_KEY = {
 
 /** Canonical entity → loader map.
  *  BFF-LUV-FE-002 covers all Management Console route families with real
- *  live adapters; mock fallback is governed by liveTransport's `auto` /
- *  `strict` fallback mode (VITE_BFF_FALLBACK). */
+ *  live adapters. */
 export const lists = {
-  strategies:      liveOrMockList(paths.strategies(),         async () => seed.strategies,           LIST_CLASS_BY_KEY.strategies, normalizeBaseObjectFields),
-  personas:        liveOrMockList(paths.personas(),           async () => seed.personas,             LIST_CLASS_BY_KEY.personas, normalizeBaseObjectFields),
-  capitalPools:    liveOrMockList(paths.capitalPools(),       async () => seed.capitalPools,         LIST_CLASS_BY_KEY.capitalPools, normalizeCapitalPool),
-  rankingFormulas: liveOrMockList(paths.rankingFormulas(),    async () => seed.rankingFormulas,      LIST_CLASS_BY_KEY.rankingFormulas, normalizeBaseObjectFields),
-  rebalances:      liveOrMockList(paths.rebalances(),         async () => seed.rebalances,           LIST_CLASS_BY_KEY.rebalances, normalizeBaseObjectFields),
-  deployments:     liveOrMockList(paths.deployments(),        async () => seed.deployments,          LIST_CLASS_BY_KEY.deployments, normalizeBaseObjectFields),
-  evolution:       liveOrMockList(paths.evolutionPrograms(),  async () => seed.evolutionPrograms,    LIST_CLASS_BY_KEY.evolution, normalizeBaseObjectFields),
-  research:        liveOrMockList(paths.researchExperiments(),async () => seed.researchExperiments,  LIST_CLASS_BY_KEY.research, normalizeBaseObjectFields),
-  artifacts:       liveOrMockList(paths.artifacts(),          async () => seed.artifacts,            LIST_CLASS_BY_KEY.artifacts),
-  tools:           liveOrMockList(paths.tools(),              async () => seed.tools,                LIST_CLASS_BY_KEY.tools, normalizeBaseObjectFields),
-  mcpServers:      liveOrMockList(paths.mcpServers(),         async () => seed.mcpServers,           LIST_CLASS_BY_KEY.mcpServers, normalizeBaseObjectFields),
-  mcpTools:        liveOrMockList(paths.mcpTools(),           async () => seed.mcpTools,             LIST_CLASS_BY_KEY.mcpTools, normalizeBaseObjectFields),
-  skills:          liveOrMockList(paths.skills(),             async () => seed.skills,               LIST_CLASS_BY_KEY.skills, normalizeBaseObjectFields),
-  channels:        liveOrMockList(paths.channels(),           async () => seed.channels,             LIST_CLASS_BY_KEY.channels, normalizeBaseObjectFields),
-  jobs:            liveOrMockList(paths.jobs(),               async () => seed.jobs,                 LIST_CLASS_BY_KEY.jobs),
-  runtimes:        liveOrMockRuntimeList(paths.runtimes(),    async () => seed.runtimes,             LIST_CLASS_BY_KEY.runtimes),
-  alerts:          liveOrMockAlertList(paths.alerts(),        async () => seed.alerts,               LIST_CLASS_BY_KEY.alerts),
-  incidents:       liveOrMockIncidentList(paths.incidents(),  async () => seed.incidents,            LIST_CLASS_BY_KEY.incidents),
-  approvals:       liveOrMockList(paths.approvals(),          async () => seed.approvals,            LIST_CLASS_BY_KEY.approvals, normalizeBaseObjectFields),
-  audit:           liveOrMockList(paths.audit(),              async () => seed.auditEvents,          LIST_CLASS_BY_KEY.audit, normalizeBaseObjectFields),
+  strategies:      strictLiveListLoader(paths.strategies(),         LIST_CLASS_BY_KEY.strategies, normalizeBaseObjectFields),
+  personas:        strictLiveListLoader(paths.personas(),           LIST_CLASS_BY_KEY.personas, normalizeBaseObjectFields),
+  capitalPools:    strictLiveListLoader(paths.capitalPools(),       LIST_CLASS_BY_KEY.capitalPools, normalizeCapitalPool),
+  rankingFormulas: strictLiveListLoader(paths.rankingFormulas(),    LIST_CLASS_BY_KEY.rankingFormulas, normalizeBaseObjectFields),
+  rebalances:      strictLiveListLoader(paths.rebalances(),         LIST_CLASS_BY_KEY.rebalances, normalizeBaseObjectFields),
+  deployments:     strictLiveListLoader(paths.deployments(),        LIST_CLASS_BY_KEY.deployments, normalizeBaseObjectFields),
+  evolution:       strictLiveListLoader(paths.evolutionPrograms(),  LIST_CLASS_BY_KEY.evolution, normalizeBaseObjectFields),
+  research:        strictLiveListLoader(paths.researchExperiments(),LIST_CLASS_BY_KEY.research, normalizeBaseObjectFields),
+  artifacts:       strictLiveListLoader(paths.artifacts(),          LIST_CLASS_BY_KEY.artifacts),
+  tools:           strictLiveListLoader(paths.tools(),              LIST_CLASS_BY_KEY.tools, normalizeBaseObjectFields),
+  mcpServers:      strictLiveListLoader(paths.mcpServers(),         LIST_CLASS_BY_KEY.mcpServers, normalizeBaseObjectFields),
+  mcpTools:        strictLiveListLoader(paths.mcpTools(),           LIST_CLASS_BY_KEY.mcpTools, normalizeBaseObjectFields),
+  skills:          strictLiveListLoader(paths.skills(),             LIST_CLASS_BY_KEY.skills, normalizeBaseObjectFields),
+  channels:        strictLiveListLoader(paths.channels(),           LIST_CLASS_BY_KEY.channels, normalizeBaseObjectFields),
+  jobs:            strictLiveListLoader(paths.jobs(),               LIST_CLASS_BY_KEY.jobs),
+  runtimes:        strictLiveRuntimeListLoader(paths.runtimes(),    LIST_CLASS_BY_KEY.runtimes),
+  alerts:          strictLiveAlertListLoader(paths.alerts(),        LIST_CLASS_BY_KEY.alerts),
+  incidents:       strictLiveIncidentListLoader(paths.incidents(),  LIST_CLASS_BY_KEY.incidents),
+  approvals:       strictLiveListLoader(paths.approvals(),          LIST_CLASS_BY_KEY.approvals, normalizeBaseObjectFields),
+  audit:           strictLiveListLoader(paths.audit(),              LIST_CLASS_BY_KEY.audit, normalizeBaseObjectFields),
 } as const satisfies Record<string, () => Promise<ListEnvelope<unknown>>>;
 
 export type ListKey = keyof typeof lists;
