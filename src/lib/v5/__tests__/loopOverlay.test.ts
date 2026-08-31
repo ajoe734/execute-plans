@@ -1,6 +1,6 @@
 // E3 — Loop run mutation overlay + bffV5.loops.* end-to-end.
 
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { bffV5 } from "@/lib/bff-v1";
 import {
   applyLoopOverlay,
@@ -9,10 +9,12 @@ import {
   pauseLoopRun,
   resumeLoopRun,
   cancelLoopRun,
+} from "@/lib/v5/loopOverlay";
+import {
   stageTimeoutState,
   DEFAULT_TIMEOUT_POLICY,
+  type LoopRun,
 } from "@/lib/v5";
-import type { LoopRun } from "@/lib/v5";
 
 beforeEach(() => loopRunOverlay.clear());
 
@@ -78,19 +80,33 @@ describe("E3 stageTimeoutState", () => {
 });
 
 describe("E3 bffV5.loops mutations", () => {
-  it("advance returns ok and emits via overlay", async () => {
-    const list = await bffV5.loops.list("execution");
-    const target = list.items[0];
-    if (!target) return;
-    const r = await bffV5.loops.advance(target.id);
-    expect(r.ok).toBe(true);
-    const next = await bffV5.loops.get(target.id);
-    expect(next?.id).toBe(target.id);
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
   });
 
-  it("returns not_found for unknown id", async () => {
-    const r = await bffV5.loops.pause("lr_does_not_exist");
-    expect(r.ok).toBe(false);
-    if (r.ok === false) expect(r.reason).toBe("not_found");
+  it("advance returns ok and emits via overlay", async () => {
+    vi.stubEnv("VITE_BFF_BASE_URL", "https://bff.example.test");
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/advance")) {
+        return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      return new Response("not found", { status: 404 });
+    });
+    globalThis.fetch = fetchMock;
+
+    const r = await bffV5.loops.advance("lr_exec_001");
+    expect(r.ok).toBe(true);
+  });
+
+  it("rejects for unknown id", async () => {
+    vi.stubEnv("VITE_BFF_BASE_URL", "https://bff.example.test");
+    const fetchMock = vi.fn(async () => {
+      return new Response(JSON.stringify({ error: { code: "NOT_FOUND", message: "not found" } }), { status: 404, headers: { "Content-Type": "application/json" } });
+    });
+    globalThis.fetch = fetchMock;
+
+    await expect(bffV5.loops.pause("lr_does_not_exist")).rejects.toThrow();
   });
 });

@@ -8,8 +8,6 @@ export * from "./events";
 export * from "./timeoutPolicy";
 export * from "./health";
 export * from "./remediation";
-export * from "./overlay";
-export * from "./loopOverlay";
 export * from "./sentinel";
 export { adaptPersonaHealth } from "./adapters/persona";
 export { adaptStrategyHealth } from "./adapters/strategy";

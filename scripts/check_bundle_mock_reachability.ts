@@ -22,6 +22,13 @@ import type { RollupOutput, OutputChunk } from "rollup";
 const FORBIDDEN_MODULE_SUBSTRINGS = [
   "src/mocks/seed",
   "src/mocks/strictLiveFixtureUnavailable",
+  "src/lib/bff-v1/mocks/adapters",
+  "src/lib/bff-v1/mocks/registry",
+  "src/lib/bff-v1/mocks/persistence",
+  "src/lib/bff-v1/mocks/mutations",
+  "src/lib/bff-v1/mocks/scenarios",
+  "seed-taxonomy.json",
+  "src/lib/bff-v1/writeOverlay",
 ];
 
 const FORBIDDEN_CODE_SYMBOLS = [
@@ -30,6 +37,11 @@ const FORBIDDEN_CODE_SYMBOLS = [
   "liveListOrSeed",
   "liveDetailOrSeed",
   "liveDerivedListOrSeed",
+  "liveDetailOrSeedArtifact",
+  "liveListOrSeedArtifact",
+  "liveDetailOrSeedNormalized",
+  "liveListOrSeedNormalized",
+  "v5ActionOverlay",
 ];
 
 async function checkBundle() {

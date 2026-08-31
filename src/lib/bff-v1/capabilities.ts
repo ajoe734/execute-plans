@@ -1,7 +1,6 @@
 import type { Channel, McpSecret, McpServer, McpTool, Skill, Tool } from "./dto";
 import { paths } from "./paths";
 import {
-  delaySeed,
   detailPath,
   liveItemsFrom,
   strictLiveDetailNormalized,
@@ -49,8 +48,8 @@ export async function getChannel(id: string): Promise<Channel | undefined> {
   return strictLiveDetailNormalized("channels.get", detailPath(paths.channels(), id));
 }
 
-export async function getMcpSecretsForServer(serverId: string): Promise<McpSecret[]> {
-  return delaySeed("bff.mcpSecrets.forServer", [{ serverId, secretKey: "api_key" }], []);
+export async function getMcpSecretsForServer(_serverId: string): Promise<McpSecret[]> {
+  return [];
 }
 
 export const tools = {

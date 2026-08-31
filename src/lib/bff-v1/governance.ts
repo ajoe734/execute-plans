@@ -17,7 +17,6 @@ import type {
 import { paths } from "./paths";
 import {
   asRecord,
-  delaySeed,
   firstArray,
   liveDetailFrom,
   liveItemsFrom,
@@ -107,16 +106,16 @@ export async function getRoutePolicyForPersona(personaId: string): Promise<Route
   return strictLiveDetail("routePolicies.forPersona", paths.personaRoutePolicy(personaId));
 }
 
-export async function listPolicyVersions(policyId: string): Promise<PolicyVersion[]> {
-  return delaySeed("bff.policyVersions.list", [{ policyId, version: "v1", createdAt: "2026-01-01" }], []);
+export async function listPolicyVersions(_policyId: string): Promise<PolicyVersion[]> {
+  return [];
 }
 
-export async function getPermissionMatrix(instance: string): Promise<PermissionMatrix | undefined> {
-  return delaySeed("bff.permissionMatrix.get", { instance, matrix: {} } as unknown as PermissionMatrix, undefined);
+export async function getPermissionMatrix(_instance: string): Promise<PermissionMatrix | undefined> {
+  return undefined;
 }
 
 export async function listPermissionMatrices(): Promise<PermissionMatrix[]> {
-  return delaySeed("bff.permissionMatrices.list", [{ instance: "persona-tool", matrix: {} }] as unknown as PermissionMatrix[], []);
+  return [];
 }
 
 async function liveMemoryUpdates(helperName: string): Promise<MemoryUpdate[]> {
@@ -184,11 +183,11 @@ export async function getConsultRule(id: string): Promise<ConsultRule | undefine
 }
 
 export async function listPolicyViolations(): Promise<PolicyViolation[]> {
-  return delaySeed("bff.policyViolations.list", [{ id: "pv_001", subjectKind: "Persona", subjectId: "per_quant", policyId: "p_1", severity: "low", detectedAt: "2026-01-01" }], []);
+  return [];
 }
 
-export async function getPolicyViolationsForSubject(kind: string, id: string): Promise<PolicyViolation[]> {
-  return delaySeed("bff.policyViolations.forSubject", [{ id: "pv_001", subjectKind: kind, subjectId: id, policyId: "p_1", severity: "low", detectedAt: "2026-01-01" }], []);
+export async function getPolicyViolationsForSubject(_kind: string, _id: string): Promise<PolicyViolation[]> {
+  return [];
 }
 
 const adaptPersonaEvaluations = (body: unknown, personaId: string): UnknownRecord[] =>
@@ -242,19 +241,19 @@ export async function getObjectVersionsForSubject(kind: string, id: string): Pro
   return versions as unknown as ObjectVersion[];
 }
 
-export async function getFeatureSetsForStrategy(id: string): Promise<FeatureSet[]> {
-  return delaySeed("bff.featureSets.forStrategy", [{ id: "fs_001", strategyId: id, features: [] }], []);
+export async function getFeatureSetsForStrategy(_id: string): Promise<FeatureSet[]> {
+  return [];
 }
 
 export async function getPerformanceSeriesForStrategy(
-  id: string,
-  granularity: "day" | "week" | "month",
+  _id: string,
+  _granularity: "day" | "week" | "month",
 ): Promise<PerformanceSeries | undefined> {
-  return delaySeed("bff.performanceSeries.forStrategy", { strategyId: id, granularity, series: [] } as unknown as PerformanceSeries, undefined);
+  return undefined;
 }
 
-export async function getWatchersForSubject(kind: string, id: string): Promise<Watcher[]> {
-  return delaySeed("bff.watchers.forSubject", [{ id: "w_001", subjectKind: kind, subjectId: id, observer: "op_001", notifyChannel: "email", createdAt: "2026-01-01" }], []);
+export async function getWatchersForSubject(_kind: string, _id: string): Promise<Watcher[]> {
+  return [];
 }
 
 export async function listDecisionJournal(): Promise<DecisionJournalEntry[]> {
@@ -266,12 +265,12 @@ export async function getDecisionJournalForSubject(kind: string, id: string): Pr
   return items.filter((d) => d.subjectKind === kind && d.subjectId === id);
 }
 
-export async function getAllocationLimitsForPool(id: string): Promise<AllocationLimit[]> {
-  return delaySeed("bff.allocationLimits.forPool", [{ poolId: id, limit: 1000000 }], []);
+export async function getAllocationLimitsForPool(_id: string): Promise<AllocationLimit[]> {
+  return [];
 }
 
-export async function getPoolFreezesForPool(id: string): Promise<PoolFreeze[]> {
-  return delaySeed("bff.poolFreezes.forPool", [{ poolId: id, frozen: false }], []);
+export async function getPoolFreezesForPool(_id: string): Promise<PoolFreeze[]> {
+  return [];
 }
 
 export const routePolicies = {

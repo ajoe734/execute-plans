@@ -1,8 +1,10 @@
 import { bffFetch, type BffRequest } from "./client";
 import { BffError, makeBffError } from "./errors";
 import { liveStatus } from "./liveStatus";
-import { isLiveBffModeConfigured, seedHelperMustReturnEmptyInLive, seedHelperEmptyReason } from "./seedTaxonomy";
-export { isLiveBffModeConfigured };
+
+export function isLiveBffModeConfigured(): boolean {
+  return liveStatus.get().mode === "live";
+}
 
 export const delay = <T>(v: T, ms = 220): Promise<T> => new Promise<T>((r) => setTimeout(() => r(v), ms));
 
@@ -93,34 +95,6 @@ export const strictLiveDetail = <T>(
 ): Promise<T | undefined> =>
   strictLiveRead<T | undefined>(helperName, { method: "GET", path }, adaptLive ?? liveDetailFrom<T>);
 
-export const liveListOrSeed = <T>(
-  helperName: string,
-  path: string,
-  seedValue?: T[],
-): Promise<T[]> =>
-  isLiveBffModeConfigured() || seedValue === undefined
-    ? strictLiveRead<T[]>(helperName, { method: "GET", path }, liveItemsFrom<T>)
-    : delay(seedValue);
-
-export const liveDetailOrSeed = <T>(
-  helperName: string,
-  path: string,
-  seedValue?: T | undefined,
-): Promise<T | undefined> =>
-  isLiveBffModeConfigured() || seedValue === undefined
-    ? strictLiveRead<T | undefined>(helperName, { method: "GET", path }, liveDetailFrom<T>)
-    : delay(seedValue);
-
-export const liveDerivedListOrSeed = <T>(
-  helperName: string,
-  path: string,
-  seedValue: T[] | undefined,
-  adaptLive: (body: unknown) => T[],
-): Promise<T[]> =>
-  isLiveBffModeConfigured() || seedValue === undefined
-    ? strictLiveRead<T[]>(helperName, { method: "GET", path }, adaptLive)
-    : delay(seedValue);
-
 export const recordString = (record: UnknownRecord | undefined, ...keys: string[]): string | undefined => {
   if (!record) return undefined;
   for (const key of keys) {
@@ -188,20 +162,6 @@ export const strictLiveListArtifact = <T>(
 ): Promise<T[]> =>
   strictLiveList<T>(helperName, path).then(normalizeArtifactList);
 
-export const liveDetailOrSeedArtifact = <T>(
-  helperName: string,
-  path: string,
-  seedValue?: T | undefined,
-): Promise<T | undefined> =>
-  liveDetailOrSeed<T>(helperName, path, seedValue).then(normalizeArtifactFields);
-
-export const liveListOrSeedArtifact = <T>(
-  helperName: string,
-  path: string,
-  seedValue?: T[],
-): Promise<T[]> =>
-  liveListOrSeed<T>(helperName, path, seedValue).then(normalizeArtifactList);
-
 export function normalizeBaseObjectList<T>(rows: T[]): T[] {
   return rows.map((row) => normalizeBaseObjectFields(row) as T);
 }
@@ -217,32 +177,4 @@ export const strictLiveListNormalized = <T>(
   path: string,
 ): Promise<T[]> =>
   strictLiveList<T>(helperName, path).then(normalizeBaseObjectList);
-
-export const liveDetailOrSeedNormalized = <T>(
-  helperName: string,
-  path: string,
-  seedValue?: T | undefined,
-): Promise<T | undefined> =>
-  liveDetailOrSeed<T>(helperName, path, seedValue).then(normalizeBaseObjectFields);
-
-export const liveListOrSeedNormalized = <T>(
-  helperName: string,
-  path: string,
-  seedValue?: T[],
-): Promise<T[]> =>
-  liveListOrSeed<T>(helperName, path, seedValue).then(normalizeBaseObjectList);
-
-export const liveEmpty = <T>(helperName: string, emptyValue: T): Promise<T> | undefined => {
-  if (seedHelperMustReturnEmptyInLive(helperName)) {
-    return delay(emptyValue, 0);
-  }
-  return undefined;
-};
-
-export const delaySeed = <T>(helperName: string, value: T, emptyValue: T): Promise<T> =>
-  liveEmpty(helperName, emptyValue) ?? delay(value);
-
-export function getSeedHelperUnavailableReason(helperName: string): string | undefined {
-  return seedHelperMustReturnEmptyInLive(helperName) ? seedHelperEmptyReason(helperName) : undefined;
-}
 

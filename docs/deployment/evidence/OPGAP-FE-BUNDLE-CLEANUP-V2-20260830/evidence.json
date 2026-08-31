@@ -1,7 +1,7 @@
 {
   "schema_version": "pantheon.task-review-evidence.v1",
   "task_id": "OPGAP-FE-BUNDLE-CLEANUP-V2-20260830",
-  "owner": "Antigravity",
+  "owner": "Antigravity2",
   "reviewer": "Codex",
   "target_repo": "execute-plans",
   "merge_target": "dev",
@@ -48,7 +48,7 @@
       "result": "passed: 193 files, 1964 tests"
     },
     "typecheck": {
-      "command": "npx tsc --noEmit",
+      "command": "npm run typecheck",
       "result": "passed"
     },
     "lint": {

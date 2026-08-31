@@ -114,20 +114,4 @@ export function cancelLoopRun(run: LoopRun): LoopRunPatch {
 
 // ---------- Stage timeout state ----------
 
-export type StageTimeoutState = "idle" | "ok" | "warn" | "escalate";
-
-export function stageTimeoutState(
-  stage: LoopStage,
-  policy: { runningWarnMs: number; blockedEscalateMs: number },
-  now = Date.now(),
-): StageTimeoutState {
-  if (stage.status === "running" && stage.startedAt) {
-    const age = now - new Date(stage.startedAt).getTime();
-    return age >= policy.runningWarnMs ? "warn" : "ok";
-  }
-  if (stage.status === "blocked" && stage.startedAt) {
-    const age = now - new Date(stage.startedAt).getTime();
-    return age >= policy.blockedEscalateMs ? "escalate" : "warn";
-  }
-  return "idle";
-}
+export { stageTimeoutState, type StageTimeoutState } from "./timeoutPolicy";

@@ -2,7 +2,6 @@
 
 import type { Strategy, Alert, Incident } from "@/lib/bff-v1";
 import { computeStrategyHealthScore } from "../health";
-import { v5ActionOverlay } from "../overlay";
 import type { StrategyExecutionHealth } from "../types";
 
 function riskScore(s: Strategy): number {
@@ -18,7 +17,6 @@ export function adaptStrategyHealth(
   strategy: Strategy,
   ctx: { alerts?: Alert[]; incidents?: Incident[] } = {},
 ): StrategyExecutionHealth {
-  v5ActionOverlay.getStrategy(strategy.id); // touch overlay for parity (no-op if absent)
 
   const findingsCount = (ctx.alerts ?? []).filter((a) => a.relatedTarget === strategy.id).length;
   const incidentPenalty = (ctx.incidents ?? []).filter(

@@ -9,7 +9,6 @@ import type {
 import { paths } from "./paths";
 import {
   asRecord,
-  delaySeed,
   liveItemsFrom,
   recordString,
   strictLiveDetail,
@@ -90,20 +89,20 @@ export async function getEvolutionCandidatesForRun(runId: string): Promise<Evolu
   ) as unknown as Promise<EvolutionCandidate[]>;
 }
 
-export async function getPromotionsForProgram(programId: string): Promise<PromotionRecord[]> {
-  return delaySeed("bff.promotions.forProgram", [{ programId, stage: "review" }], []);
+export async function getPromotionsForProgram(_programId: string): Promise<PromotionRecord[]> {
+  return [];
 }
 
 export async function listFitnessFormulas(): Promise<FitnessFormula[]> {
-  return delaySeed("bff.fitnessFormulas.list", [{ id: "ff_default", name: "Default Formula", formula: "score * 1.0" }], []);
+  return [];
 }
 
-export async function getFitnessFormula(id: string): Promise<FitnessFormula | undefined> {
-  return delaySeed("bff.fitnessFormulas.get", { id, name: id, formula: "score * 1.0" }, undefined);
+export async function getFitnessFormula(_id: string): Promise<FitnessFormula | undefined> {
+  return undefined;
 }
 
 export async function listMutationRules(): Promise<MutationRule[]> {
-  return delaySeed("bff.mutationRules.list", [{ id: "mr_001", name: "Mutation Rule 1", rate: 0.1 }], []);
+  return [];
 }
 
 export const evolution = {

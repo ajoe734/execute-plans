@@ -12,6 +12,21 @@ const bffProxyTarget =
 
 const mockFixtureModule = path.resolve(__dirname, "./src/mocks/seed.ts");
 const strictLiveFixtureStub = path.resolve(__dirname, "./src/mocks/strictLiveFixtureUnavailable.ts");
+const strictLiveSeedTaxonomyStub = path.resolve(__dirname, "./src/mocks/strictLiveSeedTaxonomyStub.json");
+const strictLiveWriteOverlayStub = path.resolve(__dirname, "./src/mocks/strictLiveWriteOverlayUnavailable.ts");
+const strictLiveMockAdaptersStub = path.resolve(__dirname, "./src/mocks/strictLiveMockAdaptersUnavailable.ts");
+const strictLiveMockRegistryStub = path.resolve(__dirname, "./src/mocks/strictLiveMockRegistryUnavailable.ts");
+
+const FORBIDDEN_STRICT_LIVE_MODULES = [
+  path.resolve(__dirname, "./src/mocks/seed.ts"),
+  path.resolve(__dirname, "./src/lib/bff-v1/mocks/adapters.ts"),
+  path.resolve(__dirname, "./src/lib/bff-v1/mocks/registry.ts"),
+  path.resolve(__dirname, "./src/lib/bff-v1/mocks/persistence.ts"),
+  path.resolve(__dirname, "./src/lib/bff-v1/mocks/mutations.ts"),
+  path.resolve(__dirname, "./src/lib/bff-v1/mocks/scenarios.ts"),
+  path.resolve(__dirname, "./src/lib/bff-v1/seed-taxonomy.json"),
+  path.resolve(__dirname, "./src/lib/bff-v1/writeOverlay.ts"),
+];
 
 function isStrictLiveBuild(env: Record<string, string | undefined>): boolean {
   return env.VITE_BFF_MODE === "live" && env.VITE_BFF_FALLBACK === "strict";
@@ -21,16 +36,20 @@ function assertStrictLiveFixtureIsolation() {
   return {
     name: "pantheon-strict-live-fixture-isolation",
     generateBundle(_: unknown, bundle: Record<string, { type: string; modules?: Record<string, unknown> }>) {
-      const containsMockFixture = Object.values(bundle).some((output) =>
-        output.type === "chunk"
-        && Object.keys(output.modules ?? {}).some((moduleId) =>
-          path.resolve(moduleId.split("?")[0]) === mockFixtureModule),
-      );
-      if (containsMockFixture) {
-        throw new Error(
-          "Strict-live production bundle must not contain src/mocks/seed.ts. "
-          + "Use a typed unavailable state instead of a mock fixture fallback.",
-        );
+      for (const output of Object.values(bundle)) {
+        if (output.type === "chunk") {
+          for (const moduleId of Object.keys(output.modules ?? {})) {
+            const resolvedModule = path.resolve(moduleId.split("?")[0]);
+            for (const forbidden of FORBIDDEN_STRICT_LIVE_MODULES) {
+              if (resolvedModule === forbidden) {
+                throw new Error(
+                  `Strict-live production bundle must not contain ${forbidden}. `
+                  + "Use a typed unavailable state instead of a mock fixture fallback.",
+                );
+              }
+            }
+          }
+        }
       }
     },
   };
@@ -106,6 +125,18 @@ export default defineConfig(({ mode }) => {
       alias: strictLiveBuild
         ? [
             { find: "@/mocks/seed", replacement: strictLiveFixtureStub },
+            { find: "@/lib/bff-v1/seed-taxonomy.json", replacement: strictLiveSeedTaxonomyStub },
+            { find: "./seed-taxonomy.json", replacement: strictLiveSeedTaxonomyStub },
+            { find: "@/lib/bff-v1/writeOverlay", replacement: strictLiveWriteOverlayStub },
+            { find: "./writeOverlay", replacement: strictLiveWriteOverlayStub },
+            { find: "@/lib/bff-v1/mocks/adapters", replacement: strictLiveMockAdaptersStub },
+            { find: "./mocks/adapters", replacement: strictLiveMockAdaptersStub },
+            { find: "@/lib/bff-v1/mocks/registry", replacement: strictLiveMockRegistryStub },
+            { find: "./mocks/registry", replacement: strictLiveMockRegistryStub },
+            { find: "@/lib/v5/overlay", replacement: strictLiveWriteOverlayStub },
+            { find: "./overlay", replacement: strictLiveWriteOverlayStub },
+            { find: "@/lib/v5/loopOverlay", replacement: strictLiveWriteOverlayStub },
+            { find: "./loopOverlay", replacement: strictLiveWriteOverlayStub },
             { find: "@", replacement: path.resolve(__dirname, "./src") },
           ]
         : {

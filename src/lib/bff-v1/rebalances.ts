@@ -8,7 +8,6 @@ import type {
 import { paths } from "./paths";
 import {
   asRecord,
-  delaySeed,
   firstArray,
   liveDetailFrom,
   liveItemsFrom,
@@ -44,16 +43,16 @@ export async function getRebalanceWorkflow(id: string): Promise<WorkflowStep[]> 
   );
 }
 
-export async function getRebalanceOverrides(id: string): Promise<RebalanceOverride[]> {
-  return delaySeed("bff.rebalanceOverrides.forRebalance", [{ id: `ov_${id}`, rebalanceId: id, reason: "mock" }], []);
+export async function getRebalanceOverrides(_id: string): Promise<RebalanceOverride[]> {
+  return [];
 }
 
-export async function getAllocationSimulations(id: string): Promise<AllocationSimulation[]> {
-  return delaySeed("bff.allocationSimulations.forRebalance", [{ id: `sim_${id}`, rebalanceId: id, status: "completed" }], []);
+export async function getAllocationSimulations(_id: string): Promise<AllocationSimulation[]> {
+  return [];
 }
 
-export async function getMetricFreezes(id: string): Promise<MetricFreeze[]> {
-  return delaySeed("bff.metricFreezes.forRebalance", [{ id: `mf_${id}`, rebalanceId: id, status: "active" }], []);
+export async function getMetricFreezes(_id: string): Promise<MetricFreeze[]> {
+  return [];
 }
 
 export const rebalances = {

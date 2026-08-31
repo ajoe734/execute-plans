@@ -18,3 +18,21 @@ export const DEFAULT_TIMEOUT_POLICY: TimeoutPolicy = {
   blockedEscalateMs: 60 * 60 * 1000, // 60 min
   emergencyReviewMs: 5 * 60 * 1000,  // 5 min
 };
+
+export type StageTimeoutState = "idle" | "ok" | "warn" | "escalate";
+
+export function stageTimeoutState(
+  stage: { status: string; startedAt?: string },
+  policy: { runningWarnMs: number; blockedEscalateMs: number },
+  now = Date.now(),
+): StageTimeoutState {
+  if (stage.status === "running" && stage.startedAt) {
+    const age = now - new Date(stage.startedAt).getTime();
+    return age >= policy.runningWarnMs ? "warn" : "ok";
+  }
+  if (stage.status === "blocked" && stage.startedAt) {
+    const age = now - new Date(stage.startedAt).getTime();
+    return age >= policy.blockedEscalateMs ? "escalate" : "warn";
+  }
+  return "idle";
+}

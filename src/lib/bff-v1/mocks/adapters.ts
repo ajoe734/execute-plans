@@ -216,3 +216,5 @@ export function bootstrapMockAdapters(): void {
     }),
   );
 }
+
+bootstrapMockAdapters();

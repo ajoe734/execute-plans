@@ -4,6 +4,7 @@
 
 import type { CommandResponse, ListEnvelope } from "../dto";
 import { BffError, makeBffError } from "../errors";
+import { setMockResolver } from "../client";
 
 export type MockResponse =
   | { kind: "json"; status: number; body: unknown }
@@ -98,7 +99,6 @@ export function resolveMock(method: string, path: string): MockHandler | undefin
       }
       return () => list({
         items: [run as never],
-        data: [run] as never,
         cursor: {},
         pageSize: 50,
         estimatedTotal: 1,
@@ -138,22 +138,6 @@ export function resolveMock(method: string, path: string): MockHandler | undefin
           state: "deployed",
         },
       ],
-      data: [
-        {
-          id: "stg_001",
-          name: "stg_001",
-          title: "stg_001",
-          strategyId: "stg_001",
-          strategy_id: "stg_001",
-          personaId: "per_001",
-          persona_id: "per_001",
-          personaName: "Persona 1",
-          capitalPoolId: "pool_001",
-          status: "active",
-          mode: "shadow",
-          state: "deployed",
-        },
-      ] as never,
       cursor: {},
       pageSize: 50,
       estimatedTotal: 1,
@@ -162,6 +146,8 @@ export function resolveMock(method: string, path: string): MockHandler | undefin
   }
   return () => ok({ status: "completed", actionId: `act_${Date.now().toString(36)}` });
 }
+
+setMockResolver(resolveMock);
 
 function matchPattern(pattern: string, path: string): boolean {
   const p = pattern.split("/");
