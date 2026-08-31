@@ -19,7 +19,8 @@
       "Added test in seedTaxonomy.test.ts asserting barrel exports isLiveBffModeConfigured without conflict.",
       "Fixed all 21 blank-line-at-EOF issues across modified files for clean git diff --check.",
       "Strict-live mock persistence stub fails closed with typed StrictLiveMockPersistenceError and QAChecklist renders explicit unavailable/error outcome with focused test coverage.",
-      "Established resolver-before-render ordering in main.tsx and added browser/bootstrap-level test proving first mock-mode BFF request succeeds without preloaded registry."
+      "Established resolver-before-render ordering in main.tsx and added browser/bootstrap-level test proving first mock-mode BFF request succeeds without preloaded registry.",
+      "Removed all wall-clock reads from v5 DTO/view-model transforms (src/lib/bff-v1/v5.ts isoFrom and adaptBffIntervention) with deterministic/caller-injected fallbacks, and added regression test in src/lib/bff-v1/__tests__/v5PureTransforms.test.ts proving identical input yields identical output across time."
     ],
     "preserved": [
       "Production import graph gate (productionImportGraph.test.ts) remains passing with 0 cycles.",
@@ -50,9 +51,13 @@
       "command": "npx vitest run src/lib/bff-v1/__tests__/productionImportGraph.test.ts",
       "result": "passed: 5/5 tests"
     },
+    "v5_pure_transforms": {
+      "command": "npx vitest run src/lib/bff-v1/__tests__/v5PureTransforms.test.ts",
+      "result": "passed: 9/9 tests"
+    },
     "full_test_suite": {
       "command": "npm test",
-      "result": "passed: 196 files, 1977 tests"
+      "result": "passed: 197 files, 1986 tests"
     },
     "typecheck": {
       "command": "npm run typecheck",
@@ -74,7 +79,8 @@
   "independent_review_required": [
     "Confirm production Rollup bundle graph has zero mock reachability and no conflicting namespace warnings via scripts/check_bundle_mock_reachability.ts.",
     "Confirm productionImportGraph.test.ts passes with 0 cycles.",
-    "Confirm all 196 test files in the test suite pass (1977/1977 tests).",
+    "Confirm src/lib/bff-v1/v5.ts transforms are pure with zero wall-clock reads and src/lib/bff-v1/__tests__/v5PureTransforms.test.ts passes (9/9 tests).",
+    "Confirm all 197 test files in the test suite pass (1986/1986 tests).",
     "Confirm git diff --check origin/dev passes cleanly without EOF whitespace issues.",
     "Confirm strict-live mock persistence snapshot/reset fails closed with typed StrictLiveMockPersistenceError.",
     "Confirm resolver-before-render ordering in main.tsx and bootstrap test passing.",

@@ -155,7 +155,7 @@ const itemsFrom = (body: unknown): unknown[] => {
   return strictItemsFrom(body);
 };
 
-const isoFrom = (value: unknown, fallback = new Date().toISOString()): string =>
+const isoFrom = (value: unknown, fallback = ""): string =>
   asString(value, fallback);
 
 function bffInterventionSeverity(kind: string): InterventionItem["severity"] {
@@ -169,7 +169,7 @@ function bffInterventionSource(kind: string): InterventionItem["source"] {
   return "sentinel";
 }
 
-export function adaptBffIntervention(value: unknown, index = 0): InterventionItem {
+export function adaptBffIntervention(value: unknown, index = 0, fallbackIso = ""): InterventionItem {
   const item = asRecord(value);
   const id = asString(item.intervention_id ?? item.interventionId ?? item.id, `intervention_${index}`);
   const kind = asString(item.kind, "hiq_sentinel");
@@ -181,7 +181,7 @@ export function adaptBffIntervention(value: unknown, index = 0): InterventionIte
   );
   const triggeredAt = asString(
     item.triggered_at ?? item.triggeredAt ?? item.created_at ?? item.createdAt,
-    new Date().toISOString(),
+    fallbackIso,
   );
   const updatedAt = asString(
     item.remediated_at ?? item.remediatedAt ?? item.updated_at ?? item.updatedAt,
@@ -204,8 +204,8 @@ export function adaptBffIntervention(value: unknown, index = 0): InterventionIte
   };
 }
 
-export function adaptBffInterventionsResponse(body: unknown): V5ListResponse<InterventionItem> {
-  return v5List(itemsFrom(body).map(adaptBffIntervention));
+export function adaptBffInterventionsResponse(body: unknown, fallbackIso = ""): V5ListResponse<InterventionItem> {
+  return v5List(itemsFrom(body).map((item, index) => adaptBffIntervention(item, index, fallbackIso)));
 }
 
 export function adaptLoopStatus(value: unknown): LoopRun["status"] {
@@ -585,7 +585,7 @@ export function adaptBffControlRoom(body: unknown, sessionContext?: V5SessionCon
     tenantId: asString(rawSession.tenantId ?? rawSession.tenant_id, "demo"),
     env: (asString(rawSession.env, "dev") as V5SessionContext["env"]),
     locale: (asString(rawSession.locale, "en-US") as V5SessionContext["locale"]),
-    serverTime: isoFrom(rawSession.serverTime ?? rawSession.server_time, new Date(0).toISOString()),
+    serverTime: isoFrom(rawSession.serverTime ?? rawSession.server_time, "1970-01-01T00:00:00.000Z"),
   };
   return {
     generatedAt: isoFrom(asRecord(record.meta).snapshot_at ?? record.generatedAt ?? record.generated_at),
