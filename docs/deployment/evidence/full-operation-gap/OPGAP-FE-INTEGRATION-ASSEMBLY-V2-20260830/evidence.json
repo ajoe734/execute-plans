@@ -1,0 +1,69 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "OPGAP-FE-INTEGRATION-ASSEMBLY-V2-20260830",
+  "title": "Frontend production route and live BFF integration assembly",
+  "owner": "Codex2",
+  "reviewer": "Claude",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/OPGAP-FE-INTEGRATION-ASSEMBLY-V2-20260830",
+  "status": "ready-for-independent-exact-head-review",
+  "scope": {
+    "implemented": [
+      "Added a full-operation assembly contract test that keeps Management and Agora desktop routes behind the production protected shells and verifies representative canonical Management routes.",
+      "Locked ManagementLayout to the typed management route manifest, SideNav projection, and per-route error boundary rather than a hand-built or mock navigation surface.",
+      "Locked the complete bff-v1 public module barrel, required live-client public symbols, and the absence of public mock adapter exports.",
+      "Verified the strict-live production Rollup graph has zero mock, seed, or fallback reachability with real writes disabled."
+    ],
+    "not_changed": [
+      "No existing desktop page, nested loop UI, route implementation, or Management shell behavior was redesigned.",
+      "No BFF endpoint, typed domain client implementation, mock adapter implementation, deployment workflow, or real-write setting was changed.",
+      "No product mutation was sent during validation."
+    ],
+    "predecessor_scope_excluded": [
+      "OPGAP-FE-BUNDLE-CLEANUP-V2-20260830 owns bundle cleanup and production mock isolation implementation.",
+      "OPGAP-FE-MGMT-CRUD-POSTMORTEM-V2-20260830 owns durable Management CRUD and canonical postmortem behavior.",
+      "OPGAP-FE-AGORA-WORKSHOP-V2-20260830 owns Agora workshop and trading-room UI behavior."
+    ]
+  },
+  "acceptance": {
+    "desktop_routes_mount_only_production_ready_pages": true,
+    "bff_v1_complete_typed_client_set_has_zero_mock_exports": true,
+    "typecheck_unit_tests_and_production_build_pass": true,
+    "strict_live_rollup_mock_seed_fallback_reachability": 0
+  },
+  "validation": {
+    "full_operation_assembly_test": {
+      "command": "npx vitest run src/management/__tests__/fullOperationAssembly.test.tsx --maxWorkers=2",
+      "result": "passed: 1 file, 3 tests"
+    },
+    "focused_lint": {
+      "command": "npx eslint src/management/__tests__/fullOperationAssembly.test.tsx",
+      "result": "passed: 0 errors"
+    },
+    "typecheck": {
+      "command": "npm run typecheck",
+      "result": "passed: tsc -p tsconfig.agora.json --noEmit"
+    },
+    "full_vitest_suite": {
+      "command": "npm test",
+      "result": "passed; existing React act(...) warnings remain non-failing test output"
+    },
+    "strict_live_production_build": {
+      "command": "VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false VITE_GCP_IDENTITY_API_KEY=<public build fixture> VITE_GCP_IDENTITY_PROJECT_ID=pantheon-lupin-dev-20260719 VITE_GCP_IDENTITY_AUTH_DOMAIN=pantheon-lupin-dev.firebaseapp.com npm run build",
+      "result": "passed: 7264 modules transformed; real writes remained disabled"
+    },
+    "production_bundle_mock_reachability": {
+      "command": "npx tsx scripts/check_bundle_mock_reachability.ts",
+      "result": "passed: Production Rollup graph has zero mock/seed/fallback reachability"
+    },
+    "diff_hygiene": {
+      "command": "git diff --check",
+      "result": "passed"
+    }
+  },
+  "review": {
+    "required_decision": "Independently run the assembly contract test, inspect the App/Layout/barrel invariants, and bind approval to the exact pushed PR head containing this manifest.",
+    "exact_head_review_required": true
+  }
+}
