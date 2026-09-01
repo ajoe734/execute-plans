@@ -7,6 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import i18n from "@/i18n";
 import { liveStatus } from "@/lib/bff-v1/liveStatus";
 import { ObjectListPage } from "./ObjectListPage";
+import type { CreateBehavior } from "@/lib/writeIntents/types";
 
 const mocks = vi.hoisted(() => ({
   useLiveListV1: vi.fn(),
@@ -30,7 +31,7 @@ function stubLiveEnv() {
   liveStatus._reset({ mode: "live", effective: "live", baseUrl: "https://bff.example.test" });
 }
 
-function renderObjectList() {
+function renderObjectList(createBehavior?: CreateBehavior) {
   return render(
     <I18nextProvider i18n={i18n}>
       <TooltipProvider>
@@ -43,6 +44,7 @@ function renderObjectList() {
                   title="Strategies"
                   loader={vi.fn()}
                   basePath="/management/strategies"
+                  createBehavior={createBehavior}
                 />
               )}
             />
@@ -142,5 +144,33 @@ describe("ObjectListPage", () => {
     const native = container.querySelector('[data-management-table-scrollbar="native"]');
     expect(native).toHaveClass("h-full", "min-h-0", "overflow-auto");
     expect(native).not.toHaveClass("max-h-[calc(100dvh-10rem)]");
+  });
+
+  it("visibly disables a legacy drawer without a durable create owner", () => {
+    mocks.useLiveListV1.mockReturnValue({
+      items: [],
+      pending: 0,
+      refresh: vi.fn(),
+      meta: {},
+    });
+
+    renderObjectList({ kind: "drawer", entity: "artifact" });
+
+    expect(screen.getByRole("button", {
+      name: "Create disabled: artifact has no typed durable BFF owner.",
+    })).toBeDisabled();
+  });
+
+  it("keeps the Persona drawer enabled because it has a typed durable owner", () => {
+    mocks.useLiveListV1.mockReturnValue({
+      items: [],
+      pending: 0,
+      refresh: vi.fn(),
+      meta: {},
+    });
+
+    renderObjectList({ kind: "drawer", entity: "persona" });
+
+    expect(screen.getByRole("button", { name: "Create Paper Persona" })).toBeEnabled();
   });
 });

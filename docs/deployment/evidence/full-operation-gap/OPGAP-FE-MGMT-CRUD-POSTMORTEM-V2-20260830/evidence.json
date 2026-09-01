@@ -1,0 +1,91 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "OPGAP-FE-MGMT-CRUD-POSTMORTEM-V2-20260830",
+  "title": "Management desktop durable CRUD ownership and canonical postmortem view",
+  "owner": "Codex",
+  "reviewer": "Antigravity2",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/OPGAP-FE-MGMT-CRUD-POSTMORTEM-V2-20260830",
+  "status": "ready-for-independent-exact-head-review",
+  "recorded_at": "2026-08-31T05:19:06Z",
+  "scope": {
+    "implemented": [
+      "Bound the generic entity create drawer to an explicit durable-owner registry; only Persona creation remains enabled and all unsupported generic create, update, and delete calls fail closed before local overlay or mock persistence can run.",
+      "Made unsupported generic CRUD visibly disabled in the Management desktop without requiring a Tooltip provider, while preserving configured redirect-only navigation actions.",
+      "Replaced the five low-level Persona onboarding mutations with one typed Persona provisioning-controller reconcile command at POST /bff/personas/{persona_id}/provisioning/reconcile and canonical Persona readback.",
+      "Added a canonical postmortem list/detail client that requires postmortem_id, rejects missing or mismatched identity, and keeps list selection and browser reload keyed by the exact encoded postmortem_id.",
+      "Replaced incident-timeline postmortem synthesis and generated pm_{incident_id} identities with canonical list/detail rendering, explicit strict-live errors, surface degradation, and staleness disclosure."
+    ],
+    "not_changed": [
+      "No BFF endpoint, backend controller, schema, dev credential, or deployment workflow was changed.",
+      "No typed write framework, Management shell, bundle cleanup, or unrelated Management surface was redesigned.",
+      "No real-write profile was enabled and no product mutation was sent during validation."
+    ],
+    "fail_closed": [
+      "Entities without a typed durable create owner render a disabled create action and cannot enter EntityCreateDrawer.",
+      "Direct unsupported create, update, and delete helper calls reject with DURABLE_WRITE_OWNER_REQUIRED instead of falling back to writeOverlay, mock persistence, or seed data.",
+      "Postmortem payloads without canonical postmortem_id, or detail payloads whose postmortem_id differs from the requested identity, are rejected rather than rendered under a fabricated identity."
+    ]
+  },
+  "delivery": {
+    "base_commit": "c77dc7b60f8df8982866859ffb3eeb954b2264cb",
+    "anchor_commits": [
+      "607e162b9eea8cbc49bdd3b003f384d1ce45601f",
+      "516fc3cb8d67b69f4eaa252da9e1c417f5bf7458"
+    ],
+    "implementation_files": [
+      "src/i18n/locales/en-US.ts",
+      "src/i18n/locales/zh-TW.ts",
+      "src/lib/bff-v1/postmortemClient.ts",
+      "src/lib/bff-v1/postmortemClient.test.ts",
+      "src/lib/writeIntents/types.ts",
+      "src/management/components/detail/__tests__/StrictLiveManagementSurfaces.test.tsx",
+      "src/management/components/write/createEntity.ts",
+      "src/management/components/write/createEntity.test.ts",
+      "src/management/pages/ObjectListPage.tsx",
+      "src/management/pages/ObjectListPage.test.tsx",
+      "src/management/pages/PersonaOnboarding.tsx",
+      "src/management/pages/PersonaOnboarding.test.ts",
+      "src/management/pages/phase2/PostmortemLibrary.tsx"
+    ]
+  },
+  "acceptance": {
+    "enabled_mutations_have_typed_durable_owner": true,
+    "unsupported_generic_crud_visibly_disabled": true,
+    "postmortem_list_detail_reload_use_postmortem_id": true,
+    "generic_overlay_mock_seed_fallback_removed_from_owned_surfaces": true,
+    "predecessor_framework_and_shell_scope_excluded": true
+  },
+  "validation": {
+    "typecheck": {
+      "command": "npm run typecheck",
+      "result": "passed: tsc -p tsconfig.agora.json --noEmit with 0 errors"
+    },
+    "focused_lint": {
+      "command": "npx eslint src/management/components/write/createEntity.ts src/management/components/write/createEntity.test.ts src/management/pages/ObjectListPage.tsx src/management/pages/ObjectListPage.test.tsx src/management/pages/PersonaOnboarding.tsx src/management/pages/PersonaOnboarding.test.ts src/management/pages/phase2/PostmortemLibrary.tsx src/management/components/detail/__tests__/StrictLiveManagementSurfaces.test.tsx src/lib/bff-v1/postmortemClient.ts src/lib/bff-v1/postmortemClient.test.ts src/lib/writeIntents/types.ts src/i18n/locales/en-US.ts src/i18n/locales/zh-TW.ts",
+      "result": "passed: 0 errors and 0 warnings"
+    },
+    "focused_contract_tests": {
+      "command": "npx vitest run src/management/pages/centers/GovernanceDecisionsPage.test.tsx src/management/components/write/createEntity.test.ts src/management/pages/ObjectListPage.test.tsx src/management/pages/PersonaOnboarding.test.ts src/lib/bff-v1/postmortemClient.test.ts src/management/components/detail/__tests__/StrictLiveManagementSurfaces.test.tsx --maxWorkers=2",
+      "result": "passed: 6 files, 32 tests"
+    },
+    "full_vitest_suite": {
+      "command": "npm test",
+      "result": "passed: 194 files, 1977 tests"
+    },
+    "strict_live_build": {
+      "command": "VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false VITE_GCP_IDENTITY_API_KEY=<documented public build fixture> VITE_GCP_IDENTITY_PROJECT_ID=pantheon-lupin-dev-20260719 VITE_GCP_IDENTITY_AUTH_DOMAIN=pantheon-lupin-dev-20260719.firebaseapp.com npm run build",
+      "result": "passed: 7266 modules transformed; production bundle built successfully with real writes disabled"
+    },
+    "diff_hygiene": {
+      "command": "git diff --check",
+      "result": "passed"
+    }
+  },
+  "review": {
+    "reviewer": "Antigravity2",
+    "status": "pending_independent_review",
+    "required_decision": "Bind approval to the exact pushed PR head; verify generic mutations have no overlay/mock/seed fallback, the Persona reconcile route is the sole onboarding mutation, and postmortem selection plus browser reload preserve exact canonical postmortem_id identity."
+  }
+}
