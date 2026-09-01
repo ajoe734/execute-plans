@@ -53,13 +53,13 @@ function normalizeSurface(value: unknown): ShellSummarySurface {
   };
 }
 
-/** Mock/offline shell summary — zeroed counts, unknown surface (never claims "ok"). */
-function mockShellSummary(): ShellSummaryResponse {
+/** Offline/unavailable shell summary — zeroed counts, unknown surface (never claims "ok"). */
+function unavailableShellSummary(): ShellSummaryResponse {
   return {
     counts: { pendingApprovals: 0, openAlerts: 0, runningJobs: 0 },
     session: {},
-    transport: { bffStatus: "mock", service: "execute-plans-mock-bff" },
-    surfaces: { shell_summary: { status: "unknown", source: "mock" } },
+    transport: { bffStatus: "unavailable" },
+    surfaces: { shell_summary: { status: "unknown", source: "unavailable" } },
   };
 }
 
@@ -95,12 +95,12 @@ function adaptShellSummary(raw: unknown): ShellSummaryResponse {
 // transient blip. TopBar treats a failure here as a local "unknown"/
 // "unavailable" signal and defers to the full-list fallback instead.
 export async function fetchShellSummary(): Promise<ShellSummaryResponse> {
-  if (liveStatus.get().mode !== "live") return mockShellSummary();
+  if (liveStatus.get().mode !== "live") return unavailableShellSummary();
   try {
     const data = await bffFetch<unknown>({ method: "GET", path: paths.mgmtShellSummary(), mode: "live" });
     return adaptShellSummary(data);
   } catch {
-    return mockShellSummary();
+    return unavailableShellSummary();
   }
 }
 

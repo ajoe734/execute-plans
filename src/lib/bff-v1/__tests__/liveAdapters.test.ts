@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { bffAgora, bffV5, realtime } from "@/lib/bff-v1";
+import { bffAgora, realtime } from "@/lib/bff-v1";
+import { bffV5 } from "@/lib/bff-v1/v5Client";
 import { liveStatus } from "@/lib/bff-v1/liveStatus";
 import { connectLiveSse, _resetLiveSse } from "@/lib/bff-v1/sse/liveSse";
 

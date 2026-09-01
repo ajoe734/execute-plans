@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import {
   Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle,
 } from "@/components/ui/sheet";
-import { v5 } from "@/lib/bff-v1";
+import { v5 } from "@/lib/bff-v1/v5Client";
 import { useT } from "@/platform/hooks";
 import { useV5Live } from "./useV5Live";
 import type { SentinelFinding, RemediationAction } from "@/lib/v5";

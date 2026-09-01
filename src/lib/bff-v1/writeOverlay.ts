@@ -1,5 +1,4 @@
 import { realtime } from "./sse/bridge";
-import { auditEvents } from "@/mocks/seed";
 import type { CreatableEntity } from "@/lib/writeIntents/types";
 import { ENTITY_TO_LIVE_KIND, ENTITY_TO_SSE_CHANNEL } from "@/lib/writeIntents/createDefaults";
 import { isSseChannel } from "./sse/channels";
@@ -54,23 +53,6 @@ class WriteOverlay {
     const prevHash = this.lastAuditHash;
     const hash = `h_${auditId}`;
     this.lastAuditHash = hash;
-
-    try {
-      auditEvents.unshift({
-        id: auditId,
-        actor: opts.actor ?? "you",
-        action: `${entity}.create`,
-        target: String(data.id ?? ""),
-        ts: new Date().toISOString(),
-        memo: `Pack F mock create (overlay, ${WRITE_OVERLAY_TTL_MS / 60000}m TTL) corr=${correlationId}${opts.confirmTokenId ? ` ctok=${opts.confirmTokenId}` : ""}`,
-        outcome: "ok",
-        ephemeral: true,
-        prevHash,
-        hash,
-      } as Parameters<typeof auditEvents.unshift>[0]);
-    } catch {
-      // seed shape variation; ignore
-    }
 
     const REALTIME_CHANNELS: ReadonlySet<string> = new Set([
       "strategy", "deployment", "incident", "loop", "job", "rebalance",

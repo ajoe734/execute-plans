@@ -80,43 +80,6 @@ export function realWritesEnabled(): boolean {
   }
 }
 
-export async function withLiveOrMock<T, TLive = T>(
-  req: BffRequest,
-  mockFn: () => Promise<T>,
-  adaptLive?: (data: TLive) => T,
-): Promise<T> {
-  if (!shouldUseLive()) {
-    // liveStatus is flagged offline (a prior live read fell back). In strict + live mode we must
-    // NOT mask that with mock seed — re-attempt live so the real result (or a typed error)
-    // surfaces, and so the surface self-heals once the BFF recovers. Only a genuinely configured
-    // mock mode (VITE_BFF_MODE=mock) short-circuits to mock here.
-    const strictLive = liveStatus.get().mode === "live" && detectFallbackMode() === "strict";
-    if (!strictLive) return mockFn();
-  }
-  try {
-    const data = await bffFetch<TLive>({ ...req, mode: "live" });
-    liveStatus.reportSuccess();
-    return adaptLive ? adaptLive(data) : data as unknown as T;
-  } catch (err) {
-    if (err instanceof BffError && err.status < 500 && err.status !== 0) {
-      // Real backend reply — caller should handle it.
-      throw err;
-    }
-    const reason = err instanceof Error ? err.message : "live transport failed";
-    if (detectFallbackMode() === "strict") {
-      // Strict mode: surface transport failure as a typed BffError; do NOT mask with mock data.
-      liveStatus.reportFallback(`strict: ${reason}`);
-      if (err instanceof BffError) throw err;
-      throw makeBffError({
-        code: "UNKNOWN_ERROR",
-        message: `live transport failed (strict mode): ${reason}`,
-      });
-    }
-    liveStatus.reportFallback(reason);
-    return mockFn();
-  }
-}
-
 // ---------- Strict Live Read Helpers ----------
 
 export type StrictLiveErrorResult<T> = { handled: true; value: T };
@@ -126,37 +89,6 @@ export function strictNotFoundAsUndefined<T>(err: unknown): StrictLiveErrorResul
   return err instanceof BffError && err.status === 404
     ? { handled: true, value: undefined }
     : undefined;
-}
-
-/**
- * Strict live read adapter for surfaces that must not silently fall back to
- * seeded mock data when the app is configured for live BFF mode.
- */
-export async function withStrictLiveOrMock<T, TLive = unknown>(
-  req: BffRequest,
-  mockFn: () => Promise<T>,
-  adaptLive: (data: TLive) => T,
-  handleExpectedError?: StrictLiveErrorHandler<T>,
-): Promise<T> {
-  if (liveStatus.get().mode !== "live") return mockFn();
-  try {
-    const data = await bffFetch<TLive>({ ...req, mode: "live" });
-    liveStatus.reportSuccess();
-    return adaptLive(data);
-  } catch (err) {
-    const expected = handleExpectedError?.(err);
-    if (expected?.handled) {
-      liveStatus.reportSuccess();
-      return expected.value;
-    }
-    const reason = err instanceof Error ? err.message : "live transport failed";
-    liveStatus.reportFallback(`strict: ${reason}`);
-    if (err instanceof BffError) throw err;
-    throw makeBffError({
-      code: "UNKNOWN_ERROR",
-      message: `live transport failed (strict mode): ${reason}`,
-    });
-  }
 }
 
 export type BffListBody<T = unknown> = {
@@ -193,19 +125,17 @@ export interface BffHealthResponse {
   version?: string;
 }
 
-export function probeLiveHealth(): Promise<BffHealthResponse> {
-  return withLiveOrMock<BffHealthResponse, unknown>(
-    { method: "GET", path: "/health" },
-    async () => ({ status: "mock", service: "execute-plans-mock-bff" }),
-    (data) => {
-      const record = data as Partial<BffHealthResponse> | undefined;
-      return {
-        status: String(record?.status ?? "ok"),
-        service: record?.service,
-        version: record?.version,
-      };
-    },
-  );
+export async function probeLiveHealth(): Promise<BffHealthResponse> {
+  try {
+    const data = await bffFetch<Partial<BffHealthResponse>>({ method: "GET", path: "/health" });
+    return {
+      status: String(data?.status ?? "ok"),
+      service: data?.service,
+      version: data?.version,
+    };
+  } catch {
+    return { status: "unavailable", service: "execute-plans" };
+  }
 }
 
 // ---------- Live Status Snapshot & Hook ----------

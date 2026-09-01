@@ -16,7 +16,8 @@ import {
   type LoopRun,
   type LoopStage,
 } from "@/lib/v5";
-import { v5, bffV1 } from "@/lib/bff-v1";
+import { bffV1 } from "@/lib/bff-v1";
+import { v5 } from "@/lib/bff-v1/v5Client";
 import type { ApprovalRequest } from "@/lib/bff-v1";
 import { Play, Pause, SkipForward, X, AlertTriangle, ShieldAlert } from "lucide-react";
 import { safeDateTime } from "@/lib/utils";

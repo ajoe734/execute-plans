@@ -1,34 +1,14 @@
-// bff-v1/v5 — sole live V5 API owner (ACG-03-015).
-// Q3 mount path: src/lib/bff-v1/v5.ts attached as bff-v1's `v5` export.
-// All write ops go through v5ActionOverlay (Q10) and emit typed v5 events (Q15) +
-// legacy data refresh (Q22) via the bff-v1 SSE bus (ACG-03-014). Lists return
-// V5ListResponse (Q16). Session uses minimal mock (Q14) — does NOT depend on
-// /bff/me until D59 lands.
-//
-// src/lib/bff/v5.ts is now a compatibility re-export of this module.
+// BFF Contract v1 — V5 DTO / View Models & Pure Transforms
+// ACG-03-015: DTOs, view models, and pure adapters.
+// Network and command execution belong to ./v5Client.ts.
 
-import * as seed from "@/mocks/seed";
-import { usePlatform } from "@/platform/store";
-import { realWritesEnabled, withLiveOrMock } from "./liveTransport";
-import { liveWriteGated } from "./writeGate";
-import { bffFetch } from "./client";
-import { paths } from "./paths";
-import { idempotencyKey as mintIdempotencyKey } from "./headers";
-import { mgmt } from "./management";
-import { strictDataFrom, strictItemsFrom, strictNotFoundAsUndefined, withStrictLiveOrMock } from "./liveTransport";
-import { realtime } from "./sse/bridge";
+import { strictItemsFrom } from "./liveTransport";
 import {
   v5List,
   type V5ListResponse,
   makeV5Event,
   type V5EventChannel,
   V5_EVENT_TOPIC,
-  v5ActionOverlay,
-  applyLoopOverlay,
-  advanceLoopRun,
-  pauseLoopRun,
-  resumeLoopRun,
-  cancelLoopRun,
   deriveFindings,
   deriveLoopRuns,
   loopRunsByKind,
@@ -51,46 +31,40 @@ import {
   type ControlRoomKpi,
 } from "@/lib/v5";
 import type { LoopKind } from "@/lib/v5/enums";
-import {
-  makeRankingRecommendationId,
-  type SendRankingRecommendationInput,
-  type RankingRecommendationAction,
-} from "@/lib/v5/management/rankingGovernance";
-import type { RankingRecommendationSubmitResult } from "./management";
 
-const delay = <T>(v: T, ms = 180) => new Promise<T>((r) => setTimeout(() => r(v), ms));
-
-/** ACG-03-014 — the v5 event transport. v5/events.ts only builds the pure
- *  envelope (makeV5Event); emitting onto the realtime bus is a live-API-owner
- *  responsibility that belongs here, not in src/lib/v5. */
-export function emitV5Event<P>(args: {
-  channel: V5EventChannel;
-  type: string;
-  payload: P;
-  correlationId?: string;
-}): ReturnType<typeof makeV5Event<P>> {
-  const env = makeV5Event(args);
-  realtime.emit(V5_EVENT_TOPIC, env);
-  // Q22 — also emit legacy data refresh for useLiveList listeners.
-  realtime.emit("data", { kind: "v5", channel: args.channel, type: args.type });
-  return env;
-}
-
-export function onV5Event(handler: (env: ReturnType<typeof makeV5Event>) => void): () => void {
-  return realtime.on(V5_EVENT_TOPIC, (p) => handler(p as ReturnType<typeof makeV5Event>));
-}
+export {
+  v5List,
+  type V5ListResponse,
+  makeV5Event,
+  type V5EventChannel,
+  V5_EVENT_TOPIC,
+  deriveFindings,
+  deriveLoopRuns,
+  loopRunsByKind,
+  adaptPersonaHealth,
+  adaptStrategyHealth,
+  adaptApprovalToIntervention,
+  adaptFindingToIntervention,
+  adaptIncidentToIntervention,
+  buildRemediationAction,
+  findCatalogueEntry,
+  type LoopRun,
+  type SentinelFinding,
+  type EvidenceRef,
+  type InterventionItem,
+  type PersonaExecutionHealth,
+  type StrategyExecutionHealth,
+  type RemediationAction,
+  type ControlRoomSummary,
+  type V5SessionContext,
+  type ControlRoomKpi,
+  type LoopKind,
+};
 
 type UnknownRecord = Record<string, unknown>;
 
-const livePaths = {
-  v5ControlRoom: () => "/bff/v5/control-room",
-  v5StrategyHealth: () => "/bff/v5/execution/strategy-health",
-  v5SentinelFinding: paths.v5SentinelFinding,
-  v5SentinelStatus: paths.v5SentinelFindingStatus,
-};
-
 const asRecord = (value: unknown): UnknownRecord =>
-  value && typeof value === "object" && !Array.isArray(value) ? value as UnknownRecord : {};
+  value && typeof value === "object" && !Array.isArray(value) ? (value as UnknownRecord) : {};
 
 const asString = (value: unknown, fallback = ""): string => {
   const text = String(value ?? "").trim();
@@ -123,7 +97,7 @@ const EVIDENCE_KINDS = new Set<EvidenceRef["kind"]>([
 
 const asEvidenceKind = (value: unknown, fallback: EvidenceRef["kind"] = "audit"): EvidenceRef["kind"] => {
   const kind = asString(value).toLowerCase();
-  return EVIDENCE_KINDS.has(kind as EvidenceRef["kind"]) ? kind as EvidenceRef["kind"] : fallback;
+  return EVIDENCE_KINDS.has(kind as EvidenceRef["kind"]) ? (kind as EvidenceRef["kind"]) : fallback;
 };
 
 const asEvidenceRef = (value: unknown): EvidenceRef | undefined => {
@@ -156,7 +130,7 @@ const asEvidenceRef = (value: unknown): EvidenceRef | undefined => {
   };
 };
 
-const asEvidenceRefs = (value: unknown): EvidenceRef[] => {
+export const asEvidenceRefs = (value: unknown): EvidenceRef[] => {
   if (!Array.isArray(value)) return [];
   return value.map(asEvidenceRef).filter((ref): ref is EvidenceRef => !!ref);
 };
@@ -168,22 +142,6 @@ const asManagementHref = (value: unknown): string | undefined => {
   if (href.startsWith("management/")) return `/${href}`;
   return undefined;
 };
-
-const sentinelStatusOverlay = new Map<string, SentinelFinding["status"]>();
-
-function applySentinelStatusOverlay(finding: SentinelFinding): SentinelFinding {
-  const status = sentinelStatusOverlay.get(finding.id);
-  return status ? { ...finding, status } : finding;
-}
-
-function setSentinelStatusOverlay(id: string, status: SentinelFinding["status"]) {
-  sentinelStatusOverlay.set(id, status);
-  emitV5Event({
-    channel: "v5.sentinel.finding.status",
-    type: "sentinel.finding.status_changed",
-    payload: { findingId: id, status },
-  });
-}
 
 const firstManagementHref = (...values: unknown[]): string | undefined => {
   for (const value of values) {
@@ -197,7 +155,7 @@ const itemsFrom = (body: unknown): unknown[] => {
   return strictItemsFrom(body);
 };
 
-const isoFrom = (value: unknown, fallback = new Date().toISOString()): string =>
+const isoFrom = (value: unknown, fallback = ""): string =>
   asString(value, fallback);
 
 function bffInterventionSeverity(kind: string): InterventionItem["severity"] {
@@ -211,15 +169,24 @@ function bffInterventionSource(kind: string): InterventionItem["source"] {
   return "sentinel";
 }
 
-function adaptBffIntervention(value: unknown, index: number): InterventionItem {
+export function adaptBffIntervention(value: unknown, index = 0, fallbackIso = ""): InterventionItem {
   const item = asRecord(value);
   const id = asString(item.intervention_id ?? item.interventionId ?? item.id, `intervention_${index}`);
   const kind = asString(item.kind, "hiq_sentinel");
   const targetType = asString(item.target_type ?? item.targetType, "target");
   const targetId = asString(item.target_id ?? item.targetId, id);
-  const linkedFindingId = asString(item.linked_finding_id ?? item.linkedFindingId ?? item.finding_id ?? item.findingId, id);
-  const triggeredAt = asString(item.triggered_at ?? item.triggeredAt ?? item.created_at ?? item.createdAt, new Date().toISOString());
-  const updatedAt = asString(item.remediated_at ?? item.remediatedAt ?? item.updated_at ?? item.updatedAt, triggeredAt);
+  const linkedFindingId = asString(
+    item.linked_finding_id ?? item.linkedFindingId ?? item.finding_id ?? item.findingId,
+    id,
+  );
+  const triggeredAt = asString(
+    item.triggered_at ?? item.triggeredAt ?? item.created_at ?? item.createdAt,
+    fallbackIso,
+  );
+  const updatedAt = asString(
+    item.remediated_at ?? item.remediatedAt ?? item.updated_at ?? item.updatedAt,
+    triggeredAt,
+  );
   return {
     id,
     source: bffInterventionSource(kind),
@@ -237,11 +204,11 @@ function adaptBffIntervention(value: unknown, index: number): InterventionItem {
   };
 }
 
-function adaptBffInterventionsResponse(body: unknown): V5ListResponse<InterventionItem> {
-  return v5List(itemsFrom(body).map(adaptBffIntervention));
+export function adaptBffInterventionsResponse(body: unknown, fallbackIso = ""): V5ListResponse<InterventionItem> {
+  return v5List(itemsFrom(body).map((item, index) => adaptBffIntervention(item, index, fallbackIso)));
 }
 
-function adaptLoopStatus(value: unknown): LoopRun["status"] {
+export function adaptLoopStatus(value: unknown): LoopRun["status"] {
   const status = asString(value).toLowerCase();
   if (["running", "active", "open", "in_progress"].includes(status)) return "running";
   if (["blocked", "paused", "mitigating", "awaiting_intervention"].includes(status)) return "blocked";
@@ -251,7 +218,10 @@ function adaptLoopStatus(value: unknown): LoopRun["status"] {
   return "idle";
 }
 
-function adaptStageStatus(value: unknown, fallback: LoopRun["stages"][number]["status"] = "pending"): LoopRun["stages"][number]["status"] {
+export function adaptStageStatus(
+  value: unknown,
+  fallback: LoopRun["stages"][number]["status"] = "pending",
+): LoopRun["stages"][number]["status"] {
   const status = asString(value).toLowerCase();
   if (["running", "active", "in_progress"].includes(status)) return "running";
   if (["blocked", "paused", "awaiting_intervention"].includes(status)) return "blocked";
@@ -264,7 +234,7 @@ function adaptStageStatus(value: unknown, fallback: LoopRun["stages"][number]["s
 type LoopRunNextAction = NonNullable<LoopRun["nextAction"]>;
 type LoopRunEvidenceRef = NonNullable<LoopRun["evidence"]>[number];
 
-function adaptLoopNextAction(value: unknown): LoopRunNextAction | undefined {
+export function adaptLoopNextAction(value: unknown): LoopRunNextAction | undefined {
   const item = asRecord(value);
   const rawKind = asString(item.kind ?? item.action_kind ?? item.actionKind).toLowerCase();
   if (!rawKind) return undefined;
@@ -311,7 +281,7 @@ const LOOP_EVIDENCE_KINDS = new Set<LoopRunEvidenceRef["kind"]>([
   "approval",
 ]);
 
-function adaptLoopEvidenceRef(value: unknown): LoopRunEvidenceRef | undefined {
+export function adaptLoopEvidenceRef(value: unknown): LoopRunEvidenceRef | undefined {
   const item = asRecord(value);
   const kind = asString(item.kind ?? item.evidence_kind ?? item.evidenceKind).toLowerCase();
   const id = asString(item.id ?? item.ref_id ?? item.refId ?? item.evidence_id ?? item.evidenceId);
@@ -319,7 +289,7 @@ function adaptLoopEvidenceRef(value: unknown): LoopRunEvidenceRef | undefined {
   return { kind: kind as LoopRunEvidenceRef["kind"], id };
 }
 
-function adaptLoopEvidence(item: UnknownRecord): LoopRunEvidenceRef[] {
+export function adaptLoopEvidence(item: UnknownRecord): LoopRunEvidenceRef[] {
   const rawRefs = [
     ...(Array.isArray(item.evidence) ? item.evidence : []),
     ...(Array.isArray(item.evidence_refs) ? item.evidence_refs : []),
@@ -348,14 +318,14 @@ function approvalHrefFromId(id: string | undefined): string | undefined {
   return id ? `/management/approvals?approval=${encodeURIComponent(id)}` : undefined;
 }
 
-function adaptLoopKind(value: unknown): LoopKind {
+export function adaptLoopKind(value: unknown): LoopKind {
   const kind = asString(value).toLowerCase();
   if (kind.includes("research")) return "research";
   if (kind.includes("optim") || kind.includes("rebalance")) return "optimization";
   return "execution";
 }
 
-function adaptBffLoopRun(value: unknown, index: number): LoopRun {
+export function adaptBffLoopRun(value: unknown, index = 0): LoopRun {
   const item = asRecord(value);
   const activePeriod = asRecord(item.activePeriod ?? item.active_period);
   const id = asString(item.loop_run_id ?? item.loopRunId ?? item.id, `loop-run-${index + 1}`);
@@ -369,26 +339,28 @@ function adaptBffLoopRun(value: unknown, index: number): LoopRun {
       : [];
   const stages = liveStages.length > 0
     ? liveStages.map((stage, stageIndex) => {
-      const s = asRecord(stage);
-      return {
-        id: asString(s.id ?? s.stage_id ?? s.stageId, `${id}_stage_${stageIndex + 1}`),
-        name: asString(s.name ?? s.kind ?? s.stage ?? s.stage_name ?? s.stageName ?? s.label, `Stage ${stageIndex + 1}`),
-        status: adaptStageStatus(s.status),
-        startedAt: asString(s.startedAt ?? s.started_at),
-        completedAt: asString(s.completedAt ?? s.completed_at),
-        timeoutPolicySource: "backend" as const,
-        timeoutMs: Number.isFinite(Number(s.timeoutMs ?? s.timeout_ms)) ? Number(s.timeoutMs ?? s.timeout_ms) : undefined,
-        warnAfterMs: Number.isFinite(Number(s.warnAfterMs ?? s.warn_after_ms)) ? Number(s.warnAfterMs ?? s.warn_after_ms) : undefined,
-      };
-    })
-    : [{
-      id: `${id}_status`,
-      name: asString(item.title ?? item.name ?? item.status, "BFF status"),
-      status: adaptStageStatus(status, status === "idle" ? "pending" : "running"),
-      startedAt,
-      completedAt: status === "succeeded" || status === "failed" || status === "cancelled" ? updatedAt : undefined,
-      timeoutPolicySource: "backend" as const,
-    }];
+        const s = asRecord(stage);
+        return {
+          id: asString(s.id ?? s.stage_id ?? s.stageId, `${id}_stage_${stageIndex + 1}`),
+          name: asString(s.name ?? s.kind ?? s.stage ?? s.stage_name ?? s.stageName ?? s.label, `Stage ${stageIndex + 1}`),
+          status: adaptStageStatus(s.status),
+          startedAt: asString(s.startedAt ?? s.started_at),
+          completedAt: asString(s.completedAt ?? s.completed_at),
+          timeoutPolicySource: "backend" as const,
+          timeoutMs: Number.isFinite(Number(s.timeoutMs ?? s.timeout_ms)) ? Number(s.timeoutMs ?? s.timeout_ms) : undefined,
+          warnAfterMs: Number.isFinite(Number(s.warnAfterMs ?? s.warn_after_ms)) ? Number(s.warnAfterMs ?? s.warn_after_ms) : undefined,
+        };
+      })
+    : [
+        {
+          id: `${id}_status`,
+          name: asString(item.title ?? item.name ?? item.status, "BFF status"),
+          status: adaptStageStatus(status, status === "idle" ? "pending" : "running"),
+          startedAt,
+          completedAt: status === "succeeded" || status === "failed" || status === "cancelled" ? updatedAt : undefined,
+          timeoutPolicySource: "backend" as const,
+        },
+      ];
   const approval = asRecord(item.approval);
   const links = asRecord(item.links);
   const approvalLinks = asRecord(approval.links);
@@ -426,18 +398,18 @@ function adaptBffLoopRun(value: unknown, index: number): LoopRun {
   );
   const nextAction = explicitNextAction
     ? {
-      ...explicitNextAction,
-      href: explicitNextAction.href ?? (explicitNextAction.kind === "awaiting_approval" ? approvalHref : undefined),
-    }
+        ...explicitNextAction,
+        href: explicitNextAction.href ?? (explicitNextAction.kind === "awaiting_approval" ? approvalHref : undefined),
+      }
     : (
-      approvalId
-        ? { kind: "awaiting_approval" as const, label: "Review approval", href: approvalHref }
-        : status === "blocked"
-          ? { kind: "awaiting_human_decision" as const, label: "Resolve BFF loop blocker" }
-          : status === "running"
-            ? { kind: "automatic" as const, label: "BFF loop running" }
-            : { kind: "none" as const }
-    );
+        approvalId
+          ? { kind: "awaiting_approval" as const, label: "Review approval", href: approvalHref }
+          : status === "blocked"
+            ? { kind: "awaiting_human_decision" as const, label: "Resolve BFF loop blocker" }
+            : status === "running"
+              ? { kind: "automatic" as const, label: "BFF loop running" }
+              : { kind: "none" as const }
+      );
   return {
     id,
     loopKind: adaptLoopKind(item.loopKind ?? item.loop_kind ?? item.loopFamily ?? item.loop_family ?? item.kind ?? item.title),
@@ -456,7 +428,7 @@ function adaptBffLoopRun(value: unknown, index: number): LoopRun {
   };
 }
 
-function adaptHealthStatus(value: unknown): PersonaExecutionHealth["status"] {
+export function adaptHealthStatus(value: unknown): PersonaExecutionHealth["status"] {
   const status = asString(value).toLowerCase();
   if (["healthy", "ok", "active"].includes(status)) return "healthy";
   if (["watch", "warning"].includes(status)) return "watch";
@@ -464,21 +436,21 @@ function adaptHealthStatus(value: unknown): PersonaExecutionHealth["status"] {
   return "degraded";
 }
 
-function scoreForStatus(status: PersonaExecutionHealth["status"]): number {
+export function scoreForStatus(status: PersonaExecutionHealth["status"]): number {
   if (status === "healthy") return 90;
   if (status === "watch") return 72;
   if (status === "critical") return 20;
   return 50;
 }
 
-function adaptBffPersonaHealth(value: unknown, index: number): PersonaExecutionHealth {
+export function adaptBffPersonaHealth(value: unknown, index = 0): PersonaExecutionHealth {
   const item = asRecord(value);
   const status = adaptHealthStatus(item.status ?? item.health);
   const score = asNumber(item.score, scoreForStatus(status));
   return {
     personaId: asString(item.personaId ?? item.persona_id ?? item.id, `persona-${index + 1}`),
     personaName: asString(item.personaName ?? item.persona_name ?? item.name, `Persona ${index + 1}`),
-    mode: ["live", "paper", "shadow", "suspended"].includes(asString(item.mode)) ? asString(item.mode) as PersonaExecutionHealth["mode"] : "shadow",
+    mode: ["live", "paper", "shadow", "suspended"].includes(asString(item.mode)) ? (asString(item.mode) as PersonaExecutionHealth["mode"]) : "shadow",
     status,
     score,
     formulaVersion: "v0-mock",
@@ -497,7 +469,7 @@ function adaptBffPersonaHealth(value: unknown, index: number): PersonaExecutionH
   };
 }
 
-function adaptBffStrategyHealth(value: unknown, index: number): StrategyExecutionHealth {
+export function adaptBffStrategyHealth(value: unknown, index = 0): StrategyExecutionHealth {
   const item = asRecord(value);
   const status = adaptHealthStatus(item.status ?? item.health);
   const score = asNumber(item.score, scoreForStatus(status));
@@ -521,7 +493,7 @@ function adaptBffStrategyHealth(value: unknown, index: number): StrategyExecutio
   };
 }
 
-function adaptSentinelStatus(value: unknown): SentinelFinding["status"] {
+export function adaptSentinelStatus(value: unknown): SentinelFinding["status"] {
   const status = asString(value).toLowerCase();
   if (["acknowledged", "accepted"].includes(status)) return "acknowledged";
   if (["action_pending", "pending", "active"].includes(status)) return "action_pending";
@@ -531,7 +503,7 @@ function adaptSentinelStatus(value: unknown): SentinelFinding["status"] {
   return "open";
 }
 
-function adaptSentinelSeverity(value: unknown): SentinelFinding["severity"] {
+export function adaptSentinelSeverity(value: unknown): SentinelFinding["severity"] {
   const severity = asString(value).toLowerCase();
   if (severity === "critical") return "critical";
   if (severity === "high" || severity === "warning") return "warning";
@@ -539,7 +511,7 @@ function adaptSentinelSeverity(value: unknown): SentinelFinding["severity"] {
   return "info";
 }
 
-function adaptBffSentinelFinding(value: unknown, index: number): SentinelFinding {
+export function adaptBffSentinelFinding(value: unknown, index = 0): SentinelFinding {
   const item = asRecord(value);
   const id = asString(item.finding_id ?? item.findingId ?? item.id, `sentinel-finding-${index + 1}`);
   const incidentId = asString(item.derived_from_incident_id ?? item.incident_id ?? item.incidentId);
@@ -550,7 +522,13 @@ function adaptBffSentinelFinding(value: unknown, index: number): SentinelFinding
   }
   const confidence = Number.isFinite(Number(item.confidence))
     ? Math.max(0, Math.min(1, Number(item.confidence)))
-    : severity === "critical" ? 0.88 : severity === "warning" ? 0.76 : severity === "watch" ? 0.62 : 0.35;
+    : severity === "critical"
+      ? 0.88
+      : severity === "warning"
+        ? 0.76
+        : severity === "watch"
+          ? 0.62
+          : 0.35;
   return {
     id,
     status: adaptSentinelStatus(item.status),
@@ -559,8 +537,10 @@ function adaptBffSentinelFinding(value: unknown, index: number): SentinelFinding
     title: asString(item.title ?? item.name, id),
     summary: asString(item.summary ?? item.description ?? item.title, id),
     source: ["alert", "incident", "job", "runtime", "persona-health", "policy"].includes(asString(item.source))
-      ? asString(item.source) as SentinelFinding["source"]
-      : incidentId ? "incident" : "runtime",
+      ? (asString(item.source) as SentinelFinding["source"])
+      : incidentId
+        ? "incident"
+        : "runtime",
     detectedAt: isoFrom(item.detectedAt ?? item.detected_at ?? item.created_at ?? item.createdAt),
     updatedAt: isoFrom(item.updatedAt ?? item.updated_at ?? item.resolved_at ?? item.resolvedAt),
     blastRadius: {
@@ -574,7 +554,11 @@ function adaptBffSentinelFinding(value: unknown, index: number): SentinelFinding
   };
 }
 
-function liveKpi(loopRuns: LoopRun[], findings: SentinelFinding[], interventions: InterventionItem[]): ControlRoomKpi {
+export function liveKpi(
+  loopRuns: LoopRun[],
+  findings: SentinelFinding[],
+  interventions: InterventionItem[],
+): ControlRoomKpi {
   return {
     loopsRunning: loopRuns.filter((r) => r.status === "running").length,
     loopsBlocked: loopRuns.filter((r) => r.status === "blocked").length,
@@ -588,7 +572,7 @@ function liveKpi(loopRuns: LoopRun[], findings: SentinelFinding[], interventions
   };
 }
 
-function adaptBffControlRoom(body: unknown): ControlRoomSummary {
+export function adaptBffControlRoom(body: unknown, sessionContext?: V5SessionContext): ControlRoomSummary {
   const record = asRecord(body);
   const loops = asRecord(record.loops);
   const sentinel = asRecord(record.sentinel);
@@ -596,332 +580,19 @@ function adaptBffControlRoom(body: unknown): ControlRoomSummary {
   const loopRuns = strictItemsFrom(loops).map(adaptBffLoopRun);
   const findings = strictItemsFrom(sentinel).map(adaptBffSentinelFinding);
   const interventionItems = strictItemsFrom(interventions).map(adaptBffIntervention);
+  const rawSession = asRecord(record.session);
+  const session: V5SessionContext = sessionContext ?? {
+    tenantId: asString(rawSession.tenantId ?? rawSession.tenant_id, "demo"),
+    env: (asString(rawSession.env, "dev") as V5SessionContext["env"]),
+    locale: (asString(rawSession.locale, "en-US") as V5SessionContext["locale"]),
+    serverTime: isoFrom(rawSession.serverTime ?? rawSession.server_time, "1970-01-01T00:00:00.000Z"),
+  };
   return {
     generatedAt: isoFrom(asRecord(record.meta).snapshot_at ?? record.generatedAt ?? record.generated_at),
-    session: session(),
+    session,
     kpi: liveKpi(loopRuns, findings, interventionItems),
     topFindings: findings.slice(0, 5),
     topInterventions: interventionItems.slice(0, 5),
     loopRuns: loopRuns.slice(0, 8),
   };
-}
-
-function session(): V5SessionContext {
-  const p = usePlatform.getState();
-  return {
-    tenantId: "demo",            // Q14 — mock until D59/D51
-    env: p.env,
-    locale: p.locale,
-    serverTime: new Date().toISOString(),
-  };
-}
-
-function allFindings(): SentinelFinding[] {
-  return deriveFindings({
-    alerts: seed.alerts,
-    incidents: seed.incidents,
-    runtimes: seed.runtimes,
-    jobs: seed.jobs,
-  }).map(applySentinelStatusOverlay);
-}
-
-function allLoopRuns(): LoopRun[] {
-  return applyLoopOverlay(deriveLoopRuns({
-    strategies: seed.strategies,
-    rebalances: seed.rebalances,
-    jobs: seed.jobs,
-    approvals: seed.approvals,
-    alerts: seed.alerts,
-    incidents: seed.incidents,
-    research: seed.researchExperiments,
-  }));
-}
-
-function allInterventions(): InterventionItem[] {
-  const fromApprovals = seed.approvals
-    .filter((a) => a.state === "pending")
-    .map(adaptApprovalToIntervention);
-  const fromFindings = allFindings()
-    .filter((f) => f.status === "open" || f.status === "action_pending")
-    .map(adaptFindingToIntervention);
-  const fromIncidents = seed.incidents
-    .filter((i) => i.status !== "resolved")
-    .map(adaptIncidentToIntervention);
-  return [...fromApprovals, ...fromFindings, ...fromIncidents];
-}
-
-function kpi(loopRuns: LoopRun[], findings: SentinelFinding[], interventions: InterventionItem[]): ControlRoomKpi {
-  const personas = seed.personas.map((p) => adaptPersonaHealth(p, { alerts: seed.alerts }));
-  const strategies = seed.strategies.map((s) => adaptStrategyHealth(s, { alerts: seed.alerts, incidents: seed.incidents }));
-  return {
-    loopsRunning: loopRuns.filter((r) => r.status === "running").length,
-    loopsBlocked: loopRuns.filter((r) => r.status === "blocked").length,
-    openFindings: findings.filter((f) => f.status === "open").length,
-    criticalFindings: findings.filter((f) => f.severity === "critical").length,
-    pendingInterventions: interventions.length,
-    personasHealthy: personas.filter((p) => p.status === "healthy").length,
-    personasDegraded: personas.filter((p) => p.status === "degraded" || p.status === "critical").length,
-    strategiesHealthy: strategies.filter((s) => s.status === "healthy").length,
-    strategiesDegraded: strategies.filter((s) => s.status === "degraded" || s.status === "critical").length,
-  };
-}
-
-export const bffV5 = {
-  // ---- Session (Q14) ----
-  session: {
-    get: (): Promise<V5SessionContext> => delay(session()),
-  },
-
-  // ---- Control Room ----
-  controlRoom: {
-    get: (): Promise<ControlRoomSummary> => withStrictLiveOrMock<ControlRoomSummary>(
-      { method: "GET", path: livePaths.v5ControlRoom() },
-      async () => {
-        const loopRuns = allLoopRuns();
-        const findings = allFindings();
-        const interventions = allInterventions();
-        const summary: ControlRoomSummary = {
-          generatedAt: new Date().toISOString(),
-          session: session(),
-          kpi: kpi(loopRuns, findings, interventions),
-          topFindings: [...findings].sort((a, b) => b.confidence - a.confidence).slice(0, 5),
-          topInterventions: interventions.slice(0, 5),
-          loopRuns: loopRuns.slice(0, 8),
-        };
-        return delay(summary);
-      },
-      adaptBffControlRoom,
-    ),
-  },
-
-  // ---- Loops ----
-  loops: {
-    list: (kind?: LoopKind): Promise<V5ListResponse<LoopRun>> => withStrictLiveOrMock<V5ListResponse<LoopRun>>(
-      { method: "GET", path: paths.v5LoopRuns(), query: kind ? { kind } : undefined },
-      async () => {
-        const all = allLoopRuns();
-        return delay(v5List(kind ? loopRunsByKind(all, kind) : all));
-      },
-      (data) => {
-        const items = strictItemsFrom(data).map(adaptBffLoopRun);
-        return v5List(kind ? loopRunsByKind(items, kind) : items);
-      },
-    ),
-    get: (id: string): Promise<LoopRun | undefined> => withStrictLiveOrMock<LoopRun | undefined>(
-      { method: "GET", path: paths.v5LoopRun(id) },
-      async () => delay(allLoopRuns().find((r) => r.id === id)),
-      (data) => {
-        const record = strictDataFrom(data);
-        return record ? adaptBffLoopRun(record, 0) : undefined;
-      },
-      strictNotFoundAsUndefined,
-    ),
-    /** E3 — advance currently running stage. */
-    advance: (id: string): Promise<{ ok: true } | { ok: false; reason: string }> => {
-      const run = allLoopRuns().find((r) => r.id === id);
-      if (!run) return delay({ ok: false, reason: "not_found" } as const);
-      const patch = advanceLoopRun(run);
-      emitV5Event({
-        channel: `v5.loop.${run.loopKind}` as const,
-        type: "loop.run.advanced",
-        payload: { runId: id, runStatus: patch.runStatus, stageStatuses: patch.stageStatuses },
-      });
-      return delay({ ok: true } as const);
-    },
-    pause: (id: string, reason?: string): Promise<{ ok: true } | { ok: false; reason: string }> => {
-      const run = allLoopRuns().find((r) => r.id === id);
-      if (!run) return delay({ ok: false, reason: "not_found" } as const);
-      const patch = pauseLoopRun(run, reason);
-      emitV5Event({
-        channel: `v5.loop.${run.loopKind}` as const,
-        type: "loop.run.paused",
-        payload: { runId: id, reason, runStatus: patch.runStatus },
-      });
-      return delay({ ok: true } as const);
-    },
-    resume: (id: string): Promise<{ ok: true } | { ok: false; reason: string }> => {
-      const run = allLoopRuns().find((r) => r.id === id);
-      if (!run) return delay({ ok: false, reason: "not_found" } as const);
-      const patch = resumeLoopRun(run);
-      emitV5Event({
-        channel: `v5.loop.${run.loopKind}` as const,
-        type: "loop.run.resumed",
-        payload: { runId: id, runStatus: patch.runStatus },
-      });
-      return delay({ ok: true } as const);
-    },
-    cancel: (id: string): Promise<{ ok: true } | { ok: false; reason: string }> => {
-      const run = allLoopRuns().find((r) => r.id === id);
-      if (!run) return delay({ ok: false, reason: "not_found" } as const);
-      const patch = cancelLoopRun(run);
-      emitV5Event({
-        channel: `v5.loop.${run.loopKind}` as const,
-        type: "loop.run.cancelled",
-        payload: { runId: id, runStatus: patch.runStatus },
-      });
-      return delay({ ok: true } as const);
-    },
-  },
-
-  // ---- Personas / Strategies (execution health) ----
-  personas: {
-    health: (): Promise<V5ListResponse<PersonaExecutionHealth>> =>
-      withStrictLiveOrMock<V5ListResponse<PersonaExecutionHealth>>(
-        { method: "GET", path: paths.v5ExecutionPersonaHealth() },
-        async () => delay(v5List(seed.personas.map((p) => adaptPersonaHealth(p, { alerts: seed.alerts })))),
-        (data) => v5List(strictItemsFrom(data).map(adaptBffPersonaHealth)),
-      ),
-  },
-  strategies: {
-    health: (): Promise<V5ListResponse<StrategyExecutionHealth>> =>
-      withStrictLiveOrMock<V5ListResponse<StrategyExecutionHealth>>(
-        { method: "GET", path: livePaths.v5StrategyHealth() },
-        async () => delay(v5List(seed.strategies.map((s) => adaptStrategyHealth(s, { alerts: seed.alerts, incidents: seed.incidents })))),
-        (data) => v5List(strictItemsFrom(data).map(adaptBffStrategyHealth)),
-      ),
-  },
-
-  // ---- Sentinel ----
-  sentinel: {
-    list: (): Promise<V5ListResponse<SentinelFinding>> =>
-      withStrictLiveOrMock<V5ListResponse<SentinelFinding>>(
-        { method: "GET", path: paths.v5SentinelFindings() },
-        async () => delay(v5List(allFindings())),
-        (data) => v5List(strictItemsFrom(data).map(adaptBffSentinelFinding).map(applySentinelStatusOverlay)),
-      ),
-    get: (id: string): Promise<SentinelFinding | undefined> =>
-      withStrictLiveOrMock<SentinelFinding | undefined>(
-        { method: "GET", path: livePaths.v5SentinelFinding(id) },
-        async () => delay(allFindings().find((f) => f.id === id)),
-        (data) => {
-          const record = strictDataFrom(data);
-          return record ? applySentinelStatusOverlay(adaptBffSentinelFinding(record, 0)) : undefined;
-        },
-        strictNotFoundAsUndefined,
-      ),
-    setStatus: async (id: string, status: SentinelFinding["status"]): Promise<{ ok: true; persisted: boolean }> => {
-      const persisted = await liveWriteGated();
-      if (persisted) {
-        await bffFetch<unknown>({
-          method: "POST",
-          path: livePaths.v5SentinelStatus(id),
-          body: { status },
-          idempotencyKey: mintIdempotencyKey(),
-          mode: "live",
-        });
-      } else {
-        await delay(undefined);
-      }
-      setSentinelStatusOverlay(id, status);
-      return { ok: true, persisted };
-    },
-  },
-
-  // ---- Interventions (HIQ) ----
-  interventions: {
-    list: (): Promise<V5ListResponse<InterventionItem>> =>
-      withStrictLiveOrMock<V5ListResponse<InterventionItem>, unknown>(
-        { method: "GET", path: paths.v5Interventions(), query: { status: "pending" } },
-        async () => delay(v5List(allInterventions())),
-        adaptBffInterventionsResponse,
-      ),
-    get: (id: string): Promise<InterventionItem | undefined> =>
-      withStrictLiveOrMock<InterventionItem | undefined>(
-        { method: "GET", path: paths.v5Intervention(id) },
-        async () => delay(allInterventions().find((i) => i.id === id)),
-        (data) => {
-          const record = strictDataFrom(data);
-          return record ? adaptBffIntervention(record, 0) : undefined;
-        },
-        strictNotFoundAsUndefined,
-      ),
-    decide: (id: string, decision: NonNullable<InterventionItem["recommendedDecision"]>): Promise<{ ok: true }> => {
-      emitV5Event({
-        channel: "v5.intervention.decision",
-        type: "intervention.decided",
-        payload: { interventionId: id, decision },
-      });
-      return delay({ ok: true });
-    },
-  },
-
-  // ---- Remediation (Q24 advisory/guarded/emergency flow) ----
-  remediation: {
-    build: (kind: string, args: { id?: string; targetKind?: RemediationAction["targetKind"]; targetId?: string }): RemediationAction | undefined => {
-      const entry = findCatalogueEntry(kind);
-      if (!entry) return undefined;
-      return buildRemediationAction(entry, {
-        id: args.id ?? `ra_${kind}_${Date.now().toString(36)}`,
-        targetKind: args.targetKind,
-        targetId: args.targetId,
-      });
-    },
-    /** Q10 — only mutates v5ActionOverlay. Existing seed remains untouched. */
-    execute: async (action: RemediationAction): Promise<{ ok: true; overlayUpdated: boolean }> => {
-      if (realWritesEnabled()) {
-        await bffFetch<unknown>({
-          method: "POST",
-          path: `${paths.v5Intervention(action.id)}/remediate`,
-          body: {
-            reason: action.label,
-            remediation_action: action.kind,
-          },
-          idempotencyKey: `execute-plans-${action.id}-${Date.now()}`,
-          mode: "live",
-        });
-      }
-      let overlayUpdated = false;
-      if (action.targetKind === "persona" && action.targetId) {
-        if (action.kind === "switch_persona_to_shadow") {
-          v5ActionOverlay.setPersona(action.targetId, { forcedMode: "shadow", reason: action.label });
-          overlayUpdated = true;
-        } else if (action.kind === "pause_persona_routing") {
-          v5ActionOverlay.setPersona(action.targetId, { routingPaused: true, reason: action.label });
-          overlayUpdated = true;
-        }
-      }
-      if (action.targetKind === "strategy" && action.targetId) {
-        if (action.kind === "reduce_allocation") {
-          v5ActionOverlay.setStrategy(action.targetId, { allocationReduced: 0.5, reason: action.label });
-          overlayUpdated = true;
-        } else if (action.kind === "freeze_rebalance") {
-          v5ActionOverlay.setStrategy(action.targetId, { rebalanceFrozen: true, reason: action.label });
-          overlayUpdated = true;
-        }
-      }
-      emitV5Event({
-        channel: "v5.sentinel.action",
-        type: action.mode === "emergency_override" ? "sentinel.action.emergency_executed" : "sentinel.action.executed",
-        payload: { actionId: action.id, kind: action.kind, mode: action.mode, target: { kind: action.targetKind, id: action.targetId }, overlayUpdated },
-      });
-      return delay({ ok: true, overlayUpdated });
-    },
-  },
-};
-
-export type BffV5 = typeof bffV5;
-
-/** Batch VII-c — v5 closed-loop OS namespace (single entrypoint). */
-export { bffV5 as v5 };
-
-// ---- PM12 ranking governance live call (moved from v5/management/rankingGovernance.ts; ACG-03-015) ----
-// src/lib/v5/management/rankingGovernance.ts keeps only pure request builders
-// (buildRankingInboxItem, makeRankingRecommendationId, requiredRoleFor). The
-// actual BFF write belongs to the live V5/management API owner.
-export function sendRankingRecommendation(
-  input: SendRankingRecommendationInput & { recommendation: RankingRecommendationAction },
-  opts: { idempotencyKey?: string } = {},
-): Promise<RankingRecommendationSubmitResult> {
-  const recommendationId = input.recommendationId ?? makeRankingRecommendationId(input);
-  return mgmt.quarterlyRanking.submitRecommendation({
-    recommendationId,
-    actionId: input.recommendation,
-    quarter: input.quarter,
-    personaId: input.personaId,
-    personaName: input.personaName,
-    source: input.source,
-    evidenceRefs: input.evidenceRefs ?? [],
-    governanceDestinations: input.governanceDestinations,
-    liveCapitalMutation: false,
-  }, opts);
 }

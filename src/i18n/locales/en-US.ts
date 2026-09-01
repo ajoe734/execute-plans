@@ -2600,6 +2600,8 @@ export default {
     persistSnapshotDone: "Persistence snapshot written",
     persistReset: "Reset persistence",
     persistResetDone: "Persistence cleared — reloading…",
+    persistUnavailable: "Mock persistence is unavailable in a strict-live build.",
+    persistError: "Mock persistence operation failed",
     realtimeTitle: "Realtime simulator",
     realtimeDesc: "Toggle the mock realtime bus to simulate disconnect/reconnect. Pages should switch to a stale/offline indicator and resync on reconnect.",
     realtimeDisconnect: "Disconnect",

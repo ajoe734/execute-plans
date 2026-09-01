@@ -9,7 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ManagementTableScroll } from "@/management/components/ManagementTableScroll";
 import { tradeJourneyHref } from "@/management/navigation/tradeJourneyLinks";
-import { mgmt, sendRankingRecommendation } from "@/lib/bff-v1";
+import { mgmt } from "@/lib/bff-v1";
+import { sendRankingRecommendation } from "@/lib/bff-v1/v5Client";
 import { useV5Live } from "@/management/pages/v5/useV5Live";
 import {
   type QuarterlyRankingFormula,

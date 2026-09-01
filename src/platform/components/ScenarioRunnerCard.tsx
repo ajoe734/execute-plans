@@ -1,5 +1,3 @@
-// Phase 19 — Scenario Runner card for QA Studio.
-// Lets QA click-run any curated end-to-end scenario and see per-step ladder.
 import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -28,19 +26,31 @@ export const ScenarioRunnerCard = () => {
       } else {
         toast.error(t("qa.scenario.failed", { defaultValue: "Scenario failed" }), { description: id });
       }
-    } finally { setRunning(null); }
+    } catch (err) {
+      toast.error(t("qa.scenario.failed", { defaultValue: "Scenario failed" }), { description: (err as Error).message });
+    } finally {
+      setRunning(null);
+    }
   };
+
   const runAll = async () => {
     setRunning("__all__");
     try {
       const all = await runAllScenarios();
       const map: Record<string, ScenarioResult> = {};
-      all.forEach((r) => { map[r.id] = r; });
+      all.forEach((r) => {
+        map[r.id] = r;
+      });
       setResults(map);
       const passed = all.filter((r) => r.ok).length;
-      toast.success(t("qa.scenario.allDone", { defaultValue: "Scenarios complete" }),
-        { description: `${passed} / ${all.length}` });
-    } finally { setRunning(null); }
+      toast.success(t("qa.scenario.allDone", { defaultValue: "Scenarios complete" }), {
+        description: `${passed} / ${all.length}`,
+      });
+    } catch (err) {
+      toast.error(t("qa.scenario.failed", { defaultValue: "Scenario failed" }), { description: (err as Error).message });
+    } finally {
+      setRunning(null);
+    }
   };
 
   return (
