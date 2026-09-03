@@ -11,7 +11,7 @@ import path from "node:path";
 
 const BFF_BASE_URL = (
   process.env.PANTHEON_BFF_BASE_URL ||
-  "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io"
+  "https://api.dev.mvl-cap.tw"
 ).replace(/\/$/u, "");
 const TENANT_ID =
   process.env.PANTHEON_PINT_TENANT_ID ||
