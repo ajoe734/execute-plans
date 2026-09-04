@@ -620,11 +620,12 @@ jobs:
             const repository = String(
               run.head_repository?.full_name || run.repository?.full_name || "",
             ).toLowerCase();
-            const trustedController =
+            const trustedControllerIdentity =
               path === ".github/workflows/nonprod-deploy.yml" &&
               repository === "ajoe734/pantheon" &&
               run.event === "workflow_dispatch" &&
-              run.head_branch === "dev" &&
+              run.head_branch === "dev";
+            const trustedController = trustedControllerIdentity &&
               String(run.head_sha || "").toLowerCase() === process.env.EXPECTED_BACKEND_SHA;
             const activeController = run.status === "in_progress" && run.conclusion == null;
             const overallSuccess = run.status === "completed" && run.conclusion === "success";
@@ -640,7 +641,7 @@ jobs:
             // parent run is active. The parent run itself is the transaction
             // owner; querying its jobs here is racy because GitHub may expose
             // the workflow run before the parent job has been indexed.
-            if (trustedController && bootstrapPredecessor && activeController &&
+            if (trustedControllerIdentity && bootstrapPredecessor && activeController &&
                 deploymentProfile === "read-only" &&
                 String(run.head_sha || "").toLowerCase() !== process.env.EXPECTED_BACKEND_SHA) {
               activeBootstrapParent = true;
@@ -671,7 +672,7 @@ jobs:
                 exactPairCoordination[0].status === "completed" &&
                 exactPairCoordination[0].conclusion === "success";
             }
-            if (!trustedController ||
+            if ((!trustedController && !activeBootstrapParent) ||
                 (!activeController && !overallSuccess &&
                  !(failedParent && completedExactPairCoordination)) &&
                 !activeBootstrapParent) {
