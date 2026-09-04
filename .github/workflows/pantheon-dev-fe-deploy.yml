@@ -1333,7 +1333,7 @@ jobs:
             matches="$(python3 scripts/github_actions_api.py list "$watchdog_workflow" "$dispatched_at" "$expected_title")"
             count="$(node -e 'const rows=JSON.parse(process.argv[1]); console.log(rows.length)' "$matches")"
             if [[ "$count" == "1" ]]; then
-              watchdog_run_id="$(node -e 'const rows=JSON.parse(process.argv[1]); console.log(rows[0].databaseId)' "$matches")"
+              watchdog_run_id="$(node -e 'const rows=JSON.parse(process.argv[1]); const id=rows[0]?.id ?? rows[0]?.databaseId; if (!Number.isSafeInteger(id) || id <= 0) process.exit(2); console.log(id)' "$matches")"
               echo "watchdog_run_id=${watchdog_run_id}" >> "$GITHUB_OUTPUT"
               exit 0
             fi
@@ -1463,7 +1463,7 @@ jobs:
             matches="$(python3 scripts/github_actions_api.py list pantheon-integration-gate.yml "$dispatched_at" "$expected_title" --branch dev)"
             count="$(node -e 'const rows=JSON.parse(process.argv[1]); console.log(rows.length)' "$matches")"
             if [[ "$count" == "1" ]]; then
-              proof_run_id="$(node -e 'const rows=JSON.parse(process.argv[1]); console.log(rows[0].databaseId)' "$matches")"
+              proof_run_id="$(node -e 'const rows=JSON.parse(process.argv[1]); const id=rows[0]?.id ?? rows[0]?.databaseId; if (!Number.isSafeInteger(id) || id <= 0) process.exit(2); console.log(id)' "$matches")"
               echo "proof_run_id=${proof_run_id}" >> "$GITHUB_OUTPUT"
               break
             fi
