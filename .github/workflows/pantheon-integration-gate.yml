@@ -1123,7 +1123,6 @@ jobs:
 
       - name: Start frontend under test
         id: pr_preview
-        if: env.PANTHEON_FE_BASE_URL == 'http://127.0.0.1:4173'
         continue-on-error: true
         run: |
           set -o pipefail
@@ -1132,8 +1131,8 @@ jobs:
           node scripts/serve-release-candidate.mjs .release-candidate/dist > "$PANTHEON_AUDIT_OUT_DIR/pr-frontend-server.log" 2>&1 &
           echo "$!" > "$PANTHEON_AUDIT_OUT_DIR/pr-frontend-server.pid"
           for i in {1..60}; do
-            if curl -fsS "$PANTHEON_FE_BASE_URL/" >/dev/null; then
-              echo "frontend under test ready at $PANTHEON_FE_BASE_URL"
+            if curl -fsS "http://127.0.0.1:4173/" >/dev/null; then
+              echo "frontend under test ready at http://127.0.0.1:4173"
               exit 0
             fi
             sleep 1
