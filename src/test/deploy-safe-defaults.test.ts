@@ -96,7 +96,12 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
       runtimeEnv,
     ].join("\n");
 
-    expect(activeRouting).toContain("35.201.204.12");
+    // Every retired generation must be gone from the active delivery path. The
+    // previous form of this guard required 35.201.204.12 to be *present*, so it
+    // held the whole acceptance path on a host that no longer exists and would
+    // have failed the migration away from it.
+    expect(activeRouting).toContain("mvl-cap.tw");
+    expect(activeRouting).not.toContain("35.201.204.12");
     expect(activeRouting).not.toContain("35.201.239.38");
     expect(activeRouting).not.toContain("pantheon-benjamin-20260528");
   });

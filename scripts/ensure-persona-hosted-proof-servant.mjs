@@ -115,11 +115,21 @@ async function responseJson(response, label) {
   return parsed;
 }
 
-const devBffHost = "pantheon-lupin-dev-bff.35.201.204.12.sslip.io";
+// The permitted host is the one this run declares, not a literal address: a
+// pinned host restricts the preflight to a single environment generation and
+// blocks the proof outright once that host is retired. The declaration is still
+// required, so the preflight can never fall through to an undeclared target.
+const declaredBffUrl = String(process.env.PANTHEON_DEV_BFF_URL ?? "").trim();
+if (!declaredBffUrl) {
+  throw new Error(
+    "PANTHEON_DEV_BFF_URL must declare the exact Pantheon dev BFF before the servant proof preflight runs.",
+  );
+}
+const devBffHost = new URL(declaredBffUrl).hostname;
 const bffUrl = new URL(bffBase);
 if (bffUrl.protocol !== "https:" || bffUrl.hostname !== devBffHost) {
   throw new Error(
-    "Servant proof preflight is restricted to the exact Pantheon dev BFF host.",
+    `Servant proof preflight is restricted to the declared Pantheon dev BFF host ${devBffHost}.`,
   );
 }
 

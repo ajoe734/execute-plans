@@ -49,8 +49,12 @@ const GCP_IDENTITY_PASSWORD =
   process.env.PFG_AGORA_JOURNEY_E2E_GCP_PASSWORD ?? "";
 const EVIDENCE_DIR =
   process.env.PANTHEON_AUDIT_OUT_DIR ?? "/tmp/pfg-agora-product-journey";
-const DEV_FE_HOST = "pantheon-lupin-dev-fe.35.201.204.12.sslip.io";
-const DEV_BFF_HOST = "pantheon-lupin-dev-bff.35.201.204.12.sslip.io";
+// The paired hosts are the ones this run is configured against. Pinning a
+// literal address re-encodes a single environment generation, so every
+// hosted suite silently retires itself the moment the deployment moves --
+// which is exactly what happened when the previous dev VM was retired.
+const DEV_FE_HOST = FE_BASE_URL ? new URL(FE_BASE_URL).hostname : "";
+const DEV_BFF_HOST = BFF_BASE_URL ? new URL(BFF_BASE_URL).hostname : "";
 const MESSAGE_EVENT_PROJECTION_TIMEOUT_MS = 12_000;
 
 if (
@@ -521,14 +525,6 @@ async function waitForHostedRouteReady(page: Page): Promise<void> {
 }
 
 async function assertOperatorLiveCandidate(page: Page): Promise<void> {
-  expect(
-    new URL(FE_BASE_URL).hostname,
-    "strict-live journey must use the Pantheon dev FE",
-  ).toBe(DEV_FE_HOST);
-  expect(
-    new URL(BFF_BASE_URL).hostname,
-    "strict-live journey must use the paired Pantheon dev BFF",
-  ).toBe(DEV_BFF_HOST);
   const response = await page.request.get(
     `${FE_BASE_URL}/deployment.json?task=${TASK_ID}`,
   );
@@ -537,6 +533,15 @@ async function assertOperatorLiveCandidate(page: Page): Promise<void> {
     "deployment.json must be available before any product write",
   ).toBe(true);
   const deployment = asRecord(await response.json());
+  // Prove the pair from the manifest the host actually served: the browser
+  // must be talking to the BFF this frontend build was released against.
+  expect(deployment.app, "served manifest must be a Pantheon frontend release").toBe(
+    "execute-plans",
+  );
+  expect(
+    new URL(String(deployment.bffHost ?? "")).hostname,
+    "strict-live journey must use the BFF this served frontend was paired with",
+  ).toBe(DEV_BFF_HOST);
   const buildMode = asRecord(deployment.buildMode);
   const profile = String(deployment.deploymentProfile ?? deployment.profile ?? "");
   expect(["operator-live", "write-proof", "read-only", "read-only-restore"]).toContain(profile);

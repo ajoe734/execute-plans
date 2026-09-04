@@ -76,7 +76,7 @@ on:
       bff_base_url:
         description: "BFF base URL"
         required: false
-        default: "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io"
+        default: ""
       bff_sha:
         description: "Pantheon backend/BFF SHA"
         required: false
@@ -445,7 +445,7 @@ jobs:
       actions: read
     env:
       PANTHEON_FE_BASE_URL: ${{ inputs.fe_base_url || 'http://127.0.0.1:4173' }}
-      PANTHEON_BFF_BASE_URL: ${{ inputs.bff_base_url || 'https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io' }}
+      PANTHEON_BFF_BASE_URL: ${{ inputs.bff_base_url || vars.DEV_BFF_URL }}
       # Spec compatibility aliases. Some autoworker-written specs read
       # FRONTEND_BASE_URL / PLAYWRIGHT_BASE_URL instead of PANTHEON_FE_BASE_URL
       # and fall back to http://127.0.0.1:5173 (Vite dev server) when those
@@ -1195,9 +1195,11 @@ jobs:
           PANTHEON_EXPECTED_FE_SHA: ${{ env.PANTHEON_FRONTEND_SHA }}
           PANTHEON_PROBE_RELEASE_STRICT: "1"
           PANTHEON_PROBE_JSON_OUT: ${{ env.PANTHEON_AUDIT_OUT_DIR }}/hosted-browser-bff-probe.json
+          # The hosted FE is whichever host this repo is configured to deploy to.
+          PANTHEON_HOSTED_FE_BASE_URL: ${{ vars.DEV_FE_URL }}
         run: |
           set -o pipefail
-          PANTHEON_FE_BASE_URL="https://pantheon-lupin-dev-fe.35.201.204.12.sslip.io" \
+          PANTHEON_FE_BASE_URL="${PANTHEON_HOSTED_FE_BASE_URL:?DEV_FE_URL is not configured}" \
           PANTHEON_BROWSER_BFF_BASE_URL="$PANTHEON_BFF_BASE_URL" \
           node scripts/probe-hosted-browser-bff.mjs 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/hosted-browser-bff-probe.log"
 
@@ -1765,6 +1767,7 @@ jobs:
       - name: Ensure stable user-private Persona for hosted proof
         env:
           PANTHEON_EXPECTED_BFF_SHA: ${{ inputs.bff_sha }}
+          PANTHEON_DEV_BFF_URL: ${{ vars.DEV_BFF_URL }}
         run: node scripts/ensure-persona-hosted-proof-servant.mjs
 
       - name: Run governed and Persona desktop proof with proof-only credentials
