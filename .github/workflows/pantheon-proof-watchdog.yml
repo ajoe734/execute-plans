@@ -52,6 +52,14 @@ on:
       expected_write_proof_digest:
         required: true
         type: string
+      fe_base_url:
+        description: "Pantheon-owned dev frontend origin for restore readback"
+        required: true
+        type: string
+      bff_base_url:
+        description: "Pantheon-owned dev BFF origin for pair verification and restore readback"
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -244,7 +252,7 @@ jobs:
           EXPECTED_PAIR_ID: ${{ inputs.expected_pair_id }}
           EXPECTED_READ_ONLY_DIGEST: ${{ inputs.expected_read_only_digest }}
           EXPECTED_WRITE_PROOF_DIGEST: ${{ inputs.expected_write_proof_digest }}
-          BFF_BASE_URL: https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io
+          BFF_BASE_URL: ${{ inputs.bff_base_url }}
         run: |
           set -euo pipefail
           archive="${RUNNER_TEMP%/}/prearm-source-pair.zip"
@@ -430,8 +438,8 @@ jobs:
       - pantheon-dev-vm
       - execute-plans-deploy
     env:
-      PANTHEON_BFF_BASE_URL: https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io
-      PANTHEON_OLD_BFF_URL: https://pantheon-lupin-dev-bff.34.81.75.241.sslip.io
+      PANTHEON_BFF_BASE_URL: ${{ inputs.bff_base_url }}
+      PANTHEON_OLD_BFF_URL: ${{ vars.DEV_RETIRED_BFF_URL || '' }}
       CANDIDATE_SHA: ${{ inputs.candidate_sha }}
       FRONTEND_REF: ${{ inputs.frontend_ref }}
       BFF_SHA: ${{ inputs.bff_sha }}
@@ -779,8 +787,8 @@ jobs:
         env:
           CANDIDATE_SHA: ${{ inputs.candidate_sha }}
           BFF_SHA: ${{ inputs.bff_sha }}
-          FE_BASE_URL: https://pantheon-lupin-dev-fe.35.201.204.12.sslip.io
-          BFF_BASE_URL: https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io
+          FE_BASE_URL: ${{ inputs.fe_base_url }}
+          BFF_BASE_URL: ${{ inputs.bff_base_url }}
         run: |
           set -euo pipefail
           for attempt in $(seq 1 30); do

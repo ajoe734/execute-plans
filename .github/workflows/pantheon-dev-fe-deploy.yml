@@ -1321,6 +1321,8 @@ jobs:
               "expected_pair_id": "EXPECTED_PAIR_ID",
               "expected_read_only_digest": "EXPECTED_READ_ONLY_DIGEST",
               "expected_write_proof_digest": "EXPECTED_WRITE_PROOF_DIGEST",
+              "fe_base_url": "PANTHEON_DEV_FE_HOST",
+              "bff_base_url": "PANTHEON_BFF_BASE_URL",
           }
           print(json.dumps({key: os.environ.get(env, "") for key, env in mapping.items()}))
           PY
