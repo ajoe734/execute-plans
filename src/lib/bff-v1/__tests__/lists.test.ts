@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
 import {
   lists,
@@ -11,6 +11,13 @@ import {
   type ListEnvelope,
 } from "@/lib/bff-v1";
 import { realtime } from "@/lib/bff-v1";
+import { makeBffError } from "@/lib/bff-v1/errors";
+import { liveStatus } from "@/lib/bff-v1/liveStatus";
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+  liveStatus._reset();
+});
 
 describe("VI-1 lists facade", () => {
   it("wraps legacy reader into ListEnvelope shape", async () => {
@@ -176,5 +183,29 @@ describe("VI-1 useLiveListV1", () => {
     await waitFor(() => expect(result.current.loading).toBe(false));
     act(() => { realtime.emit("data", { kind: "Strategy" }); });
     expect(result.current.pending).toBe(0);
+  });
+
+  it("marks strict live list transport failures as typed errors", async () => {
+    vi.stubEnv("MODE", "development");
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("VITE_BFF_MODE", "live");
+    vi.stubEnv("VITE_BFF_FALLBACK", "strict");
+    liveStatus._reset({ mode: "live", effective: "live", baseUrl: "https://bff.example.test" });
+
+    const loader = vi.fn().mockRejectedValue(makeBffError({
+      code: "BACKEND_UNAVAILABLE",
+      message: "Injected strict list failure",
+    }));
+    const { result } = renderHook(() => useLiveListV1(loader, ["Strategy"], { auto: false }));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.meta).toMatchObject({
+      degradation: {
+        strictFallbackBlocked: true,
+        reason: "Injected strict list failure",
+      },
+    });
+    expect(liveStatus.get().effective).toBe("mock");
+    expect(liveStatus.get().lastError).toContain("strict:");
   });
 });
