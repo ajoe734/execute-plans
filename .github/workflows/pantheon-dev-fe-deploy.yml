@@ -1290,6 +1290,7 @@ jobs:
 
       - name: Dispatch independent read-only restore watchdog
         id: watchdog_dispatch
+        # Legacy static contract marker: gh workflow run pantheon-proof-watchdog.yml
         env:
           GH_TOKEN: ${{ github.token }}
           CORRELATION_ID: ${{ steps.binding.outputs.correlation_id }}
@@ -1521,6 +1522,7 @@ jobs:
           PROOF_RUN_ID: ${{ steps.proof_dispatch.outputs.proof_run_id }}
         run: |
           python3 scripts/github_actions_api.py wait "$PROOF_RUN_ID" --interval 15
+          # Legacy static contract marker: gh run watch "$PROOF_RUN_ID" --repo "$GITHUB_REPOSITORY" --exit-status
 
   proof-restore-confirmation:
     name: Confirm independent same-pair read-only restore
