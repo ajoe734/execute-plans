@@ -355,10 +355,7 @@ jobs:
           proof_run_id=""
           parent_coordinator_terminal() {
             local parent_jobs
-            parent_jobs="$(gh api \
-              -H "Accept: application/vnd.github+json" \
-              -H "X-GitHub-Api-Version: 2022-11-28" \
-              "/repos/${GITHUB_REPOSITORY}/actions/runs/${PARENT_RUN_ID}/jobs?per_page=100")"
+            parent_jobs="$(python3 scripts/github_actions_api.py jobs "$PARENT_RUN_ID")"
             node -e '
               const jobs=JSON.parse(process.argv[1]).jobs||[];
               const coordinator=jobs.find((job)=>job.name==="Coordinate bounded authenticated Persona proof");
@@ -368,13 +365,10 @@ jobs:
           cancel_child_and_wait() {
             local run_status credential_status jobs
             for _ in $(seq 1 120); do
-              gh run cancel "$proof_run_id" --repo "$GITHUB_REPOSITORY" || true
-              run_status="$(gh run view "$proof_run_id" --repo "$GITHUB_REPOSITORY" --json status --jq .status)"
+              python3 scripts/github_actions_api.py cancel "$proof_run_id" || true
+              run_status="$(python3 scripts/github_actions_api.py view "$proof_run_id" | node -e 'const v=JSON.parse(require("fs").readFileSync(0,"utf8")); process.stdout.write(v.status||"")')"
               [[ "$run_status" == "completed" ]] && return 0
-              jobs="$(gh api \
-                -H "Accept: application/vnd.github+json" \
-                -H "X-GitHub-Api-Version: 2022-11-28" \
-                "/repos/${GITHUB_REPOSITORY}/actions/runs/${proof_run_id}/jobs?per_page=100")"
+              jobs="$(python3 scripts/github_actions_api.py jobs "$proof_run_id")"
               credential_status="$(node -e '
                 const jobs=JSON.parse(process.argv[1]).jobs||[];
                 const proof=jobs.find((job)=>job.name==="Run authorized one-time Persona write proof");
@@ -387,13 +381,10 @@ jobs:
             return 1
           }
           for _ in $(seq 1 420); do
-            matches="$(gh run list --repo "$GITHUB_REPOSITORY" \
-              --workflow pantheon-integration-gate.yml --event workflow_dispatch --branch dev --limit 100 \
-              --json databaseId,displayTitle,headSha \
-              --jq 'map(select(.displayTitle == "'"$expected_title"'"))')"
+            matches="$(python3 scripts/github_actions_api.py list pantheon-integration-gate.yml 1970-01-01T00:00:00Z "$expected_title" --branch dev)"
             count="$(node -e 'const rows=JSON.parse(process.argv[1]); console.log(rows.length)' "$matches")"
             if [[ "$count" == "1" ]]; then
-              proof_run_id="$(node -e 'const rows=JSON.parse(process.argv[1]); console.log(rows[0].databaseId)' "$matches")"
+              proof_run_id="$(node -e 'const rows=JSON.parse(process.argv[1]); const id=rows[0]?.id ?? rows[0]?.databaseId; if (!Number.isSafeInteger(id) || id <= 0) process.exit(2); console.log(id)' "$matches")"
               break
             fi
             [[ "$count" == "0" ]] || { echo "Ambiguous hosted proof correlation." >&2; exit 1; }
@@ -414,7 +405,7 @@ jobs:
               echo "Parent proof coordinator ended while the hosted proof was active; restoring now."
               exit 0
             fi
-            status="$(gh run view "$proof_run_id" --repo "$GITHUB_REPOSITORY" --json status --jq .status)"
+            status="$(python3 scripts/github_actions_api.py view "$proof_run_id" | node -e 'const v=JSON.parse(require("fs").readFileSync(0,"utf8")); process.stdout.write(v.status||"")')"
             [[ "$status" == "completed" ]] && exit 0
             sleep 15
           done
@@ -455,6 +446,18 @@ jobs:
       PROOF_NONCE: ${{ inputs.parent_proof_nonce }}
       CORRELATION_ID: ${{ inputs.proof_correlation_id }}
     steps:
+      - name: Checkout protected restore controller before API quiescence
+        uses: actions/checkout@v4
+        with:
+          ref: dev
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Node before API quiescence
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
       - name: Quiesce parent and terminalize exact credentialed child before restore
         env:
           GH_TOKEN: ${{ github.token }}
@@ -462,10 +465,7 @@ jobs:
           set -euo pipefail
           coordinator_status() {
             local jobs
-            jobs="$(gh api \
-              -H "Accept: application/vnd.github+json" \
-              -H "X-GitHub-Api-Version: 2022-11-28" \
-              "/repos/${GITHUB_REPOSITORY}/actions/runs/${PARENT_RUN_ID}/jobs?per_page=100")"
+            jobs="$(python3 scripts/github_actions_api.py jobs "$PARENT_RUN_ID")"
             node -e '
               const jobs=JSON.parse(process.argv[1]).jobs||[];
               const coordinator=jobs.find((job)=>job.name==="Coordinate bounded authenticated Persona proof");
@@ -479,7 +479,7 @@ jobs:
             parent_status="$(coordinator_status)"
           done
           if [[ "$parent_status" == "in_progress" || "$parent_status" == "queued" ]]; then
-            gh run cancel "$PARENT_RUN_ID" --repo "$GITHUB_REPOSITORY"
+              python3 scripts/github_actions_api.py cancel "$PARENT_RUN_ID"
             for _ in $(seq 1 120); do
               parent_status="$(coordinator_status)"
               [[ "$parent_status" == "completed" ]] && break
@@ -494,13 +494,10 @@ jobs:
           expected_title="PINT proof ${CORRELATION_ID}"
           proof_run_id=""
           for _ in $(seq 1 60); do
-            matches="$(gh run list --repo "$GITHUB_REPOSITORY" \
-              --workflow pantheon-integration-gate.yml --event workflow_dispatch --branch dev --limit 100 \
-              --json databaseId,displayTitle,headSha \
-              --jq 'map(select(.displayTitle == "'"$expected_title"'"))')"
+            matches="$(python3 scripts/github_actions_api.py list pantheon-integration-gate.yml 1970-01-01T00:00:00Z "$expected_title" --branch dev)"
             count="$(node -e 'const rows=JSON.parse(process.argv[1]); process.stdout.write(String(rows.length))' "$matches")"
             if [[ "$count" == "1" ]]; then
-              proof_run_id="$(node -e 'const rows=JSON.parse(process.argv[1]); process.stdout.write(String(rows[0].databaseId))' "$matches")"
+              proof_run_id="$(node -e 'const rows=JSON.parse(process.argv[1]); const id=rows[0]?.id ?? rows[0]?.databaseId; if (!Number.isSafeInteger(id) || id <= 0) process.exit(2); process.stdout.write(String(id))' "$matches")"
               break
             fi
             [[ "$count" == "0" ]] || { echo "Ambiguous correlated child before restore." >&2; exit 1; }
@@ -510,13 +507,10 @@ jobs:
             echo "No correlated child exists after the exact parent was quiesced."
             exit 0
           fi
-          gh run cancel "$proof_run_id" --repo "$GITHUB_REPOSITORY" || true
+          python3 scripts/github_actions_api.py cancel "$proof_run_id" || true
 
           claim_name="pantheon-proof-child-claim-attempt-${PARENT_RUN_ATTEMPT}"
-          artifacts="$(gh api \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "/repos/${GITHUB_REPOSITORY}/actions/runs/${PARENT_RUN_ID}/artifacts?name=${claim_name}&per_page=100")"
+          artifacts="$(python3 scripts/github_actions_api.py artifacts "$PARENT_RUN_ID" --name "$claim_name")"
           claim_count="$(node -e '
             const rows=(JSON.parse(process.argv[1]).artifacts||[])
               .filter((artifact)=>artifact.name===process.argv[2] && !artifact.expired);
@@ -579,8 +573,8 @@ jobs:
           fi
 
           for _ in $(seq 1 120); do
-            gh run cancel "$proof_run_id" --repo "$GITHUB_REPOSITORY" || true
-            run_status="$(gh run view "$proof_run_id" --repo "$GITHUB_REPOSITORY" --json status --jq .status)"
+            python3 scripts/github_actions_api.py cancel "$proof_run_id" || true
+            run_status="$(python3 scripts/github_actions_api.py view "$proof_run_id" | node -e 'const v=JSON.parse(require("fs").readFileSync(0,"utf8")); process.stdout.write(v.status||"")')"
             [[ "$run_status" == "completed" ]] && exit 0
             sleep 5
           done
