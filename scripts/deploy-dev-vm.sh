@@ -1608,7 +1608,8 @@ LIVE_TARGET_AT_START="${PREVIOUS_TARGET}"
 if [[ "${SHA}" != "${REMOTE_DEV_SHA}" && "${EMERGENCY_OVERRIDE}" != "true" ]]; then
   if [[ "${ALLOW_OUT_OF_ORDER_CANDIDATE}" == "true" && "${GITHUB_EVENT_NAME:-}" == "workflow_dispatch" && "${FRONTEND_REF}" != "dev" ]]; then
     evidence_append candidate.order passed "currentDevSha=${REMOTE_DEV_SHA}" "candidateRef=${FRONTEND_REF}" "candidateSha=${SHA}"
-  elif [[ "${DEPLOY_PROFILE}" == "write-proof" && -n "${PREVIOUS_COMMIT:-}" && "${SHA}" == "${PREVIOUS_COMMIT}" ]]; then
+  elif [[ ( "${DEPLOY_PROFILE}" == "write-proof" || "${DEPLOY_PROFILE}" == "read-only-restore" ) &&
+    -n "${PREVIOUS_COMMIT:-}" && "${SHA}" == "${PREVIOUS_COMMIT}" ]]; then
     evidence_append candidate.order passed "currentDevSha=${REMOTE_DEV_SHA}" "liveCandidateSha=${PREVIOUS_COMMIT}"
   else
     echo "Out-of-order candidate rejected: dev=${REMOTE_DEV_SHA} candidate=${SHA}." >&2
@@ -1622,7 +1623,7 @@ else
 fi
 
 if [[ -n "${PREVIOUS_COMMIT}" ]]; then
-  if [[ "${PREVIOUS_PROFILE}" == "write-proof" ]]; then
+  if [[ "${PREVIOUS_PROFILE}" == "write-proof" && "${DEPLOY_PROFILE}" != "read-only-restore" ]]; then
     echo "A live write-proof release may only transition through read-only-restore." >&2
     evidence_append candidate.write_predecessor_rejected failed "previousCommit=${PREVIOUS_COMMIT}"
     exit 2
