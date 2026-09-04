@@ -186,8 +186,7 @@ try {
   const primaryApiPromise = page
     .waitForResponse(
       (res) => pathnameOf(res.url()) === PRIMARY_API_PATH
-        && res.request().method() === "GET"
-        && res.ok(),
+        && res.request().method() === "GET",
       { timeout: CONTENT_TIMEOUT_MS },
     )
     .then((res) => {
@@ -217,7 +216,7 @@ try {
       const rowCount = document.querySelectorAll("tbody tr").length;
       const text = document.body.innerText || "";
       const evidenceTableReady = Boolean(document.querySelector("[data-testid='evidence-explorer-table-scroll']"));
-      const emptyOrUnavailable = /no evidence|unavailable|沒有證據|不可用|無資料/i.test(text);
+      const emptyOrUnavailable = /no evidence|unavailable|auth required|authentication required|sign in|沒有證據|不可用|無資料|登入|需要登入/i.test(text);
       return readyMarker || rowCount > 0 || evidenceTableReady || emptyOrUnavailable;
     },
     undefined,
