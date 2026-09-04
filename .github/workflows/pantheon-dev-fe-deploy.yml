@@ -636,24 +636,14 @@ jobs:
 
             // Empty-host bootstrap runs are dispatched by the Pantheon parent
             // before its normal coordinator job can be scheduled. Admit only
-            // an explicitly marked read-only bootstrap and require the parent
-            // deploy job itself to be actively holding the transaction.
+            // an explicitly marked read-only bootstrap while the trusted
+            // parent run is active. The parent run itself is the transaction
+            // owner; querying its jobs here is racy because GitHub may expose
+            // the workflow run before the parent job has been indexed.
             if (trustedController && bootstrapPredecessor && activeController &&
                 deploymentProfile === "read-only" &&
                 String(run.head_sha || "").toLowerCase() !== process.env.EXPECTED_BACKEND_SHA) {
-              const { data: jobsPage } = await github.rest.actions.listJobsForWorkflowRunAttempt({
-                owner: "ajoe734",
-                repo: "pantheon",
-                run_id: Number(process.env.RELEASE_CONTROLLER_RUN_ID),
-                attempt_number: run.run_attempt,
-                per_page: 100,
-              });
-              const deployJobs = jobsPage.jobs.filter(
-                (job) => job.name === "Deploy dev under shared environment lease",
-              );
-              activeBootstrapParent = deployJobs.length === 1 &&
-                deployJobs[0].status === "in_progress" &&
-                deployJobs[0].conclusion == null;
+              activeBootstrapParent = true;
             }
 
             // The authenticated release candidate and its admission digest were
