@@ -63,6 +63,11 @@ on:
         required: false
         default: ""
         type: string
+      bootstrap_predecessor:
+        description: "Read-only bootstrap transaction owned by an in-progress Pantheon deploy before its coordinator job exists."
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -601,6 +606,8 @@ jobs:
           EXPECTED_BACKEND_SHA: ${{ steps.pair.outputs.bff_sha }}
           EXPECTED_RELEASE_CANDIDATE_ID: ${{ steps.pair.outputs.release_candidate_id }}
           EXPECTED_COMPATIBILITY_MANIFEST_SHA256: ${{ steps.pair.outputs.compatibility_manifest_sha256 }}
+          BOOTSTRAP_PREDECESSOR: ${{ inputs.bootstrap_predecessor }}
+          DEPLOYMENT_PROFILE: ${{ inputs.deployment_profile }}
         with:
           github-token: ${{ github.token }}
           script: |
@@ -622,7 +629,32 @@ jobs:
             const activeController = run.status === "in_progress" && run.conclusion == null;
             const overallSuccess = run.status === "completed" && run.conclusion === "success";
             const failedParent = run.status === "completed" && run.conclusion === "failure";
+            const bootstrapPredecessor = String(process.env.BOOTSTRAP_PREDECESSOR || "false") === "true";
+            const deploymentProfile = String(process.env.DEPLOYMENT_PROFILE || "read-only");
+            let activeBootstrapParent = false;
             let completedExactPairCoordination = false;
+
+            // Empty-host bootstrap runs are dispatched by the Pantheon parent
+            // before its normal coordinator job can be scheduled. Admit only
+            // an explicitly marked read-only bootstrap and require the parent
+            // deploy job itself to be actively holding the transaction.
+            if (trustedController && bootstrapPredecessor && activeController &&
+                deploymentProfile === "read-only" &&
+                String(run.head_sha || "").toLowerCase() !== process.env.EXPECTED_BACKEND_SHA) {
+              const { data: jobsPage } = await github.rest.actions.listJobsForWorkflowRunAttempt({
+                owner: "ajoe734",
+                repo: "pantheon",
+                run_id: Number(process.env.RELEASE_CONTROLLER_RUN_ID),
+                attempt_number: run.run_attempt,
+                per_page: 100,
+              });
+              const deployJobs = jobsPage.jobs.filter(
+                (job) => job.name === "Deploy dev under shared environment lease",
+              );
+              activeBootstrapParent = deployJobs.length === 1 &&
+                deployJobs[0].status === "in_progress" &&
+                deployJobs[0].conclusion == null;
+            }
 
             // The authenticated release candidate and its admission digest were
             // independently bound by the preceding pair verification. A failed
@@ -651,7 +683,8 @@ jobs:
             }
             if (!trustedController ||
                 (!activeController && !overallSuccess &&
-                 !(failedParent && completedExactPairCoordination))) {
+                 !(failedParent && completedExactPairCoordination)) &&
+                !activeBootstrapParent) {
               core.setFailed("Pantheon controller does not own an active or accepted exact-pair transaction");
             }
 
