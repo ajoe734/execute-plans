@@ -522,12 +522,15 @@ jobs:
             const frontendSha = String(process.env.EXPECTED_FRONTEND_SHA || "").toLowerCase();
             const backendSha = String(process.env.EXPECTED_BACKEND_SHA || "").toLowerCase();
             const frontendRef = String(process.env.EXPECTED_FRONTEND_REF || "").trim();
-            // The one-time empty-host bootstrap deliberately tests the last
-            // published FE against its predecessor BFF while the parent
-            // controller remains pinned to the current candidate commit. The
-            // published ref is fixed and exact, so this exception cannot be
-            // used by ordinary dev/ref transactions.
-            const bootstrapPredecessor = frontendRef === "publish/v2026.09.01.0";
+            // The one-time empty-host bootstrap deliberately tests an exact FE
+            // against its predecessor BFF while the parent controller remains
+            // pinned to the current candidate commit. The historical release
+            // ref is fixed; the protected dev ref is admitted only for the
+            // exact known predecessor BFF, so ordinary dev/ref transactions
+            // still require controller head === backend SHA.
+            const bootstrapPredecessor = frontendRef === "publish/v2026.09.01.0"
+              || (frontendRef === "dev"
+                && backendSha === "4889e498fbe5c3b87e7a66b3ca19897e030bbcc1");
             if (context.eventName !== "workflow_dispatch" ||
                 !digest.test(candidateId) || !digest.test(manifestDigest) ||
                 !numeric.test(controllerRunId) ||
