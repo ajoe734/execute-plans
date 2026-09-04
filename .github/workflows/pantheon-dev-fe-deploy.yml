@@ -1300,6 +1300,8 @@ jobs:
         run: |
           set -euo pipefail
           dispatched_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          workflow_ext=".yml"
+          watchdog_workflow="pantheon-proof-watchdog${workflow_ext}"
           inputs_json="$(python3 - <<'PY'
           import json, os
           mapping = {
@@ -1326,7 +1328,7 @@ jobs:
           python3 scripts/github_actions_api.py dispatch pantheon-proof-watchdog.yml dev "$inputs_json"
           expected_title="PINT watchdog ${GITHUB_RUN_ID} ${CORRELATION_ID}"
           for _ in $(seq 1 60); do
-            matches="$(python3 scripts/github_actions_api.py list pantheon-proof-watchdog.yml "$dispatched_at" "$expected_title")"
+            matches="$(python3 scripts/github_actions_api.py list "$watchdog_workflow" "$dispatched_at" "$expected_title")"
             count="$(node -e 'const rows=JSON.parse(process.argv[1]); console.log(rows.length)' "$matches")"
             if [[ "$count" == "1" ]]; then
               watchdog_run_id="$(node -e 'const rows=JSON.parse(process.argv[1]); console.log(rows[0].databaseId)' "$matches")"
