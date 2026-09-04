@@ -2,6 +2,7 @@ name: PFG-AGORA-JOURNEY-E2E-20260820 Hosted Acceptance
 
 on:
   workflow_dispatch:
+    # Pantheon-owned dev hosts; keep this workflow bound to the live dev zone.
     inputs:
       bff_base_url:
         description: "Pantheon dev BFF base URL"
