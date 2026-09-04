@@ -1066,7 +1066,8 @@ restore_paired_safe_release() {
   verify_manifest_file \
     "${write_manifest}" "${SHA}" "${observed_write_digest}" "${GATE_RUN_ID}" \
     "${BFF_COMMIT}" "${current_state}" "${GITHUB_ARTIFACT_DIGEST}" "write-proof" "${PAIR_ID}"
-  safe_release_name="$(sudo node --input-type=module - "${locator_file}" "${PAIR_ID}" "${SHA}" "${READ_ONLY_ARTIFACT_DIGEST}" "${WRITE_PROOF_ARTIFACT_DIGEST}" <<'NODE'
+  node_bin="$(command -v node)"
+  safe_release_name="$(sudo "${node_bin}" --input-type=module - "${locator_file}" "${PAIR_ID}" "${SHA}" "${READ_ONLY_ARTIFACT_DIGEST}" "${WRITE_PROOF_ARTIFACT_DIGEST}" <<'NODE'
 import fs from "node:fs";
 const [file, pairId, frontendSha, readOnlyDigest, writeProofDigest] = process.argv.slice(2);
 const payload = JSON.parse(fs.readFileSync(file, "utf8"));
