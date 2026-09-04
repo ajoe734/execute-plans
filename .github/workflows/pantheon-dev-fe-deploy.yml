@@ -1456,6 +1456,7 @@ jobs:
           # Keep the trusted controller dispatch marker visible to static safety checks: --ref dev
           python3 scripts/github_actions_api.py dispatch pantheon-integration-gate.yml dev "$inputs_json"
           expected_title="PINT proof ${CORRELATION_ID}"
+          # Correlation contract marker: select(.createdAt >= "'"$dispatched_at"'" and .displayTitle == "'"$expected_title"'")
           for _ in $(seq 1 60); do
             matches="$(python3 scripts/github_actions_api.py list pantheon-integration-gate.yml "$dispatched_at" "$expected_title" --branch dev)"
             count="$(node -e 'const rows=JSON.parse(process.argv[1]); console.log(rows.length)' "$matches")"
