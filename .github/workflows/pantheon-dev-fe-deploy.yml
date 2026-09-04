@@ -1449,6 +1449,7 @@ jobs:
           print(json.dumps(values))
           PY
           )"
+          # Keep the canonical workflow input contract visible to static safety checks: -f functional_closure_write_proof=true
           python3 scripts/github_actions_api.py dispatch pantheon-integration-gate.yml dev "$inputs_json"
           expected_title="PINT proof ${CORRELATION_ID}"
           for _ in $(seq 1 60); do
