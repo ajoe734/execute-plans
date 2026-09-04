@@ -494,7 +494,9 @@ describe("paired Pantheon release workflow", () => {
       "Parent proof coordinator ended while the hosted proof was active; restoring now.",
     );
     expect(watchdogWorkflow).toContain("cancel_child_and_wait");
-    expect(watchdogWorkflow).toContain('gh run cancel "$proof_run_id"');
+    expect(watchdogWorkflow).toContain(
+      'python3 scripts/github_actions_api.py cancel "$proof_run_id"',
+    );
     expect(watch).toContain(
       'job.name==="Run authorized one-time Persona write proof"',
     );
@@ -521,7 +523,9 @@ describe("paired Pantheon release workflow", () => {
     expect(restore).toContain(
       "Quiesce parent and terminalize exact credentialed child before restore",
     );
-    expect(restore).toContain('gh run cancel "$PARENT_RUN_ID"');
+    expect(restore).toContain(
+      'python3 scripts/github_actions_api.py cancel "$PARENT_RUN_ID"',
+    );
     expect(restore).toContain('expected_title="PINT proof ${CORRELATION_ID}"');
     expect(restore).toContain(
       "restore child claim does not match the exact correlated proof",
@@ -529,11 +533,15 @@ describe("paired Pantheon release workflow", () => {
     expect(restore).toContain(
       "Restore refused: exact credentialed child is still nonterminal.",
     );
-    expect(
-      restore.indexOf(
-        "Quiesce parent and terminalize exact credentialed child before restore",
-      ),
-    ).toBeLessThan(restore.indexOf("Checkout protected restore controller"));
+    const quiesceIndex = restore.indexOf(
+      "Quiesce parent and terminalize exact credentialed child before restore",
+    );
+    expect(quiesceIndex).toBeGreaterThan(
+      restore.indexOf("Checkout protected restore controller before API quiescence"),
+    );
+    expect(quiesceIndex).toBeLessThan(
+      restore.lastIndexOf("Checkout protected restore controller"),
+    );
     expect(
       restore.indexOf("Checkout protected restore controller"),
     ).toBeLessThan(
@@ -808,17 +816,15 @@ describe("paired Pantheon release workflow", () => {
 
     // Watchdog watch & restore match child by correlation display title without requiring headSha == CANDIDATE_SHA
     expect(watchJob).toContain(
-      `select(.displayTitle == "'"$expected_title"'")`,
+      'python3 scripts/github_actions_api.py list pantheon-integration-gate.yml',
     );
-    expect(watchJob).not.toContain(
-      `select(.displayTitle == "'"$expected_title"'" and .headSha == "'"$CANDIDATE_SHA"'")`,
-    );
+    expect(watchJob).toContain('"$expected_title" --branch dev');
+    expect(watchJob).not.toContain(".headSha ==");
     expect(restoreJob).toContain(
-      `select(.displayTitle == "'"$expected_title"'")`,
+      'python3 scripts/github_actions_api.py list pantheon-integration-gate.yml',
     );
-    expect(restoreJob).not.toContain(
-      `select(.displayTitle == "'"$expected_title"'" and .headSha == "'"$CANDIDATE_SHA"'")`,
-    );
+    expect(restoreJob).toContain('"$expected_title" --branch dev');
+    expect(restoreJob).not.toContain(".headSha ==");
   });
 
   it("executes automated regression verifying out-of-order candidate proof child resolution and source validation logic", () => {
@@ -962,9 +968,13 @@ describe("paired Pantheon release workflow", () => {
     const proofCoordinatorJob = deployWorkflow.slice(proofCoordinatorStart, confirmationStart);
     const confirmationJob = deployWorkflow.slice(confirmationStart);
 
-    expect(proofCoordinatorJob).toContain('gh run watch "$PROOF_RUN_ID" --repo "$GITHUB_REPOSITORY" --exit-status');
+    expect(proofCoordinatorJob).toContain(
+      'python3 scripts/github_actions_api.py wait "$PROOF_RUN_ID"',
+    );
     expect(confirmationJob).toContain("Wait for independent restore watchdog");
-    expect(confirmationJob).toContain('gh run watch "$WATCHDOG_RUN_ID" --repo "$GITHUB_REPOSITORY" --exit-status');
+    expect(confirmationJob).toContain(
+      'python3 scripts/github_actions_api.py wait "$WATCHDOG_RUN_ID"',
+    );
     expect(confirmationJob).toContain("Verify post-child same-pair read-only deployment readback");
     expect(confirmationJob).toContain("Attest final same-pair restoration bound to child demo evidence");
     expect(confirmationJob).toContain('child_status" != "completed" || "$child_conclusion" != "success"');
