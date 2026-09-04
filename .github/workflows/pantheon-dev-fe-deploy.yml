@@ -107,9 +107,9 @@ jobs:
       - pantheon-dev-vm
       - execute-plans-deploy
     env:
-      PANTHEON_DEV_FE_HOST: https://pantheon-lupin-dev-fe.35.201.204.12.sslip.io
-      PANTHEON_BFF_BASE_URL: https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io
-      PANTHEON_OLD_BFF_URL: https://pantheon-lupin-dev-bff.34.81.75.241.sslip.io
+      PANTHEON_DEV_FE_HOST: ${{ vars.DEV_FE_URL || 'https://app.dev.mvl-cap.tw' }}
+      PANTHEON_BFF_BASE_URL: ${{ vars.DEV_BFF_URL || 'https://api.dev.mvl-cap.tw' }}
+      PANTHEON_OLD_BFF_URL: ${{ vars.DEV_RETIRED_BFF_URL || '' }}
       PANTHEON_HOSTED_PROBE_PATH: /management/persona-fleet
       PANTHEON_HOSTED_REQUIRED_BFF_PATHS: /bff/me
 
@@ -998,9 +998,9 @@ jobs:
       - pantheon-dev-vm
       - execute-plans-deploy
     env:
-      PANTHEON_DEV_FE_HOST: https://pantheon-lupin-dev-fe.35.201.204.12.sslip.io
-      PANTHEON_BFF_BASE_URL: https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io
-      PANTHEON_OLD_BFF_URL: https://pantheon-lupin-dev-bff.34.81.75.241.sslip.io
+      PANTHEON_DEV_FE_HOST: ${{ vars.DEV_FE_URL || 'https://app.dev.mvl-cap.tw' }}
+      PANTHEON_BFF_BASE_URL: ${{ vars.DEV_BFF_URL || 'https://api.dev.mvl-cap.tw' }}
+      PANTHEON_OLD_BFF_URL: ${{ vars.DEV_RETIRED_BFF_URL || '' }}
       EXACT_FE_SHA: ${{ needs.deploy.outputs.candidate_sha }}
       EXACT_FE_REF: ${{ needs.deploy.outputs.frontend_ref }}
       EXACT_BFF_SHA: ${{ needs.deploy.outputs.bff_sha }}
@@ -1510,8 +1510,8 @@ jobs:
       actions: read
     runs-on: ubuntu-latest
     env:
-      PANTHEON_DEV_FE_HOST: https://pantheon-lupin-dev-fe.35.201.204.12.sslip.io
-      PANTHEON_BFF_BASE_URL: https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io
+      PANTHEON_DEV_FE_HOST: ${{ vars.DEV_FE_URL || 'https://app.dev.mvl-cap.tw' }}
+      PANTHEON_BFF_BASE_URL: ${{ vars.DEV_BFF_URL || 'https://api.dev.mvl-cap.tw' }}
       EXACT_FE_SHA: ${{ needs.deploy.outputs.candidate_sha }}
       EXACT_BFF_SHA: ${{ needs.deploy.outputs.bff_sha }}
       EXPECTED_PAIR_ID: ${{ needs.deploy.outputs.pair_id }}
