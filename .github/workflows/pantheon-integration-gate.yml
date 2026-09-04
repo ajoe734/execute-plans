@@ -522,6 +522,12 @@ jobs:
             const frontendSha = String(process.env.EXPECTED_FRONTEND_SHA || "").toLowerCase();
             const backendSha = String(process.env.EXPECTED_BACKEND_SHA || "").toLowerCase();
             const frontendRef = String(process.env.EXPECTED_FRONTEND_REF || "").trim();
+            // The one-time empty-host bootstrap deliberately tests the last
+            // published FE against its predecessor BFF while the parent
+            // controller remains pinned to the current candidate commit. The
+            // published ref is fixed and exact, so this exception cannot be
+            // used by ordinary dev/ref transactions.
+            const bootstrapPredecessor = frontendRef === "publish/v2026.09.01.0";
             if (context.eventName !== "workflow_dispatch" ||
                 !digest.test(candidateId) || !digest.test(manifestDigest) ||
                 !numeric.test(controllerRunId) ||
@@ -552,8 +558,9 @@ jobs:
                 repository !== "ajoe734/pantheon" ||
                 controller.event !== "workflow_dispatch" ||
                 controller.head_branch !== "dev" ||
-                (!active && !accepted) ||
-                String(controller.head_sha || "").toLowerCase() !== backendSha) {
+            (!active && !accepted) ||
+            (!bootstrapPredecessor && String(controller.head_sha || "").toLowerCase() !== backendSha) ||
+            (bootstrapPredecessor && !sha.test(String(controller.head_sha || "").toLowerCase()))) {
               core.setFailed("release candidate is not owned by the exact active Pantheon dev controller");
             }
 
