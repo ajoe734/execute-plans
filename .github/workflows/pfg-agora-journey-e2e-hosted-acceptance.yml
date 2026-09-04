@@ -2,16 +2,17 @@ name: PFG-AGORA-JOURNEY-E2E-20260820 Hosted Acceptance
 
 on:
   workflow_dispatch:
+    # Pantheon-owned dev hosts; keep this workflow bound to the live dev zone.
     inputs:
       bff_base_url:
         description: "Pantheon dev BFF base URL"
         required: true
-        default: "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io"
+        default: "https://api.dev.mvl-cap.tw"
         type: string
       fe_base_url:
         description: "Pantheon dev frontend base URL"
         required: true
-        default: "https://pantheon-lupin-dev-fe.35.201.204.12.sslip.io"
+        default: "https://app.dev.mvl-cap.tw"
         type: string
       expected_bff_sha:
         description: "Exact deployed Pantheon BFF commit SHA"
@@ -70,8 +71,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          [[ "${PANTHEON_FE_BASE_URL}" == "https://pantheon-lupin-dev-fe.35.201.204.12.sslip.io" ]]
-          [[ "${PANTHEON_BROWSER_BFF_BASE_URL}" == "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io" ]]
+          [[ "${PANTHEON_FE_BASE_URL}" == "https://app.dev.mvl-cap.tw" ]]
+          [[ "${PANTHEON_BROWSER_BFF_BASE_URL}" == "https://api.dev.mvl-cap.tw" ]]
           [[ "${EXPECTED_FE_SHA}" =~ ^[0-9a-f]{40}$ ]]
           [[ "${EXPECTED_BFF_SHA}" =~ ^[0-9a-f]{40}$ ]]
           [[ "${PANTHEON_BFF_TENANT_ID}" == "tenant-dev" ]]
