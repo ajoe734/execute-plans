@@ -1299,30 +1299,33 @@ jobs:
         run: |
           set -euo pipefail
           dispatched_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          gh workflow run pantheon-proof-watchdog.yml \
-            --repo "$GITHUB_REPOSITORY" --ref dev \
-            -f parent_deploy_run_id="$GITHUB_RUN_ID" \
-            -f parent_deploy_run_attempt="$GITHUB_RUN_ATTEMPT" \
-            -f parent_deploy_actor="$GITHUB_ACTOR" \
-            -f parent_proof_nonce="$PROOF_NONCE" \
-            -f proof_correlation_id="$CORRELATION_ID" \
-            -f parent_binding_artifact_id="$BINDING_ARTIFACT_ID" \
-            -f parent_binding_artifact_digest="$BINDING_ARTIFACT_DIGEST" \
-            -f candidate_sha="$EXACT_FE_SHA" \
-            -f frontend_ref="$EXACT_FE_REF" \
-            -f bff_sha="$EXACT_BFF_SHA" \
-            -f source_gate_run_id="$SOURCE_GATE_RUN_ID" \
-            -f source_artifact_id="$SOURCE_ARTIFACT_ID" \
-            -f source_artifact_digest="$SOURCE_ARTIFACT_DIGEST" \
-            -f expected_pair_id="$EXPECTED_PAIR_ID" \
-            -f expected_read_only_digest="$EXPECTED_READ_ONLY_DIGEST" \
-            -f expected_write_proof_digest="$EXPECTED_WRITE_PROOF_DIGEST"
+          inputs_json="$(python3 - <<'PY'
+          import json, os
+          mapping = {
+              "parent_deploy_run_id": "GITHUB_RUN_ID",
+              "parent_deploy_run_attempt": "GITHUB_RUN_ATTEMPT",
+              "parent_deploy_actor": "GITHUB_ACTOR",
+              "parent_proof_nonce": "PROOF_NONCE",
+              "proof_correlation_id": "CORRELATION_ID",
+              "parent_binding_artifact_id": "BINDING_ARTIFACT_ID",
+              "parent_binding_artifact_digest": "BINDING_ARTIFACT_DIGEST",
+              "candidate_sha": "EXACT_FE_SHA",
+              "frontend_ref": "EXACT_FE_REF",
+              "bff_sha": "EXACT_BFF_SHA",
+              "source_gate_run_id": "SOURCE_GATE_RUN_ID",
+              "source_artifact_id": "SOURCE_ARTIFACT_ID",
+              "source_artifact_digest": "SOURCE_ARTIFACT_DIGEST",
+              "expected_pair_id": "EXPECTED_PAIR_ID",
+              "expected_read_only_digest": "EXPECTED_READ_ONLY_DIGEST",
+              "expected_write_proof_digest": "EXPECTED_WRITE_PROOF_DIGEST",
+          }
+          print(json.dumps({key: os.environ.get(env, "") for key, env in mapping.items()}))
+          PY
+          )"
+          python3 scripts/github_actions_api.py dispatch pantheon-proof-watchdog.yml dev "$inputs_json"
           expected_title="PINT watchdog ${GITHUB_RUN_ID} ${CORRELATION_ID}"
           for _ in $(seq 1 60); do
-            matches="$(gh run list --repo "$GITHUB_REPOSITORY" \
-              --workflow pantheon-proof-watchdog.yml --event workflow_dispatch --limit 100 \
-              --json databaseId,createdAt,displayTitle \
-              --jq 'map(select(.createdAt >= "'"$dispatched_at"'" and .displayTitle == "'"$expected_title"'"))')"
+            matches="$(python3 scripts/github_actions_api.py list pantheon-proof-watchdog.yml "$dispatched_at" "$expected_title")"
             count="$(node -e 'const rows=JSON.parse(process.argv[1]); console.log(rows.length)' "$matches")"
             if [[ "$count" == "1" ]]; then
               watchdog_run_id="$(node -e 'const rows=JSON.parse(process.argv[1]); console.log(rows[0].databaseId)' "$matches")"
@@ -1342,11 +1345,8 @@ jobs:
         run: |
           set -euo pipefail
           for _ in $(seq 1 120); do
-            watchdog_state="$(gh run view "$WATCHDOG_RUN_ID" --repo "$GITHUB_REPOSITORY" --json status,conclusion)"
-            jobs="$(gh api \
-              -H "Accept: application/vnd.github+json" \
-              -H "X-GitHub-Api-Version: 2022-11-28" \
-              "/repos/${GITHUB_REPOSITORY}/actions/runs/${WATCHDOG_RUN_ID}/jobs?per_page=100")"
+            watchdog_state="$(python3 scripts/github_actions_api.py view "$WATCHDOG_RUN_ID" | node -e 'const v=JSON.parse(require("fs").readFileSync(0,"utf8")); console.log(JSON.stringify({status:v.status,conclusion:v.conclusion}))')"
+            jobs="$(python3 scripts/github_actions_api.py jobs "$WATCHDOG_RUN_ID")"
             armed="$(node -e '
               const jobs=JSON.parse(process.argv[1]).jobs||[];
               const authorize=jobs.find((job)=>job.name==="Authenticate exact parent restore authority");
@@ -1419,39 +1419,40 @@ jobs:
           rm -rf .proof-child-claim
           mkdir -p .proof-child-claim
           dispatched_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          gh workflow run pantheon-integration-gate.yml \
-            --repo "$GITHUB_REPOSITORY" --ref dev \
-            -f fe_base_url="$PANTHEON_DEV_FE_HOST" \
-            -f fe_sha="$EXACT_FE_SHA" \
-            -f frontend_ref="$EXACT_FE_REF" \
-            -f proof_correlation_id="$CORRELATION_ID" \
-            -f parent_deploy_run_id="$GITHUB_RUN_ID" \
-            -f parent_deploy_run_attempt="$GITHUB_RUN_ATTEMPT" \
-            -f parent_deploy_actor="$GITHUB_ACTOR" \
-            -f parent_proof_nonce="$PROOF_NONCE" \
-            -f parent_binding_artifact_id="$BINDING_ARTIFACT_ID" \
-            -f parent_binding_artifact_digest="$BINDING_ARTIFACT_DIGEST" \
-            -f source_gate_run_id="$SOURCE_GATE_RUN_ID" \
-            -f source_artifact_id="$SOURCE_ARTIFACT_ID" \
-            -f source_artifact_digest="$SOURCE_ARTIFACT_DIGEST" \
-            -f expected_pair_id="$EXPECTED_PAIR_ID" \
-            -f expected_read_only_digest="$EXPECTED_READ_ONLY_DIGEST" \
-            -f expected_write_proof_digest="$EXPECTED_WRITE_PROOF_DIGEST" \
-            -f bff_base_url="$PANTHEON_BFF_BASE_URL" \
-            -f bff_sha="$EXACT_BFF_SHA" \
-            -f release_candidate_id="$RELEASE_CANDIDATE_ID" \
-            -f compatibility_manifest_sha256="$COMPATIBILITY_MANIFEST_SHA256" \
-            -f release_controller_run_id="$RELEASE_CONTROLLER_RUN_ID" \
-            -f persona_interaction_write_proof=true \
-            -f pint_hosted_probe=true \
-            -f functional_closure_write_proof=true \
-            -f soft_fail=false
+          inputs_json="$(python3 - <<'PY'
+          import json, os
+          mapping = {
+              "fe_base_url": "PANTHEON_DEV_FE_HOST",
+              "fe_sha": "EXACT_FE_SHA",
+              "frontend_ref": "EXACT_FE_REF",
+              "proof_correlation_id": "CORRELATION_ID",
+              "parent_deploy_run_id": "GITHUB_RUN_ID",
+              "parent_deploy_run_attempt": "GITHUB_RUN_ATTEMPT",
+              "parent_deploy_actor": "GITHUB_ACTOR",
+              "parent_proof_nonce": "PROOF_NONCE",
+              "parent_binding_artifact_id": "BINDING_ARTIFACT_ID",
+              "parent_binding_artifact_digest": "BINDING_ARTIFACT_DIGEST",
+              "source_gate_run_id": "SOURCE_GATE_RUN_ID",
+              "source_artifact_id": "SOURCE_ARTIFACT_ID",
+              "source_artifact_digest": "SOURCE_ARTIFACT_DIGEST",
+              "expected_pair_id": "EXPECTED_PAIR_ID",
+              "expected_read_only_digest": "EXPECTED_READ_ONLY_DIGEST",
+              "expected_write_proof_digest": "EXPECTED_WRITE_PROOF_DIGEST",
+              "bff_base_url": "PANTHEON_BFF_BASE_URL",
+              "bff_sha": "EXACT_BFF_SHA",
+              "release_candidate_id": "RELEASE_CANDIDATE_ID",
+              "compatibility_manifest_sha256": "COMPATIBILITY_MANIFEST_SHA256",
+              "release_controller_run_id": "RELEASE_CONTROLLER_RUN_ID",
+          }
+          values = {key: os.environ.get(env, "") for key, env in mapping.items()}
+          values.update({"persona_interaction_write_proof": "true", "pint_hosted_probe": "true", "functional_closure_write_proof": "true", "soft_fail": "false"})
+          print(json.dumps(values))
+          PY
+          )"
+          python3 scripts/github_actions_api.py dispatch pantheon-integration-gate.yml dev "$inputs_json"
           expected_title="PINT proof ${CORRELATION_ID}"
           for _ in $(seq 1 60); do
-            matches="$(gh run list --repo "$GITHUB_REPOSITORY" \
-              --workflow pantheon-integration-gate.yml --event workflow_dispatch --branch dev --limit 100 \
-              --json databaseId,createdAt,displayTitle,headSha \
-              --jq 'map(select(.createdAt >= "'"$dispatched_at"'" and .displayTitle == "'"$expected_title"'"))')"
+            matches="$(python3 scripts/github_actions_api.py list pantheon-integration-gate.yml "$dispatched_at" "$expected_title" --branch dev)"
             count="$(node -e 'const rows=JSON.parse(process.argv[1]); console.log(rows.length)' "$matches")"
             if [[ "$count" == "1" ]]; then
               proof_run_id="$(node -e 'const rows=JSON.parse(process.argv[1]); console.log(rows[0].databaseId)' "$matches")"
@@ -1462,10 +1463,7 @@ jobs:
             sleep 2
           done
           [[ -n "${proof_run_id:-}" ]] || { echo "Unable to resolve hosted proof." >&2; exit 1; }
-          child_run="$(gh api \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "/repos/${GITHUB_REPOSITORY}/actions/runs/${proof_run_id}")"
+          child_run="$(python3 scripts/github_actions_api.py view "$proof_run_id")"
           child_actor="$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).actor?.login||"").toLowerCase())' "$child_run")"
           child_triggering_actor="$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).triggering_actor?.login||"").toLowerCase())' "$child_run")"
           child_attempt="$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).run_attempt||""))' "$child_run")"
@@ -1520,7 +1518,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PROOF_RUN_ID: ${{ steps.proof_dispatch.outputs.proof_run_id }}
         run: |
-          gh run watch "$PROOF_RUN_ID" --repo "$GITHUB_REPOSITORY" --exit-status --interval 15
+          python3 scripts/github_actions_api.py wait "$PROOF_RUN_ID" --interval 15
 
   proof-restore-confirmation:
     name: Confirm independent same-pair read-only restore
