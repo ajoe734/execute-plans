@@ -1,13 +1,13 @@
 const DEV_RUNTIME_HOSTS = new Set([
   "localhost",
   "127.0.0.1",
-  "pantheon-lupin-dev-fe.35.201.204.12.sslip.io",
+  "app.dev.mvl-cap.tw",
 ]);
 
 const FALLBACK_RUNTIME_HOSTS = new Set([
   "localhost",
   "127.0.0.1",
-  "pantheon-lupin-dev-fe.35.201.204.12.sslip.io",
+  "app.dev.mvl-cap.tw",
 ]);
 
 const REAL_WRITE_KEYS = [

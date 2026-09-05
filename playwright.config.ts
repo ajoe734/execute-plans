@@ -54,7 +54,7 @@ export default defineConfig({
             VITE_BFF_MODE: process.env.VITE_BFF_MODE || "live",
             VITE_BFF_BASE_URL:
               process.env.VITE_BFF_BASE_URL ||
-              "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io",
+              "https://api.dev.mvl-cap.tw",
             VITE_BFF_FALLBACK: process.env.VITE_BFF_FALLBACK || "strict",
             VITE_BFF_REAL_WRITES: process.env.VITE_BFF_REAL_WRITES || "false",
             VITE_BFF_ALLOW_DEV_STUB_WRITES:
@@ -66,10 +66,10 @@ export default defineConfig({
               "AIza01234567890123456789012345678901234",
             VITE_GCP_IDENTITY_PROJECT_ID:
               process.env.VITE_GCP_IDENTITY_PROJECT_ID ||
-              "pantheon-lupin-dev-20260719",
+              "pantheon-dev-20260902",
             VITE_GCP_IDENTITY_AUTH_DOMAIN:
               process.env.VITE_GCP_IDENTITY_AUTH_DOMAIN ||
-              "pantheon-lupin-dev-20260719.firebaseapp.com",
+              "pantheon-dev-20260902.firebaseapp.com",
           },
         },
   use: {

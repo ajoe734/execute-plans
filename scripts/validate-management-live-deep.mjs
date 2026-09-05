@@ -18,7 +18,7 @@ const ROOT = process.cwd();
 const BFF_BASE_URL = (
   process.env.PANTHEON_BFF_BASE_URL ||
   process.env.VITE_BFF_BASE_URL ||
-  "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io"
+  "https://api.dev.mvl-cap.tw"
 ).replace(/\/$/, "");
 const AUDIT_DIR = process.env.PANTHEON_AUDIT_OUT_DIR || ".lovable/audits";
 const SMOKE_TOKEN = process.env.PANTHEON_BFF_SMOKE_BEARER_TOKEN || process.env.BFF_AUTH_TOKEN || "";

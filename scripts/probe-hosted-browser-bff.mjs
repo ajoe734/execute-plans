@@ -6,18 +6,17 @@ import { pathToFileURL } from "node:url";
 
 const FE_BASE = trimTrailingSlash(
   process.env.PANTHEON_FE_BASE_URL ||
-    "https://pantheon-lupin-dev-fe.35.201.204.12.sslip.io",
+    "https://app.dev.mvl-cap.tw",
 );
 const UPSTREAM_BFF_BASE = trimTrailingSlash(
   process.env.PANTHEON_BFF_BASE_URL ||
-    "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io",
+    "https://api.dev.mvl-cap.tw",
 );
 const BFF_BASE = trimTrailingSlash(
   process.env.PANTHEON_BROWSER_BFF_BASE_URL || UPSTREAM_BFF_BASE,
 );
 const OLD_BFF_URL = normalizeOldBffUrl(
-  process.env.PANTHEON_OLD_BFF_URL ||
-    "https://pantheon-lupin-dev-bff.34.81.75.241.sslip.io",
+  process.env.PANTHEON_OLD_BFF_URL || "",
 );
 const FE_PATH = normalizePath(
   process.env.PANTHEON_HOSTED_PROBE_PATH || "/management/persona-fleet",

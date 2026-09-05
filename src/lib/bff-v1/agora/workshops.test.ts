@@ -337,7 +337,7 @@ describe("openWorkshopStream", () => {
 
   it("cookie sessions use the configured BFF origin and native EventSource", () => {
     clearAuthProvider();
-    vi.mocked(detectBaseUrl).mockReturnValue("https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io");
+    vi.mocked(detectBaseUrl).mockReturnValue("https://api.dev.mvl-cap.tw");
     const close = vi.fn();
     const source = { close, onmessage: null as ((message: MessageEvent<string>) => void) | null, addEventListener: vi.fn() };
     const EventSourceMock = vi.fn().mockReturnValue(source);
@@ -347,7 +347,7 @@ describe("openWorkshopStream", () => {
     const cleanup = openWorkshopStream("ws/001", onEvent);
 
     expect(EventSourceMock).toHaveBeenCalledWith(
-      "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/bff/agora/workshops/ws%2F001/stream",
+      "https://api.dev.mvl-cap.tw/bff/agora/workshops/ws%2F001/stream",
       { withCredentials: true },
     );
     source.onmessage?.(
@@ -376,7 +376,7 @@ describe("openWorkshopStream", () => {
 
   it("cookie sessions pass last_event_id query parameter when lastEventId option is supplied", () => {
     clearAuthProvider();
-    vi.mocked(detectBaseUrl).mockReturnValue("https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io");
+    vi.mocked(detectBaseUrl).mockReturnValue("https://api.dev.mvl-cap.tw");
     const close = vi.fn();
     const source = { close, onmessage: null, addEventListener: vi.fn() };
     const EventSourceMock = vi.fn().mockReturnValue(source);
@@ -385,7 +385,7 @@ describe("openWorkshopStream", () => {
     openWorkshopStream("ws-001", undefined, { lastEventId: "evt-099" });
 
     expect(EventSourceMock).toHaveBeenCalledWith(
-      "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/bff/agora/workshops/ws-001/stream?last_event_id=evt-099",
+      "https://api.dev.mvl-cap.tw/bff/agora/workshops/ws-001/stream?last_event_id=evt-099",
       { withCredentials: true },
     );
   });
@@ -395,7 +395,7 @@ describe("openWorkshopStream", () => {
       getToken: () => "bearer-token-123",
       getTenantId: () => "tenant-dev",
     });
-    vi.mocked(detectBaseUrl).mockReturnValue("https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io");
+    vi.mocked(detectBaseUrl).mockReturnValue("https://api.dev.mvl-cap.tw");
 
     const onEvent = vi.fn<(event: WorkshopStreamEvent) => void>();
     const onOpen = vi.fn();
@@ -411,7 +411,7 @@ describe("openWorkshopStream", () => {
     const cleanup = openWorkshopStream("ws-001", onEvent, { onOpen, lastEventId: "evt-prev" });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "https://pantheon-lupin-dev-bff.35.201.204.12.sslip.io/bff/agora/workshops/ws-001/stream?last_event_id=evt-prev",
+      "https://api.dev.mvl-cap.tw/bff/agora/workshops/ws-001/stream?last_event_id=evt-prev",
       expect.objectContaining({
         method: "GET",
         headers: expect.objectContaining({
