@@ -11,6 +11,7 @@ import { realtime } from "./sse/bridge";
 import type { ListEnvelope } from "./dto";
 import { BffError } from "./errors";
 import { liveStatus } from "./liveStatus";
+import { detectFallbackMode } from "./liveTransport";
 
 export interface UseLiveListV1Result<T> {
   items: T[];
@@ -43,8 +44,18 @@ export function useLiveListV1<T>(
   // or showing a bare empty table.
   const degradedEnv = (err: unknown): ListEnvelope<T> => {
     const liveMode = liveStatus.get().mode === "live";
+    const strictMode = detectFallbackMode() === "strict";
     const strictFallbackBlocked =
-      liveMode && (!(err instanceof BffError) || err.status === 0 || err.status >= 500);
+      liveMode && strictMode && (!(err instanceof BffError) || err.status === 0 || err.status >= 500);
+    if (strictFallbackBlocked) {
+      // List loaders intentionally use the strict-live reader directly so a
+      // failed request cannot be replaced with seed data. Keep the global
+      // transport snapshot in the same typed-error state as strictLiveRead;
+      // otherwise the page only renders a local empty state and the shell
+      // banner incorrectly remains "real".
+      const reason = err instanceof Error ? err.message : "live read failed";
+      liveStatus.reportFallback(`strict: ${reason}`);
+    }
     return {
       items: [], cursor: {}, pageSize: 0, totalCountExact: true,
       meta: {

@@ -18,6 +18,24 @@ import type {
 import * as tradingRoomModule from "@/lib/bff-v1/agora/tradingRoom";
 import type { TradingRoomWorkspaceProposal, TradingRoomWorkspace as TradingRoomWorkspaceType } from "@/lib/bff-v1/agora/tradingRoomTypes";
 
+type MockProposalPreviewProps = {
+  proposal: TradingRoomWorkspaceProposal;
+  onAccept: () => void;
+  onRegenerate: () => void;
+  busy?: boolean;
+  error?: string;
+};
+
+type MockGridEditorProps = {
+  strategy?: Pick<TradingRoomStrategyEntry, "title">;
+  onBackToWorkshop: () => void;
+  onSwitchStrategy: () => void;
+};
+
+type MockTradeDecisionCardProps = {
+  event: TradingDecisionEvent;
+};
+
 vi.mock("@/lib/bff-v1/agora/tradingRoom", () => ({
   acceptTradingRoomWorkspaceProposalWithMeta: vi.fn(),
   createTradingRoomWorkspaceProposal: vi.fn(),
@@ -28,7 +46,7 @@ vi.mock("@/lib/bff-v1/agora/tradingRoom", () => ({
 }));
 
 vi.mock("@/agora/trading-room/WorkspaceProposalPreview", () => ({
-  WorkspaceProposalPreview: ({ proposal, onAccept, onRegenerate, busy, error }: any) => (
+  WorkspaceProposalPreview: ({ proposal, onAccept, onRegenerate, busy, error }: MockProposalPreviewProps) => (
     <div data-testid="mock-proposal-preview">
       <span>Proposal: {proposal.proposalId}</span>
       {busy && <span>Accepting...</span>}
@@ -40,7 +58,7 @@ vi.mock("@/agora/trading-room/WorkspaceProposalPreview", () => ({
 }));
 
 vi.mock("@/agora/trading-room/WorkspaceGridEditor", () => ({
-  WorkspaceGridEditor: ({ strategy, onBackToWorkshop, onSwitchStrategy }: any) => (
+  WorkspaceGridEditor: ({ strategy, onBackToWorkshop, onSwitchStrategy }: MockGridEditorProps) => (
     <div data-testid="mock-grid-editor">
       <span>Grid Editor for {strategy?.title}</span>
       <button data-testid="grid-back-button" onClick={onBackToWorkshop} type="button">Back</button>
@@ -50,7 +68,7 @@ vi.mock("@/agora/trading-room/WorkspaceGridEditor", () => ({
 }));
 
 vi.mock("@/agora/components/TradeDecisionCard", () => ({
-  TradeDecisionCard: ({ event }: any) => (
+  TradeDecisionCard: ({ event }: MockTradeDecisionCardProps) => (
     <div data-testid={`trade-decision-card-${event.decision_event_id}`}>
       Decision Card for {event.subject.symbol}
     </div>

@@ -157,6 +157,21 @@ async function injectBffResponse(
 
 async function installStableShellRoutes(page: Page) {
   await installContainedLoopbackAuth(page);
+  await page.route(exactPath("/bff/events/stream"), async (route) => {
+    if (route.request().method() === "OPTIONS") {
+      await route.fulfill({ status: 204, headers: corsHeaders(route) });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      headers: {
+        ...corsHeaders(route),
+        "Content-Type": "text/event-stream; charset=utf-8",
+        "Cache-Control": "no-cache",
+      },
+      body: ": fixture keep-alive\n\n",
+    });
+  });
   const stableRoutes: Array<[string, number, unknown]> = [
     ["/health", 200, { status: "ok", service: "pantheon-f15-route-harness" }],
     ["/bff/me", 200, meResponse()],

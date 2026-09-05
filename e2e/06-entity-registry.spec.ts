@@ -584,7 +584,7 @@ function corsHeaders(route: Route): Record<string, string> {
     "Access-Control-Allow-Origin": origin,
     "Access-Control-Expose-Headers":
       "X-BFF-Api-Version,X-Correlation-Id,X-Request-Id",
-    "X-BFF-Api-Version": "2026-05-13",
+    "X-BFF-Api-Version": "2026-05-07",
     "X-Correlation-Id": "corr-fe-int-gate-b06",
     "X-Request-Id": "req-fe-int-gate-b06",
   };
@@ -774,6 +774,19 @@ async function installRegistryRoutes(page: Page, calls = new Set<string>()): Pro
 
     if (request.method() === "OPTIONS") {
       await route.fulfill({ status: 204, headers: corsHeaders(route) });
+      return;
+    }
+
+    if (path === "/bff/events/stream") {
+      await route.fulfill({
+        status: 200,
+        headers: {
+          ...corsHeaders(route),
+          "Content-Type": "text/event-stream; charset=utf-8",
+          "Cache-Control": "no-cache",
+        },
+        body: ": fixture keep-alive\n\n",
+      });
       return;
     }
 
