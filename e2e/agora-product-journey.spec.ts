@@ -49,8 +49,8 @@ const GCP_IDENTITY_PASSWORD =
   process.env.PFG_AGORA_JOURNEY_E2E_GCP_PASSWORD ?? "";
 const EVIDENCE_DIR =
   process.env.PANTHEON_AUDIT_OUT_DIR ?? "/tmp/pfg-agora-product-journey";
-const DEV_FE_HOST = "pantheon-lupin-dev-fe.35.201.204.12.sslip.io";
-const DEV_BFF_HOST = "pantheon-lupin-dev-bff.35.201.204.12.sslip.io";
+const DEV_FE_HOST = "app.dev.mvl-cap.tw";
+const DEV_BFF_HOST = "api.dev.mvl-cap.tw";
 const MESSAGE_EVENT_PROJECTION_TIMEOUT_MS = 12_000;
 
 if (
@@ -942,9 +942,11 @@ test.describe(`${TASK_ID} strict-live browser journey`, () => {
       mutations.push(createdMutation);
       workshopId = createdMutation.id;
       expect(workshopId, "Workshop ID must be valid").toMatch(/^(?!.*unknown)[a-zA-Z0-9_.:-]+$/);
-      await expect(
-        page.getByTestId(`workshop-item-${workshopId}`),
-      ).toBeVisible({ timeout: 30_000 });
+      await expect(page).toHaveURL(
+        `${FE_BASE_URL}/agora/strategy-workshop/${encodeURIComponent(workshopId)}`,
+        { timeout: 30_000 },
+      );
+      await expect(page.getByTestId("strategy-workshop-page-session")).toBeVisible();
       const streamResponse = await workshopStream;
       expect(streamResponse.status()).toBe(200);
       expect(streamResponse.headers()["content-type"] ?? "").toContain("text/event-stream");
