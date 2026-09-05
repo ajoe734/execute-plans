@@ -1066,7 +1066,8 @@ restore_paired_safe_release() {
   verify_manifest_file \
     "${write_manifest}" "${SHA}" "${observed_write_digest}" "${GATE_RUN_ID}" \
     "${BFF_COMMIT}" "${current_state}" "${GITHUB_ARTIFACT_DIGEST}" "write-proof" "${PAIR_ID}"
-  safe_release_name="$(sudo node --input-type=module - "${locator_file}" "${PAIR_ID}" "${SHA}" "${READ_ONLY_ARTIFACT_DIGEST}" "${WRITE_PROOF_ARTIFACT_DIGEST}" <<'NODE'
+  node_bin="$(command -v node)"
+  safe_release_name="$(sudo "${node_bin}" --input-type=module - "${locator_file}" "${PAIR_ID}" "${SHA}" "${READ_ONLY_ARTIFACT_DIGEST}" "${WRITE_PROOF_ARTIFACT_DIGEST}" <<'NODE'
 import fs from "node:fs";
 const [file, pairId, frontendSha, readOnlyDigest, writeProofDigest] = process.argv.slice(2);
 const payload = JSON.parse(fs.readFileSync(file, "utf8"));
@@ -1608,7 +1609,8 @@ LIVE_TARGET_AT_START="${PREVIOUS_TARGET}"
 if [[ "${SHA}" != "${REMOTE_DEV_SHA}" && "${EMERGENCY_OVERRIDE}" != "true" ]]; then
   if [[ "${ALLOW_OUT_OF_ORDER_CANDIDATE}" == "true" && "${GITHUB_EVENT_NAME:-}" == "workflow_dispatch" && "${FRONTEND_REF}" != "dev" ]]; then
     evidence_append candidate.order passed "currentDevSha=${REMOTE_DEV_SHA}" "candidateRef=${FRONTEND_REF}" "candidateSha=${SHA}"
-  elif [[ "${DEPLOY_PROFILE}" == "write-proof" && -n "${PREVIOUS_COMMIT:-}" && "${SHA}" == "${PREVIOUS_COMMIT}" ]]; then
+  elif [[ ( "${DEPLOY_PROFILE}" == "write-proof" || "${DEPLOY_PROFILE}" == "read-only-restore" ) &&
+    -n "${PREVIOUS_COMMIT:-}" && "${SHA}" == "${PREVIOUS_COMMIT}" ]]; then
     evidence_append candidate.order passed "currentDevSha=${REMOTE_DEV_SHA}" "liveCandidateSha=${PREVIOUS_COMMIT}"
   else
     echo "Out-of-order candidate rejected: dev=${REMOTE_DEV_SHA} candidate=${SHA}." >&2
@@ -1622,7 +1624,7 @@ else
 fi
 
 if [[ -n "${PREVIOUS_COMMIT}" ]]; then
-  if [[ "${PREVIOUS_PROFILE}" == "write-proof" ]]; then
+  if [[ "${PREVIOUS_PROFILE}" == "write-proof" && "${DEPLOY_PROFILE}" != "read-only-restore" ]]; then
     echo "A live write-proof release may only transition through read-only-restore." >&2
     evidence_append candidate.write_predecessor_rejected failed "previousCommit=${PREVIOUS_COMMIT}"
     exit 2

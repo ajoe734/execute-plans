@@ -52,6 +52,11 @@ def main() -> None:
     view.add_argument("run_id")
     jobs = sub.add_parser("jobs")
     jobs.add_argument("run_id")
+    cancel = sub.add_parser("cancel")
+    cancel.add_argument("run_id")
+    artifacts = sub.add_parser("artifacts")
+    artifacts.add_argument("run_id")
+    artifacts.add_argument("--name", default=None)
     wait = sub.add_parser("wait")
     wait.add_argument("run_id")
     wait.add_argument("--interval", type=int, default=15)
@@ -69,6 +74,17 @@ def main() -> None:
         return
     if args.command == "jobs":
         print(json.dumps(_request("GET", f"/repos/{repo}/actions/runs/{args.run_id}/jobs?per_page=100"), separators=(",", ":")))
+        return
+    if args.command == "cancel":
+        _request("POST", f"/repos/{repo}/actions/runs/{args.run_id}/cancel")
+        return
+    if args.command == "artifacts":
+        query = {"per_page": "100"}
+        if args.name:
+            query["name"] = args.name
+        print(json.dumps(_request(
+            "GET", f"/repos/{repo}/actions/runs/{args.run_id}/artifacts?{urllib.parse.urlencode(query)}"
+        ), separators=(",", ":")))
         return
     if args.command == "wait":
         while True:

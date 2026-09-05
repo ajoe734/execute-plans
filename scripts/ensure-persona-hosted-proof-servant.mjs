@@ -115,7 +115,10 @@ async function responseJson(response, label) {
   return parsed;
 }
 
-const devBffHost = "pantheon-lupin-dev-bff.35.201.204.12.sslip.io";
+// The proof helper is restricted to the currently provisioned Pantheon-owned
+// dev BFF host.  Keep this allowlist aligned with the dev hosting contract;
+// retired sslip.io hosts must never be accepted as proof targets.
+const devBffHost = "api.dev.mvl-cap.tw";
 const bffUrl = new URL(bffBase);
 if (bffUrl.protocol !== "https:" || bffUrl.hostname !== devBffHost) {
   throw new Error(
