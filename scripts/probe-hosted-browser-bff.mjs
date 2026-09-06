@@ -8,13 +8,40 @@ const FE_BASE = trimTrailingSlash(
   process.env.PANTHEON_FE_BASE_URL ||
     "https://app.dev.mvl-cap.tw",
 );
+export function assertSafeBffCandidateTransport(url) {
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch (error) {
+    throw new Error(`invalid candidate transport URL: ${error.message}`);
+  }
+  if (!["http:", "https:"].includes(parsed.protocol)) {
+    throw new Error(`unsafe candidate transport protocol: ${parsed.protocol}`);
+  }
+  const hostname = parsed.hostname.toLowerCase();
+  if (
+    hostname === "169.254.169.254" ||
+    hostname.startsWith("169.254.") ||
+    hostname === "metadata.google.internal" ||
+    hostname.endsWith(".metadata.google.internal")
+  ) {
+    throw new Error(
+      `candidate transport rejected: SSRF / cloud metadata forbidden: ${hostname}`,
+    );
+  }
+  return trimTrailingSlash(url);
+}
+
 const UPSTREAM_BFF_BASE = trimTrailingSlash(
   process.env.PANTHEON_BFF_BASE_URL ||
     "https://api.dev.mvl-cap.tw",
 );
-const BFF_BASE = trimTrailingSlash(
-  process.env.PANTHEON_BROWSER_BFF_BASE_URL || UPSTREAM_BFF_BASE,
-);
+const RAW_BROWSER_BFF = String(
+  process.env.PANTHEON_BROWSER_BFF_BASE_URL || "",
+).trim();
+const BFF_BASE = RAW_BROWSER_BFF
+  ? assertSafeBffCandidateTransport(RAW_BROWSER_BFF)
+  : UPSTREAM_BFF_BASE;
 const OLD_BFF_URL = normalizeOldBffUrl(
   process.env.PANTHEON_OLD_BFF_URL || "",
 );
@@ -275,24 +302,33 @@ function pathnameOf(url) {
   }
 }
 
-export function isBffRequestUrl(url, baseUrl = BFF_BASE) {
-  const pathname = httpPathWithinBase(url, baseUrl);
-  if (pathname === null) return false;
+export function isBffPath(pathname) {
+  if (!pathname || typeof pathname !== "string") return false;
+  const normalized = pathname.startsWith("/") ? pathname : "/" + pathname;
   return (
-    pathname.startsWith("/bff/") ||
-    ["/health", "/healthz", "/readyz", "/openapi.json"].includes(pathname)
+    normalized.startsWith("/bff/") ||
+    ["/health", "/healthz", "/readyz", "/openapi.json"].includes(normalized)
   );
 }
 
+export function isBffRequestUrl(url, baseUrl = BFF_BASE) {
+  const pathname = httpPathWithinBase(url, baseUrl);
+  if (pathname === null) return false;
+  return isBffPath(pathname);
+}
+
 function isBffUrl(url) {
-  return isBffRequestUrl(url, BFF_BASE);
+  return (
+    isBffRequestUrl(url, BFF_BASE) || isBffRequestUrl(url, UPSTREAM_BFF_BASE)
+  );
 }
 
 function isCoreBffResponse(res, expectedPath) {
   const url = res.url();
   return (
     isBffUrl(url) &&
-    httpPathWithinBase(url, BFF_BASE) === expectedPath &&
+    (httpPathWithinBase(url, BFF_BASE) === expectedPath ||
+      httpPathWithinBase(url, UPSTREAM_BFF_BASE) === expectedPath) &&
     res.request().method() === "GET"
   );
 }
@@ -1397,6 +1433,62 @@ async function installCandidateRoute(page, candidateResolver, routeErrors) {
   });
 }
 
+export async function installBffCandidateRoute(
+  page,
+  upstreamBase,
+  candidateBase,
+  routeErrors = [],
+) {
+  if (upstreamBase === candidateBase) return;
+  assertSafeBffCandidateTransport(candidateBase);
+
+  await page.route(upstreamBase + "/**", async (route) => {
+    const request = route.request();
+    const originalUrl = request.url();
+    const pathname = httpPathWithinBase(originalUrl, upstreamBase);
+    if (!pathname || !isBffPath(pathname)) {
+      await route.continue();
+      return;
+    }
+
+    const candidateUrl = new URL(
+      (pathname.startsWith("/") ? pathname : "/" + pathname) +
+        new URL(originalUrl).search,
+      candidateBase,
+    ).toString();
+
+    try {
+      const response = await page.request.fetch(candidateUrl, {
+        method: request.method(),
+        headers: {
+          ...request.headers(),
+          host: new URL(candidateBase).host,
+        },
+        data: request.postDataBuffer() || undefined,
+        maxRedirects: 0,
+      });
+
+      const responseHeaders = response.headers();
+      delete responseHeaders["content-encoding"];
+      delete responseHeaders["content-length"];
+
+      await route.fulfill({
+        status: response.status(),
+        headers: responseHeaders,
+        body: await response.body(),
+      });
+    } catch (error) {
+      routeErrors.push({
+        code: "bff_candidate_transport_error",
+        url: redactUrl(originalUrl),
+        candidateUrl: redactUrl(candidateUrl),
+        error: redactDiagnosticText(error),
+      });
+      await route.abort("failed");
+    }
+  });
+}
+
 function isFrontendOriginUrl(value) {
   try {
     return new URL(value).origin === new URL(FE_BASE).origin;
@@ -1778,6 +1870,14 @@ async function runHostedUxProfile({
         candidateRouteErrors,
       );
     }
+    if (BFF_BASE !== UPSTREAM_BFF_BASE) {
+      await installBffCandidateRoute(
+        page,
+        UPSTREAM_BFF_BASE,
+        BFF_BASE,
+        candidateRouteErrors,
+      );
+    }
     page.on("request", (request) => {
       if (request.headers().authorization) authorizationRequestCount += 1;
       const method = canonicalBrowserMethod(request.method());
@@ -2002,6 +2102,14 @@ async function runProbe() {
 
   if (candidateResolver) {
     await installCandidateRoute(page, candidateResolver, candidateRouteErrors);
+  }
+  if (BFF_BASE !== UPSTREAM_BFF_BASE) {
+    await installBffCandidateRoute(
+      page,
+      UPSTREAM_BFF_BASE,
+      BFF_BASE,
+      candidateRouteErrors,
+    );
   }
 
   page.on("request", (request) => {
@@ -2416,7 +2524,10 @@ async function runProbe() {
     : [];
 
   const containsBffStatic =
-    bundleText.includes(BFF_BASE) || html.includes(BFF_BASE);
+    bundleText.includes(BFF_BASE) ||
+    html.includes(BFF_BASE) ||
+    bundleText.includes(UPSTREAM_BFF_BASE) ||
+    html.includes(UPSTREAM_BFF_BASE);
   const observedIntendedBff =
     requests.some((request) => isBffUrl(request.url)) ||
     responses.some((response) => isBffUrl(response.url)) ||

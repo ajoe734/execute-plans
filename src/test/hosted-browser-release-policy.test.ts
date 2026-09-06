@@ -16,6 +16,7 @@ import {
   assessAnonymousAuthRedirect,
   assessHostedUxProfile,
   assessPersonaFleetSafety,
+  assertSafeBffCandidateTransport,
   canonicalizeSha256,
   cssBoxShadowHasVisibleLayer,
   cssColorHasVisibleAlpha,
@@ -26,6 +27,7 @@ import {
   inspectDeploymentMetadata,
   isAllowlistedBffRequestFailure,
   isAllowlistedConsoleError,
+  isBffPath,
   isBffRequestUrl,
   listCandidateLoadedScriptAndStyleFiles,
   listCandidateScriptAndStyleFiles,
@@ -1159,5 +1161,27 @@ describe("hosted browser strict release policy", () => {
       "personaFleetSafetyPassed: personaFleetSafety.pass",
     );
     expect(source).not.toContain("response.url?.startsWith(BFF_BASE)");
+  });
+
+  it("validates safe candidate BFF transport and rejects SSRF and cloud metadata destinations", () => {
+    expect(assertSafeBffCandidateTransport("http://127.0.0.1:41888")).toBe("http://127.0.0.1:41888");
+    expect(assertSafeBffCandidateTransport("https://api.dev.mvl-cap.tw/")).toBe("https://api.dev.mvl-cap.tw");
+    expect(assertSafeBffCandidateTransport("http://localhost:8080")).toBe("http://localhost:8080");
+
+    expect(() => assertSafeBffCandidateTransport("ftp://127.0.0.1:41888")).toThrow(/unsafe candidate transport protocol/u);
+    expect(() => assertSafeBffCandidateTransport("http://169.254.169.254")).toThrow(/cloud metadata forbidden/u);
+    expect(() => assertSafeBffCandidateTransport("http://169.254.1.1")).toThrow(/cloud metadata forbidden/u);
+    expect(() => assertSafeBffCandidateTransport("http://metadata.google.internal")).toThrow(/cloud metadata forbidden/u);
+  });
+
+  it("recognizes standard BFF paths and distinguishes them from arbitrary URLs", () => {
+    expect(isBffPath("/bff/me")).toBe(true);
+    expect(isBffPath("/bff/management/persona-fleet")).toBe(true);
+    expect(isBffPath("/health")).toBe(true);
+    expect(isBffPath("/readyz")).toBe(true);
+    expect(isBffPath("/openapi.json")).toBe(true);
+    expect(isBffPath("/assets/app.js")).toBe(false);
+    expect(isBffPath("/auth")).toBe(false);
+    expect(isBffPath("")).toBe(false);
   });
 });

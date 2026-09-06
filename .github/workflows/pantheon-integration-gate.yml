@@ -965,6 +965,20 @@ jobs:
               --controller-run-id "$PANTHEON_RELEASE_CONTROLLER_RUN_ID"
             )
           fi
+          if [[ -n "${PANTHEON_BFF_IMAGE_DIGEST:-}" ]]; then
+            admission_args+=(
+              --bff-image-digest "$PANTHEON_BFF_IMAGE_DIGEST"
+              --bff-image-digest-type "${PANTHEON_BFF_IMAGE_DIGEST_TYPE:-oci_manifest_digest}"
+            )
+          fi
+          if [[ -n "${PANTHEON_LEASE_OWNER:-}" ]]; then
+            admission_args+=(
+              --lease-owner "$PANTHEON_LEASE_OWNER"
+              --lease-epoch "$PANTHEON_LEASE_EPOCH"
+              --lease-run-id "${PANTHEON_LEASE_RUN_ID:-$GITHUB_RUN_ID}"
+              --lease-delegated "${PANTHEON_LEASE_DELEGATED:-true}"
+            )
+          fi
           node scripts/release-candidate.mjs prepare-pair \
             --read-only-dist-dir dist \
             --operator-live-dist-dir dist-operator-live \

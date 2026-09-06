@@ -746,6 +746,7 @@ jobs:
           PANTHEON_DEPLOY_EMERGENCY_OVERRIDE: "false"
           PANTHEON_DEPLOY_ROLLBACK_DRILL: "false"
           PANTHEON_DEPLOY_PROFILE: read-only-restore
+          PANTHEON_DEPLOY_ACTION: restore
           PANTHEON_DEPLOY_EXPECTED_PAIR_ID: ${{ inputs.expected_pair_id }}
           PANTHEON_DEPLOY_PROOF_WINDOW_ACK: "false"
           PANTHEON_DEPLOY_REAL_WRITES: "false"

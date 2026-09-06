@@ -1,0 +1,91 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "FE-EXACT-PAIR-PROTOCOL-001",
+  "owner": "Antigravity",
+  "reviewer": "Codex2",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-EXACT-PAIR-PROTOCOL-001",
+  "status": "ready-for-independent-exact-head-review",
+  "recorded_at": "2026-09-06T05:18:00.000Z",
+  "scope": {
+    "implemented": [
+      "Machine-readable exact pair handshake contracts in scripts/release-identity.mjs, scripts/release-evidence.mjs, and scripts/release-candidate.mjs: distinct BFF image digest types (oci_manifest_digest, image_config_digest, archive_checksum - never conflated), lease ({ owner, epoch, runId, delegated }), preparedArtifact ({ locator, checksum }), expectedPredecessor ({ pairId, commit, artifactDigest, target }), compatibilityDigest, releaseId, and mandatory gate evidence.",
+      "Positive prepare protocol in scripts/deploy-dev-vm.sh: stages exact dev-public-origin FE assets, qualifies candidate against staged non-public BFF via PANTHEON_BFF_CANDIDATE_TRANSPORT, leaves incumbent live symlink untouched, emits durable prepared_success in release-evidence hash chain and writes .prepared-receipt.json, exiting 0.",
+      "Positive activate protocol in scripts/deploy-dev-vm.sh: executes in a new process without rebuilding, verifies prepared receipt and fresh same-epoch environment lease, enforces expected predecessor CAS and mandatory gate evidence, atomically exchanges DEPLOY_ROOT symlink, and verifies independent served readback. Idempotent replay succeeds without rebuilding or re-staging.",
+      "Retired one-shot public-switch bypass in scripts/deploy-dev-vm.sh without compatibility alias; unauthenticated or unphased execution fails closed with exit code 2.",
+      "Aligned proof watchdog caller in .github/workflows/pantheon-proof-watchdog.yml to explicit restore action (PANTHEON_DEPLOY_ACTION: restore) and authenticated safe sibling CAS.",
+      "Updated .github/workflows/pantheon-dev-fe-deploy.yml to run prepare followed by activate in persistent deployment and write-proof coordinator.",
+      "Updated .github/workflows/pantheon-integration-gate.yml to support forwarding lease parameters and BFF image digest to prepare-pair."
+    ],
+    "declared_artifacts": [
+      "scripts/release-identity.mjs",
+      "scripts/test-release-identity.mjs",
+      "scripts/release-evidence.mjs",
+      "src/test/release-evidence.test.ts",
+      "scripts/release-candidate.mjs",
+      "src/test/release-candidate.test.ts",
+      "scripts/probe-hosted-browser-bff.mjs",
+      "src/test/hosted-browser-release-policy.test.ts",
+      "scripts/deploy-dev-vm.sh",
+      "scripts/test-deploy-dev-vm.sh",
+      ".github/workflows/pantheon-dev-fe-deploy.yml",
+      ".github/workflows/pantheon-proof-watchdog.yml",
+      ".github/workflows/pantheon-integration-gate.yml",
+      "src/test/paired-release-workflow.test.ts",
+      "src/test/deploy-safe-defaults.test.ts",
+      "docs/deployment/evidence/FE-EXACT-PAIR-PROTOCOL-001/evidence.json"
+    ]
+  },
+  "acceptance": {
+    "handshake_contracts_frozen_with_unconflated_image_digest_types": true,
+    "positive_prepare_leaves_incumbent_untouched_and_writes_durable_receipt": true,
+    "positive_activate_resumes_in_new_process_without_rebuild_and_verifies_lease_cas": true,
+    "idempotent_replay_succeeds_without_drift": true,
+    "stale_cas_and_lease_epoch_mismatch_fail_closed": true,
+    "one_shot_public_switch_bypass_retired_with_exit_code_2": true,
+    "prior_artifact_restore_aligned_with_parent_pair_protocol": true,
+    "strictly_limited_to_16_declared_target_artifacts": true
+  },
+  "validation": {
+    "release_identity_suite": {
+      "command": "node scripts/test-release-identity.mjs",
+      "result": "passed: exact FE/BFF release identity regression tests passed"
+    },
+    "deploy_dev_vm_harness": {
+      "command": "bash scripts/test-deploy-dev-vm.sh",
+      "result": "passed: 42 passed, 0 failed"
+    },
+    "vitest_release_candidate": {
+      "command": "npx vitest run src/test/release-candidate.test.ts",
+      "result": "passed: 31 tests passed"
+    },
+    "vitest_release_evidence": {
+      "command": "npx vitest run src/test/release-evidence.test.ts",
+      "result": "passed: 21 tests passed"
+    },
+    "vitest_hosted_browser_policy": {
+      "command": "npx vitest run src/test/hosted-browser-release-policy.test.ts",
+      "result": "passed: 52 tests passed"
+    },
+    "vitest_paired_release_workflow": {
+      "command": "npx vitest run src/test/paired-release-workflow.test.ts",
+      "result": "passed: 22 tests passed"
+    },
+    "vitest_deploy_safe_defaults": {
+      "command": "npx vitest run src/test/deploy-safe-defaults.test.ts",
+      "result": "passed: 21 tests passed"
+    }
+  },
+  "review_binding": {
+    "sha_disposition": "Independent approval must bind the final PR head that contains this implementation and evidence manifest."
+  },
+  "independent_review_required": [
+    "Verify explicit BFF image digest types (oci_manifest_digest, image_config_digest, archive_checksum) are not conflated.",
+    "Verify positive prepare stages assets and produces durable .prepared-receipt.json without modifying DEPLOY_ROOT symlink.",
+    "Verify positive activate runs in a new process, validates receipt, lease epoch, predecessor CAS, and performs atomic symlink switch.",
+    "Verify one-shot bypass is retired and exits with code 2 when PANTHEON_DEPLOY_ACTION is missing.",
+    "Verify read-only restore caller in watchdog workflow uses authenticated safe sibling CAS.",
+    "Verify only the 16 declared target artifacts are modified."
+  ]
+}

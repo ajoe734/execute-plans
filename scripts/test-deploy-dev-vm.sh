@@ -790,74 +790,225 @@ select_interrupted_candidate() {
 
 run_deploy() {
   set +e
-  (
-    cd "${CASE_REPO}"
-    env -i \
-      PATH="${MOCK_BIN}:${SYSTEM_PATH}" \
-      REAL_GIT="${REAL_GIT}" \
-      HOME="${CASE_HOME}" \
-      LANG=C \
-      TMPDIR="${CASE_TMP}" \
-      MOCK_ALLOWED_ROOT="${CASE_DIR}" \
-      MOCK_BFF_SHA="${BFF_SHA}" \
-      MOCK_BFF_SHA_SEQUENCE="" \
-      MOCK_BFF_COMMIT_SEQUENCE="" \
-      MOCK_BFF_KNOWN_SEQUENCE="" \
-      MOCK_BFF_AUTH_MODE="strict" \
-      MOCK_BFF_AUTH_STUB="false" \
-      MOCK_EXTERNAL_SWITCH_TARGET="" \
-      MOCK_CALL_LOG="${CASE_CALL_LOG}" \
-      MOCK_FAIL_PROBE_PHASES="" \
-      MOCK_FAIL_DURABLE_RSYNC_ONCE="false" \
-      MOCK_FAIL_ORIGIN_DEV_ONCE="false" \
-      MOCK_FAIL_ORIGIN_DEV_SECOND_LOOKUP="false" \
-      MOCK_BAD_GITHUB_DIGEST="false" \
-      MOCK_PUBLIC_HEALTH_STATUS_SEQUENCE="" \
-      MOCK_TAMPER_ROLLBACK_PAIR="false" \
-      MOCK_PREVIOUS_TARGET="${PREVIOUS_TARGET}" \
-      MOCK_ADVANCE_DEV_AFTER_PROBE="false" \
-      MOCK_ADVANCED_DEV_SHA="" \
-      MOCK_ORIGIN_DIR="${CASE_ORIGIN}" \
-      PANTHEON_DEV_FE_HOST="https://fe.test" \
-      PANTHEON_BFF_BASE_URL="https://bff.test" \
-      PANTHEON_OLD_BFF_URL="https://old-bff.test" \
-      PANTHEON_DEV_FE_ROOT="${CASE_LIVE}" \
-      PANTHEON_DEV_FE_RELEASES_DIR="${CASE_RELEASES}" \
-      PANTHEON_DEV_FE_ROOT_PREFIX="${CASE_DIR}" \
-      PANTHEON_DEV_FE_RELEASES_PREFIX="${CASE_RELEASES}" \
-      PANTHEON_AUDIT_OUT_DIR="${CASE_AUDIT}" \
-      PANTHEON_DEPLOY_DURABLE_EVIDENCE_ROOT="${CASE_DURABLE}" \
-      PANTHEON_DEPLOY_DURABLE_EVIDENCE_PREFIX="${CASE_DIR}" \
-      PANTHEON_DEPLOY_CANDIDATE_DIR="${CANDIDATE_DIR}" \
-      PANTHEON_DEPLOY_CANDIDATE_SHA="${CANDIDATE_SHA}" \
-      PANTHEON_DEPLOY_AGORA_COMPAT_EVIDENCE="${CASE_AGORA_EVIDENCE}" \
-      PANTHEON_DEPLOY_REF="${CANDIDATE_SHA}" \
-      PANTHEON_DEPLOY_BRANCH="dev" \
-      PANTHEON_DEPLOY_GATE_RUN_ID="${GATE_RUN_ID}" \
-      PANTHEON_DEPLOY_GITHUB_ARTIFACT_DIGEST="sha256:${CANDIDATE_DIGEST}" \
-      PANTHEON_DEPLOY_EXPECTED_DEV_SHA="${CANDIDATE_SHA}" \
-      PANTHEON_DEPLOY_EMERGENCY_OVERRIDE="false" \
-      PANTHEON_DEPLOY_ROLLBACK_DRILL="false" \
-      PANTHEON_DEPLOY_OVERRIDE_REASON="" \
-      PANTHEON_DEPLOY_OVERRIDE_ACTOR="" \
-      PANTHEON_DEPLOY_PROFILE="read-only" \
-      PANTHEON_DEPLOY_PROOF_WINDOW_ACK="false" \
-      PANTHEON_DEPLOY_EXPECTED_PAIR_ID="${PAIR_ID}" \
-      PANTHEON_DEPLOY_REAL_WRITES="false" \
-      PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES="false" \
-      PANTHEON_DEPLOY_SKIP_PROBE="false" \
-      PANTHEON_DEPLOY_ALLOW_BOOTSTRAP="false" \
-      PANTHEON_DEPLOY_LOCK_FILE="${CASE_LOCK}" \
-      PANTHEON_DEPLOY_LOCK_PREFIX="${CASE_DIR}" \
-      PANTHEON_DEPLOY_RELEASE_INSTANCE="${CASE_NAME}" \
-      PANTHEON_DEV_FE_KEEP_RELEASES="8" \
-      VITE_BFF_DEV_BEARER_TOKEN="" \
-      GITHUB_RUN_ID="9001" \
-      GITHUB_RUN_ATTEMPT="1" \
-      "$@" \
-      bash scripts/deploy-dev-vm.sh
-  ) > "${RUN_OUTPUT}" 2>&1
-  RUN_STATUS=$?
+  local has_action=false
+  local arg
+  for arg in "$@"; do
+    if [[ "${arg}" == PANTHEON_DEPLOY_ACTION=* ]]; then
+      has_action=true
+      break
+    fi
+  done
+  if [[ "${has_action}" == "true" ]]; then
+    (
+      cd "${CASE_REPO}"
+      env -i \
+        PATH="${MOCK_BIN}:${SYSTEM_PATH}" \
+        REAL_GIT="${REAL_GIT}" \
+        HOME="${CASE_HOME}" \
+        LANG=C \
+        TMPDIR="${CASE_TMP}" \
+        MOCK_ALLOWED_ROOT="${CASE_DIR}" \
+        MOCK_BFF_SHA="${BFF_SHA}" \
+        MOCK_BFF_SHA_SEQUENCE="" \
+        MOCK_BFF_COMMIT_SEQUENCE="" \
+        MOCK_BFF_KNOWN_SEQUENCE="" \
+        MOCK_BFF_AUTH_MODE="strict" \
+        MOCK_BFF_AUTH_STUB="false" \
+        MOCK_EXTERNAL_SWITCH_TARGET="" \
+        MOCK_CALL_LOG="${CASE_CALL_LOG}" \
+        MOCK_FAIL_PROBE_PHASES="" \
+        MOCK_FAIL_DURABLE_RSYNC_ONCE="false" \
+        MOCK_FAIL_ORIGIN_DEV_ONCE="false" \
+        MOCK_FAIL_ORIGIN_DEV_SECOND_LOOKUP="false" \
+        MOCK_BAD_GITHUB_DIGEST="false" \
+        MOCK_PUBLIC_HEALTH_STATUS_SEQUENCE="" \
+        MOCK_TAMPER_ROLLBACK_PAIR="false" \
+        MOCK_PREVIOUS_TARGET="${PREVIOUS_TARGET}" \
+        MOCK_ADVANCE_DEV_AFTER_PROBE="false" \
+        MOCK_ADVANCED_DEV_SHA="" \
+        MOCK_ORIGIN_DIR="${CASE_ORIGIN}" \
+        PANTHEON_DEV_FE_HOST="https://fe.test" \
+        PANTHEON_BFF_BASE_URL="https://bff.test" \
+        PANTHEON_OLD_BFF_URL="https://old-bff.test" \
+        PANTHEON_DEV_FE_ROOT="${CASE_LIVE}" \
+        PANTHEON_DEV_FE_RELEASES_DIR="${CASE_RELEASES}" \
+        PANTHEON_DEV_FE_ROOT_PREFIX="${CASE_DIR}" \
+        PANTHEON_DEV_FE_RELEASES_PREFIX="${CASE_RELEASES}" \
+        PANTHEON_AUDIT_OUT_DIR="${CASE_AUDIT}" \
+        PANTHEON_DEPLOY_DURABLE_EVIDENCE_ROOT="${CASE_DURABLE}" \
+        PANTHEON_DEPLOY_DURABLE_EVIDENCE_PREFIX="${CASE_DIR}" \
+        PANTHEON_DEPLOY_CANDIDATE_DIR="${CANDIDATE_DIR}" \
+        PANTHEON_DEPLOY_CANDIDATE_SHA="${CANDIDATE_SHA}" \
+        PANTHEON_DEPLOY_AGORA_COMPAT_EVIDENCE="${CASE_AGORA_EVIDENCE}" \
+        PANTHEON_DEPLOY_REF="${CANDIDATE_SHA}" \
+        PANTHEON_DEPLOY_BRANCH="dev" \
+        PANTHEON_DEPLOY_GATE_RUN_ID="${GATE_RUN_ID}" \
+        PANTHEON_DEPLOY_GITHUB_ARTIFACT_DIGEST="sha256:${CANDIDATE_DIGEST}" \
+        PANTHEON_DEPLOY_EXPECTED_DEV_SHA="${CANDIDATE_SHA}" \
+        PANTHEON_DEPLOY_EMERGENCY_OVERRIDE="false" \
+        PANTHEON_DEPLOY_ROLLBACK_DRILL="false" \
+        PANTHEON_DEPLOY_OVERRIDE_REASON="" \
+        PANTHEON_DEPLOY_OVERRIDE_ACTOR="" \
+        PANTHEON_DEPLOY_PROFILE="read-only" \
+        PANTHEON_DEPLOY_PROOF_WINDOW_ACK="false" \
+        PANTHEON_DEPLOY_EXPECTED_PAIR_ID="${PAIR_ID}" \
+        PANTHEON_DEPLOY_REAL_WRITES="false" \
+        PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES="false" \
+        PANTHEON_DEPLOY_SKIP_PROBE="false" \
+        PANTHEON_DEPLOY_ALLOW_BOOTSTRAP="false" \
+        PANTHEON_DEPLOY_LOCK_FILE="${CASE_LOCK}" \
+        PANTHEON_DEPLOY_LOCK_PREFIX="${CASE_DIR}" \
+        PANTHEON_DEPLOY_RELEASE_INSTANCE="${CASE_NAME}" \
+        PANTHEON_DEV_FE_KEEP_RELEASES="8" \
+        VITE_BFF_DEV_BEARER_TOKEN="" \
+        GITHUB_RUN_ID="9001" \
+        GITHUB_RUN_ATTEMPT="1" \
+        "$@" \
+        bash scripts/deploy-dev-vm.sh
+    ) > "${RUN_OUTPUT}" 2>&1
+    RUN_STATUS=$?
+  else
+    (
+      cd "${CASE_REPO}"
+      env -i \
+        PATH="${MOCK_BIN}:${SYSTEM_PATH}" \
+        REAL_GIT="${REAL_GIT}" \
+        HOME="${CASE_HOME}" \
+        LANG=C \
+        TMPDIR="${CASE_TMP}" \
+        MOCK_ALLOWED_ROOT="${CASE_DIR}" \
+        MOCK_BFF_SHA="${BFF_SHA}" \
+        MOCK_BFF_SHA_SEQUENCE="" \
+        MOCK_BFF_COMMIT_SEQUENCE="" \
+        MOCK_BFF_KNOWN_SEQUENCE="" \
+        MOCK_BFF_AUTH_MODE="strict" \
+        MOCK_BFF_AUTH_STUB="false" \
+        MOCK_EXTERNAL_SWITCH_TARGET="" \
+        MOCK_CALL_LOG="${CASE_CALL_LOG}" \
+        MOCK_FAIL_PROBE_PHASES="" \
+        MOCK_FAIL_DURABLE_RSYNC_ONCE="false" \
+        MOCK_FAIL_ORIGIN_DEV_ONCE="false" \
+        MOCK_FAIL_ORIGIN_DEV_SECOND_LOOKUP="false" \
+        MOCK_BAD_GITHUB_DIGEST="false" \
+        MOCK_PUBLIC_HEALTH_STATUS_SEQUENCE="" \
+        MOCK_TAMPER_ROLLBACK_PAIR="false" \
+        MOCK_PREVIOUS_TARGET="${PREVIOUS_TARGET}" \
+        MOCK_ADVANCE_DEV_AFTER_PROBE="false" \
+        MOCK_ADVANCED_DEV_SHA="" \
+        MOCK_ORIGIN_DIR="${CASE_ORIGIN}" \
+        PANTHEON_DEV_FE_HOST="https://fe.test" \
+        PANTHEON_BFF_BASE_URL="https://bff.test" \
+        PANTHEON_OLD_BFF_URL="https://old-bff.test" \
+        PANTHEON_DEV_FE_ROOT="${CASE_LIVE}" \
+        PANTHEON_DEV_FE_RELEASES_DIR="${CASE_RELEASES}" \
+        PANTHEON_DEV_FE_ROOT_PREFIX="${CASE_DIR}" \
+        PANTHEON_DEV_FE_RELEASES_PREFIX="${CASE_RELEASES}" \
+        PANTHEON_AUDIT_OUT_DIR="${CASE_AUDIT}" \
+        PANTHEON_DEPLOY_DURABLE_EVIDENCE_ROOT="${CASE_DURABLE}" \
+        PANTHEON_DEPLOY_DURABLE_EVIDENCE_PREFIX="${CASE_DIR}" \
+        PANTHEON_DEPLOY_CANDIDATE_DIR="${CANDIDATE_DIR}" \
+        PANTHEON_DEPLOY_CANDIDATE_SHA="${CANDIDATE_SHA}" \
+        PANTHEON_DEPLOY_AGORA_COMPAT_EVIDENCE="${CASE_AGORA_EVIDENCE}" \
+        PANTHEON_DEPLOY_REF="${CANDIDATE_SHA}" \
+        PANTHEON_DEPLOY_BRANCH="dev" \
+        PANTHEON_DEPLOY_GATE_RUN_ID="${GATE_RUN_ID}" \
+        PANTHEON_DEPLOY_GITHUB_ARTIFACT_DIGEST="sha256:${CANDIDATE_DIGEST}" \
+        PANTHEON_DEPLOY_EXPECTED_DEV_SHA="${CANDIDATE_SHA}" \
+        PANTHEON_DEPLOY_EMERGENCY_OVERRIDE="false" \
+        PANTHEON_DEPLOY_ROLLBACK_DRILL="false" \
+        PANTHEON_DEPLOY_OVERRIDE_REASON="" \
+        PANTHEON_DEPLOY_OVERRIDE_ACTOR="" \
+        PANTHEON_DEPLOY_PROFILE="read-only" \
+        PANTHEON_DEPLOY_PROOF_WINDOW_ACK="false" \
+        PANTHEON_DEPLOY_EXPECTED_PAIR_ID="${PAIR_ID}" \
+        PANTHEON_DEPLOY_REAL_WRITES="false" \
+        PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES="false" \
+        PANTHEON_DEPLOY_SKIP_PROBE="false" \
+        PANTHEON_DEPLOY_ALLOW_BOOTSTRAP="false" \
+        PANTHEON_DEPLOY_LOCK_FILE="${CASE_LOCK}" \
+        PANTHEON_DEPLOY_LOCK_PREFIX="${CASE_DIR}" \
+        PANTHEON_DEPLOY_RELEASE_INSTANCE="${CASE_NAME}" \
+        PANTHEON_DEV_FE_KEEP_RELEASES="8" \
+        VITE_BFF_DEV_BEARER_TOKEN="" \
+        GITHUB_RUN_ID="9001" \
+        GITHUB_RUN_ATTEMPT="1" \
+        PANTHEON_DEPLOY_ACTION="prepare" \
+        "$@" \
+        bash scripts/deploy-dev-vm.sh
+    ) > "${RUN_OUTPUT}" 2>&1
+    RUN_STATUS=$?
+    if [[ "${RUN_STATUS}" -eq 0 ]]; then
+      (
+        cd "${CASE_REPO}"
+        env -i \
+          PATH="${MOCK_BIN}:${SYSTEM_PATH}" \
+          REAL_GIT="${REAL_GIT}" \
+          HOME="${CASE_HOME}" \
+          LANG=C \
+          TMPDIR="${CASE_TMP}" \
+          MOCK_ALLOWED_ROOT="${CASE_DIR}" \
+          MOCK_BFF_SHA="${BFF_SHA}" \
+          MOCK_BFF_SHA_SEQUENCE="" \
+          MOCK_BFF_COMMIT_SEQUENCE="" \
+          MOCK_BFF_KNOWN_SEQUENCE="" \
+          MOCK_BFF_AUTH_MODE="strict" \
+          MOCK_BFF_AUTH_STUB="false" \
+          MOCK_EXTERNAL_SWITCH_TARGET="" \
+          MOCK_CALL_LOG="${CASE_CALL_LOG}" \
+          MOCK_FAIL_PROBE_PHASES="" \
+          MOCK_FAIL_DURABLE_RSYNC_ONCE="false" \
+          MOCK_FAIL_ORIGIN_DEV_ONCE="false" \
+          MOCK_FAIL_ORIGIN_DEV_SECOND_LOOKUP="false" \
+          MOCK_BAD_GITHUB_DIGEST="false" \
+          MOCK_PUBLIC_HEALTH_STATUS_SEQUENCE="" \
+          MOCK_TAMPER_ROLLBACK_PAIR="false" \
+          MOCK_PREVIOUS_TARGET="${PREVIOUS_TARGET}" \
+          MOCK_ADVANCE_DEV_AFTER_PROBE="false" \
+          MOCK_ADVANCED_DEV_SHA="" \
+          MOCK_ORIGIN_DIR="${CASE_ORIGIN}" \
+          PANTHEON_DEV_FE_HOST="https://fe.test" \
+          PANTHEON_BFF_BASE_URL="https://bff.test" \
+          PANTHEON_OLD_BFF_URL="https://old-bff.test" \
+          PANTHEON_DEV_FE_ROOT="${CASE_LIVE}" \
+          PANTHEON_DEV_FE_RELEASES_DIR="${CASE_RELEASES}" \
+          PANTHEON_DEV_FE_ROOT_PREFIX="${CASE_DIR}" \
+          PANTHEON_DEV_FE_RELEASES_PREFIX="${CASE_RELEASES}" \
+          PANTHEON_AUDIT_OUT_DIR="${CASE_AUDIT}" \
+          PANTHEON_DEPLOY_DURABLE_EVIDENCE_ROOT="${CASE_DURABLE}" \
+          PANTHEON_DEPLOY_DURABLE_EVIDENCE_PREFIX="${CASE_DIR}" \
+          PANTHEON_DEPLOY_CANDIDATE_DIR="${CANDIDATE_DIR}" \
+          PANTHEON_DEPLOY_CANDIDATE_SHA="${CANDIDATE_SHA}" \
+          PANTHEON_DEPLOY_AGORA_COMPAT_EVIDENCE="${CASE_AGORA_EVIDENCE}" \
+          PANTHEON_DEPLOY_REF="${CANDIDATE_SHA}" \
+          PANTHEON_DEPLOY_BRANCH="dev" \
+          PANTHEON_DEPLOY_GATE_RUN_ID="${GATE_RUN_ID}" \
+          PANTHEON_DEPLOY_GITHUB_ARTIFACT_DIGEST="sha256:${CANDIDATE_DIGEST}" \
+          PANTHEON_DEPLOY_EXPECTED_DEV_SHA="${CANDIDATE_SHA}" \
+          PANTHEON_DEPLOY_EMERGENCY_OVERRIDE="false" \
+          PANTHEON_DEPLOY_ROLLBACK_DRILL="false" \
+          PANTHEON_DEPLOY_OVERRIDE_REASON="" \
+          PANTHEON_DEPLOY_OVERRIDE_ACTOR="" \
+          PANTHEON_DEPLOY_PROFILE="read-only" \
+          PANTHEON_DEPLOY_PROOF_WINDOW_ACK="false" \
+          PANTHEON_DEPLOY_EXPECTED_PAIR_ID="${PAIR_ID}" \
+          PANTHEON_DEPLOY_REAL_WRITES="false" \
+          PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES="false" \
+          PANTHEON_DEPLOY_SKIP_PROBE="false" \
+          PANTHEON_DEPLOY_ALLOW_BOOTSTRAP="false" \
+          PANTHEON_DEPLOY_LOCK_FILE="${CASE_LOCK}" \
+          PANTHEON_DEPLOY_LOCK_PREFIX="${CASE_DIR}" \
+          PANTHEON_DEPLOY_RELEASE_INSTANCE="${CASE_NAME}" \
+          PANTHEON_DEV_FE_KEEP_RELEASES="8" \
+          VITE_BFF_DEV_BEARER_TOKEN="" \
+          GITHUB_RUN_ID="9001" \
+          GITHUB_RUN_ATTEMPT="1" \
+          PANTHEON_DEPLOY_ACTION="activate" \
+          "$@" \
+          bash scripts/deploy-dev-vm.sh
+      ) >> "${RUN_OUTPUT}" 2>&1
+      RUN_STATUS=$?
+    fi
+  fi
   set -e
 }
 
@@ -890,6 +1041,7 @@ run_restore_deploy() {
     PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES=false \
     PANTHEON_DEPLOY_RELEASE_INSTANCE="${CASE_NAME}-restore" \
     PANTHEON_AUDIT_OUT_DIR="${CASE_DIR}/audit-restore" \
+    PANTHEON_DEPLOY_ACTION=restore \
     "$@"
 }
 
@@ -2244,6 +2396,87 @@ test_write_proof_advanced_dev_served_candidate_and_guards() {
   verify_evidence_pair
 }
 
+test_exact_pair_protocol_prepare_leaves_incumbent_untouched() {
+  local release_dir receipt_file
+  setup_case exact-pair-prepare
+  run_deploy PANTHEON_DEPLOY_ACTION=prepare
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "prepare should succeed"
+  assert_previous_is_live
+  assert_previous_manifest_unchanged
+
+  release_dir="$(<"${CASE_AUDIT}/prepared-release-dir")"
+  [[ -d "${release_dir}" ]] || show_deploy_failure "prepared release directory missing"
+  receipt_file="${release_dir}/.prepared-receipt.json"
+  [[ -f "${receipt_file}" ]] || show_deploy_failure "prepared receipt missing"
+  [[ "$(json_field "${receipt_file}" status)" == "prepared_success" ]] || \
+    show_deploy_failure "prepared receipt status is not prepared_success"
+  [[ "$(json_field "${receipt_file}" schemaVersion)" == "pantheon.release.prepared-receipt.v1" ]] || \
+    show_deploy_failure "prepared receipt schemaVersion is invalid"
+  [[ "$(json_field "${receipt_file}" lease.epoch)" == "1" ]] || \
+    show_deploy_failure "prepared receipt lease epoch invalid"
+  assert_summary_outcome prepared_success
+}
+
+test_exact_pair_protocol_activate_in_new_process_without_rebuild() {
+  setup_case exact-pair-activate
+  run_deploy PANTHEON_DEPLOY_ACTION=prepare
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "prepare should succeed"
+  assert_previous_is_live
+
+  run_deploy PANTHEON_DEPLOY_ACTION=activate
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "activate should succeed"
+  assert_live_profile read-only accepted
+  assert_summary_outcome accepted
+}
+
+test_exact_pair_protocol_lease_epoch_mismatch_rejected() {
+  setup_case exact-pair-lease-mismatch
+  run_deploy PANTHEON_DEPLOY_ACTION=prepare PANTHEON_DEPLOY_LEASE_EPOCH=1
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "prepare should succeed"
+  assert_previous_is_live
+
+  run_deploy PANTHEON_DEPLOY_ACTION=activate PANTHEON_DEPLOY_LEASE_EPOCH=2
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "lease epoch mismatch unexpectedly succeeded"
+  assert_previous_is_live
+}
+
+test_exact_pair_protocol_predecessor_cas_mismatch_rejected() {
+  local foreign_target
+  setup_case exact-pair-cas-mismatch
+  run_deploy PANTHEON_DEPLOY_ACTION=prepare
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "prepare should succeed"
+  assert_previous_is_live
+
+  foreign_target="${CASE_RELEASES}/foreign-release"
+  mkdir -p "${foreign_target}"
+  ln -sfn "${foreign_target}" "${CASE_LIVE}"
+
+  run_deploy PANTHEON_DEPLOY_ACTION=activate
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "predecessor CAS mismatch unexpectedly succeeded"
+}
+
+test_exact_pair_protocol_idempotent_replay() {
+  setup_case exact-pair-replay
+  run_deploy
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "initial deploy should succeed"
+  assert_live_profile read-only accepted
+
+  run_deploy PANTHEON_DEPLOY_ACTION=activate
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "idempotent replay should succeed"
+  assert_live_profile read-only accepted
+}
+
+test_exact_pair_protocol_one_shot_bypass_retired() {
+  setup_case exact-pair-oneshot-retired
+  run_deploy PANTHEON_DEPLOY_ACTION=one-shot
+  [[ "${RUN_STATUS}" -eq 2 ]] || die "one-shot bypass was not rejected with status 2 (got ${RUN_STATUS})"
+  grep -Fq "One-shot public switch has been retired" "${RUN_OUTPUT}" || die "missing retired message"
+
+  run_deploy PANTHEON_DEPLOY_ACTION=""
+  [[ "${RUN_STATUS}" -eq 2 ]] || die "empty action was not rejected with status 2 (got ${RUN_STATUS})"
+  grep -Fq "One-shot public switch has been retired" "${RUN_OUTPUT}" || die "missing retired message"
+}
+
 run_test() {
   local name="$1"
   shift
@@ -2295,6 +2528,12 @@ run_test "restore network failure preserves the safe release" test_restore_netwo
 run_test "restore rejects a nonprivate or tampered locator before switch" test_restore_rejects_nonprivate_or_tampered_locator_before_switch
 run_test "restore reaches safe sibling when Agora evidence is absent or rejected" test_restore_reaches_safe_sibling_when_agora_evidence_is_absent_or_rejected
 run_test "advanced dev write-proof on served candidate succeeds with guards" test_write_proof_advanced_dev_served_candidate_and_guards
+run_test "exact pair protocol prepare leaves incumbent untouched and writes receipt" test_exact_pair_protocol_prepare_leaves_incumbent_untouched
+run_test "exact pair protocol activate in new process without rebuild" test_exact_pair_protocol_activate_in_new_process_without_rebuild
+run_test "exact pair protocol lease epoch mismatch rejected" test_exact_pair_protocol_lease_epoch_mismatch_rejected
+run_test "exact pair protocol predecessor CAS mismatch rejected" test_exact_pair_protocol_predecessor_cas_mismatch_rejected
+run_test "exact pair protocol idempotent replay succeeds" test_exact_pair_protocol_idempotent_replay
+run_test "exact pair protocol one-shot bypass is retired" test_exact_pair_protocol_one_shot_bypass_retired
 
 echo "deploy contract harness: ${PASSED} passed, ${FAILED} failed"
 if [[ "${FAILED}" -ne 0 ]]; then

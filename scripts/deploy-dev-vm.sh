@@ -46,18 +46,72 @@ LOCK_FILE="${PANTHEON_DEPLOY_LOCK_FILE:-/tmp/pantheon-dev-fe-deploy.lock}"
 STRICT_LOCK_PREFIX="${PANTHEON_DEPLOY_LOCK_PREFIX:-/tmp}"
 DURABLE_EVIDENCE_ROOT="${PANTHEON_DEPLOY_DURABLE_EVIDENCE_ROOT:-/var/lib/pantheon-dev-fe-deploy-evidence}"
 STRICT_DURABLE_EVIDENCE_PREFIX="${PANTHEON_DEPLOY_DURABLE_EVIDENCE_PREFIX:-/var/lib/pantheon-dev-fe-deploy-evidence}"
+DEPLOY_ACTION="${PANTHEON_DEPLOY_ACTION:-}"
+BFF_CANDIDATE_TRANSPORT="${PANTHEON_BFF_CANDIDATE_TRANSPORT:-}"
+LEASE_OWNER="${PANTHEON_DEPLOY_LEASE_OWNER:-${PANTHEON_LEASE_OWNER:-${GITHUB_ACTOR:-pantheon-release-controller}}}"
+LEASE_EPOCH="${PANTHEON_DEPLOY_LEASE_EPOCH:-${PANTHEON_LEASE_EPOCH:-1}}"
+LEASE_RUN_ID="${PANTHEON_DEPLOY_LEASE_RUN_ID:-${PANTHEON_LEASE_RUN_ID:-${GITHUB_RUN_ID:-local}}}"
+LEASE_DELEGATED="${PANTHEON_DEPLOY_LEASE_DELEGATED:-${PANTHEON_LEASE_DELEGATED:-true}}"
+EXPECTED_PREDECESSOR_TARGET="${PANTHEON_DEPLOY_EXPECTED_PREDECESSOR_TARGET:-${PANTHEON_EXPECTED_PREDECESSOR_TARGET:-}}"
+EXPECTED_PREDECESSOR_COMMIT="${PANTHEON_DEPLOY_EXPECTED_PREDECESSOR_COMMIT:-${PANTHEON_EXPECTED_PREDECESSOR_COMMIT:-}}"
+EXPECTED_PREDECESSOR_PAIR_ID="${PANTHEON_DEPLOY_EXPECTED_PREDECESSOR_PAIR_ID:-${PANTHEON_EXPECTED_PREDECESSOR_PAIR_ID:-}}"
+EXPECTED_PREDECESSOR_ARTIFACT_DIGEST="${PANTHEON_DEPLOY_EXPECTED_PREDECESSOR_ARTIFACT_DIGEST:-${PANTHEON_EXPECTED_PREDECESSOR_ARTIFACT_DIGEST:-}}"
+PREPARED_SUCCESS=false
 TIMESTAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 CONTROLLER_SHA="$(git rev-parse HEAD)"
 SHA="${PANTHEON_DEPLOY_CANDIDATE_SHA:-${GITHUB_SHA:-${CONTROLLER_SHA}}}"
 SOURCE_REF="${PANTHEON_DEPLOY_REF:-${SHA}}"
 SHORT_SHA="${SHA:0:12}"
 RELEASE_INSTANCE="${PANTHEON_DEPLOY_RELEASE_INSTANCE:-${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-1}-${BASHPID}}"
+if [[ -z "${PANTHEON_DEPLOY_RELEASE_INSTANCE:-}" && -f "${AUDIT_DIR}/release-instance" ]]; then
+  RELEASE_INSTANCE="$(<"${AUDIT_DIR}/release-instance")"
+fi
 RELEASE_NAME="${TIMESTAMP}-${SHORT_SHA}-gate-${GATE_RUN_ID}-${RELEASE_INSTANCE}"
 RELEASE_DIR="${RELEASES_DIR}/${RELEASE_NAME}"
 SAFE_RELEASE_DIR="${RELEASES_DIR}/${RELEASE_NAME}-read-only"
 WRITE_RELEASE_DIR="${RELEASES_DIR}/${RELEASE_NAME}-write-proof"
 OPERATOR_RELEASE_DIR="${RELEASES_DIR}/${RELEASE_NAME}-operator-live"
+if [[ "${DEPLOY_ACTION}" == "activate" ]]; then
+  if [[ -n "${PANTHEON_DEPLOY_RELEASE_DIR:-}" ]]; then
+    RELEASE_DIR="${PANTHEON_DEPLOY_RELEASE_DIR}"
+    RELEASE_NAME="$(basename -- "${RELEASE_DIR}")"
+  elif [[ -n "${PANTHEON_DEPLOY_RELEASE_NAME:-}" ]]; then
+    RELEASE_NAME="${PANTHEON_DEPLOY_RELEASE_NAME}"
+    RELEASE_DIR="${RELEASES_DIR}/${RELEASE_NAME}"
+  elif [[ -f "${AUDIT_DIR}/prepared-release-dir" ]]; then
+    RELEASE_DIR="$(<"${AUDIT_DIR}/prepared-release-dir")"
+    RELEASE_NAME="$(basename -- "${RELEASE_DIR}")"
+  elif [[ -d "${RELEASE_DIR}" && -f "${RELEASE_DIR}/.prepared-receipt.json" ]]; then
+    :
+  else
+    while IFS= read -r possible_dir; do
+      if [[ -f "${possible_dir}/.prepared-receipt.json" ]]; then
+        RELEASE_DIR="${possible_dir}"
+        RELEASE_NAME="$(basename -- "${RELEASE_DIR}")"
+        break
+      fi
+    done < <(find "${RELEASES_DIR}" -maxdepth 1 -mindepth 1 -type d -name "*-${SHORT_SHA}-gate-${GATE_RUN_ID}-*" 2>/dev/null | sort -r)
+  fi
+fi
 SAFE_FALLBACK_LOCATOR_DIR="${RELEASES_DIR}/.pantheon-safe-locators"
+if [[ "${DEPLOY_ACTION}" == "activate" ]]; then
+  if [[ "${RELEASE_DIR}" == *-write-proof ]]; then
+    SAFE_RELEASE_DIR="${RELEASE_DIR%-write-proof}-read-only"
+    OPERATOR_RELEASE_DIR="${RELEASE_DIR%-write-proof}-operator-live"
+  elif [[ "${RELEASE_DIR}" == *-operator-live ]]; then
+    SAFE_RELEASE_DIR="${RELEASE_DIR%-operator-live}-read-only"
+    WRITE_RELEASE_DIR="${RELEASE_DIR%-operator-live}-write-proof"
+  elif [[ "${RELEASE_DIR}" == *-read-only ]]; then
+    WRITE_RELEASE_DIR="${RELEASE_DIR%-read-only}-write-proof"
+    OPERATOR_RELEASE_DIR="${RELEASE_DIR%-read-only}-operator-live"
+  fi
+  if [[ -f "${SAFE_FALLBACK_LOCATOR_DIR}/$(basename -- "${RELEASE_DIR}").json" ]]; then
+    locator_safe_name="$(node -e 'try { const p=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); process.stdout.write(p.safeReleaseName||"") } catch {}' "${SAFE_FALLBACK_LOCATOR_DIR}/$(basename -- "${RELEASE_DIR}").json")"
+    if [[ -n "${locator_safe_name}" ]]; then
+      SAFE_RELEASE_DIR="${RELEASES_DIR}/${locator_safe_name}"
+    fi
+  fi
+fi
 DURABLE_EVIDENCE_DIR="${DURABLE_EVIDENCE_ROOT}/run-${GITHUB_RUN_ID:-local}-attempt-${GITHUB_RUN_ATTEMPT:-1}-${RELEASE_INSTANCE}"
 NEXT_LINK="${DEPLOY_ROOT}.next-${RELEASE_INSTANCE}"
 ROLLBACK_LINK="${DEPLOY_ROOT}.rollback-${RELEASE_INSTANCE}"
@@ -378,16 +432,22 @@ try:
         payload += chunk
 finally:
     os.close(opened)
-descriptor = os.open(
-    target,
-    os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
-    0o600,
-)
-try:
-    os.write(descriptor, payload)
-    os.fsync(descriptor)
-finally:
-    os.close(descriptor)
+if target.exists():
+    with open(target, "rb") as f:
+        existing = f.read()
+    if existing != payload:
+        raise SystemExit("Agora compatibility evidence in audit differs from source")
+else:
+    descriptor = os.open(
+        target,
+        os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
+        0o600,
+    )
+    try:
+        os.write(descriptor, payload)
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
 PY
 }
 
@@ -624,6 +684,147 @@ publish_manifest_atomically() {
     --stage-name ".deployment-${RELEASE_INSTANCE}-${label}.tmp"
 }
 
+write_prepared_receipt() {
+  local target_release_dir="$1"
+  local target_release_name="$2"
+  local receipt_file="${target_release_dir}/.prepared-receipt.json"
+  node --input-type=module - \
+    "${receipt_file}" \
+    "${target_release_name}" \
+    "${target_release_dir}" \
+    "${PAIR_ID}" \
+    "${SHA}" \
+    "${BFF_COMMIT}" \
+    "${ARTIFACT_DIGEST}" \
+    "${DEPLOY_PROFILE}" \
+    "${GITHUB_ARTIFACT_DIGEST}" \
+    "${GATE_RUN_ID}" \
+    "${LEASE_OWNER}" \
+    "${LEASE_EPOCH}" \
+    "${LEASE_RUN_ID}" \
+    "${LEASE_DELEGATED}" \
+    "${EXPECTED_PREDECESSOR_TARGET:-${LIVE_TARGET_AT_START:-${PREVIOUS_TARGET}}}" \
+    "${EXPECTED_PREDECESSOR_COMMIT:-${LIVE_COMMIT_AT_START:-${PREVIOUS_COMMIT}}}" \
+    "${EXPECTED_PREDECESSOR_PAIR_ID:-${LIVE_PAIR_ID_AT_START:-${PREVIOUS_PAIR_ID}}}" \
+    "${EXPECTED_PREDECESSOR_ARTIFACT_DIGEST:-${LIVE_DIGEST_AT_START:-${PREVIOUS_DIGEST}}}" \
+    "${CANDIDATE_DIR}/pair.json" \
+    "${AGORA_COMPAT_EVIDENCE_AUDIT}" <<'NODE'
+import fs from "node:fs";
+const [
+  receiptFile, releaseName, releaseDir, pairId, frontendSha, bffSha,
+  artifactDigest, profile, githubArtifactDigest, gateRunId,
+  leaseOwner, leaseEpoch, leaseRunId, leaseDelegated,
+  predTarget, predCommit, predPairId, predDigest,
+  pairJsonPath, agoraCompatPath
+] = process.argv.slice(2);
+let bffImage = null;
+if (fs.existsSync(pairJsonPath)) {
+  try {
+    const p = JSON.parse(fs.readFileSync(pairJsonPath, "utf8"));
+    if (p.bffImage) bffImage = p.bffImage;
+  } catch {}
+}
+let agoraEvidence = null;
+if (fs.existsSync(agoraCompatPath)) {
+  try {
+    agoraEvidence = JSON.parse(fs.readFileSync(agoraCompatPath, "utf8"));
+  } catch {}
+}
+const receipt = {
+  schemaVersion: "pantheon.release.prepared-receipt.v1",
+  status: "prepared_success",
+  preparedAt: new Date().toISOString(),
+  releaseName,
+  releaseDir,
+  pairId,
+  frontendSha,
+  bffSha,
+  artifactDigestSha256: artifactDigest,
+  profile,
+  deploymentProfile: profile,
+  githubArtifactDigest,
+  gateRunId,
+  lease: {
+    owner: leaseOwner,
+    epoch: parseInt(leaseEpoch, 10),
+    runId: leaseRunId,
+    delegated: leaseDelegated === "true"
+  },
+  bffImage,
+  preparedArtifact: {
+    locator: releaseDir,
+    checksum: `sha256:${artifactDigest}`
+  },
+  expectedPredecessor: {
+    target: predTarget || null,
+    commit: predCommit || null,
+    pairId: predPairId || null,
+    artifactDigest: predDigest || null
+  },
+  mandatoryGates: {
+    agoraCompatibility: agoraEvidence ? "passed" : "skipped",
+    candidateVerification: "passed",
+    preSwitchProbe: "passed"
+  },
+  probes: {
+    candidatePreSwitch: "passed"
+  }
+};
+fs.writeFileSync(receiptFile, `${JSON.stringify(receipt, null, 2)}\n`, "utf8");
+NODE
+  cp -f "${receipt_file}" "${AUDIT_DIR}/prepared-receipt.json"
+  printf '%s\n' "${target_release_dir}" > "${AUDIT_DIR}/prepared-release-dir"
+  printf '%s\n' "${RELEASE_INSTANCE}" > "${AUDIT_DIR}/release-instance"
+}
+
+verify_prepared_receipt() {
+  local target_release_dir="$1"
+  local receipt_file="${target_release_dir}/.prepared-receipt.json"
+  if [[ ! -f "${receipt_file}" ]]; then
+    echo "Activation refused: prepared receipt missing in ${target_release_dir}." >&2
+    return 2
+  fi
+  node --input-type=module - \
+    "${receipt_file}" \
+    "${SHA}" \
+    "${ARTIFACT_DIGEST}" \
+    "${PAIR_ID}" \
+    "${BFF_COMMIT}" \
+    "${LEASE_EPOCH}" \
+    "${LEASE_OWNER}" \
+    "${LEASE_RUN_ID}" <<'NODE'
+import fs from "node:fs";
+const [receiptFile, expectedSha, expectedDigest, expectedPairId, expectedBffSha, currentEpoch, currentOwner, currentRunId] = process.argv.slice(2);
+const payload = JSON.parse(fs.readFileSync(receiptFile, "utf8"));
+if (payload.schemaVersion !== "pantheon.release.prepared-receipt.v1" || payload.status !== "prepared_success") {
+  throw new Error("Invalid prepared receipt status or schema");
+}
+if (payload.frontendSha?.toLowerCase() !== expectedSha.toLowerCase()) {
+  throw new Error("Receipt frontend SHA mismatch");
+}
+if (payload.artifactDigestSha256?.toLowerCase() !== expectedDigest.toLowerCase()) {
+  throw new Error("Receipt artifact digest mismatch");
+}
+if (payload.pairId?.toLowerCase() !== expectedPairId.toLowerCase()) {
+  throw new Error("Receipt pair ID mismatch");
+}
+if (payload.bffSha?.toLowerCase() !== expectedBffSha.toLowerCase()) {
+  throw new Error("Receipt BFF SHA mismatch");
+}
+const receiptEpoch = payload.lease?.epoch;
+if (receiptEpoch !== parseInt(currentEpoch, 10)) {
+  throw new Error(`Receipt lease epoch mismatch: receipt=${receiptEpoch}, current=${currentEpoch}`);
+}
+if (currentOwner && payload.lease?.owner && payload.lease.owner !== currentOwner) {
+  throw new Error("Receipt lease owner mismatch");
+}
+if (payload.mandatoryGates?.candidateVerification !== "passed" ||
+    payload.mandatoryGates?.preSwitchProbe !== "passed") {
+  throw new Error("Mandatory candidate gates not passed in prepared receipt");
+}
+NODE
+}
+
 verify_bff_identity() {
   local stage="$1"
   local output_file="${AUDIT_DIR}/bff-version-${stage}.json"
@@ -714,6 +915,10 @@ run_release_probe() {
   local candidate_env=""
   local strict_env="0"
   local probe_profile_env=()
+  local probe_candidate_transport=""
+  if [[ "${phase}" == "candidate_pre_switch" && -n "${BFF_CANDIDATE_TRANSPORT:-}" ]]; then
+    probe_candidate_transport="${BFF_CANDIDATE_TRANSPORT}"
+  fi
   if [[ -n "${candidate_dir}" ]]; then
     candidate_env="${candidate_dir}"
   fi
@@ -743,6 +948,7 @@ run_release_probe() {
     PANTHEON_FE_BASE_URL="${FE_HOST}" \
     PANTHEON_BFF_BASE_URL="${BFF_HOST}" \
     PANTHEON_BROWSER_BFF_BASE_URL="${BFF_HOST}" \
+    PANTHEON_BFF_CANDIDATE_TRANSPORT="${probe_candidate_transport}" \
     PANTHEON_OLD_BFF_URL="${OLD_BFF_HOST}" \
     PANTHEON_HOSTED_PROBE_PATH="${PANTHEON_HOSTED_PROBE_PATH:-/management/persona-fleet}" \
     PANTHEON_HOSTED_REQUIRED_BFF_PATHS="${PANTHEON_HOSTED_REQUIRED_BFF_PATHS:-/bff/me}" \
@@ -1161,6 +1367,11 @@ cleanup() {
     ROLLBACK_LINK_CREATED=false
   fi
 
+  if [[ "${status}" -eq 0 && "${DEPLOY_ACTION}" == "prepare" && "${PREPARED_SUCCESS}" == "true" ]]; then
+    rm -rf "${TMP_DIR}"
+    exit 0
+  fi
+
   if [[ "${status}" -ne 0 && "${DEPLOY_ACCEPTED}" == "true" ]]; then
     echo "Deployment was already durably accepted; preserving accepted live state and terminal evidence." >&2
     rm -rf "${TMP_DIR}"
@@ -1322,6 +1533,21 @@ while IFS= read -r variable_name; do
   esac
 done < <(compgen -e)
 
+if [[ -z "${DEPLOY_ACTION}" && "${DEPLOY_PROFILE}" == "read-only-restore" ]]; then
+  DEPLOY_ACTION="restore"
+fi
+case "${DEPLOY_ACTION}" in
+  prepare|activate|restore) ;;
+  one-shot|bypass|"")
+    echo "One-shot public switch has been retired. Explicit prepare and activate phases (or restore) are required." >&2
+    exit 2
+    ;;
+  *)
+    echo "PANTHEON_DEPLOY_ACTION must be prepare, activate, or restore." >&2
+    exit 2
+    ;;
+esac
+
 assert_scoped_path "Deploy root" "${DEPLOY_ROOT}" "${STRICT_DIR_PREFIX}"
 assert_scoped_path "Release store" "${RELEASES_DIR}" "${STRICT_RELEASES_PREFIX}"
 assert_scoped_path "Safe-fallback locator store" "${SAFE_FALLBACK_LOCATOR_DIR}" "${RELEASES_DIR}"
@@ -1445,17 +1671,21 @@ case "${DEPLOY_PROFILE}" in
   operator-live)
     ARTIFACT_DIGEST="${OPERATOR_LIVE_ARTIFACT_DIGEST}"
     CANDIDATE_DIR="${OPERATOR_LIVE_CANDIDATE_DIR}"
-    RELEASE_DIR="${OPERATOR_RELEASE_DIR}"
+    if [[ "${DEPLOY_ACTION}" != "activate" ]]; then
+      RELEASE_DIR="${OPERATOR_RELEASE_DIR}"
+    fi
     ;;
   write-proof)
     ARTIFACT_DIGEST="${WRITE_PROOF_ARTIFACT_DIGEST}"
     CANDIDATE_DIR="${WRITE_PROOF_CANDIDATE_DIR}"
-    RELEASE_DIR="${WRITE_RELEASE_DIR}"
+    if [[ "${DEPLOY_ACTION}" != "activate" ]]; then
+      RELEASE_DIR="${WRITE_RELEASE_DIR}"
+    fi
     ;;
   read-only|read-only-restore)
     ARTIFACT_DIGEST="${READ_ONLY_ARTIFACT_DIGEST}"
     CANDIDATE_DIR="${READ_ONLY_CANDIDATE_DIR}"
-    if [[ "${DEPLOY_PROFILE}" == "read-only-restore" ]]; then
+    if [[ "${DEPLOY_PROFILE}" == "read-only-restore" && "${DEPLOY_ACTION}" != "activate" ]]; then
       RELEASE_DIR="${SAFE_RELEASE_DIR}"
     fi
     ;;
@@ -1498,10 +1728,14 @@ if [[ -n "${AGORA_COMPAT_EVIDENCE_SHA256:-}" && -n "${AGORA_COMPAT_MANIFEST_SHA2
     --detail "agoraCompatibilityManifestSha256=${AGORA_COMPAT_MANIFEST_SHA256}"
   )
 fi
-node scripts/release-evidence.mjs init \
-  --log "${EVIDENCE_LOG}" \
-  "${init_evidence_details[@]}" >/dev/null
-EVIDENCE_INITIALIZED=true
+if [[ -f "${EVIDENCE_LOG}" && -s "${EVIDENCE_LOG}" ]]; then
+  EVIDENCE_INITIALIZED=true
+else
+  node scripts/release-evidence.mjs init \
+    --log "${EVIDENCE_LOG}" \
+    "${init_evidence_details[@]}" >/dev/null
+  EVIDENCE_INITIALIZED=true
+fi
 evidence_append candidate.integrity passed "frontendSha=${SHA}" "bffCommit=${BFF_COMMIT}"
 
 exec 9>"${LOCK_FILE}"
@@ -1513,7 +1747,7 @@ fi
 LOCK_ACQUIRED=true
 evidence_append deployment.lock passed "lockFile=${LOCK_FILE}"
 
-if [[ "${DEPLOY_PROFILE}" == "read-only-restore" ]]; then
+if [[ "${DEPLOY_PROFILE}" == "read-only-restore" || "${DEPLOY_ACTION}" == "restore" ]]; then
   restore_paired_safe_release
   exit 0
 fi
@@ -1605,6 +1839,10 @@ else
   exit 2
 fi
 LIVE_TARGET_AT_START="${PREVIOUS_TARGET}"
+LIVE_RELEASE_NAME_AT_START="${PREVIOUS_RELEASE_NAME}"
+LIVE_COMMIT_AT_START="${PREVIOUS_COMMIT}"
+LIVE_DIGEST_AT_START="${PREVIOUS_DIGEST}"
+LIVE_PAIR_ID_AT_START="${PREVIOUS_PAIR_ID}"
 
 if [[ "${SHA}" != "${REMOTE_DEV_SHA}" && "${EMERGENCY_OVERRIDE}" != "true" ]]; then
   if [[ "${ALLOW_OUT_OF_ORDER_CANDIDATE}" == "true" && "${GITHUB_EVENT_NAME:-}" == "workflow_dispatch" && "${FRONTEND_REF}" != "dev" ]]; then
@@ -1686,7 +1924,9 @@ fi
 
 ensure_probe_dependencies
 
-verify_bff_identity pre_candidate
+if [[ "${DEPLOY_ACTION}" != "activate" ]]; then
+  verify_bff_identity pre_candidate
+fi
 
 if [[ "${RECOVERY_ATTEMPTED}" == "true" ]]; then
   prequalify_rollback_target \
@@ -1711,22 +1951,23 @@ elif [[ -n "${PREVIOUS_TARGET}" && "${NOOP_DEPLOY}" != "true" ]]; then
 fi
 
 if [[ "${DEPLOY_PROFILE}" == "write-proof" ]]; then
-  echo "=== install and qualify paired read-only safe sibling ==="
-  if [[ -e "${SAFE_RELEASE_DIR}" || -L "${SAFE_RELEASE_DIR}" ]]; then
-    echo "Immutable safe sibling already exists: ${SAFE_RELEASE_DIR}" >&2
-    exit 2
-  fi
-  mkdir -p "${TMP_DIR}/safe-release"
-  rsync -a --delete "${READ_ONLY_CANDIDATE_DIR}/dist/" "${TMP_DIR}/safe-release/"
-  PANTHEON_RUNTIME_MANIFEST="${TMP_DIR}/safe-release/deployment.json" \
-  PANTHEON_RUNTIME_RELEASE_NAME="$(basename -- "${SAFE_RELEASE_DIR}")" \
-  PANTHEON_RUNTIME_GITHUB_DIGEST="${GITHUB_ARTIFACT_DIGEST}" \
-  PANTHEON_RUNTIME_PAIR_ID="${PAIR_ID}" \
-  PANTHEON_RUNTIME_READ_ONLY_DIGEST="${READ_ONLY_ARTIFACT_DIGEST}" \
-  PANTHEON_RUNTIME_OPERATOR_LIVE_DIGEST="${OPERATOR_LIVE_ARTIFACT_DIGEST}" \
-  PANTHEON_RUNTIME_WRITE_PROOF_DIGEST="${WRITE_PROOF_ARTIFACT_DIGEST}" \
-  PANTHEON_RUNTIME_AGORA_COMPAT_EVIDENCE="${AGORA_COMPAT_EVIDENCE_AUDIT}" \
-    node --input-type=module <<'NODE'
+  if [[ "${DEPLOY_ACTION}" == "prepare" ]]; then
+    echo "=== install and qualify paired read-only safe sibling ==="
+    if [[ -e "${SAFE_RELEASE_DIR}" || -L "${SAFE_RELEASE_DIR}" ]]; then
+      echo "Immutable safe sibling already exists: ${SAFE_RELEASE_DIR}" >&2
+      exit 2
+    fi
+    mkdir -p "${TMP_DIR}/safe-release"
+    rsync -a --delete "${READ_ONLY_CANDIDATE_DIR}/dist/" "${TMP_DIR}/safe-release/"
+    PANTHEON_RUNTIME_MANIFEST="${TMP_DIR}/safe-release/deployment.json" \
+    PANTHEON_RUNTIME_RELEASE_NAME="$(basename -- "${SAFE_RELEASE_DIR}")" \
+    PANTHEON_RUNTIME_GITHUB_DIGEST="${GITHUB_ARTIFACT_DIGEST}" \
+    PANTHEON_RUNTIME_PAIR_ID="${PAIR_ID}" \
+    PANTHEON_RUNTIME_READ_ONLY_DIGEST="${READ_ONLY_ARTIFACT_DIGEST}" \
+    PANTHEON_RUNTIME_OPERATOR_LIVE_DIGEST="${OPERATOR_LIVE_ARTIFACT_DIGEST}" \
+    PANTHEON_RUNTIME_WRITE_PROOF_DIGEST="${WRITE_PROOF_ARTIFACT_DIGEST}" \
+    PANTHEON_RUNTIME_AGORA_COMPAT_EVIDENCE="${AGORA_COMPAT_EVIDENCE_AUDIT}" \
+      node --input-type=module <<'NODE'
 import fs from "node:fs";
 const file = process.env.PANTHEON_RUNTIME_MANIFEST;
 const manifest = JSON.parse(fs.readFileSync(file, "utf8"));
@@ -1747,20 +1988,24 @@ manifest.agoraCompatibility = JSON.parse(
 );
 fs.writeFileSync(file, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
 NODE
-  verify_dist_digest "${TMP_DIR}/safe-release" "${READ_ONLY_ARTIFACT_DIGEST}" >/dev/null
-  sudo install -d -o root -g root -m 775 "${SAFE_RELEASE_DIR}"
-  SAFE_RELEASE_CREATED=true
-  sudo rsync -a --delete --chown=root:root --chmod=Du=rwx,Dg=rwx,Do=rx,Fu=rw,Fg=rw,Fo=r \
-    "${TMP_DIR}/safe-release/" "${SAFE_RELEASE_DIR}/"
-  verify_dist_digest "${SAFE_RELEASE_DIR}" "${READ_ONLY_ARTIFACT_DIGEST}" >/dev/null
-  verify_manifest_file \
-    "${SAFE_RELEASE_DIR}/deployment.json" "${SHA}" "${READ_ONLY_ARTIFACT_DIGEST}" \
-    "${GATE_RUN_ID}" "${BFF_COMMIT}" "standby" "${GITHUB_ARTIFACT_DIGEST}" \
-    "read-only" "${PAIR_ID}"
-  run_release_probe safe_sibling_pre_switch "${SAFE_RELEASE_DIR}" "${SHA}" "${READ_ONLY_ARTIFACT_DIGEST}" true
-  SAFE_RELEASE_QUALIFIED=true
-  evidence_append safe_sibling.qualified passed \
-    "artifactDigestSha256=${READ_ONLY_ARTIFACT_DIGEST}"
+    verify_dist_digest "${TMP_DIR}/safe-release" "${READ_ONLY_ARTIFACT_DIGEST}" >/dev/null
+    sudo install -d -o root -g root -m 775 "${SAFE_RELEASE_DIR}"
+    SAFE_RELEASE_CREATED=true
+    sudo rsync -a --delete --chown=root:root --chmod=Du=rwx,Dg=rwx,Do=rx,Fu=rw,Fg=rw,Fo=r \
+      "${TMP_DIR}/safe-release/" "${SAFE_RELEASE_DIR}/"
+    verify_dist_digest "${SAFE_RELEASE_DIR}" "${READ_ONLY_ARTIFACT_DIGEST}" >/dev/null
+    verify_manifest_file \
+      "${SAFE_RELEASE_DIR}/deployment.json" "${SHA}" "${READ_ONLY_ARTIFACT_DIGEST}" \
+      "${GATE_RUN_ID}" "${BFF_COMMIT}" "standby" "${GITHUB_ARTIFACT_DIGEST}" \
+      "read-only" "${PAIR_ID}"
+    run_release_probe safe_sibling_pre_switch "${SAFE_RELEASE_DIR}" "${SHA}" "${READ_ONLY_ARTIFACT_DIGEST}" true
+    SAFE_RELEASE_QUALIFIED=true
+    evidence_append safe_sibling.qualified passed \
+      "artifactDigestSha256=${READ_ONLY_ARTIFACT_DIGEST}"
+  else
+    SAFE_RELEASE_CREATED=false
+    SAFE_RELEASE_QUALIFIED=true
+  fi
 
   # A failed write switch must restore the qualified safe sibling, never the
   # live predecessor (which may be stale or may later become write-capable).
@@ -1810,6 +2055,18 @@ NODE
     verify_public_manifest "${SHA}" "${ARTIFACT_DIGEST}" "${PREVIOUS_GATE_RUN_ID}" "${AUDIT_DIR}/recovered-deployment.json" "${PREVIOUS_MANIFEST_BFF_COMMIT}" accepted "${PREVIOUS_GITHUB_ARTIFACT_DIGEST}" "${DEPLOY_PROFILE}" "${PAIR_ID}"
     evidence_append recovery.roll_forward passed "previousCommit=${RECOVERY_COMMIT}"
   fi
+  if [[ "${DEPLOY_ACTION}" == "prepare" ]]; then
+    write_prepared_receipt "${PREVIOUS_TARGET}" "${PREVIOUS_RELEASE_NAME}"
+    evidence_append release.prepared prepared_success \
+      "outcome=prepared_success" \
+      "releaseDir=${PREVIOUS_TARGET}" \
+      "pairId=${PAIR_ID}" \
+      "leaseEpoch=${LEASE_EPOCH}"
+    finalize_evidence prepared_success
+    PREPARED_SUCCESS=true
+    echo "OK: prepared live candidate ${SHA} (${ARTIFACT_DIGEST}) in ${PREVIOUS_TARGET}."
+    exit 0
+  fi
   evidence_append candidate.noop passed \
     "previousCommit=${PREVIOUS_COMMIT}" \
     "acceptedGateRunId=${PREVIOUS_GATE_RUN_ID:-legacy}" \
@@ -1842,31 +2099,32 @@ EOF
   exit 0
 fi
 
-sudo install -d -o root -g root -m 775 "${RELEASES_DIR}"
-if [[ -e "${RELEASE_DIR}" || -L "${RELEASE_DIR}" ]]; then
-  echo "Immutable release directory already exists: ${RELEASE_DIR}" >&2
-  exit 2
-fi
-mkdir -p "${TMP_DIR}/release"
-rsync -a --delete "${CANDIDATE_DIR}/dist/" "${TMP_DIR}/release/"
+if [[ "${DEPLOY_ACTION}" == "prepare" ]]; then
+  sudo install -d -o root -g root -m 775 "${RELEASES_DIR}"
+  if [[ -e "${RELEASE_DIR}" || -L "${RELEASE_DIR}" ]]; then
+    echo "Immutable release directory already exists: ${RELEASE_DIR}" >&2
+    exit 2
+  fi
+  mkdir -p "${TMP_DIR}/release"
+  rsync -a --delete "${CANDIDATE_DIR}/dist/" "${TMP_DIR}/release/"
 
-PANTHEON_RUNTIME_MANIFEST="${TMP_DIR}/release/deployment.json" \
-PANTHEON_RUNTIME_DEPLOYED_AT="${TIMESTAMP}" \
-PANTHEON_RUNTIME_RELEASE_NAME="${RELEASE_NAME}" \
-PANTHEON_RUNTIME_PREVIOUS_COMMIT="${PREVIOUS_COMMIT}" \
-PANTHEON_RUNTIME_PREVIOUS_DIGEST="${PREVIOUS_DIGEST}" \
-PANTHEON_RUNTIME_PREVIOUS_RELEASE_NAME="${PREVIOUS_RELEASE_NAME}" \
-PANTHEON_RUNTIME_GITHUB_DIGEST="${GITHUB_ARTIFACT_DIGEST}" \
-PANTHEON_RUNTIME_EMERGENCY_OVERRIDE="${EMERGENCY_OVERRIDE}" \
-PANTHEON_RUNTIME_OVERRIDE_ACTOR="${OVERRIDE_ACTOR}" \
-PANTHEON_RUNTIME_OVERRIDE_REASON_SHA256="${OVERRIDE_REASON_SHA256}" \
-PANTHEON_RUNTIME_PROFILE="${DEPLOY_PROFILE}" \
-PANTHEON_RUNTIME_PAIR_ID="${PAIR_ID}" \
-PANTHEON_RUNTIME_READ_ONLY_DIGEST="${READ_ONLY_ARTIFACT_DIGEST}" \
-PANTHEON_RUNTIME_OPERATOR_LIVE_DIGEST="${OPERATOR_LIVE_ARTIFACT_DIGEST}" \
-PANTHEON_RUNTIME_WRITE_PROOF_DIGEST="${WRITE_PROOF_ARTIFACT_DIGEST}" \
-PANTHEON_RUNTIME_AGORA_COMPAT_EVIDENCE="${AGORA_COMPAT_EVIDENCE_AUDIT}" \
-  node --input-type=module <<'NODE'
+  PANTHEON_RUNTIME_MANIFEST="${TMP_DIR}/release/deployment.json" \
+  PANTHEON_RUNTIME_DEPLOYED_AT="${TIMESTAMP}" \
+  PANTHEON_RUNTIME_RELEASE_NAME="${RELEASE_NAME}" \
+  PANTHEON_RUNTIME_PREVIOUS_COMMIT="${PREVIOUS_COMMIT}" \
+  PANTHEON_RUNTIME_PREVIOUS_DIGEST="${PREVIOUS_DIGEST}" \
+  PANTHEON_RUNTIME_PREVIOUS_RELEASE_NAME="${PREVIOUS_RELEASE_NAME}" \
+  PANTHEON_RUNTIME_GITHUB_DIGEST="${GITHUB_ARTIFACT_DIGEST}" \
+  PANTHEON_RUNTIME_EMERGENCY_OVERRIDE="${EMERGENCY_OVERRIDE}" \
+  PANTHEON_RUNTIME_OVERRIDE_ACTOR="${OVERRIDE_ACTOR}" \
+  PANTHEON_RUNTIME_OVERRIDE_REASON_SHA256="${OVERRIDE_REASON_SHA256}" \
+  PANTHEON_RUNTIME_PROFILE="${DEPLOY_PROFILE}" \
+  PANTHEON_RUNTIME_PAIR_ID="${PAIR_ID}" \
+  PANTHEON_RUNTIME_READ_ONLY_DIGEST="${READ_ONLY_ARTIFACT_DIGEST}" \
+  PANTHEON_RUNTIME_OPERATOR_LIVE_DIGEST="${OPERATOR_LIVE_ARTIFACT_DIGEST}" \
+  PANTHEON_RUNTIME_WRITE_PROOF_DIGEST="${WRITE_PROOF_ARTIFACT_DIGEST}" \
+  PANTHEON_RUNTIME_AGORA_COMPAT_EVIDENCE="${AGORA_COMPAT_EVIDENCE_AUDIT}" \
+    node --input-type=module <<'NODE'
 import fs from "node:fs";
 const file = process.env.PANTHEON_RUNTIME_MANIFEST;
 const manifest = JSON.parse(fs.readFileSync(file, "utf8"));
@@ -1896,25 +2154,25 @@ manifest.emergencyOverride = {
 };
 fs.writeFileSync(file, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
 NODE
-verify_dist_digest "${TMP_DIR}/release" "${ARTIFACT_DIGEST}" >/dev/null
-evidence_append candidate.staged_assets passed "artifactDigestSha256=${ARTIFACT_DIGEST}"
-RELEASE_CREATED=true
-sudo install -d -o root -g root -m 775 "${RELEASE_DIR}"
-sudo rsync -a --delete --chown=root:root --chmod=Du=rwx,Dg=rwx,Do=rx,Fu=rw,Fg=rw,Fo=r \
-  "${TMP_DIR}/release/" "${RELEASE_DIR}/"
-verify_dist_digest "${RELEASE_DIR}" "${ARTIFACT_DIGEST}" >/dev/null
-evidence_append candidate.installed_assets passed "artifactDigestSha256=${ARTIFACT_DIGEST}"
+  verify_dist_digest "${TMP_DIR}/release" "${ARTIFACT_DIGEST}" >/dev/null
+  evidence_append candidate.staged_assets passed "artifactDigestSha256=${ARTIFACT_DIGEST}"
+  RELEASE_CREATED=true
+  sudo install -d -o root -g root -m 775 "${RELEASE_DIR}"
+  sudo rsync -a --delete --chown=root:root --chmod=Du=rwx,Dg=rwx,Do=rx,Fu=rw,Fg=rw,Fo=r \
+    "${TMP_DIR}/release/" "${RELEASE_DIR}/"
+  verify_dist_digest "${RELEASE_DIR}" "${ARTIFACT_DIGEST}" >/dev/null
+  evidence_append candidate.installed_assets passed "artifactDigestSha256=${ARTIFACT_DIGEST}"
 
-if [[ "${DEPLOY_PROFILE}" == "write-proof" ]]; then
-  if [[ "${SAFE_RELEASE_QUALIFIED}" != "true" ]]; then
-    echo "Write-proof release cannot proceed without a qualified safe sibling." >&2
-    exit 2
-  fi
-  node --input-type=module - \
-    "${TMP_DIR}/safe-fallback-locator.json" \
-    "$(basename -- "${SAFE_RELEASE_DIR}")" \
-    "${PAIR_ID}" "${SHA}" \
-    "${READ_ONLY_ARTIFACT_DIGEST}" "${WRITE_PROOF_ARTIFACT_DIGEST}" <<'NODE'
+  if [[ "${DEPLOY_PROFILE}" == "write-proof" ]]; then
+    if [[ "${SAFE_RELEASE_QUALIFIED}" != "true" ]]; then
+      echo "Write-proof release cannot proceed without a qualified safe sibling." >&2
+      exit 2
+    fi
+    node --input-type=module - \
+      "${TMP_DIR}/safe-fallback-locator.json" \
+      "$(basename -- "${SAFE_RELEASE_DIR}")" \
+      "${PAIR_ID}" "${SHA}" \
+      "${READ_ONLY_ARTIFACT_DIGEST}" "${WRITE_PROOF_ARTIFACT_DIGEST}" <<'NODE'
 import fs from "node:fs";
 const [file, safeReleaseName, pairId, frontendSha, readOnlyDigest, writeProofDigest] = process.argv.slice(2);
 const payload = {
@@ -1927,20 +2185,86 @@ const payload = {
 };
 fs.writeFileSync(file, `${JSON.stringify(payload, null, 2)}\n`, { mode: 0o600 });
 NODE
-  sudo install -d -o root -g root -m 700 "${SAFE_FALLBACK_LOCATOR_DIR}"
-  sudo install -o root -g root -m 600 \
-    "${TMP_DIR}/safe-fallback-locator.json" \
-    "${SAFE_FALLBACK_LOCATOR_DIR}/$(basename -- "${RELEASE_DIR}").json"
-  if [[ "$(sudo stat -c '%a' "${SAFE_FALLBACK_LOCATOR_DIR}/$(basename -- "${RELEASE_DIR}").json")" != "600" ]]; then
-    echo "Private safe-fallback locator did not retain mode 0600." >&2
+    sudo install -d -o root -g root -m 700 "${SAFE_FALLBACK_LOCATOR_DIR}"
+    sudo install -o root -g root -m 600 \
+      "${TMP_DIR}/safe-fallback-locator.json" \
+      "${SAFE_FALLBACK_LOCATOR_DIR}/$(basename -- "${RELEASE_DIR}").json"
+    if [[ "$(sudo stat -c '%a' "${SAFE_FALLBACK_LOCATOR_DIR}/$(basename -- "${RELEASE_DIR}").json")" != "600" ]]; then
+      echo "Private safe-fallback locator did not retain mode 0600." >&2
+      exit 2
+    fi
+    evidence_append safe_sibling.locator passed "releaseDir=${RELEASE_DIR}"
+  fi
+
+  echo "=== candidate pre-switch browser/auth probe ==="
+  run_release_probe candidate_pre_switch "${RELEASE_DIR}" "${SHA}" "${ARTIFACT_DIGEST}" true
+  evidence_append candidate.pre_switch passed "releaseDir=${RELEASE_DIR}"
+
+  if [[ -n "${LIVE_TARGET_AT_START}" && "$(current_live_target)" != "${LIVE_TARGET_AT_START}" ]]; then
+    echo "Live release changed during candidate probe; refusing to overwrite it." >&2
+    evidence_append switch.cas failed "observedTarget=$(current_live_target)"
     exit 2
   fi
-  evidence_append safe_sibling.locator passed "releaseDir=${RELEASE_DIR}"
+
+  if ! REMOTE_DEV_SHA_AFTER_PROBE="$(resolve_remote_dev_sha)"; then
+    evidence_append controller.order_at_switch failed "reason=origin_dev_unavailable" "attempts=3"
+    exit 2
+  fi
+  if [[ "${CONTROLLER_SHA}" != "${REMOTE_DEV_SHA_AFTER_PROBE}" ]]; then
+    if [[ "${ALLOW_OUT_OF_ORDER_CANDIDATE}" == "true" && "${GITHUB_EVENT_NAME:-}" == "workflow_dispatch" && "${FRONTEND_REF}" != "dev" ]]; then
+      evidence_append candidate.order_at_switch passed "currentDevSha=${REMOTE_DEV_SHA_AFTER_PROBE}" "candidateRef=${FRONTEND_REF}" "candidateSha=${SHA}"
+    elif [[ "${DEPLOY_PROFILE}" == "write-proof" && -n "${PREVIOUS_COMMIT:-}" && "${SHA}" == "${PREVIOUS_COMMIT}" ]]; then
+      evidence_append candidate.order_at_switch passed "currentDevSha=${REMOTE_DEV_SHA_AFTER_PROBE}" "liveCandidateSha=${PREVIOUS_COMMIT}"
+    else
+      echo "Dev advanced after candidate probe; refusing stale switch." >&2
+      evidence_append candidate.order_at_switch failed "currentDevSha=${REMOTE_DEV_SHA_AFTER_PROBE}"
+      exit 2
+    fi
+  fi
+
+  echo "=== writing durable prepared receipt ==="
+  write_prepared_receipt "${RELEASE_DIR}" "${RELEASE_NAME}"
+  evidence_append release.prepared prepared_success \
+    "outcome=prepared_success" \
+    "releaseDir=${RELEASE_DIR}" \
+    "pairId=${PAIR_ID}" \
+    "leaseEpoch=${LEASE_EPOCH}"
+  finalize_evidence prepared_success
+  PREPARED_SUCCESS=true
+  echo "OK: prepared candidate ${SHA} (${ARTIFACT_DIGEST}) in ${RELEASE_DIR}; incumbent ${PREVIOUS_TARGET:-none} untouched."
+  exit 0
 fi
 
-echo "=== candidate pre-switch browser/auth probe ==="
-run_release_probe candidate_pre_switch "${RELEASE_DIR}" "${SHA}" "${ARTIFACT_DIGEST}" true
-evidence_append candidate.pre_switch passed "releaseDir=${RELEASE_DIR}"
+if [[ "${DEPLOY_ACTION}" == "activate" ]]; then
+  echo "=== validating prepared receipt and lease in new process ==="
+  verify_prepared_receipt "${RELEASE_DIR}"
+  verify_dist_digest "${RELEASE_DIR}" "${ARTIFACT_DIGEST}" >/dev/null
+
+  current_live="$(current_live_target)"
+  if [[ "${current_live}" == "${RELEASE_DIR}" ]]; then
+    echo "=== exact candidate already live: idempotent replay ==="
+    verify_dist_digest "${RELEASE_DIR}" "${ARTIFACT_DIGEST}" >/dev/null
+    verify_public_manifest "${SHA}" "${ARTIFACT_DIGEST}" "${GATE_RUN_ID}" "${AUDIT_DIR}/replay-deployment.json" "${BFF_COMMIT}" accepted "${GITHUB_ARTIFACT_DIGEST}" "${DEPLOY_PROFILE}" "${PAIR_ID}"
+    run_release_probe post_switch "" "${SHA}" "${ARTIFACT_DIGEST}" true
+    verify_bff_identity accepted_final
+    evidence_append release.accepted passed "releaseDir=${RELEASE_DIR}" "replay=true"
+    accept_deployment
+    echo "OK: idempotent replay of accepted candidate ${SHA} (${ARTIFACT_DIGEST})"
+    exit 0
+  fi
+
+  pred_target="$(node -e 'const p=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(p.expectedPredecessor?.target||"")' "${RELEASE_DIR}/.prepared-receipt.json")"
+  pred_commit="$(node -e 'const p=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(p.expectedPredecessor?.commit||"")' "${RELEASE_DIR}/.prepared-receipt.json")"
+  if [[ -n "${pred_target}" && "${current_live}" != "${pred_target}" ]]; then
+    echo "Activation CAS rejected: live predecessor target (${current_live:-none}) does not match expected predecessor (${pred_target})." >&2
+    exit 2
+  fi
+  live_commit_check="${LIVE_COMMIT_AT_START:-${PREVIOUS_COMMIT}}"
+  if [[ -n "${pred_commit}" && -n "${live_commit_check}" && "${live_commit_check}" != "${pred_commit}" ]]; then
+    echo "Activation CAS rejected: live predecessor commit (${live_commit_check}) does not match expected predecessor (${pred_commit})." >&2
+    exit 2
+  fi
+fi
 
 verify_bff_identity pre_switch
 if ! REMOTE_DEV_SHA_AT_SWITCH="$(resolve_remote_dev_sha)"; then
@@ -2025,7 +2349,9 @@ if [[ "${ROLLBACK_DRILL}" == "true" ]]; then
   exit 86
 fi
 
-PANTHEON_RUNTIME_MANIFEST="${TMP_DIR}/release/deployment.json" \
+mkdir -p "${TMP_DIR}"
+cp "${RELEASE_DIR}/deployment.json" "${TMP_DIR}/accepted-manifest.json"
+PANTHEON_RUNTIME_MANIFEST="${TMP_DIR}/accepted-manifest.json" \
 PANTHEON_RUNTIME_ACCEPTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
 node --input-type=module <<'NODE'
 import fs from "node:fs";
@@ -2041,7 +2367,7 @@ manifest.probes = {
 fs.writeFileSync(file, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
 NODE
 publish_manifest_atomically \
-  "${TMP_DIR}/release/deployment.json" \
+  "${TMP_DIR}/accepted-manifest.json" \
   "${RELEASE_DIR}" \
   accepted
 verify_public_manifest "${SHA}" "${ARTIFACT_DIGEST}" "${GATE_RUN_ID}" "${AUDIT_DIR}/accepted-deployment.json" "${BFF_COMMIT}" accepted "${GITHUB_ARTIFACT_DIGEST}" "${DEPLOY_PROFILE}" "${PAIR_ID}"

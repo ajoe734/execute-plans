@@ -7,6 +7,10 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   digestReleaseDist,
+  normalizeBffImage,
+  normalizeExpectedPredecessor,
+  normalizeLease,
+  normalizePreparedArtifact,
   preparePairedReleaseCandidate,
   prepareReleaseCandidate,
   OPERATOR_LIVE_BUILD_MODE,
@@ -1008,5 +1012,204 @@ describe("paired release candidate preparation and verification", () => {
     }
     expect(message).toMatch(/configured secret sentinel/u);
     expect(message).not.toContain(secret);
+  });
+
+  it("enforces explicit BFF image digest types and rejects relabeling distinct digests", () => {
+    const shaA = "a".repeat(64);
+    const shaB = "b".repeat(64);
+    const shaC = "c".repeat(64);
+
+    const validImage = normalizeBffImage({
+      repository: "asia-east1-docker.pkg.dev/pantheon/bff",
+      tag: "v1.2.3",
+      digestType: "oci_manifest_digest",
+      digest: shaA,
+      imageConfigDigest: shaB,
+      archiveChecksum: shaC,
+    });
+    expect(validImage.digestType).toBe("oci_manifest_digest");
+    expect(validImage.ociManifestDigest).toBe(shaA);
+    expect(validImage.imageConfigDigest).toBe(shaB);
+    expect(validImage.archiveChecksum).toBe(shaC);
+
+    // Relabeling OCI manifest digest and image config digest as identical
+    expect(() =>
+      normalizeBffImage({
+        repository: "asia-east1-docker.pkg.dev/pantheon/bff",
+        tag: "v1.2.3",
+        digestType: "oci_manifest_digest",
+        digest: shaA,
+        imageConfigDigest: shaA,
+      }),
+    ).toThrow(/cannot relabel OCI manifest digest and image config digest/u);
+
+    // Invalid digest type
+    expect(() =>
+      normalizeBffImage({
+        repository: "asia-east1-docker.pkg.dev/pantheon/bff",
+        tag: "v1.2.3",
+        digestType: "docker_tag",
+        digest: shaA,
+      }),
+    ).toThrow(/digest type must be one of/u);
+  });
+
+  it("binds BFF image, lease, prepared artifact, and predecessor into pair manifests and verifies them", () => {
+    const root = temporaryRoot();
+    const candidateDir = path.join(root, "candidate");
+    const bffDigest = "b".repeat(64);
+    const configDigest = "c".repeat(64);
+    const leaseEpoch = "1725600000";
+
+    const bffImage = {
+      repository: "asia-east1-docker.pkg.dev/pantheon/bff",
+      tag: "v1.2.3",
+      digestType: "oci_manifest_digest",
+      digest: bffDigest,
+      imageConfigDigest: configDigest,
+    };
+    const lease = {
+      owner: "pantheon-dev-deploy",
+      epoch: leaseEpoch,
+      runId: "run-999",
+      delegated: true,
+    };
+    const preparedArtifact = {
+      locator: "/var/www/pantheon-dev-fe-releases/artifact.tar.gz",
+      checksum: "e".repeat(64),
+    };
+    const expectedPredecessor = {
+      pairId: "f".repeat(64),
+      commit: "3".repeat(40),
+      target: "production-predecessor",
+    };
+
+    const prepared = preparePair(root, {
+      outputDir: candidateDir,
+      bffImage,
+      lease,
+      preparedArtifact,
+      expectedPredecessor,
+    });
+
+    expect(prepared.pair.bffImage.digest).toBe(bffDigest);
+    expect(prepared.pair.lease.epoch).toBe(leaseEpoch);
+    expect(prepared.pair.preparedArtifact.locator).toBe(preparedArtifact.locator);
+    expect(prepared.pair.expectedPredecessor.pairId).toBe(expectedPredecessor.pairId);
+
+    // Verifying with matching expectations succeeds
+    const verified = verifyPair(candidateDir, {
+      expectedBffImageDigest: bffDigest,
+      expectedLeaseEpoch: leaseEpoch,
+    });
+    expect(verified.pairId).toBe(prepared.pairId);
+
+    // Verifying with mismatched BFF image digest fails closed
+    expect(() =>
+      verifyPair(candidateDir, {
+        expectedBffImageDigest: "9".repeat(64),
+      }),
+    ).toThrow(/BFF image digest does not match/u);
+
+    // Verifying with mismatched lease epoch fails closed
+    expect(() =>
+      verifyPair(candidateDir, {
+        expectedLeaseEpoch: "9999999999",
+      }),
+    ).toThrow(/lease epoch does not match/u);
+  });
+
+  it("supports handshake flags in prepare-pair and verify-pair via CLI", () => {
+    const root = temporaryRoot();
+    const candidateDir = path.join(root, "candidate");
+    const readOnly = makeDist(path.join(root, "read-only"));
+    const operatorLive = makeDist(path.join(root, "operator-live"), {
+      "assets/profile.json": "operator-live\n",
+    });
+    const writeProof = makeDist(path.join(root, "write-proof"), {
+      "assets/profile.json": "write-proof\n",
+    });
+    const bffDigest = "7".repeat(64);
+    const leaseEpoch = "1725611111";
+
+    const prepareResult = cli([
+      "prepare-pair",
+      "--read-only-dist-dir",
+      readOnly,
+      "--operator-live-dist-dir",
+      operatorLive,
+      "--write-proof-dist-dir",
+      writeProof,
+      "--output-dir",
+      candidateDir,
+      "--frontend-sha",
+      FRONTEND_SHA,
+      "--bff-sha",
+      BFF_SHA,
+      "--gate-run-id",
+      GATE_RUN_ID,
+      "--gate-run-url",
+      GATE_RUN_URL,
+      "--bff-base-url",
+      BFF_BASE_URL,
+      "--bff-image-repository",
+      "asia-east1-docker.pkg.dev/pantheon/bff",
+      "--bff-image-tag",
+      "dev-latest",
+      "--bff-image-digest-type",
+      "oci_manifest_digest",
+      "--bff-image-digest",
+      bffDigest,
+      "--lease-owner",
+      "dev-runner",
+      "--lease-epoch",
+      leaseEpoch,
+      "--lease-delegated",
+      "true",
+    ]);
+    expect(prepareResult.status).toBe(0);
+    const pairId = prepareResult.stdout.trim();
+    expect(pairId).toHaveLength(64);
+
+    const verifySuccess = cli([
+      "verify-pair",
+      "--candidate-dir",
+      candidateDir,
+      "--expected-frontend-sha",
+      FRONTEND_SHA,
+      "--expected-gate-run-id",
+      GATE_RUN_ID,
+      "--expected-bff-sha",
+      BFF_SHA,
+      "--expected-bff-base-url",
+      BFF_BASE_URL,
+      "--expected-pair-id",
+      pairId,
+      "--expected-bff-image-digest",
+      bffDigest,
+      "--expected-lease-epoch",
+      leaseEpoch,
+    ]);
+    expect(verifySuccess.status).toBe(0);
+
+    const verifyFailBff = cli([
+      "verify-pair",
+      "--candidate-dir",
+      candidateDir,
+      "--expected-frontend-sha",
+      FRONTEND_SHA,
+      "--expected-gate-run-id",
+      GATE_RUN_ID,
+      "--expected-bff-sha",
+      BFF_SHA,
+      "--expected-bff-base-url",
+      BFF_BASE_URL,
+      "--expected-pair-id",
+      pairId,
+      "--expected-bff-image-digest",
+      "8".repeat(64),
+    ]);
+    expect(verifyFailBff.status).toBe(1);
+    expect(verifyFailBff.stderr).toContain("BFF image digest does not match");
   });
 });

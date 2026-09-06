@@ -102,4 +102,96 @@ assert.throws(
   /live BFF SHA mismatch/,
 );
 
+// BFF Image Identity and explicit digest type tests
+import { normalizeBffImage, normalizeLease } from "./release-identity.mjs";
+
+const MANIFEST_DIGEST = "a".repeat(64);
+const CONFIG_DIGEST = "b".repeat(64);
+const ARCHIVE_CHECKSUM = "c".repeat(64);
+
+const normalizedImage = normalizeBffImage({
+  repository: "asia-east1-docker.pkg.dev/pantheon-dev/pantheon/bff",
+  tag: "dev",
+  digestType: "oci_manifest_digest",
+  digest: MANIFEST_DIGEST,
+  ociManifestDigest: MANIFEST_DIGEST,
+  imageConfigDigest: CONFIG_DIGEST,
+  archiveChecksum: ARCHIVE_CHECKSUM,
+});
+assert.equal(normalizedImage.digestType, "oci_manifest_digest");
+assert.equal(normalizedImage.digest, MANIFEST_DIGEST);
+assert.equal(normalizedImage.ociManifestDigest, MANIFEST_DIGEST);
+assert.equal(normalizedImage.imageConfigDigest, CONFIG_DIGEST);
+assert.equal(normalizedImage.archiveChecksum, ARCHIVE_CHECKSUM);
+
+// Fail closed when relabeling image config digest, OCI manifest digest and archive checksum as identical
+assert.throws(
+  () =>
+    normalizeBffImage({
+      repository: "asia-east1-docker.pkg.dev/pantheon-dev/pantheon/bff",
+      tag: "dev",
+      digestType: "oci_manifest_digest",
+      digest: MANIFEST_DIGEST,
+      ociManifestDigest: MANIFEST_DIGEST,
+      imageConfigDigest: MANIFEST_DIGEST, // Same!
+    }),
+  /cannot relabel OCI manifest digest and image config digest as identical values/,
+);
+
+assert.throws(
+  () =>
+    normalizeBffImage({
+      repository: "asia-east1-docker.pkg.dev/pantheon-dev/pantheon/bff",
+      tag: "dev",
+      digestType: "unknown_type",
+      digest: MANIFEST_DIGEST,
+    }),
+  /digest type must be one of/,
+);
+
+// Identity with image and lease
+const imageIdentity = createReleaseIdentity({
+  frontendSha: FRONTEND_SHA,
+  bffBaseUrl: BFF_BASE_URL,
+  versionPayload: VERSION_PAYLOAD,
+  gateRunId: "12345",
+  gateRunUrl: "https://github.test/actions/runs/12345",
+  bffImage: normalizedImage,
+  lease: {
+    owner: "pantheon-dev-deploy",
+    epoch: "42",
+    runId: "12345",
+  },
+  releaseId: "d".repeat(64),
+  compatibilityDigest: "e".repeat(64),
+});
+
+assert.equal(imageIdentity.bff.image.digest, MANIFEST_DIGEST);
+assert.equal(imageIdentity.lease.epoch, "42");
+assert.equal(
+  validateReleaseIdentity(imageIdentity, {
+    expectedBffImageDigest: MANIFEST_DIGEST,
+    expectedBffImageDigestType: "oci_manifest_digest",
+    expectedLeaseEpoch: "42",
+    expectedLeaseOwner: "pantheon-dev-deploy",
+  }),
+  BFF_SHA,
+);
+
+assert.throws(
+  () =>
+    validateReleaseIdentity(imageIdentity, {
+      expectedBffImageDigest: CONFIG_DIGEST,
+    }),
+  /release identity BFF image digest mismatch/,
+);
+
+assert.throws(
+  () =>
+    validateReleaseIdentity(imageIdentity, {
+      expectedLeaseEpoch: "99",
+    }),
+  /release identity lease epoch mismatch/,
+);
+
 console.log("OK: exact FE/BFF release identity regression tests passed");

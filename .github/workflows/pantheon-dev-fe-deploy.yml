@@ -742,11 +742,39 @@ jobs:
           set -euo pipefail
           bash scripts/test-deploy-dev-vm.sh 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/target-runner-controller-regression.log"
 
+      - name: Prepare verified persistent candidate profile
+        id: prepare
+        if: steps.gate.outputs.deployment_profile != 'write-proof'
+        timeout-minutes: 25
+        env:
+          PANTHEON_DEPLOY_ACTION: prepare
+          PANTHEON_DEPLOY_CANDIDATE_SHA: ${{ steps.gate.outputs.candidate_sha }}
+          PANTHEON_DEPLOY_BRANCH: dev
+          PANTHEON_DEPLOY_FRONTEND_REF: ${{ steps.gate.outputs.frontend_ref }}
+          PANTHEON_DEPLOY_CANDIDATE_DIR: .release-candidate
+          PANTHEON_DEPLOY_AGORA_COMPAT_EVIDENCE: ${{ steps.agora_compat.outputs.evidence_path }}
+          PANTHEON_DEPLOY_GATE_RUN_ID: ${{ steps.gate.outputs.gate_run_id }}
+          PANTHEON_DEPLOY_GITHUB_ARTIFACT_DIGEST: ${{ steps.gate.outputs.github_artifact_digest }}
+          PANTHEON_DEPLOY_EXPECTED_DEV_SHA: ${{ steps.gate.outputs.current_dev_sha }}
+          PANTHEON_DEPLOY_EMERGENCY_OVERRIDE: ${{ steps.gate.outputs.emergency_override }}
+          PANTHEON_DEPLOY_ROLLBACK_DRILL: ${{ steps.gate.outputs.rollback_drill }}
+          PANTHEON_DEPLOY_OVERRIDE_REASON: ${{ steps.gate.outputs.override_reason }}
+          PANTHEON_DEPLOY_OVERRIDE_ACTOR: ${{ steps.gate.outputs.override_actor }}
+          PANTHEON_DEPLOY_PROFILE: ${{ steps.gate.outputs.deployment_profile }}
+          PANTHEON_DEPLOY_EXPECTED_PAIR_ID: ${{ steps.pair.outputs.pair_id }}
+          PANTHEON_DEPLOY_PROOF_WINDOW_ACK: "false"
+          PANTHEON_DEPLOY_REAL_WRITES: "false"
+          PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES: "false"
+          PANTHEON_DEPLOY_ALLOW_BOOTSTRAP: ${{ steps.gate.outputs.deployment_profile == 'read-only' && 'true' || 'false' }}
+          PANTHEON_DEPLOY_ALLOW_OUT_OF_ORDER_CANDIDATE: ${{ steps.gate.outputs.frontend_ref != 'dev' && 'true' || 'false' }}
+        run: bash scripts/deploy-dev-vm.sh
+
       - name: Deploy verified persistent candidate profile
         id: deploy
         if: steps.gate.outputs.deployment_profile != 'write-proof'
         timeout-minutes: 25
         env:
+          PANTHEON_DEPLOY_ACTION: activate
           PANTHEON_DEPLOY_CANDIDATE_SHA: ${{ steps.gate.outputs.candidate_sha }}
           PANTHEON_DEPLOY_BRANCH: dev
           PANTHEON_DEPLOY_FRONTEND_REF: ${{ steps.gate.outputs.frontend_ref }}
@@ -1384,11 +1412,40 @@ jobs:
           echo "Independent restore watchdog did not arm before the activation deadline." >&2
           exit 1
 
+      - name: Prepare bounded write-proof profile
+        id: write_prepare
+        timeout-minutes: 25
+        env:
+          PANTHEON_AUDIT_OUT_DIR: ${{ runner.temp }}/pantheon-proof-${{ github.run_id }}-${{ github.run_attempt }}/write-controller-prepare
+          PANTHEON_DEPLOY_ACTION: prepare
+          PANTHEON_DEPLOY_CANDIDATE_SHA: ${{ needs.deploy.outputs.candidate_sha }}
+          PANTHEON_DEPLOY_BRANCH: dev
+          PANTHEON_DEPLOY_FRONTEND_REF: ${{ needs.deploy.outputs.frontend_ref }}
+          PANTHEON_DEPLOY_CANDIDATE_DIR: .release-candidate
+          PANTHEON_DEPLOY_AGORA_COMPAT_EVIDENCE: ${{ steps.write_agora_compat.outputs.evidence_path }}
+          PANTHEON_DEPLOY_GATE_RUN_ID: ${{ needs.deploy.outputs.source_gate_run_id }}
+          PANTHEON_DEPLOY_GITHUB_ARTIFACT_DIGEST: ${{ needs.deploy.outputs.source_artifact_digest }}
+          PANTHEON_DEPLOY_EXPECTED_DEV_SHA: ${{ needs.deploy.outputs.current_dev_sha }}
+          PANTHEON_DEPLOY_EMERGENCY_OVERRIDE: "false"
+          PANTHEON_DEPLOY_ROLLBACK_DRILL: "false"
+          PANTHEON_DEPLOY_PROFILE: write-proof
+          PANTHEON_DEPLOY_EXPECTED_PAIR_ID: ${{ needs.deploy.outputs.pair_id }}
+          PANTHEON_DEPLOY_PROOF_WINDOW_ACK: "true"
+          PANTHEON_DEPLOY_REAL_WRITES: "false"
+          PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES: "false"
+          PANTHEON_DEPLOY_ALLOW_OUT_OF_ORDER_CANDIDATE: ${{ needs.deploy.outputs.frontend_ref != 'dev' && 'true' || 'false' }}
+          PANTHEON_DEPLOY_RELEASE_INSTANCE: ${{ github.run_id }}-${{ github.run_attempt }}-write-proof
+        run: |
+          set -euo pipefail
+          mkdir -p "$PANTHEON_AUDIT_OUT_DIR"
+          bash scripts/deploy-dev-vm.sh
+
       - name: Activate bounded write-proof profile after watchdog is durable
         id: write_deploy
         timeout-minutes: 25
         env:
           PANTHEON_AUDIT_OUT_DIR: ${{ runner.temp }}/pantheon-proof-${{ github.run_id }}-${{ github.run_attempt }}/write-controller
+          PANTHEON_DEPLOY_ACTION: activate
           PANTHEON_DEPLOY_CANDIDATE_SHA: ${{ needs.deploy.outputs.candidate_sha }}
           PANTHEON_DEPLOY_BRANCH: dev
           PANTHEON_DEPLOY_FRONTEND_REF: ${{ needs.deploy.outputs.frontend_ref }}

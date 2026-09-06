@@ -982,4 +982,37 @@ describe("paired Pantheon release workflow", () => {
     expect(confirmationJob).toContain("EXACT_BFF_SHA: ${{ needs.deploy.outputs.bff_sha }}");
     expect(confirmationJob).toContain("PROOF_RUN_ID: ${{ needs.proof-coordinator.outputs.proof_run_id }}");
   });
+
+  it("enforces exact pair protocol prepare, activate, and restore lifecycle across workflows", () => {
+    const deployJobStart = deployWorkflow.indexOf("  deploy:");
+    const proofJobStart = deployWorkflow.indexOf("  proof-coordinator:");
+    const deployJob = deployWorkflow.slice(deployJobStart, proofJobStart);
+    const proofCoordinator = deployWorkflow.slice(proofJobStart);
+
+    expect(deployJob).toContain("Prepare verified persistent candidate profile");
+    expect(deployJob).toContain("Deploy verified persistent candidate profile");
+    expect(deployJob.indexOf("Prepare verified persistent candidate profile")).toBeLessThan(
+      deployJob.indexOf("Deploy verified persistent candidate profile"),
+    );
+    expect(deployJob).toContain("PANTHEON_DEPLOY_ACTION: prepare");
+    expect(deployJob).toContain("PANTHEON_DEPLOY_ACTION: activate");
+
+    expect(proofCoordinator).toContain("Prepare bounded write-proof profile");
+    expect(proofCoordinator).toContain(
+      "Activate bounded write-proof profile after watchdog is durable",
+    );
+    expect(
+      proofCoordinator.indexOf("Prepare bounded write-proof profile"),
+    ).toBeLessThan(
+      proofCoordinator.indexOf(
+        "Activate bounded write-proof profile after watchdog is durable",
+      ),
+    );
+
+    expect(watchdogWorkflow).toContain("PANTHEON_DEPLOY_ACTION: restore");
+
+    expect(integrationWorkflow).toContain("--bff-image-digest");
+    expect(integrationWorkflow).toContain("--lease-owner");
+  });
 });
+
