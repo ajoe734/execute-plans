@@ -1071,13 +1071,14 @@ jobs:
           set -o pipefail
           npm run validate:mgmt-persona:3000 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/mgmt-persona-3000-validation.log"
 
-      - name: Anonymous BFF route probe
+      - name: Probe unauthenticated BFF routes
         id: route_probe
         continue-on-error: true
         timeout-minutes: 8
         env:
           PANTHEON_BFF_ROUTE_PROBE_ATTEMPTS: "3"
           PANTHEON_BFF_ROUTE_PROBE_TIMEOUT_MS: "25000"
+          PANTHEON_BFF_BASE_URL: ${{ env.PANTHEON_BFF_CANDIDATE_TRANSPORT || env.PANTHEON_BFF_BASE_URL }}
         run: |
           set -o pipefail
           node scripts/probe-bff-routes.mjs --anonymous 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/bff-route-probe-anonymous.log"
@@ -1086,6 +1087,8 @@ jobs:
         id: auth_smoke
         if: env.PANTHEON_BFF_SMOKE_BEARER_TOKEN != ''
         continue-on-error: true
+        env:
+          PANTHEON_BFF_BASE_URL: ${{ env.PANTHEON_BFF_CANDIDATE_TRANSPORT || env.PANTHEON_BFF_BASE_URL }}
         run: |
           set -o pipefail
           node scripts/probe-bff-authenticated-live.mjs 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/bff-authenticated-live-smoke.log"
@@ -1094,6 +1097,8 @@ jobs:
         id: write_probe
         if: env.PANTHEON_BFF_SMOKE_BEARER_TOKEN != ''
         continue-on-error: true
+        env:
+          PANTHEON_BFF_BASE_URL: ${{ env.PANTHEON_BFF_CANDIDATE_TRANSPORT || env.PANTHEON_BFF_BASE_URL }}
         run: |
           set -o pipefail
           npm run probe:bff:writes 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/bff-write-path-probe.log"
@@ -1156,6 +1161,7 @@ jobs:
         env:
           PANTHEON_EXPECTED_BFF_SHA: ${{ env.PANTHEON_BFF_SHA }}
           PANTHEON_PINT_PROBE_ALLOW_WRITES: "true"
+          PANTHEON_BFF_BASE_URL: ${{ env.PANTHEON_BFF_CANDIDATE_TRANSPORT || env.PANTHEON_BFF_BASE_URL }}
         run: |
           set -o pipefail
           node scripts/probe-persona-governed-proposal-live.mjs 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/pint-hosted-governed-proposal.log"
@@ -1163,6 +1169,8 @@ jobs:
       - name: Management live deep validation
         id: mgmt_live_deep
         continue-on-error: true
+        env:
+          PANTHEON_BFF_BASE_URL: ${{ env.PANTHEON_BFF_CANDIDATE_TRANSPORT || env.PANTHEON_BFF_BASE_URL }}
         run: |
           set -o pipefail
           npm run validate:mgmt-live:deep 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/management-live-deep-validation.log"
@@ -1250,7 +1258,7 @@ jobs:
           PANTHEON_BFF_CANDIDATE_TRANSPORT: ${{ env.PANTHEON_BFF_CANDIDATE_TRANSPORT }}
         run: |
           set -o pipefail
-          PANTHEON_FE_BASE_URL="https://pantheon-lupin-dev-fe.35.201.204.12.sslip.io" \
+          PANTHEON_FE_BASE_URL="${PANTHEON_DEV_FE_HOST:-https://app.dev.mvl-cap.tw}" \
           PANTHEON_BROWSER_BFF_BASE_URL="$PANTHEON_BFF_BASE_URL" \
           node scripts/probe-hosted-browser-bff.mjs 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/hosted-browser-bff-probe.log"
 

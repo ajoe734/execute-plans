@@ -1549,12 +1549,23 @@ export async function installBffCandidateRoute(
           }
           const preHeaders = preflightResponse.headers();
           const preAllowOrigin = preHeaders["access-control-allow-origin"];
+          const hasCredentials = Boolean(requestHeaders["authorization"] || requestHeaders["cookie"]);
           if (!preAllowOrigin) {
             routeErrors.push({
               code: "bff_candidate_cors_preflight_error",
               url: redactUrl(originalUrl),
               candidateUrl: redactUrl(candidateUrl),
               error: "candidate preflight response missing required Access-Control-Allow-Origin header",
+            });
+            await route.abort("failed");
+            return;
+          }
+          if (hasCredentials && preAllowOrigin === "*") {
+            routeErrors.push({
+              code: "bff_candidate_cors_preflight_error",
+              url: redactUrl(originalUrl),
+              candidateUrl: redactUrl(candidateUrl),
+              error: "candidate preflight Access-Control-Allow-Origin cannot be * when credentials are used",
             });
             await route.abort("failed");
             return;
@@ -1568,6 +1579,45 @@ export async function installBffCandidateRoute(
             });
             await route.abort("failed");
             return;
+          }
+          if (hasCredentials) {
+            const preAllowCreds = preHeaders["access-control-allow-credentials"];
+            if (preAllowCreds !== "true") {
+              routeErrors.push({
+                code: "bff_candidate_cors_preflight_error",
+                url: redactUrl(originalUrl),
+                candidateUrl: redactUrl(candidateUrl),
+                error: "candidate preflight response missing required Access-Control-Allow-Credentials: true header",
+              });
+              await route.abort("failed");
+              return;
+            }
+          }
+          const rawAllowMethods = preHeaders["access-control-allow-methods"] || "";
+          const preAllowMethods = rawAllowMethods.split(",").map((m) => m.trim().toUpperCase()).filter(Boolean);
+          if (!preAllowMethods.includes("*") && !preAllowMethods.includes(method.toUpperCase())) {
+            routeErrors.push({
+              code: "bff_candidate_cors_preflight_error",
+              url: redactUrl(originalUrl),
+              candidateUrl: redactUrl(candidateUrl),
+              error: `candidate preflight method ${method} not permitted by Access-Control-Allow-Methods (${rawAllowMethods || "none"})`,
+            });
+            await route.abort("failed");
+            return;
+          }
+          const rawAllowHeaders = preHeaders["access-control-allow-headers"] || "";
+          const preAllowHeaders = rawAllowHeaders.split(",").map((h) => h.trim().toLowerCase()).filter(Boolean);
+          for (const headerName of customHeaderNames) {
+            if (!preAllowHeaders.includes("*") && !preAllowHeaders.includes(headerName.toLowerCase())) {
+              routeErrors.push({
+                code: "bff_candidate_cors_preflight_error",
+                url: redactUrl(originalUrl),
+                candidateUrl: redactUrl(candidateUrl),
+                error: `candidate preflight header ${headerName} not permitted by Access-Control-Allow-Headers (${rawAllowHeaders || "none"})`,
+              });
+              await route.abort("failed");
+              return;
+            }
           }
         }
       }
@@ -2773,6 +2823,7 @@ async function runProbe() {
     applicationRootRendered: rootRendered,
     noBrowserWriteMethods: browserBffMethodPolicy.pass,
     personaFleetSafetyPassed: personaFleetSafety.pass,
+    openclawContractPassed: Boolean(personaFleetSafety.pass && rootRendered && pageErrors.length === 0),
     pageErrorsAbsent: pageErrors.length === 0,
     unexpectedConsoleErrorsAbsent: unexpectedConsoleErrors.length === 0,
     frontendResourceFailuresAbsent: frontendResourceFailures.length === 0,
@@ -3059,6 +3110,8 @@ async function runProbe() {
       generatedAt,
       mode: RELEASE_STRICT ? "release-strict" : "compatibility",
       pass,
+      personaFleetSafetyPassed: personaFleetSafety.pass,
+      openclawContractPassed: Boolean(personaFleetSafety.pass && rootRendered && pageErrors.length === 0),
       targets: {
         feBase: FE_BASE,
         pageUrl,
@@ -3096,6 +3149,7 @@ async function runProbe() {
           noEmbeddedDevBearerRequired,
           noEmbeddedDevBearer,
           personaFleetSafetyPassed: personaFleetSafety.pass,
+          openclawContractPassed: Boolean(personaFleetSafety.pass && rootRendered && pageErrors.length === 0),
           applicationRootRendered: rootRendered,
           pageErrorsAbsent: pageErrors.length === 0,
           oldUrlAbsent: oldUrlHitCount === 0,

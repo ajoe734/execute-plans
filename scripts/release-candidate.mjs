@@ -898,7 +898,10 @@ function validateExpectedCandidate(candidate, expectations) {
     },
   );
   const bffImage = candidate.bffImage ? normalizeBffImage(candidate.bffImage) : null;
-  if (bffImage && expectations.expectedBffImageDigest) {
+  if (expectations.expectedBffImageDigest) {
+    if (!bffImage) {
+      throw new Error("candidate is missing required BFF image identity");
+    }
     if (
       bffImage.digest !==
       normalizeDigest(expectations.expectedBffImageDigest, "expected BFF image digest")
@@ -907,7 +910,10 @@ function validateExpectedCandidate(candidate, expectations) {
     }
   }
   const lease = candidate.lease ? normalizeLease(candidate.lease) : null;
-  if (lease && expectations.expectedLeaseEpoch) {
+  if (expectations.expectedLeaseEpoch) {
+    if (!lease) {
+      throw new Error("candidate is missing required lease identity");
+    }
     if (String(lease.epoch) !== String(expectations.expectedLeaseEpoch)) {
       throw new Error("candidate lease epoch does not match the expected epoch");
     }
@@ -1409,7 +1415,10 @@ function validatePairManifest(pair, expectations) {
     expectedControllerRunId: expectations.controllerRunId,
   });
   const bffImage = pair.bffImage ? normalizeBffImage(pair.bffImage, "pair BFF image") : null;
-  if (bffImage && expectations.expectedBffImageDigest) {
+  if (expectations.expectedBffImageDigest) {
+    if (!bffImage) {
+      throw new Error("pair is missing required BFF image identity");
+    }
     if (
       bffImage.digest !==
       normalizeDigest(expectations.expectedBffImageDigest, "expected BFF image digest")
@@ -1418,7 +1427,10 @@ function validatePairManifest(pair, expectations) {
     }
   }
   const lease = pair.lease ? normalizeLease(pair.lease, "pair lease") : null;
-  if (lease && expectations.expectedLeaseEpoch) {
+  if (expectations.expectedLeaseEpoch) {
+    if (!lease) {
+      throw new Error("pair is missing required lease identity");
+    }
     if (String(lease.epoch) !== String(expectations.expectedLeaseEpoch)) {
       throw new Error("pair lease epoch does not match the expected epoch");
     }

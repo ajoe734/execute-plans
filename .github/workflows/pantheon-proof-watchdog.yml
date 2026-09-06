@@ -769,9 +769,9 @@ jobs:
           PANTHEON_DEPLOY_REAL_WRITES: "false"
           PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES: "false"
           PANTHEON_DEPLOY_RELEASE_INSTANCE: watchdog-${{ inputs.parent_deploy_run_id }}-${{ inputs.parent_deploy_run_attempt }}
-          PANTHEON_LEASE_OWNER: ${{ inputs.lease_owner || '' }}
-          PANTHEON_LEASE_EPOCH: ${{ inputs.lease_epoch || '' }}
-          PANTHEON_LEASE_RUN_ID: ${{ inputs.lease_run_id || '' }}
+          PANTHEON_LEASE_OWNER: ${{ inputs.lease_owner || 'pantheon-proof-watchdog' }}
+          PANTHEON_LEASE_EPOCH: ${{ inputs.lease_epoch || '1' }}
+          PANTHEON_LEASE_RUN_ID: ${{ inputs.lease_run_id || github.run_id }}
           PANTHEON_LEASE_DELEGATED: ${{ inputs.lease_delegated || 'true' }}
         run: |
           set -euo pipefail

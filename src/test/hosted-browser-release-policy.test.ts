@@ -25,6 +25,7 @@ import {
   httpPathWithinBase,
   inspectBrowserBffMethods,
   inspectDeploymentMetadata,
+  installBffCandidateRoute,
   isAllowlistedBffRequestFailure,
   isAllowlistedConsoleError,
   isBffPath,
@@ -1184,5 +1185,68 @@ describe("hosted browser strict release policy", () => {
     expect(isBffPath("/assets/app.js")).toBe(false);
     expect(isBffPath("/auth")).toBe(false);
     expect(isBffPath("")).toBe(false);
+  });
+
+  it("enforces CORS preflight methods, headers, and credential permissions in candidate route", async () => {
+    const http = await import("node:http");
+    const { chromium } = await import("@playwright/test");
+    const servers: any[] = [];
+    let browser: any;
+    try {
+      const listen = async (handler: any) => {
+        const s = http.createServer(handler);
+        servers.push(s);
+        await new Promise((r) => s.listen(0, "127.0.0.1", r));
+        return `http://127.0.0.1:${(s.address() as any).port}`;
+      };
+      const fe = await listen((req: any, res: any) => {
+        res.setHeader("Content-Type", "text/html");
+        res.end("<html>local review</html>");
+      });
+      const calls: string[] = [];
+      const bff = await listen((req: any, res: any) => {
+        calls.push(req.method);
+        res.setHeader("Access-Control-Allow-Origin", fe);
+        res.setHeader("Access-Control-Allow-Credentials", "true");
+        res.setHeader("Content-Type", "application/json");
+        if (req.method === "OPTIONS") {
+          res.writeHead(204);
+          res.end();
+          return;
+        }
+        res.end(JSON.stringify({ localFixture: true }));
+      });
+      browser = await chromium.launch({ headless: true });
+      const page = await browser.newPage();
+      await page.goto(fe);
+      const routeErrors: any[] = [];
+      await installBffCandidateRoute(page, "http://public-bff.test", bff, routeErrors);
+      const intercepted = await page.evaluate(async () => {
+        try {
+          return {
+            ok: true,
+            body: await (
+              await fetch("http://public-bff.test/bff/me", {
+                method: "PUT",
+                headers: {
+                  Authorization: "Bearer local-review-only",
+                  "Content-Type": "application/json",
+                },
+                body: "{}",
+              })
+            ).json(),
+          };
+        } catch (e) {
+          return { ok: false, error: String(e) };
+        }
+      });
+      expect(intercepted.ok).toBe(false);
+      expect(routeErrors.length).toBeGreaterThan(0);
+      expect(routeErrors[0].code).toBe("bff_candidate_cors_preflight_error");
+      expect(routeErrors[0].error).toContain("PUT");
+    } finally {
+      if (browser) await browser.close();
+      await Promise.all(servers.map((s) => new Promise((r) => s.close(r))));
+    }
   });
 });

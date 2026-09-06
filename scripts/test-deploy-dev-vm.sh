@@ -449,7 +449,14 @@ if (
 }
 if (output) {
   fs.mkdirSync(path.dirname(output), { recursive: true });
-  fs.writeFileSync(output, `${JSON.stringify({ phase, pass: true })}\n`, "utf8");
+  fs.writeFileSync(output, `${JSON.stringify({
+    phase,
+    pass: true,
+    personaFleetSafetyPassed: true,
+    personaFleetChecks: { hasNaN: false },
+    openclawContractPassed: true,
+    openclawContractChecks: { pass: true }
+  })}\n`, "utf8");
 }
 if (
   phase === "post_switch" &&
@@ -864,6 +871,10 @@ run_deploy() {
         VITE_BFF_DEV_BEARER_TOKEN="" \
         GITHUB_RUN_ID="9001" \
         GITHUB_RUN_ATTEMPT="1" \
+        PANTHEON_DEPLOY_LEASE_OWNER="parent-controller" \
+        PANTHEON_DEPLOY_LEASE_EPOCH="1" \
+        PANTHEON_DEPLOY_LEASE_RUN_ID="9001" \
+        PANTHEON_DEPLOY_LEASE_DELEGATED="true" \
         "$@" \
         bash scripts/deploy-dev-vm.sh
     ) > "${RUN_OUTPUT}" 2>&1
@@ -934,6 +945,10 @@ run_deploy() {
         VITE_BFF_DEV_BEARER_TOKEN="" \
         GITHUB_RUN_ID="9001" \
         GITHUB_RUN_ATTEMPT="1" \
+        PANTHEON_DEPLOY_LEASE_OWNER="parent-controller" \
+        PANTHEON_DEPLOY_LEASE_EPOCH="1" \
+        PANTHEON_DEPLOY_LEASE_RUN_ID="9001" \
+        PANTHEON_DEPLOY_LEASE_DELEGATED="true" \
         PANTHEON_DEPLOY_ACTION="prepare" \
         "$@" \
         bash scripts/deploy-dev-vm.sh
@@ -1005,6 +1020,10 @@ run_deploy() {
           VITE_BFF_DEV_BEARER_TOKEN="" \
           GITHUB_RUN_ID="9001" \
           GITHUB_RUN_ATTEMPT="1" \
+          PANTHEON_DEPLOY_LEASE_OWNER="parent-controller" \
+          PANTHEON_DEPLOY_LEASE_EPOCH="1" \
+          PANTHEON_DEPLOY_LEASE_RUN_ID="9001" \
+          PANTHEON_DEPLOY_LEASE_DELEGATED="true" \
           PANTHEON_DEPLOY_ACTION="activate" \
           "$@" \
           bash scripts/deploy-dev-vm.sh
@@ -2592,6 +2611,91 @@ test_exact_pair_protocol_wrong_lease_restore_rejected() {
   [[ "${RUN_STATUS}" -ne 0 ]] || die "missing-receipt restore unexpectedly succeeded"
 }
 
+test_exact_pair_protocol_failed_mandatory_gate_prepare_rejected() {
+  setup_case exact-pair-failed-gate
+  run_deploy PANTHEON_DEPLOY_ACTION=prepare PANTHEON_MANDATORY_GATE_OPENCLAW_CONTRACT=failed
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "prepare with failed openclawContract unexpectedly succeeded"
+  assert_previous_is_live
+  assert_previous_manifest_unchanged
+  grep -Fq "Cannot write prepared receipt: mandatory gates failed or missing" "${RUN_OUTPUT}" || \
+    show_deploy_failure "missing mandatory gate rejection message"
+}
+
+test_exact_pair_protocol_forged_receipt_and_unregistered_lease_rejected() {
+  local release_dir receipt_file
+  setup_case exact-pair-forged-receipt
+  run_deploy PANTHEON_DEPLOY_ACTION=prepare
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "prepare should succeed"
+  assert_previous_is_live
+
+  release_dir="$(<"${CASE_AUDIT}/prepared-release-dir")"
+  receipt_file="${release_dir}/.prepared-receipt.json"
+
+  node --input-type=module - "${receipt_file}" "${DEPLOY_SOURCE}" <<'NODE'
+import fs from 'node:fs';
+import crypto from 'node:crypto';
+const [receiptPath, sourcePath] = process.argv.slice(2);
+const src = fs.readFileSync(sourcePath, 'utf8');
+const start = src.indexOf('function computeReceiptIntegritySha256(r) {');
+const end = src.indexOf('\n}\n', start) + 2;
+const hash = new Function('crypto', src.slice(start, end) + ';return computeReceiptIntegritySha256;')(crypto);
+const r = JSON.parse(fs.readFileSync(receiptPath, 'utf8'));
+r.lease.owner = 'unregistered-review-controller';
+r.lease.epoch = 98765;
+r.lease.runId = 'nonexistent-run';
+r.receiptIntegritySha256 = hash(r);
+fs.writeFileSync(receiptPath, JSON.stringify(r, null, 2) + '\n');
+NODE
+
+  run_deploy PANTHEON_DEPLOY_ACTION=activate PANTHEON_DEPLOY_LEASE_OWNER=unregistered-review-controller PANTHEON_DEPLOY_LEASE_EPOCH=98765 PANTHEON_DEPLOY_LEASE_RUN_ID=nonexistent-run
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "forged receipt with unregistered lease unexpectedly succeeded"
+  assert_previous_is_live
+}
+
+test_exact_pair_protocol_schemaless_receipt_restore_rejected() {
+  local write_target receipt_file
+  setup_case exact-pair-schemaless-restore
+  run_write_deploy
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "write initial deployment failed"
+  assert_live_profile write-proof accepted
+
+  write_target="$(readlink -f "${CASE_LIVE}")"
+  receipt_file="${write_target}/.prepared-receipt.json"
+  node --input-type=module - "${receipt_file}" <<'NODE'
+import fs from 'node:fs';
+const p = process.argv[2];
+const prior = JSON.parse(fs.readFileSync(p, 'utf8'));
+fs.writeFileSync(p, JSON.stringify({ lease: { owner: prior.lease.owner, epoch: prior.lease.epoch, delegated: true } }));
+NODE
+
+  run_restore_deploy
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "schemaless receipt restore unexpectedly succeeded"
+  grep -Fq "Restore rejected: lease authority does not match prepared receipt." "${RUN_OUTPUT}" || \
+    show_deploy_failure "missing restore receipt validation error"
+}
+
+test_exact_pair_protocol_write_predecessor_retention() {
+  local original_target
+  setup_case exact-pair-write-retention
+  original_target="${PREVIOUS_TARGET}"
+  run_write_deploy PANTHEON_DEV_FE_KEEP_RELEASES=2
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "write deployment with retention failed"
+  if [[ ! -d "${original_target}" ]]; then
+    die "original predecessor was deleted by retention pruning"
+  fi
+}
+
+test_exact_pair_protocol_write_replay_idempotent() {
+  setup_case exact-pair-write-replay
+  run_write_deploy
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "initial write deployment failed"
+  assert_live_profile write-proof accepted
+
+  run_write_deploy PANTHEON_DEPLOY_ACTION=activate PANTHEON_DEPLOY_REAL_WRITES=true PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES=true
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "write replay should succeed idempotently"
+  assert_live_profile write-proof accepted
+}
+
 run_test() {
   local name="$1"
   shift
@@ -2653,6 +2757,11 @@ run_test "exact pair protocol changed predecessor on replay rejected" test_exact
 run_test "exact pair protocol idempotent replay succeeds" test_exact_pair_protocol_idempotent_replay
 run_test "exact pair protocol one-shot bypass is retired" test_exact_pair_protocol_one_shot_bypass_retired
 run_test "exact pair protocol wrong lease restore rejected" test_exact_pair_protocol_wrong_lease_restore_rejected
+run_test "exact pair protocol failed mandatory gate prepare rejected" test_exact_pair_protocol_failed_mandatory_gate_prepare_rejected
+run_test "exact pair protocol forged receipt and unregistered lease rejected" test_exact_pair_protocol_forged_receipt_and_unregistered_lease_rejected
+run_test "exact pair protocol schemaless receipt restore rejected" test_exact_pair_protocol_schemaless_receipt_restore_rejected
+run_test "exact pair protocol write predecessor retention" test_exact_pair_protocol_write_predecessor_retention
+run_test "exact pair protocol write replay idempotent" test_exact_pair_protocol_write_replay_idempotent
 
 echo "deploy contract harness: ${PASSED} passed, ${FAILED} failed"
 if [[ "${FAILED}" -ne 0 ]]; then

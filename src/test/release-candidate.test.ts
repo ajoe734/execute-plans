@@ -1212,4 +1212,66 @@ describe("paired release candidate preparation and verification", () => {
     expect(verifyFailBff.status).toBe(1);
     expect(verifyFailBff.stderr).toContain("BFF image digest does not match");
   });
+
+  it("requires presence of BFF image and lease identity when expected in single and pair verifiers", () => {
+    const singleRoot = temporaryRoot();
+    const singleDist = makeDist(path.join(singleRoot, "dist"));
+    const singleCandidateDir = path.join(singleRoot, "candidate");
+    prepare(singleRoot, {
+      distDir: singleDist,
+      outputDir: singleCandidateDir,
+    });
+
+    expect(() =>
+      verifyReleaseCandidate({
+        candidateDir: singleCandidateDir,
+        expectedFrontendSha: FRONTEND_SHA,
+        expectedGateRunId: GATE_RUN_ID,
+        expectedBffImageDigest: "9".repeat(64),
+      }),
+    ).toThrow(/missing required BFF image identity/u);
+
+    expect(() =>
+      verifyReleaseCandidate({
+        candidateDir: singleCandidateDir,
+        expectedFrontendSha: FRONTEND_SHA,
+        expectedGateRunId: GATE_RUN_ID,
+        expectedLeaseEpoch: "999",
+      }),
+    ).toThrow(/missing required lease identity/u);
+
+    const pairRoot = temporaryRoot();
+    const readOnlyDist = makeDist(path.join(pairRoot, "read-only"));
+    const operatorLiveDist = makeDist(path.join(pairRoot, "operator-live"), {
+      "assets/profile.json": "operator-live\n",
+    });
+    const writeProofDist = makeDist(path.join(pairRoot, "write-proof"), {
+      "assets/profile.json": "write-proof\n",
+    });
+    const pairCandidateDir = path.join(pairRoot, "candidate");
+    preparePair(pairRoot, {
+      readOnlyDistDir: readOnlyDist,
+      operatorLiveDistDir: operatorLiveDist,
+      writeProofDistDir: writeProofDist,
+      outputDir: pairCandidateDir,
+    });
+
+    expect(() =>
+      verifyPairedReleaseCandidate({
+        candidateDir: pairCandidateDir,
+        expectedFrontendSha: FRONTEND_SHA,
+        expectedGateRunId: GATE_RUN_ID,
+        expectedBffImageDigest: "9".repeat(64),
+      }),
+    ).toThrow(/missing required BFF image identity/u);
+
+    expect(() =>
+      verifyPairedReleaseCandidate({
+        candidateDir: pairCandidateDir,
+        expectedFrontendSha: FRONTEND_SHA,
+        expectedGateRunId: GATE_RUN_ID,
+        expectedLeaseEpoch: "999",
+      }),
+    ).toThrow(/missing required lease identity/u);
+  });
 });

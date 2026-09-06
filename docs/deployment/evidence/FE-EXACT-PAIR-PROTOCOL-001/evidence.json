@@ -7,18 +7,18 @@
   "merge_target": "dev",
   "branch": "task/FE-EXACT-PAIR-PROTOCOL-001",
   "status": "ready-for-independent-exact-head-review",
-  "recorded_at": "2026-09-06T07:12:00.000Z",
+  "recorded_at": "2026-09-06T08:12:00.000Z",
   "scope": {
     "implemented": [
       "Machine-readable exact pair handshake contracts in scripts/release-identity.mjs, scripts/release-evidence.mjs, and scripts/release-candidate.mjs: distinct BFF image digest types (oci_manifest_digest, image_config_digest, archive_checksum - never conflated), lease ({ owner, epoch, runId, delegated }), preparedArtifact ({ locator, checksum }), expectedPredecessor ({ pairId, commit, artifactDigest, target }), compatibilityDigest, releaseId, and mandatory gate evidence.",
-      "Positive prepare protocol in scripts/deploy-dev-vm.sh: stages exact dev-public-origin FE assets, qualifies candidate against staged non-public BFF via PANTHEON_BFF_CANDIDATE_TRANSPORT, leaves incumbent live symlink untouched, emits durable prepared_success in release-evidence hash chain and writes .prepared-receipt.json with 29-field integrity hash, exiting 0.",
-      "Positive activate protocol in scripts/deploy-dev-vm.sh: executes in a new process without rebuilding, verifies prepared receipt (29-field SHA-256 hash, non-future preparedAt <= now + 60s, TTL <= 3600s, expiresAt not expired) and fresh same-epoch environment lease (owner, epoch, runId, delegated=true), enforces expected predecessor CAS even on replay, checks all 5 mandatory gates (candidateVerification, preSwitchProbe, agoraCompatibility, managementFleet, openclawContract), atomically exchanges DEPLOY_ROOT symlink, and verifies independent served readback. Idempotent replay succeeds without rebuilding or re-staging.",
-      "Strict restore protocol in scripts/deploy-dev-vm.sh: requires valid .prepared-receipt.json for write-proof releases, authenticates lease authority with delegated=true, owner, epoch, and runId matching receipt before switching to safe read-only sibling.",
+      "Positive prepare protocol in scripts/deploy-dev-vm.sh: stages exact dev-public-origin FE assets, qualifies candidate against staged non-public BFF via PANTHEON_BFF_CANDIDATE_TRANSPORT, leaves incumbent live symlink untouched, verifies genuine gate evidence (managementFleet, openclawContract, agoraCompatibility), emits durable prepared_success in release-evidence hash chain and writes .prepared-receipt.json with 29-field integrity hash, persisting durable evidence before exiting 0.",
+      "Positive activate protocol in scripts/deploy-dev-vm.sh: executes in a new process without rebuilding, verifies prepared receipt (29-field SHA-256 hash, non-future preparedAt <= now + 60s, TTL <= 3600s, expiresAt not expired, durable receipt match, checksum match) and fresh same-epoch environment lease (registered owner regex, epoch, runId, delegated=true), enforces expected predecessor CAS even on replay, checks all 5 mandatory gates (candidateVerification, preSwitchProbe, agoraCompatibility, managementFleet, openclawContract), atomically exchanges DEPLOY_ROOT symlink, and verifies independent served readback. Idempotent write replay succeeds without rebuilding or re-staging.",
+      "Strict restore protocol in scripts/deploy-dev-vm.sh: requires fully validated .prepared-receipt.json (schema, status, 29-field integrity hash, time bounds, mandatory gates, authorized lease owner regex) for write-proof releases, authenticates lease authority with delegated=true, owner, epoch, and runId matching receipt before switching to safe read-only sibling.",
       "Retired one-shot public-switch bypass in scripts/deploy-dev-vm.sh without compatibility alias; unauthenticated or unphased execution fails closed with exit code 2.",
       "Aligned proof watchdog caller and workflow in .github/workflows/pantheon-proof-watchdog.yml and .github/workflows/pantheon-dev-fe-deploy.yml to pass and verify lease parameters (owner, epoch, runId, delegated=true).",
-      "Gated write-proof proof coordinator in .github/workflows/pantheon-dev-fe-deploy.yml so deploy_action=prepare safely runs prepare without arming watchdog, activating, or running proof, exporting prepared_release_dir and prepared_receipt from steps.write_prepare.",
-      "Updated .github/workflows/pantheon-integration-gate.yml to wire staged candidate transport to browser probe and identity verification curl, pass --bff-image-repository and --bff-image-tag when digest is present, and declare job-level environment variables within GitHub Actions 25-input dispatch limit.",
-      "Hardened probe-hosted-browser-bff.mjs: strict IPv4 loopback regex rejecting spoofed hostnames (e.g. 127.attacker.example), genuine browser CORS preflight check with OPTIONS dispatch, and preserved candidate path prefixes in route fulfillment."
+      "Gated write-proof proof coordinator in .github/workflows/pantheon-dev-fe-deploy.yml so deploy_action=prepare safely runs prepare without arming watchdog, activating, or running proof, exporting prepared_release_dir, prepared_receipt, prepared_locator, and prepared_receipt_checksum within 25-input workflow dispatch limit.",
+      "Updated .github/workflows/pantheon-integration-gate.yml to wire staged candidate transport to browser probe, write probes, management live deep, auth smoke, and identity verification curl; replaced retired sslip.io host with app.dev.mvl-cap.tw.",
+      "Hardened probe-hosted-browser-bff.mjs: strict IPv4 loopback regex rejecting spoofed hostnames (e.g. 127.attacker.example), genuine browser CORS preflight check with OPTIONS dispatch validating allowed methods, headers, and credentials, and preserved candidate path prefixes in route fulfillment."
     ],
     "declared_artifacts": [
       "scripts/release-identity.mjs",
@@ -48,19 +48,18 @@
     "one_shot_public_switch_bypass_retired_with_exit_code_2": true,
     "prior_artifact_restore_aligned_with_parent_pair_protocol": true,
     "strictly_limited_to_16_declared_target_artifacts": true,
-    "all_10_reviewer_findings_resolved": true
+    "all_reviewer_findings_resolved": true
   },
   "reviewer_findings_resolved": {
-    "1_parent_lease_authority_and_delegation": "Both activate and restore strictly authenticate fresh parent lease authority; LEASE_DELEGATED=true is enforced and delegated=false fails closed. Restore requires .prepared-receipt.json when current release is write-proof and matches lease owner/epoch/runId. Watchdog caller and workflow pass lease_owner, lease_epoch, lease_run_id, lease_delegated.",
-    "2_receipt_mandatory_integrity_and_bounds": "Mandatory receiptIntegritySha256 recomputed over all 29 fields in canonical order. Embedded verifier checks preparedAt <= now + 60s (no future timestamps), TTL <= 3600s, and now <= expiresAt (no expired receipts).",
-    "3_mandatory_management_openclaw_gates": "scripts/deploy-dev-vm.sh consumes browser probe JSON to verify managementFleet (personaFleetSafetyPassed !== false) and openclawContract. All 5 mandatory gates must have passed status in receipt.",
-    "4_observed_exact_bff_image": "Preserves PAIR_ROOT_DIR before subdirectory mutations. verify_bff_identity verifies observed image repository, tag, digestType, and digest match expected. Disallows substituting unobserved caller image in release-identity.mjs.",
-    "5_staged_candidate_transport_and_image_flags": ".github/workflows/pantheon-integration-gate.yml routes candidate transport to browser probe and curls candidate transport for /bff/version. Passes required --bff-image-repository and --bff-image-tag to prepare-pair when image digest is set.",
-    "6_browser_cors_preflight": "scripts/probe-hosted-browser-bff.mjs performs genuine browser CORS preflight check (OPTIONS request) for non-simple methods/headers, aborting route if preflight fails or lacks access-control-allow-origin.",
-    "7_preserve_candidate_path_prefix": "Candidate URL construction in probe-hosted-browser-bff.mjs preserves candidate path prefixes (e.g. /staged) when rewriting candidate routes.",
-    "8_reject_changed_predecessor_on_replay": "Predecessor comparison is executed outside !isReplay, and atomic activation CAS validates requested predecessor against receipt unconditionally.",
-    "9_prepare_only_write_proof_and_outputs": "proof-coordinator in pantheon-dev-fe-deploy.yml runs write_prepare before watchdog dispatch. When deploy_action=prepare, watchdog dispatch/arming, activate, proof dispatch, child claim upload, and proof wait steps are all gated and skipped. Outputs prepared_release_dir and prepared_receipt are exported from steps.write_prepare.",
-    "10_candidate_host_ipv4_loopback": "Hostname loopback check in probe-hosted-browser-bff.mjs strictly parses IPv4 loopbacks using /^127\\.\\d+\\.\\d+\\.\\d+$/u, rejecting spoofed domain names."
+    "1_parent_lease_authority_and_delegation": "Both activate and restore strictly authenticate fresh parent lease authority against AUTHORIZED_LEASE_OWNERS_REGEX; LEASE_DELEGATED=true is enforced and delegated=false or unregistered controllers fail closed. Fallback fake leases removed. Restore requires authenticated .prepared-receipt.json when current release is write-proof and matches lease owner/epoch/runId. Watchdog caller and workflow pass lease_owner, lease_epoch, lease_run_id, lease_delegated.",
+    "2_receipt_mandatory_integrity_and_bounds": "Mandatory receiptIntegritySha256 recomputed over all 29 fields in canonical order. Embedded verifier checks preparedAt <= now + 60s (no future timestamps), TTL <= 3600s, and now <= expiresAt (no expired receipts). Prepare verifies genuine gate evidence for managementFleet, openclawContract, and agoraCompatibility, failing closed (exit 2) if any mandatory gate fails or is missing.",
+    "3_require_image_lease_identity_presence": "release-candidate.mjs single and pair verifiers strictly require bffImage and lease presence when expected image digest and lease epoch are passed, throwing explicit errors instead of accepting nulls. deploy-dev-vm.sh enforces observed exact image binding.",
+    "4_browser_cors_preflight": "scripts/probe-hosted-browser-bff.mjs performs genuine browser CORS preflight check (OPTIONS request) for non-simple methods/headers, validating Access-Control-Allow-Methods, Access-Control-Allow-Headers, and credentials permissions. Executable Chromium browser test added in src/test/hosted-browser-release-policy.test.ts.",
+    "5_qualify_http_gates_against_candidate_transport": ".github/workflows/pantheon-integration-gate.yml routes staged candidate transport to browser probe, write probes, management live deep, and auth smoke. Retired sslip.io host replaced with app.dev.mvl-cap.tw.",
+    "6_bind_fresh_activation_dispatch": ".github/workflows/pantheon-dev-fe-deploy.yml wires prepared_locator, prepared_receipt_checksum, and expected predecessor inputs through dispatch and jobs, keeping inputs at 25 limit. deploy-dev-vm.sh rejects directory sort discovery and fails closed if prepared locator is missing.",
+    "7_restore_receipt_contract_validation": "deploy-dev-vm.sh restore_paired_safe_release validates schemaVersion, prepared_success, 29-field receiptIntegritySha256, time bounds, authorized lease owner regex, and mandatory gates before switching to safe read-only sibling.",
+    "8_retain_exact_original_predecessor": "deploy-dev-vm.sh records ORIGINAL_PREDECESSOR_TARGET and prevents its pruning during write activation retention cleanup when KEEP_RELEASES=2.",
+    "9_complete_replay_and_evidence_durability": "deploy-dev-vm.sh detects is_exact_replay for write-proof dispatches and avoids safe sibling target overwrite, allowing idempotent replay. Successful prepare invokes persist_durable_evidence and cleanup enforces DURABLE_EVIDENCE_PERSISTED=true before exit 0."
   },
   "downstream_handover_contract": {
     "DEV-DELIVERY-001": "FE deployment interface exposes separated PANTHEON_DEPLOY_ACTION=prepare (outputs prepared-release-dir, .prepared-receipt.json with TTL 3600s and 29-field integrity hash) and PANTHEON_DEPLOY_ACTION=activate (requires lease_owner, lease_epoch, lease_run_id, lease_delegated=true, predecessor CAS). Pruning retains unexpired prepared receipts. Failure during activate retains safe sibling for parent rollback.",
@@ -73,11 +72,11 @@
     },
     "deploy_dev_vm_harness": {
       "command": "PANTHEON_TEST_FILTER='exact pair protocol' bash scripts/test-deploy-dev-vm.sh",
-      "result": "passed: 10 passed, 0 failed"
+      "result": "passed: 15 passed, 0 failed (including 5 new regression tests: failed mandatory gate rejected, forged receipt rejected, schemaless restore rejected, predecessor retention preserved, write replay idempotent)"
     },
     "vitest_full_suite": {
       "command": "npx --no-install vitest run --maxWorkers=2 src/test/release-candidate.test.ts src/test/release-evidence.test.ts src/test/hosted-browser-release-policy.test.ts src/test/paired-release-workflow.test.ts src/test/deploy-safe-defaults.test.ts",
-      "result": "passed: 150 tests passed across 5 files"
+      "result": "passed: 152 tests passed across 5 files"
     }
   },
   "review_binding": {
