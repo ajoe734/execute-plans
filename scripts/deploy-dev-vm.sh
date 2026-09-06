@@ -707,8 +707,9 @@ write_prepared_receipt() {
     "${EXPECTED_PREDECESSOR_COMMIT:-${LIVE_COMMIT_AT_START:-${PREVIOUS_COMMIT}}}" \
     "${EXPECTED_PREDECESSOR_PAIR_ID:-${LIVE_PAIR_ID_AT_START:-${PREVIOUS_PAIR_ID}}}" \
     "${EXPECTED_PREDECESSOR_ARTIFACT_DIGEST:-${LIVE_DIGEST_AT_START:-${PREVIOUS_DIGEST}}}" \
-    "${CANDIDATE_DIR}/pair.json" \
-    "${AGORA_COMPAT_EVIDENCE_AUDIT}" <<'NODE'
+    "${PAIR_ROOT_DIR:-$CANDIDATE_DIR}/pair.json" \
+    "${AGORA_COMPAT_EVIDENCE_AUDIT}" \
+    "${AUDIT_DIR}/browser-probe-candidate_pre_switch.json" <<'NODE'
 import crypto from "node:crypto";
 import fs from "node:fs";
 const [
@@ -716,7 +717,7 @@ const [
   artifactDigest, profile, githubArtifactDigest, gateRunId,
   leaseOwner, leaseEpoch, leaseRunId, leaseDelegated,
   predTarget, predCommit, predPairId, predDigest,
-  pairJsonPath, agoraCompatPath
+  pairJsonPath, agoraCompatPath, browserProbePath
 ] = process.argv.slice(2);
 let bffImage = null;
 if (fs.existsSync(pairJsonPath)) {
@@ -731,33 +732,62 @@ if (fs.existsSync(agoraCompatPath)) {
     agoraEvidence = JSON.parse(fs.readFileSync(agoraCompatPath, "utf8"));
   } catch {}
 }
+let managementFleetStatus = process.env.PANTHEON_MANDATORY_GATE_MANAGEMENT_FLEET || "passed";
+if (fs.existsSync(browserProbePath)) {
+  try {
+    const probe = JSON.parse(fs.readFileSync(browserProbePath, "utf8"));
+    if (probe.personaFleetSafetyPassed === false || (probe.personaFleetChecks && probe.personaFleetChecks.hasNaN === true)) {
+      managementFleetStatus = "failed";
+    }
+  } catch {
+    managementFleetStatus = "failed";
+  }
+}
+let openclawContractStatus = process.env.PANTHEON_MANDATORY_GATE_OPENCLAW_CONTRACT || "passed";
+
 const preparedAt = new Date().toISOString();
 const expiresAt = new Date(Date.now() + 3600 * 1000).toISOString();
-const integrityPayload = [
-  pairId,
-  frontendSha,
-  bffSha,
-  artifactDigest,
-  profile,
-  releaseDir,
-  leaseOwner,
-  String(leaseEpoch),
-  leaseRunId,
-  String(leaseDelegated),
-  predTarget || "",
-  predCommit || "",
-  predPairId || "",
-  predDigest || "",
-  preparedAt
-].join("|");
-const receiptIntegritySha256 = crypto.createHash("sha256").update(integrityPayload, "utf8").digest("hex");
+
+function computeReceiptIntegritySha256(r) {
+  const parts = [
+    r.pairId || "",
+    r.frontendSha || "",
+    r.bffSha || "",
+    r.artifactDigestSha256 || "",
+    r.profile || "",
+    r.releaseDir || "",
+    r.lease?.owner || "",
+    String(r.lease?.epoch ?? ""),
+    r.lease?.runId || "",
+    String(r.lease?.delegated ?? ""),
+    r.expectedPredecessor?.target || "",
+    r.expectedPredecessor?.commit || "",
+    r.expectedPredecessor?.pairId || "",
+    r.expectedPredecessor?.artifactDigest || "",
+    r.preparedAt || "",
+    r.expiresAt || "",
+    r.bffImage?.repository || "",
+    r.bffImage?.tag || "",
+    r.bffImage?.digestType || "",
+    r.bffImage?.digest || "",
+    r.preparedArtifact?.locator || "",
+    r.preparedArtifact?.checksum || "",
+    r.githubArtifactDigest || "",
+    String(r.gateRunId || ""),
+    r.mandatoryGates?.candidateVerification || "",
+    r.mandatoryGates?.preSwitchProbe || "",
+    r.mandatoryGates?.agoraCompatibility || "",
+    r.mandatoryGates?.managementFleet || "",
+    r.mandatoryGates?.openclawContract || ""
+  ];
+  return crypto.createHash("sha256").update(parts.join("|"), "utf8").digest("hex");
+}
 
 const receipt = {
   schemaVersion: "pantheon.release.prepared-receipt.v1",
   status: "prepared_success",
   preparedAt,
   expiresAt,
-  receiptIntegritySha256,
   releaseName,
   releaseDir,
   pairId,
@@ -786,16 +816,17 @@ const receipt = {
     artifactDigest: predDigest || null
   },
   mandatoryGates: {
-    agoraCompatibility: (agoraEvidence && agoraEvidence.compatibility_status === "accepted") || profile === "read-only" ? "passed" : "skipped",
     candidateVerification: "passed",
     preSwitchProbe: "passed",
-    managementFleet: "passed",
-    openclawContract: "passed"
+    agoraCompatibility: (agoraEvidence && agoraEvidence.compatibility_status === "accepted") || profile === "read-only" ? "passed" : "skipped",
+    managementFleet: managementFleetStatus,
+    openclawContract: openclawContractStatus
   },
   probes: {
     candidatePreSwitch: "passed"
   }
 };
+receipt.receiptIntegritySha256 = computeReceiptIntegritySha256(receipt);
 fs.writeFileSync(receiptFile, `${JSON.stringify(receipt, null, 2)}\n`, "utf8");
 NODE
   cp -f "${receipt_file}" "${AUDIT_DIR}/prepared-receipt.json"
@@ -831,7 +862,7 @@ verify_prepared_receipt() {
     "${LIVE_PAIR_ID_AT_START:-${PREVIOUS_PAIR_ID:-}}" \
     "${LIVE_DIGEST_AT_START:-${PREVIOUS_DIGEST:-}}" \
     "${GATE_RUN_ID}" \
-    "${CANDIDATE_DIR}/pair.json" <<'NODE'
+    "${PAIR_ROOT_DIR:-$CANDIDATE_DIR}/pair.json" <<'NODE'
 import crypto from "node:crypto";
 import fs from "node:fs";
 const [
@@ -847,35 +878,71 @@ if (payload.schemaVersion !== "pantheon.release.prepared-receipt.v1" || payload.
   throw new Error("Invalid prepared receipt status or schema");
 }
 
-// 1. Verify receipt integrity hash
-if (payload.receiptIntegritySha256) {
-  const integrityPayload = [
-    payload.pairId,
-    payload.frontendSha,
-    payload.bffSha,
-    payload.artifactDigestSha256,
-    payload.profile,
-    payload.releaseDir,
-    payload.lease?.owner,
-    String(payload.lease?.epoch),
-    payload.lease?.runId,
-    String(payload.lease?.delegated),
-    payload.expectedPredecessor?.target || "",
-    payload.expectedPredecessor?.commit || "",
-    payload.expectedPredecessor?.pairId || "",
-    payload.expectedPredecessor?.artifactDigest || "",
-    payload.preparedAt
-  ].join("|");
-  const recomputed = crypto.createHash("sha256").update(integrityPayload, "utf8").digest("hex");
-  if (recomputed !== payload.receiptIntegritySha256) {
-    throw new Error("Prepared receipt integrity check failed: tampered receipt");
-  }
+function computeReceiptIntegritySha256(r) {
+  const parts = [
+    r.pairId || "",
+    r.frontendSha || "",
+    r.bffSha || "",
+    r.artifactDigestSha256 || "",
+    r.profile || "",
+    r.releaseDir || "",
+    r.lease?.owner || "",
+    String(r.lease?.epoch ?? ""),
+    r.lease?.runId || "",
+    String(r.lease?.delegated ?? ""),
+    r.expectedPredecessor?.target || "",
+    r.expectedPredecessor?.commit || "",
+    r.expectedPredecessor?.pairId || "",
+    r.expectedPredecessor?.artifactDigest || "",
+    r.preparedAt || "",
+    r.expiresAt || "",
+    r.bffImage?.repository || "",
+    r.bffImage?.tag || "",
+    r.bffImage?.digestType || "",
+    r.bffImage?.digest || "",
+    r.preparedArtifact?.locator || "",
+    r.preparedArtifact?.checksum || "",
+    r.githubArtifactDigest || "",
+    String(r.gateRunId || ""),
+    r.mandatoryGates?.candidateVerification || "",
+    r.mandatoryGates?.preSwitchProbe || "",
+    r.mandatoryGates?.agoraCompatibility || "",
+    r.mandatoryGates?.managementFleet || "",
+    r.mandatoryGates?.openclawContract || ""
+  ];
+  return crypto.createHash("sha256").update(parts.join("|"), "utf8").digest("hex");
 }
 
-// 2. Verify expiration
+// 1. Verify mandatory receipt integrity hash
+if (!payload.receiptIntegritySha256 || typeof payload.receiptIntegritySha256 !== "string") {
+  throw new Error("Prepared receipt integrity check failed: missing mandatory receiptIntegritySha256");
+}
+const recomputed = computeReceiptIntegritySha256(payload);
+if (recomputed !== payload.receiptIntegritySha256) {
+  throw new Error("Prepared receipt integrity check failed: tampered receipt");
+}
+
+// 2. Verify timestamp and expiration bounds
 const prepTime = Date.parse(payload.preparedAt);
-if (Number.isNaN(prepTime) || Date.now() - prepTime > 3600 * 1000) {
+if (Number.isNaN(prepTime)) {
+  throw new Error("Prepared receipt has invalid preparedAt timestamp");
+}
+const now = Date.now();
+if (prepTime > now + 60 * 1000) {
+  throw new Error("Prepared receipt preparedAt is in the future");
+}
+if (now - prepTime > 3600 * 1000) {
   throw new Error("Prepared receipt has expired (exceeded 3600s TTL)");
+}
+if (!payload.expiresAt) {
+  throw new Error("Prepared receipt is missing mandatory expiresAt timestamp");
+}
+const expTime = Date.parse(payload.expiresAt);
+if (Number.isNaN(expTime)) {
+  throw new Error("Prepared receipt has invalid expiresAt timestamp");
+}
+if (now > expTime) {
+  throw new Error("Prepared receipt has expired (past expiresAt)");
 }
 
 // 3. Identity and profile checks
@@ -904,9 +971,15 @@ if (payload.gateRunId && expectedGateRunId && String(payload.gateRunId) !== Stri
   throw new Error(`Receipt gate run ID mismatch: expected ${expectedGateRunId}, got ${payload.gateRunId}`);
 }
 
-// 4. Lease verification (fresh same-epoch lease authority)
+// 4. Lease verification (fresh same-epoch lease authority with delegation required)
 if (!payload.lease || !payload.lease.owner) {
   throw new Error("Receipt is missing required lease owner");
+}
+if (payload.lease.delegated !== true) {
+  throw new Error("Receipt lease is not delegated");
+}
+if (currentDelegated !== "true") {
+  throw new Error("Current execution lease is not delegated");
 }
 if (!currentOwner || payload.lease.owner.toLowerCase() !== currentOwner.toLowerCase()) {
   throw new Error(`Receipt lease owner mismatch: receipt=${payload.lease.owner}, current=${currentOwner}`);
@@ -915,11 +988,8 @@ const receiptEpoch = payload.lease.epoch;
 if (receiptEpoch !== parseInt(currentEpoch, 10)) {
   throw new Error(`Receipt lease epoch mismatch: receipt=${receiptEpoch}, current=${currentEpoch}`);
 }
-if (currentRunId && payload.lease.runId && payload.lease.runId !== currentRunId) {
+if (!currentRunId || !payload.lease.runId || payload.lease.runId !== currentRunId) {
   throw new Error(`Receipt lease run ID mismatch: receipt=${payload.lease.runId}, current=${currentRunId}`);
-}
-if (payload.lease.delegated !== (currentDelegated === "true")) {
-  throw new Error(`Receipt lease delegation mismatch: receipt=${payload.lease.delegated}, current=${currentDelegated}`);
 }
 
 // 5. BFF image verification
@@ -943,17 +1013,44 @@ if (fs.existsSync(pairJsonPath)) {
 }
 
 // 6. Mandatory gates
-if (payload.mandatoryGates?.candidateVerification !== "passed" ||
-    payload.mandatoryGates?.preSwitchProbe !== "passed") {
-  throw new Error("Mandatory candidate gates not passed in prepared receipt");
+if (!payload.mandatoryGates || typeof payload.mandatoryGates !== "object") {
+  throw new Error("Prepared receipt missing mandatory gates");
 }
-if (expectedProfile !== "read-only" && payload.mandatoryGates?.agoraCompatibility !== "passed") {
+if (payload.mandatoryGates.candidateVerification !== "passed") {
+  throw new Error("Mandatory candidate verification gate not passed in prepared receipt");
+}
+if (payload.mandatoryGates.preSwitchProbe !== "passed") {
+  throw new Error("Mandatory pre-switch probe gate not passed in prepared receipt");
+}
+if (expectedProfile !== "read-only" && payload.mandatoryGates.agoraCompatibility !== "passed") {
   throw new Error("Mandatory Agora compatibility gate not passed in prepared receipt");
+}
+if (payload.mandatoryGates.managementFleet !== "passed") {
+  throw new Error("Mandatory Management fleet gate not passed in prepared receipt");
+}
+if (payload.mandatoryGates.openclawContract !== "passed") {
+  throw new Error("Mandatory OpenClaw contract gate not passed in prepared receipt");
 }
 
 // 7. Full predecessor binding CAS check
 const isReplay = Boolean(liveTarget && expectedReleaseDir && liveTarget === expectedReleaseDir);
 const pred = payload.expectedPredecessor || {};
+
+// Request predecessor fields match receipt if supplied (always checked, even on replay!)
+if (reqPredTarget && pred.target && reqPredTarget !== pred.target) {
+  throw new Error(`Request predecessor target mismatch: request=${reqPredTarget}, receipt=${pred.target}`);
+}
+if (reqPredCommit && pred.commit && reqPredCommit !== pred.commit) {
+  throw new Error(`Request predecessor commit mismatch: request=${reqPredCommit}, receipt=${pred.commit}`);
+}
+if (reqPredPairId && pred.pairId && reqPredPairId !== pred.pairId) {
+  throw new Error(`Request predecessor pair ID mismatch: request=${reqPredPairId}, receipt=${pred.pairId}`);
+}
+if (reqPredDigest && pred.artifactDigest && reqPredDigest !== pred.artifactDigest) {
+  throw new Error(`Request predecessor artifact digest mismatch: request=${reqPredDigest}, receipt=${pred.artifactDigest}`);
+}
+
+// Live predecessor fields match receipt when not replay (state transition)
 if (!isReplay) {
   if (pred.target && liveTarget && liveTarget !== pred.target) {
     throw new Error(`Activation predecessor target mismatch: live=${liveTarget}, receipt=${pred.target}`);
@@ -966,20 +1063,6 @@ if (!isReplay) {
   }
   if (pred.artifactDigest && liveDigest && liveDigest !== pred.artifactDigest) {
     throw new Error(`Activation predecessor artifact digest mismatch: live=${liveDigest}, receipt=${pred.artifactDigest}`);
-  }
-
-  // Request predecessor fields match receipt if supplied
-  if (reqPredTarget && pred.target && reqPredTarget !== pred.target) {
-    throw new Error(`Request predecessor target mismatch: request=${reqPredTarget}, receipt=${pred.target}`);
-  }
-  if (reqPredCommit && pred.commit && reqPredCommit !== pred.commit) {
-    throw new Error(`Request predecessor commit mismatch: request=${reqPredCommit}, receipt=${pred.commit}`);
-  }
-  if (reqPredPairId && pred.pairId && reqPredPairId !== pred.pairId) {
-    throw new Error(`Request predecessor pair ID mismatch: request=${reqPredPairId}, receipt=${pred.pairId}`);
-  }
-  if (reqPredDigest && pred.artifactDigest && reqPredDigest !== pred.artifactDigest) {
-    throw new Error(`Request predecessor artifact digest mismatch: request=${reqPredDigest}, receipt=${pred.artifactDigest}`);
   }
 }
 NODE
@@ -995,7 +1078,7 @@ verify_bff_identity() {
     evidence_append "bff.identity.${stage}" failed "bffCommit=${BFF_COMMIT}"
     return 1
   fi
-  if ! node --input-type=module - "${output_file}" "${BFF_COMMIT}" "${DEPLOY_PROFILE}" "${CANDIDATE_DIR}/pair.json" <<'NODE'
+  if ! node --input-type=module - "${output_file}" "${BFF_COMMIT}" "${DEPLOY_PROFILE}" "${PAIR_ROOT_DIR:-$CANDIDATE_DIR}/pair.json" <<'NODE'
 import fs from "node:fs";
 const [file, expected, profile, pairJsonPath] = process.argv.slice(2);
 const payload = JSON.parse(fs.readFileSync(file, "utf8"));
@@ -1008,17 +1091,19 @@ if (source !== alias || source !== expected.toLowerCase()) {
   throw new Error("live BFF identity differs from gated candidate identity");
 }
 if (fs.existsSync(pairJsonPath)) {
-  try {
-    const pairData = JSON.parse(fs.readFileSync(pairJsonPath, "utf8"));
-    if (pairData.bffImage) {
-      const expDigest = pairData.bffImage.digest;
-      const obsDigest = payload.image?.digest || payload.image_digest || payload.digest;
-      if (expDigest && obsDigest && expDigest !== obsDigest) {
-        throw new Error(`live BFF image digest mismatch: expected ${expDigest}, got ${obsDigest}`);
-      }
+  const pairData = JSON.parse(fs.readFileSync(pairJsonPath, "utf8"));
+  if (pairData.bffImage) {
+    const exp = pairData.bffImage;
+    const obsImage = payload.image;
+    if (!obsImage || !obsImage.digest) {
+      throw new Error("live BFF identity missing required image identity or digest");
     }
-  } catch (err) {
-    if (err.message.includes("live BFF image digest mismatch")) throw err;
+    if (exp.digest && exp.digest !== obsImage.digest) {
+      throw new Error(`live BFF image digest mismatch: expected ${exp.digest}, got ${obsImage.digest}`);
+    }
+    if (exp.digestType && exp.digestType !== obsImage.digestType) {
+      throw new Error(`live BFF image digest type mismatch: expected ${exp.digestType}, got ${obsImage.digestType}`);
+    }
   }
 }
 if (profile === "operator-live") {
@@ -1409,17 +1494,57 @@ restore_paired_safe_release() {
     echo "Managed live release is missing deployment identity." >&2
     return 2
   fi
-  if [[ -n "${LEASE_OWNER:-}" || -n "${LEASE_EPOCH:-}" || -n "${LEASE_RUN_ID:-}" ]]; then
-    if [[ -n "${LEASE_EPOCH:-}" && ! "${LEASE_EPOCH}" =~ ^[0-9]+$ ]]; then
-      echo "Restore rejected: lease epoch must be a non-negative integer." >&2
-      return 2
-    fi
-    evidence_append restore.lease passed "leaseOwner=${LEASE_OWNER:-}" "leaseEpoch=${LEASE_EPOCH:-}" "leaseRunId=${LEASE_RUN_ID:-}"
-  fi
   read -r current_profile current_state current_pair < <(node -e '
     const fs=require("node:fs");const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));
     process.stdout.write(`${String(p.deploymentProfile||p.profile||"")} ${String(p.deploymentState||"")} ${String(p.pairId||"")}\n`);
   ' "${write_manifest}")
+
+  local write_receipt="${write_target}/.prepared-receipt.json"
+  if [[ ! -f "${write_receipt}" ]]; then
+    if [[ "${current_profile}" != "read-only" ]]; then
+      echo "Restore rejected: prepared receipt missing in ${write_target}." >&2
+      return 2
+    fi
+  fi
+  if [[ "${LEASE_DELEGATED}" != "true" ]]; then
+    echo "Restore rejected: parent lease delegation is required (LEASE_DELEGATED must be true)." >&2
+    return 2
+  fi
+  if [[ -z "${LEASE_OWNER:-}" || -z "${LEASE_EPOCH:-}" || -z "${LEASE_RUN_ID:-}" ]]; then
+    echo "Restore rejected: lease owner, epoch, and run ID are required." >&2
+    return 2
+  fi
+  if [[ ! "${LEASE_EPOCH}" =~ ^[0-9]+$ ]]; then
+    echo "Restore rejected: lease epoch must be a non-negative integer." >&2
+    return 2
+  fi
+  if [[ -f "${write_receipt}" ]]; then
+    if ! node --input-type=module - "${write_receipt}" "${LEASE_OWNER}" "${LEASE_EPOCH}" "${LEASE_RUN_ID}" "${LEASE_DELEGATED}" <<'NODE'
+import fs from "node:fs";
+const [receiptFile, leaseOwner, leaseEpoch, leaseRunId, leaseDelegated] = process.argv.slice(2);
+const payload = JSON.parse(fs.readFileSync(receiptFile, "utf8"));
+if (!payload.lease || !payload.lease.owner) {
+  throw new Error("Receipt missing required lease");
+}
+if (payload.lease.delegated !== true || leaseDelegated !== "true") {
+  throw new Error("Restore lease delegation mismatch or not delegated");
+}
+if (payload.lease.owner.toLowerCase() !== leaseOwner.toLowerCase()) {
+  throw new Error(`Restore lease owner mismatch: receipt=${payload.lease.owner}, current=${leaseOwner}`);
+}
+if (payload.lease.epoch !== parseInt(leaseEpoch, 10)) {
+  throw new Error(`Restore lease epoch mismatch: receipt=${payload.lease.epoch}, current=${leaseEpoch}`);
+}
+if (payload.lease.runId && leaseRunId && payload.lease.runId !== leaseRunId) {
+  throw new Error(`Restore lease run ID mismatch: receipt=${payload.lease.runId}, current=${leaseRunId}`);
+}
+NODE
+    then
+      echo "Restore rejected: lease authority does not match prepared receipt." >&2
+      return 2
+    fi
+  fi
+  evidence_append restore.lease passed "leaseOwner=${LEASE_OWNER}" "leaseEpoch=${LEASE_EPOCH}" "leaseRunId=${LEASE_RUN_ID}"
   if [[ "${current_profile}" == "read-only" ]]; then
     if [[ "${current_pair}" != "${PAIR_ID}" ||
       ( "${current_state}" != "accepted" && "${current_state}" != "standby" ) ]]; then
@@ -1767,6 +1892,15 @@ if [[ "${DEPLOY_ACTION}" == "prepare" && "${DEPLOY_PROFILE}" == "read-only-resto
   exit 2
 fi
 
+if [[ "${LEASE_DELEGATED}" != "true" ]]; then
+  echo "Deployment rejected: parent lease delegation is required (LEASE_DELEGATED must be true)." >&2
+  exit 2
+fi
+if [[ -z "${LEASE_OWNER:-}" || -z "${LEASE_EPOCH:-}" || ! "${LEASE_EPOCH}" =~ ^[0-9]+$ || -z "${LEASE_RUN_ID:-}" ]]; then
+  echo "Deployment rejected: valid lease owner, non-negative epoch, and run ID are required." >&2
+  exit 2
+fi
+
 assert_scoped_path "Deploy root" "${DEPLOY_ROOT}" "${STRICT_DIR_PREFIX}"
 assert_scoped_path "Release store" "${RELEASES_DIR}" "${STRICT_RELEASES_PREFIX}"
 assert_scoped_path "Safe-fallback locator store" "${SAFE_FALLBACK_LOCATOR_DIR}" "${RELEASES_DIR}"
@@ -1847,6 +1981,7 @@ if [[ ! -d "${CANDIDATE_DIR}/dist" || ! -f "${CANDIDATE_DIR}/candidate.json" ||
   exit 2
 fi
 
+PAIR_ROOT_DIR="${CANDIDATE_DIR}"
 READ_ONLY_CANDIDATE_DIR="${CANDIDATE_DIR}"
 OPERATOR_LIVE_CANDIDATE_DIR="${CANDIDATE_DIR}/operator-live"
 WRITE_PROOF_CANDIDATE_DIR="${CANDIDATE_DIR}/write-proof"
@@ -2085,14 +2220,31 @@ if [[ "${DEPLOY_ACTION}" == "activate" ]]; then
   verify_prepared_receipt "${RELEASE_DIR}"
   verify_dist_digest "${RELEASE_DIR}" "${ARTIFACT_DIGEST}" >/dev/null
 
+  read -r pred_target pred_commit pred_pair pred_digest < <(node -e '
+    const p=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));
+    const ep=p.expectedPredecessor||{};
+    process.stdout.write(`${ep.target||""} ${ep.commit||""} ${ep.pairId||""} ${ep.artifactDigest||""}\n`);
+  ' "${RELEASE_DIR}/.prepared-receipt.json")
+
+  if [[ -n "${EXPECTED_PREDECESSOR_TARGET:-}" && -n "${pred_target}" && "${EXPECTED_PREDECESSOR_TARGET}" != "${pred_target}" ]]; then
+    echo "Activation CAS rejected: requested predecessor target (${EXPECTED_PREDECESSOR_TARGET}) does not match receipt predecessor target (${pred_target})." >&2
+    exit 2
+  fi
+  if [[ -n "${EXPECTED_PREDECESSOR_COMMIT:-}" && -n "${pred_commit}" && "${EXPECTED_PREDECESSOR_COMMIT}" != "${pred_commit}" ]]; then
+    echo "Activation CAS rejected: requested predecessor commit (${EXPECTED_PREDECESSOR_COMMIT}) does not match receipt predecessor commit (${pred_commit})." >&2
+    exit 2
+  fi
+  if [[ -n "${EXPECTED_PREDECESSOR_PAIR_ID:-}" && -n "${pred_pair}" && "${EXPECTED_PREDECESSOR_PAIR_ID}" != "${pred_pair}" ]]; then
+    echo "Activation CAS rejected: requested predecessor pair ID (${EXPECTED_PREDECESSOR_PAIR_ID}) does not match receipt predecessor pair ID (${pred_pair})." >&2
+    exit 2
+  fi
+  if [[ -n "${EXPECTED_PREDECESSOR_ARTIFACT_DIGEST:-}" && -n "${pred_digest}" && "${EXPECTED_PREDECESSOR_ARTIFACT_DIGEST}" != "${pred_digest}" ]]; then
+    echo "Activation CAS rejected: requested predecessor digest (${EXPECTED_PREDECESSOR_ARTIFACT_DIGEST}) does not match receipt predecessor digest (${pred_digest})." >&2
+    exit 2
+  fi
+
   current_live="$(current_live_target)"
   if [[ "${current_live}" != "${RELEASE_DIR}" ]]; then
-    read -r pred_target pred_commit pred_pair pred_digest < <(node -e '
-      const p=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));
-      const ep=p.expectedPredecessor||{};
-      process.stdout.write(`${ep.target||""} ${ep.commit||""} ${ep.pairId||""} ${ep.artifactDigest||""}\n`);
-    ' "${RELEASE_DIR}/.prepared-receipt.json")
-
     if [[ -n "${pred_target}" && "${current_live}" != "${pred_target}" ]]; then
       echo "Activation CAS rejected: live predecessor target (${current_live:-none}) does not match expected predecessor target (${pred_target})." >&2
       exit 2

@@ -2534,6 +2534,64 @@ test_exact_pair_protocol_one_shot_bypass_retired() {
   grep -Fq "One-shot public switch has been retired" "${RUN_OUTPUT}" || die "missing retired message"
 }
 
+test_exact_pair_protocol_lease_delegation_false_rejected() {
+  setup_case exact-pair-delegation-false
+  run_deploy PANTHEON_DEPLOY_ACTION=prepare PANTHEON_DEPLOY_LEASE_DELEGATED=true
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "prepare should succeed"
+  assert_previous_is_live
+
+  run_deploy PANTHEON_DEPLOY_ACTION=activate PANTHEON_DEPLOY_LEASE_DELEGATED=false
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "delegated=false unexpectedly succeeded"
+  assert_previous_is_live
+}
+
+test_exact_pair_protocol_tampered_receipt_rejected() {
+  local release_dir receipt_file
+  setup_case exact-pair-tampered-receipt
+  run_deploy PANTHEON_DEPLOY_ACTION=prepare
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "prepare should succeed"
+  assert_previous_is_live
+
+  release_dir="$(<"${CASE_AUDIT}/prepared-release-dir")"
+  receipt_file="${release_dir}/.prepared-receipt.json"
+
+  python3 -c "import json; d = json.load(open('${receipt_file}')); d['frontendSha'] = '0' * 40; json.dump(d, open('${receipt_file}', 'w'))"
+
+  run_deploy PANTHEON_DEPLOY_ACTION=activate
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "tampered receipt unexpectedly succeeded"
+  assert_previous_is_live
+}
+
+test_exact_pair_protocol_changed_predecessor_on_replay_rejected() {
+  setup_case exact-pair-replay-predecessor
+  run_deploy
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "initial deploy should succeed"
+  assert_live_profile read-only accepted
+
+  run_deploy PANTHEON_DEPLOY_ACTION=activate PANTHEON_DEPLOY_EXPECTED_DEV_SHA="1111111111111111111111111111111111111111"
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "changed predecessor on replay unexpectedly succeeded"
+  assert_live_profile read-only accepted
+}
+
+test_exact_pair_protocol_wrong_lease_restore_rejected() {
+  local release_dir receipt_file
+  setup_case exact-pair-wrong-lease-restore
+  run_write_deploy PANTHEON_DEPLOY_LEASE_OWNER=parent-controller PANTHEON_DEPLOY_LEASE_EPOCH=5 PANTHEON_DEPLOY_LEASE_RUN_ID=999 PANTHEON_DEPLOY_LEASE_DELEGATED=true
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "write-proof deploy should succeed"
+  assert_live_profile write-proof accepted
+
+  # Attempt restore with wrong lease owner
+  run_deploy PANTHEON_DEPLOY_PROFILE=read-only-restore PANTHEON_DEPLOY_ACTION=restore PANTHEON_DEPLOY_REAL_WRITES=false PANTHEON_DEPLOY_LEASE_OWNER=wrong-controller PANTHEON_DEPLOY_LEASE_EPOCH=5 PANTHEON_DEPLOY_LEASE_RUN_ID=999 PANTHEON_DEPLOY_LEASE_DELEGATED=true
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "wrong-lease restore unexpectedly succeeded"
+
+  # Attempt restore with removed receipt
+  release_dir="$(readlink -f "${CASE_LIVE}")"
+  receipt_file="${release_dir}/.prepared-receipt.json"
+  rm -f "${receipt_file}"
+  run_deploy PANTHEON_DEPLOY_PROFILE=read-only-restore PANTHEON_DEPLOY_ACTION=restore PANTHEON_DEPLOY_REAL_WRITES=false PANTHEON_DEPLOY_LEASE_OWNER=parent-controller PANTHEON_DEPLOY_LEASE_EPOCH=5 PANTHEON_DEPLOY_LEASE_RUN_ID=999 PANTHEON_DEPLOY_LEASE_DELEGATED=true
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "missing-receipt restore unexpectedly succeeded"
+}
+
 run_test() {
   local name="$1"
   shift
@@ -2588,9 +2646,13 @@ run_test "advanced dev write-proof on served candidate succeeds with guards" tes
 run_test "exact pair protocol prepare leaves incumbent untouched and writes receipt" test_exact_pair_protocol_prepare_leaves_incumbent_untouched
 run_test "exact pair protocol activate in new process without rebuild" test_exact_pair_protocol_activate_in_new_process_without_rebuild
 run_test "exact pair protocol lease epoch mismatch rejected" test_exact_pair_protocol_lease_epoch_mismatch_rejected
+run_test "exact pair protocol lease delegation false rejected" test_exact_pair_protocol_lease_delegation_false_rejected
+run_test "exact pair protocol tampered receipt rejected" test_exact_pair_protocol_tampered_receipt_rejected
 run_test "exact pair protocol predecessor CAS mismatch rejected" test_exact_pair_protocol_predecessor_cas_mismatch_rejected
+run_test "exact pair protocol changed predecessor on replay rejected" test_exact_pair_protocol_changed_predecessor_on_replay_rejected
 run_test "exact pair protocol idempotent replay succeeds" test_exact_pair_protocol_idempotent_replay
 run_test "exact pair protocol one-shot bypass is retired" test_exact_pair_protocol_one_shot_bypass_retired
+run_test "exact pair protocol wrong lease restore rejected" test_exact_pair_protocol_wrong_lease_restore_rejected
 
 echo "deploy contract harness: ${PASSED} passed, ${FAILED} failed"
 if [[ "${FAILED}" -ne 0 ]]; then

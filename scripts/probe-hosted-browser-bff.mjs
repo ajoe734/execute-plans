@@ -39,7 +39,7 @@ export function assertSafeBffCandidateTransport(url) {
     hostname === "localhost" ||
     hostname === "127.0.0.1" ||
     hostname === "[::1]" ||
-    hostname.startsWith("127.");
+    /^127\.\d+\.\d+\.\d+$/u.test(hostname);
   const isPrivateIp =
     /^10\.\d+\.\d+\.\d+$/u.test(hostname) ||
     /^192\.168\.\d+\.\d+$/u.test(hostname) ||
@@ -1485,27 +1485,15 @@ export async function installBffCandidateRoute(
       return;
     }
 
+    const base = new URL(candidateBase);
+    const basePath = base.pathname.replace(/\/+$/, "");
+    const normalizedPathname = pathname.startsWith("/") ? pathname : "/" + pathname;
     const candidateUrl = new URL(
-      (pathname.startsWith("/") ? pathname : "/" + pathname) +
-        new URL(originalUrl).search,
-      candidateBase,
+      basePath + normalizedPathname + new URL(originalUrl).search,
+      base.origin,
     ).toString();
 
     try {
-      const response = await page.request.fetch(candidateUrl, {
-        method: request.method(),
-        headers: {
-          ...request.headers(),
-          host: new URL(candidateBase).host,
-        },
-        data: request.postDataBuffer() || undefined,
-        maxRedirects: 0,
-      });
-
-      const responseHeaders = response.headers();
-      delete responseHeaders["content-encoding"];
-      delete responseHeaders["content-length"];
-
       // Verify browser CORS for cross-origin candidate requests
       const requestHeaders = request.headers();
       const requestOrigin = requestHeaders["origin"] || "";
@@ -1521,11 +1509,86 @@ export async function installBffCandidateRoute(
         pageOrigin = new URL(FE_BASE).origin;
       }
       const isCrossOrigin = Boolean(requestOrigin) || (new URL(originalUrl).origin !== pageOrigin);
+      const expectedOrigin = requestOrigin || pageOrigin;
+
+      if (isCrossOrigin) {
+        const method = request.method();
+        const contentType = (requestHeaders["content-type"] || "").toLowerCase().split(";")[0].trim();
+        const simpleMethods = ["GET", "HEAD", "POST"];
+        const simpleContentTypes = ["application/x-www-form-urlencoded", "multipart/form-data", "text/plain", ""];
+        const customHeaderNames = Object.keys(requestHeaders).filter((h) => {
+          const lower = h.toLowerCase();
+          return !["accept", "accept-language", "content-language", "user-agent", "referer", "origin", "host"].includes(lower);
+        });
+        const requiresPreflight = !simpleMethods.includes(method) || !simpleContentTypes.includes(contentType) || customHeaderNames.length > 0;
+
+        if (requiresPreflight) {
+          const preflightHeaders = {
+            origin: expectedOrigin,
+            "access-control-request-method": method,
+            host: new URL(candidateBase).host,
+          };
+          if (customHeaderNames.length > 0) {
+            preflightHeaders["access-control-request-headers"] = customHeaderNames.join(", ");
+          }
+          const preflightResponse = await page.request.fetch(candidateUrl, {
+            method: "OPTIONS",
+            headers: preflightHeaders,
+            maxRedirects: 0,
+          });
+          const preflightStatus = preflightResponse.status();
+          if (preflightStatus < 200 || preflightStatus >= 300) {
+            routeErrors.push({
+              code: "bff_candidate_cors_preflight_error",
+              url: redactUrl(originalUrl),
+              candidateUrl: redactUrl(candidateUrl),
+              error: `candidate preflight failed with status ${preflightStatus}: ${await preflightResponse.text()}`,
+            });
+            await route.abort("failed");
+            return;
+          }
+          const preHeaders = preflightResponse.headers();
+          const preAllowOrigin = preHeaders["access-control-allow-origin"];
+          if (!preAllowOrigin) {
+            routeErrors.push({
+              code: "bff_candidate_cors_preflight_error",
+              url: redactUrl(originalUrl),
+              candidateUrl: redactUrl(candidateUrl),
+              error: "candidate preflight response missing required Access-Control-Allow-Origin header",
+            });
+            await route.abort("failed");
+            return;
+          }
+          if (preAllowOrigin !== "*" && preAllowOrigin !== expectedOrigin) {
+            routeErrors.push({
+              code: "bff_candidate_cors_preflight_error",
+              url: redactUrl(originalUrl),
+              candidateUrl: redactUrl(candidateUrl),
+              error: `candidate preflight Access-Control-Allow-Origin mismatch: expected ${expectedOrigin}, got ${preAllowOrigin}`,
+            });
+            await route.abort("failed");
+            return;
+          }
+        }
+      }
+
+      const response = await page.request.fetch(candidateUrl, {
+        method: request.method(),
+        headers: {
+          ...request.headers(),
+          host: new URL(candidateBase).host,
+        },
+        data: request.postDataBuffer() || undefined,
+        maxRedirects: 0,
+      });
+
+      const responseHeaders = response.headers();
+      delete responseHeaders["content-encoding"];
+      delete responseHeaders["content-length"];
 
       if (isCrossOrigin) {
         const allowOrigin = responseHeaders["access-control-allow-origin"];
         const hasCredentials = Boolean(requestHeaders["authorization"] || requestHeaders["cookie"]);
-        const expectedOrigin = requestOrigin || pageOrigin;
 
         if (!allowOrigin) {
           routeErrors.push({

@@ -1172,6 +1172,7 @@ describe("hosted browser strict release policy", () => {
     expect(() => assertSafeBffCandidateTransport("http://169.254.169.254")).toThrow(/cloud metadata forbidden/u);
     expect(() => assertSafeBffCandidateTransport("http://169.254.1.1")).toThrow(/cloud metadata forbidden/u);
     expect(() => assertSafeBffCandidateTransport("http://metadata.google.internal")).toThrow(/cloud metadata forbidden/u);
+    expect(() => assertSafeBffCandidateTransport("https://127.attacker.example")).toThrow(/unauthorized destination endpoint/u);
   });
 
   it("recognizes standard BFF paths and distinguishes them from arbitrary URLs", () => {

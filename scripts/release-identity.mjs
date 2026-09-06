@@ -224,7 +224,9 @@ export function createReleaseIdentity({
   } else if (observedImage) {
     normalizedImage = observedImage;
   } else if (callerImage) {
-    normalizedImage = callerImage;
+    throw new Error(
+      "live BFF version did not expose an observed image matching caller expectations",
+    );
   }
   const normalizedLease = lease ? normalizeLease(lease) : null;
 

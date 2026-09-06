@@ -999,19 +999,58 @@ describe("paired Pantheon release workflow", () => {
 
     expect(proofCoordinator).toContain("Prepare bounded write-proof profile");
     expect(proofCoordinator).toContain(
+      "Dispatch independent read-only restore watchdog",
+    );
+    expect(proofCoordinator).toContain(
       "Activate bounded write-proof profile after watchdog is durable",
     );
     expect(
       proofCoordinator.indexOf("Prepare bounded write-proof profile"),
     ).toBeLessThan(
       proofCoordinator.indexOf(
+        "Dispatch independent read-only restore watchdog",
+      ),
+    );
+    expect(
+      proofCoordinator.indexOf("Dispatch independent read-only restore watchdog"),
+    ).toBeLessThan(
+      proofCoordinator.indexOf(
         "Activate bounded write-proof profile after watchdog is durable",
       ),
     );
 
-    expect(watchdogWorkflow).toContain("PANTHEON_DEPLOY_ACTION: restore");
+    expect(proofCoordinator).toContain(
+      "prepared_release_dir: ${{ steps.write_prepare.outputs.prepared_release_dir }}",
+    );
+    expect(proofCoordinator).toContain(
+      "prepared_receipt: ${{ steps.write_prepare.outputs.prepared_receipt }}",
+    );
+    expect(deployJob).toContain(
+      "prepared_release_dir: ${{ steps.prepare.outputs.prepared_release_dir }}",
+    );
+    expect(deployJob).toContain(
+      "prepared_receipt: ${{ steps.prepare.outputs.prepared_receipt }}",
+    );
 
+    expect(proofCoordinator).toContain('"lease_owner": "LEASE_OWNER"');
+    expect(proofCoordinator).toContain('"lease_epoch": "LEASE_EPOCH"');
+    expect(proofCoordinator).toContain('"lease_run_id": "LEASE_RUN_ID"');
+    expect(proofCoordinator).toContain('"lease_delegated": "LEASE_DELEGATED"');
+
+    expect(watchdogWorkflow).toContain("PANTHEON_DEPLOY_ACTION: restore");
+    expect(watchdogWorkflow).toContain("lease_owner:");
+    expect(watchdogWorkflow).toContain("lease_epoch:");
+    expect(watchdogWorkflow).toContain("lease_run_id:");
+    expect(watchdogWorkflow).toContain("lease_delegated:");
+    expect(watchdogWorkflow).toContain("PANTHEON_LEASE_OWNER:");
+    expect(watchdogWorkflow).toContain("PANTHEON_LEASE_EPOCH:");
+    expect(watchdogWorkflow).toContain("PANTHEON_LEASE_RUN_ID:");
+    expect(watchdogWorkflow).toContain("PANTHEON_LEASE_DELEGATED:");
+
+    expect(integrationWorkflow).toContain("--bff-image-repository");
+    expect(integrationWorkflow).toContain("--bff-image-tag");
     expect(integrationWorkflow).toContain("--bff-image-digest");
     expect(integrationWorkflow).toContain("--lease-owner");
+    expect(integrationWorkflow).toContain("PANTHEON_BFF_CANDIDATE_TRANSPORT: ${{ env.PANTHEON_BFF_CANDIDATE_TRANSPORT }}");
   });
 });

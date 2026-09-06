@@ -139,8 +139,8 @@ jobs:
       release_candidate_id: ${{ steps.pair.outputs.release_candidate_id }}
       compatibility_manifest_sha256: ${{ steps.pair.outputs.compatibility_manifest_sha256 }}
       release_controller_run_id: ${{ steps.pair.outputs.release_controller_run_id }}
-      prepared_release_dir: ${{ steps.prepare.outputs.prepared_release_dir || steps.write_prepare.outputs.prepared_release_dir }}
-      prepared_receipt: ${{ steps.prepare.outputs.prepared_receipt || steps.write_prepare.outputs.prepared_receipt }}
+      prepared_release_dir: ${{ steps.prepare.outputs.prepared_release_dir }}
+      prepared_receipt: ${{ steps.prepare.outputs.prepared_receipt }}
     runs-on:
       - self-hosted
       - Linux
@@ -1096,6 +1096,8 @@ jobs:
     outputs:
       watchdog_run_id: ${{ steps.watchdog_dispatch.outputs.watchdog_run_id }}
       proof_run_id: ${{ steps.proof_dispatch.outputs.proof_run_id }}
+      prepared_release_dir: ${{ steps.write_prepare.outputs.prepared_release_dir }}
+      prepared_receipt: ${{ steps.write_prepare.outputs.prepared_receipt }}
     runs-on:
       - self-hosted
       - Linux
@@ -1298,8 +1300,49 @@ jobs:
           NODE
           echo "evidence_path=${evidence_path}" >> "$GITHUB_OUTPUT"
 
+      - name: Prepare bounded write-proof profile
+        id: write_prepare
+        if: github.event_name != 'workflow_dispatch' || inputs.deploy_action != 'activate'
+        timeout-minutes: 25
+        env:
+          PANTHEON_AUDIT_OUT_DIR: ${{ runner.temp }}/pantheon-proof-${{ github.run_id }}-${{ github.run_attempt }}/write-controller-prepare
+          PANTHEON_DEPLOY_ACTION: prepare
+          PANTHEON_DEPLOY_CANDIDATE_SHA: ${{ needs.deploy.outputs.candidate_sha }}
+          PANTHEON_DEPLOY_BRANCH: dev
+          PANTHEON_DEPLOY_FRONTEND_REF: ${{ needs.deploy.outputs.frontend_ref }}
+          PANTHEON_DEPLOY_CANDIDATE_DIR: .release-candidate
+          PANTHEON_DEPLOY_AGORA_COMPAT_EVIDENCE: ${{ steps.write_agora_compat.outputs.evidence_path }}
+          PANTHEON_DEPLOY_GATE_RUN_ID: ${{ needs.deploy.outputs.source_gate_run_id }}
+          PANTHEON_DEPLOY_GITHUB_ARTIFACT_DIGEST: ${{ needs.deploy.outputs.source_artifact_digest }}
+          PANTHEON_DEPLOY_EXPECTED_DEV_SHA: ${{ needs.deploy.outputs.current_dev_sha }}
+          PANTHEON_DEPLOY_EMERGENCY_OVERRIDE: "false"
+          PANTHEON_DEPLOY_ROLLBACK_DRILL: "false"
+          PANTHEON_DEPLOY_PROFILE: write-proof
+          PANTHEON_DEPLOY_EXPECTED_PAIR_ID: ${{ needs.deploy.outputs.pair_id }}
+          PANTHEON_DEPLOY_PROOF_WINDOW_ACK: "true"
+          PANTHEON_DEPLOY_REAL_WRITES: "false"
+          PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES: "false"
+          PANTHEON_DEPLOY_ALLOW_OUT_OF_ORDER_CANDIDATE: ${{ needs.deploy.outputs.frontend_ref != 'dev' && 'true' || 'false' }}
+          PANTHEON_DEPLOY_RELEASE_INSTANCE: ${{ github.run_id }}-${{ github.run_attempt }}-write-proof
+          PANTHEON_LEASE_OWNER: ${{ inputs.lease_owner || '' }}
+          PANTHEON_LEASE_EPOCH: ${{ inputs.lease_epoch || '' }}
+          PANTHEON_LEASE_RUN_ID: ${{ inputs.lease_run_id || '' }}
+          PANTHEON_LEASE_DELEGATED: ${{ inputs.lease_delegated || 'true' }}
+          PANTHEON_BFF_CANDIDATE_TRANSPORT: ${{ inputs.bff_candidate_transport || '' }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$PANTHEON_AUDIT_OUT_DIR"
+          bash scripts/deploy-dev-vm.sh
+          if [[ -f "$PANTHEON_AUDIT_OUT_DIR/prepared-release-dir" ]]; then
+            echo "prepared_release_dir=$(<"$PANTHEON_AUDIT_OUT_DIR/prepared-release-dir")" >> "$GITHUB_OUTPUT"
+          fi
+          if [[ -f "$PANTHEON_AUDIT_OUT_DIR/prepared-receipt.json" ]]; then
+            echo "prepared_receipt=$PANTHEON_AUDIT_OUT_DIR/prepared-receipt.json" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Create parent proof binding
         id: binding
+        if: github.event_name != 'workflow_dispatch' || inputs.deploy_action != 'prepare'
         env:
           PARENT_ACTOR: ${{ github.actor }}
         run: |
@@ -1349,6 +1392,7 @@ jobs:
 
       - name: Upload immutable parent proof binding
         id: binding_upload
+        if: github.event_name != 'workflow_dispatch' || inputs.deploy_action != 'prepare'
         uses: actions/upload-artifact@v4
         with:
           name: pantheon-proof-binding-attempt-${{ github.run_attempt }}
@@ -1358,6 +1402,7 @@ jobs:
 
       - name: Canonicalize parent proof binding artifact digest
         id: binding_digest
+        if: github.event_name != 'workflow_dispatch' || inputs.deploy_action != 'prepare'
         env:
           RAW_BINDING_ARTIFACT_DIGEST: ${{ steps.binding_upload.outputs.artifact-digest }}
         run: |
@@ -1371,6 +1416,7 @@ jobs:
 
       - name: Dispatch independent read-only restore watchdog
         id: watchdog_dispatch
+        if: github.event_name != 'workflow_dispatch' || inputs.deploy_action != 'prepare'
         # Legacy static contract marker: gh workflow run pantheon-proof-watchdog.yml
         env:
           GH_TOKEN: ${{ github.token }}
@@ -1378,6 +1424,10 @@ jobs:
           PROOF_NONCE: ${{ steps.binding.outputs.nonce }}
           BINDING_ARTIFACT_ID: ${{ steps.binding_upload.outputs.artifact-id }}
           BINDING_ARTIFACT_DIGEST: ${{ steps.binding_digest.outputs.artifact_digest }}
+          LEASE_OWNER: ${{ inputs.lease_owner || '' }}
+          LEASE_EPOCH: ${{ inputs.lease_epoch || '' }}
+          LEASE_RUN_ID: ${{ inputs.lease_run_id || '' }}
+          LEASE_DELEGATED: ${{ inputs.lease_delegated || 'true' }}
         run: |
           set -euo pipefail
           dispatched_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -1404,6 +1454,10 @@ jobs:
               "expected_write_proof_digest": "EXPECTED_WRITE_PROOF_DIGEST",
               "fe_base_url": "PANTHEON_DEV_FE_HOST",
               "bff_base_url": "PANTHEON_BFF_BASE_URL",
+              "lease_owner": "LEASE_OWNER",
+              "lease_epoch": "LEASE_EPOCH",
+              "lease_run_id": "LEASE_RUN_ID",
+              "lease_delegated": "LEASE_DELEGATED",
           }
           print(json.dumps({key: os.environ.get(env, "") for key, env in mapping.items()}))
           PY
@@ -1425,6 +1479,7 @@ jobs:
           exit 1
 
       - name: Require independently armed watchdog before writes
+        if: github.event_name != 'workflow_dispatch' || inputs.deploy_action != 'prepare'
         env:
           GH_TOKEN: ${{ github.token }}
           WATCHDOG_RUN_ID: ${{ steps.watchdog_dispatch.outputs.watchdog_run_id }}
@@ -1465,46 +1520,6 @@ jobs:
           echo "Independent restore watchdog did not arm before the activation deadline." >&2
           exit 1
 
-      - name: Prepare bounded write-proof profile
-        id: write_prepare
-        if: github.event_name != 'workflow_dispatch' || inputs.deploy_action != 'activate'
-        timeout-minutes: 25
-        env:
-          PANTHEON_AUDIT_OUT_DIR: ${{ runner.temp }}/pantheon-proof-${{ github.run_id }}-${{ github.run_attempt }}/write-controller-prepare
-          PANTHEON_DEPLOY_ACTION: prepare
-          PANTHEON_DEPLOY_CANDIDATE_SHA: ${{ needs.deploy.outputs.candidate_sha }}
-          PANTHEON_DEPLOY_BRANCH: dev
-          PANTHEON_DEPLOY_FRONTEND_REF: ${{ needs.deploy.outputs.frontend_ref }}
-          PANTHEON_DEPLOY_CANDIDATE_DIR: .release-candidate
-          PANTHEON_DEPLOY_AGORA_COMPAT_EVIDENCE: ${{ steps.write_agora_compat.outputs.evidence_path }}
-          PANTHEON_DEPLOY_GATE_RUN_ID: ${{ needs.deploy.outputs.source_gate_run_id }}
-          PANTHEON_DEPLOY_GITHUB_ARTIFACT_DIGEST: ${{ needs.deploy.outputs.source_artifact_digest }}
-          PANTHEON_DEPLOY_EXPECTED_DEV_SHA: ${{ needs.deploy.outputs.current_dev_sha }}
-          PANTHEON_DEPLOY_EMERGENCY_OVERRIDE: "false"
-          PANTHEON_DEPLOY_ROLLBACK_DRILL: "false"
-          PANTHEON_DEPLOY_PROFILE: write-proof
-          PANTHEON_DEPLOY_EXPECTED_PAIR_ID: ${{ needs.deploy.outputs.pair_id }}
-          PANTHEON_DEPLOY_PROOF_WINDOW_ACK: "true"
-          PANTHEON_DEPLOY_REAL_WRITES: "false"
-          PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES: "false"
-          PANTHEON_DEPLOY_ALLOW_OUT_OF_ORDER_CANDIDATE: ${{ needs.deploy.outputs.frontend_ref != 'dev' && 'true' || 'false' }}
-          PANTHEON_DEPLOY_RELEASE_INSTANCE: ${{ github.run_id }}-${{ github.run_attempt }}-write-proof
-          PANTHEON_LEASE_OWNER: ${{ inputs.lease_owner || '' }}
-          PANTHEON_LEASE_EPOCH: ${{ inputs.lease_epoch || '' }}
-          PANTHEON_LEASE_RUN_ID: ${{ inputs.lease_run_id || '' }}
-          PANTHEON_LEASE_DELEGATED: ${{ inputs.lease_delegated || 'true' }}
-          PANTHEON_BFF_CANDIDATE_TRANSPORT: ${{ inputs.bff_candidate_transport || '' }}
-        run: |
-          set -euo pipefail
-          mkdir -p "$PANTHEON_AUDIT_OUT_DIR"
-          bash scripts/deploy-dev-vm.sh
-          if [[ -f "$PANTHEON_AUDIT_OUT_DIR/prepared-release-dir" ]]; then
-            echo "prepared_release_dir=$(<"$PANTHEON_AUDIT_OUT_DIR/prepared-release-dir")" >> "$GITHUB_OUTPUT"
-          fi
-          if [[ -f "$PANTHEON_AUDIT_OUT_DIR/prepared-receipt.json" ]]; then
-            echo "prepared_receipt=$PANTHEON_AUDIT_OUT_DIR/prepared-receipt.json" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Activate bounded write-proof profile after watchdog is durable
         id: write_deploy
         if: github.event_name != 'workflow_dispatch' || inputs.deploy_action != 'prepare'
@@ -1541,6 +1556,7 @@ jobs:
 
       - name: Dispatch exact parent-bound hosted Persona proof
         id: proof_dispatch
+        if: github.event_name != 'workflow_dispatch' || inputs.deploy_action != 'prepare'
         env:
           GH_TOKEN: ${{ github.token }}
           CORRELATION_ID: ${{ steps.binding.outputs.correlation_id }}
@@ -1641,6 +1657,7 @@ jobs:
           NODE
 
       - name: Upload one-time exact child proof claim
+        if: github.event_name != 'workflow_dispatch' || inputs.deploy_action != 'prepare'
         uses: actions/upload-artifact@v4
         with:
           name: pantheon-proof-child-claim-attempt-${{ github.run_attempt }}
@@ -1649,6 +1666,7 @@ jobs:
           retention-days: 1
 
       - name: Wait for hosted proof terminal
+        if: github.event_name != 'workflow_dispatch' || inputs.deploy_action != 'prepare'
         timeout-minutes: 155
         env:
           GH_TOKEN: ${{ github.token }}

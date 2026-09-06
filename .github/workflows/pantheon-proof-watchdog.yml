@@ -60,6 +60,23 @@ on:
         description: "Pantheon-owned dev BFF origin for pair verification and restore readback"
         required: true
         type: string
+      lease_owner:
+        description: "Parent lease owner ID if coordinated."
+        required: false
+        type: string
+      lease_epoch:
+        description: "Parent lease epoch if coordinated."
+        required: false
+        type: string
+      lease_run_id:
+        description: "Parent lease run ID if coordinated."
+        required: false
+        type: string
+      lease_delegated:
+        description: "Whether parent lease delegation is authorized."
+        required: false
+        default: "true"
+        type: string
 
 permissions:
   contents: read
@@ -752,6 +769,10 @@ jobs:
           PANTHEON_DEPLOY_REAL_WRITES: "false"
           PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES: "false"
           PANTHEON_DEPLOY_RELEASE_INSTANCE: watchdog-${{ inputs.parent_deploy_run_id }}-${{ inputs.parent_deploy_run_attempt }}
+          PANTHEON_LEASE_OWNER: ${{ inputs.lease_owner || '' }}
+          PANTHEON_LEASE_EPOCH: ${{ inputs.lease_epoch || '' }}
+          PANTHEON_LEASE_RUN_ID: ${{ inputs.lease_run_id || '' }}
+          PANTHEON_LEASE_DELEGATED: ${{ inputs.lease_delegated || 'true' }}
         run: |
           set -euo pipefail
           audit_root="$PANTHEON_AUDIT_OUT_DIR"

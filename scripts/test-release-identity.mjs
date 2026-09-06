@@ -150,10 +150,28 @@ assert.throws(
 );
 
 // Identity with image and lease
+const VERSION_WITH_IMAGE = {
+  ...VERSION_PAYLOAD,
+  image: normalizedImage,
+};
+
+assert.throws(
+  () =>
+    createReleaseIdentity({
+      frontendSha: FRONTEND_SHA,
+      bffBaseUrl: BFF_BASE_URL,
+      versionPayload: VERSION_PAYLOAD,
+      gateRunId: "12345",
+      gateRunUrl: "https://github.test/actions/runs/12345",
+      bffImage: normalizedImage,
+    }),
+  /live BFF version did not expose an observed image matching caller expectations/,
+);
+
 const imageIdentity = createReleaseIdentity({
   frontendSha: FRONTEND_SHA,
   bffBaseUrl: BFF_BASE_URL,
-  versionPayload: VERSION_PAYLOAD,
+  versionPayload: VERSION_WITH_IMAGE,
   gateRunId: "12345",
   gateRunUrl: "https://github.test/actions/runs/12345",
   bffImage: normalizedImage,
