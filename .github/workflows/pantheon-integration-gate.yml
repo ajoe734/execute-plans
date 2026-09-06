@@ -956,6 +956,14 @@ jobs:
       - name: Prepare authenticated immutable three-profile candidate set
         id: candidate
         if: steps.release_identity.outcome == 'success' && steps.build.outcome == 'success' && steps.build_operator_live.outcome == 'success' && steps.build_write_proof.outcome == 'success'
+        env:
+          PANTHEON_BFF_IMAGE_DIGEST: ${{ vars.PANTHEON_BFF_IMAGE_DIGEST || env.PANTHEON_BFF_IMAGE_DIGEST || '' }}
+          PANTHEON_BFF_IMAGE_DIGEST_TYPE: ${{ vars.PANTHEON_BFF_IMAGE_DIGEST_TYPE || env.PANTHEON_BFF_IMAGE_DIGEST_TYPE || 'oci_manifest_digest' }}
+          PANTHEON_LEASE_OWNER: ${{ vars.PANTHEON_LEASE_OWNER || env.PANTHEON_LEASE_OWNER || '' }}
+          PANTHEON_LEASE_EPOCH: ${{ vars.PANTHEON_LEASE_EPOCH || env.PANTHEON_LEASE_EPOCH || '' }}
+          PANTHEON_LEASE_RUN_ID: ${{ vars.PANTHEON_LEASE_RUN_ID || env.PANTHEON_LEASE_RUN_ID || '' }}
+          PANTHEON_LEASE_DELEGATED: ${{ vars.PANTHEON_LEASE_DELEGATED || env.PANTHEON_LEASE_DELEGATED || 'true' }}
+          PANTHEON_BFF_CANDIDATE_TRANSPORT: ${{ vars.PANTHEON_BFF_CANDIDATE_TRANSPORT || env.PANTHEON_BFF_CANDIDATE_TRANSPORT || '' }}
         run: |
           admission_args=()
           if [[ -n "${PANTHEON_RELEASE_CANDIDATE_ID:-}" ]]; then

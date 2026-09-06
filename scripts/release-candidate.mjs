@@ -120,16 +120,31 @@ export function normalizeBffImage(image, label = "BFF image identity") {
     : digestType === "oci_manifest_digest"
       ? digest
       : undefined;
+  if (ociManifestDigest && digestType === "oci_manifest_digest" && ociManifestDigest !== digest) {
+    throw new Error(
+      `${label} digestType is oci_manifest_digest but digest does not match ociManifestDigest`,
+    );
+  }
   const imageConfigDigest = image.imageConfigDigest
     ? normalizeDigest(image.imageConfigDigest, `${label} image config digest`)
     : digestType === "image_config_digest"
       ? digest
       : undefined;
+  if (imageConfigDigest && digestType === "image_config_digest" && imageConfigDigest !== digest) {
+    throw new Error(
+      `${label} digestType is image_config_digest but digest does not match imageConfigDigest`,
+    );
+  }
   const archiveChecksum = image.archiveChecksum
     ? normalizeDigest(image.archiveChecksum, `${label} archive checksum`)
     : digestType === "archive_checksum"
       ? digest
       : undefined;
+  if (archiveChecksum && digestType === "archive_checksum" && archiveChecksum !== digest) {
+    throw new Error(
+      `${label} digestType is archive_checksum but digest does not match archiveChecksum`,
+    );
+  }
 
   if (ociManifestDigest && imageConfigDigest && ociManifestDigest === imageConfigDigest) {
     throw new Error(

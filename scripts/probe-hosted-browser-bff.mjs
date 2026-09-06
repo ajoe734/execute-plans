@@ -18,15 +18,43 @@ export function assertSafeBffCandidateTransport(url) {
   if (!["http:", "https:"].includes(parsed.protocol)) {
     throw new Error(`unsafe candidate transport protocol: ${parsed.protocol}`);
   }
+  if (parsed.username || parsed.password) {
+    throw new Error("candidate transport rejected: URL cannot contain embedded credentials");
+  }
   const hostname = parsed.hostname.toLowerCase();
   if (
     hostname === "169.254.169.254" ||
-    hostname.startsWith("169.254.") ||
+    hostname.includes("169.254.") ||
+    hostname.includes("a9fe:a9fe") ||
     hostname === "metadata.google.internal" ||
-    hostname.endsWith(".metadata.google.internal")
+    hostname.endsWith(".metadata.google.internal") ||
+    hostname === "100.100.100.200" ||
+    hostname.includes("fd00:ec2::254")
   ) {
     throw new Error(
       `candidate transport rejected: SSRF / cloud metadata forbidden: ${hostname}`,
+    );
+  }
+  const isLoopback =
+    hostname === "localhost" ||
+    hostname === "127.0.0.1" ||
+    hostname === "[::1]" ||
+    hostname.startsWith("127.");
+  const isPrivateIp =
+    /^10\.\d+\.\d+\.\d+$/u.test(hostname) ||
+    /^192\.168\.\d+\.\d+$/u.test(hostname) ||
+    /^172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+$/u.test(hostname);
+  const isLocalDomain =
+    hostname.endsWith(".local") ||
+    hostname.endsWith(".internal") ||
+    hostname.endsWith(".test");
+  const isPantheonDomain =
+    hostname === "mvl-cap.tw" ||
+    hostname.endsWith(".mvl-cap.tw");
+
+  if (!isLoopback && !isPrivateIp && !isLocalDomain && !isPantheonDomain) {
+    throw new Error(
+      `candidate transport rejected: unauthorized destination endpoint: ${hostname}`,
     );
   }
   return trimTrailingSlash(url);
@@ -36,12 +64,18 @@ const UPSTREAM_BFF_BASE = trimTrailingSlash(
   process.env.PANTHEON_BFF_BASE_URL ||
     "https://api.dev.mvl-cap.tw",
 );
+const RAW_CANDIDATE_TRANSPORT = String(
+  process.env.PANTHEON_BFF_CANDIDATE_TRANSPORT || "",
+).trim();
 const RAW_BROWSER_BFF = String(
   process.env.PANTHEON_BROWSER_BFF_BASE_URL || "",
 ).trim();
-const BFF_BASE = RAW_BROWSER_BFF
-  ? assertSafeBffCandidateTransport(RAW_BROWSER_BFF)
-  : UPSTREAM_BFF_BASE;
+const CANDIDATE_TRANSPORT = RAW_CANDIDATE_TRANSPORT
+  ? assertSafeBffCandidateTransport(RAW_CANDIDATE_TRANSPORT)
+  : RAW_BROWSER_BFF && RAW_BROWSER_BFF !== UPSTREAM_BFF_BASE
+    ? assertSafeBffCandidateTransport(RAW_BROWSER_BFF)
+    : "";
+const BFF_BASE = CANDIDATE_TRANSPORT || UPSTREAM_BFF_BASE;
 const OLD_BFF_URL = normalizeOldBffUrl(
   process.env.PANTHEON_OLD_BFF_URL || "",
 );
@@ -1471,6 +1505,64 @@ export async function installBffCandidateRoute(
       const responseHeaders = response.headers();
       delete responseHeaders["content-encoding"];
       delete responseHeaders["content-length"];
+
+      // Verify browser CORS for cross-origin candidate requests
+      const requestHeaders = request.headers();
+      const requestOrigin = requestHeaders["origin"] || "";
+      let pageOrigin = "";
+      try {
+        const pageUrl = page.url();
+        if (pageUrl && pageUrl !== "about:blank") {
+          pageOrigin = new URL(pageUrl).origin;
+        } else {
+          pageOrigin = new URL(FE_BASE).origin;
+        }
+      } catch {
+        pageOrigin = new URL(FE_BASE).origin;
+      }
+      const isCrossOrigin = Boolean(requestOrigin) || (new URL(originalUrl).origin !== pageOrigin);
+
+      if (isCrossOrigin) {
+        const allowOrigin = responseHeaders["access-control-allow-origin"];
+        const hasCredentials = Boolean(requestHeaders["authorization"] || requestHeaders["cookie"]);
+        const expectedOrigin = requestOrigin || pageOrigin;
+
+        if (!allowOrigin) {
+          routeErrors.push({
+            code: "bff_candidate_cors_error",
+            url: redactUrl(originalUrl),
+            candidateUrl: redactUrl(candidateUrl),
+            error: "candidate response missing required Access-Control-Allow-Origin header",
+          });
+          await route.abort("failed");
+          return;
+        }
+
+        if (hasCredentials) {
+          const allowCreds = responseHeaders["access-control-allow-credentials"];
+          if (allowOrigin === "*" || allowCreds !== "true") {
+            routeErrors.push({
+              code: "bff_candidate_cors_error",
+              url: redactUrl(originalUrl),
+              candidateUrl: redactUrl(candidateUrl),
+              error: "candidate response with credentials requires exact Access-Control-Allow-Origin and Access-Control-Allow-Credentials: true",
+            });
+            await route.abort("failed");
+            return;
+          }
+        }
+
+        if (allowOrigin !== "*" && allowOrigin !== expectedOrigin) {
+          routeErrors.push({
+            code: "bff_candidate_cors_error",
+            url: redactUrl(originalUrl),
+            candidateUrl: redactUrl(candidateUrl),
+            error: `Access-Control-Allow-Origin mismatch: expected ${expectedOrigin}, got ${allowOrigin}`,
+          });
+          await route.abort("failed");
+          return;
+        }
+      }
 
       await route.fulfill({
         status: response.status(),

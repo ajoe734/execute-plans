@@ -1015,4 +1015,3 @@ describe("paired Pantheon release workflow", () => {
     expect(integrationWorkflow).toContain("--lease-owner");
   });
 });
-

@@ -716,7 +716,7 @@ setup_case() {
   mkdir -p "${CASE_DIR}" "${CASE_HOME}" "${CASE_TMP}" "${CASE_RELEASES}" \
     "${PREVIOUS_TARGET}" "${CANDIDATE_DIST}/assets" "${OPERATOR_LIVE_DIST}/assets" "${WRITE_PROOF_DIST}/assets"
   cp -a "${BASE_ORIGIN}" "${CASE_ORIGIN}"
-  git clone -q --branch dev "${CASE_ORIGIN}" "${CASE_REPO}"
+  git clone -q --shared --branch dev "${CASE_ORIGIN}" "${CASE_REPO}"
   git -C "${CASE_REPO}" config user.name "deploy-contract-test"
   git -C "${CASE_REPO}" config user.email "deploy-contract-test@example.invalid"
 
@@ -859,6 +859,7 @@ run_deploy() {
         PANTHEON_DEPLOY_LOCK_FILE="${CASE_LOCK}" \
         PANTHEON_DEPLOY_LOCK_PREFIX="${CASE_DIR}" \
         PANTHEON_DEPLOY_RELEASE_INSTANCE="${CASE_NAME}" \
+        PANTHEON_DEPLOY_RETRY_DELAYS="0 0 0" \
         PANTHEON_DEV_FE_KEEP_RELEASES="8" \
         VITE_BFF_DEV_BEARER_TOKEN="" \
         GITHUB_RUN_ID="9001" \
@@ -928,6 +929,7 @@ run_deploy() {
         PANTHEON_DEPLOY_LOCK_FILE="${CASE_LOCK}" \
         PANTHEON_DEPLOY_LOCK_PREFIX="${CASE_DIR}" \
         PANTHEON_DEPLOY_RELEASE_INSTANCE="${CASE_NAME}" \
+        PANTHEON_DEPLOY_RETRY_DELAYS="0 0 0" \
         PANTHEON_DEV_FE_KEEP_RELEASES="8" \
         VITE_BFF_DEV_BEARER_TOKEN="" \
         GITHUB_RUN_ID="9001" \
@@ -998,6 +1000,7 @@ run_deploy() {
           PANTHEON_DEPLOY_LOCK_FILE="${CASE_LOCK}" \
           PANTHEON_DEPLOY_LOCK_PREFIX="${CASE_DIR}" \
           PANTHEON_DEPLOY_RELEASE_INSTANCE="${CASE_NAME}" \
+          PANTHEON_DEPLOY_RETRY_DELAYS="0 0 0" \
           PANTHEON_DEV_FE_KEEP_RELEASES="8" \
           VITE_BFF_DEV_BEARER_TOKEN="" \
           GITHUB_RUN_ID="9001" \
@@ -1013,23 +1016,77 @@ run_deploy() {
 }
 
 run_write_deploy() {
-  run_deploy \
-    GITHUB_EVENT_NAME=workflow_dispatch \
-    PANTHEON_DEPLOY_PROFILE=write-proof \
-    PANTHEON_DEPLOY_PROOF_WINDOW_ACK=true \
-    PANTHEON_DEPLOY_REAL_WRITES=true \
-    PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES=true \
-    "$@"
+  local has_action=false
+  local arg
+  for arg in "$@"; do
+    if [[ "${arg}" == PANTHEON_DEPLOY_ACTION=* ]]; then
+      has_action=true
+      break
+    fi
+  done
+  if [[ "${has_action}" == "true" ]]; then
+    run_deploy \
+      GITHUB_EVENT_NAME=workflow_dispatch \
+      PANTHEON_DEPLOY_PROFILE=write-proof \
+      PANTHEON_DEPLOY_PROOF_WINDOW_ACK=true \
+      "$@"
+  else
+    run_deploy \
+      GITHUB_EVENT_NAME=workflow_dispatch \
+      PANTHEON_DEPLOY_PROFILE=write-proof \
+      PANTHEON_DEPLOY_PROOF_WINDOW_ACK=true \
+      PANTHEON_DEPLOY_REAL_WRITES=false \
+      PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES=false \
+      PANTHEON_DEPLOY_ACTION=prepare \
+      "$@"
+    if [[ "${RUN_STATUS}" -eq 0 ]]; then
+      run_deploy \
+        GITHUB_EVENT_NAME=workflow_dispatch \
+        PANTHEON_DEPLOY_PROFILE=write-proof \
+        PANTHEON_DEPLOY_PROOF_WINDOW_ACK=true \
+        PANTHEON_DEPLOY_REAL_WRITES=true \
+        PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES=true \
+        PANTHEON_DEPLOY_ACTION=activate \
+        "$@"
+    fi
+  fi
 }
 
 run_operator_live_deploy() {
-  run_deploy \
-    GITHUB_EVENT_NAME=workflow_dispatch \
-    PANTHEON_DEPLOY_PROFILE=operator-live \
-    PANTHEON_DEPLOY_PROOF_WINDOW_ACK=false \
-    PANTHEON_DEPLOY_REAL_WRITES=true \
-    PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES=false \
-    "$@"
+  local has_action=false
+  local arg
+  for arg in "$@"; do
+    if [[ "${arg}" == PANTHEON_DEPLOY_ACTION=* ]]; then
+      has_action=true
+      break
+    fi
+  done
+  if [[ "${has_action}" == "true" ]]; then
+    run_deploy \
+      GITHUB_EVENT_NAME=workflow_dispatch \
+      PANTHEON_DEPLOY_PROFILE=operator-live \
+      PANTHEON_DEPLOY_PROOF_WINDOW_ACK=false \
+      "$@"
+  else
+    run_deploy \
+      GITHUB_EVENT_NAME=workflow_dispatch \
+      PANTHEON_DEPLOY_PROFILE=operator-live \
+      PANTHEON_DEPLOY_PROOF_WINDOW_ACK=false \
+      PANTHEON_DEPLOY_REAL_WRITES=false \
+      PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES=false \
+      PANTHEON_DEPLOY_ACTION=prepare \
+      "$@"
+    if [[ "${RUN_STATUS}" -eq 0 ]]; then
+      run_deploy \
+        GITHUB_EVENT_NAME=workflow_dispatch \
+        PANTHEON_DEPLOY_PROFILE=operator-live \
+        PANTHEON_DEPLOY_PROOF_WINDOW_ACK=false \
+        PANTHEON_DEPLOY_REAL_WRITES=true \
+        PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES=false \
+        PANTHEON_DEPLOY_ACTION=activate \
+        "$@"
+    fi
+  fi
 }
 
 run_restore_deploy() {

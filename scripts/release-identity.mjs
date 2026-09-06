@@ -48,16 +48,31 @@ export function normalizeBffImage(image, label = "BFF image identity") {
     : digestType === "oci_manifest_digest"
       ? digest
       : undefined;
+  if (ociManifestDigest && digestType === "oci_manifest_digest" && ociManifestDigest !== digest) {
+    throw new Error(
+      `${label} digestType is oci_manifest_digest but digest does not match ociManifestDigest`,
+    );
+  }
   const imageConfigDigest = image.imageConfigDigest
     ? normalizeImageDigest(image.imageConfigDigest, `${label} image config digest`)
     : digestType === "image_config_digest"
       ? digest
       : undefined;
+  if (imageConfigDigest && digestType === "image_config_digest" && imageConfigDigest !== digest) {
+    throw new Error(
+      `${label} digestType is image_config_digest but digest does not match imageConfigDigest`,
+    );
+  }
   const archiveChecksum = image.archiveChecksum
     ? normalizeImageDigest(image.archiveChecksum, `${label} archive checksum`)
     : digestType === "archive_checksum"
       ? digest
       : undefined;
+  if (archiveChecksum && digestType === "archive_checksum" && archiveChecksum !== digest) {
+    throw new Error(
+      `${label} digestType is archive_checksum but digest does not match archiveChecksum`,
+    );
+  }
 
   if (ociManifestDigest && imageConfigDigest && ociManifestDigest === imageConfigDigest) {
     throw new Error(
@@ -186,8 +201,31 @@ export function createReleaseIdentity({
     throw new Error("observedAt must be an ISO-8601 timestamp");
   }
 
-  const imageInput = bffImage || versionPayload.image || null;
-  const normalizedImage = imageInput ? normalizeBffImage(imageInput) : null;
+  let normalizedImage = null;
+  const observedImage = versionPayload?.image
+    ? normalizeBffImage(versionPayload.image, "observed live BFF image")
+    : null;
+  const callerImage = bffImage
+    ? normalizeBffImage(bffImage, "explicit expected BFF image")
+    : null;
+
+  if (observedImage && callerImage) {
+    if (
+      observedImage.digest !== callerImage.digest ||
+      observedImage.digestType !== callerImage.digestType ||
+      observedImage.repository !== callerImage.repository ||
+      observedImage.tag !== callerImage.tag
+    ) {
+      throw new Error(
+        `live BFF image mismatch: expected ${callerImage.digest} (${callerImage.digestType}), observed ${observedImage.digest} (${observedImage.digestType})`,
+      );
+    }
+    normalizedImage = observedImage;
+  } else if (observedImage) {
+    normalizedImage = observedImage;
+  } else if (callerImage) {
+    normalizedImage = callerImage;
+  }
   const normalizedLease = lease ? normalizeLease(lease) : null;
 
   return {
@@ -364,6 +402,47 @@ export function verifyVersionAgainstIdentity(identity, versionPayload, expectati
       `live BFF SHA mismatch: gated ${identityBffSha}, got ${liveBffSha}`,
     );
   }
+
+  const expectedImage = identity.bff?.image || null;
+  const expectedDigest = expectations.expectedBffImageDigest || expectedImage?.digest;
+  const expectedDigestType = expectations.expectedBffImageDigestType || expectedImage?.digestType;
+
+  if (expectedImage || expectedDigest) {
+    if (!versionPayload.image) {
+      throw new Error("live BFF version payload is missing required image identity");
+    }
+    const observedImage = normalizeBffImage(versionPayload.image, "observed live BFF image");
+    if (expectedImage) {
+      if (observedImage.digest !== expectedImage.digest) {
+        throw new Error(
+          `live BFF image digest mismatch: expected ${expectedImage.digest}, got ${observedImage.digest}`,
+        );
+      }
+      if (observedImage.digestType !== expectedImage.digestType) {
+        throw new Error(
+          `live BFF image digest type mismatch: expected ${expectedImage.digestType}, got ${observedImage.digestType}`,
+        );
+      }
+    }
+    if (
+      expectedDigest &&
+      observedImage.digest !== normalizeImageDigest(expectedDigest, "expected BFF image digest")
+    ) {
+      throw new Error(
+        `live BFF image digest mismatch: expected ${expectedDigest}, got ${observedImage.digest}`,
+      );
+    }
+    if (
+      expectedDigestType &&
+      observedImage.digestType !==
+        normalizeImageDigestType(expectedDigestType, "expected BFF image digest type")
+    ) {
+      throw new Error(
+        `live BFF image digest type mismatch: expected ${expectedDigestType}, got ${observedImage.digestType}`,
+      );
+    }
+  }
+
   return liveBffSha;
 }
 

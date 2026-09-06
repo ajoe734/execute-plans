@@ -68,6 +68,40 @@ on:
         required: false
         default: false
         type: boolean
+      deploy_action:
+        description: "Deployment action: full (prepare and activate), prepare (stage and verify candidate), or activate (CAS switch to prepared candidate)."
+        required: false
+        default: "full"
+        type: choice
+        options:
+          - "full"
+          - "prepare"
+          - "activate"
+      lease_owner:
+        description: "Parent lease owner ID if coordinated."
+        required: false
+        default: ""
+        type: string
+      lease_epoch:
+        description: "Parent lease epoch if coordinated."
+        required: false
+        default: ""
+        type: string
+      lease_run_id:
+        description: "Parent lease run ID if coordinated."
+        required: false
+        default: ""
+        type: string
+      lease_delegated:
+        description: "Whether parent lease delegation is authorized."
+        required: false
+        default: "true"
+        type: string
+      bff_candidate_transport:
+        description: "Candidate transport endpoint for staged BFF verification."
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
@@ -105,6 +139,8 @@ jobs:
       release_candidate_id: ${{ steps.pair.outputs.release_candidate_id }}
       compatibility_manifest_sha256: ${{ steps.pair.outputs.compatibility_manifest_sha256 }}
       release_controller_run_id: ${{ steps.pair.outputs.release_controller_run_id }}
+      prepared_release_dir: ${{ steps.prepare.outputs.prepared_release_dir || steps.write_prepare.outputs.prepared_release_dir }}
+      prepared_receipt: ${{ steps.prepare.outputs.prepared_receipt || steps.write_prepare.outputs.prepared_receipt }}
     runs-on:
       - self-hosted
       - Linux
@@ -744,7 +780,7 @@ jobs:
 
       - name: Prepare verified persistent candidate profile
         id: prepare
-        if: steps.gate.outputs.deployment_profile != 'write-proof'
+        if: steps.gate.outputs.deployment_profile != 'write-proof' && (github.event_name != 'workflow_dispatch' || inputs.deploy_action != 'activate')
         timeout-minutes: 25
         env:
           PANTHEON_DEPLOY_ACTION: prepare
@@ -767,11 +803,23 @@ jobs:
           PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES: "false"
           PANTHEON_DEPLOY_ALLOW_BOOTSTRAP: ${{ steps.gate.outputs.deployment_profile == 'read-only' && 'true' || 'false' }}
           PANTHEON_DEPLOY_ALLOW_OUT_OF_ORDER_CANDIDATE: ${{ steps.gate.outputs.frontend_ref != 'dev' && 'true' || 'false' }}
-        run: bash scripts/deploy-dev-vm.sh
+          PANTHEON_LEASE_OWNER: ${{ inputs.lease_owner || '' }}
+          PANTHEON_LEASE_EPOCH: ${{ inputs.lease_epoch || '' }}
+          PANTHEON_LEASE_RUN_ID: ${{ inputs.lease_run_id || '' }}
+          PANTHEON_LEASE_DELEGATED: ${{ inputs.lease_delegated || 'true' }}
+          PANTHEON_BFF_CANDIDATE_TRANSPORT: ${{ inputs.bff_candidate_transport || '' }}
+        run: |
+          bash scripts/deploy-dev-vm.sh
+          if [[ -f "$PANTHEON_AUDIT_OUT_DIR/prepared-release-dir" ]]; then
+            echo "prepared_release_dir=$(<"$PANTHEON_AUDIT_OUT_DIR/prepared-release-dir")" >> "$GITHUB_OUTPUT"
+          fi
+          if [[ -f "$PANTHEON_AUDIT_OUT_DIR/prepared-receipt.json" ]]; then
+            echo "prepared_receipt=$PANTHEON_AUDIT_OUT_DIR/prepared-receipt.json" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Deploy verified persistent candidate profile
         id: deploy
-        if: steps.gate.outputs.deployment_profile != 'write-proof'
+        if: steps.gate.outputs.deployment_profile != 'write-proof' && (github.event_name != 'workflow_dispatch' || inputs.deploy_action != 'prepare')
         timeout-minutes: 25
         env:
           PANTHEON_DEPLOY_ACTION: activate
@@ -794,6 +842,11 @@ jobs:
           PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES: "false"
           PANTHEON_DEPLOY_ALLOW_BOOTSTRAP: ${{ steps.gate.outputs.deployment_profile == 'read-only' && 'true' || 'false' }}
           PANTHEON_DEPLOY_ALLOW_OUT_OF_ORDER_CANDIDATE: ${{ steps.gate.outputs.frontend_ref != 'dev' && 'true' || 'false' }}
+          PANTHEON_LEASE_OWNER: ${{ inputs.lease_owner || '' }}
+          PANTHEON_LEASE_EPOCH: ${{ inputs.lease_epoch || '' }}
+          PANTHEON_LEASE_RUN_ID: ${{ inputs.lease_run_id || '' }}
+          PANTHEON_LEASE_DELEGATED: ${{ inputs.lease_delegated || 'true' }}
+          PANTHEON_BFF_CANDIDATE_TRANSPORT: ${{ inputs.bff_candidate_transport || '' }}
         run: bash scripts/deploy-dev-vm.sh
 
       - name: Write redacted workflow envelope
@@ -1414,6 +1467,7 @@ jobs:
 
       - name: Prepare bounded write-proof profile
         id: write_prepare
+        if: github.event_name != 'workflow_dispatch' || inputs.deploy_action != 'activate'
         timeout-minutes: 25
         env:
           PANTHEON_AUDIT_OUT_DIR: ${{ runner.temp }}/pantheon-proof-${{ github.run_id }}-${{ github.run_attempt }}/write-controller-prepare
@@ -1435,13 +1489,25 @@ jobs:
           PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES: "false"
           PANTHEON_DEPLOY_ALLOW_OUT_OF_ORDER_CANDIDATE: ${{ needs.deploy.outputs.frontend_ref != 'dev' && 'true' || 'false' }}
           PANTHEON_DEPLOY_RELEASE_INSTANCE: ${{ github.run_id }}-${{ github.run_attempt }}-write-proof
+          PANTHEON_LEASE_OWNER: ${{ inputs.lease_owner || '' }}
+          PANTHEON_LEASE_EPOCH: ${{ inputs.lease_epoch || '' }}
+          PANTHEON_LEASE_RUN_ID: ${{ inputs.lease_run_id || '' }}
+          PANTHEON_LEASE_DELEGATED: ${{ inputs.lease_delegated || 'true' }}
+          PANTHEON_BFF_CANDIDATE_TRANSPORT: ${{ inputs.bff_candidate_transport || '' }}
         run: |
           set -euo pipefail
           mkdir -p "$PANTHEON_AUDIT_OUT_DIR"
           bash scripts/deploy-dev-vm.sh
+          if [[ -f "$PANTHEON_AUDIT_OUT_DIR/prepared-release-dir" ]]; then
+            echo "prepared_release_dir=$(<"$PANTHEON_AUDIT_OUT_DIR/prepared-release-dir")" >> "$GITHUB_OUTPUT"
+          fi
+          if [[ -f "$PANTHEON_AUDIT_OUT_DIR/prepared-receipt.json" ]]; then
+            echo "prepared_receipt=$PANTHEON_AUDIT_OUT_DIR/prepared-receipt.json" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Activate bounded write-proof profile after watchdog is durable
         id: write_deploy
+        if: github.event_name != 'workflow_dispatch' || inputs.deploy_action != 'prepare'
         timeout-minutes: 25
         env:
           PANTHEON_AUDIT_OUT_DIR: ${{ runner.temp }}/pantheon-proof-${{ github.run_id }}-${{ github.run_attempt }}/write-controller
@@ -1463,6 +1529,11 @@ jobs:
           PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES: "true"
           PANTHEON_DEPLOY_ALLOW_OUT_OF_ORDER_CANDIDATE: ${{ needs.deploy.outputs.frontend_ref != 'dev' && 'true' || 'false' }}
           PANTHEON_DEPLOY_RELEASE_INSTANCE: ${{ github.run_id }}-${{ github.run_attempt }}-write-proof
+          PANTHEON_LEASE_OWNER: ${{ inputs.lease_owner || '' }}
+          PANTHEON_LEASE_EPOCH: ${{ inputs.lease_epoch || '' }}
+          PANTHEON_LEASE_RUN_ID: ${{ inputs.lease_run_id || '' }}
+          PANTHEON_LEASE_DELEGATED: ${{ inputs.lease_delegated || 'true' }}
+          PANTHEON_BFF_CANDIDATE_TRANSPORT: ${{ inputs.bff_candidate_transport || '' }}
         run: |
           set -euo pipefail
           mkdir -p "$PANTHEON_AUDIT_OUT_DIR"

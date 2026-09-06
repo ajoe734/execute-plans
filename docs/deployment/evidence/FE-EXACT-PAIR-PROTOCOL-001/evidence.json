@@ -7,7 +7,7 @@
   "merge_target": "dev",
   "branch": "task/FE-EXACT-PAIR-PROTOCOL-001",
   "status": "ready-for-independent-exact-head-review",
-  "recorded_at": "2026-09-06T05:18:00.000Z",
+  "recorded_at": "2026-09-06T06:30:00.000Z",
   "scope": {
     "implemented": [
       "Machine-readable exact pair handshake contracts in scripts/release-identity.mjs, scripts/release-evidence.mjs, and scripts/release-candidate.mjs: distinct BFF image digest types (oci_manifest_digest, image_config_digest, archive_checksum - never conflated), lease ({ owner, epoch, runId, delegated }), preparedArtifact ({ locator, checksum }), expectedPredecessor ({ pairId, commit, artifactDigest, target }), compatibilityDigest, releaseId, and mandatory gate evidence.",
@@ -15,8 +15,8 @@
       "Positive activate protocol in scripts/deploy-dev-vm.sh: executes in a new process without rebuilding, verifies prepared receipt and fresh same-epoch environment lease, enforces expected predecessor CAS and mandatory gate evidence, atomically exchanges DEPLOY_ROOT symlink, and verifies independent served readback. Idempotent replay succeeds without rebuilding or re-staging.",
       "Retired one-shot public-switch bypass in scripts/deploy-dev-vm.sh without compatibility alias; unauthenticated or unphased execution fails closed with exit code 2.",
       "Aligned proof watchdog caller in .github/workflows/pantheon-proof-watchdog.yml to explicit restore action (PANTHEON_DEPLOY_ACTION: restore) and authenticated safe sibling CAS.",
-      "Updated .github/workflows/pantheon-dev-fe-deploy.yml to run prepare followed by activate in persistent deployment and write-proof coordinator.",
-      "Updated .github/workflows/pantheon-integration-gate.yml to support forwarding lease parameters and BFF image digest to prepare-pair."
+      "Updated .github/workflows/pantheon-dev-fe-deploy.yml to expose separate prepare and activate dispatches, lease inputs, candidate transport, and prepared step/job outputs.",
+      "Updated .github/workflows/pantheon-integration-gate.yml to support lease parameters and BFF image digest forwarding while respecting GitHub Actions 25-input dispatch limit."
     ],
     "declared_artifacts": [
       "scripts/release-identity.mjs",
@@ -47,6 +47,19 @@
     "prior_artifact_restore_aligned_with_parent_pair_protocol": true,
     "strictly_limited_to_16_declared_target_artifacts": true
   },
+  "p1_corrections_addressed": {
+    "1_workflow_prepare_profiles": "In .github/workflows/pantheon-dev-fe-deploy.yml, prepare sets PANTHEON_DEPLOY_REAL_WRITES=false and PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES=false, and deploy-dev-vm.sh accepts read-only flags during prepare. In test-deploy-dev-vm.sh, run_write_deploy and run_operator_live_deploy pass false write flags in prepare and true write flags in activate. All 42 contract cases pass.",
+    "2_candidate_transport_routing": "probe-hosted-browser-bff.mjs reads PANTHEON_BFF_CANDIDATE_TRANSPORT and intercepts browser requests via Playwright route fulfillment, routing traffic to the bound non-public candidate transport while keeping the public origin unchanged and incumbent untouched.",
+    "3_bff_image_identity_enforcement": "In release-identity.mjs and release-candidate.mjs, contradictory typed and primary digests are rejected. createReleaseIdentity enforces caller image metadata against observed live image metadata. verifyVersionAgainstIdentity requires full image identity match (repo, tag, digest, digestType).",
+    "4_candidate_transport_cors_and_url_guards": "probe-hosted-browser-bff.mjs strictly guards candidate transport URLs against non-mvl-cap/internal domains, credentials, and cloud metadata (IPv4 and IPv6-mapped IPv4). Browser CORS is strictly enforced in route interception: missing or non-matching access-control-allow-origin triggers route.abort('failed').",
+    "5_receipt_authority_and_integrity": ".prepared-receipt.json includes sha256 HMAC/integrity covering all payload fields, TTL (3600s), lease ({ owner, epoch, runId, delegated }), BFF image ({ repository, tag, digest, digestType }), preparedArtifact ({ locator, checksum }), expectedPredecessor ({ target, commit, pairId, artifactDigest }), and mandatory gates (candidateVerification, preSwitchProbe, agoraCompatibility, managementFleet, openclawContract). All validated in verify_prepared_receipt.",
+    "6_replay_and_recovery_receipt_validation": "activate calls verify_prepared_receipt and verify_dist_digest before any replay or state transition. Predecessor CAS enforces all 4 fields (target, commit, pairId, artifactDigest) against both live state and expected receipt predecessor when switching.",
+    "7_parent_composition_and_downstream_contract": "pantheon-dev-fe-deploy.yml exposes separate workflow dispatch inputs for deploy_action, lease parameters, and candidate transport, with step/job outputs for prepared_release_dir and prepared_receipt. Pruning preserves unexpired prepared receipts. Restore validates lease parameters if provided, emitting restore.fe_half_complete for parent pair composition handover to DEV-DELIVERY-001 and STRUCT-RETIRE-001."
+  },
+  "downstream_handover_contract": {
+    "DEV-DELIVERY-001": "FE deployment interface exposes separated PANTHEON_DEPLOY_ACTION=prepare (outputs prepared-release-dir, .prepared-receipt.json with TTL 3600s) and PANTHEON_DEPLOY_ACTION=activate (requires lease_owner, lease_epoch, lease_run_id, lease_delegated, predecessor CAS). Pruning retains unexpired prepared receipts. Failure during activate retains safe sibling for parent rollback.",
+    "STRUCT-RETIRE-001": "One-shot switch bypass is permanently retired with exit code 2. No compatibility aliases exist. All deployments must execute through governed prepare -> activate or explicit restore."
+  },
   "validation": {
     "release_identity_suite": {
       "command": "node scripts/test-release-identity.mjs",
@@ -70,11 +83,15 @@
     },
     "vitest_paired_release_workflow": {
       "command": "npx vitest run src/test/paired-release-workflow.test.ts",
-      "result": "passed: 22 tests passed"
+      "result": "passed: 23 tests passed"
     },
     "vitest_deploy_safe_defaults": {
       "command": "npx vitest run src/test/deploy-safe-defaults.test.ts",
-      "result": "passed: 21 tests passed"
+      "result": "passed: 22 tests passed"
+    },
+    "vitest_full_suite": {
+      "command": "npx vitest run --maxWorkers=2 src/test/release-candidate.test.ts src/test/release-evidence.test.ts src/test/hosted-browser-release-policy.test.ts src/test/paired-release-workflow.test.ts src/test/deploy-safe-defaults.test.ts",
+      "result": "passed: 149 tests passed across 5 files"
     }
   },
   "review_binding": {
