@@ -454,7 +454,9 @@ if (output) {
     pass: true,
     personaFleetSafetyPassed: true,
     personaFleetChecks: { hasNaN: false },
-    openclawContractPassed: true,
+    openclawContractPassed: process.env.MOCK_OPENCLAW_CONTRACT_STATUS === "missing"
+      ? undefined
+      : process.env.MOCK_OPENCLAW_CONTRACT_STATUS !== "failed",
     openclawContractChecks: { pass: true }
   })}\n`, "utf8");
 }
@@ -2621,6 +2623,18 @@ test_exact_pair_protocol_failed_mandatory_gate_prepare_rejected() {
     show_deploy_failure "missing mandatory gate rejection message"
 }
 
+test_exact_pair_protocol_openclaw_result_rejected() {
+  local result="$1"
+  setup_case "exact-pair-openclaw-${result}"
+  run_deploy PANTHEON_DEPLOY_ACTION=prepare "MOCK_OPENCLAW_CONTRACT_STATUS=${result}"
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "prepare with ${result} OpenClaw result unexpectedly succeeded"
+  assert_previous_is_live
+  assert_previous_manifest_unchanged
+  [[ ! -f "${CASE_AUDIT}/prepared-receipt.json" ]] || die "rejected gate emitted prepared receipt"
+  grep -Fq "openclawContract=failed" "${RUN_OUTPUT}" || \
+    show_deploy_failure "missing OpenClaw gate rejection"
+}
+
 test_exact_pair_protocol_forged_receipt_and_unregistered_lease_rejected() {
   local release_dir receipt_file
   setup_case exact-pair-forged-receipt
@@ -2758,6 +2772,8 @@ run_test "exact pair protocol idempotent replay succeeds" test_exact_pair_protoc
 run_test "exact pair protocol one-shot bypass is retired" test_exact_pair_protocol_one_shot_bypass_retired
 run_test "exact pair protocol wrong lease restore rejected" test_exact_pair_protocol_wrong_lease_restore_rejected
 run_test "exact pair protocol failed mandatory gate prepare rejected" test_exact_pair_protocol_failed_mandatory_gate_prepare_rejected
+run_test "exact pair protocol explicit OpenClaw failure rejects fleet fallback" test_exact_pair_protocol_openclaw_result_rejected failed
+run_test "exact pair protocol missing OpenClaw result rejects fleet fallback" test_exact_pair_protocol_openclaw_result_rejected missing
 run_test "exact pair protocol forged receipt and unregistered lease rejected" test_exact_pair_protocol_forged_receipt_and_unregistered_lease_rejected
 run_test "exact pair protocol schemaless receipt restore rejected" test_exact_pair_protocol_schemaless_receipt_restore_rejected
 run_test "exact pair protocol write predecessor retention" test_exact_pair_protocol_write_predecessor_retention

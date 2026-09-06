@@ -738,7 +738,11 @@ if (fs.existsSync(browserProbePath)) {
     if (probe.pass === true && probe.personaFleetSafetyPassed === true && (!probe.personaFleetChecks || probe.personaFleetChecks.hasNaN !== true)) {
       managementFleetStatus = "passed";
     }
-    if (probe.pass === true && (probe.openclawContractPassed === true || (probe.personaFleetSafetyPassed === true && (!probe.personaFleetChecks || probe.personaFleetChecks.hasNaN !== true)))) {
+    // Fleet rendering and an anonymous authentication boundary do not execute
+    // OpenClaw. Missing or explicitly failed contract evidence must fail closed.
+    // Parent-authenticated, pair/attempt-bound gate admission remains required;
+    // this boolean check alone is not proof of that authority.
+    if (probe.pass === true && probe.openclawContractPassed === true) {
       openclawContractStatus = "passed";
     }
   } catch {
