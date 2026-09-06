@@ -14,6 +14,7 @@ const RELEASE_ADMISSION_SCHEMA =
   "pantheon.dev-release-candidate-admission.v1";
 const RELEASE_COMPATIBILITY_STATUS = "compatible";
 const DEPLOYMENT_MANIFEST_PATH = "deployment.json";
+const PREPARED_RECEIPT_PATH = ".prepared-receipt.json";
 const SHA_PATTERN = /^[0-9a-f]{40}$/u;
 const SHA256_PATTERN = /^[0-9a-f]{64}$/u;
 const POSITIVE_INTEGER_PATTERN = /^[1-9][0-9]*$/u;
@@ -94,6 +95,121 @@ function normalizeGateRunId(value, label = "gate run ID") {
     throw new Error(`${label} must be a positive integer`);
   }
   return normalized;
+}
+
+export const BFF_IMAGE_DIGEST_TYPES = Object.freeze([
+  "oci_manifest_digest",
+  "image_config_digest",
+  "archive_checksum",
+]);
+
+export function normalizeBffImage(image, label = "BFF image identity") {
+  if (!image || typeof image !== "object" || Array.isArray(image)) {
+    throw new Error(`${label} must be a JSON object`);
+  }
+  const repository = requiredString(image.repository ?? image.imageRef, `${label} repository`);
+  const tag = requiredString(image.tag ?? "dev", `${label} tag`);
+  const digestType = requiredString(image.digestType, `${label} digest type`).toLowerCase();
+  if (!BFF_IMAGE_DIGEST_TYPES.includes(digestType)) {
+    throw new Error(`${label} digest type must be one of: ${BFF_IMAGE_DIGEST_TYPES.join(", ")}`);
+  }
+  const digest = normalizeDigest(image.digest, `${label} digest`);
+
+  const ociManifestDigest = image.ociManifestDigest
+    ? normalizeDigest(image.ociManifestDigest, `${label} OCI manifest digest`)
+    : digestType === "oci_manifest_digest"
+      ? digest
+      : undefined;
+  if (ociManifestDigest && digestType === "oci_manifest_digest" && ociManifestDigest !== digest) {
+    throw new Error(
+      `${label} digestType is oci_manifest_digest but digest does not match ociManifestDigest`,
+    );
+  }
+  const imageConfigDigest = image.imageConfigDigest
+    ? normalizeDigest(image.imageConfigDigest, `${label} image config digest`)
+    : digestType === "image_config_digest"
+      ? digest
+      : undefined;
+  if (imageConfigDigest && digestType === "image_config_digest" && imageConfigDigest !== digest) {
+    throw new Error(
+      `${label} digestType is image_config_digest but digest does not match imageConfigDigest`,
+    );
+  }
+  const archiveChecksum = image.archiveChecksum
+    ? normalizeDigest(image.archiveChecksum, `${label} archive checksum`)
+    : digestType === "archive_checksum"
+      ? digest
+      : undefined;
+  if (archiveChecksum && digestType === "archive_checksum" && archiveChecksum !== digest) {
+    throw new Error(
+      `${label} digestType is archive_checksum but digest does not match archiveChecksum`,
+    );
+  }
+
+  if (ociManifestDigest && imageConfigDigest && ociManifestDigest === imageConfigDigest) {
+    throw new Error(
+      `${label} cannot relabel OCI manifest digest and image config digest as identical values`,
+    );
+  }
+  if (ociManifestDigest && archiveChecksum && ociManifestDigest === archiveChecksum) {
+    throw new Error(
+      `${label} cannot relabel OCI manifest digest and archive checksum as identical values`,
+    );
+  }
+  if (imageConfigDigest && archiveChecksum && imageConfigDigest === archiveChecksum) {
+    throw new Error(
+      `${label} cannot relabel image config digest and archive checksum as identical values`,
+    );
+  }
+
+  return {
+    repository,
+    tag,
+    digestType,
+    digest,
+    ...(ociManifestDigest ? { ociManifestDigest } : {}),
+    ...(imageConfigDigest ? { imageConfigDigest } : {}),
+    ...(archiveChecksum ? { archiveChecksum } : {}),
+  };
+}
+
+export function normalizeLease(lease, label = "environment lease") {
+  if (!lease || typeof lease !== "object" || Array.isArray(lease)) {
+    throw new Error(`${label} must be a JSON object`);
+  }
+  const owner = requiredString(lease.owner, `${label} owner`);
+  const epoch = String(lease.epoch ?? "").trim();
+  if (!epoch) throw new Error(`${label} epoch is required`);
+  const runId = lease.runId ? String(lease.runId).trim() : "";
+  const delegated = Boolean(lease.delegated ?? true);
+  return { owner, epoch, delegated, ...(runId ? { runId } : {}) };
+}
+
+export function normalizePreparedArtifact(artifact, label = "prepared artifact") {
+  if (!artifact || typeof artifact !== "object" || Array.isArray(artifact)) {
+    throw new Error(`${label} must be a JSON object`);
+  }
+  const locator = requiredString(artifact.locator, `${label} locator`);
+  const checksum = normalizeDigest(artifact.checksum, `${label} checksum`);
+  return { locator, checksum };
+}
+
+export function normalizeExpectedPredecessor(predecessor, label = "expected predecessor") {
+  if (!predecessor || typeof predecessor !== "object" || Array.isArray(predecessor)) {
+    throw new Error(`${label} must be a JSON object`);
+  }
+  const pairId = predecessor.pairId ? normalizeDigest(predecessor.pairId, `${label} pair ID`) : "";
+  const commit = predecessor.commit ? normalizeSha(predecessor.commit, `${label} commit`) : "";
+  const artifactDigest = predecessor.artifactDigest
+    ? normalizeDigest(predecessor.artifactDigest, `${label} artifact digest`)
+    : "";
+  const target = predecessor.target ? String(predecessor.target).trim() : "";
+  return {
+    ...(pairId ? { pairId } : {}),
+    ...(commit ? { commit } : {}),
+    ...(artifactDigest ? { artifactDigest } : {}),
+    ...(target ? { target } : {}),
+  };
 }
 
 function makeReleaseAdmission({
@@ -497,7 +613,10 @@ function collectFiles(
       }
       const bytes = fs.readFileSync(absolutePath);
       scanTextBytes(bytes, relativePath, secretSentinels);
-      if (excludeDeployment && relativePath === DEPLOYMENT_MANIFEST_PATH)
+      if (
+        (excludeDeployment && relativePath === DEPLOYMENT_MANIFEST_PATH) ||
+        relativePath === PREPARED_RECEIPT_PATH
+      )
         continue;
       records.push({
         path: relativePath,
@@ -515,9 +634,9 @@ function collectFiles(
 export function canonicalAssetManifestBytes(files) {
   const normalizedFiles = files.map((file, index) => {
     const filePath = canonicalRelativePath(file?.path, `files[${index}].path`);
-    if (filePath === DEPLOYMENT_MANIFEST_PATH) {
+    if (filePath === DEPLOYMENT_MANIFEST_PATH || filePath === PREPARED_RECEIPT_PATH) {
       throw new Error(
-        "deployment.json must be excluded from the canonical asset manifest",
+        `${filePath} must be excluded from the canonical asset manifest`,
       );
     }
     const digest = normalizeDigest(file?.sha256, `files[${index}].sha256`);
@@ -594,6 +713,10 @@ function makeCandidate({
   buildMode,
   files,
   artifactDigest,
+  bffImage = null,
+  lease = null,
+  preparedArtifact = null,
+  expectedPredecessor = null,
 }) {
   return {
     schemaVersion: SCHEMA_VERSION,
@@ -601,6 +724,10 @@ function makeCandidate({
     profile,
     ...(pairId ? { pairId } : {}),
     ...(releaseAdmission ? { releaseAdmission } : {}),
+    ...(bffImage ? { bffImage } : {}),
+    ...(lease ? { lease } : {}),
+    ...(preparedArtifact ? { preparedArtifact } : {}),
+    ...(expectedPredecessor ? { expectedPredecessor } : {}),
     frontendSha,
     bffSha,
     bffBaseUrl,
@@ -643,12 +770,21 @@ function makeDeploymentManifest(candidate) {
       baseUrl: candidate.bffBaseUrl,
       sourceCommitSha: candidate.bffSha,
       sourceCommitKnown: true,
+      ...(candidate.bffImage ? { image: candidate.bffImage } : {}),
     },
     gate: candidate.gate,
     integrationGateRunId: candidate.gate.runId,
     artifactDigest: candidate.artifactDigestSha256,
     artifactDigestSha256: candidate.artifactDigestSha256,
     buildMode: candidate.buildMode,
+    ...(candidate.bffImage ? { bffImage: candidate.bffImage } : {}),
+    ...(candidate.lease ? { lease: candidate.lease } : {}),
+    ...(candidate.preparedArtifact
+      ? { preparedArtifact: candidate.preparedArtifact }
+      : {}),
+    ...(candidate.expectedPredecessor
+      ? { expectedPredecessor: candidate.expectedPredecessor }
+      : {}),
   };
 }
 
@@ -761,6 +897,33 @@ function validateExpectedCandidate(candidate, expectations) {
       expectedControllerRunId: expectations.controllerRunId,
     },
   );
+  const bffImage = candidate.bffImage ? normalizeBffImage(candidate.bffImage) : null;
+  if (expectations.expectedBffImageDigest) {
+    if (!bffImage) {
+      throw new Error("candidate is missing required BFF image identity");
+    }
+    if (
+      bffImage.digest !==
+      normalizeDigest(expectations.expectedBffImageDigest, "expected BFF image digest")
+    ) {
+      throw new Error("candidate BFF image digest does not match the expected digest");
+    }
+  }
+  const lease = candidate.lease ? normalizeLease(candidate.lease) : null;
+  if (expectations.expectedLeaseEpoch) {
+    if (!lease) {
+      throw new Error("candidate is missing required lease identity");
+    }
+    if (String(lease.epoch) !== String(expectations.expectedLeaseEpoch)) {
+      throw new Error("candidate lease epoch does not match the expected epoch");
+    }
+  }
+  const preparedArtifact = candidate.preparedArtifact
+    ? normalizePreparedArtifact(candidate.preparedArtifact)
+    : null;
+  const expectedPredecessor = candidate.expectedPredecessor
+    ? normalizeExpectedPredecessor(candidate.expectedPredecessor)
+    : null;
 
   return {
     profile,
@@ -774,6 +937,10 @@ function validateExpectedCandidate(candidate, expectations) {
     buildMode,
     artifactDigest,
     releaseAdmission,
+    ...(bffImage ? { bffImage } : {}),
+    ...(lease ? { lease } : {}),
+    ...(preparedArtifact ? { preparedArtifact } : {}),
+    ...(expectedPredecessor ? { expectedPredecessor } : {}),
   };
 }
 
@@ -821,6 +988,23 @@ function validateDeploymentManifest(deployment, candidate, normalized) {
       ? JSON.stringify(deployment.releaseAdmission) ===
         JSON.stringify(normalized.releaseAdmission)
       : deployment.releaseAdmission === undefined) &&
+    (normalized.bffImage
+      ? JSON.stringify(deployment.bffImage) ===
+          JSON.stringify(normalized.bffImage) &&
+        JSON.stringify(deployment.bff?.image) ===
+          JSON.stringify(normalized.bffImage)
+      : deployment.bffImage === undefined) &&
+    (normalized.lease
+      ? JSON.stringify(deployment.lease) === JSON.stringify(normalized.lease)
+      : deployment.lease === undefined) &&
+    (normalized.preparedArtifact
+      ? JSON.stringify(deployment.preparedArtifact) ===
+        JSON.stringify(normalized.preparedArtifact)
+      : deployment.preparedArtifact === undefined) &&
+    (normalized.expectedPredecessor
+      ? JSON.stringify(deployment.expectedPredecessor) ===
+        JSON.stringify(normalized.expectedPredecessor)
+      : deployment.expectedPredecessor === undefined) &&
     deployment.commit === normalized.frontendSha &&
     deployment.sourceBranch === "dev" &&
     deployment.sourceRef === normalized.frontendSha &&
@@ -865,6 +1049,8 @@ export function verifyReleaseCandidate({
   expectedReleaseCandidateId = "",
   expectedCompatibilityManifestSha256 = "",
   expectedControllerRunId = "",
+  expectedBffImageDigest = "",
+  expectedLeaseEpoch = "",
   secretSentinels = [],
   allowPairEnvelope = false,
 }) {
@@ -926,6 +1112,8 @@ export function verifyReleaseCandidate({
     releaseCandidateId: expectedReleaseCandidateId,
     compatibilityManifestSha256: expectedCompatibilityManifestSha256,
     controllerRunId: expectedControllerRunId,
+    expectedBffImageDigest,
+    expectedLeaseEpoch,
   });
   const declaredFiles = validateDeclaredFiles(candidate.files);
   const actualRecords = collectFiles(distRoot, {
@@ -982,6 +1170,10 @@ export function prepareReleaseCandidate({
   releaseCandidateId = "",
   compatibilityManifestSha256 = "",
   controllerRunId = "",
+  bffImage = null,
+  lease = null,
+  preparedArtifact = null,
+  expectedPredecessor = null,
   buildMode = SAFE_BUILD_MODE,
   secretSentinels = [],
 }) {
@@ -1006,6 +1198,14 @@ export function prepareReleaseCandidate({
     frontendSha: normalizedFrontendSha,
     bffSha: normalizedBffSha,
   });
+  const normalizedBffImage = bffImage ? normalizeBffImage(bffImage) : null;
+  const normalizedLease = lease ? normalizeLease(lease) : null;
+  const normalizedPreparedArtifact = preparedArtifact
+    ? normalizePreparedArtifact(preparedArtifact)
+    : null;
+  const normalizedExpectedPredecessor = expectedPredecessor
+    ? normalizeExpectedPredecessor(expectedPredecessor)
+    : null;
   const normalizedBuildMode = normalizeBuildMode(buildMode);
   const normalizedSentinels = normalizeSentinels(secretSentinels);
   const sourceRecords = collectFiles(sourceRoot, {
@@ -1025,6 +1225,10 @@ export function prepareReleaseCandidate({
     buildMode: normalizedBuildMode,
     files,
     artifactDigest,
+    bffImage: normalizedBffImage,
+    lease: normalizedLease,
+    preparedArtifact: normalizedPreparedArtifact,
+    expectedPredecessor: normalizedExpectedPredecessor,
   });
   const deployment = makeDeploymentManifest(candidate);
   const temporaryRoot = `${outputRoot}.tmp-${process.pid}-${crypto.randomBytes(6).toString("hex")}`;
@@ -1057,6 +1261,8 @@ export function prepareReleaseCandidate({
       expectedBffSha: normalizedBffSha,
       expectedBffBaseUrl: normalizedBffBaseUrl,
       expectedArtifactDigest: artifactDigest,
+      expectedBffImageDigest: normalizedBffImage?.digest || "",
+      expectedLeaseEpoch: normalizedLease?.epoch || "",
       secretSentinels: normalizedSentinels,
     });
 
@@ -1087,6 +1293,10 @@ function pairIdentity({
   readOnlyDigest,
   operatorLiveDigest,
   writeProofDigest,
+  bffImage = null,
+  lease = null,
+  preparedArtifact = null,
+  expectedPredecessor = null,
 }) {
   return {
     schemaVersion: SCHEMA_VERSION,
@@ -1100,6 +1310,10 @@ function pairIdentity({
       runUrl: gateRunUrl,
     },
     ...(releaseAdmission ? { releaseAdmission } : {}),
+    ...(bffImage ? { bffImage } : {}),
+    ...(lease ? { lease } : {}),
+    ...(preparedArtifact ? { preparedArtifact } : {}),
+    ...(expectedPredecessor ? { expectedPredecessor } : {}),
     profiles: {
       readOnly: {
         profile: RELEASE_PROFILES.READ_ONLY,
@@ -1153,16 +1367,20 @@ function validatePairManifest(pair, expectations) {
     throw new Error("pair.json must contain a JSON object");
   }
   const expectedKeys = [
+    ...(pair.bffImage ? ["bffImage"] : []),
     "bffBaseUrl",
     "bffSha",
+    ...(pair.expectedPredecessor ? ["expectedPredecessor"] : []),
     "frontendSha",
     "gate",
+    ...(pair.lease ? ["lease"] : []),
     "pairId",
+    ...(pair.preparedArtifact ? ["preparedArtifact"] : []),
     "profiles",
     ...(pair.releaseAdmission ? ["releaseAdmission"] : []),
     "repository",
     "schemaVersion",
-  ];
+  ].sort();
   if (Object.keys(pair).sort().join(",") !== expectedKeys.join(",")) {
     throw new Error("pair.json has unexpected fields");
   }
@@ -1196,6 +1414,33 @@ function validatePairManifest(pair, expectations) {
       expectations.compatibilityManifestSha256,
     expectedControllerRunId: expectations.controllerRunId,
   });
+  const bffImage = pair.bffImage ? normalizeBffImage(pair.bffImage, "pair BFF image") : null;
+  if (expectations.expectedBffImageDigest) {
+    if (!bffImage) {
+      throw new Error("pair is missing required BFF image identity");
+    }
+    if (
+      bffImage.digest !==
+      normalizeDigest(expectations.expectedBffImageDigest, "expected BFF image digest")
+    ) {
+      throw new Error("pair BFF image digest does not match the expected digest");
+    }
+  }
+  const lease = pair.lease ? normalizeLease(pair.lease, "pair lease") : null;
+  if (expectations.expectedLeaseEpoch) {
+    if (!lease) {
+      throw new Error("pair is missing required lease identity");
+    }
+    if (String(lease.epoch) !== String(expectations.expectedLeaseEpoch)) {
+      throw new Error("pair lease epoch does not match the expected epoch");
+    }
+  }
+  const preparedArtifact = pair.preparedArtifact
+    ? normalizePreparedArtifact(pair.preparedArtifact, "pair prepared artifact")
+    : null;
+  const expectedPredecessor = pair.expectedPredecessor
+    ? normalizeExpectedPredecessor(pair.expectedPredecessor, "pair expected predecessor")
+    : null;
   const readOnly = pair.profiles?.readOnly;
   const operatorLive = pair.profiles?.operatorLive;
   const writeProof = pair.profiles?.writeProof;
@@ -1240,6 +1485,10 @@ function validatePairManifest(pair, expectations) {
     readOnlyDigest,
     operatorLiveDigest,
     writeProofDigest,
+    bffImage,
+    lease,
+    preparedArtifact,
+    expectedPredecessor,
   });
   const pairId = normalizeDigest(pair.pairId, "pair ID");
   if (pairId !== pairIdFor(identity)) {
@@ -1292,6 +1541,8 @@ export function verifyPairedReleaseCandidate({
   expectedReleaseCandidateId = "",
   expectedCompatibilityManifestSha256 = "",
   expectedControllerRunId = "",
+  expectedBffImageDigest = "",
+  expectedLeaseEpoch = "",
   expectedArtifactDigest = "",
   profile = RELEASE_PROFILES.READ_ONLY,
   secretSentinels = [],
@@ -1328,6 +1579,8 @@ export function verifyPairedReleaseCandidate({
     releaseCandidateId: expectedReleaseCandidateId,
     compatibilityManifestSha256: expectedCompatibilityManifestSha256,
     controllerRunId: expectedControllerRunId,
+    expectedBffImageDigest,
+    expectedLeaseEpoch,
   });
   const common = {
     expectedFrontendSha: normalized.frontendSha,
@@ -1341,6 +1594,10 @@ export function verifyPairedReleaseCandidate({
       normalized.releaseAdmission?.compatibilityManifestSha256 || "",
     expectedControllerRunId:
       normalized.releaseAdmission?.controller.runId || "",
+    expectedBffImageDigest:
+      normalized.bffImage?.digest || expectedBffImageDigest,
+    expectedLeaseEpoch:
+      normalized.lease?.epoch || expectedLeaseEpoch,
     secretSentinels: normalizedSentinels,
   };
   const readOnly = verifyReleaseCandidate({
@@ -1386,6 +1643,14 @@ export function verifyPairedReleaseCandidate({
     writeProof,
     selectedProfile,
     artifactDigestSha256: selectedArtifactDigest,
+    ...(normalized.bffImage ? { bffImage: normalized.bffImage } : {}),
+    ...(normalized.lease ? { lease: normalized.lease } : {}),
+    ...(normalized.preparedArtifact
+      ? { preparedArtifact: normalized.preparedArtifact }
+      : {}),
+    ...(normalized.expectedPredecessor
+      ? { expectedPredecessor: normalized.expectedPredecessor }
+      : {}),
   };
 }
 
@@ -1402,6 +1667,10 @@ export function preparePairedReleaseCandidate({
   releaseCandidateId = "",
   compatibilityManifestSha256 = "",
   controllerRunId = "",
+  bffImage = null,
+  lease = null,
+  preparedArtifact = null,
+  expectedPredecessor = null,
   secretSentinels = [],
 }) {
   const readOnlyRoot = path.resolve(
@@ -1439,6 +1708,14 @@ export function preparePairedReleaseCandidate({
     frontendSha: normalizedFrontendSha,
     bffSha: normalizedBffSha,
   });
+  const normalizedBffImage = bffImage ? normalizeBffImage(bffImage) : null;
+  const normalizedLease = lease ? normalizeLease(lease) : null;
+  const normalizedPreparedArtifact = preparedArtifact
+    ? normalizePreparedArtifact(preparedArtifact)
+    : null;
+  const normalizedExpectedPredecessor = expectedPredecessor
+    ? normalizeExpectedPredecessor(expectedPredecessor)
+    : null;
   const normalizedSentinels = normalizeSentinels(secretSentinels);
   const readOnlyRecords = collectFiles(readOnlyRoot, {
     secretSentinels: normalizedSentinels,
@@ -1468,6 +1745,10 @@ export function preparePairedReleaseCandidate({
     readOnlyDigest,
     operatorLiveDigest,
     writeProofDigest,
+    bffImage: normalizedBffImage,
+    lease: normalizedLease,
+    preparedArtifact: normalizedPreparedArtifact,
+    expectedPredecessor: normalizedExpectedPredecessor,
   });
   const pairId = pairIdFor(identity);
   const pair = { ...identity, pairId };
@@ -1479,6 +1760,14 @@ export function preparePairedReleaseCandidate({
     bffBaseUrl: normalizedBffBaseUrl,
     gateRunId: normalizedGateRunId,
     gateRunUrl: normalizedGateRunUrl,
+    ...(normalizedBffImage ? { bffImage: normalizedBffImage } : {}),
+    ...(normalizedLease ? { lease: normalizedLease } : {}),
+    ...(normalizedPreparedArtifact
+      ? { preparedArtifact: normalizedPreparedArtifact }
+      : {}),
+    ...(normalizedExpectedPredecessor
+      ? { expectedPredecessor: normalizedExpectedPredecessor }
+      : {}),
   };
   const readOnlyCandidate = makeCandidate({
     ...commonCandidate,
@@ -1522,6 +1811,8 @@ export function preparePairedReleaseCandidate({
       expectedBffSha: normalizedBffSha,
       expectedBffBaseUrl: normalizedBffBaseUrl,
       expectedPairId: pairId,
+      expectedBffImageDigest: normalizedBffImage?.digest || "",
+      expectedLeaseEpoch: normalizedLease?.epoch || "",
       secretSentinels: normalizedSentinels,
     });
     assertSafeOutputPath(readOnlyRoot, outputRoot);
@@ -1642,6 +1933,77 @@ function cliBuildMode(options, environment) {
   };
 }
 
+function optionsBffImage(options) {
+  const repository = options.get("--bff-image-repository");
+  const tag = options.get("--bff-image-tag");
+  const digestType = options.get("--bff-image-digest-type");
+  const digest = options.get("--bff-image-digest");
+  const ociManifestDigest = options.get("--bff-oci-manifest-digest");
+  const imageConfigDigest = options.get("--bff-image-config-digest");
+  const archiveChecksum = options.get("--bff-archive-checksum");
+  if (
+    !repository &&
+    !tag &&
+    !digestType &&
+    !digest &&
+    !ociManifestDigest &&
+    !imageConfigDigest &&
+    !archiveChecksum
+  ) {
+    return null;
+  }
+  return normalizeBffImage({
+    repository,
+    tag,
+    digestType,
+    digest,
+    ociManifestDigest,
+    imageConfigDigest,
+    archiveChecksum,
+  });
+}
+
+function optionsLease(options) {
+  const owner = options.get("--lease-owner");
+  const epoch = options.get("--lease-epoch");
+  const runId = options.get("--lease-run-id");
+  const delegated = options.get("--lease-delegated");
+  if (!owner && !epoch && !runId && !delegated) {
+    return null;
+  }
+  return normalizeLease({
+    owner,
+    epoch,
+    runId,
+    delegated: delegated ? delegated === "true" : true,
+  });
+}
+
+function optionsPreparedArtifact(options) {
+  const locator = options.get("--prepared-artifact-locator");
+  const checksum = options.get("--prepared-artifact-checksum");
+  if (!locator && !checksum) {
+    return null;
+  }
+  return normalizePreparedArtifact({ locator, checksum });
+}
+
+function optionsExpectedPredecessor(options) {
+  const pairId = options.get("--expected-predecessor-pair-id");
+  const commit = options.get("--expected-predecessor-commit");
+  const artifactDigest = options.get("--expected-predecessor-artifact-digest");
+  const target = options.get("--expected-predecessor-target");
+  if (!pairId && !commit && !artifactDigest && !target) {
+    return null;
+  }
+  return normalizeExpectedPredecessor({
+    pairId,
+    commit,
+    artifactDigest,
+    target,
+  });
+}
+
 export function main(argv = process.argv.slice(2), environment = process.env) {
   const [command, ...rawOptions] = argv;
   const commonExpectedFlags = new Set([
@@ -1665,8 +2027,31 @@ export function main(argv = process.argv.slice(2), environment = process.env) {
     "--compatibility-manifest-sha256",
     "--expected-controller-run-id",
     "--controller-run-id",
+    "--expected-bff-image-digest",
+    "--bff-image-digest",
+    "--expected-lease-epoch",
+    "--lease-epoch",
     "--profile",
   ]);
+  const handshakeOptionFlags = [
+    "--bff-image-repository",
+    "--bff-image-tag",
+    "--bff-image-digest-type",
+    "--bff-image-digest",
+    "--bff-oci-manifest-digest",
+    "--bff-image-config-digest",
+    "--bff-archive-checksum",
+    "--lease-owner",
+    "--lease-epoch",
+    "--lease-run-id",
+    "--lease-delegated",
+    "--prepared-artifact-locator",
+    "--prepared-artifact-checksum",
+    "--expected-predecessor-pair-id",
+    "--expected-predecessor-commit",
+    "--expected-predecessor-artifact-digest",
+    "--expected-predecessor-target",
+  ];
   if (command === "prepare-pair") {
     const options = parseOptions(
       rawOptions,
@@ -1684,6 +2069,7 @@ export function main(argv = process.argv.slice(2), environment = process.env) {
         "--release-candidate-id",
         "--compatibility-manifest-sha256",
         "--controller-run-id",
+        ...handshakeOptionFlags,
       ]),
     );
     cliBuildMode(
@@ -1709,6 +2095,10 @@ export function main(argv = process.argv.slice(2), environment = process.env) {
         "--compatibility-manifest-sha256",
       ),
       controllerRunId: options.get("--controller-run-id"),
+      bffImage: optionsBffImage(options),
+      lease: optionsLease(options),
+      preparedArtifact: optionsPreparedArtifact(options),
+      expectedPredecessor: optionsExpectedPredecessor(options),
       secretSentinels: collectEnvironmentSecretSentinels(environment),
     });
     process.stdout.write(`${result.pairId}\n`);
@@ -1738,6 +2128,7 @@ export function main(argv = process.argv.slice(2), environment = process.env) {
         "--allow-dev-stub-writes",
         "--vite-bff-embedded-bearer-token",
         "--embedded-bearer-token",
+        ...handshakeOptionFlags,
       ]),
     );
     const result = prepareReleaseCandidate({
@@ -1753,6 +2144,10 @@ export function main(argv = process.argv.slice(2), environment = process.env) {
         "--compatibility-manifest-sha256",
       ),
       controllerRunId: options.get("--controller-run-id"),
+      bffImage: optionsBffImage(options),
+      lease: optionsLease(options),
+      preparedArtifact: optionsPreparedArtifact(options),
+      expectedPredecessor: optionsExpectedPredecessor(options),
       buildMode: cliBuildMode(options, environment),
       secretSentinels: collectEnvironmentSecretSentinels(environment),
     });
@@ -1793,6 +2188,14 @@ export function main(argv = process.argv.slice(2), environment = process.env) {
         "--expected-controller-run-id",
         "--controller-run-id",
       ),
+      expectedBffImageDigest: options.get(
+        "--expected-bff-image-digest",
+        "--bff-image-digest",
+      ),
+      expectedLeaseEpoch: options.get(
+        "--expected-lease-epoch",
+        "--lease-epoch",
+      ),
       secretSentinels: collectEnvironmentSecretSentinels(environment),
     });
     process.stdout.write(`${result.artifactDigestSha256}\n`);
@@ -1829,6 +2232,14 @@ export function main(argv = process.argv.slice(2), environment = process.env) {
       expectedArtifactDigest: options.get(
         "--expected-artifact-digest",
         "--artifact-digest",
+      ),
+      expectedBffImageDigest: options.get(
+        "--expected-bff-image-digest",
+        "--bff-image-digest",
+      ),
+      expectedLeaseEpoch: options.get(
+        "--expected-lease-epoch",
+        "--lease-epoch",
       ),
       profile: options.get("--profile") || RELEASE_PROFILES.READ_ONLY,
       secretSentinels: collectEnvironmentSecretSentinels(environment),

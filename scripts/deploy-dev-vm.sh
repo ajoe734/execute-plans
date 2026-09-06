@@ -46,18 +46,68 @@ LOCK_FILE="${PANTHEON_DEPLOY_LOCK_FILE:-/tmp/pantheon-dev-fe-deploy.lock}"
 STRICT_LOCK_PREFIX="${PANTHEON_DEPLOY_LOCK_PREFIX:-/tmp}"
 DURABLE_EVIDENCE_ROOT="${PANTHEON_DEPLOY_DURABLE_EVIDENCE_ROOT:-/var/lib/pantheon-dev-fe-deploy-evidence}"
 STRICT_DURABLE_EVIDENCE_PREFIX="${PANTHEON_DEPLOY_DURABLE_EVIDENCE_PREFIX:-/var/lib/pantheon-dev-fe-deploy-evidence}"
+DEPLOY_ACTION="${PANTHEON_DEPLOY_ACTION:-}"
+BFF_CANDIDATE_TRANSPORT="${PANTHEON_BFF_CANDIDATE_TRANSPORT:-}"
+LEASE_OWNER="${PANTHEON_DEPLOY_LEASE_OWNER:-${PANTHEON_LEASE_OWNER:-}}"
+LEASE_EPOCH="${PANTHEON_DEPLOY_LEASE_EPOCH:-${PANTHEON_LEASE_EPOCH:-}}"
+LEASE_RUN_ID="${PANTHEON_DEPLOY_LEASE_RUN_ID:-${PANTHEON_LEASE_RUN_ID:-}}"
+LEASE_DELEGATED="${PANTHEON_DEPLOY_LEASE_DELEGATED:-${PANTHEON_LEASE_DELEGATED:-}}"
+AUTHORIZED_LEASE_OWNERS_REGEX="^(pantheon-release-controller|pantheon-dev-deploy|parent-controller|pantheon-proof-watchdog|pantheon-fe-deploy)$"
+EXPECTED_PREDECESSOR_TARGET="${PANTHEON_DEPLOY_EXPECTED_PREDECESSOR_TARGET:-${PANTHEON_EXPECTED_PREDECESSOR_TARGET:-}}"
+EXPECTED_PREDECESSOR_COMMIT="${PANTHEON_DEPLOY_EXPECTED_PREDECESSOR_COMMIT:-${PANTHEON_EXPECTED_PREDECESSOR_COMMIT:-}}"
+EXPECTED_PREDECESSOR_PAIR_ID="${PANTHEON_DEPLOY_EXPECTED_PREDECESSOR_PAIR_ID:-${PANTHEON_EXPECTED_PREDECESSOR_PAIR_ID:-}}"
+EXPECTED_PREDECESSOR_ARTIFACT_DIGEST="${PANTHEON_DEPLOY_EXPECTED_PREDECESSOR_ARTIFACT_DIGEST:-${PANTHEON_EXPECTED_PREDECESSOR_ARTIFACT_DIGEST:-}}"
+PREPARED_SUCCESS=false
 TIMESTAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 CONTROLLER_SHA="$(git rev-parse HEAD)"
 SHA="${PANTHEON_DEPLOY_CANDIDATE_SHA:-${GITHUB_SHA:-${CONTROLLER_SHA}}}"
 SOURCE_REF="${PANTHEON_DEPLOY_REF:-${SHA}}"
 SHORT_SHA="${SHA:0:12}"
 RELEASE_INSTANCE="${PANTHEON_DEPLOY_RELEASE_INSTANCE:-${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-1}-${BASHPID}}"
+if [[ -z "${PANTHEON_DEPLOY_RELEASE_INSTANCE:-}" && -f "${AUDIT_DIR}/release-instance" ]]; then
+  RELEASE_INSTANCE="$(<"${AUDIT_DIR}/release-instance")"
+fi
 RELEASE_NAME="${TIMESTAMP}-${SHORT_SHA}-gate-${GATE_RUN_ID}-${RELEASE_INSTANCE}"
 RELEASE_DIR="${RELEASES_DIR}/${RELEASE_NAME}"
 SAFE_RELEASE_DIR="${RELEASES_DIR}/${RELEASE_NAME}-read-only"
 WRITE_RELEASE_DIR="${RELEASES_DIR}/${RELEASE_NAME}-write-proof"
 OPERATOR_RELEASE_DIR="${RELEASES_DIR}/${RELEASE_NAME}-operator-live"
+if [[ "${DEPLOY_ACTION}" == "activate" ]]; then
+  if [[ -n "${PANTHEON_DEPLOY_RELEASE_DIR:-}" ]]; then
+    RELEASE_DIR="${PANTHEON_DEPLOY_RELEASE_DIR}"
+    RELEASE_NAME="$(basename -- "${RELEASE_DIR}")"
+  elif [[ -n "${PANTHEON_DEPLOY_RELEASE_NAME:-}" ]]; then
+    RELEASE_NAME="${PANTHEON_DEPLOY_RELEASE_NAME}"
+    RELEASE_DIR="${RELEASES_DIR}/${RELEASE_NAME}"
+  elif [[ -f "${AUDIT_DIR}/prepared-release-dir" ]]; then
+    RELEASE_DIR="$(<"${AUDIT_DIR}/prepared-release-dir")"
+    RELEASE_NAME="$(basename -- "${RELEASE_DIR}")"
+  elif [[ -d "${RELEASE_DIR}" && -f "${RELEASE_DIR}/.prepared-receipt.json" ]]; then
+    :
+  else
+    echo "Activation rejected: exact prepared release directory / locator is required; directory discovery is disallowed." >&2
+    exit 2
+  fi
+fi
 SAFE_FALLBACK_LOCATOR_DIR="${RELEASES_DIR}/.pantheon-safe-locators"
+if [[ "${DEPLOY_ACTION}" == "activate" ]]; then
+  if [[ "${RELEASE_DIR}" == *-write-proof ]]; then
+    SAFE_RELEASE_DIR="${RELEASE_DIR%-write-proof}-read-only"
+    OPERATOR_RELEASE_DIR="${RELEASE_DIR%-write-proof}-operator-live"
+  elif [[ "${RELEASE_DIR}" == *-operator-live ]]; then
+    SAFE_RELEASE_DIR="${RELEASE_DIR%-operator-live}-read-only"
+    WRITE_RELEASE_DIR="${RELEASE_DIR%-operator-live}-write-proof"
+  elif [[ "${RELEASE_DIR}" == *-read-only ]]; then
+    WRITE_RELEASE_DIR="${RELEASE_DIR%-read-only}-write-proof"
+    OPERATOR_RELEASE_DIR="${RELEASE_DIR%-read-only}-operator-live"
+  fi
+  if [[ -f "${SAFE_FALLBACK_LOCATOR_DIR}/$(basename -- "${RELEASE_DIR}").json" ]]; then
+    locator_safe_name="$(node -e 'try { const p=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); process.stdout.write(p.safeReleaseName||"") } catch {}' "${SAFE_FALLBACK_LOCATOR_DIR}/$(basename -- "${RELEASE_DIR}").json")"
+    if [[ -n "${locator_safe_name}" ]]; then
+      SAFE_RELEASE_DIR="${RELEASES_DIR}/${locator_safe_name}"
+    fi
+  fi
+fi
 DURABLE_EVIDENCE_DIR="${DURABLE_EVIDENCE_ROOT}/run-${GITHUB_RUN_ID:-local}-attempt-${GITHUB_RUN_ATTEMPT:-1}-${RELEASE_INSTANCE}"
 NEXT_LINK="${DEPLOY_ROOT}.next-${RELEASE_INSTANCE}"
 ROLLBACK_LINK="${DEPLOY_ROOT}.rollback-${RELEASE_INSTANCE}"
@@ -378,16 +428,22 @@ try:
         payload += chunk
 finally:
     os.close(opened)
-descriptor = os.open(
-    target,
-    os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
-    0o600,
-)
-try:
-    os.write(descriptor, payload)
-    os.fsync(descriptor)
-finally:
-    os.close(descriptor)
+if target.exists():
+    with open(target, "rb") as f:
+        existing = f.read()
+    if existing != payload:
+        raise SystemExit("Agora compatibility evidence in audit differs from source")
+else:
+    descriptor = os.open(
+        target,
+        os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
+        0o600,
+    )
+    try:
+        os.write(descriptor, payload)
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
 PY
 }
 
@@ -624,18 +680,466 @@ publish_manifest_atomically() {
     --stage-name ".deployment-${RELEASE_INSTANCE}-${label}.tmp"
 }
 
+write_prepared_receipt() {
+  local target_release_dir="$1"
+  local target_release_name="$2"
+  local receipt_file="${target_release_dir}/.prepared-receipt.json"
+  node --input-type=module - \
+    "${receipt_file}" \
+    "${target_release_name}" \
+    "${target_release_dir}" \
+    "${PAIR_ID}" \
+    "${SHA}" \
+    "${BFF_COMMIT}" \
+    "${ARTIFACT_DIGEST}" \
+    "${DEPLOY_PROFILE}" \
+    "${GITHUB_ARTIFACT_DIGEST}" \
+    "${GATE_RUN_ID}" \
+    "${LEASE_OWNER}" \
+    "${LEASE_EPOCH}" \
+    "${LEASE_RUN_ID}" \
+    "${LEASE_DELEGATED}" \
+    "${EXPECTED_PREDECESSOR_TARGET:-${LIVE_TARGET_AT_START:-${PREVIOUS_TARGET}}}" \
+    "${EXPECTED_PREDECESSOR_COMMIT:-${LIVE_COMMIT_AT_START:-${PREVIOUS_COMMIT}}}" \
+    "${EXPECTED_PREDECESSOR_PAIR_ID:-${LIVE_PAIR_ID_AT_START:-${PREVIOUS_PAIR_ID}}}" \
+    "${EXPECTED_PREDECESSOR_ARTIFACT_DIGEST:-${LIVE_DIGEST_AT_START:-${PREVIOUS_DIGEST}}}" \
+    "${PAIR_ROOT_DIR:-$CANDIDATE_DIR}/pair.json" \
+    "${AGORA_COMPAT_EVIDENCE_AUDIT}" \
+    "${AUDIT_DIR}/browser-probe-candidate_pre_switch.json" <<'NODE'
+import crypto from "node:crypto";
+import fs from "node:fs";
+const [
+  receiptFile, releaseName, releaseDir, pairId, frontendSha, bffSha,
+  artifactDigest, profile, githubArtifactDigest, gateRunId,
+  leaseOwner, leaseEpoch, leaseRunId, leaseDelegated,
+  predTarget, predCommit, predPairId, predDigest,
+  pairJsonPath, agoraCompatPath, browserProbePath
+] = process.argv.slice(2);
+let bffImage = null;
+if (fs.existsSync(pairJsonPath)) {
+  try {
+    const p = JSON.parse(fs.readFileSync(pairJsonPath, "utf8"));
+    if (p.bffImage) bffImage = p.bffImage;
+  } catch {}
+}
+let agoraEvidence = null;
+if (fs.existsSync(agoraCompatPath)) {
+  try {
+    agoraEvidence = JSON.parse(fs.readFileSync(agoraCompatPath, "utf8"));
+  } catch {}
+}
+const agoraCompatStatus = (agoraEvidence && agoraEvidence.compatibility_status === "accepted") ? "passed" : "failed";
+
+let managementFleetStatus = "failed";
+let openclawContractStatus = "failed";
+if (fs.existsSync(browserProbePath)) {
+  try {
+    const probe = JSON.parse(fs.readFileSync(browserProbePath, "utf8"));
+    if (probe.pass === true && probe.personaFleetSafetyPassed === true && (!probe.personaFleetChecks || probe.personaFleetChecks.hasNaN !== true)) {
+      managementFleetStatus = "passed";
+    }
+    // Fleet rendering and an anonymous authentication boundary do not execute
+    // OpenClaw. Missing or explicitly failed contract evidence must fail closed.
+    // Parent-authenticated, pair/attempt-bound gate admission remains required;
+    // this boolean check alone is not proof of that authority.
+    if (probe.pass === true && probe.openclawContractPassed === true) {
+      openclawContractStatus = "passed";
+    }
+  } catch {
+    managementFleetStatus = "failed";
+    openclawContractStatus = "failed";
+  }
+}
+if (process.env.PANTHEON_MANDATORY_GATE_MANAGEMENT_FLEET === "failed") {
+  managementFleetStatus = "failed";
+}
+if (process.env.PANTHEON_MANDATORY_GATE_OPENCLAW_CONTRACT === "failed") {
+  openclawContractStatus = "failed";
+}
+
+const authorizedControllers = /^(pantheon-release-controller|pantheon-dev-deploy|parent-controller|pantheon-proof-watchdog|pantheon-fe-deploy)$/i;
+if (!leaseOwner || !authorizedControllers.test(leaseOwner)) {
+  throw new Error(`Cannot write prepared receipt: unauthorized lease owner '${leaseOwner}'`);
+}
+if (!leaseRunId) {
+  throw new Error("Cannot write prepared receipt: missing lease run ID");
+}
+if (leaseDelegated !== "true") {
+  throw new Error("Cannot write prepared receipt: lease is not delegated");
+}
+
+const preparedAt = new Date().toISOString();
+const expiresAt = new Date(Date.now() + 3600 * 1000).toISOString();
+
+function computeReceiptIntegritySha256(r) {
+  const parts = [
+    r.pairId || "",
+    r.frontendSha || "",
+    r.bffSha || "",
+    r.artifactDigestSha256 || "",
+    r.profile || "",
+    r.releaseDir || "",
+    r.lease?.owner || "",
+    String(r.lease?.epoch ?? ""),
+    r.lease?.runId || "",
+    String(r.lease?.delegated ?? ""),
+    r.expectedPredecessor?.target || "",
+    r.expectedPredecessor?.commit || "",
+    r.expectedPredecessor?.pairId || "",
+    r.expectedPredecessor?.artifactDigest || "",
+    r.preparedAt || "",
+    r.expiresAt || "",
+    r.bffImage?.repository || "",
+    r.bffImage?.tag || "",
+    r.bffImage?.digestType || "",
+    r.bffImage?.digest || "",
+    r.preparedArtifact?.locator || "",
+    r.preparedArtifact?.checksum || "",
+    r.githubArtifactDigest || "",
+    String(r.gateRunId || ""),
+    r.mandatoryGates?.candidateVerification || "",
+    r.mandatoryGates?.preSwitchProbe || "",
+    r.mandatoryGates?.agoraCompatibility || "",
+    r.mandatoryGates?.managementFleet || "",
+    r.mandatoryGates?.openclawContract || ""
+  ];
+  return crypto.createHash("sha256").update(parts.join("|"), "utf8").digest("hex");
+}
+
+const receipt = {
+  schemaVersion: "pantheon.release.prepared-receipt.v1",
+  status: "prepared_success",
+  preparedAt,
+  expiresAt,
+  releaseName,
+  releaseDir,
+  pairId,
+  frontendSha,
+  bffSha,
+  artifactDigestSha256: artifactDigest,
+  profile,
+  deploymentProfile: profile,
+  githubArtifactDigest,
+  gateRunId,
+  lease: {
+    owner: leaseOwner,
+    epoch: parseInt(leaseEpoch, 10),
+    runId: leaseRunId,
+    delegated: leaseDelegated === "true"
+  },
+  bffImage,
+  preparedArtifact: {
+    locator: releaseDir,
+    checksum: `sha256:${artifactDigest}`
+  },
+  expectedPredecessor: {
+    target: predTarget || null,
+    commit: predCommit || null,
+    pairId: predPairId || null,
+    artifactDigest: predDigest || null
+  },
+  mandatoryGates: {
+    candidateVerification: "passed",
+    preSwitchProbe: "passed",
+    agoraCompatibility: agoraCompatStatus,
+    managementFleet: managementFleetStatus,
+    openclawContract: openclawContractStatus
+  },
+  probes: {
+    candidatePreSwitch: "passed"
+  }
+};
+
+const failedGates = Object.entries(receipt.mandatoryGates)
+  .filter(([_, status]) => status !== "passed")
+  .map(([name, status]) => `${name}=${status}`);
+
+if (failedGates.length > 0) {
+  throw new Error(`Cannot write prepared receipt: mandatory gates failed or missing (${failedGates.join(", ")})`);
+}
+
+receipt.receiptIntegritySha256 = computeReceiptIntegritySha256(receipt);
+fs.writeFileSync(receiptFile, `${JSON.stringify(receipt, null, 2)}\n`, "utf8");
+NODE
+  cp -f "${receipt_file}" "${AUDIT_DIR}/prepared-receipt.json"
+  printf '%s\n' "${target_release_dir}" > "${AUDIT_DIR}/prepared-release-dir"
+  printf '%s\n' "${RELEASE_INSTANCE}" > "${AUDIT_DIR}/release-instance"
+}
+
+verify_prepared_receipt() {
+  local target_release_dir="$1"
+  local receipt_file="${target_release_dir}/.prepared-receipt.json"
+  if [[ ! -f "${receipt_file}" ]]; then
+    echo "Activation refused: prepared receipt missing in ${target_release_dir}." >&2
+    return 2
+  fi
+  local durable_receipt="${DURABLE_EVIDENCE_ROOT}/${RELEASE_NAME}/prepared-receipt.json"
+  if [[ ! -f "${durable_receipt}" ]]; then
+    durable_receipt="${DURABLE_EVIDENCE_ROOT}/${RELEASE_NAME}/.prepared-receipt.json"
+  fi
+  if [[ -f "${durable_receipt}" ]]; then
+    local receipt_sum durable_sum
+    receipt_sum="$(sha256sum "${receipt_file}" | awk '{print $1}')"
+    durable_sum="$(sha256sum "${durable_receipt}" | awk '{print $1}')"
+    if [[ "${receipt_sum}" != "${durable_sum}" ]]; then
+      echo "Activation rejected: prepared receipt does not match durable copy." >&2
+      return 2
+    fi
+  fi
+  if [[ -n "${PANTHEON_DEPLOY_PREPARED_RECEIPT_CHECKSUM:-}" ]]; then
+    local expected_sum="${PANTHEON_DEPLOY_PREPARED_RECEIPT_CHECKSUM#sha256:}"
+    local actual_sum
+    actual_sum="$(sha256sum "${receipt_file}" | awk '{print $1}')"
+    if [[ "${actual_sum}" != "${expected_sum}" ]]; then
+      echo "Activation rejected: prepared receipt checksum mismatch (expected ${expected_sum}, got ${actual_sum})." >&2
+      return 2
+    fi
+  fi
+  if [[ ! "${LEASE_OWNER}" =~ ${AUTHORIZED_LEASE_OWNERS_REGEX} ]]; then
+    echo "Activation rejected: unauthorized lease owner '${LEASE_OWNER}'." >&2
+    return 2
+  fi
+  node --input-type=module - \
+    "${receipt_file}" \
+    "${SHA}" \
+    "${ARTIFACT_DIGEST}" \
+    "${PAIR_ID}" \
+    "${BFF_COMMIT}" \
+    "${DEPLOY_PROFILE}" \
+    "${target_release_dir}" \
+    "${LEASE_EPOCH}" \
+    "${LEASE_OWNER}" \
+    "${LEASE_RUN_ID}" \
+    "${LEASE_DELEGATED}" \
+    "${EXPECTED_PREDECESSOR_TARGET:-}" \
+    "${EXPECTED_PREDECESSOR_COMMIT:-}" \
+    "${EXPECTED_PREDECESSOR_PAIR_ID:-}" \
+    "${EXPECTED_PREDECESSOR_ARTIFACT_DIGEST:-}" \
+    "${LIVE_TARGET_AT_START:-${PREVIOUS_TARGET:-}}" \
+    "${LIVE_COMMIT_AT_START:-${PREVIOUS_COMMIT:-}}" \
+    "${LIVE_PAIR_ID_AT_START:-${PREVIOUS_PAIR_ID:-}}" \
+    "${LIVE_DIGEST_AT_START:-${PREVIOUS_DIGEST:-}}" \
+    "${GATE_RUN_ID}" \
+    "${PAIR_ROOT_DIR:-$CANDIDATE_DIR}/pair.json" <<'NODE'
+import crypto from "node:crypto";
+import fs from "node:fs";
+const [
+  receiptFile, expectedSha, expectedDigest, expectedPairId, expectedBffSha, expectedProfile, expectedReleaseDir,
+  currentEpoch, currentOwner, currentRunId, currentDelegated,
+  reqPredTarget, reqPredCommit, reqPredPairId, reqPredDigest,
+  liveTarget, liveCommit, livePairId, liveDigest,
+  expectedGateRunId, pairJsonPath
+] = process.argv.slice(2);
+
+const payload = JSON.parse(fs.readFileSync(receiptFile, "utf8"));
+if (payload.schemaVersion !== "pantheon.release.prepared-receipt.v1" || payload.status !== "prepared_success") {
+  throw new Error("Invalid prepared receipt status or schema");
+}
+
+function computeReceiptIntegritySha256(r) {
+  const parts = [
+    r.pairId || "",
+    r.frontendSha || "",
+    r.bffSha || "",
+    r.artifactDigestSha256 || "",
+    r.profile || "",
+    r.releaseDir || "",
+    r.lease?.owner || "",
+    String(r.lease?.epoch ?? ""),
+    r.lease?.runId || "",
+    String(r.lease?.delegated ?? ""),
+    r.expectedPredecessor?.target || "",
+    r.expectedPredecessor?.commit || "",
+    r.expectedPredecessor?.pairId || "",
+    r.expectedPredecessor?.artifactDigest || "",
+    r.preparedAt || "",
+    r.expiresAt || "",
+    r.bffImage?.repository || "",
+    r.bffImage?.tag || "",
+    r.bffImage?.digestType || "",
+    r.bffImage?.digest || "",
+    r.preparedArtifact?.locator || "",
+    r.preparedArtifact?.checksum || "",
+    r.githubArtifactDigest || "",
+    String(r.gateRunId || ""),
+    r.mandatoryGates?.candidateVerification || "",
+    r.mandatoryGates?.preSwitchProbe || "",
+    r.mandatoryGates?.agoraCompatibility || "",
+    r.mandatoryGates?.managementFleet || "",
+    r.mandatoryGates?.openclawContract || ""
+  ];
+  return crypto.createHash("sha256").update(parts.join("|"), "utf8").digest("hex");
+}
+
+// 1. Verify mandatory receipt integrity hash
+if (!payload.receiptIntegritySha256 || typeof payload.receiptIntegritySha256 !== "string") {
+  throw new Error("Prepared receipt integrity check failed: missing mandatory receiptIntegritySha256");
+}
+const recomputed = computeReceiptIntegritySha256(payload);
+if (recomputed !== payload.receiptIntegritySha256) {
+  throw new Error("Prepared receipt integrity check failed: tampered receipt");
+}
+
+// 2. Verify timestamp and expiration bounds
+const prepTime = Date.parse(payload.preparedAt);
+if (Number.isNaN(prepTime)) {
+  throw new Error("Prepared receipt has invalid preparedAt timestamp");
+}
+const now = Date.now();
+if (prepTime > now + 60 * 1000) {
+  throw new Error("Prepared receipt preparedAt is in the future");
+}
+if (now - prepTime > 3600 * 1000) {
+  throw new Error("Prepared receipt has expired (exceeded 3600s TTL)");
+}
+if (!payload.expiresAt) {
+  throw new Error("Prepared receipt is missing mandatory expiresAt timestamp");
+}
+const expTime = Date.parse(payload.expiresAt);
+if (Number.isNaN(expTime)) {
+  throw new Error("Prepared receipt has invalid expiresAt timestamp");
+}
+if (now > expTime) {
+  throw new Error("Prepared receipt has expired (past expiresAt)");
+}
+
+// 3. Identity and profile checks
+if (payload.frontendSha?.toLowerCase() !== expectedSha.toLowerCase()) {
+  throw new Error(`Receipt frontend SHA mismatch: expected ${expectedSha}, got ${payload.frontendSha}`);
+}
+if (payload.artifactDigestSha256?.toLowerCase() !== expectedDigest.toLowerCase()) {
+  throw new Error(`Receipt artifact digest mismatch: expected ${expectedDigest}, got ${payload.artifactDigestSha256}`);
+}
+if (payload.pairId?.toLowerCase() !== expectedPairId.toLowerCase()) {
+  throw new Error(`Receipt pair ID mismatch: expected ${expectedPairId}, got ${payload.pairId}`);
+}
+if (payload.bffSha?.toLowerCase() !== expectedBffSha.toLowerCase()) {
+  throw new Error(`Receipt BFF SHA mismatch: expected ${expectedBffSha}, got ${payload.bffSha}`);
+}
+if (payload.profile !== expectedProfile && payload.deploymentProfile !== expectedProfile) {
+  throw new Error(`Receipt deployment profile mismatch: expected ${expectedProfile}, got ${payload.profile}`);
+}
+if (payload.preparedArtifact?.locator && payload.preparedArtifact.locator !== expectedReleaseDir) {
+  throw new Error(`Receipt prepared artifact locator mismatch: expected ${expectedReleaseDir}, got ${payload.preparedArtifact.locator}`);
+}
+if (payload.preparedArtifact?.checksum && payload.preparedArtifact.checksum !== `sha256:${expectedDigest}`) {
+  throw new Error(`Receipt prepared artifact checksum mismatch: expected sha256:${expectedDigest}, got ${payload.preparedArtifact.checksum}`);
+}
+if (payload.gateRunId && expectedGateRunId && String(payload.gateRunId) !== String(expectedGateRunId)) {
+  throw new Error(`Receipt gate run ID mismatch: expected ${expectedGateRunId}, got ${payload.gateRunId}`);
+}
+
+// 4. Lease verification (fresh same-epoch lease authority with delegation required)
+const authorizedControllers = /^(pantheon-release-controller|pantheon-dev-deploy|parent-controller|pantheon-proof-watchdog|pantheon-fe-deploy)$/i;
+if (!payload.lease || !payload.lease.owner || !authorizedControllers.test(payload.lease.owner)) {
+  throw new Error(`Receipt lease owner '${payload.lease?.owner}' is unauthorized`);
+}
+if (payload.lease.delegated !== true) {
+  throw new Error("Receipt lease is not delegated");
+}
+if (currentDelegated !== "true") {
+  throw new Error("Current execution lease is not delegated");
+}
+if (!currentOwner || payload.lease.owner.toLowerCase() !== currentOwner.toLowerCase()) {
+  throw new Error(`Receipt lease owner mismatch: receipt=${payload.lease.owner}, current=${currentOwner}`);
+}
+const receiptEpoch = payload.lease.epoch;
+if (receiptEpoch !== parseInt(currentEpoch, 10)) {
+  throw new Error(`Receipt lease epoch mismatch: receipt=${receiptEpoch}, current=${currentEpoch}`);
+}
+if (!currentRunId || !payload.lease.runId || payload.lease.runId !== currentRunId) {
+  throw new Error(`Receipt lease run ID mismatch: receipt=${payload.lease.runId}, current=${currentRunId}`);
+}
+
+// 5. BFF image verification
+if (fs.existsSync(pairJsonPath)) {
+  try {
+    const pairData = JSON.parse(fs.readFileSync(pairJsonPath, "utf8"));
+    if (pairData.bffImage) {
+      if (!payload.bffImage) {
+        throw new Error("Receipt missing required BFF image identity");
+      }
+      if (pairData.bffImage.digest && payload.bffImage.digest !== pairData.bffImage.digest) {
+        throw new Error(`Receipt BFF image digest mismatch: expected ${pairData.bffImage.digest}, got ${payload.bffImage.digest}`);
+      }
+      if (pairData.bffImage.digestType && payload.bffImage.digestType !== pairData.bffImage.digestType) {
+        throw new Error(`Receipt BFF image digest type mismatch: expected ${pairData.bffImage.digestType}, got ${payload.bffImage.digestType}`);
+      }
+    }
+  } catch (err) {
+    if (err.message.includes("Receipt BFF image") || err.message.includes("BFF image identity")) throw err;
+  }
+}
+
+// 6. Mandatory gates
+if (!payload.mandatoryGates || typeof payload.mandatoryGates !== "object") {
+  throw new Error("Prepared receipt missing mandatory gates");
+}
+if (payload.mandatoryGates.candidateVerification !== "passed") {
+  throw new Error("Mandatory candidate verification gate not passed in prepared receipt");
+}
+if (payload.mandatoryGates.preSwitchProbe !== "passed") {
+  throw new Error("Mandatory pre-switch probe gate not passed in prepared receipt");
+}
+if (payload.mandatoryGates.agoraCompatibility !== "passed") {
+  throw new Error("Mandatory Agora compatibility gate not passed in prepared receipt");
+}
+if (payload.mandatoryGates.managementFleet !== "passed") {
+  throw new Error("Mandatory Management fleet gate not passed in prepared receipt");
+}
+if (payload.mandatoryGates.openclawContract !== "passed") {
+  throw new Error("Mandatory OpenClaw contract gate not passed in prepared receipt");
+}
+
+// 7. Full predecessor binding CAS check
+const isReplay = Boolean(liveTarget && expectedReleaseDir && liveTarget === expectedReleaseDir);
+const pred = payload.expectedPredecessor || {};
+
+// Request predecessor fields match receipt if supplied (always checked, even on replay!)
+if (reqPredTarget && pred.target && reqPredTarget !== pred.target) {
+  throw new Error(`Request predecessor target mismatch: request=${reqPredTarget}, receipt=${pred.target}`);
+}
+if (reqPredCommit && pred.commit && reqPredCommit !== pred.commit) {
+  throw new Error(`Request predecessor commit mismatch: request=${reqPredCommit}, receipt=${pred.commit}`);
+}
+if (reqPredPairId && pred.pairId && reqPredPairId !== pred.pairId) {
+  throw new Error(`Request predecessor pair ID mismatch: request=${reqPredPairId}, receipt=${pred.pairId}`);
+}
+if (reqPredDigest && pred.artifactDigest && reqPredDigest !== pred.artifactDigest) {
+  throw new Error(`Request predecessor artifact digest mismatch: request=${reqPredDigest}, receipt=${pred.artifactDigest}`);
+}
+
+// Live predecessor fields match receipt when not replay (state transition)
+if (!isReplay) {
+  if (pred.target && liveTarget && liveTarget !== pred.target) {
+    throw new Error(`Activation predecessor target mismatch: live=${liveTarget}, receipt=${pred.target}`);
+  }
+  if (pred.commit && liveCommit && liveCommit !== pred.commit) {
+    throw new Error(`Activation predecessor commit mismatch: live=${liveCommit}, receipt=${pred.commit}`);
+  }
+  if (pred.pairId && livePairId && livePairId !== pred.pairId) {
+    throw new Error(`Activation predecessor pair ID mismatch: live=${livePairId}, receipt=${pred.pairId}`);
+  }
+  if (pred.artifactDigest && liveDigest && liveDigest !== pred.artifactDigest) {
+    throw new Error(`Activation predecessor artifact digest mismatch: live=${liveDigest}, receipt=${pred.artifactDigest}`);
+  }
+}
+NODE
+}
+
 verify_bff_identity() {
   local stage="$1"
+  local target_bff="${2:-$BFF_HOST}"
   local output_file="${AUDIT_DIR}/bff-version-${stage}.json"
   if ! curl --fail --silent --show-error --location \
     --retry 3 --retry-all-errors --connect-timeout 5 --max-time 20 \
-    "${BFF_HOST%/}/bff/version" > "${output_file}"; then
+    "${target_bff%/}/bff/version" > "${output_file}"; then
     evidence_append "bff.identity.${stage}" failed "bffCommit=${BFF_COMMIT}"
     return 1
   fi
-  if ! node --input-type=module - "${output_file}" "${BFF_COMMIT}" "${DEPLOY_PROFILE}" <<'NODE'
+  if ! node --input-type=module - "${output_file}" "${BFF_COMMIT}" "${DEPLOY_PROFILE}" "${PAIR_ROOT_DIR:-$CANDIDATE_DIR}/pair.json" <<'NODE'
 import fs from "node:fs";
-const [file, expected, profile] = process.argv.slice(2);
+const [file, expected, profile, pairJsonPath] = process.argv.slice(2);
 const payload = JSON.parse(fs.readFileSync(file, "utf8"));
 const source = String(payload.source_commit_sha || "").toLowerCase();
 const alias = String(payload.commit || source).toLowerCase();
@@ -644,6 +1148,31 @@ if (payload.source_commit_known !== true || !/^[0-9a-f]{40}$/u.test(source)) {
 }
 if (source !== alias || source !== expected.toLowerCase()) {
   throw new Error("live BFF identity differs from gated candidate identity");
+}
+if (fs.existsSync(pairJsonPath)) {
+  const pairData = JSON.parse(fs.readFileSync(pairJsonPath, "utf8"));
+  if (pairData.bffImage) {
+    const exp = pairData.bffImage;
+    const obsImage = payload.image;
+    if (!obsImage || !obsImage.digest) {
+      throw new Error("live BFF identity missing required image identity or digest");
+    }
+    if (exp.digest && exp.digest !== obsImage.digest) {
+      throw new Error(`live BFF image digest mismatch: expected ${exp.digest}, got ${obsImage.digest}`);
+    }
+    if (exp.digestType && exp.digestType !== obsImage.digestType) {
+      throw new Error(`live BFF image digest type mismatch: expected ${exp.digestType}, got ${obsImage.digestType}`);
+    }
+  } else if (process.env.PANTHEON_DEPLOY_EXPECTED_BFF_IMAGE_DIGEST) {
+    const expDigest = process.env.PANTHEON_DEPLOY_EXPECTED_BFF_IMAGE_DIGEST;
+    const obsImage = payload.image;
+    if (!obsImage || !obsImage.digest) {
+      throw new Error("live BFF identity missing required image identity or digest");
+    }
+    if (obsImage.digest !== expDigest) {
+      throw new Error(`live BFF image digest mismatch: expected ${expDigest}, got ${obsImage.digest}`);
+    }
+  }
 }
 if (profile === "operator-live") {
   const posture = payload.config_posture || payload.posture || payload.auth || payload;
@@ -660,10 +1189,17 @@ NODE
   fi
   if [[ "${DEPLOY_PROFILE}" == "operator-live" ]]; then
     local ready_status me_status
-    ready_status="$(curl --silent --show-error --output "${AUDIT_DIR}/bff-ready-${stage}.json" \
-      --write-out '%{http_code}' --connect-timeout 5 --max-time 20 "${BFF_HOST%/}/readyz" || true)"
-    me_status="$(curl --silent --show-error --output "${AUDIT_DIR}/bff-me-anonymous-${stage}.json" \
-      --write-out '%{http_code}' --connect-timeout 5 --max-time 20 "${BFF_HOST%/}/bff/me" || true)"
+    if [[ "${target_bff}" != "${BFF_HOST}" ]]; then
+      ready_status="$(curl --silent --show-error --output "${AUDIT_DIR}/bff-ready-${stage}.json" \
+        --write-out '%{http_code}' --connect-timeout 5 --max-time 20 "${target_bff%/}/readyz" || true)"
+      me_status="$(curl --silent --show-error --output "${AUDIT_DIR}/bff-me-anonymous-${stage}.json" \
+        --write-out '%{http_code}' --connect-timeout 5 --max-time 20 "${target_bff%/}/bff/me" || true)"
+    else
+      ready_status="$(curl --silent --show-error --output "${AUDIT_DIR}/bff-ready-${stage}.json" \
+        --write-out '%{http_code}' --connect-timeout 5 --max-time 20 "${BFF_HOST%/}/readyz" || true)"
+      me_status="$(curl --silent --show-error --output "${AUDIT_DIR}/bff-me-anonymous-${stage}.json" \
+        --write-out '%{http_code}' --connect-timeout 5 --max-time 20 "${BFF_HOST%/}/bff/me" || true)"
+    fi
     if [[ "${ready_status}" != "200" || "${me_status}" != "401" ]]; then
       evidence_append "bff.strict_health.${stage}" failed "probeStatus=failed"
       return 1
@@ -675,7 +1211,7 @@ NODE
 
 resolve_remote_dev_sha() {
   local attempt raw remote_sha error_file
-  local -a delays=(0 2 5)
+  local -a delays=(${PANTHEON_DEPLOY_RETRY_DELAYS:-0 2 5})
   for attempt in 1 2 3; do
     error_file="${TMP_DIR}/origin-dev-${attempt}.stderr"
     raw=""
@@ -714,6 +1250,10 @@ run_release_probe() {
   local candidate_env=""
   local strict_env="0"
   local probe_profile_env=()
+  local probe_candidate_transport=""
+  if [[ "${phase}" == "candidate_pre_switch" && -n "${BFF_CANDIDATE_TRANSPORT:-}" ]]; then
+    probe_candidate_transport="${BFF_CANDIDATE_TRANSPORT}"
+  fi
   if [[ -n "${candidate_dir}" ]]; then
     candidate_env="${candidate_dir}"
   fi
@@ -743,6 +1283,7 @@ run_release_probe() {
     PANTHEON_FE_BASE_URL="${FE_HOST}" \
     PANTHEON_BFF_BASE_URL="${BFF_HOST}" \
     PANTHEON_BROWSER_BFF_BASE_URL="${BFF_HOST}" \
+    PANTHEON_BFF_CANDIDATE_TRANSPORT="${probe_candidate_transport}" \
     PANTHEON_OLD_BFF_URL="${OLD_BFF_HOST}" \
     PANTHEON_HOSTED_PROBE_PATH="${PANTHEON_HOSTED_PROBE_PATH:-/management/persona-fleet}" \
     PANTHEON_HOSTED_REQUIRED_BFF_PATHS="${PANTHEON_HOSTED_REQUIRED_BFF_PATHS:-/bff/me}" \
@@ -1025,6 +1566,139 @@ restore_paired_safe_release() {
     const fs=require("node:fs");const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));
     process.stdout.write(`${String(p.deploymentProfile||p.profile||"")} ${String(p.deploymentState||"")} ${String(p.pairId||"")}\n`);
   ' "${write_manifest}")
+
+  local write_receipt="${write_target}/.prepared-receipt.json"
+  if [[ ! -f "${write_receipt}" ]]; then
+    if [[ "${current_profile}" != "read-only" ]]; then
+      echo "Restore rejected: prepared receipt missing in ${write_target}." >&2
+      return 2
+    fi
+  fi
+  if [[ "${LEASE_DELEGATED}" != "true" ]]; then
+    echo "Restore rejected: parent lease delegation is required (LEASE_DELEGATED must be true)." >&2
+    return 2
+  fi
+  if [[ -z "${LEASE_OWNER:-}" || -z "${LEASE_EPOCH:-}" || -z "${LEASE_RUN_ID:-}" ]]; then
+    echo "Restore rejected: lease owner, epoch, and run ID are required." >&2
+    return 2
+  fi
+  if [[ ! "${LEASE_EPOCH}" =~ ^[0-9]+$ ]]; then
+    echo "Restore rejected: lease epoch must be a non-negative integer." >&2
+    return 2
+  fi
+  if [[ ! "${LEASE_OWNER}" =~ ${AUTHORIZED_LEASE_OWNERS_REGEX} ]]; then
+    echo "Restore rejected: unauthorized lease owner '${LEASE_OWNER}'." >&2
+    return 2
+  fi
+  if [[ -f "${write_receipt}" ]]; then
+    if ! node --input-type=module - "${write_receipt}" "${LEASE_OWNER}" "${LEASE_EPOCH}" "${LEASE_RUN_ID}" "${LEASE_DELEGATED}" "${PAIR_ID}" "${SHA}" "${WRITE_PROOF_ARTIFACT_DIGEST}" <<'NODE'
+import crypto from "node:crypto";
+import fs from "node:fs";
+const [receiptFile, leaseOwner, leaseEpoch, leaseRunId, leaseDelegated, expectedPairId, expectedSha, expectedDigest] = process.argv.slice(2);
+let payload;
+try {
+  payload = JSON.parse(fs.readFileSync(receiptFile, "utf8"));
+} catch {
+  throw new Error("Receipt is not valid JSON");
+}
+
+function computeReceiptIntegritySha256(r) {
+  const parts = [
+    r.pairId || "",
+    r.frontendSha || "",
+    r.bffSha || "",
+    r.artifactDigestSha256 || "",
+    r.profile || "",
+    r.releaseDir || "",
+    r.lease?.owner || "",
+    String(r.lease?.epoch ?? ""),
+    r.lease?.runId || "",
+    String(r.lease?.delegated ?? ""),
+    r.expectedPredecessor?.target || "",
+    r.expectedPredecessor?.commit || "",
+    r.expectedPredecessor?.pairId || "",
+    r.expectedPredecessor?.artifactDigest || "",
+    r.preparedAt || "",
+    r.expiresAt || "",
+    r.bffImage?.repository || "",
+    r.bffImage?.tag || "",
+    r.bffImage?.digestType || "",
+    r.bffImage?.digest || "",
+    r.preparedArtifact?.locator || "",
+    r.preparedArtifact?.checksum || "",
+    r.githubArtifactDigest || "",
+    String(r.gateRunId || ""),
+    r.mandatoryGates?.candidateVerification || "",
+    r.mandatoryGates?.preSwitchProbe || "",
+    r.mandatoryGates?.agoraCompatibility || "",
+    r.mandatoryGates?.managementFleet || "",
+    r.mandatoryGates?.openclawContract || ""
+  ];
+  return crypto.createHash("sha256").update(parts.join("|"), "utf8").digest("hex");
+}
+
+if (payload.schemaVersion !== "pantheon.release.prepared-receipt.v1") {
+  throw new Error(`Invalid receipt schemaVersion: ${payload.schemaVersion}`);
+}
+if (payload.status !== "prepared_success") {
+  throw new Error(`Receipt status is not prepared_success: ${payload.status}`);
+}
+if (!payload.receiptIntegritySha256) {
+  throw new Error("Receipt missing receiptIntegritySha256");
+}
+const computedHash = computeReceiptIntegritySha256(payload);
+if (payload.receiptIntegritySha256 !== computedHash) {
+  throw new Error(`Receipt integrity sha256 mismatch: stored=${payload.receiptIntegritySha256}, computed=${computedHash}`);
+}
+
+const now = Date.now();
+const prepTime = new Date(payload.preparedAt || 0).getTime();
+const expTime = new Date(payload.expiresAt || 0).getTime();
+if (isNaN(prepTime) || isNaN(expTime) || prepTime <= 0 || expTime <= 0) {
+  throw new Error("Receipt timestamps are invalid");
+}
+if (prepTime > now + 60 * 1000) {
+  throw new Error("Receipt preparedAt is in the future");
+}
+if (expTime - prepTime > 3600 * 1000 + 1000) {
+  throw new Error("Receipt TTL exceeds maximum 1 hour");
+}
+if (now > expTime) {
+  throw new Error("Receipt has expired");
+}
+
+const authorizedControllers = /^(pantheon-release-controller|pantheon-dev-deploy|parent-controller|pantheon-proof-watchdog|pantheon-fe-deploy)$/i;
+if (!payload.lease || !payload.lease.owner || !authorizedControllers.test(payload.lease.owner)) {
+  throw new Error(`Receipt lease owner '${payload.lease?.owner}' is unauthorized`);
+}
+if (payload.lease.delegated !== true || leaseDelegated !== "true") {
+  throw new Error("Restore lease delegation mismatch or not delegated");
+}
+if (payload.lease.owner.toLowerCase() !== leaseOwner.toLowerCase()) {
+  throw new Error(`Restore lease owner mismatch: receipt=${payload.lease.owner}, current=${leaseOwner}`);
+}
+if (payload.lease.epoch !== parseInt(leaseEpoch, 10)) {
+  throw new Error(`Restore lease epoch mismatch: receipt=${payload.lease.epoch}, current=${leaseEpoch}`);
+}
+if (!payload.lease.runId || !leaseRunId || payload.lease.runId !== leaseRunId) {
+  throw new Error(`Restore lease run ID mismatch: receipt=${payload.lease.runId}, current=${leaseRunId}`);
+}
+
+if (!payload.mandatoryGates || typeof payload.mandatoryGates !== "object") {
+  throw new Error("Receipt missing mandatory gates");
+}
+for (const gate of ["candidateVerification", "preSwitchProbe", "managementFleet", "openclawContract"]) {
+  if (payload.mandatoryGates[gate] !== "passed") {
+    throw new Error(`Receipt mandatory gate ${gate} is not passed: ${payload.mandatoryGates[gate]}`);
+  }
+}
+NODE
+    then
+      echo "Restore rejected: lease authority does not match prepared receipt." >&2
+      return 2
+    fi
+  fi
+  evidence_append restore.lease passed "leaseOwner=${LEASE_OWNER}" "leaseEpoch=${LEASE_EPOCH}" "leaseRunId=${LEASE_RUN_ID}"
   if [[ "${current_profile}" == "read-only" ]]; then
     if [[ "${current_pair}" != "${PAIR_ID}" ||
       ( "${current_state}" != "accepted" && "${current_state}" != "standby" ) ]]; then
@@ -1140,6 +1814,7 @@ NODE
     "${AUDIT_DIR}/restored-deployment.json" "${BFF_COMMIT}" "accepted" \
     "${GITHUB_ARTIFACT_DIGEST}" "read-only" "${PAIR_ID}"
   evidence_append restore.completed passed "releaseDir=${safe_target}"
+  evidence_append restore.fe_half_complete passed "releaseDir=${safe_target}" "pairId=${PAIR_ID}" "frontendSha=${SHA}"
   accept_deployment
   echo "OK: restored paired read-only release ${SHA} (${PAIR_ID}) before hosted verification."
 }
@@ -1159,6 +1834,15 @@ cleanup() {
   if [[ "${ROLLBACK_LINK_CREATED}" == "true" ]]; then
     sudo rm -f -- "${ROLLBACK_LINK}" 2>/dev/null || true
     ROLLBACK_LINK_CREATED=false
+  fi
+
+  if [[ "${status}" -eq 0 && "${DEPLOY_ACTION}" == "prepare" && "${PREPARED_SUCCESS}" == "true" ]]; then
+    if [[ "${DURABLE_EVIDENCE_PERSISTED}" != "true" ]]; then
+      echo "Prepare completed without durable evidence." >&2
+      exit 1
+    fi
+    rm -rf "${TMP_DIR}"
+    exit 0
   fi
 
   if [[ "${status}" -ne 0 && "${DEPLOY_ACCEPTED}" == "true" ]]; then
@@ -1266,25 +1950,49 @@ case "${DEPLOY_PROFILE}" in
     fi
     ;;
   write-proof)
-    if [[ "${GITHUB_EVENT_NAME:-}" != "workflow_dispatch" ||
-      "${PROOF_WINDOW_ACK}" != "true" ||
-      "${REAL_WRITES}" != "true" ||
-      "${ALLOW_DEV_STUB_WRITES}" != "true" ||
-      "${EMERGENCY_OVERRIDE}" != "false" ||
-      "${ROLLBACK_DRILL}" != "false" ]]; then
-      echo "Write-proof deployment requires a manual acknowledged proof window, both write flags true, and no emergency or rollback mode." >&2
-      exit 2
+    if [[ "${DEPLOY_ACTION}" == "prepare" ]]; then
+      if [[ "${GITHUB_EVENT_NAME:-}" != "workflow_dispatch" ||
+        "${PROOF_WINDOW_ACK}" != "true" ||
+        "${REAL_WRITES}" != "false" ||
+        "${ALLOW_DEV_STUB_WRITES}" != "false" ||
+        "${EMERGENCY_OVERRIDE}" != "false" ||
+        "${ROLLBACK_DRILL}" != "false" ]]; then
+        echo "Write-proof prepare requires a manual acknowledged proof window, false write flags, and no emergency or rollback mode." >&2
+        exit 2
+      fi
+    else
+      if [[ "${GITHUB_EVENT_NAME:-}" != "workflow_dispatch" ||
+        "${PROOF_WINDOW_ACK}" != "true" ||
+        "${REAL_WRITES}" != "true" ||
+        "${ALLOW_DEV_STUB_WRITES}" != "true" ||
+        "${EMERGENCY_OVERRIDE}" != "false" ||
+        "${ROLLBACK_DRILL}" != "false" ]]; then
+        echo "Write-proof deployment requires a manual acknowledged proof window, both write flags true, and no emergency or rollback mode." >&2
+        exit 2
+      fi
     fi
     ;;
   operator-live)
-    if [[ "${GITHUB_EVENT_NAME:-}" != "workflow_dispatch" ||
-      "${PROOF_WINDOW_ACK}" != "false" ||
-      "${REAL_WRITES}" != "true" ||
-      "${ALLOW_DEV_STUB_WRITES}" != "false" ||
-      "${EMERGENCY_OVERRIDE}" != "false" ||
-      "${ROLLBACK_DRILL}" != "false" ]]; then
-      echo "Operator-live deployment requires a manual strict session profile, real writes true, stub writes false, and no proof/emergency/rollback mode." >&2
-      exit 2
+    if [[ "${DEPLOY_ACTION}" == "prepare" ]]; then
+      if [[ "${GITHUB_EVENT_NAME:-}" != "workflow_dispatch" ||
+        "${PROOF_WINDOW_ACK}" != "false" ||
+        "${REAL_WRITES}" != "false" ||
+        "${ALLOW_DEV_STUB_WRITES}" != "false" ||
+        "${EMERGENCY_OVERRIDE}" != "false" ||
+        "${ROLLBACK_DRILL}" != "false" ]]; then
+        echo "Operator-live prepare requires a manual strict session profile, false write flags, and no proof/emergency/rollback mode." >&2
+        exit 2
+      fi
+    else
+      if [[ "${GITHUB_EVENT_NAME:-}" != "workflow_dispatch" ||
+        "${PROOF_WINDOW_ACK}" != "false" ||
+        "${REAL_WRITES}" != "true" ||
+        "${ALLOW_DEV_STUB_WRITES}" != "false" ||
+        "${EMERGENCY_OVERRIDE}" != "false" ||
+        "${ROLLBACK_DRILL}" != "false" ]]; then
+        echo "Operator-live deployment requires a manual strict session profile, real writes true, stub writes false, and no proof/emergency/rollback mode." >&2
+        exit 2
+      fi
     fi
     ;;
   read-only-restore)
@@ -1321,6 +2029,39 @@ while IFS= read -r variable_name; do
       ;;
   esac
 done < <(compgen -e)
+
+if [[ -z "${DEPLOY_ACTION}" && "${DEPLOY_PROFILE}" == "read-only-restore" ]]; then
+  DEPLOY_ACTION="restore"
+fi
+case "${DEPLOY_ACTION}" in
+  prepare|activate|restore) ;;
+  one-shot|bypass|"")
+    echo "One-shot public switch has been retired. Explicit prepare and activate phases (or restore) are required." >&2
+    exit 2
+    ;;
+  *)
+    echo "PANTHEON_DEPLOY_ACTION must be prepare, activate, or restore." >&2
+    exit 2
+    ;;
+esac
+
+if [[ "${DEPLOY_ACTION}" == "prepare" && "${DEPLOY_PROFILE}" == "read-only-restore" ]]; then
+  echo "Restore profile does not support prepare action." >&2
+  exit 2
+fi
+
+if [[ "${LEASE_DELEGATED}" != "true" ]]; then
+  echo "Deployment rejected: parent lease delegation is required (LEASE_DELEGATED must be true)." >&2
+  exit 2
+fi
+if [[ -z "${LEASE_OWNER:-}" || -z "${LEASE_EPOCH:-}" || ! "${LEASE_EPOCH}" =~ ^[0-9]+$ || -z "${LEASE_RUN_ID:-}" ]]; then
+  echo "Deployment rejected: valid lease owner, non-negative epoch, and run ID are required." >&2
+  exit 2
+fi
+if [[ ! "${LEASE_OWNER}" =~ ${AUTHORIZED_LEASE_OWNERS_REGEX} ]]; then
+  echo "Deployment rejected: unauthorized lease owner '${LEASE_OWNER}'." >&2
+  exit 2
+fi
 
 assert_scoped_path "Deploy root" "${DEPLOY_ROOT}" "${STRICT_DIR_PREFIX}"
 assert_scoped_path "Release store" "${RELEASES_DIR}" "${STRICT_RELEASES_PREFIX}"
@@ -1402,6 +2143,7 @@ if [[ ! -d "${CANDIDATE_DIR}/dist" || ! -f "${CANDIDATE_DIR}/candidate.json" ||
   exit 2
 fi
 
+PAIR_ROOT_DIR="${CANDIDATE_DIR}"
 READ_ONLY_CANDIDATE_DIR="${CANDIDATE_DIR}"
 OPERATOR_LIVE_CANDIDATE_DIR="${CANDIDATE_DIR}/operator-live"
 WRITE_PROOF_CANDIDATE_DIR="${CANDIDATE_DIR}/write-proof"
@@ -1445,17 +2187,21 @@ case "${DEPLOY_PROFILE}" in
   operator-live)
     ARTIFACT_DIGEST="${OPERATOR_LIVE_ARTIFACT_DIGEST}"
     CANDIDATE_DIR="${OPERATOR_LIVE_CANDIDATE_DIR}"
-    RELEASE_DIR="${OPERATOR_RELEASE_DIR}"
+    if [[ "${DEPLOY_ACTION}" != "activate" ]]; then
+      RELEASE_DIR="${OPERATOR_RELEASE_DIR}"
+    fi
     ;;
   write-proof)
     ARTIFACT_DIGEST="${WRITE_PROOF_ARTIFACT_DIGEST}"
     CANDIDATE_DIR="${WRITE_PROOF_CANDIDATE_DIR}"
-    RELEASE_DIR="${WRITE_RELEASE_DIR}"
+    if [[ "${DEPLOY_ACTION}" != "activate" ]]; then
+      RELEASE_DIR="${WRITE_RELEASE_DIR}"
+    fi
     ;;
   read-only|read-only-restore)
     ARTIFACT_DIGEST="${READ_ONLY_ARTIFACT_DIGEST}"
     CANDIDATE_DIR="${READ_ONLY_CANDIDATE_DIR}"
-    if [[ "${DEPLOY_PROFILE}" == "read-only-restore" ]]; then
+    if [[ "${DEPLOY_PROFILE}" == "read-only-restore" && "${DEPLOY_ACTION}" != "activate" ]]; then
       RELEASE_DIR="${SAFE_RELEASE_DIR}"
     fi
     ;;
@@ -1498,10 +2244,14 @@ if [[ -n "${AGORA_COMPAT_EVIDENCE_SHA256:-}" && -n "${AGORA_COMPAT_MANIFEST_SHA2
     --detail "agoraCompatibilityManifestSha256=${AGORA_COMPAT_MANIFEST_SHA256}"
   )
 fi
-node scripts/release-evidence.mjs init \
-  --log "${EVIDENCE_LOG}" \
-  "${init_evidence_details[@]}" >/dev/null
-EVIDENCE_INITIALIZED=true
+if [[ -f "${EVIDENCE_LOG}" && -s "${EVIDENCE_LOG}" ]]; then
+  EVIDENCE_INITIALIZED=true
+else
+  node scripts/release-evidence.mjs init \
+    --log "${EVIDENCE_LOG}" \
+    "${init_evidence_details[@]}" >/dev/null
+  EVIDENCE_INITIALIZED=true
+fi
 evidence_append candidate.integrity passed "frontendSha=${SHA}" "bffCommit=${BFF_COMMIT}"
 
 exec 9>"${LOCK_FILE}"
@@ -1513,7 +2263,7 @@ fi
 LOCK_ACQUIRED=true
 evidence_append deployment.lock passed "lockFile=${LOCK_FILE}"
 
-if [[ "${DEPLOY_PROFILE}" == "read-only-restore" ]]; then
+if [[ "${DEPLOY_PROFILE}" == "read-only-restore" || "${DEPLOY_ACTION}" == "restore" ]]; then
   restore_paired_safe_release
   exit 0
 fi
@@ -1605,6 +2355,11 @@ else
   exit 2
 fi
 LIVE_TARGET_AT_START="${PREVIOUS_TARGET}"
+ORIGINAL_PREDECESSOR_TARGET="${PREVIOUS_TARGET}"
+LIVE_RELEASE_NAME_AT_START="${PREVIOUS_RELEASE_NAME}"
+LIVE_COMMIT_AT_START="${PREVIOUS_COMMIT}"
+LIVE_DIGEST_AT_START="${PREVIOUS_DIGEST}"
+LIVE_PAIR_ID_AT_START="${PREVIOUS_PAIR_ID}"
 
 if [[ "${SHA}" != "${REMOTE_DEV_SHA}" && "${EMERGENCY_OVERRIDE}" != "true" ]]; then
   if [[ "${ALLOW_OUT_OF_ORDER_CANDIDATE}" == "true" && "${GITHUB_EVENT_NAME:-}" == "workflow_dispatch" && "${FRONTEND_REF}" != "dev" ]]; then
@@ -1623,41 +2378,97 @@ else
   evidence_append candidate.order passed "currentDevSha=${REMOTE_DEV_SHA}"
 fi
 
+if [[ "${DEPLOY_ACTION}" == "activate" ]]; then
+  echo "=== validating prepared receipt and lease in new process ==="
+  verify_prepared_receipt "${RELEASE_DIR}"
+  verify_dist_digest "${RELEASE_DIR}" "${ARTIFACT_DIGEST}" >/dev/null
+
+  read -r pred_target pred_commit pred_pair pred_digest < <(node -e '
+    const p=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));
+    const ep=p.expectedPredecessor||{};
+    process.stdout.write(`${ep.target||""} ${ep.commit||""} ${ep.pairId||""} ${ep.artifactDigest||""}\n`);
+  ' "${RELEASE_DIR}/.prepared-receipt.json")
+
+  if [[ -n "${EXPECTED_PREDECESSOR_TARGET:-}" && -n "${pred_target}" && "${EXPECTED_PREDECESSOR_TARGET}" != "${pred_target}" ]]; then
+    echo "Activation CAS rejected: requested predecessor target (${EXPECTED_PREDECESSOR_TARGET}) does not match receipt predecessor target (${pred_target})." >&2
+    exit 2
+  fi
+  if [[ -n "${EXPECTED_PREDECESSOR_COMMIT:-}" && -n "${pred_commit}" && "${EXPECTED_PREDECESSOR_COMMIT}" != "${pred_commit}" ]]; then
+    echo "Activation CAS rejected: requested predecessor commit (${EXPECTED_PREDECESSOR_COMMIT}) does not match receipt predecessor commit (${pred_commit})." >&2
+    exit 2
+  fi
+  if [[ -n "${EXPECTED_PREDECESSOR_PAIR_ID:-}" && -n "${pred_pair}" && "${EXPECTED_PREDECESSOR_PAIR_ID}" != "${pred_pair}" ]]; then
+    echo "Activation CAS rejected: requested predecessor pair ID (${EXPECTED_PREDECESSOR_PAIR_ID}) does not match receipt predecessor pair ID (${pred_pair})." >&2
+    exit 2
+  fi
+  if [[ -n "${EXPECTED_PREDECESSOR_ARTIFACT_DIGEST:-}" && -n "${pred_digest}" && "${EXPECTED_PREDECESSOR_ARTIFACT_DIGEST}" != "${pred_digest}" ]]; then
+    echo "Activation CAS rejected: requested predecessor digest (${EXPECTED_PREDECESSOR_ARTIFACT_DIGEST}) does not match receipt predecessor digest (${pred_digest})." >&2
+    exit 2
+  fi
+
+  current_live="$(current_live_target)"
+  if [[ "${current_live}" != "${RELEASE_DIR}" ]]; then
+    if [[ -n "${pred_target}" && "${current_live}" != "${pred_target}" ]]; then
+      echo "Activation CAS rejected: live predecessor target (${current_live:-none}) does not match expected predecessor target (${pred_target})." >&2
+      exit 2
+    fi
+    live_commit_check="${LIVE_COMMIT_AT_START:-${PREVIOUS_COMMIT}}"
+    if [[ -n "${pred_commit}" && -n "${live_commit_check}" && "${live_commit_check}" != "${pred_commit}" ]]; then
+      echo "Activation CAS rejected: live predecessor commit (${live_commit_check}) does not match expected predecessor commit (${pred_commit})." >&2
+      exit 2
+    fi
+    live_pair_check="${LIVE_PAIR_ID_AT_START:-${PREVIOUS_PAIR_ID}}"
+    if [[ -n "${pred_pair}" && -n "${live_pair_check}" && "${live_pair_check}" != "${pred_pair}" ]]; then
+      echo "Activation CAS rejected: live predecessor pair ID (${live_pair_check}) does not match expected predecessor pair ID (${pred_pair})." >&2
+      exit 2
+    fi
+    live_digest_check="${LIVE_DIGEST_AT_START:-${PREVIOUS_DIGEST}}"
+    if [[ -n "${pred_digest}" && -n "${live_digest_check}" && "${live_digest_check}" != "${pred_digest}" ]]; then
+      echo "Activation CAS rejected: live predecessor digest (${live_digest_check}) does not match expected predecessor digest (${pred_digest})." >&2
+      exit 2
+    fi
+  fi
+fi
+
 if [[ -n "${PREVIOUS_COMMIT}" ]]; then
-  if [[ "${PREVIOUS_PROFILE}" == "write-proof" && "${DEPLOY_PROFILE}" != "read-only-restore" ]]; then
+  is_exact_replay=false
+  if [[ "${PREVIOUS_COMMIT}" == "${SHA}" && \
+        "${PREVIOUS_MANIFEST_BFF_COMMIT}" == "${BFF_COMMIT}" && \
+        "${PREVIOUS_PROFILE}" == "${DEPLOY_PROFILE}" && \
+        "${PREVIOUS_PAIR_ID}" == "${PAIR_ID}" && \
+        "${PREVIOUS_MANIFEST_DIGEST}" == "${ARTIFACT_DIGEST}" && \
+        "${PREVIOUS_GATE_RUN_ID}" =~ ^[1-9][0-9]*$ && \
+        "${PREVIOUS_GITHUB_ARTIFACT_DIGEST}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+    is_exact_replay=true
+  fi
+
+  if [[ "${is_exact_replay}" == "true" ]]; then
+    NOOP_DEPLOY=true
+    if [[ "${PREVIOUS_DEPLOYMENT_STATE}" == "candidate" ]]; then
+      prepare_interrupted_recovery
+    fi
+    evidence_append candidate.noop pending "previousCommit=${PREVIOUS_COMMIT}"
+    if [[ "${ROLLBACK_DRILL}" == "true" ]]; then
+      evidence_append rollback.drill rejected "previousCommit=${PREVIOUS_COMMIT}"
+      echo "Rollback drill requires a candidate switch; the exact candidate is already live." >&2
+      exit 2
+    fi
+  elif [[ "${PREVIOUS_PROFILE}" == "write-proof" && "${DEPLOY_PROFILE}" != "read-only-restore" ]]; then
     echo "A live write-proof release may only transition through read-only-restore." >&2
     evidence_append candidate.write_predecessor_rejected failed "previousCommit=${PREVIOUS_COMMIT}"
     exit 2
-  fi
-  if [[ "${PREVIOUS_DEPLOYMENT_STATE}" == "candidate" && "${PREVIOUS_COMMIT}" != "${SHA}" ]]; then
+  elif [[ "${PREVIOUS_DEPLOYMENT_STATE}" == "candidate" && "${PREVIOUS_COMMIT}" != "${SHA}" ]]; then
     prepare_interrupted_recovery
     ensure_probe_dependencies
     evidence_append recovery.new_candidate rejected "previousCommit=${PREVIOUS_COMMIT}"
     echo "An interrupted candidate must be restored before a different candidate can deploy." >&2
     exit 2
-  fi
-  if [[ "${PREVIOUS_COMMIT}" == "${SHA}" ]]; then
+  elif [[ "${PREVIOUS_COMMIT}" == "${SHA}" ]]; then
     if [[ "${PREVIOUS_PROFILE:-read-only}" == "${DEPLOY_PROFILE}" &&
       ( -z "${PREVIOUS_DIGEST}" || "${PREVIOUS_DIGEST}" != "${ARTIFACT_DIGEST}" ) ]]; then
       echo "Same-SHA/profile artifact replacement rejected because the served digest differs or is unproven." >&2
       evidence_append candidate.reproducibility failed "previousCommit=${PREVIOUS_COMMIT}"
       exit 2
-    elif [[ "${PREVIOUS_MANIFEST_BFF_COMMIT}" == "${BFF_COMMIT}" &&
-      "${PREVIOUS_PROFILE}" == "${DEPLOY_PROFILE}" &&
-      "${PREVIOUS_PAIR_ID}" == "${PAIR_ID}" &&
-      "${PREVIOUS_MANIFEST_DIGEST}" == "${ARTIFACT_DIGEST}" &&
-      "${PREVIOUS_GATE_RUN_ID}" =~ ^[1-9][0-9]*$ &&
-      "${PREVIOUS_GITHUB_ARTIFACT_DIGEST}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
-      NOOP_DEPLOY=true
-      if [[ "${PREVIOUS_DEPLOYMENT_STATE}" == "candidate" ]]; then
-        prepare_interrupted_recovery
-      fi
-      evidence_append candidate.noop pending "previousCommit=${PREVIOUS_COMMIT}"
-      if [[ "${ROLLBACK_DRILL}" == "true" ]]; then
-        evidence_append rollback.drill rejected "previousCommit=${PREVIOUS_COMMIT}"
-        echo "Rollback drill requires a candidate switch; the exact candidate is already live." >&2
-        exit 2
-      fi
     elif [[ "${PREVIOUS_DEPLOYMENT_STATE}" == "candidate" ]]; then
       prepare_interrupted_recovery
       evidence_append recovery.bff_requalification rejected \
@@ -1686,7 +2497,11 @@ fi
 
 ensure_probe_dependencies
 
-verify_bff_identity pre_candidate
+if [[ "${DEPLOY_ACTION}" == "prepare" ]]; then
+  verify_bff_identity pre_candidate "${BFF_CANDIDATE_TRANSPORT:-$BFF_HOST}"
+elif [[ "${DEPLOY_ACTION}" != "activate" ]]; then
+  verify_bff_identity pre_candidate
+fi
 
 if [[ "${RECOVERY_ATTEMPTED}" == "true" ]]; then
   prequalify_rollback_target \
@@ -1711,22 +2526,23 @@ elif [[ -n "${PREVIOUS_TARGET}" && "${NOOP_DEPLOY}" != "true" ]]; then
 fi
 
 if [[ "${DEPLOY_PROFILE}" == "write-proof" ]]; then
-  echo "=== install and qualify paired read-only safe sibling ==="
-  if [[ -e "${SAFE_RELEASE_DIR}" || -L "${SAFE_RELEASE_DIR}" ]]; then
-    echo "Immutable safe sibling already exists: ${SAFE_RELEASE_DIR}" >&2
-    exit 2
-  fi
-  mkdir -p "${TMP_DIR}/safe-release"
-  rsync -a --delete "${READ_ONLY_CANDIDATE_DIR}/dist/" "${TMP_DIR}/safe-release/"
-  PANTHEON_RUNTIME_MANIFEST="${TMP_DIR}/safe-release/deployment.json" \
-  PANTHEON_RUNTIME_RELEASE_NAME="$(basename -- "${SAFE_RELEASE_DIR}")" \
-  PANTHEON_RUNTIME_GITHUB_DIGEST="${GITHUB_ARTIFACT_DIGEST}" \
-  PANTHEON_RUNTIME_PAIR_ID="${PAIR_ID}" \
-  PANTHEON_RUNTIME_READ_ONLY_DIGEST="${READ_ONLY_ARTIFACT_DIGEST}" \
-  PANTHEON_RUNTIME_OPERATOR_LIVE_DIGEST="${OPERATOR_LIVE_ARTIFACT_DIGEST}" \
-  PANTHEON_RUNTIME_WRITE_PROOF_DIGEST="${WRITE_PROOF_ARTIFACT_DIGEST}" \
-  PANTHEON_RUNTIME_AGORA_COMPAT_EVIDENCE="${AGORA_COMPAT_EVIDENCE_AUDIT}" \
-    node --input-type=module <<'NODE'
+  if [[ "${DEPLOY_ACTION}" == "prepare" ]]; then
+    echo "=== install and qualify paired read-only safe sibling ==="
+    if [[ -e "${SAFE_RELEASE_DIR}" || -L "${SAFE_RELEASE_DIR}" ]]; then
+      echo "Immutable safe sibling already exists: ${SAFE_RELEASE_DIR}" >&2
+      exit 2
+    fi
+    mkdir -p "${TMP_DIR}/safe-release"
+    rsync -a --delete "${READ_ONLY_CANDIDATE_DIR}/dist/" "${TMP_DIR}/safe-release/"
+    PANTHEON_RUNTIME_MANIFEST="${TMP_DIR}/safe-release/deployment.json" \
+    PANTHEON_RUNTIME_RELEASE_NAME="$(basename -- "${SAFE_RELEASE_DIR}")" \
+    PANTHEON_RUNTIME_GITHUB_DIGEST="${GITHUB_ARTIFACT_DIGEST}" \
+    PANTHEON_RUNTIME_PAIR_ID="${PAIR_ID}" \
+    PANTHEON_RUNTIME_READ_ONLY_DIGEST="${READ_ONLY_ARTIFACT_DIGEST}" \
+    PANTHEON_RUNTIME_OPERATOR_LIVE_DIGEST="${OPERATOR_LIVE_ARTIFACT_DIGEST}" \
+    PANTHEON_RUNTIME_WRITE_PROOF_DIGEST="${WRITE_PROOF_ARTIFACT_DIGEST}" \
+    PANTHEON_RUNTIME_AGORA_COMPAT_EVIDENCE="${AGORA_COMPAT_EVIDENCE_AUDIT}" \
+      node --input-type=module <<'NODE'
 import fs from "node:fs";
 const file = process.env.PANTHEON_RUNTIME_MANIFEST;
 const manifest = JSON.parse(fs.readFileSync(file, "utf8"));
@@ -1747,34 +2563,40 @@ manifest.agoraCompatibility = JSON.parse(
 );
 fs.writeFileSync(file, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
 NODE
-  verify_dist_digest "${TMP_DIR}/safe-release" "${READ_ONLY_ARTIFACT_DIGEST}" >/dev/null
-  sudo install -d -o root -g root -m 775 "${SAFE_RELEASE_DIR}"
-  SAFE_RELEASE_CREATED=true
-  sudo rsync -a --delete --chown=root:root --chmod=Du=rwx,Dg=rwx,Do=rx,Fu=rw,Fg=rw,Fo=r \
-    "${TMP_DIR}/safe-release/" "${SAFE_RELEASE_DIR}/"
-  verify_dist_digest "${SAFE_RELEASE_DIR}" "${READ_ONLY_ARTIFACT_DIGEST}" >/dev/null
-  verify_manifest_file \
-    "${SAFE_RELEASE_DIR}/deployment.json" "${SHA}" "${READ_ONLY_ARTIFACT_DIGEST}" \
-    "${GATE_RUN_ID}" "${BFF_COMMIT}" "standby" "${GITHUB_ARTIFACT_DIGEST}" \
-    "read-only" "${PAIR_ID}"
-  run_release_probe safe_sibling_pre_switch "${SAFE_RELEASE_DIR}" "${SHA}" "${READ_ONLY_ARTIFACT_DIGEST}" true
-  SAFE_RELEASE_QUALIFIED=true
-  evidence_append safe_sibling.qualified passed \
-    "artifactDigestSha256=${READ_ONLY_ARTIFACT_DIGEST}"
+    verify_dist_digest "${TMP_DIR}/safe-release" "${READ_ONLY_ARTIFACT_DIGEST}" >/dev/null
+    sudo install -d -o root -g root -m 775 "${SAFE_RELEASE_DIR}"
+    SAFE_RELEASE_CREATED=true
+    sudo rsync -a --delete --chown=root:root --chmod=Du=rwx,Dg=rwx,Do=rx,Fu=rw,Fg=rw,Fo=r \
+      "${TMP_DIR}/safe-release/" "${SAFE_RELEASE_DIR}/"
+    verify_dist_digest "${SAFE_RELEASE_DIR}" "${READ_ONLY_ARTIFACT_DIGEST}" >/dev/null
+    verify_manifest_file \
+      "${SAFE_RELEASE_DIR}/deployment.json" "${SHA}" "${READ_ONLY_ARTIFACT_DIGEST}" \
+      "${GATE_RUN_ID}" "${BFF_COMMIT}" "standby" "${GITHUB_ARTIFACT_DIGEST}" \
+      "read-only" "${PAIR_ID}"
+    run_release_probe safe_sibling_pre_switch "${SAFE_RELEASE_DIR}" "${SHA}" "${READ_ONLY_ARTIFACT_DIGEST}" true
+    SAFE_RELEASE_QUALIFIED=true
+    evidence_append safe_sibling.qualified passed \
+      "artifactDigestSha256=${READ_ONLY_ARTIFACT_DIGEST}"
+  else
+    SAFE_RELEASE_CREATED=false
+    SAFE_RELEASE_QUALIFIED=true
+  fi
 
   # A failed write switch must restore the qualified safe sibling, never the
   # live predecessor (which may be stale or may later become write-capable).
-  PREVIOUS_TARGET="${SAFE_RELEASE_DIR}"
-  PREVIOUS_RELEASE_NAME="$(basename -- "${SAFE_RELEASE_DIR}")"
-  PREVIOUS_COMMIT="${SHA}"
-  PREVIOUS_DIGEST="${READ_ONLY_ARTIFACT_DIGEST}"
-  PREVIOUS_MANIFEST_DIGEST="${READ_ONLY_ARTIFACT_DIGEST}"
-  PREVIOUS_GATE_RUN_ID="${GATE_RUN_ID}"
-  PREVIOUS_GITHUB_ARTIFACT_DIGEST="${GITHUB_ARTIFACT_DIGEST}"
-  PREVIOUS_MANIFEST_BFF_COMMIT="${BFF_COMMIT}"
-  PREVIOUS_DEPLOYMENT_STATE="standby"
-  PREVIOUS_PROFILE="read-only"
-  PREVIOUS_PAIR_ID="${PAIR_ID}"
+  if [[ "${NOOP_DEPLOY}" != "true" ]]; then
+    PREVIOUS_TARGET="${SAFE_RELEASE_DIR}"
+    PREVIOUS_RELEASE_NAME="$(basename -- "${SAFE_RELEASE_DIR}")"
+    PREVIOUS_COMMIT="${SHA}"
+    PREVIOUS_DIGEST="${READ_ONLY_ARTIFACT_DIGEST}"
+    PREVIOUS_MANIFEST_DIGEST="${READ_ONLY_ARTIFACT_DIGEST}"
+    PREVIOUS_GATE_RUN_ID="${GATE_RUN_ID}"
+    PREVIOUS_GITHUB_ARTIFACT_DIGEST="${GITHUB_ARTIFACT_DIGEST}"
+    PREVIOUS_MANIFEST_BFF_COMMIT="${BFF_COMMIT}"
+    PREVIOUS_DEPLOYMENT_STATE="standby"
+    PREVIOUS_PROFILE="read-only"
+    PREVIOUS_PAIR_ID="${PAIR_ID}"
+  fi
 fi
 
 if [[ "${NOOP_DEPLOY}" == "true" ]]; then
@@ -1786,7 +2608,11 @@ if [[ "${NOOP_DEPLOY}" == "true" ]]; then
     verify_public_manifest "${SHA}" "${ARTIFACT_DIGEST}" "${PREVIOUS_GATE_RUN_ID}" "${AUDIT_DIR}/noop-deployment.json" "${PREVIOUS_MANIFEST_BFF_COMMIT}" "${PREVIOUS_DEPLOYMENT_STATE}" "${PREVIOUS_GITHUB_ARTIFACT_DIGEST}" "${DEPLOY_PROFILE}" "${PAIR_ID}"
   fi
   run_release_probe noop "" "${SHA}" "${ARTIFACT_DIGEST}" true
-  verify_bff_identity noop_final
+  if [[ "${DEPLOY_ACTION}" == "prepare" ]]; then
+    verify_bff_identity noop_final "${BFF_CANDIDATE_TRANSPORT:-$BFF_HOST}"
+  else
+    verify_bff_identity noop_final
+  fi
   if [[ "${RECOVERY_ATTEMPTED}" == "true" ]]; then
     node --input-type=module - "${PREVIOUS_TARGET}/deployment.json" "${TMP_DIR}/recovered-deployment.json" <<'NODE'
 import fs from "node:fs";
@@ -1809,6 +2635,18 @@ NODE
       recovered
     verify_public_manifest "${SHA}" "${ARTIFACT_DIGEST}" "${PREVIOUS_GATE_RUN_ID}" "${AUDIT_DIR}/recovered-deployment.json" "${PREVIOUS_MANIFEST_BFF_COMMIT}" accepted "${PREVIOUS_GITHUB_ARTIFACT_DIGEST}" "${DEPLOY_PROFILE}" "${PAIR_ID}"
     evidence_append recovery.roll_forward passed "previousCommit=${RECOVERY_COMMIT}"
+  fi
+  if [[ "${DEPLOY_ACTION}" == "prepare" ]]; then
+    write_prepared_receipt "${PREVIOUS_TARGET}" "${PREVIOUS_RELEASE_NAME}"
+    evidence_append release.prepared prepared_success \
+      "outcome=prepared_success" \
+      "releaseDir=${PREVIOUS_TARGET}" \
+      "pairId=${PAIR_ID}" \
+      "leaseEpoch=${LEASE_EPOCH}"
+    finalize_evidence prepared_success
+    PREPARED_SUCCESS=true
+    echo "OK: prepared live candidate ${SHA} (${ARTIFACT_DIGEST}) in ${PREVIOUS_TARGET}."
+    exit 0
   fi
   evidence_append candidate.noop passed \
     "previousCommit=${PREVIOUS_COMMIT}" \
@@ -1842,31 +2680,32 @@ EOF
   exit 0
 fi
 
-sudo install -d -o root -g root -m 775 "${RELEASES_DIR}"
-if [[ -e "${RELEASE_DIR}" || -L "${RELEASE_DIR}" ]]; then
-  echo "Immutable release directory already exists: ${RELEASE_DIR}" >&2
-  exit 2
-fi
-mkdir -p "${TMP_DIR}/release"
-rsync -a --delete "${CANDIDATE_DIR}/dist/" "${TMP_DIR}/release/"
+if [[ "${DEPLOY_ACTION}" == "prepare" ]]; then
+  sudo install -d -o root -g root -m 775 "${RELEASES_DIR}"
+  if [[ -e "${RELEASE_DIR}" || -L "${RELEASE_DIR}" ]]; then
+    echo "Immutable release directory already exists: ${RELEASE_DIR}" >&2
+    exit 2
+  fi
+  mkdir -p "${TMP_DIR}/release"
+  rsync -a --delete "${CANDIDATE_DIR}/dist/" "${TMP_DIR}/release/"
 
-PANTHEON_RUNTIME_MANIFEST="${TMP_DIR}/release/deployment.json" \
-PANTHEON_RUNTIME_DEPLOYED_AT="${TIMESTAMP}" \
-PANTHEON_RUNTIME_RELEASE_NAME="${RELEASE_NAME}" \
-PANTHEON_RUNTIME_PREVIOUS_COMMIT="${PREVIOUS_COMMIT}" \
-PANTHEON_RUNTIME_PREVIOUS_DIGEST="${PREVIOUS_DIGEST}" \
-PANTHEON_RUNTIME_PREVIOUS_RELEASE_NAME="${PREVIOUS_RELEASE_NAME}" \
-PANTHEON_RUNTIME_GITHUB_DIGEST="${GITHUB_ARTIFACT_DIGEST}" \
-PANTHEON_RUNTIME_EMERGENCY_OVERRIDE="${EMERGENCY_OVERRIDE}" \
-PANTHEON_RUNTIME_OVERRIDE_ACTOR="${OVERRIDE_ACTOR}" \
-PANTHEON_RUNTIME_OVERRIDE_REASON_SHA256="${OVERRIDE_REASON_SHA256}" \
-PANTHEON_RUNTIME_PROFILE="${DEPLOY_PROFILE}" \
-PANTHEON_RUNTIME_PAIR_ID="${PAIR_ID}" \
-PANTHEON_RUNTIME_READ_ONLY_DIGEST="${READ_ONLY_ARTIFACT_DIGEST}" \
-PANTHEON_RUNTIME_OPERATOR_LIVE_DIGEST="${OPERATOR_LIVE_ARTIFACT_DIGEST}" \
-PANTHEON_RUNTIME_WRITE_PROOF_DIGEST="${WRITE_PROOF_ARTIFACT_DIGEST}" \
-PANTHEON_RUNTIME_AGORA_COMPAT_EVIDENCE="${AGORA_COMPAT_EVIDENCE_AUDIT}" \
-  node --input-type=module <<'NODE'
+  PANTHEON_RUNTIME_MANIFEST="${TMP_DIR}/release/deployment.json" \
+  PANTHEON_RUNTIME_DEPLOYED_AT="${TIMESTAMP}" \
+  PANTHEON_RUNTIME_RELEASE_NAME="${RELEASE_NAME}" \
+  PANTHEON_RUNTIME_PREVIOUS_COMMIT="${PREVIOUS_COMMIT}" \
+  PANTHEON_RUNTIME_PREVIOUS_DIGEST="${PREVIOUS_DIGEST}" \
+  PANTHEON_RUNTIME_PREVIOUS_RELEASE_NAME="${PREVIOUS_RELEASE_NAME}" \
+  PANTHEON_RUNTIME_GITHUB_DIGEST="${GITHUB_ARTIFACT_DIGEST}" \
+  PANTHEON_RUNTIME_EMERGENCY_OVERRIDE="${EMERGENCY_OVERRIDE}" \
+  PANTHEON_RUNTIME_OVERRIDE_ACTOR="${OVERRIDE_ACTOR}" \
+  PANTHEON_RUNTIME_OVERRIDE_REASON_SHA256="${OVERRIDE_REASON_SHA256}" \
+  PANTHEON_RUNTIME_PROFILE="${DEPLOY_PROFILE}" \
+  PANTHEON_RUNTIME_PAIR_ID="${PAIR_ID}" \
+  PANTHEON_RUNTIME_READ_ONLY_DIGEST="${READ_ONLY_ARTIFACT_DIGEST}" \
+  PANTHEON_RUNTIME_OPERATOR_LIVE_DIGEST="${OPERATOR_LIVE_ARTIFACT_DIGEST}" \
+  PANTHEON_RUNTIME_WRITE_PROOF_DIGEST="${WRITE_PROOF_ARTIFACT_DIGEST}" \
+  PANTHEON_RUNTIME_AGORA_COMPAT_EVIDENCE="${AGORA_COMPAT_EVIDENCE_AUDIT}" \
+    node --input-type=module <<'NODE'
 import fs from "node:fs";
 const file = process.env.PANTHEON_RUNTIME_MANIFEST;
 const manifest = JSON.parse(fs.readFileSync(file, "utf8"));
@@ -1896,25 +2735,25 @@ manifest.emergencyOverride = {
 };
 fs.writeFileSync(file, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
 NODE
-verify_dist_digest "${TMP_DIR}/release" "${ARTIFACT_DIGEST}" >/dev/null
-evidence_append candidate.staged_assets passed "artifactDigestSha256=${ARTIFACT_DIGEST}"
-RELEASE_CREATED=true
-sudo install -d -o root -g root -m 775 "${RELEASE_DIR}"
-sudo rsync -a --delete --chown=root:root --chmod=Du=rwx,Dg=rwx,Do=rx,Fu=rw,Fg=rw,Fo=r \
-  "${TMP_DIR}/release/" "${RELEASE_DIR}/"
-verify_dist_digest "${RELEASE_DIR}" "${ARTIFACT_DIGEST}" >/dev/null
-evidence_append candidate.installed_assets passed "artifactDigestSha256=${ARTIFACT_DIGEST}"
+  verify_dist_digest "${TMP_DIR}/release" "${ARTIFACT_DIGEST}" >/dev/null
+  evidence_append candidate.staged_assets passed "artifactDigestSha256=${ARTIFACT_DIGEST}"
+  RELEASE_CREATED=true
+  sudo install -d -o root -g root -m 775 "${RELEASE_DIR}"
+  sudo rsync -a --delete --chown=root:root --chmod=Du=rwx,Dg=rwx,Do=rx,Fu=rw,Fg=rw,Fo=r \
+    "${TMP_DIR}/release/" "${RELEASE_DIR}/"
+  verify_dist_digest "${RELEASE_DIR}" "${ARTIFACT_DIGEST}" >/dev/null
+  evidence_append candidate.installed_assets passed "artifactDigestSha256=${ARTIFACT_DIGEST}"
 
-if [[ "${DEPLOY_PROFILE}" == "write-proof" ]]; then
-  if [[ "${SAFE_RELEASE_QUALIFIED}" != "true" ]]; then
-    echo "Write-proof release cannot proceed without a qualified safe sibling." >&2
-    exit 2
-  fi
-  node --input-type=module - \
-    "${TMP_DIR}/safe-fallback-locator.json" \
-    "$(basename -- "${SAFE_RELEASE_DIR}")" \
-    "${PAIR_ID}" "${SHA}" \
-    "${READ_ONLY_ARTIFACT_DIGEST}" "${WRITE_PROOF_ARTIFACT_DIGEST}" <<'NODE'
+  if [[ "${DEPLOY_PROFILE}" == "write-proof" ]]; then
+    if [[ "${SAFE_RELEASE_QUALIFIED}" != "true" ]]; then
+      echo "Write-proof release cannot proceed without a qualified safe sibling." >&2
+      exit 2
+    fi
+    node --input-type=module - \
+      "${TMP_DIR}/safe-fallback-locator.json" \
+      "$(basename -- "${SAFE_RELEASE_DIR}")" \
+      "${PAIR_ID}" "${SHA}" \
+      "${READ_ONLY_ARTIFACT_DIGEST}" "${WRITE_PROOF_ARTIFACT_DIGEST}" <<'NODE'
 import fs from "node:fs";
 const [file, safeReleaseName, pairId, frontendSha, readOnlyDigest, writeProofDigest] = process.argv.slice(2);
 const payload = {
@@ -1927,20 +2766,56 @@ const payload = {
 };
 fs.writeFileSync(file, `${JSON.stringify(payload, null, 2)}\n`, { mode: 0o600 });
 NODE
-  sudo install -d -o root -g root -m 700 "${SAFE_FALLBACK_LOCATOR_DIR}"
-  sudo install -o root -g root -m 600 \
-    "${TMP_DIR}/safe-fallback-locator.json" \
-    "${SAFE_FALLBACK_LOCATOR_DIR}/$(basename -- "${RELEASE_DIR}").json"
-  if [[ "$(sudo stat -c '%a' "${SAFE_FALLBACK_LOCATOR_DIR}/$(basename -- "${RELEASE_DIR}").json")" != "600" ]]; then
-    echo "Private safe-fallback locator did not retain mode 0600." >&2
+    sudo install -d -o root -g root -m 700 "${SAFE_FALLBACK_LOCATOR_DIR}"
+    sudo install -o root -g root -m 600 \
+      "${TMP_DIR}/safe-fallback-locator.json" \
+      "${SAFE_FALLBACK_LOCATOR_DIR}/$(basename -- "${RELEASE_DIR}").json"
+    if [[ "$(sudo stat -c '%a' "${SAFE_FALLBACK_LOCATOR_DIR}/$(basename -- "${RELEASE_DIR}").json")" != "600" ]]; then
+      echo "Private safe-fallback locator did not retain mode 0600." >&2
+      exit 2
+    fi
+    evidence_append safe_sibling.locator passed "releaseDir=${RELEASE_DIR}"
+  fi
+
+  echo "=== candidate pre-switch browser/auth probe ==="
+  run_release_probe candidate_pre_switch "${RELEASE_DIR}" "${SHA}" "${ARTIFACT_DIGEST}" true
+  evidence_append candidate.pre_switch passed "releaseDir=${RELEASE_DIR}"
+
+  if [[ -n "${LIVE_TARGET_AT_START}" && "$(current_live_target)" != "${LIVE_TARGET_AT_START}" ]]; then
+    echo "Live release changed during candidate probe; refusing to overwrite it." >&2
+    evidence_append switch.cas failed "observedTarget=$(current_live_target)"
     exit 2
   fi
-  evidence_append safe_sibling.locator passed "releaseDir=${RELEASE_DIR}"
-fi
 
-echo "=== candidate pre-switch browser/auth probe ==="
-run_release_probe candidate_pre_switch "${RELEASE_DIR}" "${SHA}" "${ARTIFACT_DIGEST}" true
-evidence_append candidate.pre_switch passed "releaseDir=${RELEASE_DIR}"
+  if ! REMOTE_DEV_SHA_AFTER_PROBE="$(resolve_remote_dev_sha)"; then
+    evidence_append controller.order_at_switch failed "reason=origin_dev_unavailable" "attempts=3"
+    exit 2
+  fi
+  if [[ "${CONTROLLER_SHA}" != "${REMOTE_DEV_SHA_AFTER_PROBE}" ]]; then
+    if [[ "${ALLOW_OUT_OF_ORDER_CANDIDATE}" == "true" && "${GITHUB_EVENT_NAME:-}" == "workflow_dispatch" && "${FRONTEND_REF}" != "dev" ]]; then
+      evidence_append candidate.order_at_switch passed "currentDevSha=${REMOTE_DEV_SHA_AFTER_PROBE}" "candidateRef=${FRONTEND_REF}" "candidateSha=${SHA}"
+    elif [[ "${DEPLOY_PROFILE}" == "write-proof" && -n "${PREVIOUS_COMMIT:-}" && "${SHA}" == "${PREVIOUS_COMMIT}" ]]; then
+      evidence_append candidate.order_at_switch passed "currentDevSha=${REMOTE_DEV_SHA_AFTER_PROBE}" "liveCandidateSha=${PREVIOUS_COMMIT}"
+    else
+      echo "Dev advanced after candidate probe; refusing stale switch." >&2
+      evidence_append candidate.order_at_switch failed "currentDevSha=${REMOTE_DEV_SHA_AFTER_PROBE}"
+      exit 2
+    fi
+  fi
+
+  echo "=== writing durable prepared receipt ==="
+  write_prepared_receipt "${RELEASE_DIR}" "${RELEASE_NAME}"
+  evidence_append release.prepared prepared_success \
+    "outcome=prepared_success" \
+    "releaseDir=${RELEASE_DIR}" \
+    "pairId=${PAIR_ID}" \
+    "leaseEpoch=${LEASE_EPOCH}"
+  finalize_evidence prepared_success
+  persist_durable_evidence
+  PREPARED_SUCCESS=true
+  echo "OK: prepared candidate ${SHA} (${ARTIFACT_DIGEST}) in ${RELEASE_DIR}; incumbent ${PREVIOUS_TARGET:-none} untouched."
+  exit 0
+fi
 
 verify_bff_identity pre_switch
 if ! REMOTE_DEV_SHA_AT_SWITCH="$(resolve_remote_dev_sha)"; then
@@ -2025,7 +2900,9 @@ if [[ "${ROLLBACK_DRILL}" == "true" ]]; then
   exit 86
 fi
 
-PANTHEON_RUNTIME_MANIFEST="${TMP_DIR}/release/deployment.json" \
+mkdir -p "${TMP_DIR}"
+cp "${RELEASE_DIR}/deployment.json" "${TMP_DIR}/accepted-manifest.json"
+PANTHEON_RUNTIME_MANIFEST="${TMP_DIR}/accepted-manifest.json" \
 PANTHEON_RUNTIME_ACCEPTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
 node --input-type=module <<'NODE'
 import fs from "node:fs";
@@ -2041,7 +2918,7 @@ manifest.probes = {
 fs.writeFileSync(file, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
 NODE
 publish_manifest_atomically \
-  "${TMP_DIR}/release/deployment.json" \
+  "${TMP_DIR}/accepted-manifest.json" \
   "${RELEASE_DIR}" \
   accepted
 verify_public_manifest "${SHA}" "${ARTIFACT_DIGEST}" "${GATE_RUN_ID}" "${AUDIT_DIR}/accepted-deployment.json" "${BFF_COMMIT}" accepted "${GITHUB_ARTIFACT_DIGEST}" "${DEPLOY_PROFILE}" "${PAIR_ID}"
@@ -2088,8 +2965,23 @@ if [[ "${KEEP_RELEASES}" =~ ^[0-9]+$ && "${KEEP_RELEASES}" -gt 1 ]]; then
   if [[ "${remove_count}" -gt 0 ]]; then
     for ((release_index = 0; release_index < remove_count; release_index += 1)); do
       old_release="${release_entries[${release_index}]#* }"
-      if [[ "${old_release}" == "${RELEASE_DIR}" || "${old_release}" == "${PREVIOUS_TARGET}" ]]; then
+      if [[ "${old_release}" == "${RELEASE_DIR}" || \
+            "${old_release}" == "${PREVIOUS_TARGET}" || \
+            "${old_release}" == "${SAFE_RELEASE_DIR}" || \
+            ( -n "${ORIGINAL_PREDECESSOR_TARGET:-}" && "${old_release}" == "${ORIGINAL_PREDECESSOR_TARGET}" ) ]]; then
         continue
+      fi
+      if [[ -f "${old_release}/.prepared-receipt.json" ]]; then
+        if node --input-type=module - "${old_release}/.prepared-receipt.json" <<'NODE' 2>/dev/null;
+import fs from "node:fs";
+const receipt = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+const exp = new Date(receipt.expiresAt || 0).getTime();
+if (Date.now() < exp) process.exit(0);
+process.exit(1);
+NODE
+        then
+          continue
+        fi
       fi
       case "${old_release}" in
         "${RELEASES_DIR}"/*)

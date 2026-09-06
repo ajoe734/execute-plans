@@ -68,6 +68,75 @@ on:
         required: false
         default: false
         type: boolean
+      deploy_action:
+        description: "Deployment action: full (prepare and activate), prepare (stage and verify candidate), or activate (CAS switch to prepared candidate)."
+        required: false
+        default: "full"
+        type: choice
+        options:
+          - "full"
+          - "prepare"
+          - "activate"
+      lease_owner:
+        description: "Parent lease owner ID if coordinated."
+        required: false
+        default: ""
+        type: string
+      lease_epoch:
+        description: "Parent lease epoch if coordinated."
+        required: false
+        default: ""
+        type: string
+      lease_run_id:
+        description: "Parent lease run ID if coordinated."
+        required: false
+        default: ""
+        type: string
+      lease_delegated:
+        description: "Whether parent lease delegation is authorized."
+        required: false
+        default: "true"
+        type: string
+      bff_candidate_transport:
+        description: "Candidate transport endpoint for staged BFF verification."
+        required: false
+        default: ""
+        type: string
+      prepared_locator:
+        description: "Exact prepared candidate directory locator from prepare phase."
+        required: false
+        default: ""
+        type: string
+      prepared_receipt_checksum:
+        description: "Exact sha256 checksum of prepared receipt."
+        required: false
+        default: ""
+        type: string
+      expected_predecessor_target:
+        description: "Expected live symlink target before switch."
+        required: false
+        default: ""
+        type: string
+      expected_predecessor_commit:
+        description: "Expected commit SHA before switch."
+        required: false
+        default: ""
+        type: string
+      expected_predecessor_pair_id:
+        description: "Expected pair ID before switch."
+        required: false
+        default: ""
+        type: string
+      expected_predecessor_artifact_digest:
+        description: "Expected artifact digest before switch."
+        required: false
+        default: ""
+        type: string
+      prepared_release_instance:
+        description: "Exact release instance from prepare phase."
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
@@ -105,6 +174,10 @@ jobs:
       release_candidate_id: ${{ steps.pair.outputs.release_candidate_id }}
       compatibility_manifest_sha256: ${{ steps.pair.outputs.compatibility_manifest_sha256 }}
       release_controller_run_id: ${{ steps.pair.outputs.release_controller_run_id }}
+      prepared_release_dir: ${{ steps.prepare.outputs.prepared_release_dir }}
+      prepared_receipt: ${{ steps.prepare.outputs.prepared_receipt }}
+      prepared_locator: ${{ steps.prepare.outputs.prepared_locator }}
+      prepared_receipt_checksum: ${{ steps.prepare.outputs.prepared_receipt_checksum }}
     runs-on:
       - self-hosted
       - Linux
@@ -742,11 +815,61 @@ jobs:
           set -euo pipefail
           bash scripts/test-deploy-dev-vm.sh 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/target-runner-controller-regression.log"
 
-      - name: Deploy verified persistent candidate profile
-        id: deploy
-        if: steps.gate.outputs.deployment_profile != 'write-proof'
+      - name: Prepare verified persistent candidate profile
+        id: prepare
+        if: steps.gate.outputs.deployment_profile != 'write-proof' && (github.event_name != 'workflow_dispatch' || inputs.deploy_action != 'activate')
         timeout-minutes: 25
         env:
+          PANTHEON_DEPLOY_ACTION: prepare
+          PANTHEON_DEPLOY_CANDIDATE_SHA: ${{ steps.gate.outputs.candidate_sha }}
+          PANTHEON_DEPLOY_BRANCH: dev
+          PANTHEON_DEPLOY_FRONTEND_REF: ${{ steps.gate.outputs.frontend_ref }}
+          PANTHEON_DEPLOY_CANDIDATE_DIR: .release-candidate
+          PANTHEON_DEPLOY_AGORA_COMPAT_EVIDENCE: ${{ steps.agora_compat.outputs.evidence_path }}
+          PANTHEON_DEPLOY_GATE_RUN_ID: ${{ steps.gate.outputs.gate_run_id }}
+          PANTHEON_DEPLOY_GITHUB_ARTIFACT_DIGEST: ${{ steps.gate.outputs.github_artifact_digest }}
+          PANTHEON_DEPLOY_EXPECTED_DEV_SHA: ${{ steps.gate.outputs.current_dev_sha }}
+          PANTHEON_DEPLOY_EMERGENCY_OVERRIDE: ${{ steps.gate.outputs.emergency_override }}
+          PANTHEON_DEPLOY_ROLLBACK_DRILL: ${{ steps.gate.outputs.rollback_drill }}
+          PANTHEON_DEPLOY_OVERRIDE_REASON: ${{ steps.gate.outputs.override_reason }}
+          PANTHEON_DEPLOY_OVERRIDE_ACTOR: ${{ steps.gate.outputs.override_actor }}
+          PANTHEON_DEPLOY_PROFILE: ${{ steps.gate.outputs.deployment_profile }}
+          PANTHEON_DEPLOY_EXPECTED_PAIR_ID: ${{ steps.pair.outputs.pair_id }}
+          PANTHEON_DEPLOY_PROOF_WINDOW_ACK: "false"
+          PANTHEON_DEPLOY_REAL_WRITES: "false"
+          PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES: "false"
+          PANTHEON_DEPLOY_ALLOW_BOOTSTRAP: ${{ steps.gate.outputs.deployment_profile == 'read-only' && 'true' || 'false' }}
+          PANTHEON_DEPLOY_ALLOW_OUT_OF_ORDER_CANDIDATE: ${{ steps.gate.outputs.frontend_ref != 'dev' && 'true' || 'false' }}
+          PANTHEON_LEASE_OWNER: ${{ inputs.lease_owner || 'pantheon-dev-deploy' }}
+          PANTHEON_LEASE_EPOCH: ${{ inputs.lease_epoch || '1' }}
+          PANTHEON_LEASE_RUN_ID: ${{ inputs.lease_run_id || github.run_id }}
+          PANTHEON_LEASE_DELEGATED: ${{ inputs.lease_delegated || 'true' }}
+          PANTHEON_BFF_CANDIDATE_TRANSPORT: ${{ inputs.bff_candidate_transport || '' }}
+        run: |
+          bash scripts/deploy-dev-vm.sh
+          if [[ -f "$PANTHEON_AUDIT_OUT_DIR/prepared-release-dir" ]]; then
+            echo "prepared_release_dir=$(<"$PANTHEON_AUDIT_OUT_DIR/prepared-release-dir")" >> "$GITHUB_OUTPUT"
+            echo "prepared_locator=$(<"$PANTHEON_AUDIT_OUT_DIR/prepared-release-dir")" >> "$GITHUB_OUTPUT"
+          fi
+          if [[ -f "$PANTHEON_AUDIT_OUT_DIR/prepared-receipt.json" ]]; then
+            echo "prepared_receipt=$PANTHEON_AUDIT_OUT_DIR/prepared-receipt.json" >> "$GITHUB_OUTPUT"
+            receipt_checksum="$(sha256sum "$PANTHEON_AUDIT_OUT_DIR/prepared-receipt.json" | awk '{print $1}')"
+            echo "prepared_receipt_checksum=sha256:$receipt_checksum" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Deploy verified persistent candidate profile
+        id: deploy
+        if: steps.gate.outputs.deployment_profile != 'write-proof' && (github.event_name != 'workflow_dispatch' || inputs.deploy_action != 'prepare')
+        timeout-minutes: 25
+        env:
+          PANTHEON_DEPLOY_ACTION: activate
+          PANTHEON_DEPLOY_RELEASE_DIR: ${{ inputs.prepared_locator || steps.prepare.outputs.prepared_release_dir || '' }}
+          PANTHEON_DEPLOY_PREPARED_RECEIPT_CHECKSUM: ${{ inputs.prepared_receipt_checksum || steps.prepare.outputs.prepared_receipt_checksum || '' }}
+          PANTHEON_DEPLOY_RELEASE_INSTANCE: ${{ inputs.prepared_release_instance || '' }}
+          PANTHEON_DEPLOY_EXPECTED_PREDECESSOR_TARGET: ${{ inputs.expected_predecessor_target || '' }}
+          PANTHEON_DEPLOY_EXPECTED_PREDECESSOR_COMMIT: ${{ inputs.expected_predecessor_commit || '' }}
+          PANTHEON_DEPLOY_EXPECTED_PREDECESSOR_PAIR_ID: ${{ inputs.expected_predecessor_pair_id || '' }}
+          PANTHEON_DEPLOY_EXPECTED_PREDECESSOR_ARTIFACT_DIGEST: ${{ inputs.expected_predecessor_artifact_digest || '' }}
           PANTHEON_DEPLOY_CANDIDATE_SHA: ${{ steps.gate.outputs.candidate_sha }}
           PANTHEON_DEPLOY_BRANCH: dev
           PANTHEON_DEPLOY_FRONTEND_REF: ${{ steps.gate.outputs.frontend_ref }}
@@ -766,6 +889,11 @@ jobs:
           PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES: "false"
           PANTHEON_DEPLOY_ALLOW_BOOTSTRAP: ${{ steps.gate.outputs.deployment_profile == 'read-only' && 'true' || 'false' }}
           PANTHEON_DEPLOY_ALLOW_OUT_OF_ORDER_CANDIDATE: ${{ steps.gate.outputs.frontend_ref != 'dev' && 'true' || 'false' }}
+          PANTHEON_LEASE_OWNER: ${{ inputs.lease_owner || 'pantheon-dev-deploy' }}
+          PANTHEON_LEASE_EPOCH: ${{ inputs.lease_epoch || '1' }}
+          PANTHEON_LEASE_RUN_ID: ${{ inputs.lease_run_id || github.run_id }}
+          PANTHEON_LEASE_DELEGATED: ${{ inputs.lease_delegated || 'true' }}
+          PANTHEON_BFF_CANDIDATE_TRANSPORT: ${{ inputs.bff_candidate_transport || '' }}
         run: bash scripts/deploy-dev-vm.sh
 
       - name: Write redacted workflow envelope
@@ -1015,6 +1143,8 @@ jobs:
     outputs:
       watchdog_run_id: ${{ steps.watchdog_dispatch.outputs.watchdog_run_id }}
       proof_run_id: ${{ steps.proof_dispatch.outputs.proof_run_id }}
+      prepared_release_dir: ${{ steps.write_prepare.outputs.prepared_release_dir }}
+      prepared_receipt: ${{ steps.write_prepare.outputs.prepared_receipt }}
     runs-on:
       - self-hosted
       - Linux
@@ -1217,8 +1347,52 @@ jobs:
           NODE
           echo "evidence_path=${evidence_path}" >> "$GITHUB_OUTPUT"
 
+      - name: Prepare bounded write-proof profile
+        id: write_prepare
+        if: github.event_name != 'workflow_dispatch' || inputs.deploy_action != 'activate'
+        timeout-minutes: 25
+        env:
+          PANTHEON_AUDIT_OUT_DIR: ${{ runner.temp }}/pantheon-proof-${{ github.run_id }}-${{ github.run_attempt }}/write-controller-prepare
+          PANTHEON_DEPLOY_ACTION: prepare
+          PANTHEON_DEPLOY_CANDIDATE_SHA: ${{ needs.deploy.outputs.candidate_sha }}
+          PANTHEON_DEPLOY_BRANCH: dev
+          PANTHEON_DEPLOY_FRONTEND_REF: ${{ needs.deploy.outputs.frontend_ref }}
+          PANTHEON_DEPLOY_CANDIDATE_DIR: .release-candidate
+          PANTHEON_DEPLOY_AGORA_COMPAT_EVIDENCE: ${{ steps.write_agora_compat.outputs.evidence_path }}
+          PANTHEON_DEPLOY_GATE_RUN_ID: ${{ needs.deploy.outputs.source_gate_run_id }}
+          PANTHEON_DEPLOY_GITHUB_ARTIFACT_DIGEST: ${{ needs.deploy.outputs.source_artifact_digest }}
+          PANTHEON_DEPLOY_EXPECTED_DEV_SHA: ${{ needs.deploy.outputs.current_dev_sha }}
+          PANTHEON_DEPLOY_EMERGENCY_OVERRIDE: "false"
+          PANTHEON_DEPLOY_ROLLBACK_DRILL: "false"
+          PANTHEON_DEPLOY_PROFILE: write-proof
+          PANTHEON_DEPLOY_EXPECTED_PAIR_ID: ${{ needs.deploy.outputs.pair_id }}
+          PANTHEON_DEPLOY_PROOF_WINDOW_ACK: "true"
+          PANTHEON_DEPLOY_REAL_WRITES: "false"
+          PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES: "false"
+          PANTHEON_DEPLOY_ALLOW_OUT_OF_ORDER_CANDIDATE: ${{ needs.deploy.outputs.frontend_ref != 'dev' && 'true' || 'false' }}
+          PANTHEON_DEPLOY_RELEASE_INSTANCE: ${{ github.run_id }}-${{ github.run_attempt }}-write-proof
+          PANTHEON_LEASE_OWNER: ${{ inputs.lease_owner || 'pantheon-dev-deploy' }}
+          PANTHEON_LEASE_EPOCH: ${{ inputs.lease_epoch || '1' }}
+          PANTHEON_LEASE_RUN_ID: ${{ inputs.lease_run_id || github.run_id }}
+          PANTHEON_LEASE_DELEGATED: ${{ inputs.lease_delegated || 'true' }}
+          PANTHEON_BFF_CANDIDATE_TRANSPORT: ${{ inputs.bff_candidate_transport || '' }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$PANTHEON_AUDIT_OUT_DIR"
+          bash scripts/deploy-dev-vm.sh
+          if [[ -f "$PANTHEON_AUDIT_OUT_DIR/prepared-release-dir" ]]; then
+            echo "prepared_release_dir=$(<"$PANTHEON_AUDIT_OUT_DIR/prepared-release-dir")" >> "$GITHUB_OUTPUT"
+            echo "prepared_locator=$(<"$PANTHEON_AUDIT_OUT_DIR/prepared-release-dir")" >> "$GITHUB_OUTPUT"
+          fi
+          if [[ -f "$PANTHEON_AUDIT_OUT_DIR/prepared-receipt.json" ]]; then
+            echo "prepared_receipt=$PANTHEON_AUDIT_OUT_DIR/prepared-receipt.json" >> "$GITHUB_OUTPUT"
+            receipt_checksum="$(sha256sum "$PANTHEON_AUDIT_OUT_DIR/prepared-receipt.json" | awk '{print $1}')"
+            echo "prepared_receipt_checksum=sha256:$receipt_checksum" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Create parent proof binding
         id: binding
+        if: github.event_name != 'workflow_dispatch' || inputs.deploy_action != 'prepare'
         env:
           PARENT_ACTOR: ${{ github.actor }}
         run: |
@@ -1268,6 +1442,7 @@ jobs:
 
       - name: Upload immutable parent proof binding
         id: binding_upload
+        if: github.event_name != 'workflow_dispatch' || inputs.deploy_action != 'prepare'
         uses: actions/upload-artifact@v4
         with:
           name: pantheon-proof-binding-attempt-${{ github.run_attempt }}
@@ -1277,6 +1452,7 @@ jobs:
 
       - name: Canonicalize parent proof binding artifact digest
         id: binding_digest
+        if: github.event_name != 'workflow_dispatch' || inputs.deploy_action != 'prepare'
         env:
           RAW_BINDING_ARTIFACT_DIGEST: ${{ steps.binding_upload.outputs.artifact-digest }}
         run: |
@@ -1290,6 +1466,7 @@ jobs:
 
       - name: Dispatch independent read-only restore watchdog
         id: watchdog_dispatch
+        if: github.event_name != 'workflow_dispatch' || inputs.deploy_action != 'prepare'
         # Legacy static contract marker: gh workflow run pantheon-proof-watchdog.yml
         env:
           GH_TOKEN: ${{ github.token }}
@@ -1297,6 +1474,10 @@ jobs:
           PROOF_NONCE: ${{ steps.binding.outputs.nonce }}
           BINDING_ARTIFACT_ID: ${{ steps.binding_upload.outputs.artifact-id }}
           BINDING_ARTIFACT_DIGEST: ${{ steps.binding_digest.outputs.artifact_digest }}
+          LEASE_OWNER: ${{ inputs.lease_owner || '' }}
+          LEASE_EPOCH: ${{ inputs.lease_epoch || '' }}
+          LEASE_RUN_ID: ${{ inputs.lease_run_id || '' }}
+          LEASE_DELEGATED: ${{ inputs.lease_delegated || 'true' }}
         run: |
           set -euo pipefail
           dispatched_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -1323,6 +1504,10 @@ jobs:
               "expected_write_proof_digest": "EXPECTED_WRITE_PROOF_DIGEST",
               "fe_base_url": "PANTHEON_DEV_FE_HOST",
               "bff_base_url": "PANTHEON_BFF_BASE_URL",
+              "lease_owner": "LEASE_OWNER",
+              "lease_epoch": "LEASE_EPOCH",
+              "lease_run_id": "LEASE_RUN_ID",
+              "lease_delegated": "LEASE_DELEGATED",
           }
           print(json.dumps({key: os.environ.get(env, "") for key, env in mapping.items()}))
           PY
@@ -1344,6 +1529,7 @@ jobs:
           exit 1
 
       - name: Require independently armed watchdog before writes
+        if: github.event_name != 'workflow_dispatch' || inputs.deploy_action != 'prepare'
         env:
           GH_TOKEN: ${{ github.token }}
           WATCHDOG_RUN_ID: ${{ steps.watchdog_dispatch.outputs.watchdog_run_id }}
@@ -1386,9 +1572,11 @@ jobs:
 
       - name: Activate bounded write-proof profile after watchdog is durable
         id: write_deploy
+        if: github.event_name != 'workflow_dispatch' || inputs.deploy_action != 'prepare'
         timeout-minutes: 25
         env:
           PANTHEON_AUDIT_OUT_DIR: ${{ runner.temp }}/pantheon-proof-${{ github.run_id }}-${{ github.run_attempt }}/write-controller
+          PANTHEON_DEPLOY_ACTION: activate
           PANTHEON_DEPLOY_CANDIDATE_SHA: ${{ needs.deploy.outputs.candidate_sha }}
           PANTHEON_DEPLOY_BRANCH: dev
           PANTHEON_DEPLOY_FRONTEND_REF: ${{ needs.deploy.outputs.frontend_ref }}
@@ -1405,7 +1593,18 @@ jobs:
           PANTHEON_DEPLOY_REAL_WRITES: "true"
           PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES: "true"
           PANTHEON_DEPLOY_ALLOW_OUT_OF_ORDER_CANDIDATE: ${{ needs.deploy.outputs.frontend_ref != 'dev' && 'true' || 'false' }}
-          PANTHEON_DEPLOY_RELEASE_INSTANCE: ${{ github.run_id }}-${{ github.run_attempt }}-write-proof
+          PANTHEON_DEPLOY_RELEASE_DIR: ${{ inputs.prepared_locator || steps.write_prepare.outputs.prepared_release_dir || '' }}
+          PANTHEON_DEPLOY_PREPARED_RECEIPT_CHECKSUM: ${{ inputs.prepared_receipt_checksum || steps.write_prepare.outputs.prepared_receipt_checksum || '' }}
+          PANTHEON_DEPLOY_RELEASE_INSTANCE: ${{ inputs.prepared_release_instance || format('{0}-{1}-write-proof', github.run_id, github.run_attempt) }}
+          PANTHEON_DEPLOY_EXPECTED_PREDECESSOR_TARGET: ${{ inputs.expected_predecessor_target || '' }}
+          PANTHEON_DEPLOY_EXPECTED_PREDECESSOR_COMMIT: ${{ inputs.expected_predecessor_commit || '' }}
+          PANTHEON_DEPLOY_EXPECTED_PREDECESSOR_PAIR_ID: ${{ inputs.expected_predecessor_pair_id || '' }}
+          PANTHEON_DEPLOY_EXPECTED_PREDECESSOR_ARTIFACT_DIGEST: ${{ inputs.expected_predecessor_artifact_digest || '' }}
+          PANTHEON_LEASE_OWNER: ${{ inputs.lease_owner || 'pantheon-dev-deploy' }}
+          PANTHEON_LEASE_EPOCH: ${{ inputs.lease_epoch || '1' }}
+          PANTHEON_LEASE_RUN_ID: ${{ inputs.lease_run_id || github.run_id }}
+          PANTHEON_LEASE_DELEGATED: ${{ inputs.lease_delegated || 'true' }}
+          PANTHEON_BFF_CANDIDATE_TRANSPORT: ${{ inputs.bff_candidate_transport || '' }}
         run: |
           set -euo pipefail
           mkdir -p "$PANTHEON_AUDIT_OUT_DIR"
@@ -1413,6 +1612,7 @@ jobs:
 
       - name: Dispatch exact parent-bound hosted Persona proof
         id: proof_dispatch
+        if: github.event_name != 'workflow_dispatch' || inputs.deploy_action != 'prepare'
         env:
           GH_TOKEN: ${{ github.token }}
           CORRELATION_ID: ${{ steps.binding.outputs.correlation_id }}
@@ -1513,6 +1713,7 @@ jobs:
           NODE
 
       - name: Upload one-time exact child proof claim
+        if: github.event_name != 'workflow_dispatch' || inputs.deploy_action != 'prepare'
         uses: actions/upload-artifact@v4
         with:
           name: pantheon-proof-child-claim-attempt-${{ github.run_attempt }}
@@ -1521,6 +1722,7 @@ jobs:
           retention-days: 1
 
       - name: Wait for hosted proof terminal
+        if: github.event_name != 'workflow_dispatch' || inputs.deploy_action != 'prepare'
         timeout-minutes: 155
         env:
           GH_TOKEN: ${{ github.token }}

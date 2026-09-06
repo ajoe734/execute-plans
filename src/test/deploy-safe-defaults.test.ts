@@ -960,4 +960,26 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
       2,
     );
   });
+
+  it("retires one-shot deployment bypass and mandates explicit prepare, activate, or restore action", () => {
+    expect(deployScript).toContain(
+      "PANTHEON_DEPLOY_ACTION must be prepare, activate, or restore.",
+    );
+    expect(deployScript).toContain('DEPLOY_ACTION="restore"');
+    expect(deployScript).toContain('write_prepared_receipt "${RELEASE_DIR}"');
+    expect(deployScript).toContain('verify_prepared_receipt "${RELEASE_DIR}"');
+    expect(deployScript).toContain('prepared_success');
+  });
+
+  it("enforces exact pair protocol receipt integrity, lease authority, and mandatory gates", () => {
+    expect(deployScript).toContain("receiptIntegritySha256");
+    expect(deployScript).toContain("payload.lease.delegated !== true");
+    expect(deployScript).toContain("candidateVerification");
+    expect(deployScript).toContain("preSwitchProbe");
+    expect(deployScript).toContain("agoraCompatibility");
+    expect(deployScript).toContain("managementFleet");
+    expect(deployScript).toContain("openclawContract");
+    expect(deployScript).toContain("Prepared receipt preparedAt is in the future");
+    expect(deployScript).toContain("Prepared receipt has expired");
+  });
 });
