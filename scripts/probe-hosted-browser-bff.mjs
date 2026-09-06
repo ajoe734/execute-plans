@@ -1511,6 +1511,9 @@ export async function installBffCandidateRoute(
       const isCrossOrigin = Boolean(requestOrigin) || (new URL(originalUrl).origin !== pageOrigin);
       const expectedOrigin = requestOrigin || pageOrigin;
 
+      // Playwright Request does not expose Fetch's credentials mode. Missing
+      // Cookie/Authorization headers cannot prove credentials were omitted.
+      // Conservatively require credentialed CORS permissions for candidates.
       if (isCrossOrigin) {
         const method = request.method();
         const contentType = (requestHeaders["content-type"] || "").toLowerCase().split(";")[0].trim();
@@ -1518,7 +1521,10 @@ export async function installBffCandidateRoute(
         const simpleContentTypes = ["application/x-www-form-urlencoded", "multipart/form-data", "text/plain", ""];
         const customHeaderNames = Object.keys(requestHeaders).filter((h) => {
           const lower = h.toLowerCase();
-          return !["accept", "accept-language", "content-language", "user-agent", "referer", "origin", "host"].includes(lower);
+          // Browser-controlled headers are not part of Access-Control-Request-Headers.
+          return !lower.startsWith("sec-") &&
+            !["accept", "accept-language", "content-language", "user-agent", "referer", "origin", "host", "cookie", "content-length", "accept-encoding", "connection"].includes(lower) &&
+            !(lower === "content-type" && simpleContentTypes.includes(contentType));
         });
         const requiresPreflight = !simpleMethods.includes(method) || !simpleContentTypes.includes(contentType) || customHeaderNames.length > 0;
 
@@ -1549,7 +1555,6 @@ export async function installBffCandidateRoute(
           }
           const preHeaders = preflightResponse.headers();
           const preAllowOrigin = preHeaders["access-control-allow-origin"];
-          const hasCredentials = Boolean(requestHeaders["authorization"] || requestHeaders["cookie"]);
           if (!preAllowOrigin) {
             routeErrors.push({
               code: "bff_candidate_cors_preflight_error",
@@ -1560,7 +1565,7 @@ export async function installBffCandidateRoute(
             await route.abort("failed");
             return;
           }
-          if (hasCredentials && preAllowOrigin === "*") {
+          if (preAllowOrigin === "*") {
             routeErrors.push({
               code: "bff_candidate_cors_preflight_error",
               url: redactUrl(originalUrl),
@@ -1580,22 +1585,22 @@ export async function installBffCandidateRoute(
             await route.abort("failed");
             return;
           }
-          if (hasCredentials) {
-            const preAllowCreds = preHeaders["access-control-allow-credentials"];
-            if (preAllowCreds !== "true") {
-              routeErrors.push({
-                code: "bff_candidate_cors_preflight_error",
-                url: redactUrl(originalUrl),
-                candidateUrl: redactUrl(candidateUrl),
-                error: "candidate preflight response missing required Access-Control-Allow-Credentials: true header",
-              });
-              await route.abort("failed");
-              return;
-            }
+          const preAllowCreds = preHeaders["access-control-allow-credentials"];
+          if (preAllowCreds !== "true") {
+            routeErrors.push({
+              code: "bff_candidate_cors_preflight_error",
+              url: redactUrl(originalUrl),
+              candidateUrl: redactUrl(candidateUrl),
+              error: "candidate preflight response missing required Access-Control-Allow-Credentials: true header",
+            });
+            await route.abort("failed");
+            return;
           }
           const rawAllowMethods = preHeaders["access-control-allow-methods"] || "";
           const preAllowMethods = rawAllowMethods.split(",").map((m) => m.trim().toUpperCase()).filter(Boolean);
-          if (!preAllowMethods.includes("*") && !preAllowMethods.includes(method.toUpperCase())) {
+          // Require explicit permission: credentialed CORS treats
+          // '*' as a literal method/header, and Authorization is never wildcarded.
+          if (!simpleMethods.includes(method) && !preAllowMethods.includes(method.toUpperCase())) {
             routeErrors.push({
               code: "bff_candidate_cors_preflight_error",
               url: redactUrl(originalUrl),
@@ -1608,7 +1613,7 @@ export async function installBffCandidateRoute(
           const rawAllowHeaders = preHeaders["access-control-allow-headers"] || "";
           const preAllowHeaders = rawAllowHeaders.split(",").map((h) => h.trim().toLowerCase()).filter(Boolean);
           for (const headerName of customHeaderNames) {
-            if (!preAllowHeaders.includes("*") && !preAllowHeaders.includes(headerName.toLowerCase())) {
+            if (!preAllowHeaders.includes(headerName.toLowerCase())) {
               routeErrors.push({
                 code: "bff_candidate_cors_preflight_error",
                 url: redactUrl(originalUrl),
@@ -1638,7 +1643,6 @@ export async function installBffCandidateRoute(
 
       if (isCrossOrigin) {
         const allowOrigin = responseHeaders["access-control-allow-origin"];
-        const hasCredentials = Boolean(requestHeaders["authorization"] || requestHeaders["cookie"]);
 
         if (!allowOrigin) {
           routeErrors.push({
@@ -1651,18 +1655,16 @@ export async function installBffCandidateRoute(
           return;
         }
 
-        if (hasCredentials) {
-          const allowCreds = responseHeaders["access-control-allow-credentials"];
-          if (allowOrigin === "*" || allowCreds !== "true") {
-            routeErrors.push({
-              code: "bff_candidate_cors_error",
-              url: redactUrl(originalUrl),
-              candidateUrl: redactUrl(candidateUrl),
-              error: "candidate response with credentials requires exact Access-Control-Allow-Origin and Access-Control-Allow-Credentials: true",
-            });
-            await route.abort("failed");
-            return;
-          }
+        const allowCreds = responseHeaders["access-control-allow-credentials"];
+        if (allowOrigin === "*" || allowCreds !== "true") {
+          routeErrors.push({
+            code: "bff_candidate_cors_error",
+            url: redactUrl(originalUrl),
+            candidateUrl: redactUrl(candidateUrl),
+            error: "candidate response with credentials requires exact Access-Control-Allow-Origin and Access-Control-Allow-Credentials: true",
+          });
+          await route.abort("failed");
+          return;
         }
 
         if (allowOrigin !== "*" && allowOrigin !== expectedOrigin) {
@@ -2823,7 +2825,6 @@ async function runProbe() {
     applicationRootRendered: rootRendered,
     noBrowserWriteMethods: browserBffMethodPolicy.pass,
     personaFleetSafetyPassed: personaFleetSafety.pass,
-    openclawContractPassed: Boolean(personaFleetSafety.pass && rootRendered && pageErrors.length === 0),
     pageErrorsAbsent: pageErrors.length === 0,
     unexpectedConsoleErrorsAbsent: unexpectedConsoleErrors.length === 0,
     frontendResourceFailuresAbsent: frontendResourceFailures.length === 0,

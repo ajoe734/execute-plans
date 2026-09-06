@@ -1187,7 +1187,161 @@ describe("hosted browser strict release policy", () => {
     expect(isBffPath("")).toBe(false);
   });
 
-  it("enforces CORS preflight methods, headers, and credential permissions in candidate route", async () => {
+  it.each([
+    {
+      name: "rejects a missing PUT permission",
+      allowMethods: "",
+      allowHeaders: "authorization, content-type, x-cors-test",
+      credentials: "include",
+      authorization: true,
+      allowed: false,
+      error: /method PUT not permitted/,
+    },
+    {
+      name: "rejects credentialed wildcard methods",
+      allowMethods: "*",
+      allowHeaders: "authorization, content-type, x-cors-test",
+      credentials: "include",
+      authorization: true,
+      allowed: false,
+      error: /method PUT not permitted/,
+    },
+    {
+      name: "rejects credentialed wildcard headers",
+      allowMethods: "PUT",
+      allowHeaders: "*",
+      credentials: "include",
+      authorization: true,
+      allowed: false,
+      error: /header .* not permitted/,
+    },
+    {
+      name: "rejects wildcard methods with include mode and no cookies or Authorization",
+      allowMethods: "*",
+      allowHeaders: "content-type, x-cors-test",
+      credentials: "include",
+      authorization: false,
+      allowed: false,
+      error: /method PUT not permitted/,
+    },
+    {
+      name: "rejects wildcard headers with include mode and no cookies or Authorization",
+      allowMethods: "PUT",
+      allowHeaders: "*",
+      credentials: "include",
+      authorization: false,
+      allowed: false,
+      error: /header .* not permitted/,
+    },
+    {
+      name: "requires explicit Authorization permission even with omitted credentials",
+      allowMethods: "PUT",
+      allowHeaders: "*, content-type, x-cors-test",
+      credentials: "omit",
+      authorization: true,
+      allowed: false,
+      // Bundled Chromium 148 permits this; the candidate enforces Fetch's
+      // Authorization non-wildcard exception conservatively.
+      nativeAllowed: true,
+      error: /header authorization not permitted/,
+    },
+    {
+      name: "rejects wildcard preflight origin with include mode and no cookies or Authorization",
+      allowMethods: "PUT",
+      allowHeaders: "content-type, x-cors-test",
+      preflightOrigin: "*",
+      credentials: "include",
+      authorization: false,
+      allowed: false,
+      error: /Access-Control-Allow-Origin cannot be \*/,
+    },
+    {
+      name: "rejects missing preflight credentials permission with include mode and no cookies or Authorization",
+      allowMethods: "PUT",
+      allowHeaders: "content-type, x-cors-test",
+      preflightCredentials: false,
+      credentials: "include",
+      authorization: false,
+      allowed: false,
+      error: /missing required Access-Control-Allow-Credentials/,
+    },
+    {
+      name: "rejects wildcard response origin with include mode and no cookies or Authorization",
+      allowMethods: "PUT",
+      allowHeaders: "content-type, x-cors-test",
+      responseOrigin: "*",
+      responseDenied: true,
+      credentials: "include",
+      authorization: false,
+      allowed: false,
+      error: /requires exact Access-Control-Allow-Origin/,
+    },
+    {
+      name: "rejects missing response credentials permission with include mode and no cookies or Authorization",
+      allowMethods: "PUT",
+      allowHeaders: "content-type, x-cors-test",
+      responseCredentials: false,
+      responseDenied: true,
+      credentials: "include",
+      authorization: false,
+      allowed: false,
+      error: /requires exact Access-Control-Allow-Origin/,
+    },
+    {
+      name: "fails closed for omitted credentials without explicit credentials permission",
+      allowMethods: "PUT",
+      allowHeaders: "content-type, x-cors-test",
+      preflightCredentials: false,
+      credentials: "omit",
+      authorization: false,
+      allowed: false,
+      nativeAllowed: true,
+      error: /missing required Access-Control-Allow-Credentials/,
+    },
+    {
+      name: "accepts explicitly allowed credentialed methods and headers",
+      allowMethods: "PUT",
+      allowHeaders: "Authorization, Content-Type, X-Cors-Test",
+      credentials: "include",
+      authorization: true,
+      allowed: true,
+    },
+    {
+      name: "accepts explicit permissions alongside wildcard tokens",
+      allowMethods: "*, PUT",
+      allowHeaders: "*, authorization, content-type, x-cors-test",
+      credentials: "include",
+      authorization: false,
+      allowed: true,
+    },
+    {
+      name: "accepts explicit Authorization permission with omitted credentials",
+      allowMethods: "PUT",
+      allowHeaders: "authorization, content-type, x-cors-test",
+      credentials: "omit",
+      authorization: true,
+      allowed: true,
+    },
+    {
+      name: "does not require allow-method permission for a safelisted method",
+      method: "GET",
+      allowMethods: "*",
+      allowHeaders: "x-cors-test",
+      credentials: "include",
+      authorization: false,
+      allowed: true,
+    },
+    {
+      name: "fails closed for wildcard-only omitted-credentials permission when the route cannot observe credentials mode",
+      allowMethods: "*",
+      allowHeaders: "*",
+      credentials: "omit",
+      authorization: false,
+      allowed: false,
+      nativeAllowed: true,
+      error: /method PUT not permitted/,
+    },
+  ])("compares native Chromium and candidate CORS: $name", async (fixture) => {
     const http = await import("node:http");
     const { chromium } = await import("@playwright/test");
     const servers: any[] = [];
@@ -1199,54 +1353,85 @@ describe("hosted browser strict release policy", () => {
         await new Promise((r) => s.listen(0, "127.0.0.1", r));
         return `http://127.0.0.1:${(s.address() as any).port}`;
       };
-      const fe = await listen((req: any, res: any) => {
+      const fe = await listen((_req: any, res: any) => {
         res.setHeader("Content-Type", "text/html");
         res.end("<html>local review</html>");
       });
       const calls: string[] = [];
       const bff = await listen((req: any, res: any) => {
         calls.push(req.method);
-        res.setHeader("Access-Control-Allow-Origin", fe);
-        res.setHeader("Access-Control-Allow-Credentials", "true");
+        const preflight = req.method === "OPTIONS";
+        res.setHeader("Access-Control-Allow-Origin", (preflight ? fixture.preflightOrigin : fixture.responseOrigin) ?? fe);
+        if ((preflight ? fixture.preflightCredentials : fixture.responseCredentials) !== false) {
+          res.setHeader("Access-Control-Allow-Credentials", "true");
+        }
         res.setHeader("Content-Type", "application/json");
         if (req.method === "OPTIONS") {
+          res.setHeader("Access-Control-Allow-Methods", fixture.allowMethods);
+          res.setHeader("Access-Control-Allow-Headers", fixture.allowHeaders);
+          res.setHeader("Access-Control-Max-Age", "0");
           res.writeHead(204);
           res.end();
           return;
         }
         res.end(JSON.stringify({ localFixture: true }));
       });
-      browser = await chromium.launch({ headless: true });
+      browser = await chromium.launch({ headless: true, timeout: 10_000 });
       const page = await browser.newPage();
-      await page.goto(fe);
+      await page.goto(fe, { timeout: 5_000 });
+      const method = fixture.method || "PUT";
+      const fetchFixture = async (base: string) => page.evaluate(async ({ url, method, credentials, authorization }) => {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 3_000);
+        try {
+          const headers: Record<string, string> = { "X-Cors-Test": "local-fixture" };
+          if (authorization) headers.Authorization = "Bearer local-review-only";
+          if (method === "PUT") headers["Content-Type"] = "application/json";
+          const response = await fetch(url, {
+            method,
+            credentials: credentials as RequestCredentials,
+            headers,
+            body: method === "PUT" ? "{}" : undefined,
+            signal: controller.signal,
+          });
+          return { ok: true, body: await response.json() };
+        } catch (error) {
+          return { ok: false, error: String(error) };
+        } finally {
+          clearTimeout(timeout);
+        }
+      }, {
+        url: `${base}/bff/me`,
+        method,
+        credentials: fixture.credentials,
+        authorization: fixture.authorization,
+      });
+
+      const native = await fetchFixture(bff);
+      const nativeAllowed = fixture.nativeAllowed ?? fixture.allowed;
+      expect(native.ok).toBe(nativeAllowed);
+      expect(calls.splice(0)).toEqual(nativeAllowed || fixture.responseDenied ? ["OPTIONS", method] : ["OPTIONS"]);
+
       const routeErrors: any[] = [];
       await installBffCandidateRoute(page, "http://public-bff.test", bff, routeErrors);
-      const intercepted = await page.evaluate(async () => {
-        try {
-          return {
-            ok: true,
-            body: await (
-              await fetch("http://public-bff.test/bff/me", {
-                method: "PUT",
-                headers: {
-                  Authorization: "Bearer local-review-only",
-                  "Content-Type": "application/json",
-                },
-                body: "{}",
-              })
-            ).json(),
-          };
-        } catch (e) {
-          return { ok: false, error: String(e) };
-        }
-      });
-      expect(intercepted.ok).toBe(false);
-      expect(routeErrors.length).toBeGreaterThan(0);
-      expect(routeErrors[0].code).toBe("bff_candidate_cors_preflight_error");
-      expect(routeErrors[0].error).toContain("PUT");
+      const intercepted = await fetchFixture("http://public-bff.test");
+      expect(intercepted.ok).toBe(fixture.allowed);
+      // A rejected preflight must stop the actual request from reaching the candidate.
+      expect(calls).toEqual(fixture.allowed || fixture.responseDenied ? ["OPTIONS", method] : ["OPTIONS"]);
+      if (fixture.allowed) {
+        expect(intercepted).toEqual(native);
+        expect(routeErrors).toEqual([]);
+      } else {
+        expect(routeErrors).toHaveLength(1);
+        expect(routeErrors[0].code).toBe(fixture.responseDenied ? "bff_candidate_cors_error" : "bff_candidate_cors_preflight_error");
+        expect(routeErrors[0].error).toMatch(fixture.error!);
+      }
     } finally {
       if (browser) await browser.close();
-      await Promise.all(servers.map((s) => new Promise((r) => s.close(r))));
+      await Promise.all(servers.map((s) => new Promise((r) => {
+        s.close(r);
+        s.closeAllConnections();
+      })));
     }
-  });
+  }, 15_000);
 });
