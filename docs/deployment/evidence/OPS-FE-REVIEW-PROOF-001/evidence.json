@@ -24,12 +24,33 @@
   },
   "observed_fe": {
     "base_commit": "5d4f385284b44a30e10764426a47fd808a7ae3cb",
+    "head_commit": "85105cbe96a809b0ab30a0e763a97818fdbbdfc7",
     "pull_request": 747,
     "pull_request_url": "https://github.com/ajoe734/execute-plans/pull/747",
     "branch": "task/OPS-FE-REVIEW-PROOF-001"
   },
   "observed_runs": {
-    "branch_ci_run": {
+    "branch_ci_run_head_85105cbe": {
+      "run_id": 34186094899,
+      "workflow_name": "Branch CI Gate",
+      "workflow_id": 312290856,
+      "event": "pull_request",
+      "head_sha": "85105cbe96a809b0ab30a0e763a97818fdbbdfc7",
+      "conclusion": "success",
+      "suite_selection": "selected src/test/pantheon-canonical-review-workflow.test.ts in CI and passed 18/18 tests"
+    },
+    "old_base_gate_run_head_85105cbe": {
+      "run_id": 34186093583,
+      "workflow_name": "Pantheon canonical review gate",
+      "workflow_id": 342891579,
+      "event": "pull_request_target",
+      "head_sha": "85105cbe96a809b0ab30a0e763a97818fdbbdfc7",
+      "conclusion": "failure",
+      "exit_code": 1,
+      "verifier_checkout_commit": "1b39676c12182e15602bcb85a72244f2b31b0116",
+      "status_outcome": "published expected pre-approval failure status (no review-proof tag yet) with exit code 1"
+    },
+    "prior_branch_ci_run_head_07f936d0": {
       "run_id": 34185265643,
       "workflow_name": "Branch CI Gate",
       "workflow_id": 312290856,
@@ -38,7 +59,7 @@
       "conclusion": "success",
       "suite_selection": "selected src/test/pantheon-canonical-review-workflow.test.ts in CI and passed 8/8 tests"
     },
-    "old_base_gate_run": {
+    "prior_old_base_gate_run_head_07f936d0": {
       "run_id": 34185264388,
       "workflow_name": "Pantheon canonical review gate",
       "workflow_id": 342891579,
@@ -51,7 +72,24 @@
     }
   },
   "status_readback": {
-    "canonical_gate_actions_status": {
+    "canonical_gate_actions_status_head_85105cbe": {
+      "id": 53709058464,
+      "context": "Pantheon canonical review gate",
+      "state": "failure",
+      "description": "OPS-FE-REVIEW-PROOF-001: no review-proof tag (pantheon-review/approve/85105cbe96a809b0ab30a0e763a97818fdbbdfc7 or pantheon-review/operator-a",
+      "creator": "github-actions[bot]",
+      "creator_app_id": 15368,
+      "target_url": "https://github.com/ajoe734/execute-plans/actions/runs/34186093583"
+    },
+    "prior_review_bridge_reopen_status_head_07f936d0": {
+      "id": 53708814975,
+      "context": "Pantheon canonical review gate",
+      "state": "failure",
+      "description": "OPS-FE-REVIEW-PROOF-001 reopen by Codex at 07f936d09ae2",
+      "creator": "ajoe734",
+      "target_url": "https://github.com/ajoe734/execute-plans/pull/747#pantheon-review-intent-99dc0ea12574bd03e7059e6c72407983"
+    },
+    "prior_canonical_gate_actions_status_head_07f936d0": {
       "id": 53708610993,
       "context": "Pantheon canonical review gate",
       "state": "failure",
@@ -59,14 +97,6 @@
       "creator": "github-actions[bot]",
       "creator_app_id": 15368,
       "target_url": "https://github.com/ajoe734/execute-plans/actions/runs/34185264388"
-    },
-    "review_bridge_reopen_status": {
-      "id": 53708814975,
-      "context": "Pantheon canonical review gate",
-      "state": "failure",
-      "description": "OPS-FE-REVIEW-PROOF-001 reopen by Codex at 07f936d09ae2",
-      "creator": "ajoe734",
-      "target_url": "https://github.com/ajoe734/execute-plans/pull/747#pantheon-review-intent-99dc0ea12574bd03e7059e6c72407983"
     }
   },
   "real_bridge_dispatch": {
