@@ -6,6 +6,7 @@
   "target_repo": "execute-plans",
   "merge_target": "dev",
   "branch": "task/OPS-FE-REVIEW-PROOF-001",
+  "pull_request": 747,
   "status": "ready-for-independent-exact-head-review",
   "plan": {
     "path": "/tmp/pantheon-tooling-root-repair-20260907/FRONTEND_REVIEW_PROOF_PLAN.md",
@@ -66,7 +67,8 @@
     ]
   },
   "review_binding": {
-    "pull_request": null,
+    "pull_request": "https://github.com/ajoe734/execute-plans/pull/747",
+    "pull_request_number": 747,
     "required_final_binding": "Independent approval must bind the final PR head containing this manifest."
   },
   "acceptance": {
