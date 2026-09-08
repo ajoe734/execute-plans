@@ -2559,12 +2559,12 @@
     "Review all 94 dispositions including the concrete Bun retention exception and Lovable plugin consumer.",
     "Verify auth/session/SSE, graph, chart and rendering behavior tests and configured strict-live build results.",
     "Bind this committed manifest to the exact current-dev PR head, run required CI and approve canonically as Codex; only supervisor integrator merges.",
-    "Required CI currently fails due to cross-repo Agora contract drift against Pantheon dev (Branch CI runs 34287233832 and 34287225238); requires external contract sync before handoff."
+    "Required CI fails due to cross-repo Agora contract drift against Pantheon dev (runs 34288481417, 34288477651, 34287233832, 34287225238). Even with types.ts granted, verified contract provenance counterexample confirms types.ts alone cannot close CI: regenerating types also drifts contract-snapshot.json and frontend-generation-output.v1_13.json hash, and attributing new output hash to historical runtime commit 95d03944 is rejected by backend release verifier (scripts/agora_compat_manifest.py). Full repair requires external cross-repo architecture decision and qualified generation provenance sync before handoff."
   ],
   "validation_scope": {
     "auth_session_stream_behavior": "The full suite executed public-build-auth-contract (67 tests), OpenClawLlmAuthPanel, managementAi, liveTransport, SSE and agent panel tests, plus chart/grid and strict-live/release protocol regressions. No privileged hosted auth was performed.",
     "source_boundary_check": "git diff --check origin/dev...HEAD; only package.json, package-lock.json and this evidence manifest are task delivery files. Product TS/TSX, vite.config.ts, deployment workflows and scripts unchanged.",
     "install_warnings": "npm reports existing deprecated transitive packages; compatible upgrade work remains assigned to the separate FE baseline tasks.",
-    "remote_gates": "Required GitHub checks (Branch CI runs 34287233832 and 34287225238) fail Component merge gate at npm run test:contract due to cross-repo Agora contract drift against Pantheon dev. Resolving this drift requires updating src/lib/bff-v1/agora/types.ts which is outside the FE-DEP-CLOSURE-001 declared artifact scope."
+    "remote_gates": "Required GitHub checks fail Component merge gate at npm run test:contract due to cross-repo Agora contract drift against Pantheon dev. Resolving this drift requires ungranted contract snapshot/handoff/checker updates and backend release verifier alignment, which cannot be closed by types.ts grant alone without false attribution. Blocked on Human/Ops for qualified cross-repo contract provenance architecture decision."
   }
 }
