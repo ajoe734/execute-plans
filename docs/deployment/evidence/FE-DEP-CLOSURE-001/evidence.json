@@ -1,12 +1,12 @@
 {
   "schema_version": "pantheon.task-review-evidence.v1",
   "task_id": "FE-DEP-CLOSURE-001",
-  "owner": "Claude",
+  "owner": "Antigravity2",
   "reviewer": "Codex",
   "target_repo": "ajoe734/execute-plans",
   "merge_target": "dev",
   "branch": "task/FE-DEP-CLOSURE-001",
-  "status": "ready-for-independent-exact-head-review",
+  "status": "blocked-on-external-contract-drift",
   "source_identity": {
     "audit_frontend_base": "5d4f385284b44a30e10764426a47fd808a7ae3cb",
     "current_dev_base": "fda58bb05052c90e0e18310666ad174b5ab3ff51",
@@ -2559,12 +2559,12 @@
     "Review all 94 dispositions including the concrete Bun retention exception and Lovable plugin consumer.",
     "Verify auth/session/SSE, graph, chart and rendering behavior tests and configured strict-live build results.",
     "Bind this committed manifest to the exact current-dev PR head, run required CI and approve canonically as Codex; only supervisor integrator merges.",
-    "No hosted readiness, successful CI, independent approval or merged delivery is asserted by this owner manifest."
+    "Required CI currently fails due to cross-repo Agora contract drift against Pantheon dev (Branch CI runs 34287233832 and 34287225238); requires external contract sync before handoff."
   ],
   "validation_scope": {
     "auth_session_stream_behavior": "The full suite executed public-build-auth-contract (67 tests), OpenClawLlmAuthPanel, managementAi, liveTransport, SSE and agent panel tests, plus chart/grid and strict-live/release protocol regressions. No privileged hosted auth was performed.",
     "source_boundary_check": "git diff --check origin/dev...HEAD; only package.json, package-lock.json and this evidence manifest are task delivery files. Product TS/TSX, vite.config.ts, deployment workflows and scripts unchanged.",
     "install_warnings": "npm reports existing deprecated transitive packages; compatible upgrade work remains assigned to the separate FE baseline tasks.",
-    "remote_gates": "Required GitHub checks, canonical independent exact-head approval and supervisor merge must be collected against the final head; not represented as local test successes."
+    "remote_gates": "Required GitHub checks (Branch CI runs 34287233832 and 34287225238) fail Component merge gate at npm run test:contract due to cross-repo Agora contract drift against Pantheon dev. Resolving this drift requires updating src/lib/bff-v1/agora/types.ts which is outside the FE-DEP-CLOSURE-001 declared artifact scope."
   }
 }
