@@ -1,8 +1,8 @@
 {
   "schema_version": "pantheon.task-review-evidence.v1",
   "task_id": "FE-DEP-CLOSURE-001",
-  "owner": "Codex",
-  "reviewer": "Codex2",
+  "owner": "Claude",
+  "reviewer": "Codex",
   "target_repo": "ajoe734/execute-plans",
   "merge_target": "dev",
   "branch": "task/FE-DEP-CLOSURE-001",
@@ -2558,7 +2558,7 @@
   "independent_review_required": [
     "Review all 94 dispositions including the concrete Bun retention exception and Lovable plugin consumer.",
     "Verify auth/session/SSE, graph, chart and rendering behavior tests and configured strict-live build results.",
-    "Bind this committed manifest to the exact current-dev PR head, run required CI and approve canonically as Codex2; only supervisor integrator merges.",
+    "Bind this committed manifest to the exact current-dev PR head, run required CI and approve canonically as Codex; only supervisor integrator merges.",
     "No hosted readiness, successful CI, independent approval or merged delivery is asserted by this owner manifest."
   ],
   "validation_scope": {
