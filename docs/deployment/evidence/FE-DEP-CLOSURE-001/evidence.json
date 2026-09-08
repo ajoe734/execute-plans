@@ -1,0 +1,2557 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "FE-DEP-CLOSURE-001",
+  "owner": "Codex",
+  "reviewer": "Codex2",
+  "target_repo": "ajoe734/execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-DEP-CLOSURE-001",
+  "status": "owner-validation-in-progress",
+  "source_identity": {
+    "audit_frontend_base": "5d4f385284b44a30e10764426a47fd808a7ae3cb",
+    "current_dev_base": "fda58bb05052c90e0e18310666ad174b5ab3ff51",
+    "implementation_anchor": "75ed57e8",
+    "file_hashes": {
+      "package.json": {
+        "before_sha256": "d11e3b573d10cc32de05cb9d861c610ee97c1bfe36588ee8d3ee489249badaf8",
+        "after_sha256": "700b0fa7498e5fa2b8784a9137117f12887e220599a8bc5a2b09ecfecfee0221"
+      },
+      "package-lock.json": {
+        "before_sha256": "96fe9dd97d4d03f3ee0a760e6e59f0187e533236f01d6b96acb401b1084eac05",
+        "after_sha256": "50a0bde81b88f908a9bcf081128f7cf6870fe2d1d10ba7e63fc3ed782af9f040"
+      },
+      "bun.lock": {
+        "before_sha256": "e90f84e998edba792b2dc29bcb4573ade2e7f4dc2ddbe22016ba6ccad303bca3",
+        "after_sha256": "e90f84e998edba792b2dc29bcb4573ade2e7f4dc2ddbe22016ba6ccad303bca3"
+      },
+      "bun.lockb": {
+        "before_sha256": "f10928896cc65832b56af9d253bd1a3640b2c890cebc1714619a66880d0a561b",
+        "after_sha256": "f10928896cc65832b56af9d253bd1a3640b2c890cebc1714619a66880d0a561b"
+      },
+      "vite.config.ts": {
+        "before_sha256": "4f638fca493322f0c58206e59fa35df4a34c2174f86ab9d7e9a36cfe68a65e4e",
+        "after_sha256": "4f638fca493322f0c58206e59fa35df4a34c2174f86ab9d7e9a36cfe68a65e4e"
+      }
+    },
+    "final_head_binding": "Canonical handoff binds the exact final PR head containing this manifest; independent approval and merge remain required."
+  },
+  "scope": {
+    "removed_direct_dependencies": [
+      "@ai-sdk/react",
+      "@hookform/resolvers",
+      "react-markdown",
+      "@tailwindcss/typography"
+    ],
+    "removed_npm_lock_nodes": [
+      "node_modules/@ai-sdk/react",
+      "node_modules/@hookform/resolvers",
+      "node_modules/@tailwindcss/typography",
+      "node_modules/@tailwindcss/typography/node_modules/postcss-selector-parser",
+      "node_modules/lodash.castarray",
+      "node_modules/lodash.isplainobject",
+      "node_modules/react-markdown",
+      "node_modules/swr",
+      "node_modules/throttleit"
+    ],
+    "added_npm_lock_nodes": [],
+    "retained_version_changes": [],
+    "unchanged_product_source": true,
+    "unchanged_build_config": true,
+    "hosted_deployment_performed": false
+  },
+  "consumer_audit": {
+    "audit_packages": 94,
+    "current_dev_packages": 94,
+    "after_direct_packages": 90,
+    "new_or_missing_audit_packages": [],
+    "tracked_files_considered": 1155,
+    "method": "Parse all tracked JS/TS/JSX/TSX/MJS/CJS source files with TypeScript AST for import/export-from/side-effect/type imports and literal import()/require()/require.resolve(). Inspect nonliteral dynamic sites and import.meta.glob separately. Cross-check entire tracked source/config/scripts/workflows/docs for candidate names, including test mocks, CSS/config plugin names and CLI consumers. Review package peerDependencies for implicit consumers. Lockfile mentions alone do not prove active npm consumption. Each row records the full reference count and up to four concrete examples per reference kind; the embedded reproducible audit script writes every reference to /tmp/fe-dep-audit.json.",
+    "reproduction_audit_script": "const fs = require('node:fs');\nconst cp = require('node:child_process');\nconst path = require('node:path');\nconst root = process.cwd();\nconst ts = require(path.join(root, 'node_modules/typescript'));\nconst pkg = JSON.parse(cp.execFileSync('git', ['show', 'origin/dev:package.json'], {encoding:'utf8'}));\nconst deps = {...pkg.dependencies, ...pkg.devDependencies};\nconst rows = Object.fromEntries(Object.entries(deps).map(([name, declared]) => [name, {name, declared, consumers: []}]));\nconst unresolved = [];\nconst files = cp.execFileSync('git', ['ls-files','-z'], {encoding:'utf8'}).split('\\0').filter(Boolean);\nfunction record(spec, file, node, sf, kind) {\n  const name = Object.keys(rows).find(n => spec === n || spec.startsWith(n+'/'));\n  if(name) rows[name].consumers.push({file, line:sf.getLineAndCharacterOfPosition(node.getStart(sf)).line+1, kind, specifier:spec});\n}\nfor(const file of files.filter(f => /\\.(?:[cm]?[jt]sx?|css)$/.test(f))) {\n  const source=fs.readFileSync(file,'utf8');\n  const sf=ts.createSourceFile(file,source,ts.ScriptTarget.Latest,true);\n  function visit(node) {\n    if((ts.isImportDeclaration(node)||ts.isExportDeclaration(node)) && node.moduleSpecifier && ts.isStringLiteralLike(node.moduleSpecifier)) {\n      const typeOnly = node.importClause?.isTypeOnly || node.isTypeOnly || (node.importClause?.namedBindings?.elements?.length && !node.importClause.name && node.importClause.namedBindings.elements.every(e=>e.isTypeOnly));\n      record(node.moduleSpecifier.text,file,node,sf,typeOnly?'type import':'static import/export');\n    }\n    if(ts.isCallExpression(node) && (node.expression.kind===ts.SyntaxKind.ImportKeyword || node.expression.getText(sf)==='require' || node.expression.getText(sf)==='require.resolve')) {\n      const arg=node.arguments[0];\n      if(arg && ts.isStringLiteralLike(arg)) record(arg.text,file,node,sf,node.expression.kind===ts.SyntaxKind.ImportKeyword?'dynamic import':'require');\n      else unresolved.push({file,line:sf.getLineAndCharacterOfPosition(node.getStart(sf)).line+1,expression:node.getText(sf)});\n    }\n    ts.forEachChild(node,visit);\n  }\n  visit(sf);\n}\nfs.writeFileSync('/tmp/fe-dep-audit.json', JSON.stringify({scannedFiles:files.length,packages:Object.values(rows),unresolved},null,2)+'\\n');\nfor(const row of Object.values(rows)) console.log(row.name+': '+row.consumers.length+' '+row.consumers.slice(0,2).map(c=>c.file+':'+c.line+' ('+c.kind+')').join(', '));\nconsole.log('NONLITERAL',JSON.stringify(unresolved));\n",
+    "nonliteral_dynamic_sites": [
+      {
+        "file": "src/test/validate-management-live-deep-sse.test.ts",
+        "line": 26,
+        "expression": "import(\n  pathToFileURL(\n    resolve(process.cwd(), \"scripts/validate-management-live-deep.mjs\"),\n  ).href\n)"
+      }
+    ],
+    "nonliteral_resolution": "The one nonliteral import resolves scripts/validate-management-live-deep.mjs in a test; that file was scanned. import.meta.glob in src/agora/i18n.guard.test.ts loads only local TSX source, which was scanned. No computed external package lookup found.",
+    "packages": [
+      {
+        "package": "@ai-sdk/react",
+        "audit_declared": "^3.0.193",
+        "current_dev_declared": "^3.0.193",
+        "locked_before": "3.0.199",
+        "locked_after": null,
+        "family_owner_task": "FE-DEP-CLOSURE-001",
+        "disposition": "remove-unused-direct-declaration",
+        "reference_count": 0,
+        "static_type_dynamic_references": [],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "No source import/export, dynamic import, require, test/mock reference, package script or configured build plugin consumer. Typography is absent from tailwind.config.ts plugins."
+      },
+      {
+        "package": "@hookform/resolvers",
+        "audit_declared": "^3.10.0",
+        "current_dev_declared": "^3.10.0",
+        "locked_before": "3.10.0",
+        "locked_after": null,
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "remove-unused-direct-declaration",
+        "reference_count": 0,
+        "static_type_dynamic_references": [],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "No source import/export, dynamic import, require, test/mock reference, package script or configured build plugin consumer. Typography is absent from tailwind.config.ts plugins."
+      },
+      {
+        "package": "@radix-ui/react-accordion",
+        "audit_declared": "^1.2.11",
+        "current_dev_declared": "^1.2.11",
+        "locked_before": "1.2.11",
+        "locked_after": "1.2.11",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 1,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/components/ui/accordion.tsx",
+            "line": 2,
+            "kind": "static import/export",
+            "specifier": "@radix-ui/react-accordion"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "@radix-ui/react-alert-dialog",
+        "audit_declared": "^1.1.14",
+        "current_dev_declared": "^1.1.14",
+        "locked_before": "1.1.14",
+        "locked_after": "1.1.14",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 1,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/components/ui/alert-dialog.tsx",
+            "line": 2,
+            "kind": "static import/export",
+            "specifier": "@radix-ui/react-alert-dialog"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "@radix-ui/react-aspect-ratio",
+        "audit_declared": "^1.1.7",
+        "current_dev_declared": "^1.1.7",
+        "locked_before": "1.1.7",
+        "locked_after": "1.1.7",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 1,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/components/ui/aspect-ratio.tsx",
+            "line": 1,
+            "kind": "static import/export",
+            "specifier": "@radix-ui/react-aspect-ratio"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "@radix-ui/react-avatar",
+        "audit_declared": "^1.1.10",
+        "current_dev_declared": "^1.1.10",
+        "locked_before": "1.1.10",
+        "locked_after": "1.1.10",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 1,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/components/ui/avatar.tsx",
+            "line": 2,
+            "kind": "static import/export",
+            "specifier": "@radix-ui/react-avatar"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "@radix-ui/react-checkbox",
+        "audit_declared": "^1.3.2",
+        "current_dev_declared": "^1.3.2",
+        "locked_before": "1.3.2",
+        "locked_after": "1.3.2",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 1,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/components/ui/checkbox.tsx",
+            "line": 2,
+            "kind": "static import/export",
+            "specifier": "@radix-ui/react-checkbox"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "@radix-ui/react-collapsible",
+        "audit_declared": "^1.1.12",
+        "current_dev_declared": "^1.1.12",
+        "locked_before": "1.1.13",
+        "locked_after": "1.1.13",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 1,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/components/ui/collapsible.tsx",
+            "line": 1,
+            "kind": "static import/export",
+            "specifier": "@radix-ui/react-collapsible"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "@radix-ui/react-context-menu",
+        "audit_declared": "^2.2.15",
+        "current_dev_declared": "^2.2.15",
+        "locked_before": "2.2.15",
+        "locked_after": "2.2.15",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 1,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/components/ui/context-menu.tsx",
+            "line": 2,
+            "kind": "static import/export",
+            "specifier": "@radix-ui/react-context-menu"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "@radix-ui/react-dialog",
+        "audit_declared": "^1.1.15",
+        "current_dev_declared": "^1.1.15",
+        "locked_before": "1.1.16",
+        "locked_after": "1.1.16",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 5,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/agora/trading-room/WorkspaceGridEditor.tsx",
+            "line": 2,
+            "kind": "static import/export",
+            "specifier": "@radix-ui/react-dialog"
+          },
+          {
+            "file": "src/agora/trading-room/WorkspaceWidgetRevisionDrawer.tsx",
+            "line": 1,
+            "kind": "static import/export",
+            "specifier": "@radix-ui/react-dialog"
+          },
+          {
+            "file": "src/components/ui/dialog.tsx",
+            "line": 2,
+            "kind": "static import/export",
+            "specifier": "@radix-ui/react-dialog"
+          },
+          {
+            "file": "src/components/ui/sheet.tsx",
+            "line": 1,
+            "kind": "static import/export",
+            "specifier": "@radix-ui/react-dialog"
+          },
+          {
+            "file": "src/components/ui/command.tsx",
+            "line": 2,
+            "kind": "type import",
+            "specifier": "@radix-ui/react-dialog"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "@radix-ui/react-dropdown-menu",
+        "audit_declared": "^2.1.16",
+        "current_dev_declared": "^2.1.16",
+        "locked_before": "2.1.17",
+        "locked_after": "2.1.17",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 1,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/components/ui/dropdown-menu.tsx",
+            "line": 2,
+            "kind": "static import/export",
+            "specifier": "@radix-ui/react-dropdown-menu"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "@radix-ui/react-hover-card",
+        "audit_declared": "^1.1.15",
+        "current_dev_declared": "^1.1.15",
+        "locked_before": "1.1.16",
+        "locked_after": "1.1.16",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 1,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/components/ui/hover-card.tsx",
+            "line": 2,
+            "kind": "static import/export",
+            "specifier": "@radix-ui/react-hover-card"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "@radix-ui/react-label",
+        "audit_declared": "^2.1.7",
+        "current_dev_declared": "^2.1.7",
+        "locked_before": "2.1.7",
+        "locked_after": "2.1.7",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 2,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/components/ui/form.tsx",
+            "line": 2,
+            "kind": "static import/export",
+            "specifier": "@radix-ui/react-label"
+          },
+          {
+            "file": "src/components/ui/label.tsx",
+            "line": 2,
+            "kind": "static import/export",
+            "specifier": "@radix-ui/react-label"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "@radix-ui/react-menubar",
+        "audit_declared": "^1.1.15",
+        "current_dev_declared": "^1.1.15",
+        "locked_before": "1.1.15",
+        "locked_after": "1.1.15",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 1,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/components/ui/menubar.tsx",
+            "line": 2,
+            "kind": "static import/export",
+            "specifier": "@radix-ui/react-menubar"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "@radix-ui/react-navigation-menu",
+        "audit_declared": "^1.2.13",
+        "current_dev_declared": "^1.2.13",
+        "locked_before": "1.2.13",
+        "locked_after": "1.2.13",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 1,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/components/ui/navigation-menu.tsx",
+            "line": 2,
+            "kind": "static import/export",
+            "specifier": "@radix-ui/react-navigation-menu"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "@radix-ui/react-popover",
+        "audit_declared": "^1.1.14",
+        "current_dev_declared": "^1.1.14",
+        "locked_before": "1.1.14",
+        "locked_after": "1.1.14",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 1,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/components/ui/popover.tsx",
+            "line": 2,
+            "kind": "static import/export",
+            "specifier": "@radix-ui/react-popover"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "@radix-ui/react-progress",
+        "audit_declared": "^1.1.7",
+        "current_dev_declared": "^1.1.7",
+        "locked_before": "1.1.7",
+        "locked_after": "1.1.7",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 1,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/components/ui/progress.tsx",
+            "line": 2,
+            "kind": "static import/export",
+            "specifier": "@radix-ui/react-progress"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "@radix-ui/react-radio-group",
+        "audit_declared": "^1.3.7",
+        "current_dev_declared": "^1.3.7",
+        "locked_before": "1.3.7",
+        "locked_after": "1.3.7",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 1,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/components/ui/radio-group.tsx",
+            "line": 2,
+            "kind": "static import/export",
+            "specifier": "@radix-ui/react-radio-group"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "@radix-ui/react-scroll-area",
+        "audit_declared": "^1.2.9",
+        "current_dev_declared": "^1.2.9",
+        "locked_before": "1.2.9",
+        "locked_after": "1.2.9",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 1,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/components/ui/scroll-area.tsx",
+            "line": 2,
+            "kind": "static import/export",
+            "specifier": "@radix-ui/react-scroll-area"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "@radix-ui/react-select",
+        "audit_declared": "^2.2.6",
+        "current_dev_declared": "^2.2.6",
+        "locked_before": "2.3.0",
+        "locked_after": "2.3.0",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 1,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/components/ui/select.tsx",
+            "line": 2,
+            "kind": "static import/export",
+            "specifier": "@radix-ui/react-select"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "@radix-ui/react-separator",
+        "audit_declared": "^1.1.8",
+        "current_dev_declared": "^1.1.8",
+        "locked_before": "1.1.9",
+        "locked_after": "1.1.9",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 1,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/components/ui/separator.tsx",
+            "line": 2,
+            "kind": "static import/export",
+            "specifier": "@radix-ui/react-separator"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "@radix-ui/react-slider",
+        "audit_declared": "^1.3.5",
+        "current_dev_declared": "^1.3.5",
+        "locked_before": "1.3.5",
+        "locked_after": "1.3.5",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 1,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/components/ui/slider.tsx",
+            "line": 2,
+            "kind": "static import/export",
+            "specifier": "@radix-ui/react-slider"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "@radix-ui/react-slot",
+        "audit_declared": "^1.2.4",
+        "current_dev_declared": "^1.2.4",
+        "locked_before": "1.2.5",
+        "locked_after": "1.2.5",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 5,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/components/ui/breadcrumb.tsx",
+            "line": 2,
+            "kind": "static import/export",
+            "specifier": "@radix-ui/react-slot"
+          },
+          {
+            "file": "src/components/ui/button-group.tsx",
+            "line": 1,
+            "kind": "static import/export",
+            "specifier": "@radix-ui/react-slot"
+          },
+          {
+            "file": "src/components/ui/button.tsx",
+            "line": 2,
+            "kind": "static import/export",
+            "specifier": "@radix-ui/react-slot"
+          },
+          {
+            "file": "src/components/ui/form.tsx",
+            "line": 3,
+            "kind": "static import/export",
+            "specifier": "@radix-ui/react-slot"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "@radix-ui/react-switch",
+        "audit_declared": "^1.2.5",
+        "current_dev_declared": "^1.2.5",
+        "locked_before": "1.2.5",
+        "locked_after": "1.2.5",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 1,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/components/ui/switch.tsx",
+            "line": 2,
+            "kind": "static import/export",
+            "specifier": "@radix-ui/react-switch"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "@radix-ui/react-tabs",
+        "audit_declared": "^1.1.12",
+        "current_dev_declared": "^1.1.12",
+        "locked_before": "1.1.12",
+        "locked_after": "1.1.12",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 1,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/components/ui/tabs.tsx",
+            "line": 2,
+            "kind": "static import/export",
+            "specifier": "@radix-ui/react-tabs"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "@radix-ui/react-toast",
+        "audit_declared": "^1.2.14",
+        "current_dev_declared": "^1.2.14",
+        "locked_before": "1.2.14",
+        "locked_after": "1.2.14",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 1,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/components/ui/toast.tsx",
+            "line": 2,
+            "kind": "static import/export",
+            "specifier": "@radix-ui/react-toast"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "@radix-ui/react-toggle",
+        "audit_declared": "^1.1.9",
+        "current_dev_declared": "^1.1.9",
+        "locked_before": "1.1.9",
+        "locked_after": "1.1.9",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 1,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/components/ui/toggle.tsx",
+            "line": 2,
+            "kind": "static import/export",
+            "specifier": "@radix-ui/react-toggle"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "@radix-ui/react-toggle-group",
+        "audit_declared": "^1.1.10",
+        "current_dev_declared": "^1.1.10",
+        "locked_before": "1.1.10",
+        "locked_after": "1.1.10",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 1,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/components/ui/toggle-group.tsx",
+            "line": 2,
+            "kind": "static import/export",
+            "specifier": "@radix-ui/react-toggle-group"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "@radix-ui/react-tooltip",
+        "audit_declared": "^1.2.8",
+        "current_dev_declared": "^1.2.8",
+        "locked_before": "1.2.9",
+        "locked_after": "1.2.9",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 1,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/components/ui/tooltip.tsx",
+            "line": 2,
+            "kind": "static import/export",
+            "specifier": "@radix-ui/react-tooltip"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "@streamdown/cjk",
+        "audit_declared": "^1.0.3",
+        "current_dev_declared": "^1.0.3",
+        "locked_before": "1.0.3",
+        "locked_after": "1.0.3",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 1,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/components/ai-elements/message.tsx",
+            "line": 15,
+            "kind": "static import/export",
+            "specifier": "@streamdown/cjk"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "@streamdown/code",
+        "audit_declared": "^1.1.1",
+        "current_dev_declared": "^1.1.1",
+        "locked_before": "1.1.1",
+        "locked_after": "1.1.1",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 1,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/components/ai-elements/message.tsx",
+            "line": 16,
+            "kind": "static import/export",
+            "specifier": "@streamdown/code"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "@streamdown/math",
+        "audit_declared": "^1.0.2",
+        "current_dev_declared": "^1.0.2",
+        "locked_before": "1.0.2",
+        "locked_after": "1.0.2",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 1,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/components/ai-elements/message.tsx",
+            "line": 17,
+            "kind": "static import/export",
+            "specifier": "@streamdown/math"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "@streamdown/mermaid",
+        "audit_declared": "^1.0.2",
+        "current_dev_declared": "^1.0.2",
+        "locked_before": "1.0.2",
+        "locked_after": "1.0.2",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 1,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/components/ai-elements/message.tsx",
+            "line": 18,
+            "kind": "static import/export",
+            "specifier": "@streamdown/mermaid"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "@tanstack/react-query",
+        "audit_declared": "^5.83.0",
+        "current_dev_declared": "^5.83.0",
+        "locked_before": "5.83.0",
+        "locked_after": "5.83.0",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 1,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/App.tsx",
+            "line": 1,
+            "kind": "static import/export",
+            "specifier": "@tanstack/react-query"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "ai",
+        "audit_declared": "^6.0.191",
+        "current_dev_declared": "^6.0.191",
+        "locked_before": "6.0.197",
+        "locked_after": "6.0.197",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 4,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/components/ai-elements/conversation.tsx",
+            "line": 5,
+            "kind": "type import",
+            "specifier": "ai"
+          },
+          {
+            "file": "src/components/ai-elements/message.tsx",
+            "line": 19,
+            "kind": "type import",
+            "specifier": "ai"
+          },
+          {
+            "file": "src/components/ai-elements/prompt-input.tsx",
+            "line": 43,
+            "kind": "type import",
+            "specifier": "ai"
+          },
+          {
+            "file": "src/components/ai-elements/tool.tsx",
+            "line": 10,
+            "kind": "type import",
+            "specifier": "ai"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "class-variance-authority",
+        "audit_declared": "^0.7.1",
+        "current_dev_declared": "^0.7.1",
+        "locked_before": "0.7.1",
+        "locked_after": "0.7.1",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 12,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/components/ui/alert.tsx",
+            "line": 2,
+            "kind": "static import/export",
+            "specifier": "class-variance-authority"
+          },
+          {
+            "file": "src/components/ui/badge.tsx",
+            "line": 2,
+            "kind": "static import/export",
+            "specifier": "class-variance-authority"
+          },
+          {
+            "file": "src/components/ui/button-group.tsx",
+            "line": 2,
+            "kind": "static import/export",
+            "specifier": "class-variance-authority"
+          },
+          {
+            "file": "src/components/ui/button.tsx",
+            "line": 3,
+            "kind": "static import/export",
+            "specifier": "class-variance-authority"
+          },
+          {
+            "file": "src/components/ui/toggle-group.tsx",
+            "line": 3,
+            "kind": "type import",
+            "specifier": "class-variance-authority"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "clsx",
+        "audit_declared": "^2.1.1",
+        "current_dev_declared": "^2.1.1",
+        "locked_before": "2.1.1",
+        "locked_after": "2.1.1",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 1,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/lib/utils.ts",
+            "line": 1,
+            "kind": "static import/export",
+            "specifier": "clsx"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "cmdk",
+        "audit_declared": "^1.1.1",
+        "current_dev_declared": "^1.1.1",
+        "locked_before": "1.1.1",
+        "locked_after": "1.1.1",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 1,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/components/ui/command.tsx",
+            "line": 3,
+            "kind": "static import/export",
+            "specifier": "cmdk"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "date-fns",
+        "audit_declared": "^3.6.0",
+        "current_dev_declared": "^3.6.0",
+        "locked_before": "3.6.0",
+        "locked_after": "3.6.0",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 0,
+        "static_type_dynamic_references": [],
+        "implicit_build_test_plugin_peer_consumers": [
+          "node_modules/react-day-picker/package.json: peerDependencies.date-fns (^2.28.0 || ^3.0.0); calendar.tsx imports react-day-picker"
+        ],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "embla-carousel-react",
+        "audit_declared": "^8.6.0",
+        "current_dev_declared": "^8.6.0",
+        "locked_before": "8.6.0",
+        "locked_after": "8.6.0",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 1,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/components/ui/carousel.tsx",
+            "line": 2,
+            "kind": "static import/export",
+            "specifier": "embla-carousel-react"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "firebase",
+        "audit_declared": "^12.16.0",
+        "current_dev_declared": "^12.16.0",
+        "locked_before": "12.16.0",
+        "locked_after": "12.16.0",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 6,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/integrations/gcp/identity.ts",
+            "line": 1,
+            "kind": "static import/export",
+            "specifier": "firebase/app"
+          },
+          {
+            "file": "src/integrations/gcp/identity.ts",
+            "line": 2,
+            "kind": "static import/export",
+            "specifier": "firebase/auth"
+          },
+          {
+            "file": "src/lib/auth/AuthProvider.tsx",
+            "line": 10,
+            "kind": "static import/export",
+            "specifier": "firebase/auth"
+          },
+          {
+            "file": "src/pages/Auth.tsx",
+            "line": 3,
+            "kind": "static import/export",
+            "specifier": "firebase/auth"
+          },
+          {
+            "file": "src/lib/auth/AuthProvider.test.tsx",
+            "line": 2,
+            "kind": "type import",
+            "specifier": "firebase/auth"
+          },
+          {
+            "file": "src/lib/auth/bffBrowserSession.test.ts",
+            "line": 2,
+            "kind": "type import",
+            "specifier": "firebase/auth"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "i18next",
+        "audit_declared": "^26.0.8",
+        "current_dev_declared": "^26.0.8",
+        "locked_before": "26.0.10",
+        "locked_after": "26.0.10",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 6,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/i18n/index.ts",
+            "line": 1,
+            "kind": "static import/export",
+            "specifier": "i18next"
+          },
+          {
+            "file": "src/agora/i18n.guard.test.ts",
+            "line": 2,
+            "kind": "type import",
+            "specifier": "i18next"
+          },
+          {
+            "file": "src/agora/i18n.ts",
+            "line": 1,
+            "kind": "type import",
+            "specifier": "i18next"
+          },
+          {
+            "file": "src/agora/pages/strategy-performance/StrategyPerformancePage.tsx",
+            "line": 3,
+            "kind": "type import",
+            "specifier": "i18next"
+          },
+          {
+            "file": "src/agora/pages/trading-room/TradingRoomPage.tsx",
+            "line": 3,
+            "kind": "type import",
+            "specifier": "i18next"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "input-otp",
+        "audit_declared": "^1.4.2",
+        "current_dev_declared": "^1.4.2",
+        "locked_before": "1.4.2",
+        "locked_after": "1.4.2",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 1,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/components/ui/input-otp.tsx",
+            "line": 2,
+            "kind": "static import/export",
+            "specifier": "input-otp"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "lucide-react",
+        "audit_declared": "^1.16.0",
+        "current_dev_declared": "^1.16.0",
+        "locked_before": "1.17.0",
+        "locked_after": "1.17.0",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 133,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/agora/components/DailyInteractionTimeline.tsx",
+            "line": 2,
+            "kind": "static import/export",
+            "specifier": "lucide-react"
+          },
+          {
+            "file": "src/agora/components/DebateCard.tsx",
+            "line": 13,
+            "kind": "static import/export",
+            "specifier": "lucide-react"
+          },
+          {
+            "file": "src/agora/components/GovernedProposalCard.tsx",
+            "line": 2,
+            "kind": "static import/export",
+            "specifier": "lucide-react"
+          },
+          {
+            "file": "src/agora/components/PersonaOpinionCard.tsx",
+            "line": 16,
+            "kind": "static import/export",
+            "specifier": "lucide-react"
+          },
+          {
+            "file": "src/platform/components/SideNav.tsx",
+            "line": 3,
+            "kind": "type import",
+            "specifier": "lucide-react"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "motion",
+        "audit_declared": "^12.40.0",
+        "current_dev_declared": "^12.40.0",
+        "locked_before": "12.40.0",
+        "locked_after": "12.40.0",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 2,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/components/ai-elements/shimmer.tsx",
+            "line": 5,
+            "kind": "static import/export",
+            "specifier": "motion/react"
+          },
+          {
+            "file": "src/components/ai-elements/shimmer.tsx",
+            "line": 4,
+            "kind": "type import",
+            "specifier": "motion/react"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "nanoid",
+        "audit_declared": "^5.1.11",
+        "current_dev_declared": "^5.1.11",
+        "locked_before": "5.1.11",
+        "locked_after": "5.1.11",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 1,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/components/ai-elements/prompt-input.tsx",
+            "line": 52,
+            "kind": "static import/export",
+            "specifier": "nanoid"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "next-themes",
+        "audit_declared": "^0.3.0",
+        "current_dev_declared": "^0.3.0",
+        "locked_before": "0.3.0",
+        "locked_after": "0.3.0",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 1,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/components/ui/sonner.tsx",
+            "line": 1,
+            "kind": "static import/export",
+            "specifier": "next-themes"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "react",
+        "audit_declared": "^18.3.1",
+        "current_dev_declared": "^18.3.1",
+        "locked_before": "18.3.1",
+        "locked_after": "18.3.1",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 269,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/agora/pages/trading-room/TradingRoomPage.test.tsx",
+            "line": 77,
+            "kind": "dynamic import",
+            "specifier": "react"
+          },
+          {
+            "file": "src/agora/trading-room/WorkspaceGridEditor.test.tsx",
+            "line": 137,
+            "kind": "dynamic import",
+            "specifier": "react"
+          },
+          {
+            "file": "src/agora/trading-room/WorkspaceGridEditor.test.tsx",
+            "line": 147,
+            "kind": "dynamic import",
+            "specifier": "react"
+          },
+          {
+            "file": "src/agora/trading-room/WorkspaceGridEditor.test.tsx",
+            "line": 154,
+            "kind": "dynamic import",
+            "specifier": "react"
+          },
+          {
+            "file": "src/agora/TradingDeskLayout.test.tsx",
+            "line": 1,
+            "kind": "static import/export",
+            "specifier": "react"
+          },
+          {
+            "file": "src/agora/TradingDeskLayout.tsx",
+            "line": 22,
+            "kind": "static import/export",
+            "specifier": "react"
+          },
+          {
+            "file": "src/agora/components/BacktestResultCard.test.tsx",
+            "line": 1,
+            "kind": "static import/export",
+            "specifier": "react"
+          },
+          {
+            "file": "src/agora/components/BacktestResultCard.tsx",
+            "line": 1,
+            "kind": "static import/export",
+            "specifier": "react"
+          },
+          {
+            "file": "src/agora/components/WorkshopCardPrimitives.tsx",
+            "line": 1,
+            "kind": "type import",
+            "specifier": "react"
+          },
+          {
+            "file": "src/components/ai-elements/code-block.tsx",
+            "line": 13,
+            "kind": "type import",
+            "specifier": "react"
+          },
+          {
+            "file": "src/components/ai-elements/conversation.tsx",
+            "line": 7,
+            "kind": "type import",
+            "specifier": "react"
+          },
+          {
+            "file": "src/components/ai-elements/message.tsx",
+            "line": 21,
+            "kind": "type import",
+            "specifier": "react"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "react-day-picker",
+        "audit_declared": "^8.10.1",
+        "current_dev_declared": "^8.10.1",
+        "locked_before": "8.10.1",
+        "locked_after": "8.10.1",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 1,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/components/ui/calendar.tsx",
+            "line": 3,
+            "kind": "static import/export",
+            "specifier": "react-day-picker"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "react-dom",
+        "audit_declared": "^18.3.1",
+        "current_dev_declared": "^18.3.1",
+        "locked_before": "18.3.1",
+        "locked_after": "18.3.1",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 2,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/main.tsx",
+            "line": 1,
+            "kind": "static import/export",
+            "specifier": "react-dom/client"
+          },
+          {
+            "file": "src/management/components/agent/FloatingAgentPanel.tsx",
+            "line": 5,
+            "kind": "static import/export",
+            "specifier": "react-dom"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "react-hook-form",
+        "audit_declared": "^7.61.1",
+        "current_dev_declared": "^7.61.1",
+        "locked_before": "7.61.1",
+        "locked_after": "7.61.1",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 1,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/components/ui/form.tsx",
+            "line": 4,
+            "kind": "static import/export",
+            "specifier": "react-hook-form"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "react-i18next",
+        "audit_declared": "^17.0.6",
+        "current_dev_declared": "^17.0.6",
+        "locked_before": "17.0.7",
+        "locked_after": "17.0.7",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 68,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/agora/pages/strategy-performance/StrategyPerformancePage.tsx",
+            "line": 2,
+            "kind": "static import/export",
+            "specifier": "react-i18next"
+          },
+          {
+            "file": "src/agora/pages/trading-room/AttributionReportView.tsx",
+            "line": 2,
+            "kind": "static import/export",
+            "specifier": "react-i18next"
+          },
+          {
+            "file": "src/agora/pages/trading-room/TradingRoomPage.tsx",
+            "line": 2,
+            "kind": "static import/export",
+            "specifier": "react-i18next"
+          },
+          {
+            "file": "src/agora/pages/trading-room/TradingRoomWorkspace.tsx",
+            "line": 2,
+            "kind": "static import/export",
+            "specifier": "react-i18next"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "react-markdown",
+        "audit_declared": "^10.1.0",
+        "current_dev_declared": "^10.1.0",
+        "locked_before": "10.1.0",
+        "locked_after": null,
+        "family_owner_task": "FE-DEP-CLOSURE-001",
+        "disposition": "remove-unused-direct-declaration",
+        "reference_count": 0,
+        "static_type_dynamic_references": [],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "No source import/export, dynamic import, require, test/mock reference, package script or configured build plugin consumer. Typography is absent from tailwind.config.ts plugins."
+      },
+      {
+        "package": "react-resizable-panels",
+        "audit_declared": "^2.1.9",
+        "current_dev_declared": "^2.1.9",
+        "locked_before": "2.1.9",
+        "locked_after": "2.1.9",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 1,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/components/ui/resizable.tsx",
+            "line": 2,
+            "kind": "static import/export",
+            "specifier": "react-resizable-panels"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "react-router-dom",
+        "audit_declared": "^6.30.1",
+        "current_dev_declared": "^6.30.1",
+        "locked_before": "6.30.4",
+        "locked_after": "6.30.4",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 138,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/App.tsx",
+            "line": 2,
+            "kind": "static import/export",
+            "specifier": "react-router-dom"
+          },
+          {
+            "file": "src/agora/TradingDeskLayout.test.tsx",
+            "line": 4,
+            "kind": "static import/export",
+            "specifier": "react-router-dom"
+          },
+          {
+            "file": "src/agora/TradingDeskLayout.tsx",
+            "line": 23,
+            "kind": "static import/export",
+            "specifier": "react-router-dom"
+          },
+          {
+            "file": "src/agora/components/TradeDecisionCard.tsx",
+            "line": 14,
+            "kind": "static import/export",
+            "specifier": "react-router-dom"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "recharts",
+        "audit_declared": "^2.15.4",
+        "current_dev_declared": "^2.15.4",
+        "locked_before": "2.15.4",
+        "locked_after": "2.15.4",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 6,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/agora/widgets/ChartSpecRenderer.tsx",
+            "line": 4,
+            "kind": "static import/export",
+            "specifier": "recharts"
+          },
+          {
+            "file": "src/components/ui/chart.tsx",
+            "line": 2,
+            "kind": "static import/export",
+            "specifier": "recharts"
+          },
+          {
+            "file": "src/management/components/detail/PersonaEvaluationsTab.tsx",
+            "line": 7,
+            "kind": "static import/export",
+            "specifier": "recharts"
+          },
+          {
+            "file": "src/management/components/detail/StrategyPaperLiveTab.tsx",
+            "line": 5,
+            "kind": "static import/export",
+            "specifier": "recharts"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "shiki",
+        "audit_declared": "^4.1.0",
+        "current_dev_declared": "^4.1.0",
+        "locked_before": "4.2.0",
+        "locked_after": "4.2.0",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 2,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/components/ai-elements/code-block.tsx",
+            "line": 30,
+            "kind": "static import/export",
+            "specifier": "shiki"
+          },
+          {
+            "file": "src/components/ai-elements/code-block.tsx",
+            "line": 24,
+            "kind": "type import",
+            "specifier": "shiki"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "sonner",
+        "audit_declared": "^1.7.4",
+        "current_dev_declared": "^1.7.4",
+        "locked_before": "1.7.4",
+        "locked_after": "1.7.4",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 30,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/components/ui/sonner.tsx",
+            "line": 2,
+            "kind": "static import/export",
+            "specifier": "sonner"
+          },
+          {
+            "file": "src/lib/bff-v1/__tests__/writes.test.ts",
+            "line": 7,
+            "kind": "static import/export",
+            "specifier": "sonner"
+          },
+          {
+            "file": "src/lib/bff-v1/runActionSafe.ts",
+            "line": 11,
+            "kind": "static import/export",
+            "specifier": "sonner"
+          },
+          {
+            "file": "src/management/components/detail/AllocationLimitsManager.tsx",
+            "line": 12,
+            "kind": "static import/export",
+            "specifier": "sonner"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "streamdown",
+        "audit_declared": "^2.5.0",
+        "current_dev_declared": "^2.5.0",
+        "locked_before": "2.5.0",
+        "locked_after": "2.5.0",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 1,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/components/ai-elements/message.tsx",
+            "line": 31,
+            "kind": "static import/export",
+            "specifier": "streamdown"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "tailwind-merge",
+        "audit_declared": "^2.6.0",
+        "current_dev_declared": "^2.6.0",
+        "locked_before": "2.6.0",
+        "locked_after": "2.6.0",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 1,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/lib/utils.ts",
+            "line": 2,
+            "kind": "static import/export",
+            "specifier": "tailwind-merge"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "tailwindcss-animate",
+        "audit_declared": "^1.0.7",
+        "current_dev_declared": "^1.0.7",
+        "locked_before": "1.0.7",
+        "locked_after": "1.0.7",
+        "family_owner_task": "FE-TOOLCHAIN-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 1,
+        "static_type_dynamic_references": [
+          {
+            "file": "tailwind.config.ts",
+            "line": 2,
+            "kind": "static import/export",
+            "specifier": "tailwindcss-animate"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "use-stick-to-bottom",
+        "audit_declared": "^1.1.4",
+        "current_dev_declared": "^1.1.4",
+        "locked_before": "1.1.6",
+        "locked_after": "1.1.6",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 1,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/components/ai-elements/conversation.tsx",
+            "line": 9,
+            "kind": "static import/export",
+            "specifier": "use-stick-to-bottom"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "vaul",
+        "audit_declared": "^0.9.9",
+        "current_dev_declared": "^0.9.9",
+        "locked_before": "0.9.9",
+        "locked_after": "0.9.9",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 1,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/components/ui/drawer.tsx",
+            "line": 2,
+            "kind": "static import/export",
+            "specifier": "vaul"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "zod",
+        "audit_declared": "^3.25.76",
+        "current_dev_declared": "^3.25.76",
+        "locked_before": "3.25.76",
+        "locked_after": "3.25.76",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 1,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/test/e2e-scenarios.test.ts",
+            "line": 10,
+            "kind": "static import/export",
+            "specifier": "zod"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "zustand",
+        "audit_declared": "^5.0.12",
+        "current_dev_declared": "^5.0.12",
+        "locked_before": "5.0.13",
+        "locked_after": "5.0.13",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 6,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/lib/handoff.ts",
+            "line": 7,
+            "kind": "static import/export",
+            "specifier": "zustand"
+          },
+          {
+            "file": "src/platform/components/JobProgressDrawer.tsx",
+            "line": 8,
+            "kind": "static import/export",
+            "specifier": "zustand"
+          },
+          {
+            "file": "src/platform/components/NotificationCenter.tsx",
+            "line": 4,
+            "kind": "static import/export",
+            "specifier": "zustand"
+          },
+          {
+            "file": "src/platform/components/RightDrawer.tsx",
+            "line": 3,
+            "kind": "static import/export",
+            "specifier": "zustand"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "echarts",
+        "audit_declared": "^6.1.0",
+        "current_dev_declared": "^6.1.0",
+        "locked_before": "6.1.0",
+        "locked_after": "6.1.0",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 1,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/agora/widgets/ChartSpecRenderer.tsx",
+            "line": 2,
+            "kind": "type import",
+            "specifier": "echarts"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [
+          "node_modules/echarts-for-react/package.json peerDependencies.echarts; ChartSpecRenderer.tsx runtime ECharts React wrapper"
+        ],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "echarts-for-react",
+        "audit_declared": "^3.0.2",
+        "current_dev_declared": "^3.0.2",
+        "locked_before": "3.0.6",
+        "locked_after": "3.0.6",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 1,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/agora/widgets/ChartSpecRenderer.tsx",
+            "line": 3,
+            "kind": "static import/export",
+            "specifier": "echarts-for-react"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "react-grid-layout",
+        "audit_declared": "^1.5.0",
+        "current_dev_declared": "^1.5.0",
+        "locked_before": "1.5.3",
+        "locked_after": "1.5.3",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 3,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/agora/trading-room/WorkspaceGridEditor.tsx",
+            "line": 5,
+            "kind": "static import/export",
+            "specifier": "react-grid-layout"
+          },
+          {
+            "file": "src/agora/trading-room/WorkspaceGridEditor.tsx",
+            "line": 6,
+            "kind": "static import/export",
+            "specifier": "react-grid-layout/css/styles.css"
+          },
+          {
+            "file": "src/agora/pages/trading-room/TradingRoomPage.test.tsx",
+            "line": 5,
+            "kind": "type import",
+            "specifier": "react-grid-layout"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "@axe-core/playwright",
+        "audit_declared": "^4.11.3",
+        "current_dev_declared": "^4.11.3",
+        "locked_before": "4.11.3",
+        "locked_after": "4.11.3",
+        "family_owner_task": "FE-TOOLCHAIN-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 6,
+        "static_type_dynamic_references": [
+          {
+            "file": "scripts/probe-hosted-browser-bff.mjs",
+            "line": 1947,
+            "kind": "dynamic import",
+            "specifier": "@axe-core/playwright"
+          },
+          {
+            "file": "e2e/17-a11y-v5.spec.ts",
+            "line": 1,
+            "kind": "static import/export",
+            "specifier": "@axe-core/playwright"
+          },
+          {
+            "file": "e2e/24-trade-journeys.spec.ts",
+            "line": 1,
+            "kind": "static import/export",
+            "specifier": "@axe-core/playwright"
+          },
+          {
+            "file": "e2e/agora-candidate-truth.spec.ts",
+            "line": 1,
+            "kind": "static import/export",
+            "specifier": "@axe-core/playwright"
+          },
+          {
+            "file": "e2e/ppl-alloc-009-cross-repo-hosted.spec.ts",
+            "line": 11,
+            "kind": "static import/export",
+            "specifier": "@axe-core/playwright"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "@eslint/js",
+        "audit_declared": "^9.32.0",
+        "current_dev_declared": "^9.32.0",
+        "locked_before": "9.32.0",
+        "locked_after": "9.32.0",
+        "family_owner_task": "FE-TOOLCHAIN-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 1,
+        "static_type_dynamic_references": [
+          {
+            "file": "eslint.config.js",
+            "line": 1,
+            "kind": "static import/export",
+            "specifier": "@eslint/js"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "@playwright/test",
+        "audit_declared": "^1.60.0",
+        "current_dev_declared": "^1.60.0",
+        "locked_before": "1.60.0",
+        "locked_after": "1.60.0",
+        "family_owner_task": "FE-TOOLCHAIN-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 61,
+        "static_type_dynamic_references": [
+          {
+            "file": "scripts/accept-management-hosted-production.mjs",
+            "line": 122,
+            "kind": "dynamic import",
+            "specifier": "@playwright/test"
+          },
+          {
+            "file": "scripts/probe-hosted-browser-bff.mjs",
+            "line": 1945,
+            "kind": "dynamic import",
+            "specifier": "@playwright/test"
+          },
+          {
+            "file": "scripts/probe-route-load-baseline.mjs",
+            "line": 69,
+            "kind": "dynamic import",
+            "specifier": "@playwright/test"
+          },
+          {
+            "file": "crawl_final.mjs",
+            "line": 1,
+            "kind": "static import/export",
+            "specifier": "@playwright/test"
+          },
+          {
+            "file": "e2e/01-startup-session.spec.ts",
+            "line": 30,
+            "kind": "static import/export",
+            "specifier": "@playwright/test"
+          },
+          {
+            "file": "e2e/02-control-room.spec.ts",
+            "line": 20,
+            "kind": "static import/export",
+            "specifier": "@playwright/test"
+          },
+          {
+            "file": "e2e/03-execution-loop.spec.ts",
+            "line": 24,
+            "kind": "static import/export",
+            "specifier": "@playwright/test"
+          },
+          {
+            "file": "e2e/01-startup-session.spec.ts",
+            "line": 31,
+            "kind": "type import",
+            "specifier": "@playwright/test"
+          },
+          {
+            "file": "e2e/evochain009.spec.ts",
+            "line": 2,
+            "kind": "type import",
+            "specifier": "@playwright/test"
+          },
+          {
+            "file": "e2e/helpers/auth.ts",
+            "line": 2,
+            "kind": "type import",
+            "specifier": "@playwright/test"
+          },
+          {
+            "file": "e2e/helpers/bff.ts",
+            "line": 1,
+            "kind": "type import",
+            "specifier": "@playwright/test"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "@tailwindcss/typography",
+        "audit_declared": "^0.5.16",
+        "current_dev_declared": "^0.5.16",
+        "locked_before": "0.5.16",
+        "locked_after": null,
+        "family_owner_task": "FE-TOOLCHAIN-BASELINE-001",
+        "disposition": "remove-unused-direct-declaration",
+        "reference_count": 0,
+        "static_type_dynamic_references": [],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "No source import/export, dynamic import, require, test/mock reference, package script or configured build plugin consumer. Typography is absent from tailwind.config.ts plugins."
+      },
+      {
+        "package": "@testing-library/jest-dom",
+        "audit_declared": "^6.6.0",
+        "current_dev_declared": "^6.6.0",
+        "locked_before": "6.9.1",
+        "locked_after": "6.9.1",
+        "family_owner_task": "FE-TOOLCHAIN-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 7,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/management/pages/DeploymentDetail.tradeJourneys.test.tsx",
+            "line": 1,
+            "kind": "static import/export",
+            "specifier": "@testing-library/jest-dom/vitest"
+          },
+          {
+            "file": "src/management/pages/IncidentDetail.tradeJourneys.test.tsx",
+            "line": 1,
+            "kind": "static import/export",
+            "specifier": "@testing-library/jest-dom/vitest"
+          },
+          {
+            "file": "src/management/pages/StrategyDetail.tradeJourneys.test.tsx",
+            "line": 1,
+            "kind": "static import/export",
+            "specifier": "@testing-library/jest-dom/vitest"
+          },
+          {
+            "file": "src/management/pages/studios/FormulaStudio.test.tsx",
+            "line": 1,
+            "kind": "static import/export",
+            "specifier": "@testing-library/jest-dom/vitest"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "@testing-library/react",
+        "audit_declared": "^16.0.0",
+        "current_dev_declared": "^16.0.0",
+        "locked_before": "16.3.2",
+        "locked_after": "16.3.2",
+        "family_owner_task": "FE-TOOLCHAIN-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 77,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/management/pages/Runtimes.test.tsx",
+            "line": 210,
+            "kind": "dynamic import",
+            "specifier": "@testing-library/react"
+          },
+          {
+            "file": "src/management/pages/Runtimes.test.tsx",
+            "line": 262,
+            "kind": "dynamic import",
+            "specifier": "@testing-library/react"
+          },
+          {
+            "file": "src/management/pages/Runtimes.test.tsx",
+            "line": 314,
+            "kind": "dynamic import",
+            "specifier": "@testing-library/react"
+          },
+          {
+            "file": "src/agora/TradingDeskLayout.test.tsx",
+            "line": 2,
+            "kind": "static import/export",
+            "specifier": "@testing-library/react"
+          },
+          {
+            "file": "src/agora/components/BacktestResultCard.test.tsx",
+            "line": 2,
+            "kind": "static import/export",
+            "specifier": "@testing-library/react"
+          },
+          {
+            "file": "src/agora/components/CandidateReviewDrawer.test.tsx",
+            "line": 2,
+            "kind": "static import/export",
+            "specifier": "@testing-library/react"
+          },
+          {
+            "file": "src/agora/components/ConnectedGovernedProposalCard.test.tsx",
+            "line": 1,
+            "kind": "static import/export",
+            "specifier": "@testing-library/react"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "@types/node",
+        "audit_declared": "^22.16.5",
+        "current_dev_declared": "^22.16.5",
+        "locked_before": "22.16.5",
+        "locked_after": "22.16.5",
+        "family_owner_task": "FE-TOOLCHAIN-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 0,
+        "static_type_dynamic_references": [],
+        "implicit_build_test_plugin_peer_consumers": [
+          "tsconfig.node.json and Vite/test/script node:fs/node:path imports use installed Node declarations"
+        ],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "@types/react",
+        "audit_declared": "^18.3.23",
+        "current_dev_declared": "^18.3.23",
+        "locked_before": "18.3.23",
+        "locked_after": "18.3.23",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 0,
+        "static_type_dynamic_references": [],
+        "implicit_build_test_plugin_peer_consumers": [
+          "tsconfig.app.json: jsx=react-jsx; React component and JSX declarations"
+        ],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "@types/react-dom",
+        "audit_declared": "^18.3.7",
+        "current_dev_declared": "^18.3.7",
+        "locked_before": "18.3.7",
+        "locked_after": "18.3.7",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 0,
+        "static_type_dynamic_references": [],
+        "implicit_build_test_plugin_peer_consumers": [
+          "src/main.tsx:1 react-dom/client createRoot declarations"
+        ],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "@vitejs/plugin-react-swc",
+        "audit_declared": "^3.11.0",
+        "current_dev_declared": "^3.11.0",
+        "locked_before": "3.11.0",
+        "locked_after": "3.11.0",
+        "family_owner_task": "FE-TOOLCHAIN-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 2,
+        "static_type_dynamic_references": [
+          {
+            "file": "vite.config.ts",
+            "line": 2,
+            "kind": "static import/export",
+            "specifier": "@vitejs/plugin-react-swc"
+          },
+          {
+            "file": "vitest.config.ts",
+            "line": 2,
+            "kind": "static import/export",
+            "specifier": "@vitejs/plugin-react-swc"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "autoprefixer",
+        "audit_declared": "^10.4.21",
+        "current_dev_declared": "^10.4.21",
+        "locked_before": "10.4.21",
+        "locked_after": "10.4.21",
+        "family_owner_task": "FE-TOOLCHAIN-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 0,
+        "static_type_dynamic_references": [],
+        "implicit_build_test_plugin_peer_consumers": [
+          "postcss.config.js:4 named PostCSS plugin"
+        ],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "axe-core",
+        "audit_declared": "^4.11.4",
+        "current_dev_declared": "^4.11.4",
+        "locked_before": "4.11.4",
+        "locked_after": "4.11.4",
+        "family_owner_task": "FE-TOOLCHAIN-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 3,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/management/pages/oversight/RankingRecommendationPages.test.tsx",
+            "line": 3,
+            "kind": "static import/export",
+            "specifier": "axe-core"
+          },
+          {
+            "file": "src/test/a11y-axe-smoke-v5.test.tsx",
+            "line": 9,
+            "kind": "static import/export",
+            "specifier": "axe-core"
+          },
+          {
+            "file": "src/test/a11y-axe-smoke.test.tsx",
+            "line": 9,
+            "kind": "static import/export",
+            "specifier": "axe-core"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "eslint",
+        "audit_declared": "^9.32.0",
+        "current_dev_declared": "^9.32.0",
+        "locked_before": "9.32.0",
+        "locked_after": "9.32.0",
+        "family_owner_task": "FE-TOOLCHAIN-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 0,
+        "static_type_dynamic_references": [],
+        "implicit_build_test_plugin_peer_consumers": [
+          "package.json scripts.lint=eslint .; eslint.config.js"
+        ],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "eslint-plugin-react-hooks",
+        "audit_declared": "^5.2.0",
+        "current_dev_declared": "^5.2.0",
+        "locked_before": "5.2.0",
+        "locked_after": "5.2.0",
+        "family_owner_task": "FE-TOOLCHAIN-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 1,
+        "static_type_dynamic_references": [
+          {
+            "file": "eslint.config.js",
+            "line": 3,
+            "kind": "static import/export",
+            "specifier": "eslint-plugin-react-hooks"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "eslint-plugin-react-refresh",
+        "audit_declared": "^0.4.20",
+        "current_dev_declared": "^0.4.20",
+        "locked_before": "0.4.20",
+        "locked_after": "0.4.20",
+        "family_owner_task": "FE-TOOLCHAIN-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 1,
+        "static_type_dynamic_references": [
+          {
+            "file": "eslint.config.js",
+            "line": 4,
+            "kind": "static import/export",
+            "specifier": "eslint-plugin-react-refresh"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "globals",
+        "audit_declared": "^15.15.0",
+        "current_dev_declared": "^15.15.0",
+        "locked_before": "15.15.0",
+        "locked_after": "15.15.0",
+        "family_owner_task": "FE-TOOLCHAIN-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 1,
+        "static_type_dynamic_references": [
+          {
+            "file": "eslint.config.js",
+            "line": 2,
+            "kind": "static import/export",
+            "specifier": "globals"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "jsdom",
+        "audit_declared": "^20.0.3",
+        "current_dev_declared": "^20.0.3",
+        "locked_before": "20.0.3",
+        "locked_after": "20.0.3",
+        "family_owner_task": "FE-TOOLCHAIN-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 0,
+        "static_type_dynamic_references": [],
+        "implicit_build_test_plugin_peer_consumers": [
+          "vitest.config.ts:9 test.environment=jsdom"
+        ],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "lovable-tagger",
+        "audit_declared": "^1.1.13",
+        "current_dev_declared": "^1.1.13",
+        "locked_before": "1.1.13",
+        "locked_after": "1.1.13",
+        "family_owner_task": "FE-DEP-CLOSURE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 1,
+        "static_type_dynamic_references": [
+          {
+            "file": "vite.config.ts",
+            "line": 4,
+            "kind": "static import/export",
+            "specifier": "lovable-tagger"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [
+          "vite.config.ts:4 import; development plugin invokes componentTagger(); package.json build:dev and dev"
+        ],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "postcss",
+        "audit_declared": "^8.5.6",
+        "current_dev_declared": "^8.5.6",
+        "locked_before": "8.5.19",
+        "locked_after": "8.5.19",
+        "family_owner_task": "FE-TOOLCHAIN-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 0,
+        "static_type_dynamic_references": [],
+        "implicit_build_test_plugin_peer_consumers": [
+          "postcss.config.js:1-6; Vite CSS transform loads PostCSS configuration"
+        ],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "tailwindcss",
+        "audit_declared": "^3.4.17",
+        "current_dev_declared": "^3.4.17",
+        "locked_before": "3.4.17",
+        "locked_after": "3.4.17",
+        "family_owner_task": "FE-TOOLCHAIN-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 1,
+        "static_type_dynamic_references": [
+          {
+            "file": "tailwind.config.ts",
+            "line": 1,
+            "kind": "type import",
+            "specifier": "tailwindcss"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [
+          "postcss.config.js:3 named PostCSS plugin; src/index.css @tailwind directives"
+        ],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "tsx",
+        "audit_declared": "^4.21.0",
+        "current_dev_declared": "^4.21.0",
+        "locked_before": "4.21.0",
+        "locked_after": "4.21.0",
+        "family_owner_task": "FE-TOOLCHAIN-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 0,
+        "static_type_dynamic_references": [],
+        "implicit_build_test_plugin_peer_consumers": [
+          "src/test/public-build-auth-contract.test.ts:432 subprocess --import=tsx; scripts/check-i18n.ts:2 bunx tsx"
+        ],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "typescript",
+        "audit_declared": "^5.8.3",
+        "current_dev_declared": "^5.8.3",
+        "locked_before": "5.8.3",
+        "locked_after": "5.8.3",
+        "family_owner_task": "FE-TOOLCHAIN-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 2,
+        "static_type_dynamic_references": [
+          {
+            "file": "scripts/bff_route_manifest_frontend.ts",
+            "line": 17,
+            "kind": "static import/export",
+            "specifier": "typescript"
+          },
+          {
+            "file": "src/lib/bff-v1/__tests__/productionImportGraph.test.ts",
+            "line": 11,
+            "kind": "static import/export",
+            "specifier": "typescript"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [
+          "package.json scripts.typecheck invokes tsc; AST route-manifest and import-graph test consumers"
+        ],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "typescript-eslint",
+        "audit_declared": "^8.38.0",
+        "current_dev_declared": "^8.38.0",
+        "locked_before": "8.38.0",
+        "locked_after": "8.38.0",
+        "family_owner_task": "FE-TOOLCHAIN-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 1,
+        "static_type_dynamic_references": [
+          {
+            "file": "eslint.config.js",
+            "line": 5,
+            "kind": "static import/export",
+            "specifier": "typescript-eslint"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "vite",
+        "audit_declared": "^5.4.19",
+        "current_dev_declared": "^5.4.19",
+        "locked_before": "5.4.19",
+        "locked_after": "5.4.19",
+        "family_owner_task": "FE-TOOLCHAIN-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 2,
+        "static_type_dynamic_references": [
+          {
+            "file": "scripts/check_bundle_mock_reachability.ts",
+            "line": 19,
+            "kind": "static import/export",
+            "specifier": "vite"
+          },
+          {
+            "file": "vite.config.ts",
+            "line": 1,
+            "kind": "static import/export",
+            "specifier": "vite"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [
+          "package.json scripts.dev/build/build:dev/preview; .github/workflows/branch-ci.yml:232"
+        ],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "vitest",
+        "audit_declared": "^3.2.4",
+        "current_dev_declared": "^3.2.4",
+        "locked_before": "3.2.4",
+        "locked_after": "3.2.4",
+        "family_owner_task": "FE-TOOLCHAIN-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 204,
+        "static_type_dynamic_references": [
+          {
+            "file": "src/agora/TradingDeskLayout.test.tsx",
+            "line": 3,
+            "kind": "static import/export",
+            "specifier": "vitest"
+          },
+          {
+            "file": "src/agora/agoraWorkspaceCleanup.test.ts",
+            "line": 3,
+            "kind": "static import/export",
+            "specifier": "vitest"
+          },
+          {
+            "file": "src/agora/components/BacktestResultCard.test.tsx",
+            "line": 3,
+            "kind": "static import/export",
+            "specifier": "vitest"
+          },
+          {
+            "file": "src/agora/components/CandidateReviewDrawer.test.tsx",
+            "line": 3,
+            "kind": "static import/export",
+            "specifier": "vitest"
+          }
+        ],
+        "implicit_build_test_plugin_peer_consumers": [
+          "package.json scripts.test/test:watch/test:contract; .github/workflows/branch-ci.yml:186,207"
+        ],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      },
+      {
+        "package": "@types/react-grid-layout",
+        "audit_declared": "^1.3.5",
+        "current_dev_declared": "^1.3.5",
+        "locked_before": "1.3.6",
+        "locked_after": "1.3.6",
+        "family_owner_task": "FE-UI-DEPS-BASELINE-001",
+        "disposition": "retain-consumer",
+        "reference_count": 0,
+        "static_type_dynamic_references": [],
+        "implicit_build_test_plugin_peer_consumers": [
+          "src/agora/trading-room/WorkspaceGridEditor.tsx:5 react-grid-layout Layout declarations"
+        ],
+        "rationale": "Keep the concrete source, type, peer, plugin or test/build consumers recorded here; version upgrades belong to the separately assigned baseline task."
+      }
+    ]
+  },
+  "package_manager_disposition": {
+    "release_install_authority": "npm package-lock.json; unchanged existing npm release contract",
+    "ci_and_release_consumers": [
+      "README.md:14 npm install quick start",
+      ".github/workflows/branch-ci.yml:183 npm ci",
+      ".github/workflows/pantheon-integration-gate.yml:883,1599 npm ci",
+      "scripts/deploy-dev-vm.sh:611 npm ci",
+      "scripts/aggregate-release-gate.mjs:558 npm ci evidence requirement"
+    ],
+    "bun_ci_or_hosted_release_consumers": [],
+    "bun_local_consumers": [
+      "README.md:184,227 bun scripts/check-i18n.ts",
+      "scripts/bff_route_manifest_frontend.ts:1,9-12 Bun shebang and run examples; imports typescript at line 17",
+      "scripts/codemod-bff-v1.ts:1,8-10 Bun shebang and run examples",
+      "scripts/check-management-naming.ts:10 Bun run example",
+      "scripts/check-i18n.ts:2 bunx tsx",
+      ".lovable/plan.md:55 bun x vitest run editing validation"
+    ],
+    "bun_lock": "retain-existing-consumer-contract",
+    "bun_lockb": "retain-unversioned-legacy-Bun-consumer-contract",
+    "reason": "The no-local-Bun-consumer precondition is not met. Local Bun tools and the Lovable editing validation are still documented, and no minimum Bun version or explicit retirement is recorded. Bun auto-install can resolve imported typescript from bun.lock when node_modules is absent; pre-1.2 Bun uses bun.lockb. Preserve both existing locks rather than assume undocumented callers have migrated. Neither retained legacy lock is claimed to match the updated npm install graph or to qualify a release. No new Bun install workflow is introduced.",
+    "official_sources": [
+      "https://bun.sh/docs/runtime/auto-install",
+      "https://bun.sh/docs/pm/lockfile"
+    ],
+    "followup_precondition": "Explicitly migrate/retire README, local scripts and Lovable editing validation (outside this task artifact grant), establish the supported runtime contract, then remove obsolete locks under an authorized scope. This task uses its acceptance-authorized evidence-supported retention branch; it does not claim repository-wide single-lock convergence."
+  },
+  "preserved_contracts": [
+    "ai UIMessage and FileUIPart types, Streamdown plugins and Shiki rendering",
+    "Recharts, ECharts/ECharts React and react-grid-layout consumers",
+    "date-fns peer required by react-day-picker",
+    "Development componentTagger plugin; hosted migration does not prove editing workflow ended",
+    "Strict-live fixture-isolation aliases/plugin, BFF transport, auth/session and server stream source unchanged",
+    "Exact FE/BFF pair release protocol unchanged; any new FE head requires later release requalification"
+  ],
+  "validation": [
+    {
+      "command": "timeout 240 npm ci --no-audit --no-fund",
+      "exit_code": 0,
+      "result": "Baseline clean installation: 982 packages.",
+      "log_sha256": "4df2d01e058829ba253b391afeb15b81a620f9304a0126e201c6b142573c3e3a"
+    },
+    {
+      "command": "timeout 120 npm uninstall --package-lock-only --ignore-scripts --no-audit --no-fund @ai-sdk/react @hookform/resolvers react-markdown @tailwindcss/typography",
+      "exit_code": 0,
+      "result": "Four declarations and nine unique npm graph nodes removed; no retained version changes.",
+      "log_sha256": "ce7bf91f54adc7390cff6bf1c2572fd00ce9cfbd0611637e273059c4710a80c9"
+    },
+    {
+      "command": "timeout 240 npm ci --no-audit --no-fund",
+      "exit_code": 0,
+      "result": "Post-change clean installation: 973 packages.",
+      "log_sha256": "e52e8cf418960d3f755515fef7f9258b4a9fa054fec35519bceb346f3f937674"
+    },
+    {
+      "command": "timeout 90 npm ls --all --json",
+      "exit_code": 0,
+      "result": "Complete installed dependency and peer graph valid.",
+      "log_sha256": "1358ce45db252bdaaa2949275392e2209958dfd7e002709eb36fcec6b9985c63"
+    },
+    {
+      "command": "timeout 600 npm test",
+      "exit_code": 0,
+      "result": "203 files; 2046 tests passed; zero skipped, failed or missing-dependency suites.",
+      "log_sha256": "9641b8f6f6e3239e3bfb7c6a267cd2d48054b8a3583486f6a4c081e46f0fac3a",
+      "test_files": 203,
+      "tests_passed": 2046,
+      "tests_skipped": 0,
+      "tests_failed": 0,
+      "duration_seconds": 185.65
+    },
+    {
+      "command": "timeout 120 npm run typecheck",
+      "exit_code": 0,
+      "result": "Configured project typecheck passed (tsconfig.agora.json; not a claim of whole-source tsc coverage).",
+      "log_sha256": "b57ecf0ea70f204b35ee0b9ab18ca3a5711b6334753ca2d601f9702b9778b409"
+    },
+    {
+      "command": "VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false timeout 240 npm run build",
+      "exit_code": 1,
+      "result": "Initial attempt correctly rejected missing public GCP Identity config; superseded by configured successful build below, not counted as passed.",
+      "log_sha256": "c07e59a14f9b6dfa6e5f0f0cdac46e22224cb68db5d3b5b22a97ac509060fa4e"
+    },
+    {
+      "command": "VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false timeout 240 npm run build",
+      "exit_code": 0,
+      "result": "Strict-live production build passed with fixture isolation enabled; existing large-chunk warnings remain.",
+      "log_sha256": "3c1e35a7f5468683fce796bbae34d28725362eb7de50981049826dde999aea2f",
+      "public_config_source": "Existing repository Actions variables VITE_GCP_IDENTITY_API_KEY, VITE_GCP_IDENTITY_PROJECT_ID, VITE_GCP_IDENTITY_AUTH_DOMAIN fetched via gh api repos/ajoe734/execute-plans/actions/variables/<name> and exported only to build subprocess; no embedded bearer token."
+    },
+    {
+      "command": "VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false timeout 240 npm run build:dev -- --outDir /tmp/fe-dep-development-dist",
+      "exit_code": 0,
+      "result": "Development-mode configuration with retained componentTagger passed; same existing public repository configuration as production build.",
+      "log_sha256": "2250d82bc1806f113c75326a659773dbb581864368f940a25d4a224a655bff8c"
+    },
+    {
+      "command": "timeout 120 env PANTHEON_CONTRACT_ROOT=/home/chloe_ong_dev_cctech_support_com/code/pantheon npm run test:contract",
+      "exit_code": 0,
+      "result": "49 schemas, 157 routes and 75 hashes aligned; 1 test file, 7 tests passed.",
+      "log_sha256": "e558c967b579fda0cc9abeae58e835ee0ae17a622ccf4abb61493a47acb88776",
+      "tests_passed": 7
+    },
+    {
+      "command": "timeout 120 npm run test:deploy-release",
+      "exit_code": 124,
+      "result": "First batch timed out; not passed. Repeated with a longer bounded foreground batch.",
+      "log_sha256": "54cad81b72a947e2cd6fea26bc46ba62b4fef03d777a4f64b760c2c40138a90d"
+    }
+  ],
+  "independent_review_required": [
+    "Review all 94 dispositions including the concrete Bun retention exception and Lovable plugin consumer.",
+    "Verify auth/session/SSE, graph, chart and rendering behavior tests and configured strict-live build results.",
+    "Bind this committed manifest to the exact current-dev PR head, run required CI and approve canonically as Codex2; only supervisor integrator merges.",
+    "No hosted readiness, successful CI, independent approval or merged delivery is asserted by this owner manifest."
+  ],
+  "validation_scope": {
+    "auth_session_stream_behavior": "The full suite executed public-build-auth-contract (67 tests), OpenClawLlmAuthPanel, managementAi, liveTransport, SSE and agent panel tests, plus chart/grid and strict-live/release protocol regressions. No privileged hosted auth was performed.",
+    "source_boundary_check": "git diff --check origin/dev...HEAD; only package.json, package-lock.json and this evidence manifest are task delivery files. Product TS/TSX, vite.config.ts, deployment workflows and scripts unchanged.",
+    "install_warnings": "npm reports existing deprecated transitive packages; compatible upgrade work remains assigned to the separate FE baseline tasks.",
+    "remote_gates": "Required GitHub checks, canonical independent exact-head approval and supervisor merge must be collected against the final head; not represented as local test successes."
+  }
+}
