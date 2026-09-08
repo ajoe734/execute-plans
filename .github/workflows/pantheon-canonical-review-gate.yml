@@ -16,6 +16,7 @@ on:
       - reopened
       - ready_for_review
       - labeled
+      - unlabeled
     branches:
       - dev
       - main
@@ -29,13 +30,6 @@ on:
         description: "Exact PR head SHA"
         required: true
         type: string
-      delivery_class:
-        description: "Explicit delivery class (product or tooling)"
-        required: true
-        type: choice
-        options:
-          - product
-          - tooling
 
 permissions:
   contents: read
@@ -43,7 +37,7 @@ permissions:
   statuses: write
 
 concurrency:
-  group: pantheon-canonical-review-${{ github.event.pull_request.number || github.event.inputs.head_sha }}
+  group: pantheon-canonical-review-${{ github.event.pull_request.head.sha || github.event.inputs.head_sha }}
   cancel-in-progress: true
 
 jobs:
@@ -55,7 +49,7 @@ jobs:
       REPO: ${{ github.repository }}
       HEAD_REF: ${{ github.event.inputs.head_ref || github.event.pull_request.head.ref }}
       HEAD_SHA: ${{ github.event.inputs.head_sha || github.event.pull_request.head.sha }}
-      DELIVERY_CLASS: ${{ github.event.inputs.delivery_class || (contains(github.event.pull_request.labels.*.name, 'delivery:tooling') && 'tooling' || 'product') }}
+      DELIVERY_CLASS: ${{ contains(github.event.pull_request.labels.*.name, 'delivery:tooling') && 'tooling' || 'product' }}
       TARGET_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
     steps:
       - name: Checkout trusted Pantheon verifier
@@ -66,6 +60,11 @@ jobs:
           path: pantheon-verifier
           fetch-depth: 1
           persist-credentials: false
+
+      - name: Record verifier provenance
+        working-directory: pantheon-verifier
+        run: |
+          echo "Trusted Pantheon verifier checkout commit: $(git rev-parse HEAD)"
 
       - name: Validate exact head identity
         shell: bash
@@ -81,11 +80,17 @@ jobs:
       - name: Publish canonical review status
         working-directory: pantheon-verifier
         run: |
-          set -euo pipefail
+          gate_rc=0
           python3 scripts/git/canonical_review_gate_ci.py \
             --repo "$REPO" \
             --head-ref "$HEAD_REF" \
             --head-sha "$HEAD_SHA" \
             --delivery-class "$DELIVERY_CLASS" \
-            --target-url "$TARGET_URL"
-
+            --target-url "$TARGET_URL" || gate_rc=$?
+          if [[ "$gate_rc" -eq 2 ]]; then
+            echo "::error::canonical review gate could not POST any status after retries -- required context is unset for this head; re-dispatch this workflow once GitHub's API is healthy" >&2
+            exit "$gate_rc"
+          fi
+          if [[ "$gate_rc" -ne 0 && "$gate_rc" -ne 1 ]]; then
+            exit "$gate_rc"
+          fi

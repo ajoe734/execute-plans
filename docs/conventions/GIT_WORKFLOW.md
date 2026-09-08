@@ -101,21 +101,47 @@ Local hook setup (once per clone): `git config core.hooksPath .githooks`
 
 ## 6. CI Gates and Branch Protection
 
-Provided by `.github/workflows/branch-ci.yml`:
+Provided by `.github/workflows/branch-ci.yml` and `.github/workflows/pantheon-canonical-review-gate.yml`:
 
-| Status check name       | What it does                                        |
-|-------------------------|------------------------------------------------------|
-| `Commit trailers`       | Enforce subject prefix + LLM-Agent / Task-ID / Reviewer |
-| `Generated files guard` | Reject build/audit artifacts from the diff           |
-| `Component merge gate`  | Focused tests, contract checks, typecheck, and build |
-| `Smoke acceptance`      | Fail-closed compatibility context over the component merge gate |
+| Status check name               | What it does                                                    |
+|---------------------------------|------------------------------------------------------------------|
+| `Commit trailers`               | Enforce subject prefix + LLM-Agent / Task-ID / Reviewer         |
+| `Generated files guard`         | Reject build/audit artifacts from the diff                       |
+| `Component merge gate`          | Focused tests, contract checks, typecheck, and build             |
+| `Smoke acceptance`              | Fail-closed compatibility context over the component merge gate  |
+| `Pantheon canonical review gate`| Verify exact-head review proof via single trusted backend verifier|
 
-Branch protection requires PRs and an up-to-date base. `dev` requires
-`Commit trailers`, `Generated files guard`, `Component merge gate`, and the
-canonical review gate. The historical `main` protection still requires
+Branch protection requires PRs and an up-to-date base (`strict: true`). `dev` requires
+four status checks: `Commit trailers` (app_id: 15368), `Generated files guard` (app_id: 15368),
+`Component merge gate` (app_id: 15368), and `Pantheon canonical review gate`.
+In current execute-plans branch protection, `Pantheon canonical review gate` is bound with
+`app_id: null` (unlike Pantheon's app_id 15368), while status updates are posted by the GitHub
+Actions runner (`GITHUB_TOKEN`). The historical `main` protection still requires
 `Commit trailers`, `Generated files guard`, and `Smoke acceptance`; the latter
 is emitted only after `Component merge gate` succeeds, so it cannot weaken the
 underlying gate. Force push and branch deletion remain blocked.
+
+### 6.1 Canonical Review Gate
+
+The canonical review gate (`.github/workflows/pantheon-canonical-review-gate.yml`) runs
+via `pull_request_target` (executing trusted base wrapper code) on `dev` and `main` branches
+across PR events (`opened`, `synchronize`, `reopened`, `ready_for_review`, `labeled`, `unlabeled`)
+and re-triggers via `workflow_dispatch` (`head_ref`, `head_sha`).
+
+- **Single verifier protocol:** Checks out `ajoe734/pantheon@dev` and invokes
+  `scripts/git/canonical_review_gate_ci.py`. No local review policy is duplicated.
+- **Label-derived authority:** Delivery classification derives strictly from PR labels:
+  `delivery:tooling` assigns tooling delivery (Human/Ops direct delivery), whereas product
+  tasks require an exact-head review-proof tag. Removing the tooling label (`unlabeled`)
+  immediately re-evaluates the PR under product delivery. Caller-supplied classification hints
+  on dispatch are not trusted.
+- **Unified concurrency:** PR events and workflow_dispatch targeting the same head commit
+  share concurrency key `pantheon-canonical-review-${{ github.event.pull_request.head.sha || github.event.inputs.head_sha }}`
+  with `cancel-in-progress: true`, avoiding split groups.
+- **Truthful publication failure:** Script exit code 0 reflects approved status posted;
+  exit 1 reflects an unapproved/failing evaluation (fail-closed commit status published; job succeeds);
+  exit 2 indicates an unrecoverable GitHub status POST error after retries and fails the Actions job
+  loudly so required context is never left silently unset.
 
 The pre-existing `pantheon-integration-gate.yml` (FE-BFF live release
 gate) keeps running on PRs/pushes as an informational check; it is not

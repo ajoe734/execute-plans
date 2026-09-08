@@ -1,0 +1,109 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "OPS-FE-REVIEW-PROOF-001",
+  "owner": "Antigravity",
+  "reviewer": "Codex",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/OPS-FE-REVIEW-PROOF-001",
+  "status": "ready-for-independent-exact-head-review",
+  "plan": {
+    "path": "/tmp/pantheon-tooling-root-repair-20260907/FRONTEND_REVIEW_PROOF_PLAN.md",
+    "sha256": "a99458c702b8cf566bc58b589915e709065ab5f5ac6eb78de0e37ea7acf819bc"
+  },
+  "report": {
+    "path": "/tmp/pantheon-tooling-root-repair-20260907/frontend-proof-consumer-1315/REPORT.md",
+    "sha256": "b257c9aa0ef7d16360c66730c806b023f56e6ef43b2fdf1fbd4ff9bdb41a10e1"
+  },
+  "backend_predecessor": {
+    "task_id": "OPS-REVIEW-PROOF-001",
+    "status": "done",
+    "pantheon_pr": 5665,
+    "pantheon_merge_commit": "1b39676c12182e15602bcb85a72244f2b31b0116"
+  },
+  "branch_protection_status": {
+    "target_branch": "dev",
+    "strict": true,
+    "contexts": [
+      "Commit trailers",
+      "Generated files guard",
+      "Component merge gate",
+      "Pantheon canonical review gate"
+    ],
+    "checks": [
+      { "context": "Commit trailers", "app_id": 15368 },
+      { "context": "Generated files guard", "app_id": 15368 },
+      { "context": "Component merge gate", "app_id": 15368 },
+      { "context": "Pantheon canonical review gate", "app_id": null }
+    ],
+    "canonical_app_id": null,
+    "actual_publisher": "GitHub Actions (GITHUB_TOKEN)"
+  },
+  "concurrency_identity": {
+    "group": "pantheon-canonical-review-${{ github.event.pull_request.head.sha || github.event.inputs.head_sha }}",
+    "cancel_in_progress": true
+  },
+  "scope": {
+    "corrected": [
+      "Aligned .github/workflows/pantheon-canonical-review-gate.yml to consume the single canonical Pantheon review verifier.",
+      "Added unlabeled to pull_request_target types so removing delivery:tooling triggers immediate product re-evaluation.",
+      "Aligned workflow_dispatch inputs to require only head_ref and head_sha, matching backend github_review_bridge.py dispatch payload without rejecting schema or requiring delivery_class.",
+      "Unified concurrency group to pantheon-canonical-review-${{ github.event.pull_request.head.sha || github.event.inputs.head_sha }} with cancel-in-progress: true so PR events and dispatch converge to the exact same head SHA identity.",
+      "Derived DELIVERY_CLASS strictly from PR labels (delivery:tooling) rather than untrusted caller input, eliminating forged tooling classification.",
+      "Implemented truthful external publication failure handling for canonical_review_gate_ci.py: exit 0 (success status), exit 1 (unapproved status published without job crash), exit 2 (publication failure after retries, job fails loudly).",
+      "Added verifier checkout commit provenance step.",
+      "Added focused Vitest contract suite in src/test/pantheon-canonical-review-workflow.test.ts testing the wrapper contract without copying review policy.",
+      "Updated docs/conventions/GIT_WORKFLOW.md with canonical gate, publisher identity, branch protection details, and rollout documentation."
+    ],
+    "preserved": [
+      "Single verifier protocol from ajoe734/pantheon@dev is consumed without duplicating review policy or creating a second gate/verifier.",
+      "Trusted base execution via pull_request_target preserved; candidate workflow code never executes for mergeability status.",
+      "Branch protection required contexts preserved without weakening."
+    ],
+    "not_changed": [
+      "No package changes, product UI changes, hosted workflows, review keys, or branch protection mutation.",
+      "informational pantheon-integration-gate.yml left untouched as external dev VM probe."
+    ]
+  },
+  "review_binding": {
+    "pull_request": null,
+    "required_final_binding": "Independent approval must bind the final PR head containing this manifest."
+  },
+  "acceptance": {
+    "single_canonical_verifier": true,
+    "dispatch_schema_aligned": true,
+    "unlabeled_event_covered": true,
+    "unified_concurrency_group": true,
+    "truthful_publication_failure": true,
+    "vitest_contract_suite_passed": true
+  },
+  "validation": {
+    "vitest_contract_test": {
+      "command": "npx vitest run src/test/pantheon-canonical-review-workflow.test.ts",
+      "result": "passed: 8/8 tests"
+    },
+    "vitest_related_test": {
+      "command": "npx vitest related --run src/test/pantheon-canonical-review-workflow.test.ts",
+      "result": "passed: 8/8 tests"
+    },
+    "typecheck": {
+      "command": "npm run typecheck",
+      "result": "passed"
+    },
+    "lint": {
+      "command": "npm run lint",
+      "result": "passed: 0 errors"
+    }
+  },
+  "independent_review_required": [
+    "Confirm .github/workflows/pantheon-canonical-review-gate.yml consumes the single Pantheon verifier protocol without a second gate or duplicate policy.",
+    "Confirm workflow_dispatch schema requires only head_ref and head_sha, matching github_review_bridge.py dispatch payload.",
+    "Confirm pull_request_target triggers on opened, synchronize, reopened, ready_for_review, labeled, and unlabeled.",
+    "Confirm concurrency group converges to head_sha for both PR-event and dispatch runs.",
+    "Confirm delivery classification derives solely from PR labels without trusting caller dispatch inputs.",
+    "Confirm exit 2 publication failure is treated as job failure while exit 1 unapproved status is handled truthfully.",
+    "Confirm src/test/pantheon-canonical-review-workflow.test.ts passes and is selected by CI.",
+    "Confirm docs/conventions/GIT_WORKFLOW.md records canonical gate details and dev branch protection app_id null status.",
+    "Bind this file through REVIEW_FILE during governed exact-head approval."
+  ]
+}
