@@ -155,8 +155,13 @@ and re-triggers via `workflow_dispatch` (`head_ref`, `head_sha`).
     wrapper (`5d4f3852`) via `pull_request_target`, calling `pantheon@dev` verifier and publishing
     the expected pre-approval failure status until Codex approves and the proof tag is pushed.
   - *Post-merge new-base proof:* After PR #747 merges into `dev`, the new workflow is installed
-    on `dev`. The task owner must verify an actual post-merge run of the new base wrapper (accepting
-    the bridge's 2-input dispatch schema and resolving live PR metadata) before task closeout.
+    on `dev`. Because a merged PR is no longer OPEN and the new workflow strictly enforces open-PR
+    lookup, the post-merge dispatch proof targets a legitimate current OPEN PR on `dev` (e.g. PR #745,
+    branch `task/FE-EXACT-PAIR-PROTOCOL-001`, head `b536219f374a853b9c6f154e5eee998a290223e3`) via the
+    existing bridge. The new base wrapper must be verified to accept the 2-input dispatch schema (`head_ref`,
+    `head_sha`) without 422 retry, query live PR metadata, validate exact head, and post status. The post-merge
+    run proof is recorded durably in the canonical task `done` checkpoint message, preserving the frozen
+    approved review evidence manifest without post-approval head invalidation.
 
 The pre-existing `pantheon-integration-gate.yml` (FE-BFF live release
 gate) keeps running on PRs/pushes as an informational check; it is not

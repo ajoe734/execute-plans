@@ -50,6 +50,7 @@ jobs:
       TARGET_HEAD_REF: ${{ github.event.inputs.head_ref || github.event.pull_request.head.ref }}
       TARGET_HEAD_SHA: ${{ github.event.inputs.head_sha || github.event.pull_request.head.sha }}
       TARGET_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
     steps:
       - name: Checkout trusted Pantheon verifier
         uses: actions/checkout@v4
@@ -75,7 +76,11 @@ jobs:
 
           echo "Resolving authoritative current PR metadata from GitHub API for event $GITHUB_EVENT_NAME..."
           if [[ "$GITHUB_EVENT_NAME" == "pull_request_target" ]]; then
-            PR_NUM="${{ github.event.pull_request.number }}"
+            PR_NUM="${PR_NUMBER:-}"
+            if [[ -z "$PR_NUM" ]]; then
+              echo "::error::pull_request_target requires PR number" >&2
+              exit 1
+            fi
             PR_JSON=$(gh pr view "$PR_NUM" --repo "$REPO" --json number,headRefName,headRefOid,labels,state)
           elif [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
             PR_LIST_JSON=$(gh pr list --repo "$REPO" --head "$TARGET_HEAD_REF" --state open --json number,headRefName,headRefOid,labels,state)

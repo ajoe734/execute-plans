@@ -133,19 +133,27 @@
   },
   "rollout_distinction_and_owner_closeout": {
     "old_base_admission": "PR #747 is evaluated before merge by the installed dev base wrapper (commit 5d4f3852) via pull_request_target, which checks out pantheon@dev verifier (1b39676c), verifies absence of review-proof tag, and posts failure. Upon Codex approval, the review-proof tag is pushed, bridge dispatches, and the old-base workflow publishes success to admit the PR.",
-    "postmerge_new_base_proof": "Mandatory runtime proof required before task completion. Once PR #747 merges into dev, the updated workflow becomes the installed base workflow on dev.",
+    "postmerge_new_base_proof": "Mandatory runtime proof required before task completion. Once PR #747 merges into dev, the updated workflow becomes the installed base workflow on dev. Because merged PR #747 is no longer OPEN and the workflow's open-PR guard strictly rejects non-OPEN PRs, the post-merge installed-base run targets a legitimate current OPEN PR on dev (PR #745, head_ref: 'task/FE-EXACT-PAIR-PROTOCOL-001', head_sha: 'b536219f374a853b9c6f154e5eee998a290223e3') via the existing bridge dispatch.",
+    "postmerge_target_open_pr": {
+      "pr_number": 745,
+      "head_ref": "task/FE-EXACT-PAIR-PROTOCOL-001",
+      "head_sha": "b536219f374a853b9c6f154e5eee998a290223e3",
+      "state": "OPEN",
+      "title": "FE-EXACT-PAIR-PROTOCOL-001: prepare/activate protocol (blocked)"
+    },
+    "postmerge_proof_status": "pending_merge_and_closeout; not claimed as executed or passed prior to PR #747 merge",
     "owner_closeout_procedure": [
       "1. Verify PR #747 merge commit is present on origin/dev.",
-      "2. Dispatch workflow_dispatch for workflow ID 342891579 targeting dev with head_ref and head_sha.",
-      "3. Verify execution of the new-base workflow: accepts 2-input schema without 422 retry, queries GitHub API for authoritative PR metadata, records verifier checkout commit, validates exact head, and posts status.",
-      "4. Record post-merge run ID, verifier commit SHA, and publisher readback in evidence manifest.",
-      "5. Issue governed 'scripts/ai-status.sh done OPS-FE-REVIEW-PROOF-001' via PANTHEON_COMMAND_ROOT."
+      "2. Dispatch workflow_dispatch for workflow ID 342891579 targeting dev with open PR #745 head_ref ('task/FE-EXACT-PAIR-PROTOCOL-001') and head_sha ('b536219f374a853b9c6f154e5eee998a290223e3') through the existing bridge.",
+      "3. Verify execution of the new-base workflow on dev: accepts 2-input schema without 422 retry, queries GitHub API for authoritative PR metadata from open PR #745, records verifier checkout commit, validates exact head, and posts status.",
+      "4. Durably record the post-merge run proof (run ID, verifier commit SHA, publisher status readback) in the canonical task done transaction checkpoint message ('scripts/ai-status.sh done OPS-FE-REVIEW-PROOF-001 <checkpoint message>'), preserving the frozen approved evidence manifest intact without post-approval head invalidation.",
+      "5. Complete owner closeout via governed PANTHEON_COMMAND_ROOT scripts/ai-status.sh done OPS-FE-REVIEW-PROOF-001."
     ]
   },
   "scope": {
     "corrected": [
       "Aligned .github/workflows/pantheon-canonical-review-gate.yml to consume the single canonical Pantheon review verifier.",
-      "Resolved authoritative PR metadata from GitHub API (gh pr view on pull_request_target, gh pr list on workflow_dispatch) rather than event snapshots or untrusted caller hints.",
+      "Resolved authoritative PR metadata from GitHub API (gh pr view on pull_request_target with PR_NUMBER in env, gh pr list on workflow_dispatch) rather than event snapshots or untrusted caller hints.",
       "Enforced exact head validation: target head must match authoritative PR headRefOid; stale heads, wrong heads, or synthetic all-zero heads fail closed immediately before invoking the verifier.",
       "Derived delivery_class strictly from current authoritative PR labels (delivery:tooling -> tooling, absent -> product).",
       "Added unlabeled to pull_request_target types so removing delivery:tooling re-evaluates authoritative labels and enforces product review proof.",
@@ -153,13 +161,15 @@
       "Unified concurrency group to pantheon-canonical-review-${{ github.event.pull_request.head.sha || github.event.inputs.head_sha }} with cancel-in-progress: true so PR events and dispatch converge to the exact same head SHA identity.",
       "Implemented truthful external publication failure handling for canonical_review_gate_ci.py: exit 0 (success status), exit 1 (unapproved status published without job crash), exit 2 (publication failure after retries, job fails loudly).",
       "Added verifier checkout commit provenance step.",
-      "Added comprehensive Vitest contract suite in src/test/pantheon-canonical-review-workflow.test.ts testing YAML contracts and consumer behavior coverage for current/stale head, label removal, and dispatch classification.",
-      "Updated docs/conventions/GIT_WORKFLOW.md with canonical gate, publisher identity, branch protection details, and rollout documentation."
+      "Replaced mirrored TypeScript resolver with bounded execution of YAML-extracted Bash in src/test/pantheon-canonical-review-workflow.test.ts using mocked gh and python3, asserting actual stale/wrong/missing/ambiguous head rejection, label removal, API failure, verifier argument forwarding, and exit 0/1/2/unexpected handling (26/26 passed).",
+      "Specified legitimate current open PR #745 for post-merge installed-base run and defined governed durable evidence recording via canonical done checkpoint message preserving frozen approved manifest.",
+      "Updated docs/conventions/GIT_WORKFLOW.md with canonical gate, publisher identity, branch protection details, and postmerge proof procedures."
     ],
     "preserved": [
       "Single verifier protocol from ajoe734/pantheon@dev is consumed without duplicating review policy or creating a second gate/verifier.",
       "Trusted base execution via pull_request_target preserved; candidate workflow code never executes for mergeability status.",
-      "Branch protection required contexts preserved without weakening."
+      "Branch protection required contexts preserved without weakening.",
+      "Strict OPEN and exact head validation guards preserved without weakening."
     ],
     "not_changed": [
       "No package changes, product UI changes, hosted workflows, review keys, or branch protection mutation.",
@@ -180,20 +190,22 @@
     "unified_concurrency_group": true,
     "truthful_publication_failure": true,
     "vitest_contract_suite_passed": true,
-    "consumer_behavior_coverage_passed": true
+    "yaml_extracted_bash_execution_passed": true,
+    "postmerge_open_pr_specified": true,
+    "durable_evidence_path_preserves_frozen_manifest": true
   },
   "validation": {
     "vitest_contract_test": {
       "command": "npx vitest run src/test/pantheon-canonical-review-workflow.test.ts",
-      "result": "passed: 18/18 tests"
+      "result": "passed: 26/26 tests"
     },
     "vitest_related_test": {
       "command": "npx vitest related --run src/test/pantheon-canonical-review-workflow.test.ts",
-      "result": "passed: 18/18 tests"
+      "result": "passed: 26/26 tests"
     },
     "typecheck": {
       "command": "npm run typecheck",
-      "result": "passed"
+      "result": "passed: 0 errors"
     },
     "lint": {
       "command": "npx eslint src/test/pantheon-canonical-review-workflow.test.ts",
@@ -208,8 +220,9 @@
     "Confirm pull_request_target triggers on opened, synchronize, reopened, ready_for_review, labeled, and unlabeled.",
     "Confirm concurrency group converges to head_sha for both PR-event and dispatch runs.",
     "Confirm exit 2 publication failure is treated as job failure while exit 1 unapproved status is handled truthfully.",
-    "Confirm src/test/pantheon-canonical-review-workflow.test.ts passes (18/18 tests) including consumer behavior coverage for current/stale head, label removal, and dispatch classification.",
-    "Confirm docs/conventions/GIT_WORKFLOW.md records canonical gate details, authoritative resolution, stale head rejection, and old-base vs post-merge proof.",
+    "Confirm src/test/pantheon-canonical-review-workflow.test.ts executes YAML-extracted Bash with mocked gh/python3 and passes all 26/26 tests, correctly rejecting mutations.",
+    "Confirm postmerge installed-base closeout procedure targets legitimate current open PR #745 and records proof durably in canonical done checkpoint message without mutating frozen manifest.",
+    "Confirm docs/conventions/GIT_WORKFLOW.md records canonical gate details, authoritative resolution, stale head rejection, and postmerge open-PR proof.",
     "Bind this file through REVIEW_FILE during governed exact-head approval."
   ]
 }
