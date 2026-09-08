@@ -6,11 +6,11 @@
   "target_repo": "ajoe734/execute-plans",
   "merge_target": "dev",
   "branch": "task/FE-DEP-CLOSURE-001",
-  "status": "owner-validation-in-progress",
+  "status": "ready-for-independent-exact-head-review",
   "source_identity": {
     "audit_frontend_base": "5d4f385284b44a30e10764426a47fd808a7ae3cb",
     "current_dev_base": "fda58bb05052c90e0e18310666ad174b5ab3ff51",
-    "implementation_anchor": "75ed57e8",
+    "implementation_anchor": "75ed57e8ff4b90d5f510c3ead081f5fd886683ed",
     "file_hashes": {
       "package.json": {
         "before_sha256": "d11e3b573d10cc32de05cb9d861c610ee97c1bfe36588ee8d3ee489249badaf8",
@@ -2540,6 +2540,19 @@
       "exit_code": 124,
       "result": "First batch timed out; not passed. Repeated with a longer bounded foreground batch.",
       "log_sha256": "54cad81b72a947e2cd6fea26bc46ba62b4fef03d777a4f64b760c2c40138a90d"
+    },
+    {
+      "command": "timeout 600 npm run test:deploy-release",
+      "exit_code": 0,
+      "result": "Local isolated harness passed: 7 atomic symlink tests, 5 atomic manifest tests, 36 deployment controller scenarios; no hosted actions.",
+      "tests_passed": 48,
+      "tests_failed": 0,
+      "log_sha256": "d07e2da1781a98b777e09b8c714b029a8dc640d5a87429d0ed4ecc28a8aeb987"
+    },
+    {
+      "command": "git diff --check origin/dev...HEAD; python3 scripts/git/check_commit_trailers.py --range origin/dev..HEAD --skip-merge; python3 scripts/git/check_generated_files.py package.json package-lock.json docs/deployment/evidence/FE-DEP-CLOSURE-001/evidence.json",
+      "exit_code": 0,
+      "result": "Diff, task trailers and generated-files scope guards passed."
     }
   ],
   "independent_review_required": [
