@@ -130,11 +130,19 @@ and re-triggers via `workflow_dispatch` (`head_ref`, `head_sha`).
 
 - **Single verifier protocol:** Checks out `ajoe734/pantheon@dev` and invokes
   `scripts/git/canonical_review_gate_ci.py`. No local review policy is duplicated.
-- **Label-derived authority:** Delivery classification derives strictly from PR labels:
-  `delivery:tooling` assigns tooling delivery (Human/Ops direct delivery), whereas product
-  tasks require an exact-head review-proof tag. Removing the tooling label (`unlabeled`)
-  immediately re-evaluates the PR under product delivery. Caller-supplied classification hints
-  on dispatch are not trusted.
+- **Authoritative PR metadata resolution:** Rather than relying on webhook event snapshots or
+  untrusted caller hints, the wrapper queries GitHub's API (`gh pr view` for `pull_request_target`,
+  `gh pr list --head <ref>` for `workflow_dispatch`) to obtain the authoritative live PR object
+  (`headRefName`, `headRefOid`, `labels`, `state`).
+- **Exact head validation & stale head rejection:** The target head SHA is checked against the
+  PR's current authoritative head (`headRefOid`). If the head has moved (stale head), is all zeroes,
+  or fails format validation (`^[0-9a-f]{40}$`), the step fails immediately before calling the
+  verifier, preventing unearned success.
+- **Label-derived authority & removal re-evaluation:** Delivery classification derives strictly
+  from current authoritative PR labels: `delivery:tooling` assigns tooling delivery (Human/Ops direct
+  delivery), whereas product tasks require an exact-head review-proof tag. Removing the tooling
+  label (`unlabeled`) immediately re-evaluates the PR under product delivery. Dispatch runs resolve
+  the PR from `head_ref` and derive classification from its actual labels without trusting caller hints.
 - **Unified concurrency:** PR events and workflow_dispatch targeting the same head commit
   share concurrency key `pantheon-canonical-review-${{ github.event.pull_request.head.sha || github.event.inputs.head_sha }}`
   with `cancel-in-progress: true`, avoiding split groups.
@@ -142,6 +150,13 @@ and re-triggers via `workflow_dispatch` (`head_ref`, `head_sha`).
   exit 1 reflects an unapproved/failing evaluation (fail-closed commit status published; job succeeds);
   exit 2 indicates an unrecoverable GitHub status POST error after retries and fails the Actions job
   loudly so required context is never left silently unset.
+- **Rollout distinction & owner closeout:**
+  - *Old-base admission:* The repair PR #747 is evaluated before merge by the installed dev base
+    wrapper (`5d4f3852`) via `pull_request_target`, calling `pantheon@dev` verifier and publishing
+    the expected pre-approval failure status until Codex approves and the proof tag is pushed.
+  - *Post-merge new-base proof:* After PR #747 merges into `dev`, the new workflow is installed
+    on `dev`. The task owner must verify an actual post-merge run of the new base wrapper (accepting
+    the bridge's 2-input dispatch schema and resolving live PR metadata) before task closeout.
 
 The pre-existing `pantheon-integration-gate.yml` (FE-BFF live release
 gate) keeps running on PRs/pushes as an informational check; it is not

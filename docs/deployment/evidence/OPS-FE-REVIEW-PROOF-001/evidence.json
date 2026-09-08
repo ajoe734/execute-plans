@@ -22,6 +22,63 @@
     "pantheon_pr": 5665,
     "pantheon_merge_commit": "1b39676c12182e15602bcb85a72244f2b31b0116"
   },
+  "observed_fe": {
+    "base_commit": "5d4f385284b44a30e10764426a47fd808a7ae3cb",
+    "pull_request": 747,
+    "pull_request_url": "https://github.com/ajoe734/execute-plans/pull/747",
+    "branch": "task/OPS-FE-REVIEW-PROOF-001"
+  },
+  "observed_runs": {
+    "branch_ci_run": {
+      "run_id": 34185265643,
+      "workflow_name": "Branch CI Gate",
+      "workflow_id": 312290856,
+      "event": "pull_request",
+      "head_sha": "07f936d09ae29ca6f68a115cb1f0f292a711e0aa",
+      "conclusion": "success",
+      "suite_selection": "selected src/test/pantheon-canonical-review-workflow.test.ts in CI and passed 8/8 tests"
+    },
+    "old_base_gate_run": {
+      "run_id": 34185264388,
+      "workflow_name": "Pantheon canonical review gate",
+      "workflow_id": 342891579,
+      "event": "pull_request_target",
+      "head_sha": "07f936d09ae29ca6f68a115cb1f0f292a711e0aa",
+      "conclusion": "failure",
+      "exit_code": 1,
+      "verifier_checkout_commit": "1b39676c12182e15602bcb85a72244f2b31b0116",
+      "status_outcome": "published expected pre-approval failure status (no review-proof tag yet) with exit code 1"
+    }
+  },
+  "status_readback": {
+    "canonical_gate_actions_status": {
+      "id": 53708610993,
+      "context": "Pantheon canonical review gate",
+      "state": "failure",
+      "description": "OPS-FE-REVIEW-PROOF-001: no review-proof tag (pantheon-review/approve/07f936d09ae29ca6f68a115cb1f0f292a711e0aa or pantheon-review/operator-a",
+      "creator": "github-actions[bot]",
+      "creator_app_id": 15368,
+      "target_url": "https://github.com/ajoe734/execute-plans/actions/runs/34185264388"
+    },
+    "review_bridge_reopen_status": {
+      "id": 53708814975,
+      "context": "Pantheon canonical review gate",
+      "state": "failure",
+      "description": "OPS-FE-REVIEW-PROOF-001 reopen by Codex at 07f936d09ae2",
+      "creator": "ajoe734",
+      "target_url": "https://github.com/ajoe734/execute-plans/pull/747#pantheon-review-intent-99dc0ea12574bd03e7059e6c72407983"
+    }
+  },
+  "real_bridge_dispatch": {
+    "mechanism": "github_review_bridge.py::_dispatch_canonical_review_gate_workflow",
+    "target_workflow_id": 342891579,
+    "target_ref": "dev",
+    "inputs": {
+      "head_ref": "task/OPS-FE-REVIEW-PROOF-001",
+      "head_sha": "07f936d09ae29ca6f68a115cb1f0f292a711e0aa"
+    },
+    "schema_reconciliation": "Old base dev required delivery_class; bridge caught 422 Required input 'delivery_class' not provided and retried with product. New base workflow aligns schema to require only head_ref and head_sha, accepting bridge's initial dispatch payload on first attempt without retry."
+  },
   "branch_protection_status": {
     "target_branch": "dev",
     "strict": true,
@@ -44,16 +101,29 @@
     "group": "pantheon-canonical-review-${{ github.event.pull_request.head.sha || github.event.inputs.head_sha }}",
     "cancel_in_progress": true
   },
+  "rollout_distinction_and_owner_closeout": {
+    "old_base_admission": "PR #747 is evaluated before merge by the installed dev base wrapper (commit 5d4f3852) via pull_request_target, which checks out pantheon@dev verifier (1b39676c), verifies absence of review-proof tag, and posts failure. Upon Codex approval, the review-proof tag is pushed, bridge dispatches, and the old-base workflow publishes success to admit the PR.",
+    "postmerge_new_base_proof": "Mandatory runtime proof required before task completion. Once PR #747 merges into dev, the updated workflow becomes the installed base workflow on dev.",
+    "owner_closeout_procedure": [
+      "1. Verify PR #747 merge commit is present on origin/dev.",
+      "2. Dispatch workflow_dispatch for workflow ID 342891579 targeting dev with head_ref and head_sha.",
+      "3. Verify execution of the new-base workflow: accepts 2-input schema without 422 retry, queries GitHub API for authoritative PR metadata, records verifier checkout commit, validates exact head, and posts status.",
+      "4. Record post-merge run ID, verifier commit SHA, and publisher readback in evidence manifest.",
+      "5. Issue governed 'scripts/ai-status.sh done OPS-FE-REVIEW-PROOF-001' via PANTHEON_COMMAND_ROOT."
+    ]
+  },
   "scope": {
     "corrected": [
       "Aligned .github/workflows/pantheon-canonical-review-gate.yml to consume the single canonical Pantheon review verifier.",
-      "Added unlabeled to pull_request_target types so removing delivery:tooling triggers immediate product re-evaluation.",
+      "Resolved authoritative PR metadata from GitHub API (gh pr view on pull_request_target, gh pr list on workflow_dispatch) rather than event snapshots or untrusted caller hints.",
+      "Enforced exact head validation: target head must match authoritative PR headRefOid; stale heads, wrong heads, or synthetic all-zero heads fail closed immediately before invoking the verifier.",
+      "Derived delivery_class strictly from current authoritative PR labels (delivery:tooling -> tooling, absent -> product).",
+      "Added unlabeled to pull_request_target types so removing delivery:tooling re-evaluates authoritative labels and enforces product review proof.",
       "Aligned workflow_dispatch inputs to require only head_ref and head_sha, matching backend github_review_bridge.py dispatch payload without rejecting schema or requiring delivery_class.",
       "Unified concurrency group to pantheon-canonical-review-${{ github.event.pull_request.head.sha || github.event.inputs.head_sha }} with cancel-in-progress: true so PR events and dispatch converge to the exact same head SHA identity.",
-      "Derived DELIVERY_CLASS strictly from PR labels (delivery:tooling) rather than untrusted caller input, eliminating forged tooling classification.",
       "Implemented truthful external publication failure handling for canonical_review_gate_ci.py: exit 0 (success status), exit 1 (unapproved status published without job crash), exit 2 (publication failure after retries, job fails loudly).",
       "Added verifier checkout commit provenance step.",
-      "Added focused Vitest contract suite in src/test/pantheon-canonical-review-workflow.test.ts testing the wrapper contract without copying review policy.",
+      "Added comprehensive Vitest contract suite in src/test/pantheon-canonical-review-workflow.test.ts testing YAML contracts and consumer behavior coverage for current/stale head, label removal, and dispatch classification.",
       "Updated docs/conventions/GIT_WORKFLOW.md with canonical gate, publisher identity, branch protection details, and rollout documentation."
     ],
     "preserved": [
@@ -73,39 +143,43 @@
   },
   "acceptance": {
     "single_canonical_verifier": true,
+    "authoritative_pr_metadata_resolved": true,
+    "stale_head_fail_closed": true,
     "dispatch_schema_aligned": true,
     "unlabeled_event_covered": true,
     "unified_concurrency_group": true,
     "truthful_publication_failure": true,
-    "vitest_contract_suite_passed": true
+    "vitest_contract_suite_passed": true,
+    "consumer_behavior_coverage_passed": true
   },
   "validation": {
     "vitest_contract_test": {
       "command": "npx vitest run src/test/pantheon-canonical-review-workflow.test.ts",
-      "result": "passed: 8/8 tests"
+      "result": "passed: 18/18 tests"
     },
     "vitest_related_test": {
       "command": "npx vitest related --run src/test/pantheon-canonical-review-workflow.test.ts",
-      "result": "passed: 8/8 tests"
+      "result": "passed: 18/18 tests"
     },
     "typecheck": {
       "command": "npm run typecheck",
       "result": "passed"
     },
     "lint": {
-      "command": "npm run lint",
-      "result": "passed: 0 errors"
+      "command": "npx eslint src/test/pantheon-canonical-review-workflow.test.ts",
+      "result": "passed: 0 errors, 0 warnings"
     }
   },
   "independent_review_required": [
     "Confirm .github/workflows/pantheon-canonical-review-gate.yml consumes the single Pantheon verifier protocol without a second gate or duplicate policy.",
+    "Confirm pr_metadata step resolves authoritative PR metadata via GitHub API and validates target head SHA matches authoritative headRefOid, rejecting stale/wrong/all-zero heads before verifier call.",
+    "Confirm delivery classification derives solely from authoritative PR labels (delivery:tooling) without trusting caller dispatch inputs.",
     "Confirm workflow_dispatch schema requires only head_ref and head_sha, matching github_review_bridge.py dispatch payload.",
     "Confirm pull_request_target triggers on opened, synchronize, reopened, ready_for_review, labeled, and unlabeled.",
     "Confirm concurrency group converges to head_sha for both PR-event and dispatch runs.",
-    "Confirm delivery classification derives solely from PR labels without trusting caller dispatch inputs.",
     "Confirm exit 2 publication failure is treated as job failure while exit 1 unapproved status is handled truthfully.",
-    "Confirm src/test/pantheon-canonical-review-workflow.test.ts passes and is selected by CI.",
-    "Confirm docs/conventions/GIT_WORKFLOW.md records canonical gate details and dev branch protection app_id null status.",
+    "Confirm src/test/pantheon-canonical-review-workflow.test.ts passes (18/18 tests) including consumer behavior coverage for current/stale head, label removal, and dispatch classification.",
+    "Confirm docs/conventions/GIT_WORKFLOW.md records canonical gate details, authoritative resolution, stale head rejection, and old-base vs post-merge proof.",
     "Bind this file through REVIEW_FILE during governed exact-head approval."
   ]
 }

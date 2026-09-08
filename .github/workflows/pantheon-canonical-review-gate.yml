@@ -47,9 +47,8 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       REPO: ${{ github.repository }}
-      HEAD_REF: ${{ github.event.inputs.head_ref || github.event.pull_request.head.ref }}
-      HEAD_SHA: ${{ github.event.inputs.head_sha || github.event.pull_request.head.sha }}
-      DELIVERY_CLASS: ${{ contains(github.event.pull_request.labels.*.name, 'delivery:tooling') && 'tooling' || 'product' }}
+      TARGET_HEAD_REF: ${{ github.event.inputs.head_ref || github.event.pull_request.head.ref }}
+      TARGET_HEAD_SHA: ${{ github.event.inputs.head_sha || github.event.pull_request.head.sha }}
       TARGET_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
     steps:
       - name: Checkout trusted Pantheon verifier
@@ -66,19 +65,74 @@ jobs:
         run: |
           echo "Trusted Pantheon verifier checkout commit: $(git rev-parse HEAD)"
 
-      - name: Validate exact head identity
+      - name: Resolve authoritative PR metadata and validate exact head identity
+        id: pr_metadata
         shell: bash
         run: |
           set -euo pipefail
-          [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "head_sha must be a full lowercase commit SHA" >&2; exit 1; }
-          [[ "$HEAD_REF" =~ ^[A-Za-z0-9._/-]+$ ]] || { echo "head_ref contains unsafe characters" >&2; exit 1; }
+          [[ "$TARGET_HEAD_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::head_sha must be a full lowercase commit SHA" >&2; exit 1; }
+          [[ "$TARGET_HEAD_REF" =~ ^[A-Za-z0-9._/-]+$ ]] || { echo "::error::head_ref contains unsafe characters" >&2; exit 1; }
+
+          echo "Resolving authoritative current PR metadata from GitHub API for event $GITHUB_EVENT_NAME..."
           if [[ "$GITHUB_EVENT_NAME" == "pull_request_target" ]]; then
-            [[ "$HEAD_SHA" == "${{ github.event.pull_request.head.sha }}" ]] || { echo "event head SHA changed" >&2; exit 1; }
-            [[ "$HEAD_REF" == "${{ github.event.pull_request.head.ref }}" ]] || { echo "event head ref changed" >&2; exit 1; }
+            PR_NUM="${{ github.event.pull_request.number }}"
+            PR_JSON=$(gh pr view "$PR_NUM" --repo "$REPO" --json number,headRefName,headRefOid,labels,state)
+          elif [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            PR_LIST_JSON=$(gh pr list --repo "$REPO" --head "$TARGET_HEAD_REF" --state open --json number,headRefName,headRefOid,labels,state)
+            PR_COUNT=$(echo "$PR_LIST_JSON" | jq 'length')
+            if [[ "$PR_COUNT" -eq 0 ]]; then
+              echo "::error::no open pull request found for head branch $TARGET_HEAD_REF" >&2
+              exit 1
+            fi
+            if [[ "$PR_COUNT" -gt 1 ]]; then
+              echo "::error::multiple open pull requests found for head branch $TARGET_HEAD_REF ($PR_COUNT)" >&2
+              exit 1
+            fi
+            PR_JSON=$(echo "$PR_LIST_JSON" | jq '.[0]')
+          else
+            echo "::error::unsupported event $GITHUB_EVENT_NAME" >&2
+            exit 1
           fi
+
+          AUTH_HEAD_REF=$(echo "$PR_JSON" | jq -r '.headRefName')
+          AUTH_HEAD_SHA=$(echo "$PR_JSON" | jq -r '.headRefOid')
+          AUTH_STATE=$(echo "$PR_JSON" | jq -r '.state')
+
+          if [[ "$AUTH_STATE" != "OPEN" ]]; then
+            echo "::error::PR is not OPEN (state: $AUTH_STATE)" >&2
+            exit 1
+          fi
+
+          # Fail closed if target head SHA does not match current authoritative PR head (stale or wrong head)
+          if [[ "$TARGET_HEAD_SHA" != "$AUTH_HEAD_SHA" ]]; then
+            echo "::error::target head SHA $TARGET_HEAD_SHA does not match authoritative PR head $AUTH_HEAD_SHA (stale or wrong head)" >&2
+            exit 1
+          fi
+
+          if [[ "$TARGET_HEAD_REF" != "$AUTH_HEAD_REF" ]]; then
+            echo "::error::target head ref $TARGET_HEAD_REF does not match authoritative PR branch $AUTH_HEAD_REF" >&2
+            exit 1
+          fi
+
+          # Authoritative delivery classification from current PR labels (not event snapshot or caller input)
+          HAS_TOOLING_LABEL=$(echo "$PR_JSON" | jq -r '[.labels[].name] | contains(["delivery:tooling"])')
+          if [[ "$HAS_TOOLING_LABEL" == "true" ]]; then
+            DELIVERY_CLASS="tooling"
+          else
+            DELIVERY_CLASS="product"
+          fi
+
+          echo "delivery_class=$DELIVERY_CLASS" >> "$GITHUB_OUTPUT"
+          echo "auth_head_sha=$AUTH_HEAD_SHA" >> "$GITHUB_OUTPUT"
+          echo "auth_head_ref=$AUTH_HEAD_REF" >> "$GITHUB_OUTPUT"
+          echo "Authoritative metadata verified: PR head=$AUTH_HEAD_SHA, ref=$AUTH_HEAD_REF, delivery_class=$DELIVERY_CLASS"
 
       - name: Publish canonical review status
         working-directory: pantheon-verifier
+        env:
+          DELIVERY_CLASS: ${{ steps.pr_metadata.outputs.delivery_class }}
+          HEAD_REF: ${{ steps.pr_metadata.outputs.auth_head_ref }}
+          HEAD_SHA: ${{ steps.pr_metadata.outputs.auth_head_sha }}
         run: |
           gate_rc=0
           python3 scripts/git/canonical_review_gate_ci.py \
