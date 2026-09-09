@@ -101,21 +101,67 @@ Local hook setup (once per clone): `git config core.hooksPath .githooks`
 
 ## 6. CI Gates and Branch Protection
 
-Provided by `.github/workflows/branch-ci.yml`:
+Provided by `.github/workflows/branch-ci.yml` and `.github/workflows/pantheon-canonical-review-gate.yml`:
 
-| Status check name       | What it does                                        |
-|-------------------------|------------------------------------------------------|
-| `Commit trailers`       | Enforce subject prefix + LLM-Agent / Task-ID / Reviewer |
-| `Generated files guard` | Reject build/audit artifacts from the diff           |
-| `Component merge gate`  | Focused tests, contract checks, typecheck, and build |
-| `Smoke acceptance`      | Fail-closed compatibility context over the component merge gate |
+| Status check name               | What it does                                                    |
+|---------------------------------|------------------------------------------------------------------|
+| `Commit trailers`               | Enforce subject prefix + LLM-Agent / Task-ID / Reviewer         |
+| `Generated files guard`         | Reject build/audit artifacts from the diff                       |
+| `Component merge gate`          | Focused tests, contract checks, typecheck, and build             |
+| `Smoke acceptance`              | Fail-closed compatibility context over the component merge gate  |
+| `Pantheon canonical review gate`| Verify exact-head review proof via single trusted backend verifier|
 
-Branch protection requires PRs and an up-to-date base. `dev` requires
-`Commit trailers`, `Generated files guard`, `Component merge gate`, and the
-canonical review gate. The historical `main` protection still requires
+Branch protection requires PRs and an up-to-date base (`strict: true`). `dev` requires
+four status checks: `Commit trailers` (app_id: 15368), `Generated files guard` (app_id: 15368),
+`Component merge gate` (app_id: 15368), and `Pantheon canonical review gate`.
+In current execute-plans branch protection, `Pantheon canonical review gate` is bound with
+`app_id: null` (unlike Pantheon's app_id 15368), while status updates are posted by the GitHub
+Actions runner (`GITHUB_TOKEN`). The historical `main` protection still requires
 `Commit trailers`, `Generated files guard`, and `Smoke acceptance`; the latter
 is emitted only after `Component merge gate` succeeds, so it cannot weaken the
 underlying gate. Force push and branch deletion remain blocked.
+
+### 6.1 Canonical Review Gate
+
+The canonical review gate (`.github/workflows/pantheon-canonical-review-gate.yml`) runs
+via `pull_request_target` (executing trusted base wrapper code) on `dev` and `main` branches
+across PR events (`opened`, `synchronize`, `reopened`, `ready_for_review`, `labeled`, `unlabeled`)
+and re-triggers via `workflow_dispatch` (`head_ref`, `head_sha`).
+
+- **Single verifier protocol:** Checks out `ajoe734/pantheon@dev` and invokes
+  `scripts/git/canonical_review_gate_ci.py`. No local review policy is duplicated.
+- **Authoritative PR metadata resolution:** Rather than relying on webhook event snapshots or
+  untrusted caller hints, the wrapper queries GitHub's API (`gh pr view` for `pull_request_target`,
+  `gh pr list --head <ref>` for `workflow_dispatch`) to obtain the authoritative live PR object
+  (`headRefName`, `headRefOid`, `labels`, `state`).
+- **Exact head validation & stale head rejection:** The target head SHA is checked against the
+  PR's current authoritative head (`headRefOid`). If the head has moved (stale head), is all zeroes,
+  or fails format validation (`^[0-9a-f]{40}$`), the step fails immediately before calling the
+  verifier, preventing unearned success.
+- **Label-derived authority & removal re-evaluation:** Delivery classification derives strictly
+  from current authoritative PR labels: `delivery:tooling` assigns tooling delivery (Human/Ops direct
+  delivery), whereas product tasks require an exact-head review-proof tag. Removing the tooling
+  label (`unlabeled`) immediately re-evaluates the PR under product delivery. Dispatch runs resolve
+  the PR from `head_ref` and derive classification from its actual labels without trusting caller hints.
+- **Unified concurrency:** PR events and workflow_dispatch targeting the same head commit
+  share concurrency key `pantheon-canonical-review-${{ github.event.pull_request.head.sha || github.event.inputs.head_sha }}`
+  with `cancel-in-progress: true`, avoiding split groups.
+- **Truthful publication failure:** Script exit code 0 reflects approved status posted;
+  exit 1 reflects an unapproved/failing evaluation (fail-closed commit status published; job succeeds);
+  exit 2 indicates an unrecoverable GitHub status POST error after retries and fails the Actions job
+  loudly so required context is never left silently unset.
+- **Rollout distinction & owner closeout:**
+  - *Old-base admission:* The repair PR #747 is evaluated before merge by the installed dev base
+    wrapper (`5d4f3852`) via `pull_request_target`, calling `pantheon@dev` verifier and publishing
+    the expected pre-approval failure status until Codex approves and the proof tag is pushed.
+  - *Post-merge new-base proof:* After PR #747 merges into `dev`, the new workflow is installed
+    on `dev`. Because a merged PR is no longer OPEN and the new workflow strictly enforces open-PR
+    lookup, the post-merge dispatch proof targets a legitimate current OPEN PR on `dev` (e.g. PR #745,
+    branch `task/FE-EXACT-PAIR-PROTOCOL-001`, head `b536219f374a853b9c6f154e5eee998a290223e3`) via the
+    existing bridge. The new base wrapper must be verified to accept the 2-input dispatch schema (`head_ref`,
+    `head_sha`) without 422 retry, query live PR metadata, validate exact head, and post status. The post-merge
+    run proof is recorded durably in the canonical task `done` checkpoint message, preserving the frozen
+    approved review evidence manifest without post-approval head invalidation.
 
 The pre-existing `pantheon-integration-gate.yml` (FE-BFF live release
 gate) keeps running on PRs/pushes as an informational check; it is not
