@@ -1,12 +1,12 @@
 {
   "schema_version": "pantheon.task-review-evidence.v1",
   "task_id": "FE-DEP-CLOSURE-001",
-  "owner": "Antigravity2",
-  "reviewer": "Codex",
+  "owner": "Codex",
+  "reviewer": "Claude",
   "target_repo": "ajoe734/execute-plans",
   "merge_target": "dev",
   "branch": "task/FE-DEP-CLOSURE-001",
-  "status": "blocked-on-external-contract-drift",
+  "status": "source-validated-awaiting-backend-prerequisite-and-canonical-review",
   "source_identity": {
     "audit_frontend_base": "5d4f385284b44a30e10764426a47fd808a7ae3cb",
     "current_dev_base": "fda58bb05052c90e0e18310666ad174b5ab3ff51",
@@ -55,9 +55,12 @@
     ],
     "added_npm_lock_nodes": [],
     "retained_version_changes": [],
-    "unchanged_product_source": true,
-    "unchanged_build_config": true,
-    "hosted_deployment_performed": false
+    "unchanged_product_source": false,
+    "unchanged_build_config": false,
+    "hosted_deployment_performed": false,
+    "unchanged_product_runtime_implementation": true,
+    "additional_generated_contract_delta": "ResearchRunProjection gains the existing owner provenance enum; its exact schema digest is refreshed in types and snapshot.",
+    "additional_generation_tooling_delta": "Existing generator/checker verifies declared commit objects, ancestry and all resolved bundle/source Git bytes; --write followed by committed-output --bind-handoff replaces historical hard-coded commit attribution. Branch CI fetches backend history for these checks."
   },
   "consumer_audit": {
     "audit_packages": 94,
@@ -2553,18 +2556,92 @@
       "command": "git diff --check origin/dev...HEAD; python3 scripts/git/check_commit_trailers.py --range origin/dev..HEAD --skip-merge; python3 scripts/git/check_generated_files.py package.json package-lock.json docs/deployment/evidence/FE-DEP-CLOSURE-001/evidence.json",
       "exit_code": 0,
       "result": "Diff, task trailers and generated-files scope guards passed."
+    },
+    {
+      "command": "npx vitest run --maxWorkers=1 --testTimeout=15000 --hookTimeout=30000",
+      "exit_code": 0,
+      "result": "204 files; 2053 tests passed, zero failed/skipped; final seven provenance tests included.",
+      "log_sha256": "d56a942796a3fe55adc62231f5b9d8316a448a0c90d83306f5df6851d8618b9b",
+      "source_validation": "2026-09-09 direct generation provenance repair",
+      "tests_passed": 2053,
+      "tests_failed": 0,
+      "tests_skipped": 0
+    },
+    {
+      "command": "npx vitest run src/test/contract-generation-provenance.test.ts src/lib/bff-v1/__tests__/contract-drift.test.ts --maxWorkers=1",
+      "exit_code": 0,
+      "result": "Final source: 2 files; 14 tests passed.",
+      "log_sha256": "06828eca079345a67c880f58abfd4ac189bed67eb9143d96ddde6f0873eae336",
+      "source_validation": "2026-09-09 direct generation provenance repair",
+      "tests_passed": 14,
+      "tests_failed": 0,
+      "tests_skipped": 0
+    },
+    {
+      "command": "npm run typecheck",
+      "exit_code": 0,
+      "result": "Configured Agora project passes; full-application gate remains owned by FE-RUNTIME-TYPE-CLOSURE-CORRECTIVE-001.",
+      "log_sha256": "b57ecf0ea70f204b35ee0b9ab18ca3a5711b6334753ca2d601f9702b9778b409",
+      "source_validation": "2026-09-09 direct generation provenance repair"
+    },
+    {
+      "command": "PANTHEON_CONTRACT_ROOT=<committed backend candidate> node scripts/contract-drift-check.mjs",
+      "exit_code": 0,
+      "result": "49 schemas, 157 routes, 75 schema hashes aligned; all 14 resolved bundle indices and generated output are also bound to real Git commits.",
+      "log_sha256": "1b3595e982323f6ba01a03177eb2d2572deb83f0e14962432c135ad97e80306d",
+      "source_validation": "2026-09-09 direct generation provenance repair"
+    },
+    {
+      "command": "npm ls --all --json",
+      "exit_code": 0,
+      "result": "Complete installed dependency/peer graph passed after clean npm ci (973 packages).",
+      "log_sha256": "1358ce45db252bdaaa2949275392e2209958dfd7e002709eb36fcec6b9985c63",
+      "source_validation": "2026-09-09 direct generation provenance repair"
+    },
+    {
+      "command": "VITE_BFF_MODE=live VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build",
+      "exit_code": 0,
+      "result": "Strict production build passed in 63 seconds with fixture isolation and existing repository public identity variables; values were passed only to the build process.",
+      "log_sha256": "3c1e35a7f5468683fce796bbae34d28725362eb7de50981049826dde999aea2f",
+      "source_validation": "2026-09-09 direct generation provenance repair"
+    },
+    {
+      "command": "Existing scripts/agora_compat_manifest.py write --compatibility-status pending followed by verify --allow-pending, using exact committed backend/frontend candidate HEAD refs",
+      "exit_code": 0,
+      "result": "No blocking reasons; exact handoff Git bytes and descendant generated output verified. Candidate remains pending; no accepted-dev or deployment claim."
     }
   ],
   "independent_review_required": [
-    "Review all 94 dispositions including the concrete Bun retention exception and Lovable plugin consumer.",
-    "Verify auth/session/SSE, graph, chart and rendering behavior tests and configured strict-live build results.",
-    "Bind this committed manifest to the exact current-dev PR head, run required CI and approve canonically as Codex; only supervisor integrator merges.",
-    "Required CI fails due to cross-repo Agora contract drift against Pantheon dev (runs 34288481417, 34288477651, 34287233832, 34287225238). Even with types.ts granted, verified contract provenance counterexample confirms types.ts alone cannot close CI: regenerating types also drifts contract-snapshot.json and frontend-generation-output.v1_13.json hash, and attributing new output hash to historical runtime commit 95d03944 is rejected by backend release verifier (scripts/agora_compat_manifest.py). Full repair requires external cross-repo architecture decision and qualified generation provenance sync before handoff."
+    "Review all 94 package dispositions including the concrete Bun retention exception and Lovable plugin consumer.",
+    "Verify current complete frontend tests, strict production build, exact generated output and actual backend/frontend Git-byte provenance negatives.",
+    "Bind this committed manifest to the exact final PR748 head; assigned reviewer Claude performs independent canonical review after fresh required checks and the backend metadata prerequisite is merged. Only the existing canonical integrator merges.",
+    "Confirm FE-GENERATION-INPUT-CORRECTIVE-001 supplies the actual merged backend handoff; re-run the existing compatibility verifier with accepted dev refs before claiming dev source qualification. Full app typecheck remains a separately assigned task; source delivery does not claim hosted acceptance."
   ],
   "validation_scope": {
     "auth_session_stream_behavior": "The full suite executed public-build-auth-contract (67 tests), OpenClawLlmAuthPanel, managementAi, liveTransport, SSE and agent panel tests, plus chart/grid and strict-live/release protocol regressions. No privileged hosted auth was performed.",
-    "source_boundary_check": "git diff --check origin/dev...HEAD; only package.json, package-lock.json and this evidence manifest are task delivery files. Product TS/TSX, vite.config.ts, deployment workflows and scripts unchanged.",
+    "source_boundary_check": "Original package/lock delta preserved. Formal artifact expansion adds existing generation checker, generated types/snapshot, frontend generation handoff, branch CI history depth and focused provenance tests. git diff --check and commit/generated-file guards pass. No handwritten generated DTO changes, dependency upgrades, runtime auth/session/stream changes or hosted actions.",
     "install_warnings": "npm reports existing deprecated transitive packages; compatible upgrade work remains assigned to the separate FE baseline tasks.",
-    "remote_gates": "Required GitHub checks fail Component merge gate at npm run test:contract due to cross-repo Agora contract drift against Pantheon dev. Resolving this drift requires ungranted contract snapshot/handoff/checker updates and backend release verifier alignment, which cannot be closed by types.ts grant alone without false attribution. Blocked on Human/Ops for qualified cross-repo contract provenance architecture decision."
+    "remote_gates": "Previous PR748 CI failure is preserved as historical evidence. Local candidate source/provenance checks now pass; backend metadata prerequisite must merge and fresh required GitHub checks plus assigned independent canonical review must pass before FE delivery is complete."
+  },
+  "generation_provenance_repair": {
+    "validated_at": "2026-09-09T01:59:19.592018+00:00",
+    "source_head": "633796694e877bdd3e7878184b955d6f7f3113b1",
+    "backend_contract_commit": "c0c035b5f32436b96f10cd10c91834861d555144",
+    "backend_handoff_candidate_commit": "a1efe19c94f77c0d23ccbe88239ce3ab45bb357f",
+    "frontend_generated_output_commit": "bce5e57922aadab4619a16afd51078ddf91d28c1",
+    "frontend_handoff_commit": "cd7ffd4ff58cc4ef2035daa989c1abf092c0e3ae",
+    "generated_types_sha256": "9e0d797ff223cba35dedd5a956983e2c9099fb28486d0d564e21319156fa8212",
+    "root_cause": "AGORA-CHAIN-001 commit 879ac6c82 changed v4/research_run_projection.schema.json and bundle_index.v1_3.json. Frontend outputs were stale and handoffs still attributed inputs/outputs to historical commits whose Git bytes differ.",
+    "qualification_boundary": "The backend metadata prerequisite and this FE head are local committed candidates. Existing backend verifier uses the explicitly supplied candidate HEAD refs and produces a pending manifest with zero blocking reasons. This is not dev merge, canonical review, deployment or hosted acceptance.",
+    "candidate_manifest_sha256": "c84c7dcd1117a801d724f3faffdf3b4982923ba80a8da62d9c82aad52e5cbea9",
+    "inherited_bundle_boundary": "The FE gate now binds every resolved bundle index and schema/OpenAPI/capability file to the actual declared backend commit. Historical extends.bundle_index_sha256 edge metadata is not repaired by this task; no complete historical edge-metadata validation is claimed.",
+    "negative_cases": [
+      "new output bound to an old runtime with its newly calculated digest",
+      "uncommitted output binding",
+      "placeholder, unknown and unrelated commit identities",
+      "annotated tag object masquerading as a commit",
+      "changed contract, output path, algorithm or digest",
+      "inherited schema bytes attributed to a historical contract commit"
+    ]
   }
 }
