@@ -492,6 +492,15 @@ jobs:
       PANTHEON_PUBLIC_GCP_IDENTITY_API_KEY: ${{ vars.VITE_GCP_IDENTITY_API_KEY }}
       PANTHEON_PUBLIC_GCP_IDENTITY_PROJECT_ID: ${{ vars.VITE_GCP_IDENTITY_PROJECT_ID }}
       PANTHEON_PUBLIC_GCP_IDENTITY_AUTH_DOMAIN: ${{ vars.VITE_GCP_IDENTITY_AUTH_DOMAIN }}
+      PANTHEON_BFF_CANDIDATE_TRANSPORT: ${{ vars.PANTHEON_BFF_CANDIDATE_TRANSPORT || '' }}
+      PANTHEON_BFF_IMAGE_REPOSITORY: ${{ vars.PANTHEON_BFF_IMAGE_REPOSITORY || '' }}
+      PANTHEON_BFF_IMAGE_TAG: ${{ vars.PANTHEON_BFF_IMAGE_TAG || 'dev' }}
+      PANTHEON_BFF_IMAGE_DIGEST: ${{ vars.PANTHEON_BFF_IMAGE_DIGEST || '' }}
+      PANTHEON_BFF_IMAGE_DIGEST_TYPE: ${{ vars.PANTHEON_BFF_IMAGE_DIGEST_TYPE || 'oci_manifest_digest' }}
+      PANTHEON_LEASE_OWNER: ${{ vars.PANTHEON_LEASE_OWNER || '' }}
+      PANTHEON_LEASE_EPOCH: ${{ vars.PANTHEON_LEASE_EPOCH || '' }}
+      PANTHEON_LEASE_RUN_ID: ${{ vars.PANTHEON_LEASE_RUN_ID || '' }}
+      PANTHEON_LEASE_DELEGATED: ${{ vars.PANTHEON_LEASE_DELEGATED || 'true' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -804,17 +813,37 @@ jobs:
           set -euo pipefail
           version_file="$PANTHEON_AUDIT_OUT_DIR/bff-version.json"
           identity_file="$PANTHEON_AUDIT_OUT_DIR/release-identity.json"
+          target_bff="${PANTHEON_BFF_CANDIDATE_TRANSPORT:-$PANTHEON_BFF_BASE_URL}"
           curl --fail --silent --show-error --location \
             --retry 3 --retry-all-errors --connect-timeout 5 --max-time 20 \
-            "${PANTHEON_BFF_BASE_URL%/}/bff/version" > "$version_file"
-          bff_sha="$(node scripts/release-identity.mjs create \
-            --frontend-sha "$PANTHEON_FRONTEND_SHA" \
-            --bff-base-url "$PANTHEON_BFF_BASE_URL" \
-            --version-file "$version_file" \
-            --expected-bff-sha "$PANTHEON_EXPECTED_BFF_SHA" \
-            --gate-run-id "$GITHUB_RUN_ID" \
-            --gate-run-url "$PANTHEON_RELEASE_GATE_RUN_URL" \
-            --output "$identity_file")"
+            "${target_bff%/}/bff/version" > "$version_file"
+          identity_args=(
+            --frontend-sha "$PANTHEON_FRONTEND_SHA"
+            --bff-base-url "$PANTHEON_BFF_BASE_URL"
+            --version-file "$version_file"
+            --gate-run-id "$GITHUB_RUN_ID"
+            --gate-run-url "$PANTHEON_RELEASE_GATE_RUN_URL"
+            --output "$identity_file"
+          )
+          if [[ -n "$PANTHEON_EXPECTED_BFF_SHA" ]]; then
+            identity_args+=(--expected-bff-sha "$PANTHEON_EXPECTED_BFF_SHA")
+          fi
+          if [[ -n "${PANTHEON_BFF_IMAGE_DIGEST:-}" ]]; then
+            identity_args+=(
+              --bff-image-repository "${PANTHEON_BFF_IMAGE_REPOSITORY:-pantheon-bff}"
+              --bff-image-tag "${PANTHEON_BFF_IMAGE_TAG:-dev}"
+              --bff-image-digest "$PANTHEON_BFF_IMAGE_DIGEST"
+              --bff-image-digest-type "${PANTHEON_BFF_IMAGE_DIGEST_TYPE:-oci_manifest_digest}"
+            )
+          fi
+          if [[ -n "${PANTHEON_LEASE_OWNER:-}" ]]; then
+            identity_args+=(
+              --lease-owner "$PANTHEON_LEASE_OWNER"
+              --lease-epoch "$PANTHEON_LEASE_EPOCH"
+              --lease-run-id "${PANTHEON_LEASE_RUN_ID:-$GITHUB_RUN_ID}"
+            )
+          fi
+          bff_sha="$(node scripts/release-identity.mjs create "${identity_args[@]}")"
           echo "PANTHEON_BFF_SHA=${bff_sha}" >> "$GITHUB_ENV"
           echo "PANTHEON_RELEASE_IDENTITY_FILE=${identity_file}" >> "$GITHUB_ENV"
           echo "bff_sha=${bff_sha}" >> "$GITHUB_OUTPUT"
@@ -956,6 +985,14 @@ jobs:
       - name: Prepare authenticated immutable three-profile candidate set
         id: candidate
         if: steps.release_identity.outcome == 'success' && steps.build.outcome == 'success' && steps.build_operator_live.outcome == 'success' && steps.build_write_proof.outcome == 'success'
+        env:
+          PANTHEON_BFF_IMAGE_DIGEST: ${{ vars.PANTHEON_BFF_IMAGE_DIGEST || env.PANTHEON_BFF_IMAGE_DIGEST || '' }}
+          PANTHEON_BFF_IMAGE_DIGEST_TYPE: ${{ vars.PANTHEON_BFF_IMAGE_DIGEST_TYPE || env.PANTHEON_BFF_IMAGE_DIGEST_TYPE || 'oci_manifest_digest' }}
+          PANTHEON_LEASE_OWNER: ${{ vars.PANTHEON_LEASE_OWNER || env.PANTHEON_LEASE_OWNER || '' }}
+          PANTHEON_LEASE_EPOCH: ${{ vars.PANTHEON_LEASE_EPOCH || env.PANTHEON_LEASE_EPOCH || '' }}
+          PANTHEON_LEASE_RUN_ID: ${{ vars.PANTHEON_LEASE_RUN_ID || env.PANTHEON_LEASE_RUN_ID || '' }}
+          PANTHEON_LEASE_DELEGATED: ${{ vars.PANTHEON_LEASE_DELEGATED || env.PANTHEON_LEASE_DELEGATED || 'true' }}
+          PANTHEON_BFF_CANDIDATE_TRANSPORT: ${{ vars.PANTHEON_BFF_CANDIDATE_TRANSPORT || env.PANTHEON_BFF_CANDIDATE_TRANSPORT || '' }}
         run: |
           admission_args=()
           if [[ -n "${PANTHEON_RELEASE_CANDIDATE_ID:-}" ]]; then
@@ -963,6 +1000,22 @@ jobs:
               --release-candidate-id "$PANTHEON_RELEASE_CANDIDATE_ID"
               --compatibility-manifest-sha256 "$PANTHEON_COMPATIBILITY_MANIFEST_SHA256"
               --controller-run-id "$PANTHEON_RELEASE_CONTROLLER_RUN_ID"
+            )
+          fi
+          if [[ -n "${PANTHEON_BFF_IMAGE_DIGEST:-}" ]]; then
+            admission_args+=(
+              --bff-image-repository "${PANTHEON_BFF_IMAGE_REPOSITORY:-pantheon-bff}"
+              --bff-image-tag "${PANTHEON_BFF_IMAGE_TAG:-dev}"
+              --bff-image-digest "$PANTHEON_BFF_IMAGE_DIGEST"
+              --bff-image-digest-type "${PANTHEON_BFF_IMAGE_DIGEST_TYPE:-oci_manifest_digest}"
+            )
+          fi
+          if [[ -n "${PANTHEON_LEASE_OWNER:-}" ]]; then
+            admission_args+=(
+              --lease-owner "$PANTHEON_LEASE_OWNER"
+              --lease-epoch "$PANTHEON_LEASE_EPOCH"
+              --lease-run-id "${PANTHEON_LEASE_RUN_ID:-$GITHUB_RUN_ID}"
+              --lease-delegated "${PANTHEON_LEASE_DELEGATED:-true}"
             )
           fi
           node scripts/release-candidate.mjs prepare-pair \
@@ -1018,13 +1071,14 @@ jobs:
           set -o pipefail
           npm run validate:mgmt-persona:3000 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/mgmt-persona-3000-validation.log"
 
-      - name: Anonymous BFF route probe
+      - name: Probe unauthenticated BFF routes
         id: route_probe
         continue-on-error: true
         timeout-minutes: 8
         env:
           PANTHEON_BFF_ROUTE_PROBE_ATTEMPTS: "3"
           PANTHEON_BFF_ROUTE_PROBE_TIMEOUT_MS: "25000"
+          PANTHEON_BFF_BASE_URL: ${{ env.PANTHEON_BFF_CANDIDATE_TRANSPORT || env.PANTHEON_BFF_BASE_URL }}
         run: |
           set -o pipefail
           node scripts/probe-bff-routes.mjs --anonymous 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/bff-route-probe-anonymous.log"
@@ -1033,6 +1087,8 @@ jobs:
         id: auth_smoke
         if: env.PANTHEON_BFF_SMOKE_BEARER_TOKEN != ''
         continue-on-error: true
+        env:
+          PANTHEON_BFF_BASE_URL: ${{ env.PANTHEON_BFF_CANDIDATE_TRANSPORT || env.PANTHEON_BFF_BASE_URL }}
         run: |
           set -o pipefail
           node scripts/probe-bff-authenticated-live.mjs 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/bff-authenticated-live-smoke.log"
@@ -1041,6 +1097,8 @@ jobs:
         id: write_probe
         if: env.PANTHEON_BFF_SMOKE_BEARER_TOKEN != ''
         continue-on-error: true
+        env:
+          PANTHEON_BFF_BASE_URL: ${{ env.PANTHEON_BFF_CANDIDATE_TRANSPORT || env.PANTHEON_BFF_BASE_URL }}
         run: |
           set -o pipefail
           npm run probe:bff:writes 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/bff-write-path-probe.log"
@@ -1103,6 +1161,7 @@ jobs:
         env:
           PANTHEON_EXPECTED_BFF_SHA: ${{ env.PANTHEON_BFF_SHA }}
           PANTHEON_PINT_PROBE_ALLOW_WRITES: "true"
+          PANTHEON_BFF_BASE_URL: ${{ env.PANTHEON_BFF_CANDIDATE_TRANSPORT || env.PANTHEON_BFF_BASE_URL }}
         run: |
           set -o pipefail
           node scripts/probe-persona-governed-proposal-live.mjs 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/pint-hosted-governed-proposal.log"
@@ -1110,6 +1169,8 @@ jobs:
       - name: Management live deep validation
         id: mgmt_live_deep
         continue-on-error: true
+        env:
+          PANTHEON_BFF_BASE_URL: ${{ env.PANTHEON_BFF_CANDIDATE_TRANSPORT || env.PANTHEON_BFF_BASE_URL }}
         run: |
           set -o pipefail
           npm run validate:mgmt-live:deep 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/management-live-deep-validation.log"
@@ -1194,9 +1255,10 @@ jobs:
           PANTHEON_EXPECTED_FE_SHA: ${{ env.PANTHEON_FRONTEND_SHA }}
           PANTHEON_PROBE_RELEASE_STRICT: "1"
           PANTHEON_PROBE_JSON_OUT: ${{ env.PANTHEON_AUDIT_OUT_DIR }}/hosted-browser-bff-probe.json
+          PANTHEON_BFF_CANDIDATE_TRANSPORT: ${{ env.PANTHEON_BFF_CANDIDATE_TRANSPORT }}
         run: |
           set -o pipefail
-          PANTHEON_FE_BASE_URL="https://pantheon-lupin-dev-fe.35.201.204.12.sslip.io" \
+          PANTHEON_FE_BASE_URL="${PANTHEON_DEV_FE_HOST:-https://app.dev.mvl-cap.tw}" \
           PANTHEON_BROWSER_BFF_BASE_URL="$PANTHEON_BFF_BASE_URL" \
           node scripts/probe-hosted-browser-bff.mjs 2>&1 | tee "$PANTHEON_AUDIT_OUT_DIR/hosted-browser-bff-probe.log"
 
@@ -1338,10 +1400,11 @@ jobs:
         if: always() && steps.release_identity.outcome == 'success'
         run: |
           set -euo pipefail
+          target_bff="${PANTHEON_BFF_CANDIDATE_TRANSPORT:-$PANTHEON_BFF_BASE_URL}"
           version_file="$PANTHEON_AUDIT_OUT_DIR/bff-version-final.json"
           curl --fail --silent --show-error --location \
             --retry 3 --retry-all-errors --connect-timeout 5 --max-time 20 \
-            "${PANTHEON_BFF_BASE_URL%/}/bff/version" > "$version_file"
+            "${target_bff%/}/bff/version" > "$version_file"
           node scripts/release-identity.mjs verify-version \
             --identity-file "$PANTHEON_RELEASE_IDENTITY_FILE" \
             --version-file "$version_file" \

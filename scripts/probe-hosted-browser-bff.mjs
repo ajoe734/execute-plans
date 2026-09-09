@@ -8,13 +8,74 @@ const FE_BASE = trimTrailingSlash(
   process.env.PANTHEON_FE_BASE_URL ||
     "https://app.dev.mvl-cap.tw",
 );
+export function assertSafeBffCandidateTransport(url) {
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch (error) {
+    throw new Error(`invalid candidate transport URL: ${error.message}`);
+  }
+  if (!["http:", "https:"].includes(parsed.protocol)) {
+    throw new Error(`unsafe candidate transport protocol: ${parsed.protocol}`);
+  }
+  if (parsed.username || parsed.password) {
+    throw new Error("candidate transport rejected: URL cannot contain embedded credentials");
+  }
+  const hostname = parsed.hostname.toLowerCase();
+  if (
+    hostname === "169.254.169.254" ||
+    hostname.includes("169.254.") ||
+    hostname.includes("a9fe:a9fe") ||
+    hostname === "metadata.google.internal" ||
+    hostname.endsWith(".metadata.google.internal") ||
+    hostname === "100.100.100.200" ||
+    hostname.includes("fd00:ec2::254")
+  ) {
+    throw new Error(
+      `candidate transport rejected: SSRF / cloud metadata forbidden: ${hostname}`,
+    );
+  }
+  const isLoopback =
+    hostname === "localhost" ||
+    hostname === "127.0.0.1" ||
+    hostname === "[::1]" ||
+    /^127\.\d+\.\d+\.\d+$/u.test(hostname);
+  const isPrivateIp =
+    /^10\.\d+\.\d+\.\d+$/u.test(hostname) ||
+    /^192\.168\.\d+\.\d+$/u.test(hostname) ||
+    /^172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+$/u.test(hostname);
+  const isLocalDomain =
+    hostname.endsWith(".local") ||
+    hostname.endsWith(".internal") ||
+    hostname.endsWith(".test");
+  const isPantheonDomain =
+    hostname === "mvl-cap.tw" ||
+    hostname.endsWith(".mvl-cap.tw");
+
+  if (!isLoopback && !isPrivateIp && !isLocalDomain && !isPantheonDomain) {
+    throw new Error(
+      `candidate transport rejected: unauthorized destination endpoint: ${hostname}`,
+    );
+  }
+  return trimTrailingSlash(url);
+}
+
 const UPSTREAM_BFF_BASE = trimTrailingSlash(
   process.env.PANTHEON_BFF_BASE_URL ||
     "https://api.dev.mvl-cap.tw",
 );
-const BFF_BASE = trimTrailingSlash(
-  process.env.PANTHEON_BROWSER_BFF_BASE_URL || UPSTREAM_BFF_BASE,
-);
+const RAW_CANDIDATE_TRANSPORT = String(
+  process.env.PANTHEON_BFF_CANDIDATE_TRANSPORT || "",
+).trim();
+const RAW_BROWSER_BFF = String(
+  process.env.PANTHEON_BROWSER_BFF_BASE_URL || "",
+).trim();
+const CANDIDATE_TRANSPORT = RAW_CANDIDATE_TRANSPORT
+  ? assertSafeBffCandidateTransport(RAW_CANDIDATE_TRANSPORT)
+  : RAW_BROWSER_BFF && RAW_BROWSER_BFF !== UPSTREAM_BFF_BASE
+    ? assertSafeBffCandidateTransport(RAW_BROWSER_BFF)
+    : "";
+const BFF_BASE = CANDIDATE_TRANSPORT || UPSTREAM_BFF_BASE;
 const OLD_BFF_URL = normalizeOldBffUrl(
   process.env.PANTHEON_OLD_BFF_URL || "",
 );
@@ -275,24 +336,33 @@ function pathnameOf(url) {
   }
 }
 
-export function isBffRequestUrl(url, baseUrl = BFF_BASE) {
-  const pathname = httpPathWithinBase(url, baseUrl);
-  if (pathname === null) return false;
+export function isBffPath(pathname) {
+  if (!pathname || typeof pathname !== "string") return false;
+  const normalized = pathname.startsWith("/") ? pathname : "/" + pathname;
   return (
-    pathname.startsWith("/bff/") ||
-    ["/health", "/healthz", "/readyz", "/openapi.json"].includes(pathname)
+    normalized.startsWith("/bff/") ||
+    ["/health", "/healthz", "/readyz", "/openapi.json"].includes(normalized)
   );
 }
 
+export function isBffRequestUrl(url, baseUrl = BFF_BASE) {
+  const pathname = httpPathWithinBase(url, baseUrl);
+  if (pathname === null) return false;
+  return isBffPath(pathname);
+}
+
 function isBffUrl(url) {
-  return isBffRequestUrl(url, BFF_BASE);
+  return (
+    isBffRequestUrl(url, BFF_BASE) || isBffRequestUrl(url, UPSTREAM_BFF_BASE)
+  );
 }
 
 function isCoreBffResponse(res, expectedPath) {
   const url = res.url();
   return (
     isBffUrl(url) &&
-    httpPathWithinBase(url, BFF_BASE) === expectedPath &&
+    (httpPathWithinBase(url, BFF_BASE) === expectedPath ||
+      httpPathWithinBase(url, UPSTREAM_BFF_BASE) === expectedPath) &&
     res.request().method() === "GET"
   );
 }
@@ -1397,6 +1467,235 @@ async function installCandidateRoute(page, candidateResolver, routeErrors) {
   });
 }
 
+export async function installBffCandidateRoute(
+  page,
+  upstreamBase,
+  candidateBase,
+  routeErrors = [],
+) {
+  if (upstreamBase === candidateBase) return;
+  assertSafeBffCandidateTransport(candidateBase);
+
+  await page.route(upstreamBase + "/**", async (route) => {
+    const request = route.request();
+    const originalUrl = request.url();
+    const pathname = httpPathWithinBase(originalUrl, upstreamBase);
+    if (!pathname || !isBffPath(pathname)) {
+      await route.continue();
+      return;
+    }
+
+    const base = new URL(candidateBase);
+    const basePath = base.pathname.replace(/\/+$/, "");
+    const normalizedPathname = pathname.startsWith("/") ? pathname : "/" + pathname;
+    const candidateUrl = new URL(
+      basePath + normalizedPathname + new URL(originalUrl).search,
+      base.origin,
+    ).toString();
+
+    try {
+      // Verify browser CORS for cross-origin candidate requests
+      const requestHeaders = request.headers();
+      const requestOrigin = requestHeaders["origin"] || "";
+      let pageOrigin = "";
+      try {
+        const pageUrl = page.url();
+        if (pageUrl && pageUrl !== "about:blank") {
+          pageOrigin = new URL(pageUrl).origin;
+        } else {
+          pageOrigin = new URL(FE_BASE).origin;
+        }
+      } catch {
+        pageOrigin = new URL(FE_BASE).origin;
+      }
+      const isCrossOrigin = Boolean(requestOrigin) || (new URL(originalUrl).origin !== pageOrigin);
+      const expectedOrigin = requestOrigin || pageOrigin;
+
+      // Playwright Request does not expose Fetch's credentials mode. Missing
+      // Cookie/Authorization headers cannot prove credentials were omitted.
+      // Conservatively require credentialed CORS permissions for candidates.
+      if (isCrossOrigin) {
+        const method = request.method();
+        const contentType = (requestHeaders["content-type"] || "").toLowerCase().split(";")[0].trim();
+        const simpleMethods = ["GET", "HEAD", "POST"];
+        const simpleContentTypes = ["application/x-www-form-urlencoded", "multipart/form-data", "text/plain", ""];
+        const customHeaderNames = Object.keys(requestHeaders).filter((h) => {
+          const lower = h.toLowerCase();
+          // Browser-controlled headers are not part of Access-Control-Request-Headers.
+          return !lower.startsWith("sec-") &&
+            !["accept", "accept-language", "content-language", "user-agent", "referer", "origin", "host", "cookie", "content-length", "accept-encoding", "connection"].includes(lower) &&
+            !(lower === "content-type" && simpleContentTypes.includes(contentType));
+        });
+        const requiresPreflight = !simpleMethods.includes(method) || !simpleContentTypes.includes(contentType) || customHeaderNames.length > 0;
+
+        if (requiresPreflight) {
+          const preflightHeaders = {
+            origin: expectedOrigin,
+            "access-control-request-method": method,
+            host: new URL(candidateBase).host,
+          };
+          if (customHeaderNames.length > 0) {
+            preflightHeaders["access-control-request-headers"] = customHeaderNames.join(", ");
+          }
+          const preflightResponse = await page.request.fetch(candidateUrl, {
+            method: "OPTIONS",
+            headers: preflightHeaders,
+            maxRedirects: 0,
+          });
+          const preflightStatus = preflightResponse.status();
+          if (preflightStatus < 200 || preflightStatus >= 300) {
+            routeErrors.push({
+              code: "bff_candidate_cors_preflight_error",
+              url: redactUrl(originalUrl),
+              candidateUrl: redactUrl(candidateUrl),
+              error: `candidate preflight failed with status ${preflightStatus}: ${await preflightResponse.text()}`,
+            });
+            await route.abort("failed");
+            return;
+          }
+          const preHeaders = preflightResponse.headers();
+          const preAllowOrigin = preHeaders["access-control-allow-origin"];
+          if (!preAllowOrigin) {
+            routeErrors.push({
+              code: "bff_candidate_cors_preflight_error",
+              url: redactUrl(originalUrl),
+              candidateUrl: redactUrl(candidateUrl),
+              error: "candidate preflight response missing required Access-Control-Allow-Origin header",
+            });
+            await route.abort("failed");
+            return;
+          }
+          if (preAllowOrigin === "*") {
+            routeErrors.push({
+              code: "bff_candidate_cors_preflight_error",
+              url: redactUrl(originalUrl),
+              candidateUrl: redactUrl(candidateUrl),
+              error: "candidate preflight Access-Control-Allow-Origin cannot be * when credentials are used",
+            });
+            await route.abort("failed");
+            return;
+          }
+          if (preAllowOrigin !== "*" && preAllowOrigin !== expectedOrigin) {
+            routeErrors.push({
+              code: "bff_candidate_cors_preflight_error",
+              url: redactUrl(originalUrl),
+              candidateUrl: redactUrl(candidateUrl),
+              error: `candidate preflight Access-Control-Allow-Origin mismatch: expected ${expectedOrigin}, got ${preAllowOrigin}`,
+            });
+            await route.abort("failed");
+            return;
+          }
+          const preAllowCreds = preHeaders["access-control-allow-credentials"];
+          if (preAllowCreds !== "true") {
+            routeErrors.push({
+              code: "bff_candidate_cors_preflight_error",
+              url: redactUrl(originalUrl),
+              candidateUrl: redactUrl(candidateUrl),
+              error: "candidate preflight response missing required Access-Control-Allow-Credentials: true header",
+            });
+            await route.abort("failed");
+            return;
+          }
+          const rawAllowMethods = preHeaders["access-control-allow-methods"] || "";
+          const preAllowMethods = rawAllowMethods.split(",").map((m) => m.trim().toUpperCase()).filter(Boolean);
+          // Require explicit permission: credentialed CORS treats
+          // '*' as a literal method/header, and Authorization is never wildcarded.
+          if (!simpleMethods.includes(method) && !preAllowMethods.includes(method.toUpperCase())) {
+            routeErrors.push({
+              code: "bff_candidate_cors_preflight_error",
+              url: redactUrl(originalUrl),
+              candidateUrl: redactUrl(candidateUrl),
+              error: `candidate preflight method ${method} not permitted by Access-Control-Allow-Methods (${rawAllowMethods || "none"})`,
+            });
+            await route.abort("failed");
+            return;
+          }
+          const rawAllowHeaders = preHeaders["access-control-allow-headers"] || "";
+          const preAllowHeaders = rawAllowHeaders.split(",").map((h) => h.trim().toLowerCase()).filter(Boolean);
+          for (const headerName of customHeaderNames) {
+            if (!preAllowHeaders.includes(headerName.toLowerCase())) {
+              routeErrors.push({
+                code: "bff_candidate_cors_preflight_error",
+                url: redactUrl(originalUrl),
+                candidateUrl: redactUrl(candidateUrl),
+                error: `candidate preflight header ${headerName} not permitted by Access-Control-Allow-Headers (${rawAllowHeaders || "none"})`,
+              });
+              await route.abort("failed");
+              return;
+            }
+          }
+        }
+      }
+
+      const response = await page.request.fetch(candidateUrl, {
+        method: request.method(),
+        headers: {
+          ...request.headers(),
+          host: new URL(candidateBase).host,
+        },
+        data: request.postDataBuffer() || undefined,
+        maxRedirects: 0,
+      });
+
+      const responseHeaders = response.headers();
+      delete responseHeaders["content-encoding"];
+      delete responseHeaders["content-length"];
+
+      if (isCrossOrigin) {
+        const allowOrigin = responseHeaders["access-control-allow-origin"];
+
+        if (!allowOrigin) {
+          routeErrors.push({
+            code: "bff_candidate_cors_error",
+            url: redactUrl(originalUrl),
+            candidateUrl: redactUrl(candidateUrl),
+            error: "candidate response missing required Access-Control-Allow-Origin header",
+          });
+          await route.abort("failed");
+          return;
+        }
+
+        const allowCreds = responseHeaders["access-control-allow-credentials"];
+        if (allowOrigin === "*" || allowCreds !== "true") {
+          routeErrors.push({
+            code: "bff_candidate_cors_error",
+            url: redactUrl(originalUrl),
+            candidateUrl: redactUrl(candidateUrl),
+            error: "candidate response with credentials requires exact Access-Control-Allow-Origin and Access-Control-Allow-Credentials: true",
+          });
+          await route.abort("failed");
+          return;
+        }
+
+        if (allowOrigin !== "*" && allowOrigin !== expectedOrigin) {
+          routeErrors.push({
+            code: "bff_candidate_cors_error",
+            url: redactUrl(originalUrl),
+            candidateUrl: redactUrl(candidateUrl),
+            error: `Access-Control-Allow-Origin mismatch: expected ${expectedOrigin}, got ${allowOrigin}`,
+          });
+          await route.abort("failed");
+          return;
+        }
+      }
+
+      await route.fulfill({
+        status: response.status(),
+        headers: responseHeaders,
+        body: await response.body(),
+      });
+    } catch (error) {
+      routeErrors.push({
+        code: "bff_candidate_transport_error",
+        url: redactUrl(originalUrl),
+        candidateUrl: redactUrl(candidateUrl),
+        error: redactDiagnosticText(error),
+      });
+      await route.abort("failed");
+    }
+  });
+}
+
 function isFrontendOriginUrl(value) {
   try {
     return new URL(value).origin === new URL(FE_BASE).origin;
@@ -1778,6 +2077,14 @@ async function runHostedUxProfile({
         candidateRouteErrors,
       );
     }
+    if (BFF_BASE !== UPSTREAM_BFF_BASE) {
+      await installBffCandidateRoute(
+        page,
+        UPSTREAM_BFF_BASE,
+        BFF_BASE,
+        candidateRouteErrors,
+      );
+    }
     page.on("request", (request) => {
       if (request.headers().authorization) authorizationRequestCount += 1;
       const method = canonicalBrowserMethod(request.method());
@@ -2002,6 +2309,14 @@ async function runProbe() {
 
   if (candidateResolver) {
     await installCandidateRoute(page, candidateResolver, candidateRouteErrors);
+  }
+  if (BFF_BASE !== UPSTREAM_BFF_BASE) {
+    await installBffCandidateRoute(
+      page,
+      UPSTREAM_BFF_BASE,
+      BFF_BASE,
+      candidateRouteErrors,
+    );
   }
 
   page.on("request", (request) => {
@@ -2416,7 +2731,10 @@ async function runProbe() {
     : [];
 
   const containsBffStatic =
-    bundleText.includes(BFF_BASE) || html.includes(BFF_BASE);
+    bundleText.includes(BFF_BASE) ||
+    html.includes(BFF_BASE) ||
+    bundleText.includes(UPSTREAM_BFF_BASE) ||
+    html.includes(UPSTREAM_BFF_BASE);
   const observedIntendedBff =
     requests.some((request) => isBffUrl(request.url)) ||
     responses.some((response) => isBffUrl(response.url)) ||
@@ -2793,6 +3111,8 @@ async function runProbe() {
       generatedAt,
       mode: RELEASE_STRICT ? "release-strict" : "compatibility",
       pass,
+      personaFleetSafetyPassed: personaFleetSafety.pass,
+      openclawContractPassed: Boolean(personaFleetSafety.pass && rootRendered && pageErrors.length === 0),
       targets: {
         feBase: FE_BASE,
         pageUrl,
@@ -2830,6 +3150,7 @@ async function runProbe() {
           noEmbeddedDevBearerRequired,
           noEmbeddedDevBearer,
           personaFleetSafetyPassed: personaFleetSafety.pass,
+          openclawContractPassed: Boolean(personaFleetSafety.pass && rootRendered && pageErrors.length === 0),
           applicationRootRendered: rootRendered,
           pageErrorsAbsent: pageErrors.length === 0,
           oldUrlAbsent: oldUrlHitCount === 0,

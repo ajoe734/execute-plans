@@ -11,10 +11,13 @@ const SHA256 = /^[0-9a-f]{64}$/u;
 const EVENT_STATUSES = new Set([
   "accepted",
   "bootstrap",
+  "delegated",
   "failed",
   "overridden",
   "passed",
   "pending",
+  "prepared",
+  "prepared_success",
   "qualified",
   "rejected",
   "rolled_back",
@@ -23,6 +26,7 @@ const EVENT_STATUSES = new Set([
 ]);
 const OUTCOMES = new Set([
   "accepted",
+  "prepared_success",
   "recovery_rollback_failed",
   "recovery_rollback_probe_failed",
   "recovery_rolled_back",
@@ -35,11 +39,14 @@ const DETAIL_STATUSES = new Set([
   "accepted",
   "bootstrap",
   "completed",
+  "delegated",
   "failed",
   "missing",
   "overridden",
   "passed",
   "pending",
+  "prepared",
+  "prepared_success",
   "qualified",
   "rejected",
   "rolled_back",
@@ -220,19 +227,49 @@ function validateStatus(value) {
 const DETAIL_VALIDATORS = Object.freeze({
   acceptedGateRunId: validateRunIdOrLegacy,
   acceptedGithubArtifactDigest: validateGithubDigestOrLegacy,
+  activationStatus: validateStatus,
   agoraCompatibilityEvidenceSha256: validateDigest,
   agoraCompatibilityManifestSha256: validateDigest,
   artifactDigestSha256: (value) => validateDigest(value, ["legacy"]),
   auditDir: (value) => validatePath(value),
+  bffArchiveChecksum: (value) => validateDigest(value, ["none"]),
   bffCommit: validateSha40,
+  bffImageConfigDigest: (value) => validateDigest(value, ["none"]),
+  bffImageDigest: (value) => validateDigest(value, ["none"]),
+  bffImageDigestType: (value) => {
+    if (
+      !["oci_manifest_digest", "image_config_digest", "archive_checksum", "none"].includes(value)
+    )
+      invalidDetail();
+    return value;
+  },
+  bffImageRepository: (value) => {
+    if (value === "none") return value;
+    if (!/^[A-Za-z0-9][A-Za-z0-9._/-]*$/u.test(value)) invalidDetail();
+    return value;
+  },
+  bffImageTag: (value) => {
+    if (value === "none") return value;
+    if (!/^[A-Za-z0-9_.-]+$/u.test(value)) invalidDetail();
+    return value;
+  },
+  bffOciManifestDigest: (value) => validateDigest(value, ["none"]),
   candidateDir: (value) => validatePath(value),
   candidateRef: validateBranchRef,
   candidateSha: validateSha40,
+  compatibilityDigest: (value) => validateDigest(value, ["none"]),
   controllerSha: validateSha40,
   currentDevSha: validateSha40,
   deployRoot: (value) => validatePath(value),
   deploymentStatus: validateStatus,
   emergencyOverride: validateBoolean,
+  expectedPredecessorCommit: validateCommitOrPlaceholder,
+  expectedPredecessorDigest: (value) =>
+    validateDigest(value, ["legacy", "missing", "none", "bootstrap"]),
+  expectedPredecessorPairId: (value) =>
+    validateDigest(value, ["legacy", "missing", "none", "bootstrap"]),
+  expectedPredecessorTarget: (value) =>
+    validatePath(value, ["missing", "none", "bootstrap"]),
   frontendSha: validateSha40,
   githubArtifactDigest: (value) => {
     if (!/^sha256:[0-9a-f]{64}$/u.test(value.toLowerCase())) invalidDetail();
@@ -244,8 +281,13 @@ const DETAIL_VALIDATORS = Object.freeze({
   integrationGateRunId: validateRunId,
   integrationGateRunUrl: validateGateUrl,
   integrationGateStatus: validateStatus,
+  leaseDelegated: validateBoolean,
+  leaseEpoch: validateRunIdOrLegacy,
+  leaseOwner: validateActor,
+  leaseRunId: validateRunIdOrLegacy,
   liveCandidateSha: validateSha40,
   lockFile: (value) => validatePath(value),
+  mandatoryGateStatus: validateStatus,
   observedTarget: (value) => validatePath(value, ["missing"]),
   outcome: (value) => {
     if (!OUTCOMES.has(value)) invalidDetail();
@@ -253,6 +295,10 @@ const DETAIL_VALIDATORS = Object.freeze({
   },
   overrideActor: validateActor,
   overrideReasonSha256: (value) => validateDigest(value, ["none"]),
+  pairId: (value) => validateDigest(value, ["none"]),
+  preparedArtifactChecksum: (value) => validateDigest(value, ["none"]),
+  preparedArtifactLocator: (value) => validatePath(value, ["missing", "none"]),
+  preparedOutcome: validateStatus,
   previousArtifactDigest: (value) =>
     validateDigest(value, ["legacy", "missing", "none"]),
   previousCommit: validateCommitOrPlaceholder,
@@ -261,9 +307,11 @@ const DETAIL_VALIDATORS = Object.freeze({
   previousTarget: (value) => validatePath(value, ["missing", "none"]),
   probeStatus: validateStatus,
   releaseDir: (value) => validatePath(value),
+  releaseId: (value) => validateDigest(value, ["none"]),
   rollbackStatus: validateStatus,
   rollbackDrill: validateBoolean,
   runtimeBffCommit: validateSha40,
+  servedReadbackStatus: validateStatus,
   validatedDevSha: validateSha40,
 });
 
@@ -558,12 +606,21 @@ function terminalOutcome(events) {
     terminal?.type === "release.completed" &&
     terminal?.status === "passed" &&
     outcome === "accepted";
+  const preparedSuccess =
+    (terminal?.type === "release.prepared" ||
+      terminal?.type === "release.completed" ||
+      terminal?.type === "candidate.prepared") &&
+    (terminal?.status === "passed" ||
+      terminal?.status === "prepared" ||
+      terminal?.status === "prepared_success") &&
+    outcome === "prepared_success";
   const rejected =
     terminal?.type === "release.failed" &&
     terminal?.status === "failed" &&
     OUTCOMES.has(outcome) &&
-    outcome !== "accepted";
-  if (!accepted && !rejected)
+    outcome !== "accepted" &&
+    outcome !== "prepared_success";
+  if (!accepted && !rejected && !preparedSuccess)
     throw new Error("evidence log is missing a valid terminal release outcome");
   return outcome;
 }

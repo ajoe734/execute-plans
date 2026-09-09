@@ -567,4 +567,95 @@ describe("release evidence hash chain", () => {
     expect(escaped.status).toBe(2);
     expect(escaped.stderr).toMatch(/inside the audit root/u);
   });
+
+  it("finalizes and verifies prepared_success outcome with exact handshake details", () => {
+    const root = tempRoot();
+    const log = path.join(root, "evidence.jsonl");
+    const summary = path.join(root, "evidence.json");
+    expect(run(initArgs(log)).status).toBe(0);
+
+    const appended = run([
+      "append",
+      "--log",
+      log,
+      "--type",
+      "candidate.prepare",
+      "--status",
+      "prepared",
+      "--detail",
+      "leaseOwner=pantheon-dev-deploy",
+      "--detail",
+      "leaseEpoch=1",
+      "--detail",
+      "leaseDelegated=true",
+      "--detail",
+      "leaseRunId=123",
+      "--detail",
+      `preparedArtifactChecksum=${"5".repeat(64)}`,
+      "--detail",
+      `preparedArtifactLocator=${root}/prepared.zip`,
+      "--detail",
+      "bffImageRepository=asia-east1-docker.pkg.dev/pantheon-dev/pantheon/bff",
+      "--detail",
+      "bffImageTag=dev",
+      "--detail",
+      "bffImageDigestType=oci_manifest_digest",
+      "--detail",
+      `bffImageDigest=${"6".repeat(64)}`,
+      "--detail",
+      `bffOciManifestDigest=${"6".repeat(64)}`,
+      "--detail",
+      `bffImageConfigDigest=${"7".repeat(64)}`,
+      "--detail",
+      `bffArchiveChecksum=${"8".repeat(64)}`,
+      "--detail",
+      `expectedPredecessorPairId=${"9".repeat(64)}`,
+      "--detail",
+      `expectedPredecessorCommit=${"a".repeat(40)}`,
+      "--detail",
+      `expectedPredecessorDigest=${"b".repeat(64)}`,
+      "--detail",
+      `expectedPredecessorTarget=${root}/previous`,
+    ]);
+    expect(appended.status, appended.stderr).toBe(0);
+
+    const prepareComplete = run([
+      "append",
+      "--log",
+      log,
+      "--type",
+      "release.prepared",
+      "--status",
+      "passed",
+      "--detail",
+      "outcome=prepared_success",
+      "--detail",
+      "preparedOutcome=prepared_success",
+    ]);
+    expect(prepareComplete.status, prepareComplete.stderr).toBe(0);
+
+    const finalized = run([
+      "finalize",
+      "--log",
+      log,
+      "--summary",
+      summary,
+      "--outcome",
+      "prepared_success",
+      "--root",
+      root,
+    ]);
+    expect(finalized.status, finalized.stderr).toBe(0);
+
+    const verified = run([
+      "verify",
+      "--log",
+      log,
+      "--summary",
+      summary,
+      "--root",
+      root,
+    ]);
+    expect(verified.status, verified.stderr).toBe(0);
+  });
 });
