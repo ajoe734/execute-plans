@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import Ajv from "ajv";
 import {
+  requireHostedManifestPairId,
   writeDemoRunEvidence,
   type AgoraDemoRunEvidence,
 } from "../../e2e/agora-hosted-evidence";
@@ -35,7 +36,7 @@ describe("Agora Demo Run Evidence Schema", () => {
       exact_pair: {
         frontend_sha: "a".repeat(40),
         bff_sha: "b".repeat(40),
-        manifest_pair_id: "a".repeat(40) + ":" + "b".repeat(40),
+        manifest_pair_id: "c".repeat(64),
       },
       profile: "bounded-write-proof",
       objects: {
@@ -70,6 +71,18 @@ describe("Agora Demo Run Evidence Schema", () => {
     const valid = validate(validSample);
     expect(validate.errors).toBeNull();
     expect(valid).toBe(true);
+
+    for (const invalidPairId of [
+      "",
+      "0".repeat(64),
+      "c".repeat(63),
+      "a".repeat(40) + ":" + "b".repeat(40),
+    ]) {
+      expect(validate({
+        ...validSample,
+        exact_pair: { ...validSample.exact_pair, manifest_pair_id: invalidPairId },
+      })).toBe(false);
+    }
   });
 
   it("fails validation if required fields are missing", () => {
@@ -93,7 +106,7 @@ describe("Agora Demo Run Evidence Schema", () => {
       exact_pair: {
         frontend_sha: "0".repeat(40),
         bff_sha: "b".repeat(40),
-        manifest_pair_id: "0".repeat(40) + ":" + "b".repeat(40),
+        manifest_pair_id: "c".repeat(64),
       },
       profile: "bounded-write-proof",
       objects: {
@@ -132,7 +145,7 @@ describe("Agora Demo Run Evidence Schema", () => {
       exact_pair: {
         frontend_sha: "a".repeat(40),
         bff_sha: "0".repeat(40),
-        manifest_pair_id: "a".repeat(40) + ":" + "0".repeat(40),
+        manifest_pair_id: "c".repeat(64),
       },
     };
     expect(validate(bffZeroSample)).toBe(false);
@@ -148,7 +161,7 @@ describe("Agora Demo Run Evidence Schema", () => {
       exact_pair: {
         frontend_sha: "a".repeat(40),
         bff_sha: "b".repeat(40),
-        manifest_pair_id: "a".repeat(40) + ":" + "b".repeat(40),
+        manifest_pair_id: "c".repeat(64),
       },
       profile: "bounded-write-proof",
       objects: {
@@ -238,7 +251,7 @@ describe("Agora Demo Run Evidence Schema", () => {
       exact_pair: {
         frontend_sha: "a".repeat(40),
         bff_sha: "b".repeat(40),
-        manifest_pair_id: "a".repeat(40) + ":" + "b".repeat(40),
+        manifest_pair_id: "c".repeat(64),
       },
       profile: "bounded-write-proof",
       objects: {
@@ -313,7 +326,7 @@ describe("Agora Demo Run Evidence Schema", () => {
       exact_pair: {
         frontend_sha: "a".repeat(40),
         bff_sha: "b".repeat(40),
-        manifest_pair_id: "a".repeat(40) + ":" + "b".repeat(40),
+        manifest_pair_id: "c".repeat(64),
       },
       profile: "bounded-write-proof",
       objects: {
@@ -358,7 +371,7 @@ describe("Agora Demo Run Evidence Schema", () => {
       exact_pair: {
         frontend_sha: "a".repeat(40),
         bff_sha: "b".repeat(40),
-        manifest_pair_id: "a".repeat(40) + ":" + "b".repeat(40),
+        manifest_pair_id: "c".repeat(64),
       },
       profile: "bounded-write-proof",
       objects: {
@@ -396,5 +409,56 @@ describe("Agora Demo Run Evidence Schema", () => {
     expect(parsed.schema_version).toBe("pantheon.agora.demo-run-evidence.v1");
     expect(parsed.demo_run_id).toBe("demo-test-123");
     expect(parsed.objects.proposal_id).toBe("prop-123");
+  });
+});
+
+describe("Hosted Agora artifact-pair identity readback", () => {
+  const pairId = "c".repeat(64);
+  const manifest = { pairId, pair: { pairId } };
+
+  it("preserves the actual served digest and validates the parent's independent expectation", () => {
+    expect(requireHostedManifestPairId(manifest, pairId)).toBe(pairId);
+    expect(requireHostedManifestPairId(manifest)).toBe(pairId);
+  });
+
+  it.each([
+    null,
+    {},
+    { pairId },
+    { pair: { pairId } },
+    { pairId, pair: { pairId: "d".repeat(64) } },
+    { pairId: "0".repeat(64), pair: { pairId: "0".repeat(64) } },
+    {
+      pairId: "a".repeat(40) + ":" + "b".repeat(40),
+      pair: { pairId: "a".repeat(40) + ":" + "b".repeat(40) },
+    },
+  ])("rejects missing, contradictory, or fabricated commit-pair identities: %j", (invalid) => {
+    expect(() => requireHostedManifestPairId(invalid)).toThrow(/matching SHA-256/u);
+  });
+
+  it.each(["", "d".repeat(64), "0".repeat(64), "c".repeat(63)])(
+    "fails closed for an invalid or mismatched parent expectation: %s",
+    (expected) => {
+      expect(() => requireHostedManifestPairId(manifest, expected)).toThrow(/authenticated expectation/u);
+    },
+  );
+
+  it("rejects a pair switch during the journey even when both served fields agree", () => {
+    const original = requireHostedManifestPairId(manifest, pairId);
+    const changed = { pairId: "d".repeat(64), pair: { pairId: "d".repeat(64) } };
+    expect(() => requireHostedManifestPairId(changed, original)).toThrow(/authenticated expectation/u);
+  });
+
+  it("binds browser evidence to served readback and retains the parent's exact verifier", () => {
+    const journey = readFileSync(join(process.cwd(), "e2e/agora-product-journey.spec.ts"), "utf8");
+    const workflow = readFileSync(join(process.cwd(), ".github/workflows/pantheon-integration-gate.yml"), "utf8");
+    const parent = readFileSync(join(process.cwd(), ".github/workflows/pantheon-dev-fe-deploy.yml"), "utf8");
+    expect(journey).toContain("requireHostedManifestPairId(deployment, EXPECTED_PAIR_ID)");
+    expect(journey).toContain("const manifestPairId = await assertOperatorLiveCandidate(page)");
+    expect(journey).toContain("requireHostedManifestPairId(dep, manifestPairId)");
+    expect(journey).toContain("manifest_pair_id: manifestPairId");
+    expect(journey).not.toContain("manifest_pair_id: `${feSha}:${bffSha}`");
+    expect(workflow).toContain("EXPECTED_PAIR_ID: ${{ inputs.expected_pair_id }}");
+    expect(parent).toContain("if manifest_pair != expected_pair:");
   });
 });

@@ -60,7 +60,7 @@
         },
         "manifest_pair_id": {
           "type": "string",
-          "pattern": "^(?!0{40}:0{40}$)[0-9a-f]{40}:[0-9a-f]{40}$"
+          "pattern": "^(?!0{64}$)[0-9a-f]{64}$"
         }
       },
       "additionalProperties": false

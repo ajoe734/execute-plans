@@ -22,6 +22,7 @@ import {
   targetsExternalE2eEnvironment,
 } from "./helpers/auth";
 import {
+  requireHostedManifestPairId,
   writeDemoRunEvidence,
   type AgoraDemoRunEvidence,
 } from "./agora-hosted-evidence";
@@ -47,6 +48,7 @@ const TENANT_ID =
 const GCP_IDENTITY_EMAIL = process.env.PFG_AGORA_JOURNEY_E2E_GCP_EMAIL ?? "";
 const GCP_IDENTITY_PASSWORD =
   process.env.PFG_AGORA_JOURNEY_E2E_GCP_PASSWORD ?? "";
+const EXPECTED_PAIR_ID = process.env.EXPECTED_PAIR_ID;
 const EVIDENCE_DIR =
   process.env.PANTHEON_AUDIT_OUT_DIR ?? "/tmp/pfg-agora-product-journey";
 const DEV_FE_HOST = "app.dev.mvl-cap.tw";
@@ -520,7 +522,7 @@ async function waitForHostedRouteReady(page: Page): Promise<void> {
   }
 }
 
-async function assertOperatorLiveCandidate(page: Page): Promise<void> {
+async function assertOperatorLiveCandidate(page: Page): Promise<string> {
   expect(
     new URL(FE_BASE_URL).hostname,
     "strict-live journey must use the Pantheon dev FE",
@@ -548,6 +550,7 @@ async function assertOperatorLiveCandidate(page: Page): Promise<void> {
   } else {
     expect(buildMode.VITE_BFF_REAL_WRITES).toBe("true");
   }
+  return requireHostedManifestPairId(deployment, EXPECTED_PAIR_ID);
 }
 
 function valueAtAliases(
@@ -909,7 +912,7 @@ test.describe(`${TASK_ID} strict-live browser journey`, () => {
     let operationalReadinessEvidence: JsonRecord | undefined;
     const screenshots: string[] = [];
 
-    await assertOperatorLiveCandidate(page);
+    const manifestPairId = await assertOperatorLiveCandidate(page);
     const loginEvidence = await installHostedOperatorSession(
       page,
       session ? { ...session, token } : undefined,
@@ -1613,6 +1616,7 @@ test.describe(`${TASK_ID} strict-live browser journey`, () => {
       const depResponse = await request.get(`${FE_BASE_URL}/deployment.json?restore_check=${Date.now()}`);
       expect(depResponse.ok(), "deployment.json must be readable").toBe(true);
       const dep = asRecord(await depResponse.json());
+      expect(requireHostedManifestPairId(dep, manifestPairId)).toBe(manifestPairId);
       const servedFe = String(dep.commit ?? dep.frontendSha ?? (asRecord(dep.frontend)).commitSha ?? "").toLowerCase();
       const servedBff = String(dep.bffCommit ?? dep.bffSourceCommitSha ?? (asRecord(dep.bff)).sourceCommitSha ?? "").toLowerCase();
       expect(servedFe, "served FE commit must match expected FE SHA").toBe(feSha);
@@ -1667,7 +1671,7 @@ test.describe(`${TASK_ID} strict-live browser journey`, () => {
       exact_pair: {
         frontend_sha: feSha,
         bff_sha: bffSha,
-        manifest_pair_id: `${feSha}:${bffSha}`,
+        manifest_pair_id: manifestPairId,
       },
       profile: "bounded-write-proof",
       objects: {

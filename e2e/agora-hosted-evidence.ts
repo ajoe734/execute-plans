@@ -73,6 +73,33 @@ export interface AgoraDemoRunEvidence {
   };
 }
 
+/**
+ * Read the deployed artifact-pair identity; never derive it from commit SHAs.
+ * A parent-bound proof also supplies the independently authenticated pair ID.
+ * Without a parent expectation this validates readback, not parent authority.
+ */
+export function requireHostedManifestPairId(
+  manifest: unknown,
+  expectedPairId?: string,
+): string {
+  const record = (value: unknown): Record<string, unknown> =>
+    value && typeof value === "object" && !Array.isArray(value)
+      ? value as Record<string, unknown>
+      : {};
+  const deployment = record(manifest);
+  const pairId = deployment.pairId;
+  const digestPattern = /^(?!0{64}$)[0-9a-f]{64}$/u;
+  if (typeof pairId !== "string" || !digestPattern.test(pairId)
+    || record(deployment.pair).pairId !== pairId) {
+    throw new Error("Hosted deployment must expose matching SHA-256 pairId and pair.pairId");
+  }
+  if (expectedPairId !== undefined
+    && (!digestPattern.test(expectedPairId) || pairId !== expectedPairId)) {
+    throw new Error("Hosted deployment pair ID does not match the authenticated expectation");
+  }
+  return pairId;
+}
+
 export function writeHostedProofEvidence(outDir: string, payload: AgoraHostedProofPayload): string {
   mkdirSync(outDir, { recursive: true });
   const targetPath = join(outDir, "agora-hosted-proof-evidence.json");
