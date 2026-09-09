@@ -2615,13 +2615,13 @@
     "Review all 94 package dispositions including the concrete Bun retention exception and Lovable plugin consumer.",
     "Verify current complete frontend tests, strict production build, exact generated output and actual backend/frontend Git-byte provenance negatives.",
     "Bind this committed manifest to the exact final PR748 head; assigned reviewer Claude performs independent canonical review after fresh required checks and the backend metadata prerequisite is merged. Only the existing canonical integrator merges.",
-    "Confirm FE-GENERATION-INPUT-CORRECTIVE-001 supplies the actual merged backend handoff; re-run the existing compatibility verifier with accepted dev refs before claiming dev source qualification. Full app typecheck remains a separately assigned task; source delivery does not claim hosted acceptance."
+    "Consume the accepted handoff from canonical AGORA-PROVENANCE-CLOSURE-PREREQUISITE-001, regenerate/commit/bind FE output, and repeat exact-head frontend and existing compatibility checks against accepted dev refs. Full app typecheck remains a separately assigned task; source delivery does not claim hosted acceptance."
   ],
   "validation_scope": {
     "auth_session_stream_behavior": "The full suite executed public-build-auth-contract (67 tests), OpenClawLlmAuthPanel, managementAi, liveTransport, SSE and agent panel tests, plus chart/grid and strict-live/release protocol regressions. No privileged hosted auth was performed.",
     "source_boundary_check": "Original package/lock delta preserved. Formal artifact expansion adds existing generation checker, generated types/snapshot, frontend generation handoff, branch CI history depth and focused provenance tests. git diff --check and commit/generated-file guards pass. No handwritten generated DTO changes, dependency upgrades, runtime auth/session/stream changes or hosted actions.",
     "install_warnings": "npm reports existing deprecated transitive packages; compatible upgrade work remains assigned to the separate FE baseline tasks.",
-    "remote_gates": "Previous PR748 CI failure is preserved as historical evidence. Local candidate source/provenance checks now pass; backend metadata prerequisite must merge and fresh required GitHub checks plus assigned independent canonical review must pass before FE delivery is complete."
+    "remote_gates": "Previous PR748 CI failure is preserved as historical evidence. Local exploratory candidate source/provenance checks pass, but canonical AGORA-PROVENANCE-CLOSURE-PREREQUISITE-001 owns the producer fix. After that task merges, regenerate and bind FE outputs to its accepted backend contract, rerun exact-head checks and independent canonical review. Current candidate metadata is not accepted dev evidence."
   },
   "generation_provenance_repair": {
     "validated_at": "2026-09-09T01:59:19.592018+00:00",
@@ -2642,6 +2642,8 @@
       "annotated tag object masquerading as a commit",
       "changed contract, output path, algorithm or digest",
       "inherited schema bytes attributed to a historical contract commit"
-    ]
+    ],
+    "backend_handoff_candidate_disposition": "Unmerged exploratory metadata candidate only. The canonical AGORA-PROVENANCE-CLOSURE-PREREQUISITE-001 worker owns complete inherited source/bundle-edge closure and the accepted producer handoff; the narrower candidate is superseded and is not a delivery prerequisite.",
+    "required_predecessor": "AGORA-PROVENANCE-CLOSURE-PREREQUISITE-001"
   }
 }
