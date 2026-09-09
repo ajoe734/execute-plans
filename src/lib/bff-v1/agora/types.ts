@@ -8,7 +8,7 @@ export const AGORA_CONTRACT_SNAPSHOT = {
   "extends": {
     "bundle_path": "services/control-plane/specs/agora/bundle_index.v1_12.json",
     "bundle_version": "1.12",
-    "bundle_index_sha256": "25ca80c94a622a0845266cbecab617f96fc47daa8a08736a166d1d88c9dec7c6"
+    "bundle_index_sha256": "1237581dadc5be89cb204570082cdc1168b4f7d3d46ea6a8a2aa94e05f08fec9"
   },
   "files": {
     "specs/agora/agora_user_scope.schema.json": "ae660aa7719ded37ca8b41bfc6ac287d1eae0bb85a8389b08d069c528a934dee",
@@ -84,7 +84,7 @@ export const AGORA_CONTRACT_SNAPSHOT = {
     "specs/agora/v13/candidate_member_truth_projection.schema.json": "7ed59957adc97dd48af20aab19f8476acb84c29e8832d3ad076fe8625e610b00",
     "specs/agora/v13/capability_manifest_v1_12.json": "d35999b82e6b606f22de5baf4e6d260f03ce85d0cc871f5c1aa68145a0543188",
     "openapi/agora_v1_12.openapi.yaml": "88a707090a1e58ebe3159d530ab437f6f0bb0d130f26e396edf6f1de3678f53f",
-    "specs/agora/v14/capability_manifest_v1_13.json": "8b44dd85412b6ba7a0b9686b25d657fa9e3f95efdd4b0f280ff97d2be1186ff5",
+    "specs/agora/v14/capability_manifest_v1_13.json": "e17b120832bc92ed81d2edd7de3b11267ecb2fa82cfc4986cf2ac467a053f613",
     "openapi/agora_v1_13.openapi.yaml": "56f12e43bb6041a0f83bf4ff69bf13ae86a335a38246f68a10f0a4ef3a856087"
   },
   "requiredDefinitionChecksums": {
