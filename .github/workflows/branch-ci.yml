@@ -182,6 +182,9 @@ jobs:
       - name: Install
         run: npm ci
 
+      - name: Install Chromium for browser regression tests
+        run: npx --no-install playwright install --with-deps chromium
+
       - name: Deploy safety contract
         run: npx vitest run src/test/deploy-safe-defaults.test.ts
 

@@ -58,6 +58,7 @@ EXPECTED_PREDECESSOR_COMMIT="${PANTHEON_DEPLOY_EXPECTED_PREDECESSOR_COMMIT:-${PA
 EXPECTED_PREDECESSOR_PAIR_ID="${PANTHEON_DEPLOY_EXPECTED_PREDECESSOR_PAIR_ID:-${PANTHEON_EXPECTED_PREDECESSOR_PAIR_ID:-}}"
 EXPECTED_PREDECESSOR_ARTIFACT_DIGEST="${PANTHEON_DEPLOY_EXPECTED_PREDECESSOR_ARTIFACT_DIGEST:-${PANTHEON_EXPECTED_PREDECESSOR_ARTIFACT_DIGEST:-}}"
 PREPARED_SUCCESS=false
+PREPARED_REPLAY=false
 TIMESTAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 CONTROLLER_SHA="$(git rev-parse HEAD)"
 SHA="${PANTHEON_DEPLOY_CANDIDATE_SHA:-${GITHUB_SHA:-${CONTROLLER_SHA}}}"
@@ -248,6 +249,46 @@ persist_durable_evidence() {
     return 1
   fi
   DURABLE_EVIDENCE_PERSISTED=true
+}
+
+persist_prepared_evidence() {
+  # Retain the admission snapshot separately from the mutable run audit. Later
+  # activation/rejection must not overwrite the evidence used by a fresh process.
+  sudo "$(command -v node)" --input-type=module - \
+    "${AUDIT_DIR}" "${DURABLE_EVIDENCE_ROOT}" "$(basename -- "$1")" \
+    "${ROOT_DIR}/scripts/release-evidence.mjs" <<'NODE'
+import fs from "node:fs";
+import path from "node:path";
+import { execFileSync } from "node:child_process";
+const [source, root, releaseName, verifier] = process.argv.slice(2);
+if (fs.realpathSync(root) !== root || !/^[A-Za-z0-9._-]+$/.test(releaseName)) {
+  throw new Error("Prepared evidence requires a canonical root and release name");
+}
+const target = path.join(root, releaseName);
+if (fs.existsSync(target) || fs.lstatSync(target, { throwIfNoEntry: false })) {
+  throw new Error("Immutable prepared evidence already exists");
+}
+const stage = fs.mkdtempSync(path.join(root, ".prepared-"));
+try {
+  fs.cpSync(source, stage, { recursive: true });
+  execFileSync(process.execPath, [verifier, "verify", "--log", path.join(stage, "evidence.jsonl"),
+    "--summary", path.join(stage, "evidence.json"), "--root", stage], { stdio: "pipe" });
+  const syncTree = (entry) => {
+    const stat = fs.lstatSync(entry);
+    if (!stat.isDirectory() && !stat.isFile()) throw new Error("Prepared evidence must contain only regular files");
+    if (stat.isDirectory()) for (const name of fs.readdirSync(entry)) syncTree(path.join(entry, name));
+    fs.chmodSync(entry, stat.isDirectory() ? 0o750 : 0o640);
+    const fd = fs.openSync(entry, "r");
+    try { fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+  };
+  syncTree(stage);
+  fs.renameSync(stage, target);
+  const fd = fs.openSync(root, "r");
+  try { fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+} finally {
+  fs.rmSync(stage, { recursive: true, force: true });
+}
+NODE
 }
 
 accept_deployment() {
@@ -684,6 +725,7 @@ write_prepared_receipt() {
   local target_release_dir="$1"
   local target_release_name="$2"
   local receipt_file="${target_release_dir}/.prepared-receipt.json"
+  local mode="${3:-create}"
   node --input-type=module - \
     "${receipt_file}" \
     "${target_release_name}" \
@@ -705,7 +747,7 @@ write_prepared_receipt() {
     "${EXPECTED_PREDECESSOR_ARTIFACT_DIGEST:-${LIVE_DIGEST_AT_START:-${PREVIOUS_DIGEST}}}" \
     "${PAIR_ROOT_DIR:-$CANDIDATE_DIR}/pair.json" \
     "${AGORA_COMPAT_EVIDENCE_AUDIT}" \
-    "${AUDIT_DIR}/browser-probe-candidate_pre_switch.json" <<'NODE'
+    "${AUDIT_DIR}/browser-probe-candidate_pre_switch.json" "${mode}" <<'NODE'
 import crypto from "node:crypto";
 import fs from "node:fs";
 const [
@@ -713,7 +755,7 @@ const [
   artifactDigest, profile, githubArtifactDigest, gateRunId,
   leaseOwner, leaseEpoch, leaseRunId, leaseDelegated,
   predTarget, predCommit, predPairId, predDigest,
-  pairJsonPath, agoraCompatPath, browserProbePath
+  pairJsonPath, agoraCompatPath, browserProbePath, mode
 ] = process.argv.slice(2);
 let bffImage = null;
 if (fs.existsSync(pairJsonPath)) {
@@ -859,8 +901,18 @@ if (failedGates.length > 0) {
 }
 
 receipt.receiptIntegritySha256 = computeReceiptIntegritySha256(receipt);
+if (mode === "validate-only") process.exit(0);
 fs.writeFileSync(receiptFile, `${JSON.stringify(receipt, null, 2)}\n`, "utf8");
 NODE
+  if [[ "${mode}" == "validate-only" ]]; then
+    return 0
+  fi
+  copy_prepared_locator "${target_release_dir}"
+}
+
+copy_prepared_locator() {
+  local target_release_dir="$1"
+  local receipt_file="${target_release_dir}/.prepared-receipt.json"
   cp -f "${receipt_file}" "${AUDIT_DIR}/prepared-receipt.json"
   printf '%s\n' "${target_release_dir}" > "${AUDIT_DIR}/prepared-release-dir"
   printf '%s\n' "${RELEASE_INSTANCE}" > "${AUDIT_DIR}/release-instance"
@@ -869,23 +921,38 @@ NODE
 verify_prepared_receipt() {
   local target_release_dir="$1"
   local receipt_file="${target_release_dir}/.prepared-receipt.json"
-  if [[ ! -f "${receipt_file}" ]]; then
+  assert_scoped_path "Prepared release" "${target_release_dir}" "${RELEASES_DIR}"
+  if [[ "$(dirname -- "${target_release_dir}")" != "${RELEASES_DIR}" ]]; then
+    echo "Prepared release must be a direct child of the managed release store." >&2
+    return 2
+  fi
+  if [[ ! -f "${receipt_file}" || -L "${receipt_file}" || -L "${target_release_dir}" ]]; then
     echo "Activation refused: prepared receipt missing in ${target_release_dir}." >&2
     return 2
   fi
-  local durable_receipt="${DURABLE_EVIDENCE_ROOT}/${RELEASE_NAME}/prepared-receipt.json"
-  if [[ ! -f "${durable_receipt}" ]]; then
-    durable_receipt="${DURABLE_EVIDENCE_ROOT}/${RELEASE_NAME}/.prepared-receipt.json"
-  fi
-  if [[ -f "${durable_receipt}" ]]; then
-    local receipt_sum durable_sum
-    receipt_sum="$(sha256sum "${receipt_file}" | awk '{print $1}')"
-    durable_sum="$(sha256sum "${durable_receipt}" | awk '{print $1}')"
-    if [[ "${receipt_sum}" != "${durable_sum}" ]]; then
-      echo "Activation rejected: prepared receipt does not match durable copy." >&2
-      return 2
-    fi
-  fi
+  # This root-owned immutable snapshot is required, even with a fresh audit
+  # directory. Copy consistency is evidence integrity, not parent authentication.
+  sudo "$(command -v node)" --input-type=module - \
+    "${receipt_file}" "${DURABLE_EVIDENCE_ROOT}" "$(basename -- "${target_release_dir}")" \
+    "${ROOT_DIR}/scripts/release-evidence.mjs" <<'NODE'
+import fs from "node:fs";
+import path from "node:path";
+import { execFileSync } from "node:child_process";
+const [receiptFile, root, releaseName, verifier] = process.argv.slice(2);
+const directory = path.join(root, releaseName);
+const durableReceipt = path.join(directory, "prepared-receipt.json");
+if (fs.realpathSync(root) !== root || fs.realpathSync(directory) !== directory ||
+    fs.realpathSync(path.dirname(receiptFile)) !== path.dirname(receiptFile) ||
+    !fs.lstatSync(durableReceipt).isFile() ||
+    !fs.readFileSync(receiptFile).equals(fs.readFileSync(durableReceipt))) {
+  throw new Error("Prepared receipt is missing or does not match its immutable durable copy");
+}
+execFileSync(process.execPath, [verifier, "verify", "--log", path.join(directory, "evidence.jsonl"),
+  "--summary", path.join(directory, "evidence.json"), "--root", directory], { stdio: "pipe" });
+if (JSON.parse(fs.readFileSync(path.join(directory, "evidence.json"), "utf8")).outcome !== "prepared_success") {
+  throw new Error("Durable prepared evidence did not record prepared_success");
+}
+NODE
   if [[ -n "${PANTHEON_DEPLOY_PREPARED_RECEIPT_CHECKSUM:-}" ]]; then
     local expected_sum="${PANTHEON_DEPLOY_PREPARED_RECEIPT_CHECKSUM#sha256:}"
     local actual_sum
@@ -2207,6 +2274,27 @@ case "${DEPLOY_PROFILE}" in
     ;;
 esac
 
+if [[ "${DEPLOY_ACTION}" == "prepare" ]]; then
+  prepared_locator="${PANTHEON_DEPLOY_RELEASE_DIR:-}"
+  if [[ -z "${prepared_locator}" && -n "${PANTHEON_DEPLOY_RELEASE_NAME:-}" ]]; then
+    prepared_locator="${RELEASES_DIR}/${PANTHEON_DEPLOY_RELEASE_NAME}"
+  elif [[ -z "${prepared_locator}" && -f "${AUDIT_DIR}/prepared-release-dir" ]]; then
+    prepared_locator="$(<"${AUDIT_DIR}/prepared-release-dir")"
+    # A later profile of the same pair has its own admission. Reuse an implicit
+    # locator only for this profile; an explicit locator is always binding.
+    prepared_profile="$(node -e 'const p=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(p.profile||"")' "${prepared_locator}/.prepared-receipt.json")"
+    if [[ "${prepared_profile}" != "${DEPLOY_PROFILE}" ]]; then
+      prepared_locator=""
+    fi
+  fi
+  if [[ -n "${prepared_locator}" ]]; then
+    assert_scoped_path "Prepared release" "${prepared_locator}" "${RELEASES_DIR}"
+    RELEASE_DIR="${prepared_locator}"
+    RELEASE_NAME="$(basename -- "${RELEASE_DIR}")"
+    PREPARED_REPLAY=true
+  fi
+fi
+
 if [[ "${DEPLOY_PROFILE}" == "read-only-restore" ]]; then
   if [[ -n "${AGORA_COMPAT_EVIDENCE_INPUT}" && -f "${AGORA_COMPAT_EVIDENCE_INPUT}" && ! -L "${AGORA_COMPAT_EVIDENCE_INPUT}" ]]; then
     if ! verify_agora_compatibility_evidence "${AGORA_COMPAT_EVIDENCE_INPUT}"; then
@@ -2381,6 +2469,7 @@ fi
 if [[ "${DEPLOY_ACTION}" == "activate" ]]; then
   echo "=== validating prepared receipt and lease in new process ==="
   verify_prepared_receipt "${RELEASE_DIR}"
+  copy_prepared_locator "${RELEASE_DIR}"
   verify_dist_digest "${RELEASE_DIR}" "${ARTIFACT_DIGEST}" >/dev/null
 
   read -r pred_target pred_commit pred_pair pred_digest < <(node -e '
@@ -2428,6 +2517,11 @@ if [[ "${DEPLOY_ACTION}" == "activate" ]]; then
       exit 2
     fi
   fi
+fi
+
+if [[ "${DEPLOY_ACTION}" == "prepare" && "${PREVIOUS_DEPLOYMENT_STATE}" == "candidate" ]]; then
+  echo "Prepare cannot recover an interrupted public candidate; activate or restore must validate its retained receipt." >&2
+  exit 2
 fi
 
 if [[ -n "${PREVIOUS_COMMIT}" ]]; then
@@ -2501,6 +2595,32 @@ if [[ "${DEPLOY_ACTION}" == "prepare" ]]; then
   verify_bff_identity pre_candidate "${BFF_CANDIDATE_TRANSPORT:-$BFF_HOST}"
 elif [[ "${DEPLOY_ACTION}" != "activate" ]]; then
   verify_bff_identity pre_candidate
+fi
+
+if [[ "${DEPLOY_ACTION}" == "prepare" && ( "${PREPARED_REPLAY}" == "true" || "${NOOP_DEPLOY}" == "true" ) ]]; then
+  if [[ "${PREPARED_REPLAY}" != "true" ]]; then
+    RELEASE_DIR="${PREVIOUS_TARGET}"
+    RELEASE_NAME="$(basename -- "${RELEASE_DIR}")"
+  fi
+  echo "=== revalidate exact prepared candidate without renewing admission ==="
+  verify_prepared_receipt "${RELEASE_DIR}"
+  verify_dist_digest "${RELEASE_DIR}" "${ARTIFACT_DIGEST}" >/dev/null
+  run_release_probe candidate_pre_switch "${RELEASE_DIR}" "${SHA}" "${ARTIFACT_DIGEST}" true
+  write_prepared_receipt "${RELEASE_DIR}" "${RELEASE_NAME}" validate-only
+  verify_bff_identity prepared_replay_final "${BFF_CANDIDATE_TRANSPORT:-$BFF_HOST}"
+  if [[ "$(current_live_target)" != "${LIVE_TARGET_AT_START}" ]]; then
+    echo "Live release changed during repeated prepare; refusing prepared_success." >&2
+    exit 2
+  fi
+  # Return the original receipt, preserving its expiry and original predecessor.
+  copy_prepared_locator "${RELEASE_DIR}"
+  evidence_append release.prepared prepared_success \
+    "outcome=prepared_success" "releaseDir=${RELEASE_DIR}" "pairId=${PAIR_ID}" "leaseEpoch=${LEASE_EPOCH}"
+  finalize_evidence prepared_success
+  persist_durable_evidence
+  PREPARED_SUCCESS=true
+  echo "OK: retained prepared candidate ${SHA} (${ARTIFACT_DIGEST}) in ${RELEASE_DIR}."
+  exit 0
 fi
 
 if [[ "${RECOVERY_ATTEMPTED}" == "true" ]]; then
@@ -2635,18 +2755,6 @@ NODE
       recovered
     verify_public_manifest "${SHA}" "${ARTIFACT_DIGEST}" "${PREVIOUS_GATE_RUN_ID}" "${AUDIT_DIR}/recovered-deployment.json" "${PREVIOUS_MANIFEST_BFF_COMMIT}" accepted "${PREVIOUS_GITHUB_ARTIFACT_DIGEST}" "${DEPLOY_PROFILE}" "${PAIR_ID}"
     evidence_append recovery.roll_forward passed "previousCommit=${RECOVERY_COMMIT}"
-  fi
-  if [[ "${DEPLOY_ACTION}" == "prepare" ]]; then
-    write_prepared_receipt "${PREVIOUS_TARGET}" "${PREVIOUS_RELEASE_NAME}"
-    evidence_append release.prepared prepared_success \
-      "outcome=prepared_success" \
-      "releaseDir=${PREVIOUS_TARGET}" \
-      "pairId=${PAIR_ID}" \
-      "leaseEpoch=${LEASE_EPOCH}"
-    finalize_evidence prepared_success
-    PREPARED_SUCCESS=true
-    echo "OK: prepared live candidate ${SHA} (${ARTIFACT_DIGEST}) in ${PREVIOUS_TARGET}."
-    exit 0
   fi
   evidence_append candidate.noop passed \
     "previousCommit=${PREVIOUS_COMMIT}" \
@@ -2812,6 +2920,7 @@ NODE
     "leaseEpoch=${LEASE_EPOCH}"
   finalize_evidence prepared_success
   persist_durable_evidence
+  persist_prepared_evidence "${RELEASE_DIR}"
   PREPARED_SUCCESS=true
   echo "OK: prepared candidate ${SHA} (${ARTIFACT_DIGEST}) in ${RELEASE_DIR}; incumbent ${PREVIOUS_TARGET:-none} untouched."
   exit 0

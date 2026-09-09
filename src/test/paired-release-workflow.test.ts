@@ -29,6 +29,21 @@ const agoraProductJourneySpec = readFileSync(
 );
 
 describe("paired Pantheon release workflow", () => {
+  it("provisions the locked Chromium build before real browser regressions", () => {
+    const componentJob = branchWorkflow.slice(
+      branchWorkflow.indexOf("  component-merge:"),
+      branchWorkflow.indexOf("  smoke-alias:"),
+    );
+    const install = componentJob.indexOf("run: npm ci");
+    const chromium = componentJob.indexOf(
+      "run: npx --no-install playwright install --with-deps chromium",
+    );
+    const tests = componentJob.indexOf("- name: Changed component tests");
+    expect(install).toBeGreaterThanOrEqual(0);
+    expect(chromium).toBeGreaterThan(install);
+    expect(tests).toBeGreaterThan(chromium);
+    expect(componentJob.slice(chromium, tests)).not.toContain("continue-on-error");
+  });
   it("builds one authenticated three-profile set while normal gates consume read-only", () => {
     expect(integrationWorkflow).toContain("Build read-only release profile");
     expect(integrationWorkflow).toContain(

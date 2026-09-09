@@ -2,15 +2,15 @@
   "schema_version": "pantheon.task-review-evidence.v1",
   "task_id": "FE-EXACT-PAIR-PROTOCOL-001",
   "owner": "Codex",
-  "reviewer": "Codex2",
+  "reviewer": "Claude",
   "target_repo": "execute-plans",
   "merge_target": "dev",
   "branch": "task/FE-EXACT-PAIR-PROTOCOL-001",
   "status": "partial-repair-awaiting-external-protocol",
-  "recorded_at": "2026-09-06T08:40:57.184389+00:00",
+  "recorded_at": "2026-09-09T02:02:35.637138+00:00",
   "scope": {
     "kind": "source-only",
-    "declared_artifact_count": 16,
+    "declared_artifact_count": 17,
     "hosted_mutation": false,
     "complete": false,
     "ready_for_independent_review": false,
@@ -18,13 +18,16 @@
       "Reject absent or explicitly failed OpenClaw results instead of accepting Fleet UI safety as an OpenClaw contract result.",
       "Remove the browser report field that invented OpenClaw success from rendered DOM and Fleet safety.",
       "Conservatively require explicit candidate CORS permissions because Playwright request headers cannot identify Fetch credentials mode; executable local Chromium/HTTP coverage is recorded below.",
-      "Replace the previous manifest's unsupported complete-acceptance assertions with current limitations and concrete backend/CI requests."
+      "Provision Chromium and its system dependencies before the branch CI Component merge gate; .github/workflows/branch-ci.yml is now within the 17 authorized artifacts.",
+      "Retain a verified, root-owned prepared-evidence snapshot under the exact release basename, independently of the mutable run audit. Activation requires a regular matching receipt and a valid prepared_success evidence ledger; missing, mismatched or symlinked copies fail closed.",
+      "Honor exact prepare locators and replay the original admitted receipt without rebuilding, creating another release, changing its predecessor or renewing its expiry. Recheck current mandatory gates and retain the receipt in a fresh activation audit.",
+      "Persist no-op prepare evidence and preserve existing public manifest and symlink bytes. Prepare refuses interrupted public candidates without attempting public recovery; authenticated activation/restore recovery is still outstanding.",
+      "Add 11 isolated evidence/replay regressions, reproduce four pre-fix failures against the original deploy source, and retain the 17 existing exact-pair regression results. Correct the isolated rsync fake to honor the real --delete behavior."
     ],
-    "acceptance_boundary": "This is a durable partial repair, not a frozen release handshake or source/hosted acceptance. Existing local fakes and unkeyed receipt hashes do not prove controller authority, authenticated gates, staged image identity, whole-pair activation, or original pair restoration."
+    "acceptance_boundary": "Source-only partial receipt/replay and browser CI repair. Local receipt-copy consistency and self-computable SHA256 establish evidence integrity, not authenticated parent authority or gate provenance. Isolated shell fakes and local CORS browser coverage do not establish staged-image binding, whole-pair activation, exact-original restoration, hosted acceptance or a frozen release handshake."
   },
   "source_context": {
-    "recovery_head": "d0ae286f539517d65d7e27a14710609136502718",
-    "dev_base": "5d4f385284b44a30e10764426a47fd808a7ae3cb",
+    "dev_base": "fda58bb05052c90e0e18310666ad174b5ab3ff51",
     "normative_plan": {
       "path": "/home/chloe_ong_dev_cctech_support_com/code/pantheon-artifacts/dev-closure-20260906/fe-exact-pair-protocol-sa-sd.md",
       "sha256": "615b489a418945b4db3f622cf30e64364a207bac85241dc400a51f632e990b0f"
@@ -35,11 +38,11 @@
       "head": "d0ae286f539517d65d7e27a14710609136502718",
       "proof_tag": "pantheon-review/reopen/d0ae286f539517d65d7e27a14710609136502718",
       "tag_object": "65bf9d52d98c8d06627d3600e3364b6b30c12cbc",
-      "decision": "reopen"
+      "decision": "reopen",
+      "historical": true
     },
-    "anchor_commit": "94b82b6f68da05229decbdc87d0a3975a436d17f",
     "backend_read_only_audit": {
-      "head": "be67218f27bdcfb7af81b2cc23fad14268172c89",
+      "head": "c0c035b5f32436b96f10cd10c91834861d555144",
       "files": [
         {
           "path": "scripts/dev_environment_lease.py",
@@ -51,27 +54,51 @@
         },
         {
           "path": "scripts/cross_repo_release_controller.py",
-          "sha256": "09343d85ca0d875b8744d76ad4a86abc2310c0b0446af03e2c788ffd3e15f4f5"
+          "sha256": "38ad1193f915df0f30e1b9d46474555df9672d4a2f98ecbc399b5d5220c10892"
+        },
+        {
+          "path": ".github/workflows/nonprod-deploy.yml",
+          "sha256": "2da0fcc9693d229bc68b47a025a22b1aeebfda70eb96195692d9ae56255993f7"
         }
       ],
-      "workflow_pinned_lease_revision": "9e564718da8c39199a4c311f1a667b74226e3428"
+      "workflow_pinned_lease_revision": "9e564718da8c39199a4c311f1a667b74226e3428",
+      "observations": [
+        "The accepted lease primitive still freshly verifies the canonical GitHub acquisition and UUID leaseId. Its wrapper requires same-host heartbeat process identity; authenticated bounded same-acquisition cross-runner child delegation is absent.",
+        "At this exact backend head, nonprod-deploy.yml stops the heartbeat at line 2188 and releases the acquisition at lines 2219-2225. coordinate-dev-release begins at line 2247 and depends on deploy-dev, so maintaining a live parent acquisition across FE child work requires parent workflow lifecycle changes as well as lease API changes."
+      ],
+      "mutation": false
     },
     "delivery_source_sha256": {
+      ".github/workflows/branch-ci.yml": "b48ccf527ae6f59e6e6608db819a3a1e856056219a9df30588efb78ddef9ef0f",
       ".github/workflows/pantheon-dev-fe-deploy.yml": "bc4dd5f1dcd8babcc7c8114e82915c8fc4420dff66d665d1cf5b1d54b1bfba96",
       ".github/workflows/pantheon-integration-gate.yml": "da7ec36abf4482de234c71bf89ab9e3f6f6522e08a1d03bd61f7c73ef7ec6ed0",
       ".github/workflows/pantheon-proof-watchdog.yml": "b4d2e71b23fc348903634e98fb062f108cdf8af09a529aeb6e96ef0cdaf98f27",
-      "scripts/deploy-dev-vm.sh": "b4e7ce58757d16835d8ed717b4edc537d82ae61ce2e0bb6232f5dd49f7cae48a",
+      "scripts/deploy-dev-vm.sh": "8ccfaa28da279cee261b0537e74c48975d78bf41232eb9af59113d6eb44e5894",
       "scripts/probe-hosted-browser-bff.mjs": "da0d71e2cdc5235b8c1e3c6d1f5604b89ea81fc6546185269fc34ea5d432f43b",
       "scripts/release-candidate.mjs": "d0b350ae9cc63ea2fba96d126912e4d8a0d3ec03550131eb9f47317bb18f54b5",
       "scripts/release-evidence.mjs": "50eb550fde22ff88fc478cdf19ffdbd730ac8a6fcc9508ebf2f4b7bfe9492231",
       "scripts/release-identity.mjs": "2dde85d7c4660c911a5551b11f75490f8e88a8fef83a0ec720bb434b0c04e66f",
-      "scripts/test-deploy-dev-vm.sh": "db1b7e4e4a1b4c77562083e9e5ede15597afcaf4f74faf4906697f9e1a5385ec",
+      "scripts/test-deploy-dev-vm.sh": "b4f5819ad2b7d9e10e404f35c6e9ebdcc05a64b0644a76983f43dac15b308caa",
       "scripts/test-release-identity.mjs": "47ba6cd53a733d8363e188d8c4a6c5075360e18137c43191b6be65f08270b0ce",
       "src/test/deploy-safe-defaults.test.ts": "13d866e39b73b0124db65458dee23e6f4210d94e71fab6abc2eb0bb8efaf3368",
       "src/test/hosted-browser-release-policy.test.ts": "de4850494c891fbab615cb8f608988185b95d9d47248a3ab472f413edab84657",
-      "src/test/paired-release-workflow.test.ts": "bbab1487b2cb2a0bf1d114b588d673ac242ce68b436e2680dd57ae030af7f6d7",
+      "src/test/paired-release-workflow.test.ts": "0cb9eec05cc19f03b04f6f4a49c858961b5ee6553a7fb441599555b109831005",
       "src/test/release-candidate.test.ts": "e3f2b4db8c061d57867374ecf0d7fc85fc4b72bdb6a76d1419c32d2c961379fc",
       "src/test/release-evidence.test.ts": "d47ee6e6f268d26cb1b4182dadbe316c8d32230ec4c9587ebd2d82227a973b0d"
+    },
+    "historical_recovery_context": {
+      "recorded_at": "2026-09-06T08:40:57.184389+00:00",
+      "recovery_head": "d0ae286f539517d65d7e27a14710609136502718",
+      "dev_base": "5d4f385284b44a30e10764426a47fd808a7ae3cb",
+      "anchor_commit": "94b82b6f68da05229decbdc87d0a3975a436d17f",
+      "backend_read_only_head": "be67218f27bdcfb7af81b2cc23fad14268172c89"
+    },
+    "working_tree_base_head": "0db22f0e60cd1df48f841fdd376f7735c24f7273",
+    "snapshot_description": "Validated working-tree source bytes after integrating origin/dev into the task branch; hashes below identify the source changes awaiting the combined commit. The evidence manifest itself is excluded from its own hash map.",
+    "reviewer_assignment": {
+      "current": "Claude",
+      "previous": "Codex2",
+      "basis": "Canonical task reviewer amendment confirmed by the coordinating root chatbox on 2026-09-09; the historical rejected review is preserved above."
     }
   },
   "external_requests": [
@@ -86,109 +113,136 @@
         "scripts/cross_repo_release_controller.py",
         ".github/workflows/nonprod-deploy.yml"
       ],
-      "observation": "Existing verify --state-file <parent-state> --max-heartbeat-age-seconds <bound> freshly reads authenticated GitHub Contents acquisition identity and heartbeat age. Acquisition epoch is UUID leaseId, not the FE integer. The shell wrapper requires same-host heartbeat PID/start ticks/cmdline. There is no authenticated bounded cross-runner child delegation. Actual parent owner format pantheon:<repository>:<run>:<attempt> is rejected by the FE name allowlist.",
+      "observation": "Existing verify --state-file <parent-state> --max-heartbeat-age-seconds <bound> freshly reads authenticated GitHub Contents acquisition identity and heartbeat age. Acquisition epoch is UUID leaseId, not the FE integer. The shell wrapper requires same-host heartbeat PID/start ticks/cmdline. There is no authenticated bounded cross-runner child delegation. Actual parent owner format pantheon:<repository>:<run>:<attempt> is rejected by the FE name allowlist. At backend c0c035b5f32436b96f10cd10c91834861d555144, the backend deployment job stops/releases its parent acquisition before the separate coordinate-dev-release job, so a live parent hold cannot be supplied by the FE child.",
       "required_interface": "Extend the existing authority and freeze its command/schema: bind parent acquisition/owner, controller and child run/attempt, action, request, artifact/receipt/gate identity, predecessor and expiry; freshly verify canonical acquisition/liveness at mutation, reject old/revoked/lost leases, maintain actual parent heartbeat, and do not reacquire in the FE child. Include authenticated prepared/gate provenance and parent activation/restore barrier bindings.",
-      "scope_note": "No backend files were edited. The lease primitive files require formal backend scope amendment if not covered by its current grants. PLAN-ADMIT-001 is satisfied; this is not a new declared task dependency."
-    },
-    {
-      "id": "ci-browser-provisioning",
-      "classification": "external",
-      "required_files": [
-        ".github/workflows/branch-ci.yml"
-      ],
-      "observation": "PR #745 rejected head CI run 34021194372 completed Component merge gate with 151 passed / 1 failed because chromium_headless_shell-1223 was absent; Smoke acceptance failed as a consequence.",
-      "required_interface": "Formally amend the exact FE scope to provision Chromium before Component merge gate's related Vitest browser tests, or provide an equivalent already-governed CI provisioning correction. Do not skip browser coverage or label the failing check passed.",
-      "scope_note": "branch-ci.yml is outside this task's 16 authorized paths and was not edited."
+      "scope_note": "No backend source was edited as part of this FE repair. DEV-DELIVERY-001 remains the existing backend interface owner; parent workflow lifecycle and authenticated delegation must be implemented there without a duplicate FE authority or child reacquisition. PLAN-ADMIT-001 remains satisfied."
     }
   ],
   "remaining_acceptance": [
-    "Authenticated lease delegation and receipt provenance are absent. Owner-name regex, caller strings, and self-computable SHA256 are insufficient; durable-copy lookup disagrees with the persistence directory and optional comparison can be bypassed.",
-    "Management still derives from Fleet safety, and no genuine authenticated pair/controller-attempt-bound Management/OpenClaw gate artifact is consumed. The real browser probe now emits no OpenClaw success, so prepare must remain rejected until genuine gate integration exists.",
+    "Authenticated same-acquisition bounded parent delegation and receipt provenance remain absent. Owner-name regex, caller strings and self-computable SHA256 are insufficient. The repaired mandatory durable-copy comparison is integrity checking only; UUID acquisition/liveness and the real parent heartbeat must remain authoritative.",
+    "Management still derives from Fleet safety, and no genuine authenticated pair/controller-attempt-bound Management/OpenClaw gate artifact is consumed. The real browser probe emits no OpenClaw success, so genuine prepare remains rejected until authentic gate integration exists.",
     "Staged image/transport and full release/compatibility/controller-attempt/predecessor/gate handshake remain optional or unwired on the actual path. Mutable repository variables are not transaction admission. Transport authorization, DNS/private destination and redirect constraints remain unresolved.",
     "Activation checks the new public BFF before FE CAS without an authenticated whole-pair activation barrier.",
     "Restore remains same-pair safe-sibling handling rather than qualified exact original FE restoration coordinated with prior dependency/config/schema/data and BFF state.",
-    "Watchdog optional raw lease forwarding differs from deploy defaults; its 155-minute window exceeds the prepared receipt's one-hour TTL. Recovery capability must be restored with the real authority contract.",
-    "Repeated prepare/no-op and interrupted recovery remain open Codex2 findings; earlier full shell timeout was not a pass.",
-    "Actual isolated candidate-server/HTTP/browser prepare -> activate -> durable reload -> original restore coverage, mandatory gates, fresh-process crash/lease-loss and actual staged-image binding still must be completed. This repair's CORS browser tests and shell fakes do not establish that acceptance.",
-    "Required exact-head CI, fresh independent Codex2 review, integrator merge/archive, and downstream finalized-contract handoff remain outstanding."
+    "Retention protects the current activation predecessor and each unexpired prepared release itself, but does not protect original predecessors referenced by other pending prepared receipts. Exact-original artifact retention across later deployments remains required.",
+    "Watchdog optional raw lease forwarding differs from deploy defaults; its 155-minute window exceeds the prepared receipt one-hour TTL. Recovery capability must use the real authority contract.",
+    "Actual isolated candidate-server/HTTP/browser prepare -> activate -> durable reload -> original restore coverage, authenticated mandatory gates, fresh-process crash/lease-loss handling and real staged-image binding still must be completed. Passing local replay and negative shell fixtures do not establish that full acceptance.",
+    "Required GitHub checks on the final committed head, a fresh independent Claude review, integrator merge/archive, and downstream finalized-contract handoff remain outstanding."
   ],
   "validation": {
-    "identity": {
-      "command": "node scripts/test-release-identity.mjs",
+    "prepared_evidence_replay": {
+      "command": "PANTHEON_TEST_FILTER='prepared evidence' timeout 420 bash scripts/test-deploy-dev-vm.sh",
       "exit_status": 0,
-      "terminal_output": "OK: exact FE/BFF release identity regression tests passed"
-    },
-    "openclaw_negative": {
-      "command": "timeout 120s env PANTHEON_TEST_FILTER=OpenClaw bash scripts/test-deploy-dev-vm.sh",
-      "exit_status": 0,
-      "passed": 2,
+      "passed": 11,
       "failed": 0,
-      "terminal_output": "ok - exact pair protocol explicit OpenClaw failure rejects fleet fallback\nok - exact pair protocol missing OpenClaw result rejects fleet fallback\ndeploy contract harness: 2 passed, 0 failed",
-      "boundary": "Isolated shell harness with mocked network/probe; asserts unchanged incumbent bytes and no prepared receipt for both rejection cases.",
+      "terminal_output": "ok - prepared evidence missing durable copy rejects activation\nok - prepared evidence mismatched durable copy rejects activation\nok - prepared evidence symlinked durable copy rejects activation\nok - prepared evidence repeated prepare preserves locator and receipt\nok - prepared evidence rejected replay preserves original admission\nok - prepared evidence repeated prepare rechecks mandatory gate\nok - prepared evidence prepare cannot mutate an interrupted public candidate\nok - prepared evidence fresh audit reuses exact locator\nok - prepared evidence fresh activation retains original admission\nok - prepared evidence write prepare replay preserves safe sibling\nok - prepared evidence live no-op prepare preserves manifest and receipt\ndeploy contract harness: 11 passed, 0 failed",
+      "boundary": "Isolated clean clones, real candidate/evidence verification and git/flock; network, browser, sudo, lease fields and rsync are local fakes. Covers durable receipt loss/tampering/symlinks, repeated/fresh prepare and activate, mandatory-gate rejection, no-op immutability and safe-sibling replay. This is not authenticated controller or hosted acceptance.",
       "local_terminal_log": {
-        "path": "/tmp/FE-EXACT-PAIR-PROTOCOL-001-Codex-recovery.HmhZzA/openclaw-regressions.log",
-        "sha256": "9a0358c45d921db93c318b483306abef34722b9eac1ee0387bb6abb6d4f4daca",
-        "retention": "Worker-local log; terminal summary is committed here."
+        "path": "/home/chloe_ong_dev_cctech_support_com/code/pantheon-artifacts/direct-task-help-20260909/protocol-prepared-evidence-final.log",
+        "sha256": "80ef6c17e8df78790b1512be0d9c348a19393966d1e43fc284b867691fbf95f8",
+        "retention": "Retained local source-validation artifact; terminal summary is committed in this manifest."
       }
     },
-    "prepare_fixture": {
-      "command": "timeout 90s env PANTHEON_TEST_FILTER='exact pair protocol prepare leaves incumbent' bash scripts/test-deploy-dev-vm.sh",
+    "existing_exact_pair": {
+      "command": "PANTHEON_TEST_FILTER='exact pair protocol' timeout 420 bash scripts/test-deploy-dev-vm.sh",
       "exit_status": 0,
-      "passed": 1,
+      "passed": 17,
       "failed": 0,
-      "terminal_output": "ok - exact pair protocol prepare leaves incumbent untouched and writes receipt\ndeploy contract harness: 1 passed, 0 failed",
-      "boundary": "Mocked probe/lease fixture only; not real successful pair qualification.",
+      "terminal_output": "ok - exact pair protocol prepare leaves incumbent untouched and writes receipt\nok - exact pair protocol activate in new process without rebuild\nok - exact pair protocol lease epoch mismatch rejected\nok - exact pair protocol lease delegation false rejected\nok - exact pair protocol tampered receipt rejected\nok - exact pair protocol predecessor CAS mismatch rejected\nok - exact pair protocol changed predecessor on replay rejected\nok - exact pair protocol idempotent replay succeeds\nok - exact pair protocol one-shot bypass is retired\nok - exact pair protocol wrong lease restore rejected\nok - exact pair protocol failed mandatory gate prepare rejected\nok - exact pair protocol explicit OpenClaw failure rejects fleet fallback\nok - exact pair protocol missing OpenClaw result rejects fleet fallback\nok - exact pair protocol forged receipt and unregistered lease rejected\nok - exact pair protocol schemaless receipt restore rejected\nok - exact pair protocol write predecessor retention\nok - exact pair protocol write replay idempotent\ndeploy contract harness: 17 passed, 0 failed",
+      "boundary": "The existing isolated shell regressions remain passing, including lease/receipt/gate rejection and write replay. These fixtures do not prove parent authentication, staged-image transport, whole-pair restore or the complete shell suite.",
       "local_terminal_log": {
-        "path": "/tmp/FE-EXACT-PAIR-PROTOCOL-001-Codex-recovery.HmhZzA/prepare-fixture.log",
-        "sha256": "fe43d23328c6d6afd4a1ef25cb050cb175276bc211201788fdc276e3dad9ada4",
-        "retention": "Worker-local log; terminal summary is committed here."
+        "path": "/home/chloe_ong_dev_cctech_support_com/code/pantheon-artifacts/direct-task-help-20260909/protocol-exact-pair-final.log",
+        "sha256": "7a824784d1a267989100525d0c24a37457c2c0a4c60448a41b6c21dcab5cd241",
+        "retention": "Retained local source-validation artifact; terminal summary is committed in this manifest."
       }
     },
-    "contracts": {
-      "command": "timeout 120s npx --no-install vitest run --maxWorkers=2 src/test/release-candidate.test.ts src/test/release-evidence.test.ts src/test/paired-release-workflow.test.ts src/test/deploy-safe-defaults.test.ts",
+    "pre_fix_regressions": {
+      "expected_failure": true,
+      "passed": 0,
+      "failed": 4,
+      "boundary": "Fresh reproduction against git HEAD:scripts/deploy-dev-vm.sh before this turn's source edits, using the final unchanged regression harness and required support files in an isolated artifact directory. Each command exits 1 with one observed assertion failure; these are expected pre-fix failures, not successful acceptance.",
+      "baseline_source_directory": "/home/chloe_ong_dev_cctech_support_com/code/pantheon-artifacts/direct-task-help-20260909/protocol-pre-fix-source-gy4hd7wh",
+      "baseline_git_head": "0db22f0e60cd1df48f841fdd376f7735c24f7273",
+      "baseline_deploy_sha256": "b4e7ce58757d16835d8ed717b4edc537d82ae61ce2e0bb6232f5dd49f7cae48a",
+      "harness_sha256": "b4f5819ad2b7d9e10e404f35c6e9ebdcc05a64b0644a76983f43dac15b308caa",
+      "cases": [
+        {
+          "filter": "prepared evidence missing durable copy rejects activation",
+          "command": "PANTHEON_TEST_FILTER='prepared evidence missing durable copy rejects activation' timeout 120 bash scripts/test-deploy-dev-vm.sh",
+          "exit_status": 1,
+          "path": "/home/chloe_ong_dev_cctech_support_com/code/pantheon-artifacts/direct-task-help-20260909/protocol-pre-fix-missing-durable.log",
+          "sha256": "669e9cc3f4edd87054117f625571d311f31dafd637af7be11aa7e78c5eec0b20",
+          "terminal_output": "activation accepted without its durable prepared copy\ndeploy contract harness: 0 passed, 1 failed"
+        },
+        {
+          "filter": "prepared evidence repeated prepare preserves locator and receipt",
+          "command": "PANTHEON_TEST_FILTER='prepared evidence repeated prepare preserves locator and receipt' timeout 120 bash scripts/test-deploy-dev-vm.sh",
+          "exit_status": 1,
+          "path": "/home/chloe_ong_dev_cctech_support_com/code/pantheon-artifacts/direct-task-help-20260909/protocol-pre-fix-repeated-prepare.log",
+          "sha256": "bd9cb8e1857ee087841d0581f3a62cfcd2a1918ffb8a1671796d36be5be9a553",
+          "terminal_output": "repeated prepare installed a different release\ndeploy contract harness: 0 passed, 1 failed"
+        },
+        {
+          "filter": "prepared evidence fresh audit reuses exact locator",
+          "command": "PANTHEON_TEST_FILTER='prepared evidence fresh audit reuses exact locator' timeout 120 bash scripts/test-deploy-dev-vm.sh",
+          "exit_status": 1,
+          "path": "/home/chloe_ong_dev_cctech_support_com/code/pantheon-artifacts/direct-task-help-20260909/protocol-pre-fix-fresh-prepare.log",
+          "sha256": "09b780a136ff0583732b683a89b14a187918a0f73bb0b62c276d0ee23f4cd78d",
+          "terminal_output": "fresh process ignored the exact release locator\ndeploy contract harness: 0 passed, 1 failed"
+        },
+        {
+          "filter": "prepared evidence live no-op prepare preserves manifest and receipt",
+          "command": "PANTHEON_TEST_FILTER='prepared evidence live no-op prepare preserves manifest and receipt' timeout 120 bash scripts/test-deploy-dev-vm.sh",
+          "exit_status": 1,
+          "path": "/home/chloe_ong_dev_cctech_support_com/code/pantheon-artifacts/direct-task-help-20260909/protocol-pre-fix-live-noop.log",
+          "sha256": "78c33ba255708834e0b86e7efbb859e444f9f90cdc1e1996c95c8acb7b308d76",
+          "terminal_output": "no-op prepare should return the existing prepared receipt\ndeploy contract harness: 0 passed, 1 failed"
+        }
+      ],
+      "local_evidence_manifest": {
+        "path": "/home/chloe_ong_dev_cctech_support_com/code/pantheon-artifacts/direct-task-help-20260909/protocol-pre-fix-regressions.json",
+        "sha256": "199b2e48f62380812cf1221ed9c663b28f3f57efc1c25ce9c2c35957bf2e4f10",
+        "retention": "Retained local source-validation artifact; terminal summary is committed in this manifest."
+      }
+    },
+    "browser_ci": {
+      "command": "timeout 180s npx --no-install vitest run --maxWorkers=2 src/test/paired-release-workflow.test.ts src/test/hosted-browser-release-policy.test.ts",
       "exit_status": 0,
-      "passed": 99,
+      "passed": 92,
       "failed": 0,
-      "files": 4,
-      "terminal_output": "Test Files 4 passed (4)\nTests 99 passed (99)",
-      "boundary": "Local module/workflow regressions; no hosted or real provider success.",
+      "files": 2,
+      "terminal_output": "Test Files 2 passed (2)\nTests 92 passed (92)",
+      "boundary": "Root-executed workflow policy checks and actual isolated Chromium/HTTP CORS tests, with normal browser flags and no browser environment injection. This validates local tests and source ordering, not a completed GitHub Actions run or hosted pair.",
       "local_terminal_log": {
-        "path": "/tmp/FE-EXACT-PAIR-PROTOCOL-001-Codex-recovery.HmhZzA/contracts-vitest.log",
-        "sha256": "2295653846ba725bff4dec3157f024dde2ce655ad3283b24219b6fba9b02359f",
-        "retention": "Worker-local log; terminal summary is committed here."
+        "path": "/home/chloe_ong_dev_cctech_support_com/code/pantheon-artifacts/direct-task-help-20260909/protocol-browser-ci-baseline.log",
+        "sha256": "776d8e2b0110b168c5dafe09f9a8310e35c34a38f97b6296d062b526eab4561c",
+        "retention": "Retained local source-validation artifact; terminal summary is committed in this manifest."
+      }
+    },
+    "candidate_evidence_contracts": {
+      "command": "timeout 120s npx --no-install vitest run --maxWorkers=2 src/test/release-candidate.test.ts src/test/release-evidence.test.ts src/test/deploy-safe-defaults.test.ts",
+      "exit_status": 0,
+      "passed": 76,
+      "failed": 0,
+      "files": 3,
+      "terminal_output": "Test Files 3 passed (3)\nTests 76 passed (76)",
+      "boundary": "Root-executed current-source module and safety-policy regressions; validates immutable candidate/evidence integrity behavior without hosted or authenticated whole-pair acceptance.",
+      "local_terminal_log": {
+        "path": "/home/chloe_ong_dev_cctech_support_com/code/pantheon-artifacts/direct-task-help-20260909/protocol-candidate-evidence-tests.log",
+        "sha256": "3e69b72983b33bec8c7298d3542e0cad3ca692117b37e01220017b4e7681c611",
+        "retention": "Retained local source-validation artifact; terminal summary is committed in this manifest."
       }
     },
     "static_checks": {
-      "command": "git diff --check && bash -n scripts/deploy-dev-vm.sh scripts/test-deploy-dev-vm.sh && node --check scripts/probe-hosted-browser-bff.mjs",
+      "command": "git diff --check && bash -n scripts/deploy-dev-vm.sh scripts/test-deploy-dev-vm.sh && node --check scripts/probe-hosted-browser-bff.mjs && python3 -m json.tool docs/deployment/evidence/FE-EXACT-PAIR-PROTOCOL-001/evidence.json > /dev/null",
       "exit_status": 0,
       "terminal_output": "",
-      "boundary": "Local syntax and whitespace checks."
+      "boundary": "Current source syntax, JSON parse and whitespace checks."
     },
-    "cors_browser": {
-      "command": "timeout 180s npm test -- src/test/hosted-browser-release-policy.test.ts",
+    "identity": {
+      "command": "node scripts/test-release-identity.mjs",
       "exit_status": 0,
-      "files": 1,
-      "passed": 68,
-      "failed": 0,
-      "browser": "Chromium 148.0.7778.96, default launch flags",
-      "browser_cases": 16,
-      "native_parity_cases": 13,
-      "conservative_divergence_cases": 3,
-      "terminal_output": "Test Files 1 passed (1)\nTests 68 passed (68)",
-      "boundary": "Real isolated local HTTP/Chromium, synthetic response bodies only. Explicit origin, credentials, non-safelisted methods and custom header permission required. Omitted-credentials cases may be rejected conservatively because Playwright does not expose Fetch credentials mode; bundled Chromium also natively permits Authorization wildcard with omit, which this route rejects. No staged BFF image or complete pair activation is exercised.",
-      "earlier_diagnostic_batch": {
-        "command": "timeout 180s npm test -- src/test/hosted-browser-release-policy.test.ts",
-        "exit_status": 1,
-        "passed": 62,
-        "failed": 1,
-        "total": 63,
-        "reason": "Initial expectation assumed bundled Chromium rejects Authorization wildcard with credentials omit; observed native acceptance. Test now explicitly records conservative divergence; default browser flags retained."
-      },
-      "local_terminal_log": {
-        "path": "/tmp/FE-EXACT-PAIR-PROTOCOL-001-cors-final.log",
-        "sha256": "a82c16d535752fe063fc8c5a94d26e5a0a5d224fd3c41eabbda03be2388c2a6a",
-        "retention": "Worker-local log; terminal summary is committed here."
-      }
+      "boundary": "Root confirmed the current-source identity regression command exited successfully on 2026-09-09; no hosted or authenticated whole-pair acceptance is asserted."
     }
   },
   "downstream_handoff": {
@@ -196,6 +250,102 @@
       "DEV-DELIVERY-001",
       "STRUCT-RETIRE-001"
     ],
-    "disposition": "Blocked interface request only; existing one-shot replacement is unmerged and protocol handshake is not yet frozen. Do not consume this PR as accepted release authority. Preserve existing source joins and product UI grants; no assignment/fence changes were made."
+    "disposition": "Partial source repair only; authenticated parent interface and full handshake remain unfrozen. Do not consume PR #745 as accepted release authority or mark FE-EXACT-PAIR-PROTOCOL-001 complete. Receipt replay and browser CI scope findings are resolved locally; DEV-DELIVERY-001 and STRUCT-RETIRE-001 must still wait for the finalized reviewed contract."
+  },
+  "resolved_requests": [
+    {
+      "id": "ci-browser-provisioning",
+      "classification": "resolved-source-request-pending-exact-head-ci",
+      "required_files": [
+        ".github/workflows/branch-ci.yml"
+      ],
+      "scope_note": "branch-ci.yml is now authorized and edited; this is no longer an external artifact-scope blocker.",
+      "historical_observation": "PR #745 rejected head CI run 34021194372 completed Component merge gate with 151 passed / 1 failed because chromium_headless_shell-1223 was absent; Smoke acceptance failed as a consequence.",
+      "resolution": "The canonical FE scope now authorizes 17 artifacts, including branch-ci.yml. Its Install Chromium for browser regression tests step runs npx --no-install playwright install --with-deps chromium before Deploy safety contract and Changed component tests in the Component merge gate job. The real local Chromium/workflow regression run passed 92 tests in 2 files; required GitHub checks on the eventual committed head remain outstanding.",
+      "validation_reference": "validation.browser_ci",
+      "historical_required_interface": "Formally amend the exact FE scope to provision Chromium before Component merge gate's related Vitest browser tests, or provide an equivalent already-governed CI provisioning correction. Do not skip browser coverage or label the failing check passed."
+    }
+  ],
+  "historical_validation": {
+    "recorded_at": "2026-09-06T08:40:57.184389+00:00",
+    "checks": {
+      "identity": {
+        "command": "node scripts/test-release-identity.mjs",
+        "exit_status": 0,
+        "terminal_output": "OK: exact FE/BFF release identity regression tests passed"
+      },
+      "openclaw_negative": {
+        "command": "timeout 120s env PANTHEON_TEST_FILTER=OpenClaw bash scripts/test-deploy-dev-vm.sh",
+        "exit_status": 0,
+        "passed": 2,
+        "failed": 0,
+        "terminal_output": "ok - exact pair protocol explicit OpenClaw failure rejects fleet fallback\nok - exact pair protocol missing OpenClaw result rejects fleet fallback\ndeploy contract harness: 2 passed, 0 failed",
+        "boundary": "Isolated shell harness with mocked network/probe; asserts unchanged incumbent bytes and no prepared receipt for both rejection cases.",
+        "local_terminal_log": {
+          "path": "/tmp/FE-EXACT-PAIR-PROTOCOL-001-Codex-recovery.HmhZzA/openclaw-regressions.log",
+          "sha256": "9a0358c45d921db93c318b483306abef34722b9eac1ee0387bb6abb6d4f4daca",
+          "retention": "Worker-local log; terminal summary is committed here."
+        }
+      },
+      "prepare_fixture": {
+        "command": "timeout 90s env PANTHEON_TEST_FILTER='exact pair protocol prepare leaves incumbent' bash scripts/test-deploy-dev-vm.sh",
+        "exit_status": 0,
+        "passed": 1,
+        "failed": 0,
+        "terminal_output": "ok - exact pair protocol prepare leaves incumbent untouched and writes receipt\ndeploy contract harness: 1 passed, 0 failed",
+        "boundary": "Mocked probe/lease fixture only; not real successful pair qualification.",
+        "local_terminal_log": {
+          "path": "/tmp/FE-EXACT-PAIR-PROTOCOL-001-Codex-recovery.HmhZzA/prepare-fixture.log",
+          "sha256": "fe43d23328c6d6afd4a1ef25cb050cb175276bc211201788fdc276e3dad9ada4",
+          "retention": "Worker-local log; terminal summary is committed here."
+        }
+      },
+      "contracts": {
+        "command": "timeout 120s npx --no-install vitest run --maxWorkers=2 src/test/release-candidate.test.ts src/test/release-evidence.test.ts src/test/paired-release-workflow.test.ts src/test/deploy-safe-defaults.test.ts",
+        "exit_status": 0,
+        "passed": 99,
+        "failed": 0,
+        "files": 4,
+        "terminal_output": "Test Files 4 passed (4)\nTests 99 passed (99)",
+        "boundary": "Local module/workflow regressions; no hosted or real provider success.",
+        "local_terminal_log": {
+          "path": "/tmp/FE-EXACT-PAIR-PROTOCOL-001-Codex-recovery.HmhZzA/contracts-vitest.log",
+          "sha256": "2295653846ba725bff4dec3157f024dde2ce655ad3283b24219b6fba9b02359f",
+          "retention": "Worker-local log; terminal summary is committed here."
+        }
+      },
+      "static_checks": {
+        "command": "git diff --check && bash -n scripts/deploy-dev-vm.sh scripts/test-deploy-dev-vm.sh && node --check scripts/probe-hosted-browser-bff.mjs",
+        "exit_status": 0,
+        "terminal_output": "",
+        "boundary": "Local syntax and whitespace checks."
+      },
+      "cors_browser": {
+        "command": "timeout 180s npm test -- src/test/hosted-browser-release-policy.test.ts",
+        "exit_status": 0,
+        "files": 1,
+        "passed": 68,
+        "failed": 0,
+        "browser": "Chromium 148.0.7778.96, default launch flags",
+        "browser_cases": 16,
+        "native_parity_cases": 13,
+        "conservative_divergence_cases": 3,
+        "terminal_output": "Test Files 1 passed (1)\nTests 68 passed (68)",
+        "boundary": "Real isolated local HTTP/Chromium, synthetic response bodies only. Explicit origin, credentials, non-safelisted methods and custom header permission required. Omitted-credentials cases may be rejected conservatively because Playwright does not expose Fetch credentials mode; bundled Chromium also natively permits Authorization wildcard with omit, which this route rejects. No staged BFF image or complete pair activation is exercised.",
+        "earlier_diagnostic_batch": {
+          "command": "timeout 180s npm test -- src/test/hosted-browser-release-policy.test.ts",
+          "exit_status": 1,
+          "passed": 62,
+          "failed": 1,
+          "total": 63,
+          "reason": "Initial expectation assumed bundled Chromium rejects Authorization wildcard with credentials omit; observed native acceptance. Test now explicitly records conservative divergence; default browser flags retained."
+        },
+        "local_terminal_log": {
+          "path": "/tmp/FE-EXACT-PAIR-PROTOCOL-001-cors-final.log",
+          "sha256": "a82c16d535752fe063fc8c5a94d26e5a0a5d224fd3c41eabbda03be2388c2a6a",
+          "retention": "Worker-local log; terminal summary is committed here."
+        }
+      }
+    }
   }
 }

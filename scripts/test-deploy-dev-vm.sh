@@ -215,6 +215,14 @@ if [[ "${MOCK_FAIL_DURABLE_RSYNC_ONCE:-false}" == "true" && "${destination_path}
   fi
 fi
 mkdir -p "${destination_path}"
+# Match the real --delete contract: a fresh process may publish a smaller audit
+# into the same run directory, without retaining files from its earlier phase.
+for argument in "${arguments[@]}"; do
+  if [[ "${argument}" == "--delete" ]]; then
+    find "${destination_path}" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+    break
+  fi
+done
 cp -a "${source_path}/." "${destination_path}/"
 printf 'rsync\n' >> "${MOCK_CALL_LOG:?}"
 MOCK
@@ -2474,6 +2482,184 @@ test_write_proof_advanced_dev_served_candidate_and_guards() {
   verify_evidence_pair
 }
 
+test_prepared_evidence_missing_copy_rejected() {
+  setup_case prepared-evidence-missing
+  run_deploy PANTHEON_DEPLOY_ACTION=prepare
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "prepare should succeed"
+  rm -rf -- "${CASE_DURABLE}"
+
+  run_deploy PANTHEON_DEPLOY_ACTION=activate
+  [[ "${RUN_STATUS}" -ne 0 ]] || show_deploy_failure "activation accepted without its durable prepared copy"
+  assert_previous_is_live
+  assert_previous_manifest_unchanged
+}
+
+test_prepared_evidence_repeated_prepare() {
+  local release_dir receipt_snapshot
+  setup_case prepared-evidence-repeated
+  run_deploy PANTHEON_DEPLOY_ACTION=prepare
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "initial prepare should succeed"
+  release_dir="$(<"${CASE_AUDIT}/prepared-release-dir")"
+  receipt_snapshot="${CASE_DIR}/original-prepared-receipt.json"
+  cp "${release_dir}/.prepared-receipt.json" "${receipt_snapshot}"
+
+  run_deploy PANTHEON_DEPLOY_ACTION=prepare
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "repeated prepare should succeed"
+  [[ "$(<"${CASE_AUDIT}/prepared-release-dir")" == "${release_dir}" ]] || \
+    show_deploy_failure "repeated prepare installed a different release"
+  cmp -s "${receipt_snapshot}" "${release_dir}/.prepared-receipt.json" || \
+    show_deploy_failure "repeated prepare changed the admitted receipt or expiry"
+  assert_previous_is_live
+  assert_previous_manifest_unchanged
+  assert_summary_outcome prepared_success
+  verify_evidence_pair
+}
+
+test_prepared_evidence_invalid_copy_rejected() {
+  local kind="$1" release_dir durable_receipt
+  setup_case "prepared-evidence-${kind}"
+  run_deploy PANTHEON_DEPLOY_ACTION=prepare
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "prepare should succeed"
+  release_dir="$(<"${CASE_AUDIT}/prepared-release-dir")"
+  durable_receipt="${CASE_DURABLE}/$(basename -- "${release_dir}")/prepared-receipt.json"
+  [[ -f "${durable_receipt}" ]] || show_deploy_failure "immutable prepared snapshot is missing"
+  if [[ "${kind}" == "symlink" ]]; then
+    rm -- "${durable_receipt}"
+    ln -s "${release_dir}/.prepared-receipt.json" "${durable_receipt}"
+  else
+    printf '\n' >> "${durable_receipt}"
+  fi
+  run_deploy PANTHEON_DEPLOY_ACTION=activate
+  [[ "${RUN_STATUS}" -ne 0 ]] || show_deploy_failure "activation accepted invalid durable prepared evidence"
+  assert_previous_is_live
+  assert_previous_manifest_unchanged
+}
+
+test_prepared_evidence_rejected_replay_preserves_admission() {
+  local release_dir durable_dir original_hashes
+  setup_case prepared-evidence-rejected-replay
+  run_deploy PANTHEON_DEPLOY_ACTION=prepare
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "prepare should succeed"
+  release_dir="$(<"${CASE_AUDIT}/prepared-release-dir")"
+  durable_dir="${CASE_DURABLE}/$(basename -- "${release_dir}")"
+  original_hashes="$(sha256sum "${durable_dir}/prepared-receipt.json" "${durable_dir}/evidence.json" "${durable_dir}/evidence.jsonl")"
+  run_deploy PANTHEON_DEPLOY_ACTION=prepare PANTHEON_DEPLOY_LEASE_EPOCH=2
+  [[ "${RUN_STATUS}" -ne 0 ]] || show_deploy_failure "repeated prepare accepted a different lease epoch"
+  [[ "$(sha256sum "${durable_dir}/prepared-receipt.json" "${durable_dir}/evidence.json" "${durable_dir}/evidence.jsonl")" == "${original_hashes}" ]] || \
+    show_deploy_failure "rejected replay overwrote the immutable admission"
+  assert_previous_is_live
+  assert_previous_manifest_unchanged
+  run_deploy PANTHEON_DEPLOY_ACTION=prepare
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "valid repeated prepare could not recover after rejected replay"
+  cmp -s "${release_dir}/.prepared-receipt.json" "${durable_dir}/prepared-receipt.json" || \
+    show_deploy_failure "recovered prepare changed the original receipt"
+}
+
+test_prepared_evidence_replay_rechecks_mandatory_gate() {
+  local release_dir original_receipt
+  setup_case prepared-evidence-recheck-gate
+  run_deploy PANTHEON_DEPLOY_ACTION=prepare
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "prepare should succeed"
+  release_dir="$(<"${CASE_AUDIT}/prepared-release-dir")"
+  original_receipt="$(sha256sum "${release_dir}/.prepared-receipt.json")"
+  run_deploy PANTHEON_DEPLOY_ACTION=prepare MOCK_OPENCLAW_CONTRACT_STATUS=failed
+  [[ "${RUN_STATUS}" -ne 0 ]] || show_deploy_failure "repeated prepare ignored the new failed mandatory gate"
+  [[ "$(sha256sum "${release_dir}/.prepared-receipt.json")" == "${original_receipt}" ]] || show_deploy_failure "failed gate changed the prepared receipt"
+  assert_previous_is_live
+  assert_previous_manifest_unchanged
+}
+
+test_prepared_evidence_prepare_never_recovers_public_candidate() {
+  local original_manifest
+  setup_case prepared-evidence-interrupted
+  select_interrupted_candidate
+  original_manifest="${CASE_DIR}/interrupted-manifest.json"
+  cp "${INTERRUPTED_TARGET}/deployment.json" "${original_manifest}"
+  run_deploy PANTHEON_DEPLOY_ACTION=prepare
+  [[ "${RUN_STATUS}" -ne 0 ]] || show_deploy_failure "prepare recovered an unaccepted public candidate"
+  [[ "$(readlink -f "${CASE_LIVE}")" == "${INTERRUPTED_TARGET}" ]] || show_deploy_failure "prepare moved the interrupted public symlink"
+  cmp -s "${original_manifest}" "${INTERRUPTED_TARGET}/deployment.json" || show_deploy_failure "prepare rewrote the interrupted public manifest"
+  assert_probe_not_called recovery_rollback
+  assert_summary_outcome rejected_before_switch
+}
+
+test_prepared_evidence_fresh_audit_replay() {
+  local release_dir receipt_snapshot
+  setup_case prepared-evidence-fresh-audit
+  run_deploy PANTHEON_DEPLOY_ACTION=prepare
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "initial prepare should succeed"
+  release_dir="$(<"${CASE_AUDIT}/prepared-release-dir")"
+  receipt_snapshot="${CASE_DIR}/original-prepared-receipt.json"
+  cp "${release_dir}/.prepared-receipt.json" "${receipt_snapshot}"
+  CASE_AUDIT="${CASE_DIR}/fresh-audit"
+
+  run_deploy PANTHEON_DEPLOY_ACTION=prepare "PANTHEON_DEPLOY_RELEASE_DIR=${release_dir}"
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "fresh process prepare should reuse the exact locator"
+  [[ "$(<"${CASE_AUDIT}/prepared-release-dir")" == "${release_dir}" ]] || \
+    show_deploy_failure "fresh process ignored the exact release locator"
+  cmp -s "${receipt_snapshot}" "${release_dir}/.prepared-receipt.json" || \
+    show_deploy_failure "fresh process rewrote the prepared receipt"
+  run_deploy PANTHEON_DEPLOY_ACTION=activate "PANTHEON_DEPLOY_RELEASE_DIR=${release_dir}"
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "fresh process activation should use retained prepared evidence"
+  assert_live_profile read-only accepted
+  verify_evidence_pair
+}
+
+test_prepared_evidence_live_noop_prepare() {
+  local release_dir receipt_snapshot manifest_snapshot
+  setup_case prepared-evidence-noop
+  run_deploy
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "initial deployment should succeed"
+  release_dir="$(readlink -f "${CASE_LIVE}")"
+  receipt_snapshot="${CASE_DIR}/original-prepared-receipt.json"
+  manifest_snapshot="${CASE_DIR}/original-accepted-manifest.json"
+  cp "${release_dir}/.prepared-receipt.json" "${receipt_snapshot}"
+  cp "${release_dir}/deployment.json" "${manifest_snapshot}"
+  CASE_AUDIT="${CASE_DIR}/fresh-audit"
+
+  run_deploy PANTHEON_DEPLOY_ACTION=prepare "PANTHEON_DEPLOY_RELEASE_DIR=${release_dir}"
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "no-op prepare should return the existing prepared receipt"
+  [[ "$(readlink -f "${CASE_LIVE}")" == "${release_dir}" ]] || show_deploy_failure "no-op prepare moved the public symlink"
+  cmp -s "${receipt_snapshot}" "${release_dir}/.prepared-receipt.json" || show_deploy_failure "no-op prepare rewrote the receipt"
+  cmp -s "${manifest_snapshot}" "${release_dir}/deployment.json" || show_deploy_failure "no-op prepare rewrote the public manifest"
+  assert_summary_outcome prepared_success
+  verify_evidence_pair
+}
+
+test_prepared_evidence_fresh_activation() {
+  local release_dir
+  setup_case prepared-evidence-fresh-activation
+  run_deploy PANTHEON_DEPLOY_ACTION=prepare
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "prepare should succeed"
+  release_dir="$(<"${CASE_AUDIT}/prepared-release-dir")"
+  CASE_AUDIT="${CASE_DIR}/fresh-activation-audit"
+  run_deploy PANTHEON_DEPLOY_ACTION=activate "PANTHEON_DEPLOY_RELEASE_DIR=${release_dir}"
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "activation incorrectly required the previous process audit directory"
+  cmp -s "${CASE_AUDIT}/prepared-receipt.json" "${release_dir}/.prepared-receipt.json" || show_deploy_failure "fresh activation omitted the original admission from its audit"
+  assert_live_profile read-only accepted
+  verify_evidence_pair
+}
+
+test_prepared_evidence_write_prepare_replay() {
+  local release_dir safe_dir original_receipt original_safe_manifest
+  setup_case prepared-evidence-write-replay
+  run_write_deploy PANTHEON_DEPLOY_ACTION=prepare
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "write prepare should succeed"
+  release_dir="$(<"${CASE_AUDIT}/prepared-release-dir")"
+  safe_dir="${release_dir%-write-proof}-read-only"
+  original_receipt="$(sha256sum "${release_dir}/.prepared-receipt.json")"
+  original_safe_manifest="$(sha256sum "${safe_dir}/deployment.json")"
+  run_write_deploy PANTHEON_DEPLOY_ACTION=prepare
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "write prepare replay should reuse the qualified sibling"
+  [[ "$(<"${CASE_AUDIT}/prepared-release-dir")" == "${release_dir}" ]] || show_deploy_failure "write prepare replay changed the exact release"
+  [[ "$(sha256sum "${release_dir}/.prepared-receipt.json")" == "${original_receipt}" ]] || show_deploy_failure "write prepare replay changed its receipt"
+  [[ "$(sha256sum "${safe_dir}/deployment.json")" == "${original_safe_manifest}" ]] || show_deploy_failure "write prepare replay changed its safe sibling"
+  run_write_deploy PANTHEON_DEPLOY_ACTION=activate PANTHEON_DEPLOY_REAL_WRITES=true PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES=true
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "write activation failed after prepare replay"
+  assert_live_profile write-proof accepted
+  verify_evidence_pair
+}
+
 test_exact_pair_protocol_prepare_leaves_incumbent_untouched() {
   local release_dir receipt_file
   setup_case exact-pair-prepare
@@ -2761,6 +2947,17 @@ run_test "restore network failure preserves the safe release" test_restore_netwo
 run_test "restore rejects a nonprivate or tampered locator before switch" test_restore_rejects_nonprivate_or_tampered_locator_before_switch
 run_test "restore reaches safe sibling when Agora evidence is absent or rejected" test_restore_reaches_safe_sibling_when_agora_evidence_is_absent_or_rejected
 run_test "advanced dev write-proof on served candidate succeeds with guards" test_write_proof_advanced_dev_served_candidate_and_guards
+run_test "prepared evidence missing durable copy rejects activation" test_prepared_evidence_missing_copy_rejected
+run_test "prepared evidence mismatched durable copy rejects activation" test_prepared_evidence_invalid_copy_rejected mismatch
+run_test "prepared evidence symlinked durable copy rejects activation" test_prepared_evidence_invalid_copy_rejected symlink
+run_test "prepared evidence repeated prepare preserves locator and receipt" test_prepared_evidence_repeated_prepare
+run_test "prepared evidence rejected replay preserves original admission" test_prepared_evidence_rejected_replay_preserves_admission
+run_test "prepared evidence repeated prepare rechecks mandatory gate" test_prepared_evidence_replay_rechecks_mandatory_gate
+run_test "prepared evidence prepare cannot mutate an interrupted public candidate" test_prepared_evidence_prepare_never_recovers_public_candidate
+run_test "prepared evidence fresh audit reuses exact locator" test_prepared_evidence_fresh_audit_replay
+run_test "prepared evidence fresh activation retains original admission" test_prepared_evidence_fresh_activation
+run_test "prepared evidence write prepare replay preserves safe sibling" test_prepared_evidence_write_prepare_replay
+run_test "prepared evidence live no-op prepare preserves manifest and receipt" test_prepared_evidence_live_noop_prepare
 run_test "exact pair protocol prepare leaves incumbent untouched and writes receipt" test_exact_pair_protocol_prepare_leaves_incumbent_untouched
 run_test "exact pair protocol activate in new process without rebuild" test_exact_pair_protocol_activate_in_new_process_without_rebuild
 run_test "exact pair protocol lease epoch mismatch rejected" test_exact_pair_protocol_lease_epoch_mismatch_rejected
