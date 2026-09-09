@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
+import { createHash } from "node:crypto";
 
 import { paths } from "../paths";
 import { ERROR_CODES } from "@/lib/v4/errorCodes";
@@ -15,6 +16,7 @@ import {
 } from "../agora/types";
 import contractSnapshot from "../agora/contract-snapshot.json";
 import type {
+  ResearchRunProjection,
   TradingRoomWidgetSpec,
   TradingRoomWorkspaceProposal,
   WidgetRevisionProposal,
@@ -191,5 +193,36 @@ describe("BFF v1 contract drift", () => {
 
     expect(workspaceProposal.views[0].widgets[0].id).toBe(widget.id);
     expect(revision.proposedSpec.title).toBe("Winner Branch Score Heatmap");
+  });
+
+  // This refresh uses contract bytes from Pantheon dev
+  // 15e2907b5dd0af53a2d6b773f1744d7c955336a7, not the historical v1.13
+  // compatibility anchors retained in frontend-generation-output.v1_13.json.
+  it("preserves real, simulation, fixture, and unavailable research provenance as distinct generated values", () => {
+    const source = readIfExists("src/lib/bff-v1/agora/types.ts");
+    const projection = source.match(/export interface ResearchRunProjection \{([\s\S]*?)\n\}/u)?.[1];
+    expect(projection, "generated research projection must exist").toBeDefined();
+    const declaration = projection?.match(/"provenance"\?: ([^;]+);/u)?.[1] ?? "";
+    const declaredValues = Array.from(declaration.matchAll(/"([^"]+)"/gu), (match) => match[1]);
+    const expected: Array<NonNullable<ResearchRunProjection["provenance"]>> = [
+      "real", "simulation", "fixture", "unavailable",
+    ];
+    expect(declaredValues).toEqual(expected);
+    expect(new Set(declaredValues).size).toBe(4);
+    expect(AGORA_CONTRACT_SNAPSHOT.files["specs/agora/v4/research_run_projection.schema.json"])
+      .toBe("305bac84f1075bc3448238bf6157bcc1f7d39b1e18501cdef7dd39035f66c887");
+  });
+
+  it("binds the frontend generation handoff to the actual generated file bytes", () => {
+    const handoff = JSON.parse(readIfExists("docs/contracts/agora/frontend-generation-output.v1_13.json"));
+    expect(handoff.generation_metadata.file_hash_algorithm).toBe("sha256-exact-git-bytes-v1");
+    expect(handoff.generation_metadata.generated_types_hash_algorithm).toBe("sha256-path-tab-filehash-lf-v1");
+    const files = ["src/lib/bff-v1/agora/contract-snapshot.json", "src/lib/bff-v1/agora/types.ts"].sort();
+    const manifest = files.map((file) => {
+      const fileHash = createHash("sha256").update(fs.readFileSync(path.join(repoRoot, file))).digest("hex");
+      return `${file}\t${fileHash}\n`;
+    }).join("");
+    const aggregateHash = createHash("sha256").update(Buffer.from(manifest, "utf8")).digest("hex");
+    expect(handoff.frontend.generated_types_sha256).toBe(aggregateHash);
   });
 });
