@@ -55,9 +55,12 @@ export function assertGitBoundFiles(root, commit, fileHashes) {
     throw new Error("Generation source commit must be a full nonzero Git commit");
   }
   try {
+    if (gitText(root, ["rev-parse", "--verify", `${commit}^{commit}`]) !== commit) {
+      throw new Error("Commit identity must name the commit object itself");
+    }
     gitBytes(root, ["merge-base", "--is-ancestor", commit, "HEAD"]);
   } catch {
-    throw new Error(`Generation source commit ${commit} is not an available ancestor of HEAD`);
+    throw new Error(`Generation source commit ${commit} is not an exact commit object and available ancestor of HEAD`);
   }
   for (const [rel, expected] of Object.entries(fileHashes)) {
     let actual;

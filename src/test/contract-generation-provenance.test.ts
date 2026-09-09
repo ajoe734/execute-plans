@@ -89,6 +89,17 @@ describe("contract generation Git provenance", () => {
     expect(() => validateFrontendHandoff(root, handoff, contract)).toThrow("ancestor of HEAD");
   });
 
+  it("rejects an annotated tag object even when it peels to the correct output commit", () => {
+    const handoff = buildFrontendHandoff(root, contract);
+    git("-c", "user.name=Provenance test fixture", "-c", "user.email=fixture@example.invalid",
+      "-c", "tag.gpgsign=false", "tag", "-a", "output-alias", "-m", "Annotated fixture tag", originalCommit);
+    const tagObject = git("rev-parse", "refs/tags/output-alias");
+    expect(tagObject).not.toBe(originalCommit);
+    expect(git("rev-parse", `${tagObject}^{commit}`)).toBe(originalCommit);
+    handoff.frontend.runtime_commit = tagObject;
+    expect(() => validateFrontendHandoff(root, handoff, contract)).toThrow("exact commit object");
+  });
+
   it("rejects contract, output path, algorithm and digest changes", () => {
     const handoff = buildFrontendHandoff(root, contract);
     expect(() => validateFrontendHandoff(root, handoff, {
