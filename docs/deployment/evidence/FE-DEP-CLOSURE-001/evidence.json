@@ -6,7 +6,7 @@
   "target_repo": "ajoe734/execute-plans",
   "merge_target": "dev",
   "branch": "task/FE-DEP-CLOSURE-001",
-  "status": "source-validated-awaiting-backend-prerequisite-and-canonical-review",
+  "status": "source-validated-awaiting-independent-exact-head-review",
   "source_identity": {
     "audit_frontend_base": "5d4f385284b44a30e10764426a47fd808a7ae3cb",
     "current_dev_base": "fda58bb05052c90e0e18310666ad174b5ab3ff51",
@@ -67,7 +67,7 @@
     "current_dev_packages": 94,
     "after_direct_packages": 90,
     "new_or_missing_audit_packages": [],
-    "tracked_files_considered": 1155,
+    "tracked_files_considered": 1157,
     "method": "Parse all tracked JS/TS/JSX/TSX/MJS/CJS source files with TypeScript AST for import/export-from/side-effect/type imports and literal import()/require()/require.resolve(). Inspect nonliteral dynamic sites and import.meta.glob separately. Cross-check entire tracked source/config/scripts/workflows/docs for candidate names, including test mocks, CSS/config plugin names and CLI consumers. Review package peerDependencies for implicit consumers. Lockfile mentions alone do not prove active npm consumption. Each row records the full reference count and up to four concrete examples per reference kind; the embedded reproducible audit script writes every reference to /tmp/fe-dep-audit.json.",
     "reproduction_audit_script": "const fs = require('node:fs');\nconst cp = require('node:child_process');\nconst path = require('node:path');\nconst root = process.cwd();\nconst ts = require(path.join(root, 'node_modules/typescript'));\nconst pkg = JSON.parse(cp.execFileSync('git', ['show', 'origin/dev:package.json'], {encoding:'utf8'}));\nconst deps = {...pkg.dependencies, ...pkg.devDependencies};\nconst rows = Object.fromEntries(Object.entries(deps).map(([name, declared]) => [name, {name, declared, consumers: []}]));\nconst unresolved = [];\nconst files = cp.execFileSync('git', ['ls-files','-z'], {encoding:'utf8'}).split('\\0').filter(Boolean);\nfunction record(spec, file, node, sf, kind) {\n  const name = Object.keys(rows).find(n => spec === n || spec.startsWith(n+'/'));\n  if(name) rows[name].consumers.push({file, line:sf.getLineAndCharacterOfPosition(node.getStart(sf)).line+1, kind, specifier:spec});\n}\nfor(const file of files.filter(f => /\\.(?:[cm]?[jt]sx?|css)$/.test(f))) {\n  const source=fs.readFileSync(file,'utf8');\n  const sf=ts.createSourceFile(file,source,ts.ScriptTarget.Latest,true);\n  function visit(node) {\n    if((ts.isImportDeclaration(node)||ts.isExportDeclaration(node)) && node.moduleSpecifier && ts.isStringLiteralLike(node.moduleSpecifier)) {\n      const typeOnly = node.importClause?.isTypeOnly || node.isTypeOnly || (node.importClause?.namedBindings?.elements?.length && !node.importClause.name && node.importClause.namedBindings.elements.every(e=>e.isTypeOnly));\n      record(node.moduleSpecifier.text,file,node,sf,typeOnly?'type import':'static import/export');\n    }\n    if(ts.isCallExpression(node) && (node.expression.kind===ts.SyntaxKind.ImportKeyword || node.expression.getText(sf)==='require' || node.expression.getText(sf)==='require.resolve')) {\n      const arg=node.arguments[0];\n      if(arg && ts.isStringLiteralLike(arg)) record(arg.text,file,node,sf,node.expression.kind===ts.SyntaxKind.ImportKeyword?'dynamic import':'require');\n      else unresolved.push({file,line:sf.getLineAndCharacterOfPosition(node.getStart(sf)).line+1,expression:node.getText(sf)});\n    }\n    ts.forEachChild(node,visit);\n  }\n  visit(sf);\n}\nfs.writeFileSync('/tmp/fe-dep-audit.json', JSON.stringify({scannedFiles:files.length,packages:Object.values(rows),unresolved},null,2)+'\\n');\nfor(const row of Object.values(rows)) console.log(row.name+': '+row.consumers.length+' '+row.consumers.slice(0,2).map(c=>c.file+':'+c.line+' ('+c.kind+')').join(', '));\nconsole.log('NONLITERAL',JSON.stringify(unresolved));\n",
     "nonliteral_dynamic_sites": [
@@ -2386,7 +2386,7 @@
         "locked_after": "3.2.4",
         "family_owner_task": "FE-TOOLCHAIN-BASELINE-001",
         "disposition": "retain-consumer",
-        "reference_count": 204,
+        "reference_count": 205,
         "static_type_dynamic_references": [
           {
             "file": "src/agora/TradingDeskLayout.test.tsx",
@@ -2609,6 +2609,76 @@
       "command": "Existing scripts/agora_compat_manifest.py write --compatibility-status pending followed by verify --allow-pending, using exact committed backend/frontend candidate HEAD refs",
       "exit_code": 0,
       "result": "No blocking reasons; exact handoff Git bytes and descendant generated output verified. Candidate remains pending; no accepted-dev or deployment claim."
+    },
+    {
+      "command": "timeout 240 npm ci --no-audit --no-fund",
+      "exit_code": 0,
+      "result": "Clean install: 973 packages.",
+      "log_sha256": "1ecc1dd4956f6961f25d9ae7bb5706ef1bdd84b3acc31311a643ae248cd734cc",
+      "source_validation": "2026-09-09 accepted producer consumption"
+    },
+    {
+      "command": "timeout 90 npm ls --all --json",
+      "exit_code": 0,
+      "result": "Complete installed dependency and peer graph valid.",
+      "log_sha256": "1358ce45db252bdaaa2949275392e2209958dfd7e002709eb36fcec6b9985c63",
+      "source_validation": "2026-09-09 accepted producer consumption"
+    },
+    {
+      "command": "timeout 600 npm test",
+      "exit_code": 0,
+      "result": "204 files, 2053 tests passed; zero failed or skipped; includes auth/session/stream and provenance regressions.",
+      "log_sha256": "ccba22d461dc94cdea72e9978f7581b6b0befbbf1963ea1f0b9902808692e7ef",
+      "source_validation": "2026-09-09 accepted producer consumption"
+    },
+    {
+      "command": "timeout 90 npm run typecheck",
+      "exit_code": 0,
+      "result": "Configured tsconfig.agora.json passes; no whole-application typecheck claim.",
+      "log_sha256": "b57ecf0ea70f204b35ee0b9ab18ca3a5711b6334753ca2d601f9702b9778b409",
+      "source_validation": "2026-09-09 accepted producer consumption"
+    },
+    {
+      "command": "VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false timeout 240 npm run build",
+      "exit_code": 0,
+      "result": "Strict-live production build with fixture isolation passes in 1m33s. Existing public Identity config read from repository Actions variables and supplied only to build subprocess; existing chunk warnings remain.",
+      "log_sha256": "f8a7a62f3725833b3c3ad536446c25f795bf33fd15798ae4729fc43ac1b7233e",
+      "source_validation": "2026-09-09 accepted producer consumption"
+    },
+    {
+      "command": "timeout 90 env PANTHEON_CONTRACT_ROOT=/tmp/pantheon-worker-worktrees/pantheon/agora-provenance-closure-prerequisite-001 npm run test:contract",
+      "exit_code": 0,
+      "result": "49 schemas, 157 routes, 75 hashes aligned; 7 contract tests pass.",
+      "log_sha256": "c357e2e1f65408ec5f7d5a463b41a7daf1fee72b41f024603088390c0fa58c65",
+      "source_validation": "2026-09-09 accepted producer consumption"
+    },
+    {
+      "command": "timeout 90 python3 /tmp/pantheon-worker-worktrees/pantheon/agora-provenance-closure-prerequisite-001/docs/contracts/agora/generate_backend_contract.py verify",
+      "exit_code": 0,
+      "result": "Accepted backend handoff verifies, including transitive source closure.",
+      "log_sha256": "a6b946e096db4b6a1a822dc4ef1610834086f8fa2fe8041a278a2d4a06bbc353",
+      "source_validation": "2026-09-09 accepted producer consumption"
+    },
+    {
+      "command": "python3 /tmp/pantheon-worker-worktrees/pantheon/agora-provenance-closure-prerequisite-001/scripts/agora_compat_manifest.py write --frontend-root <delivery-worktree> --backend-handoff-commit 9d7b35740661c4ffb91aa271e09fba16ea048f42 --frontend-handoff-commit b9fee329cb7dd2bcb5f2e45fc4624ec5167b10c1 --frontend-dev-ref HEAD --compatibility-status pending --output /tmp/fe-dep-resume-compatibility.json",
+      "exit_code": 0,
+      "result": "Actual committed FE output and accepted backend handoff produce pending manifest with no blocking reasons.",
+      "log_sha256": "a8d2cd38facc5566a5be2274544f9b84532dd4e3fbe0167165cdefcc318bb8b2",
+      "source_validation": "2026-09-09 accepted producer consumption"
+    },
+    {
+      "command": "python3 /tmp/pantheon-worker-worktrees/pantheon/agora-provenance-closure-prerequisite-001/scripts/agora_compat_manifest.py verify --manifest /tmp/fe-dep-resume-compatibility.json --frontend-root <delivery-worktree> --frontend-dev-ref HEAD --allow-pending",
+      "exit_code": 0,
+      "result": "Cross-repository generation provenance and pending candidate manifest verify.",
+      "log_sha256": "7dc7e875d3fce1d2898227bdd3d3792eda5102b721878d09c9e33ed61fb5ddaa",
+      "source_validation": "2026-09-09 accepted producer consumption"
+    },
+    {
+      "command": "node /tmp/fe-dep-resume-audit.cjs (exact consumer_audit.reproduction_audit_script)",
+      "exit_code": 0,
+      "result": "94 audit packages rescanned; source/config/CLI/plugin consumers and retained locks reviewed.",
+      "log_sha256": "eb90945cdf2d86e0242bf4d28f3bbd9e615cd3ca49d34573f6009ee204c3f21c",
+      "source_validation": "2026-09-09 accepted producer consumption"
     }
   ],
   "independent_review_required": [
@@ -2621,7 +2691,7 @@
     "auth_session_stream_behavior": "The full suite executed public-build-auth-contract (67 tests), OpenClawLlmAuthPanel, managementAi, liveTransport, SSE and agent panel tests, plus chart/grid and strict-live/release protocol regressions. No privileged hosted auth was performed.",
     "source_boundary_check": "Original package/lock delta preserved. Formal artifact expansion adds existing generation checker, generated types/snapshot, frontend generation handoff, branch CI history depth and focused provenance tests. git diff --check and commit/generated-file guards pass. No handwritten generated DTO changes, dependency upgrades, runtime auth/session/stream changes or hosted actions.",
     "install_warnings": "npm reports existing deprecated transitive packages; compatible upgrade work remains assigned to the separate FE baseline tasks.",
-    "remote_gates": "Previous PR748 CI failure is preserved as historical evidence. Local exploratory candidate source/provenance checks pass, but canonical AGORA-PROVENANCE-CLOSURE-PREREQUISITE-001 owns the producer fix. After that task merges, regenerate and bind FE outputs to its accepted backend contract, rerun exact-head checks and independent canonical review. Current candidate metadata is not accepted dev evidence."
+    "remote_gates": "Backend prerequisite is canonical done and merged in PR #5715. FE outputs now consume its accepted handoff. PR #748 requires fresh CI and independent canonical review at the final handoff-bound head, then integrator merge. No hosted deployment or acceptance was performed; later exact-pair release requalification remains required."
   },
   "generation_provenance_repair": {
     "validated_at": "2026-09-09T01:59:19.592018+00:00",
@@ -2644,6 +2714,28 @@
       "inherited schema bytes attributed to a historical contract commit"
     ],
     "backend_handoff_candidate_disposition": "Unmerged exploratory metadata candidate only. The canonical AGORA-PROVENANCE-CLOSURE-PREREQUISITE-001 worker owns complete inherited source/bundle-edge closure and the accepted producer handoff; the narrower candidate is superseded and is not a delivery prerequisite.",
-    "required_predecessor": "AGORA-PROVENANCE-CLOSURE-PREREQUISITE-001"
+    "required_predecessor": "AGORA-PROVENANCE-CLOSURE-PREREQUISITE-001",
+    "superseded_by": "accepted_producer_consumption; exploratory candidate validation retained as historical evidence only"
+  },
+  "accepted_producer_consumption": {
+    "validated_at": "2026-09-09T05:01:56.275887+00:00",
+    "source_head": "b9fee329cb7dd2bcb5f2e45fc4624ec5167b10c1",
+    "backend_task": "AGORA-PROVENANCE-CLOSURE-PREREQUISITE-001",
+    "backend_task_status": "done",
+    "backend_pr": "https://github.com/ajoe734/pantheon/pull/5715",
+    "backend_approved_head": "9d7b35740661c4ffb91aa271e09fba16ea048f42",
+    "backend_validation_checkout_head": "2f3a49ab4917468e086985fa66a3152d8095e9f7",
+    "backend_checkout_check": "Clean existing producer worktree; generated source, handoff, OpenAPI, bundle and compatibility verifier bytes unchanged from approved head. Approved head is an ancestor of backend origin/dev.",
+    "backend_contract_commit": "77df37d54f9da6f6091bc150fce03ca711b494ec",
+    "frontend_generated_output_commit": "b70646a7a9898a6c8ba0588350365fd8fc1451f9",
+    "frontend_handoff_commit": "b9fee329cb7dd2bcb5f2e45fc4624ec5167b10c1",
+    "generated_types_sha256": "2b57c86327dc15e559d41ff22bed425a8e9b5600378301d5c63457fa31630dd9",
+    "bundle_index_sha256": "f621c694f5e74d15b81d5cf016dd2684e364b8fac849047263acdf69d94943c9",
+    "openapi_sha256": "56f12e43bb6041a0f83bf4ff69bf13ae86a335a38246f68a10f0a4ef3a856087",
+    "compatibility_manifest_sha256": "77a9e3cfa21ce2699edf9c40e41c493e35fd469cba1792544d1d7b965f1b00e4",
+    "compatibility_status": "pending",
+    "blocking_reasons": [],
+    "qualification_boundary": "Source compatibility probe uses actual backend origin/dev reachability and an explicitly supplied FE HEAD candidate ref. FE independent approval, dev merge and hosted release qualification remain separate requirements.",
+    "consumer_refresh": "Reran the embedded TypeScript AST audit against unchanged current dev fda58bb05052c90e0e18310666ad174b5ab3ff51: all 94 packages accounted for, 90 retained declarations, only Vitest reference count changed from 204 to 205 for the added provenance regression file. Rechecked Bun and componentTagger consumers; retention dispositions unchanged."
   }
 }
