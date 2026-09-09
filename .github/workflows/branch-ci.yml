@@ -213,7 +213,8 @@ jobs:
           ref: dev
           path: pantheon-contract
           token: ${{ github.token }}
-          fetch-depth: 1
+          # Generation provenance verifies the declared contract ancestor's Git bytes.
+          fetch-depth: 0
           persist-credentials: false
 
       - name: BFF contract tests
