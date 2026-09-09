@@ -7,7 +7,6 @@ const DEV_RUNTIME_HOSTS = new Set([
 const FALLBACK_RUNTIME_HOSTS = new Set([
   "localhost",
   "127.0.0.1",
-  "app.dev.mvl-cap.tw",
 ]);
 
 const REAL_WRITE_KEYS = [
@@ -116,7 +115,18 @@ function readDevRuntimeOverrides(): Record<string, string | undefined> {
 }
 
 export function readBffEnv(): Record<string, string | undefined> {
-  const viteEnv = ((import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {});
+  const metaEnv = (import.meta as unknown as { env?: Record<string, string | boolean | undefined> }).env ?? {};
+  const viteEnv = metaEnv as Record<string, string | undefined>;
   const nodeEnv = typeof process !== "undefined" ? process.env : {};
-  return { ...viteEnv, ...nodeEnv, ...readDevRuntimeOverrides() };
+  const isProd = metaEnv.PROD === true;
+  const prodDefaults: Record<string, string | undefined> = isProd
+    ? {
+        VITE_BFF_MODE: "live",
+        VITE_BFF_FALLBACK: "strict",
+        VITE_BFF_REAL_WRITES: "false",
+        VITE_BFF_ALLOW_DEV_STUB_WRITES: "false",
+        VITE_BFF_EMBEDDED_BEARER_TOKEN: "false",
+      }
+    : {};
+  return { ...prodDefaults, ...viteEnv, ...nodeEnv, ...readDevRuntimeOverrides() };
 }

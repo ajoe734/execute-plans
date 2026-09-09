@@ -29,6 +29,8 @@ const FORBIDDEN_STRICT_LIVE_MODULES = [
   path.resolve(__dirname, "./src/lib/bff-v1/mocks/scenarios.ts"),
   path.resolve(__dirname, "./src/lib/bff-v1/seed-taxonomy.json"),
   path.resolve(__dirname, "./src/lib/bff-v1/writeOverlay.ts"),
+  path.resolve(__dirname, "./src/lib/v5/overlay.ts"),
+  path.resolve(__dirname, "./src/lib/v5/loopOverlay.ts"),
 ];
 
 function isStrictLiveBuild(env: Record<string, string | undefined>): boolean {
@@ -64,10 +66,49 @@ export default defineConfig(({ mode }) => {
   // and build modes. Validate while the config is loading so `vite` cannot
   // bind a development server with a privileged ambient credential either.
   const loadedEnv = loadEnv(mode, process.cwd(), "VITE_");
+  const rawBffMode = process.env.VITE_BFF_MODE ?? loadedEnv.VITE_BFF_MODE;
+  const rawBffFallback = process.env.VITE_BFF_FALLBACK ?? loadedEnv.VITE_BFF_FALLBACK;
+  const rawRealWrites = process.env.VITE_BFF_REAL_WRITES ?? loadedEnv.VITE_BFF_REAL_WRITES;
+  const rawAllowDevStubWrites = process.env.VITE_BFF_ALLOW_DEV_STUB_WRITES ?? loadedEnv.VITE_BFF_ALLOW_DEV_STUB_WRITES;
+  const rawEmbeddedBearer = process.env.VITE_BFF_EMBEDDED_BEARER_TOKEN ?? loadedEnv.VITE_BFF_EMBEDDED_BEARER_TOKEN;
+
+  if (mode === "production") {
+    if (rawBffMode && rawBffMode !== "live") {
+      throw new Error(`Production build forbids VITE_BFF_MODE=${rawBffMode}; must be 'live'`);
+    }
+    if (rawBffFallback && rawBffFallback !== "strict") {
+      throw new Error(`Production build forbids VITE_BFF_FALLBACK=${rawBffFallback}; must be 'strict'`);
+    }
+    if (rawRealWrites && rawRealWrites !== "false") {
+      throw new Error(`Production build forbids VITE_BFF_REAL_WRITES=${rawRealWrites}; must be 'false'`);
+    }
+    if (rawAllowDevStubWrites && rawAllowDevStubWrites !== "false") {
+      throw new Error(`Production build forbids VITE_BFF_ALLOW_DEV_STUB_WRITES=${rawAllowDevStubWrites}; must be 'false'`);
+    }
+    if (rawEmbeddedBearer && rawEmbeddedBearer !== "false") {
+      throw new Error(`Production build forbids VITE_BFF_EMBEDDED_BEARER_TOKEN=${rawEmbeddedBearer}; must be 'false'`);
+    }
+  }
+
+  const bffMode = rawBffMode ?? (mode === "production" ? "live" : "mock");
+  const bffFallback = rawBffFallback ?? (mode === "production" ? "strict" : "auto");
+  const realWrites = rawRealWrites ?? "false";
+  const allowDevStubWrites = rawAllowDevStubWrites ?? "false";
+  const embeddedBearer = rawEmbeddedBearer ?? "false";
+
+  process.env.VITE_BFF_MODE = bffMode;
+  process.env.VITE_BFF_FALLBACK = bffFallback;
+  process.env.VITE_BFF_REAL_WRITES = realWrites;
+  process.env.VITE_BFF_ALLOW_DEV_STUB_WRITES = allowDevStubWrites;
+  process.env.VITE_BFF_EMBEDDED_BEARER_TOKEN = embeddedBearer;
+
   const buildEnv = {
     ...loadedEnv,
-    VITE_BFF_MODE: process.env.VITE_BFF_MODE ?? loadedEnv.VITE_BFF_MODE,
-    VITE_BFF_FALLBACK: process.env.VITE_BFF_FALLBACK ?? loadedEnv.VITE_BFF_FALLBACK,
+    VITE_BFF_MODE: bffMode,
+    VITE_BFF_FALLBACK: bffFallback,
+    VITE_BFF_REAL_WRITES: realWrites,
+    VITE_BFF_ALLOW_DEV_STUB_WRITES: allowDevStubWrites,
+    VITE_BFF_EMBEDDED_BEARER_TOKEN: embeddedBearer,
   };
   const strictLiveBuild = isStrictLiveBuild(buildEnv);
   validatePublicBuildBearerToken(
@@ -83,6 +124,13 @@ export default defineConfig(({ mode }) => {
   );
 
   return {
+    define: {
+      "import.meta.env.VITE_BFF_MODE": JSON.stringify(bffMode),
+      "import.meta.env.VITE_BFF_FALLBACK": JSON.stringify(bffFallback),
+      "import.meta.env.VITE_BFF_REAL_WRITES": JSON.stringify(realWrites),
+      "import.meta.env.VITE_BFF_ALLOW_DEV_STUB_WRITES": JSON.stringify(allowDevStubWrites),
+      "import.meta.env.VITE_BFF_EMBEDDED_BEARER_TOKEN": JSON.stringify(embeddedBearer),
+    },
     server: {
       host: "::",
       port: 8080,
