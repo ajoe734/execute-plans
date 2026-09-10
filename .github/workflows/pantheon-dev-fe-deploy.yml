@@ -1576,6 +1576,8 @@ jobs:
           const bffUrl = `${process.env.PANTHEON_BFF_BASE_URL.replace(/\/+$/, "")}/bff/version?confirmation=${Date.now()}`;
           const expectedFe = String(process.env.EXACT_FE_SHA || "").toLowerCase();
           const expectedBff = String(process.env.EXACT_BFF_SHA || "").toLowerCase();
+          const expectedPair = String(process.env.EXPECTED_PAIR_ID || "");
+          if (!/^(?!0{64}$)[0-9a-f]{64}$/.test(expectedPair)) process.exit(1);
 
           try {
             const feRes = await fetch(feUrl, { signal: AbortSignal.timeout(5000) });
@@ -1587,6 +1589,7 @@ jobs:
             const realWrites = String(dep.buildMode?.VITE_BFF_REAL_WRITES ?? "");
 
             if (servedFe !== expectedFe || servedBff !== expectedBff) process.exit(1);
+            if (dep.pairId !== expectedPair || dep.pair?.pairId !== expectedPair) process.exit(1);
             if (profile !== "read-only-restore" && profile !== "read-only") process.exit(1);
             if (realWrites !== "false") process.exit(1);
 
@@ -1666,16 +1669,19 @@ jobs:
             exit 1
           fi
 
-          evidence_summary="$(python3 - "$archive" "$EXACT_FE_SHA" "$EXACT_BFF_SHA" <<'PY'
+          evidence_summary="$(python3 - "$archive" "$EXACT_FE_SHA" "$EXACT_BFF_SHA" "$EXPECTED_PAIR_ID" <<'PY'
           import json
           import pathlib
+          import re
           import sys
           import zipfile
 
           archive_path = pathlib.Path(sys.argv[1])
           expected_fe = sys.argv[2].lower()
           expected_bff = sys.argv[3].lower()
-          expected_pair = f"{expected_fe}:{expected_bff}"
+          expected_pair = sys.argv[4]
+          if not re.fullmatch(r"(?!0{64}$)[0-9a-f]{64}", expected_pair):
+              raise SystemExit("Expected pair ID must be the authenticated nonzero SHA-256 digest")
 
           with zipfile.ZipFile(archive_path) as bundle:
               names = bundle.namelist()

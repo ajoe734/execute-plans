@@ -648,12 +648,12 @@ jobs:
               fail("Hosted PINT proof source artifact does not match the exact immutable controller pair");
               return;
             }
-            const { data: sourceRef } = await github.rest.git.getRef({
+            const { data: currentSourceRef } = await github.rest.git.getRef({
               owner: context.repo.owner,
               repo: context.repo.repo,
               ref: `heads/${frontendRef}`,
             });
-            if (String(sourceRef.object?.sha || "").toLowerCase() !== frontendSha) {
+            if (String(currentSourceRef.object?.sha || "").toLowerCase() !== frontendSha) {
               fail("Hosted PINT proof candidate ref no longer points to the exact FE SHA");
               return;
             }
