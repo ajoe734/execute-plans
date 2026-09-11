@@ -32,6 +32,19 @@ function falsey(value: unknown): boolean {
   return ["0", "false", "no", "off"].includes(String(value ?? "").trim().toLowerCase());
 }
 
+function readRuntimeConfigValue(key: string): string | undefined {
+  if (typeof window === "undefined") return undefined;
+  const runtimeWindow = window as unknown as Record<string, unknown>;
+  for (const configKey of RUNTIME_CONFIG_KEYS) {
+    const config = runtimeWindow[configKey];
+    if (!config || typeof config !== "object" || Array.isArray(config)) continue;
+    const value = (config as Record<string, unknown>)[key];
+    if (typeof value === "string") return value;
+    if (typeof value === "number" || typeof value === "boolean") return String(value);
+  }
+  return undefined;
+}
+
 function browserHostname(): string {
   if (typeof window === "undefined") return "";
   return window.location?.hostname ?? "";
@@ -45,18 +58,10 @@ export function isRuntimeFallbackHost(hostname = browserHostname()): boolean {
   return FALLBACK_RUNTIME_HOSTS.has(hostname);
 }
 
-function readRuntimeConfigValue(key: string): string | undefined {
-  if (typeof window === "undefined") return undefined;
-  const runtimeWindow = window as unknown as Record<string, unknown>;
-  for (const configKey of RUNTIME_CONFIG_KEYS) {
-    const config = runtimeWindow[configKey];
-    if (!config || typeof config !== "object" || Array.isArray(config)) continue;
-    const value = (config as Record<string, unknown>)[key];
-    if (typeof value === "string") return value;
-    if (typeof value === "number" || typeof value === "boolean") return String(value);
-  }
-  return undefined;
+export function isDevLoginHost(hostname = browserHostname()): boolean {
+  return DEV_RUNTIME_HOSTS.has(hostname);
 }
+
 
 function readStorageValue(key: string): string | undefined {
   if (typeof window === "undefined") return undefined;

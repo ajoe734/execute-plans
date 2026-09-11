@@ -10,6 +10,7 @@ import {
   GoogleAuthProvider,
 } from "firebase/auth";
 import { gcpIdentityAuth } from "@/integrations/gcp/identity";
+import { isDevLoginHost } from "@/lib/bff-v1/runtimeEnv";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,7 +18,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 
 export default function AuthPage() {
-  const { session, bffSession, bffError, loading, retryBffSession, signOut } = useAuth();
+  const { session, bffSession, bffError, loading, retryBffSession, signOut, devLogin } = useAuth();
+  const isDev = isDevLoginHost();
   const location = useLocation();
   const nav = useNavigate();
   const [params] = useSearchParams();
@@ -32,6 +34,9 @@ export default function AuthPage() {
   const authRequired = params.get("reason") === "auth-required";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [account, setAccount] = useState("");
+  const [devPassword, setDevPassword] = useState("");
+  const [devError, setDevError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -129,6 +134,28 @@ export default function AuthPage() {
     }
   };
 
+  const handleDevSignIn = async () => {
+    if (busy) return;
+    if (!account.trim() || !devPassword) {
+      const msg = "Enter account and password.";
+      toast.error(msg);
+      setDevError(msg);
+      return;
+    }
+    setBusy(true);
+    setDevError(null);
+    try {
+      await devLogin(account.trim(), devPassword);
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      toast.error(msg);
+      setDevError(msg);
+    } finally {
+      setDevPassword("");
+      setBusy(false);
+    }
+  };
+
   const retryAccessVerification = async () => {
     setBusy(true);
     try {
@@ -147,7 +174,7 @@ export default function AuthPage() {
           <h1 className="text-2xl font-semibold">{productName}</h1>
           <p className="text-sm text-muted-foreground">Sign in once to access the {productArea}.</p>
         </div>
-        {authRequired && !session ? (
+        {authRequired && !session && !bffSession ? (
           <div role="status" className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
             <p className="font-medium">Your {isAgora ? "Agora" : "Pantheon"} session is missing or expired.</p>
             <p className="mt-1 text-muted-foreground">
@@ -194,39 +221,89 @@ export default function AuthPage() {
               Use another account
             </Button>
           </div>
+        ) : isDev ? (
+          <div className="space-y-4">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (busy) return;
+                void handleDevSignIn();
+              }}
+              className="space-y-3"
+            >
+              <div className="space-y-1">
+                <label htmlFor="dev-account" className="text-sm font-medium">
+                  Account
+                </label>
+                <Input
+                  id="dev-account"
+                  type="text"
+                  placeholder="Account"
+                  autoComplete="username"
+                  value={account}
+                  onChange={(e) => setAccount(e.target.value)}
+                  disabled={busy}
+                />
+              </div>
+              <div className="space-y-1">
+                <label htmlFor="dev-password" className="text-sm font-medium">
+                  Password
+                </label>
+                <Input
+                  id="dev-password"
+                  type="password"
+                  placeholder="Password"
+                  autoComplete="current-password"
+                  value={devPassword}
+                  onChange={(e) => setDevPassword(e.target.value)}
+                  disabled={busy}
+                />
+              </div>
+              {devError ? (
+                <div role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+                  <p>{devError}</p>
+                </div>
+              ) : null}
+              <Button type="submit" className="w-full" disabled={busy}>
+                Sign in
+              </Button>
+            </form>
+          </div>
         ) : (
-        <Tabs defaultValue="signin">
-          <TabsList className="grid grid-cols-2 w-full">
-            <TabsTrigger value="signin">Sign in</TabsTrigger>
-            <TabsTrigger value="signup">Sign up</TabsTrigger>
-          </TabsList>
-          <TabsContent value="signin" className="space-y-3 pt-4">
-            <Button className="w-full" variant="outline" onClick={() => void signInWithGoogle()} disabled={busy}>
-              Continue with Google
-            </Button>
-            <div className="flex items-center gap-3 text-xs text-muted-foreground">
-              <span className="h-px flex-1 bg-border" />
-              <span>or use email</span>
-              <span className="h-px flex-1 bg-border" />
-            </div>
-            <Input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
-            <Input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} />
-            <Button className="w-full" onClick={signIn} disabled={busy}>Sign in</Button>
-            <Button className="w-full" variant="ghost" onClick={() => void resetPassword()} disabled={busy}>
-              Forgot password
-            </Button>
-          </TabsContent>
-          <TabsContent value="signup" className="space-y-3 pt-4">
-            <Input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
-            <Input type="password" placeholder="12+ chars: upper, lower, number, symbol" value={password} onChange={(e) => setPassword(e.target.value)} />
-            <Button className="w-full" onClick={signUp} disabled={busy}>Create account</Button>
-          </TabsContent>
-        </Tabs>
+          <Tabs defaultValue="signin">
+            <TabsList className="grid grid-cols-2 w-full">
+              <TabsTrigger value="signin">Sign in</TabsTrigger>
+              <TabsTrigger value="signup">Sign up</TabsTrigger>
+            </TabsList>
+            <TabsContent value="signin" className="space-y-3 pt-4">
+              <Button className="w-full" variant="outline" onClick={() => void signInWithGoogle()} disabled={busy}>
+                Continue with Google
+              </Button>
+              <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                <span className="h-px flex-1 bg-border" />
+                <span>or use email</span>
+                <span className="h-px flex-1 bg-border" />
+              </div>
+              <Input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
+              <Input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} />
+              <Button className="w-full" onClick={signIn} disabled={busy}>Sign in</Button>
+              <Button className="w-full" variant="ghost" onClick={() => void resetPassword()} disabled={busy}>
+                Forgot password
+              </Button>
+            </TabsContent>
+            <TabsContent value="signup" className="space-y-3 pt-4">
+              <Input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
+              <Input type="password" placeholder="12+ chars: upper, lower, number, symbol" value={password} onChange={(e) => setPassword(e.target.value)} />
+              <Button className="w-full" onClick={signUp} disabled={busy}>Create account</Button>
+            </TabsContent>
+          </Tabs>
         )}
         <p className="text-center text-xs text-muted-foreground">
           {isAgora
             ? "Agora uses your Pantheon single sign-on identity; there is no separate Agora password."
-            : "Authentication is provided by GCP Identity Platform."}
+            : isDev
+              ? "Development login via Pantheon BFF client credentials."
+              : "Authentication is provided by GCP Identity Platform."}
         </p>
       </div>
     </div>

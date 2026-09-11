@@ -83,6 +83,7 @@ export async function tryDevLogin(): Promise<string | null> {
       "Content-Type": "application/json",
       "X-Request-Id": `fe-dev-login-${Date.now()}`,
     },
+    credentials: "include",
     body: JSON.stringify({
       grant_type: "client_credentials",
       client_id: clientId,
