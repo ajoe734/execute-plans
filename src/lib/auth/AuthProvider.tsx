@@ -23,6 +23,8 @@ import {
   type VerifiedBffBrowserSession,
 } from "./bffBrowserSession";
 import { hasDevLoginCredentials } from "./devLoginHelper";
+import { isDevLoginHost } from "@/lib/bff-v1/runtimeEnv";
+import { postDevLogin } from "./devLogin";
 
 export interface AuthContextValue {
   session: GcpIdentitySession | null;
@@ -33,6 +35,7 @@ export interface AuthContextValue {
   loading: boolean;
   retryBffSession: () => Promise<void>;
   signOut: () => Promise<void>;
+  devLogin: (account: string, password: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue>({
@@ -43,6 +46,7 @@ const AuthContext = createContext<AuthContextValue>({
   loading: true,
   retryBffSession: async () => {},
   signOut: async () => {},
+  devLogin: async () => {},
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -65,12 +69,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setBffError(null);
 
     if (!next) {
+      clearBffBrowserSession();
       if (!hasDevLoginCredentials()) {
-        clearBffBrowserSession();
         setLoading(false);
         return;
       }
-      clearBffBrowserSession();
     } else {
       // Install the new bearer synchronously before any BFF request can run.
       registerBffBrowserSession(next);
@@ -97,7 +100,59 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const devLogin = useCallback(async (account: string, password: string) => {
+    const version = ++syncVersion.current;
+    setLoading(true);
+    setBffError(null);
+    try {
+      await postDevLogin(account, password);
+      if (syncVersion.current !== version) return;
+      clearBffBrowserSession();
+      const verified = await verifyBffBrowserSession();
+      if (syncVersion.current !== version) return;
+      sessionRef.current = null;
+      setSession(null);
+      setBffSession(verified);
+      setBffError(null);
+      setLoading(false);
+    } catch (error: unknown) {
+      if (syncVersion.current !== version) return;
+      const normalized = error instanceof Error ? error : new Error(String(error));
+      setBffError(normalized);
+      setLoading(false);
+      throw normalized;
+    }
+  }, []);
+
   useEffect(() => {
+    if (isDevLoginHost()) {
+      const version = ++syncVersion.current;
+      clearBffBrowserSession();
+      setLoading(true);
+      setBffError(null);
+      void verifyBffBrowserSession()
+        .then((verified) => {
+          if (syncVersion.current !== version) return;
+          sessionRef.current = null;
+          setSession(null);
+          setBffSession(verified);
+          setBffError(null);
+          setLoading(false);
+        })
+        .catch(() => {
+          if (syncVersion.current !== version) return;
+          sessionRef.current = null;
+          setSession(null);
+          setBffSession(null);
+          setBffError(null);
+          setLoading(false);
+        });
+      return () => {
+        ++syncVersion.current;
+        clearBffBrowserSession();
+      };
+    }
+
     let unsubscribe = () => {};
     let active = true;
     void gcpIdentityReady
@@ -130,6 +185,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(true);
 
     if (!current) {
+      if (isDevLoginHost()) {
+        const version = ++syncVersion.current;
+        clearBffBrowserSession();
+        try {
+          const verified = await verifyBffBrowserSession();
+          if (syncVersion.current !== version) return;
+          sessionRef.current = null;
+          setSession(null);
+          setBffSession(verified);
+          setBffError(null);
+          setLoading(false);
+          return;
+        } catch (error: unknown) {
+          if (syncVersion.current !== version) return;
+          const normalized = error instanceof Error ? error : new Error(String(error));
+          setBffError(normalized);
+          setLoading(false);
+          throw normalized;
+        }
+      }
       const error = new Error("GCP Identity session is unavailable; choose an account to continue.");
       setBffError(error);
       setLoading(false);
@@ -149,6 +224,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [applyUser]);
 
   const signOut = useCallback(async () => {
+    ++syncVersion.current;
     const current = sessionRef.current;
     let bffLogoutError: unknown;
 
@@ -156,11 +232,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Verification may previously have failed closed and cleared the provider;
       // restore only this current in-memory bearer long enough to invalidate it.
       registerBffBrowserSession(current);
-      try {
-        await logoutBffBrowserSession();
-      } catch (error: unknown) {
-        bffLogoutError = error;
-      }
+    }
+    try {
+      await logoutBffBrowserSession();
+    } catch (error: unknown) {
+      bffLogoutError = error;
+    }
+
+    if (isDevLoginHost()) {
+      sessionRef.current = null;
+      clearBffBrowserSession();
+      setSession(null);
+      setBffSession(null);
+      setBffError(null);
+      setLoading(false);
+      if (bffLogoutError) throw bffLogoutError;
+      return;
     }
 
     let identityLogoutError: unknown;
@@ -169,7 +256,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error: unknown) {
       identityLogoutError = error;
     } finally {
-      ++syncVersion.current;
       sessionRef.current = null;
       clearBffBrowserSession();
       setSession(null);
@@ -192,6 +278,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loading,
         retryBffSession,
         signOut,
+        devLogin,
       }}
     >
       {children}

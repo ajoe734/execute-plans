@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   identitySignOut: vi.fn(),
   retryBffSession: vi.fn(),
   signOut: vi.fn(),
+  devLogin: vi.fn(),
   auth: {
     session: null,
     bffSession: null,
@@ -18,6 +19,7 @@ const mocks = vi.hoisted(() => ({
     loading: false,
     retryBffSession: vi.fn(),
     signOut: vi.fn(),
+    devLogin: vi.fn(),
   } as Record<string, unknown>,
 }));
 
@@ -54,8 +56,17 @@ function renderAuth(entry: string) {
   );
 }
 
+function setLocation(url: string) {
+  Object.defineProperty(window, "location", {
+    value: new URL(url),
+    writable: true,
+    configurable: true,
+  });
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
+  setLocation("https://app.mvl-cap.tw/auth");
   mocks.auth = {
     session: null,
     bffSession: null,
@@ -63,6 +74,7 @@ beforeEach(() => {
     loading: false,
     retryBffSession: mocks.retryBffSession,
     signOut: mocks.signOut,
+    devLogin: mocks.devLogin,
   };
   mocks.retryBffSession.mockResolvedValue(undefined);
   mocks.signIn.mockResolvedValue({ user: { uid: "gcp-user" } });
@@ -70,6 +82,7 @@ beforeEach(() => {
   mocks.createUser.mockResolvedValue({ user: { uid: "gcp-user" } });
   mocks.sendVerification.mockResolvedValue(undefined);
   mocks.identitySignOut.mockResolvedValue(undefined);
+  mocks.devLogin.mockResolvedValue(undefined);
 });
 
 describe("Pantheon auth recovery page", () => {
@@ -201,6 +214,166 @@ describe("Pantheon auth recovery page", () => {
     };
 
     renderAuth("/auth?from=%2F%2Fevil.example");
+
+    expect(screen.getByText("Management restored")).toBeInTheDocument();
+  });
+});
+
+describe("Pantheon dev login form (app.dev.mvl-cap.tw)", () => {
+  beforeEach(() => {
+    setLocation("https://app.dev.mvl-cap.tw/auth");
+  });
+
+  it("renders the simple Account/Password dev login form with accessible labels on app.dev.mvl-cap.tw", () => {
+    renderAuth("/auth?from=%2Fmanagement%2Fcockpit");
+
+    expect(screen.getByLabelText("Account")).toBeInTheDocument();
+    expect(screen.getByLabelText("Password")).toBeInTheDocument();
+    expect(screen.getByLabelText("Account")).toHaveAttribute("autocomplete", "username");
+    expect(screen.getByLabelText("Password")).toHaveAttribute("autocomplete", "current-password");
+    expect(screen.getByRole("button", { name: "Sign in" })).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText("Email")).not.toBeInTheDocument();
+    expect(screen.queryByText("Continue with Google")).not.toBeInTheDocument();
+  });
+
+  it("submits Account and Password through devLogin", async () => {
+    renderAuth("/auth?from=%2Fmanagement%2Fcockpit");
+
+    fireEvent.change(screen.getByLabelText("Account"), {
+      target: { value: "dev-operator" },
+    });
+    fireEvent.change(screen.getByLabelText("Password"), {
+      target: { value: "correct-password" },
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+    });
+
+    expect(mocks.devLogin).toHaveBeenCalledWith(
+      "dev-operator",
+      "correct-password",
+    );
+  });
+
+  it("submits dev login on form submission", async () => {
+    renderAuth("/auth?from=%2Fmanagement%2Fcockpit");
+
+    const passwordInput = screen.getByLabelText("Password");
+    fireEvent.change(screen.getByLabelText("Account"), {
+      target: { value: "dev-operator" },
+    });
+    fireEvent.change(passwordInput, {
+      target: { value: "correct-password" },
+    });
+    const form = passwordInput.closest("form")!;
+    await act(async () => {
+      fireEvent.submit(form);
+    });
+
+    expect(mocks.devLogin).toHaveBeenCalledWith(
+      "dev-operator",
+      "correct-password",
+    );
+  });
+
+  it("displays validation error when Account or Password is empty", async () => {
+    renderAuth("/auth?from=%2Fmanagement%2Fcockpit");
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+    });
+
+    expect(mocks.devLogin).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toHaveTextContent("Enter account and password.");
+  });
+
+  it("displays error message on invalid credentials without navigating", async () => {
+    mocks.devLogin.mockRejectedValueOnce(new Error("Invalid client credentials"));
+    renderAuth("/auth?from=%2Fmanagement%2Fcockpit");
+
+    fireEvent.change(screen.getByLabelText("Account"), {
+      target: { value: "dev-operator" },
+    });
+    fireEvent.change(screen.getByLabelText("Password"), {
+      target: { value: "wrong-password" },
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+    });
+
+    expect(mocks.devLogin).toHaveBeenCalledWith("dev-operator", "wrong-password");
+    expect(screen.getByRole("alert")).toHaveTextContent("Invalid client credentials");
+    expect(screen.queryByText("Management restored")).not.toBeInTheDocument();
+  });
+
+  it("allows password correction after failure, keeping form visible and clearing password", async () => {
+    mocks.devLogin
+      .mockRejectedValueOnce(new Error("Invalid client credentials"))
+      .mockResolvedValueOnce(undefined);
+
+    renderAuth("/auth?from=%2Fmanagement%2Fcockpit");
+
+    const accountInput = screen.getByLabelText("Account");
+    const passwordInput = screen.getByLabelText("Password");
+
+    fireEvent.change(accountInput, { target: { value: "dev-operator" } });
+    fireEvent.change(passwordInput, { target: { value: "wrong-password" } });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+    });
+
+    expect(screen.getByLabelText("Account")).toBeInTheDocument();
+    expect(screen.getByLabelText("Password")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("Invalid client credentials");
+    expect(passwordInput).toHaveValue("");
+    expect(accountInput).toHaveValue("dev-operator");
+
+    fireEvent.change(passwordInput, { target: { value: "correct-password" } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+    });
+
+    expect(mocks.devLogin).toHaveBeenLastCalledWith("dev-operator", "correct-password");
+    expect(mocks.devLogin).toHaveBeenCalledTimes(2);
+  });
+
+  it("prevents repeated submissions while login is in progress", async () => {
+    let resolveLogin!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      resolveLogin = resolve;
+    });
+    mocks.devLogin.mockReturnValue(pending);
+
+    renderAuth("/auth?from=%2Fmanagement%2Fcockpit");
+
+    fireEvent.change(screen.getByLabelText("Account"), { target: { value: "dev-operator" } });
+    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "correct-password" } });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+    });
+
+    expect(mocks.devLogin).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+    });
+
+    expect(mocks.devLogin).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveLogin();
+    });
+  });
+
+  it("navigates to return path when bffSession is established", () => {
+    mocks.auth = {
+      ...mocks.auth,
+      bffSession: { identity: { authenticated: true } },
+    };
+
+    renderAuth("/auth?from=%2Fmanagement%2Fcockpit");
 
     expect(screen.getByText("Management restored")).toBeInTheDocument();
   });
