@@ -34,9 +34,10 @@ import type {
   RiskLevel,
   ApprovalRequest,
 } from "./dto";
-import type { ConfirmTokenRequest, ConfirmTokenResponse } from "@/lib/v3/highRiskActions";
+import type { ConfirmTokenRequest, ConfirmTokenResponse, CanonicalCommandIdentity } from "@/lib/v3/highRiskActions";
 import { getHighRiskAction, buildConfirmPhrase } from "@/lib/v3/highRiskActions";
 
+export type { CanonicalCommandIdentity };
 export { liveWriteGated, sessionKindAllowsWrite };
 
 export const FINAL_COMMANDS_PATH = "/bff/v1/commands" as const;
@@ -113,6 +114,13 @@ export type RunActionInput = {
   /** New lifecycle state to write (when applicable). */
   newState?: LifecycleState | string;
   memo?: string;
+  reason?: string;
+  /** Domain payload parameters (e.g. bounded duration, flags, business args) */
+  payload?: Record<string, unknown>;
+  params?: Record<string, unknown>;
+  bounded_duration_minutes?: number;
+  duration_seconds?: number;
+  runtime_id?: string;
   /** Pack C C010 — optimistic-lock guard. */
   expectedVersion?: number;
   /** Pack C C028 — replay guard. */
@@ -121,6 +129,7 @@ export type RunActionInput = {
   correlationId?: string;
   /** v3 §6.2 / VI-2 — high-risk confirm token (mock layer audit-only). */
   confirmToken?: string;
+  [key: string]: unknown;
 };
 
 export type MutationResult = {
@@ -277,10 +286,76 @@ export function buildRunActionCommand(
   const commandName = isOperationsCommand ? actionId : spec.command;
   const auditEvent = `${spec.auditNamespace}.${actionId}`;
   const confirmToken = opts.confirmToken ?? input.confirmToken;
+
+  // Extract raw payload / domain parameters
+  const rawPayload = (
+    typeof input.payload === "object" && input.payload !== null
+      ? input.payload
+      : typeof input.params === "object" && input.params !== null
+      ? input.params
+      : {}
+  ) as Record<string, unknown>;
+
+  // Copy safe domain parameters from payload/input
+  const domainParams: Record<string, unknown> = { ...rawPayload };
+
+  // Callers cannot override action, entity/target, actor, token, idempotency with payload
+  delete domainParams.command;
+  delete domainParams.action;
+  delete domainParams.target;
+  delete domainParams.confirmToken;
+  delete domainParams.confirm_token;
+  delete domainParams.approvalId;
+  delete domainParams.approval_id;
+  delete domainParams.approvalDecisionId;
+  delete domainParams.approval_decision_id;
+  delete domainParams.twoManSignatureId;
+  delete domainParams.two_man_signature_id;
+  delete domainParams.secondOperatorId;
+  delete domainParams.second_operator_id;
+  delete domainParams.idempotencyKey;
+  delete domainParams.idempotency_key;
+  delete domainParams.action_id;
+  delete domainParams.entity_type;
+  delete domainParams.entity_id;
+  delete domainParams.actor;
+  delete domainParams.actor_id;
+
+  // Preserve bounded duration parameters
+  const boundedDurationMinutes = (
+    input.bounded_duration_minutes ??
+    rawPayload.bounded_duration_minutes ??
+    rawPayload.duration_minutes
+  ) as number | undefined;
+
+  const durationSeconds = (
+    input.duration_seconds ??
+    rawPayload.duration_seconds ??
+    (typeof boundedDurationMinutes === "number" ? boundedDurationMinutes * 60 : undefined)
+  ) as number | undefined;
+
+  // Preserve memo and reason using actual BE schema
+  const reason = (
+    input.reason ??
+    rawPayload.reason ??
+    input.memo ??
+    rawPayload.memo
+  ) as string | undefined;
+
+  const isRuntime =
+    spec.targetType === "Runtime" ||
+    entityType === "runtime" ||
+    commandName === "PausePaperRuntime" ||
+    commandName === "ResumePaperRuntime";
+
   const params = definedParams({
-    memo: input.memo,
+    ...domainParams,
+    memo: reason ?? input.memo,
+    reason: reason ?? input.memo,
+    ...(boundedDurationMinutes !== undefined ? { bounded_duration_minutes: boundedDurationMinutes } : {}),
+    ...(durationSeconds !== undefined ? { duration_seconds: durationSeconds } : {}),
     expectedVersion: input.expectedVersion,
-    newState: input.newState,
+    newState: input.newState ?? domainParams.newState,
     confirmToken,
     approvalId: opts.approvalId,
     approvalDecisionId: opts.approvalDecisionId,
@@ -289,6 +364,7 @@ export function buildRunActionCommand(
     action_id: actionId,
     entity_type: entityType,
     entity_id: input.id,
+    ...(isRuntime ? { runtime_id: input.id } : {}),
     audit_event: auditEvent,
     frontend_source_route: FINAL_COMMANDS_PATH,
   });
@@ -302,7 +378,7 @@ export function buildRunActionCommand(
     action: actionId,
     params,
     audit_context: {
-      reason: String(input.memo || auditEvent),
+      reason: String(reason || input.memo || auditEvent),
     },
     confirmToken,
     approvalId: opts.approvalId,
@@ -377,11 +453,46 @@ export async function runActionCommand(
   return adaptRunActionCommandResponse(raw, opts);
 }
 
+export interface OperatorCommandReceipt {
+  command_id: string;
+  type: string;
+  target: {
+    type: string;
+    id: string;
+  };
+  submitted_at?: string;
+  status: "accepted" | "pending" | "submitted" | "processing" | "executed" | "failed" | "timeout" | string;
+  result?: Record<string, unknown> | null;
+  error?: {
+    code?: string;
+    message?: string;
+    [key: string]: unknown;
+  } | null;
+  audit?: Record<string, unknown> | null;
+  degraded_mode?: boolean;
+}
+
+export async function getOperatorCommand(
+  commandId: string,
+  opts: { correlationId?: string; baseUrl?: string; headers?: Record<string, string> } = {},
+): Promise<OperatorCommandReceipt> {
+  const correlationId = opts.correlationId ?? newCorrelationId();
+  return bffFetch<OperatorCommandReceipt>({
+    method: "GET",
+    path: paths.operatorCommand(commandId),
+    correlationId,
+    headers: opts.headers,
+    baseUrl: opts.baseUrl,
+    mode: "live",
+  });
+}
+
 export const commandClient = {
   path: FINAL_COMMANDS_PATH,
   buildRunActionCommand,
   submitCommand,
   runAction: runActionCommand,
+  getOperatorCommand,
 };
 
 /**
@@ -584,44 +695,80 @@ export async function requestConfirmToken(
   const correlationId = opts.correlationId ?? newCorrelationId();
   const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
 
+  const isCanonical = Boolean(req.canonicalCommand);
+  const effectiveActionId = req.canonicalCommand?.actionId ?? req.actionId;
+  const effectiveEntityType = req.canonicalCommand?.entityType ?? req.entityType;
+  const effectiveEntityId = req.canonicalCommand?.entityId ?? req.entityId;
+
   const mockBranch = async (): Promise<ConfirmTokenEnvelope> => {
     refuseStrictLiveWrite(correlationId);
   };
 
   if (await liveWriteGated()) {
+    const isRuntime =
+      effectiveEntityType.toLowerCase() === "runtime" ||
+      effectiveActionId.toLowerCase().includes("runtime");
+    const requestBody: Record<string, unknown> = {
+      ...req,
+      actionId: effectiveActionId,
+      action_id: effectiveActionId,
+      command: effectiveActionId,
+      entityType: effectiveEntityType,
+      entity_type: effectiveEntityType,
+      entityId: effectiveEntityId,
+      entity_id: effectiveEntityId,
+      target: {
+        type: effectiveEntityType,
+        id: effectiveEntityId,
+      },
+      ...(isRuntime ? { runtime_id: effectiveEntityId, runtimeId: effectiveEntityId } : {}),
+    };
+
     const rawData = await bffFetch<unknown>({
       method: "POST",
       path: paths.confirmTokens(),
-      body: req,
+      body: requestBody,
       idempotencyKey,
       headers: { "X-Correlation-Id": correlationId },
       mode: "live",
     });
     const d = rawData as {
-      data?: { tokenId?: string; commandId?: string };
+      data?: {
+        tokenId?: string;
+        id?: string;
+        commandId?: string;
+        requiredPhrase?: string;
+        required_phrase?: string;
+        ttlSeconds?: number;
+      };
       meta?: { idempotency?: { idempotencyKey?: string } };
     };
-    const tokenId = d.data?.tokenId ?? d.data?.commandId ?? "";
+    const tokenId = d.data?.tokenId ?? d.data?.id ?? d.data?.commandId ?? "";
     const iKey = d.meta?.idempotency?.idempotencyKey ?? idempotencyKey;
-    const action = getHighRiskAction(req.actionId);
-    const ttl = action?.tokenTtlSeconds ?? 300;
+    const action = getHighRiskAction(effectiveActionId);
+    const ttl = d.data?.ttlSeconds ?? action?.tokenTtlSeconds ?? 300;
+    const serverPhrase = d.data?.requiredPhrase ?? d.data?.required_phrase;
+    const requiredPhrase =
+      serverPhrase ||
+      (action
+        ? buildConfirmPhrase(action, { ...params, [`${effectiveEntityType}Id`]: effectiveEntityId })
+        : `${effectiveActionId} ${effectiveEntityId}`);
+
     const ctResp: ConfirmTokenResponse = {
       confirmToken: tokenId,
       expiresAt: new Date(Date.now() + ttl * 1000).toISOString(),
       ttlSeconds: ttl,
-      requiredPhrase: action
-        ? buildConfirmPhrase(action, { ...params, [`${req.entityType}Id`]: req.entityId })
-        : "",
+      requiredPhrase,
       requiresMemo: action?.memoRequired ?? false,
-      auditEventPreview: `${req.actionId}.requested`,
+      auditEventPreview: `${effectiveActionId}.requested`,
     };
     return { ok: true, data: ctResp, correlationId, idempotencyKey: iKey };
   }
   if (isStrictLiveFallback()) {
     refuseStrictLiveWrite(correlationId);
   }
-  const action = getHighRiskAction(req.actionId);
-  if (!action) {
+  const action = getHighRiskAction(effectiveActionId);
+  if (!action && !isCanonical) {
     throw makeBffError({
       code: "VALIDATION_FAILED",
       message: `Unknown action: ${req.actionId}`,
@@ -629,13 +776,17 @@ export async function requestConfirmToken(
     });
   }
   const ttl = action?.tokenTtlSeconds ?? 300;
+  const requiredPhrase = action
+    ? buildConfirmPhrase(action, { ...params, [`${effectiveEntityType}Id`]: effectiveEntityId })
+    : `${effectiveActionId} ${effectiveEntityId}`;
+
   const ctResp: ConfirmTokenResponse = {
     confirmToken: `ctok_${Date.now().toString(36)}`,
     expiresAt: new Date(Date.now() + ttl * 1000).toISOString(),
     ttlSeconds: ttl,
-    requiredPhrase: buildConfirmPhrase(action, { ...params, [`${req.entityType}Id`]: req.entityId }),
+    requiredPhrase,
     requiresMemo: action?.memoRequired ?? false,
-    auditEventPreview: `${req.actionId}.requested`,
+    auditEventPreview: `${effectiveActionId}.requested`,
   };
   return { ok: true, data: ctResp, correlationId, idempotencyKey };
 }
@@ -1492,6 +1643,7 @@ export async function createResearchTaskFromNote(
 export const bffWrites = {
   runAction,
   tryRunAction,
+  getOperatorCommand,
   requestConfirmToken,
   readConfirmToken,
   redeemConfirmToken,

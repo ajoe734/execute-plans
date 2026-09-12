@@ -64,13 +64,20 @@ export function buildConfirmPhrase(action: HighRiskAction, params: Record<string
 
 // ---------- §6.2 Confirmation Token API ----------
 
+export interface CanonicalCommandIdentity {
+  actionId: string;
+  entityType: string;
+  entityId: string;
+}
+
 export interface ConfirmTokenRequest {
   actionId: string;
   entityType: string;
   entityId: string;
-  payloadHash: string;
-  tradingEnvironment: TradingEnvironment;
-  platformEnvironment: PlatformEnvironment;
+  payloadHash?: string;
+  tradingEnvironment?: TradingEnvironment | string;
+  platformEnvironment?: PlatformEnvironment | string;
+  canonicalCommand?: CanonicalCommandIdentity;
 }
 
 export interface ConfirmTokenResponse {
@@ -84,18 +91,28 @@ export interface ConfirmTokenResponse {
 
 /** Mock issuance of a confirm token (BFF endpoint: POST /bff/command-confirmations). */
 export function issueConfirmToken(req: ConfirmTokenRequest, params: Record<string, string>): ConfirmTokenResponse {
-  const action = HRA_INDEX.get(req.actionId);
-  if (!action) throw new Error(`unknown high-risk action: ${req.actionId}`);
-  const ttl = action.tokenTtlSeconds;
+  const isCanonical = Boolean(req.canonicalCommand);
+  const effectiveActionId = req.canonicalCommand?.actionId ?? req.actionId;
+  const effectiveEntityType = req.canonicalCommand?.entityType ?? req.entityType;
+  const effectiveEntityId = req.canonicalCommand?.entityId ?? req.entityId;
+  const action = HRA_INDEX.get(effectiveActionId);
+
+  if (!action && !isCanonical) throw new Error(`unknown high-risk action: ${req.actionId}`);
+  const ttl = action?.tokenTtlSeconds ?? 300;
   const expiresAt = new Date(Date.now() + ttl * 1000).toISOString();
   const token = `ctok_${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`;
+  const canonicalPhrase = `${effectiveActionId} ${effectiveEntityId}`;
+  const requiredPhrase = action
+    ? buildConfirmPhrase(action, { ...params, [`${effectiveEntityType}Id`]: effectiveEntityId })
+    : canonicalPhrase;
+
   return {
     confirmToken: token,
     expiresAt,
     ttlSeconds: ttl,
-    requiredPhrase: buildConfirmPhrase(action, { ...params, [`${req.entityType}Id`]: req.entityId }),
-    requiresMemo: action.memoRequired,
-    auditEventPreview: `${req.actionId}.requested`,
+    requiredPhrase,
+    requiresMemo: action?.memoRequired ?? true,
+    auditEventPreview: `${effectiveActionId}.requested`,
   };
 }
 

@@ -114,7 +114,11 @@ export default defineConfig(({ mode }) => {
   validatePublicBuildBearerToken(
     process.env.VITE_BFF_DEV_BEARER_TOKEN ?? loadedEnv.VITE_BFF_DEV_BEARER_TOKEN,
   );
-  validatePublicGcpIdentityConfig(
+  // Pantheon-owned dev uses the BFF account/password session, not Firebase.
+  // Other build targets retain their existing public Identity Platform checks.
+  const devPasswordBuild = (process.env.VITE_BFF_BASE_URL ?? loadedEnv.VITE_BFF_BASE_URL)?.replace(/\/$/, "")
+    === "https://api.dev.mvl-cap.tw";
+  if (!devPasswordBuild) validatePublicGcpIdentityConfig(
     process.env.VITE_GCP_IDENTITY_API_KEY
       ?? loadedEnv.VITE_GCP_IDENTITY_API_KEY,
     process.env.VITE_GCP_IDENTITY_PROJECT_ID

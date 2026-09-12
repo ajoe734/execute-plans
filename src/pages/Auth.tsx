@@ -9,7 +9,6 @@ import {
   signOut as signOutGcpIdentity,
   GoogleAuthProvider,
 } from "firebase/auth";
-import { gcpIdentityAuth } from "@/integrations/gcp/identity";
 import { isDevLoginHost } from "@/lib/bff-v1/runtimeEnv";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { Button } from "@/components/ui/button";
@@ -46,6 +45,7 @@ export default function AuthPage() {
   const signIn = async () => {
     setBusy(true);
     try {
+      const { gcpIdentityAuth } = await import("@/integrations/gcp/identity");
       await signInWithEmailAndPassword(gcpIdentityAuth, email, password);
     } catch (error: unknown) {
       toast.error(error instanceof Error ? error.message : String(error));
@@ -57,6 +57,7 @@ export default function AuthPage() {
   const signInWithGoogle = async () => {
     setBusy(true);
     try {
+      const { gcpIdentityAuth } = await import("@/integrations/gcp/identity");
       await signInWithPopup(gcpIdentityAuth, new GoogleAuthProvider());
     } catch (error: unknown) {
       toast.error(error instanceof Error ? error.message : String(error));
@@ -68,6 +69,7 @@ export default function AuthPage() {
   const signUp = async () => {
     setBusy(true);
     try {
+      const { gcpIdentityAuth } = await import("@/integrations/gcp/identity");
       const credential = await createUserWithEmailAndPassword(
         gcpIdentityAuth,
         email,
@@ -92,6 +94,7 @@ export default function AuthPage() {
     }
     setBusy(true);
     try {
+      const { gcpIdentityAuth } = await import("@/integrations/gcp/identity");
       await sendPasswordResetEmail(gcpIdentityAuth, email, {
         url: `${window.location.origin}${agoraEntry ? "/agora/auth" : "/auth"}`,
       });

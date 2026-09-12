@@ -1,8 +1,16 @@
-import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
+import { act, render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import { AgentPanelBody } from "./AgentPanelBody";
 import { bffWrites } from "@/lib/bff-v1/writes";
+import * as toastModule from "@/hooks/use-toast";
+
+vi.mock("@/lib/bff-v1/writes", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/bff-v1/writes")>("@/lib/bff-v1/writes");
+  return { ...actual, requestConfirmToken: vi.fn(async (request) => ({
+    data: { confirmToken: "ct-test-paper-confirm", requiredPhrase: `${request.actionId} ${request.entityId}`, expiresAt: new Date(Date.now() + 300000).toISOString() },
+  })) };
+});
 
 vi.mock("@/lib/bff-v1/managementAi", async () => {
   const actual = await vi.importActual<typeof import("@/lib/bff-v1/managementAi")>("@/lib/bff-v1/managementAi");
@@ -448,6 +456,344 @@ describe("AgentPanelBody — UI Actions & Confirmation Workflow", () => {
       expect(runActionSpy).not.toHaveBeenCalled();
       // Feedback records unsupported action type
       expect(screen.getByText(/不支援的動作類型 \(customDangerousBffMutation\)/i)).toBeInTheDocument();
+    });
+  });
+
+  it.each(["accepted", "completed"])("checks the owner after %s admission before reporting paper execution", async (admissionStatus) => {
+    const toastSpy = vi.spyOn(toastModule, "toast");
+    const runActionSpy = vi.spyOn(bffWrites, "runAction").mockResolvedValue({
+      ok: true,
+      data: { actionId: "cmd_pause_runtime_001", status: admissionStatus as "accepted" | "completed" },
+      auditEventId: "cmd_pause_runtime_001",
+      correlationId: "corr_pause_777",
+      idempotencyKey: "idem_pause_888",
+      legacy: { ok: true, audit: { id: "cmd_pause_runtime_001" } as never },
+    });
+
+    const getOperatorCommandSpy = vi.spyOn(bffWrites, "getOperatorCommand").mockResolvedValue({
+      command_id: "cmd_pause_runtime_001",
+      type: "PausePaperRuntime",
+      target: { type: "Runtime", id: "rt_paper_001" },
+      status: admissionStatus === "completed" ? "failed" : "executed",
+      submitted_at: new Date().toISOString(),
+      result: { degraded_mode: false, authoritative_readback: {
+        runtime_id: "rt_paper_001", runtime_binding_id: "rb_paper_001", deployment_mode: "paper", status: "paused",
+      } },
+      error: admissionStatus === "completed" ? { code: "OWNER_REJECTED", message: "Owner rejected pause" } : undefined,
+    });
+
+    const mockTurn = {
+      id: "turn_ast_pause_1",
+      role: "assistant",
+      text: "請確認暫停 PAPER 運行環境。",
+      uiActions: [
+        {
+          id: "act_pause_paper_1",
+          kind: "runBffAction",
+          label: "PAUSE_PAPER_RUNTIME",
+          rationale: "暫停異常 PAPER 運行環境",
+          params: {
+            entityType: "Runtime",
+            entityId: "rt_paper_001",
+            actionId: "PausePaperRuntime",
+            bounded_duration_minutes: 60,
+            duration_seconds: 3600,
+            reason: "Risk mitigation pause",
+          },
+        },
+      ],
+      createdAt: Date.now() - 1000,
+    };
+
+    const sessionId = "ses_paper_pause_01";
+    localStorage.setItem("pantheon.mgmtAi.sessions.v1", JSON.stringify([
+      { id: sessionId, title: "暫停環境對話", updatedAt: Date.now() },
+    ]));
+    localStorage.setItem(`pantheon.mgmtAi.turns.v1.${sessionId}`, JSON.stringify([mockTurn]));
+
+    render(
+      <MemoryRouter initialEntries={["/management/operations"]}>
+        <AgentPanelBody />
+      </MemoryRouter>,
+    );
+
+    const sessionItem = await screen.findByText("暫停環境對話");
+    fireEvent.click(sessionItem);
+
+    const pauseBtn = await screen.findByRole("button", { name: /PAUSE_PAPER_RUNTIME/i });
+    fireEvent.click(pauseBtn);
+
+    const dialog = screen.getByRole("dialog");
+    const dialogScope = within(dialog);
+
+    // HighRiskConfirm shows description and token
+    await waitFor(() => {
+      expect(screen.getByText(/暫停異常 PAPER 運行環境/i)).toBeInTheDocument();
+    });
+
+    const memoTextarea = dialog.querySelector("textarea")!;
+    fireEvent.change(memoTextarea, {
+      target: { value: "Detailed audit memo exceeding forty characters for pausing paper runtime." },
+    });
+
+    const tokenInput = dialog.querySelectorAll("input")[0]!;
+    fireEvent.change(tokenInput, {
+      target: { value: "PausePaperRuntime rt_paper_001" },
+    });
+
+    const confirmBtn = dialogScope.getByRole("button", { name: "確認" });
+    expect(confirmBtn).not.toBeDisabled();
+    fireEvent.click(confirmBtn);
+
+    // Exactly 1 POST via runAction with runtime_id and bounded business parameters
+    await waitFor(() => {
+      expect(runActionSpy).toHaveBeenCalledTimes(1);
+      expect(runActionSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind: "Runtime",
+          id: "rt_paper_001",
+          action: "PausePaperRuntime",
+          bounded_duration_minutes: 60,
+          duration_seconds: 3600,
+          reason: "Risk mitigation pause",
+        }),
+        expect.objectContaining({
+          confirmToken: "ct-test-paper-confirm",
+        }),
+      );
+    });
+
+    // Informational toast at admission
+    expect(toastSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "指令已受理",
+      }),
+    );
+
+    if (admissionStatus === "completed") {
+      await waitFor(() => expect(screen.getByText(/Owner rejected pause/)).toBeInTheDocument());
+      expect(screen.queryByText(/已成功執行/)).not.toBeInTheDocument();
+      return;
+    }
+
+    // Polled getOperatorCommand and updated feedback to terminal success
+    await waitFor(() => {
+      expect(getOperatorCommandSpy).toHaveBeenCalledWith("cmd_pause_runtime_001", expect.anything());
+      expect(screen.getByText(/已成功執行 \(terminal status: executed\)/i)).toBeInTheDocument();
+    });
+
+    // Success toast shown after execution
+    expect(toastSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: expect.stringMatching(/PAUSE_PAPER_RUNTIME 執行成功/i),
+      }),
+    );
+  });
+
+  it("rejects executed command receipt when degraded_mode is true", async () => {
+    const toastSpy = vi.spyOn(toastModule, "toast");
+    vi.spyOn(bffWrites, "runAction").mockResolvedValue({
+      ok: true,
+      data: { actionId: "cmd_degraded_001", status: "accepted" },
+      auditEventId: "cmd_degraded_001",
+      correlationId: "corr_degraded_777",
+      idempotencyKey: "idem_degraded_888",
+      legacy: { ok: true, audit: { id: "cmd_degraded_001" } as never },
+    });
+
+    vi.spyOn(bffWrites, "getOperatorCommand").mockResolvedValue({
+      command_id: "cmd_degraded_001",
+      type: "PausePaperRuntime",
+      target: { type: "Runtime", id: "rt_paper_002" },
+      status: "executed",
+      submitted_at: new Date().toISOString(),
+      result: { degraded_mode: true }, // degraded!
+    });
+
+    const mockTurn = {
+      id: "turn_ast_degraded_1",
+      role: "assistant",
+      text: "測試降級拒絕。",
+      uiActions: [
+        {
+          id: "act_pause_paper_degraded",
+          kind: "runBffAction",
+          label: "PAUSE_DEGRADED",
+          rationale: "測試降級模式拒絕",
+          params: {
+            entityType: "Runtime",
+            entityId: "rt_paper_002",
+            actionId: "PausePaperRuntime",
+          },
+        },
+      ],
+      createdAt: Date.now() - 1000,
+    };
+
+    const sessionId = "ses_paper_degraded_01";
+    localStorage.setItem("pantheon.mgmtAi.sessions.v1", JSON.stringify([
+      { id: sessionId, title: "降級對話", updatedAt: Date.now() },
+    ]));
+    localStorage.setItem(`pantheon.mgmtAi.turns.v1.${sessionId}`, JSON.stringify([mockTurn]));
+
+    render(
+      <MemoryRouter initialEntries={["/management/operations"]}>
+        <AgentPanelBody />
+      </MemoryRouter>,
+    );
+
+    const sessionItem = await screen.findByText("降級對話");
+    fireEvent.click(sessionItem);
+
+    const pauseBtn = await screen.findByRole("button", { name: /PAUSE_DEGRADED/i });
+    fireEvent.click(pauseBtn);
+
+    const dialog = screen.getByRole("dialog");
+    const dialogScope = within(dialog);
+
+    const memoTextarea = dialog.querySelector("textarea")!;
+    fireEvent.change(memoTextarea, {
+      target: { value: "Detailed audit memo exceeding forty characters for degraded test." },
+    });
+
+    const tokenInput = dialog.querySelectorAll("input")[0]!;
+    fireEvent.change(tokenInput, {
+      target: { value: "PausePaperRuntime rt_paper_002" },
+    });
+
+    const confirmBtn = dialogScope.getByRole("button", { name: "確認" });
+    await waitFor(() => expect(confirmBtn).not.toBeDisabled());
+    fireEvent.click(confirmBtn);
+
+    // Polled getOperatorCommand and rejected degraded execution
+    await waitFor(() => {
+      expect(screen.getByText(/降級執行被拒絕/i)).toBeInTheDocument();
+    });
+
+    expect(toastSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: expect.stringMatching(/執行失敗/i),
+        variant: "destructive",
+      }),
+    );
+  });
+
+  it("keeps a delayed receipt in its original conversation when another uses the same action ID", async () => {
+    let finishRead!: (receipt: Awaited<ReturnType<typeof bffWrites.getOperatorCommand>>) => void;
+    const receipt = new Promise<Awaited<ReturnType<typeof bffWrites.getOperatorCommand>>>((resolve) => { finishRead = resolve; });
+    const read = vi.spyOn(bffWrites, "getOperatorCommand").mockReturnValue(receipt);
+    const write = vi.spyOn(bffWrites, "runAction");
+    const action = { id: "shared-action", kind: "runBffAction", label: "PAUSE_SHARED", params: {
+      entityType: "Runtime", entityId: "rt-session-A", actionId: "PausePaperRuntime",
+    } };
+    localStorage.setItem("pantheon.mgmtAi.sessions.v1", JSON.stringify([
+      { id: "session-A", title: "Conversation A", updatedAt: Date.now() },
+      { id: "session-B", title: "Conversation B", updatedAt: Date.now() - 1 },
+    ]));
+    localStorage.setItem("pantheon.mgmtAi.turns.v1.session-A", JSON.stringify([{
+      id: "turn-A", role: "assistant", text: "A action", createdAt: Date.now(), uiActions: [action],
+      actionCommands: { "shared-action": { commandId: "cmd-session-A", actionId: "PausePaperRuntime",
+        entityType: "Runtime", entityId: "rt-session-A", status: "accepted", updatedAt: Date.now() } },
+    }]));
+    localStorage.setItem("pantheon.mgmtAi.turns.v1.session-B", JSON.stringify([{
+      id: "turn-B", role: "assistant", text: "B action", createdAt: Date.now(), uiActions: [action],
+    }]));
+    render(<MemoryRouter><AgentPanelBody /></MemoryRouter>);
+    fireEvent.click(await screen.findByText("Conversation A"));
+    await waitFor(() => expect(read).toHaveBeenCalledWith("cmd-session-A", expect.anything()));
+    fireEvent.click(screen.getByText("Conversation B"));
+    expect(await screen.findByText("B action")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /PAUSE_SHARED/ })).not.toBeDisabled();
+    await act(async () => finishRead({
+      command_id: "cmd-session-A", type: "PausePaperRuntime", target: { type: "Runtime", id: "rt-session-A" },
+      status: "executed", submitted_at: new Date().toISOString(),
+      result: { authoritative_readback: { runtime_id: "rt-session-A", runtime_binding_id: "rb-A", deployment_mode: "paper", status: "paused" } },
+    }));
+    await waitFor(() => expect(JSON.parse(localStorage.getItem("pantheon.mgmtAi.turns.v1.session-A")!)[0].actionCommands["shared-action"].status).toBe("executed"));
+    expect(JSON.parse(localStorage.getItem("pantheon.mgmtAi.turns.v1.session-B")!)[0].actionCommands).toBeUndefined();
+    expect(screen.queryByText(/cmd-session-A 已成功/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /PAUSE_SHARED/ })).not.toBeDisabled();
+    expect(write).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["accepted", "valid"], ["executed", "valid"], ["executed", "wrong-command"],
+    ["executed", "wrong-target-case"], ["executed", "missing-owner-readback"],
+  ])("reads cached %s command with %s receipt without resubmitting", async (cachedStatus, receiptCase) => {
+    const runActionSpy = vi.spyOn(bffWrites, "runAction");
+    const getOperatorCommandSpy = vi.spyOn(bffWrites, "getOperatorCommand").mockResolvedValue({
+      command_id: receiptCase === "wrong-command" ? "cmd_OTHER" : "cmd_persisted_terminal_999",
+      type: "PausePaperRuntime",
+      target: { type: "Runtime", id: receiptCase === "wrong-target-case" ? "RT_PAPER_RELOAD" : "rt_paper_reload" },
+      status: "executed",
+      submitted_at: new Date().toISOString(),
+      result: { degraded_mode: false, ...(receiptCase === "missing-owner-readback" ? {} : { authoritative_readback: {
+        runtime_id: "rt_paper_reload", runtime_binding_id: "rb_paper_reload", deployment_mode: "paper", status: "paused",
+      } }) },
+    });
+
+    const actionKey = "act_reload_1";
+    const mockTurn = {
+      id: "turn_reload_1",
+      role: "assistant",
+      text: "重載對話測試。",
+      uiActions: [
+        {
+          id: "act_reload_1",
+          kind: "runBffAction",
+          label: "PAUSE_PAPER_RUNTIME",
+          params: {
+            entityType: "Runtime",
+            entityId: "rt_paper_reload",
+            actionId: "PausePaperRuntime",
+          },
+        },
+      ],
+      actionCommands: {
+        [actionKey]: {
+          commandId: "cmd_persisted_terminal_999",
+          actionId: "PausePaperRuntime",
+          entityType: "Runtime",
+          entityId: "rt_paper_reload",
+          status: cachedStatus,
+          updatedAt: Date.now() - 5000,
+        },
+      },
+      actionFeedback: {
+        [actionKey]: "指令 cmd_persisted_terminal_999 已受理，處理中…",
+      },
+      createdAt: Date.now() - 5000,
+    };
+
+    const sessionId = "ses_reload_test_01";
+    localStorage.setItem("pantheon.mgmtAi.sessions.v1", JSON.stringify([
+      { id: sessionId, title: "重載對話", updatedAt: Date.now() },
+    ]));
+    localStorage.setItem(`pantheon.mgmtAi.turns.v1.${sessionId}`, JSON.stringify([mockTurn]));
+
+    render(
+      <MemoryRouter initialEntries={["/management/operations"]}>
+        <AgentPanelBody />
+      </MemoryRouter>,
+    );
+
+    const sessionItem = await screen.findByText("重載對話");
+    fireEvent.click(sessionItem);
+
+    // Refetches the exact same commandId without calling runAction (0 POST submissions)
+    await waitFor(() => {
+      expect(getOperatorCommandSpy).toHaveBeenCalledWith("cmd_persisted_terminal_999", expect.anything());
+    });
+    expect(runActionSpy).not.toHaveBeenCalled();
+
+    if (receiptCase !== "valid") {
+      await waitFor(() => expect(screen.getByText(/驗證不匹配/)).toBeInTheDocument());
+      expect(screen.queryByText(/已成功執行/)).not.toBeInTheDocument();
+      return;
+    }
+    // Updates to terminal status
+    await waitFor(() => {
+      expect(screen.getByText(/已成功執行 \(terminal status: executed\)/i)).toBeInTheDocument();
     });
   });
 });

@@ -99,13 +99,14 @@ describe("public frontend build auth boundary", () => {
     );
   }, 30_000);
 
-  it("rejects a build before bundling when public GCP Identity configuration is missing", () => {
+  it("rejects a non-dev build before bundling when public GCP Identity configuration is missing", () => {
     const result = spawnSync("npm", ["run", "build"], {
       cwd: process.cwd(),
       encoding: "utf8",
       env: {
         ...process.env,
         VITE_BFF_DEV_BEARER_TOKEN: "",
+        VITE_BFF_BASE_URL: "https://api.mvl-cap.tw",
         VITE_GCP_IDENTITY_API_KEY: "",
         VITE_GCP_IDENTITY_PROJECT_ID: "",
         VITE_GCP_IDENTITY_AUTH_DOMAIN: "",
@@ -119,6 +120,23 @@ describe("public frontend build auth boundary", () => {
     );
     expect(output).not.toMatch(/Firebase: Error/);
   }, 30_000);
+
+  it.each(["https://api.dev.mvl-cap.tw", "https://api.dev.mvl-cap.tw/"])(
+    "loads the dev password build configuration without Firebase for %s", (bffUrl) => {
+      const result = spawnSync(process.execPath, ["--input-type=module", "-e",
+        "import {loadConfigFromFile} from 'vite'; await loadConfigFromFile({command:'build',mode:'production'}); console.log('DEV_PASSWORD_CONFIG_OK');",
+      ], {
+        cwd: process.cwd(), encoding: "utf8",
+        env: { ...process.env, VITE_BFF_MODE: "live", VITE_BFF_FALLBACK: "strict",
+          VITE_BFF_REAL_WRITES: "false", VITE_BFF_ALLOW_DEV_STUB_WRITES: "false",
+          VITE_BFF_EMBEDDED_BEARER_TOKEN: "false", VITE_BFF_DEV_BEARER_TOKEN: "",
+          VITE_BFF_BASE_URL: bffUrl, VITE_GCP_IDENTITY_API_KEY: "",
+          VITE_GCP_IDENTITY_PROJECT_ID: "", VITE_GCP_IDENTITY_AUTH_DOMAIN: "" },
+      });
+      expect(result.status, result.stderr).toBe(0);
+      expect(result.stdout).toContain("DEV_PASSWORD_CONFIG_OK");
+    }, 30_000,
+  );
 
   it("rejects a privileged token before the standard Vite dev server can bind", () => {
     const result = spawnSync(
