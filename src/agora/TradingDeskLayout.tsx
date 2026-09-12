@@ -21,7 +21,10 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/lib/auth/AuthProvider";
+import { BffError } from "@/lib/bff-v1/errors";
 import { getWorkshop } from "@/lib/bff-v1/agora/workshops";
 import type { StrategyWorkshop } from "@/lib/bff-v1/agora/types";
 import {
@@ -88,6 +91,24 @@ function CommandBar({
   onToggleDrawer: () => void;
   triggerRef: React.RefObject<HTMLButtonElement>;
 }) {
+  const { signOut } = useAuth();
+  const [signingOut, setSigningOut] = useState(false);
+
+  // AuthProvider.signOut clears local session state (so ProtectedRoute
+  // redirects) and then rethrows a failed BFF invalidation. A 401 means the
+  // BFF session was already gone; anything else is surfaced, never swallowed.
+  const handleSignOut = async () => {
+    setSigningOut(true);
+    try {
+      await signOut();
+    } catch (error: unknown) {
+      if (error instanceof BffError && error.status === 401) return;
+      toast.error(`Sign out did not complete: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setSigningOut(false);
+    }
+  };
+
   return (
     <header
       className="flex h-12 shrink-0 items-center gap-3 border-b border-[#2a2e38] bg-[#1a1d23] px-4"
@@ -115,6 +136,15 @@ function CommandBar({
           {drawerOpen ? "✕" : "⚡"}
         </span>
         Servant
+      </button>
+      <button
+        aria-label="Sign out"
+        className="inline-flex h-8 items-center rounded-md border border-[#2a2e38] bg-transparent px-2.5 text-xs font-medium text-[#8c96a6] transition-colors hover:bg-[#171b22] hover:text-[#f0ece4] disabled:cursor-not-allowed disabled:opacity-60"
+        disabled={signingOut}
+        onClick={() => void handleSignOut()}
+        type="button"
+      >
+        Sign out
       </button>
     </header>
   );
