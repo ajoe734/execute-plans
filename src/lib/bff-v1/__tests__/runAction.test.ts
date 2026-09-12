@@ -610,4 +610,70 @@ describe("operations console command mapping", () => {
       expect(envelope.target.id).toBe("persona-123");
     }
   });
+
+  it("binds runtime_id and preserves bounded business parameters for PausePaperRuntime", () => {
+    const { buildRunActionCommand } = commandClient;
+    const envelope = buildRunActionCommand(
+      {
+        kind: "Runtime",
+        id: "rt_paper_999",
+        action: "PausePaperRuntime",
+        payload: {
+          bounded_duration_minutes: 60,
+          reason: "Risk mitigation pause",
+          // Attempt to spoof target / runtime_id / action
+          runtime_id: "spoofed_rt",
+          target: { type: "Fake", id: "fake_id" },
+          command: "MaliciousCommand",
+        },
+      },
+      {
+        correlationId: "corr_pause_1",
+        idempotencyKey: "idem_pause_1",
+        confirmToken: "ctok_pause_token",
+      }
+    );
+
+    expect(envelope.command).toBe("PausePaperRuntime");
+    expect(envelope.target).toEqual({ type: "Runtime", id: "rt_paper_999" });
+    expect(envelope.confirmToken).toBe("ctok_pause_token");
+    expect(envelope.params?.runtime_id).toBe("rt_paper_999"); // protected against spoofing!
+    expect(envelope.params?.bounded_duration_minutes).toBe(60);
+    expect(envelope.params?.duration_seconds).toBe(3600);
+    expect(envelope.params?.reason).toBe("Risk mitigation pause");
+    expect(envelope.audit_context.reason).toBe("Risk mitigation pause");
+  });
+
+  it("issues confirm token for canonical command with fallback phrase", async () => {
+    const env = await requestConfirmToken({
+      actionId: "PausePaperRuntime",
+      entityType: "Runtime",
+      entityId: "rt_paper_999",
+      payloadHash: "mock",
+      tradingEnvironment: "paper",
+      platformEnvironment: "production",
+      canonicalCommand: {
+        actionId: "PausePaperRuntime",
+        entityType: "Runtime",
+        entityId: "rt_paper_999",
+      },
+    });
+
+    expect(env.ok).toBe(true);
+    expect(env.data.confirmToken).toMatch(/^ctok_/);
+    expect(env.data.requiredPhrase).toBe("PausePaperRuntime rt_paper_999");
+  });
+
+  it("rejects unknown action without canonicalCommand", async () => {
+    await expect(
+      requestConfirmToken({
+        actionId: "unknown.action.xyz",
+        entityType: "runtime",
+        entityId: "rt_1",
+        payloadHash: "mock",
+        tradingEnvironment: "paper",
+        platformEnvironment: "dev",
+      })
+    ).rejects.toThrow(/Unknown action/i);
+  });
 });

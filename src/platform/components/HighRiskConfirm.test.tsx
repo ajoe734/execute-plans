@@ -55,4 +55,104 @@ describe("HighRiskConfirm — repeat submit prevention and confirmation flow", (
       expect(onOpenChange).toHaveBeenCalledWith(false);
     });
   });
+
+  it("issues confirm token and enforces typing requiredPhrase for canonical command", async () => {
+    const onConfirm = vi.fn();
+    const onOpenChange = vi.fn();
+
+    render(
+      <HighRiskConfirm
+        open={true}
+        onOpenChange={onOpenChange}
+        operation="PausePaperRuntime"
+        target={{ type: "Runtime", id: "rt_paper_01", name: "Paper Runtime 01" }}
+        canonicalCommand={{
+          actionId: "PausePaperRuntime",
+          entityType: "Runtime",
+          entityId: "rt_paper_01",
+        }}
+        risk="high"
+        description="Pause paper runtime for maintenance"
+        onConfirm={onConfirm}
+      />,
+    );
+
+    // Wait for confirm token issuance and phrase display
+    await waitFor(() => {
+      expect(screen.getByText(/token:/i)).toBeInTheDocument();
+    });
+
+    const dialog = screen.getByRole("dialog");
+    const dialogScope = within(dialog);
+
+    // Memo is required
+    const memoTextarea = dialog.querySelector("textarea")!;
+    fireEvent.change(memoTextarea, {
+      target: { value: "Detailed audit memo exceeding forty characters for runtime pause." },
+    });
+
+    // Confirm button must be disabled before typing the required phrase
+    const confirmBtn = dialogScope.getByRole("button", { name: "確認" });
+    expect(confirmBtn).toBeDisabled();
+
+    // Type the phrase
+    const tokenInput = dialog.querySelectorAll("input")[0]!;
+    fireEvent.change(tokenInput, {
+      target: { value: "PausePaperRuntime rt_paper_01" },
+    });
+
+    // Now button should be enabled
+    expect(confirmBtn).not.toBeDisabled();
+
+    fireEvent.click(confirmBtn);
+
+    expect(onConfirm).toHaveBeenCalledWith(
+      "Detailed audit memo exceeding forty characters for runtime pause.",
+      expect.stringMatching(/^ctok_/),
+    );
+  });
+
+  it("disables confirm button and displays error when token request fails", async () => {
+    const bffV1 = await import("@/lib/bff-v1");
+    vi.spyOn(bffV1, "requestConfirmToken").mockRejectedValueOnce(
+      new Error("Network connection failed to token endpoint")
+    );
+
+    const onConfirm = vi.fn();
+    const onOpenChange = vi.fn();
+
+    render(
+      <HighRiskConfirm
+        open={true}
+        onOpenChange={onOpenChange}
+        operation="PausePaperRuntime"
+        target={{ type: "Runtime", id: "rt_paper_01", name: "Paper Runtime 01" }}
+        canonicalCommand={{
+          actionId: "PausePaperRuntime",
+          entityType: "Runtime",
+          entityId: "rt_paper_01",
+        }}
+        risk="high"
+        description="Pause paper runtime for maintenance"
+        onConfirm={onConfirm}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/Network connection failed to token endpoint/i)).toBeInTheDocument();
+    });
+
+    const dialog = screen.getByRole("dialog");
+    const dialogScope = within(dialog);
+
+    const memoTextarea = dialog.querySelector("textarea")!;
+    fireEvent.change(memoTextarea, {
+      target: { value: "Detailed audit memo exceeding forty characters for runtime pause." },
+    });
+
+    // Confirm button must remain disabled when token issuance failed
+    const confirmBtn = dialogScope.getByRole("button", { name: "確認" });
+    expect(confirmBtn).toBeDisabled();
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
 });

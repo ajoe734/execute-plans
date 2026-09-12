@@ -41,7 +41,11 @@ function sha256File(filePath) {
 }
 
 function gitBytes(root, args) {
-  return execFileSync("git", ["-C", root, ...args], { stdio: ["ignore", "pipe", "pipe"] });
+  try {
+    return execFileSync("git", ["-C", root, ...args], { stdio: ["ignore", "pipe", "pipe"] });
+  } catch (error) {
+    throw new Error(`git ${args.join(" ")} in ${root} exited ${error.status}: ${String(error.stderr || error.message).slice(0, 2000)}`);
+  }
 }
 
 function gitText(root, args) {
@@ -59,8 +63,12 @@ export function assertGitBoundFiles(root, commit, fileHashes) {
       throw new Error("Commit identity must name the commit object itself");
     }
     gitBytes(root, ["merge-base", "--is-ancestor", commit, "HEAD"]);
-  } catch {
-    throw new Error(`Generation source commit ${commit} is not an exact commit object and available ancestor of HEAD`);
+  } catch (error) {
+    let checkout = "unavailable";
+    try {
+      checkout = `HEAD=${gitText(root, ["rev-parse", "HEAD"])} shallow=${gitText(root, ["rev-parse", "--is-shallow-repository"])}`;
+    } catch { /* Preserve the original Git failure if checkout diagnostics fail. */ }
+    throw new Error(`Generation source commit ${commit} is not an exact commit object and available ancestor of HEAD; ${checkout}; ${error.message}`);
   }
   for (const [rel, expected] of Object.entries(fileHashes)) {
     let actual;

@@ -28,6 +28,9 @@ const playwrightConfig = readFileSync(
   resolve(root, "playwright.config.ts"),
   "utf8",
 );
+it("does not let Playwright report metadata truncate contract ancestry", () => {
+  expect(playwrightConfig).toMatch(/captureGitInfo:\s*\{\s*diff:\s*false\s*\}/);
+});
 const hostedPersonaSpec = readFileSync(
   resolve(root, "e2e/25-persona-fleet-live-linked-pages.spec.ts"),
   "utf8",
