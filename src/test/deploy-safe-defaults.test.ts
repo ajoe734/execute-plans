@@ -985,4 +985,12 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     expect(deployScript).toContain("Prepared receipt preparedAt is in the future");
     expect(deployScript).toContain("Prepared receipt has expired");
   });
+
+  it("stages prepared receipt in writable audit location and publishes via privileged scoped install", () => {
+    expect(deployScript).toContain('local staged_receipt="${AUDIT_DIR}/prepared-receipt.json"');
+    expect(deployScript).toContain('sudo install -o root -g root -m 664 "${staged_receipt}" "${receipt_file}"');
+    expect(deployScript).toContain('cmp -s "${staged_receipt}" "${receipt_file}"');
+    expect(deployScript).toContain('Cannot write prepared receipt: target receipt already exists');
+    expect(deployScript).toContain('assert_scoped_path "Prepared release" "${target_release_dir}" "${RELEASES_DIR}"');
+  });
 });

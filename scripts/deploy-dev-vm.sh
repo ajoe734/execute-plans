@@ -726,8 +726,18 @@ write_prepared_receipt() {
   local target_release_name="$2"
   local receipt_file="${target_release_dir}/.prepared-receipt.json"
   local mode="${3:-create}"
+  local staged_receipt="${AUDIT_DIR}/prepared-receipt.json"
+  assert_scoped_path "Prepared release" "${target_release_dir}" "${RELEASES_DIR}"
+  if [[ "$(dirname -- "${target_release_dir}")" != "${RELEASES_DIR}" ]]; then
+    echo "Prepared release must be a direct child of the managed release store." >&2
+    return 2
+  fi
+  if [[ "${mode}" == "create" && ( -f "${receipt_file}" || -L "${receipt_file}" ) ]]; then
+    echo "Cannot write prepared receipt: target receipt already exists in ${target_release_dir}." >&2
+    return 2
+  fi
   node --input-type=module - \
-    "${receipt_file}" \
+    "${staged_receipt}" \
     "${target_release_name}" \
     "${target_release_dir}" \
     "${PAIR_ID}" \
@@ -909,13 +919,20 @@ NODE
   if [[ "${mode}" == "validate-only" ]]; then
     return 0
   fi
+  sudo install -o root -g root -m 664 "${staged_receipt}" "${receipt_file}"
+  if ! cmp -s "${staged_receipt}" "${receipt_file}"; then
+    echo "Prepared receipt publication failed to preserve durable-copy consistency." >&2
+    return 2
+  fi
   copy_prepared_locator "${target_release_dir}"
 }
 
 copy_prepared_locator() {
   local target_release_dir="$1"
   local receipt_file="${target_release_dir}/.prepared-receipt.json"
-  cp -f "${receipt_file}" "${AUDIT_DIR}/prepared-receipt.json"
+  if [[ "${receipt_file}" != "${AUDIT_DIR}/prepared-receipt.json" ]]; then
+    cp -f "${receipt_file}" "${AUDIT_DIR}/prepared-receipt.json"
+  fi
   printf '%s\n' "${target_release_dir}" > "${AUDIT_DIR}/prepared-release-dir"
   printf '%s\n' "${RELEASE_INSTANCE}" > "${AUDIT_DIR}/release-instance"
 }

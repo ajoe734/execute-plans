@@ -214,6 +214,11 @@ if [[ "${MOCK_FAIL_DURABLE_RSYNC_ONCE:-false}" == "true" && "${destination_path}
     exit 23
   fi
 fi
+dest_parent="$(dirname -- "${destination_path}")"
+chmod u+w "${dest_parent}" 2>/dev/null || true
+if [[ -d "${destination_path}" ]]; then
+  chmod -R u+w "${destination_path}" 2>/dev/null || true
+fi
 mkdir -p "${destination_path}"
 # Match the real --delete contract: a fresh process may publish a smaller audit
 # into the same run directory, without retaining files from its earlier phase.
@@ -224,6 +229,12 @@ for argument in "${arguments[@]}"; do
   fi
 done
 cp -a "${source_path}/." "${destination_path}/"
+for argument in "${arguments[@]}"; do
+  if [[ "${argument}" == *"--chown=root:root"* && "${destination_path}" == *"/releases/"* ]]; then
+    chmod 0555 "${destination_path}" 2>/dev/null || true
+    break
+  fi
+done
 printf 'rsync\n' >> "${MOCK_CALL_LOG:?}"
 MOCK
 
@@ -236,7 +247,14 @@ done
 if [[ "${1:-}" == "install" && "${2:-}" == "-d" ]]; then
   destination="${@: -1}"
   case "${destination}" in
-    "${MOCK_ALLOWED_ROOT:?}"/*) mkdir -p "${destination}" ;;
+    "${MOCK_ALLOWED_ROOT:?}"/*)
+      dest_parent="$(dirname -- "${destination}")"
+      if [[ -d "${dest_parent}" ]]; then
+        chmod u+w "${dest_parent}" 2>/dev/null || true
+      fi
+      mkdir -p "${destination}"
+      chmod u+rwx "${destination}" 2>/dev/null || true
+      ;;
     *) echo "mock install destination escaped case root" >&2; exit 2 ;;
   esac
   exit 0
@@ -244,21 +262,89 @@ fi
 if [[ "${1:-}" == "install" ]]; then
   source_path="${@: -2:1}"
   destination="${@: -1}"
+  dest_mode="0644"
+  for ((i=1; i<=$#; i++)); do
+    if [[ "${!i}" == "-m" ]]; then
+      k=$((i+1))
+      dest_mode="${!k}"
+      break
+    fi
+  done
   case "${source_path}" in
     "${MOCK_ALLOWED_ROOT:?}"/*) ;;
     *) echo "mock install source escaped case root" >&2; exit 2 ;;
   esac
   case "${destination}" in
-    "${MOCK_ALLOWED_ROOT}"/*) cp "${source_path}" "${destination}" ;;
+    "${MOCK_ALLOWED_ROOT}"/*)
+      dest_dir="$(dirname -- "${destination}")"
+      was_ro=false
+      if [[ -d "${dest_dir}" && "$(stat -c '%a' "${dest_dir}" 2>/dev/null)" == "555" ]]; then
+        was_ro=true
+        chmod u+w "${dest_dir}" 2>/dev/null || true
+      fi
+      cp "${source_path}" "${destination}"
+      chmod "${dest_mode}" "${destination}" 2>/dev/null || true
+      if [[ "${was_ro}" == "true" ]]; then
+        chmod 0555 "${dest_dir}" 2>/dev/null || true
+      fi
+      ;;
     *) echo "mock install destination escaped case root" >&2; exit 2 ;;
   esac
   exit 0
+fi
+if [[ "${1:-}" == "rm" ]]; then
+  for target in "${@:2}"; do
+    if [[ -e "${target}" ]]; then
+      chmod -R u+w "${target}" 2>/dev/null || true
+      parent="$(dirname -- "${target}")"
+      if [[ -d "${parent}" ]]; then
+        chmod u+w "${parent}" 2>/dev/null || true
+      fi
+    fi
+  done
+  exec "$@"
 fi
 if [[ "${1:-}" == "python3" && "${2:-}" == */scripts/atomic-symlink-cas.py ]]; then
   printf 'atomic-cas:%s\n' "${3:-unknown}" >> "${MOCK_CALL_LOG:?}"
 fi
 if [[ "${1:-}" == "python3" && "${2:-}" == */scripts/atomic-release-manifest.py ]]; then
   printf 'atomic-manifest:%s\n' "${3:-unknown}" >> "${MOCK_CALL_LOG:?}"
+  release_store=""
+  release_dir=""
+  for ((i=1; i<=$#; i++)); do
+    if [[ "${!i}" == "--release-store" ]]; then
+      j=$((i+1))
+      release_store="${!j}"
+    elif [[ "${!i}" == "--release-dir" ]]; then
+      j=$((i+1))
+      release_dir="${!j}"
+    fi
+  done
+  if [[ -n "${release_store}" && -d "${release_store}" ]]; then
+    chmod u+w "${release_store}" 2>/dev/null || true
+  fi
+  if [[ -n "${release_dir}" && -d "${release_dir}" ]]; then
+    chmod u+w "${release_dir}" 2>/dev/null || true
+  fi
+  set +e
+  "$@"
+  status=$?
+  set -e
+  if [[ -n "${release_dir}" && -d "${release_dir}" ]]; then
+    chmod 0555 "${release_dir}" 2>/dev/null || true
+  fi
+  if [[ -n "${release_store}" && -d "${release_store}" ]]; then
+    chmod 0555 "${release_store}" 2>/dev/null || true
+  fi
+  exit "${status}"
+fi
+if [[ "${1:-}" == "node" || "${1:-}" == */node ]]; then
+  for arg in "$@"; do
+    if [[ -d "${arg}" ]]; then
+      chmod u+w "${arg}" 2>/dev/null || true
+    fi
+  done
+  exec "$@"
 fi
 exec "$@"
 MOCK
@@ -2794,7 +2880,9 @@ test_exact_pair_protocol_wrong_lease_restore_rejected() {
   # Attempt restore with removed receipt
   release_dir="$(readlink -f "${CASE_LIVE}")"
   receipt_file="${release_dir}/.prepared-receipt.json"
+  chmod u+w "${release_dir}" 2>/dev/null || true
   rm -f "${receipt_file}"
+  chmod 0555 "${release_dir}" 2>/dev/null || true
   run_deploy PANTHEON_DEPLOY_PROFILE=read-only-restore PANTHEON_DEPLOY_ACTION=restore PANTHEON_DEPLOY_REAL_WRITES=false PANTHEON_DEPLOY_LEASE_OWNER=parent-controller PANTHEON_DEPLOY_LEASE_EPOCH=5 PANTHEON_DEPLOY_LEASE_RUN_ID=999 PANTHEON_DEPLOY_LEASE_DELEGATED=true
   [[ "${RUN_STATUS}" -ne 0 ]] || die "missing-receipt restore unexpectedly succeeded"
 }
@@ -2920,6 +3008,34 @@ test_exact_pair_protocol_default_watchdog_restore_succeeds() {
   assert_live_profile read-only accepted
 }
 
+test_exact_pair_protocol_non_root_prepared_receipt_permission() {
+  local release_dir receipt_file
+  setup_case exact-pair-non-root-permission
+  run_deploy PANTHEON_DEPLOY_ACTION=prepare
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "prepare should succeed"
+  release_dir="$(<"${CASE_AUDIT}/prepared-release-dir")"
+  receipt_file="${release_dir}/.prepared-receipt.json"
+
+  [[ -d "${release_dir}" ]] || show_deploy_failure "prepared release directory missing"
+  [[ -f "${receipt_file}" ]] || show_deploy_failure "prepared receipt missing"
+  [[ "$(stat -c '%a' "${release_dir}")" == "555" ]] || \
+    show_deploy_failure "release directory does not have simulated non-root read/execute-only permissions"
+
+  if node -e 'import fs from "node:fs"; fs.writeFileSync(process.argv[1], "leak\n")' "${release_dir}/.unprivileged-probe" 2>/dev/null; then
+    show_deploy_failure "unprivileged write into release directory should have failed with EACCES"
+  fi
+
+  cmp -s "${CASE_AUDIT}/prepared-receipt.json" "${receipt_file}" || \
+    show_deploy_failure "staged and installed prepared receipts do not match"
+  [[ "$(json_field "${receipt_file}" status)" == "prepared_success" ]] || \
+    show_deploy_failure "prepared receipt status is not prepared_success"
+
+  run_deploy PANTHEON_DEPLOY_ACTION=activate
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "activation should succeed from prepared candidate"
+  assert_live_profile read-only accepted
+  assert_summary_outcome accepted
+}
+
 run_test() {
   local name="$1"
   shift
@@ -3000,6 +3116,7 @@ run_test "exact pair protocol schemaless receipt restore rejected" test_exact_pa
 run_test "exact pair protocol write predecessor retention" test_exact_pair_protocol_write_predecessor_retention
 run_test "exact pair protocol write replay idempotent" test_exact_pair_protocol_write_replay_idempotent
 run_test "exact pair protocol default watchdog restore succeeds" test_exact_pair_protocol_default_watchdog_restore_succeeds
+run_test "exact pair protocol non-root runner prepares receipt into read-only release dir" test_exact_pair_protocol_non_root_prepared_receipt_permission
 
 echo "deploy contract harness: ${PASSED} passed, ${FAILED} failed"
 if [[ "${FAILED}" -ne 0 ]]; then
