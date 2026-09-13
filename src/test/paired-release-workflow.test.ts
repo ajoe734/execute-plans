@@ -29,6 +29,22 @@ const agoraProductJourneySpec = readFileSync(
 );
 
 describe("paired Pantheon release workflow", () => {
+  it("uses the current dev variables and origin for candidate browser requests", () => {
+    expect(integrationWorkflow).toContain(
+      "PANTHEON_BFF_BASE_URL: ${{ inputs.bff_base_url || vars.DEV_BFF_URL || 'https://api.dev.mvl-cap.tw' }}",
+    );
+    const browserProbe = integrationWorkflow.slice(
+      integrationWorkflow.indexOf("      - name: Frontend browser BFF probe"),
+      integrationWorkflow.indexOf("      - name: Management route-load baseline"),
+    );
+    expect(browserProbe).toContain(
+      "PANTHEON_FE_BASE_URL: ${{ vars.DEV_FE_URL || 'https://app.dev.mvl-cap.tw' }}",
+    );
+    expect(browserProbe).toContain("PANTHEON_CANDIDATE_DIR: .release-candidate/dist");
+    expect(browserProbe).not.toContain("sslip.io");
+    expect(integrationWorkflow).not.toContain("35.201.204.12");
+  });
+
   it("builds one authenticated three-profile set while normal gates consume read-only", () => {
     expect(integrationWorkflow).toContain("Build read-only release profile");
     expect(integrationWorkflow).toContain(
