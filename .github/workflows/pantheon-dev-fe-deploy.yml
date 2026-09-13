@@ -178,6 +178,8 @@ jobs:
       prepared_receipt: ${{ steps.prepare.outputs.prepared_receipt }}
       prepared_locator: ${{ steps.prepare.outputs.prepared_locator }}
       prepared_receipt_checksum: ${{ steps.prepare.outputs.prepared_receipt_checksum }}
+      deployment_outcome: ${{ steps.prepare.outputs.deployment_outcome || steps.deploy.outputs.deployment_outcome }}
+      prepared_outcome: ${{ steps.prepare.outputs.prepared_outcome }}
     runs-on:
       - self-hosted
       - Linux
@@ -847,6 +849,12 @@ jobs:
           PANTHEON_BFF_CANDIDATE_TRANSPORT: ${{ inputs.bff_candidate_transport || '' }}
         run: |
           bash scripts/deploy-dev-vm.sh
+          if [[ -f "$PANTHEON_AUDIT_OUT_DIR/deployment-outcome" ]]; then
+            echo "deployment_outcome=$(<"$PANTHEON_AUDIT_OUT_DIR/deployment-outcome")" >> "$GITHUB_OUTPUT"
+          fi
+          if [[ -f "$PANTHEON_AUDIT_OUT_DIR/prepared-outcome" ]]; then
+            echo "prepared_outcome=$(<"$PANTHEON_AUDIT_OUT_DIR/prepared-outcome")" >> "$GITHUB_OUTPUT"
+          fi
           if [[ -f "$PANTHEON_AUDIT_OUT_DIR/prepared-release-dir" ]]; then
             echo "prepared_release_dir=$(<"$PANTHEON_AUDIT_OUT_DIR/prepared-release-dir")" >> "$GITHUB_OUTPUT"
             echo "prepared_locator=$(<"$PANTHEON_AUDIT_OUT_DIR/prepared-release-dir")" >> "$GITHUB_OUTPUT"
@@ -859,7 +867,7 @@ jobs:
 
       - name: Deploy verified persistent candidate profile
         id: deploy
-        if: steps.gate.outputs.deployment_profile != 'write-proof' && (github.event_name != 'workflow_dispatch' || inputs.deploy_action != 'prepare')
+        if: steps.gate.outputs.deployment_profile != 'write-proof' && (github.event_name != 'workflow_dispatch' || inputs.deploy_action != 'prepare') && steps.prepare.outputs.deployment_outcome != 'accepted_noop'
         timeout-minutes: 25
         env:
           PANTHEON_DEPLOY_ACTION: activate
@@ -894,7 +902,11 @@ jobs:
           PANTHEON_LEASE_RUN_ID: ${{ inputs.lease_run_id || github.run_id }}
           PANTHEON_LEASE_DELEGATED: ${{ inputs.lease_delegated || 'true' }}
           PANTHEON_BFF_CANDIDATE_TRANSPORT: ${{ inputs.bff_candidate_transport || '' }}
-        run: bash scripts/deploy-dev-vm.sh
+        run: |
+          bash scripts/deploy-dev-vm.sh
+          if [[ -f "$PANTHEON_AUDIT_OUT_DIR/deployment-outcome" ]]; then
+            echo "deployment_outcome=$(<"$PANTHEON_AUDIT_OUT_DIR/deployment-outcome")" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Write redacted workflow envelope
         if: always()

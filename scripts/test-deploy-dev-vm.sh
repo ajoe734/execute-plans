@@ -84,6 +84,8 @@ if '--ref dev' not in deploy:
     raise SystemExit("candidate workflow definitions must be dispatched from trusted execute-plans/dev")
 if 'frontend_ref' not in deploy or 'PANTHEON_DEPLOY_FRONTEND_REF' not in deploy:
     raise SystemExit("candidate source ref is not carried through FE deployment")
+if "steps.prepare.outputs.deployment_outcome != 'accepted_noop'" not in deploy:
+    raise SystemExit("deploy workflow does not skip activate on accepted_noop")
 PY
 
 HARNESS_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/deploy-dev-vm-contract.XXXXXX")"
@@ -1178,8 +1180,15 @@ run_deploy() {
         bash scripts/deploy-dev-vm.sh
     ) > "${RUN_OUTPUT}" 2>&1
     RUN_STATUS=$?
-    if [[ "${RUN_STATUS}" -eq 0 && -f "${CASE_AUDIT}/prepared-release-dir" ]]; then
-      (
+    if [[ "${RUN_STATUS}" -eq 0 ]]; then
+      local prepare_outcome=""
+      if [[ -f "${CASE_AUDIT}/deployment-outcome" ]]; then
+        prepare_outcome="$(<"${CASE_AUDIT}/deployment-outcome")"
+      elif [[ -f "${CASE_AUDIT}/prepared-outcome" ]]; then
+        prepare_outcome="$(<"${CASE_AUDIT}/prepared-outcome")"
+      fi
+      if [[ "${prepare_outcome}" != "accepted_noop" ]]; then
+        (
         cd "${CASE_REPO}"
         env -i \
           PATH="${MOCK_BIN}:${SYSTEM_PATH}" \
@@ -1253,6 +1262,7 @@ run_deploy() {
           bash scripts/deploy-dev-vm.sh
       ) >> "${RUN_OUTPUT}" 2>&1
       RUN_STATUS=$?
+      fi
     fi
   fi
   set -e
@@ -2257,6 +2267,39 @@ test_exact_candidate_noop_revalidates_live_release() {
     "${CASE_AUDIT}/evidence.jsonl" || \
     show_deploy_failure "no-op evidence omitted the incoming equivalent gate"
   verify_evidence_pair
+  [[ -f "${CASE_AUDIT}/deployment-outcome" ]] || show_deploy_failure "deployment-outcome missing in case audit"
+  [[ "$(<"${CASE_AUDIT}/deployment-outcome")" == "accepted_noop" ]] || show_deploy_failure "deployment-outcome should be accepted_noop"
+  [[ -f "${CASE_AUDIT}/prepared-outcome" ]] || show_deploy_failure "prepared-outcome missing in case audit"
+  [[ "$(<"${CASE_AUDIT}/prepared-outcome")" == "accepted_noop" ]] || show_deploy_failure "prepared-outcome should be accepted_noop"
+  [[ ! -f "${CASE_AUDIT}/prepared-release-dir" ]] || show_deploy_failure "no-op prepare must not emit prepared-release-dir"
+  [[ ! -f "${CASE_AUDIT}/prepared-receipt.json" ]] || show_deploy_failure "no-op prepare must not emit prepared-receipt.json"
+  [[ ! -f "${PREVIOUS_TARGET}/.prepared-receipt.json" ]] || show_deploy_failure "live release must not have prepared receipt"
+
+  local fresh_audit="${CASE_DIR}/audit-activate-no-locator"
+  mkdir -p "${fresh_audit}"
+  run_deploy PANTHEON_DEPLOY_ACTION=activate "PANTHEON_AUDIT_OUT_DIR=${fresh_audit}"
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "activate on already live candidate with fresh audit should succeed"
+  assert_previous_is_live
+  [[ -f "${fresh_audit}/deployment-outcome" ]] || show_deploy_failure "deployment-outcome missing in fresh activate audit"
+  [[ "$(<"${fresh_audit}/deployment-outcome")" == "accepted_noop" ]] || show_deploy_failure "fresh activate outcome should be accepted_noop"
+  [[ ! -f "${fresh_audit}/prepared-release-dir" ]] || show_deploy_failure "activate must not emit prepared-release-dir"
+  [[ ! -f "${PREVIOUS_TARGET}/.prepared-receipt.json" ]] || show_deploy_failure "must not write prepared receipt into live release"
+
+  local locator_audit="${CASE_DIR}/audit-activate-locator"
+  mkdir -p "${locator_audit}"
+  run_deploy PANTHEON_DEPLOY_ACTION=activate "PANTHEON_AUDIT_OUT_DIR=${locator_audit}" "PANTHEON_DEPLOY_RELEASE_DIR=${PREVIOUS_TARGET}"
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "activate on live release with locator should succeed"
+  assert_previous_is_live
+  [[ -f "${locator_audit}/deployment-outcome" ]] || show_deploy_failure "deployment-outcome missing in locator activate audit"
+  [[ "$(<"${locator_audit}/deployment-outcome")" == "accepted_noop" ]] || show_deploy_failure "locator activate outcome should be accepted_noop"
+  [[ ! -f "${PREVIOUS_TARGET}/.prepared-receipt.json" ]] || show_deploy_failure "must not mutate live release bytes"
+
+  run_deploy PANTHEON_DEPLOY_ACTION=activate
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "activate on live release reusing case audit should succeed"
+  assert_previous_is_live
+  [[ "$(<"${CASE_AUDIT}/deployment-outcome")" == "accepted_noop" ]] || show_deploy_failure "activate outcome should be accepted_noop"
+  [[ ! -f "${CASE_AUDIT}/prepared-release-dir" ]] || show_deploy_failure "activate must not emit prepared-release-dir"
+  [[ ! -f "${PREVIOUS_TARGET}/.prepared-receipt.json" ]] || show_deploy_failure "must not write prepared receipt into live release"
 }
 
 test_interrupted_candidate_recovers_or_rolls_back() {

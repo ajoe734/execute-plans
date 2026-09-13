@@ -85,6 +85,29 @@ if [[ "${DEPLOY_ACTION}" == "activate" ]]; then
     RELEASE_NAME="$(basename -- "${RELEASE_DIR}")"
   elif [[ -d "${RELEASE_DIR}" && -f "${RELEASE_DIR}/.prepared-receipt.json" ]]; then
     :
+  elif [[ -L "${DEPLOY_ROOT}" ]]; then
+    live_target="$(readlink -f "${DEPLOY_ROOT}" 2>/dev/null || true)"
+    case "${live_target}" in
+      "${RELEASES_DIR}"/*)
+        if [[ -d "${live_target}" && -f "${live_target}/deployment.json" ]]; then
+          live_commit="$(node -e 'try { const p=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); process.stdout.write(String(p.commit||"")) } catch {}' "${live_target}/deployment.json")"
+          if [[ -n "${live_commit}" && "${live_commit}" == "${SHA}" ]]; then
+            RELEASE_DIR="${live_target}"
+            RELEASE_NAME="$(basename -- "${RELEASE_DIR}")"
+          else
+            echo "Activation rejected: exact prepared release directory / locator is required; directory discovery is disallowed." >&2
+            exit 2
+          fi
+        else
+          echo "Activation rejected: exact prepared release directory / locator is required; directory discovery is disallowed." >&2
+          exit 2
+        fi
+        ;;
+      *)
+        echo "Activation rejected: exact prepared release directory / locator is required; directory discovery is disallowed." >&2
+        exit 2
+        ;;
+    esac
   else
     echo "Activation rejected: exact prepared release directory / locator is required; directory discovery is disallowed." >&2
     exit 2
@@ -295,6 +318,9 @@ accept_deployment() {
   # Once terminal acceptance starts, do not let INT/TERM split the finalized
   # evidence, durable copy, and in-memory accepted state.
   trap '' INT TERM
+  if [[ ! -f "${AUDIT_DIR}/deployment-outcome" ]]; then
+    printf 'accepted\n' > "${AUDIT_DIR}/deployment-outcome"
+  fi
   evidence_append release.completed passed "outcome=accepted"
   finalize_evidence accepted
   persist_durable_evidence
@@ -2007,6 +2033,9 @@ cleanup() {
     if [[ "${EVIDENCE_INITIALIZED}" == "true" ]]; then
       EVIDENCE_FINALIZED=false
       DURABLE_EVIDENCE_PERSISTED=false
+      if [[ ! -f "${AUDIT_DIR}/deployment-outcome" ]]; then
+        printf '%s\n' "${outcome}" > "${AUDIT_DIR}/deployment-outcome"
+      fi
       if finalize_evidence "${outcome}"; then
         persist_durable_evidence || status=1
       else
@@ -2495,59 +2524,6 @@ else
   evidence_append candidate.order passed "currentDevSha=${REMOTE_DEV_SHA}"
 fi
 
-if [[ "${DEPLOY_ACTION}" == "activate" ]]; then
-  echo "=== validating prepared receipt and lease in new process ==="
-  verify_prepared_receipt "${RELEASE_DIR}"
-  copy_prepared_locator "${RELEASE_DIR}"
-  verify_dist_digest "${RELEASE_DIR}" "${ARTIFACT_DIGEST}" >/dev/null
-
-  read -r pred_target pred_commit pred_pair pred_digest < <(node -e '
-    const p=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));
-    const ep=p.expectedPredecessor||{};
-    process.stdout.write(`${ep.target||""} ${ep.commit||""} ${ep.pairId||""} ${ep.artifactDigest||""}\n`);
-  ' "${RELEASE_DIR}/.prepared-receipt.json")
-
-  if [[ -n "${EXPECTED_PREDECESSOR_TARGET:-}" && -n "${pred_target}" && "${EXPECTED_PREDECESSOR_TARGET}" != "${pred_target}" ]]; then
-    echo "Activation CAS rejected: requested predecessor target (${EXPECTED_PREDECESSOR_TARGET}) does not match receipt predecessor target (${pred_target})." >&2
-    exit 2
-  fi
-  if [[ -n "${EXPECTED_PREDECESSOR_COMMIT:-}" && -n "${pred_commit}" && "${EXPECTED_PREDECESSOR_COMMIT}" != "${pred_commit}" ]]; then
-    echo "Activation CAS rejected: requested predecessor commit (${EXPECTED_PREDECESSOR_COMMIT}) does not match receipt predecessor commit (${pred_commit})." >&2
-    exit 2
-  fi
-  if [[ -n "${EXPECTED_PREDECESSOR_PAIR_ID:-}" && -n "${pred_pair}" && "${EXPECTED_PREDECESSOR_PAIR_ID}" != "${pred_pair}" ]]; then
-    echo "Activation CAS rejected: requested predecessor pair ID (${EXPECTED_PREDECESSOR_PAIR_ID}) does not match receipt predecessor pair ID (${pred_pair})." >&2
-    exit 2
-  fi
-  if [[ -n "${EXPECTED_PREDECESSOR_ARTIFACT_DIGEST:-}" && -n "${pred_digest}" && "${EXPECTED_PREDECESSOR_ARTIFACT_DIGEST}" != "${pred_digest}" ]]; then
-    echo "Activation CAS rejected: requested predecessor digest (${EXPECTED_PREDECESSOR_ARTIFACT_DIGEST}) does not match receipt predecessor digest (${pred_digest})." >&2
-    exit 2
-  fi
-
-  current_live="$(current_live_target)"
-  if [[ "${current_live}" != "${RELEASE_DIR}" ]]; then
-    if [[ -n "${pred_target}" && "${current_live}" != "${pred_target}" ]]; then
-      echo "Activation CAS rejected: live predecessor target (${current_live:-none}) does not match expected predecessor target (${pred_target})." >&2
-      exit 2
-    fi
-    live_commit_check="${LIVE_COMMIT_AT_START:-${PREVIOUS_COMMIT}}"
-    if [[ -n "${pred_commit}" && -n "${live_commit_check}" && "${live_commit_check}" != "${pred_commit}" ]]; then
-      echo "Activation CAS rejected: live predecessor commit (${live_commit_check}) does not match expected predecessor commit (${pred_commit})." >&2
-      exit 2
-    fi
-    live_pair_check="${LIVE_PAIR_ID_AT_START:-${PREVIOUS_PAIR_ID}}"
-    if [[ -n "${pred_pair}" && -n "${live_pair_check}" && "${live_pair_check}" != "${pred_pair}" ]]; then
-      echo "Activation CAS rejected: live predecessor pair ID (${live_pair_check}) does not match expected predecessor pair ID (${pred_pair})." >&2
-      exit 2
-    fi
-    live_digest_check="${LIVE_DIGEST_AT_START:-${PREVIOUS_DIGEST}}"
-    if [[ -n "${pred_digest}" && -n "${live_digest_check}" && "${live_digest_check}" != "${pred_digest}" ]]; then
-      echo "Activation CAS rejected: live predecessor digest (${live_digest_check}) does not match expected predecessor digest (${pred_digest})." >&2
-      exit 2
-    fi
-  fi
-fi
-
 if [[ "${DEPLOY_ACTION}" == "prepare" && "${PREVIOUS_DEPLOYMENT_STATE}" == "candidate" && "${PREVIOUS_COMMIT}" == "${SHA}" ]]; then
   echo "Prepare cannot recover an interrupted public candidate; activate or restore must validate its retained receipt." >&2
   exit 2
@@ -2562,7 +2538,9 @@ if [[ -n "${PREVIOUS_COMMIT}" ]]; then
         "${PREVIOUS_MANIFEST_DIGEST}" == "${ARTIFACT_DIGEST}" && \
         "${PREVIOUS_GATE_RUN_ID}" =~ ^[1-9][0-9]*$ && \
         "${PREVIOUS_GITHUB_ARTIFACT_DIGEST}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
-    is_exact_replay=true
+    if [[ "${DEPLOY_ACTION}" != "activate" || "${RELEASE_DIR}" == "${PREVIOUS_TARGET}" ]]; then
+      is_exact_replay=true
+    fi
   fi
 
   if [[ "${is_exact_replay}" == "true" ]]; then
@@ -2618,6 +2596,59 @@ if [[ -n "${PREVIOUS_COMMIT}" ]]; then
   fi
 fi
 
+if [[ "${DEPLOY_ACTION}" == "activate" && "${NOOP_DEPLOY}" != "true" ]]; then
+  echo "=== validating prepared receipt and lease in new process ==="
+  verify_prepared_receipt "${RELEASE_DIR}"
+  copy_prepared_locator "${RELEASE_DIR}"
+  verify_dist_digest "${RELEASE_DIR}" "${ARTIFACT_DIGEST}" >/dev/null
+
+  read -r pred_target pred_commit pred_pair pred_digest < <(node -e '
+    const p=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));
+    const ep=p.expectedPredecessor||{};
+    process.stdout.write(`${ep.target||""} ${ep.commit||""} ${ep.pairId||""} ${ep.artifactDigest||""}\n`);
+  ' "${RELEASE_DIR}/.prepared-receipt.json")
+
+  if [[ -n "${EXPECTED_PREDECESSOR_TARGET:-}" && -n "${pred_target}" && "${EXPECTED_PREDECESSOR_TARGET}" != "${pred_target}" ]]; then
+    echo "Activation CAS rejected: requested predecessor target (${EXPECTED_PREDECESSOR_TARGET}) does not match receipt predecessor target (${pred_target})." >&2
+    exit 2
+  fi
+  if [[ -n "${EXPECTED_PREDECESSOR_COMMIT:-}" && -n "${pred_commit}" && "${EXPECTED_PREDECESSOR_COMMIT}" != "${pred_commit}" ]]; then
+    echo "Activation CAS rejected: requested predecessor commit (${EXPECTED_PREDECESSOR_COMMIT}) does not match receipt predecessor commit (${pred_commit})." >&2
+    exit 2
+  fi
+  if [[ -n "${EXPECTED_PREDECESSOR_PAIR_ID:-}" && -n "${pred_pair}" && "${EXPECTED_PREDECESSOR_PAIR_ID}" != "${pred_pair}" ]]; then
+    echo "Activation CAS rejected: requested predecessor pair ID (${EXPECTED_PREDECESSOR_PAIR_ID}) does not match receipt predecessor pair ID (${pred_pair})." >&2
+    exit 2
+  fi
+  if [[ -n "${EXPECTED_PREDECESSOR_ARTIFACT_DIGEST:-}" && -n "${pred_digest}" && "${EXPECTED_PREDECESSOR_ARTIFACT_DIGEST}" != "${pred_digest}" ]]; then
+    echo "Activation CAS rejected: requested predecessor digest (${EXPECTED_PREDECESSOR_ARTIFACT_DIGEST}) does not match receipt predecessor digest (${pred_digest})." >&2
+    exit 2
+  fi
+
+  current_live="$(current_live_target)"
+  if [[ "${current_live}" != "${RELEASE_DIR}" ]]; then
+    if [[ -n "${pred_target}" && "${current_live}" != "${pred_target}" ]]; then
+      echo "Activation CAS rejected: live predecessor target (${current_live:-none}) does not match expected predecessor target (${pred_target})." >&2
+      exit 2
+    fi
+    live_commit_check="${LIVE_COMMIT_AT_START:-${PREVIOUS_COMMIT}}"
+    if [[ -n "${pred_commit}" && -n "${live_commit_check}" && "${live_commit_check}" != "${pred_commit}" ]]; then
+      echo "Activation CAS rejected: live predecessor commit (${live_commit_check}) does not match expected predecessor commit (${pred_commit})." >&2
+      exit 2
+    fi
+    live_pair_check="${LIVE_PAIR_ID_AT_START:-${PREVIOUS_PAIR_ID}}"
+    if [[ -n "${pred_pair}" && -n "${live_pair_check}" && "${live_pair_check}" != "${pred_pair}" ]]; then
+      echo "Activation CAS rejected: live predecessor pair ID (${live_pair_check}) does not match expected predecessor pair ID (${pred_pair})." >&2
+      exit 2
+    fi
+    live_digest_check="${LIVE_DIGEST_AT_START:-${PREVIOUS_DIGEST}}"
+    if [[ -n "${pred_digest}" && -n "${live_digest_check}" && "${live_digest_check}" != "${pred_digest}" ]]; then
+      echo "Activation CAS rejected: live predecessor digest (${live_digest_check}) does not match expected predecessor digest (${pred_digest})." >&2
+      exit 2
+    fi
+  fi
+fi
+
 ensure_probe_dependencies
 
 if [[ "${DEPLOY_ACTION}" == "prepare" ]]; then
@@ -2643,6 +2674,8 @@ if [[ "${DEPLOY_ACTION}" == "prepare" && "${PREPARED_REPLAY}" == "true" ]]; then
   fi
   # Return the original receipt, preserving its expiry and original predecessor.
   copy_prepared_locator "${RELEASE_DIR}"
+  printf 'prepared_success\n' > "${AUDIT_DIR}/deployment-outcome"
+  printf 'prepared_success\n' > "${AUDIT_DIR}/prepared-outcome"
   evidence_append release.prepared prepared_success \
     "outcome=prepared_success" "releaseDir=${RELEASE_DIR}" "pairId=${PAIR_ID}" "leaseEpoch=${LEASE_EPOCH}"
   finalize_evidence prepared_success
@@ -2812,6 +2845,8 @@ NODE
 - evidence_log: evidence.jsonl
 - evidence_summary: evidence.json
 EOF
+  printf 'accepted_noop\n' > "${AUDIT_DIR}/deployment-outcome"
+  printf 'accepted_noop\n' > "${AUDIT_DIR}/prepared-outcome"
   accept_deployment
   echo "OK: exact candidate ${SHA} (${ARTIFACT_DIGEST}) was already live and passed full revalidation."
   exit 0
@@ -2942,6 +2977,8 @@ NODE
 
   echo "=== writing durable prepared receipt ==="
   write_prepared_receipt "${RELEASE_DIR}" "${RELEASE_NAME}"
+  printf 'prepared_success\n' > "${AUDIT_DIR}/deployment-outcome"
+  printf 'prepared_success\n' > "${AUDIT_DIR}/prepared-outcome"
   evidence_append release.prepared prepared_success \
     "outcome=prepared_success" \
     "releaseDir=${RELEASE_DIR}" \

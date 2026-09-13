@@ -27,7 +27,8 @@
       "Resolve P2 72-character commit gate violation on PR #745 by compacting commit subject to 71 characters.",
       "Fix restore path in deploy-dev-vm.sh so safe sibling compensation remains valid throughout the supported 265-minute proof/recovery window without renewing stale activation authority; add late watchdog restore regression to test-deploy-dev-vm.sh.",
       "Confirm unchanged safe incumbent directly in already-safe restore path in scripts/deploy-dev-vm.sh without rejecting legitimate later watchdog lease run ID against previous publication receipt, while preserving write-proof receipt/lease verification and readback; add two-run prepare/abort/restore regression in scripts/test-deploy-dev-vm.sh.",
-      "Fix durable evidence failure injection during activate, repair un-receipted already-live no-op revalidation, and implement durable evidence ledger in test harness for interrupted candidate recovery."
+      "Fix durable evidence failure injection during activate, repair un-receipted already-live no-op revalidation, and implement durable evidence ledger in test harness for interrupted candidate recovery.",
+      "Fix no-op prepare-to-activate contract across deploy-dev-vm.sh and pantheon-dev-fe-deploy.yml, emitting accepted_noop outcomes, permitting activation to revalidate incumbent live release without locator discovery or prepared receipts, gating workflow deploy on accepted_noop, and testing prepare-to-activate caller sequences across fresh audit directories without mutating accepted bytes."
     ],
     "acceptance_boundary": "Source-only release protocol reconciliation against accepted Release I. Validates immutable candidate verification, prepared receipt replay preservation, safe-sibling failure recovery, strict CORS/browser policies, and Chromium CI provisioning. Per operator direction, does not implement disputed historical protocol expansions (no separate parent child-delegation lease API, whole-pair pre-qualification, or new watchdog framework). Sole hosted pair acceptance belongs to S5-PAIR-001; roundtrip drill belongs to S5-ROLLBACK-001."
   },
@@ -75,15 +76,15 @@
     },
     "delivery_source_sha256": {
       ".github/workflows/branch-ci.yml": "1ad2e95935f91c3f4cedfec96b9e7f736f77eba9cb562a94fe4b6713c2a0cdc0",
-      ".github/workflows/pantheon-dev-fe-deploy.yml": "9e4e49edf0353dd7f2bec8f2e65ecbe015d63a3b4573b1c86b63d37b0e70f577",
+      ".github/workflows/pantheon-dev-fe-deploy.yml": "3e9e2111e36190f3db233ccdfbae7f3da441438686c638b75d3a67020b3c8801",
       ".github/workflows/pantheon-integration-gate.yml": "3f7c1383ead67a18f68e9bb5b11cb16dc83072e75a764e3ef292e8563008ece8",
       ".github/workflows/pantheon-proof-watchdog.yml": "ef16df08c648bf6f1afc62898192956d6b735a1a9c2e61a5935b0427db44e61d",
-      "scripts/deploy-dev-vm.sh": "93e18d5216ccc7a59a53ca68f9034ff3e0b342fd8ad446dfdb5acfcc02e84d8f",
+      "scripts/deploy-dev-vm.sh": "f04280b85284e99826091de481780190ee5bc72eab0907351edb6025cb3b46da",
       "scripts/probe-hosted-browser-bff.mjs": "c0065cf7c5093cc6b93f29870205b631f765da16efa1fec246916667cf163ef3",
       "scripts/release-candidate.mjs": "d0b350ae9cc63ea2fba96d126912e4d8a0d3ec03550131eb9f47317bb18f54b5",
       "scripts/release-evidence.mjs": "50eb550fde22ff88fc478cdf19ffdbd730ac8a6fcc9508ebf2f4b7bfe9492231",
       "scripts/release-identity.mjs": "2dde85d7c4660c911a5551b11f75490f8e88a8fef83a0ec720bb434b0c04e66f",
-      "scripts/test-deploy-dev-vm.sh": "605069c2f00dee3a9e5db1a6462761c57ff499fa36512040903a9dae4d573e06",
+      "scripts/test-deploy-dev-vm.sh": "7a1fd5c80c7561797a9c1bec562995a88f9cb8959854288626029c1d40c6fc4f",
       "scripts/test-release-identity.mjs": "47ba6cd53a733d8363e188d8c4a6c5075360e18137c43191b6be65f08270b0ce",
       "src/test/deploy-safe-defaults.test.ts": "9b375d2982f0632819b4685dacb407b80e690eba64225955a076d0be30d5d872",
       "src/test/hosted-browser-release-policy.test.ts": "fb6bd96711837c33bc9b2aecfb51dbab953bcdbd4659b516ddf51d8e5816fa03",
