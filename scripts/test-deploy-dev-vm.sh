@@ -84,6 +84,10 @@ if '--ref dev' not in deploy:
     raise SystemExit("candidate workflow definitions must be dispatched from trusted execute-plans/dev")
 if 'frontend_ref' not in deploy or 'PANTHEON_DEPLOY_FRONTEND_REF' not in deploy:
     raise SystemExit("candidate source ref is not carried through FE deployment")
+if "steps.prepare.outputs.deployment_outcome != 'accepted_noop'" not in deploy:
+    raise SystemExit("deploy workflow does not skip activate on accepted_noop")
+if "deployment_outcome: ${{ steps.deploy.outputs.deployment_outcome || steps.prepare.outputs.deployment_outcome }}" not in deploy:
+    raise SystemExit("deploy workflow does not prioritize executed activate output")
 PY
 
 HARNESS_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/deploy-dev-vm-contract.XXXXXX")"
@@ -214,8 +218,27 @@ if [[ "${MOCK_FAIL_DURABLE_RSYNC_ONCE:-false}" == "true" && "${destination_path}
     exit 23
   fi
 fi
+dest_parent="$(dirname -- "${destination_path}")"
+chmod u+w "${dest_parent}" 2>/dev/null || true
+if [[ -d "${destination_path}" ]]; then
+  chmod -R u+w "${destination_path}" 2>/dev/null || true
+fi
 mkdir -p "${destination_path}"
+# Match the real --delete contract: a fresh process may publish a smaller audit
+# into the same run directory, without retaining files from its earlier phase.
+for argument in "${arguments[@]}"; do
+  if [[ "${argument}" == "--delete" ]]; then
+    find "${destination_path}" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+    break
+  fi
+done
 cp -a "${source_path}/." "${destination_path}/"
+for argument in "${arguments[@]}"; do
+  if [[ "${argument}" == *"--chown=root:root"* && "${destination_path}" == *"/releases/"* ]]; then
+    chmod 0555 "${destination_path}" 2>/dev/null || true
+    break
+  fi
+done
 printf 'rsync\n' >> "${MOCK_CALL_LOG:?}"
 MOCK
 
@@ -228,7 +251,14 @@ done
 if [[ "${1:-}" == "install" && "${2:-}" == "-d" ]]; then
   destination="${@: -1}"
   case "${destination}" in
-    "${MOCK_ALLOWED_ROOT:?}"/*) mkdir -p "${destination}" ;;
+    "${MOCK_ALLOWED_ROOT:?}"/*)
+      dest_parent="$(dirname -- "${destination}")"
+      if [[ -d "${dest_parent}" ]]; then
+        chmod u+w "${dest_parent}" 2>/dev/null || true
+      fi
+      mkdir -p "${destination}"
+      chmod u+rwx "${destination}" 2>/dev/null || true
+      ;;
     *) echo "mock install destination escaped case root" >&2; exit 2 ;;
   esac
   exit 0
@@ -236,21 +266,89 @@ fi
 if [[ "${1:-}" == "install" ]]; then
   source_path="${@: -2:1}"
   destination="${@: -1}"
+  dest_mode="0644"
+  for ((i=1; i<=$#; i++)); do
+    if [[ "${!i}" == "-m" ]]; then
+      k=$((i+1))
+      dest_mode="${!k}"
+      break
+    fi
+  done
   case "${source_path}" in
     "${MOCK_ALLOWED_ROOT:?}"/*) ;;
     *) echo "mock install source escaped case root" >&2; exit 2 ;;
   esac
   case "${destination}" in
-    "${MOCK_ALLOWED_ROOT}"/*) cp "${source_path}" "${destination}" ;;
+    "${MOCK_ALLOWED_ROOT}"/*)
+      dest_dir="$(dirname -- "${destination}")"
+      was_ro=false
+      if [[ -d "${dest_dir}" && "$(stat -c '%a' "${dest_dir}" 2>/dev/null)" == "555" ]]; then
+        was_ro=true
+        chmod u+w "${dest_dir}" 2>/dev/null || true
+      fi
+      cp "${source_path}" "${destination}"
+      chmod "${dest_mode}" "${destination}" 2>/dev/null || true
+      if [[ "${was_ro}" == "true" ]]; then
+        chmod 0555 "${dest_dir}" 2>/dev/null || true
+      fi
+      ;;
     *) echo "mock install destination escaped case root" >&2; exit 2 ;;
   esac
   exit 0
+fi
+if [[ "${1:-}" == "rm" ]]; then
+  for target in "${@:2}"; do
+    if [[ -e "${target}" ]]; then
+      chmod -R u+w "${target}" 2>/dev/null || true
+      parent="$(dirname -- "${target}")"
+      if [[ -d "${parent}" ]]; then
+        chmod u+w "${parent}" 2>/dev/null || true
+      fi
+    fi
+  done
+  exec "$@"
 fi
 if [[ "${1:-}" == "python3" && "${2:-}" == */scripts/atomic-symlink-cas.py ]]; then
   printf 'atomic-cas:%s\n' "${3:-unknown}" >> "${MOCK_CALL_LOG:?}"
 fi
 if [[ "${1:-}" == "python3" && "${2:-}" == */scripts/atomic-release-manifest.py ]]; then
   printf 'atomic-manifest:%s\n' "${3:-unknown}" >> "${MOCK_CALL_LOG:?}"
+  release_store=""
+  release_dir=""
+  for ((i=1; i<=$#; i++)); do
+    if [[ "${!i}" == "--release-store" ]]; then
+      j=$((i+1))
+      release_store="${!j}"
+    elif [[ "${!i}" == "--release-dir" ]]; then
+      j=$((i+1))
+      release_dir="${!j}"
+    fi
+  done
+  if [[ -n "${release_store}" && -d "${release_store}" ]]; then
+    chmod u+w "${release_store}" 2>/dev/null || true
+  fi
+  if [[ -n "${release_dir}" && -d "${release_dir}" ]]; then
+    chmod u+w "${release_dir}" 2>/dev/null || true
+  fi
+  set +e
+  "$@"
+  status=$?
+  set -e
+  if [[ -n "${release_dir}" && -d "${release_dir}" ]]; then
+    chmod 0555 "${release_dir}" 2>/dev/null || true
+  fi
+  if [[ -n "${release_store}" && -d "${release_store}" ]]; then
+    chmod 0555 "${release_store}" 2>/dev/null || true
+  fi
+  exit "${status}"
+fi
+if [[ "${1:-}" == "node" || "${1:-}" == */node ]]; then
+  for arg in "$@"; do
+    if [[ -d "${arg}" ]]; then
+      chmod u+w "${arg}" 2>/dev/null || true
+    fi
+  done
+  exec "$@"
 fi
 exec "$@"
 MOCK
@@ -449,7 +547,16 @@ if (
 }
 if (output) {
   fs.mkdirSync(path.dirname(output), { recursive: true });
-  fs.writeFileSync(output, `${JSON.stringify({ phase, pass: true })}\n`, "utf8");
+  fs.writeFileSync(output, `${JSON.stringify({
+    phase,
+    pass: true,
+    personaFleetSafetyPassed: true,
+    personaFleetChecks: { hasNaN: false },
+    openclawContractPassed: process.env.MOCK_OPENCLAW_CONTRACT_STATUS === "missing"
+      ? undefined
+      : process.env.MOCK_OPENCLAW_CONTRACT_STATUS !== "failed",
+    openclawContractChecks: { pass: true }
+  })}\n`, "utf8");
 }
 if (
   phase === "post_switch" &&
@@ -716,7 +823,7 @@ setup_case() {
   mkdir -p "${CASE_DIR}" "${CASE_HOME}" "${CASE_TMP}" "${CASE_RELEASES}" \
     "${PREVIOUS_TARGET}" "${CANDIDATE_DIST}/assets" "${OPERATOR_LIVE_DIST}/assets" "${WRITE_PROOF_DIST}/assets"
   cp -a "${BASE_ORIGIN}" "${CASE_ORIGIN}"
-  git clone -q --branch dev "${CASE_ORIGIN}" "${CASE_REPO}"
+  git clone -q --shared --branch dev "${CASE_ORIGIN}" "${CASE_REPO}"
   git -C "${CASE_REPO}" config user.name "deploy-contract-test"
   git -C "${CASE_REPO}" config user.email "deploy-contract-test@example.invalid"
 
@@ -766,119 +873,475 @@ select_interrupted_candidate() {
   cp -a "${CANDIDATE_DIR}/dist/." "${INTERRUPTED_TARGET}/"
   "${REAL_NODE}" -e '
     const fs = require("node:fs");
+    const crypto = require("node:crypto");
+    const path = require("node:path");
     const file = process.argv[1];
+    const prevCommit = process.argv[2];
+    const prevDigest = process.argv[3];
+    const interruptedSha = process.argv[4];
+    const candidateDigest = process.argv[5];
+    const opDigest = process.argv[6];
+    const wpDigest = process.argv[7];
+    const prevTarget = process.argv[8];
+    const interruptedTarget = process.argv[9];
+    const bffSha = process.argv[10];
+    const gateRunId = process.argv[11];
+    const caseDurable = process.argv[12];
+
     const payload = JSON.parse(fs.readFileSync(file, "utf8"));
     payload.deploymentState = "candidate";
     payload.deploymentProfile = payload.profile;
     payload.pair = {
       pairId: payload.pairId,
-      readOnlyArtifactDigestSha256: process.argv[5],
-      operatorLiveArtifactDigestSha256: process.argv[6],
-      writeProofArtifactDigestSha256: process.argv[7],
+      readOnlyArtifactDigestSha256: candidateDigest,
+      operatorLiveArtifactDigestSha256: opDigest,
+      writeProofArtifactDigestSha256: wpDigest,
     };
     payload.releaseName = "interrupted-candidate";
     payload.previousReleaseName = "previous";
-    payload.previousCommit = process.argv[2];
-    payload.previousArtifactDigest = process.argv[3];
-    payload.commit = process.argv[4];
-    payload.githubArtifactDigest = `sha256:${process.argv[5]}`;
+    payload.previousCommit = prevCommit;
+    payload.previousArtifactDigest = prevDigest;
+    payload.commit = interruptedSha;
+    payload.githubArtifactDigest = `sha256:${candidateDigest}`;
     fs.writeFileSync(file, `${JSON.stringify(payload, null, 2)}\n`);
-  ' "${INTERRUPTED_TARGET}/deployment.json" "${PREVIOUS_SHA}" "${previous_digest}" "${interrupted_sha}" "${CANDIDATE_DIGEST}" "${OPERATOR_LIVE_DIGEST}" "${WRITE_PROOF_DIGEST}"
+
+    function computeReceiptIntegritySha256(r) {
+      const parts = [
+        r.pairId || "",
+        r.frontendSha || "",
+        r.bffSha || "",
+        r.artifactDigestSha256 || "",
+        r.profile || "",
+        r.releaseDir || "",
+        r.lease?.owner || "",
+        String(r.lease?.epoch ?? ""),
+        r.lease?.runId || "",
+        String(r.lease?.delegated ?? ""),
+        r.expectedPredecessor?.target || "",
+        r.expectedPredecessor?.commit || "",
+        r.expectedPredecessor?.pairId || "",
+        r.expectedPredecessor?.artifactDigest || "",
+        r.preparedAt || "",
+        r.expiresAt || "",
+        r.bffImage?.repository || "",
+        r.bffImage?.tag || "",
+        r.bffImage?.digestType || "",
+        r.bffImage?.digest || "",
+        r.preparedArtifact?.locator || "",
+        r.preparedArtifact?.checksum || "",
+        r.githubArtifactDigest || "",
+        String(r.gateRunId || ""),
+        r.mandatoryGates?.candidateVerification || "",
+        r.mandatoryGates?.preSwitchProbe || "",
+        r.mandatoryGates?.agoraCompatibility || "",
+        r.mandatoryGates?.managementFleet || "",
+        r.mandatoryGates?.openclawContract || ""
+      ];
+      return crypto.createHash("sha256").update(parts.join("|"), "utf8").digest("hex");
+    }
+
+    const preparedAt = new Date().toISOString();
+    const expiresAt = new Date(Date.now() + 3600 * 1000).toISOString();
+    const receipt = {
+      schemaVersion: "pantheon.release.prepared-receipt.v1",
+      status: "prepared_success",
+      preparedAt,
+      expiresAt,
+      releaseName: "interrupted-candidate",
+      releaseDir: interruptedTarget,
+      pairId: payload.pairId,
+      frontendSha: interruptedSha,
+      bffSha,
+      artifactDigestSha256: candidateDigest,
+      profile: "read-only",
+      deploymentProfile: "read-only",
+      githubArtifactDigest: `sha256:${candidateDigest}`,
+      gateRunId,
+      lease: {
+        owner: "parent-controller",
+        epoch: 1,
+        runId: "9001",
+        delegated: true
+      },
+      bffImage: null,
+      preparedArtifact: {
+        locator: interruptedTarget,
+        checksum: `sha256:${candidateDigest}`
+      },
+      expectedPredecessor: {
+        target: prevTarget,
+        commit: prevCommit,
+        pairId: payload.pairId,
+        artifactDigest: prevDigest
+      },
+      mandatoryGates: {
+        candidateVerification: "passed",
+        preSwitchProbe: "passed",
+        agoraCompatibility: "passed",
+        managementFleet: "passed",
+        openclawContract: "retired"
+      },
+      probes: {
+        candidatePreSwitch: "passed"
+      }
+    };
+    receipt.receiptIntegritySha256 = computeReceiptIntegritySha256(receipt);
+    const receiptContent = `${JSON.stringify(receipt, null, 2)}\n`;
+    fs.writeFileSync(path.join(interruptedTarget, ".prepared-receipt.json"), receiptContent, "utf8");
+    const durableDir = path.join(caseDurable, "interrupted-candidate");
+    fs.mkdirSync(durableDir, { recursive: true });
+    fs.writeFileSync(path.join(durableDir, "prepared-receipt.json"), receiptContent, "utf8");
+  ' "${INTERRUPTED_TARGET}/deployment.json" "${PREVIOUS_SHA}" "${previous_digest}" "${interrupted_sha}" "${CANDIDATE_DIGEST}" "${OPERATOR_LIVE_DIGEST}" "${WRITE_PROOF_DIGEST}" "${PREVIOUS_TARGET}" "${INTERRUPTED_TARGET}" "${BFF_SHA}" "${GATE_RUN_ID}" "${CASE_DURABLE}"
+
+  local durable_dir="${CASE_DURABLE}/interrupted-candidate"
+  "${REAL_NODE}" "${CASE_REPO}/scripts/release-evidence.mjs" init \
+    --log "${durable_dir}/evidence.jsonl" \
+    --detail "candidateSha=${interrupted_sha}" \
+    --detail "controllerSha=${interrupted_sha}" \
+    --detail "integrationGateRunId=${GATE_RUN_ID}" \
+    --detail "artifactDigestSha256=${CANDIDATE_DIGEST}" \
+    --detail "githubArtifactDigest=sha256:${CANDIDATE_DIGEST}" \
+    --detail "emergencyOverride=false" \
+    --detail "rollbackDrill=false" \
+    --detail "overrideActor=none" \
+    --detail "overrideReasonSha256=none"
+  "${REAL_NODE}" "${CASE_REPO}/scripts/release-evidence.mjs" append \
+    --log "${durable_dir}/evidence.jsonl" \
+    --type release.prepared \
+    --status prepared_success \
+    --detail "outcome=prepared_success" \
+    --detail "releaseDir=${INTERRUPTED_TARGET}" \
+    --detail "pairId=${PAIR_ID}" \
+    --detail "leaseEpoch=1"
+  "${REAL_NODE}" "${CASE_REPO}/scripts/release-evidence.mjs" finalize \
+    --log "${durable_dir}/evidence.jsonl" \
+    --summary "${durable_dir}/evidence.json" \
+    --root "${durable_dir}" \
+    --outcome prepared_success
+
   ln -sfn "${INTERRUPTED_TARGET}" "${CASE_LIVE}.interrupted"
   mv -Tf "${CASE_LIVE}.interrupted" "${CASE_LIVE}"
 }
 
 run_deploy() {
   set +e
-  (
-    cd "${CASE_REPO}"
-    env -i \
-      PATH="${MOCK_BIN}:${SYSTEM_PATH}" \
-      REAL_GIT="${REAL_GIT}" \
-      HOME="${CASE_HOME}" \
-      LANG=C \
-      TMPDIR="${CASE_TMP}" \
-      MOCK_ALLOWED_ROOT="${CASE_DIR}" \
-      MOCK_BFF_SHA="${BFF_SHA}" \
-      MOCK_BFF_SHA_SEQUENCE="" \
-      MOCK_BFF_COMMIT_SEQUENCE="" \
-      MOCK_BFF_KNOWN_SEQUENCE="" \
-      MOCK_BFF_AUTH_MODE="strict" \
-      MOCK_BFF_AUTH_STUB="false" \
-      MOCK_EXTERNAL_SWITCH_TARGET="" \
-      MOCK_CALL_LOG="${CASE_CALL_LOG}" \
-      MOCK_FAIL_PROBE_PHASES="" \
-      MOCK_FAIL_DURABLE_RSYNC_ONCE="false" \
-      MOCK_FAIL_ORIGIN_DEV_ONCE="false" \
-      MOCK_FAIL_ORIGIN_DEV_SECOND_LOOKUP="false" \
-      MOCK_BAD_GITHUB_DIGEST="false" \
-      MOCK_PUBLIC_HEALTH_STATUS_SEQUENCE="" \
-      MOCK_TAMPER_ROLLBACK_PAIR="false" \
-      MOCK_PREVIOUS_TARGET="${PREVIOUS_TARGET}" \
-      MOCK_ADVANCE_DEV_AFTER_PROBE="false" \
-      MOCK_ADVANCED_DEV_SHA="" \
-      MOCK_ORIGIN_DIR="${CASE_ORIGIN}" \
-      PANTHEON_DEV_FE_HOST="https://fe.test" \
-      PANTHEON_BFF_BASE_URL="https://bff.test" \
-      PANTHEON_OLD_BFF_URL="https://old-bff.test" \
-      PANTHEON_DEV_FE_ROOT="${CASE_LIVE}" \
-      PANTHEON_DEV_FE_RELEASES_DIR="${CASE_RELEASES}" \
-      PANTHEON_DEV_FE_ROOT_PREFIX="${CASE_DIR}" \
-      PANTHEON_DEV_FE_RELEASES_PREFIX="${CASE_RELEASES}" \
-      PANTHEON_AUDIT_OUT_DIR="${CASE_AUDIT}" \
-      PANTHEON_DEPLOY_DURABLE_EVIDENCE_ROOT="${CASE_DURABLE}" \
-      PANTHEON_DEPLOY_DURABLE_EVIDENCE_PREFIX="${CASE_DIR}" \
-      PANTHEON_DEPLOY_CANDIDATE_DIR="${CANDIDATE_DIR}" \
-      PANTHEON_DEPLOY_CANDIDATE_SHA="${CANDIDATE_SHA}" \
-      PANTHEON_DEPLOY_AGORA_COMPAT_EVIDENCE="${CASE_AGORA_EVIDENCE}" \
-      PANTHEON_DEPLOY_REF="${CANDIDATE_SHA}" \
-      PANTHEON_DEPLOY_BRANCH="dev" \
-      PANTHEON_DEPLOY_GATE_RUN_ID="${GATE_RUN_ID}" \
-      PANTHEON_DEPLOY_GITHUB_ARTIFACT_DIGEST="sha256:${CANDIDATE_DIGEST}" \
-      PANTHEON_DEPLOY_EXPECTED_DEV_SHA="${CANDIDATE_SHA}" \
-      PANTHEON_DEPLOY_EMERGENCY_OVERRIDE="false" \
-      PANTHEON_DEPLOY_ROLLBACK_DRILL="false" \
-      PANTHEON_DEPLOY_OVERRIDE_REASON="" \
-      PANTHEON_DEPLOY_OVERRIDE_ACTOR="" \
-      PANTHEON_DEPLOY_PROFILE="read-only" \
-      PANTHEON_DEPLOY_PROOF_WINDOW_ACK="false" \
-      PANTHEON_DEPLOY_EXPECTED_PAIR_ID="${PAIR_ID}" \
-      PANTHEON_DEPLOY_REAL_WRITES="false" \
-      PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES="false" \
-      PANTHEON_DEPLOY_SKIP_PROBE="false" \
-      PANTHEON_DEPLOY_ALLOW_BOOTSTRAP="false" \
-      PANTHEON_DEPLOY_LOCK_FILE="${CASE_LOCK}" \
-      PANTHEON_DEPLOY_LOCK_PREFIX="${CASE_DIR}" \
-      PANTHEON_DEPLOY_RELEASE_INSTANCE="${CASE_NAME}" \
-      PANTHEON_DEV_FE_KEEP_RELEASES="8" \
-      VITE_BFF_DEV_BEARER_TOKEN="" \
-      GITHUB_RUN_ID="9001" \
-      GITHUB_RUN_ATTEMPT="1" \
-      "$@" \
-      bash scripts/deploy-dev-vm.sh
-  ) > "${RUN_OUTPUT}" 2>&1
-  RUN_STATUS=$?
+  local has_action=false
+  local arg
+  for arg in "$@"; do
+    if [[ "${arg}" == PANTHEON_DEPLOY_ACTION=* ]]; then
+      has_action=true
+      break
+    fi
+  done
+  if [[ "${has_action}" == "true" ]]; then
+    (
+      cd "${CASE_REPO}"
+      env -i \
+        PATH="${MOCK_BIN}:${SYSTEM_PATH}" \
+        REAL_GIT="${REAL_GIT}" \
+        HOME="${CASE_HOME}" \
+        LANG=C \
+        TMPDIR="${CASE_TMP}" \
+        MOCK_ALLOWED_ROOT="${CASE_DIR}" \
+        MOCK_BFF_SHA="${BFF_SHA}" \
+        MOCK_BFF_SHA_SEQUENCE="" \
+        MOCK_BFF_COMMIT_SEQUENCE="" \
+        MOCK_BFF_KNOWN_SEQUENCE="" \
+        MOCK_BFF_AUTH_MODE="strict" \
+        MOCK_BFF_AUTH_STUB="false" \
+        MOCK_EXTERNAL_SWITCH_TARGET="" \
+        MOCK_CALL_LOG="${CASE_CALL_LOG}" \
+        MOCK_FAIL_PROBE_PHASES="" \
+        MOCK_FAIL_DURABLE_RSYNC_ONCE="false" \
+        MOCK_FAIL_ORIGIN_DEV_ONCE="false" \
+        MOCK_FAIL_ORIGIN_DEV_SECOND_LOOKUP="false" \
+        MOCK_BAD_GITHUB_DIGEST="false" \
+        MOCK_PUBLIC_HEALTH_STATUS_SEQUENCE="" \
+        MOCK_TAMPER_ROLLBACK_PAIR="false" \
+        MOCK_PREVIOUS_TARGET="${PREVIOUS_TARGET}" \
+        MOCK_ADVANCE_DEV_AFTER_PROBE="false" \
+        MOCK_ADVANCED_DEV_SHA="" \
+        MOCK_ORIGIN_DIR="${CASE_ORIGIN}" \
+        PANTHEON_DEV_FE_HOST="https://fe.test" \
+        PANTHEON_BFF_BASE_URL="https://bff.test" \
+        PANTHEON_OLD_BFF_URL="https://old-bff.test" \
+        PANTHEON_DEV_FE_ROOT="${CASE_LIVE}" \
+        PANTHEON_DEV_FE_RELEASES_DIR="${CASE_RELEASES}" \
+        PANTHEON_DEV_FE_ROOT_PREFIX="${CASE_DIR}" \
+        PANTHEON_DEV_FE_RELEASES_PREFIX="${CASE_RELEASES}" \
+        PANTHEON_AUDIT_OUT_DIR="${CASE_AUDIT}" \
+        PANTHEON_DEPLOY_DURABLE_EVIDENCE_ROOT="${CASE_DURABLE}" \
+        PANTHEON_DEPLOY_DURABLE_EVIDENCE_PREFIX="${CASE_DIR}" \
+        PANTHEON_DEPLOY_CANDIDATE_DIR="${CANDIDATE_DIR}" \
+        PANTHEON_DEPLOY_CANDIDATE_SHA="${CANDIDATE_SHA}" \
+        PANTHEON_DEPLOY_AGORA_COMPAT_EVIDENCE="${CASE_AGORA_EVIDENCE}" \
+        PANTHEON_DEPLOY_REF="${CANDIDATE_SHA}" \
+        PANTHEON_DEPLOY_BRANCH="dev" \
+        PANTHEON_DEPLOY_GATE_RUN_ID="${GATE_RUN_ID}" \
+        PANTHEON_DEPLOY_GITHUB_ARTIFACT_DIGEST="sha256:${CANDIDATE_DIGEST}" \
+        PANTHEON_DEPLOY_EXPECTED_DEV_SHA="${CANDIDATE_SHA}" \
+        PANTHEON_DEPLOY_EMERGENCY_OVERRIDE="false" \
+        PANTHEON_DEPLOY_ROLLBACK_DRILL="false" \
+        PANTHEON_DEPLOY_OVERRIDE_REASON="" \
+        PANTHEON_DEPLOY_OVERRIDE_ACTOR="" \
+        PANTHEON_DEPLOY_PROFILE="read-only" \
+        PANTHEON_DEPLOY_PROOF_WINDOW_ACK="false" \
+        PANTHEON_DEPLOY_EXPECTED_PAIR_ID="${PAIR_ID}" \
+        PANTHEON_DEPLOY_REAL_WRITES="false" \
+        PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES="false" \
+        PANTHEON_DEPLOY_SKIP_PROBE="false" \
+        PANTHEON_DEPLOY_ALLOW_BOOTSTRAP="false" \
+        PANTHEON_DEPLOY_LOCK_FILE="${CASE_LOCK}" \
+        PANTHEON_DEPLOY_LOCK_PREFIX="${CASE_DIR}" \
+        PANTHEON_DEPLOY_RELEASE_INSTANCE="${CASE_NAME}" \
+        PANTHEON_DEPLOY_RETRY_DELAYS="0 0 0" \
+        PANTHEON_DEV_FE_KEEP_RELEASES="8" \
+        VITE_BFF_DEV_BEARER_TOKEN="" \
+        GITHUB_RUN_ID="9001" \
+        GITHUB_RUN_ATTEMPT="1" \
+        PANTHEON_DEPLOY_LEASE_OWNER="parent-controller" \
+        PANTHEON_DEPLOY_LEASE_EPOCH="1" \
+        PANTHEON_DEPLOY_LEASE_RUN_ID="9001" \
+        PANTHEON_DEPLOY_LEASE_DELEGATED="true" \
+        "$@" \
+        bash scripts/deploy-dev-vm.sh
+    ) > "${RUN_OUTPUT}" 2>&1
+    RUN_STATUS=$?
+  else
+    (
+      cd "${CASE_REPO}"
+      env -i \
+        PATH="${MOCK_BIN}:${SYSTEM_PATH}" \
+        REAL_GIT="${REAL_GIT}" \
+        HOME="${CASE_HOME}" \
+        LANG=C \
+        TMPDIR="${CASE_TMP}" \
+        MOCK_ALLOWED_ROOT="${CASE_DIR}" \
+        MOCK_BFF_SHA="${BFF_SHA}" \
+        MOCK_BFF_SHA_SEQUENCE="" \
+        MOCK_BFF_COMMIT_SEQUENCE="" \
+        MOCK_BFF_KNOWN_SEQUENCE="" \
+        MOCK_BFF_AUTH_MODE="strict" \
+        MOCK_BFF_AUTH_STUB="false" \
+        MOCK_EXTERNAL_SWITCH_TARGET="" \
+        MOCK_CALL_LOG="${CASE_CALL_LOG}" \
+        MOCK_FAIL_PROBE_PHASES="" \
+        MOCK_FAIL_DURABLE_RSYNC_ONCE="false" \
+        MOCK_FAIL_ORIGIN_DEV_ONCE="false" \
+        MOCK_FAIL_ORIGIN_DEV_SECOND_LOOKUP="false" \
+        MOCK_BAD_GITHUB_DIGEST="false" \
+        MOCK_PUBLIC_HEALTH_STATUS_SEQUENCE="" \
+        MOCK_TAMPER_ROLLBACK_PAIR="false" \
+        MOCK_PREVIOUS_TARGET="${PREVIOUS_TARGET}" \
+        MOCK_ADVANCE_DEV_AFTER_PROBE="false" \
+        MOCK_ADVANCED_DEV_SHA="" \
+        MOCK_ORIGIN_DIR="${CASE_ORIGIN}" \
+        PANTHEON_DEV_FE_HOST="https://fe.test" \
+        PANTHEON_BFF_BASE_URL="https://bff.test" \
+        PANTHEON_OLD_BFF_URL="https://old-bff.test" \
+        PANTHEON_DEV_FE_ROOT="${CASE_LIVE}" \
+        PANTHEON_DEV_FE_RELEASES_DIR="${CASE_RELEASES}" \
+        PANTHEON_DEV_FE_ROOT_PREFIX="${CASE_DIR}" \
+        PANTHEON_DEV_FE_RELEASES_PREFIX="${CASE_RELEASES}" \
+        PANTHEON_AUDIT_OUT_DIR="${CASE_AUDIT}" \
+        PANTHEON_DEPLOY_DURABLE_EVIDENCE_ROOT="${CASE_DURABLE}" \
+        PANTHEON_DEPLOY_DURABLE_EVIDENCE_PREFIX="${CASE_DIR}" \
+        PANTHEON_DEPLOY_CANDIDATE_DIR="${CANDIDATE_DIR}" \
+        PANTHEON_DEPLOY_CANDIDATE_SHA="${CANDIDATE_SHA}" \
+        PANTHEON_DEPLOY_AGORA_COMPAT_EVIDENCE="${CASE_AGORA_EVIDENCE}" \
+        PANTHEON_DEPLOY_REF="${CANDIDATE_SHA}" \
+        PANTHEON_DEPLOY_BRANCH="dev" \
+        PANTHEON_DEPLOY_GATE_RUN_ID="${GATE_RUN_ID}" \
+        PANTHEON_DEPLOY_GITHUB_ARTIFACT_DIGEST="sha256:${CANDIDATE_DIGEST}" \
+        PANTHEON_DEPLOY_EXPECTED_DEV_SHA="${CANDIDATE_SHA}" \
+        PANTHEON_DEPLOY_EMERGENCY_OVERRIDE="false" \
+        PANTHEON_DEPLOY_ROLLBACK_DRILL="false" \
+        PANTHEON_DEPLOY_OVERRIDE_REASON="" \
+        PANTHEON_DEPLOY_OVERRIDE_ACTOR="" \
+        PANTHEON_DEPLOY_PROFILE="read-only" \
+        PANTHEON_DEPLOY_PROOF_WINDOW_ACK="false" \
+        PANTHEON_DEPLOY_EXPECTED_PAIR_ID="${PAIR_ID}" \
+        PANTHEON_DEPLOY_REAL_WRITES="false" \
+        PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES="false" \
+        PANTHEON_DEPLOY_SKIP_PROBE="false" \
+        PANTHEON_DEPLOY_ALLOW_BOOTSTRAP="false" \
+        PANTHEON_DEPLOY_LOCK_FILE="${CASE_LOCK}" \
+        PANTHEON_DEPLOY_LOCK_PREFIX="${CASE_DIR}" \
+        PANTHEON_DEPLOY_RELEASE_INSTANCE="${CASE_NAME}" \
+        PANTHEON_DEPLOY_RETRY_DELAYS="0 0 0" \
+        PANTHEON_DEV_FE_KEEP_RELEASES="8" \
+        VITE_BFF_DEV_BEARER_TOKEN="" \
+        GITHUB_RUN_ID="9001" \
+        GITHUB_RUN_ATTEMPT="1" \
+        PANTHEON_DEPLOY_LEASE_OWNER="parent-controller" \
+        PANTHEON_DEPLOY_LEASE_EPOCH="1" \
+        PANTHEON_DEPLOY_LEASE_RUN_ID="9001" \
+        PANTHEON_DEPLOY_LEASE_DELEGATED="true" \
+        PANTHEON_DEPLOY_ACTION="prepare" \
+        "$@" \
+        bash scripts/deploy-dev-vm.sh
+    ) > "${RUN_OUTPUT}" 2>&1
+    RUN_STATUS=$?
+    if [[ "${RUN_STATUS}" -eq 0 ]]; then
+      local prepare_outcome=""
+      if [[ -f "${CASE_AUDIT}/deployment-outcome" ]]; then
+        prepare_outcome="$(<"${CASE_AUDIT}/deployment-outcome")"
+      elif [[ -f "${CASE_AUDIT}/prepared-outcome" ]]; then
+        prepare_outcome="$(<"${CASE_AUDIT}/prepared-outcome")"
+      fi
+      if [[ "${prepare_outcome}" != "accepted_noop" ]]; then
+        (
+        cd "${CASE_REPO}"
+        env -i \
+          PATH="${MOCK_BIN}:${SYSTEM_PATH}" \
+          REAL_GIT="${REAL_GIT}" \
+          HOME="${CASE_HOME}" \
+          LANG=C \
+          TMPDIR="${CASE_TMP}" \
+          MOCK_ALLOWED_ROOT="${CASE_DIR}" \
+          MOCK_BFF_SHA="${BFF_SHA}" \
+          MOCK_BFF_SHA_SEQUENCE="" \
+          MOCK_BFF_COMMIT_SEQUENCE="" \
+          MOCK_BFF_KNOWN_SEQUENCE="" \
+          MOCK_BFF_AUTH_MODE="strict" \
+          MOCK_BFF_AUTH_STUB="false" \
+          MOCK_EXTERNAL_SWITCH_TARGET="" \
+          MOCK_CALL_LOG="${CASE_CALL_LOG}" \
+          MOCK_FAIL_PROBE_PHASES="" \
+          MOCK_FAIL_DURABLE_RSYNC_ONCE="false" \
+          MOCK_FAIL_ORIGIN_DEV_ONCE="false" \
+          MOCK_FAIL_ORIGIN_DEV_SECOND_LOOKUP="false" \
+          MOCK_BAD_GITHUB_DIGEST="false" \
+          MOCK_PUBLIC_HEALTH_STATUS_SEQUENCE="" \
+          MOCK_TAMPER_ROLLBACK_PAIR="false" \
+          MOCK_PREVIOUS_TARGET="${PREVIOUS_TARGET}" \
+          MOCK_ADVANCE_DEV_AFTER_PROBE="false" \
+          MOCK_ADVANCED_DEV_SHA="" \
+          MOCK_ORIGIN_DIR="${CASE_ORIGIN}" \
+          PANTHEON_DEV_FE_HOST="https://fe.test" \
+          PANTHEON_BFF_BASE_URL="https://bff.test" \
+          PANTHEON_OLD_BFF_URL="https://old-bff.test" \
+          PANTHEON_DEV_FE_ROOT="${CASE_LIVE}" \
+          PANTHEON_DEV_FE_RELEASES_DIR="${CASE_RELEASES}" \
+          PANTHEON_DEV_FE_ROOT_PREFIX="${CASE_DIR}" \
+          PANTHEON_DEV_FE_RELEASES_PREFIX="${CASE_RELEASES}" \
+          PANTHEON_AUDIT_OUT_DIR="${CASE_AUDIT}" \
+          PANTHEON_DEPLOY_DURABLE_EVIDENCE_ROOT="${CASE_DURABLE}" \
+          PANTHEON_DEPLOY_DURABLE_EVIDENCE_PREFIX="${CASE_DIR}" \
+          PANTHEON_DEPLOY_CANDIDATE_DIR="${CANDIDATE_DIR}" \
+          PANTHEON_DEPLOY_CANDIDATE_SHA="${CANDIDATE_SHA}" \
+          PANTHEON_DEPLOY_AGORA_COMPAT_EVIDENCE="${CASE_AGORA_EVIDENCE}" \
+          PANTHEON_DEPLOY_REF="${CANDIDATE_SHA}" \
+          PANTHEON_DEPLOY_BRANCH="dev" \
+          PANTHEON_DEPLOY_GATE_RUN_ID="${GATE_RUN_ID}" \
+          PANTHEON_DEPLOY_GITHUB_ARTIFACT_DIGEST="sha256:${CANDIDATE_DIGEST}" \
+          PANTHEON_DEPLOY_EXPECTED_DEV_SHA="${CANDIDATE_SHA}" \
+          PANTHEON_DEPLOY_EMERGENCY_OVERRIDE="false" \
+          PANTHEON_DEPLOY_ROLLBACK_DRILL="false" \
+          PANTHEON_DEPLOY_OVERRIDE_REASON="" \
+          PANTHEON_DEPLOY_OVERRIDE_ACTOR="" \
+          PANTHEON_DEPLOY_PROFILE="read-only" \
+          PANTHEON_DEPLOY_PROOF_WINDOW_ACK="false" \
+          PANTHEON_DEPLOY_EXPECTED_PAIR_ID="${PAIR_ID}" \
+          PANTHEON_DEPLOY_REAL_WRITES="false" \
+          PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES="false" \
+          PANTHEON_DEPLOY_SKIP_PROBE="false" \
+          PANTHEON_DEPLOY_ALLOW_BOOTSTRAP="false" \
+          PANTHEON_DEPLOY_LOCK_FILE="${CASE_LOCK}" \
+          PANTHEON_DEPLOY_LOCK_PREFIX="${CASE_DIR}" \
+          PANTHEON_DEPLOY_RELEASE_INSTANCE="${CASE_NAME}" \
+          PANTHEON_DEPLOY_RETRY_DELAYS="0 0 0" \
+          PANTHEON_DEV_FE_KEEP_RELEASES="8" \
+          VITE_BFF_DEV_BEARER_TOKEN="" \
+          GITHUB_RUN_ID="9001" \
+          GITHUB_RUN_ATTEMPT="1" \
+          PANTHEON_DEPLOY_LEASE_OWNER="parent-controller" \
+          PANTHEON_DEPLOY_LEASE_EPOCH="1" \
+          PANTHEON_DEPLOY_LEASE_RUN_ID="9001" \
+          PANTHEON_DEPLOY_LEASE_DELEGATED="true" \
+          PANTHEON_DEPLOY_ACTION="activate" \
+          "$@" \
+          bash scripts/deploy-dev-vm.sh
+      ) >> "${RUN_OUTPUT}" 2>&1
+      RUN_STATUS=$?
+      fi
+    fi
+  fi
   set -e
 }
 
 run_write_deploy() {
-  run_deploy \
-    GITHUB_EVENT_NAME=workflow_dispatch \
-    PANTHEON_DEPLOY_PROFILE=write-proof \
-    PANTHEON_DEPLOY_PROOF_WINDOW_ACK=true \
-    PANTHEON_DEPLOY_REAL_WRITES=true \
-    PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES=true \
-    "$@"
+  local has_action=false
+  local arg
+  for arg in "$@"; do
+    if [[ "${arg}" == PANTHEON_DEPLOY_ACTION=* ]]; then
+      has_action=true
+      break
+    fi
+  done
+  if [[ "${has_action}" == "true" ]]; then
+    run_deploy \
+      GITHUB_EVENT_NAME=workflow_dispatch \
+      PANTHEON_DEPLOY_PROFILE=write-proof \
+      PANTHEON_DEPLOY_PROOF_WINDOW_ACK=true \
+      "$@"
+  else
+    run_deploy \
+      GITHUB_EVENT_NAME=workflow_dispatch \
+      PANTHEON_DEPLOY_PROFILE=write-proof \
+      PANTHEON_DEPLOY_PROOF_WINDOW_ACK=true \
+      PANTHEON_DEPLOY_REAL_WRITES=false \
+      PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES=false \
+      PANTHEON_DEPLOY_ACTION=prepare \
+      "$@"
+    if [[ "${RUN_STATUS}" -eq 0 ]]; then
+      run_deploy \
+        GITHUB_EVENT_NAME=workflow_dispatch \
+        PANTHEON_DEPLOY_PROFILE=write-proof \
+        PANTHEON_DEPLOY_PROOF_WINDOW_ACK=true \
+        PANTHEON_DEPLOY_REAL_WRITES=true \
+        PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES=true \
+        PANTHEON_DEPLOY_ACTION=activate \
+        "$@"
+    fi
+  fi
 }
 
 run_operator_live_deploy() {
-  run_deploy \
-    GITHUB_EVENT_NAME=workflow_dispatch \
-    PANTHEON_DEPLOY_PROFILE=operator-live \
-    PANTHEON_DEPLOY_PROOF_WINDOW_ACK=false \
-    PANTHEON_DEPLOY_REAL_WRITES=true \
-    PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES=false \
-    "$@"
+  local has_action=false
+  local arg
+  for arg in "$@"; do
+    if [[ "${arg}" == PANTHEON_DEPLOY_ACTION=* ]]; then
+      has_action=true
+      break
+    fi
+  done
+  if [[ "${has_action}" == "true" ]]; then
+    run_deploy \
+      GITHUB_EVENT_NAME=workflow_dispatch \
+      PANTHEON_DEPLOY_PROFILE=operator-live \
+      PANTHEON_DEPLOY_PROOF_WINDOW_ACK=false \
+      "$@"
+  else
+    run_deploy \
+      GITHUB_EVENT_NAME=workflow_dispatch \
+      PANTHEON_DEPLOY_PROFILE=operator-live \
+      PANTHEON_DEPLOY_PROOF_WINDOW_ACK=false \
+      PANTHEON_DEPLOY_REAL_WRITES=false \
+      PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES=false \
+      PANTHEON_DEPLOY_ACTION=prepare \
+      "$@"
+    if [[ "${RUN_STATUS}" -eq 0 ]]; then
+      run_deploy \
+        GITHUB_EVENT_NAME=workflow_dispatch \
+        PANTHEON_DEPLOY_PROFILE=operator-live \
+        PANTHEON_DEPLOY_PROOF_WINDOW_ACK=false \
+        PANTHEON_DEPLOY_REAL_WRITES=true \
+        PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES=false \
+        PANTHEON_DEPLOY_ACTION=activate \
+        "$@"
+    fi
+  fi
 }
 
 run_restore_deploy() {
@@ -890,6 +1353,7 @@ run_restore_deploy() {
     PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES=false \
     PANTHEON_DEPLOY_RELEASE_INSTANCE="${CASE_NAME}-restore" \
     PANTHEON_AUDIT_OUT_DIR="${CASE_DIR}/audit-restore" \
+    PANTHEON_DEPLOY_ACTION=restore \
     "$@"
 }
 
@@ -1560,16 +2024,39 @@ test_external_restore_of_previous_is_reprobed() {
 
 test_durable_evidence_failure_rolls_back_and_refinalizes() {
   setup_case durable-evidence-retry
-  run_deploy MOCK_FAIL_DURABLE_RSYNC_ONCE=true
+  run_deploy PANTHEON_DEPLOY_ACTION=prepare
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "prepare should succeed"
+  run_deploy PANTHEON_DEPLOY_ACTION=activate MOCK_FAIL_DURABLE_RSYNC_ONCE=true
   [[ "${RUN_STATUS}" -ne 0 ]] || die "durable evidence failure unexpectedly accepted candidate"
   assert_previous_is_live
   assert_probe_called post_switch
   assert_probe_called rollback
   assert_summary_outcome rolled_back
+  [[ -f "${CASE_AUDIT}/deployment-outcome" && "$(<"${CASE_AUDIT}/deployment-outcome")" == "rolled_back" ]] || \
+    die "rollback did not overwrite deployment-outcome with rolled_back"
+  [[ -f "${CASE_AUDIT}/prepared-outcome" && "$(<"${CASE_AUDIT}/prepared-outcome")" == "prepared_success" ]] || \
+    die "rollback did not preserve prepared_success in prepared-outcome"
   grep -Fq '"type":"release.completed"' "${CASE_AUDIT}/evidence.jsonl" || \
     show_deploy_failure "acceptance terminal was not reached before durable failure"
   grep -Fq '"type":"release.failed"' "${CASE_AUDIT}/evidence.jsonl" || \
     show_deploy_failure "durable failure was not re-finalized as a rollback"
+  verify_evidence_pair
+}
+
+test_durable_evidence_prepare_failure_rejects_candidate() {
+  setup_case durable-evidence-prepare-failure
+  run_deploy PANTHEON_DEPLOY_ACTION=prepare MOCK_FAIL_DURABLE_RSYNC_ONCE=true
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "durable evidence failure during prepare unexpectedly accepted candidate"
+  assert_previous_is_live
+  assert_previous_manifest_unchanged
+  assert_probe_called candidate_pre_switch
+  assert_probe_not_called post_switch
+  assert_probe_not_called rollback
+  assert_summary_outcome rejected_before_switch
+  [[ -f "${CASE_AUDIT}/deployment-outcome" && "$(<"${CASE_AUDIT}/deployment-outcome")" == "rejected_before_switch" ]] || \
+    die "failed prepare did not record rejected_before_switch in deployment-outcome"
+  [[ -f "${CASE_AUDIT}/prepared-outcome" && "$(<"${CASE_AUDIT}/prepared-outcome")" == "rejected_before_switch" ]] || \
+    die "failed prepare did not record rejected_before_switch in prepared-outcome"
   verify_evidence_pair
 }
 
@@ -1790,12 +2277,45 @@ test_exact_candidate_noop_revalidates_live_release() {
     "${CASE_AUDIT}/evidence.jsonl" || \
     show_deploy_failure "no-op evidence omitted the incoming equivalent gate"
   verify_evidence_pair
+  [[ -f "${CASE_AUDIT}/deployment-outcome" ]] || show_deploy_failure "deployment-outcome missing in case audit"
+  [[ "$(<"${CASE_AUDIT}/deployment-outcome")" == "accepted_noop" ]] || show_deploy_failure "deployment-outcome should be accepted_noop"
+  [[ -f "${CASE_AUDIT}/prepared-outcome" ]] || show_deploy_failure "prepared-outcome missing in case audit"
+  [[ "$(<"${CASE_AUDIT}/prepared-outcome")" == "accepted_noop" ]] || show_deploy_failure "prepared-outcome should be accepted_noop"
+  [[ ! -f "${CASE_AUDIT}/prepared-release-dir" ]] || show_deploy_failure "no-op prepare must not emit prepared-release-dir"
+  [[ ! -f "${CASE_AUDIT}/prepared-receipt.json" ]] || show_deploy_failure "no-op prepare must not emit prepared-receipt.json"
+  [[ ! -f "${PREVIOUS_TARGET}/.prepared-receipt.json" ]] || show_deploy_failure "live release must not have prepared receipt"
+
+  local fresh_audit="${CASE_DIR}/audit-activate-no-locator"
+  mkdir -p "${fresh_audit}"
+  run_deploy PANTHEON_DEPLOY_ACTION=activate "PANTHEON_AUDIT_OUT_DIR=${fresh_audit}"
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "activate on already live candidate with fresh audit should succeed"
+  assert_previous_is_live
+  [[ -f "${fresh_audit}/deployment-outcome" ]] || show_deploy_failure "deployment-outcome missing in fresh activate audit"
+  [[ "$(<"${fresh_audit}/deployment-outcome")" == "accepted_noop" ]] || show_deploy_failure "fresh activate outcome should be accepted_noop"
+  [[ ! -f "${fresh_audit}/prepared-release-dir" ]] || show_deploy_failure "activate must not emit prepared-release-dir"
+  [[ ! -f "${PREVIOUS_TARGET}/.prepared-receipt.json" ]] || show_deploy_failure "must not write prepared receipt into live release"
+
+  local locator_audit="${CASE_DIR}/audit-activate-locator"
+  mkdir -p "${locator_audit}"
+  run_deploy PANTHEON_DEPLOY_ACTION=activate "PANTHEON_AUDIT_OUT_DIR=${locator_audit}" "PANTHEON_DEPLOY_RELEASE_DIR=${PREVIOUS_TARGET}"
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "activate on live release with locator should succeed"
+  assert_previous_is_live
+  [[ -f "${locator_audit}/deployment-outcome" ]] || show_deploy_failure "deployment-outcome missing in locator activate audit"
+  [[ "$(<"${locator_audit}/deployment-outcome")" == "accepted_noop" ]] || show_deploy_failure "locator activate outcome should be accepted_noop"
+  [[ ! -f "${PREVIOUS_TARGET}/.prepared-receipt.json" ]] || show_deploy_failure "must not mutate live release bytes"
+
+  run_deploy PANTHEON_DEPLOY_ACTION=activate
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "activate on live release reusing case audit should succeed"
+  assert_previous_is_live
+  [[ "$(<"${CASE_AUDIT}/deployment-outcome")" == "accepted_noop" ]] || show_deploy_failure "activate outcome should be accepted_noop"
+  [[ ! -f "${CASE_AUDIT}/prepared-release-dir" ]] || show_deploy_failure "activate must not emit prepared-release-dir"
+  [[ ! -f "${PREVIOUS_TARGET}/.prepared-receipt.json" ]] || show_deploy_failure "must not write prepared receipt into live release"
 }
 
 test_interrupted_candidate_recovers_or_rolls_back() {
   setup_case interrupted-roll-forward
   select_interrupted_candidate
-  run_deploy
+  run_deploy PANTHEON_DEPLOY_ACTION=activate "PANTHEON_DEPLOY_RELEASE_DIR=${INTERRUPTED_TARGET}"
   [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "interrupted candidate did not roll forward"
   [[ "$(readlink -f "${CASE_LIVE}")" == "${INTERRUPTED_TARGET}" ]] || die "recovery changed the valid candidate target"
   [[ "$(json_field "${INTERRUPTED_TARGET}/deployment.json" deploymentState)" == "accepted" ]] || die "recovery did not repair deploymentState"
@@ -1807,7 +2327,7 @@ test_interrupted_candidate_recovers_or_rolls_back() {
 
   setup_case interrupted-rollback
   select_interrupted_candidate
-  run_deploy MOCK_FAIL_PROBE_PHASES=noop
+  run_deploy PANTHEON_DEPLOY_ACTION=activate "PANTHEON_DEPLOY_RELEASE_DIR=${INTERRUPTED_TARGET}" MOCK_FAIL_PROBE_PHASES=noop
   [[ "${RUN_STATUS}" -ne 0 ]] || die "failed interrupted candidate probe unexpectedly succeeded"
   assert_previous_is_live
   assert_probe_called noop
@@ -1839,6 +2359,41 @@ NODE
   assert_summary_outcome recovery_rolled_back
   grep -Fq "must be restored before a different candidate" "${RUN_OUTPUT}" || \
     show_deploy_failure "missing interrupted predecessor recovery message"
+  verify_evidence_pair
+
+  setup_case interrupted-missing-receipt
+  select_interrupted_candidate
+  rm "${INTERRUPTED_TARGET}/.prepared-receipt.json"
+  run_deploy PANTHEON_DEPLOY_ACTION=activate "PANTHEON_DEPLOY_RELEASE_DIR=${INTERRUPTED_TARGET}"
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "interrupted candidate accepted without receipt"
+  [[ "$(json_field "${INTERRUPTED_TARGET}/deployment.json" deploymentState)" == "candidate" ]] || die "interrupted candidate mutated without receipt"
+  assert_previous_is_live
+  assert_summary_outcome recovery_rolled_back
+  verify_evidence_pair
+
+  setup_case interrupted-changed-epoch
+  select_interrupted_candidate
+  run_deploy PANTHEON_DEPLOY_ACTION=activate "PANTHEON_DEPLOY_RELEASE_DIR=${INTERRUPTED_TARGET}" PANTHEON_DEPLOY_LEASE_EPOCH=2
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "interrupted candidate accepted under mismatched epoch"
+  [[ "$(json_field "${INTERRUPTED_TARGET}/deployment.json" deploymentState)" == "candidate" ]] || die "interrupted candidate mutated under mismatched epoch"
+  assert_previous_is_live
+  assert_summary_outcome recovery_rolled_back
+  verify_evidence_pair
+
+  setup_case interrupted-tampered-receipt
+  select_interrupted_candidate
+  "${REAL_NODE}" -e '
+    const fs = require("node:fs");
+    const file = process.argv[1];
+    const r = JSON.parse(fs.readFileSync(file, "utf8"));
+    r.lease.epoch = 99;
+    fs.writeFileSync(file, JSON.stringify(r, null, 2) + "\n");
+  ' "${INTERRUPTED_TARGET}/.prepared-receipt.json"
+  run_deploy PANTHEON_DEPLOY_ACTION=activate "PANTHEON_DEPLOY_RELEASE_DIR=${INTERRUPTED_TARGET}"
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "interrupted candidate accepted with tampered receipt"
+  [[ "$(json_field "${INTERRUPTED_TARGET}/deployment.json" deploymentState)" == "candidate" ]] || die "interrupted candidate mutated with tampered receipt"
+  assert_previous_is_live
+  assert_summary_outcome recovery_rolled_back
   verify_evidence_pair
 }
 
@@ -2034,35 +2589,35 @@ NODE
 test_restore_accepts_current_read_only_accepted_release() {
   local live_target
   setup_case paired-restore-already-safe
-  # Model the controller-abort path: the requested pair is already served in
-  # its normal accepted read-only state, so restore must be a safe no-op.
-  rm -rf -- "${PREVIOUS_TARGET:?}"/*
-  cp -a "${CANDIDATE_DIR}/dist/." "${PREVIOUS_TARGET}/"
-  "${REAL_NODE}" - "${PREVIOUS_TARGET}/deployment.json" "${PAIR_ID}" "${CANDIDATE_DIGEST}" "${OPERATOR_LIVE_DIGEST}" "${WRITE_PROOF_DIGEST}" <<'NODE'
-const fs = require("node:fs");
-const [file, pairId, readOnlyDigest, operatorLiveDigest, writeProofDigest] = process.argv.slice(2);
-const payload = JSON.parse(fs.readFileSync(file, "utf8"));
-payload.profile = "read-only";
-payload.deploymentProfile = "read-only";
-payload.pairId = pairId;
-payload.pair = {
-  pairId,
-  readOnlyArtifactDigestSha256: readOnlyDigest,
-  operatorLiveArtifactDigestSha256: operatorLiveDigest,
-  writeProofArtifactDigestSha256: writeProofDigest,
-};
-payload.deploymentState = "accepted";
-payload.releaseName = "previous";
-payload.githubArtifactDigest = `sha256:${payload.artifactDigestSha256}`;
-fs.writeFileSync(file, `${JSON.stringify(payload, null, 2)}\n`);
-NODE
-
-  run_restore_deploy
-  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "restore of an already-safe accepted release should succeed"
+  # Model the controller-abort path: deploy a genuine read-only release with its
+  # normal generated receipt so the requested pair is already served in its
+  # accepted read-only state.
+  run_deploy
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "normal read-only deploy failed"
   assert_live_profile read-only accepted
   live_target="$(readlink -f "${CASE_LIVE}")"
-  [[ "${live_target}" == "${PREVIOUS_TARGET}" ]] || \
-    show_deploy_failure "already-safe restore unexpectedly switched the live target"
+  [[ -f "${live_target}/.prepared-receipt.json" ]] || \
+    show_deploy_failure "prepared receipt missing in deployed read-only release"
+
+  run_write_deploy PANTHEON_DEPLOY_ACTION=prepare GITHUB_RUN_ID=9002 PANTHEON_DEPLOY_LEASE_RUN_ID=9002 PANTHEON_DEPLOY_RELEASE_INSTANCE=next-proof PANTHEON_AUDIT_OUT_DIR="${CASE_DIR}/audit-next-proof" PANTHEON_DEPLOY_REAL_WRITES=false PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES=false
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "next proof prepare failed"
+  [[ "$(readlink -f "${CASE_LIVE}")" == "${live_target}" ]] || show_deploy_failure "prepare changed incumbent"
+  echo "confirmed: read-only run 9001 accepted; write-proof run 9002 prepared; incumbent untouched"
+  run_restore_deploy GITHUB_RUN_ID=9002 PANTHEON_DEPLOY_LEASE_RUN_ID=9002
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "restore of an already-safe accepted release with receipt should succeed"
+  assert_live_profile read-only accepted
+  [[ "$(readlink -f "${CASE_LIVE}")" == "${live_target}" ]] || \
+    show_deploy_failure "already-safe restore with receipt unexpectedly switched the live target"
+
+  # Also preserve coverage for an already-safe release lacking a receipt (e.g. legacy fixture)
+  chmod u+w "${live_target}"
+  rm -f "${live_target}/.prepared-receipt.json"
+  chmod 0555 "${live_target}"
+  run_restore_deploy
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "restore of an already-safe accepted release without receipt should succeed"
+  assert_live_profile read-only accepted
+  [[ "$(readlink -f "${CASE_LIVE}")" == "${live_target}" ]] || \
+    show_deploy_failure "already-safe restore without receipt unexpectedly switched the live target"
 }
 
 test_restore_network_failure_preserves_safe_release() {
@@ -2244,6 +2799,539 @@ test_write_proof_advanced_dev_served_candidate_and_guards() {
   verify_evidence_pair
 }
 
+test_prepared_evidence_missing_copy_rejected() {
+  setup_case prepared-evidence-missing
+  run_deploy PANTHEON_DEPLOY_ACTION=prepare
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "prepare should succeed"
+  rm -rf -- "${CASE_DURABLE}"
+
+  run_deploy PANTHEON_DEPLOY_ACTION=activate
+  [[ "${RUN_STATUS}" -ne 0 ]] || show_deploy_failure "activation accepted without its durable prepared copy"
+  assert_previous_is_live
+  assert_previous_manifest_unchanged
+}
+
+test_prepared_evidence_repeated_prepare() {
+  local release_dir receipt_snapshot
+  setup_case prepared-evidence-repeated
+  run_deploy PANTHEON_DEPLOY_ACTION=prepare
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "initial prepare should succeed"
+  release_dir="$(<"${CASE_AUDIT}/prepared-release-dir")"
+  receipt_snapshot="${CASE_DIR}/original-prepared-receipt.json"
+  cp "${release_dir}/.prepared-receipt.json" "${receipt_snapshot}"
+
+  run_deploy PANTHEON_DEPLOY_ACTION=prepare
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "repeated prepare should succeed"
+  [[ "$(<"${CASE_AUDIT}/prepared-release-dir")" == "${release_dir}" ]] || \
+    show_deploy_failure "repeated prepare installed a different release"
+  cmp -s "${receipt_snapshot}" "${release_dir}/.prepared-receipt.json" || \
+    show_deploy_failure "repeated prepare changed the admitted receipt or expiry"
+  assert_previous_is_live
+  assert_previous_manifest_unchanged
+  assert_summary_outcome prepared_success
+  verify_evidence_pair
+}
+
+test_prepared_evidence_invalid_copy_rejected() {
+  local kind="$1" release_dir durable_receipt
+  setup_case "prepared-evidence-${kind}"
+  run_deploy PANTHEON_DEPLOY_ACTION=prepare
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "prepare should succeed"
+  release_dir="$(<"${CASE_AUDIT}/prepared-release-dir")"
+  durable_receipt="${CASE_DURABLE}/$(basename -- "${release_dir}")/prepared-receipt.json"
+  [[ -f "${durable_receipt}" ]] || show_deploy_failure "immutable prepared snapshot is missing"
+  if [[ "${kind}" == "symlink" ]]; then
+    rm -- "${durable_receipt}"
+    ln -s "${release_dir}/.prepared-receipt.json" "${durable_receipt}"
+  else
+    printf '\n' >> "${durable_receipt}"
+  fi
+  run_deploy PANTHEON_DEPLOY_ACTION=activate
+  [[ "${RUN_STATUS}" -ne 0 ]] || show_deploy_failure "activation accepted invalid durable prepared evidence"
+  assert_previous_is_live
+  assert_previous_manifest_unchanged
+}
+
+test_prepared_evidence_rejected_replay_preserves_admission() {
+  local release_dir durable_dir original_hashes
+  setup_case prepared-evidence-rejected-replay
+  run_deploy PANTHEON_DEPLOY_ACTION=prepare
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "prepare should succeed"
+  release_dir="$(<"${CASE_AUDIT}/prepared-release-dir")"
+  durable_dir="${CASE_DURABLE}/$(basename -- "${release_dir}")"
+  original_hashes="$(sha256sum "${durable_dir}/prepared-receipt.json" "${durable_dir}/evidence.json" "${durable_dir}/evidence.jsonl")"
+  run_deploy PANTHEON_DEPLOY_ACTION=prepare PANTHEON_DEPLOY_LEASE_EPOCH=2
+  [[ "${RUN_STATUS}" -ne 0 ]] || show_deploy_failure "repeated prepare accepted a different lease epoch"
+  [[ "$(sha256sum "${durable_dir}/prepared-receipt.json" "${durable_dir}/evidence.json" "${durable_dir}/evidence.jsonl")" == "${original_hashes}" ]] || \
+    show_deploy_failure "rejected replay overwrote the immutable admission"
+  assert_previous_is_live
+  assert_previous_manifest_unchanged
+  run_deploy PANTHEON_DEPLOY_ACTION=prepare
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "valid repeated prepare could not recover after rejected replay"
+  cmp -s "${release_dir}/.prepared-receipt.json" "${durable_dir}/prepared-receipt.json" || \
+    show_deploy_failure "recovered prepare changed the original receipt"
+}
+
+test_prepared_evidence_replay_rechecks_mandatory_gate() {
+  local release_dir original_receipt
+  setup_case prepared-evidence-recheck-gate
+  run_deploy PANTHEON_DEPLOY_ACTION=prepare
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "prepare should succeed"
+  release_dir="$(<"${CASE_AUDIT}/prepared-release-dir")"
+  original_receipt="$(sha256sum "${release_dir}/.prepared-receipt.json")"
+  run_deploy PANTHEON_DEPLOY_ACTION=prepare MOCK_OPENCLAW_CONTRACT_STATUS=failed
+  [[ "${RUN_STATUS}" -ne 0 ]] || show_deploy_failure "repeated prepare ignored the new failed mandatory gate"
+  [[ "$(sha256sum "${release_dir}/.prepared-receipt.json")" == "${original_receipt}" ]] || show_deploy_failure "failed gate changed the prepared receipt"
+  assert_previous_is_live
+  assert_previous_manifest_unchanged
+}
+
+test_prepared_evidence_prepare_never_recovers_public_candidate() {
+  local original_manifest
+  setup_case prepared-evidence-interrupted
+  select_interrupted_candidate
+  original_manifest="${CASE_DIR}/interrupted-manifest.json"
+  cp "${INTERRUPTED_TARGET}/deployment.json" "${original_manifest}"
+  run_deploy PANTHEON_DEPLOY_ACTION=prepare
+  [[ "${RUN_STATUS}" -ne 0 ]] || show_deploy_failure "prepare recovered an unaccepted public candidate"
+  [[ "$(readlink -f "${CASE_LIVE}")" == "${INTERRUPTED_TARGET}" ]] || show_deploy_failure "prepare moved the interrupted public symlink"
+  cmp -s "${original_manifest}" "${INTERRUPTED_TARGET}/deployment.json" || show_deploy_failure "prepare rewrote the interrupted public manifest"
+  assert_probe_not_called recovery_rollback
+  assert_summary_outcome rejected_before_switch
+}
+
+test_prepared_evidence_fresh_audit_replay() {
+  local release_dir receipt_snapshot
+  setup_case prepared-evidence-fresh-audit
+  run_deploy PANTHEON_DEPLOY_ACTION=prepare
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "initial prepare should succeed"
+  release_dir="$(<"${CASE_AUDIT}/prepared-release-dir")"
+  receipt_snapshot="${CASE_DIR}/original-prepared-receipt.json"
+  cp "${release_dir}/.prepared-receipt.json" "${receipt_snapshot}"
+  CASE_AUDIT="${CASE_DIR}/fresh-audit"
+
+  run_deploy PANTHEON_DEPLOY_ACTION=prepare "PANTHEON_DEPLOY_RELEASE_DIR=${release_dir}"
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "fresh process prepare should reuse the exact locator"
+  [[ "$(<"${CASE_AUDIT}/prepared-release-dir")" == "${release_dir}" ]] || \
+    show_deploy_failure "fresh process ignored the exact release locator"
+  cmp -s "${receipt_snapshot}" "${release_dir}/.prepared-receipt.json" || \
+    show_deploy_failure "fresh process rewrote the prepared receipt"
+  run_deploy PANTHEON_DEPLOY_ACTION=activate "PANTHEON_DEPLOY_RELEASE_DIR=${release_dir}"
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "fresh process activation should use retained prepared evidence"
+  assert_live_profile read-only accepted
+  verify_evidence_pair
+}
+
+test_prepared_evidence_live_noop_prepare() {
+  local release_dir receipt_snapshot manifest_snapshot
+  setup_case prepared-evidence-noop
+  run_deploy
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "initial deployment should succeed"
+  release_dir="$(readlink -f "${CASE_LIVE}")"
+  receipt_snapshot="${CASE_DIR}/original-prepared-receipt.json"
+  manifest_snapshot="${CASE_DIR}/original-accepted-manifest.json"
+  cp "${release_dir}/.prepared-receipt.json" "${receipt_snapshot}"
+  cp "${release_dir}/deployment.json" "${manifest_snapshot}"
+  CASE_AUDIT="${CASE_DIR}/fresh-audit"
+
+  run_deploy PANTHEON_DEPLOY_ACTION=prepare "PANTHEON_DEPLOY_RELEASE_DIR=${release_dir}"
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "no-op prepare should return the existing prepared receipt"
+  [[ "$(readlink -f "${CASE_LIVE}")" == "${release_dir}" ]] || show_deploy_failure "no-op prepare moved the public symlink"
+  cmp -s "${receipt_snapshot}" "${release_dir}/.prepared-receipt.json" || show_deploy_failure "no-op prepare rewrote the receipt"
+  cmp -s "${manifest_snapshot}" "${release_dir}/deployment.json" || show_deploy_failure "no-op prepare rewrote the public manifest"
+  assert_summary_outcome prepared_success
+  verify_evidence_pair
+}
+
+test_prepared_evidence_fresh_activation() {
+  local release_dir
+  setup_case prepared-evidence-fresh-activation
+  run_deploy PANTHEON_DEPLOY_ACTION=prepare
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "prepare should succeed"
+  release_dir="$(<"${CASE_AUDIT}/prepared-release-dir")"
+  CASE_AUDIT="${CASE_DIR}/fresh-activation-audit"
+  run_deploy PANTHEON_DEPLOY_ACTION=activate "PANTHEON_DEPLOY_RELEASE_DIR=${release_dir}"
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "activation incorrectly required the previous process audit directory"
+  cmp -s "${CASE_AUDIT}/prepared-receipt.json" "${release_dir}/.prepared-receipt.json" || show_deploy_failure "fresh activation omitted the original admission from its audit"
+  assert_live_profile read-only accepted
+  verify_evidence_pair
+}
+
+test_prepared_evidence_write_prepare_replay() {
+  local release_dir safe_dir original_receipt original_safe_manifest
+  setup_case prepared-evidence-write-replay
+  run_write_deploy PANTHEON_DEPLOY_ACTION=prepare
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "write prepare should succeed"
+  release_dir="$(<"${CASE_AUDIT}/prepared-release-dir")"
+  safe_dir="${release_dir%-write-proof}-read-only"
+  original_receipt="$(sha256sum "${release_dir}/.prepared-receipt.json")"
+  original_safe_manifest="$(sha256sum "${safe_dir}/deployment.json")"
+  run_write_deploy PANTHEON_DEPLOY_ACTION=prepare
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "write prepare replay should reuse the qualified sibling"
+  [[ "$(<"${CASE_AUDIT}/prepared-release-dir")" == "${release_dir}" ]] || show_deploy_failure "write prepare replay changed the exact release"
+  [[ "$(sha256sum "${release_dir}/.prepared-receipt.json")" == "${original_receipt}" ]] || show_deploy_failure "write prepare replay changed its receipt"
+  [[ "$(sha256sum "${safe_dir}/deployment.json")" == "${original_safe_manifest}" ]] || show_deploy_failure "write prepare replay changed its safe sibling"
+  run_write_deploy PANTHEON_DEPLOY_ACTION=activate PANTHEON_DEPLOY_REAL_WRITES=true PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES=true
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "write activation failed after prepare replay"
+  assert_live_profile write-proof accepted
+  verify_evidence_pair
+}
+
+test_exact_pair_protocol_prepare_leaves_incumbent_untouched() {
+  local release_dir receipt_file
+  setup_case exact-pair-prepare
+  run_deploy PANTHEON_DEPLOY_ACTION=prepare
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "prepare should succeed"
+  assert_previous_is_live
+  assert_previous_manifest_unchanged
+
+  release_dir="$(<"${CASE_AUDIT}/prepared-release-dir")"
+  [[ -d "${release_dir}" ]] || show_deploy_failure "prepared release directory missing"
+  receipt_file="${release_dir}/.prepared-receipt.json"
+  [[ -f "${receipt_file}" ]] || show_deploy_failure "prepared receipt missing"
+  [[ "$(json_field "${receipt_file}" status)" == "prepared_success" ]] || \
+    show_deploy_failure "prepared receipt status is not prepared_success"
+  [[ "$(json_field "${receipt_file}" schemaVersion)" == "pantheon.release.prepared-receipt.v1" ]] || \
+    show_deploy_failure "prepared receipt schemaVersion is invalid"
+  [[ "$(json_field "${receipt_file}" lease.epoch)" == "1" ]] || \
+    show_deploy_failure "prepared receipt lease epoch invalid"
+  assert_summary_outcome prepared_success
+}
+
+test_exact_pair_protocol_activate_in_new_process_without_rebuild() {
+  setup_case exact-pair-activate
+  run_deploy PANTHEON_DEPLOY_ACTION=prepare
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "prepare should succeed"
+  assert_previous_is_live
+
+  run_deploy PANTHEON_DEPLOY_ACTION=activate
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "activate should succeed"
+  assert_live_profile read-only accepted
+  assert_summary_outcome accepted
+  [[ -f "${CASE_AUDIT}/deployment-outcome" && "$(<"${CASE_AUDIT}/deployment-outcome")" == "accepted" ]] || \
+    die "activate did not record accepted deployment-outcome"
+  [[ -f "${CASE_AUDIT}/prepared-outcome" && "$(<"${CASE_AUDIT}/prepared-outcome")" == "prepared_success" ]] || \
+    die "activate did not preserve prepared_success in prepared-outcome"
+}
+
+test_exact_pair_protocol_lease_epoch_mismatch_rejected() {
+  setup_case exact-pair-lease-mismatch
+  run_deploy PANTHEON_DEPLOY_ACTION=prepare PANTHEON_DEPLOY_LEASE_EPOCH=1
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "prepare should succeed"
+  assert_previous_is_live
+
+  run_deploy PANTHEON_DEPLOY_ACTION=activate PANTHEON_DEPLOY_LEASE_EPOCH=2
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "lease epoch mismatch unexpectedly succeeded"
+  assert_previous_is_live
+}
+
+test_exact_pair_protocol_predecessor_cas_mismatch_rejected() {
+  local foreign_target
+  setup_case exact-pair-cas-mismatch
+  run_deploy PANTHEON_DEPLOY_ACTION=prepare
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "prepare should succeed"
+  assert_previous_is_live
+
+  foreign_target="${CASE_RELEASES}/foreign-release"
+  mkdir -p "${foreign_target}"
+  ln -sfn "${foreign_target}" "${CASE_LIVE}"
+
+  run_deploy PANTHEON_DEPLOY_ACTION=activate
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "predecessor CAS mismatch unexpectedly succeeded"
+}
+
+test_exact_pair_protocol_idempotent_replay() {
+  setup_case exact-pair-replay
+  run_deploy
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "initial deploy should succeed"
+  assert_live_profile read-only accepted
+
+  run_deploy PANTHEON_DEPLOY_ACTION=activate
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "idempotent replay should succeed"
+  assert_live_profile read-only accepted
+}
+
+test_exact_pair_protocol_one_shot_bypass_retired() {
+  setup_case exact-pair-oneshot-retired
+  run_deploy PANTHEON_DEPLOY_ACTION=one-shot
+  [[ "${RUN_STATUS}" -eq 2 ]] || die "one-shot bypass was not rejected with status 2 (got ${RUN_STATUS})"
+  grep -Fq "One-shot public switch has been retired" "${RUN_OUTPUT}" || die "missing retired message"
+
+  run_deploy PANTHEON_DEPLOY_ACTION=""
+  [[ "${RUN_STATUS}" -eq 2 ]] || die "empty action was not rejected with status 2 (got ${RUN_STATUS})"
+  grep -Fq "One-shot public switch has been retired" "${RUN_OUTPUT}" || die "missing retired message"
+}
+
+test_exact_pair_protocol_lease_delegation_false_rejected() {
+  setup_case exact-pair-delegation-false
+  run_deploy PANTHEON_DEPLOY_ACTION=prepare PANTHEON_DEPLOY_LEASE_DELEGATED=true
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "prepare should succeed"
+  assert_previous_is_live
+
+  run_deploy PANTHEON_DEPLOY_ACTION=activate PANTHEON_DEPLOY_LEASE_DELEGATED=false
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "delegated=false unexpectedly succeeded"
+  assert_previous_is_live
+}
+
+test_exact_pair_protocol_tampered_receipt_rejected() {
+  local release_dir receipt_file
+  setup_case exact-pair-tampered-receipt
+  run_deploy PANTHEON_DEPLOY_ACTION=prepare
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "prepare should succeed"
+  assert_previous_is_live
+
+  release_dir="$(<"${CASE_AUDIT}/prepared-release-dir")"
+  receipt_file="${release_dir}/.prepared-receipt.json"
+
+  python3 -c "import json; d = json.load(open('${receipt_file}')); d['frontendSha'] = '0' * 40; json.dump(d, open('${receipt_file}', 'w'))"
+
+  run_deploy PANTHEON_DEPLOY_ACTION=activate
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "tampered receipt unexpectedly succeeded"
+  assert_previous_is_live
+}
+
+test_exact_pair_protocol_changed_predecessor_on_replay_rejected() {
+  setup_case exact-pair-replay-predecessor
+  run_deploy
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "initial deploy should succeed"
+  assert_live_profile read-only accepted
+
+  run_deploy PANTHEON_DEPLOY_ACTION=activate PANTHEON_DEPLOY_EXPECTED_DEV_SHA="1111111111111111111111111111111111111111"
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "changed predecessor on replay unexpectedly succeeded"
+  assert_live_profile read-only accepted
+}
+
+test_exact_pair_protocol_wrong_lease_restore_rejected() {
+  local release_dir receipt_file
+  setup_case exact-pair-wrong-lease-restore
+  run_write_deploy PANTHEON_DEPLOY_LEASE_OWNER=parent-controller PANTHEON_DEPLOY_LEASE_EPOCH=5 PANTHEON_DEPLOY_LEASE_RUN_ID=999 PANTHEON_DEPLOY_LEASE_DELEGATED=true
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "write-proof deploy should succeed"
+  assert_live_profile write-proof accepted
+
+  # Attempt restore with wrong lease owner
+  run_deploy PANTHEON_DEPLOY_PROFILE=read-only-restore PANTHEON_DEPLOY_ACTION=restore PANTHEON_DEPLOY_REAL_WRITES=false PANTHEON_DEPLOY_LEASE_OWNER=wrong-controller PANTHEON_DEPLOY_LEASE_EPOCH=5 PANTHEON_DEPLOY_LEASE_RUN_ID=999 PANTHEON_DEPLOY_LEASE_DELEGATED=true
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "wrong-lease restore unexpectedly succeeded"
+
+  # Attempt restore with removed receipt
+  release_dir="$(readlink -f "${CASE_LIVE}")"
+  receipt_file="${release_dir}/.prepared-receipt.json"
+  chmod u+w "${release_dir}" 2>/dev/null || true
+  rm -f "${receipt_file}"
+  chmod 0555 "${release_dir}" 2>/dev/null || true
+  run_deploy PANTHEON_DEPLOY_PROFILE=read-only-restore PANTHEON_DEPLOY_ACTION=restore PANTHEON_DEPLOY_REAL_WRITES=false PANTHEON_DEPLOY_LEASE_OWNER=parent-controller PANTHEON_DEPLOY_LEASE_EPOCH=5 PANTHEON_DEPLOY_LEASE_RUN_ID=999 PANTHEON_DEPLOY_LEASE_DELEGATED=true
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "missing-receipt restore unexpectedly succeeded"
+}
+
+test_exact_pair_protocol_failed_mandatory_gate_prepare_rejected() {
+  setup_case exact-pair-failed-gate
+  run_deploy PANTHEON_DEPLOY_ACTION=prepare PANTHEON_MANDATORY_GATE_OPENCLAW_CONTRACT=failed
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "prepare with failed openclawContract unexpectedly succeeded"
+  assert_previous_is_live
+  assert_previous_manifest_unchanged
+  grep -Fq "Cannot write prepared receipt: mandatory gates failed or missing" "${RUN_OUTPUT}" || \
+    show_deploy_failure "missing mandatory gate rejection message"
+}
+
+test_exact_pair_protocol_openclaw_result_rejected() {
+  local result="$1"
+  setup_case "exact-pair-openclaw-${result}"
+  run_deploy PANTHEON_DEPLOY_ACTION=prepare "MOCK_OPENCLAW_CONTRACT_STATUS=${result}"
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "prepare with ${result} OpenClaw result unexpectedly succeeded"
+  assert_previous_is_live
+  assert_previous_manifest_unchanged
+  [[ ! -f "${CASE_AUDIT}/prepared-receipt.json" ]] || die "rejected gate emitted prepared receipt"
+  grep -Fq "openclawContract=failed" "${RUN_OUTPUT}" || \
+    show_deploy_failure "missing OpenClaw gate rejection"
+}
+
+test_exact_pair_protocol_forged_receipt_and_unregistered_lease_rejected() {
+  local release_dir receipt_file
+  setup_case exact-pair-forged-receipt
+  run_deploy PANTHEON_DEPLOY_ACTION=prepare
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "prepare should succeed"
+  assert_previous_is_live
+
+  release_dir="$(<"${CASE_AUDIT}/prepared-release-dir")"
+  receipt_file="${release_dir}/.prepared-receipt.json"
+
+  node --input-type=module - "${receipt_file}" "${DEPLOY_SOURCE}" <<'NODE'
+import fs from 'node:fs';
+import crypto from 'node:crypto';
+const [receiptPath, sourcePath] = process.argv.slice(2);
+const src = fs.readFileSync(sourcePath, 'utf8');
+const start = src.indexOf('function computeReceiptIntegritySha256(r) {');
+const end = src.indexOf('\n}\n', start) + 2;
+const hash = new Function('crypto', src.slice(start, end) + ';return computeReceiptIntegritySha256;')(crypto);
+const r = JSON.parse(fs.readFileSync(receiptPath, 'utf8'));
+r.lease.owner = 'unregistered-review-controller';
+r.lease.epoch = 98765;
+r.lease.runId = 'nonexistent-run';
+r.receiptIntegritySha256 = hash(r);
+fs.writeFileSync(receiptPath, JSON.stringify(r, null, 2) + '\n');
+NODE
+
+  run_deploy PANTHEON_DEPLOY_ACTION=activate PANTHEON_DEPLOY_LEASE_OWNER=unregistered-review-controller PANTHEON_DEPLOY_LEASE_EPOCH=98765 PANTHEON_DEPLOY_LEASE_RUN_ID=nonexistent-run
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "forged receipt with unregistered lease unexpectedly succeeded"
+  assert_previous_is_live
+}
+
+test_exact_pair_protocol_schemaless_receipt_restore_rejected() {
+  local write_target receipt_file
+  setup_case exact-pair-schemaless-restore
+  run_write_deploy
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "write initial deployment failed"
+  assert_live_profile write-proof accepted
+
+  write_target="$(readlink -f "${CASE_LIVE}")"
+  receipt_file="${write_target}/.prepared-receipt.json"
+  node --input-type=module - "${receipt_file}" <<'NODE'
+import fs from 'node:fs';
+const p = process.argv[2];
+const prior = JSON.parse(fs.readFileSync(p, 'utf8'));
+fs.writeFileSync(p, JSON.stringify({ lease: { owner: prior.lease.owner, epoch: prior.lease.epoch, delegated: true } }));
+NODE
+
+  run_restore_deploy
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "schemaless receipt restore unexpectedly succeeded"
+  grep -Fq "Restore rejected: lease authority does not match prepared receipt." "${RUN_OUTPUT}" || \
+    show_deploy_failure "missing restore receipt validation error"
+}
+
+test_exact_pair_protocol_write_predecessor_retention() {
+  local original_target
+  setup_case exact-pair-write-retention
+  original_target="${PREVIOUS_TARGET}"
+  run_write_deploy PANTHEON_DEV_FE_KEEP_RELEASES=2
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "write deployment with retention failed"
+  if [[ ! -d "${original_target}" ]]; then
+    die "original predecessor was deleted by retention pruning"
+  fi
+}
+
+test_exact_pair_protocol_write_replay_idempotent() {
+  setup_case exact-pair-write-replay
+  run_write_deploy
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "initial write deployment failed"
+  assert_live_profile write-proof accepted
+
+  run_write_deploy PANTHEON_DEPLOY_ACTION=activate PANTHEON_DEPLOY_REAL_WRITES=true PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES=true
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "write replay should succeed idempotently"
+  assert_live_profile write-proof accepted
+}
+
+test_exact_pair_protocol_default_watchdog_restore_succeeds() {
+  local parent_run_id="9001"
+  local watchdog_run_id="9002"
+  setup_case exact-pair-watchdog-defaults
+
+  # Write deploy runs with parent workflow defaults:
+  # lease_owner defaults to 'pantheon-dev-deploy', lease_run_id defaults to parent run_id
+  run_write_deploy \
+    GITHUB_RUN_ID="${parent_run_id}" \
+    PANTHEON_DEPLOY_LEASE_OWNER=pantheon-dev-deploy \
+    PANTHEON_DEPLOY_LEASE_RUN_ID="${parent_run_id}"
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "setup write-proof failed"
+  assert_live_profile write-proof accepted
+
+  # Watchdog restore caller resolves parent transaction values
+  # (propagated through deploy workflow dispatch or watchdog defaults resolving parent_deploy_run_id)
+  run_restore_deploy \
+    GITHUB_RUN_ID="${watchdog_run_id}" \
+    PANTHEON_DEPLOY_LEASE_OWNER=pantheon-dev-deploy \
+    PANTHEON_DEPLOY_LEASE_RUN_ID="${parent_run_id}"
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "default watchdog restore failed"
+  assert_live_profile read-only accepted
+}
+
+test_exact_pair_protocol_late_watchdog_restore_succeeds() {
+  local parent_run_id="9001"
+  local watchdog_run_id="9002"
+  local write_target clock_script
+
+  setup_case exact-pair-late-watchdog-restore
+
+  # Write deploy runs with parent workflow defaults:
+  run_write_deploy \
+    GITHUB_RUN_ID="${parent_run_id}" \
+    PANTHEON_DEPLOY_LEASE_OWNER=pantheon-dev-deploy \
+    PANTHEON_DEPLOY_LEASE_RUN_ID="${parent_run_id}"
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "setup write-proof failed"
+  assert_live_profile write-proof accepted
+
+  write_target="$(readlink -f "${CASE_LIVE}")"
+  sha256sum "${write_target}/.prepared-receipt.json" > "${CASE_DIR}/receipt-before.sha256"
+
+  # Advance clock by 61 minutes (exceeding the 1-hour activation TTL, but within
+  # the supported 265-minute proof/recovery window: watchdog watch 190m + restore 75m)
+  clock_script="${CASE_DIR}/late-watchdog-clock.cjs"
+  printf '%s\n' 'const originalNow = Date.now; Date.now = () => originalNow() + 61 * 60 * 1000;' > "${clock_script}"
+
+  # Watchdog restore succeeds throughout the supported proof/recovery window
+  run_restore_deploy \
+    GITHUB_RUN_ID="${watchdog_run_id}" \
+    PANTHEON_DEPLOY_LEASE_OWNER=pantheon-dev-deploy \
+    PANTHEON_DEPLOY_LEASE_RUN_ID="${parent_run_id}" \
+    "NODE_OPTIONS=--require=${clock_script}"
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "late watchdog restore at +61 min should succeed"
+  assert_live_profile read-only accepted
+
+  # Verify receipt integrity was preserved unchanged without rewriting
+  sha256sum --check "${CASE_DIR}/receipt-before.sha256" >/dev/null || \
+    show_deploy_failure "prepared receipt checksum changed during restore"
+
+  # Verify that stale activation authority was NOT renewed (candidate activate at +61m fails)
+  run_deploy PANTHEON_DEPLOY_ACTION=activate "NODE_OPTIONS=--require=${clock_script}"
+  [[ "${RUN_STATUS}" -ne 0 ]] || show_deploy_failure "stale activation authority must not be renewed after 1 hour"
+
+  # Verify that restore attempted after the maximum recovery window (265 min) fails closed
+  local expired_clock="${CASE_DIR}/expired-recovery-clock.cjs"
+  printf '%s\n' 'const originalNow = Date.now; Date.now = () => originalNow() + 270 * 60 * 1000;' > "${expired_clock}"
+
+  setup_case exact-pair-recovery-window-expired
+  run_write_deploy \
+    GITHUB_RUN_ID="9003" \
+    PANTHEON_DEPLOY_LEASE_OWNER=pantheon-dev-deploy \
+    PANTHEON_DEPLOY_LEASE_RUN_ID="9003"
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "setup write-proof for window expiry test failed"
+  assert_live_profile write-proof accepted
+
+  run_restore_deploy \
+    GITHUB_RUN_ID="9004" \
+    PANTHEON_DEPLOY_LEASE_OWNER=pantheon-dev-deploy \
+    PANTHEON_DEPLOY_LEASE_RUN_ID="9003" \
+    "NODE_OPTIONS=--require=${expired_clock}"
+  [[ "${RUN_STATUS}" -ne 0 ]] || show_deploy_failure "restore past maximum recovery window must fail"
+  assert_live_profile write-proof accepted
+}
+
+test_exact_pair_protocol_non_root_prepared_receipt_permission() {
+  local release_dir receipt_file
+  setup_case exact-pair-non-root-permission
+  run_deploy PANTHEON_DEPLOY_ACTION=prepare
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "prepare should succeed"
+  release_dir="$(<"${CASE_AUDIT}/prepared-release-dir")"
+  receipt_file="${release_dir}/.prepared-receipt.json"
+
+  [[ -d "${release_dir}" ]] || show_deploy_failure "prepared release directory missing"
+  [[ -f "${receipt_file}" ]] || show_deploy_failure "prepared receipt missing"
+  [[ "$(stat -c '%a' "${release_dir}")" == "555" ]] || \
+    show_deploy_failure "release directory does not have simulated non-root read/execute-only permissions"
+
+  if node -e 'import fs from "node:fs"; fs.writeFileSync(process.argv[1], "leak\n")' "${release_dir}/.unprivileged-probe" 2>/dev/null; then
+    show_deploy_failure "unprivileged write into release directory should have failed with EACCES"
+  fi
+
+  cmp -s "${CASE_AUDIT}/prepared-receipt.json" "${receipt_file}" || \
+    show_deploy_failure "staged and installed prepared receipts do not match"
+  [[ "$(json_field "${receipt_file}" status)" == "prepared_success" ]] || \
+    show_deploy_failure "prepared receipt status is not prepared_success"
+
+  run_deploy PANTHEON_DEPLOY_ACTION=activate
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "activation should succeed from prepared candidate"
+  assert_live_profile read-only accepted
+  assert_summary_outcome accepted
+}
+
 run_test() {
   local name="$1"
   shift
@@ -2274,6 +3362,7 @@ run_test "rollback validates the predecessor's own paired identity" test_rollbac
 run_test "public manifest binds the GitHub archive digest" test_github_archive_digest_is_bound_in_public_manifest
 run_test "external predecessor restore is fully re-probed" test_external_restore_of_previous_is_reprobed
 run_test "durable evidence failure rolls back and re-finalizes" test_durable_evidence_failure_rolls_back_and_refinalizes
+run_test "durable evidence failure during prepare rejects candidate" test_durable_evidence_prepare_failure_rejects_candidate
 run_test "bootstrap installs only if absent and CAS-removes a failed candidate" test_bootstrap_install_and_failed_release_removal_use_cas
 run_test "manual rollback drill restores and re-probes exact previous release" test_manual_rollback_drill_restores_and_reprobes
 run_test "rollback re-probe failure stays nonzero with previous live" test_rollback_reprobe_failure_is_explicit
@@ -2295,6 +3384,37 @@ run_test "restore network failure preserves the safe release" test_restore_netwo
 run_test "restore rejects a nonprivate or tampered locator before switch" test_restore_rejects_nonprivate_or_tampered_locator_before_switch
 run_test "restore reaches safe sibling when Agora evidence is absent or rejected" test_restore_reaches_safe_sibling_when_agora_evidence_is_absent_or_rejected
 run_test "advanced dev write-proof on served candidate succeeds with guards" test_write_proof_advanced_dev_served_candidate_and_guards
+run_test "prepared evidence missing durable copy rejects activation" test_prepared_evidence_missing_copy_rejected
+run_test "prepared evidence mismatched durable copy rejects activation" test_prepared_evidence_invalid_copy_rejected mismatch
+run_test "prepared evidence symlinked durable copy rejects activation" test_prepared_evidence_invalid_copy_rejected symlink
+run_test "prepared evidence repeated prepare preserves locator and receipt" test_prepared_evidence_repeated_prepare
+run_test "prepared evidence rejected replay preserves original admission" test_prepared_evidence_rejected_replay_preserves_admission
+run_test "prepared evidence repeated prepare rechecks mandatory gate" test_prepared_evidence_replay_rechecks_mandatory_gate
+run_test "prepared evidence prepare cannot mutate an interrupted public candidate" test_prepared_evidence_prepare_never_recovers_public_candidate
+run_test "prepared evidence fresh audit reuses exact locator" test_prepared_evidence_fresh_audit_replay
+run_test "prepared evidence fresh activation retains original admission" test_prepared_evidence_fresh_activation
+run_test "prepared evidence write prepare replay preserves safe sibling" test_prepared_evidence_write_prepare_replay
+run_test "prepared evidence live no-op prepare preserves manifest and receipt" test_prepared_evidence_live_noop_prepare
+run_test "exact pair protocol prepare leaves incumbent untouched and writes receipt" test_exact_pair_protocol_prepare_leaves_incumbent_untouched
+run_test "exact pair protocol activate in new process without rebuild" test_exact_pair_protocol_activate_in_new_process_without_rebuild
+run_test "exact pair protocol lease epoch mismatch rejected" test_exact_pair_protocol_lease_epoch_mismatch_rejected
+run_test "exact pair protocol lease delegation false rejected" test_exact_pair_protocol_lease_delegation_false_rejected
+run_test "exact pair protocol tampered receipt rejected" test_exact_pair_protocol_tampered_receipt_rejected
+run_test "exact pair protocol predecessor CAS mismatch rejected" test_exact_pair_protocol_predecessor_cas_mismatch_rejected
+run_test "exact pair protocol changed predecessor on replay rejected" test_exact_pair_protocol_changed_predecessor_on_replay_rejected
+run_test "exact pair protocol idempotent replay succeeds" test_exact_pair_protocol_idempotent_replay
+run_test "exact pair protocol one-shot bypass is retired" test_exact_pair_protocol_one_shot_bypass_retired
+run_test "exact pair protocol wrong lease restore rejected" test_exact_pair_protocol_wrong_lease_restore_rejected
+run_test "exact pair protocol failed mandatory gate prepare rejected" test_exact_pair_protocol_failed_mandatory_gate_prepare_rejected
+run_test "exact pair protocol explicit OpenClaw failure rejects fleet fallback" test_exact_pair_protocol_openclaw_result_rejected failed
+run_test "exact pair protocol missing OpenClaw result rejects fleet fallback" test_exact_pair_protocol_openclaw_result_rejected missing
+run_test "exact pair protocol forged receipt and unregistered lease rejected" test_exact_pair_protocol_forged_receipt_and_unregistered_lease_rejected
+run_test "exact pair protocol schemaless receipt restore rejected" test_exact_pair_protocol_schemaless_receipt_restore_rejected
+run_test "exact pair protocol write predecessor retention" test_exact_pair_protocol_write_predecessor_retention
+run_test "exact pair protocol write replay idempotent" test_exact_pair_protocol_write_replay_idempotent
+run_test "exact pair protocol default watchdog restore succeeds" test_exact_pair_protocol_default_watchdog_restore_succeeds
+run_test "exact pair protocol late watchdog restore succeeds" test_exact_pair_protocol_late_watchdog_restore_succeeds
+run_test "exact pair protocol non-root runner prepares receipt into read-only release dir" test_exact_pair_protocol_non_root_prepared_receipt_permission
 
 echo "deploy contract harness: ${PASSED} passed, ${FAILED} failed"
 if [[ "${FAILED}" -ne 0 ]]; then

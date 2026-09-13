@@ -29,6 +29,22 @@ const agoraProductJourneySpec = readFileSync(
 );
 
 describe("paired Pantheon release workflow", () => {
+  it("provisions the locked Chromium build before real browser regressions", () => {
+    const componentJob = branchWorkflow.slice(
+      branchWorkflow.indexOf("  component-merge:"),
+      branchWorkflow.indexOf("  smoke-alias:"),
+    );
+    const install = componentJob.indexOf("run: npm ci");
+    const chromium = componentJob.indexOf(
+      "run: npx --no-install playwright install --with-deps chromium",
+    );
+    const tests = componentJob.indexOf("- name: Changed component tests");
+    expect(install).toBeGreaterThanOrEqual(0);
+    expect(chromium).toBeGreaterThan(install);
+    expect(tests).toBeGreaterThan(chromium);
+    expect(componentJob.slice(chromium, tests)).not.toContain("continue-on-error");
+  });
+
   it("uses the current dev variables and origin for candidate browser requests", () => {
     expect(integrationWorkflow).toContain(
       "PANTHEON_BFF_BASE_URL: ${{ inputs.bff_base_url || vars.DEV_BFF_URL || 'https://api.dev.mvl-cap.tw' }}",
@@ -44,7 +60,6 @@ describe("paired Pantheon release workflow", () => {
     expect(browserProbe).not.toContain("sslip.io");
     expect(integrationWorkflow).not.toContain("35.201.204.12");
   });
-
   it("builds one authenticated three-profile set while normal gates consume read-only", () => {
     expect(integrationWorkflow).toContain("Build read-only release profile");
     expect(integrationWorkflow).toContain(
@@ -997,5 +1012,86 @@ describe("paired Pantheon release workflow", () => {
     expect(confirmationJob).toContain("EXACT_FE_SHA: ${{ needs.deploy.outputs.candidate_sha }}");
     expect(confirmationJob).toContain("EXACT_BFF_SHA: ${{ needs.deploy.outputs.bff_sha }}");
     expect(confirmationJob).toContain("PROOF_RUN_ID: ${{ needs.proof-coordinator.outputs.proof_run_id }}");
+  });
+
+  it("enforces exact pair protocol prepare, activate, and restore lifecycle across workflows", () => {
+    const deployJobStart = deployWorkflow.indexOf("  deploy:");
+    const proofJobStart = deployWorkflow.indexOf("  proof-coordinator:");
+    const deployJob = deployWorkflow.slice(deployJobStart, proofJobStart);
+    const proofCoordinator = deployWorkflow.slice(proofJobStart);
+
+    expect(deployJob).toContain("Prepare verified persistent candidate profile");
+    expect(deployJob).toContain("Deploy verified persistent candidate profile");
+    expect(deployJob.indexOf("Prepare verified persistent candidate profile")).toBeLessThan(
+      deployJob.indexOf("Deploy verified persistent candidate profile"),
+    );
+    expect(deployJob).toContain("PANTHEON_DEPLOY_ACTION: prepare");
+    expect(deployJob).toContain("PANTHEON_DEPLOY_ACTION: activate");
+
+    expect(proofCoordinator).toContain("Prepare bounded write-proof profile");
+    expect(proofCoordinator).toContain(
+      "Dispatch independent read-only restore watchdog",
+    );
+    expect(proofCoordinator).toContain(
+      "Activate bounded write-proof profile after watchdog is durable",
+    );
+    expect(
+      proofCoordinator.indexOf("Prepare bounded write-proof profile"),
+    ).toBeLessThan(
+      proofCoordinator.indexOf(
+        "Dispatch independent read-only restore watchdog",
+      ),
+    );
+    expect(
+      proofCoordinator.indexOf("Dispatch independent read-only restore watchdog"),
+    ).toBeLessThan(
+      proofCoordinator.indexOf(
+        "Activate bounded write-proof profile after watchdog is durable",
+      ),
+    );
+
+    expect(proofCoordinator).toContain(
+      "prepared_release_dir: ${{ steps.write_prepare.outputs.prepared_release_dir }}",
+    );
+    expect(proofCoordinator).toContain(
+      "prepared_receipt: ${{ steps.write_prepare.outputs.prepared_receipt }}",
+    );
+    expect(deployJob).toContain(
+      "prepared_release_dir: ${{ steps.prepare.outputs.prepared_release_dir }}",
+    );
+    expect(deployJob).toContain(
+      "prepared_receipt: ${{ steps.prepare.outputs.prepared_receipt }}",
+    );
+
+    expect(proofCoordinator).toContain('"lease_owner": "LEASE_OWNER"');
+    expect(proofCoordinator).toContain('"lease_epoch": "LEASE_EPOCH"');
+    expect(proofCoordinator).toContain('"lease_run_id": "LEASE_RUN_ID"');
+    expect(proofCoordinator).toContain('"lease_delegated": "LEASE_DELEGATED"');
+    expect(proofCoordinator).toContain(
+      "LEASE_OWNER: ${{ inputs.lease_owner || 'pantheon-dev-deploy' }}",
+    );
+    expect(proofCoordinator).toContain(
+      "LEASE_RUN_ID: ${{ inputs.lease_run_id || github.run_id }}",
+    );
+
+    expect(watchdogWorkflow).toContain("PANTHEON_DEPLOY_ACTION: restore");
+    expect(watchdogWorkflow).toContain("lease_owner:");
+    expect(watchdogWorkflow).toContain("lease_epoch:");
+    expect(watchdogWorkflow).toContain("lease_run_id:");
+    expect(watchdogWorkflow).toContain("lease_delegated:");
+    expect(watchdogWorkflow).toContain(
+      "PANTHEON_LEASE_OWNER: ${{ inputs.lease_owner || 'pantheon-dev-deploy' }}",
+    );
+    expect(watchdogWorkflow).toContain("PANTHEON_LEASE_EPOCH:");
+    expect(watchdogWorkflow).toContain(
+      "PANTHEON_LEASE_RUN_ID: ${{ inputs.lease_run_id || inputs.parent_deploy_run_id }}",
+    );
+    expect(watchdogWorkflow).toContain("PANTHEON_LEASE_DELEGATED:");
+
+    expect(integrationWorkflow).toContain("--bff-image-repository");
+    expect(integrationWorkflow).toContain("--bff-image-tag");
+    expect(integrationWorkflow).toContain("--bff-image-digest");
+    expect(integrationWorkflow).toContain("--lease-owner");
+    expect(integrationWorkflow).toContain("PANTHEON_BFF_CANDIDATE_TRANSPORT: ${{ env.PANTHEON_BFF_CANDIDATE_TRANSPORT }}");
   });
 });
