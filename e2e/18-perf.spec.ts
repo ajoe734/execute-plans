@@ -405,47 +405,21 @@ const CONTROL_ROOM_RESPONSE = {
 };
 
 const COCKPIT_RESPONSE = {
-  strip: {
-    fields: [
-      { key: "autonomy", label: "Autonomy", value: "guarded", tone: "ok" },
-      { key: "humanPending", label: "Human pending", value: 2, tone: "warn" },
-      { key: "critical", label: "Critical findings", value: 1, tone: "bad", href: "/management/sentinel" },
-      { key: "bffHa", label: "BFF HA", value: "ok", tone: "ok" },
-    ],
+  id: "management-cockpit",
+  snapshot_at: nowIso(),
+  runtime_health: {
+    overall_status: "degraded",
+    headline: "F18 owner cockpit snapshot",
+    message: "Synthetic performance fixture, not hosted business evidence.",
   },
-  loopFlow: {
-    nodes: [
-      { id: "f18-research", label: "F18 research loop", loop: "research", severity: "ok", href: "/management/loops/research" },
-      { id: "f18-execution", label: "F18 execution loop", loop: "execution", severity: "bad", href: "/management/loops/execution" },
-      { id: "f18-optimization", label: "F18 optimization loop", loop: "optimization", severity: "warn", href: "/management/loops/optimization" },
-    ],
-    edges: [
-      { from: "f18-research", to: "f18-execution", severity: "warn" },
-      { from: "f18-execution", to: "f18-optimization", severity: "bad" },
-    ],
-  },
-  matrix: {
-    personas: ["persona-f18-1"],
-    phases: ["Observe", "Orient", "Decide", "Act", "Learn"],
-    cells: ["Observe", "Orient", "Decide", "Act", "Learn"].map((phase) => ({
-      personaId: "persona-f18-1",
-      phase,
-      state: phase === "Act" ? "alerting" : "active",
-      href: "/management/persona-fleet",
+  operator_home: {
+    cards: ["Runtime", "Alerts", "Human inbox", "Trading pulse", "Research"].map((label, index) => ({
+      card_id: `f18-owner-${index + 1}`,
+      label: `F18 ${label}`,
+      status: index === 0 ? "degraded" : "unknown",
+      summary: `F18 owner summary ${index + 1}`,
     })),
   },
-  anomalies: [
-    {
-      id: "finding-f18-001",
-      severity: "critical",
-      domain: "runtime",
-      title: "F18 Sentinel Finding 001",
-      why: "Synthetic F18 cockpit anomaly.",
-      recommendedAction: "Inspect sentinel finding.",
-      detectedAt: nowIso(),
-      links: { manageHref: "/management/sentinel", evidenceHref: "/management/evidence" },
-    },
-  ],
 };
 
 const QUARTERLY_FORMULA_RESPONSE = {
@@ -825,7 +799,9 @@ async function installPerfRoutes(page: Page, counters: RouteCounters): Promise<v
   });
   await page.route(/\/bff\/management\/cockpit(?:\?.*)?$/, async (route) => {
     counters.cockpit += 1;
-    await fulfillJson(route, { data: COCKPIT_RESPONSE, meta: { snapshot_at: nowIso() } });
+    await fulfillJson(route, { data: COCKPIT_RESPONSE, meta: {
+      snapshot_at: nowIso(), surfaces: { management_cockpit: { status: "degraded" } },
+    } });
   });
   await page.route(/\/bff\/management\/portfolio-book(?:\?.*)?$/, async (route) => {
     await fulfillJson(route, { data: PORTFOLIO_SUMMARY_RESPONSE, meta: { snapshot_at: nowIso() } });
@@ -1083,9 +1059,17 @@ test.describe("F18 perf and stability soft-fail budgets", () => {
       const loadMs = await gotoAndWaitForText(
         page,
         COCKPIT_PATH,
-        [/cockpit/i, /F18 Sentinel Finding 001/i, /F18 .* loop/i],
+        [/F18 owner cockpit snapshot/],
         "Cockpit",
       );
+      const aggregate = page.getByTestId("cockpit-live-aggregate");
+      await expect(aggregate).toBeVisible();
+      for (const card of COCKPIT_RESPONSE.operator_home.cards) {
+        await expect(aggregate.getByRole("heading", { name: card.label, exact: true })).toBeVisible();
+        await expect(aggregate.getByText(card.summary, { exact: true })).toBeVisible();
+      }
+      await expect(aggregate.getByText("degraded", { exact: true })).toHaveCount(2);
+      await expect(page.getByTestId("cockpit-projection-unavailable")).toBeVisible();
       recordBudget(testInfo, {
         id: "cockpit_load",
         label: "Cockpit load",
