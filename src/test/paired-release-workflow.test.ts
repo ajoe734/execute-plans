@@ -1067,15 +1067,25 @@ describe("paired Pantheon release workflow", () => {
     expect(proofCoordinator).toContain('"lease_epoch": "LEASE_EPOCH"');
     expect(proofCoordinator).toContain('"lease_run_id": "LEASE_RUN_ID"');
     expect(proofCoordinator).toContain('"lease_delegated": "LEASE_DELEGATED"');
+    expect(proofCoordinator).toContain(
+      "LEASE_OWNER: ${{ inputs.lease_owner || 'pantheon-dev-deploy' }}",
+    );
+    expect(proofCoordinator).toContain(
+      "LEASE_RUN_ID: ${{ inputs.lease_run_id || github.run_id }}",
+    );
 
     expect(watchdogWorkflow).toContain("PANTHEON_DEPLOY_ACTION: restore");
     expect(watchdogWorkflow).toContain("lease_owner:");
     expect(watchdogWorkflow).toContain("lease_epoch:");
     expect(watchdogWorkflow).toContain("lease_run_id:");
     expect(watchdogWorkflow).toContain("lease_delegated:");
-    expect(watchdogWorkflow).toContain("PANTHEON_LEASE_OWNER:");
+    expect(watchdogWorkflow).toContain(
+      "PANTHEON_LEASE_OWNER: ${{ inputs.lease_owner || 'pantheon-dev-deploy' }}",
+    );
     expect(watchdogWorkflow).toContain("PANTHEON_LEASE_EPOCH:");
-    expect(watchdogWorkflow).toContain("PANTHEON_LEASE_RUN_ID:");
+    expect(watchdogWorkflow).toContain(
+      "PANTHEON_LEASE_RUN_ID: ${{ inputs.lease_run_id || inputs.parent_deploy_run_id }}",
+    );
     expect(watchdogWorkflow).toContain("PANTHEON_LEASE_DELEGATED:");
 
     expect(integrationWorkflow).toContain("--bff-image-repository");

@@ -1,13 +1,13 @@
 {
   "schema_version": "pantheon.task-review-evidence.v1",
   "task_id": "FE-EXACT-PAIR-PROTOCOL-001",
-  "owner": "Antigravity2",
+  "owner": "Antigravity",
   "reviewer": "Codex",
   "target_repo": "execute-plans",
   "merge_target": "dev",
   "branch": "task/FE-EXACT-PAIR-PROTOCOL-001",
   "status": "reconciled-with-accepted-release-i",
-  "recorded_at": "2026-09-13T13:50:00.000000+00:00",
+  "recorded_at": "2026-09-13T15:42:00.000000+00:00",
   "scope": {
     "kind": "source-only",
     "declared_artifact_count": 17,
@@ -20,7 +20,9 @@
       "Persist no-op prepare evidence, preserve public manifest and symlink bytes, and maintain safe-sibling restoration on failure while retiring the one-shot deployment bypass (deploy-dev-vm.sh).",
       "Conservatively enforce explicit candidate CORS permissions without arbitrary proxying or embedded credentials, and provision locked Chromium in branch-ci.yml for browser regressions.",
       "Align integration gate and test suites with current Pantheon-owned dev endpoints (https://app.dev.mvl-cap.tw, https://api.dev.mvl-cap.tw) and DEV_FE_URL / DEV_BFF_URL repository variables, eliminating references to retired hosting.",
-      "Record operator 2026-09-13 direction: reject additional safety/diagnostic framework construction (no new MFA issuer/grant, shadow service, lease framework, watchdog framework or expanded gates), preserving simple login/session, tenant isolation, and paper/live boundary."
+      "Record operator 2026-09-13 direction: reject additional safety/diagnostic framework construction (no new MFA issuer/grant, shadow service, lease framework, watchdog framework or expanded gates), preserving simple login/session, tenant isolation, and paper/live boundary.",
+      "Propagate resolved parent lease values (owner and run ID) through deploy workflow watchdog dispatch and restore caller, resolving watchdog default safe restore.",
+      "Stop claiming unexecuted OpenClaw gate passed on auth-only rendered pages with zero OpenClaw traffic; reconcile producer, prepared receipt, and evidence with accepted minimal scope where OpenClaw-before-deploy is retired per operator directives."
     ],
     "acceptance_boundary": "Source-only release protocol reconciliation against accepted Release I. Validates immutable candidate verification, prepared receipt replay preservation, safe-sibling failure recovery, strict CORS/browser policies, and Chromium CI provisioning. Per operator direction, does not implement disputed historical protocol expansions (no separate parent child-delegation lease API, whole-pair pre-qualification, or new watchdog framework). Sole hosted pair acceptance belongs to S5-PAIR-001; roundtrip drill belongs to S5-ROLLBACK-001."
   },
@@ -68,25 +70,25 @@
     },
     "delivery_source_sha256": {
       ".github/workflows/branch-ci.yml": "1ad2e95935f91c3f4cedfec96b9e7f736f77eba9cb562a94fe4b6713c2a0cdc0",
-      ".github/workflows/pantheon-dev-fe-deploy.yml": "bc4dd5f1dcd8babcc7c8114e82915c8fc4420dff66d665d1cf5b1d54b1bfba96",
+      ".github/workflows/pantheon-dev-fe-deploy.yml": "9e4e49edf0353dd7f2bec8f2e65ecbe015d63a3b4573b1c86b63d37b0e70f577",
       ".github/workflows/pantheon-integration-gate.yml": "3f7c1383ead67a18f68e9bb5b11cb16dc83072e75a764e3ef292e8563008ece8",
-      ".github/workflows/pantheon-proof-watchdog.yml": "b4d2e71b23fc348903634e98fb062f108cdf8af09a529aeb6e96ef0cdaf98f27",
-      "scripts/deploy-dev-vm.sh": "8ccfaa28da279cee261b0537e74c48975d78bf41232eb9af59113d6eb44e5894",
-      "scripts/probe-hosted-browser-bff.mjs": "da0d71e2cdc5235b8c1e3c6d1f5604b89ea81fc6546185269fc34ea5d432f43b",
+      ".github/workflows/pantheon-proof-watchdog.yml": "ef16df08c648bf6f1afc62898192956d6b735a1a9c2e61a5935b0427db44e61d",
+      "scripts/deploy-dev-vm.sh": "5a1a338c93e95e2fdc3f92eb3ddfaff381722d0cbbfb06c3a44b43d54b1635e1",
+      "scripts/probe-hosted-browser-bff.mjs": "c0065cf7c5093cc6b93f29870205b631f765da16efa1fec246916667cf163ef3",
       "scripts/release-candidate.mjs": "d0b350ae9cc63ea2fba96d126912e4d8a0d3ec03550131eb9f47317bb18f54b5",
       "scripts/release-evidence.mjs": "50eb550fde22ff88fc478cdf19ffdbd730ac8a6fcc9508ebf2f4b7bfe9492231",
       "scripts/release-identity.mjs": "2dde85d7c4660c911a5551b11f75490f8e88a8fef83a0ec720bb434b0c04e66f",
-      "scripts/test-deploy-dev-vm.sh": "b4f5819ad2b7d9e10e404f35c6e9ebdcc05a64b0644a76983f43dac15b308caa",
+      "scripts/test-deploy-dev-vm.sh": "6dd0859dfe3cb121ce0b2f9b4896402f3baacc9acf871029f2a45a4aced9bffb",
       "scripts/test-release-identity.mjs": "47ba6cd53a733d8363e188d8c4a6c5075360e18137c43191b6be65f08270b0ce",
       "src/test/deploy-safe-defaults.test.ts": "061e7be2d67d385039500263a98bca614c63b374d8e72fbc6355b2f96a7e0c82",
-      "src/test/hosted-browser-release-policy.test.ts": "de4850494c891fbab615cb8f608988185b95d9d47248a3ab472f413edab84657",
-      "src/test/paired-release-workflow.test.ts": "bddb50c0d428534d8462614bcb3216e3e6cb1e217d1f47871e7269236685c4f1",
+      "src/test/hosted-browser-release-policy.test.ts": "fb6bd96711837c33bc9b2aecfb51dbab953bcdbd4659b516ddf51d8e5816fa03",
+      "src/test/paired-release-workflow.test.ts": "08df104ae7a370e2fec3b5bd0b2f901f39d73b6e65d47ba4ffdd59f51336efcf",
       "src/test/release-candidate.test.ts": "e3f2b4db8c061d57867374ecf0d7fc85fc4b72bdb6a76d1419c32d2c961379fc",
       "src/test/release-evidence.test.ts": "d47ee6e6f268d26cb1b4182dadbe316c8d32230ec4c9587ebd2d82227a973b0d"
     },
     "reviewer_assignment": {
       "current": "Codex",
-      "basis": "Governed task row assignment by Operator on 2026-09-13; owner Antigravity2, reviewer Codex."
+      "basis": "Governed task row assignment by Operator on 2026-09-13; owner Antigravity, reviewer Codex."
     }
   },
   "delivered_functional_requirements": [
@@ -97,7 +99,9 @@
     "One-shot deployment bypass retired; mandatory explicit prepare, activate, or restore action required.",
     "Explicit candidate CORS permissions without arbitrary proxying or embedded bearer credentials; browser regression suite covers native Chromium parity.",
     "Chromium provisioning in branch-ci.yml for browser regression tests before Component merge gate.",
-    "Gate workflow and tests aligned with current Pantheon dev endpoints (https://app.dev.mvl-cap.tw, https://api.dev.mvl-cap.tw) and DEV_FE_URL / DEV_BFF_URL."
+    "Gate workflow and tests aligned with current Pantheon dev endpoints (https://app.dev.mvl-cap.tw, https://api.dev.mvl-cap.tw) and DEV_FE_URL / DEV_BFF_URL.",
+    "Propagate resolved parent lease values (owner and run ID) through deploy workflow watchdog dispatch and restore caller, resolving watchdog default safe restore.",
+    "Stop claiming unexecuted OpenClaw gate passed on auth-only rendered pages with zero OpenClaw traffic; reconcile producer, prepared receipt, and evidence with accepted minimal scope where OpenClaw-before-deploy is retired per operator directives."
   ],
   "residual_disposition": {
     "disposition_summary": "Historical protocol expansion items have been formally reconciled against operator directives. Disputed extra frameworks (parent lease delegation API, whole-pair prequalification, shadow service, watchdog framework expansion) are rejected by operator policy and not implemented. Outstanding operational acceptance is partitioned honestly to existing downstream tasks.",
@@ -131,24 +135,24 @@
     "existing_exact_pair": {
       "command": "PANTHEON_TEST_FILTER='exact pair protocol' timeout 420 bash scripts/test-deploy-dev-vm.sh",
       "exit_status": 0,
-      "passed": 17,
+      "passed": 18,
       "failed": 0,
-      "terminal_output": "ok - exact pair protocol prepare leaves incumbent untouched and writes receipt\nok - exact pair protocol activate in new process without rebuild\nok - exact pair protocol lease epoch mismatch rejected\nok - exact pair protocol lease delegation false rejected\nok - exact pair protocol tampered receipt rejected\nok - exact pair protocol predecessor CAS mismatch rejected\nok - exact pair protocol changed predecessor on replay rejected\nok - exact pair protocol idempotent replay succeeds\nok - exact pair protocol one-shot bypass is retired\nok - exact pair protocol wrong lease restore rejected\nok - exact pair protocol failed mandatory gate prepare rejected\nok - exact pair protocol explicit OpenClaw failure rejects fleet fallback\nok - exact pair protocol missing OpenClaw result rejects fleet fallback\nok - exact pair protocol forged receipt and unregistered lease rejected\nok - exact pair protocol schemaless receipt restore rejected\nok - exact pair protocol write predecessor retention\nok - exact pair protocol write replay idempotent\ndeploy contract harness: 17 passed, 0 failed",
-      "boundary": "Isolated shell regressions for lease/receipt/gate rejection, write replay, and safe-sibling retention."
+      "terminal_output": "ok - exact pair protocol prepare leaves incumbent untouched and writes receipt\nok - exact pair protocol activate in new process without rebuild\nok - exact pair protocol lease epoch mismatch rejected\nok - exact pair protocol lease delegation false rejected\nok - exact pair protocol tampered receipt rejected\nok - exact pair protocol predecessor CAS mismatch rejected\nok - exact pair protocol changed predecessor on replay rejected\nok - exact pair protocol idempotent replay succeeds\nok - exact pair protocol one-shot bypass is retired\nok - exact pair protocol wrong lease restore rejected\nok - exact pair protocol failed mandatory gate prepare rejected\nok - exact pair protocol explicit OpenClaw failure rejects fleet fallback\nok - exact pair protocol missing OpenClaw result rejects fleet fallback\nok - exact pair protocol forged receipt and unregistered lease rejected\nok - exact pair protocol schemaless receipt restore rejected\nok - exact pair protocol write predecessor retention\nok - exact pair protocol write replay idempotent\nok - exact pair protocol default watchdog restore succeeds\ndeploy contract harness: 18 passed, 0 failed",
+      "boundary": "Isolated shell regressions for lease/receipt/gate rejection, write replay, safe-sibling retention, and default watchdog restore."
     },
     "vitest_contracts": {
       "command": "PLAYWRIGHT_BROWSERS_PATH=/home/chloe_ong_dev_cctech_support_com/.cache/ms-playwright npx --no-install vitest run --maxWorkers=2 src/test/release-candidate.test.ts src/test/release-evidence.test.ts src/test/deploy-safe-defaults.test.ts src/test/paired-release-workflow.test.ts src/test/hosted-browser-release-policy.test.ts",
       "exit_status": 0,
-      "passed": 170,
+      "passed": 171,
       "failed": 0,
       "files": 5,
-      "terminal_output": "Test Files 5 passed (5)\nTests 170 passed (170)",
+      "terminal_output": "Test Files 5 passed (5)\nTests 171 passed (171)",
       "breakdown": {
         "src/test/deploy-safe-defaults.test.ts": "24 passed",
         "src/test/paired-release-workflow.test.ts": "25 passed",
         "src/test/release-candidate.test.ts": "32 passed",
         "src/test/release-evidence.test.ts": "21 passed",
-        "src/test/hosted-browser-release-policy.test.ts": "68 passed (Chromium headless shell native parity & CORS policy)"
+        "src/test/hosted-browser-release-policy.test.ts": "69 passed (Chromium headless shell native parity, CORS policy & OpenClaw auth-only rejection)"
       },
       "boundary": "Full unit and integration test suite across candidate/evidence contracts, deploy safety defaults, paired release workflows, and browser CORS release policies."
     },

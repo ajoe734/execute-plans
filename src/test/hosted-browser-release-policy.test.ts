@@ -17,6 +17,7 @@ import {
   assessHostedUxProfile,
   assessPersonaFleetSafety,
   assertSafeBffCandidateTransport,
+  evaluateOpenclawContractPassed,
   canonicalizeSha256,
   cssBoxShadowHasVisibleLayer,
   cssColorHasVisibleAlpha,
@@ -836,6 +837,27 @@ describe("hosted browser strict release policy", () => {
     expect(assessment.pass).toBe(true);
     expect(assessment.state).toBe(expectedState);
     expect(assessment.failures).toEqual([]);
+  });
+
+  it("rejects claiming OpenClaw contract passed for an auth-only rendered page with zero OpenClaw traffic", () => {
+    const assessment = assessPersonaFleetSafety({
+      rowCount: 0,
+      hasAuthRequiredState: true,
+      hasNaN: false,
+      hasNonProductionRows: false,
+      hasSeedFallbackArmed: false,
+      liveBannerValid: true,
+    });
+    expect(assessment.state).toBe("auth_required_empty");
+    expect(assessment.pass).toBe(true);
+
+    const emittedOpenclawContractPassed = evaluateOpenclawContractPassed({
+      personaFleetSafety: assessment,
+      openclawCalls: 0,
+      rootRendered: true,
+      pageErrors: [],
+    });
+    expect(emittedOpenclawContractPassed).toBe(false);
   });
 
   it.each([

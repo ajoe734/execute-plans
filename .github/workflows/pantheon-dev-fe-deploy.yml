@@ -1474,9 +1474,9 @@ jobs:
           PROOF_NONCE: ${{ steps.binding.outputs.nonce }}
           BINDING_ARTIFACT_ID: ${{ steps.binding_upload.outputs.artifact-id }}
           BINDING_ARTIFACT_DIGEST: ${{ steps.binding_digest.outputs.artifact_digest }}
-          LEASE_OWNER: ${{ inputs.lease_owner || '' }}
-          LEASE_EPOCH: ${{ inputs.lease_epoch || '' }}
-          LEASE_RUN_ID: ${{ inputs.lease_run_id || '' }}
+          LEASE_OWNER: ${{ inputs.lease_owner || 'pantheon-dev-deploy' }}
+          LEASE_EPOCH: ${{ inputs.lease_epoch || '1' }}
+          LEASE_RUN_ID: ${{ inputs.lease_run_id || github.run_id }}
           LEASE_DELEGATED: ${{ inputs.lease_delegated || 'true' }}
         run: |
           set -euo pipefail

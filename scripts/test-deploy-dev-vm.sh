@@ -2896,6 +2896,30 @@ test_exact_pair_protocol_write_replay_idempotent() {
   assert_live_profile write-proof accepted
 }
 
+test_exact_pair_protocol_default_watchdog_restore_succeeds() {
+  local parent_run_id="9001"
+  local watchdog_run_id="9002"
+  setup_case exact-pair-watchdog-defaults
+
+  # Write deploy runs with parent workflow defaults:
+  # lease_owner defaults to 'pantheon-dev-deploy', lease_run_id defaults to parent run_id
+  run_write_deploy \
+    GITHUB_RUN_ID="${parent_run_id}" \
+    PANTHEON_DEPLOY_LEASE_OWNER=pantheon-dev-deploy \
+    PANTHEON_DEPLOY_LEASE_RUN_ID="${parent_run_id}"
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "setup write-proof failed"
+  assert_live_profile write-proof accepted
+
+  # Watchdog restore caller resolves parent transaction values
+  # (propagated through deploy workflow dispatch or watchdog defaults resolving parent_deploy_run_id)
+  run_restore_deploy \
+    GITHUB_RUN_ID="${watchdog_run_id}" \
+    PANTHEON_DEPLOY_LEASE_OWNER=pantheon-dev-deploy \
+    PANTHEON_DEPLOY_LEASE_RUN_ID="${parent_run_id}"
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "default watchdog restore failed"
+  assert_live_profile read-only accepted
+}
+
 run_test() {
   local name="$1"
   shift
@@ -2975,6 +2999,7 @@ run_test "exact pair protocol forged receipt and unregistered lease rejected" te
 run_test "exact pair protocol schemaless receipt restore rejected" test_exact_pair_protocol_schemaless_receipt_restore_rejected
 run_test "exact pair protocol write predecessor retention" test_exact_pair_protocol_write_predecessor_retention
 run_test "exact pair protocol write replay idempotent" test_exact_pair_protocol_write_replay_idempotent
+run_test "exact pair protocol default watchdog restore succeeds" test_exact_pair_protocol_default_watchdog_restore_succeeds
 
 echo "deploy contract harness: ${PASSED} passed, ${FAILED} failed"
 if [[ "${FAILED}" -ne 0 ]]; then

@@ -601,6 +601,28 @@ export function assessPersonaFleetSafety(result) {
   return { pass: failures.length === 0, state, checks, failures };
 }
 
+export function evaluateOpenclawContractPassed({
+  personaFleetSafety,
+  openclawCalls = 0,
+  openclawContractChecks = null,
+  rootRendered = true,
+  pageErrors = [],
+} = {}) {
+  // An unauthenticated browser visit or auth_required_empty state with zero
+  // OpenClaw traffic does not execute or prove OpenClaw contract compliance.
+  if (
+    !personaFleetSafety ||
+    !personaFleetSafety.pass ||
+    personaFleetSafety.state === "auth_required_empty" ||
+    openclawCalls === 0 ||
+    !rootRendered ||
+    (Array.isArray(pageErrors) && pageErrors.length > 0)
+  ) {
+    return false;
+  }
+  return openclawContractChecks ? Boolean(openclawContractChecks.pass) : false;
+}
+
 async function waitForCoreBffResponse(
   page,
   expectedPath,
@@ -3105,6 +3127,20 @@ async function runProbe() {
 
   let jsonOut = "";
   if (RELEASE_STRICT || PROBE_JSON_OUT) {
+    const openclawCalls = requests.filter(
+      (request) =>
+        isBffUrl(request.url) &&
+        (request.url.includes("/bff/management/nl/") ||
+          request.url.includes("/bff/openclaw") ||
+          request.url.includes("/openclaw")),
+    ).length;
+    const openclawContractPassed = evaluateOpenclawContractPassed({
+      personaFleetSafety,
+      openclawCalls,
+      rootRendered,
+      pageErrors,
+    });
+
     jsonOut = writeJsonEvidence(evidencePath(generatedAt), {
       schemaVersion: 1,
       probe: "pantheon-hosted-browser-release-policy",
@@ -3112,7 +3148,7 @@ async function runProbe() {
       mode: RELEASE_STRICT ? "release-strict" : "compatibility",
       pass,
       personaFleetSafetyPassed: personaFleetSafety.pass,
-      openclawContractPassed: Boolean(personaFleetSafety.pass && rootRendered && pageErrors.length === 0),
+      openclawContractPassed,
       targets: {
         feBase: FE_BASE,
         pageUrl,
@@ -3150,7 +3186,7 @@ async function runProbe() {
           noEmbeddedDevBearerRequired,
           noEmbeddedDevBearer,
           personaFleetSafetyPassed: personaFleetSafety.pass,
-          openclawContractPassed: Boolean(personaFleetSafety.pass && rootRendered && pageErrors.length === 0),
+          openclawContractPassed,
           applicationRootRendered: rootRendered,
           pageErrorsAbsent: pageErrors.length === 0,
           oldUrlAbsent: oldUrlHitCount === 0,
