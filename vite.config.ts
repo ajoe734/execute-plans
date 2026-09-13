@@ -71,6 +71,9 @@ export default defineConfig(({ mode }) => {
   const rawRealWrites = process.env.VITE_BFF_REAL_WRITES ?? loadedEnv.VITE_BFF_REAL_WRITES;
   const rawAllowDevStubWrites = process.env.VITE_BFF_ALLOW_DEV_STUB_WRITES ?? loadedEnv.VITE_BFF_ALLOW_DEV_STUB_WRITES;
   const rawEmbeddedBearer = process.env.VITE_BFF_EMBEDDED_BEARER_TOKEN ?? loadedEnv.VITE_BFF_EMBEDDED_BEARER_TOKEN;
+  // Vite's production mode also builds the hosted dev release profiles.
+  const devPasswordBuild = (process.env.VITE_BFF_BASE_URL ?? loadedEnv.VITE_BFF_BASE_URL)?.replace(/\/$/, "")
+    === "https://api.dev.mvl-cap.tw";
 
   if (mode === "production") {
     if (rawBffMode && rawBffMode !== "live") {
@@ -79,7 +82,7 @@ export default defineConfig(({ mode }) => {
     if (rawBffFallback && rawBffFallback !== "strict") {
       throw new Error(`Production build forbids VITE_BFF_FALLBACK=${rawBffFallback}; must be 'strict'`);
     }
-    if (rawRealWrites && rawRealWrites !== "false") {
+    if (rawRealWrites && rawRealWrites !== "false" && !(devPasswordBuild && rawRealWrites === "true")) {
       throw new Error(`Production build forbids VITE_BFF_REAL_WRITES=${rawRealWrites}; must be 'false'`);
     }
     if (rawAllowDevStubWrites && rawAllowDevStubWrites !== "false") {
@@ -116,8 +119,6 @@ export default defineConfig(({ mode }) => {
   );
   // Pantheon-owned dev uses the BFF account/password session, not Firebase.
   // Other build targets retain their existing public Identity Platform checks.
-  const devPasswordBuild = (process.env.VITE_BFF_BASE_URL ?? loadedEnv.VITE_BFF_BASE_URL)?.replace(/\/$/, "")
-    === "https://api.dev.mvl-cap.tw";
   if (!devPasswordBuild) validatePublicGcpIdentityConfig(
     process.env.VITE_GCP_IDENTITY_API_KEY
       ?? loadedEnv.VITE_GCP_IDENTITY_API_KEY,
