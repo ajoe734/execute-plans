@@ -54,6 +54,50 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 describe("mgmt façade (PM-Live)", () => {
+  it("reads the hosted cockpit aggregate instead of requiring a seed-only view model", async () => {
+    liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({
+      data: {
+        id: "management-cockpit", snapshot_at: "2026-09-13T07:36:00Z",
+        runtime_health: { overall_status: "ok", headline: "Control plane healthy", message: "Owners responding." },
+        operator_home: { cards: [
+          { card_id: "runtime", label: "Runtime", status: "ok", summary: "No active runtime bindings." },
+        ] },
+      },
+      meta: { surfaces: {
+        management_cockpit: { status: "degraded", source: "bff_composed", message: "Telemetry is unavailable." },
+      } },
+    }));
+    const out = await mgmt.cockpit.getLiveOnly();
+    expect(out).toMatchObject({
+      snapshotAt: "2026-09-13T07:36:00Z", status: "degraded", message: "Telemetry is unavailable.",
+      health: { status: "ok", headline: "Control plane healthy", message: "Owners responding." },
+      cards: [{ id: "runtime", label: "Runtime", status: "ok", summary: "No active runtime bindings." }],
+    });
+    expect(out).not.toHaveProperty("loopFlow");
+    expect(out).not.toHaveProperty("matrix");
+    expect(liveStatus.get().effective).toBe("live");
+  });
+
+  it("does not invent healthy status or cards for missing cockpit fields", async () => {
+    liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({
+      data: { id: "management-cockpit", runtime_health: {}, operator_home: { cards: [] } },
+    }));
+    expect(await mgmt.cockpit.getLiveOnly()).toMatchObject({
+      snapshotAt: null, status: "unknown", message: null,
+      health: { status: "unknown", headline: null, message: null }, cards: [],
+    });
+  });
+
+  it.each([null, { id: "management-cockpit" }, { strip: {}, loopFlow: {}, matrix: {} }])(
+    "does not pass malformed or seed-only cockpit data as the live aggregate: %j", async (data) => {
+      liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({ data }));
+      expect(await mgmt.cockpit.getLiveOnly()).toBeUndefined();
+    },
+  );
+
   it("normalizes snake_case quarterly ranking rows for Persona focus", () => {
     const rows = adaptQuarterlyRankingRows({
       data: {
