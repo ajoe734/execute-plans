@@ -23,7 +23,7 @@ import { usePlatform } from "@/platform/store";
 import { AlertTriangle, ArrowRight, Loader2 } from "lucide-react";
 import { RiskBadge } from "./RiskBadge";
 import { StatusBadge } from "./StatusBadge";
-import type { RiskLevel } from "@/lib/bff-v1";
+import type { RiskLevel, CanonicalCommandIdentity } from "@/lib/bff-v1";
 import { requestConfirmToken as requestConfirmTokenV1 } from "@/lib/bff-v1";
 import { getHighRiskAction } from "@/lib/v3/highRiskActions";
 import { validateMemo, MEMO_POLICY_BY_RISK, type ActionRiskClass } from "@/lib/v4/memoPolicy";
@@ -72,12 +72,13 @@ export interface HighRiskConfirmProps {
   /** Extra slot rendered before footer. */
   extra?: ReactNode;
 
-  // ---- v3 §6.2 confirm-token integration ----
-  /** v3 dotted action id (e.g. "strategy.deploy_live"). When set and registered
-   *  in HIGH_RISK_ACTIONS, the modal fetches a confirmToken from BFF on open. */
+  // ---- v3 §6.2 confirm-token integration & Canonical Command Seam ----
+  /** v3 dotted action id (e.g. "strategy.deploy_live") or canonical command name. */
   actionId?: string;
   /** Entity type & id used to build the confirm phrase (e.g. {type:"strategy", id:"st_01"}). */
   confirmEntity?: { type: string; id: string };
+  /** Canonical command identity seam for runtime actions like PausePaperRuntime */
+  canonicalCommand?: CanonicalCommandIdentity;
 
   /** Planner Response §C1/D36 — when present and active, blocks token issue/redeem. */
   cooldown?: CooldownState;
@@ -94,7 +95,7 @@ export const HighRiskConfirm = ({
   rollbackTarget, requiredApproval,
   title, description,
   confirmToken, destructive, extra,
-  actionId, confirmEntity,
+  actionId, confirmEntity, canonicalCommand,
   cooldown,
   onConfirm,
 }: HighRiskConfirmProps) => {
@@ -103,43 +104,56 @@ export const HighRiskConfirm = ({
   const [memo, setMemo] = useState("");
   const [typed, setTyped] = useState("");
 
-  // ---- v3 §6.2 confirm-token state ----
-  const v3Action = actionId ? getHighRiskAction(actionId) : undefined;
-  const useV3Token = !!v3Action;
+  // ---- Token issuance flow (v3 or canonical command) ----
+  const isCanonical = Boolean(canonicalCommand);
+  const effectiveActionId = canonicalCommand?.actionId ?? actionId;
+  const effectiveEntityType = canonicalCommand?.entityType ?? confirmEntity?.type ?? target?.type ?? "entity";
+  const effectiveEntityId = canonicalCommand?.entityId ?? confirmEntity?.id ?? target?.id ?? "—";
+  const v3Action = effectiveActionId ? getHighRiskAction(effectiveActionId) : undefined;
+  const useTokenFlow = !!v3Action || isCanonical;
+
   const [issuedToken, setIssuedToken] = useState<string | null>(null);
   const [requiredPhrase, setRequiredPhrase] = useState<string | null>(null);
   const [expiresAt, setExpiresAt] = useState<number | null>(null);
+  const [issueError, setIssueError] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
   const [issuing, setIssuing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const reqIdRef = useRef(0);
 
   useEffect(() => {
-    if (!open || !useV3Token) return;
+    if (!open || !useTokenFlow) return;
     const cooldownPre = canIssueConfirmToken(cooldown);
     if (!cooldownPre.ok) { setIssuing(false); return; }
     const myReq = ++reqIdRef.current;
     setIssuing(true);
-    const entityType = confirmEntity?.type ?? target?.type ?? "entity";
-    const entityId = confirmEntity?.id ?? target?.id ?? "—";
+    setIssueError(null);
     requestConfirmTokenV1(
       {
-        actionId: actionId!,
-        entityType,
-        entityId,
+        actionId: effectiveActionId!,
+        entityType: effectiveEntityType,
+        entityId: effectiveEntityId,
         payloadHash: "mock",
         tradingEnvironment: env,
         platformEnvironment: "production",
+        canonicalCommand: isCanonical ? { actionId: effectiveActionId!, entityType: effectiveEntityType, entityId: effectiveEntityId } : undefined,
       },
-      { [`${entityType}Id`]: entityId },
+      { [`${effectiveEntityType}Id`]: effectiveEntityId },
     ).then((r) => {
       if (myReq !== reqIdRef.current) return;
       setIssuedToken(r.data.confirmToken);
       setRequiredPhrase(r.data.requiredPhrase);
       setExpiresAt(Date.parse(r.data.expiresAt));
       setIssuing(false);
-    }).catch(() => setIssuing(false));
-  }, [open, useV3Token, actionId, confirmEntity?.type, confirmEntity?.id, target?.type, target?.id, env]);
+    }).catch((err) => {
+      if (myReq !== reqIdRef.current) return;
+      setIssuing(false);
+      setIssuedToken(null);
+      setRequiredPhrase(null);
+      setExpiresAt(null);
+      setIssueError(err?.message || "Failed to obtain confirmation token");
+    });
+  }, [open, useTokenFlow, effectiveActionId, effectiveEntityType, effectiveEntityId, isCanonical, env]);
 
   useEffect(() => {
     if (!open || (!expiresAt && !cooldown?.endsAt)) return;
@@ -161,24 +175,25 @@ export const HighRiskConfirm = ({
   const twoManRequired = riskClass === "critical" || riskClass === "break_glass" || (requiredApproval?.length ?? 0) >= 2;
   const twoManPolicy = riskClass === "break_glass" || riskClass === "critical" ? HIGH_RISK_TWO_MAN_POLICY : DEFAULT_TWO_MAN_POLICY;
 
-  const tokenRequired = useV3Token || !!confirmToken || env === "live" || risk === "critical";
-  const token = useV3Token
+  const tokenRequired = useTokenFlow || !!confirmToken || env === "live" || risk === "critical";
+  const token = useTokenFlow
     ? (requiredPhrase ?? "")
     : (confirmToken ?? op.toUpperCase());
   const memoOk = memoCheck.ok;
   const tokenOk = !tokenRequired || (typed === token && token.length > 0);
-  const tokenExpired = useV3Token && expiresAt !== null && now >= expiresAt;
+  const tokenExpired = useTokenFlow && expiresAt !== null && now >= expiresAt;
   const memoMaxOk = memo.length <= 2000;
   const cooldownRedeem = canRedeemConfirmToken(cooldown);
   const cooldownBlocked = !cooldownRedeem.ok;
   const cooldownEndsAt = cooldown?.endsAt ? Date.parse(cooldown.endsAt) : null;
   const cooldownSec = cooldownEndsAt ? Math.max(0, Math.ceil((cooldownEndsAt - now) / 1000)) : null;
-  const ok = memoOk && memoMaxOk && tokenOk && !tokenExpired && !cooldownBlocked && (!useV3Token || !!issuedToken);
+  const ok = memoOk && memoMaxOk && tokenOk && !tokenExpired && !cooldownBlocked && (!useTokenFlow || (!!issuedToken && !issueError));
   const ttlSec = expiresAt ? Math.max(0, Math.ceil((expiresAt - now) / 1000)) : null;
 
   const reset = () => {
     setMemo(""); setTyped("");
     setIssuedToken(null); setRequiredPhrase(null); setExpiresAt(null);
+    setIssueError(null);
     setSubmitting(false);
   };
 
@@ -307,15 +322,21 @@ export const HighRiskConfirm = ({
               </div>
             </div>
 
+            {issueError && (
+              <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                {issueError}
+              </div>
+            )}
+
             {tokenRequired && (
               <div className="space-y-1.5">
-                {useV3Token && issuing && (
+                {useTokenFlow && issuing && (
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
                     <Loader2 className="h-3 w-3 animate-spin" />
                     Requesting confirm token…
                   </div>
                 )}
-                {useV3Token && issuedToken && (
+                {useTokenFlow && issuedToken && (
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-mono text-muted-foreground">token: {issuedToken.slice(0, 12)}…</span>
                     <span className={tokenExpired ? "text-destructive" : "text-status-warning"}>
@@ -328,7 +349,7 @@ export const HighRiskConfirm = ({
                   value={typed}
                   onChange={(e) => setTyped(e.target.value)}
                   className="text-mono"
-                  disabled={useV3Token && (!issuedToken || tokenExpired)}
+                  disabled={useTokenFlow && (!issuedToken || tokenExpired || !!issueError)}
                 />
               </div>
             )}

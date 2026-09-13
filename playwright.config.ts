@@ -30,6 +30,9 @@ process.env.PANTHEON_FE_BASE_URL ||= baseURL;
 process.env.PANTHEON_FE_PORT ||= String(dynamicPort);
 
 export default defineConfig({
+  // Playwright's PR diff capture fetches --depth=1, truncating ancestry used
+  // by the contract gate. Keep commit metadata; reports must not rewrite Git.
+  captureGitInfo: { diff: false },
   testDir: "./e2e",
   timeout: 60_000,
   expect: { timeout: 10_000 },
@@ -83,4 +86,3 @@ export default defineConfig({
     { name: "chromium", use: { ...devices["Desktop Chrome"] } },
   ],
 });
-

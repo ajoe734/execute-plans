@@ -8,12 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { onIdTokenChanged, signOut as signOutGcpIdentity, type User } from "firebase/auth";
-import {
-  gcpIdentityAuth,
-  gcpIdentityReady,
-  gcpIdentitySession,
-  type GcpIdentitySession,
-} from "@/integrations/gcp/identity";
+import type { GcpIdentitySession } from "@/integrations/gcp/identity";
 import {
   clearBffBrowserSession,
   logoutBffBrowserSession,
@@ -60,7 +55,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const applyUser = useCallback(async (user: User | null, forceRefresh = false) => {
     const version = ++syncVersion.current;
     const prior = sessionRef.current;
-    const next = user ? await gcpIdentitySession(user, forceRefresh) : null;
+    const next = user ? await (await import("@/integrations/gcp/identity")).gcpIdentitySession(user, forceRefresh) : null;
     if (syncVersion.current !== version) return;
     sessionRef.current = next;
     setSession(next);
@@ -155,8 +150,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     let unsubscribe = () => {};
     let active = true;
-    void gcpIdentityReady
-      .then(() => {
+    void import("@/integrations/gcp/identity")
+      .then(async ({ gcpIdentityReady, gcpIdentityAuth }) => {
+        await gcpIdentityReady;
         if (!active) return;
         unsubscribe = onIdTokenChanged(gcpIdentityAuth, (user) => {
           void applyUser(user).catch((error: unknown) => {
@@ -252,6 +248,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     let identityLogoutError: unknown;
     try {
+      const { gcpIdentityAuth } = await import("@/integrations/gcp/identity");
       await signOutGcpIdentity(gcpIdentityAuth);
     } catch (error: unknown) {
       identityLogoutError = error;

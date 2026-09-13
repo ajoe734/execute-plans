@@ -81,6 +81,7 @@ describe("contract generation Git provenance", () => {
         ...handoff, frontend: { ...handoff.frontend, runtime_commit: invalid },
       }, contract)).toThrow();
     }
+    expect(() => assertGitBoundFiles(root, "f".repeat(40), {})).toThrow(/HEAD=.*shallow=false; git rev-parse --verify.*exited 128/);
     git("checkout", "--orphan", "unrelated");
     write("unrelated.txt", "Distinct root with the same generated output.\n");
     const unrelated = commit();

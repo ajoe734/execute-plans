@@ -59,8 +59,7 @@ import { useInspector } from "@/platform/components/RightDrawer";
 import { useHandoff } from "@/lib/handoff";
 import { useJobDrawer } from "@/platform/components/JobProgressDrawer";
 import { useOverlay } from "@/platform/overlayStore";
-import { bffWrites } from "@/lib/bff-v1/writes";
-import { commandReceiptDescription } from "@/lib/bff-v1/commandReceipt";
+import { bffWrites, buildRunActionCommand, type OperatorCommandReceipt } from "@/lib/bff-v1/writes";
 import {
   type ChatAttachment,
   ATTACHMENT_LIMITS,
@@ -72,6 +71,19 @@ import {
   validateNewFiles,
 } from "./attachmentUtils";
 
+export interface StoredActionCommand {
+  commandId: string;
+  commandType?: string;
+  actionId: string;
+  entityType: string;
+  entityId: string;
+  status: "accepted" | "pending" | "submitted" | "processing" | "executed" | "failed" | "timeout" | string;
+  correlationId?: string;
+  idempotencyKey?: string;
+  updatedAt: number;
+  error?: string;
+  receipt?: OperatorCommandReceipt;
+}
 
 interface ChatTurn {
   id: string;
@@ -83,6 +95,7 @@ interface ChatTurn {
   traceId?: string | null;
   uiActions?: ManagementAiUiAction[];
   actionFeedback?: Record<string, string>;
+  actionCommands?: Record<string, StoredActionCommand>;
   attachments?: ChatAttachment[];
   createdAt: number;
 }
@@ -196,6 +209,7 @@ function mergeTurns(local: ChatTurn[], incoming: ChatTurn[]): ChatTurn[] {
       ...t,
       uiActions: prev.uiActions ?? t.uiActions,
       actionFeedback: { ...(prev.actionFeedback ?? {}), ...(t.actionFeedback ?? {}) },
+      actionCommands: { ...(prev.actionCommands ?? {}), ...(t.actionCommands ?? {}) },
       attachments: prev.attachments ?? t.attachments,
     } : t);
   }
@@ -411,7 +425,9 @@ export function AgentPanelBody() {
   const [text, setText] = useState("");
   const [sessions, setSessions] = useState<SessionIndexEntry[]>(() => loadSessionIndex());
   const [actionFeedback, setActionFeedback] = useState<Record<string, string>>({});
+  const [actionCommands, setActionCommands] = useState<Record<string, StoredActionCommand>>({});
   const [executingKeys, setExecutingKeys] = useState<Record<string, boolean>>({});
+  const receiptPollsRef = useRef(new Set<string>());
   const [confirmBusy, setConfirmBusy] = useState(false);
   const [pendingConfirmAction, setPendingConfirmAction] = useState<{
     action: ManagementAiUiAction;
@@ -424,6 +440,7 @@ export function AgentPanelBody() {
     idempotencyKey: string;
     payload?: Record<string, unknown>;
     memo?: string;
+    isCanonical?: boolean;
   } | null>(null);
   const [entityCreateDrawer, setEntityCreateDrawer] = useState<{
     open: boolean;
@@ -594,6 +611,8 @@ export function AgentPanelBody() {
     setDegraded(null);
     setText("");
     setActionFeedback({});
+    setActionCommands({});
+    setExecutingKeys({});
     setResyncNotice(null);
     setProviderReauthNotice(null);
     setPendingAttachments([]);
@@ -700,6 +719,44 @@ export function AgentPanelBody() {
     }
   }, [assistantModeStatus, traceId, refreshAssistantRuntimeStatus, sessionId, resync]);
 
+  const recordActionCommand = useCallback((
+    key: string,
+    cmd: StoredActionCommand,
+    feedbackText: string,
+    turnId?: string,
+    originSessionId: string | null = activeSessionRef.current,
+  ) => {
+    if (!originSessionId || !turnId) return;
+    const update = (prevTurns: ChatTurn[]) => prevTurns.map((t) => {
+        if (t.id === turnId) {
+          return {
+            ...t,
+            actionFeedback: {
+              ...(t.actionFeedback ?? {}),
+              [key]: feedbackText,
+            },
+            actionCommands: {
+              ...(t.actionCommands ?? {}),
+              [key]: cmd,
+            },
+          };
+        }
+        return t;
+      });
+    if (activeSessionRef.current !== originSessionId) {
+      void saveTurnsCache(originSessionId, update(loadTurnsCache(originSessionId)));
+      return;
+    }
+    setActionCommands((prev) => ({ ...prev, [key]: cmd }));
+    setActionFeedback((prev) => ({ ...prev, [key]: feedbackText }));
+    setTurns((prevTurns) => {
+      const nextTurns = update(prevTurns);
+      turnsRef.current = nextTurns;
+      void saveTurnsCache(originSessionId, nextTurns);
+      return nextTurns;
+    });
+  }, []);
+
   const recordActionFeedback = useCallback((key: string, feedbackText: string, turnId?: string) => {
     setActionFeedback((prev) => ({ ...prev, [key]: feedbackText }));
     setTurns((prevTurns) => {
@@ -722,10 +779,181 @@ export function AgentPanelBody() {
     });
   }, [sessionId]);
 
+  const pollCommandReceipt = useCallback(async (
+    cmd: StoredActionCommand,
+    key: string,
+    turnId?: string,
+    label?: string,
+    originSessionId: string | null = activeSessionRef.current,
+  ) => {
+    const { commandId, actionId, entityId } = cmd;
+    if (!commandId || !originSessionId || !turnId) return;
+    const actionLabel = label ?? actionId;
+    const pollKey = `${originSessionId}:${commandId}`;
+    if (receiptPollsRef.current.has(pollKey)) return;
+    receiptPollsRef.current.add(pollKey);
+    const expected = buildRunActionCommand({ kind: cmd.entityType, id: entityId, action: actionId }, {
+      correlationId: cmd.correlationId ?? commandId, idempotencyKey: cmd.idempotencyKey ?? commandId,
+    });
+    const record = (next: StoredActionCommand, text: string) =>
+      recordActionCommand(key, next, text, turnId, originSessionId);
+    if (activeSessionRef.current === originSessionId) setExecutingKeys((prev) => ({ ...prev, [key]: true }));
+
+    const maxAttempts = 15;
+    const delayMs = 1200;
+    let attempts = 0;
+
+    const checkOnce = async (): Promise<boolean> => {
+      try {
+        const receipt = await bffWrites.getOperatorCommand(commandId, {
+          correlationId: cmd.correlationId,
+        });
+        const status = receipt.status;
+
+        if (status === "executed") {
+          const isDegraded = Boolean(receipt.result?.degraded_mode || receipt.degraded_mode);
+          if (isDegraded) {
+            const updatedCmd: StoredActionCommand = {
+              ...cmd,
+              status: "failed",
+              updatedAt: Date.now(),
+              error: "執行於降級模式被拒絕",
+              receipt,
+            };
+            const desc = `指令 ${commandId} 降級執行被拒絕`;
+            record(updatedCmd, desc);
+            toast({
+              title: `${actionLabel} 執行失敗`,
+              description: desc,
+              variant: "destructive",
+            });
+            return true;
+          }
+
+          const receiptType = String(receipt.type || "");
+          const receiptTargetId = String(receipt.target?.id || "");
+          const typeMatches = receiptType === (cmd.commandType ?? expected.command);
+          const targetMatches = receiptTargetId === expected.target.id && receipt.target?.type === expected.target.type;
+          const paperCommand = expected.command === "PausePaperRuntime" || expected.command === "ResumePaperRuntime";
+          const readback = receipt.result?.authoritative_readback as Record<string, unknown> | undefined;
+          const paperReadbackMatches = !paperCommand || (
+            readback?.runtime_id === entityId
+            && Boolean(readback?.runtime_binding_id)
+            && readback?.deployment_mode === "paper"
+            && readback?.status === (expected.command === "PausePaperRuntime" ? "paused" : "active")
+          );
+
+          if (receipt.command_id !== commandId || !typeMatches || !targetMatches || !paperReadbackMatches) {
+            const updatedCmd: StoredActionCommand = {
+              ...cmd,
+              status: "failed",
+              updatedAt: Date.now(),
+              error: `指令返回目標或類型不匹配 (${receiptType} vs ${actionId}, ${receiptTargetId} vs ${entityId})`,
+              receipt,
+            };
+            const desc = `指令 ${commandId} 驗證不匹配: 目標/類型不符`;
+            record(updatedCmd, desc);
+            toast({
+              title: `${actionLabel} 驗證失敗`,
+              description: desc,
+              variant: "destructive",
+            });
+            return true;
+          }
+
+          const updatedCmd: StoredActionCommand = {
+            ...cmd,
+            status: "executed",
+            updatedAt: Date.now(),
+            receipt,
+          };
+          const desc = `指令 ${commandId} 已成功執行 (terminal status: executed)`;
+          record(updatedCmd, desc);
+          toast({
+            title: `${actionLabel} 執行成功`,
+            description: desc,
+          });
+          return true;
+        }
+
+        if (status === "failed") {
+          const errMsg = receipt.error?.message ?? receipt.error?.code ?? "後端指令執行失敗";
+          const updatedCmd: StoredActionCommand = {
+            ...cmd,
+            status: "failed",
+            updatedAt: Date.now(),
+            error: String(errMsg),
+            receipt,
+          };
+          const desc = `指令 ${commandId} 失敗: ${errMsg}`;
+          record(updatedCmd, desc);
+          toast({
+            title: `${actionLabel} 執行失敗`,
+            description: desc,
+            variant: "destructive",
+          });
+          return true;
+        }
+
+        if (status === "timeout") {
+          const updatedCmd: StoredActionCommand = {
+            ...cmd,
+            status: "timeout",
+            updatedAt: Date.now(),
+            error: "指令執行逾時",
+            receipt,
+          };
+          const desc = `指令 ${commandId} 執行逾時`;
+          record(updatedCmd, desc);
+          toast({
+            title: `${actionLabel} 執行逾時`,
+            description: desc,
+            variant: "destructive",
+          });
+          return true;
+        }
+
+        const updatedCmd: StoredActionCommand = {
+          ...cmd,
+          status,
+          updatedAt: Date.now(),
+          receipt,
+        };
+        const desc = `指令 ${commandId} 處理中 (狀態: ${status})…`;
+        record(updatedCmd, desc);
+        return false;
+      } catch (err) {
+        if (import.meta.env?.DEV) {
+          console.warn(`[mgmtAi] pollCommandReceipt attempt failed for ${commandId}`, err);
+        }
+        return false;
+      }
+    };
+
+    try {
+      while (attempts < maxAttempts) {
+        attempts++;
+        const done = await checkOnce();
+        if (done) return;
+        if (attempts < maxAttempts) {
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+        }
+      }
+      record({ ...cmd, status: "unconfirmed", updatedAt: Date.now() }, `指令 ${commandId} 尚未確認完成；可重讀回執，不會再次送出動作。`);
+    } finally {
+      receiptPollsRef.current.delete(pollKey);
+      if (activeSessionRef.current === originSessionId) setExecutingKeys((prev) => {
+        const { [key]: _dropped, ...rest } = prev;
+        return rest;
+      });
+    }
+  }, [recordActionCommand]);
+
   const loadSession = useCallback(async (id: string) => {
     if (id === sessionId) return;
     activeSessionRef.current = id;
     setSessionId(id);
+    setExecutingKeys({});
     setTraceId(null);
     setConversationSummary(undefined);
     setDegraded(null);
@@ -737,12 +965,25 @@ export function AgentPanelBody() {
     const cached = loadTurnsCache(id);
     setTurns(cached);
     const hydratedFeedback: Record<string, string> = {};
+    const hydratedCommands: Record<string, StoredActionCommand> = {};
     for (const t of cached) {
       if (t.actionFeedback) {
         Object.assign(hydratedFeedback, t.actionFeedback);
       }
+      if (t.actionCommands) {
+        Object.assign(hydratedCommands, t.actionCommands);
+      }
     }
     setActionFeedback(hydratedFeedback);
+    setActionCommands(hydratedCommands);
+
+    // Cache locates the ID; even cached terminal status must be read from the owner.
+    for (const turn of cached) {
+      for (const [key, cmd] of Object.entries(turn.actionCommands ?? {})) {
+        void pollCommandReceipt(cmd, key, turn.id, undefined, id);
+      }
+    }
+
     if (pendingSessions[id]) {
       setResyncNotice("此對話仍在等待 BFF 回覆，請稍候。");
     } else {
@@ -752,7 +993,7 @@ export function AgentPanelBody() {
       console.debug("[mgmtAi] loadSession hydrated", { sessionId: id, cached: cached.length });
     }
     await resync(id);
-  }, [sessionId, resync, pendingSessions]);
+  }, [sessionId, resync, pendingSessions, pollCommandReceipt]);
 
   const deleteSession = useCallback((id: string) => {
     // Cancel any in-flight request for this thread.
@@ -795,11 +1036,14 @@ export function AgentPanelBody() {
   const handleConfirmAction = useCallback(async (memo: string, token?: string) => {
     if (!pendingConfirmAction || confirmBusy) return;
     const { action, key, turnId, entityType, entityId, actionId, payload, correlationId, idempotencyKey } = pendingConfirmAction;
+    const originSessionId = activeSessionRef.current;
     setConfirmBusy(true);
     setExecutingKeys((prev) => ({ ...prev, [key]: true }));
     try {
+      const payloadObj = (payload ?? {}) as Record<string, unknown>;
       const res = await bffWrites.runAction(
         {
+          ...payloadObj,
           kind: entityType,
           id: entityId,
           action: actionId,
@@ -807,7 +1051,7 @@ export function AgentPanelBody() {
           confirmToken: token,
           correlationId,
           idempotencyKey,
-          ...(payload ? { newState: payload.newState as string } : {}),
+          payload: payloadObj,
         },
         {
           correlationId,
@@ -815,17 +1059,46 @@ export function AgentPanelBody() {
           confirmToken: token,
         },
       );
-      const receiptDesc = commandReceiptDescription(res, {
-        fallback: `${entityType} ${actionId} 已執行`,
-      });
-      recordActionFeedback(key, receiptDesc, turnId);
-      toast({
-        title: `${action.label ?? actionId} 執行成功`,
-        description: receiptDesc,
-      });
+      const rawCmdId = res.data?.actionId || "";
+      const status = res.data?.status || "accepted";
+
+      const initialCmd: StoredActionCommand = {
+        commandId: rawCmdId,
+        commandType: buildRunActionCommand({ kind: entityType, id: entityId, action: actionId }, { correlationId, idempotencyKey }).command,
+        actionId,
+        entityType,
+        entityId,
+        status,
+        correlationId,
+        idempotencyKey,
+        updatedAt: Date.now(),
+      };
+
+      if (!rawCmdId) throw new Error("後端未回傳 command ID，無法讀取完成回執。");
+      {
+        // Non-terminal admission
+        const admissionDesc = `指令 ${rawCmdId} 已受理，處理中…`;
+        recordActionCommand(key, { ...initialCmd, status: "accepted" }, admissionDesc, turnId, originSessionId);
+        toast({
+          title: "指令已受理",
+          description: `指令已受理 (ID: ${rawCmdId})，正在等待終端執行結果…`,
+        });
+        void pollCommandReceipt(initialCmd, key, turnId, action.label, originSessionId);
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      recordActionFeedback(key, `執行失敗: ${msg}`, turnId);
+      const failedCmd: StoredActionCommand = {
+        commandId: "",
+        actionId,
+        entityType,
+        entityId,
+        status: "failed",
+        correlationId,
+        idempotencyKey,
+        updatedAt: Date.now(),
+        error: msg,
+      };
+      recordActionCommand(key, failedCmd, `執行失敗: ${msg}`, turnId, originSessionId);
       toast({
         title: "動作執行失敗",
         description: msg,
@@ -839,12 +1112,20 @@ export function AgentPanelBody() {
       });
       setPendingConfirmAction(null);
     }
-  }, [pendingConfirmAction, confirmBusy, recordActionFeedback]);
+  }, [pendingConfirmAction, confirmBusy, recordActionCommand, pollCommandReceipt]);
 
   const runUiAction = useCallback(async (action: ManagementAiUiAction, key: string, turnId?: string, idx?: number) => {
     const correlationKey = key || getActionCorrelationKey(action as UiAction, turnId, idx);
     const existingFeedback = actionFeedback[correlationKey];
-    if (existingFeedback && (existingFeedback === "已執行" || existingFeedback.startsWith("command/") || existingFeedback.includes("status"))) {
+    const existingCmd = actionCommands[correlationKey];
+    if (existingCmd?.commandId) {
+      void pollCommandReceipt(existingCmd, correlationKey, turnId, action.label);
+      return;
+    }
+    if (
+      (existingCmd && (existingCmd.status === "executed" || existingCmd.status === "completed")) ||
+      (existingFeedback && (existingFeedback === "已執行" || existingFeedback.includes("已成功執行") || existingFeedback.startsWith("command/") || existingFeedback.includes("status")))
+    ) {
       toast({
         title: "動作已執行過",
         description: "此動作先前已完成執行，避免重複執行。",
@@ -852,7 +1133,11 @@ export function AgentPanelBody() {
       return;
     }
 
-    if (executingKeys[correlationKey] || confirmBusy) {
+    if (
+      (existingCmd && (existingCmd.status === "accepted" || existingCmd.status === "pending" || existingCmd.status === "submitted" || existingCmd.status === "processing")) ||
+      executingKeys[correlationKey] ||
+      confirmBusy
+    ) {
       return;
     }
 
@@ -880,6 +1165,9 @@ export function AgentPanelBody() {
         });
         return;
       }
+      const isCanonical =
+        actionId === "PausePaperRuntime" ||
+        actionId === "ResumePaperRuntime";
       const actionCorrelationId = (action as UiAction).correlationId || (action as UiAction).id || correlationKey;
       const idempotencyKey = (params.idempotencyKey as string) || (params.payload as Record<string, unknown>)?.idempotencyKey as string || actionCorrelationId;
       setPendingConfirmAction({
@@ -891,8 +1179,9 @@ export function AgentPanelBody() {
         actionId,
         correlationId: actionCorrelationId,
         idempotencyKey,
-        payload: params.payload as Record<string, unknown>,
-        memo: params.memo as string,
+        payload: (params.payload ?? params) as Record<string, unknown>,
+        memo: (params.memo ?? (params.payload as Record<string, unknown>)?.memo) as string,
+        isCanonical,
       });
       return;
     }
@@ -1000,7 +1289,7 @@ export function AgentPanelBody() {
         return rest;
       });
     }
-  }, [actionFeedback, executingKeys, confirmBusy, navigate, searchParams, setSearchParams, recordActionFeedback]);
+  }, [actionFeedback, actionCommands, executingKeys, confirmBusy, navigate, searchParams, setSearchParams, recordActionFeedback, pollCommandReceipt]);
 
   const activateControlMode = useCallback(async () => {
     const passphrase = controlPassphrase.trim();
@@ -1521,13 +1810,18 @@ export function AgentPanelBody() {
             onOpenChange={(open) => {
               if (!open) setPendingConfirmAction(null);
             }}
-            operation={pendingConfirmAction.action.label ?? `${pendingConfirmAction.entityType}.${pendingConfirmAction.actionId}`}
+            operation={pendingConfirmAction.action.label ?? (pendingConfirmAction.isCanonical ? pendingConfirmAction.actionId : `${pendingConfirmAction.entityType}.${pendingConfirmAction.actionId}`)}
             target={{
               type: pendingConfirmAction.entityType,
               id: pendingConfirmAction.entityId,
               name: pendingConfirmAction.entityId,
             }}
-            actionId={`${pendingConfirmAction.entityType}.${pendingConfirmAction.actionId}`}
+            actionId={pendingConfirmAction.isCanonical ? pendingConfirmAction.actionId : `${pendingConfirmAction.entityType}.${pendingConfirmAction.actionId}`}
+            canonicalCommand={pendingConfirmAction.isCanonical ? {
+              actionId: pendingConfirmAction.actionId,
+              entityType: pendingConfirmAction.entityType,
+              entityId: pendingConfirmAction.entityId,
+            } : undefined}
             confirmEntity={{
               type: pendingConfirmAction.entityType,
               id: pendingConfirmAction.entityId,
@@ -1620,9 +1914,14 @@ export function AgentPanelBody() {
                       const key = getActionCorrelationKey(a as UiAction, t.id, idx);
                       const highRisk = isHighRiskAction(a as UiAction);
                       const feedback = actionFeedback[key] ?? t.actionFeedback?.[key];
+                      const cmd = actionCommands[key] ?? t.actionCommands?.[key];
                       const isExecuted = Boolean(
-                        feedback &&
-                        (feedback === "已執行" || feedback.startsWith("command/") || feedback.includes("status"))
+                        (cmd && (cmd.status === "executed" || cmd.status === "completed")) ||
+                        (!cmd && feedback === "已執行")
+                      );
+                      const isPending = Boolean(
+                        (cmd && (cmd.status === "accepted" || cmd.status === "pending" || cmd.status === "submitted" || cmd.status === "processing")) ||
+                        (feedback && (feedback.includes("處理中") || feedback.includes("已受理")))
                       );
                       const isRunning = Boolean(executingKeys[key]);
                       return (
@@ -1642,7 +1941,7 @@ export function AgentPanelBody() {
                           ) : (
                             <Play className="h-3 w-3" />
                           )}
-                          <span>{a.label ?? a.kind}</span>
+                          <span>{cmd?.commandId && !isExecuted && !isRunning ? "重讀回執" : (a.label ?? a.kind)}</span>
                           {feedback && (
                             <Badge variant="outline" className="ml-1 text-[9px] px-1 py-0 font-normal">
                               {feedback}
