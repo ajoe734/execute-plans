@@ -25,7 +25,9 @@ const ManagementLayoutRoute = lazyNamedRoute(() => import("@/management/Manageme
 const AuthRoute = lazyRoute(() => import("@/pages/Auth"), "Auth");
 const NotFoundRoute = lazyRoute(() => import("@/pages/NotFound"), "Not found");
 const AuditViewerRoute = lazyNamedRoute(() => import("@/platform/pages/AuditViewer"), "AuditViewer", "Audit viewer");
-const QAChecklistRoute = lazyNamedRoute(() => import("@/platform/pages/QAChecklist"), "QAChecklist", "QA checklist");
+const QAChecklistRoute = import.meta.env.DEV
+  ? lazyNamedRoute(() => import("@/platform/pages/QAChecklist"), "QAChecklist", "QA checklist")
+  : () => null;
 
 const ManagementAgentRedirectRoute = lazyNamedRoute(
   () => import("@/routes/management/agent"),

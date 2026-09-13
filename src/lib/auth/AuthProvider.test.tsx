@@ -15,6 +15,11 @@ const mocks = vi.hoisted(() => ({
   verify: vi.fn(),
   refreshVerify: vi.fn(),
   bffLogout: vi.fn(),
+  postDevLogin: vi.fn(),
+}));
+
+vi.mock("./devLogin", () => ({
+  postDevLogin: (...args: unknown[]) => mocks.postDevLogin(...args),
 }));
 
 vi.mock("firebase/auth", () => ({
@@ -41,6 +46,15 @@ vi.mock("@/lib/auth/bffBrowserSession", () => ({
 }));
 
 import { AuthProvider, useAuth } from "./AuthProvider";
+import { isDevLoginHost } from "@/lib/bff-v1/runtimeEnv";
+
+function setLocation(url: string) {
+  Object.defineProperty(window, "location", {
+    value: new URL(url),
+    writable: true,
+    configurable: true,
+  });
+}
 
 function session(token: string): GcpIdentitySession {
   return {
@@ -77,6 +91,7 @@ function wrapper({ children }: { children: ReactNode }) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  setLocation("https://app.mvl-cap.tw/auth");
   mocks.authListener = null;
   mocks.initialUser = { uid: "gcp-user" } as User;
   mocks.identitySession.mockImplementation(async (user: User, forceRefresh = false) =>
@@ -87,6 +102,7 @@ beforeEach(() => {
   mocks.verify.mockResolvedValue(verified);
   mocks.refreshVerify.mockResolvedValue(verified);
   mocks.bffLogout.mockResolvedValue(undefined);
+  mocks.postDevLogin.mockResolvedValue(undefined);
 });
 
 describe("AuthProvider strict BFF bridge", () => {
@@ -214,5 +230,167 @@ describe("AuthProvider strict BFF bridge", () => {
     expect(mocks.identitySignOut).toHaveBeenCalledOnce();
     await waitFor(() => expect(result.current.session).toBeNull());
     expect(result.current.bffSession).toBeNull();
+  });
+
+  it("restores cookie session on load on dev host without depending on GCP sign-in or Firebase callbacks", async () => {
+    setLocation("https://app.dev.mvl-cap.tw/auth");
+    mocks.initialUser = { uid: "cached-gcp-user" } as User;
+    const { result } = renderHook(() => useAuth(), { wrapper });
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(mocks.verify).toHaveBeenCalled();
+    expect(mocks.authListener).toBeNull();
+    expect(mocks.identitySession).not.toHaveBeenCalled();
+    expect(result.current.session).toBeNull();
+    expect(result.current.user).toBeNull();
+    expect(result.current.bffSession).toEqual(verified);
+    expect(result.current.bffError).toBeNull();
+  });
+
+  it("maintains production behavior on load when Firebase user is null", async () => {
+    setLocation("https://app.mvl-cap.tw/auth");
+    mocks.initialUser = null;
+    const { result } = renderHook(() => useAuth(), { wrapper });
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(mocks.verify).not.toHaveBeenCalled();
+    expect(result.current.session).toBeNull();
+    expect(result.current.bffSession).toBeNull();
+  });
+
+  it("retries verification on dev host even with Firebase session null", async () => {
+    setLocation("https://app.dev.mvl-cap.tw/auth");
+    mocks.initialUser = null;
+    mocks.verify.mockRejectedValueOnce(new Error("Transient BFF error"));
+    const { result } = renderHook(() => useAuth(), { wrapper });
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.bffSession).toBeNull();
+    mocks.verify.mockResolvedValueOnce(verified);
+
+    await act(async () => {
+      await result.current.retryBffSession();
+    });
+
+    expect(result.current.bffSession).toEqual(verified);
+    expect(result.current.bffError).toBeNull();
+    expect(mocks.identitySession).not.toHaveBeenCalled();
+  });
+
+  it("throws unavailable GCP Identity session on production host when session is null", async () => {
+    setLocation("https://app.mvl-cap.tw/auth");
+    mocks.initialUser = null;
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    let retryError: unknown;
+    await act(async () => {
+      try {
+        await result.current.retryBffSession();
+      } catch (error: unknown) {
+        retryError = error;
+      }
+    });
+
+    expect(retryError).toBeInstanceOf(Error);
+    expect((retryError as Error).message).toMatch(
+      /GCP Identity session is unavailable/,
+    );
+  });
+
+  it("dev logout invalidates BFF session without calling Firebase signOut", async () => {
+    setLocation("https://app.dev.mvl-cap.tw/auth");
+    mocks.initialUser = null;
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.bffSession).toEqual(verified);
+
+    mocks.bffLogout.mockClear();
+    mocks.identitySignOut.mockClear();
+    mocks.clear.mockClear();
+
+    await act(async () => {
+      await result.current.signOut();
+    });
+
+    expect(mocks.bffLogout).toHaveBeenCalledOnce();
+    expect(mocks.identitySignOut).not.toHaveBeenCalled();
+    expect(mocks.clear).toHaveBeenCalled();
+    expect(result.current.session).toBeNull();
+    expect(result.current.bffSession).toBeNull();
+  });
+
+  it("discards late verification results after logout, preventing session resurrection", async () => {
+    setLocation("https://app.dev.mvl-cap.tw/auth");
+    let resolveVerify!: (val: typeof verified) => void;
+    mocks.verify.mockImplementation(
+      () =>
+        new Promise<typeof verified>((resolve) => {
+          resolveVerify = resolve;
+        }),
+    );
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    expect(result.current.loading).toBe(true);
+
+    await act(async () => {
+      await result.current.signOut();
+    });
+
+    expect(result.current.loading).toBe(false);
+    expect(result.current.bffSession).toBeNull();
+
+    await act(async () => {
+      resolveVerify(verified);
+    });
+
+    expect(result.current.bffSession).toBeNull();
+    expect(result.current.loading).toBe(false);
+  });
+
+  it("devLogin posts client credentials, clears in-memory bearer, verifies, and sets bffSession", async () => {
+    setLocation("https://app.dev.mvl-cap.tw/auth");
+    mocks.initialUser = null;
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    mocks.clear.mockClear();
+    mocks.verify.mockClear();
+    await act(async () => {
+      await result.current.devLogin("operator", "secret");
+    });
+
+    expect(mocks.postDevLogin).toHaveBeenCalledWith("operator", "secret");
+    expect(mocks.clear).toHaveBeenCalled();
+    expect(mocks.clear.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.verify.mock.invocationCallOrder[0],
+    );
+    expect(result.current.bffSession).toEqual(verified);
+    expect(result.current.bffError).toBeNull();
+  });
+
+  it("ignores runtime config hostname override on production host", () => {
+    setLocation("https://app.mvl-cap.tw/auth");
+    (window as unknown as { __PANTHEON_RUNTIME_CONFIG__?: unknown }).__PANTHEON_RUNTIME_CONFIG__ = {
+      hostname: "app.dev.mvl-cap.tw",
+    };
+
+    expect(isDevLoginHost()).toBe(false);
+  });
+
+  it("does not write credentials or tokens to browser storage during dev login", async () => {
+    setLocation("https://app.dev.mvl-cap.tw/auth");
+    const setItemSpy = vi.spyOn(Storage.prototype, "setItem");
+
+    mocks.initialUser = null;
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await result.current.devLogin("operator", "secret");
+    });
+
+    expect(setItemSpy).not.toHaveBeenCalled();
+    setItemSpy.mockRestore();
   });
 });

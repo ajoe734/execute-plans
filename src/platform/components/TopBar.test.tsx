@@ -1,13 +1,26 @@
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { toast } from "sonner";
 import { TopBar } from "./TopBar";
 import { lists } from "@/lib/bff-v1";
+import { makeBffError } from "@/lib/bff-v1/errors";
 import { liveStatus } from "@/lib/bff-v1/liveStatus";
 import { mockMe } from "@/lib/v4/session/me";
 import i18n from "@/i18n";
 import { markRoutePrimaryReady, resetRoutePrimaryReadyForTests } from "@/platform/routePrimaryReady";
 import { usePlatform } from "@/platform/store";
+
+// The user menu consumes the real `useAuth().signOut` contract; only the
+// provider hook itself is stubbed so no Firebase/BFF wiring runs here.
+const authMocks = vi.hoisted(() => ({ signOut: vi.fn<() => Promise<void>>() }));
+vi.mock("@/lib/auth/AuthProvider", () => ({
+  useAuth: () => ({ signOut: authMocks.signOut }),
+}));
+
+vi.mock("sonner", () => ({
+  toast: { error: vi.fn(), success: vi.fn() },
+}));
 
 const realFetch = globalThis.fetch;
 
@@ -348,5 +361,88 @@ describe("TopBar — shell-summary badge counts (MGMT-LOAD-003)", () => {
     const badge = screen.getByText("SNAPSHOT DATA");
     expect(badge).toBeInTheDocument();
     expect(badge).toHaveAttribute("title", "Degraded surfaces: shell_summary, approvals");
+  });
+});
+
+describe("TopBar — user menu sign out", () => {
+  beforeEach(async () => {
+    await i18n.changeLanguage("en-US");
+    vi.useFakeTimers();
+    vi.stubGlobal("requestIdleCallback", undefined);
+    vi.stubGlobal("cancelIdleCallback", undefined);
+    resetRoutePrimaryReadyForTests();
+    liveStatus._reset({ mode: "live", effective: "live" });
+    authMocks.signOut.mockReset();
+    vi.mocked(toast.error).mockClear();
+    globalThis.fetch = routedFetch({
+      "/bff/management/shell-summary": () => jsonResponse(shellSummaryPayload("ok")),
+      "/bff/me": () => jsonResponse(mockMe()),
+      "/health": () => jsonResponse({ status: "ok" }),
+    });
+  });
+
+  afterEach(async () => {
+    cleanup();
+    globalThis.fetch = realFetch;
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    resetRoutePrimaryReadyForTests();
+    liveStatus._reset();
+    await i18n.changeLanguage("zh-TW");
+  });
+
+  async function flush() {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+  }
+
+  async function openUserMenu() {
+    renderTopBar();
+    await flush();
+    const trigger = screen.getByRole("button", { name: /Mock Operator/ });
+    fireEvent.keyDown(trigger, { key: "Enter" });
+    await flush();
+    return screen.getByRole("menuitem", { name: /Sign out/ });
+  }
+
+  it("offers an accessible Sign out action in the user menu that invokes the provider signOut", async () => {
+    authMocks.signOut.mockResolvedValue(undefined);
+    const item = await openUserMenu();
+
+    fireEvent.click(item);
+    await flush();
+
+    expect(authMocks.signOut).toHaveBeenCalledTimes(1);
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  it("surfaces a failed BFF invalidation instead of pretending sign out succeeded", async () => {
+    const unhandled = vi.fn();
+    process.on("unhandledRejection", unhandled);
+    authMocks.signOut.mockRejectedValue(new Error("logout endpoint unreachable"));
+    try {
+      const item = await openUserMenu();
+      fireEvent.click(item);
+      await flush();
+
+      expect(authMocks.signOut).toHaveBeenCalledTimes(1);
+      expect(toast.error).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(toast.error).mock.calls[0][0]).toContain("logout endpoint unreachable");
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally {
+      process.off("unhandledRejection", unhandled);
+    }
+  });
+
+  it("treats an expired-session 401 from the BFF as already signed out", async () => {
+    authMocks.signOut.mockRejectedValue(makeBffError({ code: "TOKEN_EXPIRED" }));
+    const item = await openUserMenu();
+
+    fireEvent.click(item);
+    await flush();
+
+    expect(authMocks.signOut).toHaveBeenCalledTimes(1);
+    expect(toast.error).not.toHaveBeenCalled();
   });
 });

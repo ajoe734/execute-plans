@@ -4,7 +4,7 @@ import "./index.css";
 import { detectMode, setMockResolver, type MockHandlerResolver } from "@/lib/bff-v1/client";
 
 export async function prepareMockEnvironment(): Promise<MockHandlerResolver | undefined> {
-  if (detectMode() === "mock") {
+  if (!import.meta.env.PROD && detectMode() === "mock") {
     const [adapters, registry] = await Promise.all([
       import("@/lib/bff-v1/mocks/adapters"),
       import("@/lib/bff-v1/mocks/registry"),

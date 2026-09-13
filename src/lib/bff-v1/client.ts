@@ -4,6 +4,7 @@
 import { buildHeaders, isMutation, BFF_API_VERSION } from "./headers";
 import { BffError, makeBffError, normalizeBffErrorEnvelope } from "./errors";
 import { liveStatus, type BffMode } from "./liveStatus";
+import { readBffEnv } from "./runtimeEnv";
 
 export type { BffMode };
 
@@ -28,9 +29,7 @@ export function getMockResolver(): MockHandlerResolver | undefined {
 }
 
 function readEnv(): Record<string, string | undefined> {
-  const viteEnv = ((import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {});
-  const nodeEnv = typeof process !== "undefined" ? process.env : {};
-  return { ...viteEnv, ...nodeEnv };
+  return readBffEnv();
 }
 
 export function detectMode(): BffMode {

@@ -1,13 +1,26 @@
 import React from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { toast } from "sonner";
 import { TradingDeskLayout } from "./TradingDeskLayout";
 import { getWorkshop } from "@/lib/bff-v1/agora/workshops";
 import type { StrategyWorkshop } from "@/lib/bff-v1/agora/types";
+import { makeBffError } from "@/lib/bff-v1/errors";
 
 vi.mock("@/lib/bff-v1/agora/workshops", () => ({
   getWorkshop: vi.fn(),
+}));
+
+// The command bar consumes the real `useAuth().signOut` contract; only the
+// provider hook itself is stubbed so no Firebase/BFF wiring runs here.
+const authMocks = vi.hoisted(() => ({ signOut: vi.fn<() => Promise<void>>() }));
+vi.mock("@/lib/auth/AuthProvider", () => ({
+  useAuth: () => ({ signOut: authMocks.signOut }),
+}));
+
+vi.mock("sonner", () => ({
+  toast: { error: vi.fn(), success: vi.fn() },
 }));
 
 const DESKTOP_WIDTH = 1280;
@@ -245,5 +258,70 @@ describe("TradingDeskLayout", () => {
     expect(screen.getByTestId("servant-drawer-context").textContent).toContain(
       "open a strategy workshop session",
     );
+  });
+
+  describe("command bar sign out", () => {
+    beforeEach(() => {
+      authMocks.signOut.mockReset();
+      vi.mocked(toast.error).mockClear();
+    });
+
+    it("exposes an accessible Sign out action that invokes the auth provider signOut", async () => {
+      let resolveSignOut: () => void = () => {};
+      authMocks.signOut.mockImplementation(
+        () => new Promise<void>((resolve) => { resolveSignOut = resolve; }),
+      );
+      renderTradingDesk();
+
+      const commandBar = screen.getByTestId("trading-desk-command-bar");
+      const button = screen.getByRole("button", { name: "Sign out" }) as HTMLButtonElement;
+      expect(commandBar.contains(button)).toBe(true);
+      expect(button.type).toBe("button");
+
+      fireEvent.click(button);
+      expect(authMocks.signOut).toHaveBeenCalledTimes(1);
+      // Re-entrancy guard while the BFF invalidation is in flight.
+      expect(button.disabled).toBe(true);
+
+      await act(async () => {
+        resolveSignOut();
+      });
+      expect(button.disabled).toBe(false);
+      expect(toast.error).not.toHaveBeenCalled();
+    });
+
+    it("surfaces a failed BFF invalidation instead of pretending sign out succeeded", async () => {
+      const unhandled = vi.fn();
+      process.on("unhandledRejection", unhandled);
+      authMocks.signOut.mockRejectedValue(new Error("logout endpoint unreachable"));
+      renderTradingDesk();
+
+      fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
+
+      try {
+        await waitFor(() => expect(toast.error).toHaveBeenCalledTimes(1));
+        expect(vi.mocked(toast.error).mock.calls[0][0]).toContain("logout endpoint unreachable");
+        await act(async () => {
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        });
+        expect(unhandled).not.toHaveBeenCalled();
+      } finally {
+        process.off("unhandledRejection", unhandled);
+      }
+      expect((screen.getByRole("button", { name: "Sign out" }) as HTMLButtonElement).disabled).toBe(false);
+    });
+
+    it("treats an expired-session 401 from the BFF as already signed out", async () => {
+      authMocks.signOut.mockRejectedValue(makeBffError({ code: "TOKEN_EXPIRED" }));
+      renderTradingDesk();
+
+      fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
+
+      await waitFor(() => expect(authMocks.signOut).toHaveBeenCalledTimes(1));
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      expect(toast.error).not.toHaveBeenCalled();
+    });
   });
 });

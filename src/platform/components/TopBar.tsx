@@ -6,14 +6,16 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Search, Bell, AlertTriangle, ClipboardCheck, Loader2, Globe, User, Lock } from "lucide-react";
+import { Search, Bell, AlertTriangle, ClipboardCheck, Loader2, Globe, User, Lock, LogOut } from "lucide-react";
+import { toast } from "sonner";
 import { usePlatform, type Locale } from "@/platform/store";
 import { useT } from "@/platform/hooks";
 import {
-  lists, liveStatus, probeLiveHealth, useLiveStatus, type ListEnvelope,
+  BffError, lists, liveStatus, probeLiveHealth, useLiveStatus, type ListEnvelope,
   fetchShellSummary, shellSummaryStatus,
 } from "@/lib/bff-v1";
 import { useMe } from "@/lib/v4/session/me";
+import { useAuth } from "@/lib/auth/AuthProvider";
 import { useNotificationCenter } from "./NotificationCenter";
 import { RealtimeStatusBadge } from "./RealtimeStatusBadge";
 import { scheduleAfterRoutePrimaryReady } from "@/platform/routePrimaryReady";
@@ -48,6 +50,8 @@ export const TopBar = () => {
   const { locale, setLocale } = usePlatform();
   const live = useLiveStatus();
   const { me, loading: meLoading, error: meError } = useMe();
+  const { signOut } = useAuth();
+  const [signingOut, setSigningOut] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [counts, setCounts] = useState({ approvals: 0, alerts: 0, jobs: 0 });
   const transportSource: TopbarDataSource = live.mode === "mock" ? "mock" : live.effective === "mock" ? "fallback" : "live";
@@ -206,6 +210,21 @@ export const TopBar = () => {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // AuthProvider.signOut clears local session state (so ProtectedRoute
+  // redirects) and then rethrows a failed BFF invalidation. A 401 means the
+  // BFF session was already gone; anything else is surfaced, never swallowed.
+  const handleSignOut = async () => {
+    setSigningOut(true);
+    try {
+      await signOut();
+    } catch (error: unknown) {
+      if (error instanceof BffError && error.status === 401) return;
+      toast.error(`Sign out did not complete: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setSigningOut(false);
+    }
+  };
+
   return (
     <header className="min-h-14 max-w-full overflow-x-hidden border-b border-border bg-card flex items-center px-3 gap-2 sticky top-0 z-40 sm:px-4 sm:gap-3">
       {/* Logo + product switcher */}
@@ -303,6 +322,11 @@ export const TopBar = () => {
             {me.roles.map((r) => (
               <DropdownMenuItem key={r} disabled>{r}</DropdownMenuItem>
             ))}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem disabled={signingOut} onSelect={() => void handleSignOut()}>
+              <LogOut className="mr-2 h-4 w-4" />
+              {t("topbar.signOut", { defaultValue: "Sign out" })}
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       ) : null}

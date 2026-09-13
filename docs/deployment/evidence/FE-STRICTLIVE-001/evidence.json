@@ -1,0 +1,97 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "FE-STRICTLIVE-001",
+  "owner": "Antigravity2",
+  "reviewer": "Antigravity",
+  "target_repo": "ajoe734/execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-STRICTLIVE-001",
+  "status": "ready-for-independent-exact-head-review",
+  "scope": {
+    "summary": "Enforce production bundle strict-live defaults and remove production fallback reachability per pkt-pantheon-structural-closure-functional-v2-20260903 (SD \u00a79, \u00a711, REPORT \u00a75 GAP-MGMT-08).",
+    "required_build_contract": {
+      "VITE_BFF_MODE": "live",
+      "VITE_BFF_FALLBACK": "strict",
+      "VITE_BFF_REAL_WRITES": "false",
+      "VITE_BFF_ALLOW_DEV_STUB_WRITES": "false",
+      "VITE_BFF_EMBEDDED_BEARER_TOKEN": "false"
+    },
+    "modified_files": [
+      {
+        "file": "vite.config.ts",
+        "description": "Enforce production build contract defaults (live/strict/false) and fail closed on invalid overrides; add src/lib/v5/overlay.ts and src/lib/v5/loopOverlay.ts to FORBIDDEN_STRICT_LIVE_MODULES; provide build contract defines."
+      },
+      {
+        "file": "src/App.tsx",
+        "description": "Exclude test-only dynamic import of QAChecklist from production bundle graph using DEV-only route definition (import.meta.env.DEV ? ... : () => null)."
+      },
+      {
+        "file": "src/main.tsx",
+        "description": "Guard prepareMockEnvironment() with !import.meta.env.PROD so Rollup DCE eliminates mock dynamic imports in production builds."
+      },
+      {
+        "file": "src/lib/bff-v1/runtimeEnv.ts",
+        "description": "Remove app.dev.mvl-cap.tw from FALLBACK_RUNTIME_HOSTS so hosted dev cannot be overridden to mock fallback; add buildContractEnv defaults when in production."
+      },
+      {
+        "file": "src/lib/bff-v1/client.ts",
+        "description": "Use readBffEnv() for detectMode() and detectBaseUrl() to respect build contract defaults."
+      }
+    ],
+    "mandatory_deletions_verified": [
+      "No production reachable fixture or seed imports (src/mocks/seed.ts).",
+      "No production reachable mock adapters or registry dynamic imports.",
+      "No production reachable local write overlay or loopOverlay modules.",
+      "No fallback to mock data on hosted dev domain (app.dev.mvl-cap.tw)."
+    ]
+  },
+  "review_binding": {
+    "required_final_binding": "Independent approval must bind the final PR head containing this manifest."
+  },
+  "acceptance": {
+    "production_rollup_mock_reachability": 0,
+    "production_build_defaults_strict_live": true,
+    "forbidden_production_overrides_fail_closed": true,
+    "hosted_dev_mock_fallback_forbidden": true,
+    "full_test_suite_passed": true,
+    "check_bundle_mock_reachability": "passed"
+  },
+  "validation": {
+    "bundle_mock_reachability_gate": {
+      "command": "npx tsx scripts/check_bundle_mock_reachability.ts",
+      "result": "passed: Production Rollup graph has zero mock/seed/fallback reachability."
+    },
+    "full_test_suite": {
+      "command": "npm test",
+      "result": "passed: 204 test files passed, 2051 tests passed, 2 skipped, 0 failed."
+    },
+    "typecheck": {
+      "command": "npm run typecheck",
+      "result": "passed: tsc -p tsconfig.agora.json --noEmit exited 0."
+    },
+    "lint": {
+      "command": "npm run lint",
+      "result": "passed: 0 errors."
+    },
+    "git_diff_check": {
+      "command": "git diff --check origin/dev",
+      "result": "passed: clean with 0 whitespace/blank-line-at-EOF issues."
+    },
+    "production_build_clean": {
+      "command": "VITE_GCP_IDENTITY_API_KEY=AIza00000000000000000000000000000000000 VITE_GCP_IDENTITY_PROJECT_ID=pantheon-dev VITE_GCP_IDENTITY_AUTH_DOMAIN=pantheon-dev.firebaseapp.com npx vite build",
+      "result": "passed: built clean in production mode with zero writeOverlay, mock adapter, or QAChecklist chunks."
+    },
+    "production_build_fail_closed": {
+      "command": "VITE_BFF_MODE=mock npx vite build / VITE_BFF_FALLBACK=auto npx vite build",
+      "result": "passed: failed closed with explicit Error: Production build forbids VITE_BFF_MODE=mock / VITE_BFF_FALLBACK=auto."
+    }
+  },
+  "independent_review_required": [
+    "Confirm production Rollup bundle graph has zero mock reachability via scripts/check_bundle_mock_reachability.ts.",
+    "Confirm full vitest test suite passes (204 test files, 2051 passed).",
+    "Confirm typecheck and lint pass cleanly.",
+    "Confirm git diff --check origin/dev passes cleanly.",
+    "Confirm production build defaults to live/strict/safe writes with zero reachable mock fixtures or write overlays.",
+    "Bind this file through REVIEW_FILE during governed exact-head approval."
+  ]
+}

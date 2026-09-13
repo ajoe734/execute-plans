@@ -7,7 +7,6 @@ const DEV_RUNTIME_HOSTS = new Set([
 const FALLBACK_RUNTIME_HOSTS = new Set([
   "localhost",
   "127.0.0.1",
-  "app.dev.mvl-cap.tw",
 ]);
 
 const REAL_WRITE_KEYS = [
@@ -33,6 +32,19 @@ function falsey(value: unknown): boolean {
   return ["0", "false", "no", "off"].includes(String(value ?? "").trim().toLowerCase());
 }
 
+function readRuntimeConfigValue(key: string): string | undefined {
+  if (typeof window === "undefined") return undefined;
+  const runtimeWindow = window as unknown as Record<string, unknown>;
+  for (const configKey of RUNTIME_CONFIG_KEYS) {
+    const config = runtimeWindow[configKey];
+    if (!config || typeof config !== "object" || Array.isArray(config)) continue;
+    const value = (config as Record<string, unknown>)[key];
+    if (typeof value === "string") return value;
+    if (typeof value === "number" || typeof value === "boolean") return String(value);
+  }
+  return undefined;
+}
+
 function browserHostname(): string {
   if (typeof window === "undefined") return "";
   return window.location?.hostname ?? "";
@@ -46,18 +58,10 @@ export function isRuntimeFallbackHost(hostname = browserHostname()): boolean {
   return FALLBACK_RUNTIME_HOSTS.has(hostname);
 }
 
-function readRuntimeConfigValue(key: string): string | undefined {
-  if (typeof window === "undefined") return undefined;
-  const runtimeWindow = window as unknown as Record<string, unknown>;
-  for (const configKey of RUNTIME_CONFIG_KEYS) {
-    const config = runtimeWindow[configKey];
-    if (!config || typeof config !== "object" || Array.isArray(config)) continue;
-    const value = (config as Record<string, unknown>)[key];
-    if (typeof value === "string") return value;
-    if (typeof value === "number" || typeof value === "boolean") return String(value);
-  }
-  return undefined;
+export function isDevLoginHost(hostname = browserHostname()): boolean {
+  return DEV_RUNTIME_HOSTS.has(hostname);
 }
+
 
 function readStorageValue(key: string): string | undefined {
   if (typeof window === "undefined") return undefined;
@@ -116,7 +120,18 @@ function readDevRuntimeOverrides(): Record<string, string | undefined> {
 }
 
 export function readBffEnv(): Record<string, string | undefined> {
-  const viteEnv = ((import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {});
+  const metaEnv = (import.meta as unknown as { env?: Record<string, string | boolean | undefined> }).env ?? {};
+  const viteEnv = metaEnv as Record<string, string | undefined>;
   const nodeEnv = typeof process !== "undefined" ? process.env : {};
-  return { ...viteEnv, ...nodeEnv, ...readDevRuntimeOverrides() };
+  const isProd = metaEnv.PROD === true;
+  const prodDefaults: Record<string, string | undefined> = isProd
+    ? {
+        VITE_BFF_MODE: "live",
+        VITE_BFF_FALLBACK: "strict",
+        VITE_BFF_REAL_WRITES: "false",
+        VITE_BFF_ALLOW_DEV_STUB_WRITES: "false",
+        VITE_BFF_EMBEDDED_BEARER_TOKEN: "false",
+      }
+    : {};
+  return { ...prodDefaults, ...viteEnv, ...nodeEnv, ...readDevRuntimeOverrides() };
 }

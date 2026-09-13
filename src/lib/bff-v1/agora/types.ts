@@ -8,7 +8,7 @@ export const AGORA_CONTRACT_SNAPSHOT = {
   "extends": {
     "bundle_path": "services/control-plane/specs/agora/bundle_index.v1_12.json",
     "bundle_version": "1.12",
-    "bundle_index_sha256": "25ca80c94a622a0845266cbecab617f96fc47daa8a08736a166d1d88c9dec7c6"
+    "bundle_index_sha256": "1237581dadc5be89cb204570082cdc1168b4f7d3d46ea6a8a2aa94e05f08fec9"
   },
   "files": {
     "specs/agora/agora_user_scope.schema.json": "ae660aa7719ded37ca8b41bfc6ac287d1eae0bb85a8389b08d069c528a934dee",
@@ -42,7 +42,7 @@ export const AGORA_CONTRACT_SNAPSHOT = {
     "specs/agora/v4/capability_manifest_v1_3.json": "d21ac91558f9205732d6cffffe1fca86efad59bf1824e8dabe95fb4b585ca041",
     "specs/agora/v4/governed_intent_handoff.schema.json": "d16723d9de8c469905859e62d9904561ce96c51ebce9992cd8927a35e79092db",
     "specs/agora/v4/research_plan_execution.schema.json": "cc97bc9e119473c4ae9d2656f9629843645e73d09ab7ba2fa46bbd190c1cbe4c",
-    "specs/agora/v4/research_run_projection.schema.json": "cafd98509779818f62d4972693e50a6c749153293528de651f213713e0b1ed97",
+    "specs/agora/v4/research_run_projection.schema.json": "305bac84f1075bc3448238bf6157bcc1f7d39b1e18501cdef7dd39035f66c887",
     "specs/agora/v4/strategy_readiness.schema.json": "5ab691bb8c5fa866355092d44f2a6a197eb3c77c1dff814e7fa5e65cb2fbb816",
     "specs/agora/v4/trading_decision_event.schema.json": "fe6c8eb40900eda247b30c00ea3eb4a7fe9ec2edc65643e7850722a2adf2b3ea",
     "specs/agora/v4/trading_room_aggregate.schema.json": "c10babb6f20f4155d8f5be76b438d520e13716d6bb01f4612431b29e45027874",
@@ -84,7 +84,7 @@ export const AGORA_CONTRACT_SNAPSHOT = {
     "specs/agora/v13/candidate_member_truth_projection.schema.json": "7ed59957adc97dd48af20aab19f8476acb84c29e8832d3ad076fe8625e610b00",
     "specs/agora/v13/capability_manifest_v1_12.json": "d35999b82e6b606f22de5baf4e6d260f03ce85d0cc871f5c1aa68145a0543188",
     "openapi/agora_v1_12.openapi.yaml": "88a707090a1e58ebe3159d530ab437f6f0bb0d130f26e396edf6f1de3678f53f",
-    "specs/agora/v14/capability_manifest_v1_13.json": "8b44dd85412b6ba7a0b9686b25d657fa9e3f95efdd4b0f280ff97d2be1186ff5",
+    "specs/agora/v14/capability_manifest_v1_13.json": "e17b120832bc92ed81d2edd7de3b11267ecb2fa82cfc4986cf2ac467a053f613",
     "openapi/agora_v1_13.openapi.yaml": "56f12e43bb6041a0f83bf4ff69bf13ae86a335a38246f68a10f0a4ef3a856087"
   },
   "requiredDefinitionChecksums": {
@@ -2770,6 +2770,7 @@ export interface ResearchRunProjection {
   "started_at"?: string;
   "completed_at"?: string;
   "updated_at"?: string;
+  "provenance"?: "real" | "simulation" | "fixture" | "unavailable";
 }
 
 export interface progress {

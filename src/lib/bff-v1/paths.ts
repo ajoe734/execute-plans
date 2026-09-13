@@ -327,4 +327,5 @@ export const paths = {
   runtimeOodaPackets: (id: string) => `${BASE}/runtimes/${enc(id)}/ooda`,
   evolutionProgramOodaPackets: (id: string) => `${BASE}/evolution-programs/${enc(id)}/ooda`,
   evolutionMutationReview: (decisionId: string) => `/api/v1/operator/mutation-review/${enc(decisionId)}`,
+  operatorCommand: (id: string) => `/api/v1/operator/commands/${enc(id)}`,
 } as const;

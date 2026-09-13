@@ -12,7 +12,7 @@
  *   PANTHEON_FE_BASE_URL, FRONTEND_BASE_URL, or PLAYWRIGHT_BASE_URL
  *     default: http://127.0.0.1:5173
  *   PANTHEON_BFF_BASE_URL, BFF_BASE_URL, or VITE_BFF_BASE_URL
- *     default: https://pantheon-lupin-staging-bff.104.155.223.192.sslip.io
+ *     default: https://api.dev.mvl-cap.tw
  *   PANTHEON_BROWSER_BFF_BASE_URL
  *     optional browser-observed BFF base, usually the frontend origin when
  *     the repo dev server proxies /bff to the upstream BFF.
@@ -37,7 +37,7 @@ import {
 
 const DEFAULT_FRONTEND_BASE_URL = "http://127.0.0.1:5173";
 const DEFAULT_BFF_BASE_URL =
-  "https://pantheon-lupin-staging-bff.104.155.223.192.sslip.io";
+  "https://api.dev.mvl-cap.tw";
 const AUTH_TOKEN = roleTokenFromEnv("operator", [
   "PANTHEON_BFF_OPERATOR_A_TOKEN",
   "BFF_AUTH_TOKEN",
