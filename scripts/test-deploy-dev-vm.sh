@@ -3008,6 +3008,67 @@ test_exact_pair_protocol_default_watchdog_restore_succeeds() {
   assert_live_profile read-only accepted
 }
 
+test_exact_pair_protocol_late_watchdog_restore_succeeds() {
+  local parent_run_id="9001"
+  local watchdog_run_id="9002"
+  local write_target clock_script
+
+  setup_case exact-pair-late-watchdog-restore
+
+  # Write deploy runs with parent workflow defaults:
+  run_write_deploy \
+    GITHUB_RUN_ID="${parent_run_id}" \
+    PANTHEON_DEPLOY_LEASE_OWNER=pantheon-dev-deploy \
+    PANTHEON_DEPLOY_LEASE_RUN_ID="${parent_run_id}"
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "setup write-proof failed"
+  assert_live_profile write-proof accepted
+
+  write_target="$(readlink -f "${CASE_LIVE}")"
+  sha256sum "${write_target}/.prepared-receipt.json" > "${CASE_DIR}/receipt-before.sha256"
+
+  # Advance clock by 61 minutes (exceeding the 1-hour activation TTL, but within
+  # the supported 265-minute proof/recovery window: watchdog watch 190m + restore 75m)
+  clock_script="${CASE_DIR}/late-watchdog-clock.cjs"
+  printf '%s\n' 'const originalNow = Date.now; Date.now = () => originalNow() + 61 * 60 * 1000;' > "${clock_script}"
+
+  # Watchdog restore succeeds throughout the supported proof/recovery window
+  run_restore_deploy \
+    GITHUB_RUN_ID="${watchdog_run_id}" \
+    PANTHEON_DEPLOY_LEASE_OWNER=pantheon-dev-deploy \
+    PANTHEON_DEPLOY_LEASE_RUN_ID="${parent_run_id}" \
+    "NODE_OPTIONS=--require=${clock_script}"
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "late watchdog restore at +61 min should succeed"
+  assert_live_profile read-only accepted
+
+  # Verify receipt integrity was preserved unchanged without rewriting
+  sha256sum --check "${CASE_DIR}/receipt-before.sha256" >/dev/null || \
+    show_deploy_failure "prepared receipt checksum changed during restore"
+
+  # Verify that stale activation authority was NOT renewed (candidate activate at +61m fails)
+  run_deploy PANTHEON_DEPLOY_ACTION=activate "NODE_OPTIONS=--require=${clock_script}"
+  [[ "${RUN_STATUS}" -ne 0 ]] || show_deploy_failure "stale activation authority must not be renewed after 1 hour"
+
+  # Verify that restore attempted after the maximum recovery window (265 min) fails closed
+  local expired_clock="${CASE_DIR}/expired-recovery-clock.cjs"
+  printf '%s\n' 'const originalNow = Date.now; Date.now = () => originalNow() + 270 * 60 * 1000;' > "${expired_clock}"
+
+  setup_case exact-pair-recovery-window-expired
+  run_write_deploy \
+    GITHUB_RUN_ID="9003" \
+    PANTHEON_DEPLOY_LEASE_OWNER=pantheon-dev-deploy \
+    PANTHEON_DEPLOY_LEASE_RUN_ID="9003"
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "setup write-proof for window expiry test failed"
+  assert_live_profile write-proof accepted
+
+  run_restore_deploy \
+    GITHUB_RUN_ID="9004" \
+    PANTHEON_DEPLOY_LEASE_OWNER=pantheon-dev-deploy \
+    PANTHEON_DEPLOY_LEASE_RUN_ID="9003" \
+    "NODE_OPTIONS=--require=${expired_clock}"
+  [[ "${RUN_STATUS}" -ne 0 ]] || show_deploy_failure "restore past maximum recovery window must fail"
+  assert_live_profile write-proof accepted
+}
+
 test_exact_pair_protocol_non_root_prepared_receipt_permission() {
   local release_dir receipt_file
   setup_case exact-pair-non-root-permission
@@ -3116,6 +3177,7 @@ run_test "exact pair protocol schemaless receipt restore rejected" test_exact_pa
 run_test "exact pair protocol write predecessor retention" test_exact_pair_protocol_write_predecessor_retention
 run_test "exact pair protocol write replay idempotent" test_exact_pair_protocol_write_replay_idempotent
 run_test "exact pair protocol default watchdog restore succeeds" test_exact_pair_protocol_default_watchdog_restore_succeeds
+run_test "exact pair protocol late watchdog restore succeeds" test_exact_pair_protocol_late_watchdog_restore_succeeds
 run_test "exact pair protocol non-root runner prepares receipt into read-only release dir" test_exact_pair_protocol_non_root_prepared_receipt_permission
 
 echo "deploy contract harness: ${PASSED} passed, ${FAILED} failed"

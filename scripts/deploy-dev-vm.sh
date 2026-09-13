@@ -1749,8 +1749,21 @@ if (prepTime > now + 60 * 1000) {
 if (expTime - prepTime > 3600 * 1000 + 1000) {
   throw new Error("Receipt TTL exceeds maximum 1 hour");
 }
-if (now > expTime) {
-  throw new Error("Receipt has expired");
+// Safe compensation / restore remains valid throughout the supported proof/recovery
+// window (watchdog watch 190m + restore 75m = 265m) without renewing activation authority.
+const maxRecoveryWindowMs = (190 + 75) * 60 * 1000;
+if (now - prepTime > maxRecoveryWindowMs) {
+  throw new Error("Receipt proof recovery window has expired");
+}
+
+if (expectedPairId && payload.pairId?.toLowerCase() !== expectedPairId.toLowerCase()) {
+  throw new Error(`Receipt pair ID mismatch: expected ${expectedPairId}, got ${payload.pairId}`);
+}
+if (expectedSha && payload.frontendSha?.toLowerCase() !== expectedSha.toLowerCase()) {
+  throw new Error(`Receipt frontend SHA mismatch: expected ${expectedSha}, got ${payload.frontendSha}`);
+}
+if (expectedDigest && payload.artifactDigestSha256?.toLowerCase() !== expectedDigest.toLowerCase()) {
+  throw new Error(`Receipt artifact digest mismatch: expected ${expectedDigest}, got ${payload.artifactDigestSha256}`);
 }
 
 const authorizedControllers = /^(pantheon-release-controller|pantheon-dev-deploy|parent-controller|pantheon-proof-watchdog|pantheon-fe-deploy)$/i;
