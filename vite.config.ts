@@ -85,7 +85,12 @@ export default defineConfig(({ mode }) => {
     if (rawRealWrites && rawRealWrites !== "false" && !(devPasswordBuild && rawRealWrites === "true")) {
       throw new Error(`Production build forbids VITE_BFF_REAL_WRITES=${rawRealWrites}; must be 'false'`);
     }
-    if (rawAllowDevStubWrites && rawAllowDevStubWrites !== "false") {
+    // The existing release archive also seals a bounded dev write-proof
+    // profile. Building it does not select it for hosting: normal read-only
+    // and operator-live profiles keep this false, and BFF auth still applies.
+    const devWriteProofBuild = devPasswordBuild && rawRealWrites === "true"
+      && rawAllowDevStubWrites === "true";
+    if (rawAllowDevStubWrites && rawAllowDevStubWrites !== "false" && !devWriteProofBuild) {
       throw new Error(`Production build forbids VITE_BFF_ALLOW_DEV_STUB_WRITES=${rawAllowDevStubWrites}; must be 'false'`);
     }
     if (rawEmbeddedBearer && rawEmbeddedBearer !== "false") {
