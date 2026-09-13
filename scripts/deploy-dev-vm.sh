@@ -1632,7 +1632,7 @@ prepare_interrupted_recovery() {
 
 restore_paired_safe_release() {
   local write_target write_manifest locator_file safe_release_name safe_target
-  local locator_mode observed_write_digest current_profile current_state current_pair safe_state
+  local locator_mode observed_write_digest current_profile current_state current_pair safe_state expected_receipt_digest
 
   # Cancellation must not interrupt the only fail-closed local state change.
   # Network, package installation, and hosted probes are intentionally absent
@@ -1676,8 +1676,20 @@ restore_paired_safe_release() {
     echo "Restore rejected: unauthorized lease owner '${LEASE_OWNER}'." >&2
     return 2
   fi
+  case "${current_profile}" in
+    "read-only")
+      expected_receipt_digest="${READ_ONLY_ARTIFACT_DIGEST}"
+      ;;
+    "write-proof")
+      expected_receipt_digest="${WRITE_PROOF_ARTIFACT_DIGEST}"
+      ;;
+    *)
+      echo "Read-only restore refuses a write or unknown predecessor from another pair." >&2
+      return 2
+      ;;
+  esac
   if [[ -f "${write_receipt}" ]]; then
-    if ! node --input-type=module - "${write_receipt}" "${LEASE_OWNER}" "${LEASE_EPOCH}" "${LEASE_RUN_ID}" "${LEASE_DELEGATED}" "${PAIR_ID}" "${SHA}" "${WRITE_PROOF_ARTIFACT_DIGEST}" <<'NODE'
+    if ! node --input-type=module - "${write_receipt}" "${LEASE_OWNER}" "${LEASE_EPOCH}" "${LEASE_RUN_ID}" "${LEASE_DELEGATED}" "${PAIR_ID}" "${SHA}" "${expected_receipt_digest}" <<'NODE'
 import crypto from "node:crypto";
 import fs from "node:fs";
 const [receiptFile, leaseOwner, leaseEpoch, leaseRunId, leaseDelegated, expectedPairId, expectedSha, expectedDigest] = process.argv.slice(2);

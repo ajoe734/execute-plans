@@ -2358,35 +2358,31 @@ NODE
 test_restore_accepts_current_read_only_accepted_release() {
   local live_target
   setup_case paired-restore-already-safe
-  # Model the controller-abort path: the requested pair is already served in
-  # its normal accepted read-only state, so restore must be a safe no-op.
-  rm -rf -- "${PREVIOUS_TARGET:?}"/*
-  cp -a "${CANDIDATE_DIR}/dist/." "${PREVIOUS_TARGET}/"
-  "${REAL_NODE}" - "${PREVIOUS_TARGET}/deployment.json" "${PAIR_ID}" "${CANDIDATE_DIGEST}" "${OPERATOR_LIVE_DIGEST}" "${WRITE_PROOF_DIGEST}" <<'NODE'
-const fs = require("node:fs");
-const [file, pairId, readOnlyDigest, operatorLiveDigest, writeProofDigest] = process.argv.slice(2);
-const payload = JSON.parse(fs.readFileSync(file, "utf8"));
-payload.profile = "read-only";
-payload.deploymentProfile = "read-only";
-payload.pairId = pairId;
-payload.pair = {
-  pairId,
-  readOnlyArtifactDigestSha256: readOnlyDigest,
-  operatorLiveArtifactDigestSha256: operatorLiveDigest,
-  writeProofArtifactDigestSha256: writeProofDigest,
-};
-payload.deploymentState = "accepted";
-payload.releaseName = "previous";
-payload.githubArtifactDigest = `sha256:${payload.artifactDigestSha256}`;
-fs.writeFileSync(file, `${JSON.stringify(payload, null, 2)}\n`);
-NODE
-
-  run_restore_deploy
-  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "restore of an already-safe accepted release should succeed"
+  # Model the controller-abort path: deploy a genuine read-only release with its
+  # normal generated receipt so the requested pair is already served in its
+  # accepted read-only state.
+  run_deploy
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "normal read-only deploy failed"
   assert_live_profile read-only accepted
   live_target="$(readlink -f "${CASE_LIVE}")"
-  [[ "${live_target}" == "${PREVIOUS_TARGET}" ]] || \
-    show_deploy_failure "already-safe restore unexpectedly switched the live target"
+  [[ -f "${live_target}/.prepared-receipt.json" ]] || \
+    show_deploy_failure "prepared receipt missing in deployed read-only release"
+
+  run_restore_deploy
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "restore of an already-safe accepted release with receipt should succeed"
+  assert_live_profile read-only accepted
+  [[ "$(readlink -f "${CASE_LIVE}")" == "${live_target}" ]] || \
+    show_deploy_failure "already-safe restore with receipt unexpectedly switched the live target"
+
+  # Also preserve coverage for an already-safe release lacking a receipt (e.g. legacy fixture)
+  chmod u+w "${live_target}"
+  rm -f "${live_target}/.prepared-receipt.json"
+  chmod 0555 "${live_target}"
+  run_restore_deploy
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "restore of an already-safe accepted release without receipt should succeed"
+  assert_live_profile read-only accepted
+  [[ "$(readlink -f "${CASE_LIVE}")" == "${live_target}" ]] || \
+    show_deploy_failure "already-safe restore without receipt unexpectedly switched the live target"
 }
 
 test_restore_network_failure_preserves_safe_release() {
