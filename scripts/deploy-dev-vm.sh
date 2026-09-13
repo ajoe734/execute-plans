@@ -318,7 +318,9 @@ accept_deployment() {
   # Once terminal acceptance starts, do not let INT/TERM split the finalized
   # evidence, durable copy, and in-memory accepted state.
   trap '' INT TERM
-  if [[ ! -f "${AUDIT_DIR}/deployment-outcome" ]]; then
+  if [[ "${NOOP_DEPLOY:-false}" == "true" ]]; then
+    printf 'accepted_noop\n' > "${AUDIT_DIR}/deployment-outcome"
+  else
     printf 'accepted\n' > "${AUDIT_DIR}/deployment-outcome"
   fi
   evidence_append release.completed passed "outcome=accepted"
@@ -1561,6 +1563,7 @@ rollback_release() {
 }
 
 restore_interrupted_release() {
+  ensure_probe_dependencies
   local legacy_compat=true
   local observed_target
   observed_target="$(current_live_target)"
@@ -2033,8 +2036,9 @@ cleanup() {
     if [[ "${EVIDENCE_INITIALIZED}" == "true" ]]; then
       EVIDENCE_FINALIZED=false
       DURABLE_EVIDENCE_PERSISTED=false
-      if [[ ! -f "${AUDIT_DIR}/deployment-outcome" ]]; then
-        printf '%s\n' "${outcome}" > "${AUDIT_DIR}/deployment-outcome"
+      printf '%s\n' "${outcome}" > "${AUDIT_DIR}/deployment-outcome"
+      if [[ "${DEPLOY_ACTION}" == "prepare" ]]; then
+        printf '%s\n' "${outcome}" > "${AUDIT_DIR}/prepared-outcome"
       fi
       if finalize_evidence "${outcome}"; then
         persist_durable_evidence || status=1
@@ -2543,12 +2547,18 @@ if [[ -n "${PREVIOUS_COMMIT}" ]]; then
     fi
   fi
 
-  if [[ "${is_exact_replay}" == "true" ]]; then
+  if [[ "${is_exact_replay}" == "true" && "${PREVIOUS_DEPLOYMENT_STATE}" == "accepted" ]]; then
     NOOP_DEPLOY=true
-    if [[ "${PREVIOUS_DEPLOYMENT_STATE}" == "candidate" ]]; then
-      prepare_interrupted_recovery
-    fi
     evidence_append candidate.noop pending "previousCommit=${PREVIOUS_COMMIT}"
+    if [[ "${ROLLBACK_DRILL}" == "true" ]]; then
+      evidence_append rollback.drill rejected "previousCommit=${PREVIOUS_COMMIT}"
+      echo "Rollback drill requires a candidate switch; the exact candidate is already live." >&2
+      exit 2
+    fi
+  elif [[ "${is_exact_replay}" == "true" && "${PREVIOUS_DEPLOYMENT_STATE}" == "candidate" ]]; then
+    prepare_interrupted_recovery
+    INTERRUPTED_ROLL_FORWARD=true
+    evidence_append recovery.roll_forward pending "previousCommit=${RECOVERY_COMMIT}"
     if [[ "${ROLLBACK_DRILL}" == "true" ]]; then
       evidence_append rollback.drill rejected "previousCommit=${PREVIOUS_COMMIT}"
       echo "Rollback drill requires a candidate switch; the exact candidate is already live." >&2
@@ -2645,6 +2655,21 @@ if [[ "${DEPLOY_ACTION}" == "activate" && "${NOOP_DEPLOY}" != "true" ]]; then
     if [[ -n "${pred_digest}" && -n "${live_digest_check}" && "${live_digest_check}" != "${pred_digest}" ]]; then
       echo "Activation CAS rejected: live predecessor digest (${live_digest_check}) does not match expected predecessor digest (${pred_digest})." >&2
       exit 2
+    fi
+  else
+    if [[ "${INTERRUPTED_ROLL_FORWARD}" == "true" ]]; then
+      if [[ -n "${pred_target}" && -n "${RECOVERY_TARGET}" && "${RECOVERY_TARGET}" != "${pred_target}" ]]; then
+        echo "Activation CAS rejected: recovery predecessor target (${RECOVERY_TARGET}) does not match receipt predecessor target (${pred_target})." >&2
+        exit 2
+      fi
+      if [[ -n "${pred_commit}" && -n "${RECOVERY_COMMIT}" && "${RECOVERY_COMMIT}" != "${pred_commit}" ]]; then
+        echo "Activation CAS rejected: recovery predecessor commit (${RECOVERY_COMMIT}) does not match receipt predecessor commit (${pred_commit})." >&2
+        exit 2
+      fi
+      if [[ -n "${pred_digest}" && -n "${RECOVERY_DIGEST}" && "${RECOVERY_DIGEST}" != "${pred_digest}" ]]; then
+        echo "Activation CAS rejected: recovery predecessor digest (${RECOVERY_DIGEST}) does not match receipt predecessor digest (${pred_digest})." >&2
+        exit 2
+      fi
     fi
   fi
 fi
@@ -2781,7 +2806,7 @@ NODE
   fi
 fi
 
-if [[ "${NOOP_DEPLOY}" == "true" ]]; then
+if [[ "${NOOP_DEPLOY}" == "true" || "${INTERRUPTED_ROLL_FORWARD:-false}" == "true" ]]; then
   echo "=== exact live candidate no-op revalidation ==="
   verify_dist_digest "${PREVIOUS_TARGET}" "${ARTIFACT_DIGEST}" >/dev/null
   if [[ "${RECOVERY_ATTEMPTED}" == "true" ]]; then
@@ -2817,6 +2842,33 @@ NODE
       recovered
     verify_public_manifest "${SHA}" "${ARTIFACT_DIGEST}" "${PREVIOUS_GATE_RUN_ID}" "${AUDIT_DIR}/recovered-deployment.json" "${PREVIOUS_MANIFEST_BFF_COMMIT}" accepted "${PREVIOUS_GITHUB_ARTIFACT_DIGEST}" "${DEPLOY_PROFILE}" "${PAIR_ID}"
     evidence_append recovery.roll_forward passed "previousCommit=${RECOVERY_COMMIT}"
+  fi
+  if [[ "${INTERRUPTED_ROLL_FORWARD:-false}" == "true" ]]; then
+    cat > "${AUDIT_DIR}/dev-fe-deploy-${TIMESTAMP}.md" <<EOF
+# Pantheon Dev FE Deploy
+
+- outcome: accepted
+- verified_at: ${TIMESTAMP}
+- commit: ${SHA}
+- artifact_digest_sha256: ${ARTIFACT_DIGEST}
+- pair_id: ${PAIR_ID}
+- deployment_profile: ${DEPLOY_PROFILE}
+- github_artifact_digest: ${GITHUB_ARTIFACT_DIGEST}
+- integration_gate_run_id: ${GATE_RUN_ID}
+- bff_commit: ${BFF_COMMIT}
+- release_dir: ${PREVIOUS_TARGET}
+- real_writes: ${REAL_WRITES}
+- allow_dev_stub_writes: ${ALLOW_DEV_STUB_WRITES}
+- embedded_bearer_token: false
+- live_manifest_probe: passed
+- browser_auth_probe: passed
+- evidence_log: evidence.jsonl
+- evidence_summary: evidence.json
+EOF
+    printf 'accepted\n' > "${AUDIT_DIR}/deployment-outcome"
+    accept_deployment
+    echo "OK: interrupted candidate ${SHA} (${ARTIFACT_DIGEST}) rolled forward and passed full revalidation."
+    exit 0
   fi
   evidence_append candidate.noop passed \
     "previousCommit=${PREVIOUS_COMMIT}" \

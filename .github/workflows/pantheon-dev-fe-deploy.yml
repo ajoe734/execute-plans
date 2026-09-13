@@ -178,7 +178,7 @@ jobs:
       prepared_receipt: ${{ steps.prepare.outputs.prepared_receipt }}
       prepared_locator: ${{ steps.prepare.outputs.prepared_locator }}
       prepared_receipt_checksum: ${{ steps.prepare.outputs.prepared_receipt_checksum }}
-      deployment_outcome: ${{ steps.prepare.outputs.deployment_outcome || steps.deploy.outputs.deployment_outcome }}
+      deployment_outcome: ${{ steps.deploy.outputs.deployment_outcome || steps.prepare.outputs.deployment_outcome }}
       prepared_outcome: ${{ steps.prepare.outputs.prepared_outcome }}
     runs-on:
       - self-hosted

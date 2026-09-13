@@ -86,6 +86,8 @@ if 'frontend_ref' not in deploy or 'PANTHEON_DEPLOY_FRONTEND_REF' not in deploy:
     raise SystemExit("candidate source ref is not carried through FE deployment")
 if "steps.prepare.outputs.deployment_outcome != 'accepted_noop'" not in deploy:
     raise SystemExit("deploy workflow does not skip activate on accepted_noop")
+if "deployment_outcome: ${{ steps.deploy.outputs.deployment_outcome || steps.prepare.outputs.deployment_outcome }}" not in deploy:
+    raise SystemExit("deploy workflow does not prioritize executed activate output")
 PY
 
 HARNESS_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/deploy-dev-vm-contract.XXXXXX")"
@@ -2030,6 +2032,10 @@ test_durable_evidence_failure_rolls_back_and_refinalizes() {
   assert_probe_called post_switch
   assert_probe_called rollback
   assert_summary_outcome rolled_back
+  [[ -f "${CASE_AUDIT}/deployment-outcome" && "$(<"${CASE_AUDIT}/deployment-outcome")" == "rolled_back" ]] || \
+    die "rollback did not overwrite deployment-outcome with rolled_back"
+  [[ -f "${CASE_AUDIT}/prepared-outcome" && "$(<"${CASE_AUDIT}/prepared-outcome")" == "prepared_success" ]] || \
+    die "rollback did not preserve prepared_success in prepared-outcome"
   grep -Fq '"type":"release.completed"' "${CASE_AUDIT}/evidence.jsonl" || \
     show_deploy_failure "acceptance terminal was not reached before durable failure"
   grep -Fq '"type":"release.failed"' "${CASE_AUDIT}/evidence.jsonl" || \
@@ -2047,6 +2053,10 @@ test_durable_evidence_prepare_failure_rejects_candidate() {
   assert_probe_not_called post_switch
   assert_probe_not_called rollback
   assert_summary_outcome rejected_before_switch
+  [[ -f "${CASE_AUDIT}/deployment-outcome" && "$(<"${CASE_AUDIT}/deployment-outcome")" == "rejected_before_switch" ]] || \
+    die "failed prepare did not record rejected_before_switch in deployment-outcome"
+  [[ -f "${CASE_AUDIT}/prepared-outcome" && "$(<"${CASE_AUDIT}/prepared-outcome")" == "rejected_before_switch" ]] || \
+    die "failed prepare did not record rejected_before_switch in prepared-outcome"
   verify_evidence_pair
 }
 
@@ -2349,6 +2359,41 @@ NODE
   assert_summary_outcome recovery_rolled_back
   grep -Fq "must be restored before a different candidate" "${RUN_OUTPUT}" || \
     show_deploy_failure "missing interrupted predecessor recovery message"
+  verify_evidence_pair
+
+  setup_case interrupted-missing-receipt
+  select_interrupted_candidate
+  rm "${INTERRUPTED_TARGET}/.prepared-receipt.json"
+  run_deploy PANTHEON_DEPLOY_ACTION=activate "PANTHEON_DEPLOY_RELEASE_DIR=${INTERRUPTED_TARGET}"
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "interrupted candidate accepted without receipt"
+  [[ "$(json_field "${INTERRUPTED_TARGET}/deployment.json" deploymentState)" == "candidate" ]] || die "interrupted candidate mutated without receipt"
+  assert_previous_is_live
+  assert_summary_outcome recovery_rolled_back
+  verify_evidence_pair
+
+  setup_case interrupted-changed-epoch
+  select_interrupted_candidate
+  run_deploy PANTHEON_DEPLOY_ACTION=activate "PANTHEON_DEPLOY_RELEASE_DIR=${INTERRUPTED_TARGET}" PANTHEON_DEPLOY_LEASE_EPOCH=2
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "interrupted candidate accepted under mismatched epoch"
+  [[ "$(json_field "${INTERRUPTED_TARGET}/deployment.json" deploymentState)" == "candidate" ]] || die "interrupted candidate mutated under mismatched epoch"
+  assert_previous_is_live
+  assert_summary_outcome recovery_rolled_back
+  verify_evidence_pair
+
+  setup_case interrupted-tampered-receipt
+  select_interrupted_candidate
+  "${REAL_NODE}" -e '
+    const fs = require("node:fs");
+    const file = process.argv[1];
+    const r = JSON.parse(fs.readFileSync(file, "utf8"));
+    r.lease.epoch = 99;
+    fs.writeFileSync(file, JSON.stringify(r, null, 2) + "\n");
+  ' "${INTERRUPTED_TARGET}/.prepared-receipt.json"
+  run_deploy PANTHEON_DEPLOY_ACTION=activate "PANTHEON_DEPLOY_RELEASE_DIR=${INTERRUPTED_TARGET}"
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "interrupted candidate accepted with tampered receipt"
+  [[ "$(json_field "${INTERRUPTED_TARGET}/deployment.json" deploymentState)" == "candidate" ]] || die "interrupted candidate mutated with tampered receipt"
+  assert_previous_is_live
+  assert_summary_outcome recovery_rolled_back
   verify_evidence_pair
 }
 
@@ -2963,6 +3008,10 @@ test_exact_pair_protocol_activate_in_new_process_without_rebuild() {
   [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "activate should succeed"
   assert_live_profile read-only accepted
   assert_summary_outcome accepted
+  [[ -f "${CASE_AUDIT}/deployment-outcome" && "$(<"${CASE_AUDIT}/deployment-outcome")" == "accepted" ]] || \
+    die "activate did not record accepted deployment-outcome"
+  [[ -f "${CASE_AUDIT}/prepared-outcome" && "$(<"${CASE_AUDIT}/prepared-outcome")" == "prepared_success" ]] || \
+    die "activate did not preserve prepared_success in prepared-outcome"
 }
 
 test_exact_pair_protocol_lease_epoch_mismatch_rejected() {
