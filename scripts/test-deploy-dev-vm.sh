@@ -869,24 +869,152 @@ select_interrupted_candidate() {
   cp -a "${CANDIDATE_DIR}/dist/." "${INTERRUPTED_TARGET}/"
   "${REAL_NODE}" -e '
     const fs = require("node:fs");
+    const crypto = require("node:crypto");
+    const path = require("node:path");
     const file = process.argv[1];
+    const prevCommit = process.argv[2];
+    const prevDigest = process.argv[3];
+    const interruptedSha = process.argv[4];
+    const candidateDigest = process.argv[5];
+    const opDigest = process.argv[6];
+    const wpDigest = process.argv[7];
+    const prevTarget = process.argv[8];
+    const interruptedTarget = process.argv[9];
+    const bffSha = process.argv[10];
+    const gateRunId = process.argv[11];
+    const caseDurable = process.argv[12];
+
     const payload = JSON.parse(fs.readFileSync(file, "utf8"));
     payload.deploymentState = "candidate";
     payload.deploymentProfile = payload.profile;
     payload.pair = {
       pairId: payload.pairId,
-      readOnlyArtifactDigestSha256: process.argv[5],
-      operatorLiveArtifactDigestSha256: process.argv[6],
-      writeProofArtifactDigestSha256: process.argv[7],
+      readOnlyArtifactDigestSha256: candidateDigest,
+      operatorLiveArtifactDigestSha256: opDigest,
+      writeProofArtifactDigestSha256: wpDigest,
     };
     payload.releaseName = "interrupted-candidate";
     payload.previousReleaseName = "previous";
-    payload.previousCommit = process.argv[2];
-    payload.previousArtifactDigest = process.argv[3];
-    payload.commit = process.argv[4];
-    payload.githubArtifactDigest = `sha256:${process.argv[5]}`;
+    payload.previousCommit = prevCommit;
+    payload.previousArtifactDigest = prevDigest;
+    payload.commit = interruptedSha;
+    payload.githubArtifactDigest = `sha256:${candidateDigest}`;
     fs.writeFileSync(file, `${JSON.stringify(payload, null, 2)}\n`);
-  ' "${INTERRUPTED_TARGET}/deployment.json" "${PREVIOUS_SHA}" "${previous_digest}" "${interrupted_sha}" "${CANDIDATE_DIGEST}" "${OPERATOR_LIVE_DIGEST}" "${WRITE_PROOF_DIGEST}"
+
+    function computeReceiptIntegritySha256(r) {
+      const parts = [
+        r.pairId || "",
+        r.frontendSha || "",
+        r.bffSha || "",
+        r.artifactDigestSha256 || "",
+        r.profile || "",
+        r.releaseDir || "",
+        r.lease?.owner || "",
+        String(r.lease?.epoch ?? ""),
+        r.lease?.runId || "",
+        String(r.lease?.delegated ?? ""),
+        r.expectedPredecessor?.target || "",
+        r.expectedPredecessor?.commit || "",
+        r.expectedPredecessor?.pairId || "",
+        r.expectedPredecessor?.artifactDigest || "",
+        r.preparedAt || "",
+        r.expiresAt || "",
+        r.bffImage?.repository || "",
+        r.bffImage?.tag || "",
+        r.bffImage?.digestType || "",
+        r.bffImage?.digest || "",
+        r.preparedArtifact?.locator || "",
+        r.preparedArtifact?.checksum || "",
+        r.githubArtifactDigest || "",
+        String(r.gateRunId || ""),
+        r.mandatoryGates?.candidateVerification || "",
+        r.mandatoryGates?.preSwitchProbe || "",
+        r.mandatoryGates?.agoraCompatibility || "",
+        r.mandatoryGates?.managementFleet || "",
+        r.mandatoryGates?.openclawContract || ""
+      ];
+      return crypto.createHash("sha256").update(parts.join("|"), "utf8").digest("hex");
+    }
+
+    const preparedAt = new Date().toISOString();
+    const expiresAt = new Date(Date.now() + 3600 * 1000).toISOString();
+    const receipt = {
+      schemaVersion: "pantheon.release.prepared-receipt.v1",
+      status: "prepared_success",
+      preparedAt,
+      expiresAt,
+      releaseName: "interrupted-candidate",
+      releaseDir: interruptedTarget,
+      pairId: payload.pairId,
+      frontendSha: interruptedSha,
+      bffSha,
+      artifactDigestSha256: candidateDigest,
+      profile: "read-only",
+      deploymentProfile: "read-only",
+      githubArtifactDigest: `sha256:${candidateDigest}`,
+      gateRunId,
+      lease: {
+        owner: "parent-controller",
+        epoch: 1,
+        runId: "9001",
+        delegated: true
+      },
+      bffImage: null,
+      preparedArtifact: {
+        locator: interruptedTarget,
+        checksum: `sha256:${candidateDigest}`
+      },
+      expectedPredecessor: {
+        target: prevTarget,
+        commit: prevCommit,
+        pairId: payload.pairId,
+        artifactDigest: prevDigest
+      },
+      mandatoryGates: {
+        candidateVerification: "passed",
+        preSwitchProbe: "passed",
+        agoraCompatibility: "passed",
+        managementFleet: "passed",
+        openclawContract: "retired"
+      },
+      probes: {
+        candidatePreSwitch: "passed"
+      }
+    };
+    receipt.receiptIntegritySha256 = computeReceiptIntegritySha256(receipt);
+    const receiptContent = `${JSON.stringify(receipt, null, 2)}\n`;
+    fs.writeFileSync(path.join(interruptedTarget, ".prepared-receipt.json"), receiptContent, "utf8");
+    const durableDir = path.join(caseDurable, "interrupted-candidate");
+    fs.mkdirSync(durableDir, { recursive: true });
+    fs.writeFileSync(path.join(durableDir, "prepared-receipt.json"), receiptContent, "utf8");
+  ' "${INTERRUPTED_TARGET}/deployment.json" "${PREVIOUS_SHA}" "${previous_digest}" "${interrupted_sha}" "${CANDIDATE_DIGEST}" "${OPERATOR_LIVE_DIGEST}" "${WRITE_PROOF_DIGEST}" "${PREVIOUS_TARGET}" "${INTERRUPTED_TARGET}" "${BFF_SHA}" "${GATE_RUN_ID}" "${CASE_DURABLE}"
+
+  local durable_dir="${CASE_DURABLE}/interrupted-candidate"
+  "${REAL_NODE}" "${CASE_REPO}/scripts/release-evidence.mjs" init \
+    --log "${durable_dir}/evidence.jsonl" \
+    --detail "candidateSha=${interrupted_sha}" \
+    --detail "controllerSha=${interrupted_sha}" \
+    --detail "integrationGateRunId=${GATE_RUN_ID}" \
+    --detail "artifactDigestSha256=${CANDIDATE_DIGEST}" \
+    --detail "githubArtifactDigest=sha256:${CANDIDATE_DIGEST}" \
+    --detail "emergencyOverride=false" \
+    --detail "rollbackDrill=false" \
+    --detail "overrideActor=none" \
+    --detail "overrideReasonSha256=none"
+  "${REAL_NODE}" "${CASE_REPO}/scripts/release-evidence.mjs" append \
+    --log "${durable_dir}/evidence.jsonl" \
+    --type release.prepared \
+    --status prepared_success \
+    --detail "outcome=prepared_success" \
+    --detail "releaseDir=${INTERRUPTED_TARGET}" \
+    --detail "pairId=${PAIR_ID}" \
+    --detail "leaseEpoch=1"
+  "${REAL_NODE}" "${CASE_REPO}/scripts/release-evidence.mjs" finalize \
+    --log "${durable_dir}/evidence.jsonl" \
+    --summary "${durable_dir}/evidence.json" \
+    --root "${durable_dir}" \
+    --outcome prepared_success
+
   ln -sfn "${INTERRUPTED_TARGET}" "${CASE_LIVE}.interrupted"
   mv -Tf "${CASE_LIVE}.interrupted" "${CASE_LIVE}"
 }
@@ -1050,7 +1178,7 @@ run_deploy() {
         bash scripts/deploy-dev-vm.sh
     ) > "${RUN_OUTPUT}" 2>&1
     RUN_STATUS=$?
-    if [[ "${RUN_STATUS}" -eq 0 ]]; then
+    if [[ "${RUN_STATUS}" -eq 0 && -f "${CASE_AUDIT}/prepared-release-dir" ]]; then
       (
         cd "${CASE_REPO}"
         env -i \
@@ -1884,7 +2012,9 @@ test_external_restore_of_previous_is_reprobed() {
 
 test_durable_evidence_failure_rolls_back_and_refinalizes() {
   setup_case durable-evidence-retry
-  run_deploy MOCK_FAIL_DURABLE_RSYNC_ONCE=true
+  run_deploy PANTHEON_DEPLOY_ACTION=prepare
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "prepare should succeed"
+  run_deploy PANTHEON_DEPLOY_ACTION=activate MOCK_FAIL_DURABLE_RSYNC_ONCE=true
   [[ "${RUN_STATUS}" -ne 0 ]] || die "durable evidence failure unexpectedly accepted candidate"
   assert_previous_is_live
   assert_probe_called post_switch
@@ -1894,6 +2024,19 @@ test_durable_evidence_failure_rolls_back_and_refinalizes() {
     show_deploy_failure "acceptance terminal was not reached before durable failure"
   grep -Fq '"type":"release.failed"' "${CASE_AUDIT}/evidence.jsonl" || \
     show_deploy_failure "durable failure was not re-finalized as a rollback"
+  verify_evidence_pair
+}
+
+test_durable_evidence_prepare_failure_rejects_candidate() {
+  setup_case durable-evidence-prepare-failure
+  run_deploy PANTHEON_DEPLOY_ACTION=prepare MOCK_FAIL_DURABLE_RSYNC_ONCE=true
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "durable evidence failure during prepare unexpectedly accepted candidate"
+  assert_previous_is_live
+  assert_previous_manifest_unchanged
+  assert_probe_called candidate_pre_switch
+  assert_probe_not_called post_switch
+  assert_probe_not_called rollback
+  assert_summary_outcome rejected_before_switch
   verify_evidence_pair
 }
 
@@ -2119,7 +2262,7 @@ test_exact_candidate_noop_revalidates_live_release() {
 test_interrupted_candidate_recovers_or_rolls_back() {
   setup_case interrupted-roll-forward
   select_interrupted_candidate
-  run_deploy
+  run_deploy PANTHEON_DEPLOY_ACTION=activate "PANTHEON_DEPLOY_RELEASE_DIR=${INTERRUPTED_TARGET}"
   [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "interrupted candidate did not roll forward"
   [[ "$(readlink -f "${CASE_LIVE}")" == "${INTERRUPTED_TARGET}" ]] || die "recovery changed the valid candidate target"
   [[ "$(json_field "${INTERRUPTED_TARGET}/deployment.json" deploymentState)" == "accepted" ]] || die "recovery did not repair deploymentState"
@@ -2131,7 +2274,7 @@ test_interrupted_candidate_recovers_or_rolls_back() {
 
   setup_case interrupted-rollback
   select_interrupted_candidate
-  run_deploy MOCK_FAIL_PROBE_PHASES=noop
+  run_deploy PANTHEON_DEPLOY_ACTION=activate "PANTHEON_DEPLOY_RELEASE_DIR=${INTERRUPTED_TARGET}" MOCK_FAIL_PROBE_PHASES=noop
   [[ "${RUN_STATUS}" -ne 0 ]] || die "failed interrupted candidate probe unexpectedly succeeded"
   assert_previous_is_live
   assert_probe_called noop
@@ -3127,6 +3270,7 @@ run_test "rollback validates the predecessor's own paired identity" test_rollbac
 run_test "public manifest binds the GitHub archive digest" test_github_archive_digest_is_bound_in_public_manifest
 run_test "external predecessor restore is fully re-probed" test_external_restore_of_previous_is_reprobed
 run_test "durable evidence failure rolls back and re-finalizes" test_durable_evidence_failure_rolls_back_and_refinalizes
+run_test "durable evidence failure during prepare rejects candidate" test_durable_evidence_prepare_failure_rejects_candidate
 run_test "bootstrap installs only if absent and CAS-removes a failed candidate" test_bootstrap_install_and_failed_release_removal_use_cas
 run_test "manual rollback drill restores and re-probes exact previous release" test_manual_rollback_drill_restores_and_reprobes
 run_test "rollback re-probe failure stays nonzero with previous live" test_rollback_reprobe_failure_is_explicit

@@ -2548,7 +2548,7 @@ if [[ "${DEPLOY_ACTION}" == "activate" ]]; then
   fi
 fi
 
-if [[ "${DEPLOY_ACTION}" == "prepare" && "${PREVIOUS_DEPLOYMENT_STATE}" == "candidate" ]]; then
+if [[ "${DEPLOY_ACTION}" == "prepare" && "${PREVIOUS_DEPLOYMENT_STATE}" == "candidate" && "${PREVIOUS_COMMIT}" == "${SHA}" ]]; then
   echo "Prepare cannot recover an interrupted public candidate; activate or restore must validate its retained receipt." >&2
   exit 2
 fi
@@ -2626,7 +2626,7 @@ elif [[ "${DEPLOY_ACTION}" != "activate" ]]; then
   verify_bff_identity pre_candidate
 fi
 
-if [[ "${DEPLOY_ACTION}" == "prepare" && ( "${PREPARED_REPLAY}" == "true" || "${NOOP_DEPLOY}" == "true" ) ]]; then
+if [[ "${DEPLOY_ACTION}" == "prepare" && "${PREPARED_REPLAY}" == "true" ]]; then
   if [[ "${PREPARED_REPLAY}" != "true" ]]; then
     RELEASE_DIR="${PREVIOUS_TARGET}"
     RELEASE_NAME="$(basename -- "${RELEASE_DIR}")"
