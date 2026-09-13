@@ -2368,7 +2368,11 @@ test_restore_accepts_current_read_only_accepted_release() {
   [[ -f "${live_target}/.prepared-receipt.json" ]] || \
     show_deploy_failure "prepared receipt missing in deployed read-only release"
 
-  run_restore_deploy
+  run_write_deploy PANTHEON_DEPLOY_ACTION=prepare GITHUB_RUN_ID=9002 PANTHEON_DEPLOY_LEASE_RUN_ID=9002 PANTHEON_DEPLOY_RELEASE_INSTANCE=next-proof PANTHEON_AUDIT_OUT_DIR="${CASE_DIR}/audit-next-proof" PANTHEON_DEPLOY_REAL_WRITES=false PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES=false
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "next proof prepare failed"
+  [[ "$(readlink -f "${CASE_LIVE}")" == "${live_target}" ]] || show_deploy_failure "prepare changed incumbent"
+  echo "confirmed: read-only run 9001 accepted; write-proof run 9002 prepared; incumbent untouched"
+  run_restore_deploy GITHUB_RUN_ID=9002 PANTHEON_DEPLOY_LEASE_RUN_ID=9002
   [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "restore of an already-safe accepted release with receipt should succeed"
   assert_live_profile read-only accepted
   [[ "$(readlink -f "${CASE_LIVE}")" == "${live_target}" ]] || \

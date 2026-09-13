@@ -7,7 +7,7 @@
   "merge_target": "dev",
   "branch": "task/FE-EXACT-PAIR-PROTOCOL-001",
   "status": "reconciled-with-accepted-release-i",
-  "recorded_at": "2026-09-13T18:05:00.000000+00:00",
+  "recorded_at": "2026-09-13T18:25:00.000000+00:00",
   "scope": {
     "kind": "source-only",
     "declared_artifact_count": 17,
@@ -26,7 +26,7 @@
       "Generate and validate prepared receipt in the writable audit directory (.lovable/audits/current-run/prepared-receipt.json) and install it into root-owned release directory via privileged scoped install (sudo install -o root -g root -m 664), enforcing byte identity with cmp and scoped-path assertions; enhance test harness mocks to simulate non-root permissions and verify unprivileged writes fail with EACCES while privileged prepare and activate succeed.",
       "Resolve P2 72-character commit gate violation on PR #745 by compacting commit subject to 71 characters.",
       "Fix restore path in deploy-dev-vm.sh so safe sibling compensation remains valid throughout the supported 265-minute proof/recovery window without renewing stale activation authority; add late watchdog restore regression to test-deploy-dev-vm.sh.",
-      "Select expected receipt digest in scripts/deploy-dev-vm.sh by observed allowed current profile, preserving already-safe restore when normal read-only publication includes a prepared receipt; extend test_restore_accepts_current_read_only_accepted_release in scripts/test-deploy-dev-vm.sh to verify normal generated read-only receipt restore and receipt-less fallback."
+      "Confirm unchanged safe incumbent directly in already-safe restore path in scripts/deploy-dev-vm.sh without rejecting legitimate later watchdog lease run ID against previous publication receipt, while preserving write-proof receipt/lease verification and readback; add two-run prepare/abort/restore regression in scripts/test-deploy-dev-vm.sh."
     ],
     "acceptance_boundary": "Source-only release protocol reconciliation against accepted Release I. Validates immutable candidate verification, prepared receipt replay preservation, safe-sibling failure recovery, strict CORS/browser policies, and Chromium CI provisioning. Per operator direction, does not implement disputed historical protocol expansions (no separate parent child-delegation lease API, whole-pair pre-qualification, or new watchdog framework). Sole hosted pair acceptance belongs to S5-PAIR-001; roundtrip drill belongs to S5-ROLLBACK-001."
   },
@@ -77,12 +77,12 @@
       ".github/workflows/pantheon-dev-fe-deploy.yml": "9e4e49edf0353dd7f2bec8f2e65ecbe015d63a3b4573b1c86b63d37b0e70f577",
       ".github/workflows/pantheon-integration-gate.yml": "3f7c1383ead67a18f68e9bb5b11cb16dc83072e75a764e3ef292e8563008ece8",
       ".github/workflows/pantheon-proof-watchdog.yml": "ef16df08c648bf6f1afc62898192956d6b735a1a9c2e61a5935b0427db44e61d",
-      "scripts/deploy-dev-vm.sh": "4b8ae8c960392ed03c069a3c81a5ec4722117ba0c9c74d71a3408c1a347a87aa",
+      "scripts/deploy-dev-vm.sh": "d3cd3082cde85a9928a4832a8d809b78cec0471e266a9a6820958ba7663b3534",
       "scripts/probe-hosted-browser-bff.mjs": "c0065cf7c5093cc6b93f29870205b631f765da16efa1fec246916667cf163ef3",
       "scripts/release-candidate.mjs": "d0b350ae9cc63ea2fba96d126912e4d8a0d3ec03550131eb9f47317bb18f54b5",
       "scripts/release-evidence.mjs": "50eb550fde22ff88fc478cdf19ffdbd730ac8a6fcc9508ebf2f4b7bfe9492231",
       "scripts/release-identity.mjs": "2dde85d7c4660c911a5551b11f75490f8e88a8fef83a0ec720bb434b0c04e66f",
-      "scripts/test-deploy-dev-vm.sh": "76fe969c4bf0ded458e62632852f2a99b19ece6374cb92b813456f253e02c826",
+      "scripts/test-deploy-dev-vm.sh": "d0b61038a6188bb8f7af423560adcfa08b1f771b24f2f2b3e7a24451a7ca117b",
       "scripts/test-release-identity.mjs": "47ba6cd53a733d8363e188d8c4a6c5075360e18137c43191b6be65f08270b0ce",
       "src/test/deploy-safe-defaults.test.ts": "9b375d2982f0632819b4685dacb407b80e690eba64225955a076d0be30d5d872",
       "src/test/hosted-browser-release-policy.test.ts": "fb6bd96711837c33bc9b2aecfb51dbab953bcdbd4659b516ddf51d8e5816fa03",
@@ -108,7 +108,7 @@
     "Stop claiming unexecuted OpenClaw gate passed on auth-only rendered pages with zero OpenClaw traffic; reconcile producer, prepared receipt, and evidence with accepted minimal scope where OpenClaw-before-deploy is retired per operator directives.",
     "Generate and validate prepared receipt in the writable audit directory (.lovable/audits/current-run/prepared-receipt.json) and install it into root-owned release directory via privileged scoped install (sudo install -o root -g root -m 664), enforcing byte identity with cmp and scoped-path assertions; enhance test harness mocks to simulate non-root permissions and verify unprivileged writes fail with EACCES while privileged prepare and activate succeed.",
     "Allow exact-pair safe sibling compensation throughout the supported proof/recovery window (up to 265 minutes) without renewing stale 1-hour activation authority, enforcing receipt integrity and exact identity while rejecting post-window recovery attempts.",
-    "Select expected receipt digest by observed allowed current profile during restore, preserving already-safe compensation when normal read-only publication includes a prepared receipt while retaining exact write-proof verification."
+    "Confirm unchanged safe incumbent directly in already-safe restore path in scripts/deploy-dev-vm.sh without rejecting legitimate later watchdog lease run ID against previous publication receipt, while preserving write-proof receipt/lease verification and readback; add two-run prepare/abort/restore regression in scripts/test-deploy-dev-vm.sh."
   ],
   "residual_disposition": {
     "disposition_summary": "Historical protocol expansion items have been formally reconciled against operator directives. Disputed extra frameworks (parent lease delegation API, whole-pair prequalification, shadow service, watchdog framework expansion) are rejected by operator policy and not implemented. Outstanding operational acceptance is partitioned honestly to existing downstream tasks.",

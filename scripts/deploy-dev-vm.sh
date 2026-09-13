@@ -1653,13 +1653,6 @@ restore_paired_safe_release() {
     process.stdout.write(`${String(p.deploymentProfile||p.profile||"")} ${String(p.deploymentState||"")} ${String(p.pairId||"")}\n`);
   ' "${write_manifest}")
 
-  local write_receipt="${write_target}/.prepared-receipt.json"
-  if [[ ! -f "${write_receipt}" ]]; then
-    if [[ "${current_profile}" != "read-only" ]]; then
-      echo "Restore rejected: prepared receipt missing in ${write_target}." >&2
-      return 2
-    fi
-  fi
   if [[ "${LEASE_DELEGATED}" != "true" ]]; then
     echo "Restore rejected: parent lease delegation is required (LEASE_DELEGATED must be true)." >&2
     return 2
@@ -1676,20 +1669,39 @@ restore_paired_safe_release() {
     echo "Restore rejected: unauthorized lease owner '${LEASE_OWNER}'." >&2
     return 2
   fi
-  case "${current_profile}" in
-    "read-only")
-      expected_receipt_digest="${READ_ONLY_ARTIFACT_DIGEST}"
-      ;;
-    "write-proof")
-      expected_receipt_digest="${WRITE_PROOF_ARTIFACT_DIGEST}"
-      ;;
-    *)
-      echo "Read-only restore refuses a write or unknown predecessor from another pair." >&2
+  evidence_append restore.lease passed "leaseOwner=${LEASE_OWNER}" "leaseEpoch=${LEASE_EPOCH}" "leaseRunId=${LEASE_RUN_ID}"
+  if [[ "${current_profile}" == "read-only" ]]; then
+    if [[ "${current_pair}" != "${PAIR_ID}" ||
+      ( "${current_state}" != "accepted" && "${current_state}" != "standby" ) ]]; then
+      echo "Already-safe live release does not match the requested pair identity." >&2
       return 2
-      ;;
-  esac
-  if [[ -f "${write_receipt}" ]]; then
-    if ! node --input-type=module - "${write_receipt}" "${LEASE_OWNER}" "${LEASE_EPOCH}" "${LEASE_RUN_ID}" "${LEASE_DELEGATED}" "${PAIR_ID}" "${SHA}" "${expected_receipt_digest}" <<'NODE'
+    fi
+    verify_dist_digest "${write_target}" "${READ_ONLY_ARTIFACT_DIGEST}" >/dev/null
+    verify_manifest_file \
+      "${write_manifest}" "${SHA}" "${READ_ONLY_ARTIFACT_DIGEST}" "${GATE_RUN_ID}" \
+      "${BFF_COMMIT}" "${current_state}" "${GITHUB_ARTIFACT_DIGEST}" "read-only" "${PAIR_ID}"
+    safe_target="${write_target}"
+    # An already-safe release may be either accepted (the normal steady state)
+    # or standby (the pre-switch state). Preserve that observed state for the
+    # first hosted verification below; requiring standby here incorrectly
+    # fails a no-op restore after a controller aborts before any switch.
+    safe_state="${current_state}"
+    SAFE_RESTORE_SELECTED=true
+    RESTORE_SWITCH_COMPLETED=true
+    RELEASE_DIR="${safe_target}"
+    evidence_append restore.safe_already_live passed "releaseDir=${safe_target}"
+  elif [[ "${current_profile}" != "write-proof" ||
+    "${current_pair}" != "${PAIR_ID}" ||
+    ( "${current_state}" != "accepted" && "${current_state}" != "candidate" ) ]]; then
+    echo "Read-only restore refuses a write or unknown predecessor from another pair." >&2
+    return 2
+  else
+    local write_receipt="${write_target}/.prepared-receipt.json"
+    if [[ ! -f "${write_receipt}" ]]; then
+      echo "Restore rejected: prepared receipt missing in ${write_target}." >&2
+      return 2
+    fi
+    if ! node --input-type=module - "${write_receipt}" "${LEASE_OWNER}" "${LEASE_EPOCH}" "${LEASE_RUN_ID}" "${LEASE_DELEGATED}" "${PAIR_ID}" "${SHA}" "${WRITE_PROOF_ARTIFACT_DIGEST}" <<'NODE'
 import crypto from "node:crypto";
 import fs from "node:fs";
 const [receiptFile, leaseOwner, leaseEpoch, leaseRunId, leaseDelegated, expectedPairId, expectedSha, expectedDigest] = process.argv.slice(2);
@@ -1809,35 +1821,7 @@ NODE
       echo "Restore rejected: lease authority does not match prepared receipt." >&2
       return 2
     fi
-  fi
-  evidence_append restore.lease passed "leaseOwner=${LEASE_OWNER}" "leaseEpoch=${LEASE_EPOCH}" "leaseRunId=${LEASE_RUN_ID}"
-  if [[ "${current_profile}" == "read-only" ]]; then
-    if [[ "${current_pair}" != "${PAIR_ID}" ||
-      ( "${current_state}" != "accepted" && "${current_state}" != "standby" ) ]]; then
-      echo "Already-safe live release does not match the requested pair identity." >&2
-      return 2
-    fi
-    verify_dist_digest "${write_target}" "${READ_ONLY_ARTIFACT_DIGEST}" >/dev/null
-    verify_manifest_file \
-      "${write_manifest}" "${SHA}" "${READ_ONLY_ARTIFACT_DIGEST}" "${GATE_RUN_ID}" \
-      "${BFF_COMMIT}" "${current_state}" "${GITHUB_ARTIFACT_DIGEST}" "read-only" "${PAIR_ID}"
-    safe_target="${write_target}"
-    # An already-safe release may be either accepted (the normal steady state)
-    # or standby (the pre-switch state). Preserve that observed state for the
-    # first hosted verification below; requiring standby here incorrectly
-    # fails a no-op restore after a controller aborts before any switch.
-    safe_state="${current_state}"
-    SAFE_RESTORE_SELECTED=true
-    RESTORE_SWITCH_COMPLETED=true
-    RELEASE_DIR="${safe_target}"
-    evidence_append restore.safe_already_live passed "releaseDir=${safe_target}"
-  elif [[ "${current_profile}" != "write-proof" ||
-    "${current_pair}" != "${PAIR_ID}" ||
-    ( "${current_state}" != "accepted" && "${current_state}" != "candidate" ) ]]; then
-    echo "Read-only restore refuses a write or unknown predecessor from another pair." >&2
-    return 2
-  else
-  locator_file="${SAFE_FALLBACK_LOCATOR_DIR}/$(basename -- "${write_target}").json"
+    locator_file="${SAFE_FALLBACK_LOCATOR_DIR}/$(basename -- "${write_target}").json"
   if [[ ! -f "${write_manifest}" ]] ||
     ! sudo test -f "${locator_file}" || sudo test -L "${locator_file}"; then
     echo "Write-proof release is missing its private safe-fallback locator." >&2
