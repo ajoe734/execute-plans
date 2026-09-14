@@ -1,0 +1,183 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "FE-EXACT-PAIR-PROTOCOL-001",
+  "owner": "Antigravity2",
+  "reviewer": "Codex",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-EXACT-PAIR-PROTOCOL-001",
+  "status": "reconciled-with-accepted-release-i",
+  "recorded_at": "2026-09-13T19:40:00.000000+00:00",
+  "scope": {
+    "kind": "source-only",
+    "declared_artifact_count": 17,
+    "hosted_mutation": false,
+    "reconciled_with_release_i": true,
+    "recovery_changes": [
+      "Reconcile PR #745 against current protected dev HEAD (dbe737e0676640f1b9b2395b54fb3c0416099f8a) and accepted Release I.",
+      "Preserve immutable candidate release identity, compatibility manifest, and exact artifact hash tracking (release-candidate.mjs, release-identity.mjs).",
+      "Retain verified root-owned prepared-evidence snapshot under the exact release basename and enforce exact prepare locator replay without renewing admission or rebuilding (deploy-dev-vm.sh).",
+      "Persist no-op prepare evidence, preserve public manifest and symlink bytes, and maintain safe-sibling restoration on failure while retiring the one-shot deployment bypass (deploy-dev-vm.sh).",
+      "Conservatively enforce explicit candidate CORS permissions without arbitrary proxying or embedded credentials, and provision locked Chromium in branch-ci.yml for browser regressions.",
+      "Align integration gate and test suites with current Pantheon-owned dev endpoints (https://app.dev.mvl-cap.tw, https://api.dev.mvl-cap.tw) and DEV_FE_URL / DEV_BFF_URL repository variables, eliminating references to retired hosting.",
+      "Record operator 2026-09-13 direction: reject additional safety/diagnostic framework construction (no new MFA issuer/grant, shadow service, lease framework, watchdog framework or expanded gates), preserving simple login/session, tenant isolation, and paper/live boundary.",
+      "Propagate resolved parent lease values (owner and run ID) through deploy workflow watchdog dispatch and restore caller, resolving watchdog default safe restore.",
+      "Stop claiming unexecuted OpenClaw gate passed on auth-only rendered pages with zero OpenClaw traffic; reconcile producer, prepared receipt, and evidence with accepted minimal scope where OpenClaw-before-deploy is retired per operator directives.",
+      "Generate and validate prepared receipt in the writable audit directory (.lovable/audits/current-run/prepared-receipt.json) and install it into root-owned release directory via privileged scoped install (sudo install -o root -g root -m 664), enforcing byte identity with cmp and scoped-path assertions; enhance test harness mocks to simulate non-root permissions and verify unprivileged writes fail with EACCES while privileged prepare and activate succeed.",
+      "Resolve P2 72-character commit gate violation on PR #745 by compacting commit subject to 71 characters.",
+      "Fix restore path in deploy-dev-vm.sh so safe sibling compensation remains valid throughout the supported 265-minute proof/recovery window without renewing stale activation authority; add late watchdog restore regression to test-deploy-dev-vm.sh.",
+      "Confirm unchanged safe incumbent directly in already-safe restore path in scripts/deploy-dev-vm.sh without rejecting legitimate later watchdog lease run ID against previous publication receipt, while preserving write-proof receipt/lease verification and readback; add two-run prepare/abort/restore regression in scripts/test-deploy-dev-vm.sh.",
+      "Fix durable evidence failure injection during activate, repair un-receipted already-live no-op revalidation, and implement durable evidence ledger in test harness for interrupted candidate recovery.",
+      "Fix no-op prepare-to-activate contract across deploy-dev-vm.sh and pantheon-dev-fe-deploy.yml, emitting accepted_noop outcomes, permitting activation to revalidate incumbent live release without locator discovery or prepared receipts, gating workflow deploy on accepted_noop, and testing prepare-to-activate caller sequences across fresh audit directories without mutating accepted bytes.",
+      "Restrict receipt-free no-op deployment strictly to accepted incumbents, requiring full receipt, durable admission, checksum, epoch, and predecessor CAS validation for interrupted candidate roll-forward before manifest mutation. Publish terminal deployment outcomes reliably, overwrite failed outcomes, preserve prepared-outcome across activate, prioritize executed activate output over prepare at the workflow job level, and enforce success, rollback, and failed-prepare outcome assertions."
+    ],
+    "acceptance_boundary": "Source-only release protocol reconciliation against accepted Release I. Validates immutable candidate verification, prepared receipt replay preservation, safe-sibling failure recovery, strict CORS/browser policies, and Chromium CI provisioning. Per operator direction, does not implement disputed historical protocol expansions (no separate parent child-delegation lease API, whole-pair pre-qualification, or new watchdog framework). Sole hosted pair acceptance belongs to S5-PAIR-001; roundtrip drill belongs to S5-ROLLBACK-001."
+  },
+  "source_context": {
+    "dev_base": "dbe737e0676640f1b9b2395b54fb3c0416099f8a",
+    "normative_plan": {
+      "path": "/home/chloe_ong_dev_cctech_support_com/code/pantheon-artifacts/dev-closure-20260906/fe-exact-pair-protocol-sa-sd.md",
+      "sha256": "615b489a418945b4db3f622cf30e64364a207bac85241dc400a51f632e990b0f"
+    },
+    "operator_guidance": {
+      "document": "/tmp/pantheon-delivery-20260913.MnZdSN/CURRENT-DELIVERY.zh-TW.md",
+      "sections": [
+        "舊部署任務唯讀對帳",
+        "需要修正我先前說法的地方",
+        "不應再當新開發的範圍"
+      ],
+      "directives": [
+        "Organize and execute existing tasks through supervisor/auto-workers; no new task batch.",
+        "Reconcile existing PR #745 head e3ff866b against current protected dev and accepted release I; do not duplicate its patch or rebuild the deployment mechanism.",
+        "Operator rejects additional safety/diagnostic framework construction: no new MFA issuer/grant, shadow service, lease framework, watchdog framework or expanded gates.",
+        "Preserve simple login/session, tenant and paper/live boundary and actual exact-version/restore truth.",
+        "Acknowledge actual Release I sequence: BFF public update -> FE gate -> FE deploy/switch with failure compensation (not whole-pair non-public qualification).",
+        "No hosted deployment from this source task."
+      ]
+    },
+    "accepted_release_i": {
+      "fe_commit": "dbe737e0676640f1b9b2395b54fb3c0416099f8a",
+      "bff_commit": "ae41705b4637110e665d2eed735afbd8307e28e6",
+      "accepted_at": "2026-09-13T10:34:41Z",
+      "release_name": "20260913T103241Z-dbe737e06766-gate-34751164876-34751773220-1-1224886",
+      "pair_id": "97486af4ab16b9459b3495fdae385be38a091824dfef89c8c1d443e526e3e687",
+      "candidate_id": "db72b8b9087fe1d2ec0f11ebd8033631070a82385bf0976bc325aab1091bef03",
+      "compatibility_sha256": "a949ab8a9146f785b98a0a888d358fa0bc87443b33a195ef4b95f31f3ede2eca",
+      "fe_dist_sha256": "eab971709869b3f443222a13f769862072a4b2ad63557363c613ca0f1c982386",
+      "github_actions_runs": {
+        "parent_release": 34750913608,
+        "fe_integration_gate": 34751164876,
+        "fe_deploy": 34751773220,
+        "operator_profile": 34752443280
+      },
+      "served_endpoints": {
+        "fe": "https://app.dev.mvl-cap.tw",
+        "bff": "https://api.dev.mvl-cap.tw"
+      }
+    },
+    "delivery_source_sha256": {
+      ".github/workflows/branch-ci.yml": "1ad2e95935f91c3f4cedfec96b9e7f736f77eba9cb562a94fe4b6713c2a0cdc0",
+      ".github/workflows/pantheon-dev-fe-deploy.yml": "031cb944b4eb72eccbb074f3fda027d31d1517f3f2e481482bc48b60b9c76263",
+      ".github/workflows/pantheon-integration-gate.yml": "3f7c1383ead67a18f68e9bb5b11cb16dc83072e75a764e3ef292e8563008ece8",
+      ".github/workflows/pantheon-proof-watchdog.yml": "ef16df08c648bf6f1afc62898192956d6b735a1a9c2e61a5935b0427db44e61d",
+      "scripts/deploy-dev-vm.sh": "a6ae070383b715b7fa0ef2ae1e172b0d871713f7f918f615f59af681da1da5ab",
+      "scripts/probe-hosted-browser-bff.mjs": "c0065cf7c5093cc6b93f29870205b631f765da16efa1fec246916667cf163ef3",
+      "scripts/release-candidate.mjs": "d0b350ae9cc63ea2fba96d126912e4d8a0d3ec03550131eb9f47317bb18f54b5",
+      "scripts/release-evidence.mjs": "50eb550fde22ff88fc478cdf19ffdbd730ac8a6fcc9508ebf2f4b7bfe9492231",
+      "scripts/release-identity.mjs": "2dde85d7c4660c911a5551b11f75490f8e88a8fef83a0ec720bb434b0c04e66f",
+      "scripts/test-deploy-dev-vm.sh": "c2f9bdf00384f64ee927a0f41e834a25f3997f46c59267d8b632a417228cc2a1",
+      "scripts/test-release-identity.mjs": "47ba6cd53a733d8363e188d8c4a6c5075360e18137c43191b6be65f08270b0ce",
+      "src/test/deploy-safe-defaults.test.ts": "9b375d2982f0632819b4685dacb407b80e690eba64225955a076d0be30d5d872",
+      "src/test/hosted-browser-release-policy.test.ts": "fb6bd96711837c33bc9b2aecfb51dbab953bcdbd4659b516ddf51d8e5816fa03",
+      "src/test/paired-release-workflow.test.ts": "08df104ae7a370e2fec3b5bd0b2f901f39d73b6e65d47ba4ffdd59f51336efcf",
+      "src/test/release-candidate.test.ts": "e3f2b4db8c061d57867374ecf0d7fc85fc4b72bdb6a76d1419c32d2c961379fc",
+      "src/test/release-evidence.test.ts": "d47ee6e6f268d26cb1b4182dadbe316c8d32230ec4c9587ebd2d82227a973b0d"
+    },
+    "reviewer_assignment": {
+      "current": "Codex",
+      "basis": "Governed task row assignment by Operator on 2026-09-13; owner Antigravity2, reviewer Codex."
+    }
+  },
+  "delivered_functional_requirements": [
+    "Machine-readable prepare/activate/restore contracts frozen in release-candidate.mjs, release-identity.mjs, and release-evidence.mjs.",
+    "Root-owned prepared-evidence snapshot under the exact release basename; activation requires matching receipt and prepared_success ledger.",
+    "Exact prepare locator replay without rebuilding or renewing admission; current gate rechecks; fresh activation audit retains original admission.",
+    "No-op prepare evidence persistence and public manifest/symlink preservation; safe-sibling restoration on write failure.",
+    "One-shot deployment bypass retired; mandatory explicit prepare, activate, or restore action required.",
+    "Explicit candidate CORS permissions without arbitrary proxying or embedded bearer credentials; browser regression suite covers native Chromium parity.",
+    "Chromium provisioning in branch-ci.yml for browser regression tests before Component merge gate.",
+    "Gate workflow and tests aligned with current Pantheon dev endpoints (https://app.dev.mvl-cap.tw, https://api.dev.mvl-cap.tw) and DEV_FE_URL / DEV_BFF_URL.",
+    "Propagate resolved parent lease values (owner and run ID) through deploy workflow watchdog dispatch and restore caller, resolving watchdog default safe restore.",
+    "Stop claiming unexecuted OpenClaw gate passed on auth-only rendered pages with zero OpenClaw traffic; reconcile producer, prepared receipt, and evidence with accepted minimal scope where OpenClaw-before-deploy is retired per operator directives.",
+    "Generate and validate prepared receipt in the writable audit directory (.lovable/audits/current-run/prepared-receipt.json) and install it into root-owned release directory via privileged scoped install (sudo install -o root -g root -m 664), enforcing byte identity with cmp and scoped-path assertions; enhance test harness mocks to simulate non-root permissions and verify unprivileged writes fail with EACCES while privileged prepare and activate succeed.",
+    "Allow exact-pair safe sibling compensation throughout the supported proof/recovery window (up to 265 minutes) without renewing stale 1-hour activation authority, enforcing receipt integrity and exact identity while rejecting post-window recovery attempts.",
+    "Confirm unchanged safe incumbent directly in already-safe restore path in scripts/deploy-dev-vm.sh without rejecting legitimate later watchdog lease run ID against previous publication receipt, while preserving write-proof receipt/lease verification and readback; add two-run prepare/abort/restore regression in scripts/test-deploy-dev-vm.sh.",
+    "Repair un-receipted live release no-op revalidation in scripts/deploy-dev-vm.sh, verify durable evidence failure during activation and prepare rejection in scripts/test-deploy-dev-vm.sh, and ensure interrupted candidate roll-forward, rollback, and predecessor recovery adhere to release evidence contracts."
+  ],
+  "residual_disposition": {
+    "disposition_summary": "Historical protocol expansion items have been formally reconciled against operator directives. Disputed extra frameworks (parent lease delegation API, whole-pair prequalification, shadow service, watchdog framework expansion) are rejected by operator policy and not implemented. Outstanding operational acceptance is partitioned honestly to existing downstream tasks.",
+    "downstream_allocations": [
+      {
+        "concern": "Hosted pair deployment and served readback acceptance",
+        "responsible_task": "S5-PAIR-001",
+        "note": "Sole owner of hosted pair acceptance; DEV-RELEASE-HOSTED-001 superseded."
+      },
+      {
+        "concern": "Paired rollback roundtrip drill (accepted -> prior -> same accepted)",
+        "responsible_task": "S5-ROLLBACK-001",
+        "note": "Sole owner of paired rollback drill; no duplicate scripts or temporary workflows."
+      },
+      {
+        "concern": "Backend delivery controller and parent workflow alignment",
+        "responsible_task": "DEV-DELIVERY-001",
+        "note": "Owns backend deployment workflow lifecycle and nonprod-deploy.yml."
+      }
+    ]
+  },
+  "validation": {
+    "prepared_evidence_replay": {
+      "command": "PANTHEON_TEST_FILTER='prepared evidence' timeout 420 bash scripts/test-deploy-dev-vm.sh",
+      "exit_status": 0,
+      "passed": 11,
+      "failed": 0,
+      "terminal_output": "ok - prepared evidence missing durable copy rejects activation\nok - prepared evidence mismatched durable copy rejects activation\nok - prepared evidence symlinked durable copy rejects activation\nok - prepared evidence repeated prepare preserves locator and receipt\nok - prepared evidence rejected replay preserves original admission\nok - prepared evidence repeated prepare rechecks mandatory gate\nok - prepared evidence prepare cannot mutate an interrupted public candidate\nok - prepared evidence fresh audit reuses exact locator\nok - prepared evidence fresh activation retains original admission\nok - prepared evidence write prepare replay preserves safe sibling\nok - prepared evidence live no-op prepare preserves manifest and receipt\ndeploy contract harness: 11 passed, 0 failed",
+      "boundary": "Isolated clean clones, real candidate/evidence verification and git/flock; network, browser, sudo, lease fields and rsync are local fakes. Validates durable receipt loss/tampering/symlinks, repeated/fresh prepare and activate, mandatory-gate rejection, no-op immutability and safe-sibling replay."
+    },
+    "existing_exact_pair": {
+      "command": "PANTHEON_TEST_FILTER='exact pair protocol' timeout 420 bash scripts/test-deploy-dev-vm.sh",
+      "exit_status": 0,
+      "passed": 20,
+      "failed": 0,
+      "terminal_output": "ok - exact pair protocol prepare leaves incumbent untouched and writes receipt\nok - exact pair protocol activate in new process without rebuild\nok - exact pair protocol lease epoch mismatch rejected\nok - exact pair protocol lease delegation false rejected\nok - exact pair protocol tampered receipt rejected\nok - exact pair protocol predecessor CAS mismatch rejected\nok - exact pair protocol changed predecessor on replay rejected\nok - exact pair protocol idempotent replay succeeds\nok - exact pair protocol one-shot bypass is retired\nok - exact pair protocol wrong lease restore rejected\nok - exact pair protocol failed mandatory gate prepare rejected\nok - exact pair protocol explicit OpenClaw failure rejects fleet fallback\nok - exact pair protocol missing OpenClaw result rejects fleet fallback\nok - exact pair protocol forged receipt and unregistered lease rejected\nok - exact pair protocol schemaless receipt restore rejected\nok - exact pair protocol write predecessor retention\nok - exact pair protocol write replay idempotent\nok - exact pair protocol default watchdog restore succeeds\nok - exact pair protocol late watchdog restore succeeds\nok - exact pair protocol non-root runner prepares receipt into read-only release dir\ndeploy contract harness: 20 passed, 0 failed",
+      "boundary": "Isolated shell regressions for lease/receipt/gate rejection, write replay, safe-sibling retention, non-root prepared receipt permissions, default watchdog restore, and late watchdog safe restore throughout supported recovery window."
+    },
+    "vitest_contracts": {
+      "command": "PLAYWRIGHT_BROWSERS_PATH=/home/chloe_ong_dev_cctech_support_com/.cache/ms-playwright npx --no-install vitest run --maxWorkers=2 src/test/release-candidate.test.ts src/test/release-evidence.test.ts src/test/deploy-safe-defaults.test.ts src/test/paired-release-workflow.test.ts src/test/hosted-browser-release-policy.test.ts",
+      "exit_status": 0,
+      "passed": 172,
+      "failed": 0,
+      "files": 5,
+      "terminal_output": "Test Files 5 passed (5)\nTests 172 passed (172)",
+      "breakdown": {
+        "src/test/deploy-safe-defaults.test.ts": "25 passed",
+        "src/test/paired-release-workflow.test.ts": "25 passed",
+        "src/test/release-candidate.test.ts": "32 passed",
+        "src/test/release-evidence.test.ts": "21 passed",
+        "src/test/hosted-browser-release-policy.test.ts": "69 passed (Chromium headless shell native parity, CORS policy & OpenClaw auth-only rejection)"
+      },
+      "boundary": "Full unit and integration test suite across candidate/evidence contracts, deploy safety defaults, paired release workflows, and browser CORS release policies."
+    },
+    "static_checks": {
+      "command": "git diff --check && bash -n scripts/deploy-dev-vm.sh scripts/test-deploy-dev-vm.sh && node --check scripts/probe-hosted-browser-bff.mjs && python3 -m json.tool docs/deployment/evidence/FE-EXACT-PAIR-PROTOCOL-001/evidence.json > /dev/null",
+      "exit_status": 0,
+      "terminal_output": "",
+      "boundary": "Source syntax, JSON parse, and whitespace integrity checks."
+    },
+    "identity": {
+      "command": "node scripts/test-release-identity.mjs",
+      "exit_status": 0,
+      "terminal_output": "OK: exact FE/BFF release identity regression tests passed",
+      "boundary": "Exact FE/BFF release identity and compatibility manifest regression tests."
+    }
+  }
+}
