@@ -391,7 +391,7 @@ export async function openWorkshopConsultation(
 ): Promise<WorkshopConsultationEnvelope> {
   return bffFetch<WorkshopConsultationEnvelope>({
     method: "POST",
-    path: `/bff/agora/workshops/${encodeURIComponent(workshopId)}/consultation`,
+    path: `/bff/agora/workshops/${encodeURIComponent(workshopId)}/consultations`,
     body,
   });
 }

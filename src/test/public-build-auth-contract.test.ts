@@ -121,22 +121,47 @@ describe("public frontend build auth boundary", () => {
     expect(output).not.toMatch(/Firebase: Error/);
   }, 30_000);
 
-  it.each(["https://api.dev.mvl-cap.tw", "https://api.dev.mvl-cap.tw/"])(
-    "loads the dev password build configuration without Firebase for %s", (bffUrl) => {
+  it.each([
+    ["https://api.dev.mvl-cap.tw", "false"],
+    ["https://api.dev.mvl-cap.tw/", "false"],
+    ["https://api.dev.mvl-cap.tw", "true"],
+    ["https://api.dev.mvl-cap.tw/", "true"],
+  ])(
+    "loads the dev password build configuration for %s with writes=%s", (bffUrl, realWrites) => {
       const result = spawnSync(process.execPath, ["--input-type=module", "-e",
-        "import {loadConfigFromFile} from 'vite'; await loadConfigFromFile({command:'build',mode:'production'}); console.log('DEV_PASSWORD_CONFIG_OK');",
+        "import {loadConfigFromFile} from 'vite'; const result = await loadConfigFromFile({command:'build',mode:'production'}); console.log('DEV_PASSWORD_CONFIG_OK', result.config.define['import.meta.env.VITE_BFF_REAL_WRITES']);",
       ], {
         cwd: process.cwd(), encoding: "utf8",
         env: { ...process.env, VITE_BFF_MODE: "live", VITE_BFF_FALLBACK: "strict",
-          VITE_BFF_REAL_WRITES: "false", VITE_BFF_ALLOW_DEV_STUB_WRITES: "false",
+          VITE_BFF_REAL_WRITES: realWrites, VITE_BFF_ALLOW_DEV_STUB_WRITES: "false",
           VITE_BFF_EMBEDDED_BEARER_TOKEN: "false", VITE_BFF_DEV_BEARER_TOKEN: "",
           VITE_BFF_BASE_URL: bffUrl, VITE_GCP_IDENTITY_API_KEY: "",
           VITE_GCP_IDENTITY_PROJECT_ID: "", VITE_GCP_IDENTITY_AUTH_DOMAIN: "" },
       });
       expect(result.status, result.stderr).toBe(0);
       expect(result.stdout).toContain("DEV_PASSWORD_CONFIG_OK");
+      expect(result.stdout).toContain(JSON.stringify(realWrites));
     }, 30_000,
   );
+
+  it.each([
+    ["https://api.mvl-cap.tw", "true"],
+    ["https://api.dev.mvl-cap.tw.example.invalid", "true"],
+    ["http://api.dev.mvl-cap.tw", "true"],
+    ["https://api.dev.mvl-cap.tw", "yes"],
+  ])("rejects unintended write profiles for %s with writes=%s", (bffUrl, realWrites) => {
+    const result = spawnSync(process.execPath, ["--input-type=module", "-e",
+      "import {loadConfigFromFile} from 'vite'; await loadConfigFromFile({command:'build',mode:'production'});",
+    ], {
+      cwd: process.cwd(), encoding: "utf8",
+      env: { ...process.env, VITE_BFF_MODE: "live", VITE_BFF_FALLBACK: "strict",
+        VITE_BFF_REAL_WRITES: realWrites, VITE_BFF_ALLOW_DEV_STUB_WRITES: "false",
+        VITE_BFF_EMBEDDED_BEARER_TOKEN: "false", VITE_BFF_DEV_BEARER_TOKEN: "",
+        VITE_BFF_BASE_URL: bffUrl },
+    });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("Production build forbids VITE_BFF_REAL_WRITES");
+  }, 30_000);
 
   it("rejects a privileged token before the standard Vite dev server can bind", () => {
     const result = spawnSync(
