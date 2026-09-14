@@ -2533,6 +2533,41 @@ function adaptCockpit(raw: unknown): CockpitModel | null {
   return data as unknown as CockpitModel;
 }
 
+export interface ManagementCockpitSnapshot {
+  snapshotAt: string | null;
+  status: string;
+  message: string | null;
+  health: { status: string; headline: string | null; message: string | null };
+  cards: Array<{ id: string; label: string; status: string; summary: string | null }>;
+}
+
+function adaptCockpitSnapshot(raw: unknown): ManagementCockpitSnapshot | null {
+  const data = unwrap(raw);
+  if (!isObject(data) || data.id !== "management-cockpit" ||
+      !isObject(data.runtime_health) || !isObject(data.operator_home) ||
+      !Array.isArray(data.operator_home.cards)) return null;
+  const meta = isObject(raw) && isObject(raw.meta) ? raw.meta : {};
+  const surfaces = isObject(meta.surfaces) ? meta.surfaces : {};
+  const cockpit = isObject(surfaces.management_cockpit) ? surfaces.management_cockpit : {};
+  return {
+    snapshotAt: nullableString(data.snapshot_at),
+    status: asString(cockpit.status, "unknown"),
+    message: nullableString(cockpit.message),
+    health: {
+      status: asString(data.runtime_health.overall_status, "unknown"),
+      headline: nullableString(data.runtime_health.headline),
+      message: nullableString(data.runtime_health.message),
+    },
+    cards: data.operator_home.cards.filter(isObject)
+      .filter((card) => typeof card.card_id === "string" && card.card_id.length > 0 &&
+        typeof card.label === "string" && card.label.length > 0)
+      .map((card) => ({
+        id: String(card.card_id), label: String(card.label),
+        status: asString(card.status, "unknown"), summary: nullableString(card.summary),
+      })),
+  };
+}
+
 // ---------- PM-6 Human Inbox ----------
 
 const emptyHumanInbox = (): HumanInboxList => [];
@@ -3862,8 +3897,8 @@ export const mgmt = {
   cockpit: {
     get: (seedFn: CockpitSeedFn = defaultCockpit): Promise<CockpitModel> =>
       mgmtRead("mgmt.cockpit", { method: "GET", path: paths.mgmtCockpit() }, seedFn, adaptCockpit),
-    getLiveOnly: (): Promise<CockpitModel | undefined> =>
-      liveOnlyRead<CockpitModel>({ method: "GET", path: paths.mgmtCockpit() }, adaptCockpit),
+    getLiveOnly: (): Promise<ManagementCockpitSnapshot | undefined> =>
+      liveOnlyRead<ManagementCockpitSnapshot>({ method: "GET", path: paths.mgmtCockpit() }, adaptCockpitSnapshot),
   },
 
   humanInbox: {

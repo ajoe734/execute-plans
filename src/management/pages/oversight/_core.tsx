@@ -1,6 +1,6 @@
 // 2026-05-20 revamp §6 — Core 7 Oversight pages (Phase 1).
-// Cockpit upgraded by PM-3 (composeCockpit + SystemStateStrip / LoopFlowMap /
-// PersonaOodaMatrix / CriticalAnomalyPanel).
+// Cockpit renders the canonical BFF aggregate; missing Loops/OODA projections
+// stay unavailable instead of being filled from the legacy seed view model.
 //
 // PersonaIntent + readiness pages live in their own files.
 
@@ -15,10 +15,6 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { toast } from "sonner";
 import { agentPanel } from "@/management/components/agent/useAgentPanel";
 import type { QuarterlyRankingFormula, QuarterlyRankingRow, QuarterlySnapshot } from "@/lib/v5/management/quarterlyRanking";
-import { SystemStateStrip } from "@/management/components/cockpit/SystemStateStrip";
-import { LoopFlowMap } from "@/management/components/cockpit/LoopFlowMap";
-import { PersonaOodaMatrix } from "@/management/components/cockpit/PersonaOodaMatrix";
-import { CriticalAnomalyPanel } from "@/management/components/cockpit/CriticalAnomalyPanel";
 import { TotalCapitalSnapshot } from "@/management/components/cockpit/TotalCapitalSnapshot";
 import { PersonaLeagueSnapshot } from "@/management/components/cockpit/PersonaLeagueSnapshot";
 import { QuarterlyRankingCountdown } from "@/management/components/cockpit/QuarterlyRankingCountdown";
@@ -200,7 +196,30 @@ export const OneRingCockpitPage = () => {
           body={loading ? t("mgmt.liveOnly.loadingBody", { defaultValue: "Waiting for live BFF data." }) : unavailableBody}
         />
       )}
-      {model && <SystemStateStrip model={model.strip} />}
+      {model && (
+        <div className="space-y-3" data-testid="cockpit-live-aggregate">
+          <Card className="p-4 space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="font-semibold">{model.health.headline ?? unavailableTitle}</h2>
+              <Badge variant="outline">{model.status}</Badge>
+            </div>
+            {model.health.message && <p className="text-sm text-muted-foreground">{model.health.message}</p>}
+            {model.message && <p className="text-sm text-status-warning">{model.message}</p>}
+            {model.snapshotAt && <time className="text-xs text-muted-foreground" dateTime={model.snapshotAt}>{safeDateTime(model.snapshotAt)}</time>}
+          </Card>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+            {model.cards.map((card) => (
+              <Card key={card.id} className="p-3 space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="text-sm font-semibold">{card.label}</h3>
+                  <Badge variant="outline">{card.status}</Badge>
+                </div>
+                <p className="text-sm text-muted-foreground">{card.summary ?? "—"}</p>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
       <OpenClawLlmAuthPanel mode="summary" />
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {pSummary ? (
@@ -226,11 +245,9 @@ export const OneRingCockpitPage = () => {
       </div>
       {model && (
         <>
-          <div className="grid gap-4 lg:grid-cols-2">
-            <LoopFlowMap model={model.loopFlow} />
-            <PersonaOodaMatrix model={model.matrix} />
-          </div>
-          <CriticalAnomalyPanel anomalies={model.anomalies} />
+          <p className="text-sm text-muted-foreground" data-testid="cockpit-projection-unavailable">
+            {t("mgmt.cockpit.projectionUnavailable", { defaultValue: "Loops / OODA: the BFF has not supplied these projections. No completion counts are inferred from service health." })}
+          </p>
         </>
       )}
     </section>

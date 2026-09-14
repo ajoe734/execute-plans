@@ -5,7 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import i18n from "@/i18n";
-import { TradingPulsePage } from "./_core";
+import { OneRingCockpitPage, TradingPulsePage } from "./_core";
 import { Ep5CanaryReadinessPage } from "./Ep5CanaryReadiness";
 import { PersonaIntentTracesPage } from "./PersonaIntentTraces";
 import { PersonaLeaguePage } from "./PersonaLeague";
@@ -18,6 +18,10 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/management/pages/v5/useV5Live", () => ({
   useV5Live: mocks.useV5Live,
+}));
+
+vi.mock("@/management/components/openclaw/OpenClawLlmAuthPanel", () => ({
+  OpenClawLlmAuthPanel: () => null,
 }));
 
 void i18n.changeLanguage("en-US");
@@ -43,6 +47,27 @@ describe("live-only management page fallbacks", () => {
 
     expect(screen.getByText("Live data unavailable")).toBeInTheDocument();
     expect(screen.queryByText("Live Trading Pulse data is unavailable.")).not.toBeInTheDocument();
+  });
+
+  it("renders the actual cockpit aggregate and its degraded status without invented Loops", () => {
+    mocks.useV5Live.mockReturnValueOnce({ loading: false, data: {
+      snapshotAt: "2026-09-13T07:36:00Z", status: "degraded", message: "Telemetry is unavailable.",
+      health: { status: "ok", headline: "Control plane healthy", message: "Owners responding." },
+      cards: [{ id: "runtime", label: "Runtime", status: "ok", summary: "No active runtime bindings." }],
+    } });
+    renderPage(<OneRingCockpitPage />);
+    expect(screen.getByText("Control plane healthy")).toBeInTheDocument();
+    expect(screen.getByText("Telemetry is unavailable.")).toBeInTheDocument();
+    expect(screen.getByText("No active runtime bindings.")).toBeInTheDocument();
+    expect(screen.getByTestId("cockpit-live-aggregate")).toHaveTextContent("degraded");
+    expect(screen.queryByText("Live data unavailable")).not.toBeInTheDocument();
+    expect(screen.getByTestId("cockpit-projection-unavailable")).toBeInTheDocument();
+  });
+
+  it("keeps the cockpit unavailable when no aggregate was returned", () => {
+    renderPage(<OneRingCockpitPage />);
+    expect(screen.getByText("Live data unavailable")).toBeInTheDocument();
+    expect(screen.queryByTestId("cockpit-live-aggregate")).not.toBeInTheDocument();
   });
 
   it("does not render seeded readiness checklist rows", () => {
