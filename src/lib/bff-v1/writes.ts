@@ -532,8 +532,6 @@ export interface RunActionOptions {
   secondOperatorId?: string;
   headers?: Record<string, string>;
   baseUrl?: string;
-  /** Use only for explicit legacy-adapter compatibility checks. */
-  route?: "legacy-actions" | "commands";
 }
 
 export type RunActionV1Options = RunActionOptions;
@@ -616,49 +614,7 @@ export async function runAction(
   input: RunActionInput,
   opts: RunActionOptions = {},
 ): Promise<RunActionEnvelope> {
-  if (opts.route !== "legacy-actions") {
-    return runCommandAction(input, opts) as Promise<RunActionEnvelope>;
-  }
-
-  const correlationId = opts.correlationId ?? input.correlationId ?? newCorrelationId();
-  const idempotencyKey = opts.idempotencyKey ?? input.idempotencyKey ?? mintIdemKey();
-  const confirmToken = opts.confirmToken ?? input.confirmToken;
-
-  const mockBranch = () => mockRunActionEnvelope(input, { correlationId, idempotencyKey, confirmToken });
-
-  if (await liveWriteGated()) {
-    const livePath = paths.action(entityTypeForKind(input.kind), input.id, input.action);
-    const rawData = await bffFetch<unknown>({
-      method: "POST",
-      path: livePath,
-      body: {
-        memo: input.memo,
-        expectedVersion: input.expectedVersion,
-        newState: input.newState,
-        confirmToken,
-      },
-      idempotencyKey,
-      ifMatchVersion: input.expectedVersion,
-      headers: { "X-Correlation-Id": correlationId },
-      mode: "live",
-    });
-    const d = rawData as {
-      data?: { commandId?: string; command_id?: string; receipt_id?: string };
-      meta?: { idempotency?: { idempotencyKey?: string } };
-    };
-    const commandId = d.data?.commandId ?? d.data?.command_id ?? d.data?.receipt_id ?? "";
-    const iKey = d.meta?.idempotency?.idempotencyKey ?? idempotencyKey;
-    const legacyResult = { ok: true as const, audit: { id: commandId }, message: "dispatched" } as unknown as MutationResult;
-    return {
-      ok: true,
-      data: { actionId: commandId, status: "accepted" as const },
-      auditEventId: commandId,
-      correlationId,
-      idempotencyKey: iKey,
-      legacy: legacyResult,
-    };
-  }
-  return mockBranch();
+  return runCommandAction(input, opts) as Promise<RunActionEnvelope>;
 }
 
 /** Result-style wrapper. Never throws. */
@@ -754,9 +710,10 @@ export async function requestConfirmToken(
         ? buildConfirmPhrase(action, { ...params, [`${effectiveEntityType}Id`]: effectiveEntityId })
         : `${effectiveActionId} ${effectiveEntityId}`);
 
+    const serverExpiresAt = d.data?.expiresAt ?? d.data?.expires_at;
     const ctResp: ConfirmTokenResponse = {
       confirmToken: tokenId,
-      expiresAt: new Date(Date.now() + ttl * 1000).toISOString(),
+      expiresAt: serverExpiresAt || new Date(Date.now() + ttl * 1000).toISOString(),
       ttlSeconds: ttl,
       requiredPhrase,
       requiresMemo: action?.memoRequired ?? false,
@@ -811,12 +768,22 @@ export async function readConfirmToken(
       headers: { "X-Correlation-Id": correlationId },
       mode: "live",
     });
-    const d = rawData as { data?: { tokenId?: string; id?: string } };
-    const resolvedTokenId = d.data?.tokenId ?? d.data?.id ?? tokenId;
+    const d = rawData as {
+      data?: {
+        tokenId?: string;
+        token_id?: string;
+        id?: string;
+        expiresAt?: string;
+        expires_at?: string;
+        ttlSeconds?: number;
+      };
+    };
+    const resolvedTokenId = d.data?.tokenId ?? d.data?.token_id ?? d.data?.id ?? tokenId;
+    const serverExpiresAt = d.data?.expiresAt ?? d.data?.expires_at;
     const ctResp: ConfirmTokenResponse = {
       confirmToken: resolvedTokenId,
-      expiresAt: new Date(Date.now() + 300_000).toISOString(),
-      ttlSeconds: 300,
+      expiresAt: serverExpiresAt || new Date(Date.now() + 300_000).toISOString(),
+      ttlSeconds: d.data?.ttlSeconds ?? 300,
       requiredPhrase: "",
       requiresMemo: false,
       auditEventPreview: "confirm_token.read",

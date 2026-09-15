@@ -5,7 +5,7 @@
  *   1. Twelve registry surfaces render from live-shaped BFF list envelopes.
  *   2. Every ListResponse fixture carries totalCountExact === true.
  *   3. Missing detail reads return a RESOURCE_NOT_FOUND error envelope.
- *   4. ActionDescriptor projections use canonical /bff/actions/* endpoints.
+ *   4. ActionDescriptor projections use canonical /bff/v1/commands endpoint.
  *
  * Env:
  *   FRONTEND_BASE_URL or PLAYWRIGHT_BASE_URL
@@ -108,8 +108,8 @@ function arrayAt(value: unknown, label: string): unknown[] {
   return value as unknown[];
 }
 
-function canonicalActionEndpoint(registry: Pick<RegistryFixture, "actionId" | "entityType" | "id">): string {
-  return `/bff/actions/${registry.entityType}/${registry.id}/${registry.actionId}`;
+function canonicalActionEndpoint(_registry?: Pick<RegistryFixture, "actionId" | "entityType" | "id">): string {
+  return "/bff/v1/commands";
 }
 
 function actionDescriptor(
@@ -1049,7 +1049,7 @@ test.describe("F07 entity registry", () => {
     }
   });
 
-  test("projects ActionDescriptor endpoints to canonical /bff/actions paths", () => {
+  test("projects ActionDescriptor endpoints to canonical /bff/v1/commands path", () => {
     for (const registry of REGISTRIES) {
       const descriptors = descriptorsFromRecord(registry.record);
       expect(descriptors.length, `${registry.key} descriptors`).toBeGreaterThan(0);

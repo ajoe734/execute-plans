@@ -169,10 +169,11 @@ describe("VI-2 live-mode adaptLive normalization", () => {
     setWriteEnv(true, "tok_live_test");
     liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
     const tokenId = "ct_xyz789";
+    const serverExpiresAt = "2026-09-15T19:00:00.000Z";
     vi.spyOn(globalThis, "fetch").mockImplementation(
       makeLiveFetch({
         status: "accepted",
-        data: { tokenId, commandId: "cmd_ct_01" },
+        data: { tokenId, commandId: "cmd_ct_01", expiresAt: serverExpiresAt },
         meta: { idempotency: { idempotencyKey: "idk_srv_ct" } },
       }, 201),
     );
@@ -195,8 +196,8 @@ describe("VI-2 live-mode adaptLive normalization", () => {
     expect(env.data.confirmToken).toBe(tokenId);
     // HighRiskConfirm reads r.data.requiredPhrase
     expect(env.data.requiredPhrase).toBeTruthy();
-    // HighRiskConfirm reads r.data.expiresAt
-    expect(env.data.expiresAt).toBeTruthy();
+    // HighRiskConfirm reads r.data.expiresAt (preserves server value)
+    expect(env.data.expiresAt).toBe(serverExpiresAt);
     expect(env.correlationId).toBe("corr_ct_01");
     expect(env.idempotencyKey).toBe("idk_srv_ct");
     expect(globalThis.fetch).toHaveBeenCalledTimes(2);

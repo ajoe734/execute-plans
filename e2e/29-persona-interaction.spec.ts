@@ -496,7 +496,7 @@ async function installFixture(
           state.proposal.revision += 1;
           state.proposal.state = "validated";
           state.proposal.governedActionLink = {
-            route: "/bff/actions/{type}/{id}/{action}",
+            route: "/bff/v1/commands",
             target_type: "strategy",
             target_id: STRATEGY_ID,
             action: "submit_review",

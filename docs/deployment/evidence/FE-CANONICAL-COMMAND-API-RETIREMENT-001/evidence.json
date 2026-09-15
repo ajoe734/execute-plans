@@ -1,0 +1,182 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "FE-CANONICAL-COMMAND-API-RETIREMENT-001",
+  "owner": "Antigravity",
+  "reviewer": "Claude",
+  "target_repo": "ajoe734/execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-CANONICAL-COMMAND-API-RETIREMENT-001",
+  "status": "ready-for-independent-exact-head-review",
+  "recorded_at": "2026-09-15T05:20:00Z",
+  "scope": {
+    "kind": "source-only",
+    "summary": "Synchronously retire frontend generic command write APIs (POST /bff/actions/... and POST /api/v1/operator/commands) while retaining canonical POST /bff/v1/commands, GET /bff/actions catalog, and GET /api/v1/operator/commands/{id} status polling. Re-wire Persona operations (run_eval, restrict_tools, suspend, retire) to canonical commands client and consume server confirmation expiry directly without client-side TTL.",
+    "dependencies": {
+      "BFF-UPSTREAM-V2-PLAN-DELIVERY-001": {
+        "status": "done",
+        "satisfied": true
+      },
+      "BFF-CANONICAL-COMMAND-API-RETIREMENT-001": {
+        "status": "done",
+        "satisfied": true
+      }
+    },
+    "ppl_alloc_007_provenance_hold": {
+      "verified": true,
+      "status": "blocked",
+      "waiting_for": "Human/Ops",
+      "active_worker": null,
+      "active_lease": null,
+      "note": "Verified PPL-ALLOC-007 has no active worker or lease and its provenance hold is respected."
+    },
+    "retired_generic_write_routes": [
+      {
+        "method": "POST",
+        "route": "/bff/actions/{entityType}/{entityId}/{actionId}",
+        "active_fe_callers": 0,
+        "note": "Removed from seed taxonomy live mutations and writes.ts legacy-actions route branch; ActionDescriptors repointed to /bff/v1/commands."
+      },
+      {
+        "method": "POST",
+        "route": "/api/v1/operator/commands",
+        "active_fe_callers": 0,
+        "note": "Retired generic operator write endpoint; zero callers in execute-plans."
+      }
+    ],
+    "preserved_routes": [
+      {
+        "method": "POST",
+        "route": "/bff/v1/commands",
+        "purpose": "Sole canonical generic command write route"
+      },
+      {
+        "method": "GET",
+        "route": "/bff/actions",
+        "purpose": "Action catalog read route"
+      },
+      {
+        "method": "GET",
+        "route": "/api/v1/operator/commands/{command_id}",
+        "purpose": "Command status polling route"
+      }
+    ],
+    "modified_files": [
+      {
+        "file": "src/lib/bff-v1/paths.ts",
+        "sha256": "ca77534ac2dcebdfb9a98936060232877cca701823708688a4e88fe23bbb0e80",
+        "description": "Mark paths.action as deprecated with warning pointing to POST /bff/v1/commands; add actionCatalog and actions path builders for GET /bff/actions."
+      },
+      {
+        "file": "src/lib/bff-v1/writes.ts",
+        "sha256": "da413b44b28ed240f89566c7d612b57d51157f19f4875e771af3cfa7f4b68aaa",
+        "description": "Retire legacy-actions route branch in runAction; delegate exclusively to canonical runCommandAction (/bff/v1/commands); consume server-issued expiresAt directly in requestConfirmToken and readConfirmToken."
+      },
+      {
+        "file": "src/lib/bff-v1/personas.ts",
+        "sha256": "5fae48c39d994396d9a0fd3b62ad1c8423af8f3517afc29c67c936377714cf66",
+        "description": "Re-wire runPersonaAction directly to runAction with kind 'Persona', routing all persona actions to canonical POST /bff/v1/commands via PersonaAction envelope."
+      },
+      {
+        "file": "src/lib/bff-v1/seed-taxonomy.json",
+        "sha256": "86f287f19fe18b22d846c238e2215496e4d1d68bee289bf4624e60e7b8fd0dfd",
+        "description": "Remove retired POST /bff/actions/{entityType}/{entityId}/{actionId} from bff.mutations.live_routes."
+      },
+      {
+        "file": "src/lib/bff-v1/__tests__/runAction.test.ts",
+        "sha256": "46218a90e27636d3c224f5e771c5167274af3723eee34a1c2926558bea2438fd",
+        "description": "Remove obsolete legacy-actions test; add tests verifying all four Persona actions (run_eval, restrict_tools, suspend, retire) post to /bff/v1/commands with PersonaAction envelope; verify requestConfirmToken uses server-issued expiresAt."
+      },
+      {
+        "file": "src/lib/bff-v1/__tests__/writes.test.ts",
+        "sha256": "ae02c74ee802f9a04c663b17dfe7852bb815445420f1ee6b481d60555b93382d",
+        "description": "Update test expectation to assert env.data.expiresAt matches server-provided expiresAt directly."
+      },
+      {
+        "file": "e2e/06-entity-registry.spec.ts",
+        "sha256": "73559a66f4d427f5f204c3ffeabb0a8cba9a3eaa75b9a38507274e92bb8c43ec",
+        "description": "Update canonicalActionEndpoint and test assertions to project ActionDescriptor endpoints to canonical /bff/v1/commands path."
+      },
+      {
+        "file": "e2e/19-management-persona-100-flows.spec.ts",
+        "sha256": "8e12e60c463e15d567d86199bb2ea5cdc486f0c7abdd6101f8dbb1ed953755c8",
+        "description": "Update allowedActions endpoints to /bff/v1/commands; update fetch-071 through fetch-075 paths and bodies to canonical /bff/v1/commands with PersonaAction envelopes; update fixture router."
+      },
+      {
+        "file": "e2e/29-persona-interaction.spec.ts",
+        "sha256": "e9873d1d06a4bf7ba0cb7064cd394cf2170a4bef0cf601963060f0bd4f767765",
+        "description": "Update governedActionLink route to canonical /bff/v1/commands."
+      },
+      {
+        "file": "src/management/pages/PersonaDetail.test.ts",
+        "sha256": "9fa67f39e0a6ac0aa7f67d971fe346c928609d2cf7a1f8af6490b48efe250fad",
+        "description": "Add test assertions for runPersonaAction operations executing run_eval, restrict_tools, suspend, and retire via canonical /bff/v1/commands."
+      },
+      {
+        "file": "src/platform/components/HighRiskConfirm.test.tsx",
+        "sha256": "ce4a01fd40a867dfd5350c9e6268d6dca4a2f7478c23672e2dce70509724ecc3",
+        "description": "Add test asserting that HighRiskConfirm honors server-issued expiresAt directly for TTL calculation without adding client-side TTL."
+      }
+    ]
+  },
+  "acceptance": {
+    "active_fe_callers_to_retired_post_routes": 0,
+    "persona_actions_canonical_commands_wired": true,
+    "confirmation_expiry_uses_server_expires_at": true,
+    "legacy_actions_branch_removed": true,
+    "preserved_routes_verified": true,
+    "typescript_typecheck_passed": true,
+    "deploy_safe_defaults_passed": true,
+    "all_related_tests_passed": true,
+    "full_vitest_suite_passed": true
+  },
+  "validation": {
+    "git_diff_check": {
+      "command": "git diff --check origin/dev",
+      "exit_code": 0,
+      "result": "passed: 0 whitespace or formatting errors"
+    },
+    "typecheck": {
+      "command": "npm run typecheck",
+      "exit_code": 0,
+      "result": "passed: tsc -p tsconfig.agora.json --noEmit exited with 0"
+    },
+    "deploy_safe_defaults": {
+      "command": "npx vitest run src/test/deploy-safe-defaults.test.ts",
+      "exit_code": 0,
+      "result": "passed: 25 of 25 tests passed"
+    },
+    "persona_detail_unit_tests": {
+      "command": "npx vitest run src/management/pages/PersonaDetail.test.ts",
+      "exit_code": 0,
+      "result": "passed: 7 of 7 tests passed (including run_eval, restrict_tools, suspend, retire operations)"
+    },
+    "high_risk_confirm_unit_tests": {
+      "command": "npx vitest run src/platform/components/HighRiskConfirm.test.tsx",
+      "exit_code": 0,
+      "result": "passed: 4 of 4 tests passed (including server-issued expiresAt confirmation)"
+    },
+    "bff_v1_writes_and_actions_suite": {
+      "command": "npx vitest run src/lib/bff-v1/__tests__/runAction.test.ts src/lib/bff-v1/__tests__/writes.test.ts",
+      "exit_code": 0,
+      "result": "passed: 62 of 62 tests passed"
+    },
+    "full_bff_v1_test_suite": {
+      "command": "npx vitest run src/lib/bff-v1/__tests__/",
+      "exit_code": 0,
+      "result": "passed: 32 test files passed, 287 of 287 tests passed"
+    },
+    "related_components_suite": {
+      "command": "npx vitest related --run src/lib/bff-v1/paths.ts src/lib/bff-v1/writes.ts src/lib/bff-v1/personas.ts src/management/pages/PersonaDetail.test.ts src/platform/components/HighRiskConfirm.test.tsx",
+      "exit_code": 0,
+      "result": "passed: 106 test files passed, 995 of 995 tests passed"
+    },
+    "full_vitest_suite": {
+      "command": "npm test -- --run",
+      "exit_code": 0,
+      "result": "passed: 207 test files passed, 2154 of 2154 tests passed"
+    }
+  },
+  "review_binding": {
+    "required_final_binding": "Independent approval by Claude binding the exact commit SHA containing this manifest."
+  }
+}

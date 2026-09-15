@@ -155,4 +155,43 @@ describe("HighRiskConfirm — repeat submit prevention and confirmation flow", (
     expect(confirmBtn).toBeDisabled();
     expect(onConfirm).not.toHaveBeenCalled();
   });
+
+  it("honors server-issued expiresAt directly for TTL and expiration without adding client-side TTL", async () => {
+    const bffV1 = await import("@/lib/bff-v1");
+    const serverExpiresAt = new Date(Date.now() + 45_000).toISOString();
+    vi.spyOn(bffV1, "requestConfirmToken").mockResolvedValueOnce({
+      ok: true,
+      data: {
+        confirmToken: "ctok_server_ttl_45",
+        requiredPhrase: "PausePaperRuntime rt_paper_01",
+        expiresAt: serverExpiresAt,
+        ttlSeconds: 45,
+        requiresMemo: true,
+        auditEventPreview: "PausePaperRuntime.requested",
+      },
+      correlationId: "corr-1",
+      idempotencyKey: "idem-1",
+    });
+
+    render(
+      <HighRiskConfirm
+        open={true}
+        onOpenChange={vi.fn()}
+        operation="PausePaperRuntime"
+        target={{ type: "Runtime", id: "rt_paper_01", name: "Paper Runtime 01" }}
+        canonicalCommand={{
+          actionId: "PausePaperRuntime",
+          entityType: "Runtime",
+          entityId: "rt_paper_01",
+        }}
+        risk="high"
+        description="Pause paper runtime for maintenance"
+        onConfirm={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/TTL (?:44|45)s/i)).toBeInTheDocument();
+    });
+  });
 });
