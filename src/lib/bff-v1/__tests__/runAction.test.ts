@@ -2,6 +2,7 @@
 
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { liveWriteGated, sessionKindAllowsWrite, runAction, runCommandAction, requestConfirmToken, readConfirmToken, redeemConfirmToken, deleteConfirmToken, decideApproval, acknowledgeAlert, decideIntervention } from "@/lib/bff-v1/writes";
+import { runPersonaAction } from "@/lib/bff-v1/personas";
 import { liveStatus } from "@/lib/bff-v1/liveStatus";
 import { BffError } from "@/lib/bff-v1/errors";
 
@@ -420,29 +421,61 @@ describe("BFF-CONSOL-020 commandClient migration", () => {
     expect(env.data.status).toBe("accepted");
   });
 
-  it("explicit legacy runAction route still posts through the /bff/actions adapter path", async () => {
+  it("runPersonaAction routes all persona actions (run_eval, restrict_tools, suspend, retire) through /bff/v1/commands", async () => {
     setEnv(true, "tok_bearer_live");
     setLive(true);
-    let actionUrl = "";
-    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+    const capturedRequests: Array<{ url: string; body: Record<string, unknown>; headers: Record<string, string> }> = [];
+
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const url = String(input);
       if (url.endsWith("/bff/me")) return makeJsonResponse(meSession("bearer"), 200);
-      actionUrl = url;
+      const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+      const headers = (init?.headers ?? {}) as Record<string, string>;
+      capturedRequests.push({ url, body, headers });
       return makeJsonResponse({
         status: "accepted",
-        data: { status: "accepted", command_id: "cmd-legacy-action-020" },
-        meta: { idempotency: { idempotencyKey: "idk_legacy_020" } },
+        data: {
+          status: "accepted",
+          command: "PersonaAction",
+          receipt_id: `receipt-${body.action}`,
+          command_id: `cmd-${body.action}`,
+        },
+        meta: {
+          durable: true,
+          idempotency: { idempotencyKey: headers["Idempotency-Key"] ?? "idk_test", replayed: false },
+        },
       }, 202);
     });
 
-    const env = await runAction(
-      { kind: "Strategy", id: "stg_020", action: "promote_paper" },
-      { correlationId: "cid_legacy_020", idempotencyKey: "idk_legacy_020", route: "legacy-actions" },
-    );
+    // 1. run_eval
+    const evalReceipt = await runPersonaAction("persona-001", "run_eval", { memo: "eval test" });
+    expect(evalReceipt).toBeDefined();
 
-    expect(actionUrl.endsWith("/bff/actions/strategy/stg_020/promote_paper")).toBe(true);
-    expect(env.data.actionId).toBe("cmd-legacy-action-020");
-    expect(env.data.status).toBe("accepted");
+    // 2. restrict_tools
+    const restrictReceipt = await runPersonaAction("persona-001", "restrict_tools", { memo: "restrict test" });
+    expect(restrictReceipt).toBeDefined();
+
+    // 3. suspend (with confirmToken)
+    const suspendReceipt = await runPersonaAction("persona-001", "suspend", { memo: "suspend test", confirmToken: "ctok_suspend_1" });
+    expect(suspendReceipt).toBeDefined();
+
+    // 4. retire (with confirmToken)
+    const retireReceipt = await runPersonaAction("persona-001", "retire", { memo: "retire test", confirmToken: "ctok_retire_1" });
+    expect(retireReceipt).toBeDefined();
+
+    expect(capturedRequests).toHaveLength(4);
+    for (const req of capturedRequests) {
+      // Must post exclusively to /bff/v1/commands, never /bff/actions/...
+      expect(req.url.endsWith("/bff/v1/commands")).toBe(true);
+      expect(req.url).not.toContain("/bff/actions");
+      expect(req.body.command).toBe("PersonaAction");
+      expect(req.body.target).toEqual({ type: "Persona", id: "persona-001" });
+      expect(["run_eval", "restrict_tools", "suspend", "retire"]).toContain(req.body.action);
+      expect(req.headers["Idempotency-Key"]).toBeTruthy();
+      expect(req.headers["X-Correlation-Id"]).toBeTruthy();
+    }
+    expect(capturedRequests[2].headers["X-Confirm-Token"]).toBe("ctok_suspend_1");
+    expect(capturedRequests[3].headers["X-Confirm-Token"]).toBe("ctok_retire_1");
   });
 
   it("command route propagates typed backend precondition errors", async () => {
@@ -522,6 +555,33 @@ describe("requestConfirmToken live mode adapter", () => {
     expect(env.data.requiredPhrase).toMatch(/PROMOTE PAPER/);
     expect(env.idempotencyKey).toBe("idk_live002");
     expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("preserves server-issued expiresAt in ConfirmTokenEnvelope", async () => {
+    setEnv(true, "tok_bearer_live");
+    setLive(true);
+    const tokenId = "ct_live_server_expiry";
+    const serverExpiresAt = "2026-09-15T18:30:00.000Z";
+    vi.spyOn(globalThis, "fetch").mockImplementation(
+      makeLiveFetch({
+        status: "accepted",
+        data: { status: "accepted", commandId: "cmd-xyz", tokenId, expiresAt: serverExpiresAt },
+        meta: { idempotency: { idempotencyKey: "idk_live002b", replayed: false } },
+      }, 201),
+    );
+    const env = await requestConfirmToken(
+      {
+        actionId: "strategy.promote_paper",
+        entityType: "strategy",
+        entityId: "stg_001",
+        payloadHash: "h_live",
+        tradingEnvironment: "paper",
+        platformEnvironment: "dev",
+      },
+      { strategyId: "stg_001" },
+    );
+    expect(env.ok).toBe(true);
+    expect(env.data.expiresAt).toBe(serverExpiresAt);
   });
 });
 

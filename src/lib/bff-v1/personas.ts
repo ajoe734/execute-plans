@@ -3,6 +3,7 @@ import { bffFetch } from "./client";
 import { BffError } from "./errors";
 import { paths } from "./paths";
 import { strictLiveList } from "./domainReads";
+import { runAction } from "./writes";
 
 type BffEnvelope<T> = { data?: T; meta?: unknown } | T;
 
@@ -95,13 +96,26 @@ export async function runPersonaAction(
   payload: Record<string, unknown> = {},
   opts: PersonaWriteOptions = {},
 ): Promise<Record<string, unknown>> {
-  return bffFetch<Record<string, unknown>>({
-    method: "POST",
-    path: paths.action("persona", id, action),
-    body: payload,
-    idempotencyKey: opts.idempotencyKey,
-    correlationId: opts.correlationId,
-  });
+  const memo = typeof payload.memo === "string" ? payload.memo : undefined;
+  const reason = typeof payload.reason === "string" ? payload.reason : undefined;
+  const confirmToken = typeof payload.confirmToken === "string" ? payload.confirmToken : undefined;
+  const envelope = await runAction(
+    {
+      kind: "Persona",
+      id,
+      action,
+      memo,
+      reason,
+      confirmToken,
+      payload,
+    },
+    {
+      correlationId: opts.correlationId,
+      idempotencyKey: opts.idempotencyKey,
+      confirmToken,
+    },
+  );
+  return envelope as unknown as Record<string, unknown>;
 }
 
 export async function testPersonaPrompt(
