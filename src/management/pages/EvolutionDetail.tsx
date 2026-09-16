@@ -266,13 +266,20 @@ export const EvolutionDetail = () => {
                 <Textarea value={newConstraint} onChange={(ev) => setNewConstraint(ev.target.value)} placeholder={t("evolution.constraints.placeholder")} rows={2} />
                 <Button className="mt-2" size="sm" disabled={newConstraint.trim().length < 4} onClick={async () => {
                   const expr = newConstraint.trim();
+                  const constraintPayload = {
+                    name: expr,
+                    operator: "<=",
+                    value: expr,
+                    expression: expr,
+                    scope: "global",
+                  };
                   const receipt = await runActionSafe({
                     kind: "Evolution",
                     id: e.id,
                     action: "create_constraint",
                     memo: expr,
-                    params: { name: expr, operator: "<=", expression: expr },
-                    payload: { name: expr, operator: "<=", expression: expr },
+                    params: { ...constraintPayload, payload: constraintPayload },
+                    payload: constraintPayload,
                   }, {
                     successTitle: t("evolution.constraints.created"),
                   });

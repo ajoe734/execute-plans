@@ -7,7 +7,7 @@
   "merge_target": "dev",
   "branch": "task/FE-EVOLUTION-PROGRAM-ACTIONS-CLOSURE-001",
   "status": "ready-for-independent-exact-head-review",
-  "recorded_at": "2026-09-16T10:40:00Z",
+  "recorded_at": "2026-09-16T11:15:00Z",
   "scope": {
     "kind": "source-only",
     "summary": "Implement real frontend lifecycle actions for Evolution matching backend contracts from EVO-PROGRAM-ACTIONS-CLOSURE-CORRECTIVE-001 (D1, D2, D3). Evolution program state (draft, under_review, active, paused, stopped, completed, retired) is distinct from run state. Pause, stop, and freeze are strictly distinct actions: pause_program drains and can resume; stop stops program and cancels nonterminal runs without resume; freeze_generation freezes generation and blocks promotions and mutation approvals until unfreeze. Resume button wired to resumeEvolutionProgram. Constraints durably read from program.constraints. Fixed-empty lists replaced with real backend program data. Synthetic IDs removed. Promotion action names aligned with backend (promote_candidate_paper, promote_candidate_live) with required candidate_id. Capital authority remains none with zero live trading side effects.",
@@ -90,7 +90,9 @@
       "Replaced fixed empty stubs for promotions, fitness formulas, mutation rules, and constraints with real program data reads.",
       "Fixed Resume button by connecting to real resumeEvolutionProgram write handler.",
       "Replaced browser-local mock constraint persistence with durable backend reads from program.constraints.",
-      "Aligned candidate promotion command names to promote_candidate_paper and promote_candidate_live with candidate_id payload."
+      "Aligned candidate promotion command names to promote_candidate_paper and promote_candidate_live with candidate_id payload.",
+      "Fixed create_constraint wiring: buildRunActionCommand now nests domain fields inside params.payload and aliases value <-> expression, matching evolution_adapter and program_service backend requirements.",
+      "Added regression test coverage for all evolution write functions, buildRunActionCommand payload wiring, and strict-live write gating in stateMachines.test.ts within admitted task artifact contract."
     ],
     "capital_authority": "none",
     "live_capital_side_effects": false,
@@ -107,8 +109,8 @@
       },
       {
         "file": "src/lib/bff-v1/writes.ts",
-        "sha256": "cb9f8b918cd06728f74478b01211409c4dbaf085c608be2c88d247c3856c9ce9",
-        "description": "Added resumeEvolutionProgram, pauseEvolutionProgram, stopEvolutionProgram, unfreezeGeneration, and generic resume write methods; updated promoteCandidate action names to promote_candidate_paper / promote_candidate_live with candidate_id."
+        "sha256": "8d04dfcc5815b981b3f55c2180c04ab4a29d8a273d447883fcc52bf61a5ed470",
+        "description": "Added resumeEvolutionProgram, pauseEvolutionProgram, stopEvolutionProgram, unfreezeGeneration, createEvolutionProgramConstraint, and generic resume/createEvolutionConstraint write methods; updated promoteCandidate action names to promote_candidate_paper / promote_candidate_live with candidate_id; updated buildRunActionCommand to construct nested payload key and alias value <-> expression for backend adapter forwarding."
       },
       {
         "file": "src/lib/stateMachines/coverage.test.ts",
@@ -122,8 +124,8 @@
       },
       {
         "file": "src/lib/stateMachines/stateMachines.test.ts",
-        "sha256": "eb51cfa9c34d6eb18997bfaa59660ad13a692a76ea9bc3449a150cf45ee30e9e",
-        "description": "Added state machine unit tests for evolutionMachine verifying pause/resume, stop from active and paused, stopped terminal bounds, and retire."
+        "sha256": "7271e3e41ced1c97b59135f60d02a3db443b3fd384d9e7829e9794e9d2eba164",
+        "description": "Added state machine unit tests for evolutionMachine verifying pause/resume, stop from active and paused, stopped terminal bounds, and retire; added comprehensive regression tests for evolution write actions (resume, pause, stop, freeze, unfreeze, promote paper/live, constraint creation), buildRunActionCommand nested payload wiring with value/expression aliasing, and strict-live write gating refusal. Placed in stateMachines.test.ts in compliance with task-normalized artifact contract boundaries."
       },
       {
         "file": "src/lib/v3/status.ts",
@@ -152,8 +154,8 @@
       },
       {
         "file": "src/management/pages/EvolutionDetail.tsx",
-        "sha256": "e41bd1dbf597d2de12c6a375a70e00541b13f2b80b2d85bd0d4a788055ea6159",
-        "description": "Added stopped state mapping; added lifecycle action handlers for resume, pause, submit review, approve, complete, stop, and retire; read constraints durably from program data; wired programId and onRefresh to tabs."
+        "sha256": "82250138f06c1b0588410928dd73fc20f10df0f71e1395dfc44c3b4634a5c211",
+        "description": "Added stopped state mapping; added lifecycle action handlers for resume, pause, submit review, approve, complete, stop, and retire; read constraints durably from program data; wired programId and onRefresh to tabs; wired create_constraint action with explicit value, expression, and nested payload fields."
       }
     ],
     "verification": {
@@ -165,7 +167,7 @@
       "vitest_state_machines": {
         "command": "./node_modules/.bin/vitest run src/lib/stateMachines/",
         "exit_code": 0,
-        "result": "37 passed (37 tests across stateMachines.test.ts and coverage.test.ts)"
+        "result": "53 passed (53 tests across stateMachines.test.ts [28 tests] and coverage.test.ts [25 tests])"
       },
       "vitest_seed_taxonomy": {
         "command": "./node_modules/.bin/vitest run src/lib/bff-v1/__tests__/seedTaxonomy.test.ts",
@@ -173,9 +175,9 @@
         "result": "7 passed (7 tests)"
       },
       "build": {
-        "command": "npm run build",
+        "command": "VITE_GCP_IDENTITY_API_KEY=AIza00000000000000000000000000000000000 VITE_GCP_IDENTITY_PROJECT_ID=pantheon-dev VITE_GCP_IDENTITY_AUTH_DOMAIN=pantheon-dev.firebaseapp.com VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build",
         "exit_code": 0,
-        "result": "Production bundle built cleanly in 62s"
+        "result": "Production bundle built cleanly in 90s (exit 0)"
       }
     }
   }
