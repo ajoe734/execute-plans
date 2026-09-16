@@ -171,8 +171,8 @@ const persona = {
   consult_policy_id: "consult-policy-mgmt100",
   updatedAt: SNAPSHOT_AT,
   allowedActions: [
-    { actionId: "restrict_tools", endpoint: `/bff/actions/persona/${PERSONA_ID}/restrict_tools` },
-    { actionId: "run_eval", endpoint: `/bff/actions/persona/${PERSONA_ID}/run_eval` },
+    { actionId: "restrict_tools", endpoint: "/bff/v1/commands" },
+    { actionId: "run_eval", endpoint: "/bff/v1/commands" },
   ],
 };
 
@@ -1049,9 +1049,13 @@ function responseFor(method: string, path: string, body: unknown): { body: unkno
   if (pathname.startsWith("/bff/assistant/tools/")) {
     return { status: pathname.endsWith("/execute") ? 201 : 200, body: commandResponse("AssistantToolContract", PERSONA_ID, path) };
   }
-  if (pathname.startsWith("/bff/actions/persona/")) {
-    const action = pathname.split("/").pop() ?? "persona_action";
-    return { status: 202, body: commandResponse(action, PERSONA_ID, path) };
+  if (pathname === "/bff/v1/commands") {
+    const record = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
+    const payload = (record.payload && typeof record.payload === "object" ? record.payload : {}) as Record<string, unknown>;
+    const target = (payload.target && typeof payload.target === "object" ? payload.target : {}) as Record<string, unknown>;
+    const action = String(payload.action ?? record.type ?? "command");
+    const targetId = String(target.id ?? PERSONA_ID);
+    return { status: 202, body: commandResponse(action, targetId, path) };
   }
   if (pathname.startsWith(`/bff/v5/interventions/${INTERVENTION_ID}/`)) {
     const action = pathname.split("/").pop() ?? "intervention_action";
@@ -1182,11 +1186,11 @@ const fetchFlows: FetchFlow[] = [
   { id: "fetch-068-persona-audit", type: "fetch", category: "monitor", method: "GET", path: `/bff/personas/${PERSONA_ID}/audit` },
   { id: "fetch-069-capital-pools", type: "fetch", category: "display", method: "GET", path: "/bff/capital-pools" },
   { id: "fetch-070-agora-signals", type: "fetch", category: "display", method: "GET", path: "/bff/agora/signals" },
-  { id: "fetch-071-restrict-tools", type: "fetch", category: "adjust", method: "POST", path: `/bff/actions/persona/${PERSONA_ID}/restrict_tools`, body: { memo: "100-flow restrict tools preview" } },
-  { id: "fetch-072-suspend", type: "fetch", category: "adjust", method: "POST", path: `/bff/actions/persona/${PERSONA_ID}/suspend`, body: { memo: "100-flow suspend dry-run" } },
-  { id: "fetch-073-run-eval", type: "fetch", category: "adjust", method: "POST", path: `/bff/actions/persona/${PERSONA_ID}/run_eval`, body: { memo: "100-flow eval" } },
-  { id: "fetch-074-route-policy-mutate", type: "fetch", category: "adjust", method: "POST", path: `/bff/actions/persona/${PERSONA_ID}/mutate_persona_route_policy`, body: { policy_id: "route-policy-mgmt100-next" } },
-  { id: "fetch-075-freeze", type: "fetch", category: "adjust", method: "POST", path: `/bff/actions/persona/${PERSONA_ID}/freeze`, body: { memo: "paper freeze review" } },
+  { id: "fetch-071-restrict-tools", type: "fetch", category: "adjust", method: "POST", path: "/bff/v1/commands", body: { type: "PersonaAction", payload: { target: { type: "Persona", id: PERSONA_ID }, action: "restrict_tools", memo: "100-flow restrict tools preview" } } },
+  { id: "fetch-072-suspend", type: "fetch", category: "adjust", method: "POST", path: "/bff/v1/commands", body: { type: "PersonaAction", payload: { target: { type: "Persona", id: PERSONA_ID }, action: "suspend", memo: "100-flow suspend dry-run" } } },
+  { id: "fetch-073-run-eval", type: "fetch", category: "adjust", method: "POST", path: "/bff/v1/commands", body: { type: "PersonaAction", payload: { target: { type: "Persona", id: PERSONA_ID }, action: "run_eval", memo: "100-flow eval" } } },
+  { id: "fetch-074-route-policy-mutate", type: "fetch", category: "adjust", method: "POST", path: "/bff/v1/commands", body: { type: "PersonaAction", payload: { target: { type: "Persona", id: PERSONA_ID }, action: "mutate_persona_route_policy", policy_id: "route-policy-mgmt100-next" } } },
+  { id: "fetch-075-freeze", type: "fetch", category: "adjust", method: "POST", path: "/bff/v1/commands", body: { type: "PersonaAction", payload: { target: { type: "Persona", id: PERSONA_ID }, action: "freeze", memo: "paper freeze review" } } },
   { id: "fetch-076-test-prompt", type: "fetch", category: "feedback", method: "POST", path: `/bff/personas/${PERSONA_ID}/test-prompt`, body: { prompt: "Explain current paper risk drift." } },
   { id: "fetch-077-patch-persona", type: "fetch", category: "adjust", method: "PATCH", path: `/bff/personas/${PERSONA_ID}`, body: { description: "100-flow adjustment validation" } },
   { id: "fetch-078-claim-intervention", type: "fetch", category: "adjust", method: "POST", path: `/bff/v5/interventions/${INTERVENTION_ID}/claim`, body: { memo: "claim" } },

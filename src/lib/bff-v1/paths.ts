@@ -33,9 +33,16 @@ export const paths = {
   /** @deprecated Alias of `logout()`. */
   sessionLogout: () => `${BASE}/logout`,
 
-  // ---- Canonical action endpoint (Final §1772) ----
+  /**
+   * @deprecated Retired in U9 / BFF-CANONICAL-COMMAND-API-RETIREMENT-001.
+   * All command writes use `paths.commandsV1()` (`POST /bff/v1/commands`).
+   */
   action: (entityType: string, entityId: string, actionId: string) =>
     `${BASE}/actions/${enc(entityType)}/${enc(entityId)}/${enc(actionId)}`,
+
+  /** GET action catalog (surviving read route). */
+  actionCatalog: () => `${BASE}/actions`,
+  actions: () => `${BASE}/actions`,
 
   // ---- Strategies / Personas / etc. (resource paths still canonical) ----
   strategies: () => `${BASE}/strategies`,

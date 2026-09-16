@@ -41,8 +41,7 @@
       "category": "deprecated",
       "seed_source": "src/lib/bff-v1/mocks/mutations",
       "live_routes": [
-        "POST /bff/v1/commands",
-        "POST /bff/actions/{entityType}/{entityId}/{actionId}"
+        "POST /bff/v1/commands"
       ],
       "replacement": "Use bffWrites/runActionSafe command-client paths and retire direct bff.mutations callers.",
       "follow_up_tasks": [

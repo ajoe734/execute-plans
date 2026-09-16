@@ -2,11 +2,16 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { resolvePersonaForDetail } from "./personaDetailData";
 import { personaHumanInboxUrl, personaWorkshopEntryUrl } from "./PersonaDetail";
 import type { Persona } from "@/lib/bff-v1";
-import { getPersona } from "@/lib/bff-v1/personas";
+import { getPersona, runPersonaAction } from "@/lib/bff-v1/personas";
+import * as writes from "@/lib/bff-v1/writes";
 
-vi.mock("@/lib/bff-v1/personas", () => ({
-  getPersona: vi.fn(),
-}));
+vi.mock("@/lib/bff-v1/personas", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/bff-v1/personas")>();
+  return {
+    ...actual,
+    getPersona: vi.fn(),
+  };
+});
 
 describe("PersonaDetail", () => {
   beforeEach(() => {
@@ -67,5 +72,121 @@ describe("PersonaDetail", () => {
     expect(parsed.searchParams.get("target_strategy_version")).toBe("spec-v3");
     expect(parsed.searchParams.get("advice_environment")).toBe("research");
     expect(parsed.searchParams.get("evidence_cutoff")).toBe("2026-07-17T01:02:03Z");
+  });
+
+  describe("runPersonaAction operations", () => {
+    it("dispatches run_eval with PersonaAction envelope to canonical /bff/v1/commands", async () => {
+      const runActionSpy = vi.spyOn(writes, "runAction").mockResolvedValueOnce({
+        ok: true,
+        data: { commandId: "cmd-eval-1", status: "accepted" },
+      } as any);
+
+      const res = await runPersonaAction("ps_detail", "run_eval", { memo: "manual eval" });
+
+      expect(runActionSpy).toHaveBeenCalledWith(
+        {
+          kind: "Persona",
+          id: "ps_detail",
+          action: "run_eval",
+          memo: "manual eval",
+          reason: undefined,
+          confirmToken: undefined,
+          payload: { memo: "manual eval" },
+        },
+        {
+          correlationId: undefined,
+          idempotencyKey: undefined,
+          confirmToken: undefined,
+        },
+      );
+      expect(res).toMatchObject({ ok: true, data: { commandId: "cmd-eval-1" } });
+    });
+
+    it("dispatches restrict_tools with PersonaAction envelope to canonical /bff/v1/commands", async () => {
+      const runActionSpy = vi.spyOn(writes, "runAction").mockResolvedValueOnce({
+        ok: true,
+        data: { commandId: "cmd-restrict-1", status: "accepted" },
+      } as any);
+
+      const res = await runPersonaAction("ps_detail", "restrict_tools", { memo: "temporary restriction" });
+
+      expect(runActionSpy).toHaveBeenCalledWith(
+        {
+          kind: "Persona",
+          id: "ps_detail",
+          action: "restrict_tools",
+          memo: "temporary restriction",
+          reason: undefined,
+          confirmToken: undefined,
+          payload: { memo: "temporary restriction" },
+        },
+        {
+          correlationId: undefined,
+          idempotencyKey: undefined,
+          confirmToken: undefined,
+        },
+      );
+      expect(res).toMatchObject({ ok: true, data: { commandId: "cmd-restrict-1" } });
+    });
+
+    it("dispatches suspend with confirmToken and PersonaAction envelope to canonical /bff/v1/commands", async () => {
+      const runActionSpy = vi.spyOn(writes, "runAction").mockResolvedValueOnce({
+        ok: true,
+        data: { commandId: "cmd-suspend-1", status: "accepted" },
+      } as any);
+
+      const res = await runPersonaAction("ps_detail", "suspend", {
+        memo: "suspend memo",
+        confirmToken: "ctok_suspend_99",
+      });
+
+      expect(runActionSpy).toHaveBeenCalledWith(
+        {
+          kind: "Persona",
+          id: "ps_detail",
+          action: "suspend",
+          memo: "suspend memo",
+          reason: undefined,
+          confirmToken: "ctok_suspend_99",
+          payload: { memo: "suspend memo", confirmToken: "ctok_suspend_99" },
+        },
+        {
+          correlationId: undefined,
+          idempotencyKey: undefined,
+          confirmToken: "ctok_suspend_99",
+        },
+      );
+      expect(res).toMatchObject({ ok: true, data: { commandId: "cmd-suspend-1" } });
+    });
+
+    it("dispatches retire with confirmToken and PersonaAction envelope to canonical /bff/v1/commands", async () => {
+      const runActionSpy = vi.spyOn(writes, "runAction").mockResolvedValueOnce({
+        ok: true,
+        data: { commandId: "cmd-retire-1", status: "accepted" },
+      } as any);
+
+      const res = await runPersonaAction("ps_detail", "retire", {
+        memo: "retire memo",
+        confirmToken: "ctok_retire_99",
+      });
+
+      expect(runActionSpy).toHaveBeenCalledWith(
+        {
+          kind: "Persona",
+          id: "ps_detail",
+          action: "retire",
+          memo: "retire memo",
+          reason: undefined,
+          confirmToken: "ctok_retire_99",
+          payload: { memo: "retire memo", confirmToken: "ctok_retire_99" },
+        },
+        {
+          correlationId: undefined,
+          idempotencyKey: undefined,
+          confirmToken: "ctok_retire_99",
+        },
+      );
+      expect(res).toMatchObject({ ok: true, data: { commandId: "cmd-retire-1" } });
+    });
   });
 });
