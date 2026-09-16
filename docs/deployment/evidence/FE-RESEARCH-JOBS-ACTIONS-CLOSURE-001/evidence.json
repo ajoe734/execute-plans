@@ -68,7 +68,7 @@
     ],
     "cleanups": [
       "Removed fake simulation completed execution in SkillSandboxStudio under strict-live fallback, calling refuseStrictLiveWrite.",
-      "Added job cancellation capability in SkillSandboxStudio when a job is active/running.",
+      "Added job cancellation capability in SkillSandboxStudio when a job is active/running; tracked mock simulation timers and live polling intervals in component refs, cleared all timers on cancel and unmount, and guarded late timer/poll callbacks to prevent fake completion or status overwrite.",
       "Fixed CommandCenter runningJobs KPI filter to include active job states (running, dispatched, queued, active).",
       "Updated CommandCenter jobs table to handle job_id, job_type, and source projections.",
       "Updated StrategyDetail experiments table to handle experiment_id and experiment_name fallbacks and real status badges.",
@@ -144,8 +144,13 @@
       },
       {
         "file": "src/management/pages/studios/SkillSandboxStudio.tsx",
-        "sha256": "3d54a6077191798fb4d2c894fd983c56678cf1b0f28c067cd62bd7e80b78804c",
-        "description": "Enforced refuseStrictLiveWrite under strict-live fallback; added Cancel Job action button when job is active; polled real job logs and handled terminal canceled/failed statuses."
+        "sha256": "04c0b6fcb9221b89d922a7375a2acbd0e8f5b51b9a7faf2e26c28289c0ac6693",
+        "description": "Enforced refuseStrictLiveWrite under strict-live fallback; added Cancel Job action button when job is active; tracked mock step/completion timers and live pollInterval/pollTimeout in refs; cleared all timers on operator cancel and unmount; guarded late timer/poll callbacks from overwriting cancelled status; added jobStatus badge."
+      },
+      {
+        "file": "src/management/pages/studios/SkillSandboxStudio.test.tsx",
+        "sha256": "c3033402a189d5f20ddd12ad748e6d213d635dca0eb925dfca9b7948c8154b43",
+        "description": "Added unit tests verifying that cancelling a mock job clears completion timers and prevents late success overwrite, and cancelling a live job clears polling intervals and guards against racy late backend responses."
       }
     ],
     "verification": {
@@ -164,6 +169,11 @@
         "exit_code": 0,
         "result": "4 passed (4 tests)"
       },
+      "vitest_skill_sandbox_studio": {
+        "command": "npx vitest run src/management/pages/studios/SkillSandboxStudio.test.tsx",
+        "exit_code": 0,
+        "result": "2 passed (2 tests)"
+      },
       "vitest_state_machines": {
         "command": "npx vitest run src/lib/stateMachines/coverage.test.ts",
         "exit_code": 0,
@@ -177,7 +187,7 @@
       "build": {
         "command": "VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build",
         "exit_code": 0,
-        "result": "Production bundle built cleanly in 45s (exit 0)"
+        "result": "Production bundle built cleanly in 47s (exit 0)"
       }
     }
   }
