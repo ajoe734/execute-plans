@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { bffV1 } from "@/lib/bff-v1";
 import type { Skill } from "@/lib/bff-v1";
+import { isStrictLiveFallback } from "@/lib/bff-v1/liveTransport";
+import { refuseStrictLiveWrite } from "@/lib/bff-v1/writes";
 import { useT } from "@/platform/hooks";
 import { Play, TerminalSquare, Loader2 } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -51,9 +53,30 @@ export const SkillSandboxStudio = () => {
   const active = useMemo(() => skills.find((s) => s.id === activeId), [skills, activeId]);
   useEffect(() => { setInput(sampleInput(active)); }, [active]);
 
+  const handleCancelJob = async () => {
+    if (!activeJobId) return;
+    try {
+      await bffV1.jobs.cancel(activeJobId);
+      toast.success(t("studios.sandbox.cancelled", { defaultValue: "Job cancellation requested" }));
+      setJobStatus("failed");
+    } catch (err) {
+      toast.error(((err as Error)?.message) || "Failed to cancel job");
+    }
+  };
+
   const handleRun = async () => {
     if (!activeId) return;
     setIsSubmitting(true);
+
+    if (isStrictLiveFallback()) {
+      try {
+        refuseStrictLiveWrite(`skill-eval-${activeId}`);
+      } catch (err: unknown) {
+        toast.error(((err as Error)?.message) || "Skill execution disabled in strict mode");
+        setIsSubmitting(false);
+        return;
+      }
+    }
 
     if (bffV1.detectMode() === "live") {
       try {
@@ -107,7 +130,7 @@ export const SkillSandboxStudio = () => {
               setJobStatus("success");
               setResult((logResponse.progress || { status: "success", output: {} }) as SandboxResult);
               clearInterval(pollInterval);
-            } else if (logResponse.status === "failed") {
+            } else if (logResponse.status === "failed" || logResponse.status === "canceled" || logResponse.status === "cancelled") {
               setJobStatus("failed");
               clearInterval(pollInterval);
             }
@@ -186,14 +209,21 @@ export const SkillSandboxStudio = () => {
           <Card className="p-4 space-y-3">
             <div className="flex items-center justify-between">
               <div className="text-sm font-semibold">{t("studios.sandbox.input")}</div>
-              <Button size="sm" onClick={handleRun} disabled={isSubmitting || !activeId}>
-                {isSubmitting ? (
-                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                ) : (
-                  <Play className="h-4 w-4 mr-1" />
+              <div className="flex items-center gap-2">
+                {jobStatus === "running" && activeJobId && (
+                  <Button size="sm" variant="destructive" onClick={handleCancelJob}>
+                    {t("common.cancel", { defaultValue: "Cancel Job" })}
+                  </Button>
                 )}
-                {t("studios.sandbox.run")}
-              </Button>
+                <Button size="sm" onClick={handleRun} disabled={isSubmitting || !activeId}>
+                  {isSubmitting ? (
+                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                  ) : (
+                    <Play className="h-4 w-4 mr-1" />
+                  )}
+                  {t("studios.sandbox.run")}
+                </Button>
+              </div>
             </div>
             <Textarea value={input} onChange={(e) => setInput(e.target.value)} rows={10} className="text-mono text-xs" />
           </Card>

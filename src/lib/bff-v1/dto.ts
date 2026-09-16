@@ -484,12 +484,58 @@ export interface EvolutionProgram extends BaseObject {
   action_receipts?: Array<Record<string, unknown>>;
 }
 
+export interface ResearchExperimentAllowedActions {
+  canCancel?: boolean;
+  canRetry?: boolean;
+  canArchive?: boolean;
+  canInvalidate?: boolean;
+  canPromote?: boolean;
+}
+
 export interface ResearchExperiment extends BaseObject {
+  experiment_id?: string;
+  experimentId?: string;
+  ticket_id?: string;
+  ticketId?: string;
+  experiment_name?: string;
+  experimentName?: string;
   hypothesis: string;
-  status: "queued" | "running" | "review" | "concluded";
+  status: "queued" | "running" | "review" | "concluded" | "completed" | "failed" | "canceled" | "cancelled" | "archived" | "invalidated" | string;
+  stage?: string;
+  attempt_number?: number;
+  attemptNumber?: number;
+  parent_experiment_id?: string | null;
+  parentExperimentId?: string | null;
+  root_experiment_id?: string | null;
+  rootExperimentId?: string | null;
+  cancellation_fence?: string | null;
+  cancellationFence?: string | null;
+  cancellation_reason?: string | null;
+  cancellationReason?: string | null;
+  canceled_by?: string | null;
+  canceledBy?: string | null;
+  is_archived?: boolean;
+  isArchived?: boolean;
+  archived_at?: string | null;
+  archivedAt?: string | null;
+  archived_by?: string | null;
+  archivedBy?: string | null;
+  invalidated_reason?: string | null;
+  invalidatedReason?: string | null;
   metric: string;
   metricValue: number;
   artifactId?: string;
+  strategy_selector?: Record<string, unknown>;
+  parameter_set?: Record<string, unknown>;
+  run_config?: Record<string, unknown>;
+  launch_context?: Record<string, unknown>;
+  progress?: {
+    percent?: number | null;
+    phase?: string | null;
+    message?: string | null;
+  };
+  allowedActions?: ResearchExperimentAllowedActions;
+  action_receipts?: Array<Record<string, unknown>>;
 }
 
 export interface Artifact extends BaseObject {
@@ -500,13 +546,74 @@ export interface Artifact extends BaseObject {
   hash: string;
 }
 
+export interface JobAllowedActions {
+  canCancel?: boolean;
+  canRetry?: boolean;
+  canArchive?: boolean;
+  canPromote?: boolean;
+}
+
 export interface Job {
   id: string;
+  job_id?: string;
+  jobId?: string;
+  native_id?: string;
+  nativeId?: string;
   kind: string;
-  status: RunState;
+  source?: string;
+  job_type?: string;
+  jobType?: string;
+  status: RunState | "queued" | "dispatched" | "running" | "active" | "completed" | "succeeded" | "failed" | "canceled" | "cancelled" | "timeout" | "retrying" | string;
+  attempt_number?: number;
+  attemptNumber?: number;
+  parent_run_id?: string | null;
+  parentRunId?: string | null;
+  root_run_id?: string | null;
+  rootRunId?: string | null;
+  cancellation_fence?: string | null;
+  cancellationFence?: string | null;
+  created_at?: string;
+  createdAt?: string;
+  updated_at?: string;
+  updatedAt?: string;
   startedAt: string;
+  started_at?: string;
+  completed_at?: string | null;
+  completedAt?: string | null;
   durationMs?: number;
   owner: string;
+  progress?: unknown;
+  detail?: Record<string, unknown>;
+  logs?: unknown[] | null;
+  allowedActions?: JobAllowedActions;
+}
+
+export interface JobActionReceiptData {
+  command_id?: string;
+  receipt_id?: string;
+  status: string;
+  entity_type: "Job";
+  entity_id: string;
+  dispatch_path?: string;
+  authoritative_readback?: Record<string, unknown>;
+  cancellation_fence?: string;
+  previous_job_id?: string;
+  new_job_id?: string;
+  [key: string]: unknown;
+}
+
+export interface ExperimentActionReceiptData {
+  command_id?: string;
+  receipt_id?: string;
+  status: string;
+  entity_type: "Experiment";
+  entity_id: string;
+  dispatch_path?: string;
+  authoritative_readback?: Record<string, unknown>;
+  cancellation_fence?: string;
+  previous_experiment_id?: string;
+  new_experiment_id?: string;
+  [key: string]: unknown;
 }
 
 export interface Alert {

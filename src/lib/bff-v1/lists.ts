@@ -20,6 +20,7 @@ import {
 } from "./eventTimestamps";
 import { normalizeCapitalPool } from "./capitalPools";
 import { normalizeBaseObjectFields } from "./domainReads";
+import { normalizeJobFields } from "./operations";
 
 /**
  * Pack D D22 list-class taxonomy. Drives `totalCountExact` + whether
@@ -390,7 +391,7 @@ export const lists = {
   mcpTools:        strictLiveListLoader(paths.mcpTools(),           LIST_CLASS_BY_KEY.mcpTools, normalizeBaseObjectFields),
   skills:          strictLiveListLoader(paths.skills(),             LIST_CLASS_BY_KEY.skills, normalizeBaseObjectFields),
   channels:        strictLiveListLoader(paths.channels(),           LIST_CLASS_BY_KEY.channels, normalizeBaseObjectFields),
-  jobs:            strictLiveListLoader(paths.jobs(),               LIST_CLASS_BY_KEY.jobs),
+  jobs:            strictLiveListLoader(paths.jobs(),               LIST_CLASS_BY_KEY.jobs, normalizeJobFields),
   runtimes:        strictLiveRuntimeListLoader(paths.runtimes(),    LIST_CLASS_BY_KEY.runtimes),
   alerts:          strictLiveAlertListLoader(paths.alerts(),        LIST_CLASS_BY_KEY.alerts),
   incidents:       strictLiveIncidentListLoader(paths.incidents(),  LIST_CLASS_BY_KEY.incidents),

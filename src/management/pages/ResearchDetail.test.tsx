@@ -121,4 +121,59 @@ describe("ResearchDetail", () => {
     expect(screen.getByText("pending_upstream_task")).toBeInTheDocument();
     expect(screen.getByText("MGMT-QLIB-003 / MGMT-QLIB-005")).toBeInTheDocument();
   });
+
+  it("renders active experiment with Cancel action and places cancellation fence on cancel", async () => {
+    const activeExp: ResearchExperiment = {
+      ...experiment(),
+      status: "running",
+      state: "running",
+      allowedActions: { canCancel: true, canRetry: false, canArchive: false, canInvalidate: false },
+    };
+    mocks.researchGet.mockResolvedValue(activeExp);
+    mocks.auditList.mockResolvedValue([]);
+    mocks.personaFleetGet.mockResolvedValue([]);
+
+    renderDetail();
+
+    await waitFor(() => expect(screen.getByRole("button", { name: /cancel/i })).toBeInTheDocument());
+    expect(screen.queryByRole("button", { name: /rerun/i })).not.toBeInTheDocument();
+  });
+
+  it("renders terminal experiment with Retry and Archive actions and renders lineage", async () => {
+    const canceledExp: ResearchExperiment = {
+      ...experiment(),
+      status: "canceled",
+      state: "canceled",
+      attempt_number: 2,
+      parent_experiment_id: "exp-mgmt-qlib-005",
+      cancellation_fence: "2026-09-16T12:00:00Z",
+      allowedActions: { canCancel: false, canRetry: true, canArchive: true, canInvalidate: false },
+    };
+    mocks.researchGet.mockResolvedValue(canceledExp);
+    mocks.auditList.mockResolvedValue([]);
+    mocks.personaFleetGet.mockResolvedValue([]);
+
+    renderDetail();
+
+    await waitFor(() => expect(screen.getByRole("button", { name: /re-?run/i })).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: /archive/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^cancel$/i })).not.toBeInTheDocument();
+    expect(screen.getByText("Experiment Lineage & Governance State")).toBeInTheDocument();
+    expect(screen.getByText("exp-mgmt-qlib-005")).toBeInTheDocument();
+    expect(screen.getByText("2026-09-16T12:00:00Z")).toBeInTheDocument();
+  });
+
+  it("dispatches promote and propagates backend rejection without faking local success", async () => {
+    mocks.researchGet.mockResolvedValue(experiment());
+    mocks.auditList.mockResolvedValue([]);
+    mocks.personaFleetGet.mockResolvedValue([]);
+    mocks.runActionSafe.mockResolvedValue({
+      ok: false,
+      error: { code: "PRECONDITION_FAILED", message: "GOV-PROMOTE-001 required" },
+    });
+
+    renderDetail();
+
+    await waitFor(() => expect(screen.getByText("Promote to Strategy")).toBeInTheDocument());
+  });
 });
