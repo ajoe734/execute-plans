@@ -54,7 +54,7 @@ async function fetchLiveEvolutionRuns(helperName: string): Promise<EvolutionRun[
                 programId: recordString(run, "programId", "program_id") ?? programId,
               };
             })
-            .filter((run) => run !== null),
+            .filter((run): run is UnknownRecord => run !== null),
       ),
     ),
   );
@@ -96,7 +96,7 @@ export async function getEvolutionCandidatesForRun(runId: string): Promise<Evolu
             runId: recordString(candidate, "runId", "run_id", "evolution_run_id") ?? runId,
           };
         })
-        .filter((candidate) => candidate !== null),
+        .filter((candidate): candidate is UnknownRecord => candidate !== null),
   ) as unknown as Promise<EvolutionCandidate[]>;
 }
 
@@ -125,7 +125,7 @@ export async function getPromotionsForProgram(programId: string): Promise<Promot
           artifactId: recordString(pr, "artifact_id", "artifactId"),
         };
       })
-      .filter((p) => p !== null);
+      .filter((p): p is PromotionRecord => p !== null);
   } catch {
     return [];
   }
@@ -151,7 +151,7 @@ export async function listFitnessFormulas(programId?: string): Promise<FitnessFo
           name: recordString(fr, "name") ?? `Formula ${id}`,
           owner: recordString(fr, "owner") ?? p.owner ?? "operator",
           updatedAt: recordString(fr, "created_at", "createdAt", "updatedAt") ?? p.updatedAt ?? new Date().toISOString(),
-          state: "deployed",
+          state: "active",
           risk: "low",
           expression: recordString(fr, "expression") ?? "",
           metrics: Array.isArray(fr.metrics) ? (fr.metrics as string[]) : [],
@@ -198,7 +198,7 @@ export async function listMutationRules(programId?: string): Promise<MutationRul
           name: recordString(rr, "name") ?? `Rule ${id}`,
           owner: recordString(rr, "owner") ?? p.owner ?? "operator",
           updatedAt: recordString(rr, "created_at", "createdAt", "updatedAt") ?? p.updatedAt ?? new Date().toISOString(),
-          state: "deployed",
+          state: "active",
           risk: (recordString(rr, "risk") as any) ?? "low",
           scope,
           expression: recordString(rr, "expression") ?? "",

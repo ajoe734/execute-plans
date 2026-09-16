@@ -135,6 +135,7 @@ describe("ResearchDetail", () => {
     const activeExp: ResearchExperiment = {
       ...experiment(),
       status: "running",
+      state: "running",
       allowedActions: { canCancel: true, canRetry: false, canArchive: false, canInvalidate: false },
     };
     mocks.researchGet.mockResolvedValue(activeExp);
@@ -151,6 +152,7 @@ describe("ResearchDetail", () => {
     const canceledExp: ResearchExperiment = {
       ...experiment(),
       status: "canceled",
+      state: "canceled",
       attempt_number: 2,
       parent_experiment_id: "exp-mgmt-qlib-005",
       cancellation_fence: "2026-09-16T12:00:00Z",
@@ -188,10 +190,6 @@ describe("ResearchDetail", () => {
 const sampleSkill: Skill = {
   id: "skill-macro-summary",
   name: "Macro Summary",
-  owner: "pantheon-dev-browser",
-  updatedAt: "2026-09-01T00:00:00Z",
-  state: "review",
-  risk: "low",
   version: "1.0.0",
   archetype: "research",
   description: "Macro summary research skill",

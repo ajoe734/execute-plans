@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { bffV1, mgmt, runActionSafe, BffError } from "@/lib/bff-v1";
+import { bffV1, mgmt, runActionSafe } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import type { AuditEvent, ResearchExperiment } from "@/lib/bff-v1";
 import type { ManagementPersonaFleetRow, ManagementResearchProject } from "@/lib/bff-v1/management";
@@ -123,16 +123,19 @@ export const ResearchDetail = () => {
   const handleCancel = async (memo?: string) => {
     const experimentId = experimentIdOf(x);
     const reason = memo || "Operator halted experiment";
-    try {
-      const envelope = await bffV1.research.cancel(experimentId, { reason });
-      const receipt = envelope.data.receipt ?? {};
-      const fence = (receipt.cancellation_fence || receipt.cancellationFence || new Date().toISOString()) as string;
-      toast.success("Experiment canceled");
+    const result = await runActionSafe(
+      { kind: "Research", id: experimentId, action: "cancel", reason, memo: reason, params: { reason } },
+      { successTitle: "Experiment canceled" },
+    );
+    if (result.ok) {
+      const receiptData = result.envelope?.data as Record<string, unknown> | undefined;
+      const fence = (receiptData?.cancellation_fence || receiptData?.cancellationFence || new Date().toISOString()) as string;
       setX((prev) =>
         prev
           ? {
               ...prev,
               status: "canceled",
+              state: "canceled",
               cancellation_fence: fence,
               cancellationFence: fence,
               allowedActions: {
@@ -146,25 +149,22 @@ export const ResearchDetail = () => {
           : prev,
       );
       setCancelOpen(false);
-    } catch (err) {
-      toast.error(err instanceof BffError ? err.message : "Action failed");
     }
   };
 
   const handleRetry = async () => {
     const experimentId = experimentIdOf(x);
-    try {
-      const envelope = await bffV1.research.retry(experimentId);
-      const receipt = envelope.data.receipt ?? {};
-      const newExpId = (receipt.new_experiment_id || receipt.newExperimentId) as string | undefined;
+    const result = await runActionSafe(
+      { kind: "Research", id: experimentId, action: "retry" },
+      { successTitle: "New experiment attempt created" },
+    );
+    if (result.ok) {
+      const receiptData = result.envelope?.data as Record<string, unknown> | undefined;
+      const newExpId = (receiptData?.new_experiment_id || receiptData?.newExperimentId) as string | undefined;
       if (newExpId) {
         toast.success(`Created attempt #${(x.attempt_number ?? x.attemptNumber ?? 1) + 1}: ${newExpId}`);
         navigate(`/management/experiments/${newExpId}`);
-      } else {
-        toast.success("New experiment attempt created");
       }
-    } catch (err) {
-      toast.error(err instanceof BffError ? err.message : "Action failed");
     }
   };
 
@@ -280,7 +280,7 @@ export const ResearchDetail = () => {
               <>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <StatCard label={t("table.status")} value={(x.status ?? "").toUpperCase()} />
-                  <StatCard label="Attempt" value={`#${x.attempt_number ?? x.attemptNumber ?? 1}`} />
+                  <StatCard label="Attempt" value={`#${x.attempt_number ?? x.attemptNumber ?? 1}`} mono />
                   <StatCard label={x.metric} value={(x.metricValue ?? 0).toFixed(3)} tone="success" />
                   <StatCard label={t("table.owner")} value={x.owner} />
                 </div>
