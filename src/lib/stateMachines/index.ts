@@ -110,18 +110,21 @@ export const rebalanceMachine: StateMachine<RebalanceState> = {
 };
 
 // ---- 17.6 Evolution Program ----
-export type EvolutionState = "draft" | "active" | "paused" | "under_review" | "completed" | "retired";
+export type EvolutionState = "draft" | "under_review" | "active" | "paused" | "stopped" | "completed" | "retired";
 export const evolutionMachine: StateMachine<EvolutionState> = {
   name: "evolution",
   states: ["draft", "under_review", "active", "completed", "retired"],
-  branchStates: ["paused"],
+  branchStates: ["paused", "stopped"],
   transitions: [
     { from: "draft", to: "under_review", action: "submit_evolution_review", requiresApproval: true, uiPattern: "review_workflow" },
     { from: "under_review", to: "active", action: "approve_program", requiresApproval: true, risk: "medium" },
     { from: "active", to: "paused", action: "pause_program", risk: "low" },
     { from: "paused", to: "active", action: "resume_program", risk: "low" },
+    { from: "active", to: "stopped", action: "stop", risk: "high", uiPattern: "high_risk_modal" },
+    { from: "paused", to: "stopped", action: "stop", risk: "high", uiPattern: "high_risk_modal" },
     { from: "active", to: "completed", action: "complete_program" },
     { from: "completed", to: "retired", action: "retire_program" },
+    { from: "stopped", to: "retired", action: "retire_program" },
   ],
 };
 

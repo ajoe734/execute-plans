@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { bffV1, runActionSafe } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import type { Alert, ApprovalRequest, AuditEvent, EvolutionProgram, ResearchExperiment } from "@/lib/bff-v1";
-import { Pause, Play, GitBranch } from "lucide-react";
+import { Pause, Play, GitBranch, CheckCircle } from "lucide-react";
 import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
 import { StatCard } from "@/platform/components/StatCard";
 import { Progress } from "@/components/ui/progress";
@@ -27,12 +27,21 @@ import { MutationRuleManager } from "../components/detail/MutationRuleManager";
 import { EvolutionCandidatesTab } from "../components/detail/EvolutionCandidatesTab";
 import { EvolutionFreezePanel } from "../components/detail/EvolutionFreezePanel";
 
-const mapState = (s: string): EvolutionState => {
+const mapState = (s?: string): EvolutionState => {
+  const clean = (s ?? "").trim().toLowerCase();
   const m: Record<string, EvolutionState> = {
-    draft: "draft", review: "under_review", approved: "active",
-    deployed: "active", paused: "paused", retired: "retired",
+    draft: "draft",
+    under_review: "under_review",
+    review: "under_review",
+    active: "active",
+    approved: "active",
+    deployed: "active",
+    paused: "paused",
+    stopped: "stopped",
+    completed: "completed",
+    retired: "retired",
   };
-  return m[s] ?? "draft";
+  return m[clean] ?? "draft";
 };
 
 export const EvolutionDetail = () => {
@@ -45,8 +54,13 @@ export const EvolutionDetail = () => {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
   const [stopOpen, setStopOpen] = useState(false);
-  const [constraints, setConstraints] = useState<{ id: string; expr: string; ts: string }[]>([]);
   const [newConstraint, setNewConstraint] = useState("");
+
+  const refreshProgram = async () => {
+    if (!id) return;
+    const refreshed = await bffV1.evolution.get(id);
+    if (refreshed) setE(refreshed);
+  };
 
   useEffect(() => {
     if (!id) return;
@@ -58,7 +72,64 @@ export const EvolutionDetail = () => {
   }, [id]);
 
   if (!e) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
-  const machineState = mapState(e.state);
+  const rawState = e.status ?? e.state;
+  const machineState = mapState(typeof rawState === "string" ? rawState : undefined);
+
+  const handleResume = async () => {
+    const receipt = await runActionSafe(
+      { kind: "Evolution", id: e.id, action: "resume_program", memo: "Operator resume" },
+      { successTitle: t("evolution.resumed", { defaultValue: "Program resumed" }) },
+    );
+    if (receipt.ok) await refreshProgram();
+  };
+
+  const handlePause = async () => {
+    const receipt = await runActionSafe(
+      { kind: "Evolution", id: e.id, action: "pause_program", memo: "Operator pause" },
+      { successTitle: t("evolution.paused", { defaultValue: "Program paused" }) },
+    );
+    if (receipt.ok) await refreshProgram();
+  };
+
+  const handleSubmitReview = async () => {
+    const receipt = await runActionSafe(
+      { kind: "Evolution", id: e.id, action: "submit_evolution_review", memo: "Operator submit review" },
+      { successTitle: t("evolution.reviewSubmitted", { defaultValue: "Review submitted" }) },
+    );
+    if (receipt.ok) await refreshProgram();
+  };
+
+  const handleApprove = async () => {
+    const receipt = await runActionSafe(
+      { kind: "Evolution", id: e.id, action: "approve_program", memo: "Operator approve" },
+      { successTitle: t("evolution.approved", { defaultValue: "Program approved" }) },
+    );
+    if (receipt.ok) await refreshProgram();
+  };
+
+  const handleComplete = async () => {
+    const receipt = await runActionSafe(
+      { kind: "Evolution", id: e.id, action: "complete_program", memo: "Operator complete" },
+      { successTitle: t("evolution.completed", { defaultValue: "Program completed" }) },
+    );
+    if (receipt.ok) await refreshProgram();
+  };
+
+  const handleRetire = async () => {
+    const receipt = await runActionSafe(
+      { kind: "Evolution", id: e.id, action: "retire_program", memo: "Operator retire" },
+      { successTitle: t("evolution.retired", { defaultValue: "Program retired" }) },
+    );
+    if (receipt.ok) await refreshProgram();
+  };
+
+  const programConstraints = Array.isArray(e.constraints)
+    ? e.constraints.map((c, idx) => ({
+        id: c.id || `cst-${idx + 1}`,
+        expr: c.expression || c.name || (typeof c.value !== "undefined" ? `${c.operator || "<="} ${c.value}` : `Constraint ${idx + 1}`),
+        ts: c.created_at || e.updatedAt || new Date().toISOString(),
+      }))
+    : [];
 
   return (
     <>
@@ -66,12 +137,65 @@ export const EvolutionDetail = () => {
         object={e}
         subtitle={`Parent: ${e.parentAlpha}`}
         actions={
-          <>
-            <Button size="sm" variant="outline"><Play className="h-4 w-4 mr-1" />{t("evolution.resume")}</Button>
-            <Button size="sm" variant="destructive" onClick={() => setStopOpen(true)}>
-              <Pause className="h-4 w-4 mr-1" />Stop Program
-            </Button>
-          </>
+          <div className="flex items-center gap-2">
+            {machineState === "draft" && (
+              <Button size="sm" variant="outline" onClick={handleSubmitReview}>
+                {t("evolution.submitReview", { defaultValue: "Submit Review" })}
+              </Button>
+            )}
+            {machineState === "under_review" && (
+              <Button size="sm" variant="outline" onClick={handleApprove}>
+                <CheckCircle className="h-4 w-4 mr-1" />
+                {t("evolution.approve", { defaultValue: "Approve Program" })}
+              </Button>
+            )}
+            {machineState === "active" && (
+              <>
+                <Button size="sm" variant="outline" onClick={handlePause}>
+                  <Pause className="h-4 w-4 mr-1" />
+                  {t("evolution.pause", { defaultValue: "Pause Program" })}
+                </Button>
+                <Button size="sm" variant="secondary" onClick={handleComplete}>
+                  <CheckCircle className="h-4 w-4 mr-1" />
+                  {t("evolution.complete", { defaultValue: "Complete Program" })}
+                </Button>
+                <Button size="sm" variant="destructive" onClick={() => setStopOpen(true)}>
+                  <Pause className="h-4 w-4 mr-1" />Stop Program
+                </Button>
+              </>
+            )}
+            {machineState === "paused" && (
+              <>
+                <Button size="sm" variant="outline" onClick={handleResume}>
+                  <Play className="h-4 w-4 mr-1" />
+                  {t("evolution.resume", { defaultValue: "Resume Program" })}
+                </Button>
+                <Button size="sm" variant="destructive" onClick={() => setStopOpen(true)}>
+                  <Pause className="h-4 w-4 mr-1" />Stop Program
+                </Button>
+              </>
+            )}
+            {machineState === "stopped" && (
+              <>
+                <Badge variant="outline" className="border-status-failed/40 text-status-failed uppercase text-xs">
+                  Stopped
+                </Badge>
+                <Button size="sm" variant="outline" onClick={handleRetire}>
+                  {t("evolution.retire", { defaultValue: "Retire Program" })}
+                </Button>
+              </>
+            )}
+            {machineState === "completed" && (
+              <Button size="sm" variant="outline" onClick={handleRetire}>
+                {t("evolution.retire", { defaultValue: "Retire Program" })}
+              </Button>
+            )}
+            {machineState === "retired" && (
+              <Badge variant="outline" className="text-muted-foreground uppercase text-xs">
+                Retired
+              </Badge>
+            )}
+          </div>
         }
         tabs={[
           {
@@ -119,19 +243,19 @@ export const EvolutionDetail = () => {
               </Section>
             ),
           },
-          { value: "fitness", label: t("evolution.tabs.fitness"), content: <FitnessFormulaPanel mode="fitness" /> },
-          { value: "mutation", label: t("evolution.tabs.mutation"), content: <MutationRuleManager /> },
+          { value: "fitness", label: t("evolution.tabs.fitness"), content: <FitnessFormulaPanel mode="fitness" programId={e.id} /> },
+          { value: "mutation", label: t("evolution.tabs.mutation"), content: <MutationRuleManager programId={e.id} /> },
           { value: "runs", label: t("evolution.tabs.runs"), content: <EvolutionRunsPanel programId={e.id} mode="runs" /> },
           { value: "candidates", label: t("evolution.tabs.candidates"), content: <EvolutionCandidatesTab programId={e.id} /> },
-          { value: "promotion", label: t("evolution.tabs.promotion"), content: <PromotionPanel program={e} /> },
-          { value: "freeze", label: t("phase13.evolution.tabs.freeze"), content: <EvolutionFreezePanel program={e} /> },
+          { value: "promotion", label: t("evolution.tabs.promotion"), content: <PromotionPanel program={e} onRefresh={refreshProgram} /> },
+          { value: "freeze", label: t("phase13.evolution.tabs.freeze"), content: <EvolutionFreezePanel program={e} onRefresh={refreshProgram} /> },
           {
             value: "constraints", label: t("evolution.tabs.constraints"),
             content: (
               <Section title={t("evolution.constraints.title")}>
                 <ul className="space-y-1.5 text-sm mb-3">
-                  {constraints.length === 0 && <li className="text-xs text-muted-foreground">{t("evolution.constraints.empty")}</li>}
-                  {constraints.map((c) => (
+                  {programConstraints.length === 0 && <li className="text-xs text-muted-foreground">{t("evolution.constraints.empty")}</li>}
+                  {programConstraints.map((c) => (
                     <li key={c.id} className="flex items-center gap-3 text-mono text-xs">
                       <Badge variant="outline" className="text-[10px]">{c.id}</Badge>
                       <span className="flex-1">{c.expr}</span>
@@ -147,11 +271,13 @@ export const EvolutionDetail = () => {
                     id: e.id,
                     action: "create_constraint",
                     memo: expr,
+                    params: { name: expr, operator: "<=", expression: expr },
+                    payload: { name: expr, operator: "<=", expression: expr },
                   }, {
                     successTitle: t("evolution.constraints.created"),
                   });
                   if (!receipt.ok) return;
-                  setConstraints((cs) => [...cs, { id: `ec_${Date.now().toString(36)}`, expr, ts: new Date().toISOString() }]);
+                  await refreshProgram();
                   setNewConstraint("");
                 }}>{t("evolution.constraints.add")}</Button>
               </Section>
@@ -210,7 +336,11 @@ export const EvolutionDetail = () => {
         confirmToken="STOP"
         destructive
         onConfirm={async (memo) => {
-          await runActionSafe({ kind: "Evolution", id: e.id, action: "stop", memo }, { successTitle: "Stop requested" });
+          const receipt = await runActionSafe(
+            { kind: "Evolution", id: e.id, action: "stop", memo },
+            { successTitle: t("evolution.stopped", { defaultValue: "Program stopped" }) },
+          );
+          if (receipt.ok) await refreshProgram();
         }}
       />
     </>

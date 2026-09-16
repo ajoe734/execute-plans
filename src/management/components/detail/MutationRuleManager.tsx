@@ -12,10 +12,12 @@ import { Section } from "@/management/pages/ObjectDetailLayout";
 import { RiskBadge } from "@/platform/components/RiskBadge";
 import { NonProductionActionButton } from "@/management/components/NonProductionActionButton";
 
-export const MutationRuleManager = () => {
+export const MutationRuleManager = ({ programId }: { programId?: string } = {}) => {
   const t = useT();
   const [rules, setRules] = useState<MutationRule[]>([]);
-  useEffect(() => { bffV1.mutationRules.list().then(setRules); }, []);
+  useEffect(() => {
+    bffV1.mutationRules.list(programId).then(setRules);
+  }, [programId]);
 
   return (
     <Section title={t("evolution.tabs.mutation")}>

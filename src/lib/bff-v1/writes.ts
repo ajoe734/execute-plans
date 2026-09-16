@@ -1123,8 +1123,53 @@ export async function pause(
 ): Promise<RunActionEnvelope> {
   const correlationId = opts.correlationId ?? newCorrelationId();
   const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+  const action = (kind === "Evolution" || kind === "evolution-program") ? "pause_program" : "pause";
   if (await liveWriteGated()) {
-    return runAction({ kind, id, action: "pause", memo }, { ...opts, correlationId, idempotencyKey });
+    return runAction({ kind, id, action, memo }, { ...opts, correlationId, idempotencyKey });
+  }
+  refuseStrictLiveWrite(correlationId);
+}
+
+export async function resume(
+  kind: string,
+  id: string,
+  memo?: string,
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope> {
+  const correlationId = opts.correlationId ?? newCorrelationId();
+  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+  const action = (kind === "Evolution" || kind === "evolution-program") ? "resume_program" : "resume";
+  if (await liveWriteGated()) {
+    return runAction({ kind, id, action, memo }, { ...opts, correlationId, idempotencyKey });
+  }
+  refuseStrictLiveWrite(correlationId);
+}
+
+export async function resumeEvolutionProgram(
+  programId: string,
+  memo?: string,
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope> {
+  return resume("Evolution", programId, memo, opts);
+}
+
+export async function pauseEvolutionProgram(
+  programId: string,
+  memo?: string,
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope> {
+  return pause("Evolution", programId, memo, opts);
+}
+
+export async function stopEvolutionProgram(
+  programId: string,
+  memo?: string,
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope> {
+  const correlationId = opts.correlationId ?? newCorrelationId();
+  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+  if (await liveWriteGated()) {
+    return runAction({ kind: "Evolution", id: programId, action: "stop", memo }, { ...opts, correlationId, idempotencyKey });
   }
   refuseStrictLiveWrite(correlationId);
 }
@@ -1138,8 +1183,19 @@ export async function promoteCandidate(
 ): Promise<RunActionEnvelope> {
   const correlationId = opts.correlationId ?? newCorrelationId();
   const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+  const action = target === "live" ? "promote_candidate_live" : "promote_candidate_paper";
   if (await liveWriteGated()) {
-    return runAction({ kind: "Evolution", id: programId, action: `promote_${target}`, memo: memo ?? candidateId }, { ...opts, correlationId, idempotencyKey });
+    return runAction(
+      {
+        kind: "Evolution",
+        id: programId,
+        action,
+        memo: memo ?? candidateId,
+        payload: { candidate_id: candidateId, stage: target },
+        params: { candidate_id: candidateId, stage: target },
+      },
+      { ...opts, correlationId, idempotencyKey },
+    );
   }
   refuseStrictLiveWrite(correlationId);
 }
@@ -1153,6 +1209,19 @@ export async function freezeGeneration(
   const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
   if (await liveWriteGated()) {
     return runAction({ kind: "Evolution", id: programId, action: "freeze_generation", memo }, { ...opts, correlationId, idempotencyKey });
+  }
+  refuseStrictLiveWrite(correlationId);
+}
+
+export async function unfreezeGeneration(
+  programId: string,
+  memo?: string,
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope> {
+  const correlationId = opts.correlationId ?? newCorrelationId();
+  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+  if (await liveWriteGated()) {
+    return runAction({ kind: "Evolution", id: programId, action: "unfreeze_generation", memo }, { ...opts, correlationId, idempotencyKey });
   }
   refuseStrictLiveWrite(correlationId);
 }
@@ -1625,8 +1694,13 @@ export const bffWrites = {
   lockParams,
   rollback,
   pause,
+  resume,
+  resumeEvolutionProgram,
+  pauseEvolutionProgram,
+  stopEvolutionProgram,
   promoteCandidate,
   freezeGeneration,
+  unfreezeGeneration,
   submitOverride,
   advanceRebalanceStep,
   rerunRebalanceStep,

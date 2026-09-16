@@ -265,7 +265,7 @@ export type DeploymentStatus =
   | "deploying" | "deployed" | "failed" | "rolled_back" | "cancelled";
 
 export type EvolutionProgramStatus =
-  | "draft" | "active" | "paused" | "under_review" | "completed" | "retired";
+  | "draft" | "active" | "paused" | "stopped" | "under_review" | "completed" | "retired";
 
 export type JobStatus = "queued" | "running" | "review" | "concluded" | "failed";
 
@@ -417,6 +417,71 @@ export interface EvolutionProgram extends BaseObject {
   bestFitness: number;
   parentAlpha: string;
   progress: number;
+  revision?: number;
+  status?: EvolutionProgramStatus | string;
+  is_frozen?: boolean;
+  isFrozen?: boolean;
+  freeze_records?: Array<{
+    generation_id?: string;
+    frozen_at?: string;
+    frozen_by?: string;
+    unfrozen_at?: string;
+    unfrozen_by?: string;
+    reason?: string;
+  }>;
+  constraints?: Array<{
+    id: string;
+    name?: string;
+    scope?: string;
+    operator?: string;
+    value?: unknown;
+    penalty_weight?: number;
+    enabled?: boolean;
+    created_at?: string;
+    expression?: string;
+  }>;
+  fitness_formulas?: Array<{
+    id: string;
+    name?: string;
+    expression: string;
+    metrics: string[];
+    applied_scope?: string;
+    created_at?: string;
+  }>;
+  mutation_rules?: Array<{
+    id: string;
+    name?: string;
+    scope: string;
+    expression: string;
+    rate?: number;
+    rateBps?: number;
+    risk?: string;
+    enabled?: boolean;
+    created_at?: string;
+  }>;
+  promotions?: Array<{
+    promotion_id?: string;
+    id?: string;
+    stage?: string;
+    target?: "paper" | "live" | string;
+    candidate_id?: string;
+    candidateId?: string;
+    run_id?: string;
+    runId?: string;
+    artifact_id?: string;
+    artifact_version?: string;
+    artifact_digest?: string;
+    approval_id?: string;
+    promoted_at?: string;
+    promotedAt?: string;
+    promoted_by?: string;
+    promotedBy?: string;
+    delta_sharpe?: number;
+    deltaSharpe?: number;
+    delta_drawdown?: number;
+    deltaDrawdown?: number;
+  }>;
+  action_receipts?: Array<Record<string, unknown>>;
 }
 
 export interface ResearchExperiment extends BaseObject {
@@ -808,6 +873,8 @@ export interface PromotionRecord {
   promotedBy: string;
   deltaSharpe: number;
   deltaDrawdown: number;
+  runId?: string;
+  artifactId?: string;
 }
 
 export interface MetricFreeze {
