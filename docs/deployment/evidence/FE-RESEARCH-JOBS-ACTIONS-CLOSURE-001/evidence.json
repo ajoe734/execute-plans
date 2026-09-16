@@ -129,8 +129,8 @@
       },
       {
         "file": "src/management/pages/ResearchDetail.test.tsx",
-        "sha256": "820ca01016dd7a9f720bdf304f1f7121b344fa8d3704d44c32c7907de7c6be91",
-        "description": "Added tests verifying active experiment cancel with cancellation fence, terminal experiment retry with lineage display, and promote rejection handling without fake local success."
+        "sha256": "7b7654f3cbdf13bb7aa792237619273e631838c6b42c4292e382b46276210ac1",
+        "description": "Added tests verifying active experiment cancel with cancellation fence, terminal experiment retry with lineage display, promote rejection handling without fake local success, and SkillSandboxStudio cancellation timer fences preventing late mock and live polling overwrites."
       },
       {
         "file": "src/management/pages/ResearchDetail.tsx",
@@ -146,11 +146,6 @@
         "file": "src/management/pages/studios/SkillSandboxStudio.tsx",
         "sha256": "04c0b6fcb9221b89d922a7375a2acbd0e8f5b51b9a7faf2e26c28289c0ac6693",
         "description": "Enforced refuseStrictLiveWrite under strict-live fallback; added Cancel Job action button when job is active; tracked mock step/completion timers and live pollInterval/pollTimeout in refs; cleared all timers on operator cancel and unmount; guarded late timer/poll callbacks from overwriting cancelled status; added jobStatus badge."
-      },
-      {
-        "file": "src/management/pages/studios/SkillSandboxStudio.test.tsx",
-        "sha256": "c3033402a189d5f20ddd12ad748e6d213d635dca0eb925dfca9b7948c8154b43",
-        "description": "Added unit tests verifying that cancelling a mock job clears completion timers and prevents late success overwrite, and cancelling a live job clears polling intervals and guards against racy late backend responses."
       }
     ],
     "verification": {
@@ -167,12 +162,7 @@
       "vitest_research_detail": {
         "command": "npx vitest run src/management/pages/ResearchDetail.test.tsx",
         "exit_code": 0,
-        "result": "4 passed (4 tests)"
-      },
-      "vitest_skill_sandbox_studio": {
-        "command": "npx vitest run src/management/pages/studios/SkillSandboxStudio.test.tsx",
-        "exit_code": 0,
-        "result": "2 passed (2 tests)"
+        "result": "6 passed (6 tests)"
       },
       "vitest_state_machines": {
         "command": "npx vitest run src/lib/stateMachines/coverage.test.ts",

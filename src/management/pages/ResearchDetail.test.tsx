@@ -1,18 +1,23 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, act } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import i18n from "@/i18n";
-import type { ResearchExperiment } from "@/lib/bff-v1";
+import type { ResearchExperiment, Skill } from "@/lib/bff-v1";
 import type { ManagementPersonaFleetRow } from "@/lib/bff-v1/management";
 import { ResearchDetail } from "./ResearchDetail";
+import { SkillSandboxStudio } from "./studios/SkillSandboxStudio";
 
 const mocks = vi.hoisted(() => ({
   researchGet: vi.fn(),
   auditList: vi.fn(),
   personaFleetGet: vi.fn(),
   runActionSafe: vi.fn(),
+  skillsList: vi.fn(),
+  jobsCancel: vi.fn(),
+  detectMode: vi.fn(),
+  fetch: vi.fn(),
 }));
 
 vi.mock("@/lib/bff-v1", async (importOriginal) => {
@@ -23,6 +28,10 @@ vi.mock("@/lib/bff-v1", async (importOriginal) => {
       ...actual.bffV1,
       research: { ...actual.bffV1.research, get: mocks.researchGet },
       audit: { ...actual.bffV1.audit, list: mocks.auditList },
+      skills: { ...actual.bffV1.skills, list: mocks.skillsList },
+      jobs: { ...actual.bffV1.jobs, cancel: mocks.jobsCancel },
+      detectMode: mocks.detectMode,
+      fetch: mocks.fetch,
     },
     mgmt: {
       ...actual.mgmt,
@@ -175,5 +184,161 @@ describe("ResearchDetail", () => {
     renderDetail();
 
     await waitFor(() => expect(screen.getByText("Promote to Strategy")).toBeInTheDocument());
+  });
+});
+
+const sampleSkill: Skill = {
+  id: "skill-macro-summary",
+  name: "Macro Summary",
+  version: "1.0.0",
+  archetype: "research",
+  description: "Macro summary research skill",
+  draft: false,
+  usedByPersonas: 1,
+};
+
+describe("SkillSandboxStudio Cancellation and Timer Fence", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useRealTimers();
+    mocks.skillsList.mockResolvedValue([sampleSkill]);
+    mocks.jobsCancel.mockResolvedValue({ status: "canceled" });
+    mocks.detectMode.mockReturnValue("dev");
+  });
+
+  it("cancels mock job before completion timer fires and prevents late status overwrite", async () => {
+    vi.useFakeTimers();
+
+    render(
+      <I18nextProvider i18n={i18n}>
+        <MemoryRouter>
+          <SkillSandboxStudio />
+        </MemoryRouter>
+      </I18nextProvider>,
+    );
+
+    // Wait for skills list to populate
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const runBtn = screen.getByTestId("run-job-button");
+    expect(runBtn).toBeInTheDocument();
+
+    // Trigger mock run
+    await act(async () => {
+      fireEvent.click(runBtn);
+    });
+
+    const statusBadge = screen.getByTestId("job-status-badge");
+    expect(statusBadge).toHaveTextContent("running");
+
+    const cancelBtn = screen.getByTestId("cancel-job-button");
+    expect(cancelBtn).toBeInTheDocument();
+
+    // Advance 1000ms into the 4000ms mock run
+    await act(async () => {
+      vi.advanceTimersByTime(1000);
+    });
+
+    // Check step 1 log appeared
+    expect(screen.getByText(/Initializing sandbox environment/)).toBeInTheDocument();
+
+    // Click Cancel Job
+    await act(async () => {
+      fireEvent.click(cancelBtn);
+    });
+
+    // Verify cancellation called
+    expect(mocks.jobsCancel).toHaveBeenCalledTimes(1);
+    expect(statusBadge).toHaveTextContent("failed");
+    expect(screen.queryByTestId("cancel-job-button")).not.toBeInTheDocument();
+
+    // Verify cancellation log appeared
+    expect(screen.getByText(/cancelled by operator/)).toBeInTheDocument();
+
+    // Advance timers well beyond the 4000ms completion timer (advance by 10s)
+    await act(async () => {
+      vi.advanceTimersByTime(10000);
+    });
+
+    // The status MUST REMAIN failed and not be overwritten to success
+    expect(statusBadge).toHaveTextContent("failed");
+
+    // The fake completion card must NOT be rendered
+    expect(screen.queryByText("評估執行結果")).not.toBeInTheDocument();
+  });
+
+  it("cancels live job, clears poll interval, and fences late poll callbacks from overwriting status", async () => {
+    mocks.detectMode.mockReturnValue("live");
+    mocks.fetch.mockImplementation(async ({ path }: { path: string }) => {
+      if (path.includes("/sandbox-eval")) {
+        return { job_id: "job-live-sandbox-999" };
+      }
+      if (path.includes("/logs")) {
+        return {
+          status: "running",
+          logs: [{ timestamp: new Date().toISOString(), level: "INFO", message: "Live job executing" }],
+        };
+      }
+      return {};
+    });
+
+    vi.useFakeTimers();
+
+    render(
+      <I18nextProvider i18n={i18n}>
+        <MemoryRouter>
+          <SkillSandboxStudio />
+        </MemoryRouter>
+      </I18nextProvider>,
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const runBtn = screen.getByTestId("run-job-button");
+    await act(async () => {
+      fireEvent.click(runBtn);
+    });
+
+    // Wait for sandbox-eval POST to resolve
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const statusBadge = screen.getByTestId("job-status-badge");
+    expect(statusBadge).toHaveTextContent("running");
+
+    const cancelBtn = screen.getByTestId("cancel-job-button");
+    expect(cancelBtn).toBeInTheDocument();
+
+    // Operator cancels the live job
+    await act(async () => {
+      fireEvent.click(cancelBtn);
+    });
+
+    expect(mocks.jobsCancel).toHaveBeenCalledWith("job-live-sandbox-999");
+    expect(statusBadge).toHaveTextContent("failed");
+    expect(screen.queryByTestId("cancel-job-button")).not.toBeInTheDocument();
+
+    // If backend late response races back with status "success"
+    mocks.fetch.mockResolvedValueOnce({
+      status: "success",
+      progress: {
+        status: "success",
+        output: { summary: "Late fake success payload" },
+      },
+    });
+
+    // Advance timers
+    await act(async () => {
+      vi.advanceTimersByTime(3000);
+    });
+
+    // Status must remain failed, never overwritten by late poll response
+    expect(statusBadge).toHaveTextContent("failed");
+    expect(screen.queryByText("評估執行結果")).not.toBeInTheDocument();
   });
 });
