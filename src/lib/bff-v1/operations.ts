@@ -19,8 +19,36 @@ import {
   normalizeIncidentTimestampList,
 } from "./eventTimestamps";
 
+import { cancelJob, retryJob } from "./writes";
+
+export function normalizeJobFields<T>(raw: T | undefined): T | undefined {
+  if (!raw || typeof raw !== "object") return raw;
+  const record = raw as Record<string, unknown>;
+  const patched = { ...record };
+  if (!patched.id && patched.job_id) patched.id = patched.job_id;
+  if (!patched.job_id && patched.id) patched.job_id = patched.id;
+  if (!patched.kind && (patched.job_type || patched.source)) {
+    patched.kind = patched.job_type || patched.source;
+  }
+  if (!patched.startedAt && (patched.started_at || patched.created_at)) {
+    patched.startedAt = patched.started_at || patched.created_at;
+  }
+  if (!patched.owner && patched.source) {
+    patched.owner = patched.source;
+  }
+  return patched as T;
+}
+
+export function normalizeJobList<T>(rows: T[]): T[] {
+  return rows.map((row) => normalizeJobFields(row) as T);
+}
+
 export async function listJobs(): Promise<Job[]> {
-  return strictLiveList("jobs.list", paths.jobs());
+  return strictLiveList<Job>("jobs.list", paths.jobs()).then(normalizeJobList);
+}
+
+export async function getJob(id: string): Promise<Job | undefined> {
+  return strictLiveDetail<Job>("jobs.get", paths.job(id)).then(normalizeJobFields);
 }
 
 export async function listRuntimes(): Promise<Runtime[]> {
@@ -61,6 +89,9 @@ export async function listAudit(): Promise<AuditEvent[]> {
 
 export const jobs = {
   list: listJobs,
+  get: getJob,
+  cancel: cancelJob,
+  retry: retryJob,
 };
 
 export const runtimes = {

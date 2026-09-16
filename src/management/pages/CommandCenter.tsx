@@ -62,7 +62,7 @@ export const CommandCenter = () => {
     const openAlerts = d.alerts.filter((a) => !a.acknowledged).length;
     const openIncidents = d.incidents.filter((i) => i.status !== "resolved").length;
     const pendingApprovals = d.approvals.filter((a) => a.state === "pending").length;
-    const runningJobs = d.jobs.filter((j) => j.status === "running").length;
+    const runningJobs = d.jobs.filter((j) => ["running", "dispatched", "queued", "active"].includes(j.status)).length;
     const liveRisk = d.strategies.filter((s) => isLive(s) && (s.risk === "high" || s.risk === "critical")).length;
     const utilPct = d.pools.length
       ? Math.round((d.pools.reduce((acc, p) => acc + p.utilized / p.allocated, 0) / d.pools.length) * 100)
@@ -269,10 +269,10 @@ export const CommandCenter = () => {
             rows={d.jobs}
             onRowClick={() => navigate("/management/jobs")}
             columns={[
-              { key: "id", header: t("table.id"), cell: (r) => <span className="text-mono text-xs">{r.id}</span> },
-              { key: "kind", header: t("commandCenter.col.kind"), cell: (r) => r.kind },
+              { key: "id", header: t("table.id"), cell: (r) => <span className="text-mono text-xs">{r.job_id || r.id}</span> },
+              { key: "kind", header: t("commandCenter.col.kind"), cell: (r) => r.kind || r.job_type || r.source },
               { key: "status", header: t("common.state"), cell: (r) => <StatusBadge state={r.status} /> },
-              { key: "owner", header: t("common.owner"), cell: (r) => r.owner },
+              { key: "owner", header: t("common.owner"), cell: (r) => r.owner || r.source },
             ]}
           />
         </Card>

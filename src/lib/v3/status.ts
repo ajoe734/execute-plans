@@ -145,8 +145,8 @@ export const EVOLUTION_PROGRAM_STATUSES = [
 export type EvolutionProgramStatus = typeof EVOLUTION_PROGRAM_STATUSES[number];
 
 export const EXPERIMENT_STATUSES = [
-  "draft", "queued", "running", "completed", "failed",
-  "invalidated", "attached_to_review", "archived",
+  "draft", "queued", "running", "completed", "concluded", "failed",
+  "invalidated", "attached_to_review", "archived", "canceled", "cancelled",
 ] as const;
 export type ExperimentStatus = typeof EXPERIMENT_STATUSES[number];
 
@@ -193,8 +193,8 @@ export const INSIGHT_STATUSES = [
 export type InsightStatus = typeof INSIGHT_STATUSES[number];
 
 export const JOB_STATUSES = [
-  "queued", "running", "waiting_for_approval",
-  "completed", "failed", "cancelled", "retrying",
+  "queued", "dispatched", "running", "active", "waiting_for_approval",
+  "completed", "succeeded", "failed", "cancelled", "canceled", "timeout", "retrying",
 ] as const;
 export type JobStatus = typeof JOB_STATUSES[number];
 

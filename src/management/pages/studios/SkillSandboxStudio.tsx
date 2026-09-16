@@ -1,5 +1,5 @@
 // Phase 12.3 — Skill Sandbox Studio: input surface; execution stays disabled until a governed runner exists.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { PageHeader, PageBody } from "@/platform/components/PageHeader";
 import { Card } from "@/components/ui/card";
@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { bffV1 } from "@/lib/bff-v1";
 import type { Skill } from "@/lib/bff-v1";
+import { isStrictLiveFallback } from "@/lib/bff-v1/liveTransport";
+import { refuseStrictLiveWrite } from "@/lib/bff-v1/writes";
 import { useT } from "@/platform/hooks";
 import { Play, TerminalSquare, Loader2 } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -41,6 +43,31 @@ export const SkillSandboxStudio = () => {
   const [result, setResult] = useState<SandboxResult | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const mockTimersRef = useRef<Array<ReturnType<typeof setTimeout>>>([]);
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isCancelledRef = useRef<boolean>(false);
+  const cancelledJobIdsRef = useRef<Set<string>>(new Set());
+
+  const clearAllTimers = () => {
+    mockTimersRef.current.forEach((id) => clearTimeout(id));
+    mockTimersRef.current = [];
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
+    if (pollTimeoutRef.current) {
+      clearTimeout(pollTimeoutRef.current);
+      pollTimeoutRef.current = null;
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      clearAllTimers();
+    };
+  }, []);
+
   useEffect(() => {
     bffV1.skills.list().then((rows) => {
       setSkills(rows);
@@ -51,9 +78,45 @@ export const SkillSandboxStudio = () => {
   const active = useMemo(() => skills.find((s) => s.id === activeId), [skills, activeId]);
   useEffect(() => { setInput(sampleInput(active)); }, [active]);
 
+  const handleCancelJob = async () => {
+    if (!activeJobId) return;
+    const targetJobId = activeJobId;
+    isCancelledRef.current = true;
+    cancelledJobIdsRef.current.add(targetJobId);
+    clearAllTimers();
+    setJobStatus("failed");
+    setIsSubmitting(false);
+    setLogs((prev) => [
+      ...prev,
+      {
+        timestamp: new Date().toISOString(),
+        level: "WARN",
+        message: `Job ${targetJobId} cancelled by operator`,
+      },
+    ]);
+    try {
+      await bffV1.jobs.cancel(targetJobId);
+      toast.success(t("studios.sandbox.cancelled", { defaultValue: "Job cancellation requested" }));
+    } catch (err) {
+      toast.error(((err as Error)?.message) || "Failed to cancel job");
+    }
+  };
+
   const handleRun = async () => {
     if (!activeId) return;
+    clearAllTimers();
+    isCancelledRef.current = false;
     setIsSubmitting(true);
+
+    if (isStrictLiveFallback()) {
+      try {
+        refuseStrictLiveWrite(`skill-eval-${activeId}`);
+      } catch (err: unknown) {
+        toast.error(((err as Error)?.message) || "Skill execution disabled in strict mode");
+        setIsSubmitting(false);
+        return;
+      }
+    }
 
     if (bffV1.detectMode() === "live") {
       try {
@@ -74,12 +137,21 @@ export const SkillSandboxStudio = () => {
         if (!jobId) {
           throw new Error("No job_id returned from sandbox-eval");
         }
+        if (isCancelledRef.current) return;
+
         setActiveJobId(jobId);
         setJobStatus("running");
         setLogs([]);
         setResult(null);
 
-        const pollInterval = setInterval(async () => {
+        pollIntervalRef.current = setInterval(async () => {
+          if (isCancelledRef.current || cancelledJobIdsRef.current.has(jobId)) {
+            if (pollIntervalRef.current) {
+              clearInterval(pollIntervalRef.current);
+              pollIntervalRef.current = null;
+            }
+            return;
+          }
           try {
             const logResponse = (await bffV1.fetch({
               method: "GET",
@@ -90,6 +162,14 @@ export const SkillSandboxStudio = () => {
               progress?: unknown;
               [key: string]: unknown;
             };
+
+            if (isCancelledRef.current || cancelledJobIdsRef.current.has(jobId)) {
+              if (pollIntervalRef.current) {
+                clearInterval(pollIntervalRef.current);
+                pollIntervalRef.current = null;
+              }
+              return;
+            }
 
             if (logResponse.logs) {
               setLogs(logResponse.logs.map((log: unknown) => {
@@ -106,20 +186,33 @@ export const SkillSandboxStudio = () => {
             if (logResponse.status === "success" || logResponse.status === "succeeded") {
               setJobStatus("success");
               setResult((logResponse.progress || { status: "success", output: {} }) as SandboxResult);
-              clearInterval(pollInterval);
-            } else if (logResponse.status === "failed") {
+              if (pollIntervalRef.current) {
+                clearInterval(pollIntervalRef.current);
+                pollIntervalRef.current = null;
+              }
+            } else if (logResponse.status === "failed" || logResponse.status === "canceled" || logResponse.status === "cancelled") {
               setJobStatus("failed");
-              clearInterval(pollInterval);
+              if (pollIntervalRef.current) {
+                clearInterval(pollIntervalRef.current);
+                pollIntervalRef.current = null;
+              }
             }
           } catch (pollErr) {
             console.error("Polling error:", pollErr);
           }
         }, 1000);
 
-        setTimeout(() => clearInterval(pollInterval), 30000);
+        pollTimeoutRef.current = setTimeout(() => {
+          if (pollIntervalRef.current) {
+            clearInterval(pollIntervalRef.current);
+            pollIntervalRef.current = null;
+          }
+        }, 30000);
       } catch (err: unknown) {
-        toast.error(((err as Error)?.message) || "Failed to trigger live sandbox evaluation");
-        setJobStatus("idle");
+        if (!isCancelledRef.current) {
+          toast.error(((err as Error)?.message) || "Failed to trigger live sandbox evaluation");
+          setJobStatus("idle");
+        }
       } finally {
         setIsSubmitting(false);
       }
@@ -141,7 +234,8 @@ export const SkillSandboxStudio = () => {
       ];
 
       mockSteps.forEach((step) => {
-        setTimeout(() => {
+        const timer = setTimeout(() => {
+          if (isCancelledRef.current || cancelledJobIdsRef.current.has(mockJobId)) return;
           setLogs((prev) => [
             ...prev,
             {
@@ -151,9 +245,11 @@ export const SkillSandboxStudio = () => {
             },
           ]);
         }, step.delay);
+        mockTimersRef.current.push(timer);
       });
 
-      setTimeout(() => {
+      const finishTimer = setTimeout(() => {
+        if (isCancelledRef.current || cancelledJobIdsRef.current.has(mockJobId)) return;
         setJobStatus("success");
         setResult({
           status: "success",
@@ -165,6 +261,7 @@ export const SkillSandboxStudio = () => {
         });
         setIsSubmitting(false);
       }, 4000);
+      mockTimersRef.current.push(finishTimer);
     }
   };
 
@@ -186,19 +283,49 @@ export const SkillSandboxStudio = () => {
           <Card className="p-4 space-y-3">
             <div className="flex items-center justify-between">
               <div className="text-sm font-semibold">{t("studios.sandbox.input")}</div>
-              <Button size="sm" onClick={handleRun} disabled={isSubmitting || !activeId}>
-                {isSubmitting ? (
-                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                ) : (
-                  <Play className="h-4 w-4 mr-1" />
+              <div className="flex items-center gap-2">
+                {jobStatus === "running" && activeJobId && (
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={handleCancelJob}
+                    data-testid="cancel-job-button"
+                  >
+                    {t("common.cancel", { defaultValue: "Cancel Job" })}
+                  </Button>
                 )}
-                {t("studios.sandbox.run")}
-              </Button>
+                <Button
+                  size="sm"
+                  onClick={handleRun}
+                  disabled={isSubmitting || !activeId}
+                  data-testid="run-job-button"
+                >
+                  {isSubmitting ? (
+                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                  ) : (
+                    <Play className="h-4 w-4 mr-1" />
+                  )}
+                  {t("studios.sandbox.run")}
+                </Button>
+              </div>
             </div>
             <Textarea value={input} onChange={(e) => setInput(e.target.value)} rows={10} className="text-mono text-xs" />
           </Card>
           <Card className="p-4 space-y-3 flex flex-col">
-            <div className="text-sm font-semibold">{t("studios.sandbox.trace")}</div>
+            <div className="flex items-center justify-between">
+              <div className="text-sm font-semibold">{t("studios.sandbox.trace")}</div>
+              {jobStatus !== "idle" && (
+                <Badge
+                  variant={
+                    jobStatus === "success" ? "default" : jobStatus === "failed" ? "destructive" : "secondary"
+                  }
+                  className="text-[10px] uppercase"
+                  data-testid="job-status-badge"
+                >
+                  {jobStatus}
+                </Badge>
+              )}
+            </div>
             {jobStatus === "idle" ? (
               <EmptyState
                 icon={<TerminalSquare className="h-8 w-8" />}

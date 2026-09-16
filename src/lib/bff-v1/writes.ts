@@ -175,6 +175,7 @@ const KIND_TO_ENTITY_TYPE: Readonly<Record<string, string>> = {
   Skill: "skill",
   Channel: "channel",
   Runtime: "runtime",
+  Job: "job",
 };
 
 const ENTITY_COMMAND_SPECS: Readonly<Record<string, EntityCommandSpec>> = {
@@ -277,7 +278,7 @@ const OPERATIONS_COMMAND_TYPES = new Set([
 
 export function buildRunActionCommand(
   input: RunActionInput,
-  opts: CommandClientOptions,
+  opts: CommandClientOptions = {},
 ): FinalCommandEnvelope {
   const entityType = entityTypeForKind(input.kind);
   const spec = specForEntityType(entityType);
@@ -369,6 +370,13 @@ export function buildRunActionCommand(
     commandName === "PausePaperRuntime" ||
     commandName === "ResumePaperRuntime";
 
+  const isJob = spec.targetType === "Job" || entityType === "job";
+  const isExperiment =
+    spec.targetType === "Experiment" ||
+    entityType === "research-experiment" ||
+    entityType === "experiment" ||
+    entityType === "research";
+
   // Build nested payload for backend adapters (e.g. evolution_adapter) that only
   // forward non-whitelisted domain fields if wrapped inside params.payload (sub_payload).
   const existingSubPayload =
@@ -430,6 +438,8 @@ export function buildRunActionCommand(
     entity_type: entityType,
     entity_id: input.id,
     ...(isRuntime ? { runtime_id: input.id } : {}),
+    ...(isJob ? { job_id: input.id } : {}),
+    ...(isExperiment ? { experiment_id: input.id } : {}),
     audit_event: auditEvent,
     frontend_source_route: FINAL_COMMANDS_PATH,
   });
@@ -615,7 +625,174 @@ async function mockRunActionEnvelope(
       correlationId: resolved.correlationId,
     });
   }
+
+  // U10B Research / Job mock truthfulness and boundary enforcement
+  const isJob = input.kind === "Job" || input.kind === "job";
+  const isResearch =
+    input.kind === "Research" ||
+    input.kind === "experiment" ||
+    input.kind === "research-experiment";
+
+  function makeFailClosed(status: number, code: any, message: string): never {
+    throw new BffError(status, {
+      error: {
+        code,
+        i18nKey: `errors.${code}`,
+        message,
+        retryable: status === 503 || status === 429,
+        userActionable: status === 409 || status === 428 || status === 400,
+        correlationId: resolved.correlationId,
+      },
+    });
+  }
+
+  if (isJob) {
+    const normAction = input.action.trim().toLowerCase();
+    if (normAction === "promote") {
+      makeFailClosed(
+        409,
+        "STATE_CONFLICT",
+        "Research orchestrator run promotion requires Governance review with signed operator authorization, target stage binding, and registry readback verification. Direct promotion without Governance gate is rejected (GOV-PROMOTE-001, D-JOBS §1/§3).",
+      );
+    }
+    if (normAction === "archive") {
+      makeFailClosed(
+        409,
+        "STATE_CONFLICT",
+        "Research orchestrator run archive requires an explicit Operator Decision on artifact retention schedules and archival purge authority (D-JOBS §1/§3).",
+      );
+    }
+    if (input.id.includes("openclaw")) {
+      makeFailClosed(
+        400,
+        "VALIDATION_FAILED",
+        "OpenClaw workflow jobs are permanently read-only diagnostics for the product BFF; all write actions (cancel/retry/archive/promote) are excluded by architecture.",
+      );
+    }
+    if (input.id.includes("worker")) {
+      makeFailClosed(
+        503,
+        "FEATURE_DISABLED",
+        "Job worker action requires unresolved prerequisite task GW-STOP-FENCE-001.",
+      );
+    }
+    if (input.id.includes("trainer")) {
+      makeFailClosed(
+        503,
+        "FEATURE_DISABLED",
+        "Job trainer action requires unresolved prerequisite task TS-CANCEL-001.",
+      );
+    }
+    if (input.id.includes("ingest")) {
+      makeFailClosed(
+        503,
+        "FEATURE_DISABLED",
+        "Job ingest action requires unresolved prerequisite task SI-CANCEL-001.",
+      );
+    }
+    if (input.id.includes("policy")) {
+      makeFailClosed(
+        503,
+        "FEATURE_DISABLED",
+        "Job policy action requires unresolved prerequisite task PL-CANCEL-001.",
+      );
+    }
+  }
+
+  if (isResearch) {
+    const normAction = input.action.trim().toLowerCase();
+    if (normAction === "promote" || normAction === "promote_artifact") {
+      makeFailClosed(
+        409,
+        "STATE_CONFLICT",
+        "Experiment promotion requires Governance review tokens and target registry verification (GOV-PROMOTE-001). Direct promotion without Governance gate is rejected.",
+      );
+    }
+    if (normAction === "attached_to_review") {
+      makeFailClosed(
+        422,
+        "VALIDATION_FAILED",
+        "attached_to_review requires review package binding and is not directly executable as a state transition.",
+      );
+    }
+  }
+
   const actionId = `au_${resolved.idempotencyKey}`;
+  const now = new Date().toISOString();
+
+  let actionStatus = "completed";
+  let extraData: Record<string, unknown> = {};
+
+  if (isJob) {
+    const normAction = input.action.trim().toLowerCase();
+    if (normAction === "cancel") {
+      actionStatus = "canceled";
+      extraData = {
+        status: "canceled",
+        cancellation_fence: now,
+        cancellationFence: now,
+        cancellationFencePlaced: true,
+        fencePlaced: true,
+        reason: (input.params?.reason as string) || input.reason || input.memo,
+      };
+    } else if (normAction === "retry") {
+      actionStatus = "queued";
+      extraData = {
+        status: "queued",
+        previous_job_id: input.id,
+        new_job_id: `${input.id}-retry-2`,
+        job_id: `${input.id}-retry-2`,
+        attempt_number: 2,
+        parent_id: input.id,
+        parent_run_id: input.id,
+      };
+    }
+  } else if (isResearch) {
+    const normAction = input.action.trim().toLowerCase();
+    if (normAction === "cancel") {
+      actionStatus = "canceled";
+      extraData = {
+        status: "canceled",
+        cancellation_fence: now,
+        cancellationFence: now,
+        cancellationFencePlaced: true,
+        fencePlaced: true,
+        reason: (input.params?.reason as string) || input.reason || input.memo,
+      };
+    } else if (normAction === "retry") {
+      actionStatus = "queued";
+      extraData = {
+        status: "queued",
+        previous_experiment_id: input.id,
+        new_experiment_id: `${input.id}-retry-2`,
+        experiment_id: `${input.id}-retry-2`,
+        attempt_number: 2,
+        parent_experiment_id: input.id,
+        parent_attempt_id: input.id,
+      };
+    } else if (normAction === "archive") {
+      actionStatus = "archived";
+      extraData = {
+        status: "archived",
+        is_archived: true,
+        isArchived: true,
+        archived: true,
+        archived_at: now,
+        archivedAt: now,
+      };
+    } else if (normAction === "invalidate") {
+      actionStatus = "invalidated";
+      const reason = (input.params?.reason as string) || input.reason || input.memo || "Invalidated";
+      extraData = {
+        status: "invalidated",
+        invalidated: true,
+        invalidated_reason: reason,
+        invalidatedReason: reason,
+        invalidationReason: reason,
+      };
+    }
+  }
+
   return {
     ok: true,
     correlationId: resolved.correlationId,
@@ -623,11 +800,16 @@ async function mockRunActionEnvelope(
     auditEventId: actionId,
     data: {
       actionId,
-      status: "completed",
+      status: actionStatus,
+      receipt: {
+        status: actionStatus,
+        ...extraData,
+      },
+      ...extraData,
     },
     legacy: {
       ok: true,
-      data: { actionId, status: "completed" },
+      data: { actionId, status: actionStatus, ...extraData },
       audit: {
         id: actionId,
         correlationId: resolved.correlationId,
@@ -636,7 +818,7 @@ async function mockRunActionEnvelope(
         entityKind: input.kind,
         entityId: input.id,
         status: "succeeded",
-        timestamp: new Date().toISOString(),
+        timestamp: now,
       },
     },
   };
@@ -1791,6 +1973,67 @@ export async function createResearchTaskFromNote(
   refuseStrictLiveWrite(correlationId);
 }
 
+export async function cancelJob(
+  jobId: string,
+  opts: RunActionOptions & { reason?: string } = {},
+): Promise<RunActionEnvelope> {
+  const { reason, ...rest } = opts;
+  return runAction(
+    { kind: "Job", id: jobId, action: "cancel", reason, memo: reason, params: { reason } },
+    rest,
+  );
+}
+
+export async function retryJob(
+  jobId: string,
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope> {
+  return runAction({ kind: "Job", id: jobId, action: "retry" }, opts);
+}
+
+export async function cancelResearchExperiment(
+  experimentId: string,
+  opts: RunActionOptions & { reason?: string } = {},
+): Promise<RunActionEnvelope> {
+  const { reason, ...rest } = opts;
+  return runAction(
+    { kind: "Research", id: experimentId, action: "cancel", reason, memo: reason, params: { reason } },
+    rest,
+  );
+}
+
+export async function retryResearchExperiment(
+  experimentId: string,
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope> {
+  return runAction({ kind: "Research", id: experimentId, action: "retry" }, opts);
+}
+
+export async function archiveResearchExperiment(
+  experimentId: string,
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope> {
+  return runAction({ kind: "Research", id: experimentId, action: "archive" }, opts);
+}
+
+export async function invalidateResearchExperiment(
+  experimentId: string,
+  reason: string,
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope> {
+  return runAction(
+    { kind: "Research", id: experimentId, action: "invalidate", reason, memo: reason, params: { reason } },
+    opts,
+  );
+}
+
+export async function promoteResearchExperiment(
+  experimentId: string,
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope> {
+  return runAction({ kind: "Research", id: experimentId, action: "promote" }, opts);
+}
+
 export const bffWrites = {
   runAction,
   tryRunAction,
@@ -1849,8 +2092,16 @@ export const bffWrites = {
   tickApprovalSla,
   escalateAlertToIncident,
   createResearchTaskFromNote,
+  cancelJob,
+  retryJob,
+  cancelResearchExperiment,
+  retryResearchExperiment,
+  archiveResearchExperiment,
+  invalidateResearchExperiment,
+  promoteResearchExperiment,
 };
 
 export const writes = bffWrites;
+
 
 

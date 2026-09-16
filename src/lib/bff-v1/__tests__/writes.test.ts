@@ -1,6 +1,16 @@
 import { afterEach, describe, it, expect, vi } from "vitest";
 import { liveWriteGated, runAction, sessionKindAllowsWrite, tryRunAction, requestConfirmToken } from "@/lib/bff-v1";
-import { writes } from "@/lib/bff-v1/writes";
+import {
+  writes,
+  buildRunActionCommand,
+  cancelJob,
+  retryJob,
+  cancelResearchExperiment,
+  retryResearchExperiment,
+  archiveResearchExperiment,
+  invalidateResearchExperiment,
+  promoteResearchExperiment,
+} from "@/lib/bff-v1/writes";
 import { BffError } from "@/lib/bff-v1";
 import { liveStatus } from "@/lib/bff-v1/liveStatus";
 import { runActionSafe } from "@/lib/bff-v1/runActionSafe";
@@ -451,4 +461,162 @@ describe("VI-2 strict-live write gate never fakes a completed receipt", () => {
     ).rejects.toMatchObject({ name: "BffError", code: "FEATURE_DISABLED" });
   });
 });
+
+describe("FE-RESEARCH-JOBS-ACTIONS-CLOSURE-001 writes and closure contracts", () => {
+  describe("buildRunActionCommand entity mapping", () => {
+    it("maps Job target and params with job_id and action_id", () => {
+      const cmd = buildRunActionCommand({ kind: "Job", id: "job_001", action: "cancel", reason: "manual cancel" });
+      expect(cmd.target.type).toBe("Job");
+      expect(cmd.target.id).toBe("job_001");
+      expect(cmd.action).toBe("cancel");
+      expect(cmd.params.job_id).toBe("job_001");
+      expect(cmd.params.action_id).toBe("cancel");
+      expect(cmd.params.reason).toBe("manual cancel");
+    });
+
+    it("maps Research experiment target and params with experiment_id and action_id", () => {
+      const cmd = buildRunActionCommand({ kind: "Research", id: "exp_001", action: "retry" });
+      expect(cmd.target.type).toBe("Experiment");
+      expect(cmd.target.id).toBe("exp_001");
+      expect(cmd.action).toBe("retry");
+      expect(cmd.params.experiment_id).toBe("exp_001");
+      expect(cmd.params.action_id).toBe("retry");
+    });
+  });
+
+  describe("Job action execution contracts", () => {
+    it("cancelJob places cancellation fence and returns cancelled receipt", async () => {
+      const env = await cancelJob("job_001", { reason: "Operator stop" });
+      expect(env.ok).toBe(true);
+      expect(env.data.status).toBe("canceled");
+      expect(env.data.receipt?.cancellationFencePlaced).toBe(true);
+      expect(env.data.receipt?.fencePlaced).toBe(true);
+      expect(env.data.receipt?.reason).toBe("Operator stop");
+    });
+
+    it("retryJob links new attempt and lineage", async () => {
+      const env = await retryJob("job_001");
+      expect(env.ok).toBe(true);
+      expect(env.data.status).toBe("queued");
+      expect(env.data.receipt?.parent_id).toBe("job_001");
+      expect(env.data.receipt?.attempt_number).toBe(2);
+      expect(env.data.receipt?.job_id).toContain("retry");
+    });
+
+    it("cancelJob fails closed with 503 citing GW-STOP-FENCE-001 for worker jobs", async () => {
+      await expect(cancelJob("worker-sweep-1")).rejects.toMatchObject({
+        status: 503,
+        message: expect.stringContaining("GW-STOP-FENCE-001"),
+      });
+    });
+
+    it("cancelJob fails closed with 503 citing TS-CANCEL-001 for trainer jobs", async () => {
+      await expect(cancelJob("trainer-train-1")).rejects.toMatchObject({
+        status: 503,
+        message: expect.stringContaining("TS-CANCEL-001"),
+      });
+    });
+
+    it("cancelJob fails closed with 503 citing SI-CANCEL-001 for ingest jobs", async () => {
+      await expect(cancelJob("ingest-fetch-1")).rejects.toMatchObject({
+        status: 503,
+        message: expect.stringContaining("SI-CANCEL-001"),
+      });
+    });
+
+    it("cancelJob fails closed with 503 citing PL-CANCEL-001 for policy jobs", async () => {
+      await expect(cancelJob("policy-audit-1")).rejects.toMatchObject({
+        status: 503,
+        message: expect.stringContaining("PL-CANCEL-001"),
+      });
+    });
+
+    it("cancelJob fails closed with 400 for openclaw jobs", async () => {
+      await expect(cancelJob("openclaw-diag-1")).rejects.toMatchObject({
+        status: 400,
+        message: expect.stringContaining("OpenClaw workflow jobs are permanently read-only"),
+      });
+    });
+
+    it("refuses job actions in strict-live when writes are disabled", async () => {
+      process.env.VITE_BFF_FALLBACK = "strict";
+      liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
+
+      await expect(cancelJob("job_001")).rejects.toMatchObject({
+        name: "BffError",
+        code: "FEATURE_DISABLED",
+      });
+      await expect(retryJob("job_001")).rejects.toMatchObject({
+        name: "BffError",
+        code: "FEATURE_DISABLED",
+      });
+    });
+  });
+
+  describe("Experiment action execution contracts", () => {
+    it("cancelResearchExperiment places cancellation fence and returns cancelled status", async () => {
+      const env = await cancelResearchExperiment("exp_001", { reason: "Budget cut" });
+      expect(env.ok).toBe(true);
+      expect(env.data.status).toBe("canceled");
+      expect(env.data.receipt?.cancellationFencePlaced).toBe(true);
+      expect(env.data.receipt?.fencePlaced).toBe(true);
+    });
+
+    it("retryResearchExperiment creates linked attempt lineage", async () => {
+      const env = await retryResearchExperiment("exp_001");
+      expect(env.ok).toBe(true);
+      expect(env.data.status).toBe("queued");
+      expect(env.data.receipt?.parent_attempt_id).toBe("exp_001");
+      expect(env.data.receipt?.attempt_number).toBe(2);
+      expect(env.data.receipt?.experiment_id).toContain("retry");
+    });
+
+    it("archiveResearchExperiment marks visibility and retention without delete", async () => {
+      const env = await archiveResearchExperiment("exp_001");
+      expect(env.ok).toBe(true);
+      expect(env.data.receipt?.archived).toBe(true);
+    });
+
+    it("invalidateResearchExperiment sets invalidation reason", async () => {
+      const env = await invalidateResearchExperiment("exp_001", "data contaminated");
+      expect(env.ok).toBe(true);
+      expect(env.data.receipt?.invalidated).toBe(true);
+      expect(env.data.receipt?.invalidationReason).toBe("data contaminated");
+    });
+
+    it("promoteResearchExperiment fails closed with 409 citing GOV-PROMOTE-001", async () => {
+      await expect(promoteResearchExperiment("exp_001")).rejects.toMatchObject({
+        status: 409,
+        message: expect.stringContaining("GOV-PROMOTE-001"),
+      });
+    });
+
+    it("refuses experiment actions in strict-live when writes are disabled", async () => {
+      process.env.VITE_BFF_FALLBACK = "strict";
+      liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
+
+      await expect(cancelResearchExperiment("exp_001")).rejects.toMatchObject({
+        name: "BffError",
+        code: "FEATURE_DISABLED",
+      });
+      await expect(retryResearchExperiment("exp_001")).rejects.toMatchObject({
+        name: "BffError",
+        code: "FEATURE_DISABLED",
+      });
+      await expect(archiveResearchExperiment("exp_001")).rejects.toMatchObject({
+        name: "BffError",
+        code: "FEATURE_DISABLED",
+      });
+      await expect(invalidateResearchExperiment("exp_001", "test")).rejects.toMatchObject({
+        name: "BffError",
+        code: "FEATURE_DISABLED",
+      });
+      await expect(promoteResearchExperiment("exp_001")).rejects.toMatchObject({
+        name: "BffError",
+        code: "FEATURE_DISABLED",
+      });
+    });
+  });
+});
+
 
