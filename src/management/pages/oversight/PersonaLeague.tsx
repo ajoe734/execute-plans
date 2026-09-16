@@ -632,11 +632,16 @@ export const PersonaLeaguePage = ({ embedded = false }: { embedded?: boolean }) 
           <td className="px-3 py-3 font-mono">{fmtNum(r.humanInterventions, 0)}</td>
           <td className="px-3 py-3">
             {isGovernedRankingRecommendationAction(r.recommendedAction) ? (
-              <RecommendationButton
-                action={r.recommendedAction}
-                state={recommendationState[recommendationIdFor(r, r.recommendedAction)]}
-                onSubmit={() => void submitRecommendation(r, r.recommendedAction)}
-              />
+              (() => {
+                const action = r.recommendedAction;
+                return (
+                  <RecommendationButton
+                    action={action}
+                    state={recommendationState[recommendationIdFor(r, action)]}
+                    onSubmit={() => void submitRecommendation(r, action)}
+                  />
+                );
+              })()
             ) : (
               <span className="text-xs text-muted-foreground">{t("mgmt.league.recommendations.no_change")}</span>
             )}

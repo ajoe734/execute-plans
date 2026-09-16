@@ -29,6 +29,7 @@ import {
 } from "./tradingRoom";
 import { BffError } from "../errors";
 import { getAuthProvider, setAuthProvider } from "../headers";
+import type { TradingRoomWidgetSpec } from "./tradingRoomTypes";
 
 const BASE = "https://test.example";
 
@@ -604,7 +605,7 @@ const mockWorkspace = {
   updatedAt: "2026-06-29T00:00:00Z",
 };
 
-const mockWidget = {
+const mockWidget: TradingRoomWidgetSpec = {
   id: "widget-001",
   widgetType: "candidate_funnel",
   title: "Candidate Funnel",

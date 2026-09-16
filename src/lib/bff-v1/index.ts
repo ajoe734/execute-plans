@@ -54,3 +54,16 @@ export * from "./runtimeEnv";
 export * from "./bffV1";
 export { runActionSafe, type RunActionSafeOpts } from "./runActionSafe";
 export { useLiveList, useRealtimeStatus } from "./useLiveList";
+
+// Explicit re-exports to resolve `export *` ambiguity between modules that
+// declare identically-named symbols for different domains. Pick the
+// canonical version actually consumed via this barrel elsewhere in src.
+export type { EvidenceRef } from "./v5";
+export type { CommandResponse } from "./dto";
+export {
+  type ContextRef,
+  type ResolveContextRequest,
+  type EligibilityRequest,
+  type SubmitInteractionRequest,
+  interaction,
+} from "./agora/interaction";

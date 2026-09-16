@@ -51,11 +51,17 @@ const mockCard: WorkshopCard = {
 };
 
 const mockEvent: WorkshopStreamEvent = {
+  spec_version: "1.0",
   event_id: "evt-001",
-  workshop_id: "ws-001",
   event_type: "workshop.snapshot",
+  aggregate_type: "strategy_workshop",
+  aggregate_id: "ws-001",
+  sequence_no: 1,
+  event_time: "2026-06-01T00:00:00Z",
+  emitted_at: "2026-06-01T00:00:00Z",
+  trace_id: "trace-001",
+  idempotency_key: "idem-001",
   payload: {},
-  occurred_at: "2026-06-01T00:00:00Z",
 };
 
 afterEach(() => {

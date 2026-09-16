@@ -37,6 +37,8 @@ export type {
   WorkshopResearchRunRequest,
   WorkshopConsultationRequest,
   WorkshopConcludeRequest,
+  StrategyWorkshop,
+  StrategyCompleteness,
 };
 
 export type WorkshopCardType =
@@ -55,7 +57,9 @@ export type WorkshopCardType =
   | "persona_opinion"
   | "opinion"
   | "debate"
-  | "governed_proposal";
+  | "governed_proposal"
+  | "workshop_concluded"
+  | "conclusion";
 
 export type WorkshopCardStatus =
   | "informational"
@@ -119,7 +123,24 @@ export interface WorkshopEvidenceRef {
 
 export type WorkshopAllowedActions = Record<string, boolean>;
 
-export type WorkshopCard = GeneratedWorkshopCard;
+/**
+ * The generated `WorkshopCard` DTO types `payload` as `Record<string, never>`
+ * and its `card_type` union omits several server-emitted card kinds
+ * (persona_opinion/opinion/debate/governed_proposal/workshop_concluded/
+ * conclusion). Card rendering already treats `payload` as an untyped record
+ * (see workshopCardUtils) and switches on the full `WorkshopCardType` union,
+ * so this consumer-side type aligns with the real wire/adapter contract
+ * instead of the incomplete generated shape. Keep in sync with
+ * `GeneratedWorkshopCard`'s non-payload fields.
+ */
+export interface WorkshopCard extends Omit<GeneratedWorkshopCard, "card_type" | "payload"> {
+  card_type: WorkshopCardType;
+  payload: Record<string, unknown>;
+  /** Legacy alias some producers still emit instead of `sequence_no`. */
+  sequence?: number;
+  emitted_by?: string;
+  persona_id?: string;
+}
 export type WorkshopReadinessAssessment = GeneratedWorkshopReadinessAssessment;
 export type WorkshopStreamEvent = GeneratedWorkshopStreamEvent;
 

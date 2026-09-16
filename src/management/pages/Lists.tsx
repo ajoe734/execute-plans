@@ -1,7 +1,18 @@
 import { ObjectListPage } from "./ObjectListPage";
 import { lists } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
-import type { Strategy, Persona, CapitalPool, RankingFormula, Rebalance, Deployment, EvolutionProgram, ResearchExperiment, Artifact } from "@/lib/bff-v1";
+import type { Strategy, Persona, CapitalPool, RankingFormula, Rebalance, Deployment, EvolutionProgram, ResearchExperiment, Artifact, ListEnvelope } from "@/lib/bff-v1";
+
+// `lists.*` loaders are generically typed by `strictLiveListLoader<T>` in
+// src/lib/bff-v1/lists.ts; when the passed `adaptItem` is itself generic
+// (e.g. `normalizeBaseObjectFields`), TS's inference collapses T to
+// `unknown` at the call site inside lists.ts rather than the concrete
+// entity type. The runtime shape is correct (each loader really does
+// resolve to ListEnvelope<Entity>); we just re-assert the known entity
+// type here at the consumption boundary instead of editing the shared,
+// out-of-scope lists.ts file.
+const asEntityLoader = <T,>(loader: () => Promise<ListEnvelope<unknown>>): (() => Promise<ListEnvelope<T>>) =>
+  loader as unknown as () => Promise<ListEnvelope<T>>;
 import { capitalPoolsWithFleetFallback, capitalPoolMatchesFocus, type FleetCapitalPool } from "./capitalPoolsFleetFallback";
 import { Badge } from "@/components/ui/badge";
 import { StatCard } from "@/platform/components/StatCard";
@@ -77,7 +88,7 @@ export const StrategiesList = () => {
   return (
     <ObjectListPage<Strategy>
       title={t("nav.strategies")}
-      loader={lists.strategies}
+      loader={asEntityLoader<Strategy>(lists.strategies)}
       basePath="/management/strategies" liveKinds={["Strategy"]}
       createBehavior={{ kind: "drawer", entity: "strategy" }}
       extraColumns={[
@@ -94,7 +105,7 @@ export const PersonasList = () => {
   return (
     <ObjectListPage<Persona>
       title={t("nav.personas")}
-      loader={lists.personas}
+      loader={asEntityLoader<Persona>(lists.personas)}
       basePath="/management/personas" liveKinds={["Persona"]}
       createBehavior={{ kind: "drawer", entity: "persona" }}
       extraColumns={[
@@ -208,7 +219,7 @@ export const RankingFormulasList = () => {
   return (
     <ObjectListPage<RankingFormula>
       title={t("nav.rankingFormulas")}
-      loader={lists.rankingFormulas}
+      loader={asEntityLoader<RankingFormula>(lists.rankingFormulas)}
       basePath="/management/ranking/formulas" liveKinds={["RankingFormula"]}
       listHref="/management/governance-decisions?tab=policy"
       rowHref={(row) => `/management/governance-decisions?tab=policy&formula_id=${encodeURIComponent(row.id)}`}
@@ -247,7 +258,7 @@ export const RebalancesList = () => {
   return (
     <ObjectListPage<Rebalance>
       title={t("nav.rebalances")}
-      loader={lists.rebalances}
+      loader={asEntityLoader<Rebalance>(lists.rebalances)}
       basePath="/management/rebalance" liveKinds={["Rebalance","RebalanceOverride","MetricFreeze"]}
       listHref="/management/governance-decisions?tab=capital"
       rowHref={(row) => `/management/governance-decisions?tab=capital&rebalance_id=${encodeURIComponent(row.id)}`}
@@ -272,7 +283,7 @@ export const DeploymentsList = () => {
   return (
     <ObjectListPage<Deployment>
       title={t("nav.deployments")}
-      loader={lists.deployments}
+      loader={asEntityLoader<Deployment>(lists.deployments)}
       basePath="/management/deployments" liveKinds={["Deployment","DeploymentStage"]}
       createBehavior={{ kind: "drawer", entity: "deployment" }}
       extraColumns={[
@@ -288,7 +299,7 @@ export const EvolutionList = () => {
   return (
     <ObjectListPage<EvolutionProgram>
       title={t("nav.evolution")}
-      loader={lists.evolution}
+      loader={asEntityLoader<EvolutionProgram>(lists.evolution)}
       basePath="/management/evolution" liveKinds={["Evolution","Promotion"]}
       createBehavior={{ kind: "drawer", entity: "evolutionProgram" }}
       extraColumns={[
@@ -306,7 +317,7 @@ export const ResearchList = () => {
   return (
     <ObjectListPage<ResearchExperiment>
       title={t("nav.research")}
-      loader={lists.research}
+      loader={asEntityLoader<ResearchExperiment>(lists.research)}
       basePath="/management/experiments" liveKinds={["Research"]}
       createBehavior={{ kind: "drawer", entity: "researchExperiment" }}
       extraColumns={[
@@ -323,7 +334,7 @@ export const ArtifactsList = () => {
   return (
     <ObjectListPage<Artifact>
       title={t("nav.artifacts")}
-      loader={lists.artifacts}
+      loader={asEntityLoader<Artifact>(lists.artifacts)}
       basePath="/management/artifacts" liveKinds={["Artifact"]}
       createBehavior={{ kind: "drawer", entity: "artifact" }}
       extraColumns={[

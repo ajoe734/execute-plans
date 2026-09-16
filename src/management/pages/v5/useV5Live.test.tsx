@@ -29,7 +29,7 @@ describe("useV5Live cache", () => {
   });
 
   it("serves a fresh cache hit without calling the loader again", async () => {
-    const firstLoader = vi.fn<[], Promise<TestData>>().mockResolvedValue({ label: "first" });
+    const firstLoader = vi.fn<() => Promise<TestData>>().mockResolvedValue({ label: "first" });
     render(<HookProbe loader={firstLoader} cacheKey="sentinel" />);
 
     expect(await screen.findByTestId("state")).toHaveTextContent("ready:first");
@@ -37,7 +37,7 @@ describe("useV5Live cache", () => {
 
     cleanup();
 
-    const secondLoader = vi.fn<[], Promise<TestData>>().mockResolvedValue({ label: "second" });
+    const secondLoader = vi.fn<() => Promise<TestData>>().mockResolvedValue({ label: "second" });
     render(<HookProbe loader={secondLoader} cacheKey="sentinel" />);
 
     expect(screen.getByTestId("state")).toHaveTextContent("ready:first");
@@ -45,7 +45,7 @@ describe("useV5Live cache", () => {
   });
 
   it("refreshes cached data when a v5 event arrives", async () => {
-    const loader = vi.fn<[], Promise<TestData>>()
+    const loader = vi.fn<() => Promise<TestData>>()
       .mockResolvedValueOnce({ label: "first" })
       .mockResolvedValueOnce({ label: "second" });
     render(<HookProbe loader={loader} cacheKey="sentinel" />);

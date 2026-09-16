@@ -360,6 +360,8 @@ export interface ManagementAiAskInput {
   };
   ui?: ManagementAiUiSnapshot;
   attachments?: ManagementAiAttachment[];
+  /** Optional OpenClaw gateway routing/session overrides, passed through verbatim. */
+  openclaw?: Record<string, unknown>;
 }
 
 interface RawAskResponse {

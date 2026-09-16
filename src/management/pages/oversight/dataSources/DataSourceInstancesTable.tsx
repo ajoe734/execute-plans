@@ -295,10 +295,10 @@ function V2DataSourceRow({
                 <span>{t("mgmt.dataSources.costLabel")}: ${Number(dto.observed.usage.cost_usd).toFixed(2)}</span>
               )}
               {dto.observed?.usage?.calls_today !== undefined && (
-                <span>({dto.observed.usage.calls_today} reqs)</span>
+                <span>({String(dto.observed.usage.calls_today)} reqs)</span>
               )}
               {dto.observed?.quota?.used_percent !== undefined && (
-                <span>{t("mgmt.dataSources.quotaLabel")}: {dto.observed.quota.used_percent}%</span>
+                <span>{t("mgmt.dataSources.quotaLabel")}: {String(dto.observed.quota.used_percent)}%</span>
               )}
               {dto.observed?.dlq_unresolved_count !== undefined && dto.observed.dlq_unresolved_count > 0 && (
                 <Badge variant="outline" className="bg-status-failed/10 text-status-failed text-[9px] px-1 py-0 font-mono">

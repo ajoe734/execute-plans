@@ -29,7 +29,6 @@ import { lookupCandidatePool } from "@/lib/bff-v1/agora/candidatePool";
 import {
   TradingRoomWorkspace,
   StrategyWorkspaceView,
-  RiskBanner,
 } from "./TradingRoomWorkspace";
 import { AttributionReportView } from "./AttributionReportView";
 
@@ -231,6 +230,11 @@ function QueueSummaryStrip({ entry, add, reduce, exit, review }: QueueSummaryStr
 // ── Decision Event Detail Panel ───────────────────────────────────────────────
 
 type DecisionCallState = "idle" | "loading" | "success" | "error";
+
+interface DecisionEventDetailPanelProps {
+  event: TradingDecisionEvent;
+  etag?: string | null;
+}
 
 function DecisionEventDetailPanel({ event, etag }: DecisionEventDetailPanelProps): JSX.Element {
   return (

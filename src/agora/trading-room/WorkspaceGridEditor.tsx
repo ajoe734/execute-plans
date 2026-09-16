@@ -14,7 +14,6 @@ import type {
   TradingRoomWidgetSpec,
   TradingRoomWorkspace,
   WorkspaceLayoutOperation,
-  TradingRoomStrategyEntry,
 } from "@/lib/bff-v1/agora/tradingRoomTypes";
 import {
   listTradingRoomWorkspaceVersions,
@@ -23,6 +22,7 @@ import {
   type TradingRoomWorkspaceResult,
   type TradingDecisionEvent,
   type TradingRoomRiskSummary,
+  type TradingRoomStrategyEntry,
 } from "@/lib/bff-v1/agora/tradingRoom";
 import {
   CHART_SPEC_KINDS,
@@ -342,7 +342,7 @@ function WorkspaceWidgetCard({
       >
         <div style={{ minWidth: 0 }}>
           <h3 style={{ color: COLORS.text, fontSize: 13, fontWeight: 800, margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {agoraCopy(t, widget.titleKey, widget.title)}
+            {agoraCopy(t, undefined, widget.title)}
           </h3>
           <div style={{ color: COLORS.muted, fontSize: 11 }}>
             {validation.title} · {formatSensitivityLabel(widget.sensitivity)}
@@ -367,7 +367,7 @@ function WorkspaceWidgetCard({
           </span>
           {editMode ? (
             <button
-              aria-label={`Open widget menu for ${agoraCopy(t, widget.titleKey, widget.title)}`}
+              aria-label={`Open widget menu for ${agoraCopy(t, undefined, widget.title)}`}
               data-testid={`workspace-widget-menu-${widget.id}`}
               onClick={onMenuToggle}
               style={plainButtonStyle}
@@ -424,7 +424,7 @@ function WorkspaceWidgetCard({
         </div>
       </header>
       <div style={{ color: COLORS.muted, display: "flex", flexWrap: "wrap", gap: 6, fontSize: 10, padding: "4px 10px", borderBottom: `1px dotted ${COLORS.border}` }}>
-        <span style={{ color: COLORS.textSoft }}>{agoraCopy(t, widget.purposeKey, widget.purpose)}</span>
+        <span style={{ color: COLORS.textSoft }}>{agoraCopy(t, undefined, widget.purpose)}</span>
         <span>·</span>
         <span>{widget.dataSource}</span>
         <span>·</span>
@@ -975,17 +975,18 @@ export function WorkspaceGridEditor({
             }}
           >
             <div style={{ color: COLORS.text, fontSize: 12, fontWeight: 800 }}>
-              {agoraCopy(t, strategy.nameKey, strategy.name)}
+              {agoraCopy(t, undefined, strategy.title)}
             </div>
             <div style={{ color: COLORS.textSoft, fontSize: 11 }}>
-              狀態: <strong style={{ color: strategy.state === "live_ready" ? COLORS.good : COLORS.warning }}>{strategy.state}</strong>
+              狀態: <strong style={{ color: strategy.readiness_state === "ready" ? COLORS.good : COLORS.warning }}>{strategy.readiness_state}</strong>
             </div>
             <div style={{ color: COLORS.textSoft, fontSize: 11 }}>
               待處理決策: <strong style={{ color: pendingEventTotal(strategy) > 0 ? COLORS.accent : COLORS.muted }}>{pendingEventTotal(strategy)}</strong>
             </div>
             {riskSummary ? (
               <div style={{ color: COLORS.textSoft, fontSize: 11 }}>
-                風險限制: <strong>{riskSummary.max_drawdown_limit_pct}% MDD</strong> · 使用率 <strong>{riskSummary.portfolio_risk_budget_pct}%</strong>
+                風險狀態: <strong>{riskSummary.state}</strong>
+                {riskSummary.summary ? <> · {riskSummary.summary}</> : null}
               </div>
             ) : null}
             {dataCutoff ? (
@@ -1018,7 +1019,7 @@ export function WorkspaceGridEditor({
                   }}
                   type="button"
                 >
-                  {agoraCopy(t, view.titleKey, view.title)} ({view.widgetCount})
+                  {agoraCopy(t, undefined, view.title)} ({view.widgetCount})
                 </button>
               );
             })}
@@ -1083,7 +1084,7 @@ export function WorkspaceGridEditor({
 
       <div data-testid={`workspace-active-view-${activeView.id}`} style={{ flex: 1, minHeight: 0, overflow: "auto", padding: 16 }}>
         <div style={{ color: COLORS.textSoft, fontSize: 13, lineHeight: 1.5, marginBottom: 12 }}>
-          <strong style={{ color: COLORS.text }}>{agoraCopy(t, activeView.titleKey, activeView.title)}</strong> · {agoraCopy(t, activeView.purposeKey, activeView.purpose)}
+          <strong style={{ color: COLORS.text }}>{agoraCopy(t, undefined, activeView.title)}</strong> · {agoraCopy(t, undefined, activeView.purpose)}
           {activeView.warnings?.length ? (
             <div style={{ color: COLORS.warning, marginTop: 4 }}>
               {activeView.warnings.map((warning, index) => (
@@ -1105,7 +1106,7 @@ export function WorkspaceGridEditor({
                   style={secondaryButtonStyle}
                   type="button"
                 >
-                  {t("agora.tradingRoom.editor.restoreWidget", { title: agoraCopy(t, widget.titleKey, widget.title) })}
+                  {t("agora.tradingRoom.editor.restoreWidget", { title: agoraCopy(t, undefined, widget.title) })}
                 </button>
               ))}
             </div>

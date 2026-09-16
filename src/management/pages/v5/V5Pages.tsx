@@ -7,6 +7,7 @@ import { Link, useParams } from "react-router-dom";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { StatCard } from "@/platform/components/StatCard";
 import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { ManagementTableScroll } from "@/management/components/ManagementTableScroll";
 import { bffFetch, paths } from "@/lib/bff-v1";
 import { v5 } from "@/lib/bff-v1/v5Client";

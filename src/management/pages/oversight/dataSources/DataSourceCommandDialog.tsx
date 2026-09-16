@@ -397,7 +397,7 @@ export function DataSourceCommandDialog({
             <Card className="p-3 border text-xs space-y-2">
               <div className="font-medium text-foreground flex items-center justify-between">
                 <span>{t("mgmt.dataSources.dialog.enablePreconditionsTitle")}</span>
-                <Badge variant="outline" className={enablePreconditionsMet ? toneClass.ok : toneClass.warning}>
+                <Badge variant="outline" className={enablePreconditionsMet ? toneClass.ok : toneClass.warn}>
                   {enablePreconditionsMet ? "Preconditions Passed" : "Preconditions Incomplete"}
                 </Badge>
               </div>

@@ -24,7 +24,8 @@ export type PersonaCreatePayload = Partial<Persona> & {
   capitalSideEffectsAllowed?: boolean;
 };
 
-export interface PaperPersonaBundle extends Persona {
+export interface PaperPersonaBundle extends Omit<Persona, "state"> {
+  /** Paper-runtime-specific lifecycle value not in the base `LifecycleState` union. */
   state: "paper_running";
   paperLedgerId: string;
   runtimeBindingId: string;

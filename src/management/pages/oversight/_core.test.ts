@@ -421,6 +421,12 @@ describe("PersonaFleetPage deep links", () => {
   it("does not treat non-detail research targets as research title hrefs", () => {
     const row = {
       personaId: "persona-detail-scope",
+      owner: "pantheon-dev-browser",
+      ooda: "Orient",
+      autonomy: "supervised",
+      perfDelta: 0,
+      humanNeeded: false,
+      lastMutation: "2026-06-03",
       currentResearchProjects: [
         {
           projectId: "research-project-with-wrong-target",
@@ -679,6 +685,11 @@ describe("PersonaFleetPage deep links", () => {
   it("does not treat a performance delta or canonical target as trading telemetry", () => {
     const row = {
       personaId: "persona-seed-only",
+      owner: "pantheon-dev-browser",
+      ooda: "Observe",
+      autonomy: "supervised",
+      humanNeeded: false,
+      lastMutation: "2026-06-03",
       perfDelta: 0.095,
       hasTradingTelemetry: false,
       linkTargets: {

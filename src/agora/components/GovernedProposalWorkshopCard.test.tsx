@@ -18,7 +18,7 @@ vi.mock("@/agora/useAgoraWriteAccess", () => ({
   }),
 }));
 
-const proposal = {
+const proposal: governance.GovernedProposal = {
   proposal_id: "prop-canonical", proposal_type: "risk_limit_recommendation", target_kind: "strategy",
   target_id: "strategy-1", target_version: "v9", current_value: { limit: 5 }, proposed_value: { limit: 3 },
   rationale: "Reduce drawdown", evidence_refs: ["evidence-1"], environment_ceiling: "paper" as const,

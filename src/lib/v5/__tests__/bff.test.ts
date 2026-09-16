@@ -69,7 +69,7 @@ describe("bffV5 facade (Q3/Q14/Q16/Q24)", () => {
       const cancelResult = await bffV5.loops.cancel("loop-1");
       expect(cancelResult).toEqual({ ok: false, reason: "writes_disabled" });
 
-      const decideResult = await bffV5.interventions.decide("int-1", "execute_remediation");
+      const decideResult = await bffV5.interventions.decide("int-1", "escalate");
       expect(decideResult).toEqual({ ok: false, reason: "writes_disabled" });
 
       expect(fetchMock).toHaveBeenCalledTimes(0);
@@ -119,7 +119,7 @@ describe("bffV5 facade (Q3/Q14/Q16/Q24)", () => {
         }
         if (url.endsWith("/bff/v5/interventions/live-int/decide")) {
           expect(init?.method).toBe("POST");
-          expect(JSON.parse(String(init?.body))).toEqual({ decision: "execute_remediation" });
+          expect(JSON.parse(String(init?.body))).toEqual({ decision: "escalate" });
           return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "Content-Type": "application/json" } });
         }
         return new Response("not found", { status: 404 });
@@ -145,7 +145,7 @@ describe("bffV5 facade (Q3/Q14/Q16/Q24)", () => {
       const cancelResult = await bffV5.loops.cancel("live-loop");
       expect(cancelResult).toEqual({ ok: true });
 
-      const decideResult = await bffV5.interventions.decide("live-int", "execute_remediation");
+      const decideResult = await bffV5.interventions.decide("live-int", "escalate");
       expect(decideResult).toEqual({ ok: true });
 
       expect(fetchMock).toHaveBeenCalled();

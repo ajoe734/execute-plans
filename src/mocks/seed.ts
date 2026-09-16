@@ -995,6 +995,7 @@ export const tradeEpisodes: TradeEpisodeProjection[] = [
     environment: "paper",
     strategy_id: "strategy-winner-branch",
     instrument_id: "2382.TW",
+    artifact_id: "model-v11",
     side: "long",
     status: "reflection_pending",
     opened_at: ago(3),
@@ -1005,6 +1006,7 @@ export const tradeEpisodes: TradeEpisodeProjection[] = [
     vwap: 280.0,
     fees: 180.0,
     slippage: 15.0,
+    rejects: 0,
     realized_pnl: 45000.0,
     unrealized_pnl: 0.0,
     return: 0.012,
@@ -1028,18 +1030,23 @@ export const tradeEpisodes: TradeEpisodeProjection[] = [
     environment: "paper",
     strategy_id: "strategy-winner-branch",
     instrument_id: "2603.TW",
+    artifact_id: "model-v11",
     side: "long",
     status: "reflection_failed",
     opened_at: ago(6),
     closed_at: ago(5),
     requested_qty: 8000,
     filled_qty: 8000,
+    remaining_qty: 0,
     vwap: 190.0,
     fees: 120.0,
     slippage: 5.0,
+    rejects: 0,
     realized_pnl: -8000.0,
     unrealized_pnl: 0.0,
     return: -0.005,
+    mae: -6.0,
+    mfe: 2.0,
     source_confidence: "canonical_refs",
     coverage: {
       execution: { state: "complete", missing_refs: [], as_of: ago(5), source_system: "runtime_telemetry" },
@@ -1048,8 +1055,8 @@ export const tradeEpisodes: TradeEpisodeProjection[] = [
       reflection: { state: "degraded", missing_refs: ["reflection_api_failed"], as_of: ago(4), source_system: "persona_reflection" }
     },
     timeline: [
-      { event_id: "evt-501", event_type: "proposed", occurred_at: ago(6) },
-      { event_id: "evt-502", event_type: "closed", occurred_at: ago(5) }
+      { event_id: "evt-501", event_type: "proposed", occurred_at: ago(6), details: {} },
+      { event_id: "evt-502", event_type: "closed", occurred_at: ago(5), details: {} }
     ]
   }
 ];

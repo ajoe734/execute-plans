@@ -1318,6 +1318,9 @@ describe("DataSourceManagementPage", () => {
           },
         ],
         count: 1,
+        status: "ok",
+        source: "service_client",
+        meta: { status: "ok", source: "service_client" },
       });
 
       const createSpy = vi
@@ -1570,6 +1573,7 @@ describe("DataSourceManagementPage", () => {
       });
       const receiptsSpy = vi.spyOn(reads, "receipts").mockResolvedValue({
         receipts: [],
+        count: 0,
         meta: { status: "ok", source: "service_client" },
       });
 
@@ -1626,6 +1630,7 @@ describe("DataSourceManagementPage", () => {
               },
             },
           ],
+          count: 1,
           meta: { status: "ok", source: "service_client" },
         });
 
@@ -1654,8 +1659,8 @@ describe("DataSourceManagementPage", () => {
       const realWritesSpy = vi.spyOn(transportModule, "realWritesEnabled").mockReturnValue(true);
 
       const sourceWithoutRevision = mockV2DataSource();
-      delete (sourceWithoutRevision.desired as Record<string, unknown>).revision;
-      delete (sourceWithoutRevision.instance as Record<string, unknown>).revision;
+      delete (sourceWithoutRevision.desired as unknown as Record<string, unknown>).revision;
+      delete (sourceWithoutRevision.instance as unknown as Record<string, unknown>).revision;
 
       const validateSpy = vi.spyOn(
         (await import("@/lib/bff-v1/managementDataSources")).managementDataSourceWrites,
@@ -1699,8 +1704,8 @@ describe("DataSourceManagementPage", () => {
       );
 
       const sourceWithoutRevision = mockV2DataSource();
-      delete (sourceWithoutRevision.desired as Record<string, unknown>).revision;
-      delete (sourceWithoutRevision.instance as Record<string, unknown>).revision;
+      delete (sourceWithoutRevision.desired as unknown as Record<string, unknown>).revision;
+      delete (sourceWithoutRevision.instance as unknown as Record<string, unknown>).revision;
 
       render(
         <I18nextProvider i18n={i18n}>
