@@ -11,6 +11,7 @@ import {
   jobMachine,
   approvalMachine,
   deploymentMachine,
+  evolutionMachine,
   evolutionRunMachine,
   experimentMachine,
 } from "@/lib/stateMachines";
@@ -180,6 +181,19 @@ describe("state machine coverage (Part 7 §17)", () => {
     expect(canTransition(evolutionRunMachine, "running", "paused")).toBe(true);
     expect(canTransition(evolutionRunMachine, "paused", "running")).toBe(true);
     expect(canTransition(evolutionRunMachine, "running", "completed")).toBe(true);
+  });
+
+  it("evolution: full happy path (draft → under_review → active → completed → retired) + pause/resume + stop branch", () => {
+    expect(canTransition(evolutionMachine, "draft", "under_review")).toBe(true);
+    expect(canTransition(evolutionMachine, "under_review", "active")).toBe(true);
+    expect(canTransition(evolutionMachine, "active", "completed")).toBe(true);
+    expect(canTransition(evolutionMachine, "completed", "retired")).toBe(true);
+    expect(canTransition(evolutionMachine, "active", "paused")).toBe(true);
+    expect(canTransition(evolutionMachine, "paused", "active")).toBe(true);
+    expect(canTransition(evolutionMachine, "active", "stopped")).toBe(true);
+    expect(canTransition(evolutionMachine, "paused", "stopped")).toBe(true);
+    expect(canTransition(evolutionMachine, "stopped", "retired")).toBe(true);
+    expect(canTransition(evolutionMachine, "stopped", "active")).toBe(false);
   });
 
   it("memory: any → deleted (privileged terminal)", () => {

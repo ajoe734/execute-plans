@@ -290,14 +290,20 @@ export function buildRunActionCommand(
   // Extract raw payload / domain parameters
   const rawPayload = (
     typeof input.payload === "object" && input.payload !== null
-      ? input.payload
-      : typeof input.params === "object" && input.params !== null
-      ? input.params
-      : {}
-  ) as Record<string, unknown>;
+      ? (input.payload as Record<string, unknown>)
+      : undefined
+  );
+  const rawParams = (
+    typeof input.params === "object" && input.params !== null
+      ? (input.params as Record<string, unknown>)
+      : undefined
+  );
 
-  // Copy safe domain parameters from payload/input
-  const domainParams: Record<string, unknown> = { ...rawPayload };
+  // Copy safe domain parameters from params/payload/input
+  const domainParams: Record<string, unknown> = {
+    ...(rawParams ?? {}),
+    ...(rawPayload ?? {}),
+  };
 
   // Callers cannot override action, entity/target, actor, token, idempotency with payload
   delete domainParams.command;
@@ -321,25 +327,40 @@ export function buildRunActionCommand(
   delete domainParams.actor;
   delete domainParams.actor_id;
 
+  // Value <-> expression aliasing (e.g. for create_constraint)
+  const constraintValue = domainParams.value ?? domainParams.expression ?? rawPayload?.value ?? rawPayload?.expression;
+  const constraintExpr = domainParams.expression ?? domainParams.value ?? rawPayload?.expression ?? rawPayload?.value;
+  if (constraintValue !== undefined) {
+    domainParams.value = constraintValue;
+  }
+  if (constraintExpr !== undefined) {
+    domainParams.expression = constraintExpr;
+  }
+
   // Preserve bounded duration parameters
   const boundedDurationMinutes = (
     input.bounded_duration_minutes ??
-    rawPayload.bounded_duration_minutes ??
-    rawPayload.duration_minutes
+    rawPayload?.bounded_duration_minutes ??
+    rawPayload?.duration_minutes ??
+    rawParams?.bounded_duration_minutes ??
+    rawParams?.duration_minutes
   ) as number | undefined;
 
   const durationSeconds = (
     input.duration_seconds ??
-    rawPayload.duration_seconds ??
+    rawPayload?.duration_seconds ??
+    rawParams?.duration_seconds ??
     (typeof boundedDurationMinutes === "number" ? boundedDurationMinutes * 60 : undefined)
   ) as number | undefined;
 
   // Preserve memo and reason using actual BE schema
   const reason = (
     input.reason ??
-    rawPayload.reason ??
+    rawPayload?.reason ??
+    rawParams?.reason ??
     input.memo ??
-    rawPayload.memo
+    rawPayload?.memo ??
+    rawParams?.memo
   ) as string | undefined;
 
   const isRuntime =
@@ -348,8 +369,52 @@ export function buildRunActionCommand(
     commandName === "PausePaperRuntime" ||
     commandName === "ResumePaperRuntime";
 
+  // Build nested payload for backend adapters (e.g. evolution_adapter) that only
+  // forward non-whitelisted domain fields if wrapped inside params.payload (sub_payload).
+  const existingSubPayload =
+    typeof domainParams.payload === "object" && domainParams.payload !== null
+      ? (domainParams.payload as Record<string, unknown>)
+      : rawPayload;
+
+  let nestedPayload: Record<string, unknown> | undefined = undefined;
+  if (existingSubPayload || Object.keys(domainParams).length > 0) {
+    nestedPayload = {
+      ...domainParams,
+      ...(existingSubPayload ?? {}),
+    };
+    delete nestedPayload.payload;
+    delete nestedPayload.command;
+    delete nestedPayload.action;
+    delete nestedPayload.target;
+    delete nestedPayload.confirmToken;
+    delete nestedPayload.confirm_token;
+    delete nestedPayload.approvalId;
+    delete nestedPayload.approval_id;
+    delete nestedPayload.approvalDecisionId;
+    delete nestedPayload.approval_decision_id;
+    delete nestedPayload.twoManSignatureId;
+    delete nestedPayload.two_man_signature_id;
+    delete nestedPayload.secondOperatorId;
+    delete nestedPayload.second_operator_id;
+    delete nestedPayload.idempotencyKey;
+    delete nestedPayload.idempotency_key;
+    delete nestedPayload.action_id;
+    delete nestedPayload.entity_type;
+    delete nestedPayload.entity_id;
+    delete nestedPayload.actor;
+    delete nestedPayload.actor_id;
+
+    if (constraintValue !== undefined) {
+      nestedPayload.value = constraintValue;
+    }
+    if (constraintExpr !== undefined) {
+      nestedPayload.expression = constraintExpr;
+    }
+  }
+
   const params = definedParams({
     ...domainParams,
+    ...(nestedPayload && Object.keys(nestedPayload).length > 0 ? { payload: nestedPayload } : {}),
     memo: reason ?? input.memo,
     reason: reason ?? input.memo,
     ...(boundedDurationMinutes !== undefined ? { bounded_duration_minutes: boundedDurationMinutes } : {}),
@@ -1123,8 +1188,53 @@ export async function pause(
 ): Promise<RunActionEnvelope> {
   const correlationId = opts.correlationId ?? newCorrelationId();
   const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+  const action = (kind === "Evolution" || kind === "evolution-program") ? "pause_program" : "pause";
   if (await liveWriteGated()) {
-    return runAction({ kind, id, action: "pause", memo }, { ...opts, correlationId, idempotencyKey });
+    return runAction({ kind, id, action, memo }, { ...opts, correlationId, idempotencyKey });
+  }
+  refuseStrictLiveWrite(correlationId);
+}
+
+export async function resume(
+  kind: string,
+  id: string,
+  memo?: string,
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope> {
+  const correlationId = opts.correlationId ?? newCorrelationId();
+  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+  const action = (kind === "Evolution" || kind === "evolution-program") ? "resume_program" : "resume";
+  if (await liveWriteGated()) {
+    return runAction({ kind, id, action, memo }, { ...opts, correlationId, idempotencyKey });
+  }
+  refuseStrictLiveWrite(correlationId);
+}
+
+export async function resumeEvolutionProgram(
+  programId: string,
+  memo?: string,
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope> {
+  return resume("Evolution", programId, memo, opts);
+}
+
+export async function pauseEvolutionProgram(
+  programId: string,
+  memo?: string,
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope> {
+  return pause("Evolution", programId, memo, opts);
+}
+
+export async function stopEvolutionProgram(
+  programId: string,
+  memo?: string,
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope> {
+  const correlationId = opts.correlationId ?? newCorrelationId();
+  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+  if (await liveWriteGated()) {
+    return runAction({ kind: "Evolution", id: programId, action: "stop", memo }, { ...opts, correlationId, idempotencyKey });
   }
   refuseStrictLiveWrite(correlationId);
 }
@@ -1138,8 +1248,19 @@ export async function promoteCandidate(
 ): Promise<RunActionEnvelope> {
   const correlationId = opts.correlationId ?? newCorrelationId();
   const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+  const action = target === "live" ? "promote_candidate_live" : "promote_candidate_paper";
   if (await liveWriteGated()) {
-    return runAction({ kind: "Evolution", id: programId, action: `promote_${target}`, memo: memo ?? candidateId }, { ...opts, correlationId, idempotencyKey });
+    return runAction(
+      {
+        kind: "Evolution",
+        id: programId,
+        action,
+        memo: memo ?? candidateId,
+        payload: { candidate_id: candidateId, stage: target },
+        params: { candidate_id: candidateId, stage: target },
+      },
+      { ...opts, correlationId, idempotencyKey },
+    );
   }
   refuseStrictLiveWrite(correlationId);
 }
@@ -1153,6 +1274,19 @@ export async function freezeGeneration(
   const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
   if (await liveWriteGated()) {
     return runAction({ kind: "Evolution", id: programId, action: "freeze_generation", memo }, { ...opts, correlationId, idempotencyKey });
+  }
+  refuseStrictLiveWrite(correlationId);
+}
+
+export async function unfreezeGeneration(
+  programId: string,
+  memo?: string,
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope> {
+  const correlationId = opts.correlationId ?? newCorrelationId();
+  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+  if (await liveWriteGated()) {
+    return runAction({ kind: "Evolution", id: programId, action: "unfreeze_generation", memo }, { ...opts, correlationId, idempotencyKey });
   }
   refuseStrictLiveWrite(correlationId);
 }
@@ -1285,15 +1419,65 @@ export async function createTrainingFeedback(
   refuseStrictLiveWrite(correlationId);
 }
 
-export async function createEvolutionConstraint(
-  incidentId: string,
-  content: string,
+export interface EvolutionConstraintInput {
+  name: string;
+  operator: string;
+  value?: string | number;
+  expression?: string | number;
+  scope?: string;
+}
+
+export async function createEvolutionProgramConstraint(
+  programId: string,
+  constraint: EvolutionConstraintInput,
+  memo?: string,
   opts: RunActionOptions = {},
-): Promise<RunActionEnvelope & { constraintId: string }> {
+): Promise<RunActionEnvelope & { constraintId?: string }> {
+  const correlationId = opts.correlationId ?? newCorrelationId();
+  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+  const value = constraint.value ?? constraint.expression ?? constraint.name;
+  const expr = constraint.expression ?? value;
+  const payload = {
+    name: constraint.name,
+    operator: constraint.operator,
+    value,
+    expression: expr,
+    scope: constraint.scope ?? "global",
+  };
+  if (await liveWriteGated()) {
+    const env = await runAction(
+      {
+        kind: "Evolution",
+        id: programId,
+        action: "create_constraint",
+        memo: memo ?? `${constraint.name} ${constraint.operator} ${value}`,
+        params: { ...payload, payload },
+        payload,
+      },
+      { ...opts, correlationId, idempotencyKey },
+    );
+    return { ...env, constraintId: env.auditEventId };
+  }
+  refuseStrictLiveWrite(correlationId);
+}
+
+export async function createEvolutionConstraint(
+  targetId: string,
+  contentOrConstraint: string | EvolutionConstraintInput,
+  optsOrMemo?: RunActionOptions | string,
+  maybeOpts: RunActionOptions = {},
+): Promise<RunActionEnvelope & { constraintId?: string }> {
+  if (typeof contentOrConstraint === "object" && contentOrConstraint !== null) {
+    const memo = typeof optsOrMemo === "string" ? optsOrMemo : undefined;
+    const opts = (typeof optsOrMemo === "object" ? optsOrMemo : maybeOpts) as RunActionOptions;
+    return createEvolutionProgramConstraint(targetId, contentOrConstraint, memo, opts);
+  }
+  const memo = typeof contentOrConstraint === "string" ? contentOrConstraint : "";
+  const opts = (typeof optsOrMemo === "object" ? optsOrMemo : maybeOpts) as RunActionOptions;
   const correlationId = opts.correlationId ?? newCorrelationId();
   const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
   if (await liveWriteGated()) {
-    const env = await runAction({ kind: "Incident", id: incidentId, action: "create_evolution_constraint", memo: content }, { ...opts, correlationId, idempotencyKey });
+    const env = await runAction({ kind: "Incident", id: targetId, action: "create_evolution_constraint", memo }, { ...opts, correlationId, idempotencyKey });
     return { ...env, constraintId: env.auditEventId };
   }
   refuseStrictLiveWrite(correlationId);
@@ -1625,8 +1809,13 @@ export const bffWrites = {
   lockParams,
   rollback,
   pause,
+  resume,
+  resumeEvolutionProgram,
+  pauseEvolutionProgram,
+  stopEvolutionProgram,
   promoteCandidate,
   freezeGeneration,
+  unfreezeGeneration,
   submitOverride,
   advanceRebalanceStep,
   rerunRebalanceStep,
@@ -1637,6 +1826,7 @@ export const bffWrites = {
   appendPostmortem,
   createTrainingFeedback,
   createEvolutionConstraint,
+  createEvolutionProgramConstraint,
   promoteLive,
   emergencyKill,
   rotateMcpSecret,

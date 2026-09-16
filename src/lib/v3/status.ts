@@ -140,7 +140,7 @@ export const QUARTERLY_REBALANCE_STATUSES = [
 export type QuarterlyRebalanceStatus = typeof QUARTERLY_REBALANCE_STATUSES[number];
 
 export const EVOLUTION_PROGRAM_STATUSES = [
-  "draft", "active", "paused", "under_review", "completed", "retired",
+  "draft", "under_review", "active", "paused", "stopped", "completed", "retired",
 ] as const;
 export type EvolutionProgramStatus = typeof EVOLUTION_PROGRAM_STATUSES[number];
 

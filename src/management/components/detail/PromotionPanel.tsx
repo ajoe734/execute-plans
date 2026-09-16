@@ -16,12 +16,20 @@ import { safeDateTime } from "@/lib/utils";
 
 type PromotionTarget = "paper" | "live";
 
-export const PromotionPanel = ({ program }: { program: EvolutionProgram }) => {
+export const PromotionPanel = ({
+  program,
+  onRefresh,
+}: {
+  program: EvolutionProgram;
+  onRefresh?: () => Promise<void> | void;
+}) => {
   const t = useT();
   const [runs, setRuns] = useState<EvolutionRun[]>([]);
   const [candidates, setCandidates] = useState<EvolutionCandidate[]>([]);
   const [history, setHistory] = useState<PromotionRecord[]>([]);
   const [confirm, setConfirm] = useState<{ candidate: EvolutionCandidate; target: PromotionTarget } | null>(null);
+
+  const isFrozen = Boolean(program.is_frozen ?? program.isFrozen);
 
   useEffect(() => {
     bffV1.evolutionRuns.forProgram(program.id).then(setRuns);
@@ -29,7 +37,10 @@ export const PromotionPanel = ({ program }: { program: EvolutionProgram }) => {
   }, [program.id]);
 
   useEffect(() => {
-    if (!runs.length) return;
+    if (!runs.length) {
+      setCandidates([]);
+      return;
+    }
     Promise.all(runs.map((r) => bffV1.evolutionCandidates.forRun(r.id))).then((all) =>
       setCandidates(all.flat().filter((c) => c.state !== "discarded")),
     );
@@ -46,29 +57,29 @@ export const PromotionPanel = ({ program }: { program: EvolutionProgram }) => {
 
   const onConfirm = async (memo: string) => {
     if (!confirm) return;
-    const receipt = await writes.promoteCandidate(program.id, confirm.candidate.id, confirm.target, memo);
-    toast.success(t("phase13.evolution.promotion.queued"), {
-      description: commandReceiptDescription(receipt, { fallback: `Evolution ${program.id} · promote ${confirm.candidate.id}` }),
-    });
-    setHistory((h) => [
-      {
-        id: `pr_local_${Date.now()}`,
-        programId: program.id,
-        candidateId: confirm.candidate.id,
-        target: confirm.target,
-        promotedAt: new Date().toISOString(),
-        promotedBy: "you",
-        deltaSharpe: confirm.candidate.fitness - parentFitness,
-        deltaDrawdown: 0,
-      },
-      ...h,
-    ]);
-    setConfirm(null);
+    try {
+      const receipt = await writes.promoteCandidate(program.id, confirm.candidate.id, confirm.target, memo);
+      toast.success(t("phase13.evolution.promotion.queued"), {
+        description: commandReceiptDescription(receipt, { fallback: `Evolution ${program.id} · promote ${confirm.candidate.id}` }),
+      });
+      const updated = await bffV1.promotions.forProgram(program.id);
+      setHistory(updated);
+      await onRefresh?.();
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to promote candidate");
+    } finally {
+      setConfirm(null);
+    }
   };
 
   return (
     <>
       <Section title={t("evolution.promotion.title")}>
+        {isFrozen && (
+          <div className="mb-4 rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-500">
+            Generation is frozen. Candidate promotions and mutation approvals are blocked until unfreeze.
+          </div>
+        )}
         <DataTable
           rows={rows}
           empty={t("empty.none")}
@@ -84,11 +95,20 @@ export const PromotionPanel = ({ program }: { program: EvolutionProgram }) => {
             { key: "state", header: t("table.state"), cell: (r) => <Badge variant="outline" className="text-[10px] uppercase">{r.state}</Badge> },
             { key: "actions", header: "", cell: (r) => (
               <div className="flex gap-2 justify-end">
-                <PermissionAwareButton requiredAction="promote_paper" size="sm" variant="outline"
+                <PermissionAwareButton
+                  requiredAction="promote_paper"
+                  size="sm"
+                  variant="outline"
+                  disabled={isFrozen}
+                  title={isFrozen ? "Cannot promote candidate while generation is frozen" : undefined}
                   onClick={() => setConfirm({ candidate: r, target: "paper" })}>
                   {t("phase13.evolution.promotion.promotePaper")}
                 </PermissionAwareButton>
-                <PermissionAwareButton requiredAction="promote_live" size="sm"
+                <PermissionAwareButton
+                  requiredAction="promote_live"
+                  size="sm"
+                  disabled={isFrozen}
+                  title={isFrozen ? "Cannot promote candidate while generation is frozen" : undefined}
                   onClick={() => setConfirm({ candidate: r, target: "live" })}>
                   {t("phase13.evolution.promotion.promoteLive")}
                 </PermissionAwareButton>

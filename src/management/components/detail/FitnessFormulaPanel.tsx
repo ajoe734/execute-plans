@@ -8,9 +8,16 @@ import { useT } from "@/platform/hooks";
 import {
   MockDataEmptyState,
 } from "@/components/data/MockDataBadge";
+import { getMockDataBadgeModel } from "@/components/data/mockDataBadgeModel";
 import { useLiveStatusSnapshot } from "@/lib/bff-v1/liveTransport";
 
-export const FitnessFormulaPanel = ({ mode = "all" }: { mode?: "all" | "fitness" | "mutation" }) => {
+export const FitnessFormulaPanel = ({
+  mode = "all",
+  programId,
+}: {
+  mode?: "all" | "fitness" | "mutation";
+  programId?: string;
+}) => {
   const t = useT();
   const liveStatus = useLiveStatusSnapshot();
   const fitnessGate = getMockDataBadgeModel("bffV1.fitnessFormulas.list", liveStatus);
@@ -18,9 +25,9 @@ export const FitnessFormulaPanel = ({ mode = "all" }: { mode?: "all" | "fitness"
   const [formulas, setFormulas] = useState<FitnessFormula[]>([]);
   const [rules, setRules] = useState<MutationRule[]>([]);
   useEffect(() => {
-    bffV1.fitnessFormulas.list().then(setFormulas);
-    bffV1.mutationRules.list().then(setRules);
-  }, []);
+    bffV1.fitnessFormulas.list(programId).then(setFormulas);
+    bffV1.mutationRules.list(programId).then(setRules);
+  }, [programId]);
   const showFitness = mode === "all" || mode === "fitness";
   const showMutation = mode === "all" || mode === "mutation";
   return (
