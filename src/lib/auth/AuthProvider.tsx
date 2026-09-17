@@ -20,6 +20,16 @@ import {
 import { hasDevLoginCredentials } from "./devLoginHelper";
 import { isDevLoginHost } from "@/lib/bff-v1/runtimeEnv";
 import { postDevLogin } from "./devLogin";
+import { useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { clearScopedQueries } from "@/lib/bff-v1/queryKeys";
+
+function useOptionalQueryClient(): QueryClient | null {
+  try {
+    return useQueryClient();
+  } catch {
+    return null;
+  }
+}
 
 export interface AuthContextValue {
   session: GcpIdentitySession | null;
@@ -45,6 +55,7 @@ const AuthContext = createContext<AuthContextValue>({
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const queryClient = useOptionalQueryClient();
   const [session, setSession] = useState<GcpIdentitySession | null>(null);
   const [bffSession, setBffSession] = useState<VerifiedBffBrowserSession | null>(null);
   const [bffError, setBffError] = useState<Error | null>(null);
@@ -60,7 +71,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     sessionRef.current = next;
     setSession(next);
     const sameUser = prior?.user.uid === next?.user.uid;
-    if (!sameUser) setBffSession(null);
+    if (!sameUser) {
+      setBffSession(null);
+      void clearScopedQueries(queryClient ?? undefined);
+    }
     setBffError(null);
 
     if (!next) {
@@ -103,6 +117,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await postDevLogin(account, password);
       if (syncVersion.current !== version) return;
       clearBffBrowserSession();
+      void clearScopedQueries(queryClient ?? undefined);
       const verified = await verifyBffBrowserSession();
       if (syncVersion.current !== version) return;
       sessionRef.current = null;
@@ -238,6 +253,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (isDevLoginHost()) {
       sessionRef.current = null;
       clearBffBrowserSession();
+      void clearScopedQueries(queryClient ?? undefined);
       setSession(null);
       setBffSession(null);
       setBffError(null);
@@ -255,6 +271,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       sessionRef.current = null;
       clearBffBrowserSession();
+      void clearScopedQueries(queryClient ?? undefined);
       setSession(null);
       setBffSession(null);
       setBffError(null);

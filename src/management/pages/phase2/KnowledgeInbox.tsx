@@ -16,6 +16,7 @@ export const KnowledgeInboxPage = () => {
   const { data: live } = useV5Live(
     () => managementConsoleReads.knowledgeInbox().then((envelope) => envelope.items),
     [],
+    { cacheKey: "phase2.knowledgeInbox" },
   );
   const [items, setItems] = useState<KnowledgeInsightRecord[]>([]);
   const [active, setActive] = useState<KnowledgeInsightRecord | null>(null);

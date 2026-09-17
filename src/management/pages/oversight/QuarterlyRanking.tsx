@@ -147,9 +147,12 @@ export const QuarterlyRankingPage = ({ embedded = false }: { embedded?: boolean 
       personaFocus ? { pageSize: FOCUSED_RANKING_PAGE_SIZE } : undefined,
     ),
     [currentQuarter, personaFocus],
+    { cacheKey: `oversight.quarterlyRanking.list.${personaFocus || currentQuarter}` },
   );
   const { data: formula } = useV5Live(
-    () => mgmt.quarterlyRanking.formulaLiveOnly(), [],
+    () => mgmt.quarterlyRanking.formulaLiveOnly(),
+    [],
+    { cacheKey: "oversight.quarterlyRanking.formula" },
   );
 
   // Fallback Detection & Telemetry

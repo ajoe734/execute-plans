@@ -36,7 +36,7 @@ interface GovernanceDecisionQueueProps {
 export const GovernanceDecisionQueue = ({ kinds, titleKey, subtitleKey }: GovernanceDecisionQueueProps) => {
   const { t } = useTranslation();
   const location = useLocation();
-  const { data: items, loading } = useV5Live(() => mgmt.humanInbox.list(), []);
+  const { data: items, loading } = useV5Live(() => mgmt.humanInbox.list(), [], { cacheKey: "oversight.humanInbox" });
 
   const queueItems = useMemo(
     () => (items ?? []).filter((item: HumanInboxItem) => kinds.includes(item.kind)),

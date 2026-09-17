@@ -92,7 +92,7 @@ export const LoopsPage = () => {
       throw new Error("BFF returned invalid or missing loop health data");
     }
     return items;
-  });
+  }, [], { cacheKey: "v5.loopHealth" });
 
   return (
     <>

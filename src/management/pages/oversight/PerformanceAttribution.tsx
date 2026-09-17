@@ -526,14 +526,16 @@ export const PerformanceAttributionPage = ({ embedded = false }: { embedded?: bo
       period,
     ),
     [dimension, period],
+    { cacheKey: `oversight.performanceAttribution.${dimension}.${period}` },
   );
-  const { data: fleetRows } = useV5Live(() => mgmt.personaFleet.get(), []);
-  const { data: holdings } = useV5Live(() => mgmt.portfolioBook.holdingsLiveOnly(), []);
+  const { data: fleetRows } = useV5Live(() => mgmt.personaFleet.get(), [], { cacheKey: "oversight.personaFleet" });
+  const { data: holdings } = useV5Live(() => mgmt.portfolioBook.holdingsLiveOnly(), [], { cacheKey: "oversight.portfolioBook.holdings" });
   const { data: operationsReadModel, loading: operationsLoading } = useV5Live(
     () => personaFocus
       ? mgmt.operationsReadModel.getLiveOnly(personaFocus, period)
       : Promise.resolve(undefined),
     [personaFocus, period],
+    { cacheKey: personaFocus ? `oversight.operationsReadModel.${personaFocus}.${period}` : "oversight.operationsReadModel.none" },
   );
   const allRows = useMemo(() => (data ?? []).map(normalizePerformanceAttributionRow), [data]);
   const dimensionRows = useMemo(() => {

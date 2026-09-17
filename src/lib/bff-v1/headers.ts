@@ -60,11 +60,14 @@ export interface AuthProvider {
   getToken: () => string | null;
   /** Returns active tenant id, or null when caller is tenant-agnostic. */
   getTenantId: () => string | null;
+  /** Returns active user/operator id, or null when unauthenticated. */
+  getUserId?: () => string | null;
 }
 
 const noopProvider: AuthProvider = {
   getToken: () => null,
   getTenantId: () => null,
+  getUserId: () => null,
 };
 
 let authProvider: AuthProvider = noopProvider;
@@ -73,6 +76,7 @@ export function setAuthProvider(p: Partial<AuthProvider>): void {
   authProvider = {
     getToken: p.getToken ?? authProvider.getToken,
     getTenantId: p.getTenantId ?? authProvider.getTenantId,
+    getUserId: p.getUserId ?? authProvider.getUserId,
   };
 }
 

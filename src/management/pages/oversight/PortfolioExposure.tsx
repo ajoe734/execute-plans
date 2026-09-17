@@ -66,6 +66,7 @@ export const PortfolioExposurePage = ({ embedded = false }: { embedded?: boolean
       capitalPoolId: focusedPool, personaId, runtimeId, period,
     }),
     [filterKey],
+    { cacheKey: `oversight.portfolioBook.exposure.${filterKey}` },
   );
 
   const holdingFilters = useMemo<PortfolioHoldingFilters>(
@@ -75,6 +76,7 @@ export const PortfolioExposurePage = ({ embedded = false }: { embedded?: boolean
   const { data: holdingsData, loading: holdingsLoading } = useV5Live(
     () => focusedPool ? mgmt.portfolioBook.monitorLiveOnly(holdingFilters) : Promise.resolve(undefined),
     [focusedPool, filterKey],
+    { cacheKey: `oversight.portfolioBook.holdings.${filterKey}` },
   );
   const holdingsMonitor = holdingsData ?? EMPTY_HOLDINGS;
 

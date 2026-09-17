@@ -17,6 +17,7 @@ export const HookCronManagerPage = () => {
   const { data } = useV5Live(
     () => managementConsoleReads.hookRegistry(),
     [],
+    { cacheKey: "phase2.hookCron" },
   );
   const crons = data?.crons ?? [];
   const hooks = data?.hooks ?? [];

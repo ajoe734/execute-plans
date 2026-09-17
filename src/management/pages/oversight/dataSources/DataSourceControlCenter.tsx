@@ -238,14 +238,14 @@ export function DataSourceControlCenter() {
   const [commandAction, setCommandAction] = useState<DataSourceActionKey | null>(null);
   const [commandTargetSource, setCommandTargetSource] = useState<ManagementDataSourceV2DTO | null>(null);
 
-  const liveSourcesRes = useV5Live(() => managementConsoleReads.dataSources(), []) ?? {
+  const liveSourcesRes = useV5Live(() => managementConsoleReads.dataSources(), [], { cacheKey: "oversight.dataSources" }) ?? {
     data: undefined,
     loading: false,
     refresh: () => {},
   };
   const { data, loading, refresh } = liveSourcesRes;
 
-  const liveFleetRes = useV5Live(() => mgmt.personaFleet.get(), []) ?? {
+  const liveFleetRes = useV5Live(() => mgmt.personaFleet.get(), [], { cacheKey: "oversight.personaFleet" }) ?? {
     data: undefined,
     loading: false,
     refresh: () => {},

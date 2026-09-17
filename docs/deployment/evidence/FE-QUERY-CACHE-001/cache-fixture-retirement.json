@@ -1,0 +1,122 @@
+{
+  "schema_version": "pantheon.cache-fixture-retirement.v1",
+  "task_id": "FE-QUERY-CACHE-001",
+  "recorded_at": "2026-09-17T09:00:00Z",
+  "author": "Antigravity2",
+  "reviewer": "Claude",
+  "summary": "Retirement of handwritten Map/TTL query caches in favor of scoped TanStack Query v5 client, with double-audit F12/S05 verification and negative bundle reachability confirmation.",
+  "retired_caches": [
+    {
+      "file": "src/management/pages/v5/useV5Live.ts",
+      "symbol": "v5LiveCache",
+      "type": "Map<string, CacheEntry<unknown>>",
+      "status": "retired",
+      "replacement": "TanStack Query v5 via useQuery and queryKeys.resource() scoped by tenantId, userId, baseUrl, and mode.",
+      "evidence": "Handwritten v5LiveCache Map removed; queries now managed via queryClient and getActiveQueryScope()."
+    },
+    {
+      "file": "src/management/pages/Operations.tsx",
+      "symbol": "operationListCache",
+      "type": "Map<string, CacheEntry<unknown>>",
+      "status": "retired",
+      "replacement": "TanStack Query v5 queryClient cache via queryKeys.operations.list() scoped by tenantId, userId, baseUrl, and mode.",
+      "evidence": "Handwritten operationListCache Map and loadCachedListItems/updateCachedListItems migrated to queryClient.getQueryData/setQueryData and invalidateQueries."
+    }
+  ],
+  "query_key_scoping": {
+    "module": "src/lib/bff-v1/queryKeys.ts",
+    "scope_fields": [
+      "tenantId",
+      "userId",
+      "baseUrl",
+      "mode"
+    ],
+    "token_handling": "NEVER use auth tokens, JWTs, or bearer secrets as query keys or cache keys.",
+    "isolation_guarantees": {
+      "tenant_isolation": "Verified by double-audit F12/S05 test: switching tenant changes scope key and prevents cross-tenant data leakage.",
+      "identity_isolation": "Verified by double-audit F12/S05 test: switching user/operator changes scope key and isolates cached reads.",
+      "environment_isolation": "Verified by double-audit F12/S05 test: baseUrl/mode changes isolate cached reads.",
+      "stale_inflight_discard": "Verified by double-audit F12/S05 test: responses from prior scopes cannot overwrite active scope data.",
+      "logout_cleanup": "Verified by double-audit F12/S05 test: AuthProvider.signOut and devLogin invoke clearScopedQueries() which cancels in-flight queries and clears all cached reads."
+    }
+  },
+  "migrated_callers": [
+    {
+      "caller": "src/management/pages/Operations.tsx",
+      "hooks_and_helpers": [
+        "useCachedOperationList",
+        "loadCachedListItems",
+        "updateCachedListItems"
+      ],
+      "pages": [
+        "JobsPage",
+        "AlertsPage",
+        "IncidentsPage",
+        "ApprovalsPage",
+        "AuditPage"
+      ]
+    },
+    {
+      "caller": "src/management/pages/v5/useV5Live.ts",
+      "hook": "useV5Live",
+      "consumers": [
+        "src/management/pages/centers/GovernanceDecisionQueue.tsx",
+        "src/management/pages/oversight/EmergencyActionsPanel.tsx",
+        "src/management/pages/oversight/HumanGateDetail.tsx",
+        "src/management/pages/oversight/LiveReadinessPage.tsx",
+        "src/management/pages/oversight/PerformanceAttribution.tsx",
+        "src/management/pages/oversight/PersonaIntentTraces.tsx",
+        "src/management/pages/oversight/PersonaLeague.tsx",
+        "src/management/pages/oversight/PortfolioBook.tsx",
+        "src/management/pages/oversight/PortfolioExposure.tsx",
+        "src/management/pages/oversight/QuarterlyRanking.tsx",
+        "src/management/pages/oversight/_core.tsx",
+        "src/management/pages/oversight/dataSources/DataSourceControlCenter.tsx",
+        "src/management/pages/phase2/HookCronManager.tsx",
+        "src/management/pages/phase2/KnowledgeInbox.tsx",
+        "src/management/pages/phase2/LineageExplorer.tsx",
+        "src/management/pages/phase2/WorkflowTemplates.tsx",
+        "src/management/pages/v5/ExecutionLoop.tsx",
+        "src/management/pages/v5/Interventions.tsx",
+        "src/management/pages/v5/OptimizationLoop.tsx",
+        "src/management/pages/v5/ResearchLoop.tsx",
+        "src/management/pages/v5/Sentinel.tsx",
+        "src/management/pages/v5/V5Pages.tsx"
+      ]
+    }
+  ],
+  "audit13_fixture_isolation": {
+    "bundle_reachability_guard": "scripts/check_bundle_mock_reachability.ts",
+    "production_mock_reachability": 0,
+    "forbidden_modules_checked": [
+      "src/mocks/seed.ts",
+      "src/lib/bff-v1/mocks/adapters",
+      "src/lib/bff-v1/mocks/registry",
+      "src/lib/bff-v1/mocks/persistence",
+      "src/lib/bff-v1/mocks/mutations",
+      "src/lib/bff-v1/mocks/scenarios",
+      "src/lib/bff-v1/seed-taxonomy.json",
+      "src/lib/bff-v1/writeOverlay",
+      "src/lib/v5/overlay",
+      "src/lib/v5/loopOverlay"
+    ],
+    "forbidden_symbols_checked": [
+      "withLiveOrMock",
+      "withStrictLiveOrMock",
+      "liveListOrSeed",
+      "liveDetailOrSeed",
+      "liveDerivedListOrSeed",
+      "applyLoopOverlay",
+      "applySentinelStatusOverlay",
+      "writeFallback",
+      "liveWriteFallback"
+    ],
+    "separation_status": "Product entry graph is strictly decoupled from test/demo fixtures. Production builds fail closed if mock/overlay modules are reachable."
+  },
+  "verification_suite": {
+    "operations_double_audit_test": "src/management/pages/Operations.test.tsx (9/9 passed)",
+    "use_v5_live_test": "src/management/pages/v5/useV5Live.test.tsx (4/4 passed)",
+    "auth_provider_test": "src/lib/auth/AuthProvider.test.tsx (16/16 passed)",
+    "bff_browser_session_test": "src/lib/auth/bffBrowserSession.test.ts (9/9 passed)"
+  }
+}

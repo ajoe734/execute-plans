@@ -24,6 +24,7 @@ export const WorkflowTemplatesPage = () => {
   const { data: rows } = useV5Live(
     () => managementConsoleReads.workflowTemplates().then((envelope) => envelope.items),
     [],
+    { cacheKey: "phase2.workflowTemplates" },
   );
 
   return (

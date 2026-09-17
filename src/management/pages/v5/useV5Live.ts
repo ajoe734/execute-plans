@@ -1,30 +1,29 @@
 // Pack E E2/E3 — small hook: load async data + refresh on v5 events.
 // onV5Event is owned by src/lib/bff-v1/v5.ts, the live V5 API owner
-// (ACG-03-014/015); src/lib/v5 only builds the pure event DTO.
+// (ACG-03-014/015); backed by TanStack Query with scoped query keys.
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useCallback, useRef } from "react";
+import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { onV5Event } from "@/lib/bff-v1";
+import { getSharedQueryClient, queryKeys, resetSharedQueryClientForTests } from "@/lib/bff-v1/queryKeys";
 
-interface UseV5LiveOptions {
+export interface UseV5LiveOptions {
   cacheKey?: string;
   staleMs?: number;
 }
 
-interface V5LiveCacheEntry<T> {
-  data: T;
-  expiresAt: number;
-}
+export const DEFAULT_CACHE_STALE_MS = 60_000;
 
-const DEFAULT_CACHE_STALE_MS = 60_000;
-const v5LiveCache = new Map<string, V5LiveCacheEntry<unknown>>();
-
-function getCached<T>(cacheKey?: string): V5LiveCacheEntry<T> | undefined {
-  if (!cacheKey) return undefined;
-  return v5LiveCache.get(cacheKey) as V5LiveCacheEntry<T> | undefined;
+function useClient(): QueryClient {
+  try {
+    return useQueryClient();
+  } catch {
+    return getSharedQueryClient();
+  }
 }
 
 export function __resetV5LiveCacheForTests(): void {
-  v5LiveCache.clear();
+  resetSharedQueryClientForTests();
 }
 
 export function useV5Live<T>(
@@ -37,65 +36,51 @@ export function useV5Live<T>(
   error: unknown | null;
   refresh: () => void;
 } {
+  const queryClient = useClient();
   const cacheKey = opts.cacheKey;
   const staleMs = opts.staleMs ?? DEFAULT_CACHE_STALE_MS;
-  const cached = getCached<T>(cacheKey);
-  const [data, setData] = useState<T | undefined>(() => cached?.data);
-  const [loading, setLoading] = useState(() => !cached);
-  const [error, setError] = useState<unknown | null>(null);
+
   const loaderRef = useRef(loader);
   loaderRef.current = loader;
 
+  const queryKey = queryKeys.resource(
+    cacheKey || "v5.live.anonymous",
+    deps,
+  );
+
+  const query = useQuery<T>(
+    {
+      queryKey,
+      queryFn: async () => {
+        return await loaderRef.current();
+      },
+      staleTime: staleMs,
+    },
+    queryClient,
+  );
+
   const refresh = useCallback((force = false) => {
-    let alive = true;
-
-    const fresh = getCached<T>(cacheKey);
-    if (!force && fresh && fresh.expiresAt > Date.now()) {
-      setData(fresh.data);
-      setError(null);
-      setLoading(false);
-      return () => { alive = false; };
-    }
-
-    if (fresh) {
-      setData(fresh.data);
-      setLoading(false);
+    if (force) {
+      void queryClient.invalidateQueries({ queryKey });
     } else {
-      setLoading(true);
+      void query.refetch();
     }
-    setError(null);
-
-    loaderRef.current()
-      .then((d) => {
-        if (cacheKey) {
-          v5LiveCache.set(cacheKey, {
-            data: d,
-            expiresAt: Date.now() + staleMs,
-          });
-        }
-        if (alive) {
-          setData(d);
-          setError(null);
-          setLoading(false);
-        }
-      })
-      .catch((err) => {
-        console.error("[useV5Live] loader failed", err);
-        if (alive) {
-          setError(err);
-          setLoading(false);
-        }
-      });
-    return () => { alive = false; };
-  }, [cacheKey, staleMs]);
-
+  }, [query, queryClient, queryKey]);
 
   useEffect(() => {
-    const stop = refresh();
-    const off = onV5Event(() => refresh(true));
-    return () => { stop?.(); off(); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, deps);
+    const off = onV5Event(() => {
+      void queryClient.invalidateQueries({ queryKey });
+    });
+    return () => {
+      off();
+    };
+  }, [queryClient, queryKey]);
 
-  return { data, loading, error, refresh };
+  const loading = query.isLoading;
+  return {
+    data: query.data,
+    loading,
+    error: query.error ?? null,
+    refresh,
+  };
 }

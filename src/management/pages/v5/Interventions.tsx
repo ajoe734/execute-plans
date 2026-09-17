@@ -45,7 +45,7 @@ const SOURCES: Array<"all" | InterventionItem["source"]> = [
 
 export const InterventionsPage = () => {
   const t = useT();
-  const list = useV5Live(() => v5.interventions.list());
+  const list = useV5Live(() => v5.interventions.list(), [], { cacheKey: "v5.interventions.list" });
   const [active, setActive] = useState<InterventionItem | null>(null);
   const [filter, setFilter] = useState("");
   const [src, setSrc] = useState<typeof SOURCES[number]>("all");
