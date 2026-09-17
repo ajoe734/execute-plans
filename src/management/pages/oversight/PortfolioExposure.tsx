@@ -62,9 +62,9 @@ export const PortfolioExposurePage = ({ embedded = false }: { embedded?: boolean
   const filterKey = [focusedPool, personaId, runtimeId, period].join("|");
 
   const { data, loading, refresh } = useV5Live(
-    () => mgmt.portfolioBook.exposureLiveOnly({
+    (signal) => mgmt.portfolioBook.exposureLiveOnly({
       capitalPoolId: focusedPool, personaId, runtimeId, period,
-    }),
+    }, { signal }),
     [filterKey],
     { cacheKey: `oversight.portfolioBook.exposure.${filterKey}` },
   );
@@ -74,7 +74,7 @@ export const PortfolioExposurePage = ({ embedded = false }: { embedded?: boolean
     [focusedPool, personaId, runtimeId],
   );
   const { data: holdingsData, loading: holdingsLoading } = useV5Live(
-    () => focusedPool ? mgmt.portfolioBook.monitorLiveOnly(holdingFilters) : Promise.resolve(undefined),
+    (signal) => focusedPool ? mgmt.portfolioBook.monitorLiveOnly(holdingFilters, { signal }) : Promise.resolve(undefined),
     [focusedPool, filterKey],
     { cacheKey: `oversight.portfolioBook.holdings.${filterKey}` },
   );

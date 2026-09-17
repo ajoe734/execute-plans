@@ -16,7 +16,7 @@ export function LiveReadinessPage({
 }: {
   title: string;
   ariaLabel: string;
-  load: () => Promise<ReadinessPageModel | undefined>;
+  load: (signal?: AbortSignal) => Promise<ReadinessPageModel | undefined>;
   actions?: ReactNode;
 }) {
   const { t } = useTranslation();

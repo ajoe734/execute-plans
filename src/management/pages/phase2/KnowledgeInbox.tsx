@@ -14,7 +14,7 @@ import { NonProductionActionButton } from "@/management/components/NonProduction
 export const KnowledgeInboxPage = () => {
   const t = useT();
   const { data: live } = useV5Live(
-    () => managementConsoleReads.knowledgeInbox().then((envelope) => envelope.items),
+    (signal) => managementConsoleReads.knowledgeInbox({ signal }).then((envelope) => envelope.items),
     [],
     { cacheKey: "phase2.knowledgeInbox" },
   );

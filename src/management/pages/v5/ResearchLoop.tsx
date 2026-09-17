@@ -105,8 +105,8 @@ export const ResearchLoopPage = () => {
   const runParam = params.get("run");
   const personaFocus = params.get("persona")?.trim() ?? "";
   const projectFocus = params.get("project")?.trim() ?? "";
-  const runs = useV5Live(() => v5.loops.list("research"), [], { cacheKey: "v5.loops.research" });
-  const fleetRows = useV5Live(() => mgmt.personaFleet.get(), [], { cacheKey: "oversight.personaFleet" });
+  const runs = useV5Live((signal) => v5.loops.list("research", { signal }), [], { cacheKey: "v5.loops.research" });
+  const fleetRows = useV5Live((signal) => mgmt.personaFleet.get({}, { signal }), [], { cacheKey: "oversight.personaFleet" });
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const activeRunTriggerRef = useRef<HTMLElement | null>(null);
 

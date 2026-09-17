@@ -22,7 +22,7 @@ import { X } from "lucide-react";
 import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { getSharedQueryClient, queryKeys, resetSharedQueryClientForTests } from "@/lib/bff-v1/queryKeys";
 
-type ListLoader<T> = () => Promise<{ items: T[] }>;
+type ListLoader<T> = (signal?: AbortSignal) => Promise<{ items: T[] }>;
 
 // `lists.*` loaders resolve their generic item type to `unknown` inside
 // src/lib/bff-v1/lists.ts (the adaptItem passed there, e.g.
@@ -30,7 +30,7 @@ type ListLoader<T> = () => Promise<{ items: T[] }>;
 // to `unknown` at that call site). The runtime shape is the concrete
 // entity; we re-assert it here at the consumption boundary rather than
 // editing the shared, out-of-scope lists.ts file.
-const asEntityListLoader = <T,>(loader: () => Promise<{ items: unknown[] }>): ListLoader<T> =>
+const asEntityListLoader = <T,>(loader: (signal?: AbortSignal) => Promise<{ items: unknown[] }>): ListLoader<T> =>
   loader as unknown as ListLoader<T>;
 
 export const OPERATION_LIST_CACHE_TTL_MS = 60_000;
@@ -47,23 +47,25 @@ export function __resetOperationListCacheForTests(): void {
   resetSharedQueryClientForTests();
 }
 
-const loadListItems = <T,>(loader: ListLoader<T>) =>
-  loader().then((envelope) => envelope.items);
+const loadListItems = <T,>(loader: ListLoader<T>, signal?: AbortSignal) =>
+  loader(signal).then((envelope) => envelope.items);
 
 export async function loadCachedListItems<T>(
   cacheKey: string,
   loader: ListLoader<T>,
-  opts: { force?: boolean } = {},
+  opts: { force?: boolean; signal?: AbortSignal } = {},
 ): Promise<T[]> {
   const qc = getSharedQueryClient();
   const queryKey = queryKeys.resource(cacheKey, []);
   if (opts.force) {
+    await qc.cancelQueries({ queryKey });
     await qc.invalidateQueries({ queryKey });
   }
   return qc.fetchQuery({
     queryKey,
-    queryFn: async () => {
-      const items = await loadListItems(loader);
+    queryFn: async ({ signal }) => {
+      const effectiveSignal = opts.signal ?? signal;
+      const items = await loadListItems(loader, effectiveSignal);
       return items;
     },
     staleTime: opts.force ? 0 : OPERATION_LIST_CACHE_TTL_MS,
@@ -85,8 +87,8 @@ export function useCachedOperationList<T>(
 
   const query = useQuery<T[]>({
     queryKey,
-    queryFn: async () => {
-      const items = await loadListItems(loader);
+    queryFn: async ({ signal }) => {
+      const items = await loadListItems(loader, signal);
       return items;
     },
     staleTime: OPERATION_LIST_CACHE_TTL_MS,

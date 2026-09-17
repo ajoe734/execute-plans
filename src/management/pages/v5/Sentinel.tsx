@@ -51,7 +51,7 @@ const statusLabel = (t: (key: string, opts?: Record<string, unknown>) => string,
 
 export const SentinelPage = () => {
   const t = useT();
-  const findings = useV5Live(() => v5.sentinel.list(), [], {
+  const findings = useV5Live((signal) => v5.sentinel.list({ signal }), [], {
     cacheKey: "v5.sentinel.findings",
   });
   const [active, setActive] = useState<SentinelFinding | null>(null);

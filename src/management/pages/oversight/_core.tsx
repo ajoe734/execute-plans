@@ -155,12 +155,12 @@ function quarterlySnapshotFromLive(
 export const OneRingCockpitPage = () => {
   const { t } = useTranslation();
   const location = useLocation();
-  const { data: model, loading } = useV5Live(() => mgmt.cockpit.getLiveOnly(), [], { cacheKey: "oversight.cockpit" });
-  const { data: pSummary } = useV5Live(() => mgmt.portfolioBook.summaryLiveOnly(), [], { cacheKey: "oversight.portfolioBook.summary" });
-  const { data: league } = useV5Live(() => mgmt.personaLeague.listLiveOnly(), [], { cacheKey: "oversight.personaLeague.list" });
-  const { data: quarterlyRows } = useV5Live(() => mgmt.quarterlyRanking.listLiveOnly(), [], { cacheKey: "oversight.quarterlyRanking.list" });
-  const { data: quarterlyFormula } = useV5Live(() => mgmt.quarterlyRanking.formulaLiveOnly(), [], { cacheKey: "oversight.quarterlyRanking.formula" });
-  const { data: fleetRows } = useV5Live(() => mgmt.personaFleet.get(), [], { cacheKey: "oversight.personaFleet" });
+  const { data: model, loading } = useV5Live((signal) => mgmt.cockpit.getLiveOnly({ signal }), [], { cacheKey: "oversight.cockpit" });
+  const { data: pSummary } = useV5Live((signal) => mgmt.portfolioBook.summaryLiveOnly({ signal }), [], { cacheKey: "oversight.portfolioBook.summary" });
+  const { data: league } = useV5Live((signal) => mgmt.personaLeague.listLiveOnly({ signal }), [], { cacheKey: "oversight.personaLeague.list" });
+  const { data: quarterlyRows } = useV5Live((signal) => mgmt.quarterlyRanking.listLiveOnly(undefined, undefined, { signal }), [], { cacheKey: "oversight.quarterlyRanking.list" });
+  const { data: quarterlyFormula } = useV5Live((signal) => mgmt.quarterlyRanking.formulaLiveOnly({ signal }), [], { cacheKey: "oversight.quarterlyRanking.formula" });
+  const { data: fleetRows } = useV5Live((signal) => mgmt.personaFleet.get({}, { signal }), [], { cacheKey: "oversight.personaFleet" });
   const productionFleetRows = useMemo(() => productionPersonaFleetRows(fleetRows ?? []), [fleetRows]);
   const quarterlySnapshot = useMemo(
     () => quarterlySnapshotFromLive(quarterlyRows, quarterlyFormula),
@@ -528,7 +528,7 @@ export const PersonaFleetPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const personaFocus = (searchParams.get("persona_id") ?? searchParams.get("persona"))?.trim() ?? "";
   const { data, loading, refresh } = useV5Live(
-    () => mgmt.personaFleet.get({ q: personaFocus || undefined, pageSize: 100 }),
+    (signal) => mgmt.personaFleet.get({ q: personaFocus || undefined, pageSize: 100 }, ...(signal ? [{ signal }] : [])),
     [personaFocus],
     { cacheKey: `oversight.personaFleet.${personaFocus || "all"}` },
   );
@@ -1491,7 +1491,7 @@ const cardMetricCoverage = (card: ManagementTradingPulseCard): Record<string, un
 
 export const TradingPulsePage = () => {
   const { t } = useTranslation();
-  const { data: model, loading } = useV5Live(() => mgmt.tradingPulse.getLiveOnly(), [], {
+  const { data: model, loading } = useV5Live((signal) => mgmt.tradingPulse.getLiveOnly({ signal }), [], {
     cacheKey: "oversight.tradingPulse",
   });
   if (!model) {
@@ -1760,7 +1760,7 @@ const RuntimeRowsPanel = ({ rows }: { rows: ManagementTradingPulseRuntimeRow[] }
 
 const RankingBlocks = () => {
   const { t } = useTranslation();
-  const { data } = useV5Live(() => mgmt.tradingPulse.rankingsLiveOnly(), [], {
+  const { data } = useV5Live((signal) => mgmt.tradingPulse.rankingsLiveOnly({ signal }), [], {
     cacheKey: "oversight.tradingPulse.rankings",
   });
   const blocks = data ?? [];
@@ -1904,10 +1904,10 @@ export const EvolutionJournalPage = () => {
     true,
   );
 
-  const { data, loading } = useV5Live(() => mgmt.evolutionJournal.list<EvolutionEntry>(() => []), [], {
+  const { data, loading } = useV5Live((signal) => mgmt.evolutionJournal.list<EvolutionEntry>(() => [], { signal }), [], {
     cacheKey: "oversight.evolutionJournal.list",
   });
-  const { data: fleetRows } = useV5Live(() => mgmt.personaFleet.get(), [], {
+  const { data: fleetRows } = useV5Live((signal) => mgmt.personaFleet.get({}, { signal }), [], {
     cacheKey: "oversight.personaFleet",
   });
   const rows = useMemo(() => data ?? [], [data]);
@@ -2489,7 +2489,7 @@ const EvidenceExplorerList = () => {
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const journeyFocus = searchParams.get("journey_id")?.trim() ?? "";
-  const { data, loading } = useV5Live(() => mgmt.evidence.overviewLiveOnly(), [], {
+  const { data, loading } = useV5Live((signal) => mgmt.evidence.overviewLiveOnly({ signal }), [], {
     cacheKey: "oversight.evidence.overview",
   });
   useEffect(() => {
@@ -2761,7 +2761,7 @@ const EvidenceSourceContexts = ({ detail }: { detail: ManagementEvidenceDetail }
 const EvidenceDetailView = ({ refId }: { refId: string }) => {
   const { t } = useTranslation();
   const { data, loading, refresh } = useV5Live(
-    () => refId ? mgmt.evidence.detailLiveOnly(refId) : Promise.resolve(undefined),
+    (signal) => refId ? mgmt.evidence.detailLiveOnly(refId, { signal }) : Promise.resolve(undefined),
     [refId],
     { cacheKey: `oversight.evidence.detail.${refId}` },
   );

@@ -29,7 +29,7 @@ export const LineageExplorerPage = () => {
     () => Object.fromEntries(TYPES.map((t) => [t, true])),
   );
   const { data } = useV5Live(
-    () => managementConsoleReads.lineage(rootId || undefined),
+    (signal) => managementConsoleReads.lineage(rootId || undefined, { signal }),
     [rootId],
     { cacheKey: `phase2.lineage.${rootId || "root"}` },
   );

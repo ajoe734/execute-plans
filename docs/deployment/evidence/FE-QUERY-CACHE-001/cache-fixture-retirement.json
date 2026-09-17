@@ -1,10 +1,10 @@
 {
   "schema_version": "pantheon.cache-fixture-retirement.v1",
   "task_id": "FE-QUERY-CACHE-001",
-  "recorded_at": "2026-09-17T09:00:00Z",
+  "recorded_at": "2026-09-17T12:40:00Z",
   "author": "Antigravity2",
   "reviewer": "Claude",
-  "summary": "Retirement of handwritten Map/TTL query caches in favor of scoped TanStack Query v5 client, with double-audit F12/S05 verification and negative bundle reachability confirmation.",
+  "summary": "Retirement of handwritten Map/TTL query caches in favor of scoped TanStack Query v5 client, with AbortSignal cancellation threading to BFF transport, double-audit F12/S05 verification and negative bundle reachability confirmation.",
   "retired_caches": [
     {
       "file": "src/management/pages/v5/useV5Live.ts",
@@ -114,8 +114,8 @@
     "separation_status": "Product entry graph is strictly decoupled from test/demo fixtures. Production builds fail closed if mock/overlay modules are reachable."
   },
   "verification_suite": {
-    "operations_double_audit_test": "src/management/pages/Operations.test.tsx (9/9 passed)",
-    "use_v5_live_test": "src/management/pages/v5/useV5Live.test.tsx (4/4 passed)",
+    "operations_double_audit_test": "src/management/pages/Operations.test.tsx (12/12 passed)",
+    "use_v5_live_test": "src/management/pages/v5/useV5Live.test.tsx (6/6 passed)",
     "auth_provider_test": "src/lib/auth/AuthProvider.test.tsx (16/16 passed)",
     "bff_browser_session_test": "src/lib/auth/bffBrowserSession.test.ts (9/9 passed)"
   }

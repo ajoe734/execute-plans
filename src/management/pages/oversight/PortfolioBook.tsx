@@ -98,7 +98,7 @@ export const PortfolioBookPage = ({ embedded = false }: { embedded?: boolean } =
   const filterKey = params.toString();
 
   const { data, loading, refresh } = useV5Live(
-    () => mgmt.portfolioBook.monitorLiveOnly(filters),
+    (signal) => mgmt.portfolioBook.monitorLiveOnly(filters, { signal }),
     [filterKey],
     { cacheKey: `oversight.portfolioBook.monitor.${filterKey}` },
   );

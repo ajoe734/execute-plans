@@ -22,7 +22,7 @@ export const WorkflowTemplatesPage = () => {
   const t = useT();
   const [active, setActive] = useState<WorkflowTemplateRecord | null>(null);
   const { data: rows } = useV5Live(
-    () => managementConsoleReads.workflowTemplates().then((envelope) => envelope.items),
+    (signal) => managementConsoleReads.workflowTemplates({ signal }).then((envelope) => envelope.items),
     [],
     { cacheKey: "phase2.workflowTemplates" },
   );

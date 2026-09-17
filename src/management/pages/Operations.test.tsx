@@ -274,6 +274,44 @@ describe("Operations caller migration and cache isolation (F12/S05)", () => {
       expect(op2Current[0].id).toBe("op2-fast");
       expect(op2Current[0].id).not.toBe("op1-stale");
     });
+
+    it("discards same-key stale response when a forced reload supersedes an in-flight request", async () => {
+      setAuthProvider({
+        getTenantId: () => "tenant-1",
+        getUserId: () => "user-1",
+        getToken: () => "tok-1",
+      });
+
+      let resolveSlow!: (value: { items: Job[] }) => void;
+      const slowLoader = vi.fn().mockImplementation(
+        () => new Promise<{ items: Job[] }>((resolve) => { resolveSlow = resolve; })
+      );
+
+      // 1. Initial slow query starts
+      const slowPromise = loadCachedListItems<Job>("operations.jobs", slowLoader).catch(() => []);
+
+      // 2. Forced reload supersedes slow query
+      const freshLoader = vi.fn().mockResolvedValue({
+        items: [
+          { id: "op-fresh", kind: "execution", status: "running", owner: "user-1", startedAt: "2026-09-17" },
+        ],
+      });
+      const freshData = await loadCachedListItems<Job>("operations.jobs", freshLoader, { force: true });
+      expect(freshData[0].id).toBe("op-fresh");
+
+      // 3. Stale query resolves later
+      resolveSlow({
+        items: [
+          { id: "op-stale", kind: "backtest", status: "done", owner: "user-1", startedAt: "2026-09-17" },
+        ],
+      });
+      await slowPromise;
+
+      // 4. Cache must retain fresh data
+      const currentData = await loadCachedListItems<Job>("operations.jobs", freshLoader);
+      expect(currentData[0].id).toBe("op-fresh");
+      expect(currentData[0].id).not.toBe("op-stale");
+    });
   });
 
   describe("Logout cache isolation", () => {
@@ -305,6 +343,50 @@ describe("Operations caller migration and cache isolation (F12/S05)", () => {
       const anonData = await loadCachedListItems<Job>("operations.jobs", anonLoader);
       expect(anonData).toEqual([]);
       expect(anonLoader).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("AbortSignal cancellation", () => {
+    it("threads AbortSignal through to loader and aborts on force cancellation", async () => {
+      let receivedSignal: AbortSignal | undefined;
+      const slowLoader = vi.fn().mockImplementation((signal?: AbortSignal) => {
+        receivedSignal = signal;
+        return new Promise<{ items: Job[] }>(() => {});
+      });
+
+      const slowPromise = loadCachedListItems<Job>("operations.jobs", slowLoader).catch(() => []);
+      expect(slowLoader).toHaveBeenCalledTimes(1);
+      expect(receivedSignal).toBeDefined();
+      expect(receivedSignal?.aborted).toBe(false);
+
+      // Force reload cancels prior query
+      const freshLoader = vi.fn().mockResolvedValue({ items: [] });
+      await loadCachedListItems<Job>("operations.jobs", freshLoader, { force: true });
+      expect(receivedSignal?.aborted).toBe(true);
+      await slowPromise;
+    });
+
+    it("passes explicit opts.signal to loader and respects manual abort", async () => {
+      const controller = new AbortController();
+      let receivedSignal: AbortSignal | undefined;
+      const loader = vi.fn().mockImplementation((signal?: AbortSignal) => {
+        receivedSignal = signal;
+        return new Promise<{ items: Job[] }>((resolve, reject) => {
+          signal?.addEventListener("abort", () => {
+            const err = new Error("Aborted");
+            err.name = "AbortError";
+            reject(err);
+          });
+        });
+      });
+
+      const promise = loadCachedListItems<Job>("operations.jobs", loader, { signal: controller.signal });
+      expect(receivedSignal).toBe(controller.signal);
+      expect(receivedSignal?.aborted).toBe(false);
+
+      controller.abort();
+      expect(receivedSignal?.aborted).toBe(true);
+      await expect(promise).rejects.toThrow("Aborted");
     });
   });
 });

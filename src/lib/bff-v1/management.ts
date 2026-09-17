@@ -3897,8 +3897,8 @@ export const mgmt = {
   cockpit: {
     get: (seedFn: CockpitSeedFn = defaultCockpit): Promise<CockpitModel> =>
       mgmtRead("mgmt.cockpit", { method: "GET", path: paths.mgmtCockpit() }, seedFn, adaptCockpit),
-    getLiveOnly: (): Promise<ManagementCockpitSnapshot | undefined> =>
-      liveOnlyRead<ManagementCockpitSnapshot>({ method: "GET", path: paths.mgmtCockpit() }, adaptCockpitSnapshot),
+    getLiveOnly: (opts?: { signal?: AbortSignal }): Promise<ManagementCockpitSnapshot | undefined> =>
+      liveOnlyRead<ManagementCockpitSnapshot>({ method: "GET", path: paths.mgmtCockpit(), signal: opts?.signal }, adaptCockpitSnapshot),
   },
 
   humanInbox: {
@@ -3921,13 +3921,13 @@ export const mgmt = {
         },
       );
     },
-    get: (id: string): Promise<HumanInboxDetail | undefined> => {
+    get: (id: string, opts?: { signal?: AbortSignal }): Promise<HumanInboxDetail | undefined> => {
       if (detectMode() === "mock") {
         return Promise.resolve(undefined);
       }
       return strictLiveRead<HumanInboxDetail | undefined>(
         "mgmt.humanInbox.get",
-        { method: "GET", path: paths.mgmtHumanInboxItem(id) },
+        { method: "GET", path: paths.mgmtHumanInboxItem(id), signal: opts?.signal },
         (raw) => adaptHumanInboxDetail(raw) ?? missingHumanInboxDetail(),
       );
     },
@@ -3966,9 +3966,9 @@ export const mgmt = {
   },
 
   tradingPulse: {
-    rankingsLiveOnly: (): Promise<TradingPulseRankBlock[]> =>
+    rankingsLiveOnly: (opts?: { signal?: AbortSignal }): Promise<TradingPulseRankBlock[]> =>
       liveOnlyList<TradingPulseRankBlock>(
-        { method: "GET", path: paths.mgmtTradingRankings() },
+        { method: "GET", path: paths.mgmtTradingRankings(), signal: opts?.signal },
         adaptRankings,
       ),
     rankings: (seedFn: () => TradingPulseRankBlock[] = defaultPulseRankings):
@@ -3979,22 +3979,22 @@ export const mgmt = {
       seedFn: () => ManagementTradingPulseModel = defaultTradingPulseModel,
     ): Promise<ManagementTradingPulseModel> =>
       mgmtRead("mgmt.tradingPulse", { method: "GET", path: paths.mgmtTradingPulse() }, seedFn, adaptTradingPulseOverview),
-    getLiveOnly: (): Promise<ManagementTradingPulseModel | undefined> =>
+    getLiveOnly: (opts?: { signal?: AbortSignal }): Promise<ManagementTradingPulseModel | undefined> =>
       liveOnlyRead<ManagementTradingPulseModel>(
-        { method: "GET", path: paths.mgmtTradingPulse() },
+        { method: "GET", path: paths.mgmtTradingPulse(), signal: opts?.signal },
         adaptTradingPulseOverview,
       ),
   },
 
   personaFleet: {
-    get: (filters: { q?: string; pageSize?: number } = {}): Promise<ManagementPersonaFleetRow[]> => {
+    get: (filters: { q?: string; pageSize?: number } = {}, opts?: { signal?: AbortSignal }): Promise<ManagementPersonaFleetRow[]> => {
       if (detectMode() === "mock") {
         return Promise.reject(new Error("demo fallback is disabled for personaFleet; live BFF required"));
       }
       liveStatus.retry();
       return strictLiveRead<ManagementPersonaFleetRow[]>(
         "mgmt.personaFleet",
-        { method: "GET", path: paths.mgmtPersonaFleet(filters) },
+        { method: "GET", path: paths.mgmtPersonaFleet(filters), signal: opts?.signal },
         adaptManagementPersonaFleetLiveOnly,
       );
     },
@@ -4022,8 +4022,8 @@ export const mgmt = {
   },
 
   evolutionJournal: {
-    list: <T>(seedFn: () => T[]): Promise<T[]> =>
-      mgmtRead("mgmt.evolutionJournal.list", { method: "GET", path: paths.mgmtEvolutionJournal() }, seedFn, adaptArrayPassthrough<T>),
+    list: <T>(seedFn: () => T[], opts?: { signal?: AbortSignal }): Promise<T[]> =>
+      mgmtRead("mgmt.evolutionJournal.list", { method: "GET", path: paths.mgmtEvolutionJournal(), signal: opts?.signal }, seedFn, adaptArrayPassthrough<T>),
   },
 
   evidence: {
@@ -4033,9 +4033,9 @@ export const mgmt = {
       seedFn: () => ManagementEvidenceOverview = defaultManagementEvidenceOverview,
     ): Promise<ManagementEvidenceOverview> =>
       mgmtRead("mgmt.evidence.overview", { method: "GET", path: paths.mgmtEvidenceExplorer() }, seedFn, adaptManagementEvidenceOverview),
-    overviewLiveOnly: (): Promise<ManagementEvidenceOverview | undefined> =>
+    overviewLiveOnly: (opts?: { signal?: AbortSignal }): Promise<ManagementEvidenceOverview | undefined> =>
       liveOnlyRead<ManagementEvidenceOverview>(
-        { method: "GET", path: paths.mgmtEvidenceExplorer() },
+        { method: "GET", path: paths.mgmtEvidenceExplorer(), signal: opts?.signal },
         adaptManagementEvidenceOverview,
       ),
     detail: (
@@ -4043,9 +4043,9 @@ export const mgmt = {
       seedFn: () => ManagementEvidenceDetail = () => defaultManagementEvidenceDetail(refId),
     ): Promise<ManagementEvidenceDetail> =>
       mgmtRead("mgmt.evidence.detail", { method: "GET", path: paths.mgmtEvidenceRef(refId) }, seedFn, adaptManagementEvidenceDetail),
-    detailLiveOnly: (refId: string): Promise<ManagementEvidenceDetail | undefined> =>
+    detailLiveOnly: (refId: string, opts?: { signal?: AbortSignal }): Promise<ManagementEvidenceDetail | undefined> =>
       liveOnlyRead<ManagementEvidenceDetail>(
-        { method: "GET", path: paths.mgmtEvidenceRef(refId) },
+        { method: "GET", path: paths.mgmtEvidenceRef(refId), signal: opts?.signal },
         adaptManagementEvidenceDetail,
       ),
   },
@@ -4053,9 +4053,9 @@ export const mgmt = {
   personaIntent: {
     list: (seedFn: () => PersonaIntentTrace[]): Promise<PersonaIntentTrace[]> =>
       mgmtRead("mgmt.personaIntent.list", { method: "GET", path: paths.mgmtPersonaIntent() }, seedFn, adaptPersonaIntent),
-    listLiveOnly: (): Promise<PersonaIntentTrace[]> =>
+    listLiveOnly: (opts?: { signal?: AbortSignal }): Promise<PersonaIntentTrace[]> =>
       liveOnlyList<PersonaIntentTrace>(
-        { method: "GET", path: paths.mgmtPersonaIntent() },
+        { method: "GET", path: paths.mgmtPersonaIntent(), signal: opts?.signal },
         adaptPersonaIntent,
       ),
   },
@@ -4086,9 +4086,9 @@ export const mgmt = {
   // ---------- PM-12 ----------
 
   portfolioBook: {
-    summaryLiveOnly: (): Promise<PortfolioSummary | undefined> =>
+    summaryLiveOnly: (opts?: { signal?: AbortSignal }): Promise<PortfolioSummary | undefined> =>
       liveOnlyRead<PortfolioSummary>(
-        { method: "GET", path: paths.mgmtPortfolioBook() },
+        { method: "GET", path: paths.mgmtPortfolioBook(), signal: opts?.signal },
         (raw) => {
           const data = unwrap(raw);
           return isObject(data) && "totalNav" in data ? (data as unknown as PortfolioSummary) : null;
@@ -4111,14 +4111,14 @@ export const mgmt = {
       ),
     pools: (seedFn: () => CapitalPoolSummaryRow[]): Promise<CapitalPoolSummaryRow[]> =>
       mgmtRead("mgmt.portfolioBook.pools", { method: "GET", path: paths.mgmtPortfolioPools() }, seedFn, adaptArrayPassthrough<CapitalPoolSummaryRow>),
-    holdingsLiveOnly: (): Promise<HoldingRow[]> =>
+    holdingsLiveOnly: (opts?: { signal?: AbortSignal }): Promise<HoldingRow[]> =>
       liveOnlyList<HoldingRow>(
-        { method: "GET", path: paths.mgmtPortfolioHoldings() },
+        { method: "GET", path: paths.mgmtPortfolioHoldings(), signal: opts?.signal },
         adaptPortfolioHoldingRows,
       ),
     holdings: (seedFn: () => HoldingRow[]): Promise<HoldingRow[]> =>
       mgmtRead("mgmt.portfolioBook.holdings", { method: "GET", path: paths.mgmtPortfolioHoldings() }, seedFn, adaptArrayPassthrough<HoldingRow>),
-    exposureLiveOnly: (filters: PortfolioExposureFilters = {}): Promise<ManagementPortfolioExposureMonitor | undefined> =>
+    exposureLiveOnly: (filters: PortfolioExposureFilters = {}, opts?: { signal?: AbortSignal }): Promise<ManagementPortfolioExposureMonitor | undefined> =>
       liveOnlyRead<ManagementPortfolioExposureMonitor>(
         {
           method: "GET",
@@ -4129,10 +4129,11 @@ export const mgmt = {
             runtime_id: filters.runtimeId,
             period: filters.period,
           },
+          signal: opts?.signal,
         },
         adaptPortfolioExposureMonitor,
       ),
-    monitorLiveOnly: (filters: PortfolioHoldingFilters): Promise<PortfolioHoldingsMonitor | undefined> =>
+    monitorLiveOnly: (filters: PortfolioHoldingFilters, opts?: { signal?: AbortSignal }): Promise<PortfolioHoldingsMonitor | undefined> =>
       liveOnlyRead<PortfolioHoldingsMonitor>(
         {
           method: "GET",
@@ -4147,6 +4148,7 @@ export const mgmt = {
             capital_pool_id: filters.capitalPoolId,
             persona_id: filters.personaId,
           },
+          signal: opts?.signal,
         },
         adaptPortfolioHoldingsMonitor,
       ),
@@ -4172,9 +4174,9 @@ export const mgmt = {
   },
 
   personaLeague: {
-    listLiveOnly: (): Promise<PersonaLeagueRow[]> =>
+    listLiveOnly: (opts?: { signal?: AbortSignal }): Promise<PersonaLeagueRow[]> =>
       liveOnlyList<PersonaLeagueRow>(
-        { method: "GET", path: paths.mgmtPersonaLeague() },
+        { method: "GET", path: paths.mgmtPersonaLeague(), signal: opts?.signal },
         adaptArrayPassthrough<PersonaLeagueRow>,
       ),
     list: (seedFn: () => PersonaLeagueRow[]): Promise<PersonaLeagueRow[]> =>
@@ -4202,9 +4204,10 @@ export const mgmt = {
     listLiveOnly: (
       quarter?: string,
       filters?: { pageSize?: number; persona?: string },
+      opts?: { signal?: AbortSignal },
     ): Promise<QuarterlyRankingRow[]> =>
       liveOnlyList<QuarterlyRankingRow>(
-        { method: "GET", path: paths.mgmtQuarterlyRanking(quarter, filters) },
+        { method: "GET", path: paths.mgmtQuarterlyRanking(quarter, filters), signal: opts?.signal },
         adaptQuarterlyRankingRows,
       ),
     list: (
@@ -4213,9 +4216,9 @@ export const mgmt = {
       filters?: { pageSize?: number; persona?: string },
     ): Promise<QuarterlyRankingRow[]> =>
       mgmtRead("mgmt.quarterlyRanking.list", { method: "GET", path: paths.mgmtQuarterlyRanking(quarter, filters) }, seedFn, adaptQuarterlyRankingRows),
-    formulaLiveOnly: (): Promise<QuarterlyRankingFormula | undefined> =>
+    formulaLiveOnly: (opts?: { signal?: AbortSignal }): Promise<QuarterlyRankingFormula | undefined> =>
       liveOnlyRead<QuarterlyRankingFormula>(
-        { method: "GET", path: paths.mgmtQuarterlyRankingFormula() },
+        { method: "GET", path: paths.mgmtQuarterlyRankingFormula(), signal: opts?.signal },
         (raw) => {
           const data = unwrap(raw);
           return isObject(data) && "weights" in data
@@ -4280,9 +4283,10 @@ export const mgmt = {
     listLiveOnly: (
       dimension?: AttributionDimension,
       period?: AttributionPeriod,
+      opts?: { signal?: AbortSignal },
     ): Promise<PerformanceAttributionRow[]> =>
       liveOnlyList<PerformanceAttributionRow>(
-        { method: "GET", path: paths.mgmtPerformanceAttribution(dimension, period) },
+        { method: "GET", path: paths.mgmtPerformanceAttribution(dimension, period), signal: opts?.signal },
         adaptArrayPassthrough<PerformanceAttributionRow>,
       ),
     list: (
@@ -4294,9 +4298,9 @@ export const mgmt = {
   },
 
   operationsReadModel: {
-    getLiveOnly: (personaId: string, period?: string): Promise<ManagementOperationsReadModel | undefined> =>
+    getLiveOnly: (personaId: string, period?: string, opts?: { signal?: AbortSignal }): Promise<ManagementOperationsReadModel | undefined> =>
       liveOnlyRead<ManagementOperationsReadModel>(
-        { method: "GET", path: paths.mgmtOperationsReadModel(personaId, period) },
+        { method: "GET", path: paths.mgmtOperationsReadModel(personaId, period), signal: opts?.signal },
         adaptOperationsReadModel,
       ),
   },

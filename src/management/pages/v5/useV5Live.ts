@@ -27,7 +27,7 @@ export function __resetV5LiveCacheForTests(): void {
 }
 
 export function useV5Live<T>(
-  loader: () => Promise<T>,
+  loader: (signal?: AbortSignal) => Promise<T>,
   deps: unknown[] = [],
   opts: UseV5LiveOptions = {},
 ): {
@@ -51,19 +51,20 @@ export function useV5Live<T>(
   const query = useQuery<T>(
     {
       queryKey,
-      queryFn: async () => {
-        return await loaderRef.current();
+      queryFn: async ({ signal }) => {
+        return await loaderRef.current(signal);
       },
       staleTime: staleMs,
     },
     queryClient,
   );
 
-  const refresh = useCallback((force = false) => {
+  const refresh = useCallback(async (force = false) => {
+    await queryClient.cancelQueries({ queryKey });
     if (force) {
-      void queryClient.invalidateQueries({ queryKey });
+      await queryClient.invalidateQueries({ queryKey });
     } else {
-      void query.refetch();
+      await query.refetch();
     }
   }, [query, queryClient, queryKey]);
 

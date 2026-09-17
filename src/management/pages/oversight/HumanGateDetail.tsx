@@ -30,7 +30,7 @@ export function personaIdFromDetail(itemId: string, manageHref?: string): string
 export const HumanGateDetailPage = () => {
   const { t } = useTranslation();
   const { id = "" } = useParams<{ id: string }>();
-  const { data, loading, refresh } = useV5Live(() => mgmt.humanInbox.get(id), [id], {
+  const { data, loading, refresh } = useV5Live((signal) => mgmt.humanInbox.get(id, { signal }), [id], {
     cacheKey: `oversight.humanGateDetail.${id}`,
   });
   const [searchParams] = useSearchParams();

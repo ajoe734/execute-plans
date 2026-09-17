@@ -74,19 +74,19 @@ export const bffV5 = {
 
   // ---- Loops ----
   loops: {
-    list: (kind?: LoopKind): Promise<V5ListResponse<LoopRun>> =>
+    list: (kind?: LoopKind, opts?: { signal?: AbortSignal }): Promise<V5ListResponse<LoopRun>> =>
       strictLiveRead<V5ListResponse<LoopRun>>(
         "v5.loops.list",
-        { method: "GET", path: paths.v5LoopRuns(), query: kind ? { kind } : undefined },
+        { method: "GET", path: paths.v5LoopRuns(), query: kind ? { kind } : undefined, signal: opts?.signal },
         (data) => {
           const items = strictItemsFrom(data).map(adaptBffLoopRun);
           return v5List(kind ? loopRunsByKind(items, kind) : items);
         },
       ),
-    get: (id: string): Promise<LoopRun | undefined> =>
+    get: (id: string, opts?: { signal?: AbortSignal }): Promise<LoopRun | undefined> =>
       strictLiveRead<LoopRun | undefined>(
         "v5.loops.get",
-        { method: "GET", path: paths.v5LoopRun(id) },
+        { method: "GET", path: paths.v5LoopRun(id), signal: opts?.signal },
         (data) => {
           const record = strictDataFrom(data);
           return record ? adaptBffLoopRun(record, 0) : undefined;
@@ -145,34 +145,34 @@ export const bffV5 = {
 
   // ---- Personas / Strategies (execution health) ----
   personas: {
-    health: (): Promise<V5ListResponse<PersonaExecutionHealth>> =>
+    health: (opts?: { signal?: AbortSignal }): Promise<V5ListResponse<PersonaExecutionHealth>> =>
       strictLiveRead<V5ListResponse<PersonaExecutionHealth>>(
         "v5.personas.health",
-        { method: "GET", path: paths.v5ExecutionPersonaHealth() },
+        { method: "GET", path: paths.v5ExecutionPersonaHealth(), signal: opts?.signal },
         (data) => v5List(strictItemsFrom(data).map(adaptBffPersonaHealth)),
       ),
   },
   strategies: {
-    health: (): Promise<V5ListResponse<StrategyExecutionHealth>> =>
+    health: (opts?: { signal?: AbortSignal }): Promise<V5ListResponse<StrategyExecutionHealth>> =>
       strictLiveRead<V5ListResponse<StrategyExecutionHealth>>(
         "v5.strategies.health",
-        { method: "GET", path: livePaths.v5StrategyHealth() },
+        { method: "GET", path: livePaths.v5StrategyHealth(), signal: opts?.signal },
         (data) => v5List(strictItemsFrom(data).map(adaptBffStrategyHealth)),
       ),
   },
 
   // ---- Sentinel ----
   sentinel: {
-    list: (): Promise<V5ListResponse<SentinelFinding>> =>
+    list: (opts?: { signal?: AbortSignal }): Promise<V5ListResponse<SentinelFinding>> =>
       strictLiveRead<V5ListResponse<SentinelFinding>>(
         "v5.sentinel.list",
-        { method: "GET", path: paths.v5SentinelFindings() },
+        { method: "GET", path: paths.v5SentinelFindings(), signal: opts?.signal },
         (data) => v5List(strictItemsFrom(data).map(adaptBffSentinelFinding)),
       ),
-    get: (id: string): Promise<SentinelFinding | undefined> =>
+    get: (id: string, opts?: { signal?: AbortSignal }): Promise<SentinelFinding | undefined> =>
       strictLiveRead<SentinelFinding | undefined>(
         "v5.sentinel.get",
-        { method: "GET", path: livePaths.v5SentinelFinding(id) },
+        { method: "GET", path: livePaths.v5SentinelFinding(id), signal: opts?.signal },
         (data) => {
           const record = strictDataFrom(data);
           return record ? adaptBffSentinelFinding(record, 0) : undefined;
@@ -195,16 +195,16 @@ export const bffV5 = {
 
   // ---- Interventions ----
   interventions: {
-    list: (): Promise<V5ListResponse<InterventionItem>> =>
+    list: (opts?: { signal?: AbortSignal }): Promise<V5ListResponse<InterventionItem>> =>
       strictLiveRead<V5ListResponse<InterventionItem>>(
         "v5.interventions.list",
-        { method: "GET", path: paths.v5Interventions(), query: { status: "pending" } },
+        { method: "GET", path: paths.v5Interventions(), query: { status: "pending" }, signal: opts?.signal },
         adaptBffInterventionsResponse,
       ),
-    get: (id: string): Promise<InterventionItem | undefined> =>
+    get: (id: string, opts?: { signal?: AbortSignal }): Promise<InterventionItem | undefined> =>
       strictLiveRead<InterventionItem | undefined>(
         "v5.interventions.get",
-        { method: "GET", path: paths.v5Intervention(id) },
+        { method: "GET", path: paths.v5Intervention(id), signal: opts?.signal },
         (data) => {
           const record = strictDataFrom(data);
           return record ? adaptBffIntervention(record, 0) : undefined;

@@ -45,8 +45,8 @@ export const ExecutionLoopPage = () => {
   const runParam = params.get("run");
   const personasRef = useRef<HTMLDivElement | null>(null);
   const runsRef = useRef<HTMLDivElement | null>(null);
-  const runs = useV5Live(() => v5.loops.list("execution"), [], { cacheKey: "v5.loops.execution" });
-  const personas = useV5Live(() => v5.personas.health(), [], { cacheKey: "v5.personas.health" });
+  const runs = useV5Live((signal) => v5.loops.list("execution", { signal }), [], { cacheKey: "v5.loops.execution" });
+  const personas = useV5Live((signal) => v5.personas.health({ signal }), [], { cacheKey: "v5.personas.health" });
   const activeRunId = runParam;
   const activeRunTriggerRef = useRef<HTMLElement | null>(null);
 

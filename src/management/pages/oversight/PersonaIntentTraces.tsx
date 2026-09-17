@@ -193,7 +193,7 @@ const Trace = ({ trace }: { trace: PersonaIntentTrace }) => {
 
 export const PersonaIntentTracesPage = () => {
   const { t } = useTranslation();
-  const { data } = useV5Live(() => mgmt.personaIntent.listLiveOnly(), [], {
+  const { data } = useV5Live((signal) => mgmt.personaIntent.listLiveOnly({ signal }), [], {
     cacheKey: "oversight.personaIntent.list",
   });
   const traces = data ?? [];

@@ -521,18 +521,19 @@ export const PerformanceAttributionPage = ({ embedded = false }: { embedded?: bo
   const period: AttributionPeriod = isAttributionPeriod(periodParam) ? periodParam : "30d";
 
   const { data } = useV5Live(
-    () => mgmt.performanceAttribution.listLiveOnly(
+    (signal) => mgmt.performanceAttribution.listLiveOnly(
       dimension === "all" ? undefined : dimension,
       period,
+      { signal },
     ),
     [dimension, period],
     { cacheKey: `oversight.performanceAttribution.${dimension}.${period}` },
   );
-  const { data: fleetRows } = useV5Live(() => mgmt.personaFleet.get(), [], { cacheKey: "oversight.personaFleet" });
-  const { data: holdings } = useV5Live(() => mgmt.portfolioBook.holdingsLiveOnly(), [], { cacheKey: "oversight.portfolioBook.holdings" });
+  const { data: fleetRows } = useV5Live((signal) => mgmt.personaFleet.get({}, { signal }), [], { cacheKey: "oversight.personaFleet" });
+  const { data: holdings } = useV5Live((signal) => mgmt.portfolioBook.holdingsLiveOnly({ signal }), [], { cacheKey: "oversight.portfolioBook.holdings" });
   const { data: operationsReadModel, loading: operationsLoading } = useV5Live(
-    () => personaFocus
-      ? mgmt.operationsReadModel.getLiveOnly(personaFocus, period)
+    (signal) => personaFocus
+      ? mgmt.operationsReadModel.getLiveOnly(personaFocus, period, { signal })
       : Promise.resolve(undefined),
     [personaFocus, period],
     { cacheKey: personaFocus ? `oversight.operationsReadModel.${personaFocus}.${period}` : "oversight.operationsReadModel.none" },

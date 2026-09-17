@@ -11,7 +11,7 @@ function HookProbe({
   loader,
   cacheKey,
 }: {
-  loader: () => Promise<TestData>;
+  loader: (signal?: AbortSignal) => Promise<TestData>;
   cacheKey: string;
 }) {
   const { data, loading } = useV5Live(loader, [], { cacheKey });
@@ -111,4 +111,81 @@ describe("useV5Live cache", () => {
 
     clearAuthProvider();
   });
+
+  it("threads AbortSignal through to loader and aborts on unmount", async () => {
+    let receivedSignal: AbortSignal | undefined;
+    const slowLoader = vi.fn<(signal?: AbortSignal) => Promise<TestData>>().mockImplementation(
+      (signal) => {
+        receivedSignal = signal;
+        return new Promise(() => {});
+      }
+    );
+
+    render(<HookProbe loader={slowLoader} cacheKey="abort-test" />);
+    expect(slowLoader).toHaveBeenCalledTimes(1);
+    expect(receivedSignal).toBeDefined();
+    expect(receivedSignal?.aborted).toBe(false);
+
+    cleanup();
+
+    expect(receivedSignal?.aborted).toBe(true);
+  });
+
+  it("cancels prior in-flight request on same-key refresh and commits fresh data", async () => {
+    let firstSignal: AbortSignal | undefined;
+    let secondSignal: AbortSignal | undefined;
+    let resolveFirst!: (v: TestData) => void;
+    let resolveSecond!: (v: TestData) => void;
+
+    let callCount = 0;
+    const loader = vi.fn<(signal?: AbortSignal) => Promise<TestData>>().mockImplementation(
+      (signal) => {
+        callCount++;
+        if (callCount === 1) {
+          firstSignal = signal;
+          return new Promise((resolve) => { resolveFirst = resolve; });
+        }
+        secondSignal = signal;
+        return new Promise((resolve) => { resolveSecond = resolve; });
+      }
+    );
+
+    function RefreshProbe({ cacheKey }: { cacheKey: string }) {
+      const { data, loading, refresh } = useV5Live(loader, [], { cacheKey });
+      return (
+        <div>
+          <div data-testid="state">{loading ? "loading" : `ready:${data?.label ?? "none"}`}</div>
+          <button data-testid="refresh-btn" onClick={() => refresh()}>refresh</button>
+        </div>
+      );
+    }
+
+    render(<RefreshProbe cacheKey="same-key-race" />);
+    expect(loader).toHaveBeenCalledTimes(1);
+    expect(firstSignal?.aborted).toBe(false);
+
+    // Trigger same-key refresh while first is in-flight
+    await act(async () => {
+      screen.getByTestId("refresh-btn").click();
+    });
+
+    await waitFor(() => expect(loader).toHaveBeenCalledTimes(2));
+    expect(firstSignal?.aborted).toBe(true);
+    expect(secondSignal?.aborted).toBe(false);
+
+    // Resolve second request first
+    await act(async () => {
+      resolveSecond({ label: "fresh" });
+    });
+
+    await waitFor(() => expect(screen.getByTestId("state")).toHaveTextContent("ready:fresh"));
+
+    // Now late-resolve the first request - it must not overwrite fresh data
+    await act(async () => {
+      resolveFirst({ label: "stale" });
+    });
+
+    expect(screen.getByTestId("state")).toHaveTextContent("ready:fresh");
+  });
 });
+
