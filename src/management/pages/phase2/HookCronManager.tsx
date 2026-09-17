@@ -15,8 +15,9 @@ import { NonProductionActionButton } from "@/management/components/NonProduction
 export const HookCronManagerPage = () => {
   const t = useT();
   const { data } = useV5Live(
-    () => managementConsoleReads.hookRegistry(),
+    (signal) => managementConsoleReads.hookRegistry({ signal }),
     [],
+    { cacheKey: "phase2.hookCron" },
   );
   const crons = data?.crons ?? [];
   const hooks = data?.hooks ?? [];

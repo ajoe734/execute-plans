@@ -19,8 +19,10 @@ import { toast } from "sonner";
 import { Field } from "./ObjectDetailLayout";
 import { AuditTimeline } from "@/platform/components/AuditTimeline";
 import { X } from "lucide-react";
+import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { getSharedQueryClient, queryKeys, resetSharedQueryClientForTests } from "@/lib/bff-v1/queryKeys";
 
-type ListLoader<T> = () => Promise<{ items: T[] }>;
+type ListLoader<T> = (signal?: AbortSignal) => Promise<{ items: T[] }>;
 
 // `lists.*` loaders resolve their generic item type to `unknown` inside
 // src/lib/bff-v1/lists.ts (the adaptItem passed there, e.g.
@@ -28,83 +30,90 @@ type ListLoader<T> = () => Promise<{ items: T[] }>;
 // to `unknown` at that call site). The runtime shape is the concrete
 // entity; we re-assert it here at the consumption boundary rather than
 // editing the shared, out-of-scope lists.ts file.
-const asEntityListLoader = <T,>(loader: () => Promise<{ items: unknown[] }>): ListLoader<T> =>
+const asEntityListLoader = <T,>(loader: (signal?: AbortSignal) => Promise<{ items: unknown[] }>): ListLoader<T> =>
   loader as unknown as ListLoader<T>;
 
-const OPERATION_LIST_CACHE_TTL_MS = 60_000;
-const operationListCache = new Map<string, {
-  expiresAt: number;
-  items?: unknown[];
-  promise?: Promise<unknown[]>;
-}>();
+export const OPERATION_LIST_CACHE_TTL_MS = 60_000;
 
-const loadListItems = <T,>(loader: ListLoader<T>) =>
-  loader().then((envelope) => envelope.items);
+function useClient(): QueryClient {
+  try {
+    return useQueryClient();
+  } catch {
+    return getSharedQueryClient();
+  }
+}
 
-function loadCachedListItems<T>(
+export function __resetOperationListCacheForTests(): void {
+  resetSharedQueryClientForTests();
+}
+
+const loadListItems = <T,>(loader: ListLoader<T>, signal?: AbortSignal) =>
+  loader(signal).then((envelope) => envelope.items);
+
+export async function loadCachedListItems<T>(
   cacheKey: string,
   loader: ListLoader<T>,
-  opts: { force?: boolean } = {},
+  opts: { force?: boolean; signal?: AbortSignal } = {},
 ): Promise<T[]> {
-  const now = Date.now();
-  const cached = operationListCache.get(cacheKey);
-  if (!opts.force && cached?.items && cached.expiresAt > now) {
-    return Promise.resolve(cached.items as T[]);
+  const qc = getSharedQueryClient();
+  const queryKey = queryKeys.resource(cacheKey, []);
+  if (opts.force) {
+    await qc.cancelQueries({ queryKey });
+    await qc.invalidateQueries({ queryKey });
   }
-  if (!opts.force && cached?.promise) {
-    return cached.promise as Promise<T[]>;
-  }
-  const promise = loadListItems(loader)
-    .then((items) => {
-      operationListCache.set(cacheKey, {
-        items,
-        expiresAt: Date.now() + OPERATION_LIST_CACHE_TTL_MS,
-      });
+  return qc.fetchQuery({
+    queryKey,
+    queryFn: async ({ signal }) => {
+      const effectiveSignal = opts.signal ?? signal;
+      const items = await loadListItems(loader, effectiveSignal);
       return items;
-    })
-    .catch((err) => {
-      if (cached?.items) {
-        operationListCache.set(cacheKey, {
-          items: cached.items,
-          expiresAt: cached.expiresAt,
-        });
-      } else {
-        const latest = operationListCache.get(cacheKey);
-        if (latest?.promise) operationListCache.delete(cacheKey);
-      }
-      throw err;
-    });
-  operationListCache.set(cacheKey, {
-    items: cached?.items,
-    expiresAt: cached?.expiresAt ?? 0,
-    promise,
-  });
-  return promise;
-}
-
-function updateCachedListItems<T>(cacheKey: string, updater: (items: T[]) => T[]): void {
-  const cached = operationListCache.get(cacheKey);
-  if (!cached?.items) return;
-  operationListCache.set(cacheKey, {
-    ...cached,
-    items: updater(cached.items as T[]),
-    expiresAt: Date.now() + OPERATION_LIST_CACHE_TTL_MS,
+    },
+    staleTime: opts.force ? 0 : OPERATION_LIST_CACHE_TTL_MS,
   });
 }
 
-function useCachedOperationList<T>(
+export function updateCachedListItems<T>(cacheKey: string, updater: (items: T[]) => T[]): void {
+  const qc = getSharedQueryClient();
+  const queryKey = queryKeys.resource(cacheKey, []);
+  qc.setQueryData<T[]>(queryKey, (old) => (old ? updater(old) : old));
+}
+
+export function useCachedOperationList<T>(
   cacheKey: string,
   loader: ListLoader<T>,
 ): [T[], Dispatch<SetStateAction<T[]>>, () => Promise<void>] {
-  const cached = operationListCache.get(cacheKey);
-  const [rows, setRows] = useState<T[]>(() => cached?.items
-    ? cached.items as T[]
-    : []);
+  const qc = useClient();
+  const queryKey = queryKeys.resource(cacheKey, []);
+
+  const query = useQuery<T[]>({
+    queryKey,
+    queryFn: async ({ signal }) => {
+      const items = await loadListItems(loader, signal);
+      return items;
+    },
+    staleTime: OPERATION_LIST_CACHE_TTL_MS,
+  }, qc);
+
+  const [rows, setRowsState] = useState<T[]>(() => (query.data ?? []) as T[]);
+
+  useEffect(() => {
+    if (query.data !== undefined) {
+      setRowsState(query.data as T[]);
+    }
+  }, [query.data]);
+
+  const setRows: Dispatch<SetStateAction<T[]>> = useCallback((action) => {
+    setRowsState((prev) => {
+      const next = typeof action === "function" ? (action as (p: T[]) => T[])(prev) : action;
+      qc.setQueryData(queryKey, next);
+      return next;
+    });
+  }, [qc, queryKey]);
+
   const refresh = useCallback(async () => {
-    const items = await loadCachedListItems(cacheKey, loader);
-    setRows(items);
-  }, [cacheKey, loader]);
-  useEffect(() => { void refresh(); }, [refresh]);
+    await qc.refetchQueries({ queryKey });
+  }, [qc, queryKey]);
+
   return [rows, setRows, refresh];
 }
 
@@ -332,12 +341,14 @@ export const IncidentsPage = () => {
 
 export const ApprovalsPage = () => {
   const t = useT();
-  const [rows, setRows] = useState<ApprovalRequest[]>([]);
+  const [rows, setRows] = useCachedOperationList<ApprovalRequest>(
+    "operations.approvals",
+    asEntityListLoader<ApprovalRequest>(lists.approvals),
+  );
   const [active, setActive] = useState<ApprovalRequest | null>(null);
   const [approveOpen, setApproveOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [filter, setFilter] = useState<"all" | "pending">("pending");
-  useEffect(() => { loadListItems<ApprovalRequest>(asEntityListLoader<ApprovalRequest>(lists.approvals)).then(setRows); }, []);
 
   const filtered = useMemo(() => filter === "all" ? rows : rows.filter((r) => r.state === "pending"), [rows, filter]);
 
@@ -452,11 +463,13 @@ export const AuditPage = () => {
   const t = useT();
   const [params, setParams] = useSearchParams();
   const target = params.get("target") ?? "";
-  const [rows, setRows] = useState<AuditEvent[]>([]);
+  const [rows, setRows] = useCachedOperationList<AuditEvent>(
+    "operations.audit",
+    asEntityListLoader<AuditEvent>(lists.audit),
+  );
   const [actor, setActor] = useState<string>("all");
   const [action, setAction] = useState<string>("all");
   const [outcome, setOutcome] = useState<string>("all");
-  useEffect(() => { loadListItems<AuditEvent>(asEntityListLoader<AuditEvent>(lists.audit)).then(setRows); }, []);
   useEffect(() => {
     import("@/lib/bff-v1").then(({ realtime }) => {
       const off = realtime.on("audit", (p) => {
@@ -464,7 +477,7 @@ export const AuditPage = () => {
       });
       return off;
     });
-  }, []);
+  }, [setRows]);
 
   const actors = useMemo(() => Array.from(new Set(rows.map((r) => r.actor))).sort(), [rows]);
   const actions = useMemo(() => Array.from(new Set(rows.map((r) => r.action))).sort(), [rows]);

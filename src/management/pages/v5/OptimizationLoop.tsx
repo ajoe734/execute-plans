@@ -40,7 +40,7 @@ export const OptimizationLoopPage = () => {
   const [params, setParams] = useSearchParams();
   const intent = params.get("intent");
   const focus = params.get("focus"); // "rebalance" | "approval"
-  const runs = useV5Live(() => v5.loops.list("optimization"));
+  const runs = useV5Live((signal) => v5.loops.list("optimization", { signal }), [], { cacheKey: "v5.loops.optimization" });
   const items = runs.data?.items ?? [];
   const runsRef = useRef<HTMLDivElement | null>(null);
   const approvalRef = useRef<HTMLTableSectionElement | null>(null);

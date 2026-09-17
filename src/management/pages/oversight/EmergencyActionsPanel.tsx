@@ -27,7 +27,7 @@ const kindTone = (kind: HumanInboxKind) =>
 export const EmergencyActionsPanel = () => {
   const { t } = useTranslation();
   const location = useLocation();
-  const { data: items, loading } = useV5Live(() => mgmt.humanInbox.list(), []);
+  const { data: items, loading } = useV5Live((signal) => mgmt.humanInbox.list({ signal }), [], { cacheKey: "oversight.humanInbox" });
 
   const containmentItems = useMemo(
     () => (items ?? []).filter((item) => CONTAINMENT_KINDS.includes(item.kind)),

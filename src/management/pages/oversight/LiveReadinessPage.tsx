@@ -16,11 +16,13 @@ export function LiveReadinessPage({
 }: {
   title: string;
   ariaLabel: string;
-  load: () => Promise<ReadinessPageModel | undefined>;
+  load: (signal?: AbortSignal) => Promise<ReadinessPageModel | undefined>;
   actions?: ReactNode;
 }) {
   const { t } = useTranslation();
-  const { data: page, loading } = useV5Live(load, []);
+  const { data: page, loading } = useV5Live(load, [ariaLabel], {
+    cacheKey: `oversight.readiness.${ariaLabel}`,
+  });
 
   if (!page) {
     return (
