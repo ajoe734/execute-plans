@@ -157,12 +157,9 @@ export function normalizeLiveListResponse<T>(payload: unknown, cls: ListClass): 
     totalCountExact,
   };
 
-  if (totalCountExact) {
-    if (explicitTotal !== undefined) {
-      out.total = explicitTotal;
-    }
-  }
-
+  // Note: every list class with totalCountExact=true also has emitEstimatedTotal=true
+  // (see LIST_CLASS_RULES), so the exact total is always surfaced via estimatedTotal below —
+  // ListEnvelope has no separate exact-total field.
   if (rule.emitEstimatedTotal) {
     if (explicitEstimated !== undefined) {
       out.estimatedTotal = explicitEstimated;

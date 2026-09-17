@@ -84,7 +84,7 @@ export const DeploymentDetail = () => {
             content: (
               <>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <StatCard label={t("table.target")} value={(d.target ?? "—").toUpperCase()} tone={targetTone(d.target ?? "")} />
+                  <StatCard label={t("table.target")} value={(d.target ?? "—").toUpperCase()} tone={targetTone(d.target)} />
                   <StatCard label={t("table.version")} value={d.version} />
                   <StatCard label="Previous" value={d.previousVersion ?? "—"} />
                   <StatCard label="Promoted" value={d.promotedAt ? safeDateTime(d.promotedAt) : "—"} />

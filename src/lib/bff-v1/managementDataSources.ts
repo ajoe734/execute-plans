@@ -548,7 +548,7 @@ export function normalizeManagementDataSourceDetail(
     ...(instanceRevision !== undefined ? { revision: instanceRevision } : {}),
   };
   if (instanceRevision === undefined) {
-    delete (instanceObj as Record<string, unknown>).revision;
+    delete (instanceObj as unknown as Record<string, unknown>).revision;
   }
 
   const desiredObj: SourceDesiredState = {
@@ -558,7 +558,7 @@ export function normalizeManagementDataSourceDetail(
     ...(desiredRevision !== undefined ? { revision: desiredRevision } : {}),
   };
   if (desiredRevision === undefined) {
-    delete (desiredObj as Record<string, unknown>).revision;
+    delete (desiredObj as unknown as Record<string, unknown>).revision;
   }
 
   const observedObj: SourceObservedState = {
@@ -572,7 +572,7 @@ export function normalizeManagementDataSourceDetail(
     ...(desiredObservedRevision !== undefined ? { desired_revision: desiredObservedRevision } : {}),
   };
   if (observedRevision === undefined) {
-    delete (observedObj as Record<string, unknown>).observed_revision;
+    delete (observedObj as unknown as Record<string, unknown>).observed_revision;
   }
 
   return {

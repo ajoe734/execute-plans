@@ -93,6 +93,9 @@ export function cardTypeLabel(type: WorkshopCardType): string {
     persona_opinion: "Persona Opinion",
     opinion: "Persona Opinion",
     debate: "Debate",
+    governed_proposal: "Governed Proposal",
+    workshop_concluded: "Workshop Concluded",
+    conclusion: "Workshop Concluded",
   };
   return labels[type] ?? formatLabel(type);
 }

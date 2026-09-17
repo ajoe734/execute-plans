@@ -22,6 +22,15 @@ import { X } from "lucide-react";
 
 type ListLoader<T> = () => Promise<{ items: T[] }>;
 
+// `lists.*` loaders resolve their generic item type to `unknown` inside
+// src/lib/bff-v1/lists.ts (the adaptItem passed there, e.g.
+// normalizeBaseObjectFields, is itself generic, which collapses inference
+// to `unknown` at that call site). The runtime shape is the concrete
+// entity; we re-assert it here at the consumption boundary rather than
+// editing the shared, out-of-scope lists.ts file.
+const asEntityListLoader = <T,>(loader: () => Promise<{ items: unknown[] }>): ListLoader<T> =>
+  loader as unknown as ListLoader<T>;
+
 const OPERATION_LIST_CACHE_TTL_MS = 60_000;
 const operationListCache = new Map<string, {
   expiresAt: number;
@@ -101,7 +110,7 @@ function useCachedOperationList<T>(
 
 export const JobsPage = () => {
   const t = useT();
-  const [rows, setRows] = useCachedOperationList<Job>("operations.jobs", lists.jobs);
+  const [rows, setRows] = useCachedOperationList<Job>("operations.jobs", asEntityListLoader<Job>(lists.jobs));
   const [liveCount, setLiveCount] = useState(0);
   useEffect(() => {
     import("@/lib/bff-v1").then(({ realtime }) => {
@@ -328,7 +337,7 @@ export const ApprovalsPage = () => {
   const [approveOpen, setApproveOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [filter, setFilter] = useState<"all" | "pending">("pending");
-  useEffect(() => { loadListItems<ApprovalRequest>(lists.approvals).then(setRows); }, []);
+  useEffect(() => { loadListItems<ApprovalRequest>(asEntityListLoader<ApprovalRequest>(lists.approvals)).then(setRows); }, []);
 
   const filtered = useMemo(() => filter === "all" ? rows : rows.filter((r) => r.state === "pending"), [rows, filter]);
 
@@ -447,7 +456,7 @@ export const AuditPage = () => {
   const [actor, setActor] = useState<string>("all");
   const [action, setAction] = useState<string>("all");
   const [outcome, setOutcome] = useState<string>("all");
-  useEffect(() => { loadListItems<AuditEvent>(lists.audit).then(setRows); }, []);
+  useEffect(() => { loadListItems<AuditEvent>(asEntityListLoader<AuditEvent>(lists.audit)).then(setRows); }, []);
   useEffect(() => {
     import("@/lib/bff-v1").then(({ realtime }) => {
       const off = realtime.on("audit", (p) => {

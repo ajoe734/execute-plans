@@ -47,7 +47,7 @@ const baseScore: CandidateScoreResult = {
       category: "alpha",
       raw_value: 0.052,
       normalized_value: 0.88,
-      transform: "sigmoid",
+      transform: "logistic",
       direction: "higher_better",
       weight: 0.18,
       contribution: 15.84,
@@ -61,7 +61,7 @@ const baseScore: CandidateScoreResult = {
       category: "data_quality",
       raw_value: 0.92,
       normalized_value: 0.92,
-      transform: "identity",
+      transform: "min_max",
       direction: "higher_better",
       weight: 0.10,
       contribution: 9.2,
@@ -75,11 +75,11 @@ const baseScore: CandidateScoreResult = {
       category: "liquidity",
       raw_value: 0.15,
       normalized_value: 0.15,
-      transform: "identity",
+      transform: "min_max",
       direction: "lower_better",
       weight: 0.08,
       contribution: 4.5,
-      missing_policy: "cap_at_max",
+      missing_policy: "cap_final_score",
       evidence_refs: [],
       explanation: "Market impact constraint",
     },
@@ -97,6 +97,18 @@ const baseMember: CandidatePoolMember = {
   lifecycle_state: "candidate",
   producing_persona_id: "persona-momentum",
   created_at: "2026-06-20T00:00:00Z",
+  fields: {
+    rationale: { availability: "unavailable", reason: "not_recorded" },
+    concerns: { availability: "unavailable", reason: "not_recorded" },
+    next_event: { availability: "unavailable", reason: "not_recorded" },
+    evidence: { availability: "unavailable", reason: "not_recorded" },
+    details: { availability: "unavailable", reason: "not_recorded" },
+  },
+  as_of: "2026-06-22T09:05:00Z",
+  score_semantics: {
+    effective_score: { kind: "recipe_weighted_score", availability: "available", is_confidence_score: false },
+    sharpe_summary: { kind: "sharpe_ratio", availability: "unavailable", is_confidence_score: false, reason: "score_not_run" },
+  },
 };
 
 describe("CandidateReviewDrawer — closed state", () => {
@@ -470,7 +482,7 @@ describe("CandidateReviewDrawer — score decomposition missing_policy", () => {
           component_id: "capped_comp",
           label: "Capped Component",
           normalized_value: null,
-          missing_policy: "cap_at_max",
+          missing_policy: "cap_final_score",
         },
       ],
     };
@@ -490,6 +502,6 @@ describe("CandidateReviewDrawer — score decomposition missing_policy", () => {
     expect(screen.getByTestId("component-missing-cand-cap-capped_comp")).toBeDefined();
     expect(
       screen.getByTestId("component-missing-cand-cap-capped_comp").textContent,
-    ).toContain("cap_at_max");
+    ).toContain("cap_final_score");
   });
 });

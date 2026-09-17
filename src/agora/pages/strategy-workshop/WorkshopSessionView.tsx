@@ -96,7 +96,8 @@ function readinessHighestGate(
 ): WorkshopReadinessAssessment["highest_ready_gate"] | null {
   if (!readiness) return null;
   if (readiness.highest_ready_gate) return readiness.highest_ready_gate;
-  return readiness.passed && readiness.gate ? readiness.gate : null;
+  const readyGate = readiness.gates?.find((gate) => gate.state === "ready");
+  return readyGate ? readyGate.gate : null;
 }
 
 function readinessText(value: string | null | undefined): string | null {
@@ -1580,9 +1581,9 @@ export function WorkshopSessionView({ governedProposalId, workshopId, onAddToTra
                 try {
                   setMessageReceiptState("processing");
                   await openWorkshopConsultation(workshopId, {
-                    consultation_type: "red_team",
-                    topic: composerValue.trim() || "Red team consultation",
-                    participant_persona_ids: selectedParticipants,
+                    consultation_type: "committee",
+                    subject: composerValue.trim() || "Red team consultation",
+                    context_refs: selectedParticipants,
                   });
                   setMessageReceiptState("succeeded");
                   refreshCards();
@@ -1610,7 +1611,8 @@ export function WorkshopSessionView({ governedProposalId, workshopId, onAddToTra
                 try {
                   setMessageReceiptState("processing");
                   await createWorkshopVersion(workshopId, {
-                    change_summary: [composerValue.trim() || "Create new version patch"],
+                    patch: [],
+                    reason: composerValue.trim() || "Create new version patch",
                   });
                   setMessageReceiptState("succeeded");
                   refreshCards();
@@ -1638,7 +1640,8 @@ export function WorkshopSessionView({ governedProposalId, workshopId, onAddToTra
                 try {
                   setMessageReceiptState("processing");
                   await concludeWorkshop(workshopId, {
-                    notes: composerValue.trim() || "Concluded strategy workshop",
+                    conclusion_notes: composerValue.trim() || "Concluded strategy workshop",
+                    approval_decision_id: governedProposalId ?? "",
                   });
                   setMessageReceiptState("succeeded");
                   refreshCards();

@@ -75,7 +75,8 @@ describe("E3 stageTimeoutState", () => {
     expect(stageTimeoutState(stage, DEFAULT_TIMEOUT_POLICY)).toBe("escalate");
   });
   it("returns idle for terminal stages", () => {
-    expect(stageTimeoutState({ id: "s", name: "x", status: "succeeded" }, DEFAULT_TIMEOUT_POLICY)).toBe("idle");
+    const stage = { id: "s", name: "x", status: "succeeded" };
+    expect(stageTimeoutState(stage, DEFAULT_TIMEOUT_POLICY)).toBe("idle");
   });
 });
 

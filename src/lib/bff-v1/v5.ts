@@ -579,7 +579,7 @@ export function adaptBffControlRoom(body: unknown, sessionContext?: V5SessionCon
   const interventions = asRecord(record.interventions);
   const loopRuns = strictItemsFrom(loops).map(adaptBffLoopRun);
   const findings = strictItemsFrom(sentinel).map(adaptBffSentinelFinding);
-  const interventionItems = strictItemsFrom(interventions).map(adaptBffIntervention);
+  const interventionItems = strictItemsFrom(interventions).map((item, index) => adaptBffIntervention(item, index));
   const rawSession = asRecord(record.session);
   const session: V5SessionContext = sessionContext ?? {
     tenantId: asString(rawSession.tenantId ?? rawSession.tenant_id, "demo"),

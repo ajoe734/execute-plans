@@ -67,7 +67,7 @@ export function bindPplAlloc009RecommendationSnapshot(
 
   const rankingRow: PplAlloc009JsonRecord = {};
   for (const field of RECOMMENDATION_SNAPSHOT_ROW_FIELDS) {
-    if (Object.hasOwn(recommendation, field)) {
+    if (Object.prototype.hasOwnProperty.call(recommendation, field)) {
       rankingRow[field] = recommendation[field];
     }
   }
