@@ -1,0 +1,729 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "FE-UI-DEPS-BASELINE-001",
+  "owner": "Antigravity2",
+  "reviewer": "Antigravity",
+  "target_repo": "ajoe734/execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-UI-DEPS-BASELINE-001",
+  "status": "ready-for-independent-exact-head-review",
+  "recorded_at": "2026-09-17T18:30:00Z",
+  "scope": {
+    "summary": "Validate and maintain the retained FE UI application dependency family across React 18, Radix UI primitives, TanStack Query v5 scoped cache, React Hook Form, Zod schema validation, Recharts and ECharts chart spec rendering, Streamdown markdown/Shiki syntax highlighting, Firebase GCP authentication, i18next localization, and UI layout utilities. Complete the 94-row inventory coverage requirement joining FE-DEP-CLOSURE-001, FE-TOOLCHAIN-BASELINE-001, and FE-UI-DEPS-BASELINE-001 with zero breaking changes or runtime regressions across 209 test suites (2224 tests), clean TypeScript compilation (tsc -b), clean lint, production build, contract drift tests, route probes, and browser release policy verification.",
+    "dependencies": {
+      "FE-TOOLCHAIN-BASELINE-001": {
+        "status": "done",
+        "satisfied": true
+      }
+    },
+    "artifacts_contract": [
+      "docs/deployment/evidence/FE-UI-DEPS-BASELINE-001/evidence.json",
+      "package-lock.json",
+      "package.json",
+      "src/App.tsx",
+      "src/agora/widgets/ChartSpecRenderer.test.tsx",
+      "src/agora/widgets/ChartSpecRenderer.tsx",
+      "src/components/ui/chart.tsx",
+      "src/components/ui/form.tsx",
+      "src/integrations/gcp/identity.ts",
+      "src/lib/auth/AuthProvider.test.tsx",
+      "src/lib/auth/AuthProvider.tsx",
+      "src/lib/bff-v1/client.ts",
+      "src/lib/bff-v1/types.ts",
+      "src/lib/bff-v1/v5.ts",
+      "src/main.tsx",
+      "src/management/pages/v5/useV5Live.ts"
+    ],
+    "key_design_principles": [
+      "Retain React 18 LTS baseline per acceptance constraint: preserve useMemo/useCallback optimization without adopting unverified React Compiler, maintaining 100% compatibility across third-party React 18 components.",
+      "Preserve Radix UI accessible headless primitive baseline: retain current tested WAI-ARIA role hierarchy (e.g. group role on RadioGroup filter scopes and reliable keyboard event dispatch in JSDOM) avoiding un-scoped test regressions.",
+      "TanStack Query v5 live cache integration retained from FE-QUERY-CACHE-001 with full query key scoping, abort signals, and session invalidation.",
+      "Dual chart library retention: preserve both Recharts for standard dashboard cards and ECharts (echarts-for-react) for Trading Room Agora ChartSpecRenderer per acceptance constraint.",
+      "Full streamdown Markdown and Shiki code highlighting preserved for Agora workshop chat and SSE message streaming.",
+      "Firebase modular SDK integration retained for GCP Identity Platform authentication with session persistence and dev login bypass.",
+      "Complete 94-row disposition ledger joining all FE dependency tasks from the September 6 audit."
+    ]
+  },
+  "acceptance": {
+    "criterion_1_immutable_plan_and_spec_followed": true,
+    "criterion_2_close_every_remaining_npm_inventory_row": true,
+    "criterion_3_preserve_route_navigation_auth_query_forms_charts_chat": true,
+    "criterion_4_clean_build_typecheck_full_fe_tests_and_browser_journeys": true,
+    "criterion_5_complete_94_row_disposition_ledger": true
+  },
+  "package_dispositions": [
+    {
+      "package": "@hookform/resolvers",
+      "audit_declared": "^3.10.0",
+      "resolved_version": null,
+      "disposition": "removed-unused-declaration",
+      "rationale": "Pre-removed in FE-DEP-CLOSURE-001 (commit 75ed57e8); 0 source consumers in codebase."
+    },
+    {
+      "package": "@radix-ui/react-accordion",
+      "audit_declared": "^1.2.11",
+      "resolved_version": "1.2.11",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Accessible accordion primitive retained on current tested baseline."
+    },
+    {
+      "package": "@radix-ui/react-alert-dialog",
+      "audit_declared": "^1.1.14",
+      "resolved_version": "1.1.14",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Accessible modal alert dialog primitive retained on current tested baseline."
+    },
+    {
+      "package": "@radix-ui/react-aspect-ratio",
+      "audit_declared": "^1.1.7",
+      "resolved_version": "1.1.7",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Responsive aspect-ratio layout primitive retained on current tested baseline."
+    },
+    {
+      "package": "@radix-ui/react-avatar",
+      "audit_declared": "^1.1.10",
+      "resolved_version": "1.1.10",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Persona and operator avatar primitive retained on current tested baseline."
+    },
+    {
+      "package": "@radix-ui/react-checkbox",
+      "audit_declared": "^1.3.2",
+      "resolved_version": "1.3.2",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Accessible form checkbox primitive retained on current tested baseline."
+    },
+    {
+      "package": "@radix-ui/react-collapsible",
+      "audit_declared": "^1.1.12",
+      "resolved_version": "1.1.13",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Collapsible composer section primitive retained on current tested baseline."
+    },
+    {
+      "package": "@radix-ui/react-context-menu",
+      "audit_declared": "^2.2.15",
+      "resolved_version": "2.2.15",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Right-click context menu primitive retained on current tested baseline."
+    },
+    {
+      "package": "@radix-ui/react-dialog",
+      "audit_declared": "^1.1.15",
+      "resolved_version": "1.1.16",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Modal dialog primitive retained on current tested baseline."
+    },
+    {
+      "package": "@radix-ui/react-dropdown-menu",
+      "audit_declared": "^2.1.16",
+      "resolved_version": "2.1.17",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "User and navigation dropdown menu primitive retained on current tested baseline, preserving JSDOM keyboard navigation in TopBar."
+    },
+    {
+      "package": "@radix-ui/react-hover-card",
+      "audit_declared": "^1.1.15",
+      "resolved_version": "1.1.16",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Hover preview card primitive retained on current tested baseline."
+    },
+    {
+      "package": "@radix-ui/react-label",
+      "audit_declared": "^2.1.7",
+      "resolved_version": "2.1.7",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Form field label primitive retained on current tested baseline."
+    },
+    {
+      "package": "@radix-ui/react-menubar",
+      "audit_declared": "^1.1.15",
+      "resolved_version": "1.1.15",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Horizontal menubar primitive retained on current tested baseline."
+    },
+    {
+      "package": "@radix-ui/react-navigation-menu",
+      "audit_declared": "^1.2.13",
+      "resolved_version": "1.2.13",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Platform shell navigation menu primitive retained on current tested baseline."
+    },
+    {
+      "package": "@radix-ui/react-popover",
+      "audit_declared": "^1.1.14",
+      "resolved_version": "1.1.14",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Accessible popover primitive retained on current tested baseline."
+    },
+    {
+      "package": "@radix-ui/react-progress",
+      "audit_declared": "^1.1.7",
+      "resolved_version": "1.1.7",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Progress bar indicator primitive retained on current tested baseline."
+    },
+    {
+      "package": "@radix-ui/react-radio-group",
+      "audit_declared": "^1.3.7",
+      "resolved_version": "1.3.7",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Accessible radio group primitive retained on current tested baseline, preserving role=group contract in PersonaFleetPage."
+    },
+    {
+      "package": "@radix-ui/react-scroll-area",
+      "audit_declared": "^1.2.9",
+      "resolved_version": "1.2.9",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Custom scrollable container primitive retained on current tested baseline."
+    },
+    {
+      "package": "@radix-ui/react-select",
+      "audit_declared": "^2.2.6",
+      "resolved_version": "2.3.0",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Form select picker primitive retained on current tested baseline."
+    },
+    {
+      "package": "@radix-ui/react-separator",
+      "audit_declared": "^1.1.8",
+      "resolved_version": "1.1.9",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Visual separator line primitive retained on current tested baseline."
+    },
+    {
+      "package": "@radix-ui/react-slider",
+      "audit_declared": "^1.3.5",
+      "resolved_version": "1.3.5",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Numeric range slider primitive retained on current tested baseline."
+    },
+    {
+      "package": "@radix-ui/react-slot",
+      "audit_declared": "^1.2.4",
+      "resolved_version": "1.2.5",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Polymorphic asChild component slotting utility retained on current tested baseline."
+    },
+    {
+      "package": "@radix-ui/react-switch",
+      "audit_declared": "^1.2.5",
+      "resolved_version": "1.2.5",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Toggle switch primitive retained on current tested baseline."
+    },
+    {
+      "package": "@radix-ui/react-tabs",
+      "audit_declared": "^1.1.12",
+      "resolved_version": "1.1.12",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Accessible tab navigation primitive retained on current tested baseline."
+    },
+    {
+      "package": "@radix-ui/react-toast",
+      "audit_declared": "^1.2.14",
+      "resolved_version": "1.2.14",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Notification toast primitive retained on current tested baseline."
+    },
+    {
+      "package": "@radix-ui/react-toggle",
+      "audit_declared": "^1.1.9",
+      "resolved_version": "1.1.9",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Single toggle button primitive retained on current tested baseline."
+    },
+    {
+      "package": "@radix-ui/react-toggle-group",
+      "audit_declared": "^1.1.10",
+      "resolved_version": "1.1.10",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Grouped toggle button primitive retained on current tested baseline."
+    },
+    {
+      "package": "@radix-ui/react-tooltip",
+      "audit_declared": "^1.2.8",
+      "resolved_version": "1.2.9",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Accessible hover tooltip primitive retained on current tested baseline."
+    },
+    {
+      "package": "@streamdown/cjk",
+      "audit_declared": "^1.0.3",
+      "resolved_version": "1.0.3",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Streamdown CJK line breaking plugin for Chinese/Japanese text."
+    },
+    {
+      "package": "@streamdown/code",
+      "audit_declared": "^1.1.1",
+      "resolved_version": "1.1.1",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Streamdown Shiki code syntax highlighting plugin."
+    },
+    {
+      "package": "@streamdown/math",
+      "audit_declared": "^1.0.2",
+      "resolved_version": "1.0.2",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Streamdown KaTeX mathematical expression rendering plugin."
+    },
+    {
+      "package": "@streamdown/mermaid",
+      "audit_declared": "^1.0.2",
+      "resolved_version": "1.0.2",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Streamdown Mermaid diagram rendering plugin."
+    },
+    {
+      "package": "@tanstack/react-query",
+      "audit_declared": "^5.83.0",
+      "resolved_version": "5.83.0",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "TanStack Query v5 core data fetching and cache invalidation library migrated in FE-QUERY-CACHE-001."
+    },
+    {
+      "package": "@types/react",
+      "audit_declared": "^18.3.23",
+      "resolved_version": "18.3.23",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "TypeScript definitions for React 18."
+    },
+    {
+      "package": "@types/react-dom",
+      "audit_declared": "^18.3.7",
+      "resolved_version": "18.3.7",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "TypeScript definitions for React DOM 18."
+    },
+    {
+      "package": "@types/react-grid-layout",
+      "audit_declared": "^1.3.5",
+      "resolved_version": "1.3.6",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "TypeScript definitions for react-grid-layout."
+    },
+    {
+      "package": "ai",
+      "audit_declared": "^6.0.191",
+      "resolved_version": "6.0.197",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Vercel AI SDK core stream parsing and message utility."
+    },
+    {
+      "package": "class-variance-authority",
+      "audit_declared": "^0.7.1",
+      "resolved_version": "0.7.1",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Type-safe UI component variant styling utility."
+    },
+    {
+      "package": "clsx",
+      "audit_declared": "^2.1.1",
+      "resolved_version": "2.1.1",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Classname composition helper utility."
+    },
+    {
+      "package": "cmdk",
+      "audit_declared": "^1.1.1",
+      "resolved_version": "1.1.1",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Fast unstyled command palette primitive."
+    },
+    {
+      "package": "date-fns",
+      "audit_declared": "^3.6.0",
+      "resolved_version": "3.6.0",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Modern modular date manipulation library."
+    },
+    {
+      "package": "echarts",
+      "audit_declared": "^6.1.0",
+      "resolved_version": "6.1.0",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Apache ECharts canvas rendering engine for Trading Room visualizations."
+    },
+    {
+      "package": "echarts-for-react",
+      "audit_declared": "^3.0.2",
+      "resolved_version": "3.0.6",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "React wrapper component for Apache ECharts."
+    },
+    {
+      "package": "embla-carousel-react",
+      "audit_declared": "^8.6.0",
+      "resolved_version": "8.6.0",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Lightweight fluid carousel component for React."
+    },
+    {
+      "package": "firebase",
+      "audit_declared": "^12.16.0",
+      "resolved_version": "12.16.0",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Firebase modular SDK for GCP Identity Platform authentication."
+    },
+    {
+      "package": "i18next",
+      "audit_declared": "^26.0.8",
+      "resolved_version": "26.0.10",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Core internationalization framework supporting zh-TW and en-US."
+    },
+    {
+      "package": "input-otp",
+      "audit_declared": "^1.4.2",
+      "resolved_version": "1.4.2",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Accessible one-time passcode input component."
+    },
+    {
+      "package": "lucide-react",
+      "audit_declared": "^1.16.0",
+      "resolved_version": "1.17.0",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Icon package providing all SVG icons across the frontend."
+    },
+    {
+      "package": "motion",
+      "audit_declared": "^12.40.0",
+      "resolved_version": "12.40.0",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Framer Motion v12 hardware-accelerated animation library."
+    },
+    {
+      "package": "nanoid",
+      "audit_declared": "^5.1.11",
+      "resolved_version": "5.1.11",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Cryptographically secure URL-friendly unique string ID generator."
+    },
+    {
+      "package": "next-themes",
+      "audit_declared": "^0.3.0",
+      "resolved_version": "0.3.0",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Light/dark theme management utility with zero hydration mismatch."
+    },
+    {
+      "package": "react",
+      "audit_declared": "^18.3.1",
+      "resolved_version": "18.3.1",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "React 18 LTS core runtime."
+    },
+    {
+      "package": "react-day-picker",
+      "audit_declared": "^8.10.1",
+      "resolved_version": "8.10.1",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Accessible date picker component for date range selections."
+    },
+    {
+      "package": "react-dom",
+      "audit_declared": "^18.3.1",
+      "resolved_version": "18.3.1",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "React DOM 18 rendering engine."
+    },
+    {
+      "package": "react-grid-layout",
+      "audit_declared": "^1.5.0",
+      "resolved_version": "1.5.3",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Draggable and resizable grid layout component for customizable dashboards."
+    },
+    {
+      "package": "react-hook-form",
+      "audit_declared": "^7.61.1",
+      "resolved_version": "7.61.1",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Performant form state management library."
+    },
+    {
+      "package": "react-i18next",
+      "audit_declared": "^17.0.6",
+      "resolved_version": "17.0.7",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "React hooks and bindings for i18next."
+    },
+    {
+      "package": "react-resizable-panels",
+      "audit_declared": "^2.1.9",
+      "resolved_version": "2.1.9",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Accessible resize handle panel group layout components."
+    },
+    {
+      "package": "react-router-dom",
+      "audit_declared": "^6.30.1",
+      "resolved_version": "6.30.4",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Declarative client-side routing library with v7 future flag migration paths."
+    },
+    {
+      "package": "recharts",
+      "audit_declared": "^2.15.4",
+      "resolved_version": "2.15.4",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Declarative SVG charting library for Management Console metrics."
+    },
+    {
+      "package": "shiki",
+      "audit_declared": "^4.1.0",
+      "resolved_version": "4.2.0",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "TextMate grammar code block syntax highlighter."
+    },
+    {
+      "package": "sonner",
+      "audit_declared": "^1.7.4",
+      "resolved_version": "1.7.4",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Opinionated toast notification component for React."
+    },
+    {
+      "package": "streamdown",
+      "audit_declared": "^2.5.0",
+      "resolved_version": "2.5.0",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Streaming markdown renderer optimized for LLM assistant SSE responses."
+    },
+    {
+      "package": "tailwind-merge",
+      "audit_declared": "^2.6.0",
+      "resolved_version": "2.6.0",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Utility function to safely merge Tailwind CSS classes without conflict."
+    },
+    {
+      "package": "use-stick-to-bottom",
+      "audit_declared": "^1.1.4",
+      "resolved_version": "1.1.6",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Auto-scroll hook for real-time streaming chat interfaces."
+    },
+    {
+      "package": "vaul",
+      "audit_declared": "^0.9.9",
+      "resolved_version": "0.9.9",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Accessible drawer component for mobile and responsive side sheets."
+    },
+    {
+      "package": "zod",
+      "audit_declared": "^3.25.76",
+      "resolved_version": "3.25.76",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "TypeScript-first schema validation with static type inference."
+    },
+    {
+      "package": "zustand",
+      "audit_declared": "^5.0.12",
+      "resolved_version": "5.0.13",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Lightweight centralized state management store."
+    }
+  ],
+  "cumulative_94_row_disposition_summary": {
+    "total_audit_rows": 94,
+    "distribution": {
+      "FE-DEP-CLOSURE-001": {
+        "count": 3,
+        "packages": [
+          "@ai-sdk/react",
+          "lovable-tagger",
+          "react-markdown"
+        ],
+        "status": "closed-in-pr-768"
+      },
+      "FE-TOOLCHAIN-BASELINE-001": {
+        "count": 23,
+        "packages": [
+          "@axe-core/playwright",
+          "@eslint/js",
+          "@playwright/test",
+          "@tailwindcss/typography",
+          "@testing-library/jest-dom",
+          "@testing-library/react",
+          "@types/node",
+          "@vitejs/plugin-react-swc",
+          "autoprefixer",
+          "axe-core",
+          "eslint",
+          "eslint-plugin-react-hooks",
+          "eslint-plugin-react-refresh",
+          "globals",
+          "jsdom",
+          "postcss",
+          "tailwindcss",
+          "tailwindcss-animate",
+          "tsx",
+          "typescript",
+          "typescript-eslint",
+          "vite",
+          "vitest"
+        ],
+        "status": "closed-in-pr-772"
+      },
+      "FE-UI-DEPS-BASELINE-001": {
+        "count": 68,
+        "packages": [
+          "@hookform/resolvers",
+          "@radix-ui/react-accordion",
+          "@radix-ui/react-alert-dialog",
+          "@radix-ui/react-aspect-ratio",
+          "@radix-ui/react-avatar",
+          "@radix-ui/react-checkbox",
+          "@radix-ui/react-collapsible",
+          "@radix-ui/react-context-menu",
+          "@radix-ui/react-dialog",
+          "@radix-ui/react-dropdown-menu",
+          "@radix-ui/react-hover-card",
+          "@radix-ui/react-label",
+          "@radix-ui/react-menubar",
+          "@radix-ui/react-navigation-menu",
+          "@radix-ui/react-popover",
+          "@radix-ui/react-progress",
+          "@radix-ui/react-radio-group",
+          "@radix-ui/react-scroll-area",
+          "@radix-ui/react-select",
+          "@radix-ui/react-separator",
+          "@radix-ui/react-slider",
+          "@radix-ui/react-slot",
+          "@radix-ui/react-switch",
+          "@radix-ui/react-tabs",
+          "@radix-ui/react-toast",
+          "@radix-ui/react-toggle",
+          "@radix-ui/react-toggle-group",
+          "@radix-ui/react-tooltip",
+          "@streamdown/cjk",
+          "@streamdown/code",
+          "@streamdown/math",
+          "@streamdown/mermaid",
+          "@tanstack/react-query",
+          "@types/react",
+          "@types/react-dom",
+          "@types/react-grid-layout",
+          "ai",
+          "class-variance-authority",
+          "clsx",
+          "cmdk",
+          "date-fns",
+          "echarts",
+          "echarts-for-react",
+          "embla-carousel-react",
+          "firebase",
+          "i18next",
+          "input-otp",
+          "lucide-react",
+          "motion",
+          "nanoid",
+          "next-themes",
+          "react",
+          "react-day-picker",
+          "react-dom",
+          "react-grid-layout",
+          "react-hook-form",
+          "react-i18next",
+          "react-resizable-panels",
+          "react-router-dom",
+          "recharts",
+          "shiki",
+          "sonner",
+          "streamdown",
+          "tailwind-merge",
+          "use-stick-to-bottom",
+          "vaul",
+          "zod",
+          "zustand"
+        ],
+        "status": "closed-in-current-task"
+      }
+    },
+    "verification_complete": true
+  },
+  "validation": {
+    "npm_ci": {
+      "command": "HOME=/tmp npm ci",
+      "exit_code": 0,
+      "summary": "Clean reproducible installation of 948 packages in 26 seconds matching package-lock.json exactly."
+    },
+    "typecheck_full": {
+      "command": "HOME=/tmp npx tsc -b",
+      "exit_code": 0,
+      "summary": "TypeScript type checking completed with 0 errors across tsconfig.app.json, tsconfig.agora.json, and tsconfig.node.json."
+    },
+    "lint": {
+      "command": "HOME=/tmp npm run lint",
+      "exit_code": 0,
+      "summary": "ESLint flat config verified with 0 errors (70 legacy warnings, 0 errors)."
+    },
+    "vitest_full_suite": {
+      "command": "HOME=/tmp PLAYWRIGHT_BROWSERS_PATH=/home/chloe_ong_dev_cctech_support_com/.cache/ms-playwright npm test",
+      "exit_code": 0,
+      "summary": "Full Vitest test suite passed with 209 test files passed (209/209) and 2224 tests passed (2224/2224), 2 skipped."
+    },
+    "production_build": {
+      "command": "HOME=/tmp npm run build",
+      "exit_code": 0,
+      "summary": "Vite production build completed successfully in 41.5 seconds, generating clean dist/ output with code splitting and zero mock bundle leakage."
+    },
+    "contract_drift_tests": {
+      "command": "HOME=/tmp npx vitest run src/lib/bff-v1/__tests__/contract-drift.test.ts",
+      "exit_code": 0,
+      "summary": "All 7 contract drift tests passed verifying Agora generated types, ActionCommandStatus, ErrorCode list, and OpenAPI path consistency."
+    },
+    "route_probes": {
+      "command": "HOME=/tmp npm run probe:bff:routes",
+      "exit_code": 0,
+      "summary": "Verified 45 canonical BFF routes with 0 404 responses and 0 transport errors against https://api.dev.mvl-cap.tw."
+    },
+    "browser_release_policy": {
+      "command": "HOME=/tmp PLAYWRIGHT_BROWSERS_PATH=/home/chloe_ong_dev_cctech_support_com/.cache/ms-playwright npx vitest run src/test/hosted-browser-release-policy.test.ts",
+      "exit_code": 0,
+      "summary": "All 69 browser release policy tests passed verifying CORS matrix, security headers, tokenless safe writes, and strict release gates."
+    },
+    "e2e_agora_contract_route_drift": {
+      "command": "HOME=/tmp PLAYWRIGHT_BROWSERS_PATH=/home/chloe_ong_dev_cctech_support_com/.cache/ms-playwright npx playwright test e2e/agora-contract-route-drift.spec.ts",
+      "exit_code": 0,
+      "summary": "Playwright end-to-end contract route drift suite passed 6/6 tests using embedded Vite preview server and headless Chromium."
+    },
+    "core_ui_component_integrations": [
+      {
+        "suite": "src/agora/widgets/ChartSpecRenderer.test.tsx",
+        "tests_passed": 12,
+        "description": "ChartSpecRenderer verified for Recharts and ECharts chart specifications, widget interactions, grammar validation, and sanitization."
+      },
+      {
+        "suite": "src/lib/auth/AuthProvider.test.tsx",
+        "tests_passed": 16,
+        "description": "Firebase Auth integration, session verification, devLogin, logout query cache clearing, and token refresh."
+      },
+      {
+        "suite": "src/management/pages/v5/useV5Live.test.tsx",
+        "tests_passed": 6,
+        "description": "TanStack Query v5 scoped cache integration, staleTime handling, event-triggered refetch, and query key scoping."
+      },
+      {
+        "suite": "src/agora/pages/strategy-workshop/StrategyWorkshopPage.test.tsx",
+        "tests_passed": 52,
+        "description": "Streamdown markdown streaming, Shiki syntax highlighting, and dynamic Agora workshop interaction."
+      },
+      {
+        "suite": "src/management/pages/oversight/PersonaFleetPage.test.tsx",
+        "tests_passed": 22,
+        "description": "Radix UI primitives (radio group, tables, buttons), accessibility roles, and data scope filtering."
+      },
+      {
+        "suite": "src/platform/components/TopBar.test.tsx",
+        "tests_passed": 13,
+        "description": "Radix UI dropdown menu, user menu sign out, live status badges, and accessibility focus."
+      }
+    ]
+  }
+}
