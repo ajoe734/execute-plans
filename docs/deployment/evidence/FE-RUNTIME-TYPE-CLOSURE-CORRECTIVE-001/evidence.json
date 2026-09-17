@@ -7,7 +7,7 @@
   "merge_target": "dev",
   "branch": "task/FE-RUNTIME-TYPE-CLOSURE-CORRECTIVE-001",
   "status": "ready-for-independent-exact-head-review",
-  "recorded_at": "2026-09-17T00:43:00Z",
+  "recorded_at": "2026-09-17T01:22:00Z",
   "scope": {
     "kind": "source-only",
     "summary": "Closed residual F10/F11 mounted-frontend failures and established the mandatory full-application TypeScript gate (Q01) after the FE-STRICTLIVE-001 and FE-EXACT-PAIR-PROTOCOL-001 predecessors. F10: src/management/pages/v5/V5Pages.tsx was missing the Badge import used in 3 places on the mounted V5 loops page. F11: src/management/components/agent/AgentPanelBody.tsx's Codex reauth flow referenced an undefined setControlTargetMode (dead vestigial call with no backing state) and an undefined agentPanel (the real singleton exists in useAgentPanel.ts but was never imported) in its focusPanel(\"agentPanel\") branch; both now use real in-scope state and the real panel API, preserving the intended reauth/focus semantics rather than deleting the branches. Q01: rebaselined the frozen 397-diagnostic audit against current dev after predecessor merges; found 434 diagnostics across ~70 files (audit drift is explicitly anticipated by this task's own acceptance criteria). Fixed all of them: the largest single root cause (~150 diagnostics) was the generated WorkshopCard DTO typing `payload` as `Record<string, never>` and omitting several real server-emitted card_type values already handled by WorkshopCardRenderer -- fixed by giving workshops.ts (the consumer/adapter boundary) its own WorkshopCard type instead of aliasing the incomplete generated shape, per this task's explicit instruction not to hand-edit generated types.ts. A second systemic root cause: tsconfig.app.json has strict:false (strictNullChecks off), which breaks TypeScript's discriminated-union narrowing for boolean-literal discriminants on `if (!result.ok)` / `if (result.ok) {} else {}` patterns used throughout the BFF result-union call sites -- fixed at each call site by switching to explicit `=== false` / `=== true` (or string-literal `kind`) comparisons, which narrow correctly regardless of strictNullChecks; tsconfig itself was left untouched. Remaining diagnostics were genuine, independent type-contract misalignments (renamed/missing DTO fields, stale test fixtures using pre-refactor field names, wrong literal unions, unnarrowed `unknown` values) fixed at the real consumer/adapter boundary in each audited file. Four additional files (src/lib/bff-v1/evolution.ts, src/management/pages/ResearchDetail.tsx, src/management/pages/ResearchDetail.test.tsx, src/test/hosted-browser-release-policy.test.ts) were formally added to the task artifact contract by Human/Ops at 2026-09-17T00:21:08Z; all 13 residual diagnostics across these files were cleanly closed without touching central/generated types. Added package.json `typecheck:app` (full app) / `typecheck:agora` (existing focused Agora gate, kept as the acceptance criteria instruct) and repointed `typecheck` at the full-app gate; branch-ci.yml's required Typecheck step now runs both. Added src/test/full-app-typecheck-contract.test.ts to lock this gate in place against regression.",
@@ -52,7 +52,7 @@
       {
         "finding": "F11",
         "file": "src/management/components/agent/AgentPanelBody.tsx",
-        "fix": "Wired real controlTargetMode state into activateAssistantControlMode's mode param (was a dead setControlTargetMode call with no backing state); imported the real `agentPanel` singleton for focusPanel(\"agentPanel\") (was an undefined reference)."
+        "fix": "Wired real controlTargetMode state into activateAssistantControlMode's mode param (was a dead setControlTargetMode call with no backing state); imported the real `agentPanel` singleton for focusPanel(\"agentPanel\") (was an undefined reference). Added 5 mounted component/action tests in AgentPanelBody.test.tsx covering focusPanel(\"agentPanel\"), unauthenticated reauth triggering control mode activation, successful Codex reauth session notice and verification link rendering, expired/forbidden session (HTTP 403) failure with control dialog re-opening, and direct toolbar control mode activation/deactivation."
       }
     ],
     "capital_authority": "none",
@@ -244,6 +244,11 @@
         "description": "F11: added missing controlTargetMode state (wired into activateAssistantControlMode's mode param, replacing a hardcoded literal) to resolve undefined setControlTargetMode calls in the Codex reauth flow; imported the existing `agentPanel` singleton (useAgentPanel.ts) to resolve the undefined agentPanel.open() call in focusPanel(\"agentPanel\"); fixed AssistantProviderReauthResult boolean-discriminant narrowing (see strict:false narrowing note below) by using ok === false / ok === true comparisons instead of !result.ok / result.ok."
       },
       {
+        "file": "src/management/components/agent/AgentPanelBody.test.tsx",
+        "sha256": "26bae32673f17d7d90ff11755a3e1407ae55d64f9d3b42ee9b2f64cbf137782d",
+        "description": "F11 test coverage: added mounted component and action tests covering focusPanel(\"agentPanel\") using real agentPanel singleton API, Codex provider reauth requiring control mode activation, successful Codex reauth session notice and verification link rendering, expired/forbidden session (HTTP 403) failure handling and control dialog re-opening, and toolbar control mode activation and deactivation."
+      },
+      {
         "file": "src/management/components/detail/AllocationSimulationPanel.tsx",
         "sha256": "9e66e09d9d68b8229e11a4c24cc0e01f32ce51362bc2e61363e0f9e7c77a4a49",
         "description": "Aligned to the real generated/consumer type contract (renamed/added fields, corrected literal unions, or narrowed `unknown` values) to close a Q01 full-app typecheck diagnostic in this audited file. No behavior, test coverage, or generated DTO files were weakened to reach zero diagnostics."
@@ -388,7 +393,12 @@
       "vitest_full_suite": {
         "command": "npm run test",
         "exit_code": 0,
-        "result": "2203 passed, 0 failed (208 test files)"
+        "result": "2208 passed, 0 failed (208 test files)"
+      },
+      "vitest_agent_panel_body": {
+        "command": "npx vitest run src/management/components/agent/AgentPanelBody.test.tsx",
+        "exit_code": 0,
+        "result": "22 passed (22 tests)"
       },
       "vitest_full_app_typecheck_contract": {
         "command": "npx vitest run src/test/full-app-typecheck-contract.test.ts",
