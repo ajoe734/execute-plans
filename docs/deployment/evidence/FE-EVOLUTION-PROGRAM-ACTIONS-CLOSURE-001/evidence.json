@@ -1,0 +1,184 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "FE-EVOLUTION-PROGRAM-ACTIONS-CLOSURE-001",
+  "owner": "Antigravity2",
+  "reviewer": "Claude",
+  "target_repo": "ajoe734/execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-EVOLUTION-PROGRAM-ACTIONS-CLOSURE-001",
+  "status": "ready-for-independent-exact-head-review",
+  "recorded_at": "2026-09-16T11:15:00Z",
+  "scope": {
+    "kind": "source-only",
+    "summary": "Implement real frontend lifecycle actions for Evolution matching backend contracts from EVO-PROGRAM-ACTIONS-CLOSURE-CORRECTIVE-001 (D1, D2, D3). Evolution program state (draft, under_review, active, paused, stopped, completed, retired) is distinct from run state. Pause, stop, and freeze are strictly distinct actions: pause_program drains and can resume; stop stops program and cancels nonterminal runs without resume; freeze_generation freezes generation and blocks promotions and mutation approvals until unfreeze. Resume button wired to resumeEvolutionProgram. Constraints durably read from program.constraints. Fixed-empty lists replaced with real backend program data. Synthetic IDs removed. Promotion action names aligned with backend (promote_candidate_paper, promote_candidate_live) with required candidate_id. Capital authority remains none with zero live trading side effects.",
+    "dependencies": {
+      "BFF-UPSTREAM-V2-PLAN-DELIVERY-001": {
+        "status": "done",
+        "satisfied": true
+      },
+      "EVO-PROGRAM-ACTIONS-CLOSURE-CORRECTIVE-001": {
+        "status": "done",
+        "satisfied": true
+      }
+    },
+    "ppl_alloc_007_provenance_hold": {
+      "verified": true,
+      "status": "blocked",
+      "waiting_for": "Human/Ops",
+      "active_worker": null,
+      "active_lease": null,
+      "note": "Verified PPL-ALLOC-007 has no active worker or lease and its provenance hold is respected."
+    },
+    "lifecycle_actions": [
+      {
+        "action": "submit_evolution_review",
+        "from_state": "draft",
+        "to_state": "under_review",
+        "description": "Submit draft evolution program for review."
+      },
+      {
+        "action": "approve_program",
+        "from_state": "under_review",
+        "to_state": "active",
+        "description": "Approve evolution program for execution."
+      },
+      {
+        "action": "pause_program",
+        "from_state": "active",
+        "to_state": "paused",
+        "description": "Pause program execution; runs drain gracefully; can be resumed."
+      },
+      {
+        "action": "resume_program",
+        "from_state": "paused",
+        "to_state": "active",
+        "description": "Resume paused program; backend strictly refuses resume from stopped state with 409."
+      },
+      {
+        "action": "stop",
+        "from_state": ["active", "paused"],
+        "to_state": "stopped",
+        "description": "Stop program permanently; cancels nonterminal runs; requires high-risk confirmation token; cannot be resumed."
+      },
+      {
+        "action": "complete_program",
+        "from_state": "active",
+        "to_state": "completed",
+        "description": "Mark evolution program completed."
+      },
+      {
+        "action": "retire_program",
+        "from_state": ["completed", "stopped"],
+        "to_state": "retired",
+        "description": "Retire completed or stopped evolution program."
+      },
+      {
+        "action": "freeze_generation",
+        "description": "Sets is_frozen=true; blocks candidate promotions and mutation approvals."
+      },
+      {
+        "action": "unfreeze_generation",
+        "description": "Sets is_frozen=false; unblocks promotions and mutation approvals."
+      },
+      {
+        "action": "promote_candidate_paper / promote_candidate_live",
+        "description": "Promotes candidate with candidate_id parameter; blocked when generation is frozen."
+      }
+    ],
+    "cleanups": [
+      "Removed synthetic run ID (${programId}:run) and candidate ID (${runId}:candidate) fabrication.",
+      "Replaced fixed empty stubs for promotions, fitness formulas, mutation rules, and constraints with real program data reads.",
+      "Fixed Resume button by connecting to real resumeEvolutionProgram write handler.",
+      "Replaced browser-local mock constraint persistence with durable backend reads from program.constraints.",
+      "Aligned candidate promotion command names to promote_candidate_paper and promote_candidate_live with candidate_id payload.",
+      "Fixed create_constraint wiring: buildRunActionCommand now nests domain fields inside params.payload and aliases value <-> expression, matching evolution_adapter and program_service backend requirements.",
+      "Added regression test coverage for all evolution write functions, buildRunActionCommand payload wiring, and strict-live write gating in stateMachines.test.ts within admitted task artifact contract."
+    ],
+    "capital_authority": "none",
+    "live_capital_side_effects": false,
+    "modified_files": [
+      {
+        "file": "src/lib/bff-v1/dto.ts",
+        "sha256": "cbd37bde3c120c8a7b17708fdbdc48d50f1d1713f579d1957da29b3bba6a3a44",
+        "description": "Added stopped to EvolutionProgramStatus; enriched EvolutionProgram with revision, freeze_records, constraints, fitness_formulas, mutation_rules, promotions, action_receipts, and is_frozen; added runId and artifactId to PromotionRecord."
+      },
+      {
+        "file": "src/lib/bff-v1/evolution.ts",
+        "sha256": "aeeb61555c19e8bf570125eab83efa85898fd4d1f58fab38005924ba3a9c304a",
+        "description": "Removed synthetic ID generation; read promotions, fitness formulas, mutation rules, and constraints from real backend program data with safe error handling."
+      },
+      {
+        "file": "src/lib/bff-v1/writes.ts",
+        "sha256": "8d04dfcc5815b981b3f55c2180c04ab4a29d8a273d447883fcc52bf61a5ed470",
+        "description": "Added resumeEvolutionProgram, pauseEvolutionProgram, stopEvolutionProgram, unfreezeGeneration, createEvolutionProgramConstraint, and generic resume/createEvolutionConstraint write methods; updated promoteCandidate action names to promote_candidate_paper / promote_candidate_live with candidate_id; updated buildRunActionCommand to construct nested payload key and alias value <-> expression for backend adapter forwarding."
+      },
+      {
+        "file": "src/lib/stateMachines/coverage.test.ts",
+        "sha256": "95e1a00b72f13f18945845eb265eb0c65840273e126ea5daf05749ae176b680d",
+        "description": "Added comprehensive test coverage for evolutionMachine covering full lifecycle including stopped state and terminal transitions."
+      },
+      {
+        "file": "src/lib/stateMachines/index.ts",
+        "sha256": "30d31d736e521a2f0ef34913ac98e9735ac6216dee77917b557b6ba3e3989236",
+        "description": "Updated evolutionMachine to include stopped state, stop transition with high-risk confirm, retire from stopped, and enforce resume only from paused."
+      },
+      {
+        "file": "src/lib/stateMachines/stateMachines.test.ts",
+        "sha256": "7271e3e41ced1c97b59135f60d02a3db443b3fd384d9e7829e9794e9d2eba164",
+        "description": "Added state machine unit tests for evolutionMachine verifying pause/resume, stop from active and paused, stopped terminal bounds, and retire; added comprehensive regression tests for evolution write actions (resume, pause, stop, freeze, unfreeze, promote paper/live, constraint creation), buildRunActionCommand nested payload wiring with value/expression aliasing, and strict-live write gating refusal. Placed in stateMachines.test.ts in compliance with task-normalized artifact contract boundaries."
+      },
+      {
+        "file": "src/lib/v3/status.ts",
+        "sha256": "5de82803003a54ac6a6edef7896c7fe02e14129d7e10640c1bb5bbca12b4583f",
+        "description": "Added stopped to EVOLUTION_PROGRAM_STATUSES."
+      },
+      {
+        "file": "src/management/components/detail/EvolutionFreezePanel.tsx",
+        "sha256": "633eb445d613d82d950ea6fca03e05e6092b22cb5edb58624c96f6e2f97a4c7b",
+        "description": "Bound isFrozen to program.is_frozen, added unfreeze_generation button/action, render freeze_records history, and support onRefresh."
+      },
+      {
+        "file": "src/management/components/detail/FitnessFormulaPanel.tsx",
+        "sha256": "a587f4e6b2cbc1ca7cbf055548c6ad13bf56b281453272541b37e78171593030",
+        "description": "Import getMockDataBadgeModel and support optional programId for program-specific formula listing."
+      },
+      {
+        "file": "src/management/components/detail/MutationRuleManager.tsx",
+        "sha256": "6e0fe2e23aab12d50646d28fd49c96c3f34dc48ea5dab263e4e26e710b5764dd",
+        "description": "Support optional programId for program-specific mutation rule listing."
+      },
+      {
+        "file": "src/management/components/detail/PromotionPanel.tsx",
+        "sha256": "8adb39d3f62e1f38622eb4447eb63b8eb77331d2d1e6b25916e94ea3f63f982e",
+        "description": "Removed fake pr_local_ append in favor of durable backend reread; disable promotion buttons and show notice when generation is frozen."
+      },
+      {
+        "file": "src/management/pages/EvolutionDetail.tsx",
+        "sha256": "82250138f06c1b0588410928dd73fc20f10df0f71e1395dfc44c3b4634a5c211",
+        "description": "Added stopped state mapping; added lifecycle action handlers for resume, pause, submit review, approve, complete, stop, and retire; read constraints durably from program data; wired programId and onRefresh to tabs; wired create_constraint action with explicit value, expression, and nested payload fields."
+      }
+    ],
+    "verification": {
+      "typecheck": {
+        "command": "npm run typecheck",
+        "exit_code": 0,
+        "result": "Clean (0 errors)"
+      },
+      "vitest_state_machines": {
+        "command": "./node_modules/.bin/vitest run src/lib/stateMachines/",
+        "exit_code": 0,
+        "result": "53 passed (53 tests across stateMachines.test.ts [28 tests] and coverage.test.ts [25 tests])"
+      },
+      "vitest_seed_taxonomy": {
+        "command": "./node_modules/.bin/vitest run src/lib/bff-v1/__tests__/seedTaxonomy.test.ts",
+        "exit_code": 0,
+        "result": "7 passed (7 tests)"
+      },
+      "build": {
+        "command": "VITE_GCP_IDENTITY_API_KEY=AIza00000000000000000000000000000000000 VITE_GCP_IDENTITY_PROJECT_ID=pantheon-dev VITE_GCP_IDENTITY_AUTH_DOMAIN=pantheon-dev.firebaseapp.com VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build",
+        "exit_code": 0,
+        "result": "Production bundle built cleanly in 90s (exit 0)"
+      }
+    }
+  }
+}

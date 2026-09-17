@@ -1,0 +1,184 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "FE-RESEARCH-JOBS-ACTIONS-CLOSURE-001",
+  "owner": "Antigravity",
+  "reviewer": "Claude",
+  "target_repo": "ajoe734/execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-RESEARCH-JOBS-ACTIONS-CLOSURE-001",
+  "status": "ready-for-independent-exact-head-review",
+  "recorded_at": "2026-09-16T12:32:00Z",
+  "scope": {
+    "kind": "source-only",
+    "summary": "Implement frontend execution closure for Research and Jobs domains matching backend contracts from RESEARCH-JOBS-ACTIONS-CLOSURE-CORRECTIVE-001. Cancel places cancellation fence and rejects late completions; retry requires eligible terminal state and establishes linked attempt lineage (attempt_number, parent_id/parent_experiment_id) while preserving evidence; archive enforces visibility and retention policy without physical delete; promote fails closed with 409 citing GOV-PROMOTE-001 without capital or live activation. Non-orchestrator job sources fail closed (openclaw 400 read-only, worker 503 GW-STOP-FENCE-001, trainer 503 TS-CANCEL-001, ingest 503 SI-CANCEL-001, policy 503 PL-CANCEL-001). Cleaned up fake completed execution, browser-local success mutations, and unverified mock shortcuts across ResearchDetail, CommandCenter, StrategyDetail, and SkillSandboxStudio.",
+    "dependencies": {
+      "BFF-UPSTREAM-V2-PLAN-DELIVERY-001": {
+        "status": "done",
+        "satisfied": true
+      },
+      "RESEARCH-JOBS-ACTIONS-CLOSURE-CORRECTIVE-001": {
+        "status": "done",
+        "satisfied": true
+      }
+    },
+    "ppl_alloc_007_provenance_hold": {
+      "verified": true,
+      "status": "blocked",
+      "waiting_for": "Human/Ops",
+      "active_worker": null,
+      "active_lease": null,
+      "note": "Verified PPL-ALLOC-007 has no active worker or lease and its provenance hold is respected."
+    },
+    "lifecycle_actions": [
+      {
+        "action": "cancel",
+        "domain": "Job",
+        "description": "Cancel orchestrator run; returns canceled status and places cancellation fence timestamp."
+      },
+      {
+        "action": "retry",
+        "domain": "Job",
+        "description": "Retry eligible terminal run; dispatches new attempt incrementing attempt_number and linking parent_id."
+      },
+      {
+        "action": "cancel",
+        "domain": "Experiment",
+        "description": "Cancel running experiment; returns canceled status with cancellation_fence."
+      },
+      {
+        "action": "retry",
+        "domain": "Experiment",
+        "description": "Retry terminal experiment; creates linked attempt lineage with parent_experiment_id and incremented attempt_number."
+      },
+      {
+        "action": "archive",
+        "domain": "Experiment",
+        "description": "Archive concluded/terminal experiment; sets is_archived=true and archived_at retention timestamp without physical delete."
+      },
+      {
+        "action": "invalidate",
+        "domain": "Experiment",
+        "description": "Invalidate experiment with documented invalidation reason."
+      },
+      {
+        "action": "promote",
+        "domain": "Experiment",
+        "description": "Fail-closed with 409 citing GOV-PROMOTE-001; requires signed operator review package."
+      }
+    ],
+    "cleanups": [
+      "Removed fake simulation completed execution in SkillSandboxStudio under strict-live fallback, calling refuseStrictLiveWrite.",
+      "Added job cancellation capability in SkillSandboxStudio when a job is active/running; tracked mock simulation timers and live polling intervals in component refs, cleared all timers on cancel and unmount, and guarded late timer/poll callbacks to prevent fake completion or status overwrite.",
+      "Fixed CommandCenter runningJobs KPI filter to include active job states (running, dispatched, queued, active).",
+      "Updated CommandCenter jobs table to handle job_id, job_type, and source projections.",
+      "Updated StrategyDetail experiments table to handle experiment_id and experiment_name fallbacks and real status badges.",
+      "Enriched ResearchDetail with dynamic allowedActions, cancellation fence rendering, retry lineage navigation, and fail-closed promotion handling."
+    ],
+    "capital_authority": "none",
+    "live_capital_side_effects": false,
+    "modified_files": [
+      {
+        "file": "src/lib/bff-v1/__tests__/writes.test.ts",
+        "sha256": "97abf0e3588f9887ee587ef785f617195aa661d03e327644c8c5e38a5c14b09c",
+        "description": "Added test suite verifying Job and Experiment action execution contracts, cancellation fences, attempt lineage, fail-closed boundaries (GW-STOP-FENCE-001, TS-CANCEL-001, SI-CANCEL-001, PL-CANCEL-001, openclaw read-only 400, GOV-PROMOTE-001 409), buildRunActionCommand target mapping, and strict-live write gating refusal."
+      },
+      {
+        "file": "src/lib/bff-v1/dto.ts",
+        "sha256": "0ceb0c40b436ddf51d4cab0202de614c72a314f141631d12e7abccf2a17177ce",
+        "description": "Enriched ResearchExperiment and Job types with attempt lineage (parent_id, root_id, attempt_number), cancellation fences, retention metadata (archived, invalidatedReason), and dynamic allowedActions affordance flags; added JobActionReceiptData and ExperimentActionReceiptData."
+      },
+      {
+        "file": "src/lib/bff-v1/lists.ts",
+        "sha256": "3d866d38f13a20b99a7cac638d9b14b6a2eb10d6b6c77c48984c0c55690e2741",
+        "description": "Normalized job list elements via normalizeJobFields for consistent frontend consumption."
+      },
+      {
+        "file": "src/lib/bff-v1/operations.ts",
+        "sha256": "4f795cf6b64687cada996c085b6b7309420954b291bcdb86808708709a87e517",
+        "description": "Added normalizeJobFields, normalizeJobList, getJob(id), and wired cancel/retry methods to operations.jobs."
+      },
+      {
+        "file": "src/lib/bff-v1/paths.ts",
+        "sha256": "04f162b3cb5b8121cd1304e7c55ad062b94ccca1d55c50f185ee597f83ad9518",
+        "description": "Added paths for job logs, job actions, research experiment detail, and research experiment actions."
+      },
+      {
+        "file": "src/lib/bff-v1/research.ts",
+        "sha256": "20764b98191dc8ff33a24ece0f2e1163040195a19081a3b0a77ed6613fe7e650",
+        "description": "Exported cancel, retry, archive, invalidate, and promote action methods on bffV1.research."
+      },
+      {
+        "file": "src/lib/bff-v1/writes.ts",
+        "sha256": "4b0f6c9389348ad0b754015706763ddd6de8498b07a19b6172ed37d3a9295d91",
+        "description": "Mapped Job entity kind and buildRunActionCommand params (job_id, experiment_id, action_id); added makeFailClosed helper with explicit status codes (409 on job archive/promote, 400 on openclaw, 503 on worker/trainer/ingest/policy, 409 on experiment promote citing GOV-PROMOTE-001); enriched mock receipts with fences and lineage; exported cancelJob, retryJob, cancelResearchExperiment, retryResearchExperiment, archiveResearchExperiment, invalidateResearchExperiment, promoteResearchExperiment."
+      },
+      {
+        "file": "src/lib/stateMachines/index.ts",
+        "sha256": "21f7eaaa86f5d6778a824d2e8f260bdd9c1093837aad9970f57897c08144c7b0",
+        "description": "Enriched experimentMachine with concluded, canceled, and cancelled states and transitions for cancel, retry, archive, and invalidate; enriched jobMachine with dispatched, succeeded, canceled, cancelled, and timeout states while preserving unique (from, action) deterministic transitions."
+      },
+      {
+        "file": "src/lib/v3/status.ts",
+        "sha256": "f56d958a473ca8ec5b887310acd610569d3671e86aa4d0032b9a0fcb3a69e52d",
+        "description": "Aligned EXPERIMENT_STATUSES and JOB_STATUSES with backend projection statuses."
+      },
+      {
+        "file": "src/management/pages/CommandCenter.tsx",
+        "sha256": "9c7fb4f1b2e7f8fbdb66ffb3da6355ec54a48307ac213ce395958925e2eb3c35",
+        "description": "Updated runningJobs KPI filter to include active job states (running, dispatched, queued, active); supported job_id, job_type, and source fallbacks in quick view table."
+      },
+      {
+        "file": "src/management/pages/ResearchDetail.test.tsx",
+        "sha256": "7b7654f3cbdf13bb7aa792237619273e631838c6b42c4292e382b46276210ac1",
+        "description": "Added tests verifying active experiment cancel with cancellation fence, terminal experiment retry with lineage display, promote rejection handling without fake local success, and SkillSandboxStudio cancellation timer fences preventing late mock and live polling overwrites."
+      },
+      {
+        "file": "src/management/pages/ResearchDetail.tsx",
+        "sha256": "e68006855755d6126d741ec40b38422f7924bc09a35eccb9f456f9434cbd59f4",
+        "description": "Wired real cancel, retry, archive, invalidate, and promote actions; rendered dynamic allowedActions affordance buttons; rendered Experiment Lineage & Governance State card showing parent/root attempt IDs, cancellation fence, archived status, and invalidation reasons."
+      },
+      {
+        "file": "src/management/pages/StrategyDetail.tsx",
+        "sha256": "9b78f73e794ac670ed04cceacc15f3fc5b6e10caea969b3770cc92dd9a07cdc8",
+        "description": "Supported experiment_id and experiment_name fallbacks and dynamic status badges in StrategyDetail experiments table."
+      },
+      {
+        "file": "src/management/pages/studios/SkillSandboxStudio.tsx",
+        "sha256": "04c0b6fcb9221b89d922a7375a2acbd0e8f5b51b9a7faf2e26c28289c0ac6693",
+        "description": "Enforced refuseStrictLiveWrite under strict-live fallback; added Cancel Job action button when job is active; tracked mock step/completion timers and live pollInterval/pollTimeout in refs; cleared all timers on operator cancel and unmount; guarded late timer/poll callbacks from overwriting cancelled status; added jobStatus badge."
+      }
+    ],
+    "verification": {
+      "typecheck": {
+        "command": "npm run typecheck",
+        "exit_code": 0,
+        "result": "Clean (0 errors)"
+      },
+      "vitest_writes": {
+        "command": "npx vitest run src/lib/bff-v1/__tests__/writes.test.ts",
+        "exit_code": 0,
+        "result": "44 passed (44 tests)"
+      },
+      "vitest_research_detail": {
+        "command": "npx vitest run src/management/pages/ResearchDetail.test.tsx",
+        "exit_code": 0,
+        "result": "6 passed (6 tests)"
+      },
+      "vitest_state_machines": {
+        "command": "npx vitest run src/lib/stateMachines/coverage.test.ts",
+        "exit_code": 0,
+        "result": "25 passed (25 tests)"
+      },
+      "vitest_capabilities": {
+        "command": "npx vitest run src/management/pages/capabilitiesProductionTruth.test.ts",
+        "exit_code": 0,
+        "result": "3 passed (3 tests)"
+      },
+      "build": {
+        "command": "VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build",
+        "exit_code": 0,
+        "result": "Production bundle built cleanly in 47s (exit 0)"
+      }
+    }
+  }
+}

@@ -175,6 +175,7 @@ const KIND_TO_ENTITY_TYPE: Readonly<Record<string, string>> = {
   Skill: "skill",
   Channel: "channel",
   Runtime: "runtime",
+  Job: "job",
 };
 
 const ENTITY_COMMAND_SPECS: Readonly<Record<string, EntityCommandSpec>> = {
@@ -277,7 +278,7 @@ const OPERATIONS_COMMAND_TYPES = new Set([
 
 export function buildRunActionCommand(
   input: RunActionInput,
-  opts: CommandClientOptions,
+  opts: CommandClientOptions = {},
 ): FinalCommandEnvelope {
   const entityType = entityTypeForKind(input.kind);
   const spec = specForEntityType(entityType);
@@ -290,14 +291,20 @@ export function buildRunActionCommand(
   // Extract raw payload / domain parameters
   const rawPayload = (
     typeof input.payload === "object" && input.payload !== null
-      ? input.payload
-      : typeof input.params === "object" && input.params !== null
-      ? input.params
-      : {}
-  ) as Record<string, unknown>;
+      ? (input.payload as Record<string, unknown>)
+      : undefined
+  );
+  const rawParams = (
+    typeof input.params === "object" && input.params !== null
+      ? (input.params as Record<string, unknown>)
+      : undefined
+  );
 
-  // Copy safe domain parameters from payload/input
-  const domainParams: Record<string, unknown> = { ...rawPayload };
+  // Copy safe domain parameters from params/payload/input
+  const domainParams: Record<string, unknown> = {
+    ...(rawParams ?? {}),
+    ...(rawPayload ?? {}),
+  };
 
   // Callers cannot override action, entity/target, actor, token, idempotency with payload
   delete domainParams.command;
@@ -321,25 +328,40 @@ export function buildRunActionCommand(
   delete domainParams.actor;
   delete domainParams.actor_id;
 
+  // Value <-> expression aliasing (e.g. for create_constraint)
+  const constraintValue = domainParams.value ?? domainParams.expression ?? rawPayload?.value ?? rawPayload?.expression;
+  const constraintExpr = domainParams.expression ?? domainParams.value ?? rawPayload?.expression ?? rawPayload?.value;
+  if (constraintValue !== undefined) {
+    domainParams.value = constraintValue;
+  }
+  if (constraintExpr !== undefined) {
+    domainParams.expression = constraintExpr;
+  }
+
   // Preserve bounded duration parameters
   const boundedDurationMinutes = (
     input.bounded_duration_minutes ??
-    rawPayload.bounded_duration_minutes ??
-    rawPayload.duration_minutes
+    rawPayload?.bounded_duration_minutes ??
+    rawPayload?.duration_minutes ??
+    rawParams?.bounded_duration_minutes ??
+    rawParams?.duration_minutes
   ) as number | undefined;
 
   const durationSeconds = (
     input.duration_seconds ??
-    rawPayload.duration_seconds ??
+    rawPayload?.duration_seconds ??
+    rawParams?.duration_seconds ??
     (typeof boundedDurationMinutes === "number" ? boundedDurationMinutes * 60 : undefined)
   ) as number | undefined;
 
   // Preserve memo and reason using actual BE schema
   const reason = (
     input.reason ??
-    rawPayload.reason ??
+    rawPayload?.reason ??
+    rawParams?.reason ??
     input.memo ??
-    rawPayload.memo
+    rawPayload?.memo ??
+    rawParams?.memo
   ) as string | undefined;
 
   const isRuntime =
@@ -348,8 +370,59 @@ export function buildRunActionCommand(
     commandName === "PausePaperRuntime" ||
     commandName === "ResumePaperRuntime";
 
+  const isJob = spec.targetType === "Job" || entityType === "job";
+  const isExperiment =
+    spec.targetType === "Experiment" ||
+    entityType === "research-experiment" ||
+    entityType === "experiment" ||
+    entityType === "research";
+
+  // Build nested payload for backend adapters (e.g. evolution_adapter) that only
+  // forward non-whitelisted domain fields if wrapped inside params.payload (sub_payload).
+  const existingSubPayload =
+    typeof domainParams.payload === "object" && domainParams.payload !== null
+      ? (domainParams.payload as Record<string, unknown>)
+      : rawPayload;
+
+  let nestedPayload: Record<string, unknown> | undefined = undefined;
+  if (existingSubPayload || Object.keys(domainParams).length > 0) {
+    nestedPayload = {
+      ...domainParams,
+      ...(existingSubPayload ?? {}),
+    };
+    delete nestedPayload.payload;
+    delete nestedPayload.command;
+    delete nestedPayload.action;
+    delete nestedPayload.target;
+    delete nestedPayload.confirmToken;
+    delete nestedPayload.confirm_token;
+    delete nestedPayload.approvalId;
+    delete nestedPayload.approval_id;
+    delete nestedPayload.approvalDecisionId;
+    delete nestedPayload.approval_decision_id;
+    delete nestedPayload.twoManSignatureId;
+    delete nestedPayload.two_man_signature_id;
+    delete nestedPayload.secondOperatorId;
+    delete nestedPayload.second_operator_id;
+    delete nestedPayload.idempotencyKey;
+    delete nestedPayload.idempotency_key;
+    delete nestedPayload.action_id;
+    delete nestedPayload.entity_type;
+    delete nestedPayload.entity_id;
+    delete nestedPayload.actor;
+    delete nestedPayload.actor_id;
+
+    if (constraintValue !== undefined) {
+      nestedPayload.value = constraintValue;
+    }
+    if (constraintExpr !== undefined) {
+      nestedPayload.expression = constraintExpr;
+    }
+  }
+
   const params = definedParams({
     ...domainParams,
+    ...(nestedPayload && Object.keys(nestedPayload).length > 0 ? { payload: nestedPayload } : {}),
     memo: reason ?? input.memo,
     reason: reason ?? input.memo,
     ...(boundedDurationMinutes !== undefined ? { bounded_duration_minutes: boundedDurationMinutes } : {}),
@@ -365,6 +438,8 @@ export function buildRunActionCommand(
     entity_type: entityType,
     entity_id: input.id,
     ...(isRuntime ? { runtime_id: input.id } : {}),
+    ...(isJob ? { job_id: input.id } : {}),
+    ...(isExperiment ? { experiment_id: input.id } : {}),
     audit_event: auditEvent,
     frontend_source_route: FINAL_COMMANDS_PATH,
   });
@@ -550,7 +625,174 @@ async function mockRunActionEnvelope(
       correlationId: resolved.correlationId,
     });
   }
+
+  // U10B Research / Job mock truthfulness and boundary enforcement
+  const isJob = input.kind === "Job" || input.kind === "job";
+  const isResearch =
+    input.kind === "Research" ||
+    input.kind === "experiment" ||
+    input.kind === "research-experiment";
+
+  function makeFailClosed(status: number, code: any, message: string): never {
+    throw new BffError(status, {
+      error: {
+        code,
+        i18nKey: `errors.${code}`,
+        message,
+        retryable: status === 503 || status === 429,
+        userActionable: status === 409 || status === 428 || status === 400,
+        correlationId: resolved.correlationId,
+      },
+    });
+  }
+
+  if (isJob) {
+    const normAction = input.action.trim().toLowerCase();
+    if (normAction === "promote") {
+      makeFailClosed(
+        409,
+        "STATE_CONFLICT",
+        "Research orchestrator run promotion requires Governance review with signed operator authorization, target stage binding, and registry readback verification. Direct promotion without Governance gate is rejected (GOV-PROMOTE-001, D-JOBS §1/§3).",
+      );
+    }
+    if (normAction === "archive") {
+      makeFailClosed(
+        409,
+        "STATE_CONFLICT",
+        "Research orchestrator run archive requires an explicit Operator Decision on artifact retention schedules and archival purge authority (D-JOBS §1/§3).",
+      );
+    }
+    if (input.id.includes("openclaw")) {
+      makeFailClosed(
+        400,
+        "VALIDATION_FAILED",
+        "OpenClaw workflow jobs are permanently read-only diagnostics for the product BFF; all write actions (cancel/retry/archive/promote) are excluded by architecture.",
+      );
+    }
+    if (input.id.includes("worker")) {
+      makeFailClosed(
+        503,
+        "FEATURE_DISABLED",
+        "Job worker action requires unresolved prerequisite task GW-STOP-FENCE-001.",
+      );
+    }
+    if (input.id.includes("trainer")) {
+      makeFailClosed(
+        503,
+        "FEATURE_DISABLED",
+        "Job trainer action requires unresolved prerequisite task TS-CANCEL-001.",
+      );
+    }
+    if (input.id.includes("ingest")) {
+      makeFailClosed(
+        503,
+        "FEATURE_DISABLED",
+        "Job ingest action requires unresolved prerequisite task SI-CANCEL-001.",
+      );
+    }
+    if (input.id.includes("policy")) {
+      makeFailClosed(
+        503,
+        "FEATURE_DISABLED",
+        "Job policy action requires unresolved prerequisite task PL-CANCEL-001.",
+      );
+    }
+  }
+
+  if (isResearch) {
+    const normAction = input.action.trim().toLowerCase();
+    if (normAction === "promote" || normAction === "promote_artifact") {
+      makeFailClosed(
+        409,
+        "STATE_CONFLICT",
+        "Experiment promotion requires Governance review tokens and target registry verification (GOV-PROMOTE-001). Direct promotion without Governance gate is rejected.",
+      );
+    }
+    if (normAction === "attached_to_review") {
+      makeFailClosed(
+        422,
+        "VALIDATION_FAILED",
+        "attached_to_review requires review package binding and is not directly executable as a state transition.",
+      );
+    }
+  }
+
   const actionId = `au_${resolved.idempotencyKey}`;
+  const now = new Date().toISOString();
+
+  let actionStatus = "completed";
+  let extraData: Record<string, unknown> = {};
+
+  if (isJob) {
+    const normAction = input.action.trim().toLowerCase();
+    if (normAction === "cancel") {
+      actionStatus = "canceled";
+      extraData = {
+        status: "canceled",
+        cancellation_fence: now,
+        cancellationFence: now,
+        cancellationFencePlaced: true,
+        fencePlaced: true,
+        reason: (input.params?.reason as string) || input.reason || input.memo,
+      };
+    } else if (normAction === "retry") {
+      actionStatus = "queued";
+      extraData = {
+        status: "queued",
+        previous_job_id: input.id,
+        new_job_id: `${input.id}-retry-2`,
+        job_id: `${input.id}-retry-2`,
+        attempt_number: 2,
+        parent_id: input.id,
+        parent_run_id: input.id,
+      };
+    }
+  } else if (isResearch) {
+    const normAction = input.action.trim().toLowerCase();
+    if (normAction === "cancel") {
+      actionStatus = "canceled";
+      extraData = {
+        status: "canceled",
+        cancellation_fence: now,
+        cancellationFence: now,
+        cancellationFencePlaced: true,
+        fencePlaced: true,
+        reason: (input.params?.reason as string) || input.reason || input.memo,
+      };
+    } else if (normAction === "retry") {
+      actionStatus = "queued";
+      extraData = {
+        status: "queued",
+        previous_experiment_id: input.id,
+        new_experiment_id: `${input.id}-retry-2`,
+        experiment_id: `${input.id}-retry-2`,
+        attempt_number: 2,
+        parent_experiment_id: input.id,
+        parent_attempt_id: input.id,
+      };
+    } else if (normAction === "archive") {
+      actionStatus = "archived";
+      extraData = {
+        status: "archived",
+        is_archived: true,
+        isArchived: true,
+        archived: true,
+        archived_at: now,
+        archivedAt: now,
+      };
+    } else if (normAction === "invalidate") {
+      actionStatus = "invalidated";
+      const reason = (input.params?.reason as string) || input.reason || input.memo || "Invalidated";
+      extraData = {
+        status: "invalidated",
+        invalidated: true,
+        invalidated_reason: reason,
+        invalidatedReason: reason,
+        invalidationReason: reason,
+      };
+    }
+  }
+
   return {
     ok: true,
     correlationId: resolved.correlationId,
@@ -558,11 +800,16 @@ async function mockRunActionEnvelope(
     auditEventId: actionId,
     data: {
       actionId,
-      status: "completed",
+      status: actionStatus,
+      receipt: {
+        status: actionStatus,
+        ...extraData,
+      },
+      ...extraData,
     },
     legacy: {
       ok: true,
-      data: { actionId, status: "completed" },
+      data: { actionId, status: actionStatus, ...extraData },
       audit: {
         id: actionId,
         correlationId: resolved.correlationId,
@@ -571,7 +818,7 @@ async function mockRunActionEnvelope(
         entityKind: input.kind,
         entityId: input.id,
         status: "succeeded",
-        timestamp: new Date().toISOString(),
+        timestamp: now,
       },
     },
   };
@@ -1123,8 +1370,53 @@ export async function pause(
 ): Promise<RunActionEnvelope> {
   const correlationId = opts.correlationId ?? newCorrelationId();
   const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+  const action = (kind === "Evolution" || kind === "evolution-program") ? "pause_program" : "pause";
   if (await liveWriteGated()) {
-    return runAction({ kind, id, action: "pause", memo }, { ...opts, correlationId, idempotencyKey });
+    return runAction({ kind, id, action, memo }, { ...opts, correlationId, idempotencyKey });
+  }
+  refuseStrictLiveWrite(correlationId);
+}
+
+export async function resume(
+  kind: string,
+  id: string,
+  memo?: string,
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope> {
+  const correlationId = opts.correlationId ?? newCorrelationId();
+  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+  const action = (kind === "Evolution" || kind === "evolution-program") ? "resume_program" : "resume";
+  if (await liveWriteGated()) {
+    return runAction({ kind, id, action, memo }, { ...opts, correlationId, idempotencyKey });
+  }
+  refuseStrictLiveWrite(correlationId);
+}
+
+export async function resumeEvolutionProgram(
+  programId: string,
+  memo?: string,
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope> {
+  return resume("Evolution", programId, memo, opts);
+}
+
+export async function pauseEvolutionProgram(
+  programId: string,
+  memo?: string,
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope> {
+  return pause("Evolution", programId, memo, opts);
+}
+
+export async function stopEvolutionProgram(
+  programId: string,
+  memo?: string,
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope> {
+  const correlationId = opts.correlationId ?? newCorrelationId();
+  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+  if (await liveWriteGated()) {
+    return runAction({ kind: "Evolution", id: programId, action: "stop", memo }, { ...opts, correlationId, idempotencyKey });
   }
   refuseStrictLiveWrite(correlationId);
 }
@@ -1138,8 +1430,19 @@ export async function promoteCandidate(
 ): Promise<RunActionEnvelope> {
   const correlationId = opts.correlationId ?? newCorrelationId();
   const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+  const action = target === "live" ? "promote_candidate_live" : "promote_candidate_paper";
   if (await liveWriteGated()) {
-    return runAction({ kind: "Evolution", id: programId, action: `promote_${target}`, memo: memo ?? candidateId }, { ...opts, correlationId, idempotencyKey });
+    return runAction(
+      {
+        kind: "Evolution",
+        id: programId,
+        action,
+        memo: memo ?? candidateId,
+        payload: { candidate_id: candidateId, stage: target },
+        params: { candidate_id: candidateId, stage: target },
+      },
+      { ...opts, correlationId, idempotencyKey },
+    );
   }
   refuseStrictLiveWrite(correlationId);
 }
@@ -1153,6 +1456,19 @@ export async function freezeGeneration(
   const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
   if (await liveWriteGated()) {
     return runAction({ kind: "Evolution", id: programId, action: "freeze_generation", memo }, { ...opts, correlationId, idempotencyKey });
+  }
+  refuseStrictLiveWrite(correlationId);
+}
+
+export async function unfreezeGeneration(
+  programId: string,
+  memo?: string,
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope> {
+  const correlationId = opts.correlationId ?? newCorrelationId();
+  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+  if (await liveWriteGated()) {
+    return runAction({ kind: "Evolution", id: programId, action: "unfreeze_generation", memo }, { ...opts, correlationId, idempotencyKey });
   }
   refuseStrictLiveWrite(correlationId);
 }
@@ -1285,15 +1601,65 @@ export async function createTrainingFeedback(
   refuseStrictLiveWrite(correlationId);
 }
 
-export async function createEvolutionConstraint(
-  incidentId: string,
-  content: string,
+export interface EvolutionConstraintInput {
+  name: string;
+  operator: string;
+  value?: string | number;
+  expression?: string | number;
+  scope?: string;
+}
+
+export async function createEvolutionProgramConstraint(
+  programId: string,
+  constraint: EvolutionConstraintInput,
+  memo?: string,
   opts: RunActionOptions = {},
-): Promise<RunActionEnvelope & { constraintId: string }> {
+): Promise<RunActionEnvelope & { constraintId?: string }> {
+  const correlationId = opts.correlationId ?? newCorrelationId();
+  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+  const value = constraint.value ?? constraint.expression ?? constraint.name;
+  const expr = constraint.expression ?? value;
+  const payload = {
+    name: constraint.name,
+    operator: constraint.operator,
+    value,
+    expression: expr,
+    scope: constraint.scope ?? "global",
+  };
+  if (await liveWriteGated()) {
+    const env = await runAction(
+      {
+        kind: "Evolution",
+        id: programId,
+        action: "create_constraint",
+        memo: memo ?? `${constraint.name} ${constraint.operator} ${value}`,
+        params: { ...payload, payload },
+        payload,
+      },
+      { ...opts, correlationId, idempotencyKey },
+    );
+    return { ...env, constraintId: env.auditEventId };
+  }
+  refuseStrictLiveWrite(correlationId);
+}
+
+export async function createEvolutionConstraint(
+  targetId: string,
+  contentOrConstraint: string | EvolutionConstraintInput,
+  optsOrMemo?: RunActionOptions | string,
+  maybeOpts: RunActionOptions = {},
+): Promise<RunActionEnvelope & { constraintId?: string }> {
+  if (typeof contentOrConstraint === "object" && contentOrConstraint !== null) {
+    const memo = typeof optsOrMemo === "string" ? optsOrMemo : undefined;
+    const opts = (typeof optsOrMemo === "object" ? optsOrMemo : maybeOpts) as RunActionOptions;
+    return createEvolutionProgramConstraint(targetId, contentOrConstraint, memo, opts);
+  }
+  const memo = typeof contentOrConstraint === "string" ? contentOrConstraint : "";
+  const opts = (typeof optsOrMemo === "object" ? optsOrMemo : maybeOpts) as RunActionOptions;
   const correlationId = opts.correlationId ?? newCorrelationId();
   const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
   if (await liveWriteGated()) {
-    const env = await runAction({ kind: "Incident", id: incidentId, action: "create_evolution_constraint", memo: content }, { ...opts, correlationId, idempotencyKey });
+    const env = await runAction({ kind: "Incident", id: targetId, action: "create_evolution_constraint", memo }, { ...opts, correlationId, idempotencyKey });
     return { ...env, constraintId: env.auditEventId };
   }
   refuseStrictLiveWrite(correlationId);
@@ -1607,6 +1973,67 @@ export async function createResearchTaskFromNote(
   refuseStrictLiveWrite(correlationId);
 }
 
+export async function cancelJob(
+  jobId: string,
+  opts: RunActionOptions & { reason?: string } = {},
+): Promise<RunActionEnvelope> {
+  const { reason, ...rest } = opts;
+  return runAction(
+    { kind: "Job", id: jobId, action: "cancel", reason, memo: reason, params: { reason } },
+    rest,
+  );
+}
+
+export async function retryJob(
+  jobId: string,
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope> {
+  return runAction({ kind: "Job", id: jobId, action: "retry" }, opts);
+}
+
+export async function cancelResearchExperiment(
+  experimentId: string,
+  opts: RunActionOptions & { reason?: string } = {},
+): Promise<RunActionEnvelope> {
+  const { reason, ...rest } = opts;
+  return runAction(
+    { kind: "Research", id: experimentId, action: "cancel", reason, memo: reason, params: { reason } },
+    rest,
+  );
+}
+
+export async function retryResearchExperiment(
+  experimentId: string,
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope> {
+  return runAction({ kind: "Research", id: experimentId, action: "retry" }, opts);
+}
+
+export async function archiveResearchExperiment(
+  experimentId: string,
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope> {
+  return runAction({ kind: "Research", id: experimentId, action: "archive" }, opts);
+}
+
+export async function invalidateResearchExperiment(
+  experimentId: string,
+  reason: string,
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope> {
+  return runAction(
+    { kind: "Research", id: experimentId, action: "invalidate", reason, memo: reason, params: { reason } },
+    opts,
+  );
+}
+
+export async function promoteResearchExperiment(
+  experimentId: string,
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope> {
+  return runAction({ kind: "Research", id: experimentId, action: "promote" }, opts);
+}
+
 export const bffWrites = {
   runAction,
   tryRunAction,
@@ -1625,8 +2052,13 @@ export const bffWrites = {
   lockParams,
   rollback,
   pause,
+  resume,
+  resumeEvolutionProgram,
+  pauseEvolutionProgram,
+  stopEvolutionProgram,
   promoteCandidate,
   freezeGeneration,
+  unfreezeGeneration,
   submitOverride,
   advanceRebalanceStep,
   rerunRebalanceStep,
@@ -1637,6 +2069,7 @@ export const bffWrites = {
   appendPostmortem,
   createTrainingFeedback,
   createEvolutionConstraint,
+  createEvolutionProgramConstraint,
   promoteLive,
   emergencyKill,
   rotateMcpSecret,
@@ -1659,8 +2092,16 @@ export const bffWrites = {
   tickApprovalSla,
   escalateAlertToIncident,
   createResearchTaskFromNote,
+  cancelJob,
+  retryJob,
+  cancelResearchExperiment,
+  retryResearchExperiment,
+  archiveResearchExperiment,
+  invalidateResearchExperiment,
+  promoteResearchExperiment,
 };
 
 export const writes = bffWrites;
+
 
 

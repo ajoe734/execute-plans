@@ -82,6 +82,8 @@ export const paths = {
   // ---- Jobs / Approvals / Incidents ----
   jobs: () => `${BASE}/jobs`,
   job: (id: string) => `${BASE}/jobs/${enc(id)}`,
+  jobLogs: (id: string) => `${BASE}/jobs/${enc(id)}/logs`,
+  jobActions: (id: string, action: string) => `${BASE}/jobs/${enc(id)}/actions/${enc(action)}`,
   approvals: () => `${BASE}/approvals`,
   approval: (id: string) => `${BASE}/approvals/${enc(id)}`,
   approvalDecide: (id: string) => `${BASE}/approvals/${enc(id)}/decide`,
@@ -113,6 +115,8 @@ export const paths = {
 
   // ---- Research ----
   researchExperiments: () => `${BASE}/research-experiments`,
+  researchExperiment: (id: string) => `${BASE}/research-experiments/${enc(id)}`,
+  researchExperimentActions: (id: string, action: string) => `${BASE}/research-experiments/${enc(id)}/actions/${enc(action)}`,
   strategySpecs: (id: string) => `${BASE}/strategies/${enc(id)}/specs`,
 
   // ---- Command confirmations (v3 §6.2) — submission endpoint ----

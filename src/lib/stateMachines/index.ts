@@ -110,18 +110,21 @@ export const rebalanceMachine: StateMachine<RebalanceState> = {
 };
 
 // ---- 17.6 Evolution Program ----
-export type EvolutionState = "draft" | "active" | "paused" | "under_review" | "completed" | "retired";
+export type EvolutionState = "draft" | "under_review" | "active" | "paused" | "stopped" | "completed" | "retired";
 export const evolutionMachine: StateMachine<EvolutionState> = {
   name: "evolution",
   states: ["draft", "under_review", "active", "completed", "retired"],
-  branchStates: ["paused"],
+  branchStates: ["paused", "stopped"],
   transitions: [
     { from: "draft", to: "under_review", action: "submit_evolution_review", requiresApproval: true, uiPattern: "review_workflow" },
     { from: "under_review", to: "active", action: "approve_program", requiresApproval: true, risk: "medium" },
     { from: "active", to: "paused", action: "pause_program", risk: "low" },
     { from: "paused", to: "active", action: "resume_program", risk: "low" },
+    { from: "active", to: "stopped", action: "stop", risk: "high", uiPattern: "high_risk_modal" },
+    { from: "paused", to: "stopped", action: "stop", risk: "high", uiPattern: "high_risk_modal" },
     { from: "active", to: "completed", action: "complete_program" },
     { from: "completed", to: "retired", action: "retire_program" },
+    { from: "stopped", to: "retired", action: "retire_program" },
   ],
 };
 
@@ -143,21 +146,36 @@ export const evolutionRunMachine: StateMachine<EvolutionRunState> = {
 
 // ---- 17.7 Experiment ----
 export type ExperimentState =
-  | "draft" | "queued" | "running" | "completed" | "failed"
-  | "invalidated" | "attached_to_review" | "archived";
+  | "draft" | "queued" | "running" | "completed" | "concluded" | "failed"
+  | "invalidated" | "attached_to_review" | "archived" | "canceled" | "cancelled";
 export const experimentMachine: StateMachine<ExperimentState> = {
   name: "experiment",
-  states: ["draft", "queued", "running", "completed", "attached_to_review", "archived"],
-  branchStates: ["failed", "invalidated"],
+  states: ["draft", "queued", "running", "completed", "concluded", "attached_to_review", "archived"],
+  branchStates: ["failed", "invalidated", "canceled", "cancelled"],
   transitions: [
     { from: "draft", to: "queued", action: "run_experiment", uiPattern: "create_job" },
     { from: "queued", to: "running", action: "job_started" },
     { from: "running", to: "completed", action: "job_completed" },
+    { from: "running", to: "concluded", action: "conclude" },
     { from: "running", to: "failed", action: "job_failed" },
+    { from: "queued", to: "canceled", action: "cancel" },
+    { from: "running", to: "canceled", action: "cancel" },
     { from: "completed", to: "attached_to_review", action: "attach_to_review", requiresApproval: true },
+    { from: "concluded", to: "attached_to_review", action: "attach_to_review", requiresApproval: true },
     { from: "completed", to: "invalidated", action: "invalidate_result", requiresApproval: true, risk: "medium" },
+    { from: "concluded", to: "invalidated", action: "invalidate_result", requiresApproval: true, risk: "medium" },
     { from: "failed", to: "queued", action: "retry" },
+    { from: "canceled", to: "queued", action: "retry" },
+    { from: "cancelled", to: "queued", action: "retry" },
+    { from: "completed", to: "queued", action: "retry" },
+    { from: "concluded", to: "queued", action: "retry" },
+    { from: "invalidated", to: "queued", action: "retry" },
     { from: "completed", to: "archived", action: "archive" },
+    { from: "concluded", to: "archived", action: "archive" },
+    { from: "failed", to: "archived", action: "archive" },
+    { from: "canceled", to: "archived", action: "archive" },
+    { from: "cancelled", to: "archived", action: "archive" },
+    { from: "invalidated", to: "archived", action: "archive" },
   ],
 };
 
@@ -357,20 +375,32 @@ export const agoraSessionMachine: StateMachine<AgoraSessionState> = {
 };
 
 // ---- 17.18 Job ----
-export type JobState = "queued" | "running" | "waiting_for_approval" | "completed" | "failed" | "cancelled" | "retrying";
+export type JobState =
+  | "queued" | "dispatched" | "running" | "waiting_for_approval"
+  | "completed" | "succeeded" | "failed" | "cancelled" | "canceled" | "timeout" | "retrying";
 export const jobMachine: StateMachine<JobState> = {
   name: "job",
-  states: ["queued", "running", "completed"],
-  branchStates: ["waiting_for_approval", "failed", "cancelled", "retrying"],
+  states: ["queued", "dispatched", "running", "completed"],
+  branchStates: ["waiting_for_approval", "failed", "cancelled", "canceled", "timeout", "succeeded", "retrying"],
   transitions: [
+    { from: "queued", to: "dispatched", action: "dispatch" },
     { from: "queued", to: "running", action: "start" },
+    { from: "dispatched", to: "running", action: "run" },
     { from: "running", to: "completed", action: "complete" },
+    { from: "running", to: "succeeded", action: "succeed" },
     { from: "running", to: "failed", action: "fail" },
+    { from: "running", to: "timeout", action: "timeout" },
     { from: "running", to: "waiting_for_approval", action: "wait_approval", requiresApproval: true },
     { from: "waiting_for_approval", to: "running", action: "approval_granted" },
     { from: "failed", to: "retrying", action: "retry" },
+    { from: "completed", to: "retrying", action: "retry" },
+    { from: "succeeded", to: "retrying", action: "retry" },
+    { from: "canceled", to: "retrying", action: "retry" },
+    { from: "cancelled", to: "retrying", action: "retry" },
+    { from: "timeout", to: "retrying", action: "retry" },
     { from: "retrying", to: "running", action: "retry_started" },
     { from: "queued", to: "cancelled", action: "cancel" },
+    { from: "dispatched", to: "canceled", action: "cancel" },
     { from: "running", to: "cancelled", action: "cancel" },
   ],
 };

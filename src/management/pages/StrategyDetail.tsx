@@ -230,13 +230,13 @@ export const StrategyDetail = () => {
             content: (
               <DataTable<ResearchExperiment>
                 rows={experiments}
-                onRowClick={(r) => nav(`/management/experiments/${r.id}`)}
+                onRowClick={(r) => nav(`/management/experiments/${r.experiment_id || r.id}`)}
                 columns={[
-                  { key: "id", header: t("table.id"), cell: (r) => <span className="text-mono text-xs">{r.id}</span> },
-                  { key: "name", header: t("table.name"), cell: (r) => <div className="font-medium">{r.name}</div> },
+                  { key: "id", header: t("table.id"), cell: (r) => <span className="text-mono text-xs">{r.experiment_id || r.id}</span> },
+                  { key: "name", header: t("table.name"), cell: (r) => <div className="font-medium">{r.experiment_name || r.name}</div> },
                   { key: "hyp", header: t("strategyDetail.hypothesis"), cell: (r) => <span className="text-xs text-muted-foreground">{r.hypothesis}</span> },
                   { key: "metric", header: t("table.metric"), cell: (r) => <span className="text-mono text-xs">{r.metric}: {(r.metricValue ?? 0).toFixed(3)}</span> },
-                  { key: "status", header: t("table.status"), cell: (r) => <StatusBadge state={r.status === "concluded" ? "success" : r.status === "running" ? "running" : r.status === "review" ? "review" : "pending"} /> },
+                  { key: "status", header: t("table.status"), cell: (r) => <StatusBadge state={r.status} /> },
                 ]}
                 empty={t("empty.noResults")}
               />
