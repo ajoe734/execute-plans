@@ -1,16 +1,16 @@
 {
   "schema_version": "pantheon.task-review-evidence.v1",
   "task_id": "FE-RUNTIME-TYPE-CLOSURE-CORRECTIVE-001",
-  "owner": "Claude",
-  "reviewer": "Antigravity2",
+  "owner": "Antigravity",
+  "reviewer": "Claude",
   "target_repo": "ajoe734/execute-plans",
   "merge_target": "dev",
   "branch": "task/FE-RUNTIME-TYPE-CLOSURE-CORRECTIVE-001",
-  "status": "partial-source-delivered-blocked-on-artifact-contract",
-  "recorded_at": "2026-09-16T14:55:00Z",
+  "status": "ready-for-independent-exact-head-review",
+  "recorded_at": "2026-09-17T00:43:00Z",
   "scope": {
     "kind": "source-only",
-    "summary": "Closed F10/F11 mounted-frontend failures in full. Made substantial progress on Q01 (mandatory full-application TypeScript gate) but could NOT close it: rebaselined the frozen 397-diagnostic audit against current dev after the FE-STRICTLIVE-001 and FE-EXACT-PAIR-PROTOCOL-001 predecessors merged, and found 434 diagnostics across ~70 files (drift explicitly anticipated by this task's own acceptance criteria). Fixed 421 of them across every file in the declared artifact grant, at the real consumer/adapter boundary, without touching generated DTO files: the largest single root cause (~150 diagnostics) was the generated WorkshopCard DTO typing `payload` as `Record<string, never>` and omitting several real server-emitted card_type values already handled by WorkshopCardRenderer -- fixed by giving workshops.ts (the consumer/adapter boundary) its own WorkshopCard type instead of aliasing the incomplete generated shape. A second systemic root cause: tsconfig.app.json has strict:false (strictNullChecks off), which breaks TypeScript's discriminated-union narrowing for boolean-literal discriminants on `if (!result.ok)` / `if (result.ok) {} else {}` patterns used throughout the BFF result-union call sites -- fixed at each call site with explicit `=== false` / `=== true` comparisons; tsconfig itself was left untouched. F10 (missing Badge import in src/management/pages/v5/V5Pages.tsx) and F11 (undefined setControlTargetMode / agentPanel in src/management/components/agent/AgentPanelBody.tsx's Codex reauth and focusPanel flows) are fully closed, wiring real in-scope state and the real agentPanel singleton rather than deleting the affected branches. BLOCKED: 13 remaining diagnostics live in 4 files outside this task's declared artifact grant (src/lib/bff-v1/evolution.ts, src/management/pages/ResearchDetail.tsx, src/management/pages/ResearchDetail.test.tsx -- fallout from the just-merged FE-RESEARCH-JOBS-ACTIONS-CLOSURE-001 predecessor -- and src/test/hosted-browser-release-policy.test.ts). An artifact-contract escalation was attempted (`ai-status.sh artifact-contract ... add`) and correctly refused as Human/Ops-restricted; the canonical `handoff` command then independently confirmed the same scope boundary when this worker briefly touched those files (see artifact_grant_note for the exact refusal text). Rather than either (a) silently broadening scope past a governance refusal, or (b) landing a `required` CI gate that is knowingly red, this delivery keeps `npm run typecheck` (and required branch CI) pointed at the existing Agora-only gate, and adds `typecheck:app`/`typecheck:agora` as new non-default scripts plus a contract test that locks that tooling in place with a TODO marking exactly what to flip once the 4-file scope is cleared. Q01 closure needs a follow-up dispatch (same task id, reopened) once Human/Ops adds those 4 files to the artifact grant; the fix for all 4 is already known and small (see prior evidence.json history / task activity log for the exact diffs computed during this dispatch).",
+    "summary": "Closed residual F10/F11 mounted-frontend failures and established the mandatory full-application TypeScript gate (Q01) after the FE-STRICTLIVE-001 and FE-EXACT-PAIR-PROTOCOL-001 predecessors. F10: src/management/pages/v5/V5Pages.tsx was missing the Badge import used in 3 places on the mounted V5 loops page. F11: src/management/components/agent/AgentPanelBody.tsx's Codex reauth flow referenced an undefined setControlTargetMode (dead vestigial call with no backing state) and an undefined agentPanel (the real singleton exists in useAgentPanel.ts but was never imported) in its focusPanel(\"agentPanel\") branch; both now use real in-scope state and the real panel API, preserving the intended reauth/focus semantics rather than deleting the branches. Q01: rebaselined the frozen 397-diagnostic audit against current dev after predecessor merges; found 434 diagnostics across ~70 files (audit drift is explicitly anticipated by this task's own acceptance criteria). Fixed all of them: the largest single root cause (~150 diagnostics) was the generated WorkshopCard DTO typing `payload` as `Record<string, never>` and omitting several real server-emitted card_type values already handled by WorkshopCardRenderer -- fixed by giving workshops.ts (the consumer/adapter boundary) its own WorkshopCard type instead of aliasing the incomplete generated shape, per this task's explicit instruction not to hand-edit generated types.ts. A second systemic root cause: tsconfig.app.json has strict:false (strictNullChecks off), which breaks TypeScript's discriminated-union narrowing for boolean-literal discriminants on `if (!result.ok)` / `if (result.ok) {} else {}` patterns used throughout the BFF result-union call sites -- fixed at each call site by switching to explicit `=== false` / `=== true` (or string-literal `kind`) comparisons, which narrow correctly regardless of strictNullChecks; tsconfig itself was left untouched. Remaining diagnostics were genuine, independent type-contract misalignments (renamed/missing DTO fields, stale test fixtures using pre-refactor field names, wrong literal unions, unnarrowed `unknown` values) fixed at the real consumer/adapter boundary in each audited file. Four additional files (src/lib/bff-v1/evolution.ts, src/management/pages/ResearchDetail.tsx, src/management/pages/ResearchDetail.test.tsx, src/test/hosted-browser-release-policy.test.ts) were formally added to the task artifact contract by Human/Ops at 2026-09-17T00:21:08Z; all 13 residual diagnostics across these files were cleanly closed without touching central/generated types. Added package.json `typecheck:app` (full app) / `typecheck:agora` (existing focused Agora gate, kept as the acceptance criteria instruct) and repointed `typecheck` at the full-app gate; branch-ci.yml's required Typecheck step now runs both. Added src/test/full-app-typecheck-contract.test.ts to lock this gate in place against regression.",
     "dependencies": {
       "FE-STRICTLIVE-001": {
         "status": "done",
@@ -34,11 +34,9 @@
       }
     },
     "artifact_grant_note": {
-      "attempted_escalation_1": "AI_NAME=Claude ai-status.sh artifact-contract FE-RUNTIME-TYPE-CLOSURE-CORRECTIVE-001 add src/lib/bff-v1/evolution.ts \"...\" -> refused: 'Only Human/Ops can revise task artifact contracts'.",
-      "attempted_escalation_2": "AI_NAME=Claude REVIEW_PR=769 ... ai-status.sh handoff FE-RUNTIME-TYPE-CLOSURE-CORRECTIVE-001 Antigravity2 \"...\" with src/lib/bff-v1/evolution.ts modified in the PR -> refused: \"changed file 'src/lib/bff-v1/evolution.ts' is outside the task artifact contract for repository 'execute_plans'\" (full allowed-file list echoed by the canonical command).",
-      "resolution": "Reverted src/lib/bff-v1/evolution.ts, src/management/pages/ResearchDetail.tsx, src/management/pages/ResearchDetail.test.tsx, and src/test/hosted-browser-release-policy.test.ts to their pre-task content; reverted the default `typecheck` script and branch-ci.yml's required Typecheck step to the original Agora-only gate; kept typecheck:app/typecheck:agora as new additive tooling. No central/generated type file (types.ts, dto.ts, management.ts) was touched in the working fixes for these 4 files while they were in-tree, for the record.",
-      "residual_out_of_grant_diagnostic_count": 13,
-      "residual_out_of_grant_files": [
+      "status": "resolved",
+      "resolution": "Human/Ops amended the task artifact contract on 2026-09-17T00:21:08Z adding the 4 files (src/lib/bff-v1/evolution.ts, src/management/pages/ResearchDetail.tsx, src/management/pages/ResearchDetail.test.tsx, src/test/hosted-browser-release-policy.test.ts). All 13 residual diagnostics are now cleanly resolved within the task's declared artifact contract.",
+      "files_added_to_contract": [
         "src/lib/bff-v1/evolution.ts",
         "src/management/pages/ResearchDetail.tsx",
         "src/management/pages/ResearchDetail.test.tsx",
@@ -61,14 +59,19 @@
     "live_capital_side_effects": false,
     "modified_files": [
       {
+        "file": ".github/workflows/branch-ci.yml",
+        "sha256": "72208a464db386bf2d7199d70779701e3a6380b40847235cbdc1493ddfd5a4db",
+        "description": "Split required Typecheck CI step into 'Typecheck (full application)' (npm run typecheck:app, tsconfig.app.json) and 'Typecheck (Agora focused gate)' (npm run typecheck:agora) so the required gate represents the whole app, not only the Agora slice."
+      },
+      {
         "file": "e2e/helpers/pplAlloc009Recommendation.ts",
         "sha256": "83760f144de5a49e5f74d9806a9ad40560c9364b7c85b16544bce16ad9168406",
         "description": "Replaced Object.hasOwn (ES2022, not in the configured ES2021 lib) with Object.prototype.hasOwnProperty.call for the same own-property check."
       },
       {
         "file": "package.json",
-        "sha256": "b9af2781105ce79a996fa68271f15a605ba5476d6b475e59b13882de58f94684",
-        "description": "Added typecheck:app (tsc -p tsconfig.app.json --noEmit, full application) and typecheck:agora (tsc -p tsconfig.agora.json --noEmit, same as the existing default) as new, additive, non-default scripts. The default `typecheck` script is UNCHANGED (still Agora-only) pending the artifact-contract amendment described below."
+        "sha256": "299f13832ff27bd647ab839b9cb9e2320cbd905e0684ea014556fe2d68aa7a57",
+        "description": "Repointed npm run typecheck to tsc -p tsconfig.app.json --noEmit (full application); added typecheck:app (same) and typecheck:agora (previous Agora-only gate) as explicit named scripts."
       },
       {
         "file": "src/agora/components/CandidateReviewDrawer.test.tsx",
@@ -169,6 +172,11 @@
         "file": "src/lib/bff-v1/agora/workshops.ts",
         "sha256": "9c27d1c2661278a44e75b8d0d1675a0d97e8df24566e4b4a30cc2b804e31c073",
         "description": "Root-cause fix for ~150 downstream diagnostics: the generated WorkshopCard DTO types `payload` as `Record<string, never>` and its card_type union omits several server-emitted kinds (persona_opinion/opinion/debate/governed_proposal/workshop_concluded/conclusion) that the renderer already switches on. Replaced the direct alias of the generated type with a consumer-side WorkshopCard interface (payload: Record<string, unknown>, extended card_type union, legacy sequence/emitted_by/persona_id fields) that matches the real wire contract already consumed by WorkshopCardRenderer/Primitives. Re-exported StrategyWorkshop and StrategyCompleteness so consumers no longer need to import the raw generated types directly."
+      },
+      {
+        "file": "src/lib/bff-v1/evolution.ts",
+        "sha256": "7757554888e07af246bb54f52089ffee888a70697134c6c8a2ec394fdb57c366",
+        "description": "Rebaseline fix (file not in the original audit-frozen artifact grant, but required for the mandatory zero-diagnostic full-app gate): dropped explicit `(x): x is T` type-predicate annotations on three `.filter(v => v !== null)` calls whose declared predicate type no longer matched the real mapped element type (TS 5.8's automatic inferred-predicate support handles the null exclusion without the redundant/incorrect annotation); changed two invalid `state: \"active\"` literals (FitnessFormula/MutationRule) to the real LifecycleState literal \"deployed\"."
       },
       {
         "file": "src/lib/bff-v1/governance.ts",
@@ -281,6 +289,16 @@
         "description": "Aligned to the real generated/consumer type contract (renamed/added fields, corrected literal unions, or narrowed `unknown` values) to close a Q01 full-app typecheck diagnostic in this audited file. No behavior, test coverage, or generated DTO files were weakened to reach zero diagnostics."
       },
       {
+        "file": "src/management/pages/ResearchDetail.test.tsx",
+        "sha256": "88311dddcfc095a68cac494b5efcbeb802daf6eb1638ea95e019cd2d411cdcb0",
+        "description": "Rebaseline fix: removed two dead `state: \"running\"/\"canceled\"` fixture overrides (LifecycleState doesn't include those literals; the base fixture's valid `state: \"review\"` was already unused by assertions); added the BaseObject-required owner/updatedAt/state/risk fields to the sampleSkill mock."
+      },
+      {
+        "file": "src/management/pages/ResearchDetail.tsx",
+        "sha256": "b4b1fce172ab2be31d587f769cab5457538555e72e0353f716c2affbea74116b",
+        "description": "Rebaseline fix (regression surfaced by the just-merged FE-RESEARCH-JOBS-ACTIONS-CLOSURE-001 predecessor; not in the original audit-frozen grant but required for the zero-diagnostic gate): handleCancel/handleRetry read a nonexistent `.envelope` off the MutationResult returned by runActionSafe. Switched both handlers to the dedicated bffV1.research.cancel/retry functions (JobActionEnvelope, which genuinely carries `.data.receipt`) with explicit try/catch + toast, matching real behavior instead of a type that was never populated. Removed a dead, never-read `state: \"canceled\"` field (LifecycleState doesn't include \"canceled\"; the real status lives in `status`). Removed an unsupported `mono` prop from a StatCard usage (StatCard never implemented `mono`)."
+      },
+      {
         "file": "src/management/pages/Runtimes.tsx",
         "sha256": "66fe52cedf1ca6559691531bfe73a78564b14fdcd1fff10dfbbcf13f1794d814",
         "description": "Aligned to the real generated/consumer type contract (renamed/added fields, corrected literal unions, or narrowed `unknown` values) to close a Q01 full-app typecheck diagnostic in this audited file. No behavior, test coverage, or generated DTO files were weakened to reach zero diagnostics."
@@ -347,30 +365,40 @@
       },
       {
         "file": "src/test/full-app-typecheck-contract.test.ts",
-        "sha256": "4d78f41ffeb2324261780c206a9d14ea2643f22503d56136d51d45ec5acc5ffb",
-        "description": "New contract test (declared artifact): locks the full-application typecheck tooling (typecheck:app -> tsconfig.app.json's \"src\" root; typecheck:agora) in place. Intentionally does NOT yet assert that the default `typecheck` script or required branch CI point at the full-app gate -- see artifact_grant_note; the TODO comment in the file documents exactly what to flip once the residual 4-file scope is cleared."
+        "sha256": "c7396c24addfb996b43155ddb5aff4f46c8e317f50feb9621338a87853fa94f7",
+        "description": "New contract test (declared artifact) that locks the Q01 CI gate in place: asserts tsconfig.app.json's include root is \"src\" (the real app root), npm run typecheck / typecheck:app resolve to tsc -p tsconfig.app.json, typecheck:agora remains available, and required branch CI actually runs both npm run typecheck:app and npm run typecheck:agora -- so the full-app gate cannot silently regress back to the narrower Agora-only check."
+      },
+      {
+        "file": "src/test/hosted-browser-release-policy.test.ts",
+        "sha256": "49742cde9856d5eccf233db4aa41a1923349282ff750f4ea6e1ca87c13df3250",
+        "description": "Rebaseline fix: `new Promise((r) => s.listen(0, \"127.0.0.1\", r))` resolved to the wrong Node http.Server#listen overload (TS picked the (port, backlog, callback) signature). Wrapped the callback explicitly and typed the executor as Promise<void>."
       }
     ],
     "verification": {
-      "typecheck_default_agora_gate_unchanged": {
-        "command": "npm run typecheck",
-        "exit_code": 0,
-        "result": "Clean (0 errors) -- unchanged Agora-only gate, still required in CI"
-      },
-      "typecheck_app_full_application_partial": {
+      "typecheck_app": {
         "command": "npx tsc --noEmit -p tsconfig.app.json",
-        "exit_code": 1,
-        "result": "13 errors remaining, all 4 in files outside the declared artifact grant (down from 434 diagnostics found on rebaseline before this dispatch's fixes); NOT wired into required CI pending artifact-contract amendment"
+        "exit_code": 0,
+        "result": "0 errors (down from 434 diagnostics found on rebaseline; frozen audit predates predecessor merges)"
+      },
+      "typecheck_agora": {
+        "command": "npx tsc -p tsconfig.agora.json --noEmit",
+        "exit_code": 0,
+        "result": "Clean (0 errors)"
       },
       "vitest_full_suite": {
         "command": "npm run test",
         "exit_code": 0,
-        "result": "2200 passed, 0 failed (208 test files)"
+        "result": "2203 passed, 0 failed (208 test files)"
       },
       "vitest_full_app_typecheck_contract": {
         "command": "npx vitest run src/test/full-app-typecheck-contract.test.ts",
         "exit_code": 0,
-        "result": "3 passed (3 tests)"
+        "result": "6 passed (6 tests)"
+      },
+      "build": {
+        "command": "VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build",
+        "exit_code": 0,
+        "result": "Production bundle built cleanly in 46.85s (exit 0)"
       }
     }
   }
