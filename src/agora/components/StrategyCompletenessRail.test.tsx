@@ -128,6 +128,7 @@ describe("StrategyCompletenessRail", () => {
       created_at: "2026-07-05 16:22:58+00",
     };
     const completenessCard: WorkshopCard = {
+      spec_version: "1.0",
       card_id: "card_completeness_8f7dc9e4-108f-4067-8d05-9cad30c7e17a",
       card_type: "completeness_update",
       workshop_id: liveSnapshot.workshop_id,

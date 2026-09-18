@@ -17,6 +17,7 @@ import type {
 } from "@/lib/bff-v1/agora/tradingRoom";
 import * as tradingRoomModule from "@/lib/bff-v1/agora/tradingRoom";
 import type { TradingRoomWorkspaceProposal, TradingRoomWorkspace as TradingRoomWorkspaceType } from "@/lib/bff-v1/agora/tradingRoomTypes";
+import type { TradingRoomWorkspaceResult } from "@/lib/bff-v1/agora/tradingRoom";
 
 type MockProposalPreviewProps = {
   proposal: TradingRoomWorkspaceProposal;
@@ -76,18 +77,10 @@ vi.mock("@/agora/components/TradeDecisionCard", () => ({
 }));
 
 const SAMPLE_STRATEGY: TradingRoomStrategyEntry = {
-  active_portfolio_version: "port-v1",
-  allowed_environments: ["paper", "live"],
-  backtest_id: "bt-001",
-  benchmark_symbol: "^TWII",
   dashboard_recipe_id: "recipe-001",
-  description: "Taiwan equity momentum strategy",
-  governed_proposal_id: "prop-001",
-  is_pinned: true,
   monitoring_state: "monitoring",
   pending_event_counts: { add: 1, entry: 2, exit: 0, reduce: 0, review: 1 },
   readiness_state: "ready",
-  risk_profile: "moderate",
   staleness_reasons: [],
   strategy_id: "strat-001",
   strategy_spec_registry_id: "reg-spec-001",
@@ -95,7 +88,6 @@ const SAMPLE_STRATEGY: TradingRoomStrategyEntry = {
 };
 
 const SAMPLE_AGGREGATE: TradingRoomAggregate = {
-  as_of: "2026-08-30T22:00:00Z",
   data_cutoff: "2026-08-30T21:50:00Z",
   position_summaries: [{ symbol: "2330.TW", quantity: 1000, value: 950000 }],
   queue_summary: { add: 1, entry: 2, exit: 0, reduce: 0, review: 1 },
@@ -104,75 +96,111 @@ const SAMPLE_AGGREGATE: TradingRoomAggregate = {
     state: "watch",
     summary: "Sector limit elevated",
   },
+  snapshot_at: "2026-08-30T22:00:00Z",
+  spec_version: "1.0",
   strategies: [SAMPLE_STRATEGY],
+  user_scope_ref: "user-001",
 };
 
 const SAMPLE_EVENTS: TradingDecisionEvent[] = [
   {
-    confidence: { rationale: "Trend continuation", value: 0.85 },
+    confidence: { basis: "model", calibration_state: "calibrated", value: 0.85 },
     decision_event_id: "evt-001",
     event_kind: "entry",
-    expected_value: { gross: 12.5, net: 10.2 },
-    generated_at: "2026-08-30T21:45:00Z",
-    source_signal_ids: ["sig-001"],
+    evidence_refs: [],
+    expected_value: { cost: 2.3, downside: -3, gross: 12.5, horizon: "1d", net: 10.2, unit: "currency" },
+    invalidation: { conditions: [], current_state: "valid" },
+    no_order_route_proof: "agora_decision_support_only",
+    origin: "strategy_signal",
+    probability: { horizon: "1d", target_outcome: "profit_target_hit", value: 0.6 },
+    rationale: [{ claim: "Trend continuation", confidence: 0.85 }],
+    risk_notes: [],
+    spec_version: "1.0",
     state: "triggered",
     strategy_id: "strat-001",
-    subject: { market: "TW", symbol: "2330.TW" },
+    strategy_spec_registry_id: "reg-spec-001",
+    subject: { symbol: "2330.TW", venue: "TW" },
+    suggested_action: "enter",
+    triggered_at: "2026-08-30T21:45:00Z",
   },
   {
-    confidence: { rationale: "Support bounce", value: 0.72 },
+    confidence: { basis: "model", calibration_state: "calibrated", value: 0.72 },
     decision_event_id: "evt-002",
     event_kind: "add",
-    expected_value: { gross: 8.0, net: 6.5 },
-    generated_at: "2026-08-30T21:40:00Z",
-    source_signal_ids: ["sig-002"],
+    evidence_refs: [],
+    expected_value: { cost: 1.5, downside: -2, gross: 8.0, horizon: "1d", net: 6.5, unit: "currency" },
+    invalidation: { conditions: [], current_state: "valid" },
+    no_order_route_proof: "agora_decision_support_only",
+    origin: "strategy_signal",
+    probability: { horizon: "1d", target_outcome: "profit_target_hit", value: 0.55 },
+    rationale: [{ claim: "Support bounce", confidence: 0.72 }],
+    risk_notes: [],
+    spec_version: "1.0",
     state: "pending_review",
     strategy_id: "strat-001",
-    subject: { market: "TW", symbol: "2454.TW" },
+    strategy_spec_registry_id: "reg-spec-001",
+    subject: { symbol: "2454.TW", venue: "TW" },
+    suggested_action: "add",
+    triggered_at: "2026-08-30T21:40:00Z",
   },
 ];
 
 const SAMPLE_PROPOSAL: TradingRoomWorkspaceProposal = {
+  dataAvailability: { sources: [], status: "complete" },
   generatedAt: "2026-08-30T22:00:00Z",
-  personalizationRationale: "Optimized layout based on Taiwan equity profile",
+  personalizationApplied: { items: [], status: "not_applied" },
   proposalId: "prop-ws-001",
+  rationale: "Optimized layout based on Taiwan equity profile",
+  status: "preview",
   strategyId: "strat-001",
   strategyVersion: "reg-spec-001",
   views: [
     {
       id: "view-overview",
-      isDefault: true,
-      kind: "dashboard",
-      label: "Overview",
-      layout: [{ h: 4, i: "w1", w: 6, x: 0, y: 0 }],
+      layoutTemplate: "grid",
+      order: 0,
+      purpose: "Decision queue overview",
+      title: "Overview",
+      widgetCount: 1,
       widgets: [
         {
+          chartSpec: {
+            encodings: {},
+            kind: "table",
+            spec_version: "1.0",
+          },
+          dataSource: "agora.trading.events",
           id: "w1",
-          kind: "trading_queue",
+          interactions: [],
+          maxSize: { height: 8, width: 12 },
+          minSize: { height: 2, width: 2 },
+          placement: { height: 4, minHeight: 2, minWidth: 2, width: 6, x: 0, y: 0 },
+          purpose: "Show pending decisions",
+          query: { filters: {} },
+          sensitivity: "user_private",
           title: "Decision Queue",
-          version: "1.0.0",
+          whyIncluded: "Primary action surface",
+          widgetType: "trading_queue",
         },
       ],
     },
   ],
+  warnings: [],
 };
 
-const SAMPLE_WORKSPACE_RESULT = {
+const SAMPLE_WORKSPACE_RESULT: TradingRoomWorkspaceResult = {
   etag: '"etag-ws-001"',
-  version: {
-    createdAt: "2026-08-30T22:00:00Z",
-    description: "Initial accepted layout",
-    versionId: "ver-001",
-  },
   workspace: {
     activeViewId: "view-overview",
     createdAt: "2026-08-30T22:00:00Z",
-    description: "Taiwan Momentum Alpha Workspace",
+    dashboardVersion: 1,
+    generatedBy: "trading_servant",
     id: "ws-strat-001",
+    status: "active",
     strategyId: "strat-001",
     strategyVersion: "reg-spec-001",
-    title: "Taiwan Momentum Alpha Workspace",
     updatedAt: "2026-08-30T22:00:00Z",
+    userId: "user-001",
     views: SAMPLE_PROPOSAL.views,
   } as TradingRoomWorkspaceType,
 };

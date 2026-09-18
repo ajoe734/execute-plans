@@ -2,7 +2,7 @@ import React from "react";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { ChartSpecV1 } from "@/lib/bff-v1/agora/types";
+import type { ChartSpecV1 } from "@/lib/bff-v1/agora/tradingRoomTypes";
 
 import { ChartSpecRenderer, validateChartSpecForRendering } from "./ChartSpecRenderer";
 
@@ -184,12 +184,12 @@ describe("ChartSpecRenderer", () => {
       <ChartSpecRenderer
         data={[{ label: "Evidence", value: 1 }]}
         onInteraction={onInteraction}
-        spec={metricSpec({ click_action: { kind: "open_evidence", params: { evidence_id: "ev-1" } } })}
+        spec={metricSpec({ click_action: { kind: "open_evidence", payload: { evidence_id: "ev-1" } } })}
       />,
     );
 
     fireEvent.click(screen.getByTestId("chart-spec-renderer"));
-    expect(onInteraction).toHaveBeenCalledWith({ kind: "open_evidence", params: { evidence_id: "ev-1" } });
+    expect(onInteraction).toHaveBeenCalledWith({ kind: "open_evidence", payload: { evidence_id: "ev-1" } });
   });
 
   it("renders honest ChartNotice and does not fabricate fake data when data is undefined", () => {

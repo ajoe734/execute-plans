@@ -278,7 +278,10 @@ const OPERATIONS_COMMAND_TYPES = new Set([
 
 export function buildRunActionCommand(
   input: RunActionInput,
-  opts: CommandClientOptions = {},
+  // `correlationId`/`idempotencyKey` are only meaningful once the command is
+  // submitted (see `submitCommand`'s required `CommandClientOptions`); this
+  // builder itself never reads either field, so callers may omit both.
+  opts: Partial<CommandClientOptions> = {},
 ): FinalCommandEnvelope {
   const entityType = entityTypeForKind(input.kind);
   const spec = specForEntityType(entityType);
@@ -592,6 +595,23 @@ export interface RunActionEnvelope extends CommandResponse<ActionCommandResponse
   legacy: MutationResult;
 }
 
+/**
+ * Job/Experiment lifecycle actions (cancel/retry/archive/invalidate) genuinely
+ * carry an action-specific outcome `receipt` on `data` (see the mock envelope
+ * built in `mockRunActionEnvelope`) that `ActionCommandResponseData` does not
+ * declare. Kept local to the call sites that actually receive it.
+ */
+export type JobActionStatus = ActionCommandStatus | "canceled" | "archived" | "invalidated";
+
+export interface ActionCommandResponseDataWithReceipt extends Omit<ActionCommandResponseData, "status"> {
+  status: JobActionStatus;
+  receipt?: Record<string, unknown>;
+}
+
+export interface JobActionEnvelope extends Omit<RunActionEnvelope, "data"> {
+  data: ActionCommandResponseDataWithReceipt;
+}
+
 export interface RunActionOptions {
   /** Reuse a parent chain's correlationId (default: mint root). */
   correlationId?: string;
@@ -614,13 +634,13 @@ export type RunActionV1Options = RunActionOptions;
 async function mockRunActionEnvelope(
   input: RunActionInput,
   resolved: { correlationId: string; idempotencyKey: string; confirmToken?: string },
-): Promise<RunActionEnvelope> {
+): Promise<JobActionEnvelope> {
   if (isStrictLiveFallback()) {
     refuseStrictLiveWrite(resolved.correlationId);
   }
   if (input.kind === "Strategy" && input.action === "promote_live" && input.id === "stg_005") {
     throw makeBffError({
-      code: "PRECONDITION_FAILED",
+      code: "ILLEGAL_TRANSITION",
       message: "Illegal transition: cannot promote_live from discovered state.",
       correlationId: resolved.correlationId,
     });
@@ -720,7 +740,7 @@ async function mockRunActionEnvelope(
   const actionId = `au_${resolved.idempotencyKey}`;
   const now = new Date().toISOString();
 
-  let actionStatus = "completed";
+  let actionStatus: JobActionStatus = "completed";
   let extraData: Record<string, unknown> = {};
 
   if (isJob) {
@@ -809,16 +829,17 @@ async function mockRunActionEnvelope(
     },
     legacy: {
       ok: true,
-      data: { actionId, status: actionStatus, ...extraData },
+      correlationId: resolved.correlationId,
+      idempotencyKey: resolved.idempotencyKey,
       audit: {
         id: actionId,
+        actor: "bff-mock-write",
+        action: input.action,
+        target: `${input.kind}:${input.id}`,
+        ts: now,
+        outcome: "ok",
         correlationId: resolved.correlationId,
         idempotencyKey: resolved.idempotencyKey,
-        action: input.action,
-        entityKind: input.kind,
-        entityId: input.id,
-        status: "succeeded",
-        timestamp: now,
       },
     },
   };
@@ -850,7 +871,10 @@ export async function runCommandAction(
       baseUrl: opts.baseUrl,
     });
   }
-  return mockRunActionEnvelope(input, { correlationId, idempotencyKey, confirmToken });
+  // JobActionEnvelope is a strict superset of RunActionEnvelope's `data` shape
+  // (wider `status` union + optional `receipt`); narrowing back down is safe here
+  // because generic (non job/experiment) callers only ever populate the shared subset.
+  return mockRunActionEnvelope(input, { correlationId, idempotencyKey, confirmToken }) as unknown as Promise<RunActionEnvelope>;
 }
 
 /**
@@ -943,6 +967,8 @@ export async function requestConfirmToken(
         requiredPhrase?: string;
         required_phrase?: string;
         ttlSeconds?: number;
+        expiresAt?: string;
+        expires_at?: string;
       };
       meta?: { idempotency?: { idempotencyKey?: string } };
     };
@@ -1976,7 +2002,7 @@ export async function createResearchTaskFromNote(
 export async function cancelJob(
   jobId: string,
   opts: RunActionOptions & { reason?: string } = {},
-): Promise<RunActionEnvelope> {
+): Promise<JobActionEnvelope> {
   const { reason, ...rest } = opts;
   return runAction(
     { kind: "Job", id: jobId, action: "cancel", reason, memo: reason, params: { reason } },
@@ -1987,14 +2013,14 @@ export async function cancelJob(
 export async function retryJob(
   jobId: string,
   opts: RunActionOptions = {},
-): Promise<RunActionEnvelope> {
+): Promise<JobActionEnvelope> {
   return runAction({ kind: "Job", id: jobId, action: "retry" }, opts);
 }
 
 export async function cancelResearchExperiment(
   experimentId: string,
   opts: RunActionOptions & { reason?: string } = {},
-): Promise<RunActionEnvelope> {
+): Promise<JobActionEnvelope> {
   const { reason, ...rest } = opts;
   return runAction(
     { kind: "Research", id: experimentId, action: "cancel", reason, memo: reason, params: { reason } },
@@ -2005,14 +2031,14 @@ export async function cancelResearchExperiment(
 export async function retryResearchExperiment(
   experimentId: string,
   opts: RunActionOptions = {},
-): Promise<RunActionEnvelope> {
+): Promise<JobActionEnvelope> {
   return runAction({ kind: "Research", id: experimentId, action: "retry" }, opts);
 }
 
 export async function archiveResearchExperiment(
   experimentId: string,
   opts: RunActionOptions = {},
-): Promise<RunActionEnvelope> {
+): Promise<JobActionEnvelope> {
   return runAction({ kind: "Research", id: experimentId, action: "archive" }, opts);
 }
 
@@ -2020,7 +2046,7 @@ export async function invalidateResearchExperiment(
   experimentId: string,
   reason: string,
   opts: RunActionOptions = {},
-): Promise<RunActionEnvelope> {
+): Promise<JobActionEnvelope> {
   return runAction(
     { kind: "Research", id: experimentId, action: "invalidate", reason, memo: reason, params: { reason } },
     opts,

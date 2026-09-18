@@ -59,6 +59,7 @@ import { useInspector } from "@/platform/components/RightDrawer";
 import { useHandoff } from "@/lib/handoff";
 import { useJobDrawer } from "@/platform/components/JobProgressDrawer";
 import { useOverlay } from "@/platform/overlayStore";
+import { agentPanel } from "./useAgentPanel";
 import { bffWrites, buildRunActionCommand, type OperatorCommandReceipt } from "@/lib/bff-v1/writes";
 import {
   type ChatAttachment,
@@ -317,7 +318,7 @@ function ControlModePill({ status, failure }: {
 }
 
 function ProviderReauthNotice({ result }: { result: AssistantProviderReauthResult }) {
-  if (!result.ok) {
+  if (result.ok === false) {
     return (
       <div className="mt-1.5 rounded border border-amber-500/40 bg-background/60 px-2 py-1.5 text-[10px] text-amber-800 dark:text-amber-300">
         Reauth 失敗：{result.message}
@@ -452,6 +453,7 @@ export function AgentPanelBody() {
   const [isDragging, setIsDragging] = useState(false);
   const [assistantModeStatus, setAssistantModeStatus] = useState<AssistantModeStatusResult | null>(null);
   const [controlDialogOpen, setControlDialogOpen] = useState(false);
+  const [controlTargetMode, setControlTargetMode] = useState<"kernel_debug">("kernel_debug");
   const [controlPassphrase, setControlPassphrase] = useState("");
   const [controlReason, setControlReason] = useState("Management AI diagnostic session");
   const [controlBusy, setControlBusy] = useState(false);
@@ -698,7 +700,7 @@ export function AgentPanelBody() {
         traceId: ps?.runId ?? traceId ?? undefined,
       });
       setProviderReauthNotice(result);
-      if (result.ok) {
+      if (result.ok === true) {
         toast({
           title: "Codex reauth started",
           description: result.reauth.userCode ? `code ${result.reauth.userCode}` : (result.reauth.status ?? "pending"),
@@ -1302,7 +1304,7 @@ export function AgentPanelBody() {
     try {
       const result = await activateAssistantControlMode({
         passphrase,
-        mode: "kernel_debug",
+        mode: controlTargetMode,
         reason: controlReason.trim() || "Management AI control mode",
         ttlSeconds: 900,
         idleTtlSeconds: 300,
@@ -1322,7 +1324,7 @@ export function AgentPanelBody() {
     } finally {
       setControlBusy(false);
     }
-  }, [controlPassphrase, controlReason, sessionId, refreshAssistantRuntimeStatus]);
+  }, [controlPassphrase, controlReason, controlTargetMode, sessionId, refreshAssistantRuntimeStatus]);
 
   const deactivateControlMode = useCallback(async () => {
     setControlBusy(true);

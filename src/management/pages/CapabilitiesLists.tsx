@@ -2,8 +2,15 @@ import { ObjectListPage } from "./ObjectListPage";
 import { lists } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { Badge } from "@/components/ui/badge";
-import type { Tool, McpServer, Skill, Channel } from "@/lib/bff-v1";
+import type { Tool, McpServer, Skill, Channel, ListEnvelope } from "@/lib/bff-v1";
 import { Inbox } from "lucide-react";
+
+// See Lists.tsx for why this re-assertion is needed: `lists.*` loaders
+// resolve generic T to `unknown` inside lists.ts when adaptItem is itself
+// generic; the runtime shape is the concrete entity, so we assert it here
+// rather than editing the shared, out-of-scope lists.ts file.
+const asEntityLoader = <T,>(loader: () => Promise<ListEnvelope<unknown>>): (() => Promise<ListEnvelope<T>>) =>
+  loader as unknown as () => Promise<ListEnvelope<T>>;
 
 const capabilityCreateDisabled = {
   kind: "disabled" as const,
@@ -33,7 +40,7 @@ export const ToolsList = () => {
   return (
     <ObjectListPage<Tool>
       title={t("nav.tools")}
-      loader={lists.tools}
+      loader={asEntityLoader<Tool>(lists.tools)}
       basePath="/management/tools" liveKinds={["Tool"]}
       createBehavior={capabilityCreateDisabled}
       emptyState={capabilityEmptyState(
@@ -58,7 +65,7 @@ export const McpServersList = () => {
   return (
     <ObjectListPage<McpServer>
       title={t("nav.mcp")}
-      loader={lists.mcpServers}
+      loader={asEntityLoader<McpServer>(lists.mcpServers)}
       basePath="/management/mcp" liveKinds={["McpServer","McpSecret"]}
       createBehavior={capabilityCreateDisabled}
       emptyState={capabilityEmptyState(
@@ -89,7 +96,7 @@ export const SkillsList = () => {
   return (
     <ObjectListPage<Skill>
       title={t("nav.skills")}
-      loader={lists.skills}
+      loader={asEntityLoader<Skill>(lists.skills)}
       basePath="/management/skills" liveKinds={["Skill"]}
       createBehavior={capabilityCreateDisabled}
       emptyState={capabilityEmptyState(
@@ -115,7 +122,7 @@ export const ChannelsList = () => {
   return (
     <ObjectListPage<Channel>
       title={t("nav.channels")}
-      loader={lists.channels}
+      loader={asEntityLoader<Channel>(lists.channels)}
       basePath="/management/channels" liveKinds={["Channel"]}
       extraColumns={[
         { key: "kind", header: t("table.kind"), cell: (r) => <span className="text-xs tracking-wide">{r.kind}</span> },

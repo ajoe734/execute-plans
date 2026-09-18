@@ -152,25 +152,26 @@ async function liveConsultRules(helperName: string): Promise<ConsultRule[]> {
       policyRecord.consult_rules,
       policyRecord.consultRules,
     );
-    return triggerRules.map((rule, ruleIndex) => {
+    return triggerRules.map((rule, ruleIndex): ConsultRule => {
       const id = recordString(rule, "id", "rule_id", "ruleId") ?? `${personaId}:consult:${ruleIndex + 1}`;
       const envScope = firstArray<string>(rule.envScope, rule.env_scope);
+      const mode = recordString(rule, "mode", "decision_mode");
       return {
         id,
         name: recordString(rule, "name", "description", "condition") ?? id,
-        personaId,
         fromPersonaId: personaId,
+        toPersonaId: recordString(rule, "toPersonaId", "to_persona_id", "target_persona_id") ?? personaId,
         trigger: recordString(rule, "trigger", "condition", "name") ?? "risk.high",
-        condition: recordString(rule, "condition", "name") ?? "risk.high",
-        mode: recordString(rule, "mode", "decision_mode") === "blocking" ? "blocking" as const : "advisory" as const,
-        description: recordString(rule, "description", "summary"),
-        envScope: envScope.filter((s): s is "live" | "paper" | "backtest" =>
-          s === "live" || s === "paper" || s === "backtest"),
-        toPersonaId: recordString(rule, "toPersonaId", "to_persona_id", "target_persona_id"),
+        mode: mode === "blocking" ? "blocking" : mode === "ack" ? "ack" : "advisory",
+        envScope: envScope.filter((s): s is "research" | "paper" | "live" =>
+          s === "research" || s === "paper" || s === "live"),
+        enabled: typeof rule.enabled === "boolean" ? rule.enabled : recordString(rule, "status") !== "disabled",
+        owner: recordString(rule, "owner", "created_by", "createdBy") ?? personaId,
+        updatedAt: recordString(rule, "updatedAt", "updated_at") ?? new Date(0).toISOString(),
       };
     });
   });
-  return rules as ConsultRule[];
+  return rules;
 }
 
 export async function listConsultRules(): Promise<ConsultRule[]> {

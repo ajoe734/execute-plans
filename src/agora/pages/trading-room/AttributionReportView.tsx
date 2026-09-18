@@ -53,6 +53,22 @@ function formatRatio(value: number | undefined | null, decimals = 2): string {
   return value.toFixed(decimals);
 }
 
+/**
+ * Attribution summary/metrics/meta payloads carry a fixed set of typed
+ * fields plus an open-ended index signature for analytics extension fields
+ * the backend attaches per period/dimension. Narrow those `unknown` reads
+ * here instead of casting so callers only ever see number/string.
+ */
+function pickNumber(source: { [key: string]: unknown } | undefined | null, key: string): number | undefined {
+  const value = source?.[key];
+  return typeof value === "number" ? value : undefined;
+}
+
+function pickString(source: { [key: string]: unknown } | undefined | null, key: string): string | undefined {
+  const value = source?.[key];
+  return typeof value === "string" ? value : undefined;
+}
+
 function formatTimestamp(value: string | undefined | null, locale = "en-US"): string {
   if (!value) return "not reported";
   const parsed = new Date(value);
@@ -311,11 +327,11 @@ function AttributionReportContent({
             <div className="text-[11px] font-bold uppercase tracking-wider text-[#8c96a6]">
               {t("agora.tradingRoom.attribution.summary.totalReturn", { defaultValue: "Total Return" })}
             </div>
-            <div className={cn("mt-1 text-lg font-bold", (summary.total_return ?? 0) >= 0 ? "text-emerald-400" : "text-rose-400")}>
-              {formatPercent(summary.total_return)}
+            <div className={cn("mt-1 text-lg font-bold", (pickNumber(summary, "total_return") ?? 0) >= 0 ? "text-emerald-400" : "text-rose-400")}>
+              {formatPercent(pickNumber(summary, "total_return"))}
             </div>
             <div className="text-[10px] text-[#8c96a6] mt-0.5">
-              Bench: {formatPercent(summary.benchmark_return)}
+              Bench: {formatPercent(pickNumber(summary, "benchmark_return"))}
             </div>
           </div>
 
@@ -323,11 +339,11 @@ function AttributionReportContent({
             <div className="text-[11px] font-bold uppercase tracking-wider text-[#8c96a6]">
               {t("agora.tradingRoom.attribution.summary.activeReturn", { defaultValue: "Active Return" })}
             </div>
-            <div className={cn("mt-1 text-lg font-bold", (summary.active_return ?? 0) >= 0 ? "text-emerald-400" : "text-rose-400")}>
-              {formatPercent(summary.active_return)}
+            <div className={cn("mt-1 text-lg font-bold", (pickNumber(summary, "active_return") ?? 0) >= 0 ? "text-emerald-400" : "text-rose-400")}>
+              {formatPercent(pickNumber(summary, "active_return"))}
             </div>
             <div className="text-[10px] text-[#8c96a6] mt-0.5">
-              Alpha: {formatPercent(summary.alpha)}
+              Alpha: {formatPercent(pickNumber(summary, "alpha"))}
             </div>
           </div>
 
@@ -336,10 +352,10 @@ function AttributionReportContent({
               {t("agora.tradingRoom.attribution.summary.sharpeRatio", { defaultValue: "Sharpe Ratio" })}
             </div>
             <div className="mt-1 text-lg font-bold text-[#f0ece4]">
-              {formatRatio(summary.sharpe_ratio)}
+              {formatRatio(pickNumber(summary, "sharpe_ratio"))}
             </div>
             <div className="text-[10px] text-[#8c96a6] mt-0.5">
-              IR: {formatRatio(summary.information_ratio)}
+              IR: {formatRatio(pickNumber(summary, "information_ratio"))}
             </div>
           </div>
 
@@ -348,10 +364,10 @@ function AttributionReportContent({
               {t("agora.tradingRoom.attribution.summary.winRate", { defaultValue: "Win Rate" })}
             </div>
             <div className="mt-1 text-lg font-bold text-[#f0ece4]">
-              {formatPercent(summary.win_rate, false)}
+              {formatPercent(pickNumber(summary, "win_rate"), false)}
             </div>
             <div className="text-[10px] text-[#8c96a6] mt-0.5">
-              Items: {summary.item_count ?? items.length}
+              Items: {pickNumber(summary, "item_count") ?? items.length}
             </div>
           </div>
 
@@ -360,10 +376,10 @@ function AttributionReportContent({
               {t("agora.tradingRoom.attribution.summary.maxDrawdown", { defaultValue: "Max Drawdown" })}
             </div>
             <div className="mt-1 text-lg font-bold text-amber-400">
-              {formatPercent(summary.max_drawdown, false)}
+              {formatPercent(pickNumber(summary, "max_drawdown"), false)}
             </div>
             <div className="text-[10px] text-[#8c96a6] mt-0.5">
-              Turnover: {formatRatio(summary.turnover)}x
+              Turnover: {formatRatio(pickNumber(summary, "turnover"))}x
             </div>
           </div>
 
@@ -372,10 +388,10 @@ function AttributionReportContent({
               {t("agora.tradingRoom.attribution.summary.asOf", { defaultValue: "As Of" })}
             </div>
             <div className="mt-1 text-xs font-semibold text-[#c5cad2]">
-              {formatTimestamp(summary.as_of || meta?.as_of, i18n.resolvedLanguage)}
+              {formatTimestamp(pickString(summary, "as_of") || pickString(meta, "as_of"), i18n.resolvedLanguage)}
             </div>
             <div className="text-[10px] text-[#8c96a6] mt-0.5 uppercase">
-              {meta?.status ?? "verified"}
+              {pickString(meta, "status") ?? "verified"}
             </div>
           </div>
         </div>
@@ -463,8 +479,8 @@ function AttributionReportContent({
               <tbody className="divide-y divide-[#2a2e38]">
                 {sortedItems.map((row) => {
                   const m = row.metrics ?? {};
-                  const isPositiveReturn = (m.total_return ?? 0) >= 0;
-                  const isActivePositive = (m.active_return ?? 0) >= 0;
+                  const isPositiveReturn = (pickNumber(m, "total_return") ?? 0) >= 0;
+                  const isActivePositive = (pickNumber(m, "active_return") ?? 0) >= 0;
                   return (
                     <tr
                       className="hover:bg-[#1a2030]/60 transition-colors"
@@ -477,25 +493,25 @@ function AttributionReportContent({
                         <div className="text-[10px] text-[#8c96a6] font-mono">{row.dimension_key}</div>
                       </td>
                       <td className={cn("py-2.5 px-3 text-right font-semibold font-mono", isPositiveReturn ? "text-emerald-400" : "text-rose-400")}>
-                        {formatPercent(m.total_return)}
+                        {formatPercent(pickNumber(m, "total_return"))}
                       </td>
                       <td className="py-2.5 px-3 text-right text-[#8c96a6] font-mono">
-                        {formatPercent(m.benchmark_return)}
+                        {formatPercent(pickNumber(m, "benchmark_return"))}
                       </td>
                       <td className={cn("py-2.5 px-3 text-right font-semibold font-mono", isActivePositive ? "text-emerald-400" : "text-rose-400")}>
-                        {formatPercent(m.active_return)}
+                        {formatPercent(pickNumber(m, "active_return"))}
                       </td>
                       <td className="py-2.5 px-3 text-right text-[#f0ece4] font-mono">
-                        {formatRatio(m.sharpe_ratio)}
+                        {formatRatio(pickNumber(m, "sharpe_ratio"))}
                       </td>
                       <td className="py-2.5 px-3 text-right text-[#f0ece4] font-mono">
-                        {formatPercent(m.win_rate)}
+                        {formatPercent(pickNumber(m, "win_rate"))}
                       </td>
                       <td className="py-2.5 px-3 text-right text-amber-400 font-mono">
-                        {formatPercent(m.max_drawdown)}
+                        {formatPercent(pickNumber(m, "max_drawdown"))}
                       </td>
                       <td className="py-2.5 px-3 text-right text-[#8c96a6] font-mono">
-                        {formatPercent(m.risk_contribution)}
+                        {formatPercent(pickNumber(m, "risk_contribution"))}
                       </td>
                     </tr>
                   );
@@ -520,7 +536,7 @@ function AttributionReportContent({
             </span>
           </div>
           <div className="text-[10px]">
-            As of: {formatTimestamp(meta.as_of, i18n.resolvedLanguage)} · Status: <span className="font-semibold text-[#f0ece4] uppercase">{meta.status ?? "ready"}</span>
+            As of: {formatTimestamp(pickString(meta, "as_of"), i18n.resolvedLanguage)} · Status: <span className="font-semibold text-[#f0ece4] uppercase">{pickString(meta, "status") ?? "ready"}</span>
           </div>
         </div>
       )}

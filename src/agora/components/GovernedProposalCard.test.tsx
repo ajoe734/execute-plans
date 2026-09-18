@@ -22,7 +22,7 @@ vi.mock("@/agora/useAgoraWriteAccess", async (importOriginal) => {
   };
 });
 
-const base = {
+const base: api.GovernedProposal = {
   proposal_id: "prop-1", proposal_type: "risk_limit_recommendation", target_kind: "strategy", target_id: "s1", target_version: "v7",
   current_value: { limit: 5 }, proposed_value: { limit: 3 }, rationale: "Reduce drawdown", evidence_refs: ["evidence-1"],
   environment_ceiling: "live" as const, required_permissions: ["risk.approve"], required_reviewers: ["human", "risk"], human_gate: true,

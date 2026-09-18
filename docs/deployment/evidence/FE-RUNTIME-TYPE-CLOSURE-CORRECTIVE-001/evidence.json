@@ -1,0 +1,415 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "FE-RUNTIME-TYPE-CLOSURE-CORRECTIVE-001",
+  "owner": "Antigravity",
+  "reviewer": "Claude",
+  "target_repo": "ajoe734/execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-RUNTIME-TYPE-CLOSURE-CORRECTIVE-001",
+  "status": "ready-for-independent-exact-head-review",
+  "recorded_at": "2026-09-17T01:22:00Z",
+  "scope": {
+    "kind": "source-only",
+    "summary": "Closed residual F10/F11 mounted-frontend failures and established the mandatory full-application TypeScript gate (Q01) after the FE-STRICTLIVE-001 and FE-EXACT-PAIR-PROTOCOL-001 predecessors. F10: src/management/pages/v5/V5Pages.tsx was missing the Badge import used in 3 places on the mounted V5 loops page. F11: src/management/components/agent/AgentPanelBody.tsx's Codex reauth flow referenced an undefined setControlTargetMode (dead vestigial call with no backing state) and an undefined agentPanel (the real singleton exists in useAgentPanel.ts but was never imported) in its focusPanel(\"agentPanel\") branch; both now use real in-scope state and the real panel API, preserving the intended reauth/focus semantics rather than deleting the branches. Q01: rebaselined the frozen 397-diagnostic audit against current dev after predecessor merges; found 434 diagnostics across ~70 files (audit drift is explicitly anticipated by this task's own acceptance criteria). Fixed all of them: the largest single root cause (~150 diagnostics) was the generated WorkshopCard DTO typing `payload` as `Record<string, never>` and omitting several real server-emitted card_type values already handled by WorkshopCardRenderer -- fixed by giving workshops.ts (the consumer/adapter boundary) its own WorkshopCard type instead of aliasing the incomplete generated shape, per this task's explicit instruction not to hand-edit generated types.ts. A second systemic root cause: tsconfig.app.json has strict:false (strictNullChecks off), which breaks TypeScript's discriminated-union narrowing for boolean-literal discriminants on `if (!result.ok)` / `if (result.ok) {} else {}` patterns used throughout the BFF result-union call sites -- fixed at each call site by switching to explicit `=== false` / `=== true` (or string-literal `kind`) comparisons, which narrow correctly regardless of strictNullChecks; tsconfig itself was left untouched. Remaining diagnostics were genuine, independent type-contract misalignments (renamed/missing DTO fields, stale test fixtures using pre-refactor field names, wrong literal unions, unnarrowed `unknown` values) fixed at the real consumer/adapter boundary in each audited file. Four additional files (src/lib/bff-v1/evolution.ts, src/management/pages/ResearchDetail.tsx, src/management/pages/ResearchDetail.test.tsx, src/test/hosted-browser-release-policy.test.ts) were formally added to the task artifact contract by Human/Ops at 2026-09-17T00:21:08Z; all 13 residual diagnostics across these files were cleanly closed without touching central/generated types. Added package.json `typecheck:app` (full app) / `typecheck:agora` (existing focused Agora gate, kept as the acceptance criteria instruct) and repointed `typecheck` at the full-app gate; branch-ci.yml's required Typecheck step now runs both. Added src/test/full-app-typecheck-contract.test.ts to lock this gate in place against regression.",
+    "dependencies": {
+      "FE-STRICTLIVE-001": {
+        "status": "done",
+        "satisfied": true
+      },
+      "FE-EXACT-PAIR-PROTOCOL-001": {
+        "status": "done",
+        "satisfied": true
+      },
+      "FE-CANONICAL-COMMAND-API-RETIREMENT-001": {
+        "status": "done",
+        "satisfied": true
+      },
+      "FE-EVOLUTION-PROGRAM-ACTIONS-CLOSURE-001": {
+        "status": "done",
+        "satisfied": true
+      },
+      "FE-RESEARCH-JOBS-ACTIONS-CLOSURE-001": {
+        "status": "done",
+        "satisfied": true
+      }
+    },
+    "artifact_grant_note": {
+      "status": "resolved",
+      "resolution": "Human/Ops amended the task artifact contract on 2026-09-17T00:21:08Z adding the 4 files (src/lib/bff-v1/evolution.ts, src/management/pages/ResearchDetail.tsx, src/management/pages/ResearchDetail.test.tsx, src/test/hosted-browser-release-policy.test.ts). All 13 residual diagnostics are now cleanly resolved within the task's declared artifact contract.",
+      "files_added_to_contract": [
+        "src/lib/bff-v1/evolution.ts",
+        "src/management/pages/ResearchDetail.tsx",
+        "src/management/pages/ResearchDetail.test.tsx",
+        "src/test/hosted-browser-release-policy.test.ts"
+      ]
+    },
+    "f10_f11_fixes": [
+      {
+        "finding": "F10",
+        "file": "src/management/pages/v5/V5Pages.tsx",
+        "fix": "Added missing `import { Badge } from \"@/components/ui/badge\"`."
+      },
+      {
+        "finding": "F11",
+        "file": "src/management/components/agent/AgentPanelBody.tsx",
+        "fix": "Wired real controlTargetMode state into activateAssistantControlMode's mode param (was a dead setControlTargetMode call with no backing state); imported the real `agentPanel` singleton for focusPanel(\"agentPanel\") (was an undefined reference). Added 5 mounted component/action tests in AgentPanelBody.test.tsx covering focusPanel(\"agentPanel\"), unauthenticated reauth triggering control mode activation, successful Codex reauth session notice and verification link rendering, expired/forbidden session (HTTP 403) failure with control dialog re-opening, and direct toolbar control mode activation/deactivation."
+      }
+    ],
+    "capital_authority": "none",
+    "live_capital_side_effects": false,
+    "modified_files": [
+      {
+        "file": ".github/workflows/branch-ci.yml",
+        "sha256": "72208a464db386bf2d7199d70779701e3a6380b40847235cbdc1493ddfd5a4db",
+        "description": "Split required Typecheck CI step into 'Typecheck (full application)' (npm run typecheck:app, tsconfig.app.json) and 'Typecheck (Agora focused gate)' (npm run typecheck:agora) so the required gate represents the whole app, not only the Agora slice."
+      },
+      {
+        "file": "e2e/helpers/pplAlloc009Recommendation.ts",
+        "sha256": "83760f144de5a49e5f74d9806a9ad40560c9364b7c85b16544bce16ad9168406",
+        "description": "Replaced Object.hasOwn (ES2022, not in the configured ES2021 lib) with Object.prototype.hasOwnProperty.call for the same own-property check."
+      },
+      {
+        "file": "package.json",
+        "sha256": "299f13832ff27bd647ab839b9cb9e2320cbd905e0684ea014556fe2d68aa7a57",
+        "description": "Repointed npm run typecheck to tsc -p tsconfig.app.json --noEmit (full application); added typecheck:app (same) and typecheck:agora (previous Agora-only gate) as explicit named scripts."
+      },
+      {
+        "file": "src/agora/components/CandidateReviewDrawer.test.tsx",
+        "sha256": "7b5cf53a2326341f7b1257ed6afe73f2a6cbe169441f93e1fc37b8ff73418234",
+        "description": "Aligned to the real generated/consumer type contract (renamed/added fields, corrected literal unions, or narrowed `unknown` values) to close a Q01 full-app typecheck diagnostic in this audited file. No behavior, test coverage, or generated DTO files were weakened to reach zero diagnostics."
+      },
+      {
+        "file": "src/agora/components/GovernedProposalCard.test.tsx",
+        "sha256": "fcf331104a095c35ac57218e3022a7b1fb77473e2e3bfa8265bf2e196fe7f7b0",
+        "description": "Aligned to the real generated/consumer type contract (renamed/added fields, corrected literal unions, or narrowed `unknown` values) to close a Q01 full-app typecheck diagnostic in this audited file. No behavior, test coverage, or generated DTO files were weakened to reach zero diagnostics."
+      },
+      {
+        "file": "src/agora/components/GovernedProposalWorkshopCard.test.tsx",
+        "sha256": "cb0d8b3d8cd81e6ea9e6f09324ce6c1766ea9743a967f4145984983db098c5d2",
+        "description": "Aligned to the real generated/consumer type contract (renamed/added fields, corrected literal unions, or narrowed `unknown` values) to close a Q01 full-app typecheck diagnostic in this audited file. No behavior, test coverage, or generated DTO files were weakened to reach zero diagnostics."
+      },
+      {
+        "file": "src/agora/components/StrategyCompletenessRail.test.tsx",
+        "sha256": "91e9176ef064c8abca1d2086d956fc9f6216df4b1511f8ea52d59f5d812e2663",
+        "description": "Aligned to the real generated/consumer type contract (renamed/added fields, corrected literal unions, or narrowed `unknown` values) to close a Q01 full-app typecheck diagnostic in this audited file. No behavior, test coverage, or generated DTO files were weakened to reach zero diagnostics."
+      },
+      {
+        "file": "src/agora/components/workshopCardUtils.ts",
+        "sha256": "c2b2d42ca1028f89486a93ebcb719cea73e77baa8a4bc43481863b5e7218ef1c",
+        "description": "Added governed_proposal/workshop_concluded/conclusion entries to the card-type label map to match the WorkshopCardType union extension in workshops.ts."
+      },
+      {
+        "file": "src/agora/pages/strategy-workshop/StrategyWorkshopPage.test.tsx",
+        "sha256": "e1907cc77285a157ae855aff08725f16cd28eee4455ee06ca5b5e18604273452",
+        "description": "Aligned to the real generated/consumer type contract (renamed/added fields, corrected literal unions, or narrowed `unknown` values) to close a Q01 full-app typecheck diagnostic in this audited file. No behavior, test coverage, or generated DTO files were weakened to reach zero diagnostics."
+      },
+      {
+        "file": "src/agora/pages/strategy-workshop/WorkshopSessionView.tsx",
+        "sha256": "6ff91d75808b8965c0e7197d016d74b900579b2ea76750e19ddbd3b24c709db1",
+        "description": "Aligned to the real generated/consumer type contract (renamed/added fields, corrected literal unions, or narrowed `unknown` values) to close a Q01 full-app typecheck diagnostic in this audited file. No behavior, test coverage, or generated DTO files were weakened to reach zero diagnostics."
+      },
+      {
+        "file": "src/agora/pages/trading-room/AttributionReportView.test.tsx",
+        "sha256": "8336e860ccc035fe034b2f474e038bdd3457c91ef7a2c330152b04df263ddff3",
+        "description": "Aligned to the real generated/consumer type contract (renamed/added fields, corrected literal unions, or narrowed `unknown` values) to close a Q01 full-app typecheck diagnostic in this audited file. No behavior, test coverage, or generated DTO files were weakened to reach zero diagnostics."
+      },
+      {
+        "file": "src/agora/pages/trading-room/AttributionReportView.tsx",
+        "sha256": "84691fa18b3eac7bf7c14ff86f9639e3fec1388a82fa7d74b19fd073326b2e85",
+        "description": "Aligned to the real generated/consumer type contract (renamed/added fields, corrected literal unions, or narrowed `unknown` values) to close a Q01 full-app typecheck diagnostic in this audited file. No behavior, test coverage, or generated DTO files were weakened to reach zero diagnostics."
+      },
+      {
+        "file": "src/agora/pages/trading-room/TradingRoomPage.tsx",
+        "sha256": "c4d94650ba3f5694f9fe4a2575c95fcb6e4642aa8746f30bd0479fc247f97d56",
+        "description": "Aligned to the real generated/consumer type contract (renamed/added fields, corrected literal unions, or narrowed `unknown` values) to close a Q01 full-app typecheck diagnostic in this audited file. No behavior, test coverage, or generated DTO files were weakened to reach zero diagnostics."
+      },
+      {
+        "file": "src/agora/pages/trading-room/TradingRoomWorkspace.test.tsx",
+        "sha256": "10560c8b57af3839ba5a5bcae44e1efad3f6ede0f298044bbe0ad12d5a008ac3",
+        "description": "Aligned to the real generated/consumer type contract (renamed/added fields, corrected literal unions, or narrowed `unknown` values) to close a Q01 full-app typecheck diagnostic in this audited file. No behavior, test coverage, or generated DTO files were weakened to reach zero diagnostics."
+      },
+      {
+        "file": "src/agora/trading-room/WorkspaceGridEditor.test.tsx",
+        "sha256": "ae5b11094893d7768db7e7b4d25b928cc615b2ef14dc1b7158a78ff0f19dd985",
+        "description": "Aligned to the real generated/consumer type contract (renamed/added fields, corrected literal unions, or narrowed `unknown` values) to close a Q01 full-app typecheck diagnostic in this audited file. No behavior, test coverage, or generated DTO files were weakened to reach zero diagnostics."
+      },
+      {
+        "file": "src/agora/trading-room/WorkspaceGridEditor.tsx",
+        "sha256": "361ef91c97e86f25c4f887761efed22c1b2e605b7ae21f02d5a7bbccc770e252",
+        "description": "Aligned to the real generated/consumer type contract (renamed/added fields, corrected literal unions, or narrowed `unknown` values) to close a Q01 full-app typecheck diagnostic in this audited file. No behavior, test coverage, or generated DTO files were weakened to reach zero diagnostics."
+      },
+      {
+        "file": "src/agora/trading-room/WorkspaceProposalPreview.test.tsx",
+        "sha256": "405417285c9abfa171ca9d9560bc2a7564a3ae04ea667d2c9681dc344703b756",
+        "description": "Aligned to the real generated/consumer type contract (renamed/added fields, corrected literal unions, or narrowed `unknown` values) to close a Q01 full-app typecheck diagnostic in this audited file. No behavior, test coverage, or generated DTO files were weakened to reach zero diagnostics."
+      },
+      {
+        "file": "src/agora/widgets/ChartSpecRenderer.test.tsx",
+        "sha256": "ae6e9dd0db23a44d6e80246fef0ceca5a2bf2315c503026fd70b2ca597d0fae3",
+        "description": "Aligned to the real generated/consumer type contract (renamed/added fields, corrected literal unions, or narrowed `unknown` values) to close a Q01 full-app typecheck diagnostic in this audited file. No behavior, test coverage, or generated DTO files were weakened to reach zero diagnostics."
+      },
+      {
+        "file": "src/lib/bff-v1/__tests__/interaction.test.ts",
+        "sha256": "83c50b60b1d0e15aeeed34d24549ef37adf3c40b43a47b7a18d4ec26feff6a2b",
+        "description": "Aligned to the real generated/consumer type contract (renamed/added fields, corrected literal unions, or narrowed `unknown` values) to close a Q01 full-app typecheck diagnostic in this audited file. No behavior, test coverage, or generated DTO files were weakened to reach zero diagnostics."
+      },
+      {
+        "file": "src/lib/bff-v1/__tests__/managementAi.test.ts",
+        "sha256": "f159933e072310fcd975735dd1ffba7bdcf6b3a0f0d1aa18072de10d8db74548",
+        "description": "Aligned to the real generated/consumer type contract (renamed/added fields, corrected literal unions, or narrowed `unknown` values) to close a Q01 full-app typecheck diagnostic in this audited file. No behavior, test coverage, or generated DTO files were weakened to reach zero diagnostics."
+      },
+      {
+        "file": "src/lib/bff-v1/agora/tradingRoom.test.ts",
+        "sha256": "39626fdd40b49aa8e6d063c209433924ca446cb44098e24ca0241768ab3ae0f3",
+        "description": "Aligned to the real generated/consumer type contract (renamed/added fields, corrected literal unions, or narrowed `unknown` values) to close a Q01 full-app typecheck diagnostic in this audited file. No behavior, test coverage, or generated DTO files were weakened to reach zero diagnostics."
+      },
+      {
+        "file": "src/lib/bff-v1/agora/workshops.test.ts",
+        "sha256": "b70609287bbe51919fe2f3762176e2ca32113fffcaba4833bea94f817a6a330e",
+        "description": "Aligned to the real generated/consumer type contract (renamed/added fields, corrected literal unions, or narrowed `unknown` values) to close a Q01 full-app typecheck diagnostic in this audited file. No behavior, test coverage, or generated DTO files were weakened to reach zero diagnostics."
+      },
+      {
+        "file": "src/lib/bff-v1/agora/workshops.ts",
+        "sha256": "9c27d1c2661278a44e75b8d0d1675a0d97e8df24566e4b4a30cc2b804e31c073",
+        "description": "Root-cause fix for ~150 downstream diagnostics: the generated WorkshopCard DTO types `payload` as `Record<string, never>` and its card_type union omits several server-emitted kinds (persona_opinion/opinion/debate/governed_proposal/workshop_concluded/conclusion) that the renderer already switches on. Replaced the direct alias of the generated type with a consumer-side WorkshopCard interface (payload: Record<string, unknown>, extended card_type union, legacy sequence/emitted_by/persona_id fields) that matches the real wire contract already consumed by WorkshopCardRenderer/Primitives. Re-exported StrategyWorkshop and StrategyCompleteness so consumers no longer need to import the raw generated types directly."
+      },
+      {
+        "file": "src/lib/bff-v1/evolution.ts",
+        "sha256": "7757554888e07af246bb54f52089ffee888a70697134c6c8a2ec394fdb57c366",
+        "description": "Rebaseline fix (file not in the original audit-frozen artifact grant, but required for the mandatory zero-diagnostic full-app gate): dropped explicit `(x): x is T` type-predicate annotations on three `.filter(v => v !== null)` calls whose declared predicate type no longer matched the real mapped element type (TS 5.8's automatic inferred-predicate support handles the null exclusion without the redundant/incorrect annotation); changed two invalid `state: \"active\"` literals (FitnessFormula/MutationRule) to the real LifecycleState literal \"deployed\"."
+      },
+      {
+        "file": "src/lib/bff-v1/governance.ts",
+        "sha256": "f08506f624e2f5b2b7f56f27648e962804ab29f071d4d64415464563ec670583",
+        "description": "Aligned to the real generated/consumer type contract (renamed/added fields, corrected literal unions, or narrowed `unknown` values) to close a Q01 full-app typecheck diagnostic in this audited file. No behavior, test coverage, or generated DTO files were weakened to reach zero diagnostics."
+      },
+      {
+        "file": "src/lib/bff-v1/index.ts",
+        "sha256": "1a083da17643ad39ef9d19666caf1d165a61eddfb0a6ac643bac33e9a899bef2",
+        "description": "Aligned to the real generated/consumer type contract (renamed/added fields, corrected literal unions, or narrowed `unknown` values) to close a Q01 full-app typecheck diagnostic in this audited file. No behavior, test coverage, or generated DTO files were weakened to reach zero diagnostics."
+      },
+      {
+        "file": "src/lib/bff-v1/lists.ts",
+        "sha256": "1c467c17be01ec7b1926c5a5a115790d64a7496cf5826079a8997d953de261d2",
+        "description": "Aligned to the real generated/consumer type contract (renamed/added fields, corrected literal unions, or narrowed `unknown` values) to close a Q01 full-app typecheck diagnostic in this audited file. No behavior, test coverage, or generated DTO files were weakened to reach zero diagnostics."
+      },
+      {
+        "file": "src/lib/bff-v1/managementAi.ts",
+        "sha256": "c74616a89baec2b32c535a280dbdfd9e69966597b1029f0d7167225a84e374a2",
+        "description": "Aligned to the real generated/consumer type contract (renamed/added fields, corrected literal unions, or narrowed `unknown` values) to close a Q01 full-app typecheck diagnostic in this audited file. No behavior, test coverage, or generated DTO files were weakened to reach zero diagnostics."
+      },
+      {
+        "file": "src/lib/bff-v1/managementConsoleReads.ts",
+        "sha256": "8d90beae7f7e8629a65853afebb070d0b69bfaacd00ef37c1b40f6999bae7a43",
+        "description": "Aligned to the real generated/consumer type contract (renamed/added fields, corrected literal unions, or narrowed `unknown` values) to close a Q01 full-app typecheck diagnostic in this audited file. No behavior, test coverage, or generated DTO files were weakened to reach zero diagnostics."
+      },
+      {
+        "file": "src/lib/bff-v1/managementDataSources.ts",
+        "sha256": "f35e4dc714fe04fe1cc1c8b4ef68853d4b5b8ba2cf956f4e515f88f68985aa85",
+        "description": "Aligned to the real generated/consumer type contract (renamed/added fields, corrected literal unions, or narrowed `unknown` values) to close a Q01 full-app typecheck diagnostic in this audited file. No behavior, test coverage, or generated DTO files were weakened to reach zero diagnostics."
+      },
+      {
+        "file": "src/lib/bff-v1/personas.ts",
+        "sha256": "c9708a06915ee0c54c9ccb810453b82f2ebdd444816541e8f9d096e8db2087d4",
+        "description": "Aligned to the real generated/consumer type contract (renamed/added fields, corrected literal unions, or narrowed `unknown` values) to close a Q01 full-app typecheck diagnostic in this audited file. No behavior, test coverage, or generated DTO files were weakened to reach zero diagnostics."
+      },
+      {
+        "file": "src/lib/bff-v1/v5.ts",
+        "sha256": "560f71b0df407e9cba4ddd9891136804cd74ebd97170a253c322ba9ea7262a30",
+        "description": "Aligned to the real generated/consumer type contract (renamed/added fields, corrected literal unions, or narrowed `unknown` values) to close a Q01 full-app typecheck diagnostic in this audited file. No behavior, test coverage, or generated DTO files were weakened to reach zero diagnostics."
+      },
+      {
+        "file": "src/lib/bff-v1/writeOverlay.ts",
+        "sha256": "0a1eb872b7b6949ca7e68fe7783a57732a980bfd3269e5a0c0c6a3e9fbb5b596",
+        "description": "Aligned to the real generated/consumer type contract (renamed/added fields, corrected literal unions, or narrowed `unknown` values) to close a Q01 full-app typecheck diagnostic in this audited file. No behavior, test coverage, or generated DTO files were weakened to reach zero diagnostics."
+      },
+      {
+        "file": "src/lib/bff-v1/writes.ts",
+        "sha256": "494a9be936b2002aecbebc31cb61110fcc7fc73b7a00835979e5283e72546117",
+        "description": "Aligned to the real generated/consumer type contract (renamed/added fields, corrected literal unions, or narrowed `unknown` values) to close a Q01 full-app typecheck diagnostic in this audited file. No behavior, test coverage, or generated DTO files were weakened to reach zero diagnostics."
+      },
+      {
+        "file": "src/lib/v5/__tests__/bff.test.ts",
+        "sha256": "30618cb6e3ab95a3cdfdaa17372ba2e19d48caf173c3fd3c1d1e9d03c1ead5ad",
+        "description": "Aligned to the real generated/consumer type contract (renamed/added fields, corrected literal unions, or narrowed `unknown` values) to close a Q01 full-app typecheck diagnostic in this audited file. No behavior, test coverage, or generated DTO files were weakened to reach zero diagnostics."
+      },
+      {
+        "file": "src/lib/v5/__tests__/loopOverlay.test.ts",
+        "sha256": "dddcc8818813c95070fd05ff8f1876c2a49396662f75f76237bc128b5460259d",
+        "description": "Aligned to the real generated/consumer type contract (renamed/added fields, corrected literal unions, or narrowed `unknown` values) to close a Q01 full-app typecheck diagnostic in this audited file. No behavior, test coverage, or generated DTO files were weakened to reach zero diagnostics."
+      },
+      {
+        "file": "src/management/components/agent/AgentPanelBody.tsx",
+        "sha256": "f25ef136fa02f1c0e5a9876fcc56585468d5bf3e73f890c26daabc1c4382c113",
+        "description": "F11: added missing controlTargetMode state (wired into activateAssistantControlMode's mode param, replacing a hardcoded literal) to resolve undefined setControlTargetMode calls in the Codex reauth flow; imported the existing `agentPanel` singleton (useAgentPanel.ts) to resolve the undefined agentPanel.open() call in focusPanel(\"agentPanel\"); fixed AssistantProviderReauthResult boolean-discriminant narrowing (see strict:false narrowing note below) by using ok === false / ok === true comparisons instead of !result.ok / result.ok."
+      },
+      {
+        "file": "src/management/components/agent/AgentPanelBody.test.tsx",
+        "sha256": "26bae32673f17d7d90ff11755a3e1407ae55d64f9d3b42ee9b2f64cbf137782d",
+        "description": "F11 test coverage: added mounted component and action tests covering focusPanel(\"agentPanel\") using real agentPanel singleton API, Codex provider reauth requiring control mode activation, successful Codex reauth session notice and verification link rendering, expired/forbidden session (HTTP 403) failure handling and control dialog re-opening, and toolbar control mode activation and deactivation."
+      },
+      {
+        "file": "src/management/components/detail/AllocationSimulationPanel.tsx",
+        "sha256": "9e66e09d9d68b8229e11a4c24cc0e01f32ce51362bc2e61363e0f9e7c77a4a49",
+        "description": "Aligned to the real generated/consumer type contract (renamed/added fields, corrected literal unions, or narrowed `unknown` values) to close a Q01 full-app typecheck diagnostic in this audited file. No behavior, test coverage, or generated DTO files were weakened to reach zero diagnostics."
+      },
+      {
+        "file": "src/management/components/detail/McpSecretsPanel.tsx",
+        "sha256": "d0cda446b0f19b9713a7abeb59be85cca0a7472b15fd8359d7d9d488fc38cc4a",
+        "description": "Aligned to the real generated/consumer type contract (renamed/added fields, corrected literal unions, or narrowed `unknown` values) to close a Q01 full-app typecheck diagnostic in this audited file. No behavior, test coverage, or generated DTO files were weakened to reach zero diagnostics."
+      },
+      {
+        "file": "src/management/components/openclaw/OpenClawLlmAuthPanel.tsx",
+        "sha256": "c7e55deed24ad5b3e715b4be33b16a47b18fcb2570230f2a0ee35aae76616fae",
+        "description": "Aligned to the real generated/consumer type contract (renamed/added fields, corrected literal unions, or narrowed `unknown` values) to close a Q01 full-app typecheck diagnostic in this audited file. No behavior, test coverage, or generated DTO files were weakened to reach zero diagnostics."
+      },
+      {
+        "file": "src/management/pages/CapabilitiesLists.tsx",
+        "sha256": "bb695995ac3b4a325589699254449cafa94455186b2ab4e1513a9e18a4ba1354",
+        "description": "Aligned to the real generated/consumer type contract (renamed/added fields, corrected literal unions, or narrowed `unknown` values) to close a Q01 full-app typecheck diagnostic in this audited file. No behavior, test coverage, or generated DTO files were weakened to reach zero diagnostics."
+      },
+      {
+        "file": "src/management/pages/CapitalPoolDetail.tsx",
+        "sha256": "6a90155282b64c1dc906beecab162e933f9d9e85a46487ddda67cad92eb579fe",
+        "description": "Aligned to the real generated/consumer type contract (renamed/added fields, corrected literal unions, or narrowed `unknown` values) to close a Q01 full-app typecheck diagnostic in this audited file. No behavior, test coverage, or generated DTO files were weakened to reach zero diagnostics."
+      },
+      {
+        "file": "src/management/pages/DeploymentDetail.tsx",
+        "sha256": "ad9d5a406b30b71069fcb2daa1da8285a87f3a584f4fafaa6e7f04c0f1600186",
+        "description": "Aligned to the real generated/consumer type contract (renamed/added fields, corrected literal unions, or narrowed `unknown` values) to close a Q01 full-app typecheck diagnostic in this audited file. No behavior, test coverage, or generated DTO files were weakened to reach zero diagnostics."
+      },
+      {
+        "file": "src/management/pages/Lists.tsx",
+        "sha256": "9239849bfcd12802a2181719d978cc1921b0e0733847c2d313844d503138b13d",
+        "description": "Aligned to the real generated/consumer type contract (renamed/added fields, corrected literal unions, or narrowed `unknown` values) to close a Q01 full-app typecheck diagnostic in this audited file. No behavior, test coverage, or generated DTO files were weakened to reach zero diagnostics."
+      },
+      {
+        "file": "src/management/pages/Operations.tsx",
+        "sha256": "bbb23513235e16f9f08271d91d9f504253a69265096a95c374765196e1193666",
+        "description": "Aligned to the real generated/consumer type contract (renamed/added fields, corrected literal unions, or narrowed `unknown` values) to close a Q01 full-app typecheck diagnostic in this audited file. No behavior, test coverage, or generated DTO files were weakened to reach zero diagnostics."
+      },
+      {
+        "file": "src/management/pages/PersonaOnboarding.tsx",
+        "sha256": "00c7626af8e2b9db0f6ffc60806a9875cdf4e39026d5ad1f8f7b1fd45df42fb5",
+        "description": "Aligned to the real generated/consumer type contract (renamed/added fields, corrected literal unions, or narrowed `unknown` values) to close a Q01 full-app typecheck diagnostic in this audited file. No behavior, test coverage, or generated DTO files were weakened to reach zero diagnostics."
+      },
+      {
+        "file": "src/management/pages/ResearchDetail.test.tsx",
+        "sha256": "88311dddcfc095a68cac494b5efcbeb802daf6eb1638ea95e019cd2d411cdcb0",
+        "description": "Rebaseline fix: removed two dead `state: \"running\"/\"canceled\"` fixture overrides (LifecycleState doesn't include those literals; the base fixture's valid `state: \"review\"` was already unused by assertions); added the BaseObject-required owner/updatedAt/state/risk fields to the sampleSkill mock."
+      },
+      {
+        "file": "src/management/pages/ResearchDetail.tsx",
+        "sha256": "b4b1fce172ab2be31d587f769cab5457538555e72e0353f716c2affbea74116b",
+        "description": "Rebaseline fix (regression surfaced by the just-merged FE-RESEARCH-JOBS-ACTIONS-CLOSURE-001 predecessor; not in the original audit-frozen grant but required for the zero-diagnostic gate): handleCancel/handleRetry read a nonexistent `.envelope` off the MutationResult returned by runActionSafe. Switched both handlers to the dedicated bffV1.research.cancel/retry functions (JobActionEnvelope, which genuinely carries `.data.receipt`) with explicit try/catch + toast, matching real behavior instead of a type that was never populated. Removed a dead, never-read `state: \"canceled\"` field (LifecycleState doesn't include \"canceled\"; the real status lives in `status`). Removed an unsupported `mono` prop from a StatCard usage (StatCard never implemented `mono`)."
+      },
+      {
+        "file": "src/management/pages/Runtimes.tsx",
+        "sha256": "66fe52cedf1ca6559691531bfe73a78564b14fdcd1fff10dfbbcf13f1794d814",
+        "description": "Aligned to the real generated/consumer type contract (renamed/added fields, corrected literal unions, or narrowed `unknown` values) to close a Q01 full-app typecheck diagnostic in this audited file. No behavior, test coverage, or generated DTO files were weakened to reach zero diagnostics."
+      },
+      {
+        "file": "src/management/pages/capitalPoolsFleetFallback.ts",
+        "sha256": "62a6f2a2540a184ae2b86826a19e0855dc8d11a0ae348031c22bc9fe95becf1b",
+        "description": "Aligned to the real generated/consumer type contract (renamed/added fields, corrected literal unions, or narrowed `unknown` values) to close a Q01 full-app typecheck diagnostic in this audited file. No behavior, test coverage, or generated DTO files were weakened to reach zero diagnostics."
+      },
+      {
+        "file": "src/management/pages/oversight/DataSourceManagement.test.tsx",
+        "sha256": "05d3a862f5d330dbe76e43182afc1afd5f13a400a9e9fa85517908dd864beffa",
+        "description": "Aligned to the real generated/consumer type contract (renamed/added fields, corrected literal unions, or narrowed `unknown` values) to close a Q01 full-app typecheck diagnostic in this audited file. No behavior, test coverage, or generated DTO files were weakened to reach zero diagnostics."
+      },
+      {
+        "file": "src/management/pages/oversight/PerformanceAttribution.tsx",
+        "sha256": "cf54eaa237406b968c1c25c9d44771c47d02e4645a08f8290f0b235826ad198a",
+        "description": "Aligned to the real generated/consumer type contract (renamed/added fields, corrected literal unions, or narrowed `unknown` values) to close a Q01 full-app typecheck diagnostic in this audited file. No behavior, test coverage, or generated DTO files were weakened to reach zero diagnostics."
+      },
+      {
+        "file": "src/management/pages/oversight/PersonaLeague.tsx",
+        "sha256": "f2551b217cb6745abcbc97fa600c3e250b563fad20bf4623915cd9a8d90f5c32",
+        "description": "Aligned to the real generated/consumer type contract (renamed/added fields, corrected literal unions, or narrowed `unknown` values) to close a Q01 full-app typecheck diagnostic in this audited file. No behavior, test coverage, or generated DTO files were weakened to reach zero diagnostics."
+      },
+      {
+        "file": "src/management/pages/oversight/_core.test.ts",
+        "sha256": "84b7a658d7a7d11bb435e03a73fea8ead207684bec452886eb8e04b4a73ddd92",
+        "description": "Aligned to the real generated/consumer type contract (renamed/added fields, corrected literal unions, or narrowed `unknown` values) to close a Q01 full-app typecheck diagnostic in this audited file. No behavior, test coverage, or generated DTO files were weakened to reach zero diagnostics."
+      },
+      {
+        "file": "src/management/pages/oversight/dataSources/DataSourceCommandDialog.tsx",
+        "sha256": "6f9e67b3d616dfb2ddee3b2f431a42d24f2c586b44e655181c39765a8e266fef",
+        "description": "Aligned to the real generated/consumer type contract (renamed/added fields, corrected literal unions, or narrowed `unknown` values) to close a Q01 full-app typecheck diagnostic in this audited file. No behavior, test coverage, or generated DTO files were weakened to reach zero diagnostics."
+      },
+      {
+        "file": "src/management/pages/oversight/dataSources/DataSourceInstancesTable.tsx",
+        "sha256": "4ec8e9d7950f0e17dad3adb3fd5bcab52db2611211d8f5faf610f8c4935d386c",
+        "description": "Aligned to the real generated/consumer type contract (renamed/added fields, corrected literal unions, or narrowed `unknown` values) to close a Q01 full-app typecheck diagnostic in this audited file. No behavior, test coverage, or generated DTO files were weakened to reach zero diagnostics."
+      },
+      {
+        "file": "src/management/pages/oversight/personaFleetLinks.ts",
+        "sha256": "98fff8c5d00f4449841d3075f32770596ef52688014929ed3d91f675e80b0607",
+        "description": "Added the missing snake_case fields (mutation_entry_id, evolution_entry_id, evolution_href, last_mutation_at, last_mutation) to the local RawPersonaFleetRow raw-row type and restored their use as the raw-data fallback in personaFleetMutationHref, fixing both a type error and a regression this task introduced then caught via the full test suite (personaFleetMutationHref's slim/raw-row fallback path in _core.test.ts)."
+      },
+      {
+        "file": "src/management/pages/v5/V5Pages.tsx",
+        "sha256": "66c88f1ee2cc32310a09e030b4cbf0c7d787b50f81baf6c59c37ace6ecfcd3f3",
+        "description": "F10: added the missing `import { Badge } from \"@/components/ui/badge\"` -- mounted V5 loops page referenced Badge in 3 places without importing it."
+      },
+      {
+        "file": "src/management/pages/v5/useV5Live.test.tsx",
+        "sha256": "3a4c2f4065591e4cfdfbe85a51db4ff451fbc14c19d64c1534b0a6d8544efeab",
+        "description": "Aligned to the real generated/consumer type contract (renamed/added fields, corrected literal unions, or narrowed `unknown` values) to close a Q01 full-app typecheck diagnostic in this audited file. No behavior, test coverage, or generated DTO files were weakened to reach zero diagnostics."
+      },
+      {
+        "file": "src/mocks/seed.ts",
+        "sha256": "83fed7dc71e101bf7b4cdd48f12a6a1a3509034612f6c65ee72b35f0c002e2e4",
+        "description": "Aligned to the real generated/consumer type contract (renamed/added fields, corrected literal unions, or narrowed `unknown` values) to close a Q01 full-app typecheck diagnostic in this audited file. No behavior, test coverage, or generated DTO files were weakened to reach zero diagnostics."
+      },
+      {
+        "file": "src/routes/lazyRoute.tsx",
+        "sha256": "4b76b037d088e55c3ada73339c7687f271b6d8fa87a0dd68ea8c09eb364a93a5",
+        "description": "lazyNamedRoute's generic constraint required the entire imported route module to satisfy Record<string, RouteComponent>, which broke when a route module also exports a plain non-component helper (safeWorkshopReturnPath in routes/agora.tsx). Narrowed the constraint to only require the named export key to be a RouteComponent (Record<Key, RouteComponent>) instead of the whole module shape."
+      },
+      {
+        "file": "src/test/full-app-typecheck-contract.test.ts",
+        "sha256": "c7396c24addfb996b43155ddb5aff4f46c8e317f50feb9621338a87853fa94f7",
+        "description": "New contract test (declared artifact) that locks the Q01 CI gate in place: asserts tsconfig.app.json's include root is \"src\" (the real app root), npm run typecheck / typecheck:app resolve to tsc -p tsconfig.app.json, typecheck:agora remains available, and required branch CI actually runs both npm run typecheck:app and npm run typecheck:agora -- so the full-app gate cannot silently regress back to the narrower Agora-only check."
+      },
+      {
+        "file": "src/test/hosted-browser-release-policy.test.ts",
+        "sha256": "49742cde9856d5eccf233db4aa41a1923349282ff750f4ea6e1ca87c13df3250",
+        "description": "Rebaseline fix: `new Promise((r) => s.listen(0, \"127.0.0.1\", r))` resolved to the wrong Node http.Server#listen overload (TS picked the (port, backlog, callback) signature). Wrapped the callback explicitly and typed the executor as Promise<void>."
+      }
+    ],
+    "verification": {
+      "typecheck_app": {
+        "command": "npx tsc --noEmit -p tsconfig.app.json",
+        "exit_code": 0,
+        "result": "0 errors (down from 434 diagnostics found on rebaseline; frozen audit predates predecessor merges)"
+      },
+      "typecheck_agora": {
+        "command": "npx tsc -p tsconfig.agora.json --noEmit",
+        "exit_code": 0,
+        "result": "Clean (0 errors)"
+      },
+      "vitest_full_suite": {
+        "command": "npm run test",
+        "exit_code": 0,
+        "result": "2208 passed, 0 failed (208 test files)"
+      },
+      "vitest_agent_panel_body": {
+        "command": "npx vitest run src/management/components/agent/AgentPanelBody.test.tsx",
+        "exit_code": 0,
+        "result": "22 passed (22 tests)"
+      },
+      "vitest_full_app_typecheck_contract": {
+        "command": "npx vitest run src/test/full-app-typecheck-contract.test.ts",
+        "exit_code": 0,
+        "result": "6 passed (6 tests)"
+      },
+      "build": {
+        "command": "VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build",
+        "exit_code": 0,
+        "result": "Production bundle built cleanly in 46.85s (exit 0)"
+      }
+    }
+  }
+}

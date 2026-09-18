@@ -60,9 +60,9 @@ export function lazyRoute(load: () => Promise<LazyModule>, label: string): Route
   };
 }
 
-export function lazyNamedRoute<TModule extends Record<string, RouteComponent>>(
+export function lazyNamedRoute<Key extends string, TModule extends Record<Key, RouteComponent>>(
   load: () => Promise<TModule>,
-  exportName: keyof TModule,
+  exportName: Key,
   label: string,
 ): RouteComponent {
   return lazyRoute(

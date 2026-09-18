@@ -136,7 +136,11 @@ function fleetPrimaryPoolId(row: ManagementPersonaFleetRow): string | undefined 
 
 function fleetRowUpdatedAt(row: ManagementPersonaFleetRow): string {
   const raw = row as RawFleetCapitalRow;
-  return usableText(row.updatedAt) ?? usableText(raw.updated_at) ?? "";
+  // ManagementPersonaFleetRow has no `updatedAt`/`updated_at` field; the
+  // closest real "last touched" timestamp is lastMutationAt (falling back to
+  // the coarser lastMutation date string), with the raw snake_case field kept
+  // as a defensive fallback for payloads that don't match the typed shape.
+  return usableText(row.lastMutationAt) ?? usableText(row.lastMutation) ?? usableText(raw.updated_at) ?? "";
 }
 
 function latestIso(rows: ManagementPersonaFleetRow[]): string {
@@ -320,7 +324,9 @@ function poolCurrency(poolId: string): CapitalPool["currency"] {
 function poolRisk(rows: ManagementPersonaFleetRow[]): CapitalPool["risk"] {
   return rows.some((row) => {
     const raw = row as RawFleetCapitalRow;
-    const health = usableText(row.health) ?? usableText(raw.health) ?? usableText(raw.status);
+    // ManagementPersonaFleetRow has no `health` field; use the defensive raw
+    // fallback field(s) instead.
+    const health = usableText(raw.health) ?? usableText(raw.status);
     return health && health !== "healthy";
   }) ? "medium" : "low";
 }

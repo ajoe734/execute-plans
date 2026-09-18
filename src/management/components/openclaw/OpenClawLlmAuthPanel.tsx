@@ -249,9 +249,9 @@ function kernelLabel(mode: AssistantModeStatusResult | null): string {
 }
 
 function firstError(state: PanelState): string | null {
-  if (state.providerResult && !state.providerResult.ok) return state.providerResult.message;
-  if (state.usageSummary && !state.usageSummary.ok) return state.usageSummary.message;
-  if (state.mode && !state.mode.ok && state.mode.message !== "aborted") return state.mode.message;
+  if (state.providerResult && state.providerResult.ok === false) return state.providerResult.message;
+  if (state.usageSummary && state.usageSummary.ok === false) return state.usageSummary.message;
+  if (state.mode && state.mode.ok === false && state.mode.message !== "aborted") return state.mode.message;
   return null;
 }
 
@@ -317,16 +317,18 @@ function reauthPollDelayMs(session: AssistantProviderReauthSession): number {
 }
 
 function reauthFailureTitle(result: AssistantProviderReauthResult): string {
-  if (result.ok) return "";
-  return result.statusCode === 404 ? "BFF route unavailable" : "Reauth failed";
+  if (result.ok === false) return result.statusCode === 404 ? "BFF route unavailable" : "Reauth failed";
+  return "";
 }
 
 function reauthFailureMessage(result: AssistantProviderReauthResult): string {
-  if (result.ok) return "";
-  if (result.statusCode === 404 && /^BFF 404\b/i.test(result.message)) {
-    return "BFF route unavailable: /bff/assistant/provider/reauth";
+  if (result.ok === false) {
+    if (result.statusCode === 404 && /^BFF 404\b/i.test(result.message)) {
+      return "BFF route unavailable: /bff/assistant/provider/reauth";
+    }
+    return result.message;
   }
-  return result.message;
+  return "";
 }
 
 function providersFromResults(
@@ -530,7 +532,7 @@ export function OpenClawLlmAuthPanel({
           ttlSeconds: 900,
           idleTtlSeconds: 300,
         });
-        if (!control.ok) {
+        if (control.ok === false) {
           setAddProviderError(control.message);
           return;
         }
@@ -547,7 +549,7 @@ export function OpenClawLlmAuthPanel({
         binaryEnv: addProviderForm.binaryEnv.trim() || undefined,
         note: addProviderForm.note.trim() || undefined,
       });
-      if (!result.ok) {
+      if (result.ok === false) {
         setAddProviderError(result.message);
         return;
       }
@@ -588,7 +590,7 @@ export function OpenClawLlmAuthPanel({
         sessionId: session.reauthSessionId,
         code,
       });
-      if (!submitted.ok) {
+      if (submitted.ok === false) {
         setProviderReauth(key, { codeBusy: false, codeError: submitted.message });
         return;
       }
@@ -1148,7 +1150,7 @@ function UsageHistoryPanel({ summary }: { summary: AssistantProviderUsageSummary
     );
   }
 
-  if (!summary.ok) {
+  if (summary.ok === false) {
     return (
       <section className="mt-5 border-t border-border pt-4">
         <div className="flex items-start gap-2 rounded-md border border-status-warning/30 bg-status-warning/10 p-3 text-xs text-status-warning">
@@ -1161,7 +1163,7 @@ function UsageHistoryPanel({ summary }: { summary: AssistantProviderUsageSummary
 
   const providers = summary.providers.filter((provider) => !isOpenClawProviderValue(provider.provider ?? provider.providerName));
   const staleCount = providers.filter((provider) => recordFrom(provider.observedUsage).stale === true).length;
-  const totals = providers.reduce(
+  const totals = providers.reduce<{ liveAuthCount: number; calls: number; totalTokens: number }>(
     (acc, provider) => ({
       liveAuthCount: acc.liveAuthCount + (provider.liveAuth ? 1 : 0),
       calls: acc.calls + (usageNumber(provider.calls) ?? 0),

@@ -4,6 +4,8 @@ import { MemoryRouter } from "react-router-dom";
 import { AgentPanelBody } from "./AgentPanelBody";
 import { bffWrites } from "@/lib/bff-v1/writes";
 import * as toastModule from "@/hooks/use-toast";
+import * as mgmtAi from "@/lib/bff-v1/managementAi";
+import { agentPanel } from "./useAgentPanel";
 
 vi.mock("@/lib/bff-v1/writes", async () => {
   const actual = await vi.importActual<typeof import("@/lib/bff-v1/writes")>("@/lib/bff-v1/writes");
@@ -18,6 +20,7 @@ vi.mock("@/lib/bff-v1/managementAi", async () => {
     ...actual,
     fetchAssistantModeStatus: vi.fn().mockResolvedValue({
       ok: true,
+      kind: "ok",
       status: { kernelEnabled: true, controlMode: { active: false, state: "inactive" } },
     }),
     fetchManagementAiConversationList: vi.fn().mockResolvedValue({
@@ -27,6 +30,36 @@ vi.mock("@/lib/bff-v1/managementAi", async () => {
     fetchManagementAiConversation: vi.fn().mockResolvedValue({
       kind: "ok",
       turns: [],
+    }),
+    streamManagementAi: vi.fn().mockResolvedValue({
+      ok: true,
+      kind: "ok",
+      answer: "Mock answer",
+    }),
+    startAssistantProviderReauth: vi.fn().mockResolvedValue({
+      ok: true,
+      kind: "ok",
+      reauth: {
+        provider: "codex",
+        status: "pending",
+        userCode: "TEST-CODE-1234",
+        reauthSessionId: "reauth_1",
+        verificationUri: "https://auth.example.com",
+        verificationUriComplete: "https://auth.example.com",
+        expiresAt: null,
+        intervalSeconds: 5,
+        credentialExchange: null,
+      },
+    }),
+    activateAssistantControlMode: vi.fn().mockResolvedValue({
+      ok: true,
+      kind: "ok",
+      controlMode: { active: true, state: "active", mode: "kernel_debug" },
+    }),
+    deactivateAssistantControlMode: vi.fn().mockResolvedValue({
+      ok: true,
+      kind: "ok",
+      controlMode: { active: false, state: "inactive" },
     }),
   };
 });
@@ -795,5 +828,368 @@ describe("AgentPanelBody — UI Actions & Confirmation Workflow", () => {
     await waitFor(() => {
       expect(screen.getByText(/已成功執行 \(terminal status: executed\)/i)).toBeInTheDocument();
     });
+  });
+});
+
+describe("AgentPanelBody — F11 Codex Reauth & Focus Panel Flow", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.clearAllMocks();
+  });
+
+  it("executes focusPanel for agentPanel using real agentPanel store API", async () => {
+    const openSpy = vi.spyOn(agentPanel, "open");
+    const mockTurn = {
+      id: "turn_ast_focus_agent_panel",
+      role: "assistant",
+      text: "請開啟 Agent Panel。",
+      uiActions: [
+        {
+          kind: "focusPanel",
+          label: "聚焦 Agent 助理",
+          params: { panel: "agentPanel" },
+        },
+      ],
+      createdAt: Date.now() - 1000,
+    };
+
+    const sessionId = "ses_test_focus_agent";
+    localStorage.setItem("pantheon.mgmtAi.sessions.v1", JSON.stringify([
+      { id: sessionId, title: "聚焦 Agent 對話", updatedAt: Date.now() },
+    ]));
+    localStorage.setItem(`pantheon.mgmtAi.turns.v1.${sessionId}`, JSON.stringify([mockTurn]));
+
+    render(
+      <MemoryRouter initialEntries={["/management/strategies"]}>
+        <AgentPanelBody />
+      </MemoryRouter>,
+    );
+
+    const sessionItem = await screen.findByText("聚焦 Agent 對話");
+    fireEvent.click(sessionItem);
+
+    const focusBtn = await screen.findByRole("button", { name: /聚焦 Agent 助理/i });
+    fireEvent.click(focusBtn);
+
+    await waitFor(() => {
+      expect(openSpy).toHaveBeenCalled();
+      expect(screen.getByText("已執行")).toBeInTheDocument();
+    });
+  });
+
+  it("handles Codex reauth when control mode is inactive: renders ProviderReauthNotice failure, opens control dialog, and activates control mode with controlTargetMode", async () => {
+    const toastSpy = vi.spyOn(toastModule, "toast");
+    vi.mocked(mgmtAi.fetchAssistantModeStatus).mockResolvedValue({
+      ok: true,
+      kind: "ok",
+      status: { kernelEnabled: true, controlMode: { active: false, state: "inactive" } },
+    });
+    vi.mocked(mgmtAi.streamManagementAi).mockResolvedValue({
+      ok: false,
+      kind: "provider_degraded",
+      providerStatus: {
+        provider: "codex",
+        runtime: "openclaw_gateway_agent_cli",
+        status: "degraded",
+        used: false,
+        fallback: "rule_based",
+        operatorAction: "reauth_codex_service_user",
+        displayMessage: "Codex authentication required.",
+        runId: "run_reauth_inactive_1",
+      },
+      sessionId: "ses_reauth_inactive",
+      traceId: "trace_reauth_inactive",
+      answer: "AI provider 暫時不可用，目前改用規則式摘要。",
+      auditLogHref: null,
+      conversationHref: null,
+      uiActions: [],
+      message: "Codex auth required",
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/management/operations"]}>
+        <AgentPanelBody />
+      </MemoryRouter>,
+    );
+
+    // Send a message to trigger provider_degraded
+    const textarea = screen.getByPlaceholderText(/跟 Management AI 說話/i);
+    fireEvent.change(textarea, { target: { value: "Trigger degraded provider" } });
+    fireEvent.submit(textarea.closest("form")!);
+
+    // Degraded banner appears with "重新登入" button
+    const reauthBtn = await screen.findByRole("button", { name: /重新登入/i });
+    expect(screen.getByText("Codex authentication required.")).toBeInTheDocument();
+
+    // Click "重新登入" when control mode is inactive
+    fireEvent.click(reauthBtn);
+
+    // ProviderReauthNotice should display failure notice indicating control mode is needed
+    await waitFor(() => {
+      expect(screen.getByText(/Reauth 失敗：需要先啟用 control mode。/i)).toBeInTheDocument();
+    });
+
+    expect(toastSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "需要 Control mode",
+        description: "需要先啟用 control mode。",
+      }),
+    );
+
+    // Control Dialog should be open
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("Control mode")).toBeInTheDocument();
+
+    // Enter passphrase and activate control mode
+    const passphraseInput = dialog.querySelector("#mgmt-ai-control-passphrase")!;
+    fireEvent.change(passphraseInput, { target: { value: "test-kernel-pass" } });
+
+    const activateBtn = within(dialog).getByRole("button", { name: "Activate" });
+    fireEvent.click(activateBtn);
+
+    await waitFor(() => {
+      expect(mgmtAi.activateAssistantControlMode).toHaveBeenCalledWith(
+        expect.objectContaining({
+          passphrase: "test-kernel-pass",
+          mode: "kernel_debug",
+          reason: "Codex provider reauth",
+        }),
+      );
+    });
+
+    expect(toastSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "Control mode active",
+      }),
+    );
+  });
+
+  it("handles successful Codex reauth when control mode is active: calls startAssistantProviderReauth and renders active reauth session notice", async () => {
+    const toastSpy = vi.spyOn(toastModule, "toast");
+    vi.mocked(mgmtAi.fetchAssistantModeStatus).mockResolvedValue({
+      ok: true,
+      kind: "ok",
+      status: {
+        kernelEnabled: true,
+        controlMode: { active: true, state: "active", mode: "kernel_debug" },
+      },
+    });
+    vi.mocked(mgmtAi.streamManagementAi).mockResolvedValue({
+      ok: false,
+      kind: "provider_degraded",
+      providerStatus: {
+        provider: "codex",
+        runtime: "openclaw_gateway_agent_cli",
+        status: "degraded",
+        used: false,
+        fallback: "rule_based",
+        operatorAction: "reauth_codex_service_user",
+        displayMessage: "Codex session expired.",
+        runId: "run_reauth_success_1",
+      },
+      sessionId: "ses_reauth_success",
+      traceId: "trace_reauth_success",
+      answer: "AI provider 暫時不可用，目前改用規則式摘要。",
+      auditLogHref: null,
+      conversationHref: null,
+      uiActions: [],
+      message: "Codex auth required",
+    });
+    vi.mocked(mgmtAi.startAssistantProviderReauth).mockResolvedValue({
+      ok: true,
+      kind: "ok",
+      reauth: {
+        provider: "codex",
+        status: "pending",
+        userCode: "TEST-CODE-9999",
+        verificationUri: "https://auth.codex.example/device",
+        verificationUriComplete: "https://auth.codex.example/device?code=TEST-CODE-9999",
+        reauthSessionId: "reauth_sess_alpha",
+        expiresAt: null,
+        intervalSeconds: 5,
+        credentialExchange: {
+          bffHandlesCredentials: true,
+          frontendHandlesCredentials: false,
+        },
+      },
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/management/operations"]}>
+        <AgentPanelBody />
+      </MemoryRouter>,
+    );
+
+    const textarea = screen.getByPlaceholderText(/跟 Management AI 說話/i);
+    fireEvent.change(textarea, { target: { value: "Trigger degraded provider" } });
+    fireEvent.submit(textarea.closest("form")!);
+
+    const reauthBtn = await screen.findByRole("button", { name: /重新登入/i });
+    fireEvent.click(reauthBtn);
+
+    await waitFor(() => {
+      expect(mgmtAi.startAssistantProviderReauth).toHaveBeenCalledWith(
+        expect.objectContaining({
+          provider: "codex",
+          reason: "Codex session expired.",
+          traceId: "run_reauth_success_1",
+        }),
+      );
+    });
+
+    // ProviderReauthNotice renders successful pending state with code, session, and verification link
+    await waitFor(() => {
+      expect(screen.getByText(/Codex reauth pending/i)).toBeInTheDocument();
+      expect(screen.getByText(/code=TEST-CODE-9999/i)).toBeInTheDocument();
+      expect(screen.getByText(/session=reauth_sess_alpha/i)).toBeInTheDocument();
+      expect(screen.getByText(/bff_credentials=true frontend_credentials=false/i)).toBeInTheDocument();
+    });
+
+    const loginLink = screen.getByRole("link", { name: /login/i });
+    expect(loginLink).toHaveAttribute("href", "https://auth.codex.example/device?code=TEST-CODE-9999");
+
+    expect(toastSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "Codex reauth started",
+        description: "code TEST-CODE-9999",
+      }),
+    );
+  });
+
+  it("handles expired Codex reauth session (HTTP 403): renders failure in ProviderReauthNotice and re-opens control dialog", async () => {
+    const toastSpy = vi.spyOn(toastModule, "toast");
+    vi.mocked(mgmtAi.fetchAssistantModeStatus).mockResolvedValue({
+      ok: true,
+      kind: "ok",
+      status: {
+        kernelEnabled: true,
+        controlMode: { active: true, state: "active", mode: "kernel_debug" },
+      },
+    });
+    vi.mocked(mgmtAi.streamManagementAi).mockResolvedValue({
+      ok: false,
+      kind: "provider_degraded",
+      providerStatus: {
+        provider: "codex",
+        runtime: "openclaw_gateway_agent_cli",
+        status: "degraded",
+        used: false,
+        fallback: "rule_based",
+        operatorAction: "reauth_codex_service_user",
+        displayMessage: "Codex token expired.",
+        runId: "run_reauth_expired_1",
+      },
+      sessionId: "ses_reauth_expired",
+      traceId: "trace_reauth_expired",
+      answer: "AI provider 暫時不可用，目前改用規則式摘要。",
+      auditLogHref: null,
+      conversationHref: null,
+      uiActions: [],
+      message: "Codex auth required",
+    });
+    vi.mocked(mgmtAi.startAssistantProviderReauth).mockResolvedValue({
+      ok: false,
+      kind: "failure",
+      statusCode: 403,
+      message: "Codex session expired; re-authentication required",
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/management/operations"]}>
+        <AgentPanelBody />
+      </MemoryRouter>,
+    );
+
+    const textarea = screen.getByPlaceholderText(/跟 Management AI 說話/i);
+    fireEvent.change(textarea, { target: { value: "Trigger degraded provider" } });
+    fireEvent.submit(textarea.closest("form")!);
+
+    const reauthBtn = await screen.findByRole("button", { name: /重新登入/i });
+    fireEvent.click(reauthBtn);
+
+    // ProviderReauthNotice displays error
+    await waitFor(() => {
+      expect(screen.getByText(/Reauth 失敗：Codex session expired; re-authentication required/i)).toBeInTheDocument();
+    });
+
+    // On 403, Control Dialog automatically re-opens for reauth
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("Control mode")).toBeInTheDocument();
+
+    expect(toastSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "Reauth 失敗",
+        description: "Codex session expired; re-authentication required",
+        variant: "destructive",
+      }),
+    );
+  });
+
+  it("opens Control dialog from toolbar, activates control mode, and can deactivate", async () => {
+    const toastSpy = vi.spyOn(toastModule, "toast");
+    vi.mocked(mgmtAi.fetchAssistantModeStatus)
+      .mockResolvedValueOnce({
+        ok: true,
+        kind: "ok",
+        status: { kernelEnabled: true, controlMode: { active: false, state: "inactive" } },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        kind: "ok",
+        status: { kernelEnabled: true, controlMode: { active: true, state: "active", mode: "kernel_debug" } },
+      });
+
+    render(
+      <MemoryRouter initialEntries={["/management/operations"]}>
+        <AgentPanelBody />
+      </MemoryRouter>,
+    );
+
+    const controlBtn = await screen.findByRole("button", { name: /Control/i });
+    fireEvent.click(controlBtn);
+
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("Control mode")).toBeInTheDocument();
+
+    // Try activate without passphrase
+    const activateBtn = within(dialog).getByRole("button", { name: "Activate" });
+    fireEvent.click(activateBtn);
+    expect(await screen.findByText("需要 passphrase")).toBeInTheDocument();
+
+    // Enter passphrase and activate
+    const passphraseInput = dialog.querySelector("#mgmt-ai-control-passphrase")!;
+    fireEvent.change(passphraseInput, { target: { value: "secret123" } });
+    fireEvent.click(activateBtn);
+
+    await waitFor(() => {
+      expect(mgmtAi.activateAssistantControlMode).toHaveBeenCalledWith(
+        expect.objectContaining({
+          passphrase: "secret123",
+          mode: "kernel_debug",
+        }),
+      );
+    });
+
+    expect(toastSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "Control mode active",
+      }),
+    );
+
+    // Open dialog again and deactivate
+    fireEvent.click(controlBtn);
+    const dialogAgain = await screen.findByRole("dialog");
+    const deactivateBtn = within(dialogAgain).getByRole("button", { name: "Deactivate" });
+    fireEvent.click(deactivateBtn);
+
+    await waitFor(() => {
+      expect(mgmtAi.deactivateAssistantControlMode).toHaveBeenCalled();
+    });
+
+    expect(toastSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "Control mode inactive",
+      }),
+    );
   });
 });

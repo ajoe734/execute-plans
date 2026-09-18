@@ -21,7 +21,7 @@ vi.mock("react-i18next", () => ({
 
 function sampleProposal(overrides: Partial<TradingRoomWorkspaceProposal> = {}): TradingRoomWorkspaceProposal {
   return {
-    id: "prop-001",
+    proposalId: "prop-001",
     strategyId: "strat-001",
     strategyVersion: "v1.0",
     generatedAt: "2026-07-14T02:00:00Z",

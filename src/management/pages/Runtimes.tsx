@@ -18,7 +18,7 @@ import { runtimesWithFleetFallback, type FleetRuntimeRow } from "./runtimeFleetF
 
 const NAN = "nan";
 
-type RuntimeAction = "restart" | "drain" | "move" | "scale" | "quarantine" | "inspect_logs" | "disable_new";
+type RuntimeAction = "restart" | "drain" | "move" | "scale" | "quarantine" | "inspect_logs" | "disable_new" | "emergency_kill";
 
 type RuntimeRow = FleetRuntimeRow & {
   bindingId?: string;

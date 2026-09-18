@@ -4,6 +4,7 @@ import { ENTITY_TO_LIVE_KIND, ENTITY_TO_SSE_CHANNEL } from "@/lib/writeIntents/c
 import { isSseChannel } from "./sse/channels";
 import type { SseChannelKind } from "@/lib/v4/sseEnvelope";
 import { newCorrelationId, newUuid } from "@/lib/v4/correlation";
+import { auditEvents } from "@/mocks/seed";
 
 export const WRITE_OVERLAY_TTL_MS = 30 * 60 * 1000;
 export const WRITE_OVERLAY_GC_INTERVAL_MS = 60 * 1000;

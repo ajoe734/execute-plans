@@ -1,9 +1,10 @@
 import React from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { StrategyWorkshop, WorkshopCard } from "@/lib/bff-v1/agora/types";
 import type { ResolveContextRequest } from "@/lib/bff-v1/agora/interaction";
 import type {
+  StrategyWorkshop,
+  WorkshopCard,
   WorkshopCard as WorkshopCardSchema,
   WorkshopCompletenessSnapshot,
   WorkshopReadinessAssessment,
@@ -121,10 +122,10 @@ const MOCK_WORKSHOP = {
 function resolvedContextFixture(body: ResolveContextRequest) {
   const workshopId = body.workshop_id ?? "ws-abc";
   const contextRefs = body.context_refs ?? [];
-  const bindingRefs = contextRefs.map((ref: Record<string, unknown>) => ({
+  const bindingRefs = contextRefs.map((ref) => ({
     kind: ref.type, id: ref.id, version: ref.version_id ?? null,
   }));
-  const strategy = bindingRefs.find((ref: Record<string, unknown>) => ref.kind === "strategy" && ref.version);
+  const strategy = bindingRefs.find((ref) => ref.kind === "strategy" && ref.version);
   const resolvedAt = "2026-07-17T00:00:00Z";
   return Promise.resolve({
     data: {
@@ -142,8 +143,8 @@ function resolvedContextFixture(body: ResolveContextRequest) {
         focused_object: body.focused_object ?? { kind: "workshop", id: workshopId },
         context_refs: bindingRefs,
         strategy_ref: strategy ? { strategy_id: strategy.id, version_id: strategy.version } : null,
-        decision_ref: bindingRefs.find((ref: Record<string, unknown>) => ref.kind === "decision_event")?.id ?? null,
-        journal_ref: bindingRefs.find((ref: Record<string, unknown>) => ref.kind === "journal_entry")?.id ?? null,
+        decision_ref: bindingRefs.find((ref) => ref.kind === "decision_event")?.id ?? null,
+        journal_ref: bindingRefs.find((ref) => ref.kind === "journal_entry")?.id ?? null,
         position_risk_snapshot_refs: [],
         evidence_cutoff: body.evidence_cutoff ?? resolvedAt,
         selected_persona_ids: body.selected_persona_ids ?? [],
@@ -157,33 +158,31 @@ function resolvedContextFixture(body: ResolveContextRequest) {
   });
 }
 
-const TRADING_ROOM_READY = {
+const TRADING_ROOM_READY: WorkshopReadinessAssessment = {
+  spec_version: "1.0",
   assessment_id: "ready-001",
   assessed_at: "2026-07-04T00:00:00Z",
-  blockers: [],
-  gate: "trading_room",
+  assessment_version: 1,
+  gates: [{ gate: "trading_room", state: "ready", requirements: [] }],
   highest_ready_gate: "trading_room",
-  passed: true,
   strategy_id: "strat-001",
   strategy_spec_registry_id: "reg-001",
   workshop_version_id: "wsv-001",
   workshop_id: "ws-abc",
-} as WorkshopReadinessAssessment & { highest_ready_gate: "trading_room" };
+};
 
-const BLOCKED_READINESS = {
+const BLOCKED_READINESS: WorkshopReadinessAssessment = {
   ...TRADING_ROOM_READY,
   assessment_id: "ready-blocked-001",
-  blockers: ["Full validation is incomplete"],
-  gate: "full_validation",
+  gates: [{ gate: "full_validation", state: "blocked", requirements: [] }],
   highest_ready_gate: "full_validation",
-  passed: true,
-} as WorkshopReadinessAssessment & { highest_ready_gate: "full_validation" };
+};
 
-const MISSING_STRATEGY_ID_READINESS = {
+const MISSING_STRATEGY_ID_READINESS: WorkshopReadinessAssessment = {
   ...TRADING_ROOM_READY,
   assessment_id: "ready-missing-strategy",
   strategy_id: undefined,
-} as WorkshopReadinessAssessment & { highest_ready_gate: "trading_room" };
+};
 
 const LIVE_COMPLETENESS_SNAPSHOT: WorkshopCompletenessSnapshot = {
   snapshot_id: "8f7dc9e4-108f-4067-8d05-9cad30c7e17a",
@@ -204,6 +203,7 @@ const LIVE_COMPLETENESS_SNAPSHOT: WorkshopCompletenessSnapshot = {
 };
 
 const LIVE_COMPLETENESS_CARD: WorkshopCard = {
+  spec_version: "1.0",
   card_id: "card_completeness_8f7dc9e4-108f-4067-8d05-9cad30c7e17a",
   card_type: "completeness_update",
   workshop_id: LIVE_COMPLETENESS_SNAPSHOT.workshop_id,
@@ -392,6 +392,7 @@ describe("StrategyWorkshopPage", () => {
     } as StrategyWorkshop);
     vi.mocked(workshopsModule.listWorkshopCards).mockResolvedValue([
       {
+        spec_version: "1.0",
         card_id: "card-001",
         card_type: "next_question",
         workshop_id: rawWorkshopId,
@@ -405,11 +406,17 @@ describe("StrategyWorkshopPage", () => {
     vi.mocked(workshopsModule.listWorkshopEvents).mockResolvedValue({
       items: [
         {
+          spec_version: "1.0",
           event_id: "event-001",
-          workshop_id: rawWorkshopId,
           event_type: "workshop.message.accepted",
+          aggregate_type: "strategy_workshop",
+          aggregate_id: rawWorkshopId,
+          sequence_no: 1,
+          event_time: "2026-07-08T00:00:00Z",
+          emitted_at: "2026-07-08T00:00:00Z",
+          trace_id: "trace-001",
+          idempotency_key: "idem-001",
           payload: {},
-          occurred_at: "2026-07-08T00:00:00Z",
         },
       ],
     });
@@ -554,11 +561,17 @@ describe("StrategyWorkshopPage", () => {
 
     act(() => {
       handleEvent?.({
+        spec_version: "1.0",
         event_id: "event-completeness-updated-001",
         event_type: "workshop.completeness.updated",
-        occurred_at: "2026-07-13T12:38:05Z",
+        aggregate_type: "strategy_workshop",
+        aggregate_id: LIVE_COMPLETENESS_SNAPSHOT.workshop_id,
+        sequence_no: 1,
+        event_time: "2026-07-13T12:38:05Z",
+        emitted_at: "2026-07-13T12:38:05Z",
+        trace_id: "trace-completeness-updated-001",
+        idempotency_key: "idem-completeness-updated-001",
         payload: {},
-        workshop_id: LIVE_COMPLETENESS_SNAPSHOT.workshop_id,
       });
     });
 
@@ -648,7 +661,7 @@ describe("StrategyWorkshopPage", () => {
       .map(([, options]) => options?.resolutionSessionId);
     expect(resolutionSessions.length).toBeGreaterThanOrEqual(2);
     expect(new Set(resolutionSessions).size).toBe(1);
-    expect(workshopsModule.listWorkshopEvents.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(vi.mocked(workshopsModule.listWorkshopEvents).mock.calls.length).toBeGreaterThanOrEqual(2);
     expect(workshopsModule.reconstructWorkshopStrategy).toHaveBeenCalledWith("ws-abc");
     expect(workshopsModule.getWorkshopWithEtag).toHaveBeenCalledWith("ws-abc");
     expect(workshopsModule.postWorkshopMessage).toHaveBeenCalledWith(
@@ -826,7 +839,7 @@ describe("StrategyWorkshopPage", () => {
     await waitFor(() => expect(screen.getByTestId("servant-composer-error")).toHaveTextContent(
       "Workshop message receipt was not found in the durable event readback before the finite deadline; reconstruction has not been started.",
     ), { timeout: 12_000 });
-    expect(workshopsModule.listWorkshopEvents.mock.calls.length).toBeGreaterThanOrEqual(5);
+    expect(vi.mocked(workshopsModule.listWorkshopEvents).mock.calls.length).toBeGreaterThanOrEqual(5);
     expect(workshopsModule.reconstructWorkshopStrategy).not.toHaveBeenCalled();
     expect(submitDailyInteraction).not.toHaveBeenCalled();
   }, 15_000);
@@ -865,9 +878,17 @@ describe("StrategyWorkshopPage", () => {
     await act(async () => {
       pendingReadbacks.get("ws-abc")?.({
         items: [{
+          spec_version: "1.0",
           event_id: "evt-message-route-change",
-          event_type: "message",
-          workshop_id: "ws-abc",
+          event_type: "workshop.message.accepted",
+          aggregate_type: "strategy_workshop",
+          aggregate_id: "ws-abc",
+          sequence_no: 8,
+          event_time: "2026-07-08T00:00:00Z",
+          emitted_at: "2026-07-08T00:00:00Z",
+          trace_id: "trace-message-route-change",
+          idempotency_key: "idem-message-route-change",
+          payload: {},
         }],
       });
       await Promise.resolve();
@@ -923,7 +944,7 @@ describe("StrategyWorkshopPage", () => {
       active_strategy_spec_registry_id: "spec-v3",
       created_at: "2026-07-18 08:36:47+00",
       metadata: {},
-    });
+    } as StrategyWorkshop);
     let rejectedPropose = false;
     vi.mocked(interaction.resolveContext).mockImplementation((body) => {
       if (body.initial_mode === "propose_action" && !rejectedPropose) {
@@ -1003,7 +1024,7 @@ describe("StrategyWorkshopPage", () => {
       ...MOCK_WORKSHOP,
       strategy_id: "strategy-a",
       active_strategy_spec_registry_id: "spec-v3",
-    });
+    } as StrategyWorkshop);
 
     render(<StrategyWorkshopPage workshopId="ws-abc" />);
 
@@ -1072,7 +1093,7 @@ describe("StrategyWorkshopPage", () => {
       ...MOCK_WORKSHOP,
       strategy_id: "strategy-a",
       active_strategy_spec_registry_id: "spec-v3",
-    });
+    } as StrategyWorkshop);
 
     render(<StrategyWorkshopPage workshopId="ws-abc" />);
 
@@ -1279,8 +1300,8 @@ describe("StrategyWorkshopPage", () => {
     expect(await screen.findByTestId("servant-composer-error")).toHaveTextContent(
       "The interaction response violated the no-execution authority boundary.",
     );
-    expect(workshopsModule.listWorkshopCards.mock.calls.length).toBeGreaterThanOrEqual(1);
-    expect(workshopsModule.listWorkshopEvents.mock.calls.length).toBeGreaterThanOrEqual(1);
+    expect(vi.mocked(workshopsModule.listWorkshopCards).mock.calls.length).toBeGreaterThanOrEqual(1);
+    expect(vi.mocked(workshopsModule.listWorkshopEvents).mock.calls.length).toBeGreaterThanOrEqual(1);
     // The Workshop message and its reconstruction already reached durable readback
     // before the daily-interaction submission failed; the message receipt remains
     // truthfully "succeeded" while the separate Persona receipt records the failure.
@@ -1617,20 +1638,32 @@ describe("StrategyWorkshopPage", () => {
     // Simulate multiple incoming stream events
     act(() => {
       handleEvent?.({
+        spec_version: "1.0",
         event_id: "evt-stream-1",
-        workshop_id: "ws-abc",
-        event_type: "workshop.event",
+        event_type: "stream.heartbeat",
+        aggregate_type: "strategy_workshop",
+        aggregate_id: "ws-abc",
+        sequence_no: 1,
+        event_time: "2026-08-28T00:00:01Z",
+        emitted_at: "2026-08-28T00:00:01Z",
+        trace_id: "trace-stream-1",
+        idempotency_key: "idem-stream-1",
         payload: {},
-        occurred_at: "2026-08-28T00:00:01Z",
       });
     });
     act(() => {
       handleEvent?.({
+        spec_version: "1.0",
         event_id: "evt-stream-2",
-        workshop_id: "ws-abc",
-        event_type: "workshop.event",
+        event_type: "stream.heartbeat",
+        aggregate_type: "strategy_workshop",
+        aggregate_id: "ws-abc",
+        sequence_no: 2,
+        event_time: "2026-08-28T00:00:02Z",
+        emitted_at: "2026-08-28T00:00:02Z",
+        trace_id: "trace-stream-2",
+        idempotency_key: "idem-stream-2",
         payload: {},
-        occurred_at: "2026-08-28T00:00:02Z",
       });
     });
 

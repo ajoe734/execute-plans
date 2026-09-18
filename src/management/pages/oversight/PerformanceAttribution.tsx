@@ -212,7 +212,7 @@ function normalizePerformanceAttributionRow(raw: unknown): AttributionViewRow {
   const dimension = isAttributionDimension(r.dimension) ? r.dimension : "persona";
   const key = cleanDataText(r.key, r.dimensionKey, r.dimension_key, r.label) ?? "unknown";
   const label = cleanDataText(r.label, key) ?? MISSING;
-  const links = r.links ?? {};
+  const links: RawLinks = r.links ?? {};
   const manageHref = cleanText(links.manageHref, links.manage_href) ?? buildAttributionLinks(dimension, key).manageHref;
 
   return {
@@ -265,8 +265,8 @@ function fleetStrategyId(row: ManagementPersonaFleetRow | undefined): string | u
   return cleanDataText(
     row.researchStatus?.strategyId,
     row.researchStatus?.strategySpecId,
-    row.currentResearchProjects?.[0]?.strategyId,
-    row.currentResearchProjects?.[0]?.strategySpecId,
+    row.currentResearchProjects?.[0]?.experimentId,
+    row.currentResearchProjects?.[0]?.artifactId,
   );
 }
 
@@ -296,7 +296,7 @@ function fallbackAttributionRowFromFleet(
     pnlContribution: finiteNumber(summary.pnl),
     pnlContributionPct: finiteNumber(row.perfDelta),
     riskContributionPct: NaN,
-    drawdownContributionPct: finiteNumber(summary.maxDrawdown, summary.max_drawdown),
+    drawdownContributionPct: finiteNumber(summary.maxDrawdown),
     evidenceRefs: [],
     links: {
       manageHref: `/management/persona-fleet?persona=${encodeURIComponent(focus)}`,

@@ -56,7 +56,11 @@ export async function reconcilePersonaProvisioning(
 export function isCompletePaperBundle(persona: Persona | undefined): boolean {
   if (!persona) return false;
   const bundle = persona as RepairablePersona;
-  return persona.state === "paper_running" && Boolean(bundle.paperLedgerId) && Boolean(bundle.runtimeBindingId);
+  // Persona.state is typed as the generic LifecycleState union (dto.ts), but a
+  // paper-provisioned persona bundle carries the runtime-only "paper_running"
+  // value (see PaperPersonaBundle in lib/bff-v1/personas.ts). Compare against
+  // the real runtime string rather than widening the shared LifecycleState type.
+  return (persona.state as string) === "paper_running" && Boolean(bundle.paperLedgerId) && Boolean(bundle.runtimeBindingId);
 }
 
 function bundleReference(value: unknown): string {

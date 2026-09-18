@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { interaction } from "@/lib/bff-v1";
-import { resolveContextIdempotencyKey, type ResolveContextEnvelope } from "@/lib/bff-v1/agora/interaction";
+import { resolveContextIdempotencyKey, type ResolveContextEnvelope, type ResolveContextRequest } from "@/lib/bff-v1/agora/interaction";
 import { liveStatus } from "@/lib/bff-v1/liveStatus";
 
 describe("Agora Interactions client tests", () => {
@@ -33,7 +33,7 @@ describe("Agora Interactions client tests", () => {
   });
 
   it("derives one stable ASCII idempotency identity from the complete canonical request", async () => {
-    const request = {
+    const request: ResolveContextRequest = {
       workshop_id: "ws-1",
       context_refs: [{ type: "persona" as const, id: "persona-1" }],
       selected_persona_ids: ["persona-1"],
@@ -81,13 +81,28 @@ describe("Agora Interactions client tests", () => {
             environment: "paper",
             verified: true,
             resolved_at: "2026-07-17T00:00:00Z",
+            context_binding: {
+              binding_id: "bind-1",
+              workshop_id: "ws-1",
+              tenant_id: "tenant-1",
+              source_route: "/management/personas/persona-1",
+              focused_object: { kind: "persona", id: "persona-1" },
+              context_refs: [{ kind: "persona", id: "persona-1" }],
+              evidence_cutoff: "2026-07-17T00:00:00Z",
+              selected_persona_ids: ["persona-1"],
+              initial_mode: "reflect",
+              return_route: "/management/personas/persona-1",
+              advice_environment: "paper",
+              context_digest: "server-context-digest",
+              resolved_at: "2026-07-17T00:00:00Z",
+            },
           },
         };
         receipts.set(idempotencyKey, receipt);
       }
       return new Response(JSON.stringify(receipt), { status: 200 });
     });
-    const request = {
+    const request: ResolveContextRequest = {
       workshop_id: "ws-1",
       context_refs: [{ type: "persona" as const, id: "persona-1" }],
       selected_persona_ids: ["persona-1"],

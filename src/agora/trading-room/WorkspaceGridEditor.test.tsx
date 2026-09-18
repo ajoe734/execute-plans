@@ -264,34 +264,23 @@ describe("WorkspaceGridEditor component", () => {
         initialEtag="etag-123"
         initialWorkspace={dummyWorkspace}
         riskSummary={{
-          active_circuit_breakers: [],
-          correlation_cluster_exposure_pct: 12,
-          gross_exposure_pct: 60,
-          leverage_ratio: 1.0,
-          max_drawdown_limit_pct: 15,
-          net_exposure_pct: 40,
-          portfolio_risk_budget_pct: 45,
-          tail_risk_indicator: "normal",
+          state: "normal",
+          summary: "Within risk budget",
+          alerts: [],
         }}
         strategy={{
-          available_views: ["overview"],
-          data_status: "complete",
-          last_signal_time: "2026-07-14T02:05:00Z",
-          monitoring_mode: "continuous",
-          name: "Winner Branch Test",
-          pending_event_counts: { add: 0, entry: 1, exit: 0, reduce: 0, review: 0 },
-          pipeline_phase: "live_monitoring",
-          readiness_score: 95,
-          state: "live_ready",
           strategy_id: "strat-1",
-          strategy_version: "v1.0",
-          symbol: "AAPL",
+          strategy_spec_registry_id: "strat-1-registry",
+          title: "Winner Branch Test",
+          readiness_state: "ready",
+          monitoring_state: "monitoring",
+          pending_event_counts: { add: 0, entry: 1, exit: 0, reduce: 0, review: 0 },
         }}
       />,
     );
 
     expect(screen.getByText("Winner Branch Test")).toBeTruthy();
-    expect(screen.getByText("live_ready")).toBeTruthy();
+    expect(screen.getByText("ready")).toBeTruthy();
     expect(screen.getByText("資料切齊: 2026-07-14T02:10:00Z")).toBeTruthy();
     expect(screen.getByText("1")).toBeTruthy();
   });

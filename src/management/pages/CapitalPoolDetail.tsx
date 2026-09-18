@@ -94,7 +94,7 @@ export const CapitalPoolDetail = () => {
         if (cancelled) return;
 
         const boundPersonaIds = getPersonaIdsForPoolId(id || "", fleetRows as unknown as ManagementPersonaFleetRow[]);
-        const rawPool = pool as Record<string, unknown>;
+        const rawPool = pool as unknown as Record<string, unknown>;
         const boundStrats = allStrategies.filter((s) => {
           if (poolIds.has(s.capitalPoolId)) return true;
           const isPaper =

@@ -1372,7 +1372,7 @@ describe("hosted browser strict release policy", () => {
       const listen = async (handler: any) => {
         const s = http.createServer(handler);
         servers.push(s);
-        await new Promise((r) => s.listen(0, "127.0.0.1", r));
+        await new Promise<void>((r) => s.listen(0, "127.0.0.1", () => r()));
         return `http://127.0.0.1:${(s.address() as any).port}`;
       };
       const fe = await listen((_req: any, res: any) => {

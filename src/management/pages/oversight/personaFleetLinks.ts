@@ -274,6 +274,11 @@ type RawPersonaFleetRow = ManagementPersonaFleetRow & {
   review?: RawLinkRecord;
   linkTargets?: RawLinkRecord;
   link_targets?: RawLinkRecord;
+  mutation_entry_id?: string;
+  evolution_entry_id?: string;
+  evolution_href?: string;
+  last_mutation_at?: string;
+  last_mutation?: string;
 };
 
 type RawDataSource = ManagementDataSource & {

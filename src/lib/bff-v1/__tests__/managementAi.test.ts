@@ -513,7 +513,7 @@ describe("Management AI stream", () => {
     );
 
     expect(result.kind).toBe("ok");
-    if (result.kind !== "ok") throw new Error(result.message);
+    if (result.kind !== "ok") throw new Error("message" in result ? result.message : result.kind);
     expect(fetchMock.mock.calls[0][0]).toBe("https://bff.example.test/bff/management/nl/ask/stream");
     expect(result.answer).toBe("Control mode is inactive");
     expect(result.providerStatus.provider).toBe("pantheon_bff");
