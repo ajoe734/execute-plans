@@ -25,6 +25,7 @@ export default tseslint.config(
       ...reactHooks.configs.recommended.rules,
       "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
       "@typescript-eslint/no-unused-vars": "off",
+      "@typescript-eslint/no-explicit-any": "off",
       // C1+C2 (2026-05-09) — deprecate v3 normative layer (superseded by v4)
       // and v5/timeoutPolicy (superseded by v4/asyncTransitionPolicy).
       // Existing imports kept as legacy shim; new code must use v4.

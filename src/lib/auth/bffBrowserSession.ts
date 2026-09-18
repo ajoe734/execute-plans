@@ -79,9 +79,11 @@ export function signedTenantId(session: GcpIdentitySession | null): string | nul
 export function registerBffBrowserSession(session: GcpIdentitySession): void {
   const accessToken = nonBlank(session.idToken);
   const tenantId = signedTenantId(session);
+  const userId = nonBlank(session.user?.uid);
   setAuthProvider({
     getToken: () => accessToken,
     getTenantId: () => tenantId,
+    getUserId: () => userId,
   });
   invalidateMe();
 }

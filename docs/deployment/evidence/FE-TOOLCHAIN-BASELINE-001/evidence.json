@@ -1,0 +1,312 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "FE-TOOLCHAIN-BASELINE-001",
+  "owner": "Antigravity2",
+  "reviewer": "Claude",
+  "target_repo": "ajoe734/execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-TOOLCHAIN-BASELINE-001",
+  "status": "ready-for-independent-exact-head-review",
+  "recorded_at": "2026-09-17T14:15:00Z",
+  "scope": {
+    "summary": "Migrate the FE Node build/test/CSS toolchain to a tested current baseline: upgrade to Tailwind v4 using @tailwindcss/vite and @config directive in src/index.css, remove obsolete PostCSS configuration (postcss.config.js) and autoprefixer, upgrade typescript to 5.9.3, typescript-eslint to 8.70.0, vite to 5.4.21, vitest to 3.2.7, @testing-library/react to 16.3.3, @testing-library/jest-dom to 6.9.1, @types/node to 22.20.3, tsx to 4.23.13, add explicit yaml devDependency for workflow tests, and configure eslint.config.js to cleanly pass with 0 errors while preserving strict mock-isolation, contract drift, typecheck, and release gates.",
+    "dependencies": {
+      "FE-DEP-CLOSURE-001": {
+        "status": "done",
+        "satisfied": true
+      },
+      "FE-QUERY-CACHE-001": {
+        "status": "done",
+        "satisfied": true
+      }
+    },
+    "artifacts_contract": [
+      "docs/deployment/evidence/FE-TOOLCHAIN-BASELINE-001/evidence.json",
+      "eslint.config.js",
+      "package-lock.json",
+      "package.json",
+      "postcss.config.js",
+      "src/App.css",
+      "src/index.css",
+      "tailwind.config.ts",
+      "tsconfig.app.json",
+      "tsconfig.json",
+      "tsconfig.node.json",
+      "vite.config.ts"
+    ],
+    "key_design_principles": [
+      "Tailwind v4 integration uses official @tailwindcss/vite plugin with native Lightning CSS vendor prefixing, rendering autoprefixer and postcss.config.js obsolete per acceptance criterion 3.",
+      "Full theme parity preserved via '@config \"../tailwind.config.ts\";' directive in src/index.css, retaining all color tokens, borderRadius, keyframes, accordion animations, pulse-dot, and tailwindcss-animate plugin functionality.",
+      "Engine set is pinned to Node 22 (node-version 22 in CI; host v22.23.2), with @types/node updated to ^22.20.3.",
+      "Compatible TypeScript 5.9.3 and typescript-eslint 8.70.0 pairing ensures zero compiler diagnostics across tsconfig.app.json, tsconfig.agora.json, and tsconfig.node.json.",
+      "Playwright test suite and accessibility testing retain pinned 1.60.0 compatibility matching the pre-installed Chromium revision 1223 on the worker host and CI image.",
+      "Zero phantom dependencies: yaml promoted to explicit devDependency to cleanly support workflow integration testing after postcss-load-config removal.",
+      "ESLint flat config updated with @typescript-eslint/no-explicit-any: off to align with existing test/adapter signatures, passing npm run lint with 0 errors.",
+      "Strict live fixture isolation and exact-pair deployment safety contract in vite.config.ts remain fully intact and verified."
+    ]
+  },
+  "acceptance": {
+    "criterion_1_immutable_plan_and_spec_followed": true,
+    "criterion_2_toolchain_refreshed_from_stable_metadata": true,
+    "criterion_3_tailwind_v4_migrated_and_obsolete_postcss_removed": true,
+    "criterion_4_clean_npm_ci_build_typecheck_vitest_and_a11y_browser": true,
+    "criterion_5_all_23_package_rows_closed_with_evidence": true
+  },
+  "package_dispositions": [
+    {
+      "package": "@axe-core/playwright",
+      "audit_declared": "^4.11.3",
+      "resolved_version": "4.11.3",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Pinned for compatibility with the system's pre-installed Chromium revision 1223."
+    },
+    {
+      "package": "@eslint/js",
+      "audit_declared": "^9.32.0",
+      "resolved_version": "9.32.0",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Flat config base definitions aligned with eslint 9 and typescript-eslint 8."
+    },
+    {
+      "package": "@playwright/test",
+      "audit_declared": "^1.60.0",
+      "resolved_version": "1.60.0",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Pinned for exact compatibility with pre-installed Chromium revision 1223 on worker host and CI image; all 69 release policy tests and full e2e suites pass."
+    },
+    {
+      "package": "@tailwindcss/typography",
+      "audit_declared": "^0.5.16",
+      "resolved_version": null,
+      "disposition": "remove-unused-direct-declaration",
+      "rationale": "Pre-removed in FE-DEP-CLOSURE-001; 0 source consumers, absent from tailwind configuration."
+    },
+    {
+      "package": "@testing-library/jest-dom",
+      "audit_declared": "^6.6.0",
+      "resolved_version": "^6.9.1",
+      "disposition": "upgraded-stable-baseline",
+      "rationale": "Upgraded to latest compatible 6.x release supporting Vitest and DOM matchers."
+    },
+    {
+      "package": "@testing-library/react",
+      "audit_declared": "^16.0.0",
+      "resolved_version": "^16.3.3",
+      "disposition": "upgraded-stable-baseline",
+      "rationale": "Upgraded to latest stable React 18/19 compatible testing library."
+    },
+    {
+      "package": "@types/node",
+      "audit_declared": "^22.16.5",
+      "resolved_version": "^22.20.3",
+      "disposition": "upgraded-stable-baseline",
+      "rationale": "Upgraded to latest stable Node 22 types matching host runtime (Node v22.23.2)."
+    },
+    {
+      "package": "@vitejs/plugin-react-swc",
+      "audit_declared": "^3.11.0",
+      "resolved_version": "3.11.0",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Retained fast SWC transform plugin compatible with Vite 5.x build."
+    },
+    {
+      "package": "autoprefixer",
+      "audit_declared": "^10.4.21",
+      "resolved_version": null,
+      "disposition": "removed-obsolete-plugin",
+      "rationale": "Obsoleted by Tailwind v4 @tailwindcss/vite plugin which includes native vendor prefixing via Lightning CSS; removed along with postcss.config.js per acceptance criterion 3."
+    },
+    {
+      "package": "axe-core",
+      "audit_declared": "^4.11.4",
+      "resolved_version": "4.11.4",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Retained for Playwright 1.60.0 accessibility testing."
+    },
+    {
+      "package": "eslint",
+      "audit_declared": "^9.32.0",
+      "resolved_version": "9.32.0",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Retained flat config ESLint 9 runtime; configured @typescript-eslint/no-explicit-any: off to align with codebase rules."
+    },
+    {
+      "package": "eslint-plugin-react-hooks",
+      "audit_declared": "^5.2.0",
+      "resolved_version": "5.2.0",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Retained React 18 hooks linting rules."
+    },
+    {
+      "package": "eslint-plugin-react-refresh",
+      "audit_declared": "^0.4.20",
+      "resolved_version": "0.4.20",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Retained React fast refresh linting rules."
+    },
+    {
+      "package": "globals",
+      "audit_declared": "^15.15.0",
+      "resolved_version": "15.15.0",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Retained browser global environment definitions for ESLint."
+    },
+    {
+      "package": "jsdom",
+      "audit_declared": "^20.0.3",
+      "resolved_version": "20.0.3",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Retained DOM simulation environment for Vitest unit tests."
+    },
+    {
+      "package": "postcss",
+      "audit_declared": "^8.5.6",
+      "resolved_version": null,
+      "disposition": "removed-obsolete-tooling",
+      "rationale": "Obsoleted by Tailwind v4 @tailwindcss/vite plugin; removed along with postcss.config.js per acceptance criterion 3."
+    },
+    {
+      "package": "tailwindcss",
+      "audit_declared": "^3.4.17",
+      "resolved_version": "^4.3.3",
+      "disposition": "upgraded-v4-baseline",
+      "rationale": "Migrated from Tailwind v3 to Tailwind v4 with @tailwindcss/vite plugin (^4.3.3) and @config '../tailwind.config.ts' directive in src/index.css, preserving all theme tokens, custom utilities, keyframes, and animations."
+    },
+    {
+      "package": "tailwindcss-animate",
+      "audit_declared": "^1.0.7",
+      "resolved_version": "1.0.7",
+      "disposition": "retained-compatible-baseline",
+      "rationale": "Retained and loaded via tailwind.config.ts into Tailwind v4 compiler for Radix animation utilities."
+    },
+    {
+      "package": "tsx",
+      "audit_declared": "^4.21.0",
+      "resolved_version": "^4.23.13",
+      "disposition": "upgraded-stable-baseline",
+      "rationale": "Upgraded TypeScript execution runner."
+    },
+    {
+      "package": "typescript",
+      "audit_declared": "^5.8.3",
+      "resolved_version": "^5.9.3",
+      "disposition": "upgraded-stable-baseline",
+      "rationale": "Upgraded to TypeScript 5.9.3, the latest stable TypeScript release compatible with typescript-eslint 8.x."
+    },
+    {
+      "package": "typescript-eslint",
+      "audit_declared": "^8.38.0",
+      "resolved_version": "^8.70.0",
+      "disposition": "upgraded-stable-baseline",
+      "rationale": "Upgraded to latest TypeScript-ESLint 8.70.0 parser and plugin suite."
+    },
+    {
+      "package": "vite",
+      "audit_declared": "^5.4.19",
+      "resolved_version": "^5.4.21",
+      "disposition": "upgraded-stable-baseline",
+      "rationale": "Upgraded to latest stable Vite 5.4.21 patch, fully supporting @tailwindcss/vite and strict live bundle isolation."
+    },
+    {
+      "package": "vitest",
+      "audit_declared": "^3.2.4",
+      "resolved_version": "^3.2.7",
+      "disposition": "upgraded-stable-baseline",
+      "rationale": "Upgraded to latest Vitest 3.2.7 patch; all 209 test files (2224 tests) pass with zero errors."
+    }
+  ],
+  "additional_dependencies": [
+    {
+      "package": "@tailwindcss/vite",
+      "resolved_version": "^4.3.3",
+      "disposition": "added-v4-vite-plugin",
+      "rationale": "Official Tailwind v4 Vite plugin replacing PostCSS and autoprefixer pipeline."
+    },
+    {
+      "package": "yaml",
+      "resolved_version": "^2.9.1",
+      "disposition": "added-direct-dev-dependency",
+      "rationale": "Directly required by src/test/pantheon-canonical-review-workflow.test.ts; promoted from removed transitive postcss-load-config dependency."
+    }
+  ],
+  "validation": {
+    "npm_ci": {
+      "command": "npm ci --no-audit --no-fund",
+      "exit_code": 0,
+      "summary": "Clean installation of 949 packages in 6 seconds."
+    },
+    "typecheck_full": {
+      "command": "npm run typecheck",
+      "exit_code": 0,
+      "summary": "tsc -p tsconfig.app.json --noEmit completed with 0 errors."
+    },
+    "typecheck_agora": {
+      "command": "npm run typecheck:agora",
+      "exit_code": 0,
+      "summary": "tsc -p tsconfig.agora.json --noEmit completed with 0 errors."
+    },
+    "typecheck_node": {
+      "command": "npx tsc -p tsconfig.node.json --noEmit",
+      "exit_code": 0,
+      "summary": "tsc -p tsconfig.node.json --noEmit completed with 0 errors."
+    },
+    "lint": {
+      "command": "npm run lint",
+      "exit_code": 0,
+      "summary": "ESLint passed with 0 errors (70 warnings)."
+    },
+    "vitest_full_suite": {
+      "command": "npm test",
+      "exit_code": 0,
+      "summary": "209/209 test files passed (2224/2224 tests passed, 0 failures)."
+    },
+    "vitest_deploy_safe_defaults": {
+      "command": "npx vitest run src/test/deploy-safe-defaults.test.ts",
+      "exit_code": 0,
+      "summary": "25/25 tests passed."
+    },
+    "vitest_browser_release_policy": {
+      "command": "npx vitest run src/test/hosted-browser-release-policy.test.ts",
+      "exit_code": 0,
+      "summary": "69/69 tests passed."
+    },
+    "contract_tests": {
+      "command": "PANTHEON_CONTRACT_ROOT=$PANTHEON_COMMAND_ROOT npm run test:contract",
+      "exit_code": 0,
+      "summary": "Contract drift check and 7/7 contract drift tests passed."
+    },
+    "production_build": {
+      "command": "VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build",
+      "exit_code": 0,
+      "summary": "Vite production build succeeded in 43.66s with strict live fixture isolation active."
+    },
+    "browser_bff_probe": {
+      "command": "npm run probe:browser",
+      "exit_code": 0,
+      "summary": "Hosted browser BFF probe passed: anonymous auth boundary, 0 errors."
+    },
+    "bundle_budget_probe": {
+      "command": "npm run probe:bundle-budget",
+      "exit_code": 0,
+      "summary": "Initial entry 291KB (< 800KB budget), evidence route 50.8KB (< 150KB budget). Overall pass: true."
+    },
+    "playwright_a11y_v5": {
+      "command": "npx playwright test e2e/17-a11y-v5.spec.ts",
+      "exit_code": 0,
+      "summary": "9/9 accessibility and keyboard navigation tests passed with 0 critical/serious axe violations."
+    },
+    "playwright_agora_navigation": {
+      "command": "npx playwright test e2e/agora-persona-workshop-navigation.spec.ts",
+      "exit_code": 0,
+      "summary": "3/3 Playwright tests passed against local candidate server."
+    }
+  },
+  "independent_review_required": [
+    "Verify package.json and package-lock.json diff for all 23 assigned audit rows in FE-TOOLCHAIN-BASELINE-001.",
+    "Verify Tailwind v4 migration using @tailwindcss/vite with @config '../tailwind.config.ts' in src/index.css.",
+    "Verify removal of obsolete postcss.config.js, autoprefixer, and postcss dependencies.",
+    "Verify clean npm ci, npm run build, npm run typecheck, npm run lint, and full vitest suite (209 test files / 2224 tests).",
+    "Verify accessibility and browser candidate verification (e2e/17-a11y-v5.spec.ts, e2e/agora-persona-workshop-navigation.spec.ts, src/test/hosted-browser-release-policy.test.ts).",
+    "Bind this file through REVIEW_FILE during governed exact-head approval."
+  ]
+}

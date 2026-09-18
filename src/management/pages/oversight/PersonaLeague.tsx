@@ -98,7 +98,9 @@ export const PersonaLeaguePage = ({ embedded = false }: { embedded?: boolean }) 
   const paramSourceConfidence = searchParams.get("source_confidence")?.trim();
 
   // Load from Live API
-  const { data: apiData, loading: apiLoading } = useV5Live(() => mgmt.personaLeague.listLiveOnly(), []);
+  const { data: apiData, loading: apiLoading } = useV5Live((signal) => mgmt.personaLeague.listLiveOnly({ signal }), [], {
+    cacheKey: "oversight.personaLeague.list",
+  });
 
   // Determine fallback & telemetry health
   const useFallback = !apiData || apiData.length === 0;

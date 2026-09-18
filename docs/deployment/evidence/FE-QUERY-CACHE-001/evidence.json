@@ -1,0 +1,252 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "FE-QUERY-CACHE-001",
+  "owner": "Antigravity2",
+  "reviewer": "Claude",
+  "target_repo": "ajoe734/execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-QUERY-CACHE-001",
+  "status": "ready-for-independent-exact-head-review",
+  "recorded_at": "2026-09-17T12:40:00Z",
+  "scope": {
+    "summary": "Replace handwritten globalMap/TTL in useV5Live.ts and Operations.tsx with scoped TanStack Query v5 client, thread AbortSignal from TanStack Query context through loaders and underlying BFF transport (bffFetch/strictLiveRead), implement user-authorized double-audit F12/S05 exact regression test for caller migration, identity/environment switch, same-key and cross-scope stale in-flight response discard, AbortSignal cancellation, and logout cache isolation, and close remaining production fixture plumbing.",
+    "dependencies": {
+      "FE-STRICTLIVE-001": {
+        "status": "done",
+        "satisfied": true
+      },
+      "FE-EXACT-PAIR-PROTOCOL-001": {
+        "status": "done",
+        "satisfied": true
+      },
+      "FE-DEP-CLOSURE-001": {
+        "status": "done",
+        "satisfied": true
+      },
+      "FE-RUNTIME-TYPE-CLOSURE-CORRECTIVE-001": {
+        "status": "done",
+        "satisfied": true
+      },
+      "FE-CANONICAL-COMMAND-API-RETIREMENT-001": {
+        "status": "done",
+        "satisfied": true
+      }
+    },
+    "retired_caches": [
+      {
+        "file": "src/management/pages/v5/useV5Live.ts",
+        "symbol": "v5LiveCache",
+        "replacement": "TanStack Query v5 useQuery + queryKeys.resource() scoped by tenantId, userId, baseUrl, mode"
+      },
+      {
+        "file": "src/management/pages/Operations.tsx",
+        "symbol": "operationListCache",
+        "replacement": "TanStack Query v5 queryClient + queryKeys.operations.list() scoped by tenantId, userId, baseUrl, mode"
+      }
+    ],
+    "key_design_principles": [
+      "Query keys are scoped by active tenantId, userId, baseUrl, and mode via getActiveQueryScope().",
+      "Authentication tokens, JWTs, and bearer tokens are strictly forbidden from being used as query keys.",
+      "Logout, user changes, and environment changes invoke clearScopedQueries() which cancels in-flight queries and clears all cached reads.",
+      "AbortSignal is threaded through TanStack Query queryFn context into loaders and BFF transport (strictLiveRead / bffFetch), supporting automatic unmount cancellation and manual query cancellation.",
+      "Same-key stale response races are prevented by TanStack Query query cancellation on refresh and supersede.",
+      "Existing SSE event invalidation, confirmed-command invalidation semantics, and live degraded presentation are fully preserved.",
+      "Zero reachable mock/seed/overlay modules in production bundle graph verified via check_bundle_mock_reachability.ts."
+    ],
+    "modified_files": [
+      {
+        "file": "src/lib/bff-v1/queryKeys.ts",
+        "description": "Centralized TanStack Query v5 query keys factory, active query scope resolver (tenantId, userId, baseUrl, mode), shared QueryClient accessor, and clearScopedQueries() invalidator/canceller."
+      },
+      {
+        "file": "src/lib/bff-v1/headers.ts",
+        "description": "Added optional getUserId accessor to AuthProvider interface, getter/setter, and clearAuthProvider() for clean test resets."
+      },
+      {
+        "file": "src/lib/auth/bffBrowserSession.ts",
+        "description": "Registered getUserId accessor in registerBffBrowserSession() so QueryScope reliably captures current authenticated user ID without token leakage."
+      },
+      {
+        "file": "src/lib/auth/AuthProvider.tsx",
+        "description": "Integrated clearScopedQueries() on user change (!sameUser), devLogin(), and signOut() to cancel in-flight queries and purge cached reads."
+      },
+      {
+        "file": "src/management/pages/v5/useV5Live.ts",
+        "description": "Replaced handwritten v5LiveCache Map with TanStack Query v5 useQuery; forward QueryFunctionContext.signal to loader and cancel in-flight query on refresh."
+      },
+      {
+        "file": "src/management/pages/Operations.tsx",
+        "description": "Replaced handwritten operationListCache Map with TanStack Query v5 queryClient; forward signal to loader and cancel in-flight query on force reload."
+      },
+      {
+        "file": "src/lib/bff-v1/management.ts",
+        "description": "Added optional opts?: { signal?: AbortSignal } to cockpit, humanInbox, tradingPulse, personaFleet, evidence, personaIntent, portfolioBook, personaLeague, quarterlyRanking, performanceAttribution, and operationsReadModel live read methods."
+      },
+      {
+        "file": "src/lib/bff-v1/v5Client.ts",
+        "description": "Added optional opts?: { signal?: AbortSignal } to loops, personas, strategies, sentinel, and interventions methods."
+      },
+      {
+        "file": "src/lib/bff-v1/managementConsoleReads.ts",
+        "description": "Added optional opts?: { signal?: AbortSignal } to readRecords, dataSources, permissions, memoryGovernance, consultRules, lineage, workflowTemplates, hookRegistry, knowledgeInbox, and oodaPacketDetail."
+      },
+      {
+        "file": "src/management/pages/Operations.test.tsx",
+        "description": "User-authorized double-audit F12/S05 exact regression test suite covering Operations caller migration (Jobs, Alerts, Incidents, Approvals, Audit), identity switch isolation, environment switch isolation, cross-scope and same-key stale in-flight response discard, AbortSignal cancellation, and logout cache isolation."
+      },
+      {
+        "file": "src/management/pages/v5/useV5Live.test.tsx",
+        "description": "Extended unit tests for useV5Live validating query execution, concurrent deduplication, scope isolation, AbortSignal unmount abort, and same-key race cancellation."
+      },
+      {
+        "file": "src/lib/auth/AuthProvider.test.tsx",
+        "description": "Verified AuthProvider signs out, switches users, and clears scoped queries correctly."
+      },
+      {
+        "file": "src/lib/auth/bffBrowserSession.test.ts",
+        "description": "Verified registerBffBrowserSession correctly populates getUserId."
+      },
+      {
+        "file": "src/management/pages/centers/GovernanceDecisionQueue.tsx",
+        "description": "Migrated useV5Live caller to forward signal and explicit cacheKey 'oversight.humanInbox'."
+      },
+      {
+        "file": "src/management/pages/oversight/EmergencyActionsPanel.tsx",
+        "description": "Migrated useV5Live caller to forward signal and explicit cacheKey 'oversight.humanInbox'."
+      },
+      {
+        "file": "src/management/pages/oversight/HumanGateDetail.tsx",
+        "description": "Migrated useV5Live caller to forward signal and explicit cacheKey 'oversight.humanGateDetail.${id}'."
+      },
+      {
+        "file": "src/management/pages/oversight/LiveReadinessPage.tsx",
+        "description": "Migrated useV5Live caller to forward signal and explicit cacheKey 'oversight.readiness.${ariaLabel}'."
+      },
+      {
+        "file": "src/management/pages/oversight/PerformanceAttribution.tsx",
+        "description": "Migrated useV5Live callers to forward signal and explicit scoped cacheKeys."
+      },
+      {
+        "file": "src/management/pages/oversight/PersonaIntentTraces.tsx",
+        "description": "Migrated useV5Live caller to forward signal and explicit cacheKey 'oversight.personaIntent.list'."
+      },
+      {
+        "file": "src/management/pages/oversight/PersonaLeague.tsx",
+        "description": "Migrated useV5Live caller to forward signal and explicit cacheKey 'oversight.personaLeague.list'."
+      },
+      {
+        "file": "src/management/pages/oversight/PortfolioBook.tsx",
+        "description": "Migrated useV5Live caller to forward signal and explicit cacheKey 'oversight.portfolioBook.monitor.${filterKey}'."
+      },
+      {
+        "file": "src/management/pages/oversight/PortfolioExposure.tsx",
+        "description": "Migrated useV5Live callers to forward signal and explicit scoped cacheKeys."
+      },
+      {
+        "file": "src/management/pages/oversight/QuarterlyRanking.tsx",
+        "description": "Migrated useV5Live callers to forward signal and explicit scoped cacheKeys."
+      },
+      {
+        "file": "src/management/pages/oversight/_core.tsx",
+        "description": "Migrated all useV5Live callers across Cockpit, PersonaFleet, TradingPulse, EvolutionJournal, and EvidenceExplorer to forward signal and explicit cacheKeys."
+      },
+      {
+        "file": "src/management/pages/oversight/dataSources/DataSourceControlCenter.tsx",
+        "description": "Migrated useV5Live callers to forward signal and explicit cacheKeys."
+      },
+      {
+        "file": "src/management/pages/phase2/HookCronManager.tsx",
+        "description": "Migrated useV5Live caller to forward signal and explicit cacheKey 'phase2.hookCron'."
+      },
+      {
+        "file": "src/management/pages/phase2/KnowledgeInbox.tsx",
+        "description": "Migrated useV5Live caller to forward signal and explicit cacheKey 'phase2.knowledgeInbox'."
+      },
+      {
+        "file": "src/management/pages/phase2/LineageExplorer.tsx",
+        "description": "Migrated useV5Live caller to forward signal and explicit cacheKey 'phase2.lineage.${rootId || \"root\"}'."
+      },
+      {
+        "file": "src/management/pages/phase2/WorkflowTemplates.tsx",
+        "description": "Migrated useV5Live caller to forward signal and explicit cacheKey 'phase2.workflowTemplates'."
+      },
+      {
+        "file": "src/management/pages/v5/ExecutionLoop.tsx",
+        "description": "Migrated useV5Live callers to forward signal and explicit scoped cacheKeys."
+      },
+      {
+        "file": "src/management/pages/v5/Interventions.tsx",
+        "description": "Migrated useV5Live caller to forward signal and explicit cacheKey 'v5.interventions.list'."
+      },
+      {
+        "file": "src/management/pages/v5/OptimizationLoop.tsx",
+        "description": "Migrated useV5Live caller to forward signal and explicit cacheKey 'v5.loops.optimization'."
+      },
+      {
+        "file": "src/management/pages/v5/ResearchLoop.tsx",
+        "description": "Migrated useV5Live callers to forward signal and explicit scoped cacheKeys."
+      },
+      {
+        "file": "src/management/pages/v5/Sentinel.tsx",
+        "description": "Migrated useV5Live caller to forward signal and explicit cacheKey 'v5.sentinel.findings'."
+      },
+      {
+        "file": "src/management/pages/v5/V5Pages.tsx",
+        "description": "Migrated useV5Live caller to forward signal and explicit cacheKey 'v5.loopHealth'."
+      }
+    ]
+  },
+  "review_binding": {
+    "required_final_binding": "Independent approval must bind the final PR head containing this manifest."
+  },
+  "acceptance": {
+    "handwritten_caches_retired": true,
+    "tanstack_query_scoped_keys": true,
+    "auth_tokens_excluded_from_keys": true,
+    "abort_signal_transport_cancellation": true,
+    "double_audit_f12_s05_regression_passed": true,
+    "identity_switch_cache_isolation": true,
+    "environment_switch_cache_isolation": true,
+    "stale_inflight_response_discard": true,
+    "same_key_stale_response_race_prevented": true,
+    "logout_cache_isolation": true,
+    "production_rollup_mock_reachability": 0,
+    "full_test_suite_passed": true
+  },
+  "validation": {
+    "operations_double_audit_test": {
+      "command": "npx vitest run src/management/pages/Operations.test.tsx",
+      "result": "passed: 12/12 tests passed."
+    },
+    "use_v5_live_test": {
+      "command": "npx vitest run src/management/pages/v5/useV5Live.test.tsx",
+      "result": "passed: 6/6 tests passed."
+    },
+    "auth_provider_test": {
+      "command": "npx vitest run src/lib/auth/AuthProvider.test.tsx",
+      "result": "passed: 16/16 tests passed."
+    },
+    "bff_browser_session_test": {
+      "command": "npx vitest run src/lib/auth/bffBrowserSession.test.ts",
+      "result": "passed: 9/9 tests passed."
+    },
+    "bundle_mock_reachability_gate": {
+      "command": "npx tsx scripts/check_bundle_mock_reachability.ts",
+      "result": "passed: 0 violations, zero mock reachability."
+    },
+    "typecheck": {
+      "command": "npm run typecheck",
+      "result": "passed: tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.agora.json --noEmit exited 0."
+    }
+  },
+  "independent_review_required": [
+    "Confirm handwritten caches in useV5Live.ts and Operations.tsx are removed and replaced by TanStack Query v5.",
+    "Confirm query keys are strictly scoped by tenantId, userId, baseUrl, and mode without auth tokens.",
+    "Confirm AbortSignal is threaded from QueryFunctionContext.signal to loaders and BFF transport (strictLiveRead / bffFetch).",
+    "Confirm user switch, environment switch, and logout cancel in-flight queries and isolate/clear cached reads.",
+    "Confirm double-audit F12/S05 exact regression test passes completely in Operations.test.tsx (including same-key race and AbortSignal cancellation).",
+    "Confirm all useV5Live callers specify explicit cache keys and forward AbortSignal.",
+    "Confirm production Rollup bundle graph has zero mock reachability via scripts/check_bundle_mock_reachability.ts.",
+    "Bind this file through REVIEW_FILE during governed exact-head approval."
+  ]
+}

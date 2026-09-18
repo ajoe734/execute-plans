@@ -82,17 +82,18 @@ export const LoopsPage = () => {
   const [activeTab, setActiveTab] = useState<"truth" | "runs">("truth");
   const data = useAsync(() => v5.loops.list(kind), [kind]);
 
-  const loopHealthData = useV5Live<LoopHealthEntryDTO[]>(async () => {
+  const loopHealthData = useV5Live<LoopHealthEntryDTO[]>(async (signal) => {
     const res = await bffFetch<LoopHealthListEnvelope>({
       method: "GET",
       path: paths.loopHealthList(),
+      signal,
     });
     const items = res?.data || res?.items;
     if (!res || !items) {
       throw new Error("BFF returned invalid or missing loop health data");
     }
     return items;
-  });
+  }, [], { cacheKey: "v5.loopHealth" });
 
   return (
     <>

@@ -220,10 +220,11 @@ const readRecords = async <T>(
   path: string,
   surface: string,
   adapt: (record: UnknownRecord, index: number) => T | undefined,
+  opts?: { signal?: AbortSignal },
 ): Promise<ManagementRecordsEnvelope<T>> =>
   strictLiveRead<ManagementRecordsEnvelope<T>>(
     `managementConsoleReads.${surface}`,
-    { method: "GET", path },
+    { method: "GET", path, signal: opts?.signal },
     (raw) => {
       const items = envelopeRecords(raw)
         .map(adapt)
@@ -594,28 +595,29 @@ const adaptLineageEdge = (record: UnknownRecord): LineageEdgeRecord | undefined 
 };
 
 export const managementConsoleReads = {
-  dataSources: () =>
+  dataSources: (opts?: { signal?: AbortSignal }) =>
     readRecords<ManagementDataSourceV2DTO | CanonicalDataSourceRecord>(
       paths.mgmtDataSources(),
       "data_sources",
       adaptDataSourceV2OrLegacy,
+      opts,
     ),
 
-  permissions: async () => {
-    const envelope = await readRecords(paths.mgmtPermissions(), "permissions", adaptPermissionMatrix);
+  permissions: async (opts?: { signal?: AbortSignal }) => {
+    const envelope = await readRecords(paths.mgmtPermissions(), "permissions", adaptPermissionMatrix, opts);
     return { ...envelope, items: mergePermissionMatrices(envelope.items) };
   },
 
-  memoryGovernance: () =>
-    readRecords(paths.mgmtMemoryGovernance(), "memory_governance", adaptMemoryUpdate),
+  memoryGovernance: (opts?: { signal?: AbortSignal }) =>
+    readRecords(paths.mgmtMemoryGovernance(), "memory_governance", adaptMemoryUpdate, opts),
 
-  consultRules: () =>
-    readRecords(paths.mgmtConsultRules(), "consult_rules", adaptConsultRule),
+  consultRules: (opts?: { signal?: AbortSignal }) =>
+    readRecords(paths.mgmtConsultRules(), "consult_rules", adaptConsultRule, opts),
 
-  lineage: (rootId?: string): Promise<LineageRead> =>
+  lineage: (rootId?: string, opts?: { signal?: AbortSignal }): Promise<LineageRead> =>
     strictLiveRead<LineageRead>(
       "managementConsoleReads.lineage",
-      { method: "GET", path: paths.lineage(rootId) },
+      { method: "GET", path: paths.lineage(rootId), signal: opts?.signal },
       (raw) => {
         const root = asRecord(raw);
         const data = asRecord(root?.data);
@@ -628,13 +630,13 @@ export const managementConsoleReads = {
       },
     ),
 
-  workflowTemplates: () =>
-    readRecords(paths.workflowTemplates(), "workflows", adaptWorkflow),
+  workflowTemplates: (opts?: { signal?: AbortSignal }) =>
+    readRecords(paths.workflowTemplates(), "workflows", adaptWorkflow, opts),
 
-  hookRegistry: (): Promise<HookRegistryRead> =>
+  hookRegistry: (opts?: { signal?: AbortSignal }): Promise<HookRegistryRead> =>
     strictLiveRead<HookRegistryRead>(
       "managementConsoleReads.hookRegistry",
-      { method: "GET", path: paths.hookRegistry() },
+      { method: "GET", path: paths.hookRegistry(), signal: opts?.signal },
       (raw) => {
         const root = asRecord(raw);
         const data = asRecord(root?.data);
@@ -651,8 +653,8 @@ export const managementConsoleReads = {
       },
     ),
 
-  knowledgeInbox: () =>
-    readRecords(paths.knowledgeInbox(), "knowledge", adaptKnowledge),
+  knowledgeInbox: (opts?: { signal?: AbortSignal }) =>
+    readRecords(paths.knowledgeInbox(), "knowledge", adaptKnowledge, opts),
 
   oodaPacket: oodaPacketDetail,
   oodaPackets: {
@@ -676,10 +678,10 @@ function adaptOodaPacketDetail(body: unknown): OodaPacketDetail | undefined {
   };
 }
 
-export function oodaPacketDetail(id: string): Promise<OodaPacketDetail | undefined> {
+export function oodaPacketDetail(id: string, opts?: { signal?: AbortSignal }): Promise<OodaPacketDetail | undefined> {
   return strictLiveRead<OodaPacketDetail | undefined>(
     "managementConsoleReads.oodaPacket",
-    { method: "GET", path: paths.oodaPacket(id) },
+    { method: "GET", path: paths.oodaPacket(id), signal: opts?.signal },
     adaptOodaPacketDetail,
   );
 }

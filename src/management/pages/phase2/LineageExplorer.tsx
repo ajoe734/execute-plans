@@ -28,7 +28,11 @@ export const LineageExplorerPage = () => {
   const [enabled, setEnabled] = useState<Record<string, boolean>>(
     () => Object.fromEntries(TYPES.map((t) => [t, true])),
   );
-  const { data } = useV5Live(() => managementConsoleReads.lineage(rootId || undefined), [rootId]);
+  const { data } = useV5Live(
+    (signal) => managementConsoleReads.lineage(rootId || undefined, { signal }),
+    [rootId],
+    { cacheKey: `phase2.lineage.${rootId || "root"}` },
+  );
 
   useEffect(() => {
     if (!rootId) return;
