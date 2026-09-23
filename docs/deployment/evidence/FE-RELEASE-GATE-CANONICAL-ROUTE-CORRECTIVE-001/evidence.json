@@ -114,7 +114,12 @@
     "attempted_fix": "This worker rewrote both commits with compliant subjects (67 and 70 chars) preserving byte-identical tree content -- verified `git rev-parse HEAD^{tree}` equal to origin's tree -- as local commits bc3a0aa4 and 9ba1de92, preserved on the local-only branch `local-compliant-trailer-rewrite-backup` in this task's worktree.",
     "why_unresolved": "Publishing that rewrite requires force-pushing task/FE-RELEASE-GATE-CANONICAL-ROUTE-CORRECTIVE-001 (the two bad-subject commits are already on origin, so any subject correction is a non-fast-forward change). This worker's sandbox hard-denies any `git push --force*` command, and task-closeout-finalization.md's Push and Merge Policy separately forbids `--force`/`--delete` pushes 'as routine closeout'. No governed non-destructive helper in scripts/git/ can rewrite already-pushed commit messages. This is a genuine action outside this worker's authorized capability, not an implementation gap.",
     "required_corrective_actor": "Human/Ops (or another actor with force-push authorization on this task branch)",
-    "required_corrective_action": "Force-push (or cherry-pick onto a fresh branch and force-update the ref for) the compliant-subject commit pair already prepared on `local-compliant-trailer-rewrite-backup` in this worktree -- tree b8f96283f6296fc0e8fcefed16ad206e9638cd5a, identical to the current PR head's tree -- onto task/FE-RELEASE-GATE-CANONICAL-ROUTE-CORRECTIVE-001, then re-run scripts/git/check_commit_trailers.py to confirm exit 0 before re-handoff."
+    "required_corrective_action": "Force-push (or cherry-pick onto a fresh branch and force-update the ref for) the compliant-subject commit pair already prepared on `local-compliant-trailer-rewrite-backup` in this worktree -- tree b8f96283f6296fc0e8fcefed16ad206e9638cd5a, identical to the current PR head's tree -- onto task/FE-RELEASE-GATE-CANONICAL-ROUTE-CORRECTIVE-001, then re-run scripts/git/check_commit_trailers.py to confirm exit 0 before re-handoff.",
+    "resolution": {
+      "status": "resolved_by_human_ops",
+      "action_taken": "Human/Ops force-pushed task/FE-RELEASE-GATE-CANONICAL-ROUTE-CORRECTIVE-001 to new head 078d6cec2f12bbdebe7ac11fedd675495ef1b139 with all four non-merge commit subjects at or under 72 chars, and a tree (409539f2143ca6c5433216a0e442e99f2b7454b9) byte-identical to the prior head b7677e61 so this AC5 evidence commit content was preserved. Prior head preserved on backup/fe-release-gate-pre-force-20260923.",
+      "reverification": "python3 scripts/git/check_commit_trailers.py --range 5ff992dd8147f43715debebcd5e29a8ac1538209..HEAD --skip-merge -> exit 0 at head 078d6cec2f12bbdebe7ac11fedd675495ef1b139. PR #777 checks re-observed at this exact head: Commit trailers pass, Component merge gate pass, Generated files guard pass, Smoke acceptance pass."
+    }
   },
   "second_pass_validation": {
     "npm_ci": { "command": "npm ci", "result": "948 packages installed cleanly" },
@@ -135,6 +140,12 @@
       "note": "aggregate-release-gate.mjs writePaths[0] (line 980) is the exact string \"/bff/v1/commands\", identical to the corrected WRITE_ENDPOINTS[0].route; allRowsPass()'s rows.get(route) lookup now resolves.",
       "caveat": "PANTHEON_BFF_SMOKE_BEARER_TOKEN is not available in this worker's environment (no CI secret injected), so the authenticated live probe itself could not be executed standalone here to populate .lovable/audits/bff-authenticated-live-smoke.log; that run happens in CI (pantheon-integration-gate.yml) where the secret is provisioned. This evidence records the code-level fix that removes the string mismatch; CI's own run of the corrected script is the final confirmation."
     }
+  },
+  "post_force_push_head_binding": {
+    "new_pr_head": "078d6cec2f12bbdebe7ac11fedd675495ef1b139",
+    "prior_pr_head_tested_in_ci": "53e262eec151642d32f0a2c74902338619c6ee12",
+    "tree_identity": "078d6cec2f12bbdebe7ac11fedd675495ef1b139^{tree} == 409539f2143ca6c5433216a0e442e99f2b7454b9, identical to prior head b7677e618c961644dc2311474db982f9f7e78aaf^{tree}, so the code exercised by CI run 35886826252 (recorded under open_gap.reproducible_ci_execution) is byte-identical to the code at this new head; only commit subjects/messages changed to satisfy the Commit trailers check.",
+    "verified_at": "2026-09-23T23:35Z"
   },
   "independent_review_required": [
     "Confirm scripts/probe-bff-routes.mjs and scripts/aggregate-release-gate.mjs still reference POST /bff/v1/commands, the backend's actual sole canonical generic command write route, per pantheon@dev BFF_COMMAND_API_CONTRACT.md section 3 and command_adapters/router.py's module docstring.",
