@@ -42,10 +42,35 @@
   ],
   "open_gap": {
     "acceptance_criterion": "the release gate aggregate reports zero failing critical checks for a candidate that is otherwise healthy",
-    "status": "resolved",
+    "status": "resolved_with_reproducible_ci_evidence",
     "reason": "Human/Ops added scripts/probe-bff-authenticated-live.mjs to this task's declared artifact contract. Its WRITE_ENDPOINTS route literal at line 299 was corrected from /bff/actions/strategy/strategy-dev/promote to /bff/v1/commands, with a body matching the PromoteStrategyPaper command envelope already used in the corrected anonymous probe (scripts/probe-bff-routes.mjs bodyFor()). aggregate-release-gate.mjs's writePaths already contained the exact string \"/bff/v1/commands\", so the producer/consumer mismatch that previously kept Gate 3's write/precondition row missing/failed is closed.",
-    "residual_ci_scope": "A full zero-fail aggregate run also depends on other gates' evidence logs (npm ci, lint, build, contract-drift, Playwright fixture E2E, etc., owned by Gemini/Codex/Codex2 per the gate table) that are produced by the CI pipeline's own steps, not by this frontend corrective task. Those are outside this task's declared artifact scope and were MISSING (not FAIL) when the aggregate was re-run standalone in this workspace, because this task does not execute the full pantheon-integration-gate.yml pipeline. This task's scope was the specific AC5 producer/consumer route-string mismatch, which is now closed; the full pipeline run in CI determines final Gate 7 status.",
-    "recorded_as": "closed, this task's authorized change set"
+    "reproducible_ci_execution": {
+      "note": "The prior evidence pass only claimed the fix via node --check and side-by-side string comparison, which the independent reviewer correctly rejected as insufficient. This pass instead dispatched the actual governed pipeline (workflow_dispatch, no fabricated inputs) against the exact PR #777 head and downloaded its own evidence artifact.",
+      "workflow": "pantheon-integration-gate.yml",
+      "trigger": "gh workflow run pantheon-integration-gate.yml --ref task/FE-RELEASE-GATE-CANONICAL-ROUTE-CORRECTIVE-001 (workflow_dispatch, no inputs supplied)",
+      "run_id": "35886826252",
+      "run_url": "https://github.com/ajoe734/execute-plans/actions/runs/35886826252",
+      "exact_candidate_identity": {
+        "frontend_commit_sha": "53e262eec151642d32f0a2c74902338619c6ee12",
+        "frontend_repository": "ajoe734/execute-plans",
+        "bff_base_url": "https://api.dev.mvl-cap.tw",
+        "bff_source_commit_sha_observed": "ae41705b4637110e665d2eed735afbd8307e28e6",
+        "source": "pantheon-release-identity-attempt-1/release-identity.json artifact from run 35886826252"
+      },
+      "terminal_exit_status": {
+        "job": "integration-gate",
+        "conclusion": "success",
+        "workflow_run_status": "completed / success"
+      },
+      "gate_7_result": {
+        "overall": "warn (non-hard-gate advisories only)",
+        "all_critical_gates_pass_check": "pass",
+        "failing_or_missing_check_count": 0,
+        "source": "release-gate-summary.json from run 35886826252, verified by iterating every gate/check and filtering status in ('fail','missing') across all 8 gates -- zero matches"
+      },
+      "auth_smoke_and_write_probe_caveat": "The `Authenticated BFF smoke` and `Live dry-run write probe` steps in pantheon-integration-gate.yml are gated by `if: env.PANTHEON_BFF_SMOKE_BEARER_TOKEN != ''`, but that workflow never assigns PANTHEON_BFF_SMOKE_BEARER_TOKEN from `secrets.PANTHEON_BFF_SMOKE_BEARER_TOKEN` anywhere in its env blocks (verified by grep across the full workflow file), so both steps are structurally skipped on every trigger type, not just this run. aggregate-release-gate.mjs treats a skipped/missing authenticated-smoke log as 'skip'/'warn', not 'fail', for these rows, which is why Gate 7's hard-fail check (which only counts 'fail'/'missing') still reports zero. This means the corrected WRITE_ENDPOINTS[0] route was not actually exercised as a live authenticated request in this run either -- that gap is a pre-existing pantheon-integration-gate.yml wiring issue, not in this task's declared artifact scope (probe-bff-authenticated-live.mjs, aggregate-release-gate.mjs, probe-bff-routes.mjs, the test file, this evidence file), and not something this frontend corrective task can fix without exceeding its authorized scope. Recording it explicitly rather than re-hiding it behind a claim of full verification."
+    },
+    "recorded_as": "AC5 producer/consumer route-string mismatch closed; reproducible CI evidence obtained at exact PR head with Gate 7 reporting zero failing/missing checks; the pipeline's own missing bearer-token wiring (separate, pre-existing defect) is out of this task's scope and documented above rather than silently assumed fixed"
   },
   "validation": {
     "npm_ci": { "command": "npm ci", "result": "948 packages installed cleanly" },
@@ -80,7 +105,16 @@
     "anonymous_probe_zero_canonical_404": true,
     "npm_run_test_passes_including_hosted_browser_release_policy_suite": true,
     "no_check_silenced_by_exception_or_deleted_assertion": true,
-    "release_gate_aggregate_reports_zero_failing_critical_checks": "producer/consumer route-string mismatch resolved; see open_gap.residual_ci_scope for the remaining CI-pipeline-only gates this task cannot execute standalone"
+    "release_gate_aggregate_reports_zero_failing_critical_checks": "true, with reproducible CI evidence; see open_gap.reproducible_ci_execution for the exact run, candidate identity, and terminal Gate 7 result (0 failing/missing checks)"
+  },
+  "delivery_ci_blocker_not_fixable_by_this_worker": {
+    "gate": "Commit trailers (required dev branch-protection status check)",
+    "reproduction": "python3 scripts/git/check_commit_trailers.py --range 5ff992dd8147f43715debebcd5e29a8ac1538209..HEAD --skip-merge -> exit 1",
+    "cause": "Two already-pushed non-merge commits on this PR's head history exceed the 72-char subject limit enforced by check_commit_trailers.py: f9394b3b ('FE-RELEASE-GATE-CANONICAL-ROUTE-CORRECTIVE-001: use POST /bff/v1/commands', 73 chars) and 53e262ee ('FE-RELEASE-GATE-CANONICAL-ROUTE-CORRECTIVE-001: fix authenticated write probe route', 83 chars). GitHub Actions run 35875301605 fails 'Commit trailers' for this reason and consequently skips 'Component merge gate' / fails 'Smoke acceptance'.",
+    "attempted_fix": "This worker rewrote both commits with compliant subjects (67 and 70 chars) preserving byte-identical tree content -- verified `git rev-parse HEAD^{tree}` equal to origin's tree -- as local commits bc3a0aa4 and 9ba1de92, preserved on the local-only branch `local-compliant-trailer-rewrite-backup` in this task's worktree.",
+    "why_unresolved": "Publishing that rewrite requires force-pushing task/FE-RELEASE-GATE-CANONICAL-ROUTE-CORRECTIVE-001 (the two bad-subject commits are already on origin, so any subject correction is a non-fast-forward change). This worker's sandbox hard-denies any `git push --force*` command, and task-closeout-finalization.md's Push and Merge Policy separately forbids `--force`/`--delete` pushes 'as routine closeout'. No governed non-destructive helper in scripts/git/ can rewrite already-pushed commit messages. This is a genuine action outside this worker's authorized capability, not an implementation gap.",
+    "required_corrective_actor": "Human/Ops (or another actor with force-push authorization on this task branch)",
+    "required_corrective_action": "Force-push (or cherry-pick onto a fresh branch and force-update the ref for) the compliant-subject commit pair already prepared on `local-compliant-trailer-rewrite-backup` in this worktree -- tree b8f96283f6296fc0e8fcefed16ad206e9638cd5a, identical to the current PR head's tree -- onto task/FE-RELEASE-GATE-CANONICAL-ROUTE-CORRECTIVE-001, then re-run scripts/git/check_commit_trailers.py to confirm exit 0 before re-handoff."
   },
   "second_pass_validation": {
     "npm_ci": { "command": "npm ci", "result": "948 packages installed cleanly" },
