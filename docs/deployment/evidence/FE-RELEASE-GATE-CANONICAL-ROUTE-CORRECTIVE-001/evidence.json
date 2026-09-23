@@ -6,52 +6,73 @@
   "target_repo": "execute-plans",
   "merge_target": "dev",
   "branch": "task/FE-RELEASE-GATE-CANONICAL-ROUTE-CORRECTIVE-001",
-  "trigger": {
-    "backend_run": "pantheon run 35853609038 (ref ede7f3d4be5616acfccd9f963ac5b5920a0812c7)",
-    "backend_outcome": "success on capture/deploy/paper-baseline/Agora-smoke; failed only at Admit and switch",
-    "failing_gate_run": "execute-plans pantheon-integration-gate.yml run 35855655784 (conclusion: failure)",
-    "failing_rows": [
-      "npm run test outcome failure (all error lines pointed at src/test/hosted-browser-release-policy.test.ts)",
-      "Anonymous protected routes not 404 (42 protected route rows, auth mode permissive)",
-      "Anonymous no canonical 404 (canonical 404 count 1)"
-    ]
+  "supersedes": "PR #777 exact head d0b089b55fd85cbfcd0f6298a92873131d252759 (independent review REJECT recorded 2026-09-23T12:21:09Z)",
+  "prior_review_defects_addressed": {
+    "P1_AC1_AC2_stale_action_id": "The prior fix replaced the probed action_id (promote -> promote_paper) but the entire POST /bff/actions/{type}/{id}/{action} route family is retired on pantheon@origin/dev (verified at exact head ede7f3d4be5616acfccd9f963ac5b5920a0812c7, fetched fresh into /tmp/pantheon-integration-checkout at review time). Any action_id under that route 404s. Corrected the probe and aggregate to target the real sole canonical generic write route, POST /bff/v1/commands, instead of any /bff/actions/* literal.",
+    "P1_AC3_browser_provisioning": "CI's pantheon-integration-gate.yml runs `npm run test` before its `Install Playwright` step, so a fresh runner has no Chromium executable when the hosted browser suite's CORS comparison tests call chromium.launch(). Fixed inside the test file (in scope) rather than the workflow (out of scope): added ensureChromiumInstalled(), invoked from a beforeAll with a 180s hook timeout, which checks chromium.executablePath() and runs `npx playwright install chromium` only if missing. Reproduced the original failure and confirmed the fix with PLAYWRIGHT_BROWSERS_PATH pointed at a brand-new empty directory (no reuse of any pre-existing local cache).",
+    "P1_AC5_producer_consumer_mismatch": "NOT RESOLVED. aggregate-release-gate.mjs's writePaths must exact-string-match the `route` field emitted by scripts/probe-bff-authenticated-live.mjs's WRITE_ENDPOINTS (allRowsPass() in aggregate-release-gate.mjs does `rows.get(route)`, no normalization). scripts/probe-bff-authenticated-live.mjs is not in this task's declared artifact scope, and still probes the retired literal `{ route: \"/bff/actions/strategy/strategy-dev/promote\", method: \"POST\" }` (line 299). Updating aggregate's writePaths entry to the real canonical route (POST /bff/v1/commands) does not by itself fix the mismatch, because the producer still emits a different, and separately wrong, route. See open_gap below."
   },
   "root_cause_analysis": {
-    "npm_run_test_failure": "Reproduced npm run test locally against a fresh `npm ci` install; all 209 test files / 2224 tests pass, including src/test/hosted-browser-release-policy.test.ts (69/69). No source defect found in the suite or the modules it exercises (scripts/probe-hosted-browser-bff.mjs). Treated as an environment/install-state failure in the prior CI run, not a code regression; no test assertion was weakened or removed.",
-    "canonical_404_route": {
-      "stale_entry": "POST /bff/actions/strategy/strategy-dev/promote",
-      "finding": "The BFF exposes the generic action route template `POST /bff/actions/{type}/{id}/{action}` (services/control-plane/bff/command_adapters/router.py, `_CANONICAL_ACTIONS_ROUTE`), but `action` must be a catalog action_id. The pantheon backend's own canonical contract (services/control-plane/bff/BFF_COMMAND_API_CONTRACT.md section 8.1 'Strategy Actions', and the strategy adapter's status_map in services/control-plane/bff/command_adapters/strategy_adapter.py) only recognizes `promote_paper` and `promote_live` for the strategy entity — there is no action_id literally named `promote`. Action-id validation happens before the auth check for this route, so an unrecognized action_id 404s instead of 401ing like every other protected route.",
-      "evidence_source": "pantheon@origin/dev (ede7f3d4be5616acfccd9f963ac5b5920a0812c7 exactly, verified via a local read-only checkout at /tmp/pantheon-integration-checkout pinned to that ref) — services/control-plane/bff/BFF_COMMAND_API_CONTRACT.md:311-319, services/control-plane/bff/command_adapters/router.py:299-320 (_CANONICAL_ACTIONS_ROUTE), services/control-plane/bff/command_adapters/strategy_adapter.py:85-93 (status_map).",
-      "decision": "The probe's route entry was stale (wrong action_id), not the backend missing the route. Corrected the probe/gate route lists to use the real canonical action_id `promote_paper` instead of inventing a backend change or silencing the check.",
+    "npm_run_test_failure": "Reproduced locally: a clean `npm ci` + `npm run test` passes all 209 files / 2224 tests, including src/test/hosted-browser-release-policy.test.ts (69/69) when a Playwright browser cache already exists. Confirmed the CI-specific cause is browser provisioning order, not a suite defect, by rerunning the same suite with PLAYWRIGHT_BROWSERS_PATH set to a fresh empty directory before this task's fix (16/69 failed, matching prior review's repro) and after (69/69 passed, browser downloaded on demand).",
+    "canonical_write_route": {
+      "stale_assumption": "Both the original probe entry (POST /bff/actions/strategy/strategy-dev/promote) and the prior corrective commit's replacement (.../promote_paper) target a route family that pantheon has fully retired.",
+      "finding": "services/control-plane/bff/command_adapters/router.py's module docstring and BFF_COMMAND_API_CONTRACT.md section 3 ('Sole Canonical Write Route') both state that POST /bff/actions/{entityType}/{entityId}/{actionId} and POST /api/v1/operator/commands were retired and fully removed from the router, handlers, and OpenAPI schema, with no compatibility shim; any client still targeting them gets a 404. POST /bff/v1/commands is the sole canonical generic command write route. Its handler (command_adapters/service.py submit_command_admission) calls self.extract_identity(authorization, ...) as its first statement, before any payload/command validation, so an anonymous request 401s regardless of body shape -- confirmed live below.",
+      "evidence_source": "pantheon@origin/dev fetched fresh at ede7f3d4be5616acfccd9f963ac5b5920a0812c7 into a read-only checkout at /tmp/pantheon-integration-checkout (git fetch origin dev immediately before reading): services/control-plane/bff/command_adapters/router.py:1-19,135-159; services/control-plane/bff/BFF_COMMAND_API_CONTRACT.md:1-59; services/control-plane/bff/command_adapters/service.py:1361-1383,1670-1695.",
+      "backward_compatibility_check": "POST /bff/v1/commands also exists at ae41705b4637110e665d2eed735afbd8307e28e6 (an ancestor of ede7f3d4, and the commit the currently-deployed public candidate actually reports -- see identity binding below), so the corrected probe validates correctly against both the older deployed candidate and the intended ede7f3d4 candidate; it is not a route that only exists in the not-yet-deployed target.",
+      "decision": "Point the anonymous and gate-aggregate probes at POST /bff/v1/commands (the real, currently-live, sole canonical write route) instead of any /bff/actions/* literal for either action_id.",
       "files_corrected": [
-        "scripts/probe-bff-routes.mjs (route list entry)",
+        "scripts/probe-bff-routes.mjs (route list entry + command-envelope body for the new route)",
         "scripts/aggregate-release-gate.mjs (writePaths list entry)"
       ]
     }
   },
+  "candidate_identity_binding": {
+    "note": "The reviewer flagged that the prior evidence's anonymous-probe pass validated whatever was live at probe time without recording which backend commit that was, so it did not actually prove anything about the ede7f3d4 candidate. Recording the binding explicitly this time.",
+    "public_bff_version_at_verification_time": {
+      "command": "curl -s https://api.dev.mvl-cap.tw/bff/version",
+      "source_commit_sha": "ae41705b4637110e665d2eed735afbd8307e28e6",
+      "observed_at": "2026-09-23T12:31Z (this task's verification pass)"
+    },
+    "caveat": "ae41705b4637110e665d2eed735afbd8307e28e6 is an ancestor of the intended candidate ede7f3d4be5616acfccd9f963ac5b5920a0812c7, not ede7f3d4 itself; the backend Admit-and-switch step that would deploy ede7f3d4 to this hosted candidate has not completed. This frontend task cannot deploy the backend and made no backend or deployment changes. The route-family retirement finding above was verified by reading pantheon source at the exact ede7f3d4 ref, not by inference from the currently-deployed host; the backward_compatibility_check above independently confirms the corrected route also works against the older, currently-deployed ae41705b commit, so the fix is valid regardless of which of the two commits is actually live when this runs in CI."
+  },
   "not_changed": [
-    "scripts/probe-bff-authenticated-live.mjs still references the pre-existing route literal out of this task's declared artifact scope; left untouched.",
-    "No backend (pantheon) files changed; this is a frontend probe/gate correction only.",
-    "No assertions removed or weakened in src/test/hosted-browser-release-policy.test.ts; it already passed after a clean dependency install."
+    "No backend (pantheon) files changed; this is a frontend probe/gate/test correction only.",
+    "No assertions removed or weakened in src/test/hosted-browser-release-policy.test.ts; all 69 hosted-browser-suite assertions are unchanged. The only addition is a beforeAll that provisions a missing Chromium binary before the suite's browser-dependent tests run.",
+    "No deployment performed."
   ],
+  "open_gap": {
+    "acceptance_criterion": "the release gate aggregate reports zero failing critical checks for a candidate that is otherwise healthy",
+    "status": "unmet",
+    "reason": "scripts/probe-bff-authenticated-live.mjs line 299 still probes the retired literal `/bff/actions/strategy/strategy-dev/promote` as an authenticated write/precondition check, and aggregate-release-gate.mjs's allRowsPass() requires an exact string match between its writePaths and that producer's emitted `route` field. That file is out of this task's declared artifact scope (scripts/probe-bff-routes.mjs, scripts/aggregate-release-gate.mjs, src/test/hosted-browser-release-policy.test.ts, this evidence file), so it cannot be corrected inside this task's authorized change set.",
+    "required_action": "Human/Ops must add scripts/probe-bff-authenticated-live.mjs to this task's artifact contract (task must be todo/blocked for `artifact-contract`, which this owner cannot invoke) so the owner can change its WRITE_ENDPOINTS route literal from /bff/actions/strategy/strategy-dev/promote to /bff/v1/commands (with a command envelope body matching the PromoteStrategyPaper mapping already used in the corrected anonymous probe), matching aggregate-release-gate.mjs's writePaths.",
+    "recorded_as": "blocker, waiting_for Human/Ops, at task closeout of this in-scope corrective pass"
+  },
   "validation": {
     "npm_ci": { "command": "npm ci", "result": "948 packages installed cleanly" },
-    "hosted_browser_release_policy_suite": {
+    "hosted_browser_release_policy_suite_normal_cache": {
       "command": "npx vitest run src/test/hosted-browser-release-policy.test.ts",
       "result": "passed: 69/69 tests"
     },
+    "hosted_browser_release_policy_suite_empty_cache": {
+      "command": "PLAYWRIGHT_BROWSERS_PATH=/tmp/fe-canonical-empty-browser-cache-4 npx vitest run src/test/hosted-browser-release-policy.test.ts",
+      "result": "passed: 69/69 tests; Chromium downloaded on demand inside a 180s beforeAll hook timeout, reproducing and fixing the exact CI failure mode from run 35855655784"
+    },
     "hard_gates_suite": {
-      "command": "npx vitest run src/test/aggregate-release-gate-hard-gates.test.ts src/test/hosted-browser-release-policy.test.ts",
-      "result": "passed: 91/91 tests"
+      "command": "npx vitest run src/test/aggregate-release-gate-hard-gates.test.ts",
+      "result": "passed: 22/22 tests"
     },
     "full_suite": {
       "command": "npm run test",
-      "result": "passed: 209 files / 2224 tests"
+      "result": "passed: 209 files / 2224 tests in 167.43s"
     },
     "anonymous_route_probe_against_hosted_candidate": {
       "command": "node scripts/probe-bff-routes.mjs",
-      "target": "https://api.dev.mvl-cap.tw (default PANTHEON_BFF_BASE_URL)",
-      "result": "Canonical 404 count: 0; Transport errors: 0; all protected routes (including the corrected POST /bff/actions/strategy/strategy-dev/promote_paper) returned 401 as expected; PASS: no canonical route returned 404."
+      "target": "https://api.dev.mvl-cap.tw (default PANTHEON_BFF_BASE_URL; observed source_commit_sha ae41705b4637110e665d2eed735afbd8307e28e6 at probe time, see candidate_identity_binding)",
+      "result": "Canonical 404 count: 0; Transport errors: 0; all 45 protected routes (including the corrected POST /bff/v1/commands) returned 401 as expected; PASS: no canonical route returned 404."
+    },
+    "manual_route_check": {
+      "command": "curl -s -o /dev/null -w '%{http_code}' -X POST https://api.dev.mvl-cap.tw/bff/v1/commands -H 'Content-Type: application/json' -H 'Idempotency-Key: probe-test-1' -d '{...PromoteStrategyPaper command envelope...}'",
+      "result": "401"
     }
   },
   "acceptance": {
@@ -59,13 +80,13 @@
     "anonymous_probe_zero_canonical_404": true,
     "npm_run_test_passes_including_hosted_browser_release_policy_suite": true,
     "no_check_silenced_by_exception_or_deleted_assertion": true,
-    "release_gate_aggregate_reports_zero_failing_critical_checks": "pending independent verification via the next integration-gate run against the merged head; the two contributing scripts were corrected and locally re-validated as above"
+    "release_gate_aggregate_reports_zero_failing_critical_checks": false
   },
   "independent_review_required": [
-    "Confirm scripts/probe-bff-routes.mjs and scripts/aggregate-release-gate.mjs now reference the backend's real canonical action_id (promote_paper) for the strategy promote route, per pantheon@dev BFF_COMMAND_API_CONTRACT.md section 8.1 and strategy_adapter.py status_map.",
-    "Confirm no acceptance assertion was weakened or removed in src/test/hosted-browser-release-policy.test.ts.",
-    "Confirm node scripts/probe-bff-routes.mjs against the hosted dev candidate reports zero canonical 404 rows.",
-    "Confirm npm run test passes in full.",
-    "Bind this file through REVIEW_FILE during governed exact-head approval."
+    "Confirm scripts/probe-bff-routes.mjs and scripts/aggregate-release-gate.mjs now reference POST /bff/v1/commands, the backend's actual sole canonical generic command write route, per pantheon@dev BFF_COMMAND_API_CONTRACT.md section 3 and command_adapters/router.py's module docstring.",
+    "Confirm no acceptance assertion was weakened or removed in src/test/hosted-browser-release-policy.test.ts; only a Chromium provisioning beforeAll was added.",
+    "Confirm node scripts/probe-bff-routes.mjs against the hosted dev candidate reports zero canonical 404 rows, and independently verify which backend commit was live at review time via GET /bff/version.",
+    "Confirm npm run test passes in full, including a run with an empty PLAYWRIGHT_BROWSERS_PATH to validate the CI-provisioning fix.",
+    "Confirm the open_gap entry accurately describes why AC5 remains unmet and that it requires a Human/Ops artifact-scope decision, not further owner-side implementation within the current contract."
   ]
 }
