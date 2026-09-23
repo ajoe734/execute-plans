@@ -1,0 +1,71 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "FE-RELEASE-GATE-CANONICAL-ROUTE-CORRECTIVE-001",
+  "owner": "Claude",
+  "reviewer": "Codex",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-RELEASE-GATE-CANONICAL-ROUTE-CORRECTIVE-001",
+  "trigger": {
+    "backend_run": "pantheon run 35853609038 (ref ede7f3d4be5616acfccd9f963ac5b5920a0812c7)",
+    "backend_outcome": "success on capture/deploy/paper-baseline/Agora-smoke; failed only at Admit and switch",
+    "failing_gate_run": "execute-plans pantheon-integration-gate.yml run 35855655784 (conclusion: failure)",
+    "failing_rows": [
+      "npm run test outcome failure (all error lines pointed at src/test/hosted-browser-release-policy.test.ts)",
+      "Anonymous protected routes not 404 (42 protected route rows, auth mode permissive)",
+      "Anonymous no canonical 404 (canonical 404 count 1)"
+    ]
+  },
+  "root_cause_analysis": {
+    "npm_run_test_failure": "Reproduced npm run test locally against a fresh `npm ci` install; all 209 test files / 2224 tests pass, including src/test/hosted-browser-release-policy.test.ts (69/69). No source defect found in the suite or the modules it exercises (scripts/probe-hosted-browser-bff.mjs). Treated as an environment/install-state failure in the prior CI run, not a code regression; no test assertion was weakened or removed.",
+    "canonical_404_route": {
+      "stale_entry": "POST /bff/actions/strategy/strategy-dev/promote",
+      "finding": "The BFF exposes the generic action route template `POST /bff/actions/{type}/{id}/{action}` (services/control-plane/bff/command_adapters/router.py, `_CANONICAL_ACTIONS_ROUTE`), but `action` must be a catalog action_id. The pantheon backend's own canonical contract (services/control-plane/bff/BFF_COMMAND_API_CONTRACT.md section 8.1 'Strategy Actions', and the strategy adapter's status_map in services/control-plane/bff/command_adapters/strategy_adapter.py) only recognizes `promote_paper` and `promote_live` for the strategy entity — there is no action_id literally named `promote`. Action-id validation happens before the auth check for this route, so an unrecognized action_id 404s instead of 401ing like every other protected route.",
+      "evidence_source": "pantheon@origin/dev (ede7f3d4be5616acfccd9f963ac5b5920a0812c7 exactly, verified via a local read-only checkout at /tmp/pantheon-integration-checkout pinned to that ref) — services/control-plane/bff/BFF_COMMAND_API_CONTRACT.md:311-319, services/control-plane/bff/command_adapters/router.py:299-320 (_CANONICAL_ACTIONS_ROUTE), services/control-plane/bff/command_adapters/strategy_adapter.py:85-93 (status_map).",
+      "decision": "The probe's route entry was stale (wrong action_id), not the backend missing the route. Corrected the probe/gate route lists to use the real canonical action_id `promote_paper` instead of inventing a backend change or silencing the check.",
+      "files_corrected": [
+        "scripts/probe-bff-routes.mjs (route list entry)",
+        "scripts/aggregate-release-gate.mjs (writePaths list entry)"
+      ]
+    }
+  },
+  "not_changed": [
+    "scripts/probe-bff-authenticated-live.mjs still references the pre-existing route literal out of this task's declared artifact scope; left untouched.",
+    "No backend (pantheon) files changed; this is a frontend probe/gate correction only.",
+    "No assertions removed or weakened in src/test/hosted-browser-release-policy.test.ts; it already passed after a clean dependency install."
+  ],
+  "validation": {
+    "npm_ci": { "command": "npm ci", "result": "948 packages installed cleanly" },
+    "hosted_browser_release_policy_suite": {
+      "command": "npx vitest run src/test/hosted-browser-release-policy.test.ts",
+      "result": "passed: 69/69 tests"
+    },
+    "hard_gates_suite": {
+      "command": "npx vitest run src/test/aggregate-release-gate-hard-gates.test.ts src/test/hosted-browser-release-policy.test.ts",
+      "result": "passed: 91/91 tests"
+    },
+    "full_suite": {
+      "command": "npm run test",
+      "result": "passed: 209 files / 2224 tests"
+    },
+    "anonymous_route_probe_against_hosted_candidate": {
+      "command": "node scripts/probe-bff-routes.mjs",
+      "target": "https://api.dev.mvl-cap.tw (default PANTHEON_BFF_BASE_URL)",
+      "result": "Canonical 404 count: 0; Transport errors: 0; all protected routes (including the corrected POST /bff/actions/strategy/strategy-dev/promote_paper) returned 401 as expected; PASS: no canonical route returned 404."
+    }
+  },
+  "acceptance": {
+    "canonical_route_list_matches_backend_and_justified": true,
+    "anonymous_probe_zero_canonical_404": true,
+    "npm_run_test_passes_including_hosted_browser_release_policy_suite": true,
+    "no_check_silenced_by_exception_or_deleted_assertion": true,
+    "release_gate_aggregate_reports_zero_failing_critical_checks": "pending independent verification via the next integration-gate run against the merged head; the two contributing scripts were corrected and locally re-validated as above"
+  },
+  "independent_review_required": [
+    "Confirm scripts/probe-bff-routes.mjs and scripts/aggregate-release-gate.mjs now reference the backend's real canonical action_id (promote_paper) for the strategy promote route, per pantheon@dev BFF_COMMAND_API_CONTRACT.md section 8.1 and strategy_adapter.py status_map.",
+    "Confirm no acceptance assertion was weakened or removed in src/test/hosted-browser-release-policy.test.ts.",
+    "Confirm node scripts/probe-bff-routes.mjs against the hosted dev candidate reports zero canonical 404 rows.",
+    "Confirm npm run test passes in full.",
+    "Bind this file through REVIEW_FILE during governed exact-head approval."
+  ]
+}

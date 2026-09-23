@@ -977,7 +977,7 @@ function buildGate3(routeProbe, authSmoke, writeProbe, liveDeep) {
     "/bff/v5/execution/persona-health",
   ];
   const writePaths = [
-    "/bff/actions/strategy/strategy-dev/promote",
+    "/bff/actions/strategy/strategy-dev/promote_paper",
     "/bff/approvals/approval-dev/decide",
     "/bff/v5/interventions/intervention-dev/decide",
     "/bff/management/nl/ask",
