@@ -19,7 +19,7 @@ const routes = [
   ["GET", "/bff/me"],
   ["POST", "/bff/auth/refresh"],
   ["POST", "/bff/logout"],
-  ["POST", "/bff/actions/strategy/strategy-dev/promote"],
+  ["POST", "/bff/v1/commands"],
   ["GET", "/bff/strategies"],
   ["GET", "/bff/strategies/strategy-dev"],
   ["GET", "/bff/personas"],
@@ -75,7 +75,19 @@ function bodyFor(method, route) {
   if (route.includes("/acknowledge")) return JSON.stringify({ memo: "route probe noop" });
   if (route.includes("/import-tools")) return JSON.stringify({ schemaJson: { probe: true }, memo: "route probe noop" });
   if (route.includes("/auth/refresh") || route.includes("/logout")) return JSON.stringify({});
-  if (route.includes("/actions/")) return JSON.stringify({ memo: "route probe noop", expectedVersion: 1 });
+  if (route === "/bff/v1/commands") {
+    // Sole canonical generic command write route (BFF_COMMAND_API_CONTRACT.md
+    // section 3, "Sole Canonical Write Route"); extract_identity() runs before
+    // payload validation, so an anonymous request 401s regardless of body
+    // shape. Body mirrors the strategy promote_paper mapping (section 8.1).
+    return JSON.stringify({
+      command: "PromoteStrategyPaper",
+      target: { type: "strategy", id: "strategy-dev" },
+      action: "promote_paper",
+      params: {},
+      audit_context: { reason: "anonymous route probe" },
+    });
+  }
   return JSON.stringify({});
 }
 
