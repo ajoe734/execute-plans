@@ -209,6 +209,7 @@
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 100ms !important;
+    transition-property: opacity !important;
     scroll-behavior: auto !important;
   }
 }
