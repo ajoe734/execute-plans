@@ -1,0 +1,52 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "FE-WORKSHOP-PERSISTENCE-JOURNEY-001",
+  "owner": "Claude",
+  "reviewer": "Codex",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-WORKSHOP-PERSISTENCE-JOURNEY-001",
+  "evidence_kind": "local_validation_only",
+  "note": "This task's scope is source-only: a new opt-in hosted spec, an optional workflow scope, and a local policy test. No deployment, no hosted acceptance run, and no live BFF/FE writes were performed by this task. Hosted acceptance (a real workflow_dispatch run against the live Pantheon dev deployment with the workshop_persistence_only input) is a separate, later step gated on this PR merging and is explicitly out of scope here per the task brief.",
+  "acceptance_mapping": {
+    "AC1_optional_workflow_scope": "Added `workshop_persistence_only` boolean input (default false) to .github/workflows/pfg-agora-journey-e2e-hosted-acceptance.yml. Default full journey step (agora-product-journey.spec.ts) and its identity/safety guard steps (Reject unsafe target..., Bind expected identity...) are unchanged and still run unconditionally except the viewer-secret precondition, which is skipped only in focused mode alongside the viewer bearer mint step it protects.",
+    "AC2_real_account_password_login": "e2e/workshop-persistence-hosted.spec.ts's realUiDevLogin() drives the real #dev-account/#dev-password form rendered by src/pages/Auth.tsx (confirmed by reading Auth.tsx:227-274 and devLogin.ts, which posts DEV_LOGIN_CLIENT_ID/SECRET as client_id/client_secret with credentials:'include', establishing a real HttpOnly BFF session cookie). No bearer token is ever injected via addInitScript/page.route, and no storageState is used anywhere in the spec (verified by src/test/workshop-persistence-hosted-policy.test.ts's source-contract assertions).",
+    "AC3_single_workshop_create_and_readback": "The spec's create_workshop step submits exactly one uniquely titled workshop (`Workshop persistence journey <uuid>`) through the real UI form, captures the real POST /bff/agora/workshops receipt, and asserts the saved title both via the UI (workshop-item-<id> test id) and via an authenticated server readback (GET /bff/agora/workshops/<id>). No reconstruction, research, Trading Room, or consultation flow is invoked.",
+    "AC4_real_signout_and_fresh_login_readback": "realUiSignOut() clicks the real 'Sign out' UI control and asserts the underlying POST /bff/logout succeeds; assertSessionInvalidated() then confirms GET /bff/me returns 401 with no Authorization header (server-side invalidation, not just client-side state). The test then closes the first BrowserContext, opens a brand-new context (assertAnonymousContext confirms it redirects to /auth?reason=auth-required), performs a second real UI login with the same DEV_LOGIN_CLIENT_ID/SECRET (same account/tenant), and reads back the exact saved title via the workshop-item-<id> UI element for the same workshop id.",
+    "AC5_exact_pair_before_and_after": "captureVersionPair() is called once before the login sequence and once after the fresh-login readback, both times asserting deployment.json's commit and bff/version's source_commit_sha equal EXPECTED_FE_SHA/EXPECTED_BFF_SHA exactly. The test's finally block additionally recomputes `matched` from the two captures and fails the test (even after all steps otherwise passed) if the pair does not match on both sides.",
+    "AC6_sanitized_evidence_only": "writeEvidence() persists only schema_version, task_id, operation_id, timestamps, status, the version pair (fe/bff sha + captured_at, no tokens), workshop id/title/title_sha256, and a per-step {id, status} list. The spec never calls page.screenshot(), never reads cookies()/request().headers(), and Playwright's own artifact capture is disabled workflow-wide by PANTHEON_CREDENTIALED_PLAYWRIGHT_NO_ARTIFACTS=1 (trace/screenshot/video all 'off' in playwright.config.ts). On failure the same evidence file (with status:'failed' and a sanitized failure.message/step_id, containing only the assertion message, never request bodies or headers) is still written from the try/finally.",
+    "AC7_focused_mode_scope_and_tokens": "The two 'Mint a short-lived operator/viewer bearer token' workflow steps are gated with `if: inputs.workshop_persistence_only != 'true'`, and the full-journey step is gated with the same condition; the new focused step is gated with `if: inputs.workshop_persistence_only == 'true'`. Default (unset) input keeps every existing full-mode step running exactly as before. DEV_LOGIN_CLIENT_ID/SECRET are the same existing secret-bound env vars already used by the full journey; no new secret or credential flow was added.",
+    "AC8_discovery_and_policy_validation": "Playwright test discovery (`npx playwright test e2e/workshop-persistence-hosted.spec.ts --list`) finds exactly 1 test. src/test/workshop-persistence-hosted-policy.test.ts is LOCAL, deterministic source-contract validation (13 assertions covering both the spec and workflow source) and is explicitly documented in both files as local validation, distinct from the HOSTED ACCEPTANCE run performed by the workflow itself against a live deployment."
+  },
+  "local_validation": {
+    "commands": [
+      {
+        "command": "npx playwright test e2e/workshop-persistence-hosted.spec.ts --list",
+        "result": "1 test discovered, no syntax/type errors"
+      },
+      {
+        "command": "npx eslint e2e/workshop-persistence-hosted.spec.ts src/test/workshop-persistence-hosted-policy.test.ts",
+        "result": "clean, zero findings"
+      },
+      {
+        "command": "npx vitest run src/test/workshop-persistence-hosted-policy.test.ts",
+        "result": "13 passed (13)"
+      },
+      {
+        "command": "npm test",
+        "result": "210 test files passed, 2237 tests passed (full existing suite, no regressions)"
+      },
+      {
+        "command": "python3 -c \"import yaml; yaml.safe_load(open('.github/workflows/pfg-agora-journey-e2e-hosted-acceptance.yml'))\"",
+        "result": "valid YAML"
+      }
+    ],
+    "not_run": "The hosted browser journey itself (WORKSHOP_PERSISTENCE_HOSTED_E2E=1 against a live Pantheon dev deployment) was not run by this task; it requires workflow_dispatch with the workshop_persistence_only input against a real deployed FE/BFF pair and real DEV_LOGIN_CLIENT_ID/SECRET, which is out of this source-only task's scope per the task brief's coordinator note."
+  },
+  "not_changed": [
+    "e2e/agora-product-journey.spec.ts and its default full-journey workflow steps are untouched other than being wrapped in the new focused-mode `if:` guard, which evaluates to run exactly as before when workshop_persistence_only is unset/false.",
+    "No backend (pantheon) files changed.",
+    "No deployment performed.",
+    "No new secrets, credential flows, or runner frameworks were introduced."
+  ]
+}
