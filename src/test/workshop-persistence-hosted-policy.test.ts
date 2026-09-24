@@ -93,6 +93,24 @@ describe("FE-WORKSHOP-PERSISTENCE-JOURNEY-001 hosted spec source contract", () =
     expect(specSource).not.toContain("matched: true,");
   });
 
+  it("also asserts the deployment.json manifest BFF SHA, not just the live /bff/version SHA", () => {
+    expect(specSource).toContain("deployment.bffCommit");
+    expect(specSource).toContain("deployment.bffSourceCommitSha");
+    expect(specSource).toContain("manifestBffSha");
+    expect(specSource).toContain(
+      "deployment.json bffCommit/bffSourceCommitSha must match the expected exact BFF SHA",
+    );
+    const manifestAssertIndex = specSource.indexOf(
+      "deployment.json bffCommit/bffSourceCommitSha must match the expected exact BFF SHA",
+    );
+    const liveBffAssertIndex = specSource.indexOf(
+      "live BFF commit must match the expected exact BFF SHA",
+    );
+    const captureFnIndex = specSource.indexOf("async function captureVersionPair");
+    expect(manifestAssertIndex).toBeGreaterThan(captureFnIndex);
+    expect(liveBffAssertIndex).toBeGreaterThan(manifestAssertIndex);
+  });
+
   it("writes only allowlisted sanitized evidence and never credentials, cookies, headers, or login screenshots", () => {
     expect(specSource).toContain("SanitizedEvidence");
     expect(specSource).toContain("title_sha256");
@@ -103,6 +121,58 @@ describe("FE-WORKSHOP-PERSISTENCE-JOURNEY-001 hosted spec source contract", () =
     expect(specSource).not.toContain(".password");
     expect(specSource).not.toContain("DEV_PASSWORD}");
     expect(specSource).not.toMatch(/writeFileSync\([^)]*devPassword/i);
+  });
+
+  it("never persists the caught error's own message/cause as step failure evidence, even for secret-bearing errors", () => {
+    // Password-fill and request failures can carry DEV_PASSWORD in their
+    // message text. The only way to guarantee that never reaches sanitized
+    // JSON/reporter evidence is for the catch path to never read the error
+    // at all -- so this asserts structurally, not just by pattern-matching
+    // known secret shapes, which a new failure site could bypass.
+    expect(specSource).not.toContain("error.message");
+    expect(specSource).not.toContain("error instanceof Error");
+    expect(specSource).not.toContain("String(error)");
+    expect(specSource).not.toContain("catch (error)");
+    expect(specSource).toContain("} catch {");
+    expect(specSource).toContain('message: `step "${id}" failed`');
+    expect(specSource).toContain('throw new Error(`${TASK_ID} step "${id}" failed`)');
+
+    // Synthetic proof: a secret-bearing thrown value can never surface in the
+    // sanitized failure message, because the sanitizer is a pure function of
+    // the step id only and never reads the thrown value's text.
+    const secretBearingErrors = [
+      new Error("fill(#dev-password) failed: value=super-secret-dev-password"),
+      "raw string throw containing super-secret-dev-password",
+      { toString: () => "object throw leaking super-secret-dev-password" },
+    ];
+    const sanitizeFailure = (id: string) => ({
+      message: `step "${id}" failed`,
+      step_id: id,
+    });
+    for (const thrown of secretBearingErrors) {
+      const sanitized = sanitizeFailure("real_ui_login_first");
+      expect(JSON.stringify(sanitized)).not.toContain("super-secret-dev-password");
+      expect(sanitized.message).not.toContain(String(thrown));
+    }
+  });
+
+  it("reads the saved title via a real detail<->list round trip, since the detail route has no workshop-item-id locator", () => {
+    expect(specSource).toContain("async function assertSavedTitleViaListRoundTrip");
+    expect(specSource).toContain("async function reopenWorkshopFromListAndAssertTitle");
+    expect(specSource).toContain('page.getByRole("link", { name: "工坊列表" })');
+    expect(specSource).toContain(
+      'assertSavedTitleViaListRoundTrip(page, workshopId, workshopTitle)',
+    );
+    expect(specSource).toContain(
+      "reopenWorkshopFromListAndAssertTitle(freshPage, workshopId, workshopTitle)",
+    );
+    // WorkshopSessionView (the detail route) never renders workshop-item-{id};
+    // that testid only exists in WorkshopListView. Every use of the locator
+    // must live inside the two list round-trip helpers, not inline in the
+    // test body against a page that was just goto'd straight to a detail URL.
+    const testBodyStart = specSource.indexOf('test("real UI login');
+    const testBody = specSource.slice(testBodyStart);
+    expect(testBody).not.toContain("workshop-item-${workshopId}");
   });
 
   it("does not mint or reuse viewer/operator bearer tokens for the focused persistence journey", () => {
@@ -145,13 +215,29 @@ describe("FE-WORKSHOP-PERSISTENCE-JOURNEY-001 hosted workflow source contract", 
     expect(mintViewerIndex).toBeGreaterThan(-1);
     expect(fullJourneyIndex).toBeGreaterThan(-1);
     expect(focusedJourneyIndex).toBeGreaterThan(-1);
-    expect(workflowSource).toContain(
-      "inputs.workshop_persistence_only != 'true'",
-    );
-    expect(workflowSource).toContain(
-      "inputs.workshop_persistence_only == 'true'",
-    );
+    // workshop_persistence_only is a `type: boolean` workflow_dispatch input,
+    // so `inputs.workshop_persistence_only` in an `if:` expression is already
+    // a boolean. Comparing it to the *string* 'true' forces GitHub Actions'
+    // mismatched-type coercion (both operands become numbers; the string
+    // becomes NaN), which makes `!= 'true'` always true and `== 'true'`
+    // always false regardless of the actual input -- the exact bug that made
+    // focused dispatch skip the focused spec while still running full-journey
+    // steps. The guard must compare/branch on the boolean itself.
+    expect(workflowSource).not.toContain("!= 'true'");
+    expect(workflowSource).not.toContain("== 'true'");
+    expect(workflowSource).toContain('if: "!inputs.workshop_persistence_only"');
+    expect(workflowSource).toContain("if: inputs.workshop_persistence_only");
     expect(workflowSource).toContain("e2e/workshop-persistence-hosted.spec.ts");
+  });
+
+  it("checks out the dispatched revision with a valid 40-character commit pin", () => {
+    const checkoutMatch = workflowSource.match(
+      /uses: actions\/checkout@([0-9a-f]+)/,
+    );
+    expect(checkoutMatch, "checkout step must pin actions/checkout by commit").not.toBeNull();
+    const pin = checkoutMatch?.[1] ?? "";
+    expect(pin).toHaveLength(40);
+    expect(pin).toBe("34e114876b0b11c390a56381ad16ebd13914f8d5");
   });
 
   it("uses only the existing environment secret binding, no new credential flow", () => {

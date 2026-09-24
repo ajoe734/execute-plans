@@ -173,6 +173,11 @@ async function captureVersionPair(page: Page): Promise<VersionPairEvidence> {
   expect(deploymentResponse.ok(), "deployment.json must be reachable").toBe(true);
   const deployment = asRecord(await deploymentResponse.json());
   const feSha = String(deployment.commit ?? "").trim().toLowerCase();
+  const manifestBffSha = String(
+    deployment.bffCommit ?? deployment.bffSourceCommitSha ?? "",
+  )
+    .trim()
+    .toLowerCase();
 
   const versionResponse = await page.request.get(`${BFF_BASE_URL}/bff/version`);
   expect(versionResponse.ok(), "/bff/version must be reachable").toBe(true);
@@ -183,6 +188,10 @@ async function captureVersionPair(page: Page): Promise<VersionPairEvidence> {
   const bffKnown = String(version.source_commit_known ?? "");
 
   expect(feSha, "live FE commit must match the expected exact FE SHA").toBe(EXPECTED_FE_SHA);
+  expect(
+    manifestBffSha,
+    "deployment.json bffCommit/bffSourceCommitSha must match the expected exact BFF SHA",
+  ).toBe(EXPECTED_BFF_SHA);
   expect(bffKnown, "live BFF /bff/version source_commit_known must be true").toBe("true");
   expect(bffSha, "live BFF commit must match the expected exact BFF SHA").toBe(EXPECTED_BFF_SHA);
 
@@ -260,6 +269,65 @@ async function assertSessionInvalidated(page: Page): Promise<void> {
   ).toBe(401);
 }
 
+/**
+ * The workshop detail route (StrategyWorkshopPage with an id) renders
+ * WorkshopSessionView, which does not expose a `workshop-item-{id}` locator;
+ * that testid only exists on list rows in WorkshopListView. To read the
+ * saved title with a real locator, navigate back to the list via the
+ * existing detail backlink, assert the exact visible title there, then
+ * click the same real item to reopen the matching detail route.
+ */
+async function assertSavedTitleViaListRoundTrip(
+  page: Page,
+  workshopId: string,
+  title: string,
+): Promise<void> {
+  await expect(page).toHaveURL(
+    `${FE_BASE_URL}/agora/strategy-workshop/${encodeURIComponent(workshopId)}`,
+    { timeout: 30_000 },
+  );
+  await page.getByRole("link", { name: "工坊列表" }).click();
+  await expect(page).toHaveURL(`${FE_BASE_URL}/agora/strategy-workshop`, {
+    timeout: 30_000,
+  });
+  await expect(page.getByTestId("strategy-workshop-page-list")).toBeVisible({
+    timeout: 30_000,
+  });
+  const item = page.getByTestId(`workshop-item-${workshopId}`);
+  await expect(item).toBeVisible({ timeout: 30_000 });
+  await expect(item).toContainText(title);
+  await item.click();
+  await expect(page).toHaveURL(
+    `${FE_BASE_URL}/agora/strategy-workshop/${encodeURIComponent(workshopId)}`,
+    { timeout: 30_000 },
+  );
+}
+
+/**
+ * Same list round trip, starting from the list route that the post-login
+ * redirect lands on (rather than a detail URL that would 404 the backlink).
+ */
+async function reopenWorkshopFromListAndAssertTitle(
+  page: Page,
+  workshopId: string,
+  title: string,
+): Promise<void> {
+  await expect(page).toHaveURL(`${FE_BASE_URL}/agora/strategy-workshop`, {
+    timeout: 30_000,
+  });
+  await expect(page.getByTestId("strategy-workshop-page-list")).toBeVisible({
+    timeout: 30_000,
+  });
+  const item = page.getByTestId(`workshop-item-${workshopId}`);
+  await expect(item).toBeVisible({ timeout: 30_000 });
+  await expect(item).toContainText(title);
+  await item.click();
+  await expect(page).toHaveURL(
+    `${FE_BASE_URL}/agora/strategy-workshop/${encodeURIComponent(workshopId)}`,
+    { timeout: 30_000 },
+  );
+}
+
 /** Confirms a brand-new browser context has no residual authenticated state. */
 async function assertAnonymousContext(page: Page): Promise<void> {
   await page.goto(`${FE_BASE_URL}/agora/strategy-workshop`, {
@@ -295,13 +363,16 @@ test.describe(`${TASK_ID} hosted workshop persistence`, () => {
         const result = await fn();
         steps.push({ id, status: "passed" });
         return result;
-      } catch (error) {
+      } catch {
+        // Intentionally do not persist the caught error's message/cause: form-fill
+        // and request failures in this journey can carry the dev-login secret in
+        // their text, and that must never reach sanitized JSON/reporter evidence.
         steps.push({ id, status: "failed" });
         failure = {
-          message: error instanceof Error ? error.message : String(error),
+          message: `step "${id}" failed`,
           step_id: id,
         };
-        throw error;
+        throw new Error(`${TASK_ID} step "${id}" failed`);
       }
     };
 
@@ -329,16 +400,9 @@ test.describe(`${TASK_ID} hosted workshop persistence`, () => {
         return id;
       });
 
-      await runStep("assert_saved_title_ui", async () => {
-        await expect(page).toHaveURL(
-          `${FE_BASE_URL}/agora/strategy-workshop/${encodeURIComponent(workshopId)}`,
-          { timeout: 30_000 },
-        );
-        await expect(page.getByTestId(`workshop-item-${workshopId}`)).toContainText(
-          workshopTitle,
-          { timeout: 30_000 },
-        );
-      });
+      await runStep("assert_saved_title_ui", () =>
+        assertSavedTitleViaListRoundTrip(page, workshopId, workshopTitle),
+      );
 
       await runStep("assert_saved_title_server_readback", async () => {
         const readback = await page.request.get(
@@ -374,15 +438,9 @@ test.describe(`${TASK_ID} hosted workshop persistence`, () => {
 
         await runStep("real_ui_login_second", () => realUiDevLogin(freshPage));
 
-        await runStep("reopen_workshop_and_read_exact_title", async () => {
-          await freshPage.goto(
-            `${FE_BASE_URL}/agora/strategy-workshop/${encodeURIComponent(workshopId)}`,
-            { waitUntil: "domcontentloaded" },
-          );
-          await expect(
-            freshPage.getByTestId(`workshop-item-${workshopId}`),
-          ).toContainText(workshopTitle, { timeout: 30_000 });
-        });
+        await runStep("reopen_workshop_and_read_exact_title", () =>
+          reopenWorkshopFromListAndAssertTitle(freshPage, workshopId, workshopTitle),
+        );
 
         after = await runStep("capture_version_pair_after", () =>
           captureVersionPair(freshPage),

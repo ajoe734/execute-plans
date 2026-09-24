@@ -71,7 +71,7 @@ jobs:
       PANTHEON_PUBLIC_GCP_IDENTITY_API_KEY: ${{ vars.VITE_GCP_IDENTITY_API_KEY }}
     steps:
       - name: Checkout dispatched revision
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5a
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
 
       - name: Reject unsafe target or incomplete proof inputs
         shell: bash
@@ -133,7 +133,7 @@ jobs:
           echo "verified real-writes deployment.json binds fe=${served_fe} bff=${served_bff} to the expected exact pair"
 
       - name: Mint a short-lived operator bearer token via governed dev-login and prove operator readiness
-        if: inputs.workshop_persistence_only != 'true'
+        if: "!inputs.workshop_persistence_only"
         shell: bash
         run: |
           set -euo pipefail
@@ -155,7 +155,7 @@ jobs:
           node -e 'const r=JSON.parse(process.argv[1]); const d=r.data ?? r; if (d.ready !== true || d.authReady !== true) process.exit(1)' "${readiness}"
 
       - name: Mint a short-lived viewer bearer token via governed dev-login
-        if: inputs.workshop_persistence_only != 'true'
+        if: "!inputs.workshop_persistence_only"
         shell: bash
         run: |
           set -euo pipefail
@@ -184,7 +184,7 @@ jobs:
         run: npx playwright install chromium --with-deps
 
       - name: Run real Agora product journey hosted spec
-        if: inputs.workshop_persistence_only != 'true'
+        if: "!inputs.workshop_persistence_only"
         run: |
           set -euo pipefail
           npx playwright test e2e/agora-product-journey.spec.ts \
@@ -194,7 +194,7 @@ jobs:
             --trace=off
 
       - name: Run real workshop persistence hosted spec
-        if: inputs.workshop_persistence_only == 'true'
+        if: inputs.workshop_persistence_only
         run: |
           set -euo pipefail
           npx playwright test e2e/workshop-persistence-hosted.spec.ts \
