@@ -27,6 +27,11 @@ on:
         required: true
         default: "tenant-dev"
         type: string
+      workshop_persistence_only:
+        description: "FE-WORKSHOP-PERSISTENCE-JOURNEY-001: run only the focused real-login workshop persistence spec instead of the full Agora journey"
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -58,14 +63,15 @@ jobs:
       DEV_LOGIN_CLIENT_SECRET: ${{ secrets.DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_SECRET }}
       DEV_LOGIN_VIEWER_CLIENT_ID: ${{ vars.DEV_BFF_DEV_LOGIN_VIEWER_CLIENT_ID || 'pantheon-dev-viewer-v1' }}
       DEV_LOGIN_VIEWER_CLIENT_SECRET: ${{ secrets.DEV_BFF_DEV_LOGIN_VIEWER_CLIENT_SECRET }}
-      PFG_AGORA_JOURNEY_E2E: "1"
+      PFG_AGORA_JOURNEY_E2E: ${{ inputs.workshop_persistence_only && '0' || '1' }}
+      WORKSHOP_PERSISTENCE_HOSTED_E2E: ${{ inputs.workshop_persistence_only && '1' || '0' }}
       PANTHEON_PERSONA_INTERACTION_WRITE_PROOF: "1"
       PFG_AGORA_JOURNEY_E2E_GCP_EMAIL: ${{ secrets.PFG_AGORA_JOURNEY_E2E_GCP_EMAIL }}
       PFG_AGORA_JOURNEY_E2E_GCP_PASSWORD: ${{ secrets.PFG_AGORA_JOURNEY_E2E_GCP_PASSWORD }}
       PANTHEON_PUBLIC_GCP_IDENTITY_API_KEY: ${{ vars.VITE_GCP_IDENTITY_API_KEY }}
     steps:
       - name: Checkout dispatched revision
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5a
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
 
       - name: Reject unsafe target or incomplete proof inputs
         shell: bash
@@ -80,7 +86,7 @@ jobs:
             echo "::error::DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_SECRET is not provisioned; refusing to run an unauthenticated hosted journey." >&2
             exit 1
           fi
-          if [[ -z "${DEV_LOGIN_VIEWER_CLIENT_SECRET}" ]]; then
+          if [[ "${WORKSHOP_PERSISTENCE_HOSTED_E2E}" != "1" && -z "${DEV_LOGIN_VIEWER_CLIENT_SECRET}" ]]; then
             echo "::error::DEV_BFF_DEV_LOGIN_VIEWER_CLIENT_SECRET is not provisioned; refusing to run without viewer negative controls." >&2
             exit 1
           fi
@@ -127,6 +133,7 @@ jobs:
           echo "verified real-writes deployment.json binds fe=${served_fe} bff=${served_bff} to the expected exact pair"
 
       - name: Mint a short-lived operator bearer token via governed dev-login and prove operator readiness
+        if: "!inputs.workshop_persistence_only"
         shell: bash
         run: |
           set -euo pipefail
@@ -148,6 +155,7 @@ jobs:
           node -e 'const r=JSON.parse(process.argv[1]); const d=r.data ?? r; if (d.ready !== true || d.authReady !== true) process.exit(1)' "${readiness}"
 
       - name: Mint a short-lived viewer bearer token via governed dev-login
+        if: "!inputs.workshop_persistence_only"
         shell: bash
         run: |
           set -euo pipefail
@@ -176,9 +184,20 @@ jobs:
         run: npx playwright install chromium --with-deps
 
       - name: Run real Agora product journey hosted spec
+        if: "!inputs.workshop_persistence_only"
         run: |
           set -euo pipefail
           npx playwright test e2e/agora-product-journey.spec.ts \
+            --project=chromium \
+            --retries=0 \
+            --reporter=list \
+            --trace=off
+
+      - name: Run real workshop persistence hosted spec
+        if: inputs.workshop_persistence_only
+        run: |
+          set -euo pipefail
+          npx playwright test e2e/workshop-persistence-hosted.spec.ts \
             --project=chromium \
             --retries=0 \
             --reporter=list \
