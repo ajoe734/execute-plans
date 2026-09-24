@@ -1,0 +1,85 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "FE-LOGIN-FOCUS-RELEASE-CORRECTIVE-001",
+  "owner": "Claude",
+  "reviewer": "Codex",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-LOGIN-FOCUS-RELEASE-CORRECTIVE-001",
+  "rejected_candidate": "62f14573a36daa69ce6007f709dc719ce5e3a83c",
+  "failure_reproduced": {
+    "source": "execute-plans Actions run 35969175887, artifact 10796585038 (candidate 62f14573a36daa69ce6007f709dc719ce5e3a83c)",
+    "check": "desktop-1440 keyboardFocusVisible",
+    "probe_context": "colorScheme: dark, reducedMotion: reduce, viewport 1440x900 (scripts/probe-hosted-browser-bff.mjs runHostedUxProfile)"
+  },
+  "root_cause_analysis": {
+    "immutable_default_context_replay": {
+      "note": "Local diagnostic replay of the unchanged candidate artifact (10794534436) against current Chromium in the probe's default (non reduced-motion) context showed all three focusable login controls (dev-account input, dev-password input, Sign in button) with a visible focus box-shadow ring at delay 0 and delay 200ms after Tab -- confirming AC2: this is not a missing-CSS regression and no blind outline addition is warranted.",
+      "evidence_files": "/tmp/pantheon-focus-diagnosis-20260924/candidate-focus-samples.json, candidate-focus-0.png..candidate-focus-2.png"
+    },
+    "exact_probe_context_replay": {
+      "note": "Replaying the same unchanged candidate artifact with the exact gate probe context (desktop-1440, colorScheme dark, reducedMotion reduce, axe-before-Tab ordering) reproduced the failure: dev-account and dev-password inputs report focusVisible=true but an all-transparent boxShadow (5 rgba(0,0,0,0) layers) immediately after Tab, while the Sign in button retains a visible ring.",
+      "evidence_files": "/tmp/pantheon-focus-diagnosis-20260924/candidate-exact-context-samples.json, candidate-exact-context.png"
+    },
+    "mechanism": "src/index.css's `@media (prefers-reduced-motion: reduce)` block (comment: 'keep opacity transitions only') set `transition-duration: 100ms !important` on every element but never restricted `transition-property`, so any element with no explicit `transition-property` declaration kept the CSS initial value `all`. Input (src/components/ui/input.tsx) declares no transition utility at all, so it falls into this case; Button (src/components/ui/button.tsx) explicitly declares Tailwind's `transition-colors` utility (an explicit property list: color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, and gradient-stop custom properties -- notably not box-shadow), so it was never affected by the `all` fallback and its ring stayed instant. Tailwind 4 also compiles `focus-visible:outline-none` to an actual `outline: none`, so the focus box-shadow ring is the only cue for the two inputs. Under `prefers-reduced-motion: reduce`, the block's blanket duration override newly activated a real 100ms CSS transition on `box-shadow` for the inputs, which previously had no transition on that property at all (initial duration 0s outside reduced motion), so their focus ring animates in from its unfocused (fully transparent) value instead of applying instantly. The release-gate probe samples computed style synchronously in the same tick as the Tab keypress with no wait, so it can observe the transparent starting frame of that now-animated transition; this is inherently timing-dependent, which is why not every repeated sample in the diagnosis run hit the transparent frame.",
+    "why_default_context_passed": "Outside prefers-reduced-motion, no rule sets transition-duration on box-shadow for the inputs, so it stays at the browser's initial 0s value and the ring change is applied on the same frame -- no race for the probe to observe."
+  },
+  "fix": {
+    "file": "src/index.css",
+    "change": "Added `transition-property: opacity !important;` to the existing `@media (prefers-reduced-motion: reduce)` block, restricting what any element under reduced motion is allowed to transition to opacity only -- matching the block's pre-existing comment intent ('keep opacity transitions only') exactly. Non-opacity property changes (box-shadow, outline-color, border-color, etc.) now apply instantly under reduced motion instead of animating over the forced 100ms duration.",
+    "lines_changed": 1,
+    "no_detector_or_threshold_change": "scripts/probe-hosted-browser-bff.mjs (keyboardFocus / reducedMotion inspectors, visibleCue / cssBoxShadowHasVisibleLayer logic, REDUCED_MOTION_MAX_TRANSITION_MS=150) was not modified."
+  },
+  "not_changed": [
+    "No BFF, dependency, package-upgrade, MFA/issuer, or execution-grant changes.",
+    "No deployment performed from this task; no hosted acceptance is claimed.",
+    "No release-gate check skipped, thresholds relaxed, or assertions weakened.",
+    "src/components/ui/input.tsx and src/components/ui/button.tsx are unchanged; the fix is scoped entirely to the shared reduced-motion rule in src/index.css."
+  ],
+  "validation": {
+    "local_before_after_replay": {
+      "method": "Built dist twice with `VITE_BFF_MODE=live VITE_BFF_FALLBACK=strict VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_REAL_WRITES=true VITE_BFF_ALLOW_DEV_STUB_WRITES=true` (matching the rejected candidate's recorded buildMode in pair.json), once with src/index.css unchanged (before) and once with the one-line fix (after). Served each dist locally over plain HTTP and replayed the release-gate's exact keyboard-focus probe context (viewport 1440x900, colorScheme dark, reducedMotion reduce) with the local Chromium build at /home/.../.cache/ms-playwright/chromium-1223 via playwright-core, pressing Tab and sampling computed style with no wait, matching scripts/probe-hosted-browser-bff.mjs inspectKeyboardFocus exactly.",
+      "before_result": "dev-account: visibleCue=true (transparent-ring sample not hit this run); dev-password: visibleCue=false (boxShadow all rgba(0,0,0,0) layers) across 3 repeated Tab-cycles -- reproduces the exact rejected-candidate failure mode.",
+      "after_result": "dev-account, dev-password, and the Sign in button: visibleCue=true with a fully opaque ring boxShadow on every one of 3 repeated Tab-cycles."
+    },
+    "e2e_regression_coverage": {
+      "file": "e2e/login-focus.spec.ts",
+      "note": "New Playwright spec against a production build served by the existing e2e webServer (scripts/build-e2e-server.mjs + vite preview), using page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' }) in a beforeEach. `reducedMotion` is only documented as a `TestOptions.contextOptions` field (node_modules/playwright/types/test.d.ts ~line 7501), not a top-level `test.use()` key -- unlike `colorScheme`, which is a first-class top-level TestOptions field (same file, line 7084) -- so an initial `test.use({ reducedMotion: 'reduce' })` was silently ignored while `colorScheme: 'dark'` took effect. Verified directly: with that top-level `test.use`, `window.matchMedia('(prefers-reduced-motion: reduce)').matches` was `false` while `(prefers-color-scheme: dark)` was `true`; switching to `page.emulateMedia` set both correctly. This is a testOptions API-shape correction, not a browser/environment defect.",
+      "positive_test": "Tabs through all three login controls and asserts (a) each control exposes a visible focus cue via the release gate's own visibleCue formula (imported cssColorHasVisibleAlpha/cssBoxShadowHasVisibleLayer from scripts/probe-hosted-browser-bff.mjs, not reimplemented) and (b) deterministically, that no control's computed transition-property includes box-shadow/outline/all under reduced motion -- asserting the actual CSS contract instead of racing an animation frame, since a same-tick screenshot of a box-shadow mid-transition is inherently timing-dependent.",
+      "negative_control": "A second test injects `#dev-account:focus-visible { box-shadow: none !important; outline: none !important; }` and asserts the same visibleCue formula still reports false -- a genuinely invisible/transparent focus cue must still fail.",
+      "before_fix_result": "Reverted the src/index.css fix only (git stash) and reran e2e/login-focus.spec.ts: positive test failed deterministically with 'dev-account must not transition box-shadow/outline under reduced motion (transition-property: all)'; negative-control test still passed. Restored the fix afterward.",
+      "after_fix_result": "Both tests pass: `2 passed` (npx playwright test e2e/login-focus.spec.ts)."
+    },
+    "unit_tests": {
+      "command": "npx vitest run --maxWorkers=2 --testTimeout=15000 --hookTimeout=30000 src/pages/Auth.test.tsx src/test/hosted-browser-release-policy.test.ts",
+      "result": "2 files passed, 85/85 tests passed"
+    },
+    "full_unit_suite": {
+      "command": "npm run test",
+      "result": "209 files passed, 2224/2224 tests passed in 215.78s"
+    },
+    "typecheck": {
+      "command": "npm run typecheck",
+      "result": "clean, no errors"
+    },
+    "lint": {
+      "command": "npx eslint e2e/login-focus.spec.ts",
+      "result": "no errors (src/index.css has no ESLint config matching CSS files, expected)"
+    }
+  },
+  "acceptance": {
+    "reproduced_exact_rejected_candidate_failure_with_real_probe_context": true,
+    "confirmed_default_context_unaffected_no_blind_css_addition": true,
+    "smallest_evidenced_fix_no_skip_or_threshold_relaxation": true,
+    "genuine_transparent_focus_cue_still_fails_negative_control": true,
+    "unit_and_e2e_regression_coverage_added_and_passing": true,
+    "no_hosted_acceptance_claimed_no_deployment_from_this_task": true
+  },
+  "independent_review_required": [
+    "Confirm the single added declaration `transition-property: opacity !important;` in src/index.css's existing `@media (prefers-reduced-motion: reduce)` block is the only change to that file, and matches the block's own pre-existing comment intent.",
+    "Confirm e2e/login-focus.spec.ts's positive test fails against the pre-fix src/index.css (reproducible via `git stash` on that one file) and passes after, per validation.e2e_regression_coverage above.",
+    "Confirm the negative control (genuinely transparent focus cue) still fails the same visibleCue detector logic.",
+    "Confirm no changes were made to scripts/probe-hosted-browser-bff.mjs, src/components/ui/input.tsx, or src/components/ui/button.tsx.",
+    "Confirm full unit suite (npm run test) and typecheck remain green at the final commit."
+  ]
+}
