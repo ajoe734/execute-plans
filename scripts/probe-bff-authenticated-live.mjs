@@ -296,7 +296,17 @@ const LIST_ENDPOINTS = [
 // Write/precondition endpoints probed with dev-only IDs.
 // Expected to return typed 4xx error envelopes rather than success.
 const WRITE_ENDPOINTS = [
-  { route: "/bff/actions/strategy/strategy-dev/promote", method: "POST" },
+  {
+    route: "/bff/v1/commands",
+    method: "POST",
+    body: {
+      command: "PromoteStrategyPaper",
+      target: { type: "strategy", id: "strategy-dev" },
+      action: "promote_paper",
+      params: {},
+      audit_context: { reason: "authenticated route probe" },
+    },
+  },
   { route: "/bff/approvals/approval-dev/decide", method: "POST", body: "invalid-smoke-payload" },
   { route: "/bff/v5/interventions/intervention-dev/decide", method: "POST" },
   { route: "/bff/management/nl/ask", method: "POST", body: {} },
