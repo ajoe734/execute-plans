@@ -355,7 +355,15 @@ jobs:
               run.conclusion === "success" &&
               String(run.display_title || "") === `Release candidate ${releaseCandidateId}`;
             const sourceRefMatches = String(sourceRef.object?.sha || "").toLowerCase() === requestedSha;
-            if (!validRun || !sourceRefMatches) {
+            let sourceAdmitted = sourceRefMatches;
+            if (!sourceAdmitted && requestedFrontendRef === "dev") {
+              const { data: ancestry } = await github.rest.repos.compareCommits({
+                owner: context.repo.owner, repo: context.repo.repo,
+                base: requestedSha, head: sourceRef.object.sha,
+              });
+              sourceAdmitted = ["ahead", "identical"].includes(ancestry.status);
+            }
+            if (!validRun || !sourceAdmitted) {
               core.setFailed(`run ${gateRunId} is not the successful controller-dispatched integration gate for ${requestedSha}`);
               return;
             }
@@ -426,10 +434,15 @@ jobs:
               core.setFailed("current dev ref did not resolve to one exact commit SHA");
               return;
             }
-            if (String(run.head_sha || "").toLowerCase() !== currentDevSha) {
-              core.setFailed(`integration gate ${gateRunId} was not run from the current trusted dev workflow ref`);
+            const { data: gateAncestry } = await github.rest.repos.compareCommits({
+              owner: context.repo.owner, repo: context.repo.repo,
+              base: run.head_sha, head: currentDevSha,
+            });
+            if (!["ahead", "identical"].includes(gateAncestry.status)) {
+              core.setFailed(`integration gate ${gateRunId} is outside protected dev history`);
               return;
             }
+            core.setOutput("ref_drift", String(!sourceRefMatches || run.head_sha !== currentDevSha));
             core.setOutput("candidate_sha", requestedSha);
             core.setOutput("frontend_ref", requestedFrontendRef);
             core.setOutput("gate_run_id", gateRunIdText);
@@ -437,7 +450,7 @@ jobs:
             core.setOutput("artifact_id", String(artifacts[0].id));
             core.setOutput("artifact_name", artifactName);
             core.setOutput("github_artifact_digest", String(artifacts[0].digest).toLowerCase());
-            core.setOutput("current_dev_sha", currentDevSha);
+            core.setOutput("current_dev_sha", context.sha);
             core.setOutput("emergency_override", emergencyOverride ? "true" : "false");
             core.setOutput("rollback_drill", rollbackDrill ? "true" : "false");
             core.setOutput("override_reason", overrideReason);
@@ -468,10 +481,11 @@ jobs:
             exit 1
           fi
           current_dev_sha="$(git ls-remote --exit-code origin refs/heads/dev | awk '{print $1}')"
-          if [[ "$current_dev_sha" != "$TRUSTED_CONTROLLER_SHA" ]]; then
-            echo "Trusted controller is stale: expected dev=$TRUSTED_CONTROLLER_SHA current dev=$current_dev_sha" >&2
+          git fetch --no-tags origin "$current_dev_sha"
+          git merge-base --is-ancestor "$TRUSTED_CONTROLLER_SHA" "$current_dev_sha" || {
+            echo "Trusted controller is outside protected dev history" >&2
             exit 1
-          fi
+          }
 
       - name: Checkout exact candidate source for compatibility verification
         uses: actions/checkout@v4
@@ -675,8 +689,11 @@ jobs:
           NODE
 
       - name: Validate Pantheon release controller owns the exact pair
+        id: release_owner
         uses: actions/github-script@v7
         env:
+          REF_DRIFT: ${{ steps.gate.outputs.ref_drift }}
+          FRONTEND_REF: ${{ steps.gate.outputs.frontend_ref }}
           RELEASE_CONTROLLER_RUN_ID: ${{ steps.pair.outputs.release_controller_run_id }}
           EXPECTED_BACKEND_SHA: ${{ steps.pair.outputs.bff_sha }}
           EXPECTED_RELEASE_CANDIDATE_ID: ${{ steps.pair.outputs.release_candidate_id }}
@@ -752,13 +769,21 @@ jobs:
                  !(failedParent && completedExactPairCoordination)) &&
                 !activeBootstrapParent) {
               core.setFailed("Pantheon controller does not own an active or accepted exact-pair transaction");
+              return;
             }
+            if (process.env.REF_DRIFT === "true" && !activeController) {
+              core.setFailed("A completed controller cannot replay a superseded pair");
+              return;
+            }
+            core.setOutput("admitted_dev_pair", String(
+              trustedController && activeController && process.env.FRONTEND_REF === "dev"
+            ));
 
       - name: Checkout protected Pantheon Agora gate controller
         uses: actions/checkout@v4
         with:
           repository: ajoe734/pantheon
-          ref: dev
+          ref: ${{ steps.pair.outputs.bff_sha }}
           path: .pantheon-agora-compat
           fetch-depth: 0
           persist-credentials: false
@@ -831,6 +856,7 @@ jobs:
           PANTHEON_DEPLOY_GATE_RUN_ID: ${{ steps.gate.outputs.gate_run_id }}
           PANTHEON_DEPLOY_GITHUB_ARTIFACT_DIGEST: ${{ steps.gate.outputs.github_artifact_digest }}
           PANTHEON_DEPLOY_EXPECTED_DEV_SHA: ${{ steps.gate.outputs.current_dev_sha }}
+          PANTHEON_DEPLOY_ADMITTED_DEV_PAIR: ${{ steps.release_owner.outputs.admitted_dev_pair }}
           PANTHEON_DEPLOY_EMERGENCY_OVERRIDE: ${{ steps.gate.outputs.emergency_override }}
           PANTHEON_DEPLOY_ROLLBACK_DRILL: ${{ steps.gate.outputs.rollback_drill }}
           PANTHEON_DEPLOY_OVERRIDE_REASON: ${{ steps.gate.outputs.override_reason }}
@@ -886,6 +912,7 @@ jobs:
           PANTHEON_DEPLOY_GATE_RUN_ID: ${{ steps.gate.outputs.gate_run_id }}
           PANTHEON_DEPLOY_GITHUB_ARTIFACT_DIGEST: ${{ steps.gate.outputs.github_artifact_digest }}
           PANTHEON_DEPLOY_EXPECTED_DEV_SHA: ${{ steps.gate.outputs.current_dev_sha }}
+          PANTHEON_DEPLOY_ADMITTED_DEV_PAIR: ${{ steps.release_owner.outputs.admitted_dev_pair }}
           PANTHEON_DEPLOY_EMERGENCY_OVERRIDE: ${{ steps.gate.outputs.emergency_override }}
           PANTHEON_DEPLOY_ROLLBACK_DRILL: ${{ steps.gate.outputs.rollback_drill }}
           PANTHEON_DEPLOY_OVERRIDE_REASON: ${{ steps.gate.outputs.override_reason }}

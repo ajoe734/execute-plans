@@ -1351,6 +1351,21 @@ resolve_remote_dev_sha() {
   return 1
 }
 
+# Only the workflow's validated active exact-pair owner enables this. The
+# authenticated artifact and compatibility checks still pin both source SHAs.
+# A new dev merge may queue another release, but cannot change this release.
+admitted_dev_ancestor() {
+  local admitted_sha="$1" dev_tip="$2"
+  [[ "${PANTHEON_DEPLOY_ADMITTED_DEV_PAIR:-false}" == "true" &&
+     "${GITHUB_EVENT_NAME:-}" == "workflow_dispatch" &&
+     "${FRONTEND_REF}" == "dev" &&
+     ( "${DEPLOY_PROFILE}" == "read-only" || "${DEPLOY_PROFILE}" == "operator-live" ) ]] || return 1
+  if ! git cat-file -e "${dev_tip}^{commit}" 2>/dev/null; then
+    git fetch --no-tags origin "${dev_tip}" >&2 || return 1
+  fi
+  git merge-base --is-ancestor "${admitted_sha}" "${dev_tip}"
+}
+
 run_release_probe() {
   local phase="$1"
   local candidate_dir="$2"
@@ -2422,7 +2437,7 @@ if ! REMOTE_DEV_SHA="$(resolve_remote_dev_sha)"; then
   evidence_append controller.order failed "reason=origin_dev_unavailable" "attempts=3"
   exit 2
 fi
-if [[ "${CONTROLLER_SHA}" != "${REMOTE_DEV_SHA}" ]]; then
+if [[ "${CONTROLLER_SHA}" != "${REMOTE_DEV_SHA}" ]] && ! admitted_dev_ancestor "${CONTROLLER_SHA}" "${REMOTE_DEV_SHA}"; then
   echo "Dev advanced after controller validation; refusing to run a stale deploy controller." >&2
   evidence_append controller.order failed "currentDevSha=${REMOTE_DEV_SHA}" "validatedDevSha=${CONTROLLER_SHA}"
   exit 2
@@ -2512,7 +2527,9 @@ LIVE_DIGEST_AT_START="${PREVIOUS_DIGEST}"
 LIVE_PAIR_ID_AT_START="${PREVIOUS_PAIR_ID}"
 
 if [[ "${SHA}" != "${REMOTE_DEV_SHA}" && "${EMERGENCY_OVERRIDE}" != "true" ]]; then
-  if [[ "${ALLOW_OUT_OF_ORDER_CANDIDATE}" == "true" && "${GITHUB_EVENT_NAME:-}" == "workflow_dispatch" && "${FRONTEND_REF}" != "dev" ]]; then
+  if admitted_dev_ancestor "${SHA}" "${REMOTE_DEV_SHA}"; then
+    evidence_append candidate.admitted_pair passed "candidateSha=${SHA}" "currentDevSha=${REMOTE_DEV_SHA}"
+  elif [[ "${ALLOW_OUT_OF_ORDER_CANDIDATE}" == "true" && "${GITHUB_EVENT_NAME:-}" == "workflow_dispatch" && "${FRONTEND_REF}" != "dev" ]]; then
     evidence_append candidate.order passed "currentDevSha=${REMOTE_DEV_SHA}" "candidateRef=${FRONTEND_REF}" "candidateSha=${SHA}"
   elif [[ ( "${DEPLOY_PROFILE}" == "write-proof" || "${DEPLOY_PROFILE}" == "read-only-restore" ) &&
     -n "${PREVIOUS_COMMIT:-}" && "${SHA}" == "${PREVIOUS_COMMIT}" ]]; then
@@ -3015,7 +3032,7 @@ NODE
     evidence_append controller.order_at_switch failed "reason=origin_dev_unavailable" "attempts=3"
     exit 2
   fi
-  if [[ "${CONTROLLER_SHA}" != "${REMOTE_DEV_SHA_AFTER_PROBE}" ]]; then
+  if [[ "${CONTROLLER_SHA}" != "${REMOTE_DEV_SHA_AFTER_PROBE}" ]] && ! admitted_dev_ancestor "${CONTROLLER_SHA}" "${REMOTE_DEV_SHA_AFTER_PROBE}"; then
     if [[ "${ALLOW_OUT_OF_ORDER_CANDIDATE}" == "true" && "${GITHUB_EVENT_NAME:-}" == "workflow_dispatch" && "${FRONTEND_REF}" != "dev" ]]; then
       evidence_append candidate.order_at_switch passed "currentDevSha=${REMOTE_DEV_SHA_AFTER_PROBE}" "candidateRef=${FRONTEND_REF}" "candidateSha=${SHA}"
     elif [[ "${DEPLOY_PROFILE}" == "write-proof" && -n "${PREVIOUS_COMMIT:-}" && "${SHA}" == "${PREVIOUS_COMMIT}" ]]; then
@@ -3049,7 +3066,7 @@ if ! REMOTE_DEV_SHA_AT_SWITCH="$(resolve_remote_dev_sha)"; then
   evidence_append controller.order_at_switch failed "reason=origin_dev_unavailable" "attempts=3"
   exit 2
 fi
-if [[ "${CONTROLLER_SHA}" != "${REMOTE_DEV_SHA_AT_SWITCH}" ]]; then
+if [[ "${CONTROLLER_SHA}" != "${REMOTE_DEV_SHA_AT_SWITCH}" ]] && ! admitted_dev_ancestor "${CONTROLLER_SHA}" "${REMOTE_DEV_SHA_AT_SWITCH}"; then
   echo "Dev advanced after candidate probe; refusing a switch from a stale controller." >&2
   evidence_append controller.order_at_switch failed "currentDevSha=${REMOTE_DEV_SHA_AT_SWITCH}"
   exit 2
@@ -3063,7 +3080,9 @@ if [[ "${FRONTEND_REF}" != "dev" ]]; then
   fi
 fi
 if [[ "${SHA}" != "${REMOTE_DEV_SHA_AT_SWITCH}" && "${EMERGENCY_OVERRIDE}" != "true" ]]; then
-  if [[ "${ALLOW_OUT_OF_ORDER_CANDIDATE}" == "true" && "${GITHUB_EVENT_NAME:-}" == "workflow_dispatch" && "${FRONTEND_REF}" != "dev" ]]; then
+  if admitted_dev_ancestor "${SHA}" "${REMOTE_DEV_SHA_AT_SWITCH}"; then
+    evidence_append candidate.admitted_pair passed "candidateSha=${SHA}" "currentDevSha=${REMOTE_DEV_SHA_AT_SWITCH}"
+  elif [[ "${ALLOW_OUT_OF_ORDER_CANDIDATE}" == "true" && "${GITHUB_EVENT_NAME:-}" == "workflow_dispatch" && "${FRONTEND_REF}" != "dev" ]]; then
     evidence_append candidate.order_at_switch passed "currentDevSha=${REMOTE_DEV_SHA_AT_SWITCH}" "candidateRef=${FRONTEND_REF}" "candidateSha=${SHA}"
   elif [[ "${DEPLOY_PROFILE}" == "write-proof" && -n "${PREVIOUS_COMMIT:-}" && "${SHA}" == "${PREVIOUS_COMMIT}" ]]; then
     evidence_append candidate.order_at_switch passed "currentDevSha=${REMOTE_DEV_SHA_AT_SWITCH}" "liveCandidateSha=${PREVIOUS_COMMIT}"
