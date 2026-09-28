@@ -2149,6 +2149,24 @@ test_external_live_switch_is_never_overwritten() {
   verify_evidence_pair
 }
 
+test_admitted_pair_survives_new_dev_merge() {
+  local advanced_dev_sha
+  setup_case admitted-pair-dev-advances
+  advanced_dev_sha="$(git -C "${CASE_REPO}" commit-tree "${CANDIDATE_SHA}^{tree}" -p "${CANDIDATE_SHA}" -m "next dev release")"
+  git -C "${CASE_REPO}" push -q origin "${advanced_dev_sha}:refs/heads/dev-advance-candidate" >/dev/null
+  run_deploy GITHUB_EVENT_NAME=workflow_dispatch PANTHEON_DEPLOY_ADMITTED_DEV_PAIR=true \
+    MOCK_ADVANCE_DEV_AFTER_PROBE=true MOCK_ADVANCED_DEV_SHA="${advanced_dev_sha}"
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "admitted exact pair should finish after a newer dev merge"
+  assert_candidate_is_live
+  assert_probe_called post_switch
+
+  setup_case admitted-pair-dev-rewritten
+  git --git-dir="${CASE_ORIGIN}" update-ref refs/heads/dev "${PREVIOUS_SHA}"
+  run_deploy GITHUB_EVENT_NAME=workflow_dispatch PANTHEON_DEPLOY_ADMITTED_DEV_PAIR=true
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "rewritten dev history unexpectedly admitted"
+  assert_previous_is_live
+}
+
 test_out_of_order_and_expected_dev_mismatch_rejected() {
   local advanced_dev_sha nonancestor_sha
   setup_case remote-dev-mismatch
@@ -3367,6 +3385,7 @@ run_test "bootstrap installs only if absent and CAS-removes a failed candidate" 
 run_test "manual rollback drill restores and re-probes exact previous release" test_manual_rollback_drill_restores_and_reprobes
 run_test "rollback re-probe failure stays nonzero with previous live" test_rollback_reprobe_failure_is_explicit
 run_test "external live switch is preserved by rollback CAS" test_external_live_switch_is_never_overwritten
+run_test "active admitted pair survives new merges but rejects rewritten history" test_admitted_pair_survives_new_dev_merge
 run_test "out-of-order and expected-dev mismatches reject" test_out_of_order_and_expected_dev_mismatch_rejected
 run_test "governed task-branch candidate can deploy out of order" test_governed_task_branch_candidate_can_deploy_out_of_order
 run_test "concurrent flock rejects" test_concurrent_flock_rejected
