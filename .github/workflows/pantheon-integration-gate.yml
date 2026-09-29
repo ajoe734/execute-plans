@@ -554,8 +554,7 @@ jobs:
               owner: context.repo.owner, repo: context.repo.repo, ref: `heads/${frontendRef}`,
             });
             const controllerSha = String(context.sha || "").toLowerCase();
-            if (String(sourceRef.object.sha || "").toLowerCase() !== frontendSha ||
-                !sha.test(controllerSha) || context.ref !== "refs/heads/dev") {
+            if (!sha.test(controllerSha) || context.ref !== "refs/heads/dev") {
               core.setFailed("release controller must run trusted dev workflow code while pinning the exact FE ref");
               return;
             }
@@ -576,6 +575,20 @@ jobs:
             (!bootstrapPredecessor && String(controller.head_sha || "").toLowerCase() !== backendSha) ||
             (bootstrapPredecessor && !sha.test(String(controller.head_sha || "").toLowerCase()))) {
               core.setFailed("release candidate is not owned by the exact active Pantheon dev controller");
+              return;
+            }
+            if (String(sourceRef.object.sha || "").toLowerCase() !== frontendSha) {
+              if (!active || frontendRef !== "dev") {
+                core.setFailed("Only an active admitted dev pair may finish after a new merge");
+                return;
+              }
+              const { data: ancestry } = await github.rest.repos.compareCommits({
+                owner: context.repo.owner, repo: context.repo.repo,
+                base: frontendSha, head: sourceRef.object.sha,
+              });
+              if (!["ahead", "identical"].includes(ancestry.status)) {
+                core.setFailed("Admitted FE commit is no longer in protected dev history");
+              }
             }
 
       - name: Validate exact hosted proof source before credentials
@@ -659,12 +672,12 @@ jobs:
               fail("Hosted PINT proof source artifact does not match the exact immutable controller pair");
               return;
             }
-            const { data: sourceRef } = await github.rest.git.getRef({
+            const { data: proofSourceRef } = await github.rest.git.getRef({
               owner: context.repo.owner,
               repo: context.repo.repo,
               ref: `heads/${frontendRef}`,
             });
-            if (String(sourceRef.object?.sha || "").toLowerCase() !== frontendSha) {
+            if (String(proofSourceRef.object?.sha || "").toLowerCase() !== frontendSha) {
               fail("Hosted PINT proof candidate ref no longer points to the exact FE SHA");
               return;
             }
@@ -866,7 +879,7 @@ jobs:
           python3 pantheon-contract/scripts/agora_compat_manifest.py write \
             --output "$manifest" \
             --frontend-root "$GITHUB_WORKSPACE" \
-            --backend-dev-ref refs/remotes/origin/dev \
+            --backend-dev-ref "$PANTHEON_BFF_SHA" \
             --frontend-dev-ref "$PANTHEON_FRONTEND_SHA" \
             --backend-runtime-commit "$PANTHEON_BFF_SHA" \
             --frontend-runtime-commit "$PANTHEON_FRONTEND_SHA" \
@@ -874,7 +887,7 @@ jobs:
           python3 pantheon-contract/scripts/agora_compat_manifest.py deployment-gate \
             --manifest "$manifest" \
             --frontend-root "$GITHUB_WORKSPACE" \
-            --backend-dev-ref refs/remotes/origin/dev \
+            --backend-dev-ref "$PANTHEON_BFF_SHA" \
             --frontend-dev-ref "$PANTHEON_FRONTEND_SHA" \
             --backend-runtime-commit "$PANTHEON_BFF_SHA" \
             --frontend-runtime-commit "$PANTHEON_FRONTEND_SHA" \

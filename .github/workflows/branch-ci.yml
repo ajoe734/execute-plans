@@ -186,7 +186,7 @@ jobs:
         run: npx --no-install playwright install --with-deps chromium
 
       - name: Deploy safety contract
-        run: npx vitest run src/test/deploy-safe-defaults.test.ts
+        run: npx vitest run src/test/deploy-safe-defaults.test.ts src/test/paired-release-workflow.test.ts src/test/admitted-dev-pair.test.ts
 
       - name: Changed component tests
         env:
