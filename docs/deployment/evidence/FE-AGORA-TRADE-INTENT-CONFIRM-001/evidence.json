@@ -42,5 +42,14 @@
     "Unit tests mock HTTP; no hosted write test or dev deployment claimed.",
     "Build reports bundle-size warnings; adjacent existing workspace tests emit React act warnings."
   ],
-  "review_status": "pending independent exact-head review"
+  "review_status": "not handed off: governed handoff timed out (120s, exit 124) waiting on central lock; upstream CI blocker",
+  "ci": {
+    "run": "https://github.com/ajoe734/execute-plans/actions/runs/36665827203",
+    "result": "failed: upstream Pantheon contract bundle is not reproducible",
+    "file": "specs/agora/v4/trading_decision_event.schema.json",
+    "expected_sha256": "fe6c8eb40900eda247b30c00ea3eb4a7fe9ec2edc65643e7850722a2adf2b3ea",
+    "actual_sha256": "08daf802a237547030c9abb678c493357d5a83d7505bab481ef70eb22259139f",
+    "passed": "Commit trailers, generated files guard, changed component tests; local verification above passed.",
+    "required_remediation": "Repair/regenerate canonical Pantheon dev contract bundle, rerun FE CI, then exact-head handoff."
+  }
 }
