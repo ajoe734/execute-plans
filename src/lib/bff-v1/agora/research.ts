@@ -175,8 +175,8 @@ function listOf<T>(body: unknown, ...keys: string[]): T[] {
   return [];
 }
 
-function allowedActionsFrom(meta: Record<string, unknown>): string[] {
-  const raw = meta.allowedActions ?? meta.allowed_actions;
+function allowedActionsFrom(root: Record<string, unknown>, meta: Record<string, unknown>): string[] {
+  const raw = root.allowedActions ?? root.allowed_actions ?? meta.allowedActions ?? meta.allowed_actions;
   if (Array.isArray(raw)) return raw.map(String);
   return Object.entries(record(raw))
     .filter(([, on]) => on === true)
@@ -189,7 +189,7 @@ function snapshotFrom(body: unknown): ResearchPlanSnapshot {
   return {
     plan: record(root?.data ?? root) as unknown as ResearchPlanExecution,
     etag: typeof meta.etag === "string" ? meta.etag : null,
-    allowedActions: allowedActionsFrom(meta),
+    allowedActions: allowedActionsFrom(record(root), meta),
   };
 }
 

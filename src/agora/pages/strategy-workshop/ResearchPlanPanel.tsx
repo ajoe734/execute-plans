@@ -79,7 +79,7 @@ export function ResearchPlanPanel({ workshopId, strategySpec }: ResearchPlanPane
     : access.writeAllowed ? null : access.writeDisabledReason;
   const createReason = writeReason ?? (strategySpec ? null : "Canonical StrategySpec identity is not yet available.");
   const can = (entry: PlanEntry, action: string) =>
-    entry.snapshot.allowedActions.some((name) => name.toLowerCase().replace(/^can[_-]?/, "") === action);
+    entry.snapshot.allowedActions.some((name) => name.replace(/^can(?=[A-Z_-])[_-]?/, "").toLowerCase() === action);
 
   return (
     <section className="space-y-2 border-t border-slate-100 pt-2" data-testid="research-plan-panel">
