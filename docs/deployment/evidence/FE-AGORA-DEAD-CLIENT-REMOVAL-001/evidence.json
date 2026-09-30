@@ -67,8 +67,27 @@
   ],
   "contract_source": "Pantheon command-runtime services/control-plane/bff/postmortems/router.py and tests/test_postmortem_router.py: data array and report_id identity.",
   "limitations": [
-    "Independent Claude2 review pending.",
+    "Independent Claude2 review not admitted; Human/Ops must repair task artifact contract and upstream CI contract drift.",
     "Dev merge and deployment not yet verified.",
     "Build emits existing large-chunk warnings."
-  ]
+  ],
+  "delivery": {
+    "pr": "https://github.com/ajoe734/execute-plans/pull/789",
+    "handoff": "rejected: artifact contract omits necessary caller-test and taxonomy cleanup",
+    "required_artifact_additions": [
+      "src/lib/bff-v1/__tests__/contract-drift.test.ts",
+      "src/lib/bff-v1/__tests__/envelope.test.ts",
+      "src/lib/bff-v1/__tests__/liveAdapters.test.ts",
+      "src/lib/bff-v1/agora/identity.test.ts",
+      "src/lib/bff-v1/seed-taxonomy.json"
+    ],
+    "required_actor": "Human/Ops",
+    "ci_contract_failure": {
+      "run": "https://github.com/ajoe734/execute-plans/actions/runs/36675188306",
+      "path": "specs/agora/v4/trading_decision_event.schema.json",
+      "expected_sha256": "fe6c8eb40900eda247b30c00ea3eb4a7fe9ec2edc65643e7850722a2adf2b3ea",
+      "actual_sha256": "08daf802a237547030c9abb678c493357d5a83d7505bab481ef70eb22259139f",
+      "frontend_contract_files_changed": false
+    }
+  }
 }
