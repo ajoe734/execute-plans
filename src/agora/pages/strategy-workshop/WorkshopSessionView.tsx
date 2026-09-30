@@ -4,7 +4,6 @@ import {
   getWorkshop,
   getWorkshopWithEtag,
   postWorkshopMessage,
-  dispatchWorkshopResearchRun,
   openWorkshopConsultation,
   createWorkshopVersion,
   concludeWorkshop,
@@ -64,6 +63,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { TradingRoomReadinessHandoff } from "./StrategyWorkshopPage";
+import { ResearchPlanPanel } from "./ResearchPlanPanel";
 import { resolveSubmissionTenant } from "./submissionTenant";
 
 export type WorkshopInteractionMode = DailyInteractionMode;
@@ -1540,35 +1540,14 @@ export function WorkshopSessionView({ governedProposalId, workshopId, onAddToTra
             )}
           </div>
 
+          <ResearchPlanPanel
+            workshopId={workshopId}
+            strategySpec={strategySpecIdentity ? { strategyId: strategySpecIdentity.strategyId, registryId: strategySpecIdentity.registryId } : null}
+          />
+
           {/* Workshop Command Shortcuts */}
           <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-2 shrink-0" data-testid="workshop-command-buttons">
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mr-1">Workshop Commands:</span>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 text-xs font-medium bg-slate-50 hover:bg-slate-100"
-              data-testid="cmd-research-btn"
-              disabled={composerInputDisabled}
-              onClick={async () => {
-                setSendLoading(true);
-                setMessageReceiptState("accepted");
-                try {
-                  setMessageReceiptState("processing");
-                  await dispatchWorkshopResearchRun(workshopId);
-                  setMessageReceiptState("succeeded");
-                  refreshCards();
-                  refreshEvents();
-                } catch (err) {
-                  setMessageReceiptState("failed");
-                  setSendError(err instanceof Error ? err.message : "Research run failed");
-                } finally {
-                  setSendLoading(false);
-                }
-              }}
-              type="button"
-            >
-              + Research Run
-            </Button>
             <Button
               variant="outline"
               size="sm"
