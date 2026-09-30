@@ -1542,3 +1542,27 @@ describe("error handling", () => {
     );
   });
 });
+
+
+describe("governed decision receipts", () => {
+  it("preserves intent_ref in both the decision response and reloaded event", async () => {
+    globalThis.fetch = vi.fn()
+      .mockResolvedValueOnce(ok({ data: { decision: "approve", intent_ref: "intent-1" } }, 201))
+      .mockResolvedValueOnce(ok({ data: { decision_event_id: "evt-001", intent_ref: "intent-1" } }));
+    const receipt = await decideOnEvent("evt-001", { decision: "approve" },
+      { ifMatch: '"v1"', idempotencyKey: "idem", requestId: "req" }, BASE);
+    expect(receipt.intent_ref).toBe("intent-1");
+    expect((await getDecisionEvent("evt-001", BASE))?.intent_ref).toBe("intent-1");
+  });
+});
+
+
+it("retains per-event ETags on queue and detail reads", async () => {
+  globalThis.fetch = vi.fn()
+    .mockResolvedValueOnce(ok({ items: [{ decision_event_id: "evt-001", etag: '"event-v1"' }] }, 200, { ETag: '"page-v1"' }))
+    .mockResolvedValueOnce(ok({ decision_event_id: "evt-001" }, 200, { ETag: '"event-v1"' }));
+  const page = await listDecisionEvents(undefined, BASE);
+  expect(page.etag).toBe('"page-v1"');
+  expect(page.items[0].etag).toBe('"event-v1"');
+  expect((await getDecisionEvent("evt-001", BASE))?.etag).toBe('"event-v1"');
+});

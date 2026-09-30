@@ -203,6 +203,8 @@ export interface EvidenceRef {
 }
 
 export interface TradingDecisionEvent {
+  intent_ref?: string | null;
+  etag?: string;
   spec_version: "1.0";
   decision_event_id: string;
   dedupe_key?: string;
@@ -307,6 +309,10 @@ export interface DecisionBody {
   decision: DecisionChoice;
   rationale?: string;
   modifications?: Record<string, unknown>;
+}
+
+export interface DecisionReceipt extends Record<string, unknown> {
+  intent_ref?: string | null;
 }
 
 export interface CreateTradingRoomWorkspaceProposalRequest {
@@ -1012,7 +1018,7 @@ export async function getDecisionEvent(
     throw new Error(String(message));
   }
   const body = await parseJson(res);
-  return extractDecisionEvent(body);
+  return { ...extractDecisionEvent(body), etag: res.headers.get("ETag") ?? undefined };
 }
 
 /** Generate a Trading Room workspace proposal for a strategy version. */
@@ -1282,7 +1288,7 @@ export async function decideOnEvent(
   body: DecisionBody,
   options?: { ifMatch?: string; idempotencyKey?: string; requestId?: string },
   baseUrl?: string,
-): Promise<Record<string, unknown>> {
+): Promise<DecisionReceipt> {
   const base = resolvedBase(baseUrl);
   const url = `${base}/bff/agora/trading-room/decision-events/${encodeURIComponent(decisionEventId)}/decisions`;
   const headers: Record<string, string> = {
