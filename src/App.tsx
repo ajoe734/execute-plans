@@ -88,8 +88,6 @@ const LoopsRoute = lazyNamedRoute(() => import("@/routes/management/v5"), "Loops
 const ExecutionLoopRoute = lazyNamedRoute(() => import("@/routes/management/v5"), "ExecutionLoopRoute", "Execution loop");
 const OptimizationLoopRoute = lazyNamedRoute(() => import("@/routes/management/v5"), "OptimizationLoopRoute", "Optimization loop");
 const ResearchLoopRoute = lazyNamedRoute(() => import("@/routes/management/v5"), "ResearchLoopRoute", "Research loop");
-const SentinelRoute = lazyNamedRoute(() => import("@/routes/management/v5"), "SentinelRoute", "Sentinel");
-const InterventionsRoute = lazyNamedRoute(() => import("@/routes/management/v5"), "InterventionsRoute", "Interventions");
 
 const StrategiesListRoute = lazyNamedRoute(() => import("@/routes/management/registry"), "StrategiesListRoute", "Strategies");
 const StrategyDetailRoute = lazyNamedRoute(() => import("@/routes/management/registry"), "StrategyDetailRoute", "Strategy detail");
@@ -247,8 +245,6 @@ const App = () => (
                 <Route path="loops/optimization" element={<OptimizationLoopRoute />} />
                 <Route path="loops/research" element={<ResearchLoopRoute />} />
                 <Route path="loops/:kind" element={<LoopsRoute />} />
-                <Route path="sentinel" element={<SentinelRoute />} />
-                <Route path="interventions" element={<InterventionsRoute />} />
                 <Route path="overview" element={<Navigate to="/management/cockpit" replace />} />
                 <Route path="overview-legacy" element={<Navigate to="/management/cockpit" replace />} />
                 <Route path="command-center" element={<Navigate to="/management/cockpit" replace />} />

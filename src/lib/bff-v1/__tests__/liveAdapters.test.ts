@@ -54,12 +54,6 @@ describe("BFF live read adapters", () => {
     expect(result.totalCountExact).toBe(true);
   });
 
-  it("strict v5 live mode throws instead of returning seeded mock data on transport failure", async () => {
-    globalThis.fetch = vi.fn().mockRejectedValue(new Error("ECONNREFUSED"));
-
-    await expect(bffV5.sentinel.list()).rejects.toBeInstanceOf(BffError);
-    expect(liveStatus.get().effective).toBe("mock");
-  });
 
   it("Agora signals use live route DTOs when configured for live BFF", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
