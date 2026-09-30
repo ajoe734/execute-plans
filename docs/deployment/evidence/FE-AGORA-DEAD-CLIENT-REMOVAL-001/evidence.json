@@ -2,8 +2,9 @@
   "task_id": "FE-AGORA-DEAD-CLIENT-REMOVAL-001",
   "owner": "Codex",
   "reviewer": "Antigravity",
-  "base_commit": "4402d372c66101d685299a91c164ea388ebe61b6",
-  "implementation_commit": "2262025ee9b8cb4741c16740d2d4a967b68877ff",
+  "base_commit": "40c6fcb3edfe83c0ab444bf9c5ae020230c394e2",
+  "implementation_commit": "d9a08bb9734aa706cd7affd575211d69a5bbd99e",
+  "validation_commit": "2262025ee9b8cb4741c16740d2d4a967b68877ff",
   "pantheon_contract_commit": "0ab65eadec74c43ed6921b0d68b7e5c7f59152b8",
   "change_class": "simplify",
   "production_net_lines": -942,
@@ -81,6 +82,14 @@
     }
   ],
   "contract_source": "Pantheon command-runtime services/control-plane/bff/postmortems/router.py and tests/test_postmortem_router.py: data array and report_id identity.",
+  "merged_base_validation": {
+    "commit": "d9a08bb9734aa706cd7affd575211d69a5bbd99e",
+    "contract": "PANTHEON_CONTRACT_ROOT=$PANTHEON_COMMAND_ROOT timeout 180 npm run test:contract: exit 0, 7 tests.",
+    "command": "timeout 180 npm test -- src/agora/components/TradeDecisionCard.test.tsx src/lib/bff-v1/agora/tradingIntents.test.ts src/lib/bff-v1/agora/tradingRoom.test.ts src/lib/bff-v1/postmortemClient.test.ts src/lib/bff-v1/__tests__/agoraReadsDeterministic.test.ts src/management/__tests__/fullOperationAssembly.test.tsx",
+    "exit_code": 0,
+    "passed": 128,
+    "note": "Second refresh only integrates dev PR #787 without conflicts. Targeted tests cover both incoming clients and this task; prior complete validation is bound above. New-head CI supplies merge validation."
+  },
   "limitations": [
     "Independent Antigravity review pending fresh exact-head handoff after new-head CI.",
     "Dev merge and deployment not yet verified.",
@@ -89,7 +98,7 @@
   "delivery": {
     "pr": "https://github.com/ajoe734/execute-plans/pull/789",
     "artifact_admission": "Human/Ops declared the five companion files on 2026-09-30; changes only remove or update references to deleted exports.",
-    "base_refresh": "Merged execute-plans dev 4402d372 without conflicts, including PR #792. Generated types, contract-snapshot.json and frontend-generation-output.v1_13.json match dev and are absent from the PR diff. Local validation rerun except explicitly identified prior browser evidence.",
+    "base_refresh": "Merged dev 4402d372 (PR #792), then 40c6fcb3 (PR #787) after base advanced during CI. Both merges clean. Generated Agora artifacts and incoming trading-intent clients match dev and are absent from the PR diff.",
     "environment": "Installed absent npm dependencies with npm ci before validation; initial missing-tool invocations are not passes.",
     "previous_ci_blocker": "Agora bundle checksum drift resolved by upstream digest repair and FE PR #792; current contract checks pass."
   }
