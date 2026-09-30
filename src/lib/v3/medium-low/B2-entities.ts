@@ -155,9 +155,6 @@ export interface RollbackJobInput {
 }
 export interface PostmortemGenerationJobInput { incidentId: string; language: LocaleCode; }
 
-export const ATTACH_INSIGHT_TO_STRATEGY_ENDPOINT = (insightId: string) =>
-  `/bff/insights/${insightId}/actions/attach-strategy`;
-
 // ───────── G27 / G43 — Audit retention ─────────
 export const AUDIT_RETENTION_YEARS = {
   liveDeploymentRollbackKill: 7,

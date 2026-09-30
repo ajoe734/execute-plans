@@ -10,6 +10,16 @@ export type AgoraCapability =
   | "agora.dashboard.v1"
   | "agora.personalization.v1";
 
+export interface AgoraServantPolicy {
+  persona_class: "agora_servant";
+  owner_scope: "user_private";
+  visibility_scope: "private" | "redacted_management";
+  memory_scope: "private_user";
+  persona_registry_backed: true;
+  execution_authority: "none";
+  prohibited_authority: ["runtime_binding", "broker_order", "capital_binding"];
+}
+
 function adaptCapabilities(body: unknown): AgoraCapability[] {
   const namesFrom = (value: unknown): AgoraCapability[] => {
     if (!Array.isArray(value)) return [];

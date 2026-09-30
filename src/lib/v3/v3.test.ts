@@ -249,7 +249,7 @@ describe("v3 §11 rebalance workflow", () => {
   });
 });
 
-// ───────── §15 Agora handoff ─────────
+// ───────── Pack B: B1 platform ─────────
 describe("v3 part10 B1 — platform", () => {
   it("resolvePersonaLocale: session lock wins over user pref", () => {
     expect(resolvePersonaLocale({
@@ -298,7 +298,7 @@ describe("v3 part10 B3 — console", () => {
   });
 });
 
-// ───────── Pack B: B4 agora ─────────
+// ───────── Pack B: B5 misc ─────────
 describe("v3 part10 B5 — misc", () => {
   it("resolveAcceptLocale honors query > header > user > Accept-Language", () => {
     expect(resolveAcceptLocale({ queryLocale: "en-US", userLocale: "zh-TW" })).toBe("en-US");

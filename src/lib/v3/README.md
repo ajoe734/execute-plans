@@ -1,7 +1,7 @@
 # v3 Normative Layer
 
 Authoritative TypeScript representation of Pantheon Build Spec **v3** (`.lovable/spec/v3/`).
-This folder is **additive**: existing `src/lib/*` modules continue to work; new code MUST import from here.
+This legacy layer retains Management contracts still used by the frontend. Unreachable Agora contracts have been retired. New code should use the current domain clients.
 
 Conflict resolution order: **v3 (here) → v2 → v1 base spec**.
 

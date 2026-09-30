@@ -36,4 +36,20 @@ describe("management decision journal adapter", () => {
     expect(journal[0].decidedAt).toBe("");
 
   });
+
+  it("preserves journal aliases and filters the requested strategy", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: [
+      { entry_id: "j1", scope: { type: "Strategy", id: "s1" }, decision: "Keep paper", actor_id: "operator", decided_at: "2026-09-30T00:00:00Z", outcome: "good" },
+      { id: "j2", subjectKind: "Strategy", subjectId: "s2" },
+    ] }), { status: 200 }));
+    expect(await decisionJournal.forSubject("Strategy", "s1")).toEqual([
+      { id: "j1", subjectKind: "Strategy", subjectId: "s1", title: "Keep paper", decidedBy: "operator", decidedAt: "2026-09-30T00:00:00Z", outcome: "good" },
+    ]);
+    expect(globalThis.fetch).toHaveBeenCalledWith("https://bff.example.test/bff/agora/journal", expect.anything());
+  });
+
+  it("propagates a journal transport failure", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(new Response("Unavailable", { status: 503 }));
+    await expect(decisionJournal.list()).rejects.toThrow();
+  });
 });
