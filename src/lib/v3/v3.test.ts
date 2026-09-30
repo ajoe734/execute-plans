@@ -35,19 +35,6 @@ import {
   RANKING_SCOPES,
   type RankingFormulaSpec,
 } from "./rankingMatrix";
-import {
-  validateSignalFeedback,
-  SIGNAL_FEEDBACK_ENDPOINT,
-  SIGNAL_FEEDBACK_EDIT_WINDOW_SECONDS,
-} from "./signalFeedback";
-import {
-  validateEvidenceUpload,
-  EVIDENCE_LIMITS,
-  COMMITTEE_EVIDENCE_ALLOWED_MIMES,
-  COMMITTEE_EVIDENCE_ENDPOINTS,
-} from "./committeeEvidence";
-import { AGORA_HANDOFF_TYPES } from "./agoraHandoff";
-import { AGORA_KPI_SPECS } from "./agoraKpi";
 import { REBALANCE_STEPS, getRebalanceStep } from "./rebalanceWorkflow";
 
 import {
@@ -66,13 +53,6 @@ import {
   SSE_CHANNELS,
   LINEAGE_GRAPH_LIMITS,
 } from "./medium-low/B3-console";
-import {
-  PERSONA_ASK_MODE_SCOPES,
-  COMMITTEE_TEMPLATE_REQUIRED_EVIDENCE,
-  AGORA_PROHIBITED_ACTIONS,
-  AGORA_DEFAULT_ROUTE,
-  PERSONA_LAB_COMMIT_FLOW,
-} from "./medium-low/B4-agora";
 import {
   resolveAcceptLocale,
   validateHighRiskMemo,
@@ -270,83 +250,6 @@ describe("v3 §11 rebalance workflow", () => {
 });
 
 // ───────── §15 Agora handoff ─────────
-describe("v3 §15 agora handoff", () => {
-  it("8 canonical handoff types", () => {
-    expect(AGORA_HANDOFF_TYPES).toHaveLength(8);
-  });
-});
-
-// ───────── §16 Signal feedback ─────────
-describe("v3 §16 signal feedback", () => {
-  it("endpoint helper builds correct path", () => {
-    expect(SIGNAL_FEEDBACK_ENDPOINT("sig_1")).toBe("/bff/agora/signals/sig_1/feedback");
-    expect(SIGNAL_FEEDBACK_EDIT_WINDOW_SECONDS).toBe(30);
-  });
-  it("agree without reason at any confidence is OK", () => {
-    expect(validateSignalFeedback({ signalId: "s", decision: "agree", confidence: 5 })).toEqual([]);
-  });
-  it("disagree with confidence ≥4 requires reason", () => {
-    const errs = validateSignalFeedback({ signalId: "s", decision: "disagree", confidence: 4 });
-    expect(errs.some((e) => e.code === "reason_required_high_confidence_disagree")).toBe(true);
-  });
-  it("flag_suspicious always requires reason", () => {
-    const errs = validateSignalFeedback({ signalId: "s", decision: "flag_suspicious", confidence: 1 });
-    expect(errs.some((e) => e.code === "reason_required_flag")).toBe(true);
-  });
-  it("confidence out of range reported", () => {
-    const errs = validateSignalFeedback({ signalId: "s", decision: "agree", confidence: 9 as never });
-    expect(errs.some((e) => e.code === "confidence_out_of_range")).toBe(true);
-  });
-});
-
-// ───────── §17 Agora KPI strip ─────────
-describe("v3 §17 agora KPIs", () => {
-  it("has 7 canonical KPIs", () => {
-    expect(AGORA_KPI_SPECS).toHaveLength(7);
-  });
-});
-
-// ───────── §18 Committee evidence pack ─────────
-describe("v3 §18 evidence pack", () => {
-  const meta = { source: "x", title: "t", uploadedBy: "u", createdAt: "2026-01-01" };
-  it("accepted MIME + metadata is OK", () => {
-    expect(validateEvidenceUpload([], [
-      { fileName: "a.pdf", mimeType: "application/pdf", sizeBytes: 1000, metadata: meta },
-    ])).toEqual([]);
-  });
-  it("rejects disallowed mime", () => {
-    const errs = validateEvidenceUpload([], [
-      { fileName: "x.zip", mimeType: "application/zip", sizeBytes: 100, metadata: meta },
-    ]);
-    expect(errs.some((e) => e.code === "mime_not_allowed")).toBe(true);
-  });
-  it("rejects oversize file", () => {
-    const errs = validateEvidenceUpload([], [
-      { fileName: "big.pdf", mimeType: "application/pdf", sizeBytes: EVIDENCE_LIMITS.maxFileSizeBytes + 1, metadata: meta },
-    ]);
-    expect(errs.some((e) => e.code === "file_too_large")).toBe(true);
-  });
-  it("rejects too many files", () => {
-    const incoming = Array.from({ length: EVIDENCE_LIMITS.maxFilesPerPack + 1 }, (_, i) => ({
-      fileName: `f${i}.pdf`, mimeType: "application/pdf" as const, sizeBytes: 10, metadata: meta,
-    }));
-    const errs = validateEvidenceUpload([], incoming);
-    expect(errs.some((e) => e.code === "too_many_files")).toBe(true);
-  });
-  it("requires metadata", () => {
-    const errs = validateEvidenceUpload([], [
-      { fileName: "a.pdf", mimeType: "application/pdf", sizeBytes: 10 },
-    ]);
-    expect(errs.some((e) => e.code === "missing_metadata")).toBe(true);
-  });
-  it("endpoint helper builds path", () => {
-    expect(COMMITTEE_EVIDENCE_ENDPOINTS.createPack("sess_1"))
-      .toBe("/bff/agora/committee/sess_1/evidence-pack");
-    expect(COMMITTEE_EVIDENCE_ALLOWED_MIMES.length).toBeGreaterThan(0);
-  });
-});
-
-// ───────── Pack B: B1 platform ─────────
 describe("v3 part10 B1 — platform", () => {
   it("resolvePersonaLocale: session lock wins over user pref", () => {
     expect(resolvePersonaLocale({
@@ -396,31 +299,6 @@ describe("v3 part10 B3 — console", () => {
 });
 
 // ───────── Pack B: B4 agora ─────────
-describe("v3 part10 B4 — agora", () => {
-  it("ask modes carry token + latency budgets", () => {
-    expect(PERSONA_ASK_MODE_SCOPES.quick_ask.maxTokens).toBeLessThan(
-      PERSONA_ASK_MODE_SCOPES.deep_research.maxTokens,
-    );
-  });
-  it("templates list required evidence", () => {
-    expect(COMMITTEE_TEMPLATE_REQUIRED_EVIDENCE.signal_trust.length).toBeGreaterThan(0);
-  });
-  it("Agora cannot directly promote_to_live (ADR-FE-0002)", () => {
-    expect(AGORA_PROHIBITED_ACTIONS.promote_to_live).toBe("not_shown");
-    expect(AGORA_PROHIBITED_ACTIONS.emergency_kill).toBe("not_shown");
-  });
-  it("each agora role has a default route", () => {
-    for (const r of Object.keys(AGORA_DEFAULT_ROUTE)) {
-      expect(AGORA_DEFAULT_ROUTE[r as keyof typeof AGORA_DEFAULT_ROUTE]).toMatch(/^\/agora\//);
-    }
-  });
-  it("persona-lab commit flow is ordered", () => {
-    expect(PERSONA_LAB_COMMIT_FLOW[0]).toBe("sandbox_draft");
-    expect(PERSONA_LAB_COMMIT_FLOW.at(-1)).toBe("published");
-  });
-});
-
-// ───────── Pack B: B5 misc ─────────
 describe("v3 part10 B5 — misc", () => {
   it("resolveAcceptLocale honors query > header > user > Accept-Language", () => {
     expect(resolveAcceptLocale({ queryLocale: "en-US", userLocale: "zh-TW" })).toBe("en-US");

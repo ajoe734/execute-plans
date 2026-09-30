@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { bffAgora } from "@/lib/bff-v1/agora/agoraReads";
+import { decisionJournal } from "@/lib/bff-v1/governance";
 import { liveStatus } from "@/lib/bff-v1/liveStatus";
 
-describe("bffAgora deterministic read adapters", () => {
+describe("management decision journal adapter", () => {
   const realFetch = globalThis.fetch;
 
   beforeEach(() => {
@@ -18,33 +18,7 @@ describe("bffAgora deterministic read adapters", () => {
     vi.restoreAllMocks();
   });
 
-  it("does not fabricate ticker symbols or wall-clock timestamps for missing signal DTO fields", async () => {
-    globalThis.fetch = vi.fn().mockImplementation(() =>
-      Promise.resolve(
-        new Response(JSON.stringify({
-          items: [
-            {
-              signal_id: "sig-sparse-1",
-            },
-            {
-              signal_id: "sig-sparse-2",
-            },
-          ],
-        }), { status: 200, headers: { "Content-Type": "application/json" } }),
-      ),
-    );
-
-    const signals = await bffAgora.signals.list();
-    expect(signals).toHaveLength(2);
-    expect(signals[0].symbol).toBe("");
-    expect(signals[1].symbol).toBe("");
-    expect(signals[0].generatedAt).toBe("");
-    expect(signals[1].generatedAt).toBe("");
-    expect(signals[0].reviewStatus).toBe("");
-    expect(signals[0].rationale).toBe("");
-  });
-
-  it("does not fabricate wall-clock timestamps for missing insight/journal/session fields", async () => {
+  it("does not fabricate wall-clock timestamps for missing journal fields", async () => {
     globalThis.fetch = vi.fn().mockImplementation(() =>
       Promise.resolve(
         new Response(JSON.stringify({
@@ -57,17 +31,9 @@ describe("bffAgora deterministic read adapters", () => {
       ),
     );
 
-    const insights = await bffAgora.inbox.list();
-    expect(insights).toHaveLength(1);
-    expect(insights[0].ts).toBe("");
-
-    const journal = await bffAgora.journal.list();
+    const journal = await decisionJournal.list();
     expect(journal).toHaveLength(1);
     expect(journal[0].decidedAt).toBe("");
 
-    const sessions = await bffAgora.ask.sessions();
-    expect(sessions).toHaveLength(1);
-    expect(sessions[0].createdAt).toBe("");
-    expect(sessions[0].updatedAt).toBe("");
   });
 });

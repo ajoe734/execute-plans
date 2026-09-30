@@ -155,40 +155,6 @@ export interface RollbackJobInput {
 }
 export interface PostmortemGenerationJobInput { incidentId: string; language: LocaleCode; }
 
-// ───────── G26 / G48 / G52 / G65 — Agora Handoff full schema ─────────
-export type AgoraHandoffTypeFull =
-  | "trader_insight_to_strategy"
-  | "signal_feedback_to_research_task"
-  | "committee_memo_to_review_evidence"
-  | "trainer_feedback_to_persona_update"
-  | "skill_draft_to_skill_approval"
-  | "mcp_tool_request_to_permission_review"
-  | "alert_triage_to_incident";
-
-export type HandoffStatus = "draft" | "submitted" | "accepted" | "rejected" | "rerouted" | "expired";
-
-export interface AgoraHandoffDTOFull<TPayload = unknown> {
-  id: string;
-  handoffType: AgoraHandoffTypeFull;
-  status: HandoffStatus;
-  source: { app: "agora"; route: string; entity: LinkedEntityRef };
-  destination: {
-    app: "management"; route: string;
-    queue: "insight" | "research" | "governance" | "persona" | "capability" | "incident";
-  };
-  priority: "low" | "normal" | "high" | "urgent";
-  slaDueAt: string;
-  rerouteCount: number;
-  payload: TPayload;
-  createdBy: LinkedEntityRef;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export const HANDOFF_SLA_HOURS: Record<AgoraHandoffDTOFull["priority"], number> = {
-  low: 24 * 7, normal: 24 * 2, high: 24, urgent: 4,
-};
-
 export const ATTACH_INSIGHT_TO_STRATEGY_ENDPOINT = (insightId: string) =>
   `/bff/insights/${insightId}/actions/attach-strategy`;
 

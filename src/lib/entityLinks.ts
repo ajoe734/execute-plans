@@ -58,19 +58,12 @@ export function lineageHref(id?: string | null): string {
   return `/management/lineage?root=${encodeURIComponent(e.id)}`;
 }
 
-/** Deep link to DecisionJournal filtered to this subject. */
+/** Open the strategy's journal summary, or the subject's live audit page. */
 export function decisionsHref(kindOrId?: string | null, id?: string | null): string {
-  // Accept either (kind, id) or just (id) and infer kind.
-  let kind: string | null = null;
-  let subjectId: string | null = null;
-  if (kindOrId && id) { kind = kindOrId; subjectId = id; }
-  else if (kindOrId) {
-    const r = resolveEntity(kindOrId);
-    if (r) { kind = r.kind; subjectId = r.id; }
-  }
-  if (!kind || !subjectId) return "/agora/journal";
-  const qs = new URLSearchParams({ subjectKind: kind, subjectId });
-  return `/agora/journal?${qs.toString()}`;
+  const entity = id ? { kind: kindOrId, id } : resolveEntity(kindOrId);
+  return entity?.kind === "Strategy"
+    ? `/management/strategies/${encodeURIComponent(entity.id)}`
+    : auditHref(entity?.id);
 }
 
 /** Deep link to AuditPage filtered to this target id. */

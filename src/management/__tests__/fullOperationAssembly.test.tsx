@@ -54,7 +54,6 @@ const COMPLETE_BFF_PUBLIC_MODULES = [
   "./search",
   "./writeOverlay",
   "./evidenceOperations",
-  "./agora/agoraReads",
   "./v5",
   "./management",
   "./managementConsoleReads",

@@ -134,12 +134,7 @@ export const paths = {
   sse: () => `${BASE}/events/stream`,
 
   // ---- Agora ----
-  agoraSignals: () => `${BASE}/agora/signals`,
-  agoraInbox: () => `${BASE}/agora/inbox`,
   agoraJournal: () => `${BASE}/agora/journal`,
-  agoraPostmortems: () => `${BASE}/agora/postmortems`,
-  agoraAskSessions: () => `${BASE}/agora/ask/sessions`,
-  agoraAskSession: (id: string) => `${BASE}/agora/ask/sessions/${enc(id)}`,
 
   // ---- v5 closed-loop ----
   v5LoopRuns: () => `${BASE}/v5/loop-runs`,

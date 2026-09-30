@@ -20,9 +20,8 @@ const canonicalRecord = {
 describe("postmortemClient", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("reads the canonical Agora list without synthesizing ids", async () => {
+  it("reads the canonical API list without synthesizing ids", async () => {
     vi.mocked(bffFetch).mockResolvedValue({
-      items: [canonicalRecord],
       data: [canonicalRecord],
       meta: { surfaces: { agora_postmortems: { status: "ok", source: "service_store" } } },
     });
@@ -38,7 +37,7 @@ describe("postmortemClient", () => {
       status: "ok",
       source: "service_store",
     }));
-    expect(bffFetch).toHaveBeenCalledWith({ method: "GET", path: "/bff/agora/postmortems" });
+    expect(bffFetch).toHaveBeenCalledWith({ method: "GET", path: "/api/v1/postmortems" });
   });
 
   it("rejects list records that omit canonical postmortem_id", async () => {
