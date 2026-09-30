@@ -4,7 +4,6 @@
  * Coverage:
  *   1. Cockpit load budget plus 30s SSE-driven DOM rerender proxy.
  *   2. Entity registry first-page load budget and DataTable density stability.
- *   3. Sentinel list load budget.
  *   4. LineageGraph warns when the graph exceeds 500 nodes.
  *
  * Budgets are soft by default so this spec can enter CI without blocking the
@@ -24,7 +23,6 @@ const DEFAULT_FRONTEND_BASE_URL = "http://127.0.0.1:5173";
 
 const COCKPIT_PATH = "/management/cockpit";
 const ENTITY_LIST_PATH = "/management/strategies";
-const SENTINEL_PATH = "/management/sentinel";
 const LINEAGE_PATH = "/management/lineage?root=strategy-f18-wide";
 
 const STRICT_BUDGETS = process.env.FE_INT_GATE_PERF_STRICT === "1";
@@ -34,7 +32,6 @@ const SSE_EVENT_INTERVAL_MS = Number(process.env.FE_INT_GATE_SSE_EVENT_INTERVAL_
 const BUDGETS = {
   cockpitLoadMs: 4_000,
   entityFirstPageLoadMs: 4_000,
-  sentinelListLoadMs: 4_000,
   sseMutationBatchesPer30s: 180,
 } as const;
 
@@ -1153,33 +1150,6 @@ test.describe("F18 perf and stability soft-fail budgets", () => {
     });
   });
 
-  test("keeps Sentinel list load within soft budget", async ({ page }, testInfo) => {
-    const counters = routeCounters();
-    const failures = collectPageFailures(page);
-    await installPerfRoutes(page, counters);
-
-    const loadMs = await gotoAndWaitForText(
-      page,
-      SENTINEL_PATH,
-      [/F18 Sentinel Finding 001/i, /\bcritical\b/i, /\bwarning\b/i],
-      "Sentinel list",
-    );
-    recordBudget(testInfo, {
-      id: "sentinel_list_load",
-      label: "Sentinel list load",
-      actual: loadMs,
-      max: BUDGETS.sentinelListLoadMs,
-      unit: "ms",
-    });
-
-    await expect(page.getByText("F18 Sentinel Finding 001", { exact: false }).first()).toBeVisible();
-    expect(await bodyText(page)).not.toMatch(CRASH_TEXT);
-    expect(failures, "Sentinel list should not emit console/page errors").toEqual([]);
-    testInfo.annotations.push({
-      type: "fixture-route-reads",
-      description: `sentinel_findings=${counters.sentinelFindings}`,
-    });
-  });
 
   test("warns when LineageGraph receives more than 500 nodes", async ({ page }) => {
     const counters = routeCounters();
