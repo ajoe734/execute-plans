@@ -1,9 +1,10 @@
 {
   "task_id": "FE-AGORA-DEAD-CLIENT-REMOVAL-001",
   "owner": "Codex",
-  "reviewer": "Claude2",
-  "base_commit": "92f052524c4b7f2dc3165e5056b7524602c606e7",
-  "implementation_commit": "ef2d89e668b222cc16a4546c80ceec6fa5bb7f30",
+  "reviewer": "Antigravity",
+  "base_commit": "4402d372c66101d685299a91c164ea388ebe61b6",
+  "implementation_commit": "2262025ee9b8cb4741c16740d2d4a967b68877ff",
+  "pantheon_contract_commit": "0ab65eadec74c43ed6921b0d68b7e5c7f59152b8",
   "change_class": "simplify",
   "production_net_lines": -942,
   "production_line_budget": -500,
@@ -27,23 +28,34 @@
   ],
   "validation": [
     {
-      "command": "npm run typecheck",
-      "exit_code": 0
-    },
-    {
-      "command": "npm run typecheck:agora",
-      "exit_code": 0
-    },
-    {
-      "command": "timeout 300 npm test",
+      "command": "timeout 180 npm run typecheck",
       "exit_code": 124,
-      "note": "Initial bounded run timed out; not counted as passed."
+      "note": "Initial bounded run timed out during concurrent validation; not counted as passed."
+    },
+    {
+      "command": "timeout 480 npm run typecheck",
+      "exit_code": 0
+    },
+    {
+      "command": "timeout 240 npm run typecheck:agora",
+      "exit_code": 0
+    },
+    {
+      "command": "timeout 720 npm test",
+      "exit_code": 1,
+      "note": "All 2236 tests passed, but Vitest worker onTaskUpdate timed out during concurrent validation; not counted as a passing run."
     },
     {
       "command": "timeout 720 npm test",
       "exit_code": 0,
       "test_files": 208,
       "passed": 2236
+    },
+    {
+      "command": "PANTHEON_CONTRACT_ROOT=$PANTHEON_COMMAND_ROOT timeout 180 npm run test:contract",
+      "exit_code": 0,
+      "passed": 7,
+      "note": "Command runtime HEAD matched current Pantheon dev above; 49 schemas, 157 routes and 75 sha256 entries aligned."
     },
     {
       "command": "VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build",
@@ -53,7 +65,7 @@
       "command": "VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false VITE_GCP_IDENTITY_API_KEY=AIza00000000000000000000000000000000000 npx --no-install playwright test e2e/13-agora.spec.ts --project=chromium --retries=0",
       "exit_code": 0,
       "passed": 3,
-      "note": "Contained loopback fixtures, real production route components; no hosted-runtime proof."
+      "note": "Prior evidence at ef2d89e668b222cc16a4546c80ceec6fa5bb7f30; contained loopback fixtures, real production route components; not rerun during this base refresh and not hosted-runtime proof."
     },
     {
       "command": "python3 $PANTHEON_COMMAND_ROOT/scripts/git/diff_budget.py --base origin/dev --head HEAD --change-class simplify --budget -500",
@@ -70,22 +82,15 @@
   ],
   "contract_source": "Pantheon command-runtime services/control-plane/bff/postmortems/router.py and tests/test_postmortem_router.py: data array and report_id identity.",
   "limitations": [
-    "Independent Claude2 review pending fresh exact-head handoff.",
-    "Upstream Agora bundle digest CI failure remains pending Pantheon PR #6022; rerun failed CI after that merges.",
+    "Independent Antigravity review pending fresh exact-head handoff after new-head CI.",
     "Dev merge and deployment not yet verified.",
     "Build emits existing large-chunk warnings."
   ],
   "delivery": {
     "pr": "https://github.com/ajoe734/execute-plans/pull/789",
     "artifact_admission": "Human/Ops declared the five companion files on 2026-09-30; changes only remove or update references to deleted exports.",
-    "base_refresh": "Merged execute-plans dev 92f05252 without conflicts; all local validation above rerun against refreshed implementation.",
+    "base_refresh": "Merged execute-plans dev 4402d372 without conflicts, including PR #792. Generated types, contract-snapshot.json and frontend-generation-output.v1_13.json match dev and are absent from the PR diff. Local validation rerun except explicitly identified prior browser evidence.",
     "environment": "Installed absent npm dependencies with npm ci before validation; initial missing-tool invocations are not passes.",
-    "ci_contract_failure": {
-      "run": "https://github.com/ajoe734/execute-plans/actions/runs/36675188306",
-      "path": "specs/agora/v4/trading_decision_event.schema.json",
-      "expected_sha256": "fe6c8eb40900eda247b30c00ea3eb4a7fe9ec2edc65643e7850722a2adf2b3ea",
-      "actual_sha256": "08daf802a237547030c9abb678c493357d5a83d7505bab481ef70eb22259139f",
-      "frontend_contract_files_changed": false
-    }
+    "previous_ci_blocker": "Agora bundle checksum drift resolved by upstream digest repair and FE PR #792; current contract checks pass."
   }
 }
