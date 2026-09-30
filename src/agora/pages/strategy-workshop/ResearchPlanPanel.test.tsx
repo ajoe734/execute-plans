@@ -14,6 +14,8 @@ const api = vi.hoisted(() => ({
   cancelResearchPlan: vi.fn(),
   dispatchResearchPlan: vi.fn(),
 }));
+const bffFetch = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/bff-v1/client", () => ({ bffFetch: (req: unknown) => bffFetch(req) }));
 vi.mock("@/lib/bff-v1/agora/research", async (orig) => ({ ...(await orig<object>()), ...api }));
 
 import { BffError } from "@/lib/bff-v1/errors";
@@ -72,5 +74,51 @@ describe("ResearchPlanPanel", () => {
     expect(screen.getByTestId("research-plan-create")).toBeDisabled();
     expect(screen.getByTestId("research-plan-approve")).toBeDisabled();
     expect(screen.getByTestId("research-plan-disabled-reason")).toHaveTextContent("Writes are disabled");
+  });
+});
+
+describe("ResearchPlanPanel with real BFF envelopes", () => {
+  const etag = 'W/"research-plan:p1:v3"';
+  let status = "draft";
+  const envelope = () => ({
+    allowedActions: status === "draft" ? { approve: true, cancel: true, dispatch: false } : { approve: false, cancel: true, dispatch: true },
+    data: { plan_id: "p1", status, stages: [{ stage_type: "rolling_oos" }] },
+    meta: { etag },
+  });
+  const called = (suffix: string) => bffFetch.mock.calls.map(([r]) => r).find((r) => r.path.endsWith(suffix));
+
+  beforeEach(async () => {
+    const realResearch = await vi.importActual<Record<string, never>>("@/lib/bff-v1/agora/research");
+    status = "draft";
+    bffFetch.mockReset();
+    for (const name of Object.keys(api) as (keyof typeof api)[]) api[name].mockImplementation(realResearch[name]);
+    bffFetch.mockImplementation(async (req: { method: string; path: string }) => {
+      if (req.path.endsWith("/research-plans") && req.method === "GET") return { data: [envelope().data] };
+      if (req.path.endsWith("/research-plans/p1")) return envelope();
+      if (req.path.endsWith("/runs") && req.method === "GET") return { data: [] };
+      if (req.path.endsWith("/approve")) status = "approved";
+      return { status: "accepted", data: null, meta: {} };
+    });
+  });
+
+  it("approves a draft, then offers dispatch and cancel with If-Match", async () => {
+    render(<ResearchPlanPanel workshopId="w" strategySpec={spec} />);
+    await screen.findByTestId("research-plan-p1");
+    expect(screen.getByTestId("research-plan-dispatch")).toBeDisabled();
+    fireEvent.click(screen.getByTestId("research-plan-approve"));
+    await waitFor(() => expect(screen.getByTestId("research-plan-dispatch")).toBeEnabled());
+    expect(called("/approve").headers).toEqual({ "If-Match": etag });
+    expect(screen.getByTestId("research-plan-approve")).toBeDisabled();
+    await waitFor(() => expect(screen.getByTestId("research-plan-cancel")).toBeEnabled());
+    fireEvent.click(screen.getByTestId("research-plan-cancel"));
+    await waitFor(() => expect(called("/cancel")).toBeTruthy());
+    expect(called("/cancel").headers).toEqual({ "If-Match": etag });
+  });
+
+  it("reads an approved plan back after reload", async () => {
+    status = "approved";
+    render(<ResearchPlanPanel workshopId="w" strategySpec={spec} />);
+    await screen.findByTestId("research-plan-p1");
+    expect(screen.getByTestId("research-plan-dispatch")).toBeEnabled();
   });
 });
