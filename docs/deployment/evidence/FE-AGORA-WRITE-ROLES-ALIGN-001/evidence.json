@@ -1,0 +1,20 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "FE-AGORA-WRITE-ROLES-ALIGN-001",
+  "owner": "Codex",
+  "reviewer": "Claude2",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "base_sha": "d784ef0322a550e649b1d8bc63c0ea27daf22e6f",
+  "implementation_commit": "01580ce8",
+  "summary": "Agora interaction writes accept only operator, approver, admin and reviewer; denial copy no longer advertises research roles.",
+  "coverage": "Hook tests admit all four accepted roles, deny platform_admin/ops/research_lead/analyst/strategy_manager/viewer, and deny each accepted role when writeGate returns false. Existing tests retain capability and session-policy coverage.",
+  "validation": [
+    {"command": "npm test -- src/agora/useAgoraWriteAccess.test.ts src/lib/bff-v1/__tests__/runAction.test.ts src/lib/bff-v1/__tests__/writes.test.ts", "exit_code": 0, "result": "3 files, 94 tests passed; 16 Agora hook/helper tests"},
+    {"command": "npm run typecheck:agora", "exit_code": 0},
+    {"command": "npx eslint src/agora/useAgoraWriteAccess.ts src/agora/useAgoraWriteAccess.test.ts", "exit_code": 0},
+    {"command": "git diff --check", "exit_code": 0}
+  ],
+  "production_net_lines": -5,
+  "boundary": "BFF authorization, writeGate implementation and capability checks unchanged. No live writes or hosted deployment performed. Independent review pending."
+}
