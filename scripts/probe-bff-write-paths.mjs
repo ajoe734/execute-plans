@@ -66,14 +66,6 @@ const ENDPOINTS = [
   { batch: "P1-A", route: "/bff/command-confirmations/token-dev/confirm", method: "POST", body: {} },
 
   // P1-C - v5 Sentinel + HIQ writes
-  { batch: "P1-C", route: "/bff/v5/sentinel/findings/finding-dev/status", method: "POST", body: { status: "acknowledged" } },
-  { batch: "P1-C", route: "/bff/v5/sentinel/remediation/build", method: "POST", body: { findingId: "finding-dev", plan: { kind: "pause", target: "strategy-dev" } } },
-  { batch: "P1-C", route: "/bff/v5/interventions/intervention-dev/claim", method: "POST", body: {} },
-  { batch: "P1-C", route: "/bff/v5/interventions/intervention-dev/release", method: "POST", body: {} },
-  { batch: "P1-C", route: "/bff/v5/interventions/intervention-dev/escalate", method: "POST", body: { to: "tier2" } },
-  { batch: "P1-C", route: "/bff/v5/interventions/intervention-dev/decide", method: "POST", body: { decision: "approve", memo: "probe" } },
-  { batch: "P1-C", route: "/bff/v5/interventions/intervention-dev/two-man-sign", method: "POST", body: {} },
-  { batch: "P1-C", required: false, route: "/bff/v5/interventions/batch-decide", method: "POST", body: { ids: ["intervention-dev"], decision: "approve" } },
 
   // P1-E - Agora writes
   { batch: "P1-E", safety: "create", route: "/bff/agora/signals", method: "POST", body: { title: "dev-probe" } },
@@ -101,7 +93,6 @@ const READBACK_ENDPOINTS = [
   "/bff/research-experiments",
   "/bff/skills",
   "/bff/approvals",
-  "/bff/v5/interventions",
   "/bff/agora/signals",
   "/bff/agora/inbox",
   "/bff/agora/journal",

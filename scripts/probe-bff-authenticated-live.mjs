@@ -288,8 +288,6 @@ const LIST_ENDPOINTS = [
   "/bff/agora/postmortems",
   // Agora Ask removed from Management AI probe surface (2026-06-03).
   "/bff/v5/loop-runs",
-  "/bff/v5/sentinel/findings",
-  "/bff/v5/interventions",
   "/bff/v5/execution/persona-health",
 ];
 
@@ -308,7 +306,6 @@ const WRITE_ENDPOINTS = [
     },
   },
   { route: "/bff/approvals/approval-dev/decide", method: "POST", body: "invalid-smoke-payload" },
-  { route: "/bff/v5/interventions/intervention-dev/decide", method: "POST" },
   { route: "/bff/management/nl/ask", method: "POST", body: {} },
 ];
 

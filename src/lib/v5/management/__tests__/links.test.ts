@@ -1,10 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
-  resolveManagementHref, buildLinkSet, buildSentinelResolutionLinks,
+  resolveManagementHref, buildLinkSet,
   EVIDENCE_HREF_FALLBACK_LABEL, ACTION_HREF_FALLBACK_LABEL,
   type ManagementHrefKind,
 } from "../links";
-import type { SentinelFinding } from "../../types";
 
 describe("resolveManagementHref — PM-2 deep link rules", () => {
   const cases: Array<[ManagementHrefKind, string | undefined, string | null, Parameters<typeof resolveManagementHref>[2]?]> = [
@@ -22,8 +21,6 @@ describe("resolveManagementHref — PM-2 deep link rules", () => {
     ["postmortem", "pm-2", "/management/postmortems?item=pm-2"],
     ["evolution", "ev-101", "/management/evolution-journal?item=ev-101"],
     ["loop_run", "run-1", "/management/loops/research?run=run-1", { loopKind: "research" }],
-    ["sentinel", "f-1", "/management/sentinel?finding=f-1"],
-    ["intervention", "i-1", "/management/interventions?item=i-1"],
     ["broker_live", undefined, "/management/readiness/broker-live"],
     ["bff_ha", undefined, "/management/readiness/bff-ha"],
     ["strict_publish", undefined, "/management/readiness/strict-publish"],
@@ -59,42 +56,5 @@ describe("buildLinkSet — PM-2", () => {
   it("exports fallback labels (UI MUST display these instead of inventing URLs)", () => {
     expect(EVIDENCE_HREF_FALLBACK_LABEL).toBe("Evidence missing");
     expect(ACTION_HREF_FALLBACK_LABEL).toBe("No action required");
-  });
-});
-
-describe("buildSentinelResolutionLinks", () => {
-  it("turns a Sentinel finding into concrete resolution routes", () => {
-    const finding: SentinelFinding = {
-      id: "finding-123",
-      status: "open",
-      severity: "warning",
-      confidence: 0.72,
-      title: "Drawdown breach",
-      summary: "Paper sleeve drawdown breached threshold.",
-      source: "incident",
-      detectedAt: "2026-07-01T00:00:00.000Z",
-      updatedAt: "2026-07-01T00:00:00.000Z",
-      blastRadius: {
-        personas: ["persona-tw-equity"],
-        strategies: ["tw-momentum"],
-        pools: ["pool-tw-alpha"],
-      },
-      evidence: [
-        { kind: "incident", id: "inc-123" },
-        { kind: "metric", id: "paper-drawdown" },
-      ],
-      recommendedActionIds: ["request_human_approval", "reduce_allocation"],
-    };
-
-    const links = buildSentinelResolutionLinks(finding);
-    const byLabel = new Map(links.map((link) => [link.label, link.href]));
-
-    expect(byLabel.get("Review intervention")).toBe("/management/interventions?finding=finding-123");
-    expect(byLabel.get("Open human inbox")).toBe("/management/human-inbox?persona=persona-tw-equity");
-    expect(byLabel.get("Inspect evidence")).toBe("/management/evidence?ref_id=inc-123");
-    expect(byLabel.get("Open incident")).toBe("/management/incidents/inc-123");
-    expect(byLabel.get("Open strategy")).toBe("/management/strategies/tw-momentum");
-    expect(byLabel.get("Open persona readiness")).toBe("/management/persona-fleet?persona=persona-tw-equity");
-    expect(byLabel.get("Open capital gate")).toBe("/management/governance-decisions?tab=capital&capital_id=pool-tw-alpha");
   });
 });

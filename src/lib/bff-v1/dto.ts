@@ -284,12 +284,6 @@ export type LoopStatus =
 
 export type SentinelHealth = "healthy" | "watch" | "degraded" | "critical";
 
-export type InterventionStatus =
-  | "open" | "acknowledged" | "action_pending" | "mitigating" | "resolved" | "dismissed";
-
-export type InterventionSource =
-  | "approval" | "sentinel" | "incident" | "policy_exception" | "emergency_review";
-
 // ---------- Section 10: Domain Contracts ----------
 
 export type RiskLevel = "info" | "low" | "medium" | "high" | "critical";

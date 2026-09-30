@@ -1212,53 +1212,6 @@ export async function acknowledgeAlert(
   return { ok: true, data: { alertId: id }, correlationId, idempotencyKey };
 }
 
-// ---------- decideIntervention (v5) ----------
-
-export type InterventionDecision = "acknowledge" | "approve" | "reject" | "dismiss" | "escalate";
-
-export type InterventionDecisionEnvelope = CommandResponse<{ interventionId: string; decision: InterventionDecision }>;
-
-export interface InterventionDecisionOptions {
-  correlationId?: string;
-  idempotencyKey?: string;
-}
-
-/**
- * v5 closed-loop — POST /bff/v5/interventions/{id}/decide.
- */
-export async function decideIntervention(
-  id: string,
-  decision: InterventionDecision,
-  memo: string,
-  opts: InterventionDecisionOptions = {},
-): Promise<InterventionDecisionEnvelope> {
-  const correlationId = opts.correlationId ?? newCorrelationId();
-  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
-
-  if (await liveWriteGated()) {
-    const data = await bffFetch<unknown>({
-      method: "POST",
-      path: paths.v5InterventionDecide(id),
-      body: { decision, memo },
-      idempotencyKey,
-      headers: { "X-Correlation-Id": correlationId },
-      mode: "live",
-    });
-    const d = data as { interventionId?: string; decision?: InterventionDecision };
-    return { ok: true, data: { interventionId: d.interventionId ?? id, decision: d.decision ?? decision }, correlationId, idempotencyKey };
-  }
-  if (isStrictLiveFallback()) {
-    refuseStrictLiveWrite(correlationId);
-  }
-  return {
-    ok: true,
-    data: { interventionId: id, decision },
-    auditEventId: `au_iv_${id}`,
-    correlationId,
-    idempotencyKey,
-  };
-}
-
 // ---------- decideEvolutionReview ----------
 
 export type EvolutionReviewDecision = "approve" | "reject";
@@ -2070,7 +2023,6 @@ export const bffWrites = {
   deleteConfirmToken,
   decideApproval,
   acknowledgeAlert,
-  decideIntervention,
   decideEvolutionReview,
   liveWriteGated,
   freezePool,

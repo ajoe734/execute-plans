@@ -81,8 +81,6 @@ describe("bff-v1 path builders", () => {
     expect(paths.logout()).toBe("/bff/logout");
     expect(paths.approvalDecide("ap_1")).toBe("/bff/approvals/ap_1/decide");
     expect(paths.approvalDecision("ap_1")).toBe("/bff/approvals/ap_1/decide");
-    expect(paths.v5InterventionDecide("iv_1")).toBe("/bff/v5/interventions/iv_1/decide");
-    expect(paths.v5InterventionDecision("iv_1")).toBe("/bff/v5/interventions/iv_1/decide");
     expect(paths.mcpServerImportTools("srv_1")).toBe("/bff/mcp-servers/srv_1/import-tools");
     expect(paths.agoraAskSession("ask_1")).toBe("/bff/agora/ask/sessions/ask_1");
     expect(paths.sse()).toBe("/bff/events/stream");

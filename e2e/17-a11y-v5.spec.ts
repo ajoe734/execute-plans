@@ -12,9 +12,9 @@ const BLOCKING_IMPACTS = new Set(["critical", "serious"]);
 
 const V5_PAGE_SCENARIOS = [
   {
-    name: "control room",
-    path: "/management/control-room",
-    ready: /Control Room|loops|Sentinel|Intervention|Findings/i,
+    name: "cockpit",
+    path: "/management/cockpit",
+    ready: /Management Cockpit|Management 駕駛艙/i,
   },
   {
     name: "research loop",
@@ -32,18 +32,34 @@ const V5_PAGE_SCENARIOS = [
     ready: /Optimization|approval|rebalance|runs/i,
   },
   {
-    name: "sentinel",
-    path: "/management/sentinel",
-    ready: /Sentinel|Findings|critical|confidence/i,
+    name: "incidents",
+    path: "/management/incidents",
+    ready: /F17 Incident routing drift/,
   },
   {
-    name: "interventions",
-    path: "/management/interventions",
-    ready: /Interventions|Human Intervention Queue|approval|sentinel/i,
+    name: "human inbox",
+    path: "/management/human-inbox",
+    ready: /F17 Incident review/,
   },
 ] as const;
 
 const NOW = "2026-05-13T14:45:00Z";
+
+const incidents = [{
+  id: "incident-f17", title: "F17 Incident routing drift", severity: "high",
+  status: "investigating", openedAt: NOW, commander: "operator-f17",
+  description: "Review the affected route before resolving this incident.",
+  affected: ["strategy-alpha"], timeline: [],
+}];
+
+const humanInbox = [{
+  id: "human-f17", kind: "intervention", title: "F17 Incident review",
+  requiredRole: "operator", summary: "Review the current incident evidence.",
+  consequenceIfApproved: "Continue investigation", consequenceIfRejected: "Keep incident open",
+  consequenceIfIgnored: "Incident remains pending", canDecide: false, canProceed: false,
+  detailHref: "/management/human-inbox/human-f17",
+  links: { manageHref: "/management/incidents", evidenceHref: "/management/incidents/incident-f17" },
+}];
 
 const loopRuns = [
   {
@@ -261,13 +277,13 @@ async function installV5A11yRoutes(page: Page): Promise<void> {
       return;
     }
 
-    if (path === "/bff/v5/sentinel/findings") {
-      await fulfillJson(route, { items: sentinelFindings });
+    if (path === "/bff/incidents") {
+      await fulfillJson(route, { items: incidents, total: incidents.length, totalIsExact: true });
       return;
     }
 
-    if (path === "/bff/v5/interventions") {
-      await fulfillJson(route, { items: interventions });
+    if (path === "/bff/management/human-inbox") {
+      await fulfillJson(route, { data: humanInbox, meta: { snapshot_at: NOW } });
       return;
     }
 
@@ -362,28 +378,26 @@ test.describe("F17 axe a11y gate for v5 pages", () => {
     await expect(trigger).toBeFocused();
   });
 
-  test("ESC closes the read-only Sentinel investigation drawer and restores focus", async ({ page }) => {
-    await gotoReady(page, "/management/sentinel", /Sentinel|Findings|critical|confidence/i);
-
-    const findingTriggers = page.locator("ul button").filter({ hasText: /critical|warning|watch/i });
-    await expect(findingTriggers.first()).toBeVisible();
-    const findingTrigger = await firstVisible(findingTriggers);
-    await findingTrigger.focus();
-    await findingTrigger.click();
-
-    const drawer = page.getByRole("dialog").first();
+  test("incident resolution confirmation restores focus without submitting on Escape", async ({ page }) => {
+    const writes: string[] = [];
+    page.on("request", (request) => {
+      if (new URL(request.url()).pathname.startsWith("/bff/") && request.method() === "POST") {
+        writes.push(request.url());
+      }
+    });
+    await gotoReady(page, "/management/incidents", /F17 Incident routing drift/);
+    await page.getByRole("row").filter({ hasText: "F17 Incident routing drift" }).click();
+    const drawer = page.getByRole("dialog", { name: "F17 Incident routing drift", exact: true });
     await expect(drawer).toBeVisible();
-    await expect(page.locator('[role="dialog"]')).toHaveCount(1);
-    await expect(drawer).toContainText(/Investigation summary|調查摘要/i);
-    await expect(drawer).toContainText(/Governance handling|治理處理/i);
-    await expect(drawer.getByRole("button", { name: /run|執行/i })).toHaveCount(0);
-    await expect(
-      page.getByRole("dialog").filter({ hasText: /高風險|Confirm high-risk action|pause_persona_routing/i }),
-    ).toHaveCount(0);
-
+    const trigger = drawer.getByRole("button", { name: /^(Resolve|結案|解決)$/i });
+    await trigger.focus();
+    await trigger.press("Enter");
+    await expect(page.getByRole("dialog", { name: /高風險|high-risk/i })).toBeVisible();
     await page.keyboard.press("Escape");
-    await expect(page.locator('[role="dialog"]')).toHaveCount(0);
-    await expect(findingTrigger).toBeFocused();
+    await expect(page.getByRole("dialog", { name: /高風險|high-risk/i })).toHaveCount(0);
+    await expect(drawer).toBeVisible();
+    await expect(trigger).toBeFocused();
+    expect(writes).toEqual([]);
   });
 
   test("motion-safe v5 status indicators respect reduced motion", async ({ page }) => {
