@@ -2,8 +2,8 @@
   "task_id": "FE-AGORA-DEAD-CLIENT-REMOVAL-001",
   "owner": "Codex",
   "reviewer": "Claude2",
-  "base_commit": "c6d15063e9e8447a90eb77c0f9c7a31007597fdc",
-  "implementation_commit": "85c9bfc6e71e8f90f2f50868e7bb81e88f0e7daa",
+  "base_commit": "92f052524c4b7f2dc3165e5056b7524602c606e7",
+  "implementation_commit": "ef2d89e668b222cc16a4546c80ceec6fa5bb7f30",
   "change_class": "simplify",
   "production_net_lines": -942,
   "production_line_budget": -500,
@@ -31,23 +31,26 @@
       "exit_code": 0
     },
     {
-      "command": "npm test",
-      "exit_code": 0,
-      "test_files": 211,
-      "passed": 2249
+      "command": "npm run typecheck:agora",
+      "exit_code": 0
     },
     {
-      "command": "npx vitest run src/management/__tests__/fullOperationAssembly.test.tsx src/lib/v3/v3.test.ts --maxWorkers=2",
+      "command": "timeout 300 npm test",
+      "exit_code": 124,
+      "note": "Initial bounded run timed out; not counted as passed."
+    },
+    {
+      "command": "timeout 720 npm test",
       "exit_code": 0,
-      "passed": 56,
-      "note": "Rerun after final fixture type correction."
+      "test_files": 208,
+      "passed": 2236
     },
     {
       "command": "VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build",
       "exit_code": 0
     },
     {
-      "command": "VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false VITE_GCP_IDENTITY_API_KEY=AIza00000000000000000000000000000000000 npx playwright test e2e/13-agora.spec.ts --project=chromium --retries=0",
+      "command": "VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false VITE_GCP_IDENTITY_API_KEY=AIza00000000000000000000000000000000000 npx --no-install playwright test e2e/13-agora.spec.ts --project=chromium --retries=0",
       "exit_code": 0,
       "passed": 3,
       "note": "Contained loopback fixtures, real production route components; no hosted-runtime proof."
@@ -61,27 +64,22 @@
       "exit_code": 0
     },
     {
-      "command": "git diff --check",
+      "command": "git diff --check origin/dev...HEAD",
       "exit_code": 0
     }
   ],
   "contract_source": "Pantheon command-runtime services/control-plane/bff/postmortems/router.py and tests/test_postmortem_router.py: data array and report_id identity.",
   "limitations": [
-    "Independent Claude2 review not admitted; Human/Ops must repair task artifact contract and upstream CI contract drift.",
+    "Independent Claude2 review pending fresh exact-head handoff.",
+    "Upstream Agora bundle digest CI failure remains pending Pantheon PR #6022; rerun failed CI after that merges.",
     "Dev merge and deployment not yet verified.",
     "Build emits existing large-chunk warnings."
   ],
   "delivery": {
     "pr": "https://github.com/ajoe734/execute-plans/pull/789",
-    "handoff": "rejected: artifact contract omits necessary caller-test and taxonomy cleanup",
-    "required_artifact_additions": [
-      "src/lib/bff-v1/__tests__/contract-drift.test.ts",
-      "src/lib/bff-v1/__tests__/envelope.test.ts",
-      "src/lib/bff-v1/__tests__/liveAdapters.test.ts",
-      "src/lib/bff-v1/agora/identity.test.ts",
-      "src/lib/bff-v1/seed-taxonomy.json"
-    ],
-    "required_actor": "Human/Ops",
+    "artifact_admission": "Human/Ops declared the five companion files on 2026-09-30; changes only remove or update references to deleted exports.",
+    "base_refresh": "Merged execute-plans dev 92f05252 without conflicts; all local validation above rerun against refreshed implementation.",
+    "environment": "Installed absent npm dependencies with npm ci before validation; initial missing-tool invocations are not passes.",
     "ci_contract_failure": {
       "run": "https://github.com/ajoe734/execute-plans/actions/runs/36675188306",
       "path": "specs/agora/v4/trading_decision_event.schema.json",
