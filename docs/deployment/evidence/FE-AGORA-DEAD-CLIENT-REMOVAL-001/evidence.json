@@ -1,0 +1,74 @@
+{
+  "task_id": "FE-AGORA-DEAD-CLIENT-REMOVAL-001",
+  "owner": "Codex",
+  "reviewer": "Claude2",
+  "base_commit": "c6d15063e9e8447a90eb77c0f9c7a31007597fdc",
+  "implementation_commit": "85c9bfc6e71e8f90f2f50868e7bb81e88f0e7daa",
+  "change_class": "simplify",
+  "production_net_lines": -942,
+  "production_line_budget": -500,
+  "changes": [
+    "Deleted unused agoraReads daily/signals/inbox/ask API, dashboard client, identity me/sessions, barrels and dead path builders.",
+    "Moved the surviving journal adapter into management governance; preserved endpoint, DTO aliases, subject filtering and strict failures.",
+    "Deleted v3 Agora KPI, handoff, signal feedback and committee evidence modules; removed Agora-only B2-B5 sections while retaining Management contracts.",
+    "Postmortems list now reads /api/v1/postmortems and accepts canonical report_id as well as existing postmortem_id for list/detail identity.",
+    "Strategy detail tolerates each secondary request failure, reports unavailable sections, ends primary failure loading and ignores stale effect completions.",
+    "Decision links open a live strategy or audit page; removed the nonexistent memory-review navigation.",
+    "Replaced F13 synthetic retired endpoint harness with actual management page browser tests; retained CI entrypoint."
+  ],
+  "preserved_clients": [
+    "src/lib/bff-v1/agora/tradingRoom.ts",
+    "src/lib/bff-v1/agora/workshops.ts",
+    "src/lib/bff-v1/agora/performance.ts",
+    "src/lib/bff-v1/agora/servant.ts",
+    "src/lib/bff-v1/agora/research.ts",
+    "src/lib/bff-v1/agora/governance.ts",
+    "src/lib/bff-v1/agora/types.ts"
+  ],
+  "validation": [
+    {
+      "command": "npm run typecheck",
+      "exit_code": 0
+    },
+    {
+      "command": "npm test",
+      "exit_code": 0,
+      "test_files": 211,
+      "passed": 2249
+    },
+    {
+      "command": "npx vitest run src/management/__tests__/fullOperationAssembly.test.tsx src/lib/v3/v3.test.ts --maxWorkers=2",
+      "exit_code": 0,
+      "passed": 56,
+      "note": "Rerun after final fixture type correction."
+    },
+    {
+      "command": "VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build",
+      "exit_code": 0
+    },
+    {
+      "command": "VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false VITE_GCP_IDENTITY_API_KEY=AIza00000000000000000000000000000000000 npx playwright test e2e/13-agora.spec.ts --project=chromium --retries=0",
+      "exit_code": 0,
+      "passed": 3,
+      "note": "Contained loopback fixtures, real production route components; no hosted-runtime proof."
+    },
+    {
+      "command": "python3 $PANTHEON_COMMAND_ROOT/scripts/git/diff_budget.py --base origin/dev --head HEAD --change-class simplify --budget -500",
+      "exit_code": 0
+    },
+    {
+      "command": "python3 scripts/git/check_commit_trailers.py --range origin/dev..HEAD",
+      "exit_code": 0
+    },
+    {
+      "command": "git diff --check",
+      "exit_code": 0
+    }
+  ],
+  "contract_source": "Pantheon command-runtime services/control-plane/bff/postmortems/router.py and tests/test_postmortem_router.py: data array and report_id identity.",
+  "limitations": [
+    "Independent Claude2 review pending.",
+    "Dev merge and deployment not yet verified.",
+    "Build emits existing large-chunk warnings."
+  ]
+}
