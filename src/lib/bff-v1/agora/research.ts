@@ -1,8 +1,11 @@
 /**
  * BFF client for Agora research plan and run endpoints.
  * Source: services/control-plane/openapi/agora_v1_3.openapi.yaml §Research Plans / §Research Runs
- * Live strict: pages must not call these BFF endpoints directly — import from here instead.
+ * Uses the shared BFF client (base URL, auth, tenant, idempotency headers).
  */
+
+import { BffError } from "../errors";
+import { bffFetch } from "../client";
 
 export type ResearchPlanStatus = "draft" | "approved" | "running" | "completed" | "cancelled";
 export type ResearchRunExecutionStatus =
@@ -125,294 +128,164 @@ export interface ResearchRunProjection {
   updated_at?: string;
 }
 
+/** Workshop-visible research stage labels mapped to the BFF stage_type enum. */
+export const RESEARCH_STAGE_TYPES = {
+  "Prototype backtest": "prototype_backtest",
+  "Rolling out-of-sample": "rolling_oos",
+  "Econometric validation": "econometric_validation",
+  "Portfolio synthesis": "portfolio_synthesis",
+} as const;
+export type ResearchStageType = (typeof RESEARCH_STAGE_TYPES)[keyof typeof RESEARCH_STAGE_TYPES];
+
+/** The create endpoint is extra=forbid: only these fields may be sent. */
+export interface ResearchPlanCreateRequest {
+  spec_version: "1.0";
+  strategy_id: string;
+  strategy_spec_registry_id: string;
+  stages: Array<{ stage_type: ResearchStageType }>;
+}
+
+export interface ResearchPlanSnapshot {
+  plan: ResearchPlanExecution;
+  /** meta.etag, sent back verbatim as If-Match. */
+  etag: string | null;
+  /** Action names the BFF currently allows (e.g. "approve", "dispatch", "cancel"). */
+  allowedActions: string[];
+}
+
 export interface CommandResponse {
   status: "accepted" | "queued" | "completed";
   data: unknown;
   meta: Record<string, unknown>;
 }
 
-function resolvedBase(baseUrl?: string): string {
-  if (baseUrl) return baseUrl.replace(/\/+$/, "");
-  if (typeof window !== "undefined" && window.location?.origin) {
-    return window.location.origin.replace(/\/+$/, "");
-  }
-  return "";
-}
+type Envelope = { data?: unknown; meta?: unknown; status?: unknown };
 
-function recordFrom(value: unknown): Record<string, unknown> {
+function record(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
 }
 
-async function parseJson(res: Response): Promise<unknown> {
-  const text = await res.text();
-  if (!text) return {};
-  try {
-    return JSON.parse(text);
-  } catch {
-    return { error: { message: text } };
-  }
+function listOf<T>(body: unknown, ...keys: string[]): T[] {
+  const data = (body as Envelope | undefined)?.data ?? body;
+  if (Array.isArray(data)) return data as T[];
+  const obj = record(data);
+  for (const key of ["items", ...keys]) if (Array.isArray(obj[key])) return obj[key] as T[];
+  return [];
 }
 
-function planFrom(value: unknown): ResearchPlanExecution {
-  const root = recordFrom(value);
-  const data = recordFrom(root.data ?? root);
-  return data as unknown as ResearchPlanExecution;
+function allowedActionsFrom(meta: Record<string, unknown>): string[] {
+  const raw = meta.allowedActions ?? meta.allowed_actions;
+  if (Array.isArray(raw)) return raw.map(String);
+  return Object.entries(record(raw))
+    .filter(([, on]) => on === true)
+    .map(([name]) => name);
 }
 
-function plansFrom(value: unknown): ResearchPlanExecution[] {
-  const root = recordFrom(value);
-  const items = root.data ?? root;
-  if (Array.isArray(items)) return items as ResearchPlanExecution[];
-  const data = recordFrom(items);
-  const list = data.items ?? data.plans ?? data.results;
-  return Array.isArray(list) ? (list as ResearchPlanExecution[]) : [];
+function snapshotFrom(body: unknown): ResearchPlanSnapshot {
+  const root = body as Envelope | undefined;
+  const meta = record(root?.meta);
+  return {
+    plan: record(root?.data ?? root) as unknown as ResearchPlanExecution,
+    etag: typeof meta.etag === "string" ? meta.etag : null,
+    allowedActions: allowedActionsFrom(meta),
+  };
 }
 
-function runFrom(value: unknown): ResearchRunProjection {
-  const root = recordFrom(value);
-  const data = recordFrom(root.data ?? root);
-  return data as unknown as ResearchRunProjection;
-}
-
-function runsFrom(value: unknown): ResearchRunProjection[] {
-  const root = recordFrom(value);
-  const items = root.data ?? root;
-  if (Array.isArray(items)) return items as ResearchRunProjection[];
-  const data = recordFrom(items);
-  const list = data.items ?? data.runs ?? data.results;
-  return Array.isArray(list) ? (list as ResearchRunProjection[]) : [];
-}
-
-function commandResponseFrom(value: unknown): CommandResponse {
-  const root = recordFrom(value);
+function commandFrom(body: unknown): CommandResponse {
+  const root = record(body);
   return {
     status: (root.status as CommandResponse["status"]) ?? "accepted",
     data: root.data ?? null,
-    meta: (root.meta as Record<string, unknown>) ?? {},
+    meta: record(root.meta),
   };
 }
 
-function artifactRefsFrom(value: unknown): string[] {
-  const root = recordFrom(value);
-  const items = root.data ?? root;
-  if (Array.isArray(items)) return items as string[];
-  const data = recordFrom(items);
-  const list = data.items ?? data.artifact_refs ?? data.results;
-  return Array.isArray(list) ? (list as string[]) : [];
+const planPath = (planId: string) => `/bff/agora/research-plans/${encodeURIComponent(planId)}`;
+const runPath = (runId: string) => `/bff/agora/research-runs/${encodeURIComponent(runId)}`;
+
+export interface ResearchCommandOptions {
+  idempotencyKey?: string;
+  /** ETag from the latest snapshot; sent verbatim as If-Match. */
+  ifMatch?: string;
 }
 
-async function throwOnError(res: Response, url: string): Promise<void> {
-  if (!res.ok) {
-    const body = await parseJson(res);
-    const message =
-      recordFrom(recordFrom(body).error).message ?? `${res.status} ${res.statusText} at ${url}`;
-    throw new Error(String(message));
+function command(path: string, options?: ResearchCommandOptions, body?: unknown) {
+  return bffFetch<unknown>({
+    method: "POST",
+    path,
+    body,
+    idempotencyKey: options?.idempotencyKey,
+    headers: options?.ifMatch ? { "If-Match": options.ifMatch } : undefined,
+  }).then(commandFrom);
+}
+
+export async function listWorkshopResearchPlans(workshopId: string): Promise<ResearchPlanExecution[]> {
+  const body = await bffFetch<unknown>({
+    method: "GET",
+    path: `/bff/agora/workshops/${encodeURIComponent(workshopId)}/research-plans`,
+  });
+  return listOf<ResearchPlanExecution>(body, "plans", "results");
+}
+
+export async function createWorkshopResearchPlan(
+  workshopId: string,
+  request: ResearchPlanCreateRequest,
+  options?: Pick<ResearchCommandOptions, "idempotencyKey">,
+): Promise<ResearchPlanSnapshot> {
+  const body = await bffFetch<unknown>({
+    method: "POST",
+    path: `/bff/agora/workshops/${encodeURIComponent(workshopId)}/research-plans`,
+    body: request,
+    idempotencyKey: options?.idempotencyKey,
+  });
+  return snapshotFrom(body);
+}
+
+/** Returns null when the plan does not exist. */
+export async function getResearchPlan(planId: string): Promise<ResearchPlanSnapshot | null> {
+  try {
+    return snapshotFrom(await bffFetch<unknown>({ method: "GET", path: planPath(planId) }));
+  } catch (err) {
+    if (err instanceof BffError && err.status === 404) return null;
+    throw err;
   }
 }
 
-/**
- * GET /bff/agora/workshops/{workshop_id}/research-plans
- * List research plans attached to a workshop.
- */
-export async function listWorkshopResearchPlans(
-  workshopId: string,
-  baseUrl?: string,
-): Promise<ResearchPlanExecution[]> {
-  const base = resolvedBase(baseUrl);
-  const url = `${base}/bff/agora/workshops/${encodeURIComponent(workshopId)}/research-plans`;
-  const res = await fetch(url, {
-    method: "GET",
-    credentials: "include",
-    headers: { Accept: "application/json" },
-  });
-  await throwOnError(res, url);
-  return plansFrom(await parseJson(res));
+export const approveResearchPlan = (planId: string, options?: ResearchCommandOptions) =>
+  command(`${planPath(planId)}/approve`, options);
+
+export const cancelResearchPlan = (planId: string, options?: ResearchCommandOptions) =>
+  command(`${planPath(planId)}/cancel`, options);
+
+export const dispatchResearchPlan = (planId: string, options?: ResearchCommandOptions) =>
+  command(`${planPath(planId)}/runs`, options);
+
+export async function listResearchPlanRuns(planId: string): Promise<ResearchRunProjection[]> {
+  const body = await bffFetch<unknown>({ method: "GET", path: `${planPath(planId)}/runs` });
+  return listOf<ResearchRunProjection>(body, "runs", "results");
 }
 
-/**
- * POST /bff/agora/workshops/{workshop_id}/research-plans
- * Create a draft research plan attached to the workshop.
- */
-export async function createWorkshopResearchPlan(
-  workshopId: string,
-  plan: Partial<ResearchPlanExecution>,
-  options?: { idempotencyKey?: string; ifMatch?: string; requestId?: string },
-  baseUrl?: string,
-): Promise<ResearchPlanExecution> {
-  const base = resolvedBase(baseUrl);
-  const url = `${base}/bff/agora/workshops/${encodeURIComponent(workshopId)}/research-plans`;
-  const headers: Record<string, string> = {
-    Accept: "application/json",
-    "Content-Type": "application/json",
-  };
-  if (options?.idempotencyKey) headers["Idempotency-Key"] = options.idempotencyKey;
-  if (options?.ifMatch) headers["If-Match"] = options.ifMatch;
-  if (options?.requestId) headers["X-Request-Id"] = options.requestId;
-  const res = await fetch(url, {
-    method: "POST",
-    credentials: "include",
-    headers,
-    body: JSON.stringify(plan),
-  });
-  await throwOnError(res, url);
-  return planFrom(await parseJson(res));
+export async function getResearchRun(runId: string): Promise<ResearchRunProjection | null> {
+  try {
+    const body = await bffFetch<Envelope>({ method: "GET", path: runPath(runId) });
+    return record(body?.data ?? body) as unknown as ResearchRunProjection;
+  } catch (err) {
+    if (err instanceof BffError && err.status === 404) return null;
+    throw err;
+  }
 }
 
-/**
- * GET /bff/agora/research-plans/{plan_id}
- * Get research plan detail.
- */
-export async function getResearchPlan(
-  planId: string,
-  baseUrl?: string,
-): Promise<ResearchPlanExecution | null> {
-  const base = resolvedBase(baseUrl);
-  const url = `${base}/bff/agora/research-plans/${encodeURIComponent(planId)}`;
-  const res = await fetch(url, {
-    method: "GET",
-    credentials: "include",
-    headers: { Accept: "application/json" },
-  });
-  if (res.status === 404) return null;
-  await throwOnError(res, url);
-  return planFrom(await parseJson(res));
+export const cancelResearchRun = (runId: string, options?: Pick<ResearchCommandOptions, "idempotencyKey">) =>
+  command(`${runPath(runId)}/cancel`, options);
+
+export async function listResearchRunArtifacts(runId: string): Promise<string[]> {
+  const body = await bffFetch<unknown>({ method: "GET", path: `${runPath(runId)}/artifacts` });
+  return listOf<string>(body, "artifact_refs", "results");
 }
 
-/**
- * POST /bff/agora/research-plans/{plan_id}/approve
- * Approve a draft research plan for dispatch.
- */
-export async function approveResearchPlan(
-  planId: string,
-  options?: { idempotencyKey?: string; ifMatch?: string; requestId?: string },
-  baseUrl?: string,
-): Promise<CommandResponse> {
-  const base = resolvedBase(baseUrl);
-  const url = `${base}/bff/agora/research-plans/${encodeURIComponent(planId)}/approve`;
-  const headers: Record<string, string> = { Accept: "application/json" };
-  if (options?.idempotencyKey) headers["Idempotency-Key"] = options.idempotencyKey;
-  if (options?.ifMatch) headers["If-Match"] = options.ifMatch;
-  if (options?.requestId) headers["X-Request-Id"] = options.requestId;
-  const res = await fetch(url, { method: "POST", credentials: "include", headers });
-  await throwOnError(res, url);
-  return commandResponseFrom(await parseJson(res));
-}
-
-/**
- * POST /bff/agora/research-plans/{plan_id}/cancel
- * Cancel an approved or running research plan.
- */
-export async function cancelResearchPlan(
-  planId: string,
-  options?: { idempotencyKey?: string; ifMatch?: string; requestId?: string },
-  baseUrl?: string,
-): Promise<CommandResponse> {
-  const base = resolvedBase(baseUrl);
-  const url = `${base}/bff/agora/research-plans/${encodeURIComponent(planId)}/cancel`;
-  const headers: Record<string, string> = { Accept: "application/json" };
-  if (options?.idempotencyKey) headers["Idempotency-Key"] = options.idempotencyKey;
-  if (options?.ifMatch) headers["If-Match"] = options.ifMatch;
-  if (options?.requestId) headers["X-Request-Id"] = options.requestId;
-  const res = await fetch(url, { method: "POST", credentials: "include", headers });
-  await throwOnError(res, url);
-  return commandResponseFrom(await parseJson(res));
-}
-
-/**
- * GET /bff/agora/research-plans/{plan_id}/runs
- * List research runs for a plan.
- */
-export async function listResearchPlanRuns(
-  planId: string,
-  baseUrl?: string,
-): Promise<ResearchRunProjection[]> {
-  const base = resolvedBase(baseUrl);
-  const url = `${base}/bff/agora/research-plans/${encodeURIComponent(planId)}/runs`;
-  const res = await fetch(url, {
-    method: "GET",
-    credentials: "include",
-    headers: { Accept: "application/json" },
-  });
-  await throwOnError(res, url);
-  return runsFrom(await parseJson(res));
-}
-
-/**
- * POST /bff/agora/research-plans/{plan_id}/runs
- * Dispatch an approved research plan (creates a new run).
- */
-export async function dispatchResearchPlan(
-  planId: string,
-  options?: { idempotencyKey?: string; ifMatch?: string; requestId?: string },
-  baseUrl?: string,
-): Promise<CommandResponse> {
-  const base = resolvedBase(baseUrl);
-  const url = `${base}/bff/agora/research-plans/${encodeURIComponent(planId)}/runs`;
-  const headers: Record<string, string> = { Accept: "application/json" };
-  if (options?.idempotencyKey) headers["Idempotency-Key"] = options.idempotencyKey;
-  if (options?.ifMatch) headers["If-Match"] = options.ifMatch;
-  if (options?.requestId) headers["X-Request-Id"] = options.requestId;
-  const res = await fetch(url, { method: "POST", credentials: "include", headers });
-  await throwOnError(res, url);
-  return commandResponseFrom(await parseJson(res));
-}
-
-/**
- * GET /bff/agora/research-runs/{run_id}
- * Get research run projection.
- */
-export async function getResearchRun(
-  runId: string,
-  baseUrl?: string,
-): Promise<ResearchRunProjection | null> {
-  const base = resolvedBase(baseUrl);
-  const url = `${base}/bff/agora/research-runs/${encodeURIComponent(runId)}`;
-  const res = await fetch(url, {
-    method: "GET",
-    credentials: "include",
-    headers: { Accept: "application/json" },
-  });
-  if (res.status === 404) return null;
-  await throwOnError(res, url);
-  return runFrom(await parseJson(res));
-}
-
-/**
- * POST /bff/agora/research-runs/{run_id}/cancel
- * Request cancellation of an active research run.
- */
-export async function cancelResearchRun(
-  runId: string,
-  options?: { idempotencyKey?: string; requestId?: string },
-  baseUrl?: string,
-): Promise<CommandResponse> {
-  const base = resolvedBase(baseUrl);
-  const url = `${base}/bff/agora/research-runs/${encodeURIComponent(runId)}/cancel`;
-  const headers: Record<string, string> = { Accept: "application/json" };
-  if (options?.idempotencyKey) headers["Idempotency-Key"] = options.idempotencyKey;
-  if (options?.requestId) headers["X-Request-Id"] = options.requestId;
-  const res = await fetch(url, { method: "POST", credentials: "include", headers });
-  await throwOnError(res, url);
-  return commandResponseFrom(await parseJson(res));
-}
-
-/**
- * GET /bff/agora/research-runs/{run_id}/artifacts
- * List artifact and evidence refs produced by a research run.
- */
-export async function listResearchRunArtifacts(
-  runId: string,
-  baseUrl?: string,
-): Promise<string[]> {
-  const base = resolvedBase(baseUrl);
-  const url = `${base}/bff/agora/research-runs/${encodeURIComponent(runId)}/artifacts`;
-  const res = await fetch(url, {
-    method: "GET",
-    credentials: "include",
-    headers: { Accept: "application/json" },
-  });
-  await throwOnError(res, url);
-  return artifactRefsFrom(await parseJson(res));
+/** True for stale-ETag conflicts (HTTP 409/412). */
+export function isStaleEtagError(err: unknown): boolean {
+  return err instanceof BffError && (err.status === 409 || err.status === 412);
 }
