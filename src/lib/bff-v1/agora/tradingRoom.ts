@@ -203,6 +203,7 @@ export interface EvidenceRef {
 }
 
 export interface TradingDecisionEvent {
+  intent_ref?: string | null;
   spec_version: "1.0";
   decision_event_id: string;
   dedupe_key?: string;
@@ -307,6 +308,10 @@ export interface DecisionBody {
   decision: DecisionChoice;
   rationale?: string;
   modifications?: Record<string, unknown>;
+}
+
+export interface DecisionReceipt extends Record<string, unknown> {
+  intent_ref?: string | null;
 }
 
 export interface CreateTradingRoomWorkspaceProposalRequest {
@@ -1282,7 +1287,7 @@ export async function decideOnEvent(
   body: DecisionBody,
   options?: { ifMatch?: string; idempotencyKey?: string; requestId?: string },
   baseUrl?: string,
-): Promise<Record<string, unknown>> {
+): Promise<DecisionReceipt> {
   const base = resolvedBase(baseUrl);
   const url = `${base}/bff/agora/trading-room/decision-events/${encodeURIComponent(decisionEventId)}/decisions`;
   const headers: Record<string, string> = {

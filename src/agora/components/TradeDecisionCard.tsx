@@ -10,15 +10,19 @@
  * Confidence and probability are displayed as distinct fields per D2 spec.
  */
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   decideOnEvent,
   type TradingDecisionEvent,
   type DecisionChoice,
+  type DecisionBody,
 } from "@/lib/bff-v1/agora/tradingRoom";
 import { interaction } from "@/lib/bff-v1/agora/interaction";
 import { useAgoraWriteAccess } from "@/agora/useAgoraWriteAccess";
+
+import { getTradingIntent, submitTradingIntentHandoff, withdrawTradingIntent,
+  type TradingIntentDetail, type IntentStage } from "@/lib/bff-v1/agora/tradingIntents";
 
 function newUUID(): string {
   return crypto.randomUUID();
@@ -104,7 +108,11 @@ export interface TradeDecisionCardProps {
   onDecisionRecorded?: (choice: DecisionChoice, eventId: string) => void;
 }
 
-export function TradeDecisionCard({
+export function TradeDecisionCard(props: TradeDecisionCardProps): JSX.Element {
+  return <DecisionCardBody key={props.event.decision_event_id} {...props} />;
+}
+
+function DecisionCardBody({
   event,
   etag,
   onDecisionRecorded,
@@ -114,6 +122,8 @@ export function TradeDecisionCard({
   const [callState, setCallState] = useState<DecisionCallState>("idle");
   const [callError, setCallError] = useState<string | null>(null);
   const [decidedChoice, setDecidedChoice] = useState<DecisionChoice | null>(null);
+
+  const [intentRef, setIntentRef] = useState(event.intent_ref);
 
   // Consultation states
   const [showConsultPanel, setShowConsultPanel] = useState(false);
@@ -135,25 +145,29 @@ export function TradeDecisionCard({
   };
 
   const canDecide =
+    writeAccess.writeAllowed && !writeAccess.loading && !intentRef && !event.intent_ref &&
     callState !== "loading" &&
     callState !== "success" &&
     (event.state === "pending_review" ||
       event.state === "triggered" ||
       event.state === "approaching");
 
-  async function handleDecide(choice: DecisionChoice) {
+  async function handleDecide(choice: DecisionChoice, details: Omit<DecisionBody, "decision"> = {}) {
+    if (!canDecide) return;
     setCallState("loading");
     setCallError(null);
     try {
-      await decideOnEvent(
+      const receipt = await decideOnEvent(
         event.decision_event_id,
-        { decision: choice },
+        { decision: choice, ...details },
         {
           ifMatch: etag,
           idempotencyKey: newUUID(),
           requestId: newUUID(),
         },
       );
+      setIntentRef(receipt.intent_ref);
+      setShowModifyLinkage(false);
       setDecidedChoice(choice);
       setCallState("success");
       onDecisionRecorded?.(choice, event.decision_event_id);
@@ -518,9 +532,17 @@ export function TradeDecisionCard({
             color: "#38bdf8",
           }}
         >
-          Approve or Modify creates a governed TradingIntent via AG-BE-TR-002.
-          No order is placed. Canary/live promotion requires separate governance review.
+          確認執行或修改部位會建立受治理的交易意圖（TradingIntent）。不會下單。
+          僅可申請 Shadow 追蹤或紙上測試。
         </div>
+
+        {(intentRef || event.intent_ref) && (
+          <IntentStatus key={`${intentRef || event.intent_ref}:${writeAccess.actorId}`}
+            intentId={(intentRef || event.intent_ref)!} etag={etag} />
+        )}
+        {(!writeAccess.writeAllowed || writeAccess.loading) && (
+          <p role="status">{writeAccess.loading ? "正在確認寫入權限…" : writeAccess.writeDisabledReason}</p>
+        )}
 
         {/* Trader Decision Buttons */}
         <div
@@ -579,7 +601,7 @@ export function TradeDecisionCard({
                       fontWeight: choice === "approve" || choice === "reject" ? 600 : 400,
                     }}
                   >
-                    {choice.charAt(0).toUpperCase() + choice.slice(1)}
+                    {{ approve: "確認執行", modify: "修改部位", defer: "延後觀察", reject: "拒絕" }[choice]}
                   </button>
                 ),
               )}
@@ -870,32 +892,16 @@ export function TradeDecisionCard({
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
               <button
                 type="button"
-                disabled={callState === "loading" || !modifyProposalId.trim() || !modifyRationale.trim()}
+                disabled={!canDecide || !modifyProposalId.trim() || !modifyRationale.trim()}
                 onClick={async () => {
-                  setCallState("loading");
-                  setCallError(null);
-                  try {
-                    await decideOnEvent(
-                      ev.decision_event_id,
-                      {
-                        decision: "modify",
-                        rationale: modifyRationale,
-                        modifications: {
-                          proposal_id: modifyProposalId.trim(),
-                          proposal_revision: parseInt(modifyProposalRevision, 10) || 1,
-                          consultation_workshop_id: modifyWorkshopId.trim() || undefined,
-                        }
-                      },
-                      { ifMatch: etag, idempotencyKey: newUUID(), requestId: newUUID() }
-                    );
-                    setDecidedChoice("modify");
-                    setCallState("success");
-                    setShowModifyLinkage(false);
-                    onDecisionRecorded?.("modify", ev.decision_event_id);
-                  } catch (err) {
-                    setCallError(err instanceof Error ? err.message : "Modify failed");
-                    setCallState("error");
-                  }
+                  await handleDecide("modify", {
+                    rationale: modifyRationale,
+                    modifications: {
+                      proposal_id: modifyProposalId.trim(),
+                      proposal_revision: parseInt(modifyProposalRevision, 10) || 1,
+                      consultation_workshop_id: modifyWorkshopId.trim() || undefined,
+                    },
+                  });
                 }}
                 style={{
                   padding: "4px 12px",
@@ -924,4 +930,52 @@ export function TradeDecisionCard({
       </div>
     </div>
   );
+}
+
+function IntentStatus({ intentId, etag }: { intentId: string; etag?: string }) {
+  const access = useAgoraWriteAccess();
+  const [detail, setDetail] = useState<TradingIntentDetail | null>(null);
+  const [busy, setBusy] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [revision, setRevision] = useState(0);
+  useEffect(() => {
+    let active = true;
+    setBusy(true);
+    setDetail(null);
+    getTradingIntent(intentId).then((value) => {
+      if (active) { setDetail(value); setError(null); }
+    }).catch((err) => {
+      if (active) setError(err instanceof Error ? err.message : "無法讀取交易意圖");
+    }).finally(() => { if (active) setBusy(false); });
+    return () => { active = false; };
+  }, [intentId, revision]);
+  const writable = access.writeAllowed && !access.loading && !!access.actorId && !!etag && !busy;
+  async function act(stage: IntentStage | "withdraw") {
+    if (!writable || !detail || !(stage === "withdraw" ? detail.allowedActions.withdraw : detail.allowedActions.submit_handoff)) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const options = { ifMatch: etag!, idempotencyKey: newUUID(), requestId: newUUID() };
+      if (stage === "withdraw") await withdrawTradingIntent(intentId, options);
+      else await submitTradingIntentHandoff(detail.data, stage, access.actorId!, options);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "交易意圖操作失敗");
+      setBusy(false);
+      return;
+    }
+    setRevision((value) => value + 1);
+  }
+  const labels: Record<string, string> = { draft: "待送出", submitted: "已提交", withdrawn: "已撤回", accepted: "已接受", rejected: "已拒絕" };
+  return <section aria-label="交易意圖" style={{ color: "#c4ccda", fontSize: 12 }}>
+    <p>交易意圖：{intentId}</p>
+    <p role="status">{busy ? "讀取中…" : detail ? `狀態：${labels[detail.lifecycle_state] ?? detail.lifecycle_state}` : "狀態尚未確認"}</p>
+    {detail?.handoffs.map((handoff) => <p key={handoff.handoff_id}>
+      {handoff.requested_stage === "shadow" ? "Shadow" : handoff.requested_stage === "paper" ? "紙上測試" : handoff.requested_stage}：{labels[handoff.state] ?? handoff.state}
+    </p>)}
+    {error && <p role="alert">{error}</p>}
+    <button disabled={!writable || !detail?.allowedActions.submit_handoff} onClick={() => act("shadow")}>送 Shadow</button>{" "}
+    <button disabled={!writable || !detail?.allowedActions.submit_handoff} onClick={() => act("paper")}>申請紙上測試</button>{" "}
+    <button disabled={!writable || !detail?.allowedActions.withdraw} onClick={() => act("withdraw")}>撤回</button>{" "}
+    <button disabled={busy} onClick={() => setRevision((value) => value + 1)}>重新讀取狀態</button>
+  </section>;
 }
