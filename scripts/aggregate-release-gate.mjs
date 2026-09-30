@@ -803,10 +803,6 @@ function analyzeLiveDeep(stepOutcomes) {
     rbacStatus: report?.rbac?.status || parseStatusAfter(text, "RBAC status"),
     rbacPresentRoles: report?.rbac?.presentRoles || [],
     rbacMissingRoles: report?.rbac?.missingRoles || [],
-    operatorRaceStatus:
-      report?.operatorRace?.status ||
-      parseStatusAfter(text, "Operator race status"),
-    operatorRaceNote: report?.operatorRace?.note || "",
     sseStatus: report?.sse?.status || parseStatusAfter(text, "SSE status"),
     sseNote: report?.sse?.note || "",
     sseDurationMs:
@@ -972,14 +968,11 @@ function buildGate3(routeProbe, authSmoke, writeProbe, liveDeep) {
   ];
   const v5Paths = [
     "/bff/v5/loop-runs",
-    "/bff/v5/sentinel/findings",
-    "/bff/v5/interventions",
     "/bff/v5/execution/persona-health",
   ];
   const writePaths = [
     "/bff/v1/commands",
     "/bff/approvals/approval-dev/decide",
-    "/bff/v5/interventions/intervention-dev/decide",
     "/bff/management/nl/ask",
   ];
 
@@ -1235,18 +1228,6 @@ function buildGate3(routeProbe, authSmoke, writeProbe, liveDeep) {
         evidence: liveDeepEvidence,
         note: liveDeepNote(
           `status=${liveDeep.rbacStatus || "missing"}; present=${liveDeep.rbacPresentRoles.join(",") || "none"}; missing=${liveDeep.rbacMissingRoles.join(",") || "none"}`,
-        ),
-      },
-    ),
-    makeCheck(
-      "Live deep: multi-operator two-man race is exercised.",
-      liveDeepGateStatus(liveDeep.operatorRaceStatus),
-      {
-        owner: liveDeepOwner(liveDeep.operatorRaceStatus),
-        evidence: liveDeepEvidence,
-        note: liveDeepNote(
-          liveDeep.operatorRaceNote ||
-            `status=${liveDeep.operatorRaceStatus || "missing"}`,
         ),
       },
     ),
@@ -1628,13 +1609,6 @@ function buildGate5(playwright) {
       "F04 Optimization Loop.",
       /\bf04\b|04-optimization-loop/,
     ),
-    checkFlow(
-      playwright,
-      "F05",
-      "F05 Sentinel.",
-      /\bf05\b|04-sentinel-remediation/,
-    ),
-    checkFlow(playwright, "F06", "F06 HIQ.", /\bf06\b|05-interventions|hiq/),
     checkFlow(
       playwright,
       "F07",

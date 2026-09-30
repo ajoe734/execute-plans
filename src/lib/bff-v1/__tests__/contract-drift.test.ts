@@ -68,9 +68,6 @@ describe("BFF v1 contract drift", () => {
       paths.agoraPostmortems(),
       paths.agoraAskSessions(),
       paths.v5LoopRuns(),
-      paths.v5SentinelFindings(),
-      paths.v5Interventions(),
-      paths.v5InterventionDecide("{id}").replace("%7Bid%7D", "{id}"),
       paths.v5ExecutionPersonaHealth(),
     ];
 

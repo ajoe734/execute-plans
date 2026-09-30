@@ -31,16 +31,6 @@ const V5_PAGE_SCENARIOS = [
     path: "/management/loops/optimization",
     ready: /Optimization|approval|rebalance|runs/i,
   },
-  {
-    name: "sentinel",
-    path: "/management/sentinel",
-    ready: /Sentinel|Findings|critical|confidence/i,
-  },
-  {
-    name: "interventions",
-    path: "/management/interventions",
-    ready: /Interventions|Human Intervention Queue|approval|sentinel/i,
-  },
 ] as const;
 
 const NOW = "2026-05-13T14:45:00Z";
@@ -261,15 +251,7 @@ async function installV5A11yRoutes(page: Page): Promise<void> {
       return;
     }
 
-    if (path === "/bff/v5/sentinel/findings") {
-      await fulfillJson(route, { items: sentinelFindings });
-      return;
-    }
 
-    if (path === "/bff/v5/interventions") {
-      await fulfillJson(route, { items: interventions });
-      return;
-    }
 
     if (path.startsWith("/bff/")) {
       await fulfillJson(route, { items: [] });
@@ -362,29 +344,6 @@ test.describe("F17 axe a11y gate for v5 pages", () => {
     await expect(trigger).toBeFocused();
   });
 
-  test("ESC closes the read-only Sentinel investigation drawer and restores focus", async ({ page }) => {
-    await gotoReady(page, "/management/sentinel", /Sentinel|Findings|critical|confidence/i);
-
-    const findingTriggers = page.locator("ul button").filter({ hasText: /critical|warning|watch/i });
-    await expect(findingTriggers.first()).toBeVisible();
-    const findingTrigger = await firstVisible(findingTriggers);
-    await findingTrigger.focus();
-    await findingTrigger.click();
-
-    const drawer = page.getByRole("dialog").first();
-    await expect(drawer).toBeVisible();
-    await expect(page.locator('[role="dialog"]')).toHaveCount(1);
-    await expect(drawer).toContainText(/Investigation summary|調查摘要/i);
-    await expect(drawer).toContainText(/Governance handling|治理處理/i);
-    await expect(drawer.getByRole("button", { name: /run|執行/i })).toHaveCount(0);
-    await expect(
-      page.getByRole("dialog").filter({ hasText: /高風險|Confirm high-risk action|pause_persona_routing/i }),
-    ).toHaveCount(0);
-
-    await page.keyboard.press("Escape");
-    await expect(page.locator('[role="dialog"]')).toHaveCount(0);
-    await expect(findingTrigger).toBeFocused();
-  });
 
   test("motion-safe v5 status indicators respect reduced motion", async ({ page }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });

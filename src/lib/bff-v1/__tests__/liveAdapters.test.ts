@@ -6,7 +6,6 @@ import { liveStatus } from "@/lib/bff-v1/liveStatus";
 import { connectLiveSse, _resetLiveSse } from "@/lib/bff-v1/sse/liveSse";
 
 
-import { BffError } from "@/lib/bff-v1/errors";
 
 const realFetch = globalThis.fetch;
 const realEventSource = globalThis.EventSource;
