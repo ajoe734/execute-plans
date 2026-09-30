@@ -6,7 +6,6 @@ import { liveStatus } from "@/lib/bff-v1/liveStatus";
 import { connectLiveSse, _resetLiveSse } from "@/lib/bff-v1/sse/liveSse";
 
 
-import { BffError } from "@/lib/bff-v1/errors";
 
 const realFetch = globalThis.fetch;
 const realEventSource = globalThis.EventSource;
@@ -54,12 +53,6 @@ describe("BFF live read adapters", () => {
     expect(result.totalCountExact).toBe(true);
   });
 
-  it("strict v5 live mode throws instead of returning seeded mock data on transport failure", async () => {
-    globalThis.fetch = vi.fn().mockRejectedValue(new Error("ECONNREFUSED"));
-
-    await expect(bffV5.sentinel.list()).rejects.toBeInstanceOf(BffError);
-    expect(liveStatus.get().effective).toBe("mock");
-  });
 
 });
 

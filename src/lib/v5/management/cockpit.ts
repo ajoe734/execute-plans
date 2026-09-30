@@ -82,7 +82,6 @@ export function composeCockpit(seed: CockpitSeed): CockpitModel {
     fields: [
       { key: "autonomy", label: "Autonomy", value: seed.autonomy, tone: seed.autonomy === "manual" ? "warn" : "ok", href: "/management/governance-decisions?tab=policy" },
       { key: "humanPending", label: "Human pending", value: seed.humanPending, tone: seed.humanPending > 0 ? "warn" : "ok", href: "/management/human-inbox" },
-      { key: "critical", label: "Critical findings", value: seed.criticalFindings, tone: seed.criticalFindings > 0 ? "bad" : "ok", href: "/management/sentinel" },
       { key: "owners", label: "Persona owners", value: seed.personaOwners, href: "/management/personas" },
       { key: "personas", label: "Personas", value: seed.personas.length, href: "/management/persona-fleet" },
       { key: "broker", label: "Broker live", value: seed.brokerReady ? "ready" : "blocked", tone: seed.brokerReady ? "ok" : "bad", href: "/management/readiness/broker-live" },

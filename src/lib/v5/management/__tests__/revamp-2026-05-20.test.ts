@@ -15,9 +15,9 @@ import {
 import { paths } from "@/lib/bff-v1/paths";
 
 describe("PM-3 composeCockpit", () => {
-  it("produces 9 system-state fields, 10 loop nodes, 10 edges, OODA cells per persona", () => {
+  it("produces 8 system-state fields, 10 loop nodes, 10 edges, OODA cells per persona", () => {
     const m = composeCockpit(defaultCockpitSeed());
-    expect(m.strip.fields).toHaveLength(9);
+    expect(m.strip.fields).toHaveLength(8);
     expect(m.loopFlow.nodes).toHaveLength(10);
     expect(m.loopFlow.edges).toHaveLength(10);
     expect(m.matrix.phases).toEqual(OODA_PHASES);

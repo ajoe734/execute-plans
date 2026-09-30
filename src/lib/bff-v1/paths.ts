@@ -7,7 +7,6 @@
 //   - /bff/auth/refresh                      (was /bff/session/refresh)
 //   - /bff/logout                            (was /bff/session/logout)
 //   - /bff/approvals/{id}/decide             (was /bff/approvals/{id}/decision)
-//   - /bff/v5/interventions/{id}/decide      (was .../decision)
 //   - /bff/mcp-servers/{id}/import-tools     (new — replaces /bff/mcp-tools/import)
 //   - /bff/actions/{entityType}/{entityId}/{actionId} — canonical action endpoint
 //
@@ -139,14 +138,6 @@ export const paths = {
   // ---- v5 closed-loop ----
   v5LoopRuns: () => `${BASE}/v5/loop-runs`,
   v5LoopRun: (id: string) => `${BASE}/v5/loop-runs/${enc(id)}`,
-  v5SentinelFindings: () => `${BASE}/v5/sentinel/findings`,
-  v5SentinelFinding: (id: string) => `${BASE}/v5/sentinel/findings/${enc(id)}`,
-  v5SentinelFindingStatus: (id: string) => `${BASE}/v5/sentinel/findings/${enc(id)}/status`,
-  v5Interventions: () => `${BASE}/v5/interventions`,
-  v5Intervention: (id: string) => `${BASE}/v5/interventions/${enc(id)}`,
-  v5InterventionDecide: (id: string) => `${BASE}/v5/interventions/${enc(id)}/decide`,
-  /** @deprecated Alias of `v5InterventionDecide(id)`. */
-  v5InterventionDecision: (id: string) => `${BASE}/v5/interventions/${enc(id)}/decide`,
   v5ExecutionPersonaHealth: () => `${BASE}/v5/execution/persona-health`,
 
   // ---- 2026-07-29 Twelve Loop Gap Truth ----
