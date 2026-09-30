@@ -34,6 +34,8 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { useIsNarrowViewport } from "./responsive";
+import { useAgoraWriteAccess } from "./useAgoraWriteAccess";
+import { useServantStatus, type ServantStatusState } from "./useServantStatus";
 import "./responsive.css";
 
 // ─── Tab definitions ──────────────────────────────────────────────────────────
@@ -80,18 +82,60 @@ function tabFromPath(pathname: string): AgoraTab {
   return "trading-room";
 }
 
+// ─── Servant status ───────────────────────────────────────────────────────────
+
+const SERVANT_STATUS_LABEL: Record<string, string> = {
+  active: "運作中",
+  suspended: "已暫停",
+  paper_only: "僅模擬",
+  shadow_only: "僅影子",
+  retired: "已退役",
+};
+
+function servantStatusText(state: ServantStatusState): string {
+  if (state.kind === "loading") return "讀取中…";
+  if (state.kind === "missing") return "尚未建立";
+  if (state.kind === "error") return "狀態讀取失敗";
+  return SERVANT_STATUS_LABEL[state.servant.status] ?? state.servant.status;
+}
+
+function ServantProfileSummary({ state }: { state: ServantStatusState }) {
+  if (state.kind === "error") {
+    return (
+      <p className="text-xs text-[#f87171]" role="alert">
+        交易僕人狀態讀取失敗：{state.message}
+      </p>
+    );
+  }
+  if (state.kind !== "ready") {
+    return <p className="text-xs text-[#737d8e]">交易僕人：{servantStatusText(state)}</p>;
+  }
+  const { servant } = state;
+  return (
+    <div className="mb-3 flex flex-col gap-1 text-xs text-[#8c96a6]" data-testid="servant-profile">
+      <p className="text-sm font-medium text-[#f0ece4]">{servant.display_name}</p>
+      <p>狀態：{servantStatusText(state)}</p>
+      <p className="font-mono">{servant.persona_id}</p>
+      <p>政策：僅限模擬（paper-only）、不具執行權限（execution_authority: {servant.policy.execution_authority}）</p>
+    </div>
+  );
+}
+
 // ─── CommandBar ───────────────────────────────────────────────────────────────
 
 function CommandBar({
   drawerOpen,
   onToggleDrawer,
   triggerRef,
+  servant,
 }: {
   drawerOpen: boolean;
   onToggleDrawer: () => void;
   triggerRef: React.RefObject<HTMLButtonElement>;
+  servant: ReturnType<typeof useServantStatus>;
 }) {
   const { signOut } = useAuth();
+  const { interactionAllowed } = useAgoraWriteAccess();
   const [signingOut, setSigningOut] = useState(false);
 
   // AuthProvider.signOut clears local session state (so ProtectedRoute
@@ -135,8 +179,30 @@ function CommandBar({
         <span aria-hidden="true" className="h-3.5 w-3.5 select-none">
           {drawerOpen ? "✕" : "⚡"}
         </span>
-        Servant
+        交易僕人
       </button>
+      <span
+        className="text-xs text-[#8c96a6]"
+        data-testid="servant-status"
+        role={servant.state.kind === "error" ? "alert" : undefined}
+      >
+        {servantStatusText(servant.state)}
+      </span>
+      {servant.state.kind === "missing" && interactionAllowed && (
+        <button
+          className="inline-flex h-8 items-center rounded-md border border-[rgba(232,183,80,0.35)] px-2.5 text-xs font-medium text-[#e8b750] disabled:opacity-60"
+          disabled={servant.creating}
+          onClick={() => void servant.create()}
+          type="button"
+        >
+          建立交易僕人
+        </button>
+      )}
+      {servant.createError && (
+        <span className="text-xs text-[#f87171]" role="alert">
+          {servant.createError}
+        </span>
+      )}
       <button
         aria-label="Sign out"
         className="inline-flex h-8 items-center rounded-md border border-[#2a2e38] bg-transparent px-2.5 text-xs font-medium text-[#8c96a6] transition-colors hover:bg-[#171b22] hover:text-[#f0ece4] disabled:cursor-not-allowed disabled:opacity-60"
@@ -233,7 +299,9 @@ function ServantDrawer({
   isNarrow,
   onOpenChange,
   triggerRef,
+  servantState,
 }: {
+  servantState: ServantStatusState;
   open: boolean;
   workshopId?: string;
   isNarrow: boolean;
@@ -244,9 +312,10 @@ function ServantDrawer({
 
   const context = (
     <div className="flex-1 overflow-auto p-3" data-testid="servant-drawer-context">
+      <ServantProfileSummary state={servantState} />
       {!workshopId && (
         <p className="text-xs text-[#737d8e]">
-          Servant panel — open a strategy workshop session for contextual state.
+          交易僕人面板 — 開啟策略工坊工作階段以查看情境狀態。
         </p>
       )}
       {workshopId && contextState.status === "loading" && (
@@ -291,7 +360,7 @@ function ServantDrawer({
         >
           <div className="flex min-h-12 shrink-0 items-center border-b border-[#2a2e38] px-4 pr-14">
             <SheetTitle className="text-xs font-semibold uppercase tracking-wide text-[#e8b750]">
-              Servant
+              交易僕人
             </SheetTitle>
             <SheetDescription className="sr-only" id="servant-drawer-description">
               Contextual task, decision, and workshop status.
@@ -318,7 +387,7 @@ function ServantDrawer({
     >
       <div className="flex h-10 shrink-0 items-center border-b border-[#2a2e38] px-3">
         <span className="text-xs font-semibold uppercase tracking-wide text-[#e8b750]">
-          Servant
+          交易僕人
         </span>
         {workshopId && (
           <span className="ml-auto font-mono text-xs text-[#737d8e]">
@@ -390,6 +459,7 @@ export function TradingDeskLayout({ workshopId, className }: TradingDeskLayoutPr
   const isNarrow = useIsNarrowViewport();
   const drawerTriggerRef = useRef<HTMLButtonElement>(null);
   const mainRegionRef = useRef<HTMLDivElement>(null);
+  const servant = useServantStatus();
 
   useEffect(() => {
     const mainRegion = mainRegionRef.current;
@@ -426,6 +496,7 @@ export function TradingDeskLayout({ workshopId, className }: TradingDeskLayoutPr
       <CommandBar
         drawerOpen={drawerOpen}
         onToggleDrawer={() => setDrawerOpen((v) => !v)}
+        servant={servant}
         triggerRef={drawerTriggerRef}
       />
 
@@ -444,6 +515,7 @@ export function TradingDeskLayout({ workshopId, className }: TradingDeskLayoutPr
           isNarrow={isNarrow}
           onOpenChange={setDrawerOpen}
           open={drawerOpen}
+          servantState={servant.state}
           triggerRef={drawerTriggerRef}
           workshopId={servantWorkshopId}
         />
