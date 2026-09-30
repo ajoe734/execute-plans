@@ -204,6 +204,7 @@ export interface EvidenceRef {
 
 export interface TradingDecisionEvent {
   intent_ref?: string | null;
+  etag?: string;
   spec_version: "1.0";
   decision_event_id: string;
   dedupe_key?: string;
@@ -1017,7 +1018,7 @@ export async function getDecisionEvent(
     throw new Error(String(message));
   }
   const body = await parseJson(res);
-  return extractDecisionEvent(body);
+  return { ...extractDecisionEvent(body), etag: res.headers.get("ETag") ?? undefined };
 }
 
 /** Generate a Trading Room workspace proposal for a strategy version. */

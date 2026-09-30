@@ -19,7 +19,7 @@ import {
   type DecisionBody,
 } from "@/lib/bff-v1/agora/tradingRoom";
 import { interaction } from "@/lib/bff-v1/agora/interaction";
-import { useAgoraWriteAccess } from "@/agora/useAgoraWriteAccess";
+import { useAgoraWriteAccess, type AgoraWriteAccess } from "@/agora/useAgoraWriteAccess";
 
 import { getTradingIntent, submitTradingIntentHandoff, withdrawTradingIntent,
   type TradingIntentDetail, type IntentStage } from "@/lib/bff-v1/agora/tradingIntents";
@@ -109,7 +109,7 @@ export interface TradeDecisionCardProps {
 }
 
 export function TradeDecisionCard(props: TradeDecisionCardProps): JSX.Element {
-  return <DecisionCardBody key={props.event.decision_event_id} {...props} />;
+  return <DecisionCardBody key={props.event.decision_event_id} {...props} etag={props.event.etag ?? props.etag} />;
 }
 
 function DecisionCardBody({
@@ -145,7 +145,7 @@ function DecisionCardBody({
   };
 
   const canDecide =
-    writeAccess.writeAllowed && !writeAccess.loading && !intentRef && !event.intent_ref &&
+    writeAccess.writeAllowed && !writeAccess.loading && !!etag && !intentRef && !event.intent_ref &&
     callState !== "loading" &&
     callState !== "success" &&
     (event.state === "pending_review" ||
@@ -538,7 +538,7 @@ function DecisionCardBody({
 
         {(intentRef || event.intent_ref) && (
           <IntentStatus key={`${intentRef || event.intent_ref}:${writeAccess.actorId}`}
-            intentId={(intentRef || event.intent_ref)!} etag={etag} />
+            intentId={(intentRef || event.intent_ref)!} etag={etag} access={writeAccess} />
         )}
         {(!writeAccess.writeAllowed || writeAccess.loading) && (
           <p role="status">{writeAccess.loading ? "正在確認寫入權限…" : writeAccess.writeDisabledReason}</p>
@@ -932,8 +932,7 @@ function DecisionCardBody({
   );
 }
 
-function IntentStatus({ intentId, etag }: { intentId: string; etag?: string }) {
-  const access = useAgoraWriteAccess();
+function IntentStatus({ intentId, etag, access }: { intentId: string; etag?: string; access: AgoraWriteAccess }) {
   const [detail, setDetail] = useState<TradingIntentDetail | null>(null);
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState<string | null>(null);
