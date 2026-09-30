@@ -9,23 +9,16 @@ import {
   makeV5Event,
   type V5EventChannel,
   V5_EVENT_TOPIC,
-  deriveFindings,
   deriveLoopRuns,
   loopRunsByKind,
   adaptPersonaHealth,
   adaptStrategyHealth,
-  adaptApprovalToIntervention,
-  adaptFindingToIntervention,
-  adaptIncidentToIntervention,
-  buildRemediationAction,
-  findCatalogueEntry,
   type LoopRun,
   type SentinelFinding,
   type EvidenceRef,
   type InterventionItem,
   type PersonaExecutionHealth,
   type StrategyExecutionHealth,
-  type RemediationAction,
   type ControlRoomSummary,
   type V5SessionContext,
   type ControlRoomKpi,
@@ -38,23 +31,16 @@ export {
   makeV5Event,
   type V5EventChannel,
   V5_EVENT_TOPIC,
-  deriveFindings,
   deriveLoopRuns,
   loopRunsByKind,
   adaptPersonaHealth,
   adaptStrategyHealth,
-  adaptApprovalToIntervention,
-  adaptFindingToIntervention,
-  adaptIncidentToIntervention,
-  buildRemediationAction,
-  findCatalogueEntry,
   type LoopRun,
   type SentinelFinding,
   type EvidenceRef,
   type InterventionItem,
   type PersonaExecutionHealth,
   type StrategyExecutionHealth,
-  type RemediationAction,
   type ControlRoomSummary,
   type V5SessionContext,
   type ControlRoomKpi,
@@ -151,10 +137,6 @@ const firstManagementHref = (...values: unknown[]): string | undefined => {
   return undefined;
 };
 
-const itemsFrom = (body: unknown): unknown[] => {
-  return strictItemsFrom(body);
-};
-
 const isoFrom = (value: unknown, fallback = ""): string =>
   asString(value, fallback);
 
@@ -202,10 +184,6 @@ export function adaptBffIntervention(value: unknown, index = 0, fallbackIso = ""
     evidenceRefs: [{ kind: "approval", id }],
     modifyAllowed: true,
   };
-}
-
-export function adaptBffInterventionsResponse(body: unknown, fallbackIso = ""): V5ListResponse<InterventionItem> {
-  return v5List(itemsFrom(body).map((item, index) => adaptBffIntervention(item, index, fallbackIso)));
 }
 
 export function adaptLoopStatus(value: unknown): LoopRun["status"] {

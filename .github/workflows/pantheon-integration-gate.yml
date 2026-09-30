@@ -1239,9 +1239,7 @@ jobs:
             e2e/01-startup-session.spec.ts \
             e2e/02-control-room.spec.ts \
             e2e/03-execution-loop.spec.ts \
-            e2e/04-sentinel-remediation.spec.ts \
             e2e/04b-optimization-loop.spec.ts \
-            e2e/05-interventions.spec.ts \
             e2e/06-entity-registry.spec.ts \
             e2e/07-high-risk-confirm.spec.ts \
             e2e/08-create-intent.spec.ts \
@@ -1346,9 +1344,7 @@ jobs:
             e2e/01-startup-session.spec.ts \
             e2e/02-control-room.spec.ts \
             e2e/03-execution-loop.spec.ts \
-            e2e/04-sentinel-remediation.spec.ts \
             e2e/04b-optimization-loop.spec.ts \
-            e2e/05-interventions.spec.ts \
             e2e/06-entity-registry.spec.ts \
             e2e/07-high-risk-confirm.spec.ts \
             e2e/08-create-intent.spec.ts \

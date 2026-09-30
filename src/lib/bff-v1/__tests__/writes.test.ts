@@ -452,14 +452,6 @@ describe("VI-2 strict-live write gate never fakes a completed receipt", () => {
     ).rejects.toMatchObject({ name: "BffError", code: "FEATURE_DISABLED" });
   });
 
-  it("decideIntervention rejects in strict-live when writes are disabled", async () => {
-    process.env.VITE_BFF_FALLBACK = "strict";
-    liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
-
-    await expect(
-      writes.decideIntervention("iv_001", "approve", "intervention memo"),
-    ).rejects.toMatchObject({ name: "BffError", code: "FEATURE_DISABLED" });
-  });
 });
 
 describe("FE-RESEARCH-JOBS-ACTIONS-CLOSURE-001 writes and closure contracts", () => {

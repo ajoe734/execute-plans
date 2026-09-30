@@ -57,8 +57,6 @@ export const BASELINE_ROUTES = [
   { path: "/management/incidents", kind: "nav" },
   { path: "/management/jobs", kind: "nav" },
   { path: "/management/alerts", kind: "nav" },
-  { path: "/management/sentinel", kind: "nav" },
-  { path: "/management/interventions", kind: "nav" },
   { path: "/management/approvals", kind: "nav" },
   { path: "/management/governance", kind: "nav" },
   { path: "/management/governance/policies", kind: "nav" },

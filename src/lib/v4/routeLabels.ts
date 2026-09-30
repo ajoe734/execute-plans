@@ -55,8 +55,6 @@ export const ROUTE_LABELS: readonly RouteLabel[] = [
   { path: "/management/loops/research", i18nKey: "nav.loopResearch", parent: "/management/loops" },
   { path: "/management/loops/execution", i18nKey: "nav.loopExecution", subtitleKey: "v5.loops.execution.subtitle", parent: "/management/loops" },
   { path: "/management/loops/optimization", i18nKey: "nav.loopOptimization", parent: "/management/loops" },
-  { path: "/management/sentinel", i18nKey: "nav.sentinel", subtitleKey: "v5.sentinel.subtitle", parent: "/management" },
-  { path: "/management/interventions", i18nKey: "nav.interventions", subtitleKey: "v5.interventions.subtitle", parent: "/management" },
 
   // core management
   { path: "/management/strategies", i18nKey: "nav.strategyRegistry", parent: "/management" },

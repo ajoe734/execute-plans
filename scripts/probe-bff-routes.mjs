@@ -57,9 +57,6 @@ const routes = [
   { method: "POST", route: "/bff/assistant/provider/reauth", anonymousOnly: true },
 
   ["GET", "/bff/v5/loop-runs"],
-  ["GET", "/bff/v5/sentinel/findings"],
-  ["GET", "/bff/v5/interventions"],
-  ["POST", "/bff/v5/interventions/intervention-dev/decide"],
   ["GET", "/bff/v5/execution/persona-health"],
 ];
 
