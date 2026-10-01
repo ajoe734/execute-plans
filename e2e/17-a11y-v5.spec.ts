@@ -392,9 +392,12 @@ test.describe("F17 axe a11y gate for v5 pages", () => {
     const trigger = drawer.getByRole("button", { name: /^(Resolve|結案|解決)$/i });
     await trigger.focus();
     await trigger.press("Enter");
-    await expect(page.getByRole("dialog", { name: /高風險|high-risk/i })).toBeVisible();
+    const confirmation = page.getByRole("dialog", { name: /高風險|high-risk/i });
+    await expect(confirmation).toBeVisible();
+    // Radix mounts its keyboard/focus scope after the dialog becomes visible.
+    await expect(confirmation.locator("textarea")).toBeFocused();
     await page.keyboard.press("Escape");
-    await expect(page.getByRole("dialog", { name: /高風險|high-risk/i })).toHaveCount(0);
+    await expect(confirmation).toHaveCount(0);
     await expect(drawer).toBeVisible();
     await expect(trigger).toBeFocused();
     expect(writes).toEqual([]);

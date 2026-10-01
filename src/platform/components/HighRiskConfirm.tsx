@@ -202,6 +202,13 @@ export const HighRiskConfirm = ({
     <Dialog open={open} onOpenChange={(o) => { if (!o) reset(); onOpenChange(o); }}>
       <DialogContent
         className="max-w-xl"
+        onKeyDown={(event) => {
+          if (event.key !== "Escape" || event.defaultPrevented) return;
+          event.preventDefault();
+          event.stopPropagation();
+          reset();
+          onOpenChange(false);
+        }}
         onOpenAutoFocus={() => {
           returnFocusRef.current = document.activeElement instanceof HTMLElement
             ? document.activeElement : null;

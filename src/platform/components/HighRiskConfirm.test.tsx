@@ -1,8 +1,40 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { createEvent, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { HighRiskConfirm } from "./HighRiskConfirm";
 
 describe("HighRiskConfirm — repeat submit prevention and confirmation flow", () => {
+  it("cancels an unhandled Escape while the native dialog key listener is not registered", () => {
+    const addEventListener = document.addEventListener.bind(document);
+    const listenerRegistration = vi.spyOn(document, "addEventListener").mockImplementation((type, listener, options) => {
+      if (type !== "keydown") addEventListener(type, listener, options);
+    });
+    const onOpenChange = vi.fn();
+    const onConfirm = vi.fn();
+    try {
+      render(<HighRiskConfirm open onOpenChange={onOpenChange} onConfirm={onConfirm} />);
+    } finally {
+      listenerRegistration.mockRestore();
+    }
+    const memo = screen.getByRole("dialog").querySelector("textarea")!;
+    fireEvent.change(memo, { target: { value: "Cancelled incident review" } });
+    fireEvent.keyDown(memo, { key: "Escape" });
+    expect(onOpenChange).toHaveBeenCalledExactlyOnceWith(false);
+    expect(memo).toHaveValue("");
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
+
+  it("leaves an already handled Escape to its current owner", () => {
+    const onOpenChange = vi.fn();
+    const onConfirm = vi.fn();
+    render(<HighRiskConfirm open onOpenChange={onOpenChange} onConfirm={onConfirm} />);
+    const memo = screen.getByRole("dialog").querySelector("textarea")!;
+    const escape = createEvent.keyDown(memo, { key: "Escape" });
+    escape.preventDefault();
+    fireEvent(memo, escape);
+    expect(onOpenChange).not.toHaveBeenCalled();
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
+
   it("prevents multiple onConfirm calls during pending async submit", async () => {
     let resolveConfirm: () => void = () => {};
     const onConfirmPromise = new Promise<void>((resolve) => {
