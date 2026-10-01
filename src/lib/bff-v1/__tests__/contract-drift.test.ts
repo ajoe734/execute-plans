@@ -62,11 +62,7 @@ describe("BFF v1 contract drift", () => {
       paths.tools(),
       paths.rankingFormulas(),
       paths.sse(),
-      paths.agoraSignals(),
-      paths.agoraInbox(),
       paths.agoraJournal(),
-      paths.agoraPostmortems(),
-      paths.agoraAskSessions(),
       paths.v5LoopRuns(),
       paths.v5ExecutionPersonaHealth(),
     ];

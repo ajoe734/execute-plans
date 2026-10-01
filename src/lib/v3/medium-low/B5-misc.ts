@@ -4,43 +4,12 @@
 import type { LinkedEntityRef } from "./B5-shared";
 import type { LocaleCode, PersonaResponseLanguageMode } from "./B1-platform";
 
-// ───────── G69 — Agora session / message attachment + citation ─────────
-export interface AgoraMessageDTO {
-  id: string;
-  sessionId: string;
-  sender: LinkedEntityRef;
-  role: "user" | "persona" | "system" | "trainer";
-  content: string;
-  language: LocaleCode;
-  attachments: MessageAttachmentDTO[];
-  citations: InlineCitationDTO[];
-  annotations: MessageAnnotationDTO[];
-  createdAt: string;
-}
-
-export interface MessageAttachmentDTO {
-  id: string;
-  fileName: string;
-  mimeType: string;
-  sizeBytes: number;
-  storageUrl: string;
-  previewUrl?: string;
-}
-
 export interface InlineCitationDTO {
   id: string;
   label: string;
   ref: LinkedEntityRef;
   quote?: string;
   range?: { start: number; end: number };
-}
-
-export interface MessageAnnotationDTO {
-  id: string;
-  authorRef: LinkedEntityRef;
-  body: string;
-  range?: { start: number; end: number };
-  createdAt: string;
 }
 
 // ───────── G70 — Missing BFF endpoints ─────────

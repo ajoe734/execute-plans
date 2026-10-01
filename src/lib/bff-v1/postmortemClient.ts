@@ -1,12 +1,11 @@
 import { bffFetch } from "./client";
-import { paths } from "./paths";
 
 type UnknownRecord = Record<string, unknown>;
 
 export type PostmortemStatus = "draft" | "review" | "approved" | "published" | string;
 
 export interface PostmortemRecord {
-  /** DataTable identity, always projected from canonical postmortem_id. */
+  /** DataTable identity, projected from the canonical report_id (or legacy postmortem_id). */
   id: string;
   postmortem_id: string;
   incident_id: string;
@@ -98,9 +97,9 @@ function normalizeMeta(value: unknown): PostmortemResponseMeta {
 
 function normalizePostmortem(value: unknown, context: string): PostmortemRecord {
   const item = asRecord(value);
-  const postmortemId = asString(item.postmortem_id);
+  const postmortemId = asString(item.report_id) || asString(item.postmortem_id);
   if (!postmortemId) {
-    throw new Error(`${context} is missing canonical postmortem_id.`);
+    throw new Error(`${context} is missing canonical postmortem_id or report_id.`);
   }
 
   return {
@@ -135,7 +134,7 @@ function listItems(payload: unknown): unknown[] {
 export async function listPostmortems(): Promise<PostmortemListResult> {
   const response = await bffFetch<unknown>({
     method: "GET",
-    path: paths.agoraPostmortems(),
+    path: "/api/v1/postmortems",
   });
   const envelope = asRecord(response);
   return {

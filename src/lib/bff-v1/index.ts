@@ -34,7 +34,6 @@ export * from "./governance";
 export * from "./search";
 export * from "./writeOverlay";
 export * from "./evidenceOperations";
-export * from "./agora/agoraReads";
 export * from "./v5";
 export * from "./management";
 export * from "./managementConsoleReads";
