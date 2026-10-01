@@ -81,10 +81,6 @@
         "GET /bff/v5/control-room",
         "GET /bff/v5/loop-runs",
         "GET /bff/v5/loop-runs/{id}",
-        "GET /bff/v5/sentinel/findings",
-        "GET /bff/v5/sentinel/findings/{id}",
-        "GET /bff/v5/interventions",
-        "GET /bff/v5/interventions/{id}",
         "GET /bff/v5/execution/persona-health",
         "GET /bff/v5/execution/strategy-health"
       ],

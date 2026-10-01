@@ -6,14 +6,9 @@ import { capabilityMatches } from "@/lib/v4/roleCapabilities";
 
 const INTERACTION_ROLES = new Set([
   "admin",
-  "platform_admin",
   "operator",
-  "ops",
   "reviewer",
   "approver",
-  "research_lead",
-  "analyst",
-  "strategy_manager",
 ]);
 
 const INTERACTION_CAPABILITIES = [
@@ -48,7 +43,7 @@ export function interactionAccessReason(input: {
     return "Interaction writes are disabled by deployment policy or this session is not eligible for writes.";
   }
   if (!input.roles.some((role) => INTERACTION_ROLES.has(role.toLowerCase()))) {
-    return "Interaction requires an operator, reviewer, approver, research, or admin role.";
+    return "Interaction requires an operator, reviewer, approver, or admin role.";
   }
   if (!INTERACTION_CAPABILITIES.some((required) => capabilitiesAllow(input.agoraCapabilities, [required]))) {
     return "Interaction requires the Agora Workshop or Persona Interaction capability.";
