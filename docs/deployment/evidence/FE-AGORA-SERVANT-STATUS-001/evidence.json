@@ -1,0 +1,16 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "FE-AGORA-SERVANT-STATUS-001",
+  "owner": "Claude",
+  "reviewer": "Codex",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "summary": "Agora header shows the 交易僕人 status from GET /bff/agora/servant (尚未建立 on 404); operators create via one ensure call; servant client now uses shared bffFetch, no mock data or default status.",
+  "coverage": "servant.test.ts: configured BFF base URL, 404 -> null, 401/network errors throw, unknown status rejected, ensure headers and stable persona_id. useServantStatus.test.ts: ready/missing/error and create flow. TradingDeskLayout.test.tsx: missing/viewer/operator/ready/error header states and drawer profile with paper-only and no-execution policy.",
+  "validation": [
+    {"command": "npx vitest run src/agora src/routes src/lib/bff-v1", "exit_code": 0, "result": "78 files, 965 tests passed"},
+    {"command": "npm run typecheck:agora", "exit_code": 0},
+    {"command": "npm run typecheck", "exit_code": 0}
+  ],
+  "boundary": "Create button gated by useAgoraWriteAccess.interactionAllowed (operator/reviewer/approver/admin + writeGate); BFF authorization unchanged. No live writes performed."
+}
