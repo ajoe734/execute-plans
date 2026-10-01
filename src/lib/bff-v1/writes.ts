@@ -1135,7 +1135,8 @@ export async function deleteConfirmToken(
 
 // ---------- decideApproval ----------
 
-export type ApprovalDecision = "approve" | "reject" | "request_changes" | "escalate" | "freeze";
+// Owner votes are approve/reject only; request-changes is retired (410) and never a vote.
+export type ApprovalDecision = "approve" | "reject";
 
 export type ApprovalDecisionEnvelope = CommandResponse<{ approvalId: string; decision: ApprovalDecision }>;
 
@@ -1143,7 +1144,13 @@ export interface ApprovalDecisionOptions {
   correlationId?: string;
   idempotencyKey?: string;
   stageName?: string;
+  /** Owner version observed on the displayed approval; required, never defaulted. */
+  expectedVersion?: number;
 }
+
+// A retry of the same vote (id/decision/memo/stage/version) reuses its Idempotency-Key.
+// Cleared once the owner answers (accepted or 409), so changed content never reuses a key.
+const approvalAttemptKeys = new Map<string, string>();
 
 /**
  * Live path: POST /bff/approvals/{id}/decide.
@@ -1155,17 +1162,30 @@ export async function decideApproval(
   opts: ApprovalDecisionOptions = {},
 ): Promise<ApprovalDecisionEnvelope> {
   const correlationId = opts.correlationId ?? newCorrelationId();
-  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+  const version = opts.expectedVersion;
+  const attemptId = JSON.stringify([id, decision, memo, opts.stageName, version]);
+  const idempotencyKey = opts.idempotencyKey ?? approvalAttemptKeys.get(attemptId) ?? mintIdemKey();
 
   if (await liveWriteGated()) {
-    const data = await bffFetch<unknown>({
-      method: "POST",
-      path: paths.approvalDecide(id),
-      body: { decision, memo, stageName: opts.stageName },
-      idempotencyKey,
-      headers: { "X-Correlation-Id": correlationId },
-      mode: "live",
-    });
+    if (typeof version !== "number" || !Number.isSafeInteger(version) || version < 0) {
+      throw new Error(`Approval ${id} has no valid owner version; refresh before deciding.`);
+    }
+    approvalAttemptKeys.set(attemptId, idempotencyKey);
+    let data: unknown;
+    try {
+      data = await bffFetch<unknown>({
+        method: "POST",
+        path: paths.approvalDecide(id),
+        body: { decision, memo, stageName: opts.stageName, expected_version: version },
+        idempotencyKey,
+        headers: { "X-Correlation-Id": correlationId },
+        mode: "live",
+      });
+    } catch (err) {
+      if (err instanceof BffError && err.status === 409) approvalAttemptKeys.delete(attemptId);
+      throw err;
+    }
+    approvalAttemptKeys.delete(attemptId);
     const d = data as { approvalId?: string; decision?: ApprovalDecision };
     return { ok: true, data: { approvalId: d.approvalId ?? id, decision: d.decision ?? decision }, correlationId, idempotencyKey };
   }
@@ -1872,49 +1892,46 @@ export async function createApproval(
   refuseStrictLiveWrite(correlationId);
 }
 
+type ApprovalAliasOptions = RunActionOptions & { expectedVersion?: number };
+
 export async function approve(
   id: string,
   memo?: string,
-  opts: RunActionOptions = {},
+  opts: ApprovalAliasOptions = {},
 ): Promise<RunActionEnvelope> {
-  const correlationId = opts.correlationId ?? newCorrelationId();
-  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
   if (await liveWriteGated()) {
-    return decideApproval(id, "approve", memo ?? "approved", { ...opts, correlationId, idempotencyKey }) as unknown as RunActionEnvelope;
+    return decideApproval(id, "approve", memo ?? "approved", opts) as unknown as RunActionEnvelope;
   }
-  refuseStrictLiveWrite(correlationId);
+  refuseStrictLiveWrite(opts.correlationId ?? newCorrelationId());
 }
 
 export async function reject(
   id: string,
   memo?: string,
-  opts: RunActionOptions = {},
+  opts: ApprovalAliasOptions = {},
 ): Promise<RunActionEnvelope> {
-  const correlationId = opts.correlationId ?? newCorrelationId();
-  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
   if (await liveWriteGated()) {
-    return decideApproval(id, "reject", memo ?? "rejected", { ...opts, correlationId, idempotencyKey }) as unknown as RunActionEnvelope;
+    return decideApproval(id, "reject", memo ?? "rejected", opts) as unknown as RunActionEnvelope;
   }
-  refuseStrictLiveWrite(correlationId);
+  refuseStrictLiveWrite(opts.correlationId ?? newCorrelationId());
 }
 
+/** Each item carries the owner version it was displayed with; keys are per item. */
 export async function batchDecideApproval(
-  ids: string[],
-  decision: "approve" | "reject",
+  items: { id: string; version?: number }[],
+  decision: ApprovalDecision,
   memo: string,
   opts: RunActionOptions = {},
 ): Promise<{ ok: boolean; results: RunActionEnvelope[] }> {
-  const correlationId = opts.correlationId ?? newCorrelationId();
-  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
   if (await liveWriteGated()) {
     const results: RunActionEnvelope[] = [];
-    for (const id of ids) {
-      const res = await decideApproval(id, decision, memo, { ...opts, correlationId, idempotencyKey });
+    for (const { id, version } of items) {
+      const res = await decideApproval(id, decision, memo, { correlationId: opts.correlationId, expectedVersion: version });
       results.push(res as unknown as RunActionEnvelope);
     }
     return { ok: true, results };
   }
-  refuseStrictLiveWrite(correlationId);
+  refuseStrictLiveWrite(opts.correlationId ?? newCorrelationId());
 }
 
 export async function tickApprovalSla(

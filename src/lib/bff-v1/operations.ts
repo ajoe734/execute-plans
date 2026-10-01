@@ -75,12 +75,29 @@ export async function getIncident(id: string): Promise<Incident | undefined> {
   return strictLiveDetail<Incident>("incidents.get", paths.incident(id)).then(normalizeIncidentTimestampFields);
 }
 
+/** Single read-boundary projection of Governance owner fields into the display DTO. */
+export function normalizeApprovalFields<T>(raw: T | undefined): T | undefined {
+  if (!raw || typeof raw !== "object") return raw;
+  const r = raw as Record<string, unknown>;
+  if (r.decision_state === undefined && r.target_id === undefined) return raw;
+  const out = { ...r };
+  out.id ??= r.approval_id ?? r.decision_id;
+  out.kind ??= r.target_type;
+  out.subject ??= r.target_id;
+  out.requester ??= r.owner_user_id;
+  out.riskLevel ??= r.risk_level;
+  out.createdAt ??= r.created_at;
+  // pending / under_review stay pending; only a final owner state is approved/rejected.
+  out.state = r.decision_state === "approved" || r.decision_state === "rejected" ? r.decision_state : "pending";
+  return out as T;
+}
+
 export async function listApprovals(): Promise<ApprovalRequest[]> {
-  return strictLiveList("approvals.list", paths.approvals());
+  return strictLiveList<ApprovalRequest>("approvals.list", paths.approvals()).then((rows) => rows.map((r) => normalizeApprovalFields(r) as ApprovalRequest));
 }
 
 export async function getApproval(id: string): Promise<ApprovalRequest | undefined> {
-  return strictLiveDetail("approvals.get", paths.approval(id));
+  return strictLiveDetail<ApprovalRequest>("approvals.get", paths.approval(id)).then(normalizeApprovalFields);
 }
 
 export async function listAudit(): Promise<AuditEvent[]> {

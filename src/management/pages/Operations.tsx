@@ -19,6 +19,7 @@ import { toast } from "sonner";
 import { Field } from "./ObjectDetailLayout";
 import { AuditTimeline } from "@/platform/components/AuditTimeline";
 import { X } from "lucide-react";
+import { BffError } from "@/lib/bff-v1/errors";
 import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { getSharedQueryClient, queryKeys, resetSharedQueryClientForTests } from "@/lib/bff-v1/queryKeys";
 
@@ -341,7 +342,7 @@ export const IncidentsPage = () => {
 
 export const ApprovalsPage = () => {
   const t = useT();
-  const [rows, setRows] = useCachedOperationList<ApprovalRequest>(
+  const [rows, , refresh] = useCachedOperationList<ApprovalRequest>(
     "operations.approvals",
     asEntityListLoader<ApprovalRequest>(lists.approvals),
   );
@@ -352,15 +353,29 @@ export const ApprovalsPage = () => {
 
   const filtered = useMemo(() => filter === "all" ? rows : rows.filter((r) => r.state === "pending"), [rows, filter]);
 
-  const decide = async (id: string, state: ApprovalRequest["state"], memo?: string) => {
-    const decision = state === "approved" ? "approve" : state === "rejected" ? "reject" : null;
-    if (!decision) return;
-    const receipt = await bffWrites.decideApproval(id, decision, memo ?? "");
-    setRows((rs) => rs.map((r) => r.id === id ? { ...r, state } : r));
-    setActive((a) => a && a.id === id ? { ...a, state } : a);
-    toast.success(t("toast.approvalDecided", { id, state }), {
-      description: commandReceiptDescription(receipt),
-    });
+  // A vote is only a submission: final state comes from the owner readback, never the requested vote.
+  const decide = async (approval: ApprovalRequest, decision: "approve" | "reject", memo: string) => {
+    let receipt;
+    try {
+      receipt = await bffWrites.decideApproval(approval.id, decision, memo, { expectedVersion: approval.version });
+    } catch (err) {
+      if (err instanceof BffError && err.status === 409) {
+        await refresh().catch(() => undefined);
+        toast.error(t("governance.conflict", { defaultValue: "Approval changed on the owner; review the refreshed state and decide again." }));
+        setActive(null);
+        return;
+      }
+      throw err;
+    }
+    try {
+      await refresh();
+      toast.success(t("toast.approvalSubmitted", { id: approval.id, defaultValue: "Vote submitted for {{id}}" }), {
+        description: commandReceiptDescription(receipt),
+      });
+    } catch {
+      toast.warning(t("governance.readbackFailed", { defaultValue: "Vote submitted, but the owner state could not be read back. Reload to confirm." }));
+    }
+    setActive(null);
   };
 
   return (
@@ -440,7 +455,7 @@ export const ApprovalsPage = () => {
                 title={t("confirmDialog.approveTitle", { subject: active.subject })}
                 description={t("confirmDialog.approveDesc", { kind: active.kind })}
                 confirmToken="APPROVE"
-                onConfirm={() => decide(active.id, "approved")}
+                onConfirm={(memo) => decide(active, "approve", memo)}
               />
               <HighRiskConfirm
                 open={rejectOpen}
@@ -449,7 +464,7 @@ export const ApprovalsPage = () => {
                 description={t("confirmDialog.rejectDesc")}
                 confirmToken="REJECT"
                 destructive
-                onConfirm={() => decide(active.id, "rejected")}
+                onConfirm={(memo) => decide(active, "reject", memo)}
               />
             </>
           )}

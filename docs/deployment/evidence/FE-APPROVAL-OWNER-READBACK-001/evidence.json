@@ -1,0 +1,30 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "FE-APPROVAL-OWNER-READBACK-001",
+  "owner": "Claude",
+  "reviewer": "Codex2",
+  "target_repo": "ajoe734/execute-plans",
+  "merge_target": "dev",
+  "status": "ready-for-independent-exact-head-review",
+  "base_commit": "638c809b",
+  "production_net_lines": 21,
+  "local_validation": {
+    "typecheck": "tsc -p tsconfig.app.json --noEmit: exit 0",
+    "vitest": "runAction, writes, approval-readback, src/management/pages: 38 files / 322 tests passed",
+    "scope": "local isolated only; fixtures are not hosted owner evidence"
+  },
+  "covered": [
+    "expected_version transport from observed owner version (decideApproval, approve/reject/batch aliases)",
+    "missing/malformed version refused before any request; zero never substituted",
+    "same-attempt retry keeps Idempotency-Key and payload; 409 or changed content mints a new key",
+    "batch items use own version and distinct keys",
+    "operations.ts approval-readback projection preserves version and pending/under_review",
+    "pages no longer derive final state from the requested vote; readback after submit; 409 refresh without re-vote",
+    "Operations HighRiskConfirm passes exact memo",
+    "request_changes/escalate/freeze and named-stage UI removed; fixed mock evidence replaced by Not provided"
+  ],
+  "not_done": [
+    "No page-level Operations.test.tsx / e2e/12-approvals.spec.ts additions for modal flows (memo, 409 refresh, readback failure); covered at helper level only",
+    "Hosted acceptance remains external_wait; no SSH/VM access used"
+  ]
+}

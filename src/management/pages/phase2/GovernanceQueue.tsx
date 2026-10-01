@@ -169,21 +169,27 @@ export const GovernanceQueuePage = () => {
           destructive={batchDecision === "reject"}
           onConfirm={async (memo) => {
             if (!batchDecision) return;
-            try {
-              const results = await Promise.all(
-                selectedIds.map((id) => bffWrites.decideApproval(id, batchDecision, memo)),
-              );
+            // Sequential per-item votes, each with the version of that displayed row; unresolved
+            // items stay selectable. The queue is always re-read from the owner afterwards.
+            const results: Awaited<ReturnType<typeof bffWrites.decideApproval>>[] = [];
+            const failures: string[] = [];
+            for (const id of selectedIds) {
+              try {
+                results.push(await bffWrites.decideApproval(id, batchDecision, memo, { expectedVersion: rows.find((r) => r.id === id)?.version }));
+              } catch (err) {
+                failures.push(`${id}: ${err instanceof Error ? err.message : String(err)}`);
+              }
+            }
+            if (results.length > 0) {
               toast.success(t("governance.batch.done", { defaultValue: "{{n}} request(s) processed", n: results.length }), {
                 description: commandBatchReceiptDescription(results),
               });
-            } catch (err) {
-              toast.error(t("toast.failed", { defaultValue: "Action failed" }), {
-                description: err instanceof Error ? err.message : String(err),
-              });
-              return;
             }
-            setSelected(new Set());
-            await reload();
+            if (failures.length > 0) {
+              toast.error(t("toast.failed", { defaultValue: "Action failed" }), { description: failures.join("\n") });
+            }
+            setSelected(new Set(selectedIds.filter((id) => failures.some((f) => f.startsWith(`${id}:`)))));
+            await reload().catch(() => undefined);
           }}
         />
       </PageBody>
