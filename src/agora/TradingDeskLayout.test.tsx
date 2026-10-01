@@ -19,6 +19,28 @@ vi.mock("@/lib/auth/AuthProvider", () => ({
   useAuth: () => ({ signOut: authMocks.signOut }),
 }));
 
+const servantMocks = vi.hoisted(() => ({
+  status: vi.fn(),
+  create: vi.fn(),
+  access: vi.fn(),
+}));
+vi.mock("./useServantStatus", () => ({ useServantStatus: () => servantMocks.status() }));
+vi.mock("./useAgoraWriteAccess", () => ({ useAgoraWriteAccess: () => servantMocks.access() }));
+
+const servantProfile = {
+  persona_id: "persona-1",
+  display_name: "我的交易僕人",
+  status: "paper_only",
+  policy: { execution_authority: "none" },
+};
+
+function mockServant(state: unknown, interactionAllowed = false) {
+  servantMocks.status.mockReturnValue({ state, creating: false, createError: null, create: servantMocks.create });
+  servantMocks.access.mockReturnValue({ interactionAllowed });
+}
+
+beforeEach(() => mockServant({ kind: "ready", servant: servantProfile }));
+
 vi.mock("sonner", () => ({
   toast: { error: vi.fn(), success: vi.fn() },
 }));
@@ -181,7 +203,7 @@ describe("TradingDeskLayout", () => {
     trigger.focus();
     fireEvent.click(trigger);
 
-    const dialog = screen.getByRole("dialog", { name: "Servant" });
+    const dialog = screen.getByRole("dialog", { name: "交易僕人" });
     const mainRegion = screen.getByTestId("trading-desk-main").parentElement;
     expect(dialog).toBe(screen.getByTestId("trading-desk-servant-drawer"));
     expect(mainRegion?.hasAttribute("inert")).toBe(true);
@@ -213,7 +235,7 @@ describe("TradingDeskLayout", () => {
     renderTradingDesk("/agora/strategy-workshop");
     fireEvent.click(screen.getByRole("button", { name: /servant/i }));
     expect(screen.getByTestId("servant-drawer-context").textContent).toContain(
-      "open a strategy workshop session",
+      "開啟策略工坊工作階段",
     );
   });
 
@@ -256,7 +278,7 @@ describe("TradingDeskLayout", () => {
     fireEvent.click(screen.getByRole("button", { name: /servant/i }));
     expect(getWorkshop).not.toHaveBeenCalled();
     expect(screen.getByTestId("servant-drawer-context").textContent).toContain(
-      "open a strategy workshop session",
+      "開啟策略工坊工作階段",
     );
   });
 
@@ -323,5 +345,44 @@ describe("TradingDeskLayout", () => {
       });
       expect(toast.error).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe("TradingDeskLayout servant status", () => {
+  it("shows 尚未建立 when the servant does not exist, without a create button for viewers", () => {
+    mockServant({ kind: "missing" }, false);
+    renderTradingDesk();
+    expect(screen.getByTestId("servant-status").textContent).toBe("尚未建立");
+    expect(screen.queryByRole("button", { name: "建立交易僕人" })).toBeNull();
+  });
+
+  it("lets an operator create the servant with one ensure call", () => {
+    mockServant({ kind: "missing" }, true);
+    renderTradingDesk();
+    fireEvent.click(screen.getByRole("button", { name: "建立交易僕人" }));
+    expect(servantMocks.create).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the header status and no create button once the servant exists", () => {
+    renderTradingDesk();
+    expect(screen.getByTestId("servant-status").textContent).toBe("僅模擬");
+    expect(screen.queryByRole("button", { name: "建立交易僕人" })).toBeNull();
+  });
+
+  it("shows read errors as errors", () => {
+    mockServant({ kind: "error", message: "boom" }, true);
+    renderTradingDesk();
+    expect(screen.getByRole("alert").textContent).toBe("狀態讀取失敗");
+    expect(screen.queryByRole("button", { name: "建立交易僕人" })).toBeNull();
+  });
+
+  it("shows the profile with paper-only and no-execution policy in the drawer", () => {
+    renderTradingDesk();
+    fireEvent.click(screen.getByRole("button", { name: /servant/i }));
+    const profile = screen.getByTestId("servant-profile").textContent ?? "";
+    expect(profile).toContain("我的交易僕人");
+    expect(profile).toContain("persona-1");
+    expect(profile).toContain("paper-only");
+    expect(profile).toContain("execution_authority: none");
   });
 });

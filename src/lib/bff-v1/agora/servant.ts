@@ -1,12 +1,13 @@
 // BFF client for agora.servant.v1 capability.
-// Routes: /bff/agora/servant/ensure (POST).
+// Routes: /bff/agora/servant (GET), /bff/agora/servant/ensure (POST).
+// Strict live: errors surface as errors; never mock data or a default status.
 // Schema: servant_profile.schema.json.
 // The browser must never submit another user's identity; tenant_id and
 // agora_user_id are always derived server-side from the authenticated subject.
 
 import type { AgoraCapability, AgoraServantPolicy } from "./identity";
 import { bffFetch } from "../client";
-import { liveStatus } from "../liveStatus";
+import { BffError, makeBffError } from "../errors";
 
 export type ServantStatus = "active" | "suspended" | "paper_only" | "shadow_only" | "retired";
 
@@ -45,46 +46,6 @@ export interface ServantEnsureRequest {
   timezone?: string;
 }
 
-export class AgoraServantError extends Error {
-  readonly status: number;
-  constructor(message: string, status: number) {
-    super(message);
-    this.name = "AgoraServantError";
-    this.status = status;
-  }
-}
-
-function resolvedBase(baseUrl?: string): string {
-  if (baseUrl) return baseUrl.replace(/\/+$/, "");
-  if (typeof window !== "undefined" && window.location?.origin) {
-    return window.location.origin.replace(/\/+$/, "");
-  }
-  return "";
-}
-
-async function parseBody(res: Response): Promise<unknown> {
-  const text = await res.text();
-  if (!text) return {};
-  try {
-    return JSON.parse(text);
-  } catch {
-    return { error: { message: text } };
-  }
-}
-
-function errorMessage(body: unknown, status: number): string {
-  if (body && typeof body === "object") {
-    const b = body as Record<string, unknown>;
-    const err = b.error;
-    if (err && typeof err === "object") {
-      const e = err as Record<string, unknown>;
-      if (typeof e.message === "string") return e.message;
-      if (typeof e.code === "string") return e.code;
-    }
-  }
-  return `BFF responded with HTTP ${status}`;
-}
-
 function normalizeCapabilitySummary(raw: unknown): ServantCapabilitySummary {
   const r = (raw && typeof raw === "object" && !Array.isArray(raw)
     ? raw
@@ -120,6 +81,14 @@ function normalizePolicy(raw: unknown): AgoraServantPolicy {
   };
 }
 
+const SERVANT_STATUSES: readonly ServantStatus[] = [
+  "active",
+  "suspended",
+  "paper_only",
+  "shadow_only",
+  "retired",
+];
+
 function normalizeServantProfile(raw: unknown): ServantProfile {
   const outer = (raw && typeof raw === "object" && !Array.isArray(raw)
     ? raw
@@ -128,22 +97,18 @@ function normalizeServantProfile(raw: unknown): ServantProfile {
     ? outer.data
     : outer) as Record<string, unknown>;
 
-  const VALID_STATUSES: ServantStatus[] = [
-    "active",
-    "suspended",
-    "paper_only",
-    "shadow_only",
-    "retired",
-  ];
-  const rawStatus = String(r.status ?? "");
-  const status: ServantStatus = (VALID_STATUSES.includes(rawStatus as ServantStatus)
-    ? rawStatus
-    : "active") as ServantStatus;
+  const status = r.status as ServantStatus;
+  if (!SERVANT_STATUSES.includes(status) || typeof r.persona_id !== "string" || !r.persona_id) {
+    throw makeBffError({
+      code: "UNKNOWN_ERROR",
+      message: "Servant response is missing persona_id or has an unknown status",
+    });
+  }
 
   return {
     spec_version: "1.0",
-    persona_id: String(r.persona_id ?? ""),
-    display_name: String(r.display_name ?? "Servant"),
+    persona_id: r.persona_id,
+    display_name: String(r.display_name ?? "交易僕人"),
     status,
     tenant_id: String(r.tenant_id ?? ""),
     agora_user_id: String(r.agora_user_id ?? ""),
@@ -164,90 +129,28 @@ function normalizeServantProfile(raw: unknown): ServantProfile {
   };
 }
 
-const MOCK_SERVANT: ServantProfile = {
-  spec_version: "1.0",
-  persona_id: "mock-servant",
-  display_name: "Agora Servant (mock)",
-  status: "active",
-  tenant_id: "mock-tenant",
-  agora_user_id: "mock-user",
-  persona_class: "agora_servant",
-  owner_scope: "user_private",
-  visibility_scope: "private",
-  memory_scope: "private_user",
-  capability_summary: { can_ask: true, can_research: false, can_workshop: false },
-  policy: {
-    persona_class: "agora_servant",
-    owner_scope: "user_private",
-    visibility_scope: "private",
-    memory_scope: "private_user",
-    persona_registry_backed: true,
-    execution_authority: "none",
-    prohibited_authority: ["runtime_binding", "broker_order", "capital_binding"],
-  },
-};
-
-async function ensureWithLiveStatus(): Promise<ServantProfile> {
-  if (liveStatus.get().mode !== "live") return MOCK_SERVANT;
-  const data = await bffFetch<unknown>({
-    method: "POST",
-    path: "/bff/agora/servant/ensure",
-    body: {},
-    mode: "live",
-  });
-  return normalizeServantProfile(data);
-}
-
-export const agoraServantClient = { ensure: ensureWithLiveStatus } as const;
-
-/**
- * GET /bff/agora/servant — get the current user's servant profile.
- * Returns null when the servant is not yet provisioned (HTTP 404).
- * Throws AgoraServantError on all other non-2xx responses.
- */
-export async function getServant(baseUrl?: string): Promise<ServantProfile | null> {
-  const base = resolvedBase(baseUrl);
-  const url = `${base}/bff/agora/servant`;
-
-  const res = await fetch(url, {
-    method: "GET",
-    credentials: "include",
-    headers: { Accept: "application/json" },
-  });
-
-  if (res.status === 404) return null;
-
-  const body = await parseBody(res);
-  if (!res.ok) throw new AgoraServantError(errorMessage(body, res.status), res.status);
-  return normalizeServantProfile(body);
+/** GET /bff/agora/servant — null when the servant is not yet created (404). */
+export async function getServant(): Promise<ServantProfile | null> {
+  try {
+    return normalizeServantProfile(
+      await bffFetch<unknown>({ method: "GET", path: "/bff/agora/servant" }),
+    );
+  } catch (err) {
+    if (err instanceof BffError && err.status === 404) return null;
+    throw err;
+  }
 }
 
 /**
- * POST /bff/agora/servant/ensure — provision or reconcile the current user's servant.
- * The BFF derives tenant_id and agora_user_id from the authenticated subject.
- * Requires a client-generated UUID idempotency key.
+ * POST /bff/agora/servant/ensure — idempotent create. bffFetch supplies
+ * Idempotency-Key and X-Request-Id; tenant/user are derived server-side.
  */
-export async function ensureServant(
-  idempotencyKey: string,
-  request: ServantEnsureRequest,
-  baseUrl?: string,
-): Promise<ServantProfile> {
-  const base = resolvedBase(baseUrl);
-  const url = `${base}/bff/agora/servant/ensure`;
-
-  const res = await fetch(url, {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/json",
-      "Idempotency-Key": idempotencyKey,
-      "X-Request-Id": crypto.randomUUID(),
-    },
-    body: JSON.stringify(request),
-  });
-
-  const body = await parseBody(res);
-  if (!res.ok) throw new AgoraServantError(errorMessage(body, res.status), res.status);
-  return normalizeServantProfile(body);
+export async function ensureServant(request: ServantEnsureRequest = {}): Promise<ServantProfile> {
+  return normalizeServantProfile(
+    await bffFetch<unknown>({
+      method: "POST",
+      path: "/bff/agora/servant/ensure",
+      body: request,
+    }),
+  );
 }
