@@ -10,7 +10,7 @@
   "production_net_lines": 21,
   "local_validation": {
     "typecheck": "tsc -p tsconfig.app.json --noEmit: exit 0",
-    "vitest": "runAction, writes, approval-readback, src/management/pages: 38 files / 322 tests passed",
+    "vitest": "68 files / 543 tests passed (src/management/pages + src/lib/bff-v1/__tests__)",
     "scope": "local isolated only; fixtures are not hosted owner evidence"
   },
   "covered": [

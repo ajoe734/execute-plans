@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { normalizeApprovalFields } from "@/lib/bff-v1/operations";
-import type { ApprovalRequest } from "@/lib/bff-v1";
+const n = (r: object) => normalizeApprovalFields(r) as unknown as Record<string, unknown>;
 
 const owner = {
   id: "gov_1",
@@ -15,19 +15,19 @@ const owner = {
 
 describe("normalizeApprovalFields (Governance owner readback)", () => {
   it("projects owner fields and preserves the real version", () => {
-    const a = normalizeApprovalFields(owner) as ApprovalRequest;
+    const a = n(owner);
     expect(a).toMatchObject({ id: "gov_1", kind: "Strategy", subject: "stg_9", requester: "u_owner", riskLevel: "high", createdAt: owner.created_at, state: "pending", version: 4 });
   });
 
   it("keeps under_review pending and only maps final owner states", () => {
-    expect(normalizeApprovalFields({ ...owner, decision_state: "under_review" })!.state).toBe("pending");
-    expect(normalizeApprovalFields({ ...owner, decision_state: "approved" })!.state).toBe("approved");
-    expect(normalizeApprovalFields({ ...owner, decision_state: "rejected" })!.state).toBe("rejected");
+    expect(n({ ...owner, decision_state: "under_review" }).state).toBe("pending");
+    expect(n({ ...owner, decision_state: "approved" }).state).toBe("approved");
+    expect(n({ ...owner, decision_state: "rejected" }).state).toBe("rejected");
   });
 
   it("never invents a version for legacy/unversioned records", () => {
     const { version: _v, ...legacy } = owner;
-    expect(normalizeApprovalFields(legacy)).not.toHaveProperty("version");
+    expect(n(legacy)).not.toHaveProperty("version");
   });
 
   it("passes already-display-shaped records through untouched", () => {

@@ -20,7 +20,7 @@ import {
 } from "./eventTimestamps";
 import { normalizeCapitalPool } from "./capitalPools";
 import { normalizeBaseObjectFields } from "./domainReads";
-import { normalizeApprovalFields, normalizeJobFields } from "./operations";
+import { normalizeJobFields } from "./operations";
 
 /**
  * Pack D D22 list-class taxonomy. Drives `totalCountExact` + whether
@@ -392,7 +392,7 @@ export const lists = {
   runtimes:        strictLiveRuntimeListLoader(paths.runtimes(),    LIST_CLASS_BY_KEY.runtimes),
   alerts:          strictLiveAlertListLoader(paths.alerts(),        LIST_CLASS_BY_KEY.alerts),
   incidents:       strictLiveIncidentListLoader(paths.incidents(),  LIST_CLASS_BY_KEY.incidents),
-  approvals:       strictLiveListLoader(paths.approvals(),          LIST_CLASS_BY_KEY.approvals, (r) => normalizeApprovalFields(normalizeBaseObjectFields(r))),
+  approvals:       strictLiveListLoader(paths.approvals(),          LIST_CLASS_BY_KEY.approvals, normalizeBaseObjectFields),
   audit:           strictLiveListLoader(paths.audit(),              LIST_CLASS_BY_KEY.audit, normalizeBaseObjectFields),
 } as const satisfies Record<string, () => Promise<ListEnvelope<unknown>>>;
 

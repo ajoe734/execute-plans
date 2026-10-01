@@ -20,6 +20,7 @@ import { Field } from "./ObjectDetailLayout";
 import { AuditTimeline } from "@/platform/components/AuditTimeline";
 import { X } from "lucide-react";
 import { BffError } from "@/lib/bff-v1/errors";
+import { normalizeApprovalFields } from "@/lib/bff-v1/operations";
 import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { getSharedQueryClient, queryKeys, resetSharedQueryClientForTests } from "@/lib/bff-v1/queryKeys";
 
@@ -344,7 +345,7 @@ export const ApprovalsPage = () => {
   const t = useT();
   const [rows, , refresh] = useCachedOperationList<ApprovalRequest>(
     "operations.approvals",
-    asEntityListLoader<ApprovalRequest>(lists.approvals),
+    () => lists.approvals().then((r) => ({ items: r.items.map((a) => normalizeApprovalFields(a) as ApprovalRequest) })),
   );
   const [active, setActive] = useState<ApprovalRequest | null>(null);
   const [approveOpen, setApproveOpen] = useState(false);
