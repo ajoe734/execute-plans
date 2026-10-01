@@ -113,7 +113,7 @@ export function useCachedOperationList<T>(
   }, [qc, queryKey]);
 
   const refresh = useCallback(async () => {
-    await qc.refetchQueries({ queryKey });
+    await qc.refetchQueries({ queryKey }, { throwOnError: true });
   }, [qc, queryKey]);
 
   return [rows, setRows, refresh];
@@ -361,11 +361,15 @@ export const ApprovalsPage = () => {
       receipt = await bffWrites.decideApproval(approval.id, decision, memo, { expectedVersion: approval.version });
     } catch (err) {
       if (err instanceof BffError && err.status === 409) {
-        await refresh().catch(() => undefined);
-        toast.error(t("governance.conflict", { defaultValue: "Approval changed on the owner; review the refreshed state and decide again." }));
+        const fresh = await refresh().then(() => true, () => false);
+        toast.error(fresh
+          ? t("governance.conflict", { defaultValue: "Approval changed on the owner; review the refreshed state and decide again." })
+          : t("governance.conflictReadbackFailed", { defaultValue: "Approval changed on the owner and could not be refreshed. Reload before deciding again." }));
         setActive(null);
         return;
       }
+      // Keep the sheet and modal memo: a retry re-sends the same version, memo and key.
+      toast.error(err instanceof Error ? err.message : String(err));
       throw err;
     }
     try {

@@ -58,6 +58,7 @@ type ApprovalDto = {
   riskLevel: "low" | "medium" | "high" | "critical";
   state: ApprovalState;
   status: ApprovalState;
+  version: number;
   subject: string;
   target_id: string;
   target_type: string;
@@ -291,6 +292,16 @@ class ApprovalHarness {
   ): Promise<void> {
     const body = await this.recordRequest(req, path);
     const decision = stringField(body.decision) === "reject" ? "reject" : "approve";
+    // Owner CAS contract: the vote must carry the version the caller observed.
+    const expected = body.expected_version;
+    if (typeof expected !== "number") {
+      this.fulfillJson(res, 422, { detail: { error: { code: "VALIDATION_FAILED", message: "expected_version required" } } });
+      return;
+    }
+    if (this.approvals.get(approvalId) && this.approvals.get(approvalId)?.version !== expected) {
+      this.fulfillJson(res, 409, { detail: { error: { code: "CONFLICT", message: "stale expected_version" } } });
+      return;
+    }
     const approval = this.applyDecision(approvalId, decision, {
       actor: OPERATOR_ID,
       correlationId: stringField(body.correlationId) || "corr-f12-single",
@@ -444,6 +455,7 @@ class ApprovalHarness {
     }
     refreshApprovalState(approval);
     if (decision === "reject") approval.state = "rejected";
+    approval.version += 1;
     this.audit.push({
       action: `approval.${decision}`,
       actor: options.actor,
@@ -603,6 +615,7 @@ function makeApproval(args: {
     riskLevel: args.riskLevel,
     state: "pending",
     status: "pending",
+    version: 1,
     stages: args.stages,
     subject: args.subject,
     target_id: args.targetId,
@@ -830,6 +843,7 @@ async function installApprovalQueue(page: Page, baseUrl: string): Promise<void> 
         const result = await postJson(`/bff/approvals/${id}/decide`, {
           correlationId: `corr-f12-${id}-decide`,
           decision,
+          expected_version: state.rows.find((row) => row.id === id)?.version,
           memo: `F12 ${decision}`,
         });
         if (result.status < 300) {
@@ -994,6 +1008,27 @@ test.describe("F12 approval governance", () => {
       path: `/bff/approvals/${SINGLE_APPROVAL_ID}/decide`,
     });
     expect(harness.requests[0].idempotencyKey).toMatch(/^f12-/);
+  });
+
+  test("decide is bound to the observed owner version", async ({ page }) => {
+    await installApprovalQueue(page, harness.baseUrl);
+
+    const first = await decideApproval(page, SINGLE_APPROVAL_ID, "approve");
+    expect(first.status, JSON.stringify(first.body)).toBe(202);
+    expect(harness.requests[0].body).toMatchObject({ expected_version: 1, memo: "F12 approve" });
+    expect(harness.approval(SINGLE_APPROVAL_ID).version).toBe(2);
+
+    const stale = await page.evaluate(async ({ url, auth, id }) => {
+      const r = await fetch(`${url}/bff/approvals/${id}/decide`, {
+        body: JSON.stringify({ decision: "reject", expected_version: 1, memo: "stale" }),
+        headers: { Authorization: auth, "Content-Type": "application/json" },
+        method: "POST",
+      });
+      return r.status;
+    }, { url: harness.baseUrl, auth: AUTH_HEADER, id: SINGLE_APPROVAL_ID });
+    expect(stale).toBe(409);
+    expect(harness.approval(SINGLE_APPROVAL_ID).state).toBe("approved");
+    expect(harness.audit).toHaveLength(1);
   });
 
   test("two-man sign enforces distinct signer and shows quorum progress", async ({

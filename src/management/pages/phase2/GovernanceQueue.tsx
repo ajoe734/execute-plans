@@ -1,7 +1,7 @@
 import { bffV1 } from "@/lib/bff-v1";
 // Governance Queue — Spec Part 3 §9.6.
 // Phase 17 — adds batch approve/reject + per-row stage progress preview.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { Card } from "@/components/ui/card";
@@ -17,6 +17,7 @@ import { useT } from "@/platform/hooks";
 import { SlaCountdown } from "@/platform/components/SlaCountdown";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
 import { toast } from "sonner";
+import { BffError } from "@/lib/bff-v1/errors";
 import { QUORUM_POLICIES, type QuorumRiskClass } from "@/lib/v4/reviewerQuorum";
 import { safeDateTime } from "@/lib/utils";
 
@@ -39,6 +40,7 @@ export const GovernanceQueuePage = () => {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [batchDecision, setBatchDecision] = useState<"approve" | "reject" | null>(null);
 
+  const unresolved = useRef(new Map<string, number>());
   const reload = () => bffV1.approvals.list().then(setRows);
   useEffect(() => { reload(); }, []);
 
@@ -169,27 +171,46 @@ export const GovernanceQueuePage = () => {
           destructive={batchDecision === "reject"}
           onConfirm={async (memo) => {
             if (!batchDecision) return;
-            // Sequential per-item votes, each with the version of that displayed row; unresolved
-            // items stay selectable. The queue is always re-read from the owner afterwards.
+            // Sequential per-item votes, each with the version of that displayed row. An item
+            // whose outcome is unknown (non-409 failure) keeps its original version so the retry
+            // is the same attempt (same memo/version => same Idempotency-Key) even after a reload.
+            const ids = [...new Set([...selectedIds, ...unresolved.current.keys()])];
             const results: Awaited<ReturnType<typeof bffWrites.decideApproval>>[] = [];
             const failures: string[] = [];
-            for (const id of selectedIds) {
+            const conflicts: string[] = [];
+            for (const id of ids) {
+              const version = unresolved.current.get(id) ?? rows.find((r) => r.id === id)?.version;
               try {
-                results.push(await bffWrites.decideApproval(id, batchDecision, memo, { expectedVersion: rows.find((r) => r.id === id)?.version }));
+                results.push(await bffWrites.decideApproval(id, batchDecision, memo, { expectedVersion: version }));
+                unresolved.current.delete(id);
               } catch (err) {
-                failures.push(`${id}: ${err instanceof Error ? err.message : String(err)}`);
+                if (err instanceof BffError && err.status === 409) {
+                  unresolved.current.delete(id);
+                  conflicts.push(id);
+                } else {
+                  if (typeof version === "number") unresolved.current.set(id, version);
+                  failures.push(`${id}: ${err instanceof Error ? err.message : String(err)}`);
+                }
               }
             }
+            setSelected(new Set(unresolved.current.keys()));
+            const fresh = await reload().then(() => true, () => false);
             if (results.length > 0) {
-              toast.success(t("governance.batch.done", { defaultValue: "{{n}} request(s) processed", n: results.length }), {
+              toast.success(t("governance.batch.done", { defaultValue: "{{n}} vote(s) submitted", n: results.length }), {
                 description: commandBatchReceiptDescription(results),
               });
             }
+            if (conflicts.length > 0) {
+              toast.error(t("governance.conflict", { defaultValue: "Approval changed on the owner; review the refreshed state and decide again." }), { description: conflicts.join("\n") });
+            }
+            if (!fresh) {
+              toast.warning(t("governance.readbackFailed", { defaultValue: "Vote submitted, but the owner state could not be read back. Reload to confirm." }));
+            }
             if (failures.length > 0) {
               toast.error(t("toast.failed", { defaultValue: "Action failed" }), { description: failures.join("\n") });
+              // Keep the modal and memo open so retrying re-sends the unresolved attempts unchanged.
+              throw new Error(failures.join("; "));
             }
-            setSelected(new Set(selectedIds.filter((id) => failures.some((f) => f.startsWith(`${id}:`)))));
-            await reload().catch(() => undefined);
           }}
         />
       </PageBody>

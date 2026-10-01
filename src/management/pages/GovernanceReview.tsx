@@ -65,15 +65,19 @@ export const GovernanceReview = () => {
       receipt = await bffWrites.decideApproval(req.id, d, memo, { expectedVersion: req.version });
     } catch (err) {
       if (err instanceof BffError && err.status === 409) {
-        await reload().catch(() => undefined);
-        toast.error(t("governance.conflict", { defaultValue: "Approval changed on the owner; review the refreshed state and decide again." }));
+        const fresh = await reload().then(() => true, () => false);
+        toast.error(fresh
+          ? t("governance.conflict", { defaultValue: "Approval changed on the owner; review the refreshed state and decide again." })
+          : t("governance.conflictReadbackFailed", { defaultValue: "Approval changed on the owner and could not be refreshed. Reload before deciding again." }));
         return;
       }
+      // Keep req (version) and the modal memo so a retry is the same attempt.
+      toast.error(err instanceof Error ? err.message : String(err));
       throw err;
     }
     try {
       await reload();
-      toast.success(`${t(`governance.decision.${d}`)} - ${req.subject}${memo ? ` · ${memo.slice(0, 40)}` : ""}`, {
+      toast.success(`${t("governance.voteSubmitted", { defaultValue: "Vote submitted" })} - ${req.subject}${memo ? ` · ${memo.slice(0, 40)}` : ""}`, {
         description: commandReceiptDescription(receipt, { fallback: `Approval ${req.id} · ${d}` }),
       });
     } catch {
@@ -181,15 +185,11 @@ export const GovernanceReview = () => {
           operation={decision ? `governance.${decision}` : undefined}
           target={{ type: "Approval", id: req.id, name: req.subject }}
           currentState={req.state}
-          newState={
-            decision === "approve" ? "approved" :
-            decision === "reject" ? "rejected" : req.state
-          }
           risk={req.riskLevel}
           requiredApproval={req.requiresStages}
           destructive={decision === "reject"}
           confirmToken={req.riskLevel === "critical" ? decision?.toUpperCase() : undefined}
-          onConfirm={(memo) => { if (decision) apply(decision, memo); }}
+          onConfirm={(memo) => decision ? apply(decision, memo) : undefined}
         />
       </PageBody>
     </>
