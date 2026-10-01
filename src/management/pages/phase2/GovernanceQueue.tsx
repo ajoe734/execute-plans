@@ -61,6 +61,51 @@ export const GovernanceQueuePage = () => {
     [selected, filtered],
   );
 
+  const submitBatch = async (decision: "approve" | "reject", memo: string, retryIds?: string[]) => {
+    // Sequential per-item votes, each with the version of that displayed row. An item
+    // whose outcome is unknown (non-409 failure) keeps its original version so the retry
+    // is the same attempt (same memo/version => same Idempotency-Key) even after a reload.
+    const ids = retryIds ?? [...new Set([...selectedIds, ...unresolved.current.keys()])];
+    const results: Awaited<ReturnType<typeof bffWrites.decideApproval>>[] = [];
+    const failures: string[] = [];
+    const conflicts: string[] = [];
+    for (const id of ids) {
+      const version = unresolved.current.get(id) ?? rows.find((r) => r.id === id)?.version;
+      try {
+        results.push(await bffWrites.decideApproval(id, decision, memo, { expectedVersion: version }));
+        unresolved.current.delete(id);
+      } catch (err) {
+        if (err instanceof BffError && err.status === 409) {
+          unresolved.current.delete(id);
+          conflicts.push(id);
+        } else {
+          if (typeof version === "number") unresolved.current.set(id, version);
+          failures.push(`${id}: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+    }
+    setSelected(new Set(unresolved.current.keys()));
+    const fresh = await reload().then(() => true, () => false);
+    if (results.length > 0) {
+      toast.success(t("governance.batch.done", { defaultValue: "{{n}} vote(s) submitted", n: results.length }), {
+        description: commandBatchReceiptDescription(results),
+      });
+    }
+    if (conflicts.length > 0) {
+      toast.error(t("governance.conflict", { defaultValue: "Approval changed on the owner; review the refreshed state and decide again." }), { description: conflicts.join("\n") });
+    }
+    if (!fresh) {
+      toast.warning(t("governance.readbackFailed", { defaultValue: "Vote submitted, but the owner state could not be read back. Reload to confirm." }));
+    }
+    if (failures.length > 0) {
+      // Retry re-sends the unresolved items unchanged (original versions, same memo => same keys).
+      toast.error(t("toast.failed", { defaultValue: "Action failed" }), {
+        description: failures.join("\n"),
+        action: { label: t("actions.retry", { defaultValue: "Retry" }), onClick: () => void submitBatch(decision, memo, [...unresolved.current.keys()]) },
+      });
+    }
+  };
+
   return (
     <>
       <PageHeader
@@ -169,49 +214,7 @@ export const GovernanceQueuePage = () => {
           newState={batchDecision === "approve" ? "approved" : "rejected"}
           risk={selectedIds.some((id) => rows.find((r) => r.id === id)?.riskLevel === "critical") ? "critical" : "high"}
           destructive={batchDecision === "reject"}
-          onConfirm={async (memo) => {
-            if (!batchDecision) return;
-            // Sequential per-item votes, each with the version of that displayed row. An item
-            // whose outcome is unknown (non-409 failure) keeps its original version so the retry
-            // is the same attempt (same memo/version => same Idempotency-Key) even after a reload.
-            const ids = [...new Set([...selectedIds, ...unresolved.current.keys()])];
-            const results: Awaited<ReturnType<typeof bffWrites.decideApproval>>[] = [];
-            const failures: string[] = [];
-            const conflicts: string[] = [];
-            for (const id of ids) {
-              const version = unresolved.current.get(id) ?? rows.find((r) => r.id === id)?.version;
-              try {
-                results.push(await bffWrites.decideApproval(id, batchDecision, memo, { expectedVersion: version }));
-                unresolved.current.delete(id);
-              } catch (err) {
-                if (err instanceof BffError && err.status === 409) {
-                  unresolved.current.delete(id);
-                  conflicts.push(id);
-                } else {
-                  if (typeof version === "number") unresolved.current.set(id, version);
-                  failures.push(`${id}: ${err instanceof Error ? err.message : String(err)}`);
-                }
-              }
-            }
-            setSelected(new Set(unresolved.current.keys()));
-            const fresh = await reload().then(() => true, () => false);
-            if (results.length > 0) {
-              toast.success(t("governance.batch.done", { defaultValue: "{{n}} vote(s) submitted", n: results.length }), {
-                description: commandBatchReceiptDescription(results),
-              });
-            }
-            if (conflicts.length > 0) {
-              toast.error(t("governance.conflict", { defaultValue: "Approval changed on the owner; review the refreshed state and decide again." }), { description: conflicts.join("\n") });
-            }
-            if (!fresh) {
-              toast.warning(t("governance.readbackFailed", { defaultValue: "Vote submitted, but the owner state could not be read back. Reload to confirm." }));
-            }
-            if (failures.length > 0) {
-              toast.error(t("toast.failed", { defaultValue: "Action failed" }), { description: failures.join("\n") });
-              // Keep the modal and memo open so retrying re-sends the unresolved attempts unchanged.
-              throw new Error(failures.join("; "));
-            }
-          }}
+          onConfirm={(memo) => batchDecision ? submitBatch(batchDecision, memo) : undefined}
         />
       </PageBody>
     </>

@@ -7,10 +7,10 @@
   "merge_target": "dev",
   "status": "ready-for-independent-exact-head-review",
   "base_commit": "638c809b",
-  "production_net_lines": 49,
+  "production_net_lines": 54,
   "local_validation": {
     "typecheck": "tsc -p tsconfig.app.json --noEmit: exit 0",
-    "vitest": "56 files / 578 tests passed (src/lib/bff-v1, src/platform, Operations.test, approvalCallers.test)",
+    "vitest": "102 files / 949 tests passed (src/lib/bff-v1, src/management, src/platform)",
     "scope": "local isolated only; fixtures are not hosted owner evidence"
   },
   "covered": [
@@ -22,9 +22,8 @@
     "pages no longer derive final state from the requested vote; readback after submit; 409 refresh without re-vote",
     "Operations HighRiskConfirm passes exact memo",
     "request_changes/escalate/freeze and named-stage UI removed; fixed mock evidence replaced by Not provided",
-    "approvalCallers.test.tsx: real GovernanceReview/Operations ApprovalsPage/GovernanceQueue callers with real HighRiskConfirm: exact memo+expected_version, unchanged retry payload after owner failure (modal/memo retained), 409 refresh without re-vote, refresh-failed 409 and readback-failure warnings without success toast, batch per-item versions, ambiguous batch failure retried with original version/memo",
-    "HighRiskConfirm keeps memo/modal open when onConfirm rejects (caller surfaces error)",
-    "e2e/12-approvals.spec.ts harness: versioned DTOs, /decide enforces expected_version (422 missing, 409 stale)"
+    "e2e/12-approvals.spec.ts harness: versioned DTOs, /decide enforces expected_version (422 missing, 409 stale)",
+    "Operations.test.tsx: real GovernanceReview/Operations ApprovalsPage/GovernanceQueue callers with real HighRiskConfirm: exact memo+expected_version, Retry action re-sends the unchanged failed attempt, 409 refresh without re-vote, refresh-failed 409 and readback-failure warnings without success toast, batch per-item versions, ambiguous batch failure retried with original version/memo and 409 item not re-voted"
   ],
   "not_done": [
     "e2e/12-approvals.spec.ts could not be executed locally (vite build for the e2e web server fails in this worktree); harness additions are typechecked only, and the harness simulates the BFF rather than driving the real pages",

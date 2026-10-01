@@ -71,9 +71,11 @@ export const GovernanceReview = () => {
           : t("governance.conflictReadbackFailed", { defaultValue: "Approval changed on the owner and could not be refreshed. Reload before deciding again." }));
         return;
       }
-      // Keep req (version) and the modal memo so a retry is the same attempt.
-      toast.error(err instanceof Error ? err.message : String(err));
-      throw err;
+      // The modal resets on close; Retry re-sends this exact attempt (same memo/version => same key).
+      toast.error(err instanceof Error ? err.message : String(err), {
+        action: { label: t("actions.retry", { defaultValue: "Retry" }), onClick: () => void apply(d, memo) },
+      });
+      return;
     }
     try {
       await reload();

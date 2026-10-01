@@ -368,9 +368,11 @@ export const ApprovalsPage = () => {
         setActive(null);
         return;
       }
-      // Keep the sheet and modal memo: a retry re-sends the same version, memo and key.
-      toast.error(err instanceof Error ? err.message : String(err));
-      throw err;
+      // Retry re-sends this exact attempt (same memo/version => same key); the sheet keeps its version.
+      toast.error(err instanceof Error ? err.message : String(err), {
+        action: { label: t("actions.retry", { defaultValue: "Retry" }), onClick: () => void decide(approval, decision, memo) },
+      });
+      return;
     }
     try {
       await refresh();

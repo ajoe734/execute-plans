@@ -389,8 +389,6 @@ export const HighRiskConfirm = ({
                 await onConfirm(memo, issuedToken ?? undefined);
                 reset();
                 onOpenChange(false);
-              } catch {
-                // The caller surfaces the failure; keep the memo/modal so a retry is the same attempt.
               } finally {
                 setSubmitting(false);
               }
