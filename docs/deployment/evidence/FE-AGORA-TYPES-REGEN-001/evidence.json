@@ -1,0 +1,25 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "FE-AGORA-TYPES-REGEN-001",
+  "owner": "Codex",
+  "reviewer": "Antigravity",
+  "target_repo": "ajoe734/execute-plans",
+  "merge_target": "dev",
+  "status": "ready-for-independent-exact-head-review",
+  "base_commit": "92f052524c4b7f2dc3165e5056b7524602c606e7",
+  "generated_output_commit": "c3157a57cdb45b8c113e8828d7cc6df803ae5d02",
+  "pantheon_dev_commit": "32fec5165ff262ae3b0b45af130780b4b84678b4",
+  "contract_root": "/home/chloe_ong_dev_cctech_support_com/pantheon-ci-deploy/dev-root",
+  "contract_checkout_commit": "643be6f5b0e9d97ae9ed49fae3561f7f526e002d",
+  "source_verification": "Remote dev SHA matched local origin/dev; git diff --exit-code origin/dev -- services/control-plane/specs/agora services/control-plane/openapi docs/contracts/agora/backend-generation-input.v1_13.json returned 0. The read-only checkout's complete contract inputs equal current Pantheon dev.",
+  "generation": ["PANTHEON_CONTRACT_ROOT=<contract_root> npm run contract:drift:update", "Commit generated output", "PANTHEON_CONTRACT_ROOT=<contract_root> node scripts/contract-drift-check.mjs --bind-handoff"],
+  "optional_fields_added": ["tenant_id", "user_id", "intent_ref", "etag"],
+  "bundle_v1_12_sha256": "ff4d9f916ccbc75c6c5f805404e8bb2ef01b69806cc48d93de3c738007d1d540",
+  "production_net_lines": 4,
+  "checks": [
+    {"command": "PANTHEON_CONTRACT_ROOT=<contract_root> npm run test:contract", "exit_code": 0, "result": "49 schemas, 157 routes, 75 sha256 entries aligned; 7 tests passed"},
+    {"command": "npm run typecheck:agora", "exit_code": 0},
+    {"command": "git diff --check", "exit_code": 0}
+  ],
+  "deployment": "Not deployed; pending independent review and supervisor merge."
+}

@@ -116,8 +116,6 @@ const FAMILY_RULES: Array<[string, string]> = [
   ["/bff/v1/mcp", "mcp-final"],
   ["/bff/mcp-servers", "mcp-final"],
   ["/bff/mcp-tools", "mcp-final"],
-  ["/bff/v5/interventions", "v5-interventions"],
-  ["/bff/v5/sentinel", "execute-plans-cutover-smoke"],
   ["/bff/v5/loop-runs", "execute-plans-cutover-smoke"],
   ["/bff/v5/execution", "execute-plans-cutover-smoke"],
   ["/bff/v5/control-room", "execute-plans-cutover-smoke"],

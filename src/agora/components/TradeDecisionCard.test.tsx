@@ -4,6 +4,22 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TradeDecisionCard } from "./TradeDecisionCard";
 import type { TradingDecisionEvent } from "@/lib/bff-v1/agora/tradingRoom";
 
+vi.mock("@/lib/bff-v1/agora/tradingIntents", () => ({
+  getTradingIntent: vi.fn(), submitTradingIntentHandoff: vi.fn(), withdrawTradingIntent: vi.fn(),
+}));
+import { getTradingIntent, submitTradingIntentHandoff, withdrawTradingIntent } from "@/lib/bff-v1/agora/tradingIntents";
+import { useAgoraWriteAccess } from "@/agora/useAgoraWriteAccess";
+const allowedAccess = vi.mocked(useAgoraWriteAccess).getMockImplementation()!();
+const intentDetail = {
+  status: "draft", lifecycle_state: "draft",
+  data: { intent_id: "intent-1", strategy_id: "strat-alpha-001", strategy_spec_registry_id: "reg-001" },
+  allowedActions: { submit_handoff: true, withdraw: true }, handoffs: [],
+};
+beforeEach(() => {
+  vi.mocked(useAgoraWriteAccess).mockReturnValue(allowedAccess);
+  vi.mocked(getTradingIntent).mockResolvedValue(intentDetail);
+});
+
 // Mock the BFF client
 vi.mock("@/lib/bff-v1/agora/tradingRoom", () => ({
   decideOnEvent: vi.fn(),
@@ -18,7 +34,7 @@ vi.mock("@/lib/bff-v1/agora/interaction", () => ({
 }));
 
 vi.mock("@/agora/useAgoraWriteAccess", () => ({
-  useAgoraWriteAccess: () => ({
+  useAgoraWriteAccess: vi.fn(() => ({
     actorId: "operator-001",
     agoraCapabilities: ["agora.workshop.v1"],
     capabilities: [],
@@ -28,7 +44,7 @@ vi.mock("@/agora/useAgoraWriteAccess", () => ({
     interactionDisabledReason: null,
     writeAllowed: true,
     writeDisabledReason: null,
-  }),
+  })),
 }));
 
 vi.mock("react-router-dom", () => ({
@@ -230,8 +246,8 @@ describe("TradeDecisionCard", () => {
     render(<TradeDecisionCard event={baseEvent} />);
     const noticeEl = screen.getByTestId("trade-decision-card-intent-notice-evt-001");
     expect(noticeEl.textContent).toContain("TradingIntent");
-    expect(noticeEl.textContent).toContain("AG-BE-TR-002");
-    expect(noticeEl.textContent).toContain("No order is placed");
+    expect(noticeEl.textContent).not.toContain("AG-BE-TR-002");
+    expect(noticeEl.textContent).toContain("不會下單");
   });
 
   it("renders all four trader decision buttons", () => {
@@ -252,7 +268,7 @@ describe("TradeDecisionCard", () => {
   });
 
   it("calls decideOnEvent and shows success state on approve", async () => {
-    mockDecideOnEvent.mockResolvedValueOnce({});
+    mockDecideOnEvent.mockResolvedValueOnce({ intent_ref: "intent-1" });
     const onDecisionRecorded = vi.fn();
     render(
       <TradeDecisionCard
@@ -275,6 +291,8 @@ describe("TradeDecisionCard", () => {
       }),
     );
     expect(onDecisionRecorded).toHaveBeenCalledWith("approve", "evt-001");
+    await screen.findByText("狀態：待送出");
+    expect(getTradingIntent).toHaveBeenCalledWith("intent-1");
   });
 
   it("shows error state when decideOnEvent rejects", async () => {
@@ -303,5 +321,121 @@ describe("TradeDecisionCard", () => {
     expect(
       screen.queryByTestId("trade-decision-card-position-evt-001"),
     ).toBeNull();
+  });
+});
+
+describe("governed intent actions", () => {
+  const restoredEvent = { ...baseEvent, state: "decided" as const, intent_ref: "intent-1" };
+  it("reads the persisted reference on reload and shows handoffs", async () => {
+    vi.mocked(getTradingIntent).mockResolvedValue({ ...intentDetail, handoffs: [
+      { handoff_id: "h1", requested_stage: "shadow", state: "submitted" },
+    ] });
+    const first = render(<TradeDecisionCard event={restoredEvent} etag='"v2"' />);
+    await screen.findByText("Shadow：已提交");
+    first.unmount();
+    render(<TradeDecisionCard event={restoredEvent} etag='"v2"' />);
+    await screen.findByText("狀態：待送出");
+    expect(getTradingIntent).toHaveBeenCalledTimes(2);
+    expect(decideOnEvent).not.toHaveBeenCalled();
+  });
+  it.each([['送 Shadow', 'shadow'], ['申請紙上測試', 'paper']] as const)("submits %s and reads authoritative status", async (label, stage) => {
+    render(<TradeDecisionCard event={restoredEvent} etag='"v2"' />);
+    await screen.findByText("狀態：待送出");
+    vi.mocked(getTradingIntent).mockResolvedValueOnce({ ...intentDetail, lifecycle_state: "submitted",
+      allowedActions: { submit_handoff: false, withdraw: true } });
+    fireEvent.click(screen.getByRole("button", { name: label }));
+    await screen.findByText("狀態：已提交");
+    expect(submitTradingIntentHandoff).toHaveBeenCalledWith(intentDetail.data, stage, "operator-001",
+      expect.objectContaining({ ifMatch: '"v2"', idempotencyKey: expect.any(String), requestId: expect.any(String) }));
+    expect(screen.getByRole("button", { name: label })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: /canary|live/i })).toBeNull();
+  });
+  it("withdraws and disables actions from server readback", async () => {
+    render(<TradeDecisionCard event={restoredEvent} etag='"v2"' />);
+    await screen.findByText("狀態：待送出");
+    vi.mocked(getTradingIntent).mockResolvedValueOnce({ ...intentDetail, lifecycle_state: "withdrawn",
+      allowedActions: { submit_handoff: false, withdraw: false } });
+    fireEvent.click(screen.getByRole("button", { name: "撤回" }));
+    await screen.findByText("狀態：已撤回");
+    expect(withdrawTradingIntent).toHaveBeenCalledWith("intent-1", expect.objectContaining({ ifMatch: '"v2"' }));
+    expect(screen.getByRole("button", { name: "撤回" })).toBeDisabled();
+  });
+  it.each([false, true])("gates every decision and intent action when denied or loading (%s)", async (loading) => {
+    vi.mocked(useAgoraWriteAccess).mockReturnValue({ ...allowedAccess, writeAllowed: loading, loading,
+      writeDisabledReason: "Writes disabled" });
+    const view = render(<TradeDecisionCard event={baseEvent} etag='"v1"' />);
+    for (const name of ["確認執行", "修改部位", "延後觀察", "拒絕"]) {
+      const button = screen.getByRole("button", { name });
+      expect(button).toBeDisabled(); fireEvent.click(button);
+    }
+    view.rerender(<TradeDecisionCard event={restoredEvent} etag='"v2"' />);
+    await screen.findByText("狀態：待送出");
+    for (const name of ["送 Shadow", "申請紙上測試", "撤回"]) {
+      const button = screen.getByRole("button", { name });
+      expect(button).toBeDisabled(); fireEvent.click(button);
+    }
+    expect(decideOnEvent).not.toHaveBeenCalled();
+    expect(submitTradingIntentHandoff).not.toHaveBeenCalled();
+    expect(withdrawTradingIntent).not.toHaveBeenCalled();
+  });
+  it("gates an already open modification form if write access changes", () => {
+    const view = render(<TradeDecisionCard event={baseEvent} etag='"v1"' />);
+    fireEvent.click(screen.getByRole("button", { name: "修改部位" }));
+    fireEvent.change(screen.getByTestId("modify-proposal-id-evt-001"), { target: { value: "proposal-1" } });
+    fireEvent.change(screen.getByPlaceholderText("Explain the changes to sizes, bounds, or limits..."), { target: { value: "reduce" } });
+    vi.mocked(useAgoraWriteAccess).mockReturnValue({ ...allowedAccess, writeAllowed: false });
+    view.rerender(<TradeDecisionCard event={baseEvent} etag='"v1"' />);
+    expect(screen.getByTestId("modify-linkage-submit-evt-001")).toBeDisabled();
+    fireEvent.click(screen.getByTestId("modify-linkage-submit-evt-001"));
+    expect(decideOnEvent).not.toHaveBeenCalled();
+  });
+  it("preserves modify intent receipts", async () => {
+    mockDecideOnEvent.mockResolvedValueOnce({ intent_ref: "intent-1" });
+    render(<TradeDecisionCard event={baseEvent} etag='"v1"' />);
+    fireEvent.click(screen.getByRole("button", { name: "修改部位" }));
+    fireEvent.change(screen.getByTestId("modify-proposal-id-evt-001"), { target: { value: "proposal-1" } });
+    fireEvent.change(screen.getByPlaceholderText("Explain the changes to sizes, bounds, or limits..."), { target: { value: "reduce" } });
+    fireEvent.click(screen.getByTestId("modify-linkage-submit-evt-001"));
+    await screen.findByText("狀態：待送出");
+    expect(decideOnEvent).toHaveBeenCalledWith("evt-001", expect.objectContaining({ decision: "modify",
+      modifications: expect.objectContaining({ proposal_id: "proposal-1" }) }), expect.any(Object));
+  });
+  it("keeps confirmed intent when readback fails and retries only the read", async () => {
+    mockDecideOnEvent.mockResolvedValueOnce({ intent_ref: "intent-1" });
+    vi.mocked(getTradingIntent).mockRejectedValueOnce(new Error("readback unavailable"));
+    render(<TradeDecisionCard event={baseEvent} etag='"v1"' />);
+    fireEvent.click(screen.getByRole("button", { name: "確認執行" }));
+    await screen.findByText("readback unavailable");
+    expect(screen.getByRole("button", { name: "送 Shadow" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "重新讀取狀態" }));
+    await screen.findByText("狀態：待送出");
+    expect(decideOnEvent).toHaveBeenCalledTimes(1);
+  });
+  it("reports rejected mutations without claiming success", async () => {
+    vi.mocked(withdrawTradingIntent).mockRejectedValueOnce(new Error("state conflict"));
+    render(<TradeDecisionCard event={restoredEvent} etag='"v2"' />);
+    await screen.findByText("狀態：待送出");
+    fireEvent.click(screen.getByRole("button", { name: "撤回" }));
+    await screen.findByText("state conflict");
+    expect(screen.queryByText("狀態：已撤回")).toBeNull();
+  });
+});
+
+
+describe("decision resource versions", () => {
+  it("uses per-event ETag instead of the queue page ETag", async () => {
+    mockDecideOnEvent.mockResolvedValueOnce({ intent_ref: "intent-1" });
+    render(<TradeDecisionCard event={{ ...baseEvent, etag: '"event-v1"' }} etag='"page-v1"' />);
+    fireEvent.click(screen.getByRole("button", { name: "確認執行" }));
+    await screen.findByText("狀態：待送出");
+    expect(decideOnEvent).toHaveBeenCalledWith("evt-001", { decision: "approve" },
+      expect.objectContaining({ ifMatch: '"event-v1"' }));
+  });
+  it("disables writes without the required ETag", async () => {
+    render(<TradeDecisionCard event={{ ...baseEvent, intent_ref: "intent-1" }} />);
+    await screen.findByText("狀態：待送出");
+    expect(screen.getByRole("button", { name: "確認執行" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "送 Shadow" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "撤回" })).toBeDisabled();
   });
 });
