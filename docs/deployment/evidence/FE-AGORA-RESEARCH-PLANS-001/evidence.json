@@ -1,0 +1,16 @@
+{
+  "task_id": "FE-AGORA-RESEARCH-PLANS-001",
+  "checks": {
+    "tsc_app": "pass",
+    "vitest": "research.test.ts, ResearchPlanPanel.test.tsx, StrategyWorkshopPage.test.tsx, ResearchRunCard.test.tsx: 85 passed"
+  },
+  "acceptance": {
+    "1": "research.ts uses shared bffFetch; create sends only spec_version, strategy_id, strategy_spec_registry_id, stages[{stage_type}]",
+    "2": "ResearchPlanPanel creates from StrategySpec identity and lists plans from the BFF on load",
+    "3": "approve/cancel/dispatch send snapshot meta.etag as If-Match; 409/412 shown as stale plan and refreshed",
+    "4": "Dispatch enabled only when meta allowed actions include dispatch; runs rendered via ResearchRunProjectionCard",
+    "5": "No environment field is sent or offered; stage types limited to the four research stages",
+    "6": "cmd-research-btn and dispatchWorkshopResearchRun call removed from WorkshopSessionView",
+    "7": "Buttons disabled with title and visible reason when useAgoraWriteAccess denies writes"
+  }
+}
