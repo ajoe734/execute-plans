@@ -120,6 +120,7 @@ export const HighRiskConfirm = ({
   const [issuing, setIssuing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const reqIdRef = useRef(0);
+  const returnFocusRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (!open || !useTokenFlow) return;
@@ -199,7 +200,27 @@ export const HighRiskConfirm = ({
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) reset(); onOpenChange(o); }}>
-      <DialogContent className="max-w-xl">
+      <DialogContent
+        className="max-w-xl"
+        onKeyDown={(event) => {
+          if (event.key !== "Escape" || event.defaultPrevented) return;
+          event.preventDefault();
+          event.stopPropagation();
+          reset();
+          onOpenChange(false);
+        }}
+        onOpenAutoFocus={() => {
+          returnFocusRef.current = document.activeElement instanceof HTMLElement
+            ? document.activeElement : null;
+        }}
+        onCloseAutoFocus={(event) => {
+          const trigger = returnFocusRef.current;
+          if (trigger?.isConnected) {
+            event.preventDefault();
+            trigger.focus();
+          }
+        }}
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <AlertTriangle className={destructive || risk === "critical" ? "text-destructive h-5 w-5" : "text-status-warning h-5 w-5"} />
