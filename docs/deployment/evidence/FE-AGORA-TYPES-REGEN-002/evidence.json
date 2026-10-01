@@ -1,0 +1,147 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "FE-AGORA-TYPES-REGEN-002",
+  "owner": "Codex",
+  "reviewer": "Antigravity",
+  "target_repo": "ajoe734/execute-plans",
+  "merge_target": "dev",
+  "status": "ready-for-independent-exact-head-review",
+  "base_commit": "98bb5cdc2227e9468c1301e15226ac24110af995",
+  "generated_output_commit": "6d4c7ff81128543b09ebec5be12c2f59680b4c9b",
+  "pantheon_dev_commit": "33dc57e0f9909504c4629714523ca84622ebd0d7",
+  "contract_checkout_commit": "33dc57e0f9909504c4629714523ca84622ebd0d7",
+  "contract_root": "/tmp/pantheon-agora-types-source-20261001",
+  "source_verification": {
+    "contract_commit": "d4d2d4223ec9bdfc1989e197dd4b39a5546c55cb",
+    "source_files_verified": 90,
+    "bundle_chain_indices_verified": 14,
+    "contract_digests": {
+      "bundle_index": {
+        "path": "services/control-plane/specs/agora/bundle_index.v1_13.json",
+        "sha256": "36cce833c8b34fb128750576435a93d40e1271d0cba6b89104898d5d68eda336"
+      },
+      "openapi": {
+        "path": "services/control-plane/openapi/agora_v1_13.openapi.yaml",
+        "sha256": "56f12e43bb6041a0f83bf4ff69bf13ae86a335a38246f68a10f0a4ef3a856087"
+      },
+      "capability_manifest": {
+        "path": "services/control-plane/specs/agora/v14/capability_manifest_v1_13.json",
+        "sha256": "6f9701fdf5a3302c4fd9f5ccd19a89dcbf0cfe8c76fb6627e45c7a1a96bd0bf8"
+      }
+    },
+    "result": "pass"
+  },
+  "source_verification_method": "SHA256 of every backend handoff source_files/contract entry matched both actual checkout bytes and git show <contract_commit>:<path>; all 14 bundle-chain indices verified, including parent byte digests. Both FE/BE remote dev refs matched the recorded clean initial checkouts. Existing generator also verifies contract source commit ancestry and exact Git bytes.",
+  "generator": {
+    "path": "scripts/contract-drift-check.mjs",
+    "sha256": "8b17553ad2a3864ce67b802a461c1bcb758103f8c48555ff6c4bc179e8c854dc",
+    "changed": false
+  },
+  "frontend_handoff": {
+    "repo": "ajoe734/execute-plans",
+    "runtime_commit": "6d4c7ff81128543b09ebec5be12c2f59680b4c9b",
+    "generated_from_contract_commit": "d4d2d4223ec9bdfc1989e197dd4b39a5546c55cb",
+    "bundle_index_sha256": "36cce833c8b34fb128750576435a93d40e1271d0cba6b89104898d5d68eda336",
+    "openapi_sha256": "56f12e43bb6041a0f83bf4ff69bf13ae86a335a38246f68a10f0a4ef3a856087",
+    "generated_types_sha256": "31bc39990e2757850366997af7878ede928dc35e42c87c74349272bc1601d836"
+  },
+  "generated_files": [
+    {
+      "path": "src/lib/bff-v1/agora/contract-snapshot.json",
+      "git_blob": "3bf081d38baa7a9596a5c7f7557a45b6e79f6dc5",
+      "sha256": "f8388b93a9db3679eb7314ae7302a8e42d15621a234134e2c70bab9518205fc9"
+    },
+    {
+      "path": "src/lib/bff-v1/agora/types.ts",
+      "git_blob": "d7fa3600928a915455753b7ed4f26f0fdeeabb73",
+      "sha256": "51d0601a26b395d67202f4c919b6fbfd57175d061abacb8144b82b6dbc564c21"
+    }
+  ],
+  "historical_provenance": "Prior handoff remains available at the base commit; the new digest is bound to the generated output commit, never substituted onto the historical FE commit. BE contract_commit is preserved from its verified input.",
+  "generated_delta": {
+    "schema_count": 49,
+    "type_count": 208,
+    "capabilities_before": 33,
+    "capabilities_after": 30,
+    "routes_before": 157,
+    "routes_after": 99,
+    "production_additions": 24,
+    "production_deletions": 148,
+    "production_net_lines": -124,
+    "production_budget": 10,
+    "classification": "Unchanged scripts/git/diff_budget.py physical-line classifier; types.ts and contract-snapshot.json are production, handoff and evidence are docs/evidence."
+  },
+  "checks": [
+    {
+      "command": "PANTHEON_CONTRACT_ROOT=/tmp/pantheon-agora-types-source-20261001 npm run contract:drift:update",
+      "exit_code": 0,
+      "result": "Generated only the existing types and snapshot with the unchanged generator."
+    },
+    {
+      "command": "PANTHEON_CONTRACT_ROOT=/tmp/pantheon-agora-types-source-20261001 node scripts/contract-drift-check.mjs --bind-handoff",
+      "exit_code": 0,
+      "result": "Bound after generated output commit."
+    },
+    {
+      "command": "PANTHEON_CONTRACT_ROOT=/tmp/pantheon-agora-types-source-20261001 node scripts/contract-drift-check.mjs",
+      "exit_code": 0,
+      "result": "49 schemas, 99 routes, 75 sha256 entries aligned."
+    },
+    {
+      "command": "PANTHEON_CONTRACT_ROOT=/tmp/pantheon-agora-types-source-20261001 npm run test:contract",
+      "exit_code": 0,
+      "result": "7 tests passed; drift check passed."
+    },
+    {
+      "command": "PANTHEON_CONTRACT_ROOT=/tmp/pantheon-agora-types-source-20261001 npm run typecheck:agora",
+      "exit_code": 0,
+      "result": "Passed."
+    },
+    {
+      "command": "git diff --check",
+      "exit_code": 0
+    },
+    {
+      "command": "python3 \"$PANTHEON_COMMAND_ROOT/scripts/git/diff_budget.py\" --base 98bb5cdc2227e9468c1301e15226ac24110af995 --head HEAD --change-class corrective --budget 10",
+      "exit_code": 0,
+      "result": "production +24/-148 = -124; both generated paths remain production."
+    },
+    {
+      "command": "timeout 60 python3 /tmp/pantheon-agora-types-source-20261001/docs/contracts/agora/generate_backend_contract.py verify --handoff /tmp/pantheon-agora-types-source-20261001/docs/contracts/agora/backend-generation-input.v1_13.json",
+      "exit_code": 0,
+      "result": "Backend deterministic bundle, Git provenance, source hashes, refs and handoff verified."
+    },
+    {
+      "command": "PANTHEON_CONTRACT_ROOT=/tmp/pantheon-agora-types-source-20261001 timeout 240 npx --no-install vitest related --run --maxWorkers=2 src/lib/bff-v1/agora/types.ts",
+      "exit_code": 0,
+      "result": "58 files, 426 tests passed; unchanged assertions and default test timeout.",
+      "log_sha256": "10c2715a441b42c8a701d4c7fbfbe884f7a20c5f6fb6c0fbcd8ae358f6cee767"
+    },
+    {
+      "command": "PANTHEON_CONTRACT_ROOT=/tmp/pantheon-agora-types-source-20261001 timeout 360 npm run typecheck:app",
+      "exit_code": 0,
+      "result": "Full application typecheck passed.",
+      "log_sha256": "d64fe12d35030d7794aa0bce5422507ae19ac09c7c7ad7ce21a36e11064cee11"
+    }
+  ],
+  "review_and_ci": "Pending independent Antigravity exact-head review and required frontend CI at handoff. Canonical delivery binding records the final manifest-containing PR head; supervisor integrator owns merge.",
+  "deployment": "Source delivery only. No deployment, hosted acceptance, runtime configuration, or real writes performed.",
+  "supplemental_attempts": [
+    {
+      "command": "PANTHEON_CONTRACT_ROOT=/tmp/pantheon-agora-types-source-20261001 timeout 180 npx --no-install vitest related --run src/lib/bff-v1/agora/types.ts",
+      "exit_code": 1,
+      "result": "423 passed, 3 timed out at unchanged default 5000ms in CapitalPoolDetail.test.tsx (1) and QAChecklist.test.tsx (2). Rerun with maxWorkers=2, preserving assertions and timeouts.",
+      "log_sha256": "2c1d285eead22d8bfe6b031a112faeb6f09fefe87d9ea07742b14c347921ecc8"
+    },
+    {
+      "command": "PANTHEON_CONTRACT_ROOT=/tmp/pantheon-agora-types-source-20261001 timeout 180 npm run typecheck:app",
+      "exit_code": 124,
+      "result": "Outer batch timed out without compiler diagnostics; not counted as passed. Rerun with 360-second outer bound."
+    }
+  ],
+  "required_github_checks": [
+    "Commit trailers",
+    "Generated files guard",
+    "Component merge gate"
+  ]
+}

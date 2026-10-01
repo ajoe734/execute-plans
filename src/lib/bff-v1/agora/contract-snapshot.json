@@ -5,7 +5,7 @@
   "extends": {
     "bundle_path": "services/control-plane/specs/agora/bundle_index.v1_12.json",
     "bundle_version": "1.12",
-    "bundle_index_sha256": "ff4d9f916ccbc75c6c5f805404e8bb2ef01b69806cc48d93de3c738007d1d540"
+    "bundle_index_sha256": "f5e9c29dfe7ca6b026bb6607a668e26e32be41cea75c0838e803c14b5ac16f49"
   },
   "files": {
     "specs/agora/agora_user_scope.schema.json": "ae660aa7719ded37ca8b41bfc6ac287d1eae0bb85a8389b08d069c528a934dee",
@@ -16,26 +16,26 @@
     "specs/agora/research_run_summary.schema.json": "669530ad2aed09133e84344aec7768e375c9cc505728b136d76041366184328b",
     "specs/agora/candidate_pool.schema.json": "679077c2f567502883f0b7735332645df30cccd6752a978379c5eeecd058e3b9",
     "specs/agora/dashboard_recipe.schema.json": "5b9c33653eb8c85b001b5f6f6a802e83e58276a25f6c00e0a030a7094c78a8f6",
-    "specs/agora/widget_spec.schema.json": "0749275943dc155afa08dbb8736c336d613daf18b99b42f6c10aec15d2eabedb",
+    "specs/agora/widget_spec.schema.json": "cc0cf7ec6051c7413bbdae48365bc95015c7efc1f2f91effbb899145c397b7a5",
     "specs/agora/trading_event.schema.json": "14bd9e788c855c30a1803a767e66a38efc6f7505bfddf59d3095499d113f02f4",
     "specs/agora/trading_intent.schema.json": "588a0508e6b00206be1361e6337b440b7710df0075d6272adb4e85040be4f7ad",
     "specs/agora/shadow_decision.schema.json": "1414c77ddebb5102b81a10fb57db32520c607daba76cb3736f7eb20eb751b0b2",
     "specs/agora/personalization_event.schema.json": "df7991d19943650a61d58a065182fe4bda20f967b4098a36f36b1ab4b33bcb21",
-    "specs/agora/capability_manifest.json": "5988cac6d8ca38fc0c51922086c1cc2564b1bb31b2b36ee276e6d363249e9e3e",
-    "openapi/agora_v1.openapi.yaml": "4da5ea91923e40c13a9118ee4f784a5d6627e6cb91e4d4712d8fac244912118f",
+    "specs/agora/capability_manifest.json": "e70b8d38d7dbffc81846307957f07e030b350aed1d0d28efc2d31aefaa3e56a8",
+    "openapi/agora_v1.openapi.yaml": "afd4ad122b54c570691f0d927d0d582561b6fc21285308e69464f7527389a107",
     "specs/agora/v2/widget_spec_v2.schema.json": "d360a17a9762d69e6a5e2c87921117bb85ee34d972fd8034f8904df6facb993f",
     "specs/agora/v2/chart_spec_v1.schema.json": "0bcd0fa5fc21d7c021d54803780e310cfd9234b3ea15c044fa0b5cdfffed0967",
     "specs/agora/v2/dashboard_recipe_v2.schema.json": "34c7e0fab793ec79776e9ddd5cca98683cacc6b8bba328e02a8c4c5eba45c13a",
     "specs/agora/v2/compatibility_manifest.schema.json": "84c3607195484d09710708c08e7c29821b75d83199376cd5374a2ce0c3ca7827",
-    "specs/agora/v2/capability_manifest_v1_1.json": "6a729d1284ca8f88058a4c301dc67a4c17fd76097190bf020310f4f2cab3db41",
+    "specs/agora/v2/capability_manifest_v1_1.json": "f2a2a93cee874d10d4eecc202fd68c6eadb3769cd815f6a330f7cc15ba5f39b9",
     "specs/agora/v3/private_content_ref.schema.json": "f51648d6534142046ed256649e29357038ba420894b09bb9dab92e75fd7a8403",
     "specs/agora/v3/workshop_storage_contract.schema.json": "a4dc2d5e464d952ab633757f396426459b84ca84d150cbcbe960b8006ba758ca",
     "specs/agora/v3/strategy_ref_contract.schema.json": "1e456372c394d2d256fdcaaee1fd2f1e4ab4829ffbf18e3432dc78e242d497e0",
     "specs/agora/v3/workshop_event.schema.json": "cea5fe3c9360fd50710ef7f68d84b155d7720ea27c52617cd298604dd6c5c5f3",
     "specs/agora/v3/workshop_version_link.schema.json": "70e4ce55ce55a4417bb869f27ce35e05408a05a909ea08941a2b3ad5b16b7313",
     "specs/agora/v3/workshop_persistence.schema.json": "fb62e17f64311e5090577dd3b9b43be599faee12aee9ac9241660d99a095fa3b",
-    "specs/agora/v3/capability_manifest_v1_2.json": "de7bffc221ecebf268c9a3a5da4787c5aaaa5088ecb8bc4502cc1ed0a4722b33",
-    "openapi/agora_v1_2.openapi.yaml": "5a8de5667869e17a662f34433e397a4140d68f038b1a76145d0d123d65774e66",
+    "specs/agora/v3/capability_manifest_v1_2.json": "834a21b1d907c1dab188274400b0980ab9b8fe1e578ce9a60244d229ffc47722",
+    "openapi/agora_v1_2.openapi.yaml": "5c5ef9e4d7d382c7561d7cf22b26404c4bcf8a9a48ddaa185ccaf70f004c8520",
     "specs/agora/v4/capability_manifest_v1_3.json": "d21ac91558f9205732d6cffffe1fca86efad59bf1824e8dabe95fb4b585ca041",
     "specs/agora/v4/governed_intent_handoff.schema.json": "d16723d9de8c469905859e62d9904561ce96c51ebce9992cd8927a35e79092db",
     "specs/agora/v4/research_plan_execution.schema.json": "cc97bc9e119473c4ae9d2656f9629843645e73d09ab7ba2fa46bbd190c1cbe4c",
@@ -81,7 +81,7 @@
     "specs/agora/v13/candidate_member_truth_projection.schema.json": "7ed59957adc97dd48af20aab19f8476acb84c29e8832d3ad076fe8625e610b00",
     "specs/agora/v13/capability_manifest_v1_12.json": "d35999b82e6b606f22de5baf4e6d260f03ce85d0cc871f5c1aa68145a0543188",
     "openapi/agora_v1_12.openapi.yaml": "88a707090a1e58ebe3159d530ab437f6f0bb0d130f26e396edf6f1de3678f53f",
-    "specs/agora/v14/capability_manifest_v1_13.json": "e17b120832bc92ed81d2edd7de3b11267ecb2fa82cfc4986cf2ac467a053f613",
+    "specs/agora/v14/capability_manifest_v1_13.json": "6f9701fdf5a3302c4fd9f5ccd19a89dcbf0cfe8c76fb6627e45c7a1a96bd0bf8",
     "openapi/agora_v1_13.openapi.yaml": "56f12e43bb6041a0f83bf4ff69bf13ae86a335a38246f68a10f0a4ef3a856087"
   },
   "required_definition_checksums": {
@@ -142,7 +142,7 @@
     "services/control-plane/specs/agora/v13/candidate_member_truth_projection.schema.json#/definitions/UnavailableField": "106646eba2a84192d8143a48ae7e9a3f32e8de1251a288549ef42e8658b21942"
   },
   "schema_count": 49,
-  "capability_count": 33,
-  "operation_count": 157,
+  "capability_count": 30,
+  "operation_count": 99,
   "generated_type_count": 208
 }
