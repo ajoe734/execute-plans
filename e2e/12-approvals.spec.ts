@@ -58,6 +58,7 @@ type ApprovalDto = {
   riskLevel: "low" | "medium" | "high" | "critical";
   state: ApprovalState;
   status: ApprovalState;
+  version: number;
   subject: string;
   target_id: string;
   target_type: string;
@@ -291,6 +292,16 @@ class ApprovalHarness {
   ): Promise<void> {
     const body = await this.recordRequest(req, path);
     const decision = stringField(body.decision) === "reject" ? "reject" : "approve";
+    // Owner CAS contract: the vote must carry the version the caller observed.
+    const expected = body.expected_version;
+    if (typeof expected !== "number") {
+      this.fulfillJson(res, 422, { detail: { error: { code: "VALIDATION_FAILED", message: "expected_version required" } } });
+      return;
+    }
+    if (this.approvals.get(approvalId) && this.approvals.get(approvalId)?.version !== expected) {
+      this.fulfillJson(res, 409, { detail: { error: { code: "CONFLICT", message: "stale expected_version" } } });
+      return;
+    }
     const approval = this.applyDecision(approvalId, decision, {
       actor: OPERATOR_ID,
       correlationId: stringField(body.correlationId) || "corr-f12-single",
@@ -444,6 +455,7 @@ class ApprovalHarness {
     }
     refreshApprovalState(approval);
     if (decision === "reject") approval.state = "rejected";
+    approval.version += 1;
     this.audit.push({
       action: `approval.${decision}`,
       actor: options.actor,
@@ -603,6 +615,7 @@ function makeApproval(args: {
     riskLevel: args.riskLevel,
     state: "pending",
     status: "pending",
+    version: 1,
     stages: args.stages,
     subject: args.subject,
     target_id: args.targetId,
@@ -830,6 +843,7 @@ async function installApprovalQueue(page: Page, baseUrl: string): Promise<void> 
         const result = await postJson(`/bff/approvals/${id}/decide`, {
           correlationId: `corr-f12-${id}-decide`,
           decision,
+          expected_version: state.rows.find((row) => row.id === id)?.version,
           memo: `F12 ${decision}`,
         });
         if (result.status < 300) {
@@ -996,6 +1010,27 @@ test.describe("F12 approval governance", () => {
     expect(harness.requests[0].idempotencyKey).toMatch(/^f12-/);
   });
 
+  test("decide is bound to the observed owner version", async ({ page }) => {
+    await installApprovalQueue(page, harness.baseUrl);
+
+    const first = await decideApproval(page, SINGLE_APPROVAL_ID, "approve");
+    expect(first.status, JSON.stringify(first.body)).toBe(202);
+    expect(harness.requests[0].body).toMatchObject({ expected_version: 1, memo: "F12 approve" });
+    expect(harness.approval(SINGLE_APPROVAL_ID).version).toBe(2);
+
+    const stale = await page.evaluate(async ({ url, auth, id }) => {
+      const r = await fetch(`${url}/bff/approvals/${id}/decide`, {
+        body: JSON.stringify({ decision: "reject", expected_version: 1, memo: "stale" }),
+        headers: { Authorization: auth, "Content-Type": "application/json" },
+        method: "POST",
+      });
+      return r.status;
+    }, { url: harness.baseUrl, auth: AUTH_HEADER, id: SINGLE_APPROVAL_ID });
+    expect(stale).toBe(409);
+    expect(harness.approval(SINGLE_APPROVAL_ID).state).toBe("approved");
+    expect(harness.audit).toHaveLength(1);
+  });
+
   test("two-man sign enforces distinct signer and shows quorum progress", async ({
     page,
   }) => {
@@ -1099,5 +1134,72 @@ test.describe("F12 approval governance", () => {
     expect(state.selected).toEqual([BATCH_FAILED_APPROVAL_ID]);
     expect(harness.approval(BATCH_OK_APPROVAL_ID).state).toBe("approved");
     expect(harness.approval(BATCH_FAILED_APPROVAL_ID).state).toBe("pending");
+  });
+});
+
+// Real management page against route-mocked, real-shaped Governance owner records.
+test.describe("F12 approval owner readback (real queue page)", () => {
+  const owner = (id: string, version: number, extra: JsonRecord = {}): JsonRecord => ({
+    approval_id: id,
+    target_type: "Strategy",
+    target_id: `stg-${id}`,
+    owner_user_id: "u-owner",
+    risk_level: "high",
+    created_at: SNAPSHOT_AT,
+    decision_state: "pending",
+    version,
+    ...extra,
+  });
+
+  async function install(page: Page, rows: JsonRecord[]) {
+    const cors = (route: import("@playwright/test").Route) => ({
+      "Access-Control-Allow-Credentials": "true",
+      "Access-Control-Allow-Headers":
+        "accept,authorization,content-type,idempotency-key,if-match,x-bff-api-version,x-correlation-id,x-locale,x-request-id,x-tenant-id,x-trace-id",
+      "Access-Control-Allow-Methods": "GET,POST,PATCH,PUT,DELETE,OPTIONS",
+      "Access-Control-Allow-Origin": route.request().headers()["origin"] ?? "*",
+      "Access-Control-Expose-Headers": "x-bff-api-version,x-correlation-id,x-request-id",
+    });
+    await page.route(/^https?:\/\/[^/]+\/(?:bff|health|healthz|readyz).*/, async (route) => {
+      const req = route.request();
+      const path = new URL(req.url()).pathname;
+      const json = (body: unknown, status = 200) =>
+        route.fulfill({ body: JSON.stringify(body), contentType: "application/json", headers: cors(route), status });
+      if (req.method() === "OPTIONS") return route.fulfill({ headers: cors(route), status: 204 });
+      if (path === "/bff/events/stream") return route.fulfill({ body: ": connected\n\n", contentType: "text/event-stream", headers: cors(route) });
+      if (path.startsWith("/health") || path === "/readyz") return json({ status: "ok", live: true, ready: true });
+      if (path === "/bff/me") return json({ data: { environment: { name: "playwright", strict_auth: false }, tenant_id: "pantheon-dev", user: { id: OPERATOR_ID, roles: ["operator", "reviewer", "approver"] } } });
+      const envelope = (items: unknown[]) => ({
+        data: { items },
+        items,
+        meta: { route: path, snapshot_at: SNAPSHOT_AT, source: "approval-readback-fixture", status: "ok", surfaces: { canonical_read: { source: "approval-readback-fixture", status: "ok" } } },
+        page_info: { page_size: items.length, total: items.length, totalCountExact: true },
+      });
+      return json(envelope(path === "/bff/approvals" ? rows : []));
+    });
+  }
+
+  async function open(page: Page) {
+    const { installOidcDevLogin, LOCAL_FIXTURE_AUTH_TOKEN } = await import("./helpers/auth");
+    await installOidcDevLogin(page, { goto: false, roles: ["operator", "reviewer", "approver"], tenantId: "pantheon-dev", token: LOCAL_FIXTURE_AUTH_TOKEN });
+    await page.goto("/management/governance", { waitUntil: "domcontentloaded" });
+  }
+
+  test("real final owner states are final and non-selectable", async ({ page }) => {
+    const rows = [
+      owner("p1", 3),
+      owner("d1", 5, { decision_state: "decided", decision: "approved_with_conditions", conditions: ["c"] }),
+      owner("d2", 4, { decision_state: "decided", decision: "rejected" }),
+      owner("r1", 2, { decision_state: "revoked" }),
+    ];
+    await install(page, rows);
+    await open(page);
+    await page.getByLabel("select p1").waitFor();
+    await page.getByRole("button", { name: /^(All|全部)$/ }).click();
+    for (const id of ["d1", "d2", "r1"]) await expect(page.getByLabel(`select ${id}`)).toBeDisabled();
+    await expect(page.getByLabel("select p1")).toBeEnabled();
+    // The safe e2e build disables real writes, so vote transport is covered by unit/page tests.
+    await page.getByLabel("select p1").click();
+    await expect(page.getByRole("button", { name: /Batch approve|批次核准/ })).toBeVisible();
   });
 });

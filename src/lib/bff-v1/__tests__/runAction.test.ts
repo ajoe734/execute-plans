@@ -1,7 +1,7 @@
 // BFF-LUV-FE-004 — Focused write-flow tests for bff/runAction.ts
 
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { liveWriteGated, sessionKindAllowsWrite, runAction, runCommandAction, requestConfirmToken, readConfirmToken, redeemConfirmToken, deleteConfirmToken, decideApproval, acknowledgeAlert } from "@/lib/bff-v1/writes";
+import { liveWriteGated, sessionKindAllowsWrite, runAction, runCommandAction, requestConfirmToken, readConfirmToken, redeemConfirmToken, deleteConfirmToken, decideApproval, batchDecideApproval, acknowledgeAlert } from "@/lib/bff-v1/writes";
 import { runPersonaAction } from "@/lib/bff-v1/personas";
 import { liveStatus } from "@/lib/bff-v1/liveStatus";
 import { BffError } from "@/lib/bff-v1/errors";
@@ -724,5 +724,67 @@ describe("operations console command mapping", () => {
         platformEnvironment: "dev",
       })
     ).rejects.toThrow(/Unknown action/i);
+  });
+});
+
+// ---------- decideApproval (live owner version / CAS transport) ----------
+
+describe("decideApproval live owner version", () => {
+  type Call = { url: string; body: Record<string, unknown>; key: string };
+  function liveDecide(respond: (n: number) => Response) {
+    setEnv(true, "tok_bearer_live");
+    setLive(true);
+    const calls: Call[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith("/bff/me")) return makeJsonResponse(meSession("bearer"), 200);
+      calls.push({
+        url,
+        body: JSON.parse(String(init?.body)) as Record<string, unknown>,
+        key: (init?.headers as Record<string, string>)["Idempotency-Key"],
+      });
+      return respond(calls.length);
+    });
+    return calls;
+  }
+  const ok = () => makeJsonResponse({ approvalId: "ap_v", decision: "approve" }, 200);
+  const conflict = () => makeJsonResponse({ error: { code: "STATE_CONFLICT", message: "stale", i18nKey: "x", retryable: false, userActionable: true, correlationId: "c" } }, 409);
+
+  it("sends the observed owner version as expected_version with memo", async () => {
+    const calls = liveDecide(ok);
+    await decideApproval("ap_v", "approve", "exact memo", { expectedVersion: 7 });
+    expect(calls[0].url).toMatch(/\/approvals\/ap_v\/decide$/);
+    expect(calls[0].body).toMatchObject({ decision: "approve", memo: "exact memo", expected_version: 7 });
+  });
+
+  it.each([undefined, Number.NaN, -1, 1.5])("refuses to vote without a valid version (%s)", async (v) => {
+    const calls = liveDecide(ok);
+    await expect(decideApproval("ap_v", "approve", "m", { expectedVersion: v as number })).rejects.toThrow(/owner version/);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("reuses the Idempotency-Key and payload when the same vote is retried", async () => {
+    const calls = liveDecide((n) => (n === 1 ? makeJsonResponse({ error: { code: "INTERNAL", message: "boom", i18nKey: "x", retryable: true, userActionable: false, correlationId: "c" } }, 503) : ok()));
+    await expect(decideApproval("ap_v", "approve", "m", { expectedVersion: 3 })).rejects.toBeDefined();
+    await decideApproval("ap_v", "approve", "m", { expectedVersion: 3 });
+    expect(calls[1].key).toBe(calls[0].key);
+    expect(calls[1].body).toEqual(calls[0].body);
+  });
+
+  it("mints a new key for changed content and after a 409 (no silent re-vote)", async () => {
+    const calls = liveDecide((n) => (n === 1 ? conflict() : ok()));
+    await expect(decideApproval("ap_v", "approve", "m", { expectedVersion: 3 })).rejects.toBeInstanceOf(BffError);
+    await decideApproval("ap_v", "approve", "m", { expectedVersion: 3 });
+    expect(calls[1].key).not.toBe(calls[0].key);
+    await decideApproval("ap_v", "approve", "other memo", { expectedVersion: 3 });
+    expect(calls[2].key).not.toBe(calls[1].key);
+  });
+
+  it("batch votes carry each item's own version and distinct keys", async () => {
+    const calls = liveDecide(ok);
+    await batchDecideApproval([{ id: "ap_a", version: 2 }, { id: "ap_b", version: 9 }], "reject", "m");
+    expect(calls.map((c) => c.body.expected_version)).toEqual([2, 9]);
+    expect(calls[0].key).not.toBe(calls[1].key);
+    await expect(batchDecideApproval([{ id: "ap_c" }], "approve", "m")).rejects.toThrow(/owner version/);
   });
 });
