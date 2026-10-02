@@ -942,6 +942,7 @@ export default {
       approve: "批次核准",
       reject: "批次駁回",
       done: "已處理 {{n}} 筆請求",
+      submitted: "已送出 {{n}} 筆投票；最終狀態以 owner 為準",
     },
     policies: {
       title: "路由策略",

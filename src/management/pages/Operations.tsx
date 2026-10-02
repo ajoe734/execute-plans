@@ -19,6 +19,8 @@ import { toast } from "sonner";
 import { Field } from "./ObjectDetailLayout";
 import { AuditTimeline } from "@/platform/components/AuditTimeline";
 import { X } from "lucide-react";
+import { BffError } from "@/lib/bff-v1/errors";
+import { normalizeApprovalFields } from "@/lib/bff-v1/operations";
 import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { getSharedQueryClient, queryKeys, resetSharedQueryClientForTests } from "@/lib/bff-v1/queryKeys";
 
@@ -111,7 +113,7 @@ export function useCachedOperationList<T>(
   }, [qc, queryKey]);
 
   const refresh = useCallback(async () => {
-    await qc.refetchQueries({ queryKey });
+    await qc.refetchQueries({ queryKey }, { throwOnError: true });
   }, [qc, queryKey]);
 
   return [rows, setRows, refresh];
@@ -341,9 +343,9 @@ export const IncidentsPage = () => {
 
 export const ApprovalsPage = () => {
   const t = useT();
-  const [rows, setRows] = useCachedOperationList<ApprovalRequest>(
+  const [rows, , refresh] = useCachedOperationList<ApprovalRequest>(
     "operations.approvals",
-    asEntityListLoader<ApprovalRequest>(lists.approvals),
+    () => lists.approvals().then((r) => ({ items: r.items.map((a) => normalizeApprovalFields(a) as ApprovalRequest) })),
   );
   const [active, setActive] = useState<ApprovalRequest | null>(null);
   const [approveOpen, setApproveOpen] = useState(false);
@@ -352,15 +354,35 @@ export const ApprovalsPage = () => {
 
   const filtered = useMemo(() => filter === "all" ? rows : rows.filter((r) => r.state === "pending"), [rows, filter]);
 
-  const decide = async (id: string, state: ApprovalRequest["state"], memo?: string) => {
-    const decision = state === "approved" ? "approve" : state === "rejected" ? "reject" : null;
-    if (!decision) return;
-    const receipt = await bffWrites.decideApproval(id, decision, memo ?? "");
-    setRows((rs) => rs.map((r) => r.id === id ? { ...r, state } : r));
-    setActive((a) => a && a.id === id ? { ...a, state } : a);
-    toast.success(t("toast.approvalDecided", { id, state }), {
-      description: commandReceiptDescription(receipt),
-    });
+  // A vote is only a submission: final state comes from the owner readback, never the requested vote.
+  const decide = async (approval: ApprovalRequest, decision: "approve" | "reject", memo: string) => {
+    let receipt;
+    try {
+      receipt = await bffWrites.decideApproval(approval.id, decision, memo, { expectedVersion: approval.version });
+    } catch (err) {
+      if (err instanceof BffError && err.status === 409) {
+        const fresh = await refresh().then(() => true, () => false);
+        toast.error(fresh
+          ? t("governance.conflict", { defaultValue: "Approval changed on the owner; review the refreshed state and decide again." })
+          : t("governance.conflictReadbackFailed", { defaultValue: "Approval changed on the owner and could not be refreshed. Reload before deciding again." }));
+        setActive(null);
+        return;
+      }
+      // Retry re-sends this exact attempt (same memo/version => same key); the sheet keeps its version.
+      toast.error(err instanceof Error ? err.message : String(err), {
+        action: { label: t("actions.retry", { defaultValue: "Retry" }), onClick: () => void decide(approval, decision, memo) },
+      });
+      return;
+    }
+    try {
+      await refresh();
+      toast.success(t("toast.approvalSubmitted", { id: approval.id, defaultValue: "Vote submitted for {{id}}" }), {
+        description: commandReceiptDescription(receipt),
+      });
+    } catch {
+      toast.warning(t("governance.readbackFailed", { defaultValue: "Vote submitted, but the owner state could not be read back. Reload to confirm." }));
+    }
+    setActive(null);
   };
 
   return (
@@ -440,7 +462,7 @@ export const ApprovalsPage = () => {
                 title={t("confirmDialog.approveTitle", { subject: active.subject })}
                 description={t("confirmDialog.approveDesc", { kind: active.kind })}
                 confirmToken="APPROVE"
-                onConfirm={() => decide(active.id, "approved")}
+                onConfirm={(memo) => decide(active, "approve", memo)}
               />
               <HighRiskConfirm
                 open={rejectOpen}
@@ -449,7 +471,7 @@ export const ApprovalsPage = () => {
                 description={t("confirmDialog.rejectDesc")}
                 confirmToken="REJECT"
                 destructive
-                onConfirm={() => decide(active.id, "rejected")}
+                onConfirm={(memo) => decide(active, "reject", memo)}
               />
             </>
           )}

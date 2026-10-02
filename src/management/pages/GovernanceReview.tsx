@@ -21,12 +21,11 @@ import { AuditTimeline } from "@/platform/components/AuditTimeline";
 import { PermissionAwareButton } from "@/platform/components/PermissionAwareButton";
 import { ApprovalStagesStepper } from "@/platform/components/LifecycleStepper";
 import { StageDecisionPanel } from "@/platform/components/StageDecisionPanel";
+import { BffError } from "@/lib/bff-v1/errors";
 import { PolicyValidatorPanel } from "@/management/components/governance/PolicyValidatorPanel";
 import { safeDateTime } from "@/lib/utils";
 
-type StageDecision = { stageName: string; decision: "approve" | "reject" };
-
-type Decision = "approve" | "reject" | "request_changes" | "escalate" | "freeze";
+type Decision = "approve" | "reject";
 
 export const GovernanceReview = () => {
   const t = useT();
@@ -36,7 +35,6 @@ export const GovernanceReview = () => {
   const [req, setReq] = useState<ApprovalRequest | null>(null);
   const [audit, setAudit] = useState<AuditEvent[]>([]);
   const [decision, setDecision] = useState<Decision | null>(null);
-  const [stageDecision, setStageDecision] = useState<StageDecision | null>(null);
 
   const reload = () => bffV1.approvals.get(id).then((r) => setReq(r ?? null));
 
@@ -62,22 +60,32 @@ export const GovernanceReview = () => {
   }
 
   const apply = async (d: Decision, memo: string) => {
-    const mapState: Record<Decision, ApprovalRequest["state"]> = {
-      approve: "approved", reject: "rejected", request_changes: "pending", escalate: "pending", freeze: "pending",
-    };
-    const receipt = await bffWrites.decideApproval(req.id, d, memo);
-    setReq({ ...req, state: mapState[d] });
-    toast.success(`${t(`governance.decision.${d}`)} - ${req.subject}${memo ? ` · ${memo.slice(0, 40)}` : ""}`, {
-      description: commandReceiptDescription(receipt, { fallback: `Approval ${req.id} · ${d}` }),
-    });
+    let receipt;
+    try {
+      receipt = await bffWrites.decideApproval(req.id, d, memo, { expectedVersion: req.version });
+    } catch (err) {
+      if (err instanceof BffError && err.status === 409) {
+        const fresh = await reload().then(() => true, () => false);
+        toast.error(fresh
+          ? t("governance.conflict", { defaultValue: "Approval changed on the owner; review the refreshed state and decide again." })
+          : t("governance.conflictReadbackFailed", { defaultValue: "Approval changed on the owner and could not be refreshed. Reload before deciding again." }));
+        return;
+      }
+      // The modal resets on close; Retry re-sends this exact attempt (same memo/version => same key).
+      toast.error(err instanceof Error ? err.message : String(err), {
+        action: { label: t("actions.retry", { defaultValue: "Retry" }), onClick: () => void apply(d, memo) },
+      });
+      return;
+    }
+    try {
+      await reload();
+      toast.success(`${t("governance.voteSubmitted", { defaultValue: "Vote submitted" })} - ${req.subject}${memo ? ` · ${memo.slice(0, 40)}` : ""}`, {
+        description: commandReceiptDescription(receipt, { fallback: `Approval ${req.id} · ${d}` }),
+      });
+    } catch {
+      toast.warning(t("governance.readbackFailed", { defaultValue: "Vote submitted, but the owner state could not be read back. Reload to confirm." }));
+    }
   };
-
-  // Mock evidence + validator results — in real BFF these come from /bff/approvals/:id/evidence
-  const evidence = [
-    { kind: "backtest", label: "Q1 backtest report", status: "success" as const },
-    { kind: "policy", label: "Risk policy diff", status: "warning" as const },
-    { kind: "eval", label: "Evaluation suite — pass 92/100", status: "success" as const },
-  ];
 
   return (
     <>
@@ -106,8 +114,8 @@ export const GovernanceReview = () => {
                 <StageDecisionPanel
                   stages={req.stages}
                   i18nPrefix="lifecycle.approval"
-                  disabled={req.state !== "pending"}
-                  onDecide={(stageName, d) => setStageDecision({ stageName, decision: d })}
+                  disabled
+                  onDecide={() => undefined}
                 />
               </div>
             ) : req.requiresStages && (
@@ -138,17 +146,7 @@ export const GovernanceReview = () => {
             )}
             <Card className="p-4">
               <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">{t("governance.evidence")}</div>
-              <ul className="divide-y divide-border">
-                {evidence.map((e) => (
-                  <li key={e.kind} className="py-2 flex items-center justify-between">
-                    <div>
-                      <div className="text-sm font-medium">{e.label}</div>
-                      <div className="text-mono text-xs text-muted-foreground">{e.kind}</div>
-                    </div>
-                    <StatusBadge state={e.status} />
-                  </li>
-                ))}
-              </ul>
+              <div className="text-sm text-muted-foreground">{t("governance.evidenceNotProvided", { defaultValue: "Not provided" })}</div>
             </Card>
             <PolicyValidatorPanel approvalId={req.id} />
           </div>
@@ -163,15 +161,8 @@ export const GovernanceReview = () => {
                 <PermissionAwareButton requiredAction="approve" className="w-full" onClick={() => setDecision("approve")}>
                   {t("governance.decision.approve")}
                 </PermissionAwareButton>
-                <PermissionAwareButton requiredAction="reject" variant="outline" className="w-full" onClick={() => setDecision("request_changes")}>
-                  {t("governance.decision.request_changes")}
-                </PermissionAwareButton>
                 <PermissionAwareButton requiredAction="reject" variant="destructive" className="w-full" onClick={() => setDecision("reject")}>
                   {t("governance.decision.reject")}
-                </PermissionAwareButton>
-                <Button variant="ghost" className="w-full" onClick={() => setDecision("escalate")}>{t("governance.decision.escalate")}</Button>
-                <PermissionAwareButton requiredAction="freeze" variant="ghost" className="w-full" onClick={() => setDecision("freeze")}>
-                  {t("governance.decision.freeze")}
                 </PermissionAwareButton>
               </div>
             )}
@@ -196,36 +187,11 @@ export const GovernanceReview = () => {
           operation={decision ? `governance.${decision}` : undefined}
           target={{ type: "Approval", id: req.id, name: req.subject }}
           currentState={req.state}
-          newState={
-            decision === "approve" ? "approved" :
-            decision === "reject" ? "rejected" : req.state
-          }
           risk={req.riskLevel}
           requiredApproval={req.requiresStages}
-          destructive={decision === "reject" || decision === "freeze"}
+          destructive={decision === "reject"}
           confirmToken={req.riskLevel === "critical" ? decision?.toUpperCase() : undefined}
-          onConfirm={(memo) => { if (decision) apply(decision, memo); }}
-        />
-        <HighRiskConfirm
-          open={stageDecision !== null}
-          onOpenChange={(o) => !o && setStageDecision(null)}
-          operation={stageDecision ? `governance.stage.${stageDecision.decision}` : undefined}
-          target={{ type: "Approval", id: req.id, name: `${req.subject} · ${stageDecision?.stageName ?? ""}` }}
-          currentState={req.state}
-          newState={req.state}
-          risk={req.riskLevel}
-          destructive={stageDecision?.decision === "reject"}
-          confirmToken={req.riskLevel === "critical" ? stageDecision?.decision.toUpperCase() : undefined}
-          onConfirm={async (memo) => {
-            if (!stageDecision) return;
-            const r = await bffWrites.decideApproval(req.id, stageDecision.decision, memo, { stageName: stageDecision.stageName });
-            if (r.ok) {
-              toast.success(`${t(`approval.stage.${stageDecision.decision}`, { defaultValue: stageDecision.decision })} - ${stageDecision.stageName}`, {
-                description: commandReceiptDescription(r, { fallback: `Approval ${req.id} · ${stageDecision.stageName}` }),
-              });
-              await reload();
-            }
-          }}
+          onConfirm={(memo) => decision ? apply(decision, memo) : undefined}
         />
       </PageBody>
     </>

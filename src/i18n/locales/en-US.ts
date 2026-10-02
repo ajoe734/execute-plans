@@ -957,6 +957,7 @@ export default {
       approve: "Batch approve",
       reject: "Batch reject",
       done: "{{n}} request(s) processed",
+      submitted: "{{n}} vote(s) submitted; final state follows the owner",
     },
     policies: {
       title: "Route Policies",

@@ -17,6 +17,7 @@ import { useT } from "@/platform/hooks";
 import { SlaCountdown } from "@/platform/components/SlaCountdown";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
 import { toast } from "sonner";
+import { BffError } from "@/lib/bff-v1/errors";
 import { QUORUM_POLICIES, type QuorumRiskClass } from "@/lib/v4/reviewerQuorum";
 import { safeDateTime } from "@/lib/utils";
 
@@ -58,6 +59,48 @@ export const GovernanceQueuePage = () => {
     () => Array.from(selected).filter((id) => filtered.some((r) => r.id === id && r.state === "pending")),
     [selected, filtered],
   );
+
+  type BatchItem = { id: string; version?: number };
+  const submitBatch = async (decision: "approve" | "reject", memo: string, items: BatchItem[]) => {
+    // Sequential per-item votes. `items` is the immutable attempt: each id carries the version
+    // displayed when the user chose it, so a retry of an item whose outcome is unknown
+    // (non-409 failure) re-sends the same decision/memo/version (=> same Idempotency-Key).
+    const results: Awaited<ReturnType<typeof bffWrites.decideApproval>>[] = [];
+    const failed: BatchItem[] = [];
+    const failures: string[] = [];
+    const conflicts: string[] = [];
+    for (const item of items) {
+      try {
+        results.push(await bffWrites.decideApproval(item.id, decision, memo, { expectedVersion: item.version }));
+      } catch (err) {
+        if (err instanceof BffError && err.status === 409) {
+          conflicts.push(item.id);
+        } else {
+          failed.push(item);
+          failures.push(`${item.id}: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+    }
+    setSelected(new Set(failed.map((i) => i.id)));
+    const fresh = await reload().then(() => true, () => false);
+    if (results.length > 0) {
+      toast.success(t("governance.batch.submitted", { defaultValue: "{{n}} vote(s) submitted", n: results.length }), {
+        description: commandBatchReceiptDescription(results),
+      });
+    }
+    if (conflicts.length > 0) {
+      toast.error(t("governance.conflict", { defaultValue: "Approval changed on the owner; review the refreshed state and decide again." }), { description: conflicts.join("\n") });
+    }
+    if (!fresh) {
+      toast.warning(t("governance.readbackFailed", { defaultValue: "Vote submitted, but the owner state could not be read back. Reload to confirm." }));
+    }
+    if (failed.length > 0) {
+      toast.error(t("toast.failed", { defaultValue: "Action failed" }), {
+        description: failures.join("\n"),
+        action: { label: t("actions.retry", { defaultValue: "Retry" }), onClick: () => void submitBatch(decision, memo, failed) },
+      });
+    }
+  };
 
   return (
     <>
@@ -164,27 +207,11 @@ export const GovernanceQueuePage = () => {
           operation={batchDecision ? `governance.batch.${batchDecision}` : undefined}
           target={{ type: "Approval", id: "batch", name: `${selectedIds.length} request(s)` }}
           currentState="pending"
-          newState={batchDecision === "approve" ? "approved" : "rejected"}
           risk={selectedIds.some((id) => rows.find((r) => r.id === id)?.riskLevel === "critical") ? "critical" : "high"}
           destructive={batchDecision === "reject"}
-          onConfirm={async (memo) => {
-            if (!batchDecision) return;
-            try {
-              const results = await Promise.all(
-                selectedIds.map((id) => bffWrites.decideApproval(id, batchDecision, memo)),
-              );
-              toast.success(t("governance.batch.done", { defaultValue: "{{n}} request(s) processed", n: results.length }), {
-                description: commandBatchReceiptDescription(results),
-              });
-            } catch (err) {
-              toast.error(t("toast.failed", { defaultValue: "Action failed" }), {
-                description: err instanceof Error ? err.message : String(err),
-              });
-              return;
-            }
-            setSelected(new Set());
-            await reload();
-          }}
+          onConfirm={(memo) => batchDecision
+            ? submitBatch(batchDecision, memo, selectedIds.map((id) => ({ id, version: rows.find((r) => r.id === id)?.version })))
+            : undefined}
         />
       </PageBody>
     </>
