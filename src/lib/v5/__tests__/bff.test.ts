@@ -37,11 +37,6 @@ describe("bffV5 facade (Q3/Q14/Q16/Q24)", () => {
     expect(["live", "paper", "shadow", "suspended"]).toContain(r.items[0].mode);
   });
 
-  it("remediation.build emergency requires HighRiskConfirm", () => {
-    const a = bffV5.remediation.build("pause_persona_routing", { targetKind: "persona", targetId: "per_quant" });
-    expect(a?.mode).toBe("emergency_override");
-    expect(a?.requiresHighRiskConfirm).toBe(true);
-  });
 
   describe("fail-closed write gating (VITE_BFF_REAL_WRITES=false)", () => {
     it("fails closed without network calls for all POST operations", async () => {
@@ -50,12 +45,7 @@ describe("bffV5 facade (Q3/Q14/Q16/Q24)", () => {
       const fetchMock = vi.fn();
       globalThis.fetch = fetchMock;
 
-      const a = bffV5.remediation.build("switch_persona_to_shadow", { id: "per_quant", targetKind: "persona", targetId: "per_quant" })!;
-      const remResult = await bffV5.remediation.execute(a);
-      expect(remResult).toEqual({ ok: false, overlayUpdated: false, reason: "writes_disabled" });
 
-      const setStatusResult = await bffV5.sentinel.setStatus("finding-1", "dismissed");
-      expect(setStatusResult).toEqual({ ok: true, persisted: false });
 
       const advanceResult = await bffV5.loops.advance("loop-1");
       expect(advanceResult).toEqual({ ok: false, reason: "writes_disabled" });
@@ -69,8 +59,6 @@ describe("bffV5 facade (Q3/Q14/Q16/Q24)", () => {
       const cancelResult = await bffV5.loops.cancel("loop-1");
       expect(cancelResult).toEqual({ ok: false, reason: "writes_disabled" });
 
-      const decideResult = await bffV5.interventions.decide("int-1", "escalate");
-      expect(decideResult).toEqual({ ok: false, reason: "writes_disabled" });
 
       expect(fetchMock).toHaveBeenCalledTimes(0);
     });
@@ -91,15 +79,6 @@ describe("bffV5 facade (Q3/Q14/Q16/Q24)", () => {
             },
           }), { status: 200, headers: { "Content-Type": "application/json" } });
         }
-        if (url.endsWith("/bff/v5/interventions/per_quant/remediate")) {
-          expect(init?.method).toBe("POST");
-          return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "Content-Type": "application/json" } });
-        }
-        if (url.endsWith("/bff/v5/sentinel/findings/live-finding/status")) {
-          expect(init?.method).toBe("POST");
-          expect(JSON.parse(String(init?.body))).toEqual({ status: "dismissed" });
-          return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "Content-Type": "application/json" } });
-        }
         if (url.endsWith("/bff/v5/loop-runs/live-loop/advance")) {
           expect(init?.method).toBe("POST");
           return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "Content-Type": "application/json" } });
@@ -117,21 +96,11 @@ describe("bffV5 facade (Q3/Q14/Q16/Q24)", () => {
           expect(init?.method).toBe("POST");
           return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "Content-Type": "application/json" } });
         }
-        if (url.endsWith("/bff/v5/interventions/live-int/decide")) {
-          expect(init?.method).toBe("POST");
-          expect(JSON.parse(String(init?.body))).toEqual({ decision: "escalate" });
-          return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "Content-Type": "application/json" } });
-        }
         return new Response("not found", { status: 404 });
       });
       globalThis.fetch = fetchMock;
 
-      const a = bffV5.remediation.build("switch_persona_to_shadow", { id: "per_quant", targetKind: "persona", targetId: "per_quant" })!;
-      const remResult = await bffV5.remediation.execute(a);
-      expect(remResult).toEqual({ ok: true, overlayUpdated: false });
 
-      const setStatusResult = await bffV5.sentinel.setStatus("live-finding", "dismissed");
-      expect(setStatusResult).toEqual({ ok: true, persisted: true });
 
       const advanceResult = await bffV5.loops.advance("live-loop");
       expect(advanceResult).toEqual({ ok: true });
@@ -145,8 +114,6 @@ describe("bffV5 facade (Q3/Q14/Q16/Q24)", () => {
       const cancelResult = await bffV5.loops.cancel("live-loop");
       expect(cancelResult).toEqual({ ok: true });
 
-      const decideResult = await bffV5.interventions.decide("live-int", "escalate");
-      expect(decideResult).toEqual({ ok: true });
 
       expect(fetchMock).toHaveBeenCalled();
     });

@@ -581,7 +581,6 @@ describe("public frontend build auth boundary", () => {
     expect(source).not.toContain("pantheon-dev-browser:reviewer");
     expect(hostedSource).not.toContain("VITE_BFF_DEV_BEARER_TOKEN");
     expect(hostedE2ePaths).toContain("e2e/agora-winner-branch-hosted.spec.ts");
-    expect(allNetworkE2ePaths).toContain("e2e/04-sentinel-remediation.spec.ts");
 
     for (const file of [
       "scripts/accept-management-hosted-production.mjs",
@@ -669,7 +668,6 @@ describe("public frontend build auth boundary", () => {
         "test",
         "e2e/08-create-intent.spec.ts",
         "e2e/20-portfolio-book-monitor.spec.ts",
-        "e2e/04-sentinel-remediation.spec.ts",
         "--list",
         "--reporter=line",
       ],

@@ -1,4 +1,5 @@
 import React from "react";
+import type { ResearchRunProjection } from "@/lib/bff-v1/agora/research";
 import type { WorkshopCard } from "@/lib/bff-v1/agora/workshops";
 import type { PayloadResearchProgress, ResearchExecutionStatus } from "./workshop-card-types";
 
@@ -195,6 +196,26 @@ export function ResearchRunCard({ card, onContinueDiscussion }: ResearchRunCardP
           </button>
         )}
       </div>
+    </div>
+  );
+}
+
+/** Read-back view of a persisted research run (progress and outcome come from the BFF). */
+export function ResearchRunProjectionCard({ run }: { run: ResearchRunProjection }): JSX.Element {
+  const percent = Math.max(0, Math.min(100, Math.round(run.progress?.percent ?? 0)));
+  return (
+    <div className="rounded border border-slate-200 p-2 text-xs space-y-1" data-testid={`research-run-${run.run_id}`}>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-mono text-[11px] text-slate-400">{run.run_id}</span>
+        <span className="font-semibold text-slate-800" data-testid="research-run-status">{run.execution_status}</span>
+        <span data-testid="research-run-outcome">Outcome: {run.outcome}</span>
+      </div>
+      <div className="h-1.5 rounded bg-slate-100" role="progressbar" aria-valuenow={percent} aria-valuemin={0} aria-valuemax={100}>
+        <div className="h-1.5 rounded bg-blue-600" style={{ width: `${percent}%` }} />
+      </div>
+      <p className="text-slate-500">{run.progress?.phase} · {percent}%{run.progress?.message ? ` · ${run.progress.message}` : ""}</p>
+      {run.failure?.message ? <p className="text-red-600">{run.failure.message}</p> : null}
+      {(run.blocking_reasons ?? []).map((reason) => <p key={reason} className="text-amber-700">{reason}</p>)}
     </div>
   );
 }

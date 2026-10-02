@@ -1,6 +1,4 @@
 // Pack E E1 — lightweight v5 closed-loop surfaces.
-// The full Sentinel / HIQ implementations live in their dedicated modules. Control
-// Room remains here as a legacy release-gate read surface for /bff/v5/control-room.
 
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";

@@ -24,13 +24,11 @@ export const LIST_TOTAL_COUNT_POLICIES: readonly ListPolicy[] = [
 
   // Governance queues — exact
   { pathPrefix: "/bff/approvals",        totalCount: "exact" },
-  { pathPrefix: "/bff/v5/interventions", totalCount: "exact" },
 
   // v5 loops — exact preferred (mock OK with true)
   { pathPrefix: "/bff/v5/loop-runs",     totalCount: "exact" },
 
   // Sentinel — exact preferred
-  { pathPrefix: "/bff/v5/sentinel/findings", totalCount: "exact" },
 
   // Audit feed — estimated
   { pathPrefix: "/bff/audit",            totalCount: "estimated", notes: "estimated allowed" },
