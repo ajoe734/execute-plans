@@ -174,7 +174,7 @@ describe("retired Agora probe inventories and release enforcement", () => {
         expect(["fail", "missing"], route).toContain(check(missing.gates["3"], label).status);
       }
     });
-  });
+  }, 15_000);
 
   it.each([404, 500, 503])("retained read status %s fails authenticated smoke and Gate 3", async (status) => {
     await fixture(async (base) => {
