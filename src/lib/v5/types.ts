@@ -3,7 +3,7 @@
 
 import type {
   LoopKind, LoopStatus, LoopStageStatus, HealthStatus, AutonomyMode,
-  RemediationMode, InterventionSeverity, SentinelFindingStatus,
+  InterventionSeverity, SentinelFindingStatus,
   SentinelSeverity, InterventionSource, InterventionDecision,
 } from "./enums";
 
@@ -137,25 +137,6 @@ export interface SentinelFinding {
   recommendedActionIds: string[];
   /** Q5 — optional supersession pointer if status moved to dismissed/resolved. */
   supersededByFindingId?: string;
-}
-
-// ---------- Remediation ----------
-
-export interface RemediationAction {
-  id: string;
-  /** Catalogue id, e.g. "reduce_allocation". */
-  kind: string;
-  mode: RemediationMode;             // Q6
-  label: string;
-  description?: string;
-  /** Q13 — role-based gating is canonical; capability-based gating waits on Permission Contract backport (A2) → EVIDENCE_CAPABILITY_MAP. No FE action. */
-  requiredRoles: string[];
-  requiredCapabilities?: string[];
-  requiresHumanApproval: boolean;
-  targetKind?: "strategy" | "persona" | "pool" | "deployment" | "runtime" | "policy";
-  targetId?: string;
-  /** Q24 — emergency_override always requires HighRiskConfirm. */
-  requiresHighRiskConfirm: boolean;
 }
 
 // ---------- Human Intervention Queue ----------

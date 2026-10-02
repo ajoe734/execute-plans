@@ -2,11 +2,9 @@
 import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { bffV1 } from "@/lib/bff-v1";
 import type { MemoryUpdate } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
-import { useNavigate } from "react-router-dom";
 import { safeDateTime } from "@/lib/utils";
 import { NonProductionActionButton } from "@/management/components/NonProductionActionButton";
 
@@ -20,7 +18,6 @@ const stateTone: Record<string, string> = {
 
 export const MemoryGovernanceQueue = ({ personaId }: { personaId: string }) => {
   const t = useT();
-  const nav = useNavigate();
   const [items, setItems] = useState<MemoryUpdate[]>([]);
 
   useEffect(() => {
@@ -34,7 +31,6 @@ export const MemoryGovernanceQueue = ({ personaId }: { personaId: string }) => {
           <div className="text-sm font-semibold">{t("persona.memory.queue")}</div>
           <div className="text-mono text-[10px] text-muted-foreground">{items.length} pending updates</div>
         </div>
-        <Button size="sm" variant="outline" onClick={() => nav("/agora/memory")}>{t("persona.memory.openReview")}</Button>
       </div>
       {items.length === 0 && <div className="text-xs text-muted-foreground py-6 text-center">{t("empty.none")}</div>}
       <div className="space-y-2">

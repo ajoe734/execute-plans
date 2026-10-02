@@ -45,9 +45,6 @@ export type HealthStatus = "healthy" | "watch" | "degraded" | "critical";
 /** Q4: PersonaExecutionHealth.mode canonical (paused removed). */
 export type AutonomyMode = "live" | "paper" | "shadow" | "suspended";
 
-/** Q6: Canonical RemediationAction.mode (automationLevel deprecated). */
-export type RemediationMode = "advisory" | "guarded_automation" | "emergency_override";
-
 export type InterventionSeverity = "info" | "watch" | "warning" | "critical";
 
 /** Q5: SD-canonical SentinelFinding.status (SA accepted→acknowledged, executing→mitigating). */

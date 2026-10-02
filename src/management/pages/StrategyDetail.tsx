@@ -58,15 +58,30 @@ export const StrategyDetail = () => {
   const [activeTr, setActiveTr] = useState<Transition<StrategyState> | null>(null);
   const [watchers, setWatchers] = useState<Watcher[]>([]);
   const [journal, setJournal] = useState<DecisionJournalEntry[]>([]);
+  const [loadErrors, setLoadErrors] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!id) return;
+    let current = true;
+    const failures: string[] = [];
+    const read = <T,>(label: string, request: Promise<T>, fallback: T): Promise<T> =>
+      request.catch(() => { failures.push(label); return fallback; });
+    setS(undefined);
+    setLoadErrors([]);
+    setLoading(true);
     Promise.all([
-      bffV1.strategies.get(id), bffV1.jobs.list(), bffV1.audit.list(),
-      bffV1.approvals.list(), bffV1.alerts.list(), bffV1.incidents.list(),
-      bffV1.artifacts.list(), bffV1.research.list(), bffV1.evolution.list(),
-      bffV1.watchers.forSubject("Strategy", id), bffV1.decisionJournal.forSubject("Strategy", id),
+      read("Strategy", bffV1.strategies.get(id), undefined),
+      read("Jobs", bffV1.jobs.list(), []), read("Audit", bffV1.audit.list(), []),
+      read("Approvals", bffV1.approvals.list(), []), read("Alerts", bffV1.alerts.list(), []),
+      read("Incidents", bffV1.incidents.list(), []), read("Artifacts", bffV1.artifacts.list(), []),
+      read("Research", bffV1.research.list(), []), read("Evolution", bffV1.evolution.list(), []),
+      read("Watchers", bffV1.watchers.forSubject("Strategy", id), []),
+      read("Decision journal", bffV1.decisionJournal.forSubject("Strategy", id), []),
     ]).then(([strat, j, a, ap, al, inc, ar, ex, ev, w, dj]) => {
+      if (!current) return;
+      setLoadErrors(failures);
+      setLoading(false);
       setS(strat); setJobs(j);
       setAudit(a.filter((x) => x.target === id || (x.target ?? "").includes(id)));
       setApprovals(ap.filter((x) => (x.subject ?? "").includes(id)));
@@ -77,6 +92,7 @@ export const StrategyDetail = () => {
       setEvolutions(ev.filter((e) => e.parentAlpha === strat?.alpha));
       setWatchers(w); setJournal(dj);
     });
+    return () => { current = false; };
   }, [id]);
 
   const machineState: StrategyState = useMemo(() => {
@@ -92,13 +108,15 @@ export const StrategyDetail = () => {
     [machineState, can],
   );
 
-  if (!s) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
+  if (loading) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
+  if (!s) return <div role="alert" className="p-6">{loadErrors.includes("Strategy") ? "Strategy could not be loaded." : "Strategy not found."}</div>;
 
   const params: { key: string; value: string; note: string }[] = [];
   const paperLive: { metric: string; paper: string; live: string; delta: string }[] = [];
 
   return (
     <>
+      {loadErrors.length > 0 && <div role="alert" className="px-6 py-3 text-sm text-status-warning">Some strategy data could not be loaded: {loadErrors.join(", ")}.</div>}
       <ObjectDetailLayout
         object={s}
         subtitle={`${s.alpha} · ${s.id}`}

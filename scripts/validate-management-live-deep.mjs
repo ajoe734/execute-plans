@@ -5,7 +5,6 @@
  * Live deep validation for Management UI <-> BFF/persona interaction seams that
  * cannot be proven by the synthetic 3000-round validator alone:
  * - bearer-token RBAC matrix, when role-specific tokens are available
- * - two-operator / same-operator two-man-sign race behavior, when tokens exist
  * - long SSE open + reconnect with Last-Event-ID duplicate detection
  *
  * Missing role/operator tokens produce partial evidence instead of a false pass.
@@ -53,20 +52,6 @@ const RBAC_MATRIX = [
     allowTyped404: true,
     allowed: ["approver", "admin"],
     body: { decision: "approve", reason: PROBE_MARKER },
-  },
-  {
-    id: "intervention-decide-dry-run",
-    method: "POST",
-    routeForRole: (role, check) => `/bff/v5/interventions/${probeTargetId(role, check.id)}/decide`,
-    allowed: ["operator", "approver", "admin"],
-    body: { decision: "approve", memo: PROBE_MARKER },
-  },
-  {
-    id: "two-man-sign-dry-run",
-    method: "POST",
-    routeForRole: (role, check) => `/bff/v5/interventions/${probeTargetId(role, check.id)}/two-man-sign`,
-    allowed: ["operator", "approver", "admin"],
-    body: { memo: PROBE_MARKER },
   },
   {
     id: "management-nl-ask-dry-run",
@@ -132,19 +117,6 @@ function statusWeight(status) {
 
 function worstStatus(statuses) {
   return statuses.reduce((worst, status) => (statusWeight(status) > statusWeight(worst) ? status : worst), "pass");
-}
-
-function slug(value) {
-  return String(value ?? "")
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9_-]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 72) || "probe";
-}
-
-function probeTargetId(role, checkId) {
-  return ["rbac", slug(PROBE_MARKER), slug(role), slug(checkId)].join("-");
 }
 
 function routeForCheck(check, role) {
@@ -355,80 +327,6 @@ async function runRbacMatrix() {
   };
 }
 
-function actorFromMe(json) {
-  const candidate = json?.data ?? json ?? {};
-  const user = candidate.user ?? candidate.current_user ?? candidate.currentUser ?? candidate;
-  return (
-    user.id ||
-    user.user_id ||
-    user.email ||
-    candidate.user_id ||
-    candidate.sub ||
-    ""
-  );
-}
-
-function raceResponseOk(response) {
-  if (response.error) return false;
-  if ([404, 405, 501].includes(response.status)) return false;
-  if (response.status >= 500 || response.status === 0) return false;
-  if (response.status >= 200 && response.status < 300) return true;
-  return response.status >= 400 && response.status < 500 && response.typedEnvelope;
-}
-
-async function runOperatorRace() {
-  const rows = [];
-  const tokenA = OPERATOR_A_TOKEN || "";
-  const tokenB = OPERATOR_B_TOKEN || "";
-
-  if (!tokenA || !tokenB) {
-    return {
-      status: "partial",
-      rows,
-      note: "PANTHEON_BFF_OPERATOR_A_TOKEN and PANTHEON_BFF_OPERATOR_B_TOKEN are required for distinct-operator race proof.",
-    };
-  }
-
-  const [meA, meB] = await Promise.all([
-    fetchJson("/bff/me", { token: tokenA, requestPrefix: "race-me-a" }),
-    fetchJson("/bff/me", { token: tokenB, requestPrefix: "race-me-b" }),
-  ]);
-  const actorA = actorFromMe(meA.json);
-  const actorB = actorFromMe(meB.json);
-  const distinctActors = actorA && actorB && actorA !== actorB;
-
-  const body = { memo: PROBE_MARKER, reason: "operator-race-dry-run" };
-  const [sameA1, sameA2] = await Promise.all([
-    fetchJson("/bff/v5/interventions/intervention-dev/two-man-sign", { method: "POST", token: tokenA, body, requestPrefix: "race-same-a1" }),
-    fetchJson("/bff/v5/interventions/intervention-dev/two-man-sign", { method: "POST", token: tokenA, body, requestPrefix: "race-same-a2" }),
-  ]);
-  const [distinctA, distinctB] = await Promise.all([
-    fetchJson("/bff/v5/interventions/intervention-dev/two-man-sign", { method: "POST", token: tokenA, body, requestPrefix: "race-distinct-a" }),
-    fetchJson("/bff/v5/interventions/intervention-dev/two-man-sign", { method: "POST", token: tokenB, body, requestPrefix: "race-distinct-b" }),
-  ]);
-
-  rows.push(
-    { case: "same-operator-a1", actor: actorA, status: sameA1.status, typedEnvelope: sameA1.typedEnvelope, ok: raceResponseOk(sameA1) },
-    { case: "same-operator-a2", actor: actorA, status: sameA2.status, typedEnvelope: sameA2.typedEnvelope, ok: raceResponseOk(sameA2) },
-    { case: "distinct-operator-a", actor: actorA, status: distinctA.status, typedEnvelope: distinctA.typedEnvelope, ok: raceResponseOk(distinctA) },
-    { case: "distinct-operator-b", actor: actorB, status: distinctB.status, typedEnvelope: distinctB.typedEnvelope, ok: raceResponseOk(distinctB) },
-  );
-
-  const bothSameSucceeded = [sameA1, sameA2].every((response) => response.status >= 200 && response.status < 300);
-  const transportOk = rows.every((row) => row.ok);
-  // Dry-run two-man-sign does not execute the distinct-operator state machine
-  // (no first signature is persisted), so the same operator producing two 200
-  // previews is expected and is NOT a real-mode two-man violation. Only treat
-  // unresolved/duplicate operator identities or transport/envelope failures as a
-  // hard failure; surface the same-operator dry-run observation as a note.
-  const status = !distinctActors || !transportOk ? "fail" : "pass";
-  const notes = [];
-  if (!distinctActors) notes.push(`operator tokens did not resolve to distinct /bff/me actors: ${actorA || "missing"} vs ${actorB || "missing"}`);
-  if (bothSameSucceeded) notes.push("same operator produced two success responses for two-man-sign dry-run (dry-run does not enforce the two-man state machine; informational)");
-  if (!transportOk) notes.push("one or more race requests failed route/envelope validation");
-  return { status, rows, note: notes.join("; ") || "two-man-sign race dry-run completed with distinct operators" };
-}
-
 function processSseChunk(state, text) {
   state.buffer += text;
   let newlineIndex = state.buffer.search(/\r?\n/);
@@ -593,7 +491,6 @@ function renderMarkdown(results) {
     "",
     "- Which real bearer-token roles still lack CI secrets for full RBAC proof?",
     "- Which high-risk dry-run writes can return success without visible side effects?",
-    "- Can a same-operator race ever satisfy two-man-sign under load?",
     "- Does SSE reconnect with Last-Event-ID replay duplicate event IDs after a longer open window?",
     "",
     "## Coverage Status",
@@ -601,7 +498,6 @@ function renderMarkdown(results) {
     `- RBAC status: ${results.rbac.status}`,
     `- RBAC present roles: ${results.rbac.presentRoles.join(", ") || "none"}`,
     `- RBAC missing roles: ${results.rbac.missingRoles.join(", ") || "none"}`,
-    `- Operator race status: ${results.operatorRace.status}`,
     `- SSE status: ${results.sse.status}`,
     `- SSE duration ms: ${results.sse.durationMs}`,
     "",
@@ -626,14 +522,6 @@ function renderMarkdown(results) {
     }
   }
 
-  lines.push("", "## Operator Race", "", `Status: ${results.operatorRace.status}`, `Note: ${results.operatorRace.note || ""}`, "", tableRow(["Case", "Actor", "Status", "Typed envelope", "OK"]), tableRow(["---", "---", "---:", "---", "---"]));
-  for (const row of results.operatorRace.rows) {
-    lines.push(tableRow([row.case, row.actor || "missing", row.status, row.typedEnvelope ? "yes" : "no", row.ok ? "yes" : "no"]));
-  }
-  if (!results.operatorRace.rows.length) {
-    lines.push(tableRow(["not executed", "missing", "-", "-", "no"]));
-  }
-
   lines.push("", "## SSE Long Reconnect", "", `Status: ${results.sse.status}`, `Note: ${results.sse.note}`, "", tableRow(["Phase", "Opened", "Status", "Messages", "Heartbeats", "Last event ID", "Error"]), tableRow(["---", "---", "---:", "---:", "---:", "---", "---"]));
   for (const phase of [results.sse.first, results.sse.second]) {
     lines.push(tableRow([phase.phase, phase.opened ? "yes" : "no", phase.status, phase.messages, phase.heartbeats, phase.lastEventId || "none", phase.error || ""]));
@@ -645,20 +533,17 @@ function renderMarkdown(results) {
 
 async function main() {
   console.log(`[live-deep] BFF: ${BFF_BASE_URL}`);
-  console.log("[live-deep] Asking: what role tokens, operator races, and SSE replay cases have not been proven yet?");
+  console.log("[live-deep] Asking: what role tokens and SSE replay cases have not been proven yet?");
 
   const rbac = await runRbacMatrix();
   console.log(`[live-deep] RBAC status: ${rbac.status}; present=${rbac.presentRoles.join(",") || "none"} missing=${rbac.missingRoles.join(",") || "none"}`);
 
-  const operatorRace = await runOperatorRace();
-  console.log(`[live-deep] Operator race status: ${operatorRace.status}`);
-
   const sse = await runSseLongReconnect();
   console.log(`[live-deep] SSE status: ${sse.status}; ${sse.note}`);
 
-  const overall = worstStatus([rbac.status, operatorRace.status, sse.status]);
+  const overall = worstStatus([rbac.status, sse.status]);
   const generatedAt = new Date().toISOString();
-  const results = { generatedAt, overall, probeMarker: PROBE_MARKER, rbac, operatorRace, sse };
+  const results = { generatedAt, overall, probeMarker: PROBE_MARKER, rbac, sse };
   const auditDir = path.resolve(ROOT, AUDIT_DIR);
   fs.mkdirSync(auditDir, { recursive: true });
   const ts = generatedAt.replace(/[:.]/g, "-");

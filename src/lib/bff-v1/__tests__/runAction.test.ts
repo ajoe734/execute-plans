@@ -1,7 +1,7 @@
 // BFF-LUV-FE-004 — Focused write-flow tests for bff/runAction.ts
 
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { liveWriteGated, sessionKindAllowsWrite, runAction, runCommandAction, requestConfirmToken, readConfirmToken, redeemConfirmToken, deleteConfirmToken, decideApproval, acknowledgeAlert, decideIntervention } from "@/lib/bff-v1/writes";
+import { liveWriteGated, sessionKindAllowsWrite, runAction, runCommandAction, requestConfirmToken, readConfirmToken, redeemConfirmToken, deleteConfirmToken, decideApproval, acknowledgeAlert } from "@/lib/bff-v1/writes";
 import { runPersonaAction } from "@/lib/bff-v1/personas";
 import { liveStatus } from "@/lib/bff-v1/liveStatus";
 import { BffError } from "@/lib/bff-v1/errors";
@@ -198,17 +198,6 @@ describe("acknowledgeAlert mock branch", () => {
   });
 });
 
-// ---------- decideIntervention (mock branch) ----------
-
-describe("decideIntervention mock branch", () => {
-  it("returns intervention decision envelope", async () => {
-    setEnv(false);
-    const env = await decideIntervention("iv_001", "acknowledge", "reviewing");
-    expect(env.ok).toBe(true);
-    expect(env.data.interventionId).toBe("iv_001");
-    expect(env.data.decision).toBe("acknowledge");
-  });
-});
 
 // ---------- readConfirmToken (mock branch) ----------
 

@@ -20,7 +20,6 @@ export const GLOBAL_SHORTCUTS: readonly ShortcutDef[] = [
   { keys: ["g", "p"], action: "nav.personas",        label: "Persona Registry",  route: "/management/personas" },
   { keys: ["g", "e"], action: "nav.executionLoop",   label: "Execution Loop",    route: "/management/loops/execution" },
   { keys: ["g", "o"], action: "nav.optimizationLoop",label: "Optimization Loop", route: "/management/loops/optimization" },
-  { keys: ["g", "i"], action: "nav.interventions",   label: "Interventions",     route: "/management/interventions" },
   { keys: ["/"],      action: "search.open",         label: "Search / command palette" },
   { keys: ["Esc"],    action: "overlay.close",       label: "Close topmost overlay" },
 ];

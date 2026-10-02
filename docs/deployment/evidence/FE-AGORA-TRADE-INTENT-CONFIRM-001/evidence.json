@@ -1,0 +1,54 @@
+{
+  "task_id": "FE-AGORA-TRADE-INTENT-CONFIRM-001",
+  "owner": "Codex2",
+  "reviewer": "Claude",
+  "repository": "ajoe734/execute-plans",
+  "base_commit": "4402d372c66101d685299a91c164ea388ebe61b6",
+  "backend_contract_commit": "0ab65eadec74c43ed6921b0d68b7e5c7f59152b8",
+  "validated_product_commit": "75556ea635f533fbd074a55496914487719eb0b2",
+  "scope": "Frontend decision receipt retention and governed trading-intent readback, handoff and withdrawal.",
+  "acceptance": [
+    "Confirm/modify retain intent_ref; confirm, modify, defer and reject use Agora write access.",
+    "Reload restores intent_ref from the persisted decision event and reads GET trading-intents/{id}, including lifecycle and handoffs.",
+    "Only shadow_start/shadow and paper_validation_request/paper handoffs; runtime rejects canary/live before transport.",
+    "Withdraw and handoff refresh authoritative readback; server allowedActions gate controls; no optimistic lifecycle success.",
+    "Per-event ETag takes precedence over queue ETag; missing version or loading/denied access disables mutations.",
+    "Decision/intent operations call only trading-room decision-events and trading-intents paths; existing persona consultation remains separate.",
+    "UI removes internal task code and states that no order is placed."
+  ],
+  "verification": [
+    {
+      "command": "timeout 180 env PANTHEON_CONTRACT_ROOT=$PANTHEON_COMMAND_ROOT npm run test:contract",
+      "exit_code": 0,
+      "result": "49 schemas, 157 routes, 75 sha256 entries aligned; 7 tests passed against current Pantheon dev at backend_contract_commit"
+    },
+    {
+      "command": "timeout 180 npm test -- src/agora/components/TradeDecisionCard.test.tsx src/lib/bff-v1/agora/tradingRoom.test.ts src/lib/bff-v1/agora/tradingIntents.test.ts src/agora/pages/trading-room/TradingRoomPage.test.tsx src/agora/pages/trading-room/TradingRoomWorkspace.test.tsx src/agora/useAgoraWriteAccess.test.ts",
+      "exit_code": 0,
+      "result": "195 passed across 6 files"
+    },
+    {
+      "command": "timeout 180 npm run typecheck",
+      "exit_code": 0
+    },
+    {
+      "command": "timeout 60 npx eslint src/agora/components/TradeDecisionCard.tsx src/agora/components/TradeDecisionCard.test.tsx src/lib/bff-v1/agora/tradingRoom.ts src/lib/bff-v1/agora/tradingRoom.test.ts src/lib/bff-v1/agora/tradingIntents.ts src/lib/bff-v1/agora/tradingIntents.test.ts",
+      "exit_code": 0
+    },
+    {
+      "command": "timeout 180 env VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build",
+      "exit_code": 0
+    },
+    {
+      "command": "git diff --check",
+      "exit_code": 0
+    }
+  ],
+  "limitations": [
+    "Unit tests mock HTTP; no hosted write test or dev deployment claimed.",
+    "Build reports bundle-size warnings; adjacent existing workspace tests emit React act warnings."
+  ],
+  "integration": "Merged current dev including PR #792; types.ts, contract-snapshot.json and frontend-generation-output.v1_13.json match origin/dev and are absent from the PR diff.",
+  "net_production_lines": 117,
+  "review_status": "Owner evidence prepared for exact-head CI and independent Claude review; no approval or deployment claimed."
+}

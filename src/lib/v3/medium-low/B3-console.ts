@@ -15,7 +15,6 @@ export const COMMAND_CENTER_KPIS: readonly CommandCenterKpiSpec[] = [
   { id: "runningJobCount",             formula: "count(job where status in [queued, running, retrying])", source: "Job System" },
   { id: "personaViolationCount",       formula: "count(policyViolation where status != closed)", source: "Persona Directorate" },
   { id: "capitalExposureUtilization",  formula: "allocatedCapital / totalCapital", source: "Capital Pool" },
-  { id: "agoraIncomingCount",          formula: "count(handoff where status=submitted)", source: "Handoff Queue" },
   { id: "runtimeHealthScore",          formula: "percentage(runtime where status=healthy)", source: "Runtime Monitor" },
 ] as const;
 
@@ -98,9 +97,7 @@ export type SseChannel =
   | "alerts.live"
   | "incidents.timeline"
   | "deployment.events"
-  | "review.updates"
-  | "agora.signals"
-  | "agora.session.messages";
+  | "review.updates";
 
 export interface SseChannelSpec {
   channel: SseChannel;
@@ -118,8 +115,6 @@ export const SSE_CHANNELS: readonly SseChannelSpec[] = [
   { channel: "incidents.timeline",        endpoint: "/bff/sse/incidents/:id/timeline",   retainCount: 200, minIntervalMs: 1000 },
   { channel: "deployment.events",         endpoint: "/bff/sse/deployment/events",        retainCount: 100, minIntervalMs: 1000 },
   { channel: "review.updates",            endpoint: "/bff/sse/review/updates",           retainCount: 100, minIntervalMs: 1000 },
-  { channel: "agora.signals",             endpoint: "/bff/sse/agora/signals",            retainCount: 200, minIntervalMs: 1000 },
-  { channel: "agora.session.messages",    endpoint: "/bff/sse/agora/sessions/:id",       retainCount: 200, minIntervalMs: 250 },
 ] as const;
 
 export interface SseDiagnosticDTO {

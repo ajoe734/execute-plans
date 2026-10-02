@@ -1,0 +1,105 @@
+{
+  "task_id": "FE-AGORA-DEAD-CLIENT-REMOVAL-001",
+  "owner": "Codex",
+  "reviewer": "Antigravity",
+  "base_commit": "40c6fcb3edfe83c0ab444bf9c5ae020230c394e2",
+  "implementation_commit": "d9a08bb9734aa706cd7affd575211d69a5bbd99e",
+  "validation_commit": "2262025ee9b8cb4741c16740d2d4a967b68877ff",
+  "pantheon_contract_commit": "0ab65eadec74c43ed6921b0d68b7e5c7f59152b8",
+  "change_class": "simplify",
+  "production_net_lines": -942,
+  "production_line_budget": -500,
+  "changes": [
+    "Deleted unused agoraReads daily/signals/inbox/ask API, dashboard client, identity me/sessions, barrels and dead path builders.",
+    "Moved the surviving journal adapter into management governance; preserved endpoint, DTO aliases, subject filtering and strict failures.",
+    "Deleted v3 Agora KPI, handoff, signal feedback and committee evidence modules; removed Agora-only B2-B5 sections while retaining Management contracts.",
+    "Postmortems list now reads /api/v1/postmortems and accepts canonical report_id as well as existing postmortem_id for list/detail identity.",
+    "Strategy detail tolerates each secondary request failure, reports unavailable sections, ends primary failure loading and ignores stale effect completions.",
+    "Decision links open a live strategy or audit page; removed the nonexistent memory-review navigation.",
+    "Replaced F13 synthetic retired endpoint harness with actual management page browser tests; retained CI entrypoint."
+  ],
+  "preserved_clients": [
+    "src/lib/bff-v1/agora/tradingRoom.ts",
+    "src/lib/bff-v1/agora/workshops.ts",
+    "src/lib/bff-v1/agora/performance.ts",
+    "src/lib/bff-v1/agora/servant.ts",
+    "src/lib/bff-v1/agora/research.ts",
+    "src/lib/bff-v1/agora/governance.ts",
+    "src/lib/bff-v1/agora/types.ts"
+  ],
+  "validation": [
+    {
+      "command": "timeout 180 npm run typecheck",
+      "exit_code": 124,
+      "note": "Initial bounded run timed out during concurrent validation; not counted as passed."
+    },
+    {
+      "command": "timeout 480 npm run typecheck",
+      "exit_code": 0
+    },
+    {
+      "command": "timeout 240 npm run typecheck:agora",
+      "exit_code": 0
+    },
+    {
+      "command": "timeout 720 npm test",
+      "exit_code": 1,
+      "note": "All 2236 tests passed, but Vitest worker onTaskUpdate timed out during concurrent validation; not counted as a passing run."
+    },
+    {
+      "command": "timeout 720 npm test",
+      "exit_code": 0,
+      "test_files": 208,
+      "passed": 2236
+    },
+    {
+      "command": "PANTHEON_CONTRACT_ROOT=$PANTHEON_COMMAND_ROOT timeout 180 npm run test:contract",
+      "exit_code": 0,
+      "passed": 7,
+      "note": "Command runtime HEAD matched current Pantheon dev above; 49 schemas, 157 routes and 75 sha256 entries aligned."
+    },
+    {
+      "command": "VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build",
+      "exit_code": 0
+    },
+    {
+      "command": "VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false VITE_GCP_IDENTITY_API_KEY=AIza00000000000000000000000000000000000 npx --no-install playwright test e2e/13-agora.spec.ts --project=chromium --retries=0",
+      "exit_code": 0,
+      "passed": 3,
+      "note": "Prior evidence at ef2d89e668b222cc16a4546c80ceec6fa5bb7f30; contained loopback fixtures, real production route components; not rerun during this base refresh and not hosted-runtime proof."
+    },
+    {
+      "command": "python3 $PANTHEON_COMMAND_ROOT/scripts/git/diff_budget.py --base origin/dev --head HEAD --change-class simplify --budget -500",
+      "exit_code": 0
+    },
+    {
+      "command": "python3 scripts/git/check_commit_trailers.py --range origin/dev..HEAD",
+      "exit_code": 0
+    },
+    {
+      "command": "git diff --check origin/dev...HEAD",
+      "exit_code": 0
+    }
+  ],
+  "contract_source": "Pantheon command-runtime services/control-plane/bff/postmortems/router.py and tests/test_postmortem_router.py: data array and report_id identity.",
+  "merged_base_validation": {
+    "commit": "d9a08bb9734aa706cd7affd575211d69a5bbd99e",
+    "contract": "PANTHEON_CONTRACT_ROOT=$PANTHEON_COMMAND_ROOT timeout 180 npm run test:contract: exit 0, 7 tests.",
+    "command": "timeout 180 npm test -- src/agora/components/TradeDecisionCard.test.tsx src/lib/bff-v1/agora/tradingIntents.test.ts src/lib/bff-v1/agora/tradingRoom.test.ts src/lib/bff-v1/postmortemClient.test.ts src/lib/bff-v1/__tests__/agoraReadsDeterministic.test.ts src/management/__tests__/fullOperationAssembly.test.tsx",
+    "exit_code": 0,
+    "passed": 128,
+    "note": "Second refresh only integrates dev PR #787 without conflicts. Targeted tests cover both incoming clients and this task; prior complete validation is bound above. New-head CI supplies merge validation."
+  },
+  "limitations": [
+    "Independent Antigravity review pending fresh exact-head handoff after new-head CI.",
+    "Dev merge and deployment not yet verified.",
+    "Build emits existing large-chunk warnings."
+  ],
+  "delivery": {
+    "pr": "https://github.com/ajoe734/execute-plans/pull/789",
+    "artifact_admission": "Human/Ops declared the five companion files on 2026-09-30; changes only remove or update references to deleted exports.",
+    "base_refresh": "Merged dev 4402d372 (PR #792), then 40c6fcb3 (PR #787) after base advanced during CI. Both merges clean. Generated Agora artifacts and incoming trading-intent clients match dev and are absent from the PR diff.",
+    "environment": "Installed absent npm dependencies with npm ci before validation; initial missing-tool invocations are not passes.",
+    "previous_ci_blocker": "Agora bundle checksum drift resolved by upstream digest repair and FE PR #792; current contract checks pass."
+  }
+}

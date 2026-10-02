@@ -4,7 +4,7 @@
  * Coverage:
  *   1. Cockpit load budget plus 30s SSE-driven DOM rerender proxy.
  *   2. Entity registry first-page load budget and DataTable density stability.
- *   3. Sentinel list load budget.
+ *   3. Incident list load budget.
  *   4. LineageGraph warns when the graph exceeds 500 nodes.
  *
  * Budgets are soft by default so this spec can enter CI without blocking the
@@ -24,7 +24,7 @@ const DEFAULT_FRONTEND_BASE_URL = "http://127.0.0.1:5173";
 
 const COCKPIT_PATH = "/management/cockpit";
 const ENTITY_LIST_PATH = "/management/strategies";
-const SENTINEL_PATH = "/management/sentinel";
+const INCIDENTS_PATH = "/management/incidents";
 const LINEAGE_PATH = "/management/lineage?root=strategy-f18-wide";
 
 const STRICT_BUDGETS = process.env.FE_INT_GATE_PERF_STRICT === "1";
@@ -34,7 +34,7 @@ const SSE_EVENT_INTERVAL_MS = Number(process.env.FE_INT_GATE_SSE_EVENT_INTERVAL_
 const BUDGETS = {
   cockpitLoadMs: 4_000,
   entityFirstPageLoadMs: 4_000,
-  sentinelListLoadMs: 4_000,
+  incidentListLoadMs: 4_000,
   sseMutationBatchesPer30s: 180,
 } as const;
 
@@ -46,6 +46,7 @@ const SERVING_MOCK_BANNER =
 type JsonRecord = Record<string, unknown>;
 
 type RouteCounters = {
+  incidents: number;
   cockpit: number;
   controlRoom: number;
   lineage: number;
@@ -261,6 +262,7 @@ async function fulfillJson(
 
 function routeCounters(): RouteCounters {
   return {
+    incidents: 0,
     cockpit: 0,
     controlRoom: 0,
     lineage: 0,
@@ -844,6 +846,14 @@ async function installPerfRoutes(page: Page, counters: RouteCounters): Promise<v
       meta: { snapshot_at: nowIso(), surfaces: { interventions: { status: "ok" } } },
     });
   });
+  await page.route(/\/bff\/incidents(?:\?.*)?$/, async (route) => {
+    counters.incidents += 1;
+    await fulfillJson(route, {
+      items: [{ id: "incident-f18", title: "F18 Incident routing drift", severity: "high",
+        status: "investigating", openedAt: nowIso(), description: "Pending incident investigation" }],
+      total: 1, totalIsExact: true,
+    });
+  });
   await page.route(/\/bff\/strategies(?:\?.*)?$/, async (route) => {
     counters.strategies += 1;
     await fulfillJson(route, STRATEGIES_RESPONSE);
@@ -1153,32 +1163,21 @@ test.describe("F18 perf and stability soft-fail budgets", () => {
     });
   });
 
-  test("keeps Sentinel list load within soft budget", async ({ page }, testInfo) => {
+  test("keeps incident list load within soft budget", async ({ page }, testInfo) => {
     const counters = routeCounters();
     const failures = collectPageFailures(page);
     await installPerfRoutes(page, counters);
-
     const loadMs = await gotoAndWaitForText(
-      page,
-      SENTINEL_PATH,
-      [/F18 Sentinel Finding 001/i, /\bcritical\b/i, /\bwarning\b/i],
-      "Sentinel list",
+      page, INCIDENTS_PATH, [/F18 Incident routing drift/], "Incident list",
     );
     recordBudget(testInfo, {
-      id: "sentinel_list_load",
-      label: "Sentinel list load",
-      actual: loadMs,
-      max: BUDGETS.sentinelListLoadMs,
-      unit: "ms",
+      id: "incident_list_load", label: "Incident list load", actual: loadMs,
+      max: BUDGETS.incidentListLoadMs, unit: "ms",
     });
-
-    await expect(page.getByText("F18 Sentinel Finding 001", { exact: false }).first()).toBeVisible();
+    await expect(page.getByRole("row").filter({ hasText: "F18 Incident routing drift" })).toBeVisible();
+    expect(counters.incidents).toBeGreaterThan(0);
     expect(await bodyText(page)).not.toMatch(CRASH_TEXT);
-    expect(failures, "Sentinel list should not emit console/page errors").toEqual([]);
-    testInfo.annotations.push({
-      type: "fixture-route-reads",
-      description: `sentinel_findings=${counters.sentinelFindings}`,
-    });
+    expect(failures, "Incident list should not emit console/page errors").toEqual([]);
   });
 
   test("warns when LineageGraph receives more than 500 nodes", async ({ page }) => {

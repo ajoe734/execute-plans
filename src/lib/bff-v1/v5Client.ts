@@ -12,21 +12,13 @@ import {
   v5List,
   type V5ListResponse,
   loopRunsByKind,
-  findCatalogueEntry,
-  buildRemediationAction,
-  adaptBffInterventionsResponse,
-  adaptBffIntervention,
   adaptBffLoopRun,
   adaptBffPersonaHealth,
   adaptBffStrategyHealth,
-  adaptBffSentinelFinding,
   adaptBffControlRoom,
   type LoopRun,
-  type SentinelFinding,
-  type InterventionItem,
   type PersonaExecutionHealth,
   type StrategyExecutionHealth,
-  type RemediationAction,
   type ControlRoomSummary,
   type V5SessionContext,
 } from "./v5";
@@ -42,8 +34,6 @@ import type { RankingRecommendationSubmitResult } from "./management";
 const livePaths = {
   v5ControlRoom: () => "/bff/v5/control-room",
   v5StrategyHealth: () => "/bff/v5/execution/strategy-health",
-  v5SentinelFinding: paths.v5SentinelFinding,
-  v5SentinelStatus: paths.v5SentinelFindingStatus,
 };
 
 export function session(): V5SessionContext {
@@ -161,98 +151,6 @@ export const bffV5 = {
       ),
   },
 
-  // ---- Sentinel ----
-  sentinel: {
-    list: (opts?: { signal?: AbortSignal }): Promise<V5ListResponse<SentinelFinding>> =>
-      strictLiveRead<V5ListResponse<SentinelFinding>>(
-        "v5.sentinel.list",
-        { method: "GET", path: paths.v5SentinelFindings(), signal: opts?.signal },
-        (data) => v5List(strictItemsFrom(data).map(adaptBffSentinelFinding)),
-      ),
-    get: (id: string, opts?: { signal?: AbortSignal }): Promise<SentinelFinding | undefined> =>
-      strictLiveRead<SentinelFinding | undefined>(
-        "v5.sentinel.get",
-        { method: "GET", path: livePaths.v5SentinelFinding(id), signal: opts?.signal },
-        (data) => {
-          const record = strictDataFrom(data);
-          return record ? adaptBffSentinelFinding(record, 0) : undefined;
-        },
-      ),
-    setStatus: async (id: string, status: SentinelFinding["status"]): Promise<{ ok: true; persisted: boolean }> => {
-      if (!(await liveWriteGated())) {
-        return { ok: true, persisted: false };
-      }
-      await bffFetch<unknown>({
-        method: "POST",
-        path: livePaths.v5SentinelStatus(id),
-        body: { status },
-        idempotencyKey: mintIdempotencyKey(),
-        mode: "live",
-      });
-      return { ok: true, persisted: true };
-    },
-  },
-
-  // ---- Interventions ----
-  interventions: {
-    list: (opts?: { signal?: AbortSignal }): Promise<V5ListResponse<InterventionItem>> =>
-      strictLiveRead<V5ListResponse<InterventionItem>>(
-        "v5.interventions.list",
-        { method: "GET", path: paths.v5Interventions(), query: { status: "pending" }, signal: opts?.signal },
-        adaptBffInterventionsResponse,
-      ),
-    get: (id: string, opts?: { signal?: AbortSignal }): Promise<InterventionItem | undefined> =>
-      strictLiveRead<InterventionItem | undefined>(
-        "v5.interventions.get",
-        { method: "GET", path: paths.v5Intervention(id), signal: opts?.signal },
-        (data) => {
-          const record = strictDataFrom(data);
-          return record ? adaptBffIntervention(record, 0) : undefined;
-        },
-      ),
-    decide: async (id: string, decision: NonNullable<InterventionItem["recommendedDecision"]>): Promise<{ ok: boolean; reason?: string }> => {
-      if (!(await liveWriteGated())) {
-        return { ok: false, reason: "writes_disabled" };
-      }
-      await bffFetch<unknown>({
-        method: "POST",
-        path: `${paths.v5Intervention(id)}/decide`,
-        body: { decision },
-        idempotencyKey: mintIdempotencyKey(),
-        mode: "live",
-      });
-      return { ok: true };
-    },
-  },
-
-  // ---- Remediation ----
-  remediation: {
-    build: (kind: string, args: { id?: string; targetKind?: RemediationAction["targetKind"]; targetId?: string }): RemediationAction | undefined => {
-      const entry = findCatalogueEntry(kind);
-      if (!entry) return undefined;
-      return buildRemediationAction(entry, {
-        id: args.id ?? `ra_${kind}_${Date.now().toString(36)}`,
-        targetKind: args.targetKind,
-        targetId: args.targetId,
-      });
-    },
-    execute: async (action: RemediationAction): Promise<{ ok: boolean; overlayUpdated: boolean; reason?: string }> => {
-      if (!(await liveWriteGated())) {
-        return { ok: false, overlayUpdated: false, reason: "writes_disabled" };
-      }
-      await bffFetch<unknown>({
-        method: "POST",
-        path: `${paths.v5Intervention(action.id)}/remediate`,
-        body: {
-          reason: action.label,
-          remediation_action: action.kind,
-        },
-        idempotencyKey: mintIdempotencyKey(),
-        mode: "live",
-      });
-      return { ok: true, overlayUpdated: false };
-    },
-  },
 };
 
 export type BffV5 = typeof bffV5;

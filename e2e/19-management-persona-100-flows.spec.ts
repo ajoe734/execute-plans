@@ -730,7 +730,6 @@ function cockpitModel(): JsonRecord {
       fields: [
         { key: "autonomy", label: "Autonomy", value: "supervised", tone: "ok", href: "/management/governance" },
         { key: "humanPending", label: "Human pending", value: 1, tone: "warn", href: "/management/human-inbox" },
-        { key: "critical", label: "Critical findings", value: 0, tone: "ok", href: "/management/sentinel" },
         { key: "owners", label: "Persona owners", value: 2, href: "/management/personas" },
         { key: "personas", label: "Personas", value: fleetRows.length, href: "/management/persona-fleet" },
         { key: "broker", label: "Broker live", value: "ready", tone: "ok", href: "/management/readiness/broker-live" },
@@ -911,18 +910,6 @@ function responseFor(method: string, path: string, body: unknown): { body: unkno
   if (pathname === `/bff/v5/loop-runs/${LOOP_ID}`) {
     return { status: 200, body: envelope(loopRecord, path) };
   }
-  if (pathname === "/bff/v5/sentinel/findings") {
-    return { status: 200, body: envelope([sentinelFinding], path) };
-  }
-  if (pathname === `/bff/v5/sentinel/findings/${FINDING_ID}`) {
-    return { status: 200, body: envelope(sentinelFinding, path) };
-  }
-  if (pathname === "/bff/v5/interventions") {
-    return { status: 200, body: envelope([intervention], path) };
-  }
-  if (pathname === `/bff/v5/interventions/${INTERVENTION_ID}`) {
-    return { status: 200, body: envelope(intervention, path) };
-  }
   if (pathname === "/bff/personas") {
     if (method === "POST") {
       return { status: 201, body: envelope({ ...persona, ...(body as JsonRecord | undefined) }, path) };
@@ -1057,13 +1044,6 @@ function responseFor(method: string, path: string, body: unknown): { body: unkno
     const targetId = String(target.id ?? PERSONA_ID);
     return { status: 202, body: commandResponse(action, targetId, path) };
   }
-  if (pathname.startsWith(`/bff/v5/interventions/${INTERVENTION_ID}/`)) {
-    const action = pathname.split("/").pop() ?? "intervention_action";
-    return { status: 202, body: commandResponse(action, INTERVENTION_ID, path) };
-  }
-  if (pathname === "/bff/v5/interventions/batch-decide") {
-    return { status: 202, body: commandResponse("batch_decide", INTERVENTION_ID, path) };
-  }
   if (pathname === `/bff/approvals/${APPROVAL_ID}/decide` || pathname === "/bff/approvals/batch-decide") {
     return { status: 202, body: commandResponse("approval_decide", APPROVAL_ID, path) };
   }
@@ -1132,8 +1112,6 @@ const uiFlows: UiFlow[] = [
   { id: "ui-017-formula-policy-detail", type: "ui", category: "monitor", path: `/management/promotion-allocation?tab=formula-policy&formula_id=${quarterlyFormula.formulaId}`, endpoint: "/bff/ranking-formulas", text: "MGMT100 Ranking Formula" },
   { id: "ui-018-deployment-alias", type: "ui", category: "monitor", path: "/management/deployment", endpoint: "/bff/deployments" },
   { id: "ui-019-execution-loop", type: "ui", category: "monitor", path: "/management/loops/execution", endpoint: "/bff/v5/loop-runs" },
-  { id: "ui-020-sentinel", type: "ui", category: "monitor", path: "/management/sentinel", endpoint: "/bff/v5/sentinel/findings" },
-  { id: "ui-021-interventions", type: "ui", category: "monitor", path: "/management/interventions", endpoint: "/bff/v5/interventions" },
   { id: "ui-022-personas-list", type: "ui", category: "display", path: "/management/personas", endpoint: "/bff/personas", text: PERSONA_NAME },
   { id: "ui-023-persona-detail", type: "ui", category: "display", path: `/management/personas/${PERSONA_ID}`, endpoint: `/bff/personas/${PERSONA_ID}`, text: PERSONA_NAME },
   { id: "ui-024-persona-onboarding", type: "ui", category: "adjust", path: `/management/personas/${PERSONA_ID}/onboarding`, endpoint: `/bff/personas/${PERSONA_ID}` },
@@ -1160,8 +1138,6 @@ const fetchFlows: FetchFlow[] = [
   { id: "fetch-042-persona-health", type: "fetch", category: "monitor", method: "GET", path: "/bff/v5/execution/persona-health" },
   { id: "fetch-043-strategy-health", type: "fetch", category: "monitor", method: "GET", path: "/bff/v5/execution/strategy-health" },
   { id: "fetch-044-loop-runs", type: "fetch", category: "monitor", method: "GET", path: "/bff/v5/loop-runs" },
-  { id: "fetch-045-sentinel", type: "fetch", category: "monitor", method: "GET", path: "/bff/v5/sentinel/findings" },
-  { id: "fetch-046-interventions", type: "fetch", category: "monitor", method: "GET", path: "/bff/v5/interventions" },
   { id: "fetch-047-personas", type: "fetch", category: "display", method: "GET", path: "/bff/personas" },
   { id: "fetch-048-persona-detail", type: "fetch", category: "display", method: "GET", path: `/bff/personas/${PERSONA_ID}` },
   { id: "fetch-049-persona-memory", type: "fetch", category: "display", method: "GET", path: `/bff/personas/${PERSONA_ID}/memory` },
@@ -1173,9 +1149,7 @@ const fetchFlows: FetchFlow[] = [
   { id: "fetch-055-league-tiers", type: "fetch", category: "monitor", method: "GET", path: "/bff/management/persona-league/tiers" },
   { id: "fetch-056-ranking-formula", type: "fetch", category: "monitor", method: "GET", path: "/bff/management/quarterly-ranking/formula" },
   { id: "fetch-057-ranking-recommendations", type: "fetch", category: "monitor", method: "GET", path: "/bff/management/quarterly-ranking/recommendations?quarter=2026Q2" },
-  { id: "fetch-058-intervention-detail", type: "fetch", category: "monitor", method: "GET", path: `/bff/v5/interventions/${INTERVENTION_ID}` },
   { id: "fetch-059-loop-detail", type: "fetch", category: "monitor", method: "GET", path: `/bff/v5/loop-runs/${LOOP_ID}` },
-  { id: "fetch-060-finding-detail", type: "fetch", category: "monitor", method: "GET", path: `/bff/v5/sentinel/findings/${FINDING_ID}` },
   { id: "fetch-061-runtimes", type: "fetch", category: "monitor", method: "GET", path: "/bff/runtimes" },
   { id: "fetch-062-runtime-detail", type: "fetch", category: "monitor", method: "GET", path: `/bff/runtimes/${RUNTIME_ID}` },
   { id: "fetch-063-alerts", type: "fetch", category: "monitor", method: "GET", path: "/bff/alerts" },
@@ -1193,12 +1167,6 @@ const fetchFlows: FetchFlow[] = [
   { id: "fetch-075-freeze", type: "fetch", category: "adjust", method: "POST", path: "/bff/v1/commands", body: { type: "PersonaAction", payload: { target: { type: "Persona", id: PERSONA_ID }, action: "freeze", memo: "paper freeze review" } } },
   { id: "fetch-076-test-prompt", type: "fetch", category: "feedback", method: "POST", path: `/bff/personas/${PERSONA_ID}/test-prompt`, body: { prompt: "Explain current paper risk drift." } },
   { id: "fetch-077-patch-persona", type: "fetch", category: "adjust", method: "PATCH", path: `/bff/personas/${PERSONA_ID}`, body: { description: "100-flow adjustment validation" } },
-  { id: "fetch-078-claim-intervention", type: "fetch", category: "adjust", method: "POST", path: `/bff/v5/interventions/${INTERVENTION_ID}/claim`, body: { memo: "claim" } },
-  { id: "fetch-079-release-intervention", type: "fetch", category: "adjust", method: "POST", path: `/bff/v5/interventions/${INTERVENTION_ID}/release`, body: { memo: "release" } },
-  { id: "fetch-080-escalate-intervention", type: "fetch", category: "adjust", method: "POST", path: `/bff/v5/interventions/${INTERVENTION_ID}/escalate`, body: { to: "risk-owner" } },
-  { id: "fetch-081-decide-intervention", type: "fetch", category: "adjust", method: "POST", path: `/bff/v5/interventions/${INTERVENTION_ID}/decide`, body: { decision: "approve", memo: "approve remediation" } },
-  { id: "fetch-082-two-man", type: "fetch", category: "adjust", method: "POST", path: `/bff/v5/interventions/${INTERVENTION_ID}/two-man-sign`, body: { secondOperatorId: "op-mgmt100-2" } },
-  { id: "fetch-083-batch-decide", type: "fetch", category: "adjust", method: "POST", path: "/bff/v5/interventions/batch-decide", body: { ids: [INTERVENTION_ID], decision: "approve" } },
   { id: "fetch-084-approval-decide", type: "fetch", category: "adjust", method: "POST", path: `/bff/approvals/${APPROVAL_ID}/decide`, body: { decision: "approve", reason: "100-flow" } },
   { id: "fetch-085-approval-batch", type: "fetch", category: "adjust", method: "POST", path: "/bff/approvals/batch-decide", body: { ids: [APPROVAL_ID], decision: "reject" } },
   { id: "fetch-086-alert-ack", type: "fetch", category: "adjust", method: "POST", path: `/bff/alerts/${ALERT_ID}/acknowledge`, body: { memo: "ack" } },
@@ -1222,14 +1190,14 @@ const flows: Flow[] = [...uiFlows, ...fetchFlows];
 
 test.setTimeout(180_000);
 
-test("runs 100 management/persona/trading interaction flows", async ({ page }) => {
+test("runs 88 management/persona/trading interaction flows", async ({ page }) => {
   test.skip(
     targetsExternalE2eEnvironment(),
     "route-mocked fixture coverage is loopback-only; hosted candidates use live acceptance specs",
   );
-  expect(flows).toHaveLength(100);
-  expect(new Set(flows.map((flow) => flow.id)).size).toBe(100);
-  expect(new Set(flows.map((flow) => `${flow.type}:${flow.category}:${"path" in flow ? flow.path : ""}`)).size).toBeGreaterThan(90);
+  expect(flows).toHaveLength(88);
+  expect(new Set(flows.map((flow) => flow.id)).size).toBe(88);
+  expect(new Set(flows.map((flow) => `${flow.type}:${flow.category}:${"path" in flow ? flow.path : ""}`)).size).toBeGreaterThan(78);
 
   const hits: BffHit[] = [];
   await installBffFixture(page, hits);
@@ -1325,7 +1293,7 @@ test("runs 100 management/persona/trading interaction flows", async ({ page }) =
     return acc;
   }, {});
 
-  expect(results).toHaveLength(100);
+  expect(results).toHaveLength(88);
   expect(counts.display).toBeGreaterThanOrEqual(25);
   expect(counts.monitor).toBeGreaterThanOrEqual(25);
   expect(counts.adjust).toBeGreaterThanOrEqual(20);

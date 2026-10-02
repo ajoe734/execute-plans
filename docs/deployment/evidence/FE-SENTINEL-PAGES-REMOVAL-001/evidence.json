@@ -1,0 +1,21 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "FE-SENTINEL-PAGES-REMOVAL-001",
+  "owner": "Codex",
+  "reviewer": "Claude2",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "base_sha": "c6d15063e9e8447a90eb77c0f9c7a31007597fdc",
+  "summary": "Remove Sentinel and Interventions pages, routes, navigation, shortcuts, cockpit link, dedicated clients/paths/types, dead remediation helpers, and retired test/probe coverage.",
+  "validation": [
+    {"command": "timeout 600 npm test", "exit_code": 0, "result": "208 files; 2246 tests passed"},
+    {"command": "timeout 180 npm run typecheck", "exit_code": 0},
+    {"command": "timeout 300 env VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build", "exit_code": 0},
+    {"command": "npx playwright test --list --reporter=line", "exit_code": 0, "result": "136 tests in 49 files; discovery only"},
+    {"command": "npx vitest run src/lib/bff-v1/__tests__/seedTaxonomy.test.ts --maxWorkers=2", "exit_code": 0, "result": "7 tests passed after deleting retired route inventory entries"},
+    {"command": "git diff origin/dev --check", "exit_code": 0},
+    {"check": "Deleted modules absent; no retired route/path references in src or scripts", "result": "passed"}
+  ],
+  "production_net_lines": -1981,
+  "boundary": "Shared Control Room summary adapters/types and health metrics remain in use. Backend, incident screens and approval workflows are unchanged. Browser E2E execution and hosted deployment are not claimed; independent review is pending."
+}

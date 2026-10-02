@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   adaptBffControlRoom,
   adaptBffIntervention,
-  adaptBffInterventionsResponse,
   adaptBffLoopRun,
   adaptBffPersonaHealth,
   adaptBffSentinelFinding,
@@ -47,19 +46,6 @@ describe("v5 DTO / View Model Pure Transforms", () => {
     expect(item.updatedAt).toBe(fallback);
   });
 
-  it("adaptBffInterventionsResponse is pure and deterministic across time", async () => {
-    const body = { items: [{}, { intervention_id: "int-123", kind: "risk_breach" }] };
-    const first = adaptBffInterventionsResponse(body);
-
-    await new Promise((resolve) => setTimeout(resolve, 25));
-
-    const second = adaptBffInterventionsResponse(body);
-
-    expect(first).toEqual(second);
-    expect(first.items[0].createdAt).toBe("");
-    expect(first.items[1].severity).toBe("critical");
-    expect(first.items[1].source).toBe("policy_exception");
-  });
 
   it("adaptBffLoopRun is pure: zero wall-clock reads or non-deterministic fallbacks", async () => {
     const input = {};
