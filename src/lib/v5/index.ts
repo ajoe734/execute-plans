@@ -7,13 +7,6 @@ export * from "./list";
 export * from "./events";
 export * from "./timeoutPolicy";
 export * from "./health";
-export * from "./remediation";
-export * from "./sentinel";
 export { adaptPersonaHealth } from "./adapters/persona";
 export { adaptStrategyHealth } from "./adapters/strategy";
 export { deriveLoopRuns, loopRunsByKind } from "./adapters/loopRun";
-export {
-  adaptApprovalToIntervention,
-  adaptFindingToIntervention,
-  adaptIncidentToIntervention,
-} from "./adapters/intervention";

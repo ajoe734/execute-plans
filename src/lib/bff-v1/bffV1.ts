@@ -17,7 +17,6 @@ import * as headersModule from "./headers";
 import * as writesModule from "./writes";
 import * as managementModule from "./management";
 import * as v5Module from "./v5Client";
-import * as agoraModule from "./agora/agoraReads";
 
 export const bffV1 = {
   get fetch() { return clientModule.bffFetch; },
@@ -75,5 +74,4 @@ export const bffV1 = {
   get writes() { return writesModule.bffWrites; },
   get mgmt() { return managementModule.mgmt; },
   get v5() { return v5Module.bffV5; },
-  get agora() { return agoraModule.bffAgora; },
 };

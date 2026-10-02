@@ -204,8 +204,6 @@ export const MANAGEMENT_SIDEBAR_GROUPS: readonly ManagementNavGroup[] = [
       { id: "deployments", to: "/management/deployments", labelKey: "nav.deployments", icon: Rocket },
       { id: "runtimes", to: "/management/runtimes", labelKey: "nav.runtimes", icon: Server },
       { id: "loops", to: "/management/loops", labelKey: "nav.loops", icon: Workflow, dedupeKey: "loops" },
-      { id: "sentinel", to: "/management/sentinel", labelKey: "nav.sentinel", icon: ShieldAlert, dedupeKey: "humanQueue" },
-      { id: "interventions", to: "/management/interventions", labelKey: "nav.interventions", icon: Eye, dedupeKey: "humanQueue" },
       { id: "incidents", to: "/management/incidents", labelKey: "nav.incidents", icon: AlertOctagon },
       { id: "jobs", to: "/management/jobs", labelKey: "nav.jobs", icon: ListChecks },
       { id: "alerts", to: "/management/alerts", labelKey: "nav.alerts", icon: Bell },

@@ -26,7 +26,9 @@ import {
   strictLiveRead,
   type UnknownRecord,
 } from "./domainReads";
-import { bffAgora } from "./agora/agoraReads";
+import { strictItemsFrom } from "./liveTransport";
+
+const asString = (value: unknown, fallback = ""): string => String(value ?? "").trim() || fallback;
 
 const normalizedKind = (kind: string) => kind.replace(/[^a-z0-9]/gi, "").toLowerCase();
 const isPersonaKind = (kind: string) => normalizedKind(kind) === "persona";
@@ -257,12 +259,33 @@ export async function getWatchersForSubject(_kind: string, _id: string): Promise
   return [];
 }
 
+function adaptJournalEntry(value: unknown): DecisionJournalEntry {
+  const item = asRecord(value) ?? {};
+  const id = asString(item.entry_id ?? item.entryId ?? item.decision_id ?? item.decisionId ?? item.id, "");
+  const scope = asRecord(item.scope) ?? {};
+  return {
+    id,
+    subjectKind: asString(item.subjectKind ?? item.subject_kind ?? scope.type, "Agora"),
+    subjectId: asString(item.subjectId ?? item.subject_id ?? scope.id ?? item.scope_ref ?? item.scopeRef, id),
+    title: asString(item.title ?? item.decision ?? item.summary, id),
+    decidedAt: asString(item.decidedAt ?? item.decided_at ?? item.updated_at ?? item.updatedAt ?? item.created_at ?? item.createdAt, ""),
+    decidedBy: asString(item.decidedBy ?? item.decided_by ?? item.actor_id ?? item.actorId, "agora"),
+    outcome: ["pending", "good", "neutral", "bad"].includes(asString(item.outcome))
+      ? asString(item.outcome) as DecisionJournalEntry["outcome"]
+      : undefined,
+  };
+}
+
 export async function listDecisionJournal(): Promise<DecisionJournalEntry[]> {
-  return bffAgora.journal.list();
+  return strictLiveRead(
+    "decisionJournal.list",
+    { method: "GET", path: paths.agoraJournal() },
+    (data) => strictItemsFrom(data).map(adaptJournalEntry),
+  );
 }
 
 export async function getDecisionJournalForSubject(kind: string, id: string): Promise<DecisionJournalEntry[]> {
-  const items = await bffAgora.journal.list();
+  const items = await listDecisionJournal();
   return items.filter((d) => d.subjectKind === kind && d.subjectId === id);
 }
 
