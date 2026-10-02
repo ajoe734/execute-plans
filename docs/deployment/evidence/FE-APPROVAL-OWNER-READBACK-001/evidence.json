@@ -1,0 +1,35 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "FE-APPROVAL-OWNER-READBACK-001",
+  "owner": "Claude",
+  "reviewer": "Codex2",
+  "target_repo": "ajoe734/execute-plans",
+  "merge_target": "dev",
+  "status": "ready-for-independent-exact-head-review",
+  "base_commit": "638c809b",
+  "production_net_lines": 54,
+  "local_validation": {
+    "typecheck": "tsc -p tsconfig.app.json --noEmit: exit 0",
+    "vitest": "98 files / 926 tests passed (src/lib/bff-v1, src/management)",
+    "e2e": "npm ci + npm run build:e2e exit 0 in isolated node_modules; npx playwright test e2e/12-approvals.spec.ts: 5 passed",
+    "scope": "local isolated only; fixtures are not hosted owner evidence"
+  },
+  "covered": [
+    "expected_version transport from observed owner version (decideApproval, approve/reject/batch aliases)",
+    "missing/malformed version refused before any request; zero never substituted",
+    "same-attempt retry keeps Idempotency-Key and payload; 409 or changed content mints a new key",
+    "batch items use own version and distinct keys",
+    "pages no longer derive final state from the requested vote; readback after submit; 409 refresh without re-vote",
+    "Operations HighRiskConfirm passes exact memo",
+    "request_changes/escalate/freeze and named-stage UI removed; fixed mock evidence replaced by Not provided",
+    "e2e/12-approvals.spec.ts harness: versioned DTOs, /decide enforces expected_version (422 missing, 409 stale)",
+    "Operations.test.tsx: real GovernanceReview/Operations ApprovalsPage/GovernanceQueue callers with real HighRiskConfirm: exact memo+expected_version, Retry action re-sends the unchanged failed attempt, 409 refresh without re-vote, refresh-failed 409 and readback-failure warnings without success toast, batch per-item versions, ambiguous batch failure retried with original version/memo and 409 item not re-voted",
+    "operations.ts projection: owner decision_state=decided + decision approved/approved_with_conditions/rejected map to final states (conditions preserved); pending/under_review stay pending; revoked/superseded/unknown are non-actionable",
+    "GovernanceQueue: fresh batch submits only explicit current selection with displayed versions; retry bound to immutable per-attempt items/decision/memo; interleaved-attempt and deselection regressions; truthful vote-submitted wording (scoped locale key en-US/zh-TW), no predicted final state",
+    "e2e real queue page with real-shaped owner records: decided/rejected/revoked rows final and non-selectable"
+  ],
+  "not_done": [
+    "Safe e2e build disables real writes (VITE_BFF_REAL_WRITES=false), so vote POST transport/deselection are proven by real-page vitest (Operations.test.tsx), not the browser; browser covers read-side final states",
+    "Hosted acceptance remains external_wait; no SSH/VM access used"
+  ]
+}
