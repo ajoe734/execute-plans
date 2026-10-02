@@ -68,11 +68,7 @@ const ENDPOINTS = [
   // P1-C - v5 Sentinel + HIQ writes
 
   // P1-E - Agora writes
-  { batch: "P1-E", safety: "create", route: "/bff/agora/signals", method: "POST", body: { title: "dev-probe" } },
-  { batch: "P1-E", safety: "create", route: "/bff/agora/feedback", method: "POST", body: { target: "dev", text: "probe" } },
-  { batch: "P1-E", safety: "create", route: "/bff/agora/inbox/inbox-dev/triage", method: "POST", body: { action: "ack" } },
   { batch: "P1-E", safety: "create", route: "/bff/agora/journal", method: "POST", body: { title: "dev-probe", body: "probe" } },
-  { batch: "P1-E", safety: "create", route: "/bff/agora/skill-coaching", method: "POST", body: { skillId: "skill-dev" } },
   { batch: "P1-E", safety: "create", route: "/bff/agora/postmortems", method: "POST", body: { incidentId: "incident-dev" } },
 
   // P2-MAI - Management AI runtime (OpenClaw / Codex)
@@ -93,8 +89,6 @@ const READBACK_ENDPOINTS = [
   "/bff/research-experiments",
   "/bff/skills",
   "/bff/approvals",
-  "/bff/agora/signals",
-  "/bff/agora/inbox",
   "/bff/agora/journal",
   "/bff/agora/postmortems",
 ];

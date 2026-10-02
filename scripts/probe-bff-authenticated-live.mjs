@@ -282,8 +282,6 @@ const LIST_ENDPOINTS = [
   "/bff/tools",
   "/bff/ranking-formulas",
   "/bff/research-experiments",
-  "/bff/agora/signals",
-  "/bff/agora/inbox",
   "/bff/agora/journal",
   "/bff/agora/postmortems",
   // Agora Ask removed from Management AI probe surface (2026-06-03).

@@ -47,8 +47,6 @@ const routes = [
   ["GET", "/bff/tools"],
   ["GET", "/bff/ranking-formulas"],
   ["GET", "/bff/research-experiments"],
-  ["GET", "/bff/agora/signals"],
-  ["GET", "/bff/agora/inbox"],
   ["GET", "/bff/agora/journal"],
   ["GET", "/bff/agora/postmortems"],
   // /bff/agora/ask/sessions intentionally removed (2026-06-03): Management AI
