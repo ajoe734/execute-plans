@@ -25,7 +25,7 @@
     "e2e/12-approvals.spec.ts harness: versioned DTOs, /decide enforces expected_version (422 missing, 409 stale)",
     "Operations.test.tsx: real GovernanceReview/Operations ApprovalsPage/GovernanceQueue callers with real HighRiskConfirm: exact memo+expected_version, Retry action re-sends the unchanged failed attempt, 409 refresh without re-vote, refresh-failed 409 and readback-failure warnings without success toast, batch per-item versions, ambiguous batch failure retried with original version/memo and 409 item not re-voted",
     "operations.ts projection: owner decision_state=decided + decision approved/approved_with_conditions/rejected map to final states (conditions preserved); pending/under_review stay pending; revoked/superseded/unknown are non-actionable",
-    "GovernanceQueue: fresh batch submits only explicit current selection with displayed versions; retry bound to immutable per-attempt items/decision/memo; interleaved-attempt and deselection regressions; truthful vote-submitted wording (scoped locale key en-US/zh-TW), no predicted final state",
+    "GovernanceQueue: fresh batch submits only explicit current selection with displayed versions; retry bound to immutable per-attempt items/decision/memo; interleaved-attempt and deselection regressions; truthful vote-submitted wording via a scoped fresh i18n key (locale files not in artifact contract; default text renders in both locales), no predicted final state",
     "e2e real queue page with real-shaped owner records: decided/rejected/revoked rows final and non-selectable"
   ],
   "not_done": [

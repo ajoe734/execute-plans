@@ -84,7 +84,7 @@ export const GovernanceQueuePage = () => {
     setSelected(new Set(failed.map((i) => i.id)));
     const fresh = await reload().then(() => true, () => false);
     if (results.length > 0) {
-      toast.success(t("governance.batch.submitted", { defaultValue: "{{n}} vote(s) submitted", n: results.length }), {
+      toast.success(t("governance.batch.submitted", { defaultValue: "{{n}} vote(s) submitted; final state follows the owner", n: results.length }), {
         description: commandBatchReceiptDescription(results),
       });
     }
