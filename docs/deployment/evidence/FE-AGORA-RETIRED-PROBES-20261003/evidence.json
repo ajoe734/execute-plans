@@ -1,0 +1,153 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "FE-AGORA-RETIRED-PROBES-20261003",
+  "owner": "Codex",
+  "reviewer": "Claude",
+  "target_repo": "ajoe734/execute-plans",
+  "merge_target": "dev",
+  "status": "ready-for-independent-exact-head-review",
+  "base_commit": "379456f058d6cd604269f7a52154211d3df99629",
+  "validated_source_commit": "91f44b1ae07096c3e2a33ba0aca73ee907362ac1",
+  "accepted_delivery": [
+    {
+      "url": "https://github.com/ajoe734/pantheon/pull/6031",
+      "merge_commit": "0ff716751c81d32d3220b4f70f3afe0c58247c38",
+      "consumed": "Deleted signals, inbox, feedback and skill-coaching; preserved active Agora surfaces."
+    },
+    {
+      "url": "https://github.com/ajoe734/execute-plans/pull/789",
+      "merge_commit": "98bb5cdc2227e9468c1301e15226ac24110af995",
+      "consumed": "Accepted client deletion; trading/workshops/performance/servant/research/trading-intent clients preserved."
+    },
+    {
+      "url": "https://github.com/ajoe734/execute-plans/pull/799",
+      "merge_commit": "638c809beeb968646656fddda88a35530b823877",
+      "consumed": "Accepted regenerated contract: 157 to 99 routes; no schema changes here."
+    }
+  ],
+  "original_failure": {
+    "url": "https://github.com/ajoe734/execute-plans/actions/runs/37037994555/job/110940852838",
+    "source_commit": "379456f058d6cd604269f7a52154211d3df99629",
+    "retrieval": "gh api repos/ajoe734/execute-plans/actions/jobs/110940852838/logs; matches saved log after timestamp removal",
+    "fixture": "original-anonymous-probe.md",
+    "fixture_sha256": "74d51e559d0553dc4754e59f85971873a0b935fc0ae8e7162b485321a352af8c",
+    "observed_counts": {
+      "200": 3,
+      "401": 37,
+      "404": 2
+    },
+    "canonical_404_routes": [
+      "/bff/agora/signals",
+      "/bff/agora/inbox"
+    ],
+    "gate3": "Two failed anonymous checks: protected routes auth status and canonical404 count=2. Auth/write checks skipped; live RBAC partial.",
+    "gate7": "All critical gates pass: FAIL; 2 failing or missing checks. Existing exception document did not override the failure.",
+    "controller_url": "https://github.com/ajoe734/pantheon/actions/runs/37035071230/job/110940608195",
+    "controller_artifact_id": 11242466526,
+    "controller_log": "ERROR: pantheon-integration-gate.yml run 37037994555 concluded failure",
+    "controller_rejection": {
+      "backend": {
+        "commit": "6bf0f7195f6dc6a5e42f685b2b860302e47e9747"
+      },
+      "compatibility_manifest_sha256": "74c4dd3d301d7a4a9fff5e581f136275ab5555c3577ec8e2e6c6f61b4200808a",
+      "controller": {
+        "repository": "ajoe734/pantheon",
+        "run_id": "37035071230",
+        "workflow": "nonprod-deploy.yml"
+      },
+      "controller_exit_code": 1,
+      "frontend": {
+        "commit": "379456f058d6cd604269f7a52154211d3df99629"
+      },
+      "outcome": "rejected",
+      "release_candidate_id": "2595b53561de04d5a471aae073d30802e092affd1f202c1f6e13bbb0522babdc",
+      "schema_version": "pantheon.cross-repo-release-controller-evidence.v1"
+    },
+    "separate_hosted_obligations": "Original FE log also records /readyz503; parent job ends exit75 because exact rollback proof is absent. Neither is solved or waived by this source repair."
+  },
+  "change": {
+    "production_additions": 0,
+    "production_deletions": 15,
+    "net_production_lines": -15,
+    "budget": 0,
+    "description": "Delete retired-only route entries from five existing inventories; no new runtime code, allowance, exception, timeout or assertion changes.",
+    "retained": "Journal/postmortems read/write/readback entries remain. All non-retired lines are unchanged; trading/workshop/research/Persona owner UI and generated schemas are untouched."
+  },
+  "regressions": [
+    "Original GitHub anonymous Markdown replays through the real aggregate into Gate3/Gate7 failures.",
+    "Actual anonymous/authenticated route scripts, authenticated smoke and create-enabled write script call loopback HTTP; retired paths return404 if called. All succeed without any retired requests, preserving journal/postmortems reads/writes.",
+    "Actual probe output feeds aggregate: all Gate3 checks pass with complete local evidence. Remove each of 26 actual smoke rows individually: mandatory evidence fails.",
+    "Retained404/500/503 reads/writes fail applicable probe and aggregate checks. Anonymous500/503 enforcement remains in strict Gate3; readiness503 remains blocking there.",
+    "Untyped401/403 write responses fail. A successful write leaking its dry-run marker into readback fails. Existing typed auth/role rejection semantics remain expected preconditions, not new exceptions.",
+    "Persona harness executes all3000 unique cases plus300 actual local GETs; no retired generated routes. Retained live-read failures404/500/503 exit1.",
+    "Existing full aggregate hard-gate, hosted-auth and Playwright-classification suites run unchanged."
+  ],
+  "validation": [
+    {
+      "command": "timeout 180 npm test -- src/test/agora-retired-probes.test.ts src/test/aggregate-release-gate-hard-gates.test.ts src/test/aggregate-release-gate-hosted-auth.test.ts src/test/aggregate-release-gate-playwright-classification.test.ts",
+      "result": "57 passed / 4 files",
+      "exit_code": 0,
+      "log": "/tmp/fe-agora-focused.log",
+      "sha256": "4598a215be2eee7715a2414f5110245e95fa633c9bd8e01320904ff543b16264"
+    },
+    {
+      "command": "timeout 420 npm test",
+      "result": "2313 passed / 213 files; 365.56 seconds",
+      "exit_code": 0,
+      "log": "/tmp/fe-agora-full-tests.log",
+      "sha256": "11a6901c2d5cbcc09832d89976c0b619ef6b6c5038133e9228a6f2581b146b25"
+    },
+    {
+      "command": "timeout 90 npx --no-install vitest related --run src/test/agora-retired-probes.test.ts",
+      "result": "19 passed; final test includes explicit 15s bound for 26 aggregate subprocesses, matching npm test timeout; runtime readiness unchanged",
+      "exit_code": 0,
+      "log": "/tmp/fe-agora-related.log",
+      "sha256": "24a423f61a5151400ffb375b9d256e1ef51af2877a13ded84bdbb6c90db4e519"
+    },
+    {
+      "command": "timeout 180 npm run typecheck",
+      "result": "pass",
+      "exit_code": 0,
+      "log": "/tmp/fe-agora-typecheck.log",
+      "sha256": "e38c26b5e7b0982ac7fdacb4832749746b5c3c678e6de661d1a003afe6ce9d6d"
+    },
+    {
+      "command": "timeout 180 npm run lint",
+      "result": "0 errors, 68 existing warnings",
+      "exit_code": 0,
+      "log": "/tmp/fe-agora-lint.log",
+      "sha256": "327b2fb40a3393f10db876fc10d1255daf86912d4e5b35f082ed7a601d895e63"
+    },
+    {
+      "command": "timeout 240 env VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build",
+      "result": "pass; existing large chunk warning",
+      "exit_code": 0,
+      "log": "/tmp/fe-agora-build.log",
+      "sha256": "11a9cc5fae39275da728abafd34ea562079d223956e57d68a450278aec0bd5b7"
+    },
+    {
+      "command": "python3 \"$PANTHEON_COMMAND_ROOT/scripts/git/diff_budget.py\" --base origin/dev --head HEAD --change-class simplify --budget 0",
+      "result": "production +0/-15=-15; evidence files below400-line cap",
+      "exit_code": 0
+    },
+    {
+      "command": "git diff --check; exact original-minus-retired-lines comparison of all five scripts",
+      "result": "pass; all other production bytes unchanged",
+      "exit_code": 0
+    }
+  ],
+  "limitations": [
+    "Local fixture/source evidence only; no hosted requests, VM/SSH, workflow dispatch, deployment or real-capital operations performed.",
+    "Approval is pending genuine independent Claude review of the final PR head. Only the canonical supervisor integrator may merge after review and required checks; no auto-merge armed.",
+    "The final release coordinator owns exact-pair deployment and outstanding readiness/rollback proof. This manifest makes no hosted success claim."
+  ],
+  "validation_note": "Full suite ran at source91f44b1a. Only subsequent test change sets an explicit per-test15s timeout to match npm test for the raw vitest related CI invocation; that final test blob passed the supplemental command. Initial node-environment test draft failed shared window setup, corrected to the existing jsdom harness before all passing runs.",
+  "validated_blobs": {
+    "scripts/probe-bff-routes.mjs": "f63bd91f61fb5b1ccf3e6452ea148a5630cb30f5",
+    "scripts/probe-bff-authenticated-live.mjs": "af355970686552ba665330a1da71a7cd88639247",
+    "scripts/probe-bff-write-paths.mjs": "9fbfc83d699192458b75bdbfd7587b282f04982c",
+    "scripts/aggregate-release-gate.mjs": "789778e64a253519b0ee9d2475bd128d08a6643f",
+    "scripts/validate-management-persona-3000.mjs": "dfb8cbb46d0a856b7f89a093be908f0033fc61b8",
+    "src/test/agora-retired-probes.test.ts": "64fc73bdfb00dab3cb3676f68dd885f3702b748e"
+  }
+}
