@@ -8,9 +8,9 @@
     "normalizeApprovalFields maps decision_state proposed to pending"
   ],
   "validation": {
-    "typecheck": "npm run typecheck passed",
-    "vitest": "oversight pages, bff-v1 management/pm12/approval-readback, v5, Operations: all passed",
-    "contract_drift": "NOT PASSED: with PANTHEON_CONTRACT_ROOT=local pantheon checkout, src/lib/bff-v1/agora/types.ts reported stale; this task does not touch agora files; local checkout commit not the released pair, so unverified"
+    "typecheck": "npm run typecheck passed (exit 0) at head after npm ci",
+    "vitest": "29 files / 329 tests passed: oversight pages, bff-v1 management/pm12/approval-readback/contract-drift, v5, Operations",
+    "contract_drift": "PASSED: PANTHEON_CONTRACT_ROOT=clean GitHub clone ajoe734/pantheon@13b44eadb65e2ec7452df453050857a4baca7fc3 (origin/dev, contains 2643a2d12); 'Agora bundle aligned: 49 schemas, 99 routes, 75 sha256 entries'; no generated files changed"
   },
   "production_delta": "+19/-468 lines",
   "hosted": "not performed; separate task"
