@@ -1,0 +1,17 @@
+{
+  "task_id": "FE-PERSONA-OWNER-READBACK-20261002",
+  "base_frontend_sha": "7d01b1ae125246b952120ffd718b1df3ec242769",
+  "backend_owner_contract": "pantheon 2643a2d12 (PERSONA-OWNER-READBACK-20261002)",
+  "changes": [
+    "removed retired quarterly-ranking recommendation submit client, path, v5Client wrapper and submit/HumanGate buttons",
+    "Quarterly Ranking and Persona League show the single saved Governance proposal read-only; pending links to approval Inbox item; advisory rows have no action",
+    "normalizeApprovalFields maps decision_state proposed to pending"
+  ],
+  "validation": {
+    "typecheck": "npm run typecheck passed",
+    "vitest": "oversight pages, bff-v1 management/pm12/approval-readback, v5, Operations: all passed",
+    "contract_drift": "NOT PASSED: with PANTHEON_CONTRACT_ROOT=local pantheon checkout, src/lib/bff-v1/agora/types.ts reported stale; this task does not touch agora files; local checkout commit not the released pair, so unverified"
+  },
+  "production_delta": "+19/-468 lines",
+  "hosted": "not performed; separate task"
+}
