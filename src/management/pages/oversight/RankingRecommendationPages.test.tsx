@@ -17,20 +17,11 @@ import { RankingsCenterPage } from "../centers/RankingsCenterPage";
 
 const mocks = vi.hoisted(() => ({
   useV5Live: vi.fn(),
-  sendRankingRecommendation: vi.fn(),
 }));
 
 vi.mock("@/management/pages/v5/useV5Live", () => ({
   useV5Live: mocks.useV5Live,
 }));
-
-vi.mock("@/lib/bff-v1/v5Client", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/bff-v1/v5Client")>();
-  return {
-    ...actual,
-    sendRankingRecommendation: mocks.sendRankingRecommendation,
-  };
-});
 
 void i18n.changeLanguage("en-US");
 
@@ -64,11 +55,10 @@ async function expectAccessibleRankingStatusAndPagination(container: HTMLElement
   expect(results.violations).toHaveLength(0);
 }
 
-describe("ranking recommendation submit pages", () => {
+describe("ranking recommendation proposal pages", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     mocks.useV5Live.mockReset();
-    mocks.sendRankingRecommendation.mockReset();
   });
 
   it("Promotion & Allocation is a legacy shell that links to the canonical centers, not a tabbed workbench", () => {
@@ -242,52 +232,27 @@ describe("ranking recommendation submit pages", () => {
     expect(within(table).getByText(/insufficient data/i)).toBeInTheDocument();
   });
 
-  it("Persona League submits through the adapter and navigates to returned Human Inbox detail", async () => {
-    const row = {
-      ...defaultPersonaLeague()[0],
-      recommendationId: "pm12-rec-league-alpha",
-      evidenceRefs: ["evidence:league-alpha"],
-    };
+  const withOwner = (decision_status: string, owner_decision: object) => ({
+    human_review_state: { status: "pending_human_gate", decision_status, owner_decision },
+  });
+
+  it("Persona League links the saved pending proposal and has no submit control", async () => {
+    const row = { ...defaultPersonaLeague()[0], ...withOwner("pending", { decision_id: "dec-1", available: true }) };
     mocks.useV5Live.mockReturnValue({ data: [row], loading: false, refresh: vi.fn() });
-    mocks.sendRankingRecommendation.mockResolvedValue({
-      ok: true,
-      persisted: true,
-      recommendationId: "pm12-rec-league-alpha",
-      actionId: "promote_to_canary_candidate",
-      quarter: "2026-Q3",
-      personaId: row.personaId,
-      status: "accepted",
-      idempotencyKey: "idk-league-page",
-      humanInboxId: "promotion_review:review-league-alpha",
-      detailHref: "/management/human-inbox/promotion_review%3Areview-league-alpha",
-      liveCapitalMutation: false,
-      governanceDestinations: ["human_inbox", "human_gate_decision"],
-    });
 
     renderWithRoutes("/management/promotion-allocation", <PersonaLeaguePage />);
 
-    fireEvent.click(screen.getByRole("button", { name: /Promote to canary candidate/ }));
-
-    await waitFor(() => {
-      expect(mocks.sendRankingRecommendation).toHaveBeenCalledWith(
-        expect.objectContaining({
-          recommendationId: "pm12-rec-league-alpha",
-          source: "persona_league",
-          personaId: row.personaId,
-          recommendation: "promote_to_canary_candidate",
-          evidenceRefs: ["evidence:league-alpha"],
-        }),
-      );
-    });
+    expect(screen.queryByRole("button", { name: /Promote to canary candidate/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("link", { name: /Promote to canary candidate · pending/ }));
     expect(await screen.findByText("Human Inbox detail route")).toBeInTheDocument();
   });
 
-  it("Quarterly Ranking shows local-only state when BFF writes are disabled", async () => {
-    const row = {
-      ...defaultQuarterlyRanking()[0],
-      recommendationId: "pm12-rec-quarterly-alpha",
-      quarter: "2026-Q3",
-    };
+  it.each([
+    ["decided", { decision_id: "dec-2", available: true }, /· decided/],
+    ["rejected", { decision_id: "dec-3", available: true }, /· rejected/],
+    ["unavailable", { decision_id: "dec-4", available: false }, /· unavailable/],
+  ])("Quarterly Ranking shows %s proposal read-only without a link or action", (status, owner, label) => {
+    const row = { ...defaultQuarterlyRanking()[0], quarter: "2026-Q3", ...withOwner(status, owner) };
     let liveCall = 0;
     mocks.useV5Live.mockImplementation(() => {
       liveCall += 1;
@@ -295,34 +260,27 @@ describe("ranking recommendation submit pages", () => {
         ? { data: [row], loading: false, refresh: vi.fn() }
         : { data: defaultQuarterlyFormula(), loading: false, refresh: vi.fn() };
     });
-    mocks.sendRankingRecommendation.mockResolvedValue({
-      ok: true,
-      persisted: false,
-      recommendationId: "pm12-rec-quarterly-alpha",
-      actionId: "promote_to_canary_candidate",
-      quarter: "2026-Q3",
-      personaId: row.personaId,
-      status: "write_disabled",
-      idempotencyKey: "idk-quarterly-page",
-      liveCapitalMutation: false,
-      governanceDestinations: ["human_inbox", "governance_queue", "human_gate_decision"],
+
+    renderWithRoutes("/management/promotion-allocation", <QuarterlyRankingPage />);
+
+    expect(screen.getByText(label)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: label })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Promote to canary candidate/ })).not.toBeInTheDocument();
+  });
+
+  it("Quarterly Ranking row without a saved proposal is advisory with no mutation action", () => {
+    const row = { ...defaultQuarterlyRanking()[0], quarter: "2026-Q3" };
+    let liveCall = 0;
+    mocks.useV5Live.mockImplementation(() => {
+      liveCall += 1;
+      return liveCall % 2 === 1
+        ? { data: [row], loading: false, refresh: vi.fn() }
+        : { data: defaultQuarterlyFormula(), loading: false, refresh: vi.fn() };
     });
 
     renderWithRoutes("/management/promotion-allocation", <QuarterlyRankingPage />);
 
-    fireEvent.click(screen.getByRole("button", { name: /Promote to canary candidate/ }));
-
-    await waitFor(() => {
-      expect(mocks.sendRankingRecommendation).toHaveBeenCalledWith(
-        expect.objectContaining({
-          recommendationId: "pm12-rec-quarterly-alpha",
-          source: "quarterly_ranking",
-          personaId: row.personaId,
-          quarter: "2026-Q3",
-        }),
-      );
-    });
-    expect(screen.getByText("Every recommendation requires Human Review; live capital is never changed directly.")).toBeInTheDocument();
-    expect(screen.getByText("Real writes are disabled, so no BFF Human Inbox review was created.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Promote to canary candidate/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Promote to canary candidate/ })).not.toBeInTheDocument();
   });
 });

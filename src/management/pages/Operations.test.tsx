@@ -456,6 +456,18 @@ describe("Approval callers: Operations ApprovalsPage", () => {
     expect(m.list).toHaveBeenCalledTimes(2);
   });
 
+  it("lists a new owner-shaped proposed proposal as pending and votes with its version", async () => {
+    m.list.mockResolvedValue([{
+      decision_id: "dec_p1", target_type: "persona_lifecycle_transition", target_id: "subj-p1", owner_user_id: "u1",
+      risk_level: "medium", created_at: "2026-10-01T00:00:00Z", decision_state: "proposed", state: "pending", version: 2,
+    }]);
+    render(<MemoryRouter><ApprovalsPage /></MemoryRouter>);
+    fireEvent.click(await screen.findByText("subj-p1"));
+    fireEvent.click(screen.getByRole("button", { name: "actions.approve" }));
+    confirm("APPROVE");
+    await waitFor(() => expect(m.decide).toHaveBeenCalledWith("dec_p1", "approve", MEMO, { expectedVersion: 2 }));
+  });
+
   it("passes the reject memo and version", async () => {
     m.list.mockResolvedValue([row("a1", 3)]);
     await open();
