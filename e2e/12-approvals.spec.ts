@@ -19,9 +19,9 @@ import { execFileSync } from "node:child_process";
 import { authHeaders, installContainedLoopbackAuth, installContainedLoopbackAuthAuthority, installOidcDevLogin, LOCAL_FIXTURE_AUTH_TOKEN, targetsExternalE2eEnvironment } from "./helpers/auth";
 
 // Reject an explicit CLI filter override before any fixture starts or installs routes.
-test.beforeEach(async ({}, testInfo) => {
+test.beforeEach(async ({ baseURL }, testInfo) => {
   if (testInfo.tags.includes("@approval-local")) {
-    expect(targetsExternalE2eEnvironment(), "approval fixtures require a local loopback lane").toBe(false);
+    expect(targetsExternalE2eEnvironment({ ...process.env, PANTHEON_FE_BASE_URL: baseURL }), "approval fixtures require a local loopback lane").toBe(false);
   }
 });
 
@@ -1161,7 +1161,7 @@ test.describe("F12 approval owner readback (real queue page)", { tag: "@approval
   });
 
   async function install(page: Page, rows: JsonRecord[]) {
-    await installContainedLoopbackAuth(page, { tenantId: "pantheon-dev" });
+    await installContainedLoopbackAuth(page, { tenantId: "pantheon-dev", token: LOCAL_FIXTURE_AUTH_TOKEN });
     const cors = (route: import("@playwright/test").Route) => ({
       "Access-Control-Allow-Credentials": "true",
       "Access-Control-Allow-Headers":
@@ -1190,7 +1190,7 @@ test.describe("F12 approval owner readback (real queue page)", { tag: "@approval
   }
 
   async function open(page: Page) {
-    await installContainedLoopbackAuthAuthority(page, { tenantId: "pantheon-dev" });
+    await installContainedLoopbackAuthAuthority(page, { tenantId: "pantheon-dev", token: LOCAL_FIXTURE_AUTH_TOKEN });
     await page.goto("/management/governance", { waitUntil: "domcontentloaded" });
   }
 
