@@ -15,6 +15,14 @@
 import { expect, test, type Page } from "@playwright/test";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
+import { authHeaders, installContainedLoopbackAuth, installContainedLoopbackAuthAuthority, targetsExternalE2eEnvironment } from "./helpers/auth";
+
+// Reject an explicit CLI filter override before any fixture starts or installs routes.
+test.beforeEach(async ({}, testInfo) => {
+  if (testInfo.tags.includes("@approval-local")) {
+    expect(targetsExternalE2eEnvironment(), "approval fixtures require a local loopback lane").toBe(false);
+  }
+});
 
 const OPERATOR_ID = "op-fe-gate";
 const AUTH_HEADER = `Bearer ${OPERATOR_ID}:operator,reviewer,approver:mfa`;
@@ -944,7 +952,7 @@ async function selectApproval(page: Page, id: string): Promise<void> {
   await page.getByLabel(`select ${id}`).check();
 }
 
-test.describe("F12 approval governance", () => {
+test.describe("F12 approval governance", { tag: "@approval-local" }, () => {
   let harness: ApprovalHarness;
 
   test.beforeEach(async () => {
@@ -1138,7 +1146,7 @@ test.describe("F12 approval governance", () => {
 });
 
 // Real management page against route-mocked, real-shaped Governance owner records.
-test.describe("F12 approval owner readback (real queue page)", () => {
+test.describe("F12 approval owner readback (real queue page)", { tag: "@approval-local" }, () => {
   const owner = (id: string, version: number, extra: JsonRecord = {}): JsonRecord => ({
     approval_id: id,
     target_type: "Strategy",
@@ -1152,6 +1160,7 @@ test.describe("F12 approval owner readback (real queue page)", () => {
   });
 
   async function install(page: Page, rows: JsonRecord[]) {
+    await installContainedLoopbackAuth(page, { tenantId: "pantheon-dev" });
     const cors = (route: import("@playwright/test").Route) => ({
       "Access-Control-Allow-Credentials": "true",
       "Access-Control-Allow-Headers":
@@ -1180,8 +1189,7 @@ test.describe("F12 approval owner readback (real queue page)", () => {
   }
 
   async function open(page: Page) {
-    const { installOidcDevLogin, LOCAL_FIXTURE_AUTH_TOKEN } = await import("./helpers/auth");
-    await installOidcDevLogin(page, { goto: false, roles: ["operator", "reviewer", "approver"], tenantId: "pantheon-dev", token: LOCAL_FIXTURE_AUTH_TOKEN });
+    await installContainedLoopbackAuthAuthority(page, { tenantId: "pantheon-dev" });
     await page.goto("/management/governance", { waitUntil: "domcontentloaded" });
   }
 
@@ -1202,4 +1210,22 @@ test.describe("F12 approval owner readback (real queue page)", () => {
     await page.getByLabel("select p1").click();
     await expect(page.getByRole("button", { name: /Batch approve|批次核准/ })).toBeVisible();
   });
+});
+
+// No interception or synthetic browser session: this is genuine owner evidence.
+test("F12 authenticated approval owner readback", { tag: "@approval-hosted" }, async ({ request }) => {
+  const headers = authHeaders({ env: { ...process.env, PANTHEON_HOSTED_E2E: "1" } });
+  const base = process.env.PANTHEON_BROWSER_BFF_BASE_URL || process.env.PANTHEON_BFF_BASE_URL;
+  expect(base, "hosted approval readback requires an explicit BFF owner target").toBeTruthy();
+  const response = await request.get(`${base!.replace(/\/$/, "")}/bff/approvals`, { headers });
+  expect(response.status(), "authenticated approval owner must be available").toBe(200);
+  const body = await response.json();
+  const rows = body.data?.items ?? body.items;
+  expect(Array.isArray(rows), "owner must return approval records").toBe(true);
+  expect(rows.length, "empty owner data is not approval acceptance").toBeGreaterThan(0);
+  for (const row of rows) {
+    expect(row.approval_id ?? row.id).toEqual(expect.any(String));
+    expect(row.decision_state).toEqual(expect.any(String));
+    expect(Number.isInteger(row.version) && row.version > 0, "owner version is required").toBe(true);
+  }
 });
