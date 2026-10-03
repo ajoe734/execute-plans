@@ -7,7 +7,9 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { execFileSync } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
+import { createServer } from "node:http";
+import { promisify } from "node:util";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
@@ -392,6 +394,63 @@ describe("hosted browser strict release policy", () => {
     expect(crossOrigin.pass).toBe(false);
     expect(crossOrigin.checks.sameOrigin).toBe(false);
   });
+
+  it.each([true, false])(
+    "reads the settled auth redirect after the first 401 (valid return: %s)",
+    async (validReturn) => {
+      const out = mkdtempSync(join(tmpdir(), "pantheon-delayed-auth-"));
+      cleanupRoots.push(out);
+      const from = validReturn ? "/management/persona-fleet" : "//evil.example/";
+      const server = createServer((req, res) => {
+        const pathname = new URL(req.url!, "http://localhost").pathname;
+        if (pathname.startsWith("/bff/") || ["/health", "/readyz"].includes(pathname)) {
+          res.setHeader("Content-Type", "application/json");
+          res.statusCode = pathname.startsWith("/bff/") ? 401 : 200;
+          res.end(JSON.stringify(res.statusCode === 401
+            ? { error: { code: "AUTH_REQUIRED" } }
+            : { status: "ok", ready: true }));
+          return;
+        }
+        res.setHeader("Content-Type", "text/html");
+        res.end(`<!doctype html><html><body><div id="root">${pathname === "/auth" ? "Sign in" : "Loading"}</div>
+          ${pathname === "/auth" ? "" : `<script>
+            fetch('/bff/me').then(() => setTimeout(() => {
+              location.href = '/auth?reason=auth-required&from=${encodeURIComponent(from)}';
+            }, 200));
+          </script>`}</body></html>`);
+      });
+      await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
+      const origin = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+      const evidence = join(out, "probe.json");
+      try {
+        await promisify(execFile)(process.execPath, [resolve("scripts/probe-hosted-browser-bff.mjs")], {
+          env: {
+            ...process.env,
+            PANTHEON_FE_BASE_URL: origin,
+            PANTHEON_BFF_BASE_URL: origin,
+            PANTHEON_HOSTED_REQUIRED_BFF_PATHS: "/bff/me",
+            PANTHEON_HOSTED_PROBE_PATH: "/management/persona-fleet",
+            PANTHEON_PROBE_RELEASE_STRICT: "0",
+            PANTHEON_AUDIT_OUT_DIR: out,
+            PANTHEON_PROBE_JSON_OUT: evidence,
+          },
+          timeout: 30_000,
+        }).catch((error) => {
+          if (error.code !== 1) throw error;
+        });
+        const result = JSON.parse(readFileSync(evidence, "utf8"));
+        expect(result.pass).toBe(validReturn);
+        expect(result.browser.anonymousAuthBoundary.pass).toBe(validReturn);
+        expect(result.browser.personaFleetSafety.pass).toBe(validReturn);
+        expect(result.bff.coreResponses).toEqual(expect.arrayContaining([
+          expect.objectContaining({ path: "/bff/me", status: 401 }),
+        ]));
+      } finally {
+        await new Promise<void>((done) => server.close(() => done()));
+      }
+    },
+    40_000,
+  );
 
   it("distinguishes an RGB zero channel from transparent CSS focus colors", () => {
     expect(cssColorHasVisibleAlpha("rgb(229, 151, 0)")).toBe(true);

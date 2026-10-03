@@ -2512,23 +2512,31 @@ async function runProbe() {
       if (!anonymousAuthBoundary.pass) {
         await page
           .waitForFunction(
-            () => {
+            (authPath) => {
               const text = document.body.innerText || "";
               const rowCount = Array.from(document.querySelectorAll("tbody tr"))
                 .map((row) => (row.textContent || "").trim())
                 .filter(Boolean).length;
               return (
+                window.location.pathname === authPath ||
                 rowCount > 0 ||
                 /AUTH_REQUIRED|authentication required|missing Bearer token|Live Persona Fleet data unavailable|目前沒有 live Persona Fleet 資料|seed fallback armed|fallback standby|NaN/iu.test(
                   text,
                 )
               );
             },
-            undefined,
+            AUTH_ROUTE_PATH,
             { timeout: Math.min(15_000, remainingTimeoutMs()) },
           )
           .catch(() => {});
       }
+
+      // A protected response can arrive before the SPA finishes its redirect.
+      anonymousAuthBoundary = assessAnonymousAuthRedirect(
+        page.url(),
+        FE_PATH,
+        FE_BASE,
+      );
 
       personaFleetChecks = await page
         .evaluate(() => {
