@@ -654,7 +654,9 @@ export interface ApprovalRequest {
   kind: string;
   subject: string;
   requester: string;
-  state: "pending" | "approved" | "rejected";
+  state: "pending" | "approved" | "rejected" | "revoked" | "superseded" | "unknown";
+  /** Owner (Governance) version observed at read time; sent as expected_version on votes. */
+  version?: number;
   riskLevel: RiskLevel;
   createdAt: string;
   rationale?: string;
