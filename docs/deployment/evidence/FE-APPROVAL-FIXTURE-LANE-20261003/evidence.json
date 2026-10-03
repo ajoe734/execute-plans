@@ -1,0 +1,105 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "FE-APPROVAL-FIXTURE-LANE-20261003",
+  "owner": "Codex",
+  "reviewer": "Codex2",
+  "target_repo": "ajoe734/execute-plans",
+  "merge_target": "dev",
+  "status": "ready-for-independent-exact-head-review",
+  "base_commit": "1031f0f0d4d9b308fefcbee6c42ec74c80b43613",
+  "validated_source_commit": "d61e9831a41da8cd797f56bc044d6d9787d4b1a3",
+  "validated_blobs": {
+    "e2e/12-approvals.spec.ts": "a8a0025b51a74409f6bb05113f316b5f461f6e35",
+    "playwright.config.ts": "d249268f3f86537134e9d9182623b9845daaecbf",
+    "package.json": "df88e269656235a8eaa5b893ecaae3183806282e"
+  },
+  "scope": [
+    "Existing chromium project separates @approval-local and @approval-hosted using the unchanged auth target classifier; no broad approval skips.",
+    "Five existing fixtures plus two boundary regressions execute only in the loopback lane; contained auth denies undeclared BFF traffic and preserves helper remote rejection.",
+    "Hosted selection retains an authenticated, unintercepted owner GET requiring actual records, decision state and owner version; missing token, owner503, empty records and missing version fail closed.",
+    "Existing integration workflow commands, including their grep-invert argument, select the correct lane without a new runner or platform.",
+    "FE803/807/808, product code, auth helper policy and coordinator release redirect repair remain unchanged."
+  ],
+  "change_budget": {
+    "production_added": 7,
+    "production_deleted": 1,
+    "net_production": 6,
+    "limit": 30
+  },
+  "validation": [
+    {
+      "command": "PANTHEON_FE_BASE_URL=https://approval-fixture.invalid PANTHEON_CREDENTIALED_PLAYWRIGHT_NO_ARTIFACTS=1 timeout 60 npx playwright test e2e/12-approvals.spec.ts --project=chromium --grep \"real final owner states\" --retries=0 --reporter=line",
+      "result": "Baseline failure reproduced: LOCAL_FIXTURE_AUTH_TOKEN loopback rejection before navigation; run on base_commit.",
+      "exit_code": 1,
+      "log": "/tmp/fe-approval-before.log",
+      "sha256": "e4cca4dfa18b663bdfda41ce4877edb10e9cada57c842485287a17de11a115ae"
+    },
+    {
+      "command": "VITE_BFF_BASE_URL=http://127.0.0.1:9 VITE_GCP_IDENTITY_API_KEY=AIza00000000000000000000000000000000000 PANTHEON_CREDENTIALED_PLAYWRIGHT_NO_ARTIFACTS=1 timeout 240 npm run e2e:approvals:local -- --retries=0 --reporter=line",
+      "result": "7/7 passed, zero skipped; includes actual queue-page final-state assertions and three external-selection variants with the workflow grep-invert.",
+      "exit_code": 0,
+      "log": "/tmp/fe-approval-local-final.log",
+      "sha256": "e00a1611c952fa11a340ec5bb4aa0ae187ebb54f0c8313a06e74472ea1c29a35"
+    },
+    {
+      "command": "timeout 180 npx vitest run --maxWorkers=1 --testTimeout=15000 --hookTimeout=30000 src/test/e2e-auth-helper-session.test.ts src/test/strict-browser-auth-source-contract.test.ts src/test/public-build-auth-contract.test.ts src/test/aggregate-release-gate-playwright-classification.test.ts src/test/aggregate-release-gate-hosted-auth.test.ts src/lib/bff-v1/__tests__/approval-readback.test.ts",
+      "result": "112/112 passed across six files, no unhandled errors.",
+      "exit_code": 0,
+      "log": "/tmp/fe-approval-unit-final.log",
+      "sha256": "7863e5fb833402ea3ba2185592c8cdcbe41b6bc14c792c3ab01147acef82916e"
+    },
+    {
+      "command": "env -u BFF_AUTH_TOKEN -u PANTHEON_BFF_SMOKE_BEARER_TOKEN -u PANTHEON_BFF_SMOKE_TOKEN PANTHEON_FE_BASE_URL=https://approval-fixture.invalid PANTHEON_CREDENTIALED_PLAYWRIGHT_NO_ARTIFACTS=1 timeout 40 npx playwright test e2e/12-approvals.spec.ts --project=chromium --retries=0 --reporter=line",
+      "result": "Expected failure: only authenticated owner readback selected; missing short-lived token rejected before any request. Shell asserted exit1 and exact error.",
+      "exit_code": 1,
+      "log": "/tmp/fe-approval-hosted-missing-auth.log",
+      "sha256": "de410f68ddda7207edea40dffa29025feb8ee65b872e6fb2779bdb3dd533f879"
+    },
+    {
+      "command": "PANTHEON_FE_BASE_URL=https://approval-fixture.invalid timeout 30 npm run e2e:approvals:local -- --list",
+      "result": "Expected exit1: No tests found, Total0. Remote target cannot select local fixtures.",
+      "exit_code": 1,
+      "log": "/tmp/fe-approval-remote-local-selection.log",
+      "sha256": "6973203e33ded9a741a7e0a39de71879edb885c177c6be7ae2f5cbab24fa4cd1"
+    },
+    {
+      "command": "timeout 120 npm run typecheck:app",
+      "result": "Passed.",
+      "exit_code": 0,
+      "log": "/tmp/fe-approval-typecheck.log",
+      "sha256": "d64fe12d35030d7794aa0bce5422507ae19ac09c7c7ad7ce21a36e11064cee11"
+    },
+    {
+      "command": "timeout 120 npm run typecheck:agora",
+      "result": "Passed.",
+      "exit_code": 0,
+      "log": "/tmp/fe-approval-typecheck-agora.log",
+      "sha256": "32e3620f2ec6a9a5a14c2240103999b5d926e26ab958e17162fe3f872586a877"
+    },
+    {
+      "command": "VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false timeout 240 npm run build",
+      "result": "Passed; existing large-chunk warning. Compile only, no hosted calls.",
+      "exit_code": 0,
+      "log": "/tmp/fe-approval-build.log",
+      "sha256": "af85d9b35bdcc0431ed305d9d804894c4d9a8afe3d729698a624af2a66678090"
+    },
+    {
+      "command": "timeout 60 npx eslint e2e/12-approvals.spec.ts playwright.config.ts",
+      "result": "Passed, no warnings or errors.",
+      "exit_code": 0,
+      "log": "/tmp/fe-approval-lint-final.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "validation_notes": [
+    "First parallel Vitest run had112 passing assertions but exit1 from worker RPC timeout; not counted as passed. Clean serial rerun above is authoritative. An attempted npm-script worker override was rejected as a duplicate option; corrected to the direct existing Vitest command.",
+    "Initial lint found an empty fixture parameter. Final guard uses resolved baseURL, and final local Playwright rerun and lint cover that source blob.",
+    "App/Agora typecheck, unit suites and production build precede only the final E2E guard/explicit fixture-token edit; product, config and auth helper bytes did not change."
+  ],
+  "limitations": [
+    "Source and local isolated evidence only. No hosted owner success, persisted/restarted live readback, browser/BFF hosted acceptance or deployment is claimed.",
+    "Negative owner503/empty/unversioned assertions are local validator cases, not hosted owner responses or authenticated hosted acceptance.",
+    "No credentials minted or used, no live API calls, SSH/VM operations, deployment dispatch or release repair performed.",
+    "Independent Codex2 exact-head approval, required GitHub CI and supervisor merge remain pending. Canonical handoff freezes the final evidence commit; only supervisor integration may merge, and owner done follows confirmed merge."
+  ]
+}

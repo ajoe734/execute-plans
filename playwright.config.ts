@@ -1,5 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
 import net from "node:net";
+import { targetsExternalE2eEnvironment } from "./e2e/helpers/auth";
 
 const credentialedProofNoArtifacts =
   process.env.PANTHEON_CREDENTIALED_PLAYWRIGHT_NO_ARTIFACTS === "1";
@@ -83,6 +84,10 @@ export default defineConfig({
     ...devices["Desktop Chrome"],
   },
   projects: [
-    { name: "chromium", use: { ...devices["Desktop Chrome"] } },
+    {
+      name: "chromium",
+      grepInvert: targetsExternalE2eEnvironment() ? /@approval-local/ : /@approval-hosted/,
+      use: { ...devices["Desktop Chrome"] },
+    },
   ],
 });
