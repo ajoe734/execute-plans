@@ -31,7 +31,6 @@ import type {
   WorkshopConcludeEnvelope,
   WorkshopConsultationEnvelope,
   WorkshopReadinessAssessment,
-  WorkshopResearchRunEnvelope,
   WorkshopStreamEvent,
   WorkshopVersionCreateEnvelope,
   WorkshopVersionListEnvelope,
@@ -47,7 +46,6 @@ import type {
   WorkshopConcludeEnvelope as GeneratedWorkshopConcludeEnvelope,
   WorkshopConsultationEnvelope as GeneratedWorkshopConsultationEnvelope,
   StrategyReadinessAssessment as GeneratedWorkshopReadinessAssessment,
-  WorkshopResearchRunEnvelope as GeneratedWorkshopResearchRunEnvelope,
   WorkshopStreamEvent as GeneratedWorkshopStreamEvent,
   WorkshopVersionCreateEnvelope as GeneratedWorkshopVersionCreateEnvelope,
   WorkshopVersionListEnvelope as GeneratedWorkshopVersionListEnvelope,
@@ -153,21 +151,18 @@ describe("Agora generated DTO client bindings", () => {
     type ListFnReturn = ReturnType<typeof import("../agora/workshops").listWorkshopVersions>;
     type CreateFnReturn = ReturnType<typeof import("../agora/workshops").createWorkshopVersion>;
     type SelectFnReturn = ReturnType<typeof import("../agora/workshops").selectWorkshopVersion>;
-    type ResearchFnReturn = ReturnType<typeof import("../agora/workshops").dispatchWorkshopResearchRun>;
     type ConsultFnReturn = ReturnType<typeof import("../agora/workshops").openWorkshopConsultation>;
     type ConcludeFnReturn = ReturnType<typeof import("../agora/workshops").concludeWorkshop>;
 
     const _testListRet: Promise<GeneratedWorkshopVersionListEnvelope> = null as unknown as ListFnReturn;
     const _testCreateRet: Promise<GeneratedWorkshopVersionCreateEnvelope> = null as unknown as CreateFnReturn;
     const _testSelectRet: Promise<GeneratedWorkshopVersionSelectEnvelope> = null as unknown as SelectFnReturn;
-    const _testResearchRet: Promise<GeneratedWorkshopResearchRunEnvelope> = null as unknown as ResearchFnReturn;
     const _testConsultRet: Promise<GeneratedWorkshopConsultationEnvelope> = null as unknown as ConsultFnReturn;
     const _testConcludeRet: Promise<GeneratedWorkshopConcludeEnvelope> = null as unknown as ConcludeFnReturn;
 
     expect(_testListRet).toBeNull();
     expect(_testCreateRet).toBeNull();
     expect(_testSelectRet).toBeNull();
-    expect(_testResearchRet).toBeNull();
     expect(_testConsultRet).toBeNull();
     expect(_testConcludeRet).toBeNull();
   });

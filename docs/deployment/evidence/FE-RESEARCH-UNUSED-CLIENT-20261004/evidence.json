@@ -1,0 +1,15 @@
+{
+  "task_id": "FE-RESEARCH-UNUSED-CLIENT-20261004",
+  "base_frontend_sha": "98f5ba5f",
+  "backend_contract": "ajoe734/pantheon@13b44eadb65e2ec7452df453050857a4baca7fc3 (GitHub clone)",
+  "removed": "dispatchWorkshopResearchRun (src/lib/bff-v1/agora/workshops.ts) plus its two duplicate tests and the ResearchFnReturn type assertion",
+  "deadness_trace": "repo-wide grep (ts/tsx/js/json/md) found only the declaration, tests and the binding type test; namespace imports of workshops module (TradingRoomPage.test, StrategyWorkshopPage.test) do not reference it; no registry or re-export of the function; research.ts research-plan/owner clients untouched",
+  "preserved": "generated DTO type re-exports, contract snapshot/types route inventory (retained backend endpoint), paths.ts (has no research-runs entry, unchanged)",
+  "production_net_lines": "-13",
+  "validation": {
+    "typecheck": "npm run typecheck exit 0",
+    "vitest": "src/lib/bff-v1 + src/agora/pages/strategy-workshop: 52 files / 584 tests passed",
+    "contract_drift": "PASSED (no-write): 49 schemas, 99 routes, 75 sha256 entries"
+  },
+  "note": "Local results for this head before commit; exact-head review, CI and merge are separate. No hosted claims."
+}
