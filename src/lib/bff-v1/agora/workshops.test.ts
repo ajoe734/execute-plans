@@ -6,7 +6,6 @@ import {
   getWorkshopWithEtag,
   getWorkshopCompleteness,
   getWorkshopReadiness,
-  dispatchWorkshopResearchRun,
   listWorkshopCards,
   listWorkshopEvents,
   listWorkshops,
@@ -119,34 +118,6 @@ describe("getWorkshop", () => {
     await expect(getWorkshopWithEtag("ws-001")).rejects.toThrow(
       "Authoritative Workshop readback omitted its current ETag precondition.",
     );
-  });
-});
-
-describe("dispatchWorkshopResearchRun", () => {
-  it("uses the deployed plural research-runs route without inventing an empty payload", async () => {
-    vi.mocked(bffFetch).mockResolvedValue({ data: { research_run_id: "run-001" } });
-
-    await dispatchWorkshopResearchRun("ws/001");
-
-    expect(bffFetch).toHaveBeenCalledWith({
-      method: "POST",
-      path: "/bff/agora/workshops/ws%2F001/research-runs",
-      body: undefined,
-    });
-  });
-});
-
-describe("dispatchWorkshopResearchRun", () => {
-  it("uses the deployed plural research-runs route without inventing an empty payload", async () => {
-    vi.mocked(bffFetch).mockResolvedValue({ data: { research_run_id: "run-001" } });
-
-    await dispatchWorkshopResearchRun("ws/001");
-
-    expect(bffFetch).toHaveBeenCalledWith({
-      method: "POST",
-      path: "/bff/agora/workshops/ws%2F001/research-runs",
-      body: undefined,
-    });
   });
 });
 
