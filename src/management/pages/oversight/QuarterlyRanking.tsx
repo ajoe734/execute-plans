@@ -10,7 +10,6 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ManagementTableScroll } from "@/management/components/ManagementTableScroll";
 import { tradeJourneyHref } from "@/management/navigation/tradeJourneyLinks";
 import { mgmt } from "@/lib/bff-v1";
-import { sendRankingRecommendation } from "@/lib/bff-v1/v5Client";
 import { useV5Live } from "@/management/pages/v5/useV5Live";
 import {
   type QuarterlyRankingFormula,
@@ -19,8 +18,6 @@ import {
 import {
   currentPm12QuarterId,
   isGovernedRankingRecommendationAction,
-  makeRankingRecommendationId,
-  type RankingRecommendationSubmitResult,
 } from "@/lib/v5/management/rankingGovernance";
 import {
   ShieldAlert,
@@ -87,22 +84,6 @@ function daysUntil(dateText: string): string {
 const personaManageHref = (row: QuarterlyRankingRow): string =>
   row.links?.manageHref ?? `/management/personas/${encodeURIComponent(row.personaId)}`;
 
-type RecommendationUiState =
-  | { kind: "submitting" }
-  | { kind: "local_only"; result: RankingRecommendationSubmitResult }
-  | { kind: "submitted"; result: RankingRecommendationSubmitResult }
-  | { kind: "error"; message: string };
-
-type QuarterlyRecommendationRow = QuarterlyRankingRow & {
-  recommendationId?: string;
-  recommendation_id?: string;
-  governanceDestinations?: string[];
-  governance_destinations?: string[];
-};
-
-const governanceDestinationsFromRow = (row: QuarterlyRecommendationRow): string[] | undefined =>
-  row.governanceDestinations ?? row.governance_destinations;
-
 type RawQuarterlyRankingRow = QuarterlyRankingRow & {
   id?: string;
   persona?: string;
@@ -138,7 +119,6 @@ export const QuarterlyRankingPage = ({ embedded = false }: { embedded?: boolean 
   const paramSnapshotId = searchParams.get("snapshot")?.trim() ?? "snap-2026-q3-final";
   const paramSourceConfidence = searchParams.get("source_confidence")?.trim();
   const currentQuarter = useMemo(() => currentPm12QuarterId(), []);
-  const [recommendationState, setRecommendationState] = useState<Record<string, RecommendationUiState>>({});
 
   // Fetch Live Data
   const { data: rows, loading: rowsLoading } = useV5Live(
@@ -150,6 +130,7 @@ export const QuarterlyRankingPage = ({ embedded = false }: { embedded?: boolean 
     [currentQuarter, personaFocus],
     { cacheKey: `oversight.quarterlyRanking.list.${personaFocus || currentQuarter}` },
   );
+  const savedProposal = useSavedProposals(currentQuarter);
   const { data: formula } = useV5Live(
     (signal) => mgmt.quarterlyRanking.formulaLiveOnly({ signal }),
     [],
@@ -286,43 +267,6 @@ export const QuarterlyRankingPage = ({ embedded = false }: { embedded?: boolean 
       setSortOrder("desc");
     }
     setCurrentPage(1);
-  };
-
-  const submitRecommendation = async (r: QuarterlyRankingRow) => {
-    if (!isGovernedRankingRecommendationAction(r.recommendation)) return;
-    const row = r as QuarterlyRecommendationRow;
-    const recommendationId = row.recommendationId ?? row.recommendation_id ?? makeRankingRecommendationId({
-      personaId: r.personaId,
-      personaName: r.personaName,
-      recommendation: r.recommendation,
-      source: "quarterly_ranking",
-      quarter: r.quarter ?? quarter,
-      evidenceRefs: r.evidenceRefs ?? [],
-    });
-    setRecommendationState((prev) => ({ ...prev, [recommendationId]: { kind: "submitting" } }));
-    try {
-      const result = await sendRankingRecommendation({
-        personaId: r.personaId,
-        personaName: r.personaName,
-        recommendation: r.recommendation,
-        recommendationId,
-        source: "quarterly_ranking",
-        quarter: r.quarter ?? quarter,
-        evidenceRefs: r.evidenceRefs ?? [],
-        governanceDestinations: governanceDestinationsFromRow(row),
-      });
-      if (result.persisted && result.detailHref) {
-        navigate(result.detailHref);
-        return;
-      }
-      setRecommendationState((prev) => ({
-        ...prev,
-        [recommendationId]: { kind: result.persisted ? "submitted" : "local_only", result },
-      }));
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      setRecommendationState((prev) => ({ ...prev, [recommendationId]: { kind: "error", message } }));
-    }
   };
 
   return (
@@ -607,21 +551,7 @@ export const QuarterlyRankingPage = ({ embedded = false }: { embedded?: boolean 
                   </td>
                   <td className="px-3 py-3">
                     {isGovernedRankingRecommendationAction(r.recommendation) ? (
-                      <RecommendationSubmitCell
-                        label={t(`mgmt.league.recommendations.${r.recommendation}`)}
-                        state={recommendationState[
-                          ((r as QuarterlyRecommendationRow).recommendationId ?? (r as QuarterlyRecommendationRow).recommendation_id)
-                          ?? makeRankingRecommendationId({
-                            personaId: r.personaId,
-                            personaName: r.personaName,
-                            recommendation: r.recommendation,
-                            source: "quarterly_ranking",
-                            quarter: r.quarter ?? quarter,
-                            evidenceRefs: r.evidenceRefs ?? [],
-                          })
-                        ]}
-                        onSubmit={() => void submitRecommendation(r)}
-                      />
+                      <ProposalCell review={savedProposal(r.personaId, r.recommendation)} label={t(`mgmt.league.recommendations.${r.recommendation}`)} />
                     ) : (
                       <span className="text-xs text-muted-foreground">{t("mgmt.league.recommendations.no_change")}</span>
                     )}
@@ -726,40 +656,36 @@ export const QuarterlyRankingPage = ({ embedded = false }: { embedded?: boolean 
   );
 };
 
-function RecommendationSubmitCell({
-  label,
-  state,
-  onSubmit,
-}: {
-  label: string;
-  state?: RecommendationUiState;
-  onSubmit: () => void;
-}) {
+type OwnerReview = {
+  decision_status?: string;
+  decision?: string | null;
+  owner_decision?: { decision_id?: string; available?: boolean } | null;
+};
+
+/** Saved Governance proposals live on the owner recommendation read, not on the ranking/league list rows. */
+export function useSavedProposals(quarter: string): (personaId: string, action?: string) => OwnerReview | undefined {
+  const { data } = useV5Live(
+    (signal) => mgmt.quarterlyRanking.recommendationsLiveOnly(quarter, signal ? { signal } : undefined),
+    [quarter],
+    { cacheKey: "oversight.quarterlyRanking.recommendations" },
+  );
+  return (personaId, action) =>
+    (data as Array<{ personaId: string; action_id?: string; human_review_state?: OwnerReview }> | undefined)
+      ?.find((r) => r.personaId === personaId && r.action_id === action)?.human_review_state;
+}
+
+/** Read-only view of the single saved Governance proposal; advisory rows have none and no action. */
+export function ProposalCell({ review, label }: { review?: OwnerReview; label: string }) {
   const { t } = useTranslation();
-  const busy = state?.kind === "submitting";
-  return (
-    <div className="max-w-[240px] space-y-1">
-      <Button size="sm" variant="outline" onClick={onSubmit} disabled={busy} className="h-7 text-xs border-primary/30 hover:bg-primary/10 text-primary">
-        {busy ? t("mgmt.governance.submitting") : `${label} →`}
-      </Button>
-      <p className="text-[10px] leading-snug text-muted-foreground">
-        {t("mgmt.governance.humanReviewRequired")}
-      </p>
-      {state?.kind === "local_only" && (
-        <p role="status" className="text-[10px] leading-snug text-amber-500 font-semibold">
-          {t("mgmt.governance.localOnly")}
-        </p>
-      )}
-      {state?.kind === "submitted" && (
-        <p role="status" className="text-[10px] leading-snug text-emerald-700 dark:text-emerald-300 font-semibold">
-          {t("mgmt.governance.submitted")}
-        </p>
-      )}
-      {state?.kind === "error" && (
-        <p role="alert" className="text-[10px] leading-snug text-rose-500 font-semibold">
-          {t("mgmt.governance.submitFailed", { message: state.message })}
-        </p>
-      )}
-    </div>
+  const id = review?.owner_decision?.decision_id;
+  if (!id) return <span className="text-xs text-muted-foreground">{label}</span>;
+  const status = review.owner_decision?.available === false
+    ? "unavailable"
+    : review.decision_status === "decided" ? review.decision || "decided" : review.decision_status ?? "unavailable";
+  const text = `${label} · ${t(`mgmt.governance.proposalStatus.${status}`, { defaultValue: status.replace(/_/g, " ") })}`;
+  return status === "pending" ? (
+    <Link to={`/management/human-inbox/${encodeURIComponent(`approval:${id}`)}`} className="text-xs text-primary hover:underline">{text}</Link>
+  ) : (
+    <span className="text-xs text-muted-foreground">{text}</span>
   );
 }

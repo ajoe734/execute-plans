@@ -1,0 +1,15 @@
+{
+  "task_id": "FE-PERSONA-READBACK-SOURCE-20261004",
+  "continues": "FE-PERSONA-OWNER-READBACK-20261002",
+  "reused_patch": "unpublished 6194e5aa (reapplied via cherry-pick -n; no published history rewritten, PR812 and 7e403ed0 untouched)",
+  "base_frontend_sha": "7d01b1ae125246b952120ffd718b1df3ec242769",
+  "backend_contract": "ajoe734/pantheon@13b44eadb65e2ec7452df453050857a4baca7fc3 (GitHub clone, not the shared checkout)",
+  "validation": {
+    "typecheck": "npm run typecheck passed (exit 0)",
+    "vitest": "58 files / 576 tests passed: oversight pages, bff-v1, v5, Operations",
+    "contract_drift": "PASSED (no-write): Agora bundle aligned: 49 schemas, 99 routes, 75 sha256 entries; no generated files changed"
+  },
+  "production_net_lines": "net <= 0 vs dev (prior +44/-468, plus ~+13 pagination)",
+  "note": "Results are for this child's head before commit; exact-head review, frontend CI and merge are separate. Hosted claims not made.",
+  "pagination_fix": "recommendationsLiveOnly requests page_size=200 and follows page_info.next_page_token (AbortSignal kept per page); regression in bff-v1 management.test.ts. Re-validated: tsc exit 0; management, management-pm12, RankingRecommendationPages tests 72 passed."
+}

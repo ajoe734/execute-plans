@@ -11,9 +11,7 @@
 import type { LeagueRecommendedAction } from "./personaLeague";
 import type { HumanInboxItem } from "./humanInbox";
 import { buildLinkSet } from "./links";
-import type { RankingRecommendationSubmitResult } from "@/lib/bff-v1/management";
 
-export type { RankingRecommendationSubmitResult } from "@/lib/bff-v1/management";
 export type RankingRecommendationAction = Exclude<LeagueRecommendedAction, "no_change">;
 
 export interface SendRankingRecommendationInput {
