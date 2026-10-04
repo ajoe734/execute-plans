@@ -79,6 +79,19 @@ describe("mgmt façade (PM-Live)", () => {
     expect(liveStatus.get().effective).toBe("live");
   });
 
+  it("recommendations live read follows next_page_token past the first page", async () => {
+    liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
+    const page = (id: string, next: string | null) => jsonResponse({ data: [{ personaId: id, rank: 1 }], page_info: { next_page_token: next } });
+    const fetchSpy = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(page("p1", "1"))
+      .mockResolvedValueOnce(page("p2", null));
+    const rows = await mgmt.quarterlyRanking.recommendationsLiveOnly("2026-Q4");
+    expect(rows.map((r) => r.personaId)).toEqual(["p1", "p2"]);
+    const urls = fetchSpy.mock.calls.map((c) => String(c[0]));
+    expect(urls[0]).toContain("quarter=2026-Q4&page_size=200");
+    expect(urls[1]).toContain("page_token=1");
+  });
+
   it("does not invent healthy status or cards for missing cockpit fields", async () => {
     liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
     vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({

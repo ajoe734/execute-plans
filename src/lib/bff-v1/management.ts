@@ -4061,11 +4061,22 @@ export const mgmt = {
       seedFn: () => QuarterlyRankingRow[],
     ): Promise<QuarterlyRankingRow[]> =>
       mgmtRead("mgmt.quarterlyRanking.recommendations", { method: "GET", path: paths.mgmtQuarterlyRankingRecommendations(quarter) }, seedFn, adaptQuarterlyRankingRows),
-    recommendationsLiveOnly: (quarter?: string, opts?: { signal?: AbortSignal }): Promise<QuarterlyRankingRow[]> =>
-      liveOnlyList<QuarterlyRankingRow>(
-        { method: "GET", path: paths.mgmtQuarterlyRankingRecommendations(quarter), signal: opts?.signal },
-        adaptQuarterlyRankingRows,
-      ),
+    recommendationsLiveOnly: async (quarter?: string, opts?: { signal?: AbortSignal }): Promise<QuarterlyRankingRow[]> => {
+      const rows: QuarterlyRankingRow[] = [];
+      let token: string | undefined;
+      do {
+        const page = await liveOnlyRead<{ rows: QuarterlyRankingRow[]; next?: string }>(
+          { method: "GET", path: paths.mgmtQuarterlyRankingRecommendations(quarter, token), signal: opts?.signal },
+          (raw) => {
+            const info = (isObject(raw) ? raw.page_info : undefined) as { next_page_token?: string | null } | undefined;
+            return { rows: adaptQuarterlyRankingRows(raw) ?? [], next: info?.next_page_token || undefined };
+          },
+        );
+        rows.push(...(page?.rows ?? []));
+        token = page?.next;
+      } while (token);
+      return rows;
+    },
   },
 
   performanceAttribution: {
