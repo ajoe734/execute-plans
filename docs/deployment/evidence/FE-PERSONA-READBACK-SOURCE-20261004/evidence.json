@@ -1,0 +1,14 @@
+{
+  "task_id": "FE-PERSONA-READBACK-SOURCE-20261004",
+  "continues": "FE-PERSONA-OWNER-READBACK-20261002",
+  "reused_patch": "unpublished 6194e5aa (reapplied via cherry-pick -n; no published history rewritten, PR812 and 7e403ed0 untouched)",
+  "base_frontend_sha": "7d01b1ae125246b952120ffd718b1df3ec242769",
+  "backend_contract": "ajoe734/pantheon@13b44eadb65e2ec7452df453050857a4baca7fc3 (GitHub clone, not the shared checkout)",
+  "validation": {
+    "typecheck": "npm run typecheck passed (exit 0)",
+    "vitest": "58 files / 576 tests passed: oversight pages, bff-v1, v5, Operations",
+    "contract_drift": "PASSED (no-write): Agora bundle aligned: 49 schemas, 99 routes, 75 sha256 entries; no generated files changed"
+  },
+  "production_net_lines": "+44/-468 (net <= 0)",
+  "note": "Results are for this child's head before commit; exact-head review, frontend CI and merge are separate. Hosted claims not made."
+}

@@ -1,0 +1,18 @@
+{
+  "task_id": "FE-PERSONA-OWNER-READBACK-20261002",
+  "base_frontend_sha": "7d01b1ae125246b952120ffd718b1df3ec242769",
+  "backend_owner_contract": "pantheon 2643a2d12 (PERSONA-OWNER-READBACK-20261002)",
+  "changes": [
+    "removed retired quarterly-ranking recommendation submit client, path, v5Client wrapper and submit/HumanGate buttons",
+    "Quarterly Ranking and Persona League show the single saved Governance proposal read-only; pending links to approval Inbox item; advisory rows have no action",
+    "normalizeApprovalFields maps decision_state proposed to pending",
+    "both pages read saved proposals from the owner recommendation read (tenant-scoped, abortable useV5Live), match persona_id+action_id, and show decided outcomes (approved/approved_with_conditions/rejected) from decision"
+  ],
+  "validation": {
+    "typecheck": "npm run typecheck passed (exit 0) at head after npm ci",
+    "vitest": "29 files / 334 tests passed: oversight pages, bff-v1 management/pm12/approval-readback/contract-drift, v5, Operations",
+    "contract_drift": "PASSED: PANTHEON_CONTRACT_ROOT=clean GitHub clone ajoe734/pantheon@13b44eadb65e2ec7452df453050857a4baca7fc3 (origin/dev, contains 2643a2d12); 'Agora bundle aligned: 49 schemas, 99 routes, 75 sha256 entries'; no generated files changed"
+  },
+  "production_delta": "+44/-482 lines (net -438)",
+  "hosted": "not performed; separate task"
+}
