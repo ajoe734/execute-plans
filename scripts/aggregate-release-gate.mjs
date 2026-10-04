@@ -959,8 +959,6 @@ function buildGate3(routeProbe, authSmoke, writeProbe, liveDeep) {
     "/bff/tools",
     "/bff/ranking-formulas",
     "/bff/research-experiments",
-    "/bff/agora/signals",
-    "/bff/agora/inbox",
     "/bff/agora/journal",
     "/bff/agora/postmortems",
     // "/bff/agora/ask/sessions" removed (2026-06-03) — Management AI runtime

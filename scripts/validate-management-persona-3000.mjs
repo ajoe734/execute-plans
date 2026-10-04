@@ -119,7 +119,6 @@ const readRoutes = [
   { route: "/bff/alerts", family: "alerts", shape: "list" },
   { route: "/bff/approvals", family: "approvals", shape: "list" },
   { route: "/bff/audit", family: "audit", shape: "list" },
-  { route: "/bff/agora/signals", family: "agora-signals", shape: "list" },
 ];
 
 const uiRoutes = [
@@ -176,8 +175,6 @@ const writeCommands = [
   { id: "alert-escalate", route: "/bff/alerts/{alert}/escalate-incident", method: "POST", risk: "medium", approval: false },
   { id: "incident-mitigate", route: "/bff/incidents/{incident}/start-mitigation", method: "POST", risk: "high", approval: true },
   { id: "incident-resolve", route: "/bff/incidents/{incident}/resolve", method: "POST", risk: "medium", approval: false },
-  { id: "signal-feedback", route: "/bff/agora/signals/{signal}/feedback", method: "POST", risk: "low", approval: false },
-  { id: "agora-feedback", route: "/bff/agora/feedback", method: "POST", risk: "low", approval: false },
   { id: "nl-ask", route: "/bff/management/nl/ask", method: "POST", risk: "low", approval: false },
   { id: "tool-preview", route: "/bff/assistant/tools/preview", method: "POST", risk: "low", approval: false },
   { id: "tool-validate", route: "/bff/assistant/tools/validate", method: "POST", risk: "medium", approval: false },
