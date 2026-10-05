@@ -150,6 +150,43 @@ describe("PersonaTradeJournalTab Component Tests", () => {
     mockGetEpisode.mockResolvedValue({ data: mockEpisode });
   });
 
+  it("passes the opaque owner cursor unchanged instead of calculating an offset", async () => {
+    mockListEpisodes.mockResolvedValueOnce({
+      data: [mockEpisode], page_info: { next_cursor: "opaque-owner-cursor==", has_more: true },
+      meta: { coverage_state: "complete" },
+    }).mockResolvedValueOnce({
+      data: [{ ...mockEpisode, trade_episode_id: "ep-2", instrument_id: "QQQ" }],
+      page_info: { next_cursor: null, has_more: false }, meta: { coverage_state: "complete" },
+    });
+    render(<MemoryRouter><PersonaTradeJournalTab personaId="per_quant" /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole("button", { name: "Load More" }));
+    await screen.findByText("QQQ");
+    expect(screen.getByText("AAPL")).toBeInTheDocument();
+    expect(mockListEpisodes).toHaveBeenLastCalledWith("per_quant", expect.objectContaining({ cursor: "opaque-owner-cursor==" }));
+    expect(screen.queryByRole("button", { name: "Load More" })).not.toBeInTheDocument();
+  });
+
+  it("renders saved pattern reflection provenance without fabricated confidence or sample size", async () => {
+    vi.mocked(tradeJournal.patterns).mockResolvedValueOnce({
+      data: [{ reflection_id: "saved-pattern", trigger: "scheduled_pattern", review_state: "proposed",
+        model: "test-model", attribution: "Saved owner attribution", mistakes: ["Saved mistake"],
+        generated_at: "2026-10-05T00:00:00Z", facts_snapshot_ref: "facts://sha256/test",
+        persona_id: "per_quant", trade_episode_id: "ep-1", reflection_version: 1,
+        facts_snapshot_hash: "sha256:test", expected_vs_actual: {}, counterfactuals: [],
+        what_worked: [], unknowns: [], followups: [], lesson_candidates: [],
+        provider: "test-provider", prompt_version: "test-v1" }],
+      meta: { source: "persona_reflection", coverage_state: "complete" },
+    });
+    render(<MemoryRouter><PersonaTradeJournalTab personaId="per_quant" /></MemoryRouter>);
+    await screen.findByText("AAPL");
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Patterns" }), { button: 0, ctrlKey: false });
+    await screen.findByText("Saved owner attribution");
+    expect(screen.getByText("saved-pattern")).toBeInTheDocument();
+    expect(screen.getByText(/facts:\/\/sha256\/test/)).toBeInTheDocument();
+    expect(screen.queryByText("Sample Size")).not.toBeInTheDocument();
+    expect(screen.queryByText("Confidence")).not.toBeInTheDocument();
+  });
+
   it("loads and renders trade episodes", async () => {
     render(
       <MemoryRouter>

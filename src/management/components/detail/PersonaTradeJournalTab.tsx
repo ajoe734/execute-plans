@@ -79,8 +79,8 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
   const [envFilter, setEnvFilter] = useState<string>("");
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState<string>("");
-  const [cursor, setCursor] = useState<number>(0);
-  const [hasMore, setHasMore] = useState<boolean>(false);
+  const [cursor, setCursor] = useState<string | undefined>();
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
 
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -125,8 +125,10 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
           limit: 10,
           cursor: cursor
         });
-        setEpisodes(res.data);
-        setHasMore(res.page_info.has_more || false);
+        setEpisodes((current) => cursor
+          ? [...new Map([...current, ...res.data].map((row) => [row.trade_episode_id, row] as const)).values()]
+          : res.data);
+        setNextCursor(res.page_info.next_cursor);
         setDegradedState(res.meta.coverage_state);
       } else if (activeTab === "reflections") {
         const res = await tradeJournal.reflections(personaId);
@@ -383,7 +385,7 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
       )}
 
       {/* Main Tabs */}
-      <Tabs value={activeTab} onValueChange={(val) => { setActiveTab(val); setCursor(0); }} className="w-full">
+      <Tabs value={activeTab} onValueChange={(val) => { setActiveTab(val); setCursor(undefined); }} className="w-full">
         <TabsList className="grid grid-cols-3 w-full max-w-[400px]">
           <TabsTrigger value="journal">Episodes</TabsTrigger>
           <TabsTrigger value="reflections">Reflections</TabsTrigger>
@@ -407,7 +409,7 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
             <div className="flex gap-2">
               <select
                 value={envFilter}
-                onChange={(e) => { setEnvFilter(e.target.value); setCursor(0); }}
+                onChange={(e) => { setEnvFilter(e.target.value); setCursor(undefined); }}
                 className="px-3 py-1.5 text-xs rounded-md border border-input bg-background"
               >
                 <option value="">All Environments</option>
@@ -417,7 +419,7 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
 
               <select
                 value={statusFilter}
-                onChange={(e) => { setStatusFilter(e.target.value); setCursor(0); }}
+                onChange={(e) => { setStatusFilter(e.target.value); setCursor(undefined); }}
                 className="px-3 py-1.5 text-xs rounded-md border border-input bg-background"
               >
                 <option value="">All Statuses</option>
@@ -490,12 +492,13 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
               </div>
 
               {/* Pagination */}
-              {hasMore && (
+              {nextCursor && (
                 <div className="flex justify-end pt-2">
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => setCursor(prev => prev + 10)}
+                    disabled={loading}
+                    onClick={() => setCursor(nextCursor ?? undefined)}
                   >
                     Load More
                   </Button>
@@ -606,36 +609,24 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
           {loading ? (
             <div className="flex items-center justify-center p-12"><Spinner className="h-6 w-6 text-muted-foreground" /></div>
           ) : patterns.length === 0 ? (
-            <div className="p-12 text-center text-muted-foreground text-sm border border-dashed rounded-md">No mistake patterns identified.</div>
+            <div className="p-12 text-center text-muted-foreground text-sm border border-dashed rounded-md">No saved multi-episode reviews yet.</div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {patterns.map((pat) => (
-                <Card key={pat.pattern_id} className="p-4 space-y-3">
-                  <div>
-                    <div className="text-xs text-muted-foreground font-mono">{pat.pattern_id}</div>
-                    <div className="text-base font-semibold mt-0.5">{pat.name}</div>
+                <Card key={pat.reflection_id} className="p-4 space-y-3">
+                  <div className="text-xs text-muted-foreground font-mono">{pat.reflection_id}</div>
+                  <div className="flex gap-2">
+                    <Badge variant="outline">{pat.review_state}</Badge>
+                    <Badge variant="outline">{pat.model}</Badge>
                   </div>
-
-                  <p className="text-xs text-muted-foreground">{pat.description}</p>
-
-                  <div className="grid grid-cols-2 gap-2 p-2.5 rounded bg-muted/40 text-xs">
-                    <div>
-                      <span className="text-muted-foreground block text-[10px]">Taxonomy</span>
-                      <span className="font-semibold capitalize">{pat.mistake_taxonomy.replace("_", " ")}</span>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground block text-[10px]">Confidence</span>
-                      <span className="font-semibold">{(pat.confidence * 100).toFixed(0)}%</span>
-                    </div>
-                    <div className="mt-1.5">
-                      <span className="text-muted-foreground block text-[10px]">Sample Size</span>
-                      <span className="font-semibold">{pat.sample_size} episodes</span>
-                    </div>
-                  </div>
-
-                  <div className="text-xs bg-amber-500/5 p-2 rounded border border-amber-500/10 text-amber-500">
-                    <span className="font-semibold block text-[10px] uppercase tracking-wider mb-0.5">Recommendation:</span>
-                    {pat.recommendation}
+                  <p className="text-xs text-muted-foreground">{pat.attribution}</p>
+                  {Array.isArray(pat.mistakes) && pat.mistakes.every((item) => typeof item === "string") ? (
+                    <ul className="text-xs list-disc pl-4">
+                      {pat.mistakes.map((mistake, index) => <li key={index}>{mistake}</li>)}
+                    </ul>
+                  ) : <p className="text-xs text-muted-foreground">Mistake analysis unavailable.</p>}
+                  <div className="text-xs text-muted-foreground">
+                    Saved {safeDateTime(pat.generated_at)} · Facts: {pat.facts_snapshot_ref}
                   </div>
                 </Card>
               ))}

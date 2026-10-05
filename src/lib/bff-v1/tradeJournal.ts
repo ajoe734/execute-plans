@@ -91,18 +91,9 @@ export interface PersonaTradeReflection {
   review_state: string;
 }
 
-export interface TradePattern {
-  pattern_id: string;
-  persona_id: string;
-  environment: string;
-  name: string;
-  description: string;
-  sample_size: number;
-  confidence: number;
-  mistake_taxonomy: string;
-  occurrences: string[];
-  recommendation: string;
-}
+// Pattern reviews are persisted Persona reflection artifacts, not a second
+// independently generated projection with invented confidence/sample counts.
+export type TradePattern = PersonaTradeReflection;
 
 export interface CommandReceipt {
   status: "accepted";
@@ -111,7 +102,7 @@ export interface CommandReceipt {
 
 export interface TradeJournalResponse {
   data: TradeEpisodeProjection[];
-  page_info: { next_cursor: number | null; has_more?: boolean };
+  page_info: { next_cursor: string | null; has_more?: boolean };
   meta: { coverage_state: string; source: string; count: number };
 }
 
