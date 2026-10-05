@@ -17,7 +17,6 @@ import {
 import {
   buildRankingInboxItem, makeRankingRecommendationId, requiredRoleFor,
 } from "@/lib/v5/management/rankingGovernance";
-import { sendRankingRecommendation } from "@/lib/bff-v1/v5Client";
 
 describe("PM12 portfolio", () => {
   it("composes totals from pools + holdings", () => {
@@ -119,14 +118,5 @@ describe("PM12 ranking governance", () => {
       recommendation: "freeze_persona", source: "persona_league", quarter: "2026-Q2",
     });
     expect(id1).toBe(id2);
-  });
-  it("sendRankingRecommendation fails closed when real writes are disabled", async () => {
-    const result = await sendRankingRecommendation({
-      personaId: "p1", personaName: "P1",
-      recommendation: "freeze_persona", source: "persona_league", quarter: "2026-Q2",
-    });
-    expect(result.persisted).toBe(false);
-    expect(result.status).toBe("write_disabled");
-    expect(result.liveCapitalMutation).toBe(false);
   });
 });

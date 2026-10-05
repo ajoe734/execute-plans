@@ -9,7 +9,6 @@ import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ManagementTableScroll } from "@/management/components/ManagementTableScroll";
 import { mgmt } from "@/lib/bff-v1";
-import { sendRankingRecommendation } from "@/lib/bff-v1/v5Client";
 import { useV5Live } from "@/management/pages/v5/useV5Live";
 import {
   sortByPreset,
@@ -19,13 +18,8 @@ import {
   type PersonaLeaguePreset,
   type PersonaLeagueRow,
 } from "@/lib/v5/management/personaLeague";
-import {
-  currentPm12QuarterId,
-  isGovernedRankingRecommendationAction,
-  makeRankingRecommendationId,
-  type RankingRecommendationAction,
-  type RankingRecommendationSubmitResult,
-} from "@/lib/v5/management/rankingGovernance";
+import { currentPm12QuarterId, isGovernedRankingRecommendationAction } from "@/lib/v5/management/rankingGovernance";
+import { ProposalCell, useSavedProposals } from "./QuarterlyRanking";
 import {
   ShieldAlert,
   ShieldCheck,
@@ -66,26 +60,8 @@ const personaManageHref = (row: PersonaLeagueRow): string =>
 
 
 
-type RecommendationUiState =
-  | { kind: "submitting" }
-  | { kind: "local_only"; result: RankingRecommendationSubmitResult }
-  | { kind: "submitted"; result: RankingRecommendationSubmitResult }
-  | { kind: "error"; message: string };
-
-type PersonaLeagueRecommendationRow = PersonaLeagueRow & {
-  recommendationId?: string;
-  recommendation_id?: string;
-  evidenceRefs?: string[];
-  evidence_refs?: string[];
-  governanceDestinations?: string[];
-  governance_destinations?: string[];
-};
-
-const evidenceRefsFromRow = (row: PersonaLeagueRecommendationRow): string[] =>
+const evidenceRefsFromRow = (row: PersonaLeagueRow & { evidenceRefs?: string[]; evidence_refs?: string[] }): string[] =>
   row.evidenceRefs ?? row.evidence_refs ?? [];
-
-const governanceDestinationsFromRow = (row: PersonaLeagueRecommendationRow): string[] | undefined =>
-  row.governanceDestinations ?? row.governance_destinations;
 
 type SortField = "rank" | "score" | "pnl" | "sharpe" | "drawdown" | "interventions";
 type SortOrder = "asc" | "desc";
@@ -102,6 +78,8 @@ export const PersonaLeaguePage = ({ embedded = false }: { embedded?: boolean }) 
     cacheKey: "oversight.personaLeague.list",
   });
 
+  const savedProposal = useSavedProposals(currentPm12QuarterId());
+
   // Determine fallback & telemetry health
   const useFallback = !apiData || apiData.length === 0;
   const isTelemetryDegraded = useFallback || paramSourceConfidence === "degraded";
@@ -112,8 +90,6 @@ export const PersonaLeaguePage = ({ embedded = false }: { embedded?: boolean }) 
 
   const [preset, setPreset] = useState<PersonaLeaguePreset>("overall");
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [recommendationState, setRecommendationState] = useState<Record<string, RecommendationUiState>>({});
-  const currentQuarter = useMemo(() => currentPm12QuarterId(), []);
 
   // Filtering States
   const [searchQuery, setSearchQuery] = useState("");
@@ -213,47 +189,6 @@ export const PersonaLeaguePage = ({ embedded = false }: { embedded?: boolean }) 
       setSortOrder("desc");
     }
     setCurrentPage(1);
-  };
-
-  const recommendationIdFor = (r: PersonaLeagueRow, action: RankingRecommendationAction): string => {
-    const row = r as PersonaLeagueRecommendationRow;
-    return row.recommendationId ?? row.recommendation_id ?? makeRankingRecommendationId({
-      personaId: r.personaId,
-      personaName: r.personaName,
-      recommendation: action,
-      source: "persona_league",
-      quarter: currentQuarter,
-      evidenceRefs: evidenceRefsFromRow(row),
-    });
-  };
-
-  const submitRecommendation = async (r: PersonaLeagueRow, action: RankingRecommendationAction) => {
-    const row = r as PersonaLeagueRecommendationRow;
-    const recommendationId = recommendationIdFor(r, action);
-    setRecommendationState((prev) => ({ ...prev, [recommendationId]: { kind: "submitting" } }));
-    try {
-      const result = await sendRankingRecommendation({
-        personaId: r.personaId,
-        personaName: r.personaName,
-        recommendation: action,
-        recommendationId,
-        source: "persona_league",
-        quarter: currentQuarter,
-        evidenceRefs: evidenceRefsFromRow(row),
-        governanceDestinations: governanceDestinationsFromRow(row),
-      });
-      if (result.persisted && result.detailHref) {
-        navigate(result.detailHref);
-        return;
-      }
-      setRecommendationState((prev) => ({
-        ...prev,
-        [recommendationId]: { kind: result.persisted ? "submitted" : "local_only", result },
-      }));
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      setRecommendationState((prev) => ({ ...prev, [recommendationId]: { kind: "error", message } }));
-    }
   };
 
   return (
@@ -634,16 +569,7 @@ export const PersonaLeaguePage = ({ embedded = false }: { embedded?: boolean }) 
           <td className="px-3 py-3 font-mono">{fmtNum(r.humanInterventions, 0)}</td>
           <td className="px-3 py-3">
             {isGovernedRankingRecommendationAction(r.recommendedAction) ? (
-              (() => {
-                const action = r.recommendedAction;
-                return (
-                  <RecommendationButton
-                    action={action}
-                    state={recommendationState[recommendationIdFor(r, action)]}
-                    onSubmit={() => void submitRecommendation(r, action)}
-                  />
-                );
-              })()
+              <ProposalCell review={savedProposal(r.personaId, r.recommendedAction)} label={t(`mgmt.league.recommendations.${r.recommendedAction}`)} />
             ) : (
               <span className="text-xs text-muted-foreground">{t("mgmt.league.recommendations.no_change")}</span>
             )}
@@ -669,10 +595,10 @@ export const PersonaLeaguePage = ({ embedded = false }: { embedded?: boolean }) 
                     </div>
                   ))}
                 </div>
-                {evidenceRefsFromRow(r as PersonaLeagueRecommendationRow).length > 0 ? (
+                {evidenceRefsFromRow(r).length > 0 ? (
                   <div className="pt-2 border-t border-border/30 flex flex-wrap items-center gap-2">
                     <span className="text-xs text-muted-foreground font-medium">Evidence Coverage:</span>
-                    {evidenceRefsFromRow(r as PersonaLeagueRecommendationRow).map((evidenceRef) => (
+                    {evidenceRefsFromRow(r).map((evidenceRef) => (
                       <Link
                         key={evidenceRef}
                         to={`/management/evidence?query=${encodeURIComponent(evidenceRef)}`}
@@ -691,39 +617,3 @@ export const PersonaLeaguePage = ({ embedded = false }: { embedded?: boolean }) 
     );
   }
 };
-
-function RecommendationButton({
-  action, state, onSubmit,
-}: {
-  action: RankingRecommendationAction;
-  state?: RecommendationUiState;
-  onSubmit: () => void;
-}) {
-  const { t } = useTranslation();
-  const busy = state?.kind === "submitting";
-  return (
-    <div className="max-w-[240px] space-y-1">
-      <Button size="sm" variant="outline" onClick={onSubmit} disabled={busy} className="h-7 text-xs border-primary/30 hover:bg-primary/10 text-primary">
-        {busy ? t("mgmt.governance.submitting") : `${t(`mgmt.league.recommendations.${action}`)} →`}
-      </Button>
-      <p className="text-[10px] leading-snug text-muted-foreground">
-        {t("mgmt.governance.humanReviewRequired")}
-      </p>
-      {state?.kind === "local_only" && (
-        <p role="status" className="text-[10px] leading-snug text-amber-500 font-semibold">
-          {t("mgmt.governance.localOnly")}
-        </p>
-      )}
-      {state?.kind === "submitted" && (
-        <p role="status" className="text-[10px] leading-snug text-emerald-700 dark:text-emerald-300 font-semibold">
-          {t("mgmt.governance.submitted")}
-        </p>
-      )}
-      {state?.kind === "error" && (
-        <p role="alert" className="text-[10px] leading-snug text-rose-500 font-semibold">
-          {t("mgmt.governance.submitFailed", { message: state.message })}
-        </p>
-      )}
-    </div>
-  );
-}

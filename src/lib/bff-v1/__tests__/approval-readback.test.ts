@@ -21,6 +21,7 @@ describe("normalizeApprovalFields (Governance owner readback)", () => {
 
   it("keeps under_review pending and only maps final owner states", () => {
     expect(n({ ...owner, decision_state: "under_review" }).state).toBe("pending");
+    expect(n({ ...owner, decision_state: "proposed", state: "pending" }).state).toBe("pending");
     expect(n({ ...owner, decision_state: "approved" }).state).toBe("approved");
     expect(n({ ...owner, decision_state: "rejected" }).state).toBe("rejected");
   });

@@ -79,6 +79,19 @@ describe("mgmt façade (PM-Live)", () => {
     expect(liveStatus.get().effective).toBe("live");
   });
 
+  it("recommendations live read follows next_page_token past the first page", async () => {
+    liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
+    const page = (id: string, next: string | null) => jsonResponse({ data: [{ personaId: id, rank: 1 }], page_info: { next_page_token: next } });
+    const fetchSpy = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(page("p1", "1"))
+      .mockResolvedValueOnce(page("p2", null));
+    const rows = await mgmt.quarterlyRanking.recommendationsLiveOnly("2026-Q4");
+    expect(rows.map((r) => r.personaId)).toEqual(["p1", "p2"]);
+    const urls = fetchSpy.mock.calls.map((c) => String(c[0]));
+    expect(urls[0]).toContain("quarter=2026-Q4&page_size=200");
+    expect(urls[1]).toContain("page_token=1");
+  });
+
   it("does not invent healthy status or cards for missing cockpit fields", async () => {
     liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
     vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({
@@ -619,118 +632,6 @@ describe("mgmt façade (PM-Live)", () => {
       replayed: false,
     });
   });
-
-  it("does not POST ranking recommendations when real writes are disabled", async () => {
-    process.env.VITE_BFF_REAL_WRITES = "false";
-    liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
-    const fetchSpy = vi.spyOn(globalThis, "fetch");
-
-    const result = await mgmt.quarterlyRanking.submitRecommendation(
-      {
-        recommendationId: "pm12-rec-disabled",
-        actionId: "promote_to_canary_candidate",
-        quarter: "2026-Q3",
-        personaId: "persona-disabled",
-        personaName: "Disabled Persona",
-        source: "quarterly_ranking",
-        evidenceRefs: ["evidence:disabled"],
-      },
-      { idempotencyKey: "idk-ranking-disabled" },
-    );
-
-    expect(result).toMatchObject({
-      ok: true,
-      persisted: false,
-      recommendationId: "pm12-rec-disabled",
-      actionId: "promote_to_canary_candidate",
-      quarter: "2026-Q3",
-      personaId: "persona-disabled",
-      status: "write_disabled",
-      idempotencyKey: "idk-ranking-disabled",
-      liveCapitalMutation: false,
-      governanceDestinations: ["human_inbox", "governance_queue", "human_gate_decision"],
-    });
-    expect(fetchSpy).not.toHaveBeenCalled();
-  });
-
-  it("POSTs ranking recommendations as governed commands when real writes are enabled", async () => {
-    process.env.VITE_BFF_REAL_WRITES = "true";
-    window.sessionStorage.setItem("pantheon.bff.bearerToken", "tok-ranking-test");
-    liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
-    let commandUrl = "";
-    let commandBody: Record<string, unknown> = {};
-    let commandHeaders: Record<string, string> = {};
-    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
-      const url = String(input);
-      if (url.endsWith("/bff/me")) return writeSessionResponse();
-      commandUrl = url;
-      commandBody = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
-      commandHeaders = init?.headers as Record<string, string>;
-      return jsonResponse({
-        status: "accepted",
-        data: {
-          status: "accepted",
-          commandId: "cmd-ranking-enabled",
-          recommendation_id: "pm12-rec-enabled",
-          review_id: "review-ranking-enabled-revision-2",
-          promotion_review_id: "review-ranking-enabled-revision-2",
-          ranking_snapshot_id: "ranking-quarterly-2026-q3-revision-2",
-          human_inbox_id: "promotion_review:review-ranking-enabled-revision-2",
-        },
-        meta: { idempotency: { idempotencyKey: "idk-ranking-enabled", replayed: false } },
-      }, 202);
-    });
-
-    const result = await mgmt.quarterlyRanking.submitRecommendation(
-      {
-        recommendationId: "pm12-rec-enabled",
-        actionId: "promote_to_canary_candidate",
-        quarter: "2026-Q3",
-        personaId: "persona-enabled",
-        personaName: "Enabled Persona",
-        source: "persona_league",
-        evidenceRefs: ["evidence:enabled"],
-        governanceDestinations: ["human_inbox", "human_gate_decision"],
-      },
-      { idempotencyKey: "idk-ranking-enabled" },
-    );
-
-    expect(commandUrl.endsWith("/bff/management/quarterly-ranking/recommendations/pm12-rec-enabled/submit")).toBe(true);
-    expect(commandBody).toMatchObject({
-      quarter: "2026-Q3",
-      recommendation_id: "pm12-rec-enabled",
-      recommendationId: "pm12-rec-enabled",
-      recommendation_action_id: "promote_to_canary_candidate",
-      recommendationActionId: "promote_to_canary_candidate",
-      actionId: "promote_to_canary_candidate",
-      persona_id: "persona-enabled",
-      personaId: "persona-enabled",
-      evidence_refs: ["evidence:enabled"],
-      governance_destinations: ["human_inbox", "human_gate_decision"],
-      live_capital_mutation: false,
-      liveCapitalMutation: false,
-      direct_live_capital_mutation: false,
-      runtime_mutation: false,
-    });
-    expect(commandHeaders["Idempotency-Key"]).toBe("idk-ranking-enabled");
-    expect(result).toMatchObject({
-      ok: true,
-      persisted: true,
-      recommendationId: "pm12-rec-enabled",
-      actionId: "promote_to_canary_candidate",
-      quarter: "2026-Q3",
-      personaId: "persona-enabled",
-      status: "accepted",
-      idempotencyKey: "idk-ranking-enabled",
-      commandId: "cmd-ranking-enabled",
-      reviewId: "review-ranking-enabled-revision-2",
-      humanInboxId: "promotion_review:review-ranking-enabled-revision-2",
-      detailHref: "/management/human-inbox/promotion_review%3Areview-ranking-enabled-revision-2",
-      replayed: false,
-      liveCapitalMutation: false,
-    });
-  });
-
   it("readiness helpers all pass seed through", async () => {
     const seed = { header: { title: "t" }, checklist: [], packets: [], blockers: [] } as never;
     for (const fn of [

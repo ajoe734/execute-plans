@@ -260,10 +260,10 @@ export const paths = {
     return `${BASE}/management/quarterly-ranking${params.length ? `?${params.join("&")}` : ""}`;
   },
   mgmtQuarterlyRankingFormula: () => `${BASE}/management/quarterly-ranking/formula`,
-  mgmtQuarterlyRankingRecommendations: (quarter?: string) =>
-    `${BASE}/management/quarterly-ranking/recommendations${quarter ? `?quarter=${enc(quarter)}` : ""}`,
-  mgmtQuarterlyRankingRecommendationSubmit: (recommendationId: string) =>
-    `${BASE}/management/quarterly-ranking/recommendations/${enc(recommendationId)}/submit`,
+  mgmtQuarterlyRankingRecommendations: (quarter?: string, pageToken?: string) => {
+    const params = [quarter && `quarter=${enc(quarter)}`, "page_size=200", pageToken && `page_token=${enc(pageToken)}`].filter(Boolean);
+    return `${BASE}/management/quarterly-ranking/recommendations${params.length ? `?${params.join("&")}` : ""}`;
+  },
   mgmtPerformanceAttribution: (dimension?: string, period?: string) => {
     const qs: string[] = [];
     if (dimension) qs.push(`dimension=${enc(dimension)}`);

@@ -94,7 +94,7 @@ export function normalizeApprovalFields<T>(raw: T | undefined): T | undefined {
   out.state =
     final === "approved" || final === "approved_with_conditions" ? "approved"
     : final === "rejected" ? "rejected"
-    : ds === "pending" || ds === "under_review" ? "pending"
+    : ds === "pending" || ds === "proposed" || ds === "under_review" ? "pending"
     : ds === "revoked" || ds === "superseded" ? ds
     : "unknown";
   return out as T;

@@ -23,13 +23,6 @@ import {
   type V5SessionContext,
 } from "./v5";
 import type { LoopKind } from "@/lib/v5/enums";
-import { mgmt } from "./management";
-import {
-  makeRankingRecommendationId,
-  type SendRankingRecommendationInput,
-  type RankingRecommendationAction,
-} from "@/lib/v5/management/rankingGovernance";
-import type { RankingRecommendationSubmitResult } from "./management";
 
 const livePaths = {
   v5ControlRoom: () => "/bff/v5/control-room",
@@ -155,21 +148,3 @@ export const bffV5 = {
 
 export type BffV5 = typeof bffV5;
 export { bffV5 as v5 };
-
-export function sendRankingRecommendation(
-  input: SendRankingRecommendationInput & { recommendation: RankingRecommendationAction },
-  opts: { idempotencyKey?: string } = {},
-): Promise<RankingRecommendationSubmitResult> {
-  const recommendationId = input.recommendationId ?? makeRankingRecommendationId(input);
-  return mgmt.quarterlyRanking.submitRecommendation({
-    recommendationId,
-    actionId: input.recommendation,
-    quarter: input.quarter,
-    personaId: input.personaId,
-    personaName: input.personaName,
-    source: input.source,
-    evidenceRefs: input.evidenceRefs ?? [],
-    governanceDestinations: input.governanceDestinations,
-    liveCapitalMutation: false,
-  }, opts);
-}

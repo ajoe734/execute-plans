@@ -391,19 +391,6 @@ export async function selectWorkshopVersion(
   });
 }
 
-// ─── Research ─────────────────────────────────────────────────────────────────
-
-export async function dispatchWorkshopResearchRun(
-  workshopId: string,
-  body?: WorkshopResearchRunRequest,
-): Promise<WorkshopResearchRunEnvelope> {
-  return bffFetch<WorkshopResearchRunEnvelope>({
-    method: "POST",
-    path: `/bff/agora/workshops/${encodeURIComponent(workshopId)}/research-runs`,
-    body,
-  });
-}
-
 // ─── Consultation ─────────────────────────────────────────────────────────────
 
 export async function openWorkshopConsultation(
