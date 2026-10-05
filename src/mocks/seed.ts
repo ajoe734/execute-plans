@@ -1165,15 +1165,9 @@ export const tradeReflections: PersonaTradeReflection[] = [
 
 export const tradePatterns: TradePattern[] = [
   {
-    pattern_id: "pat-earnings-overconfidence",
-    persona_id: "per_quant",
-    environment: "paper",
-    name: "Earnings catalyst sizing drift",
-    description: "Trend showing larger position sizes and widened stops during quarterly earnings announcements.",
-    sample_size: 14,
-    confidence: 0.82,
-    mistake_taxonomy: "sizing_drift",
-    occurrences: ["ep-force-closed", "ep-failed-reflection"],
-    recommendation: "Hard limit size to 5% during earnings weeks."
+    ...tradeReflections[0],
+    reflection_id: "pat-earnings-overconfidence",
+    trigger: "scheduled_pattern",
+    attribution: "Fixture multi-episode review: earnings catalyst sizing drift."
   }
 ];
