@@ -178,7 +178,7 @@ const KIND_TO_ENTITY_TYPE: Readonly<Record<string, string>> = {
   Job: "job",
 };
 
-const ENTITY_COMMAND_SPECS: Readonly<Record<string, EntityCommandSpec>> = {
+export const ENTITY_COMMAND_SPECS: Readonly<Record<string, EntityCommandSpec>> = {
   strategy: { command: "StrategyAction", targetType: "Strategy", auditNamespace: "strategy" },
   persona: { command: "PersonaAction", targetType: "Persona", auditNamespace: "persona" },
   "capital-pool": {
@@ -254,24 +254,7 @@ function idempotencyFrom(raw: BackendCommandResponse, fallback: string): string 
   return raw.meta?.idempotency?.idempotencyKey ?? raw.meta?.idempotency?.key ?? fallback;
 }
 
-export const RETIRED_BACKEND_COMMANDS = new Set([
-  "ApproveRollback",
-  "RejectRollback",
-  "RankingAction",
-  "RankingFormulaAction",
-  "QuarterlyRankingRecommendationSubmit",
-  "AuditExport",
-  "ToolAction",
-  "McpServerAction",
-  "SkillAction",
-  "HumanGateApprove",
-  "HumanGateReject",
-  "HumanGateRequestMoreEvidence",
-  "HumanGateExtendTtl",
-  "RequestReview",
-]);
-
-const OPERATIONS_COMMAND_TYPES = new Set([
+export const OPERATIONS_COMMAND_TYPES = new Set([
   "Observe",
   "PausePaperRuntime",
   "ResumePaperRuntime",
@@ -294,11 +277,6 @@ export function buildRunActionCommand(
   const actionId = input.action.trim();
   const isOperationsCommand = OPERATIONS_COMMAND_TYPES.has(actionId);
   const commandName = isOperationsCommand ? actionId : spec.command;
-  if (RETIRED_BACKEND_COMMANDS.has(commandName)) {
-    throw new Error(
-      `Command "${commandName}" was retired by backend (ACTION_RETIRED 410) and cannot be emitted`,
-    );
-  }
   const auditEvent = `${spec.auditNamespace}.${actionId}`;
   const confirmToken = opts.confirmToken ?? input.confirmToken;
 
