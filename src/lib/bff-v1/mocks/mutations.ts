@@ -735,24 +735,6 @@ export const mutations = {
     return delay({ ok: true, audit, feedbackId: fid });
   },
 
-  /** Phase P2 — Recalculate / freeze / publish / override / compare ranking. */
-  rankingAction(
-    scope: "persona" | "strategy" | "alphaFamily" | "capitalPool" | "paper" | "live",
-    action: "recalculate" | "freeze" | "publish" | "override" | "compare",
-    memo?: string,
-  ): Promise<MutationResult & { job?: Job }> {
-    const job = action === "compare" || action === "recalculate" ? queueMockJob(`ranking.${scope}.${action}`) : undefined;
-    realtime.emit("data", { kind: "Ranking" });
-    const audit = pushAudit(`ranking.${action}`, `ranking:${scope}`, memo, { outcome: "ok" });
-    return delay({ ok: true, audit, job, message: `${action} ${scope}` });
-  },
-
-  /** Phase P2 — Switch active ranking formula version (high-risk). */
-  setActiveRankingFormula(formulaId: string, memo?: string): Promise<MutationResult> {
-    const audit = pushAudit("ranking.formula.set_active", formulaId, memo, { outcome: "ok" });
-    realtime.emit("data", { kind: "RankingFormula" });
-    return delay({ ok: true, audit, message: `Active formula → ${formulaId}` });
-  },
 
   /** Phase P2 — Append a mitigation step to an incident. */
   appendIncidentMitigation(incidentId: string, content: string): Promise<MutationResult> {

@@ -67,8 +67,8 @@ export const PermissionMatrix = ({ matrix, readOnly }: Props) => {
                 {dirty.size} {t("governance.permission.pending")}
               </Badge>
             )}
-            <NonProductionActionButton size="sm" variant="outline">{t("actions.reset")}</NonProductionActionButton>
-            <NonProductionActionButton size="sm">{t("actions.submitForReview")}</NonProductionActionButton>
+            <NonProductionActionButton size="sm" variant="outline" status="no executing owner">{t("actions.reset")}</NonProductionActionButton>
+            <NonProductionActionButton size="sm" status="no executing owner">{t("actions.submitForReview")}</NonProductionActionButton>
           </div>
         )}
       </div>

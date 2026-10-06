@@ -66,10 +66,10 @@ export const RoutePolicyEditor = ({ policy, readOnly }: Props) => {
         </div>
         {!readOnly && (
           <div className="flex items-center gap-2">
-            <NonProductionActionButton size="sm" variant="outline">
+            <NonProductionActionButton size="sm" variant="outline" status="no executing owner">
               {t("actions.reset")}
             </NonProductionActionButton>
-            <NonProductionActionButton size="sm">{t("actions.submitForReview")}</NonProductionActionButton>
+            <NonProductionActionButton size="sm" status="no executing owner">{t("actions.submitForReview")}</NonProductionActionButton>
           </div>
         )}
       </div>
@@ -132,7 +132,7 @@ export const RoutePolicyEditor = ({ policy, readOnly }: Props) => {
               <div className="flex flex-col items-end gap-1">
                 <Badge variant="outline" className={`text-[10px] uppercase ${kindTone[r.targetKind]}`}>{r.targetKind}</Badge>
                 {!readOnly && (
-                  <NonProductionActionButton size="icon" variant="ghost" className="h-7 w-7 p-0" aria-label={t("actions.delete")}>
+                  <NonProductionActionButton size="icon" variant="ghost" className="h-7 w-7 p-0" aria-label={t("actions.delete")} status="no executing owner">
                     <Trash2 className="h-3 w-3" />
                   </NonProductionActionButton>
                 )}
@@ -140,7 +140,7 @@ export const RoutePolicyEditor = ({ policy, readOnly }: Props) => {
             </div>
           ))}
           {!readOnly && (
-            <NonProductionActionButton variant="outline" size="sm" className="w-full">
+            <NonProductionActionButton variant="outline" size="sm" className="w-full" status="no executing owner">
               <Plus className="h-3.5 w-3.5 mr-1" />{t("governance.policy.addRule")}
             </NonProductionActionButton>
           )}

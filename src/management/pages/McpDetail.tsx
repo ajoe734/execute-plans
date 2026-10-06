@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, Link } from "react-router-dom";
+import { Button } from "@/components/ui/button";
 import { bffV1 } from "@/lib/bff-v1";
 import type { McpServer, McpTool } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
@@ -11,13 +12,12 @@ import { StatusBadge } from "@/platform/components/StatusBadge";
 import { Badge } from "@/components/ui/badge";
 import { LifecycleStepper } from "@/platform/components/LifecycleStepper";
 import { mcpServerMachine, type McpServerState } from "@/lib/stateMachines";
-import { ShieldCheck, PlugZap, Activity, ShieldOff, RotateCcw, ArchiveX } from "lucide-react";
+import { ShieldCheck } from "lucide-react";
 import { envBadge, scopeTone } from "./CapabilitiesLists";
 import { McpRegistryPanel } from "@/management/components/detail/McpRegistryPanel";
 import { ActivityMonitor } from "@/management/components/detail/ActivityMonitor";
 import { McpSecretsPanel } from "@/management/components/detail/McpSecretsPanel";
 import { McpServerSchemaPanel } from "@/management/components/detail/McpServerSchemaPanel";
-import { NonProductionActionButton } from "@/management/components/NonProductionActionButton";
 import { CapabilityDetailEmptyState } from "@/management/components/CapabilityDetailEmptyState";
 
 const HEALTH_TO_STATE: Record<string, McpServerState> = {
@@ -46,26 +46,11 @@ export const McpServerDetail = () => {
   const machineState: McpServerState = HEALTH_TO_STATE[s.health] ?? "healthy";
 
   const actionBar = (
-    <div className="flex flex-wrap gap-2">
-      <NonProductionActionButton size="sm" variant="outline">
-        <PlugZap className="h-4 w-4 mr-1" />{t("mcp.actions.testConnection")}
-      </NonProductionActionButton>
-      <NonProductionActionButton size="sm" variant="outline">
-        <Activity className="h-4 w-4 mr-1" />{t("mcp.actions.healthCheck")}
-      </NonProductionActionButton>
-      {machineState !== "disabled" ? (
-        <NonProductionActionButton size="sm" variant="outline">
-          <ShieldOff className="h-4 w-4 mr-1" />{t("mcp.actions.disable")}
-        </NonProductionActionButton>
-      ) : (
-        <NonProductionActionButton size="sm">
-          <RotateCcw className="h-4 w-4 mr-1" />{t("mcp.actions.reenable")}
-        </NonProductionActionButton>
-      )}
-      <NonProductionActionButton size="sm" variant="destructive">
-        <ArchiveX className="h-4 w-4 mr-1" />{t("mcp.actions.retire")}
-      </NonProductionActionButton>
-    </div>
+    <Button size="sm" variant="outline" asChild>
+      <Link to="/management/capabilities/mcps">
+        {t("nav.mcpServers", { defaultValue: "MCP Servers" })}
+      </Link>
+    </Button>
   );
 
   return (
@@ -191,13 +176,7 @@ export const McpToolDetail = () => {
       <ObjectDetailLayout
         object={tool}
         subtitle={`MCP tool · ${tool.scope}`}
-        actions={
-          !liveGranted && tool.scope === "destructive" ? (
-            <NonProductionActionButton size="sm" variant="destructive">
-              <ShieldCheck className="h-4 w-4 mr-1" />Grant Live access
-            </NonProductionActionButton>
-          ) : null
-        }
+        actions={null}
         tabs={[
           {
             value: "overview", label: t("section.overview"),

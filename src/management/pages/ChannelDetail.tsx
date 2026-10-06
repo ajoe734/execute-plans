@@ -30,7 +30,7 @@ export const ChannelDetail = () => {
       object={c}
       subtitle={`${(c.kind ?? "").toUpperCase()} · ${c.subscribers ?? 0} subscribers`}
       actions={
-        <NonProductionActionButton size="sm" variant="outline">
+        <NonProductionActionButton size="sm" variant="outline" status="no executing owner">
           <Send className="h-4 w-4 mr-1" />Send test
         </NonProductionActionButton>
       }

@@ -178,7 +178,7 @@ const KIND_TO_ENTITY_TYPE: Readonly<Record<string, string>> = {
   Job: "job",
 };
 
-const ENTITY_COMMAND_SPECS: Readonly<Record<string, EntityCommandSpec>> = {
+export const ENTITY_COMMAND_SPECS: Readonly<Record<string, EntityCommandSpec>> = {
   strategy: { command: "StrategyAction", targetType: "Strategy", auditNamespace: "strategy" },
   persona: { command: "PersonaAction", targetType: "Persona", auditNamespace: "persona" },
   "capital-pool": {
@@ -187,12 +187,6 @@ const ENTITY_COMMAND_SPECS: Readonly<Record<string, EntityCommandSpec>> = {
     auditNamespace: "capitalpool",
   },
   rebalance: { command: "RebalanceAction", targetType: "Rebalance", auditNamespace: "rebalance" },
-  "ranking-formula": {
-    command: "RankingFormulaAction",
-    targetType: "RankingFormula",
-    auditNamespace: "rankingformula",
-  },
-  ranking: { command: "RankingAction", targetType: "Ranking", auditNamespace: "ranking" },
   deployment: { command: "DeploymentAction", targetType: "Deployment", auditNamespace: "deployment" },
   runtime: { command: "RuntimeAction", targetType: "Runtime", auditNamespace: "runtime" },
   review: { command: "ReviewAction", targetType: "Review", auditNamespace: "review" },
@@ -211,10 +205,6 @@ const ENTITY_COMMAND_SPECS: Readonly<Record<string, EntityCommandSpec>> = {
   },
   experiment: { command: "ExperimentAction", targetType: "Experiment", auditNamespace: "research" },
   job: { command: "JobAction", targetType: "Job", auditNamespace: "job" },
-  tool: { command: "ToolAction", targetType: "Tool", auditNamespace: "tool" },
-  "mcp-server": { command: "McpServerAction", targetType: "McpServer", auditNamespace: "mcpserver" },
-  "mcp-tool": { command: "ToolAction", targetType: "Tool", auditNamespace: "mcptool" },
-  skill: { command: "SkillAction", targetType: "Skill", auditNamespace: "skill" },
   artifact: { command: "ReviewAction", targetType: "Review", auditNamespace: "artifact" },
   channel: { command: "ReviewAction", targetType: "Review", auditNamespace: "channel" },
 };
@@ -264,9 +254,8 @@ function idempotencyFrom(raw: BackendCommandResponse, fallback: string): string 
   return raw.meta?.idempotency?.idempotencyKey ?? raw.meta?.idempotency?.key ?? fallback;
 }
 
-const OPERATIONS_COMMAND_TYPES = new Set([
+export const OPERATIONS_COMMAND_TYPES = new Set([
   "Observe",
-  "RequestReview",
   "PausePaperRuntime",
   "ResumePaperRuntime",
   "Demote",
@@ -1760,33 +1749,6 @@ export async function runtimeAction(
   refuseStrictLiveWrite(correlationId);
 }
 
-export async function rankingAction(
-  scope: "persona" | "strategy" | "alphaFamily" | "capitalPool" | "paper" | "live",
-  action: "recalculate" | "freeze" | "publish" | "override" | "compare",
-  memo?: string,
-  opts: RunActionOptions = {},
-): Promise<RunActionEnvelope & { job?: Job }> {
-  const correlationId = opts.correlationId ?? newCorrelationId();
-  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
-  if (await liveWriteGated()) {
-    const env = await runAction({ kind: "Ranking", id: `ranking:${scope}`, action, memo }, { ...opts, correlationId, idempotencyKey });
-    return { ...env, job: undefined };
-  }
-  refuseStrictLiveWrite(correlationId);
-}
-
-export async function setActiveRankingFormula(
-  formulaId: string,
-  memo?: string,
-  opts: RunActionOptions = {},
-): Promise<RunActionEnvelope> {
-  const correlationId = opts.correlationId ?? newCorrelationId();
-  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
-  if (await liveWriteGated()) {
-    return runAction({ kind: "RankingFormula", id: formulaId, action: "set_active", memo }, { ...opts, correlationId, idempotencyKey });
-  }
-  refuseStrictLiveWrite(correlationId);
-}
 
 export async function scheduleDeployment(
   deploymentId: string,
@@ -2072,8 +2034,6 @@ export const bffWrites = {
   reduceAllocation,
   runParameterSweep,
   runtimeAction,
-  rankingAction,
-  setActiveRankingFormula,
   scheduleDeployment,
   personaOps,
   publishRebalanceReport,

@@ -64,7 +64,7 @@ export const AllocationSimulationPanel = ({ rebalance }: { rebalance: Rebalance 
         ))}
         <div className="flex justify-end gap-2 pt-2">
           <Button size="sm" variant="outline" onClick={() => setWeights(Object.fromEntries(lines.map((l) => [l.strategyId, l.proposedWeight * 100])))}>{t("actions.reset")}</Button>
-          <NonProductionActionButton size="sm">{t("rebalance.sim.run")}</NonProductionActionButton>
+          <NonProductionActionButton size="sm" status="no executing owner">{t("rebalance.sim.run")}</NonProductionActionButton>
         </div>
       </Card>
     </div>

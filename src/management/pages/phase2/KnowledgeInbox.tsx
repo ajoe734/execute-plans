@@ -57,10 +57,10 @@ export const KnowledgeInboxPage = () => {
                 <p className="text-sm text-muted-foreground leading-relaxed">{active.body}</p>
                 <div className="text-xs text-muted-foreground text-mono">{active.source} · {safeDateTime(active.ts)}</div>
                 <div className="flex flex-wrap gap-2 pt-2 border-t border-border">
-                  <NonProductionActionButton size="sm">{t("knowledge.promoteArtifact")}</NonProductionActionButton>
-                  <NonProductionActionButton size="sm" variant="outline">{t("knowledge.promotePostmortem")}</NonProductionActionButton>
-                  <NonProductionActionButton size="sm" variant="outline">{t("knowledge.promoteResearch")}</NonProductionActionButton>
-                  <NonProductionActionButton size="sm" variant="ghost">{t("knowledge.dismiss")}</NonProductionActionButton>
+                  <NonProductionActionButton size="sm" status="no executing owner">{t("knowledge.promoteArtifact")}</NonProductionActionButton>
+                  <NonProductionActionButton size="sm" variant="outline" status="no executing owner">{t("knowledge.promotePostmortem")}</NonProductionActionButton>
+                  <NonProductionActionButton size="sm" variant="outline" status="no executing owner">{t("knowledge.promoteResearch")}</NonProductionActionButton>
+                  <NonProductionActionButton size="sm" variant="ghost" status="no executing owner">{t("knowledge.dismiss")}</NonProductionActionButton>
                 </div>
               </>
             ) : (

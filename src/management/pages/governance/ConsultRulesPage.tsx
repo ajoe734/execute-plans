@@ -42,8 +42,8 @@ export const ConsultRulesPage = () => {
         subtitle={t("governance.consult.subtitle")}
         actions={
           <div className="flex items-center gap-2">
-            <NonProductionActionButton size="sm" variant="outline"><Plus className="h-3.5 w-3.5 mr-1" />{t("governance.consult.add")}</NonProductionActionButton>
-            <NonProductionActionButton size="sm">{t("actions.submitForReview")}</NonProductionActionButton>
+            <NonProductionActionButton size="sm" variant="outline" status="no executing owner"><Plus className="h-3.5 w-3.5 mr-1" />{t("governance.consult.add")}</NonProductionActionButton>
+            <NonProductionActionButton size="sm" status="no executing owner">{t("actions.submitForReview")}</NonProductionActionButton>
           </div>
         }
       />
@@ -70,7 +70,7 @@ export const ConsultRulesPage = () => {
                 <Switch checked={r.enabled} disabled />
                 <Input value={r.name} disabled className="h-8 text-sm font-medium flex-1" />
                 <Badge variant="outline" className={`text-[10px] uppercase ${modeTone[r.mode]}`}>{r.mode}</Badge>
-                <NonProductionActionButton size="icon" variant="ghost" className="h-7 w-7 p-0" aria-label={t("actions.delete")}>
+                <NonProductionActionButton size="icon" variant="ghost" className="h-7 w-7 p-0" aria-label={t("actions.delete")} status="no executing owner">
                   <Trash2 className="h-3.5 w-3.5" />
                 </NonProductionActionButton>
               </div>

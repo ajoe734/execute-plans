@@ -10,7 +10,6 @@ import {
 } from "@/components/data/MockDataBadge";
 import { getMockDataBadgeModel } from "@/components/data/mockDataBadgeModel";
 import { useLiveStatusSnapshot } from "@/lib/bff-v1/liveTransport";
-import { NonProductionActionButton } from "@/management/components/NonProductionActionButton";
 
 const fmtAge = (iso: string) => {
   const days = Math.round((Date.now() - new Date(iso).getTime()) / 86400_000);
@@ -43,9 +42,6 @@ export const McpSecretsPanel = ({ server }: { server: McpServer }) => {
               <div className="uppercase tracking-wider">{t("phase13.mcp.secrets.lastRotated")}</div>
               <div className="text-mono text-foreground">{fmtAge(s.lastRotatedAt)} · {s.rotatedBy}</div>
             </div>
-            <NonProductionActionButton size="sm" variant="outline">
-              {t("phase13.mcp.secrets.rotate")}
-            </NonProductionActionButton>
           </div>
         ))}
       </Card>

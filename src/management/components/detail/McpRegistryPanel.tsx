@@ -5,7 +5,6 @@ import type { McpServer } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { envBadge } from "@/management/pages/CapabilitiesLists";
 import { ShieldCheck } from "lucide-react";
-import { NonProductionActionButton } from "@/management/components/NonProductionActionButton";
 
 const ALL_ENVS: ("research" | "paper" | "live")[] = ["research", "paper", "live"];
 
@@ -45,9 +44,6 @@ export const McpRegistryPanel = ({ server }: { server: McpServer }) => {
             <span>{t("mcp.registry.liveWarn")}</span>
           </div>
         )}
-        <div className="flex justify-end gap-2 pt-2">
-          <NonProductionActionButton size="sm">{t("actions.save")}</NonProductionActionButton>
-        </div>
       </Card>
     </div>
   );

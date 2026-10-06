@@ -440,6 +440,10 @@ export default {
     reset: "重設", proposeChange: "提出變更", promoteLive: "升級至 Live", applyRebalance: "套用調倉",
     back: "返回", submitForReview: "送審",
     open: "開啟", submitting: "送出中…",
+    disabledStatus: {
+      ownerPending: "Owner 端點已存在待接線",
+      noOwner: "無執行 owner",
+    },
   },
   confirm: {
     title: "高風險動作確認",

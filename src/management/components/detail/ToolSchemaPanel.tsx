@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import type { Tool } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
-import { NonProductionActionButton } from "@/management/components/NonProductionActionButton";
 
 interface SchemaField { name: string; type: string; required: boolean; description: string; }
 
@@ -94,7 +93,6 @@ export const ToolSandboxPanel = ({ tool }: { tool: Tool }) => {
         <Textarea value={payload} onChange={(e) => setPayload(e.target.value)} rows={8} className="text-mono text-xs" />
         <div className="flex justify-end gap-2">
           <Button size="sm" variant="outline" onClick={() => setPayload(JSON.stringify({ tool: tool.id, args: {} }, null, 2))}>{t("actions.reset")}</Button>
-          <NonProductionActionButton size="sm">{t("tool.sandbox.run")}</NonProductionActionButton>
         </div>
       </Card>
     </div>
