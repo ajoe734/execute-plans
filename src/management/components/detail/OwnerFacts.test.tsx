@@ -8,6 +8,7 @@ import { RiskBudgetPanel } from "./RiskBudgetPanel";
 import { StrategyPaperLiveTab } from "./StrategyPaperLiveTab";
 import { adaptTradingPulseOverview, mgmt } from "@/lib/bff-v1/management";
 import type { CapitalPool, Rebalance } from "@/lib/bff-v1";
+import { normalizeCapitalPool } from "@/lib/bff-v1/capitalPools";
 
 vi.mock("@/platform/hooks", () => ({ useT: () => (key: string) =>
   key.split(".").reduce((value: any, part) => value?.[part], en) ?? key,
@@ -74,6 +75,18 @@ describe("owner facts, using real panels and the real BFF normalizer", () => {
     expect(screen.queryByText(/35%|Quarterly review cycle/)).not.toBeInTheDocument();
     rerender(<RiskBudgetPanel pool={{ ...pool, riskBudget: 0.03 }} />);
     expect(screen.getByText("3.00%")).toBeInTheDocument();
+  });
+
+  it("does not present legacy capital-adapter zero/USD defaults as reported facts", () => {
+    const { rerender } = render(<><MandatePanel pool={normalizeCapitalPool({ pool_id: "empty" })!} /><RiskBudgetPanel pool={normalizeCapitalPool({ pool_id: "empty" })!} /></>);
+    expect(screen.queryByText("0.00%")).not.toBeInTheDocument();
+    expect(screen.queryByText("USD")).not.toBeInTheDocument();
+    expect(screen.queryByText("0")).not.toBeInTheDocument();
+    const zero = normalizeCapitalPool({ pool_id: "real-zero", allocated: 0, risk_budget: 0, currency: "TWD" })!;
+    rerender(<><MandatePanel pool={zero} /><RiskBudgetPanel pool={zero} /></>);
+    expect(screen.getByText("0.00%")).toBeInTheDocument();
+    expect(screen.getByText("0")).toBeInTheDocument();
+    expect(screen.getByText("TWD")).toBeInTheDocument();
   });
 
   it("renders distinct strategy/runtime/binding identities and nonzero owner metrics", async () => {
