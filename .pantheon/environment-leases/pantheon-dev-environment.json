@@ -1,8 +1,8 @@
 {
   "acquiredAt": "2026-10-06T10:51:52Z",
   "branch": "environment-coordination",
-  "expiresAt": "2026-10-06T11:00:29Z",
-  "heartbeatAt": "2026-10-06T10:55:29Z",
+  "expiresAt": "2026-10-06T11:01:31Z",
+  "heartbeatAt": "2026-10-06T10:56:31Z",
   "leaseId": "7eae7e86-d616-47ec-836a-bc7a77e71077",
   "mode": "deployment",
   "owner": "pantheon:operator:pantheon-79:distill-offline-recovery-20261006",
