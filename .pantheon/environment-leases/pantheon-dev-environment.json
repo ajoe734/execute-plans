@@ -1,0 +1,14 @@
+{
+  "acquiredAt": "2026-10-06T10:51:52Z",
+  "branch": "environment-coordination",
+  "expiresAt": "2026-10-06T10:56:52Z",
+  "heartbeatAt": "2026-10-06T10:51:52Z",
+  "leaseId": "7eae7e86-d616-47ec-836a-bc7a77e71077",
+  "mode": "deployment",
+  "owner": "pantheon:operator:pantheon-79:distill-offline-recovery-20261006",
+  "path": ".pantheon/environment-leases/pantheon-dev-environment.json",
+  "repository": "ajoe734/execute-plans",
+  "resource": "pantheon-dev-environment",
+  "runUrl": "operator-coordinated distillation offline recovery (docs/operations/distillation-sqlite-lifetime-repair.md)",
+  "schemaVersion": 1
+}
