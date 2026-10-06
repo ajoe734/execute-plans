@@ -452,7 +452,35 @@ export interface ManagementTradingPulseCard {
   [key: string]: unknown;
 }
 
+export interface ManagementTradingPulseSnapshot {
+  captured_at?: string;
+  observed_at?: string;
+  deployment_stage?: string;
+  metrics: Record<string, number | null>;
+}
+
+export interface ManagementTradingPulseDriftMetric {
+  metric_id: string;
+  label?: string;
+  unit?: string;
+  baseline_value: number | null;
+  observed_value: number | null;
+  delta: number | null;
+  status: string;
+}
+
+export interface ManagementTradingPulseDriftGroup {
+  group_id: string;
+  label: string;
+  metrics: ManagementTradingPulseDriftMetric[];
+}
+
 export interface ManagementTradingPulseBaselineComparison {
+  strategyId?: string;
+  strategy_id?: string;
+  paperBaseline?: ManagementTradingPulseSnapshot;
+  observedState?: ManagementTradingPulseSnapshot;
+  driftGroups?: ManagementTradingPulseDriftGroup[];
   runtimeId: string;
   runtime_id?: string;
   runtimeBindingId?: string;
@@ -471,6 +499,8 @@ export interface ManagementTradingPulseBaselineComparison {
 }
 
 export interface ManagementTradingPulseRuntimeRow {
+  strategyId?: string;
+  strategy_id?: string;
   runtimeId: string;
   runtime_id?: string;
   runtimeBindingId?: string;
@@ -3007,6 +3037,36 @@ function normalizeTradingPulseCard(value: unknown): ManagementTradingPulseCard |
   };
 }
 
+function normalizePulseSnapshot(value: unknown): ManagementTradingPulseSnapshot | undefined {
+  if (!isObject(value)) return undefined;
+  const metrics = isObject(value.metrics) ? value.metrics : {};
+  return {
+    captured_at: asString(value.captured_at),
+    observed_at: asString(value.observed_at),
+    deployment_stage: asString(value.deployment_stage),
+    metrics: Object.fromEntries(Object.entries({
+      ...metrics,
+      ...(Object.prototype.hasOwnProperty.call(value, "return_percent") ? { return_percent: value.return_percent } : {}),
+    }).map(([key, metric]) => [key, typeof metric === "number" && Number.isFinite(metric) ? metric : null])),
+  };
+}
+
+function normalizePulseDriftGroups(value: unknown): ManagementTradingPulseDriftGroup[] {
+  if (!Array.isArray(value)) return [];
+  const number = (raw: unknown) => typeof raw === "number" && Number.isFinite(raw) ? raw : null;
+  return value.filter(isObject).map((group) => ({
+    group_id: asString(group.group_id),
+    label: asString(group.label ?? group.group_id),
+    metrics: (Array.isArray(group.metrics) ? group.metrics : []).filter(isObject)
+      .filter((metric) => asString(metric.metric_id).length > 0)
+      .map((metric) => ({
+        metric_id: asString(metric.metric_id), label: asString(metric.label), unit: asString(metric.unit),
+        baseline_value: number(metric.baseline_value), observed_value: number(metric.observed_value),
+        delta: number(metric.delta), status: asString(metric.status, "unknown"),
+      })),
+  }));
+}
+
 function normalizeBaselineComparison(value: unknown): ManagementTradingPulseBaselineComparison | null {
   if (!isObject(value)) return null;
   const runtimeId = asString(value.runtimeId ?? value.runtime_id);
@@ -3027,6 +3087,11 @@ function normalizeBaselineComparison(value: unknown): ManagementTradingPulseBase
     deploymentStage,
     deployment_stage: deploymentStage,
     status: asString(value.status, "unavailable"),
+    strategyId: asString(value.strategyId ?? value.strategy_id),
+    strategy_id: asString(value.strategyId ?? value.strategy_id),
+    paperBaseline: normalizePulseSnapshot(value.paperBaseline ?? value.paper_baseline),
+    observedState: normalizePulseSnapshot(value.observedState ?? value.observed_state),
+    driftGroups: normalizePulseDriftGroups(value.driftGroups ?? value.drift_groups),
     metricCount: asFiniteNumber(value.metricCount ?? value.metric_count, 0),
     breachedMetricCount: asFiniteNumber(value.breachedMetricCount ?? value.breached_metric_count, 0),
     watchMetricCount: asFiniteNumber(value.watchMetricCount ?? value.watch_metric_count, 0),
@@ -3061,6 +3126,8 @@ function normalizeRuntimeRow(value: unknown): ManagementTradingPulseRuntimeRow |
     deploymentStage,
     deployment_stage: deploymentStage,
     status: asString(value.status),
+    strategyId: asString(value.strategyId ?? value.strategy_id),
+    strategy_id: asString(value.strategyId ?? value.strategy_id),
     metrics,
     telemetrySummary,
     telemetry_summary: telemetrySummary,

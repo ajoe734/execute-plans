@@ -31,8 +31,9 @@ describe("PFG-MGMT-FE-REAL-20260820 Strict Live & Degraded Tests", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText(/BFF Telemetry: unavailable/i)).toBeInTheDocument();
-      expect(screen.getByText(/Telemetry stream unavailable; no live breach calculation available/i)).toBeInTheDocument();
+      expect(screen.getByText(/phase21.ownerFacts.readStatus: unavailable/)).toBeInTheDocument();
+      expect(screen.getByText("phase21.ownerFacts.noComparisons")).toBeInTheDocument();
+      expect(screen.queryByRole("table")).not.toBeInTheDocument();
     });
   });
 
