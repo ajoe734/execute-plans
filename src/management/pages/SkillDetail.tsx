@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { safeDateTime } from "@/lib/utils";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, Link } from "react-router-dom";
 import { bffV1 } from "@/lib/bff-v1";
 import type { AuditEvent, Persona, Skill } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
@@ -12,12 +12,10 @@ import { StatCard } from "@/platform/components/StatCard";
 import { Button } from "@/components/ui/button";
 import { LifecycleStepper } from "@/platform/components/LifecycleStepper";
 import { skillMachine, type SkillState } from "@/lib/stateMachines";
-import { Send, Archive } from "lucide-react";
 import { ExternalLink } from "lucide-react";
 import { SkillPromptEditor } from "@/management/components/detail/SkillPromptEditor";
 import { SkillRiskPanel } from "@/management/components/detail/SkillRiskPanel";
 import { Card } from "@/components/ui/card";
-import { NonProductionActionButton } from "@/management/components/NonProductionActionButton";
 import { CapabilityDetailEmptyState } from "@/management/components/CapabilityDetailEmptyState";
 
 export const SkillDetail = () => {
@@ -54,17 +52,11 @@ export const SkillDetail = () => {
         object={skill}
         subtitle={`${skill.archetype} · v${skill.version}`}
         actions={
-          <>
-            {skill.draft ? (
-              <NonProductionActionButton size="sm">
-                <Send className="h-4 w-4 mr-1" />{t("skill.publish")}
-              </NonProductionActionButton>
-            ) : (
-              <NonProductionActionButton size="sm" variant="outline">
-                <Archive className="h-4 w-4 mr-1" />{t("actions.retire")}
-              </NonProductionActionButton>
-            )}
-          </>
+          <Button size="sm" variant="outline" asChild>
+            <Link to="/management/capabilities/skills">
+              {t("nav.skills", { defaultValue: "Skills" })}
+            </Link>
+          </Button>
         }
         tabs={[
           {

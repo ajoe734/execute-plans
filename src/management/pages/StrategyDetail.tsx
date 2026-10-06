@@ -129,7 +129,7 @@ export const StrategyDetail = () => {
             })}>
               <Inbox className="h-4 w-4 mr-1" />Inspect
             </Button>
-            <NonProductionActionButton size="sm" variant="outline">
+            <NonProductionActionButton size="sm" variant="outline" status="no executing owner">
               <Zap className="h-4 w-4 mr-1" />{t("strategy.sweep.run")}
             </NonProductionActionButton>
             {transitions.map((tr) => (
@@ -137,6 +137,7 @@ export const StrategyDetail = () => {
                 key={tr.action}
                 size="sm"
                 variant={tr.risk === "critical" || tr.risk === "high" ? "default" : "outline"}
+                status="no executing owner"
               >
                 {tr.action} → {tr.to}
               </NonProductionActionButton>
@@ -329,11 +330,11 @@ export const StrategyDetail = () => {
                       { key: "act", header: "", cell: (r) => (
                         <div className="flex gap-1 justify-end">
                           {!r.acknowledged && (
-                            <NonProductionActionButton size="sm" variant="ghost">
+                            <NonProductionActionButton size="sm" variant="ghost" status="owner endpoint exists with frontend wiring pending">
                               <CheckCircle2 className="h-3.5 w-3.5 mr-1" />{t("table_actions.acknowledge")}
                             </NonProductionActionButton>
                           )}
-                          <NonProductionActionButton size="sm" variant="outline">
+                          <NonProductionActionButton size="sm" variant="outline" status="owner endpoint exists with frontend wiring pending">
                             <AlertTriangle className="h-3.5 w-3.5 mr-1" />{t("table_actions.escalateIncident")}
                           </NonProductionActionButton>
                         </div>
@@ -362,10 +363,10 @@ export const StrategyDetail = () => {
                   { key: "ts", header: t("table.opened"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{safeDateTime(r.openedAt)}</span> },
                   { key: "act", header: "", cell: (r) => (
                     <div className="flex gap-1 justify-end">
-                      <NonProductionActionButton size="sm" variant="ghost">
+                      <NonProductionActionButton size="sm" variant="ghost" status="owner endpoint exists with frontend wiring pending">
                         {r.status === "open" ? t("table_actions.startMitigation") : t("table_actions.resolve")}
                       </NonProductionActionButton>
-                      <NonProductionActionButton size="sm" variant="outline">
+                      <NonProductionActionButton size="sm" variant="outline" status="no executing owner">
                         <FileText className="h-3.5 w-3.5 mr-1" />{t("incident.postmortem.add")}
                       </NonProductionActionButton>
                     </div>

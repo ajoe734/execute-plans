@@ -147,7 +147,7 @@ export const IncidentDetail = () => {
                 {t("incident.startMitigation")}
               </PermissionAwareButton>
             )}
-            <NonProductionActionButton size="sm" variant="outline">
+            <NonProductionActionButton size="sm" variant="outline" status="no executing owner">
               {t("incident.pauseStrategy")}
             </NonProductionActionButton>
             {incident.status !== "resolved" && (

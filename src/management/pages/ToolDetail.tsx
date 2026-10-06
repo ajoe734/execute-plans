@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, Link } from "react-router-dom";
 import { bffV1 } from "@/lib/bff-v1";
 import type { AuditEvent, Strategy, Tool } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
@@ -8,12 +8,11 @@ import { StatCard } from "@/platform/components/StatCard";
 import { DataTable } from "@/platform/components/DataTable";
 import { AuditTimeline } from "@/platform/components/AuditTimeline";
 import { StatusBadge } from "@/platform/components/StatusBadge";
+import { Button } from "@/components/ui/button";
 import { ToolSchemaPanel, ToolSandboxPanel } from "@/management/components/detail/ToolSchemaPanel";
 import { ActivityMonitor } from "@/management/components/detail/ActivityMonitor";
 import { LifecycleStepper } from "@/platform/components/LifecycleStepper";
 import { toolMachine, type ToolState } from "@/lib/stateMachines";
-import { PlayCircle, Power, ShieldOff, ShieldCheck, ArchiveX, Archive, Gauge, Tag } from "lucide-react";
-import { NonProductionActionButton } from "@/management/components/NonProductionActionButton";
 import { CapabilityDetailEmptyState } from "@/management/components/CapabilityDetailEmptyState";
 
 const STATE_MAP: Record<string, ToolState> = {
@@ -46,47 +45,11 @@ export const ToolDetail = () => {
   const machineState: ToolState = STATE_MAP[tool.state ?? ""] ?? "draft";
 
   const actions = (
-    <div className="flex flex-wrap gap-2">
-      {machineState === "draft" && (
-        <NonProductionActionButton size="sm" variant="outline">
-          <PlayCircle className="h-4 w-4 mr-1" />{t("tool.actions.test")}
-        </NonProductionActionButton>
-      )}
-      {machineState === "testing" && (
-        <NonProductionActionButton size="sm">
-          <Power className="h-4 w-4 mr-1" />{t("tool.actions.activate")}
-        </NonProductionActionButton>
-      )}
-      {machineState === "active" && (
-        <>
-          <NonProductionActionButton size="sm" variant="outline">
-            <ShieldOff className="h-4 w-4 mr-1" />{t("tool.actions.restrict")}
-          </NonProductionActionButton>
-          <NonProductionActionButton size="sm" variant="outline">
-            <Archive className="h-4 w-4 mr-1" />{t("tool.actions.deprecate")}
-          </NonProductionActionButton>
-          <NonProductionActionButton size="sm" variant="outline">
-            <ArchiveX className="h-4 w-4 mr-1" />{t("tool.actions.block")}
-          </NonProductionActionButton>
-        </>
-      )}
-      {machineState === "restricted" && (
-        <NonProductionActionButton size="sm">
-          <ShieldCheck className="h-4 w-4 mr-1" />{t("tool.actions.unrestrict")}
-        </NonProductionActionButton>
-      )}
-      {machineState === "deprecated" && (
-        <NonProductionActionButton size="sm" variant="outline">
-          <ArchiveX className="h-4 w-4 mr-1" />{t("tool.actions.retire")}
-        </NonProductionActionButton>
-      )}
-      <NonProductionActionButton size="sm" variant="outline">
-        <Gauge className="h-4 w-4 mr-1" />{t("tool.actions.rateLimit")}
-      </NonProductionActionButton>
-      <NonProductionActionButton size="sm" variant="outline">
-        <Tag className="h-4 w-4 mr-1" />{t("tool.actions.classifyRisk")}
-      </NonProductionActionButton>
-    </div>
+    <Button size="sm" variant="outline" asChild>
+      <Link to="/management/capabilities/tools">
+        {t("nav.tools", { defaultValue: "Tools" })}
+      </Link>
+    </Button>
   );
 
   return (

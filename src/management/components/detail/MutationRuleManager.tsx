@@ -22,7 +22,7 @@ export const MutationRuleManager = ({ programId }: { programId?: string } = {}) 
   return (
     <Section title={t("evolution.tabs.mutation")}>
       <div className="flex justify-end">
-        <NonProductionActionButton size="sm" variant="outline"><Plus className="h-3.5 w-3.5 mr-1" />{t("phase13.evolution.mutation.add")}</NonProductionActionButton>
+        <NonProductionActionButton size="sm" variant="outline" status="no executing owner"><Plus className="h-3.5 w-3.5 mr-1" />{t("phase13.evolution.mutation.add")}</NonProductionActionButton>
       </div>
       <Card className="p-0">
         <DataTable

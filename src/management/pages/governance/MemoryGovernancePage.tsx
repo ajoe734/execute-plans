@@ -91,8 +91,8 @@ export const MemoryGovernancePage = () => {
                 {m.before && <div className="text-xs text-muted-foreground line-through">{m.before}</div>}
                 <div className="text-sm">{m.after}</div>
                 <div className="flex justify-end gap-2">
-                  <NonProductionActionButton size="sm" variant="outline"><X className="h-3.5 w-3.5 mr-1" />{t("actions.reject")}</NonProductionActionButton>
-                  <NonProductionActionButton size="sm"><Check className="h-3.5 w-3.5 mr-1" />{t("actions.approve")}</NonProductionActionButton>
+                  <NonProductionActionButton size="sm" variant="outline" status="no executing owner"><X className="h-3.5 w-3.5 mr-1" />{t("actions.reject")}</NonProductionActionButton>
+                  <NonProductionActionButton size="sm" status="no executing owner"><Check className="h-3.5 w-3.5 mr-1" />{t("actions.approve")}</NonProductionActionButton>
                 </div>
               </Card>
             ))}
@@ -116,14 +116,14 @@ export const MemoryGovernancePage = () => {
                       </div>
                       <div className="text-sm">{m!.after}</div>
                       <div className="flex justify-end gap-1 pt-1">
-                        <NonProductionActionButton size="sm" variant="outline">{t("actions.reject")}</NonProductionActionButton>
-                        <NonProductionActionButton size="sm">{t("governance.memory.keep")}</NonProductionActionButton>
+                        <NonProductionActionButton size="sm" variant="outline" status="no executing owner">{t("actions.reject")}</NonProductionActionButton>
+                        <NonProductionActionButton size="sm" status="no executing owner">{t("governance.memory.keep")}</NonProductionActionButton>
                       </div>
                     </div>
                   ))}
                 </div>
                 <div className="flex justify-end">
-                  <NonProductionActionButton size="sm" variant="secondary">
+                  <NonProductionActionButton size="sm" variant="secondary" status="no executing owner">
                     <GitMerge className="h-3.5 w-3.5 mr-1" />{t("governance.memory.merge")}
                   </NonProductionActionButton>
                 </div>

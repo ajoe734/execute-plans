@@ -23,7 +23,7 @@ describe("MGMT-GAP-005 capability production truth gates", () => {
     expect(source).toContain("Live skill registry is empty");
   });
 
-  it("keeps capability detail writes and runners disabled instead of local-success paths", () => {
+  it("keeps capability detail writes and runners removed instead of local-success paths", () => {
     const guardedFiles = [
       "src/management/pages/ToolDetail.tsx",
       "src/management/pages/McpDetail.tsx",
@@ -36,11 +36,18 @@ describe("MGMT-GAP-005 capability production truth gates", () => {
 
     for (const relPath of guardedFiles) {
       const source = readSource(relPath);
-      expect(source, relPath).toContain("NonProductionActionButton");
+      expect(source, relPath).not.toContain("NonProductionActionButton");
       expect(source, relPath).not.toContain("runActionSafe");
       expect(source, relPath).not.toContain("HighRiskConfirm");
       expect(source, relPath).not.toContain("toast.success");
+      expect(source, relPath).not.toContain("ToolAction");
+      expect(source, relPath).not.toContain("McpServerAction");
+      expect(source, relPath).not.toContain("SkillAction");
     }
+
+    expect(readSource("src/management/pages/ToolDetail.tsx")).toContain("/management/capabilities/tools");
+    expect(readSource("src/management/pages/McpDetail.tsx")).toContain("/management/capabilities/mcps");
+    expect(readSource("src/management/pages/SkillDetail.tsx")).toContain("/management/capabilities/skills");
 
     const toolSandbox = readSource("src/management/components/detail/ToolSchemaPanel.tsx");
     expect(toolSandbox).not.toContain("setTimeout");

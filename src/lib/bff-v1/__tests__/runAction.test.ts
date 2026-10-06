@@ -640,7 +640,6 @@ describe("operations console command mapping", () => {
     const { buildRunActionCommand } = commandClient;
     const actions = [
       "Observe",
-      "RequestReview",
       "PausePaperRuntime",
       "ResumePaperRuntime",
       "Demote",

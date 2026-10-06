@@ -21,7 +21,7 @@ export const PersonaWorkspaceTab = ({ personaId }: { personaId: string }) => {
     <div className="grid gap-4 md:grid-cols-2">
       <Section title={t("phase13.persona.workspace.scratchpad")}>
         <Textarea value={draft} onChange={(e) => setDraft(e.target.value)} rows={8} placeholder={t("phase13.persona.workspace.scratchPlaceholder")} className="font-mono text-xs" />
-        <NonProductionActionButton size="sm" variant="outline">
+        <NonProductionActionButton size="sm" variant="outline" status="owner endpoint exists with frontend wiring pending">
           {t("actions.save")}
         </NonProductionActionButton>
       </Section>

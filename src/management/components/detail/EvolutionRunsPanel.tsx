@@ -66,7 +66,7 @@ export const EvolutionRunsPanel = ({ programId, mode = "all" }: { programId: str
               : c.state === "discarded" ? "border-status-failed/40 text-status-failed"
               : "border-border text-muted-foreground"}`}>{c.state}</Badge>
             {c.state === "scored" && (
-              <NonProductionActionButton size="sm" variant="outline">{t("evolution.runs.promote")}</NonProductionActionButton>
+              <NonProductionActionButton size="sm" variant="outline" status="owner endpoint exists with frontend wiring pending">{t("evolution.runs.promote")}</NonProductionActionButton>
             )}
           </div>
         ))}

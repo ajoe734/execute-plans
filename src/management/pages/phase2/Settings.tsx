@@ -95,6 +95,7 @@ const BreakGlassPanel = () => {
       <NonProductionActionButton
         size="sm"
         variant="destructive"
+        status="no executing owner"
       >
         Submit force transition
       </NonProductionActionButton>
@@ -129,7 +130,7 @@ export const SettingsPage = () => {
                 <div className="space-y-1.5"><Label>{t("settings.profile.displayName")}</Label><Input defaultValue="Operator" /></div>
                 <div className="space-y-1.5"><Label>{t("settings.profile.email")}</Label><Input defaultValue="ops@pantheon.local" /></div>
               </div>
-              <NonProductionActionButton size="sm">{t("actions.save")}</NonProductionActionButton>
+              <NonProductionActionButton size="sm" status="no executing owner">{t("actions.save")}</NonProductionActionButton>
             </Section>
           </TabsContent>
 
@@ -163,7 +164,7 @@ export const SettingsPage = () => {
                 <Row key={i.name} label={i.name}>
                   <div className="flex gap-2 items-center">
                     <Badge variant={i.status === "connected" ? "default" : "outline"}>{i.status}</Badge>
-                    <NonProductionActionButton size="sm" variant="outline">{i.status === "connected" ? t("settings.integrations.manage") : t("settings.integrations.connect")}</NonProductionActionButton>
+                    <NonProductionActionButton size="sm" variant="outline" status="no executing owner">{i.status === "connected" ? t("settings.integrations.manage") : t("settings.integrations.connect")}</NonProductionActionButton>
                   </div>
                 </Row>
               ))}
@@ -177,10 +178,10 @@ export const SettingsPage = () => {
                 { name: "ci-runner",    prefix: "pk_live_3f…", created: "2026-03-02" },
               ].map((k) => (
                 <Row key={k.name} label={k.name} hint={`${k.prefix} · created ${k.created}`}>
-                  <NonProductionActionButton size="sm" variant="outline">{t("settings.api.rotate")}</NonProductionActionButton>
+                  <NonProductionActionButton size="sm" variant="outline" status="no executing owner">{t("settings.api.rotate")}</NonProductionActionButton>
                 </Row>
               ))}
-              <NonProductionActionButton size="sm">{t("settings.api.create")}</NonProductionActionButton>
+              <NonProductionActionButton size="sm" status="no executing owner">{t("settings.api.create")}</NonProductionActionButton>
             </Section>
           </TabsContent>
 

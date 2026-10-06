@@ -23,7 +23,7 @@ export const HookCronManagerPage = () => {
   const hooks = data?.hooks ?? [];
   return (
     <>
-      <PageHeader title={t("nav.hooks")} subtitle={t("hooks.subtitle")} actions={<NonProductionActionButton size="sm">{t("hooks.create")}</NonProductionActionButton>} />
+      <PageHeader title={t("nav.hooks")} subtitle={t("hooks.subtitle")} actions={<NonProductionActionButton size="sm" status="no executing owner">{t("hooks.create")}</NonProductionActionButton>} />
       <PageBody>
         <Tabs defaultValue="cron">
           <TabsList>
