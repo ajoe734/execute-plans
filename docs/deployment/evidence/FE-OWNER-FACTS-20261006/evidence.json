@@ -1,0 +1,27 @@
+{
+  "task_id": "FE-OWNER-FACTS-20261006",
+  "repository": "ajoe734/execute-plans",
+  "base_sha": "a4f4f6f23e95963f8ec7c441b750e0fdc6ecb052",
+  "scope": [
+    "Remove invented policy validator results/progress, constraint decisions, mandate rules and risk breakdowns.",
+    "Keep proposed allocation arithmetic distinct from policy validation; preserve unknown versus real zero.",
+    "The existing capital read adapter now exposes field-presence metadata so these panels do not present legacy zero/USD defaults as reported values. No policy/admission decision is inferred.",
+    "Normalize real BFF comparison snapshots, drift groups and strategy identity without interpreting paperLiveDrift availability metadata as measurements.",
+    "Match strategy to explicit runtime/binding relations; display per-runtime owner values, units, timestamps and assessment, not a fabricated time series or browser-owned threshold."
+  ],
+  "paired_backend_pr": "https://github.com/ajoe734/pantheon/pull/6178",
+  "validation": [
+    {"command": "NODE_ENV=test npx vitest related --run --maxWorkers=2 <all changed TypeScript paths>", "result": "78 files, 729 tests passed on final source; exit 0. An earlier unlimited-worker rerun passed all assertions but exited 1 with an unhandled bootstrapMockOrdering.test.tsx teardown error; it is not counted as a passing run."},
+    {"command": "NODE_ENV=test npx vitest run src/test/deploy-safe-defaults.test.ts src/test/paired-release-workflow.test.ts src/test/admitted-dev-pair.test.ts", "result": "54 passed"},
+    {"command": "npx tsc -p tsconfig.app.json --noEmit; npx tsc -p tsconfig.agora.json --noEmit", "result": "both passed"},
+    {"command": "NODE_ENV=production VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false VITE_BFF_ALLOW_DEV_STUB_WRITES=false VITE_BFF_EMBEDDED_BEARER_TOKEN=false npm run build", "result": "passed; chunk-size warnings"}
+  ],
+  "not_completed": [
+    "Missing policy validation, mandate details, measured risk breakdown and edit capabilities remain product obligations; displaying unverified does not deliver or retire them.",
+    "Upstream telemetry-owner wiring and read freshness still require separate backend repairs.",
+    "Other CapitalPool callers still consume legacy normalization defaults and risk classification; qualifying these two panels is not a claim that all capital read semantics have been repaired.",
+    "Canonical exact-head independent approval, merge, paired deployment and authenticated hosted acceptance have not occurred.",
+    "No claim of twelve-loop closure, live brokerage, queue recovery or monitor delivery acceptance."
+  ],
+  "operational_actions": "None. No deployment, hosted mutations, queue replay or real-capital changes."
+}

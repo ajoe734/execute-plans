@@ -77,7 +77,7 @@ export function normalizeCapitalPool(value: unknown): CapitalPool | undefined {
   const id = poolId ?? asString(record.id, record.ledger_id, record.ledgerId);
   if (!id) return undefined;
 
-  const riskBudget = asFraction(
+  const reportedRiskBudget = asFraction(
     record.riskBudget,
     record.risk_budget,
     record.riskBudgetPct,
@@ -86,9 +86,10 @@ export function normalizeCapitalPool(value: unknown): CapitalPool | undefined {
     record.max_drawdown_pct,
     params?.riskBudget,
     params?.risk_budget,
-  ) ?? 0;
+  );
+  const riskBudget = reportedRiskBudget ?? 0;
 
-  const allocated = asNumber(
+  const reportedAllocated = asNumber(
     record.allocated,
     record.capitalAllocation,
     record.capital_allocation,
@@ -100,7 +101,8 @@ export function normalizeCapitalPool(value: unknown): CapitalPool | undefined {
     record.aum,
     params?.allocated,
     params?.budget,
-  ) ?? 0;
+  );
+  const allocated = reportedAllocated ?? 0;
 
   const utilizationRatio = asFraction(record.utilizationPct, record.utilization_pct, record.utilizationRate, record.utilization_rate);
   const utilization = asNumber(record.utilization);
@@ -132,6 +134,7 @@ export function normalizeCapitalPool(value: unknown): CapitalPool | undefined {
   const bindingCount = asNumber(record.bindingCount, record.binding_count) ?? bindings.length;
   const riskPolicyRef = asString(record.riskPolicyRef, record.risk_policy_ref, record.policy_ref, record.policyRef);
   const status = asString(record.status, record.lifecycleStatus, record.lifecycle_status);
+  const reportedCurrency = asString(record.currency, params?.currency);
 
   return {
     ...record,
@@ -143,7 +146,14 @@ export function normalizeCapitalPool(value: unknown): CapitalPool | undefined {
     updatedAt: asString(record.updatedAt, record.updated_at, record.created_at, record.effective_at) ?? "",
     state: normalizeState(record.state ?? status),
     risk: normalizeRisk(record.risk, riskBudget),
-    currency: asString(record.currency, params?.currency) ?? "USD",
+    currency: reportedCurrency ?? "USD",
+    // Legacy numeric defaults remain for existing callers. Facts panels must
+    // not present those defaults as values actually supplied by the owner.
+    reportedFields: {
+      currency: reportedCurrency !== undefined,
+      allocated: reportedAllocated !== undefined,
+      riskBudget: reportedRiskBudget !== undefined,
+    },
     allocated,
     utilized,
     riskBudget,
