@@ -1,8 +1,8 @@
 {
   "acquiredAt": "2026-10-07T00:39:08Z",
   "branch": "environment-coordination",
-  "expiresAt": "2026-10-07T00:46:46Z",
-  "heartbeatAt": "2026-10-07T00:41:46Z",
+  "expiresAt": "2026-10-07T00:47:18Z",
+  "heartbeatAt": "2026-10-07T00:42:18Z",
   "leaseId": "486a39db-93cb-499a-873c-506205e4cab4",
   "mode": "qualification",
   "owner": "l12-compose:manual:l12humanops:1279733:ffa6fb8ce46c",
