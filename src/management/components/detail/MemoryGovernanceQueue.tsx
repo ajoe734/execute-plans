@@ -46,8 +46,8 @@ export const MemoryGovernanceQueue = ({ personaId }: { personaId: string }) => {
             <div className="text-sm">{m.after}</div>
             {m.state === "queued" && (
               <div className="flex justify-end gap-2">
-                <NonProductionActionButton size="sm" variant="outline">{t("actions.reject")}</NonProductionActionButton>
-                <NonProductionActionButton size="sm">{t("actions.approve")}</NonProductionActionButton>
+                <NonProductionActionButton size="sm" variant="outline" status="no executing owner">{t("actions.reject")}</NonProductionActionButton>
+                <NonProductionActionButton size="sm" status="no executing owner">{t("actions.approve")}</NonProductionActionButton>
               </div>
             )}
             {m.state === "conflict" && (

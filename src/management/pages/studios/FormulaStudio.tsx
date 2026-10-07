@@ -149,7 +149,7 @@ export const FormulaStudio = () => {
             <TabsContent value="backtest" className="mt-4 space-y-4">
               <div className="flex justify-between items-center">
                 <h3 className="text-sm font-semibold">{t("studios.backtest")} 執行歷史</h3>
-                <NonProductionActionButton size="sm">
+                <NonProductionActionButton size="sm" status="no executing owner">
                   {t("studios.runBacktest")}
                 </NonProductionActionButton>
               </div>

@@ -13,7 +13,7 @@ export const RiskBudgetPanel = ({ pool }: { pool: CapitalPool }) => {
       </div>
       <h4 className="text-sm font-semibold">{t("capitalPool.risk.breakdown")}</h4>
       <p className="text-xs text-muted-foreground">{t("phase21.ownerFacts.riskBreakdownUnavailable")}</p>
-      <NonProductionActionButton size="sm">{t("actions.proposeChange")}</NonProductionActionButton>
+      <NonProductionActionButton size="sm" status="no executing owner">{t("actions.proposeChange")}</NonProductionActionButton>
     </Card>
   );
 };

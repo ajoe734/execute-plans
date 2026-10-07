@@ -36,8 +36,8 @@ describe("E2E happy 3/10 · Rebalance step advance", () => {
   });
 });
 
-describe("E2E happy 4/10 · Ranking recalculate (zod-validated)", () => {
-  const RecalcResponse = z.object({
+describe("E2E happy 4/10 · Runtime action (zod-validated)", () => {
+  const ActionResponse = z.object({
     ok: z.literal(true),
     audit: z.object({
       id: z.string(), actor: z.string(), action: z.string(),
@@ -46,9 +46,9 @@ describe("E2E happy 4/10 · Ranking recalculate (zod-validated)", () => {
     job: z.object({ id: z.string(), kind: z.string(), status: z.string() }).optional(),
     message: z.string().optional(),
   });
-  it("Given live scope When recalculate Then envelope matches contract", async () => {
-    const r = await mutations.rankingAction("live", "recalculate", "quarterly");
-    const parsed = RecalcResponse.safeParse(r);
+  it("Given runtime When restart Then envelope matches contract", async () => {
+    const r = await mutations.runtimeAction("rt_001", "restart", "maintenance");
+    const parsed = ActionResponse.safeParse(r);
     expect(parsed.success).toBe(true);
   });
 });
@@ -88,10 +88,10 @@ describe("E2E happy 7/10 · Handoff SLA", () => {
   });
 });
 
-describe("E2E happy 8/10 · Skill action via runAction", () => {
-  it("Given draft skill When approve Then audit emitted", async () => {
-    const r = await mutations.runAction({ kind: "Skill", id: "sk_macro_brief", action: "approve" });
-    expect(r.audit.action).toMatch(/skill\./);
+describe("E2E happy 8/10 · Persona action via runAction", () => {
+  it("Given persona When observe Then audit emitted", async () => {
+    const r = await mutations.runAction({ kind: "Persona", id: "p_marcus", action: "Observe" });
+    expect(r.audit.action).toMatch(/persona\./);
   });
 });
 

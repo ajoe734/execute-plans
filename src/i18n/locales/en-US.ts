@@ -449,6 +449,10 @@ export default {
     reset: "Reset", proposeChange: "Propose change", promoteLive: "Promote to Live", applyRebalance: "Apply Rebalance",
     back: "Back", submitForReview: "Submit for review",
     open: "Open", submitting: "Submitting…",
+    disabledStatus: {
+      ownerPending: "Owner endpoint exists with frontend wiring pending",
+      noOwner: "No executing owner",
+    },
   },
   confirm: {
     title: "Confirm high-risk action",

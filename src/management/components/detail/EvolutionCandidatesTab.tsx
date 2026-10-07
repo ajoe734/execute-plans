@@ -64,10 +64,10 @@ export const EvolutionCandidatesTab = ({ programId }: { programId: string }) => 
         <div className="flex-1" />
         <div className="flex items-center gap-2">
           <Badge variant="outline" className="text-[10px] uppercase">{selected.size} selected</Badge>
-          <NonProductionActionButton size="sm" variant="outline">
+          <NonProductionActionButton size="sm" variant="outline" status="no executing owner">
             {t("phase13.evolution.candidates.batchPromote")}
           </NonProductionActionButton>
-          <NonProductionActionButton size="sm" variant="destructive">
+          <NonProductionActionButton size="sm" variant="destructive" status="no executing owner">
             {t("phase13.evolution.candidates.batchDiscard")}
           </NonProductionActionButton>
         </div>
@@ -117,7 +117,7 @@ export const EvolutionCandidatesTab = ({ programId }: { programId: string }) => 
                     {inspect.mutationsApplied.length === 0 && <li className="text-muted-foreground">—</li>}
                   </ul>
                 </div>
-                <NonProductionActionButton size="sm">{t("evolution.candidate.promote")}</NonProductionActionButton>
+                <NonProductionActionButton size="sm" status="owner endpoint exists with frontend wiring pending">{t("evolution.candidate.promote")}</NonProductionActionButton>
               </div>
             </>
           )}

@@ -1,15 +1,14 @@
 import { useEffect, useState } from "react";
 import { safeDateTime } from "@/lib/utils";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { bffV1, runActionSafe } from "@/lib/bff-v1";
+import { bffV1 } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import type { AuditEvent, RankingFormula, Strategy } from "@/lib/bff-v1";
-import { CheckCircle2, Edit, Inbox } from "lucide-react";
+import { Inbox } from "lucide-react";
 import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { EmptyState } from "@/components/ui/empty-state";
-import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
 import { DataTable } from "@/platform/components/DataTable";
 import { AuditTimeline } from "@/platform/components/AuditTimeline";
 
@@ -21,7 +20,6 @@ export const RankingFormulaDetail = () => {
   const [loading, setLoading] = useState(true);
   const [strategies, setStrategies] = useState<Strategy[]>([]);
   const [audit, setAudit] = useState<AuditEvent[]>([]);
-  const [confirmOpen, setConfirmOpen] = useState(false);
 
   useEffect(() => {
     if (!id) {
@@ -67,12 +65,11 @@ export const RankingFormulaDetail = () => {
         object={f}
         subtitle={f.id}
         actions={
-          <>
-            <Button size="sm" variant="outline"><Edit className="h-4 w-4 mr-1" />{t("actions.edit")}</Button>
-            <Button size="sm" onClick={() => setConfirmOpen(true)}>
-              <CheckCircle2 className="h-4 w-4 mr-1" />Activate
-            </Button>
-          </>
+          <Button size="sm" variant="outline" asChild>
+            <Link to="/management/governance-decisions?tab=policy">
+              {t("nav.rankingFormulas", { defaultValue: "Ranking Policies" })}
+            </Link>
+          </Button>
         }
         tabs={[
           {
@@ -110,24 +107,6 @@ export const RankingFormulaDetail = () => {
           ) },
           { value: "audit", label: t("nav.audit"), content: <AuditTimeline entries={audit} /> },
         ]}
-      />
-
-      <HighRiskConfirm
-        open={confirmOpen}
-        onOpenChange={setConfirmOpen}
-        title={`Activate Ranking Formula — ${f.name}`}
-        description={t("detail.confirm.activateFormula")}
-        actionId="ranking_formula.activate"
-        confirmEntity={{ type: "formula", id: f.id }}
-        target={{ type: "RankingFormula", id: f.id, name: f.name }}
-        risk="high"
-        destructive
-        onConfirm={async (memo, token) => {
-          await runActionSafe({ kind: "RankingFormula", id: f.id, action: "activate", memo }, {
-            confirmToken: token,
-            successTitle: "Activation requested - pending approval",
-          });
-        }}
       />
     </>
   );

@@ -30,7 +30,7 @@ export const WorkflowTemplatesPage = () => {
   return (
     <>
       <PageHeader title={t("nav.workflowTemplates")} subtitle={t("workflows.subtitle")} actions={
-        <NonProductionActionButton size="sm">{t("workflows.create")}</NonProductionActionButton>
+        <NonProductionActionButton size="sm" status="no executing owner">{t("workflows.create")}</NonProductionActionButton>
       }/>
       <PageBody>
         <Card>
@@ -71,8 +71,8 @@ export const WorkflowTemplatesPage = () => {
                   <div className="flex flex-wrap gap-2">{active.inputs.map((i) => <code key={i} className="text-mono text-xs bg-muted px-1.5 py-0.5 rounded">{i}</code>)}</div>
                 </Card>
                 <div className="flex gap-2">
-                  <NonProductionActionButton size="sm">{t("workflows.run")}</NonProductionActionButton>
-                  <NonProductionActionButton size="sm" variant="outline">{t("workflows.edit")}</NonProductionActionButton>
+                  <NonProductionActionButton size="sm" status="no executing owner">{t("workflows.run")}</NonProductionActionButton>
+                  <NonProductionActionButton size="sm" variant="outline" status="no executing owner">{t("workflows.edit")}</NonProductionActionButton>
                 </div>
               </div>
             </>

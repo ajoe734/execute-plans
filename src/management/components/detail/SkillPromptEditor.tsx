@@ -6,7 +6,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import type { Skill } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
-import { NonProductionActionButton } from "@/management/components/NonProductionActionButton";
 
 const initialPrompt = (skill: Skill) => `# ${skill.name}
 Archetype: ${skill.archetype}
@@ -59,9 +58,6 @@ export const SkillPromptEditor = ({ skill }: { skill: Skill }) => {
             <Button size="sm" variant="outline" onClick={() => { setDraft(original); }} disabled={!dirty}>
               {t("actions.reset")}
             </Button>
-            <NonProductionActionButton size="sm">
-              {t("skill.prompt.saveDraft")}
-            </NonProductionActionButton>
           </div>
         </div>
       </Card>

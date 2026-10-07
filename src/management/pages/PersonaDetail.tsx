@@ -333,7 +333,7 @@ export const PersonaDetail = () => {
                 <Inbox className="h-4 w-4 mr-1" />{t("mgmt.inbox.openForPersona")}
               </Link>
             </Button>
-            <NonProductionActionButton size="sm" variant="outline">
+            <NonProductionActionButton size="sm" variant="outline" status="owner endpoint exists with frontend wiring pending">
               <Edit className="h-4 w-4 mr-1" />{t("actions.edit")}
             </NonProductionActionButton>
             <Button size="sm" variant="outline" onClick={async () => {
