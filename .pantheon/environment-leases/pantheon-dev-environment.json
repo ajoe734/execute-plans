@@ -1,0 +1,14 @@
+{
+  "acquiredAt": "2026-10-07T03:32:08Z",
+  "branch": "environment-coordination",
+  "expectedBackendSha": "a4abce7b2cded51b18187b784ca540dff331bbc2",
+  "expiresAt": "2026-10-07T03:42:08Z",
+  "heartbeatAt": "2026-10-07T03:32:08Z",
+  "leaseId": "6bedeee3-056f-42df-963c-1b591fd97e96",
+  "mode": "qualification",
+  "owner": "operator:chatbox:paper-compensation-37553990288-20261007",
+  "path": ".pantheon/environment-leases/pantheon-dev-environment.json",
+  "repository": "ajoe734/execute-plans",
+  "resource": "pantheon-dev-environment",
+  "schemaVersion": 1
+}
