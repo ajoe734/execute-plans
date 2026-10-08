@@ -1,8 +1,8 @@
 {
   "acquiredAt": "2026-10-08T10:38:45Z",
   "branch": "environment-coordination",
-  "expiresAt": "2026-10-08T10:46:49Z",
-  "heartbeatAt": "2026-10-08T10:41:49Z",
+  "expiresAt": "2026-10-08T10:47:50Z",
+  "heartbeatAt": "2026-10-08T10:42:50Z",
   "leaseId": "a1bce824-7071-465d-bb2d-af46fadde20c",
   "mode": "deployment",
   "owner": "pantheon:ajoe734/pantheon:37764733614:1",
