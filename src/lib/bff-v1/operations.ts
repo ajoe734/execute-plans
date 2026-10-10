@@ -88,11 +88,12 @@ export function normalizeApprovalFields<T>(raw: T | undefined): T | undefined {
   const gc = (dc && typeof (dc.governance_chain ?? dc.governanceChain) === "object" ? (dc.governance_chain ?? dc.governanceChain) : undefined) as Record<string, unknown> | undefined;
   const chainId = gc ? (str(gc.target_id) ?? str(gc.targetId)) : undefined;
   const chainVer = gc ? (str(gc.target_version) ?? str(gc.targetVersion)) : undefined;
-  const badId = topId && chainId && topId.toLowerCase() !== chainId.toLowerCase();
-  const badVer = topVer && chainVer && topVer.toLowerCase() !== chainVer.toLowerCase();
-  out.targetConflict = Boolean(badId || badVer);
-  out.targetId = badId ? undefined : (topId ?? chainId);
-  out.targetVersion = badVer ? undefined : (topVer ?? chainVer);
+  const badId = Boolean(topId && chainId && topId !== chainId);
+  const badVer = Boolean(topVer && chainVer && topVer !== chainVer);
+  const conflict = Boolean(badId || badVer || r.targetConflict || r.target_conflict);
+  out.targetConflict = conflict;
+  out.targetId = conflict ? undefined : (topId ?? chainId);
+  out.targetVersion = conflict ? undefined : (topVer ?? chainVer);
   if (gc && (chainId || chainVer)) {
     out.decisionContext = {
       governanceChain: {
@@ -103,7 +104,7 @@ export function normalizeApprovalFields<T>(raw: T | undefined): T | undefined {
   }
   out.id ??= r.approval_id ?? r.decision_id;
   out.kind ??= r.target_type;
-  out.subject ??= out.targetId ?? r.target_id;
+  out.subject ??= out.targetId ?? (conflict ? undefined : r.target_id);
   out.requester ??= r.owner_user_id;
   out.riskLevel ??= r.risk_level;
   out.createdAt ??= r.created_at;
@@ -114,6 +115,7 @@ export function normalizeApprovalFields<T>(raw: T | undefined): T | undefined {
     : final === "rejected" ? "rejected"
     : ds === "pending" || ds === "proposed" || ds === "under_review" ? "pending"
     : ds === "revoked" || ds === "superseded" ? ds
+    : ds !== undefined ? "unknown"
     : typeof r.state === "string" ? r.state
     : "unknown";
   return out as T;

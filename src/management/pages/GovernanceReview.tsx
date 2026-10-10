@@ -108,8 +108,8 @@ export const GovernanceReview = () => {
             <Field label={t("governance.caseId", { defaultValue: "Case ID" })} value={req.id} mono />
             <Field label={t("governance.version", { defaultValue: "Version" })} value={req.version !== undefined ? `v${req.version}` : t("governance.unavailable", { defaultValue: "Unavailable" })} mono />
             <Field label={t("governance.canonicalState", { defaultValue: "Canonical State" })} value={req.state ?? t("governance.unavailable", { defaultValue: "Unavailable" })} mono />
-            <Field label={t("governance.targetId", { defaultValue: "Target ID" })} value={req.targetId ?? t("governance.unavailable", { defaultValue: "Unavailable" })} mono />
-            <Field label={t("governance.targetVersion", { defaultValue: "Target Version" })} value={req.targetVersion ?? t("governance.unavailable", { defaultValue: "Unavailable" })} mono />
+            <Field label={t("governance.targetId", { defaultValue: "Target ID" })} value={!req.targetConflict && req.targetId ? req.targetId : t("governance.unavailable", { defaultValue: "Unavailable" })} mono />
+            <Field label={t("governance.targetVersion", { defaultValue: "Target Version" })} value={!req.targetConflict && req.targetVersion ? req.targetVersion : t("governance.unavailable", { defaultValue: "Unavailable" })} mono />
             <Field label={t("governance.kind")} value={req.kind} mono />
             <Field label={t("governance.requester")} value={req.requester} mono />
             <Field label={t("governance.created")} value={safeDateTime(req.createdAt)} mono />

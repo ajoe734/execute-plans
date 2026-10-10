@@ -96,6 +96,7 @@ describe("normalizeApprovalFields (Governance owner readback)", () => {
     const res = n(conflictId);
     expect(res.targetConflict).toBe(true);
     expect(res.targetId).toBeUndefined();
+    expect(res.targetVersion).toBeUndefined();
   });
 
   it("rejects conflicting canonical target_version between top-level and governance_chain", () => {
@@ -110,7 +111,48 @@ describe("normalizeApprovalFields (Governance owner readback)", () => {
     };
     const res = n(conflictVer);
     expect(res.targetConflict).toBe(true);
+    expect(res.targetId).toBeUndefined();
     expect(res.targetVersion).toBeUndefined();
+  });
+
+  it("rejects case-mismatched canonical target_id as conflicting opaque IDs", () => {
+    const caseMismatch = {
+      ...owner,
+      target_id: "pool-A",
+      decision_context: {
+        governance_chain: {
+          target_id: "pool-a",
+        },
+      },
+    };
+    const res = n(caseMismatch);
+    expect(res.targetConflict).toBe(true);
+    expect(res.targetId).toBeUndefined();
+    expect(res.targetVersion).toBeUndefined();
+  });
+
+  it("withholds both canonical target fields visibly when target_id conflicts even if target_version matches", () => {
+    const partialConflict = {
+      ...owner,
+      target_id: "pool-A",
+      target_version: "e9c7c073c544cd453e2ac3d62b4acb4be7a47f5010a01a5498c40c284238a39b",
+      decision_context: {
+        governance_chain: {
+          target_id: "pool-OTHER",
+          target_version: "e9c7c073c544cd453e2ac3d62b4acb4be7a47f5010a01a5498c40c284238a39b",
+        },
+      },
+    };
+    const res = n(partialConflict);
+    expect(res.targetConflict).toBe(true);
+    expect(res.targetId).toBeUndefined();
+    expect(res.targetVersion).toBeUndefined();
+  });
+
+  it("keeps unrecognized canonical decision_state unknown rather than falling back to display state=pending", () => {
+    expect(n({ ...owner, decision_state: "corrupt_state", state: "pending" }).state).toBe("unknown");
+    expect(n({ ...owner, decision_state: "unrecognized", state: "pending" }).state).toBe("unknown");
+    expect(n({ ...owner, decision_state: "decided", decision: "weird", state: "pending" }).state).toBe("unknown");
   });
 
   it("leaves target fields undefined when omitted, without guessing or fabricating", () => {
