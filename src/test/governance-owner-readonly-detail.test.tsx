@@ -176,4 +176,83 @@ describe("GovernanceReview owner-bound read-only detail", () => {
     // Zero decision writes
     expect(mocks.decideApproval).not.toHaveBeenCalled();
   });
+
+  it("withholds both target fields visibly as Unavailable when targetConflict is true even if target strings were provided", async () => {
+    const caseId = "approval-explicit-conflict-case";
+    const explicitConflictCase: ApprovalRequest = {
+      id: caseId,
+      kind: "Strategy",
+      subject: "Explicit Conflict Approval",
+      requester: "operator-5",
+      state: "pending",
+      version: 1,
+      targetId: "pool-A",
+      targetVersion: "e9c7c073c544cd453e2ac3d62b4acb4be7a47f5010a01a5498c40c284238a39b",
+      targetConflict: true,
+      riskLevel: "high",
+      createdAt: "2026-10-10T12:00:00Z",
+    };
+
+    mocks.approvalGet.mockResolvedValue(explicitConflictCase);
+    renderReview(caseId);
+
+    expect(await screen.findByText("Explicit Conflict Approval")).toBeInTheDocument();
+    // Conflicting target fields are visibly unavailable
+    expect(screen.queryByText("pool-A")).not.toBeInTheDocument();
+    expect(screen.queryByText("e9c7c073c544cd453e2ac3d62b4acb4be7a47f5010a01a5498c40c284238a39b")).not.toBeInTheDocument();
+    const unavailableElements = screen.getAllByText("Unavailable");
+    expect(unavailableElements.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("displays canonical state as unknown and renders decision buttons non-actionable for unknown owner states", async () => {
+    const caseId = "approval-unknown-state-case";
+    const unknownStateCase: ApprovalRequest = {
+      id: caseId,
+      kind: "Strategy",
+      subject: "Unknown State Case",
+      requester: "operator-6",
+      state: "unknown",
+      version: 2,
+      riskLevel: "low",
+      createdAt: "2026-10-10T12:00:00Z",
+    };
+
+    mocks.approvalGet.mockResolvedValue(unknownStateCase);
+    renderReview(caseId);
+
+    expect(await screen.findByText("Unknown State Case")).toBeInTheDocument();
+    expect(screen.getAllByText("unknown").length).toBeGreaterThanOrEqual(2);
+    // Approve and reject buttons MUST NOT be rendered
+    expect(screen.queryByRole("button", { name: /approve/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /reject/i })).not.toBeInTheDocument();
+    expect(screen.getByText("Already unknown.")).toBeInTheDocument();
+    expect(mocks.decideApproval).not.toHaveBeenCalled();
+  });
+
+  it("withholds both target fields visibly as Unavailable when canonical target anchor is malformed or invalid", async () => {
+    const caseId = "approval-malformed-target-case";
+    const malformedCase: ApprovalRequest = {
+      id: caseId,
+      kind: "Strategy",
+      subject: "Malformed Target Approval",
+      requester: "operator-7",
+      state: "pending",
+      version: 1,
+      targetId: undefined,
+      targetVersion: undefined,
+      targetConflict: true,
+      riskLevel: "medium",
+      createdAt: "2026-10-10T12:00:00Z",
+    };
+
+    mocks.approvalGet.mockResolvedValue(malformedCase);
+    renderReview(caseId);
+
+    expect(await screen.findByText("Malformed Target Approval")).toBeInTheDocument();
+    expect(screen.queryByText("pool-A")).not.toBeInTheDocument();
+    expect(screen.queryByText("123")).not.toBeInTheDocument();
+    const unavailableElements = screen.getAllByText("Unavailable");
+    expect(unavailableElements.length).toBeGreaterThanOrEqual(2);
+    expect(mocks.decideApproval).not.toHaveBeenCalled();
+  });
 });
