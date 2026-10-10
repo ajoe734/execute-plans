@@ -34,9 +34,11 @@ import { join } from "node:path";
 
 const TASK_ID =
   process.env.TASK_ID ||
-  (process.env.EXISTING_WORKSHOP_ID
-    ? "FE-WORKSHOP-SAME-RESOURCE-RESUME-20261010"
-    : "FE-WORKSHOP-PERSISTENCE-JOURNEY-001");
+  (process.env.GOVERNANCE_CASE_ID
+    ? "FE-GOVERNANCE-PAPER-CASE-READONLY-HARNESS-20261010"
+    : process.env.EXISTING_WORKSHOP_ID
+      ? "FE-WORKSHOP-SAME-RESOURCE-RESUME-20261010"
+      : "FE-WORKSHOP-PERSISTENCE-JOURNEY-001");
 const ENABLED = process.env.WORKSHOP_PERSISTENCE_HOSTED_E2E === "1";
 
 const FE_BASE_URL = trimTrailingSlash(
@@ -64,6 +66,16 @@ const EXISTING_WORKSHOP_TITLE_SHA256 = (
   process.env.EXISTING_WORKSHOP_TITLE_SHA256 ?? ""
 ).trim().toLowerCase();
 const RESUME_EXISTING = process.env.WORKSHOP_RESUME_EXISTING === "1";
+const GOVERNANCE_CASE_ID = (process.env.GOVERNANCE_CASE_ID ?? "").trim();
+const GOVERNANCE_CASE_EXPECTED_VERSION = (
+  process.env.GOVERNANCE_CASE_EXPECTED_VERSION ?? ""
+).trim();
+const GOVERNANCE_CASE_TARGET_DIGEST = (
+  process.env.GOVERNANCE_CASE_TARGET_DIGEST ??
+  process.env.GOVERNANCE_CASE_TARGET_ID ??
+  process.env.GOVERNANCE_CASE_TARGET_DIGEST_OR_ID ??
+  ""
+).trim();
 const EVIDENCE_DIR =
   process.env.PANTHEON_AUDIT_OUT_DIR ?? "/tmp/workshop-persistence-hosted";
 const DEV_FE_HOST = "app.dev.mvl-cap.tw";
@@ -71,6 +83,7 @@ const DEV_BFF_HOST = "api.dev.mvl-cap.tw";
 const CANONICAL_UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SHA256_HEX_REGEX = /^[0-9a-f]{64}$/i;
+const CANONICAL_IDENTIFIER_REGEX = /^[a-zA-Z0-9_.:-]+$/;
 
 export function validateExistingWorkshopInputs(
   id: string,
@@ -102,7 +115,61 @@ export function validateExistingWorkshopInputs(
   return { valid: true, id: trimmedId, titleSha: trimmedSha };
 }
 
+export function validateGovernanceCaseInputs(
+  id: string,
+  expectedVersionStr: string,
+  targetDigestOrId: string,
+):
+  | { valid: true; id: string; expectedVersion: number; targetDigestOrId: string }
+  | { valid: false; reason: string } {
+  const trimmedId = id.trim();
+  const trimmedVersion = expectedVersionStr.trim();
+  const trimmedDigest = targetDigestOrId.trim();
+
+  if (!trimmedId && !trimmedVersion && !trimmedDigest) {
+    return { valid: false, reason: "governance case id, expected version, and target digest/id are all missing" };
+  }
+  if (!trimmedId) {
+    return { valid: false, reason: "missing governance case id" };
+  }
+  if (!trimmedVersion) {
+    return { valid: false, reason: "missing governance case expected version" };
+  }
+  if (!trimmedDigest) {
+    return { valid: false, reason: "missing governance case target digest or id" };
+  }
+  if (!CANONICAL_IDENTIFIER_REGEX.test(trimmedId)) {
+    return {
+      valid: false,
+      reason: `malformed governance case id "${trimmedId}"; must match canonical identifier format`,
+    };
+  }
+  if (!/^[0-9]+$/.test(trimmedVersion) || parseInt(trimmedVersion, 10) <= 0) {
+    return {
+      valid: false,
+      reason: `malformed governance case expected version "${trimmedVersion}"; must be a positive integer`,
+    };
+  }
+  if (!CANONICAL_IDENTIFIER_REGEX.test(trimmedDigest)) {
+    return {
+      valid: false,
+      reason: `malformed governance case target digest or id "${trimmedDigest}"; must be 64-hex SHA256 or canonical identifier`,
+    };
+  }
+  return {
+    valid: true,
+    id: trimmedId,
+    expectedVersion: parseInt(trimmedVersion, 10),
+    targetDigestOrId: trimmedDigest,
+  };
+}
+
 const hasExistingInputs = Boolean(EXISTING_WORKSHOP_ID || EXISTING_WORKSHOP_TITLE_SHA256);
+const hasGovernanceInputs = Boolean(
+  GOVERNANCE_CASE_ID ||
+  GOVERNANCE_CASE_EXPECTED_VERSION ||
+  GOVERNANCE_CASE_TARGET_DIGEST,
+);
 
 if (
   ENABLED &&
@@ -126,6 +193,19 @@ if (ENABLED && (hasExistingInputs || RESUME_EXISTING)) {
   if (!validation.valid) {
     throw new Error(
       `${TASK_ID} existing workshop mode requires valid canonical UUID and 64-hex title SHA256: ${validation.reason}`,
+    );
+  }
+}
+
+if (ENABLED && hasGovernanceInputs) {
+  const govValidation = validateGovernanceCaseInputs(
+    GOVERNANCE_CASE_ID,
+    GOVERNANCE_CASE_EXPECTED_VERSION,
+    GOVERNANCE_CASE_TARGET_DIGEST,
+  );
+  if (!govValidation.valid) {
+    throw new Error(
+      `${TASK_ID} governance case mode requires valid case id, positive integer version, and target digest/id: ${govValidation.reason}`,
     );
   }
 }
@@ -184,6 +264,14 @@ type SanitizedEvidence = {
     id: string;
     title: string;
     title_sha256: string;
+    content_sha256?: string;
+  };
+  governance_case?: {
+    id: string;
+    expected_version: number;
+    target_digest: string;
+    observed_version?: number;
+    state?: string;
     content_sha256?: string;
   };
   steps: StepResult[];
@@ -417,6 +505,111 @@ async function assertAnonymousContext(page: Page): Promise<void> {
   expect(page.url()).toContain("reason=auth-required");
 }
 
+/**
+ * Reads the specified governance approval case directly from the owner BFF via
+ * GET /bff/approvals/{id}, asserting valid case id, expected version match,
+ * pending/proposed state, and binding to target pool id or digest.
+ * Zero mutations, zero write calls.
+ */
+async function readGovernanceCaseOwnerReadback(
+  page: Page,
+  caseId: string,
+  expectedVersion: number,
+  targetDigestOrId: string,
+): Promise<{
+  data: JsonRecord;
+  contentDigest: string;
+  version: number;
+  state: string;
+  subject: string;
+}> {
+  const readback = await page.request.get(
+    `${BFF_BASE_URL}/bff/approvals/${encodeURIComponent(caseId)}`,
+    { headers: { Accept: "application/json", "X-Tenant-Id": TENANT_ID } },
+  );
+  expect(
+    readback.ok(),
+    `governance case owner GET returned ${readback.status()}`,
+  ).toBe(true);
+  const body = asRecord(await readback.json());
+  const data = asRecord(body.data ?? body);
+  const observedId = String(data.id ?? data.approval_id ?? "").trim();
+  expect(observedId, "owner GET must return matching case ID").toBe(caseId);
+
+  const observedVersion = Number(data.version ?? data.lock_version ?? 0);
+  if (observedVersion !== expectedVersion) {
+    throw new Error(
+      `Governance case version mismatch: expected ${expectedVersion}, got ${observedVersion}; case changed on owner (stale outcome)`,
+    );
+  }
+
+  const observedState = String(
+    data.state ?? data.decision_state ?? "",
+  ).toLowerCase();
+  expect(
+    ["pending", "proposed", "under_review"].includes(observedState),
+    `governance case state must be pending or proposed, got "${observedState}"`,
+  ).toBe(true);
+
+  const targetLower = targetDigestOrId.toLowerCase();
+  const serialized = canonicalJsonString(data).toLowerCase();
+  const subject = String(data.subject ?? "");
+  const diffSummary = String(data.diffSummary ?? "");
+  const rationale = String(data.rationale ?? "");
+  const target = String(data.target ?? "");
+  const matchesTarget =
+    target.toLowerCase().includes(targetLower) ||
+    subject.toLowerCase().includes(targetLower) ||
+    diffSummary.toLowerCase().includes(targetLower) ||
+    rationale.toLowerCase().includes(targetLower) ||
+    serialized.includes(targetLower);
+  expect(
+    matchesTarget,
+    `owner GET response must bind to target digest or id "${targetDigestOrId}"`,
+  ).toBe(true);
+
+  const contentDigest = computeContentHash(data);
+  expect(
+    contentDigest,
+    "governance case content digest must be non-empty",
+  ).toBeTruthy();
+
+  return {
+    data,
+    contentDigest,
+    version: observedVersion,
+    state: observedState,
+    subject,
+  };
+}
+
+/**
+ * Navigates to the real /management/governance/{id} route and asserts that the
+ * case is actually visible in the DOM with owner-bound detail.
+ * Read-only navigation only: absolutely NEVER clicks any decision or write buttons.
+ */
+async function navigateGovernanceCaseUi(
+  page: Page,
+  caseId: string,
+  expectedSubject?: string,
+): Promise<void> {
+  await page.goto(
+    `${FE_BASE_URL}/management/governance/${encodeURIComponent(caseId)}`,
+    { waitUntil: "domcontentloaded" },
+  );
+  await expect(page).toHaveURL(
+    `${FE_BASE_URL}/management/governance/${encodeURIComponent(caseId)}`,
+    { timeout: 30_000 },
+  );
+  await expect(page.getByText("找不到審批請求")).not.toBeVisible();
+  await expect(page.locator("body")).toContainText(caseId, { timeout: 30_000 });
+  if (expectedSubject) {
+    await expect(page.locator("body")).toContainText(expectedSubject, {
+      timeout: 30_000,
+    });
+  }
+}
+
 test.describe(`${TASK_ID} hosted workshop persistence`, () => {
   test.skip(
     !ENABLED,
@@ -439,6 +632,10 @@ test.describe(`${TASK_ID} hosted workshop persistence`, () => {
     let workshopTitle = isExistingMode ? "" : `Workshop persistence journey ${operationId}`;
     let workshopId = "";
     let contentDigest = "";
+    let initialGovDigest = "";
+    let initialGovVersion = 0;
+    let initialGovState = "";
+    let govSubject = "";
     const steps: StepResult[] = [];
     let status: "passed" | "failed" = "failed";
     let failure: { message: string; step_id: string | null } | undefined;
@@ -558,6 +755,45 @@ test.describe(`${TASK_ID} hosted workshop persistence`, () => {
           ).toBe(contentDigest);
         });
 
+        if (hasGovernanceInputs) {
+          const govVal = validateGovernanceCaseInputs(
+            GOVERNANCE_CASE_ID,
+            GOVERNANCE_CASE_EXPECTED_VERSION,
+            GOVERNANCE_CASE_TARGET_DIGEST,
+          );
+          if (!govVal.valid) {
+            throw new Error(`governance case inputs invalid: ${govVal.reason}`);
+          }
+          const govTarget = govVal.targetDigestOrId;
+          const govCaseId = govVal.id;
+          const govExpectedVer = govVal.expectedVersion;
+
+          await runStep("assert_governance_case_owner_readback_first", async () => {
+            const gov = await readGovernanceCaseOwnerReadback(
+              page,
+              govCaseId,
+              govExpectedVer,
+              govTarget,
+            );
+            initialGovDigest = gov.contentDigest;
+            initialGovVersion = gov.version;
+            initialGovState = gov.state;
+            govSubject = gov.subject;
+          });
+
+          await runStep("navigate_governance_case_ui_first", () =>
+            navigateGovernanceCaseUi(page, govCaseId, govSubject),
+          );
+
+          await page.goto(
+            `${FE_BASE_URL}/agora/strategy-workshop/${encodeURIComponent(workshopId)}`,
+            { waitUntil: "domcontentloaded" },
+          );
+          await expect(
+            page.getByRole("button", { name: "Sign out" }),
+          ).toBeVisible({ timeout: 30_000 });
+        }
+
         await runStep("real_ui_sign_out", () => realUiSignOut(page));
         await runStep("assert_session_invalidated", () => assertSessionInvalidated(page));
 
@@ -602,6 +838,44 @@ test.describe(`${TASK_ID} hosted workshop persistence`, () => {
               "fresh context owner content digest must match initial content digest",
             ).toBe(contentDigest);
           });
+
+          if (hasGovernanceInputs) {
+            const govVal = validateGovernanceCaseInputs(
+              GOVERNANCE_CASE_ID,
+              GOVERNANCE_CASE_EXPECTED_VERSION,
+              GOVERNANCE_CASE_TARGET_DIGEST,
+            );
+            if (!govVal.valid) {
+              throw new Error(`governance case inputs invalid: ${govVal.reason}`);
+            }
+            const govTarget = govVal.targetDigestOrId;
+            const govCaseId = govVal.id;
+            const govExpectedVer = govVal.expectedVersion;
+
+            await runStep("navigate_governance_case_ui_second", () =>
+              navigateGovernanceCaseUi(freshPage, govCaseId, govSubject),
+            );
+
+            await runStep(
+              "assert_fresh_context_governance_case_owner_readback",
+              async () => {
+                const freshGov = await readGovernanceCaseOwnerReadback(
+                  freshPage,
+                  govCaseId,
+                  govExpectedVer,
+                  govTarget,
+                );
+                expect(
+                  freshGov.version,
+                  "fresh context governance case version must match initial version",
+                ).toBe(initialGovVersion);
+                expect(
+                  freshGov.contentDigest,
+                  "fresh context governance case content digest must match initial digest",
+                ).toBe(initialGovDigest);
+              },
+            );
+          }
 
           after = await runStep("capture_version_pair_after", () =>
             captureVersionPair(freshPage),
@@ -659,6 +933,45 @@ test.describe(`${TASK_ID} hosted workshop persistence`, () => {
           contentDigest = computeContentHash(data);
         });
 
+        if (hasGovernanceInputs) {
+          const govVal = validateGovernanceCaseInputs(
+            GOVERNANCE_CASE_ID,
+            GOVERNANCE_CASE_EXPECTED_VERSION,
+            GOVERNANCE_CASE_TARGET_DIGEST,
+          );
+          if (!govVal.valid) {
+            throw new Error(`governance case inputs invalid: ${govVal.reason}`);
+          }
+          const govTarget = govVal.targetDigestOrId;
+          const govCaseId = govVal.id;
+          const govExpectedVer = govVal.expectedVersion;
+
+          await runStep("assert_governance_case_owner_readback_first", async () => {
+            const gov = await readGovernanceCaseOwnerReadback(
+              page,
+              govCaseId,
+              govExpectedVer,
+              govTarget,
+            );
+            initialGovDigest = gov.contentDigest;
+            initialGovVersion = gov.version;
+            initialGovState = gov.state;
+            govSubject = gov.subject;
+          });
+
+          await runStep("navigate_governance_case_ui_first", () =>
+            navigateGovernanceCaseUi(page, govCaseId, govSubject),
+          );
+
+          await page.goto(
+            `${FE_BASE_URL}/agora/strategy-workshop/${encodeURIComponent(workshopId)}`,
+            { waitUntil: "domcontentloaded" },
+          );
+          await expect(
+            page.getByRole("button", { name: "Sign out" }),
+          ).toBeVisible({ timeout: 30_000 });
+        }
+
         await runStep("real_ui_sign_out", () => realUiSignOut(page));
         await runStep("assert_session_invalidated", () => assertSessionInvalidated(page));
 
@@ -677,6 +990,44 @@ test.describe(`${TASK_ID} hosted workshop persistence`, () => {
           await runStep("reopen_workshop_and_read_exact_title", () =>
             reopenWorkshopFromListAndAssertTitle(freshPage, workshopId, workshopTitle),
           );
+
+          if (hasGovernanceInputs) {
+            const govVal = validateGovernanceCaseInputs(
+              GOVERNANCE_CASE_ID,
+              GOVERNANCE_CASE_EXPECTED_VERSION,
+              GOVERNANCE_CASE_TARGET_DIGEST,
+            );
+            if (!govVal.valid) {
+              throw new Error(`governance case inputs invalid: ${govVal.reason}`);
+            }
+            const govTarget = govVal.targetDigestOrId;
+            const govCaseId = govVal.id;
+            const govExpectedVer = govVal.expectedVersion;
+
+            await runStep("navigate_governance_case_ui_second", () =>
+              navigateGovernanceCaseUi(freshPage, govCaseId, govSubject),
+            );
+
+            await runStep(
+              "assert_fresh_context_governance_case_owner_readback",
+              async () => {
+                const freshGov = await readGovernanceCaseOwnerReadback(
+                  freshPage,
+                  govCaseId,
+                  govExpectedVer,
+                  govTarget,
+                );
+                expect(
+                  freshGov.version,
+                  "fresh context governance case version must match initial version",
+                ).toBe(initialGovVersion);
+                expect(
+                  freshGov.contentDigest,
+                  "fresh context governance case content digest must match initial digest",
+                ).toBe(initialGovDigest);
+              },
+            );
+          }
 
           after = await runStep("capture_version_pair_after", () =>
             captureVersionPair(freshPage),
@@ -721,6 +1072,18 @@ test.describe(`${TASK_ID} hosted workshop persistence`, () => {
           title_sha256: resolvedTitleSha256,
           ...(contentDigest ? { content_sha256: contentDigest } : {}),
         },
+        ...(hasGovernanceInputs && GOVERNANCE_CASE_ID
+          ? {
+              governance_case: {
+                id: GOVERNANCE_CASE_ID,
+                expected_version: Number(GOVERNANCE_CASE_EXPECTED_VERSION) || 1,
+                target_digest: GOVERNANCE_CASE_TARGET_DIGEST,
+                ...(initialGovVersion ? { observed_version: initialGovVersion } : {}),
+                ...(initialGovState ? { state: initialGovState } : {}),
+                ...(initialGovDigest ? { content_sha256: initialGovDigest } : {}),
+              },
+            }
+          : {}),
         steps,
         ...(failure ? { failure } : {}),
       };
