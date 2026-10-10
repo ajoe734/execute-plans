@@ -32,7 +32,11 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-const TASK_ID = "FE-WORKSHOP-PERSISTENCE-JOURNEY-001";
+const TASK_ID =
+  process.env.TASK_ID ||
+  (process.env.EXISTING_WORKSHOP_ID
+    ? "FE-WORKSHOP-SAME-RESOURCE-RESUME-20261010"
+    : "FE-WORKSHOP-PERSISTENCE-JOURNEY-001");
 const ENABLED = process.env.WORKSHOP_PERSISTENCE_HOSTED_E2E === "1";
 
 const FE_BASE_URL = trimTrailingSlash(
@@ -55,10 +59,50 @@ const DEV_ACCOUNT = process.env.DEV_LOGIN_CLIENT_ID ?? "";
 const DEV_PASSWORD = process.env.DEV_LOGIN_CLIENT_SECRET ?? "";
 const EXPECTED_FE_SHA = String(process.env.EXPECTED_FE_SHA ?? "").trim().toLowerCase();
 const EXPECTED_BFF_SHA = String(process.env.EXPECTED_BFF_SHA ?? "").trim().toLowerCase();
+const EXISTING_WORKSHOP_ID = (process.env.EXISTING_WORKSHOP_ID ?? "").trim();
+const EXISTING_WORKSHOP_TITLE_SHA256 = (
+  process.env.EXISTING_WORKSHOP_TITLE_SHA256 ?? ""
+).trim().toLowerCase();
+const RESUME_EXISTING = process.env.WORKSHOP_RESUME_EXISTING === "1";
 const EVIDENCE_DIR =
   process.env.PANTHEON_AUDIT_OUT_DIR ?? "/tmp/workshop-persistence-hosted";
 const DEV_FE_HOST = "app.dev.mvl-cap.tw";
 const DEV_BFF_HOST = "api.dev.mvl-cap.tw";
+const CANONICAL_UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const SHA256_HEX_REGEX = /^[0-9a-f]{64}$/i;
+
+export function validateExistingWorkshopInputs(
+  id: string,
+  titleSha: string,
+): { valid: true; id: string; titleSha: string } | { valid: false; reason: string } {
+  const trimmedId = id.trim();
+  const trimmedSha = titleSha.trim().toLowerCase();
+  if (!trimmedId && !trimmedSha) {
+    return { valid: false, reason: "both existing workshop id and title SHA256 are missing" };
+  }
+  if (!trimmedId) {
+    return { valid: false, reason: "missing existing workshop id" };
+  }
+  if (!trimmedSha) {
+    return { valid: false, reason: "missing existing workshop title SHA256" };
+  }
+  if (!CANONICAL_UUID_REGEX.test(trimmedId)) {
+    return {
+      valid: false,
+      reason: `malformed existing workshop id "${trimmedId}"; must be a canonical UUID`,
+    };
+  }
+  if (!SHA256_HEX_REGEX.test(trimmedSha)) {
+    return {
+      valid: false,
+      reason: `malformed existing workshop title SHA256 "${trimmedSha}"; must be 64 hex characters`,
+    };
+  }
+  return { valid: true, id: trimmedId, titleSha: trimmedSha };
+}
+
+const hasExistingInputs = Boolean(EXISTING_WORKSHOP_ID || EXISTING_WORKSHOP_TITLE_SHA256);
 
 if (
   ENABLED &&
@@ -74,7 +118,41 @@ if (
   );
 }
 
+if (ENABLED && (hasExistingInputs || RESUME_EXISTING)) {
+  const validation = validateExistingWorkshopInputs(
+    EXISTING_WORKSHOP_ID,
+    EXISTING_WORKSHOP_TITLE_SHA256,
+  );
+  if (!validation.valid) {
+    throw new Error(
+      `${TASK_ID} existing workshop mode requires valid canonical UUID and 64-hex title SHA256: ${validation.reason}`,
+    );
+  }
+}
+
 type JsonRecord = Record<string, unknown>;
+
+export function canonicalJsonString(obj: unknown): string {
+  if (obj === null || typeof obj !== "object") {
+    return JSON.stringify(obj);
+  }
+  if (Array.isArray(obj)) {
+    return "[" + obj.map(canonicalJsonString).join(",") + "]";
+  }
+  const record = obj as Record<string, unknown>;
+  const keys = Object.keys(record).sort();
+  return (
+    "{" +
+    keys
+      .map((k) => `${JSON.stringify(k)}:${canonicalJsonString(record[k])}`)
+      .join(",") +
+    "}"
+  );
+}
+
+export function computeContentHash(data: JsonRecord): string {
+  return sha256Hex(canonicalJsonString(data));
+}
 
 type StepResult = {
   id: string;
@@ -92,6 +170,7 @@ type SanitizedEvidence = {
   schema_version: "pantheon.workshop-persistence.hosted-evidence.v1";
   task_id: string;
   operation_id: string;
+  mode: "new_workshop_creation" | "existing_workshop_resume";
   started_at: string;
   completed_at: string;
   status: "passed" | "failed";
@@ -105,6 +184,7 @@ type SanitizedEvidence = {
     id: string;
     title: string;
     title_sha256: string;
+    content_sha256?: string;
   };
   steps: StepResult[];
   failure?: {
@@ -350,9 +430,16 @@ test.describe(`${TASK_ID} hosted workshop persistence`, () => {
   }) => {
     const operationId = randomUUID();
     const startedAt = new Date().toISOString();
-    const workshopTitle = `Workshop persistence journey ${operationId}`;
-    const steps: StepResult[] = [];
+    const isExistingMode = Boolean(
+      EXISTING_WORKSHOP_ID || EXISTING_WORKSHOP_TITLE_SHA256 || RESUME_EXISTING,
+    );
+    const mode = isExistingMode
+      ? "existing_workshop_resume"
+      : "new_workshop_creation";
+    let workshopTitle = isExistingMode ? "" : `Workshop persistence journey ${operationId}`;
     let workshopId = "";
+    let contentDigest = "";
+    const steps: StepResult[] = [];
     let status: "passed" | "failed" = "failed";
     let failure: { message: string; step_id: string | null } | undefined;
     let before: VersionPairEvidence | undefined;
@@ -377,79 +464,229 @@ test.describe(`${TASK_ID} hosted workshop persistence`, () => {
     };
 
     try {
-      before = await runStep("capture_version_pair_before", () => captureVersionPair(page));
+      if (isExistingMode) {
+        const validation = validateExistingWorkshopInputs(
+          EXISTING_WORKSHOP_ID,
+          EXISTING_WORKSHOP_TITLE_SHA256,
+        );
+        if (!validation.valid) {
+          throw new Error(
+            `${TASK_ID} invalid existing workshop inputs: ${validation.reason}`,
+          );
+        }
+        workshopId = validation.id;
+        const expectedTitleSha256 = validation.titleSha;
 
-      await runStep("real_ui_login_first", () => realUiDevLogin(page));
+        before = await runStep("capture_version_pair_before", () =>
+          captureVersionPair(page),
+        );
 
-      workshopId = await runStep("create_workshop", async () => {
-        await expect(page.getByTestId("strategy-workshop-page-list")).toBeVisible({
-          timeout: 30_000,
+        await runStep("real_ui_login_first", () => realUiDevLogin(page));
+
+        let acknowledgedTitle = "";
+        await runStep("assert_existing_workshop_owner_readback_first", async () => {
+          const readback = await page.request.get(
+            `${BFF_BASE_URL}/bff/agora/workshops/${encodeURIComponent(workshopId)}`,
+            { headers: { Accept: "application/json", "X-Tenant-Id": TENANT_ID } },
+          );
+          expect(readback.ok(), `existing workshop initial readback returned ${readback.status()}`).toBe(true);
+          const body = asRecord(await readback.json());
+          const data = asRecord(body.data ?? body);
+          expect(String(data.workshop_id ?? ""), "owner GET must return same workshop ID").toBe(workshopId);
+          const metadata = asRecord(data.metadata);
+          acknowledgedTitle =
+            (typeof metadata.strategy_name === "string" && metadata.strategy_name) ||
+            (typeof metadata.title === "string" && metadata.title) ||
+            (typeof data.title === "string" && data.title) ||
+            "";
+          expect(acknowledgedTitle, "acknowledged workshop must have a non-empty title").toBeTruthy();
+          expect(
+            sha256Hex(acknowledgedTitle),
+            "owner GET title SHA256 must match the acknowledged title hash",
+          ).toBe(expectedTitleSha256);
+          contentDigest = computeContentHash(data);
+          expect(contentDigest, "owner content digest must be non-empty").toBeTruthy();
         });
-        await page.getByTestId("create-workshop-btn").click();
-        await page.getByTestId("create-workshop-title-input").fill(workshopTitle);
-        const created = waitForResponse(page, "POST", "/bff/agora/workshops");
-        await page.getByTestId("create-workshop-submit").click();
-        const response = await created;
-        expect(response.ok(), `workshop create returned ${response.status()}`).toBe(true);
-        const body = asRecord(await jsonBody(response));
-        const data = asRecord(body.data ?? body);
-        const id = String(data.workshop_id ?? "").trim();
-        expect(id, "workshop create must return a canonical workshop_id").toMatch(
-          /^(?!.*unknown)[a-zA-Z0-9_.:-]+$/i,
-        );
-        return id;
-      });
 
-      await runStep("assert_saved_title_ui", () =>
-        assertSavedTitleViaListRoundTrip(page, workshopId, workshopTitle),
-      );
+        workshopTitle = acknowledgedTitle;
 
-      await runStep("assert_saved_title_server_readback", async () => {
-        const readback = await page.request.get(
-          `${BFF_BASE_URL}/bff/agora/workshops/${encodeURIComponent(workshopId)}`,
-          { headers: { Accept: "application/json", "X-Tenant-Id": TENANT_ID } },
-        );
-        expect(readback.ok(), `workshop readback returned ${readback.status()}`).toBe(true);
-        const body = asRecord(await readback.json());
-        const data = asRecord(body.data ?? body);
-        expect(String(data.workshop_id ?? "")).toBe(workshopId);
-        const metadata = asRecord(data.metadata);
-        const savedTitle =
-          (typeof metadata.strategy_name === "string" && metadata.strategy_name) ||
-          (typeof metadata.title === "string" && metadata.title) ||
-          "";
-        expect(savedTitle, "server readback must return the exact saved title").toBe(
-          workshopTitle,
-        );
-      });
-
-      await runStep("real_ui_sign_out", () => realUiSignOut(page));
-      await runStep("assert_session_invalidated", () => assertSessionInvalidated(page));
-
-      await page.context().close();
-
-      const freshContext = await browser.newContext();
-      try {
-        const freshPage = await freshContext.newPage();
-
-        await runStep("assert_fresh_context_anonymous", () =>
-          assertAnonymousContext(freshPage),
+        await runStep("navigate_existing_workshop_ui", () =>
+          reopenWorkshopFromListAndAssertTitle(page, workshopId, acknowledgedTitle),
         );
 
-        await runStep("real_ui_login_second", () => realUiDevLogin(freshPage));
+        await runStep("execute_real_page_reload", async () => {
+          await page.reload({ waitUntil: "domcontentloaded" });
+          await expect(page).toHaveURL(
+            `${FE_BASE_URL}/agora/strategy-workshop/${encodeURIComponent(workshopId)}`,
+            { timeout: 30_000 },
+          );
+          await expect(page.getByTestId("strategy-workshop-runtime-header")).toBeVisible({
+            timeout: 30_000,
+          });
+        });
 
-        await runStep("reopen_workshop_and_read_exact_title", () =>
-          reopenWorkshopFromListAndAssertTitle(freshPage, workshopId, workshopTitle),
+        await runStep("assert_after_reload_readback_and_visible_ui", async () => {
+          await expect(page).toHaveURL(
+            `${FE_BASE_URL}/agora/strategy-workshop/${encodeURIComponent(workshopId)}`,
+            { timeout: 30_000 },
+          );
+          await expect(page.getByTestId("strategy-workshop-runtime-header")).toBeVisible({
+            timeout: 30_000,
+          });
+          const readback = await page.request.get(
+            `${BFF_BASE_URL}/bff/agora/workshops/${encodeURIComponent(workshopId)}`,
+            { headers: { Accept: "application/json", "X-Tenant-Id": TENANT_ID } },
+          );
+          expect(readback.ok(), `post-reload readback returned ${readback.status()}`).toBe(true);
+          const body = asRecord(await readback.json());
+          const data = asRecord(body.data ?? body);
+          expect(String(data.workshop_id ?? ""), "post-reload readback must return same ID").toBe(workshopId);
+          const metadata = asRecord(data.metadata);
+          const postReloadTitle =
+            (typeof metadata.strategy_name === "string" && metadata.strategy_name) ||
+            (typeof metadata.title === "string" && metadata.title) ||
+            (typeof data.title === "string" && data.title) ||
+            "";
+          expect(
+            sha256Hex(postReloadTitle),
+            "post-reload title SHA256 must match the acknowledged title hash",
+          ).toBe(expectedTitleSha256);
+          const postReloadDigest = computeContentHash(data);
+          expect(
+            postReloadDigest,
+            "post-reload owner content digest must match initial content digest",
+          ).toBe(contentDigest);
+        });
+
+        await runStep("real_ui_sign_out", () => realUiSignOut(page));
+        await runStep("assert_session_invalidated", () => assertSessionInvalidated(page));
+
+        await page.context().close();
+
+        const freshContext = await browser.newContext();
+        try {
+          const freshPage = await freshContext.newPage();
+
+          await runStep("assert_fresh_context_anonymous", () =>
+            assertAnonymousContext(freshPage),
+          );
+
+          await runStep("real_ui_login_second", () => realUiDevLogin(freshPage));
+
+          await runStep("reopen_existing_workshop_ui", () =>
+            reopenWorkshopFromListAndAssertTitle(freshPage, workshopId, acknowledgedTitle),
+          );
+
+          await runStep("assert_fresh_context_owner_readback", async () => {
+            const readback = await freshPage.request.get(
+              `${BFF_BASE_URL}/bff/agora/workshops/${encodeURIComponent(workshopId)}`,
+              { headers: { Accept: "application/json", "X-Tenant-Id": TENANT_ID } },
+            );
+            expect(readback.ok(), `fresh context readback returned ${readback.status()}`).toBe(true);
+            const body = asRecord(await readback.json());
+            const data = asRecord(body.data ?? body);
+            expect(String(data.workshop_id ?? ""), "fresh context readback must return same ID").toBe(workshopId);
+            const metadata = asRecord(data.metadata);
+            const freshContextTitle =
+              (typeof metadata.strategy_name === "string" && metadata.strategy_name) ||
+              (typeof metadata.title === "string" && metadata.title) ||
+              (typeof data.title === "string" && data.title) ||
+              "";
+            expect(
+              sha256Hex(freshContextTitle),
+              "fresh context title SHA256 must match the acknowledged title hash",
+            ).toBe(expectedTitleSha256);
+            const freshContextDigest = computeContentHash(data);
+            expect(
+              freshContextDigest,
+              "fresh context owner content digest must match initial content digest",
+            ).toBe(contentDigest);
+          });
+
+          after = await runStep("capture_version_pair_after", () =>
+            captureVersionPair(freshPage),
+          );
+        } finally {
+          await freshContext.close();
+        }
+
+        status = "passed";
+      } else {
+        before = await runStep("capture_version_pair_before", () => captureVersionPair(page));
+
+        await runStep("real_ui_login_first", () => realUiDevLogin(page));
+
+        workshopId = await runStep("create_workshop", async () => {
+          await expect(page.getByTestId("strategy-workshop-page-list")).toBeVisible({
+            timeout: 30_000,
+          });
+          await page.getByTestId("create-workshop-btn").click();
+          await page.getByTestId("create-workshop-title-input").fill(workshopTitle);
+          const created = waitForResponse(page, "POST", "/bff/agora/workshops");
+          await page.getByTestId("create-workshop-submit").click();
+          const response = await created;
+          expect(response.ok(), `workshop create returned ${response.status()}`).toBe(true);
+          const body = asRecord(await jsonBody(response));
+          const data = asRecord(body.data ?? body);
+          const id = String(data.workshop_id ?? "").trim();
+          expect(id, "workshop create must return a canonical workshop_id").toMatch(
+            /^(?!.*unknown)[a-zA-Z0-9_.:-]+$/i,
+          );
+          return id;
+        });
+
+        await runStep("assert_saved_title_ui", () =>
+          assertSavedTitleViaListRoundTrip(page, workshopId, workshopTitle),
         );
 
-        after = await runStep("capture_version_pair_after", () =>
-          captureVersionPair(freshPage),
-        );
-      } finally {
-        await freshContext.close();
+        await runStep("assert_saved_title_server_readback", async () => {
+          const readback = await page.request.get(
+            `${BFF_BASE_URL}/bff/agora/workshops/${encodeURIComponent(workshopId)}`,
+            { headers: { Accept: "application/json", "X-Tenant-Id": TENANT_ID } },
+          );
+          expect(readback.ok(), `workshop readback returned ${readback.status()}`).toBe(true);
+          const body = asRecord(await readback.json());
+          const data = asRecord(body.data ?? body);
+          expect(String(data.workshop_id ?? "")).toBe(workshopId);
+          const metadata = asRecord(data.metadata);
+          const savedTitle =
+            (typeof metadata.strategy_name === "string" && metadata.strategy_name) ||
+            (typeof metadata.title === "string" && metadata.title) ||
+            "";
+          expect(savedTitle, "server readback must return the exact saved title").toBe(
+            workshopTitle,
+          );
+          contentDigest = computeContentHash(data);
+        });
+
+        await runStep("real_ui_sign_out", () => realUiSignOut(page));
+        await runStep("assert_session_invalidated", () => assertSessionInvalidated(page));
+
+        await page.context().close();
+
+        const freshContext = await browser.newContext();
+        try {
+          const freshPage = await freshContext.newPage();
+
+          await runStep("assert_fresh_context_anonymous", () =>
+            assertAnonymousContext(freshPage),
+          );
+
+          await runStep("real_ui_login_second", () => realUiDevLogin(freshPage));
+
+          await runStep("reopen_workshop_and_read_exact_title", () =>
+            reopenWorkshopFromListAndAssertTitle(freshPage, workshopId, workshopTitle),
+          );
+
+          after = await runStep("capture_version_pair_after", () =>
+            captureVersionPair(freshPage),
+          );
+        } finally {
+          await freshContext.close();
+        }
+
+        status = "passed";
       }
-
-      status = "passed";
     } finally {
       const matched = Boolean(
         before &&
@@ -460,10 +697,15 @@ test.describe(`${TASK_ID} hosted workshop persistence`, () => {
         before.bff_sha === EXPECTED_BFF_SHA,
       );
 
+      const resolvedTitleSha256 = workshopTitle
+        ? sha256Hex(workshopTitle)
+        : (EXISTING_WORKSHOP_TITLE_SHA256 || "");
+
       const evidence: SanitizedEvidence = {
         schema_version: "pantheon.workshop-persistence.hosted-evidence.v1",
         task_id: TASK_ID,
         operation_id: operationId,
+        mode,
         started_at: startedAt,
         completed_at: new Date().toISOString(),
         status,
@@ -476,7 +718,8 @@ test.describe(`${TASK_ID} hosted workshop persistence`, () => {
         workshop: {
           id: workshopId,
           title: workshopTitle,
-          title_sha256: sha256Hex(workshopTitle),
+          title_sha256: resolvedTitleSha256,
+          ...(contentDigest ? { content_sha256: contentDigest } : {}),
         },
         steps,
         ...(failure ? { failure } : {}),

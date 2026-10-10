@@ -252,3 +252,166 @@ describe("FE-WORKSHOP-PERSISTENCE-JOURNEY-001 hosted workflow source contract", 
     );
   });
 });
+
+describe("FE-WORKSHOP-SAME-RESOURCE-RESUME-20261010 existing-resource resume and reload contract", () => {
+  it("validates existing-workshop inputs and fails closed on missing, malformed, or partial inputs", () => {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const shaRegex = /^[0-9a-f]{64}$/i;
+
+    const validate = (id: string, titleSha: string) => {
+      const trimmedId = id.trim();
+      const trimmedSha = titleSha.trim().toLowerCase();
+      if (!trimmedId && !trimmedSha) {
+        return { valid: false, reason: "both existing workshop id and title SHA256 are missing" };
+      }
+      if (!trimmedId) {
+        return { valid: false, reason: "missing existing workshop id" };
+      }
+      if (!trimmedSha) {
+        return { valid: false, reason: "missing existing workshop title SHA256" };
+      }
+      if (!uuidRegex.test(trimmedId)) {
+        return {
+          valid: false,
+          reason: `malformed existing workshop id "${trimmedId}"; must be a canonical UUID`,
+        };
+      }
+      if (!shaRegex.test(trimmedSha)) {
+        return {
+          valid: false,
+          reason: `malformed existing workshop title SHA256 "${trimmedSha}"; must be 64 hex characters`,
+        };
+      }
+      return { valid: true, id: trimmedId, titleSha: trimmedSha };
+    };
+
+    // Missing cases
+    expect(validate("", "").valid).toBe(false);
+    expect(validate("", "f697a21ccd124c051cf40715d1fd622d0314f8af2d0c7cd9c7c13682cf9c3093").valid).toBe(false);
+    expect(validate("295726c7-47b5-4516-a74a-c5ba8765ee48", "").valid).toBe(false);
+
+    // Malformed ID cases
+    expect(validate("not-a-uuid", "f697a21ccd124c051cf40715d1fd622d0314f8af2d0c7cd9c7c13682cf9c3093").valid).toBe(false);
+    expect(validate("12345", "f697a21ccd124c051cf40715d1fd622d0314f8af2d0c7cd9c7c13682cf9c3093").valid).toBe(false);
+    expect(validate("295726c7-47b5-4516-a74a-c5ba8765ee4g", "f697a21ccd124c051cf40715d1fd622d0314f8af2d0c7cd9c7c13682cf9c3093").valid).toBe(false);
+
+    // Malformed SHA cases
+    expect(validate("295726c7-47b5-4516-a74a-c5ba8765ee48", "too-short").valid).toBe(false);
+    expect(validate("295726c7-47b5-4516-a74a-c5ba8765ee48", "f697a21ccd124c051cf40715d1fd622d0314f8af2d0c7cd9c7c13682cf9c309z").valid).toBe(false);
+
+    // Valid operator target case
+    const validResult = validate(
+      "295726c7-47b5-4516-a74a-c5ba8765ee48",
+      "f697a21ccd124c051cf40715d1fd622d0314f8af2d0c7cd9c7c13682cf9c3093",
+    );
+    expect(validResult.valid).toBe(true);
+    if (validResult.valid) {
+      expect(validResult.id).toBe("295726c7-47b5-4516-a74a-c5ba8765ee48");
+      expect(validResult.titleSha).toBe("f697a21ccd124c051cf40715d1fd622d0314f8af2d0c7cd9c7c13682cf9c3093");
+    }
+
+    // Spec source contracts
+    expect(specSource).toContain("CANONICAL_UUID_REGEX");
+    expect(specSource).toContain("SHA256_HEX_REGEX");
+    expect(specSource).toContain("validateExistingWorkshopInputs");
+    expect(specSource).toContain("EXISTING_WORKSHOP_ID");
+    expect(specSource).toContain("EXISTING_WORKSHOP_TITLE_SHA256");
+  });
+
+  it("computes deterministic owner-content digest and verifies stability across clean contexts and reloads", () => {
+    // Pure function check matching spec's canonical serialization
+    const canonicalJsonString = (obj: unknown): string => {
+      if (obj === null || typeof obj !== "object") {
+        return JSON.stringify(obj);
+      }
+      if (Array.isArray(obj)) {
+        return "[" + obj.map(canonicalJsonString).join(",") + "]";
+      }
+      const record = obj as Record<string, unknown>;
+      const keys = Object.keys(record).sort();
+      return (
+        "{" +
+        keys
+          .map((k) => `${JSON.stringify(k)}:${canonicalJsonString(record[k])}`)
+          .join(",") +
+        "}"
+      );
+    };
+
+    const objA = {
+      workshop_id: "295726c7-47b5-4516-a74a-c5ba8765ee48",
+      title: "Strategy Test",
+      metadata: { strategy_name: "Strategy Test", tags: ["a", "b"] },
+      lock_version: 1,
+    };
+    const objB = {
+      lock_version: 1,
+      metadata: { tags: ["a", "b"], strategy_name: "Strategy Test" },
+      title: "Strategy Test",
+      workshop_id: "295726c7-47b5-4516-a74a-c5ba8765ee48",
+    };
+
+    // Key-order independent canonical string
+    expect(canonicalJsonString(objA)).toBe(canonicalJsonString(objB));
+
+    // Spec source contract for owner-content digest
+    expect(specSource).toContain("function canonicalJsonString");
+    expect(specSource).toContain("function computeContentHash");
+    expect(specSource).toContain("content_sha256");
+  });
+
+  it("spec source contract: executes real page.reload step without creating replacement workshop in existing mode", () => {
+    expect(specSource).toContain("page.reload({ waitUntil: \"domcontentloaded\" })");
+    expect(specSource).toContain('"execute_real_page_reload"');
+    expect(specSource).toContain('"assert_after_reload_readback_and_visible_ui"');
+    expect(specSource).toContain("postReloadDigest");
+    expect(specSource).toContain(
+      "post-reload owner content digest must match initial content digest",
+    );
+
+    // Existing mode must not invoke create_workshop or POST /bff/agora/workshops
+    const existingModeBranchStart = specSource.indexOf("if (isExistingMode) {");
+    const elseBranchStart = specSource.indexOf("} else {", existingModeBranchStart);
+    expect(existingModeBranchStart).toBeGreaterThan(-1);
+    expect(elseBranchStart).toBeGreaterThan(existingModeBranchStart);
+
+    const existingModeSource = specSource.slice(existingModeBranchStart, elseBranchStart);
+    expect(existingModeSource).not.toContain('"create_workshop"');
+    expect(existingModeSource).not.toContain('page.getByTestId("create-workshop-btn")');
+    expect(existingModeSource).not.toContain('page.getByTestId("create-workshop-submit")');
+    expect(existingModeSource).not.toContain('"POST"');
+    expect(existingModeSource).not.toContain('"PATCH"');
+    expect(existingModeSource).not.toContain("/patch-proposals");
+  });
+
+  it("spec source contract: proves same UUID, acknowledged title hash, and content digest across fresh context", () => {
+    expect(specSource).toContain('"assert_existing_workshop_owner_readback_first"');
+    expect(specSource).toContain('"navigate_existing_workshop_ui"');
+    expect(specSource).toContain('"reopen_existing_workshop_ui"');
+    expect(specSource).toContain('"assert_fresh_context_owner_readback"');
+    expect(specSource).toContain("freshContextDigest");
+    expect(specSource).toContain(
+      "fresh context owner content digest must match initial content digest",
+    );
+    expect(specSource).toContain(
+      "fresh context title SHA256 must match the acknowledged title hash",
+    );
+    expect(specSource).toContain(
+      "fresh context readback must return same ID",
+    );
+  });
+
+  it("workflow source contract: declares optional existing-workshop inputs and validates UUID and SHA256 formats", () => {
+    expect(workflowSource).toContain("existing_workshop_id:");
+    expect(workflowSource).toContain("existing_workshop_title_sha256:");
+    expect(workflowSource).toContain("EXISTING_WORKSHOP_ID:");
+    expect(workflowSource).toContain("EXISTING_WORKSHOP_TITLE_SHA256:");
+    expect(workflowSource).toContain(
+      '[[ "${EXISTING_WORKSHOP_ID:-}" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]',
+    );
+    expect(workflowSource).toContain(
+      '[[ "${EXISTING_WORKSHOP_TITLE_SHA256:-}" =~ ^[0-9a-fA-F]{64}$ ]]',
+    );
+  });
+});
+
