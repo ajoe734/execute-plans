@@ -165,4 +165,81 @@ describe("normalizeApprovalFields (Governance owner readback)", () => {
     expect(res.targetVersion).toBeUndefined();
     expect(res.targetConflict).toBe(false);
   });
+
+  it("rejects malformed non-string canonical top target_id even when nested claim exists", () => {
+    const malformedTop = {
+      ...owner,
+      target_id: 123,
+      decision_context: {
+        governance_chain: {
+          target_id: "pool-A",
+          target_version: "e9c7c073c544cd453e2ac3d62b4acb4be7a47f5010a01a5498c40c284238a39b",
+        },
+      },
+    };
+    const res = n(malformedTop);
+    expect(res.targetConflict).toBe(true);
+    expect(res.targetId).toBeUndefined();
+    expect(res.targetVersion).toBeUndefined();
+    expect(res.subject).not.toBe("pool-A");
+    expect(res.subject).not.toBe(123);
+    expect(res.decisionContext).toBeUndefined();
+  });
+
+  it("rejects malformed non-string canonical target_version and blank strings", () => {
+    const malformedVer = {
+      ...owner,
+      target_id: "pool-A",
+      target_version: 123,
+      decision_context: {
+        governance_chain: {
+          target_id: "pool-A",
+          target_version: "e9c7c073c544cd453e2ac3d62b4acb4be7a47f5010a01a5498c40c284238a39b",
+        },
+      },
+    };
+    const resVer = n(malformedVer);
+    expect(resVer.targetConflict).toBe(true);
+    expect(resVer.targetId).toBeUndefined();
+    expect(resVer.targetVersion).toBeUndefined();
+
+    const blankTop = {
+      ...owner,
+      target_id: "   ",
+      decision_context: {
+        governance_chain: {
+          target_id: "pool-A",
+        },
+      },
+    };
+    const resBlank = n(blankTop);
+    expect(resBlank.targetConflict).toBe(true);
+    expect(resBlank.targetId).toBeUndefined();
+  });
+
+  it("rejects malformed nested governance_chain targets", () => {
+    const malformedChain = {
+      ...owner,
+      target_id: "pool-A",
+      decision_context: {
+        governance_chain: {
+          target_id: 999,
+        },
+      },
+    };
+    const res = n(malformedChain);
+    expect(res.targetConflict).toBe(true);
+    expect(res.targetId).toBeUndefined();
+    expect(res.targetVersion).toBeUndefined();
+  });
+
+  it("rejects standalone malformed canonical top target_id without guessing or fallback", () => {
+    const malformedStandalone = {
+      ...owner,
+      target_id: 123,
+    };
+    const res = n(malformedStandalone);
+    expect(res.targetConflict).toBe(true);
+    expect(res.targetId).toBeUndefined();
+  });
 });

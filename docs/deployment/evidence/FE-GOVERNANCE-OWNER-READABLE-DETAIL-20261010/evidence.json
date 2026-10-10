@@ -7,25 +7,26 @@
   "merge_target": "dev",
   "branch": "task/FE-GOVERNANCE-OWNER-READABLE-DETAIL-20261010",
   "evidence_kind": "local_validation_only",
-  "note": "This task is a bounded, read-only UI detail follow-up to FE-GOVERNANCE-PAPER-CASE-READONLY-HARNESS-20261010 / PR #828 and resolves the Human/Ops review requeue counter observations (FE829-c3cc-original-normalizer-canonical-conflict-and-state-source-negative). In normalizeApprovalFields, canonical target anchors (top-level and governance_chain) require exact case-sensitive equality for opaque IDs and digests without toLowerCase flattening; any target conflict (including explicit pool-OTHER conflict with matching version) withholds both canonical target fields visibly as Unavailable; and unrecognized/malformed canonical owner decision_state strictly maps to unknown rather than falling back to display state=pending, ensuring unknown owner records remain non-actionable. GovernanceReview reads targetConflict and withholds both fields visibly when conflict is indicated. All original vote/decision rules, permissions, and zero-write guarantees are preserved. Net production changes are strictly bounded to 30 lines (limit <= 40).",
+  "receipt": "FE830-77a-original-helper-prior-counters-fixed-and-malformed-anchor-negative.json",
+  "note": "This task is a bounded, read-only UI detail follow-up to FE-GOVERNANCE-PAPER-CASE-READONLY-HARNESS-20261010 / PR #828 and resolves the Human/Ops review requeue counter observations (FE829-c3cc-original-normalizer-canonical-conflict-and-state-source-negative and FE830-77a-original-helper-prior-counters-fixed-and-malformed-anchor-negative.json). In normalizeApprovalFields, canonical target anchors (top-level and governance_chain) require exact case-sensitive equality for opaque IDs and digests without toLowerCase flattening; any non-string, blank, or conflicting target anchor withholds both canonical target fields visibly as Unavailable (no silent discard of malformed explicit anchors in favor of nested claims); and unrecognized/malformed canonical owner decision_state strictly maps to unknown rather than falling back to display state=pending, ensuring unknown owner records remain non-actionable. GovernanceReview reads targetConflict and withholds both fields visibly as Unavailable when conflict or malformed anchors are indicated. All original vote/decision rules, permissions, and zero-write guarantees are preserved. Net production changes are strictly bounded to 30 lines (limit <= 40).",
   "acceptance_mapping": {
     "AC1_predecessor_contract_retention": "Product read-only detail follow-up to delivered FE-GOVERNANCE-PAPER-CASE-READONLY-HARNESS-20261010 / PR #828; retains predecessor DONE status, hosted workflow contract, and spec harness completely intact and unchanged.",
     "AC2_hosted_browser_failure_addressed": "Directly resolves original hosted run 38092578863 / artifact 11684950542 navigate_governance_case_ui_first failure where GovernanceReview did not render canonical target digest, explicit owner version, or canonical state.",
     "AC3_owner_readable_detail_and_unavailable_handling": "Renders genuine owner-bound case ID, explicit owner version (v<ver>), canonical state, target_id, and target_version as readable localized Field labels and values in GovernanceReview summary. Missing, unknown, or conflicting canonical anchors display visibly as Unavailable without guessing, fabrication, or arbitrary substring fallback. Unrecognized canonical owner state stays unknown and keeps decision buttons non-actionable.",
-    "AC4_typed_target_projection_and_conflict_rejection": "normalizeApprovalFields extracts canonical target_id and target_version from top-level fields and decision_context.governance_chain with exact equality (opaque ID case-sensitivity) and strict conflict rejection (withholding both canonical target fields on any conflict), mapping to typed optional ApprovalRequest DTO fields rather than raw arbitrary serialized bodies.",
+    "AC4_typed_target_projection_and_conflict_rejection": "normalizeApprovalFields extracts canonical target_id and target_version from top-level fields and decision_context.governance_chain with exact equality (opaque ID case-sensitivity) and strict conflict rejection (withholding both canonical target fields on any conflict or malformed anchor), mapping to typed optional ApprovalRequest DTO fields rather than raw arbitrary serialized bodies.",
     "AC5_zero_writes_and_unchanged_governance_rules": "Strictly preserves read-only posture: zero vote/approve/reject/accept-review/activation/rebalance mutations or auto-decisions. High-risk confirmation, memo requirements, and two-human quorum rules remain untouched.",
     "AC6_preserve_original_harness": "Preserves original optional owner-target harness equality/conflict assertions, 11-step creation mode, and 13-step existing workshop mode without weakening visible UI assertions or skipping checks to green.",
-    "AC7_scoped_artifacts_and_line_budget": "Touches only the six declared repository artifacts: src/management/pages/GovernanceReview.tsx, src/lib/bff-v1/dto.ts, src/lib/bff-v1/operations.ts, src/lib/bff-v1/__tests__/approval-readback.test.ts, src/test/governance-owner-readonly-detail.test.tsx, and docs/deployment/evidence/FE-GOVERNANCE-OWNER-READABLE-DETAIL-20261010/evidence.json. Net production lines are 30 (budget <= 40). Validated with 13 approval-readback tests, 6 focused component tests, 30 hosted policy tests, clean typecheck, and clean lint."
+    "AC7_scoped_artifacts_and_line_budget": "Touches only the six declared repository artifacts: src/management/pages/GovernanceReview.tsx, src/lib/bff-v1/dto.ts, src/lib/bff-v1/operations.ts, src/lib/bff-v1/__tests__/approval-readback.test.ts, src/test/governance-owner-readonly-detail.test.tsx, and docs/deployment/evidence/FE-GOVERNANCE-OWNER-READABLE-DETAIL-20261010/evidence.json. Net production lines are 32 (budget <= 40). Validated with 17 approval-readback tests, 7 focused component tests, 30 hosted policy tests, clean typecheck, and clean lint."
   },
   "local_validation": {
     "commands": [
       {
         "command": "vitest run src/lib/bff-v1/__tests__/approval-readback.test.ts",
-        "result": "13 passed (13)"
+        "result": "17 passed (17)"
       },
       {
         "command": "vitest run src/test/governance-owner-readonly-detail.test.tsx",
-        "result": "6 passed (6)"
+        "result": "7 passed (7)"
       },
       {
         "command": "vitest run src/test/workshop-persistence-hosted-policy.test.ts",
@@ -41,7 +42,7 @@
       },
       {
         "command": "git diff --stat 6f9b26bcf..HEAD src/management/pages/GovernanceReview.tsx src/lib/bff-v1/dto.ts src/lib/bff-v1/operations.ts",
-        "result": "35 insertions(+), 5 deletions(-) (net +30 lines, budget <= 40 satisfied)"
+        "result": "37 insertions(+), 5 deletions(-) (net +32 lines, budget <= 40 satisfied)"
       }
     ],
     "not_run": "Live hosted browser execution against the deployed Pantheon dev environment is deferred to coordinator workflow_dispatch after integration, as required by source worker boundaries."

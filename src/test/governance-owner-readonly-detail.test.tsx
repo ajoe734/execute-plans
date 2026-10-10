@@ -228,4 +228,31 @@ describe("GovernanceReview owner-bound read-only detail", () => {
     expect(screen.getByText("Already unknown.")).toBeInTheDocument();
     expect(mocks.decideApproval).not.toHaveBeenCalled();
   });
+
+  it("withholds both target fields visibly as Unavailable when canonical target anchor is malformed or invalid", async () => {
+    const caseId = "approval-malformed-target-case";
+    const malformedCase: ApprovalRequest = {
+      id: caseId,
+      kind: "Strategy",
+      subject: "Malformed Target Approval",
+      requester: "operator-7",
+      state: "pending",
+      version: 1,
+      targetId: undefined,
+      targetVersion: undefined,
+      targetConflict: true,
+      riskLevel: "medium",
+      createdAt: "2026-10-10T12:00:00Z",
+    };
+
+    mocks.approvalGet.mockResolvedValue(malformedCase);
+    renderReview(caseId);
+
+    expect(await screen.findByText("Malformed Target Approval")).toBeInTheDocument();
+    expect(screen.queryByText("pool-A")).not.toBeInTheDocument();
+    expect(screen.queryByText("123")).not.toBeInTheDocument();
+    const unavailableElements = screen.getAllByText("Unavailable");
+    expect(unavailableElements.length).toBeGreaterThanOrEqual(2);
+    expect(mocks.decideApproval).not.toHaveBeenCalled();
+  });
 });
