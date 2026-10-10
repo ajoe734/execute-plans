@@ -511,6 +511,150 @@ async function assertAnonymousContext(page: Page): Promise<void> {
  * pending/proposed state, and binding to target pool id or digest.
  * Zero mutations, zero write calls.
  */
+/**
+ * Resolves and validates canonical target_id and target_version from the owner approval case
+ * payload, supporting top-level fields and nested decision_context.governance_chain.
+ * Rejects conflicting definitions between top-level and governance_chain.
+ * Matches exact equality against targetDigestOrId (never arbitrary substring or serialized JSON).
+ */
+export function extractAndValidateCanonicalGovernanceTarget(
+  data: JsonRecord,
+  expectedTarget: string,
+): {
+  canonicalTargetId: string | null;
+  canonicalTargetVersion: string | null;
+  matchedBy: "target_id" | "target_version";
+} {
+  const trimmedExpected = expectedTarget.trim();
+  if (!trimmedExpected) {
+    throw new Error("expectedTarget must be non-empty");
+  }
+
+  const topTargetId =
+    typeof data.target_id === "string" && data.target_id.trim()
+      ? data.target_id.trim()
+      : typeof data.targetId === "string" && data.targetId.trim()
+        ? data.targetId.trim()
+        : null;
+
+  const topTargetVersion =
+    typeof data.target_version === "string" && data.target_version.trim()
+      ? data.target_version.trim()
+      : typeof data.targetVersion === "string" && data.targetVersion.trim()
+        ? data.targetVersion.trim()
+        : null;
+
+  const decisionContext = asRecord(
+    data.decision_context ?? data.decisionContext,
+  );
+  const govChain = asRecord(
+    decisionContext.governance_chain ?? decisionContext.governanceChain,
+  );
+
+  const chainTargetId =
+    typeof govChain.target_id === "string" && govChain.target_id.trim()
+      ? govChain.target_id.trim()
+      : typeof govChain.targetId === "string" && govChain.targetId.trim()
+        ? govChain.targetId.trim()
+        : null;
+
+  const chainTargetVersion =
+    typeof govChain.target_version === "string" && govChain.target_version.trim()
+      ? govChain.target_version.trim()
+      : typeof govChain.targetVersion === "string" && govChain.targetVersion.trim()
+        ? govChain.targetVersion.trim()
+        : null;
+
+  if (
+    topTargetId &&
+    chainTargetId &&
+    topTargetId.toLowerCase() !== chainTargetId.toLowerCase()
+  ) {
+    throw new Error(
+      `Governance case target_id conflict: top-level "${topTargetId}" != governance_chain "${chainTargetId}"`,
+    );
+  }
+
+  if (
+    topTargetVersion &&
+    chainTargetVersion &&
+    topTargetVersion.toLowerCase() !== chainTargetVersion.toLowerCase()
+  ) {
+    throw new Error(
+      `Governance case target_version conflict: top-level "${topTargetVersion}" != governance_chain "${chainTargetVersion}"`,
+    );
+  }
+
+  const canonicalTargetId = topTargetId ?? chainTargetId;
+  const canonicalTargetVersion = topTargetVersion ?? chainTargetVersion;
+
+  if (!canonicalTargetId && !canonicalTargetVersion) {
+    throw new Error(
+      "Governance case does not declare canonical target_id or target_version in supported paths (top-level or decision_context.governance_chain)",
+    );
+  }
+
+  const isSha256 = /^[a-fA-F0-9]{64}$/.test(trimmedExpected);
+  const expectedLower = trimmedExpected.toLowerCase();
+
+  if (isSha256) {
+    if (canonicalTargetVersion) {
+      if (canonicalTargetVersion.toLowerCase() !== expectedLower) {
+        throw new Error(
+          `Governance case target_version mismatch: expected "${trimmedExpected}", got "${canonicalTargetVersion}" (conflicting canonical target)`,
+        );
+      }
+      return {
+        canonicalTargetId,
+        canonicalTargetVersion,
+        matchedBy: "target_version",
+      };
+    }
+    if (canonicalTargetId && canonicalTargetId.toLowerCase() === expectedLower) {
+      return {
+        canonicalTargetId,
+        canonicalTargetVersion,
+        matchedBy: "target_id",
+      };
+    }
+    throw new Error(
+      `Governance case target digest mismatch: expected "${trimmedExpected}" was not matched by canonical target_version or target_id`,
+    );
+  } else {
+    if (canonicalTargetId) {
+      if (canonicalTargetId.toLowerCase() !== expectedLower) {
+        throw new Error(
+          `Governance case target_id mismatch: expected "${trimmedExpected}", got "${canonicalTargetId}" (conflicting canonical target)`,
+        );
+      }
+      return {
+        canonicalTargetId,
+        canonicalTargetVersion,
+        matchedBy: "target_id",
+      };
+    }
+    if (
+      canonicalTargetVersion &&
+      canonicalTargetVersion.toLowerCase() === expectedLower
+    ) {
+      return {
+        canonicalTargetId,
+        canonicalTargetVersion,
+        matchedBy: "target_version",
+      };
+    }
+    throw new Error(
+      `Governance case target id mismatch: expected "${trimmedExpected}" was not matched by canonical target_id or target_version`,
+    );
+  }
+}
+
+/**
+ * Reads the specified governance approval case directly from the owner BFF via
+ * GET /bff/approvals/{id}, asserting valid case id, expected version match,
+ * pending/proposed state, and binding to target pool id or digest.
+ * Zero mutations, zero write calls.
+ */
 async function readGovernanceCaseOwnerReadback(
   page: Page,
   caseId: string,
@@ -522,6 +666,8 @@ async function readGovernanceCaseOwnerReadback(
   version: number;
   state: string;
   subject: string;
+  targetId: string | null;
+  targetVersion: string | null;
 }> {
   const readback = await page.request.get(
     `${BFF_BASE_URL}/bff/approvals/${encodeURIComponent(caseId)}`,
@@ -551,23 +697,10 @@ async function readGovernanceCaseOwnerReadback(
     `governance case state must be pending or proposed, got "${observedState}"`,
   ).toBe(true);
 
-  const targetLower = targetDigestOrId.toLowerCase();
-  const serialized = canonicalJsonString(data).toLowerCase();
-  const subject = String(data.subject ?? "");
-  const diffSummary = String(data.diffSummary ?? "");
-  const rationale = String(data.rationale ?? "");
-  const target = String(data.target ?? "");
-  const matchesTarget =
-    target.toLowerCase().includes(targetLower) ||
-    subject.toLowerCase().includes(targetLower) ||
-    diffSummary.toLowerCase().includes(targetLower) ||
-    rationale.toLowerCase().includes(targetLower) ||
-    serialized.includes(targetLower);
-  expect(
-    matchesTarget,
-    `owner GET response must bind to target digest or id "${targetDigestOrId}"`,
-  ).toBe(true);
+  const { canonicalTargetId, canonicalTargetVersion } =
+    extractAndValidateCanonicalGovernanceTarget(data, targetDigestOrId);
 
+  const subject = String(data.subject ?? "");
   const contentDigest = computeContentHash(data);
   expect(
     contentDigest,
@@ -580,6 +713,8 @@ async function readGovernanceCaseOwnerReadback(
     version: observedVersion,
     state: observedState,
     subject,
+    targetId: canonicalTargetId,
+    targetVersion: canonicalTargetVersion,
   };
 }
 
@@ -591,8 +726,20 @@ async function readGovernanceCaseOwnerReadback(
 async function navigateGovernanceCaseUi(
   page: Page,
   caseId: string,
-  expectedSubject?: string,
+  expectedSubjectOrOptions?:
+    | string
+    | {
+        expectedSubject?: string;
+        expectedState?: string;
+        expectedVersion?: number;
+        targetDigestOrId?: string;
+      },
 ): Promise<void> {
+  const opts =
+    typeof expectedSubjectOrOptions === "string"
+      ? { expectedSubject: expectedSubjectOrOptions }
+      : expectedSubjectOrOptions ?? {};
+
   await page.goto(
     `${FE_BASE_URL}/management/governance/${encodeURIComponent(caseId)}`,
     { waitUntil: "domcontentloaded" },
@@ -603,10 +750,39 @@ async function navigateGovernanceCaseUi(
   );
   await expect(page.getByText("找不到審批請求")).not.toBeVisible();
   await expect(page.locator("body")).toContainText(caseId, { timeout: 30_000 });
-  if (expectedSubject) {
-    await expect(page.locator("body")).toContainText(expectedSubject, {
+
+  if (opts.expectedSubject) {
+    await expect(page.locator("body")).toContainText(opts.expectedSubject, {
       timeout: 30_000,
     });
+  }
+
+  if (opts.expectedState) {
+    await expect(page.locator("body")).toContainText(opts.expectedState, {
+      timeout: 30_000,
+      ignoreCase: true,
+    });
+  }
+
+  if (opts.targetDigestOrId) {
+    await expect(page.locator("body")).toContainText(opts.targetDigestOrId, {
+      timeout: 30_000,
+      ignoreCase: true,
+    });
+  }
+
+  if (opts.expectedVersion !== undefined) {
+    const bodyText = await page.locator("body").innerText();
+    const hasVersionIndicator =
+      bodyText.includes(`v${opts.expectedVersion}`) ||
+      bodyText.includes(`version ${opts.expectedVersion}`) ||
+      bodyText.includes(`Version ${opts.expectedVersion}`) ||
+      bodyText.includes(`-v${opts.expectedVersion}`) ||
+      bodyText.includes(String(opts.expectedVersion));
+    expect(
+      hasVersionIndicator,
+      `governance case UI must display version indicator for version ${opts.expectedVersion}`,
+    ).toBe(true);
   }
 }
 
@@ -782,7 +958,12 @@ test.describe(`${TASK_ID} hosted workshop persistence`, () => {
           });
 
           await runStep("navigate_governance_case_ui_first", () =>
-            navigateGovernanceCaseUi(page, govCaseId, govSubject),
+            navigateGovernanceCaseUi(page, govCaseId, {
+              expectedSubject: govSubject,
+              expectedState: initialGovState,
+              expectedVersion: initialGovVersion,
+              targetDigestOrId: govTarget,
+            }),
           );
 
           await page.goto(
@@ -853,7 +1034,12 @@ test.describe(`${TASK_ID} hosted workshop persistence`, () => {
             const govExpectedVer = govVal.expectedVersion;
 
             await runStep("navigate_governance_case_ui_second", () =>
-              navigateGovernanceCaseUi(freshPage, govCaseId, govSubject),
+              navigateGovernanceCaseUi(freshPage, govCaseId, {
+                expectedSubject: govSubject,
+                expectedState: initialGovState,
+                expectedVersion: initialGovVersion,
+                targetDigestOrId: govTarget,
+              }),
             );
 
             await runStep(
@@ -960,7 +1146,12 @@ test.describe(`${TASK_ID} hosted workshop persistence`, () => {
           });
 
           await runStep("navigate_governance_case_ui_first", () =>
-            navigateGovernanceCaseUi(page, govCaseId, govSubject),
+            navigateGovernanceCaseUi(page, govCaseId, {
+              expectedSubject: govSubject,
+              expectedState: initialGovState,
+              expectedVersion: initialGovVersion,
+              targetDigestOrId: govTarget,
+            }),
           );
 
           await page.goto(
@@ -1005,7 +1196,12 @@ test.describe(`${TASK_ID} hosted workshop persistence`, () => {
             const govExpectedVer = govVal.expectedVersion;
 
             await runStep("navigate_governance_case_ui_second", () =>
-              navigateGovernanceCaseUi(freshPage, govCaseId, govSubject),
+              navigateGovernanceCaseUi(freshPage, govCaseId, {
+                expectedSubject: govSubject,
+                expectedState: initialGovState,
+                expectedVersion: initialGovVersion,
+                targetDigestOrId: govTarget,
+              }),
             );
 
             await runStep(
