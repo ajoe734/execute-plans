@@ -734,7 +734,16 @@ ensure_probe_dependencies() {
   fi
   echo "=== install probe dependencies ==="
   npm ci
-  npx playwright install chromium --with-deps
+  npx playwright install chromium
+  echo "=== verify browser launch availability ==="
+  node -e '
+import("@playwright/test").then(async ({ chromium }) => {
+  const browser = await chromium.launch({ headless: true });
+  await browser.close();
+}).catch((err) => {
+  console.error("Browser launch preflight failed:", err.message);
+  process.exit(1);
+});'
   PROBE_DEPENDENCIES_READY=true
 }
 
