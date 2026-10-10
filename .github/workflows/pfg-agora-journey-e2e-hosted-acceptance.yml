@@ -42,6 +42,21 @@ on:
         required: false
         default: ""
         type: string
+      governance_case_id:
+        description: "FE-GOVERNANCE-PAPER-CASE-READONLY-HARNESS-20261010: optional canonical governance case ID for read-only browser verification"
+        required: false
+        default: ""
+        type: string
+      governance_case_expected_version:
+        description: "FE-GOVERNANCE-PAPER-CASE-READONLY-HARNESS-20261010: optional expected integer version for governance case"
+        required: false
+        default: ""
+        type: string
+      governance_case_target_digest:
+        description: "FE-GOVERNANCE-PAPER-CASE-READONLY-HARNESS-20261010: optional 64-hex target digest or target ID for governance case"
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
@@ -77,6 +92,9 @@ jobs:
       WORKSHOP_PERSISTENCE_HOSTED_E2E: ${{ inputs.workshop_persistence_only && '1' || '0' }}
       EXISTING_WORKSHOP_ID: ${{ inputs.existing_workshop_id || '' }}
       EXISTING_WORKSHOP_TITLE_SHA256: ${{ inputs.existing_workshop_title_sha256 || '' }}
+      GOVERNANCE_CASE_ID: ${{ inputs.governance_case_id || '' }}
+      GOVERNANCE_CASE_EXPECTED_VERSION: ${{ inputs.governance_case_expected_version || '' }}
+      GOVERNANCE_CASE_TARGET_DIGEST: ${{ inputs.governance_case_target_digest || '' }}
       PANTHEON_PERSONA_INTERACTION_WRITE_PROOF: "1"
       PFG_AGORA_JOURNEY_E2E_GCP_EMAIL: ${{ secrets.PFG_AGORA_JOURNEY_E2E_GCP_EMAIL }}
       PFG_AGORA_JOURNEY_E2E_GCP_PASSWORD: ${{ secrets.PFG_AGORA_JOURNEY_E2E_GCP_PASSWORD }}
@@ -97,6 +115,11 @@ jobs:
           if [[ -n "${EXISTING_WORKSHOP_ID:-}" || -n "${EXISTING_WORKSHOP_TITLE_SHA256:-}" ]]; then
             [[ "${EXISTING_WORKSHOP_ID:-}" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]
             [[ "${EXISTING_WORKSHOP_TITLE_SHA256:-}" =~ ^[0-9a-fA-F]{64}$ ]]
+          fi
+          if [[ -n "${GOVERNANCE_CASE_ID:-}" || -n "${GOVERNANCE_CASE_EXPECTED_VERSION:-}" || -n "${GOVERNANCE_CASE_TARGET_DIGEST:-}" ]]; then
+            [[ "${GOVERNANCE_CASE_ID:-}" =~ ^[a-zA-Z0-9_.:-]+$ ]]
+            [[ "${GOVERNANCE_CASE_EXPECTED_VERSION:-}" =~ ^[0-9]+$ ]]
+            [[ "${GOVERNANCE_CASE_TARGET_DIGEST:-}" =~ ^[a-zA-Z0-9_.:-]+$ ]]
           fi
           if [[ -z "${DEV_LOGIN_CLIENT_SECRET}" ]]; then
             echo "::error::DEV_BFF_DEV_LOGIN_OPERATOR_A_CLIENT_SECRET is not provisioned; refusing to run an unauthenticated hosted journey." >&2

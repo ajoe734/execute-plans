@@ -415,3 +415,172 @@ describe("FE-WORKSHOP-SAME-RESOURCE-RESUME-20261010 existing-resource resume and
   });
 });
 
+describe("FE-GOVERNANCE-PAPER-CASE-READONLY-HARNESS-20261010 optional governance case read-only contract", () => {
+  it("validates governance case inputs and fails closed on missing, malformed, or partial inputs", () => {
+    const idRegex = /^[a-zA-Z0-9_.:-]+$/;
+
+    const validate = (
+      id: string,
+      expectedVersionStr: string,
+      targetDigestOrId: string,
+    ) => {
+      const trimmedId = id.trim();
+      const trimmedVersion = expectedVersionStr.trim();
+      const trimmedDigest = targetDigestOrId.trim();
+
+      if (!trimmedId && !trimmedVersion && !trimmedDigest) {
+        return {
+          valid: false,
+          reason: "governance case id, expected version, and target digest/id are all missing",
+        };
+      }
+      if (!trimmedId) {
+        return { valid: false, reason: "missing governance case id" };
+      }
+      if (!trimmedVersion) {
+        return { valid: false, reason: "missing governance case expected version" };
+      }
+      if (!trimmedDigest) {
+        return { valid: false, reason: "missing governance case target digest or id" };
+      }
+      if (!idRegex.test(trimmedId)) {
+        return {
+          valid: false,
+          reason: `malformed governance case id "${trimmedId}"; must match canonical identifier format`,
+        };
+      }
+      if (!/^[0-9]+$/.test(trimmedVersion) || parseInt(trimmedVersion, 10) <= 0) {
+        return {
+          valid: false,
+          reason: `malformed governance case expected version "${trimmedVersion}"; must be a positive integer`,
+        };
+      }
+      if (!idRegex.test(trimmedDigest)) {
+        return {
+          valid: false,
+          reason: `malformed governance case target digest or id "${trimmedDigest}"; must be 64-hex SHA256 or canonical identifier`,
+        };
+      }
+      return {
+        valid: true,
+        id: trimmedId,
+        expectedVersion: parseInt(trimmedVersion, 10),
+        targetDigestOrId: trimmedDigest,
+      };
+    };
+
+    // All missing
+    expect(validate("", "", "").valid).toBe(false);
+
+    // Partial input cases
+    expect(validate("approval-paper-human-quorum-closeout-20261010-v1", "", "").valid).toBe(false);
+    expect(validate("", "1", "").valid).toBe(false);
+    expect(validate("", "", "e9c7c073c544cd453e2ac3d62b4acb4be7a47f5010a01a5498c40c284238a39b").valid).toBe(false);
+    expect(validate("approval-paper-human-quorum-closeout-20261010-v1", "1", "").valid).toBe(false);
+    expect(validate("approval-paper-human-quorum-closeout-20261010-v1", "", "e9c7c073c544cd453e2ac3d62b4acb4be7a47f5010a01a5498c40c284238a39b").valid).toBe(false);
+    expect(validate("", "1", "e9c7c073c544cd453e2ac3d62b4acb4be7a47f5010a01a5498c40c284238a39b").valid).toBe(false);
+
+    // Malformed ID
+    expect(validate("invalid id with spaces", "1", "e9c7c073c544cd453e2ac3d62b4acb4be7a47f5010a01a5498c40c284238a39b").valid).toBe(false);
+
+    // Malformed version
+    expect(validate("approval-paper-human-quorum-closeout-20261010-v1", "0", "e9c7c073c544cd453e2ac3d62b4acb4be7a47f5010a01a5498c40c284238a39b").valid).toBe(false);
+    expect(validate("approval-paper-human-quorum-closeout-20261010-v1", "-1", "e9c7c073c544cd453e2ac3d62b4acb4be7a47f5010a01a5498c40c284238a39b").valid).toBe(false);
+    expect(validate("approval-paper-human-quorum-closeout-20261010-v1", "version1", "e9c7c073c544cd453e2ac3d62b4acb4be7a47f5010a01a5498c40c284238a39b").valid).toBe(false);
+
+    // Malformed target
+    expect(validate("approval-paper-human-quorum-closeout-20261010-v1", "1", "bad digest with spaces!").valid).toBe(false);
+
+    // Valid canonical pending paper case target
+    const validWithDigest = validate(
+      "approval-paper-human-quorum-closeout-20261010-v1",
+      "1",
+      "e9c7c073c544cd453e2ac3d62b4acb4be7a47f5010a01a5498c40c284238a39b",
+    );
+    expect(validWithDigest.valid).toBe(true);
+    if (validWithDigest.valid) {
+      expect(validWithDigest.id).toBe("approval-paper-human-quorum-closeout-20261010-v1");
+      expect(validWithDigest.expectedVersion).toBe(1);
+      expect(validWithDigest.targetDigestOrId).toBe("e9c7c073c544cd453e2ac3d62b4acb4be7a47f5010a01a5498c40c284238a39b");
+    }
+
+    const validWithPoolId = validate(
+      "approval-paper-human-quorum-closeout-20261010-v1",
+      "1",
+      "pool-paper-human-quorum-closeout-20261010-v1",
+    );
+    expect(validWithPoolId.valid).toBe(true);
+    if (validWithPoolId.valid) {
+      expect(validWithPoolId.targetDigestOrId).toBe("pool-paper-human-quorum-closeout-20261010-v1");
+    }
+
+    // Spec source contracts
+    expect(specSource).toContain("validateGovernanceCaseInputs");
+    expect(specSource).toContain("GOVERNANCE_CASE_ID");
+    expect(specSource).toContain("GOVERNANCE_CASE_EXPECTED_VERSION");
+    expect(specSource).toContain("GOVERNANCE_CASE_TARGET_DIGEST");
+    expect(specSource).toContain("hasGovernanceInputs");
+  });
+
+  it("spec source contract: zero governance write/vote calls, never clicking decision buttons, and no vote authority inference", () => {
+    // Absolutely NO governance accept-review/decide/vote/activate/rebalance POST/PATCH/DELETE
+    expect(specSource).not.toContain("decideApproval");
+    expect(specSource).not.toContain("/bff/approvals/batch-decide");
+    expect(specSource).not.toContain('page.getByRole("button", { name: "Approve" })');
+    expect(specSource).not.toContain('page.getByRole("button", { name: "Reject" })');
+    expect(specSource).not.toContain("canApprove");
+    expect(specSource).not.toContain("allowedActions");
+
+    // Only GET /bff/approvals is performed
+    expect(specSource).toContain("GET");
+    expect(specSource).toContain("/bff/approvals/");
+    const specAfterImport = specSource.slice(specSource.indexOf('test("real UI login'));
+    expect(specAfterImport).not.toContain('"POST", "/bff/approvals');
+    expect(specAfterImport).not.toContain('"PATCH", "/bff/approvals');
+    expect(specAfterImport).not.toContain('"DELETE", "/bff/approvals');
+  });
+
+  it("spec source contract: reports real stale outcome on version mismatch and never resets or resaves fixture", () => {
+    expect(specSource).toContain("Governance case version mismatch");
+    expect(specSource).toContain("case changed on owner (stale outcome)");
+    expect(specSource).not.toContain("resetFixture");
+    expect(specSource).not.toContain("resaveFixture");
+  });
+
+  it("spec source contract: navigates /management/governance/{id} route and asserts actually visible owner-bound detail", () => {
+    expect(specSource).toContain("async function navigateGovernanceCaseUi");
+    expect(specSource).toContain("/management/governance/");
+    expect(specSource).toContain("找不到審批請求");
+    expect(specSource).toContain('"assert_governance_case_owner_readback_first"');
+    expect(specSource).toContain('"navigate_governance_case_ui_first"');
+    expect(specSource).toContain('"navigate_governance_case_ui_second"');
+    expect(specSource).toContain('"assert_fresh_context_governance_case_owner_readback"');
+    expect(specSource).toContain("initialGovVersion");
+    expect(specSource).toContain("initialGovDigest");
+    expect(specSource).toContain(
+      "fresh context governance case version must match initial version",
+    );
+    expect(specSource).toContain(
+      "fresh context governance case content digest must match initial digest",
+    );
+  });
+
+  it("workflow source contract: declares optional governance case inputs and validates canonical identifier formats", () => {
+    expect(workflowSource).toContain("governance_case_id:");
+    expect(workflowSource).toContain("governance_case_expected_version:");
+    expect(workflowSource).toContain("governance_case_target_digest:");
+    expect(workflowSource).toContain("GOVERNANCE_CASE_ID:");
+    expect(workflowSource).toContain("GOVERNANCE_CASE_EXPECTED_VERSION:");
+    expect(workflowSource).toContain("GOVERNANCE_CASE_TARGET_DIGEST:");
+    expect(workflowSource).toContain(
+      '[[ "${GOVERNANCE_CASE_ID:-}" =~ ^[a-zA-Z0-9_.:-]+$ ]]',
+    );
+    expect(workflowSource).toContain(
+      '[[ "${GOVERNANCE_CASE_EXPECTED_VERSION:-}" =~ ^[0-9]+$ ]]',
+    );
+    expect(workflowSource).toContain(
+      '[[ "${GOVERNANCE_CASE_TARGET_DIGEST:-}" =~ ^[a-zA-Z0-9_.:-]+$ ]]',
+    );
+  });
+});
+
