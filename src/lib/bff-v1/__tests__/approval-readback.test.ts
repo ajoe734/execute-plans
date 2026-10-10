@@ -47,4 +47,80 @@ describe("normalizeApprovalFields (Governance owner readback)", () => {
     const display = { id: "a", kind: "k", subject: "s", state: "approved", version: 2 };
     expect(normalizeApprovalFields(display)).toBe(display);
   });
+
+  it("projects canonical target_id and target_version from top-level and governance_chain with exact equality", () => {
+    const valid = {
+      ...owner,
+      target_id: "pool_1",
+      target_version: "e9c7c073c544cd453e2ac3d62b4acb4be7a47f5010a01a5498c40c284238a39b",
+      decision_context: {
+        governance_chain: {
+          target_id: "pool_1",
+          target_version: "e9c7c073c544cd453e2ac3d62b4acb4be7a47f5010a01a5498c40c284238a39b",
+        },
+      },
+    };
+    const res = n(valid);
+    expect(res.targetId).toBe("pool_1");
+    expect(res.targetVersion).toBe("e9c7c073c544cd453e2ac3d62b4acb4be7a47f5010a01a5498c40c284238a39b");
+    expect(res.targetConflict).toBe(false);
+  });
+
+  it("projects canonical targets from governance_chain when top-level fields are omitted", () => {
+    const chainOnly = {
+      id: "gov_2",
+      decision_state: "pending",
+      decision_context: {
+        governance_chain: {
+          target_id: "pool_2",
+          target_version: "hash_ver_2",
+        },
+      },
+    };
+    const res = n(chainOnly);
+    expect(res.targetId).toBe("pool_2");
+    expect(res.targetVersion).toBe("hash_ver_2");
+    expect(res.targetConflict).toBe(false);
+  });
+
+  it("rejects conflicting canonical target_id between top-level and governance_chain", () => {
+    const conflictId = {
+      ...owner,
+      target_id: "pool_alpha",
+      decision_context: {
+        governance_chain: {
+          target_id: "pool_beta",
+        },
+      },
+    };
+    const res = n(conflictId);
+    expect(res.targetConflict).toBe(true);
+    expect(res.targetId).toBeUndefined();
+  });
+
+  it("rejects conflicting canonical target_version between top-level and governance_chain", () => {
+    const conflictVer = {
+      ...owner,
+      target_version: "aaaa",
+      decision_context: {
+        governance_chain: {
+          target_version: "bbbb",
+        },
+      },
+    };
+    const res = n(conflictVer);
+    expect(res.targetConflict).toBe(true);
+    expect(res.targetVersion).toBeUndefined();
+  });
+
+  it("leaves target fields undefined when omitted, without guessing or fabricating", () => {
+    const noTargets = {
+      id: "gov_3",
+      decision_state: "pending",
+    };
+    const res = n(noTargets);
+    expect(res.targetId).toBeUndefined();
+    expect(res.targetVersion).toBeUndefined();
+    expect(res.targetConflict).toBe(false);
+  });
 });
