@@ -75,18 +75,18 @@ export async function getIncident(id: string): Promise<Incident | undefined> {
   return strictLiveDetail<Incident>("incidents.get", paths.incident(id)).then(normalizeIncidentTimestampFields);
 }
 
+const chk = (v: unknown): [string | undefined, boolean] => v === undefined ? [undefined, false] : typeof v === "string" && v.trim() ? [v.trim(), false] : [undefined, true];
+const pair = (a: unknown, b: unknown): [string | undefined, boolean] => {
+  const [v1, b1] = chk(a), [v2, b2] = chk(b);
+  return b1 || b2 || (v1 && v2 && v1 !== v2) ? [undefined, true] : [v1 ?? v2, false];
+};
+
 /** Single read-boundary projection of Governance owner fields into the display DTO. */
 export function normalizeApprovalFields<T>(raw: T | undefined): T | undefined {
   if (!raw || typeof raw !== "object") return raw;
   const r = raw as Record<string, unknown>;
   if (r.decision_state === undefined && r.target_id === undefined && r.target_version === undefined && !r.decision_context && !r.decisionContext) return raw;
   const out = { ...r };
-  const chk = (v: unknown): [string | undefined, boolean] =>
-    v === undefined ? [undefined, false] : typeof v === "string" && v.trim() ? [v.trim(), false] : [undefined, true];
-  const pair = (a: unknown, b: unknown): [string | undefined, boolean] => {
-    const [v1, b1] = chk(a), [v2, b2] = chk(b);
-    return b1 || b2 || (v1 && v2 && v1 !== v2) ? [undefined, true] : [v1 ?? v2, false];
-  };
   const [topId, bTId] = pair(r.target_id, r.targetId), [topVer, bTVer] = pair(r.target_version, r.targetVersion);
   const rawDc = r.decision_context ?? r.decisionContext, bDc = rawDc !== undefined && (typeof rawDc !== "object" || !rawDc);
   const dc = !bDc && typeof rawDc === "object" ? (rawDc as Record<string, unknown>) : undefined;
@@ -131,8 +131,26 @@ export async function getApproval(id: string): Promise<ApprovalRequest | undefin
   return strictLiveDetail<ApprovalRequest>("approvals.get", paths.approval(id)).then(normalizeApprovalFields);
 }
 
+export function normalizeAuditFields<T = AuditEvent>(raw: unknown): T {
+  if (!raw || typeof raw !== "object") return raw as T;
+  const r = raw as Record<string, unknown>;
+  const [eid, bEid] = pair(r.entry_id, r.entryId), [id, bId] = pair(r.id, eid);
+  const [tid, bTid] = pair(r.target_id, r.targetId), [target, bTarget] = pair(r.target, tid);
+  const [aid, bAid] = pair(r.action_type, r.actionType), [action, bAction] = pair(r.action, aid);
+  const [ts, badTs] = pair(r.ts, r.timestamp), [actor, badActor] = chk(r.actor), badTarget = Boolean(bTid || bTarget || r.targetConflict);
+  const out: Record<string, unknown> = {
+    ...r, id: bEid || bId ? undefined : id, target: badTarget ? undefined : target, action: bAid || bAction ? undefined : action,
+    ts: badTs ? undefined : ts, actor: badActor ? undefined : actor, targetConflict: badTarget,
+  };
+  if (badTarget) { delete out.target_id; delete out.targetId; }
+  if (bEid || bId) { delete out.entry_id; delete out.entryId; }
+  if (bAid || bAction) { delete out.action_type; delete out.actionType; }
+  if (badTs) delete out.timestamp;
+  return out as T;
+}
+
 export async function listAudit(): Promise<AuditEvent[]> {
-  return strictLiveList("audit.list", paths.audit());
+  return strictLiveList<AuditEvent>("audit.list", paths.audit()).then((rows) => rows.map((r) => normalizeAuditFields(r) as AuditEvent));
 }
 
 export const jobs = {

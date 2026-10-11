@@ -1,0 +1,59 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "FE-GOVERNANCE-CANONICAL-AUDIT-READBACK-20261011",
+  "owner": "Antigravity2",
+  "reviewer": "Antigravity",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-GOVERNANCE-CANONICAL-AUDIT-READBACK-20261011",
+  "evidence_kind": "local_validation_only",
+  "receipt": "FE79-original-Gov-audit-target-counter.json",
+  "note": "Follow-up after official terminal reopen denial for FE-GOVERNANCE-OWNER-READABLE-DETAIL-20261010. Normalizes canonical owner audit shape (entry_id, action_type, target_id, timestamp) to display shape (id, action, target, ts) at the single typed read boundary in normalizeAuditFields and operations.listAudit. Prevents TypeError when audit rows lack display target or contain malformed fields. Purges conflicting/invalid target aliases at the boundary (delete target_id/targetId and sets targetConflict=true) to prevent downstream alias resurrection. Enforces failclosed exact target binding without substring, alias fallback, or cross-anchor matching. Preserves genuine case details and honest loading/error boundaries (honest Error state on owner 503 rather than false 404; honest separate audit unavailable state without false not-found or false complete). Net production delta is +26 lines against 79aacd97, well within the <= 40 budget.",
+  "acceptance_mapping": {
+    "AC1_followup_and_prior_safeguards": "Follows up after official terminal reopen denial for FE-GOVERNANCE-OWNER-READABLE-DETAIL-20261010; preserves delivered 829 and 830 exact-source 54 PASS tests and canonical target safeguards; builds strictly on separate execute-plans from current dev 79aacd97.",
+    "AC2_canonical_owner_audit_shape_normalization": "Fixes actual owner audit shape (entry_id, action_type, target_id, timestamp) vs display shape (id, action, target, ts) at the single typed read boundary via normalizeAuditFields in operations.ts and AuditEvent typing in dto.ts. Purges invalid/conflicting aliases and sets targetConflict=true without recursive inspection or coercion of invalid non-string values.",
+    "AC3_resilient_governance_review_rendering": "GovernanceReview renders genuine case detail without TypeError when audit rows have missing display target or optional malformed fields. Missing, conflicting, or invalid audit identity remains unlinked. Implements exact target binding rather than substring or subject word cross-anchor matching, preventing silent misattribution of foreign approval or pool audits.",
+    "AC4_preserve_tests_and_add_negatives": "Preserves original harness and all 54 original tests (17 approval-readback, 7 governance-owner-readonly-detail, 30 workshop-persistence-hosted-policy). Adds exact realowner-shaped audit regression plus missing, non-string, conflicting, and reverse-conflicting foreign target negatives, audit 503 negative, and owner 503 error negative. Loading and audit failure are visibly honest rather than false not-found or false complete.",
+    "AC5_zero_writes_and_retained_failure_truth": "No business writes, votes, permission or button widening, bearer tokens, storageState, or credential changes. Original browser 38108525681 failure after 7 PASS remains valid history and is not erased. The original source callback failure is resolved with failclosed exact binding.",
+    "AC6_scoped_artifacts_and_line_budget": "Touches only the six declared repository artifacts: src/lib/bff-v1/operations.ts, src/lib/bff-v1/dto.ts, src/lib/bff-v1/__tests__/approval-readback.test.ts, src/management/pages/GovernanceReview.tsx, src/test/governance-owner-readonly-detail.test.tsx, and docs/deployment/evidence/FE-GOVERNANCE-CANONICAL-AUDIT-READBACK-20261011/evidence.json. Net production diff against 79aacd97 is +26 lines (budget <= 40 satisfied)."
+  },
+  "local_validation": {
+    "commands": [
+      {
+        "command": "npx vitest run src/lib/bff-v1/__tests__/approval-readback.test.ts",
+        "result": "25 passed (25)"
+      },
+      {
+        "command": "npx vitest run src/test/governance-owner-readonly-detail.test.tsx",
+        "result": "13 passed (13)"
+      },
+      {
+        "command": "npx vitest run src/test/workshop-persistence-hosted-policy.test.ts",
+        "result": "30 passed (30)"
+      },
+      {
+        "command": "npm run test",
+        "result": "217 test files passed (217), 2390 passed (2390)"
+      },
+      {
+        "command": "npx tsc -p tsconfig.app.json --noEmit",
+        "result": "clean, 0 errors"
+      },
+      {
+        "command": "npm run lint",
+        "result": "clean, 0 errors (67 pre-existing warnings)"
+      },
+      {
+        "command": "git diff --stat 79aacd97 -- src/lib/bff-v1/operations.ts src/lib/bff-v1/dto.ts src/management/pages/GovernanceReview.tsx",
+        "result": "43 insertions(+), 17 deletions(-) (net +26 lines, budget <= 40 satisfied)"
+      }
+    ],
+    "not_run": "Live hosted browser execution against the deployed Pantheon dev environment is deferred to coordinator workflow_dispatch after integration, as required by source worker boundaries."
+  },
+  "not_changed": [
+    "e2e/workshop-persistence-hosted.spec.ts and .github/workflows/pfg-agora-journey-e2e-hosted-acceptance.yml remain untouched.",
+    "Vote/decision submission logic, permissions, and high-risk confirmation rules remain unchanged.",
+    "No new API routes, endpoints, auth flows, or bearer tokens added.",
+    "No business writes, machine votes, or automated decision triggers introduced."
+  ]
+}
