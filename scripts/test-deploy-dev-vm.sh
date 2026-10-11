@@ -115,8 +115,12 @@ die() {
   exit 1
 }
 
-grep -Fq 'npx playwright install chromium --with-deps' "${DEPLOY_SOURCE}" \
-  || die "deploy controller must provision Chromium runtime dependencies on the self-hosted runner"
+grep -Fq 'npx playwright install chromium' "${DEPLOY_SOURCE}" \
+  || die "deploy controller must provision Chromium on the self-hosted runner"
+! grep -Fq 'npx playwright install chromium --with-deps' "${DEPLOY_SOURCE}" \
+  || die "deploy controller must avoid global apt update in routine ensure_probe_dependencies"
+grep -Fq 'chromium.launch' "${DEPLOY_SOURCE}" \
+  || die "deploy controller must verify browser launch availability before switch"
 
 show_deploy_failure() {
   local message="$1"
@@ -190,6 +194,28 @@ cat > "${MOCK_BIN}/npx" <<'MOCK'
 #!/usr/bin/env bash
 set -Eeuo pipefail
 printf 'npx\n' >> "${MOCK_CALL_LOG:?}"
+printf 'npx-command:%s\n' "$*" >> "${MOCK_CALL_LOG:?}"
+if [[ "${MOCK_FAIL_APT_402:-false}" == "true" || "$*" == *"--with-deps"* ]]; then
+  echo "Err: https://dl.cloudsmith.io/public/caddy/stable/deb/debian any-version InRelease 402 Payment Required" >&2
+  echo "E: Failed to fetch https://dl.cloudsmith.io/public/caddy/stable/deb/debian/dists/any-version/InRelease 402 Payment Required" >&2
+  echo "Failed to install browsers" >&2
+  echo "Error: Installation process exited with code: 100" >&2
+  exit 100
+fi
+MOCK
+
+cat > "${MOCK_BIN}/node" <<MOCK
+#!/usr/bin/env bash
+set -Eeuo pipefail
+if [[ "\${1:-}" == "-e" && "\${2:-}" == *"chromium.launch"* ]]; then
+  printf 'browser-preflight\n' >> "\${MOCK_CALL_LOG:?}"
+  if [[ "\${MOCK_FAIL_BROWSER_PREFLIGHT:-false}" == "true" ]]; then
+    echo "Browser launch preflight failed: browserType.launch: Executable doesn't exist or missing shared libraries" >&2
+    exit 1
+  fi
+  exit 0
+fi
+exec "${REAL_NODE}" "\$@"
 MOCK
 
 cat > "${MOCK_BIN}/rsync" <<'MOCK'
@@ -441,7 +467,7 @@ case "${url}" in
 esac
 MOCK
 
-chmod +x "${MOCK_BIN}/npm" "${MOCK_BIN}/npx" "${MOCK_BIN}/rsync" \
+chmod +x "${MOCK_BIN}/npm" "${MOCK_BIN}/npx" "${MOCK_BIN}/node" "${MOCK_BIN}/rsync" \
   "${MOCK_BIN}/sudo" "${MOCK_BIN}/curl" "${MOCK_BIN}/git"
 
 mkdir -p "${BASE_SOURCE}/scripts"
@@ -1039,10 +1065,13 @@ run_deploy() {
       env -i \
         PATH="${MOCK_BIN}:${SYSTEM_PATH}" \
         REAL_GIT="${REAL_GIT}" \
+        REAL_NODE="${REAL_NODE}" \
         HOME="${CASE_HOME}" \
         LANG=C \
         TMPDIR="${CASE_TMP}" \
         MOCK_ALLOWED_ROOT="${CASE_DIR}" \
+        MOCK_FAIL_APT_402="false" \
+        MOCK_FAIL_BROWSER_PREFLIGHT="false" \
         MOCK_BFF_SHA="${BFF_SHA}" \
         MOCK_BFF_SHA_SEQUENCE="" \
         MOCK_BFF_COMMIT_SEQUENCE="" \
@@ -1113,10 +1142,13 @@ run_deploy() {
       env -i \
         PATH="${MOCK_BIN}:${SYSTEM_PATH}" \
         REAL_GIT="${REAL_GIT}" \
+        REAL_NODE="${REAL_NODE}" \
         HOME="${CASE_HOME}" \
         LANG=C \
         TMPDIR="${CASE_TMP}" \
         MOCK_ALLOWED_ROOT="${CASE_DIR}" \
+        MOCK_FAIL_APT_402="false" \
+        MOCK_FAIL_BROWSER_PREFLIGHT="false" \
         MOCK_BFF_SHA="${BFF_SHA}" \
         MOCK_BFF_SHA_SEQUENCE="" \
         MOCK_BFF_COMMIT_SEQUENCE="" \
@@ -1195,10 +1227,13 @@ run_deploy() {
         env -i \
           PATH="${MOCK_BIN}:${SYSTEM_PATH}" \
           REAL_GIT="${REAL_GIT}" \
+          REAL_NODE="${REAL_NODE}" \
           HOME="${CASE_HOME}" \
           LANG=C \
           TMPDIR="${CASE_TMP}" \
           MOCK_ALLOWED_ROOT="${CASE_DIR}" \
+          MOCK_FAIL_APT_402="false" \
+          MOCK_FAIL_BROWSER_PREFLIGHT="false" \
           MOCK_BFF_SHA="${BFF_SHA}" \
           MOCK_BFF_SHA_SEQUENCE="" \
           MOCK_BFF_COMMIT_SEQUENCE="" \
@@ -3350,6 +3385,45 @@ test_exact_pair_protocol_non_root_prepared_receipt_permission() {
   assert_summary_outcome accepted
 }
 
+test_browser_dependencies_preflight_and_apt_bypass() {
+  setup_case browser-deps-apt402-reproduction
+  # 1. Reproduce old apt402 failure with controlled mock
+  run_deploy PANTHEON_DEPLOY_ACTION=prepare MOCK_FAIL_APT_402=true
+  [[ "${RUN_STATUS}" -eq 100 || "${RUN_STATUS}" -ne 0 ]] || \
+    show_deploy_failure "mock apt 402 failure must fail deploy prepare"
+  grep -Fq '402 Payment Required' "${RUN_OUTPUT}" || \
+    show_deploy_failure "deploy output must show the reproduced apt 402 failure"
+  [[ ! -f "${CASE_AUDIT}/prepared-receipt.json" ]] || \
+    show_deploy_failure "prepare must not seal receipt on apt 402 failure"
+
+  setup_case browser-deps-ready-runtime-success
+  # 2. Prove ready runtime success without apt
+  run_deploy PANTHEON_DEPLOY_ACTION=prepare
+  [[ "${RUN_STATUS}" -eq 0 ]] || \
+    show_deploy_failure "ready runtime must succeed deploy prepare without apt"
+  grep -Fxq 'npx' "${CASE_CALL_LOG}" || \
+    show_deploy_failure "npx was not invoked"
+  grep -Fxq 'npx-command:playwright install chromium' "${CASE_CALL_LOG}" || \
+    show_deploy_failure "playwright install chromium was not invoked with locked target without apt"
+  ! grep -Fq -e '--with-deps' "${CASE_CALL_LOG}" || \
+    show_deploy_failure "deploy controller must not use --with-deps"
+  grep -Fxq 'browser-preflight' "${CASE_CALL_LOG}" || \
+    show_deploy_failure "browser launch preflight was not executed"
+  assert_summary_outcome prepared_success
+
+  setup_case browser-deps-missing-runtime-failure
+  # 3. Missing runtime failure fails closed before prepare seal and before switch
+  run_deploy PANTHEON_DEPLOY_ACTION=prepare MOCK_FAIL_BROWSER_PREFLIGHT=true
+  [[ "${RUN_STATUS}" -ne 0 ]] || \
+    show_deploy_failure "missing browser runtime must fail closed"
+  grep -Fq 'browserType.launch' "${RUN_OUTPUT}" || \
+    show_deploy_failure "deploy output must indicate browser launch failure"
+  [[ ! -f "${CASE_AUDIT}/prepared-receipt.json" ]] || \
+    show_deploy_failure "missing browser runtime must not seal prepared receipt"
+  [[ "$(readlink -f "${CASE_LIVE}")" == "${PREVIOUS_TARGET}" ]] || \
+    show_deploy_failure "missing browser runtime must not switch live symlink"
+}
+
 run_test() {
   local name="$1"
   shift
@@ -3434,6 +3508,7 @@ run_test "exact pair protocol write replay idempotent" test_exact_pair_protocol_
 run_test "exact pair protocol default watchdog restore succeeds" test_exact_pair_protocol_default_watchdog_restore_succeeds
 run_test "exact pair protocol late watchdog restore succeeds" test_exact_pair_protocol_late_watchdog_restore_succeeds
 run_test "exact pair protocol non-root runner prepares receipt into read-only release dir" test_exact_pair_protocol_non_root_prepared_receipt_permission
+run_test "browser dependencies avoid routine apt and fail closed on missing runtime" test_browser_dependencies_preflight_and_apt_bypass
 
 echo "deploy contract harness: ${PASSED} passed, ${FAILED} failed"
 if [[ "${FAILED}" -ne 0 ]]; then

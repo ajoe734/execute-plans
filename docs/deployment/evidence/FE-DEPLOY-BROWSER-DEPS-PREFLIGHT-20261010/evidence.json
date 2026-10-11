@@ -1,0 +1,68 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "FE-DEPLOY-BROWSER-DEPS-PREFLIGHT-20261010",
+  "owner": "Antigravity2",
+  "reviewer": "Antigravity",
+  "target_repo": "ajoe734/execute-plans",
+  "merge_target": "dev",
+  "status": "ready-for-independent-exact-head-review",
+  "base_commit": "3b49f1f0cf2f4bb3e898eeb9df7d786016f0e298",
+  "incident_context": {
+    "failed_deploy_run_id": "38029795121",
+    "root_workflow_run_id": "38027568953",
+    "old_gate_run_id": "38028828417",
+    "failure_log": "/tmp/pantheon-l1-l12-independent-monitor-20261008/total-closeout-20261010T0520Z/fe-deploy-38029795121-failed.log lines 77-89",
+    "root_cause": "FE deploy run 38029795121 failed at prepare stage because 'npx playwright install chromium --with-deps' attempted to run global system apt-get update via sudo, which failed with exit code 100 due to an unrelated HTTP 402 Payment Required from Cloudsmith Debian repository for Caddy. Preprovisioned self-hosted VM already has required system libraries.",
+    "resolution": "Removed '--with-deps' from routine ensure_probe_dependencies to avoid unnecessary apt updates on the provisioned host. Added fail-closed browser availability preflight using headless Chromium launch and close before prepare seal and switch."
+  },
+  "scope": [
+    "Use only original locked Playwright Chromium on preprovisioned target and avoid global apt update in routine ensure_probe_dependencies; npm ci and browser availability remain verified.",
+    "Missing Chromium or shared libraries must fail closed before prepare seal and before switch through actual headless browser launch and close; never skip BrowserSmoke or weaken auth readiness lease CAS evidence checks.",
+    "Original deployment contract harness reproduces old apt402 failure with controlled mock and proves ready runtime success without apt and missing runtime failure; all existing cases still executed with honest no-skip results.",
+    "Do not remove Caddy repository or its signature policy or change VM system config; no credentials network provider substitution or hosted mutations by worker; current environment identities from Pantheon latest docs not stale FE AGENTS retired origins.",
+    "Only three declared files and production net increase at most 40; no changes to product UI data or global CI browser deps; reviewer exacthead requiredCI and merge to current FE dev before solecoordinator exactpair qualification and hosted retry.",
+    "Keep actual FE38029795121 failure with Root38027568953 parent and old gate38028828417; newFEmerge requires own fresh gate and exactcandidate pins not reused old qualification."
+  ],
+  "change_budget": {
+    "production_added": 11,
+    "production_deleted": 1,
+    "net_production": 10,
+    "limit": 40
+  },
+  "acceptance_criteria": {
+    "ac1_locked_chromium_no_routine_apt": "Verified: ensure_probe_dependencies runs npm ci and npx playwright install chromium without --with-deps, avoiding routine apt-get update while retaining locked Chromium installation and browser availability verification.",
+    "ac2_fail_closed_headless_browser_launch": "Verified: node -e preflight launches headless Chromium and closes it before prepare receipt seal and before symlink switch. Throws and terminates process with exit code 1 if Chromium executable or OS shared libraries are missing.",
+    "ac3_contract_harness_reproduces_apt402_and_verifies_runtime": "Verified: test_browser_dependencies_preflight_and_apt_bypass reproduces old apt 402 exit code 100 failure with controlled mock, proves prepare succeeds without apt update, and verifies that missing runtime fails closed before receipt seal and switch.",
+    "ac4_preserve_system_config_and_boundaries": "Verified: No changes to Caddy repository, package manager, or VM config. No network/credentials changes or hosted mutations.",
+    "ac5_three_files_budget_under_40": "Verified: Only scripts/deploy-dev-vm.sh, scripts/test-deploy-dev-vm.sh, and docs/deployment/evidence/FE-DEPLOY-BROWSER-DEPS-PREFLIGHT-20261010/evidence.json modified. Production net line increase is well within budget limit of 40 lines.",
+    "ac6_retain_failure_lineage": "Verified: Retained historical failure context (FE deploy 38029795121, Root 38027568953, Gate 38028828417). New FE merge will require fresh gate qualification and exact candidate pins."
+  },
+  "validation": [
+    {
+      "command": "python3 scripts/test-atomic-symlink-cas.py && python3 scripts/test-atomic-release-manifest.py",
+      "result": "Passed (7 atomic CAS tests, 5 release manifest tests OK)",
+      "exit_code": 0
+    },
+    {
+      "command": "PANTHEON_TEST_FILTER=\"browser dependencies avoid routine apt\" bash scripts/test-deploy-dev-vm.sh",
+      "result": "Passed (1/1 focused test passed, reproduced apt 402, proved ready runtime success without apt, proved missing runtime fail closed)",
+      "exit_code": 0
+    },
+    {
+      "command": "PANTHEON_TEST_FILTER=\"post-switch failure rolls back and re-probes\" bash scripts/test-deploy-dev-vm.sh",
+      "result": "Passed (1/1 rollback regression passed)",
+      "exit_code": 0
+    },
+    {
+      "command": "bash scripts/test-deploy-dev-vm.sh",
+      "result": "Passed all 70/70 deployment contract regression tests with zero failures",
+      "exit_code": 0
+    }
+  ],
+  "limitations": [
+    "Source-only corrective change in ajoe734/execute-plans delivery worktree.",
+    "No mutations to VM configuration, APT repositories, or Caddy signature policies.",
+    "No product UI changes or CI workflow alterations.",
+    "Requires independent review approval from Antigravity and CI qualification before merge to dev and deployment retry."
+  ]
+}
