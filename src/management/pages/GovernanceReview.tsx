@@ -50,7 +50,7 @@ export const GovernanceReview = () => {
   }, [id]);
 
   const linkedAudit = useMemo(
-    () => audit.map((x) => normalizeAuditFields(x)).filter((e) => !e?.targetConflict && typeof e?.target === "string" && Boolean(id) && e.target === id).slice(0, 8),
+    () => audit.map((x) => normalizeAuditFields(x)).filter((e) => !e?.targetConflict && !e?.idConflict && typeof e?.target === "string" && Boolean(id) && e.target === id && typeof e?.id === "string" && Boolean(e.id.trim())).slice(0, 8),
     [audit, id],
   );
 

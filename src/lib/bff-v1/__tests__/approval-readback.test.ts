@@ -344,4 +344,122 @@ describe("normalizeAuditFields (Governance owner audit readback)", () => {
     expect(res.action).toBeUndefined();
     expect(res.ts).toBeUndefined();
   });
+
+  it("rejects missing entry_id and id without guessing, leaves id undefined and idConflict false", () => {
+    const missingId = {
+      target_id: "case-missing-id",
+      action_type: "approval.proposed",
+      timestamp: "2026-10-11T03:30:00Z",
+      actor: "operator-8",
+    };
+    const res = normalizeAuditFields(missingId);
+    expect(res.id).toBeUndefined();
+    expect(res.idConflict).toBe(false);
+    expect(res.target).toBe("case-missing-id");
+  });
+
+  it("rejects numeric entry_id (123) without coercing to string, clears entry_id, and sets idConflict", () => {
+    const numericEntryId = {
+      entry_id: 123,
+      target_id: "case-numeric-id",
+      action_type: "approval.proposed",
+      timestamp: "2026-10-11T03:30:00Z",
+      actor: "operator-9",
+    };
+    const res = normalizeAuditFields(numericEntryId);
+    expect(res.id).toBeUndefined();
+    expect(res.entry_id).toBeUndefined();
+    expect(res.idConflict).toBe(true);
+  });
+
+  it("rejects conflicting display id vs canonical entry_id, clears id and entry_id, and sets idConflict", () => {
+    const conflictingId = {
+      id: "display-audit-id",
+      entry_id: "canonical-audit-id",
+      target_id: "case-conflicting-id",
+      action_type: "approval.proposed",
+      timestamp: "2026-10-11T03:30:00Z",
+      actor: "operator-10",
+    };
+    const res = normalizeAuditFields(conflictingId);
+    expect(res.id).toBeUndefined();
+    expect(res.entry_id).toBeUndefined();
+    expect(res.idConflict).toBe(true);
+  });
+
+  it("rejects numeric display id (123) without coercing to string, clears id, and sets idConflict", () => {
+    const numericId = {
+      id: 123,
+      target: "case-numeric-disp-id",
+      action: "approval.proposed",
+      ts: "2026-10-11T03:30:00Z",
+      actor: "operator-11",
+    };
+    const res = normalizeAuditFields(numericId);
+    expect(res.id).toBeUndefined();
+    expect(res.idConflict).toBe(true);
+  });
+
+  it("passes valid supporteddisplay audit row and matching aliases through", () => {
+    const displayOnly = {
+      id: "audit-disp-only",
+      target: "approval-case-1",
+      action: "approval.decided",
+      ts: "2026-10-11T03:31:00Z",
+      actor: "operator-12",
+    };
+    const resDisplay = normalizeAuditFields(displayOnly);
+    expect(resDisplay.id).toBe("audit-disp-only");
+    expect(resDisplay.idConflict).toBe(false);
+
+    const matchingAliases = {
+      id: "audit-matching-id",
+      entry_id: "audit-matching-id",
+      target: "approval-case-2",
+      target_id: "approval-case-2",
+      action: "approval.proposed",
+      action_type: "approval.proposed",
+      ts: "2026-10-11T03:32:00Z",
+      timestamp: "2026-10-11T03:32:00Z",
+      actor: "operator-13",
+    };
+    const resMatching = normalizeAuditFields(matchingAliases);
+    expect(resMatching.id).toBe("audit-matching-id");
+    expect(resMatching.target).toBe("approval-case-2");
+    expect(resMatching.idConflict).toBe(false);
+    expect(resMatching.targetConflict).toBe(false);
+  });
+
+  it("preserves idempotence across repeated normalization of valid, missing, numeric, and conflicting audit rows", () => {
+    const validOwner = {
+      entry_id: "audit-real",
+      target_id: "approval-exact",
+      action_type: "approval.proposed",
+      timestamp: "2026-10-11T00:00:00Z",
+      actor: "owner",
+    };
+    const pass1 = normalizeAuditFields(validOwner);
+    const pass2 = normalizeAuditFields(pass1);
+    expect(pass2).toEqual(pass1);
+
+    const missingId = {
+      target_id: "approval-exact",
+      action_type: "approval.proposed",
+      timestamp: "2026-10-11T00:00:00Z",
+      actor: "owner",
+    };
+    expect(normalizeAuditFields(normalizeAuditFields(missingId))).toEqual(normalizeAuditFields(missingId));
+
+    const numericId = {
+      ...validOwner,
+      entry_id: 123,
+    };
+    expect(normalizeAuditFields(normalizeAuditFields(numericId))).toEqual(normalizeAuditFields(numericId));
+
+    const conflictingId = {
+      ...validOwner,
+      id: "different-audit",
+    };
+    expect(normalizeAuditFields(normalizeAuditFields(conflictingId))).toEqual(normalizeAuditFields(conflictingId));
+  });
 });
