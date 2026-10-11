@@ -7,13 +7,13 @@
   "merge_target": "dev",
   "branch": "task/FE-GOVERNANCE-AUDIT-IDENTITY-FAILCLOSED-20261011",
   "evidence_kind": "local_validation_only",
-  "receipt": "FE831-491-original-audit-identity-negative.json",
-  "note": "Referenced follow-up task following terminal denial of FE-GOVERNANCE-CANONICAL-AUDIT-READBACK-20261011. Preserves genuine PR #831 head 491afee8 and merge 3fa4b1aa. Fixes original AST pipeline admitting current-target audit rows with missing entry_id, numeric 123 entry_id, or conflicting display id vs canonical entry_id. Implements typed read-boundary validation in normalizeAuditFields (dto.ts and operations.ts) and filters out invalid or conflicting identity rows in linkedAudit (GovernanceReview.tsx) so they remain unlinked and are not presented as genuine events. Supported display rows and canonical owner rows continue to render cleanly. All 54 original and 67 prior tests are preserved, with exact identity negative and positive tests added (74 tests in focused suites). Cumulative production delta against 79aacd97 is +26 lines (budget <= 40 satisfied).",
+  "receipt": "FE-owner-error-88b5c615-original-source-check.json",
+  "note": "Referenced follow-up task following terminal denial of FE-GOVERNANCE-CANONICAL-AUDIT-READBACK-20261011. Preserves genuine PR #831 head 491afee8 and merge 3fa4b1aa. Fixes original AST pipeline admitting current-target audit rows with missing entry_id, numeric 123 entry_id, or conflicting display id vs canonical entry_id. Implements typed read-boundary validation in normalizeAuditFields (dto.ts and operations.ts) and filters out invalid or conflicting identity rows in linkedAudit (GovernanceReview.tsx) so they remain unlinked and are not presented as genuine events. Supported display rows and canonical owner rows continue to render cleanly. Error states in GovernanceReview use sanitized generic localized unavailable messages rather than exporting raw exception details or sentinels to state/UI. All 54 original and 67 prior tests are preserved, with exact identity negative and positive tests added (75 tests in focused suites). Cumulative production delta against 79aacd97 is +26 lines (budget <= 40 satisfied).",
   "acceptance_mapping": {
     "AC1_referenced_followup": "References FE-GOVERNANCE-CANONICAL-AUDIT-READBACK-20261011 follow-up after terminal denial; preserves genuine PR831 head 491afee8 and merge 3fa4b1aa with all 67 tests and 1 discovery passing; builds directly upon clean task branch task/FE-GOVERNANCE-AUDIT-IDENTITY-FAILCLOSED-20261011 on dev.",
     "AC2_fix_audit_identity_pipeline": "Fixes complete original AST pipeline in normalizeAuditFields and linkedAudit callback to reject audit rows with missing entry_id, numeric 123 entry_id, or conflicting display id vs canonical entry_id. Those rows remain unlinked and are not presented as genuine audit events. Valid canonical owner and supported display rows continue to render cleanly. Exact opaque target equality and prior target-state conflicts remain failclosed.",
-    "AC3_single_read_boundary_projection": "Single typed read-boundary projection in operations.ts normalizeAuditFields with consistent missing, invalid, and conflicting identity handling and idempotence. Outlawed permissive numeric coercion or unknown rows as proof. Governance case details remain visible when audit data is unavailable or empty.",
-    "AC4_preserve_tests_and_add_identity_negatives": "Preserves all 54 original and 67 prior tests, adding exact identity negatives (missing entry_id, numeric entry_id, conflicting id vs entry_id) and valid display/alias rows (totaling 74 passing tests in the touched test suites). Retains failure truth without skips or test harness weakening.",
+    "AC3_single_read_boundary_projection": "Single typed read-boundary projection in operations.ts normalizeAuditFields with consistent missing, invalid, and conflicting identity handling and idempotence. Outlawed permissive numeric coercion or unknown rows as proof. Governance case details remain visible when audit data is unavailable or empty. GovernanceReview rejection handling maintains a safe boolean error state and renders a localized generic unavailable message, avoiding raw downstream error/sentinel disclosure.",
+    "AC4_preserve_tests_and_add_identity_negatives": "Preserves all 54 original and 67 prior tests, adding exact identity negatives (missing entry_id, numeric entry_id, conflicting id vs entry_id), valid display/alias rows, and error privacy sentinel-notvisible regression tests (totaling 75 passing tests in the touched test suites). Retains failure truth without skips or test harness weakening.",
     "AC5_scoped_artifacts_and_line_budget": "Touches only the six declared files: src/lib/bff-v1/operations.ts, src/lib/bff-v1/dto.ts, src/lib/bff-v1/__tests__/approval-readback.test.ts, src/management/pages/GovernanceReview.tsx, src/test/governance-owner-readonly-detail.test.tsx, and docs/deployment/evidence/FE-GOVERNANCE-AUDIT-IDENTITY-FAILCLOSED-20261011/evidence.json. Cumulative production delta against 79aacd97 is +26 net lines (43 insertions, 17 deletions), satisfying the <= 40 budget."
   },
   "local_validation": {
@@ -23,12 +23,16 @@
         "result": "6/6 cases pass (valid_owner: 1, missing_event_identity: 0, numeric_event_identity: 0, conflicting_event_identity: 0, foreign_target: 0, conflicting_target: 0)"
       },
       {
+        "command": "FROZEN_ROOT=/tmp/pantheon-worker-worktrees/execute-plans/fe-governance-audit-identity-failclosed-20261011 node /tmp/pantheon-closeout-continue-20261011T0328Z/FE-original-owner-error-privacy-helper.cjs",
+        "result": "raw_message_in_state: false, original_JSX_directly_renders_loadError: false, state_value: true"
+      },
+      {
         "command": "npx vitest run src/lib/bff-v1/__tests__/approval-readback.test.ts",
         "result": "30 passed (30)"
       },
       {
         "command": "npx vitest run src/test/governance-owner-readonly-detail.test.tsx",
-        "result": "14 passed (14)"
+        "result": "15 passed (15)"
       },
       {
         "command": "npx vitest run src/test/workshop-persistence-hosted-policy.test.ts",
@@ -36,7 +40,7 @@
       },
       {
         "command": "npm run test",
-        "result": "217 test files passed (217), 2397 passed (2397)"
+        "result": "217 test files passed (217), 2398 passed (2398)"
       },
       {
         "command": "npx tsc -p tsconfig.app.json --noEmit",

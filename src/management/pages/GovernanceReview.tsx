@@ -35,15 +35,15 @@ export const GovernanceReview = () => {
   const [req, setReq] = useState<ApprovalRequest | null>(null);
   const [audit, setAudit] = useState<AuditEvent[]>([]);
   const [decision, setDecision] = useState<Decision | null>(null);
-  const [loading, setLoading] = useState(true), [loadError, setLoadError] = useState<string | null>(null), [auditError, setAuditError] = useState(false);
+  const [loading, setLoading] = useState(true), [loadError, setLoadError] = useState(false), [auditError, setAuditError] = useState(false);
 
   const reload = () => bffV1.approvals.get(id).then((r) => setReq(r ?? null));
 
   useEffect(() => {
     let active = true;
-    setLoading(true); setLoadError(null); setAuditError(false);
+    setLoading(true); setLoadError(false); setAuditError(false);
     bffV1.approvals.get(id).then((r) => { if (active) setReq(r ?? null); }, (err) => {
-      if (active) { setReq(null); if (!(err instanceof BffError && err.status === 404)) setLoadError(err instanceof Error ? err.message : String(err)); }
+      if (active) { setReq(null); if (!(err instanceof BffError && err.status === 404)) setLoadError(true); }
     }).finally(() => { if (active) setLoading(false); });
     bffV1.audit.list().then((a) => { if (active) setAudit(a.map((x) => normalizeAuditFields(x))); }, () => { if (active) { setAudit([]); setAuditError(true); } });
     return () => { active = false; };
@@ -55,7 +55,7 @@ export const GovernanceReview = () => {
   );
 
   if (loading) return <><PageHeader title={t("common.loading", { defaultValue: "Loading..." })} /><PageBody><Card className="p-6 text-sm text-muted-foreground">{t("common.loading", { defaultValue: "Loading..." })}</Card></PageBody></>;
-  if (loadError) return <><PageHeader title={t("common.error", { defaultValue: "Error" })} /><PageBody><Card className="p-6 text-sm text-destructive">{loadError}</Card></PageBody></>;
+  if (loadError) return <><PageHeader title={t("common.error", { defaultValue: "Error" })} /><PageBody><Card className="p-6 text-sm text-destructive">{t("governance.unavailable", { defaultValue: "Approval request unavailable" })}</Card></PageBody></>;
 
   if (!req) {
     return (

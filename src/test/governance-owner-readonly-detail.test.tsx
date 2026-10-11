@@ -413,9 +413,22 @@ describe("GovernanceReview owner-bound read-only detail", () => {
     mocks.approvalGet.mockRejectedValue(new Error("503 Service Unavailable"));
     renderReview(caseId);
 
-    expect(await screen.findByText("503 Service Unavailable")).toBeInTheDocument();
+    expect(await screen.findByText("Approval request unavailable")).toBeInTheDocument();
+    expect(screen.queryByText("503 Service Unavailable")).not.toBeInTheDocument();
     expect(screen.queryByText("Approval request not found")).not.toBeInTheDocument();
     expect(screen.queryByText("It may have been resolved, withdrawn, or archived.")).not.toBeInTheDocument();
+    expect(mocks.decideApproval).not.toHaveBeenCalled();
+  });
+
+  it("does not leak raw downstream exception details or sentinel messages to the error UI", async () => {
+    const caseId = "approval-owner-sentinel-case";
+    const sentinel = "SOURCE_ONLY_INTERNAL_ERROR_DETAIL_SENTINEL";
+    mocks.approvalGet.mockRejectedValue(new Error(sentinel));
+    renderReview(caseId);
+
+    expect(await screen.findByText("Approval request unavailable")).toBeInTheDocument();
+    expect(screen.queryByText(sentinel)).not.toBeInTheDocument();
+    expect(screen.queryByText("Approval request not found")).not.toBeInTheDocument();
     expect(mocks.decideApproval).not.toHaveBeenCalled();
   });
 
