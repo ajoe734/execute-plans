@@ -415,3 +415,459 @@ describe("FE-WORKSHOP-SAME-RESOURCE-RESUME-20261010 existing-resource resume and
   });
 });
 
+describe("FE-GOVERNANCE-PAPER-CASE-READONLY-HARNESS-20261010 optional governance case read-only contract", () => {
+  it("validates governance case inputs and fails closed on missing, malformed, or partial inputs", () => {
+    const idRegex = /^[a-zA-Z0-9_.:-]+$/;
+
+    const validate = (
+      id: string,
+      expectedVersionStr: string,
+      targetDigestOrId: string,
+    ) => {
+      const trimmedId = id.trim();
+      const trimmedVersion = expectedVersionStr.trim();
+      const trimmedDigest = targetDigestOrId.trim();
+
+      if (!trimmedId && !trimmedVersion && !trimmedDigest) {
+        return {
+          valid: false,
+          reason: "governance case id, expected version, and target digest/id are all missing",
+        };
+      }
+      if (!trimmedId) {
+        return { valid: false, reason: "missing governance case id" };
+      }
+      if (!trimmedVersion) {
+        return { valid: false, reason: "missing governance case expected version" };
+      }
+      if (!trimmedDigest) {
+        return { valid: false, reason: "missing governance case target digest or id" };
+      }
+      if (!idRegex.test(trimmedId)) {
+        return {
+          valid: false,
+          reason: `malformed governance case id "${trimmedId}"; must match canonical identifier format`,
+        };
+      }
+      if (!/^[0-9]+$/.test(trimmedVersion) || parseInt(trimmedVersion, 10) <= 0) {
+        return {
+          valid: false,
+          reason: `malformed governance case expected version "${trimmedVersion}"; must be a positive integer`,
+        };
+      }
+      if (!idRegex.test(trimmedDigest)) {
+        return {
+          valid: false,
+          reason: `malformed governance case target digest or id "${trimmedDigest}"; must be 64-hex SHA256 or canonical identifier`,
+        };
+      }
+      return {
+        valid: true,
+        id: trimmedId,
+        expectedVersion: parseInt(trimmedVersion, 10),
+        targetDigestOrId: trimmedDigest,
+      };
+    };
+
+    // All missing
+    expect(validate("", "", "").valid).toBe(false);
+
+    // Partial input cases
+    expect(validate("approval-paper-human-quorum-closeout-20261010-v1", "", "").valid).toBe(false);
+    expect(validate("", "1", "").valid).toBe(false);
+    expect(validate("", "", "e9c7c073c544cd453e2ac3d62b4acb4be7a47f5010a01a5498c40c284238a39b").valid).toBe(false);
+    expect(validate("approval-paper-human-quorum-closeout-20261010-v1", "1", "").valid).toBe(false);
+    expect(validate("approval-paper-human-quorum-closeout-20261010-v1", "", "e9c7c073c544cd453e2ac3d62b4acb4be7a47f5010a01a5498c40c284238a39b").valid).toBe(false);
+    expect(validate("", "1", "e9c7c073c544cd453e2ac3d62b4acb4be7a47f5010a01a5498c40c284238a39b").valid).toBe(false);
+
+    // Malformed ID
+    expect(validate("invalid id with spaces", "1", "e9c7c073c544cd453e2ac3d62b4acb4be7a47f5010a01a5498c40c284238a39b").valid).toBe(false);
+
+    // Malformed version
+    expect(validate("approval-paper-human-quorum-closeout-20261010-v1", "0", "e9c7c073c544cd453e2ac3d62b4acb4be7a47f5010a01a5498c40c284238a39b").valid).toBe(false);
+    expect(validate("approval-paper-human-quorum-closeout-20261010-v1", "-1", "e9c7c073c544cd453e2ac3d62b4acb4be7a47f5010a01a5498c40c284238a39b").valid).toBe(false);
+    expect(validate("approval-paper-human-quorum-closeout-20261010-v1", "version1", "e9c7c073c544cd453e2ac3d62b4acb4be7a47f5010a01a5498c40c284238a39b").valid).toBe(false);
+
+    // Malformed target
+    expect(validate("approval-paper-human-quorum-closeout-20261010-v1", "1", "bad digest with spaces!").valid).toBe(false);
+
+    // Valid canonical pending paper case target
+    const validWithDigest = validate(
+      "approval-paper-human-quorum-closeout-20261010-v1",
+      "1",
+      "e9c7c073c544cd453e2ac3d62b4acb4be7a47f5010a01a5498c40c284238a39b",
+    );
+    expect(validWithDigest.valid).toBe(true);
+    if (validWithDigest.valid) {
+      expect(validWithDigest.id).toBe("approval-paper-human-quorum-closeout-20261010-v1");
+      expect(validWithDigest.expectedVersion).toBe(1);
+      expect(validWithDigest.targetDigestOrId).toBe("e9c7c073c544cd453e2ac3d62b4acb4be7a47f5010a01a5498c40c284238a39b");
+    }
+
+    const validWithPoolId = validate(
+      "approval-paper-human-quorum-closeout-20261010-v1",
+      "1",
+      "pool-paper-human-quorum-closeout-20261010-v1",
+    );
+    expect(validWithPoolId.valid).toBe(true);
+    if (validWithPoolId.valid) {
+      expect(validWithPoolId.targetDigestOrId).toBe("pool-paper-human-quorum-closeout-20261010-v1");
+    }
+
+    // Spec source contracts
+    expect(specSource).toContain("validateGovernanceCaseInputs");
+    expect(specSource).toContain("GOVERNANCE_CASE_ID");
+    expect(specSource).toContain("GOVERNANCE_CASE_EXPECTED_VERSION");
+    expect(specSource).toContain("GOVERNANCE_CASE_TARGET_DIGEST");
+    expect(specSource).toContain("hasGovernanceInputs");
+  });
+
+  type JsonRecord = Record<string, unknown>;
+  function asRecord(value: unknown): JsonRecord {
+    return value && typeof value === "object" && !Array.isArray(value)
+      ? (value as JsonRecord)
+      : {};
+  }
+
+  function extractAndValidateCanonicalGovernanceTarget(
+    data: JsonRecord,
+    expectedTarget: string,
+  ): {
+    canonicalTargetId: string | null;
+    canonicalTargetVersion: string | null;
+    matchedBy: "target_id" | "target_version";
+  } {
+    const trimmedExpected = expectedTarget.trim();
+    if (!trimmedExpected) {
+      throw new Error("expectedTarget must be non-empty");
+    }
+
+    const topTargetId =
+      typeof data.target_id === "string" && data.target_id.trim()
+        ? data.target_id.trim()
+        : typeof data.targetId === "string" && data.targetId.trim()
+          ? data.targetId.trim()
+          : null;
+
+    const topTargetVersion =
+      typeof data.target_version === "string" && data.target_version.trim()
+        ? data.target_version.trim()
+        : typeof data.targetVersion === "string" && data.targetVersion.trim()
+          ? data.targetVersion.trim()
+          : null;
+
+    const decisionContext = asRecord(
+      data.decision_context ?? data.decisionContext,
+    );
+    const govChain = asRecord(
+      decisionContext.governance_chain ?? decisionContext.governanceChain,
+    );
+
+    const chainTargetId =
+      typeof govChain.target_id === "string" && govChain.target_id.trim()
+        ? govChain.target_id.trim()
+        : typeof govChain.targetId === "string" && govChain.targetId.trim()
+          ? govChain.targetId.trim()
+          : null;
+
+    const chainTargetVersion =
+      typeof govChain.target_version === "string" && govChain.target_version.trim()
+        ? govChain.target_version.trim()
+        : typeof govChain.targetVersion === "string" && govChain.targetVersion.trim()
+          ? govChain.targetVersion.trim()
+          : null;
+
+    if (
+      topTargetId &&
+      chainTargetId &&
+      topTargetId.toLowerCase() !== chainTargetId.toLowerCase()
+    ) {
+      throw new Error(
+        `Governance case target_id conflict: top-level "${topTargetId}" != governance_chain "${chainTargetId}"`,
+      );
+    }
+
+    if (
+      topTargetVersion &&
+      chainTargetVersion &&
+      topTargetVersion.toLowerCase() !== chainTargetVersion.toLowerCase()
+    ) {
+      throw new Error(
+        `Governance case target_version conflict: top-level "${topTargetVersion}" != governance_chain "${chainTargetVersion}"`,
+      );
+    }
+
+    const canonicalTargetId = topTargetId ?? chainTargetId;
+    const canonicalTargetVersion = topTargetVersion ?? chainTargetVersion;
+
+    if (!canonicalTargetId && !canonicalTargetVersion) {
+      throw new Error(
+        "Governance case does not declare canonical target_id or target_version in supported paths (top-level or decision_context.governance_chain)",
+      );
+    }
+
+    const isSha256 = /^[a-fA-F0-9]{64}$/.test(trimmedExpected);
+    const expectedLower = trimmedExpected.toLowerCase();
+
+    if (isSha256) {
+      if (canonicalTargetVersion) {
+        if (canonicalTargetVersion.toLowerCase() !== expectedLower) {
+          throw new Error(
+            `Governance case target_version mismatch: expected "${trimmedExpected}", got "${canonicalTargetVersion}" (conflicting canonical target)`,
+          );
+        }
+        return {
+          canonicalTargetId,
+          canonicalTargetVersion,
+          matchedBy: "target_version",
+        };
+      }
+      if (canonicalTargetId && canonicalTargetId.toLowerCase() === expectedLower) {
+        return {
+          canonicalTargetId,
+          canonicalTargetVersion,
+          matchedBy: "target_id",
+        };
+      }
+      throw new Error(
+        `Governance case target digest mismatch: expected "${trimmedExpected}" was not matched by canonical target_version or target_id`,
+      );
+    } else {
+      if (canonicalTargetId) {
+        if (canonicalTargetId.toLowerCase() !== expectedLower) {
+          throw new Error(
+            `Governance case target_id mismatch: expected "${trimmedExpected}", got "${canonicalTargetId}" (conflicting canonical target)`,
+          );
+        }
+        return {
+          canonicalTargetId,
+          canonicalTargetVersion,
+          matchedBy: "target_id",
+        };
+      }
+      if (
+        canonicalTargetVersion &&
+        canonicalTargetVersion.toLowerCase() === expectedLower
+      ) {
+        return {
+          canonicalTargetId,
+          canonicalTargetVersion,
+          matchedBy: "target_version",
+        };
+      }
+      throw new Error(
+        `Governance case target id mismatch: expected "${trimmedExpected}" was not matched by canonical target_id or target_version`,
+      );
+    }
+  }
+
+  it("validates canonical target_version and target_id from top-level and decision_context.governance_chain with exact equality", () => {
+    const validCase = {
+      id: "approval-paper-human-quorum-closeout-20261010-v1",
+      target_id: "pool-paper-human-quorum-closeout-20261010-v1",
+      target_version: "e9c7c073c544cd453e2ac3d62b4acb4be7a47f5010a01a5498c40c284238a39b",
+      decision_context: {
+        governance_chain: {
+          target_id: "pool-paper-human-quorum-closeout-20261010-v1",
+          target_version: "e9c7c073c544cd453e2ac3d62b4acb4be7a47f5010a01a5498c40c284238a39b",
+        },
+      },
+    };
+
+    // Match by 64-hex SHA-256 target_version
+    const byVersion = extractAndValidateCanonicalGovernanceTarget(
+      validCase,
+      "e9c7c073c544cd453e2ac3d62b4acb4be7a47f5010a01a5498c40c284238a39b",
+    );
+    expect(byVersion.matchedBy).toBe("target_version");
+    expect(byVersion.canonicalTargetVersion).toBe(
+      "e9c7c073c544cd453e2ac3d62b4acb4be7a47f5010a01a5498c40c284238a39b",
+    );
+    expect(byVersion.canonicalTargetId).toBe(
+      "pool-paper-human-quorum-closeout-20261010-v1",
+    );
+
+    // Match by canonical target_id
+    const byId = extractAndValidateCanonicalGovernanceTarget(
+      validCase,
+      "pool-paper-human-quorum-closeout-20261010-v1",
+    );
+    expect(byId.matchedBy).toBe("target_id");
+    expect(byId.canonicalTargetId).toBe(
+      "pool-paper-human-quorum-closeout-20261010-v1",
+    );
+
+    // Nested-only governance_chain resolution
+    const nestedOnly = {
+      id: "approval-paper-human-quorum-closeout-20261010-v1",
+      decision_context: {
+        governance_chain: {
+          target_id: "pool-paper-human-quorum-closeout-20261010-v1",
+          target_version: "e9c7c073c544cd453e2ac3d62b4acb4be7a47f5010a01a5498c40c284238a39b",
+        },
+      },
+    };
+    const nestedResult = extractAndValidateCanonicalGovernanceTarget(
+      nestedOnly,
+      "e9c7c073c544cd453e2ac3d62b4acb4be7a47f5010a01a5498c40c284238a39b",
+    );
+    expect(nestedResult.matchedBy).toBe("target_version");
+    expect(nestedResult.canonicalTargetVersion).toBe(
+      "e9c7c073c544cd453e2ac3d62b4acb4be7a47f5010a01a5498c40c284238a39b",
+    );
+  });
+
+  it("strictly rejects conflicting canonical targets between top-level and decision_context.governance_chain", () => {
+    const conflictingTargetId = {
+      id: "approval-case-1",
+      target_id: "pool-alpha",
+      decision_context: {
+        governance_chain: {
+          target_id: "pool-beta",
+        },
+      },
+    };
+    expect(() =>
+      extractAndValidateCanonicalGovernanceTarget(conflictingTargetId, "pool-alpha"),
+    ).toThrowError(/Governance case target_id conflict/);
+
+    const conflictingTargetVersion = {
+      id: "approval-case-1",
+      target_version: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      decision_context: {
+        governance_chain: {
+          target_version: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        },
+      },
+    };
+    expect(() =>
+      extractAndValidateCanonicalGovernanceTarget(
+        conflictingTargetVersion,
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      ),
+    ).toThrowError(/Governance case target_version conflict/);
+  });
+
+  it("strictly rejects wrong canonical targets even when rationale or free-text mentions expected digest (review negative counter proof)", () => {
+    // Reviewer negative counter: case has canonical target_id OTHERpool and target_version f64,
+    // but rationale mentions expected e9c7 digest. Must FAIL, not accept via free-text fallback.
+    const wrongTargetCase = {
+      id: "approval-paper-human-quorum-closeout-20261010-v1",
+      version: 1,
+      state: "pending",
+      target_id: "OTHERpool",
+      target_version: "f64",
+      subject: "Paper approval mentioning e9c7c073c544cd453e2ac3d62b4acb4be7a47f5010a01a5498c40c284238a39b",
+      rationale: "Target e9c7c073c544cd453e2ac3d62b4acb4be7a47f5010a01a5498c40c284238a39b mentioned in notes only",
+      diffSummary: "Pool e9c7c073c544cd453e2ac3d62b4acb4be7a47f5010a01a5498c40c284238a39b mentioned in diff",
+      decision_context: {
+        governance_chain: {
+          target_id: "OTHERpool",
+          target_version: "f64",
+        },
+      },
+    };
+
+    // When expectedTarget is the 64-hex digest e9c7...
+    expect(() =>
+      extractAndValidateCanonicalGovernanceTarget(
+        wrongTargetCase,
+        "e9c7c073c544cd453e2ac3d62b4acb4be7a47f5010a01a5498c40c284238a39b",
+      ),
+    ).toThrowError(/Governance case target_version mismatch/);
+
+    // When expectedTarget is pool-paper-human-quorum-closeout-20261010-v1
+    expect(() =>
+      extractAndValidateCanonicalGovernanceTarget(
+        wrongTargetCase,
+        "pool-paper-human-quorum-closeout-20261010-v1",
+      ),
+    ).toThrowError(/Governance case target_id mismatch/);
+
+    // Case with no canonical target fields declared
+    const noCanonicalTarget = {
+      id: "approval-case-no-targets",
+      rationale: "e9c7c073c544cd453e2ac3d62b4acb4be7a47f5010a01a5498c40c284238a39b",
+    };
+    expect(() =>
+      extractAndValidateCanonicalGovernanceTarget(
+        noCanonicalTarget,
+        "e9c7c073c544cd453e2ac3d62b4acb4be7a47f5010a01a5498c40c284238a39b",
+      ),
+    ).toThrowError(/does not declare canonical target_id or target_version/);
+  });
+
+  it("spec source contract: zero governance write/vote calls, never clicking decision buttons, and no vote authority inference", () => {
+    // Absolutely NO governance accept-review/decide/vote/activate/rebalance POST/PATCH/DELETE
+    expect(specSource).not.toContain("decideApproval");
+    expect(specSource).not.toContain("/bff/approvals/batch-decide");
+    expect(specSource).not.toContain('page.getByRole("button", { name: "Approve" })');
+    expect(specSource).not.toContain('page.getByRole("button", { name: "Reject" })');
+    expect(specSource).not.toContain("canApprove");
+    expect(specSource).not.toContain("allowedActions");
+
+    // Only GET /bff/approvals is performed
+    expect(specSource).toContain("GET");
+    expect(specSource).toContain("/bff/approvals/");
+    const specAfterImport = specSource.slice(specSource.indexOf('test("real UI login'));
+    expect(specAfterImport).not.toContain('"POST", "/bff/approvals');
+    expect(specAfterImport).not.toContain('"PATCH", "/bff/approvals');
+    expect(specAfterImport).not.toContain('"DELETE", "/bff/approvals');
+  });
+
+  it("spec source contract: reports real stale outcome on version mismatch and never resets or resaves fixture", () => {
+    expect(specSource).toContain("Governance case version mismatch");
+    expect(specSource).toContain("case changed on owner (stale outcome)");
+    expect(specSource).not.toContain("resetFixture");
+    expect(specSource).not.toContain("resaveFixture");
+  });
+
+  it("spec source contract: navigates /management/governance/{id} route and asserts actually visible owner-bound detail", () => {
+    expect(specSource).toContain("async function navigateGovernanceCaseUi");
+    expect(specSource).toContain("/management/governance/");
+    expect(specSource).toContain("找不到審批請求");
+    expect(specSource).toContain('"assert_governance_case_owner_readback_first"');
+    expect(specSource).toContain('"navigate_governance_case_ui_first"');
+    expect(specSource).toContain('"navigate_governance_case_ui_second"');
+    expect(specSource).toContain('"assert_fresh_context_governance_case_owner_readback"');
+    expect(specSource).toContain("initialGovVersion");
+    expect(specSource).toContain("initialGovDigest");
+    expect(specSource).toContain(
+      "fresh context governance case version must match initial version",
+    );
+    expect(specSource).toContain(
+      "fresh context governance case content digest must match initial digest",
+    );
+    // Explicit canonical target validation and conflict rejection
+    expect(specSource).toContain("extractAndValidateCanonicalGovernanceTarget");
+    expect(specSource).toContain("decision_context");
+    expect(specSource).toContain("governance_chain");
+    expect(specSource).toContain("Governance case target_id conflict");
+    expect(specSource).toContain("Governance case target_version conflict");
+    // navigateGovernanceCaseUi asserts actual owner-bound detail/state/version with target, not generic error/ID only
+    expect(specSource).toContain("opts.expectedState");
+    expect(specSource).toContain("opts.targetDigestOrId");
+    expect(specSource).toContain("opts.expectedVersion");
+    expect(specSource).toContain("opts.expectedSubject");
+    expect(specSource).not.toContain("serialized.includes(targetLower)");
+  });
+
+  it("workflow source contract: declares optional governance case inputs and validates canonical identifier formats", () => {
+    expect(workflowSource).toContain("governance_case_id:");
+    expect(workflowSource).toContain("governance_case_expected_version:");
+    expect(workflowSource).toContain("governance_case_target_digest:");
+    expect(workflowSource).toContain("GOVERNANCE_CASE_ID:");
+    expect(workflowSource).toContain("GOVERNANCE_CASE_EXPECTED_VERSION:");
+    expect(workflowSource).toContain("GOVERNANCE_CASE_TARGET_DIGEST:");
+    expect(workflowSource).toContain(
+      '[[ "${GOVERNANCE_CASE_ID:-}" =~ ^[a-zA-Z0-9_.:-]+$ ]]',
+    );
+    expect(workflowSource).toContain(
+      '[[ "${GOVERNANCE_CASE_EXPECTED_VERSION:-}" =~ ^[0-9]+$ ]]',
+    );
+    expect(workflowSource).toContain(
+      '[[ "${GOVERNANCE_CASE_TARGET_DIGEST:-}" =~ ^[a-zA-Z0-9_.:-]+$ ]]',
+    );
+  });
+});
+
