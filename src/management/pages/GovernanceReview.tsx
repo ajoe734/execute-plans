@@ -12,7 +12,7 @@ import { StatusBadge } from "@/platform/components/StatusBadge";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
 import { bffWrites } from "@/lib/bff-v1/writes";
 import { commandReceiptDescription } from "@/lib/bff-v1/commandReceipt";
-import type { ApprovalRequest, AuditEvent } from "@/lib/bff-v1";
+import { normalizeAuditFields, type ApprovalRequest, type AuditEvent } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { usePermissions } from "@/lib/usePermissions";
 import { Field } from "./ObjectDetailLayout";
@@ -35,18 +35,27 @@ export const GovernanceReview = () => {
   const [req, setReq] = useState<ApprovalRequest | null>(null);
   const [audit, setAudit] = useState<AuditEvent[]>([]);
   const [decision, setDecision] = useState<Decision | null>(null);
+  const [loading, setLoading] = useState(true), [loadError, setLoadError] = useState<string | null>(null), [auditError, setAuditError] = useState(false);
 
   const reload = () => bffV1.approvals.get(id).then((r) => setReq(r ?? null));
 
   useEffect(() => {
-    Promise.all([bffV1.approvals.get(id), bffV1.audit.list()])
-      .then(([r, a]) => { setReq(r ?? null); setAudit(a); });
+    let active = true;
+    setLoading(true); setLoadError(null); setAuditError(false);
+    bffV1.approvals.get(id).then((r) => { if (active) setReq(r ?? null); }, (err) => {
+      if (active) { setReq(null); if (!(err instanceof BffError && err.status === 404)) setLoadError(err instanceof Error ? err.message : String(err)); }
+    }).finally(() => { if (active) setLoading(false); });
+    bffV1.audit.list().then((a) => { if (active) setAudit(a.map((x) => normalizeAuditFields(x))); }, () => { if (active) { setAudit([]); setAuditError(true); } });
+    return () => { active = false; };
   }, [id]);
 
   const linkedAudit = useMemo(
-    () => audit.filter((e) => e.target.includes(id) || (req && e.target.includes(req.subject.split(" ")[0]))).slice(0, 8),
-    [audit, id, req],
+    () => audit.map((x) => normalizeAuditFields(x)).filter((e) => !e?.targetConflict && typeof e?.target === "string" && Boolean(id) && e.target === id).slice(0, 8),
+    [audit, id],
   );
+
+  if (loading) return <><PageHeader title={t("common.loading", { defaultValue: "Loading..." })} /><PageBody><Card className="p-6 text-sm text-muted-foreground">{t("common.loading", { defaultValue: "Loading..." })}</Card></PageBody></>;
+  if (loadError) return <><PageHeader title={t("common.error", { defaultValue: "Error" })} /><PageBody><Card className="p-6 text-sm text-destructive">{loadError}</Card></PageBody></>;
 
   if (!req) {
     return (
@@ -175,14 +184,12 @@ export const GovernanceReview = () => {
           </Card>
         </div>
 
-        {/* Bottom — Audit Timeline */}
+        {auditError && <div className="text-xs text-muted-foreground mb-2">{t("governance.auditUnavailable", { defaultValue: "Audit history unavailable" })}</div>}
         <AuditTimeline
           title={t("governance.auditTimeline")}
           entries={[
             { ts: req.createdAt, actor: req.requester, action: `request.${req.kind}`, target: req.id },
-            ...linkedAudit.map((e) => ({
-              id: e.id, ts: e.ts, actor: e.actor, action: e.action, target: e.target, memo: e.memo,
-            })),
+            ...linkedAudit.map((e) => ({ id: e.id ?? e.entry_id, ts: e.ts ?? e.timestamp ?? "", actor: e.actor ?? "", action: e.action ?? e.action_type ?? "", target: e.target, memo: e.memo })),
           ]}
         />
 
