@@ -137,13 +137,13 @@ export function normalizeAuditFields<T = AuditEvent>(raw: unknown): T {
   const [eid, bEid] = pair(r.entry_id, r.entryId), [id, bId] = pair(r.id, eid);
   const [tid, bTid] = pair(r.target_id, r.targetId), [target, bTarget] = pair(r.target, tid);
   const [aid, bAid] = pair(r.action_type, r.actionType), [action, bAction] = pair(r.action, aid);
-  const [ts, badTs] = pair(r.ts, r.timestamp), [actor, badActor] = chk(r.actor), badTarget = Boolean(bTid || bTarget || r.targetConflict);
+  const [ts, badTs] = pair(r.ts, r.timestamp), [actor, badActor] = chk(r.actor), badTarget = Boolean(bTid || bTarget || r.targetConflict), badId = Boolean(bEid || bId || r.idConflict);
   const out: Record<string, unknown> = {
-    ...r, id: bEid || bId ? undefined : id, target: badTarget ? undefined : target, action: bAid || bAction ? undefined : action,
-    ts: badTs ? undefined : ts, actor: badActor ? undefined : actor, targetConflict: badTarget,
+    ...r, id: badId ? undefined : id, target: badTarget ? undefined : target, action: bAid || bAction ? undefined : action,
+    ts: badTs ? undefined : ts, actor: badActor ? undefined : actor, targetConflict: badTarget, idConflict: badId,
   };
   if (badTarget) { delete out.target_id; delete out.targetId; }
-  if (bEid || bId) { delete out.entry_id; delete out.entryId; }
+  if (badId) { delete out.entry_id; delete out.entryId; delete out.id; }
   if (bAid || bAction) { delete out.action_type; delete out.actionType; }
   if (badTs) delete out.timestamp;
   return out as T;

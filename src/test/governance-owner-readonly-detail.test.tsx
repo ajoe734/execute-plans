@@ -413,9 +413,22 @@ describe("GovernanceReview owner-bound read-only detail", () => {
     mocks.approvalGet.mockRejectedValue(new Error("503 Service Unavailable"));
     renderReview(caseId);
 
-    expect(await screen.findByText("503 Service Unavailable")).toBeInTheDocument();
+    expect(await screen.findByText("Approval request unavailable")).toBeInTheDocument();
+    expect(screen.queryByText("503 Service Unavailable")).not.toBeInTheDocument();
     expect(screen.queryByText("Approval request not found")).not.toBeInTheDocument();
     expect(screen.queryByText("It may have been resolved, withdrawn, or archived.")).not.toBeInTheDocument();
+    expect(mocks.decideApproval).not.toHaveBeenCalled();
+  });
+
+  it("does not leak raw downstream exception details or sentinel messages to the error UI", async () => {
+    const caseId = "approval-owner-sentinel-case";
+    const sentinel = "SOURCE_ONLY_INTERNAL_ERROR_DETAIL_SENTINEL";
+    mocks.approvalGet.mockRejectedValue(new Error(sentinel));
+    renderReview(caseId);
+
+    expect(await screen.findByText("Approval request unavailable")).toBeInTheDocument();
+    expect(screen.queryByText(sentinel)).not.toBeInTheDocument();
+    expect(screen.queryByText("Approval request not found")).not.toBeInTheDocument();
     expect(mocks.decideApproval).not.toHaveBeenCalled();
   });
 
@@ -426,6 +439,70 @@ describe("GovernanceReview owner-bound read-only detail", () => {
 
     expect(await screen.findByText("Approval request not found")).toBeInTheDocument();
     expect(screen.getByText("It may have been resolved, withdrawn, or archived.")).toBeInTheDocument();
+    expect(mocks.decideApproval).not.toHaveBeenCalled();
+  });
+
+  it("does not link or present current-target audit rows with missing, numeric, or conflicting event identity", async () => {
+    const caseId = "approval-invalid-identity-audit-case";
+    const genuineCase: ApprovalRequest = {
+      id: caseId,
+      kind: "Strategy",
+      subject: "Invalid Identity Audit Case",
+      requester: "operator-human-5",
+      state: "pending",
+      version: 1,
+      targetId: "pool-safe",
+      targetVersion: "ver-safe",
+      riskLevel: "medium",
+      createdAt: "2026-10-10T12:00:00Z",
+    };
+
+    mocks.approvalGet.mockResolvedValue(genuineCase);
+    mocks.auditList.mockResolvedValue([
+      {
+        target_id: caseId,
+        action_type: "approval.missing_identity",
+        timestamp: "2026-10-10T12:05:00Z",
+        actor: "owner",
+      },
+      {
+        entry_id: 123,
+        target_id: caseId,
+        action_type: "approval.numeric_identity",
+        timestamp: "2026-10-10T12:06:00Z",
+        actor: "owner",
+      },
+      {
+        id: "conflicting-display-id",
+        entry_id: "canonical-entry-id",
+        target_id: caseId,
+        action_type: "approval.conflicting_identity",
+        timestamp: "2026-10-10T12:07:00Z",
+        actor: "owner",
+      },
+      {
+        entry_id: "audit-valid-owner-entry",
+        target_id: caseId,
+        action_type: "approval.valid_owner_action",
+        timestamp: "2026-10-10T12:08:00Z",
+        actor: "owner",
+      },
+      {
+        id: "audit-valid-display-entry",
+        target: caseId,
+        action: "approval.valid_display_action",
+        ts: "2026-10-10T12:09:00Z",
+        actor: "owner",
+      },
+    ]);
+    renderReview(caseId);
+
+    expect(await screen.findByText("Invalid Identity Audit Case")).toBeInTheDocument();
+    expect(await screen.findByText("approval.valid_owner_action")).toBeInTheDocument();
+    expect(await screen.findByText("approval.valid_display_action")).toBeInTheDocument();
+    expect(screen.queryByText("approval.missing_identity")).not.toBeInTheDocument();
+    expect(screen.queryByText("approval.numeric_identity")).not.toBeInTheDocument();
+    expect(screen.queryByText("approval.conflicting_identity")).not.toBeInTheDocument();
     expect(mocks.decideApproval).not.toHaveBeenCalled();
   });
 });
