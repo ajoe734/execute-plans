@@ -1,0 +1,60 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "FE-WORKSHOP-SAME-RESOURCE-RESUME-20261010",
+  "owner": "Antigravity2",
+  "reviewer": "Antigravity",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-WORKSHOP-SAME-RESOURCE-RESUME-20261010",
+  "evidence_kind": "local_validation_only",
+  "note": "This task's scope is strictly source-only in execute-plans: extending the existing workshop-persistence-hosted spec and workflow with an optional explicit existing-workshop readback and reload mode. No deployment, no live hosted execution, and no live BFF/FE writes were performed by this task in the source worker. The operator target (canonical UUID 295726c7-47b5-4516-a74a-c5ba8765ee48 with acknowledged title SHA256 f697a21ccd124c051cf40715d1fd622d0314f8af2d0c7cd9c7c13682cf9c3093 created 2026-10-09T01:16:15.438Z) is acknowledged as the target resource for coordinator execution; hosted execution will be run independently on the live deployment by the designated coordinator. Net production changes are strictly bounded to 16 lines added to the workflow file (budget max 40).",
+  "acceptance_mapping": {
+    "AC1_optional_existing_readback_mode": "Extended e2e/workshop-persistence-hosted.spec.ts and .github/workflows/pfg-agora-journey-e2e-hosted-acceptance.yml with optional explicit existing-workshop readback mode. The default eleven-step new-workshop creation journey and full Agora defaults remain completely untouched and active when existing-workshop inputs are omitted.",
+    "AC2_reuse_canonical_uuid_and_title_sha256": "Existing mode accepts explicitly supplied canonical UUID (EXISTING_WORKSHOP_ID) and acknowledged title SHA256 (EXISTING_WORKSHOP_TITLE_SHA256). Missing, partial, or malformed inputs fail closed immediately via validateExistingWorkshopInputs() before execution. Existing mode never invokes create_workshop, never clicks create buttons, never issues POST /bff/agora/workshops, and never PATCHes or resaves old content.",
+    "AC3_real_ui_login_and_initial_owner_readback": "Real UI dev login uses DEV_LOGIN_CLIENT_ID and DEV_LOGIN_CLIENT_SECRET on the #dev-account/#dev-password form, verifying HttpOnly cookie session and operator role via GET /bff/me and /bff/auth/readiness. Initial owner GET /bff/agora/workshops/{id} verifies same workshop ID, matches title SHA256 to acknowledged hash, computes stable owner-content digest, and navigates existing resource via real list UI.",
+    "AC4_execute_real_page_reload": "Executes real page.reload({ waitUntil: 'domcontentloaded' }) in execute_real_page_reload step, asserting that URL remains on the workshop detail page and runtime header is visible.",
+    "AC5_post_reload_reread_and_visible_ui": "assert_after_reload_readback_and_visible_ui step re-reads visible resource, verifies URL, and performs owner GET /bff/agora/workshops/{id} asserting same ID, title hash, and content digest. Followed by realUiSignOut() (/bff/logout) and assertSessionInvalidated() (GET /bff/me -> 401).",
+    "AC6_AC7_AC8_clean_context_and_second_login": "Closes first browser context, opens a brand-new browser context via browser.newContext(), proves anonymous route redirects to /auth?reason=auth-required in assert_fresh_context_anonymous, and performs real second UI login via realUiDevLogin(freshPage).",
+    "AC9_reopen_existing_resource_and_fresh_owner_readback": "In fresh context, reopen_existing_workshop_ui navigates through real UI list, and assert_fresh_context_owner_readback performs owner GET asserting exact same UUID, title SHA256, and owner-content digest. Hard reload, new context, and latest pair checks are all registered, executed steps.",
+    "AC10_AC11_guards_and_chronology": "Original exact FE/BFF SHA verification (deployment.json commit, deployment.json bffCommit/bffSourceCommitSha, and /bff/version source_commit_sha) and strict host/tenant/operator guards are preserved. No synthetic restart assertion based on timestamps is made.",
+    "AC12_AC13_privacy_unchanged": "No tokens, cookies, passwords, request bodies, screenshots, videos, or traces are captured. Sanitized evidence records only allowlisted metadata: task ID, operation ID, mode, timestamps, status, version pair, workshop ID/title/title SHA256/content digest, and step statuses.",
+    "AC14_AC18_deterministic_local_policy_tests": "Added 5 comprehensive policy tests in src/test/workshop-persistence-hosted-policy.test.ts covering: input validation negative cases (missing, partial, malformed ID, malformed SHA), canonical JSON serialization and owner-content digest stability, no-create/no-resave enforcement in existing mode, real page.reload step registration, clean-context UUID/title/digest consistency, and workflow input/rejection contracts.",
+    "AC19_four_artifacts_and_line_budget": "Touches exactly four declared artifacts. Workflow modifications add 16 lines with 0 deletions (well within the net production budget of 40 lines). All policy tests and Playwright discovery pass cleanly."
+  },
+  "local_validation": {
+    "commands": [
+      {
+        "command": "npx vitest run src/test/workshop-persistence-hosted-policy.test.ts",
+        "result": "22 passed (22)"
+      },
+      {
+        "command": "npx playwright test e2e/workshop-persistence-hosted.spec.ts --list",
+        "result": "1 test discovered, zero syntax/type errors"
+      },
+      {
+        "command": "npx eslint e2e/workshop-persistence-hosted.spec.ts src/test/workshop-persistence-hosted-policy.test.ts",
+        "result": "clean, zero findings"
+      },
+      {
+        "command": "npx tsc --noEmit -p tsconfig.json",
+        "result": "clean, zero errors"
+      },
+      {
+        "command": "python3 -c \"import yaml; yaml.safe_load(open('.github/workflows/pfg-agora-journey-e2e-hosted-acceptance.yml'))\"",
+        "result": "valid YAML"
+      },
+      {
+        "command": "git diff --stat .github/workflows/pfg-agora-journey-e2e-hosted-acceptance.yml",
+        "result": "16 insertions, 0 deletions (net +16 lines, max 40 budget satisfied)"
+      }
+    ],
+    "not_run": "Live hosted browser execution against the deployed Pantheon dev environment is deferred to coordinator workflow_dispatch after integration, as required by source worker boundaries."
+  },
+  "not_changed": [
+    "Default new-workshop 11-step persistence journey is completely preserved and untouched when existing workshop inputs are omitted.",
+    "e2e/agora-product-journey.spec.ts and full Agora product journey remain untouched.",
+    "No product runtime or frontend UI components modified.",
+    "No backend files modified.",
+    "No new secret or credential flows introduced."
+  ]
+}
