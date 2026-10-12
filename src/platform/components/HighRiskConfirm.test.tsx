@@ -35,6 +35,23 @@ describe("HighRiskConfirm — repeat submit prevention and confirmation flow", (
     expect(onConfirm).not.toHaveBeenCalled();
   });
 
+  it("does not invent a two-person requirement from critical risk or the role list", () => {
+    render(
+      <HighRiskConfirm
+        open
+        onOpenChange={vi.fn()}
+        onConfirm={vi.fn()}
+        operation="retire_persona"
+        risk="critical"
+        requiredApproval={["risk_officer", "cio"]}
+      />,
+    );
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).queryByText(/Two-person approval required/i)).not.toBeInTheDocument();
+    expect(within(dialog).getByText("risk_officer")).toBeInTheDocument();
+    expect(within(dialog).getByText("cio")).toBeInTheDocument();
+  });
+
   it("prevents multiple onConfirm calls during pending async submit", async () => {
     let resolveConfirm: () => void = () => {};
     const onConfirmPromise = new Promise<void>((resolve) => {

@@ -31,5 +31,10 @@
   "not_done": [
     "Safe e2e build disables real writes (VITE_BFF_REAL_WRITES=false), so vote POST transport/deselection are proven by real-page vitest (Operations.test.tsx), not the browser; browser covers read-side final states",
     "Hosted acceptance remains external_wait; no SSH/VM access used"
-  ]
+  ],
+  "current_status_update": {
+    "task_id": "FE-REMOVE-INVENTED-APPROVAL-QUORUM-20261012",
+    "scope": "source-only: removed client-invented Quorum column (GovernanceQueue) and generic two-person banner (HighRiskConfirm); historical scope above unchanged",
+    "hosted_or_browser_done": false
+  }
 }
