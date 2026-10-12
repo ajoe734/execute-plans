@@ -79,16 +79,34 @@ export async function getIncident(id: string): Promise<Incident | undefined> {
 export function normalizeApprovalFields<T>(raw: T | undefined): T | undefined {
   if (!raw || typeof raw !== "object") return raw;
   const r = raw as Record<string, unknown>;
-  if (r.decision_state === undefined && r.target_id === undefined) return raw;
+  if (r.decision_state === undefined && r.target_id === undefined && r.target_version === undefined && !r.decision_context && !r.decisionContext) return raw;
   const out = { ...r };
+  const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : undefined);
+  const topId = str(r.target_id) ?? str(r.targetId);
+  const topVer = str(r.target_version) ?? str(r.targetVersion);
+  const dc = (typeof r.decision_context === "object" && r.decision_context ? r.decision_context : typeof r.decisionContext === "object" && r.decisionContext ? r.decisionContext : undefined) as Record<string, unknown> | undefined;
+  const gc = (dc && typeof (dc.governance_chain ?? dc.governanceChain) === "object" ? (dc.governance_chain ?? dc.governanceChain) : undefined) as Record<string, unknown> | undefined;
+  const chainId = gc ? (str(gc.target_id) ?? str(gc.targetId)) : undefined;
+  const chainVer = gc ? (str(gc.target_version) ?? str(gc.targetVersion)) : undefined;
+  const badId = topId && chainId && topId.toLowerCase() !== chainId.toLowerCase();
+  const badVer = topVer && chainVer && topVer.toLowerCase() !== chainVer.toLowerCase();
+  out.targetConflict = Boolean(badId || badVer);
+  out.targetId = badId ? undefined : (topId ?? chainId);
+  out.targetVersion = badVer ? undefined : (topVer ?? chainVer);
+  if (gc && (chainId || chainVer)) {
+    out.decisionContext = {
+      governanceChain: {
+        ...(chainId ? { targetId: chainId } : {}),
+        ...(chainVer ? { targetVersion: chainVer } : {}),
+      },
+    };
+  }
   out.id ??= r.approval_id ?? r.decision_id;
   out.kind ??= r.target_type;
-  out.subject ??= r.target_id;
+  out.subject ??= out.targetId ?? r.target_id;
   out.requester ??= r.owner_user_id;
   out.riskLevel ??= r.risk_level;
   out.createdAt ??= r.created_at;
-  // Only a final owner outcome is approved/rejected; pending/under_review stay pending and
-  // revoked/superseded/unknown terminal records are non-actionable (never pending).
   const ds = r.decision_state;
   const final = ds === "decided" ? r.decision : ds;
   out.state =
@@ -96,6 +114,7 @@ export function normalizeApprovalFields<T>(raw: T | undefined): T | undefined {
     : final === "rejected" ? "rejected"
     : ds === "pending" || ds === "proposed" || ds === "under_review" ? "pending"
     : ds === "revoked" || ds === "superseded" ? ds
+    : typeof r.state === "string" ? r.state
     : "unknown";
   return out as T;
 }

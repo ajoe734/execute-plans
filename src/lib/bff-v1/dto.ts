@@ -665,6 +665,10 @@ export interface ApprovalRequest {
   diffSummary?: string;
   requiresStages?: string[];
   stages?: ApprovalStage[];
+  targetId?: string;
+  targetVersion?: string;
+  targetConflict?: boolean;
+  decisionContext?: { governanceChain?: { targetId?: string; targetVersion?: string } };
 }
 
 export interface AuditEvent {
