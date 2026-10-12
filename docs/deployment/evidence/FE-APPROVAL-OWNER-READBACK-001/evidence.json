@@ -35,6 +35,8 @@
   "current_status_update": {
     "task_id": "FE-REMOVE-INVENTED-APPROVAL-QUORUM-20261012",
     "scope": "source-only: removed client-invented Quorum column (GovernanceQueue) and generic two-person banner (HighRiskConfirm); historical scope above unchanged",
+    "merged_production_code": "commit 3bf4f0cf858ee0a28d50a4e47460863bfb964b25 merged into dev at 82876de0d156f3d76493910dc599437f9264274a via PR #838; source author Claude truthfully recorded; local 93 tests PASS (vitest HighRiskConfirm 7, governance-owner-readonly-detail 15, approval-readback 30, runAction 41 PASS), tsc clean, vite build compiles",
+    "review_status": "prior Claude self-review invalid; current independent review by Antigravity2 pending via open receipt PR review transport on exact dev base",
     "hosted_or_browser_done": false
   }
 }
