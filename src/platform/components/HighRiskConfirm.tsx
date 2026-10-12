@@ -27,7 +27,6 @@ import type { RiskLevel, CanonicalCommandIdentity } from "@/lib/bff-v1";
 import { requestConfirmToken as requestConfirmTokenV1 } from "@/lib/bff-v1";
 import { getHighRiskAction } from "@/lib/v3/highRiskActions";
 import { validateMemo, MEMO_POLICY_BY_RISK, type ActionRiskClass } from "@/lib/v4/memoPolicy";
-import { DEFAULT_TWO_MAN_POLICY, HIGH_RISK_TWO_MAN_POLICY } from "@/lib/v4/twoManPolicy";
 import { canIssueConfirmToken, canRedeemConfirmToken, type CooldownState } from "@/lib/v4/cooldownPriority";
 
 export interface AffectedRefs {
@@ -172,9 +171,6 @@ export const HighRiskConfirm = ({
     : risk === "medium" ? "medium" : "low";
   const memoPolicy = MEMO_POLICY_BY_RISK[riskClass];
   const memoCheck = validateMemo(memo, riskClass);
-  // Planner Response §C2/D35 — two-man policy hint (UI only; enforcement on BFF).
-  const twoManRequired = riskClass === "critical" || riskClass === "break_glass" || (requiredApproval?.length ?? 0) >= 2;
-  const twoManPolicy = riskClass === "break_glass" || riskClass === "critical" ? HIGH_RISK_TWO_MAN_POLICY : DEFAULT_TWO_MAN_POLICY;
 
   const tokenRequired = useTokenFlow || !!confirmToken || env === "live" || risk === "critical";
   const token = useTokenFlow
@@ -293,15 +289,6 @@ export const HighRiskConfirm = ({
             {env === "live" && (
               <div className="rounded-md border border-env-live-accent/40 bg-env-live-bg/30 px-3 py-2 text-sm text-env-live-accent font-medium">
                 {t("confirm.liveWarning")}
-              </div>
-            )}
-
-            {twoManRequired && (
-              <div className="rounded-md border border-status-warning/40 bg-status-warning/10 px-3 py-2 text-xs text-status-warning">
-                {t("confirm.twoMan.title", { defaultValue: "Two-person approval required" })} ·
-                {twoManPolicy.distinctRoleFamily
-                  ? ` ${t("confirm.twoMan.distinctFamily", { defaultValue: "distinct user + distinct role family" })}`
-                  : ` ${t("confirm.twoMan.distinctUser", { defaultValue: "distinct user (requester may not sign)" })}`}
               </div>
             )}
 
