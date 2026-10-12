@@ -675,8 +675,9 @@ export interface AuditEvent {
   id: string;
   actor: string;
   action: string;
-  target: string;
+  target?: string;
   ts: string;
+  entryId?: string; entry_id?: string; targetId?: string; target_id?: string; targetType?: string; target_type?: string; actionType?: string; action_type?: string; timestamp?: string; targetConflict?: boolean; idConflict?: boolean;
   memo?: string;
   before?: string;
   after?: string;

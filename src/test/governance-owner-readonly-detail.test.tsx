@@ -176,4 +176,333 @@ describe("GovernanceReview owner-bound read-only detail", () => {
     // Zero decision writes
     expect(mocks.decideApproval).not.toHaveBeenCalled();
   });
+
+  it("withholds both target fields visibly as Unavailable when targetConflict is true even if target strings were provided", async () => {
+    const caseId = "approval-explicit-conflict-case";
+    const explicitConflictCase: ApprovalRequest = {
+      id: caseId,
+      kind: "Strategy",
+      subject: "Explicit Conflict Approval",
+      requester: "operator-5",
+      state: "pending",
+      version: 1,
+      targetId: "pool-A",
+      targetVersion: "e9c7c073c544cd453e2ac3d62b4acb4be7a47f5010a01a5498c40c284238a39b",
+      targetConflict: true,
+      riskLevel: "high",
+      createdAt: "2026-10-10T12:00:00Z",
+    };
+
+    mocks.approvalGet.mockResolvedValue(explicitConflictCase);
+    renderReview(caseId);
+
+    expect(await screen.findByText("Explicit Conflict Approval")).toBeInTheDocument();
+    // Conflicting target fields are visibly unavailable
+    expect(screen.queryByText("pool-A")).not.toBeInTheDocument();
+    expect(screen.queryByText("e9c7c073c544cd453e2ac3d62b4acb4be7a47f5010a01a5498c40c284238a39b")).not.toBeInTheDocument();
+    const unavailableElements = screen.getAllByText("Unavailable");
+    expect(unavailableElements.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("displays canonical state as unknown and renders decision buttons non-actionable for unknown owner states", async () => {
+    const caseId = "approval-unknown-state-case";
+    const unknownStateCase: ApprovalRequest = {
+      id: caseId,
+      kind: "Strategy",
+      subject: "Unknown State Case",
+      requester: "operator-6",
+      state: "unknown",
+      version: 2,
+      riskLevel: "low",
+      createdAt: "2026-10-10T12:00:00Z",
+    };
+
+    mocks.approvalGet.mockResolvedValue(unknownStateCase);
+    renderReview(caseId);
+
+    expect(await screen.findByText("Unknown State Case")).toBeInTheDocument();
+    expect(screen.getAllByText("unknown").length).toBeGreaterThanOrEqual(2);
+    // Approve and reject buttons MUST NOT be rendered
+    expect(screen.queryByRole("button", { name: /approve/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /reject/i })).not.toBeInTheDocument();
+    expect(screen.getByText("Already unknown.")).toBeInTheDocument();
+    expect(mocks.decideApproval).not.toHaveBeenCalled();
+  });
+
+  it("withholds both target fields visibly as Unavailable when canonical target anchor is malformed or invalid", async () => {
+    const caseId = "approval-malformed-target-case";
+    const malformedCase: ApprovalRequest = {
+      id: caseId,
+      kind: "Strategy",
+      subject: "Malformed Target Approval",
+      requester: "operator-7",
+      state: "pending",
+      version: 1,
+      targetId: undefined,
+      targetVersion: undefined,
+      targetConflict: true,
+      riskLevel: "medium",
+      createdAt: "2026-10-10T12:00:00Z",
+    };
+
+    mocks.approvalGet.mockResolvedValue(malformedCase);
+    renderReview(caseId);
+
+    expect(await screen.findByText("Malformed Target Approval")).toBeInTheDocument();
+    expect(screen.queryByText("pool-A")).not.toBeInTheDocument();
+    expect(screen.queryByText("123")).not.toBeInTheDocument();
+    const unavailableElements = screen.getAllByText("Unavailable");
+    expect(unavailableElements.length).toBeGreaterThanOrEqual(2);
+    expect(mocks.decideApproval).not.toHaveBeenCalled();
+  });
+
+  it("renders genuine case detail with exact realowner-shaped audit regression without TypeError", async () => {
+    const caseId = "approval-realowner-audit-case";
+    const genuineCase: ApprovalRequest = {
+      id: caseId,
+      kind: "Strategy",
+      subject: "Realowner Audit Case",
+      requester: "operator-human-1",
+      state: "pending",
+      version: 1,
+      targetId: "pool-safe",
+      targetVersion: "ver-safe",
+      riskLevel: "high",
+      createdAt: "2026-10-10T12:00:00Z",
+    };
+
+    mocks.approvalGet.mockResolvedValue(genuineCase);
+    mocks.auditList.mockResolvedValue([
+      {
+        entry_id: "audit-entry-real-1",
+        actor: "operator-human-1",
+        action_type: "approval.proposed",
+        target_type: "approval",
+        target_id: caseId,
+        timestamp: "2026-10-10T12:05:00Z",
+      },
+    ]);
+    renderReview(caseId);
+
+    expect(await screen.findByText("Realowner Audit Case")).toBeInTheDocument();
+    expect(await screen.findByText("approval.proposed")).toBeInTheDocument();
+    expect(mocks.decideApproval).not.toHaveBeenCalled();
+  });
+
+  it("renders genuine case detail when audit rows have missing or non-string target_id without TypeError", async () => {
+    const caseId = "approval-missing-nonstring-audit-case";
+    const genuineCase: ApprovalRequest = {
+      id: caseId,
+      kind: "Strategy",
+      subject: "Missing Nonstring Audit Case",
+      requester: "operator-human-2",
+      state: "pending",
+      version: 1,
+      riskLevel: "medium",
+      createdAt: "2026-10-10T12:00:00Z",
+    };
+
+    mocks.approvalGet.mockResolvedValue(genuineCase);
+    mocks.auditList.mockResolvedValue([
+      {
+        entry_id: "audit-missing-target",
+        actor: "operator-anon",
+        action_type: "system.ping",
+        timestamp: "2026-10-10T12:05:00Z",
+      },
+      {
+        entry_id: "audit-nonstring-target",
+        actor: "operator-anon",
+        action_type: "system.ping2",
+        target_id: 12345,
+        timestamp: "2026-10-10T12:06:00Z",
+      },
+    ]);
+    renderReview(caseId);
+
+    expect(await screen.findByText("Missing Nonstring Audit Case")).toBeInTheDocument();
+    expect(screen.queryByText("system.ping")).not.toBeInTheDocument();
+    expect(screen.queryByText("system.ping2")).not.toBeInTheDocument();
+    expect(mocks.decideApproval).not.toHaveBeenCalled();
+  });
+
+  it("does not silently misattribute foreign target or conflicting target audit events to the approval case", async () => {
+    const caseId = "approval-foreign-audit-case";
+    const genuineCase: ApprovalRequest = {
+      id: caseId,
+      kind: "Strategy",
+      subject: "pool-paper-quorum approval",
+      requester: "operator-human-3",
+      state: "pending",
+      version: 1,
+      targetId: "pool-paper-quorum",
+      riskLevel: "low",
+      createdAt: "2026-10-10T12:00:00Z",
+    };
+
+    mocks.approvalGet.mockResolvedValue(genuineCase);
+    mocks.auditList.mockResolvedValue([
+      {
+        entry_id: "audit-foreign-target",
+        actor: "foreign-op",
+        action_type: "pool.rebalance",
+        target_id: "pool-other",
+        timestamp: "2026-10-10T12:05:00Z",
+      },
+      {
+        entry_id: "audit-conflicting-target",
+        actor: "foreign-op",
+        action_type: "approval.other",
+        target: caseId,
+        target_id: "different-case",
+        timestamp: "2026-10-10T12:06:00Z",
+      },
+      {
+        entry_id: "audit-reverse-conflicting-target",
+        actor: "foreign-op",
+        action_type: "approval.reverse_other",
+        target: "different-case",
+        target_id: caseId,
+        timestamp: "2026-10-10T12:06:30Z",
+      },
+      {
+        entry_id: "audit-substring-match",
+        actor: "foreign-op",
+        action_type: "approval.substring",
+        target_id: `${caseId}-extra-suffix`,
+        timestamp: "2026-10-10T12:07:00Z",
+      },
+    ]);
+    renderReview(caseId);
+
+    expect(await screen.findByText("pool-paper-quorum approval")).toBeInTheDocument();
+    expect(screen.queryByText("pool.rebalance")).not.toBeInTheDocument();
+    expect(screen.queryByText("approval.other")).not.toBeInTheDocument();
+    expect(screen.queryByText("approval.reverse_other")).not.toBeInTheDocument();
+    expect(screen.queryByText("approval.substring")).not.toBeInTheDocument();
+    expect(mocks.decideApproval).not.toHaveBeenCalled();
+  });
+
+  it("renders honest audit failure state and preserves genuine case detail when audit read returns 503 rather than false not-found or false complete", async () => {
+    const caseId = "approval-audit-503-case";
+    const genuineCase: ApprovalRequest = {
+      id: caseId,
+      kind: "Strategy",
+      subject: "Audit 503 Negative Case",
+      requester: "operator-human-4",
+      state: "pending",
+      version: 1,
+      targetId: "pool-safe",
+      targetVersion: "ver-safe",
+      riskLevel: "high",
+      createdAt: "2026-10-10T12:00:00Z",
+    };
+
+    mocks.approvalGet.mockResolvedValue(genuineCase);
+    mocks.auditList.mockRejectedValue(new Error("503 Service Unavailable"));
+    renderReview(caseId);
+
+    expect(await screen.findByText("Audit 503 Negative Case")).toBeInTheDocument();
+    expect(screen.queryByText("Not Found")).not.toBeInTheDocument();
+    expect(screen.getByText("Audit history unavailable")).toBeInTheDocument();
+    expect(mocks.decideApproval).not.toHaveBeenCalled();
+  });
+
+  it("renders honest error state when owner approval read returns 503 rather than false not-found or false complete", async () => {
+    const caseId = "approval-owner-503-case";
+    mocks.approvalGet.mockRejectedValue(new Error("503 Service Unavailable"));
+    renderReview(caseId);
+
+    expect(await screen.findByText("Approval request unavailable")).toBeInTheDocument();
+    expect(screen.queryByText("503 Service Unavailable")).not.toBeInTheDocument();
+    expect(screen.queryByText("Approval request not found")).not.toBeInTheDocument();
+    expect(screen.queryByText("It may have been resolved, withdrawn, or archived.")).not.toBeInTheDocument();
+    expect(mocks.decideApproval).not.toHaveBeenCalled();
+  });
+
+  it("does not leak raw downstream exception details or sentinel messages to the error UI", async () => {
+    const caseId = "approval-owner-sentinel-case";
+    const sentinel = "SOURCE_ONLY_INTERNAL_ERROR_DETAIL_SENTINEL";
+    mocks.approvalGet.mockRejectedValue(new Error(sentinel));
+    renderReview(caseId);
+
+    expect(await screen.findByText("Approval request unavailable")).toBeInTheDocument();
+    expect(screen.queryByText(sentinel)).not.toBeInTheDocument();
+    expect(screen.queryByText("Approval request not found")).not.toBeInTheDocument();
+    expect(mocks.decideApproval).not.toHaveBeenCalled();
+  });
+
+  it("renders genuine not-found when owner approval read returns undefined", async () => {
+    const caseId = "approval-notfound-case";
+    mocks.approvalGet.mockResolvedValue(undefined);
+    renderReview(caseId);
+
+    expect(await screen.findByText("Approval request not found")).toBeInTheDocument();
+    expect(screen.getByText("It may have been resolved, withdrawn, or archived.")).toBeInTheDocument();
+    expect(mocks.decideApproval).not.toHaveBeenCalled();
+  });
+
+  it("does not link or present current-target audit rows with missing, numeric, or conflicting event identity", async () => {
+    const caseId = "approval-invalid-identity-audit-case";
+    const genuineCase: ApprovalRequest = {
+      id: caseId,
+      kind: "Strategy",
+      subject: "Invalid Identity Audit Case",
+      requester: "operator-human-5",
+      state: "pending",
+      version: 1,
+      targetId: "pool-safe",
+      targetVersion: "ver-safe",
+      riskLevel: "medium",
+      createdAt: "2026-10-10T12:00:00Z",
+    };
+
+    mocks.approvalGet.mockResolvedValue(genuineCase);
+    mocks.auditList.mockResolvedValue([
+      {
+        target_id: caseId,
+        action_type: "approval.missing_identity",
+        timestamp: "2026-10-10T12:05:00Z",
+        actor: "owner",
+      },
+      {
+        entry_id: 123,
+        target_id: caseId,
+        action_type: "approval.numeric_identity",
+        timestamp: "2026-10-10T12:06:00Z",
+        actor: "owner",
+      },
+      {
+        id: "conflicting-display-id",
+        entry_id: "canonical-entry-id",
+        target_id: caseId,
+        action_type: "approval.conflicting_identity",
+        timestamp: "2026-10-10T12:07:00Z",
+        actor: "owner",
+      },
+      {
+        entry_id: "audit-valid-owner-entry",
+        target_id: caseId,
+        action_type: "approval.valid_owner_action",
+        timestamp: "2026-10-10T12:08:00Z",
+        actor: "owner",
+      },
+      {
+        id: "audit-valid-display-entry",
+        target: caseId,
+        action: "approval.valid_display_action",
+        ts: "2026-10-10T12:09:00Z",
+        actor: "owner",
+      },
+    ]);
+    renderReview(caseId);
+
+    expect(await screen.findByText("Invalid Identity Audit Case")).toBeInTheDocument();
+    expect(await screen.findByText("approval.valid_owner_action")).toBeInTheDocument();
+    expect(await screen.findByText("approval.valid_display_action")).toBeInTheDocument();
+    expect(screen.queryByText("approval.missing_identity")).not.toBeInTheDocument();
+    expect(screen.queryByText("approval.numeric_identity")).not.toBeInTheDocument();
+    expect(screen.queryByText("approval.conflicting_identity")).not.toBeInTheDocument();
+    expect(mocks.decideApproval).not.toHaveBeenCalled();
+  });
 });

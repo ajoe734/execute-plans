@@ -75,35 +75,38 @@ export async function getIncident(id: string): Promise<Incident | undefined> {
   return strictLiveDetail<Incident>("incidents.get", paths.incident(id)).then(normalizeIncidentTimestampFields);
 }
 
+const chk = (v: unknown): [string | undefined, boolean] => v === undefined ? [undefined, false] : typeof v === "string" && v.trim() ? [v.trim(), false] : [undefined, true];
+const pair = (a: unknown, b: unknown): [string | undefined, boolean] => {
+  const [v1, b1] = chk(a), [v2, b2] = chk(b);
+  return b1 || b2 || (v1 && v2 && v1 !== v2) ? [undefined, true] : [v1 ?? v2, false];
+};
+
 /** Single read-boundary projection of Governance owner fields into the display DTO. */
 export function normalizeApprovalFields<T>(raw: T | undefined): T | undefined {
   if (!raw || typeof raw !== "object") return raw;
   const r = raw as Record<string, unknown>;
   if (r.decision_state === undefined && r.target_id === undefined && r.target_version === undefined && !r.decision_context && !r.decisionContext) return raw;
   const out = { ...r };
-  const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : undefined);
-  const topId = str(r.target_id) ?? str(r.targetId);
-  const topVer = str(r.target_version) ?? str(r.targetVersion);
-  const dc = (typeof r.decision_context === "object" && r.decision_context ? r.decision_context : typeof r.decisionContext === "object" && r.decisionContext ? r.decisionContext : undefined) as Record<string, unknown> | undefined;
-  const gc = (dc && typeof (dc.governance_chain ?? dc.governanceChain) === "object" ? (dc.governance_chain ?? dc.governanceChain) : undefined) as Record<string, unknown> | undefined;
-  const chainId = gc ? (str(gc.target_id) ?? str(gc.targetId)) : undefined;
-  const chainVer = gc ? (str(gc.target_version) ?? str(gc.targetVersion)) : undefined;
-  const badId = topId && chainId && topId.toLowerCase() !== chainId.toLowerCase();
-  const badVer = topVer && chainVer && topVer.toLowerCase() !== chainVer.toLowerCase();
-  out.targetConflict = Boolean(badId || badVer);
-  out.targetId = badId ? undefined : (topId ?? chainId);
-  out.targetVersion = badVer ? undefined : (topVer ?? chainVer);
-  if (gc && (chainId || chainVer)) {
-    out.decisionContext = {
-      governanceChain: {
-        ...(chainId ? { targetId: chainId } : {}),
-        ...(chainVer ? { targetVersion: chainVer } : {}),
-      },
-    };
+  const [topId, bTId] = pair(r.target_id, r.targetId), [topVer, bTVer] = pair(r.target_version, r.targetVersion);
+  const rawDc = r.decision_context ?? r.decisionContext, bDc = rawDc !== undefined && (typeof rawDc !== "object" || !rawDc);
+  const dc = !bDc && typeof rawDc === "object" ? (rawDc as Record<string, unknown>) : undefined;
+  const rawGc = dc ? (dc.governance_chain ?? dc.governanceChain) : undefined, bGc = rawGc !== undefined && (typeof rawGc !== "object" || !rawGc);
+  const gc = !bGc && typeof rawGc === "object" ? (rawGc as Record<string, unknown>) : undefined;
+  const [chainId, bCId] = pair(gc?.target_id, gc?.targetId), [chainVer, bCVer] = pair(gc?.target_version, gc?.targetVersion);
+  const badId = Boolean(bTId || bCId || (topId && chainId && topId !== chainId));
+  const badVer = Boolean(bTVer || bCVer || (topVer && chainVer && topVer !== chainVer));
+  const conflict = Boolean(badId || badVer || bDc || bGc || r.targetConflict || r.target_conflict);
+  out.targetConflict = conflict;
+  out.targetId = conflict ? undefined : (topId ?? chainId);
+  out.targetVersion = conflict ? undefined : (topVer ?? chainVer);
+  if (!conflict && gc && (chainId || chainVer)) {
+    out.decisionContext = { governanceChain: { ...(chainId ? { targetId: chainId } : {}), ...(chainVer ? { targetVersion: chainVer } : {}) } };
+  } else if (conflict) {
+    delete out.decisionContext;
   }
   out.id ??= r.approval_id ?? r.decision_id;
   out.kind ??= r.target_type;
-  out.subject ??= out.targetId ?? r.target_id;
+  out.subject ??= out.targetId ?? (conflict ? undefined : r.target_id);
   out.requester ??= r.owner_user_id;
   out.riskLevel ??= r.risk_level;
   out.createdAt ??= r.created_at;
@@ -114,6 +117,7 @@ export function normalizeApprovalFields<T>(raw: T | undefined): T | undefined {
     : final === "rejected" ? "rejected"
     : ds === "pending" || ds === "proposed" || ds === "under_review" ? "pending"
     : ds === "revoked" || ds === "superseded" ? ds
+    : ds !== undefined ? "unknown"
     : typeof r.state === "string" ? r.state
     : "unknown";
   return out as T;
@@ -127,8 +131,26 @@ export async function getApproval(id: string): Promise<ApprovalRequest | undefin
   return strictLiveDetail<ApprovalRequest>("approvals.get", paths.approval(id)).then(normalizeApprovalFields);
 }
 
+export function normalizeAuditFields<T = AuditEvent>(raw: unknown): T {
+  if (!raw || typeof raw !== "object") return raw as T;
+  const r = raw as Record<string, unknown>;
+  const [eid, bEid] = pair(r.entry_id, r.entryId), [id, bId] = pair(r.id, eid);
+  const [tid, bTid] = pair(r.target_id, r.targetId), [target, bTarget] = pair(r.target, tid);
+  const [aid, bAid] = pair(r.action_type, r.actionType), [action, bAction] = pair(r.action, aid);
+  const [ts, badTs] = pair(r.ts, r.timestamp), [actor, badActor] = chk(r.actor), badTarget = Boolean(bTid || bTarget || r.targetConflict), badId = Boolean(bEid || bId || r.idConflict);
+  const out: Record<string, unknown> = {
+    ...r, id: badId ? undefined : id, target: badTarget ? undefined : target, action: bAid || bAction ? undefined : action,
+    ts: badTs ? undefined : ts, actor: badActor ? undefined : actor, targetConflict: badTarget, idConflict: badId,
+  };
+  if (badTarget) { delete out.target_id; delete out.targetId; }
+  if (badId) { delete out.entry_id; delete out.entryId; delete out.id; }
+  if (bAid || bAction) { delete out.action_type; delete out.actionType; }
+  if (badTs) delete out.timestamp;
+  return out as T;
+}
+
 export async function listAudit(): Promise<AuditEvent[]> {
-  return strictLiveList("audit.list", paths.audit());
+  return strictLiveList<AuditEvent>("audit.list", paths.audit()).then((rows) => rows.map((r) => normalizeAuditFields(r) as AuditEvent));
 }
 
 export const jobs = {
