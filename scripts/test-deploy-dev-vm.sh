@@ -819,6 +819,26 @@ fs.writeFileSync(file, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
 NODE
 }
 
+prepare_fixture_pair() {
+  PAIR_ID="$(env -i PATH="${SYSTEM_PATH}" HOME="${CASE_HOME}" \
+    "${REAL_NODE}" "${CASE_REPO}/scripts/release-candidate.mjs" prepare-pair \
+      --read-only-dist-dir "${CANDIDATE_DIST}" \
+      --operator-live-dist-dir "${OPERATOR_LIVE_DIST}" \
+      --write-proof-dist-dir "${WRITE_PROOF_DIST}" \
+      --output-dir "${CANDIDATE_DIR}" \
+      --frontend-sha "${CANDIDATE_SHA}" \
+      --bff-sha "${BFF_SHA}" \
+      --gate-run-id "${GATE_RUN_ID}" \
+      --gate-run-url "https://github.com/ajoe734/execute-plans/actions/runs/${GATE_RUN_ID}" \
+      --bff-base-url "https://bff.test")"
+  [[ "${PAIR_ID}" =~ ^[0-9a-f]{64}$ ]] || die "fixture pair ID is invalid"
+  CANDIDATE_DIGEST="$(json_field "${CANDIDATE_DIR}/pair.json" profiles.readOnly.artifactDigestSha256)"
+  OPERATOR_LIVE_DIGEST="$(json_field "${CANDIDATE_DIR}/pair.json" profiles.operatorLive.artifactDigestSha256)"
+  WRITE_PROOF_DIGEST="$(json_field "${CANDIDATE_DIR}/pair.json" profiles.writeProof.artifactDigestSha256)"
+  [[ "${CANDIDATE_DIGEST}" =~ ^[0-9a-f]{64}$ && "${OPERATOR_LIVE_DIGEST}" =~ ^[0-9a-f]{64}$ && "${WRITE_PROOF_DIGEST}" =~ ^[0-9a-f]{64}$ ]] || \
+    die "fixture profile digest is invalid"
+}
+
 setup_case() {
   local name="$1"
   local previous_commit="${2:-${PREVIOUS_SHA}}"
@@ -869,23 +889,7 @@ setup_case() {
   printf 'globalThis.__operatorLive = true;\n' > "${OPERATOR_LIVE_DIST}/assets/app-abcdef12.js"
   printf '<!doctype html><html><body>write proof candidate</body></html>\n' > "${WRITE_PROOF_DIST}/index.html"
   printf 'globalThis.__candidateWrites = true;\n' > "${WRITE_PROOF_DIST}/assets/app-abcdef12.js"
-  PAIR_ID="$(env -i PATH="${SYSTEM_PATH}" HOME="${CASE_HOME}" \
-    "${REAL_NODE}" "${CASE_REPO}/scripts/release-candidate.mjs" prepare-pair \
-      --read-only-dist-dir "${CANDIDATE_DIST}" \
-      --operator-live-dist-dir "${OPERATOR_LIVE_DIST}" \
-      --write-proof-dist-dir "${WRITE_PROOF_DIST}" \
-      --output-dir "${CANDIDATE_DIR}" \
-      --frontend-sha "${CANDIDATE_SHA}" \
-      --bff-sha "${BFF_SHA}" \
-      --gate-run-id "${GATE_RUN_ID}" \
-      --gate-run-url "https://github.com/ajoe734/execute-plans/actions/runs/${GATE_RUN_ID}" \
-      --bff-base-url "https://bff.test")"
-  [[ "${PAIR_ID}" =~ ^[0-9a-f]{64}$ ]] || die "fixture pair ID is invalid"
-  CANDIDATE_DIGEST="$(json_field "${CANDIDATE_DIR}/pair.json" profiles.readOnly.artifactDigestSha256)"
-  OPERATOR_LIVE_DIGEST="$(json_field "${CANDIDATE_DIR}/pair.json" profiles.operatorLive.artifactDigestSha256)"
-  WRITE_PROOF_DIGEST="$(json_field "${CANDIDATE_DIR}/pair.json" profiles.writeProof.artifactDigestSha256)"
-  [[ "${CANDIDATE_DIGEST}" =~ ^[0-9a-f]{64}$ && "${OPERATOR_LIVE_DIGEST}" =~ ^[0-9a-f]{64}$ && "${WRITE_PROOF_DIGEST}" =~ ^[0-9a-f]{64}$ ]] || \
-    die "fixture profile digest is invalid"
+  prepare_fixture_pair
   make_agora_compatibility_evidence "${CASE_AGORA_EVIDENCE}"
   : > "${CASE_CALL_LOG}"
 }
@@ -3424,6 +3428,204 @@ test_browser_dependencies_preflight_and_apt_bypass() {
     show_deploy_failure "missing browser runtime must not switch live symlink"
 }
 
+sealed_json() {
+  local target="$1"
+  local dist manifest_sha frontend backend
+  dist="$(env -i PATH="${SYSTEM_PATH}" HOME="${CASE_HOME}" \
+    "${REAL_NODE}" "${CASE_REPO}/scripts/release-candidate.mjs" digest --dist-dir "${target}")"
+  manifest_sha="$("${REAL_NODE}" -e 'process.stdout.write(require("node:crypto").createHash("sha256").update(require("node:fs").readFileSync(process.argv[1])).digest("hex"))' "${target}/deployment.json")"
+  frontend="$(json_field "${target}/deployment.json" commit)"
+  backend="$(json_field "${target}/deployment.json" bffCommit)"
+  printf '{"target":"%s","dist_sha256":"%s","manifest_sha256":"%s","frontend_sha":"%s","backend_sha":"%s"}' \
+    "${target}" "${dist}" "${manifest_sha}" "${frontend}" "${backend}"
+}
+
+tree_fingerprint() {
+  (cd "$1" && find . -type f -print0 | sort -z | xargs -0 sha256sum)
+}
+
+run_restore_sealed() {
+  local from_json="$1"
+  local to_json="$2"
+  shift 2
+  SEALED_RUN=$((${SEALED_RUN:-0} + 1))
+  run_deploy \
+    GITHUB_EVENT_NAME=workflow_dispatch \
+    PANTHEON_DEPLOY_PROFILE=operator-live \
+    PANTHEON_DEPLOY_PROOF_WINDOW_ACK=false \
+    PANTHEON_DEPLOY_REAL_WRITES=true \
+    PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES=false \
+    PANTHEON_DEPLOY_ACTION=restore-sealed \
+    PANTHEON_DEPLOY_RELEASE_INSTANCE="${CASE_NAME}-sealed-${SEALED_RUN}" \
+    PANTHEON_AUDIT_OUT_DIR="${CASE_DIR}/audit-sealed-${SEALED_RUN}" \
+    PANTHEON_DEPLOY_LEASE_EPOCH=7 \
+    PANTHEON_DEPLOY_LEASE_RUN_ID=424242 \
+    PANTHEON_DEPLOY_SEALED_FROM_JSON="${from_json}" \
+    PANTHEON_DEPLOY_SEALED_TO_JSON="${to_json}" \
+    "$@"
+}
+
+# Builds two independently deployed accepted operator-live releases with
+# different FE commits, BFF commits and asset bytes: BASELINE first, then FINAL
+# (live). Neither is a copy of the other.
+setup_sealed_pair() {
+  local final_fe="${CANDIDATE_SHA}" final_bff="${BFF_SHA}"
+  local baseline_fe baseline_bff="cccccccccccccccccccccccccccccccccccccccc" final_next
+  setup_case "$1" "${PREVIOUS_SHA}" auto
+  baseline_fe="$(git -C "${CASE_REPO}" commit-tree "${PREVIOUS_SHA}^{tree}" -p "${PREVIOUS_SHA}" -m "sealed baseline release")"
+  final_next="$(git -C "${CASE_REPO}" commit-tree "${final_fe}^{tree}" -p "${baseline_fe}" -m "sealed final release")"
+
+  CANDIDATE_SHA="${baseline_fe}"
+  BFF_SHA="${baseline_bff}"
+  printf 'globalThis.__operatorLive = "sealed-baseline";\n' > "${OPERATOR_LIVE_DIST}/assets/app-abcdef12.js"
+  prepare_fixture_pair
+  make_agora_compatibility_evidence "${CASE_AGORA_EVIDENCE}"
+  git -C "${CASE_REPO}" push -q -f origin "${baseline_fe}:refs/heads/dev" >/dev/null
+  git -C "${CASE_REPO}" checkout -q -B dev "${baseline_fe}"
+  git -C "${CASE_REPO}" fetch -q origin dev
+  run_operator_live_deploy
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "baseline operator-live fixture deploy should succeed"
+  SEALED_BASELINE="$(readlink -f "${CASE_LIVE}")"
+
+  CANDIDATE_SHA="${final_next}"
+  BFF_SHA="${final_bff}"
+  printf 'globalThis.__operatorLive = "sealed-final";\n' > "${OPERATOR_LIVE_DIST}/assets/app-abcdef12.js"
+  prepare_fixture_pair
+  make_agora_compatibility_evidence "${CASE_AGORA_EVIDENCE}"
+  git -C "${CASE_REPO}" push -q -f origin "${final_next}:refs/heads/dev" >/dev/null
+  git -C "${CASE_REPO}" checkout -q -B dev "${final_next}"
+  git -C "${CASE_REPO}" fetch -q origin dev
+  run_operator_live_deploy PANTHEON_AUDIT_OUT_DIR="${CASE_DIR}/audit-final" \
+    PANTHEON_DEPLOY_RELEASE_INSTANCE="${CASE_NAME}-final"
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "final operator-live fixture deploy should succeed"
+  SEALED_FINAL="$(readlink -f "${CASE_LIVE}")"
+  [[ "${SEALED_FINAL}" != "${SEALED_BASELINE}" ]] || die "sealed fixture releases must be distinct directories"
+  FINAL_SEAL="$(sealed_json "${SEALED_FINAL}")"
+  BASELINE_SEAL="$(sealed_json "${SEALED_BASELINE}")"
+  [[ "$(json_field "${SEALED_FINAL}/deployment.json" commit)" != "$(json_field "${SEALED_BASELINE}/deployment.json" commit)" ]] || die "FE versions must differ"
+  [[ "$(json_field "${SEALED_FINAL}/deployment.json" bffCommit)" != "$(json_field "${SEALED_BASELINE}/deployment.json" bffCommit)" ]] || die "BFF versions must differ"
+  ! cmp -s "${SEALED_FINAL}/assets/app-abcdef12.js" "${SEALED_BASELINE}/assets/app-abcdef12.js" || die "asset bytes must differ"
+  [[ "$(jq -r .dist_sha256 <<<"${FINAL_SEAL}")" != "$(jq -r .dist_sha256 <<<"${BASELINE_SEAL}")" ]] || die "dist digests must differ"
+}
+
+assert_sealed_rejected_unchanged() {
+  local reason="$1"
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "restore-sealed unexpectedly accepted: ${reason}"
+  [[ "$(readlink -f "${CASE_LIVE}")" == "${SEALED_FINAL}" ]] || \
+    show_deploy_failure "live target moved after rejected restore-sealed: ${reason}"
+  ! compgen -G "${CASE_LIVE}.rollback-*" >/dev/null || die "staged link left behind: ${reason}"
+}
+
+# Asserts the live release is the sealed one by its actual manifest identities.
+assert_live_sealed_identity() {
+  local seal="$1" live
+  live="$(readlink -f "${CASE_LIVE}")"
+  [[ "$(jq -r .target <<<"${seal}")" == "${live}" ]] || die "live target is not the sealed target"
+  [[ "$(json_field "${live}/deployment.json" commit)" == "$(jq -r .frontend_sha <<<"${seal}")" ]] || die "live FE version is not the sealed FE"
+  [[ "$(json_field "${live}/deployment.json" bffCommit)" == "$(jq -r .backend_sha <<<"${seal}")" ]] || die "live BFF version is not the sealed BFF"
+  [[ "$(sealed_json "${live}")" == "${seal}" ]] || die "live release digests differ from the original seal"
+}
+
+test_sealed_return_roundtrip_preserves_bytes() {
+  local final_before baseline_before calls_before
+  setup_sealed_pair sealed-roundtrip
+  final_before="$(tree_fingerprint "${SEALED_FINAL}")"
+  baseline_before="$(tree_fingerprint "${SEALED_BASELINE}")"
+  calls_before="$(wc -l < "${CASE_CALL_LOG}")"
+
+  run_restore_sealed "${FINAL_SEAL}" "${BASELINE_SEAL}"
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "final->baseline restore-sealed should succeed"
+  [[ "$(readlink -f "${CASE_LIVE}")" == "${SEALED_BASELINE}" ]] || die "baseline was not selected"
+  assert_live_sealed_identity "${BASELINE_SEAL}"
+  grep -Fq '"operation":"exchange"' "${RUN_OUTPUT}" || die "CAS exchange receipt missing"
+  grep -Fq "FE selection only" "${RUN_OUTPUT}" || die "FE-selection-only semantics missing"
+  ! compgen -G "${CASE_LIVE}.rollback-*" >/dev/null || die "staged link left behind"
+
+  run_restore_sealed "${BASELINE_SEAL}" "${FINAL_SEAL}"
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "baseline->final restore-sealed should succeed"
+  [[ "$(readlink -f "${CASE_LIVE}")" == "${SEALED_FINAL}" ]] || die "same final was not reselected"
+  assert_live_sealed_identity "${FINAL_SEAL}"
+  ! compgen -G "${CASE_LIVE}.rollback-*" >/dev/null || die "staged link left behind"
+
+  [[ "$(tree_fingerprint "${SEALED_FINAL}")" == "${final_before}" ]] || die "final bytes changed"
+  [[ "$(tree_fingerprint "${SEALED_BASELINE}")" == "${baseline_before}" ]] || die "baseline bytes changed"
+  # The only tooling calls allowed are the two atomic CAS exchanges (one per leg).
+  [[ "$(tail -n +$((calls_before + 1)) "${CASE_CALL_LOG}")" == $'atomic-cas:exchange\natomic-cas:exchange' ]] || \
+    die "restore-sealed invoked build/probe/network tooling beyond the CAS exchange"
+}
+
+test_sealed_return_rejects_bad_seals_and_state() {
+  local bad tampered_dist
+  setup_sealed_pair sealed-negatives
+
+  run_restore_sealed "${FINAL_SEAL}" ""
+  assert_sealed_rejected_unchanged "missing to seal"
+
+  bad="$("${REAL_NODE}" -e 'const p=JSON.parse(process.argv[1]);p.manifest_sha256="0".repeat(64);process.stdout.write(JSON.stringify(p))' "${BASELINE_SEAL}")"
+  run_restore_sealed "${FINAL_SEAL}" "${bad}"
+  assert_sealed_rejected_unchanged "wrong manifest seal"
+
+  bad="$("${REAL_NODE}" -e 'const p=JSON.parse(process.argv[1]);p.dist_sha256="1".repeat(64);process.stdout.write(JSON.stringify(p))' "${BASELINE_SEAL}")"
+  run_restore_sealed "${FINAL_SEAL}" "${bad}"
+  assert_sealed_rejected_unchanged "wrong asset seal"
+
+  bad="$("${REAL_NODE}" -e 'const p=JSON.parse(process.argv[1]);p.backend_sha=JSON.parse(process.argv[2]).backend_sha;process.stdout.write(JSON.stringify(p))' "${BASELINE_SEAL}" "${FINAL_SEAL}")"
+  run_restore_sealed "${FINAL_SEAL}" "${bad}"
+  assert_sealed_rejected_unchanged "mixed FE/BFF pair"
+
+  bad="$("${REAL_NODE}" -e 'const p=JSON.parse(process.argv[1]);p.extra="x";process.stdout.write(JSON.stringify(p))' "${BASELINE_SEAL}")"
+  run_restore_sealed "${FINAL_SEAL}" "${bad}"
+  assert_sealed_rejected_unchanged "extra seal field"
+
+  tampered_dist="${SEALED_BASELINE}/assets/app-abcdef12.js"
+  chmod u+w "${tampered_dist}"
+  printf '// tampered\n' >> "${tampered_dist}"
+  run_restore_sealed "${FINAL_SEAL}" "${BASELINE_SEAL}"
+  assert_sealed_rejected_unchanged "tampered sealed assets"
+  grep -Fq "do not match their sealed digest" "${RUN_OUTPUT}" || show_deploy_failure "tampered asset rejection not explicit"
+  "${REAL_NODE}" -e 'const fs=require("node:fs");const f=process.argv[1];fs.writeFileSync(f,fs.readFileSync(f,"utf8").replace("// tampered\n",""))' "${tampered_dist}"
+
+  # Stale predecessor: seals claim baseline is live while final actually is.
+  run_restore_sealed "${BASELINE_SEAL}" "${FINAL_SEAL}"
+  assert_sealed_rejected_unchanged "stale predecessor"
+  grep -Fq "not the expected sealed predecessor" "${RUN_OUTPUT}" || show_deploy_failure "stale predecessor rejection not explicit"
+
+  # Not operator-live, strict profile boundary.
+  run_restore_sealed "${FINAL_SEAL}" "${BASELINE_SEAL}" PANTHEON_DEPLOY_PROFILE=read-only \
+    PANTHEON_DEPLOY_REAL_WRITES=false
+  assert_sealed_rejected_unchanged "non operator-live profile"
+
+  # Still valid afterwards: the rejections never mutated anything.
+  run_restore_sealed "${FINAL_SEAL}" "${BASELINE_SEAL}"
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "restore-sealed should succeed after rejected attempts"
+}
+
+test_sealed_return_rejects_unmanaged_paths_and_leases() {
+  local outside bad
+  setup_sealed_pair sealed-paths-leases
+
+  outside="${CASE_DIR}/outside-release"
+  chmod u+w "${CASE_RELEASES}"
+  cp -a "${SEALED_BASELINE}" "${outside}"
+  bad="$(sealed_json "${outside}")"
+  run_restore_sealed "${FINAL_SEAL}" "${bad}"
+  assert_sealed_rejected_unchanged "target outside managed release store"
+
+  ln -s "${SEALED_BASELINE}" "${CASE_RELEASES}/linked-baseline"
+  chmod u-w "${CASE_RELEASES}"
+  bad="$("${REAL_NODE}" -e 'const p=JSON.parse(process.argv[1]);p.target=process.argv[2];process.stdout.write(JSON.stringify(p))' "${BASELINE_SEAL}" "${CASE_RELEASES}/linked-baseline")"
+  run_restore_sealed "${FINAL_SEAL}" "${bad}"
+  assert_sealed_rejected_unchanged "symlinked release target"
+
+  run_restore_sealed "${FINAL_SEAL}" "${BASELINE_SEAL}" PANTHEON_DEPLOY_LEASE_DELEGATED=false
+  assert_sealed_rejected_unchanged "nondelegated lease"
+  run_restore_sealed "${FINAL_SEAL}" "${BASELINE_SEAL}" PANTHEON_DEPLOY_LEASE_OWNER=foreign-owner
+  assert_sealed_rejected_unchanged "foreign lease owner"
+  run_restore_sealed "${FINAL_SEAL}" "${BASELINE_SEAL}" PANTHEON_DEPLOY_LEASE_OWNER=
+  assert_sealed_rejected_unchanged "missing lease owner"
+}
+
+
 run_test() {
   local name="$1"
   shift
@@ -3509,6 +3711,9 @@ run_test "exact pair protocol default watchdog restore succeeds" test_exact_pair
 run_test "exact pair protocol late watchdog restore succeeds" test_exact_pair_protocol_late_watchdog_restore_succeeds
 run_test "exact pair protocol non-root runner prepares receipt into read-only release dir" test_exact_pair_protocol_non_root_prepared_receipt_permission
 run_test "browser dependencies avoid routine apt and fail closed on missing runtime" test_browser_dependencies_preflight_and_apt_bypass
+run_test "sealed return round-trips operator-live releases preserving bytes" test_sealed_return_roundtrip_preserves_bytes
+run_test "sealed return rejects bad seals, stale predecessor, and wrong profile" test_sealed_return_rejects_bad_seals_and_state
+run_test "sealed return rejects unmanaged paths and invalid leases" test_sealed_return_rejects_unmanaged_paths_and_leases
 
 echo "deploy contract harness: ${PASSED} passed, ${FAILED} failed"
 if [[ "${FAILED}" -ne 0 ]]; then

@@ -1,0 +1,45 @@
+{
+  "taskId": "FE-SEALED-ARTIFACT-RETURN-ENTRY-20261013",
+  "parent": "DEV-SIX-AREA-HOSTED-CLOSEOUT-20261002",
+  "baseDevHead": "4d1d066bc0508b5a9e5172fab080511260142b52",
+  "scope": "source only; no hosted/VM/provider/deployment action by worker",
+  "files": [
+    "scripts/deploy-dev-vm.sh",
+    "scripts/test-deploy-dev-vm.sh",
+    "src/test/deploy-safe-defaults.test.ts"
+  ],
+  "callableContract": {
+    "action": "PANTHEON_DEPLOY_ACTION=restore-sealed",
+    "profile": "PANTHEON_DEPLOY_PROFILE=operator-live (GITHUB_EVENT_NAME=workflow_dispatch, PANTHEON_DEPLOY_REAL_WRITES=true, PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES=false)",
+    "inputs": {
+      "PANTHEON_DEPLOY_SEALED_FROM_JSON": "exactly {target,dist_sha256,manifest_sha256,frontend_sha,backend_sha}; must equal the current live target",
+      "PANTHEON_DEPLOY_SEALED_TO_JSON": "same five fields; the release to select",
+      "lease": "existing PANTHEON_DEPLOY_LEASE_{OWNER,EPOCH,RUN_ID,DELEGATED} checks, independent of any prepared receipt"
+    },
+    "directions": "same action; return uses the reversed seals (final->baseline, then baseline->same final)",
+    "result": "stdout 'restore-sealed result: {\"exchangedOutTarget\":...,\"liveTarget\":...,\"operation\":\"exchange\"}' and AUDIT_DIR/restore-sealed-result.json; semantics: FE selection only, paired BFF and hosted/browser acceptance pending",
+    "failure": "exit 2 before mutation on any seal/path/lease/predecessor/CAS rejection; exit 1 with partial-transition message if readback differs from the requested target"
+  },
+  "behavior": [
+    "validates both seals, managed direct-child release dirs, regular manifests, manifest sha256, accepted operator-live state, dist digest (release-candidate.mjs digest) and manifest identity (verify_manifest_file) before any mutation",
+    "stages an owner link and uses scripts/atomic-symlink-cas.py exchange (unchanged); successful CAS consumes the link",
+    "no release creation, manifest/receipt/pair.json/acceptedAt rewrite, build, pull, prepare, reseal, prune, probe or network call",
+    "cleanup short-circuits for this action only; ordinary deployment cleanup and evidence requirements are unchanged"
+  ],
+  "tests": {
+    "added": [
+      "sealed return round-trips operator-live releases preserving bytes",
+      "sealed return rejects bad seals, stale predecessor, and wrong profile",
+      "sealed return rejects unmanaged paths and invalid leases"
+    ],
+    "fullSuite": "Original harness scripts/test-deploy-dev-vm.sh, 73 unique run_test cases, each run as `PANTHEON_TEST_FILTER=<exact name> bash scripts/test-deploy-dev-vm.sh > log 2>&1` (no pipe; real harness exit captured via $?) in bounded foreground batches 1-18, 19-40, 41-60, 61-73: 73/73 harness exit 0, 0 'not ok'. Logs contain 74 'ok -' lines because one name matches a second case by substring (duplicate, not a distinct test). The earlier unfiltered full invocation was terminated by the tool (exit 143) at the 600s limit after 34 ok, 0 not ok; that remains truthful and no single unfiltered exit code is recorded. Earlier per-name commands piped into grep, so their captured exit was grep's; superseded by this run.",
+    "cas": "python3 scripts/test-atomic-symlink-cas.py: Ran 7 tests, OK, exit 0 (rerun; source bytes unchanged)",
+    "fixtureCorrection": "setup_sealed_pair no longer copies final to baseline. It deploys two independent accepted operator-live releases via the normal prepare/activate path: baseline (FE commit = child of PREVIOUS, BFF cccc..., asset 'sealed-baseline') then final (FE commit child of baseline, BFF bbbb..., asset 'sealed-final'). The fixture asserts distinct directories, FE commit, BFF commit, asset bytes and dist digests. The public restore-sealed action is invoked in separate processes final->baseline->same final; assert_live_sealed_identity checks after each leg the actual live target, manifest FE/BFF commit and recomputed seal (target/dist/manifest digests) equal the original seal; full-tree fingerprints of both releases are unchanged; both retained; only the two atomic-cas:exchange calls occur; staged links cleaned. Mixed-pair negative now splices final's BFF onto the baseline seal.",
+    "staticContract": "src/test/deploy-safe-defaults.test.ts: updated only the stale action-list test title/assertion to 'prepare, activate, restore, or restore-sealed' (matches deploy-dev-vm.sh). Source and bash harness unchanged by this step; no full bash rerun. Ran `NODE_ENV=test npx vitest run src/test/deploy-safe-defaults.test.ts src/test/paired-release-workflow.test.ts src/test/admitted-dev-pair.test.ts` (the branch-ci 'Deploy safety contract' modules): 3 files, 54 tests passed, exit 0. `npm run typecheck`: exit 0. NODE_ENV=production in the worker shell breaks vitest node: imports, so NODE_ENV=test was set. Build and hosted CI are left to required CI."
+  },
+  "limitations": [
+    "a concurrent live-link change between validation and CAS is covered by the unchanged CAS primitive's own tests, not by a new harness race; the harness covers stale predecessor rejection before CAS",
+    "fixture lease fields are not hosted expiry enforcement; the guarded Pantheon caller owns that",
+    "local tests are not a hosted round trip or final delivery"
+  ]
+}

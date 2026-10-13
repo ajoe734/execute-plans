@@ -960,9 +960,9 @@ describe("Pantheon dev frontend deploy safety boundary", () => {
     );
   });
 
-  it("retires one-shot deployment bypass and mandates explicit prepare, activate, or restore action", () => {
+  it("retires one-shot deployment bypass and mandates explicit prepare, activate, restore, or restore-sealed action", () => {
     expect(deployScript).toContain(
-      "PANTHEON_DEPLOY_ACTION must be prepare, activate, or restore.",
+      "PANTHEON_DEPLOY_ACTION must be prepare, activate, restore, or restore-sealed.",
     );
     expect(deployScript).toContain('DEPLOY_ACTION="restore"');
     expect(deployScript).toContain('write_prepared_receipt "${RELEASE_DIR}"');

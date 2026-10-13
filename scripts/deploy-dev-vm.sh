@@ -1968,6 +1968,137 @@ NODE
   echo "OK: restored paired read-only release ${SHA} (${PAIR_ID}) before hosted verification."
 }
 
+# Parse one original five-field FE seal (target, dist_sha256, manifest_sha256,
+# frontend_sha, backend_sha) into SEAL_* globals. No digest is read from disk
+# here: the seal is the authority supplied by the authenticated caller.
+parse_sealed_input() {
+  local label="$1"
+  local raw="$2"
+  local parsed
+  if ! parsed="$(node -e '
+    let p;
+    try { p = JSON.parse(process.argv[1]); } catch { process.exit(1); }
+    const keys = ["target", "dist_sha256", "manifest_sha256", "frontend_sha", "backend_sha"];
+    if (!p || typeof p !== "object" || Array.isArray(p)) process.exit(1);
+    const got = Object.keys(p).sort();
+    if (JSON.stringify(got) !== JSON.stringify([...keys].sort())) process.exit(1);
+    const hex = (v, n) => typeof v === "string" && new RegExp(`^[0-9a-f]{${n}}$`).test(v);
+    if (typeof p.target !== "string" || !p.target.startsWith("/") || /[\s]/.test(p.target)) process.exit(1);
+    if (!hex(p.dist_sha256, 64) || !hex(p.manifest_sha256, 64) || !hex(p.frontend_sha, 40) || !hex(p.backend_sha, 40)) process.exit(1);
+    process.stdout.write(keys.map((k) => p[k]).join(" ") + "\n");
+  ' "${raw}")"; then
+    echo "restore-sealed rejected: ${label} seal must be JSON with exactly target, dist_sha256, manifest_sha256, frontend_sha, backend_sha." >&2
+    return 2
+  fi
+  read -r SEAL_TARGET SEAL_DIST SEAL_MANIFEST SEAL_FRONTEND SEAL_BACKEND <<<"${parsed}"
+}
+
+# Verify one sealed release against its original seal using the existing
+# digest and manifest verifiers. Never mutates anything.
+verify_sealed_release() {
+  local label="$1"
+  local target="$2" dist="$3" manifest_sha="$4" frontend="$5" backend="$6"
+  local manifest="${target}/deployment.json"
+  local fields gate github_digest pair_id ro_digest ol_digest wp_digest
+  if [[ "$(dirname -- "${target}")" != "${RELEASES_DIR}" || ! "$(basename -- "${target}")" =~ ^[A-Za-z0-9._-]+$ ||
+    -L "${target}" || ! -d "${target}" || "$(readlink -f -- "${target}" 2>/dev/null || true)" != "${target}" ]]; then
+    echo "restore-sealed rejected: ${label} target is not a direct managed release directory." >&2
+    return 2
+  fi
+  assert_scoped_path "Sealed ${label} release" "${target}" "${RELEASES_DIR}"
+  if [[ ! -f "${manifest}" || -L "${manifest}" ]]; then
+    echo "restore-sealed rejected: ${label} release has no regular deployment manifest." >&2
+    return 2
+  fi
+  if ! fields="$(node -e '
+    const fs = require("node:fs"), crypto = require("node:crypto");
+    const raw = fs.readFileSync(process.argv[1]);
+    if (crypto.createHash("sha256").update(raw).digest("hex") !== process.argv[2]) process.exit(1);
+    const p = JSON.parse(raw.toString("utf8"));
+    if (p.deploymentState !== "accepted" || p.deploymentProfile !== "operator-live" || p.profile !== "operator-live") process.exit(1);
+    const f = (v) => String(v ?? "-") || "-";
+    process.stdout.write([f(p.integrationGateRunId), f(p.githubArtifactDigest), f(p.pairId),
+      f(p.pair?.readOnlyArtifactDigestSha256), f(p.pair?.operatorLiveArtifactDigestSha256),
+      f(p.pair?.writeProofArtifactDigestSha256)].join(" ") + "\n");
+  ' "${manifest}" "${manifest_sha}")"; then
+    echo "restore-sealed rejected: ${label} manifest does not match its seal or is not an accepted operator-live release." >&2
+    return 2
+  fi
+  read -r gate github_digest pair_id ro_digest ol_digest wp_digest <<<"${fields}"
+  [[ "${gate}" == "-" ]] && gate=""
+  [[ "${github_digest}" == "-" ]] && github_digest=""
+  if ! verify_dist_digest "${target}" "${dist}" >/dev/null; then
+    echo "restore-sealed rejected: ${label} assets do not match their sealed digest." >&2
+    return 2
+  fi
+  if ! verify_manifest_file "${manifest}" "${frontend}" "${dist}" "${gate}" "${backend}" accepted \
+    "${github_digest}" operator-live "${pair_id}" "${ro_digest}" "${ol_digest}" "${wp_digest}" >/dev/null; then
+    echo "restore-sealed rejected: ${label} manifest identity does not match its seal." >&2
+    return 2
+  fi
+}
+
+# Select an already-sealed, already-accepted operator-live FE release in place
+# of another one. Selection only: the release directories, manifests and
+# receipts are neither created nor rewritten, and the paired BFF is not
+# touched, so the result certifies FE selection only (pair acceptance pending).
+restore_sealed_release() {
+  local from_json="${PANTHEON_DEPLOY_SEALED_FROM_JSON:-}"
+  local to_json="${PANTHEON_DEPLOY_SEALED_TO_JSON:-}"
+  local from_target from_dist from_manifest from_fe from_be
+  local live cas_result
+  if [[ "${DEPLOY_PROFILE}" != "operator-live" ]]; then
+    echo "restore-sealed rejected: only the strict operator-live profile may select sealed releases." >&2
+    return 2
+  fi
+  if [[ -z "${from_json}" || -z "${to_json}" ]]; then
+    echo "restore-sealed rejected: PANTHEON_DEPLOY_SEALED_FROM_JSON and PANTHEON_DEPLOY_SEALED_TO_JSON are required." >&2
+    return 2
+  fi
+  parse_sealed_input from "${from_json}" || return 2
+  from_target="${SEAL_TARGET}" from_dist="${SEAL_DIST}" from_manifest="${SEAL_MANIFEST}" from_fe="${SEAL_FRONTEND}" from_be="${SEAL_BACKEND}"
+  parse_sealed_input to "${to_json}" || return 2
+  if [[ "${from_target}" == "${SEAL_TARGET}" ]]; then
+    echo "restore-sealed rejected: from and to seals name the same release." >&2
+    return 2
+  fi
+  if [[ ! -L "${DEPLOY_ROOT}" ]]; then
+    echo "restore-sealed rejected: live deploy root is not a managed symlink." >&2
+    return 2
+  fi
+  live="$(current_live_target)"
+  if [[ "${live}" != "${from_target}" ]]; then
+    echo "restore-sealed rejected: live target ${live:-missing} is not the expected sealed predecessor." >&2
+    return 2
+  fi
+  verify_sealed_release from "${from_target}" "${from_dist}" "${from_manifest}" "${from_fe}" "${from_be}" || return 2
+  verify_sealed_release to "${SEAL_TARGET}" "${SEAL_DIST}" "${SEAL_MANIFEST}" "${SEAL_FRONTEND}" "${SEAL_BACKEND}" || return 2
+
+  sudo ln -s -- "${SEAL_TARGET}" "${ROLLBACK_LINK}"
+  ROLLBACK_LINK_CREATED=true
+  SWITCH_ATTEMPTED=true
+  if ! cas_result="$(sudo python3 "${SYMLINK_CAS_HELPER}" exchange \
+    --live-link "${DEPLOY_ROOT}" \
+    --staged-link "${ROLLBACK_LINK}" \
+    --expected-live-target "${from_target}" \
+    --expected-staged-target "${SEAL_TARGET}")"; then
+    sudo rm -f -- "${ROLLBACK_LINK}"
+    ROLLBACK_LINK_CREATED=false
+    echo "restore-sealed rejected: atomic symlink CAS rejected the live predecessor." >&2
+    return 2
+  fi
+  ROLLBACK_LINK_CREATED=false
+  live="$(current_live_target)"
+  if [[ "${live}" != "${SEAL_TARGET}" ]]; then
+    echo "restore-sealed FAILED: live target after exchange is ${live:-missing}, expected ${SEAL_TARGET}; transition is partial." >&2
+    return 1
+  fi
+  mkdir -p "${AUDIT_DIR}"
+  printf '%s\n' "${cas_result}" > "${AUDIT_DIR}/restore-sealed-result.json"
+  echo "restore-sealed result: ${cas_result}"
+  echo "OK: selected sealed FE release ${SEAL_TARGET} (frontend ${SEAL_FRONTEND}); FE selection only, paired BFF and hosted acceptance are pending."
+}
+
 cleanup() {
   local status=$?
   local outcome=accepted
@@ -1983,6 +2114,13 @@ cleanup() {
   if [[ "${ROLLBACK_LINK_CREATED}" == "true" ]]; then
     sudo rm -f -- "${ROLLBACK_LINK}" 2>/dev/null || true
     ROLLBACK_LINK_CREATED=false
+  fi
+
+  if [[ "${DEPLOY_ACTION}" == "restore-sealed" ]]; then
+    # Selection-only action: it is neither a deployment nor a rollback, so the
+    # deployment outcome/evidence finalization below does not apply.
+    rm -rf "${TMP_DIR}"
+    exit "${status}"
   fi
 
   if [[ "${status}" -eq 0 && "${DEPLOY_ACTION}" == "prepare" && "${PREPARED_SUCCESS}" == "true" ]]; then
@@ -2187,13 +2325,13 @@ if [[ -z "${DEPLOY_ACTION}" && "${DEPLOY_PROFILE}" == "read-only-restore" ]]; th
   DEPLOY_ACTION="restore"
 fi
 case "${DEPLOY_ACTION}" in
-  prepare|activate|restore) ;;
+  prepare|activate|restore|restore-sealed) ;;
   one-shot|bypass|"")
     echo "One-shot public switch has been retired. Explicit prepare and activate phases (or restore) are required." >&2
     exit 2
     ;;
   *)
-    echo "PANTHEON_DEPLOY_ACTION must be prepare, activate, or restore." >&2
+    echo "PANTHEON_DEPLOY_ACTION must be prepare, activate, restore, or restore-sealed." >&2
     exit 2
     ;;
 esac
@@ -2222,6 +2360,20 @@ assert_scoped_path "Safe-fallback locator store" "${SAFE_FALLBACK_LOCATOR_DIR}" 
 assert_scoped_path "Deployment lock" "${LOCK_FILE}" "${STRICT_LOCK_PREFIX}"
 assert_scoped_path "Durable evidence root" "${DURABLE_EVIDENCE_ROOT}" "${STRICT_DURABLE_EVIDENCE_PREFIX}"
 assert_scoped_path "Durable evidence run" "${DURABLE_EVIDENCE_DIR}" "${DURABLE_EVIDENCE_ROOT}"
+if [[ "${DEPLOY_ACTION}" == "restore-sealed" ]]; then
+  if [[ ! "${RELEASE_INSTANCE}" =~ ^[A-Za-z0-9._-]+$ ]]; then
+    echo "Release instance contains unsafe path characters." >&2
+    exit 2
+  fi
+  exec 9>"${LOCK_FILE}"
+  if ! flock -n 9; then
+    echo "Another dev frontend deployment holds ${LOCK_FILE}." >&2
+    exit 2
+  fi
+  LOCK_ACQUIRED=true
+  restore_sealed_release
+  exit 0
+fi
 if [[ ! "${SHA}" =~ ^[0-9a-f]{40}$ || "${SOURCE_REF}" != "${SHA}" ]]; then
   echo "Deployment source ref must equal the exact candidate SHA." >&2
   exit 2
