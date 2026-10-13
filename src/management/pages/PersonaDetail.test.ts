@@ -1,9 +1,24 @@
+import { createElement } from "react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { resolvePersonaForDetail } from "./personaDetailData";
-import { personaHumanInboxUrl, personaWorkshopEntryUrl } from "./PersonaDetail";
+import { PersonaDetail, personaHumanInboxUrl, personaWorkshopEntryUrl } from "./PersonaDetail";
 import type { Persona } from "@/lib/bff-v1";
 import { getPersona, runPersonaAction } from "@/lib/bff-v1/personas";
 import * as writes from "@/lib/bff-v1/writes";
+
+vi.mock("@/lib/bff-v1", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/bff-v1")>();
+  return {
+    ...actual,
+    bffV1: {
+      ...actual.bffV1,
+      strategies: { ...actual.bffV1.strategies, list: vi.fn().mockResolvedValue([]) },
+      audit: { ...actual.bffV1.audit, list: vi.fn().mockResolvedValue([]) },
+    },
+  };
+});
 
 vi.mock("@/lib/bff-v1/personas", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/bff-v1/personas")>();
@@ -74,34 +89,55 @@ describe("PersonaDetail", () => {
     expect(parsed.searchParams.get("evidence_cutoff")).toBe("2026-07-17T01:02:03Z");
   });
 
+  describe("saved Quarterly Ranking navigation", () => {
+    it.each(["ps_detail", "persona/tw equity"])(
+      "links to persona-scoped saved rankings for %s and submits no command",
+      async (personaId) => {
+        vi.mocked(getPersona).mockResolvedValue({
+          id: personaId,
+          name: "Detail Persona",
+          owner: "you",
+          updatedAt: "2026-05-10T00:00:00.000Z",
+          state: "draft",
+          risk: "low",
+          archetype: "macro",
+          routedStrategies: 0,
+          successRate: 0,
+        } as Persona);
+        const runActionSpy = vi.spyOn(writes, "runAction");
+        runActionSpy.mockClear();
+
+        render(
+          createElement(
+            MemoryRouter,
+            { initialEntries: [`/management/personas/${encodeURIComponent(personaId)}`] },
+            createElement(
+              Routes,
+              null,
+              createElement(Route, { path: "/management/personas/:id", element: createElement(PersonaDetail) }),
+            ),
+          ),
+        );
+
+        const link = await waitFor(() => {
+          const el = screen
+            .getAllByRole("link")
+            .find((a) => a.getAttribute("href")?.startsWith("/management/rankings"));
+          expect(el).toBeTruthy();
+          return el as HTMLElement;
+        });
+        const href = link.getAttribute("href") ?? "";
+        const parsed = new URL(href, "https://example.test");
+        expect(parsed.pathname).toBe("/management/rankings");
+        expect(parsed.searchParams.get("tab")).toBe("quarterly");
+        expect(parsed.searchParams.get("persona")).toBe(personaId);
+        fireEvent.click(link);
+        expect(runActionSpy).not.toHaveBeenCalled();
+      },
+    );
+  });
+
   describe("runPersonaAction operations", () => {
-    it("dispatches run_eval with PersonaAction envelope to canonical /bff/v1/commands", async () => {
-      const runActionSpy = vi.spyOn(writes, "runAction").mockResolvedValueOnce({
-        ok: true,
-        data: { commandId: "cmd-eval-1", status: "accepted" },
-      } as any);
-
-      const res = await runPersonaAction("ps_detail", "run_eval", { memo: "manual eval" });
-
-      expect(runActionSpy).toHaveBeenCalledWith(
-        {
-          kind: "Persona",
-          id: "ps_detail",
-          action: "run_eval",
-          memo: "manual eval",
-          reason: undefined,
-          confirmToken: undefined,
-          payload: { memo: "manual eval" },
-        },
-        {
-          correlationId: undefined,
-          idempotencyKey: undefined,
-          confirmToken: undefined,
-        },
-      );
-      expect(res).toMatchObject({ ok: true, data: { commandId: "cmd-eval-1" } });
-    });
-
     it("dispatches restrict_tools with PersonaAction envelope to canonical /bff/v1/commands", async () => {
       const runActionSpy = vi.spyOn(writes, "runAction").mockResolvedValueOnce({
         ok: true,

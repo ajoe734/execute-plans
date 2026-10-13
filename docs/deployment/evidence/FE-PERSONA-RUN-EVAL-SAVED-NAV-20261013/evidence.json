@@ -1,0 +1,25 @@
+{
+  "task_id": "FE-PERSONA-RUN-EVAL-SAVED-NAV-20261013",
+  "base": "execute-plans dev 4d1d066bc0508b5a9e5172fab080511260142b52",
+  "change": "PersonaDetail Run Eval write button (runPersonaAction run_eval + success toast) replaced by a react-router Link (Button asChild) to canonicalCenterUrl('rankings','quarterly',{persona: p.id}) with Trophy icon and nav.rankingsCenter label. No run_eval command is issued; no evaluation-success toast.",
+  "files_changed": [
+    "src/management/pages/PersonaDetail.tsx",
+    "src/management/pages/PersonaDetail.test.ts"
+  ],
+  "tests": {
+    "note": "Real jsdom render of PersonaDetail with mocked getPersona and bffV1 strategies/audit lists; this is not owner execution of any command.",
+    "added": "Rendered link href asserted as /management/rankings?tab=quarterly&persona=<id> for ps_detail and 'persona/tw equity' (URL-encoded, parsed via URL); clicking it does not call writes.runAction.",
+    "removed": "Mocked run_eval-accepted runPersonaAction assertion."
+  },
+  "commands": [
+    { "cmd": "NODE_ENV=test npx vitest run src/management/pages/PersonaDetail.test.ts", "exit_code": 0, "result": "1 file passed, 8 tests passed" },
+    { "cmd": "npm run typecheck (tsc -p tsconfig.app.json --noEmit)", "exit_code": 0 },
+    { "cmd": "npx eslint src/management/pages/PersonaDetail.tsx src/management/pages/PersonaDetail.test.ts", "exit_code": 0, "result": "0 errors, 2 pre-existing react-refresh warnings" }
+  ],
+  "limitations": [
+    "Source-only correction; no hosted, browser, deployment, or Pantheon owner verification performed.",
+    "Shell had NODE_ENV=production; tests were run with NODE_ENV=test and npm ci --include=dev.",
+    "Exact FE/BFF pair deployment and hosted acceptance remain with DEV-SIX-AREA-HOSTED-CLOSEOUT-20261002 and the existing FE hosted acceptance owner.",
+    "run_eval is not claimed retired; the current owner simply does not implement it (original counter: ACTION_UNAVAILABLE)."
+  ]
+}
