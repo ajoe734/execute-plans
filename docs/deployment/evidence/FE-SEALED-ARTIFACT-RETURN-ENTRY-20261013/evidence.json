@@ -1,0 +1,40 @@
+{
+  "taskId": "FE-SEALED-ARTIFACT-RETURN-ENTRY-20261013",
+  "parent": "DEV-SIX-AREA-HOSTED-CLOSEOUT-20261002",
+  "baseDevHead": "4d1d066bc0508b5a9e5172fab080511260142b52",
+  "scope": "source only; no hosted/VM/provider/deployment action by worker",
+  "files": ["scripts/deploy-dev-vm.sh", "scripts/test-deploy-dev-vm.sh"],
+  "callableContract": {
+    "action": "PANTHEON_DEPLOY_ACTION=restore-sealed",
+    "profile": "PANTHEON_DEPLOY_PROFILE=operator-live (GITHUB_EVENT_NAME=workflow_dispatch, PANTHEON_DEPLOY_REAL_WRITES=true, PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES=false)",
+    "inputs": {
+      "PANTHEON_DEPLOY_SEALED_FROM_JSON": "exactly {target,dist_sha256,manifest_sha256,frontend_sha,backend_sha}; must equal the current live target",
+      "PANTHEON_DEPLOY_SEALED_TO_JSON": "same five fields; the release to select",
+      "lease": "existing PANTHEON_DEPLOY_LEASE_{OWNER,EPOCH,RUN_ID,DELEGATED} checks, independent of any prepared receipt"
+    },
+    "directions": "same action; return uses the reversed seals (final->baseline, then baseline->same final)",
+    "result": "stdout 'restore-sealed result: {\"exchangedOutTarget\":...,\"liveTarget\":...,\"operation\":\"exchange\"}' and AUDIT_DIR/restore-sealed-result.json; semantics: FE selection only, paired BFF and hosted/browser acceptance pending",
+    "failure": "exit 2 before mutation on any seal/path/lease/predecessor/CAS rejection; exit 1 with partial-transition message if readback differs from the requested target"
+  },
+  "behavior": [
+    "validates both seals, managed direct-child release dirs, regular manifests, manifest sha256, accepted operator-live state, dist digest (release-candidate.mjs digest) and manifest identity (verify_manifest_file) before any mutation",
+    "stages an owner link and uses scripts/atomic-symlink-cas.py exchange (unchanged); successful CAS consumes the link",
+    "no release creation, manifest/receipt/pair.json/acceptedAt rewrite, build, pull, prepare, reseal, prune, probe or network call",
+    "cleanup short-circuits for this action only; ordinary deployment cleanup and evidence requirements are unchanged"
+  ],
+  "tests": {
+    "added": [
+      "sealed return round-trips operator-live releases preserving bytes",
+      "sealed return rejects bad seals, stale predecessor, and wrong profile",
+      "sealed return rejects unmanaged paths and invalid leases"
+    ],
+    "fullSuite": "73 named tests, each run via PANTHEON_TEST_FILTER=<exact name> in three bounded batches: 73 unique ok, 0 not ok (one name matched twice by substring). A single unfiltered 'bash scripts/test-deploy-dev-vm.sh' exceeded the 600s tool limit (34 ok, 0 not ok before termination), so no single unfiltered exit code is recorded.",
+    "cas": "python3 scripts/test-atomic-symlink-cas.py: Ran 7 tests, OK, exit 0"
+  },
+  "limitations": [
+    "fixture baseline is a byte-copy of the accepted operator-live release under a different directory name (distinct target, identical content); a second independently built operator-live release was not constructed",
+    "a concurrent live-link change between validation and CAS is covered by the unchanged CAS primitive's own tests, not by a new harness race; the harness covers stale predecessor rejection before CAS",
+    "fixture lease fields are not hosted expiry enforcement; the guarded Pantheon caller owns that",
+    "local tests are not a hosted round trip or final delivery"
+  ]
+}
