@@ -10,7 +10,7 @@
   ],
   "callableContract": {
     "action": "PANTHEON_DEPLOY_ACTION=restore-sealed",
-    "profile": "PANTHEON_DEPLOY_PROFILE=operator-live (GITHUB_EVENT_NAME=workflow_dispatch, PANTHEON_DEPLOY_REAL_WRITES=true, PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES=false)",
+    "profile": "PANTHEON_DEPLOY_PROFILE=operator-live (PANTHEON_DEPLOY_REAL_WRITES=true, PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES=false; GITHUB_EVENT_NAME absent/empty for local manual recovery, or workflow_dispatch)",
     "inputs": {
       "PANTHEON_DEPLOY_SEALED_FROM_JSON": "exactly {target,dist_sha256,manifest_sha256,frontend_sha,backend_sha}; must equal the current live target",
       "PANTHEON_DEPLOY_SEALED_TO_JSON": "same five fields; the release to select",
@@ -41,5 +41,13 @@
     "a concurrent live-link change between validation and CAS is covered by the unchanged CAS primitive's own tests, not by a new harness race; the harness covers stale predecessor rejection before CAS",
     "fixture lease fields are not hosted expiry enforcement; the guarded Pantheon caller owns that",
     "local tests are not a hosted round trip or final delivery"
-  ]
+  ],
+  "manualRestoreProfile": {
+    "task": "FE-SEALED-MANUAL-RESTORE-PROFILE-20261014",
+    "originalGap": "FE 312 deploy-dev-vm.sh general operator-live profile case accepted only GITHUB_EVENT_NAME=workflow_dispatch before the restore-sealed branch, so a real local manual restore with empty GitHub context was rejected (\"Operator-live deployment requires a manual strict session profile\") before any switch; the original harness hardcoded workflow_dispatch and the original evidence documented that profile.",
+    "correction": "Only action=restore-sealed additionally accepts an absent/empty GITHUB_EVENT_NAME. Every other event name, prepare/activate, strict flags, lease owner/epoch/run, exact seals, managed paths, expected-current predecessor, own lock and atomic CAS are unchanged. No GITHUB_* or PANTHEON_DEV_EVENT_NAME values are synthesized.",
+    "regression": "scripts/test-deploy-dev-vm.sh sealed cases now run the real script with real Node and the real CAS helper with empty GITHUB_EVENT_NAME/RUN_ID/RUN_ATTEMPT/REPOSITORY; they also assert push, emergency, stub-writes, and activate/prepare-without-dispatch rejection with the live target unchanged, and workflow_dispatch still accepted.",
+    "verification": "Source head 31240b105f6394cea4c68418b2aa603f50f60690 plus working-tree change: complete bash harness 73 ok / 0 not ok / 0 skipped (run in filter batches because the full run exceeds the 10-minute foreground bound); bash -n and git diff --check exit 0.",
+    "limits": "Local source/fixture proof only; not hosted restore or hosted acceptance. Hosted FE312/BE84 remains unaccepted; Root owns baseline recovery and final FULL acceptance. Historical failed manual retries are retained."
+  }
 }
