@@ -3449,8 +3449,13 @@ run_restore_sealed() {
   local to_json="$2"
   shift 2
   SEALED_RUN=$((${SEALED_RUN:-0} + 1))
+  # Genuine local manual recovery: no GitHub execution context at all. Callers
+  # may override these (later assignments win) to exercise other event names.
   run_deploy \
-    GITHUB_EVENT_NAME=workflow_dispatch \
+    GITHUB_EVENT_NAME= \
+    GITHUB_RUN_ID= \
+    GITHUB_RUN_ATTEMPT= \
+    GITHUB_REPOSITORY= \
     PANTHEON_DEPLOY_PROFILE=operator-live \
     PANTHEON_DEPLOY_PROOF_WINDOW_ACK=false \
     PANTHEON_DEPLOY_REAL_WRITES=true \
@@ -3594,6 +3599,27 @@ test_sealed_return_rejects_bad_seals_and_state() {
   run_restore_sealed "${FINAL_SEAL}" "${BASELINE_SEAL}" PANTHEON_DEPLOY_PROFILE=read-only \
     PANTHEON_DEPLOY_REAL_WRITES=false
   assert_sealed_rejected_unchanged "non operator-live profile"
+
+  # A non-manual GitHub event is still refused; empty/workflow_dispatch are not.
+  run_restore_sealed "${FINAL_SEAL}" "${BASELINE_SEAL}" GITHUB_EVENT_NAME=push
+  assert_sealed_rejected_unchanged "non-manual github event"
+  run_restore_sealed "${FINAL_SEAL}" "${BASELINE_SEAL}" PANTHEON_DEPLOY_EMERGENCY_OVERRIDE=true
+  assert_sealed_rejected_unchanged "emergency override"
+  run_restore_sealed "${FINAL_SEAL}" "${BASELINE_SEAL}" PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES=true
+  assert_sealed_rejected_unchanged "stub writes"
+
+  # Ordinary activate still requires manual workflow_dispatch (empty event rejected).
+  run_restore_sealed "${FINAL_SEAL}" "${BASELINE_SEAL}" PANTHEON_DEPLOY_ACTION=activate
+  assert_sealed_rejected_unchanged "activate without github manual dispatch"
+  grep -Fq "requires a manual strict session profile" "${RUN_OUTPUT}" || show_deploy_failure "activate event rejection not explicit"
+  run_restore_sealed "${FINAL_SEAL}" "${BASELINE_SEAL}" PANTHEON_DEPLOY_ACTION=prepare PANTHEON_DEPLOY_REAL_WRITES=false
+  assert_sealed_rejected_unchanged "prepare without github manual dispatch"
+
+  # workflow_dispatch remains accepted for restore-sealed.
+  run_restore_sealed "${FINAL_SEAL}" "${BASELINE_SEAL}" GITHUB_EVENT_NAME=workflow_dispatch
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "workflow_dispatch restore-sealed should succeed"
+  run_restore_sealed "${BASELINE_SEAL}" "${FINAL_SEAL}"
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "restore back should succeed"
 
   # Still valid afterwards: the rejections never mutated anything.
   run_restore_sealed "${FINAL_SEAL}" "${BASELINE_SEAL}"
