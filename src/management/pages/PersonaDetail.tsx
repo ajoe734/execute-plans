@@ -11,7 +11,7 @@ import { commandReceiptDescription } from "@/lib/bff-v1/commandReceipt";
 import { useT } from "@/platform/hooks";
 import { usePermissions } from "@/lib/usePermissions";
 import type { Persona, Strategy, AuditEvent } from "@/lib/bff-v1";
-import { Pause, Edit, Beaker, Play, Lock, Archive, Inbox, MessageSquare, GitCompare, Lightbulb, History } from "lucide-react";
+import { Pause, Edit, Beaker, Trophy, Lock, Archive, Inbox, MessageSquare, GitCompare, Lightbulb, History } from "lucide-react";
 import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
 import { DataTable } from "@/platform/components/DataTable";
 import { StatusBadge } from "@/platform/components/StatusBadge";
@@ -344,13 +344,10 @@ export const PersonaDetail = () => {
             }}>
               <Beaker className="h-4 w-4 mr-1" />{t("persona.ops.testAs")}
             </Button>
-            <Button size="sm" variant="outline" onClick={async () => {
-              const receipt = await runPersonaAction(p.id, "run_eval", { memo: "manual eval" });
-              toast.success(t("persona.ops.evalToast"), {
-                description: personaReceipt(receipt, "run_eval"),
-              });
-            }}>
-              <Play className="h-4 w-4 mr-1" />{t("persona.ops.runEval")}
+            <Button asChild size="sm" variant="outline">
+              <Link to={canonicalCenterUrl("rankings", "quarterly", { persona: p.id })}>
+                <Trophy className="h-4 w-4 mr-1" />{t("nav.rankingsCenter")}
+              </Link>
             </Button>
             <Button size="sm" variant="outline" onClick={async () => {
               const receipt = await runPersonaAction(p.id, "restrict_tools", { memo: "temporary restriction" });
