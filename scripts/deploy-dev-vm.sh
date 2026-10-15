@@ -2275,7 +2275,16 @@ case "${DEPLOY_PROFILE}" in
         exit 2
       fi
     else
-      if [[ "${GITHUB_EVENT_NAME:-}" != "workflow_dispatch" ||
+      # Sealed restore selects existing immutable releases from a local manual
+      # recovery session, so it accepts an absent/empty GitHub event as well as
+      # workflow_dispatch. Any other event name, and prepare/activate, still
+      # require manual workflow_dispatch.
+      restore_event_ok=false
+      if [[ "${GITHUB_EVENT_NAME:-}" == "workflow_dispatch" ||
+        ( "${DEPLOY_ACTION}" == "restore-sealed" && -z "${GITHUB_EVENT_NAME:-}" ) ]]; then
+        restore_event_ok=true
+      fi
+      if [[ "${restore_event_ok}" != "true" ||
         "${PROOF_WINDOW_ACK}" != "false" ||
         "${REAL_WRITES}" != "true" ||
         "${ALLOW_DEV_STUB_WRITES}" != "false" ||
