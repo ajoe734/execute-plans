@@ -79,6 +79,40 @@ describe("mgmt façade (PM-Live)", () => {
     expect(liveStatus.get().effective).toBe("live");
   });
 
+  it("forwards Evolution journal focus as encoded server query and returns a target outside the default first page", async () => {
+    liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      return jsonResponse(url.includes("decision=")
+        ? {
+            data: {
+              id: "management_evolution_journal",
+              items: [{ id: "evo-sweep-inc-drift-a24770da155d" }],
+              summary: { total_items: 1, returned_items: 1 },
+            },
+            page_info: { next_page_token: null, total: 1, page_size: 20 },
+          }
+        : {
+            data: {
+              id: "management_evolution_journal",
+              items: [{ id: "first-page-row" }],
+              summary: { total_items: 124, returned_items: 20 },
+            },
+            page_info: { next_page_token: "20", total: 124, page_size: 20 },
+          });
+    });
+    const unfiltered = await mgmt.evolutionJournal.list<{ id: string }>(() => []);
+    expect(unfiltered.map((r) => r.id)).toEqual(["first-page-row"]);
+    expect(String(fetchSpy.mock.calls[0][0])).toMatch(/\/management\/evolution-journal$/);
+    const focused = await mgmt.evolutionJournal.list<{ id: string }>(() => [], {
+      persona: "p/1 a", mutationReview: "m&r", decision: "evo-sweep-inc-drift-a24770da155d",
+    });
+    expect(focused.map((r) => r.id)).toEqual(["evo-sweep-inc-drift-a24770da155d"]);
+    expect(String(fetchSpy.mock.calls[1][0])).toContain(
+      "/management/evolution-journal?persona=p%2F1+a&mutation_review=m%26r&decision=evo-sweep-inc-drift-a24770da155d",
+    );
+  });
+
   it("recommendations live read follows next_page_token past the first page", async () => {
     liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
     const page = (id: string, next: string | null) => jsonResponse({ data: [{ personaId: id, rank: 1 }], page_info: { next_page_token: next } });
