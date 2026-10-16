@@ -3909,8 +3909,11 @@ export const mgmt = {
   },
 
   evolutionJournal: {
-    list: <T>(seedFn: () => T[], opts?: { signal?: AbortSignal }): Promise<T[]> =>
-      mgmtRead("mgmt.evolutionJournal.list", { method: "GET", path: paths.mgmtEvolutionJournal(), signal: opts?.signal }, seedFn, adaptArrayPassthrough<T>),
+    list: <T>(
+      seedFn: () => T[],
+      opts?: { signal?: AbortSignal; persona?: string; mutationReview?: string; decision?: string },
+    ): Promise<T[]> =>
+      mgmtRead("mgmt.evolutionJournal.list", { method: "GET", path: paths.mgmtEvolutionJournal(opts), signal: opts?.signal }, seedFn, adaptArrayPassthrough<T>),
   },
 
   evidence: {

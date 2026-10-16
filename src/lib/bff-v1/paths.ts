@@ -202,7 +202,14 @@ export const paths = {
   mgmtPromotionReviewDecision: (id: string) => `${BASE}/management/promotion-reviews/${enc(id)}/decisions`,
   mgmtTradingPulse: () => `${BASE}/management/trading-pulse`,
   mgmtTradingRankings: () => `${BASE}/management/trading-pulse/rankings`,
-  mgmtEvolutionJournal: () => `${BASE}/management/evolution-journal`,
+  mgmtEvolutionJournal: (filters: { persona?: string; mutationReview?: string; decision?: string } = {}) => {
+    const params = new URLSearchParams();
+    if (filters.persona) params.set("persona", filters.persona);
+    if (filters.mutationReview) params.set("mutation_review", filters.mutationReview);
+    if (filters.decision) params.set("decision", filters.decision);
+    const query = params.toString();
+    return `${BASE}/management/evolution-journal${query ? `?${query}` : ""}`;
+  },
   mgmtEvidenceExplorer: () => `${BASE}/management/evidence`,
   mgmtEvidenceRef: (id: string) => `${BASE}/management/evidence/${enc(id)}`,
   /** MGMT-LOAD-003 — cheap shell badge counts + session/transport, no full lists. */
