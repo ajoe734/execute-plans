@@ -1,0 +1,13 @@
+{
+  "task_id": "FE-DRAWER-KEYBOARD-READINESS-20261016",
+  "scope": "source/QA only; test synchronization, no hosted deployment",
+  "diagnosis": "e2e/17-a11y-v5.spec.ts drawer test pressed Escape right after the dialog became visible, before Radix mounted its focus/keyboard scope. The sibling incident test already awaits the automatic textarea focus. LoopRunDrawer's first tabbable element for a running run is textarea#pause-reason.",
+  "change": "one await expect(dialog #pause-reason).toBeFocused() before the single Escape; closed/trigger-focused assertions unchanged",
+  "production_files_changed": 0,
+  "original_failure": "Not reproduced locally; all local repetitions passed, so intermittency is not claimed fixed by repetition. Original CI failure: dialog count expected 0, received 1 after Escape (FEgate38955315045).",
+  "verification": [
+    {"cmd": "NODE_ENV=development npx playwright test e2e/17-a11y-v5.spec.ts --project=chromium -g focus", "exit": 0, "result": "2 passed"},
+    {"cmd": "NODE_ENV=development npx playwright test e2e/17-a11y-v5.spec.ts --project=chromium", "exit": 0, "result": "9 passed"},
+    {"cmd": "NODE_ENV=development npx playwright test e2e/17-a11y-v5.spec.ts --project=chromium -g 'drawer focus' --repeat-each=5", "exit": 0, "result": "5 passed"}
+  ]
+}
