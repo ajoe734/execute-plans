@@ -481,6 +481,8 @@ describe("hosted browser strict release policy", () => {
       "Protocol error (Network.getResponseBody): No resource with given identifier found",
     );
     expect(isAcceptableCoreStatus(response)).toBe(false);
+    expect(isAcceptableCoreStatus(response, { pass: true })).toBe(true);
+    expect(isAcceptableCoreStatus(response, { pass: false })).toBe(false);
   });
 
   it("retains status 0 and diagnostic error when core BFF response is genuinely absent", async () => {
@@ -497,6 +499,7 @@ describe("hosted browser strict release policy", () => {
     expect(response.body).toBe("");
     expect(response.error).toContain("Timeout 5000ms exceeded");
     expect(isAcceptableCoreStatus(response)).toBe(false);
+    expect(isAcceptableCoreStatus(response, { pass: true })).toBe(false);
   });
 
   it("preserves observed 500 status without treating body-read failure as success", async () => {
@@ -522,6 +525,35 @@ describe("hosted browser strict release policy", () => {
     expect(response.body).toBe("");
     expect(response.error).toContain("network socket reset while reading body");
     expect(isAcceptableCoreStatus(response)).toBe(false);
+    expect(isAcceptableCoreStatus(response, { pass: true })).toBe(false);
+  });
+
+  it("reconciles isAcceptableCoreStatus with verified authBoundary while maintaining strict checks", () => {
+    const emptyBody401 = {
+      path: "/bff/me",
+      status: 401,
+      method: "GET",
+      url: "https://api.dev.mvl-cap.tw/bff/me",
+      body: "",
+      error: "Protocol error (Network.getResponseBody): No resource with given identifier found",
+    };
+    const validAuthBoundary = { pass: true };
+    const unsafeAuthBoundary = { pass: false };
+
+    expect(isAcceptableCoreStatus(emptyBody401, validAuthBoundary)).toBe(true);
+    expect(isAcceptableCoreStatus(emptyBody401, unsafeAuthBoundary)).toBe(false);
+    expect(isAcceptableCoreStatus(emptyBody401)).toBe(false);
+
+    const normal401 = { status: 401, body: '{"error":"AUTH_REQUIRED"}' };
+    expect(isAcceptableCoreStatus(normal401)).toBe(true);
+    expect(isAcceptableCoreStatus(normal401, unsafeAuthBoundary)).toBe(true);
+
+    const invalidBody401 = { status: 401, body: '{"error":"GATEWAY_TIMEOUT"}' };
+    expect(isAcceptableCoreStatus(invalidBody401, validAuthBoundary)).toBe(false);
+
+    expect(isAcceptableCoreStatus({ status: 500, body: "" }, validAuthBoundary)).toBe(false);
+    expect(isAcceptableCoreStatus({ status: 0, body: "" }, validAuthBoundary)).toBe(false);
+    expect(isAcceptableCoreStatus({ status: 200, body: "" }, validAuthBoundary)).toBe(false);
   });
 
   it("distinguishes an RGB zero channel from transparent CSS focus colors", () => {

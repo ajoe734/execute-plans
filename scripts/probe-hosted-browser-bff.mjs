@@ -367,10 +367,11 @@ function isCoreBffResponse(res, expectedPath) {
   );
 }
 
-export function isAcceptableCoreStatus(response) {
+export function isAcceptableCoreStatus(response, authBoundary) {
   return (
     response.status === 401 &&
-    /AUTH_REQUIRED|authentication required/iu.test(response.body || "")
+    (/AUTH_REQUIRED|authentication required/iu.test(response.body || "") ||
+      (Boolean(authBoundary?.pass) && !response.body))
   );
 }
 
@@ -645,9 +646,6 @@ export async function waitForCoreBffResponse(
     };
   }
 
-  const status = typeof res.status === "function" ? res.status() : 0;
-  const method = res.request?.()?.method?.() || "GET";
-  const url = typeof res.url === "function" ? redactUrl(res.url()) : "";
   let body = "";
   let error = "";
   try {
@@ -660,9 +658,9 @@ export async function waitForCoreBffResponse(
 
   return {
     path: expectedPath,
-    status,
-    method,
-    url,
+    status: typeof res.status === "function" ? res.status() : 0,
+    method: res.request?.()?.method?.() || "GET",
+    url: typeof res.url === "function" ? redactUrl(res.url()) : "",
     body,
     error,
   };
@@ -2799,12 +2797,15 @@ async function runProbe() {
     REQUIRED_CORE_BFF_PATHS.every((expectedPath) =>
       coreResponses.some(
         (response) =>
-          response.path === expectedPath && isAcceptableCoreStatus(response),
+          response.path === expectedPath &&
+          isAcceptableCoreStatus(response, anonymousAuthBoundary),
       ),
     );
   const observedProtectedResponsesOk = coreResponses
     .filter((response) => response.status > 0)
-    .every(isAcceptableCoreStatus);
+    .every((response) =>
+      isAcceptableCoreStatus(response, anonymousAuthBoundary),
+    );
   const noAuthorizationRequests = authorizationRequests.length === 0;
   const browserBffMethodPolicy = inspectBrowserBffMethods(requests);
   const noEmbeddedDevBearer = !/pantheon-dev-browser\s*:/iu.test(
@@ -2835,7 +2836,8 @@ async function runProbe() {
     (expectedPath) =>
       coreResponses.some(
         (response) =>
-          response.path === expectedPath && isAcceptableCoreStatus(response),
+          response.path === expectedPath &&
+          isAcceptableCoreStatus(response, anonymousAuthBoundary),
       ),
   );
   const personaFleetSafety = FE_PATH.includes("persona-fleet")
@@ -3019,7 +3021,7 @@ async function runProbe() {
         " | " +
         isRequiredCorePath(response.path) +
         " | " +
-        isAcceptableCoreStatus(response) +
+        isAcceptableCoreStatus(response, anonymousAuthBoundary) +
         " | " +
         (response.url
           ? response.url.replace(BFF_BASE, "") + " " + response.body

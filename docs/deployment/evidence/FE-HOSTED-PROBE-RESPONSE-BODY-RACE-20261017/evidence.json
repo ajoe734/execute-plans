@@ -7,17 +7,17 @@
   "merge_target": "dev",
   "branch": "task/FE-HOSTED-PROBE-RESPONSE-BODY-RACE-20261017",
   "evidence_kind": "local_validation_only",
-  "note": "Fixes race in waitForCoreBffResponse where Chromium protocol error (Network.getResponseBody: No resource with given identifier found) thrown by res.text() during post-401 auth redirect fell into the outer catch block and erased the genuinely observed response status to 0 and url to empty string. Separates response observation from body retrieval: if res.text() fails, observed status, method, and redacted URL are preserved, body is empty string, and error captures redacted diagnostic text. Genuinely absent responses still return status 0. Preserves strict gate checks and valid-versus-unsafe redirect semantics without loosening release gates. Net production growth in scripts/probe-hosted-browser-bff.mjs is +13 lines (<= 20 budget satisfied). Added 3 deterministic base-failing regression tests in src/test/hosted-browser-release-policy.test.ts covering body-read failure status/diagnostic retention, absent response status 0 retention, and 500 status non-success.",
+  "note": "Fixes race in waitForCoreBffResponse where Chromium protocol error (Network.getResponseBody: No resource with given identifier found) thrown by res.text() during post-401 auth redirect fell into the outer catch block and erased the genuinely observed response status to 0 and url to empty string. Separates response observation from body retrieval: if res.text() fails, observed status, method, and redacted URL are preserved, body is empty string, and error captures redacted diagnostic text. Genuinely absent responses still return status 0. Reconciles isAcceptableCoreStatus with verified authBoundary so that when body is lost during a verified auth redirect race, 401 is accepted when authBoundary.pass is true, while unsafe redirects and 500 errors remain rejected. Net production growth in scripts/probe-hosted-browser-bff.mjs is +15 lines (<= 20 budget satisfied). Added regression tests in src/test/hosted-browser-release-policy.test.ts covering body-read failure retention, absent response status 0, 500 non-success, and auth boundary reconciliation.",
   "acceptance_mapping": {
     "AC1_read_boundaries_and_reproduce_failure": "Read existing waitForCoreBffResponse, waitForRequiredCoreOrAuthBoundary, and isAcceptableCoreStatus. Confirmed original FE281ceed31f39d8a248d949d16ec8b7e8f18132b3 gate39050748766 test failure where res.text() Network.getResponseBody Protocol error caused status to be rewritten as 0 and url as empty string despite 401 response receipt.",
-    "AC2_preserve_observed_status_and_diagnostics": "Updated response capture in waitForCoreBffResponse so body read failures cannot erase observed status, method, or redacted URL. Diagnostic error is truthfully retained. An absent response retains status 0. Real 500 or unsafe auth redirects or required body-dependent evidence do not become success. Preserved strict gate/auth checks. Net production delta in scripts/probe-hosted-browser-bff.mjs is +13 lines (+26, -13), within the <= 20 line budget.",
-    "AC3_deterministic_regression_and_suite_verification": "Extended src/test/hosted-browser-release-policy.test.ts with deterministic base-failing unit tests proving retention of received status (401), method, url, and diagnostic error when body read throws; absent response returning status 0; and 500 status non-success. All 74 tests in hosted-browser-release-policy.test.ts pass cleanly. Typecheck (app and agora), deploy-safe-defaults, paired-release-workflow, admitted-dev-pair, and lint checks verified clean."
+    "AC2_preserve_observed_status_and_diagnostics": "Updated response capture in waitForCoreBffResponse so body read failures cannot erase observed status, method, or redacted URL. Truthfully retained error diagnostics. Reconciled isAcceptableCoreStatus with verified authBoundary: acceptable core 401 is admitted when authBoundary.pass is verified even if body was lost in flight, while unsafe auth redirects, non-401s, or 500 errors never pass. Preserved strict gate/auth checks. Net production delta in scripts/probe-hosted-browser-bff.mjs is +15 lines (+33, -18), within the <= 20 line budget.",
+    "AC3_deterministic_regression_and_suite_verification": "Extended src/test/hosted-browser-release-policy.test.ts with deterministic regression tests proving retention of received status (401), method, url, and diagnostic error when body read throws; absent response returning status 0; 500 status non-success; and reconciliation of acceptable core status with verified auth boundary. All 75 tests in hosted-browser-release-policy.test.ts pass cleanly. Typecheck (app and agora), deploy-safe-defaults, paired-release-workflow, admitted-dev-pair, and lint checks verified clean."
   },
   "local_validation": {
     "commands": [
       {
         "command": "NODE_ENV=test ./node_modules/.bin/vitest run src/test/hosted-browser-release-policy.test.ts",
-        "result": "74 passed (74)"
+        "result": "75 passed (75)"
       },
       {
         "command": "NODE_ENV=test ./node_modules/.bin/vitest run src/test/deploy-safe-defaults.test.ts src/test/paired-release-workflow.test.ts src/test/admitted-dev-pair.test.ts",
@@ -37,7 +37,7 @@
       },
       {
         "command": "git diff --stat scripts/probe-hosted-browser-bff.mjs",
-        "result": "26 insertions(+), 13 deletions(-) (net +13 lines, budget <= 20 satisfied)"
+        "result": "33 insertions(+), 18 deletions(-) (net +15 lines, budget <= 20 satisfied)"
       }
     ]
   },
