@@ -1904,9 +1904,19 @@ export const EvolutionJournalPage = () => {
     true,
   );
 
-  const { data, loading } = useV5Live((signal) => mgmt.evolutionJournal.list<EvolutionEntry>(() => [], { signal }), [], {
-    cacheKey: "oversight.evolutionJournal.list",
-  });
+  const serverMutationReview = normalizeEvolutionFocusToken(searchParams.get("mutation_review"), true);
+  const serverDecision = serverMutationReview ? "" : normalizeEvolutionFocusToken(searchParams.get("decision"), true);
+  const { data, loading } = useV5Live(
+    (signal) =>
+      mgmt.evolutionJournal.list<EvolutionEntry>(() => [], {
+        signal,
+        persona: personaFocus,
+        mutationReview: serverMutationReview,
+        decision: serverDecision,
+      }),
+    [personaFocus, serverMutationReview, serverDecision],
+    { cacheKey: "oversight.evolutionJournal.list" },
+  );
   const { data: fleetRows } = useV5Live((signal) => mgmt.personaFleet.get({}, { signal }), [], {
     cacheKey: "oversight.personaFleet",
   });

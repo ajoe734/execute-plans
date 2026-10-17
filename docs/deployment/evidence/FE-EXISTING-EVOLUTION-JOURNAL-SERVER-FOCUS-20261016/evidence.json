@@ -1,0 +1,16 @@
+{
+  "task_id": "FE-EXISTING-EVOLUTION-JOURNAL-SERVER-FOCUS-20261016",
+  "scope": "source behavior only; hosted browser acceptance is performed later by Root against the exact released pair",
+  "changes": [
+    "paths.mgmtEvolutionJournal accepts persona/mutation_review/decision and URL-encodes them",
+    "mgmt.evolutionJournal.list forwards focus options to the existing BFF query",
+    "EvolutionJournalPage passes focus into useV5Live deps so focus change/clear refetches under a distinct cache key"
+  ],
+  "production_net_lines": 18,
+  "tests": [
+    "src/lib/bff-v1/__tests__/management.test.ts",
+    "src/management/pages/oversight/EvolutionJournalPage.test.tsx"
+  ],
+  "verification": "NODE_ENV=test vitest run management.test.ts + EvolutionJournalPage.test.tsx (incl. real useV5Live mounted focus change/clear with fetch-level fixtures) passed; tsc --noEmit clean",
+  "not_done": ["no BFF change", "no timeout change", "no deploy or provider call"]
+}

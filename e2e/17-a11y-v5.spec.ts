@@ -372,6 +372,8 @@ test.describe("F17 axe a11y gate for v5 pages", () => {
 
     await page.keyboard.press("Enter");
     await expect(page.getByRole("dialog")).toBeVisible();
+    // Radix mounts its keyboard/focus scope after the dialog becomes visible.
+    await expect(page.getByRole("dialog").locator("#pause-reason")).toBeFocused();
 
     await page.keyboard.press("Escape");
     await expect(page.getByRole("dialog")).toHaveCount(0);
