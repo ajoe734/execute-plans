@@ -1,0 +1,50 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "FE-HOSTED-PROBE-RESPONSE-BODY-RACE-20261017",
+  "owner": "Antigravity2",
+  "reviewer": "Antigravity",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-HOSTED-PROBE-RESPONSE-BODY-RACE-20261017",
+  "evidence_kind": "local_validation_only",
+  "note": "Fixes race in waitForCoreBffResponse where Chromium protocol error (Network.getResponseBody: No resource with given identifier found) thrown by res.text() during post-401 auth redirect fell into the outer catch block and erased the genuinely observed response status to 0 and url to empty string. Separates response observation from body retrieval: if res.text() fails, observed status, method, and redacted URL are preserved, body is empty string, and error captures redacted diagnostic text. Genuinely absent responses still return status 0. Preserves strict gate checks and valid-versus-unsafe redirect semantics without loosening release gates. Net production growth in scripts/probe-hosted-browser-bff.mjs is +13 lines (<= 20 budget satisfied). Added 3 deterministic base-failing regression tests in src/test/hosted-browser-release-policy.test.ts covering body-read failure status/diagnostic retention, absent response status 0 retention, and 500 status non-success.",
+  "acceptance_mapping": {
+    "AC1_read_boundaries_and_reproduce_failure": "Read existing waitForCoreBffResponse, waitForRequiredCoreOrAuthBoundary, and isAcceptableCoreStatus. Confirmed original FE281ceed31f39d8a248d949d16ec8b7e8f18132b3 gate39050748766 test failure where res.text() Network.getResponseBody Protocol error caused status to be rewritten as 0 and url as empty string despite 401 response receipt.",
+    "AC2_preserve_observed_status_and_diagnostics": "Updated response capture in waitForCoreBffResponse so body read failures cannot erase observed status, method, or redacted URL. Diagnostic error is truthfully retained. An absent response retains status 0. Real 500 or unsafe auth redirects or required body-dependent evidence do not become success. Preserved strict gate/auth checks. Net production delta in scripts/probe-hosted-browser-bff.mjs is +13 lines (+26, -13), within the <= 20 line budget.",
+    "AC3_deterministic_regression_and_suite_verification": "Extended src/test/hosted-browser-release-policy.test.ts with deterministic base-failing unit tests proving retention of received status (401), method, url, and diagnostic error when body read throws; absent response returning status 0; and 500 status non-success. All 74 tests in hosted-browser-release-policy.test.ts pass cleanly. Typecheck (app and agora), deploy-safe-defaults, paired-release-workflow, admitted-dev-pair, and lint checks verified clean."
+  },
+  "local_validation": {
+    "commands": [
+      {
+        "command": "NODE_ENV=test ./node_modules/.bin/vitest run src/test/hosted-browser-release-policy.test.ts",
+        "result": "74 passed (74)"
+      },
+      {
+        "command": "NODE_ENV=test ./node_modules/.bin/vitest run src/test/deploy-safe-defaults.test.ts src/test/paired-release-workflow.test.ts src/test/admitted-dev-pair.test.ts",
+        "result": "54 passed (54)"
+      },
+      {
+        "command": "npm run typecheck:app",
+        "result": "clean, 0 errors"
+      },
+      {
+        "command": "npm run typecheck:agora",
+        "result": "clean, 0 errors"
+      },
+      {
+        "command": "npm run lint",
+        "result": "clean, 0 errors (67 pre-existing warnings)"
+      },
+      {
+        "command": "git diff --stat scripts/probe-hosted-browser-bff.mjs",
+        "result": "26 insertions(+), 13 deletions(-) (net +13 lines, budget <= 20 satisfied)"
+      }
+    ]
+  },
+  "not_changed": [
+    "No change to release workflow, deploy controller, or product runtime.",
+    "No new probes, wrapper chains, services, configs, retries, timeout increases, or fallbacks added.",
+    "No allowlists added or test expectations rewritten to hide 401.",
+    "No VM, SSH, or hosted API calls; source/local delivery only."
+  ]
+}

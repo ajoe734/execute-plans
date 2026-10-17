@@ -31,6 +31,7 @@ import {
   inspectBrowserBffMethods,
   inspectDeploymentMetadata,
   installBffCandidateRoute,
+  isAcceptableCoreStatus,
   isAllowlistedBffRequestFailure,
   isAllowlistedConsoleError,
   isBffPath,
@@ -40,6 +41,7 @@ import {
   redactDiagnosticText,
   scanTextForSensitiveValues,
   summarizeAxeViolations,
+  waitForCoreBffResponse,
 } from "../../scripts/probe-hosted-browser-bff.mjs";
 
 const cleanupRoots: string[] = [];
@@ -451,6 +453,76 @@ describe("hosted browser strict release policy", () => {
     },
     40_000,
   );
+
+  it("preserves observed HTTP status and diagnostics when response body read is unavailable", async () => {
+    const mockResponse = {
+      status: () => 401,
+      request: () => ({ method: () => "GET" }),
+      url: () => "https://api.dev.mvl-cap.tw/bff/me",
+      text: async () => {
+        throw new Error(
+          "response.text: Protocol error (Network.getResponseBody): No resource with given identifier found",
+        );
+      },
+    };
+    const mockPage = {
+      waitForResponse: async (predicate: (res: typeof mockResponse) => boolean) => {
+        if (predicate(mockResponse)) return mockResponse;
+        throw new Error("Response did not match predicate");
+      },
+    };
+
+    const response = await waitForCoreBffResponse(mockPage, "/bff/me", 5000);
+    expect(response.status).toBe(401);
+    expect(response.method).toBe("GET");
+    expect(response.url).toBe("https://api.dev.mvl-cap.tw/bff/me");
+    expect(response.body).toBe("");
+    expect(response.error).toContain(
+      "Protocol error (Network.getResponseBody): No resource with given identifier found",
+    );
+    expect(isAcceptableCoreStatus(response)).toBe(false);
+  });
+
+  it("retains status 0 and diagnostic error when core BFF response is genuinely absent", async () => {
+    const mockFailingPage = {
+      waitForResponse: async () => {
+        throw new Error("Timeout 5000ms exceeded while waiting for response");
+      },
+    };
+
+    const response = await waitForCoreBffResponse(mockFailingPage, "/bff/me", 5000);
+    expect(response.status).toBe(0);
+    expect(response.method).toBe("GET");
+    expect(response.url).toBe("");
+    expect(response.body).toBe("");
+    expect(response.error).toContain("Timeout 5000ms exceeded");
+    expect(isAcceptableCoreStatus(response)).toBe(false);
+  });
+
+  it("preserves observed 500 status without treating body-read failure as success", async () => {
+    const mock500Response = {
+      status: () => 500,
+      request: () => ({ method: () => "GET" }),
+      url: () => "https://api.dev.mvl-cap.tw/bff/me",
+      text: async () => {
+        throw new Error("network socket reset while reading body");
+      },
+    };
+    const mock500Page = {
+      waitForResponse: async (predicate: (res: typeof mock500Response) => boolean) => {
+        if (predicate(mock500Response)) return mock500Response;
+        throw new Error("Response did not match predicate");
+      },
+    };
+
+    const response = await waitForCoreBffResponse(mock500Page, "/bff/me", 5000);
+    expect(response.status).toBe(500);
+    expect(response.method).toBe("GET");
+    expect(response.url).toBe("https://api.dev.mvl-cap.tw/bff/me");
+    expect(response.body).toBe("");
+    expect(response.error).toContain("network socket reset while reading body");
+    expect(isAcceptableCoreStatus(response)).toBe(false);
+  });
 
   it("distinguishes an RGB zero channel from transparent CSS focus colors", () => {
     expect(cssColorHasVisibleAlpha("rgb(229, 151, 0)")).toBe(true);

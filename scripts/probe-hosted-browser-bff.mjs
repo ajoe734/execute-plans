@@ -367,7 +367,7 @@ function isCoreBffResponse(res, expectedPath) {
   );
 }
 
-function isAcceptableCoreStatus(response) {
+export function isAcceptableCoreStatus(response) {
   return (
     response.status === 401 &&
     /AUTH_REQUIRED|authentication required/iu.test(response.body || "")
@@ -623,26 +623,17 @@ export function evaluateOpenclawContractPassed({
   return openclawContractChecks ? Boolean(openclawContractChecks.pass) : false;
 }
 
-async function waitForCoreBffResponse(
+export async function waitForCoreBffResponse(
   page,
   expectedPath,
   timeoutMs = remainingTimeoutMs(),
 ) {
+  let res;
   try {
-    const res = await page.waitForResponse(
+    res = await page.waitForResponse(
       (response) => isCoreBffResponse(response, expectedPath),
       { timeout: Math.min(timeoutMs, remainingTimeoutMs()) },
     );
-    return {
-      path: expectedPath,
-      status: res.status(),
-      method: res.request().method(),
-      url: redactUrl(res.url()),
-      body: redactDiagnosticText(
-        (await res.text()).replace(/\s+/gu, " ").slice(0, 500),
-      ),
-      error: "",
-    };
   } catch (error) {
     return {
       path: expectedPath,
@@ -653,6 +644,28 @@ async function waitForCoreBffResponse(
       error: redactDiagnosticText(error, 240),
     };
   }
+
+  const status = typeof res.status === "function" ? res.status() : 0;
+  const method = res.request?.()?.method?.() || "GET";
+  const url = typeof res.url === "function" ? redactUrl(res.url()) : "";
+  let body = "";
+  let error = "";
+  try {
+    body = redactDiagnosticText(
+      (await res.text()).replace(/\s+/gu, " ").slice(0, 500),
+    );
+  } catch (bodyError) {
+    error = redactDiagnosticText(bodyError, 240);
+  }
+
+  return {
+    path: expectedPath,
+    status,
+    method,
+    url,
+    body,
+    error,
+  };
 }
 
 function textHits(label, text, needle) {
