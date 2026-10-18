@@ -31,6 +31,7 @@ import {
   inspectBrowserBffMethods,
   inspectDeploymentMetadata,
   installBffCandidateRoute,
+  isAcceptableCoreStatus,
   isAllowlistedBffRequestFailure,
   isAllowlistedConsoleError,
   isBffPath,
@@ -40,6 +41,7 @@ import {
   redactDiagnosticText,
   scanTextForSensitiveValues,
   summarizeAxeViolations,
+  waitForCoreBffResponse,
 } from "../../scripts/probe-hosted-browser-bff.mjs";
 
 const cleanupRoots: string[] = [];
@@ -451,6 +453,108 @@ describe("hosted browser strict release policy", () => {
     },
     40_000,
   );
+
+  it("preserves observed HTTP status and diagnostics when response body read is unavailable", async () => {
+    const mockResponse = {
+      status: () => 401,
+      request: () => ({ method: () => "GET" }),
+      url: () => "https://api.dev.mvl-cap.tw/bff/me",
+      text: async () => {
+        throw new Error(
+          "response.text: Protocol error (Network.getResponseBody): No resource with given identifier found",
+        );
+      },
+    };
+    const mockPage = {
+      waitForResponse: async (predicate: (res: typeof mockResponse) => boolean) => {
+        if (predicate(mockResponse)) return mockResponse;
+        throw new Error("Response did not match predicate");
+      },
+    };
+
+    const response = await waitForCoreBffResponse(mockPage, "/bff/me", 5000);
+    expect(response.status).toBe(401);
+    expect(response.method).toBe("GET");
+    expect(response.url).toBe("https://api.dev.mvl-cap.tw/bff/me");
+    expect(response.body).toBe("");
+    expect(response.error).toContain(
+      "Protocol error (Network.getResponseBody): No resource with given identifier found",
+    );
+    expect(isAcceptableCoreStatus(response)).toBe(false);
+    expect(isAcceptableCoreStatus(response, { pass: true })).toBe(true);
+    expect(isAcceptableCoreStatus(response, { pass: false })).toBe(false);
+  });
+
+  it("retains status 0 and diagnostic error when core BFF response is genuinely absent", async () => {
+    const mockFailingPage = {
+      waitForResponse: async () => {
+        throw new Error("Timeout 5000ms exceeded while waiting for response");
+      },
+    };
+
+    const response = await waitForCoreBffResponse(mockFailingPage, "/bff/me", 5000);
+    expect(response.status).toBe(0);
+    expect(response.method).toBe("GET");
+    expect(response.url).toBe("");
+    expect(response.body).toBe("");
+    expect(response.error).toContain("Timeout 5000ms exceeded");
+    expect(isAcceptableCoreStatus(response)).toBe(false);
+    expect(isAcceptableCoreStatus(response, { pass: true })).toBe(false);
+  });
+
+  it("preserves observed 500 status without treating body-read failure as success", async () => {
+    const mock500Response = {
+      status: () => 500,
+      request: () => ({ method: () => "GET" }),
+      url: () => "https://api.dev.mvl-cap.tw/bff/me",
+      text: async () => {
+        throw new Error("network socket reset while reading body");
+      },
+    };
+    const mock500Page = {
+      waitForResponse: async (predicate: (res: typeof mock500Response) => boolean) => {
+        if (predicate(mock500Response)) return mock500Response;
+        throw new Error("Response did not match predicate");
+      },
+    };
+
+    const response = await waitForCoreBffResponse(mock500Page, "/bff/me", 5000);
+    expect(response.status).toBe(500);
+    expect(response.method).toBe("GET");
+    expect(response.url).toBe("https://api.dev.mvl-cap.tw/bff/me");
+    expect(response.body).toBe("");
+    expect(response.error).toContain("network socket reset while reading body");
+    expect(isAcceptableCoreStatus(response)).toBe(false);
+    expect(isAcceptableCoreStatus(response, { pass: true })).toBe(false);
+  });
+
+  it("reconciles isAcceptableCoreStatus with verified authBoundary while maintaining strict checks", () => {
+    const emptyBody401 = {
+      path: "/bff/me",
+      status: 401,
+      method: "GET",
+      url: "https://api.dev.mvl-cap.tw/bff/me",
+      body: "",
+      error: "Protocol error (Network.getResponseBody): No resource with given identifier found",
+    };
+    const validAuthBoundary = { pass: true };
+    const unsafeAuthBoundary = { pass: false };
+
+    expect(isAcceptableCoreStatus(emptyBody401, validAuthBoundary)).toBe(true);
+    expect(isAcceptableCoreStatus(emptyBody401, unsafeAuthBoundary)).toBe(false);
+    expect(isAcceptableCoreStatus(emptyBody401)).toBe(false);
+
+    const normal401 = { status: 401, body: '{"error":"AUTH_REQUIRED"}' };
+    expect(isAcceptableCoreStatus(normal401)).toBe(true);
+    expect(isAcceptableCoreStatus(normal401, unsafeAuthBoundary)).toBe(true);
+
+    const invalidBody401 = { status: 401, body: '{"error":"GATEWAY_TIMEOUT"}' };
+    expect(isAcceptableCoreStatus(invalidBody401, validAuthBoundary)).toBe(false);
+
+    expect(isAcceptableCoreStatus({ status: 500, body: "" }, validAuthBoundary)).toBe(false);
+    expect(isAcceptableCoreStatus({ status: 0, body: "" }, validAuthBoundary)).toBe(false);
+    expect(isAcceptableCoreStatus({ status: 200, body: "" }, validAuthBoundary)).toBe(false);
+  });
 
   it("distinguishes an RGB zero channel from transparent CSS focus colors", () => {
     expect(cssColorHasVisibleAlpha("rgb(229, 151, 0)")).toBe(true);
