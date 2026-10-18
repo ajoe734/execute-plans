@@ -14,7 +14,11 @@ import { resolveEntity, lineageHref, decisionsHref, auditHref } from "@/lib/enti
 import { safeDateTime } from "@/lib/utils";
 
 interface Props {
-  object: Pick<BaseObject, "id" | "name" | "owner" | "updatedAt" | "state" | "risk" | "labelKey">;
+  object: Pick<BaseObject, "id" | "name" | "owner" | "updatedAt" | "labelKey"> & {
+    state?: BaseObject["state"]; status?: string; risk?: BaseObject["risk"]; reportedFields?: { risk?: boolean };
+  };
+  state?: string;
+  risk?: BaseObject["risk"];
   /** Optional environment chip (research / paper / live). */
   env?: "research" | "paper" | "live";
   /** Subtitle line under the entity name (e.g. alpha id, kind, version). */
@@ -25,11 +29,14 @@ interface Props {
   hideBack?: boolean;
 }
 
-export const EntityHeader = ({ object, env, subtitle, actions, hideBack }: Props) => {
+export const EntityHeader = ({ object, state, risk, env, subtitle, actions, hideBack }: Props) => {
   const t = useT();
   const navigate = useNavigate();
   const label = (object.labelKey ? t(object.labelKey, { defaultValue: object.name }) : object.name) || object.id;
   const owner = object.owner || "—";
+  const poolStatus = object.status?.trim().toLowerCase();
+  const badgeState = state !== undefined ? state : (object.state ?? (poolStatus === "active" ? "active" : undefined));
+  const badgeRisk = risk !== undefined ? risk : (object.reportedFields?.risk === false ? undefined : object.risk);
 
   return (
     <div className="border-b border-border bg-card px-4 py-4 space-y-2 sm:px-6">
@@ -38,8 +45,8 @@ export const EntityHeader = ({ object, env, subtitle, actions, hideBack }: Props
           <div className="flex items-center gap-2 flex-wrap">
             <Badge variant="outline" className="text-mono text-[10px]">{object.id}</Badge>
             <h1 className="min-w-0 break-words text-xl font-semibold tracking-tight">{label}</h1>
-            <StatusBadge state={object.state} />
-            <RiskBadge level={object.risk} />
+            <StatusBadge state={badgeState} />
+            <RiskBadge level={badgeRisk} />
             {env && (
               <Badge variant="secondary" className="text-mono text-[10px] uppercase">
                 {t(`env.${env}`, { defaultValue: env })}

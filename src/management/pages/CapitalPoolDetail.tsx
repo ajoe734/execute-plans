@@ -16,7 +16,6 @@ import { DataTable } from "@/platform/components/DataTable";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { RiskBadge } from "@/platform/components/RiskBadge";
 import { StatCard } from "@/platform/components/StatCard";
-import { Progress } from "@/components/ui/progress";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
 import { LineageGraph, type LineageNode, type LineageEdge } from "@/platform/components/LineageGraph";
 import { MandatePanel } from "../components/detail/MandatePanel";
@@ -25,7 +24,6 @@ import { BindingsMatrix } from "../components/detail/BindingsMatrix";
 import { AllocationLimitsManager } from "../components/detail/AllocationLimitsManager";
 import { FreezeUnfreezePanel } from "../components/detail/FreezeUnfreezePanel";
 import { AllocationSimulationPanel } from "../components/detail/AllocationSimulationPanel";
-import { assessBreach } from "@/lib/v4/capitalBreach";
 import { lifecycleOf } from "@/lib/v4/strategyTripleDerive";
 import { findMetric } from "@/lib/v4/metricRegistry";
 import { Badge } from "@/components/ui/badge";
@@ -146,17 +144,32 @@ export const CapitalPoolDetail = () => {
       </>
     );
   }
-  const allocated = num(c.allocated);
-  const utilized = num(c.utilized);
-  const riskBudget = num(c.riskBudget);
-  const utilizationPct = safeRatio(utilized, allocated) * 100;
+  const hasCurrency = c.reportedFields?.currency !== false && Boolean(c.currency);
+  const currency = hasCurrency ? c.currency : undefined;
+  const hasAllocated = c.reportedFields?.allocated !== false && Number.isFinite(c.allocated);
+  const hasUtilized = c.reportedFields?.utilized !== false && Number.isFinite(c.utilized);
+  const hasRiskBudget = c.reportedFields?.riskBudget !== false && Number.isFinite(c.riskBudget);
+  const hasRisk = c.reportedFields?.risk !== false && Boolean(c.risk);
+  const allocated = hasAllocated ? num(c.allocated) : 0;
+  const utilized = hasUtilized ? num(c.utilized) : 0;
+  const riskBudget = hasRiskBudget ? num(c.riskBudget) : 0;
+  const hasUtilization = hasAllocated && hasUtilized && (allocated > 0 || utilized === 0);
+  const utilizationPct = hasUtilization ? (allocated > 0 ? safeRatio(utilized, allocated) * 100 : 0) : undefined;
+  const fmtAmount = (amount: number) => (currency ? `${currency} ${amount.toLocaleString()}` : amount.toLocaleString());
   const bindingCount = typeof c.bindingCount === "number" ? c.bindingCount : Array.isArray(c.bindings) ? c.bindings.length : 0;
+  const bindingLabels = (c.bindings ?? [])
+    .map((b) => [b.role ?? b.persona_id ?? b.personaId, b.allowed_deployment_scope ?? b.scope, b.status].filter(Boolean).join(" · "))
+    .filter(Boolean);
+  const bindingsValue = bindingLabels.length ? `${bindingCount.toLocaleString()} (${bindingLabels.join(", ")})` : bindingCount.toLocaleString();
   const riskPolicyRef = c.riskPolicyRef ?? c.risk_policy_ref;
+  const poolStatus = c.status?.trim().toLowerCase();
+  const headerState = c.state ?? (poolStatus === "active" ? "active" : undefined);
+  const headerRisk = hasRisk ? c.risk : undefined;
   const firstRebalance = rebalances[0];
 
   // Lineage: pool ↔ rebalance ↔ strategy
   const lineageNodes: LineageNode[] = [
-    { id: c.id, label: c.name, type: "CapitalPool", state: c.state, risk: c.risk, highlight: true },
+    { id: c.id, label: c.name, type: "CapitalPool", state: headerState, risk: headerRisk, highlight: true },
     ...rebalances.map((r) => ({ id: r.id, label: r.name, type: "Rebalance", state: r.state, risk: r.risk })),
     ...strats.map((s) => ({ id: s.id, label: s.name, type: "Strategy", state: lifecycleOf(s), risk: s.risk })),
   ];
@@ -169,7 +182,9 @@ export const CapitalPoolDetail = () => {
     <>
       <ObjectDetailLayout
         object={c}
-        subtitle={`${c.currency} · ${c.id}`}
+        state={headerState}
+        risk={headerRisk}
+        subtitle={currency ? `${currency} · ${c.id}` : c.id}
         actions={
           <>
             <Button size="sm" variant="outline"><Edit className="h-4 w-4 mr-1" />{t("actions.edit")}</Button>
@@ -182,55 +197,29 @@ export const CapitalPoolDetail = () => {
           {
             value: "overview", label: t("section.overview"),
             content: (() => {
-              const breach = assessBreach({
-                utilized,
-                allocated,
-                currentDrawdownPct: strats.length ? Math.min(...strats.map((s) => s.drawdown)) : undefined,
-                riskBudgetPct: riskBudget,
-              });
               const utilMetric = findMetric("capital_utilization_pct");
-              const rbuMetric = findMetric("risk_budget_usage_pct");
-              const breachToneCls: Record<string, string> = {
-                ok: "bg-status-success/15 text-status-success border-status-success/30",
-                warn: "bg-status-warning/15 text-status-warning border-status-warning/30",
-                high: "bg-status-warning/15 text-status-warning border-status-warning/30",
-                critical: "bg-status-failed/15 text-status-failed border-status-failed/30",
-              };
               return (
                 <>
                   <div className="grid grid-cols-3 gap-4">
-                    <StatCard label={t("section.holdings")} value={`${c.currency} ${allocated.toLocaleString()}`} />
+                    <StatCard label={t("section.holdings")} value={hasAllocated ? fmtAmount(allocated) : "—"} />
                     <StatCard
                       label={utilMetric ? `Capital utilization (%)` : t("table.utilization")}
-                      value={`${(breach.utilizationPct * 100).toFixed(utilMetric?.precision ?? 2)}%`}
-                      hint={`${c.currency} ${utilized.toLocaleString()}`}
+                      value={utilizationPct !== undefined ? `${utilizationPct.toFixed(utilMetric?.precision ?? 2)}%` : "—"}
+                      hint={hasUtilized ? fmtAmount(utilized) : undefined}
                     />
-                    <StatCard label={t("section.limits")} value={safePercent(riskBudget, 2)} tone="warning" />
+                    <StatCard label={t("section.limits")} value={hasRiskBudget ? safePercent(riskBudget, 2) : "—"} tone={hasRiskBudget ? "warning" : "default"} />
                   </div>
                   <Section title={t("section.details")}>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                       <Field label={t("nav.capitalPools")} value={c.id} mono />
                       <Field label={t("phase13.capital.detail.riskPolicy")} value={riskPolicyRef ?? "—"} mono />
-                      <Field label={t("phase13.capital.detail.bindings")} value={bindingCount.toLocaleString()} mono />
+                      <Field label={t("phase13.capital.detail.bindings")} value={bindingsValue} mono />
                       <Field label={t("common.owner")} value={c.owner} mono />
                     </div>
                   </Section>
                   <Section title={t("detail.section.breachAssessment")}>
-                    <div className="flex flex-wrap items-center gap-2 mb-2">
-                      <Badge variant="outline" className={breachToneCls[breach.level]}>{(breach.level ?? "").toUpperCase()}</Badge>
-                      {breach.riskBudgetUsagePct != null && rbuMetric && (
-                        <span className="text-xs text-muted-foreground text-mono">
-                          {rbuMetric.id}={(breach.riskBudgetUsagePct * 100).toFixed(rbuMetric.precision)}%
-                        </span>
-                      )}
-                      {breach.reasons.length > 0 && (
-                        <span className="text-xs text-muted-foreground">· {breach.reasons.join(", ")}</span>
-                      )}
-                    </div>
-                    <Progress value={breach.utilizationPct * 100} className="h-2" />
-                    <div className="flex justify-between text-xs text-muted-foreground text-mono">
-                      <span>0</span>
-                      <span>{allocated.toLocaleString()}</span>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant="outline">{t("phase21.ownerFacts.unverified")}</Badge>
                     </div>
                   </Section>
                 </>
@@ -308,9 +297,9 @@ export const CapitalPoolDetail = () => {
               <Section>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <Field label="VaR" value="—" mono />
-                  <Field label={t("section.limits")} value={safePercent(riskBudget, 2)} mono />
-                  <Field label={t("table.capacity")} value={`${Math.max(0, 100 - utilizationPct).toFixed(1)}%`} mono />
-                  <Field label={t("table.value")} value={c.currency} mono />
+                  <Field label={t("section.limits")} value={hasRiskBudget ? safePercent(riskBudget, 2) : "—"} mono />
+                  <Field label={t("table.capacity")} value={utilizationPct !== undefined ? `${Math.max(0, 100 - utilizationPct).toFixed(1)}%` : "—"} mono />
+                  <Field label={t("table.value")} value={currency ?? "—"} mono />
                 </div>
               </Section>
             ),

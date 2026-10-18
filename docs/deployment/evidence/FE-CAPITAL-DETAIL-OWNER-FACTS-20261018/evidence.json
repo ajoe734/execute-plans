@@ -1,0 +1,86 @@
+{
+  "task_id": "FE-CAPITAL-DETAIL-OWNER-FACTS-20261018",
+  "title": "Render actual Capital owner facts instead of synthetic zero and deployment state",
+  "repository": "ajoe734/execute-plans",
+  "branch": "task/FE-CAPITAL-DETAIL-OWNER-FACTS-20261018",
+  "base_branch": "dev",
+  "base_commit": "a4d685ca0f252971a7cbc5acf1e890d82c89d86e",
+  "reused_foundation": {
+    "task_id": "FE-OWNER-FACTS-20261006",
+    "commit": "1c751cc36f3d4d2873981d5e4b7c47b60dee0d36",
+    "mechanisms": [
+      "CapitalPool.reportedFields",
+      "phase21.ownerFacts.unverified",
+      "StatusBadge unavailable/active handling",
+      "RiskBadge unavailable handling",
+      "MandatePanel",
+      "RiskBudgetPanel"
+    ]
+  },
+  "sanitized_input_source": "/tmp/pantheon-capital-detail-owner-facts-input-20261018.json",
+  "scoped_artifacts": [
+    "src/lib/bff-v1/capitalPools.ts",
+    "src/lib/bff-v1/dto.ts",
+    "src/management/pages/CapitalPoolDetail.tsx",
+    "src/management/pages/CapitalPoolDetail.test.tsx",
+    "src/lib/bff-v1/__tests__/capitalPools.test.ts",
+    "src/platform/components/EntityHeader.tsx",
+    "src/management/pages/ObjectDetailLayout.tsx",
+    "src/i18n/locales/en-US.ts",
+    "src/i18n/locales/zh-TW.ts",
+    "docs/deployment/evidence/FE-CAPITAL-DETAIL-OWNER-FACTS-20261018/evidence.json"
+  ],
+  "production_diff_summary": {
+    "insertions": 79,
+    "deletions": 67,
+    "net_lines": 12,
+    "budget_max_net_lines": 80
+  },
+  "acceptance_verification": {
+    "missing_owner_facts_unavailable_unverified": {
+      "sanitized_pool_id": "c9f8b55d-e65b-4a76-be1a-77a9efaa60ef",
+      "holdings": "—",
+      "capital_utilization": "—",
+      "risk_limit": "—",
+      "risk_badge": "Unavailable / 無資料",
+      "breach_assessment": "Not verified / 未驗證",
+      "explicit_zero_preserved": true
+    },
+    "capital_status_and_identity_integrity": {
+      "owner_status": "active",
+      "normalized_lifecycle_state": null,
+      "header_status_badge": "Active / 啟用",
+      "unknown_or_missing_status_badge": "Unavailable / 無資料",
+      "canonical_id": "c9f8b55d-e65b-4a76-be1a-77a9efaa60ef",
+      "currency": "TWD",
+      "bindings_rendered": "1 (paper_owner · paper · active)",
+      "retired_runtime_binding_not_shown_as_deployed": true
+    },
+    "hosted_release_posture": {
+      "prior_hosted_commit_a4d685ca_includes_this_fix": false,
+      "note": "Current hosted BD85 / a4d685ca0f252971a7cbc5acf1e890d82c89d86e does not include this follow-up fix; Root retains subsequent exact-version join and single release."
+    }
+  },
+  "verified_commands": [
+    {
+      "command": "NODE_ENV=test npx vitest run --maxWorkers=2 src/lib/bff-v1/__tests__/capitalPools.test.ts src/management/pages/CapitalPoolDetail.test.tsx src/management/components/detail/OwnerFacts.test.tsx",
+      "exit_code": 0,
+      "summary": "3 test files passed (20 tests passed)"
+    },
+    {
+      "command": "NODE_ENV=test npx vitest related --run --maxWorkers=2 src/lib/bff-v1/capitalPools.ts src/management/pages/CapitalPoolDetail.tsx src/management/pages/ObjectDetailLayout.tsx src/platform/components/EntityHeader.tsx",
+      "exit_code": 0,
+      "summary": "63 test files passed (491 tests passed)"
+    },
+    {
+      "command": "npx tsc -p tsconfig.app.json --noEmit && npx tsc -p tsconfig.agora.json --noEmit",
+      "exit_code": 0,
+      "summary": "Both TypeScript configs passed with 0 errors"
+    },
+    {
+      "command": "NODE_ENV=production VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false VITE_BFF_ALLOW_DEV_STUB_WRITES=false VITE_BFF_EMBEDDED_BEARER_TOKEN=false npm run build",
+      "exit_code": 0,
+      "summary": "Strict live safe-write production bundle built cleanly"
+    }
+  ]
+}

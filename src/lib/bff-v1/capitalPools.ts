@@ -41,19 +41,27 @@ const asFraction = (...values: unknown[]): number | undefined => {
   return value > 1 ? value / 100 : value;
 };
 
-const normalizeState = (value: unknown): LifecycleState => {
+const asRiskLevel = (...values: unknown[]): RiskLevel | undefined => {
+  for (const value of values) {
+    const risk = String(value ?? "").trim().toLowerCase();
+    if ((RISK_LEVELS as readonly string[]).includes(risk)) return risk as RiskLevel;
+  }
+  return undefined;
+};
+
+const normalizeState = (value: unknown): LifecycleState | undefined => {
   const status = String(value ?? "").trim().toLowerCase();
   if (["draft", "new"].includes(status)) return "draft";
   if (["review", "under_review", "rebalancing"].includes(status)) return "review";
   if (["approved"].includes(status)) return "approved";
   if (["paused", "frozen", "restricted", "suspended"].includes(status)) return "paused";
   if (["retired", "archived"].includes(status)) return "retired";
-  return "deployed";
+  if (status === "deployed") return "deployed";
+  return undefined;
 };
 
-const normalizeRisk = (value: unknown, riskBudget: number): RiskLevel => {
-  const risk = String(value ?? "").trim().toLowerCase() as RiskLevel;
-  if (RISK_LEVELS.includes(risk)) return risk;
+const normalizeRisk = (reportedRisk: RiskLevel | undefined, riskBudget: number): RiskLevel => {
+  if (reportedRisk) return reportedRisk;
   if (riskBudget >= 0.08) return "critical";
   if (riskBudget >= 0.06) return "high";
   if (riskBudget >= 0.04) return "medium";
@@ -106,7 +114,7 @@ export function normalizeCapitalPool(value: unknown): CapitalPool | undefined {
 
   const utilizationRatio = asFraction(record.utilizationPct, record.utilization_pct, record.utilizationRate, record.utilization_rate);
   const utilization = asNumber(record.utilization);
-  const utilized = asNumber(
+  const reportedUtilized = asNumber(
     record.utilized,
     record.used,
     record.capitalUtilized,
@@ -118,11 +126,14 @@ export function normalizeCapitalPool(value: unknown): CapitalPool | undefined {
     record.current_exposure,
     record.grossExposure,
     record.gross_exposure,
-  ) ?? (utilizationRatio !== undefined
-    ? allocated * utilizationRatio
-    : utilization !== undefined && utilization <= 1 && allocated > 0
-      ? allocated * utilization
-      : utilization ?? 0);
+    params?.utilized,
+    params?.used,
+  ) ?? (utilizationRatio !== undefined && reportedAllocated !== undefined
+    ? reportedAllocated * utilizationRatio
+    : utilization !== undefined && utilization <= 1 && reportedAllocated !== undefined
+      ? reportedAllocated * utilization
+      : utilization);
+  const utilized = reportedUtilized ?? 0;
 
   const bindings = firstArray<UnknownRecord>(
     record.bindings,
@@ -135,6 +146,7 @@ export function normalizeCapitalPool(value: unknown): CapitalPool | undefined {
   const riskPolicyRef = asString(record.riskPolicyRef, record.risk_policy_ref, record.policy_ref, record.policyRef);
   const status = asString(record.status, record.lifecycleStatus, record.lifecycle_status);
   const reportedCurrency = asString(record.currency, params?.currency);
+  const reportedRisk = asRiskLevel(record.risk, record.risk_level, record.riskLevel, params?.risk, params?.risk_level);
 
   return {
     ...record,
@@ -145,14 +157,16 @@ export function normalizeCapitalPool(value: unknown): CapitalPool | undefined {
     owner: asString(record.owner, record.owner_id, record.created_by, record.updated_by) ?? "capital",
     updatedAt: asString(record.updatedAt, record.updated_at, record.created_at, record.effective_at) ?? "",
     state: normalizeState(record.state ?? status),
-    risk: normalizeRisk(record.risk, riskBudget),
+    risk: normalizeRisk(reportedRisk, riskBudget),
     currency: reportedCurrency ?? "USD",
     // Legacy numeric defaults remain for existing callers. Facts panels must
     // not present those defaults as values actually supplied by the owner.
     reportedFields: {
       currency: reportedCurrency !== undefined,
       allocated: reportedAllocated !== undefined,
+      utilized: reportedUtilized !== undefined,
       riskBudget: reportedRiskBudget !== undefined,
+      risk: reportedRisk !== undefined,
     },
     allocated,
     utilized,
@@ -163,7 +177,7 @@ export function normalizeCapitalPool(value: unknown): CapitalPool | undefined {
     bindings: bindings.length ? bindings : undefined,
     bindingCount,
     summary: asString(record.summary, record.description),
-  } as CapitalPool;
+  };
 }
 
 export function normalizeCapitalPools(values: unknown[]): CapitalPool[] {

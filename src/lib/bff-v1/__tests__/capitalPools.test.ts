@@ -27,7 +27,15 @@ describe("capital pool adapter", () => {
       utilized: 52500,
       riskBudget: 0.08,
       risk: "critical",
-      state: "deployed",
+      status: "active",
+      state: undefined,
+      reportedFields: {
+        currency: true,
+        allocated: true,
+        utilized: true,
+        riskBudget: true,
+        risk: false,
+      },
       riskPolicyRef: "risk-policy-crypto-paper",
       bindingCount: 2,
     });
@@ -45,5 +53,77 @@ describe("capital pool adapter", () => {
 
     expect(pool?.id).toBe("pool-crypto-paper");
     expect(pool?.allocated).toBe(50000);
+  });
+
+  it("preserves sanitized real owner facts with null budget and active status without defaulting to deployed", () => {
+    const pool = normalizeCapitalPool({
+      id: "c9f8b55d-e65b-4a76-be1a-77a9efaa60ef",
+      name: "Default TWD Capital Pool",
+      status: "active",
+      currency: "TWD",
+      budget: null,
+      risk_policy_ref: null,
+      bindings: [
+        {
+          role: "paper_owner",
+          budget: null,
+          status: "active",
+          allowed_deployment_scope: "paper",
+        },
+      ],
+    });
+
+    expect(pool).toMatchObject({
+      id: "c9f8b55d-e65b-4a76-be1a-77a9efaa60ef",
+      name: "Default TWD Capital Pool",
+      status: "active",
+      state: undefined,
+      currency: "TWD",
+      riskPolicyRef: undefined,
+      bindingCount: 1,
+      bindings: [
+        {
+          role: "paper_owner",
+          budget: null,
+          status: "active",
+          allowed_deployment_scope: "paper",
+        },
+      ],
+      reportedFields: {
+        currency: true,
+        allocated: false,
+        utilized: false,
+        riskBudget: false,
+        risk: false,
+      },
+    });
+  });
+
+  it("distinguishes explicit numeric zero from missing or unknown status and risk", () => {
+    const pool = normalizeCapitalPool({
+      pool_id: "pool-zero",
+      status: "unknown_status",
+      currency: "TWD",
+      budget: 0,
+      utilized: 0,
+      risk_budget: 0,
+    });
+
+    expect(pool).toMatchObject({
+      id: "pool-zero",
+      status: "unknown_status",
+      state: undefined,
+      currency: "TWD",
+      allocated: 0,
+      utilized: 0,
+      riskBudget: 0,
+      reportedFields: {
+        currency: true,
+        allocated: true,
+        utilized: true,
+        riskBudget: true,
+        risk: false,
+      },
+    });
   });
 });
