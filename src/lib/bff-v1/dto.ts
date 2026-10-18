@@ -339,10 +339,10 @@ export interface CapitalPool extends BaseObject {
   utilized: number;
   riskBudget: number;
   /** Read-adapter presence, not a policy verdict or business approval. */
-  reportedFields?: { currency: boolean; allocated: boolean; riskBudget: boolean };
+  reportedFields?: { currency: boolean; allocated: boolean; utilized?: boolean; riskBudget: boolean; risk?: boolean };
   poolId?: string;
   pool_id?: string;
-  status?: string;
+  status?: CapitalPoolStatus | string;
   riskPolicyRef?: string;
   risk_policy_ref?: string;
   bindings?: Array<Record<string, unknown>>;

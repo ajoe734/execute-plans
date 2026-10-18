@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import i18n from "@/i18n";
 import type { CapitalPool, Strategy } from "@/lib/bff-v1";
 import type { ListEnvelope } from "@/lib/bff-v1";
+import { normalizeCapitalPool } from "@/lib/bff-v1/capitalPools";
 import type { ManagementPersonaFleetRow } from "@/lib/bff-v1/management";
 import { CapitalPoolDetail } from "./CapitalPoolDetail";
 
@@ -67,7 +68,8 @@ function renderDetail(id: string) {
 }
 
 describe("CapitalPoolDetail", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    await i18n.changeLanguage("en-US");
     mocks.capitalGet.mockReset();
     mocks.capitalList.mockReset();
     mocks.strategiesList.mockReset();
@@ -127,5 +129,101 @@ describe("CapitalPoolDetail", () => {
     expect(mocks.capitalList).toHaveBeenCalledTimes(1);
     expect(mocks.strategiesList).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(mocks.personaFleetGet).toHaveBeenCalledTimes(2));
+  });
+
+  it("renders the sanitized Capital owner shape without synthetic zero, low risk, breach OK, or deployed state", async () => {
+    const poolId = "c9f8b55d-e65b-4a76-be1a-77a9efaa60ef";
+    mocks.capitalGet.mockResolvedValue(
+      normalizeCapitalPool({
+        id: poolId,
+        name: "Default TWD Capital Pool",
+        status: "active",
+        currency: "TWD",
+        budget: null,
+        risk_policy_ref: null,
+        bindings: [
+          {
+            role: "paper_owner",
+            budget: null,
+            status: "active",
+            allowed_deployment_scope: "paper",
+          },
+        ],
+      }),
+    );
+    mocks.personaFleetGet.mockResolvedValue([
+      {
+        personaId: "persona-20260711-f54c2879",
+        personaName: "TW Paper Persona",
+        capitalMode: "paper",
+        paperCapitalPoolId: poolId,
+        runtimeId: "openclaw-gateway-dev",
+        status: "retired",
+      },
+    ] as unknown as ManagementPersonaFleetRow[]);
+
+    renderDetail(poolId);
+
+    await screen.findByText("Default TWD Capital Pool");
+    expect(screen.getByText(`TWD · ${poolId}`)).toBeInTheDocument();
+    expect(screen.getByText("Active")).toBeInTheDocument();
+    expect(screen.getByText("Unavailable")).toBeInTheDocument();
+    expect(screen.getByText("Not verified")).toBeInTheDocument();
+    expect(screen.getByText("1 (paper_owner · paper · active)")).toBeInTheDocument();
+
+    expect(screen.queryByText("Deployed")).not.toBeInTheDocument();
+    expect(screen.queryByText("Low")).not.toBeInTheDocument();
+    expect(screen.queryByText("TWD 0")).not.toBeInTheDocument();
+    expect(screen.queryByText("0.00%")).not.toBeInTheDocument();
+    expect(screen.queryByText("OK")).not.toBeInTheDocument();
+  });
+
+  it("preserves explicit numeric zero facts without inventing Low risk, Deployed state, or breach OK", async () => {
+    const poolId = "pool-explicit-zero";
+    mocks.capitalGet.mockResolvedValue(
+      normalizeCapitalPool({
+        id: poolId,
+        name: "Explicit Zero Pool",
+        status: "active",
+        currency: "TWD",
+        budget: 0,
+        utilized: 0,
+        risk_budget: 0,
+      }),
+    );
+
+    renderDetail(poolId);
+
+    await screen.findByText("Explicit Zero Pool");
+    expect(screen.getByText("Active")).toBeInTheDocument();
+    expect(screen.getByText("Unavailable")).toBeInTheDocument();
+    expect(screen.getByText("Not verified")).toBeInTheDocument();
+    expect(screen.getAllByText("TWD 0")).toHaveLength(2);
+    expect(screen.getAllByText("0.00%")).toHaveLength(2);
+
+    expect(screen.queryByText("Deployed")).not.toBeInTheDocument();
+    expect(screen.queryByText("Low")).not.toBeInTheDocument();
+    expect(screen.queryByText("OK")).not.toBeInTheDocument();
+  });
+
+  it("renders unavailable badges and placeholders when status and currency are missing or unknown", async () => {
+    const poolId = "pool-unknown-status";
+    mocks.capitalGet.mockResolvedValue(
+      normalizeCapitalPool({
+        pool_id: poolId,
+        name: "Unverified Pool",
+        status: "unknown_status",
+      }),
+    );
+
+    renderDetail(poolId);
+
+    await screen.findByText("Unverified Pool");
+    expect(screen.getAllByText("Unavailable")).toHaveLength(2);
+    expect(screen.getByText("Not verified")).toBeInTheDocument();
+    expect(screen.queryByText("Deployed")).not.toBeInTheDocument();
+    expect(screen.queryByText("USD")).not.toBeInTheDocument();
+    expect(screen.queryByText("0.00%")).not.toBeInTheDocument();
+    expect(screen.queryByText("OK")).not.toBeInTheDocument();
   });
 });

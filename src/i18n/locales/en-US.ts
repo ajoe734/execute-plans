@@ -439,7 +439,7 @@ export default {
     pending: "Pending", running: "Running", success: "Success",
     warning: "Warning", failed: "Failed", paused: "Paused",
     draft: "Draft", review: "In Review", approved: "Approved",
-    deployed: "Deployed", retired: "Retired", unavailable: "Unavailable",
+    active: "Active", deployed: "Deployed", retired: "Retired", unavailable: "Unavailable",
   },
   actions: {
     create: "Create", edit: "Edit", view: "View", delete: "Delete",
