@@ -434,4 +434,91 @@ describe("ranking recommendation proposal pages", () => {
     expect(screen.queryByText(/Promote to canary candidate/)).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Promote to canary candidate/ })).not.toBeInTheDocument();
   });
+
+  it("renders authoritative served Q4 snapshot identity in Evaluation Context, preserves row recommendation provenance, and never invents snap-2026-q3-final", () => {
+    const q4Row = {
+      ...ACTUAL_RANKING_ROW,
+      persona_id: "persona-b74d2d121d01589eb9c8",
+      quarter: "2026-Q4",
+      ranking_snapshot_id: "ranking-quarterly-2026-q4-2fe05fbe2c40dff7778d5e22",
+    };
+    const q4SavedRecommendation = {
+      ...SAVED_ADVISORY_RECOMMENDATION,
+      persona_id: "persona-b74d2d121d01589eb9c8",
+      quarter: "2026-Q4",
+      evaluator_run_id: "persona-eval-20261019T215712Z",
+      ranking_snapshot_id: "ranking-quarterly-2026-q4-29eb48a0455252e2a2f9d27a",
+    };
+    mockLive({
+      rows: adaptQuarterlyRankingRows({ data: { items: [q4Row] } }),
+      formula: defaultQuarterlyFormula(),
+      proposals: adaptQuarterlyRankingRows({ data: { items: [q4SavedRecommendation] } }),
+    });
+
+    const servedView = renderWithRoutes(
+      "/management/rankings?tab=quarterly&persona=persona-b74d2d121d01589eb9c8",
+      <RankingsCenterPage />,
+      "/management/rankings",
+    );
+    const contextCard = screen.getByRole("heading", { name: /Evaluation Context/i }).closest("div") as HTMLElement;
+    expect(within(contextCard).getByText("Snapshot ID:").nextElementSibling).toHaveTextContent(
+      "ranking-quarterly-2026-q4-2fe05fbe2c40dff7778d5e22",
+    );
+    expect(within(contextCard).queryByText("Requested Snapshot:")).not.toBeInTheDocument();
+    expect(screen.getByText("persona-eval-20261019T215712Z · ranking-quarterly-2026-q4-29eb48a0455252e2a2f9d27a")).toBeInTheDocument();
+    expect(screen.queryByText("snap-2026-q3-final")).not.toBeInTheDocument();
+    servedView.unmount();
+
+    mockLive({
+      rows: [{ ...ACTUAL_RANKING_ROW, persona_id: "persona-b74d2d121d01589eb9c8", quarter: "2026-Q4" }],
+      formula: defaultQuarterlyFormula(),
+      proposals: [q4SavedRecommendation],
+    });
+    const proposalFallbackView = renderWithRoutes("/management/quarterly-ranking", <QuarterlyRankingPage />);
+    const proposalContext = screen.getByRole("heading", { name: /Evaluation Context/i }).closest("div") as HTMLElement;
+    expect(within(proposalContext).getByText("Snapshot ID:").nextElementSibling).toHaveTextContent(
+      "ranking-quarterly-2026-q4-29eb48a0455252e2a2f9d27a",
+    );
+    expect(screen.queryByText("snap-2026-q3-final")).not.toBeInTheDocument();
+    proposalFallbackView.unmount();
+
+    mockLive({ rows: [ACTUAL_RANKING_ROW], formula: defaultQuarterlyFormula(), proposals: [] });
+    renderWithRoutes("/management/quarterly-ranking", <QuarterlyRankingPage />);
+    const unavailableContext = screen.getByRole("heading", { name: /Evaluation Context/i }).closest("div") as HTMLElement;
+    expect(within(unavailableContext).getByText("Snapshot ID:").nextElementSibling).toHaveTextContent("unavailable");
+    expect(screen.queryByText("snap-2026-q3-final")).not.toBeInTheDocument();
+  });
+
+  it("distinguishes a requested URL snapshot parameter without letting it masquerade as the served Evaluation Context identity", () => {
+    const q4Row = {
+      ...ACTUAL_RANKING_ROW,
+      quarter: "2026-Q4",
+      ranking_snapshot_id: "ranking-quarterly-2026-q4-2fe05fbe2c40dff7778d5e22",
+    };
+    mockLive({ rows: [q4Row], formula: defaultQuarterlyFormula(), proposals: [] });
+
+    const withServed = renderWithRoutes(
+      "/management/quarterly-ranking?snapshot=snap-2026-q3-final",
+      <QuarterlyRankingPage />,
+    );
+    const servedContext = screen.getByRole("heading", { name: /Evaluation Context/i }).closest("div") as HTMLElement;
+    expect(within(servedContext).getByText("Snapshot ID:").nextElementSibling).toHaveTextContent(
+      "ranking-quarterly-2026-q4-2fe05fbe2c40dff7778d5e22",
+    );
+    expect(within(servedContext).getByText("Requested Snapshot:").nextElementSibling).toHaveTextContent(
+      "snap-2026-q3-final",
+    );
+    withServed.unmount();
+
+    mockLive({ rows: [], formula: defaultQuarterlyFormula(), proposals: [] });
+    renderWithRoutes(
+      "/management/quarterly-ranking?snapshot=snap-requested-only",
+      <QuarterlyRankingPage />,
+    );
+    const unavailableContext = screen.getByRole("heading", { name: /Evaluation Context/i }).closest("div") as HTMLElement;
+    expect(within(unavailableContext).getByText("Snapshot ID:").nextElementSibling).toHaveTextContent("unavailable");
+    expect(within(unavailableContext).getByText("Requested Snapshot:").nextElementSibling).toHaveTextContent(
+      "snap-requested-only",
+    );
+  });
 });
