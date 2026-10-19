@@ -550,7 +550,7 @@ export const QuarterlyRankingPage = ({ embedded = false }: { embedded?: boolean 
                     )}
                   </td>
                   <td className="px-3 py-3">
-                    <ProposalCell proposal={savedProposal(r.personaId, r.recommendation, r.quarter)} fallbackAction={r.recommendation} />
+                    <ProposalCell proposal={savedProposal(r.personaId, r.quarter)} />
                   </td>
                 </tr>
               ))}
@@ -676,27 +676,24 @@ export type SavedProposal = {
 };
 
 /** Saved Evaluator recommendations and Governance proposals live on the owner recommendation read, not on ranking/league rows. */
-export function useSavedProposals(quarter: string): (personaId: string, action?: string, rowQuarter?: string) => SavedProposal | undefined {
+export function useSavedProposals(quarter: string): (personaId: string, rowQuarter?: string) => SavedProposal | undefined {
   const { data } = useV5Live(
     (signal) => mgmt.quarterlyRanking.recommendationsLiveOnly(quarter, signal ? { signal } : undefined),
     [quarter],
     { cacheKey: "oversight.quarterlyRanking.recommendations" },
   );
-  return (personaId, action, rowQuarter) =>
+  return (personaId, rowQuarter) =>
     (data as SavedProposal[] | undefined)?.find((r) => {
       const id = r.personaId ?? r.persona_id ?? r.persona;
       const savedAction = r.action_id ?? r.actionId ?? r.recommendation;
-      if (id !== personaId || (rowQuarter && r.quarter && r.quarter !== rowQuarter)) return false;
-      return isGovernedRankingRecommendationAction(action as QuarterlyRankingRow["recommendation"])
-        ? savedAction === action
-        : Boolean(savedAction);
+      return id === personaId && (!rowQuarter || !r.quarter || r.quarter === rowQuarter) && Boolean(savedAction);
     });
 }
 
 /** Read-only view of the saved Evaluator recommendation and single Governance proposal; advisory rows have no action. */
-export function ProposalCell({ proposal, fallbackAction }: { proposal?: SavedProposal; fallbackAction?: string }) {
+export function ProposalCell({ proposal }: { proposal?: SavedProposal | null }) {
   const { t } = useTranslation();
-  const action = proposal?.action_id ?? proposal?.actionId ?? proposal?.recommendation ?? fallbackAction;
+  const action = proposal?.action_id ?? proposal?.actionId ?? proposal?.recommendation;
   if (!action) return <span className="text-xs text-muted-foreground">—</span>;
   const label = t(`mgmt.league.recommendations.${action}`, { defaultValue: action });
   const review = proposal?.human_review_state;

@@ -86,14 +86,13 @@ export const PersonaLeaguePage = ({ embedded = false }: { embedded?: boolean }) 
 
   const rows = useMemo(() => {
     return (apiData ?? []).map((raw, i) => {
-      const r = raw as PersonaLeagueRow & { persona_id?: string; persona?: string; id?: string; persona_name?: string; name?: string; display_name?: string; current_rank?: number; rank?: number; recommendation?: PersonaLeagueRow["recommendedAction"] };
+      const r = raw as PersonaLeagueRow & { persona_id?: string; persona?: string; id?: string; persona_name?: string; name?: string; display_name?: string; current_rank?: number; rank?: number };
       const personaId = r.personaId ?? r.persona_id ?? r.persona ?? r.id ?? "";
       return {
         ...r,
         personaId,
         personaName: r.personaName ?? r.persona_name ?? r.name ?? r.display_name ?? (personaId || "—"),
         currentRank: r.currentRank ?? r.current_rank ?? r.rank ?? i + 1,
-        recommendedAction: r.recommendedAction ?? r.recommendation,
       } as PersonaLeagueRow;
     });
   }, [apiData]);
@@ -578,7 +577,7 @@ export const PersonaLeaguePage = ({ embedded = false }: { embedded?: boolean }) 
           <td className="px-3 py-3 font-mono text-rose-500">{fmtPct(r.maxDrawdown)}</td>
           <td className="px-3 py-3 font-mono">{fmtNum(r.humanInterventions, 0)}</td>
           <td className="px-3 py-3">
-            <ProposalCell proposal={savedProposal(r.personaId, r.recommendedAction)} fallbackAction={r.recommendedAction} />
+            <ProposalCell proposal={savedProposal(r.personaId)} />
           </td>
           <td className="px-3 py-3">
             <Button size="sm" variant="ghost" onClick={onToggle} aria-expanded={expanded} className="text-xs">
