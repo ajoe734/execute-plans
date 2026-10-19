@@ -1,0 +1,81 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "FE-WORKSHOP-CANONICAL-IDENTITY-RELOAD-20261019",
+  "title": "修正既有Workshop重新載入未讀取canonical策略身分",
+  "owner": "Antigravity",
+  "reviewer": "Antigravity2",
+  "repository": "ajoe734/execute-plans",
+  "target_repo": "execute-plans",
+  "base_branch": "dev",
+  "base_commit": "4e5bbe67349c51b8b0cca8c4d8fa81a5371f873a",
+  "branch": "task/FE-WORKSHOP-CANONICAL-IDENTITY-RELOAD-20261019",
+  "source_head": "3992dec603094cba142af6a56501fa2e7bfe8211",
+  "final_head_binding": "Canonical handoff binds the exact final PR head containing this manifest via REVIEW_HEAD_SHA.",
+  "status": "ready-for-independent-exact-head-review",
+  "evidence_kind": "local_validation_only",
+  "sanitized_source_input": {
+    "path": "/home/chloe_ong_dev_cctech_support_com/code/pantheon-artifacts/latest-dev-closure-20261002/recovery-20261018/FE-WORKSHOP-CANONICAL-IDENTITY-RELOAD-20261019-sanitized-source-input.json",
+    "sha256": "f8e5f03728db93e1ab1a5d0d5bc2f3989f67afe9b7b60ae07d561ed3e49d22b5",
+    "accepted_fe_commit_exhibiting_defect": "4e5bbe67349c51b8b0cca8c4d8fa81a5371f873a",
+    "observed_defect": "Existing Workshop initial navigation and reload did not invoke listWorkshopVersions(workshopId), leaving strategySpecIdentity null until a later stream event and keeping ResearchPlanPanel disabled despite canonical owner versions existing."
+  },
+  "scoped_artifacts": {
+    "declared": [
+      "src/agora/pages/strategy-workshop/WorkshopSessionView.tsx",
+      "src/agora/pages/strategy-workshop/StrategyWorkshopPage.test.tsx",
+      "docs/deployment/evidence/FE-WORKSHOP-CANONICAL-IDENTITY-RELOAD-20261019/evidence.json"
+    ],
+    "modified": [
+      "src/agora/pages/strategy-workshop/WorkshopSessionView.tsx",
+      "src/agora/pages/strategy-workshop/StrategyWorkshopPage.test.tsx",
+      "docs/deployment/evidence/FE-WORKSHOP-CANONICAL-IDENTITY-RELOAD-20261019/evidence.json"
+    ],
+    "unchanged_declared": []
+  },
+  "production_diff_summary": {
+    "files": [
+      "src/agora/pages/strategy-workshop/WorkshopSessionView.tsx"
+    ],
+    "insertions": 8,
+    "deletions": 3,
+    "net_lines": 5,
+    "budget_max_net_lines": 40
+  },
+  "acceptance_verification": {
+    "AC1_initial_load_and_remount_canonical_identity": "WorkshopSessionView reads listWorkshopVersions(workshopId) during initial load/remount inside the [workshopId] useEffect and refreshes on workshop.snapshot SSE events, deriving strategySpecIdentity exclusively via the existing canonicalStrategySpecIdentity(versions) parser while preserving immutable strategy_id and registry_id semantics.",
+    "AC2_resource_change_reset_and_cancellation": "On workshopId change, WorkshopSessionView immediately resets strategySpecIdentity to null, guards initial load resolution with the existing cancelled effect flag, and guards refreshStrategySpec callbacks with activeWorkshopIdRef.current === workshopId so late responses from a prior Workshop are ignored and missing/failed owner versions keep ResearchPlanPanel disabled with tenant/auth/write and role checks intact.",
+    "AC3_regression_coverage_and_preserved_display": "Added 4 regression tests in src/agora/pages/strategy-workshop/StrategyWorkshopPage.test.tsx proving: (1) initial load and browser-equivalent remount hydration of canonical StrategySpec identity enabling createWorkshopResearchPlan while preserving durable synthesis and Research result display; (2) write-access and role guards preventing Research Plan creation even when canonical identity is hydrated; (3) failed/missing/non-canonical owner version responses keeping Research Plan creation disabled despite visible labels or local events; and (4) resource switching clearing previous identity and ignoring delayed prior-workshop responses.",
+    "AC4_scoped_footprint_and_delivery_boundary": "Modified only the 3 declared artifacts. Production diff is +8/-3 lines (net +5, within <= 40 budget) and this evidence manifest is under 400 lines. No VM, SSH, product login, real provider, or hosted business action was invoked. Root retains combined final exact-pair qualification/release."
+  },
+  "verified_commands": [
+    {
+      "command": "NODE_ENV=test ./node_modules/.bin/vitest related --run src/agora/pages/strategy-workshop/WorkshopSessionView.tsx src/agora/pages/strategy-workshop/StrategyWorkshopPage.test.tsx",
+      "exit_code": 0,
+      "summary": "3 test files passed (67 tests passed, including all 56 tests in StrategyWorkshopPage.test.tsx)"
+    },
+    {
+      "command": "./node_modules/.bin/tsc -p tsconfig.app.json --noEmit && ./node_modules/.bin/tsc -p tsconfig.agora.json --noEmit",
+      "exit_code": 0,
+      "summary": "Both tsconfig.app.json and tsconfig.agora.json passed with 0 errors"
+    },
+    {
+      "command": "./node_modules/.bin/eslint src/agora/pages/strategy-workshop/WorkshopSessionView.tsx src/agora/pages/strategy-workshop/StrategyWorkshopPage.test.tsx",
+      "exit_code": 0,
+      "summary": "0 errors (2 pre-existing warnings)"
+    },
+    {
+      "command": "python3 scripts/git/test_publish_promote.py && NODE_ENV=test ./node_modules/.bin/vitest run src/test/deploy-safe-defaults.test.ts src/test/paired-release-workflow.test.ts src/test/admitted-dev-pair.test.ts",
+      "exit_code": 0,
+      "summary": "12 Python unit tests and 54 Vitest release/safety tests passed"
+    },
+    {
+      "command": "NODE_ENV=production VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false VITE_BFF_ALLOW_DEV_STUB_WRITES=false VITE_BFF_EMBEDDED_BEARER_TOKEN=false ./node_modules/.bin/vite build --outDir /tmp/fe-workshop-canonical-identity-reload-dist && rm -rf /tmp/fe-workshop-canonical-identity-reload-dist",
+      "exit_code": 0,
+      "summary": "Strict-live safe-write production build succeeded cleanly in 55.33s"
+    }
+  ],
+  "hosted_release_posture": {
+    "hosted_delivery_claimed": false,
+    "note": "This task delivers a scoped frontend source repair and local verification only. No VM, provider, real credentials, or hosted business actions were executed. Root owns combined final exact-pair qualification/release and original-resource readback."
+  }
+}
