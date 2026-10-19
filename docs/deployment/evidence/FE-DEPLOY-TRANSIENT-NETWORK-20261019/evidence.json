@@ -10,63 +10,75 @@
   "evidence_kind": "local_validation_only",
   "frozen_original_failure_evidence": {
     "bounded_input_path": "/tmp/pantheon-assist-20261013/FE-DEPLOY-TRANSIENT-NETWORK-20261019-bounded-input.json",
-    "bounded_input_sha256": "55d0be4c5619986d60e0e4390ed49bb15620a1c6f7f565a15d6812c47e5e6d74",
+    "bounded_input_sha256": "e9a79465aa450d3ed04946c9f9b430d23db66255df5cf726eef6512aa9f00fec",
     "root_run_id": 39266905540,
     "fe_deploy_run_id": 39274970062,
-    "integration_gate_run_id": 39273862620,
+    "integration_gate_run_id": "39271981107",
+    "release_candidate_id": "15d786126fdec169ca0eb96bd22ae746c2ca100698d1c2c8073872c223792be3",
     "backend_sha": "0eace2eab875c208a68916be630b01dd9e969602",
     "frontend_sha": "84fbe157bee67793d8f585d128e47c30525a35ce",
     "previous_target_sha": "4e5bbe67349c51b8b0cca8c4d8fa81a5371f873a",
-    "artifact_id": 12197973384,
-    "artifact_digest_sha256": "0a4db02ef3981b2ad507db066a722cc84ba5eba5caa73d7de010d2e0d98607e1",
-    "source_files": {
-      "fe_deploy_run_meta": {
-        "path": "/tmp/pantheon-assist-20261013/FEdeploy39274970062-run-meta.json",
-        "sha256": "ee17cb94b1ebcb9303152a1ec6fc842f88c426706321899ed02e3a16ed6b9d34"
+    "official_failed_FE_artifact": {
+      "id": 12197973384,
+      "zip": "/tmp/pantheon-assist-20261013/pantheon-dev-fe-deploy-evidence-attempt-1-39274970062.zip",
+      "sha256": "0a4db02ef3981b2ad507db066a722cc84ba5eba5caa73d7de010d2e0d98607e1"
+    },
+    "source_files": [
+      {
+        "path": "/tmp/pantheon-assist-20261013/FEdeploy39274970062-original-artifacts/pantheon-dev-fe-deploy-evidence-attempt-1/controller/evidence.jsonl",
+        "sha256": "a33553f8a6a30a78026a462f4424855f39c6863567d08cfd117e138b8d89d2c5"
       },
-      "candidate_pre_switch_probe": {
-        "path": "/tmp/pantheon-assist-20261013/FEdeploy39274970062-original-artifacts/pantheon-dev-fe-deploy-evidence-attempt-1/controller/browser-probe-candidate_pre_switch.json",
-        "sha256": "c63ce6c60a712c9dfde8ed2da53a4dd11604ec3af0b6e417dd0d27d65dcbe591"
-      },
-      "previous_target_pre_switch_probe": {
+      {
         "path": "/tmp/pantheon-assist-20261013/FEdeploy39274970062-original-artifacts/pantheon-dev-fe-deploy-evidence-attempt-1/controller/browser-probe-previous_target_pre_switch.json",
-        "sha256": "e1d7f555517a53cbab4487236f6e7806c9f621b6064f672f29515d979f68148d"
+        "sha256": "1ab39250a10945cb7419e59fb9b1472b4f593246d5764eca0cd9b6579f7984fd"
       },
-      "controller_evidence": {
-        "path": "/tmp/pantheon-assist-20261013/FEdeploy39274970062-original-artifacts/pantheon-dev-fe-deploy-evidence-attempt-1/controller/evidence.json",
-        "sha256": "21584f9e2450de3b7e4ab38efbf43a40180cfcf26f8f47488a35bc1c0f8246de"
+      {
+        "path": "/tmp/pantheon-assist-20261013/FEdeploy39274970062-original-artifacts/pantheon-dev-fe-deploy-evidence-attempt-1/controller/browser-probe-candidate_pre_switch.json",
+        "sha256": "6981685f1aef1317525f88eddb41640459db4592e8d034e6833fcd82c5f56098"
+      },
+      {
+        "path": "/tmp/pantheon-assist-20261013/FEdeploy39274970062-original-artifacts/pantheon-dev-fe-deploy-evidence-attempt-1/controller/prepared-receipt.json",
+        "sha256": "2d678c6c3f95b53dfb805104e8159fccfbd628bcb53a58396d0dd0af10ac47b3"
       }
+    ],
+    "controller_evidence_summary": {
+      "path": "/tmp/pantheon-assist-20261013/FEdeploy39274970062-original-artifacts/pantheon-dev-fe-deploy-evidence-attempt-1/controller/evidence.json",
+      "sha256": "b2c902da87554cceb09b40e20dc483da99ba7ba9bae8a0d84e4b9de1ce2d43ac"
     },
     "recorded_facts": {
-      "candidate_pre_switch_prepare_passed_at": "2026-04-10T15:24:22Z",
-      "previous_target_pre_switch_prepare_passed_at": "2026-04-10T15:24:57Z",
-      "candidate_pre_switch_activate_passed_at": "2026-04-10T15:26:12Z",
-      "previous_target_pre_switch_activate_failed_at": "2026-04-10T15:26:21Z",
-      "failure_reason": "required BFF probe check failed",
-      "failed_core_requests": [
+      "previous_target_pre_switch_prepare_passed_at": "2026-10-19T15:24:57.166Z",
+      "candidate_pre_switch_prepare_passed_at": "2026-10-19T15:25:09.854Z",
+      "prepared_receipt_at": "2026-10-19T15:25:10.880Z",
+      "previous_target_pre_switch_activate_probe_generated_at": "2026-10-19T15:26:16.032Z",
+      "previous_target_pre_switch_activate_failed_at": "2026-10-19T15:26:21.990Z",
+      "failures": [
+        "existingAuthBoundaryAndBffChecks",
+        "unexpectedConsoleErrorsAbsent"
+      ],
+      "bff_failures": [
         {
-          "path": "/bff/me",
-          "status": 0,
-          "error": "net::ERR_NETWORK_CHANGED"
+          "method": "GET",
+          "url": "https://api.dev.mvl-cap.tw/bff/me",
+          "failure": "net::ERR_NETWORK_CHANGED"
         },
         {
-          "path": "/bff/auth/readiness",
-          "status": 0,
-          "error": "net::ERR_NETWORK_CHANGED"
+          "method": "GET",
+          "url": "https://api.dev.mvl-cap.tw/bff/auth/readiness",
+          "failure": "net::ERR_NETWORK_CHANGED"
         }
       ],
       "retired_openclaw_gates_unchanged": true
     }
   },
   "diagnosis_and_fix": {
-    "root_cause": "During FE deploy run 39274970062 (under Root 39266905540), both candidate (84fbe157bee67793d8f585d128e47c30525a35ce) and previous rollback target (4e5bbe67349c51b8b0cca8c4d8fa81a5371f873a) passed prepare pre-switch browser probes, and candidate passed activate pre-switch probe. When re-probing previous_target_pre_switch during activate at 2026-04-10T15:26:21Z, Chromium encountered a transient network interface change (net::ERR_NETWORK_CHANGED) while fetching /bff/me and /bff/auth/readiness, while manifest, assets, index SHA-256, CORS preflight, and write-route checks all passed. run_release_probe in scripts/deploy-dev-vm.sh had no bounded retry for a pure Chromium ERR_NETWORK_CHANGED pre-switch probe failure.",
-    "fix_summary": "Added exported classifier isTransientNetworkChangedProbeFailure(evidence) in scripts/probe-hosted-browser-bff.mjs (and recorded transientNetworkChangedOnly in probe JSON output) that returns true only when a failed probe passed all non-core-request checks (manifest, index/assets, CORS preflight, zero page/write/retired-endpoint violations, no unsafe auth redirect) and every failed core BFF request failed with status 0 and error containing ERR_NETWORK_CHANGED (plus matching requestFailures entries). Updated run_release_probe in scripts/deploy-dev-vm.sh so pre-switch phases (*_pre_switch) allow at most one complete re-probe with the exact same environment and release/backend/pair identities when attempt 1 fails with isTransientNetworkChangedProbeFailure. Preserved original attempt 1 evidence at browser-probe-<phase>-attempt-1.json and append-only event browser.probe.<phase>.attempt_1 (failed) distinct from final browser-probe-<phase>.json and browser.probe.<phase> (passed or failed)."
+    "root_cause": "During FE deploy run 39274970062 (under Root 39266905540, integration gate 39271981107), previous rollback target (4e5bbe67349c51b8b0cca8c4d8fa81a5371f873a) passed browser.probe.previous_target_pre_switch at 2026-10-19T15:24:57.166Z and candidate (84fbe157bee67793d8f585d128e47c30525a35ce) passed browser.probe.candidate_pre_switch at 2026-10-19T15:25:09.854Z with prepared-receipt.json written at 2026-10-19T15:25:10.880Z. During activate pre-switch at 2026-10-19T15:26:21.990Z, re-probing previous_target_pre_switch failed solely due to Chromium net::ERR_NETWORK_CHANGED on /bff/me and /bff/auth/readiness while manifest, assets, deployment policy, and write-method checks passed. run_release_probe in scripts/deploy-dev-vm.sh had no bounded retry for a pure Chromium ERR_NETWORK_CHANGED pre-switch probe failure.",
+    "fix_summary": "Added exported minimal transport diagnosis predicate isTransientNetworkChangedProbeFailure(evidence) in scripts/probe-hosted-browser-bff.mjs that checks that BFF failures exist and all BFF/console failures are net::ERR_NETWORK_CHANGED without requiring response-dependent flags (anonymousAuthBoundaryVerified, requiredCoreResponseOk, observedProtectedResponsesOk) to already be true on attempt 1 when ERR_NETWORK_CHANGED prevents observing the first core/auth response, while still rejecting any non-ERR_NETWORK_CHANGED BFF/console/page/resource/policy/write/secret/auth error and keeping the second full probe authoritative. Updated run_release_probe in scripts/deploy-dev-vm.sh so pre-switch phases (*_pre_switch) allow at most one complete re-probe with identical identities before switch, preserving attempt-1 evidence at browser-probe-<phase>-attempt-1.json and browser.probe.<phase>.attempt_1=failed distinct from final browser-probe-<phase>.json and browser.probe.<phase>."
   },
   "acceptance_mapping": {
-    "AC1_frozen_evidence_and_diagnosis": "Read /tmp/pantheon-assist-20261013/FE-DEPLOY-TRANSIENT-NETWORK-20261019-bounded-input.json and all four referenced frozen artifacts. Recorded that candidate 84fbe157bee67793d8f585d128e47c30525a35ce passed and previous target 4e5bbe67349c51b8b0cca8c4d8fa81a5371f873a passed during prepare (15:24:57Z) then failed during activate pre-switch (15:26:21Z) due to transient Chromium net::ERR_NETWORK_CHANGED on /bff/me and /bff/auth/readiness. Left retired OpenClaw gates untouched.",
-    "AC2_bounded_single_pre_switch_reprobe": "Implemented isTransientNetworkChangedProbeFailure in scripts/probe-hosted-browser-bff.mjs and bounded 1x re-probe in run_release_probe (scripts/deploy-dev-vm.sh) for *_pre_switch phases using identical candidate/previous release, backend, and pair identities before switch. Preserved gate-before-switch and immediate rejection for auth/tenant/asset/manifest/CORS failures and persistent ERR_NETWORK_CHANGED.",
-    "AC3_distinct_attempt_and_final_evidence": "Preserved attempt-1 failed probe JSON at ${AUDIT_DIR}/browser-probe-${phase}-attempt-1.json and logged browser.probe.${phase}.attempt_1=failed in evidence.jsonl before running attempt 2 and writing final ${AUDIT_DIR}/browser-probe-${phase}.json and browser.probe.${phase}. Both files are hashed into controller evidence.json auditFiles.",
-    "AC4_focused_and_suite_validation": "Added test_pre_switch_transient_network_changed_reprobe in scripts/test-deploy-dev-vm.sh covering frozen artifact classification, recovered transient ERR_NETWORK_CHANGED on previous_target_pre_switch during activate after earlier prepare pass, persistent ERR_NETWORK_CHANGED rejection after at most 2 total attempts, and immediate 1-attempt rejection for non-transient failures. Passed full deploy contract harness, atomic CAS/manifest python tests, vitest release/deploy suites, and TypeScript typechecks.",
+    "AC1_frozen_evidence_and_diagnosis": "Read /tmp/pantheon-assist-20261013/FE-DEPLOY-TRANSIENT-NETWORK-20261019-bounded-input.json and all four referenced source_files with exact SHA-256 digests. Recorded that previous target 4e5bbe67349c51b8b0cca8c4d8fa81a5371f873a passed at 2026-10-19T15:24:57.166Z, candidate 84fbe157bee67793d8f585d128e47c30525a35ce passed at 2026-10-19T15:25:09.854Z, and previous target failed at 2026-10-19T15:26:21.990Z solely due to transient Chromium net::ERR_NETWORK_CHANGED on /bff/me and /bff/auth/readiness. Left retired OpenClaw gates untouched.",
+    "AC2_bounded_single_pre_switch_reprobe": "Implemented minimal transport diagnosis predicate isTransientNetworkChangedProbeFailure in scripts/probe-hosted-browser-bff.mjs and bounded 1x re-probe in run_release_probe (scripts/deploy-dev-vm.sh) for *_pre_switch phases using identical candidate/previous release, backend, and pair identities before switch. Preserved gate-before-switch and immediate rejection for real auth/tenant/asset/manifest/connection failures and persistent ERR_NETWORK_CHANGED.",
+    "AC3_distinct_attempt_and_final_evidence": "Preserved attempt-1 failed probe JSON at ${AUDIT_DIR}/browser-probe-${phase}-attempt-1.json and logged browser.probe.${phase}.attempt_1=failed in evidence.jsonl before running attempt 2 and writing final ${AUDIT_DIR}/browser-probe-${phase}.json and browser.probe.${phase}. Both files are hashed into controller evidence.json files.",
+    "AC4_focused_and_suite_validation": "Updated test_pre_switch_transient_network_changed_reprobe in scripts/test-deploy-dev-vm.sh covering frozen artifact classification, attempt-1 ERR_NETWORK_CHANGED with unobserved auth/core response flags qualifying for 1 retry, recovered transient ERR_NETWORK_CHANGED on previous_target_pre_switch during activate after earlier prepare pass, persistent ERR_NETWORK_CHANGED rejection after at most 1 retry, and immediate 1-attempt rejection for real auth/manifest/asset/connection failures.",
     "AC5_source_only_scope": "Modified only the 4 declared scoped artifacts in execute-plans. No VM, SSH, model/provider/business calls, fixture, approval, deployment, lease, or Publisher changes."
   },
   "scoped_artifacts": [

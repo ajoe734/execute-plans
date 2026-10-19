@@ -633,9 +633,9 @@ if (output) {
           shellOk: true,
           publicHealthOk: true,
           usesIntendedBff: true,
-          anonymousAuthBoundaryVerified: true,
-          requiredCoreResponseOk: true,
-          observedProtectedResponsesOk: true,
+          anonymousAuthBoundaryVerified: false,
+          requiredCoreResponseOk: false,
+          observedProtectedResponsesOk: false,
           noAuthorizationRequests: true,
           noBrowserWriteMethods: true,
           noEmbeddedDevBearerRequired: process.env.PANTHEON_PROBE_LEGACY_ROLLBACK_TARGET_COMPAT !== "1",
@@ -3886,6 +3886,14 @@ if (!isTransientNetworkChangedProbeFailure(frozenShape)) {
   throw new Error("expected frozen ERR_NETWORK_CHANGED failure shape to classify as transient");
 }
 
+const unobservedResponseVariant = structuredClone(frozenShape);
+unobservedResponseVariant.checks.base.anonymousAuthBoundaryVerified = false;
+unobservedResponseVariant.checks.base.requiredCoreResponseOk = false;
+unobservedResponseVariant.checks.base.observedProtectedResponsesOk = false;
+if (!isTransientNetworkChangedProbeFailure(unobservedResponseVariant)) {
+  throw new Error("attempt-1 ERR_NETWORK_CHANGED with unobserved auth/core response flags must still qualify for 1 retry");
+}
+
 const boundedInputPath = "/tmp/pantheon-assist-20261013/FE-DEPLOY-TRANSIENT-NETWORK-20261019-bounded-input.json";
 if (fs.existsSync(boundedInputPath)) {
   const boundedInput = JSON.parse(fs.readFileSync(boundedInputPath, "utf8"));
@@ -3900,6 +3908,13 @@ if (fs.existsSync(boundedInputPath)) {
     if (!isTransientNetworkChangedProbeFailure(prevProbe)) {
       throw new Error("frozen browser-probe-previous_target_pre_switch.json did not classify as transient");
     }
+    const prevUnobserved = structuredClone(prevProbe);
+    prevUnobserved.checks.base.anonymousAuthBoundaryVerified = false;
+    prevUnobserved.checks.base.requiredCoreResponseOk = false;
+    prevUnobserved.checks.base.observedProtectedResponsesOk = false;
+    if (!isTransientNetworkChangedProbeFailure(prevUnobserved)) {
+      throw new Error("frozen browser-probe-previous_target_pre_switch.json with unobserved auth/core response flags did not classify as transient");
+    }
   }
   if (candProbePath && fs.existsSync(candProbePath)) {
     const candProbe = JSON.parse(fs.readFileSync(candProbePath, "utf8"));
@@ -3910,7 +3925,8 @@ if (fs.existsSync(boundedInputPath)) {
 }
 
 for (const mutate of [
-  (d) => { d.checks.base.anonymousAuthBoundaryVerified = false; },
+  (d) => { d.checks.base.noAuthorizationRequests = false; },
+  (d) => { d.bff.coreResponses = [{ path: "/bff/me", method: "GET", status: 403, error: "" }]; d.checks.base.observedProtectedResponsesOk = false; },
   (d) => { d.checks.base.personaFleetSafetyPassed = false; d.checks.strict.personaFleetSafetyPassed = false; },
   (d) => { d.checks.strict.frontendResourceFailuresAbsent = false; d.failures.push("frontendResourceFailuresAbsent"); },
   (d) => { d.checks.strict.deploymentPolicyPassed = false; d.failures.push("deploymentPolicyPassed"); },

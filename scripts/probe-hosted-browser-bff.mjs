@@ -1111,126 +1111,92 @@ function isNetworkChangedDiagnostic(value) {
   );
 }
 
+const TRANSIENT_BASE_IGNORED_CHECKS = new Set([
+  "pass",
+  "bffRequestFailuresAbsent",
+  "anonymousAuthBoundaryVerified",
+  "requiredCoreResponseOk",
+  "observedProtectedResponsesOk",
+  "openclawContractPassed",
+  "noEmbeddedDevBearerRequired",
+]);
+
+const TRANSIENT_STRICT_ALLOWED_FAILURES = new Set([
+  "existingAuthBoundaryAndBffChecks",
+  "unexpectedConsoleErrorsAbsent",
+  "hostedUxProfilesPassed",
+]);
+
 export function isTransientNetworkChangedProbeFailure(evidence) {
   if (!evidence || typeof evidence !== "object" || evidence.pass !== false) {
     return false;
   }
   const base = evidence.checks?.base;
-  const strict = evidence.checks?.strict;
-  if (!base || typeof base !== "object") {
-    return false;
-  }
+  if (!base || typeof base !== "object") return false;
   const bffFailures = Array.isArray(evidence.bff?.failures)
     ? evidence.bff.failures
-    : [];
-  const unexpectedConsoleErrors = Array.isArray(
-    evidence.browser?.unexpectedConsoleErrors,
-  )
-    ? evidence.browser.unexpectedConsoleErrors
     : [];
   const profiles = Array.isArray(evidence.browser?.hostedUxProfiles)
     ? evidence.browser.hostedUxProfiles
     : [];
-  const profileConsoleErrors = profiles.flatMap((profile) =>
-    Array.isArray(profile?.diagnostics?.unexpectedConsoleErrors)
-      ? profile.diagnostics.unexpectedConsoleErrors
-      : [],
-  );
+  const consoleErrors = [
+    ...(Array.isArray(evidence.browser?.unexpectedConsoleErrors)
+      ? evidence.browser.unexpectedConsoleErrors
+      : []),
+    ...profiles.flatMap((p) => p?.diagnostics?.unexpectedConsoleErrors || []),
+  ];
   if (
-    bffFailures.length === 0 &&
-    unexpectedConsoleErrors.length === 0 &&
-    profileConsoleErrors.length === 0
+    bffFailures.length === 0 ||
+    !bffFailures.every((entry) => isNetworkChangedDiagnostic(entry?.failure)) ||
+    !consoleErrors.every((entry) => isNetworkChangedDiagnostic(entry?.text))
   ) {
     return false;
   }
+  const coreResponses = Array.isArray(evidence.bff?.coreResponses)
+    ? evidence.bff.coreResponses
+    : [];
+  if (coreResponses.some((r) => r?.status > 0 && r.status !== 401)) {
+    return false;
+  }
   if (
-    !bffFailures.every((entry) => isNetworkChangedDiagnostic(entry?.failure)) ||
-    !unexpectedConsoleErrors.every((entry) =>
-      isNetworkChangedDiagnostic(entry?.text),
-    ) ||
-    !profileConsoleErrors.every((entry) =>
-      isNetworkChangedDiagnostic(entry?.text),
+    Object.entries(base).some(
+      ([key, ok]) =>
+        !TRANSIENT_BASE_IGNORED_CHECKS.has(key) &&
+        !(
+          key === "noEmbeddedDevBearer" &&
+          base.noEmbeddedDevBearerRequired === false
+        ) &&
+        ok !== true,
     )
   ) {
     return false;
   }
-  const nonNetworkBaseChecksOk =
-    base.shellOk === true &&
-    base.publicHealthOk === true &&
-    base.usesIntendedBff === true &&
-    base.anonymousAuthBoundaryVerified === true &&
-    base.requiredCoreResponseOk === true &&
-    base.observedProtectedResponsesOk === true &&
-    base.noAuthorizationRequests === true &&
-    base.noBrowserWriteMethods === true &&
-    (!base.noEmbeddedDevBearerRequired || base.noEmbeddedDevBearer === true) &&
-    base.personaFleetSafetyPassed === true &&
-    base.applicationRootRendered === true &&
-    base.pageErrorsAbsent === true &&
-    base.oldUrlAbsent === true &&
-    base.bffRequestsObserved === true;
-  if (!nonNetworkBaseChecksOk) {
+  const strict = evidence.checks?.strict;
+  if (
+    strict &&
+    typeof strict === "object" &&
+    Object.entries(strict).some(
+      ([key, ok]) => !TRANSIENT_STRICT_ALLOWED_FAILURES.has(key) && ok !== true,
+    )
+  ) {
     return false;
   }
-  if (evidence.mode === "release-strict" || strict) {
-    if (!strict || typeof strict !== "object") {
-      return false;
-    }
-    const profilesTransientOnly =
-      strict.hostedUxProfilesPassed === true ||
-      (profiles.length > 0 &&
-        profiles.every((profile) => {
-          if (profile?.assessment?.pass === true) return true;
-          const failures = Array.isArray(profile?.assessment?.failures)
-            ? profile.assessment.failures
-            : [];
-          const consoleErrs = Array.isArray(
-            profile?.diagnostics?.unexpectedConsoleErrors,
-          )
-            ? profile.diagnostics.unexpectedConsoleErrors
-            : [];
-          return (
-            failures.length === 1 &&
-            failures[0] === "unexpectedConsoleErrorsAbsent" &&
-            consoleErrs.length > 0 &&
-            consoleErrs.every((entry) =>
-              isNetworkChangedDiagnostic(entry?.text),
-            )
-          );
-        }));
-    const nonNetworkStrictChecksOk =
-      strict.applicationRootRendered === true &&
-      strict.noBrowserWriteMethods === true &&
-      strict.personaFleetSafetyPassed === true &&
-      strict.pageErrorsAbsent === true &&
-      strict.frontendResourceFailuresAbsent === true &&
-      strict.frontendResourceHttpErrorsAbsent === true &&
-      strict.bundleFetchesComplete === true &&
-      strict.deploymentJsonFetched === true &&
-      strict.deploymentPolicyPassed === true &&
-      strict.freshStorageInspected === true &&
-      strict.freshStorageSensitiveValuesAbsent === true &&
-      strict.htmlAndAssetSensitiveValuesAbsent === true &&
-      strict.candidateRouteErrorsAbsent === true &&
-      strict.hostedUxProfileSetComplete === true &&
-      profilesTransientOnly;
-    if (!nonNetworkStrictChecksOk) {
-      return false;
-    }
-    const allowedFailures = new Set([
-      "existingAuthBoundaryAndBffChecks",
-      "unexpectedConsoleErrorsAbsent",
-      "hostedUxProfilesPassed",
-    ]);
-    const failures = Array.isArray(evidence.failures) ? evidence.failures : [];
-    if (
-      failures.length === 0 ||
-      !failures.every((failure) => allowedFailures.has(failure))
-    ) {
-      return false;
-    }
+  if (
+    profiles.some((p) =>
+      (p?.assessment?.failures || []).some(
+        (f) =>
+          f !== "unexpectedConsoleErrorsAbsent" &&
+          f !== "requiredCoreResponsesObserved" &&
+          f !== "routeContentReady",
+      ),
+    )
+  ) {
+    return false;
   }
-  return true;
+  const failures = Array.isArray(evidence.failures) ? evidence.failures : [];
+  return failures.every((failure) =>
+    TRANSIENT_STRICT_ALLOWED_FAILURES.has(failure),
+  );
 }
 
 function isWithinRoot(root, target) {
