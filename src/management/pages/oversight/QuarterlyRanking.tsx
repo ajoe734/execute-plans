@@ -277,12 +277,8 @@ export const QuarterlyRankingPage = ({ embedded = false }: { embedded?: boolean 
       const id = pickSnapshotId(row as RawQuarterlyRankingRow);
       if (id) return id;
     }
-    for (const row of activeRows) {
-      const id = pickSnapshotId(savedProposal(row.personaId, row.quarter));
-      if (id) return id;
-    }
     return undefined;
-  }, [filteredRanking, ranking, savedProposal]);
+  }, [filteredRanking, ranking]);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {

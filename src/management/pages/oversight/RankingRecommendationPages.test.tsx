@@ -474,13 +474,15 @@ describe("ranking recommendation proposal pages", () => {
       formula: defaultQuarterlyFormula(),
       proposals: [q4SavedRecommendation],
     });
-    const proposalFallbackView = renderWithRoutes("/management/quarterly-ranking", <QuarterlyRankingPage />);
+    const proposalOnlyView = renderWithRoutes("/management/quarterly-ranking", <QuarterlyRankingPage />);
     const proposalContext = screen.getByRole("heading", { name: /Evaluation Context/i }).closest("div") as HTMLElement;
     expect(within(proposalContext).getByText("Snapshot ID:").nextElementSibling).toHaveTextContent(
-      "ranking-quarterly-2026-q4-29eb48a0455252e2a2f9d27a",
+      "unavailable",
     );
+    expect(within(proposalContext).queryByText("ranking-quarterly-2026-q4-29eb48a0455252e2a2f9d27a")).not.toBeInTheDocument();
+    expect(screen.getByText("persona-eval-20261019T215712Z · ranking-quarterly-2026-q4-29eb48a0455252e2a2f9d27a")).toBeInTheDocument();
     expect(screen.queryByText("snap-2026-q3-final")).not.toBeInTheDocument();
-    proposalFallbackView.unmount();
+    proposalOnlyView.unmount();
 
     mockLive({ rows: [ACTUAL_RANKING_ROW], formula: defaultQuarterlyFormula(), proposals: [] });
     renderWithRoutes("/management/quarterly-ranking", <QuarterlyRankingPage />);
