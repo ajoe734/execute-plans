@@ -225,4 +225,74 @@ describe("PersonaDetail", () => {
       expect(res).toMatchObject({ ok: true, data: { commandId: "cmd-retire-1" } });
     });
   });
+
+  describe("header lifecycle display", () => {
+    it("renders canonical lifecycleStatus research_only instead of contradictory legacy draft state while preserving paper readiness", async () => {
+      vi.mocked(getPersona).mockResolvedValue({
+        id: "persona-dev-lifecycle-39057282435",
+        name: "DEV ACCEPTANCE ONLY: Persona lifecycle JWT 39057282435",
+        owner: "pantheon-dev-operator-a",
+        updatedAt: "2026-10-19T01:13:49.473740Z",
+        state: "draft",
+        lifecycleStatus: "research_only",
+        risk: "low",
+        archetype: "generalist",
+        routedStrategies: 0,
+        successRate: 0,
+      });
+      const runActionSpy = vi.spyOn(writes, "runAction");
+      runActionSpy.mockClear();
+
+      render(
+        createElement(
+          MemoryRouter,
+          { initialEntries: ["/management/personas/persona-dev-lifecycle-39057282435"] },
+          createElement(
+            Routes,
+            null,
+            createElement(Route, { path: "/management/personas/:id", element: createElement(PersonaDetail) }),
+          ),
+        ),
+      );
+
+      expect(await screen.findByText("research_only")).toBeInTheDocument();
+      expect(screen.queryByText(/^(draft|草稿)$/i)).not.toBeInTheDocument();
+      expect(screen.getByText(/0\/5 · persona-dev-lifecycle-39057282435/)).toBeInTheDocument();
+      expect(screen.getByText("未升級")).toBeInTheDocument();
+      expect(runActionSpy).not.toHaveBeenCalled();
+    });
+
+    it.each([undefined, "", "   "])(
+      "preserves the legacy state display when canonical lifecycleStatus is %j",
+      async (lifecycleStatus) => {
+        vi.mocked(getPersona).mockResolvedValue({
+          id: "ps_legacy",
+          name: "Legacy Persona",
+          owner: "you",
+          updatedAt: "2026-05-10T00:00:00.000Z",
+          state: "draft",
+          lifecycleStatus,
+          risk: "low",
+          archetype: "macro",
+          routedStrategies: 0,
+          successRate: 0,
+        });
+
+        render(
+          createElement(
+            MemoryRouter,
+            { initialEntries: ["/management/personas/ps_legacy"] },
+            createElement(
+              Routes,
+              null,
+              createElement(Route, { path: "/management/personas/:id", element: createElement(PersonaDetail) }),
+            ),
+          ),
+        );
+
+        expect(await screen.findByText("草稿")).toBeInTheDocument();
+        expect(screen.queryByText("research_only")).not.toBeInTheDocument();
+      },
+    );
+  });
 });
