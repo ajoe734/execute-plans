@@ -130,7 +130,8 @@ export const QuarterlyRankingPage = ({ embedded = false }: { embedded?: boolean 
     [currentQuarter, personaFocus],
     { cacheKey: `oversight.quarterlyRanking.list.${personaFocus || currentQuarter}` },
   );
-  const savedProposal = useSavedProposals(currentQuarter);
+  const quarter = rows?.find((row) => row.quarter)?.quarter || currentQuarter;
+  const savedProposal = useSavedProposals(quarter);
   const { data: formula } = useV5Live(
     (signal) => mgmt.quarterlyRanking.formulaLiveOnly({ signal }),
     [],
@@ -256,7 +257,6 @@ export const QuarterlyRankingPage = ({ embedded = false }: { embedded?: boolean 
 
   const disqualified = ranking.filter((r) => r.eligibility !== "eligible");
   const evidence = ranking.flatMap((r) => r.evidenceRefs ?? []);
-  const quarter = ranking.find((row) => row.quarter)?.quarter ?? currentQuarter;
   const cutoffDate = quarterCutoffDate(quarter);
 
   const handleSort = (field: SortField) => {
@@ -550,11 +550,7 @@ export const QuarterlyRankingPage = ({ embedded = false }: { embedded?: boolean 
                     )}
                   </td>
                   <td className="px-3 py-3">
-                    {isGovernedRankingRecommendationAction(r.recommendation) ? (
-                      <ProposalCell review={savedProposal(r.personaId, r.recommendation)} label={t(`mgmt.league.recommendations.${r.recommendation}`)} />
-                    ) : (
-                      <span className="text-xs text-muted-foreground">{t("mgmt.league.recommendations.no_change")}</span>
-                    )}
+                    <ProposalCell proposal={savedProposal(r.personaId, r.quarter)} />
                   </td>
                 </tr>
               ))}
@@ -657,35 +653,71 @@ export const QuarterlyRankingPage = ({ embedded = false }: { embedded?: boolean 
 };
 
 type OwnerReview = {
+  status?: string;
   decision_status?: string;
   decision?: string | null;
   owner_decision?: { decision_id?: string; available?: boolean } | null;
 };
 
-/** Saved Governance proposals live on the owner recommendation read, not on the ranking/league list rows. */
-export function useSavedProposals(quarter: string): (personaId: string, action?: string) => OwnerReview | undefined {
+export type SavedProposal = {
+  personaId?: string;
+  persona_id?: string;
+  persona?: string;
+  quarter?: string;
+  action_id?: string;
+  actionId?: string;
+  recommendation?: string;
+  rationale?: string;
+  ranking_snapshot_id?: string;
+  rankingSnapshotId?: string;
+  evaluator_run_id?: string;
+  evaluatorRunId?: string;
+  human_review_state?: OwnerReview;
+};
+
+/** Saved Evaluator recommendations and Governance proposals live on the owner recommendation read, not on ranking/league rows. */
+export function useSavedProposals(quarter: string): (personaId: string, rowQuarter?: string) => SavedProposal | undefined {
   const { data } = useV5Live(
     (signal) => mgmt.quarterlyRanking.recommendationsLiveOnly(quarter, signal ? { signal } : undefined),
     [quarter],
     { cacheKey: "oversight.quarterlyRanking.recommendations" },
   );
-  return (personaId, action) =>
-    (data as Array<{ personaId: string; action_id?: string; human_review_state?: OwnerReview }> | undefined)
-      ?.find((r) => r.personaId === personaId && r.action_id === action)?.human_review_state;
+  return (personaId, rowQuarter) =>
+    (data as SavedProposal[] | undefined)?.find((r) => {
+      const id = r.personaId ?? r.persona_id ?? r.persona;
+      const savedAction = r.action_id ?? r.actionId ?? r.recommendation;
+      return id === personaId && (!rowQuarter || !r.quarter || r.quarter === rowQuarter) && Boolean(savedAction);
+    });
 }
 
-/** Read-only view of the single saved Governance proposal; advisory rows have none and no action. */
-export function ProposalCell({ review, label }: { review?: OwnerReview; label: string }) {
+/** Read-only view of the saved Evaluator recommendation and single Governance proposal; advisory rows have no action. */
+export function ProposalCell({ proposal }: { proposal?: SavedProposal | null }) {
   const { t } = useTranslation();
-  const id = review?.owner_decision?.decision_id;
-  if (!id) return <span className="text-xs text-muted-foreground">{label}</span>;
-  const status = review.owner_decision?.available === false
-    ? "unavailable"
-    : review.decision_status === "decided" ? review.decision || "decided" : review.decision_status ?? "unavailable";
-  const text = `${label} · ${t(`mgmt.governance.proposalStatus.${status}`, { defaultValue: status.replace(/_/g, " ") })}`;
-  return status === "pending" ? (
-    <Link to={`/management/human-inbox/${encodeURIComponent(`approval:${id}`)}`} className="text-xs text-primary hover:underline">{text}</Link>
-  ) : (
-    <span className="text-xs text-muted-foreground">{text}</span>
+  const action = proposal?.action_id ?? proposal?.actionId ?? proposal?.recommendation;
+  if (!action) return <span className="text-xs text-muted-foreground">—</span>;
+  const label = t(`mgmt.league.recommendations.${action}`, { defaultValue: action });
+  const review = proposal?.human_review_state;
+  const id = isGovernedRankingRecommendationAction(action as QuarterlyRankingRow["recommendation"])
+    ? review?.owner_decision?.decision_id
+    : undefined;
+  const status = id
+    ? review?.owner_decision?.available === false
+      ? "unavailable"
+      : review?.decision_status === "decided" ? review.decision || "decided" : review?.decision_status ?? "unavailable"
+    : undefined;
+  const text = status
+    ? `${label} · ${t(`mgmt.governance.proposalStatus.${status}`, { defaultValue: status.replace(/_/g, " ") })}`
+    : label;
+  const sources = [proposal?.evaluator_run_id ?? proposal?.evaluatorRunId, proposal?.ranking_snapshot_id ?? proposal?.rankingSnapshotId].filter(Boolean);
+  return (
+    <div className="space-y-0.5">
+      {status === "pending" && id ? (
+        <Link to={`/management/human-inbox/${encodeURIComponent(`approval:${id}`)}`} className="text-xs text-primary hover:underline">{text}</Link>
+      ) : (
+        <span className="text-xs text-muted-foreground">{text}</span>
+      )}
+      {proposal?.rationale && <p className="text-[11px] text-muted-foreground leading-snug">{proposal.rationale}</p>}
+      {sources.length > 0 && <p className="font-mono text-[10px] text-muted-foreground">{sources.join(" · ")}</p>}
+    </div>
   );
 }

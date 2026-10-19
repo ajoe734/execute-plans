@@ -18,7 +18,7 @@ import {
   type PersonaLeaguePreset,
   type PersonaLeagueRow,
 } from "@/lib/v5/management/personaLeague";
-import { currentPm12QuarterId, isGovernedRankingRecommendationAction } from "@/lib/v5/management/rankingGovernance";
+import { currentPm12QuarterId } from "@/lib/v5/management/rankingGovernance";
 import { ProposalCell, useSavedProposals } from "./QuarterlyRanking";
 import {
   ShieldAlert,
@@ -85,7 +85,16 @@ export const PersonaLeaguePage = ({ embedded = false }: { embedded?: boolean }) 
   const isTelemetryDegraded = useFallback || paramSourceConfidence === "degraded";
 
   const rows = useMemo(() => {
-    return apiData ?? [];
+    return (apiData ?? []).map((raw, i) => {
+      const r = raw as PersonaLeagueRow & { persona_id?: string; persona?: string; id?: string; persona_name?: string; name?: string; display_name?: string; current_rank?: number; rank?: number };
+      const personaId = r.personaId ?? r.persona_id ?? r.persona ?? r.id ?? "";
+      return {
+        ...r,
+        personaId,
+        personaName: r.personaName ?? r.persona_name ?? r.name ?? r.display_name ?? (personaId || "—"),
+        currentRank: r.currentRank ?? r.current_rank ?? r.rank ?? i + 1,
+      } as PersonaLeagueRow;
+    });
   }, [apiData]);
 
   const [preset, setPreset] = useState<PersonaLeaguePreset>("overall");
@@ -568,11 +577,7 @@ export const PersonaLeaguePage = ({ embedded = false }: { embedded?: boolean }) 
           <td className="px-3 py-3 font-mono text-rose-500">{fmtPct(r.maxDrawdown)}</td>
           <td className="px-3 py-3 font-mono">{fmtNum(r.humanInterventions, 0)}</td>
           <td className="px-3 py-3">
-            {isGovernedRankingRecommendationAction(r.recommendedAction) ? (
-              <ProposalCell review={savedProposal(r.personaId, r.recommendedAction)} label={t(`mgmt.league.recommendations.${r.recommendedAction}`)} />
-            ) : (
-              <span className="text-xs text-muted-foreground">{t("mgmt.league.recommendations.no_change")}</span>
-            )}
+            <ProposalCell proposal={savedProposal(r.personaId)} />
           </td>
           <td className="px-3 py-3">
             <Button size="sm" variant="ghost" onClick={onToggle} aria-expanded={expanded} className="text-xs">

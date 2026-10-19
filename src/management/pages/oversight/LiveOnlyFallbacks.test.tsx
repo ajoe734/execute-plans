@@ -112,4 +112,110 @@ describe("live-only management page fallbacks", () => {
 
     expect(container.textContent).not.toContain("NaN");
   });
+
+  it("renders saved owner recommendation and rationale instead of fabricated no_change or legacy row action", () => {
+    const rankingRows = [
+      {
+        persona_id: "persona-projection-test",
+        score: 69.25,
+        eligibility: "eligible",
+      },
+      {
+        persona_id: "persona-counterexample-test",
+        score: 68.0,
+        eligibility: "eligible",
+        recommendation: "promote_to_canary_candidate",
+        recommendedAction: "promote_to_canary_candidate",
+      },
+    ];
+    const savedRecommendations = [
+      {
+        persona_id: "persona-projection-test",
+        action_id: "promote_to_canary_candidate",
+        rationale: "Saved provider rationale for existing read-only report",
+        ranking_snapshot_id: "ranking-projection-test",
+        evaluator_run_id: "evaluator-projection-test",
+        human_review_state: {
+          status: "advisory_report",
+          decision_status: "not_applicable",
+          owner_decision: null,
+        },
+      },
+      {
+        persona_id: "persona-counterexample-test",
+        action_id: "request_more_evidence",
+        rationale: "Saved owner rationale overriding legacy row action",
+        ranking_snapshot_id: "ranking-counterexample-test",
+        evaluator_run_id: "evaluator-counterexample-test",
+        human_review_state: {
+          status: "advisory_report",
+          decision_status: "not_applicable",
+          owner_decision: null,
+        },
+      },
+    ];
+    mocks.useV5Live.mockImplementation((_loader, _deps, opts?: { cacheKey?: string }) => ({
+      data: opts?.cacheKey?.includes("recommendations")
+        ? savedRecommendations
+        : opts?.cacheKey?.includes("formula")
+          ? undefined
+          : rankingRows,
+      loading: false,
+      refresh: vi.fn(),
+    }));
+
+    const quarterly = renderPage(<QuarterlyRankingPage />);
+    expect(screen.getByText("Promote to canary candidate")).toBeInTheDocument();
+    expect(screen.getByText("Saved provider rationale for existing read-only report")).toBeInTheDocument();
+    expect(screen.getByText("evaluator-projection-test · ranking-projection-test")).toBeInTheDocument();
+    expect(screen.getByText("request_more_evidence")).toBeInTheDocument();
+    expect(screen.getByText("Saved owner rationale overriding legacy row action")).toBeInTheDocument();
+    expect(screen.queryByText("No change")).not.toBeInTheDocument();
+    quarterly.unmount();
+
+    renderPage(<PersonaLeaguePage />);
+    expect(screen.getByText("Promote to canary candidate")).toBeInTheDocument();
+    expect(screen.getByText("Saved provider rationale for existing read-only report")).toBeInTheDocument();
+    expect(screen.getByText("evaluator-projection-test · ranking-projection-test")).toBeInTheDocument();
+    expect(screen.getByText("request_more_evidence")).toBeInTheDocument();
+    expect(screen.getByText("Saved owner rationale overriding legacy row action")).toBeInTheDocument();
+    expect(screen.queryByText("No change")).not.toBeInTheDocument();
+  });
+
+  it("does not fabricate no_change or legacy ranking actions on Quarterly Ranking or Persona League when saved owner recommendations are unavailable", () => {
+    const rankingRows = [
+      {
+        persona_id: "persona-projection-test",
+        score: 69.25,
+        eligibility: "eligible",
+        recommendation: "no_change",
+        recommendedAction: "no_change",
+      },
+      {
+        persona_id: "persona-legacy-promote",
+        score: 71.0,
+        eligibility: "eligible",
+        recommendation: "promote_to_canary_candidate",
+        recommendedAction: "promote_to_canary_candidate",
+      },
+    ];
+    mocks.useV5Live.mockImplementation((_loader, _deps, opts?: { cacheKey?: string }) => ({
+      data: opts?.cacheKey?.includes("recommendations") || opts?.cacheKey?.includes("formula")
+        ? undefined
+        : rankingRows,
+      loading: false,
+      refresh: vi.fn(),
+    }));
+
+    const quarterly = renderPage(<QuarterlyRankingPage />);
+    expect(screen.getByText("persona-projection-test")).toBeInTheDocument();
+    expect(screen.queryByText("No change")).not.toBeInTheDocument();
+    expect(screen.queryByText("Promote to canary candidate")).not.toBeInTheDocument();
+    quarterly.unmount();
+
+    renderPage(<PersonaLeaguePage />);
+    expect(screen.getByText("persona-projection-test")).toBeInTheDocument();
+    expect(screen.queryByText("No change")).not.toBeInTheDocument();
+    expect(screen.queryByText("Promote to canary candidate")).not.toBeInTheDocument();
+  });
 });
