@@ -1,0 +1,96 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "FE-PERSONA-DETAIL-CANONICAL-LIFECYCLE-20261019",
+  "title": "Show authoritative Persona lifecycle in the existing detail header",
+  "owner": "Antigravity2",
+  "reviewer": "Antigravity",
+  "repository": "ajoe734/execute-plans",
+  "target_repo": "execute-plans",
+  "base_branch": "dev",
+  "base_commit": "aa94a6b27c8cf3de667901dc4ee865977f423cc7",
+  "branch": "task/FE-PERSONA-DETAIL-CANONICAL-LIFECYCLE-20261019",
+  "source_head": "357f1d958ea0a66b270e91327617bce5c9222a95",
+  "final_head_binding": "Canonical handoff binds the exact final PR head containing this manifest via REVIEW_HEAD_SHA.",
+  "status": "ready-for-independent-exact-head-review",
+  "evidence_kind": "local_validation_only",
+  "observed_defect_reference": {
+    "accepted_fe_commit_exhibiting_defect": "aa94a6b27c8cf3de667901dc4ee865977f423cc7",
+    "target_persona_id": "persona-dev-lifecycle-39057282435",
+    "executed_command_id": "cmd-ab07a6a4b9704e25a94ec63041a14ffc",
+    "bff_payload_fields": {
+      "state": "draft",
+      "lifecycleStatus": "research_only"
+    },
+    "readonly_ndjson_evidence": "/home/chloe_ong_dev_cctech_support_com/code/pantheon-artifacts/latest-dev-closure-20261002/recovery-20261018/Persona-original-same-target-exact-readonly-20261019T011431Z.ndjson",
+    "ui_screenshot_evidence": "/home/chloe_ong_dev_cctech_support_com/code/pantheon-artifacts/latest-dev-closure-20261002/recovery-20261018/original-hosted-ui-after-original-persona-transition-20261019T011543323Z/original-persona-after-reload.png"
+  },
+  "scoped_artifacts": {
+    "declared": [
+      "src/management/pages/PersonaDetail.tsx",
+      "src/management/pages/PersonaDetail.test.ts",
+      "src/lib/bff-v1/dto.ts",
+      "src/i18n/locales/en-US.ts",
+      "src/i18n/locales/zh-TW.ts",
+      "docs/deployment/evidence/FE-PERSONA-DETAIL-CANONICAL-LIFECYCLE-20261019/evidence.json"
+    ],
+    "modified": [
+      "src/lib/bff-v1/dto.ts",
+      "src/management/pages/PersonaDetail.tsx",
+      "src/management/pages/PersonaDetail.test.ts",
+      "docs/deployment/evidence/FE-PERSONA-DETAIL-CANONICAL-LIFECYCLE-20261019/evidence.json"
+    ],
+    "unchanged_declared": [
+      "src/i18n/locales/en-US.ts",
+      "src/i18n/locales/zh-TW.ts"
+    ]
+  },
+  "production_diff_summary": {
+    "files": [
+      "src/lib/bff-v1/dto.ts",
+      "src/management/pages/PersonaDetail.tsx"
+    ],
+    "insertions": 3,
+    "deletions": 0,
+    "net_lines": 3,
+    "budget_max_net_lines": 25
+  },
+  "acceptance_verification": {
+    "AC1_canonical_header_lifecycle": "PersonaDetail wires const headerState = p.lifecycleStatus?.trim() || p.state into the existing ObjectDetailLayout state override prop. When lifecycleStatus is 'research_only' and legacy state is 'draft', the detail header renders 'research_only' and does not display 'draft' or '草稿'.",
+    "AC2_legacy_fallback_preserved": "When lifecycleStatus is undefined, empty string, or whitespace-only, headerState falls back to p.state so older responses continue rendering the legacy state badge ('草稿' for draft) without inventing a status.",
+    "AC3_commands_permissions_paper_readiness_unchanged": "Existing Persona mutation commands, permission gates, and Paper readiness semantics (ACTIVE_LIFECYCLE = {'paper_owner', 'live_owner', 'active'}) remain untouched; research_only continues to evaluate as non-paper-owner ('未升級' / 'Not promoted') and no extra API requests or business actions are triggered.",
+    "AC4_focused_regression_and_validation": "Added rendered-component regression tests in src/management/pages/PersonaDetail.test.ts covering lifecycleStatus='research_only' with legacy state='draft' as well as undefined/empty/whitespace legacy fallback. Executed focused suites, vitest related (72 files / 633 tests), TypeScript app and agora typechecks, eslint, and strict-live safe-write production build.",
+    "AC5_minimal_footprint": "Production changes total +3/-0 lines (net +3, within <= 25 budget) across src/lib/bff-v1/dto.ts (+1) and src/management/pages/PersonaDetail.tsx (+2). No new resolver, helper framework, dependency, store, provider, or global lifecycle rewrite was introduced.",
+    "AC6_evidence_and_delivery_boundary": "Author evidence records exact executed test suites, commands, exit codes, source commit 357f1d958ea0a66b270e91327617bce5c9222a95, and binds final PR head via REVIEW_HEAD_SHA for independent review by Antigravity. Source completion does not claim hosted delivery; Root owns serial final exact-pair delivery and hosted readback."
+  },
+  "verified_commands": [
+    {
+      "command": "NODE_ENV=test ./node_modules/.bin/vitest run src/management/pages/PersonaDetail.test.ts src/management/pages/PersonaOnboarding.test.ts src/lib/bff-v1/personas.test.ts src/lib/v5/management/__tests__/i18nParity.test.ts",
+      "exit_code": 0,
+      "summary": "4 test files passed (22 tests passed, including 12 in PersonaDetail.test.ts)"
+    },
+    {
+      "command": "NODE_ENV=test ./node_modules/.bin/vitest related --run --maxWorkers=2 src/management/pages/PersonaDetail.tsx src/lib/bff-v1/dto.ts",
+      "exit_code": 0,
+      "summary": "72 test files passed (633 tests passed)"
+    },
+    {
+      "command": "./node_modules/.bin/tsc -p tsconfig.app.json --noEmit && ./node_modules/.bin/tsc -p tsconfig.agora.json --noEmit",
+      "exit_code": 0,
+      "summary": "Both tsconfig.app.json and tsconfig.agora.json passed with 0 errors"
+    },
+    {
+      "command": "./node_modules/.bin/eslint src/management/pages/PersonaDetail.tsx src/management/pages/PersonaDetail.test.ts src/lib/bff-v1/dto.ts",
+      "exit_code": 0,
+      "summary": "0 errors (4 pre-existing warnings)"
+    },
+    {
+      "command": "NODE_ENV=production VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false VITE_BFF_ALLOW_DEV_STUB_WRITES=false VITE_BFF_EMBEDDED_BEARER_TOKEN=false ./node_modules/.bin/vite build --outDir /tmp/fe-persona-detail-canonical-lifecycle-dist && rm -rf /tmp/fe-persona-detail-canonical-lifecycle-dist",
+      "exit_code": 0,
+      "summary": "Strict-live safe-write production build succeeded cleanly in 50.88s"
+    }
+  ],
+  "hosted_release_posture": {
+    "hosted_delivery_claimed": false,
+    "note": "This task delivers a scoped frontend source display correction only. No VM, provider, real credentials, or business actions were executed. Root retains serial final exact-pair delivery and hosted readback."
+  }
+}

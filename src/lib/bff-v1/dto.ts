@@ -321,6 +321,7 @@ export interface Persona extends BaseObject {
   archetype: string;
   routedStrategies: number;
   successRate: number;
+  lifecycleStatus?: PersonaStatus | "research_only" | "consultable" | "paper_owner" | "live_owner" | "frozen" | string;
   mandate?: string;
   strategyFamily?: string;
   traits?: {
