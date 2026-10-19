@@ -1375,6 +1375,21 @@ admitted_dev_ancestor() {
   git merge-base --is-ancestor "${admitted_sha}" "${dev_tip}"
 }
 
+is_transient_network_probe_failure() {
+  local probe_json="$1"
+  [[ -f "${probe_json}" ]] || return 1
+  node --input-type=module - "${ROOT_DIR}/scripts/probe-hosted-browser-bff.mjs" "${probe_json}" <<'NODE'
+import fs from "node:fs";
+import { pathToFileURL } from "node:url";
+const [probeModulePath, probeJsonPath] = process.argv.slice(2);
+const { isTransientNetworkChangedProbeFailure } = await import(
+  pathToFileURL(probeModulePath).href
+);
+const evidence = JSON.parse(fs.readFileSync(probeJsonPath, "utf8"));
+process.exit(isTransientNetworkChangedProbeFailure(evidence) ? 0 : 1);
+NODE
+}
+
 run_release_probe() {
   local phase="$1"
   local candidate_dir="$2"
@@ -1385,10 +1400,17 @@ run_release_probe() {
   local candidate_source_scan="${7:-all}"
   local legacy_rollback_target_compat="${8:-false}"
   local json_out="${AUDIT_DIR}/browser-probe-${phase}.json"
+  local attempt_1_out="${AUDIT_DIR}/browser-probe-${phase}-attempt-1.json"
   local candidate_env=""
   local strict_env="0"
   local probe_profile_env=()
   local probe_candidate_transport=""
+  local max_attempts=1
+  local attempt=1
+  rm -f "${attempt_1_out}"
+  if [[ "${phase}" == *_pre_switch ]]; then
+    max_attempts=2
+  fi
   if [[ "${phase}" == "candidate_pre_switch" && -n "${BFF_CANDIDATE_TRANSPORT:-}" ]]; then
     probe_candidate_transport="${BFF_CANDIDATE_TRANSPORT}"
   fi
@@ -1417,28 +1439,39 @@ run_release_probe() {
       "PANTHEON_PROBE_EXPECTED_WRITE_PROOF_DIGEST=${PREVIOUS_WRITE_PROOF_ARTIFACT_DIGEST}"
     )
   fi
-  if ! env "${probe_profile_env[@]}" \
-    PANTHEON_FE_BASE_URL="${FE_HOST}" \
-    PANTHEON_BFF_BASE_URL="${BFF_HOST}" \
-    PANTHEON_BROWSER_BFF_BASE_URL="${BFF_HOST}" \
-    PANTHEON_BFF_CANDIDATE_TRANSPORT="${probe_candidate_transport}" \
-    PANTHEON_OLD_BFF_URL="${OLD_BFF_HOST}" \
-    PANTHEON_HOSTED_PROBE_PATH="${PANTHEON_HOSTED_PROBE_PATH:-/management/persona-fleet}" \
-    PANTHEON_HOSTED_REQUIRED_BFF_PATHS="${PANTHEON_HOSTED_REQUIRED_BFF_PATHS:-/bff/me}" \
-    PANTHEON_PROBE_NOCACHE_SHA="${expected_sha}" \
-    PANTHEON_EXPECTED_FE_SHA="${expected_sha}" \
-    PANTHEON_EXPECTED_ARTIFACT_DIGEST="${expected_digest}" \
-    PANTHEON_PROBE_RELEASE_STRICT="${strict_env}" \
-    PANTHEON_PROBE_LEGACY_RELEASE_COMPAT="$([[ "${legacy_compat}" == "true" ]] && echo 1 || echo 0)" \
-    PANTHEON_PROBE_LEGACY_ROLLBACK_TARGET_COMPAT="$([[ "${legacy_rollback_target_compat}" == "true" ]] && echo 1 || echo 0)" \
-    PANTHEON_CANDIDATE_DIR="${candidate_env}" \
-    PANTHEON_PROBE_CANDIDATE_SOURCE_SCAN="${candidate_source_scan}" \
-    PANTHEON_PROBE_JSON_OUT="${json_out}" \
-    PANTHEON_AUDIT_OUT_DIR="${AUDIT_DIR}" \
-    node scripts/probe-hosted-browser-bff.mjs; then
+  while true; do
+    if env "${probe_profile_env[@]}" \
+      PANTHEON_FE_BASE_URL="${FE_HOST}" \
+      PANTHEON_BFF_BASE_URL="${BFF_HOST}" \
+      PANTHEON_BROWSER_BFF_BASE_URL="${BFF_HOST}" \
+      PANTHEON_BFF_CANDIDATE_TRANSPORT="${probe_candidate_transport}" \
+      PANTHEON_OLD_BFF_URL="${OLD_BFF_HOST}" \
+      PANTHEON_HOSTED_PROBE_PATH="${PANTHEON_HOSTED_PROBE_PATH:-/management/persona-fleet}" \
+      PANTHEON_HOSTED_REQUIRED_BFF_PATHS="${PANTHEON_HOSTED_REQUIRED_BFF_PATHS:-/bff/me}" \
+      PANTHEON_PROBE_NOCACHE_SHA="${expected_sha}" \
+      PANTHEON_EXPECTED_FE_SHA="${expected_sha}" \
+      PANTHEON_EXPECTED_ARTIFACT_DIGEST="${expected_digest}" \
+      PANTHEON_PROBE_RELEASE_STRICT="${strict_env}" \
+      PANTHEON_PROBE_LEGACY_RELEASE_COMPAT="$([[ "${legacy_compat}" == "true" ]] && echo 1 || echo 0)" \
+      PANTHEON_PROBE_LEGACY_ROLLBACK_TARGET_COMPAT="$([[ "${legacy_rollback_target_compat}" == "true" ]] && echo 1 || echo 0)" \
+      PANTHEON_CANDIDATE_DIR="${candidate_env}" \
+      PANTHEON_PROBE_CANDIDATE_SOURCE_SCAN="${candidate_source_scan}" \
+      PANTHEON_PROBE_JSON_OUT="${json_out}" \
+      PANTHEON_AUDIT_OUT_DIR="${AUDIT_DIR}" \
+      node scripts/probe-hosted-browser-bff.mjs; then
+      break
+    fi
+    if (( attempt < max_attempts )) && is_transient_network_probe_failure "${json_out}"; then
+      mv -f "${json_out}" "${attempt_1_out}"
+      evidence_append "browser.probe.${phase}.attempt_1" failed \
+        "frontendSha=${expected_sha}" \
+        "artifactDigestSha256=${expected_digest:-legacy}"
+      attempt=$((attempt + 1))
+      continue
+    fi
     evidence_append "browser.probe.${phase}" failed "frontendSha=${expected_sha}" "artifactDigestSha256=${expected_digest:-legacy}"
     return 1
-  fi
+  done
   evidence_append "browser.probe.${phase}" passed "frontendSha=${expected_sha}" "artifactDigestSha256=${expected_digest:-legacy}"
 }
 

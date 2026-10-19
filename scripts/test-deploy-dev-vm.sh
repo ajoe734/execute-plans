@@ -9,6 +9,7 @@ set -Eeuo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEPLOY_SOURCE="${ROOT_DIR}/scripts/deploy-dev-vm.sh"
+PROBE_SOURCE="${ROOT_DIR}/scripts/probe-hosted-browser-bff.mjs"
 CANDIDATE_SOURCE="${PANTHEON_TEST_RELEASE_CANDIDATE_SOURCE:-${ROOT_DIR}/scripts/release-candidate.mjs}"
 EVIDENCE_SOURCE="${ROOT_DIR}/scripts/release-evidence.mjs"
 CAS_SOURCE="${ROOT_DIR}/scripts/atomic-symlink-cas.py"
@@ -21,6 +22,7 @@ REAL_GIT="$(command -v git)"
 
 for required_file in \
   "${DEPLOY_SOURCE}" \
+  "${PROBE_SOURCE}" \
   "${CANDIDATE_SOURCE}" \
   "${EVIDENCE_SOURCE}" \
   "${CAS_SOURCE}" \
@@ -472,11 +474,13 @@ chmod +x "${MOCK_BIN}/npm" "${MOCK_BIN}/npx" "${MOCK_BIN}/node" "${MOCK_BIN}/rsy
 
 mkdir -p "${BASE_SOURCE}/scripts"
 cp "${DEPLOY_SOURCE}" "${BASE_SOURCE}/scripts/deploy-dev-vm.sh"
+cp "${PROBE_SOURCE}" "${BASE_SOURCE}/scripts/real-probe-hosted-browser-bff.mjs"
 cp "${CANDIDATE_SOURCE}" "${BASE_SOURCE}/scripts/release-candidate.mjs"
 cp "${EVIDENCE_SOURCE}" "${BASE_SOURCE}/scripts/release-evidence.mjs"
 cp "${CAS_SOURCE}" "${BASE_SOURCE}/scripts/atomic-symlink-cas.py"
 cp "${ATOMIC_MANIFEST_SOURCE}" "${BASE_SOURCE}/scripts/atomic-release-manifest.py"
 chmod +x "${BASE_SOURCE}/scripts/deploy-dev-vm.sh" \
+  "${BASE_SOURCE}/scripts/real-probe-hosted-browser-bff.mjs" \
   "${BASE_SOURCE}/scripts/release-candidate.mjs" \
   "${BASE_SOURCE}/scripts/release-evidence.mjs" \
   "${BASE_SOURCE}/scripts/atomic-symlink-cas.py" \
@@ -487,7 +491,14 @@ cat > "${BASE_SOURCE}/scripts/probe-hosted-browser-bff.mjs" <<'MOCK_PROBE'
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 
+export { isTransientNetworkChangedProbeFailure } from "./real-probe-hosted-browser-bff.mjs";
+
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href
+) {
 const output = process.env.PANTHEON_PROBE_JSON_OUT || "";
 const match = path.basename(output).match(/^browser-probe-(.+)\.json$/u);
 const phase = match?.[1] || "unknown";
@@ -571,18 +582,141 @@ if (
     fs.renameSync(tempLink, liveLink);
   } catch {}
 }
+const transientOncePhases = String(process.env.MOCK_TRANSIENT_NETWORK_ONCE_PHASES || "")
+  .split(",")
+  .map((value) => value.trim())
+  .filter(Boolean);
+const transientPersistentPhases = String(process.env.MOCK_TRANSIENT_NETWORK_PERSISTENT_PHases || process.env.MOCK_TRANSIENT_NETWORK_PERSISTENT_PHASES || "")
+  .split(",")
+  .map((value) => value.trim())
+  .filter(Boolean);
+const attemptCountFile = `${process.env.MOCK_ALLOWED_ROOT || "/tmp"}/.probe-attempt-count-${phase}`;
+let phaseAttempt = 1;
+if (fs.existsSync(attemptCountFile)) {
+  phaseAttempt = Number.parseInt(fs.readFileSync(attemptCountFile, "utf8").trim(), 10) + 1;
+}
+fs.writeFileSync(attemptCountFile, `${phaseAttempt}\n`, "utf8");
+const transientMarker = `${process.env.MOCK_ALLOWED_ROOT || "/tmp"}/.transient-network-once-${phase}`;
+let emitTransientNetworkChanged = false;
+if (transientPersistentPhases.includes(phase)) {
+  emitTransientNetworkChanged = true;
+} else if (transientOncePhases.includes(phase) && !fs.existsSync(transientMarker)) {
+  fs.writeFileSync(transientMarker, "1\n", "utf8");
+  emitTransientNetworkChanged = true;
+}
+const expectations = {
+  frontendSha: process.env.PANTHEON_EXPECTED_FE_SHA || "",
+  artifactDigest: process.env.PANTHEON_EXPECTED_ARTIFACT_DIGEST || "",
+  profile: process.env.PANTHEON_PROBE_EXPECTED_PROFILE || "",
+  pairId: process.env.PANTHEON_PROBE_EXPECTED_PAIR_ID || "",
+  readOnlyArtifactDigest: process.env.PANTHEON_PROBE_EXPECTED_READ_ONLY_DIGEST || "",
+  operatorLiveArtifactDigest: process.env.PANTHEON_PROBE_EXPECTED_OPERATOR_LIVE_DIGEST || "",
+  writeProofArtifactDigest: process.env.PANTHEON_PROBE_EXPECTED_WRITE_PROOF_DIGEST || "",
+};
 if (output) {
   fs.mkdirSync(path.dirname(output), { recursive: true });
-  fs.writeFileSync(output, `${JSON.stringify({
-    phase,
-    pass: true,
-    personaFleetSafetyPassed: true,
-    personaFleetChecks: { hasNaN: false },
-    openclawContractPassed: process.env.MOCK_OPENCLAW_CONTRACT_STATUS === "missing"
-      ? undefined
-      : process.env.MOCK_OPENCLAW_CONTRACT_STATUS !== "failed",
-    openclawContractChecks: { pass: true }
-  })}\n`, "utf8");
+  if (emitTransientNetworkChanged) {
+    fs.writeFileSync(output, `${JSON.stringify({
+      schemaVersion: 1,
+      probe: "pantheon-hosted-browser-release-policy",
+      phase,
+      attempt: phaseAttempt,
+      mode: process.env.PANTHEON_PROBE_RELEASE_STRICT === "1" ? "release-strict" : "compatibility",
+      pass: false,
+      transientNetworkChangedOnly: true,
+      personaFleetSafetyPassed: true,
+      personaFleetChecks: { hasNaN: false },
+      openclawContractPassed: false,
+      expectations,
+      checks: {
+        base: {
+          shellOk: true,
+          publicHealthOk: true,
+          usesIntendedBff: true,
+          anonymousAuthBoundaryVerified: true,
+          requiredCoreResponseOk: true,
+          observedProtectedResponsesOk: true,
+          noAuthorizationRequests: true,
+          noBrowserWriteMethods: true,
+          noEmbeddedDevBearerRequired: process.env.PANTHEON_PROBE_LEGACY_ROLLBACK_TARGET_COMPAT !== "1",
+          noEmbeddedDevBearer: true,
+          personaFleetSafetyPassed: true,
+          openclawContractPassed: false,
+          applicationRootRendered: true,
+          pageErrorsAbsent: true,
+          oldUrlAbsent: true,
+          bffRequestsObserved: true,
+          bffRequestFailuresAbsent: false,
+          pass: false,
+        },
+        strict: {
+          existingAuthBoundaryAndBffChecks: false,
+          applicationRootRendered: true,
+          noBrowserWriteMethods: true,
+          personaFleetSafetyPassed: true,
+          pageErrorsAbsent: true,
+          unexpectedConsoleErrorsAbsent: false,
+          frontendResourceFailuresAbsent: true,
+          frontendResourceHttpErrorsAbsent: true,
+          bundleFetchesComplete: true,
+          deploymentJsonFetched: true,
+          deploymentPolicyPassed: true,
+          freshStorageInspected: true,
+          freshStorageSensitiveValuesAbsent: true,
+          htmlAndAssetSensitiveValuesAbsent: true,
+          candidateRouteErrorsAbsent: true,
+          hostedUxProfileSetComplete: true,
+          hostedUxProfilesPassed: true,
+        },
+      },
+      failures: ["existingAuthBoundaryAndBffChecks", "unexpectedConsoleErrorsAbsent"],
+      browser: {
+        unexpectedConsoleErrors: [
+          {
+            text: "Failed to load resource: net::ERR_NETWORK_CHANGED",
+            url: "https://api.dev.mvl-cap.tw/bff/me",
+            allowlisted: false,
+          },
+          {
+            text: "Failed to load resource: net::ERR_NETWORK_CHANGED",
+            url: "https://api.dev.mvl-cap.tw/bff/auth/readiness",
+            allowlisted: false,
+          },
+        ],
+      },
+      bff: {
+        failures: [
+          {
+            method: "GET",
+            url: "https://api.dev.mvl-cap.tw/bff/me",
+            failure: "net::ERR_NETWORK_CHANGED",
+          },
+          {
+            method: "GET",
+            url: "https://api.dev.mvl-cap.tw/bff/auth/readiness",
+            failure: "net::ERR_NETWORK_CHANGED",
+          },
+        ],
+      },
+    })}\n`, "utf8");
+  } else {
+    fs.writeFileSync(output, `${JSON.stringify({
+      phase,
+      attempt: phaseAttempt,
+      pass: true,
+      expectations,
+      personaFleetSafetyPassed: true,
+      personaFleetChecks: { hasNaN: false },
+      openclawContractPassed: process.env.MOCK_OPENCLAW_CONTRACT_STATUS === "missing"
+        ? undefined
+        : process.env.MOCK_OPENCLAW_CONTRACT_STATUS !== "failed",
+      openclawContractChecks: { pass: true }
+    })}\n`, "utf8");
+  }
+}
+if (emitTransientNetworkChanged) {
+  console.error(`mock transient ERR_NETWORK_CHANGED probe failure: ${phase}`);
+  process.exitCode = 1;
 }
 if (
   phase === "post_switch" &&
@@ -614,6 +748,7 @@ const failures = String(process.env.MOCK_FAIL_PROBE_PHASES || "")
 if (failures.includes(phase)) {
   console.error(`mock browser/auth probe failure: ${phase}`);
   process.exitCode = 1;
+}
 }
 MOCK_PROBE
 chmod +x "${BASE_SOURCE}/scripts/probe-hosted-browser-bff.mjs"
@@ -1085,6 +1220,8 @@ run_deploy() {
         MOCK_EXTERNAL_SWITCH_TARGET="" \
         MOCK_CALL_LOG="${CASE_CALL_LOG}" \
         MOCK_FAIL_PROBE_PHASES="" \
+        MOCK_TRANSIENT_NETWORK_ONCE_PHASES="" \
+        MOCK_TRANSIENT_NETWORK_PERSISTENT_PHASES="" \
         MOCK_FAIL_DURABLE_RSYNC_ONCE="false" \
         MOCK_FAIL_ORIGIN_DEV_ONCE="false" \
         MOCK_FAIL_ORIGIN_DEV_SECOND_LOOKUP="false" \
@@ -1162,6 +1299,8 @@ run_deploy() {
         MOCK_EXTERNAL_SWITCH_TARGET="" \
         MOCK_CALL_LOG="${CASE_CALL_LOG}" \
         MOCK_FAIL_PROBE_PHASES="" \
+        MOCK_TRANSIENT_NETWORK_ONCE_PHASES="" \
+        MOCK_TRANSIENT_NETWORK_PERSISTENT_PHASES="" \
         MOCK_FAIL_DURABLE_RSYNC_ONCE="false" \
         MOCK_FAIL_ORIGIN_DEV_ONCE="false" \
         MOCK_FAIL_ORIGIN_DEV_SECOND_LOOKUP="false" \
@@ -1247,6 +1386,8 @@ run_deploy() {
           MOCK_EXTERNAL_SWITCH_TARGET="" \
           MOCK_CALL_LOG="${CASE_CALL_LOG}" \
           MOCK_FAIL_PROBE_PHASES="" \
+          MOCK_TRANSIENT_NETWORK_ONCE_PHASES="" \
+          MOCK_TRANSIENT_NETWORK_PERSISTENT_PHASES="" \
           MOCK_FAIL_DURABLE_RSYNC_ONCE="false" \
           MOCK_FAIL_ORIGIN_DEV_ONCE="false" \
           MOCK_FAIL_ORIGIN_DEV_SECOND_LOOKUP="false" \
@@ -3651,6 +3792,258 @@ test_sealed_return_rejects_unmanaged_paths_and_leases() {
   assert_sealed_rejected_unchanged "missing lease owner"
 }
 
+test_pre_switch_transient_network_changed_reprobe() {
+  local probe_calls
+  # 1. Verify classifier against frozen FEdeploy 39274970062 failure shape and real failure exclusions
+  "${REAL_NODE}" --input-type=module - "${PROBE_SOURCE}" <<'NODE'
+import fs from "node:fs";
+import { pathToFileURL } from "node:url";
+
+const { isTransientNetworkChangedProbeFailure } = await import(
+  pathToFileURL(process.argv[2]).href
+);
+
+const frozenShape = {
+  schemaVersion: 1,
+  probe: "pantheon-hosted-browser-release-policy",
+  mode: "release-strict",
+  pass: false,
+  personaFleetSafetyPassed: true,
+  openclawContractPassed: false,
+  checks: {
+    base: {
+      shellOk: true,
+      publicHealthOk: true,
+      usesIntendedBff: true,
+      anonymousAuthBoundaryVerified: true,
+      requiredCoreResponseOk: true,
+      observedProtectedResponsesOk: true,
+      noAuthorizationRequests: true,
+      noBrowserWriteMethods: true,
+      noEmbeddedDevBearerRequired: true,
+      noEmbeddedDevBearer: true,
+      personaFleetSafetyPassed: true,
+      openclawContractPassed: false,
+      applicationRootRendered: true,
+      pageErrorsAbsent: true,
+      oldUrlAbsent: true,
+      bffRequestsObserved: true,
+      bffRequestFailuresAbsent: false,
+      pass: false,
+    },
+    strict: {
+      existingAuthBoundaryAndBffChecks: false,
+      applicationRootRendered: true,
+      noBrowserWriteMethods: true,
+      personaFleetSafetyPassed: true,
+      pageErrorsAbsent: true,
+      unexpectedConsoleErrorsAbsent: false,
+      frontendResourceFailuresAbsent: true,
+      frontendResourceHttpErrorsAbsent: true,
+      bundleFetchesComplete: true,
+      deploymentJsonFetched: true,
+      deploymentPolicyPassed: true,
+      freshStorageInspected: true,
+      freshStorageSensitiveValuesAbsent: true,
+      htmlAndAssetSensitiveValuesAbsent: true,
+      candidateRouteErrorsAbsent: true,
+      hostedUxProfileSetComplete: true,
+      hostedUxProfilesPassed: true,
+    },
+  },
+  failures: ["existingAuthBoundaryAndBffChecks", "unexpectedConsoleErrorsAbsent"],
+  browser: {
+    unexpectedConsoleErrors: [
+      {
+        text: "Failed to load resource: net::ERR_NETWORK_CHANGED",
+        url: "https://api.dev.mvl-cap.tw/bff/me",
+        allowlisted: false,
+      },
+      {
+        text: "Failed to load resource: net::ERR_NETWORK_CHANGED",
+        url: "https://api.dev.mvl-cap.tw/bff/auth/readiness",
+        allowlisted: false,
+      },
+    ],
+  },
+  bff: {
+    failures: [
+      {
+        method: "GET",
+        url: "https://api.dev.mvl-cap.tw/bff/me",
+        failure: "net::ERR_NETWORK_CHANGED",
+      },
+      {
+        method: "GET",
+        url: "https://api.dev.mvl-cap.tw/bff/auth/readiness",
+        failure: "net::ERR_NETWORK_CHANGED",
+      },
+    ],
+  },
+};
+
+if (!isTransientNetworkChangedProbeFailure(frozenShape)) {
+  throw new Error("expected frozen ERR_NETWORK_CHANGED failure shape to classify as transient");
+}
+
+const boundedInputPath = "/tmp/pantheon-assist-20261013/FE-DEPLOY-TRANSIENT-NETWORK-20261019-bounded-input.json";
+if (fs.existsSync(boundedInputPath)) {
+  const boundedInput = JSON.parse(fs.readFileSync(boundedInputPath, "utf8"));
+  const prevProbePath = boundedInput.source_files?.find((entry) =>
+    entry.path.endsWith("/browser-probe-previous_target_pre_switch.json"),
+  )?.path;
+  const candProbePath = boundedInput.source_files?.find((entry) =>
+    entry.path.endsWith("/browser-probe-candidate_pre_switch.json"),
+  )?.path;
+  if (prevProbePath && fs.existsSync(prevProbePath)) {
+    const prevProbe = JSON.parse(fs.readFileSync(prevProbePath, "utf8"));
+    if (!isTransientNetworkChangedProbeFailure(prevProbe)) {
+      throw new Error("frozen browser-probe-previous_target_pre_switch.json did not classify as transient");
+    }
+  }
+  if (candProbePath && fs.existsSync(candProbePath)) {
+    const candProbe = JSON.parse(fs.readFileSync(candProbePath, "utf8"));
+    if (candProbe.pass !== true || isTransientNetworkChangedProbeFailure(candProbe)) {
+      throw new Error("frozen browser-probe-candidate_pre_switch.json should remain passed and non-transient");
+    }
+  }
+}
+
+for (const mutate of [
+  (d) => { d.checks.base.anonymousAuthBoundaryVerified = false; },
+  (d) => { d.checks.base.personaFleetSafetyPassed = false; d.checks.strict.personaFleetSafetyPassed = false; },
+  (d) => { d.checks.strict.frontendResourceFailuresAbsent = false; d.failures.push("frontendResourceFailuresAbsent"); },
+  (d) => { d.checks.strict.deploymentPolicyPassed = false; d.failures.push("deploymentPolicyPassed"); },
+  (d) => { d.bff.failures[0].failure = "net::ERR_CONNECTION_REFUSED"; },
+]) {
+  const copy = structuredClone(frozenShape);
+  mutate(copy);
+  if (isTransientNetworkChangedProbeFailure(copy)) {
+    throw new Error("real auth/tenant/asset/manifest/connection failure must not classify as transient");
+  }
+}
+NODE
+
+  # 2. Recovered transient ERR_NETWORK_CHANGED on previous_target_pre_switch during activate after earlier prepare pass
+  setup_case transient-network-previous-target-recovered
+  upgrade_previous_manifest_to_paired_modern "${PREVIOUS_TARGET}/deployment.json"
+  "${REAL_NODE}" -e '
+    const fs = require("node:fs");
+    const file = process.argv[1];
+    const p = JSON.parse(fs.readFileSync(file, "utf8"));
+    p.profile = "operator-live";
+    p.deploymentProfile = "operator-live";
+    p.pair.readOnlyArtifactDigestSha256 = "5".repeat(64);
+    p.pair.operatorLiveArtifactDigestSha256 = p.artifactDigestSha256;
+    p.buildMode.VITE_BFF_REAL_WRITES = "true";
+    fs.writeFileSync(file, JSON.stringify(p, null, 2) + "\n");
+  ' "${PREVIOUS_TARGET}/deployment.json"
+  cp "${PREVIOUS_TARGET}/deployment.json" "${PREVIOUS_MANIFEST_SNAPSHOT}"
+
+  run_operator_live_deploy PANTHEON_DEPLOY_ACTION=prepare \
+    PANTHEON_DEPLOY_REAL_WRITES=false \
+    PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES=false
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "prepare before transient network activate should succeed"
+  [[ -f "${CASE_AUDIT}/prepared-receipt.json" ]] || show_deploy_failure "prepare did not write prepared-receipt.json"
+  [[ ! -f "${CASE_AUDIT}/browser-probe-previous_target_pre_switch-attempt-1.json" ]] || \
+    show_deploy_failure "prepare without transient failure should not write attempt-1 file"
+
+  run_operator_live_deploy PANTHEON_DEPLOY_ACTION=activate \
+    PANTHEON_DEPLOY_REAL_WRITES=true \
+    PANTHEON_DEPLOY_ALLOW_DEV_STUB_WRITES=false \
+    MOCK_TRANSIENT_NETWORK_ONCE_PHASES=previous_target_pre_switch
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "activate with one transient ERR_NETWORK_CHANGED should recover on single re-probe"
+  assert_candidate_is_live
+  assert_live_profile operator-live accepted
+  assert_summary_outcome accepted
+  verify_evidence_pair
+
+  probe_calls="$(grep -Fxc 'probe:previous_target_pre_switch' "${CASE_CALL_LOG}" || true)"
+  [[ "${probe_calls}" -eq 3 ]] || \
+    show_deploy_failure "expected 1 prepare probe + 2 activate probes (1 retry) for previous_target_pre_switch, got ${probe_calls}"
+  [[ -f "${CASE_AUDIT}/browser-probe-previous_target_pre_switch-attempt-1.json" ]] || \
+    show_deploy_failure "original failed attempt-1 evidence was not preserved"
+  [[ -f "${CASE_AUDIT}/browser-probe-previous_target_pre_switch.json" ]] || \
+    show_deploy_failure "final recovered probe evidence is missing"
+  "${REAL_NODE}" - "${CASE_AUDIT}/browser-probe-previous_target_pre_switch-attempt-1.json" \
+    "${CASE_AUDIT}/browser-probe-previous_target_pre_switch.json" \
+    "${CASE_AUDIT}/evidence.jsonl" \
+    "${CASE_AUDIT}/evidence.json" <<'NODE'
+const fs = require("node:fs");
+const [attempt1Path, finalPath, logPath, summaryPath] = process.argv.slice(2);
+const attempt1 = JSON.parse(fs.readFileSync(attempt1Path, "utf8"));
+const finalProbe = JSON.parse(fs.readFileSync(finalPath, "utf8"));
+if (attempt1.pass !== false || finalProbe.pass !== true) {
+  throw new Error("attempt-1 and final probe pass states must remain distinct (false vs true)");
+}
+if (JSON.stringify(attempt1.expectations) !== JSON.stringify(finalProbe.expectations)) {
+  throw new Error("re-probe did not preserve exact expectations/identities");
+}
+if (!attempt1.bff?.failures?.every((f) => f.failure === "net::ERR_NETWORK_CHANGED")) {
+  throw new Error("attempt-1 evidence lost original ERR_NETWORK_CHANGED failure details");
+}
+const events = fs.readFileSync(logPath, "utf8").trim().split(/\r?\n/u).map((l) => JSON.parse(l));
+const attempt1Event = events.find((e) => e.type === "browser.probe.previous_target_pre_switch.attempt_1");
+const finalEvents = events.filter((e) => e.type === "browser.probe.previous_target_pre_switch");
+if (!attempt1Event || attempt1Event.status !== "failed") {
+  throw new Error("missing browser.probe.previous_target_pre_switch.attempt_1 failed event in evidence.jsonl");
+}
+if (finalEvents.length !== 2 || finalEvents.some((e) => e.status !== "passed")) {
+  throw new Error("expected browser.probe.previous_target_pre_switch passed events in prepare and activate");
+}
+const summary = JSON.parse(fs.readFileSync(summaryPath, "utf8"));
+const recordedPaths = new Set((summary.files || []).map((f) => f.path));
+if (
+  !recordedPaths.has("browser-probe-previous_target_pre_switch-attempt-1.json") ||
+  !recordedPaths.has("browser-probe-previous_target_pre_switch.json")
+) {
+  throw new Error("evidence.json did not hash both distinct attempt-1 and final probe files");
+}
+NODE
+
+  # 3. Persistent ERR_NETWORK_CHANGED failure rejects before switch after at most one re-probe
+  setup_case transient-network-previous-target-persistent
+  run_deploy PANTHEON_DEPLOY_ACTION=prepare
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "prepare before persistent transient failure should succeed"
+  run_deploy PANTHEON_DEPLOY_ACTION=activate \
+    MOCK_TRANSIENT_NETWORK_PERSISTENT_PHASES=previous_target_pre_switch
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "persistent ERR_NETWORK_CHANGED unexpectedly accepted the release"
+  assert_previous_is_live
+  assert_previous_manifest_unchanged
+  assert_probe_not_called post_switch
+  assert_summary_outcome rejected_before_switch
+  verify_evidence_pair
+  probe_calls="$(grep -Fxc 'probe:previous_target_pre_switch' "${CASE_CALL_LOG}" || true)"
+  [[ "${probe_calls}" -eq 3 ]] || \
+    show_deploy_failure "persistent failure must stop after at most 1 re-probe in activate (3 total with prepare), got ${probe_calls}"
+  [[ -f "${CASE_AUDIT}/browser-probe-previous_target_pre_switch-attempt-1.json" ]] || \
+    show_deploy_failure "persistent failure did not preserve attempt-1 evidence"
+  [[ -f "${CASE_AUDIT}/browser-probe-previous_target_pre_switch.json" ]] || \
+    show_deploy_failure "persistent failure did not preserve final failed evidence"
+  [[ "$(json_field "${CASE_AUDIT}/browser-probe-previous_target_pre_switch-attempt-1.json" pass)" == "false" ]] || \
+    die "attempt-1 must remain failed"
+  [[ "$(json_field "${CASE_AUDIT}/browser-probe-previous_target_pre_switch.json" pass)" == "false" ]] || \
+    die "final persistent probe must remain failed"
+  [[ "$(json_field "${CASE_AUDIT}/browser-probe-previous_target_pre_switch-attempt-1.json" attempt)" != \
+     "$(json_field "${CASE_AUDIT}/browser-probe-previous_target_pre_switch.json" attempt)" ]] || \
+    die "attempt-1 and final persistent failure evidence must come from distinct attempts"
+
+  # 4. Real non-transient probe failure before switch rejects immediately without re-probe
+  setup_case non-transient-previous-target-no-reprobe
+  run_deploy PANTHEON_DEPLOY_ACTION=prepare
+  [[ "${RUN_STATUS}" -eq 0 ]] || show_deploy_failure "prepare before non-transient failure should succeed"
+  run_deploy PANTHEON_DEPLOY_ACTION=activate \
+    MOCK_FAIL_PROBE_PHASES=previous_target_pre_switch
+  [[ "${RUN_STATUS}" -ne 0 ]] || die "real probe failure unexpectedly accepted the release"
+  assert_previous_is_live
+  assert_summary_outcome rejected_before_switch
+  probe_calls="$(grep -Fxc 'probe:previous_target_pre_switch' "${CASE_CALL_LOG}" || true)"
+  [[ "${probe_calls}" -eq 2 ]] || \
+    show_deploy_failure "real non-transient failure must not re-probe in activate (expected 2 total calls with prepare, got ${probe_calls})"
+  [[ ! -f "${CASE_AUDIT}/browser-probe-previous_target_pre_switch-attempt-1.json" ]] || \
+    show_deploy_failure "real non-transient failure must not emit transient attempt-1 evidence"
+}
+
 
 run_test() {
   local name="$1"
@@ -3740,6 +4133,7 @@ run_test "browser dependencies avoid routine apt and fail closed on missing runt
 run_test "sealed return round-trips operator-live releases preserving bytes" test_sealed_return_roundtrip_preserves_bytes
 run_test "sealed return rejects bad seals, stale predecessor, and wrong profile" test_sealed_return_rejects_bad_seals_and_state
 run_test "sealed return rejects unmanaged paths and invalid leases" test_sealed_return_rejects_unmanaged_paths_and_leases
+run_test "pre-switch transient ERR_NETWORK_CHANGED re-probes once and preserves distinct evidence" test_pre_switch_transient_network_changed_reprobe
 
 echo "deploy contract harness: ${PASSED} passed, ${FAILED} failed"
 if [[ "${FAILED}" -ne 0 ]]; then

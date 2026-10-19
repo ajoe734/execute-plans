@@ -1105,6 +1105,134 @@ export function isAllowlistedBffRequestFailure(entry) {
   return /\bnet::ERR_NETWORK_CHANGED\b/iu.test(failure);
 }
 
+function isNetworkChangedDiagnostic(value) {
+  return (
+    typeof value === "string" && /\bnet::ERR_NETWORK_CHANGED\b/iu.test(value)
+  );
+}
+
+export function isTransientNetworkChangedProbeFailure(evidence) {
+  if (!evidence || typeof evidence !== "object" || evidence.pass !== false) {
+    return false;
+  }
+  const base = evidence.checks?.base;
+  const strict = evidence.checks?.strict;
+  if (!base || typeof base !== "object") {
+    return false;
+  }
+  const bffFailures = Array.isArray(evidence.bff?.failures)
+    ? evidence.bff.failures
+    : [];
+  const unexpectedConsoleErrors = Array.isArray(
+    evidence.browser?.unexpectedConsoleErrors,
+  )
+    ? evidence.browser.unexpectedConsoleErrors
+    : [];
+  const profiles = Array.isArray(evidence.browser?.hostedUxProfiles)
+    ? evidence.browser.hostedUxProfiles
+    : [];
+  const profileConsoleErrors = profiles.flatMap((profile) =>
+    Array.isArray(profile?.diagnostics?.unexpectedConsoleErrors)
+      ? profile.diagnostics.unexpectedConsoleErrors
+      : [],
+  );
+  if (
+    bffFailures.length === 0 &&
+    unexpectedConsoleErrors.length === 0 &&
+    profileConsoleErrors.length === 0
+  ) {
+    return false;
+  }
+  if (
+    !bffFailures.every((entry) => isNetworkChangedDiagnostic(entry?.failure)) ||
+    !unexpectedConsoleErrors.every((entry) =>
+      isNetworkChangedDiagnostic(entry?.text),
+    ) ||
+    !profileConsoleErrors.every((entry) =>
+      isNetworkChangedDiagnostic(entry?.text),
+    )
+  ) {
+    return false;
+  }
+  const nonNetworkBaseChecksOk =
+    base.shellOk === true &&
+    base.publicHealthOk === true &&
+    base.usesIntendedBff === true &&
+    base.anonymousAuthBoundaryVerified === true &&
+    base.requiredCoreResponseOk === true &&
+    base.observedProtectedResponsesOk === true &&
+    base.noAuthorizationRequests === true &&
+    base.noBrowserWriteMethods === true &&
+    (!base.noEmbeddedDevBearerRequired || base.noEmbeddedDevBearer === true) &&
+    base.personaFleetSafetyPassed === true &&
+    base.applicationRootRendered === true &&
+    base.pageErrorsAbsent === true &&
+    base.oldUrlAbsent === true &&
+    base.bffRequestsObserved === true;
+  if (!nonNetworkBaseChecksOk) {
+    return false;
+  }
+  if (evidence.mode === "release-strict" || strict) {
+    if (!strict || typeof strict !== "object") {
+      return false;
+    }
+    const profilesTransientOnly =
+      strict.hostedUxProfilesPassed === true ||
+      (profiles.length > 0 &&
+        profiles.every((profile) => {
+          if (profile?.assessment?.pass === true) return true;
+          const failures = Array.isArray(profile?.assessment?.failures)
+            ? profile.assessment.failures
+            : [];
+          const consoleErrs = Array.isArray(
+            profile?.diagnostics?.unexpectedConsoleErrors,
+          )
+            ? profile.diagnostics.unexpectedConsoleErrors
+            : [];
+          return (
+            failures.length === 1 &&
+            failures[0] === "unexpectedConsoleErrorsAbsent" &&
+            consoleErrs.length > 0 &&
+            consoleErrs.every((entry) =>
+              isNetworkChangedDiagnostic(entry?.text),
+            )
+          );
+        }));
+    const nonNetworkStrictChecksOk =
+      strict.applicationRootRendered === true &&
+      strict.noBrowserWriteMethods === true &&
+      strict.personaFleetSafetyPassed === true &&
+      strict.pageErrorsAbsent === true &&
+      strict.frontendResourceFailuresAbsent === true &&
+      strict.frontendResourceHttpErrorsAbsent === true &&
+      strict.bundleFetchesComplete === true &&
+      strict.deploymentJsonFetched === true &&
+      strict.deploymentPolicyPassed === true &&
+      strict.freshStorageInspected === true &&
+      strict.freshStorageSensitiveValuesAbsent === true &&
+      strict.htmlAndAssetSensitiveValuesAbsent === true &&
+      strict.candidateRouteErrorsAbsent === true &&
+      strict.hostedUxProfileSetComplete === true &&
+      profilesTransientOnly;
+    if (!nonNetworkStrictChecksOk) {
+      return false;
+    }
+    const allowedFailures = new Set([
+      "existingAuthBoundaryAndBffChecks",
+      "unexpectedConsoleErrorsAbsent",
+      "hostedUxProfilesPassed",
+    ]);
+    const failures = Array.isArray(evidence.failures) ? evidence.failures : [];
+    if (
+      failures.length === 0 ||
+      !failures.every((failure) => allowedFailures.has(failure))
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
 function isWithinRoot(root, target) {
   const relative = path.relative(root, target);
   return (
@@ -3164,7 +3292,7 @@ async function runProbe() {
       pageErrors,
     });
 
-    jsonOut = writeJsonEvidence(evidencePath(generatedAt), {
+    const evidencePayload = {
       schemaVersion: 1,
       probe: "pantheon-hosted-browser-release-policy",
       generatedAt,
@@ -3267,7 +3395,10 @@ async function runProbe() {
         publicHealthResponses,
         oldUrlHits,
       },
-    });
+    };
+    evidencePayload.transientNetworkChangedOnly =
+      isTransientNetworkChangedProbeFailure(evidencePayload);
+    jsonOut = writeJsonEvidence(evidencePath(generatedAt), evidencePayload);
   }
 
   console.log(md);

@@ -1,0 +1,118 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "FE-DEPLOY-TRANSIENT-NETWORK-20261019",
+  "owner": "Antigravity",
+  "reviewer": "Antigravity2",
+  "target_repo": "ajoe734/execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-DEPLOY-TRANSIENT-NETWORK-20261019",
+  "base_commit": "84fbe157bee67793d8f585d128e47c30525a35ce",
+  "evidence_kind": "local_validation_only",
+  "frozen_original_failure_evidence": {
+    "bounded_input_path": "/tmp/pantheon-assist-20261013/FE-DEPLOY-TRANSIENT-NETWORK-20261019-bounded-input.json",
+    "bounded_input_sha256": "55d0be4c5619986d60e0e4390ed49bb15620a1c6f7f565a15d6812c47e5e6d74",
+    "root_run_id": 39266905540,
+    "fe_deploy_run_id": 39274970062,
+    "integration_gate_run_id": 39273862620,
+    "backend_sha": "0eace2eab875c208a68916be630b01dd9e969602",
+    "frontend_sha": "84fbe157bee67793d8f585d128e47c30525a35ce",
+    "previous_target_sha": "4e5bbe67349c51b8b0cca8c4d8fa81a5371f873a",
+    "artifact_id": 12197973384,
+    "artifact_digest_sha256": "0a4db02ef3981b2ad507db066a722cc84ba5eba5caa73d7de010d2e0d98607e1",
+    "source_files": {
+      "fe_deploy_run_meta": {
+        "path": "/tmp/pantheon-assist-20261013/FEdeploy39274970062-run-meta.json",
+        "sha256": "ee17cb94b1ebcb9303152a1ec6fc842f88c426706321899ed02e3a16ed6b9d34"
+      },
+      "candidate_pre_switch_probe": {
+        "path": "/tmp/pantheon-assist-20261013/FEdeploy39274970062-original-artifacts/pantheon-dev-fe-deploy-evidence-attempt-1/controller/browser-probe-candidate_pre_switch.json",
+        "sha256": "c63ce6c60a712c9dfde8ed2da53a4dd11604ec3af0b6e417dd0d27d65dcbe591"
+      },
+      "previous_target_pre_switch_probe": {
+        "path": "/tmp/pantheon-assist-20261013/FEdeploy39274970062-original-artifacts/pantheon-dev-fe-deploy-evidence-attempt-1/controller/browser-probe-previous_target_pre_switch.json",
+        "sha256": "e1d7f555517a53cbab4487236f6e7806c9f621b6064f672f29515d979f68148d"
+      },
+      "controller_evidence": {
+        "path": "/tmp/pantheon-assist-20261013/FEdeploy39274970062-original-artifacts/pantheon-dev-fe-deploy-evidence-attempt-1/controller/evidence.json",
+        "sha256": "21584f9e2450de3b7e4ab38efbf43a40180cfcf26f8f47488a35bc1c0f8246de"
+      }
+    },
+    "recorded_facts": {
+      "candidate_pre_switch_prepare_passed_at": "2026-04-10T15:24:22Z",
+      "previous_target_pre_switch_prepare_passed_at": "2026-04-10T15:24:57Z",
+      "candidate_pre_switch_activate_passed_at": "2026-04-10T15:26:12Z",
+      "previous_target_pre_switch_activate_failed_at": "2026-04-10T15:26:21Z",
+      "failure_reason": "required BFF probe check failed",
+      "failed_core_requests": [
+        {
+          "path": "/bff/me",
+          "status": 0,
+          "error": "net::ERR_NETWORK_CHANGED"
+        },
+        {
+          "path": "/bff/auth/readiness",
+          "status": 0,
+          "error": "net::ERR_NETWORK_CHANGED"
+        }
+      ],
+      "retired_openclaw_gates_unchanged": true
+    }
+  },
+  "diagnosis_and_fix": {
+    "root_cause": "During FE deploy run 39274970062 (under Root 39266905540), both candidate (84fbe157bee67793d8f585d128e47c30525a35ce) and previous rollback target (4e5bbe67349c51b8b0cca8c4d8fa81a5371f873a) passed prepare pre-switch browser probes, and candidate passed activate pre-switch probe. When re-probing previous_target_pre_switch during activate at 2026-04-10T15:26:21Z, Chromium encountered a transient network interface change (net::ERR_NETWORK_CHANGED) while fetching /bff/me and /bff/auth/readiness, while manifest, assets, index SHA-256, CORS preflight, and write-route checks all passed. run_release_probe in scripts/deploy-dev-vm.sh had no bounded retry for a pure Chromium ERR_NETWORK_CHANGED pre-switch probe failure.",
+    "fix_summary": "Added exported classifier isTransientNetworkChangedProbeFailure(evidence) in scripts/probe-hosted-browser-bff.mjs (and recorded transientNetworkChangedOnly in probe JSON output) that returns true only when a failed probe passed all non-core-request checks (manifest, index/assets, CORS preflight, zero page/write/retired-endpoint violations, no unsafe auth redirect) and every failed core BFF request failed with status 0 and error containing ERR_NETWORK_CHANGED (plus matching requestFailures entries). Updated run_release_probe in scripts/deploy-dev-vm.sh so pre-switch phases (*_pre_switch) allow at most one complete re-probe with the exact same environment and release/backend/pair identities when attempt 1 fails with isTransientNetworkChangedProbeFailure. Preserved original attempt 1 evidence at browser-probe-<phase>-attempt-1.json and append-only event browser.probe.<phase>.attempt_1 (failed) distinct from final browser-probe-<phase>.json and browser.probe.<phase> (passed or failed)."
+  },
+  "acceptance_mapping": {
+    "AC1_frozen_evidence_and_diagnosis": "Read /tmp/pantheon-assist-20261013/FE-DEPLOY-TRANSIENT-NETWORK-20261019-bounded-input.json and all four referenced frozen artifacts. Recorded that candidate 84fbe157bee67793d8f585d128e47c30525a35ce passed and previous target 4e5bbe67349c51b8b0cca8c4d8fa81a5371f873a passed during prepare (15:24:57Z) then failed during activate pre-switch (15:26:21Z) due to transient Chromium net::ERR_NETWORK_CHANGED on /bff/me and /bff/auth/readiness. Left retired OpenClaw gates untouched.",
+    "AC2_bounded_single_pre_switch_reprobe": "Implemented isTransientNetworkChangedProbeFailure in scripts/probe-hosted-browser-bff.mjs and bounded 1x re-probe in run_release_probe (scripts/deploy-dev-vm.sh) for *_pre_switch phases using identical candidate/previous release, backend, and pair identities before switch. Preserved gate-before-switch and immediate rejection for auth/tenant/asset/manifest/CORS failures and persistent ERR_NETWORK_CHANGED.",
+    "AC3_distinct_attempt_and_final_evidence": "Preserved attempt-1 failed probe JSON at ${AUDIT_DIR}/browser-probe-${phase}-attempt-1.json and logged browser.probe.${phase}.attempt_1=failed in evidence.jsonl before running attempt 2 and writing final ${AUDIT_DIR}/browser-probe-${phase}.json and browser.probe.${phase}. Both files are hashed into controller evidence.json auditFiles.",
+    "AC4_focused_and_suite_validation": "Added test_pre_switch_transient_network_changed_reprobe in scripts/test-deploy-dev-vm.sh covering frozen artifact classification, recovered transient ERR_NETWORK_CHANGED on previous_target_pre_switch during activate after earlier prepare pass, persistent ERR_NETWORK_CHANGED rejection after at most 2 total attempts, and immediate 1-attempt rejection for non-transient failures. Passed full deploy contract harness, atomic CAS/manifest python tests, vitest release/deploy suites, and TypeScript typechecks.",
+    "AC5_source_only_scope": "Modified only the 4 declared scoped artifacts in execute-plans. No VM, SSH, model/provider/business calls, fixture, approval, deployment, lease, or Publisher changes."
+  },
+  "scoped_artifacts": [
+    "scripts/deploy-dev-vm.sh",
+    "scripts/probe-hosted-browser-bff.mjs",
+    "scripts/test-deploy-dev-vm.sh",
+    "docs/deployment/evidence/FE-DEPLOY-TRANSIENT-NETWORK-20261019/evidence.json"
+  ],
+  "local_validation": {
+    "commands": [
+      {
+        "command": "PANTHEON_TEST_FILTER=\"pre-switch transient ERR_NETWORK_CHANGED\" bash scripts/test-deploy-dev-vm.sh",
+        "result": "1 passed, 0 failed",
+        "exit_code": 0
+      },
+      {
+        "command": "bash scripts/test-deploy-dev-vm.sh",
+        "result": "74 passed, 0 failed",
+        "exit_code": 0
+      },
+      {
+        "command": "python3 scripts/test-atomic-symlink-cas.py && python3 scripts/test-atomic-release-manifest.py",
+        "result": "7 atomic symlink CAS tests OK, 5 atomic release manifest tests OK",
+        "exit_code": 0
+      },
+      {
+        "command": "npx vitest run src/test/deploy-safe-defaults.test.ts src/test/paired-release-workflow.test.ts src/test/admitted-dev-pair.test.ts src/test/release-candidate.test.ts src/test/release-evidence.test.ts src/test/hosted-browser-release-policy.test.ts",
+        "result": "6 test files passed, 182 tests passed",
+        "exit_code": 0
+      },
+      {
+        "command": "npm run typecheck:app && npm run typecheck:agora",
+        "result": "clean, 0 errors",
+        "exit_code": 0
+      },
+      {
+        "command": "git diff --check && bash -n scripts/deploy-dev-vm.sh scripts/test-deploy-dev-vm.sh && node --check scripts/probe-hosted-browser-bff.mjs",
+        "result": "clean, 0 errors",
+        "exit_code": 0
+      }
+    ]
+  },
+  "not_changed": [
+    "Retired OpenClaw gates and contract flags were not altered.",
+    "No new service, framework, secret, static JWT, MFA, or gate introduced.",
+    "No product runtime or UI feature changes.",
+    "No VM, SSH, or hosted deployment operations performed; serial hosted operations remain with original coordinator."
+  ]
+}
