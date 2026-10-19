@@ -608,6 +608,7 @@ export function WorkshopSessionView({ governedProposalId, workshopId, onAddToTra
   useEffect(() => {
     let cancelled = false;
     setSessionLoading(true);
+    setStrategySpecIdentity(null);
 
     Promise.all([
       getWorkshop(workshopId)
@@ -627,6 +628,9 @@ export function WorkshopSessionView({ governedProposalId, workshopId, onAddToTra
       listWorkshopEvents(workshopId)
         .then((response) => { if (!cancelled) setWorkshopEvents(response?.items ?? []); })
         .catch(() => { if (!cancelled) setWorkshopEvents([]); }),
+      listWorkshopVersions(workshopId)
+        .then((versions) => { if (!cancelled) setStrategySpecIdentity(canonicalStrategySpecIdentity(versions)); })
+        .catch(() => { if (!cancelled) setStrategySpecIdentity(null); }),
     ]).finally(() => {
       if (!cancelled) setSessionLoading(false);
     });
@@ -789,10 +793,10 @@ export function WorkshopSessionView({ governedProposalId, workshopId, onAddToTra
   const refreshStrategySpec = useCallback(() => {
     try {
       void listWorkshopVersions(workshopId)
-        .then((versions) => setStrategySpecIdentity(canonicalStrategySpecIdentity(versions)))
-        .catch(() => setStrategySpecIdentity(null));
+        .then((versions) => { if (activeWorkshopIdRef.current === workshopId) setStrategySpecIdentity(canonicalStrategySpecIdentity(versions)); })
+        .catch(() => { if (activeWorkshopIdRef.current === workshopId) setStrategySpecIdentity(null); });
     } catch {
-      setStrategySpecIdentity(null);
+      if (activeWorkshopIdRef.current === workshopId) setStrategySpecIdentity(null);
     }
   }, [workshopId]);
 
@@ -842,6 +846,7 @@ export function WorkshopSessionView({ governedProposalId, workshopId, onAddToTra
             refreshCompleteness();
             refreshReadiness();
             refreshEvents();
+            refreshStrategySpec();
             void refreshDailyInteractions();
             break;
           default:

@@ -15,6 +15,15 @@ const authProviderState = vi.hoisted(() => ({
   tenantId: "tenant-1" as string | null,
 }));
 
+const writeAccessState = vi.hoisted(() => ({
+  roles: ["operator"] as string[],
+  loading: false,
+  interactionAllowed: true,
+  interactionDisabledReason: null as string | null,
+  writeAllowed: true,
+  writeDisabledReason: null as string | null,
+}));
+
 vi.mock("@/lib/bff-v1/agora/workshops", () => ({
   listWorkshops: vi.fn().mockResolvedValue([]),
   getWorkshop: vi.fn().mockResolvedValue(null),
@@ -67,6 +76,17 @@ vi.mock("@/lib/bff-v1/agora/dailyInteractions", async (importOriginal) => {
   };
 });
 
+vi.mock("@/lib/bff-v1/agora/research", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@/lib/bff-v1/agora/research")>();
+  return {
+    ...original,
+    listWorkshopResearchPlans: vi.fn().mockResolvedValue([]),
+    getResearchPlan: vi.fn().mockResolvedValue(null),
+    listResearchPlanRuns: vi.fn().mockResolvedValue([]),
+    createWorkshopResearchPlan: vi.fn().mockResolvedValue({}),
+  };
+});
+
 vi.mock("@/lib/bff-v1/headers", async (importOriginal) => {
   const original = await importOriginal<typeof import("@/lib/bff-v1/headers")>();
   return {
@@ -83,12 +103,12 @@ vi.mock("@/agora/useAgoraWriteAccess", () => ({
     actorId: "operator-001",
     agoraCapabilities: ["agora.workshop.v1"],
     capabilities: ["agora.workshop.v1"],
-    roles: ["operator"],
-    loading: false,
-    interactionAllowed: true,
-    interactionDisabledReason: null,
-    writeAllowed: true,
-    writeDisabledReason: null,
+    roles: writeAccessState.roles,
+    loading: writeAccessState.loading,
+    interactionAllowed: writeAccessState.interactionAllowed,
+    interactionDisabledReason: writeAccessState.interactionDisabledReason,
+    writeAllowed: writeAccessState.writeAllowed,
+    writeDisabledReason: writeAccessState.writeDisabledReason,
   }),
 }));
 
@@ -102,6 +122,7 @@ import { StrategyWorkshopPage } from "./StrategyWorkshopPage";
 import { resolveSubmissionTenant } from "./submissionTenant";
 import { pickerParticipants } from "@/agora/participantPicker";
 import * as workshopsModule from "@/lib/bff-v1/agora/workshops";
+import * as researchModule from "@/lib/bff-v1/agora/research";
 import { interaction } from "@/lib/bff-v1/agora/interaction";
 import { listDailyInteractions, submitDailyInteraction } from "@/lib/bff-v1/agora/dailyInteractions";
 
@@ -286,6 +307,16 @@ describe("StrategyWorkshopPage", () => {
     } as never);
     vi.mocked(workshopsModule.openWorkshopStream).mockReturnValue(() => undefined);
     vi.mocked(listDailyInteractions).mockResolvedValue([]);
+    writeAccessState.roles = ["operator"];
+    writeAccessState.loading = false;
+    writeAccessState.interactionAllowed = true;
+    writeAccessState.interactionDisabledReason = null;
+    writeAccessState.writeAllowed = true;
+    writeAccessState.writeDisabledReason = null;
+    vi.mocked(researchModule.listWorkshopResearchPlans).mockResolvedValue([]);
+    vi.mocked(researchModule.getResearchPlan).mockResolvedValue(null);
+    vi.mocked(researchModule.listResearchPlanRuns).mockResolvedValue([]);
+    vi.mocked(researchModule.createWorkshopResearchPlan).mockResolvedValue({} as never);
   });
 
   it("submits with the authoritative tenant when the browser bridge has no tenant hint", async () => {
@@ -1670,5 +1701,429 @@ describe("StrategyWorkshopPage", () => {
     // openWorkshopStream should still only have been called once and not torn down
     expect(workshopsModule.openWorkshopStream).toHaveBeenCalledTimes(1);
     expect(teardown).not.toHaveBeenCalled();
+  });
+
+  it("hydrates ResearchPlanPanel canonical identity on initial load and browser-equivalent remount while preserving durable synthesis and Research result display", async () => {
+    vi.mocked(workshopsModule.getWorkshop).mockResolvedValue({
+      ...MOCK_WORKSHOP,
+      workshop_id: "ws-abc",
+      strategy_id: "strategy-canonical-001",
+      active_strategy_spec_registry_id: "registry-canonical-002",
+    } as StrategyWorkshop);
+    vi.mocked(workshopsModule.listWorkshopVersions).mockResolvedValue({
+      data: {
+        versions: [{
+          version: {
+            workshop_version_id: "workshop-version-002",
+            workshop_id: "ws-abc",
+            strategy_id: "strategy-canonical-001",
+            strategy_spec_registry_id: "registry-canonical-002",
+            parent_workshop_version_id: null,
+            source_event_id: null,
+            sequence_no: 2,
+            document_sha256: "sha256-canonical",
+            created_by: "user-001",
+            created_at: "2026-08-20T00:00:00Z",
+          },
+          strategy_spec: {
+            entry: {
+              registry_id: "registry-canonical-002",
+              strategy_id: "strategy-canonical-001",
+              version: "2",
+              metadata: { strategy_spec: {} },
+            },
+          },
+        }],
+        selected_version_id: "workshop-version-002",
+        active_strategy_spec_registry_id: "registry-canonical-002",
+      },
+      meta: {},
+    } as never);
+    vi.mocked(listDailyInteractions).mockResolvedValue([{
+      interaction_id: "int-durable-001",
+      workshop_id: "ws-abc",
+      status: "completed",
+      human_request: {
+        mode: "ask",
+        request_text: "Assess the current regime",
+        submitted_at: "2026-08-20T00:00:00Z",
+      },
+      participants: [{
+        persona_id: "per_quant",
+        persona_version: "1",
+        session_persona_id: "session-quant",
+        display_name: "Quant Architect",
+        provider_agent_id: "agent-quant",
+        workspace_id: "workspace-quant",
+        environment_ceiling: "paper",
+        capability_snapshot: ["persona_opinion"],
+        captured_at: "2026-08-20T00:00:00Z",
+      }],
+      provider_invocations: [],
+      opinions: [{
+        opinion_id: "op-durable-001",
+        participant: {
+          persona_id: "per_quant",
+          persona_version: "1",
+          session_persona_id: "session-quant",
+          display_name: "Quant Architect",
+          provider_agent_id: "agent-quant",
+          workspace_id: "workspace-quant",
+          environment_ceiling: "paper",
+          capability_snapshot: ["persona_opinion"],
+          captured_at: "2026-08-20T00:00:00Z",
+        },
+        conclusion: "support",
+        confidence: 0.85,
+        rationale: "Durable opinion preserved across reload.",
+        provider_invocation_id: "inv-001",
+        recommended_measures: [],
+      }],
+      synthesis: {
+        status: "completed",
+        summary: "Durable synthesis preserved across reload.",
+        disagreements: [],
+      },
+      missing_participant_ids: [],
+      degraded_participant_ids: [],
+      candidate_proposal_links: [],
+      audit_refs: ["audit-durable-001"],
+    } as never]);
+    const existingPlan = {
+      spec_version: "1.0" as const,
+      plan_id: "plan-existing-001",
+      workshop_id: "ws-abc",
+      strategy_id: "strategy-canonical-001",
+      strategy_spec_registry_id: "registry-canonical-002",
+      status: "completed" as const,
+      no_order_route_proof: "research_plan_no_order_route" as const,
+      stages: [{ stage_id: "stg-1", stage_type: "rolling_oos", status: "completed", dependencies: [], required_capability: "research.rolling_oos", routing: { preferred_backend: "qlib", fallback_policy: "fail_closed" as const } }],
+      created_at: "2026-08-20T00:00:00Z",
+      updated_at: "2026-08-20T00:05:00Z",
+    };
+    vi.mocked(researchModule.listWorkshopResearchPlans).mockResolvedValue([existingPlan]);
+    vi.mocked(researchModule.getResearchPlan).mockResolvedValue({
+      plan: existingPlan,
+      etag: 'W/"research-plan:plan-existing-001:v1"',
+      allowedActions: [],
+    });
+    vi.mocked(researchModule.listResearchPlanRuns).mockResolvedValue([{
+      spec_version: "1.0",
+      run_id: "run-existing-001",
+      plan_id: "plan-existing-001",
+      stage_id: "stg-1",
+      stage_type: "rolling_oos",
+      execution_status: "succeeded",
+      outcome: "pass",
+      summary: { headline: "Saved rolling OOS passed." },
+    } as never]);
+
+    const firstMount = render(<StrategyWorkshopPage workshopId="ws-abc" />);
+
+    await waitFor(() => {
+      expect(workshopsModule.listWorkshopVersions).toHaveBeenCalledWith("ws-abc");
+      expect(screen.getByTestId("research-plan-create")).toBeEnabled();
+    });
+    expect(screen.queryByTestId("research-plan-disabled-reason")).toBeNull();
+    expect(await screen.findByTestId("interaction-synthesis-int-durable-001")).toHaveTextContent(
+      "Durable synthesis preserved across reload.",
+    );
+    expect(await screen.findByTestId("research-plan-plan-existing-001")).toBeInTheDocument();
+    expect(await screen.findByTestId("research-run-status")).toHaveTextContent("succeeded");
+    expect(workshopsModule.postWorkshopMessage).not.toHaveBeenCalled();
+    expect(workshopsModule.reconstructWorkshopStrategy).not.toHaveBeenCalled();
+
+    // Browser-equivalent reload / remount without any local message or event
+    firstMount.unmount();
+    render(<StrategyWorkshopPage workshopId="ws-abc" />);
+
+    await waitFor(() => {
+      expect(workshopsModule.listWorkshopVersions).toHaveBeenCalledTimes(2);
+      expect(screen.getByTestId("research-plan-create")).toBeEnabled();
+    });
+    expect(screen.queryByTestId("research-plan-disabled-reason")).toBeNull();
+    expect(await screen.findByTestId("interaction-synthesis-int-durable-001")).toHaveTextContent(
+      "Durable synthesis preserved across reload.",
+    );
+    expect(await screen.findByTestId("research-plan-plan-existing-001")).toBeInTheDocument();
+    expect(await screen.findByTestId("research-run-status")).toHaveTextContent("succeeded");
+
+    fireEvent.click(screen.getByTestId("research-plan-create"));
+    await waitFor(() => {
+      expect(researchModule.createWorkshopResearchPlan).toHaveBeenCalledWith(
+        "ws-abc",
+        expect.objectContaining({
+          spec_version: "1.0",
+          strategy_id: "strategy-canonical-001",
+          strategy_spec_registry_id: "registry-canonical-002",
+        }),
+      );
+    });
+    expect(workshopsModule.postWorkshopMessage).not.toHaveBeenCalled();
+    expect(workshopsModule.reconstructWorkshopStrategy).not.toHaveBeenCalled();
+    expect(submitDailyInteraction).not.toHaveBeenCalled();
+  });
+
+  it("preserves role and write-access guards on ResearchPlanPanel when canonical owner versions hydrate on load", async () => {
+    writeAccessState.roles = ["viewer"];
+    writeAccessState.writeAllowed = false;
+    writeAccessState.writeDisabledReason = "Viewer role cannot create or modify Research Plans.";
+    vi.mocked(workshopsModule.getWorkshop).mockResolvedValue(MOCK_WORKSHOP);
+    vi.mocked(workshopsModule.listWorkshopVersions).mockResolvedValue({
+      data: {
+        versions: [{
+          version: {
+            workshop_version_id: "workshop-version-002",
+            workshop_id: "ws-abc",
+            strategy_id: "strategy-canonical-001",
+            strategy_spec_registry_id: "registry-canonical-002",
+            parent_workshop_version_id: null,
+            source_event_id: null,
+            sequence_no: 2,
+            document_sha256: "sha256-canonical",
+            created_by: "user-001",
+            created_at: "2026-08-20T00:00:00Z",
+          },
+          strategy_spec: {
+            entry: {
+              registry_id: "registry-canonical-002",
+              strategy_id: "strategy-canonical-001",
+              version: "2",
+              metadata: { strategy_spec: {} },
+            },
+          },
+        }],
+        selected_version_id: "workshop-version-002",
+        active_strategy_spec_registry_id: "registry-canonical-002",
+      },
+      meta: {},
+    } as never);
+
+    render(<StrategyWorkshopPage workshopId="ws-abc" />);
+
+    await waitFor(() => expect(workshopsModule.listWorkshopVersions).toHaveBeenCalledWith("ws-abc"));
+    expect(screen.getByTestId("research-plan-create")).toBeDisabled();
+    expect(screen.getByTestId("research-plan-disabled-reason")).toHaveTextContent(
+      "Viewer role cannot create or modify Research Plans.",
+    );
+    fireEvent.click(screen.getByTestId("research-plan-create"));
+    expect(researchModule.createWorkshopResearchPlan).not.toHaveBeenCalled();
+  });
+
+  it("keeps ResearchPlanPanel disabled when owner versions fail or omit canonical identity despite visible labels or local events", async () => {
+    let handleEvent: ((event: WorkshopStreamEvent) => void) | undefined;
+    vi.mocked(workshopsModule.openWorkshopStream).mockImplementation((_id, onEvent) => {
+      handleEvent = onEvent;
+      return () => undefined;
+    });
+    vi.mocked(workshopsModule.getWorkshop).mockResolvedValue({
+      ...MOCK_WORKSHOP,
+      workshop_id: "ws-abc",
+      strategy_id: "strategy-visible-label",
+      active_strategy_spec_registry_id: "registry-visible-label",
+      subject: {
+        kind: "strategy_spec",
+        ref: "strategy-visible-label",
+        title: "Visible Strategy Label Only",
+      },
+      metadata: {
+        strategy_id: "strategy-visible-label",
+        strategy_version: "registry-visible-label",
+        evidence_cutoff: "2026-07-17T00:00:00Z",
+      },
+    } as StrategyWorkshop);
+    vi.mocked(workshopsModule.listWorkshopVersions).mockRejectedValueOnce(
+      new Error("Owner versions read failed"),
+    );
+
+    const firstMount = render(<StrategyWorkshopPage workshopId="ws-abc" />);
+
+    await waitFor(() => expect(workshopsModule.listWorkshopVersions).toHaveBeenCalledWith("ws-abc"));
+    expect(screen.getByTestId("research-plan-create")).toBeDisabled();
+    expect(screen.getByTestId("research-plan-disabled-reason")).toHaveTextContent(
+      "Canonical StrategySpec identity is not yet available.",
+    );
+
+    act(() => {
+      handleEvent?.({
+        spec_version: "1.0",
+        event_id: "evt-local-completeness",
+        event_type: "workshop.completeness.updated",
+        aggregate_type: "strategy_workshop",
+        aggregate_id: "ws-abc",
+        sequence_no: 2,
+        event_time: "2026-08-28T00:00:01Z",
+        emitted_at: "2026-08-28T00:00:01Z",
+        trace_id: "trace-local-completeness",
+        idempotency_key: "idem-local-completeness",
+        payload: {},
+      });
+    });
+    expect(screen.getByTestId("research-plan-create")).toBeDisabled();
+    fireEvent.click(screen.getByTestId("research-plan-create"));
+    expect(researchModule.createWorkshopResearchPlan).not.toHaveBeenCalled();
+
+    firstMount.unmount();
+    vi.mocked(workshopsModule.listWorkshopVersions).mockResolvedValueOnce({
+      data: {
+        versions: [{
+          version: {
+            workshop_version_id: "workshop-version-incomplete",
+            workshop_id: "ws-abc",
+            strategy_id: "strategy-visible-label",
+            strategy_spec_registry_id: "",
+            parent_workshop_version_id: null,
+            source_event_id: null,
+            sequence_no: 1,
+            document_sha256: "sha256-incomplete",
+            created_by: "user-001",
+            created_at: "2026-08-20T00:00:00Z",
+          },
+          strategy_spec: {
+            entry: {
+              registry_id: "",
+              strategy_id: "strategy-visible-label",
+              version: "1",
+              metadata: {},
+            },
+          },
+        }],
+        selected_version_id: "workshop-version-incomplete",
+        active_strategy_spec_registry_id: null,
+      },
+      meta: {},
+    } as never);
+
+    render(<StrategyWorkshopPage workshopId="ws-abc" />);
+
+    await waitFor(() => expect(workshopsModule.listWorkshopVersions).toHaveBeenCalledTimes(2));
+    expect(screen.getByTestId("research-plan-create")).toBeDisabled();
+    expect(screen.getByTestId("research-plan-disabled-reason")).toHaveTextContent(
+      "Canonical StrategySpec identity is not yet available.",
+    );
+    fireEvent.click(screen.getByTestId("research-plan-create"));
+    expect(researchModule.createWorkshopResearchPlan).not.toHaveBeenCalled();
+  });
+
+  it("clears the previous StrategySpec identity on Workshop resource change and ignores delayed old Workshop responses", async () => {
+    let resolveDelayedOldInitial!: (value: unknown) => void;
+    let resolveDelayedOldRefresh!: (value: unknown) => void;
+    let resolvePendingB!: (value: unknown) => void;
+    let handleStreamEvent: ((event: WorkshopStreamEvent) => void) | undefined;
+    vi.mocked(workshopsModule.openWorkshopStream).mockImplementation((_id, onEvent) => {
+      handleStreamEvent = onEvent;
+      return () => undefined;
+    });
+    vi.mocked(workshopsModule.getWorkshop).mockImplementation(async (id) => ({
+      ...MOCK_WORKSHOP,
+      workshop_id: id,
+    }));
+
+    const validEnvelopeFor = (workshopId: string, strategyId: string, registryId: string) => ({
+      data: {
+        versions: [{
+          version: {
+            workshop_version_id: `wsv-${workshopId}`,
+            workshop_id: workshopId,
+            strategy_id: strategyId,
+            strategy_spec_registry_id: registryId,
+            parent_workshop_version_id: null,
+            source_event_id: null,
+            sequence_no: 1,
+            document_sha256: `sha-${workshopId}`,
+            created_by: "user-001",
+            created_at: "2026-08-20T00:00:00Z",
+          },
+          strategy_spec: {
+            entry: {
+              registry_id: registryId,
+              strategy_id: strategyId,
+              version: "1",
+              metadata: { strategy_spec: {} },
+            },
+          },
+        }],
+        selected_version_id: `wsv-${workshopId}`,
+        active_strategy_spec_registry_id: registryId,
+      },
+      meta: {},
+    });
+
+    let oldCallCount = 0;
+    vi.mocked(workshopsModule.listWorkshopVersions).mockImplementation((id) => {
+      if (id === "ws-A") {
+        return Promise.resolve(validEnvelopeFor("ws-A", "strategy-A", "registry-A") as never);
+      }
+      if (id === "ws-B") {
+        return new Promise((resolve) => {
+          resolvePendingB = resolve;
+        }) as never;
+      }
+      if (id === "ws-old") {
+        oldCallCount += 1;
+        return new Promise((resolve) => {
+          if (oldCallCount === 1) {
+            resolveDelayedOldInitial = resolve;
+          } else {
+            resolveDelayedOldRefresh = resolve;
+          }
+        }) as never;
+      }
+      return Promise.resolve({
+        data: { versions: [], selected_version_id: null, active_strategy_spec_registry_id: null },
+      } as never);
+    });
+
+    const { rerender } = render(<StrategyWorkshopPage workshopId="ws-A" />);
+    await waitFor(() => expect(screen.getByTestId("research-plan-create")).toBeEnabled());
+
+    // Switch from hydrated ws-A to pending ws-B: identity must clear immediately
+    rerender(<StrategyWorkshopPage workshopId="ws-B" />);
+    expect(screen.getByTestId("research-plan-create")).toBeDisabled();
+    expect(screen.getByTestId("research-plan-disabled-reason")).toHaveTextContent(
+      "Canonical StrategySpec identity is not yet available.",
+    );
+    await act(async () => {
+      resolvePendingB({
+        data: { versions: [], selected_version_id: null, active_strategy_spec_registry_id: null },
+      });
+    });
+    expect(screen.getByTestId("research-plan-create")).toBeDisabled();
+
+    // Switch to ws-old with delayed initial and refresh responses, then switch to ws-new before ws-old resolves
+    rerender(<StrategyWorkshopPage workshopId="ws-old" />);
+    await waitFor(() => expect(workshopsModule.listWorkshopVersions).toHaveBeenCalledWith("ws-old"));
+    act(() => {
+      handleStreamEvent?.({
+        spec_version: "1.0",
+        event_id: "evt-old-version",
+        event_type: "workshop.version.created",
+        aggregate_type: "strategy_workshop",
+        aggregate_id: "ws-old",
+        sequence_no: 3,
+        event_time: "2026-08-28T00:00:03Z",
+        emitted_at: "2026-08-28T00:00:03Z",
+        trace_id: "trace-old-version",
+        idempotency_key: "idem-old-version",
+        payload: {},
+      });
+    });
+    expect(oldCallCount).toBe(2);
+
+    rerender(<StrategyWorkshopPage workshopId="ws-new" />);
+    await waitFor(() => expect(workshopsModule.listWorkshopVersions).toHaveBeenCalledWith("ws-new"));
+
+    await act(async () => {
+      resolveDelayedOldInitial(validEnvelopeFor("ws-old", "strategy-old", "registry-old"));
+      resolveDelayedOldRefresh(validEnvelopeFor("ws-old", "strategy-old", "registry-old"));
+      await Promise.resolve();
+    });
+
+    expect(screen.getByTestId("research-plan-create")).toBeDisabled();
+    expect(screen.getByTestId("research-plan-disabled-reason")).toHaveTextContent(
+      "Canonical StrategySpec identity is not yet available.",
+    );
+    fireEvent.click(screen.getByTestId("research-plan-create"));
+    expect(researchModule.createWorkshopResearchPlan).not.toHaveBeenCalled();
   });
 });
