@@ -1,12 +1,12 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import i18n from "@/i18n";
 import { liveStatus } from "@/lib/bff-v1/liveStatus";
-import { ObjectListPage } from "./ObjectListPage";
+import { ObjectListPage, resolveObjectRowHref } from "./ObjectListPage";
 import { CapitalPoolsList } from "./Lists";
 import type { CreateBehavior } from "@/lib/writeIntents/types";
 import capitalPoolsFixture from "@/lib/bff-v1/__tests__/fixtures/hosted-20261020/capital-pools.json";
@@ -214,5 +214,71 @@ describe("ObjectListPage", () => {
 
     expect(i18n.getFixedT("zh-TW")("mgmt.dataSources.detail.cadenceCron")).not.toBe("mgmt.dataSources.detail.cadenceCron");
     expect(i18n.getFixedT("zh-TW")("mgmt.dataSources.detail.timezone")).not.toBe("mgmt.dataSources.detail.timezone");
+  });
+
+  it("does not make a row without an id clickable and does not navigate to /undefined or build hrefs containing undefined", () => {
+    const missingIdRow = {
+      id: undefined as unknown as string,
+      name: "Artifact Without ID",
+      state: "approved" as const,
+      risk: "low" as const,
+      owner: "research",
+      updatedAt: "2026-10-20T18:40:00Z",
+    };
+
+    expect(resolveObjectRowHref(missingIdRow, "/management/artifacts")).toBeUndefined();
+    expect(
+      resolveObjectRowHref(
+        missingIdRow,
+        "/management/artifacts",
+        (r) => `/management/artifacts/${encodeURIComponent(r.id)}`,
+      ),
+    ).toBeUndefined();
+
+    mocks.useLiveListV1.mockReturnValue({
+      items: [missingIdRow],
+      pending: 0,
+      refresh: vi.fn(),
+      meta: {},
+    });
+
+    function LocationProbe() {
+      const loc = useLocation();
+      return <output data-testid="location">{loc.pathname}{loc.search}</output>;
+    }
+
+    render(
+      <I18nextProvider i18n={i18n}>
+        <TooltipProvider>
+          <MemoryRouter initialEntries={["/management/artifacts"]}>
+            <Routes>
+              <Route
+                path="/management/artifacts"
+                element={(
+                  <>
+                    <ObjectListPage
+                      title="Artifacts"
+                      loader={vi.fn()}
+                      basePath="/management/artifacts"
+                    />
+                    <LocationProbe />
+                  </>
+                )}
+              />
+              <Route path="/management/artifacts/:id" element={<LocationProbe />} />
+            </Routes>
+          </MemoryRouter>
+        </TooltipProvider>
+      </I18nextProvider>,
+    );
+
+    const rowCell = screen.getByText("Artifact Without ID");
+    const rowElement = rowCell.closest("tr");
+    expect(rowElement).not.toBeNull();
+    expect(rowElement).not.toHaveClass("cursor-pointer");
+
+    fireEvent.click(rowCell);
+    expect(screen.getByTestId("location")).toHaveTextContent("/management/artifacts");
+    expect(screen.getByTestId("location")).not.toHaveTextContent("/management/artifacts/undefined");
   });
 });

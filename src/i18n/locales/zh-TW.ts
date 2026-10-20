@@ -590,6 +590,12 @@ export default {
   detail: {
     // TJ-I18N-SSE-001 — key existed only as call-site defaultValue before.
     tradeJourneys: { viewTradeJourneys: "查看交易旅程" },
+    loadState: {
+      notFoundTitle: "找不到{{entity}}",
+      notFoundDescription: "Live 合約中找不到 ID 為 {{id}} 的{{entity}}明細。",
+      errorTitle: "無法載入{{entity}}",
+      errorDescription: "讀取 ID 為 {{id}} 的{{entity}}明細失敗：{{error}}",
+    },
     section: {
       routing: "路由",
       hypothesis: "假設",

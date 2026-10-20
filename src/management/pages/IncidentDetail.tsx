@@ -13,6 +13,7 @@ import { RiskBadge } from "@/platform/components/RiskBadge";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
 import { bffV1, writes } from "@/lib/bff-v1";
+import { useLiveDetail } from "@/lib/bff-v1/useLiveDetail";
 import { commandReceiptDescription } from "@/lib/bff-v1/commandReceipt";
 import type { Incident, Alert, Strategy, Runtime } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
@@ -33,7 +34,11 @@ export const IncidentDetail = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const perms = usePermissions();
-  const [incident, setIncident] = useState<Incident | null>(null);
+  const { data: incident, setData: setIncident, loading, isError, error } = useLiveDetail<Incident>(
+    id,
+    (entityId) => bffV1.incidents.get(entityId),
+    { kinds: ["incidents"] },
+  );
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [strategies, setStrategies] = useState<Strategy[]>([]);
   const [runtimes, setRuntimes] = useState<Runtime[]>([]);
@@ -83,23 +88,40 @@ export const IncidentDetail = () => {
   };
 
   useEffect(() => {
+    if (!id) return;
     Promise.all([
-      bffV1.incidents.get(id), bffV1.alerts.list(),
-      bffV1.strategies.list(), bffV1.runtimes.list(),
-    ]).then(([i, a, s, r]) => {
-      setIncident(i ?? null);
+      bffV1.alerts.list().catch(() => [] as Alert[]),
+      bffV1.strategies.list().catch(() => [] as Strategy[]),
+      bffV1.runtimes.list().catch(() => [] as Runtime[]),
+    ]).then(([a, s, r]) => {
       setAlerts(a);
       setStrategies(s);
       setRuntimes(r);
     });
   }, [id]);
 
+  if (loading) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
   if (!incident) {
     return (
       <>
-        <PageHeader title={t("incident.notFound")} />
+        <PageHeader
+          title={
+            isError
+              ? t("detail.loadState.errorTitle", { entity: "Incident", defaultValue: "Could Not Load Incident" })
+              : t("incident.notFound")
+          }
+        />
         <PageBody>
-          <Card className="p-6 text-sm text-muted-foreground">{t("incident.notFoundHint")}</Card>
+          <Card className="p-6 text-sm text-muted-foreground">
+            {isError
+              ? t("detail.loadState.errorDescription", {
+                entity: "Incident",
+                id,
+                error: error ?? "unknown error",
+                defaultValue: `Failed to load Incident detail for ID ${id}: ${error ?? "unknown error"}`,
+              })
+              : t("incident.notFoundHint")}
+          </Card>
         </PageBody>
       </>
     );

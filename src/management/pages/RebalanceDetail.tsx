@@ -3,9 +3,10 @@ import { useParams, useNavigate } from "react-router-dom";
 import { safePercent } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { bffV1, runActionSafe } from "@/lib/bff-v1";
+import { useLiveDetail } from "@/lib/bff-v1/useLiveDetail";
 import { useT } from "@/platform/hooks";
 import type { ApprovalRequest, AuditEvent, Rebalance, CapitalPool, Strategy } from "@/lib/bff-v1";
-import { Download, Send, Inbox } from "lucide-react";
+import { AlertTriangle, Download, Send, Inbox } from "lucide-react";
 import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -40,8 +41,11 @@ export const RebalanceDetail = () => {
   const t = useT();
   const navigate = useNavigate();
   const { can } = usePermissions();
-  const [r, setR] = useState<Rebalance | undefined>();
-  const [loading, setLoading] = useState(true);
+  const { data: r, loading, isError, error } = useLiveDetail<Rebalance>(
+    id,
+    (entityId) => bffV1.rebalances.get(entityId),
+    { kinds: ["rebalances"] },
+  );
   const [pool, setPool] = useState<CapitalPool | undefined>();
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
   const [audit, setAudit] = useState<AuditEvent[]>([]);
@@ -51,24 +55,19 @@ export const RebalanceDetail = () => {
   const [strategies, setStrategies] = useState<Strategy[]>([]);
 
   useEffect(() => {
-    if (!id) {
-      setLoading(false);
+    if (!r) {
+      setPool(undefined);
       return;
     }
-    setLoading(true);
-    bffV1.rebalances.get(id)
-      .then((rb) => {
-        setR(rb);
-        if (rb) {
-          setMachineState(mapState(rb.state));
-          bffV1.capitalPools.get(rb.targetPoolId).then(setPool);
-        }
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
-    bffV1.approvals.list().then((all) => setApprovals(all.filter((a) => (a.subject ?? "").includes(id) || (a.kind ?? "").includes("rebalance"))));
-    bffV1.audit.list().then((all) => setAudit(all.filter((a) => a.target === id || a.action?.startsWith("rebalance."))));
-    bffV1.strategies.list().then(setStrategies);
+    setMachineState(mapState(r.state));
+    bffV1.capitalPools.get(r.targetPoolId).then(setPool).catch(() => {});
+  }, [r]);
+
+  useEffect(() => {
+    if (!id) return;
+    bffV1.approvals.list().then((all) => setApprovals(all.filter((a) => (a.subject ?? "").includes(id) || (a.kind ?? "").includes("rebalance")))).catch(() => {});
+    bffV1.audit.list().then((all) => setAudit(all.filter((a) => a.target === id || a.action?.startsWith("rebalance.")))).catch(() => {});
+    bffV1.strategies.list().then(setStrategies).catch(() => {});
   }, [id]);
 
   const transitions = useMemo(
@@ -83,9 +82,22 @@ export const RebalanceDetail = () => {
         <PageHeader title={t("nav.rebalance", { defaultValue: "Rebalance" })} />
         <PageBody>
           <EmptyState
-            icon={<Inbox className="h-8 w-8 text-muted-foreground" />}
-            title={t("rebalance.detail.notFoundTitle", { defaultValue: "Rebalance Not Found" })}
-            description={t("rebalance.detail.notFoundDescription", { id: id ?? "", defaultValue: `Rebalance detail for ID ${id} is not available in the live contract.` })}
+            icon={isError ? <AlertTriangle className="h-8 w-8 text-status-failed" /> : <Inbox className="h-8 w-8 text-muted-foreground" />}
+            title={
+              isError
+                ? t("detail.loadState.errorTitle", { entity: "Rebalance", defaultValue: "Could Not Load Rebalance" })
+                : t("rebalance.detail.notFoundTitle", { defaultValue: "Rebalance Not Found" })
+            }
+            description={
+              isError
+                ? t("detail.loadState.errorDescription", {
+                  entity: "Rebalance",
+                  id: id ?? "",
+                  error: error ?? "unknown error",
+                  defaultValue: `Failed to load Rebalance detail for ID ${id ?? ""}: ${error ?? "unknown error"}`,
+                })
+                : t("rebalance.detail.notFoundDescription", { id: id ?? "", defaultValue: `Rebalance detail for ID ${id} is not available in the live contract.` })
+            }
             cta={{ label: t("governanceDecisions.backToList", { defaultValue: "Back to Governance Decisions" }), onClick: () => navigate("/management/governance-decisions?tab=capital") }}
           />
         </PageBody>

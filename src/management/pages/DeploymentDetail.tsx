@@ -5,11 +5,12 @@ import { tradeJourneyHref } from "@/management/navigation/tradeJourneyLinks";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Rocket, Undo2, TrendingDown, CalendarClock, Inbox } from "lucide-react";
+import { Rocket, Undo2, TrendingDown, CalendarClock, Inbox, AlertTriangle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { bffV1, runActionSafe } from "@/lib/bff-v1";
+import { useLiveDetail } from "@/lib/bff-v1/useLiveDetail";
 import { useT } from "@/platform/hooks";
 import type { ApprovalRequest, AuditEvent, Deployment, Runtime } from "@/lib/bff-v1";
 import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
@@ -29,8 +30,11 @@ export const DeploymentDetail = () => {
   const t = useT();
   const navigate = useNavigate();
   const location = useLocation();
-  const [d, setD] = useState<Deployment | undefined>();
-  const [loading, setLoading] = useState(true);
+  const { data: d, setData: setD, loading, isError, error } = useLiveDetail<Deployment>(
+    id,
+    (entityId) => bffV1.deployments.get(entityId),
+    { kinds: ["deployments"] },
+  );
   const [runtimes, setRuntimes] = useState<Runtime[]>([]);
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
   const [audit, setAudit] = useState<AuditEvent[]>([]);
@@ -42,18 +46,10 @@ export const DeploymentDetail = () => {
   const [scheduleAt, setScheduleAt] = useState<string>(() => new Date(Date.now() + 86400_000).toISOString().slice(0, 16));
 
   useEffect(() => {
-    if (!id) {
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    setD(undefined);
-    Promise.all([
-      bffV1.deployments.get(id).then(setD).catch(() => setD(undefined)),
-      bffV1.runtimes.list().then(setRuntimes).catch(() => {}),
-      bffV1.approvals.list().then(setApprovals).catch(() => {}),
-      bffV1.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action?.startsWith("deployment.")))).catch(() => {}),
-    ]).finally(() => setLoading(false));
+    if (!id) return;
+    bffV1.runtimes.list().then(setRuntimes).catch(() => {});
+    bffV1.approvals.list().then(setApprovals).catch(() => {});
+    bffV1.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action?.startsWith("deployment.")))).catch(() => {});
   }, [id]);
   if (loading) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
   if (!d) {
@@ -62,9 +58,22 @@ export const DeploymentDetail = () => {
         <PageHeader title={t("nav.deployments", { defaultValue: "Deployments" })} />
         <PageBody>
           <EmptyState
-            icon={<Inbox className="h-8 w-8 text-muted-foreground" />}
-            title={t("deployment.detail.notFoundTitle", { defaultValue: "Deployment Not Found" })}
-            description={t("deployment.detail.notFoundDescription", { id: id ?? "", defaultValue: `Deployment detail for ID ${id} is not available in the live contract.` })}
+            icon={isError ? <AlertTriangle className="h-8 w-8 text-status-failed" /> : <Inbox className="h-8 w-8 text-muted-foreground" />}
+            title={
+              isError
+                ? t("detail.loadState.errorTitle", { entity: "Deployment", defaultValue: "Could Not Load Deployment" })
+                : t("deployment.detail.notFoundTitle", { defaultValue: "Deployment Not Found" })
+            }
+            description={
+              isError
+                ? t("detail.loadState.errorDescription", {
+                  entity: "Deployment",
+                  id: id ?? "",
+                  error: error ?? "unknown error",
+                  defaultValue: `Failed to load Deployment detail for ID ${id ?? ""}: ${error ?? "unknown error"}`,
+                })
+                : t("deployment.detail.notFoundDescription", { id: id ?? "", defaultValue: `Deployment detail for ID ${id} is not available in the live contract.` })
+            }
             cta={{ label: t("actions.back", { defaultValue: "Back to Deployments" }), onClick: () => navigate("/management/deployments") }}
           />
         </PageBody>

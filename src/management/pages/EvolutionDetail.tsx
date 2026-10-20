@@ -1,14 +1,17 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { safeDateTime } from "@/lib/utils";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { EmptyState } from "@/components/ui/empty-state";
+import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { bffV1, runActionSafe } from "@/lib/bff-v1";
+import { useLiveDetail } from "@/lib/bff-v1/useLiveDetail";
 import { useT } from "@/platform/hooks";
 import type { Alert, ApprovalRequest, AuditEvent, EvolutionProgram, ResearchExperiment } from "@/lib/bff-v1";
-import { Pause, Play, GitBranch, CheckCircle } from "lucide-react";
+import { AlertTriangle, Inbox, Pause, Play, GitBranch, CheckCircle } from "lucide-react";
 import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
 import { StatCard } from "@/platform/components/StatCard";
 import { Progress } from "@/components/ui/progress";
@@ -48,7 +51,11 @@ export const EvolutionDetail = () => {
   const { id } = useParams();
   const t = useT();
   const nav = useNavigate();
-  const [e, setE] = useState<EvolutionProgram | undefined>();
+  const { data: e, loading, isError, error, refresh } = useLiveDetail<EvolutionProgram>(
+    id,
+    (entityId) => bffV1.evolution.get(entityId),
+    { kinds: ["evolution"] },
+  );
   const [experiments, setExperiments] = useState<ResearchExperiment[]>([]);
   const [audit, setAudit] = useState<AuditEvent[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
@@ -58,20 +65,50 @@ export const EvolutionDetail = () => {
 
   const refreshProgram = async () => {
     if (!id) return;
-    const refreshed = await bffV1.evolution.get(id);
-    if (refreshed) setE(refreshed);
+    await refresh();
   };
 
   useEffect(() => {
     if (!id) return;
-    bffV1.evolution.get(id).then(setE);
-    bffV1.research.list().then(setExperiments);
-    bffV1.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action?.startsWith("evolution."))));
-    bffV1.alerts.list().then((a) => setAlerts(a.filter((x) => x.relatedTarget === id || x.source?.includes("evolution"))));
-    bffV1.approvals.list().then((a) => setApprovals(a.filter((x) => x.subject?.includes(id ?? "") || x.kind?.includes("evolution"))));
+    bffV1.research.list().then(setExperiments).catch(() => {});
+    bffV1.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action?.startsWith("evolution.")))).catch(() => {});
+    bffV1.alerts.list().then((a) => setAlerts(a.filter((x) => x.relatedTarget === id || x.source?.includes("evolution")))).catch(() => {});
+    bffV1.approvals.list().then((a) => setApprovals(a.filter((x) => x.subject?.includes(id ?? "") || x.kind?.includes("evolution")))).catch(() => {});
   }, [id]);
 
-  if (!e) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
+  if (loading) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
+  if (!e) {
+    return (
+      <>
+        <PageHeader title={t("nav.evolution", { defaultValue: "Evolution" })} />
+        <PageBody>
+          <EmptyState
+            icon={isError ? <AlertTriangle className="h-8 w-8 text-status-failed" /> : <Inbox className="h-8 w-8 text-muted-foreground" />}
+            title={
+              isError
+                ? t("detail.loadState.errorTitle", { entity: "Evolution Program", defaultValue: "Could Not Load Evolution Program" })
+                : t("detail.loadState.notFoundTitle", { entity: "Evolution Program", defaultValue: "Evolution Program Not Found" })
+            }
+            description={
+              isError
+                ? t("detail.loadState.errorDescription", {
+                  entity: "Evolution Program",
+                  id: id ?? "",
+                  error: error ?? "unknown error",
+                  defaultValue: `Failed to load Evolution Program detail for ID ${id ?? ""}: ${error ?? "unknown error"}`,
+                })
+                : t("detail.loadState.notFoundDescription", {
+                  entity: "Evolution Program",
+                  id: id ?? "",
+                  defaultValue: `Evolution Program detail for ID ${id ?? ""} is not available in the live contract.`,
+                })
+            }
+            cta={{ label: t("actions.back", { defaultValue: "Back to Evolution" }), onClick: () => nav("/management/evolution") }}
+          />
+        </PageBody>
+      </>
+    );
+  }
   const rawState = e.status ?? e.state;
   const machineState = mapState(typeof rawState === "string" ? rawState : undefined);
 
@@ -203,13 +240,13 @@ export const EvolutionDetail = () => {
             content: (
               <>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <StatCard label="Generation" value={`G${e.generation}`} />
-                  <StatCard label="Population" value={e.population.toString()} />
+                  <StatCard label="Generation" value={`G${e.generation ?? 0}`} />
+                  <StatCard label="Population" value={(e.population ?? 0).toString()} />
                   <StatCard label="Best Fitness" value={(e.bestFitness ?? 0).toFixed(3)} tone="success" />
-                  <StatCard label="Progress" value={`${(e.progress * 100).toFixed(0)}%`} />
+                  <StatCard label="Progress" value={`${((e.progress ?? 0) * 100).toFixed(0)}%`} />
                 </div>
                 <Section title={t("detail.section.generationProgress")}>
-                  <Progress value={e.progress * 100} className="h-2" />
+                  <Progress value={(e.progress ?? 0) * 100} className="h-2" />
                 </Section>
                 <Section title={t("lifecycle.title")}>
                   <LifecycleStepper machine={evolutionMachine} current={machineState} i18nPrefix="lifecycle.evolution" />

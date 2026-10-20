@@ -1,0 +1,67 @@
+{
+  "task_id": "FE-MGMT-DETAIL-LOAD-STATES-20261020",
+  "captured_at": "2026-10-20T19:25:00Z",
+  "fe_url": "https://app.dev.mvl-cap.tw",
+  "bff_base_url": "https://api.dev.mvl-cap.tw",
+  "fe_base_commit": "55b241504",
+  "bff_commit": "77bb7b33f",
+  "hosted_reproduction": {
+    "observed_at": "2026-10-20T18:4xZ",
+    "fe_commit": "55b241504",
+    "bff_commit": "77bb7b33f",
+    "list_route": "/management/artifacts",
+    "navigated_route": "/management/artifacts/undefined",
+    "bff_request": "GET /bff/artifacts/undefined",
+    "bff_status": 404,
+    "bff_response_body": {
+      "detail": "Research artifact not found"
+    },
+    "observed_ui_symptom": "Clicking an artifact row without an id on /management/artifacts navigated to /management/artifacts/undefined; GET /bff/artifacts/undefined returned 404 Research artifact not found and ArtifactDetail remained stuck on '載入中…' ('Loading...') forever."
+  },
+  "shared_helper": "src/lib/bff-v1/useLiveDetail.ts",
+  "migrated_pages": [
+    "src/management/pages/ObjectListPage.tsx",
+    "src/management/pages/ArtifactDetail.tsx",
+    "src/management/pages/ChannelDetail.tsx",
+    "src/management/pages/EvolutionDetail.tsx",
+    "src/management/pages/DeploymentDetail.tsx",
+    "src/management/pages/RankingFormulaDetail.tsx",
+    "src/management/pages/CapitalPoolDetail.tsx",
+    "src/management/pages/IncidentDetail.tsx",
+    "src/management/pages/McpDetail.tsx",
+    "src/management/pages/PersonaDetail.tsx",
+    "src/management/pages/RebalanceDetail.tsx",
+    "src/management/pages/ResearchDetail.tsx",
+    "src/management/pages/SkillDetail.tsx",
+    "src/management/pages/StrategyDetail.tsx",
+    "src/management/pages/ToolDetail.tsx",
+    "src/management/pages/governance/RoutePolicyDetail.tsx",
+    "src/management/pages/oversight/HumanGateDetail.tsx"
+  ],
+  "fixed_surfaces": [
+    {
+      "surface": "useLiveDetail shared helper (src/lib/bff-v1/useLiveDetail.ts)",
+      "failing_behavior_on_base": "No shared live detail hook existed next to useLiveList.ts and useLiveListV1.ts; detail pages either called bffV1.X.get(id).then(setX) with no catch/state machine or maintained ad-hoc page-local loading booleans that conflated 404 and 500.",
+      "base_test_failure": "FAIL src/lib/bff-v1/__tests__/useLiveDetail.test.ts: Cannot find module '@/lib/bff-v1/useLiveDetail' on base commit 55b241504.",
+      "passing_test_output": "PASS src/lib/bff-v1/__tests__/useLiveDetail.test.ts (5 tests) 211ms — distinguishes loading, ready, not-found (404 / missing id / undefined result), and error (500 / transport failure)."
+    },
+    {
+      "surface": "ArtifactDetail (/management/artifacts/:id), ChannelDetail (/management/channels/:id), EvolutionDetail (/management/evolution/:id)",
+      "failing_behavior_on_base": "ArtifactDetail.tsx:29, ChannelDetail.tsx:21, and EvolutionDetail.tsx:67 invoked bffV1.{artifacts,channels,evolution}.get(id).then(setX) without catching rejections or tracking load state, leaving the page on '載入中…' / 'Loading...' forever after a 404 or 500 response.",
+      "base_test_failure": "FAIL src/management/pages/ArtifactDetail.test.tsx, ChannelDetail.test.tsx, EvolutionDetail.test.tsx: Unhandled Rejection BffError: HTTP 404 / HTTP 500; expected 'Artifact Not Found' / 'Could Not Load Artifact' but page remained on 'Loading...'.",
+      "passing_test_output": "PASS src/management/pages/ArtifactDetail.test.tsx (2 tests), PASS src/management/pages/ChannelDetail.test.tsx (2 tests), PASS src/management/pages/EvolutionDetail.test.tsx (2 tests) — 404 renders not-found EmptyState and 500 renders error EmptyState with HTTP 500 detail; neither stays on 'Loading...' or '載入中…'."
+    },
+    {
+      "surface": "DeploymentDetail (/management/deployments/:id) & RankingFormulaDetail (/management/ranking/formulas/:id)",
+      "failing_behavior_on_base": "DeploymentDetail.tsx and RankingFormulaDetail.tsx used page-local loading state and caught all errors into undefined, rendering 'Deployment Not Found' / 'Ranking Policy Not Found' even when the BFF returned HTTP 500.",
+      "base_test_failure": "FAIL src/management/pages/DeploymentDetail.test.tsx: expected 'Could Not Load Deployment' on HTTP 500 but rendered 'Deployment Not Found'.",
+      "passing_test_output": "PASS src/management/pages/DeploymentDetail.test.tsx (3 tests) 265ms, PASS src/management/pages/DeploymentDetail.tradeJourneys.test.tsx (1 test), PASS src/management/pages/RankingFormulaDetail.test.tsx (1 test) — 404 renders Not Found EmptyState and 500 renders Could Not Load EmptyState via useLiveDetail."
+    },
+    {
+      "surface": "ObjectListPage row navigation (src/management/pages/ObjectListPage.tsx)",
+      "failing_behavior_on_base": "ObjectListPage passed onRowClick={(r) => navigate(rowHref ? rowHref(r) : `${basePath}/${encodeURIComponent(r.id)}`)} unconditionally, making rows with undefined/empty id clickable (cursor-pointer) and navigating to /management/.../undefined.",
+      "base_test_failure": "FAIL src/management/pages/ObjectListPage.test.tsx: row without id had class 'cursor-pointer' and clicking navigated to '/management/artifacts/undefined'.",
+      "passing_test_output": "PASS src/management/pages/ObjectListPage.test.tsx (7 tests) 522ms — resolveObjectRowHref returns undefined for missing/undefined ids, rows without an id are not clickable, and clicking does not navigate or build hrefs containing undefined."
+    }
+  ]
+}

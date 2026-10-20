@@ -599,6 +599,12 @@ export default {
   detail: {
     // TJ-I18N-SSE-001 — key existed only as call-site defaultValue before.
     tradeJourneys: { viewTradeJourneys: "View Trade Journeys" },
+    loadState: {
+      notFoundTitle: "{{entity}} Not Found",
+      notFoundDescription: "{{entity}} detail for ID {{id}} is not available in the live contract.",
+      errorTitle: "Could Not Load {{entity}}",
+      errorDescription: "Failed to load {{entity}} detail for ID {{id}}: {{error}}",
+    },
     section: {
       routing: "Routing",
       hypothesis: "Hypothesis",

@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { mgmt } from "@/lib/bff-v1";
+import { formatDetailError, isNotFoundError } from "@/lib/bff-v1/useLiveDetail";
 import { useV5Live } from "@/management/pages/v5/useV5Live";
 import { CheckCircle2, Loader2, XCircle } from "lucide-react";
 import { toast } from "sonner";
@@ -30,7 +31,7 @@ export function personaIdFromDetail(itemId: string, manageHref?: string): string
 export const HumanGateDetailPage = () => {
   const { t } = useTranslation();
   const { id = "" } = useParams<{ id: string }>();
-  const { data, loading, refresh } = useV5Live((signal) => mgmt.humanInbox.get(id, { signal }), [id], {
+  const { data, loading, error, refresh } = useV5Live((signal) => mgmt.humanInbox.get(id, { signal }), [id], {
     cacheKey: `oversight.humanGateDetail.${id}`,
   });
   const [searchParams] = useSearchParams();
@@ -38,6 +39,7 @@ export const HumanGateDetailPage = () => {
   const [rationale, setRationale] = useState("");
   const [submittingDecision, setSubmittingDecision] = useState<PromotionReviewDecisionValue | null>(null);
   const item = data;
+  const hasLoadError = Boolean(error) && !isNotFoundError(error);
 
   if (loading && !item) {
     return (
@@ -68,7 +70,9 @@ export const HumanGateDetailPage = () => {
           </Button>
         </header>
         <Card className="p-4 text-sm text-muted-foreground">
-          {t("mgmt.inbox.detailUnavailableBody")}
+          {hasLoadError
+            ? `${t("mgmt.inbox.detailUnavailableBody")} (${formatDetailError(error)})`
+            : t("mgmt.inbox.detailUnavailableBody")}
         </Card>
       </section>
     );

@@ -2,13 +2,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { PageHeader, PageBody } from "@/platform/components/PageHeader";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ManagementTableScroll } from "@/management/components/ManagementTableScroll";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, GitCompare } from "lucide-react";
+import { AlertTriangle, ArrowLeft, GitCompare, Inbox } from "lucide-react";
 import { bffV1 } from "@/lib/bff-v1";
+import { useLiveDetail } from "@/lib/bff-v1/useLiveDetail";
 import type { Persona, PolicyVersion, RoutePolicy } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { RoutePolicyEditor } from "@/management/components/governance/RoutePolicyEditor";
@@ -21,18 +23,23 @@ export const RoutePolicyDetail = () => {
   const { id } = useParams();
   const t = useT();
   const nav = useNavigate();
-  const [policy, setPolicy] = useState<RoutePolicy | undefined>();
+  const { data: policy, loading, isError, error } = useLiveDetail<RoutePolicy>(
+    id,
+    (entityId) => bffV1.routePolicies.get(entityId),
+    { kinds: ["routePolicies"] },
+  );
   const [versions, setVersions] = useState<PolicyVersion[]>([]);
   const [persona, setPersona] = useState<Persona | undefined>();
   const [leftV, setLeftV] = useState<string>("");
   const [rightV, setRightV] = useState<string>("");
 
   useEffect(() => {
+    if (!policy || policy.name) return;
+    bffV1.personas.get(policy.personaId).then(setPersona).catch(() => {});
+  }, [policy]);
+
+  useEffect(() => {
     if (!id) return;
-    bffV1.routePolicies.get(id).then((p) => {
-      setPolicy(p);
-      if (p && !p.name) bffV1.personas.get(p.personaId).then(setPersona).catch(() => {});
-    }).catch(() => {});
     bffV1.policyVersions.list(id).then((v) => {
       setVersions(v);
       if (v.length >= 2) {
@@ -42,13 +49,45 @@ export const RoutePolicyDetail = () => {
         setLeftV(v[0].id);
         setRightV(v[0].id);
       }
-    });
+    }).catch(() => {});
   }, [id]);
 
   const left = useMemo(() => versions.find((v) => v.id === leftV), [versions, leftV]);
   const right = useMemo(() => versions.find((v) => v.id === rightV), [versions, rightV]);
 
-  if (!policy) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
+  if (loading) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
+  if (!policy) {
+    return (
+      <>
+        <PageHeader title={t("nav.routePolicies", { defaultValue: "Route Policies" })} />
+        <PageBody>
+          <EmptyState
+            icon={isError ? <AlertTriangle className="h-8 w-8 text-status-failed" /> : <Inbox className="h-8 w-8 text-muted-foreground" />}
+            title={
+              isError
+                ? t("detail.loadState.errorTitle", { entity: "Route Policy", defaultValue: "Could Not Load Route Policy" })
+                : t("detail.loadState.notFoundTitle", { entity: "Route Policy", defaultValue: "Route Policy Not Found" })
+            }
+            description={
+              isError
+                ? t("detail.loadState.errorDescription", {
+                  entity: "Route Policy",
+                  id: id ?? "",
+                  error: error ?? "unknown error",
+                  defaultValue: `Failed to load Route Policy detail for ID ${id ?? ""}: ${error ?? "unknown error"}`,
+                })
+                : t("detail.loadState.notFoundDescription", {
+                  entity: "Route Policy",
+                  id: id ?? "",
+                  defaultValue: `Route Policy detail for ID ${id ?? ""} is not available in the live contract.`,
+                })
+            }
+            cta={{ label: t("actions.back", { defaultValue: "Back to Route Policies" }), onClick: () => nav("/management/governance/policies") }}
+          />
+        </PageBody>
+      </>
+    );
+  }
 
   return (
     <>

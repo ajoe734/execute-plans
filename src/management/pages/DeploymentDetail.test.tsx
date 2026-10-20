@@ -85,4 +85,29 @@ describe("Deployments list & detail BFF contract alignment", () => {
     expect(await screen.findByText("Deployment Not Found")).toBeInTheDocument();
     expect(screen.queryByText("Loading...")).not.toBeInTheDocument();
   });
+
+  it("renders Could Not Load Deployment when GET /bff/deployments/:id returns 500 instead of not-found or loading", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("/bff/deployments/")) {
+        return jsonResponse({ detail: "Deployment service unavailable" }, 500);
+      }
+      return jsonResponse({ data: [], items: [] }, 200);
+    });
+
+    render(
+      <I18nextProvider i18n={i18n}>
+        <MemoryRouter initialEntries={["/management/deployments/dep-500"]}>
+          <Routes>
+            <Route path="/management/deployments/:id" element={<DeploymentDetail />} />
+          </Routes>
+        </MemoryRouter>
+      </I18nextProvider>,
+    );
+
+    expect(await screen.findByText("Could Not Load Deployment")).toBeInTheDocument();
+    expect(screen.getByText(/Failed to load Deployment detail for ID dep-500: HTTP 500/)).toBeInTheDocument();
+    expect(screen.queryByText("Deployment Not Found")).not.toBeInTheDocument();
+    expect(screen.queryByText("Loading...")).not.toBeInTheDocument();
+  });
 });
