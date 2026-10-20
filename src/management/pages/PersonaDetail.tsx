@@ -290,11 +290,13 @@ export const PersonaDetail = () => {
   const immutableStrategyTargets = routed
     .map(immutableStrategyTarget)
     .filter((item): item is ImmutableStrategyTarget => Boolean(item));
+  const headerState = p.lifecycleStatus?.trim() || p.state;
 
   return (
     <>
       <ObjectDetailLayout
         object={p}
+        state={headerState}
         subtitle={`${p.archetype} · ${p.id}`}
         actions={
           <>
