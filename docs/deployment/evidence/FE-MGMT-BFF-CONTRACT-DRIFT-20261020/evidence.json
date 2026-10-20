@@ -1,0 +1,56 @@
+{
+  "task_id": "FE-MGMT-BFF-CONTRACT-DRIFT-20261020",
+  "captured_at": "2026-10-20T09:08:00Z",
+  "bff_base_url": "https://api.dev.mvl-cap.tw",
+  "bff_commit": "c1169fe7ee38ca844dd8c93b7acd09abd73f947b",
+  "fe_base_commit": "bfc2607cd",
+  "fixtures_dir": "src/lib/bff-v1/__tests__/fixtures/hosted-20261020",
+  "fixtures": [
+    "readiness-ep5.json",
+    "readiness-broker-live.json",
+    "readiness-bff-ha.json",
+    "readiness-strict-publish.json",
+    "search.json",
+    "deployments.json",
+    "route-policies.json",
+    "personas.json",
+    "capital-pools.json"
+  ],
+  "fixed_pages": [
+    {
+      "page": "LiveReadinessPage (/management/oversight/ep5-readiness, /broker-live-readiness, /bff-ha-readiness, /strict-publish-audit)",
+      "adapter": "adaptReadiness (src/lib/bff-v1/management.ts)",
+      "failing_behavior_on_base": "GET /bff/management/readiness/{ep5,broker-live,bff-ha,strict-publish} returns 200 with data.{readinessStatus,canProceed,checks,blockingReasons,evidenceRefs} and no header/checklist. adaptReadiness returned null unless data.header and data.checklist existed, causing liveOnlyRead to resolve undefined and LiveReadinessPage to display 'Live readiness data unavailable'.",
+      "base_test_failure": "FAIL src/lib/bff-v1/__tests__/readinessAdapter.test.ts: AssertionError: ep5 should not return undefined (expected undefined to be defined); LiveReadinessPage rendered 'Live readiness data unavailable' instead of 'EP5 prerequisite evidence bundle' and 'broker-live-readiness'.",
+      "passing_test_output": "PASS src/lib/bff-v1/__tests__/readinessAdapter.test.ts (2 tests) 220ms — adapts ep5 (6 checks, 6 blockers, 7 packets), broker-live (3 checks, 1 blocker, 2 packets), bff-ha (4 checks, 4 blockers, 2 packets), and strict-publish (4 checks, 4 blockers, 2 packets); renders checks, blockers, and evidence refs on LiveReadinessPage."
+    },
+    {
+      "page": "CommandPalette global search & section jump",
+      "adapter": "search (src/lib/bff-v1/search.ts) + CommandPalette (src/platform/components/CommandPalette.tsx)",
+      "failing_behavior_on_base": "GET /bff/search returns lowercase/snake_case type values ('strategy', 'persona', 'capital_pool'). TYPE_ORDER and entityRoute in CommandPalette only matched PascalCase ('Strategy', 'Persona', 'CapitalPool'), dropping all entity search results. Section matching only checked the active locale label, so searching 'risk' in zh-TW missed '風險中心'.",
+      "base_test_failure": "FAIL src/lib/bff-v1/__tests__/searchResults.test.ts & src/platform/components/CommandPalette.test.tsx: expected type 'Strategy' but received 'strategy'; CommandPalette dropped all 3 captured search results and failed to find '風險中心' when querying 'risk' in zh-TW.",
+      "passing_test_output": "PASS src/lib/bff-v1/__tests__/searchResults.test.ts (1 test) 21ms & PASS src/platform/components/CommandPalette.test.tsx (2 tests) — maps strategy/persona/capital_pool to Strategy/Persona/CapitalPool, renders persona and strategy names from captured search.json, navigates to entity routes, and matches section entries by id and en-US label in zh-TW."
+    },
+    {
+      "page": "DeploymentsList (/management/deployments) & DeploymentDetail (/management/deployments/:id)",
+      "adapter": "normalizeBaseObjectFields (src/lib/bff-v1/domainReads.ts) + DeploymentDetail (src/management/pages/DeploymentDetail.tsx)",
+      "failing_behavior_on_base": "BASE_OBJECT_FIELD_ALIASES.id listed artifact_id before plan_id. BFF /bff/deployments rows contain both plan_id and artifact_id without id, so row.id became artifact_id; clicking a row navigated to /management/deployments/{artifact_id}, which 404s on BFF detail (resolvable by plan_id only). DeploymentDetail had no catch handler and stayed on 'Loading...' forever on 404.",
+      "base_test_failure": "FAIL src/lib/bff-v1/__tests__/detailNormalization.test.ts & src/management/pages/DeploymentDetail.test.tsx: expected 'plan-persona-paper-3623d82dbfb3d31f75d8' but received 'artifact-persona-paper-3623d82dbfb3d31f75d8'; Unhandled Rejection BffError: HTTP 404 and stuck on 'Loading...'.",
+      "passing_test_output": "PASS src/lib/bff-v1/__tests__/detailNormalization.test.ts (5 tests) 10ms & PASS src/management/pages/DeploymentDetail.test.tsx (2 tests) 254ms — row.id resolves to plan_id, clicking row navigates to /management/deployments/plan-persona-paper-3623d82dbfb3d31f75d8, and 404 renders 'Deployment Not Found' EmptyState."
+    },
+    {
+      "page": "RoutePoliciesList (/management/governance/policies) & RoutePolicyDetail (/management/governance/policies/:id)",
+      "adapter": "listRoutePolicies / getRoutePolicy (src/lib/bff-v1/governance.ts, src/lib/bff-v1/paths.ts)",
+      "failing_behavior_on_base": "liveRoutePolicies fetched /bff/personas and then issued N+1 GET /bff/personas/{id}/route-policy requests (~90 requests), repeated on getRoutePolicy, while RoutePoliciesList fetched /bff/personas again.",
+      "base_test_failure": "FAIL src/lib/bff-v1/__tests__/routePolicies.test.ts: BffError HTTP 500 on unexpected per-persona /bff/personas/{id}/route-policy request instead of reading GET /bff/route-policies.",
+      "passing_test_output": "PASS src/lib/bff-v1/__tests__/routePolicies.test.ts (1 test) 32ms — reads GET /bff/route-policies?page_size=200 once and GET /bff/personas once (0 per-persona route-policy requests) and synthesizes default {personaId, version: 'v1', rules: [], consult_policy: null} for personas without a stored policy."
+    },
+    {
+      "page": "CapitalPoolsList (/management/capital, /management/governance-decisions?tab=capital) & DataSourceWizard / DataSourceDetail",
+      "adapter": "CapitalPoolsList (src/management/pages/Lists.tsx) + locales (src/i18n/locales/zh-TW.ts, src/i18n/locales/en-US.ts)",
+      "failing_behavior_on_base": "CapitalPoolsList filters out capitalScope === 'paper'. When all returned pools are paper (87 pools in dev), the empty state displayed governanceDecisions.capitalEmptyState ('尚無資金池資料' / 'upstream is not producing for it'). Data source wizard step 5 showed raw i18n keys mgmt.dataSources.detail.cadenceCron and mgmt.dataSources.detail.timezone.",
+      "base_test_failure": "FAIL src/management/pages/ObjectListPage.test.tsx: Unable to find element stating paper pools are hidden; rendered 'No capital pools yet — upstream is not producing for it' instead.",
+      "passing_test_output": "PASS src/management/pages/ObjectListPage.test.tsx (6 tests) 517ms — renders 'No formal capital pools (2 paper pools hidden)' when 2 paper pools are filtered out, and resolves zh-TW strings for mgmt.dataSources.detail.cadenceCron ('排程週期 (Cron)') and mgmt.dataSources.detail.timezone ('時區')."
+    }
+  ]
+}

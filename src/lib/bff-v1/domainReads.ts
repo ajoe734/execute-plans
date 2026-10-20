@@ -102,10 +102,10 @@ export const recordString = (record: UnknownRecord | undefined, ...keys: string[
 };
 
 const BASE_OBJECT_FIELD_ALIASES: Record<string, string[]> = {
-  id: ["id", "experiment_id", "artifact_id", "pool_id", "plan_id", "channel_id", "incident_id"],
-  name: ["name", "title", "label", "experiment_name", "plan_name", "pool_name"],
-  owner: ["owner", "owner_id", "ownerId", "owned_by"],
-  updatedAt: ["updatedAt", "updated_at", "last_updated_at", "lastUpdatedAt"],
+  id: ["id", "plan_id", "experiment_id", "artifact_id", "pool_id", "channel_id", "incident_id"],
+  name: ["name", "title", "label", "experiment_name", "plan_name", "pool_name", "plan_id"],
+  owner: ["owner", "owner_id", "ownerId", "owned_by", "created_by"],
+  updatedAt: ["updatedAt", "updated_at", "last_updated_at", "lastUpdatedAt", "created_at"],
   state: ["state", "status", "lifecycle_state", "lifecycleState"],
   risk: ["risk", "risk_level", "riskLevel"],
 };

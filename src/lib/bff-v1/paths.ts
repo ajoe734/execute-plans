@@ -51,6 +51,7 @@ export const paths = {
 
   personas: () => `${BASE}/personas`,
   persona: (id: string) => `${BASE}/personas/${enc(id)}`,
+  routePolicies: () => `${BASE}/route-policies`,
   personaRoutePolicy: (id: string) => `${BASE}/personas/${enc(id)}/route-policy`,
   personaEvaluations: (id: string) => `${BASE}/personas/${enc(id)}/evaluations`,
   personaMemory: (id: string) => `${BASE}/personas/${enc(id)}/memory`,

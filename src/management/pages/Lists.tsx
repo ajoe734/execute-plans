@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { ObjectListPage } from "./ObjectListPage";
 import { lists } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
@@ -119,15 +120,15 @@ export const PersonasList = () => {
 
 export const CapitalPoolsList = () => {
   const t = useT();
+  const [hiddenPaperCount, setHiddenPaperCount] = useState(0);
   return (
     <ObjectListPage<FleetCapitalPool>
       title={t("nav.capitalPools")}
       loader={async () => {
         const env = await capitalPoolsWithFleetFallback();
-        return {
-          ...env,
-          items: env.items.filter((item) => item.capitalScope !== "paper"),
-        };
+        const items = env.items.filter((item) => item.capitalScope !== "paper");
+        setHiddenPaperCount(env.items.length - items.length);
+        return { ...env, items };
       }}
       basePath="/management/capital" liveKinds={["CapitalPool","AllocationLimit","PoolFreeze"]}
       listHref="/management/governance-decisions?tab=capital"
@@ -137,7 +138,10 @@ export const CapitalPoolsList = () => {
       focusLabel={t("nav.capitalPools")}
       focusMatch={capitalPoolMatchesFocus}
       createBehavior={{ kind: "drawer", entity: "capitalPool" }}
-      emptyState={{
+      emptyState={hiddenPaperCount > 0 ? {
+        title: t("governanceDecisions.capitalEmptyState.paperHiddenTitle", { count: hiddenPaperCount }),
+        description: t("governanceDecisions.capitalEmptyState.paperHiddenDescription", { count: hiddenPaperCount }),
+      } : {
         title: t("governanceDecisions.capitalEmptyState.title"),
         description: t("governanceDecisions.capitalEmptyState.description"),
       }}
