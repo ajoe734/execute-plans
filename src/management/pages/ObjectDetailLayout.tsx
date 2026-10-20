@@ -14,6 +14,8 @@ export interface DetailTab {
 
 interface Props<T extends BaseObject> {
   object: T;
+  state?: string;
+  risk?: BaseObject["risk"];
   subtitle?: string;
   actions?: ReactNode;
   tabs: DetailTab[];
@@ -21,10 +23,10 @@ interface Props<T extends BaseObject> {
   env?: "research" | "paper" | "live";
 }
 
-export function ObjectDetailLayout<T extends BaseObject>({ object, subtitle, actions, tabs, defaultTab, env }: Props<T>) {
+export function ObjectDetailLayout<T extends BaseObject>({ object, state, risk, subtitle, actions, tabs, defaultTab, env }: Props<T>) {
   return (
     <>
-      <EntityHeader object={object} subtitle={subtitle} actions={actions} env={env} />
+      <EntityHeader object={object} state={state} risk={risk} subtitle={subtitle} actions={actions} env={env} />
       <PageBody>
         <Tabs defaultValue={defaultTab ?? tabs[0].value}>
           <TabsList>
