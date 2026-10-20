@@ -1,0 +1,13 @@
+{
+  "acquiredAt": "2026-10-20T16:38:44Z",
+  "branch": "environment-coordination",
+  "expiresAt": "2026-10-20T16:43:44Z",
+  "heartbeatAt": "2026-10-20T16:38:44Z",
+  "leaseId": "2302d1bb-d9e6-4f46-9467-a504a9c14ea0",
+  "mode": "qualification",
+  "owner": "l12-compose:manual:l12q39459072137x1:2342:5a3e0e289c47",
+  "path": ".pantheon/environment-leases/pantheon-dev-environment.json",
+  "repository": "ajoe734/execute-plans",
+  "resource": "pantheon-dev-environment",
+  "schemaVersion": 1
+}
