@@ -44,6 +44,9 @@ const TYPE_ORDER = [
   "Oversight",
 ];
 
+const normalizeSearchType = (type: string) =>
+  TYPE_ORDER.find((k) => k.toLowerCase() === String(type ?? "").replace(/_/g, "").toLowerCase()) ?? type;
+
 export const CommandPalette = ({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) => {
   const t = useT();
   const [q, setQ] = useState("");
@@ -66,15 +69,15 @@ export const CommandPalette = ({ open, onOpenChange }: { open: boolean; onOpenCh
 
   const grouped = useMemo(() => {
     const g: Record<string, SearchResult[]> = {};
-    for (const r of results) (g[r.type] ||= []).push(r);
+    for (const r of results) (g[normalizeSearchType(r.type)] ||= []).push(r);
     return TYPE_ORDER.filter((k) => g[k]?.length).map((k) => [k, g[k]] as const);
   }, [results]);
 
   const matchingSections = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return SECTION_ENTRIES
-      .map((entry) => ({ ...entry, label: t(entry.labelKey) }))
-      .filter((entry) => !needle || entry.label.toLowerCase().includes(needle));
+      .map((entry) => ({ ...entry, label: t(entry.labelKey), enLabel: t(entry.labelKey, { lng: "en-US" }) }))
+      .filter((entry) => !needle || [entry.label, entry.enLabel, entry.id].some((s) => s.toLowerCase().includes(needle)));
   }, [q, t]);
 
   return (
@@ -109,7 +112,7 @@ export const CommandPalette = ({ open, onOpenChange }: { open: boolean; onOpenCh
                       key={r.id}
                       onSelect={() => {
                         onOpenChange(false);
-                        const route = entityRoute[r.type];
+                        const route = entityRoute[normalizeSearchType(r.type)];
                         if (route) navigate(route(r.id));
                       }}
                     >

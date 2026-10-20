@@ -258,6 +258,8 @@ export default {
     capitalEmptyState: {
       title: "No capital pools yet",
       description: "This surface has no capital pool data yet — the backend is reachable but upstream is not producing for it.",
+      paperHiddenTitle: "No formal capital pools ({{count}} paper pools hidden)",
+      paperHiddenDescription: "{{count}} paper capital pool(s) exist upstream and are hidden on this formal capital pools surface.",
     },
     rebalanceEmptyState: {
       title: "No rebalance proposals yet",
@@ -3247,6 +3249,8 @@ export default {
         allowedHosts: "Allowed Host Patterns",
         fetchLimits: "Fetch Limits",
         scheduleUniverse: "Scheduling & Active Universe",
+        cadenceCron: "Cadence (Cron)",
+        timezone: "Timezone",
         jitterSeconds: "Jitter (Seconds)",
         universePolicyRef: "Universe Policy Ref",
         canaryRuns: "Bounded Canary History",

@@ -31,8 +31,8 @@ export const RoutePolicyDetail = () => {
     if (!id) return;
     bffV1.routePolicies.get(id).then((p) => {
       setPolicy(p);
-      if (p) bffV1.personas.get(p.personaId).then(setPersona);
-    });
+      if (p && !p.name) bffV1.personas.get(p.personaId).then(setPersona).catch(() => {});
+    }).catch(() => {});
     bffV1.policyVersions.list(id).then((v) => {
       setVersions(v);
       if (v.length >= 2) {

@@ -7,7 +7,9 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import i18n from "@/i18n";
 import { liveStatus } from "@/lib/bff-v1/liveStatus";
 import { ObjectListPage } from "./ObjectListPage";
+import { CapitalPoolsList } from "./Lists";
 import type { CreateBehavior } from "@/lib/writeIntents/types";
+import capitalPoolsFixture from "@/lib/bff-v1/__tests__/fixtures/hosted-20261020/capital-pools.json";
 
 const mocks = vi.hoisted(() => ({
   useLiveListV1: vi.fn(),
@@ -172,5 +174,45 @@ describe("ObjectListPage", () => {
     renderObjectList({ kind: "drawer", entity: "persona" });
 
     expect(screen.getByRole("button", { name: "Create Paper Persona" })).toBeEnabled();
+  });
+
+  it("states that paper pools are hidden and how many exist on CapitalPoolsList empty state and translates dataSources cadenceCron/timezone in zh-TW", async () => {
+    let loaded = false;
+    mocks.useLiveListV1.mockImplementation((loader: () => Promise<{ items: unknown[] }>) => {
+      if (!loaded) {
+        loaded = true;
+        void loader();
+      }
+      return {
+        items: [],
+        pending: 0,
+        refresh: vi.fn(),
+        meta: capitalPoolsFixture.meta,
+      };
+    });
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
+      new Response(JSON.stringify(capitalPoolsFixture), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    render(
+      <I18nextProvider i18n={i18n}>
+        <TooltipProvider>
+          <MemoryRouter initialEntries={["/management/capital"]}>
+            <Routes>
+              <Route path="/management/capital" element={<CapitalPoolsList />} />
+            </Routes>
+          </MemoryRouter>
+        </TooltipProvider>
+      </I18nextProvider>,
+    );
+
+    expect(await screen.findByText("No formal capital pools (2 paper pools hidden)")).toBeInTheDocument();
+    expect(screen.queryByText(/upstream is not producing/i)).not.toBeInTheDocument();
+
+    expect(i18n.getFixedT("zh-TW")("mgmt.dataSources.detail.cadenceCron")).not.toBe("mgmt.dataSources.detail.cadenceCron");
+    expect(i18n.getFixedT("zh-TW")("mgmt.dataSources.detail.timezone")).not.toBe("mgmt.dataSources.detail.timezone");
   });
 });

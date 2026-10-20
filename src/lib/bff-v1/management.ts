@@ -38,7 +38,7 @@ import {
 } from "@/lib/v5/management/humanInbox";
 import type { ManagementLinkSet } from "@/lib/v5/management/links";
 import type { PersonaIntentTrace, PersonaIntentVisibility } from "@/lib/v5/management/personaIntent";
-import type { ReadinessPageModel } from "@/lib/v5/management/readiness";
+import { composeReadinessHeader, type ChecklistItemStatus, type ReadinessBlocker, type ReadinessChecklistItem, type ReadinessPacket, type ReadinessPageModel } from "@/lib/v5/management/readiness";
 // PM-12 imports
 import type {
   PortfolioSummary, CapitalPoolSummaryRow, HoldingRow,
@@ -3493,11 +3493,41 @@ export function adaptPersonaIntent(raw: unknown): PersonaIntentTrace[] | null {
 
 // ---------- Readiness ----------
 
-function adaptReadiness(raw: unknown): ReadinessPageModel | null {
+export function adaptReadiness(raw: unknown): ReadinessPageModel | null {
   const data = unwrap(raw);
   if (!isObject(data)) return null;
-  if (!isObject(data.header) || !Array.isArray(data.checklist)) return null;
-  return data as unknown as ReadinessPageModel;
+  if (isObject(data.header) && Array.isArray(data.checklist)) return data as unknown as ReadinessPageModel;
+  const rawChecks = Array.isArray(data.checks) ? data.checks.filter(isObject) : null;
+  if (!rawChecks) return null;
+  const meta = isObject(raw) && isObject(raw.meta) ? raw.meta : {};
+  const snapshotAt = asString(meta.snapshot_at ?? data.snapshot_at ?? data.updatedAt, "");
+  const checkById = new Map(rawChecks.map((c) => [asString(c.id), c]));
+  const checklist: ReadinessChecklistItem[] = rawChecks.map((c) => {
+    const s = asString(c.status).toLowerCase();
+    const status: ChecklistItemStatus = s === "pass" ? "pass" : s === "fail" || s === "blocked" ? "fail" : s === "not_applicable" ? "not_applicable" : "pending";
+    const refs = stringList(c.evidence_refs ?? c.evidenceRefs);
+    return {
+      id: asString(c.id), label: asString(c.label, asString(c.id)), status,
+      ownerRole: asString(c.ownerRole ?? c.owner_role, "bff"),
+      evidenceRequired: refs.length > 0, evidenceAttached: refs.length > 0 && status === "pass",
+      blocking: Boolean(c.blocking), description: asString(c.message ?? c.description) || undefined,
+    };
+  });
+  const blockers: ReadinessBlocker[] = stringList(data.blockingReasons ?? data.blocking_reasons).map((id) => {
+    const c = checkById.get(id);
+    return { id, severity: "critical", reason: asString(c?.message ?? c?.label, id), requiredRole: "operator", nextAction: asString(c?.label, id), linkedEvidence: stringList(c?.evidence_refs ?? c?.evidenceRefs) };
+  });
+  const rawRefs = Array.isArray(data.evidenceRefs ?? data.evidence_refs) ? ((data.evidenceRefs ?? data.evidence_refs) as unknown[]).filter(isObject) : [];
+  const packets: ReadinessPacket[] = rawRefs.map((e) => ({
+    id: asString(e.id ?? e.path), packetType: asString(e.label ?? e.packetType, asString(e.id)),
+    status: e.exists === true && !e.historical_only ? "verified" : e.historical_only ? "stale" : e.exists === false ? "missing" : "pending",
+    createdAt: asString(e.createdAt ?? e.created_at, snapshotAt), linkedObject: asString(e.path) || undefined, href: asString(e.href) || undefined,
+  }));
+  const baseHeader = composeReadinessHeader(asString(data.title, asString(data.id)), "dev", checklist, blockers, snapshotAt);
+  const rawStatus = asString(data.readinessStatus ?? data.readiness_status).toLowerCase();
+  const status = rawStatus === "ready" || rawStatus === "blocked" || rawStatus === "pending" ? rawStatus : baseHeader.status;
+  const rawProceed = data.canProceed ?? data.can_proceed;
+  return { header: { ...baseHeader, status, canProceed: typeof rawProceed === "boolean" ? rawProceed : status === "ready" }, checklist, packets, blockers };
 }
 
 function stringList(value: unknown): string[] {

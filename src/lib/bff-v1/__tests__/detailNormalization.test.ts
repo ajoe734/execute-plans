@@ -6,8 +6,16 @@
 // (rendered as literal `status.undefined` / `risk.undefined` / blank fields).
 import { describe, it, expect } from "vitest";
 import { normalizeBaseObjectFields } from "../domainReads";
+import deploymentsFixture from "./fixtures/hosted-20261020/deployments.json";
 
 describe("normalizeBaseObjectFields", () => {
+  it("prefers plan_id over artifact_id on captured BFF deployment rows", () => {
+    const firstRow = deploymentsFixture.data[0];
+    const normalized = normalizeBaseObjectFields(firstRow) as Record<string, unknown>;
+    expect(normalized.id).toBe("plan-persona-paper-3623d82dbfb3d31f75d8");
+    expect(normalized.id).not.toBe(firstRow.artifact_id);
+  });
+
   it("recovers state/risk/owner/updatedAt/name from common snake_case aliases", () => {
     const raw = {
       id: "pool-1",
