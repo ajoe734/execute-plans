@@ -2,10 +2,13 @@ import { useEffect, useState } from "react";
 import { safeDateTime } from "@/lib/utils";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { bffV1, runActionSafe } from "@/lib/bff-v1";
+import { useLiveDetail } from "@/lib/bff-v1/useLiveDetail";
 import { useT } from "@/platform/hooks";
 import type { Artifact, AuditEvent, Deployment } from "@/lib/bff-v1";
-import { Download, Trash2 } from "lucide-react";
+import { AlertTriangle, Download, Inbox, Trash2 } from "lucide-react";
 import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
 import { StatCard } from "@/platform/components/StatCard";
 import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
@@ -19,19 +22,54 @@ export const ArtifactDetail = () => {
   const { id } = useParams();
   const t = useT();
   const navigate = useNavigate();
-  const [a, setA] = useState<Artifact | undefined>();
+  const { data: a, loading, isError, error } = useLiveDetail<Artifact>(
+    id,
+    (entityId) => bffV1.artifacts.get(entityId),
+    { kinds: ["artifacts"] },
+  );
   const [deployments, setDeployments] = useState<Deployment[]>([]);
   const [audit, setAudit] = useState<AuditEvent[]>([]);
   const [retireOpen, setRetireOpen] = useState(false);
 
   useEffect(() => {
     if (!id) return;
-    bffV1.artifacts.get(id).then(setA);
-    bffV1.deployments.list().then((all) => setDeployments(all.filter((d) => d.artifactId === id)));
-    bffV1.audit.list().then((au) => setAudit(au.filter((x) => x.target === id || x.action?.startsWith("artifact."))));
+    bffV1.deployments.list().then((all) => setDeployments(all.filter((d) => d.artifactId === id))).catch(() => {});
+    bffV1.audit.list().then((au) => setAudit(au.filter((x) => x.target === id || x.action?.startsWith("artifact.")))).catch(() => {});
   }, [id]);
 
-  if (!a) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
+  if (loading) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
+  if (!a) {
+    return (
+      <>
+        <PageHeader title={t("nav.artifacts", { defaultValue: "Artifacts" })} />
+        <PageBody>
+          <EmptyState
+            icon={isError ? <AlertTriangle className="h-8 w-8 text-status-failed" /> : <Inbox className="h-8 w-8 text-muted-foreground" />}
+            title={
+              isError
+                ? t("detail.loadState.errorTitle", { entity: "Artifact", defaultValue: "Could Not Load Artifact" })
+                : t("detail.loadState.notFoundTitle", { entity: "Artifact", defaultValue: "Artifact Not Found" })
+            }
+            description={
+              isError
+                ? t("detail.loadState.errorDescription", {
+                  entity: "Artifact",
+                  id: id ?? "",
+                  error: error ?? "unknown error",
+                  defaultValue: `Failed to load Artifact detail for ID ${id ?? ""}: ${error ?? "unknown error"}`,
+                })
+                : t("detail.loadState.notFoundDescription", {
+                  entity: "Artifact",
+                  id: id ?? "",
+                  defaultValue: `Artifact detail for ID ${id ?? ""} is not available in the live contract.`,
+                })
+            }
+            cta={{ label: t("actions.back", { defaultValue: "Back to Artifacts" }), onClick: () => navigate("/management/artifacts") }}
+          />
+        </PageBody>
+      </>
+    );
+  }
 
   return (
     <>

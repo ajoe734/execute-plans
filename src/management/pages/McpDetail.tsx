@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { bffV1 } from "@/lib/bff-v1";
+import { useLiveDetail } from "@/lib/bff-v1/useLiveDetail";
 import type { McpServer, McpTool } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
@@ -12,7 +14,7 @@ import { StatusBadge } from "@/platform/components/StatusBadge";
 import { Badge } from "@/components/ui/badge";
 import { LifecycleStepper } from "@/platform/components/LifecycleStepper";
 import { mcpServerMachine, type McpServerState } from "@/lib/stateMachines";
-import { ShieldCheck } from "lucide-react";
+import { AlertTriangle, ShieldCheck } from "lucide-react";
 import { envBadge, scopeTone } from "./CapabilitiesLists";
 import { McpRegistryPanel } from "@/management/components/detail/McpRegistryPanel";
 import { ActivityMonitor } from "@/management/components/detail/ActivityMonitor";
@@ -28,19 +30,35 @@ export const McpServerDetail = () => {
   const { id } = useParams();
   const t = useT();
   const navigate = useNavigate();
-  const [s, setS] = useState<McpServer | undefined>();
-  const [loaded, setLoaded] = useState(false);
+  const { data: s, loading, isError, error } = useLiveDetail<McpServer>(
+    id,
+    (entityId) => bffV1.mcpServers.get(entityId),
+    { kinds: ["mcpServers"] },
+  );
   const [tools, setTools] = useState<McpTool[]>([]);
   useEffect(() => {
     if (!id) return;
-    setLoaded(false);
-    bffV1.mcpServers.get(id).then((row) => { setS(row); setLoaded(true); }).catch(() => setLoaded(true));
-    bffV1.mcpTools.list().then((all) => setTools(all.filter((t) => t.serverId === id)));
+    bffV1.mcpTools.list().then((all) => setTools(all.filter((t) => t.serverId === id))).catch(() => {});
   }, [id]);
+  if (loading) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
   if (!s) {
-    return loaded
-      ? <CapabilityDetailEmptyState kind="MCP server" id={id} />
-      : <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
+    if (isError) {
+      return (
+        <div className="p-6">
+          <EmptyState
+            icon={<AlertTriangle className="h-8 w-8 text-status-failed" />}
+            title={t("detail.loadState.errorTitle", { entity: "MCP Server", defaultValue: "Could Not Load MCP Server" })}
+            description={t("detail.loadState.errorDescription", {
+              entity: "MCP Server",
+              id: id ?? "",
+              error: error ?? "unknown error",
+              defaultValue: `Failed to load MCP Server detail for ID ${id ?? ""}: ${error ?? "unknown error"}`,
+            })}
+          />
+        </div>
+      );
+    }
+    return <CapabilityDetailEmptyState kind="MCP server" id={id} />;
   }
 
   const machineState: McpServerState = HEALTH_TO_STATE[s.health] ?? "healthy";
@@ -156,17 +174,30 @@ export const McpToolDetail = () => {
   const { id } = useParams();
   const t = useT();
   const navigate = useNavigate();
-  const [tool, setTool] = useState<McpTool | undefined>();
-  const [loaded, setLoaded] = useState(false);
-  useEffect(() => {
-    if (!id) return;
-    setLoaded(false);
-    bffV1.mcpTools.get(id).then((row) => { setTool(row); setLoaded(true); }).catch(() => setLoaded(true));
-  }, [id]);
+  const { data: tool, loading, isError, error } = useLiveDetail<McpTool>(
+    id,
+    (entityId) => bffV1.mcpTools.get(entityId),
+    { kinds: ["mcpTools"] },
+  );
+  if (loading) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
   if (!tool) {
-    return loaded
-      ? <CapabilityDetailEmptyState kind="MCP tool" id={id} />
-      : <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
+    if (isError) {
+      return (
+        <div className="p-6">
+          <EmptyState
+            icon={<AlertTriangle className="h-8 w-8 text-status-failed" />}
+            title={t("detail.loadState.errorTitle", { entity: "MCP Tool", defaultValue: "Could Not Load MCP Tool" })}
+            description={t("detail.loadState.errorDescription", {
+              entity: "MCP Tool",
+              id: id ?? "",
+              error: error ?? "unknown error",
+              defaultValue: `Failed to load MCP Tool detail for ID ${id ?? ""}: ${error ?? "unknown error"}`,
+            })}
+          />
+        </div>
+      );
+    }
+    return <CapabilityDetailEmptyState kind="MCP tool" id={id} />;
   }
 
   const liveGranted = tool.envGrants.includes("live");

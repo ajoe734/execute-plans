@@ -4,6 +4,7 @@ import { safePercent, safeRatio } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { bffV1, runActionSafe, mgmt } from "@/lib/bff-v1";
+import { useLiveDetail } from "@/lib/bff-v1/useLiveDetail";
 import { capitalPoolWithFleetFallback, getPersonaIdsForPoolId } from "./capitalPoolsFleetFallback";
 import { useT } from "@/platform/hooks";
 import type { ApprovalRequest, AuditEvent, CapitalPool, Rebalance, Strategy } from "@/lib/bff-v1";
@@ -34,9 +35,24 @@ export const CapitalPoolDetail = () => {
   const { id } = useParams();
   const t = useT();
   const navigate = useNavigate();
-  const [c, setC] = useState<CapitalPool | undefined>();
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | undefined>();
+  const { data: c, loading, isError, error } = useLiveDetail<CapitalPool>(
+    id,
+    async (entityId) => {
+      let pool: CapitalPool | undefined;
+      let detailError: unknown;
+      try {
+        pool = await bffV1.capitalPools.get(entityId);
+      } catch (err) {
+        detailError = err;
+      }
+      pool ??= await capitalPoolWithFleetFallback(entityId);
+      if (!pool && detailError) {
+        throw detailError;
+      }
+      return pool;
+    },
+    { kinds: ["capitalPools"] },
+  );
   const [strats, setStrats] = useState<Strategy[]>([]);
   const [rebalances, setRebalances] = useState<Rebalance[]>([]);
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
@@ -46,88 +62,65 @@ export const CapitalPoolDetail = () => {
   useEffect(() => {
     let cancelled = false;
 
-    async function load() {
-      if (!id) {
-        setLoading(false);
-        setError("missing-id");
-        return;
-      }
-
-      setLoading(true);
-      setError(undefined);
-      setC(undefined);
+    async function loadRelated(pool: CapitalPool) {
       setStrats([]);
       setRebalances([]);
       setApprovals([]);
       setAudit([]);
 
-      try {
-        let pool: CapitalPool | undefined;
-        let detailError: string | undefined;
-        try {
-          pool = await bffV1.capitalPools.get(id);
-        } catch (err) {
-          detailError = err instanceof Error ? err.message : String(err);
+      const poolIds = new Set(
+        [id, pool.id, pool.poolId, pool.pool_id].filter((value): value is string => Boolean(value)),
+      );
+      const mentionsPool = (value?: string) => Boolean(value && Array.from(poolIds).some((poolId) => value.includes(poolId)));
+
+      const [allStrategies, allRebalances, allApprovals, allAudit, fleetRows] = await Promise.all([
+        bffV1.strategies.list().catch((): Strategy[] => []),
+        bffV1.rebalances.list().catch((): Rebalance[] => []),
+        bffV1.approvals.list().catch((): ApprovalRequest[] => []),
+        bffV1.audit.list().catch((): AuditEvent[] => []),
+        mgmt.personaFleet.get().catch(() => [] as unknown[]),
+      ]);
+      if (cancelled) return;
+
+      const boundPersonaIds = getPersonaIdsForPoolId(id || "", fleetRows as unknown as ManagementPersonaFleetRow[]);
+      const rawPool = pool as unknown as Record<string, unknown>;
+      const boundStrats = allStrategies.filter((s) => {
+        if (poolIds.has(s.capitalPoolId)) return true;
+        const isPaper =
+          rawPool.capitalMode === "paper" ||
+          rawPool.capital_mode === "paper" ||
+          rawPool.capitalScope === "paper" ||
+          rawPool.capital_scope === "paper" ||
+          (id || "").startsWith("paper-ledger-") ||
+          (id || "").startsWith("pool-crypto-paper");
+        if (isPaper) {
+          return s.personaIds.some((pId) => boundPersonaIds.has(pId));
         }
-        pool ??= await capitalPoolWithFleetFallback(id);
-        if (cancelled) return;
-        if (!pool) {
-          setError(detailError ?? "not-found");
-          return;
-        }
+        return false;
+      });
 
-        setC(pool);
-        const poolIds = new Set(
-          [id, pool.id, pool.poolId, pool.pool_id].filter((value): value is string => Boolean(value)),
-        );
-        const mentionsPool = (value?: string) => Boolean(value && Array.from(poolIds).some((poolId) => value.includes(poolId)));
-
-        const [allStrategies, allRebalances, allApprovals, allAudit, fleetRows] = await Promise.all([
-          bffV1.strategies.list().catch((): Strategy[] => []),
-          bffV1.rebalances.list().catch((): Rebalance[] => []),
-          bffV1.approvals.list().catch((): ApprovalRequest[] => []),
-          bffV1.audit.list().catch((): AuditEvent[] => []),
-          mgmt.personaFleet.get().catch(() => [] as unknown[]),
-        ]);
-        if (cancelled) return;
-
-        const boundPersonaIds = getPersonaIdsForPoolId(id || "", fleetRows as unknown as ManagementPersonaFleetRow[]);
-        const rawPool = pool as unknown as Record<string, unknown>;
-        const boundStrats = allStrategies.filter((s) => {
-          if (poolIds.has(s.capitalPoolId)) return true;
-          const isPaper =
-            rawPool.capitalMode === "paper" ||
-            rawPool.capital_mode === "paper" ||
-            rawPool.capitalScope === "paper" ||
-            rawPool.capital_scope === "paper" ||
-            (id || "").startsWith("paper-ledger-") ||
-            (id || "").startsWith("pool-crypto-paper");
-          if (isPaper) {
-            return s.personaIds.some((pId) => boundPersonaIds.has(pId));
-          }
-          return false;
-        });
-
-        setStrats(boundStrats);
-        setRebalances(allRebalances.filter((r) => poolIds.has(r.targetPoolId)));
-        setApprovals(allApprovals.filter((a) => mentionsPool(a.subject) || (a.kind ?? "").includes("capital")));
-        setAudit(allAudit.filter((x) => poolIds.has(x.target) || x.action?.startsWith("capital.") || x.action?.startsWith("rebalance.")));
-      } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
+      setStrats(boundStrats);
+      setRebalances(allRebalances.filter((r) => poolIds.has(r.targetPoolId)));
+      setApprovals(allApprovals.filter((a) => mentionsPool(a.subject) || (a.kind ?? "").includes("capital")));
+      setAudit(allAudit.filter((x) => poolIds.has(x.target) || x.action?.startsWith("capital.") || x.action?.startsWith("rebalance.")));
     }
 
-    void load();
+    if (c) {
+      void loadRelated(c);
+    } else {
+      setStrats([]);
+      setRebalances([]);
+      setApprovals([]);
+      setAudit([]);
+    }
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [c, id]);
 
   if (loading) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
   if (!c) {
-    const description = error && !["missing-id", "not-found"].includes(error)
+    const description = isError && error
       ? t("phase13.capital.detail.notFoundWithError", { id, error })
       : t("phase13.capital.detail.notFoundDescription", { id: id ?? "" });
     return (

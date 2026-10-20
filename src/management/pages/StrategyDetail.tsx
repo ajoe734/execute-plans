@@ -15,6 +15,7 @@ import { StatusBadge } from "@/platform/components/StatusBadge";
 import { RiskBadge } from "@/platform/components/RiskBadge";
 import { bffWrites } from "@/lib/bff-v1/writes";
 import { bffV1, runActionSafe } from "@/lib/bff-v1";
+import { useLiveDetail } from "@/lib/bff-v1/useLiveDetail";
 import { NonProductionActionButton } from "@/management/components/NonProductionActionButton";
 import { useT } from "@/platform/hooks";
 import type { Strategy, Job, AuditEvent, ApprovalRequest, Alert, Incident, Artifact, EvolutionProgram, ResearchExperiment } from "@/lib/bff-v1";
@@ -45,7 +46,6 @@ export const StrategyDetail = () => {
   const nav = useNavigate();
   const location = useLocation();
   const { can } = usePermissions();
-  const [s, setS] = useState<Strategy | undefined>();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [audit, setAudit] = useState<AuditEvent[]>([]);
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
@@ -59,41 +59,46 @@ export const StrategyDetail = () => {
   const [watchers, setWatchers] = useState<Watcher[]>([]);
   const [journal, setJournal] = useState<DecisionJournalEntry[]>([]);
   const [loadErrors, setLoadErrors] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (!id) return;
-    let current = true;
-    const failures: string[] = [];
-    const read = <T,>(label: string, request: Promise<T>, fallback: T): Promise<T> =>
-      request.catch(() => { failures.push(label); return fallback; });
-    setS(undefined);
-    setLoadErrors([]);
-    setLoading(true);
-    Promise.all([
-      read("Strategy", bffV1.strategies.get(id), undefined),
-      read("Jobs", bffV1.jobs.list(), []), read("Audit", bffV1.audit.list(), []),
-      read("Approvals", bffV1.approvals.list(), []), read("Alerts", bffV1.alerts.list(), []),
-      read("Incidents", bffV1.incidents.list(), []), read("Artifacts", bffV1.artifacts.list(), []),
-      read("Research", bffV1.research.list(), []), read("Evolution", bffV1.evolution.list(), []),
-      read("Watchers", bffV1.watchers.forSubject("Strategy", id), []),
-      read("Decision journal", bffV1.decisionJournal.forSubject("Strategy", id), []),
-    ]).then(([strat, j, a, ap, al, inc, ar, ex, ev, w, dj]) => {
-      if (!current) return;
+  const { data: s, setData: setS, loading, isError } = useLiveDetail<Strategy>(
+    id,
+    async (entityId) => {
+      const failures: string[] = [];
+      const read = <T,>(label: string, request: Promise<T>, fallback: T): Promise<T> =>
+        request.catch(() => { failures.push(label); return fallback; });
+      setLoadErrors([]);
+      let stratError: unknown;
+      const [strat, j, a, ap, al, inc, ar, ex, ev, w, dj] = await Promise.all([
+        bffV1.strategies.get(entityId).catch((err) => {
+          stratError = err;
+          failures.push("Strategy");
+          return undefined;
+        }),
+        read("Jobs", bffV1.jobs.list(), []), read("Audit", bffV1.audit.list(), []),
+        read("Approvals", bffV1.approvals.list(), []), read("Alerts", bffV1.alerts.list(), []),
+        read("Incidents", bffV1.incidents.list(), []), read("Artifacts", bffV1.artifacts.list(), []),
+        read("Research", bffV1.research.list(), []), read("Evolution", bffV1.evolution.list(), []),
+        read("Watchers", bffV1.watchers.forSubject("Strategy", entityId), []),
+        read("Decision journal", bffV1.decisionJournal.forSubject("Strategy", entityId), []),
+      ]);
       setLoadErrors(failures);
-      setLoading(false);
-      setS(strat); setJobs(j);
-      setAudit(a.filter((x) => x.target === id || (x.target ?? "").includes(id)));
-      setApprovals(ap.filter((x) => (x.subject ?? "").includes(id)));
-      setAlerts(al.filter((x) => x.relatedTarget === id || (x.source ?? "").includes(id) || (x.title ?? "").includes(id)));
-      setIncidents(inc.filter((x) => x.affected?.includes(id)));
+      setJobs(j);
+      setAudit(a.filter((x) => x.target === entityId || (x.target ?? "").includes(entityId)));
+      setApprovals(ap.filter((x) => (x.subject ?? "").includes(entityId)));
+      setAlerts(al.filter((x) => x.relatedTarget === entityId || (x.source ?? "").includes(entityId) || (x.title ?? "").includes(entityId)));
+      setIncidents(inc.filter((x) => x.affected?.includes(entityId)));
       setArtifacts(ar.slice(0, 5));
       setExperiments(ex.slice(0, 6));
       setEvolutions(ev.filter((e) => e.parentAlpha === strat?.alpha));
-      setWatchers(w); setJournal(dj);
-    });
-    return () => { current = false; };
-  }, [id]);
+      setWatchers(w);
+      setJournal(dj);
+      if (!strat && stratError) {
+        throw stratError;
+      }
+      return strat;
+    },
+    { kinds: ["strategies"] },
+  );
 
   const machineState: StrategyState = useMemo(() => {
     if (!s) return "discovered";
@@ -109,7 +114,7 @@ export const StrategyDetail = () => {
   );
 
   if (loading) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
-  if (!s) return <div role="alert" className="p-6">{loadErrors.includes("Strategy") ? "Strategy could not be loaded." : "Strategy not found."}</div>;
+  if (!s) return <div role="alert" className="p-6">{isError || loadErrors.includes("Strategy") ? "Strategy could not be loaded." : "Strategy not found."}</div>;
 
   const params: { key: string; value: string; note: string }[] = [];
   const paperLive: { metric: string; paper: string; live: string; delta: string }[] = [];

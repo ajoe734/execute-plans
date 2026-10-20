@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { safeDateTime } from "@/lib/utils";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import { bffV1 } from "@/lib/bff-v1";
+import { useLiveDetail } from "@/lib/bff-v1/useLiveDetail";
 import type { AuditEvent, Persona, Skill } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
@@ -10,9 +11,10 @@ import { AuditTimeline } from "@/platform/components/AuditTimeline";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { StatCard } from "@/platform/components/StatCard";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { LifecycleStepper } from "@/platform/components/LifecycleStepper";
 import { skillMachine, type SkillState } from "@/lib/stateMachines";
-import { ExternalLink } from "lucide-react";
+import { AlertTriangle, ExternalLink } from "lucide-react";
 import { SkillPromptEditor } from "@/management/components/detail/SkillPromptEditor";
 import { SkillRiskPanel } from "@/management/components/detail/SkillRiskPanel";
 import { Card } from "@/components/ui/card";
@@ -22,16 +24,17 @@ export const SkillDetail = () => {
   const { id } = useParams();
   const t = useT();
   const nav = useNavigate();
-  const [skill, setSkill] = useState<Skill | undefined>();
-  const [loaded, setLoaded] = useState(false);
+  const { data: skill, loading, isError, error } = useLiveDetail<Skill>(
+    id,
+    (entityId) => bffV1.skills.get(entityId),
+    { kinds: ["skills"] },
+  );
   const [personas, setPersonas] = useState<Persona[]>([]);
   const [audit, setAudit] = useState<AuditEvent[]>([]);
   useEffect(() => {
     if (!id) return;
-    setLoaded(false);
-    bffV1.skills.get(id).then((row) => { setSkill(row); setLoaded(true); }).catch(() => setLoaded(true));
-    bffV1.personas.list().then(setPersonas);
-    bffV1.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action?.startsWith("skill."))));
+    bffV1.personas.list().then(setPersonas).catch(() => {});
+    bffV1.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action?.startsWith("skill.")))).catch(() => {});
   }, [id]);
 
   const machineState: SkillState = useMemo(() => {
@@ -40,10 +43,25 @@ export const SkillDetail = () => {
     return skill.publishedAt ? "active" : "approved";
   }, [skill]);
 
+  if (loading) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
   if (!skill) {
-    return loaded
-      ? <CapabilityDetailEmptyState kind="skill" id={id} />
-      : <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
+    if (isError) {
+      return (
+        <div className="p-6">
+          <EmptyState
+            icon={<AlertTriangle className="h-8 w-8 text-status-failed" />}
+            title={t("detail.loadState.errorTitle", { entity: "Skill", defaultValue: "Could Not Load Skill" })}
+            description={t("detail.loadState.errorDescription", {
+              entity: "Skill",
+              id: id ?? "",
+              error: error ?? "unknown error",
+              defaultValue: `Failed to load Skill detail for ID ${id ?? ""}: ${error ?? "unknown error"}`,
+            })}
+          />
+        </div>
+      );
+    }
+    return <CapabilityDetailEmptyState kind="skill" id={id} />;
   }
 
   return (

@@ -35,8 +35,7 @@ import { PersonaVersionHistoryTab } from "../components/detail/PersonaVersionHis
 import { resolvePersonaForDetail } from "./personaDetailData";
 import { PersonaReadinessCard } from "../components/persona/PersonaReadinessCard";
 import { useAgoraWriteAccess } from "@/agora/useAgoraWriteAccess";
-
-type PersonaLoadState = "loading" | "ready" | "not-found" | "error";
+import { useLiveDetail } from "@/lib/bff-v1/useLiveDetail";
 
 export const personaHumanInboxUrl = (personaId: string) =>
   `/management/human-inbox?persona=${encodeURIComponent(personaId)}`;
@@ -110,8 +109,11 @@ export const PersonaDetail = () => {
   const t = useT();
   const navigate = useNavigate();
   const location = useLocation();
-  const [p, setP] = useState<Persona | undefined>();
-  const [loadState, setLoadState] = useState<PersonaLoadState>("loading");
+  const { data: p, setData: setP, loadState } = useLiveDetail<Persona>(
+    id,
+    (entityId) => resolvePersonaForDetail(entityId),
+    { kinds: ["personas"] },
+  );
   const [routed, setRouted] = useState<Strategy[]>([]);
   const [audit, setAudit] = useState<AuditEvent[]>([]);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -126,35 +128,22 @@ export const PersonaDetail = () => {
   useEffect(() => {
     let cancelled = false;
     if (!id) {
-      setP(undefined);
       setRouted([]);
       setAudit([]);
-      setLoadState("not-found");
       return;
     }
 
-    setP(undefined);
     setRouted([]);
     setAudit([]);
-    setLoadState("loading");
 
     Promise.all([
-      resolvePersonaForDetail(id),
       bffV1.strategies.list().catch(() => [] as Strategy[]),
       bffV1.audit.list().catch(() => [] as AuditEvent[]),
-    ])
-      .then(([persona, allStrategies, allAudit]) => {
-        if (cancelled) return;
-        setP(persona);
-        setRouted(allStrategies.filter((s) => s.personaIds.includes(id)));
-        setAudit(allAudit.filter((x) => x.target === id));
-        setLoadState(persona ? "ready" : "not-found");
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setP(undefined);
-        setLoadState("error");
-      });
+    ]).then(([allStrategies, allAudit]) => {
+      if (cancelled) return;
+      setRouted(allStrategies.filter((s) => s.personaIds.includes(id)));
+      setAudit(allAudit.filter((x) => x.target === id));
+    });
 
     return () => { cancelled = true; };
   }, [id]);
