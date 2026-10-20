@@ -13,7 +13,7 @@ import { defaultPersonaLeague } from "@/lib/v5/management/personaLeague";
 import { defaultQuarterlyFormula, defaultQuarterlyRanking } from "@/lib/v5/management/quarterlyRanking";
 import { PersonaLeaguePage } from "./PersonaLeague";
 import { PromotionAllocationPage } from "./PromotionAllocation";
-import { QuarterlyRankingPage } from "./QuarterlyRanking";
+import { ProposalCell, QuarterlyRankingPage } from "./QuarterlyRanking";
 import { RankingsCenterPage } from "../centers/RankingsCenterPage";
 
 const mocks = vi.hoisted(() => ({
@@ -247,15 +247,15 @@ describe("ranking recommendation proposal pages", () => {
   });
 
   it.each([
-    ["a different action", (id: string) => savedProposals(pending(), id, "freeze_persona")],
+    ["another persona's proposal", () => savedProposals(pending(), "other-persona")],
     ["a failed owner read", () => undefined],
-  ])("Persona League does not invent a proposal for %s", (_name, proposals) => {
+  ])("Persona League does not invent a proposal or fallback to legacy row action for %s", (_name, proposals) => {
     const row = { ...defaultPersonaLeague()[0], recommendedAction: "promote_to_canary_candidate" as const };
-    mockLive({ rows: [row], proposals: proposals(row.personaId) });
+    mockLive({ rows: [row], proposals: proposals() });
 
     renderWithRoutes("/management/promotion-allocation", <PersonaLeaguePage />);
-    expect(screen.queryByText(/Promote to canary candidate · /)).not.toBeInTheDocument();
-    expect(screen.getByText("Promote to canary candidate")).toBeInTheDocument();
+    expect(screen.queryByText(/Promote to canary candidate/)).not.toBeInTheDocument();
+    expect(screen.queryByText("No change")).not.toBeInTheDocument();
   });
 
   it.each([
@@ -282,6 +282,156 @@ describe("ranking recommendation proposal pages", () => {
     renderWithRoutes("/management/promotion-allocation", <QuarterlyRankingPage />);
 
     expect(screen.queryByRole("button", { name: /Promote to canary candidate/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Promote to canary candidate/ })).not.toBeInTheDocument();
+  });
+
+  const ACTUAL_RANKING_ROW = {
+    persona_id: "persona-projection-test",
+    score: 69.25,
+    eligibility: "eligible" as const,
+  };
+
+  const SAVED_ADVISORY_RECOMMENDATION = {
+    persona_id: "persona-projection-test",
+    action_id: "promote_to_canary_candidate",
+    rationale: "Saved provider rationale for existing read-only report",
+    ranking_snapshot_id: "ranking-projection-test",
+    evaluator_run_id: "evaluator-projection-test",
+    human_review_state: {
+      status: "advisory_report",
+      decision_status: "not_applicable",
+      owner_decision: null,
+    },
+  };
+
+  it("projects saved Evaluator action, rationale, and source identity on Quarterly Ranking and Persona League when ranking DTO omits recommendation", () => {
+    const proposals = adaptQuarterlyRankingRows({ data: { items: [SAVED_ADVISORY_RECOMMENDATION] } });
+    mockLive({
+      rows: adaptQuarterlyRankingRows({ data: { items: [ACTUAL_RANKING_ROW] } }),
+      formula: defaultQuarterlyFormula(),
+      proposals,
+    });
+
+    const firstMount = renderWithRoutes("/management/quarterly-ranking", <QuarterlyRankingPage />);
+    expect(screen.getByText("Promote to canary candidate")).toBeInTheDocument();
+    expect(screen.getByText("Saved provider rationale for existing read-only report")).toBeInTheDocument();
+    expect(screen.getByText("evaluator-projection-test · ranking-projection-test")).toBeInTheDocument();
+    expect(screen.getByText("69.3")).toBeInTheDocument();
+    expect(screen.queryByText("No change")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Promote to canary candidate/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Promote to canary candidate/ })).not.toBeInTheDocument();
+    firstMount.unmount();
+
+    mockLive({ rows: [ACTUAL_RANKING_ROW], proposals: [SAVED_ADVISORY_RECOMMENDATION] });
+    renderWithRoutes("/management/persona-league", <PersonaLeaguePage />);
+    expect(screen.getByText("Promote to canary candidate")).toBeInTheDocument();
+    expect(screen.getByText("Saved provider rationale for existing read-only report")).toBeInTheDocument();
+    expect(screen.getByText("evaluator-projection-test · ranking-projection-test")).toBeInTheDocument();
+    expect(screen.queryByText("No change")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Promote to canary candidate/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Promote to canary candidate/ })).not.toBeInTheDocument();
+  });
+
+  it("preserves pending and terminal owner decision behavior when ranking DTO omits recommendation and allows explicit no_change", () => {
+    mockLive({
+      rows: [ACTUAL_RANKING_ROW],
+      formula: defaultQuarterlyFormula(),
+      proposals: [{ ...SAVED_ADVISORY_RECOMMENDATION, human_review_state: pending("dec-saved-1") }],
+    });
+    const pendingView = renderWithRoutes("/management/quarterly-ranking", <QuarterlyRankingPage />);
+    const link = screen.getByRole("link", { name: /Promote to canary candidate · pending/ });
+    expect(link).toHaveAttribute("href", "/management/human-inbox/approval%3Adec-saved-1");
+    expect(screen.getByText("Saved provider rationale for existing read-only report")).toBeInTheDocument();
+    pendingView.unmount();
+
+    mockLive({
+      rows: [ACTUAL_RANKING_ROW],
+      formula: defaultQuarterlyFormula(),
+      proposals: [{ ...SAVED_ADVISORY_RECOMMENDATION, human_review_state: decided("approved", "dec-saved-2") }],
+    });
+    const decidedView = renderWithRoutes("/management/quarterly-ranking", <QuarterlyRankingPage />);
+    expect(screen.getByText("Promote to canary candidate · approved")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Promote to canary candidate/ })).not.toBeInTheDocument();
+    decidedView.unmount();
+
+    mockLive({
+      rows: [ACTUAL_RANKING_ROW],
+      formula: defaultQuarterlyFormula(),
+      proposals: [{ ...SAVED_ADVISORY_RECOMMENDATION, action_id: "no_change", rationale: "Explicit saved no_change rationale" }],
+    });
+    renderWithRoutes("/management/quarterly-ranking", <QuarterlyRankingPage />);
+    expect(screen.getByText("No change")).toBeInTheDocument();
+    expect(screen.getByText("Explicit saved no_change rationale")).toBeInTheDocument();
+  });
+
+  it("renders the actual saved owner action when a legacy ranking row action differs, without discarding saved advice or falling back to the ranking row", () => {
+    const savedEvidenceRequest = {
+      ...SAVED_ADVISORY_RECOMMENDATION,
+      action_id: "request_more_evidence",
+      rationale: "Saved owner rationale requesting additional evidence",
+    };
+    mockLive({
+      rows: [{ ...ACTUAL_RANKING_ROW, recommendation: "promote_to_canary_candidate" }],
+      formula: defaultQuarterlyFormula(),
+      proposals: [savedEvidenceRequest],
+    });
+
+    const quarterly = renderWithRoutes("/management/quarterly-ranking", <QuarterlyRankingPage />);
+    expect(screen.getByText("request_more_evidence")).toBeInTheDocument();
+    expect(screen.getByText("Saved owner rationale requesting additional evidence")).toBeInTheDocument();
+    expect(screen.getByText("evaluator-projection-test · ranking-projection-test")).toBeInTheDocument();
+    expect(screen.queryByText(/Promote to canary candidate/)).not.toBeInTheDocument();
+    expect(screen.queryByText("No change")).not.toBeInTheDocument();
+    quarterly.unmount();
+
+    mockLive({
+      rows: [{ ...ACTUAL_RANKING_ROW, recommendedAction: "promote_to_canary_candidate" }],
+      proposals: [savedEvidenceRequest],
+    });
+    renderWithRoutes("/management/persona-league", <PersonaLeaguePage />);
+    expect(screen.getByText("request_more_evidence")).toBeInTheDocument();
+    expect(screen.getByText("Saved owner rationale requesting additional evidence")).toBeInTheDocument();
+    expect(screen.getByText("evaluator-projection-test · ranking-projection-test")).toBeInTheDocument();
+    expect(screen.queryByText(/Promote to canary candidate/)).not.toBeInTheDocument();
+    expect(screen.queryByText("No change")).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["missing owner recommendation", []],
+    ["failed owner recommendation read", undefined],
+  ])("does not fabricate no_change or legacy ranking actions when saved owner advice is absent for %s", (_label, proposals) => {
+    const cellView = renderWithRoutes("/management/quarterly-ranking", <ProposalCell proposal={undefined} />);
+    expect(cellView.container).toHaveTextContent("—");
+    expect(screen.queryByText("No change")).not.toBeInTheDocument();
+    cellView.unmount();
+
+    mockLive({
+      rows: [
+        ACTUAL_RANKING_ROW,
+        { ...ACTUAL_RANKING_ROW, persona_id: "persona-legacy-no-change", recommendation: "no_change" },
+        { ...ACTUAL_RANKING_ROW, persona_id: "persona-legacy-promote", recommendation: "promote_to_canary_candidate" },
+      ],
+      formula: defaultQuarterlyFormula(),
+      proposals,
+    });
+
+    const quarterly = renderWithRoutes("/management/quarterly-ranking", <QuarterlyRankingPage />);
+    expect(screen.queryByText("No change")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Promote to canary candidate/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Promote to canary candidate/ })).not.toBeInTheDocument();
+    quarterly.unmount();
+
+    mockLive({
+      rows: [
+        ACTUAL_RANKING_ROW,
+        { ...ACTUAL_RANKING_ROW, persona_id: "persona-legacy-no-change", recommendedAction: "no_change" },
+        { ...ACTUAL_RANKING_ROW, persona_id: "persona-legacy-promote", recommendedAction: "promote_to_canary_candidate" },
+      ],
+      proposals,
+    });
+    renderWithRoutes("/management/persona-league", <PersonaLeaguePage />);
+    expect(screen.queryByText("No change")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Promote to canary candidate/)).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Promote to canary candidate/ })).not.toBeInTheDocument();
   });
 });

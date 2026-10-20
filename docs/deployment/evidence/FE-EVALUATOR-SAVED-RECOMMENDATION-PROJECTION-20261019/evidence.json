@@ -1,0 +1,83 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "FE-EVALUATOR-SAVED-RECOMMENDATION-PROJECTION-20261019",
+  "title": "Restore saved evaluator advice in existing ranking views",
+  "owner": "Antigravity",
+  "reviewer": "Antigravity2",
+  "repository": "ajoe734/execute-plans",
+  "target_repo": "execute-plans",
+  "base_branch": "dev",
+  "base_commit": "e0e50f914df200f0b192b07a11a9d4ed12788c54",
+  "branch": "task/FE-EVALUATOR-SAVED-RECOMMENDATION-PROJECTION-20261019",
+  "source_head": "887f7b2eccdc60a1700ecc240aab151f88e668fd",
+  "final_head_binding": "Canonical handoff binds the exact final PR head containing this manifest via REVIEW_HEAD_SHA.",
+  "status": "ready-for-independent-exact-head-review",
+  "evidence_kind": "local_validation_only",
+  "sanitized_source_input": {
+    "path": "/tmp/pantheon-assist-20261013/current-state-20261019/FE-EVALUATOR-SAVED-RECOMMENDATION-PROJECTION-20261019-sanitized-source-input.json",
+    "sha256": "bca5164b240f22c1718a84f96fb54de82e886721d51f428edb215c192dd4ab26",
+    "accepted_fe_commit_exhibiting_defect": "4e5bbe67349c51b8b0cca8c4d8fa81a5371f873a",
+    "observed_defect": "QuarterlyRanking and PersonaLeague gated ProposalCell on r.recommendation / r.recommendedAction and fell back to fabricated no_change, hiding saved owner recommendations (e.g. promote_to_canary_candidate) and rationale when the ranking DTO legitimately omitted recommendation after heuristic removal.",
+    "sanitized_source_concerns_path": "/tmp/pantheon-assist-20261013/current-state-20261019/PR854-93347f25-assigned-reviewer-sanitized-source-concerns.json",
+    "prior_submitted_head_preserved_in_history": "93347f2535e2fc518ee6850d00a7173c57768388",
+    "resolved_findings": {
+      "finding_1_proposal_cell_no_fallback_action": "Removed fallbackAction from ProposalCell so only proposal.action_id / proposal.actionId / proposal.recommendation from the saved owner read may supply an action; missing or failed owner reads render '—' even if a ranking/league row carries a legacy no_change or promote_to_canary_candidate field.",
+      "finding_2_use_saved_proposals_no_legacy_action_filter": "Removed the ranking-derived action parameter and filtering from useSavedProposals so saved owner recommendations for a persona/quarter (e.g. request_more_evidence) are never discarded when a legacy ranking row action differs."
+    }
+  },
+  "scoped_artifacts": {
+    "declared": [
+      "src/management/pages/oversight/QuarterlyRanking.tsx",
+      "src/management/pages/oversight/PersonaLeague.tsx",
+      "src/management/pages/oversight/RankingRecommendationPages.test.tsx",
+      "src/management/pages/oversight/LiveOnlyFallbacks.test.tsx",
+      "docs/deployment/evidence/FE-EVALUATOR-SAVED-RECOMMENDATION-PROJECTION-20261019/evidence.json"
+    ],
+    "modified": [
+      "src/management/pages/oversight/QuarterlyRanking.tsx",
+      "src/management/pages/oversight/PersonaLeague.tsx",
+      "src/management/pages/oversight/RankingRecommendationPages.test.tsx",
+      "src/management/pages/oversight/LiveOnlyFallbacks.test.tsx",
+      "docs/deployment/evidence/FE-EVALUATOR-SAVED-RECOMMENDATION-PROJECTION-20261019/evidence.json"
+    ],
+    "unchanged_declared": []
+  },
+  "production_diff_summary": {
+    "files": [
+      "src/management/pages/oversight/QuarterlyRanking.tsx",
+      "src/management/pages/oversight/PersonaLeague.tsx"
+    ],
+    "insertions": 68,
+    "deletions": 31,
+    "net_lines": 37,
+    "budget_max_net_lines": 80
+  },
+  "acceptance_verification": {
+    "AC1_saved_owner_recommendation_projection": "Updated useSavedProposals and ProposalCell in QuarterlyRanking.tsx and wired both QuarterlyRanking.tsx and PersonaLeague.tsx to project only the saved owner recommendation action_id/rationale/source without regenerating advice from scores, filtering by legacy ranking actions, or falling back to fabricated no_change.",
+    "AC2_shared_consumers_rationale_source_identity_and_truthful_fallback": "Both QuarterlyRanking and PersonaLeague render the saved owner action, readable rationale, and source identity (evaluator_run_id and ranking_snapshot_id) for the same persona and quarter while preserving ranking scores and formulas as read-only evidence. Explicit actual saved no_change renders No change; missing or failed saved-owner reads render '—' without claiming a model conclusion. Preserves existing useV5Live AbortSignal and cacheKey boundaries.",
+    "AC3_governance_decision_and_advisory_read_only_posture": "ProposalCell links to /management/human-inbox/approval:<decision_id> only when a genuine pending owner_decision.decision_id exists for a governed action, keeps terminal decisions (approved, approved_with_conditions, rejected, unavailable) read-only, and renders advisory reports (such as promote_to_canary_candidate or request_more_evidence with owner_decision: null) as non-executable read-only text without submit/vote/lifecycle/capital controls.",
+    "AC4_focused_test_suites_and_typecheck": "Extended RankingRecommendationPages.test.tsx and LiveOnlyFallbacks.test.tsx with actual-schema ranking rows lacking recommendation, separate saved owner action/rationale/source identity, and the two sanitized source concern counterexamples (differing legacy ranking action vs saved request_more_evidence, and missing/failed owner read with legacy no_change or promote_to_canary_candidate). Ran both focused Vitest suites plus tsconfig.app.json and tsconfig.agora.json typechecks.",
+    "AC5_scope_budget_and_worker_boundary": "Touched only the 5 declared paths on a clean worktree branched from dev e0e50f914df200f0b192b07a11a9d4ed12788c54. Production net diff is +37 lines (<= 80 budget) and this manifest is 85 lines (<= 400 budget). No VM, SSH, product login, real provider, or hosted business actions were executed."
+  },
+  "verified_commands": [
+    {
+      "command": "NODE_ENV=test ./node_modules/.bin/vitest run --maxWorkers=2 src/management/pages/oversight/RankingRecommendationPages.test.tsx src/management/pages/oversight/LiveOnlyFallbacks.test.tsx",
+      "exit_code": 0,
+      "summary": "2 test files passed (34 tests passed: 23 in RankingRecommendationPages.test.tsx, 11 in LiveOnlyFallbacks.test.tsx)"
+    },
+    {
+      "command": "./node_modules/.bin/tsc -p tsconfig.app.json --noEmit && ./node_modules/.bin/tsc -p tsconfig.agora.json --noEmit",
+      "exit_code": 0,
+      "summary": "Both tsconfig.app.json and tsconfig.agora.json passed with 0 errors"
+    },
+    {
+      "command": "./node_modules/.bin/eslint src/management/pages/oversight/QuarterlyRanking.tsx src/management/pages/oversight/PersonaLeague.tsx src/management/pages/oversight/RankingRecommendationPages.test.tsx src/management/pages/oversight/LiveOnlyFallbacks.test.tsx",
+      "exit_code": 0,
+      "summary": "0 errors (1 pre-existing fast-refresh warning on exported hook/component)"
+    }
+  ],
+  "hosted_release_posture": {
+    "hosted_delivery_claimed": false,
+    "note": "This task delivers a scoped frontend source repair and local verification only. Root owns existing backend qualification and final exact FE/BFF gate/release."
+  }
+}
