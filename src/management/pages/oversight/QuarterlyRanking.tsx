@@ -102,7 +102,16 @@ type RawQuarterlyRankingRow = QuarterlyRankingRow & {
   pnl_quarter?: number;
   sharpe_quarter?: number;
   evidence_refs?: string[];
+  ranking_snapshot_id?: string;
+  rankingSnapshotId?: string;
   metrics?: { pnl?: number | null; sharpe?: number | null };
+};
+
+const pickSnapshotId = (
+  record?: { ranking_snapshot_id?: string; rankingSnapshotId?: string } | null,
+): string | undefined => {
+  const id = record?.ranking_snapshot_id?.trim() || record?.rankingSnapshotId?.trim();
+  return id || undefined;
 };
 
 type SortField = "rank" | "prevRank" | "delta" | "score" | "pnl" | "sharpe";
@@ -116,7 +125,7 @@ export const QuarterlyRankingPage = ({ embedded = false }: { embedded?: boolean 
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const personaFocus = searchParams.get("persona")?.trim() ?? "";
-  const paramSnapshotId = searchParams.get("snapshot")?.trim() ?? "snap-2026-q3-final";
+  const requestedSnapshotId = searchParams.get("snapshot")?.trim() || undefined;
   const paramSourceConfidence = searchParams.get("source_confidence")?.trim();
   const currentQuarter = useMemo(() => currentPm12QuarterId(), []);
 
@@ -258,6 +267,18 @@ export const QuarterlyRankingPage = ({ embedded = false }: { embedded?: boolean 
   const disqualified = ranking.filter((r) => r.eligibility !== "eligible");
   const evidence = ranking.flatMap((r) => r.evidenceRefs ?? []);
   const cutoffDate = quarterCutoffDate(quarter);
+  const servedSnapshotId = useMemo(() => {
+    const activeRows = filteredRanking.length > 0 ? filteredRanking : ranking;
+    for (const row of activeRows) {
+      const id = pickSnapshotId(row as RawQuarterlyRankingRow);
+      if (id) return id;
+    }
+    for (const row of ranking) {
+      const id = pickSnapshotId(row as RawQuarterlyRankingRow);
+      if (id) return id;
+    }
+    return undefined;
+  }, [filteredRanking, ranking]);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -362,8 +383,14 @@ export const QuarterlyRankingPage = ({ embedded = false }: { embedded?: boolean 
           <div className="space-y-2 text-xs">
             <div className="flex justify-between">
               <span className="text-muted-foreground">Snapshot ID:</span>
-              <span className="font-mono font-semibold text-foreground">{paramSnapshotId}</span>
+              <span className="font-mono font-semibold text-foreground">{servedSnapshotId ?? "unavailable"}</span>
             </div>
+            {requestedSnapshotId && requestedSnapshotId !== servedSnapshotId && (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Requested Snapshot:</span>
+                <span className="font-mono text-muted-foreground">{requestedSnapshotId}</span>
+              </div>
+            )}
             <div className="flex justify-between">
               <span className="text-muted-foreground">Formula ID:</span>
               <span className="font-mono font-semibold text-foreground">{f.formulaId}</span>

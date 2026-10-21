@@ -1,0 +1,81 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "FE-QUARTERLY-SNAPSHOT-TRUTH-20261019",
+  "title": "Remove false quarterly ranking snapshot identity",
+  "owner": "Antigravity",
+  "reviewer": "Claude",
+  "repository": "ajoe734/execute-plans",
+  "target_repo": "execute-plans",
+  "base_branch": "dev",
+  "base_commit": "09533af7855fae132601bd91567d399d15863918",
+  "branch": "task/FE-QUARTERLY-SNAPSHOT-TRUTH-20261019",
+  "task_generation": 2,
+  "generation_1_history": {
+    "pr": 856,
+    "head_sha": "caa3a99bfa174e320214e70455fe3d4aeb3a8c3c",
+    "merge_commit_sha": "09533af7855fae132601bd91567d399d15863918",
+    "reopen_counterexample": "/home/chloe_ong_dev_cctech_support_com/code/pantheon-artifacts/latest-dev-closure-20261002/recovery-20261018/FE856-caa-submitted-current-vs-saved-snapshot-original-AC1-counterexample-20261019.json",
+    "reopen_counterexample_sha256": "5a503a8c0e0e4641691fda93532adc30bd93a7903b7e384ba2936f0f9feec31f",
+    "note": "Generation 1 Claude review approval and canonical merge 09533af7855fae132601bd91567d399d15863918 remain historical truth. Generation 2 removes the savedProposal ranking_snapshot_id fallback from servedSnapshotId so saved recommendation input provenance never masquerades as current Evaluation Context Snapshot ID."
+  },
+  "final_head_binding": "Canonical handoff binds the exact final PR head containing this manifest via REVIEW_HEAD_SHA.",
+  "status": "ready-for-independent-exact-head-review",
+  "evidence_kind": "local_validation_only",
+  "reproduced_defect_context": {
+    "accepted_fe_commit_exhibiting_defect": "84fbe157bee67793d8f585d128e47c30525a35ce",
+    "generation_1_merged_fe_commit": "09533af7855fae132601bd91567d399d15863918",
+    "accepted_be_commit_context": "8ae6521490ce465ce0019c8f5c88402f7771ecd8",
+    "screenshot_evidence": "/home/chloe_ong_dev_cctech_support_com/code/pantheon-artifacts/latest-dev-closure-20261002/recovery-20261018/saved-evaluator-and-original-Pattern-ui-after-accepted-Root39325350799-20261019T224219837Z/saved-evaluator-quarterly-after-reload.png",
+    "retained_dto_evidence": "/home/chloe_ong_dev_cctech_support_com/code/pantheon-artifacts/latest-dev-closure-20261002/recovery-20261018/saved-evaluator-and-original-Pattern-ui-after-accepted-Root39325350799-20261019T224219837Z/saved-evaluator-quarterly.json",
+    "counterexample_evidence": "/home/chloe_ong_dev_cctech_support_com/code/pantheon-artifacts/latest-dev-closure-20261002/recovery-20261018/FE856-caa-submitted-current-vs-saved-snapshot-original-AC1-counterexample-20261019.json",
+    "observed_defect": "QuarterlyRanking.tsx originally hardcoded 'snap-2026-q3-final' and in generation 1 still fell back to savedProposal ranking_snapshot_id (29eb48a0455252e2a2f9d27a, the saved recommendation input source snapshot) when current ranking rows did not expose the current response snapshot (2fe05fbe2c40dff7778d5e22)."
+  },
+  "scoped_artifacts": {
+    "declared": [
+      "src/management/pages/oversight/QuarterlyRanking.tsx",
+      "src/management/pages/oversight/RankingRecommendationPages.test.tsx",
+      "docs/deployment/evidence/FE-QUARTERLY-SNAPSHOT-TRUTH-20261019/evidence.json"
+    ],
+    "modified": [
+      "src/management/pages/oversight/QuarterlyRanking.tsx",
+      "src/management/pages/oversight/RankingRecommendationPages.test.tsx",
+      "docs/deployment/evidence/FE-QUARTERLY-SNAPSHOT-TRUTH-20261019/evidence.json"
+    ],
+    "unchanged_declared": []
+  },
+  "production_diff_summary": {
+    "files": [
+      "src/management/pages/oversight/QuarterlyRanking.tsx"
+    ],
+    "insertions": 1,
+    "deletions": 5,
+    "net_lines": -4
+  },
+  "acceptance_verification": {
+    "AC1_authoritative_snapshot_truth_and_url_distinction": "Removed the hardcoded 'snap-2026-q3-final' fallback and removed the savedProposal ranking_snapshot_id fallback from servedSnapshotId in QuarterlyRanking.tsx. Evaluation Context Snapshot ID now resolves strictly from authoritative current ranking response rows (ranking_snapshot_id / rankingSnapshotId on active/ranked rows) or renders 'unavailable' when current ranking rows do not expose an authoritative snapshot identity, never equating saved recommendation source snapshot identity (ranking-quarterly-2026-q4-29eb48a0455252e2a2f9d27a) with current Evaluation Context snapshot identity (ranking-quarterly-2026-q4-2fe05fbe2c40dff7778d5e22). Row-level saved recommendation source/rationale provenance and separate 'Requested Snapshot:' URL display remain preserved.",
+    "AC2_preserve_owner_recommendation_formulas_and_boundaries": "Preserved useSavedProposals, ProposalCell (including row-level evaluator_run_id and ranking_snapshot_id provenance), quarterly selection, score formulas, and read-only human-decision boundaries without any BFF, schema, protocol, mode, provider, or business action changes.",
+    "AC3_scoped_page_and_focused_test_coverage": "Updated only QuarterlyRanking.tsx and the focused test in RankingRecommendationPages.test.tsx (plus this task evidence manifest) to discriminate current Evaluation Context identity from saved recommendation provenance and assert honest 'unavailable' when current row snapshot identity is absent.",
+    "AC4_clean_worktree_and_governed_pr_flow": "Prepared on clean execute-plans worktree branch task/FE-QUARTERLY-SNAPSHOT-TRUTH-20261019 from current dev 09533af7855fae132601bd91567d399d15863918 for single PR delivery and independent review by Claude without VM, SSH, publishing, or deployment actions."
+  },
+  "verified_commands": [
+    {
+      "command": "NODE_ENV=test ./node_modules/.bin/vitest run --maxWorkers=2 src/management/pages/oversight/RankingRecommendationPages.test.tsx src/management/pages/oversight/LiveOnlyFallbacks.test.tsx",
+      "exit_code": 0,
+      "summary": "2 test files passed (36 tests passed: 25 in RankingRecommendationPages.test.tsx, 11 in LiveOnlyFallbacks.test.tsx)"
+    },
+    {
+      "command": "./node_modules/.bin/tsc -p tsconfig.app.json --noEmit && ./node_modules/.bin/tsc -p tsconfig.agora.json --noEmit",
+      "exit_code": 0,
+      "summary": "Both tsconfig.app.json and tsconfig.agora.json passed with 0 errors"
+    },
+    {
+      "command": "./node_modules/.bin/eslint src/management/pages/oversight/QuarterlyRanking.tsx src/management/pages/oversight/RankingRecommendationPages.test.tsx",
+      "exit_code": 0,
+      "summary": "0 errors (1 pre-existing fast-refresh warning on exported hook/component)"
+    }
+  ],
+  "hosted_release_posture": {
+    "hosted_delivery_claimed": false,
+    "note": "This task delivers a scoped frontend source repair and local verification only. Root joins reviewed FE and BFF once for serial hosted acceptance."
+  }
+}
