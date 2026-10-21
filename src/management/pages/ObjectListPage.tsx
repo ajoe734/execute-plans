@@ -21,6 +21,30 @@ import { hasDurableCreateOwner, type CreateBehavior } from "@/lib/writeIntents/t
 import { EntityCreateDrawer } from "@/management/components/write/EntityCreateDrawer";
 import { PaperPersonaBundleIncompleteError } from "@/lib/bff-v1/personas";
 
+export function hasValidObjectRowId(row: { id?: unknown } | null | undefined): row is { id: string } {
+  if (!row || typeof row.id !== "string") return false;
+  const trimmed = row.id.trim();
+  return trimmed.length > 0 && trimmed !== "undefined" && trimmed !== "null";
+}
+
+export function resolveObjectRowHref<T extends BaseObject>(
+  row: T | null | undefined,
+  basePath: string,
+  rowHref?: (row: T) => string,
+): string | undefined {
+  if (!hasValidObjectRowId(row)) return undefined;
+  const normalizedRow = { ...row, id: row.id.trim() };
+  const candidate = rowHref
+    ? rowHref(normalizedRow)
+    : `${basePath}/${encodeURIComponent(normalizedRow.id)}`;
+  if (typeof candidate !== "string") return undefined;
+  const trimmed = candidate.trim();
+  if (!trimmed || /(?:^|[/?#&=])undefined(?:$|[/?#&])/i.test(trimmed)) {
+    return undefined;
+  }
+  return trimmed;
+}
+
 interface Props<T extends BaseObject> {
   title: string;
   /** VI-1: now returns a ListEnvelope. Use bffV1.lists.* or asListEnvelope(). */
@@ -72,6 +96,7 @@ export function ObjectListPage<T extends BaseObject>({
     : rows;
   const focusMatched = Boolean(focusId && focusedRows.length > 0);
   const visibleRows = focusMatched ? focusedRows : rows;
+  const hasClickableRows = visibleRows.some((r) => Boolean(resolveObjectRowHref(r, basePath, rowHref)));
 
   const columns: Column<T>[] = [
     {
@@ -146,8 +171,8 @@ export function ObjectListPage<T extends BaseObject>({
           open={drawerOpen}
           onOpenChange={(v) => { setDrawerOpen(v); if (!v) refresh(); }}
           onCreated={(created) => {
-            if (createBehavior.entity === "persona" && created.id) {
-              navigate(`${basePath}/${encodeURIComponent(String(created.id))}`);
+            if (createBehavior.entity === "persona" && hasValidObjectRowId(created)) {
+              navigate(`${basePath}/${encodeURIComponent(created.id.trim())}`);
             } else {
               refresh();
             }
@@ -237,7 +262,12 @@ export function ObjectListPage<T extends BaseObject>({
             rows={visibleRows}
             columns={columns}
             empty={t("common.noResults")}
-            onRowClick={(r) => navigate(rowHref ? rowHref(r) : `${basePath}/${encodeURIComponent(r.id)}`)}
+            onRowClick={hasClickableRows
+              ? (r) => {
+                const href = resolveObjectRowHref(r, basePath, rowHref);
+                if (href) navigate(href);
+              }
+              : undefined}
             fillViewport
           />
         )}

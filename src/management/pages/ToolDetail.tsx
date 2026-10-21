@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import { bffV1 } from "@/lib/bff-v1";
+import { useLiveDetail } from "@/lib/bff-v1/useLiveDetail";
 import type { AuditEvent, Strategy, Tool } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
@@ -9,6 +10,8 @@ import { DataTable } from "@/platform/components/DataTable";
 import { AuditTimeline } from "@/platform/components/AuditTimeline";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { AlertTriangle } from "lucide-react";
 import { ToolSchemaPanel, ToolSandboxPanel } from "@/management/components/detail/ToolSchemaPanel";
 import { ActivityMonitor } from "@/management/components/detail/ActivityMonitor";
 import { LifecycleStepper } from "@/platform/components/LifecycleStepper";
@@ -24,22 +27,38 @@ export const ToolDetail = () => {
   const { id } = useParams();
   const t = useT();
   const nav = useNavigate();
-  const [tool, setTool] = useState<Tool | undefined>();
-  const [loaded, setLoaded] = useState(false);
+  const { data: tool, loading, isError, error } = useLiveDetail<Tool>(
+    id,
+    (entityId) => bffV1.tools.get(entityId),
+    { kinds: ["tools"] },
+  );
   const [consumers, setConsumers] = useState<Strategy[]>([]);
   const [audit, setAudit] = useState<AuditEvent[]>([]);
 
   useEffect(() => {
     if (!id) return;
-    setLoaded(false);
-    bffV1.tools.get(id).then((row) => { setTool(row); setLoaded(true); }).catch(() => setLoaded(true));
-    bffV1.strategies.list().then((s) => setConsumers(s.slice(0, 4)));
-    bffV1.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action?.startsWith("tool."))));
+    bffV1.strategies.list().then((s) => setConsumers(s.slice(0, 4))).catch(() => {});
+    bffV1.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action?.startsWith("tool.")))).catch(() => {});
   }, [id]);
+  if (loading) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
   if (!tool) {
-    return loaded
-      ? <CapabilityDetailEmptyState kind="tool" id={id} />
-      : <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
+    if (isError) {
+      return (
+        <div className="p-6">
+          <EmptyState
+            icon={<AlertTriangle className="h-8 w-8 text-status-failed" />}
+            title={t("detail.loadState.errorTitle", { entity: "Tool", defaultValue: "Could Not Load Tool" })}
+            description={t("detail.loadState.errorDescription", {
+              entity: "Tool",
+              id: id ?? "",
+              error: error ?? "unknown error",
+              defaultValue: `Failed to load Tool detail for ID ${id ?? ""}: ${error ?? "unknown error"}`,
+            })}
+          />
+        </div>
+      );
+    }
+    return <CapabilityDetailEmptyState kind="tool" id={id} />;
   }
 
   const machineState: ToolState = STATE_MAP[tool.state ?? ""] ?? "draft";

@@ -3,9 +3,10 @@ import { safeDateTime } from "@/lib/utils";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { bffV1 } from "@/lib/bff-v1";
+import { useLiveDetail } from "@/lib/bff-v1/useLiveDetail";
 import { useT } from "@/platform/hooks";
 import type { AuditEvent, RankingFormula, Strategy } from "@/lib/bff-v1";
-import { Inbox } from "lucide-react";
+import { AlertTriangle, Inbox } from "lucide-react";
 import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -16,24 +17,18 @@ export const RankingFormulaDetail = () => {
   const { id } = useParams();
   const t = useT();
   const nav = useNavigate();
-  const [f, setF] = useState<RankingFormula | undefined>();
-  const [loading, setLoading] = useState(true);
+  const { data: f, loading, isError, error } = useLiveDetail<RankingFormula>(
+    id,
+    (entityId) => bffV1.rankingFormulas.list().then((rows) => rows.find((x) => x.id === entityId)),
+    { kinds: ["rankingFormulas"] },
+  );
   const [strategies, setStrategies] = useState<Strategy[]>([]);
   const [audit, setAudit] = useState<AuditEvent[]>([]);
 
   useEffect(() => {
-    if (!id) {
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    Promise.all([
-      bffV1.rankingFormulas.list().then((rows) => setF(rows.find((x) => x.id === id))),
-      bffV1.strategies.list().then(setStrategies),
-      bffV1.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action?.startsWith("ranking.")))),
-    ])
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    if (!id) return;
+    bffV1.strategies.list().then(setStrategies).catch(() => {});
+    bffV1.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action?.startsWith("ranking.")))).catch(() => {});
   }, [id]);
 
   if (loading) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
@@ -43,9 +38,22 @@ export const RankingFormulaDetail = () => {
         <PageHeader title={t("nav.rankingFormulas", { defaultValue: "Ranking Policies" })} />
         <PageBody>
           <EmptyState
-            icon={<Inbox className="h-8 w-8 text-muted-foreground" />}
-            title={t("rankingFormula.detail.notFoundTitle", { defaultValue: "Ranking Policy Not Found" })}
-            description={t("rankingFormula.detail.notFoundDescription", { id: id ?? "", defaultValue: `Ranking policy detail for ID ${id} is not available in the live contract.` })}
+            icon={isError ? <AlertTriangle className="h-8 w-8 text-status-failed" /> : <Inbox className="h-8 w-8 text-muted-foreground" />}
+            title={
+              isError
+                ? t("detail.loadState.errorTitle", { entity: "Ranking Policy", defaultValue: "Could Not Load Ranking Policy" })
+                : t("rankingFormula.detail.notFoundTitle", { defaultValue: "Ranking Policy Not Found" })
+            }
+            description={
+              isError
+                ? t("detail.loadState.errorDescription", {
+                  entity: "Ranking Policy",
+                  id: id ?? "",
+                  error: error ?? "unknown error",
+                  defaultValue: `Failed to load Ranking Policy detail for ID ${id ?? ""}: ${error ?? "unknown error"}`,
+                })
+                : t("rankingFormula.detail.notFoundDescription", { id: id ?? "", defaultValue: `Ranking policy detail for ID ${id} is not available in the live contract.` })
+            }
             cta={{ label: t("governanceDecisions.backToList", { defaultValue: "Back to Governance Decisions" }), onClick: () => nav("/management/governance-decisions?tab=policy") }}
           />
         </PageBody>

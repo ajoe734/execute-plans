@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { bffV1, mgmt, runActionSafe, BffError } from "@/lib/bff-v1";
+import { useLiveDetail } from "@/lib/bff-v1/useLiveDetail";
 import { useT } from "@/platform/hooks";
 import type { AuditEvent, ResearchExperiment } from "@/lib/bff-v1";
 import type { ManagementPersonaFleetRow, ManagementResearchProject } from "@/lib/bff-v1/management";
-import { Beaker, Package, Ban, RotateCcw, Archive, AlertTriangle } from "lucide-react";
+import { Beaker, Package, Ban, RotateCcw, Archive, AlertTriangle, Inbox } from "lucide-react";
 import { toast } from "sonner";
 import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
 import { StatCard } from "@/platform/components/StatCard";
@@ -84,7 +87,11 @@ export const ResearchDetail = () => {
   const { id } = useParams();
   const t = useT();
   const navigate = useNavigate();
-  const [x, setX] = useState<ResearchExperimentLive | undefined>();
+  const { data: x, setData: setX, loading, isError, error } = useLiveDetail<ResearchExperimentLive>(
+    id,
+    (entityId) => bffV1.research.get(entityId) as Promise<ResearchExperimentLive | undefined>,
+    { kinds: ["research"] },
+  );
   const [audit, setAudit] = useState<AuditEvent[]>([]);
   const [fleetRows, setFleetRows] = useState<ManagementPersonaFleetRow[]>([]);
   const [promoteOpen, setPromoteOpen] = useState(false);
@@ -93,12 +100,43 @@ export const ResearchDetail = () => {
 
   useEffect(() => {
     if (!id) return;
-    bffV1.research.get(id).then((value) => setX(value as ResearchExperimentLive | undefined));
-    bffV1.audit.list().then((a) => setAudit(a.filter((e) => e.target === id || e.action?.startsWith("research."))));
+    bffV1.audit.list().then((a) => setAudit(a.filter((e) => e.target === id || e.action?.startsWith("research.")))).catch(() => {});
     mgmt.personaFleet.get().then(setFleetRows).catch(() => setFleetRows([]));
   }, [id]);
 
-  if (!x) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
+  if (loading) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
+  if (!x) {
+    return (
+      <>
+        <PageHeader title={t("nav.experiments", { defaultValue: "Experiments" })} />
+        <PageBody>
+          <EmptyState
+            icon={isError ? <AlertTriangle className="h-8 w-8 text-status-failed" /> : <Inbox className="h-8 w-8 text-muted-foreground" />}
+            title={
+              isError
+                ? t("detail.loadState.errorTitle", { entity: "Experiment", defaultValue: "Could Not Load Experiment" })
+                : t("detail.loadState.notFoundTitle", { entity: "Experiment", defaultValue: "Experiment Not Found" })
+            }
+            description={
+              isError
+                ? t("detail.loadState.errorDescription", {
+                  entity: "Experiment",
+                  id: id ?? "",
+                  error: error ?? "unknown error",
+                  defaultValue: `Failed to load Experiment detail for ID ${id ?? ""}: ${error ?? "unknown error"}`,
+                })
+                : t("detail.loadState.notFoundDescription", {
+                  entity: "Experiment",
+                  id: id ?? "",
+                  defaultValue: `Experiment detail for ID ${id ?? ""} is not available in the live contract.`,
+                })
+            }
+            cta={{ label: t("actions.back", { defaultValue: "Back to Experiments" }), onClick: () => navigate("/management/experiments") }}
+          />
+        </PageBody>
+      </>
+    );
+  }
   const researchContext = researchContextFor(x, fleetRows);
   const frameworks = researchContext.frameworks.length
     ? researchContext.frameworks

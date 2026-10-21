@@ -1,12 +1,15 @@
 import { useEffect, useState } from "react";
 import { safeDateTime } from "@/lib/utils";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
+import { EmptyState } from "@/components/ui/empty-state";
+import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { bffV1 } from "@/lib/bff-v1";
+import { useLiveDetail } from "@/lib/bff-v1/useLiveDetail";
 import type { AuditEvent, Channel } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
 import { StatCard } from "@/platform/components/StatCard";
-import { Send } from "lucide-react";
+import { AlertTriangle, Inbox, Send } from "lucide-react";
 import { DataTable } from "@/platform/components/DataTable";
 import { AuditTimeline } from "@/platform/components/AuditTimeline";
 import { NonProductionActionButton } from "@/management/components/NonProductionActionButton";
@@ -14,16 +17,52 @@ import { NonProductionActionButton } from "@/management/components/NonProduction
 export const ChannelDetail = () => {
   const { id } = useParams();
   const t = useT();
-  const [c, setC] = useState<Channel | undefined>();
+  const navigate = useNavigate();
+  const { data: c, loading, isError, error } = useLiveDetail<Channel>(
+    id,
+    (entityId) => bffV1.channels.get(entityId),
+    { kinds: ["channels"] },
+  );
   const [audit, setAudit] = useState<AuditEvent[]>([]);
   useEffect(() => {
     if (!id) return;
-    bffV1.channels.get(id).then(setC);
-    bffV1.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action?.startsWith("channel."))));
+    bffV1.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action?.startsWith("channel.")))).catch(() => {});
   }, [id]);
 
   const recent: { id: string; ts: string; title: string; severity: string }[] = [];
-  if (!c) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
+  if (loading) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
+  if (!c) {
+    return (
+      <>
+        <PageHeader title={t("nav.channels", { defaultValue: "Channels" })} />
+        <PageBody>
+          <EmptyState
+            icon={isError ? <AlertTriangle className="h-8 w-8 text-status-failed" /> : <Inbox className="h-8 w-8 text-muted-foreground" />}
+            title={
+              isError
+                ? t("detail.loadState.errorTitle", { entity: "Channel", defaultValue: "Could Not Load Channel" })
+                : t("detail.loadState.notFoundTitle", { entity: "Channel", defaultValue: "Channel Not Found" })
+            }
+            description={
+              isError
+                ? t("detail.loadState.errorDescription", {
+                  entity: "Channel",
+                  id: id ?? "",
+                  error: error ?? "unknown error",
+                  defaultValue: `Failed to load Channel detail for ID ${id ?? ""}: ${error ?? "unknown error"}`,
+                })
+                : t("detail.loadState.notFoundDescription", {
+                  entity: "Channel",
+                  id: id ?? "",
+                  defaultValue: `Channel detail for ID ${id ?? ""} is not available in the live contract.`,
+                })
+            }
+            cta={{ label: t("actions.back", { defaultValue: "Back to Channels" }), onClick: () => navigate("/management/channels") }}
+          />
+        </PageBody>
+      </>
+    );
+  }
 
   return (
     <ObjectDetailLayout
