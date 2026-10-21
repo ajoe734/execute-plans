@@ -1,0 +1,32 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "FE-RANKING-STATUS-TRUTH-20261021",
+  "owner": "Antigravity",
+  "reviewer": "Antigravity2",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-RANKING-STATUS-TRUTH-20261021",
+  "status": "ready-for-independent-exact-head-review",
+  "scope": {
+    "adopted": [
+      "QuarterlyRanking.tsx and PersonaLeague.tsx availability banners: replace unverified High Confidence and verified/optimal telemetry cluster claims with factual BFF ranking row availability wording in strict live mode.",
+      "QuarterlyRanking.tsx and PersonaLeague.tsx empty and degraded source_confidence URL states: remove false local-memory and seed backup claims in strict live listLiveOnly pages while keeping empty (no BFF rows loaded) and degraded URL source_confidence states distinguishable from loaded rows."
+    ],
+    "not_changed": [
+      "Scores, ranking rows, saved Evaluator recommendations, Governance proposal review state, filters, links, source_confidence URL navigation, backend DTOs/endpoints, and string-mirroring tests."
+    ]
+  },
+  "changed_lines": {
+    "src/management/pages/oversight/QuarterlyRanking.tsx": "+5/-5 (net 0)",
+    "src/management/pages/oversight/PersonaLeague.tsx": "+5/-5 (net 0)",
+    "production_total": "+10/-10 (net 0)"
+  },
+  "validation": {
+    "focused_ui_tests": "passed: vitest run RankingRecommendationPages.test.tsx + LiveOnlyFallbacks.test.tsx (2 files, 36/36 passed)",
+    "typecheck_app": "passed: tsc -p tsconfig.app.json --noEmit (0 errors)",
+    "typecheck_agora": "passed: tsc -p tsconfig.agora.json --noEmit (0 errors)",
+    "eslint": "passed: eslint QuarterlyRanking.tsx PersonaLeague.tsx (0 errors)",
+    "build": "passed: vite build (strict live mode)"
+  },
+  "production_net_lines": 0
+}
