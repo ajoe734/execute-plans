@@ -1,0 +1,164 @@
+{
+  "task_id": "FE-APPROVAL-BROWSER-ACCEPTANCE-20261004",
+  "at": "2026-10-21T13:40:22.832502+00:00",
+  "repository": "ajoe734/execute-plans",
+  "status": "ready_for_assigned_independent_review_not_hosted_done",
+  "owner": "Human/Ops",
+  "reviewer": "Antigravity",
+  "documentation_only": true,
+  "production_delta": 0,
+  "hosted_done": false,
+  "all12_complete": false,
+  "original_acceptance": {
+    "AC1": {
+      "requirement": "Manual existing-release acceptance checkpoint only. Preserve archived FE-APPROVAL-HOSTED-ACCEPTANCE-001 and its genuine bounded historical HTTP evidence; its archive explicitly says no browser run. Do not rewrite that archive or reinterpret it as browser/final-pair proof. This follow-up captures the designated inventory section5 and R3/R7 obligation.",
+      "evidence_state": "scoped_evidence_ready_assigned_independent_review_pending",
+      "finding": "Original HTTP-only archive is preserved byte-for-byte and is not relabeled browser evidence. The genuine historical browser controls and current saved-state observations are separately identified.",
+      "proof_keys": [
+        "original_HTTP_only_archive",
+        "current_accepted_pair",
+        "current_genuine_auth_tenant_saved_read",
+        "current_actual_owners"
+      ]
+    },
+    "AC2": {
+      "requirement": "Use the existing single nonprod release and lease with exact accepted served FE/BFF/owner identities containing the completed source work. The already granted designated-dev deployment/restart/labelled paper scope applies; no worker VM/SSH access and no additional deployment or approval platform. Do not launch a parallel release.",
+      "evidence_state": "scoped_evidence_ready_assigned_independent_review_pending",
+      "finding": "Accepted exact BE23f9dd/FEa701 Root39564986170 passed all18 artifact roundtrip checks. Current browser verified this pair before and after; no parallel release or worker VM access.",
+      "proof_keys": [
+        "original_finite_browser_negative_audit",
+        "last_accepted_pair",
+        "current_accepted_pair",
+        "current_genuine_auth_tenant_saved_read",
+        "current_actual_owners"
+      ]
+    },
+    "AC3": {
+      "requirement": "Use existing Playwright/browser harness and genuine hosted login. Never send LOCAL_FIXTURE_AUTH_TOKEN or forged local JWT to the hosted target. Prove pending proposal is visible and linked to the same persisted owner decision plus real final/conditional/rejected display where genuinely available; validate owner version and target binding from actual response serialization.",
+      "evidence_state": "scoped_evidence_ready_assigned_independent_review_pending",
+      "finding": "Historical genuine hosted UI showed original proposed v1, under_review v2 and rejected v3. Current genuine hosted login reads the same v3 target and all44 DTO fields unchanged, then visually displays saved rejected state after reload. This technical nonexecuting rejection is not a human business approval.",
+      "proof_keys": [
+        "original_finite_browser_primary",
+        "same_original_owner_after_actual_replacement",
+        "same_original_decision_current_one_JWT_GET",
+        "current_accepted_pair",
+        "current_genuine_auth_tenant_saved_read",
+        "current_actual_owners"
+      ]
+    },
+    "AC4": {
+      "requirement": "Prove browser stale-version409 handling and refresh plus failed-owner-readback error visibility without manufacturing success or using a request-shaped fixture as hosted evidence. Preserve tenant cache/cancellation isolation and no-effect denied controls. Capture timestamps and actual requests/results with credentials redacted; any deliberate transport failure injection must be labeled and kept separate from genuine owner/provider execution.",
+      "evidence_state": "scoped_evidence_ready_assigned_independent_review_pending",
+      "finding": "Original one-time real stale409/no-owner-change and explicitly injected GET503 remain historical bounded controls. Current26 genuine login/tenant/revocation/late-response/reload checks pass on accepted23f/a701 without replaying either finite control. Raw historical409/202 bodies were not retained; caller statuses and actual owner before/after records are the bounded proof.",
+      "proof_keys": [
+        "original_finite_browser_negative_audit",
+        "genuine_tenant_revocation_late_response_isolation",
+        "current_accepted_pair",
+        "current_genuine_auth_tenant_saved_read",
+        "current_actual_owners"
+      ]
+    },
+    "AC5": {
+      "requirement": "Only new explicitly labelled paper fixtures may be written within the existing authorization. Genuine business votes require genuine authorized humans; no proxy votes or fabricated approved records. If a fresh finality case needs a human action keep that exact case pending and identify the required action. Historical approved rows can be read as controls but cannot certify a fresh causal chain.",
+      "evidence_state": "scoped_evidence_ready_assigned_independent_review_pending",
+      "finding": "No new vote or approved business record is created. Original fixture identifies the assistant technical rejection and has no executable capital/Persona target; user-authorized Persona transition is a distinct separately evidenced operation, not this F12 vote.",
+      "proof_keys": [
+        "original_finite_browser_negative_audit",
+        "current_accepted_pair",
+        "current_genuine_auth_tenant_saved_read",
+        "current_actual_owners"
+      ]
+    },
+    "AC6": {
+      "requirement": "Verify owner persistence and UI readback after refresh and authorized necessary restart within the coordinated acceptance round. Publish scoped truthful evidence and obtain independent review before hosted done. Browser success on a different pair or local fixture suites is not this acceptance. No product source changes or deletions or real capital/IAM/bucket changes.",
+      "evidence_state": "scoped_evidence_ready_assigned_independent_review_pending",
+      "finding": "Same original decision was created before actual later Governance owner start; current owner is running after the accepted Root and same entire44-field DTO equals both prior3f observations, with genuine browser reload/readback. Genuine assigned independent review remains pending; source delta0 and no new restart/control/write.",
+      "proof_keys": [
+        "same_original_owner_after_actual_replacement",
+        "genuine_tenant_revocation_late_response_isolation",
+        "same_original_decision_current_one_JWT_GET",
+        "current_accepted_pair",
+        "current_genuine_auth_tenant_saved_read",
+        "current_actual_owners"
+      ]
+    }
+  },
+  "proofs": {
+    "original_HTTP_only_archive": {
+      "path": "/home/chloe_ong_dev_cctech_support_com/pantheon-ci-deploy/coordination-root/ai-task-archive/tasks/FE-APPROVAL-HOSTED-ACCEPTANCE-001.json",
+      "sha256": "ec3200c116334e34441f74928cae4f81ced76cde71b19c528f4476946b004baf"
+    },
+    "original_finite_browser_negative_audit": {
+      "path": "/home/chloe_ong_dev_cctech_support_com/code/pantheon-artifacts/latest-dev-closure-20261002/recovery-20261018/Root39325350799-F12-once-controls-independent-bounded-audit-20261019.json",
+      "sha256": "49428c2752a8df10de331217269157b19b3dc22e2cacefe13f842f37e45c4678"
+    },
+    "original_finite_browser_primary": {
+      "path": "/home/chloe_ong_dev_cctech_support_com/code/pantheon-artifacts/latest-dev-closure-20261002/recovery-20261018/F12-existing-technical-negative-controls-20261019T224109740Z/checkpoint.json",
+      "sha256": "de5e62a6b7ef0ef50a77a439a8a26c50066b6bca6d5e7def666c08b4f265ba02"
+    },
+    "last_accepted_pair": {
+      "path": "/home/chloe_ong_dev_cctech_support_com/code/pantheon-artifacts/latest-dev-closure-20261002/recovery-20261018/Root39527250552-accepted-exact-artifact-roundtrip-proof-20261020.json",
+      "sha256": "cd74f3dfc7031e3f24a98e40a6af3c3dcc68d05d18c756200cebc4cee97a55e8"
+    },
+    "genuine_tenant_revocation_late_response_isolation": {
+      "path": "/home/chloe_ong_dev_cctech_support_com/code/pantheon-artifacts/latest-dev-closure-20261002/recovery-20261018/Root39527250552-existing-approval-auth-late-read-20261020-continuation/checkpoint.json",
+      "sha256": "f4061beb108213d676382ada3f26d856092d9ebdec77ee34a2924bfe9ef418eb"
+    },
+    "same_original_owner_after_actual_replacement": {
+      "path": "/tmp/pantheon-assist-20261013/Original-F12-existing-Governance-replacement-and-current3f91-owner35-fullDTO-persistence-20261021.json",
+      "sha256": "c45940bef1cd31b90dd583e15c7af497fd1bd857918de18a63663c0975eddb92"
+    },
+    "same_original_decision_current_one_JWT_GET": {
+      "path": "/home/chloe_ong_dev_cctech_support_com/code/pantheon-artifacts/latest-dev-closure-20261002/recovery-20261018/Root395272-accepted-original-step3-original-F12-one-real-JWT-GET-20261021.json",
+      "sha256": "c498aa189bb179a3cd5dc317aad491b871fddf124efe98995d03cb487058c326"
+    },
+    "current_accepted_pair": {
+      "path": "/home/chloe_ong_dev_cctech_support_com/code/pantheon-artifacts/latest-dev-closure-20261002/recovery-20261018/Root39564986170-accepted-exact-artifact-roundtrip-proof-20261021.json",
+      "sha256": "7b4e6b7ff42cfefb7234cf4a9463a421c0f4b7afd5bef50e9acf5b646863637d"
+    },
+    "current_genuine_auth_tenant_saved_read": {
+      "path": "/home/chloe_ong_dev_cctech_support_com/code/pantheon-artifacts/latest-dev-closure-20261002/recovery-20261018/Root39564986170-existing-approval-auth-late-read-20261020-continuation/checkpoint.json",
+      "sha256": "10964b9744391a328e495c0320bc18cda6e0f032167b4170a7dc14ac8eef6806"
+    },
+    "current_actual_owners": {
+      "path": "/tmp/pantheon-assist-20261013/Actual-product-owners-post-accepted-Root39564986170-20261021T123747Z.json",
+      "sha256": "9c0d25e7572034a7a1dfcdaae2e2887154e8772365b27ad3d8fbe037b1f6a76b"
+    }
+  },
+  "final_accepted_release": {
+    "BE": "23f9dd03e5d12b2cab769dd8fc2596d117c01ba4",
+    "FE": "a70121543efec81e07a278d034898b258a8b4dc2",
+    "Root": 39564986170,
+    "proof": {
+      "path": "/home/chloe_ong_dev_cctech_support_com/code/pantheon-artifacts/latest-dev-closure-20261002/recovery-20261018/Root39564986170-accepted-exact-artifact-roundtrip-proof-20261021.json",
+      "sha256": "7b4e6b7ff42cfefb7234cf4a9463a421c0f4b7afd5bef50e9acf5b646863637d"
+    }
+  },
+  "original_finite_controls_consumed": true,
+  "new_votes_provider_or_capital_operations": 0,
+  "limits": [
+    "Original finite technical negative execution belongs to8ae/FE84 Root393253. Later accepted3f91/a701 observations prove readback/isolation/durability, not a replay of that historical stale409/injected503.",
+    "Original screenshots include clipped/fading transitions; saved caller DOM assertions and owner records support warning/transition details. No unsupported full screenshot readability is claimed.",
+    "Actual later Governance owner instance is established; this document does not invent the triggering restart command or missing OCI revision.",
+    "No fresh human business approval or new causal-chain outcome is inferred from historical approved/rejected rows.",
+    "Current exact accepted pair and saved original-state browser evidence are now supplied. Assigned independent review, required CI, merge and native hosted closeout remain pending; all12/TOTAL is not claimed."
+  ],
+  "independent_assigned_review_pending": true,
+  "current_saved_control_observation": {
+    "decision_id": "apv-dev-acceptance-f12-negative-controls-20261019",
+    "owner_version": 3,
+    "outcome": "rejected",
+    "both_actual_reads_HTTP": 200,
+    "complete_DTO_fields": 44,
+    "complete_DTO_equal_to_actual_previous_owner_read": true,
+    "auth_tenant_logout_late_response_checks": 26,
+    "all_checks_pass": true,
+    "finite_control_replayed": false,
+    "new_business_votes": 0,
+    "new_provider_calls": 0,
+    "actual_visual_read": {
+      "path": "/home/chloe_ong_dev_cctech_support_com/code/pantheon-artifacts/latest-dev-closure-20261002/recovery-20261018/Root39564986170-existing-approval-auth-late-read-20261020-continuation/fresh-original-v3-after-reload.png",
+      "observed": "Same original nonexecuting target, v3 rejected, technical-only rationale, no pending vote buttons; current operator-a session visible. Policy proof remains unverified, as expected for this nonexecuting negative fixture."
+    }
+  }
+}
