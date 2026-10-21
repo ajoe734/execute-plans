@@ -1,0 +1,47 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "FE-TRADE-JOURNEYS-AUTH-TENANT-20261021",
+  "owner": "Antigravity",
+  "reviewer": "Antigravity2",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-TRADE-JOURNEYS-AUTH-TENANT-20261021",
+  "status": "ready-for-independent-exact-head-review",
+  "sanitized_technical_input": {
+    "path": "/tmp/pantheon-direct-runtime-20261021/FE-TRADE-JOURNEYS-AUTH-TENANT-20261021-sanitized-observed-finding.json",
+    "served_BE": "e231f85638791517447d1125c69cfdc041849a2d",
+    "served_FE": "d6b988d0e7e4f79e7c9f8ec68b0abd7e6b32b54c",
+    "base_FE_dev": "78da68e5d0a931846566752c10f833d6ad284808",
+    "prior_source_sha256": "0b23c9f16500a678f7996a8bbc4cf374b1672edb7f19258179067d7d813a6f78",
+    "raw_private_probe_sha256": "8ac248a798bc605ca039f100b5d2597867a40968832b34f8be26c5cc5ff95b75",
+    "raw_messages_credentials_or_trade_payloads_included": false
+  },
+  "scope": {
+    "adopted": [
+      "TradeJourneysPage.tsx: resolve active tenant from explicit URL tenant_id parameter first, then genuine authenticated BFF session identity (useAuth().bffSession.identity.tenantId), signed identity claim (signedTenantId(session)), or registered BFF auth provider tenant (getAuthProvider().getTenantId()), before falling back to default.",
+      "TradeJourneysPage and TradeJourneyDetailPage: share the same resolved tenant across list queries, SSE/cursor event subscriptions, identifier resolution, detail/timeline/evidence reads, detail row links, and all-journeys/show-all return links.",
+      "TradeJourneysPage.test.tsx: add focused regression tests for bare list navigation and bare detail navigation with an authenticated non-default tenant and for preserved explicit tenant_id URL context while retaining all existing fixtures and tests."
+    ],
+    "not_changed": [
+      "Explicit tenant_id URL parameter precedence, environment selection, entity focus banners, return_to/return_label links, reversible server cursor pagination, and backend BFF tenant/role enforcement.",
+      "No hardcoded tenant-dev in production source, no new auth service/fetch pipeline/cache/config/framework, no VM/SSH/credential/provider/business/deployment actions."
+    ]
+  },
+  "changed_lines": {
+    "src/management/pages/trade-journeys/TradeJourneysPage.tsx": "+16/-2 (net +14)",
+    "src/management/pages/trade-journeys/TradeJourneysPage.test.tsx": "+182/-2 (net +180)",
+    "production_total": "+16/-2 (net +14)"
+  },
+  "production_net_lines": 14,
+  "validation": {
+    "focused_ui_and_client_tests": "passed: npx vitest run src/management/pages/trade-journeys/TradeJourneysPage.test.tsx src/management/pages/trade-journeys/TradeJourneysPage.i18n.test.tsx src/lib/bff-v1/__tests__/tradeJourneys.test.ts src/management/navigation/tradeJourneyLinks.test.ts (4 files, 18/18 passed)",
+    "typecheck_app": "passed: npm run typecheck:app (tsc -p tsconfig.app.json --noEmit, 0 errors)",
+    "typecheck_agora": "passed: npm run typecheck:agora (tsc -p tsconfig.agora.json --noEmit, 0 errors)",
+    "eslint": "passed: npx eslint src/management/pages/trade-journeys/TradeJourneysPage.tsx src/management/pages/trade-journeys/TradeJourneysPage.test.tsx (0 errors, 0 warnings)"
+  },
+  "authority_boundary": {
+    "source_delivery_proves_hosted_acceptance": false,
+    "worker_vm_ssh_secrets_provider_business_deploy_authority": false,
+    "hosted_pair_deployment_and_bare_url_reload_owner": "Root"
+  }
+}

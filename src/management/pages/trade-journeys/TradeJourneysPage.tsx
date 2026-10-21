@@ -2,7 +2,21 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { AlertTriangle, ArrowLeft, CheckCircle2, CircleDashed, ExternalLink, Search } from "lucide-react";
 import { useT } from "@/platform/hooks";
+import { useAuth } from "@/lib/auth/AuthProvider";
+import { signedTenantId } from "@/lib/auth/bffBrowserSession";
+import { getAuthProvider } from "@/lib/bff-v1/headers";
 import { getTradeJourney, getTradeJourneyEvidence, getTradeJourneyTimeline, listTradeJourneys, resolveTradeJourney, subscribeTradeJourneys, type JourneyDetailEnvelope, type JourneyListEnvelope, type JourneyLiveState, type JourneyMeta, type JourneyRow, type JourneyTimelineEnvelope } from "@/lib/bff-v1/tradeJourneys";
+
+function useTradeJourneyTenant(params: URLSearchParams): string {
+  const { bffSession, session } = useAuth();
+  return (
+    params.get("tenant_id")?.trim() ||
+    bffSession?.identity?.tenantId?.trim() ||
+    signedTenantId(session) ||
+    getAuthProvider().getTenantId()?.trim() ||
+    "default"
+  );
+}
 
 const STAGES = ["signal_generation", "trade_decision", "risk_evaluation", "order_submission", "broker_acknowledgement", "fill_management", "ledger_booking", "reconciliation"];
 const VIEWS = [{ labelKey: "tradeJourneys.filters.viewAttention", value: "attention" }, { labelKey: "tradeJourneys.filters.viewRiskReject", value: "risk_reject" }, { labelKey: "tradeJourneys.filters.viewBrokerReject", value: "broker_reject" }, { labelKey: "tradeJourneys.filters.viewPartialFill", value: "partial_fill" }, { labelKey: "tradeJourneys.filters.viewReconMismatch", value: "recon_mismatch" }];
@@ -31,7 +45,7 @@ export function TradeJourneysPage() {
   const [resolving, setResolving] = useState(false);
   const [liveState, setLiveState] = useState<JourneyLiveState>("connecting");
   const [liveRevision, setLiveRevision] = useState(0);
-  const tenant = params.get("tenant_id") || "default";
+  const tenant = useTradeJourneyTenant(params);
   const environment = params.get("environment") || "paper";
   const personaFocus = params.get("persona_id") || undefined;
   const strategyFocus = params.get("strategy_id") || undefined;
@@ -74,7 +88,7 @@ export function TradeJourneysPage() {
 export function TradeJourneyDetailPage() {
   const t = useT();
   const { journeyId = "" } = useParams(); const [params] = useSearchParams();
-  const tenant = params.get("tenant_id") || "default", environment = params.get("environment") || "paper";
+  const tenant = useTradeJourneyTenant(params), environment = params.get("environment") || "paper";
   const returnTo = params.get("return_to") || undefined, returnLabel = params.get("return_label") || undefined;
   const listContext = useMemo(() => { const next = new URLSearchParams(); next.set("tenant_id", tenant); next.set("environment", environment); if (returnTo) next.set("return_to", returnTo); if (returnLabel) next.set("return_label", returnLabel); return next.toString(); }, [tenant, environment, returnTo, returnLabel]);
   const [detail, setDetail] = useState<JourneyDetailEnvelope>(); const [timeline, setTimeline] = useState<JourneyTimelineEnvelope>(); const [evidence, setEvidence] = useState<Record<string, unknown>>(); const [error, setError] = useState("");
