@@ -208,15 +208,15 @@ export const PersonaLeaguePage = ({ embedded = false }: { embedded?: boolean }) 
           {isTelemetryDegraded ? <ShieldAlert className="h-5 w-5 text-amber-500 animate-pulse" /> : <ShieldCheck className="h-5 w-5 text-emerald-700 dark:text-emerald-300" />}
           <div className="flex-1">
             <AlertTitle className="text-sm font-semibold flex items-center gap-2">
-              Telemetry Feed: {isTelemetryDegraded ? "Degraded Standby" : "High Confidence (BFF Live)"}
+              BFF Ranking Data: {useFallback ? "No Live Rows Loaded" : isTelemetryDegraded ? "Source Confidence Flagged (URL)" : "Live Rows Loaded"}
               <Badge variant="outline" className={`ml-2 text-[10px] uppercase font-bold tracking-wider ${isTelemetryDegraded ? "border-amber-500/30 text-amber-500 bg-amber-500/10" : "border-emerald-500/30 text-emerald-700 dark:text-emerald-300 bg-emerald-500/10"}`}>
-                {isTelemetryDegraded ? "standby" : "live"}
+                {useFallback ? "empty" : isTelemetryDegraded ? "degraded" : "live"}
               </Badge>
             </AlertTitle>
             <AlertDescription className="text-xs text-muted-foreground mt-0.5">
-              {isTelemetryDegraded 
-                ? "BFF real-time telemetry stream is offline or missing. Operating on local memory and seed backups safely."
-                : "Active sync with live telemetry clusters verified. All indicators are optimal."}
+              {useFallback
+                ? "No BFF ranking rows are currently loaded. Strict live mode does not use local memory or seed fallback data."
+                : isTelemetryDegraded ? "BFF ranking rows are loaded with a degraded source_confidence URL parameter; row-level eligibility and evidence remain as reported by BFF." : "BFF ranking rows are loaded in strict live mode. Row-level eligibility and telemetry coverage are reported per persona below."}
             </AlertDescription>
           </div>
         </div>
