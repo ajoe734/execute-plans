@@ -3,10 +3,44 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import i18n from "@/i18n";
+import { clearAuthProvider, setAuthProvider } from "@/lib/bff-v1/headers";
 import { TradeJourneyDetailPage, TradeJourneysPage } from "./TradeJourneysPage";
 import * as api from "@/lib/bff-v1/tradeJourneys";
 
-vi.mock("@/lib/bff-v1/tradeJourneys", async importOriginal => ({ ...(await importOriginal<typeof api>()), listTradeJourneys: vi.fn(), getTradeJourney: vi.fn(), getTradeJourneyTimeline: vi.fn(), getTradeJourneyEvidence: vi.fn(), resolveTradeJourney: vi.fn() }));
+const authState = vi.hoisted(() => ({
+  bffSession: null as { identity?: { tenantId?: string } } | null,
+  session: null as unknown,
+}));
+
+vi.mock("@/lib/auth/AuthProvider", async importOriginal => {
+  const actual = await importOriginal<typeof import("@/lib/auth/AuthProvider")>();
+  return {
+    ...actual,
+    useAuth: () => ({
+      session: authState.session,
+      user: null,
+      bffSession: authState.bffSession,
+      bffError: null,
+      loading: false,
+      retryBffSession: vi.fn(),
+      signOut: vi.fn(),
+      devLogin: vi.fn(),
+    }),
+  };
+});
+
+vi.mock("@/lib/bff-v1/tradeJourneys", async importOriginal => {
+  const actual = await importOriginal<typeof api>();
+  return {
+    ...actual,
+    listTradeJourneys: vi.fn(),
+    getTradeJourney: vi.fn(),
+    getTradeJourneyTimeline: vi.fn(),
+    getTradeJourneyEvidence: vi.fn(),
+    resolveTradeJourney: vi.fn(),
+    subscribeTradeJourneys: vi.fn(actual.subscribeTradeJourneys),
+  };
+});
 
 const fresh = { snapshot_at: new Date().toISOString(), read_state: "formal" as const, freshness: { materializer_revision: 7, rebuild_status: "ready", source_watermarks: {} } };
 const scenarios = [
@@ -26,7 +60,12 @@ describe("Trade Journeys workbench", () => {
   // (see TradeJourneysPage.i18n.test.tsx for the zh-TW coverage guard).
   beforeAll(async () => { await i18n.changeLanguage("en-US"); });
   afterAll(async () => { await i18n.changeLanguage("zh-TW"); });
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    authState.bffSession = null;
+    authState.session = null;
+    clearAuthProvider();
+  });
 
   it("renders happy, risk reject, broker reject, partial fill, and recon mismatch rows", async () => {
     vi.mocked(api.listTradeJourneys).mockResolvedValue({ data: { items: rows }, page_info: { total: 5, page_size: 25 }, meta: fresh });
@@ -104,5 +143,146 @@ describe("Trade Journeys workbench", () => {
     const backLink = screen.getByRole("link", { name: /Back to Strategy strat-1/ });
     expect(backLink).toHaveAttribute("href", "/management/strategies/strat-1");
     expect(screen.getByRole("link", { name: "All journeys" })).toHaveAttribute("href", "/management/trade-journeys?tenant_id=t1&environment=paper&return_to=%2Fmanagement%2Fstrategies%2Fstrat-1&return_label=Strategy+strat-1");
+  });
+
+  it("inherits the authenticated BFF session tenant on bare list navigation across list, events, row links, and resolve", async () => {
+    authState.bffSession = { identity: { tenantId: "tenant-dev" } };
+    const knownJourneyId = "tj_c7d14e8a-3cac-439a-81b7-7401fa2aaac3";
+    const knownRow = { ...rows[0], journey_id: knownJourneyId };
+    vi.mocked(api.listTradeJourneys).mockResolvedValue({ data: { items: [knownRow] }, page_info: { total: 25, page_size: 25 }, meta: fresh });
+    vi.mocked(api.resolveTradeJourney).mockResolvedValue({ data: { ambiguous: false, journey_ids: [knownJourneyId] }, meta: fresh });
+    vi.mocked(api.getTradeJourney).mockResolvedValue({ data: knownRow, meta: fresh });
+    vi.mocked(api.getTradeJourneyTimeline).mockResolvedValue({ data: { items: [] }, page_info: { total: 0, page_size: 100 }, meta: fresh });
+    vi.mocked(api.getTradeJourneyEvidence).mockResolvedValue({ data: {}, meta: fresh });
+
+    render(
+      <MemoryRouter initialEntries={["/management/trade-journeys"]}>
+        <Routes>
+          <Route path="/management/trade-journeys" element={<><TradeJourneysPage/><Location/></>} />
+          <Route path="/management/trade-journeys/:journeyId" element={<><TradeJourneyDetailPage/><Location/></>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    const rowLink = await screen.findByRole("link", { name: knownJourneyId });
+    expect(api.listTradeJourneys).toHaveBeenCalledWith(
+      expect.objectContaining({ tenant_id: "tenant-dev", environment: "paper" }),
+      expect.anything(),
+    );
+    expect(api.subscribeTradeJourneys).toHaveBeenCalledWith(
+      { tenant_id: "tenant-dev", environment: "paper" },
+      expect.anything(),
+    );
+    expect(rowLink).toHaveAttribute(
+      "href",
+      `/management/trade-journeys/${knownJourneyId}?tenant_id=tenant-dev&environment=paper`,
+    );
+
+    fireEvent.change(screen.getByLabelText("Resolve any identifier"), { target: { value: "ord-77" } });
+    fireEvent.click(screen.getByRole("button", { name: "Resolve" }));
+
+    await waitFor(() =>
+      expect(api.resolveTradeJourney).toHaveBeenCalledWith({
+        q: "ord-77",
+        tenant_id: "tenant-dev",
+        environment: "paper",
+      }),
+    );
+    await waitFor(() =>
+      expect(api.getTradeJourney).toHaveBeenCalledWith(
+        knownJourneyId,
+        { tenant_id: "tenant-dev", environment: "paper" },
+        expect.anything(),
+      ),
+    );
+    expect(screen.getByTestId("location")).toHaveTextContent("tenant_id=tenant-dev&environment=paper");
+  });
+
+  it("inherits the authenticated tenant on bare detail navigation and falls back to the registered auth provider tenant", async () => {
+    setAuthProvider({ getTenantId: () => "tenant-dev" });
+    const knownJourneyId = "tj_c7d14e8a-3cac-439a-81b7-7401fa2aaac3";
+    vi.mocked(api.getTradeJourney).mockResolvedValue({ data: { ...rows[0], journey_id: knownJourneyId }, meta: fresh });
+    vi.mocked(api.getTradeJourneyTimeline).mockResolvedValue({ data: { items: [] }, page_info: { total: 0, page_size: 100 }, meta: fresh });
+    vi.mocked(api.getTradeJourneyEvidence).mockResolvedValue({ data: {}, meta: fresh });
+
+    render(
+      <MemoryRouter initialEntries={[`/management/trade-journeys/${knownJourneyId}`]}>
+        <Routes>
+          <Route path="/management/trade-journeys/:journeyId" element={<TradeJourneyDetailPage/>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await screen.findByText(knownJourneyId);
+    expect(api.getTradeJourney).toHaveBeenCalledWith(
+      knownJourneyId,
+      { tenant_id: "tenant-dev", environment: "paper" },
+      expect.anything(),
+    );
+    expect(api.getTradeJourneyTimeline).toHaveBeenCalledWith(
+      knownJourneyId,
+      { tenant_id: "tenant-dev", environment: "paper", page_size: 100 },
+      expect.anything(),
+    );
+    expect(api.getTradeJourneyEvidence).toHaveBeenCalledWith(
+      knownJourneyId,
+      { tenant_id: "tenant-dev", environment: "paper" },
+      expect.anything(),
+    );
+    expect(screen.getByRole("link", { name: "All journeys" })).toHaveAttribute(
+      "href",
+      "/management/trade-journeys?tenant_id=tenant-dev&environment=paper",
+    );
+  });
+
+  it("preserves an explicit tenant_id URL parameter over the authenticated session tenant across list, events, resolve, and detail", async () => {
+    authState.bffSession = { identity: { tenantId: "tenant-dev" } };
+    setAuthProvider({ getTenantId: () => "tenant-dev" });
+    vi.mocked(api.listTradeJourneys).mockResolvedValue({ data: { items: rows.slice(0, 1) }, page_info: { total: 1, page_size: 25 }, meta: fresh });
+    vi.mocked(api.resolveTradeJourney).mockResolvedValue({ data: { ambiguous: false, journey_ids: ["happy-1"] }, meta: fresh });
+    vi.mocked(api.getTradeJourney).mockResolvedValue({ data: rows[0], meta: fresh });
+    vi.mocked(api.getTradeJourneyTimeline).mockResolvedValue({ data: { items: [] }, page_info: { total: 0, page_size: 100 }, meta: fresh });
+    vi.mocked(api.getTradeJourneyEvidence).mockResolvedValue({ data: {}, meta: fresh });
+
+    render(
+      <MemoryRouter initialEntries={["/management/trade-journeys?tenant_id=tenant-explicit&environment=canary&persona_id=persona-a&return_to=%2Fmanagement%2Fpersonas%2Fpersona-a&return_label=Persona%20persona-a"]}>
+        <Routes>
+          <Route path="/management/trade-journeys" element={<><TradeJourneysPage/><Location/></>} />
+          <Route path="/management/trade-journeys/:journeyId" element={<><TradeJourneyDetailPage/><Location/></>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    const rowLink = await screen.findByRole("link", { name: "happy-1" });
+    expect(api.listTradeJourneys).toHaveBeenCalledWith(
+      expect.objectContaining({ tenant_id: "tenant-explicit", environment: "canary", persona_id: "persona-a" }),
+      expect.anything(),
+    );
+    expect(api.subscribeTradeJourneys).toHaveBeenCalledWith(
+      { tenant_id: "tenant-explicit", environment: "canary" },
+      expect.anything(),
+    );
+    expect(rowLink).toHaveAttribute(
+      "href",
+      "/management/trade-journeys/happy-1?tenant_id=tenant-explicit&environment=canary&return_to=%2Fmanagement%2Fpersonas%2Fpersona-a&return_label=Persona+persona-a",
+    );
+
+    fireEvent.change(screen.getByLabelText("Resolve any identifier"), { target: { value: "ord-explicit" } });
+    fireEvent.click(screen.getByRole("button", { name: "Resolve" }));
+
+    await waitFor(() =>
+      expect(api.resolveTradeJourney).toHaveBeenCalledWith({
+        q: "ord-explicit",
+        tenant_id: "tenant-explicit",
+        environment: "canary",
+      }),
+    );
+    await waitFor(() =>
+      expect(api.getTradeJourney).toHaveBeenCalledWith(
+        "happy-1",
+        { tenant_id: "tenant-explicit", environment: "canary" },
+        expect.anything(),
+      ),
+    );
   });
 });
