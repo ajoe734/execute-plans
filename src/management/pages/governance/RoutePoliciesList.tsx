@@ -7,7 +7,7 @@ import { StatusBadge } from "@/platform/components/StatusBadge";
 import { RiskBadge } from "@/platform/components/RiskBadge";
 import { Badge } from "@/components/ui/badge";
 import { bffV1 } from "@/lib/bff-v1";
-import type { Persona, RoutePolicy } from "@/lib/bff-v1";
+import type { RoutePolicy } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 import { safeDateTime } from "@/lib/utils";
 
@@ -15,11 +15,9 @@ export const RoutePoliciesList = () => {
   const t = useT();
   const nav = useNavigate();
   const [rows, setRows] = useState<RoutePolicy[]>([]);
-  const [personas, setPersonas] = useState<Record<string, Persona>>({});
 
   useEffect(() => {
-    bffV1.routePolicies.list().then(setRows);
-    bffV1.personas.list().then((ps) => setPersonas(Object.fromEntries(ps.map((p) => [p.id, p]))));
+    bffV1.routePolicies.list().then(setRows).catch(() => setRows([]));
   }, []);
 
   return (
@@ -28,7 +26,7 @@ export const RoutePoliciesList = () => {
       <PageBody>
         <DataTable
           rows={rows}
-          onRowClick={(r) => nav(`/management/governance/policies/${r.id}`)}
+          onRowClick={(r) => nav(`/management/governance/policies/${encodeURIComponent(r.id)}`)}
           empty={t("empty.noResults")}
           columns={[
             { key: "name", header: t("table.name"), cell: (r) => (
@@ -38,7 +36,7 @@ export const RoutePoliciesList = () => {
               </div>
             ) },
             { key: "persona", header: t("nav.personas"), cell: (r) => (
-              <span className="text-sm">{personas[r.personaId]?.name ?? r.personaId}</span>
+              <span className="text-sm">{r.name ?? r.personaId}</span>
             ) },
             { key: "version", header: t("table.version"), cell: (r) => (
               <Badge variant="outline" className="text-mono text-[10px]">{r.version}</Badge>

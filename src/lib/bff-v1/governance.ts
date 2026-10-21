@@ -75,24 +75,53 @@ const routePolicyIdentifier = (policy: UnknownRecord | undefined): string | unde
   return personaId ? `persona:${personaId}:${version ?? "current"}` : undefined;
 };
 
+function synthesizePersonaRoutePolicy(persona: UnknownRecord, stored?: UnknownRecord): UnknownRecord {
+  const personaId = recordString(stored, "personaId", "persona_id") ?? recordString(persona, "id", "persona_id", "personaId") ?? "";
+  const version = recordString(stored, "version", "policy_version", "policyVersion") ?? "v1";
+  const policy: UnknownRecord = {
+    personaId,
+    version,
+    rules: Array.isArray(stored?.rules) ? stored.rules : [],
+    consult_policy: stored?.consult_policy ?? stored?.consultPolicy ?? persona.consult_policy ?? persona.consultPolicy ?? null,
+    name: recordString(stored, "name", "title") ?? recordString(persona, "name", "title", "label") ?? personaId,
+    owner: recordString(stored, "owner", "owner_id") ?? recordString(persona, "owner", "owner_id", "ownerId") ?? "pantheon-bff",
+    state: recordString(stored, "state", "status") ?? recordString(persona, "state", "status", "lifecycle_state") ?? "approved",
+    risk: recordString(stored, "risk", "risk_level") ?? recordString(persona, "risk", "risk_level", "riskLevel") ?? "low",
+    updatedAt: recordString(stored, "updatedAt", "updated_at") ?? recordString(persona, "updatedAt", "updated_at") ?? "",
+    ...stored,
+  };
+  policy.personaId = personaId;
+  policy.version = version;
+  if (!Array.isArray(policy.rules)) policy.rules = [];
+  policy.id = routePolicyIdentifier(policy) ?? `persona:${personaId}:${version}`;
+  return policy;
+}
+
 async function liveRoutePolicies(helperName: string): Promise<RoutePolicy[]> {
-  const policies = await livePersonaScopedItems(
-    helperName,
-    paths.personaRoutePolicy,
-    (body, personaId) => {
+  try {
+    const [storedItems, personas] = await Promise.all([
+      strictLiveRead<UnknownRecord[]>(helperName, { method: "GET", path: paths.routePolicies(), query: { page_size: 200 } }, liveItemsFrom<UnknownRecord>),
+      strictLiveRead<UnknownRecord[]>(helperName, { method: "GET", path: paths.personas() }, liveItemsFrom<UnknownRecord>),
+    ]);
+    const personaById = new Map(personas.map((p) => [recordString(p, "id", "persona_id", "personaId") ?? "", p]));
+    const covered = new Set<string>();
+    const policies = storedItems.map((item) => {
+      const pid = recordString(item, "personaId", "persona_id") ?? "";
+      if (pid) covered.add(pid);
+      return synthesizePersonaRoutePolicy(personaById.get(pid) ?? {}, item);
+    });
+    for (const [pid, persona] of personaById) {
+      if (pid && !covered.has(pid)) policies.push(synthesizePersonaRoutePolicy(persona));
+    }
+    return policies as unknown as RoutePolicy[];
+  } catch (err) {
+    if ((err as { status?: number })?.status !== 404 && !(err instanceof Error && /404/.test(err.message))) throw err;
+    const policies = await livePersonaScopedItems(helperName, paths.personaRoutePolicy, (body, personaId) => {
       const detail = asRecord(liveDetailFrom<UnknownRecord>(body));
-      if (!detail) return [];
-      const policy = { ...detail };
-      if (policy.personaId === undefined && policy.persona_id === undefined) {
-        policy.personaId = personaId;
-      }
-      if (policy.id === undefined) {
-        policy.id = routePolicyIdentifier(policy) ?? `persona:${personaId}:current`;
-      }
-      return [policy];
-    },
-  );
-  return policies as unknown as RoutePolicy[];
+      return detail ? [synthesizePersonaRoutePolicy({ id: personaId }, detail)] : [];
+    });
+    return policies as unknown as RoutePolicy[];
+  }
 }
 
 export async function listRoutePolicies(): Promise<RoutePolicy[]> {
@@ -101,7 +130,7 @@ export async function listRoutePolicies(): Promise<RoutePolicy[]> {
 
 export async function getRoutePolicy(id: string): Promise<RoutePolicy | undefined> {
   const policies = await liveRoutePolicies("routePolicies.get");
-  return policies.find((policy) => routePolicyIdentifier(asRecord(policy)) === id);
+  return policies.find((policy) => routePolicyIdentifier(asRecord(policy)) === id || policy.personaId === id);
 }
 
 export async function getRoutePolicyForPersona(personaId: string): Promise<RoutePolicy | undefined> {

@@ -251,6 +251,8 @@ export default {
     capitalEmptyState: {
       title: "尚無資金池資料",
       description: "此頁面尚無資金池資料——後端可連線，但上游尚未產生資料。",
+      paperHiddenTitle: "尚無正式資金池（已隱藏 {{count}} 個模擬資金池）",
+      paperHiddenDescription: "上游目前有 {{count}} 個模擬（paper）資金池，此正式資金池頁面已將其隱藏。",
     },
     rebalanceEmptyState: {
       title: "尚無再平衡提案",
@@ -3228,6 +3230,8 @@ export default {
         allowedHosts: "允許連線主機白名單",
         fetchLimits: "擷取限制",
         scheduleUniverse: "排程與運作標的政策",
+        cadenceCron: "排程週期 (Cron)",
+        timezone: "時區",
         jitterSeconds: "隨機抖動 (秒)",
         universePolicyRef: "標的範圍政策參考",
         canaryRuns: "金絲雀驗證記錄",
