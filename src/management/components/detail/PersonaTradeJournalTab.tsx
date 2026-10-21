@@ -565,7 +565,7 @@ export const PersonaTradeJournalTab = ({ personaId }: { personaId: string }) => 
                               <span className="font-mono text-[9px] text-muted-foreground">{c.id}</span>
                             </div>
                             <div className="text-sm font-medium">{c.proposed_change}</div>
-                            <div className="text-[10px] text-muted-foreground">Confidence: {(c.confidence * 100).toFixed(0)}%</div>
+                            <div className="text-[10px] text-muted-foreground">Confidence: {typeof c.confidence === "number" && Number.isFinite(c.confidence) && c.confidence >= 0 && c.confidence <= 1 ? `${(c.confidence * 100).toFixed(0)}%` : "—"}</div>
                           </div>
                           {ref.review_state === "proposed" && (
                             <div className="flex gap-1 shrink-0">

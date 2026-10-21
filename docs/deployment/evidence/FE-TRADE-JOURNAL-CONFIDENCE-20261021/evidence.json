@@ -1,0 +1,23 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "FE-TRADE-JOURNAL-CONFIDENCE-20261021",
+  "owner": "Antigravity",
+  "reviewer": "Antigravity2",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-TRADE-JOURNAL-CONFIDENCE-20261021",
+  "status": "ready-for-independent-exact-head-review",
+  "scope": {
+    "adopted": [
+      "PersonaTradeJournalTab.tsx lesson candidate row: render confidence as a percentage only when it is a finite number in 0..1 (including 0 and 1); otherwise render the existing unavailable placeholder instead of NaN%."
+    ],
+    "not_changed": [
+      "Historical reflection/lesson records, provider validation, business commands, proposal review state, episode and ranking behavior; no DTO compatibility helper, no qualitative-to-numeric mapping, no new dependencies."
+    ]
+  },
+  "validation": {
+    "component_test": "passed: vitest PersonaTradeJournalTab.test.tsx 7/7",
+    "typecheck": "passed: npm run typecheck (tsc -p tsconfig.app.json) 0 errors"
+  },
+  "production_net_lines": 0
+}
