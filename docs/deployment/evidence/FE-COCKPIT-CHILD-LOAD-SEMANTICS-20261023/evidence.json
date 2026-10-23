@@ -1,0 +1,10 @@
+{
+  "task_id": "FE-COCKPIT-CHILD-LOAD-SEMANTICS-20261023",
+  "base_head": "48cfa84fc4a6c62e4081bf91d740c800c0f339d9",
+  "scope": ["src/management/pages/oversight/_core.tsx", "src/management/pages/oversight/LiveOnlyFallbacks.test.tsx"],
+  "validation": {
+    "vitest src/management/pages/oversight/LiveOnlyFallbacks.test.tsx": "23 passed / 0 failed",
+    "tsc -p tsconfig.app.json --noEmit": "exit 0"
+  },
+  "notes": "Source-only. No remote/business/model acceptance run. Hosted UI acceptance remains with release coordinator."
+}

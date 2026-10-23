@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { I18nextProvider } from "react-i18next";
 import { MemoryRouter } from "react-router-dom";
@@ -286,6 +286,108 @@ describe("live-only management page fallbacks", () => {
     it("unknown owner total => bottom unavailable", () => {
       renderPage(<PersonaLeagueSnapshot rows={ranked(20)} inventory={inv(20)} />);
       expect(screen.getByTestId("persona-league-bottom-incomplete")).toHaveTextContent("population unknown");
+    });
+  });
+
+  describe("cockpit child load semantics", () => {
+    type St = { data?: unknown; loading?: boolean; error?: unknown };
+    const cockpit = { snapshotAt: "2026-10-23T00:00:00Z", status: "ok", health: { status: "ok", headline: "Cockpit ok" }, cards: [] };
+    const keys = ["portfolioBook.summary", "personaLeague.rankings", "personaLeague.inventory", "quarterlyRanking.list", "quarterlyRanking.formula", "personaFleet"];
+    let states: Record<string, St>;
+    const apply = (next: Record<string, St>) => {
+      states = { ...states, ...next };
+    };
+    const rerenderWith = (view: ReturnType<typeof renderPage>, next: Record<string, St>) => {
+      apply(next);
+      view.rerender(
+        <I18nextProvider i18n={i18n}><MemoryRouter><OneRingCockpitPage /></MemoryRouter></I18nextProvider>,
+      );
+    };
+    beforeEach(() => {
+      states = Object.fromEntries(keys.map((k) => [k, { loading: true }]));
+      mocks.useV5Live.mockImplementation((_l, _d, opts?: { cacheKey?: string }) => {
+        const key = (opts?.cacheKey ?? "").replace("oversight.", "");
+        const st = key === "cockpit" ? { data: cockpit, loading: false } : states[key] ?? {};
+        return { data: st.data, loading: st.loading ?? false, error: st.error ?? null, refresh: vi.fn() };
+      });
+    });
+    const qrow = (i: number, eligibility: string) => ({
+      personaId: `q${i}`, quarter: "2026-Q4", eligibility, evidenceRefs: ["e"],
+    });
+    const page = [qrow(0, "eligible"), ...Array.from({ length: 19 }, (_, i) => qrow(i + 1, "insufficient_data"))];
+    const rk = (n: number) => ({
+      personaId: `p${n}`, personaName: `Persona ${n}`, currentRank: n, tier: "A",
+      links: { manageHref: `/management/personas/p${n}` },
+    });
+
+    it("quarterly: formula before rows is not 0/0/0, then error, then 1+19 page", () => {
+      apply({ "quarterlyRanking.formula": { data: { version: "9.9.9" } }, "quarterlyRanking.list": { loading: true } });
+      const view = renderPage(<OneRingCockpitPage />);
+      expect(screen.getByText(/Formula 9\.9\.9 loaded; waiting for ranking rows/)).toBeInTheDocument();
+      expect(screen.queryByText("Disqualified / Insufficient data")).not.toBeInTheDocument();
+      rerenderWith(view, { "quarterlyRanking.list": { loading: false, error: new Error("boom") } });
+      expect(screen.getByText(/ranking rows unavailable/)).toBeInTheDocument();
+      expect(screen.queryByText("Disqualified / Insufficient data")).not.toBeInTheDocument();
+      rerenderWith(view, { "quarterlyRanking.list": { data: page } });
+      const row = screen.getByText("Disqualified / Insufficient data").parentElement as HTMLElement;
+      expect(within(row).getByText("19")).toBeInTheDocument();
+      expect(screen.getByTestId("quarterly-loaded-scope")).toHaveTextContent("已載入項目");
+      expect(screen.getByTestId("quarterly-loaded-scope")).toHaveTextContent("20 rows");
+    });
+
+    it("quarterly: a successful empty list is a genuine zero", () => {
+      apply({ "quarterlyRanking.list": { data: [] }, "quarterlyRanking.formula": { data: { version: "1" } } });
+      renderPage(<OneRingCockpitPage />);
+      const row = screen.getByText("Disqualified / Insufficient data").parentElement as HTMLElement;
+      expect(within(row).getByText("0")).toBeInTheDocument();
+      expect(screen.getByTestId("quarterly-loaded-scope")).toHaveTextContent("0 rows");
+    });
+
+    it("capital: pending, error, then known facts", () => {
+      const view = renderPage(<OneRingCockpitPage />);
+      expect(screen.getAllByText("Waiting for live BFF data.").length).toBeGreaterThan(0);
+      rerenderWith(view, { "portfolioBook.summary": { loading: false, error: new Error("x") } });
+      expect(screen.getAllByText(/does not render seed/).length).toBeGreaterThan(0);
+      rerenderWith(view, { "portfolioBook.summary": { data: {
+        totalNav: null, totalCash: null, grossExposure: null, leverage: null, unrealizedPnl: null, pnlToday: null,
+        activeCapitalPools: 1, highestRiskPoolId: null, bindingCount: 89, activeRuntimeCount: 1,
+        paperRuntimeCount: 87, liveRuntimeCount: 0, totalTrades: 3, totalPnl: -15, maxDrawdown: 0.1, latestTelemetryAt: null,
+      } } });
+      expect(screen.getByText("87 / 0")).toBeInTheDocument();
+      expect(screen.queryByText("$0")).not.toBeInTheDocument();
+    });
+
+    it("rankings: pending shows no unavailable claim, settles with Top3/Bottom3 and links", () => {
+      const view = renderPage(<OneRingCockpitPage />);
+      expect(screen.queryByText("Ranking unavailable.")).not.toBeInTheDocument();
+      expect(screen.queryByText(/No ranked rows returned/)).not.toBeInTheDocument();
+      const all = Array.from({ length: 94 }, (_, i) => rk(i + 1));
+      rerenderWith(view, {
+        "personaLeague.rankings": { data: all },
+        "personaLeague.inventory": { data: [{ personaId: "p1", personaName: "Persona 1", manageHref: "/m/p1", ownerTotal: 94 }] },
+      });
+      expect(screen.getByRole("link", { name: "#1 Persona 1" })).toHaveAttribute("href", "/management/personas/p1");
+      expect(screen.getByRole("link", { name: "#94 Persona 94" })).toBeInTheDocument();
+      expect(screen.queryByTestId("persona-league-bottom-incomplete")).not.toBeInTheDocument();
+    });
+
+    it("rankings success with inventory pending keeps Top3 and labels coverage unknown", () => {
+      apply({ "personaLeague.rankings": { data: Array.from({ length: 20 }, (_, i) => rk(i + 1)) } });
+      renderPage(<OneRingCockpitPage />);
+      expect(screen.getByRole("link", { name: "#1 Persona 1" })).toBeInTheDocument();
+      expect(screen.getByTestId("persona-league-inventory-pending")).toHaveTextContent("waiting for inventory");
+      expect(screen.getByTestId("persona-league-bottom-incomplete")).toHaveTextContent("population unknown");
+    });
+
+    it("fleet: pending, error, then 20 paper rows is a scoped filtered-empty state", () => {
+      const view = renderPage(<OneRingCockpitPage />);
+      expect(screen.queryByText(/no source health is claimed/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/No attention|noAttention/i)).not.toBeInTheDocument();
+      rerenderWith(view, { personaFleet: { loading: false, error: new Error("x") } });
+      expect(screen.queryByText(/no source health is claimed/)).not.toBeInTheDocument();
+      const paper = Array.from({ length: 20 }, (_, i) => ({ personaId: `f${i}`, personaName: `F${i}`, capitalMode: "paper" }));
+      rerenderWith(view, { personaFleet: { data: paper } });
+      expect(screen.getByText(/20 fleet rows; none are live\/canary/)).toBeInTheDocument();
     });
   });
 });
