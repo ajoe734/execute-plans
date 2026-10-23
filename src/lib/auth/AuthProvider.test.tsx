@@ -346,6 +346,38 @@ describe("AuthProvider strict BFF bridge", () => {
     expect(result.current.loading).toBe(false);
   });
 
+  it("fences a retry started while logout is pending so the old session is not restored", async () => {
+    setLocation("https://app.dev.mvl-cap.tw/auth");
+    mocks.initialUser = null;
+    mocks.verify.mockRejectedValueOnce(new Error("BFF browser session verification timed out after 10000ms"));
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.bffError).not.toBeNull();
+
+    let resolveLogout!: () => void;
+    mocks.bffLogout.mockImplementationOnce(
+      () => new Promise<void>((resolve) => { resolveLogout = resolve; }),
+    );
+    let resolveRetry!: (val: typeof verified) => void;
+    mocks.verify.mockImplementationOnce(
+      () => new Promise<typeof verified>((resolve) => { resolveRetry = resolve; }),
+    );
+    let logout!: Promise<void>;
+    let retry!: Promise<void>;
+    act(() => { logout = result.current.signOut(); });
+    act(() => { retry = result.current.retryBffSession(); });
+    await act(async () => {
+      resolveLogout();
+      await logout;
+    });
+    await act(async () => {
+      resolveRetry(verified);
+      await retry;
+    });
+    expect(result.current.bffSession).toBeNull();
+    expect(result.current.loading).toBe(false);
+  });
+
   it("throws unavailable GCP Identity session on production host when session is null", async () => {
     setLocation("https://app.mvl-cap.tw/auth");
     mocks.initialUser = null;

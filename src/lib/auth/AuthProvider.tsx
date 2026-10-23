@@ -266,6 +266,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error: unknown) {
       bffLogoutError = error;
     }
+    // Fence any retry/verify started while logout was pending so a late
+    // response for the old session cannot restore it after logout completes.
+    ++syncVersion.current;
 
     if (isDevLoginHost()) {
       sessionRef.current = null;

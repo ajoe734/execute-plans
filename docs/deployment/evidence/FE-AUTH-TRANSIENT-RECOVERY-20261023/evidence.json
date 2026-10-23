@@ -11,11 +11,12 @@
   "behavior": {
     "transient": "verification timeout, network TypeError, BffError 5xx/408/429 keep bffError, bffSession stays null (protected access not admitted), Auth.tsx shows Retry access verification on dev host without a GCP session",
     "genuine": "BffError 4xx other than 408/429 and unauthenticated/rejected readback clear bffError and show the sign-in form",
-    "unchanged": "10s request timeout, backend contracts, syncVersion logout/late-response fencing, tenant query clearing"
+    "unchanged": "10s request timeout, backend contracts, syncVersion logout/late-response fencing, tenant query clearing",
+    "logout_retry_interleaving": "signOut bumps syncVersion again after the BFF logout await, and Auth.tsx disables actions (busy) while Use another account is pending, so a retry during pending logout cannot restore the old session"
   },
   "verification": {
-    "vitest": "src/lib/auth + src/pages/Auth.test.tsx: 6 files, 56 tests passed",
-    "tsc": "tsc --noEmit -p tsconfig.app.json: clean",
+    "vitest": "src/lib/auth + src/pages/Auth.test.tsx: 6 files, 57 tests passed (new regression fails without the fix)",
+    "tsc": "tsc --noEmit -p tsconfig.app.json: exit 0 (captured directly)",
     "eslint": "0 errors; 5 warnings, none from this change",
     "not_run": "hosted browser recheck and two-actor logout proof remain with the original parent; no deployment or provider call"
   }

@@ -159,6 +159,17 @@ export default function AuthPage() {
     }
   };
 
+  const signOutWithBusy = async () => {
+    setBusy(true);
+    try {
+      await signOut();
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const retryAccessVerification = async () => {
     setBusy(true);
     try {
@@ -204,7 +215,7 @@ export default function AuthPage() {
             <Button className="w-full" variant="outline" onClick={() => void resendVerification()} disabled={busy}>
               Resend verification email
             </Button>
-            <Button className="w-full" variant="ghost" onClick={() => void signOut()} disabled={busy}>
+            <Button className="w-full" variant="ghost" onClick={() => void signOutWithBusy()} disabled={busy}>
               Use another account
             </Button>
           </div>
@@ -220,7 +231,7 @@ export default function AuthPage() {
             >
               Retry access verification
             </Button>
-            <Button className="mt-2 w-full" variant="ghost" onClick={() => void signOut()} disabled={busy}>
+            <Button className="mt-2 w-full" variant="ghost" onClick={() => void signOutWithBusy()} disabled={busy}>
               Use another account
             </Button>
           </div>
