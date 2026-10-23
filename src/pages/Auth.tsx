@@ -159,6 +159,17 @@ export default function AuthPage() {
     }
   };
 
+  const signOutWithBusy = async () => {
+    setBusy(true);
+    try {
+      await signOut();
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const retryAccessVerification = async () => {
     setBusy(true);
     try {
@@ -177,7 +188,7 @@ export default function AuthPage() {
           <h1 className="text-2xl font-semibold">{productName}</h1>
           <p className="text-sm text-muted-foreground">Sign in once to access the {productArea}.</p>
         </div>
-        {authRequired && !session && !bffSession ? (
+        {authRequired && !session && !bffSession && !(isDev && bffError) ? (
           <div role="status" className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
             <p className="font-medium">Your {isAgora ? "Agora" : "Pantheon"} session is missing or expired.</p>
             <p className="mt-1 text-muted-foreground">
@@ -204,11 +215,11 @@ export default function AuthPage() {
             <Button className="w-full" variant="outline" onClick={() => void resendVerification()} disabled={busy}>
               Resend verification email
             </Button>
-            <Button className="w-full" variant="ghost" onClick={() => void signOut()} disabled={busy}>
+            <Button className="w-full" variant="ghost" onClick={() => void signOutWithBusy()} disabled={busy}>
               Use another account
             </Button>
           </div>
-        ) : session && !loading && bffError ? (
+        ) : (session || (isDev && !bffSession)) && !loading && bffError ? (
           <div role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm">
             <p className="font-medium">{isAgora ? "Agora access" : "Pantheon session"} verification failed.</p>
             <p className="mt-1 text-muted-foreground">{bffError.message}</p>
@@ -220,7 +231,7 @@ export default function AuthPage() {
             >
               Retry access verification
             </Button>
-            <Button className="mt-2 w-full" variant="ghost" onClick={() => void signOut()} disabled={busy}>
+            <Button className="mt-2 w-full" variant="ghost" onClick={() => void signOutWithBusy()} disabled={busy}>
               Use another account
             </Button>
           </div>
