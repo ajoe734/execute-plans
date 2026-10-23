@@ -47,6 +47,20 @@ vi.mock("@/lib/auth/bffBrowserSession", () => ({
 
 import { AuthProvider, useAuth } from "./AuthProvider";
 import { isDevLoginHost } from "@/lib/bff-v1/runtimeEnv";
+import { BffError } from "@/lib/bff-v1/errors";
+
+function httpError(status: number) {
+  return new BffError(status, {
+    error: {
+      code: "UNKNOWN_ERROR",
+      message: `HTTP ${status}`,
+      i18nKey: "errors.unknown",
+      retryable: status >= 500,
+      userActionable: false,
+      correlationId: "corr-test",
+    },
+  } as ConstructorParameters<typeof BffError>[1]);
+}
 
 function setLocation(url: string) {
   Object.defineProperty(window, "location", {
@@ -275,6 +289,61 @@ describe("AuthProvider strict BFF bridge", () => {
     expect(result.current.bffSession).toEqual(verified);
     expect(result.current.bffError).toBeNull();
     expect(mocks.identitySession).not.toHaveBeenCalled();
+  });
+
+  it("keeps a dev-cookie timeout retryable without admitting the session, then recovers on retry", async () => {
+    setLocation("https://app.dev.mvl-cap.tw/auth");
+    mocks.initialUser = null;
+    const timeout = new Error("BFF browser session verification timed out after 10000ms");
+    mocks.verify.mockRejectedValueOnce(timeout);
+    const { result } = renderHook(() => useAuth(), { wrapper });
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.bffSession).toBeNull();
+    expect(result.current.session).toBeNull();
+    expect(result.current.bffError).toBe(timeout);
+
+    mocks.verify.mockRejectedValueOnce(httpError(503));
+    await act(async () => {
+      await expect(result.current.retryBffSession()).rejects.toThrow("HTTP 503");
+    });
+    expect(result.current.bffSession).toBeNull();
+    expect(result.current.bffError?.message).toBe("HTTP 503");
+
+    mocks.verify.mockResolvedValueOnce(verified);
+    await act(async () => {
+      await result.current.retryBffSession();
+    });
+    expect(result.current.bffSession).toEqual(verified);
+    expect(result.current.bffError).toBeNull();
+  });
+
+  it("requires login after a genuine dev-cookie 401 and discards a late retry after logout", async () => {
+    setLocation("https://app.dev.mvl-cap.tw/auth");
+    mocks.initialUser = null;
+    mocks.verify.mockRejectedValueOnce(httpError(401));
+    const { result } = renderHook(() => useAuth(), { wrapper });
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.bffSession).toBeNull();
+    expect(result.current.bffError).toBeNull();
+
+    let resolveRetry!: (val: typeof verified) => void;
+    mocks.verify.mockImplementationOnce(
+      () => new Promise<typeof verified>((resolve) => { resolveRetry = resolve; }),
+    );
+    let retry!: Promise<void>;
+    act(() => { retry = result.current.retryBffSession(); });
+    await act(async () => {
+      await result.current.signOut();
+    });
+    await act(async () => {
+      resolveRetry(verified);
+      await retry;
+    });
+    expect(result.current.bffSession).toBeNull();
+    expect(result.current.bffError).toBeNull();
+    expect(result.current.loading).toBe(false);
   });
 
   it("throws unavailable GCP Identity session on production host when session is null", async () => {
