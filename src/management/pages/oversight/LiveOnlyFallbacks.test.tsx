@@ -387,7 +387,38 @@ describe("live-only management page fallbacks", () => {
       expect(screen.queryByText(/no source health is claimed/)).not.toBeInTheDocument();
       const paper = Array.from({ length: 20 }, (_, i) => ({ personaId: `f${i}`, personaName: `F${i}`, capitalMode: "paper" }));
       rerenderWith(view, { personaFleet: { data: paper } });
-      expect(screen.getByText(/20 fleet rows; none are live\/canary/)).toBeInTheDocument();
+      expect(screen.getByText(/20 fleet rows; none match the current production filter/)).toBeInTheDocument();
+    });
+
+    it("fleet: label does not claim mode (live named Test excluded; missing mode admitted)", () => {
+      apply({ personaFleet: { data: [
+        { personaId: "t1", personaName: "Test Live", capitalMode: "live" },
+        { personaId: "m1", personaName: "Normal" },
+      ] } });
+      renderPage(<OneRingCockpitPage />);
+      const scope = screen.getByTestId("fleet-loaded-scope");
+      expect(scope).toHaveTextContent("2 fleet rows, 1 match the current production filter");
+      expect(scope).not.toHaveTextContent(/live\/canary/);
+    });
+
+    it("retained data + error is visibly marked stale for each child", () => {
+      const all = Array.from({ length: 3 }, (_, i) => rk(i + 1));
+      apply({
+        "quarterlyRanking.list": { data: page, error: new Error("refetch") },
+        "personaLeague.rankings": { data: all, error: new Error("refetch") },
+        "personaLeague.inventory": { data: [{ personaId: "p1", personaName: "Persona 1", manageHref: "/m/p1", ownerTotal: 3 }] },
+        personaFleet: { data: [{ personaId: "f1", personaName: "F1", capitalMode: "live" }], error: new Error("refetch") },
+        "portfolioBook.summary": { data: {
+          totalNav: null, totalCash: null, grossExposure: null, leverage: null, unrealizedPnl: null, pnlToday: null,
+          activeCapitalPools: 1, highestRiskPoolId: null, bindingCount: 1, activeRuntimeCount: 1,
+          paperRuntimeCount: 1, liveRuntimeCount: 0, totalTrades: 0, totalPnl: 0, maxDrawdown: 0, latestTelemetryAt: null,
+        }, error: new Error("refetch") },
+      });
+      renderPage(<OneRingCockpitPage />);
+      for (const id of ["quarterly-stale", "persona-league-stale", "fleet-stale", "capital-stale"]) {
+        expect(screen.getByTestId(id)).toHaveTextContent("may be stale");
+      }
+      expect(screen.getAllByRole("link", { name: "#1 Persona 1" }).length).toBeGreaterThan(0);
     });
   });
 });
