@@ -2,10 +2,15 @@
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Card } from "@/components/ui/card";
-import { computeTopMovers, type PersonaLeagueRow } from "@/lib/v5/management/personaLeague";
+import { computeTopMovers, type PersonaLeagueInventoryRow, type PersonaLeagueRow } from "@/lib/v5/management/personaLeague";
 import { canonicalCenterUrl } from "@/management/navigation/managementRouteManifest";
 
-export const PersonaLeagueSnapshot = ({ rows }: { rows: PersonaLeagueRow[] }) => {
+export const PersonaLeagueSnapshot = ({
+  rows,
+  inventory = [],
+}: { rows: PersonaLeagueRow[]; inventory?: PersonaLeagueInventoryRow[] }) => {
+  // Bottom-3 is only a global claim when every inventory persona is ranked in the returned rows.
+  const bottomProvable = inventory.length > 0 && rows.length >= inventory.length;
   const { t } = useTranslation();
   const sorted = [...rows].sort((a, b) => a.currentRank - b.currentRank);
   const top3 = sorted.slice(0, 3);
@@ -17,10 +22,35 @@ export const PersonaLeagueSnapshot = ({ rows }: { rows: PersonaLeagueRow[] }) =>
         <h3 className="text-sm font-semibold text-foreground">{t("mgmt.cockpit.personaLeague")}</h3>
         <Link to={canonicalCenterUrl("rankings", "rolling")} className="text-xs text-primary hover:underline">{t("mgmt.actions.openDetail")} →</Link>
       </header>
-      <div className="grid grid-cols-2 gap-3 text-xs">
-        <Block title={t("mgmt.league.top3")} rows={top3} />
-        <Block title={t("mgmt.league.bottom3")} rows={bottom3} />
-      </div>
+      {rows.length > 0 ? (
+        <div className="grid grid-cols-2 gap-3 text-xs">
+          <Block title={t("mgmt.league.top3")} rows={top3} />
+          {bottomProvable ? (
+            <Block title={t("mgmt.league.bottom3")} rows={bottom3} />
+          ) : (
+            <div data-testid="persona-league-bottom-incomplete">
+              <div className="text-muted-foreground mb-1">{t("mgmt.league.bottom3")}</div>
+              <div className="text-muted-foreground">
+                Unavailable — {rows.length}{inventory.length > 0 ? ` of ${inventory.length}` : ""} ranked rows returned; coverage incomplete.
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="text-xs space-y-1" data-testid="persona-league-unranked">
+          <div className="text-muted-foreground">
+            {inventory.length > 0 ? "No ranked rows returned by the rankings owner; personas listed unranked." : "Ranking unavailable."}
+          </div>
+          <ul className="space-y-1">
+            {inventory.slice(0, 5).map((r) => (
+              <li key={r.personaId} className="flex justify-between gap-2">
+                <Link to={r.manageHref} className="font-mono text-primary hover:underline">{r.personaName}</Link>
+                <span className="text-muted-foreground">{r.eligible === false ? (r.exclusionReason ?? "not eligible") : "unranked"}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       <div className="mt-3 pt-3 border-t border-border text-xs space-y-1">
         {movers.topUp[0] && (
           <div>
@@ -51,7 +81,7 @@ function Block({ title, rows }: { title: string; rows: PersonaLeagueRow[] }) {
         {rows.map((r) => (
           <li key={r.personaId} className="flex justify-between">
             <Link to={r.links.manageHref} className="font-mono text-primary hover:underline">#{r.currentRank} {r.personaName}</Link>
-            <span className="font-mono text-muted-foreground">{r.tier}</span>
+            <span className="font-mono text-muted-foreground">{r.eligible === false ? `${r.tier} · not eligible` : r.tier}</span>
           </li>
         ))}
       </ul>

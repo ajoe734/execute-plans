@@ -3,6 +3,9 @@
 
 import { afterEach, describe, it, expect, beforeEach, vi } from "vitest";
 import {
+  adaptCockpitCapitalSummary,
+  adaptPersonaLeagueInventory,
+  adaptPersonaLeagueRankedRows,
   adaptManagementEvidenceDetail,
   adaptManagementEvidenceOverview,
   adaptTradingPulseOverview,
@@ -1726,5 +1729,93 @@ describe("safeAdapt strict-live contract mismatch", () => {
     const out = await mgmt.cockpit.get();
     expect(out.strip.fields).toEqual([]);
     expect(liveStatus.get().effective).toBe("live");
+  });
+});
+
+describe("Cockpit child read contracts (actual-shaped owner payloads)", () => {
+  const portfolio = {
+    data: {
+      totalCash: null, grossExposure: null, leverage: null, unrealizedPnl: null, pnlToday: null,
+      activeCapitalPools: 1, highestRiskPoolId: null,
+      summary: {
+        active_capital_pool_count: 1, binding_count: 89, active_runtime_count: 1,
+        paper_runtime_count: 87, live_runtime_count: 0, total_pnl: -15.0, total_trades: 3,
+        max_drawdown: 0.00015, latest_telemetry_at: "2026-10-23T01:14:39Z",
+      },
+    },
+  };
+
+  it("keeps available facts and leaves absent financials unknown (no totalNav)", () => {
+    const out = adaptCockpitCapitalSummary(portfolio);
+    expect(out).toMatchObject({
+      totalNav: null, totalCash: null, grossExposure: null, leverage: null,
+      unrealizedPnl: null, pnlToday: null, activeCapitalPools: 1,
+      activeRuntimeCount: 1, paperRuntimeCount: 87, liveRuntimeCount: 0,
+      totalTrades: 3, totalPnl: -15, highestRiskPoolId: null,
+    });
+  });
+
+  it("rejects payloads that carry no portfolio facts", () => {
+    expect(adaptCockpitCapitalSummary({ data: {} })).toBeNull();
+    expect(adaptCockpitCapitalSummary(null)).toBeNull();
+  });
+
+  const inventory = {
+    data: {
+      items: [{
+        id: "persona-contract-a", persona_id: "persona-contract-a", name: "Contract Persona A",
+        tenant_id: "tenant-x", eligible: false, exclusion_reason: "insufficient telemetry",
+        links: { detail: "/bff/personas/persona-contract-a" },
+      }],
+    },
+  };
+
+  it("never turns inventory rows into ranked rows", () => {
+    expect(adaptPersonaLeagueRankedRows(inventory)).toEqual([]);
+  });
+
+  it("presents inventory as unranked with canonical persona links", () => {
+    expect(adaptPersonaLeagueInventory(inventory)).toEqual([{
+      personaId: "persona-contract-a", personaName: "Contract Persona A", tenantId: "tenant-x",
+      eligible: false, exclusionReason: "insufficient telemetry",
+      manageHref: "/management/personas/persona-contract-a",
+    }]);
+  });
+
+  it("selects the overall group's nested ranked rows from the grouped rankings payload", () => {
+    const row = (n: number, crit: string) => ({
+      rank: n, score: 50, criteria: crit, tier: "tier-4", eligible: false, exclusion_reason: "retired",
+      id: `p-${crit}-${n}`, persona_id: `p-${crit}-${n}`, name: `Persona ${n}`,
+      links: { detail: `/bff/personas/p-${crit}-${n}` },
+    });
+    const rows = adaptPersonaLeagueRankedRows({
+      data: { items: [
+        { ranking_id: "persona-league-pnl", criteria: "pnl", ranked_count: 1, items: [row(1, "pnl")] },
+        { ranking_id: "persona-league-overall", criteria: "overall", ranked_count: 2, items: [row(1, "overall"), row(2, "overall")] },
+      ] },
+    });
+    expect(rows!.map((r) => [r.personaId, r.currentRank, r.personaName])).toEqual([
+      ["p-overall-1", 1, "Persona 1"], ["p-overall-2", 2, "Persona 2"],
+    ]);
+    expect(rows![0]).toMatchObject({ eligible: false, exclusionReason: "retired", links: { manageHref: "/management/personas/p-overall-1" } });
+  });
+
+  it("returns no rows when grouped payload has no overall group", () => {
+    expect(adaptPersonaLeagueRankedRows({ data: { items: [{ criteria: "pnl", items: [{ rank: 1, persona_id: "x" }] }] } })).toEqual([]);
+  });
+
+  it("accepts owner-ranked rows (snake_case) with name, rank and link", () => {
+    const rows = adaptPersonaLeagueRankedRows({
+      data: { items: [
+        { persona_id: "p1", persona_name: "One", current_rank: 1, tier: "A" },
+        { persona_id: "", current_rank: 2 },
+        { persona_id: "p3", name: "Three" },
+      ] },
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows![0]).toMatchObject({
+      personaId: "p1", personaName: "One", currentRank: 1, tier: "A",
+      links: { manageHref: "/management/personas/p1" },
+    });
   });
 });

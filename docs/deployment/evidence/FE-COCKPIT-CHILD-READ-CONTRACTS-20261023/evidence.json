@@ -1,0 +1,15 @@
+{
+  "task": "FE-COCKPIT-CHILD-READ-CONTRACTS-20261023",
+  "scope": "source-only; local sanitized fixtures; not hosted acceptance",
+  "findings": {
+    "portfolio_book": "summaryLiveOnly required totalNav and returned undefined for the real service-backed payload; now adaptCockpitCapitalSummary keeps summary runtime/trade/PnL facts and leaves null financials unknown",
+    "persona_league": "rankings owner returns data.items as ranking GROUPS with nested ranked items; adaptPersonaLeagueRankedRows selects the overall group's nested rows (real rank/identity/eligibility/canonical links). Cockpit requests criteria=overall&limit=200; bottom-3 is shown only when ranked rows cover the whole inventory, otherwise 'coverage incomplete'. Inventory rows are never ranked.",
+    "total_pnl_unit": "total_pnl rendered as a bare number labelled 'currency not supplied'; no USD/NAV invented"
+  },
+  "tests": [
+    "src/lib/bff-v1/__tests__/management.test.ts",
+    "src/management/pages/oversight/LiveOnlyFallbacks.test.tsx"
+  ],
+  "business_mutations": 0,
+  "provider_calls": 0
+}
