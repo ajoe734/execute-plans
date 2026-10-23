@@ -32,6 +32,30 @@ export interface PortfolioSummary {
   highestRiskPoolId?: string;
 }
 
+/**
+ * Cockpit capital snapshot as the live owner actually returns it: financial
+ * fields are null when the owner has no value (never coerced to 0), and the
+ * runtime/trade facts come from the owner's `summary` block.
+ */
+export interface CockpitCapitalSummary {
+  totalNav: number | null;
+  totalCash: number | null;
+  grossExposure: number | null;
+  leverage: number | null;
+  unrealizedPnl: number | null;
+  pnlToday: number | null;
+  activeCapitalPools: number | null;
+  highestRiskPoolId: string | null;
+  bindingCount: number | null;
+  activeRuntimeCount: number | null;
+  paperRuntimeCount: number | null;
+  liveRuntimeCount: number | null;
+  totalTrades: number | null;
+  totalPnl: number | null;
+  maxDrawdown: number | null;
+  latestTelemetryAt: string | null;
+}
+
 export interface CapitalPoolSummaryRow {
   capitalPoolId: string;
   capitalPoolName: string;

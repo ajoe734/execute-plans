@@ -9,6 +9,8 @@ import { OneRingCockpitPage, TradingPulsePage } from "./_core";
 import { Ep5CanaryReadinessPage } from "./Ep5CanaryReadiness";
 import { PersonaIntentTracesPage } from "./PersonaIntentTraces";
 import { PersonaLeaguePage } from "./PersonaLeague";
+import { TotalCapitalSnapshot } from "@/management/components/cockpit/TotalCapitalSnapshot";
+import { PersonaLeagueSnapshot } from "@/management/components/cockpit/PersonaLeagueSnapshot";
 import { PortfolioBookPage } from "./PortfolioBook";
 import { QuarterlyRankingPage } from "./QuarterlyRanking";
 
@@ -217,5 +219,73 @@ describe("live-only management page fallbacks", () => {
     expect(screen.getByText("persona-projection-test")).toBeInTheDocument();
     expect(screen.queryByText("No change")).not.toBeInTheDocument();
     expect(screen.queryByText("Promote to canary candidate")).not.toBeInTheDocument();
+  });
+
+  it("renders available capital facts with unknown financials as dashes, not zero", () => {
+    renderPage(<TotalCapitalSnapshot summary={{
+      totalNav: null, totalCash: null, grossExposure: null, leverage: null,
+      unrealizedPnl: null, pnlToday: null, activeCapitalPools: 1, highestRiskPoolId: null,
+      bindingCount: 89, activeRuntimeCount: 1, paperRuntimeCount: 87, liveRuntimeCount: 0,
+      totalTrades: 3, totalPnl: -15, maxDrawdown: 0.00015, latestTelemetryAt: null,
+    }} />);
+    expect(screen.getByText("87 / 0")).toBeInTheDocument();
+    expect(screen.getByText("-15")).toBeInTheDocument();
+    expect(screen.queryByText(/\$/)).not.toBeInTheDocument();
+    expect(screen.queryByText("$0")).not.toBeInTheDocument();
+  });
+
+  it("shows inventory personas as unranked with working links and no synthetic rank", () => {
+    renderPage(<PersonaLeagueSnapshot rows={[]} inventory={[{
+      personaId: "persona-contract-a", personaName: "Contract Persona A",
+      eligible: false, exclusionReason: "insufficient telemetry",
+      manageHref: "/management/personas/persona-contract-a",
+    }]} />);
+    const link = screen.getByRole("link", { name: "Contract Persona A" });
+    expect(link).toHaveAttribute("href", "/management/personas/persona-contract-a");
+    expect(screen.getByTestId("persona-league-unranked")).toHaveTextContent("No ranked rows returned");
+    expect(screen.queryByText(/#\d/)).not.toBeInTheDocument();
+  });
+
+  it("shows ranked rows with links and does not claim a global bottom-3 from a truncated slice", () => {
+    const mk = (n: number) => ({
+      personaId: `p${n}`, personaName: `Persona ${n}`, currentRank: n, tier: "A", eligible: n !== 2,
+      links: { manageHref: `/management/personas/p${n}` },
+    }) as never;
+    const inventory = Array.from({ length: 5 }, (_, i) => ({
+      personaId: `p${i + 1}`, personaName: `Persona ${i + 1}`, manageHref: `/management/personas/p${i + 1}`,
+    }));
+    renderPage(<PersonaLeagueSnapshot rows={[mk(1), mk(2), mk(3)]} inventory={inventory.map((r) => ({ ...r, ownerTotal: 5 }))} />);
+    expect(screen.getByRole("link", { name: "#1 Persona 1" })).toHaveAttribute("href", "/management/personas/p1");
+    expect(screen.getByText("A · not eligible")).toBeInTheDocument();
+    expect(screen.getByTestId("persona-league-bottom-incomplete")).toHaveTextContent("3 of 5");
+    expect(screen.queryByTestId("persona-league-unranked")).not.toBeInTheDocument();
+  });
+
+  describe("global bottom-3 coverage", () => {
+    const mk = (n: number) => ({
+      personaId: `p${n}`, personaName: `Persona ${n}`, currentRank: n, tier: "A",
+      links: { manageHref: `/management/personas/p${n}` },
+    }) as never;
+    const ranked = (n: number) => Array.from({ length: n }, (_, i) => mk(i + 1));
+    const inv = (n: number, ownerTotal?: number) => Array.from({ length: n }, (_, i) => ({
+      personaId: `p${i + 1}`, personaName: `Persona ${i + 1}`, manageHref: `/management/personas/p${i + 1}`, ownerTotal,
+    }));
+
+    it("20 ranked / 20 inventory / owner total 94 => bottom unavailable, top ranks stay visible", () => {
+      renderPage(<PersonaLeagueSnapshot rows={ranked(20)} inventory={inv(20, 94)} />);
+      expect(screen.getByTestId("persona-league-bottom-incomplete")).toHaveTextContent("20 of 94");
+      expect(screen.getByRole("link", { name: "#1 Persona 1" })).toBeInTheDocument();
+    });
+
+    it("complete 94 ranked of owner total 94 => bottom available", () => {
+      renderPage(<PersonaLeagueSnapshot rows={ranked(94)} inventory={inv(20, 94)} />);
+      expect(screen.queryByTestId("persona-league-bottom-incomplete")).not.toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "#94 Persona 94" })).toBeInTheDocument();
+    });
+
+    it("unknown owner total => bottom unavailable", () => {
+      renderPage(<PersonaLeagueSnapshot rows={ranked(20)} inventory={inv(20)} />);
+      expect(screen.getByTestId("persona-league-bottom-incomplete")).toHaveTextContent("population unknown");
+    });
   });
 });

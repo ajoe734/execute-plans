@@ -77,7 +77,23 @@ export interface PersonaLeagueRow {
   degradedMutations: number;
   status: PersonaLeagueStatus;
   recommendedAction?: LeagueRecommendedAction;
+  /** Owner-reported eligibility (rankings route); absent when not supplied. */
+  tenantId?: string;
+  eligible?: boolean;
+  exclusionReason?: string;
   links: ManagementLinkSet;
+}
+
+/** Inventory entry from the persona-league owner: identity only, no rank. */
+export interface PersonaLeagueInventoryRow {
+  personaId: string;
+  personaName: string;
+  tenantId?: string;
+  eligible?: boolean;
+  exclusionReason?: string;
+  manageHref: string;
+  /** Owner-reported total persona population (not the page length); absent when unknown. */
+  ownerTotal?: number;
 }
 
 export function sortByPreset(
