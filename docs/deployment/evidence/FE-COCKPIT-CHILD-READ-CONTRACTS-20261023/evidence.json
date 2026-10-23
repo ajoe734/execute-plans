@@ -10,6 +10,7 @@
     "src/lib/bff-v1/__tests__/management.test.ts",
     "src/management/pages/oversight/LiveOnlyFallbacks.test.tsx"
   ],
+  "validation": "vitest management.test.ts LiveOnlyFallbacks.test.tsx 67/67; tsc -p tsconfig.app.json clean",
   "business_mutations": 0,
   "provider_calls": 0
 }

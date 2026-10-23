@@ -9,8 +9,10 @@ export const PersonaLeagueSnapshot = ({
   rows,
   inventory = [],
 }: { rows: PersonaLeagueRow[]; inventory?: PersonaLeagueInventoryRow[] }) => {
-  // Bottom-3 is only a global claim when every inventory persona is ranked in the returned rows.
-  const bottomProvable = inventory.length > 0 && rows.length >= inventory.length;
+  // Bottom-3 is only a global claim when the owner-reported population is known and fully ranked.
+  // Inventory is paged, so its length is never a population proxy.
+  const ownerTotal = inventory.find((r) => typeof r.ownerTotal === "number")?.ownerTotal;
+  const bottomProvable = ownerTotal !== undefined && ownerTotal > 0 && rows.length >= ownerTotal;
   const { t } = useTranslation();
   const sorted = [...rows].sort((a, b) => a.currentRank - b.currentRank);
   const top3 = sorted.slice(0, 3);
@@ -31,7 +33,7 @@ export const PersonaLeagueSnapshot = ({
             <div data-testid="persona-league-bottom-incomplete">
               <div className="text-muted-foreground mb-1">{t("mgmt.league.bottom3")}</div>
               <div className="text-muted-foreground">
-                Unavailable — {rows.length}{inventory.length > 0 ? ` of ${inventory.length}` : ""} ranked rows returned; coverage incomplete.
+                Unavailable — {rows.length}{ownerTotal !== undefined ? ` of ${ownerTotal}` : ""} ranked rows returned; {ownerTotal !== undefined ? "coverage incomplete" : "population unknown"}.
               </div>
             </div>
           )}

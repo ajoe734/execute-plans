@@ -92,6 +92,8 @@ export interface PersonaLeagueInventoryRow {
   eligible?: boolean;
   exclusionReason?: string;
   manageHref: string;
+  /** Owner-reported total persona population (not the page length); absent when unknown. */
+  ownerTotal?: number;
 }
 
 export function sortByPreset(

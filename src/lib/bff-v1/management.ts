@@ -3371,9 +3371,19 @@ export function adaptPersonaLeagueRankedRows(raw: unknown): PersonaLeagueRow[] |
   });
 }
 
+/** Owner-reported full persona population (summary.persona_count / page_info.total); null when not stated. */
+function personaLeagueOwnerTotal(raw: unknown): number | null {
+  const data = unwrap(raw);
+  const summary = isObject(data) && isObject(data.summary) ? data.summary : {};
+  const pageInfo = isObject(raw) && isObject(raw.page_info) ? raw.page_info : {};
+  const total = nullableNumber(summary.persona_count ?? pageInfo.total);
+  return total !== null && total >= 0 ? total : null;
+}
+
 export function adaptPersonaLeagueInventory(raw: unknown): PersonaLeagueInventoryRow[] | null {
   const items = adaptArrayPassthrough<Record<string, unknown>>(raw);
   if (!items) return null;
+  const ownerTotal = personaLeagueOwnerTotal(raw) ?? undefined;
   return items.flatMap((record) => {
     if (!isObject(record)) return [];
     const personaId = asString(record.personaId ?? record.persona_id ?? record.id);
@@ -3386,6 +3396,7 @@ export function adaptPersonaLeagueInventory(raw: unknown): PersonaLeagueInventor
       eligible: typeof record.eligible === "boolean" ? record.eligible : undefined,
       exclusionReason: asString(record.exclusionReason ?? record.exclusion_reason) || undefined,
       manageHref: href,
+      ownerTotal,
     }];
   });
 }

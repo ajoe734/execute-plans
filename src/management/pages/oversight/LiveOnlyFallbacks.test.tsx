@@ -254,10 +254,38 @@ describe("live-only management page fallbacks", () => {
     const inventory = Array.from({ length: 5 }, (_, i) => ({
       personaId: `p${i + 1}`, personaName: `Persona ${i + 1}`, manageHref: `/management/personas/p${i + 1}`,
     }));
-    renderPage(<PersonaLeagueSnapshot rows={[mk(1), mk(2), mk(3)]} inventory={inventory} />);
+    renderPage(<PersonaLeagueSnapshot rows={[mk(1), mk(2), mk(3)]} inventory={inventory.map((r) => ({ ...r, ownerTotal: 5 }))} />);
     expect(screen.getByRole("link", { name: "#1 Persona 1" })).toHaveAttribute("href", "/management/personas/p1");
     expect(screen.getByText("A · not eligible")).toBeInTheDocument();
     expect(screen.getByTestId("persona-league-bottom-incomplete")).toHaveTextContent("3 of 5");
     expect(screen.queryByTestId("persona-league-unranked")).not.toBeInTheDocument();
+  });
+
+  describe("global bottom-3 coverage", () => {
+    const mk = (n: number) => ({
+      personaId: `p${n}`, personaName: `Persona ${n}`, currentRank: n, tier: "A",
+      links: { manageHref: `/management/personas/p${n}` },
+    }) as never;
+    const ranked = (n: number) => Array.from({ length: n }, (_, i) => mk(i + 1));
+    const inv = (n: number, ownerTotal?: number) => Array.from({ length: n }, (_, i) => ({
+      personaId: `p${i + 1}`, personaName: `Persona ${i + 1}`, manageHref: `/management/personas/p${i + 1}`, ownerTotal,
+    }));
+
+    it("20 ranked / 20 inventory / owner total 94 => bottom unavailable, top ranks stay visible", () => {
+      renderPage(<PersonaLeagueSnapshot rows={ranked(20)} inventory={inv(20, 94)} />);
+      expect(screen.getByTestId("persona-league-bottom-incomplete")).toHaveTextContent("20 of 94");
+      expect(screen.getByRole("link", { name: "#1 Persona 1" })).toBeInTheDocument();
+    });
+
+    it("complete 94 ranked of owner total 94 => bottom available", () => {
+      renderPage(<PersonaLeagueSnapshot rows={ranked(94)} inventory={inv(20, 94)} />);
+      expect(screen.queryByTestId("persona-league-bottom-incomplete")).not.toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "#94 Persona 94" })).toBeInTheDocument();
+    });
+
+    it("unknown owner total => bottom unavailable", () => {
+      renderPage(<PersonaLeagueSnapshot rows={ranked(20)} inventory={inv(20)} />);
+      expect(screen.getByTestId("persona-league-bottom-incomplete")).toHaveTextContent("population unknown");
+    });
   });
 });

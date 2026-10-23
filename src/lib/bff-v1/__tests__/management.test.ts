@@ -1782,6 +1782,13 @@ describe("Cockpit child read contracts (actual-shaped owner payloads)", () => {
     }]);
   });
 
+  it("carries the owner-reported population, not the page length, onto inventory rows", () => {
+    const page = { ...inventory, data: { ...inventory.data, summary: { persona_count: 94, returned_count: 1 } } };
+    expect(adaptPersonaLeagueInventory(page)![0].ownerTotal).toBe(94);
+    expect(adaptPersonaLeagueInventory({ ...inventory, page_info: { total: 94 } })![0].ownerTotal).toBe(94);
+    expect(adaptPersonaLeagueInventory(inventory)![0].ownerTotal).toBeUndefined();
+  });
+
   it("selects the overall group's nested ranked rows from the grouped rankings payload", () => {
     const row = (n: number, crit: string) => ({
       rank: n, score: 50, criteria: crit, tier: "tier-4", eligible: false, exclusion_reason: "retired",
