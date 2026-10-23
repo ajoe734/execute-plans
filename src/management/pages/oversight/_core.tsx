@@ -137,8 +137,9 @@ function quarterlySnapshotFromLive(
   rows: QuarterlyRankingRow[] | undefined,
   formula: QuarterlyRankingFormula | undefined,
 ): QuarterlySnapshot | undefined {
-  if (!rows && !formula) return undefined;
-  const rowList = rows ?? [];
+  // Rows are the only source of counts; a formula arriving first must not look like 0/0/0.
+  if (!rows) return undefined;
+  const rowList = rows;
   const quarter = rowList.find((row) => row.quarter)?.quarter ?? currentQuarterId();
   const cutoffDate = quarterCutoffDate(quarter);
   return {
@@ -146,7 +147,7 @@ function quarterlySnapshotFromLive(
     cutoffDate,
     daysRemaining: daysUntil(cutoffDate),
     eligiblePersonas: rowList.filter((row) => row.eligibility === "eligible").length,
-    disqualifiedPersonas: rowList.filter((row) => row.eligibility === "disqualified").length,
+    disqualifiedPersonas: rowList.filter((row) => row.eligibility === "disqualified" || row.eligibility === "insufficient_data").length,
     pendingEvidenceGaps: rowList.filter((row) => (row.evidenceRefs ?? []).length === 0).length,
     formulaVersion: formula?.version ?? "—",
   };
@@ -156,18 +157,25 @@ export const OneRingCockpitPage = () => {
   const { t } = useTranslation();
   const location = useLocation();
   const { data: model, loading } = useV5Live((signal) => mgmt.cockpit.getLiveOnly({ signal }), [], { cacheKey: "oversight.cockpit" });
-  const { data: pSummary } = useV5Live((signal) => mgmt.portfolioBook.summaryLiveOnly({ signal }), [], { cacheKey: "oversight.portfolioBook.summary" });
-  const { data: league } = useV5Live((signal) => mgmt.personaLeague.rankingsLiveOnly({ signal, criteria: "overall", limit: 200 }), [], { cacheKey: "oversight.personaLeague.rankings" });
-  const { data: leagueInventory } = useV5Live((signal) => mgmt.personaLeague.inventoryLiveOnly({ signal }), [], { cacheKey: "oversight.personaLeague.inventory" });
-  const { data: quarterlyRows } = useV5Live((signal) => mgmt.quarterlyRanking.listLiveOnly(undefined, undefined, { signal }), [], { cacheKey: "oversight.quarterlyRanking.list" });
-  const { data: quarterlyFormula } = useV5Live((signal) => mgmt.quarterlyRanking.formulaLiveOnly({ signal }), [], { cacheKey: "oversight.quarterlyRanking.formula" });
-  const { data: fleetRows } = useV5Live((signal) => mgmt.personaFleet.get({}, { signal }), [], { cacheKey: "oversight.personaFleet" });
+  const { data: pSummary, loading: pSummaryLoading, error: pSummaryError = null } = useV5Live((signal) => mgmt.portfolioBook.summaryLiveOnly({ signal }), [], { cacheKey: "oversight.portfolioBook.summary" });
+  const { data: league, loading: leagueLoading, error: leagueError = null } = useV5Live((signal) => mgmt.personaLeague.rankingsLiveOnly({ signal, criteria: "overall", limit: 200 }), [], { cacheKey: "oversight.personaLeague.rankings" });
+  const { data: leagueInventory, loading: inventoryLoading, error: inventoryError = null } = useV5Live((signal) => mgmt.personaLeague.inventoryLiveOnly({ signal }), [], { cacheKey: "oversight.personaLeague.inventory" });
+  const { data: quarterlyRows, loading: quarterlyRowsLoading, error: quarterlyRowsError = null } = useV5Live((signal) => mgmt.quarterlyRanking.listLiveOnly(undefined, undefined, { signal }), [], { cacheKey: "oversight.quarterlyRanking.list" });
+  const { data: quarterlyFormula, error: quarterlyFormulaError = null } = useV5Live((signal) => mgmt.quarterlyRanking.formulaLiveOnly({ signal }), [], { cacheKey: "oversight.quarterlyRanking.formula" });
+  const { data: fleetRows, loading: fleetLoading, error: fleetError = null } = useV5Live((signal) => mgmt.personaFleet.get({}, { signal }), [], { cacheKey: "oversight.personaFleet" });
   const productionFleetRows = useMemo(() => productionPersonaFleetRows(fleetRows ?? []), [fleetRows]);
   const quarterlySnapshot = useMemo(
     () => quarterlySnapshotFromLive(quarterlyRows, quarterlyFormula),
     [quarterlyFormula, quarterlyRows],
   );
 
+  const staleNote = (testId: string, error: unknown) =>
+    error ? (
+      <p className="text-xs text-status-warning" data-testid={testId}>
+        Latest read failed; the values above are retained from an earlier successful read and may be stale.
+      </p>
+    ) : null;
+  const loadingBody = t("mgmt.liveOnly.loadingBody", { defaultValue: "Waiting for live BFF data." });
   const unavailableTitle = t("mgmt.liveOnly.unavailableTitle", { defaultValue: "Live data unavailable" });
   const unavailableBody = t("mgmt.liveOnly.unavailableBody", {
     defaultValue: "This page does not render seed, demo, or non-production fallback data.",
@@ -224,25 +232,68 @@ export const OneRingCockpitPage = () => {
       <OpenClawLlmAuthPanel mode="summary" />
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {pSummary ? (
-          <TotalCapitalSnapshot summary={pSummary} />
+          <div className="space-y-1">
+            <TotalCapitalSnapshot summary={pSummary} />
+            {staleNote("capital-stale", pSummaryError)}
+          </div>
         ) : (
           <LiveOnlyNotice
             title={t("mgmt.cockpit.totalCapital")}
-            body={unavailableBody}
+            body={pSummaryLoading ? loadingBody : unavailableBody}
             action={<Link to={canonicalCenterUrl("performance", "overview")} className="text-xs text-primary hover:underline">{t("mgmt.actions.openDetail")} →</Link>}
           />
         )}
-        <PersonaLeagueSnapshot rows={league ?? []} inventory={leagueInventory ?? []} />
-        {quarterlySnapshot ? (
-          <QuarterlyRankingCountdown snap={quarterlySnapshot} />
+        {!league || (league.length === 0 && !leagueInventory && inventoryLoading) ? (
+          <LiveOnlyNotice
+            title={t("mgmt.cockpit.personaLeague")}
+            body={leagueLoading || (league && inventoryLoading) ? loadingBody : unavailableBody}
+            action={<Link to={canonicalCenterUrl("rankings", "rolling")} className="text-xs text-primary hover:underline">{t("mgmt.actions.openDetail")} →</Link>}
+          />
+        ) : (
+          <div className="space-y-1">
+            <PersonaLeagueSnapshot rows={league} inventory={leagueInventory ?? []} />
+            {staleNote("persona-league-stale", leagueError ?? inventoryError)}
+            {!leagueInventory && inventoryLoading && (
+              <p className="text-xs text-muted-foreground" data-testid="persona-league-inventory-pending">
+                Population coverage: waiting for inventory (unknown). Showing {league.length} ranked rows loaded.
+              </p>
+            )}
+          </div>
+        )}
+        {quarterlySnapshot && quarterlyRows ? (
+          <div className="space-y-1">
+            <QuarterlyRankingCountdown snap={quarterlySnapshot} />
+            <p className="text-xs text-muted-foreground" data-testid="quarterly-loaded-scope">
+              已載入項目 (current returned page): {quarterlyRows.length} rows. Disqualified / Insufficient data includes insufficient_data rows; counts cover loaded items only.
+            </p>
+            {staleNote("quarterly-stale", quarterlyRowsError ?? quarterlyFormulaError)}
+          </div>
         ) : (
           <LiveOnlyNotice
             title={t("mgmt.cockpit.quarterlyCountdown")}
-            body={unavailableBody}
+            body={quarterlyRowsLoading ? `${loadingBody}${quarterlyFormula ? ` Formula ${quarterlyFormula.version} loaded; waiting for ranking rows.` : ""}` : `${unavailableBody}${quarterlyFormula ? ` Formula ${quarterlyFormula.version} loaded; ranking rows unavailable.` : ""}`}
             action={<Link to={canonicalCenterUrl("rankings", "quarterly")} className="text-xs text-primary hover:underline">{t("mgmt.actions.openDetail")} →</Link>}
           />
         )}
-        <DataSourceHealthSnapshot rows={productionFleetRows} />
+        {!fleetRows ? (
+          <LiveOnlyNotice
+            title={t("mgmt.dataSources.cockpitTitle")}
+            body={fleetLoading ? loadingBody : unavailableBody}
+          />
+        ) : productionFleetRows.length === 0 ? (
+          <LiveOnlyNotice
+            title={t("mgmt.dataSources.cockpitTitle")}
+            body={`已載入項目 (current returned page): ${fleetRows.length} fleet rows; none match the current production filter, so no source health is claimed.${fleetError ? " Latest read failed; this is retained from an earlier read and may be stale." : ""}`}
+          />
+        ) : (
+          <div className="space-y-1">
+            <DataSourceHealthSnapshot rows={productionFleetRows} />
+            <p className="text-xs text-muted-foreground" data-testid="fleet-loaded-scope">
+              已載入項目 (current returned page): {fleetRows.length} fleet rows, {productionFleetRows.length} match the current production filter.
+            </p>
+            {staleNote("fleet-stale", fleetError)}
+          </div>
+        )}
       </div>
       {model && (
         <>
