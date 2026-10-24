@@ -41,11 +41,12 @@ import type { PersonaIntentTrace, PersonaIntentVisibility } from "@/lib/v5/manag
 import { composeReadinessHeader, type ChecklistItemStatus, type ReadinessBlocker, type ReadinessChecklistItem, type ReadinessPacket, type ReadinessPageModel } from "@/lib/v5/management/readiness";
 // PM-12 imports
 import type {
-  PortfolioSummary, CapitalPoolSummaryRow, HoldingRow,
+  PortfolioSummary, CockpitCapitalSummary, CapitalPoolSummaryRow, HoldingRow,
   PortfolioHoldingFilters, PortfolioHoldingsMonitor, PortfolioHoldingMonitorRow,
   PortfolioIncident, PortfolioSourceIssue, PortfolioCapitalScopeKind,
 } from "@/lib/v5/management/portfolio";
-import type { PersonaLeagueRow } from "@/lib/v5/management/personaLeague";
+import type { PersonaLeagueRow, PersonaLeagueInventoryRow } from "@/lib/v5/management/personaLeague";
+import { buildLinkSet } from "@/lib/v5/management/links";
 import type {
   QuarterlyRankingRow, QuarterlyRankingFormula,
 } from "@/lib/v5/management/quarterlyRanking";
@@ -3285,6 +3286,121 @@ function adaptArrayPassthrough<T>(raw: unknown): T[] | null {
          (isObject(data) ? asArray<T>(data.items) : null);
 }
 
+
+const nullableNumber = (value: unknown): number | null => {
+  if (value === null || value === undefined || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+};
+
+export function adaptCockpitCapitalSummary(raw: unknown): CockpitCapitalSummary | null {
+  const data = unwrap(raw);
+  if (!isObject(data)) return null;
+  const summary = isObject(data.summary) ? data.summary : {};
+  const hasFact = "totalNav" in data || "total_nav" in data || isObject(data.summary) ||
+    "activeCapitalPools" in data;
+  if (!hasFact) return null;
+  const pick = (...keys: string[]): number | null => {
+    for (const key of keys) {
+      const v = nullableNumber(data[key] ?? summary[key]);
+      if (v !== null) return v;
+    }
+    return null;
+  };
+  return {
+    totalNav: pick("totalNav", "total_nav"),
+    totalCash: pick("totalCash", "total_cash"),
+    grossExposure: pick("grossExposure", "gross_exposure"),
+    leverage: pick("leverage"),
+    unrealizedPnl: pick("unrealizedPnl", "unrealized_pnl"),
+    pnlToday: pick("pnlToday", "pnl_today"),
+    activeCapitalPools: pick("activeCapitalPools", "active_capital_pools", "active_capital_pool_count"),
+    highestRiskPoolId: asString(data.highestRiskPoolId ?? data.highest_risk_pool_id) || null,
+    bindingCount: pick("binding_count"),
+    activeRuntimeCount: pick("active_runtime_count"),
+    paperRuntimeCount: pick("paper_runtime_count"),
+    liveRuntimeCount: pick("live_runtime_count"),
+    totalTrades: pick("total_trades"),
+    totalPnl: pick("total_pnl"),
+    maxDrawdown: pick("max_drawdown"),
+    latestTelemetryAt: asString(summary.latest_telemetry_at ?? data.latest_telemetry_at) || null,
+  };
+}
+
+/**
+ * Ranked persona-league rows. The rankings owner returns data.items as ranking
+ * GROUPS (one per criteria) each carrying nested ranked `items`; the overall
+ * group is selected. A flat list of ranked rows is also accepted. Only entries
+ * carrying a real persona id AND a finite owner-supplied rank qualify;
+ * inventory entries are never ranked by position and rows without identity are
+ * dropped (no blank names / hrefs).
+ */
+export function adaptPersonaLeagueRankedRows(raw: unknown): PersonaLeagueRow[] | null {
+  const top = adaptArrayPassthrough<Record<string, unknown>>(raw);
+  if (!top) return null;
+  const isGroup = (r: unknown): r is Record<string, unknown> =>
+    isObject(r) && Array.isArray(r.items);
+  const items = top.some(isGroup)
+    ? top.filter(isGroup)
+        .filter((g) => asString(g.criteria) === "overall" || asString(g.ranking_id) === "persona-league-overall")
+        .flatMap((g) => g.items as Record<string, unknown>[])
+    : top;
+  return items.flatMap((record) => {
+    if (!isObject(record)) return [];
+    const personaId = asString(record.personaId ?? record.persona_id ?? record.id);
+    const rank = nullableNumber(record.currentRank ?? record.current_rank ?? record.rank);
+    if (!personaId || rank === null) return [];
+    const links = isObject(record.links) && asString(record.links.manageHref)
+      ? (record.links as unknown as PersonaLeagueRow["links"])
+      : buildLinkSet({ primary: { kind: "persona", id: personaId } });
+    const previous = nullableNumber(record.previousRank ?? record.previous_rank);
+    const delta = nullableNumber(record.rankDelta ?? record.rank_delta);
+    return [{
+      ...(record as object),
+      personaId,
+      personaName: asString(record.personaName ?? record.persona_name ?? record.name, personaId),
+      tenantId: asString(record.tenantId ?? record.tenant_id) || undefined,
+      currentRank: rank,
+      previousRank: previous ?? undefined,
+      rankDelta: delta ?? undefined,
+      tier: asString(record.tier, "watch") as PersonaLeagueRow["tier"],
+      eligible: typeof record.eligible === "boolean" ? record.eligible : undefined,
+      exclusionReason: asString(record.exclusionReason ?? record.exclusion_reason) || undefined,
+      links,
+    } as PersonaLeagueRow];
+  });
+}
+
+/** Owner-reported full persona population (summary.persona_count / page_info.total); null when not stated. */
+function personaLeagueOwnerTotal(raw: unknown): number | null {
+  const data = unwrap(raw);
+  const summary = isObject(data) && isObject(data.summary) ? data.summary : {};
+  const pageInfo = isObject(raw) && isObject(raw.page_info) ? raw.page_info : {};
+  const total = nullableNumber(summary.persona_count ?? pageInfo.total);
+  return total !== null && total >= 0 ? total : null;
+}
+
+export function adaptPersonaLeagueInventory(raw: unknown): PersonaLeagueInventoryRow[] | null {
+  const items = adaptArrayPassthrough<Record<string, unknown>>(raw);
+  if (!items) return null;
+  const ownerTotal = personaLeagueOwnerTotal(raw) ?? undefined;
+  return items.flatMap((record) => {
+    if (!isObject(record)) return [];
+    const personaId = asString(record.personaId ?? record.persona_id ?? record.id);
+    if (!personaId) return [];
+    const href = buildLinkSet({ primary: { kind: "persona", id: personaId } }).manageHref;
+    return [{
+      personaId,
+      personaName: asString(record.personaName ?? record.persona_name ?? record.name, personaId),
+      tenantId: asString(record.tenantId ?? record.tenant_id) || undefined,
+      eligible: typeof record.eligible === "boolean" ? record.eligible : undefined,
+      exclusionReason: asString(record.exclusionReason ?? record.exclusion_reason) || undefined,
+      manageHref: href,
+      ownerTotal,
+    }];
+  });
+}
+
 export function adaptQuarterlyRankingRows(raw: unknown): QuarterlyRankingRow[] | null {
   const items = adaptArrayPassthrough<Record<string, unknown>>(raw);
   if (!items) return null;
@@ -4006,13 +4122,10 @@ export const mgmt = {
   // ---------- PM-12 ----------
 
   portfolioBook: {
-    summaryLiveOnly: (opts?: { signal?: AbortSignal }): Promise<PortfolioSummary | undefined> =>
-      liveOnlyRead<PortfolioSummary>(
+    summaryLiveOnly: (opts?: { signal?: AbortSignal }): Promise<CockpitCapitalSummary | undefined> =>
+      liveOnlyRead<CockpitCapitalSummary>(
         { method: "GET", path: paths.mgmtPortfolioBook(), signal: opts?.signal },
-        (raw) => {
-          const data = unwrap(raw);
-          return isObject(data) && "totalNav" in data ? (data as unknown as PortfolioSummary) : null;
-        },
+        adaptCockpitCapitalSummary,
       ),
     summary: (seedFn: () => PortfolioSummary): Promise<PortfolioSummary> =>
       mgmtRead(
@@ -4097,14 +4210,24 @@ export const mgmt = {
     listLiveOnly: (opts?: { signal?: AbortSignal }): Promise<PersonaLeagueRow[]> =>
       liveOnlyList<PersonaLeagueRow>(
         { method: "GET", path: paths.mgmtPersonaLeague(), signal: opts?.signal },
-        adaptArrayPassthrough<PersonaLeagueRow>,
+        adaptPersonaLeagueRankedRows,
+      ),
+    inventoryLiveOnly: (opts?: { signal?: AbortSignal }): Promise<PersonaLeagueInventoryRow[]> =>
+      liveOnlyList<PersonaLeagueInventoryRow>(
+        { method: "GET", path: paths.mgmtPersonaLeague(), signal: opts?.signal },
+        adaptPersonaLeagueInventory,
       ),
     list: (seedFn: () => PersonaLeagueRow[]): Promise<PersonaLeagueRow[]> =>
       mgmtRead("mgmt.personaLeague.list", { method: "GET", path: paths.mgmtPersonaLeague() }, seedFn, adaptArrayPassthrough<PersonaLeagueRow>),
-    rankingsLiveOnly: (): Promise<PersonaLeagueRow[]> =>
+    rankingsLiveOnly: (opts?: { signal?: AbortSignal; criteria?: string; limit?: number }): Promise<PersonaLeagueRow[]> =>
       liveOnlyList<PersonaLeagueRow>(
-        { method: "GET", path: paths.mgmtPersonaLeagueRankings() },
-        adaptArrayPassthrough<PersonaLeagueRow>,
+        {
+          method: "GET",
+          path: paths.mgmtPersonaLeagueRankings(),
+          query: { criteria: opts?.criteria, limit: opts?.limit },
+          signal: opts?.signal,
+        },
+        adaptPersonaLeagueRankedRows,
       ),
     rankings: (seedFn: () => PersonaLeagueRow[]): Promise<PersonaLeagueRow[]> =>
       mgmtRead("mgmt.personaLeague.rankings", { method: "GET", path: paths.mgmtPersonaLeagueRankings() }, seedFn, adaptArrayPassthrough<PersonaLeagueRow>),
