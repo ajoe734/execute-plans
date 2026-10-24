@@ -150,7 +150,7 @@ jobs:
     permissions:
       contents: read
       actions: read
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Validate exact active authorized parent deploy
         id: parent
@@ -438,7 +438,7 @@ jobs:
           (inputs.pint_hosted_probe == 'true' || inputs.persona_interaction_write_proof == 'true' || inputs.functional_closure_write_proof == 'true')
         )
       }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 145
     permissions:
       contents: read
@@ -1637,7 +1637,7 @@ jobs:
     permissions:
       contents: read
       actions: read
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       PANTHEON_FE_BASE_URL: ${{ inputs.fe_base_url }}
       PANTHEON_BFF_BASE_URL: ${{ inputs.bff_base_url }}

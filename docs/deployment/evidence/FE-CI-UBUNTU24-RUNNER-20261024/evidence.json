@@ -1,0 +1,93 @@
+{
+  "schema_version": "pantheon.fe.task-evidence.v1",
+  "task_id": "FE-CI-UBUNTU24-RUNNER-20261024",
+  "title": "Restore supported Ubuntu24 for current FE CI and release gate",
+  "owner": "Antigravity2",
+  "reviewer": "Claude",
+  "repository": "ajoe734/execute-plans",
+  "target_repo": "execute-plans",
+  "base_branch": "dev",
+  "base_commit_sha": "d09572fe03e883946ebade151d2774faf8dbddca",
+  "branch": "task/FE-CI-UBUNTU24-RUNNER-20261024",
+  "primary_ci_evidence": {
+    "evidence_file": "/tmp/pantheon-release399295-readonly-20261023/CI-two-repos-real26-failures-and-same-day24-success-supported-runner-evidence-20261024.json",
+    "evidence_sha256": "c0e1f1e44e60bdc64c028b5e3dec4bc074be9c1d528691269591b966f56569ab",
+    "observed_branch_ci_failure": {
+      "run_id": 40102086924,
+      "job_id": 120898226074,
+      "source_sha": "4892b63e700012e78fb98dcc5960f9d959a62391",
+      "job_name": "Component merge gate",
+      "error": "Error: ERROR: Playwright does not support chromium on ubuntu26.04-x64"
+    },
+    "same_day_ubuntu24_success": {
+      "run_id": 40099877392,
+      "job_id": 120890100843,
+      "source_sha": "995d4d1c30911fe1d60b8c6b17762eee239a8f2f",
+      "runner_image": "ubuntu-24.04 (24.04.5)",
+      "conclusion": "success"
+    },
+    "official_rollout_reference": "https://github.com/actions/runner-images/issues/14748"
+  },
+  "workflow_changes": {
+    ".github/workflows/branch-ci.yml": {
+      "jobs_updated": {
+        "trailers": "ubuntu-24.04",
+        "generated-files": "ubuntu-24.04",
+        "component-merge": "ubuntu-24.04",
+        "smoke-alias": "ubuntu-24.04"
+      },
+      "required_check_names_preserved": [
+        "Commit trailers",
+        "Generated files guard",
+        "Component merge gate",
+        "Smoke acceptance"
+      ]
+    },
+    ".github/workflows/pantheon-integration-gate.yml": {
+      "jobs_updated": {
+        "proof-authorization": "ubuntu-24.04",
+        "integration-gate": "ubuntu-24.04",
+        "authorized-write-proof": "ubuntu-24.04"
+      },
+      "risk_basis": "Source-derived risk from sharing the same locked Playwright stack on ubuntu-latest; not claimed as a new observed release failure."
+    }
+  },
+  "invariants_preserved": {
+    "playwright_and_npm_lockfiles_unchanged": true,
+    "app_code_unchanged": true,
+    "browser_install_commands_unchanged": true,
+    "no_fallbacks_retries_or_timeout_increases": true,
+    "exact_candidate_identities_and_gate_before_switch_unchanged": true,
+    "f18_browser_expectations_and_safe_write_defaults_unchanged": true,
+    "rollback_requirements_unchanged": true,
+    "release_or_hosted_business_workflows_dispatched": 0,
+    "ssh_vm_model_or_business_calls": 0
+  },
+  "scoped_artifacts": [
+    ".github/workflows/branch-ci.yml",
+    ".github/workflows/pantheon-integration-gate.yml",
+    "docs/deployment/evidence/FE-CI-UBUNTU24-RUNNER-20261024/evidence.json"
+  ],
+  "local_validation": [
+    {
+      "command": "PyYAML safe_load validation on .github/workflows/branch-ci.yml and .github/workflows/pantheon-integration-gate.yml",
+      "exit_code": 0,
+      "summary": "All 4 jobs in branch-ci.yml and all 3 jobs in pantheon-integration-gate.yml parse cleanly with runs-on: ubuntu-24.04"
+    },
+    {
+      "command": "python3 scripts/git/test_publish_promote.py",
+      "exit_code": 0,
+      "summary": "Ran 12 tests in 0.008s (OK)"
+    },
+    {
+      "command": "python3 scripts/git/check_generated_files.py .github/workflows/branch-ci.yml .github/workflows/pantheon-integration-gate.yml docs/deployment/evidence/FE-CI-UBUNTU24-RUNNER-20261024/evidence.json",
+      "exit_code": 0,
+      "summary": "Generated files guard passed"
+    },
+    {
+      "command": "npx vitest run src/test/deploy-safe-defaults.test.ts src/test/paired-release-workflow.test.ts src/test/admitted-dev-pair.test.ts src/test/full-app-typecheck-contract.test.ts src/management/pages/trade-journeys/TradeJourneysHostedProof.contract.test.ts",
+      "exit_code": 0,
+      "summary": "5 test files passed, 65 tests passed"
+    }
+  ]
+}
