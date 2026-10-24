@@ -1,7 +1,15 @@
 import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
+import {
+  resolveDeploymentRuntimeConfig,
+  type ValidatedDeploymentRuntimeConfig,
+} from "@/config/deploymentRuntime";
 import { detectMode, setMockResolver, type MockHandlerResolver } from "@/lib/bff-v1/client";
+
+export function prepareDeploymentRuntime(): ValidatedDeploymentRuntimeConfig | null {
+  return resolveDeploymentRuntimeConfig();
+}
 
 export async function prepareMockEnvironment(): Promise<MockHandlerResolver | undefined> {
   if (!import.meta.env.PROD && detectMode() === "mock") {
@@ -24,6 +32,7 @@ export async function prepareMockEnvironment(): Promise<MockHandlerResolver | un
 export async function bootstrapApp(
   rootElement: HTMLElement | null = document.getElementById("root"),
 ): Promise<void> {
+  prepareDeploymentRuntime();
   await prepareMockEnvironment();
   if (rootElement) {
     createRoot(rootElement).render(<App />);
