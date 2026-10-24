@@ -53,6 +53,7 @@ type RouteCounters = {
   loopRuns: number;
   me: number;
   personaHealth: number;
+  personaRankings: number;
   sentinelFindings: number;
   strategies: number;
   strategyHealth: number;
@@ -269,6 +270,7 @@ function routeCounters(): RouteCounters {
     loopRuns: 0,
     me: 0,
     personaHealth: 0,
+    personaRankings: 0,
     sentinelFindings: 0,
     strategies: 0,
     strategyHealth: 0,
@@ -479,6 +481,19 @@ const PERSONA_LEAGUE_RESPONSE = [
     links: { manageHref: "/management/personas/persona-f18-2" },
   },
 ];
+
+// Current owner shape: data.items are ranking GROUPS (one per criteria), each
+// carrying nested owner-ranked items. Ranks are owner-supplied, never derived
+// from inventory order.
+const PERSONA_LEAGUE_RANKINGS_RESPONSE = {
+  items: [
+    {
+      ranking_id: "persona-league-overall",
+      criteria: "overall",
+      items: PERSONA_LEAGUE_RESPONSE,
+    },
+  ],
+};
 
 const PERSONA_FLEET_RESPONSE = [
   {
@@ -811,6 +826,10 @@ async function installPerfRoutes(page: Page, counters: RouteCounters): Promise<v
   await page.route(/\/bff\/management\/persona-league(?:\?.*)?$/, async (route) => {
     await fulfillJson(route, { data: PERSONA_LEAGUE_RESPONSE, meta: { snapshot_at: nowIso() } });
   });
+  await page.route(/\/bff\/management\/persona-league\/rankings(?:\?.*)?$/, async (route) => {
+    counters.personaRankings += 1;
+    await fulfillJson(route, { data: PERSONA_LEAGUE_RANKINGS_RESPONSE, meta: { snapshot_at: nowIso() } });
+  });
   await page.route(/\/bff\/management\/quarterly-ranking(?:\?.*)?$/, async (route) => {
     await fulfillJson(route, { data: [], meta: { snapshot_at: nowIso(), surfaces: { quarterly_ranking: { status: "ok" } } } });
   });
@@ -1090,6 +1109,8 @@ test.describe("F18 perf and stability soft-fail budgets", () => {
 
       expect(await bodyText(page)).not.toMatch(SERVING_MOCK_BANNER);
       expect(failures, "Cockpit should not emit console/page errors").toEqual([]);
+      expect(counters.personaRankings, "Cockpit should consume authoritative rankings").toBeGreaterThan(0);
+      await expect(page.getByText("F18 Persona 1").first()).toBeVisible();
 
       await startMutationCounter(page);
       await page.waitForTimeout(SSE_WINDOW_MS);

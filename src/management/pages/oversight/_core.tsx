@@ -157,7 +157,8 @@ export const OneRingCockpitPage = () => {
   const location = useLocation();
   const { data: model, loading } = useV5Live((signal) => mgmt.cockpit.getLiveOnly({ signal }), [], { cacheKey: "oversight.cockpit" });
   const { data: pSummary } = useV5Live((signal) => mgmt.portfolioBook.summaryLiveOnly({ signal }), [], { cacheKey: "oversight.portfolioBook.summary" });
-  const { data: league } = useV5Live((signal) => mgmt.personaLeague.listLiveOnly({ signal }), [], { cacheKey: "oversight.personaLeague.list" });
+  const { data: league } = useV5Live((signal) => mgmt.personaLeague.rankingsLiveOnly({ signal, criteria: "overall", limit: 200 }), [], { cacheKey: "oversight.personaLeague.rankings" });
+  const { data: leagueInventory } = useV5Live((signal) => mgmt.personaLeague.inventoryLiveOnly({ signal }), [], { cacheKey: "oversight.personaLeague.inventory" });
   const { data: quarterlyRows } = useV5Live((signal) => mgmt.quarterlyRanking.listLiveOnly(undefined, undefined, { signal }), [], { cacheKey: "oversight.quarterlyRanking.list" });
   const { data: quarterlyFormula } = useV5Live((signal) => mgmt.quarterlyRanking.formulaLiveOnly({ signal }), [], { cacheKey: "oversight.quarterlyRanking.formula" });
   const { data: fleetRows } = useV5Live((signal) => mgmt.personaFleet.get({}, { signal }), [], { cacheKey: "oversight.personaFleet" });
@@ -231,7 +232,7 @@ export const OneRingCockpitPage = () => {
             action={<Link to={canonicalCenterUrl("performance", "overview")} className="text-xs text-primary hover:underline">{t("mgmt.actions.openDetail")} →</Link>}
           />
         )}
-        <PersonaLeagueSnapshot rows={league ?? []} />
+        <PersonaLeagueSnapshot rows={league ?? []} inventory={leagueInventory ?? []} />
         {quarterlySnapshot ? (
           <QuarterlyRankingCountdown snap={quarterlySnapshot} />
         ) : (
