@@ -38,7 +38,7 @@ concurrency:
 jobs:
   trailers:
     name: Commit trailers
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Validate explicit promote dispatch
         if: github.event_name == 'workflow_dispatch'
@@ -117,7 +117,7 @@ jobs:
 
   generated-files:
     name: Generated files guard
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Validate explicit promote dispatch
         if: github.event_name == 'workflow_dispatch'
@@ -161,7 +161,7 @@ jobs:
 
   component-merge:
     name: Component merge gate
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs:
       - trailers
       - generated-files
@@ -240,7 +240,7 @@ jobs:
 
   smoke-alias:
     name: Smoke acceptance
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs:
       - component-merge
     if: always()
