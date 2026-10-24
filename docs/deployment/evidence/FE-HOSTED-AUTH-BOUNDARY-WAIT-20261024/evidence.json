@@ -1,0 +1,12 @@
+{
+  "task": "FE-HOSTED-AUTH-BOUNDARY-WAIT-20261024",
+  "scope": "source/local tests only; no hosted probe, SSH, deployment or provider calls",
+  "fix": "waitForRequiredCoreOrAuthBoundary now passes coreTimeoutMs to the auth-redirect wait, so a valid anonymous redirect stays observable for the whole core timeout instead of the fixed 10s wait rejecting and leaving the race on the unresolved core promise. Total probe deadline (remainingTimeoutMs) unchanged; no retries added.",
+  "validation": {
+    "vitest": "src/test/hosted-browser-release-policy.test.ts 79/79 passed",
+    "counterexample": "new 'keeps observing a valid auth boundary' test enforces waitForURL opts.timeout with fake timers and fires a delayed redirect at 12s (>10s, <60s), failing against unfixed c067 helper and passing with fix",
+    "eslint": "clean",
+    "tsc": "clean"
+  },
+  "not_claimed": "actual hosted acceptance; original two ERR_ABORTED root cause"
+}
