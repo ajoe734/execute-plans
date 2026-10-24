@@ -1,0 +1,59 @@
+{
+  "schema_version": "pantheon.fe.task-evidence.v1",
+  "task_id": "FE-IMMUTABLE-RELEASE-CONFIG-20261024",
+  "title": "Make the immutable frontend release use validated per-environment public runtime config",
+  "owner": "Antigravity2",
+  "reviewer": "Claude",
+  "repository": "ajoe734/execute-plans",
+  "base_branch": "dev",
+  "base_commit_sha": "c067d6a82573249ca338a38d30ad74611f0b53f8",
+  "runtime_config_schema": "pantheon.fe.public-runtime-config.v1",
+  "counterexample_verified": {
+    "commit_sha": "c067d6a82573249ca338a38d30ad74611f0b53f8",
+    "findings": [
+      "src/lib/bff-v1/runtimeEnv.ts read build-time import.meta.env.VITE_BFF_BASE_URL and only allowed dev-host write/fallback overrides.",
+      "src/integrations/gcp/identity.ts read build-time import.meta.env.VITE_GCP_IDENTITY_API_KEY, VITE_GCP_IDENTITY_PROJECT_ID, and VITE_GCP_IDENTITY_AUTH_DOMAIN.",
+      "Promoting the sealed Dev frontend bundle to Staging or Production without rebuilding or rewriting bundle bytes continued targeting https://api.dev.mvl-cap.tw and pantheon-dev-20260902."
+    ]
+  },
+  "scoped_artifacts": [
+    "index.html",
+    "public/runtime-config.js",
+    "src/config/deploymentRuntime.ts",
+    "src/config/deploymentRuntime.test.ts",
+    "src/config/publicBuildAuth.ts",
+    "src/config/publicGcpIdentity.ts",
+    "src/integrations/gcp/identity.ts",
+    "src/lib/bff-v1/runtimeEnv.ts",
+    "src/lib/bff-v1/__tests__/runtimeEnv.test.ts",
+    "src/main.tsx",
+    "docs/deployment/immutable-runtime-config.md",
+    "docs/deployment/evidence/FE-IMMUTABLE-RELEASE-CONFIG-20261024/evidence.json"
+  ],
+  "coordinated_downstream_tasks": [
+    "ENV-STG-EPHEMERAL-IMPL-001",
+    "ENV-PROD-CONTROL-IMPL-001"
+  ],
+  "local_validation": [
+    {
+      "command": "npx vitest run src/config/deploymentRuntime.test.ts src/lib/bff-v1/__tests__/runtimeEnv.test.ts",
+      "exit_code": 0,
+      "summary": "2 test files passed, 12 tests passed"
+    },
+    {
+      "command": "npx vitest run src/test/deploy-safe-defaults.test.ts src/test/strict-browser-auth-source-contract.test.ts src/test/release-candidate.test.ts src/lib/auth/AuthProvider.test.tsx src/pages/Auth.test.tsx src/test/bootstrapMockOrdering.test.tsx src/lib/bff-v1/__tests__/liveTransportSnapshot.test.ts",
+      "exit_code": 0,
+      "summary": "7 test files passed, 108 tests passed"
+    },
+    {
+      "command": "npm run typecheck",
+      "exit_code": 0,
+      "summary": "tsc -p tsconfig.app.json --noEmit passed with 0 errors"
+    },
+    {
+      "command": "VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw npm run build",
+      "exit_code": 0,
+      "summary": "vite build succeeded with externalizable /runtime-config.js"
+    }
+  ]
+}

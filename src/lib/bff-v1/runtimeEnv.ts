@@ -1,3 +1,5 @@
+import { resolveDeploymentRuntimeConfig } from "@/config/deploymentRuntime";
+
 const DEV_RUNTIME_HOSTS = new Set([
   "localhost",
   "127.0.0.1",
@@ -50,15 +52,35 @@ function browserHostname(): string {
   return window.location?.hostname ?? "";
 }
 
+function activeRuntimeEnvironment(): string | null {
+  try {
+    return resolveDeploymentRuntimeConfig()?.environment ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export function isDevRuntimeWriteGateHost(hostname = browserHostname()): boolean {
+  const runtimeEnv = activeRuntimeEnvironment();
+  if (runtimeEnv === "staging" || runtimeEnv === "production") {
+    return false;
+  }
   return DEV_RUNTIME_HOSTS.has(hostname);
 }
 
 export function isRuntimeFallbackHost(hostname = browserHostname()): boolean {
+  const runtimeEnv = activeRuntimeEnvironment();
+  if (runtimeEnv === "staging" || runtimeEnv === "production") {
+    return false;
+  }
   return FALLBACK_RUNTIME_HOSTS.has(hostname);
 }
 
 export function isDevLoginHost(hostname = browserHostname()): boolean {
+  const runtimeEnv = activeRuntimeEnvironment();
+  if (runtimeEnv === "staging" || runtimeEnv === "production") {
+    return false;
+  }
   return DEV_RUNTIME_HOSTS.has(hostname);
 }
 
@@ -133,5 +155,29 @@ export function readBffEnv(): Record<string, string | undefined> {
         VITE_BFF_EMBEDDED_BEARER_TOKEN: "false",
       }
     : {};
+
+  const runtimeDeployment = resolveDeploymentRuntimeConfig();
+  if (runtimeDeployment) {
+    const isDevOrLocal =
+      runtimeDeployment.environment === "dev"
+      || runtimeDeployment.environment === "local";
+    return {
+      ...prodDefaults,
+      ...viteEnv,
+      ...nodeEnv,
+      VITE_BFF_BASE_URL: runtimeDeployment.bffBaseUrl,
+      VITE_GCP_IDENTITY_API_KEY: runtimeDeployment.gcpIdentity.apiKey,
+      VITE_GCP_IDENTITY_PROJECT_ID: runtimeDeployment.gcpIdentity.projectId,
+      VITE_GCP_IDENTITY_AUTH_DOMAIN: runtimeDeployment.gcpIdentity.authDomain,
+      VITE_GCP_IDENTITY_ISSUER: runtimeDeployment.gcpIdentity.issuer,
+      VITE_GCP_IDENTITY_AUDIENCE: runtimeDeployment.gcpIdentity.audience,
+      VITE_PANTHEON_DEPLOYMENT_ENV: runtimeDeployment.environment,
+      VITE_PANTHEON_CONFIG_REF: runtimeDeployment.configRef,
+      VITE_PANTHEON_CONFIG_SHA256: runtimeDeployment.configSha256,
+      ...runtimeDeployment.safeDefaults,
+      ...(isDevOrLocal ? readDevRuntimeOverrides() : {}),
+    };
+  }
+
   return { ...prodDefaults, ...viteEnv, ...nodeEnv, ...readDevRuntimeOverrides() };
 }
