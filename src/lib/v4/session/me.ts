@@ -6,6 +6,7 @@ import { paths } from "@/lib/bff-v1/paths";
 import { bffFetch, detectMode } from "@/lib/bff-v1/client";
 import { isStrictLiveFallback } from "@/lib/bff-v1/liveTransport";
 import { liveStatus } from "@/lib/bff-v1/liveStatus";
+import { isAbortError } from "@/lib/bff-v1/errors";
 
 export type Role =
   | "platform_admin"
@@ -120,6 +121,7 @@ async function loadLiveOrMockMe(): Promise<MeResponse> {
     });
     return normalizeMeResponse(raw);
   } catch (err) {
+    if (isAbortError(err)) throw err;
     if (!isStrictLiveFallback()) {
       liveStatus.reportFallback(err instanceof Error ? err.message : String(err));
       return mockMe();

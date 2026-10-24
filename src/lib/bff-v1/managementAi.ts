@@ -13,6 +13,7 @@
 //     `TransportFailure`; UI MUST render the same degraded banner.
 
 import { buildHeaders } from "./headers";
+import { isAbortError } from "./errors";
 import { paths } from "./paths";
 import { readBffEnv } from "./runtimeEnv";
 
@@ -899,10 +900,6 @@ function newIdempotencyKey(): string {
 }
 
 const MANAGEMENT_AI_STREAM_READ_TIMEOUT_MS = 45_000;
-
-function isAbortError(err: unknown, signal?: AbortSignal): boolean {
-  return (err as { name?: string } | null)?.name === "AbortError" || Boolean(signal?.aborted);
-}
 
 /** POST /bff/management/nl/ask — never returns a locally-synthesized answer. */
 export async function askManagementAi(

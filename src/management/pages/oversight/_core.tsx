@@ -1225,7 +1225,10 @@ export const HumanInboxPage = () => {
   const targetTypeFocus = searchParams.get("target_type")?.trim() ?? (targetFocus ? "target" : "");
   const { data, loading, error = null, refresh } = useV5Live<HumanInboxList>(() => {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 5000);
+    const timer = setTimeout(
+      () => controller.abort(new DOMException("Human inbox request timed out", "TimeoutError")),
+      5000,
+    );
     return mgmt.humanInbox.list({ signal: controller.signal }).finally(() => clearTimeout(timer));
   }, []);
   const sorted = useMemo(

@@ -6,7 +6,7 @@
 // `undefined`, or fails with a 5xx / transport error.
 
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
-import { BffError } from "./errors";
+import { BffError, isAbortError } from "./errors";
 import { liveStatus } from "./liveStatus";
 import { detectFallbackMode } from "./liveTransport";
 import { realtime } from "./sse/bridge";
@@ -215,6 +215,8 @@ export function useLiveDetail<T>(
         if (!mountedRef.current || reqId !== requestIdRef.current) {
           return undefined;
         }
+        // Caller cancellation: leave the previous state untouched.
+        if (isAbortError(err)) return undefined;
         if (isNotFoundError(err)) {
           setDataState(undefined);
           setStatus("not-found");
