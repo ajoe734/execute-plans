@@ -47,6 +47,22 @@ export class BffError extends Error {
   }
 }
 
+/** A deadline expiry (`AbortSignal.timeout()` or `controller.abort(new DOMException(..., "TimeoutError"))`). */
+export function isTimeoutError(err: unknown, signal?: AbortSignal): boolean {
+  const name = (e: unknown) => (e as { name?: string } | null | undefined)?.name;
+  return name(err) === "TimeoutError" || (Boolean(signal?.aborted) && name(signal?.reason) === "TimeoutError");
+}
+
+/**
+ * True when the caller cancelled the request (unmount, TanStack cancelQueries,
+ * a superseding refetch). That is not a transport failure. A deadline
+ * (TimeoutError) is never a caller cancellation.
+ */
+export function isAbortError(err: unknown, signal?: AbortSignal): boolean {
+  if (isTimeoutError(err, signal)) return false;
+  return (err as { name?: string } | null | undefined)?.name === "AbortError" || Boolean(signal?.aborted);
+}
+
 /** Default HTTP status mapping per Final.md §C.1 / §C.3. Backend authoritative. */
 export const ERROR_CODE_TO_STATUS: Readonly<Partial<Record<ErrorCode, number>>> = {
   VALIDATION_FAILED: 400,

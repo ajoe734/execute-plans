@@ -206,6 +206,33 @@ describe("Pantheon auth recovery page", () => {
     expect(mocks.signIn).not.toHaveBeenCalled();
   });
 
+  it("offers retry on the dev host when cookie verification failed transiently without a GCP session", async () => {
+    setLocation("https://app.dev.mvl-cap.tw/auth");
+    mocks.auth = {
+      ...mocks.auth,
+      bffError: new Error("BFF browser session verification timed out after 10000ms"),
+    };
+
+    renderAuth("/auth?reason=auth-required&from=%2Fmanagement%2Fcockpit");
+
+    expect(screen.queryByText(/missing or expired/iu)).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText("Password")).not.toBeInTheDocument();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Retry access verification" }));
+    });
+    expect(mocks.retryBffSession).toHaveBeenCalledOnce();
+  });
+
+  it("still shows the login form on the dev host after a genuine rejection", () => {
+    setLocation("https://app.dev.mvl-cap.tw/auth");
+
+    renderAuth("/auth?reason=auth-required&from=%2Fmanagement%2Fcockpit");
+
+    expect(screen.getByRole("status")).toHaveTextContent("missing or expired");
+    expect(screen.getByPlaceholderText("Password")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Retry access verification" })).not.toBeInTheDocument();
+  });
+
   it("rejects a protocol-relative return target", () => {
     mocks.auth = {
       ...mocks.auth,
