@@ -16,6 +16,14 @@ vi.mock("@/management/pages/v5/useV5Live", () => ({
 
 void i18n.changeLanguage("en-US");
 
+const LATEST_PERIOD = {
+  requested: "latest",
+  applied: "latest",
+  windowed: false,
+  basis: "latest_runtime_telemetry_snapshot",
+  source: "meta" as const,
+};
+
 const LATEST_ONLY_PERIOD = {
   requested: "30d",
   applied: "latest",
@@ -26,7 +34,7 @@ const LATEST_ONLY_PERIOD = {
   source: "meta" as const,
 };
 
-function attributionResult(rows: unknown[], period: Record<string, unknown> = LATEST_ONLY_PERIOD) {
+function attributionResult(rows: unknown[], period: Record<string, unknown> = LATEST_PERIOD) {
   return { rows, period };
 }
 
@@ -294,8 +302,23 @@ describe("PerformanceAttributionPage", () => {
     expect(screen.queryByText("nan")).not.toBeInTheDocument();
   });
 
-  it("shows the latest-snapshot notice when a non-latest period was not windowed", () => {
+  it("defaults to latest and shows no period notice when the URL has no period", () => {
     mockAttributionOnly(attributionResult([]));
+
+    renderPage("/management/performance-attribution");
+
+    expect(screen.getByRole("combobox", { name: "Period" })).toHaveValue("latest");
+    expect(mocks.useV5Live).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.anything(),
+      { cacheKey: "oversight.performanceAttribution.all.latest" },
+    );
+    expect(screen.queryByTestId("attribution-period-notice")).not.toBeInTheDocument();
+    expect(screen.getByTestId("attribution-applied-period")).toHaveTextContent("Applied period: Latest snapshot");
+  });
+
+  it("shows the latest-snapshot notice when a non-latest period was not windowed", () => {
+    mockAttributionOnly(attributionResult([], LATEST_ONLY_PERIOD));
 
     renderPage("/management/performance-attribution?period=30d");
 
