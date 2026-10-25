@@ -3901,6 +3901,11 @@ export default {
       focusedEntityFmt: "Focused entity: {{entity}} · {{count}} attribution row(s)",
       focusMissingEntityFmt: "No performance attribution found for {{entity}}.",
       showAllEntities: "Show all entities in this dimension",
+      appliedPeriodFmt: "Applied period: {{period}}",
+      appliedPeriodUnconfirmed: "Applied period: not confirmed by BFF",
+      periodLatestSnapshotNotice: "Showing the latest snapshot: the BFF has no dated data for this period.",
+      periodUnconfirmedNoticeFmt: "The BFF did not confirm that the {{period}} window was applied; figures are not filtered to this period.",
+      periodOptionLatestOnlyFmt: "{{period}} (latest snapshot only)",
       confidence: {
         formal: "Formal attribution",
         partial: "Partial data",
@@ -3923,6 +3928,7 @@ export default {
         market_regime: "Market regime",
       },
       periods: {
+        latest: "Latest snapshot",
         "7d": "7 days",
         "30d": "30 days",
         quarter: "Quarter",

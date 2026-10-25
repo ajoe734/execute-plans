@@ -52,7 +52,9 @@ import type {
 } from "@/lib/v5/management/quarterlyRanking";
 import type {
   PerformanceAttributionRow, AttributionDimension, AttributionPeriod,
+  PerformanceAttributionResult,
 } from "@/lib/v5/management/performanceAttribution";
+import { adaptAttributionPeriodState } from "@/lib/v5/management/performanceAttribution";
 
 export type ManagementDataConfidence = "formal" | "partial" | "fallback" | "degraded" | "unavailable";
 
@@ -3286,6 +3288,15 @@ function adaptArrayPassthrough<T>(raw: unknown): T[] | null {
          (isObject(data) ? asArray<T>(data.items) : null);
 }
 
+export function adaptPerformanceAttributionResult(raw: unknown): PerformanceAttributionResult {
+  const data = unwrap(raw);
+  const rows = adaptArrayPassthrough<PerformanceAttributionRow>(raw) ??
+    (isObject(data) ? asArray<PerformanceAttributionRow>(data.rows) : null) ??
+    (isObject(raw) ? asArray<PerformanceAttributionRow>(raw.items) : null) ??
+    [];
+  return { rows, period: adaptAttributionPeriodState(raw) };
+}
+
 
 const nullableNumber = (value: unknown): number | null => {
   if (value === null || value === undefined || value === "") return null;
@@ -4303,6 +4314,21 @@ export const mgmt = {
   },
 
   performanceAttribution: {
+    /** Rows plus the period the BFF actually applied (meta.period). */
+    getLiveOnly: (
+      dimension?: AttributionDimension,
+      period?: AttributionPeriod,
+      opts?: { signal?: AbortSignal },
+    ): Promise<PerformanceAttributionResult> => {
+      if (detectMode() === "mock") {
+        return Promise.resolve({ rows: [], period: adaptAttributionPeriodState(undefined) });
+      }
+      return strictLiveRead<PerformanceAttributionResult>(
+        `mgmt.${paths.mgmtPerformanceAttribution(dimension, period)}`,
+        { method: "GET", path: paths.mgmtPerformanceAttribution(dimension, period), signal: opts?.signal },
+        adaptPerformanceAttributionResult,
+      );
+    },
     listLiveOnly: (
       dimension?: AttributionDimension,
       period?: AttributionPeriod,

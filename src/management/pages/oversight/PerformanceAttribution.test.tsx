@@ -16,6 +16,29 @@ vi.mock("@/management/pages/v5/useV5Live", () => ({
 
 void i18n.changeLanguage("en-US");
 
+const LATEST_ONLY_PERIOD = {
+  requested: "30d",
+  applied: "latest",
+  windowed: false,
+  basis: "latest_runtime_telemetry_snapshot",
+  reason: "dated_attribution_source_unavailable",
+  message: "No dated per-runtime P&L source; showing the latest telemetry snapshot.",
+  source: "meta" as const,
+};
+
+function attributionResult(rows: unknown[], period: Record<string, unknown> = LATEST_ONLY_PERIOD) {
+  return { rows, period };
+}
+
+function mockAttributionOnly(result: ReturnType<typeof attributionResult>) {
+  mocks.useV5Live.mockImplementation((_fn: unknown, _deps: unknown, opts?: { cacheKey?: string }) => {
+    if (opts?.cacheKey?.startsWith("oversight.performanceAttribution.")) {
+      return { data: result, loading: false, refresh: vi.fn() };
+    }
+    return { data: undefined, loading: false, refresh: vi.fn() };
+  });
+}
+
 function renderPage(initialEntry: string) {
   return render(
     <I18nextProvider i18n={i18n}>
@@ -36,7 +59,7 @@ describe("PerformanceAttributionPage", () => {
   it("honors Persona Fleet persona query params and normalizes live PM12 snake_case rows", () => {
     mocks.useV5Live
       .mockReturnValueOnce({
-        data: [
+        data: attributionResult([
           {
             dimension: "persona",
             dimension_key: "persona-tw-equity",
@@ -65,7 +88,7 @@ describe("PerformanceAttributionPage", () => {
               persona_ids: ["persona-crypto"],
             },
           },
-        ],
+        ]),
         loading: false,
         refresh: vi.fn(),
       })
@@ -151,13 +174,13 @@ describe("PerformanceAttributionPage", () => {
   it("does not fall back to unrelated attribution rows when persona focus misses", () => {
     mocks.useV5Live
       .mockReturnValueOnce({
-        data: [{
+        data: attributionResult([{
           dimension: "persona",
           dimension_key: "persona-crypto",
           label: "Crypto Persona",
           metrics: { total_pnl: 9876 },
           source_refs: { persona_ids: ["persona-crypto"] },
-        }],
+        }]),
         loading: false,
         refresh: vi.fn(),
       })
@@ -175,13 +198,13 @@ describe("PerformanceAttributionPage", () => {
   it("shows a Persona Fleet summary row when attribution rows miss but fleet has the persona", () => {
     mocks.useV5Live
       .mockReturnValueOnce({
-        data: [{
+        data: attributionResult([{
           dimension: "persona",
           dimension_key: "persona-crypto",
           label: "Crypto Persona",
           metrics: { total_pnl: 9876 },
           source_refs: { persona_ids: ["persona-crypto"] },
-        }],
+        }]),
         loading: false,
         refresh: vi.fn(),
       })
@@ -269,5 +292,60 @@ describe("PerformanceAttributionPage", () => {
     expect(screen.getByText(/MISSING_ATTRIBUTION_MATCH/)).toBeInTheDocument();
     expect(screen.getByText(/MISSING_HOLDINGS_MATCH/)).toBeInTheDocument();
     expect(screen.queryByText("nan")).not.toBeInTheDocument();
+  });
+
+  it("shows the latest-snapshot notice when a non-latest period was not windowed", () => {
+    mockAttributionOnly(attributionResult([]));
+
+    renderPage("/management/performance-attribution?period=30d");
+
+    expect(screen.getByTestId("attribution-period-notice")).toHaveTextContent(
+      "Showing the latest snapshot: the BFF has no dated data for this period.",
+    );
+    expect(screen.getByTestId("attribution-applied-period")).toHaveTextContent("Applied period: Latest snapshot");
+    expect(screen.queryByText("Applied period: 30 days")).not.toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "30 days (latest snapshot only)" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Latest snapshot" })).toBeInTheDocument();
+  });
+
+  it("shows no period notice when latest is selected", () => {
+    mockAttributionOnly(attributionResult([], {
+      requested: "latest",
+      applied: "latest",
+      windowed: false,
+      basis: "latest_runtime_telemetry_snapshot",
+      source: "meta",
+    }));
+
+    renderPage("/management/performance-attribution?period=latest");
+
+    expect(screen.queryByTestId("attribution-period-notice")).not.toBeInTheDocument();
+    expect(screen.getByTestId("attribution-applied-period")).toHaveTextContent("Applied period: Latest snapshot");
+    expect(screen.getByRole("option", { name: "30 days" })).toBeInTheDocument();
+  });
+
+  it("labels a window as applied only when the BFF confirms windowed", () => {
+    mockAttributionOnly(attributionResult([], {
+      requested: "30d",
+      applied: "30d",
+      windowed: true,
+      source: "meta",
+    }));
+
+    renderPage("/management/performance-attribution?period=30d");
+
+    expect(screen.queryByTestId("attribution-period-notice")).not.toBeInTheDocument();
+    expect(screen.getByTestId("attribution-applied-period")).toHaveTextContent("Applied period: 30 days");
+  });
+
+  it("does not claim a legacy string period as applied", () => {
+    mockAttributionOnly(attributionResult([], { applied: "30d", windowed: false, source: "legacy_string" }));
+
+    renderPage("/management/performance-attribution?period=30d");
+
+    expect(screen.getByTestId("attribution-period-notice")).toHaveTextContent(
+      "The BFF did not confirm that the 30 days window was applied",
+    );
+    expect(screen.getByTestId("attribution-applied-period")).toHaveTextContent("Applied period: not confirmed by BFF");
   });
 });
