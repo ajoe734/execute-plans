@@ -4,7 +4,7 @@ export function validatePublicBuildBearerToken(
   const token = value ?? "";
   if (token) {
     throw new Error(
-      "VITE_BFF_DEV_BEARER_TOKEN must be empty; browser bearer credentials are forbidden",
+      "VITE_BFF_DEV_BEARER_TOKEN must be empty; browser Authorization header tokens are forbidden",
     );
   }
   return "";
@@ -18,7 +18,7 @@ const FORBIDDEN_RUNTIME_VALUE_PATTERNS: ReadonlyArray<{
   pattern: RegExp;
 }> = [
   {
-    label: "bearer credential",
+    label: "bearer-credential value",
     pattern: /\bbearer[\t ]+[a-z0-9._~+/=-]{4,}/iu,
   },
   {
@@ -53,7 +53,7 @@ export function assertNoPublicRuntimeCredentials(
       if (rawKey === "VITE_BFF_EMBEDDED_BEARER_TOKEN") {
         if (String(rawValue ?? "").trim().toLowerCase() !== "false") {
           throw new Error(
-            `${contextLabel} forbids ${fieldPath}=${String(rawValue)}; embedded bearer tokens must remain 'false'`,
+            `${contextLabel} forbids ${fieldPath}=${String(rawValue)}; embedded bearer-token mode must remain 'false'`,
           );
         }
         continue;
