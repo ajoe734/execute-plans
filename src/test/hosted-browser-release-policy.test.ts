@@ -12,7 +12,15 @@ import { createServer } from "node:http";
 import { promisify } from "node:util";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 
 import {
   HOSTED_UX_PERFORMANCE_BUDGETS,
@@ -377,6 +385,22 @@ describe("hosted browser strict release policy", () => {
     const FE_ORIGIN = "https://app.dev.mvl-cap.tw";
     const validUrl = `${FE_ORIGIN}/auth?reason=auth-required&from=%2Fmanagement%2Fpersona-fleet`;
     const paths = ["/bff/management/summary"];
+    // Pin the inputs the probe would otherwise read from the environment and
+    // the wall clock: the gate exports PANTHEON_FE_BASE_URL for its local
+    // frontend, and the overall budget counts from module import. The policy
+    // under test (origin, auth route, reason, return path) is unchanged.
+    const boundaryOptions = {
+      expectedOrigin: FE_ORIGIN,
+      remainingMs: () => 120_000,
+    };
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
 
     function fakePage(initialUrl = `${FE_ORIGIN}/management/persona-fleet`) {
       let current = initialUrl;
@@ -429,30 +453,26 @@ describe("hosted browser strict release policy", () => {
     }
 
     it("keeps observing a valid auth boundary for the full core timeout", async () => {
-      vi.useFakeTimers();
-      try {
-        const fake = fakePage();
-        const pending = waitForRequiredCoreOrAuthBoundary(
-          fake.page,
-          paths,
-          "/management/persona-fleet",
-          60_000,
-        );
-        await vi.advanceTimersByTimeAsync(12_000);
-        expect(fake.calls.urlTimeout).toBeGreaterThan(12_000);
-        let settled = false;
-        void pending.then(() => {
-          settled = true;
-        });
-        fake.navigate(validUrl);
-        await vi.advanceTimersByTimeAsync(0);
-        expect(settled).toBe(true);
-        const outcome = await pending;
-        expect(outcome.responses).toEqual([]);
-        expect(outcome.authBoundary.pass).toBe(true);
-      } finally {
-        vi.useRealTimers();
-      }
+      const fake = fakePage();
+      const pending = waitForRequiredCoreOrAuthBoundary(
+        fake.page,
+        paths,
+        "/management/persona-fleet",
+        60_000,
+        boundaryOptions,
+      );
+      await vi.advanceTimersByTimeAsync(12_000);
+      expect(fake.calls.urlTimeout).toBeGreaterThan(12_000);
+      let settled = false;
+      void pending.then(() => {
+        settled = true;
+      });
+      fake.navigate(validUrl);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(settled).toBe(true);
+      const outcome = await pending;
+      expect(outcome.responses).toEqual([]);
+      expect(outcome.authBoundary.pass).toBe(true);
     });
 
     it("accepts an immediate valid boundary", async () => {
@@ -462,6 +482,7 @@ describe("hosted browser strict release policy", () => {
         paths,
         "/management/persona-fleet",
         60_000,
+        boundaryOptions,
       );
       expect(outcome.authBoundary.pass).toBe(true);
     });
@@ -473,6 +494,7 @@ describe("hosted browser strict release policy", () => {
         paths,
         "/management/persona-fleet",
         60_000,
+        boundaryOptions,
       );
       await Promise.resolve();
       fake.failCore();
@@ -489,6 +511,7 @@ describe("hosted browser strict release policy", () => {
         paths,
         "/management/persona-fleet",
         60_000,
+        boundaryOptions,
       );
       await Promise.resolve();
       fake.navigate(
@@ -501,12 +524,50 @@ describe("hosted browser strict release policy", () => {
       void pending.then(() => {
         settled = true;
       });
-      await new Promise((r) => setTimeout(r, 10));
+      await vi.advanceTimersByTimeAsync(10);
       expect(settled).toBe(false);
       fake.failCore();
       const outcome = await pending;
       expect(outcome.authBoundary.pass).toBe(false);
       expect(outcome.responses[0].status).toBe(0);
+    });
+
+    it("requires the boundary on the configured frontend origin", async () => {
+      const fake = fakePage(validUrl);
+      const pending = waitForRequiredCoreOrAuthBoundary(
+        fake.page,
+        paths,
+        "/management/persona-fleet",
+        60_000,
+        { ...boundaryOptions, expectedOrigin: "http://127.0.0.1:4173" },
+      );
+      let settled = false;
+      void pending.then(() => {
+        settled = true;
+      });
+      await vi.advanceTimersByTimeAsync(10);
+      expect(settled).toBe(false);
+      fake.failCore();
+      const outcome = await pending;
+      expect(outcome.authBoundary.pass).toBe(false);
+      expect(outcome.authBoundary.checks.sameOrigin).toBe(false);
+    });
+
+    it("clamps both waits to the remaining overall probe budget", async () => {
+      const fake = fakePage();
+      const pending = waitForRequiredCoreOrAuthBoundary(
+        fake.page,
+        paths,
+        "/management/persona-fleet",
+        60_000,
+        { ...boundaryOptions, remainingMs: () => 5_000 },
+      );
+      expect(fake.calls.urlTimeout).toBe(5_000);
+      expect(fake.calls.responseTimeout).toBe(5_000);
+      fake.failCore();
+      await vi.advanceTimersByTimeAsync(5_000);
+      const outcome = await pending;
+      expect(outcome.authBoundary.pass).toBe(false);
     });
   });
 

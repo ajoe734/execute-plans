@@ -38,11 +38,53 @@ describe("paired Pantheon release workflow", () => {
     const chromium = componentJob.indexOf(
       "run: npx --no-install playwright install --with-deps chromium",
     );
-    const tests = componentJob.indexOf("- name: Changed component tests");
+    const tests = componentJob.indexOf(
+      "- name: Release gate unit / integration tests",
+    );
     expect(install).toBeGreaterThanOrEqual(0);
     expect(chromium).toBeGreaterThan(install);
     expect(tests).toBeGreaterThan(chromium);
     expect(componentJob.slice(chromium, tests)).not.toContain("continue-on-error");
+  });
+
+  it("runs the release gate's vitest suite and env on every PR", () => {
+    const stepRun = (workflow: string, name: string) => {
+      const start = workflow.indexOf(`      - name: ${name}\n`);
+      expect(start).toBeGreaterThan(-1);
+      const end = workflow.indexOf("\n      - name: ", start + 1);
+      return workflow.slice(start, end === -1 ? undefined : end);
+    };
+    const releaseStep = stepRun(integrationWorkflow, "Unit / integration tests");
+    const prStep = stepRun(branchWorkflow, "Release gate unit / integration tests");
+    // One shared npm script; no file list, filter, or related-only subset.
+    expect(releaseStep).toContain("npm run test 2>&1");
+    expect(prStep).toMatch(/\n {8}run: npm run test\n/u);
+    expect(prStep).not.toMatch(/vitest|--changed|related/u);
+
+    const prEnv = [
+      ...prStep.matchAll(/^ {10}([A-Z0-9_]+): "([^"]*)"$/gmu),
+    ].map(([, key, value]) => [key, value]);
+    expect(prEnv.length).toBeGreaterThan(0);
+    const gateJob = integrationWorkflow.slice(
+      integrationWorkflow.indexOf("  integration-gate:"),
+    );
+    const gateEnv = gateJob.slice(
+      gateJob.indexOf("    env:\n"),
+      gateJob.indexOf("    steps:\n"),
+    );
+    for (const [key, value] of prEnv) {
+      const line = gateEnv.match(new RegExp(`^ {6}${key}: (.*)$`, "mu"));
+      expect(line, key).not.toBeNull();
+      const gateValue = line![1].trim();
+      // A push-triggered gate resolves `${{ a || 'default' }}` to `default`.
+      const pushDefault =
+        gateValue.match(/'([^']*)' \}\}$/u)?.[1] ??
+        gateValue.replace(/^"(.*)"$/u, "$1");
+      expect(pushDefault, key).toBe(value);
+    }
+    expect(Object.fromEntries(prEnv).PANTHEON_FE_BASE_URL).toBe(
+      "http://127.0.0.1:4173",
+    );
   });
 
   it("uses the current dev variables and origin for candidate browser requests", () => {
@@ -767,8 +809,9 @@ describe("paired Pantheon release workflow", () => {
     expect(integration).not.toContain("pull-requests: write");
     expect(triggers).not.toContain("pull_request:");
     expect(branchWorkflow).toContain("  component-merge:");
-    expect(branchWorkflow).toContain("name: Changed component tests");
-    expect(branchWorkflow).toContain("npx vitest related --run");
+    expect(branchWorkflow).toContain(
+      "name: Release gate unit / integration tests",
+    );
     expect(branchWorkflow).toContain("name: Checkout Pantheon contract bundle");
     expect(branchWorkflow).toContain("PANTHEON_CONTRACT_ROOT: pantheon-contract");
     expect(branchWorkflow).toContain("run: npm run test:contract");
