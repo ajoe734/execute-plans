@@ -77,7 +77,7 @@ describe("public frontend build auth boundary", () => {
       "pantheon-dev-browser:admin:mfa:assistant.kernel.debug",
     ]) {
       expect(() => validatePublicBuildBearerToken(rejected)).toThrow(
-        /must be empty; browser bearer credentials are forbidden/,
+        /must be empty; browser Authorization header tokens are forbidden/,
       );
     }
   });
@@ -95,7 +95,7 @@ describe("public frontend build auth boundary", () => {
 
     expect(result.status).not.toBe(0);
     expect(`${result.stdout}\n${result.stderr}`).toMatch(
-      /must be empty; browser bearer credentials are forbidden/,
+      /must be empty; browser Authorization header tokens are forbidden/,
     );
   }, 30_000);
 
@@ -215,7 +215,7 @@ describe("public frontend build auth boundary", () => {
     expect(result.error?.message ?? "").not.toMatch(/timed out|ETIMEDOUT/i);
     expect(result.status).not.toBe(0);
     expect(`${result.stdout}\n${result.stderr}`).toMatch(
-      /must be empty; browser bearer credentials are forbidden/,
+      /must be empty; browser Authorization header tokens are forbidden/,
     );
     expect(`${result.stdout}\n${result.stderr}`).not.toMatch(/Local:\s+http/i);
   });
@@ -239,7 +239,7 @@ describe("public frontend build auth boundary", () => {
 
       expect(result.status).not.toBe(0);
       expect(`${result.stdout}\n${result.stderr}`).toMatch(
-        /must be empty; browser bearer credentials are forbidden/,
+        /must be empty; browser Authorization header tokens are forbidden/,
       );
     },
     30_000,

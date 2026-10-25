@@ -238,6 +238,11 @@ jobs:
           VITE_GCP_IDENTITY_AUTH_DOMAIN: ${{ vars.VITE_GCP_IDENTITY_AUTH_DOMAIN }}
         run: npm run build
 
+      # Same browser-asset credential scan the release candidate applies before
+      # a hosted deploy, so a matching bundled string fails the PR instead.
+      - name: Bundle credential scan
+        run: npm run scan:bundle-credentials
+
   smoke-alias:
     name: Smoke acceptance
     runs-on: ubuntu-24.04
