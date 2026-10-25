@@ -519,7 +519,7 @@ export const PerformanceAttributionPage = ({ embedded = false }: { embedded?: bo
   const entityFocus = searchParams.get("entity")?.trim() ?? "";
   const dimension = selectedDimensionFromQuery(searchParams.get("dimension"), personaFocus);
   const periodParam = searchParams.get("period");
-  const period: AttributionPeriod = isAttributionPeriod(periodParam) ? periodParam : "30d";
+  const period: AttributionPeriod = isAttributionPeriod(periodParam) ? periodParam : "latest";
 
   const { data } = useV5Live(
     (signal) => mgmt.performanceAttribution.getLiveOnly(
