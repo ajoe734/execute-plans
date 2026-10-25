@@ -244,7 +244,11 @@ export function assessAnonymousAuthRedirect(
   };
 }
 
-async function waitForAnonymousAuthRedirect(page, expectedFromPath) {
+async function waitForAnonymousAuthRedirect(
+  page,
+  expectedFromPath,
+  timeoutMs = AUTH_BOUNDARY_TIMEOUT_MS,
+) {
   await page.waitForURL(
     (url) =>
       assessAnonymousAuthRedirect(
@@ -252,12 +256,12 @@ async function waitForAnonymousAuthRedirect(page, expectedFromPath) {
         expectedFromPath,
         FE_BASE,
       ).pass,
-    { timeout: Math.min(AUTH_BOUNDARY_TIMEOUT_MS, remainingTimeoutMs()) },
+    { timeout: Math.min(timeoutMs, remainingTimeoutMs()) },
   );
   return assessAnonymousAuthRedirect(page.url(), expectedFromPath, FE_BASE);
 }
 
-async function waitForRequiredCoreOrAuthBoundary(
+export async function waitForRequiredCoreOrAuthBoundary(
   page,
   expectedPaths,
   expectedFromPath,
@@ -271,6 +275,7 @@ async function waitForRequiredCoreOrAuthBoundary(
   const authPromise = waitForAnonymousAuthRedirect(
     page,
     expectedFromPath,
+    coreTimeoutMs,
   ).then((boundary) => ({ kind: "auth", boundary }));
 
   try {

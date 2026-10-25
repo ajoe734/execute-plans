@@ -12,7 +12,7 @@ import { createServer } from "node:http";
 import { promisify } from "node:util";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import {
   HOSTED_UX_PERFORMANCE_BUDGETS,
@@ -42,6 +42,7 @@ import {
   scanTextForSensitiveValues,
   summarizeAxeViolations,
   waitForCoreBffResponse,
+  waitForRequiredCoreOrAuthBoundary,
 } from "../../scripts/probe-hosted-browser-bff.mjs";
 
 const cleanupRoots: string[] = [];
@@ -369,6 +370,143 @@ describe("hosted browser strict release policy", () => {
       authRequiredReason: true,
       safeReturnTarget: true,
       expectedReturnPath: true,
+    });
+  });
+
+  describe("required core or auth boundary wait", () => {
+    const FE_ORIGIN = "https://app.dev.mvl-cap.tw";
+    const validUrl = `${FE_ORIGIN}/auth?reason=auth-required&from=%2Fmanagement%2Fpersona-fleet`;
+    const paths = ["/bff/management/summary"];
+
+    function fakePage(initialUrl = `${FE_ORIGIN}/management/persona-fleet`) {
+      let current = initialUrl;
+      const waiters: Array<{
+        predicate: (url: URL) => boolean;
+        resolve: () => void;
+        reject: (error: Error) => void;
+      }> = [];
+      const calls: { urlTimeout?: number; responseTimeout?: number } = {};
+      let rejectCore: (error: Error) => void = () => {};
+      const page = {
+        url: () => current,
+        waitForURL: (predicate: (url: URL) => boolean, opts: { timeout: number }) => {
+          calls.urlTimeout = opts.timeout;
+          return new Promise<void>((resolve, reject) => {
+            if (predicate(new URL(current))) return resolve();
+            const timer = setTimeout(
+              () => reject(new Error("Timeout exceeded")),
+              opts.timeout,
+            );
+            timer.unref?.();
+            waiters.push({
+              predicate,
+              resolve: () => {
+                clearTimeout(timer);
+                resolve();
+              },
+              reject,
+            });
+          });
+        },
+        waitForResponse: (_p: unknown, opts: { timeout: number }) => {
+          calls.responseTimeout = opts.timeout;
+          return new Promise((_resolve, reject) => {
+            rejectCore = reject;
+          });
+        },
+      };
+      return {
+        page,
+        calls,
+        navigate(url: string) {
+          current = url;
+          for (const w of [...waiters]) {
+            if (w.predicate(new URL(url))) w.resolve();
+          }
+        },
+        failCore: () => rejectCore(new Error("net::ERR_ABORTED")),
+      };
+    }
+
+    it("keeps observing a valid auth boundary for the full core timeout", async () => {
+      vi.useFakeTimers();
+      try {
+        const fake = fakePage();
+        const pending = waitForRequiredCoreOrAuthBoundary(
+          fake.page,
+          paths,
+          "/management/persona-fleet",
+          60_000,
+        );
+        await vi.advanceTimersByTimeAsync(12_000);
+        expect(fake.calls.urlTimeout).toBeGreaterThan(12_000);
+        let settled = false;
+        void pending.then(() => {
+          settled = true;
+        });
+        fake.navigate(validUrl);
+        await vi.advanceTimersByTimeAsync(0);
+        expect(settled).toBe(true);
+        const outcome = await pending;
+        expect(outcome.responses).toEqual([]);
+        expect(outcome.authBoundary.pass).toBe(true);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("accepts an immediate valid boundary", async () => {
+      const fake = fakePage(validUrl);
+      const outcome = await waitForRequiredCoreOrAuthBoundary(
+        fake.page,
+        paths,
+        "/management/persona-fleet",
+        60_000,
+      );
+      expect(outcome.authBoundary.pass).toBe(true);
+    });
+
+    it("still returns a core response when no boundary appears", async () => {
+      const fake = fakePage();
+      const pending = waitForRequiredCoreOrAuthBoundary(
+        fake.page,
+        paths,
+        "/management/persona-fleet",
+        60_000,
+      );
+      await Promise.resolve();
+      fake.failCore();
+      const outcome = await pending;
+      expect(outcome.responses[0].status).toBe(0);
+      expect(outcome.responses[0].error).toContain("ERR_ABORTED");
+      expect(outcome.authBoundary.pass).toBe(false);
+    });
+
+    it("does not let a wrong origin or wrong return path win", async () => {
+      const fake = fakePage();
+      const pending = waitForRequiredCoreOrAuthBoundary(
+        fake.page,
+        paths,
+        "/management/persona-fleet",
+        60_000,
+      );
+      await Promise.resolve();
+      fake.navigate(
+        "https://evil.example/auth?reason=auth-required&from=%2Fmanagement%2Fpersona-fleet",
+      );
+      fake.navigate(
+        `${FE_ORIGIN}/auth?reason=auth-required&from=%2Fother`,
+      );
+      let settled = false;
+      void pending.then(() => {
+        settled = true;
+      });
+      await new Promise((r) => setTimeout(r, 10));
+      expect(settled).toBe(false);
+      fake.failCore();
+      const outcome = await pending;
+      expect(outcome.authBoundary.pass).toBe(false);
+      expect(outcome.responses[0].status).toBe(0);
     });
   });
 
