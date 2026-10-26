@@ -1,9 +1,10 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import i18n from "@/i18n";
+import { adaptPortfolioHoldingsMonitor } from "@/lib/bff-v1/management";
 import { PortfolioBookPage } from "./PortfolioBook";
 import type { PortfolioHoldingMonitorRow, PortfolioIncident } from "@/lib/v5/management/portfolio";
 
@@ -108,5 +109,109 @@ describe("PortfolioBookPage monitor", () => {
     expect(screen.getByText(`${surfaceStatus} source`)).toBeInTheDocument();
     expect(screen.getByText(emptyMessage)).toBeInTheDocument();
     expect(screen.queryByTestId("portfolio-holding")).not.toBeInTheDocument();
+  });
+
+  it("formats explicit holding currencies in their native unit, labels null currency as 幣別未提供 without claiming USD, and keeps unavailable money as —", () => {
+    const monitor = adaptPortfolioHoldingsMonitor({
+      data: {
+        summary: {
+          holding_count: 3,
+          incident_count: 0,
+          source_coverage: {
+            source_row_count: 3,
+            runtime_count: 3,
+            telemetry_runtime_count: 3,
+            stale_row_count: 0,
+            missing_binding_count: 0,
+            degraded_source_count: 0,
+          },
+        },
+        items: [
+          {
+            id: "rt-eb295fe2:2330.TW",
+            holding_id: "rt-eb295fe2:2330.TW",
+            capital_pool_id: "hosted-all12-h12-01a11-20261023-9aeb-pool",
+            broker_id: "",
+            runtime_id: "rt-eb295fe2",
+            persona_id: "persona-strat-hosted-all12-h12-01a11-20261023-9aeb-src-e018ff6d0eb8",
+            symbol: "2330.TW",
+            side: "short",
+            quantity: -2.0,
+            mark_price: 2385.0,
+            market_value: -4770.0,
+            unrealized_pnl: null,
+            currency: null,
+            deployment_stage: "paper",
+            source_status: "ok",
+            telemetry_stale: false,
+            risk_state: "paper_exposure",
+            source_issues: [],
+            capital_scope: { stage: "paper", scope_kind: "paper_ledger", scope_id: null },
+            links: {},
+          },
+          {
+            id: "rt-twd:2330.TW",
+            holding_id: "rt-twd:2330.TW",
+            runtime_id: "rt-twd",
+            symbol: "2330.TW",
+            quantity: -2.0,
+            market_value: -4770.0,
+            unrealized_pnl: -120.0,
+            currency: "TWD",
+            deployment_stage: "paper",
+            source_status: "ok",
+            telemetry_stale: false,
+            risk_state: "paper_exposure",
+            source_issues: [],
+            capital_scope: { stage: "paper", scope_kind: "paper_ledger", scope_id: null },
+            links: {},
+          },
+          {
+            id: "rt-usd:AAPL",
+            holding_id: "rt-usd:AAPL",
+            runtime_id: "rt-usd",
+            symbol: "AAPL",
+            quantity: 10.0,
+            market_value: 1926.0,
+            unrealized_pnl: null,
+            currency: "USD",
+            deployment_stage: "live",
+            source_status: "ok",
+            telemetry_stale: false,
+            risk_state: "live_exposure",
+            source_issues: [],
+            capital_scope: { stage: "live", scope_kind: "live_capital_pool", scope_id: "pool-us" },
+            links: {},
+          },
+        ],
+      },
+      meta: {
+        incidents: [],
+        surfaces: { portfolio_book_holdings: { status: "ok" } },
+      },
+    });
+
+    mocks.useV5Live.mockReturnValue({
+      loading: false,
+      refresh: vi.fn(),
+      data: monitor,
+    });
+    renderPage();
+
+    const rows = screen.getAllByTestId("portfolio-holding");
+    expect(rows).toHaveLength(3);
+
+    const nullCurrencyCells = within(rows[0]).getAllByRole("cell");
+    expect(nullCurrencyCells[3]).toHaveTextContent("-4,770 (幣別未提供)");
+    expect(nullCurrencyCells[3].textContent).not.toMatch(/\$|USD|TWD|NT\$/);
+    expect(nullCurrencyCells[4]).toHaveTextContent("—");
+
+    const twdCells = within(rows[1]).getAllByRole("cell");
+    expect(twdCells[3]).toHaveTextContent("-NT$4,770");
+    expect(twdCells[4]).toHaveTextContent("-NT$120");
+
+    const usdCells = within(rows[2]).getAllByRole("cell");
+    expect(usdCells[3]).toHaveTextContent("$1,926");
+    expect(usdCells[4]).toHaveTextContent("—");
   });
 });

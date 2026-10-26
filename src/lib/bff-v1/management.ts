@@ -3873,6 +3873,7 @@ function adaptPortfolioHoldingMonitorRow(item: Record<string, unknown>): Portfol
     capitalPoolId: asString(item.capital_pool_id) || undefined,
     brokerId: asString(item.broker_id) || undefined,
     symbol: asString(item.symbol ?? instrument.symbol, "—"),
+    currency: nullableString(item.currency ?? instrument.currency),
     quantity: optionalFiniteNumber(item.quantity),
     marketValue: optionalFiniteNumber(item.market_value),
     unrealizedPnl: optionalFiniteNumber(item.unrealized_pnl),
