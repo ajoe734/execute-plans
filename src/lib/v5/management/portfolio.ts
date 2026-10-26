@@ -136,6 +136,7 @@ export interface PortfolioHoldingMonitorRow {
   capitalPoolId?: string;
   brokerId?: string;
   symbol: string;
+  currency?: string | null;
   quantity?: number;
   marketValue?: number;
   unrealizedPnl?: number;
