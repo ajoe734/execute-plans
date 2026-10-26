@@ -1,5 +1,5 @@
 import { bffFetch, type BffRequest } from "./client";
-import { BffError, makeBffError } from "./errors";
+import { BffError, isAbortError, makeBffError } from "./errors";
 import { liveStatus } from "./liveStatus";
 
 export const delay = <T>(v: T, ms = 220): Promise<T> => new Promise<T>((r) => setTimeout(() => r(v), ms));
@@ -64,6 +64,8 @@ export async function strictLiveRead<T>(
     liveStatus.reportSuccess();
     return adaptLive(data);
   } catch (err) {
+    // Caller cancellation (unmount, query cancel) is not a transport failure.
+    if (isAbortError(err, req.signal)) throw err;
     if (err instanceof BffError && err.status < 500 && err.status !== 0) {
       throw err;
     }

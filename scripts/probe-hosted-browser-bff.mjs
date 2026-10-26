@@ -244,33 +244,50 @@ export function assessAnonymousAuthRedirect(
   };
 }
 
-async function waitForAnonymousAuthRedirect(page, expectedFromPath) {
+async function waitForAnonymousAuthRedirect(
+  page,
+  expectedFromPath,
+  timeoutMs = AUTH_BOUNDARY_TIMEOUT_MS,
+  { expectedOrigin = FE_BASE, remainingMs = remainingTimeoutMs } = {},
+) {
   await page.waitForURL(
     (url) =>
       assessAnonymousAuthRedirect(
         url.toString(),
         expectedFromPath,
-        FE_BASE,
+        expectedOrigin,
       ).pass,
-    { timeout: Math.min(AUTH_BOUNDARY_TIMEOUT_MS, remainingTimeoutMs()) },
+    { timeout: Math.min(timeoutMs, remainingMs()) },
   );
-  return assessAnonymousAuthRedirect(page.url(), expectedFromPath, FE_BASE);
+  return assessAnonymousAuthRedirect(
+    page.url(),
+    expectedFromPath,
+    expectedOrigin,
+  );
 }
 
-async function waitForRequiredCoreOrAuthBoundary(
+// `expectedOrigin` and `remainingMs` default to the probe's configured FE
+// origin and overall wall-clock budget; tests inject them so the policy is
+// exercised independently of PANTHEON_FE_BASE_URL and module import time.
+export async function waitForRequiredCoreOrAuthBoundary(
   page,
   expectedPaths,
   expectedFromPath,
   coreTimeoutMs,
+  { expectedOrigin = FE_BASE, remainingMs = remainingTimeoutMs } = {},
 ) {
   const corePromise = Promise.all(
     expectedPaths.map((expectedPath) =>
-      waitForCoreBffResponse(page, expectedPath, coreTimeoutMs),
+      waitForCoreBffResponse(page, expectedPath, coreTimeoutMs, {
+        remainingMs,
+      }),
     ),
   ).then((responses) => ({ kind: "core", responses }));
   const authPromise = waitForAnonymousAuthRedirect(
     page,
     expectedFromPath,
+    coreTimeoutMs,
+    { expectedOrigin, remainingMs },
   ).then((boundary) => ({ kind: "auth", boundary }));
 
   try {
@@ -283,7 +300,7 @@ async function waitForRequiredCoreOrAuthBoundary(
       authBoundary: assessAnonymousAuthRedirect(
         page.url(),
         expectedFromPath,
-        FE_BASE,
+        expectedOrigin,
       ),
     };
   } catch {
@@ -292,7 +309,7 @@ async function waitForRequiredCoreOrAuthBoundary(
       authBoundary: assessAnonymousAuthRedirect(
         page.url(),
         expectedFromPath,
-        FE_BASE,
+        expectedOrigin,
       ),
     };
   }
@@ -628,12 +645,13 @@ export async function waitForCoreBffResponse(
   page,
   expectedPath,
   timeoutMs = remainingTimeoutMs(),
+  { remainingMs = remainingTimeoutMs } = {},
 ) {
   let res;
   try {
     res = await page.waitForResponse(
       (response) => isCoreBffResponse(response, expectedPath),
-      { timeout: Math.min(timeoutMs, remainingTimeoutMs()) },
+      { timeout: Math.min(timeoutMs, remainingMs()) },
     );
   } catch (error) {
     return {

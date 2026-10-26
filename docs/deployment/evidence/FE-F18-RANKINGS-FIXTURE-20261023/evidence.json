@@ -1,0 +1,17 @@
+{
+  "task": "FE-F18-RANKINGS-FIXTURE-20261023",
+  "base_sha": "a206bed2daa6b8c5558468d9af5cb9d1ced37de2",
+  "changed_files": ["e2e/18-perf.spec.ts"],
+  "root_cause": "installPerfRoutes only declared /bff/management/persona-league; the anchored regex does not match /persona-league/rankings, so the deny-by-default fixture aborted it (ERR_BLOCKED_BY_CLIENT) and the strict seed fallback failed.",
+  "change": "Added a persona-league/rankings route returning the grouped owner DTO (data.items = [{criteria: overall, ranking_id: persona-league-overall, items: owner-ranked rows}]), a personaRankings request counter, and assertions that the route was consumed and F18 Persona 1 renders. Deny-by-default, strict fallback, 4s and 30s SSE budgets unchanged.",
+  "before": {
+    "command": "npx playwright test e2e/18-perf.spec.ts -g 'Cockpit load and SSE'",
+    "result": "failed at SERVING_MOCK_BANNER assertion (strict: Failed to fetch, seed fallback blocked)"
+  },
+  "after": {
+    "focused": "1 passed",
+    "full_f18_spec": "4 passed",
+    "mode": "local Playwright loopback webServer; no hosted BFF, token, provider, VM or deploy"
+  },
+  "limits": "Proves fixture compatibility only; hosted acceptance and all12 remain incomplete."
+}

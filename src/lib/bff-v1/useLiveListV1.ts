@@ -9,7 +9,7 @@
 import { useEffect, useRef, useState } from "react";
 import { realtime } from "./sse/bridge";
 import type { ListEnvelope } from "./dto";
-import { BffError } from "./errors";
+import { BffError, isAbortError } from "./errors";
 import { liveStatus } from "./liveStatus";
 import { detectFallbackMode } from "./liveTransport";
 
@@ -84,6 +84,7 @@ export function useLiveListV1<T>(
       setLoading(false);
     }).catch((err) => {
       if (!mountedRef.current) return;
+      if (isAbortError(err)) return;
       setEnv(degradedEnv(err));
       setPending(0);
       setLoading(false);
@@ -100,7 +101,7 @@ export function useLiveListV1<T>(
         void loaderRef.current().then((next) => {
           if (mountedRef.current) setEnv(next);
         }).catch((err) => {
-          if (mountedRef.current) setEnv(degradedEnv(err));
+          if (mountedRef.current && !isAbortError(err)) setEnv(degradedEnv(err));
         });
       } else {
         if (mountedRef.current) setPending((n) => n + 1);

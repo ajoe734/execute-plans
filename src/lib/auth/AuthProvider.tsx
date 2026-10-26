@@ -22,6 +22,7 @@ import { isDevLoginHost } from "@/lib/bff-v1/runtimeEnv";
 import { postDevLogin } from "./devLogin";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { clearScopedQueries } from "@/lib/bff-v1/queryKeys";
+import { BffError } from "@/lib/bff-v1/errors";
 
 function useOptionalQueryClient(): QueryClient | null {
   try {
@@ -29,6 +30,18 @@ function useOptionalQueryClient(): QueryClient | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Timeouts, network failures and transient 5xx/408/429 leave the cookie's
+ * validity unknown, so they stay retryable. Any other rejection (401/403,
+ * unauthenticated or rejected readback) is a genuine sign-in boundary.
+ */
+function isTransientVerificationError(error: Error): boolean {
+  if (error instanceof BffError) {
+    return error.status >= 500 || error.status === 408 || error.status === 429;
+  }
+  return error instanceof TypeError || /verification timed out/iu.test(error.message);
 }
 
 export interface AuthContextValue {
@@ -128,7 +141,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error: unknown) {
       if (syncVersion.current !== version) return;
       const normalized = error instanceof Error ? error : new Error(String(error));
-      setBffError(normalized);
+      // Rejected credentials are reported by the form; only a transient
+      // failure keeps the retry action (no GCP session in dev-cookie mode).
+      setBffError(isTransientVerificationError(normalized) ? normalized : null);
       setLoading(false);
       throw normalized;
     }
@@ -149,12 +164,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setBffError(null);
           setLoading(false);
         })
-        .catch(() => {
+        .catch((error: unknown) => {
           if (syncVersion.current !== version) return;
+          const normalized = error instanceof Error ? error : new Error(String(error));
           sessionRef.current = null;
           setSession(null);
           setBffSession(null);
-          setBffError(null);
+          setBffError(isTransientVerificationError(normalized) ? normalized : null);
           setLoading(false);
         });
       return () => {
@@ -211,7 +227,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } catch (error: unknown) {
           if (syncVersion.current !== version) return;
           const normalized = error instanceof Error ? error : new Error(String(error));
-          setBffError(normalized);
+          setBffSession(null);
+          setBffError(isTransientVerificationError(normalized) ? normalized : null);
           setLoading(false);
           throw normalized;
         }
@@ -249,6 +266,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error: unknown) {
       bffLogoutError = error;
     }
+    // Fence any retry/verify started while logout was pending so a late
+    // response for the old session cannot restore it after logout completes.
+    ++syncVersion.current;
 
     if (isDevLoginHost()) {
       sessionRef.current = null;
