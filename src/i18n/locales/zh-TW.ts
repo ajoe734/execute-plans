@@ -3882,6 +3882,11 @@ export default {
       focusedEntityFmt: "已聚焦標的：{{entity}} · {{count}} 筆績效歸因",
       focusMissingEntityFmt: "找不到 {{entity}} 的績效歸因資料。",
       showAllEntities: "顯示此維度全部標的",
+      appliedPeriodFmt: "實際套用期間：{{period}}",
+      appliedPeriodUnconfirmed: "實際套用期間：BFF 未確認",
+      periodLatestSnapshotNotice: "目前顯示最新快照：BFF 沒有此期間的日期資料。",
+      periodUnconfirmedNoticeFmt: "BFF 未確認已套用 {{period}} 區間；數值未依此期間篩選。",
+      periodOptionLatestOnlyFmt: "{{period}}（僅最新快照）",
       confidence: {
         formal: "正式歸因",
         partial: "部分資料",
@@ -3904,6 +3909,7 @@ export default {
         market_regime: "市場 regime",
       },
       periods: {
+        latest: "最新快照",
         "7d": "7 天",
         "30d": "30 天",
         quarter: "季度",

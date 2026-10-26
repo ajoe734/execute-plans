@@ -2,13 +2,19 @@
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Card } from "@/components/ui/card";
-import type { PortfolioSummary } from "@/lib/v5/management/portfolio";
+import type { CockpitCapitalSummary } from "@/lib/v5/management/portfolio";
 import { canonicalCenterUrl } from "@/management/navigation/managementRouteManifest";
 
-const fmtUsd = (n: number) =>
-  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
+const UNKNOWN = "—";
+const fmtUsd = (n: number | null) =>
+  n === null ? UNKNOWN : new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
+const fmtCount = (n: number | null) => (n === null ? UNKNOWN : String(n));
+// total_pnl carries no currency from the owner: show the bare number, never a symbol.
+const fmtUnitless = (n: number | null) =>
+  n === null ? UNKNOWN : new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(n);
+const toneOf = (n: number | null): "ok" | "bad" | undefined => (n === null ? undefined : n < 0 ? "bad" : "ok");
 
-export const TotalCapitalSnapshot = ({ summary }: { summary: PortfolioSummary }) => {
+export const TotalCapitalSnapshot = ({ summary }: { summary: CockpitCapitalSummary }) => {
   const { t } = useTranslation();
   return (
     <Card className="p-4">
@@ -20,11 +26,15 @@ export const TotalCapitalSnapshot = ({ summary }: { summary: PortfolioSummary })
         <Stat label={t("mgmt.portfolio.totalNav")} value={fmtUsd(summary.totalNav)} />
         <Stat label={t("mgmt.portfolio.totalCash")} value={fmtUsd(summary.totalCash)} />
         <Stat label={t("mgmt.portfolio.grossExposure")} value={fmtUsd(summary.grossExposure)} />
-        <Stat label={t("mgmt.portfolio.leverage")} value={`${summary.leverage.toFixed(2)}×`} />
-        <Stat label={t("mgmt.portfolio.unrealizedPnl")} value={fmtUsd(summary.unrealizedPnl)} tone={summary.unrealizedPnl < 0 ? "bad" : "ok"} />
-        <Stat label={t("mgmt.portfolio.pnlToday")} value={fmtUsd(summary.pnlToday)} tone={summary.pnlToday < 0 ? "bad" : "ok"} />
-        <Stat label={t("mgmt.cockpit.activePools")} value={String(summary.activeCapitalPools)} />
+        <Stat label={t("mgmt.portfolio.leverage")} value={summary.leverage === null ? UNKNOWN : `${summary.leverage.toFixed(2)}×`} />
+        <Stat label={t("mgmt.portfolio.unrealizedPnl")} value={fmtUsd(summary.unrealizedPnl)} tone={toneOf(summary.unrealizedPnl)} />
+        <Stat label={t("mgmt.portfolio.pnlToday")} value={fmtUsd(summary.pnlToday)} tone={toneOf(summary.pnlToday)} />
+        <Stat label={t("mgmt.cockpit.activePools")} value={fmtCount(summary.activeCapitalPools)} />
         <Stat label={t("mgmt.cockpit.highestRiskPool")} value={summary.highestRiskPoolId ?? "·"} />
+        <Stat label="Active runtimes" value={fmtCount(summary.activeRuntimeCount)} />
+        <Stat label="Paper / live runtimes" value={`${fmtCount(summary.paperRuntimeCount)} / ${fmtCount(summary.liveRuntimeCount)}`} />
+        <Stat label="Total trades" value={fmtCount(summary.totalTrades)} />
+        <Stat label="Total PnL (currency not supplied)" value={fmtUnitless(summary.totalPnl)} tone={toneOf(summary.totalPnl)} />
       </div>
     </Card>
   );

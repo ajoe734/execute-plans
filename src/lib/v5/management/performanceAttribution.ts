@@ -15,7 +15,76 @@ export const ATTRIBUTION_DIMENSIONS: readonly AttributionDimension[] = [
   "region", "broker", "runtime", "research_backend", "quarter", "market_regime",
 ] as const;
 
-export type AttributionPeriod = "7d" | "30d" | "quarter" | "ytd";
+export type AttributionPeriod = "latest" | "7d" | "30d" | "quarter" | "ytd";
+
+export const DATED_ATTRIBUTION_SOURCE_UNAVAILABLE = "dated_attribution_source_unavailable";
+
+/**
+ * What the BFF says it actually applied for `period`. The BFF (pantheon
+ * #6785) reports `meta.period = {requested, applied, windowed, basis, reason,
+ * message}`; older builds sent a bare string. `windowed` is true only when the
+ * BFF explicitly confirms the requested window was applied.
+ */
+export interface AttributionPeriodState {
+  requested?: string;
+  applied?: string;
+  windowed: boolean;
+  basis?: string;
+  reason?: string;
+  message?: string;
+  source: "meta" | "legacy_string" | "summary" | "missing";
+}
+
+export interface PerformanceAttributionResult {
+  rows: PerformanceAttributionRow[];
+  period: AttributionPeriodState;
+}
+
+const isRecord = (v: unknown): v is Record<string, unknown> =>
+  typeof v === "object" && v !== null && !Array.isArray(v);
+
+const optText = (v: unknown): string | undefined =>
+  typeof v === "string" && v.trim() ? v.trim() : undefined;
+
+export function adaptAttributionPeriodState(raw: unknown): AttributionPeriodState {
+  const root = isRecord(raw) ? raw : {};
+  const meta = isRecord(root.meta) ? root.meta : {};
+  const data = isRecord(root.data) ? root.data : {};
+  const summary = isRecord(data.summary) ? data.summary : {};
+  const metaPeriod = meta.period;
+
+  if (isRecord(metaPeriod)) {
+    return {
+      requested: optText(metaPeriod.requested),
+      applied: optText(metaPeriod.applied),
+      windowed: metaPeriod.windowed === true,
+      basis: optText(metaPeriod.basis),
+      reason: optText(metaPeriod.reason),
+      message: optText(metaPeriod.message),
+      source: "meta",
+    };
+  }
+  if (optText(metaPeriod)) {
+    // Legacy BFF: a bare string never confirmed a window was applied.
+    return { applied: optText(metaPeriod), windowed: false, source: "legacy_string" };
+  }
+  const summaryPeriod = optText(summary.period) ?? optText(data.period);
+  if (summaryPeriod || typeof summary.period_windowed === "boolean") {
+    return {
+      requested: optText(summary.requested_period),
+      applied: summaryPeriod,
+      windowed: summary.period_windowed === true,
+      source: "summary",
+    };
+  }
+  return { windowed: false, source: "missing" };
+}
+
+/** The applied period the UI may claim, or undefined when unconfirmed. */
+export function confirmedAppliedPeriod(state: AttributionPeriodState): string | undefined {
+  if (state.windowed) return state.applied;
+  return state.applied === "latest" ? "latest" : undefined;
+}
 
 export interface PerformanceAttributionRow {
   dimension: AttributionDimension;

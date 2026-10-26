@@ -15,7 +15,8 @@ import type {
 import { useV5Live } from "@/management/pages/v5/useV5Live";
 import type { HoldingRow } from "@/lib/v5/management/portfolio";
 import {
-  ATTRIBUTION_DIMENSIONS, buildAttributionLinks,
+  ATTRIBUTION_DIMENSIONS, buildAttributionLinks, confirmedAppliedPeriod,
+  DATED_ATTRIBUTION_SOURCE_UNAVAILABLE,
   type AttributionDimension, type AttributionPeriod, type PerformanceAttributionRow,
 } from "@/lib/v5/management/performanceAttribution";
 
@@ -26,7 +27,7 @@ const fmtUsd = (n: number) =>
     : MISSING;
 const fmtPct = (n: number) => (Number.isFinite(n) ? `${(n * 100).toFixed(2)}%` : MISSING);
 
-const PERIODS: AttributionPeriod[] = ["7d", "30d", "quarter", "ytd"];
+const PERIODS: AttributionPeriod[] = ["latest", "7d", "30d", "quarter", "ytd"];
 
 const confidenceTone = (confidence: ManagementDataConfidence): string =>
   confidence === "formal"
@@ -518,10 +519,10 @@ export const PerformanceAttributionPage = ({ embedded = false }: { embedded?: bo
   const entityFocus = searchParams.get("entity")?.trim() ?? "";
   const dimension = selectedDimensionFromQuery(searchParams.get("dimension"), personaFocus);
   const periodParam = searchParams.get("period");
-  const period: AttributionPeriod = isAttributionPeriod(periodParam) ? periodParam : "30d";
+  const period: AttributionPeriod = isAttributionPeriod(periodParam) ? periodParam : "latest";
 
   const { data } = useV5Live(
-    (signal) => mgmt.performanceAttribution.listLiveOnly(
+    (signal) => mgmt.performanceAttribution.getLiveOnly(
       dimension === "all" ? undefined : dimension,
       period,
       { signal },
@@ -533,12 +534,18 @@ export const PerformanceAttributionPage = ({ embedded = false }: { embedded?: bo
   const { data: holdings } = useV5Live((signal) => mgmt.portfolioBook.holdingsLiveOnly({ signal }), [], { cacheKey: "oversight.portfolioBook.holdings" });
   const { data: operationsReadModel, loading: operationsLoading } = useV5Live(
     (signal) => personaFocus
-      ? mgmt.operationsReadModel.getLiveOnly(personaFocus, period, { signal })
+      ? mgmt.operationsReadModel.getLiveOnly(personaFocus, period === "latest" ? undefined : period, { signal })
       : Promise.resolve(undefined),
     [personaFocus, period],
     { cacheKey: personaFocus ? `oversight.operationsReadModel.${personaFocus}.${period}` : "oversight.operationsReadModel.none" },
   );
-  const allRows = useMemo(() => (data ?? []).map(normalizePerformanceAttributionRow), [data]);
+  const allRows = useMemo(() => (data?.rows ?? []).map(normalizePerformanceAttributionRow), [data]);
+  // Applied period comes from the BFF response, never from the selector.
+  const periodState = data?.period;
+  const appliedPeriod = periodState ? confirmedAppliedPeriod(periodState) : undefined;
+  const periodNotApplied = Boolean(periodState) && period !== "latest" && !periodState?.windowed;
+  const windowsUnavailable = periodState?.reason === DATED_ATTRIBUTION_SOURCE_UNAVAILABLE || periodNotApplied;
+  const periodLabel = (p: string) => t(`mgmt.attribution.periods.${p}`, { defaultValue: p });
   const dimensionRows = useMemo(() => {
     const filtered = dimension === "all" ? allRows : allRows.filter((r) => r.dimension === dimension);
     return [...filtered].sort((a, b) => (b.pnlContribution || 0) - (a.pnlContribution || 0));
@@ -615,6 +622,7 @@ export const PerformanceAttributionPage = ({ embedded = false }: { embedded?: bo
           <h1 className="text-2xl font-semibold text-foreground">{t("mgmt.attribution.title")}</h1>
           <p className="text-sm text-muted-foreground">{t("mgmt.attribution.subtitle")}</p>
         </div>
+        <div className="flex flex-col items-end gap-1">
         <div className="flex gap-2">
           <select
             className="h-8 rounded-md border border-border bg-background px-2 text-sm"
@@ -634,9 +642,33 @@ export const PerformanceAttributionPage = ({ embedded = false }: { embedded?: bo
             aria-label={t("mgmt.attribution.period")}
           >
             {PERIODS.map((p) => (
-              <option key={p} value={p}>{t(`mgmt.attribution.periods.${p}`, { defaultValue: p })}</option>
+              <option key={p} value={p}>
+                {p !== "latest" && windowsUnavailable
+                  ? t("mgmt.attribution.periodOptionLatestOnlyFmt", { period: periodLabel(p) })
+                  : periodLabel(p)}
+              </option>
             ))}
           </select>
+        </div>
+        {periodState ? (
+          <Badge variant="outline" data-testid="attribution-applied-period">
+            {appliedPeriod
+              ? t("mgmt.attribution.appliedPeriodFmt", { period: periodLabel(appliedPeriod) })
+              : t("mgmt.attribution.appliedPeriodUnconfirmed")}
+          </Badge>
+        ) : null}
+        {periodNotApplied ? (
+          <p
+            role="status"
+            className="max-w-sm text-right text-xs text-status-warning"
+            data-testid="attribution-period-notice"
+            title={periodState?.message}
+          >
+            {periodState?.reason === DATED_ATTRIBUTION_SOURCE_UNAVAILABLE || appliedPeriod === "latest"
+              ? t("mgmt.attribution.periodLatestSnapshotNotice")
+              : t("mgmt.attribution.periodUnconfirmedNoticeFmt", { period: periodLabel(period) })}
+          </p>
+        ) : null}
         </div>
       </header>
 

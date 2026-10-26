@@ -161,7 +161,7 @@ export async function verifyBffBrowserSession(): Promise<VerifiedBffBrowserSessi
 
   const controller = new AbortController();
   const timeout = setTimeout(
-    () => controller.abort(),
+    () => controller.abort(new DOMException("BFF browser session verification timed out", "TimeoutError")),
     BFF_BROWSER_SESSION_VERIFICATION_TIMEOUT_MS,
   );
 
