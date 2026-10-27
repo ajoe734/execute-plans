@@ -1,0 +1,94 @@
+{
+  "task_id": "FE-PORTFOLIO-CURRENCY-DISPLAY-20261026",
+  "title": "Preserve actual currency in existing portfolio holding display",
+  "repository": "ajoe734/execute-plans",
+  "branch": "task/FE-PORTFOLIO-CURRENCY-DISPLAY-20261026",
+  "base_branch": "dev",
+  "base_commit": "ad31927ded9a9ebd99eb436eb7320bc7a97e4065",
+  "scope": "source_only_existing_portfolio_holding_currency_display",
+  "actual_defect_source_review": "/tmp/pantheon-codex-01a11-review-20261023/FE-original-holding-false-USD-display-source-review-20261026.json",
+  "scoped_artifacts": [
+    "src/lib/v5/management/portfolio.ts",
+    "src/lib/bff-v1/management.ts",
+    "src/management/pages/oversight/PortfolioBook.tsx",
+    "src/lib/bff-v1/__tests__/management-pm12.test.ts",
+    "src/management/pages/oversight/PortfolioBook.test.tsx",
+    "docs/deployment/evidence/FE-PORTFOLIO-CURRENCY-DISPLAY-20261026/evidence.json"
+  ],
+  "defect_reproduction": {
+    "fe_baseline_commit": "ad31927ded9a9ebd99eb436eb7320bc7a97e4065",
+    "bff_candidate_commit": "a34a6956384ce8d9afd7e060bfce9d7a23082c90",
+    "candidate_holding_id": "rt-eb295fe2:2330.TW",
+    "candidate_holding_payload": {
+      "symbol": "2330.TW",
+      "quantity": -2.0,
+      "mark_price": 2385.0,
+      "market_value": -4770.0,
+      "unrealized_pnl": null,
+      "currency": null
+    },
+    "root_causes": [
+      "src/lib/v5/management/portfolio.ts lines 132-149 omitted currency from PortfolioHoldingMonitorRow.",
+      "src/lib/bff-v1/management.ts lines 3866-3890 adaptPortfolioHoldingMonitorRow dropped item.currency.",
+      "src/management/pages/oversight/PortfolioBook.tsx lines 50-53 fmtUsd and lines 270/272 formatted holding marketValue and unrealizedPnl with fixed USD currency without FX or original currency metadata."
+    ]
+  },
+  "acceptance_verification": {
+    "nullable_currency_preserved": true,
+    "explicit_currency_native_unit": {
+      "TWD_minus_4770": "-NT$4,770",
+      "TWD_minus_120": "-NT$120",
+      "USD_1926": "$1,926"
+    },
+    "missing_currency_neutral_display": {
+      "null_currency_minus_4770": "-4,770 (幣別未提供)",
+      "claims_usd_or_twd": false
+    },
+    "unavailable_money_preserved": {
+      "null_unrealized_pnl": "—",
+      "coerced_to_zero": false
+    },
+    "shared_formatter_inspection": {
+      "other_financial_pages_modified": false,
+      "inspected_callsites": [
+        "src/management/pages/oversight/PersonaLeague.tsx",
+        "src/management/pages/oversight/PortfolioExposure.tsx",
+        "src/management/pages/oversight/PerformanceAttribution.tsx",
+        "src/management/pages/oversight/QuarterlyRanking.tsx",
+        "src/management/components/cockpit/TotalCapitalSnapshot.tsx"
+      ]
+    },
+    "release_ordering_posture": {
+      "frozen_root_run_url": "https://github.com/ajoe734/pantheon/actions/runs/40245443101",
+      "frozen_root_run_status": "completed",
+      "frozen_root_run_conclusion": "success",
+      "frozen_root_run_completed_at": "2026-10-26T00:43:18Z",
+      "fe_dev_frozen_commit": "ad31927ded9a9ebd99eb436eb7320bc7a97e4065",
+      "note": "Verified Root 40245443101 reached terminal completed/success state at 2026-10-26T00:43:18Z before opening PR and handing off to Antigravity2; no worker publish/switch/VM/probe dispatched."
+    }
+  },
+  "verified_commands": [
+    {
+      "command": "npx vitest run src/lib/bff-v1/__tests__/management-pm12.test.ts src/management/pages/oversight/PortfolioBook.test.tsx",
+      "exit_code": 0,
+      "summary": "2 test files passed (20 tests passed)"
+    },
+    {
+      "command": "npm run typecheck && npm run typecheck:agora",
+      "exit_code": 0,
+      "summary": "tsconfig.app.json and tsconfig.agora.json passed with 0 errors"
+    },
+    {
+      "command": "PANTHEON_CONTRACT_ROOT=$PANTHEON_COMMAND_ROOT npm run test:contract",
+      "exit_code": 0,
+      "summary": "Contract drift check (49 schemas, 99 routes, 75 sha256 entries) and contract-drift.test.ts (7/7) passed"
+    },
+    {
+      "command": "VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npx vite build --outDir /tmp/fe-portfolio-currency-display-20261026-dist",
+      "exit_code": 0,
+      "summary": "Strict live safe-write production build succeeded cleanly without dirtying worktree dist/"
+    }
+  ],
+  "business_mutations": 0,
+  "provider_calls": 0
+}

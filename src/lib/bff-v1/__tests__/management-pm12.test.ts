@@ -62,6 +62,111 @@ describe("portfolio holdings live monitor adapter", () => {
       expect(result?.items).toEqual([]);
     }
   });
+
+  it("retains explicit currency and preserves null currency, signed market_value, and unavailable unrealized_pnl from the BFF monitor DTO", () => {
+    const result = adaptPortfolioHoldingsMonitor({
+      data: {
+        summary: {
+          holding_count: 3,
+          incident_count: 0,
+          source_coverage: {
+            source_row_count: 3,
+            runtime_count: 3,
+            telemetry_runtime_count: 3,
+            stale_row_count: 0,
+            missing_binding_count: 0,
+            degraded_source_count: 0,
+          },
+        },
+        items: [
+          {
+            id: "rt-eb295fe2:2330.TW",
+            holding_id: "rt-eb295fe2:2330.TW",
+            capital_pool_id: "hosted-all12-h12-01a11-20261023-9aeb-pool",
+            broker_id: "",
+            runtime_id: "rt-eb295fe2",
+            persona_id: "persona-strat-hosted-all12-h12-01a11-20261023-9aeb-src-e018ff6d0eb8",
+            symbol: "2330.TW",
+            side: "short",
+            quantity: -2.0,
+            mark_price: 2385.0,
+            market_value: -4770.0,
+            unrealized_pnl: null,
+            currency: null,
+            deployment_stage: "paper",
+            source_status: "ok",
+            telemetry_stale: false,
+            risk_state: "paper_exposure",
+            source_issues: [],
+            capital_scope: { stage: "paper", scope_kind: "paper_ledger", scope_id: null },
+            links: {},
+          },
+          {
+            id: "rt-twd:2330.TW",
+            holding_id: "rt-twd:2330.TW",
+            runtime_id: "rt-twd",
+            symbol: "2330.TW",
+            quantity: -2.0,
+            market_value: -4770.0,
+            unrealized_pnl: -120.0,
+            currency: "TWD",
+            deployment_stage: "paper",
+            source_status: "ok",
+            telemetry_stale: false,
+            risk_state: "paper_exposure",
+            source_issues: [],
+            capital_scope: { stage: "paper", scope_kind: "paper_ledger", scope_id: null },
+            links: {},
+          },
+          {
+            id: "rt-usd:AAPL",
+            holding_id: "rt-usd:AAPL",
+            runtime_id: "rt-usd",
+            symbol: "AAPL",
+            quantity: 10.0,
+            market_value: 1926.0,
+            unrealized_pnl: null,
+            currency: "USD",
+            deployment_stage: "live",
+            source_status: "ok",
+            telemetry_stale: false,
+            risk_state: "live_exposure",
+            source_issues: [],
+            capital_scope: { stage: "live", scope_kind: "live_capital_pool", scope_id: "pool-us" },
+            links: {},
+          },
+        ],
+      },
+      meta: {
+        incidents: [],
+        surfaces: { portfolio_book_holdings: { status: "ok" } },
+      },
+    });
+
+    expect(result?.items).toHaveLength(3);
+    expect(result?.items[0]).toEqual(expect.objectContaining({
+      holdingId: "rt-eb295fe2:2330.TW",
+      symbol: "2330.TW",
+      currency: null,
+      quantity: -2,
+      marketValue: -4770,
+      unrealizedPnl: undefined,
+    }));
+    expect(result?.items[1]).toEqual(expect.objectContaining({
+      holdingId: "rt-twd:2330.TW",
+      currency: "TWD",
+      quantity: -2,
+      marketValue: -4770,
+      unrealizedPnl: -120,
+    }));
+    expect(result?.items[2]).toEqual(expect.objectContaining({
+      holdingId: "rt-usd:AAPL",
+      currency: "USD",
+      quantity: 10,
+      marketValue: 1926,
+      unrealizedPnl: undefined,
+    }));
+  });
 });
 
 describe("quarterly ranking live adapter", () => {

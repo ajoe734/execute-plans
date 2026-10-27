@@ -47,12 +47,22 @@ const FILTER_TO_MODEL: Record<string, keyof PortfolioHoldingFilters> = {
   risk_state: "riskState",
 };
 
-const fmtUsd = (n?: number) =>
-  n === undefined || !Number.isFinite(n)
+const MISSING_CURRENCY_LABEL = "幣別未提供";
+const fmtNum = (n?: number | null) =>
+  n === undefined || n === null || !Number.isFinite(n)
     ? "—"
-    : new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
-const fmtNum = (n?: number) =>
-  n === undefined || !Number.isFinite(n) ? "—" : new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(n);
+    : new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(Object.is(n, -0) ? 0 : n);
+const fmtHoldingMoney = (n?: number | null, currency?: string | null) => {
+  if (n === undefined || n === null || !Number.isFinite(n)) return "—";
+  const amount = Object.is(n, -0) ? 0 : n;
+  const code = currency?.trim().toUpperCase();
+  if (!code) return `${fmtNum(amount)} (${MISSING_CURRENCY_LABEL})`;
+  try {
+    return new Intl.NumberFormat("en-US", { style: "currency", currency: code, maximumFractionDigits: 0 }).format(amount);
+  } catch {
+    return `${code} ${fmtNum(amount)}`;
+  }
+};
 
 const CONFIDENCE_TONE: Record<string, string> = {
   ok: "bg-status-success/15 text-status-success border-status-success/30",
@@ -267,9 +277,9 @@ export const PortfolioBookPage = ({ embedded = false }: { embedded?: boolean } =
                       <div>{row.runtimeId || "Unknown runtime"}</div>
                       <div>{row.brokerId || "Unknown broker"}</div>
                     </td>
-                    <td className="px-3 py-3 font-mono">{fmtUsd(row.marketValue)}</td>
+                    <td className="px-3 py-3 font-mono">{fmtHoldingMoney(row.marketValue, row.currency)}</td>
                     <td className={`px-3 py-3 font-mono ${(row.unrealizedPnl ?? 0) < 0 ? "text-status-failed" : "text-status-success"}`}>
-                      {fmtUsd(row.unrealizedPnl)}
+                      {fmtHoldingMoney(row.unrealizedPnl, row.currency)}
                     </td>
                     <td className="px-3 py-3">
                       <Badge variant="outline" className={tone(row.sourceStatus)}>{row.sourceStatus}</Badge>
