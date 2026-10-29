@@ -32,6 +32,7 @@ const servantProfile = {
   display_name: "我的交易僕人",
   status: "paper_only",
   policy: { execution_authority: "none" },
+  capability_summary: { can_ask: true, can_research: true, can_workshop: false },
 };
 
 function mockServant(state: unknown, interactionAllowed = false) {
@@ -365,7 +366,7 @@ describe("TradingDeskLayout servant status", () => {
 
   it("shows the header status and no create button once the servant exists", () => {
     renderTradingDesk();
-    expect(screen.getByTestId("servant-status").textContent).toBe("僅模擬");
+    expect(screen.getByTestId("servant-status").textContent).toBe("助理就緒");
     expect(screen.queryByRole("button", { name: "建立交易僕人" })).toBeNull();
   });
 
@@ -376,13 +377,16 @@ describe("TradingDeskLayout servant status", () => {
     expect(screen.queryByRole("button", { name: "建立交易僕人" })).toBeNull();
   });
 
-  it("shows the profile with paper-only and no-execution policy in the drawer", () => {
+  it("shows the advisory profile with capabilities and no-execution policy in the drawer", () => {
     renderTradingDesk();
     fireEvent.click(screen.getByRole("button", { name: /servant/i }));
     const profile = screen.getByTestId("servant-profile").textContent ?? "";
     expect(profile).toContain("我的交易僕人");
     expect(profile).toContain("persona-1");
-    expect(profile).toContain("paper-only");
+    expect(profile).toContain("顧問型助理");
+    expect(profile).toContain("就緒度：助理就緒");
+    expect(screen.getByTestId("servant-capabilities").textContent).toBe("能力：提問、研究");
+    expect(profile).not.toMatch(/paper_running|league|ledger-/i);
     expect(profile).toContain("execution_authority: none");
   });
 });
