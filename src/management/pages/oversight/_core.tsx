@@ -586,6 +586,12 @@ export const PersonaFleetPage = () => {
   const archivedOnly = personaFleetArchivedFromParams(searchParams);
   const urlQ = searchParams.get("q")?.trim() ?? "";
   const [searchText, setSearchText] = useState(urlQ);
+  // URL-driven q changes (same-route navigation, clearing) replace the input instead of being overwritten by it.
+  const [seenUrlQ, setSeenUrlQ] = useState(urlQ);
+  if (seenUrlQ !== urlQ) {
+    setSeenUrlQ(urlQ);
+    setSearchText(urlQ);
+  }
   const [refreshing, setRefreshing] = useState(false);
 
   // Debounced search -> URL (which resets pagination through the scope key below).

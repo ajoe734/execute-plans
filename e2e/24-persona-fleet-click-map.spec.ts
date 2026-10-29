@@ -60,6 +60,8 @@ const MOCK_FLEET_ROWS = [
   {
     id: "persona-formal-mut",
     personaId: "persona-formal-mut",
+    persona_purpose: "trading",
+    data_scope: "regular",
     personaName: "Formal Persona",
     owner: "operator-formal",
     ooda: "decide",
@@ -125,6 +127,8 @@ const MOCK_FLEET_ROWS = [
   {
     id: "persona-20260528-04688755",
     personaId: "persona-20260528-04688755",
+    persona_purpose: "trading",
+    data_scope: "test",
     personaName: "Crypto-Alt-Hunter",
     owner: "operator-fallback",
     ooda: "observe",
@@ -188,6 +192,8 @@ const MOCK_FLEET_ROWS = [
   {
     id: "persona-missing-data",
     personaId: "persona-missing-data",
+    persona_purpose: "trading",
+    data_scope: "test",
     personaName: "Missing Data Persona",
     owner: "operator-missing",
     ooda: "none",
@@ -322,7 +328,10 @@ async function installMockFixture(page: Page): Promise<void> {
       const params = url.searchParams;
       const size = Number(params.get("page_size") ?? MOCK_FLEET_ROWS.length);
       const start = Number(params.get("page_token") ?? 0);
-      const all = params.get("archived") === "only" ? [] : PAGED_FLEET_ROWS;
+      const dataScope = params.get("data_scope");
+      const all = params.get("archived") === "only"
+        ? []
+        : PAGED_FLEET_ROWS.filter((r) => !dataScope || dataScope === "all" || (r as { data_scope?: string }).data_scope === dataScope);
       const items = all.slice(start, start + size);
       const next = start + items.length < all.length ? String(start + items.length) : null;
       await fulfillJson(route, {
@@ -544,8 +553,8 @@ test.describe("MGMT-OPS-010 Persona Fleet Click-Map Regression", () => {
     console.log("Navigating back to Persona Fleet...");
     await page.goto(frontendUrl("/management/persona-fleet"), { waitUntil: "domcontentloaded" });
 
-    console.log("Clicking Non-Production tab...");
-    await page.getByRole("radio", { name: /非正式資料/ }).click();
+    console.log("Clicking test-data scope...");
+    await page.getByRole("radio", { name: /測試／驗收資料/ }).click();
 
     // Link 9: Recent mutation - Fallback Path (Crypto-Alt-Hunter)
     console.log("Clicking Fallback Recent mutation link...");
@@ -571,8 +580,8 @@ test.describe("MGMT-OPS-010 Persona Fleet Click-Map Regression", () => {
     console.log("Navigating back to Persona Fleet...");
     await page.goto(frontendUrl("/management/persona-fleet"), { waitUntil: "domcontentloaded" });
 
-    console.log("Clicking Non-Production tab...");
-    await page.getByRole("radio", { name: /非正式資料/ }).click();
+    console.log("Clicking test-data scope...");
+    await page.getByRole("radio", { name: /測試／驗收資料/ }).click();
 
     // Link 10: Missing-Data Path (Missing Data Persona should have no link)
     console.log("Checking Missing-Data row links...");
@@ -596,7 +605,7 @@ test.describe("MGMT-OPS-010 Persona Fleet Click-Map Regression", () => {
   test("pages through >100 server rows 20 at a time and ends on a disabled Next", async ({ page }) => {
     await page.goto(frontendUrl("/management/persona-fleet"), { waitUntil: "domcontentloaded", timeout: 30_000 });
     const pager = page.getByTestId("persona-fleet-pager");
-    await expect(pager).toContainText(new RegExp(`(of|共) ${PAGED_FLEET_ROWS.length}`), { timeout: 15_000 });
+    await expect(pager).toContainText(new RegExp(`(of|共) ${PAGED_FLEET_ROWS.filter((r) => (r as { data_scope?: string }).data_scope === "regular").length}`), { timeout: 15_000 });
     await expect(page.getByRole("button", { name: /^(Previous|上一頁)$/ })).toBeDisabled();
     const next = page.getByRole("button", { name: /^(Next|下一頁)$/ });
     for (let i = 0; i < 6; i += 1) {

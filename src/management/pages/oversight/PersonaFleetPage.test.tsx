@@ -1,7 +1,7 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { useEffect, useState } from "react";
 import { I18nextProvider } from "react-i18next";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { Link, MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import i18n from "@/i18n";
@@ -292,6 +292,32 @@ describe("PersonaFleetPage", () => {
       fireEvent.click(screen.getByRole("radio", { name: "Regular" }));
       await waitFor(() => expect(screen.getByText("Page 1")).toBeInTheDocument());
       expect(screen.getByText("Persona p-000")).toBeInTheDocument();
+    });
+
+    it("follows same-route q navigation and clearing without replaying stale input", async () => {
+      vi.spyOn(mgmt.personaFleet, "page").mockImplementation(async (q) => serve(q ?? {}));
+      const Probe = () => <div data-testid="loc">{useLocation().search}</div>;
+      render(
+        <I18nextProvider i18n={i18n}>
+          <MemoryRouter initialEntries={["/management/persona-fleet?q=p-001"]}>
+            <Link to="/management/persona-fleet?q=p-002">to-beta</Link>
+            <Link to="/management/persona-fleet">to-clear</Link>
+            <Probe />
+            <Routes>
+              <Route path="/management/persona-fleet" element={<PersonaFleetPage />} />
+            </Routes>
+          </MemoryRouter>
+        </I18nextProvider>,
+      );
+      await screen.findByText("Persona p-001");
+      fireEvent.click(screen.getByText("to-beta"));
+      await screen.findByText("Persona p-002");
+      await new Promise((resolve) => setTimeout(resolve, 450));
+      expect(screen.getByTestId("loc").textContent).toBe("?q=p-002");
+      fireEvent.click(screen.getByText("to-clear"));
+      await screen.findByText("Persona p-000");
+      await new Promise((resolve) => setTimeout(resolve, 450));
+      expect(screen.getByTestId("loc").textContent).toBe("");
     });
 
     it("keeps the mapped legacy test scope when requesting archives", async () => {
