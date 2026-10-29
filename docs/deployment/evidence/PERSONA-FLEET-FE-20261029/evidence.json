@@ -1,0 +1,22 @@
+{
+  "task_id": "PERSONA-FLEET-FE-20261029",
+  "scope": "source only; no VM/SSH, product login, deployment, provider call, trade or hosted write",
+  "bff_contract": "pantheon docs/bff/execution-tasks/2026-10-29-persona-fleet/API_CONTRACT.md (merged c01bb731e, PERSONA-FLEET-BFF-20261029)",
+  "behavior": {
+    "request": "purpose=trading&data_scope=regular|test|unknown&archived=exclude|only&page_size=20&page_token=<opaque>; focused persona link uses q=<id>&purpose=all&data_scope=all&archived=include",
+    "classification": "server-owned persona_purpose/data_scope/classification_confirmed; FE name/id/capital-mode classifier removed",
+    "legacy_urls": {"?tab=production": "data=regular", "?tab=non-production": "data=test"},
+    "agora": "assistant drawer shows identity, readiness, capabilities, advisory/no-execution policy; no rank, ledger or paper_running",
+    "cache_and_races": "useV5Live query key = identity scope (tenant,user,baseUrl,mode) + cacheKey + [scope, page token]; react-query aborts superseded requests; page-token stack resets on scope change",
+    "states": "initial loading, owner error, refresh-failed with as-of, true empty, filtered empty, missing total shown as not reported"
+  },
+  "verification": {
+    "tsc_app_and_agora": "pass",
+    "eslint_touched": "0 errors (pre-existing warnings only)",
+    "vitest_src_management_agora_bff-v1_i18n": "140 files / 1536 tests passed",
+    "build": "vite build ok",
+    "playwright": "e2e/24 'pages through >100 server rows' passed in chromium (route-mocked, 133 rows, 7 pages)",
+    "known_unrelated": "e2e/24 'click-map smoke regression' fails at the performance-attribution link because its fixture has no telemetry (fixture/link-rule drift in code this task does not touch)"
+  },
+  "not_verified": ["hosted behavior", "second-identity privacy (server-enforced; covered by BFF tests)"]
+}

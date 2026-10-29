@@ -418,6 +418,44 @@ export interface ManagementPersonaFleetRow {
   rank?: ManagementPersonaFleetRank;
   rowAction?: ManagementPersonaFleetRowAction;
   linkTargets?: ManagementPersonaFleetLinkTargets;
+  /** Server-owned classification (PERSONA-FLEET-BFF-20261029); the FE never re-derives it. */
+  personaPurpose?: ManagementPersonaFleetPurpose;
+  dataScope?: ManagementPersonaFleetDataScope;
+  classificationConfirmed?: boolean;
+  classificationSource?: { purpose?: string; dataScope?: string };
+  archived?: boolean;
+}
+
+export type ManagementPersonaFleetPurpose = "trading" | "advisory_assistant" | "unknown";
+export type ManagementPersonaFleetDataScope = "regular" | "test" | "unknown";
+export type ManagementPersonaFleetArchived = "exclude" | "only" | "include";
+
+export interface ManagementPersonaFleetQuery {
+  q?: string;
+  pageSize?: number;
+  pageToken?: string;
+  purpose?: ManagementPersonaFleetPurpose | "all";
+  dataScope?: ManagementPersonaFleetDataScope | "all";
+  archived?: ManagementPersonaFleetArchived;
+}
+
+export interface ManagementPersonaFleetPopulation {
+  authorizedTotal?: number;
+  activeTotal?: number;
+  archivedTotal?: number;
+  byPurpose: Record<string, number>;
+  byDataScope: Record<string, number>;
+}
+
+export interface ManagementPersonaFleetPage {
+  rows: ManagementPersonaFleetRow[];
+  nextPageToken: string | null;
+  /** Filtered authorized population (not the page); undefined when the server did not report it. */
+  total?: number;
+  pageSize?: number;
+  population: ManagementPersonaFleetPopulation;
+  /** Client observation time of this response; the server does not stamp as-of on this list. */
+  asOf?: string;
 }
 
 export interface ManagementTradingPulseSurface {
@@ -2467,6 +2505,57 @@ function adaptPersonaFleetRow(value: unknown): ManagementPersonaFleetRow | null 
     } : undefined,
     rowAction: adaptPersonaFleetRowAction(value.rowAction ?? value.row_action),
     linkTargets: adaptPersonaFleetLinkTargets(value.linkTargets ?? value.link_targets),
+    personaPurpose: oneOf(value.personaPurpose ?? value.persona_purpose, ["trading", "advisory_assistant", "unknown"]),
+    dataScope: oneOf(value.dataScope ?? value.data_scope, ["regular", "test", "unknown"]),
+    classificationConfirmed: typeof (value.classificationConfirmed ?? value.classification_confirmed) === "boolean"
+      ? Boolean(value.classificationConfirmed ?? value.classification_confirmed)
+      : undefined,
+    classificationSource: isObject(value.classificationSource ?? value.classification_source)
+      ? {
+        purpose: asOptionalString(objectOrEmpty(value.classificationSource ?? value.classification_source).purpose),
+        dataScope: asOptionalString(
+          objectOrEmpty(value.classificationSource ?? value.classification_source).data_scope
+          ?? objectOrEmpty(value.classificationSource ?? value.classification_source).dataScope,
+        ),
+      }
+      : undefined,
+    archived: typeof value.archived === "boolean" ? value.archived : undefined,
+  };
+}
+
+function oneOf<T extends string>(value: unknown, allowed: readonly T[]): T | undefined {
+  const text = asString(value).trim().toLowerCase();
+  return (allowed as readonly string[]).includes(text) ? (text as T) : undefined;
+}
+
+function countRecord(value: unknown): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const [key, raw] of Object.entries(objectOrEmpty(value))) {
+    const n = optionalFiniteNumber(raw);
+    if (n !== undefined) out[key] = n;
+  }
+  return out;
+}
+
+export function adaptManagementPersonaFleetPage(raw: unknown): ManagementPersonaFleetPage {
+  const envelope = objectOrEmpty(raw);
+  const data = objectOrEmpty(unwrap(raw));
+  const pageInfo = objectOrEmpty(envelope.page_info ?? envelope.pageInfo ?? data.page_info ?? data.pageInfo);
+  const summary = objectOrEmpty(data.summary);
+  const population = objectOrEmpty(summary.population);
+  const token = asOptionalString(pageInfo.next_page_token ?? pageInfo.nextPageToken);
+  return {
+    rows: adaptManagementPersonaFleet(raw) ?? [],
+    nextPageToken: token && token.length > 0 ? token : null,
+    total: optionalFiniteNumber(pageInfo.filtered_total ?? pageInfo.filteredTotal ?? pageInfo.total),
+    pageSize: optionalFiniteNumber(pageInfo.page_size ?? pageInfo.pageSize),
+    population: {
+      authorizedTotal: optionalFiniteNumber(population.authorized_total),
+      activeTotal: optionalFiniteNumber(population.active_total),
+      archivedTotal: optionalFiniteNumber(population.archived_total),
+      byPurpose: countRecord(population.by_purpose),
+      byDataScope: countRecord(population.by_data_scope),
+    },
   };
 }
 
@@ -4032,6 +4121,7 @@ export const mgmt = {
   },
 
   personaFleet: {
+    /** Legacy flat read for non-fleet consumers: trading rows only (advisory assistants are never trading personas). */
     get: (filters: { q?: string; pageSize?: number } = {}, opts?: { signal?: AbortSignal }): Promise<ManagementPersonaFleetRow[]> => {
       if (detectMode() === "mock") {
         return Promise.reject(new Error("demo fallback is disabled for personaFleet; live BFF required"));
@@ -4040,7 +4130,19 @@ export const mgmt = {
       return strictLiveRead<ManagementPersonaFleetRow[]>(
         "mgmt.personaFleet",
         { method: "GET", path: paths.mgmtPersonaFleet(filters), signal: opts?.signal },
-        adaptManagementPersonaFleetLiveOnly,
+        (raw) => adaptManagementPersonaFleetLiveOnly(raw).filter((row) => row.personaPurpose !== "advisory_assistant"),
+      );
+    },
+    /** Server-paginated fleet read with explicit purpose/data/archive scopes. */
+    page: (filters: ManagementPersonaFleetQuery = {}, opts?: { signal?: AbortSignal }): Promise<ManagementPersonaFleetPage> => {
+      if (detectMode() === "mock") {
+        return Promise.reject(new Error("demo fallback is disabled for personaFleet; live BFF required"));
+      }
+      liveStatus.retry();
+      return strictLiveRead<ManagementPersonaFleetPage>(
+        "mgmt.personaFleet.page",
+        { method: "GET", path: paths.mgmtPersonaFleet(filters), signal: opts?.signal },
+        (raw) => ({ ...adaptManagementPersonaFleetPage(raw), asOf: new Date().toISOString() }),
       );
     },
   },

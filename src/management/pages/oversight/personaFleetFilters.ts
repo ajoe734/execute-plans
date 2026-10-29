@@ -1,50 +1,67 @@
-import type { ManagementPersonaFleetRow } from "@/lib/bff-v1/management";
+import type {
+  ManagementPersonaFleetArchived,
+  ManagementPersonaFleetDataScope,
+  ManagementPersonaFleetQuery,
+  ManagementPersonaFleetRow,
+} from "@/lib/bff-v1/management";
 
-const KNOWN_DEMO_PERSONA_IDS = new Set([
-  "persona-crypto",
-  "persona-us-equity",
-  "persona-tw-equity",
-]);
-
-const NON_PRODUCTION_PATTERNS = [
-  /\bdemo\b/i,
-  /\bmock\b/i,
-  /\bfixture\b/i,
-  /\bsample\b/i,
-  /\btest\b/i,
-  /dry[-_ ]?run/i,
-  /deploy[-_ ]?smoke/i,
-  /\bsmoke persona\b/i,
-  /^dev[-_ ]?probe/i,
-];
-
-function nonProductionTokens(row: ManagementPersonaFleetRow): string[] {
-  return [
-    row.personaId,
-    row.personaName,
-    row.currentWork,
-    row.state,
-    ...(row.tags ?? []),
-    ...(row.currentResearchProjects ?? []).flatMap((project) => [
-      project.projectId,
-      project.title,
-      project.status,
-    ]),
-  ].filter((token): token is string => Boolean(token));
-}
-
+/** Server-owned classification only: names, ids and capital mode are never inspected here. */
 export function isNonProductionPersonaFleetRow(row: ManagementPersonaFleetRow): boolean {
-  if (KNOWN_DEMO_PERSONA_IDS.has(row.personaId)) return true;
-
-  const raw = row as ManagementPersonaFleetRow & { capital_mode?: string; capital_pool?: { mode?: string } };
-  const capMode = String(row.capitalMode ?? raw.capital_mode ?? row.capitalPool?.mode ?? raw.capital_pool?.mode ?? "").trim().toLowerCase();
-  if (capMode && capMode !== "live" && capMode !== "canary") return true;
-
-  return nonProductionTokens(row).some((token) =>
-    NON_PRODUCTION_PATTERNS.some((pattern) => pattern.test(token)),
-  );
+  return row.dataScope === "test";
 }
 
 export function productionPersonaFleetRows(rows: ManagementPersonaFleetRow[]): ManagementPersonaFleetRow[] {
-  return rows.filter((row) => !isNonProductionPersonaFleetRow(row));
+  return rows.filter((row) => row.personaPurpose !== "advisory_assistant" && !isNonProductionPersonaFleetRow(row));
+}
+
+export type PersonaFleetDataFilter = ManagementPersonaFleetDataScope;
+
+export const PERSONA_FLEET_PAGE_SIZE = 20;
+
+export interface PersonaFleetViewFilters {
+  dataScope: PersonaFleetDataFilter;
+  archived: boolean;
+  q: string;
+}
+
+const DATA_FILTERS: readonly PersonaFleetDataFilter[] = ["regular", "test", "unknown"];
+
+/**
+ * Explicit legacy mapping for bookmarks: `?tab=production` -> regular data,
+ * `?tab=non-production` -> test data. New links use `?data=`.
+ */
+export function personaFleetDataFilterFromParams(params: URLSearchParams): PersonaFleetDataFilter {
+  const data = params.get("data")?.trim().toLowerCase();
+  if (data && (DATA_FILTERS as readonly string[]).includes(data)) return data as PersonaFleetDataFilter;
+  const tab = params.get("tab")?.trim().toLowerCase();
+  if (tab === "non-production" || tab === "nonproduction") return "test";
+  return "regular";
+}
+
+export function personaFleetArchivedFromParams(params: URLSearchParams): boolean {
+  const value = (params.get("archived") ?? params.get("scope"))?.trim().toLowerCase();
+  return value === "only" || value === "archived" || value === "1" || value === "true";
+}
+
+/**
+ * A focused persona link locates the exact authorized record regardless of the
+ * list filters: all purposes, data scopes and archive state, matched by id.
+ */
+export function personaFleetQuery(
+  filters: PersonaFleetViewFilters,
+  focus: string,
+  pageToken: string | undefined,
+): ManagementPersonaFleetQuery {
+  if (focus) {
+    return { q: focus, purpose: "all", dataScope: "all", archived: "include", pageSize: PERSONA_FLEET_PAGE_SIZE };
+  }
+  const archived: ManagementPersonaFleetArchived = filters.archived ? "only" : "exclude";
+  return {
+    q: filters.q || undefined,
+    purpose: "trading",
+    dataScope: filters.dataScope,
+    archived,
+    pageSize: PERSONA_FLEET_PAGE_SIZE,
+    pageToken,
+  };
 }

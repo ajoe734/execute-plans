@@ -262,6 +262,23 @@ const MOCK_HUMAN_INBOX_ITEMS = [
   }
 ];
 
+// Mixed server population: the two fixture rows plus 130 generated regular rows (> 100) for paging.
+const PAGED_FLEET_ROWS = [
+  ...MOCK_FLEET_ROWS,
+  ...Array.from({ length: 130 }, (_, i) => ({
+    id: `gen-${String(i).padStart(3, "0")}`,
+    personaId: `gen-${String(i).padStart(3, "0")}`,
+    personaName: `Generated ${String(i).padStart(3, "0")}`,
+    owner: "operator-generated",
+    ooda: "observe",
+    autonomy: "medium",
+    state: "draft",
+    persona_purpose: "trading",
+    data_scope: "regular",
+    perfDelta: null,
+  })),
+];
+
 async function installMockFixture(page: Page): Promise<void> {
   await page.route(/^https?:\/\/[^/]+\/(?:bff|health|healthz|readyz).*/, async (route) => {
     const request = route.request();
@@ -302,7 +319,16 @@ async function installMockFixture(page: Page): Promise<void> {
       return;
     }
     if (path === "/bff/management/persona-fleet") {
-      await fulfillJson(route, envelope(MOCK_FLEET_ROWS, path));
+      const params = url.searchParams;
+      const size = Number(params.get("page_size") ?? MOCK_FLEET_ROWS.length);
+      const start = Number(params.get("page_token") ?? 0);
+      const all = params.get("archived") === "only" ? [] : PAGED_FLEET_ROWS;
+      const items = all.slice(start, start + size);
+      const next = start + items.length < all.length ? String(start + items.length) : null;
+      await fulfillJson(route, {
+        ...envelope(items, path),
+        page_info: { next_page_token: next, total: all.length, filtered_total: all.length, page_size: size },
+      });
       return;
     }
     if (path.startsWith("/bff/personas/")) {
@@ -565,5 +591,19 @@ test.describe("MGMT-OPS-010 Persona Fleet Click-Map Regression", () => {
     console.log("Capturing screenshot 11...");
     await captureScreenshot(page, "11-missing-data-no-link");
     console.log("Test finished successfully!");
+  });
+
+  test("pages through >100 server rows 20 at a time and ends on a disabled Next", async ({ page }) => {
+    await page.goto(frontendUrl("/management/persona-fleet"), { waitUntil: "domcontentloaded", timeout: 30_000 });
+    const pager = page.getByTestId("persona-fleet-pager");
+    await expect(pager).toContainText(new RegExp(`(of|共) ${PAGED_FLEET_ROWS.length}`), { timeout: 15_000 });
+    await expect(page.getByRole("button", { name: /^(Previous|上一頁)$/ })).toBeDisabled();
+    const next = page.getByRole("button", { name: /^(Next|下一頁)$/ });
+    for (let i = 0; i < 6; i += 1) {
+      await expect(next).toBeEnabled();
+      await next.click();
+    }
+    await expect(page.getByText("Generated 129")).toBeVisible({ timeout: 15_000 });
+    await expect(next).toBeDisabled();
   });
 });

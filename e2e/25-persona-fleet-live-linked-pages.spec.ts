@@ -46,7 +46,7 @@ async function openFocusedFleetRow(page: Page, personaId: string) {
   });
   await fleetRead;
   const nonProductionScope = page.getByRole("radio", {
-    name: /非正式資料|Non-production data/i,
+    name: /測試／驗收資料|Test \/ acceptance/i,
   });
   await expect(nonProductionScope).toBeVisible({ timeout: 30_000 });
   await nonProductionScope.click();

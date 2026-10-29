@@ -61,7 +61,10 @@ import {
   visibleDataSources,
 } from "./personaFleetDataSources";
 import {
-  isNonProductionPersonaFleetRow,
+  PERSONA_FLEET_PAGE_SIZE,
+  personaFleetArchivedFromParams,
+  personaFleetDataFilterFromParams,
+  personaFleetQuery,
   productionPersonaFleetRows,
 } from "./personaFleetFilters";
 import {
@@ -579,68 +582,83 @@ export const PersonaFleetPage = () => {
   const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
   const personaFocus = (searchParams.get("persona_id") ?? searchParams.get("persona"))?.trim() ?? "";
-  const { data, loading, refresh } = useV5Live(
-    (signal) => mgmt.personaFleet.get({ q: personaFocus || undefined, pageSize: 100 }, ...(signal ? [{ signal }] : [])),
-    [personaFocus],
-    { cacheKey: `oversight.personaFleet.${personaFocus || "all"}` },
+  const dataFilter = personaFleetDataFilterFromParams(searchParams);
+  const archivedOnly = personaFleetArchivedFromParams(searchParams);
+  const urlQ = searchParams.get("q")?.trim() ?? "";
+  const [searchText, setSearchText] = useState(urlQ);
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Debounced search -> URL (which resets pagination through the scope key below).
+  useEffect(() => {
+    if (searchText.trim() === urlQ) return undefined;
+    const timer = setTimeout(() => {
+      const next = new URLSearchParams(searchParams);
+      if (searchText.trim()) next.set("q", searchText.trim());
+      else next.delete("q");
+      setSearchParams(next, { replace: true });
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchText, urlQ, searchParams, setSearchParams]);
+
+  const filters = useMemo(
+    () => ({ dataScope: dataFilter, archived: archivedOnly, q: urlQ }),
+    [dataFilter, archivedOnly, urlQ],
   );
-  const rows = useMemo(() => data ?? [], [data]);
+  const scopeKey = personaFocus
+    ? `focus:${personaFocus}`
+    : `${filters.dataScope}|${filters.archived ? "archived" : "active"}|${filters.q}`;
 
-  const [showRetired, setShowRetired] = useState(false);
+  // Page-token stack: index 0 is the first page. A scope change drops the stack (reset to page 1).
+  const [pager, setPager] = useState<{ scopeKey: string; tokens: string[] }>({ scopeKey, tokens: [""] });
+  const tokens = pager.scopeKey === scopeKey ? pager.tokens : [""];
+  const pageIndex = tokens.length - 1;
+  const pageToken = tokens[pageIndex] || undefined;
 
-  const productionCount = useMemo(() => {
-    return rows.filter((r) => {
-      if (!showRetired && r.state && HIDDEN_STATES.has(r.state)) return false;
-      return !isNonProductionPersonaFleetRow(r);
-    }).length;
-  }, [rows, showRetired]);
+  const { data, loading, error = null, refresh } = useV5Live(
+    (signal) => mgmt.personaFleet.page(personaFleetQuery(filters, personaFocus, pageToken), { signal }),
+    [scopeKey, pageToken ?? ""],
+    { cacheKey: "oversight.personaFleet.page" },
+  );
+  const rows = useMemo(() => (data?.rows ?? []).filter((r) => r.personaPurpose !== "advisory_assistant"), [data]);
+  const visibleRows = useMemo(
+    () => (personaFocus ? rows.filter((r) => r.personaId === personaFocus) : rows),
+    [rows, personaFocus],
+  );
+  const population = data?.population;
 
-  const nonProductionCount = useMemo(() => {
-    return rows.filter((r) => {
-      if (!showRetired && r.state && HIDDEN_STATES.has(r.state)) return false;
-      return isNonProductionPersonaFleetRow(r);
-    }).length;
-  }, [rows, showRetired]);
-
-  const tabParam = searchParams.get("tab")?.trim().toLowerCase();
-  const currentTab = useMemo(() => {
-    if (tabParam === "non-production" || tabParam === "nonproduction") {
-      return "non-production";
-    }
-    if (tabParam === "production") {
-      return "production";
-    }
-    if (personaFocus && rows.length > 0) {
-      const matched = rows.find((r) => r.personaId === personaFocus);
-      if (matched) {
-        return isNonProductionPersonaFleetRow(matched) ? "non-production" : "production";
-      }
-    }
-    return "production";
-  }, [tabParam, personaFocus, rows]);
-
-  const setActiveTab = (tab: string) => {
+  const setParam = (key: string, value: string | null) => {
     const next = new URLSearchParams(searchParams);
-    next.set("tab", tab);
+    next.delete("tab");
+    if (value === null) next.delete(key);
+    else next.set(key, value);
     setSearchParams(next, { replace: true });
   };
+  const goNext = () => {
+    if (!data?.nextPageToken) return;
+    setPager({ scopeKey, tokens: [...tokens, data.nextPageToken] });
+  };
+  const goPrev = () => {
+    if (pageIndex === 0) return;
+    setPager({ scopeKey, tokens: tokens.slice(0, -1) });
+  };
+  const runRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await refresh();
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
-  const filtered = useMemo(() => rows.filter((r) => {
-    if (!showRetired && r.state && HIDDEN_STATES.has(r.state)) return false;
-    const isNP = isNonProductionPersonaFleetRow(r);
-    if (currentTab === "production" && isNP) return false;
-    if (currentTab === "non-production" && !isNP) return false;
-    return true;
-  }), [rows, showRetired, currentTab]);
-
-  const visibleRows = useMemo(() => {
-    if (!personaFocus) return filtered;
-    return filtered.filter((r) => r.personaId === personaFocus);
-  }, [filtered, personaFocus]);
-  const isPersonaFocusLoading = Boolean(personaFocus && loading && data === undefined);
+  const isInitialLoading = loading && !data;
+  const isOwnerError = !data && !loading;
+  const isRefreshFailed = Boolean(error) && Boolean(data);
+  const isTrueEmpty = !personaFocus && !!data && population?.authorizedTotal === 0;
+  const isFilteredEmpty = !personaFocus && !!data && !isTrueEmpty && visibleRows.length === 0;
+  const isPersonaFocusLoading = Boolean(personaFocus && isInitialLoading);
   const hasPersonaFocusMatch = !personaFocus || visibleRows.length > 0;
-
-  const hiddenRetired = rows.filter((r) => r.state && HIDDEN_STATES.has(r.state)).length;
+  const rangeStart = pageIndex * PERSONA_FLEET_PAGE_SIZE + 1;
+  const rangeEnd = pageIndex * PERSONA_FLEET_PAGE_SIZE + visibleRows.length;
 
   return (
     <section className="flex h-full min-h-0 flex-col gap-4 overflow-hidden p-6" aria-label={t("mgmt.fleet.title")}>
@@ -650,44 +668,52 @@ export const PersonaFleetPage = () => {
           <p className="text-sm text-muted-foreground">{t("mgmt.fleet.subtitle")}</p>
         </div>
       </header>
-      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
-        <ToggleGroup
-          type="single"
-          value={currentTab}
-          onValueChange={(val) => {
-            if (val === "production" || val === "non-production") {
-              setActiveTab(val);
-            }
-          }}
-          aria-label={t("mgmt.fleet.filter.dataScope")}
-          className="grid w-full max-w-[400px] grid-cols-2 rounded-md bg-muted p-1 text-muted-foreground"
-        >
-          <ToggleGroupItem
-            value="production"
-            className="h-auto rounded-sm px-3 py-1.5 data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-sm"
+      {!personaFocus && (
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
+          <ToggleGroup
+            type="single"
+            value={dataFilter}
+            onValueChange={(val) => {
+              if (val === "regular" || val === "test" || val === "unknown") setParam("data", val);
+            }}
+            aria-label={t("mgmt.fleet.filter.dataScope")}
+            className="grid w-full max-w-[520px] grid-cols-3 rounded-md bg-muted p-1 text-muted-foreground"
           >
-            {t("mgmt.fleet.production")} ({productionCount})
-          </ToggleGroupItem>
-          <ToggleGroupItem
-            value="non-production"
-            className="h-auto rounded-sm px-3 py-1.5 data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-sm"
-          >
-            {t("mgmt.fleet.nonProduction")} ({nonProductionCount})
-          </ToggleGroupItem>
-        </ToggleGroup>
-        <div className="flex items-center gap-2 text-xs">
-          <Button
-            size="sm"
-            variant={showRetired ? "default" : "outline"}
-            onClick={() => setShowRetired((v) => !v)}
-            aria-pressed={showRetired}
-          >
-            {showRetired
-              ? t("mgmt.fleet.filter.hideRetired")
-              : t("mgmt.fleet.filter.showRetiredFmt", { count: hiddenRetired })}
-          </Button>
+            {(["regular", "test", "unknown"] as const).map((value) => (
+              <ToggleGroupItem
+                key={value}
+                value={value}
+                className="h-auto rounded-sm px-3 py-1.5 data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-sm"
+              >
+                {t(`mgmt.fleet.data.${value}`)}
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
+          <input
+            type="search"
+            value={searchText}
+            onChange={(event) => setSearchText(event.target.value)}
+            placeholder={t("mgmt.fleet.filter.searchPlaceholder")}
+            aria-label={t("mgmt.fleet.filter.searchPlaceholder")}
+            className="h-8 w-56 rounded-md border border-border bg-background px-2 text-xs"
+          />
+          <div className="flex items-center gap-2 text-xs">
+            <Button
+              size="sm"
+              variant={archivedOnly ? "default" : "outline"}
+              onClick={() => setParam("archived", archivedOnly ? null : "only")}
+              aria-pressed={archivedOnly}
+            >
+              {archivedOnly
+                ? t("mgmt.fleet.filter.hideArchived")
+                : t("mgmt.fleet.filter.showArchivedFmt", { count: population?.archivedTotal ?? "?" })}
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => void runRefresh()} disabled={refreshing}>
+              {refreshing ? t("mgmt.fleet.refreshing") : t("mgmt.actions.refresh")}
+            </Button>
+          </div>
         </div>
-      </div>
+      )}
       {personaFocus && (
         <Card className={"p-3 text-sm " + (isPersonaFocusLoading || hasPersonaFocusMatch
           ? "border-primary/30 bg-primary/5"
@@ -697,6 +723,8 @@ export const PersonaFleetPage = () => {
             <span className="text-foreground">
               {isPersonaFocusLoading
                 ? t("mgmt.fleet.focusLoadingPersonaFmt", { persona: personaFocus })
+                : isOwnerError
+                ? t("mgmt.fleet.focusUnavailablePersonaFmt", { persona: personaFocus })
                 : hasPersonaFocusMatch
                 ? t("mgmt.fleet.focusedPersonaFmt", { persona: personaFocus })
                 : t("mgmt.fleet.focusMissingPersonaFmt", { persona: personaFocus })}
@@ -707,30 +735,34 @@ export const PersonaFleetPage = () => {
           </div>
         </Card>
       )}
-      {visibleRows.length === 0 && rows.length > 0 && !personaFocus && (
-        <Card className="p-4 text-sm">
-          {currentTab === "production" ? (
-            <>
-              <div className="font-medium text-foreground">{t("mgmt.fleet.liveDataUnavailableTitle")}</div>
-              <p className="mt-1 text-muted-foreground">{t("mgmt.fleet.liveDataUnavailableBody")}</p>
-            </>
-          ) : (
-            <span className="text-muted-foreground">{t("mgmt.fleet.filter.allFilteredHint")}</span>
-          )}
-        </Card>
-      )}
-      {loading && rows.length === 0 && (
-        <Card className="p-4 text-sm text-muted-foreground">
+      {isInitialLoading && !personaFocus && (
+        <Card className="p-4 text-sm text-muted-foreground" role="status">
           {t("mgmt.fleet.loadingLive")}
         </Card>
       )}
-      {!loading && rows.length === 0 && (
-        <Card className="p-4 text-sm">
+      {isOwnerError && (
+        <Card className="p-4 text-sm" role="alert">
           <div className="font-medium text-foreground">{t("mgmt.fleet.liveDataUnavailableTitle")}</div>
           <p className="mt-1 text-muted-foreground">{t("mgmt.fleet.liveDataUnavailableBody")}</p>
-          <Button size="sm" variant="outline" className="mt-3" onClick={refresh}>
+          <Button size="sm" variant="outline" className="mt-3" onClick={() => void runRefresh()}>
             {t("mgmt.actions.refresh")}
           </Button>
+        </Card>
+      )}
+      {isRefreshFailed && (
+        <Card className="border-status-warning/30 bg-status-warning/10 p-3 text-sm" role="alert">
+          {t("mgmt.fleet.refreshFailedFmt", { at: data?.asOf ?? "—" })}
+        </Card>
+      )}
+      {isTrueEmpty && (
+        <Card className="p-4 text-sm">
+          <div className="font-medium text-foreground">{t("mgmt.fleet.trueEmptyTitle")}</div>
+          <p className="mt-1 text-muted-foreground">{t("mgmt.fleet.trueEmptyBody")}</p>
+        </Card>
+      )}
+      {isFilteredEmpty && (
+        <Card className="p-4 text-sm">
+          <span className="text-muted-foreground">{t("mgmt.fleet.filter.allFilteredHint")}</span>
         </Card>
       )}
       {visibleRows.length > 0 && (
@@ -760,7 +792,6 @@ export const PersonaFleetPage = () => {
           <tbody>
             {visibleRows.map((r) => {
               const retired = r.state && HIDDEN_STATES.has(r.state);
-              const nonProduction = isNonProductionPersonaFleetRow(r);
               const sourceCount = providerOkCount(r);
               const sourceBadges = visibleDataSources(r);
               const sourceStatus = dataSourceState(r);
@@ -812,6 +843,16 @@ export const PersonaFleetPage = () => {
                     )}
                     <div className="mt-0.5 flex items-center gap-1 font-mono text-xs text-muted-foreground">
                       <span>{r.personaId}</span>
+                      <Badge
+                        variant="outline"
+                        data-testid={`fleet-data-scope-${r.personaId}`}
+                        className={r.dataScope === "test" || r.dataScope === "unknown"
+                          ? "border-status-warning/40 text-[10px] text-status-warning"
+                          : "text-[10px] text-muted-foreground"}
+                      >
+                        {t(`mgmt.fleet.data.${r.dataScope ?? "unknown"}`)}
+                        {r.classificationConfirmed === false ? ` · ${t("mgmt.fleet.toConfirm")}` : ""}
+                      </Badge>
                       {(r.is_market_persona_default || r.isMarketPersonaDefault || r.seed_row || r.seedRow) && (
                         <Badge variant="outline" className="border-amber-500/40 text-[10px] text-amber-600 dark:text-amber-400">
                           Seed Fixture
@@ -1164,11 +1205,6 @@ export const PersonaFleetPage = () => {
                       </OptionalFleetLink>
                       );
                     })()}
-                    {nonProduction && (
-                      <Badge variant="outline" className="ml-1 bg-muted text-muted-foreground">
-                        {t("mgmt.fleet.nonProduction")}
-                      </Badge>
-                    )}
                   </td>
                   <td className="px-3 py-2 text-right">
                     {!retired && (
@@ -1206,6 +1242,27 @@ export const PersonaFleetPage = () => {
         </table>
         </ManagementTableScroll>
       </Card>
+      )}
+      {data && !isOwnerError && (visibleRows.length > 0 || pageIndex > 0) && (
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 pr-16 text-xs text-muted-foreground" data-testid="persona-fleet-pager">
+          <span>
+            {data.total !== undefined && !personaFocus
+              ? t("mgmt.fleet.pager.rangeFmt", { start: rangeStart, end: rangeEnd, total: data.total })
+              : t("mgmt.fleet.pager.rangeNoTotalFmt", { start: rangeStart, end: rangeEnd })}
+            {data.asOf ? ` · ${t("mgmt.fleet.asOfFmt", { at: data.asOf })}` : ""}
+          </span>
+          {!personaFocus && (
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="outline" onClick={goPrev} disabled={pageIndex === 0 || loading}>
+                {t("mgmt.fleet.pager.previous")}
+              </Button>
+              <span>{t("mgmt.fleet.pager.pageFmt", { page: pageIndex + 1 })}</span>
+              <Button size="sm" variant="outline" onClick={goNext} disabled={!data.nextPageToken || loading}>
+                {t("mgmt.fleet.pager.next")}
+              </Button>
+            </div>
+          )}
+        </div>
       )}
     </section>
   );
