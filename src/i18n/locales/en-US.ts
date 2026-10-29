@@ -3395,6 +3395,7 @@ export default {
       production: "Production",
       data: { regular: "Regular", test: "Test / acceptance", unknown: "Unconfirmed" },
       toConfirm: "to confirm",
+      purposeUnknown: "Purpose unconfirmed",
       refreshing: "Refreshing…",
       focusUnavailablePersonaFmt: "Persona fleet data for {{persona}} is unavailable.",
       refreshFailedFmt: "Refresh failed. Showing the last confirmed page, observed {{at}}.",
@@ -3411,6 +3412,7 @@ export default {
       filter: {
         searchPlaceholder: "Search personas",
         showArchivedFmt: "Archived ({{count}})",
+        unknownPurpose: "Unconfirmed purpose",
         hideArchived: "Hide archived",
         dataScope: "Persona data scope",
         showRetiredFmt: "Show retired ({{count}})",

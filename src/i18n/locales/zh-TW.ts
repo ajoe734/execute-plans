@@ -3376,6 +3376,7 @@ export default {
       production: "正式資料",
       data: { regular: "正式資料", test: "測試／驗收資料", unknown: "待確認" },
       toConfirm: "待確認",
+      purposeUnknown: "用途待確認",
       refreshing: "更新中…",
       focusUnavailablePersonaFmt: "無法讀取 {{persona}} 的 Persona 艦隊資料。",
       refreshFailedFmt: "更新失敗，顯示最後確認的頁面（觀測時間 {{at}}）。",
@@ -3392,6 +3393,7 @@ export default {
       filter: {
         searchPlaceholder: "搜尋 Persona",
         showArchivedFmt: "已封存（{{count}}）",
+        unknownPurpose: "用途待確認",
         hideArchived: "隱藏已封存",
         dataScope: "Persona 資料範圍",
         showRetiredFmt: "顯示已封存 ({{count}})",

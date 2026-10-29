@@ -18,7 +18,11 @@ export type PersonaFleetDataFilter = ManagementPersonaFleetDataScope;
 
 export const PERSONA_FLEET_PAGE_SIZE = 20;
 
+/** Normal fleet is trading-only; `unknown` is the explicit path to provenance-free legacy records. */
+export type PersonaFleetPurposeFilter = "trading" | "unknown";
+
 export interface PersonaFleetViewFilters {
+  purpose: PersonaFleetPurposeFilter;
   dataScope: PersonaFleetDataFilter;
   archived: boolean;
   q: string;
@@ -36,6 +40,10 @@ export function personaFleetDataFilterFromParams(params: URLSearchParams): Perso
   const tab = params.get("tab")?.trim().toLowerCase();
   if (tab === "non-production" || tab === "nonproduction") return "test";
   return "regular";
+}
+
+export function personaFleetPurposeFromParams(params: URLSearchParams): PersonaFleetPurposeFilter {
+  return params.get("purpose")?.trim().toLowerCase() === "unknown" ? "unknown" : "trading";
 }
 
 export function personaFleetArchivedFromParams(params: URLSearchParams): boolean {
@@ -56,12 +64,22 @@ export function personaFleetQuery(
     return { q: focus, purpose: "all", dataScope: "all", archived: "include", pageSize: PERSONA_FLEET_PAGE_SIZE, pageToken };
   }
   const archived: ManagementPersonaFleetArchived = filters.archived ? "only" : "exclude";
+  return personaFleetScopedQuery(filters, archived, pageToken, PERSONA_FLEET_PAGE_SIZE);
+}
+
+/** Same filters with an explicit archive state; used for the scoped archived count (page size 1, no row enrichment needed). */
+export function personaFleetScopedQuery(
+  filters: PersonaFleetViewFilters,
+  archived: ManagementPersonaFleetArchived,
+  pageToken: string | undefined,
+  pageSize: number,
+): ManagementPersonaFleetQuery {
   return {
     q: filters.q || undefined,
-    purpose: "trading",
+    purpose: filters.purpose,
     dataScope: filters.dataScope,
     archived,
-    pageSize: PERSONA_FLEET_PAGE_SIZE,
+    pageSize,
     pageToken,
   };
 }

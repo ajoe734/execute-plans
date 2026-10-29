@@ -63,6 +63,8 @@ import {
 import {
   PERSONA_FLEET_PAGE_SIZE,
   personaFleetArchivedFromParams,
+  personaFleetPurposeFromParams,
+  personaFleetScopedQuery,
   personaFleetDataFilterFromParams,
   personaFleetQuery,
   productionPersonaFleetRows,
@@ -584,6 +586,7 @@ export const PersonaFleetPage = () => {
   const personaFocus = (searchParams.get("persona_id") ?? searchParams.get("persona"))?.trim() ?? "";
   const dataFilter = personaFleetDataFilterFromParams(searchParams);
   const archivedOnly = personaFleetArchivedFromParams(searchParams);
+  const purposeFilter = personaFleetPurposeFromParams(searchParams);
   const urlQ = searchParams.get("q")?.trim() ?? "";
   const [searchText, setSearchText] = useState(urlQ);
   // URL-driven q changes (same-route navigation, clearing) replace the input instead of being overwritten by it.
@@ -607,12 +610,12 @@ export const PersonaFleetPage = () => {
   }, [searchText, urlQ, searchParams, setSearchParams]);
 
   const filters = useMemo(
-    () => ({ dataScope: dataFilter, archived: archivedOnly, q: urlQ }),
-    [dataFilter, archivedOnly, urlQ],
+    () => ({ purpose: purposeFilter, dataScope: dataFilter, archived: archivedOnly, q: urlQ }),
+    [purposeFilter, dataFilter, archivedOnly, urlQ],
   );
   const scopeKey = personaFocus
     ? `focus:${personaFocus}`
-    : `${filters.dataScope}|${filters.archived ? "archived" : "active"}|${filters.q}`;
+    : `${filters.purpose}|${filters.dataScope}|${filters.archived ? "archived" : "active"}|${filters.q}`;
 
   // Page-token stack: index 0 is the first page. A scope change drops the stack (reset to page 1).
   const [pager, setPager] = useState<{ scopeKey: string; tokens: string[] }>({ scopeKey, tokens: [""] });
@@ -638,6 +641,17 @@ export const PersonaFleetPage = () => {
     [scopeKey, pageToken ?? ""],
     { cacheKey: "oversight.personaFleet.page" },
   );
+  // Archived count for the current purpose/data/search scope: a size-1 probe, never archived row enrichment.
+  const countScopeKey = `${filters.purpose}|${filters.dataScope}|${filters.q}`;
+  const { data: archivedProbe } = useV5Live(
+    async (signal) => {
+      if (personaFocus || archivedOnly) return null;
+      return mgmt.personaFleet.page(personaFleetScopedQuery(filters, "only", undefined, 1), { signal });
+    },
+    [countScopeKey, personaFocus, archivedOnly],
+    { cacheKey: "oversight.personaFleet.archivedCount" },
+  );
+  const scopedArchivedCount = archivedProbe?.total;
   const rows = useMemo(() => (data?.rows ?? []).filter((r) => r.personaPurpose !== "advisory_assistant"), [data]);
   const visibleRows = useMemo(
     () => (personaFocus ? rows.filter((r) => r.personaId === personaFocus) : rows),
@@ -710,6 +724,14 @@ export const PersonaFleetPage = () => {
               </ToggleGroupItem>
             ))}
           </ToggleGroup>
+          <Button
+            size="sm"
+            variant={purposeFilter === "unknown" ? "default" : "outline"}
+            onClick={() => setParam("purpose", purposeFilter === "unknown" ? null : "unknown")}
+            aria-pressed={purposeFilter === "unknown"}
+          >
+            {t("mgmt.fleet.filter.unknownPurpose")}
+          </Button>
           <input
             type="search"
             value={searchText}
@@ -727,7 +749,7 @@ export const PersonaFleetPage = () => {
             >
               {archivedOnly
                 ? t("mgmt.fleet.filter.hideArchived")
-                : t("mgmt.fleet.filter.showArchivedFmt", { count: population?.archivedTotal ?? "?" })}
+                : t("mgmt.fleet.filter.showArchivedFmt", { count: scopedArchivedCount ?? "?" })}
             </Button>
             <Button size="sm" variant="outline" onClick={() => void runRefresh()} disabled={refreshing}>
               {refreshing ? t("mgmt.fleet.refreshing") : t("mgmt.actions.refresh")}
@@ -874,6 +896,15 @@ export const PersonaFleetPage = () => {
                         {t(`mgmt.fleet.data.${r.dataScope ?? "unknown"}`)}
                         {r.classificationConfirmed === false ? ` · ${t("mgmt.fleet.toConfirm")}` : ""}
                       </Badge>
+                      {r.personaPurpose === "unknown" && (
+                        <Badge
+                          variant="outline"
+                          data-testid={`fleet-purpose-${r.personaId}`}
+                          className="border-status-warning/40 text-[10px] text-status-warning"
+                        >
+                          {t("mgmt.fleet.purposeUnknown")}
+                        </Badge>
+                      )}
                       {(r.is_market_persona_default || r.isMarketPersonaDefault || r.seed_row || r.seedRow) && (
                         <Badge variant="outline" className="border-amber-500/40 text-[10px] text-amber-600 dark:text-amber-400">
                           Seed Fixture

@@ -228,7 +228,7 @@ describe("PersonaFleetPage", () => {
         : bucket === 7 ? { dataScope: "regular", state: "draft", capitalMode: undefined }
         : bucket === 8 ? { dataScope: "regular", capitalMode: "live", state: "live_running" }
         : bucket < 11 ? { dataScope: "test", capitalMode: "paper", state: "paper_running" }
-        : bucket === 11 ? { dataScope: "unknown", classificationConfirmed: false, state: "draft" }
+        : bucket === 11 ? { personaPurpose: "unknown", dataScope: "unknown", classificationConfirmed: false, state: "draft" }
         : { dataScope: "regular", state: "retired", archived: true };
       universe.push(fleetRow(id, `Persona ${id}`, { personaPurpose: "trading", archived: false, ...overrides }));
     }
@@ -324,7 +324,7 @@ describe("PersonaFleetPage", () => {
       const page = vi.spyOn(mgmt.personaFleet, "page").mockImplementation(async (q) => serve(q ?? {}));
       renderFleet("/management/persona-fleet?tab=non-production");
       await screen.findByText("Persona p-009");
-      fireEvent.click(screen.getByRole("button", { name: "Archived (10)" }));
+      fireEvent.click(screen.getByRole("button", { name: "Archived (0)" }));
       await waitFor(() => expect(page.mock.calls.at(-1)?.[0]).toMatchObject({dataScope: "test", archived: "only"}));
     });
 
@@ -359,11 +359,29 @@ describe("PersonaFleetPage", () => {
 
     it("keeps test and unknown data behind explicit filters and labels them", async () => {
       vi.spyOn(mgmt.personaFleet, "page").mockImplementation(async (q) => serve(q ?? {}));
-      renderFleet("/management/persona-fleet?data=unknown");
+      renderFleet("/management/persona-fleet?data=unknown&purpose=unknown");
       await screen.findByText("Persona p-011");
+      expect(screen.getByTestId("fleet-purpose-p-011").textContent).toContain("Purpose unconfirmed");
       expect(screen.getByTestId("fleet-data-scope-p-011").textContent).toContain("Unconfirmed");
       expect(screen.getByTestId("fleet-data-scope-p-011").textContent).toContain("to confirm");
       expect(screen.queryByText("Persona p-000")).not.toBeInTheDocument();
+    });
+
+    it("reaches provenance-free unknown/unknown records through the explicit unconfirmed-purpose toggle", async () => {
+      const page = vi.spyOn(mgmt.personaFleet, "page").mockImplementation(async (q) => serve(q ?? {}));
+      renderFleet("/management/persona-fleet?data=unknown");
+      await screen.findByText(/No personas match|filtered/i).catch(() => undefined);
+      expect(screen.queryByText("Persona p-011")).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Unconfirmed purpose" }));
+      await screen.findByText("Persona p-011");
+      expect(page.mock.calls.at(-1)?.[0]).toMatchObject({ purpose: "unknown", dataScope: "unknown" });
+    });
+
+    it("shows the archived count for the current filter scope, not the global total", async () => {
+      vi.spyOn(mgmt.personaFleet, "page").mockImplementation(async (q) => serve(q ?? {}));
+      renderFleet("/management/persona-fleet?data=test");
+      await screen.findByText("Persona p-009");
+      await screen.findByRole("button", { name: "Archived (0)" });
     });
 
     it("maps legacy ?tab=non-production to test data and never classifies by name", async () => {
@@ -379,7 +397,8 @@ describe("PersonaFleetPage", () => {
       renderFleet("/management/persona-fleet");
       const archivedTotal = universe.filter((r) => r.archived).length;
       const toggle = await screen.findByRole("button", { name: `Archived (${archivedTotal})` });
-      expect(page.mock.calls.every(([q]) => q?.archived === "exclude")).toBe(true);
+      // only the size-1 count probe asks for archived; no archived rows are fetched until requested
+      expect(page.mock.calls.filter(([q]) => q?.archived !== "exclude").every(([q]) => q?.archived === "only" && q?.pageSize === 1)).toBe(true);
       fireEvent.click(toggle);
       await screen.findByText("Persona p-012");
       expect(page.mock.calls.at(-1)?.[0]).toMatchObject({ archived: "only", pageToken: undefined });
@@ -389,6 +408,7 @@ describe("PersonaFleetPage", () => {
       const resolvers: Array<() => void> = [];
       vi.spyOn(mgmt.personaFleet, "page").mockImplementation((q, opts) => new Promise((resolve) => {
         const result = serve(q ?? {});
+        if (q?.pageSize === 1) { resolve(result); return; } // archived-count probe
         resolvers.push(() => resolve(result));
         opts?.signal?.addEventListener("abort", () => resolve(result)); // late/aborted response still resolves
       }));

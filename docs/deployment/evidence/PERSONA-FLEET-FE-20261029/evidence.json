@@ -8,6 +8,8 @@
     "legacy_urls": {"?tab=production": "data=regular", "?tab=non-production": "data=test"},
     "agora": "assistant drawer shows identity, readiness, capabilities, advisory/no-execution policy; no rank, ledger or paper_running",
     "cache_and_races": "useV5Live query key = identity scope (tenant,user,baseUrl,mode) + cacheKey + [scope, page token]; react-query aborts superseded requests; page-token stack is reset on scope change (round-trip regression test); legacy ?tab= is persisted as explicit ?data= before archive/filter toggles",
+    "unknown_purpose": "normal fleet stays purpose=trading; explicit ?purpose=unknown toggle (Unconfirmed purpose) requests purpose=unknown so provenance-free unknown/unknown legacy records are reachable, with Purpose unconfirmed + Unconfirmed badges",
+    "archived_count": "button count comes from a page_size=1 archived=only probe under the same purpose/data/search filters (page_info total); archived rows are still fetched only on request",
     "states": "initial loading, owner error, refresh-failed with as-of, true empty, filtered empty, missing total shown as not reported"
   },
   "verification": {
