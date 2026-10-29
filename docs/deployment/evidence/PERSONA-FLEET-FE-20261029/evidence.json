@@ -14,7 +14,7 @@
     "tsc_app_and_agora": "pass",
     "eslint_touched": "0 errors (pre-existing warnings only)",
     "vitest_src_management_agora_bff-v1_i18n": "140 files / 1536 tests passed",
-    "build": "vite build ok",
+    "build": "vite production build succeeded via scripts/build-e2e-server.mjs (Playwright webServer); bare npm run build needs VITE_GCP_IDENTITY_API_KEY in env and was not run without it",
     "playwright": "e2e/24 'pages through >100 server rows' passed in chromium (route-mocked, 133 rows, 7 pages)",
     "known_unrelated": "e2e/24 'click-map smoke regression' fails at the performance-attribution link because its fixture has no telemetry (fixture/link-rule drift in code this task does not touch)"
   },
