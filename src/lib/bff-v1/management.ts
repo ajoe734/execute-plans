@@ -452,6 +452,8 @@ export interface ManagementPersonaFleetPage {
   nextPageToken: string | null;
   /** Filtered authorized population (not the page); undefined when the server did not report it. */
   total?: number;
+  /** Archived records matching the current authorized non-archive filters across all pages; undefined when not reported. */
+  filteredArchivedTotal?: number;
   pageSize?: number;
   population: ManagementPersonaFleetPopulation;
   /** Client observation time of this response; the server does not stamp as-of on this list. */
@@ -2548,6 +2550,7 @@ export function adaptManagementPersonaFleetPage(raw: unknown): ManagementPersona
     rows: adaptManagementPersonaFleet(raw) ?? [],
     nextPageToken: token && token.length > 0 ? token : null,
     total: optionalFiniteNumber(pageInfo.filtered_total ?? pageInfo.filteredTotal ?? pageInfo.total),
+    filteredArchivedTotal: optionalFiniteNumber(summary.filtered_archived_total),
     pageSize: optionalFiniteNumber(pageInfo.page_size ?? pageInfo.pageSize),
     population: {
       authorizedTotal: optionalFiniteNumber(population.authorized_total),

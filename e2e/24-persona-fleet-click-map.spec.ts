@@ -336,6 +336,7 @@ async function installMockFixture(page: Page): Promise<void> {
       const next = start + items.length < all.length ? String(start + items.length) : null;
       await fulfillJson(route, {
         ...envelope(items, path),
+        data: { items, summary: { filtered_archived_total: 0 } },
         page_info: { next_page_token: next, total: all.length, filtered_total: all.length, page_size: size },
       });
       return;
