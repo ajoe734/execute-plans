@@ -1677,7 +1677,7 @@ describe("mgmt façade (PM-Live)", () => {
             classification_source: { purpose: "metadata", data_scope: "none" }, archived: false, state: "draft" },
           { persona_id: "servant-1", persona_purpose: "advisory_assistant", state: "advisory" },
         ],
-        summary: { population: { authorized_total: 130, active_total: 120, archived_total: 10, by_purpose: { trading: 129 }, by_data_scope: { test: 3 } } },
+        summary: { filtered_archived_total: 4, population: { authorized_total: 130, active_total: 120, archived_total: 10, by_purpose: { trading: 129 }, by_data_scope: { test: 3 } } },
       },
       page_info: { next_page_token: "20", total: 75, filtered_total: 75, page_size: 20 },
     });
@@ -1687,6 +1687,7 @@ describe("mgmt façade (PM-Live)", () => {
     ]);
     expect(page.rows[0]?.classificationSource).toEqual({ purpose: "metadata", dataScope: "none" });
     expect(page).toMatchObject({ nextPageToken: "20", total: 75, pageSize: 20 });
+    expect(page.filteredArchivedTotal).toBe(4);
     expect(page.population).toMatchObject({ authorizedTotal: 130, archivedTotal: 10, byDataScope: { test: 3 } });
   });
 
@@ -1695,6 +1696,16 @@ describe("mgmt façade (PM-Live)", () => {
     expect(page.total).toBeUndefined();
     expect(page.nextPageToken).toBeNull();
     expect(page.population.archivedTotal).toBeUndefined();
+    expect(page.filteredArchivedTotal).toBeUndefined();
+  });
+
+  it("maps a canonical owner-failure null filtered_archived_total to unknown, not zero or population", () => {
+    const page = adaptManagementPersonaFleetPage({
+      data: { items: [{ persona_id: "p-1" }], summary: { filtered_archived_total: null, population: { archived_total: 10 } } },
+      page_info: { next_page_token: null },
+    });
+    expect(page.filteredArchivedTotal).toBeUndefined();
+    expect(page.population.archivedTotal).toBe(10);
   });
 
   it("management paths exist on paths catalog", () => {

@@ -64,7 +64,6 @@ import {
   PERSONA_FLEET_PAGE_SIZE,
   personaFleetArchivedFromParams,
   personaFleetPurposeFromParams,
-  personaFleetScopedQuery,
   personaFleetDataFilterFromParams,
   personaFleetQuery,
   productionPersonaFleetRows,
@@ -641,17 +640,8 @@ export const PersonaFleetPage = () => {
     [scopeKey, pageToken ?? ""],
     { cacheKey: "oversight.personaFleet.page" },
   );
-  // Archived count for the current purpose/data/search scope: a size-1 probe, never archived row enrichment.
-  const countScopeKey = `${filters.purpose}|${filters.dataScope}|${filters.q}`;
-  const { data: archivedProbe } = useV5Live(
-    async (signal) => {
-      if (personaFocus || archivedOnly) return null;
-      return mgmt.personaFleet.page(personaFleetScopedQuery(filters, "only", undefined, 1), { signal });
-    },
-    [countScopeKey, personaFocus, archivedOnly],
-    { cacheKey: "oversight.personaFleet.archivedCount" },
-  );
-  const scopedArchivedCount = archivedProbe?.total;
+  // Scoped archived count comes from the page metadata; archived rows are only fetched on explicit request.
+  const scopedArchivedCount = data?.filteredArchivedTotal;
   const rows = useMemo(() => (data?.rows ?? []).filter((r) => r.personaPurpose !== "advisory_assistant"), [data]);
   const visibleRows = useMemo(
     () => (personaFocus ? rows.filter((r) => r.personaId === personaFocus) : rows),
