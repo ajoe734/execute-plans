@@ -53,7 +53,7 @@ export function personaFleetQuery(
   pageToken: string | undefined,
 ): ManagementPersonaFleetQuery {
   if (focus) {
-    return { q: focus, purpose: "all", dataScope: "all", archived: "include", pageSize: PERSONA_FLEET_PAGE_SIZE };
+    return { q: focus, purpose: "all", dataScope: "all", archived: "include", pageSize: PERSONA_FLEET_PAGE_SIZE, pageToken };
   }
   const archived: ManagementPersonaFleetArchived = filters.archived ? "only" : "exclude";
   return {

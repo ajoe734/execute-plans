@@ -45,12 +45,6 @@ async function openFocusedFleetRow(page: Page, personaId: string) {
     waitUntil: "domcontentloaded",
   });
   await fleetRead;
-  const nonProductionScope = page.getByRole("radio", {
-    name: /測試／驗收資料|Test \/ acceptance/i,
-  });
-  await expect(nonProductionScope).toBeVisible({ timeout: 30_000 });
-  await nonProductionScope.click();
-  await expect(nonProductionScope).toBeChecked();
   const row = page.locator("tr").filter({ hasText: personaId }).first();
   await expect(row).toBeVisible({ timeout: 30_000 });
   return row;

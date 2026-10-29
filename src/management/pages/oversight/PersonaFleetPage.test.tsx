@@ -280,6 +280,28 @@ describe("PersonaFleetPage", () => {
       installLiveHook();
     });
 
+    it("does not resurrect an old page after a scope round trip", async () => {
+      vi.spyOn(mgmt.personaFleet, "page").mockImplementation(async (q) => serve(q ?? {}));
+      renderFleet("/management/persona-fleet");
+      await screen.findByText("Persona p-000");
+      fireEvent.click(screen.getByRole("button", { name: "Next" }));
+      await screen.findByText("Page 2");
+      fireEvent.click(screen.getByRole("radio", { name: "Test / acceptance" }));
+      await screen.findByText("Persona p-009");
+      expect(screen.getByText("Page 1")).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("radio", { name: "Regular" }));
+      await waitFor(() => expect(screen.getByText("Page 1")).toBeInTheDocument());
+      expect(screen.getByText("Persona p-000")).toBeInTheDocument();
+    });
+
+    it("keeps the mapped legacy test scope when requesting archives", async () => {
+      const page = vi.spyOn(mgmt.personaFleet, "page").mockImplementation(async (q) => serve(q ?? {}));
+      renderFleet("/management/persona-fleet?tab=non-production");
+      await screen.findByText("Persona p-009");
+      fireEvent.click(screen.getByRole("button", { name: "Archived (10)" }));
+      await waitFor(() => expect(page.mock.calls.at(-1)?.[0]).toMatchObject({dataScope: "test", archived: "only"}));
+    });
+
     it("requests 20 trading/regular/non-archived rows, paginates beyond 100 without gaps or duplicates", async () => {
       const page = vi.spyOn(mgmt.personaFleet, "page").mockImplementation(async (q) => serve(q ?? {}));
       renderFleet("/management/persona-fleet");
@@ -364,6 +386,21 @@ describe("PersonaFleetPage", () => {
       await screen.findByText("Persona p-125");
       expect(page.mock.calls[0]?.[0]).toMatchObject({ q: "p-125", purpose: "all", dataScope: "all", archived: "include" });
       expect(screen.getByText("Focused persona: p-125")).toBeInTheDocument();
+    });
+
+    it("finds a focused persona past the first substring-match page by walking next pages", async () => {
+      const base = universe[0]!;
+      const mk = (id: string) => ({ ...base, personaId: id, personaName: id });
+      const first = Array.from({ length: 20 }, (_, i) => mk(`p-target-${i}`));
+      const page = vi.spyOn(mgmt.personaFleet, "page").mockImplementation(async (q) =>
+        q?.pageToken
+          ? fleetPage([mk("p-target")], { nextPageToken: null })
+          : fleetPage(first, { nextPageToken: "20" }),
+      );
+      renderFleet("/management/persona-fleet?persona_id=p-target");
+      await screen.findByText("Focused persona: p-target");
+      expect(page.mock.calls.map(([q]) => q?.pageToken)).toEqual([undefined, "20"]);
+      expect(screen.queryByText("No persona fleet row found for p-target.")).not.toBeInTheDocument();
     });
 
     it("never renders an advisory assistant as a fleet row even when the focus targets it", async () => {

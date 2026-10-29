@@ -610,12 +610,25 @@ export const PersonaFleetPage = () => {
 
   // Page-token stack: index 0 is the first page. A scope change drops the stack (reset to page 1).
   const [pager, setPager] = useState<{ scopeKey: string; tokens: string[] }>({ scopeKey, tokens: [""] });
+  if (pager.scopeKey !== scopeKey) setPager({ scopeKey, tokens: [""] });
   const tokens = pager.scopeKey === scopeKey ? pager.tokens : [""];
   const pageIndex = tokens.length - 1;
   const pageToken = tokens[pageIndex] || undefined;
 
   const { data, loading, error = null, refresh } = useV5Live(
-    (signal) => mgmt.personaFleet.page(personaFleetQuery(filters, personaFocus, pageToken), { signal }),
+    async (signal) => {
+      if (!personaFocus) return mgmt.personaFleet.page(personaFleetQuery(filters, "", pageToken), { signal });
+      // Focus lookup: the server only offers substring search, so walk the matching
+      // pages (cancellable) until the exact authorized id is found or pages run out.
+      let token: string | undefined;
+      for (;;) {
+        const result = await mgmt.personaFleet.page(personaFleetQuery(filters, personaFocus, token), { signal });
+        if (result.rows.some((r) => r.personaId === personaFocus) || !result.nextPageToken || result.nextPageToken === token) {
+          return result;
+        }
+        token = result.nextPageToken;
+      }
+    },
     [scopeKey, pageToken ?? ""],
     { cacheKey: "oversight.personaFleet.page" },
   );
@@ -628,6 +641,8 @@ export const PersonaFleetPage = () => {
 
   const setParam = (key: string, value: string | null) => {
     const next = new URLSearchParams(searchParams);
+    // Persist the legacy ?tab= mapping as explicit ?data= before dropping tab.
+    if (key !== "data" && next.has("tab") && !next.has("data")) next.set("data", dataFilter);
     next.delete("tab");
     if (value === null) next.delete(key);
     else next.set(key, value);
