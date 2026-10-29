@@ -379,20 +379,20 @@ describe("live-only management page fallbacks", () => {
       expect(screen.getByTestId("persona-league-bottom-incomplete")).toHaveTextContent("population unknown");
     });
 
-    it("fleet: pending, error, then 20 paper rows is a scoped filtered-empty state", () => {
+    it("fleet: pending, error, then 20 server-classified test rows is a scoped filtered-empty state", () => {
       const view = renderPage(<OneRingCockpitPage />);
       expect(screen.queryByText(/no source health is claimed/)).not.toBeInTheDocument();
       expect(screen.queryByText(/No attention|noAttention/i)).not.toBeInTheDocument();
       rerenderWith(view, { personaFleet: { loading: false, error: new Error("x") } });
       expect(screen.queryByText(/no source health is claimed/)).not.toBeInTheDocument();
-      const paper = Array.from({ length: 20 }, (_, i) => ({ personaId: `f${i}`, personaName: `F${i}`, capitalMode: "paper" }));
+      const paper = Array.from({ length: 20 }, (_, i) => ({ personaId: `f${i}`, personaName: `F${i}`, capitalMode: "paper", dataScope: "test" }));
       rerenderWith(view, { personaFleet: { data: paper } });
       expect(screen.getByText(/20 fleet rows; none match the current production filter/)).toBeInTheDocument();
     });
 
-    it("fleet: label does not claim mode (live named Test excluded; missing mode admitted)", () => {
+    it("fleet: label does not claim mode (server test scope excluded; regular paper and unnamed admitted)", () => {
       apply({ personaFleet: { data: [
-        { personaId: "t1", personaName: "Test Live", capitalMode: "live" },
+        { personaId: "t1", personaName: "Acceptance Live", capitalMode: "live", dataScope: "test" },
         { personaId: "m1", personaName: "Normal" },
       ] } });
       renderPage(<OneRingCockpitPage />);
