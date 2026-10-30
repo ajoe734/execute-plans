@@ -1,0 +1,24 @@
+{
+  "task_id": "PERSONA-FLEET-FE-20261029",
+  "scope": "source only; no VM/SSH, product login, deployment, provider call, trade or hosted write",
+  "bff_contract": "pantheon docs/bff/execution-tasks/2026-10-29-persona-fleet/API_CONTRACT.md (merged c01bb731e, PERSONA-FLEET-BFF-20261029)",
+  "behavior": {
+    "request": "purpose=trading&data_scope=regular|test|unknown&archived=exclude|only&page_size=20&page_token=<opaque>; focused persona link uses q=<id>&purpose=all&data_scope=all&archived=include and walks next_page_token pages (cancellable) until the exact authorized id is found",
+    "classification": "server-owned persona_purpose/data_scope/classification_confirmed; FE name/id/capital-mode classifier removed",
+    "legacy_urls": {"?tab=production": "data=regular", "?tab=non-production": "data=test"},
+    "agora": "assistant drawer shows identity, readiness, capabilities, advisory/no-execution policy; no rank, ledger or paper_running",
+    "cache_and_races": "useV5Live query key = identity scope (tenant,user,baseUrl,mode) + cacheKey + [scope, page token]; react-query aborts superseded requests; page-token stack is reset on scope change (round-trip regression test); legacy ?tab= is persisted as explicit ?data= before archive/filter toggles",
+    "unknown_purpose": "normal fleet stays purpose=trading; explicit ?purpose=unknown toggle (Unconfirmed purpose) requests purpose=unknown so provenance-free unknown/unknown legacy records are reachable, with Purpose unconfirmed + Unconfirmed badges",
+    "archived_count": "button count comes from a page_size=1 archived=only probe under the same purpose/data/search filters (page_info total); archived rows are still fetched only on request",
+    "states": "initial loading, owner error, refresh-failed with as-of, true empty, filtered empty, missing total shown as not reported"
+  },
+  "verification": {
+    "tsc_app_and_agora": "pass",
+    "eslint_touched": "0 errors (pre-existing warnings only)",
+    "vitest_src_management_agora_bff-v1_i18n": "140 files / 1539 tests passed (incl. focus-beyond-first-page collision regression)",
+    "build": "vite production build succeeded via scripts/build-e2e-server.mjs (Playwright webServer); bare npm run build needs VITE_GCP_IDENTITY_API_KEY in env and was not run without it",
+    "playwright": "e2e/24 'pages through >100 server rows' passed in chromium (route-mocked, 133 rows, 7 pages)",
+    "known_unrelated": "e2e/24 'click-map smoke regression' fails at the performance-attribution link because its fixture has no telemetry (fixture/link-rule drift in code this task does not touch)"
+  },
+  "not_verified": ["hosted behavior", "second-identity privacy (server-enforced; covered by BFF tests)"]
+}

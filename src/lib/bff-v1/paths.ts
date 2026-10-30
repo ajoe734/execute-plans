@@ -187,11 +187,24 @@ export const paths = {
   mgmtPermissions: () => `${BASE}/management/permissions`,
   mgmtMemoryGovernance: () => `${BASE}/management/memory-governance`,
   mgmtConsultRules: () => `${BASE}/management/consult-rules`,
-  mgmtPersonaFleet: (filters: { q?: string; pageSize?: number } = {}) => {
+  mgmtPersonaFleet: (
+    filters: {
+      q?: string;
+      pageSize?: number;
+      pageToken?: string;
+      purpose?: string;
+      dataScope?: string;
+      archived?: string;
+    } = {},
+  ) => {
     const params = new URLSearchParams();
     const q = filters.q?.trim();
     if (q) params.set("q", q);
+    if (filters.purpose) params.set("purpose", filters.purpose);
+    if (filters.dataScope) params.set("data_scope", filters.dataScope);
+    if (filters.archived) params.set("archived", filters.archived);
     if (filters.pageSize !== undefined) params.set("page_size", String(filters.pageSize));
+    if (filters.pageToken) params.set("page_token", filters.pageToken);
     const query = params.toString();
     return `${BASE}/management/persona-fleet${query ? `?${query}` : ""}`;
   },

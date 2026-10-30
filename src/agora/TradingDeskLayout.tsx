@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/sheet";
 import { useIsNarrowViewport } from "./responsive";
 import { useAgoraWriteAccess } from "./useAgoraWriteAccess";
+import type { ServantProfile } from "@/lib/bff-v1/agora/servant";
 import { useServantStatus, type ServantStatusState } from "./useServantStatus";
 import "./responsive.css";
 
@@ -87,7 +88,7 @@ function tabFromPath(pathname: string): AgoraTab {
 const SERVANT_STATUS_LABEL: Record<string, string> = {
   active: "運作中",
   suspended: "已暫停",
-  paper_only: "僅模擬",
+  paper_only: "助理就緒",
   shadow_only: "僅影子",
   retired: "已退役",
 };
@@ -97,6 +98,17 @@ function servantStatusText(state: ServantStatusState): string {
   if (state.kind === "missing") return "尚未建立";
   if (state.kind === "error") return "狀態讀取失敗";
   return SERVANT_STATUS_LABEL[state.servant.status] ?? state.servant.status;
+}
+
+function servantCapabilityText(servant: ServantProfile): string {
+  const caps = servant.capability_summary;
+  const labels = [
+    caps?.can_ask && "提問",
+    caps?.can_research && "研究",
+    caps?.can_workshop && "工作坊",
+    caps?.can_shadow && "影子觀察",
+  ].filter((label): label is string => Boolean(label));
+  return labels.length > 0 ? labels.join("、") : "未回報任何能力";
 }
 
 function ServantProfileSummary({ state }: { state: ServantStatusState }) {
@@ -116,7 +128,13 @@ function ServantProfileSummary({ state }: { state: ServantStatusState }) {
       <p className="text-sm font-medium text-[#f0ece4]">{servant.display_name}</p>
       <p>狀態：{servantStatusText(state)}</p>
       <p className="font-mono">{servant.persona_id}</p>
-      <p>政策：僅限模擬（paper-only）、不具執行權限（execution_authority: {servant.policy.execution_authority}）</p>
+      <p>類型：顧問型助理（不是交易策略 Persona，無排名、無模擬帳本）</p>
+      <p>
+        就緒度：{servantStatusText(state)}
+        {servant.last_active_at ? `（最近活動 ${servant.last_active_at}）` : "（尚無活動紀錄）"}
+      </p>
+      <p data-testid="servant-capabilities">能力：{servantCapabilityText(servant)}</p>
+      <p>政策：不具交易、資金或 runtime 執行權限（execution_authority: {servant.policy.execution_authority}）</p>
     </div>
   );
 }

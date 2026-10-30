@@ -12,6 +12,7 @@ import {
   adaptHumanInboxDetail,
   adaptHumanInboxList,
   adaptManagementPersonaFleet,
+  adaptManagementPersonaFleetPage,
   adaptOperationsReadModel,
   adaptPersonaIntent,
   adaptPortfolioExposureMonitor,
@@ -1660,6 +1661,40 @@ describe("mgmt façade (PM-Live)", () => {
       evolutionEntryId: null,
       evolutionHref: null,
     });
+  });
+
+  it("builds explicit fleet scope, archive and page-token query parameters", () => {
+    expect(
+      paths.mgmtPersonaFleet({ purpose: "trading", dataScope: "test", archived: "exclude", pageSize: 20, pageToken: "tok/1" }),
+    ).toBe("/bff/management/persona-fleet?purpose=trading&data_scope=test&archived=exclude&page_size=20&page_token=tok%2F1");
+  });
+
+  it("adapts the fleet page envelope: server classification, totals and next token", () => {
+    const page = adaptManagementPersonaFleetPage({
+      data: {
+        items: [
+          { persona_id: "p-1", persona_purpose: "trading", data_scope: "unknown", classification_confirmed: false,
+            classification_source: { purpose: "metadata", data_scope: "none" }, archived: false, state: "draft" },
+          { persona_id: "servant-1", persona_purpose: "advisory_assistant", state: "advisory" },
+        ],
+        summary: { population: { authorized_total: 130, active_total: 120, archived_total: 10, by_purpose: { trading: 129 }, by_data_scope: { test: 3 } } },
+      },
+      page_info: { next_page_token: "20", total: 75, filtered_total: 75, page_size: 20 },
+    });
+    expect(page.rows.map((r) => [r.personaId, r.personaPurpose, r.dataScope, r.classificationConfirmed])).toEqual([
+      ["p-1", "trading", "unknown", false],
+      ["servant-1", "advisory_assistant", undefined, undefined],
+    ]);
+    expect(page.rows[0]?.classificationSource).toEqual({ purpose: "metadata", dataScope: "none" });
+    expect(page).toMatchObject({ nextPageToken: "20", total: 75, pageSize: 20 });
+    expect(page.population).toMatchObject({ authorizedTotal: 130, archivedTotal: 10, byDataScope: { test: 3 } });
+  });
+
+  it("reports an absent total and last page honestly instead of inventing zero", () => {
+    const page = adaptManagementPersonaFleetPage({ data: { items: [{ persona_id: "p-1" }] }, page_info: { next_page_token: null } });
+    expect(page.total).toBeUndefined();
+    expect(page.nextPageToken).toBeNull();
+    expect(page.population.archivedTotal).toBeUndefined();
   });
 
   it("management paths exist on paths catalog", () => {
