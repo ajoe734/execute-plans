@@ -246,8 +246,15 @@ describe("PersonaFleetPage", () => {
       const start = q.pageToken ? Number(q.pageToken) : 0;
       const slice = matches.slice(start, start + (q.pageSize ?? PAGE));
       const next = start + slice.length < matches.length ? String(start + slice.length) : null;
+      const archivedInScope = universe.filter((r) =>
+        r.archived
+        && !(q.purpose && q.purpose !== "all" && r.personaPurpose !== q.purpose)
+        && !(q.dataScope && q.dataScope !== "all" && r.dataScope !== q.dataScope)
+        && !(q.q && !`${r.personaId} ${r.personaName}`.toLowerCase().includes(q.q.toLowerCase())),
+      ).length;
       return fleetPage(slice, {
         total: matches.length,
+        filteredArchivedTotal: archivedInScope,
         nextPageToken: next,
         population: {
           authorizedTotal: universe.length,
@@ -384,6 +391,88 @@ describe("PersonaFleetPage", () => {
       await screen.findByRole("button", { name: "Archived (0)" });
     });
 
+    it("scoped archived count is independent of the returned page and issues no archived request on filtering", async () => {
+      const page = vi.spyOn(mgmt.personaFleet, "page").mockImplementation(async (q) => serve(q ?? {}));
+      renderFleet("/management/persona-fleet");
+      const regular = universe.filter((r) => r.archived && r.dataScope === "regular").length;
+      await screen.findByRole("button", { name: `Archived (${regular})` });
+      fireEvent.click(screen.getByRole("radio", { name: "Test / acceptance" }));
+      await screen.findByRole("button", { name: "Archived (0)" });
+      expect(page.mock.calls.every(([q]) => q?.archived === "exclude")).toBe(true);
+    });
+
+    it("keeps the scoped archived count across page changes and never requests archived rows while searching or filtering", async () => {
+      const page = vi.spyOn(mgmt.personaFleet, "page").mockImplementation(async (q) => serve(q ?? {}));
+      renderFleet("/management/persona-fleet");
+      const regular = universe.filter((r) => r.archived && r.dataScope === "regular").length;
+      await screen.findByRole("button", { name: `Archived (${regular})` });
+      fireEvent.click(screen.getByRole("button", { name: "Next" }));
+      await screen.findByText("Page 2");
+      expect(screen.getByRole("button", { name: `Archived (${regular})` })).toBeInTheDocument();
+      fireEvent.change(screen.getByRole("searchbox"), { target: { value: "p-012" } });
+      await screen.findByRole("button", { name: "Archived (1)" });
+      fireEvent.change(screen.getByRole("searchbox"), { target: { value: "p-000" } });
+      await screen.findByRole("button", { name: "Archived (0)" });
+      fireEvent.change(screen.getByRole("searchbox"), { target: { value: "" } });
+      await screen.findByRole("button", { name: `Archived (${regular})` });
+      fireEvent.click(screen.getByRole("radio", { name: "Test / acceptance" }));
+      await screen.findByText("Persona p-009");
+      expect(page.mock.calls.length).toBeGreaterThan(3);
+      expect(page.mock.calls.every(([q]) => q?.archived === "exclude")).toBe(true);
+    });
+
+    it("shows the unknown-scope archived count from the server for the authorized private scope", async () => {
+      vi.spyOn(mgmt.personaFleet, "page").mockImplementation(async (q) =>
+        fleetPage([universe[11]!], { total: 1, filteredArchivedTotal: q?.purpose === "unknown" ? 3 : 0, nextPageToken: null }));
+      renderFleet("/management/persona-fleet?data=unknown");
+      await screen.findByRole("button", { name: "Archived (0)" });
+      fireEvent.click(screen.getByRole("button", { name: "Unconfirmed purpose" }));
+      await screen.findByRole("button", { name: "Archived (3)" });
+    });
+
+    it.each([
+      ["null", null],
+      ["missing", undefined],
+    ])("renders an unknown archived count when the server metadata is %s, without a population fallback", async (_label, value) => {
+      const page = vi.spyOn(mgmt.personaFleet, "page").mockImplementation(async () =>
+        fleetPage([universe[0]!], {
+          total: 1,
+          filteredArchivedTotal: value as unknown as number | undefined,
+          nextPageToken: null,
+          population: { authorizedTotal: 130, activeTotal: 120, archivedTotal: 10, byPurpose: {}, byDataScope: {} },
+        }));
+      renderFleet("/management/persona-fleet");
+      await screen.findByRole("button", { name: "Archived (?)" });
+      expect(screen.queryByRole("button", { name: "Archived (10)" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Archived (0)" })).not.toBeInTheDocument();
+      expect(page.mock.calls.every(([q]) => q?.archived === "exclude")).toBe(true);
+    });
+
+    it("pages through multiple archived pages only after the user selects archived", async () => {
+      const archivedRows = Array.from({ length: 45 }, (_, i) =>
+        fleetRow(`a-${String(i).padStart(3, "0")}`, `Archived ${i}`, { personaPurpose: "trading", dataScope: "regular", state: "retired", archived: true }));
+      const page = vi.spyOn(mgmt.personaFleet, "page").mockImplementation(async (q) => {
+        if (q?.archived !== "only") return fleetPage([universe[0]!], { total: 1, filteredArchivedTotal: 45, nextPageToken: null });
+        const start = q.pageToken ? Number(q.pageToken) : 0;
+        const slice = archivedRows.slice(start, start + PAGE);
+        return fleetPage(slice, {
+          total: 45, filteredArchivedTotal: 45,
+          nextPageToken: start + slice.length < 45 ? String(start + slice.length) : null,
+        });
+      });
+      renderFleet("/management/persona-fleet");
+      const toggle = await screen.findByRole("button", { name: "Archived (45)" });
+      expect(page.mock.calls.every(([q]) => q?.archived === "exclude")).toBe(true);
+      fireEvent.click(toggle);
+      await screen.findByText("Archived 0");
+      fireEvent.click(screen.getByRole("button", { name: "Next" }));
+      await screen.findByText("Archived 20");
+      fireEvent.click(screen.getByRole("button", { name: "Next" }));
+      await screen.findByText("Archived 44");
+      const archivedCalls = page.mock.calls.filter(([q]) => q?.archived === "only");
+      expect(archivedCalls.map(([q]) => q?.pageToken)).toEqual([undefined, "20", "40"]);
+    });
+
     it("maps legacy ?tab=non-production to test data and never classifies by name", async () => {
       const page = vi.spyOn(mgmt.personaFleet, "page").mockImplementation(async (q) => serve(q ?? {}));
       renderFleet("/management/persona-fleet?tab=non-production");
@@ -397,8 +486,8 @@ describe("PersonaFleetPage", () => {
       renderFleet("/management/persona-fleet");
       const archivedTotal = universe.filter((r) => r.archived).length;
       const toggle = await screen.findByRole("button", { name: `Archived (${archivedTotal})` });
-      // only the size-1 count probe asks for archived; no archived rows are fetched until requested
-      expect(page.mock.calls.filter(([q]) => q?.archived !== "exclude").every(([q]) => q?.archived === "only" && q?.pageSize === 1)).toBe(true);
+      // the count comes from page metadata; no archived rows are requested until the user asks
+      expect(page.mock.calls.every(([q]) => q?.archived === "exclude")).toBe(true);
       fireEvent.click(toggle);
       await screen.findByText("Persona p-012");
       expect(page.mock.calls.at(-1)?.[0]).toMatchObject({ archived: "only", pageToken: undefined });
@@ -408,7 +497,6 @@ describe("PersonaFleetPage", () => {
       const resolvers: Array<() => void> = [];
       vi.spyOn(mgmt.personaFleet, "page").mockImplementation((q, opts) => new Promise((resolve) => {
         const result = serve(q ?? {});
-        if (q?.pageSize === 1) { resolve(result); return; } // archived-count probe
         resolvers.push(() => resolve(result));
         opts?.signal?.addEventListener("abort", () => resolve(result)); // late/aborted response still resolves
       }));

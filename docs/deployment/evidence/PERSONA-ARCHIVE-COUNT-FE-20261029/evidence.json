@@ -1,0 +1,11 @@
+{
+  "task": "PERSONA-ARCHIVE-COUNT-FE-20261029",
+  "scope": "source + local validation only; no deployment, hosted acceptance not claimed",
+  "change": "Removed archivedProbe/oversight.personaFleet.archivedCount; archived button count reads data.summary.filtered_archived_total via adaptManagementPersonaFleetPage (null/missing stays '?', no population fallback)",
+  "checks": {
+    "vitest PersonaFleetPage.test.tsx + management.test.ts": "93 passed, exit 0 (adds: count stable across page change, q/unknown/private scoped counts, null/missing => unknown, >1 archived pages only after explicit selection, zero archived=only requests during search/purpose/data filtering, adapter owner-failure null)",
+    "npm run typecheck:app": "exit 0",
+    "playwright e2e/24-persona-fleet-click-map.spec.ts --project=chromium --retries=0": "exit 1: 1 passed (>100-row paging), 1 failed (click-map smoke, line 531: performance attribution link missing). Failure is a pre-existing telemetry-fixture gap (fixture lacks trading telemetry, so the unchanged link guard suppresses the link); not caused by this change. Not all browser checks pass."
+  },
+  "hosted_acceptance": "deferred to PERSONA-FLEET-DEV-ACCEPTANCE-20261029"
+}
