@@ -72,7 +72,7 @@ describe("BFF 401 session-expiry signal & renewal transport", () => {
         return new Response(
           JSON.stringify({
             authenticated: true,
-            expires_at: "2026-11-03T07:00:00Z",
+            expires_at: "2026-11-04T07:00:00Z",
           }),
           { status: 200, headers: { "Content-Type": "application/json" } },
         );
@@ -121,7 +121,7 @@ describe("BFF 401 session-expiry signal & renewal transport", () => {
     expect(attempts.get("/bff/c")).toBe(2);
     expect(listener).not.toHaveBeenCalled();
     expect(refreshedListener).toHaveBeenCalledTimes(1);
-    expect(getRecordedSessionExpiry().expiresAtMs).toBe(Date.parse("2026-11-03T07:00:00Z"));
+    expect(getRecordedSessionExpiry().expiresAtMs).toBe(Date.parse("2026-11-04T07:00:00Z"));
     unsubRefreshed();
   });
 
@@ -137,7 +137,7 @@ describe("BFF 401 session-expiry signal & renewal transport", () => {
         return new Response(
           JSON.stringify({
             authenticated: true,
-            expires_at: "2026-11-03T07:00:00Z",
+            expires_at: "2026-11-04T07:00:00Z",
           }),
           { status: 200, headers: { "Content-Type": "application/json" } },
         );
@@ -235,5 +235,72 @@ describe("BFF 401 session-expiry signal & renewal transport", () => {
 
     clearSessionExpiry();
     expect(getRecordedSessionExpiry().expiresAtMs).toBeNull();
+  });
+
+  it("renews on cold page load when initial /bff/me returns 401 and establishes session without /auth redirect", async () => {
+    resetSessionTransportForTests();
+    let meAttempts = 0;
+    let refreshCalls = 0;
+    const nextExpiresAt = "2026-11-04T08:00:00Z";
+
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      const path = new URL(url, "https://x.test").pathname;
+      if (path === "/bff/auth/refresh") {
+        refreshCalls += 1;
+        return new Response(
+          JSON.stringify({
+            authenticated: true,
+            expires_at: nextExpiresAt,
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (path === "/bff/me") {
+        meAttempts += 1;
+        if (meAttempts === 1) {
+          return new Response(
+            JSON.stringify({ error: { code: "TOKEN_EXPIRED", message: "Access token expired" } }),
+            { status: 401, headers: { "Content-Type": "application/json" } },
+          );
+        }
+        return new Response(
+          JSON.stringify({
+            data: {
+              user: { id: "admintest" },
+              tenant: { id: "default" },
+              roles: ["operator"],
+              capabilities: ["agora.workshop.v1"],
+              session: {
+                authenticated: true,
+                session_kind: "cookie",
+                expires_at: nextExpiresAt,
+              },
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return new Response("{}", { status: 404 });
+    }) as typeof fetch;
+
+    const meResult = await bffFetch<{
+      data: {
+        user: { id: string };
+        session: { authenticated: boolean; session_kind: string; expires_at: string };
+      };
+    }>({
+      method: "GET",
+      path: "/bff/me",
+      mode: "live",
+      baseUrl: "https://x.test",
+    });
+
+    expect(refreshCalls).toBe(1);
+    expect(meAttempts).toBe(2);
+    expect(meResult.data.session.authenticated).toBe(true);
+    expect(meResult.data.user.id).toBe("admintest");
+    expect(listener).not.toHaveBeenCalled();
+    expect(getRecordedSessionExpiry().expiresAtMs).toBe(Date.parse(nextExpiresAt));
   });
 });

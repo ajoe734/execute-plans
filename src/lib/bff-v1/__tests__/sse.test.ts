@@ -204,7 +204,7 @@ describe("SD-AGC-04 — fetchSse transport", () => {
       if (url.endsWith("/bff/auth/refresh")) {
         refreshCalls += 1;
         return new Response(
-          JSON.stringify({ authenticated: true, expires_at: "2026-11-03T07:00:00Z" }),
+          JSON.stringify({ authenticated: true, expires_at: "2026-11-04T07:00:00Z" }),
           { status: 200, headers: { "Content-Type": "application/json" } },
         );
       }
@@ -274,7 +274,7 @@ describe("SD-AGC-04 — fetchSse transport", () => {
     const fetchMock = vi.fn(async () => {
       if (refreshShouldSucceed) {
         return new Response(
-          JSON.stringify({ authenticated: true, expires_at: "2026-11-03T07:00:00Z" }),
+          JSON.stringify({ authenticated: true, expires_at: "2026-11-04T07:00:00Z" }),
           { status: 200, headers: { "Content-Type": "application/json" } },
         );
       }

@@ -498,7 +498,7 @@ describe("openWorkshopStream", () => {
     vi.stubGlobal("EventSource", EventSourceMock);
 
     const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ authenticated: true, expires_at: "2026-11-03T07:00:00Z" }), {
+      new Response(JSON.stringify({ authenticated: true, expires_at: "2026-11-04T07:00:00Z" }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
       }),

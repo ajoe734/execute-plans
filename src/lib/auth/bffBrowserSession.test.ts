@@ -10,6 +10,7 @@ import {
   signedTenantId,
   verifyBffBrowserSession,
 } from "./bffBrowserSession";
+import { getRecordedSessionExpiry, resetSessionTransportForTests } from "./sessionExpiry";
 
 function session(input: {
   token?: string;
@@ -62,6 +63,7 @@ function readiness(operator = false, providerReady = true) {
 
 afterEach(() => {
   clearBffBrowserSession();
+  vi.unstubAllEnvs();
   vi.useRealTimers();
   vi.restoreAllMocks();
   window.localStorage.clear();
@@ -242,5 +244,87 @@ describe("strict browser BFF session bridge", () => {
       client_id: "client-id-test",
       client_secret: "client-secret-test",
     });
+  });
+
+  it("renews an expired 30m access cookie on cold page load via single-flight POST /bff/auth/refresh and retries /bff/me", async () => {
+    resetSessionTransportForTests();
+    clearAuthProvider();
+    vi.stubEnv("VITE_BFF_BASE_URL", "https://bff.example.test");
+
+    let meAttempts = 0;
+    let readinessAttempts = 0;
+    let refreshCalls = 0;
+    const nextExpiresAt = "2026-11-04T08:00:00Z";
+
+    const fetcher = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/bff/auth/refresh")) {
+        refreshCalls += 1;
+        return response({
+          authenticated: true,
+          expires_at: nextExpiresAt,
+          refresh_expires_at: "2026-12-03T07:30:00Z",
+        });
+      }
+      if (url.endsWith("/bff/me")) {
+        meAttempts += 1;
+        if (meAttempts === 1) {
+          return response({ error: { code: "TOKEN_EXPIRED", message: "Access token expired" } }, 401);
+        }
+        return response({
+          data: {
+            user: { id: "admintest" },
+            tenant: { id: "default" },
+            roles: ["operator"],
+            capabilities: ["agora.workshop.v1"],
+            session: {
+              authenticated: true,
+              session_kind: "cookie",
+              expires_at: nextExpiresAt,
+              refresh_expires_at: "2026-12-03T07:30:00Z",
+            },
+          },
+        });
+      }
+      if (url.endsWith("/bff/auth/readiness")) {
+        readinessAttempts += 1;
+        if (readinessAttempts === 1) {
+          return response({ error: { code: "TOKEN_EXPIRED", message: "Access token expired" } }, 401);
+        }
+        return response({
+          data: {
+            ready: true,
+            authReady: true,
+            providerReady: true,
+            sourceCommitSha: "1".repeat(40),
+            auth: {
+              mode: "strict",
+              strict: true,
+              stub: false,
+              sessionKind: "cookie",
+              operatorRoleReady: true,
+              interactionCapabilityReady: true,
+            },
+          },
+        });
+      }
+      return response({}, 404);
+    });
+
+    const verified = await verifyBffBrowserSession();
+
+    expect(refreshCalls).toBe(1);
+    expect(meAttempts).toBe(2);
+    expect(readinessAttempts).toBe(2);
+    expect(verified.identity).toMatchObject({
+      authenticated: true,
+      sessionKind: "cookie",
+      userId: "admintest",
+      tenantId: "default",
+      expiresAt: nextExpiresAt,
+    });
+    expect(verified.readiness.authReady).toBe(true);
+    expect(getRecordedSessionExpiry().expiresAtMs).toBe(Date.parse(nextExpiresAt));
+    expect(fetcher).toHaveBeenCalledTimes(5);
   });
 });

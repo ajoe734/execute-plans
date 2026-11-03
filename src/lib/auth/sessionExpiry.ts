@@ -1,5 +1,6 @@
 import { BffError } from "@/lib/bff-v1/errors";
 import { buildHeaders, getAuthProvider } from "@/lib/bff-v1/headers";
+import { liveStatus } from "@/lib/bff-v1/liveStatus";
 import { paths } from "@/lib/bff-v1/paths";
 import { readBffEnv } from "@/lib/bff-v1/runtimeEnv";
 
@@ -36,6 +37,7 @@ let renewalFetchFn: typeof fetch | undefined;
 let visibilityListenerAttached = false;
 
 const DEFAULT_PROACTIVE_LEAD_MS = 60_000;
+const MAX_TIMEOUT_MS = 2_147_483_647;
 
 export function onBffUnauthorized(listener: BffUnauthorizedListener): () => void {
   unauthorizedListeners.add(listener);
@@ -196,10 +198,11 @@ function scheduleProactiveRefresh(): void {
     return;
   }
   const remainingMs = recordedExpiresAtMs - now;
-  const leadMs = remainingMs > 0
-    ? Math.min(DEFAULT_PROACTIVE_LEAD_MS, Math.floor(remainingMs * 0.25))
-    : 0;
-  const delayMs = Math.max(0, remainingMs - leadMs);
+  if (remainingMs <= 0) {
+    return;
+  }
+  const leadMs = Math.min(DEFAULT_PROACTIVE_LEAD_MS, Math.floor(remainingMs * 0.25));
+  const delayMs = Math.min(MAX_TIMEOUT_MS, Math.max(0, remainingMs - leadMs));
 
   proactiveTimer = setTimeout(() => {
     proactiveTimer = null;
@@ -347,6 +350,8 @@ export async function refreshBffSession(options?: {
       }
 
       lastSuccessGeneration = currentGen;
+      renewalActive = true;
+      ensureVisibilityListener();
       try {
         const clone = typeof res.clone === "function" ? res.clone() : null;
         if (clone && typeof clone.text === "function") {
@@ -430,7 +435,6 @@ export async function bffSessionFetch(
   const isDevLoginEndpoint = cleanPath.endsWith("/bff/auth/dev-login");
   const isLogoutEndpoint = cleanPath.endsWith(paths.logout());
   const isMeEndpoint = cleanPath.endsWith(paths.me());
-  const isAuthReadinessEndpoint = cleanPath.endsWith(paths.authReadiness());
 
   const baseUrl = options?.baseUrl ?? extractBaseUrlFromRequestUrl(url);
   const generationAtStart = refreshGeneration;
@@ -445,21 +449,27 @@ export async function bffSessionFetch(
     return res;
   }
 
-  const isInitialAuthProbe = (isMeEndpoint || isAuthReadinessEndpoint) && !renewalActive;
+  const isMockModeWriteGateProbe =
+    isMeEndpoint &&
+    !renewalActive &&
+    liveStatus.get().mode !== "live" &&
+    readBffEnv().VITE_BFF_MODE !== "live" &&
+    readBffEnv().VITE_BFF_REAL_WRITES === "true";
+
   if (
     res.status !== 401 ||
     isRefreshEndpoint ||
     isDevLoginEndpoint ||
     isLogoutEndpoint ||
-    isInitialAuthProbe
+    isMockModeWriteGateProbe
   ) {
     return res;
   }
 
   let refreshed = false;
-  if (!refreshInFlight && lastSuccessGeneration > generationAtStart) {
+  if (!refreshInFlight && refreshGeneration > generationAtStart) {
     // Another concurrent request already completed a refresh while this request was in flight.
-    refreshed = true;
+    refreshed = lastSuccessGeneration > generationAtStart;
   } else {
     refreshed = await refreshBffSession({
       baseUrl,

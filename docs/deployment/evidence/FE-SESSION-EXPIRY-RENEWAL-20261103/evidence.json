@@ -9,6 +9,8 @@
     "src/lib/auth/AuthProvider.tsx",
     "src/lib/auth/AuthProvider.test.tsx",
     "src/lib/auth/bffBrowserSession.ts",
+    "src/lib/auth/bffBrowserSession.test.ts",
+    "src/lib/auth/devAuthBootstrap.test.tsx",
     "src/lib/auth/devLogin.ts",
     "src/lib/auth/devLoginHelper.ts",
     "src/lib/v4/session/me.ts",
@@ -35,7 +37,7 @@
   ],
   "behavior": {
     "single_transport": "Every BFF request under src/lib/bff-v1 routes through bffSessionFetch in src/lib/auth/sessionExpiry.ts (extending PR #897 without a second 401 mechanism). Enforced by src/lib/bff-v1/__tests__/sessionTransportCoverage.test.ts.",
-    "single_flight_refresh_and_retry": "On 401, bffSessionFetch executes a single-flight POST /bff/auth/refresh (with credentials: include) and retries the original request once with identical headers and Idempotency-Key.",
+    "single_flight_refresh_and_retry": "On 401 (including initial cold-page-load /bff/me and /bff/auth/readiness probes when the 30-min access cookie expired within the 30-day refresh cookie lifetime), bffSessionFetch executes a single-flight POST /bff/auth/refresh (with credentials: include) and retries the original request once with identical headers and Idempotency-Key.",
     "proactive_and_visibility_renewal": "Seeds access expires_at and refresh_expires_at from /bff/me, /bff/auth/dev-login, and /bff/auth/refresh payloads; schedules a proactive refresh timer before expires_at and refreshes on document visibilitychange (visible).",
     "refresh_failure_redirect": "When refresh fails (confirmed: true), AuthProvider immediately clears bffSession, clearScopedQueries, and useMe state so ProtectedRoute redirects to /auth?reason=auth-required&from=... without showing Transport Unavailable or Source unavailable.",
     "auth_notice_and_topbar": "Auth.tsx renders localized session-expired notice (zh-TW 登入已過期 / en-US Session expired) and returns to from path after login; TopBar clears operator identity immediately on session expiry.",
@@ -43,8 +45,8 @@
     "logout": "signOut calls POST /bff/logout via logoutBffBrowserSession and clears session expiry tracking and local session state."
   },
   "verification": {
-    "vitest": "68 test files, 725 tests passed (including sessionTransportCoverage.test.ts, sessionExpiry.test.ts, sse.test.ts, workshops.test.ts, AuthProvider.test.tsx, Auth.test.tsx, TopBar.test.tsx)",
-    "tsc": "tsc --noEmit -p tsconfig.app.json: exit 0",
+    "vitest": "68 test files, 728 tests passed (including sessionTransportCoverage.test.ts, sessionExpiry.test.ts, bffBrowserSession.test.ts, devAuthBootstrap.test.tsx, sse.test.ts, workshops.test.ts, AuthProvider.test.tsx, Auth.test.tsx, TopBar.test.tsx)",
+    "tsc": "tsc --noEmit: exit 0",
     "eslint": "0 errors on touched files"
   }
 }
