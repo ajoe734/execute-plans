@@ -1,0 +1,15 @@
+{
+  "task_id": "FE-SSE-RECONNECT-AFTER-TRANSIENT-REFRESH-20261103",
+  "root_cause": "liveSse.ts and agora/workshops.ts EventSource pre-open error handlers called refreshBffSession and only reconnected on refreshed=true. Since #901 a transient refresh failure (404/5xx/network) returns false without logout, so the stream stayed dead until reload.",
+  "fix": [
+    "sessionExpiry.ts: new refreshBffSessionOutcome() returning refreshed | auth_rejected | transient; refreshBffSession() is a boolean wrapper (unchanged behavior).",
+    "liveSse.ts: pre-open failure + transient refresh -> backoff reconnect using module attempt counter; auth_rejected -> no reconnect; post-open drops still skip refresh.",
+    "workshops.ts: post-open drop -> backoff reconnect without refresh; pre-open failure -> refresh, onError still reported, backoff reconnect on transient, none on 401/403. Attempt resets on open/refresh success; timer cleared on cleanup."
+  ],
+  "bff_code_changed": false,
+  "verification": {
+    "vitest": "npx vitest run src/lib/bff-v1 src/lib/auth: 64 files, 671 tests passed (new: sse.test.ts x2, workshops.test.ts x3 covering unreachable-then-reachable, growing backoff, 401/403 no reconnect, post-open no refresh)",
+    "tsc": "npx tsc --noEmit -p tsconfig.app.json clean",
+    "playwright": "e2e/02-control-room, 17-a11y-v5, 18-perf chromium: 15 passed, 2 skipped (pre-existing)"
+  }
+}

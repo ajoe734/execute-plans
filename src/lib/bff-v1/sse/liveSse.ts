@@ -23,7 +23,7 @@ import { paths } from "../paths";
 import {
   bffSessionFetch,
   onBffSessionRefreshed,
-  refreshBffSession,
+  refreshBffSessionOutcome,
 } from "@/lib/auth/sessionExpiry";
 
 let current: { close: () => void } | null = null;
@@ -360,16 +360,21 @@ export function connectLiveSse(init: SseConnectInit = {}): () => void {
       }
       return;
     }
-    void refreshBffSession({
+    void refreshBffSessionOutcome({
       baseUrl: base,
       reportOnFailure: true,
-    }).then((refreshed) => {
+    }).then((outcome) => {
       if (closedByCaller || !isLiveModeConfigured()) return;
-      if (refreshed) {
+      if (outcome === "refreshed") {
         attempt = 0;
         clearTimer();
         connectLiveSse(init);
+      } else if (outcome === "transient") {
+        // BFF unreachable / restarting: keep retrying with growing backoff.
+        clearTimer();
+        reconnectTimer = setTimeout(() => connectLiveSse(init), nextBackoffMs(attempt++, true));
       }
+      // auth_rejected: session-expired flow owns recovery; no reconnect.
     });
   };
   es.addEventListener("error", handleError);
