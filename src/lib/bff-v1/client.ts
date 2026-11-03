@@ -5,6 +5,7 @@ import { buildHeaders, isMutation, BFF_API_VERSION } from "./headers";
 import { BffError, makeBffError, normalizeBffErrorEnvelope } from "./errors";
 import { liveStatus, type BffMode } from "./liveStatus";
 import { readBffEnv } from "./runtimeEnv";
+import { reportBffUnauthorized } from "@/lib/auth/sessionExpiry";
 
 export type { BffMode };
 
@@ -148,6 +149,7 @@ export async function bffFetch<T = unknown>(req: BffRequest): Promise<T> {
   const text = await res.text();
   const json: unknown = text ? safeJson(text) : undefined;
   if (!res.ok) {
+    if (res.status === 401) reportBffUnauthorized();
     const envelope = normalizeBffErrorEnvelope(json, res.status, headers["X-Correlation-Id"]);
     if (envelope) {
       throw new BffError(res.status, envelope);

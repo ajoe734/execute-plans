@@ -23,6 +23,7 @@ import { postDevLogin } from "./devLogin";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { clearScopedQueries } from "@/lib/bff-v1/queryKeys";
 import { BffError } from "@/lib/bff-v1/errors";
+import { onBffUnauthorized } from "./sessionExpiry";
 
 function useOptionalQueryClient(): QueryClient | null {
   try {
@@ -74,7 +75,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [bffError, setBffError] = useState<Error | null>(null);
   const [loading, setLoading] = useState(true);
   const sessionRef = useRef<GcpIdentitySession | null>(null);
+  const bffSessionRef = useRef<VerifiedBffBrowserSession | null>(null);
+  const expiryCheckRunning = useRef(false);
   const syncVersion = useRef(0);
+
+  useEffect(() => {
+    bffSessionRef.current = bffSession;
+  }, [bffSession]);
 
   const applyUser = useCallback(async (user: User | null, forceRefresh = false) => {
     const version = ++syncVersion.current;
@@ -205,6 +212,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       clearBffBrowserSession();
     };
   }, [applyUser]);
+
+  // An expired dev-cookie session otherwise keeps the signed-in header while
+  // every page read fails. Re-check once; only a genuine rejection signs out.
+  useEffect(() => onBffUnauthorized(() => {
+    if (!isDevLoginHost() || !bffSessionRef.current || expiryCheckRunning.current) return;
+    expiryCheckRunning.current = true;
+    const version = syncVersion.current;
+    void verifyBffBrowserSession()
+      .catch((error: unknown) => {
+        if (syncVersion.current !== version) return;
+        const normalized = error instanceof Error ? error : new Error(String(error));
+        if (isTransientVerificationError(normalized)) return;
+        ++syncVersion.current;
+        sessionRef.current = null;
+        clearBffBrowserSession();
+        void clearScopedQueries(queryClient ?? undefined);
+        setSession(null);
+        setBffSession(null);
+        setBffError(null);
+        setLoading(false);
+      })
+      .finally(() => {
+        expiryCheckRunning.current = false;
+      });
+  }), [queryClient]);
 
   const retryBffSession = useCallback(async () => {
     const current = sessionRef.current;
