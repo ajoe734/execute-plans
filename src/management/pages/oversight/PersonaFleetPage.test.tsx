@@ -1047,4 +1047,55 @@ describe("PersonaFleetPage", () => {
       "/management/personas/persona-draft/onboarding",
     );
   });
+
+  it("omits raw none review tokens in the rank cell while keeping non-none review labels", () => {
+    mockFleet({
+      data: [
+        fleetRow("persona-none-review", "None Review Persona", {
+          owner: "pantheon-dev-operator-a",
+          capitalMode: "paper",
+          reviewType: "none",
+          reviewStatus: "none",
+          personaPurpose: "unknown",
+          dataScope: "regular",
+          isMarketPersonaDefault: true,
+          seedRow: true,
+        }),
+        fleetRow("persona-real-review", "Real Review Persona", {
+          capitalMode: "paper",
+          reviewType: "none",
+          reviewStatus: "pending_human_review",
+        }),
+      ],
+      loading: false,
+      refresh: vi.fn(),
+    });
+
+    renderFleet("/management/persona-fleet");
+
+    const table = screen.getByRole("table");
+    const thead = table.querySelector("thead");
+    const headerCells = table.querySelectorAll("thead th");
+    const noneRow = screen.getByText("None Review Persona").closest("tr")!;
+    const noneRowCells = noneRow.querySelectorAll("td");
+
+    expect(thead).toHaveClass("sticky", "top-0", "z-30");
+    expect(headerCells[0]).toHaveClass("sticky", "left-0", "z-40", "min-w-[280px]");
+    expect(headerCells[1]).toHaveClass("min-w-[180px]", "whitespace-nowrap");
+    expect(noneRowCells[0]).toHaveClass("sticky", "left-0", "z-10", "min-w-[280px]");
+    expect(noneRowCells[1]).toHaveClass("min-w-[180px]", "whitespace-nowrap");
+    expect(noneRowCells[1]).toHaveTextContent("pantheon-dev-operator-a");
+
+    expect(screen.getByTestId("fleet-data-scope-persona-none-review")).toHaveClass("shrink-0", "whitespace-nowrap");
+    expect(screen.getByTestId("fleet-purpose-persona-none-review")).toHaveClass("shrink-0", "whitespace-nowrap");
+    expect(screen.getByText("Seed Fixture")).toHaveClass("shrink-0", "whitespace-nowrap");
+
+    const noneRankCell = noneRowCells[5]!;
+    expect(noneRankCell).toHaveTextContent("—");
+    expect(noneRankCell).not.toHaveTextContent(/none/i);
+
+    const realRow = screen.getByText("Real Review Persona").closest("tr")!;
+    const realRankCell = realRow.querySelectorAll("td")[5]!;
+    expect(realRankCell).toHaveTextContent("pending human review");
+  });
 });

@@ -68,6 +68,8 @@ const MOCK_FLEET_ROWS = [
     autonomy: "high",
     state: "paper_running",
     perfDelta: 0.123,
+    has_trading_telemetry: true,
+    hasTradingTelemetry: true,
     lastMutationKind: "formal_mutation",
     mutation_entry_id: "evo-dec-formal",
     mutationEntryId: "evo-dec-formal",
@@ -607,6 +609,67 @@ test.describe("MGMT-OPS-010 Persona Fleet Click-Map Regression", () => {
     await page.goto(frontendUrl("/management/persona-fleet"), { waitUntil: "domcontentloaded", timeout: 30_000 });
     const pager = page.getByTestId("persona-fleet-pager");
     await expect(pager).toContainText(new RegExp(`(of|共) ${PAGED_FLEET_ROWS.filter((r) => (r as { data_scope?: string }).data_scope === "regular").length}`), { timeout: 15_000 });
+
+    const headerStackCheck = await page.evaluate(() => {
+      const container = document.querySelector('[data-testid="persona-fleet-table-scroll"]');
+      const viewport =
+        container?.querySelector<HTMLElement>('[data-management-table-scrollbar="native"]') ??
+        (container as HTMLElement | null);
+      if (!viewport) return { ok: false, reason: "missing-viewport" };
+
+      viewport.scrollTop = 220;
+      viewport.scrollLeft = 260;
+
+      const headerCells = Array.from(viewport.querySelectorAll<HTMLTableCellElement>("thead th"));
+      const personaHeader = headerCells[0];
+      if (!personaHeader) return { ok: false, reason: "missing-persona-header" };
+
+      const viewportRect = viewport.getBoundingClientRect();
+      const personaRect = personaHeader.getBoundingClientRect();
+      const personaCenterX = personaRect.left + personaRect.width / 2;
+      const personaCenterY = personaRect.top + personaRect.height / 2;
+      const personaHit = document.elementFromPoint(personaCenterX, personaCenterY);
+      const personaHeaderTopmost = Boolean(
+        personaHit && (personaHeader === personaHit || personaHeader.contains(personaHit)),
+      );
+
+      const otherHeader = headerCells.slice(1).find((th) => {
+        const rect = th.getBoundingClientRect();
+        const centerX = rect.left + rect.width / 2;
+        return rect.left >= personaRect.right && centerX > personaRect.right + 4 && centerX < viewportRect.right - 4;
+      });
+      if (!otherHeader) {
+        return {
+          ok: false,
+          reason: "missing-visible-other-header",
+          scrollTop: viewport.scrollTop,
+          scrollLeft: viewport.scrollLeft,
+        };
+      }
+      const otherRect = otherHeader.getBoundingClientRect();
+      const otherCenterX = otherRect.left + otherRect.width / 2;
+      const otherCenterY = otherRect.top + otherRect.height / 2;
+      const otherHit = document.elementFromPoint(otherCenterX, otherCenterY);
+      const otherHeaderTopmost = Boolean(
+        otherHit && (otherHeader === otherHit || otherHeader.contains(otherHit)),
+      );
+
+      return {
+        ok: viewport.scrollTop > 0 && viewport.scrollLeft > 0 && personaHeaderTopmost && otherHeaderTopmost,
+        scrollTop: viewport.scrollTop,
+        scrollLeft: viewport.scrollLeft,
+        personaHeaderTopmost,
+        otherHeaderTopmost,
+        personaHitTag: personaHit?.tagName ?? null,
+        otherHitTag: otherHit?.tagName ?? null,
+      };
+    });
+    expect(headerStackCheck.scrollTop).toBeGreaterThan(0);
+    expect(headerStackCheck.scrollLeft).toBeGreaterThan(0);
+    expect(headerStackCheck.personaHeaderTopmost).toBe(true);
+    expect(headerStackCheck.otherHeaderTopmost).toBe(true);
+    expect(headerStackCheck.ok).toBe(true);
+
     await expect(page.getByRole("button", { name: /^(Previous|上一頁)$/ })).toBeDisabled();
     const next = page.getByRole("button", { name: /^(Next|下一頁)$/ });
     for (let i = 0; i < 6; i += 1) {
