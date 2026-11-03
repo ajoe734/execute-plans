@@ -23,7 +23,9 @@ export interface SessionExpiryInfo {
 const unauthorizedListeners = new Set<BffUnauthorizedListener>();
 const refreshedListeners = new Set<() => void>();
 
-let refreshInFlight: Promise<boolean> | null = null;
+export type BffRefreshOutcome = "refreshed" | "auth_rejected" | "transient";
+
+let refreshInFlight: Promise<BffRefreshOutcome> | null = null;
 let refreshGeneration = 0;
 let lastSuccessGeneration = 0;
 let lastKnownBaseUrl = "";
@@ -306,6 +308,16 @@ export async function refreshBffSession(options?: {
   fetchFn?: typeof fetch;
   reportOnFailure?: boolean;
 }): Promise<boolean> {
+  return (await refreshBffSessionOutcome(options)) === "refreshed";
+}
+
+/** Like `refreshBffSession`, but distinguishes a confirmed 401/403 rejection
+ *  from a transient failure (404 / 5xx / network error). */
+export async function refreshBffSessionOutcome(options?: {
+  baseUrl?: string;
+  fetchFn?: typeof fetch;
+  reportOnFailure?: boolean;
+}): Promise<BffRefreshOutcome> {
   if (refreshInFlight) {
     return refreshInFlight;
   }
@@ -318,9 +330,9 @@ export async function refreshBffSession(options?: {
   refreshGeneration += 1;
   const currentGen = refreshGeneration;
 
-  const task = (async (): Promise<boolean> => {
+  const task = (async (): Promise<BffRefreshOutcome> => {
     if (typeof fetcher !== "function") {
-      return false;
+      return "transient";
     }
 
     try {
@@ -338,7 +350,7 @@ export async function refreshBffSession(options?: {
           clearSessionExpiry();
           reportBffUnauthorized({ confirmed: true });
         }
-        return false;
+        return isAuthFailure ? "auth_rejected" : "transient";
       }
 
       lastSuccessGeneration = currentGen;
@@ -359,10 +371,10 @@ export async function refreshBffSession(options?: {
         // Ignore non-JSON or consumed bodies on mock responses.
       }
       notifySessionRefreshed();
-      return true;
+      return "refreshed";
     } catch {
       // Network error or timeout: transient, never a session expiry.
-      return false;
+      return "transient";
     } finally {
       refreshInFlight = null;
     }

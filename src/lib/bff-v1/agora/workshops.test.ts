@@ -611,3 +611,162 @@ describe("openWorkshopStream", () => {
   });
 });
 
+
+describe("openWorkshopStream transient refresh failure", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    resetSessionTransportForTests();
+  });
+
+  it("reports onError and reconnects with backoff when refresh fails transiently before open", async () => {
+    vi.useFakeTimers();
+    resetSessionTransportForTests();
+    clearAuthProvider();
+    vi.mocked(detectBaseUrl).mockReturnValue("https://api.dev.mvl-cap.tw");
+    const sources: Array<{
+      url: string;
+      close: ReturnType<typeof vi.fn>;
+      onerror: ((e: Event) => void) | null;
+      listeners: Record<string, () => void>;
+      addEventListener: (type: string, fn: () => void) => void;
+    }> = [];
+    vi.stubGlobal(
+      "EventSource",
+      vi.fn((url: string) => {
+        const listeners: Record<string, () => void> = {};
+        const instance = {
+          url,
+          close: vi.fn(),
+          onerror: null,
+          listeners,
+          addEventListener: (type: string, fn: () => void) => {
+            listeners[type] = fn;
+          },
+        };
+        sources.push(instance);
+        return instance;
+      }),
+    );
+
+    let bffUp = false;
+    const fetchMock = vi.fn(async () => {
+      if (!bffUp) throw new TypeError("network down");
+      return new Response(JSON.stringify({ authenticated: true }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const onError = vi.fn();
+    const cleanup = openWorkshopStream("ws-001", undefined, { onError });
+    sources[0].onerror?.(new Event("error"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(sources).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(1_300);
+    expect(sources).toHaveLength(2);
+
+    // still down: backoff grows (~2s)
+    sources[1].onerror?.(new Event("error"));
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(sources).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(1_600);
+    expect(sources).toHaveLength(3);
+    expect(onError).toHaveBeenCalledTimes(2);
+
+    // BFF back: refresh succeeds and reconnects immediately
+    bffUp = true;
+    sources[2].onerror?.(new Event("error"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(sources).toHaveLength(4);
+
+    cleanup();
+  });
+
+  it("reconnects with backoff after an open stream drops, without calling refresh", async () => {
+    vi.useFakeTimers();
+    resetSessionTransportForTests();
+    clearAuthProvider();
+    vi.mocked(detectBaseUrl).mockReturnValue("https://api.dev.mvl-cap.tw");
+    const sources: Array<{
+      url: string;
+      close: ReturnType<typeof vi.fn>;
+      onerror: ((e: Event) => void) | null;
+      listeners: Record<string, () => void>;
+      addEventListener: (type: string, fn: () => void) => void;
+    }> = [];
+    vi.stubGlobal(
+      "EventSource",
+      vi.fn((url: string) => {
+        const listeners: Record<string, () => void> = {};
+        const instance = {
+          url,
+          close: vi.fn(),
+          onerror: null,
+          listeners,
+          addEventListener: (type: string, fn: () => void) => {
+            listeners[type] = fn;
+          },
+        };
+        sources.push(instance);
+        return instance;
+      }),
+    );
+
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const cleanup = openWorkshopStream("ws-001");
+    sources[0].listeners.open?.();
+    sources[0].onerror?.(new Event("error"));
+    await vi.advanceTimersByTimeAsync(1_300);
+    expect(sources).toHaveLength(2);
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    cleanup();
+  });
+
+  it("does not reconnect when refresh is rejected with 403", async () => {
+    vi.useFakeTimers();
+    resetSessionTransportForTests();
+    clearAuthProvider();
+    vi.mocked(detectBaseUrl).mockReturnValue("https://api.dev.mvl-cap.tw");
+    const sources: Array<{
+      url: string;
+      close: ReturnType<typeof vi.fn>;
+      onerror: ((e: Event) => void) | null;
+      listeners: Record<string, () => void>;
+      addEventListener: (type: string, fn: () => void) => void;
+    }> = [];
+    vi.stubGlobal(
+      "EventSource",
+      vi.fn((url: string) => {
+        const listeners: Record<string, () => void> = {};
+        const instance = {
+          url,
+          close: vi.fn(),
+          onerror: null,
+          listeners,
+          addEventListener: (type: string, fn: () => void) => {
+            listeners[type] = fn;
+          },
+        };
+        sources.push(instance);
+        return instance;
+      }),
+    );
+
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 403 })));
+
+    const onError = vi.fn();
+    const cleanup = openWorkshopStream("ws-001", undefined, { onError });
+    sources[0].onerror?.(new Event("error"));
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(sources).toHaveLength(1);
+    expect(onError).toHaveBeenCalled();
+
+    cleanup();
+  });
+});

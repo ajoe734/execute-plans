@@ -6,7 +6,8 @@
 import { bffFetch, detectBaseUrl } from "../client";
 import { getAuthProvider } from "../headers";
 import { fetchSse } from "../sse/liveSse";
-import { refreshBffSession } from "@/lib/auth/sessionExpiry";
+import { nextBackoffMs } from "../sse/protocol";
+import { refreshBffSessionOutcome } from "@/lib/auth/sessionExpiry";
 
 import type {
   StrategyWorkshop,
@@ -504,6 +505,8 @@ export function openWorkshopStream(
   let closed = false;
   let currentLastEventId = options?.lastEventId;
   let source: EventSource | null = null;
+  let attempt = 0;
+  let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
   const buildStreamUrl = () => {
     const q = currentLastEventId ? `?last_event_id=${encodeURIComponent(currentLastEventId)}` : "";
@@ -514,11 +517,12 @@ export function openWorkshopStream(
     if (closed) return;
     const es = new EventSource(buildStreamUrl(), { withCredentials: true });
     source = es;
-    if (options?.onOpen) {
-      es.addEventListener("open", () => {
-        if (!closed) options.onOpen?.();
-      });
-    }
+    let everOpened = false;
+    es.addEventListener("open", () => {
+      everOpened = true;
+      attempt = 0;
+      if (!closed) options?.onOpen?.();
+    });
     let errorHandled = false;
     const handleError = () => {
       if (closed || errorHandled) return;
@@ -528,16 +532,27 @@ export function openWorkshopStream(
       } catch {
         // Ignore close errors.
       }
-      void refreshBffSession({
+      const scheduleBackoff = () => {
+        if (reconnectTimer) clearTimeout(reconnectTimer);
+        reconnectTimer = setTimeout(connectEventSource, nextBackoffMs(attempt++, true));
+      };
+      if (everOpened) {
+        // Healthy stream dropped: reconnect with backoff, no refresh probe.
+        scheduleBackoff();
+        return;
+      }
+      void refreshBffSessionOutcome({
         baseUrl,
         reportOnFailure: true,
-      }).then((refreshed) => {
+      }).then((outcome) => {
         if (closed) return;
-        if (refreshed) {
+        if (outcome === "refreshed") {
+          attempt = 0;
           connectEventSource();
           return;
         }
         options?.onError?.(new Error("EventSource connection error"));
+        if (outcome === "transient") scheduleBackoff();
       });
     };
     es.addEventListener("error", handleError);
@@ -562,6 +577,7 @@ export function openWorkshopStream(
   connectEventSource();
   return () => {
     closed = true;
+    if (reconnectTimer) clearTimeout(reconnectTimer);
     try {
       source?.close();
     } catch {

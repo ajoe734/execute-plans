@@ -315,3 +315,129 @@ describe("SD-AGC-04 — fetchSse transport", () => {
   });
 });
 
+
+describe("transient refresh failure reconnect (cookie EventSource)", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    resetSessionTransportForTests();
+    liveStatus._reset();
+  });
+
+  it("reconnects with growing backoff while the BFF is unreachable, then resumes", async () => {
+    vi.useFakeTimers();
+    resetSessionTransportForTests();
+    clearAuthProvider();
+    liveStatus._reset({ mode: "live", effective: "live", baseUrl: "https://bff.example.test" });
+    const unauthorizedListener = vi.fn();
+    const unsub = onBffUnauthorized(unauthorizedListener);
+    const sources: Array<{
+      url: string;
+      close: ReturnType<typeof vi.fn>;
+      onerror: ((e: Event) => void) | null;
+      listeners: Record<string, () => void>;
+      addEventListener: (type: string, fn: () => void) => void;
+    }> = [];
+    vi.stubGlobal(
+      "EventSource",
+      vi.fn((url: string) => {
+        const listeners: Record<string, () => void> = {};
+        const instance = {
+          url,
+          close: vi.fn(),
+          onerror: null,
+          listeners,
+          addEventListener: (type: string, fn: () => void) => {
+            listeners[type] = fn;
+          },
+        };
+        sources.push(instance);
+        return instance;
+      }),
+    );
+
+    let bffUp = false;
+    const fetchMock = vi.fn(async () => {
+      if (!bffUp) throw new TypeError("network down");
+      return new Response(JSON.stringify({ authenticated: true }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const close = connectLiveSse({ channels: ["strategy"] });
+    expect(sources).toHaveLength(1);
+
+    sources[0].onerror?.(new Event("error"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(sources).toHaveLength(1);
+    // first backoff is ~1s (jitter 0.8-1.2x)
+    await vi.advanceTimersByTimeAsync(1_300);
+    expect(sources).toHaveLength(2);
+
+    // second pre-open failure: backoff grows (~2s), no tight loop
+    sources[1].onerror?.(new Event("error"));
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(sources).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(1_600);
+    expect(sources).toHaveLength(3);
+
+    // BFF back: the next pre-open error refreshes and reconnects immediately
+    bffUp = true;
+    sources[2].onerror?.(new Event("error"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(sources).toHaveLength(4);
+    expect(unauthorizedListener).not.toHaveBeenCalled();
+
+    unsub();
+    close();
+  });
+
+  it("does not reconnect when refresh is rejected with 401", async () => {
+    vi.useFakeTimers();
+    resetSessionTransportForTests();
+    clearAuthProvider();
+    liveStatus._reset({ mode: "live", effective: "live", baseUrl: "https://bff.example.test" });
+    const unauthorizedListener = vi.fn();
+    const unsub = onBffUnauthorized(unauthorizedListener);
+    const sources: Array<{
+      url: string;
+      close: ReturnType<typeof vi.fn>;
+      onerror: ((e: Event) => void) | null;
+      listeners: Record<string, () => void>;
+      addEventListener: (type: string, fn: () => void) => void;
+    }> = [];
+    vi.stubGlobal(
+      "EventSource",
+      vi.fn((url: string) => {
+        const listeners: Record<string, () => void> = {};
+        const instance = {
+          url,
+          close: vi.fn(),
+          onerror: null,
+          listeners,
+          addEventListener: (type: string, fn: () => void) => {
+            listeners[type] = fn;
+          },
+        };
+        sources.push(instance);
+        return instance;
+      }),
+    );
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("{}", { status: 401 })),
+    );
+
+    const close = connectLiveSse({ channels: ["strategy"] });
+    sources[0].onerror?.(new Event("error"));
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(sources).toHaveLength(1);
+    expect(unauthorizedListener).toHaveBeenCalledWith(expect.objectContaining({ confirmed: true }));
+
+    unsub();
+    close();
+  });
+});
