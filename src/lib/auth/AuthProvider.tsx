@@ -23,7 +23,12 @@ import { postDevLogin } from "./devLogin";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { clearScopedQueries } from "@/lib/bff-v1/queryKeys";
 import { BffError } from "@/lib/bff-v1/errors";
-import { onBffUnauthorized } from "./sessionExpiry";
+import {
+  clearSessionExpiry,
+  onBffUnauthorized,
+  recordSessionExpiry,
+  setSessionRenewalActive,
+} from "./sessionExpiry";
 
 function useOptionalQueryClient(): QueryClient | null {
   try {
@@ -141,6 +146,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const verified = await verifyBffBrowserSession();
       if (syncVersion.current !== version) return;
       sessionRef.current = null;
+      bffSessionRef.current = verified;
+      setSessionRenewalActive(true);
+      if (verified.identity.expiresAt || verified.identity.refreshExpiresAt) {
+        recordSessionExpiry({
+          expiresAt: verified.identity.expiresAt,
+          refreshExpiresAt: verified.identity.refreshExpiresAt,
+        });
+      }
       setSession(null);
       setBffSession(verified);
       setBffError(null);
@@ -159,6 +172,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (isDevLoginHost()) {
       const version = ++syncVersion.current;
+      clearSessionExpiry();
       clearBffBrowserSession();
       setLoading(true);
       setBffError(null);
@@ -166,6 +180,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .then((verified) => {
           if (syncVersion.current !== version) return;
           sessionRef.current = null;
+          bffSessionRef.current = verified;
+          setSessionRenewalActive(true);
+          if (verified.identity.expiresAt || verified.identity.refreshExpiresAt) {
+            recordSessionExpiry({
+              expiresAt: verified.identity.expiresAt,
+              refreshExpiresAt: verified.identity.refreshExpiresAt,
+            });
+          }
           setSession(null);
           setBffSession(verified);
           setBffError(null);
@@ -175,6 +197,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (syncVersion.current !== version) return;
           const normalized = error instanceof Error ? error : new Error(String(error));
           sessionRef.current = null;
+          bffSessionRef.current = null;
           setSession(null);
           setBffSession(null);
           setBffError(isTransientVerificationError(normalized) ? normalized : null);
@@ -182,6 +205,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
       return () => {
         ++syncVersion.current;
+        clearSessionExpiry();
         clearBffBrowserSession();
       };
     }
@@ -214,9 +238,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [applyUser]);
 
   // An expired dev-cookie session otherwise keeps the signed-in header while
-  // every page read fails. Re-check once; only a genuine rejection signs out.
-  useEffect(() => onBffUnauthorized(() => {
-    if (!isDevLoginHost() || !bffSessionRef.current || expiryCheckRunning.current) return;
+  // every page read fails. When refresh has already failed (`confirmed: true`),
+  // clear session and scoped queries immediately; otherwise re-check once.
+  useEffect(() => onBffUnauthorized((event) => {
+    if (sessionRef.current || !bffSessionRef.current) return;
+
+    if (event?.confirmed) {
+      ++syncVersion.current;
+      expiryCheckRunning.current = false;
+      sessionRef.current = null;
+      bffSessionRef.current = null;
+      clearSessionExpiry();
+      clearBffBrowserSession();
+      void clearScopedQueries(queryClient ?? undefined);
+      setSession(null);
+      setBffSession(null);
+      setBffError(null);
+      setLoading(false);
+      return;
+    }
+
+    if (!isDevLoginHost() || expiryCheckRunning.current) return;
     expiryCheckRunning.current = true;
     const version = syncVersion.current;
     void verifyBffBrowserSession()
@@ -226,6 +268,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (isTransientVerificationError(normalized)) return;
         ++syncVersion.current;
         sessionRef.current = null;
+        bffSessionRef.current = null;
+        clearSessionExpiry();
         clearBffBrowserSession();
         void clearScopedQueries(queryClient ?? undefined);
         setSession(null);
@@ -246,11 +290,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!current) {
       if (isDevLoginHost()) {
         const version = ++syncVersion.current;
+        clearSessionExpiry();
         clearBffBrowserSession();
         try {
           const verified = await verifyBffBrowserSession();
           if (syncVersion.current !== version) return;
           sessionRef.current = null;
+          bffSessionRef.current = verified;
+          setSessionRenewalActive(true);
+          if (verified.identity.expiresAt || verified.identity.refreshExpiresAt) {
+            recordSessionExpiry({
+              expiresAt: verified.identity.expiresAt,
+              refreshExpiresAt: verified.identity.refreshExpiresAt,
+            });
+          }
           setSession(null);
           setBffSession(verified);
           setBffError(null);
@@ -259,6 +312,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } catch (error: unknown) {
           if (syncVersion.current !== version) return;
           const normalized = error instanceof Error ? error : new Error(String(error));
+          bffSessionRef.current = null;
           setBffSession(null);
           setBffError(isTransientVerificationError(normalized) ? normalized : null);
           setLoading(false);
@@ -304,6 +358,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (isDevLoginHost()) {
       sessionRef.current = null;
+      bffSessionRef.current = null;
+      clearSessionExpiry();
       clearBffBrowserSession();
       void clearScopedQueries(queryClient ?? undefined);
       setSession(null);
@@ -322,6 +378,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       identityLogoutError = error;
     } finally {
       sessionRef.current = null;
+      bffSessionRef.current = null;
+      clearSessionExpiry();
       clearBffBrowserSession();
       void clearScopedQueries(queryClient ?? undefined);
       setSession(null);
@@ -332,7 +390,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (identityLogoutError) throw identityLogoutError;
     if (bffLogoutError) throw bffLogoutError;
-  }, []);
+  }, [queryClient]);
 
   return (
     <AuthContext.Provider

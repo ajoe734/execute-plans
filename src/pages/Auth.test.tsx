@@ -41,6 +41,7 @@ vi.mock("@/lib/auth/AuthProvider", () => ({
   useAuth: () => mocks.auth,
 }));
 
+import i18n from "@/i18n";
 import AuthPage from "./Auth";
 
 function renderAuth(entry: string) {
@@ -403,5 +404,22 @@ describe("Pantheon dev login form (app.dev.mvl-cap.tw)", () => {
     renderAuth("/auth?from=%2Fmanagement%2Fcockpit");
 
     expect(screen.getByText("Management restored")).toBeInTheDocument();
+  });
+
+  it("displays localized session-expired notice in zh-TW and en-US when redirected on 401", async () => {
+    await act(async () => {
+      await i18n.changeLanguage("zh-TW");
+    });
+
+    const { unmount } = renderAuth("/auth?reason=auth-required&from=%2Fmanagement%2Fcockpit");
+    expect(screen.getByRole("status")).toHaveTextContent("登入已過期");
+    unmount();
+
+    await act(async () => {
+      await i18n.changeLanguage("en-US");
+    });
+
+    renderAuth("/auth?reason=auth-required&from=%2Fmanagement%2Fcockpit");
+    expect(screen.getByRole("status")).toHaveTextContent(/session expired/i);
   });
 });

@@ -5,7 +5,7 @@ import { buildHeaders, isMutation, BFF_API_VERSION } from "./headers";
 import { BffError, makeBffError, normalizeBffErrorEnvelope } from "./errors";
 import { liveStatus, type BffMode } from "./liveStatus";
 import { readBffEnv } from "./runtimeEnv";
-import { reportBffUnauthorized } from "@/lib/auth/sessionExpiry";
+import { bffSessionFetch } from "@/lib/auth/sessionExpiry";
 
 export type { BffMode };
 
@@ -138,7 +138,7 @@ export async function bffFetch<T = unknown>(req: BffRequest): Promise<T> {
   if (isMutation(req.method) && req.body !== undefined) {
     init.body = JSON.stringify(req.body);
   }
-  const res = await fetch(url, init);
+  const res = await bffSessionFetch(url, init, { baseUrl: req.baseUrl });
   // H1+ — record server-advertised api version (if any) for mismatch detection.
   liveStatus.reportApiVersion(res.headers.get("X-BFF-Api-Version") ?? undefined, BFF_API_VERSION);
   // Planner §E7 — record echoed X-Request-Id / X-Correlation-Id for debugging.
@@ -149,7 +149,6 @@ export async function bffFetch<T = unknown>(req: BffRequest): Promise<T> {
   const text = await res.text();
   const json: unknown = text ? safeJson(text) : undefined;
   if (!res.ok) {
-    if (res.status === 401) reportBffUnauthorized();
     const envelope = normalizeBffErrorEnvelope(json, res.status, headers["X-Correlation-Id"]);
     if (envelope) {
       throw new BffError(res.status, envelope);

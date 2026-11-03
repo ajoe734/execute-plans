@@ -50,7 +50,14 @@ export const TopBar = () => {
   const { locale, setLocale } = usePlatform();
   const live = useLiveStatus();
   const { me, loading: meLoading, error: meError } = useMe();
-  const { signOut } = useAuth();
+  const auth = useAuth();
+  const { signOut } = auth;
+  const sessionCleared =
+    "bffSession" in auth &&
+    !auth.loading &&
+    auth.bffSession === null &&
+    !auth.session;
+  const activeMe = sessionCleared ? null : me;
   const [signingOut, setSigningOut] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [counts, setCounts] = useState({ approvals: 0, alerts: 0, jobs: 0 });
@@ -295,31 +302,31 @@ export const TopBar = () => {
       </DropdownMenu>
 
       {/* User / Session — sourced from /bff/me; 401 surfaces auth error, never mock user */}
-      {meLoading && !me ? (
+      {meLoading && !activeMe && !sessionCleared ? (
         <Button variant="ghost" size="sm" disabled className="hidden gap-1 md:inline-flex">
           <Loader2 className="h-4 w-4 animate-spin" />
         </Button>
-      ) : meError || !me ? (
+      ) : meError || !activeMe ? (
         <Button variant="ghost" size="sm" className="hidden gap-1 text-destructive md:inline-flex" title={meError?.message ?? "Session unavailable"} aria-label="auth-error">
           <Lock className="h-4 w-4" />
           <span className="text-xs">Auth</span>
         </Button>
-      ) : me ? (
+      ) : activeMe ? (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="sm" className="hidden gap-1 md:inline-flex">
               <User className="h-4 w-4" />
               {String(
-                (me.user as { displayName?: string; display_name?: string }).displayName
-                  ?? (me.user as { display_name?: string }).display_name
-                  ?? me.user.id
+                (activeMe.user as { displayName?: string; display_name?: string }).displayName
+                  ?? (activeMe.user as { display_name?: string }).display_name
+                  ?? activeMe.user.id
               )}
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuLabel>{t("topbar.role")}</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            {me.roles.map((r) => (
+            {activeMe.roles.map((r) => (
               <DropdownMenuItem key={r} disabled>{r}</DropdownMenuItem>
             ))}
             <DropdownMenuSeparator />

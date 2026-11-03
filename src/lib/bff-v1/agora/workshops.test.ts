@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { onBffUnauthorized, resetSessionTransportForTests } from "@/lib/auth/sessionExpiry";
 import { bffFetch, detectBaseUrl } from "../client";
 import { clearAuthProvider, setAuthProvider } from "../headers";
 import {
@@ -439,7 +440,8 @@ describe("openWorkshopStream", () => {
     cleanup();
   });
 
-  it("stops reconnect on 401/403 until auth refresh", async () => {
+  it("stops reconnect on 401/403 after attempting single-flight refresh", async () => {
+    resetSessionTransportForTests();
     setAuthProvider({
       getToken: () => "stale-bearer-token",
     });
@@ -464,8 +466,124 @@ describe("openWorkshopStream", () => {
       );
     });
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    // 1 initial stream fetch + 1 POST /bff/auth/refresh attempt, then stops reconnect
+    expect(fetchMock).toHaveBeenCalledTimes(2);
     cleanup();
+    resetSessionTransportForTests();
+  });
+
+  it("reconnects cookie EventSource stream after successful session refresh on error", async () => {
+    resetSessionTransportForTests();
+    clearAuthProvider();
+    vi.mocked(detectBaseUrl).mockReturnValue("https://api.dev.mvl-cap.tw");
+
+    const sources: Array<{
+      url: string;
+      close: ReturnType<typeof vi.fn>;
+      onmessage: ((e: MessageEvent) => void) | null;
+      onerror: ((e: Event) => void) | null;
+      addEventListener: ReturnType<typeof vi.fn>;
+    }> = [];
+    const EventSourceMock = vi.fn((url: string) => {
+      const instance = {
+        url,
+        close: vi.fn(),
+        onmessage: null,
+        onerror: null,
+        addEventListener: vi.fn(),
+      };
+      sources.push(instance);
+      return instance;
+    });
+    vi.stubGlobal("EventSource", EventSourceMock);
+
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ authenticated: true, expires_at: "2026-11-04T07:00:00Z" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const onEvent = vi.fn<(event: WorkshopStreamEvent) => void>();
+    const cleanup = openWorkshopStream("ws-001", onEvent);
+    expect(sources).toHaveLength(1);
+
+    // Emit one event so last_event_id is tracked before the stream drops
+    sources[0].onmessage?.(
+      new MessageEvent("message", {
+        lastEventId: "evt-042",
+        data: JSON.stringify({
+          data: {
+            event_id: "evt-042",
+            workshop_id: "ws-001",
+            event_type: "workshop.snapshot",
+            payload: {},
+            occurred_at: "2026-06-01T00:00:00Z",
+          },
+        }),
+      }),
+    );
+
+    // Simulate EventSource error (e.g. access cookie expired)
+    sources[0].onerror?.(new Event("error"));
+
+    await vi.waitFor(() => {
+      expect(sources).toHaveLength(2);
+    });
+    expect(sources[0].close).toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.dev.mvl-cap.tw/bff/auth/refresh",
+      expect.objectContaining({ method: "POST", credentials: "include" }),
+    );
+    expect(sources[1].url).toBe(
+      "https://api.dev.mvl-cap.tw/bff/agora/workshops/ws-001/stream?last_event_id=evt-042",
+    );
+
+    cleanup();
+    resetSessionTransportForTests();
+  });
+
+  it("reports confirmed unauthorized and does not reconnect cookie EventSource when refresh fails", async () => {
+    resetSessionTransportForTests();
+    clearAuthProvider();
+    vi.mocked(detectBaseUrl).mockReturnValue("https://api.dev.mvl-cap.tw");
+
+    const unauthorizedListener = vi.fn();
+    const unsub = onBffUnauthorized(unauthorizedListener);
+
+    const source = {
+      close: vi.fn(),
+      onmessage: null as ((e: MessageEvent) => void) | null,
+      onerror: null as ((e: Event) => void) | null,
+      addEventListener: vi.fn(),
+    };
+    const EventSourceMock = vi.fn().mockReturnValue(source);
+    vi.stubGlobal("EventSource", EventSourceMock);
+
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: { code: "AUTH_REQUIRED", message: "Refresh expired" } }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const onError = vi.fn();
+    const cleanup = openWorkshopStream("ws-001", undefined, { onError });
+    source.onerror?.(new Event("error"));
+
+    await vi.waitFor(() => {
+      expect(unauthorizedListener).toHaveBeenCalledWith(
+        expect.objectContaining({ confirmed: true }),
+      );
+    });
+    expect(EventSourceMock).toHaveBeenCalledTimes(1);
+    expect(onError).toHaveBeenCalled();
+
+    unsub();
+    cleanup();
+    resetSessionTransportForTests();
   });
 
   it("treats 409 replay-unavailable as a signal to trigger onResync", async () => {
