@@ -157,7 +157,6 @@ function handleVisibilityChange(): void {
     baseUrl: renewalBaseUrl,
     fetchFn: renewalFetchFn,
     reportOnFailure: true,
-    confirmOnlyOnAuthStatus: true,
   });
 }
 
@@ -213,8 +212,7 @@ function scheduleProactiveRefresh(): void {
       baseUrl: renewalBaseUrl,
       fetchFn: renewalFetchFn,
       reportOnFailure: true,
-      confirmOnlyOnAuthStatus: true,
-    });
+      });
   }, delayMs);
 }
 
@@ -307,7 +305,6 @@ export async function refreshBffSession(options?: {
   baseUrl?: string;
   fetchFn?: typeof fetch;
   reportOnFailure?: boolean;
-  confirmOnlyOnAuthStatus?: boolean;
 }): Promise<boolean> {
   if (refreshInFlight) {
     return refreshInFlight;
@@ -317,17 +314,12 @@ export async function refreshBffSession(options?: {
   const baseUrl = resolveBaseUrl(options?.baseUrl ?? renewalBaseUrl);
   const refreshUrl = `${baseUrl}${paths.authRefresh()}`;
   const shouldReportOnFailure = options?.reportOnFailure ?? true;
-  const confirmOnlyOnAuthStatus = options?.confirmOnlyOnAuthStatus ?? false;
 
   refreshGeneration += 1;
   const currentGen = refreshGeneration;
 
   const task = (async (): Promise<boolean> => {
     if (typeof fetcher !== "function") {
-      if (shouldReportOnFailure && !confirmOnlyOnAuthStatus) {
-        clearSessionExpiry();
-        reportBffUnauthorized({ confirmed: true });
-      }
       return false;
     }
 
@@ -342,7 +334,7 @@ export async function refreshBffSession(options?: {
       if (!res || !res.ok) {
         const status = res?.status;
         const isAuthFailure = status === 401 || status === 403;
-        if (shouldReportOnFailure && (!confirmOnlyOnAuthStatus || isAuthFailure)) {
+        if (shouldReportOnFailure && isAuthFailure) {
           clearSessionExpiry();
           reportBffUnauthorized({ confirmed: true });
         }
@@ -369,10 +361,7 @@ export async function refreshBffSession(options?: {
       notifySessionRefreshed();
       return true;
     } catch {
-      if (shouldReportOnFailure && !confirmOnlyOnAuthStatus) {
-        clearSessionExpiry();
-        reportBffUnauthorized({ confirmed: true });
-      }
+      // Network error or timeout: transient, never a session expiry.
       return false;
     } finally {
       refreshInFlight = null;
