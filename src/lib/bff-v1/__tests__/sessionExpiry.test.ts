@@ -239,6 +239,7 @@ describe("BFF 401 session-expiry signal & renewal transport", () => {
 
   it("renews on cold page load when initial /bff/me returns 401 and establishes session without /auth redirect", async () => {
     resetSessionTransportForTests();
+    localStorage.setItem("agora.session.renewal-until", String(Date.now() + 86_400_000));
     let meAttempts = 0;
     let refreshCalls = 0;
     const nextExpiresAt = "2026-11-04T08:00:00Z";
@@ -303,6 +304,62 @@ describe("BFF 401 session-expiry signal & renewal transport", () => {
     expect(listener).not.toHaveBeenCalled();
     expect(getRecordedSessionExpiry().expiresAtMs).toBe(Date.parse(nextExpiresAt));
   });
+
+  const coldLoadFetch = (calls: string[]) => {
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = new URL(String(input), "https://x.test").pathname;
+      calls.push(`${init?.method ?? "GET"} ${path}`);
+      if (path === "/bff/auth/refresh") {
+        return new Response(JSON.stringify({ expires_at: "2099-01-01T00:00:00Z" }), { status: 200 });
+      }
+      return new Response("{}", { status: 401 });
+    }) as typeof fetch;
+  };
+  const coldMe = () =>
+    bffFetch({ method: "GET", path: "/bff/me", mode: "live", baseUrl: "https://x.test" }).catch(() => undefined);
+
+  it("anonymous cold load sends no POST /bff/auth/refresh", async () => {
+    const calls: string[] = [];
+    coldLoadFetch(calls);
+    await Promise.all([
+      coldMe(),
+      bffFetch({ method: "GET", path: "/bff/auth/readiness", mode: "live", baseUrl: "https://x.test" }).catch(() => undefined),
+    ]);
+    expect(calls.sort()).toEqual(["GET /bff/auth/readiness", "GET /bff/me"]);
+  });
+
+  it("returning user with unexpired marker refreshes once then retries", async () => {
+    localStorage.setItem("agora.session.renewal-until", String(Date.now() + 86_400_000));
+    const calls: string[] = [];
+    coldLoadFetch(calls);
+    await coldMe();
+    expect(calls).toEqual(["GET /bff/me", "POST /bff/auth/refresh", "GET /bff/me"]);
+  });
+
+  it("ignores and removes an expired marker without POSTing", async () => {
+    localStorage.setItem("agora.session.renewal-until", String(Date.now() - 1000));
+    const calls: string[] = [];
+    coldLoadFetch(calls);
+    await coldMe();
+    expect(calls).toEqual(["GET /bff/me"]);
+    expect(localStorage.getItem("agora.session.renewal-until")).toBeNull();
+  });
+
+  it("records the marker from refresh_expires_at and removes it on refresh 401", async () => {
+    const until = Date.now() + 86_400_000;
+    recordSessionExpiryFromPayload({ refresh_expires_at: new Date(until).toISOString() });
+    expect(localStorage.getItem("agora.session.renewal-until")).toBe(String(until));
+    globalThis.fetch = vi.fn(async () => new Response("{}", { status: 401 })) as typeof fetch;
+    await bffFetch({ method: "GET", path: "/bff/x", mode: "live", baseUrl: "https://x.test" }).catch(() => undefined);
+    expect(localStorage.getItem("agora.session.renewal-until")).toBeNull();
+  });
+  it("removes the marker when the logout endpoint is called", async () => {
+    localStorage.setItem("agora.session.renewal-until", String(Date.now() + 86_400_000));
+    globalThis.fetch = vi.fn(async () => new Response(null, { status: 204 })) as typeof fetch;
+    await bffFetch({ method: "POST", path: "/bff/logout", mode: "live", baseUrl: "https://x.test" });
+    expect(localStorage.getItem("agora.session.renewal-until")).toBeNull();
+  });
+
   const apiThenRefresh = (refresh: () => Promise<Response>) => {
     globalThis.fetch = vi.fn().mockImplementation(async (input: RequestInfo | URL) => {
       if (String(input).endsWith("/bff/auth/refresh")) return refresh();

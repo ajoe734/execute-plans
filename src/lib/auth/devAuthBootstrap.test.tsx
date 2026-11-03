@@ -115,6 +115,7 @@ it("renews expired 30m access token on cold page load via single-flight POST /bf
     return new Response("{}", { status: 404 });
   });
   vi.stubGlobal("fetch", fetchSpy);
+  localStorage.setItem("agora.session.renewal-until", String(Date.now() + 86_400_000));
 
   const { AuthProvider } = await import("./AuthProvider");
   const { ProtectedRoute } = await import("./ProtectedRoute");

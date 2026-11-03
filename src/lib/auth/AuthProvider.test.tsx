@@ -177,6 +177,18 @@ describe("AuthProvider strict BFF bridge", () => {
     expect(result.current.bffSession).toBeNull();
   });
 
+  it("removes the session renewal marker on sign-out", async () => {
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    localStorage.setItem("agora.session.renewal-until", String(Date.now() + 86_400_000));
+
+    await act(async () => {
+      await result.current.signOut();
+    });
+
+    expect(localStorage.getItem("agora.session.renewal-until")).toBeNull();
+  });
+
   it("reports BFF verification failure without erasing the GCP session", async () => {
     mocks.verify.mockRejectedValue(new Error("BFF returned 401"));
     const { result } = renderHook(() => useAuth(), { wrapper });

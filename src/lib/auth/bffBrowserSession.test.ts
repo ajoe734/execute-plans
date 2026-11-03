@@ -311,6 +311,7 @@ describe("strict browser BFF session bridge", () => {
       return response({}, 404);
     });
 
+    localStorage.setItem("agora.session.renewal-until", String(Date.now() + 86_400_000));
     const verified = await verifyBffBrowserSession();
 
     expect(refreshCalls).toBe(1);
