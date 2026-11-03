@@ -6,6 +6,7 @@
 import { bffFetch, detectBaseUrl } from "../client";
 import { getAuthProvider } from "../headers";
 import { fetchSse } from "../sse/liveSse";
+import { refreshBffSession } from "@/lib/auth/sessionExpiry";
 
 import type {
   StrategyWorkshop,
@@ -500,25 +501,69 @@ export function openWorkshopStream(
     return () => {};
   }
 
-  const source = new EventSource(url, { withCredentials: true });
-  if (options?.onOpen) {
-    source.addEventListener("open", () => options.onOpen?.());
-  }
-  if (options?.onError) {
-    source.addEventListener("error", () => options.onError?.(new Error("EventSource connection error")));
-  }
-  if (onEvent) {
-    source.onmessage = (message) => {
+  let closed = false;
+  let currentLastEventId = options?.lastEventId;
+  let source: EventSource | null = null;
+
+  const buildStreamUrl = () => {
+    const q = currentLastEventId ? `?last_event_id=${encodeURIComponent(currentLastEventId)}` : "";
+    return `${baseUrl}/bff/agora/workshops/${encodeURIComponent(workshopId)}/stream${q}`;
+  };
+
+  const connectEventSource = () => {
+    if (closed) return;
+    const es = new EventSource(buildStreamUrl(), { withCredentials: true });
+    source = es;
+    if (options?.onOpen) {
+      es.addEventListener("open", () => {
+        if (!closed) options.onOpen?.();
+      });
+    }
+    es.addEventListener("error", () => {
+      if (closed) return;
       try {
-        const raw = typeof message.data === "string" ? JSON.parse(message.data) : message.data;
-        const normalized = normalizeWorkshopStreamEvent(raw, { id: message.lastEventId }, workshopId);
-        onEvent(normalized);
+        es.close();
       } catch {
-        // Ignore malformed keepalive or compatibility messages.
+        // Ignore close errors.
       }
-    };
-  }
-  return () => source.close();
+      void refreshBffSession({
+        baseUrl,
+        reportOnFailure: true,
+      }).then((refreshed) => {
+        if (closed) return;
+        if (refreshed) {
+          connectEventSource();
+          return;
+        }
+        options?.onError?.(new Error("EventSource connection error"));
+      });
+    });
+    if (onEvent) {
+      es.onmessage = (message) => {
+        if (closed) return;
+        try {
+          const raw = typeof message.data === "string" ? JSON.parse(message.data) : message.data;
+          const normalized = normalizeWorkshopStreamEvent(raw, { id: message.lastEventId }, workshopId);
+          if (normalized.event_id) {
+            currentLastEventId = normalized.event_id;
+          }
+          onEvent(normalized);
+        } catch {
+          // Ignore malformed keepalive or compatibility messages.
+        }
+      };
+    }
+  };
+
+  connectEventSource();
+  return () => {
+    closed = true;
+    try {
+      source?.close();
+    } catch {
+      // Ignore close errors.
+    }
+  };
 }
 
 

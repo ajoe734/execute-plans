@@ -4,6 +4,11 @@ import { paths } from "@/lib/bff-v1/paths";
 import { invalidateMe } from "@/lib/v4/session/me";
 import type { GcpIdentitySession } from "@/integrations/gcp/identity";
 import { tryDevLogin, clearDevLoginCache, hasDevLoginCredentials } from "./devLoginHelper";
+import {
+  clearSessionExpiry,
+  recordSessionExpiryFromPayload,
+  setSessionRenewalActive,
+} from "./sessionExpiry";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -14,6 +19,8 @@ export interface BffBrowserIdentity {
   tenantId: string;
   roles: string[];
   capabilities: string[];
+  expiresAt?: string;
+  refreshExpiresAt?: string;
 }
 
 export interface BffBrowserReadiness {
@@ -91,6 +98,7 @@ export function registerBffBrowserSession(session: GcpIdentitySession): void {
 export function clearBffBrowserSession(): void {
   clearAuthProvider();
   clearDevLoginCache();
+  clearSessionExpiry();
   invalidateMe();
 }
 
@@ -114,6 +122,11 @@ function parseMe(value: unknown): BffBrowserIdentity {
     throw new Error("BFF identity readback is missing user or tenant authority");
   }
 
+  const expiry = recordSessionExpiryFromPayload(value);
+  if (sessionKind === "cookie") {
+    setSessionRenewalActive(true);
+  }
+
   return {
     authenticated: true,
     sessionKind,
@@ -121,6 +134,8 @@ function parseMe(value: unknown): BffBrowserIdentity {
     tenantId,
     roles: stringArray(data.roles),
     capabilities: stringArray(data.capabilities),
+    ...(expiry?.expiresAt ? { expiresAt: expiry.expiresAt } : {}),
+    ...(expiry?.refreshExpiresAt ? { refreshExpiresAt: expiry.refreshExpiresAt } : {}),
   };
 }
 

@@ -1,5 +1,6 @@
 import { bffFetch, detectMode, detectBaseUrl } from "./client";
 import { buildHeaders } from "./headers";
+import { bffSessionFetch } from "@/lib/auth/sessionExpiry";
 
 export type JourneyReadState = "formal" | "partial" | "degraded" | "unavailable";
 export type JourneyEnvironment = "paper" | "canary" | "live";
@@ -124,7 +125,11 @@ export function subscribeTradeJourneys(
     if (closed) return;
     try {
       const headers = buildHeaders({ method: "GET", extra: { Accept: "text/event-stream", ...(highestRevision ? { "Last-Event-ID": String(highestRevision) } : {}) } });
-      const res = await fetch(`${detectBaseUrl()}/bff/management/trade-journeys/events?${params}`, { headers, credentials: "include" });
+      const res = await bffSessionFetch(`${detectBaseUrl()}/bff/management/trade-journeys/events?${params}`, { headers, credentials: "include" });
+      if (res.status === 401) {
+        closed = true;
+        return;
+      }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       let invalidate = false;
       for (const frame of parseSseFrames(await res.text())) {

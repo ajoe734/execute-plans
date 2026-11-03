@@ -9,6 +9,7 @@
 import { detectBaseUrl } from "../client";
 import { BffError, normalizeBffErrorEnvelope, type ErrorCode } from "../errors";
 import { buildHeaders } from "../headers";
+import { bffSessionFetch } from "@/lib/auth/sessionExpiry";
 
 export type AgoraFreshness =
   | "fresh"
@@ -233,7 +234,7 @@ export async function getAgoraOperationalReadiness(
   baseUrl = detectBaseUrl(),
 ): Promise<AgoraOperationalReadiness> {
   const base = baseUrl.replace(/\/+$/, "");
-  const response = await fetch(`${base}/bff/agora/operational-readiness`, {
+  const response = await bffSessionFetch(`${base}/bff/agora/operational-readiness`, {
     method: "GET",
     credentials: "include",
     headers: buildHeaders({ method: "GET" }),

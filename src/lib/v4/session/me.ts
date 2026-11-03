@@ -7,6 +7,10 @@ import { bffFetch, detectMode } from "@/lib/bff-v1/client";
 import { isStrictLiveFallback } from "@/lib/bff-v1/liveTransport";
 import { liveStatus } from "@/lib/bff-v1/liveStatus";
 import { isAbortError } from "@/lib/bff-v1/errors";
+import {
+  onBffUnauthorized,
+  recordSessionExpiryFromPayload,
+} from "@/lib/auth/sessionExpiry";
 
 export type Role =
   | "platform_admin"
@@ -56,6 +60,13 @@ const ME_CACHE_TTL_MS = 30_000;
 
 let cache: { value: MeResponse; fetchedAt: number } | null = null;
 let inflight: Promise<MeResponse> | null = null;
+const invalidateListeners = new Set<() => void>();
+
+onBffUnauthorized((event) => {
+  if (event?.confirmed) {
+    invalidateMe();
+  }
+});
 
 export function mockMe(): MeResponse {
   const now = new Date();
@@ -101,11 +112,24 @@ function isMeResponse(value: unknown): value is MeResponse {
 }
 
 function normalizeMeResponse(value: unknown): MeResponse {
-  if (isMeResponse(value)) return value;
+  recordSessionExpiryFromPayload(value);
+  if (isMeResponse(value)) {
+    recordSessionExpiryFromPayload(value);
+    return value;
+  }
   const record = value as { data?: unknown; me?: unknown; session?: unknown } | undefined;
-  if (isMeResponse(record?.data)) return record.data;
-  if (isMeResponse(record?.me)) return record.me;
-  if (isMeResponse(record?.session)) return record.session;
+  if (isMeResponse(record?.data)) {
+    recordSessionExpiryFromPayload(record.data);
+    return record.data;
+  }
+  if (isMeResponse(record?.me)) {
+    recordSessionExpiryFromPayload(record.me);
+    return record.me;
+  }
+  if (isMeResponse(record?.session)) {
+    recordSessionExpiryFromPayload(record.session);
+    return record.session;
+  }
   throw new Error("Invalid /bff/me response shape");
 }
 
@@ -149,6 +173,9 @@ export async function fetchMe(force = false): Promise<MeResponse> {
 export function invalidateMe(): void {
   cache = null;
   inflight = null;
+  for (const listener of invalidateListeners) {
+    listener();
+  }
 }
 
 export async function refreshSession(): Promise<MeResponse> {
@@ -191,6 +218,13 @@ export function useMe(): { me: MeResponse | null; loading: boolean; error: Error
 
   useEffect(() => {
     let alive = true;
+    const onInvalidate = () => {
+      if (!alive) return;
+      setMe(null);
+      setError(null);
+      setLoading(false);
+    };
+    invalidateListeners.add(onInvalidate);
     setLoading(true);
     fetchMe()
       .then((value) => {
@@ -208,6 +242,7 @@ export function useMe(): { me: MeResponse | null; loading: boolean; error: Error
       });
     return () => {
       alive = false;
+      invalidateListeners.delete(onInvalidate);
     };
   }, []);
 

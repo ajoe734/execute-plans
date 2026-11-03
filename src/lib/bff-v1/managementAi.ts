@@ -16,6 +16,7 @@ import { buildHeaders } from "./headers";
 import { isAbortError } from "./errors";
 import { paths } from "./paths";
 import { readBffEnv } from "./runtimeEnv";
+import { bffSessionFetch } from "@/lib/auth/sessionExpiry";
 
 function detectBaseUrl(): string {
   const env = readBffEnv();
@@ -613,7 +614,7 @@ export async function fetchAssistantProviders(
   const headers = buildHeaders({ method: "GET" });
   let res: Response;
   try {
-    res = await fetch(`${base}${paths.assistantProviders(options?.authProbe ?? false)}`, {
+    res = await bffSessionFetch(`${base}${paths.assistantProviders(options?.authProbe ?? false)}`, {
       method: "GET",
       headers,
       credentials: "include",
@@ -689,7 +690,7 @@ export async function registerAssistantProvider(
 
   let res: Response;
   try {
-    res = await fetch(`${base}${paths.assistantProviderRegister()}`, {
+    res = await bffSessionFetch(`${base}${paths.assistantProviderRegister()}`, {
       method: "POST",
       headers,
       body,
@@ -752,7 +753,7 @@ export async function fetchAssistantProviderUsageSummary(
   const headers = buildHeaders({ method: "GET" });
   let res: Response;
   try {
-    res = await fetch(
+    res = await bffSessionFetch(
       `${base}${paths.assistantProviderUsageSummary(
         options?.authProbe ?? false,
         options?.windowHours ?? 168,
@@ -932,7 +933,7 @@ export async function askManagementAi(
 
   let res: Response;
   try {
-    res = await fetch(`${base}${paths.managementNlAsk()}`, {
+    res = await bffSessionFetch(`${base}${paths.managementNlAsk()}`, {
       method: "POST",
       headers,
       body,
@@ -1037,7 +1038,7 @@ export async function streamManagementAi(
 
   let res: Response;
   try {
-    res = await fetch(`${base}${paths.managementNlAskStream()}`, {
+    res = await bffSessionFetch(`${base}${paths.managementNlAskStream()}`, {
       method: "POST", headers, body, credentials: "include", signal: options?.signal,
     });
   } catch (err) {
@@ -1191,7 +1192,7 @@ export async function startAssistantProviderReauth(
 
   let res: Response;
   try {
-    res = await fetch(`${base}${route}`, {
+    res = await bffSessionFetch(`${base}${route}`, {
       method: "POST",
       headers,
       body,
@@ -1258,7 +1259,7 @@ export async function fetchAssistantProviderReauthStatus(
   const headers = buildHeaders({ method: "GET" });
   let res: Response;
   try {
-    res = await fetch(`${base}${route}`, {
+    res = await bffSessionFetch(`${base}${route}`, {
       method: "GET",
       headers,
       credentials: "include",
@@ -1335,7 +1336,7 @@ export async function submitAssistantProviderReauthCode(
 
   let res: Response;
   try {
-    res = await fetch(`${base}${route}`, {
+    res = await bffSessionFetch(`${base}${route}`, {
       method: "POST",
       headers,
       body,
@@ -1403,7 +1404,7 @@ export async function fetchAssistantModeStatus(
   const headers = buildHeaders({ method: "GET" });
   let res: Response;
   try {
-    res = await fetch(`${base}${paths.assistantMode()}`, {
+    res = await bffSessionFetch(`${base}${paths.assistantMode()}`, {
       method: "GET",
       headers,
       credentials: "include",
@@ -1470,7 +1471,7 @@ export async function activateAssistantControlMode(
 
   let res: Response;
   try {
-    res = await fetch(`${base}${paths.assistantControlModeActivate()}`, {
+    res = await bffSessionFetch(`${base}${paths.assistantControlModeActivate()}`, {
       method: "POST",
       headers,
       body,
@@ -1527,7 +1528,7 @@ export async function deactivateAssistantControlMode(
   const headers = buildHeaders({ method: "POST", idempotency: newIdempotencyKey() });
   let res: Response;
   try {
-    res = await fetch(`${base}${paths.assistantControlModeDeactivate()}`, {
+    res = await bffSessionFetch(`${base}${paths.assistantControlModeDeactivate()}`, {
       method: "POST",
       headers,
       body: JSON.stringify({ reason }),
@@ -1626,7 +1627,7 @@ export async function fetchManagementAiConversation(
   const url = `${base}${paths.managementAiConversation(sessionId)}`;
   let res: Response;
   try {
-    res = await fetch(url, { method: "GET", headers, credentials: "include" });
+    res = await bffSessionFetch(url, { method: "GET", headers, credentials: "include" });
   } catch (err) {
     return { ok: false, kind: "failure", status: null, message: (err as Error)?.message ?? "Network error." };
   }
@@ -1690,7 +1691,7 @@ export async function fetchManagementAiConversationList(
   const url = `${base}${paths.managementAiConversations(limit)}`;
   let res: Response;
   try {
-    res = await fetch(url, { method: "GET", headers, credentials: "include" });
+    res = await bffSessionFetch(url, { method: "GET", headers, credentials: "include" });
   } catch (err) {
     return { ok: false, kind: "failure", status: null, message: (err as Error)?.message ?? "Network error." };
   }

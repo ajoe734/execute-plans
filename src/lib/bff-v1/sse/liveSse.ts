@@ -20,6 +20,11 @@ import {
   type SseConnectInit,
 } from "./protocol";
 import { paths } from "../paths";
+import {
+  bffSessionFetch,
+  onBffSessionRefreshed,
+  refreshBffSession,
+} from "@/lib/auth/sessionExpiry";
 
 let current: { close: () => void } | null = null;
 let attempt = 0;
@@ -81,6 +86,7 @@ export interface FetchSseController {
  */
 export function fetchSse(options: FetchSseOptions): FetchSseController {
   let closed = false;
+  let awaitingAuthRefresh = false;
   let abortController = new AbortController();
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   let attempt = 0;
@@ -101,6 +107,14 @@ export function fetchSse(options: FetchSseOptions): FetchSseController {
       if (!closed) void connect();
     }, delay);
   };
+
+  const offRefreshed = onBffSessionRefreshed(() => {
+    if (closed || !awaitingAuthRefresh) return;
+    awaitingAuthRefresh = false;
+    attempt = 0;
+    clearTimer();
+    void connect();
+  });
 
   async function connect() {
     if (closed) return;
@@ -129,24 +143,29 @@ export function fetchSse(options: FetchSseOptions): FetchSseController {
       },
     });
 
-    const fetchFn = options.fetchFn ?? globalThis.fetch;
-
     try {
-      const res = await fetchFn(options.url, {
-        method: "GET",
-        headers,
-        credentials: options.credentials ?? "include",
-        signal: abortController.signal,
-      });
+      const res = await bffSessionFetch(
+        options.url,
+        {
+          method: "GET",
+          headers,
+          credentials: options.credentials ?? "include",
+          signal: abortController.signal,
+        },
+        { fetchFn: options.fetchFn },
+      );
 
       if (closed || abortController.signal.aborted) return;
 
       // Stop on 401 / 403 until the auth layer refreshes/reverifies.
       if (res.status === 401 || res.status === 403) {
+        awaitingAuthRefresh = true;
         const error = new Error(`SSE auth failed with status ${res.status}`);
         options.onError?.(error);
         return;
       }
+
+      awaitingAuthRefresh = false;
 
       // Treat 409 replay-unavailable as a signal to fetch a canonical snapshot and reconnect.
       if (res.status === 409) {
@@ -231,6 +250,7 @@ export function fetchSse(options: FetchSseOptions): FetchSseController {
     close: () => {
       if (closed) return;
       closed = true;
+      offRefreshed();
       clearTimer();
       try {
         abortController.abort();
@@ -277,9 +297,11 @@ export function connectLiveSse(init: SseConnectInit = {}): () => void {
           /* ignore malformed line */
         }
       },
-      onError: () => {
+      onError: (err) => {
         realtime.markLiveError();
-        liveStatus.reportFallback("sse_open_failed");
+        if (!/SSE auth failed/iu.test(err.message)) {
+          liveStatus.reportFallback("sse_open_failed");
+        }
       },
       onClose: () => {
         realtime.markLiveError();
@@ -299,11 +321,10 @@ export function connectLiveSse(init: SseConnectInit = {}): () => void {
     return () => {};
   }
 
-  let opened = false;
+  let closedByCaller = false;
   const es = new EventSource(url, { withCredentials: true });
 
   es.addEventListener("open", () => {
-    opened = true;
     attempt = 0;
     realtime.markLiveOpen();
     liveStatus.reportSuccess();
@@ -320,12 +341,20 @@ export function connectLiveSse(init: SseConnectInit = {}): () => void {
 
   es.addEventListener("error", () => {
     realtime.markLiveError();
-    if (!opened) {
-      liveStatus.reportFallback("sse_open_failed");
-      cleanup(true);
-      return;
-    }
-    cleanup(true);
+    if (closedByCaller) return;
+    try { es.close(); } catch { /* noop */ }
+    current = null;
+    void refreshBffSession({
+      baseUrl: base,
+      reportOnFailure: true,
+    }).then((refreshed) => {
+      if (closedByCaller || !isLiveModeConfigured()) return;
+      if (refreshed) {
+        attempt = 0;
+        clearTimer();
+        connectLiveSse(init);
+      }
+    });
   });
 
   function cleanup(scheduleReconnect = false) {
@@ -338,7 +367,13 @@ export function connectLiveSse(init: SseConnectInit = {}): () => void {
     }
   }
 
-  current = { close: () => { clearTimer(); cleanup(false); } };
+  current = {
+    close: () => {
+      closedByCaller = true;
+      clearTimer();
+      cleanup(false);
+    },
+  };
   return current.close;
 }
 
