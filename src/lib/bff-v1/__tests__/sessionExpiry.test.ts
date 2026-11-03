@@ -303,4 +303,35 @@ describe("BFF 401 session-expiry signal & renewal transport", () => {
     expect(listener).not.toHaveBeenCalled();
     expect(getRecordedSessionExpiry().expiresAtMs).toBe(Date.parse(nextExpiresAt));
   });
+  const apiThenRefresh = (refresh: () => Promise<Response>) => {
+    globalThis.fetch = vi.fn().mockImplementation(async (input: RequestInfo | URL) => {
+      if (String(input).endsWith("/bff/auth/refresh")) return refresh();
+      return new Response(JSON.stringify({ error: { code: "AUTH_REQUIRED", message: "expired" } }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+  };
+
+  it.each([401, 403])("starts the session-expired flow when refresh returns %i", async (status) => {
+    apiThenRefresh(async () => new Response("{}", { status }));
+    await bffFetch({ method: "GET", path: "/bff/x", mode: "live", baseUrl: "https://x.test" }).catch(() => undefined);
+    expect(listener).toHaveBeenCalledWith(expect.objectContaining({ confirmed: true }));
+  });
+
+  it.each([404, 500, 503])("does not expire the session when refresh returns %i", async (status) => {
+    apiThenRefresh(async () => new Response("{}", { status }));
+    const failure = await bffFetch({ method: "GET", path: "/bff/x", mode: "live", baseUrl: "https://x.test" })
+      .catch((error: unknown) => error);
+    expect(listener).not.toHaveBeenCalled();
+    expect(isUnauthorizedError(failure)).toBe(true);
+  });
+
+  it("does not expire the session when refresh fails on the network", async () => {
+    apiThenRefresh(async () => {
+      throw new TypeError("Failed to fetch");
+    });
+    await bffFetch({ method: "GET", path: "/bff/x", mode: "live", baseUrl: "https://x.test" }).catch(() => undefined);
+    expect(listener).not.toHaveBeenCalled();
+  });
 });

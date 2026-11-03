@@ -325,7 +325,9 @@ export function connectLiveSse(init: SseConnectInit = {}): () => void {
   let closedByCaller = false;
   const es = new EventSource(url, { withCredentials: true });
 
+  let everOpened = false;
   es.addEventListener("open", () => {
+    everOpened = true;
     attempt = 0;
     realtime.markLiveOpen();
     liveStatus.reportSuccess();
@@ -348,6 +350,16 @@ export function connectLiveSse(init: SseConnectInit = {}): () => void {
     if (closedByCaller) return;
     try { es.close(); } catch { /* noop */ }
     current = null;
+    if (everOpened) {
+      // The stream was healthy before it dropped, so this is a transient
+      // disconnect rather than an expired session: reconnect with backoff
+      // instead of probing /bff/auth/refresh on every drop.
+      if (isLiveModeConfigured()) {
+        clearTimer();
+        reconnectTimer = setTimeout(() => connectLiveSse(init), nextBackoffMs(attempt++, true));
+      }
+      return;
+    }
     void refreshBffSession({
       baseUrl: base,
       reportOnFailure: true,
