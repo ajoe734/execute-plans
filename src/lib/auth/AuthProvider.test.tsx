@@ -372,6 +372,26 @@ describe("AuthProvider strict BFF bridge", () => {
     expect(mocks.clear).toHaveBeenCalled();
   });
 
+  it("immediately clears dev-cookie session without an extra /bff/me probe when refresh failure is confirmed", async () => {
+    setLocation("https://app.dev.mvl-cap.tw/management");
+    mocks.initialUser = null;
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.bffSession).toEqual(verified));
+
+    mocks.verify.mockClear();
+    mocks.clear.mockClear();
+
+    act(() => {
+      reportBffUnauthorized({ confirmed: true });
+    });
+
+    await waitFor(() => expect(result.current.bffSession).toBeNull());
+    expect(mocks.verify).not.toHaveBeenCalled();
+    expect(mocks.clear).toHaveBeenCalledOnce();
+    expect(result.current.bffError).toBeNull();
+    expect(result.current.loading).toBe(false);
+  });
+
   it("keeps the dev-cookie session when the 401 recheck succeeds or is transient", async () => {
     setLocation("https://app.dev.mvl-cap.tw/management");
     mocks.initialUser = null;

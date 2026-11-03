@@ -1,8 +1,10 @@
 import { afterEach, describe, it, expect, vi } from "vitest";
+import { onBffUnauthorized, resetSessionTransportForTests } from "@/lib/auth/sessionExpiry";
+import { liveStatus } from "@/lib/bff-v1/liveStatus";
 import { subscribe, publish } from "@/lib/bff-v1/sse/bridge";
 import { isSseEvent, SSE_SCHEMA_VERSION } from "@/lib/bff-v1/sse/channels";
 import { extractSseFrames, parseSseFrames } from "@/lib/bff-v1/sse/protocol";
-import { fetchSse } from "@/lib/bff-v1/sse/liveSse";
+import { connectLiveSse, fetchSse } from "@/lib/bff-v1/sse/liveSse";
 import { setAuthProvider, clearAuthProvider } from "@/lib/bff-v1/headers";
 
 describe("VI-A C5 — SSE typed envelope (schemaVersion=1)", () => {
@@ -189,6 +191,127 @@ describe("SD-AGC-04 — fetchSse transport", () => {
     });
 
     controller.close();
+  });
+
+  it("refreshes session on 401 and retries fetchSse stream once", async () => {
+    resetSessionTransportForTests();
+    let streamAttempts = 0;
+    let refreshCalls = 0;
+    const onMessage = vi.fn();
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/bff/auth/refresh")) {
+        refreshCalls += 1;
+        return new Response(
+          JSON.stringify({ authenticated: true, expires_at: "2026-11-03T07:00:00Z" }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      streamAttempts += 1;
+      if (streamAttempts === 1) {
+        return new Response(
+          JSON.stringify({ error: { code: "TOKEN_EXPIRED", message: "Access token expired" } }),
+          { status: 401, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return new Response(
+        'event: strategy.updated\nid: evt-200\ndata: {"ok":true}\n\n',
+        { status: 200, headers: { "Content-Type": "text/event-stream" } },
+      );
+    }) as typeof fetch;
+
+    const controller = fetchSse({
+      url: "https://bff.example.test/bff/events/stream",
+      autoReconnect: false,
+      fetchFn: fetchMock,
+      onMessage,
+    });
+
+    await vi.waitFor(() => {
+      expect(onMessage).toHaveBeenCalledWith({
+        event: "strategy.updated",
+        id: "evt-200",
+        data: '{"ok":true}',
+      });
+    });
+
+    expect(refreshCalls).toBe(1);
+    expect(streamAttempts).toBe(2);
+    controller.close();
+    resetSessionTransportForTests();
+  });
+
+  it("connectLiveSse cookie EventSource reconnects after refresh and does not mark fallback on refresh failure", async () => {
+    resetSessionTransportForTests();
+    clearAuthProvider();
+    liveStatus._reset({ mode: "live", effective: "live", baseUrl: "https://bff.example.test" });
+
+    const unauthorizedListener = vi.fn();
+    const unsub = onBffUnauthorized(unauthorizedListener);
+
+    const sources: Array<{
+      url: string;
+      close: ReturnType<typeof vi.fn>;
+      onmessage: ((e: MessageEvent) => void) | null;
+      onerror: ((e: Event) => void) | null;
+      addEventListener: ReturnType<typeof vi.fn>;
+    }> = [];
+    const EventSourceMock = vi.fn((url: string) => {
+      const instance = {
+        url,
+        close: vi.fn(),
+        onmessage: null,
+        onerror: null,
+        addEventListener: vi.fn(),
+      };
+      sources.push(instance);
+      return instance;
+    });
+    vi.stubGlobal("EventSource", EventSourceMock);
+
+    let refreshShouldSucceed = true;
+    const fetchMock = vi.fn(async () => {
+      if (refreshShouldSucceed) {
+        return new Response(
+          JSON.stringify({ authenticated: true, expires_at: "2026-11-03T07:00:00Z" }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return new Response(
+        JSON.stringify({ error: { code: "AUTH_REQUIRED", message: "Refresh expired" } }),
+        { status: 401, headers: { "Content-Type": "application/json" } },
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const close = connectLiveSse({
+      channels: ["strategy"],
+    });
+    expect(sources).toHaveLength(1);
+
+    // 1st error: refresh succeeds -> EventSource reconnects
+    sources[0].onerror?.(new Event("error"));
+    await vi.waitFor(() => {
+      expect(sources).toHaveLength(2);
+    });
+    expect(unauthorizedListener).not.toHaveBeenCalled();
+
+    // 2nd error: refresh fails -> unauthorized listener notified, liveStatus stays "live" (not fallback)
+    refreshShouldSucceed = false;
+    sources[1].onerror?.(new Event("error"));
+    await vi.waitFor(() => {
+      expect(unauthorizedListener).toHaveBeenCalledWith(
+        expect.objectContaining({ confirmed: true }),
+      );
+    });
+    expect(sources).toHaveLength(2);
+    expect(liveStatus.get().effective).toBe("live");
+
+    unsub();
+    close();
+    resetSessionTransportForTests();
+    liveStatus._reset();
   });
 });
 

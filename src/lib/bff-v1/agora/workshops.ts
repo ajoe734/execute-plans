@@ -519,8 +519,10 @@ export function openWorkshopStream(
         if (!closed) options.onOpen?.();
       });
     }
-    es.addEventListener("error", () => {
-      if (closed) return;
+    let errorHandled = false;
+    const handleError = () => {
+      if (closed || errorHandled) return;
+      errorHandled = true;
       try {
         es.close();
       } catch {
@@ -537,7 +539,9 @@ export function openWorkshopStream(
         }
         options?.onError?.(new Error("EventSource connection error"));
       });
-    });
+    };
+    es.addEventListener("error", handleError);
+    es.onerror = handleError;
     if (onEvent) {
       es.onmessage = (message) => {
         if (closed) return;

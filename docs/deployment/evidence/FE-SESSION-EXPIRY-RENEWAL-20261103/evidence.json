@@ -1,0 +1,50 @@
+{
+  "task_id": "FE-SESSION-EXPIRY-RENEWAL-20261103",
+  "scope": "Unified session-aware BFF transport with single-flight POST /bff/auth/refresh + retry on 401, proactive renewal before expires_at and on tab visibility, SSE reconnect after refresh, localized session-expired notice on /auth, and TopBar identity clearing.",
+  "depends_on": [
+    "BFF-DEV-LOGIN-30D-REFRESH-20261103"
+  ],
+  "files": [
+    "src/lib/auth/sessionExpiry.ts",
+    "src/lib/auth/AuthProvider.tsx",
+    "src/lib/auth/AuthProvider.test.tsx",
+    "src/lib/auth/bffBrowserSession.ts",
+    "src/lib/auth/devLogin.ts",
+    "src/lib/auth/devLoginHelper.ts",
+    "src/lib/v4/session/me.ts",
+    "src/pages/Auth.tsx",
+    "src/pages/Auth.test.tsx",
+    "src/platform/components/TopBar.tsx",
+    "src/platform/components/TopBar.test.tsx",
+    "src/lib/bff-v1/client.ts",
+    "src/lib/bff-v1/management.ts",
+    "src/lib/bff-v1/managementAi.ts",
+    "src/lib/bff-v1/tradeJourneys.ts",
+    "src/lib/bff-v1/sse/liveSse.ts",
+    "src/lib/bff-v1/agora/candidatePool.ts",
+    "src/lib/bff-v1/agora/governance.ts",
+    "src/lib/bff-v1/agora/operationalReadiness.ts",
+    "src/lib/bff-v1/agora/performance.ts",
+    "src/lib/bff-v1/agora/tradingRoom.ts",
+    "src/lib/bff-v1/agora/workshops.ts",
+    "src/lib/bff-v1/agora/workshops.test.ts",
+    "src/lib/bff-v1/__tests__/sessionExpiry.test.ts",
+    "src/lib/bff-v1/__tests__/sessionTransportCoverage.test.ts",
+    "src/lib/bff-v1/__tests__/sse.test.ts",
+    "docs/deployment/evidence/FE-SESSION-EXPIRY-RENEWAL-20261103/evidence.json"
+  ],
+  "behavior": {
+    "single_transport": "Every BFF request under src/lib/bff-v1 routes through bffSessionFetch in src/lib/auth/sessionExpiry.ts (extending PR #897 without a second 401 mechanism). Enforced by src/lib/bff-v1/__tests__/sessionTransportCoverage.test.ts.",
+    "single_flight_refresh_and_retry": "On 401, bffSessionFetch executes a single-flight POST /bff/auth/refresh (with credentials: include) and retries the original request once with identical headers and Idempotency-Key.",
+    "proactive_and_visibility_renewal": "Seeds access expires_at and refresh_expires_at from /bff/me, /bff/auth/dev-login, and /bff/auth/refresh payloads; schedules a proactive refresh timer before expires_at and refreshes on document visibilitychange (visible).",
+    "refresh_failure_redirect": "When refresh fails (confirmed: true), AuthProvider immediately clears bffSession, clearScopedQueries, and useMe state so ProtectedRoute redirects to /auth?reason=auth-required&from=... without showing Transport Unavailable or Source unavailable.",
+    "auth_notice_and_topbar": "Auth.tsx renders localized session-expired notice (zh-TW 登入已過期 / en-US Session expired) and returns to from path after login; TopBar clears operator identity immediately on session expiry.",
+    "sse_reconnect": "liveSse (fetchSse + cookie EventSource) and workshops openWorkshopStream (fetchSse + cookie EventSource) reconnect after successful refresh and report confirmed unauthorized without marking liveStatus fallback when refresh fails.",
+    "logout": "signOut calls POST /bff/logout via logoutBffBrowserSession and clears session expiry tracking and local session state."
+  },
+  "verification": {
+    "vitest": "68 test files, 725 tests passed (including sessionTransportCoverage.test.ts, sessionExpiry.test.ts, sse.test.ts, workshops.test.ts, AuthProvider.test.tsx, Auth.test.tsx, TopBar.test.tsx)",
+    "tsc": "tsc --noEmit -p tsconfig.app.json: exit 0",
+    "eslint": "0 errors on touched files"
+  }
+}

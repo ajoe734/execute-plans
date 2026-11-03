@@ -48,10 +48,11 @@ function dispatch(raw: unknown): void {
 function readBaseUrl(): string {
   try {
     const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {};
-    return env.VITE_BFF_BASE_URL ?? "";
+    if (env.VITE_BFF_BASE_URL) return env.VITE_BFF_BASE_URL;
   } catch {
-    return "";
+    // Ignore env read errors
   }
+  return liveStatus.get().baseUrl ?? "";
 }
 
 /** Configured live mode (not the *effective* mode). We keep probing SSE while
@@ -339,7 +340,10 @@ export function connectLiveSse(init: SseConnectInit = {}): () => void {
     }
   });
 
-  es.addEventListener("error", () => {
+  let errorHandled = false;
+  const handleError = () => {
+    if (errorHandled) return;
+    errorHandled = true;
     realtime.markLiveError();
     if (closedByCaller) return;
     try { es.close(); } catch { /* noop */ }
@@ -355,7 +359,9 @@ export function connectLiveSse(init: SseConnectInit = {}): () => void {
         connectLiveSse(init);
       }
     });
-  });
+  };
+  es.addEventListener("error", handleError);
+  es.onerror = handleError;
 
   function cleanup(scheduleReconnect = false) {
     try { es.close(); } catch { /* noop */ }

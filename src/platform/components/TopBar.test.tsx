@@ -3,6 +3,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { toast } from "sonner";
 import { TopBar } from "./TopBar";
+import { reportBffUnauthorized } from "@/lib/auth/sessionExpiry";
 import { lists } from "@/lib/bff-v1";
 import { makeBffError } from "@/lib/bff-v1/errors";
 import { liveStatus } from "@/lib/bff-v1/liveStatus";
@@ -444,5 +445,18 @@ describe("TopBar — user menu sign out", () => {
 
     expect(authMocks.signOut).toHaveBeenCalledTimes(1);
     expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  it("clears the TopBar user identity immediately when session expiry is confirmed", async () => {
+    renderTopBar();
+    await flush();
+    expect(screen.getByRole("button", { name: /Mock Operator/ })).toBeInTheDocument();
+
+    act(() => {
+      reportBffUnauthorized({ confirmed: true });
+    });
+    await flush();
+
+    expect(screen.queryByRole("button", { name: /Mock Operator/ })).not.toBeInTheDocument();
   });
 });

@@ -1,5 +1,6 @@
 import { readBffEnv } from "@/lib/bff-v1/runtimeEnv";
 import { setAuthProvider } from "@/lib/bff-v1/headers";
+import { bffSessionFetch } from "./sessionExpiry";
 
 let cachedToken: string | null = null;
 let cachedTenantId: string | null = null;
@@ -77,19 +78,23 @@ export async function tryDevLogin(): Promise<string | null> {
   const env = readBffEnv();
   const baseUrl = env.VITE_BFF_BASE_URL ?? "";
 
-  const response = await fetch(`${baseUrl}/bff/auth/dev-login`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Request-Id": `fe-dev-login-${Date.now()}`,
+  const response = await bffSessionFetch(
+    `${baseUrl}/bff/auth/dev-login`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Request-Id": `fe-dev-login-${Date.now()}`,
+      },
+      credentials: "include",
+      body: JSON.stringify({
+        grant_type: "client_credentials",
+        client_id: clientId,
+        client_secret: clientSecret,
+      }),
     },
-    credentials: "include",
-    body: JSON.stringify({
-      grant_type: "client_credentials",
-      client_id: clientId,
-      client_secret: clientSecret,
-    }),
-  });
+    { baseUrl },
+  );
 
   if (!response.ok) {
     throw new Error(`dev-login HTTP ${response.status}`);
