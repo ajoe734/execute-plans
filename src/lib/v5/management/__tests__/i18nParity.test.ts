@@ -61,4 +61,21 @@ describe("Pack PM-i18n parity", () => {
       expect(zhKeys.has(k), `zh missing ${k}`).toBe(true);
     }
   });
+
+  it("includes portfolio book loading, refresh, and error keys in both locales", () => {
+    const portfolioStateKeys = [
+      "mgmt.portfolio.loading",
+      "mgmt.portfolio.loadingTitle",
+      "mgmt.portfolio.loadingBody",
+      "mgmt.portfolio.refresh",
+      "mgmt.portfolio.refreshing",
+      "mgmt.portfolio.refreshingNotice",
+      "mgmt.portfolio.loadErrorBody",
+      "mgmt.portfolio.retry",
+    ];
+    for (const k of portfolioStateKeys) {
+      expect(enKeys.has(k), `en missing ${k}`).toBe(true);
+      expect(zhKeys.has(k), `zh missing ${k}`).toBe(true);
+    }
+  });
 });

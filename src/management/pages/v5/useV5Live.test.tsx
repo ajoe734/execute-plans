@@ -187,5 +187,112 @@ describe("useV5Live cache", () => {
 
     expect(screen.getByTestId("state")).toHaveTextContent("ready:fresh");
   });
+
+  it("keeps last loaded data with refreshing=true and loading=false during manual refresh and v5 events", async () => {
+    let resolveFirst!: (v: TestData) => void;
+    let resolveSecond!: (v: TestData) => void;
+    let resolveThird!: (v: TestData) => void;
+    let callCount = 0;
+
+    const loader = vi.fn<() => Promise<TestData>>().mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) return new Promise((resolve) => { resolveFirst = resolve; });
+      if (callCount === 2) return new Promise((resolve) => { resolveSecond = resolve; });
+      return new Promise((resolve) => { resolveThird = resolve; });
+    });
+
+    function RefreshStateProbe() {
+      const { data, loading, refreshing, refresh } = useV5Live(loader, [], { cacheKey: "refresh-state" });
+      return (
+        <div>
+          <div data-testid="flags">{`loading:${loading}|refreshing:${refreshing}|data:${data?.label ?? "none"}`}</div>
+          <button data-testid="manual-refresh" onClick={() => void refresh()}>refresh</button>
+        </div>
+      );
+    }
+
+    render(<RefreshStateProbe />);
+    expect(screen.getByTestId("flags")).toHaveTextContent("loading:true|refreshing:false|data:none");
+
+    await act(async () => {
+      resolveFirst({ label: "v1" });
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId("flags")).toHaveTextContent("loading:false|refreshing:false|data:v1"),
+    );
+
+    await act(async () => {
+      screen.getByTestId("manual-refresh").click();
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId("flags")).toHaveTextContent("loading:false|refreshing:true|data:v1"),
+    );
+
+    await act(async () => {
+      resolveSecond({ label: "v2" });
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId("flags")).toHaveTextContent("loading:false|refreshing:false|data:v2"),
+    );
+
+    act(() => {
+      emitV5Event({
+        channel: "v5.sentinel.findings",
+        type: "sentinel.finding.updated",
+        payload: { id: "finding-2" },
+      });
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId("flags")).toHaveTextContent("loading:false|refreshing:true|data:v2"),
+    );
+
+    await act(async () => {
+      resolveThird({ label: "v3" });
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId("flags")).toHaveTextContent("loading:false|refreshing:false|data:v3"),
+    );
+  });
+
+  it("exposes error when initial request fails and sets loading=true while retrying", async () => {
+    let resolveRetry!: (v: TestData) => void;
+    let callCount = 0;
+    const loader = vi.fn<() => Promise<TestData>>().mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) return Promise.reject(new Error("Holdings timeout"));
+      return new Promise((resolve) => { resolveRetry = resolve; });
+    });
+
+    function ErrorRetryProbe() {
+      const { data, loading, refreshing, error, refresh } = useV5Live(loader, [], { cacheKey: "error-retry" });
+      return (
+        <div>
+          <div data-testid="status">
+            {`loading:${loading}|refreshing:${refreshing}|data:${data?.label ?? "none"}|error:${error instanceof Error ? error.message : "none"}`}
+          </div>
+          <button data-testid="retry-btn" onClick={() => void refresh()}>retry</button>
+        </div>
+      );
+    }
+
+    render(<ErrorRetryProbe />);
+    await waitFor(() =>
+      expect(screen.getByTestId("status")).toHaveTextContent("loading:false|refreshing:false|data:none|error:Holdings timeout"),
+    );
+
+    await act(async () => {
+      screen.getByTestId("retry-btn").click();
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId("status")).toHaveTextContent("loading:true|refreshing:false|data:none"),
+    );
+
+    await act(async () => {
+      resolveRetry({ label: "recovered" });
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId("status")).toHaveTextContent("loading:false|refreshing:false|data:recovered|error:none"),
+    );
+  });
 });
 
