@@ -25,6 +25,7 @@ import { clearScopedQueries } from "@/lib/bff-v1/queryKeys";
 import { BffError } from "@/lib/bff-v1/errors";
 import {
   clearSessionExpiry,
+  clearSessionRenewalMarker,
   onBffUnauthorized,
   recordSessionExpiry,
   setSessionRenewalActive,
@@ -356,6 +357,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // response for the old session cannot restore it after logout completes.
     ++syncVersion.current;
 
+    clearSessionRenewalMarker();
     if (isDevLoginHost()) {
       sessionRef.current = null;
       bffSessionRef.current = null;

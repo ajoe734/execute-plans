@@ -1,0 +1,14 @@
+{
+  "task": "FE-ANON-COLDLOAD-NO-REFRESH-POST-20261103",
+  "run": "local vite dev server + Playwright chromium, fresh browser context, empty localStorage, all /bff/* routes fulfilled with 401",
+  "route": "/management/cockpit",
+  "finalUrl": "/auth?reason=auth-required&from=%2Fmanagement%2Fcockpit",
+  "markerAfterLoad": null,
+  "bffRequests": [
+    { "method": "GET", "path": "/bff/me", "status": 401 },
+    { "method": "GET", "path": "/bff/auth/readiness", "status": 401 }
+  ],
+  "writeMethodRequestCount": 0,
+  "markerStorageKey": "agora.session.renewal-until",
+  "unchanged": ["scripts/probe-hosted-browser-bff.mjs", "hosted browser release policy"]
+}

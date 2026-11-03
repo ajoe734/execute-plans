@@ -38,6 +38,47 @@ let renewalBaseUrl: string | undefined;
 let renewalFetchFn: typeof fetch | undefined;
 let visibilityListenerAttached = false;
 
+const RENEWAL_MARKER_KEY = "agora.session.renewal-until";
+
+function readRenewalMarkerMs(): number | null {
+  try {
+    const raw = globalThis.localStorage?.getItem(RENEWAL_MARKER_KEY);
+    if (!raw) return null;
+    const ms = Number(raw);
+    return Number.isFinite(ms) ? ms : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeRenewalMarker(refreshExpiresAtMs: number): void {
+  try {
+    globalThis.localStorage?.setItem(RENEWAL_MARKER_KEY, String(refreshExpiresAtMs));
+  } catch {
+    // Storage may be unavailable; cold-load renewal then simply stays off.
+  }
+}
+
+/** Removes the persisted renewal marker (logout or confirmed refresh rejection). */
+export function clearSessionRenewalMarker(): void {
+  try {
+    globalThis.localStorage?.removeItem(RENEWAL_MARKER_KEY);
+  } catch {
+    // Ignore unavailable storage.
+  }
+}
+
+/** True when a prior login/refresh left an unexpired marker in this browser. */
+function hasUnexpiredRenewalMarker(): boolean {
+  const ms = readRenewalMarkerMs();
+  if (ms === null) return false;
+  if (Date.now() >= ms) {
+    clearSessionRenewalMarker();
+    return false;
+  }
+  return true;
+}
+
 const DEFAULT_PROACTIVE_LEAD_MS = 60_000;
 const MAX_TIMEOUT_MS = 2_147_483_647;
 
@@ -232,6 +273,7 @@ export function recordSessionExpiry(
     const parsedRefresh = Date.parse(info.refreshExpiresAt);
     if (Number.isFinite(parsedRefresh)) {
       recordedRefreshExpiresAtMs = parsedRefresh;
+      writeRenewalMarker(parsedRefresh);
     }
   }
   if (info.expiresAt) {
@@ -297,6 +339,7 @@ export function getRecordedSessionExpiry(): {
 
 export function resetSessionTransportForTests(): void {
   clearSessionExpiry();
+  clearSessionRenewalMarker();
   refreshInFlight = null;
   refreshGeneration = 0;
   lastSuccessGeneration = 0;
@@ -346,6 +389,9 @@ export async function refreshBffSessionOutcome(options?: {
       if (!res || !res.ok) {
         const status = res?.status;
         const isAuthFailure = status === 401 || status === 403;
+        if (isAuthFailure) {
+          clearSessionRenewalMarker();
+        }
         if (shouldReportOnFailure && isAuthFailure) {
           clearSessionExpiry();
           reportBffUnauthorized({ confirmed: true });
@@ -445,10 +491,21 @@ export async function bffSessionFetch(
     return res;
   }
 
+  if (isLogoutEndpoint) {
+    clearSessionRenewalMarker();
+  }
+
   if (res.ok && (isMeEndpoint || isRefreshEndpoint || isDevLoginEndpoint)) {
     inspectExpiryResponse(res, { baseUrl, fetchFn: options?.fetchFn });
     return res;
   }
+
+  // A browser with no live session and no unexpired renewal marker has
+  // nothing to renew: the initial /bff/me and /bff/auth/readiness 401s go
+  // straight to the auth boundary without a POST /bff/auth/refresh.
+  const isAnonymousColdLoadProbe =
+    (isMeEndpoint || cleanPath.endsWith(paths.authReadiness())) &&
+    !renewalActive && !hasUnexpiredRenewalMarker();
 
   const isMockModeWriteGateProbe =
     isMeEndpoint &&
@@ -462,6 +519,7 @@ export async function bffSessionFetch(
     isRefreshEndpoint ||
     isDevLoginEndpoint ||
     isLogoutEndpoint ||
+    isAnonymousColdLoadProbe ||
     isMockModeWriteGateProbe
   ) {
     return res;
@@ -491,6 +549,7 @@ export async function bffSessionFetch(
   }
 
   if (retryRes.status === 401) {
+    clearSessionRenewalMarker();
     clearSessionExpiry();
     reportBffUnauthorized({ confirmed: true });
     return retryRes;
