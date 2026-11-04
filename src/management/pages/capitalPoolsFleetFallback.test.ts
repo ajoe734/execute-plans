@@ -3,7 +3,13 @@ import { lists, mgmt } from "@/lib/bff-v1";
 import type { ListEnvelope } from "@/lib/bff-v1";
 import type { CapitalPool } from "@/lib/bff-v1";
 import type { ManagementPersonaFleetRow } from "@/lib/bff-v1/management";
-import { capitalPoolBindingDetail, capitalPoolMatchesFocus, capitalPoolsWithFleetFallback, capitalPoolWithFleetFallback } from "./capitalPoolsFleetFallback";
+import {
+  capitalPoolBindingDetail,
+  capitalPoolMatchesFocus,
+  capitalPoolsWithFleetFallback,
+  capitalPoolWithFleetFallback,
+  classifyCapitalPoolScope,
+} from "./capitalPoolsFleetFallback";
 
 vi.mock("@/lib/bff-v1", () => ({
   lists: {
@@ -343,5 +349,72 @@ describe("capitalPoolMatchesFocus", () => {
       capitalScope: "paper",
       fleetDerived: true,
     });
+  });
+
+  it("matches the real owner paper pool record by pool_id, persona alias prefix, and fleet paper ledger id", async () => {
+    const ownerPool: CapitalPool = {
+      id: "hosted-all12-h12-claude-20261027-4923-pool",
+      poolId: "hosted-all12-h12-claude-20261027-4923-pool",
+      name: "persona-strat-hosted-all12-h12-claude-20261027-4923-src-106b4057d07a paper pool",
+      owner: "tenant-dev",
+      status: "active",
+      state: undefined,
+      risk: undefined,
+      currency: "TWD",
+      allocated: 0,
+      utilized: undefined,
+      riskBudget: undefined,
+      updatedAt: "2026-11-01T08:41:17Z",
+      reportedFields: {
+        currency: true,
+        allocated: false,
+        utilized: false,
+        riskBudget: false,
+        risk: false,
+      },
+      metadata: {
+        internal: true,
+        execution_context: "paper",
+        tenant_id: "tenant-dev",
+        fixture: "hosted_all12",
+        paper_only: true,
+      },
+    } as CapitalPool;
+
+    vi.mocked(lists.capitalPools).mockResolvedValue(emptyEnvelope([ownerPool]));
+    vi.mocked(mgmt.personaFleet.get).mockResolvedValue([
+      {
+        personaId: "persona-strat-hosted-all12-h12-claude-20261027-4923-src-106b4057d07a",
+        personaName: "H12 Claude Strategy",
+        capitalMode: "paper",
+        paperLedgerId: "paper-ledger-persona-strat-hosted-all12-h12-claude-20261027-4923-src-106b4057d07a",
+      },
+    ] as unknown as ManagementPersonaFleetRow[]);
+
+    const env = await capitalPoolsWithFleetFallback();
+    expect(env.items).toHaveLength(1);
+    const enriched = env.items[0];
+
+    expect(classifyCapitalPoolScope(enriched)).toBe("paper");
+    expect(capitalPoolMatchesFocus(enriched, "hosted-all12-h12-claude-20261027-4923-pool")).toBe(true);
+    expect(
+      capitalPoolMatchesFocus(
+        enriched,
+        "persona-strat-hosted-all12-h12-claude-20261027-4923-src-106b4057d07a",
+      ),
+    ).toBe(true);
+    expect(
+      capitalPoolMatchesFocus(
+        enriched,
+        "paper-ledger-persona-strat-hosted-all12-h12-claude-20261027-4923-src-106b4057d07a",
+      ),
+    ).toBe(true);
+    expect(
+      classifyCapitalPoolScope({
+        ...enriched,
+        status: "archived",
+        state: "retired",
+      }),
+    ).toBe("archived");
   });
 });
