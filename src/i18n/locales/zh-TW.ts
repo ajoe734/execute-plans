@@ -2599,6 +2599,20 @@ export default {
     search: "搜尋標題或事件…",
     incident: "事件", author: "作者", resolved: "結案時間",
     rootCause: "根因", impact: "影響", followUps: "後續行動",
+    statusFilter: "狀態篩選",
+    status: {
+      all: "全部狀態",
+      draft: "草稿",
+      review: "審查中",
+      approved: "已核准",
+      published: "已發佈",
+    },
+    pagination: {
+      label: "事後檢討分頁",
+      total: "共 {{total}} 筆事後檢討",
+      previous: "上一頁",
+      next: "下一頁",
+    },
   },
   rankingDashboard: {
     subtitle: "依公式排序的績效儀表板,可下鑽看分數組成。",

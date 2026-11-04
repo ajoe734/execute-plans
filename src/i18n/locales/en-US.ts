@@ -2617,6 +2617,20 @@ export default {
     search: "Search title or incident…",
     incident: "Incident", author: "Author", resolved: "Resolved",
     rootCause: "Root cause", impact: "Impact", followUps: "Follow-ups",
+    statusFilter: "Filter status",
+    status: {
+      all: "All statuses",
+      draft: "Draft",
+      review: "In Review",
+      approved: "Approved",
+      published: "Published",
+    },
+    pagination: {
+      label: "Postmortem pagination",
+      total: "{{total}} postmortems",
+      previous: "Previous",
+      next: "Next",
+    },
   },
   rankingDashboard: {
     subtitle: "Performance ranking by formula, with click-through score breakdown.",
