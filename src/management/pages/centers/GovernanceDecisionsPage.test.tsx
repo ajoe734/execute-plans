@@ -1,8 +1,9 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { TooltipProvider } from "@/components/ui/tooltip";
 import i18n from "@/i18n";
 import { GovernanceDecisionsPage } from "./GovernanceDecisionsPage";
 import type { HumanInboxItem } from "@/lib/v5/management/humanInbox";
@@ -10,22 +11,47 @@ import { deriveGovernanceDecisionState } from "./governanceDecisionState";
 
 const mocks = vi.hoisted(() => ({
   useV5Live: vi.fn(),
+  useLiveListV1: vi.fn(),
 }));
 
 vi.mock("@/management/pages/v5/useV5Live", () => ({
   useV5Live: mocks.useV5Live,
 }));
 
+vi.mock("@/lib/bff-v1", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/bff-v1")>();
+  return {
+    ...actual,
+    useLiveListV1: mocks.useLiveListV1,
+  };
+});
+
 void i18n.changeLanguage("en-US");
+
+function LocationProbe() {
+  const loc = useLocation();
+  return <output data-testid="location">{loc.pathname}{loc.search}</output>;
+}
 
 function renderPage(initialEntry: string) {
   return render(
     <I18nextProvider i18n={i18n}>
-      <MemoryRouter initialEntries={[initialEntry]}>
-        <Routes>
-          <Route path="/management/governance-decisions" element={<GovernanceDecisionsPage />} />
-        </Routes>
-      </MemoryRouter>
+      <TooltipProvider>
+        <MemoryRouter initialEntries={[initialEntry]}>
+          <Routes>
+            <Route
+              path="/management/governance-decisions"
+              element={(
+                <>
+                  <GovernanceDecisionsPage />
+                  <LocationProbe />
+                </>
+              )}
+            />
+            <Route path="/management/capital/:id" element={<LocationProbe />} />
+          </Routes>
+        </MemoryRouter>
+      </TooltipProvider>
     </I18nextProvider>,
   );
 }
@@ -46,6 +72,8 @@ const recommendationItem: HumanInboxItem = {
 describe("Governance Decisions — recommendations queue", () => {
   beforeEach(() => {
     mocks.useV5Live.mockReset();
+    mocks.useLiveListV1.mockReset();
+    mocks.useLiveListV1.mockReturnValue({ items: [], pending: 0, refresh: vi.fn(), meta: {} });
   });
 
   it("renders the recommendations queue and a Rankings Center link without any embedded ranking table", () => {
@@ -99,6 +127,8 @@ describe("Governance Decisions — recommendations queue", () => {
 describe("Governance Decisions — capital queue", () => {
   beforeEach(() => {
     mocks.useV5Live.mockReset();
+    mocks.useLiveListV1.mockReset();
+    mocks.useLiveListV1.mockReturnValue({ items: [], pending: 0, refresh: vi.fn(), meta: {} });
   });
 
   it("keeps broker disconnect and sentinel containment items visible after the legacy route redirect", () => {
@@ -122,6 +152,70 @@ describe("Governance Decisions — capital queue", () => {
 
     expect(screen.getByText("Kraken disconnected")).toBeInTheDocument();
     expect(screen.getByText("Drawdown sentinel fired")).toBeInTheDocument();
+  });
+
+  it("renders formal, paper, and archived capital pool scopes with counts, auto-switches on capital_id focus, and opens /management/capital/:id on row click", () => {
+    mocks.useV5Live.mockReturnValue({ data: [], loading: false, refresh: vi.fn() });
+    const paperPool = {
+      id: "hosted-all12-h12-claude-20261027-4923-pool",
+      poolId: "hosted-all12-h12-claude-20261027-4923-pool",
+      name: "persona-strat-hosted-all12-h12-claude-20261027-4923-src-106b4057d07a paper pool",
+      owner: "tenant-dev",
+      status: "active",
+      state: undefined,
+      risk: undefined,
+      currency: "TWD",
+      allocated: 0,
+      utilized: 0,
+      riskBudget: 0,
+      updatedAt: "2026-11-01T08:41:17Z",
+      capitalScope: "paper",
+      reportedFields: {
+        currency: true,
+        allocated: false,
+        utilized: false,
+        riskBudget: false,
+        risk: false,
+      },
+    };
+    const archivedPool = {
+      ...paperPool,
+      id: "hosted-all12-archived-pool",
+      poolId: "hosted-all12-archived-pool",
+      name: "persona-strat-hosted-all12-archived paper pool",
+      status: "archived",
+      state: "retired" as const,
+    };
+
+    mocks.useLiveListV1.mockImplementation((_loader: unknown, liveKinds?: string[]) => {
+      if (liveKinds?.includes("CapitalPool")) {
+        return {
+          items: [paperPool, archivedPool],
+          pending: 0,
+          refresh: vi.fn(),
+          meta: {},
+        };
+      }
+      return { items: [], pending: 0, refresh: vi.fn(), meta: {} };
+    });
+
+    renderPage(
+      "/management/governance-decisions?tab=capital&capital_id=hosted-all12-h12-claude-20261027-4923-pool",
+    );
+
+    expect(screen.getByRole("button", { name: "Formal (0)" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: "Paper (1)" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Archived (1)" })).toHaveAttribute("aria-pressed", "false");
+
+    const rowText = screen.getByText(
+      "persona-strat-hosted-all12-h12-claude-20261027-4923-src-106b4057d07a paper pool",
+    );
+    expect(rowText).toBeInTheDocument();
+
+    fireEvent.click(rowText);
+    expect(screen.getByTestId("location")).toHaveTextContent(
+      "/management/capital/hosted-all12-h12-claude-20261027-4923-pool",
+    );
   });
 });
 

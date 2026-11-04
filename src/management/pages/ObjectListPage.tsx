@@ -2,7 +2,7 @@
 // VI-1 — migrated to bffV1: loader returns ListEnvelope<T>; refresh via useLiveListV1.
 import { useState } from "react";
 import type { ReactNode } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { DataTable, type Column } from "@/platform/components/DataTable";
 import { StatusBadge } from "@/platform/components/StatusBadge";
@@ -45,6 +45,32 @@ export function resolveObjectRowHref<T extends BaseObject>(
   return trimmed;
 }
 
+export interface ObjectListEmptyStateConfig {
+  title: string;
+  description: string;
+  icon?: ReactNode;
+  actionLabel?: string;
+  actionTo?: string;
+}
+
+export interface ObjectListScopeOption<S extends string = string> {
+  id: S;
+  label: string;
+}
+
+export interface ObjectListScopeConfig<T, S extends string = string> {
+  paramName: string;
+  defaultScope: S;
+  groupLabel: string;
+  options: readonly ObjectListScopeOption<S>[];
+  classify: (row: T) => S;
+  emptyStateForScope?: (
+    scope: S,
+    counts: Record<S, number>,
+    buildScopeHref: (targetScope: S) => string,
+  ) => ObjectListEmptyStateConfig | undefined;
+}
+
 interface Props<T extends BaseObject> {
   title: string;
   /** VI-1: now returns a ListEnvelope. Use bffV1.lists.* or asListEnvelope(). */
@@ -58,7 +84,7 @@ interface Props<T extends BaseObject> {
   liveKinds?: string[];
   /** Pack F F01 — describes the Create button behavior. */
   createBehavior?: CreateBehavior;
-  focusParam?: string;
+  focusParam?: string | readonly string[];
   focusLabel?: string;
   /**
    * Optional matcher for the `focusParam` value. Defaults to strict `row.id === focusId`.
@@ -67,22 +93,27 @@ interface Props<T extends BaseObject> {
    * so the link lands on a row instead of the "no matching row" banner.
    */
   focusMatch?: (row: T, focusId: string) => boolean;
-  emptyState?: {
-    title: string;
-    description: string;
-    icon?: ReactNode;
-  };
+  emptyState?: ObjectListEmptyStateConfig;
+  scopeConfig?: ObjectListScopeConfig<T>;
   /** Optional aggregate summary rendered above the data grid. */
   summary?: (rows: T[]) => ReactNode;
 }
 
 export function ObjectListPage<T extends BaseObject>({
-  title, loader, basePath, listHref, rowHref, nameCell, extraColumns = [], liveKinds = [], createBehavior, focusParam, focusLabel, focusMatch, emptyState, summary,
+  title, loader, basePath, listHref, rowHref, nameCell, extraColumns = [], liveKinds = [], createBehavior, focusParam, focusLabel, focusMatch, emptyState, scopeConfig, summary,
 }: Props<T>) {
   const t = useT();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const focusId = focusParam ? searchParams.get(focusParam)?.trim() ?? "" : "";
+  const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const focusParamList = Array.isArray(focusParam)
+    ? focusParam
+    : typeof focusParam === "string" && focusParam
+      ? [focusParam]
+      : [];
+  const focusId = focusParamList
+    .map((param) => searchParams.get(param)?.trim() ?? "")
+    .find((val) => val.length > 0) ?? "";
   const { items: rows, pending, refresh, meta } = useLiveListV1<T>(loader, liveKinds, { auto: false });
   const [drawerOpen, setDrawerOpen] = useState(false);
   const degradation = extractDegradation(meta);
@@ -91,12 +122,79 @@ export function ObjectListPage<T extends BaseObject>({
   const degradedDescription = degradation.degraded && strictFallbackBlocked
     ? `strict typed error · ${degradation.reason || liveStatus.fallbackReason || "live BFF unavailable"} · seed fallback blocked`
     : degradation.reason;
-  const focusedRows = focusId
-    ? rows.filter((row) => (focusMatch ? focusMatch(row, focusId) : row.id === focusId))
+
+  const matchesFocus = (row: T, targetFocusId: string): boolean =>
+    focusMatch ? focusMatch(row, targetFocusId) : row.id === targetFocusId;
+
+  const allFocusedRows = focusId
+    ? rows.filter((row) => matchesFocus(row, focusId))
+    : [];
+
+  const scopeCounts: Record<string, number> = {};
+  if (scopeConfig) {
+    for (const option of scopeConfig.options) {
+      scopeCounts[option.id] = 0;
+    }
+    for (const row of rows) {
+      const scope = scopeConfig.classify(row);
+      scopeCounts[scope] = (scopeCounts[scope] ?? 0) + 1;
+    }
+  }
+
+  const rawScopeParam = scopeConfig
+    ? searchParams.get(scopeConfig.paramName)?.trim().toLowerCase() ?? ""
+    : "";
+  const explicitScope = scopeConfig?.options.find((opt) => opt.id.toLowerCase() === rawScopeParam)?.id;
+  const focusedScope = scopeConfig && allFocusedRows.length > 0
+    ? scopeConfig.classify(allFocusedRows[0])
+    : undefined;
+  const activeScope = scopeConfig
+    ? (explicitScope && (!focusedScope || allFocusedRows.some((row) => scopeConfig.classify(row) === explicitScope))
+      ? explicitScope
+      : (focusedScope ?? explicitScope ?? scopeConfig.defaultScope))
+    : undefined;
+
+  const scopedRows = scopeConfig && activeScope
+    ? rows.filter((row) => scopeConfig.classify(row) === activeScope)
     : rows;
+
+  const focusedRows = focusId
+    ? scopedRows.filter((row) => matchesFocus(row, focusId))
+    : scopedRows;
   const focusMatched = Boolean(focusId && focusedRows.length > 0);
-  const visibleRows = focusMatched ? focusedRows : rows;
+  const visibleRows = focusMatched ? focusedRows : scopedRows;
   const hasClickableRows = visibleRows.some((r) => Boolean(resolveObjectRowHref(r, basePath, rowHref)));
+
+  const buildScopeHref = (targetScope: string): string => {
+    const nextParams = new URLSearchParams(searchParams);
+    if (scopeConfig) {
+      nextParams.set(scopeConfig.paramName, targetScope);
+      if (focusId && focusedScope && focusedScope !== targetScope) {
+        for (const param of focusParamList) {
+          nextParams.delete(param);
+        }
+      }
+    }
+    const qs = nextParams.toString();
+    return `${location.pathname}${qs ? `?${qs}` : ""}`;
+  };
+
+  const selectScope = (targetScope: string) => {
+    if (!scopeConfig) return;
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set(scopeConfig.paramName, targetScope);
+    if (focusId && focusedScope && focusedScope !== targetScope) {
+      for (const param of focusParamList) {
+        nextParams.delete(param);
+      }
+    }
+    setSearchParams(nextParams);
+  };
+
+  const isDegradedEmpty = rows.length === 0 && degradation.degraded;
+  const resolvedEmptyState = !isDegradedEmpty && scopeConfig && activeScope && scopeConfig.emptyStateForScope
+    ? (scopeConfig.emptyStateForScope(activeScope, scopeCounts, buildScopeHref) ?? emptyState)
+    : emptyState;
 
   const columns: Column<T>[] = [
     {
@@ -199,7 +297,33 @@ export function ObjectListPage<T extends BaseObject>({
     <>
       <PageHeader title={title} actions={renderCreateAction()} />
       <PageBody fill>
-        {summary && rows.length > 0 && <div className="mb-4">{summary(rows)}</div>}
+        {scopeConfig && (
+          <div
+            role="group"
+            aria-label={scopeConfig.groupLabel}
+            className="mb-3 flex flex-wrap items-center gap-2"
+          >
+            {scopeConfig.options.map((option) => {
+              const count = scopeCounts[option.id] ?? 0;
+              const selected = activeScope === option.id;
+              return (
+                <Button
+                  key={option.id}
+                  type="button"
+                  size="sm"
+                  variant={selected ? "default" : "outline"}
+                  aria-pressed={selected}
+                  data-capital-scope={option.id}
+                  data-scope-count={count}
+                  onClick={() => selectScope(option.id)}
+                >
+                  {option.label} ({count})
+                </Button>
+              );
+            })}
+          </div>
+        )}
+        {summary && visibleRows.length > 0 && <div className="mb-4">{summary(visibleRows)}</div>}
         {pending > 0 && (
           <button
             onClick={refresh}
@@ -240,23 +364,42 @@ export function ObjectListPage<T extends BaseObject>({
             </div>
           </Card>
         )}
-        {rows.length === 0 && (degradation.degraded || emptyState) ? (
-          <EmptyState
-            icon={emptyState?.icon ?? <Inbox className="h-8 w-8" />}
-            title={
-              degradation.degraded
-                ? t("common.awaitingData", { defaultValue: "No data yet" })
-                : emptyState?.title ?? t("common.noResults")
-            }
-            description={
-              degradedDescription ||
-              emptyState?.description ||
-              t("common.awaitingDataDesc", {
-                defaultValue:
-                  "This surface has no data yet — the backend is reachable but upstream is not producing for it.",
-              })
-            }
-          />
+        {visibleRows.length === 0 && (isDegradedEmpty || resolvedEmptyState) ? (
+          <div
+            onClick={(event) => {
+              if (isDegradedEmpty || !resolvedEmptyState?.actionTo) return;
+              const target = event.target as HTMLElement | null;
+              if (target?.closest?.("a")) {
+                event.preventDefault();
+                navigate(resolvedEmptyState.actionTo);
+              }
+            }}
+          >
+            <EmptyState
+              icon={resolvedEmptyState?.icon ?? <Inbox className="h-8 w-8" />}
+              title={
+                isDegradedEmpty
+                  ? t("common.awaitingData", { defaultValue: "No data yet" })
+                  : resolvedEmptyState?.title ?? t("common.noResults")
+              }
+              description={
+                (isDegradedEmpty ? degradedDescription : undefined) ||
+                resolvedEmptyState?.description ||
+                t("common.awaitingDataDesc", {
+                  defaultValue:
+                    "This surface has no data yet — the backend is reachable but upstream is not producing for it.",
+                })
+              }
+              cta={
+                !isDegradedEmpty && resolvedEmptyState?.actionLabel && resolvedEmptyState?.actionTo
+                  ? {
+                    label: resolvedEmptyState.actionLabel,
+                    href: resolvedEmptyState.actionTo,
+                  }
+                  : undefined
+              }
+            />
+          </div>
         ) : (
           <DataTable
             rows={visibleRows}
