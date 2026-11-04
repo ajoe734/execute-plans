@@ -573,6 +573,14 @@ export default {
       ledger_booking: "Ledger booking",
       reconciliation: "Reconciliation",
     },
+    statuses: {
+      open: "Open",
+      completed: "Completed",
+      completed_with_variance: "Completed with variance",
+      no_order: "No order",
+      unreconciled: "Unreconciled",
+      failed: "Failed",
+    },
     detail: {
       allJourneys: "All journeys",
       envRevision: "{{environment}} · revision {{revision}}",

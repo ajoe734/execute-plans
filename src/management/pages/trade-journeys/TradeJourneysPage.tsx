@@ -31,9 +31,20 @@ function ReadState({ meta }: { meta?: JourneyMeta }) {
 }
 
 function Status({ row }: { row: JourneyRow }) {
+  const t = useT();
   const activeFlags = Object.entries(row.flags || {}).filter(([, active]) => active).map(([name]) => name);
-  const bad = /reject|mismatch|fail|block/i.test(`${row.status} ${activeFlags.join(" ")}`);
-  return <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs ${bad ? "bg-red-500/10 text-red-700 dark:text-red-300" : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"}`}>{bad ? <AlertTriangle size={13} /> : <CheckCircle2 size={13} />}{row.status}</span>;
+  const bad = row.status === "failed" || /reject|mismatch|fail|block/i.test(`${row.status} ${activeFlags.join(" ")}`);
+  const warn = !bad && (row.status === "completed_with_variance" || row.status === "unreconciled");
+  const ok = !bad && !warn && row.status === "completed";
+  const tone = bad
+    ? "bg-red-500/10 text-red-700 dark:text-red-300"
+    : warn
+      ? "bg-amber-500/10 text-amber-700 dark:text-amber-300"
+      : ok
+        ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+        : "bg-muted text-muted-foreground";
+  const label = row.status ? t(`tradeJourneys.statuses.${row.status}`, { defaultValue: row.status }) : "";
+  return <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs ${tone}`}>{bad || warn ? <AlertTriangle size={13} /> : ok ? <CheckCircle2 size={13} /> : <CircleDashed size={13} />}{label}</span>;
 }
 
 export function TradeJourneysPage() {

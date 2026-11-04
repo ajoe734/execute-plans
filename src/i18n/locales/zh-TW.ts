@@ -564,6 +564,14 @@ export default {
       ledger_booking: "帳務入帳",
       reconciliation: "對帳",
     },
+    statuses: {
+      open: "進行中",
+      completed: "已完成",
+      completed_with_variance: "完成但對帳有差異",
+      no_order: "未下單",
+      unreconciled: "未對帳",
+      failed: "失敗",
+    },
     detail: {
       allJourneys: "全部旅程",
       envRevision: "{{environment}} · 版本 {{revision}}",

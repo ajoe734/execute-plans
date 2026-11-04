@@ -1,0 +1,42 @@
+{
+  "schema_version": "pantheon.trade-journeys-status-labels.v1",
+  "task_id": "FE-TRADE-JOURNEY-STATUS-LABELS-20261104",
+  "taskId": "FE-TRADE-JOURNEY-STATUS-LABELS-20261104",
+  "owner": "Antigravity",
+  "reviewer": "Claude",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-TRADE-JOURNEY-STATUS-LABELS-20261104",
+  "status": "ready_for_review",
+  "timestamp": "2026-11-04T01:04:30Z",
+  "scope": {
+    "delivered": [
+      "Added localized status labels under tradeJourneys.statuses in both src/i18n/locales/zh-TW.ts (open: 進行中, completed: 已完成, completed_with_variance: 完成但對帳有差異, no_order: 未下單, unreconciled: 未對帳, failed: 失敗) and src/i18n/locales/en-US.ts (open: Open, completed: Completed, completed_with_variance: Completed with variance, no_order: No order, unreconciled: Unreconciled, failed: Failed)",
+      "Updated Status in src/management/pages/trade-journeys/TradeJourneysPage.tsx to render localized status labels with raw status fallback for unknown values across both list and detail views",
+      "Restricted green success styling (bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 with CheckCircle2) strictly to completed without active adverse flags",
+      "Applied warning styling (bg-amber-500/10 text-amber-700 dark:text-amber-300 with AlertTriangle) to completed_with_variance and unreconciled, error styling (bg-red-500/10 text-red-700 dark:text-red-300 with AlertTriangle) to failed and rows with active adverse flags, and neutral styling (bg-muted text-muted-foreground with CircleDashed) to open, no_order, and unknown non-adverse statuses",
+      "Added unit and i18n test coverage in TradeJourneysPage.test.tsx and TradeJourneysPage.i18n.test.tsx verifying labels and styles of every listed status, unknown fallback, and active adverse flag override in both locales on list and detail pages"
+    ],
+    "not_changed": [
+      "Did not change Trade Journeys BFF data fetching or backend contract"
+    ]
+  },
+  "artifacts": [
+    "src/management/pages/trade-journeys/TradeJourneysPage.tsx",
+    "src/management/pages/trade-journeys/TradeJourneysPage.test.tsx",
+    "src/management/pages/trade-journeys/TradeJourneysPage.i18n.test.tsx",
+    "src/i18n/locales/zh-TW.ts",
+    "src/i18n/locales/en-US.ts",
+    "docs/deployment/evidence/FE-TRADE-JOURNEY-STATUS-LABELS-20261104/evidence.json"
+  ],
+  "acceptance_checklist": {
+    "1_localized_labels_and_raw_fallback_on_list_and_detail": true,
+    "2_status_tones_completed_green_variance_unreconciled_warning_failed_error_open_no_order_neutral": true,
+    "3_active_adverse_flag_forces_error_style": true,
+    "4_tests_cover_every_status_label_and_style_in_both_locales": true
+  },
+  "verification": {
+    "vitest": "npx vitest run src/management/pages/trade-journeys/TradeJourneysPage.test.tsx src/management/pages/trade-journeys/TradeJourneysPage.i18n.test.tsx src/management/pages/trade-journeys/TradeJourneysHostedProof.contract.test.ts src/lib/v5/management/__tests__/i18nParity.test.ts (4 test files, 24 tests passed)",
+    "typecheck": "npm run typecheck:app (tsc -p tsconfig.app.json --noEmit passed with 0 errors)"
+  }
+}
