@@ -13,6 +13,7 @@ import {
   __resetOperationListCacheForTests,
 } from "./Operations";
 import { BffError } from "@/lib/bff-v1/errors";
+import { normalizeApprovalFields } from "@/lib/bff-v1/operations";
 import { GovernanceReview } from "./GovernanceReview";
 import { GovernanceQueuePage } from "./phase2/GovernanceQueue";
 import { setAuthProvider, clearAuthProvider } from "@/lib/bff-v1/headers";
@@ -22,8 +23,10 @@ import type { Job, Alert, Incident } from "@/lib/bff-v1";
 const m = vi.hoisted(() => ({
   decide: vi.fn(),
   list: vi.fn(),
+  listDecisions: vi.fn(),
   get: vi.fn(),
   toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() },
+  translate: null as ((key: string, params?: Record<string, unknown>) => string) | null,
 }));
 
 const { mockRealtime, mockJobs, mockAlerts, mockIncidents } = vi.hoisted(() => {
@@ -77,7 +80,7 @@ vi.mock("@/lib/bff-v1", async (importOriginal) => {
       audit: vi.fn().mockResolvedValue({ items: [] }),
     },
     realtime: mockRealtime,
-    bffV1: { approvals: { get: m.get, list: m.list }, audit: { list: () => Promise.resolve([]) } },
+    bffV1: { approvals: { get: m.get, list: m.list, listDecisions: m.listDecisions }, audit: { list: () => Promise.resolve([]) } },
   };
 });
 
@@ -90,6 +93,7 @@ vi.mock("@/management/components/governance/PolicyValidatorPanel", () => ({ Poli
 
 vi.mock("@/platform/hooks", () => ({
   useT: () => (key: string, params?: Record<string, unknown>) => {
+    if (m.translate) return m.translate(key, params);
     if (key === "page.jobsSubtitle") return `Jobs count: ${params?.count ?? 0}`;
     return key;
   },
@@ -434,10 +438,13 @@ const confirm = (name: string) => {
 beforeEach(() => {
   vi.clearAllMocks();
   m.list.mockReset();
+  m.listDecisions.mockReset();
   m.get.mockReset();
   m.decide.mockReset();
+  m.translate = null;
   __resetOperationListCacheForTests();
   m.decide.mockResolvedValue({ ok: true, data: { approvalId: "a1", decision: "approve" }, correlationId: "c", idempotencyKey: "k" });
+  m.listDecisions.mockResolvedValue([]);
 });
 
 describe("Approval callers: Operations ApprovalsPage", () => {
@@ -515,6 +522,299 @@ describe("Approval callers: Operations ApprovalsPage", () => {
     m.toast.error.mock.calls[0][1].action.onClick();
     await waitFor(() => expect(m.decide).toHaveBeenCalledTimes(2));
     expect(m.decide.mock.calls[1]).toEqual(m.decide.mock.calls[0]);
+  });
+
+  const realDecidedBase = {
+    version: 2,
+    actor_id: "pantheon-dev-admin-test",
+    decision: "approved",
+    rationale: "approval",
+    target_id: "hosted-all12-h12-claude-20261027-4923-execution-artifact",
+    tenant_id: "tenant-dev",
+    actor_role: "governance_reviewer",
+    conditions: [],
+    created_at: "2026-11-01T14:50:02Z",
+    decided_at: "2026-11-01T14:50:02Z",
+    expires_at: "2026-11-08T14:50:02Z",
+    persona_id: "persona-strat-hosted-all12-h12-claude-20261027-4923-src-106b4057d07a",
+    revoked_at: null,
+    risk_level: "low",
+    decision_id: "apv-07db6c62179bfb41bcb790001c955022535fe863aa003a8458e1eea8d62c7574",
+    target_type: "registry_entry",
+    evidence_refs: [],
+    owner_user_id: "pantheon-dev-admin-test",
+    decision_state: "decided",
+    target_version: "1.0.0",
+    capital_pool_id: "hosted-all12-h12-claude-20261027-4923-pool",
+    authority_status: "authoritative",
+  };
+
+  it("fetches GET /api/v1/approval-decisions only when the all filter is selected and lists decided and revoked records sorted newest first by decided_at then created_at", async () => {
+    m.list.mockResolvedValue([row("pending-1", 1)]);
+    m.listDecisions.mockResolvedValue([
+      {
+        ...realDecidedBase,
+        decision_id: "apv-older-decided",
+        target_id: "target-older-decided",
+        created_at: "2026-11-01T10:00:00Z",
+        decided_at: "2026-11-01T12:00:00Z",
+      },
+      {
+        ...realDecidedBase,
+        decision_id: "apv-newest-decided",
+        target_id: "target-newest-decided",
+        decision: "rejected",
+        created_at: "2026-11-01T09:00:00Z",
+        decided_at: "2026-11-02T15:00:00Z",
+      },
+      {
+        ...realDecidedBase,
+        decision_id: "apv-same-decided-newer-created",
+        target_id: "target-same-decided-newer-created",
+        decision_state: "revoked",
+        decision: "approved",
+        created_at: "2026-11-01T11:30:00Z",
+        decided_at: "2026-11-01T12:00:00Z",
+      },
+    ].map((r) => normalizeApprovalFields(r)));
+
+    render(<MemoryRouter><ApprovalsPage /></MemoryRouter>);
+    expect(await screen.findByText("subj-pending-1")).toBeInTheDocument();
+    expect(m.list).toHaveBeenCalledTimes(1);
+    expect(m.listDecisions).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "filter.all" }));
+    expect(await screen.findByText("target-newest-decided")).toBeInTheDocument();
+    expect(m.listDecisions).toHaveBeenCalledTimes(1);
+
+    const cells = screen.getAllByRole("row").slice(1).map((r) => r.textContent ?? "");
+    expect(cells).toHaveLength(3);
+    expect(cells[0]).toContain("target-newest-decided");
+    expect(cells[0]).toContain("status.rejected");
+    expect(cells[1]).toContain("target-same-decided-newer-created");
+    expect(cells[1]).toContain("status.revoked");
+    expect(cells[2]).toContain("target-older-decided");
+    expect(cells[2]).toContain("status.approved");
+  });
+
+  it("sorts a proposed row created after the newest decision first when decided_at is null", async () => {
+    m.list.mockResolvedValue([]);
+    m.listDecisions.mockResolvedValue([
+      {
+        ...realDecidedBase,
+        decision_id: "apv-newest-decided",
+        target_id: "target-newest-decided",
+        decision: "approved",
+        created_at: "2026-11-01T09:00:00Z",
+        decided_at: "2026-11-02T15:00:00Z",
+      },
+      {
+        ...realDecidedBase,
+        decision_id: "apv-newer-proposed",
+        target_id: "target-newer-proposed",
+        decision_state: "proposed",
+        decision: null,
+        actor_id: null,
+        created_at: "2026-11-03T10:00:00Z",
+        decided_at: null,
+      },
+    ].map((r) => normalizeApprovalFields(r)));
+
+    render(<MemoryRouter><ApprovalsPage /></MemoryRouter>);
+    fireEvent.click(screen.getByRole("button", { name: "filter.all" }));
+    expect(await screen.findByText("target-newer-proposed")).toBeInTheDocument();
+
+    const cells = screen.getAllByRole("row").slice(1).map((r) => r.textContent ?? "");
+    expect(cells).toHaveLength(2);
+    expect(cells[0]).toContain("target-newer-proposed");
+    expect(cells[0]).toContain("status.pending");
+    expect(cells[1]).toContain("target-newest-decided");
+    expect(cells[1]).toContain("status.approved");
+  });
+
+  it("renders localized zh-TW status labels 已駁回 and 已撤銷 for rejected and revoked rows", async () => {
+    const zhTW = (await import("@/i18n/locales/zh-TW")).default;
+    const enUS = (await import("@/i18n/locales/en-US")).default;
+    expect(zhTW.status.rejected).toBe("已駁回");
+    expect(zhTW.status.revoked).toBe("已撤銷");
+    expect(zhTW.status.superseded).toBe("已取代");
+    expect(enUS.status.rejected).toBe("Rejected");
+    expect(enUS.status.revoked).toBe("Revoked");
+    expect(enUS.status.superseded).toBe("Superseded");
+
+    m.translate = (key: string, params?: Record<string, unknown>) => {
+      const [ns, field] = key.split(".");
+      const dict = zhTW as unknown as Record<string, Record<string, string>>;
+      return dict[ns]?.[field] ?? (params?.defaultValue as string | undefined) ?? key;
+    };
+    m.list.mockResolvedValue([]);
+    m.listDecisions.mockResolvedValue([
+      {
+        ...realDecidedBase,
+        decision_id: "apv-zh-rejected",
+        target_id: "target-zh-rejected",
+        decision_state: "decided",
+        decision: "rejected",
+        decided_at: "2026-11-02T15:00:00Z",
+      },
+      {
+        ...realDecidedBase,
+        decision_id: "apv-zh-revoked",
+        target_id: "target-zh-revoked",
+        decision_state: "revoked",
+        decision: "approved",
+        decided_at: "2026-11-01T12:00:00Z",
+      },
+    ].map((r) => normalizeApprovalFields(r)));
+
+    render(<MemoryRouter><ApprovalsPage /></MemoryRouter>);
+    fireEvent.click(screen.getByRole("button", { name: zhTW.filter.all }));
+    expect(await screen.findByText("target-zh-rejected")).toBeInTheDocument();
+
+    const cells = screen.getAllByRole("row").slice(1).map((r) => r.textContent ?? "");
+    expect(cells).toHaveLength(2);
+    expect(cells[0]).toContain("target-zh-rejected");
+    expect(cells[0]).toContain("已駁回");
+    expect(cells[1]).toContain("target-zh-revoked");
+    expect(cells[1]).toContain("已撤銷");
+  });
+
+  it("filters rows by decision id, target id, persona id, and capital pool id via the search box", async () => {
+    m.list.mockResolvedValue([]);
+    m.listDecisions.mockResolvedValue([
+      realDecidedBase,
+      {
+        ...realDecidedBase,
+        decision_id: "apv-other-999",
+        target_id: "other-strategy-target-beta",
+        persona_id: "persona-beta-777",
+        capital_pool_id: "pool-beta-888",
+      },
+    ].map((r) => normalizeApprovalFields(r)));
+
+    render(<MemoryRouter><ApprovalsPage /></MemoryRouter>);
+    fireEvent.click(screen.getByRole("button", { name: "filter.all" }));
+    expect(await screen.findByText(realDecidedBase.target_id)).toBeInTheDocument();
+    expect(screen.getByText("other-strategy-target-beta")).toBeInTheDocument();
+
+    const searchbox = screen.getByRole("searchbox");
+
+    // Target ID fragment
+    fireEvent.change(searchbox, { target: { value: "4923-execution-artifact" } });
+    expect(screen.getByText(realDecidedBase.target_id)).toBeInTheDocument();
+    expect(screen.queryByText("other-strategy-target-beta")).toBeNull();
+
+    // Decision ID fragment
+    fireEvent.change(searchbox, { target: { value: "apv-other-999" } });
+    expect(screen.getByText("other-strategy-target-beta")).toBeInTheDocument();
+    expect(screen.queryByText(realDecidedBase.target_id)).toBeNull();
+
+    // Persona ID fragment
+    fireEvent.change(searchbox, { target: { value: "106b4057d07a" } });
+    expect(screen.getByText(realDecidedBase.target_id)).toBeInTheDocument();
+    expect(screen.queryByText("other-strategy-target-beta")).toBeNull();
+
+    // Capital pool ID fragment
+    fireEvent.change(searchbox, { target: { value: "pool-beta-888" } });
+    expect(screen.getByText("other-strategy-target-beta")).toBeInTheDocument();
+    expect(screen.queryByText(realDecidedBase.target_id)).toBeNull();
+  });
+
+  it("shows decider, decided time, expiry, persona, and capital pool in the detail sheet (or dash when absent) and hides approve/reject controls on non-pending rows", async () => {
+    m.list.mockResolvedValue([]);
+    m.listDecisions.mockResolvedValue([
+      realDecidedBase,
+      {
+        decision_id: "apv-minimal-rejected",
+        target_type: "Strategy",
+        target_id: "target-minimal-rejected",
+        owner_user_id: "u-req",
+        risk_level: "high",
+        created_at: "2026-11-01T10:00:00Z",
+        decision_state: "decided",
+        decision: "rejected",
+        actor_id: null,
+        decided_at: null,
+        expires_at: null,
+        persona_id: null,
+        capital_pool_id: null,
+      },
+    ].map((r) => normalizeApprovalFields(r)));
+
+    render(<MemoryRouter><ApprovalsPage /></MemoryRouter>);
+    fireEvent.click(screen.getByRole("button", { name: "filter.all" }));
+    fireEvent.click(await screen.findByText(realDecidedBase.target_id));
+
+    expect(await screen.findByText(realDecidedBase.persona_id)).toBeInTheDocument();
+    expect(screen.getByText(realDecidedBase.capital_pool_id)).toBeInTheDocument();
+    expect(screen.getAllByText("pantheon-dev-admin-test").length).toBeGreaterThanOrEqual(2);
+    expect(screen.queryByRole("button", { name: "actions.approve" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "actions.reject" })).toBeNull();
+
+    fireEvent.click(screen.getByText("target-minimal-rejected"));
+    await waitFor(() => expect(screen.getByText("apv-minimal-rejected")).toBeInTheDocument());
+    expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(5);
+    expect(screen.queryByRole("button", { name: "actions.approve" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "actions.reject" })).toBeNull();
+  });
+
+  it("shows an error state and never an empty table when reading the decisions route fails", async () => {
+    m.list.mockResolvedValue([row("a1", 1)]);
+    m.listDecisions.mockRejectedValue(new Error("decisions endpoint 503"));
+
+    render(<MemoryRouter><ApprovalsPage /></MemoryRouter>);
+    expect(await screen.findByText("subj-a1")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "filter.all" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("page.approvalsDecisionsError");
+    expect(alert).toHaveTextContent("decisions endpoint 503");
+    expect(screen.queryByRole("table")).toBeNull();
+  });
+
+  it("states that decided records are under the all filter when pending view is empty and carries every new label in both locales", async () => {
+    const enUS = (await import("@/i18n/locales/en-US")).default;
+    const zhTW = (await import("@/i18n/locales/zh-TW")).default;
+
+    const newPageKeys = [
+      "approvalsPendingEmpty",
+      "approvalsDecisionsError",
+      "approvalsDecider",
+      "approvalsDecidedAt",
+      "approvalsExpiresAt",
+      "approvalsPersona",
+      "approvalsCapitalPool",
+    ] as const;
+    for (const k of newPageKeys) {
+      expect(typeof enUS.page[k]).toBe("string");
+      expect(enUS.page[k].length).toBeGreaterThan(0);
+      expect(typeof zhTW.page[k]).toBe("string");
+      expect(zhTW.page[k].length).toBeGreaterThan(0);
+    }
+    expect(enUS.filter.approvalsSearch.length).toBeGreaterThan(0);
+    expect(zhTW.filter.approvalsSearch.length).toBeGreaterThan(0);
+
+    m.list.mockResolvedValue([]);
+    m.translate = (key: string) => {
+      const [ns, field] = key.split(".");
+      const dict = enUS as unknown as Record<string, Record<string, string>>;
+      return dict[ns]?.[field] ?? key;
+    };
+
+    const { unmount } = render(<MemoryRouter><ApprovalsPage /></MemoryRouter>);
+    expect(await screen.findByText(enUS.page.approvalsPendingEmpty)).toBeInTheDocument();
+    expect(enUS.page.approvalsPendingEmpty).toMatch(/decided.*all/i);
+    unmount();
+
+    __resetOperationListCacheForTests();
+    m.translate = (key: string) => {
+      const [ns, field] = key.split(".");
+      const dict = zhTW as unknown as Record<string, Record<string, string>>;
+      return dict[ns]?.[field] ?? key;
+    };
+    render(<MemoryRouter><ApprovalsPage /></MemoryRouter>);
+    expect(await screen.findByText(zhTW.page.approvalsPendingEmpty)).toBeInTheDocument();
+    expect(zhTW.page.approvalsPendingEmpty).toMatch(/已決策.*全部/);
   });
 });
 

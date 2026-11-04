@@ -1,6 +1,33 @@
-import { describe, it, expect } from "vitest";
-import { normalizeApprovalFields, normalizeAuditFields } from "@/lib/bff-v1/operations";
+import { describe, it, expect, vi, afterEach } from "vitest";
+import { listApprovalDecisions, listApprovals, normalizeApprovalFields, normalizeAuditFields } from "@/lib/bff-v1/operations";
+import { liveStatus } from "@/lib/bff-v1/liveStatus";
+import { paths } from "@/lib/bff-v1/paths";
 const n = (r: object) => normalizeApprovalFields(r) as unknown as Record<string, unknown>;
+
+const realHostedDecision = {
+  version: 2,
+  actor_id: "pantheon-dev-admin-test",
+  decision: "approved",
+  rationale: "approval",
+  target_id: "hosted-all12-h12-claude-20261027-4923-execution-artifact",
+  tenant_id: "tenant-dev",
+  actor_role: "governance_reviewer",
+  conditions: [],
+  created_at: "2026-11-01T14:50:02Z",
+  decided_at: "2026-11-01T14:50:02Z",
+  expires_at: "2026-11-08T14:50:02Z",
+  persona_id: "persona-strat-hosted-all12-h12-claude-20261027-4923-src-106b4057d07a",
+  revoked_at: null,
+  risk_level: "low",
+  decision_id: "apv-07db6c62179bfb41bcb790001c955022535fe863aa003a8458e1eea8d62c7574",
+  target_type: "registry_entry",
+  evidence_refs: [],
+  owner_user_id: "pantheon-dev-admin-test",
+  decision_state: "decided",
+  target_version: "1.0.0",
+  capital_pool_id: "hosted-all12-h12-claude-20261027-4923-pool",
+  authority_status: "authoritative",
+};
 
 const owner = {
   id: "gov_1",
@@ -241,6 +268,104 @@ describe("normalizeApprovalFields (Governance owner readback)", () => {
     const res = n(malformedStandalone);
     expect(res.targetConflict).toBe(true);
     expect(res.targetId).toBeUndefined();
+  });
+
+  it("normalizes the real hosted decision record shape for decided approved, decided rejected, and revoked records", () => {
+    const projectedBase = {
+      ...realHostedDecision,
+      id: realHostedDecision.decision_id,
+      outcome: "approved",
+      status: "decided",
+      state: "decided",
+      decision_type: "registry_entry",
+      submitted_at: realHostedDecision.created_at,
+      submitted_by: realHostedDecision.owner_user_id,
+      allowedActions: [],
+      decision_context: {
+        governance_chain: {
+          target_id: realHostedDecision.target_id,
+          target_version: realHostedDecision.target_version,
+        },
+      },
+    };
+
+    const approved = n(projectedBase);
+    expect(approved).toMatchObject({
+      id: "apv-07db6c62179bfb41bcb790001c955022535fe863aa003a8458e1eea8d62c7574",
+      kind: "registry_entry",
+      subject: "hosted-all12-h12-claude-20261027-4923-execution-artifact",
+      targetId: "hosted-all12-h12-claude-20261027-4923-execution-artifact",
+      targetVersion: "1.0.0",
+      requester: "pantheon-dev-admin-test",
+      decider: "pantheon-dev-admin-test",
+      decidedAt: "2026-11-01T14:50:02Z",
+      expiresAt: "2026-11-08T14:50:02Z",
+      personaId: "persona-strat-hosted-all12-h12-claude-20261027-4923-src-106b4057d07a",
+      capitalPoolId: "hosted-all12-h12-claude-20261027-4923-pool",
+      riskLevel: "low",
+      createdAt: "2026-11-01T14:50:02Z",
+      state: "approved",
+      version: 2,
+    });
+
+    const rejected = n({ ...projectedBase, decision: "rejected", outcome: "rejected" });
+    expect(rejected.state).toBe("rejected");
+
+    const revoked = n({
+      ...projectedBase,
+      decision_state: "revoked",
+      decision: "approved",
+      revoked_at: "2026-11-02T00:00:00Z",
+    });
+    expect(revoked.state).toBe("revoked");
+  });
+
+  describe("listApprovals vs listApprovalDecisions routes", () => {
+    const realFetch = globalThis.fetch;
+    afterEach(() => {
+      globalThis.fetch = realFetch;
+      liveStatus._reset();
+    });
+
+    it("reads pending approvals from GET /bff/approvals and all decisions from GET /api/v1/approval-decisions", async () => {
+      liveStatus._reset({ mode: "live", effective: "live" });
+      const fetchSpy = vi.fn((input: Parameters<typeof fetch>[0]) => {
+        const url = new URL(String(input), "https://bff.test");
+        if (url.pathname === "/bff/approvals") {
+          return Promise.resolve(new Response(JSON.stringify({ items: [{ ...owner, decision_state: "proposed" }] }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }));
+        }
+        if (url.pathname === "/api/v1/approval-decisions") {
+          return Promise.resolve(new Response(JSON.stringify({ data: [realHostedDecision], meta: { total: 1 } }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }));
+        }
+        return Promise.resolve(new Response("not found", { status: 404 }));
+      });
+      globalThis.fetch = fetchSpy as unknown as typeof fetch;
+
+      expect(paths.approvals()).toBe("/bff/approvals");
+      expect(paths.approvalDecisions()).toBe("/api/v1/approval-decisions");
+
+      const pendingRows = await listApprovals();
+      expect(pendingRows).toHaveLength(1);
+      expect(pendingRows[0].state).toBe("pending");
+
+      const allDecisions = await listApprovalDecisions();
+      expect(allDecisions).toHaveLength(1);
+      expect(allDecisions[0]).toMatchObject({
+        id: realHostedDecision.decision_id,
+        state: "approved",
+        decider: "pantheon-dev-admin-test",
+        decidedAt: "2026-11-01T14:50:02Z",
+        expiresAt: "2026-11-08T14:50:02Z",
+        personaId: realHostedDecision.persona_id,
+        capitalPoolId: realHostedDecision.capital_pool_id,
+      });
+    });
   });
 });
 
