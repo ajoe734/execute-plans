@@ -177,7 +177,7 @@ describe("management reads after retiring dead Agora clients", () => {
     render(<MemoryRouter><PostmortemLibraryPage /></MemoryRouter>);
     fireEvent.click(await screen.findByText("Persisted review"));
     expect(await screen.findByText("Read-store timeout")).toBeInTheDocument();
-    expect(fetch).toHaveBeenNthCalledWith(1, { method: "GET", path: "/api/v1/postmortems" });
+    expect(fetch).toHaveBeenNthCalledWith(1, { method: "GET", path: "/api/v1/postmortems", query: { page_size: 50 } });
     expect(fetch).toHaveBeenNthCalledWith(2, { method: "GET", path: "/api/v1/postmortems/report-1" });
   });
 
