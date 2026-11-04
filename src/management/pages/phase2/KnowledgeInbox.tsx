@@ -13,18 +13,38 @@ import { NonProductionActionButton } from "@/management/components/NonProduction
 
 export const KnowledgeInboxPage = () => {
   const t = useT();
-  const { data: live } = useV5Live(
-    (signal) => managementConsoleReads.knowledgeInbox({ signal }).then((envelope) => envelope.items),
+  const { data: envelope, loading, error } = useV5Live(
+    (signal) => managementConsoleReads.knowledgeInbox({ signal }),
     [],
     { cacheKey: "phase2.knowledgeInbox" },
   );
+  const live = Array.isArray(envelope) ? envelope : envelope?.items;
+  const metaStatus = (
+    (!Array.isArray(envelope)
+      ? envelope?.meta?.status ??
+        envelope?.meta?.surfaces?.knowledge_inbox?.status ??
+        envelope?.meta?.surfaces?.knowledge?.status
+      : undefined) ?? ""
+  ).toLowerCase();
+  const isUnavailable =
+    !loading &&
+    (Boolean(error) || !envelope || metaStatus === "unavailable" || metaStatus === "error" || metaStatus === "failed");
+
   const [items, setItems] = useState<KnowledgeInsightRecord[]>([]);
   const [active, setActive] = useState<KnowledgeInsightRecord | null>(null);
   useEffect(() => {
-    if (!live) return;
+    if (!live) {
+      setItems([]);
+      setActive(null);
+      return;
+    }
     setItems(live);
-    setActive((prev) => prev && live.some((item) => item.id === prev.id) ? prev : live[0] ?? null);
+    setActive((prev) => (prev && live.some((item) => item.id === prev.id) ? prev : live[0] ?? null));
   }, [live]);
+
+  const activeTime = active?.ts ? safeDateTime(active.ts) : "";
+  const formattedTime = activeTime && activeTime !== "—" ? activeTime : (active?.ts || "");
+  const activeMetaLine = active ? [active.source, formattedTime].filter(Boolean).join(" · ") : "";
 
   return (
     <>
@@ -32,17 +52,26 @@ export const KnowledgeInboxPage = () => {
       <PageBody>
         <div className="grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-4">
           <Card className="p-2">
-            {items.length === 0 && <div className="p-6 text-sm text-muted-foreground text-center">{t("knowledge.empty")}</div>}
+            {!loading && isUnavailable && items.length === 0 && (
+              <div className="p-6 text-sm text-muted-foreground text-center" data-testid="knowledge-inbox-unavailable">
+                {t("knowledge.unavailable")}
+              </div>
+            )}
+            {!loading && !isUnavailable && items.length === 0 && (
+              <div className="p-6 text-sm text-muted-foreground text-center" data-testid="knowledge-inbox-empty">
+                {t("knowledge.empty")}
+              </div>
+            )}
             <ul className="divide-y divide-border">
               {items.map((i) => (
                 <li key={i.id}>
                   <button onClick={() => setActive(i)} className={`w-full text-left p-3 hover:bg-muted/40 ${active?.id === i.id ? "bg-muted/60" : ""}`}>
                     <div className="flex items-center gap-2 mb-1">
                       <RiskBadge level={i.risk} />
-                      <Badge variant="outline" className="text-[10px] uppercase">{i.kind}</Badge>
+                      {i.kind && <Badge variant="outline" className="text-[10px] uppercase">{i.kind}</Badge>}
                     </div>
                     <div className="text-sm font-medium truncate">{i.title}</div>
-                    <div className="text-xs text-muted-foreground text-mono mt-0.5">{i.source}</div>
+                    {i.source && <div className="text-xs text-muted-foreground text-mono mt-0.5">{i.source}</div>}
                   </button>
                 </li>
               ))}
@@ -52,10 +81,14 @@ export const KnowledgeInboxPage = () => {
           <Card className="p-5 space-y-4">
             {active ? (
               <>
-                <div className="flex items-center gap-2"><RiskBadge level={active.risk} /><Badge variant="outline">{active.kind}</Badge><span className="text-mono text-xs text-muted-foreground">{active.id}</span></div>
+                <div className="flex items-center gap-2">
+                  <RiskBadge level={active.risk} />
+                  {active.kind && <Badge variant="outline">{active.kind}</Badge>}
+                  <span className="text-mono text-xs text-muted-foreground">{active.id}</span>
+                </div>
                 <h2 className="text-lg font-semibold">{active.title}</h2>
                 <p className="text-sm text-muted-foreground leading-relaxed">{active.body}</p>
-                <div className="text-xs text-muted-foreground text-mono">{active.source} · {safeDateTime(active.ts)}</div>
+                {activeMetaLine && <div className="text-xs text-muted-foreground text-mono">{activeMetaLine}</div>}
                 <div className="flex flex-wrap gap-2 pt-2 border-t border-border">
                   <NonProductionActionButton size="sm" status="no executing owner">{t("knowledge.promoteArtifact")}</NonProductionActionButton>
                   <NonProductionActionButton size="sm" variant="outline" status="no executing owner">{t("knowledge.promotePostmortem")}</NonProductionActionButton>
