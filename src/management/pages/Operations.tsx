@@ -20,7 +20,7 @@ import { Field } from "./ObjectDetailLayout";
 import { AuditTimeline } from "@/platform/components/AuditTimeline";
 import { X } from "lucide-react";
 import { BffError } from "@/lib/bff-v1/errors";
-import { listApprovalDecisions, normalizeApprovalFields } from "@/lib/bff-v1/operations";
+import { normalizeApprovalFields } from "@/lib/bff-v1/operations";
 import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { getSharedQueryClient, queryKeys, resetSharedQueryClientForTests } from "@/lib/bff-v1/queryKeys";
 
@@ -356,10 +356,7 @@ export const ApprovalsPage = () => {
 
   const decisionsQuery = useQuery<ApprovalRequest[]>({
     queryKey: queryKeys.operations.approvalDecisions(),
-    queryFn: () =>
-      (bffV1.approvals.listDecisions ?? listApprovalDecisions)().then((items) =>
-        items.map((a) => normalizeApprovalFields(a) as ApprovalRequest),
-      ),
+    queryFn: () => bffV1.approvals.listDecisions(),
     enabled: filter === "all",
     staleTime: OPERATION_LIST_CACHE_TTL_MS,
   }, qc);
@@ -374,8 +371,8 @@ export const ApprovalsPage = () => {
   const filtered = useMemo(() => {
     const base = filter === "all"
       ? [...(decisionsQuery.data ?? [])].sort((a, b) => {
-          const da = a.decidedAt ?? "";
-          const db = b.decidedAt ?? "";
+          const da = a.decidedAt ?? a.createdAt ?? "";
+          const db = b.decidedAt ?? b.createdAt ?? "";
           return da !== db ? db.localeCompare(da) : (b.createdAt ?? "").localeCompare(a.createdAt ?? "");
         })
       : rows.filter((r) => r.state === "pending");

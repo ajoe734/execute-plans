@@ -441,7 +441,8 @@ export default {
     pending: "Pending", running: "Running", success: "Success",
     warning: "Warning", failed: "Failed", paused: "Paused",
     draft: "Draft", review: "In Review", approved: "Approved",
-    active: "Active", deployed: "Deployed", retired: "Retired", unavailable: "Unavailable",
+    rejected: "Rejected", revoked: "Revoked", superseded: "Superseded",
+    active: "Active", deployed: "Deployed", retired: "Retired", unavailable: "Unavailable", unknown: "Unknown",
   },
   actions: {
     create: "Create", edit: "Edit", view: "View", delete: "Delete",

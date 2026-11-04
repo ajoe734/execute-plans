@@ -7,7 +7,7 @@
   "merge_target": "dev",
   "hosted_verification_claimed": false,
   "hosted_verification_note": "Hosted readback is performed by the operator coordinator after deploy; this pre-deploy evidence covers local unit, contract, i18n parity, and typecheck verification only.",
-  "summary": "Wire the /management/approvals 'all' filter to GET /api/v1/approval-decisions via bffV1.approvals.listDecisions while keeping the 'pending' filter and all other callers of listApprovals / lists.approvals pending-only on GET /bff/approvals.",
+  "summary": "Wire the /management/approvals 'all' filter to GET /api/v1/approval-decisions via bffV1.approvals.listDecisions while keeping the 'pending' filter and all other callers of listApprovals / lists.approvals pending-only on GET /bff/approvals; add status.rejected, status.revoked, status.superseded, and status.unknown to en-US and zh-TW locales; sort 'all' filter rows by decidedAt ?? createdAt then createdAt.",
   "scoped_artifacts": [
     "src/lib/bff-v1/paths.ts",
     "src/lib/bff-v1/dto.ts",
@@ -21,25 +21,26 @@
     "docs/deployment/evidence/FE-APPROVALS-DECIDED-HISTORY-20261104/evidence.json"
   ],
   "untouched_shared_files": [
-    "src/lib/bff-v1/lists.ts"
+    "src/lib/bff-v1/lists.ts",
+    "src/platform/components/StatusBadge.tsx"
   ],
   "acceptance_criteria": {
     "1_all_filter_reads_approval_decisions_pending_keeps_bff_approvals": "verified",
     "2_listApprovals_and_lists_approvals_stay_pending_only": "verified",
     "3_normalizeApprovalFields_maps_decided_approved_rejected_and_revoked": "verified",
-    "4_all_filter_sorts_newest_first_by_decided_at_then_created_at": "verified",
+    "4_all_filter_sorts_newest_first_by_decided_at_fallback_created_at_then_created_at": "verified",
     "5_search_box_filters_by_decision_target_persona_capital_pool_id": "verified",
     "6_detail_sheet_shows_decider_decided_at_expires_at_persona_capital_pool_and_hides_actions_on_non_pending": "verified",
     "7_decisions_route_failure_shows_error_alert_never_empty_table": "verified",
     "8_empty_pending_view_states_decided_records_are_under_all_filter": "verified",
-    "9_both_locales_carry_every_new_label": "verified"
+    "9_both_locales_carry_every_new_label_including_status_rejected_revoked_superseded_unknown": "verified"
   },
   "verification": {
     "unit_and_contract_tests": {
       "command": "npx vitest run src/lib/bff-v1/__tests__/approval-readback.test.ts src/lib/bff-v1/__tests__/contract-drift.test.ts src/lib/bff-v1/__tests__/shellSummary.test.ts src/lib/v5/management/__tests__/i18nParity.test.ts src/management/pages/Operations.test.tsx",
       "status": "passed",
       "test_files": 5,
-      "tests_passed": 81
+      "tests_passed": 83
     },
     "typecheck": {
       "command": "npx tsc --noEmit",

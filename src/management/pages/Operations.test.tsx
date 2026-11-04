@@ -13,6 +13,7 @@ import {
   __resetOperationListCacheForTests,
 } from "./Operations";
 import { BffError } from "@/lib/bff-v1/errors";
+import { normalizeApprovalFields } from "@/lib/bff-v1/operations";
 import { GovernanceReview } from "./GovernanceReview";
 import { GovernanceQueuePage } from "./phase2/GovernanceQueue";
 import { setAuthProvider, clearAuthProvider } from "@/lib/bff-v1/headers";
@@ -575,7 +576,7 @@ describe("Approval callers: Operations ApprovalsPage", () => {
         created_at: "2026-11-01T11:30:00Z",
         decided_at: "2026-11-01T12:00:00Z",
       },
-    ]);
+    ].map((r) => normalizeApprovalFields(r)));
 
     render(<MemoryRouter><ApprovalsPage /></MemoryRouter>);
     expect(await screen.findByText("subj-pending-1")).toBeInTheDocument();
@@ -596,6 +597,90 @@ describe("Approval callers: Operations ApprovalsPage", () => {
     expect(cells[2]).toContain("status.approved");
   });
 
+  it("sorts a proposed row created after the newest decision first when decided_at is null", async () => {
+    m.list.mockResolvedValue([]);
+    m.listDecisions.mockResolvedValue([
+      {
+        ...realDecidedBase,
+        decision_id: "apv-newest-decided",
+        target_id: "target-newest-decided",
+        decision: "approved",
+        created_at: "2026-11-01T09:00:00Z",
+        decided_at: "2026-11-02T15:00:00Z",
+      },
+      {
+        ...realDecidedBase,
+        decision_id: "apv-newer-proposed",
+        target_id: "target-newer-proposed",
+        decision_state: "proposed",
+        decision: null,
+        actor_id: null,
+        created_at: "2026-11-03T10:00:00Z",
+        decided_at: null,
+      },
+    ].map((r) => normalizeApprovalFields(r)));
+
+    render(<MemoryRouter><ApprovalsPage /></MemoryRouter>);
+    fireEvent.click(screen.getByRole("button", { name: "filter.all" }));
+    expect(await screen.findByText("target-newer-proposed")).toBeInTheDocument();
+
+    const cells = screen.getAllByRole("row").slice(1).map((r) => r.textContent ?? "");
+    expect(cells).toHaveLength(2);
+    expect(cells[0]).toContain("target-newer-proposed");
+    expect(cells[0]).toContain("status.pending");
+    expect(cells[1]).toContain("target-newest-decided");
+    expect(cells[1]).toContain("status.approved");
+  });
+
+  it("renders localized zh-TW status labels 已駁回 and 已撤銷 for rejected and revoked rows", async () => {
+    const zhTW = (await import("@/i18n/locales/zh-TW")).default;
+    const enUS = (await import("@/i18n/locales/en-US")).default;
+    expect(zhTW.status.rejected).toBe("已駁回");
+    expect(zhTW.status.revoked).toBe("已撤銷");
+    expect(zhTW.status.superseded).toBe("已取代");
+    expect(zhTW.status.unknown).toBe("未知");
+    expect(enUS.status.rejected).toBe("Rejected");
+    expect(enUS.status.revoked).toBe("Revoked");
+    expect(enUS.status.superseded).toBe("Superseded");
+    expect(enUS.status.unknown).toBe("Unknown");
+
+    m.translate = (key: string, params?: Record<string, unknown>) => {
+      const [ns, field] = key.split(".");
+      const dict = zhTW as unknown as Record<string, Record<string, string>>;
+      return dict[ns]?.[field] ?? (params?.defaultValue as string | undefined) ?? key;
+    };
+    m.list.mockResolvedValue([]);
+    m.listDecisions.mockResolvedValue([
+      {
+        ...realDecidedBase,
+        decision_id: "apv-zh-rejected",
+        target_id: "target-zh-rejected",
+        decision_state: "decided",
+        decision: "rejected",
+        decided_at: "2026-11-02T15:00:00Z",
+      },
+      {
+        ...realDecidedBase,
+        decision_id: "apv-zh-revoked",
+        target_id: "target-zh-revoked",
+        decision_state: "revoked",
+        decision: "approved",
+        decided_at: "2026-11-01T12:00:00Z",
+      },
+    ].map((r) => normalizeApprovalFields(r)));
+
+    render(<MemoryRouter><ApprovalsPage /></MemoryRouter>);
+    fireEvent.click(screen.getByRole("button", { name: zhTW.filter.all }));
+    expect(await screen.findByText("target-zh-rejected")).toBeInTheDocument();
+
+    const cells = screen.getAllByRole("row").slice(1).map((r) => r.textContent ?? "");
+    expect(cells).toHaveLength(2);
+    expect(cells[0]).toContain("target-zh-rejected");
+    expect(cells[0]).toContain("已駁回");
+    expect(cells[1]).toContain("target-zh-revoked");
+    expect(cells[1]).toContain("已撤銷");
+  });
+
   it("filters rows by decision id, target id, persona id, and capital pool id via the search box", async () => {
     m.list.mockResolvedValue([]);
     m.listDecisions.mockResolvedValue([
@@ -607,7 +692,7 @@ describe("Approval callers: Operations ApprovalsPage", () => {
         persona_id: "persona-beta-777",
         capital_pool_id: "pool-beta-888",
       },
-    ]);
+    ].map((r) => normalizeApprovalFields(r)));
 
     render(<MemoryRouter><ApprovalsPage /></MemoryRouter>);
     fireEvent.click(screen.getByRole("button", { name: "filter.all" }));
@@ -656,7 +741,7 @@ describe("Approval callers: Operations ApprovalsPage", () => {
         persona_id: null,
         capital_pool_id: null,
       },
-    ]);
+    ].map((r) => normalizeApprovalFields(r)));
 
     render(<MemoryRouter><ApprovalsPage /></MemoryRouter>);
     fireEvent.click(screen.getByRole("button", { name: "filter.all" }));
