@@ -638,11 +638,9 @@ describe("Approval callers: Operations ApprovalsPage", () => {
     expect(zhTW.status.rejected).toBe("已駁回");
     expect(zhTW.status.revoked).toBe("已撤銷");
     expect(zhTW.status.superseded).toBe("已取代");
-    expect(zhTW.status.unknown).toBe("未知");
     expect(enUS.status.rejected).toBe("Rejected");
     expect(enUS.status.revoked).toBe("Revoked");
     expect(enUS.status.superseded).toBe("Superseded");
-    expect(enUS.status.unknown).toBe("Unknown");
 
     m.translate = (key: string, params?: Record<string, unknown>) => {
       const [ns, field] = key.split(".");

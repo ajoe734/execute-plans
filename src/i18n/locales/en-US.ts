@@ -454,7 +454,7 @@ export default {
     warning: "Warning", failed: "Failed", paused: "Paused",
     draft: "Draft", review: "In Review", approved: "Approved",
     rejected: "Rejected", revoked: "Revoked", superseded: "Superseded",
-    active: "Active", deployed: "Deployed", retired: "Retired", unavailable: "Unavailable", unknown: "Unknown",
+    active: "Active", deployed: "Deployed", retired: "Retired", unavailable: "Unavailable",
   },
   actions: {
     create: "Create", edit: "Edit", view: "View", delete: "Delete",

@@ -445,7 +445,7 @@ export default {
     warning: "警告", failed: "失敗", paused: "暫停",
     draft: "草稿", review: "審查中", approved: "已核准",
     rejected: "已駁回", revoked: "已撤銷", superseded: "已取代",
-    active: "啟用", deployed: "已部署", retired: "已退役", unavailable: "無資料", unknown: "未知",
+    active: "啟用", deployed: "已部署", retired: "已退役", unavailable: "無資料",
   },
   actions: {
     create: "建立", edit: "編輯", view: "檢視", delete: "刪除",
