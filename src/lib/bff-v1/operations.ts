@@ -110,6 +110,11 @@ export function normalizeApprovalFields<T>(raw: T | undefined): T | undefined {
   out.requester ??= r.owner_user_id;
   out.riskLevel ??= r.risk_level;
   out.createdAt ??= r.created_at;
+  out.decider = chk(out.decider)[0] ?? chk(r.actor_id)[0];
+  out.decidedAt = chk(out.decidedAt)[0] ?? chk(r.decided_at)[0];
+  out.expiresAt = chk(out.expiresAt)[0] ?? chk(r.expires_at)[0];
+  out.personaId = chk(out.personaId)[0] ?? chk(r.persona_id)[0];
+  out.capitalPoolId = chk(out.capitalPoolId)[0] ?? chk(r.capital_pool_id)[0];
   const ds = r.decision_state;
   const final = ds === "decided" ? r.decision : ds;
   out.state =
@@ -125,6 +130,10 @@ export function normalizeApprovalFields<T>(raw: T | undefined): T | undefined {
 
 export async function listApprovals(): Promise<ApprovalRequest[]> {
   return strictLiveList<ApprovalRequest>("approvals.list", paths.approvals()).then((rows) => rows.map((r) => normalizeApprovalFields(r) as ApprovalRequest));
+}
+
+export async function listApprovalDecisions(): Promise<ApprovalRequest[]> {
+  return strictLiveList<ApprovalRequest>("approvals.listDecisions", paths.approvalDecisions()).then((rows) => rows.map((r) => normalizeApprovalFields(r) as ApprovalRequest));
 }
 
 export async function getApproval(id: string): Promise<ApprovalRequest | undefined> {
@@ -177,6 +186,7 @@ export const incidents = {
 
 export const approvals = {
   list: listApprovals,
+  listDecisions: listApprovalDecisions,
   get: getApproval,
 };
 

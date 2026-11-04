@@ -5,7 +5,7 @@ import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { DataTable } from "@/platform/components/DataTable";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { RiskBadge } from "@/platform/components/RiskBadge";
-import { lists, runActionSafe } from "@/lib/bff-v1";
+import { bffV1, lists, runActionSafe } from "@/lib/bff-v1";
 import { bffWrites } from "@/lib/bff-v1/writes";
 import { commandReceiptDescription } from "@/lib/bff-v1/commandReceipt";
 import { normalizeAlertTimestampFields } from "@/lib/bff-v1/eventTimestamps";
@@ -20,7 +20,7 @@ import { Field } from "./ObjectDetailLayout";
 import { AuditTimeline } from "@/platform/components/AuditTimeline";
 import { X } from "lucide-react";
 import { BffError } from "@/lib/bff-v1/errors";
-import { normalizeApprovalFields } from "@/lib/bff-v1/operations";
+import { listApprovalDecisions, normalizeApprovalFields } from "@/lib/bff-v1/operations";
 import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { getSharedQueryClient, queryKeys, resetSharedQueryClientForTests } from "@/lib/bff-v1/queryKeys";
 
@@ -343,7 +343,8 @@ export const IncidentsPage = () => {
 
 export const ApprovalsPage = () => {
   const t = useT();
-  const [rows, , refresh] = useCachedOperationList<ApprovalRequest>(
+  const qc = useClient();
+  const [rows, , refreshPending] = useCachedOperationList<ApprovalRequest>(
     "operations.approvals",
     () => lists.approvals().then((r) => ({ items: r.items.map((a) => normalizeApprovalFields(a) as ApprovalRequest) })),
   );
@@ -351,8 +352,41 @@ export const ApprovalsPage = () => {
   const [approveOpen, setApproveOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [filter, setFilter] = useState<"all" | "pending">("pending");
+  const [search, setSearch] = useState("");
 
-  const filtered = useMemo(() => filter === "all" ? rows : rows.filter((r) => r.state === "pending"), [rows, filter]);
+  const decisionsQuery = useQuery<ApprovalRequest[]>({
+    queryKey: queryKeys.operations.approvalDecisions(),
+    queryFn: () =>
+      (bffV1.approvals.listDecisions ?? listApprovalDecisions)().then((items) =>
+        items.map((a) => normalizeApprovalFields(a) as ApprovalRequest),
+      ),
+    enabled: filter === "all",
+    staleTime: OPERATION_LIST_CACHE_TTL_MS,
+  }, qc);
+
+  const refresh = useCallback(async () => {
+    await refreshPending();
+    if (filter === "all") {
+      await qc.refetchQueries({ queryKey: queryKeys.operations.approvalDecisions() }, { throwOnError: true });
+    }
+  }, [refreshPending, filter, qc]);
+
+  const filtered = useMemo(() => {
+    const base = filter === "all"
+      ? [...(decisionsQuery.data ?? [])].sort((a, b) => {
+          const da = a.decidedAt ?? "";
+          const db = b.decidedAt ?? "";
+          return da !== db ? db.localeCompare(da) : (b.createdAt ?? "").localeCompare(a.createdAt ?? "");
+        })
+      : rows.filter((r) => r.state === "pending");
+    const q = search.trim().toLowerCase();
+    if (!q) return base;
+    return base.filter((r) =>
+      [r.id, r.targetId, r.subject, r.personaId, r.capitalPoolId].some(
+        (v) => typeof v === "string" && v.toLowerCase().includes(q),
+      ),
+    );
+  }, [rows, decisionsQuery.data, filter, search]);
 
   // A vote is only a submission: final state comes from the owner readback, never the requested vote.
   const decide = async (approval: ApprovalRequest, decision: "approve" | "reject", memo: string) => {
@@ -391,21 +425,47 @@ export const ApprovalsPage = () => {
         title={t("nav.approvals")}
         subtitle={t("page.approvalsSubtitle")}
         actions={
-          <div className="flex gap-1">
-            <Button size="sm" variant={filter === "pending" ? "default" : "outline"} onClick={() => setFilter("pending")}>{t("filter.pending")}</Button>
-            <Button size="sm" variant={filter === "all" ? "default" : "outline"} onClick={() => setFilter("all")}>{t("filter.all")}</Button>
+          <div className="flex items-center gap-2">
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={t("filter.approvalsSearch")}
+              aria-label={t("filter.approvalsSearch")}
+              className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+            />
+            <div className="flex gap-1">
+              <Button size="sm" variant={filter === "pending" ? "default" : "outline"} onClick={() => setFilter("pending")}>{t("filter.pending")}</Button>
+              <Button size="sm" variant={filter === "all" ? "default" : "outline"} onClick={() => setFilter("all")}>{t("filter.all")}</Button>
+            </div>
           </div>
         }
       />
       <PageBody>
-        <DataTable rows={filtered} onRowClick={(r) => setActive(r)} columns={[
-          { key: "kind", header: t("table.kind"), cell: (r) => <span className="text-mono text-xs">{r.kind}</span> },
-          { key: "subject", header: t("table.subject"), cell: (r) => <div className="font-medium">{r.subject}</div> },
-          { key: "req", header: t("table.requester"), cell: (r) => <span className="text-mono text-xs">{r.requester}</span> },
-          { key: "risk", header: t("table.risk"), cell: (r) => <RiskBadge level={r.riskLevel} /> },
-          { key: "state", header: t("table.state"), cell: (r) => <StatusBadge state={r.state} /> },
-          { key: "created", header: t("table.created"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{safeDateTime(r.createdAt)}</span> },
-        ]} />
+        {filter === "all" && decisionsQuery.isError ? (
+          <Card role="alert" className="p-6 border-destructive/40 bg-destructive/5 text-destructive text-sm">
+            <div>{t("page.approvalsDecisionsError")}</div>
+            {decisionsQuery.error instanceof Error && decisionsQuery.error.message && (
+              <div className="text-mono text-xs mt-1">{decisionsQuery.error.message}</div>
+            )}
+          </Card>
+        ) : filter === "all" && decisionsQuery.isPending ? (
+          <Card className="p-8 text-center text-muted-foreground text-sm">{t("ui.loading")}</Card>
+        ) : (
+          <DataTable
+            rows={filtered}
+            empty={filter === "pending" ? t("page.approvalsPendingEmpty") : t("empty.noResults")}
+            onRowClick={(r) => setActive(r)}
+            columns={[
+              { key: "kind", header: t("table.kind"), cell: (r) => <span className="text-mono text-xs">{r.kind}</span> },
+              { key: "subject", header: t("table.subject"), cell: (r) => <div className="font-medium">{r.subject}</div> },
+              { key: "req", header: t("table.requester"), cell: (r) => <span className="text-mono text-xs">{r.requester}</span> },
+              { key: "risk", header: t("table.risk"), cell: (r) => <RiskBadge level={r.riskLevel} /> },
+              { key: "state", header: t("table.state"), cell: (r) => <StatusBadge state={r.state} /> },
+              { key: "created", header: t("table.created"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{safeDateTime(r.createdAt)}</span> },
+            ]}
+          />
+        )}
       </PageBody>
 
       <Sheet open={!!active} onOpenChange={(o) => !o && setActive(null)}>
@@ -423,8 +483,13 @@ export const ApprovalsPage = () => {
               </SheetHeader>
               <div className="mt-6 space-y-4">
                 <Card className="p-4 grid grid-cols-2 gap-4">
-                  <Field label={t("table.requester")} value={active.requester} mono />
+                  <Field label={t("table.requester")} value={active.requester || "—"} mono />
                   <Field label={t("table.created")} value={safeDateTime(active.createdAt)} mono />
+                  <Field label={t("page.approvalsDecider")} value={active.decider ?? "—"} mono />
+                  <Field label={t("page.approvalsDecidedAt")} value={safeDateTime(active.decidedAt)} mono />
+                  <Field label={t("page.approvalsExpiresAt")} value={safeDateTime(active.expiresAt)} mono />
+                  <Field label={t("page.approvalsPersona")} value={active.personaId ?? "—"} mono />
+                  <Field label={t("page.approvalsCapitalPool")} value={active.capitalPoolId ?? "—"} mono />
                 </Card>
                 {active.rationale && (
                   <Card className="p-4">
@@ -456,23 +521,27 @@ export const ApprovalsPage = () => {
                 )}
               </div>
 
-              <HighRiskConfirm
-                open={approveOpen}
-                onOpenChange={setApproveOpen}
-                title={t("confirmDialog.approveTitle", { subject: active.subject })}
-                description={t("confirmDialog.approveDesc", { kind: active.kind })}
-                confirmToken="APPROVE"
-                onConfirm={(memo) => decide(active, "approve", memo)}
-              />
-              <HighRiskConfirm
-                open={rejectOpen}
-                onOpenChange={setRejectOpen}
-                title={t("confirmDialog.rejectTitle", { subject: active.subject })}
-                description={t("confirmDialog.rejectDesc")}
-                confirmToken="REJECT"
-                destructive
-                onConfirm={(memo) => decide(active, "reject", memo)}
-              />
+              {active.state === "pending" && (
+                <>
+                  <HighRiskConfirm
+                    open={approveOpen}
+                    onOpenChange={setApproveOpen}
+                    title={t("confirmDialog.approveTitle", { subject: active.subject })}
+                    description={t("confirmDialog.approveDesc", { kind: active.kind })}
+                    confirmToken="APPROVE"
+                    onConfirm={(memo) => decide(active, "approve", memo)}
+                  />
+                  <HighRiskConfirm
+                    open={rejectOpen}
+                    onOpenChange={setRejectOpen}
+                    title={t("confirmDialog.rejectTitle", { subject: active.subject })}
+                    description={t("confirmDialog.rejectDesc")}
+                    confirmToken="REJECT"
+                    destructive
+                    onConfirm={(memo) => decide(active, "reject", memo)}
+                  />
+                </>
+              )}
             </>
           )}
         </SheetContent>

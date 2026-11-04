@@ -662,6 +662,11 @@ export interface ApprovalRequest {
   version?: number;
   riskLevel: RiskLevel;
   createdAt: string;
+  decider?: string;
+  decidedAt?: string;
+  expiresAt?: string;
+  personaId?: string;
+  capitalPoolId?: string;
   rationale?: string;
   diffSummary?: string;
   requiresStages?: string[];

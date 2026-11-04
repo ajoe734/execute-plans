@@ -85,6 +85,7 @@ export const paths = {
   jobLogs: (id: string) => `${BASE}/jobs/${enc(id)}/logs`,
   jobActions: (id: string, action: string) => `${BASE}/jobs/${enc(id)}/actions/${enc(action)}`,
   approvals: () => `${BASE}/approvals`,
+  approvalDecisions: () => `/api/v1/approval-decisions`,
   approval: (id: string) => `${BASE}/approvals/${enc(id)}`,
   approvalDecide: (id: string) => `${BASE}/approvals/${enc(id)}/decide`,
   approvalsBatchDecide: () => `${BASE}/approvals/batch-decide`,
