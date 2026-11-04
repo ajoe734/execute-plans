@@ -63,6 +63,7 @@ export const queryKeys = {
     alerts: (scope?: Partial<QueryScope>) => ["pantheon", getActiveQueryScope(scope), "operations", "alerts"] as const,
     incidents: (scope?: Partial<QueryScope>) => ["pantheon", getActiveQueryScope(scope), "operations", "incidents"] as const,
     approvals: (scope?: Partial<QueryScope>) => ["pantheon", getActiveQueryScope(scope), "operations", "approvals"] as const,
+    approvalDecisions: (scope?: Partial<QueryScope>) => ["pantheon", getActiveQueryScope(scope), "operations", "approvalDecisions"] as const,
     audit: (scope?: Partial<QueryScope>) => ["pantheon", getActiveQueryScope(scope), "operations", "audit"] as const,
     tools: (scope?: Partial<QueryScope>) => ["pantheon", getActiveQueryScope(scope), "operations", "tools"] as const,
     mcp: (scope?: Partial<QueryScope>) => ["pantheon", getActiveQueryScope(scope), "operations", "mcp"] as const,

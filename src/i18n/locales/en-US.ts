@@ -453,6 +453,7 @@ export default {
     pending: "Pending", running: "Running", success: "Success",
     warning: "Warning", failed: "Failed", paused: "Paused",
     draft: "Draft", review: "In Review", approved: "Approved",
+    rejected: "Rejected", revoked: "Revoked", superseded: "Superseded",
     active: "Active", deployed: "Deployed", retired: "Retired", unavailable: "Unavailable",
   },
   actions: {
@@ -1211,12 +1212,19 @@ export default {
     alertsSubtitle: "Raw alerts from monitors and thresholds. Acknowledge to claim ownership; escalate to an incident when coordination is needed.",
     incidentsSubtitle: "Incidents are formal coordinated issues. Each incident has a commander and timeline.",
     approvalsSubtitle: "Multi-stage governance inbox. High-risk actions require typed confirmation.",
+    approvalsPendingEmpty: "No pending approvals. Decided records are under the All filter.",
+    approvalsDecisionsError: "Failed to load approval decisions.",
+    approvalsDecider: "Decider",
+    approvalsDecidedAt: "Decided",
+    approvalsExpiresAt: "Expires",
+    approvalsPersona: "Persona",
+    approvalsCapitalPool: "Capital Pool",
     auditSubtitle: "Tamper-evident log of every action taken across the platform.",
     channelsSubtitle: "Notification routes available from Agora. Used by personas and skills to publish briefs, alerts, and digests.",
     noChannels: "No channels configured.",
     subscribersFmt: "{{n}} subscribers · filters: {{f}}",
   },
-  filter: { pending: "Pending", all: "All" },
+  filter: { pending: "Pending", all: "All", approvalsSearch: "Search decision, target, persona, or capital pool ID…" },
   approval: {
     sla: {
       label: "SLA",
