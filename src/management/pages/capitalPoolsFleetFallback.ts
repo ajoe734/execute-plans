@@ -185,19 +185,37 @@ function bindingNames(bindings: FleetCapitalPoolBinding[]): string {
   return bindings.map((binding) => binding.personaName).join(", ");
 }
 
+export type CapitalPoolViewScope = "formal" | "paper" | "archived";
+
+export const CAPITAL_POOL_VIEW_SCOPES: readonly CapitalPoolViewScope[] = [
+  "formal",
+  "paper",
+  "archived",
+] as const;
+
+export function normalizeCapitalPoolViewScope(value: unknown): CapitalPoolViewScope {
+  const normalized = usableText(value)?.toLowerCase();
+  if (normalized === "paper" || normalized === "archived") return normalized;
+  return "formal";
+}
+
 function fleetNameLookupIds(row: ManagementPersonaFleetRow): string[] {
-  const name = personaName(row);
-  if (!name) return [];
-  if (isPaperFleetRow(row)) {
-    return [
-      `${name} paper pool`,
-      `${name} paper capital pool`,
-    ];
+  const candidates = uniqueStrings([personaName(row), usableText(row.personaId)]);
+  const ids: string[] = [];
+  for (const label of candidates) {
+    if (isPaperFleetRow(row)) {
+      ids.push(
+        `${label} paper pool`,
+        `${label} paper capital pool`,
+      );
+    } else {
+      ids.push(
+        `${label} capital pool`,
+        `${label} live capital pool`,
+      );
+    }
   }
-  return [
-    `${name} capital pool`,
-    `${name} live capital pool`,
-  ];
+  return uniqueStrings(ids);
 }
 
 export function capitalPoolBindingSummary(pool: FleetCapitalPool): string {
@@ -222,6 +240,12 @@ export function capitalPoolBindingDetail(pool: FleetCapitalPool): string {
   }).join(" | ");
 }
 
+function poolPersonaPrefix(name: string | undefined): string | undefined {
+  if (!name) return undefined;
+  const match = /^(.+?)\s+(?:paper\s+capital|live\s+capital|paper|capital)\s+pool$/i.exec(name.trim());
+  return usableText(match?.[1]);
+}
+
 function poolLookupIds(pool: FleetCapitalPool): string[] {
   const raw = pool as FleetCapitalPool & {
     pool_id?: string | null;
@@ -229,15 +253,25 @@ function poolLookupIds(pool: FleetCapitalPool): string[] {
     capitalPoolId?: string | null;
     paper_ledger_id?: string | null;
     paperLedgerId?: string | null;
+    persona_id?: string | null;
+    personaId?: string | null;
+    metadata?: Record<string, unknown> | null;
   };
   return uniqueStrings([
     usableText(pool.id),
     usableText(pool.name),
+    poolPersonaPrefix(usableText(pool.name)),
     usableText(raw.pool_id),
     usableText(raw.capital_pool_id),
     usableText(raw.capitalPoolId),
     usableText(raw.paperLedgerId),
     usableText(raw.paper_ledger_id),
+    usableText(raw.personaId),
+    usableText(raw.persona_id),
+    usableText(raw.metadata?.persona_id),
+    usableText(raw.metadata?.personaId),
+    usableText(raw.metadata?.paper_ledger_id),
+    usableText(raw.metadata?.paperLedgerId),
   ]);
 }
 
@@ -262,6 +296,7 @@ export function capitalPoolMatchesFocus(pool: FleetCapitalPool, focusId: string)
       binding.paperCapitalPoolId,
       binding.capitalPoolId,
       binding.personaId,
+      binding.personaName,
     ])) {
       keys.add(key);
     }
@@ -287,15 +322,46 @@ function poolCapitalScope(pool: FleetCapitalPool, rows: ManagementPersonaFleetRo
     scope?: string | null;
     live_capital_enabled?: boolean | null;
     liveCapitalEnabled?: boolean | null;
+    metadata?: Record<string, unknown> | null;
   };
+  const metadataScope = usableText(raw.metadata?.execution_context)
+    ?? usableText(raw.metadata?.executionContext)
+    ?? (raw.metadata?.paper_only === true || raw.metadata?.paperOnly === true ? "paper" : undefined);
   return usableText(raw.capitalScope)
     ?? usableText(raw.capital_scope)
     ?? usableText(raw.scope)
     ?? (raw.liveCapitalEnabled || raw.live_capital_enabled ? "live" : undefined)
+    ?? (metadataScope?.toLowerCase() === "paper" ? "paper" : undefined)
     ?? (/paper/i.test(`${pool.id} ${pool.name}`) ? "paper" : undefined)
     ?? (/canary/i.test(`${pool.id} ${pool.name}`) ? "canary" : undefined)
     ?? (/live/i.test(`${pool.id} ${pool.name}`) ? "live" : undefined)
     ?? (rows.some(isPaperFleetRow) ? "paper" : undefined);
+}
+
+export function isArchivedCapitalPool(pool: FleetCapitalPool): boolean {
+  const raw = pool as FleetCapitalPool & {
+    archived?: boolean | null;
+    is_archived?: boolean | null;
+    isArchived?: boolean | null;
+    metadata?: Record<string, unknown> | null;
+  };
+  const status = usableText(pool.status)?.toLowerCase();
+  const state = usableText(pool.state)?.toLowerCase();
+  if (status === "archived" || status === "retired" || state === "retired" || state === "archived") {
+    return true;
+  }
+  return raw.archived === true || raw.is_archived === true || raw.isArchived === true || raw.metadata?.archived === true;
+}
+
+export function isPaperCapitalPool(pool: FleetCapitalPool): boolean {
+  const scope = usableText(pool.capitalScope)?.toLowerCase() ?? poolCapitalScope(pool, [])?.toLowerCase();
+  return scope === "paper" || scope === "paper_ledger";
+}
+
+export function classifyCapitalPoolScope(pool: FleetCapitalPool): CapitalPoolViewScope {
+  if (isArchivedCapitalPool(pool)) return "archived";
+  if (isPaperCapitalPool(pool)) return "paper";
+  return "formal";
 }
 
 function enrichPool(pool: FleetCapitalPool, rows: ManagementPersonaFleetRow[]): FleetCapitalPool {

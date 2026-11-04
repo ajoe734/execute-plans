@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { ObjectListPage } from "./ObjectListPage";
 import { lists } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
@@ -14,7 +13,12 @@ import type { Strategy, Persona, CapitalPool, RankingFormula, Rebalance, Deploym
 // out-of-scope lists.ts file.
 const asEntityLoader = <T,>(loader: () => Promise<ListEnvelope<unknown>>): (() => Promise<ListEnvelope<T>>) =>
   loader as unknown as () => Promise<ListEnvelope<T>>;
-import { capitalPoolsWithFleetFallback, capitalPoolMatchesFocus, type FleetCapitalPool } from "./capitalPoolsFleetFallback";
+import {
+  capitalPoolsWithFleetFallback,
+  capitalPoolMatchesFocus,
+  classifyCapitalPoolScope,
+  type FleetCapitalPool,
+} from "./capitalPoolsFleetFallback";
 import { Badge } from "@/components/ui/badge";
 import { StatCard } from "@/platform/components/StatCard";
 
@@ -24,8 +28,31 @@ const fix = (v: unknown, d = 2): string => num(v).toFixed(d);
 const pct = (v: unknown, d = 0): string => `${(num(v) * 100).toFixed(d)}%`;
 const loc = (v: unknown): string => num(v).toLocaleString();
 const hasNumber = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
-const locOrMissing = (v: unknown): string => hasNumber(v) ? v.toLocaleString() : "unconfigured";
-const pctOrMissing = (v: unknown, d = 0): string => hasNumber(v) ? `${(v * 100).toFixed(d)}%` : "unconfigured";
+
+function isAllocatedReported(row: CapitalPool): row is CapitalPool & { allocated: number } {
+  if (row.reportedFields && row.reportedFields.allocated === false) return false;
+  return hasNumber(row.allocated);
+}
+
+function isUtilizedReported(row: CapitalPool): row is CapitalPool & { utilized: number } {
+  if (row.reportedFields && row.reportedFields.utilized === false) return false;
+  return hasNumber(row.utilized);
+}
+
+function isRiskBudgetReported(row: CapitalPool): row is CapitalPool & { riskBudget: number } {
+  if (row.reportedFields && row.reportedFields.riskBudget === false) return false;
+  return hasNumber(row.riskBudget);
+}
+
+function isCurrencyReported(row: CapitalPool): boolean {
+  if (row.reportedFields && row.reportedFields.currency === false) return false;
+  return typeof row.currency === "string" && row.currency.trim().length > 0;
+}
+
+function isActiveCapitalPool(row: CapitalPool): boolean {
+  if (row.state === "deployed" || row.state === "approved") return true;
+  return String(row.status ?? "").trim().toLowerCase() === "active";
+}
 
 function capitalScopeLabel(value: unknown): string {
   const scope = String(value ?? "").trim().toLowerCase();
@@ -120,42 +147,108 @@ export const PersonasList = () => {
 
 export const CapitalPoolsList = () => {
   const t = useT();
-  const [hiddenPaperCount, setHiddenPaperCount] = useState(0);
+  const notReported = t("governanceDecisions.capitalNotReported");
   return (
     <ObjectListPage<FleetCapitalPool>
       title={t("nav.capitalPools")}
-      loader={async () => {
-        const env = await capitalPoolsWithFleetFallback();
-        const items = env.items.filter((item) => item.capitalScope !== "paper");
-        setHiddenPaperCount(env.items.length - items.length);
-        return { ...env, items };
-      }}
+      loader={capitalPoolsWithFleetFallback}
       basePath="/management/capital" liveKinds={["CapitalPool","AllocationLimit","PoolFreeze"]}
       listHref="/management/governance-decisions?tab=capital"
-      rowHref={(row) => `/management/governance-decisions?tab=capital&capital_id=${encodeURIComponent(row.id)}`}
+      rowHref={(row) => `/management/capital/${encodeURIComponent(row.id)}`}
       nameCell={CapitalPoolNameCell}
-      focusParam="pool"
+      focusParam={["capital_id", "pool"]}
       focusLabel={t("nav.capitalPools")}
       focusMatch={capitalPoolMatchesFocus}
       createBehavior={{ kind: "drawer", entity: "capitalPool" }}
-      emptyState={hiddenPaperCount > 0 ? {
-        title: t("governanceDecisions.capitalEmptyState.paperHiddenTitle", { count: hiddenPaperCount }),
-        description: t("governanceDecisions.capitalEmptyState.paperHiddenDescription", { count: hiddenPaperCount }),
-      } : {
+      scopeConfig={{
+        paramName: "capital_scope",
+        defaultScope: "formal",
+        groupLabel: t("governanceDecisions.capitalScopes.groupLabel"),
+        options: [
+          { id: "formal", label: t("governanceDecisions.capitalScopes.formal") },
+          { id: "paper", label: t("governanceDecisions.capitalScopes.paper") },
+          { id: "archived", label: t("governanceDecisions.capitalScopes.archived") },
+        ],
+        classify: classifyCapitalPoolScope,
+        emptyStateForScope: (scope, counts, buildScopeHref) => {
+          const paperCount = counts.paper ?? 0;
+          const archivedCount = counts.archived ?? 0;
+          if (scope === "formal") {
+            if (paperCount > 0 || archivedCount > 0) {
+              return {
+                title: t("governanceDecisions.capitalEmptyState.paperHiddenTitle", {
+                  paperCount,
+                  archivedCount,
+                }),
+                description: t("governanceDecisions.capitalEmptyState.paperHiddenDescription", {
+                  paperCount,
+                  archivedCount,
+                }),
+                actionLabel: t("governanceDecisions.capitalEmptyState.openPaperScope", {
+                  count: paperCount,
+                }),
+                actionTo: buildScopeHref("paper"),
+              };
+            }
+            return {
+              title: t("governanceDecisions.capitalEmptyState.title"),
+              description: t("governanceDecisions.capitalEmptyState.description"),
+            };
+          }
+          if (scope === "paper") {
+            return {
+              title: t("governanceDecisions.capitalEmptyState.paperEmptyTitle"),
+              description: t("governanceDecisions.capitalEmptyState.paperEmptyDescription"),
+            };
+          }
+          return {
+            title: t("governanceDecisions.capitalEmptyState.archivedEmptyTitle"),
+            description: t("governanceDecisions.capitalEmptyState.archivedEmptyDescription"),
+          };
+        },
+      }}
+      emptyState={{
         title: t("governanceDecisions.capitalEmptyState.title"),
         description: t("governanceDecisions.capitalEmptyState.description"),
       }}
       summary={(rows) => {
-        const mixedCurrencyLabel = t("phase13.capital.summary.currencies", { count: new Set(rows.map((row) => row.currency || "USD")).size });
-        const allocated = currencyBreakdown(rows, (row) => num(row.allocated), mixedCurrencyLabel);
-        const utilized = currencyBreakdown(rows, (row) => num(row.utilized), mixedCurrencyLabel);
-        const totalAllocated = rows.reduce((sum, row) => sum + num(row.allocated), 0);
-        const totalUtilized = rows.reduce((sum, row) => sum + num(row.utilized), 0);
-        const utilization = totalAllocated > 0 ? totalUtilized / totalAllocated : 0;
-        const weightedRiskBudget = totalAllocated > 0
-          ? rows.reduce((sum, row) => sum + num(row.allocated) * num(row.riskBudget), 0) / totalAllocated
-          : 0;
-        const activePools = rows.filter((row) => row.state === "deployed" || row.state === "approved").length;
+        const allocatedRows = rows.filter(isAllocatedReported);
+        const utilizedRows = rows.filter(isUtilizedReported);
+        const bothAllocAndUtilRows = rows.filter(
+          (row): row is FleetCapitalPool & { allocated: number; utilized: number } =>
+            isAllocatedReported(row) && isUtilizedReported(row),
+        );
+        const riskBudgetRows = rows.filter(isRiskBudgetReported);
+        const weightedRiskBudgetRows = riskBudgetRows.filter(isAllocatedReported);
+
+        const allocatedMixedCurrencyLabel = t("phase13.capital.summary.currencies", {
+          count: new Set(allocatedRows.map((row) => row.currency || "USD")).size,
+        });
+        const utilizedMixedCurrencyLabel = t("phase13.capital.summary.currencies", {
+          count: new Set(utilizedRows.map((row) => row.currency || "USD")).size,
+        });
+
+        const allocated = allocatedRows.length > 0
+          ? currencyBreakdown(allocatedRows, (row) => row.allocated, allocatedMixedCurrencyLabel)
+          : undefined;
+        const utilized = utilizedRows.length > 0
+          ? currencyBreakdown(utilizedRows, (row) => row.utilized, utilizedMixedCurrencyLabel)
+          : undefined;
+
+        const totalAllocatedForUtil = bothAllocAndUtilRows.reduce((sum, row) => sum + row.allocated, 0);
+        const totalUtilizedForUtil = bothAllocAndUtilRows.reduce((sum, row) => sum + row.utilized, 0);
+        const utilization = totalAllocatedForUtil > 0
+          ? totalUtilizedForUtil / totalAllocatedForUtil
+          : undefined;
+
+        const totalAllocatedForRisk = weightedRiskBudgetRows.reduce((sum, row) => sum + row.allocated, 0);
+        const weightedRiskBudget = riskBudgetRows.length > 0
+          ? (totalAllocatedForRisk > 0
+            ? weightedRiskBudgetRows.reduce((sum, row) => sum + row.allocated * row.riskBudget, 0) / totalAllocatedForRisk
+            : riskBudgetRows.reduce((sum, row) => sum + row.riskBudget, 0) / riskBudgetRows.length)
+          : undefined;
+
+        const activePools = rows.filter(isActiveCapitalPool).length;
         const bindingCount = rows.reduce((sum, row) => sum + num(row.bindingCount ?? row.personaCount), 0);
         return (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -166,20 +259,30 @@ export const CapitalPoolsList = () => {
             />
             <StatCard
               label={t("phase13.capital.summary.allocated")}
-              value={allocated.headline}
-              hint={allocated.hint}
+              value={allocated ? allocated.headline : notReported}
+              hint={allocated?.hint}
             />
             <StatCard
               label={t("phase13.capital.summary.utilized")}
-              value={utilized.headline}
-              hint={t("phase13.capital.summary.utilization", { pct: (utilization * 100).toFixed(1) })}
-              tone={utilization >= 0.9 ? "danger" : utilization >= 0.75 ? "warning" : "default"}
+              value={utilized ? utilized.headline : notReported}
+              hint={utilization !== undefined
+                ? t("phase13.capital.summary.utilization", { pct: (utilization * 100).toFixed(1) })
+                : notReported}
+              tone={utilization !== undefined && utilization >= 0.9
+                ? "danger"
+                : utilization !== undefined && utilization >= 0.75
+                  ? "warning"
+                  : "default"}
             />
             <StatCard
               label={t("phase13.capital.summary.riskBudget")}
-              value={`${(weightedRiskBudget * 100).toFixed(2)}%`}
+              value={weightedRiskBudget !== undefined ? `${(weightedRiskBudget * 100).toFixed(2)}%` : notReported}
               hint={t("phase13.capital.summary.bindings", { count: bindingCount })}
-              tone={weightedRiskBudget >= 0.08 ? "danger" : weightedRiskBudget >= 0.06 ? "warning" : "default"}
+              tone={weightedRiskBudget !== undefined && weightedRiskBudget >= 0.08
+                ? "danger"
+                : weightedRiskBudget !== undefined && weightedRiskBudget >= 0.06
+                  ? "warning"
+                  : "default"}
             />
           </div>
         );
@@ -189,12 +292,17 @@ export const CapitalPoolsList = () => {
           key: "summary",
           header: t("table.summary", { defaultValue: "Summary" }),
           cell: (r) => {
-            const utilization = hasNumber(r.allocated) && r.allocated > 0 && hasNumber(r.utilized)
+            const allocReported = isAllocatedReported(r);
+            const utilReported = isUtilizedReported(r);
+            const ccy = isCurrencyReported(r) ? r.currency : notReported;
+            const utilization = allocReported && r.allocated > 0 && utilReported
               ? r.utilized / r.allocated
               : undefined;
             return (
               <div className="max-w-[26rem] text-xs text-muted-foreground">
-                <span className="text-foreground">{r.currency ?? "unconfigured"} {locOrMissing(r.allocated)}</span>
+                <span className="text-foreground">
+                  {allocReported ? `${ccy} ${loc(r.allocated)}` : `${ccy} · ${notReported}`}
+                </span>
                 {hasNumber(utilization) && (
                   <span> · {t("phase13.capital.summary.utilization", { pct: (utilization * 100).toFixed(1) })}</span>
                 )}
@@ -204,10 +312,10 @@ export const CapitalPoolsList = () => {
             );
           },
         },
-        { key: "ccy", header: t("table.value"), cell: (r) => <span className="text-mono text-xs">{r.currency ?? "unconfigured"}</span> },
-        { key: "alloc", header: t("section.holdings"), cell: (r) => <span className="text-mono text-xs">{locOrMissing(r.allocated)}</span> },
-        { key: "util", header: t("table.utilization"), cell: (r) => <span className="text-mono text-xs">{locOrMissing(r.utilized)}</span> },
-        { key: "rb", header: t("section.limits"), cell: (r) => <span className="text-mono text-xs">{pctOrMissing(r.riskBudget, 1)}</span> },
+        { key: "ccy", header: t("table.value"), cell: (r) => <span className="text-mono text-xs">{isCurrencyReported(r) ? r.currency : notReported}</span> },
+        { key: "alloc", header: t("section.holdings"), cell: (r) => <span className="text-mono text-xs">{isAllocatedReported(r) ? loc(r.allocated) : notReported}</span> },
+        { key: "util", header: t("table.utilization"), cell: (r) => <span className="text-mono text-xs">{isUtilizedReported(r) ? loc(r.utilized) : notReported}</span> },
+        { key: "rb", header: t("section.limits"), cell: (r) => <span className="text-mono text-xs">{isRiskBudgetReported(r) ? `${(r.riskBudget * 100).toFixed(1)}%` : notReported}</span> },
         { key: "personas", header: t("nav.personas"), cell: (r) => (
           <span className="text-mono text-xs" title={r.personaNames}>
             {personaCountLabel(r.personaCount)}
