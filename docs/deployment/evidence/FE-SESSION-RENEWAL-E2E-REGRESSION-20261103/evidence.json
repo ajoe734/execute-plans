@@ -1,0 +1,19 @@
+{
+  "task_id": "FE-SESSION-RENEWAL-E2E-REGRESSION-20261103",
+  "root_cause": {
+    "first_trigger": "EventSource 'error' on GET /bff/events/stream (liveSse.ts handleError) called refreshBffSession. Fixture SSE responses end after one chunk, so the stream errors right after open.",
+    "refresh_response_in_fixture": "Loopback fixtures do not stub POST /bff/auth/refresh. Contained auth aborts undeclared /bff/** (network error); 17-a11y catch-all '**/*' returns 200, producing a refresh -> reconnect -> stream end -> refresh loop (617 refresh POSTs in one test).",
+    "why_logout": "refreshBffSession treated any non-ok/network failure as session expiry (clearSessionExpiry + reportBffUnauthorized confirmed:true) -> /auth."
+  },
+  "fix": [
+    "sessionExpiry.ts: only refresh 401/403 starts the session-expired flow; 404/5xx/network/timeout return false without clearing session (all callers: transport, proactive, visibility, SSE); removed confirmOnlyOnAuthStatus option.",
+    "liveSse.ts: a drop after the stream had opened is a transient disconnect -> backoff reconnect, no refresh probe; refresh only when the stream failed before ever opening."
+  ],
+  "no_shared_e2e_refresh_stub_needed": true,
+  "f12_approval_hosted": "F12 authenticated approval owner readback @approval-hosted ALSO FAILED on 1a6438fa9 (the pre-#899 commit; run 41570098230 job 125700724000), so it is not caused by PR #899 and is not fixed here. It requires a hosted BFF and is not runnable locally.",
+  "verification": {
+    "vitest": "npx vitest run src/lib: 100 files, 1023 tests passed (includes new sessionExpiry tests: refresh 401/403 redirect; 404/500/503/network no redirect)",
+    "tsc": "npx tsc --noEmit clean",
+    "playwright": "e2e/02-control-room, 17-a11y-v5, 18-perf on chromium: 15 passed, 2 skipped (pre-existing), no assertions changed"
+  }
+}

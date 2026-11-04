@@ -1,0 +1,39 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "FE-PERSONA-FLEET-TABLE-LAYOUT-20261103",
+  "owner": "Antigravity",
+  "reviewer": "Claude",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-PERSONA-FLEET-TABLE-LAYOUT-20261103",
+  "status": "ready-for-independent-exact-head-review",
+  "base_FE_dev": "63c297d4e5f86ee73ca01c3a7ed913affe3a6dd7",
+  "scope": {
+    "adopted": [
+      "src/management/pages/oversight/_core.tsx: raise PersonaFleetPage table header stacking order (thead sticky top-0 z-30, corner Persona th sticky left-0 z-40) above frozen body Persona column cells (td sticky left-0 z-10) without adding a new table or scroll component.",
+      "src/management/pages/oversight/_core.tsx: add min-w-[280px] to the Persona column and shrink-0 whitespace-nowrap to Persona cell badges (data scope, purpose, Seed Fixture), and add min-w-[180px] whitespace-nowrap to the Owner column so operator identifiers stay on one line.",
+      "src/management/pages/oversight/_core.tsx: suppress absent or raw 'none' reviewType/reviewStatus tokens in the Rank cell via fleetReviewToken while preserving non-none review labels.",
+      "src/management/pages/oversight/PersonaFleetPage.test.tsx: add unit test coverage for sticky header/column stacking classes, badge/owner nowrap behavior, and Rank cell suppression of raw 'none' review tokens.",
+      "e2e/24-persona-fleet-click-map.spec.ts: scroll the persona-fleet-table-scroll viewport down and right and assert via document.elementFromPoint that the Persona header cell and another visible header cell remain topmost at their centers."
+    ],
+    "not_changed": [
+      "No new table component, scroll wrapper, or second sticky mechanism.",
+      "Unrelated tables in src/management/pages/oversight/_core.tsx and other pages remain untouched.",
+      "No BFF or Pantheon backend source changes."
+    ]
+  },
+  "changed_lines": {
+    "src/management/pages/oversight/_core.tsx": "+35/-13 (net +22)",
+    "src/management/pages/oversight/PersonaFleetPage.test.tsx": "+51/-0 (net +51)",
+    "e2e/24-persona-fleet-click-map.spec.ts": "+63/-0 (net +63)",
+    "production_total": "+35/-13 (net +22)"
+  },
+  "production_net_lines": 22,
+  "validation": {
+    "unit_tests": "passed: npx vitest run src/management/pages/oversight/_core.test.ts src/management/pages/oversight/PersonaFleetPage.test.tsx src/lib/v5/management/__tests__/i18nParity.test.ts (3 files, 81/81 passed)",
+    "e2e_playwright": "passed: npx playwright test e2e/24-persona-fleet-click-map.spec.ts (2/2 passed)",
+    "typecheck_app": "passed: npm run typecheck:app (tsc -p tsconfig.app.json --noEmit, 0 errors)",
+    "typecheck_agora": "passed: npm run typecheck:agora (tsc -p tsconfig.agora.json --noEmit, 0 errors)",
+    "eslint": "passed: npx eslint src/management/pages/oversight/_core.tsx src/management/pages/oversight/PersonaFleetPage.test.tsx e2e/24-persona-fleet-click-map.spec.ts (0 errors, 0 warnings)"
+  }
+}

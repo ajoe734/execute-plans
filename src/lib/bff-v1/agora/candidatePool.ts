@@ -13,6 +13,7 @@
  */
 
 import { buildHeaders } from "../headers";
+import { bffSessionFetch } from "@/lib/auth/sessionExpiry";
 import type {
   ComponentDigest as GeneratedCandidateComponentDigest,
   CandidateConcernsValue as GeneratedCandidateConcernsValue,
@@ -184,7 +185,7 @@ export async function lookupCandidatePool(
   const base = resolvedBase(baseUrl);
   const suffix = query.toString();
   const url = `${base}/bff/agora/candidate-pools/lookup${suffix ? `?${suffix}` : ""}`;
-  const res = await fetch(url, {
+  const res = await bffSessionFetch(url, {
     method: "GET",
     credentials: "include",
     headers: candidatePoolHeaders("GET"),
@@ -210,7 +211,7 @@ export async function getCandidatePoolScore(
 ): Promise<CandidateScoreResult[]> {
   const base = resolvedBase(baseUrl);
   const url = `${base}/bff/agora/candidate-pools/${encodeURIComponent(poolId)}/score`;
-  const res = await fetch(url, {
+  const res = await bffSessionFetch(url, {
     method: "GET",
     credentials: "include",
     headers: candidatePoolHeaders("GET"),
@@ -240,7 +241,7 @@ export async function triggerCandidatePoolScore(
 ): Promise<void> {
   const base = resolvedBase(baseUrl);
   const url = `${base}/bff/agora/candidate-pools/${encodeURIComponent(poolId)}/score`;
-  const res = await fetch(url, {
+  const res = await bffSessionFetch(url, {
     method: "POST",
     credentials: "include",
     headers: candidatePoolHeaders("POST", options),
@@ -270,7 +271,7 @@ export async function listCandidatePoolMembers(
 ): Promise<CandidatePoolMembersResult> {
   const base = resolvedBase(baseUrl);
   const url = `${base}/bff/agora/candidate-pools/${encodeURIComponent(poolId)}/members`;
-  const res = await fetch(url, {
+  const res = await bffSessionFetch(url, {
     method: "GET",
     credentials: "include",
     headers: candidatePoolHeaders("GET"),
@@ -333,7 +334,7 @@ export async function reviewCandidateMember(
 ): Promise<Record<string, unknown>> {
   const base = resolvedBase(baseUrl);
   const url = `${base}/bff/agora/candidate-pools/${encodeURIComponent(poolId)}/members/${encodeURIComponent(artifactId)}/review`;
-  const res = await fetch(url, {
+  const res = await bffSessionFetch(url, {
     method: "POST",
     credentials: "include",
     headers: candidatePoolHeaders("POST", options),

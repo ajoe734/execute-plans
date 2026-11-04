@@ -2,6 +2,7 @@ import { detectBaseUrl } from "../client";
 import { BffError, normalizeBffErrorEnvelope, type ErrorCode } from "../errors";
 import { buildHeaders } from "../headers";
 import { liveWriteGated } from "../writeGate";
+import { bffSessionFetch } from "@/lib/auth/sessionExpiry";
 import type {
   AdjustmentSuggestion as GeneratedAdjustmentSuggestion,
   ComplianceMetric as GeneratedComplianceMetric,
@@ -79,7 +80,7 @@ async function request<T>(input: {
 }): Promise<T> {
   const base = detectBaseUrl().replace(/\/$/, "");
   const query = input.query?.toString();
-  const response = await fetch(`${base}${input.path}${query ? `?${query}` : ""}`, {
+  const response = await bffSessionFetch(`${base}${input.path}${query ? `?${query}` : ""}`, {
     method: input.method,
     credentials: "include",
     headers: buildHeaders({ method: input.method, idempotency: input.idempotencyKey }),

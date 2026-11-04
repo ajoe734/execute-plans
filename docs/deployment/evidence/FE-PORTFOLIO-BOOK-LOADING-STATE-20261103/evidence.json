@@ -1,0 +1,36 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "FE-PORTFOLIO-BOOK-LOADING-STATE-20261103",
+  "owner": "Antigravity2",
+  "reviewer": "Claude2",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-PORTFOLIO-BOOK-LOADING-STATE-20261103",
+  "status": "ready-for-independent-exact-head-review",
+  "scope": {
+    "changed": [
+      "src/management/pages/oversight/PortfolioBook.tsx: remove EMPTY_MONITOR fallback; render dedicated loading card while first holdings response is pending without zero coverage cards or Source: unavailable badge; render error card with Retry button when request fails without zero coverage cards; render BFF summary coverage cards and meta.surfaces.portfolio_book_holdings.status badge when loaded; retain last loaded values with refreshing indicator during manual or background refresh.",
+      "src/management/pages/v5/useV5Live.ts: expose refreshing (hasData && query.isFetching), keep loading true while retrying with no data (!hasData && (query.isLoading || query.isFetching)), and set retry: false and refetchOnWindowFocus: false.",
+      "src/i18n/locales/en-US.ts and src/i18n/locales/zh-TW.ts: add mgmt.portfolio.{loading,loadingTitle,loadingBody,refresh,refreshing,refreshingNotice,loadErrorBody,retry} with full locale parity.",
+      "src/management/pages/oversight/PortfolioBook.test.tsx, src/management/pages/v5/useV5Live.test.tsx, and src/lib/v5/management/__tests__/i18nParity.test.ts: add unit test coverage for pending, failed+retry, loaded, and manual/background refreshing states plus locale key parity."
+    ],
+    "not_changed": [
+      "BFF contract and adaptPortfolioHoldingsMonitor payload mapping.",
+      "Live-only rule: no seed, demo, or non-production fallback data is introduced."
+    ]
+  },
+  "validation": {
+    "vitest": {
+      "command": "./node_modules/.bin/vitest run src/management/pages/v5/useV5Live.test.tsx src/management/pages/oversight/PortfolioBook.test.tsx src/lib/v5/management/__tests__/i18nParity.test.ts src/management/pages/oversight/LiveOnlyFallbacks.test.tsx",
+      "result": "passed: 48/48 tests passed across 4 test files (exit 0)"
+    },
+    "typecheck": {
+      "command": "./node_modules/.bin/tsc -p tsconfig.app.json --noEmit",
+      "result": "passed: 0 errors (exit 0)"
+    },
+    "eslint": {
+      "command": "./node_modules/.bin/eslint src/management/pages/oversight/PortfolioBook.tsx src/management/pages/oversight/PortfolioBook.test.tsx src/management/pages/v5/useV5Live.ts src/management/pages/v5/useV5Live.test.tsx src/i18n/locales/zh-TW.ts src/i18n/locales/en-US.ts src/lib/v5/management/__tests__/i18nParity.test.ts",
+      "result": "passed: 0 errors, 0 warnings (exit 0)"
+    }
+  }
+}
