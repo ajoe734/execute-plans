@@ -196,6 +196,14 @@ function handleVisibilityChange(): void {
     reportBffUnauthorized({ confirmed: true });
     return;
   }
+  if (
+    recordedExpiresAtMs !== null &&
+    Number.isFinite(recordedExpiresAtMs) &&
+    recordedExpiresAtMs - Date.now() > DEFAULT_PROACTIVE_LEAD_MS
+  ) {
+    scheduleProactiveRefresh();
+    return;
+  }
   void refreshBffSession({
     baseUrl: renewalBaseUrl,
     fetchFn: renewalFetchFn,
