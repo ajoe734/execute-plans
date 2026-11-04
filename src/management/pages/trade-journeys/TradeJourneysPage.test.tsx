@@ -72,9 +72,85 @@ describe("Trade Journeys workbench", () => {
     renderList();
     for (const [id, status] of scenarios) {
       expect(await screen.findByText(id)).toBeInTheDocument();
-      expect(screen.getByText(status)).toBeInTheDocument();
+      expect(screen.getByText(status === "completed" ? "Completed" : status)).toBeInTheDocument();
     }
     expect(screen.getByText("Fresh · revision 7")).toBeInTheDocument();
+  });
+
+  it("renders localized labels and status tones on list and detail for every canonical status, unknown fallback, and active adverse flags", async () => {
+    const statusMatrix = [
+      { journey_id: "tj-open", status: "open", label: "Open", classToken: "bg-muted" },
+      { journey_id: "tj-completed", status: "completed", label: "Completed", classToken: "bg-emerald-500/10" },
+      { journey_id: "tj-variance", status: "completed_with_variance", label: "Completed with variance", classToken: "bg-amber-500/10" },
+      { journey_id: "tj-no-order", status: "no_order", label: "No order", classToken: "bg-muted" },
+      { journey_id: "tj-unreconciled", status: "unreconciled", label: "Unreconciled", classToken: "bg-amber-500/10" },
+      { journey_id: "tj-failed", status: "failed", label: "Failed", classToken: "bg-red-500/10" },
+      { journey_id: "tj-unknown", status: "vendor_custom_pending", label: "vendor_custom_pending", classToken: "bg-muted" },
+    ] as const;
+
+    const matrixRows = statusMatrix.map(({ journey_id, status }) => ({
+      journey_id,
+      status,
+      current_stage: "reconciliation",
+      flags: {},
+      environment: "paper" as const,
+      severity: "info",
+      symbol: "2330",
+      updated_at: new Date().toISOString(),
+    }));
+
+    vi.mocked(api.listTradeJourneys).mockResolvedValue({
+      data: { items: matrixRows },
+      page_info: { total: matrixRows.length, page_size: 25 },
+      meta: fresh,
+    });
+    const listView = renderList();
+    for (const item of statusMatrix) {
+      expect(await screen.findByText(item.journey_id)).toBeInTheDocument();
+      const badge = screen.getByText(item.label);
+      expect(badge).toHaveClass(item.classToken);
+      if (item.status !== "completed") {
+        expect(badge).not.toHaveClass("bg-emerald-500/10");
+      }
+    }
+    listView.unmount();
+
+    for (const item of statusMatrix) {
+      const detailRow = matrixRows.find(r => r.journey_id === item.journey_id)!;
+      vi.mocked(api.getTradeJourney).mockResolvedValue({ data: detailRow, meta: fresh });
+      vi.mocked(api.getTradeJourneyTimeline).mockResolvedValue({ data: { items: [] }, page_info: { total: 0, page_size: 100 }, meta: fresh });
+      vi.mocked(api.getTradeJourneyEvidence).mockResolvedValue({ data: {}, meta: fresh });
+      const detailView = render(
+        <MemoryRouter initialEntries={[`/management/trade-journeys/${item.journey_id}`]}>
+          <Routes><Route path="/management/trade-journeys/:journeyId" element={<TradeJourneyDetailPage />} /></Routes>
+        </MemoryRouter>,
+      );
+      await screen.findByRole("heading", { name: item.journey_id });
+      const detailBadge = screen.getByText(item.label);
+      expect(detailBadge).toHaveClass(item.classToken);
+      if (item.status !== "completed") {
+        expect(detailBadge).not.toHaveClass("bg-emerald-500/10");
+      }
+      detailView.unmount();
+    }
+
+    // Active adverse flag turns an otherwise neutral or success row to the error style.
+    vi.mocked(api.listTradeJourneys).mockResolvedValue({
+      data: {
+        items: [
+          { ...matrixRows[0], journey_id: "tj-open-flagged", flags: { risk_reject: true } },
+          { ...matrixRows[1], journey_id: "tj-completed-flagged", flags: { recon_mismatch: true } },
+          { ...matrixRows[0], journey_id: "tj-open-inactive-flag", status: "no_order", flags: { risk_reject: false } },
+        ],
+      },
+      page_info: { total: 3, page_size: 25 },
+      meta: fresh,
+    });
+    renderList();
+    await screen.findByText("tj-open-flagged");
+    expect(screen.getByText("Open")).toHaveClass("bg-red-500/10");
+    expect(screen.getByText("Completed")).toHaveClass("bg-red-500/10");
+    expect(screen.getByText("No order")).toHaveClass("bg-muted");
   });
 
   it("keeps reversible server cursor history in the URL and resets it with filters", async () => {
