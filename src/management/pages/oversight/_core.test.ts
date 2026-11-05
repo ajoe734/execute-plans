@@ -17,7 +17,11 @@ import {
 } from "./personaFleetLinks";
 import { PERSONA_FLEET_ACTION_LABELS } from "./personaFleetActionLabels";
 import { visibleDataSources } from "./personaFleetDataSources";
-import { filterEvolutionJournalRowsForFocus, normalizeEvolutionFocusToken } from "./evolutionJournalFocus";
+import {
+  filterEvolutionJournalRowsForFocus,
+  normalizeEvolutionFocusToken,
+  normalizeEvolutionJournalView,
+} from "./evolutionJournalFocus";
 
 describe("PersonaFleetPage data source badges", () => {
   it("prioritizes readable providers and keeps every declared source visible", () => {
@@ -720,6 +724,67 @@ describe("EvolutionJournalPage focus filtering", () => {
     expect(normalizeEvolutionFocusToken("UNDEFINED", true)).toBe("");
     expect(normalizeEvolutionFocusToken("2026-06-03", true)).toBe("");
     expect(normalizeEvolutionFocusToken("evo-dec-formal", true)).toBe("evo-dec-formal");
+  });
+
+  it("normalizes evolution journal view parameter with history as default", () => {
+    expect(normalizeEvolutionJournalView(null)).toBe("history");
+    expect(normalizeEvolutionJournalView(undefined)).toBe("history");
+    expect(normalizeEvolutionJournalView("")).toBe("history");
+    expect(normalizeEvolutionJournalView("bogus")).toBe("history");
+    expect(normalizeEvolutionJournalView("history")).toBe("history");
+    expect(normalizeEvolutionJournalView("auto_proposals")).toBe("auto_proposals");
+    expect(normalizeEvolutionJournalView("AUTO_PROPOSALS")).toBe("auto_proposals");
+    expect(normalizeEvolutionJournalView("all")).toBe("all");
+  });
+
+  it("matches real BFF decision, mutation_review, and persona records across nested record/mutation_review fields", () => {
+    type EvolutionEntry = Parameters<typeof filterEvolutionJournalRowsForFocus>[0][number];
+    const rows: EvolutionEntry[] = [
+      {
+        id: "evolution_decision:evo-sweep-agent-000b205c0ef9-0000",
+        entry_type: "evolution_decision",
+        source_id: "evo-sweep-agent-000b205c0ef9-0000",
+        status: "proposed",
+        action_type: "flag_for_review",
+        evidence_class: "incident_followup",
+        target: { type: "candidate_artifact", id: "infra-component-agent-finding-000b205c0ef9" },
+        record: {
+          decision_id: "evo-sweep-agent-000b205c0ef9-0000",
+          linked_incident_id: "agent-000b205c0ef9-0000",
+          evidence_class: "incident_followup",
+        },
+      },
+      {
+        id: "mutation_review:evo-sweep-inc-deployment-comp-deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+        entry_type: "mutation_review",
+        source_id: "evo-sweep-inc-deployment-comp-deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+        status: "proposed",
+        action_type: "freeze",
+        evidence_class: "incident_severity",
+        target: { type: "candidate_artifact", id: "artifact-persona-paper-1bad2eca6831457cd885" },
+        mutation_review: {
+          decision_id: "evo-sweep-inc-deployment-comp-deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+          persona_id: "persona-paper-1bad2eca6831457cd885",
+          evidence_class: "incident_severity",
+        },
+      },
+    ];
+
+    const byDecision = filterEvolutionJournalRowsForFocus(rows, {
+      mutationFocus: "evo-sweep-agent-000b205c0ef9-0000",
+    });
+    expect(byDecision.matched).toBe(true);
+    expect(byDecision.rows.map((r) => r.id)).toEqual([
+      "evolution_decision:evo-sweep-agent-000b205c0ef9-0000",
+    ]);
+
+    const byPersona = filterEvolutionJournalRowsForFocus(rows, {
+      personaFocus: "persona-paper-1bad2eca6831457cd885",
+    });
+    expect(byPersona.matched).toBe(true);
+    expect(byPersona.rows.map((r) => r.id)).toEqual([
+      "mutation_review:evo-sweep-inc-deployment-comp-deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+    ]);
   });
 
   it("does not fall back to global evolution items when persona focus misses", () => {
