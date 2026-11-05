@@ -1209,14 +1209,20 @@ test.describe("F18 perf and stability soft-fail budgets", () => {
     await gotoAndWaitForText(
       page,
       LINEAGE_PATH,
-      [/strategy-f18-wide/i, /Lineage has 506 nodes/i],
+      [/strategy-f18-wide/i, /血緣圖共 506 個節點（超過 500），需改用伺服器端分群摘要檢視。/],
       "Lineage graph",
     );
 
+    const configuredLocale = await page.evaluate(
+      () => window.localStorage.getItem("pantheon.locale") || "zh-TW",
+    );
+    const expectedWarning =
+      configuredLocale === "en-US"
+        ? "This lineage has 506 nodes (more than 500). Use the server-side clustered summary view instead."
+        : "血緣圖共 506 個節點（超過 500），需改用伺服器端分群摘要檢視。";
+
     await expect(
-      page.getByText(
-        /Lineage has 506 nodes \(> 500\); server-side layout \/ clustered summary required\./i,
-      ),
+      page.getByText(expectedWarning, { exact: true }),
     ).toBeVisible();
     expect(failures, "Lineage graph should not emit console/page errors").toEqual([]);
     expect(counters.lineage, "Lineage graph fixture should read the canonical lineage route").toBeGreaterThan(0);
