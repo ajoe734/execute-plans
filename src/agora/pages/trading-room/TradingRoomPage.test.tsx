@@ -18,6 +18,7 @@ vi.mock("@/lib/bff-v1/agora/tradingRoom", () => ({
   createTradingRoomWorkspaceProposal: vi.fn(),
   createWidgetRevisionProposal: vi.fn(),
   getTradingRoom: vi.fn(),
+  getTradingRoomWorkspaceByStrategyWithMeta: vi.fn(),
   listDecisionEvents: vi.fn(),
   listTradingRoomWorkspaceVersions: vi.fn(),
   patchTradingRoomWorkspaceLayout: vi.fn(),
@@ -728,6 +729,9 @@ describe("TradingRoomPage", () => {
       etag: '"events-etag-v1"',
     });
     vi.mocked(tradingRoomModule.decideOnEvent).mockResolvedValue({});
+    vi.mocked(tradingRoomModule.getTradingRoomWorkspaceByStrategyWithMeta).mockRejectedValue(
+      new BffError(404, { error: { code: "RESOURCE_NOT_FOUND", message: "no saved workspace" } } as never),
+    );
     vi.mocked(tradingRoomModule.createTradingRoomWorkspaceProposal).mockResolvedValue(MOCK_PROPOSAL);
     vi.mocked(tradingRoomModule.acceptTradingRoomWorkspaceProposalWithMeta).mockResolvedValue({
       etag: '"workspace-etag-v1"',
