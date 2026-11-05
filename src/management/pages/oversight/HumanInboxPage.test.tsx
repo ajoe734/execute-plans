@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import i18n from "@/i18n";
+import { adaptHumanInboxList } from "@/lib/bff-v1/management";
 import { HumanInboxPage } from "./_core";
 import type { HumanInboxItem, HumanInboxList } from "@/lib/v5/management/humanInbox";
 
@@ -215,5 +216,301 @@ describe("HumanInboxPage", () => {
       "href",
       "/management/human-inbox/promotion_review%3Areview-persona-paper-1?returnUrl=%2Fmanagement%2Fhuman-inbox",
     );
+  });
+
+  it("shows degradedEmptyBody and degraded banner when an adapted BFF payload has unavailable surface and zero rows, and shows emptyBody with no banner when all surfaces are ok", () => {
+    const unavailableEmpty = adaptHumanInboxList({
+      data: {
+        id: "human_inbox",
+        items: [],
+        summary: { total: 0 },
+        facets: {},
+      },
+      page_info: {
+        next_page_token: null,
+        total: 0,
+        page_size: 50,
+      },
+      meta: {
+        snapshot_at: "2026-11-04T12:00:00Z",
+        surfaces: {
+          human_inbox: { status: "ok", snapshot_at: "2026-11-04T12:00:00Z" },
+          governance_review_queue: {
+            status: "unavailable",
+            reason: "read_timeout",
+            source: "timeout_fallback",
+            message: "Governance review queue timed out",
+            snapshot_at: "2026-11-04T12:00:00Z",
+          },
+        },
+      },
+    })!;
+
+    mocks.useV5Live.mockReturnValue({
+      data: unavailableEmpty,
+      loading: false,
+      error: null,
+      refresh: vi.fn(),
+    });
+
+    const { unmount } = renderInbox();
+    expect(screen.getByText(/Live queue status is degraded/)).toBeInTheDocument();
+    expect(
+      screen.getByText("No confirmed items loaded. Note: This does not mean the inbox is empty, as some sources timed out."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("No Human Inbox items currently require review.")).not.toBeInTheDocument();
+    unmount();
+
+    const okEmpty = adaptHumanInboxList({
+      data: {
+        id: "human_inbox",
+        items: [],
+        summary: { total: 0 },
+        facets: {},
+      },
+      page_info: {
+        next_page_token: null,
+        total: 0,
+        page_size: 50,
+      },
+      meta: {
+        snapshot_at: "2026-11-04T12:00:00Z",
+        surfaces: {
+          human_inbox: { status: "ok", snapshot_at: "2026-11-04T12:00:00Z" },
+          governance_review_queue: { status: "ok", snapshot_at: "2026-11-04T12:00:00Z" },
+        },
+      },
+    })!;
+
+    mocks.useV5Live.mockReturnValue({
+      data: okEmpty,
+      loading: false,
+      error: null,
+      refresh: vi.fn(),
+    });
+
+    renderInbox();
+    expect(screen.getByText("No Human Inbox items currently require review.")).toBeInTheDocument();
+    expect(screen.queryByText(/Live queue status is degraded/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("No confirmed items loaded. Note: This does not mean the inbox is empty, as some sources timed out."),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows rows and degraded banner when surface is degraded with real incident and approval rows, ranking incident above approval with no approve/reject controls and linking to /management/incidents/:id", () => {
+    const adapted = adaptHumanInboxList({
+      data: {
+        id: "human_inbox",
+        items: [
+          {
+            actor_id: "user-risk-lead-1",
+            actor_role: "risk_owner",
+            authority_status: "authorized",
+            authorization_scope: "capital_pool",
+            candidate_digest: "sha256:cand-1bad2eca6831457cd885",
+            capital_pool_id: "pool-canary-tw-equity",
+            conditions: [],
+            controller_record_ref: "ctrl:rec-1bad2eca6831457cd885",
+            created_at: "2026-11-04T11:45:00Z",
+            decided_at: null,
+            decision: "approve",
+            decision_id: "dec-capital-pool-activation-001",
+            decision_state: "proposed",
+            event_id: "evt-dec-001",
+            evidence_refs: ["evidence:pool-canary-tw-equity:readiness"],
+            expires_at: "2026-11-05T11:45:00Z",
+            metadata: { stage: "canary" },
+            owner_user_id: "user-ops-1",
+            persona_id: "persona-tw-equity-canary",
+            proof_digest: "sha256:proof-001",
+            proposal_content_digest: "sha256:prop-001",
+            proposal_id: "prop-capital-pool-001",
+            proposal_revision: 1,
+            rationale: "Canary capital pool activation requires risk owner sign-off.",
+            recorded_at: "2026-11-04T11:45:00Z",
+            revoked_at: null,
+            risk_level: "high",
+            session_id: "sess-001",
+            superseded_by: null,
+            target_id: "pool-canary-tw-equity",
+            target_type: "capital_pool_activation",
+            target_version: "v1",
+            tenant_id: "tenant-default",
+            validation_result_digest: "sha256:val-001",
+            version: 1,
+          },
+          {
+            artifact_id: "art-deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+            artifact_version: "1.0.0",
+            binding_id: "bind-persona-paper-1bad2eca6831457cd885",
+            capital_pool_id: "pool-paper-default",
+            created_at: "2026-11-04T11:58:00Z",
+            deployment_plan_id: "deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+            deployment_stage: "paper",
+            evidence_summary: "Compensation saga entered safe mode after broker validation timeout.",
+            incident_cluster_id: "cluster-deployment-comp-1bad2eca6831457cd885",
+            incident_id: "inc-deployment-comp-deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+            id: "incident:inc-deployment-comp-deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+            inbox_id: "incident:inc-deployment-comp-deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+            inboxType: "incident",
+            source_type: "incident",
+            source_id: "inc-deployment-comp-deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+            lineage_ref: "lineage:deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+            persona_capital_binding_id: "pcb-persona-paper-1bad2eca6831457cd885",
+            reconciliation_ids: ["rec-1bad2eca6831457cd885"],
+            resolved_at: null,
+            runtime_id: "runtime-persona-paper-1bad2eca6831457cd885",
+            severity: "critical",
+            status: "open",
+            telemetry_event_ids: ["tel-1bad2eca6831457cd885"],
+            title: "Deployment compensation entered safe mode for deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+            trace_id: "trace-1bad2eca6831457cd885",
+            route: "/management/incidents/inc-deployment-comp-deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+            allowedActions: {
+              canReview: true,
+              canRemediate: true,
+            },
+          },
+        ],
+      },
+      page_info: {
+        next_page_token: null,
+        total: 2,
+        page_size: 50,
+      },
+      meta: {
+        snapshot_at: "2026-11-04T12:00:00Z",
+        surfaces: {
+          human_inbox: {
+            status: "degraded",
+            reason: "read_timeout",
+            source: "timeout_fallback",
+            message: "Partial timeout",
+            snapshot_at: "2026-11-04T12:00:00Z",
+          },
+        },
+      },
+    })!;
+
+    mocks.useV5Live.mockReturnValue({
+      data: adapted,
+      loading: false,
+      error: null,
+      refresh: vi.fn(),
+    });
+
+    renderInbox();
+
+    expect(screen.getByText(/Live queue status is degraded/)).toBeInTheDocument();
+    expect(screen.getByText("incident")).toBeInTheDocument();
+    expect(screen.getByText("approval")).toBeInTheDocument();
+
+    const incidentTitle = screen.getByText(
+      "Deployment compensation entered safe mode for deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+    );
+    const approvalTitle = screen.getByText("capital_pool_activation approval");
+    expect(
+      incidentTitle.compareDocumentPosition(approvalTitle) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    expect(screen.queryByRole("button", { name: /approve|reject/i })).not.toBeInTheDocument();
+
+    const actionLinks = screen.getAllByRole("link", { name: "Open action page" });
+    expect(actionLinks[0]).toHaveAttribute(
+      "href",
+      "/management/incidents/inc-deployment-comp-deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+    );
+    expect(screen.queryByTestId("inbox-partial-count")).not.toBeInTheDocument();
+  });
+
+  it("states shown and total counts in en-US and zh-TW when page_info.total exceeds rows returned, and hides it when equal", async () => {
+    const partialList = adaptHumanInboxList({
+      data: {
+        id: "human_inbox",
+        items: [
+          {
+            artifact_id: "art-deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+            artifact_version: "1.0.0",
+            binding_id: "bind-persona-paper-1bad2eca6831457cd885",
+            capital_pool_id: "pool-paper-default",
+            created_at: "2026-11-04T11:58:00Z",
+            deployment_plan_id: "deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+            deployment_stage: "paper",
+            evidence_summary: "Compensation saga entered safe mode.",
+            incident_cluster_id: "cluster-deployment-comp-1bad2eca6831457cd885",
+            incident_id: "inc-deployment-comp-deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+            id: "inc-deployment-comp-deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+            lineage_ref: "lineage:deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+            persona_capital_binding_id: "pcb-persona-paper-1bad2eca6831457cd885",
+            reconciliation_ids: ["rec-1bad2eca6831457cd885"],
+            resolved_at: null,
+            runtime_id: "runtime-persona-paper-1bad2eca6831457cd885",
+            severity: "critical",
+            status: "open",
+            telemetry_event_ids: ["tel-1bad2eca6831457cd885"],
+            title: "Deployment compensation entered safe mode for deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+            trace_id: "trace-1bad2eca6831457cd885",
+          },
+        ],
+      },
+      page_info: {
+        next_page_token: "cursor-2",
+        total: 5,
+        page_size: 1,
+      },
+      meta: {
+        snapshot_at: "2026-11-04T12:00:00Z",
+        surfaces: {
+          human_inbox: { status: "ok", snapshot_at: "2026-11-04T12:00:00Z" },
+        },
+      },
+    })!;
+
+    mocks.useV5Live.mockReturnValue({
+      data: partialList,
+      loading: false,
+      error: null,
+      refresh: vi.fn(),
+    });
+
+    await i18n.changeLanguage("en-US");
+    const { unmount } = renderInbox();
+    expect(screen.getByText("Showing 1 of 5 items")).toBeInTheDocument();
+    unmount();
+
+    await i18n.changeLanguage("zh-TW");
+    const { unmount: unmountZh } = renderInbox();
+    expect(screen.getByText("顯示 1 / 共 5 筆項目")).toBeInTheDocument();
+    unmountZh();
+
+    await i18n.changeLanguage("en-US");
+    const equalList = adaptHumanInboxList({
+      data: {
+        id: "human_inbox",
+        items: [partialList[0]],
+      },
+      page_info: {
+        next_page_token: null,
+        total: 1,
+        page_size: 50,
+      },
+      meta: {
+        snapshot_at: "2026-11-04T12:00:00Z",
+        surfaces: {
+          human_inbox: { status: "ok", snapshot_at: "2026-11-04T12:00:00Z" },
+        },
+      },
+    })!;
+
+    mocks.useV5Live.mockReturnValue({
+      data: equalList,
+      loading: false,
+      error: null,
+      refresh: vi.fn(),
+    });
+
+    renderInbox();
+    expect(screen.queryByText(/Showing .* of .* items/)).not.toBeInTheDocument();
+    expect(screen.queryByTestId("inbox-partial-count")).not.toBeInTheDocument();
   });
 });

@@ -1,0 +1,130 @@
+{
+  "schema_version": "pantheon.fe-human-inbox-truth.v1",
+  "task_id": "FE-HUMAN-INBOX-TRUTH-20261104",
+  "taskId": "FE-HUMAN-INBOX-TRUTH-20261104",
+  "title": "Human inbox hides degraded reads and would show incidents as approvals that can be decided",
+  "owner": "Antigravity",
+  "reviewer": "Claude",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-HUMAN-INBOX-TRUTH-20261104",
+  "prerequisite": {
+    "task_id": "FE-EVIDENCE-KNOWLEDGE-TRUTH-20261104",
+    "status": "done"
+  },
+  "status": "ready_for_review",
+  "timestamp": "2026-11-05T03:45:00Z",
+  "scope": {
+    "delivered": [
+      "Updated adaptHumanInboxList and mgmt.humanInbox.list in src/lib/bff-v1/management.ts to preserve top-level BFF meta.surfaces and page_info (falling back to data.meta / data.page_info when nested) for both empty and non-empty lists.",
+      "Updated useV5Live in src/management/pages/v5/useV5Live.ts with structuralSharing: false so expando properties (meta and page_info) on array results such as HumanInboxList survive TanStack Query cache reads and updates when a cacheKey is used.",
+      "Added 'incident' to HumanInboxKind, HUMAN_INBOX_KINDS (12 kinds total), and humanInboxRank (rank 5.5, above 'approval' at 2, with all 12 ranks distinct) in src/lib/v5/management/humanInbox.ts without adding incident to GovernanceDecisionsPage or CONTAINMENT_KINDS.",
+      "Updated adaptInboxRecord and allowedActionsCanDecide in src/lib/bff-v1/management.ts so incident rows (both BFF-projected inboxType='incident' with allowedActions={canReview:true,canRemediate:true} and raw owner GET /api/incidents?open_only=true records) keep kind='incident', canDecide=false, and links.manageHref='/management/incidents/:id', while approval decision records (including raw owner proposed rows with target_type and no title/summary/priority/state/status/outcome) and promotion review rows preserve their decision controls.",
+      "Updated HumanInboxPage in src/management/pages/oversight/_core.tsx to display the shown and total counts in zh-TW and en-US via mgmt.inbox.shownOfTotalFmt when page_info.total exceeds the number of returned rows, and hide it when equal.",
+      "Updated GovernanceDecisionQueue.tsx and EmergencyActionsPanel.tsx to read error and meta.surfaces from useV5Live and display existing degradedEmptyBody / degradedQueueDesc strings instead of their none text when a read fails or any surface is degraded/unavailable, while preserving their none text when all surfaces are ok and no items match.",
+      "Added unit and component tests in management.test.ts, useV5Live.test.tsx, revamp-2026-05-20.test.ts, HumanInboxPage.test.tsx, HumanGateDetail.test.tsx, GovernanceDecisionQueue.test.tsx, and EmergencyActionsPanel.test.tsx using the real hosted BFF and owner row shapes."
+    ],
+    "not_changed": [
+      "Did not add 'incident' to GovernanceDecisionsPage or CONTAINMENT_KINDS in EmergencyActionsPanel.tsx.",
+      "Did not add a second degraded design; reused existing degradedEmptyBody and degradedQueueDesc strings."
+    ]
+  },
+  "acceptance_verification": [
+    {
+      "criterion": 1,
+      "description": "adaptHumanInboxList keeps the BFF top-level meta: given the exact BFF payload shape with data and page_info and meta at the top level mgmt.humanInbox.list returns meta.surfaces for both an empty and a non-empty list; a test through the real useV5Live with a cacheKey proves meta survives",
+      "status": "passed",
+      "verified_by": [
+        "src/lib/bff-v1/__tests__/management.test.ts > keeps top-level BFF meta.surfaces and page_info for both empty and non-empty humanInbox.list payloads",
+        "src/management/pages/v5/useV5Live.test.tsx > preserves HumanInboxList top-level meta.surfaces and page_info through real useV5Live with a cacheKey across empty and non-empty responses"
+      ]
+    },
+    {
+      "criterion": 2,
+      "description": "HumanInboxPage with any surface degraded or unavailable and zero rows shows degradedEmptyBody and the degraded banner and never emptyBody; with rows and a degraded surface it shows the rows and the banner; with all surfaces ok and zero rows it shows emptyBody and no banner",
+      "status": "passed",
+      "verified_by": [
+        "src/management/pages/oversight/HumanInboxPage.test.tsx > shows degraded banner and degraded empty body when live data is degraded and empty",
+        "src/management/pages/oversight/HumanInboxPage.test.tsx > shows degradedEmptyBody and degraded banner when an adapted BFF payload has unavailable surface and zero rows, and shows emptyBody with no banner when all surfaces are ok",
+        "src/management/pages/oversight/HumanInboxPage.test.tsx > shows rows and degraded banner when surface is degraded with real incident and approval rows, ranking incident above approval with no approve/reject controls and linking to /management/incidents/:id"
+      ]
+    },
+    {
+      "criterion": 3,
+      "description": "An incident row keeps kind incident instead of falling back to approval: HumanInboxKind, HUMAN_INBOX_KINDS and humanInboxRank include incident ranked above approval and every existing rank stays distinct",
+      "status": "passed",
+      "verified_by": [
+        "src/lib/v5/management/__tests__/revamp-2026-05-20.test.ts > exposes 12 kinds with unique rank and ranks incident above approval",
+        "src/lib/bff-v1/__tests__/management.test.ts > adapts real owner incident and approval decision row shapes accurately"
+      ]
+    },
+    {
+      "criterion": 4,
+      "description": "An incident row has canDecide false and shows no approve or reject control on the inbox page or the detail page even when the BFF allowedActions only carry canReview and canRemediate; its manage link opens the existing /management/incidents/:id route; approval and promotion review rows keep their current decision controls",
+      "status": "passed",
+      "verified_by": [
+        "src/management/pages/oversight/HumanInboxPage.test.tsx > shows rows and degraded banner when surface is degraded with real incident and approval rows, ranking incident above approval with no approve/reject controls and linking to /management/incidents/:id",
+        "src/management/pages/oversight/HumanGateDetail.test.tsx > renders incident detail with canDecide false, no approve or reject controls even when allowedActions has canReview and canRemediate, and manage link to /management/incidents/:id",
+        "src/management/pages/oversight/HumanGateDetail.test.tsx > renders promotion review decision controls and submits an approval"
+      ]
+    },
+    {
+      "criterion": 5,
+      "description": "GovernanceDecisionQueue and EmergencyActionsPanel show an unavailable message instead of their none text when the read fails or a surface is degraded; when all surfaces are ok and no item matches they keep the none text; new tests cover both components",
+      "status": "passed",
+      "verified_by": [
+        "src/management/pages/centers/GovernanceDecisionQueue.test.tsx > shows degradedEmptyBody instead of none text when the read fails with an error",
+        "src/management/pages/centers/GovernanceDecisionQueue.test.tsx > shows degradedEmptyBody instead of none text when a BFF surface is degraded or unavailable",
+        "src/management/pages/centers/GovernanceDecisionQueue.test.tsx > keeps the none text when all surfaces are ok and no item matches",
+        "src/management/pages/oversight/EmergencyActionsPanel.test.tsx > shows degradedEmptyBody instead of none text when the read fails with an error",
+        "src/management/pages/oversight/EmergencyActionsPanel.test.tsx > shows degradedEmptyBody instead of none text when a BFF surface is degraded or unavailable",
+        "src/management/pages/oversight/EmergencyActionsPanel.test.tsx > keeps the none text when all surfaces are ok and no containment item matches (incidents are not in CONTAINMENT_KINDS)"
+      ]
+    },
+    {
+      "criterion": 6,
+      "description": "When page_info.total exceeds the rows returned the inbox page states the shown and total counts in zh-TW and en-US; when they are equal no such text appears",
+      "status": "passed",
+      "verified_by": [
+        "src/management/pages/oversight/HumanInboxPage.test.tsx > states shown and total counts in en-US and zh-TW when page_info.total exceeds rows returned, and hides it when equal"
+      ]
+    },
+    {
+      "criterion": 7,
+      "description": "Tests use the real BFF row shapes given in the task; the application type check and existing inbox tests stay green; no existing test is weakened or deleted and any changed assertion is justified in evidence",
+      "status": "passed",
+      "justification": "No existing test was weakened or deleted. The only updated existing assertion is in src/lib/v5/management/__tests__/revamp-2026-05-20.test.ts where HUMAN_INBOX_KINDS length and unique rank set size were updated from 11 to 12 (and strengthened with humanInboxRank('incident') > humanInboxRank('approval')) because Acceptance Criterion 3 explicitly adds 'incident' as the 12th HumanInboxKind with a distinct rank."
+    }
+  ],
+  "artifacts": [
+    "src/lib/bff-v1/management.ts",
+    "src/lib/bff-v1/__tests__/management.test.ts",
+    "src/lib/v5/management/humanInbox.ts",
+    "src/lib/v5/management/__tests__/revamp-2026-05-20.test.ts",
+    "src/management/pages/oversight/_core.tsx",
+    "src/management/pages/oversight/HumanInboxPage.test.tsx",
+    "src/management/pages/oversight/HumanGateDetail.tsx",
+    "src/management/pages/oversight/HumanGateDetail.test.tsx",
+    "src/management/pages/oversight/EmergencyActionsPanel.tsx",
+    "src/management/pages/oversight/EmergencyActionsPanel.test.tsx",
+    "src/management/pages/centers/GovernanceDecisionQueue.tsx",
+    "src/management/pages/centers/GovernanceDecisionQueue.test.tsx",
+    "src/management/pages/v5/useV5Live.ts",
+    "src/management/pages/v5/useV5Live.test.tsx",
+    "src/i18n/locales/zh-TW.ts",
+    "src/i18n/locales/en-US.ts",
+    "docs/deployment/evidence/FE-HUMAN-INBOX-TRUTH-20261104/evidence.json"
+  ],
+  "validation": {
+    "typecheck": {
+      "command": "npm run typecheck:app && ./node_modules/.bin/tsc -p tsconfig.agora.json --noEmit",
+      "exit_code": 0
+    },
+    "unit_and_component_tests": {
+      "command": "./node_modules/.bin/vitest run src/lib/v5/management/__tests__/revamp-2026-05-20.test.ts src/lib/v5/management/__tests__/i18nParity.test.ts src/lib/bff-v1/__tests__/contract-drift.test.ts src/lib/bff-v1/__tests__/management.test.ts src/management/pages/v5/useV5Live.test.tsx src/management/pages/oversight/_core.test.ts src/management/pages/oversight/HumanInboxPage.test.tsx src/management/pages/oversight/HumanGateDetail.test.tsx src/management/pages/oversight/EmergencyActionsPanel.test.tsx src/management/pages/centers/GovernanceDecisionQueue.test.tsx src/management/pages/centers/GovernanceDecisionsPage.test.tsx",
+      "exit_code": 0,
+      "test_files_passed": 11,
+      "tests_passed": 157
+    }
+  }
+}

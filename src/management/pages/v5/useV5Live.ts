@@ -58,6 +58,7 @@ export function useV5Live<T>(
       staleTime: staleMs,
       retry: false,
       refetchOnWindowFocus: false,
+      structuralSharing: false,
     },
     queryClient,
   );

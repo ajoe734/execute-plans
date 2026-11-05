@@ -722,6 +722,227 @@ describe("mgmt façade (PM-Live)", () => {
     });
   });
 
+  it("keeps top-level BFF meta.surfaces and page_info for both empty and non-empty humanInbox.list payloads", async () => {
+    liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
+    const degradedMeta = {
+      snapshot_at: "2026-11-04T12:00:00Z",
+      surfaces: {
+        human_inbox: {
+          status: "degraded",
+          reason: "read_timeout",
+          source: "timeout_fallback",
+          message: "Human inbox read timed out",
+          snapshot_at: "2026-11-04T12:00:00Z",
+        },
+        governance_review_queue: {
+          status: "unavailable",
+          reason: "read_timeout",
+          source: "timeout_fallback",
+          message: "Governance review queue timed out",
+          snapshot_at: "2026-11-04T12:00:00Z",
+        },
+      },
+    };
+    const realIncidentOwnerRow = {
+      artifact_id: "art-deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+      artifact_version: "1.0.0",
+      binding_id: "bind-persona-paper-1bad2eca6831457cd885",
+      capital_pool_id: "pool-paper-default",
+      created_at: "2026-11-04T11:58:00Z",
+      deployment_plan_id: "deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+      deployment_stage: "paper",
+      evidence_summary: "Compensation saga entered safe mode after broker validation timeout.",
+      incident_cluster_id: "cluster-deployment-comp-1bad2eca6831457cd885",
+      incident_id: "inc-deployment-comp-deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+      id: "inc-deployment-comp-deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+      lineage_ref: "lineage:deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+      persona_capital_binding_id: "pcb-persona-paper-1bad2eca6831457cd885",
+      reconciliation_ids: ["rec-1bad2eca6831457cd885"],
+      resolved_at: null,
+      runtime_id: "runtime-persona-paper-1bad2eca6831457cd885",
+      severity: "critical",
+      status: "open",
+      telemetry_event_ids: ["tel-1bad2eca6831457cd885"],
+      title: "Deployment compensation entered safe mode for deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+      trace_id: "trace-1bad2eca6831457cd885",
+    };
+
+    const emptyPayload = {
+      data: {
+        id: "human_inbox",
+        items: [],
+        summary: { total: 0 },
+        facets: { by_type: {}, by_priority: {}, by_status: {} },
+      },
+      page_info: {
+        next_page_token: null,
+        total: 0,
+        page_size: 50,
+      },
+      meta: degradedMeta,
+    };
+
+    const nonEmptyPayload = {
+      data: {
+        id: "human_inbox",
+        items: [
+          {
+            ...realIncidentOwnerRow,
+            id: "incident:inc-deployment-comp-deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+            inbox_id: "incident:inc-deployment-comp-deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+            inboxType: "incident",
+            source_type: "incident",
+            source_id: "inc-deployment-comp-deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+            route: "/management/incidents/inc-deployment-comp-deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+            allowedActions: {
+              canReview: true,
+              canRemediate: true,
+            },
+          },
+        ],
+        summary: { total: 3 },
+        facets: { by_type: { incident: 1 }, by_priority: { critical: 1 }, by_status: { open: 1 } },
+      },
+      page_info: {
+        next_page_token: "cursor-2",
+        total: 3,
+        page_size: 1,
+      },
+      meta: degradedMeta,
+    };
+
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(jsonResponse(emptyPayload))
+      .mockResolvedValueOnce(jsonResponse(nonEmptyPayload));
+
+    const emptyResult = await mgmt.humanInbox.list();
+    expect(emptyResult).toHaveLength(0);
+    expect(emptyResult.meta?.surfaces).toEqual(degradedMeta.surfaces);
+    expect(emptyResult.page_info?.total).toBe(0);
+
+    const nonEmptyResult = await mgmt.humanInbox.list();
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(nonEmptyResult).toHaveLength(1);
+    expect(nonEmptyResult.meta?.surfaces).toEqual(degradedMeta.surfaces);
+    expect(nonEmptyResult.page_info).toMatchObject({
+      next_page_token: "cursor-2",
+      total: 3,
+      page_size: 1,
+    });
+    expect(nonEmptyResult[0]).toMatchObject({
+      id: "incident:inc-deployment-comp-deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+      kind: "incident",
+      canDecide: false,
+      allowedActions: {
+        canDecide: false,
+        canApprove: false,
+        canReject: false,
+      },
+      links: {
+        manageHref: "/management/incidents/inc-deployment-comp-deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+      },
+    });
+  });
+
+  it("adapts real owner incident and approval decision row shapes accurately", () => {
+    const rawIncidentOwnerRow = {
+      artifact_id: "art-deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+      artifact_version: "1.0.0",
+      binding_id: "bind-persona-paper-1bad2eca6831457cd885",
+      capital_pool_id: "pool-paper-default",
+      created_at: "2026-11-04T11:58:00Z",
+      deployment_plan_id: "deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+      deployment_stage: "paper",
+      evidence_summary: "Compensation saga entered safe mode after broker validation timeout.",
+      incident_cluster_id: "cluster-deployment-comp-1bad2eca6831457cd885",
+      incident_id: "inc-deployment-comp-deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+      id: "inc-deployment-comp-deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+      lineage_ref: "lineage:deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+      persona_capital_binding_id: "pcb-persona-paper-1bad2eca6831457cd885",
+      reconciliation_ids: ["rec-1bad2eca6831457cd885"],
+      resolved_at: null,
+      runtime_id: "runtime-persona-paper-1bad2eca6831457cd885",
+      severity: "critical",
+      status: "open",
+      telemetry_event_ids: ["tel-1bad2eca6831457cd885"],
+      title: "Deployment compensation entered safe mode for deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+      trace_id: "trace-1bad2eca6831457cd885",
+    };
+
+    const rawApprovalDecisionRow = {
+      actor_id: "user-risk-lead-1",
+      actor_role: "risk_owner",
+      authority_status: "authorized",
+      authorization_scope: "capital_pool",
+      candidate_digest: "sha256:cand-1bad2eca6831457cd885",
+      capital_pool_id: "pool-canary-tw-equity",
+      conditions: [],
+      controller_record_ref: "ctrl:rec-1bad2eca6831457cd885",
+      created_at: "2026-11-04T11:45:00Z",
+      decided_at: null,
+      decision: "approve",
+      decision_id: "dec-capital-pool-activation-001",
+      decision_state: "proposed",
+      event_id: "evt-dec-001",
+      evidence_refs: ["evidence:pool-canary-tw-equity:readiness"],
+      expires_at: "2026-11-05T11:45:00Z",
+      metadata: { stage: "canary" },
+      owner_user_id: "user-ops-1",
+      persona_id: "persona-tw-equity-canary",
+      proof_digest: "sha256:proof-001",
+      proposal_content_digest: "sha256:prop-001",
+      proposal_id: "prop-capital-pool-001",
+      proposal_revision: 1,
+      rationale: "Canary capital pool activation requires risk owner sign-off.",
+      recorded_at: "2026-11-04T11:45:00Z",
+      revoked_at: null,
+      risk_level: "high",
+      session_id: "sess-001",
+      superseded_by: null,
+      target_id: "pool-canary-tw-equity",
+      target_type: "capital_pool_activation",
+      target_version: "v1",
+      tenant_id: "tenant-default",
+      validation_result_digest: "sha256:val-001",
+      version: 1,
+    };
+
+    const out = adaptHumanInboxList({
+      data: {
+        id: "human_inbox",
+        items: [rawIncidentOwnerRow, rawApprovalDecisionRow],
+      },
+    });
+
+    expect(out).toHaveLength(2);
+    expect(out?.[0]).toMatchObject({
+      id: "inc-deployment-comp-deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+      kind: "incident",
+      title: "Deployment compensation entered safe mode for deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+      summary: "Compensation saga entered safe mode after broker validation timeout.",
+      canDecide: false,
+      links: {
+        manageHref: "/management/incidents/inc-deployment-comp-deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+      },
+    });
+    expect(out?.[1]).toMatchObject({
+      id: "approval:dec-capital-pool-activation-001",
+      kind: "approval",
+      title: "capital_pool_activation approval",
+      summary: "Canary capital pool activation requires risk owner sign-off.",
+      requiredRole: "risk_owner",
+      status: "proposed",
+      personaId: "persona-tw-equity-canary",
+      canDecide: true,
+      canProceed: false,
+      evidenceRefs: ["evidence:pool-canary-tw-equity:readiness"],
+      links: {
+        manageHref: "/management/approvals?approval=dec-capital-pool-activation-001",
+      },
+    });
+  });
+
   it("does not POST promotion review decisions when real writes are disabled", async () => {
     process.env.VITE_BFF_REAL_WRITES = "false";
     liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });

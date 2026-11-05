@@ -1,6 +1,8 @@
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { emitV5Event } from "@/lib/bff-v1";
+import { adaptHumanInboxList } from "@/lib/bff-v1/management";
+import type { HumanInboxList } from "@/lib/v5/management/humanInbox";
 import { __resetV5LiveCacheForTests, useV5Live } from "./useV5Live";
 
 interface TestData {
@@ -292,6 +294,124 @@ describe("useV5Live cache", () => {
     });
     await waitFor(() =>
       expect(screen.getByTestId("status")).toHaveTextContent("loading:false|refreshing:false|data:recovered|error:none"),
+    );
+  });
+
+  it("preserves HumanInboxList top-level meta.surfaces and page_info through real useV5Live with a cacheKey across empty and non-empty responses", async () => {
+    const emptyDegraded = adaptHumanInboxList({
+      data: {
+        id: "human_inbox",
+        items: [],
+        summary: { total: 0 },
+        facets: {},
+      },
+      page_info: {
+        next_page_token: null,
+        total: 0,
+        page_size: 50,
+      },
+      meta: {
+        snapshot_at: "2026-11-04T12:00:00Z",
+        surfaces: {
+          human_inbox: {
+            status: "degraded",
+            reason: "read_timeout",
+            source: "timeout_fallback",
+            message: "Read timed out",
+            snapshot_at: "2026-11-04T12:00:00Z",
+          },
+          governance_review_queue: {
+            status: "unavailable",
+            reason: "read_timeout",
+            source: "timeout_fallback",
+            message: "Queue unavailable",
+            snapshot_at: "2026-11-04T12:00:00Z",
+          },
+        },
+      },
+    })!;
+
+    const nonEmptyDegraded = adaptHumanInboxList({
+      data: {
+        id: "human_inbox",
+        items: [
+          {
+            artifact_id: "art-deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+            artifact_version: "1.0.0",
+            binding_id: "bind-persona-paper-1bad2eca6831457cd885",
+            capital_pool_id: "pool-paper-default",
+            created_at: "2026-11-04T11:58:00Z",
+            deployment_plan_id: "deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+            deployment_stage: "paper",
+            evidence_summary: "Compensation saga entered safe mode.",
+            incident_cluster_id: "cluster-deployment-comp-1bad2eca6831457cd885",
+            incident_id: "inc-deployment-comp-deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+            id: "inc-deployment-comp-deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+            lineage_ref: "lineage:deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+            persona_capital_binding_id: "pcb-persona-paper-1bad2eca6831457cd885",
+            reconciliation_ids: ["rec-1bad2eca6831457cd885"],
+            resolved_at: null,
+            runtime_id: "runtime-persona-paper-1bad2eca6831457cd885",
+            severity: "critical",
+            status: "open",
+            telemetry_event_ids: ["tel-1bad2eca6831457cd885"],
+            title: "Deployment compensation entered safe mode for deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+            trace_id: "trace-1bad2eca6831457cd885",
+          },
+        ],
+        summary: { total: 4 },
+        facets: {},
+      },
+      page_info: {
+        next_page_token: "tok-2",
+        total: 4,
+        page_size: 1,
+      },
+      meta: {
+        snapshot_at: "2026-11-04T12:01:00Z",
+        surfaces: {
+          human_inbox: {
+            status: "degraded",
+            reason: "read_timeout",
+            source: "timeout_fallback",
+            message: "Partial timeout",
+            snapshot_at: "2026-11-04T12:01:00Z",
+          },
+        },
+      },
+    })!;
+
+    const loader = vi
+      .fn<() => Promise<HumanInboxList>>()
+      .mockResolvedValueOnce(emptyDegraded)
+      .mockResolvedValueOnce(nonEmptyDegraded);
+
+    function InboxCacheProbe() {
+      const { data, loading, refresh } = useV5Live(loader, [], { cacheKey: "oversight.humanInbox" });
+      return (
+        <div>
+          <div data-testid="inbox-meta">
+            {loading
+              ? "loading"
+              : `${data?.length ?? 0}|${data?.meta?.surfaces?.human_inbox?.status ?? "none"}|${data?.meta?.surfaces?.governance_review_queue?.status ?? "none"}|${data?.page_info?.total ?? -1}`}
+          </div>
+          <button data-testid="inbox-refresh" onClick={() => void refresh()}>
+            refresh
+          </button>
+        </div>
+      );
+    }
+
+    render(<InboxCacheProbe />);
+    await waitFor(() =>
+      expect(screen.getByTestId("inbox-meta")).toHaveTextContent("0|degraded|unavailable|0"),
+    );
+
+    await act(async () => {
+      screen.getByTestId("inbox-refresh").click();
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId("inbox-meta")).toHaveTextContent("1|degraded|none|4"),
     );
   });
 });
