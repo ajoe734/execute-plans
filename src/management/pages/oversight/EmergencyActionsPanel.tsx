@@ -27,12 +27,21 @@ const kindTone = (kind: HumanInboxKind) =>
 export const EmergencyActionsPanel = () => {
   const { t } = useTranslation();
   const location = useLocation();
-  const { data: items, loading } = useV5Live((signal) => mgmt.humanInbox.list({ signal }), [], { cacheKey: "oversight.humanInbox" });
+  const { data: items, loading, error = null } = useV5Live(
+    (signal) => mgmt.humanInbox.list({ signal }),
+    [],
+    { cacheKey: "oversight.humanInbox" },
+  );
 
   const containmentItems = useMemo(
     () => (items ?? []).filter((item) => CONTAINMENT_KINDS.includes(item.kind)),
     [items],
   );
+  const surfaces = items?.meta?.surfaces ?? {};
+  const isDegraded = Object.values(surfaces).some(
+    (surface) => surface.status === "degraded" || surface.status === "unavailable",
+  );
+  const isQueueUnavailable = !loading && (Boolean(error) || isDegraded);
 
   const returnUrl = encodeURIComponent(location.pathname + location.search);
 
@@ -42,6 +51,11 @@ export const EmergencyActionsPanel = () => {
         <h2 className="text-sm font-semibold text-foreground">{t("promotionAllocation.emergencyActions.title")}</h2>
         <p className="text-xs text-muted-foreground">{t("promotionAllocation.emergencyActions.subtitle")}</p>
       </div>
+      {isQueueUnavailable && containmentItems.length > 0 && (
+        <p className="text-xs text-status-warning">
+          {t("mgmt.inbox.degradedQueueDesc", "Live queue status is degraded. Some items might be missing or delayed due to a downstream timeout.")}
+        </p>
+      )}
       <ul className="space-y-2">
         {containmentItems.map((item) => (
           <li key={item.id} className="rounded-md border border-border p-3">
@@ -64,7 +78,11 @@ export const EmergencyActionsPanel = () => {
         ))}
         {containmentItems.length === 0 && (
           <li className="p-3 text-center text-sm text-muted-foreground">
-            {loading ? t("promotionAllocation.emergencyActions.loading") : t("promotionAllocation.emergencyActions.none")}
+            {loading
+              ? t("promotionAllocation.emergencyActions.loading")
+              : isQueueUnavailable
+              ? t("mgmt.inbox.degradedEmptyBody", "No items visible in this degraded view. Try refreshing.")
+              : t("promotionAllocation.emergencyActions.none")}
           </li>
         )}
       </ul>

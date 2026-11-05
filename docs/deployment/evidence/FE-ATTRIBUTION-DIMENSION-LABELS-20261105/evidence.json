@@ -13,8 +13,21 @@
     "execute_plans_merge_commit": "466a4639b34a16da327d9869ee5e1c25ffe71a12",
     "status": "done"
   },
+  "dev_integration": {
+    "merged_origin_dev_commit": "9529c069b0a151bc2be508a263c91c21cb0e9fbd",
+    "prior_pr917_head_commit": "bc32272ef09c7c5843c73cef3fa4f67c0a0fd593",
+    "resolved_admitted_conflicts": [
+      "src/lib/bff-v1/management.ts",
+      "src/lib/v5/management/__tests__/i18nParity.test.ts"
+    ],
+    "auto_merged_admitted_files": [
+      "src/i18n/locales/en-US.ts",
+      "src/i18n/locales/zh-TW.ts"
+    ],
+    "unadmitted_file_conflicts": []
+  },
   "status": "ready_for_review",
-  "timestamp": "2026-11-05T02:44:00Z",
+  "timestamp": "2026-11-05T04:27:30Z",
   "scope": {
     "delivered": [
       "Added SUPPORTED_ATTRIBUTION_DIMENSIONS, UNSUPPORTED_ATTRIBUTION_DIMENSIONS, BFF_ATTRIBUTION_DIMENSION_ALIASES (exact 23 accepted names from services/control-plane/bff/management_read_models/ranking_router.py _PM12_ATTRIBUTION_DIMENSION_ALIASES), BFF_ACCEPTED_ATTRIBUTION_DIMENSIONS, isSupportedAttributionDimension, normalizeSupportedAttributionDimension, isBffAcceptedAttributionDimension, normalizeAttributionDimension, and normalizePerformanceAttributionRow in src/lib/v5/management/performanceAttribution.ts.",
@@ -96,14 +109,14 @@
   ],
   "validation": {
     "typecheck": {
-      "command": "./node_modules/.bin/tsc -p tsconfig.app.json --noEmit && ./node_modules/.bin/tsc -p tsconfig.agora.json --noEmit",
+      "command": "npm run typecheck:app && ./node_modules/.bin/tsc -p tsconfig.agora.json --noEmit",
       "exit_code": 0
     },
     "unit_and_component_tests": {
-      "command": "./node_modules/.bin/vitest run src/management/pages/oversight/PerformanceAttribution.test.tsx src/lib/v5/management/__tests__/performanceAttribution.test.ts src/lib/v5/management/__tests__/pm12.test.ts src/lib/bff-v1/__tests__/management-pm12.test.ts src/lib/bff-v1/__tests__/management.test.ts src/lib/v5/management/__tests__/i18nParity.test.ts",
+      "command": "./node_modules/.bin/vitest run src/management/pages/oversight/PerformanceAttribution.test.tsx src/lib/v5/management/__tests__/performanceAttribution.test.ts src/lib/v5/management/__tests__/pm12.test.ts src/lib/bff-v1/__tests__/management-pm12.test.ts src/lib/bff-v1/__tests__/management.test.ts src/lib/v5/management/__tests__/i18nParity.test.ts src/management/pages/oversight/EvolutionJournalPage.test.tsx src/management/pages/oversight/HumanInboxPage.test.tsx src/management/pages/oversight/PersonaFleetPage.test.tsx src/management/pages/oversight/_core.test.ts src/management/pages/v5/useV5Live.test.tsx",
       "exit_code": 0,
-      "test_files_passed": 6,
-      "tests_passed": 111
+      "test_files_passed": 11,
+      "tests_passed": 224
     }
   }
 }

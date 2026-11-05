@@ -35,6 +35,7 @@ import {
   type HumanInboxItem,
   type HumanInboxKind,
   type HumanInboxList,
+  type HumanInboxPageInfo,
 } from "@/lib/v5/management/humanInbox";
 import type { ManagementLinkSet } from "@/lib/v5/management/links";
 import type { PersonaIntentTrace, PersonaIntentVisibility } from "@/lib/v5/management/personaIntent";
@@ -2329,6 +2330,10 @@ function normalizeEvolutionHref(value: unknown): string | null {
     if (url.origin !== "https://pantheon.invalid" || url.pathname !== "/management/evolution-journal") {
       return null;
     }
+    const view = url.searchParams.get("view");
+    if (view !== null && !["all", "history", "auto_proposals"].includes(view.trim().toLowerCase())) {
+      return null;
+    }
     const persona = url.searchParams.get("persona");
     if (persona && INVALID_MUTATION_REFERENCE_TOKENS.has(persona.trim().toLowerCase())) return null;
     for (const key of ["mutation_review", "decision", "item"]) {
@@ -2889,6 +2894,9 @@ const allowedActionsCanDecide = (raw: unknown, fallback: boolean): boolean => {
   if (typeof allowed.can_approve === "boolean" || typeof allowed.can_reject === "boolean") {
     return Boolean(allowed.can_approve || allowed.can_reject);
   }
+  if (Object.keys(allowed).length > 0) {
+    return false;
+  }
   return fallback;
 };
 
@@ -2918,19 +2926,37 @@ const inferInboxRequiredRole = (it: Record<string, unknown>, kind: HumanInboxKin
 };
 
 const adaptInboxRecord = (it: Record<string, unknown>): HumanInboxItem | null => {
-  const rawKind = it.kind ?? it.inboxType ?? it.inbox_type ?? it.source_type ?? it.sourceType;
+  const inferredKind =
+    it.incident_id !== undefined || it.incident_cluster_id !== undefined
+      ? "incident"
+      : it.decision_id !== undefined || it.decision_state !== undefined
+        ? "approval"
+        : undefined;
+  const rawKind = it.kind ?? it.inboxType ?? it.inbox_type ?? it.source_type ?? it.sourceType ?? inferredKind;
   const kind = normalizeInboxKind(rawKind);
   const fallbackReviewId = asString(it.reviewId ?? it.review_id ?? it.source_id);
+  const fallbackIncidentId = asString(it.incident_id ?? it.source_id ?? it.sourceId);
+  const fallbackDecisionId = asString(it.approval_decision_id ?? it.decision_id);
   const id = asString(
     it.id ?? it.inbox_id ?? it.inboxId,
-    kind === "promotion_review" && fallbackReviewId ? `promotion_review:${fallbackReviewId}` : "",
+    kind === "promotion_review" && fallbackReviewId
+      ? `promotion_review:${fallbackReviewId}`
+      : kind === "incident" && fallbackIncidentId
+        ? `incident:${fallbackIncidentId}`
+        : kind === "approval" && fallbackDecisionId
+          ? `approval:${fallbackDecisionId}`
+          : "",
   );
   if (!id) return null;
-  const actionState = asString(it.action_state ?? it.actionState ?? it.status);
-  const canDecide = asBoolean(
-    it.canDecide ?? it.can_decide,
-    allowedActionsCanDecide(it.allowedActions ?? it.allowed_actions, true),
-  );
+  const status = asOptionalString(it.status ?? it.decision_state ?? it.state);
+  const actionState = asString(it.action_state ?? it.actionState ?? status);
+  const defaultCanDecide = kind !== "readiness_blocker" && kind !== "incident";
+  const canDecide = kind === "incident"
+    ? false
+    : asBoolean(
+        it.canDecide ?? it.can_decide,
+        allowedActionsCanDecide(it.allowedActions ?? it.allowed_actions, defaultCanDecide),
+      );
   const canProceed = asBoolean(
     it.canProceed ?? it.can_proceed,
     actionState ? !actionStateBlocksProceed(actionState) : true,
@@ -2938,26 +2964,51 @@ const adaptInboxRecord = (it: Record<string, unknown>): HumanInboxItem | null =>
   const personaId = asOptionalString(it.personaId ?? it.persona_id);
   const reviewId = asOptionalString(it.reviewId ?? it.review_id ?? it.source_id);
   const reviewType = asOptionalString(it.reviewType ?? it.review_type);
-  const sourceId = asOptionalString(it.sourceId ?? it.source_id ?? reviewId);
+  const incidentTargetId = kind === "incident"
+    ? (asString(it.incident_id ?? it.source_id ?? it.sourceId) || (id.startsWith("incident:") ? id.slice("incident:".length) : id))
+    : "";
+  const approvalTargetId = kind === "approval"
+    ? (asString(it.approval_decision_id ?? it.decision_id) || (id.startsWith("approval:") ? id.slice("approval:".length) : ""))
+    : "";
+  const sourceId = asOptionalString(
+    it.sourceId ??
+      it.source_id ??
+      (kind === "incident" ? incidentTargetId : undefined) ??
+      (kind === "approval" ? approvalTargetId : undefined) ??
+      reviewId,
+  );
   const decisionHref = asOptionalString(it.decisionHref ?? it.decision_href);
   const blockingReasons = asInboxStringList(it.blockingReasons ?? it.blocking_reasons ?? it.reasons);
   const route = kind === "promotion_review" && personaId
     ? inboxPersonaManageHref(personaId)
-    : it.route ?? it.manageHref ?? (isObject(it.target) ? it.target.route : undefined);
+    : it.route ??
+      it.href ??
+      it.manageHref ??
+      (isObject(it.target) ? it.target.route : undefined) ??
+      (kind === "incident" && incidentTargetId ? `/management/incidents/${encodeURIComponent(incidentTargetId)}` : undefined) ??
+      (kind === "approval" && approvalTargetId ? `/management/approvals?approval=${encodeURIComponent(approvalTargetId)}` : undefined);
   const allowedActions = adaptInboxAllowedActions(it.allowedActions ?? it.allowed_actions, canDecide);
+  const summary = asOptionalString(it.summary ?? it.evidence_summary ?? it.rationale);
+  const approvalTargetType = kind === "approval" ? asOptionalString(it.decision_type ?? it.target_type) : undefined;
+  const title = asString(
+    it.title ??
+      (approvalTargetType ? `${approvalTargetType} approval` : undefined) ??
+      summary ??
+      id,
+  );
   return {
     id,
     kind,
-    title: asString(it.title ?? it.summary ?? id),
-    summary: asOptionalString(it.summary),
-    requiredRole: asString(it.requiredRole ?? it.required_role ?? it.submitted_by, inferInboxRequiredRole(it, kind)),
+    title,
+    summary,
+    requiredRole: asString(it.requiredRole ?? it.required_role ?? it.actor_role ?? it.submitted_by, inferInboxRequiredRole(it, kind)),
     consequenceIfApproved: asString(it.consequenceIfApproved ?? it.consequence_if_approved ?? ""),
     consequenceIfRejected: asString(it.consequenceIfRejected ?? it.consequence_if_rejected ?? ""),
     consequenceIfIgnored: asString(it.consequenceIfIgnored ?? it.consequence_if_ignored ?? ""),
     ttlSec: typeof it.ttlSec === "number" ? it.ttlSec : typeof it.ttl_sec === "number" ? it.ttl_sec : undefined,
     canDecide,
     canProceed,
-    status: asOptionalString(it.status),
+    status,
     sourceId,
     personaId,
     reviewId,
@@ -3010,6 +3061,50 @@ const adaptDecisionHistory = (raw: unknown): HumanInboxDecisionRecord[] => {
   }));
 };
 
+const extractHumanInboxMeta = (raw: unknown, data?: unknown): HumanInboxList["meta"] => {
+  if (isObject(raw) && isObject(raw.meta)) {
+    return raw.meta as HumanInboxList["meta"];
+  }
+  if (isObject(data) && isObject(data.meta)) {
+    return data.meta as HumanInboxList["meta"];
+  }
+  return undefined;
+};
+
+const extractHumanInboxPageInfo = (raw: unknown, data?: unknown): HumanInboxPageInfo | undefined => {
+  const candidates = [
+    isObject(raw) ? raw.page_info : undefined,
+    isObject(raw) ? raw.pageInfo : undefined,
+    isObject(data) ? data.page_info : undefined,
+    isObject(data) ? data.pageInfo : undefined,
+  ];
+  for (const candidate of candidates) {
+    if (isObject(candidate)) {
+      const totalRaw = candidate.total;
+      const pageSizeRaw = candidate.page_size ?? candidate.pageSize;
+      const nextTokenRaw = candidate.next_page_token ?? candidate.nextPageToken;
+      const total = typeof totalRaw === "number" && Number.isFinite(totalRaw)
+        ? totalRaw
+        : typeof totalRaw === "string" && totalRaw.trim() !== "" && Number.isFinite(Number(totalRaw))
+          ? Number(totalRaw)
+          : undefined;
+      const pageSize = typeof pageSizeRaw === "number" && Number.isFinite(pageSizeRaw)
+        ? pageSizeRaw
+        : typeof pageSizeRaw === "string" && pageSizeRaw.trim() !== "" && Number.isFinite(Number(pageSizeRaw))
+          ? Number(pageSizeRaw)
+          : undefined;
+      const nextPageToken = typeof nextTokenRaw === "string" ? nextTokenRaw : nextTokenRaw === null ? null : undefined;
+      return {
+        ...(candidate as HumanInboxPageInfo),
+        ...(total !== undefined ? { total } : {}),
+        ...(pageSize !== undefined ? { page_size: pageSize, pageSize } : {}),
+        ...(nextPageToken !== undefined ? { next_page_token: nextPageToken, nextPageToken } : {}),
+      };
+    }
+  }
+  return undefined;
+};
+
 export function adaptHumanInboxList(raw: unknown): HumanInboxList | null {
   const data = unwrap(raw);
   const arr =
@@ -3017,8 +3112,14 @@ export function adaptHumanInboxList(raw: unknown): HumanInboxList | null {
     (isObject(data) ? asArray<Record<string, unknown>>(data.items) : null);
   if (!arr) return null;
   const items: HumanInboxList = arr.map(adaptInboxRecord).filter((it): it is HumanInboxItem => it !== null);
-  if (isObject(data) && data.meta) {
-    items.meta = isObject(data.meta) ? data.meta : undefined;
+  const meta = extractHumanInboxMeta(raw, data);
+  if (meta) {
+    items.meta = meta;
+  }
+  const pageInfo = extractHumanInboxPageInfo(raw, data);
+  if (pageInfo) {
+    items.page_info = pageInfo;
+    items.pageInfo = pageInfo;
   }
   return items;
 }
@@ -3444,10 +3545,208 @@ export function adaptTradingPulseOverview(raw: unknown): ManagementTradingPulseM
 // ---------- PM-7 Persona Fleet / PM-11 Evolution / PM-1 Evidence ----------
 // All three are array-of-row view-models. Adapters share shape.
 
+export type ManagementEvolutionJournalView = "all" | "history" | "auto_proposals";
+export type ManagementEvolutionJournalEvidenceClass =
+  | "threshold_signal"
+  | "incident_followup"
+  | "incident_severity"
+  | "unclassified";
+
+export interface ManagementEvolutionJournalAutoProposalCounts {
+  incident_followup: number;
+  incident_severity: number;
+  postmortem_draft: number;
+  total: number;
+  incidentFollowup: number;
+  incidentSeverity: number;
+  postmortemDraft: number;
+}
+
+export interface ManagementEvolutionJournalSummary {
+  total_items: number;
+  totalItems: number;
+  returned_items: number;
+  returnedItems: number;
+  decision_count: number;
+  decisionCount: number;
+  mutation_review_count: number;
+  mutationReviewCount: number;
+  postmortem_count: number;
+  postmortemCount: number;
+  rollback_count: number;
+  rollbackCount: number;
+  freeze_order_count: number;
+  freezeOrderCount: number;
+  pending_review_count: number;
+  pendingReviewCount: number;
+  active_freeze_count: number;
+  activeFreezeCount: number;
+  completed_rollback_count: number;
+  completedRollbackCount: number;
+  latest_at?: string | null;
+  latestAt?: string | null;
+  by_type: Record<string, number>;
+  byType: Record<string, number>;
+  by_status: Record<string, number>;
+  byStatus: Record<string, number>;
+  by_risk_level: Record<string, number>;
+  byRiskLevel: Record<string, number>;
+}
+
+export interface ManagementEvolutionJournalPageInfo {
+  next_page_token: string | null;
+  nextPageToken: string | null;
+  page_size: number;
+  pageSize: number;
+  total: number;
+}
+
+export interface ManagementEvolutionJournalMeta {
+  snapshot_at?: string;
+  snapshotAt?: string;
+  surfaces?: Record<string, { status: string; source?: string; message?: string; reason?: string }>;
+}
+
+export type EvolutionJournalList<T = Record<string, unknown>> = T[] & {
+  summary?: ManagementEvolutionJournalSummary;
+  autoProposalCounts?: ManagementEvolutionJournalAutoProposalCounts;
+  auto_proposal_counts?: ManagementEvolutionJournalAutoProposalCounts;
+  pageInfo?: ManagementEvolutionJournalPageInfo;
+  page_info?: ManagementEvolutionJournalPageInfo;
+  meta?: ManagementEvolutionJournalMeta;
+};
+
 function adaptArrayPassthrough<T>(raw: unknown): T[] | null {
   const data = unwrap(raw);
   return asArray<T>(data) ??
          (isObject(data) ? asArray<T>(data.items) : null);
+}
+
+export function adaptEvolutionJournalList<T = Record<string, unknown>>(raw: unknown): EvolutionJournalList<T> | null {
+  const arr = adaptArrayPassthrough<T>(raw);
+  if (!arr) return null;
+  const list = [...arr] as EvolutionJournalList<T>;
+  const rawArr = arr as EvolutionJournalList<T>;
+  const data = unwrap(raw);
+  const envelope = isObject(raw) ? raw : {};
+
+  const rawSummary = (isObject(data) && isObject(data.summary) ? data.summary : undefined)
+    ?? (isObject(envelope.summary) ? envelope.summary : undefined)
+    ?? (isObject(rawArr.summary) ? (rawArr.summary as unknown as Record<string, unknown>) : undefined);
+  if (rawSummary) {
+    const totalItems = asFiniteNumber(rawSummary.total_items ?? rawSummary.totalItems, list.length);
+    const returnedItems = asFiniteNumber(rawSummary.returned_items ?? rawSummary.returnedItems, list.length);
+    const decisionCount = asFiniteNumber(rawSummary.decision_count ?? rawSummary.decisionCount, 0);
+    const mutationReviewCount = asFiniteNumber(rawSummary.mutation_review_count ?? rawSummary.mutationReviewCount, 0);
+    const postmortemCount = asFiniteNumber(rawSummary.postmortem_count ?? rawSummary.postmortemCount, 0);
+    const rollbackCount = asFiniteNumber(rawSummary.rollback_count ?? rawSummary.rollbackCount, 0);
+    const freezeOrderCount = asFiniteNumber(rawSummary.freeze_order_count ?? rawSummary.freezeOrderCount, 0);
+    const pendingReviewCount = asFiniteNumber(rawSummary.pending_review_count ?? rawSummary.pendingReviewCount, 0);
+    const activeFreezeCount = asFiniteNumber(rawSummary.active_freeze_count ?? rawSummary.activeFreezeCount, 0);
+    const completedRollbackCount = asFiniteNumber(rawSummary.completed_rollback_count ?? rawSummary.completedRollbackCount, 0);
+    const latestAt = nullableString(rawSummary.latest_at ?? rawSummary.latestAt);
+    const byType = asCountRecord(rawSummary.by_type ?? rawSummary.byType);
+    const byStatus = asCountRecord(rawSummary.by_status ?? rawSummary.byStatus);
+    const byRiskLevel = asCountRecord(rawSummary.by_risk_level ?? rawSummary.byRiskLevel);
+    list.summary = {
+      total_items: totalItems,
+      totalItems,
+      returned_items: returnedItems,
+      returnedItems,
+      decision_count: decisionCount,
+      decisionCount,
+      mutation_review_count: mutationReviewCount,
+      mutationReviewCount,
+      postmortem_count: postmortemCount,
+      postmortemCount,
+      rollback_count: rollbackCount,
+      rollbackCount,
+      freeze_order_count: freezeOrderCount,
+      freezeOrderCount,
+      pending_review_count: pendingReviewCount,
+      pendingReviewCount,
+      active_freeze_count: activeFreezeCount,
+      activeFreezeCount,
+      completed_rollback_count: completedRollbackCount,
+      completedRollbackCount,
+      latest_at: latestAt,
+      latestAt,
+      by_type: byType,
+      byType,
+      by_status: byStatus,
+      byStatus,
+      by_risk_level: byRiskLevel,
+      byRiskLevel,
+    };
+  }
+
+  const rawCounts = (isObject(data) && isObject(data.auto_proposal_counts ?? data.autoProposalCounts)
+    ? (data.auto_proposal_counts ?? data.autoProposalCounts) as Record<string, unknown>
+    : undefined)
+    ?? (isObject(envelope.auto_proposal_counts ?? envelope.autoProposalCounts)
+      ? (envelope.auto_proposal_counts ?? envelope.autoProposalCounts) as Record<string, unknown>
+      : undefined)
+    ?? (isObject(rawArr.auto_proposal_counts ?? rawArr.autoProposalCounts)
+      ? (rawArr.auto_proposal_counts ?? rawArr.autoProposalCounts) as unknown as Record<string, unknown>
+      : undefined);
+  if (rawCounts) {
+    const incidentFollowup = asFiniteNumber(rawCounts.incident_followup ?? rawCounts.incidentFollowup, 0);
+    const incidentSeverity = asFiniteNumber(rawCounts.incident_severity ?? rawCounts.incidentSeverity, 0);
+    const postmortemDraft = asFiniteNumber(rawCounts.postmortem_draft ?? rawCounts.postmortemDraft, 0);
+    const total = asFiniteNumber(rawCounts.total, incidentFollowup + incidentSeverity + postmortemDraft);
+    const counts: ManagementEvolutionJournalAutoProposalCounts = {
+      incident_followup: incidentFollowup,
+      incident_severity: incidentSeverity,
+      postmortem_draft: postmortemDraft,
+      total,
+      incidentFollowup,
+      incidentSeverity,
+      postmortemDraft,
+    };
+    list.autoProposalCounts = counts;
+    list.auto_proposal_counts = counts;
+  }
+
+  const rawPageInfo = (isObject(envelope.page_info ?? envelope.pageInfo)
+    ? (envelope.page_info ?? envelope.pageInfo) as Record<string, unknown>
+    : undefined)
+    ?? (isObject(data) && isObject(data.page_info ?? data.pageInfo)
+      ? (data.page_info ?? data.pageInfo) as Record<string, unknown>
+      : undefined)
+    ?? (isObject(rawArr.page_info ?? rawArr.pageInfo)
+      ? (rawArr.page_info ?? rawArr.pageInfo) as unknown as Record<string, unknown>
+      : undefined);
+  if (rawPageInfo) {
+    const nextPageToken = nullableString(rawPageInfo.next_page_token ?? rawPageInfo.nextPageToken);
+    const pageSize = asFiniteNumber(rawPageInfo.page_size ?? rawPageInfo.pageSize, 20);
+    const total = asFiniteNumber(rawPageInfo.total, list.summary?.total_items ?? list.length);
+    const pageInfo: ManagementEvolutionJournalPageInfo = {
+      next_page_token: nextPageToken,
+      nextPageToken,
+      page_size: pageSize,
+      pageSize,
+      total,
+    };
+    list.pageInfo = pageInfo;
+    list.page_info = pageInfo;
+  }
+
+  const rawMeta = (isObject(envelope.meta) ? envelope.meta : undefined)
+    ?? (isObject(data) && isObject(data.meta) ? data.meta : undefined)
+    ?? (isObject(rawArr.meta) ? (rawArr.meta as unknown as Record<string, unknown>) : undefined);
+  if (rawMeta) {
+    const rawSurfaces = isObject(rawMeta.surfaces) ? rawMeta.surfaces : {};
+    const surfaces = Object.fromEntries(
+      Object.entries(rawSurfaces).map(([key, item]) => [key, adaptEvidenceSurface(item)]),
+    );
+    list.meta = {
+      snapshot_at: optionalString(rawMeta.snapshot_at ?? rawMeta.snapshotAt),
+      snapshotAt: optionalString(rawMeta.snapshotAt ?? rawMeta.snapshot_at),
+      surfaces,
+    };
+  }
+
+  return list;
 }
 
 export function adaptPerformanceAttributionRows(raw: unknown): PerformanceAttributionRow[] | null {
@@ -4125,8 +4424,14 @@ export const mgmt = {
           const adapted = adaptHumanInboxList(raw);
           if (adapted) return adapted;
           const empty = emptyHumanInbox();
-          if (isObject(raw) && raw.meta) {
-            empty.meta = isObject(raw.meta) ? raw.meta : undefined;
+          const meta = extractHumanInboxMeta(raw);
+          if (meta) {
+            empty.meta = meta;
+          }
+          const pageInfo = extractHumanInboxPageInfo(raw);
+          if (pageInfo) {
+            empty.page_info = pageInfo;
+            empty.pageInfo = pageInfo;
           }
           return empty;
         },
@@ -4248,9 +4553,22 @@ export const mgmt = {
   evolutionJournal: {
     list: <T>(
       seedFn: () => T[],
-      opts?: { signal?: AbortSignal; persona?: string; mutationReview?: string; decision?: string },
-    ): Promise<T[]> =>
-      mgmtRead("mgmt.evolutionJournal.list", { method: "GET", path: paths.mgmtEvolutionJournal(opts), signal: opts?.signal }, seedFn, adaptArrayPassthrough<T>),
+      opts?: {
+        signal?: AbortSignal;
+        view?: ManagementEvolutionJournalView | string;
+        persona?: string;
+        mutationReview?: string;
+        decision?: string;
+        pageSize?: number;
+        pageToken?: string | null;
+      },
+    ): Promise<EvolutionJournalList<T>> =>
+      mgmtRead(
+        "mgmt.evolutionJournal.list",
+        { method: "GET", path: paths.mgmtEvolutionJournal(opts), signal: opts?.signal },
+        seedFn as () => EvolutionJournalList<T>,
+        adaptEvolutionJournalList<T>,
+      ),
   },
 
   evidence: {

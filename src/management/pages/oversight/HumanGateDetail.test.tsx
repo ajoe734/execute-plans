@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import i18n from "@/i18n";
+import { adaptHumanInboxDetail } from "@/lib/bff-v1/management";
 import { HumanGateDetailPage } from "./HumanGateDetail";
 import type { HumanInboxDetail } from "@/lib/v5/management/humanInbox";
 import { mgmt } from "@/lib/bff-v1";
@@ -282,5 +283,128 @@ describe("HumanGateDetailPage", () => {
       expect(toastMocks.error).toHaveBeenCalledWith("Decision failed: HTTP 500");
     });
     expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it("renders incident detail with canDecide false, no approve or reject controls even when allowedActions has canReview and canRemediate, and manage link to /management/incidents/:id", () => {
+    const incidentDetail = adaptHumanInboxDetail({
+      data: {
+        item: {
+          artifact_id: "art-deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+          artifact_version: "1.0.0",
+          binding_id: "bind-persona-paper-1bad2eca6831457cd885",
+          capital_pool_id: "pool-paper-default",
+          created_at: "2026-11-04T11:58:00Z",
+          deployment_plan_id: "deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+          deployment_stage: "paper",
+          evidence_summary: "Compensation saga entered safe mode after broker validation timeout.",
+          incident_cluster_id: "cluster-deployment-comp-1bad2eca6831457cd885",
+          incident_id: "inc-deployment-comp-deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+          id: "incident:inc-deployment-comp-deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+          inbox_id: "incident:inc-deployment-comp-deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+          inboxType: "incident",
+          source_type: "incident",
+          source_id: "inc-deployment-comp-deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+          lineage_ref: "lineage:deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+          persona_capital_binding_id: "pcb-persona-paper-1bad2eca6831457cd885",
+          reconciliation_ids: ["rec-1bad2eca6831457cd885"],
+          resolved_at: null,
+          runtime_id: "runtime-persona-paper-1bad2eca6831457cd885",
+          severity: "critical",
+          status: "open",
+          telemetry_event_ids: ["tel-1bad2eca6831457cd885"],
+          title: "Deployment compensation entered safe mode for deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+          trace_id: "trace-1bad2eca6831457cd885",
+          route: "/management/incidents/inc-deployment-comp-deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+          allowedActions: {
+            canReview: true,
+            canRemediate: true,
+          },
+        },
+      },
+    })!;
+
+    expect(incidentDetail.kind).toBe("incident");
+    expect(incidentDetail.canDecide).toBe(false);
+
+    mocks.useV5Live.mockReturnValue({
+      data: incidentDetail,
+      loading: false,
+      refresh: vi.fn(),
+    });
+
+    const { unmount } = renderDetail(
+      "incident:inc-deployment-comp-deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+    );
+
+    expect(
+      screen.getByRole("heading", {
+        name: "Deployment compensation entered safe mode for deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+      }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Promotion decision")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /approve|reject/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open action page" })).toHaveAttribute(
+      "href",
+      "/management/incidents/inc-deployment-comp-deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+    );
+    unmount();
+
+    const approvalDetail = adaptHumanInboxDetail({
+      data: {
+        item: {
+          actor_id: "user-risk-lead-1",
+          actor_role: "risk_owner",
+          authority_status: "authorized",
+          authorization_scope: "capital_pool",
+          candidate_digest: "sha256:cand-1bad2eca6831457cd885",
+          capital_pool_id: "pool-canary-tw-equity",
+          conditions: [],
+          controller_record_ref: "ctrl:rec-1bad2eca6831457cd885",
+          created_at: "2026-11-04T11:45:00Z",
+          decided_at: null,
+          decision: "approve",
+          decision_id: "dec-capital-pool-activation-001",
+          decision_state: "proposed",
+          event_id: "evt-dec-001",
+          evidence_refs: ["evidence:pool-canary-tw-equity:readiness"],
+          expires_at: "2026-11-05T11:45:00Z",
+          metadata: { stage: "canary" },
+          owner_user_id: "user-ops-1",
+          persona_id: "persona-tw-equity-canary",
+          proof_digest: "sha256:proof-001",
+          proposal_content_digest: "sha256:prop-001",
+          proposal_id: "prop-capital-pool-001",
+          proposal_revision: 1,
+          rationale: "Canary capital pool activation requires risk owner sign-off.",
+          recorded_at: "2026-11-04T11:45:00Z",
+          revoked_at: null,
+          risk_level: "high",
+          session_id: "sess-001",
+          superseded_by: null,
+          target_id: "pool-canary-tw-equity",
+          target_type: "capital_pool_activation",
+          target_version: "v1",
+          tenant_id: "tenant-default",
+          validation_result_digest: "sha256:val-001",
+          version: 1,
+        },
+      },
+    })!;
+
+    expect(approvalDetail.kind).toBe("approval");
+    expect(approvalDetail.canDecide).toBe(true);
+
+    mocks.useV5Live.mockReturnValue({
+      data: approvalDetail,
+      loading: false,
+      refresh: vi.fn(),
+    });
+
+    renderDetail("approval:dec-capital-pool-activation-001");
+    expect(screen.getByRole("heading", { name: "capital_pool_activation approval" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open action page" })).toHaveAttribute(
+      "href",
+      "/management/approvals?approval=dec-capital-pool-activation-001",
+    );
   });
 });

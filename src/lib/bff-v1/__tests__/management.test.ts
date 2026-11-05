@@ -117,6 +117,125 @@ describe("mgmt façade (PM-Live)", () => {
     );
   });
 
+  it("forwards view, page_size, and page_token to /bff/management/evolution-journal and adapts summary, auto_proposal_counts, page_info, and evidence_class", async () => {
+    liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
+      jsonResponse({
+        data: {
+          id: "management_evolution_journal",
+          items: [
+            {
+              id: "evolution_decision:evo-sweep-agent-000b205c0ef9-0000",
+              entry_type: "evolution_decision",
+              source_id: "evo-sweep-agent-000b205c0ef9-0000",
+              title: "Evolution decision · flag_for_review",
+              summary: "Candidate artifact infra-component-agent-finding-000b205c0ef9",
+              status: "proposed",
+              action_type: "flag_for_review",
+              risk_level: "low",
+              evidence_class: "incident_followup",
+              target: {
+                type: "candidate_artifact",
+                id: "infra-component-agent-finding-000b205c0ef9",
+              },
+              occurred_at: "2026-11-04T01:00:00Z",
+              created_at: "2026-11-04T01:00:00Z",
+              record: {
+                decision_id: "evo-sweep-agent-000b205c0ef9-0000",
+                target_type: "candidate_artifact",
+                target_id: "infra-component-agent-finding-000b205c0ef9",
+                risk_level: "low",
+                linked_incident_id: "agent-000b205c0ef9-0000",
+                action_type: "flag_for_review",
+                decision_state: "proposed",
+                status: "proposed",
+                evidence_class: "incident_followup",
+                threshold_snapshots: [
+                  {
+                    breached: true,
+                    comparator: "gte",
+                    metric_name: "incident_followup_required",
+                    observed_value: 1,
+                    threshold_value: 1,
+                    policy_source: "EVOLUTION_REVIEW_AND_THRESHOLDS.md section 7.5",
+                    signal_type: "manual_review",
+                    window: "active-incident",
+                  },
+                ],
+              },
+            },
+          ],
+          summary: {
+            total_items: 6,
+            returned_items: 1,
+            decision_count: 2,
+            mutation_review_count: 2,
+            postmortem_count: 2,
+            rollback_count: 0,
+            freeze_order_count: 0,
+            pending_review_count: 2,
+            active_freeze_count: 0,
+            completed_rollback_count: 0,
+            by_type: { evolution_decision: 2, mutation_review: 2, postmortem: 2 },
+            by_status: { proposed: 4, draft: 2 },
+            by_risk_level: { low: 2, medium: 2, unknown: 2 },
+          },
+          auto_proposal_counts: {
+            incident_followup: 1,
+            incident_severity: 1,
+            postmortem_draft: 2,
+            total: 4,
+          },
+        },
+        page_info: {
+          next_page_token: "20",
+          page_size: 20,
+          total: 6,
+        },
+        meta: {
+          snapshot_at: "2026-11-04T02:00:00Z",
+          surfaces: {
+            evolution_decisions: { status: "ok", source: "live" },
+            postmortems: { status: "ok", source: "live" },
+          },
+        },
+      }),
+    );
+
+    const out = await mgmt.evolutionJournal.list<{ id: string; evidence_class?: string }>(() => [], {
+      view: "auto_proposals",
+      pageSize: 20,
+      pageToken: "20",
+    });
+
+    expect(String(fetchSpy.mock.calls[0][0])).toBe(
+      "/bff/management/evolution-journal?view=auto_proposals&page_size=20&page_token=20",
+    );
+    expect(out).toHaveLength(1);
+    expect(out[0].id).toBe("evolution_decision:evo-sweep-agent-000b205c0ef9-0000");
+    expect(out[0].evidence_class).toBe("incident_followup");
+    expect(out.autoProposalCounts).toEqual({
+      incident_followup: 1,
+      incident_severity: 1,
+      postmortem_draft: 2,
+      total: 4,
+      incidentFollowup: 1,
+      incidentSeverity: 1,
+      postmortemDraft: 2,
+    });
+    expect(out.auto_proposal_counts).toEqual(out.autoProposalCounts);
+    expect(out.summary?.total_items).toBe(6);
+    expect(out.summary?.decision_count).toBe(2);
+    expect(out.pageInfo).toEqual({
+      next_page_token: "20",
+      nextPageToken: "20",
+      page_size: 20,
+      pageSize: 20,
+      total: 6,
+    });
+    expect(out.meta?.surfaces?.evolution_decisions?.status).toBe("ok");
+  });
+
   it("recommendations live read follows next_page_token past the first page", async () => {
     liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
     const page = (id: string, next: string | null) => jsonResponse({ data: [{ personaId: id, rank: 1 }], page_info: { next_page_token: next } });
@@ -599,6 +718,227 @@ describe("mgmt façade (PM-Live)", () => {
       detailHref: "/management/human-inbox/promotion_review%3Areview-persona-paper-1",
       links: {
         manageHref: "/management/persona-fleet?persona=persona-paper-1",
+      },
+    });
+  });
+
+  it("keeps top-level BFF meta.surfaces and page_info for both empty and non-empty humanInbox.list payloads", async () => {
+    liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
+    const degradedMeta = {
+      snapshot_at: "2026-11-04T12:00:00Z",
+      surfaces: {
+        human_inbox: {
+          status: "degraded",
+          reason: "read_timeout",
+          source: "timeout_fallback",
+          message: "Human inbox read timed out",
+          snapshot_at: "2026-11-04T12:00:00Z",
+        },
+        governance_review_queue: {
+          status: "unavailable",
+          reason: "read_timeout",
+          source: "timeout_fallback",
+          message: "Governance review queue timed out",
+          snapshot_at: "2026-11-04T12:00:00Z",
+        },
+      },
+    };
+    const realIncidentOwnerRow = {
+      artifact_id: "art-deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+      artifact_version: "1.0.0",
+      binding_id: "bind-persona-paper-1bad2eca6831457cd885",
+      capital_pool_id: "pool-paper-default",
+      created_at: "2026-11-04T11:58:00Z",
+      deployment_plan_id: "deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+      deployment_stage: "paper",
+      evidence_summary: "Compensation saga entered safe mode after broker validation timeout.",
+      incident_cluster_id: "cluster-deployment-comp-1bad2eca6831457cd885",
+      incident_id: "inc-deployment-comp-deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+      id: "inc-deployment-comp-deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+      lineage_ref: "lineage:deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+      persona_capital_binding_id: "pcb-persona-paper-1bad2eca6831457cd885",
+      reconciliation_ids: ["rec-1bad2eca6831457cd885"],
+      resolved_at: null,
+      runtime_id: "runtime-persona-paper-1bad2eca6831457cd885",
+      severity: "critical",
+      status: "open",
+      telemetry_event_ids: ["tel-1bad2eca6831457cd885"],
+      title: "Deployment compensation entered safe mode for deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+      trace_id: "trace-1bad2eca6831457cd885",
+    };
+
+    const emptyPayload = {
+      data: {
+        id: "human_inbox",
+        items: [],
+        summary: { total: 0 },
+        facets: { by_type: {}, by_priority: {}, by_status: {} },
+      },
+      page_info: {
+        next_page_token: null,
+        total: 0,
+        page_size: 50,
+      },
+      meta: degradedMeta,
+    };
+
+    const nonEmptyPayload = {
+      data: {
+        id: "human_inbox",
+        items: [
+          {
+            ...realIncidentOwnerRow,
+            id: "incident:inc-deployment-comp-deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+            inbox_id: "incident:inc-deployment-comp-deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+            inboxType: "incident",
+            source_type: "incident",
+            source_id: "inc-deployment-comp-deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+            route: "/management/incidents/inc-deployment-comp-deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+            allowedActions: {
+              canReview: true,
+              canRemediate: true,
+            },
+          },
+        ],
+        summary: { total: 3 },
+        facets: { by_type: { incident: 1 }, by_priority: { critical: 1 }, by_status: { open: 1 } },
+      },
+      page_info: {
+        next_page_token: "cursor-2",
+        total: 3,
+        page_size: 1,
+      },
+      meta: degradedMeta,
+    };
+
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(jsonResponse(emptyPayload))
+      .mockResolvedValueOnce(jsonResponse(nonEmptyPayload));
+
+    const emptyResult = await mgmt.humanInbox.list();
+    expect(emptyResult).toHaveLength(0);
+    expect(emptyResult.meta?.surfaces).toEqual(degradedMeta.surfaces);
+    expect(emptyResult.page_info?.total).toBe(0);
+
+    const nonEmptyResult = await mgmt.humanInbox.list();
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(nonEmptyResult).toHaveLength(1);
+    expect(nonEmptyResult.meta?.surfaces).toEqual(degradedMeta.surfaces);
+    expect(nonEmptyResult.page_info).toMatchObject({
+      next_page_token: "cursor-2",
+      total: 3,
+      page_size: 1,
+    });
+    expect(nonEmptyResult[0]).toMatchObject({
+      id: "incident:inc-deployment-comp-deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+      kind: "incident",
+      canDecide: false,
+      allowedActions: {
+        canDecide: false,
+        canApprove: false,
+        canReject: false,
+      },
+      links: {
+        manageHref: "/management/incidents/inc-deployment-comp-deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+      },
+    });
+  });
+
+  it("adapts real owner incident and approval decision row shapes accurately", () => {
+    const rawIncidentOwnerRow = {
+      artifact_id: "art-deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+      artifact_version: "1.0.0",
+      binding_id: "bind-persona-paper-1bad2eca6831457cd885",
+      capital_pool_id: "pool-paper-default",
+      created_at: "2026-11-04T11:58:00Z",
+      deployment_plan_id: "deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+      deployment_stage: "paper",
+      evidence_summary: "Compensation saga entered safe mode after broker validation timeout.",
+      incident_cluster_id: "cluster-deployment-comp-1bad2eca6831457cd885",
+      incident_id: "inc-deployment-comp-deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+      id: "inc-deployment-comp-deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+      lineage_ref: "lineage:deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+      persona_capital_binding_id: "pcb-persona-paper-1bad2eca6831457cd885",
+      reconciliation_ids: ["rec-1bad2eca6831457cd885"],
+      resolved_at: null,
+      runtime_id: "runtime-persona-paper-1bad2eca6831457cd885",
+      severity: "critical",
+      status: "open",
+      telemetry_event_ids: ["tel-1bad2eca6831457cd885"],
+      title: "Deployment compensation entered safe mode for deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+      trace_id: "trace-1bad2eca6831457cd885",
+    };
+
+    const rawApprovalDecisionRow = {
+      actor_id: "user-risk-lead-1",
+      actor_role: "risk_owner",
+      authority_status: "authorized",
+      authorization_scope: "capital_pool",
+      candidate_digest: "sha256:cand-1bad2eca6831457cd885",
+      capital_pool_id: "pool-canary-tw-equity",
+      conditions: [],
+      controller_record_ref: "ctrl:rec-1bad2eca6831457cd885",
+      created_at: "2026-11-04T11:45:00Z",
+      decided_at: null,
+      decision: "approve",
+      decision_id: "dec-capital-pool-activation-001",
+      decision_state: "proposed",
+      event_id: "evt-dec-001",
+      evidence_refs: ["evidence:pool-canary-tw-equity:readiness"],
+      expires_at: "2026-11-05T11:45:00Z",
+      metadata: { stage: "canary" },
+      owner_user_id: "user-ops-1",
+      persona_id: "persona-tw-equity-canary",
+      proof_digest: "sha256:proof-001",
+      proposal_content_digest: "sha256:prop-001",
+      proposal_id: "prop-capital-pool-001",
+      proposal_revision: 1,
+      rationale: "Canary capital pool activation requires risk owner sign-off.",
+      recorded_at: "2026-11-04T11:45:00Z",
+      revoked_at: null,
+      risk_level: "high",
+      session_id: "sess-001",
+      superseded_by: null,
+      target_id: "pool-canary-tw-equity",
+      target_type: "capital_pool_activation",
+      target_version: "v1",
+      tenant_id: "tenant-default",
+      validation_result_digest: "sha256:val-001",
+      version: 1,
+    };
+
+    const out = adaptHumanInboxList({
+      data: {
+        id: "human_inbox",
+        items: [rawIncidentOwnerRow, rawApprovalDecisionRow],
+      },
+    });
+
+    expect(out).toHaveLength(2);
+    expect(out?.[0]).toMatchObject({
+      id: "inc-deployment-comp-deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+      kind: "incident",
+      title: "Deployment compensation entered safe mode for deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+      summary: "Compensation saga entered safe mode after broker validation timeout.",
+      canDecide: false,
+      links: {
+        manageHref: "/management/incidents/inc-deployment-comp-deployment-saga-plan-persona-paper-1bad2eca6831457cd885",
+      },
+    });
+    expect(out?.[1]).toMatchObject({
+      id: "approval:dec-capital-pool-activation-001",
+      kind: "approval",
+      title: "capital_pool_activation approval",
+      summary: "Canary capital pool activation requires risk owner sign-off.",
+      requiredRole: "risk_owner",
+      status: "proposed",
+      personaId: "persona-tw-equity-canary",
+      canDecide: true,
+      canProceed: false,
+      evidenceRefs: ["evidence:pool-canary-tw-equity:readiness"],
+      links: {
+        manageHref: "/management/approvals?approval=dec-capital-pool-activation-001",
       },
     });
   });

@@ -70,6 +70,9 @@ describe("BFF v1 contract drift", () => {
     for (const p of canonicalPaths) {
       expect(openApi, `OpenAPI must include ${p}`).toContain(p);
     }
+
+    expect(paths.researchTasks()).toBe("/bff/research-tasks");
+    expect(paths.researchTask("rtask-20261023-008")).toBe("/bff/research-tasks/rtask-20261023-008");
   });
 
   it("ActionCommandStatus is a named schema and does not contain requires_* success states", () => {

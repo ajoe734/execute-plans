@@ -5,6 +5,7 @@ import {
   allocationSimulations,
   consultRules,
   evaluationRuns,
+  evolution,
   evolutionCandidates,
   evolutionRuns,
   featureSets,
@@ -23,6 +24,7 @@ import {
   poolFreezes,
   promotions,
   rebalanceOverrides,
+  research,
   routePolicies,
   strategies,
   watchers,
@@ -224,5 +226,99 @@ describe("seed taxonomy live gating", () => {
     await expect(strategies.list()).resolves.toEqual([{ id: "live_strategy", name: "Live Strategy" }]);
     expect(fetchSpy).toHaveBeenCalledOnce();
     expect(String(fetchSpy.mock.calls[0][0])).toContain("/bff/strategies");
+  });
+
+  it("routes research reads to /bff/research-tasks and evolution.create to POST /bff/evolution-programs with only name", async () => {
+    stubLiveEnv();
+    const fetchSpy = vi.fn((input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+      const path = pathFromFetchInput(input);
+      if (path === "/bff/research-tasks") {
+        return jsonResponse({
+          items: [
+            {
+              id: "rtask-20261023-008",
+              task_id: "rtask-20261023-008",
+              name: "Hypothesis Task",
+              objective: "Validate factor decay",
+              status: "completed",
+              created_by: "research-worker",
+              updated_at: "2026-10-23T12:00:00Z",
+              run_count: 1,
+              latest_run: {
+                run_id: "rrun-20261023-002",
+                status: "completed",
+                adapter: "vectorbt",
+                dispatch_mode: "real",
+              },
+            },
+          ],
+        });
+      }
+      if (path === "/bff/research-tasks/rtask-20261023-008") {
+        return jsonResponse({
+          data: {
+            id: "rtask-20261023-008",
+            task_id: "rtask-20261023-008",
+            name: "Hypothesis Task",
+            objective: "Validate factor decay",
+            status: "completed",
+            created_by: "research-worker",
+            updated_at: "2026-10-23T12:00:00Z",
+            run_count: 1,
+            runs: [
+              {
+                run_id: "rrun-20261023-002",
+                status: "completed",
+                adapter: "vectorbt",
+                dispatch_mode: "real",
+              },
+            ],
+          },
+        });
+      }
+      if (path === "/bff/evolution-programs" && init?.method === "POST") {
+        const body = JSON.parse(String(init.body ?? "{}"));
+        return jsonResponse({
+          data: {
+            program_id: "evo-created-1",
+            name: body.name,
+            status: "draft",
+            updated_at: "2026-11-04T00:00:00Z",
+          },
+        });
+      }
+      return Promise.resolve(new Response("not found", { status: 404 }));
+    });
+    globalThis.fetch = fetchSpy as unknown as typeof fetch;
+
+    const tasks = await research.list();
+    expect(tasks).toHaveLength(1);
+    expect(tasks[0]).toMatchObject({
+      id: "rtask-20261023-008",
+      name: "Hypothesis Task",
+      objective: "Validate factor decay",
+      status: "completed",
+      runCount: 1,
+    });
+
+    const detail = await research.get("rtask-20261023-008");
+    expect(detail?.objective).toBe("Validate factor decay");
+    expect(detail?.runs).toHaveLength(1);
+
+    const created = await evolution.create({ name: "  New Evo Direction  " }, { idempotencyKey: "idem-evo-live" });
+    expect(created).toMatchObject({
+      id: "evo-created-1",
+      name: "New Evo Direction",
+      state: "draft",
+      status: "draft",
+    });
+
+    const postCall = fetchSpy.mock.calls.find(
+      ([input, init]) => pathFromFetchInput(input) === "/bff/evolution-programs" && init?.method === "POST",
+    );
+    expect(postCall).toBeDefined();
+    expect(JSON.parse(String(postCall?.[1]?.body))).toEqual({ name: "New Evo Direction" });
+    const headers = postCall?.[1]?.headers as Record<string, string>;
+    expect(headers["Idempotency-Key"]).toBe("idem-evo-live");
   });
 });
