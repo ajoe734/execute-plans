@@ -1,0 +1,10 @@
+{
+  "task": "FE-TRADINGROOM-WORKSPACE-RESTORE-20261105",
+  "change": "TradingRoomWorkspace restores saved private workspace via existing scoped GET /bff/agora/strategies/{id}/trading-room/workspace?strategy_version= before creating a preview; only a genuine 404 (or explicit regeneration) creates a proposal.",
+  "commands": [
+    {"cmd": "npx vitest run src/agora src/lib/bff-v1/agora", "result": "40 files / 640 tests passed"},
+    {"cmd": "npx tsc --noEmit -p tsconfig.app.json", "result": "exit 0"},
+    {"cmd": "new restore tests against original TradingRoomWorkspace.tsx", "result": "7 failed (remount restore, 401/403/409/500/503, network) as expected; pass after fix"}
+  ],
+  "limits": "Isolated test success only; hosted create/edit/reload acceptance remains with DEV-OPERABLE-PROFILE-ACCEPTANCE-20261104 after same-pair deployment. No backend, deployment, or business writes performed."
+}

@@ -15,6 +15,7 @@ import type {
   TradingRoomStrategyEntry,
   TradingDecisionEvent,
 } from "@/lib/bff-v1/agora/tradingRoom";
+import { BffError } from "@/lib/bff-v1/errors";
 import * as tradingRoomModule from "@/lib/bff-v1/agora/tradingRoom";
 import type { TradingRoomWorkspaceProposal, TradingRoomWorkspace as TradingRoomWorkspaceType } from "@/lib/bff-v1/agora/tradingRoomTypes";
 import type { TradingRoomWorkspaceResult } from "@/lib/bff-v1/agora/tradingRoom";
@@ -41,6 +42,7 @@ vi.mock("@/lib/bff-v1/agora/tradingRoom", () => ({
   acceptTradingRoomWorkspaceProposalWithMeta: vi.fn(),
   createTradingRoomWorkspaceProposal: vi.fn(),
   decideOnEvent: vi.fn(),
+  getTradingRoomWorkspaceByStrategyWithMeta: vi.fn(),
   listTradingRoomWorkspaceVersions: vi.fn(),
   patchTradingRoomWorkspaceLayout: vi.fn(),
   rollbackTradingRoomWorkspaceVersion: vi.fn(),
@@ -205,11 +207,113 @@ const SAMPLE_WORKSPACE_RESULT: TradingRoomWorkspaceResult = {
   } as TradingRoomWorkspaceType,
 };
 
+function bffErr(status: number, code = "RESOURCE_NOT_FOUND"): BffError {
+  return new BffError(status, { error: { code, message: `err ${status}` } } as never);
+}
+
+const SAVED_RESULT: TradingRoomWorkspaceResult = {
+  etag: '"saved-etag-v2"',
+  workspace: { ...SAMPLE_WORKSPACE_RESULT.workspace, id: "trw_saved", dashboardVersion: 2 } as TradingRoomWorkspaceType,
+};
+
+function renderWs(strategyId = "strat-001", strategyVersion = "reg-spec-001") {
+  return (
+    <TradingRoomWorkspace
+      aggregate={SAMPLE_AGGREGATE}
+      events={SAMPLE_EVENTS}
+      eventsEtag="etag-events-1"
+      eventsLoading={false}
+      strategy={SAMPLE_STRATEGY}
+      strategyId={strategyId}
+      strategyVersion={strategyVersion}
+    />
+  );
+}
+
+describe("TradingRoomWorkspace saved workspace restore", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(tradingRoomModule.createTradingRoomWorkspaceProposal).mockResolvedValue(SAMPLE_PROPOSAL);
+    vi.mocked(tradingRoomModule.getTradingRoomWorkspaceByStrategyWithMeta).mockRejectedValue(bffErr(404));
+  });
+  afterEach(() => cleanup());
+
+  it("restores the saved workspace on remount via GET with no proposal POST", async () => {
+    vi.mocked(tradingRoomModule.getTradingRoomWorkspaceByStrategyWithMeta).mockResolvedValue(SAVED_RESULT);
+    const first = render(renderWs());
+    await waitFor(() => expect(screen.getByTestId("mock-grid-editor")).toBeInTheDocument());
+    first.unmount();
+    render(renderWs());
+    await waitFor(() => expect(screen.getByTestId("mock-grid-editor")).toBeInTheDocument());
+    expect(tradingRoomModule.getTradingRoomWorkspaceByStrategyWithMeta).toHaveBeenCalledWith("strat-001", "reg-spec-001");
+    expect(tradingRoomModule.createTradingRoomWorkspaceProposal).not.toHaveBeenCalled();
+    expect(tradingRoomModule.acceptTradingRoomWorkspaceProposalWithMeta).not.toHaveBeenCalled();
+  });
+
+  it("creates the preview only after a genuine 404", async () => {
+    render(renderWs());
+    await waitFor(() => expect(screen.getByTestId("mock-proposal-preview")).toBeInTheDocument());
+    expect(tradingRoomModule.createTradingRoomWorkspaceProposal).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    [401, "AUTH_REQUIRED"],
+    [403, "PERMISSION_DENIED"],
+    [409, "TENANT_SCOPE_MISMATCH"],
+    [500, "INTERNAL_ERROR"],
+    [503, "SERVICE_UNAVAILABLE"],
+  ])("does not create a proposal on lookup status %s", async (status, code) => {
+    vi.mocked(tradingRoomModule.getTradingRoomWorkspaceByStrategyWithMeta).mockRejectedValue(bffErr(status, code));
+    render(renderWs());
+    await waitFor(() => expect(screen.getByTestId("trading-room-proposal-error")).toBeInTheDocument());
+    expect(tradingRoomModule.createTradingRoomWorkspaceProposal).not.toHaveBeenCalled();
+    expect(tradingRoomModule.acceptTradingRoomWorkspaceProposalWithMeta).not.toHaveBeenCalled();
+  });
+
+  it("does not create a proposal on a network failure", async () => {
+    vi.mocked(tradingRoomModule.getTradingRoomWorkspaceByStrategyWithMeta).mockRejectedValue(new TypeError("Failed to fetch"));
+    render(renderWs());
+    await waitFor(() => expect(screen.getByTestId("trading-room-proposal-error")).toBeInTheDocument());
+    expect(tradingRoomModule.createTradingRoomWorkspaceProposal).not.toHaveBeenCalled();
+  });
+
+  it("ignores a late response from the previous strategy", async () => {
+    let resolveOld: (v: TradingRoomWorkspaceResult) => void = () => undefined;
+    vi.mocked(tradingRoomModule.getTradingRoomWorkspaceByStrategyWithMeta).mockImplementation((id: string) =>
+      id === "strat-old"
+        ? new Promise<TradingRoomWorkspaceResult>((r) => {
+            resolveOld = r;
+          })
+        : Promise.reject(bffErr(404)),
+    );
+    const view = render(renderWs("strat-old"));
+    view.rerender(renderWs("strat-new"));
+    await waitFor(() => expect(screen.getByTestId("mock-proposal-preview")).toBeInTheDocument());
+    await act(async () => {
+      resolveOld(SAVED_RESULT);
+    });
+    expect(screen.queryByTestId("mock-grid-editor")).not.toBeInTheDocument();
+    expect(screen.getByTestId("mock-proposal-preview")).toBeInTheDocument();
+  });
+
+  it("explicit regeneration creates a new proposal without restoring", async () => {
+    render(renderWs());
+    await waitFor(() => expect(screen.getByTestId("mock-proposal-preview")).toBeInTheDocument());
+    vi.mocked(tradingRoomModule.getTradingRoomWorkspaceByStrategyWithMeta).mockResolvedValue(SAVED_RESULT);
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("preview-regen-button"));
+    });
+    await waitFor(() => expect(tradingRoomModule.createTradingRoomWorkspaceProposal).toHaveBeenCalledTimes(2));
+    expect(screen.queryByTestId("mock-grid-editor")).not.toBeInTheDocument();
+  });
+});
+
 describe("TradingRoomWorkspace component suite", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(tradingRoomModule.createTradingRoomWorkspaceProposal).mockResolvedValue(SAMPLE_PROPOSAL);
     vi.mocked(tradingRoomModule.acceptTradingRoomWorkspaceProposalWithMeta).mockResolvedValue(SAMPLE_WORKSPACE_RESULT);
+    vi.mocked(tradingRoomModule.getTradingRoomWorkspaceByStrategyWithMeta).mockRejectedValue(bffErr(404));
   });
 
   afterEach(() => {
