@@ -1,0 +1,125 @@
+{
+  "task_id": "FE-POSTMORTEM-LIBRARY-PAGING-20261104",
+  "title": "Postmortem library must page search and report owner state from the real read",
+  "owner": "Antigravity2",
+  "reviewer": "Claude",
+  "repository": "ajoe734/execute-plans",
+  "branch": "task/FE-POSTMORTEM-LIBRARY-PAGING-20261104",
+  "merge_target": "dev",
+  "prerequisite_backend_task": "POSTMORTEM-BFF-OWNER-READ-20261104",
+  "hosted_verification_claimed": false,
+  "hosted_verification_note": "Hosted verification is performed later by the operator acceptance task; this pre-deploy evidence records functional unit, contract, i18n parity, and typecheck verification using the real 23-key postmortem record shape.",
+  "scoped_artifacts": [
+    "src/lib/bff-v1/postmortemClient.ts",
+    "src/lib/bff-v1/postmortemClient.test.ts",
+    "src/management/pages/phase2/PostmortemLibrary.tsx",
+    "src/management/pages/phase2/PostmortemLibrary.test.tsx",
+    "src/management/__tests__/fullOperationAssembly.test.tsx",
+    "src/i18n/locales/zh-TW.ts",
+    "src/i18n/locales/en-US.ts",
+    "docs/deployment/evidence/FE-POSTMORTEM-LIBRARY-PAGING-20261104/evidence.json"
+  ],
+  "acceptance_criteria_evidence": {
+    "ac1_paging_and_total": {
+      "status": "verified",
+      "page_size_default": 50,
+      "query_params_used": [
+        "page_size",
+        "page_token"
+      ],
+      "total_source": "page_info.total",
+      "drafts_hidden_by_default": false,
+      "verified_by": [
+        "src/lib/bff-v1/postmortemClient.test.ts",
+        "src/management/pages/phase2/PostmortemLibrary.test.tsx::AC1: reads pages through page_size and page_token so every row is reachable and shows page_info.total"
+      ]
+    },
+    "ac2_server_side_search_status_filter_and_localized_draft_label": {
+      "status": "verified",
+      "search_query_param": "q",
+      "status_query_param": "status",
+      "status_options": [
+        "draft",
+        "review",
+        "approved",
+        "published"
+      ],
+      "localized_draft_labels": {
+        "en-US": "Draft",
+        "zh-TW": "草稿"
+      },
+      "verified_by": [
+        "src/management/pages/phase2/PostmortemLibrary.test.tsx::AC2: sends search q and status filter to BFF across all rows and renders localized draft status labels in en-US and zh-TW",
+        "src/lib/v5/management/__tests__/i18nParity.test.ts"
+      ]
+    },
+    "ac3_surface_banner_and_unavailable_handling": {
+      "status": "verified",
+      "surface_key": "meta.surfaces.postmortems",
+      "unavailable_banner_shown": true,
+      "no_postmortems_message_shown_when_unavailable": false,
+      "verified_by": [
+        "src/management/pages/phase2/PostmortemLibrary.test.tsx::AC3: reads meta.surfaces.postmortems and shows the unavailable banner without ever showing the no postmortems message"
+      ]
+    },
+    "ac4_draft_pending_root_cause_and_detail_sheet_by_postmortem_id": {
+      "status": "verified",
+      "real_record_key_count": 23,
+      "real_record_keys": [
+        "action_items",
+        "artifact_id",
+        "artifact_version",
+        "author_ids",
+        "binding_id",
+        "capital_pool_id",
+        "contributing_factors",
+        "created_at",
+        "deployment_plan_id",
+        "deployment_stage",
+        "incident_cluster_id",
+        "incident_evidence_summary",
+        "incident_id",
+        "lineage_ref",
+        "persona_capital_binding_id",
+        "postmortem_id",
+        "root_cause",
+        "runtime_id",
+        "status",
+        "telemetry_event_ids",
+        "timeline",
+        "title",
+        "trace_id"
+      ],
+      "sample_draft_postmortem_id": "pm-inc-training-session-001",
+      "sample_draft_title": "Postmortem draft: BFF downstream degradation: training-session",
+      "sample_draft_status": "draft",
+      "sample_draft_root_cause": "Draft generated from resolved incident inc-training-session-001; root cause pending analysis.",
+      "detail_endpoint": "GET /api/v1/postmortems/pm-inc-training-session-001",
+      "verified_by": [
+        "src/management/pages/phase2/PostmortemLibrary.test.tsx::AC4: shows a draft with pending root cause as a draft and opens the detail sheet by postmortem_id using the real 23-key record shape"
+      ]
+    },
+    "ac5_no_weakened_tests_and_changed_assertion_justifications": {
+      "status": "verified",
+      "existing_tests_deleted_or_weakened": 0,
+      "changed_existing_test_assertions": [
+        {
+          "test": "src/management/__tests__/fullOperationAssembly.test.tsx::management reads after retiring dead Agora clients > shows real API postmortem records and opens their canonical detail",
+          "reason": "Updated expected first bffFetch call on PostmortemLibraryPage mount from { method: 'GET', path: '/api/v1/postmortems' } to { method: 'GET', path: '/api/v1/postmortems', query: { page_size: 50 } } because AC1 requires PostmortemLibraryPage to read pages through page_size and page_token."
+        }
+      ]
+    }
+  },
+  "verification": {
+    "vitest": {
+      "command": "./node_modules/.bin/vitest run src/lib/bff-v1/postmortemClient.test.ts src/management/pages/phase2/PostmortemLibrary.test.tsx src/management/__tests__/fullOperationAssembly.test.tsx src/management/components/detail/__tests__/StrictLiveManagementSurfaces.test.tsx src/lib/bff-v1/__tests__/contract-drift.test.ts src/lib/v5/management/__tests__/i18nParity.test.ts",
+      "status": "passed",
+      "test_files": 6,
+      "tests_passed": 49
+    },
+    "typecheck": {
+      "command": "./node_modules/.bin/tsc -p tsconfig.app.json --noEmit",
+      "status": "passed"
+    }
+  }
+}

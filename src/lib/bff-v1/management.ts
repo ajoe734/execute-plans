@@ -1033,7 +1033,7 @@ function listAdapt<T>(adapt: (raw: unknown) => T[] | null) {
   };
 }
 
-function liveOnlyRead<T, TLive = unknown>(
+export function liveOnlyRead<T, TLive = unknown>(
   req: BffRequest,
   adapt: (raw: unknown) => T | null,
 ): Promise<T | undefined> {

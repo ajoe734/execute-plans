@@ -28,6 +28,7 @@ import {
 } from "../errors";
 import { readBffEnv } from "../runtimeEnv";
 import { buildHeaders } from "../headers";
+import { bffSessionFetch } from "@/lib/auth/sessionExpiry";
 
 // ── Types derived from v4 schemas ──────────────────────────────────────────────
 
@@ -892,7 +893,7 @@ export async function getTradingRoom(
 ): Promise<TradingRoomAggregate> {
   const base = resolvedBase(baseUrl);
   const url = `${base}/bff/agora/trading-room`;
-  const res = await fetch(url, {
+  const res = await bffSessionFetch(url, {
     method: "GET",
     credentials: "include",
     headers: { Accept: "application/json", ...authHeaders() },
@@ -915,7 +916,7 @@ export async function getTradingRoomStrategy(
 ): Promise<Record<string, unknown> | null> {
   const base = resolvedBase(baseUrl);
   const url = `${base}/bff/agora/trading-room/strategies/${encodeURIComponent(strategyId)}`;
-  const res = await fetch(url, {
+  const res = await bffSessionFetch(url, {
     method: "GET",
     credentials: "include",
     headers: { Accept: "application/json", ...authHeaders() },
@@ -955,7 +956,7 @@ export async function listDecisionEvents(
   if (params?.state) qs.set("state", params.state);
   const query = qs.toString();
   const url = `${base}/bff/agora/trading-room/decision-events${query ? `?${query}` : ""}`;
-  const res = await fetch(url, {
+  const res = await bffSessionFetch(url, {
     method: "GET",
     credentials: "include",
     headers: { Accept: "application/json", ...authHeaders() },
@@ -985,7 +986,7 @@ export async function getTradingRoomPerformanceAttribution(
   qs.set("page_size", String(query?.pageSize ?? 50));
   if (query?.pageToken) qs.set("page_token", query.pageToken);
   const url = `${base}/bff/management/performance-attribution/by-strategy?${qs.toString()}`;
-  const res = await fetch(url, {
+  const res = await bffSessionFetch(url, {
     method: "GET",
     credentials: "include",
     headers: { Accept: "application/json", ...authHeaders() },
@@ -1004,7 +1005,7 @@ export async function getDecisionEvent(
 ): Promise<TradingDecisionEvent | null> {
   const base = resolvedBase(baseUrl);
   const url = `${base}/bff/agora/trading-room/decision-events/${encodeURIComponent(decisionEventId)}`;
-  const res = await fetch(url, {
+  const res = await bffSessionFetch(url, {
     method: "GET",
     credentials: "include",
     headers: { Accept: "application/json", ...authHeaders() },
@@ -1037,7 +1038,7 @@ export async function createTradingRoomWorkspaceProposal(
   };
   if (options?.idempotencyKey)
     headers["Idempotency-Key"] = options.idempotencyKey;
-  const res = await fetch(url, {
+  const res = await bffSessionFetch(url, {
     method: "POST",
     credentials: "include",
     headers,
@@ -1058,7 +1059,7 @@ export async function getTradingRoomWorkspaceProposal(
 ): Promise<TradingRoomWorkspaceProposal> {
   const base = resolvedBase(baseUrl);
   const url = `${base}/bff/agora/strategies/${encodeURIComponent(strategyId)}/trading-room/proposals/${encodeURIComponent(proposalId)}`;
-  const res = await fetch(url, {
+  const res = await bffSessionFetch(url, {
     method: "GET",
     credentials: "include",
     headers: { Accept: "application/json", ...authHeaders() },
@@ -1109,7 +1110,7 @@ export async function acceptTradingRoomWorkspaceProposalWithMeta(
   };
   if (options?.idempotencyKey)
     headers["Idempotency-Key"] = options.idempotencyKey;
-  const res = await fetch(url, {
+  const res = await bffSessionFetch(url, {
     method: "POST",
     credentials: "include",
     headers,
@@ -1151,7 +1152,7 @@ export async function getTradingRoomWorkspaceWithMeta(
 ): Promise<TradingRoomWorkspaceResult> {
   const base = resolvedBase(baseUrl);
   const url = `${base}/bff/agora/trading-room/workspaces/${encodeURIComponent(workspaceId)}`;
-  const res = await fetch(url, {
+  const res = await bffSessionFetch(url, {
     method: "GET",
     credentials: "include",
     headers: { Accept: "application/json", ...authHeaders() },
@@ -1172,7 +1173,7 @@ export async function patchTradingRoomWorkspaceLayout(
 ): Promise<TradingRoomWorkspaceResult> {
   const base = resolvedBase(baseUrl);
   const url = `${base}/bff/agora/trading-room/workspaces/${encodeURIComponent(workspaceId)}/layout`;
-  const res = await fetch(url, {
+  const res = await bffSessionFetch(url, {
     method: "PATCH",
     credentials: "include",
     headers: mutationHeaders(options),
@@ -1192,7 +1193,7 @@ export async function listTradingRoomWorkspaceVersions(
 ): Promise<TradingRoomDashboardVersion[]> {
   const base = resolvedBase(baseUrl);
   const url = `${base}/bff/agora/trading-room/workspaces/${encodeURIComponent(workspaceId)}/versions`;
-  const res = await fetch(url, {
+  const res = await bffSessionFetch(url, {
     method: "GET",
     credentials: "include",
     headers: { Accept: "application/json", ...authHeaders() },
@@ -1214,7 +1215,7 @@ export async function rollbackTradingRoomWorkspaceVersion(
 ): Promise<TradingRoomWorkspaceResult> {
   const base = resolvedBase(baseUrl);
   const url = `${base}/bff/agora/trading-room/workspaces/${encodeURIComponent(workspaceId)}/versions/${encodeURIComponent(versionId)}/rollback`;
-  const res = await fetch(url, {
+  const res = await bffSessionFetch(url, {
     method: "POST",
     credentials: "include",
     headers: mutationHeaders(options),
@@ -1237,7 +1238,7 @@ export async function createWidgetRevisionProposal(
 ): Promise<WidgetRevisionProposalResult> {
   const base = resolvedBase(baseUrl);
   const url = `${base}/bff/agora/trading-room/workspaces/${encodeURIComponent(workspaceId)}/widgets/${encodeURIComponent(widgetId)}/revision-proposals`;
-  const res = await fetch(url, {
+  const res = await bffSessionFetch(url, {
     method: "POST",
     credentials: "include",
     headers: mutationHeaders(options),
@@ -1259,7 +1260,7 @@ export async function acceptWidgetRevisionProposal(
 ): Promise<WidgetRevisionAcceptResult> {
   const base = resolvedBase(baseUrl);
   const url = `${base}/bff/agora/trading-room/widget-revision-proposals/${encodeURIComponent(proposalId)}/accept`;
-  const res = await fetch(url, {
+  const res = await bffSessionFetch(url, {
     method: "POST",
     credentials: "include",
     headers: mutationHeaders(options),
@@ -1300,7 +1301,7 @@ export async function decideOnEvent(
   if (options?.idempotencyKey)
     headers["Idempotency-Key"] = options.idempotencyKey;
   if (options?.requestId) headers["X-Request-Id"] = options.requestId;
-  const res = await fetch(url, {
+  const res = await bffSessionFetch(url, {
     method: "POST",
     credentials: "include",
     headers,

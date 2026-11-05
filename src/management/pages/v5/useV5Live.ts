@@ -33,6 +33,7 @@ export function useV5Live<T>(
 ): {
   data: T | undefined;
   loading: boolean;
+  refreshing: boolean;
   error: unknown | null;
   refresh: () => void;
 } {
@@ -55,13 +56,15 @@ export function useV5Live<T>(
         return await loaderRef.current(signal);
       },
       staleTime: staleMs,
+      retry: false,
+      refetchOnWindowFocus: false,
     },
     queryClient,
   );
 
-  const refresh = useCallback(async (force = false) => {
+  const refresh = useCallback(async (force: unknown = false) => {
     await queryClient.cancelQueries({ queryKey });
-    if (force) {
+    if (force === true) {
       await queryClient.invalidateQueries({ queryKey });
     } else {
       await query.refetch();
@@ -77,10 +80,13 @@ export function useV5Live<T>(
     };
   }, [queryClient, queryKey]);
 
-  const loading = query.isLoading;
+  const hasData = query.data !== undefined;
+  const loading = !hasData && (query.isLoading || query.isFetching);
+  const refreshing = hasData && query.isFetching;
   return {
     data: query.data,
     loading,
+    refreshing,
     error: query.error ?? null,
     refresh,
   };

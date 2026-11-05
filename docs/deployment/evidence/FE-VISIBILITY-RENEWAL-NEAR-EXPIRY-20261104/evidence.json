@@ -1,0 +1,17 @@
+{
+  "task_id": "FE-VISIBILITY-RENEWAL-NEAR-EXPIRY-20261104",
+  "root_cause": "handleVisibilityChange in src/lib/auth/sessionExpiry.ts called refreshBffSession() every time the document became visible without checking the remaining access-token lifetime (recordedExpiresAtMs - Date.now()). Hosted BFF logs on 2026-11-04 recorded 11 POST /bff/auth/refresh 200 responses between 00:32:45Z and 00:35:54Z on a single login session, rotating credentials on every tab switch and increasing multi-tab collision risk.",
+  "fix": [
+    "src/lib/auth/sessionExpiry.ts: in handleVisibilityChange, keep the existing renewalActive, document.visibilityState === 'visible', GCP Identity bearer token, and refresh-expired guards in order.",
+    "src/lib/auth/sessionExpiry.ts: after the refresh-expired check, when recordedExpiresAtMs is a finite number and recordedExpiresAtMs - Date.now() > DEFAULT_PROACTIVE_LEAD_MS (60_000), call scheduleProactiveRefresh() and return without sending POST /bff/auth/refresh.",
+    "src/lib/auth/sessionExpiry.ts: when recordedExpiresAtMs is within 60 seconds, already past, or unknown (null), call refreshBffSession() as before so single-flight renewal runs once and unknown expiry can be recorded from the response."
+  ],
+  "bff_code_changed": false,
+  "cross_tab_locks_or_new_storage_added": false,
+  "verification": {
+    "vitest_scoped": "npx vitest run src/lib/bff-v1/__tests__/sessionExpiry.test.ts src/lib/bff-v1/__tests__/sse.test.ts src/lib/auth/AuthProvider.test.tsx src/lib/auth/devAuthBootstrap.test.tsx: 4 files, 59 tests passed",
+    "vitest_bff_auth": "npx vitest run src/lib/bff-v1 src/lib/auth: 64 files, 680 tests passed",
+    "typecheck": "npm run typecheck && npm run typecheck:agora: clean",
+    "playwright": "npx playwright test e2e/02-control-room.spec.ts e2e/17-a11y-v5.spec.ts e2e/18-perf.spec.ts --project=chromium: 15 passed, 2 skipped (pre-existing), no new skips or weakened assertions"
+  }
+}

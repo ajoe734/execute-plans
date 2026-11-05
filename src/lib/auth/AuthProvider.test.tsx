@@ -48,6 +48,7 @@ vi.mock("@/lib/auth/bffBrowserSession", () => ({
 import { AuthProvider, useAuth } from "./AuthProvider";
 import { isDevLoginHost } from "@/lib/bff-v1/runtimeEnv";
 import { BffError } from "@/lib/bff-v1/errors";
+import { reportBffUnauthorized } from "./sessionExpiry";
 
 function httpError(status: number) {
   return new BffError(status, {
@@ -174,6 +175,18 @@ describe("AuthProvider strict BFF bridge", () => {
     );
     expect(result.current.session).toBeNull();
     expect(result.current.bffSession).toBeNull();
+  });
+
+  it("removes the session renewal marker on sign-out", async () => {
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    localStorage.setItem("agora.session.renewal-until", String(Date.now() + 86_400_000));
+
+    await act(async () => {
+      await result.current.signOut();
+    });
+
+    expect(localStorage.getItem("agora.session.renewal-until")).toBeNull();
   });
 
   it("reports BFF verification failure without erasing the GCP session", async () => {
@@ -344,6 +357,81 @@ describe("AuthProvider strict BFF bridge", () => {
     expect(result.current.bffSession).toBeNull();
     expect(result.current.bffError).toBeNull();
     expect(result.current.loading).toBe(false);
+  });
+
+  it("signs out a dev-cookie session once a page read 401 is confirmed by BFF readback", async () => {
+    setLocation("https://app.dev.mvl-cap.tw/management");
+    mocks.initialUser = null;
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.bffSession).toEqual(verified));
+
+    let rejectRecheck!: (error: Error) => void;
+    mocks.verify.mockImplementationOnce(
+      () => new Promise<typeof verified>((_resolve, reject) => { rejectRecheck = reject; }),
+    );
+    act(() => {
+      reportBffUnauthorized();
+      reportBffUnauthorized();
+    });
+    expect(mocks.verify).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      rejectRecheck(httpError(401));
+    });
+    await waitFor(() => expect(result.current.bffSession).toBeNull());
+    expect(result.current.bffError).toBeNull();
+    expect(result.current.loading).toBe(false);
+    expect(mocks.clear).toHaveBeenCalled();
+  });
+
+  it("immediately clears dev-cookie session without an extra /bff/me probe when refresh failure is confirmed", async () => {
+    setLocation("https://app.dev.mvl-cap.tw/management");
+    mocks.initialUser = null;
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.bffSession).toEqual(verified));
+
+    mocks.verify.mockClear();
+    mocks.clear.mockClear();
+
+    act(() => {
+      reportBffUnauthorized({ confirmed: true });
+    });
+
+    await waitFor(() => expect(result.current.bffSession).toBeNull());
+    expect(mocks.verify).not.toHaveBeenCalled();
+    expect(mocks.clear).toHaveBeenCalledOnce();
+    expect(result.current.bffError).toBeNull();
+    expect(result.current.loading).toBe(false);
+  });
+
+  it("keeps the dev-cookie session when the 401 recheck succeeds or is transient", async () => {
+    setLocation("https://app.dev.mvl-cap.tw/management");
+    mocks.initialUser = null;
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.bffSession).toEqual(verified));
+
+    act(() => reportBffUnauthorized());
+    await waitFor(() => expect(mocks.verify).toHaveBeenCalledTimes(2));
+    // Let the first recheck settle so the next 401 starts a new one.
+    await act(async () => {});
+
+    mocks.verify.mockRejectedValueOnce(httpError(503));
+    act(() => reportBffUnauthorized());
+    await waitFor(() => expect(mocks.verify).toHaveBeenCalledTimes(3));
+    await act(async () => {});
+    expect(result.current.bffSession).toEqual(verified);
+  });
+
+  it("leaves GCP Identity sessions to their own token refresh on a page read 401", async () => {
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.bffSession).toEqual(verified));
+    const calls = mocks.verify.mock.calls.length;
+
+    act(() => reportBffUnauthorized());
+    await act(async () => {});
+
+    expect(mocks.verify).toHaveBeenCalledTimes(calls);
+    expect(result.current.bffSession).toEqual(verified);
   });
 
   it("fences a retry started while logout is pending so the old session is not restored", async () => {

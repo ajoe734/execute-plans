@@ -398,6 +398,24 @@ function fleetLeagueScore(r: ManagementPersonaFleetRow): number | undefined {
   return r.leagueScore ?? raw.league_score ?? r.rank?.leagueScore ?? raw.rank?.league_score;
 }
 
+function normalizeReviewToken(value?: string | null): string | undefined {
+  const trimmed = String(value ?? "").trim();
+  if (!trimmed || trimmed.toLowerCase() === "none") return undefined;
+  return trimmed;
+}
+
+function fleetReviewToken(r: ManagementPersonaFleetRow): string | undefined {
+  const raw = r as ManagementPersonaFleetRow & {
+    review_type?: string;
+    review_status?: string;
+    review?: { type?: string; status?: string };
+  };
+  return (
+    normalizeReviewToken(r.reviewType ?? raw.review_type ?? raw.review?.type) ??
+    normalizeReviewToken(r.reviewStatus ?? raw.review_status ?? raw.review?.status)
+  );
+}
+
 function fieldLinkClass(className?: string): string {
   return [
     "font-medium text-primary underline underline-offset-4 transition-colors hover:text-primary/80",
@@ -809,9 +827,9 @@ export const PersonaFleetPage = () => {
           viewportClassName="h-full min-h-0 overflow-auto pb-4"
         >
         <table className="w-full min-w-[1840px] text-sm">
-          <thead className="sticky top-0 z-10 border-b border-border bg-card text-left text-xs uppercase tracking-wider text-muted-foreground">
+          <thead className="sticky top-0 z-30 border-b border-border bg-card text-left text-xs uppercase tracking-wider text-muted-foreground">
             <tr>
-              <th className="sticky left-0 z-20 bg-card px-3 py-2 border-r border-border/50 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.15)]">{t("mgmt.fleet.persona")}</th><th className="px-3 py-2">{t("mgmt.fleet.owner")}</th>
+              <th className="sticky left-0 z-40 min-w-[280px] bg-card px-3 py-2 border-r border-border/50 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.15)]">{t("mgmt.fleet.persona")}</th><th className="min-w-[180px] whitespace-nowrap px-3 py-2">{t("mgmt.fleet.owner")}</th>
               <th className="px-3 py-2">{t("mgmt.fleet.ooda")}</th><th className="px-3 py-2">{t("mgmt.fleet.autonomy")}</th>
               <th className="px-3 py-2">{t("mgmt.fleet.capital")}</th><th className="px-3 py-2">{t("mgmt.fleet.rank")}</th>
               <th className="px-3 py-2">{t("mgmt.fleet.dataSources")}</th><th className="px-3 py-2">{t("mgmt.fleet.research")}</th>
@@ -856,6 +874,7 @@ export const PersonaFleetPage = () => {
               const runtimeHealth = fleetRuntimeHealth(r);
               const leagueRank = fleetLeagueRank(r);
               const leagueScore = fleetLeagueScore(r);
+              const reviewToken = fleetReviewToken(r);
               const stateLabel = displayFleetState(r);
               const focused = personaFocus === r.personaId;
               return (
@@ -863,7 +882,7 @@ export const PersonaFleetPage = () => {
                   key={r.personaId}
                   className={"group border-b border-border/50 hover:bg-muted/30 " + (retired ? "opacity-60 " : "") + (focused ? "bg-primary/5" : "")}
                 >
-                  <td className={"sticky left-0 z-10 border-r border-border/50 px-3 py-2 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.15)] transition-colors " + (focused ? "bg-primary/10 group-hover:bg-primary/15" : "bg-card group-hover:bg-muted/40")}>
+                  <td className={"sticky left-0 z-10 min-w-[280px] border-r border-border/50 px-3 py-2 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.15)] transition-colors " + (focused ? "bg-primary/10 group-hover:bg-primary/15" : "bg-card group-hover:bg-muted/40")}>
                     {personaHref ? (
                       <Link
                         to={personaHref}
@@ -874,14 +893,17 @@ export const PersonaFleetPage = () => {
                     ) : (
                       <span className="font-medium text-foreground">{r.personaName || r.personaId}</span>
                     )}
-                    <div className="mt-0.5 flex items-center gap-1 font-mono text-xs text-muted-foreground">
-                      <span>{r.personaId}</span>
+                    <div className="mt-0.5 flex flex-wrap items-center gap-1 font-mono text-xs text-muted-foreground">
+                      <span className="whitespace-nowrap">{r.personaId}</span>
                       <Badge
                         variant="outline"
                         data-testid={`fleet-data-scope-${r.personaId}`}
-                        className={r.dataScope === "test" || r.dataScope === "unknown"
-                          ? "border-status-warning/40 text-[10px] text-status-warning"
-                          : "text-[10px] text-muted-foreground"}
+                        className={
+                          "shrink-0 whitespace-nowrap text-[10px] " +
+                          (r.dataScope === "test" || r.dataScope === "unknown"
+                            ? "border-status-warning/40 text-status-warning"
+                            : "text-muted-foreground")
+                        }
                       >
                         {t(`mgmt.fleet.data.${r.dataScope ?? "unknown"}`)}
                         {r.classificationConfirmed === false ? ` · ${t("mgmt.fleet.toConfirm")}` : ""}
@@ -890,19 +912,19 @@ export const PersonaFleetPage = () => {
                         <Badge
                           variant="outline"
                           data-testid={`fleet-purpose-${r.personaId}`}
-                          className="border-status-warning/40 text-[10px] text-status-warning"
+                          className="shrink-0 whitespace-nowrap border-status-warning/40 text-[10px] text-status-warning"
                         >
                           {t("mgmt.fleet.purposeUnknown")}
                         </Badge>
                       )}
                       {(r.is_market_persona_default || r.isMarketPersonaDefault || r.seed_row || r.seedRow) && (
-                        <Badge variant="outline" className="border-amber-500/40 text-[10px] text-amber-600 dark:text-amber-400">
+                        <Badge variant="outline" className="shrink-0 whitespace-nowrap border-amber-500/40 text-[10px] text-amber-600 dark:text-amber-400">
                           Seed Fixture
                         </Badge>
                       )}
                     </div>
                   </td>
-                  <td className="px-3 py-2 text-muted-foreground">{r.owner}</td>
+                  <td className="min-w-[180px] whitespace-nowrap px-3 py-2 text-muted-foreground">{r.owner}</td>
                   <td className="px-3 py-2">
                     <OptionalFleetLink
                       href={oodaHref}
@@ -980,9 +1002,9 @@ export const PersonaFleetPage = () => {
 	                        {t("mgmt.fleet.scoreFmt", { score: leagueScore.toFixed(1) })}
 	                      </div>
 	                    )}
-	                    {(r.reviewType || r.reviewStatus) && (
+	                    {reviewToken && (
 	                      <span className="mt-1 block text-xs text-muted-foreground">
-	                        {formatToken(r.reviewType || r.reviewStatus)}
+	                        {formatToken(reviewToken)}
 	                      </span>
 	                    )}
 	                  </td>

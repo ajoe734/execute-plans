@@ -20,6 +20,11 @@ import {
   type SseConnectInit,
 } from "./protocol";
 import { paths } from "../paths";
+import {
+  bffSessionFetch,
+  onBffSessionRefreshed,
+  refreshBffSessionOutcome,
+} from "@/lib/auth/sessionExpiry";
 
 let current: { close: () => void } | null = null;
 let attempt = 0;
@@ -43,10 +48,11 @@ function dispatch(raw: unknown): void {
 function readBaseUrl(): string {
   try {
     const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {};
-    return env.VITE_BFF_BASE_URL ?? "";
+    if (env.VITE_BFF_BASE_URL) return env.VITE_BFF_BASE_URL;
   } catch {
-    return "";
+    // Ignore env read errors
   }
+  return liveStatus.get().baseUrl ?? "";
 }
 
 /** Configured live mode (not the *effective* mode). We keep probing SSE while
@@ -81,6 +87,7 @@ export interface FetchSseController {
  */
 export function fetchSse(options: FetchSseOptions): FetchSseController {
   let closed = false;
+  let awaitingAuthRefresh = false;
   let abortController = new AbortController();
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   let attempt = 0;
@@ -101,6 +108,14 @@ export function fetchSse(options: FetchSseOptions): FetchSseController {
       if (!closed) void connect();
     }, delay);
   };
+
+  const offRefreshed = onBffSessionRefreshed(() => {
+    if (closed || !awaitingAuthRefresh) return;
+    awaitingAuthRefresh = false;
+    attempt = 0;
+    clearTimer();
+    void connect();
+  });
 
   async function connect() {
     if (closed) return;
@@ -129,24 +144,29 @@ export function fetchSse(options: FetchSseOptions): FetchSseController {
       },
     });
 
-    const fetchFn = options.fetchFn ?? globalThis.fetch;
-
     try {
-      const res = await fetchFn(options.url, {
-        method: "GET",
-        headers,
-        credentials: options.credentials ?? "include",
-        signal: abortController.signal,
-      });
+      const res = await bffSessionFetch(
+        options.url,
+        {
+          method: "GET",
+          headers,
+          credentials: options.credentials ?? "include",
+          signal: abortController.signal,
+        },
+        { fetchFn: options.fetchFn },
+      );
 
       if (closed || abortController.signal.aborted) return;
 
       // Stop on 401 / 403 until the auth layer refreshes/reverifies.
       if (res.status === 401 || res.status === 403) {
+        awaitingAuthRefresh = true;
         const error = new Error(`SSE auth failed with status ${res.status}`);
         options.onError?.(error);
         return;
       }
+
+      awaitingAuthRefresh = false;
 
       // Treat 409 replay-unavailable as a signal to fetch a canonical snapshot and reconnect.
       if (res.status === 409) {
@@ -231,6 +251,7 @@ export function fetchSse(options: FetchSseOptions): FetchSseController {
     close: () => {
       if (closed) return;
       closed = true;
+      offRefreshed();
       clearTimer();
       try {
         abortController.abort();
@@ -277,9 +298,11 @@ export function connectLiveSse(init: SseConnectInit = {}): () => void {
           /* ignore malformed line */
         }
       },
-      onError: () => {
+      onError: (err) => {
         realtime.markLiveError();
-        liveStatus.reportFallback("sse_open_failed");
+        if (!/SSE auth failed/iu.test(err.message)) {
+          liveStatus.reportFallback("sse_open_failed");
+        }
       },
       onClose: () => {
         realtime.markLiveError();
@@ -299,11 +322,12 @@ export function connectLiveSse(init: SseConnectInit = {}): () => void {
     return () => {};
   }
 
-  let opened = false;
+  let closedByCaller = false;
   const es = new EventSource(url, { withCredentials: true });
 
+  let everOpened = false;
   es.addEventListener("open", () => {
-    opened = true;
+    everOpened = true;
     attempt = 0;
     realtime.markLiveOpen();
     liveStatus.reportSuccess();
@@ -318,15 +342,43 @@ export function connectLiveSse(init: SseConnectInit = {}): () => void {
     }
   });
 
-  es.addEventListener("error", () => {
+  let errorHandled = false;
+  const handleError = () => {
+    if (errorHandled) return;
+    errorHandled = true;
     realtime.markLiveError();
-    if (!opened) {
-      liveStatus.reportFallback("sse_open_failed");
-      cleanup(true);
+    if (closedByCaller) return;
+    try { es.close(); } catch { /* noop */ }
+    current = null;
+    if (everOpened) {
+      // The stream was healthy before it dropped, so this is a transient
+      // disconnect rather than an expired session: reconnect with backoff
+      // instead of probing /bff/auth/refresh on every drop.
+      if (isLiveModeConfigured()) {
+        clearTimer();
+        reconnectTimer = setTimeout(() => connectLiveSse(init), nextBackoffMs(attempt++, true));
+      }
       return;
     }
-    cleanup(true);
-  });
+    void refreshBffSessionOutcome({
+      baseUrl: base,
+      reportOnFailure: true,
+    }).then((outcome) => {
+      if (closedByCaller || !isLiveModeConfigured()) return;
+      if (outcome === "refreshed") {
+        attempt = 0;
+        clearTimer();
+        connectLiveSse(init);
+      } else if (outcome === "transient") {
+        // BFF unreachable / restarting: keep retrying with growing backoff.
+        clearTimer();
+        reconnectTimer = setTimeout(() => connectLiveSse(init), nextBackoffMs(attempt++, true));
+      }
+      // auth_rejected: session-expired flow owns recovery; no reconnect.
+    });
+  };
+  es.addEventListener("error", handleError);
+  es.onerror = handleError;
 
   function cleanup(scheduleReconnect = false) {
     try { es.close(); } catch { /* noop */ }
@@ -338,7 +390,13 @@ export function connectLiveSse(init: SseConnectInit = {}): () => void {
     }
   }
 
-  current = { close: () => { clearTimer(); cleanup(false); } };
+  current = {
+    close: () => {
+      closedByCaller = true;
+      clearTimer();
+      cleanup(false);
+    },
+  };
   return current.close;
 }
 

@@ -3,7 +3,7 @@
 // with URL round-trip, explicit capital scope, and BFF-derived source
 // confidence. Never renders degraded or missing-binding coverage as formal
 // attribution or "covered".
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Card } from "@/components/ui/card";
@@ -13,16 +13,6 @@ import { ManagementTableScroll } from "@/management/components/ManagementTableSc
 import { mgmt } from "@/lib/bff-v1";
 import { useV5Live } from "@/management/pages/v5/useV5Live";
 import type { PortfolioHoldingFilters, PortfolioHoldingsMonitor } from "@/lib/v5/management/portfolio";
-
-const EMPTY_MONITOR: PortfolioHoldingsMonitor = {
-  items: [],
-  incidents: [],
-  surfaceStatus: "unavailable",
-  coverage: {
-    holdingCount: 0, sourceRowCount: 0, runtimeCount: 0, telemetryRuntimeCount: 0,
-    staleRowCount: 0, missingBindingCount: 0, degradedSourceCount: 0, incidentCount: 0,
-  },
-};
 
 // Six required operator filters (MGMT-OPS-003 GAP-001): stage, broker,
 // runtime, source status, stale telemetry, and risk state. Query key is what
@@ -107,12 +97,26 @@ export const PortfolioBookPage = ({ embedded = false }: { embedded?: boolean } =
   }, [params]);
   const filterKey = params.toString();
 
-  const { data, loading, refresh } = useV5Live(
+  const {
+    data,
+    loading,
+    refreshing = false,
+    error = null,
+    refresh,
+  } = useV5Live(
     (signal) => mgmt.portfolioBook.monitorLiveOnly(filters, { signal }),
     [filterKey],
     { cacheKey: `oversight.portfolioBook.monitor.${filterKey}` },
   );
-  const monitor = data ?? EMPTY_MONITOR;
+  const lastLoadedRef = useRef<PortfolioHoldingsMonitor | undefined>(undefined);
+  if (data !== undefined) {
+    lastLoadedRef.current = data;
+  }
+  const monitor = data ?? ((loading || refreshing) ? lastLoadedRef.current : undefined);
+  const isInitialLoading = loading && monitor === undefined;
+  const isRefreshing = monitor !== undefined && (loading || refreshing);
+  const hasLoadError = monitor === undefined && !isInitialLoading;
+  const hasRefreshError = monitor !== undefined && Boolean(error) && !isRefreshing;
 
   const setFilter = (queryKey: string, value: string) => {
     const next = new URLSearchParams(params);
@@ -121,7 +125,7 @@ export const PortfolioBookPage = ({ embedded = false }: { embedded?: boolean } =
     setParams(next, { replace: true });
   };
   const activeFilterCount = FILTERS.filter(([queryKey]) => params.get(queryKey)).length;
-  const incidentsByHolding = new Map(monitor.incidents.map((incident) => [incident.holdingId, incident]));
+  const incidentsByHolding = new Map((monitor?.incidents ?? []).map((incident) => [incident.holdingId, incident]));
 
   return (
     <section className={embedded ? "space-y-6" : "p-6 space-y-6"} aria-label={t("mgmt.portfolio.title")}>
@@ -130,49 +134,82 @@ export const PortfolioBookPage = ({ embedded = false }: { embedded?: boolean } =
           <h1 className="text-2xl font-semibold text-foreground">{t("mgmt.portfolio.title")}</h1>
           <p className="text-sm text-muted-foreground">{t("mgmt.portfolio.subtitle")}</p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => refresh()} disabled={loading}>
-          {loading ? "Refreshing…" : "Refresh"}
+        <Button variant="outline" size="sm" onClick={() => refresh()} disabled={isInitialLoading || isRefreshing}>
+          {isRefreshing
+            ? t("mgmt.portfolio.refreshing", { defaultValue: "Refreshing…" })
+            : isInitialLoading
+              ? t("mgmt.portfolio.loading", { defaultValue: "Loading…" })
+              : t("mgmt.portfolio.refresh", { defaultValue: "Refresh" })}
         </Button>
       </header>
 
-      {data === undefined && !loading ? (
-        <Card className="p-4">
+      {isInitialLoading ? (
+        <Card className="p-4" role="status" aria-live="polite" data-testid="portfolio-book-loading">
           <h2 className="text-sm font-semibold text-foreground">
-            {t("mgmt.liveOnly.unavailableTitle", { defaultValue: "Live data unavailable" })}
+            {t("mgmt.portfolio.loadingTitle", { defaultValue: "Loading portfolio holdings…" })}
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            {t("mgmt.liveOnly.unavailableBody", { defaultValue: "This page does not render seed, demo, or non-production fallback data." })}
+            {t("mgmt.portfolio.loadingBody", { defaultValue: "Waiting for live BFF holdings and source coverage data." })}
           </p>
         </Card>
       ) : null}
 
+      {hasLoadError || hasRefreshError ? (
+        <Card className="p-4 border-status-failed/40 space-y-3" role="alert" data-testid="portfolio-book-error">
+          <div>
+            <h2 className="text-sm font-semibold text-foreground">
+              {t("mgmt.liveOnly.unavailableTitle", { defaultValue: "Live data unavailable" })}
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {error instanceof Error && error.message
+                ? `${error.message} — ${t("mgmt.liveOnly.unavailableBody", { defaultValue: "This page does not render seed, demo, or non-production fallback data." })}`
+                : t("mgmt.portfolio.loadErrorBody", {
+                    defaultValue: "Failed to load live portfolio holdings. This page does not render seed, demo, or non-production fallback data.",
+                  })}
+            </p>
+          </div>
+          <div>
+            <Button variant="outline" size="sm" onClick={() => refresh()}>
+              {t("mgmt.portfolio.retry", { defaultValue: "Retry" })}
+            </Button>
+          </div>
+        </Card>
+      ) : null}
+
       {/* Coverage: BFF-derived confidence, never an aggregate "covered"/"formal" claim. */}
-      <Card className="p-4 space-y-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="outline" className={tone(monitor.surfaceStatus)}>
-            Source: {monitor.surfaceStatus}
-          </Badge>
-          {monitor.surfaceMessage ? (
-            <span className="text-sm text-muted-foreground">{monitor.surfaceMessage}</span>
-          ) : null}
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {[
-            ["Holdings", monitor.coverage.holdingCount],
-            ["Source rows", monitor.coverage.sourceRowCount],
-            ["Telemetry runtimes", `${monitor.coverage.telemetryRuntimeCount}/${monitor.coverage.runtimeCount}`],
-            ["Incidents", monitor.coverage.incidentCount],
-            ["Missing bindings", monitor.coverage.missingBindingCount],
-            ["Degraded sources", monitor.coverage.degradedSourceCount],
-            ["Stale rows", monitor.coverage.staleRowCount],
-          ].map(([label, value]) => (
-            <div key={label as string} className="rounded border border-border p-3">
-              <div className="text-xs text-muted-foreground">{label}</div>
-              <div className="text-lg font-mono text-foreground">{value}</div>
-            </div>
-          ))}
-        </div>
-      </Card>
+      {monitor ? (
+        <Card className="p-4 space-y-3" data-testid="portfolio-book-coverage">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="outline" className={tone(monitor.surfaceStatus)}>
+              Source: {monitor.surfaceStatus}
+            </Badge>
+            {monitor.surfaceMessage ? (
+              <span className="text-sm text-muted-foreground">{monitor.surfaceMessage}</span>
+            ) : null}
+            {isRefreshing ? (
+              <span className="text-xs text-muted-foreground" role="status" aria-live="polite" data-testid="portfolio-book-refreshing">
+                {t("mgmt.portfolio.refreshingNotice", { defaultValue: "Refreshing live holdings; showing last loaded values." })}
+              </span>
+            ) : null}
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {[
+              ["Holdings", monitor.coverage.holdingCount],
+              ["Source rows", monitor.coverage.sourceRowCount],
+              ["Telemetry runtimes", `${monitor.coverage.telemetryRuntimeCount}/${monitor.coverage.runtimeCount}`],
+              ["Incidents", monitor.coverage.incidentCount],
+              ["Missing bindings", monitor.coverage.missingBindingCount],
+              ["Degraded sources", monitor.coverage.degradedSourceCount],
+              ["Stale rows", monitor.coverage.staleRowCount],
+            ].map(([label, value]) => (
+              <div key={label as string} className="rounded border border-border p-3">
+                <div className="text-xs text-muted-foreground">{label}</div>
+                <div className="text-lg font-mono text-foreground">{value}</div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      ) : null}
 
       {/* Six required operator filters, URL-persisted and sent to the BFF. */}
       <Card className="p-4 space-y-3">
@@ -212,116 +249,120 @@ export const PortfolioBookPage = ({ embedded = false }: { embedded?: boolean } =
         ) : null}
       </Card>
 
-      {/* Row-level incidents: every degraded or missing-binding holding stays visible. */}
-      {monitor.incidents.length > 0 ? (
-        <Card className="border-status-failed/40">
-          <header className="border-b border-border p-4">
-            <h2 className="text-sm font-semibold text-foreground">
-              Source incidents ({monitor.incidents.length})
-            </h2>
-          </header>
-          <div className="divide-y divide-border">
-            {monitor.incidents.map((incident) => (
-              <article key={incident.id} className="space-y-2 p-4" data-testid="portfolio-incident">
-                <div className="flex flex-wrap gap-2">
-                  <Badge variant="outline" className={tone(incident.severity)}>{incident.severity} severity</Badge>
-                  <Badge variant="outline" className={tone(incident.riskState)}>{incident.riskState}</Badge>
-                  <Badge variant="outline" className={tone(incident.sourceStatus)}>Source: {incident.sourceStatus}</Badge>
-                </div>
-                <p className="text-sm text-foreground">{incident.message}</p>
-                <div className="text-xs text-muted-foreground">
-                  {incident.sourceIssues.map((issue) => `${issue.code}: ${issue.message}`).join(" · ")}
-                </div>
-                {incident.links.human_review ? (
-                  <Button asChild size="sm" variant="outline">
-                    <Link to={incident.links.human_review}>Human Review</Link>
-                  </Button>
-                ) : null}
-              </article>
-            ))}
-          </div>
-        </Card>
-      ) : null}
-
-      {/* Holdings: capital scope, source confidence, risk state, context-preserving links. */}
-      <Card>
-        <header className="px-4 py-2 border-b border-border">
-          <h2 className="text-sm font-semibold text-foreground">{t("mgmt.portfolio.holdingsTitle")}</h2>
-        </header>
-        <ManagementTableScroll minScrollWidth={1280}>
-          <table className="w-full min-w-[1280px] text-sm">
-            <thead className="text-left text-xs uppercase tracking-wider text-muted-foreground border-b border-border">
-              <tr>
-                {["Holding", "Stage / capital scope", "Runtime / broker", "Market value", "Unrealized PnL", "Source confidence", "Risk", "Actions"].map((heading) => (
-                  <th key={heading} className="px-3 py-2">{heading}</th>
+      {monitor ? (
+        <>
+          {/* Row-level incidents: every degraded or missing-binding holding stays visible. */}
+          {monitor.incidents.length > 0 ? (
+            <Card className="border-status-failed/40">
+              <header className="border-b border-border p-4">
+                <h2 className="text-sm font-semibold text-foreground">
+                  Source incidents ({monitor.incidents.length})
+                </h2>
+              </header>
+              <div className="divide-y divide-border">
+                {monitor.incidents.map((incident) => (
+                  <article key={incident.id} className="space-y-2 p-4" data-testid="portfolio-incident">
+                    <div className="flex flex-wrap gap-2">
+                      <Badge variant="outline" className={tone(incident.severity)}>{incident.severity} severity</Badge>
+                      <Badge variant="outline" className={tone(incident.riskState)}>{incident.riskState}</Badge>
+                      <Badge variant="outline" className={tone(incident.sourceStatus)}>Source: {incident.sourceStatus}</Badge>
+                    </div>
+                    <p className="text-sm text-foreground">{incident.message}</p>
+                    <div className="text-xs text-muted-foreground">
+                      {incident.sourceIssues.map((issue) => `${issue.code}: ${issue.message}`).join(" · ")}
+                    </div>
+                    {incident.links.human_review ? (
+                      <Button asChild size="sm" variant="outline">
+                        <Link to={incident.links.human_review}>Human Review</Link>
+                      </Button>
+                    ) : null}
+                  </article>
                 ))}
-              </tr>
-            </thead>
-            <tbody>
-              {monitor.items.map((row) => {
-                const incident = incidentsByHolding.get(row.holdingId);
-                const humanReviewHref = incident?.links.human_review ?? row.links.human_review;
-                return (
-                  <tr key={row.holdingId} className="border-b border-border/50 align-top" data-testid="portfolio-holding">
-                    <td className="px-3 py-3">
-                      <div className="font-mono text-foreground">{row.symbol}</div>
-                      <div className="text-xs text-muted-foreground">{row.holdingId}</div>
-                    </td>
-                    <td className="px-3 py-3">
-                      <Badge variant="outline">{row.deploymentStage || "unknown"}</Badge>
-                      <div className="mt-1 text-xs text-muted-foreground">
-                        {scopeLabel(row.capitalScope.scopeKind, row.capitalScope.scopeId)}
-                      </div>
-                    </td>
-                    <td className="px-3 py-3 font-mono text-xs">
-                      <div>{row.runtimeId || "Unknown runtime"}</div>
-                      <div>{row.brokerId || "Unknown broker"}</div>
-                    </td>
-                    <td className="px-3 py-3 font-mono">{fmtHoldingMoney(row.marketValue, row.currency)}</td>
-                    <td className={`px-3 py-3 font-mono ${(row.unrealizedPnl ?? 0) < 0 ? "text-status-failed" : "text-status-success"}`}>
-                      {fmtHoldingMoney(row.unrealizedPnl, row.currency)}
-                    </td>
-                    <td className="px-3 py-3">
-                      <Badge variant="outline" className={tone(row.sourceStatus)}>{row.sourceStatus}</Badge>
-                      {row.telemetryStale ? (
-                        <div className="mt-1 text-xs text-status-warning">Stale telemetry</div>
-                      ) : null}
-                      <div className="mt-1 text-xs text-muted-foreground">
-                        {row.sourceIssues.map((issue) => issue.code).join(", ") || "No reported source issue"}
-                      </div>
-                    </td>
-                    <td className="px-3 py-3">
-                      <Badge variant="outline" className={tone(row.riskState)}>{row.riskState}</Badge>
-                    </td>
-                    <td className="px-3 py-3">
-                      <div className="flex flex-col items-start gap-1">
-                        {row.links.persona_fleet ? (
-                          <Link className="text-primary hover:underline" to={row.links.persona_fleet}>Persona Fleet</Link>
-                        ) : null}
-                        {row.links.performance_attribution ? (
-                          <Link className="text-primary hover:underline" to={row.links.performance_attribution}>Attribution</Link>
-                        ) : null}
-                        {humanReviewHref ? (
-                          <Link className="text-primary hover:underline" to={humanReviewHref}>Human Review</Link>
-                        ) : null}
-                      </div>
-                    </td>
+              </div>
+            </Card>
+          ) : null}
+
+          {/* Holdings: capital scope, source confidence, risk state, context-preserving links. */}
+          <Card>
+            <header className="px-4 py-2 border-b border-border">
+              <h2 className="text-sm font-semibold text-foreground">{t("mgmt.portfolio.holdingsTitle")}</h2>
+            </header>
+            <ManagementTableScroll minScrollWidth={1280}>
+              <table className="w-full min-w-[1280px] text-sm">
+                <thead className="text-left text-xs uppercase tracking-wider text-muted-foreground border-b border-border">
+                  <tr>
+                    {["Holding", "Stage / capital scope", "Runtime / broker", "Market value", "Unrealized PnL", "Source confidence", "Risk", "Actions"].map((heading) => (
+                      <th key={heading} className="px-3 py-2">{heading}</th>
+                    ))}
                   </tr>
-                );
-              })}
-              {!loading && monitor.items.length === 0 ? (
-                <tr>
-                  <td className="px-3 py-8 text-center text-muted-foreground" colSpan={8}>
-                    {monitor.surfaceStatus === "unavailable"
-                      ? "Portfolio holdings source is unavailable."
-                      : "No holdings match the current filters."}
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </ManagementTableScroll>
-      </Card>
+                </thead>
+                <tbody>
+                  {monitor.items.map((row) => {
+                    const incident = incidentsByHolding.get(row.holdingId);
+                    const humanReviewHref = incident?.links.human_review ?? row.links.human_review;
+                    return (
+                      <tr key={row.holdingId} className="border-b border-border/50 align-top" data-testid="portfolio-holding">
+                        <td className="px-3 py-3">
+                          <div className="font-mono text-foreground">{row.symbol}</div>
+                          <div className="text-xs text-muted-foreground">{row.holdingId}</div>
+                        </td>
+                        <td className="px-3 py-3">
+                          <Badge variant="outline">{row.deploymentStage || "unknown"}</Badge>
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            {scopeLabel(row.capitalScope.scopeKind, row.capitalScope.scopeId)}
+                          </div>
+                        </td>
+                        <td className="px-3 py-3 font-mono text-xs">
+                          <div>{row.runtimeId || "Unknown runtime"}</div>
+                          <div>{row.brokerId || "Unknown broker"}</div>
+                        </td>
+                        <td className="px-3 py-3 font-mono">{fmtHoldingMoney(row.marketValue, row.currency)}</td>
+                        <td className={`px-3 py-3 font-mono ${(row.unrealizedPnl ?? 0) < 0 ? "text-status-failed" : "text-status-success"}`}>
+                          {fmtHoldingMoney(row.unrealizedPnl, row.currency)}
+                        </td>
+                        <td className="px-3 py-3">
+                          <Badge variant="outline" className={tone(row.sourceStatus)}>{row.sourceStatus}</Badge>
+                          {row.telemetryStale ? (
+                            <div className="mt-1 text-xs text-status-warning">Stale telemetry</div>
+                          ) : null}
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            {row.sourceIssues.map((issue) => issue.code).join(", ") || "No reported source issue"}
+                          </div>
+                        </td>
+                        <td className="px-3 py-3">
+                          <Badge variant="outline" className={tone(row.riskState)}>{row.riskState}</Badge>
+                        </td>
+                        <td className="px-3 py-3">
+                          <div className="flex flex-col items-start gap-1">
+                            {row.links.persona_fleet ? (
+                              <Link className="text-primary hover:underline" to={row.links.persona_fleet}>Persona Fleet</Link>
+                            ) : null}
+                            {row.links.performance_attribution ? (
+                              <Link className="text-primary hover:underline" to={row.links.performance_attribution}>Attribution</Link>
+                            ) : null}
+                            {humanReviewHref ? (
+                              <Link className="text-primary hover:underline" to={humanReviewHref}>Human Review</Link>
+                            ) : null}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {monitor.items.length === 0 ? (
+                    <tr>
+                      <td className="px-3 py-8 text-center text-muted-foreground" colSpan={8}>
+                        {monitor.surfaceStatus === "unavailable"
+                          ? "Portfolio holdings source is unavailable."
+                          : "No holdings match the current filters."}
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </ManagementTableScroll>
+          </Card>
+        </>
+      ) : null}
     </section>
   );
 };

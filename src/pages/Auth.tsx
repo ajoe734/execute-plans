@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import {
   createUserWithEmailAndPassword,
   sendEmailVerification,
@@ -17,6 +18,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 
 export default function AuthPage() {
+  const { t } = useTranslation();
   const { session, bffSession, bffError, loading, retryBffSession, signOut, devLogin } = useAuth();
   const isDev = isDevLoginHost();
   const location = useLocation();
@@ -30,7 +32,8 @@ export default function AuthPage() {
   const isAgora = agoraEntry || from === "/agora" || from.startsWith("/agora/");
   const productName = isAgora ? "Agora" : "Pantheon Management";
   const productArea = isAgora ? "trading workbench" : "cockpit";
-  const authRequired = params.get("reason") === "auth-required";
+  const reason = params.get("reason");
+  const authRequired = reason === "auth-required" || reason === "session-expired";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [account, setAccount] = useState("");
@@ -190,7 +193,9 @@ export default function AuthPage() {
         </div>
         {authRequired && !session && !bffSession && !(isDev && bffError) ? (
           <div role="status" className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
-            <p className="font-medium">Your {isAgora ? "Agora" : "Pantheon"} session is missing or expired.</p>
+            <p className="font-medium">
+              {t("errors.TOKEN_EXPIRED")} — Your {isAgora ? "Agora" : "Pantheon"} session is missing or expired.
+            </p>
             <p className="mt-1 text-muted-foreground">
               Sign in once to reconnect live data. {isAgora ? "Agora" : "Pantheon"} did not substitute fallback data.
             </p>

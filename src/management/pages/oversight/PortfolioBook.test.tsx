@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -213,5 +213,177 @@ describe("PortfolioBookPage monitor", () => {
     const usdCells = within(rows[2]).getAllByRole("cell");
     expect(usdCells[3]).toHaveTextContent("$1,926");
     expect(usdCells[4]).toHaveTextContent("—");
+  });
+
+  it("shows a loading state while the first holdings response is pending and never renders zero coverage cards or a Source: unavailable badge", () => {
+    mocks.useV5Live.mockReturnValue({
+      data: undefined,
+      loading: true,
+      refreshing: false,
+      error: null,
+      refresh: vi.fn(),
+    });
+    renderPage();
+
+    expect(screen.getByTestId("portfolio-book-loading")).toBeInTheDocument();
+    expect(screen.getByText("Loading portfolio holdings…")).toBeInTheDocument();
+    expect(screen.getByText("Waiting for live BFF holdings and source coverage data.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Loading…" })).toBeDisabled();
+
+    expect(screen.queryByTestId("portfolio-book-coverage")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Source:\s*unavailable/i)).not.toBeInTheDocument();
+    expect(screen.queryByText("Holdings")).not.toBeInTheDocument();
+    expect(screen.queryByText("Source rows")).not.toBeInTheDocument();
+    expect(screen.queryByText("Telemetry runtimes")).not.toBeInTheDocument();
+    expect(screen.queryByText("Missing bindings")).not.toBeInTheDocument();
+    expect(screen.queryByText("0/0")).not.toBeInTheDocument();
+    expect(screen.queryByText("Portfolio holdings source is unavailable.")).not.toBeInTheDocument();
+  });
+
+  it("shows an error state with retry when the holdings request fails and does not render zero coverage cards", () => {
+    const refresh = vi.fn();
+    mocks.useV5Live.mockReturnValue({
+      data: undefined,
+      loading: false,
+      refreshing: false,
+      error: new Error("Holdings request timed out after 18s"),
+      refresh,
+    });
+    renderPage();
+
+    const errorCard = screen.getByTestId("portfolio-book-error");
+    expect(errorCard).toBeInTheDocument();
+    expect(within(errorCard).getByText("Live data unavailable")).toBeInTheDocument();
+    expect(within(errorCard).getByText(/Holdings request timed out after 18s/)).toBeInTheDocument();
+
+    expect(screen.queryByTestId("portfolio-book-coverage")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Source:\s*unavailable/i)).not.toBeInTheDocument();
+    expect(screen.queryByText("Holdings")).not.toBeInTheDocument();
+    expect(screen.queryByText("Source rows")).not.toBeInTheDocument();
+    expect(screen.queryByText("Telemetry runtimes")).not.toBeInTheDocument();
+    expect(screen.queryByText("0/0")).not.toBeInTheDocument();
+
+    fireEvent.click(within(errorCard).getByRole("button", { name: "Retry" }));
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders BFF summary coverage values and meta.surfaces.portfolio_book_holdings.status when data loads", () => {
+    const monitor = adaptPortfolioHoldingsMonitor({
+      data: {
+        summary: {
+          holding_count: 14,
+          incident_count: 3,
+          source_coverage: {
+            source_row_count: 11,
+            runtime_count: 9,
+            telemetry_runtime_count: 7,
+            stale_row_count: 2,
+            missing_binding_count: 4,
+            degraded_source_count: 5,
+          },
+        },
+        items: [],
+      },
+      meta: {
+        incidents: [],
+        surfaces: {
+          portfolio_book_holdings: {
+            status: "partial",
+            message: "2 runtimes have delayed telemetry",
+          },
+        },
+      },
+    });
+
+    mocks.useV5Live.mockReturnValue({
+      data: monitor,
+      loading: false,
+      refreshing: false,
+      error: null,
+      refresh: vi.fn(),
+    });
+    renderPage();
+
+    const coverageCard = screen.getByTestId("portfolio-book-coverage");
+    expect(within(coverageCard).getByText("Source: partial")).toBeInTheDocument();
+    expect(within(coverageCard).getByText("2 runtimes have delayed telemetry")).toBeInTheDocument();
+    expect(within(coverageCard).getByText("Holdings").parentElement).toHaveTextContent("14");
+    expect(within(coverageCard).getByText("Source rows").parentElement).toHaveTextContent("11");
+    expect(within(coverageCard).getByText("Telemetry runtimes").parentElement).toHaveTextContent("7/9");
+    expect(within(coverageCard).getByText("Incidents").parentElement).toHaveTextContent("3");
+    expect(within(coverageCard).getByText("Missing bindings").parentElement).toHaveTextContent("4");
+    expect(within(coverageCard).getByText("Degraded sources").parentElement).toHaveTextContent("5");
+    expect(within(coverageCard).getByText("Stale rows").parentElement).toHaveTextContent("2");
+  });
+
+  it("keeps last loaded values visible with a refreshing indicator during manual or background refresh instead of resetting to zeros", () => {
+    const refresh = vi.fn();
+    const loadedMonitor = { items, incidents, surfaceStatus: "degraded", coverage };
+    mocks.useV5Live.mockReturnValue({
+      data: loadedMonitor,
+      loading: false,
+      refreshing: false,
+      error: null,
+      refresh,
+    });
+
+    const view = renderPage();
+    expect(screen.getAllByTestId("portfolio-holding")).toHaveLength(14);
+    expect(within(screen.getByTestId("portfolio-book-coverage")).getByText("Source: degraded")).toBeInTheDocument();
+    expect(screen.queryByTestId("portfolio-book-refreshing")).not.toBeInTheDocument();
+
+    // Background or manual refresh where useV5Live sets refreshing=true with previous data retained
+    mocks.useV5Live.mockReturnValue({
+      data: loadedMonitor,
+      loading: false,
+      refreshing: true,
+      error: null,
+      refresh,
+    });
+    view.rerender(
+      <I18nextProvider i18n={i18n}>
+        <MemoryRouter initialEntries={["/management/portfolio-book"]}>
+          <Routes>
+            <Route path="/management/portfolio-book" element={<PortfolioBookPage />} />
+          </Routes>
+        </MemoryRouter>
+      </I18nextProvider>,
+    );
+
+    expect(screen.getByRole("button", { name: "Refreshing…" })).toBeDisabled();
+    expect(screen.getByTestId("portfolio-book-refreshing")).toHaveTextContent(
+      "Refreshing live holdings; showing last loaded values.",
+    );
+    const coverageCard = screen.getByTestId("portfolio-book-coverage");
+    expect(within(coverageCard).getByText("Source: degraded")).toBeInTheDocument();
+    expect(within(coverageCard).getByText("Holdings").parentElement).toHaveTextContent("14");
+    expect(within(coverageCard).getByText("Telemetry runtimes").parentElement).toHaveTextContent("4/14");
+    expect(within(coverageCard).getByText("Missing bindings").parentElement).toHaveTextContent("10");
+    expect(screen.getAllByTestId("portfolio-holding")).toHaveLength(14);
+    expect(screen.queryByText(/Source:\s*unavailable/i)).not.toBeInTheDocument();
+
+    // Also retains last loaded values if loading=true while data is temporarily undefined during refresh
+    mocks.useV5Live.mockReturnValue({
+      data: undefined,
+      loading: true,
+      refreshing: false,
+      error: null,
+      refresh,
+    });
+    view.rerender(
+      <I18nextProvider i18n={i18n}>
+        <MemoryRouter initialEntries={["/management/portfolio-book"]}>
+          <Routes>
+            <Route path="/management/portfolio-book" element={<PortfolioBookPage />} />
+          </Routes>
+        </MemoryRouter>
+      </I18nextProvider>,
+    );
+
+    expect(screen.getByRole("button", { name: "Refreshing…" })).toBeDisabled();
+    expect(screen.getByTestId("portfolio-book-refreshing")).toBeInTheDocument();
+    expect(within(screen.getByTestId("portfolio-book-coverage")).getByText("Holdings").parentElement).toHaveTextContent("14");
+    expect(screen.getAllByTestId("portfolio-holding")).toHaveLength(14);
+    expect(screen.queryByText(/Source:\s*unavailable/i)).not.toBeInTheDocument();
   });
 });
