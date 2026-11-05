@@ -28,6 +28,7 @@ import {
 } from "@/lib/v5/management/humanInbox";
 import { mgmt } from "@/lib/bff-v1";
 import {
+  adaptEvolutionJournalList,
   type ManagementEvidenceDetail,
   type ManagementEvidenceAllowedActions,
   type ManagementEvidenceAuditEvent,
@@ -40,6 +41,10 @@ import {
   type ManagementEvidenceRelationships,
   type ManagementEvidenceResolvedLink,
   type ManagementEvidenceTask,
+  type ManagementEvolutionJournalAutoProposalCounts,
+  type ManagementEvolutionJournalMeta,
+  type ManagementEvolutionJournalPageInfo,
+  type ManagementEvolutionJournalSummary,
   type ManagementPersonaFleetRow,
   type ManagementTradingPulseCard,
   type ManagementTradingPulseModel,
@@ -86,7 +91,12 @@ import {
   personaFleetRuntimeHref,
   type PersonaFleetResearchItem,
 } from "./personaFleetLinks";
-import { filterEvolutionJournalRowsForFocus, normalizeEvolutionFocusToken } from "./evolutionJournalFocus";
+import {
+  filterEvolutionJournalRowsForFocus,
+  normalizeEvolutionFocusToken,
+  normalizeEvolutionJournalView,
+  type EvolutionJournalView,
+} from "./evolutionJournalFocus";
 import { safeDateTime } from "@/lib/utils";
 import { markRoutePrimaryReady } from "@/platform/routePrimaryReady";
 
@@ -1998,8 +2008,17 @@ interface EvolutionEntry {
   // mutation_review journal entries with a different field set.
   title?: string; summary?: string; status?: string; entryType?: string;
   entry_type?: string;
+  source_id?: string;
   risk_level?: string; action_type?: string;
+  evidence_class?: string;
+  evidenceClass?: string;
+  persona_id?: string;
+  personaId?: string;
+  route?: string;
   target?: { type?: string; id?: string; version?: string } | null;
+  decision?: Record<string, unknown> | null;
+  mutation_review?: Record<string, unknown> | null;
+  record?: { evidence_refs?: unknown; [key: string]: unknown } | null;
   occurred_at?: string; created_at?: string;
   // EVOCHAIN-007 producer marker: seed-derived entries carry `origin: "seed"`
   // so the FE can badge them as fixture data instead of live evolution output.
@@ -2007,6 +2026,19 @@ interface EvolutionEntry {
 }
 
 const FORMAL_EVOLUTION_ENTRY_TYPES = new Set(["evolution_decision", "mutation_review"]);
+
+function extractEvolutionEvidenceClass(entry: EvolutionEntry): string | undefined {
+  const raw =
+    entry.evidence_class
+    ?? entry.evidenceClass
+    ?? (entry.decision && typeof entry.decision.evidence_class === "string" ? entry.decision.evidence_class : undefined)
+    ?? (entry.mutation_review && typeof entry.mutation_review.evidence_class === "string" ? entry.mutation_review.evidence_class : undefined)
+    ?? (entry.record && typeof entry.record.evidence_class === "string" ? entry.record.evidence_class : undefined);
+  if (!raw) return undefined;
+  const clean = String(raw).trim();
+  if (!clean || ["nan", "undefined", "null", "none"].includes(clean.toLowerCase())) return undefined;
+  return clean;
+}
 
 type RawEvolutionFleetRow = ManagementPersonaFleetRow & {
   id?: string;
@@ -2073,8 +2105,9 @@ const verdictTone = (v?: string) =>
 
 export const EvolutionJournalPage = () => {
   const { t } = useTranslation();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
 
+  const activeView = normalizeEvolutionJournalView(searchParams.get("view"));
   const personaFocus = normalizeEvolutionFocusToken(searchParams.get("persona"));
   const mutationFocus = normalizeEvolutionFocusToken(
     searchParams.get("mutation_review") ?? searchParams.get("decision") ?? searchParams.get("item"),
@@ -2083,21 +2116,53 @@ export const EvolutionJournalPage = () => {
 
   const serverMutationReview = normalizeEvolutionFocusToken(searchParams.get("mutation_review"), true);
   const serverDecision = serverMutationReview ? "" : normalizeEvolutionFocusToken(searchParams.get("decision"), true);
-  const { data, loading } = useV5Live(
+
+  const scopeKey = `${activeView}|${personaFocus}|${serverMutationReview}|${serverDecision}`;
+  const [pager, setPager] = useState<{ scopeKey: string; tokens: string[] }>({ scopeKey, tokens: [""] });
+  if (pager.scopeKey !== scopeKey) setPager({ scopeKey, tokens: [""] });
+  const tokens = pager.scopeKey === scopeKey ? pager.tokens : [""];
+  const pageIndex = tokens.length - 1;
+  const pageToken = tokens[pageIndex] || undefined;
+
+  const { data, loading, error = null, refresh } = useV5Live(
     (signal) =>
       mgmt.evolutionJournal.list<EvolutionEntry>(() => [], {
         signal,
+        view: activeView,
         persona: personaFocus,
         mutationReview: serverMutationReview,
         decision: serverDecision,
+        pageToken,
       }),
-    [personaFocus, serverMutationReview, serverDecision],
+    [activeView, personaFocus, serverMutationReview, serverDecision, pageToken ?? ""],
     { cacheKey: "oversight.evolutionJournal.list" },
   );
   const { data: fleetRows } = useV5Live((signal) => mgmt.personaFleet.get({}, { signal }), [], {
     cacheKey: "oversight.personaFleet",
   });
-  const rows = useMemo(() => data ?? [], [data]);
+
+  const adaptedList = useMemo(
+    () => (data !== undefined ? adaptEvolutionJournalList<EvolutionEntry>(data) : null),
+    [data],
+  );
+  const rows = useMemo(() => adaptedList ?? [], [adaptedList]);
+  const summary: ManagementEvolutionJournalSummary | undefined = adaptedList?.summary;
+  const autoProposalCounts: ManagementEvolutionJournalAutoProposalCounts = useMemo(
+    () =>
+      adaptedList?.autoProposalCounts ?? {
+        incident_followup: 0,
+        incident_severity: 0,
+        postmortem_draft: 0,
+        total: 0,
+        incidentFollowup: 0,
+        incidentSeverity: 0,
+        postmortemDraft: 0,
+      },
+    [adaptedList],
+  );
+  const pageInfo: ManagementEvolutionJournalPageInfo | undefined = adaptedList?.pageInfo;
+  const journalMeta: ManagementEvolutionJournalMeta | undefined = adaptedList?.meta;
+
   const focus = useMemo(
     () => filterEvolutionJournalRowsForFocus(rows, { personaFocus, mutationFocus }),
     [mutationFocus, personaFocus, rows],
@@ -2107,11 +2172,41 @@ export const EvolutionJournalPage = () => {
     [fleetRows, focus.matched, mutationFocus, personaFocus],
   );
   const visibleRows = fleetFallback ? [fleetFallback] : focus.rows;
-  const focusMatched = focus.matched || Boolean(fleetFallback);
   const hasFocus = Boolean(personaFocus || mutationFocus);
 
   const sourceFocus = normalizeEvolutionFocusToken(searchParams.get("source"));
   const isFleetSummary = Boolean(fleetFallback || sourceFocus === "fleet_summary");
+
+  const degradedSurfaces = useMemo(() => {
+    const entries = Object.entries(journalMeta?.surfaces ?? {});
+    return entries.filter(([, surface]) =>
+      ["degraded", "unavailable", "error", "failed"].includes(String(surface?.status ?? "").toLowerCase()),
+    );
+  }, [journalMeta]);
+  const isReadFailed =
+    Boolean(error) || (!loading && data === undefined && !isFleetSummary) || degradedSurfaces.length > 0;
+
+  const switchView = (nextView: EvolutionJournalView) => {
+    const next = new URLSearchParams(searchParams);
+    next.set("view", nextView);
+    setSearchParams(next);
+  };
+
+  const nextPageToken = pageInfo?.next_page_token ?? null;
+  const pageSize = pageInfo?.page_size ?? 20;
+  const filteredTotal = summary?.total_items ?? pageInfo?.total ?? visibleRows.length;
+  const returnedCount = summary?.returned_items ?? visibleRows.length;
+  const rangeStart = visibleRows.length === 0 ? 0 : pageIndex * pageSize + 1;
+  const rangeEnd = pageIndex * pageSize + visibleRows.length;
+
+  const goNext = () => {
+    if (!nextPageToken) return;
+    setPager({ scopeKey, tokens: [...tokens, nextPageToken] });
+  };
+  const goPrev = () => {
+    if (pageIndex === 0) return;
+    setPager({ scopeKey, tokens: tokens.slice(0, -1) });
+  };
 
   const focusText = (() => {
     const pText = personaFocus;
@@ -2138,12 +2233,85 @@ export const EvolutionJournalPage = () => {
     return `無匹配項目${detailParts ? ` (${detailParts})` : ""}`;
   })();
 
+  const viewBadgeLabel =
+    activeView === "auto_proposals"
+      ? t("mgmt.evolution.viewAutoProposals")
+      : activeView === "all"
+        ? t("mgmt.evolution.viewAll")
+        : t("mgmt.evolution.viewHistory");
+
   return (
     <section className="p-6 space-y-4" aria-label={t("mgmt.evolution.title")}>
       <header>
         <h1 className="text-2xl font-semibold text-foreground">{t("mgmt.evolution.title")}</h1>
         <p className="text-sm text-muted-foreground">{t("mgmt.evolution.subtitle")}</p>
       </header>
+      {!isReadFailed && (
+        <Card className="p-3 text-sm" data-testid="evolution-auto-proposals-summary">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="space-y-1">
+              <div className="text-foreground">
+                {t("mgmt.evolution.autoProposalsSummaryFmt", {
+                  total: autoProposalCounts.total,
+                  incidentFollowup: autoProposalCounts.incident_followup,
+                  incidentSeverity: autoProposalCounts.incident_severity,
+                  postmortemDraft: autoProposalCounts.postmortem_draft,
+                })}
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                <Badge variant="outline" data-testid="auto-proposal-total">
+                  {t("mgmt.evolution.autoProposalsTotal")}: {autoProposalCounts.total}
+                </Badge>
+                <Badge variant="outline" data-testid="auto-proposal-incident-followup">
+                  {t("mgmt.evolution.incidentFollowup")}: {autoProposalCounts.incident_followup}
+                </Badge>
+                <Badge variant="outline" data-testid="auto-proposal-incident-severity">
+                  {t("mgmt.evolution.incidentSeverity")}: {autoProposalCounts.incident_severity}
+                </Badge>
+                <Badge variant="outline" data-testid="auto-proposal-postmortem-draft">
+                  {t("mgmt.evolution.postmortemDraft")}: {autoProposalCounts.postmortem_draft}
+                </Badge>
+              </div>
+            </div>
+            <Button
+              size="sm"
+              variant={activeView === "auto_proposals" ? "default" : "outline"}
+              data-testid="evolution-view-toggle"
+              onClick={() => switchView(activeView === "auto_proposals" ? "history" : "auto_proposals")}
+            >
+              {activeView === "auto_proposals"
+                ? t("mgmt.evolution.showHistory")
+                : t("mgmt.evolution.showAutoProposals")}
+            </Button>
+          </div>
+        </Card>
+      )}
+      {!isReadFailed && (summary !== undefined || pageInfo !== undefined) && (
+        <Card className="p-3 text-xs text-muted-foreground" data-testid="evolution-journal-summary">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="outline" data-testid="evolution-active-view-badge">
+                {viewBadgeLabel}
+              </Badge>
+              <span className="text-foreground">
+                {t("mgmt.evolution.filteredSummaryFmt", {
+                  total: filteredTotal,
+                  returned: returnedCount,
+                })}
+              </span>
+            </div>
+            {summary && (
+              <div className="flex flex-wrap items-center gap-2">
+                <span>{t("mgmt.evolution.summaryDecisions")}: {summary.decision_count}</span>
+                <span>{t("mgmt.evolution.summaryMutationReviews")}: {summary.mutation_review_count}</span>
+                <span>{t("mgmt.evolution.summaryPostmortems")}: {summary.postmortem_count}</span>
+                <span>{t("mgmt.evolution.summaryRollbacks")}: {summary.rollback_count}</span>
+                <span>{t("mgmt.evolution.summaryFreezeOrders")}: {summary.freeze_order_count}</span>
+              </div>
+            )}
+          </div>
+        </Card>
+      )}
       {hasFocus && (
         <Card className={"p-3 text-sm " + (focus.matched && !isFleetSummary
           ? "border-primary/30 bg-primary/5"
@@ -2164,10 +2332,52 @@ export const EvolutionJournalPage = () => {
           {t("common.loading", { defaultValue: "Loading..." })}
         </Card>
       )}
-      {!loading && rows.length === 0 && (
-        <Card className="p-4 text-sm text-muted-foreground">
-          {t("common.awaitingData", { defaultValue: "No data yet" })}
+      {isReadFailed && (
+        <Card
+          className="border-status-failed/30 bg-status-failed/10 p-4 text-sm space-y-2"
+          role="alert"
+          data-testid="evolution-journal-degraded"
+        >
+          <div className="flex items-center gap-2 text-status-failed">
+            <AlertCircle className="h-5 w-5" />
+            <span className="font-semibold">{t("mgmt.evolution.degradedTitle")}</span>
+          </div>
+          <p className="text-muted-foreground">{t("mgmt.evolution.degradedBody")}</p>
+          {degradedSurfaces.length > 0 && (
+            <div className="text-xs text-muted-foreground">
+              {degradedSurfaces.map(([key, surface]) => `${key}: ${surface.status}`).join(" · ")}
+            </div>
+          )}
+          <div>
+            <Button size="sm" variant="outline" onClick={() => void refresh?.()}>
+              <RefreshCw className="h-3.5 w-3.5 mr-1" />
+              {t("mgmt.evolution.retry")}
+            </Button>
+          </div>
         </Card>
+      )}
+      {!loading && !isReadFailed && visibleRows.length === 0 && (
+        activeView === "history" && !hasFocus ? (
+          <Card className="p-4 text-sm space-y-2" data-testid="evolution-history-empty">
+            <div className="font-medium text-foreground">{t("mgmt.evolution.emptyHistoryTitle")}</div>
+            <p className="text-muted-foreground">
+              {t("mgmt.evolution.emptyHistoryWithProposalsFmt", {
+                total: autoProposalCounts.total,
+                incidentFollowup: autoProposalCounts.incident_followup,
+                incidentSeverity: autoProposalCounts.incident_severity,
+                postmortemDraft: autoProposalCounts.postmortem_draft,
+              })}
+            </p>
+          </Card>
+        ) : activeView === "auto_proposals" && !hasFocus ? (
+          <Card className="p-4 text-sm text-muted-foreground" data-testid="evolution-auto-proposals-empty">
+            {t("mgmt.evolution.emptyAutoProposals")}
+          </Card>
+        ) : (
+          <Card className="p-4 text-sm text-muted-foreground">
+            {t("common.awaitingData", { defaultValue: "No data yet" })}
+          </Card>
+        )
       )}
       {visibleRows.map((e) => {
         // The live aggregate and the legacy mock have different field sets;
@@ -2209,11 +2419,30 @@ export const EvolutionJournalPage = () => {
         const isFormalEntry = Boolean(entryType && FORMAL_EVOLUTION_ENTRY_TYPES.has(entryType));
         const approvalStatus = isFormalEntry ? status : undefined;
         const isFixture = e.origin === "seed";
+        const evidenceClass = extractEvolutionEvidenceClass(e);
+        const evidenceClassLabel = evidenceClass
+          ? t(`mgmt.evolution.evidenceClasses.${evidenceClass}`, { defaultValue: evidenceClass })
+          : undefined;
         return (
           <Card key={e.id} className="p-4 space-y-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="text-sm font-medium text-foreground">{headline}</div>
               <div className="flex shrink-0 flex-wrap items-center gap-1">
+                {evidenceClass && (
+                  <Badge
+                    variant="outline"
+                    data-testid={`evolution-evidence-class-${evidenceClass}`}
+                    className={
+                      evidenceClass === "threshold_signal"
+                        ? "bg-primary/10 text-primary border-primary/30"
+                        : evidenceClass === "incident_severity"
+                          ? "bg-status-warning/15 text-status-warning border-status-warning/30"
+                          : "bg-muted text-muted-foreground border-border"
+                    }
+                  >
+                    {evidenceClassLabel} ({evidenceClass})
+                  </Badge>
+                )}
                 {isFixture && (
                   <Badge
                     variant="outline"
@@ -2240,12 +2469,36 @@ export const EvolutionJournalPage = () => {
               {action && <div><dt className="text-muted-foreground">{t("mgmt.evolution.action", { defaultValue: "Action" })}</dt><dd className="text-foreground">{action}</dd></div>}
               {risk && <div><dt className="text-muted-foreground">{t("mgmt.evolution.risk", { defaultValue: "Risk" })}</dt><dd className="text-foreground">{risk}</dd></div>}
               {target && <div><dt className="text-muted-foreground">{t("mgmt.evolution.target", { defaultValue: "Target" })}</dt><dd className="font-mono text-foreground">{target}</dd></div>}
+              {evidenceClass && <div><dt className="text-muted-foreground">{t("mgmt.evolution.evidenceClass")}</dt><dd className="text-foreground">{evidenceClassLabel}</dd></div>}
               {approvalStatus && <div><dt className="text-muted-foreground">{t("mgmt.evolution.approvalStatus", { defaultValue: "Approval status" })}</dt><dd className="text-foreground">{approvalStatus}</dd></div>}
               {when && <div><dt className="text-muted-foreground">{t("mgmt.evolution.landed")}</dt><dd className="text-foreground">{when}</dd></div>}
             </dl>
           </Card>
         );
       })}
+      {!isReadFailed && !isFleetSummary && (visibleRows.length > 0 || pageIndex > 0 || nextPageToken !== null) && (
+        <div
+          className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground"
+          data-testid="evolution-journal-pager"
+        >
+          <span>
+            {t("mgmt.evolution.pager.rangeFmt", {
+              start: rangeStart,
+              end: rangeEnd,
+              total: filteredTotal,
+            })}
+          </span>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={goPrev} disabled={pageIndex === 0 || loading}>
+              {t("mgmt.evolution.pager.previous")}
+            </Button>
+            <span>{t("mgmt.evolution.pager.pageFmt", { page: pageIndex + 1 })}</span>
+            <Button size="sm" variant="outline" onClick={goNext} disabled={!nextPageToken || loading}>
+              {t("mgmt.evolution.pager.next")}
+            </Button>
+          </div>
+        </div>
+      )}
     </section>
   );
 };

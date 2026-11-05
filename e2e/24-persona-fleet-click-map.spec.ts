@@ -234,12 +234,15 @@ const MOCK_FLEET_ROWS = [
 const MOCK_EVOLUTION_ITEMS = [
   {
     id: "evo-dec-formal",
+    entry_type: "evolution_decision",
+    source_id: "evo-dec-formal",
     title: "Formal Mutation Title",
     summary: "Formal mutation details for the persona.",
     status: "approved",
     verdict: "approved",
     action_type: "retrain",
     risk_level: "medium",
+    evidence_class: "threshold_signal",
     target: {
       type: "Persona",
       id: "persona-formal-mut"
@@ -390,7 +393,29 @@ async function installMockFixture(page: Page): Promise<void> {
       }
     }
     if (path === "/bff/management/evolution-journal") {
-      await fulfillJson(route, envelope(MOCK_EVOLUTION_ITEMS, path));
+      await fulfillJson(route, {
+        ...envelope(MOCK_EVOLUTION_ITEMS, path),
+        data: {
+          id: "management_evolution_journal",
+          items: MOCK_EVOLUTION_ITEMS,
+          summary: {
+            total_items: MOCK_EVOLUTION_ITEMS.length,
+            returned_items: MOCK_EVOLUTION_ITEMS.length,
+            decision_count: MOCK_EVOLUTION_ITEMS.length,
+            mutation_review_count: 0,
+            postmortem_count: 0,
+            rollback_count: 0,
+            freeze_order_count: 0,
+          },
+          auto_proposal_counts: {
+            incident_followup: 1,
+            incident_severity: 1,
+            postmortem_draft: 2,
+            total: 4,
+          },
+        },
+        page_info: { next_page_token: null, page_size: 20, total: MOCK_EVOLUTION_ITEMS.length },
+      });
       return;
     }
     if (path === "/bff/management/human-inbox") {
@@ -570,6 +595,8 @@ test.describe("MGMT-OPS-010 Persona Fleet Click-Map Regression", () => {
     await expect(page).toHaveURL(/\/management\/evolution-journal\?persona=persona-formal-mut/);
     console.log("Expecting formal mutation details to be visible...");
     await expect(page.getByText("已聚焦 Persona: persona-formal-mut · mutation: evo-dec-formal")).toBeVisible();
+    await expect(page.getByTestId("evolution-auto-proposals-summary")).toContainText("自動提案：共 4 筆");
+    await expect(page.getByTestId("evolution-evidence-class-threshold_signal")).toBeVisible();
     await expect(page.getByText("Formal Mutation Title")).toBeVisible();
     await expect(page.getByText("evo-dec-formal", { exact: true })).toBeVisible();
     console.log("Capturing screenshot 09...");
