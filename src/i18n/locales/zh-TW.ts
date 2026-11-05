@@ -2619,7 +2619,7 @@ export default {
   },
   knowledge: {
     subtitle: "從營運活動匯集的洞察。可升級為 Artifact、Postmortem 或研究任務。",
-    empty: "收件匣已清空。", selectHint: "請選一筆洞察。",
+    empty: "收件匣已清空。", unavailable: "知識收件匣不可用。", selectHint: "請選一筆洞察。",
     promoteArtifact: "升級 → Artifact", promotePostmortem: "升級 → Postmortem", promoteResearch: "升級 → 研究任務",
     dismiss: "忽略", dismissed: "洞察已忽略", promotedTo: "已升級為 {{target}}",
   },
@@ -3641,6 +3641,13 @@ export default {
         failed: "證據處置失敗",
       },
       noRows: "沒有證據參照。",
+      unavailableRows: "證據資料面不可用，無法載入證據紀錄。",
+      unavailableValue: "不可用",
+      pager: {
+        previous: "上一頁",
+        next: "下一頁",
+        pageFmt: "第 {{page}} 頁 · 共 {{total}} 筆",
+      },
       noLinkedDecisions: "此證據參照沒有 BFF 關聯決策。",
       redactedDecision: "已遮蔽決策",
       sourceNote: "來源筆記",

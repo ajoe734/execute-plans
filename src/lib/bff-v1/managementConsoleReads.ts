@@ -101,8 +101,8 @@ export interface KnowledgeInsightRecord {
   id: string;
   title: string;
   source: string;
-  kind: "research_note" | "signal_review" | "committee_memo" | "alert_observation";
-  risk: "low" | "medium" | "high";
+  kind: string;
+  risk?: "low" | "medium" | "high";
   ts: string;
   body: string;
 }
@@ -191,15 +191,25 @@ const envelopeRecords = (raw: unknown): UnknownRecord[] => {
 const envelopeMeta = (raw: unknown, surface: string): ManagementListMeta => {
   const root = asRecord(raw);
   const meta = asRecord(root?.meta) ?? {};
+  const surfaces = asRecord(meta.surfaces);
+  const surfaceEntry = surfaces?.[surface] ?? surfaces?.[`${surface}_inbox`];
+  const surfaceRecord = asRecord(surfaceEntry);
+  const hasExplicitItemsArray =
+    surface === "knowledge" &&
+    Object.keys(meta).length === 0 &&
+    (Array.isArray(raw) || Array.isArray(root?.items) || Array.isArray(asRecord(root?.data)?.items));
+  const fallbackStatus = hasExplicitItemsArray ? "ok" : "unavailable";
+  const status = asString(meta.status, surfaceRecord?.status, surfaceEntry) ?? fallbackStatus;
+  const source = asString(meta.source, surfaceRecord?.source) ?? "frontend_empty_read";
   return {
-    status: asString(meta.status) ?? "unavailable",
-    source: asString(meta.source) ?? "frontend_empty_read",
+    status,
+    source,
     surfaces: {
       [surface]: {
-        status: asString(asRecord(meta.surfaces)?.[surface]) ?? asString(meta.status) ?? "unavailable",
-        source: asString(meta.source) ?? "frontend_empty_read",
+        status: asString(surfaceRecord?.status, surfaceEntry, meta.status) ?? status,
+        source,
       },
-      ...(asRecord(meta.surfaces) as Record<string, ManagementSurfaceState> | undefined),
+      ...(surfaces as Record<string, ManagementSurfaceState> | undefined),
     },
     ...meta,
   };
@@ -557,26 +567,27 @@ const adaptHook = (record: UnknownRecord, index: number): HookRecord => ({
   firedToday: asNumber(record.firedToday ?? record.fired_today, 0),
 });
 
-const toKnowledgeKind = (value: unknown): KnowledgeInsightRecord["kind"] => {
+export const toKnowledgeKind = (value: unknown): KnowledgeInsightRecord["kind"] =>
+  asString(value) ?? "";
+
+export const toKnowledgeRisk = (value: unknown): KnowledgeInsightRecord["risk"] => {
   const normalized = asString(value)?.toLowerCase();
-  if (normalized === "signal_review" || normalized === "committee_memo" || normalized === "alert_observation") return normalized;
-  return "research_note";
+  if (normalized === "high" || normalized === "medium" || normalized === "low") return normalized;
+  return undefined;
 };
 
-const toKnowledgeRisk = (value: unknown): KnowledgeInsightRecord["risk"] => {
-  const normalized = asString(value)?.toLowerCase();
-  return normalized === "high" || normalized === "medium" ? normalized : "low";
+export const adaptKnowledge = (record: UnknownRecord, index = 0): KnowledgeInsightRecord => {
+  const content = asRecord(record.content);
+  return {
+    id: asString(record.id, record.note_id, record.insight_id, record.entry_id, record.item_id) ?? `knowledge-${index + 1}`,
+    title: asString(record.title, record.name, record.headline, content?.title, content?.headline) ?? `Knowledge item ${index + 1}`,
+    source: asString(record.sourceDataset, record.source_dataset, record.source, record.source_ref, record.origin) ?? "",
+    kind: toKnowledgeKind(record.inboxType ?? record.inbox_type ?? record.kind ?? record.knowledge_type),
+    risk: toKnowledgeRisk(record.risk ?? record.risk_level),
+    ts: asString(record.ts, record.updated_at, record.updatedAt, record.created_at, record.createdAt, record.timestamp) ?? "",
+    body: asString(record.body, record.summary, record.description, record.excerpt, content?.summary, content?.body, content?.lesson) ?? "",
+  };
 };
-
-const adaptKnowledge = (record: UnknownRecord, index: number): KnowledgeInsightRecord => ({
-  id: asString(record.id, record.insight_id, record.item_id) ?? `knowledge-${index + 1}`,
-  title: asString(record.title, record.name, record.headline) ?? `Knowledge item ${index + 1}`,
-  source: asString(record.source, record.source_ref, record.origin) ?? "pantheon-bff",
-  kind: toKnowledgeKind(record.kind ?? record.knowledge_type),
-  risk: toKnowledgeRisk(record.risk ?? record.risk_level),
-  ts: asString(record.ts, record.created_at, record.updated_at, record.timestamp) ?? "",
-  body: asString(record.body, record.summary, record.description, record.excerpt) ?? "",
-});
 
 const adaptLineageNode = (record: UnknownRecord, index: number): LineageNodeRecord => ({
   id: asString(record.id, record.node_id, record.artifact_id, record.ref) ?? `node-${index + 1}`,

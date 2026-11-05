@@ -4,10 +4,12 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import i18n from "@/i18n";
-import type {
-  ManagementEvidenceDetail,
-  ManagementEvidenceOverview,
+import {
+  adaptManagementEvidenceOverview,
+  type ManagementEvidenceDetail,
+  type ManagementEvidenceOverview,
 } from "@/lib/bff-v1/management";
+import { safeDateTime } from "@/lib/utils";
 import { EvidenceExplorerPage, EvidencePacketDetailPage } from "./_core";
 
 const mocks = vi.hoisted(() => ({
@@ -628,5 +630,292 @@ describe("EvidenceExplorerPage", () => {
     })));
     await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
     expect(screen.getByText("receipt: cmd-mark-stale")).toBeInTheDocument();
+  });
+
+  it("shows unavailable state and no numeric zero in the five metric cards and shows a distinct unavailable message when management_evidence is not ok", () => {
+    const unavailablePayload = adaptManagementEvidenceOverview({
+      data: {
+        id: "management-evidence",
+        items: [],
+        summary: {
+          total_evidence: null,
+          returned_evidence: null,
+          visible_evidence: null,
+          redacted_evidence: null,
+          verified_evidence: null,
+          by_source_type: {},
+          by_link_type: {},
+          by_credibility_tier: {},
+          traceable_evidence: null,
+          unresolved_source_evidence: null,
+          incomplete_evidence: null,
+          needs_attention_evidence: null,
+          open_operation_evidence: null,
+          by_actionability_state: {},
+          by_actionability_severity: {},
+          by_operation_status: {},
+        },
+        facets: {
+          source_types: {},
+          link_types: {},
+          credibility_tiers: {},
+          actionability_states: {},
+          actionability_severity: {},
+          operation_statuses: {},
+        },
+      },
+      page_info: {
+        next_page_token: null,
+        total: null,
+        page_size: 20,
+      },
+      meta: {
+        snapshot_at: "2026-11-04T00:00:00Z",
+        surfaces: {
+          management_evidence: {
+            status: "unavailable",
+            source: "service_store",
+            reason: "source_ingest_evidence_items_unavailable",
+          },
+          evidence_refs: {
+            status: "unavailable",
+            source: "service_store",
+            reason: "source_ingest_evidence_items_unavailable",
+          },
+        },
+        redacted_evidence_count: null,
+      },
+    });
+    mocks.useV5Live.mockReturnValue({ data: unavailablePayload, loading: false, refresh: vi.fn() });
+
+    renderEvidence("/management/evidence");
+
+    const metricCards = screen.getAllByTestId("evidence-metric-card");
+    expect(metricCards).toHaveLength(5);
+    for (const card of metricCards) {
+      expect(card).toHaveTextContent("Unavailable");
+      expect(card.textContent).not.toMatch(/\b0\b/);
+    }
+    expect(screen.getByTestId("evidence-route-unavailable")).toHaveTextContent(
+      "Evidence surface is unavailable; evidence records could not be loaded.",
+    );
+    expect(screen.queryByTestId("evidence-route-empty")).not.toBeInTheDocument();
+    expect(screen.queryByText("No evidence refs.")).not.toBeInTheDocument();
+  });
+
+  it("shows zero in the five metric cards and the no rows message for a true empty ok response", () => {
+    const emptyOkPayload = adaptManagementEvidenceOverview({
+      data: {
+        id: "management-evidence",
+        items: [],
+        summary: {
+          total_evidence: 0,
+          returned_evidence: 0,
+          visible_evidence: 0,
+          redacted_evidence: 0,
+          verified_evidence: 0,
+          by_source_type: {},
+          by_link_type: {},
+          by_credibility_tier: {},
+          traceable_evidence: 0,
+          unresolved_source_evidence: 0,
+          incomplete_evidence: 0,
+          needs_attention_evidence: 0,
+          open_operation_evidence: 0,
+          by_actionability_state: {},
+          by_actionability_severity: {},
+          by_operation_status: {},
+        },
+        facets: {
+          source_types: {},
+          link_types: {},
+          credibility_tiers: {},
+          actionability_states: {},
+          actionability_severity: {},
+          operation_statuses: {},
+        },
+      },
+      page_info: {
+        next_page_token: null,
+        total: 0,
+        page_size: 20,
+      },
+      meta: {
+        snapshot_at: "2026-11-04T00:00:00Z",
+        surfaces: {
+          management_evidence: { status: "ok", source: "service_store" },
+          evidence_refs: { status: "ok", source: "service_store" },
+        },
+        redacted_evidence_count: 0,
+      },
+    });
+    mocks.useV5Live.mockReturnValue({ data: emptyOkPayload, loading: false, refresh: vi.fn() });
+
+    renderEvidence("/management/evidence");
+
+    const metricCards = screen.getAllByTestId("evidence-metric-card");
+    expect(metricCards).toHaveLength(5);
+    for (const card of metricCards) {
+      expect(card).toHaveTextContent("0");
+    }
+    expect(screen.getByTestId("evidence-route-empty")).toHaveTextContent("No evidence refs.");
+    expect(screen.queryByTestId("evidence-route-unavailable")).not.toBeInTheDocument();
+  });
+
+  it("renders title, source type, captured time, page_info.total, and paginates beyond the first page using the real BFF payload shape", () => {
+    const firstPagePayload = adaptManagementEvidenceOverview({
+      data: {
+        id: "management-evidence",
+        items: [
+          {
+            id: "evitem-tw_price_daily-0050-2026-11-01-abc123",
+            ref_id: "evitem-tw_price_daily-0050-2026-11-01-abc123",
+            evidence_item_id: "evitem-tw_price_daily-0050-2026-11-01-abc123",
+            title: "TW official tw_price_daily TWSE 0050 2026-11-01",
+            citation_label: "TW official tw_price_daily TWSE 0050 2026-11-01",
+            source_type: "official_reference",
+            captured_at: "2026-11-01T14:30:00+08:00",
+            available_time: "2026-11-01T14:30:00+08:00",
+            event_time: "2026-11-01T00:00:00+08:00",
+            item_type: "tw_price_daily",
+            link_type: "tw_price_daily",
+            metadata: { source_class: "official_reference" },
+            credibility: { tier: "producer_record", verified: true },
+          },
+        ],
+        summary: {
+          total_evidence: 614,
+          returned_evidence: 1,
+          visible_evidence: 1,
+          redacted_evidence: 0,
+          verified_evidence: 1,
+          by_source_type: { official_reference: 1 },
+          by_link_type: { tw_price_daily: 1 },
+          by_credibility_tier: { producer_record: 1 },
+          traceable_evidence: 0,
+          unresolved_source_evidence: 0,
+          incomplete_evidence: 0,
+          needs_attention_evidence: 0,
+          open_operation_evidence: 0,
+          by_actionability_state: {},
+          by_actionability_severity: {},
+          by_operation_status: {},
+        },
+        facets: {
+          source_types: { official_reference: 1 },
+          link_types: { tw_price_daily: 1 },
+          credibility_tiers: { producer_record: 1 },
+          actionability_states: {},
+          actionability_severity: {},
+          operation_statuses: {},
+        },
+      },
+      page_info: {
+        next_page_token: "20",
+        total: 614,
+        page_size: 20,
+      },
+      meta: {
+        snapshot_at: "2026-11-04T00:00:00Z",
+        surfaces: {
+          management_evidence: { status: "ok", source: "service_store" },
+          evidence_refs: { status: "ok", source: "service_store" },
+        },
+        redacted_evidence_count: 0,
+      },
+    });
+
+    const secondPagePayload = adaptManagementEvidenceOverview({
+      data: {
+        id: "management-evidence",
+        items: [
+          {
+            id: "evitem-tw_price_daily-2330-2026-11-01-def456",
+            ref_id: "evitem-tw_price_daily-2330-2026-11-01-def456",
+            evidence_item_id: "evitem-tw_price_daily-2330-2026-11-01-def456",
+            title: "TW official tw_price_daily TWSE 2330 2026-11-01",
+            citation_label: "TW official tw_price_daily TWSE 2330 2026-11-01",
+            source_type: "official_reference",
+            captured_at: "2026-11-01T14:35:00+08:00",
+            available_time: "2026-11-01T14:35:00+08:00",
+            event_time: "2026-11-01T00:00:00+08:00",
+            item_type: "tw_price_daily",
+            link_type: "tw_price_daily",
+            metadata: { source_class: "official_reference" },
+            credibility: { tier: "producer_record", verified: true },
+          },
+        ],
+        summary: {
+          total_evidence: 614,
+          returned_evidence: 1,
+          visible_evidence: 1,
+          redacted_evidence: 0,
+          verified_evidence: 1,
+          by_source_type: { official_reference: 1 },
+          by_link_type: { tw_price_daily: 1 },
+          by_credibility_tier: { producer_record: 1 },
+          traceable_evidence: 0,
+          unresolved_source_evidence: 0,
+          incomplete_evidence: 0,
+          needs_attention_evidence: 0,
+          open_operation_evidence: 0,
+          by_actionability_state: {},
+          by_actionability_severity: {},
+          by_operation_status: {},
+        },
+        facets: {
+          source_types: { official_reference: 1 },
+          link_types: { tw_price_daily: 1 },
+          credibility_tiers: { producer_record: 1 },
+          actionability_states: {},
+          actionability_severity: {},
+          operation_statuses: {},
+        },
+      },
+      page_info: {
+        next_page_token: "40",
+        total: 614,
+        page_size: 20,
+      },
+      meta: {
+        snapshot_at: "2026-11-04T00:00:00Z",
+        surfaces: {
+          management_evidence: { status: "ok", source: "service_store" },
+          evidence_refs: { status: "ok", source: "service_store" },
+        },
+        redacted_evidence_count: 0,
+      },
+    });
+
+    mocks.useV5Live.mockImplementation((_loader: unknown, deps: unknown[]) => {
+      const token = Array.isArray(deps) ? deps[0] : null;
+      return {
+        data: token === "20" ? secondPagePayload : firstPagePayload,
+        loading: false,
+        refresh: vi.fn(),
+      };
+    });
+
+    renderEvidence("/management/evidence");
+
+    const metricCards = screen.getAllByTestId("evidence-metric-card");
+    expect(metricCards[0]).toHaveTextContent("Total");
+    expect(metricCards[0]).toHaveTextContent("614");
+
+    expect(screen.getByText("TW official tw_price_daily TWSE 0050 2026-11-01")).toBeInTheDocument();
+    expect(screen.getByTitle("official_reference")).toHaveTextContent("official reference");
+    expect(screen.getByText(safeDateTime("2026-11-01T14:30:00+08:00"))).toBeInTheDocument();
+
+    const nextButton = screen.getByTestId("evidence-pagination-next");
+    const prevButton = screen.getByTestId("evidence-pagination-prev");
+    expect(prevButton).toBeDisabled();
+    expect(nextButton).toBeEnabled();
+
+    fireEvent.click(nextButton);
+
+    expect(screen.getByText("TW official tw_price_daily TWSE 2330 2026-11-01")).toBeInTheDocument();
+    expect(screen.getByText(safeDateTime("2026-11-01T14:35:00+08:00"))).toBeInTheDocument();
+    expect(screen.getAllByTestId("evidence-metric-card")[0]).toHaveTextContent("614");
+    expect(screen.getByTestId("evidence-pagination-prev")).toBeEnabled();
   });
 });

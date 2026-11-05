@@ -1,0 +1,113 @@
+{
+  "schema_version": "pantheon.fe-evidence-knowledge-truth.v1",
+  "task_id": "FE-EVIDENCE-KNOWLEDGE-TRUTH-20261104",
+  "taskId": "FE-EVIDENCE-KNOWLEDGE-TRUTH-20261104",
+  "title": "Evidence shows zero on read failure and knowledge inbox invents kind risk and source",
+  "owner": "Antigravity",
+  "reviewer": "Claude",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-EVIDENCE-KNOWLEDGE-TRUTH-20261104",
+  "prerequisite": {
+    "task_id": "EVIDENCE-OWNER-LIST-BOUNDED-20261104",
+    "pantheon_merge_commit": "ec425ce13033abd13088669e202ec35ca25f5b76",
+    "status": "done"
+  },
+  "status": "ready_for_review",
+  "timestamp": "2026-11-05T01:37:30Z",
+  "scope": {
+    "delivered": [
+      "Updated EvidenceExplorerList in src/management/pages/oversight/_core.tsx (importing ManagementEvidenceOverview from @/lib/bff-v1/management) to check whether the management_evidence surface is ok; when management_evidence is not ok (unavailable, degraded, or unreturned), the five metric cards render Unavailable instead of numeric 0 and the empty-table row renders a distinct unavailable message (evidence-route-unavailable) instead of the no-rows message, while a true empty ok response continues to render 0 in the five metric cards and the no-rows message (evidence-route-empty).",
+      "Updated adaptManagementEvidenceOverview and adaptEvidenceListItem in src/lib/bff-v1/management.ts to map BFF /bff/management/evidence rows from EVIDENCE-OWNER-LIST-BOUNDED-20261104 (title / citation_label, source_type / metadata.source_class, captured_at / available_time / event_time, top-level page_info, top-level meta.surfaces, and null-safe asFiniteNumber).",
+      "Added page_info pagination support in mgmt.evidence.overviewLiveOnly and EvidenceExplorerList so operators can reach rows beyond the first page via page_info.next_page_token while displaying page_info.total as the Total metric.",
+      "Removed fabricated defaults in src/lib/bff-v1/managementConsoleReads.ts (adaptKnowledge, toKnowledgeKind, toKnowledgeRisk): kind is read from inboxType without defaulting to research_note, source is read from sourceDataset without defaulting to pantheon-bff, missing risk remains undefined instead of defaulting to low, and missing timestamp remains empty string instead of fabricating a timestamp.",
+      "Updated KnowledgeInboxPage in src/management/pages/phase2/KnowledgeInbox.tsx to distinguish BFF empty ok responses (rendering knowledge.empty / data-testid=knowledge-inbox-empty) from read failures or unavailable surfaces (rendering knowledge.unavailable / data-testid=knowledge-inbox-unavailable), to render the existing Unavailable RiskBadge when risk is missing, and to omit fabricated time separator/placeholder when ts is empty.",
+      "Added bilingual i18n keys in src/i18n/locales/en-US.ts and src/i18n/locales/zh-TW.ts for knowledge.unavailable, mgmt.evidence.unavailableRows, mgmt.evidence.unavailableValue, and mgmt.evidence.pager.{previous,next,pageFmt}.",
+      "Added unit and component tests in src/lib/bff-v1/__tests__/managementConsoleReads.test.ts, src/management/pages/phase2/KnowledgeInbox.test.tsx, src/lib/bff-v1/__tests__/management.test.ts, and src/management/pages/oversight/EvidenceExplorerPage.test.tsx using the real BFF payload shapes."
+    ],
+    "not_changed": [
+      "Left all four NonProductionActionButton promote/dismiss buttons (status=\"no executing owner\") in src/management/pages/phase2/KnowledgeInbox.tsx untouched.",
+      "Did not weaken, delete, or alter any existing test assertion."
+    ]
+  },
+  "acceptance_verification": [
+    {
+      "criterion": 1,
+      "description": "The evidence page shows the unavailable state and no numeric zero in its five metric cards when the management_evidence surface is not ok and shows a distinct unavailable message in place of the no rows message; a true empty ok response still shows zero and the no rows message",
+      "status": "passed",
+      "verified_by": [
+        "src/management/pages/oversight/EvidenceExplorerPage.test.tsx > shows unavailable state and no numeric zero in the five metric cards and shows a distinct unavailable message when management_evidence is not ok",
+        "src/management/pages/oversight/EvidenceExplorerPage.test.tsx > shows zero in the five metric cards and the no rows message for a true empty ok response"
+      ]
+    },
+    {
+      "criterion": 2,
+      "description": "The evidence table shows title and source type and captured time from the BFF mapped fields and a test uses the real BFF payload shape",
+      "status": "passed",
+      "verified_by": [
+        "src/lib/bff-v1/__tests__/management.test.ts > adapts bounded BFF /bff/management/evidence envelope with top-level page_info, meta, and mapped source_ingest_evidence_items rows",
+        "src/management/pages/oversight/EvidenceExplorerPage.test.tsx > renders title, source type, captured time, page_info.total, and paginates beyond the first page using the real BFF payload shape"
+      ]
+    },
+    {
+      "criterion": 3,
+      "description": "The evidence page can reach rows beyond the first page using page_info and the total shown matches page_info.total",
+      "status": "passed",
+      "verified_by": [
+        "src/lib/bff-v1/__tests__/management.test.ts > adapts bounded BFF /bff/management/evidence envelope with top-level page_info, meta, and mapped source_ingest_evidence_items rows",
+        "src/management/pages/oversight/EvidenceExplorerPage.test.tsx > renders title, source type, captured time, page_info.total, and paginates beyond the first page using the real BFF payload shape"
+      ]
+    },
+    {
+      "criterion": 4,
+      "description": "adaptKnowledge no longer defaults kind to research_note or risk to low or source to pantheon-bff; kind comes from inboxType and source from sourceDataset; a missing risk shows the existing unavailable badge and a missing time shows no fabricated value",
+      "status": "passed",
+      "verified_by": [
+        "src/lib/bff-v1/__tests__/managementConsoleReads.test.ts > maps kind from inboxType and source from sourceDataset without fabricating research_note, low, pantheon-bff, or timestamps",
+        "src/lib/bff-v1/__tests__/managementConsoleReads.test.ts > does not default missing kind to research_note, missing risk to low, or missing source to pantheon-bff",
+        "src/management/pages/phase2/KnowledgeInbox.test.tsx > renders kind from inboxType, source from sourceDataset, the existing unavailable risk badge when risk is missing, and no fabricated time when time is missing"
+      ]
+    },
+    {
+      "criterion": 5,
+      "description": "The knowledge inbox shows the existing empty message when the BFF returns no items and a read failure is shown as unavailable rather than empty",
+      "status": "passed",
+      "verified_by": [
+        "src/lib/bff-v1/__tests__/managementConsoleReads.test.ts > preserves BFF knowledge_inbox surface status for ok, empty, and unavailable envelopes",
+        "src/management/pages/phase2/KnowledgeInbox.test.tsx > shows the existing empty message when the BFF returns no items",
+        "src/management/pages/phase2/KnowledgeInbox.test.tsx > shows read failure as unavailable rather than empty when BFF surface is unavailable or transport fails"
+      ]
+    },
+    {
+      "criterion": 6,
+      "description": "No existing test is weakened or deleted to pass and any changed assertion is justified in evidence",
+      "status": "passed",
+      "justification": "Zero existing tests or assertions were modified, weakened, or deleted. All 77 pre-existing tests across management.test.ts, EvidenceExplorerPage.test.tsx, revamp-2026-05-20.test.ts, and contract-drift.test.ts pass unchanged alongside 9 newly added tests (86 total passing tests)."
+    }
+  ],
+  "artifacts": [
+    "src/lib/bff-v1/managementConsoleReads.ts",
+    "src/lib/bff-v1/__tests__/managementConsoleReads.test.ts",
+    "src/lib/bff-v1/management.ts",
+    "src/lib/bff-v1/__tests__/management.test.ts",
+    "src/management/pages/phase2/KnowledgeInbox.tsx",
+    "src/management/pages/phase2/KnowledgeInbox.test.tsx",
+    "src/management/pages/oversight/_core.tsx",
+    "src/management/pages/oversight/EvidenceExplorerPage.test.tsx",
+    "src/i18n/locales/zh-TW.ts",
+    "src/i18n/locales/en-US.ts",
+    "docs/deployment/evidence/FE-EVIDENCE-KNOWLEDGE-TRUTH-20261104/evidence.json"
+  ],
+  "validation": {
+    "typecheck": {
+      "command": "./node_modules/.bin/tsc -p tsconfig.app.json --noEmit && ./node_modules/.bin/tsc -p tsconfig.agora.json --noEmit",
+      "exit_code": 0
+    },
+    "unit_and_component_tests": {
+      "command": "./node_modules/.bin/vitest run src/lib/bff-v1/__tests__/managementConsoleReads.test.ts src/management/pages/phase2/KnowledgeInbox.test.tsx src/lib/bff-v1/__tests__/management.test.ts src/management/pages/oversight/EvidenceExplorerPage.test.tsx src/lib/v5/management/__tests__/revamp-2026-05-20.test.ts src/lib/bff-v1/__tests__/contract-drift.test.ts",
+      "exit_code": 0,
+      "test_files_passed": 6,
+      "tests_passed": 86
+    }
+  }
+}
