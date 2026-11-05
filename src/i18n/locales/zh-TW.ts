@@ -837,6 +837,8 @@ export default {
     collapse: "收合",
   },
   lineage: {
+    overClientNotice: "血緣圖共 {{count}} 個節點（超過 {{limit}}），畫面可能較慢；建議縮小範圍或指定根節點查看。",
+    overServerNotice: "血緣圖共 {{count}} 個節點（超過 {{limit}}），需改用伺服器端分群摘要檢視。",
     title: "資料血緣",
     legendUpstream: "上游",
     legendDownstream: "下游",
@@ -2765,6 +2767,7 @@ export default {
     subtitle: "可搜尋的事件 Postmortem 知識庫,可回連至原事件。",
     search: "搜尋標題或事件…",
     incident: "事件", author: "作者", resolved: "結案時間",
+    time: "時間", publishedAt: "發佈", createdAt: "建立",
     rootCause: "根因", impact: "影響", followUps: "後續行動",
     statusFilter: "狀態篩選",
     status: {

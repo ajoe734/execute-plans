@@ -10,6 +10,8 @@ export interface Column<T> {
   header: string;
   cell: (row: T) => ReactNode;
   className?: string;
+  /** Minimum column width in px used to size the scroll area (default 160). */
+  minWidth?: number;
 }
 
 /** Planner Response §E14 — three canonical densities. */
@@ -29,7 +31,7 @@ export function DataTable<T extends { id: string }>({
 }) {
   const rowH = DATATABLE_ROW_HEIGHT_PX[density];
   const cellPad = density === "dense" ? "py-1" : density === "compact" ? "py-1.5" : "py-2";
-  const minScrollWidth = Math.max(720, columns.length * 160);
+  const minScrollWidth = Math.max(720, columns.reduce((sum, c) => sum + (c.minWidth ?? 160), 0));
   return (
     <Card
       className={cn("flex min-h-0 overflow-hidden", fillViewport && "flex-1")}
@@ -49,7 +51,7 @@ export function DataTable<T extends { id: string }>({
           <TableHeader className="sticky top-0 z-10 bg-card">
             <TableRow className="bg-muted/40 hover:bg-muted/40">
               {columns.map((c) => (
-                <TableHead key={c.key} className={"text-xs uppercase tracking-wider " + (c.className ?? "")}>{c.header}</TableHead>
+                <TableHead key={c.key} className={"text-xs uppercase tracking-wider whitespace-nowrap " + (c.className ?? "")}>{c.header}</TableHead>
               ))}
             </TableRow>
           </TableHeader>

@@ -25,8 +25,11 @@ type LoadStatus = "loading" | "ready" | "error";
 const DEFAULT_PAGE_SIZE = 50;
 const POSTMORTEM_STATUS_OPTIONS = ["draft", "review", "approved", "published"] as const;
 
-function displayedAt(item: PostmortemRecord): string {
-  return item.published_at || item.created_at;
+/** published_at when the record was published; otherwise created_at (never labelled as closed). */
+function displayedAt(item: PostmortemRecord): { at: string; kind: "published" | "created" } {
+  return item.published_at
+    ? { at: item.published_at, kind: "published" }
+    : { at: item.created_at, kind: "created" };
 }
 
 function listSurface(meta: PostmortemResponseMeta | undefined) {
@@ -226,11 +229,27 @@ export const PostmortemLibraryPage = () => {
               empty={listStatus === "loading" ? "Loading canonical postmortems..." : "No canonical postmortems recorded."}
               columns={[
                 { key: "id", header: t("table.id"), cell: (row) => <span className="text-mono text-xs">{row.postmortem_id}</span> },
-                { key: "status", header: t("table.status"), cell: (row) => <Badge variant="outline">{statusLabel(t, row.status)}</Badge> },
+                { key: "status", header: t("table.status"), cell: (row) => <Badge variant="outline" className="whitespace-nowrap shrink-0">{statusLabel(t, row.status)}</Badge> },
                 { key: "title", header: t("table.title"), cell: (row) => <div className="font-medium">{row.title}</div> },
                 { key: "inc", header: t("postmortem.incident"), cell: (row) => <span className="text-mono text-xs">{row.incident_id}</span> },
                 { key: "by", header: t("postmortem.author"), cell: (row) => <span className="text-mono text-xs">{row.author_ids.join(", ") || "unassigned"}</span> },
-                { key: "ts", header: t("postmortem.resolved"), cell: (row) => <span className="text-mono text-xs text-muted-foreground">{safeDateTime(displayedAt(row))}</span> },
+                {
+                  key: "ts",
+                  header: t("postmortem.time", { defaultValue: "Time" }),
+                  cell: (row) => {
+                    const { at, kind } = displayedAt(row);
+                    return (
+                      <span className="text-mono text-xs text-muted-foreground whitespace-nowrap" data-time-kind={kind}>
+                        {safeDateTime(at)}
+                        <span className="ml-1">
+                          ({kind === "published"
+                            ? t("postmortem.publishedAt", { defaultValue: "Published" })
+                            : t("postmortem.createdAt", { defaultValue: "Created" })})
+                        </span>
+                      </span>
+                    );
+                  },
+                },
               ]}
             />
             <footer
@@ -302,7 +321,13 @@ export const PostmortemLibraryPage = () => {
               <Card className="p-4 grid grid-cols-2 gap-4">
                 <Field label={t("postmortem.incident")} value={active.incident_id || "unavailable"} mono />
                 <Field label={t("postmortem.author")} value={active.author_ids.join(", ") || "unassigned"} mono />
-                <Field label={t("postmortem.resolved")} value={safeDateTime(displayedAt(active))} mono />
+                <Field
+                  label={displayedAt(active).kind === "published"
+                    ? t("postmortem.publishedAt", { defaultValue: "Published" })
+                    : t("postmortem.createdAt", { defaultValue: "Created" })}
+                  value={safeDateTime(displayedAt(active).at)}
+                  mono
+                />
                 <Field label="Deployment stage" value={active.deployment_stage || "unavailable"} mono />
                 <Field label="Artifact" value={active.artifact_id || "unavailable"} mono />
                 <Field label="Runtime" value={active.runtime_id || "unavailable"} mono />
