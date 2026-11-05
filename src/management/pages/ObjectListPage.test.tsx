@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { LiveStatusBanner } from "@/components/layout/LiveStatusBanner";
 import i18n from "@/i18n";
 import { liveStatus } from "@/lib/bff-v1/liveStatus";
 import { ObjectListPage, resolveObjectRowHref } from "./ObjectListPage";
@@ -1938,5 +1939,75 @@ describe("ObjectListPage", () => {
 
     unmount();
     await i18n.changeLanguage("en-US");
+  });
+
+  it("renders EvolutionList when /bff/management/evolution-qualification returns an array body without opening STRICT TYPED ERROR or FALLBACK DATA banners and fetches qualification only once", async () => {
+    const { useLiveListV1: actualUseLiveListV1 } = await vi.importActual<typeof import("@/lib/bff-v1")>("@/lib/bff-v1");
+    mocks.useLiveListV1.mockImplementation(actualUseLiveListV1);
+    stubLiveEnv();
+
+    let qualificationCalls = 0;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("/bff/management/evolution-qualification")) {
+        qualificationCalls += 1;
+        return new Response(JSON.stringify([]), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (url.includes("/bff/evolution-programs")) {
+        return new Response(
+          JSON.stringify({
+            data: [
+              {
+                id: "evp-array-qual-001",
+                program_id: "evp-array-qual-001",
+                name: "Resilient Evolution Program",
+                status: "active",
+                state: "active",
+                origin: "manual",
+                source_decision_ids: [],
+                run_ids: ["run-1"],
+                updated_at: "2026-11-05T02:00:00Z",
+              },
+            ],
+            total: 1,
+            total_complete: true,
+            cursor: { next: null },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return new Response(JSON.stringify({ data: [], items: [] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+
+    await i18n.changeLanguage("en-US");
+    render(
+      <I18nextProvider i18n={i18n}>
+        <TooltipProvider>
+          <MemoryRouter initialEntries={["/management/evolution"]}>
+            <LiveStatusBanner />
+            <Routes>
+              <Route path="/management/evolution" element={<EvolutionList />} />
+            </Routes>
+          </MemoryRouter>
+        </TooltipProvider>
+      </I18nextProvider>,
+    );
+
+    expect(await screen.findByText("Resilient Evolution Program")).toBeInTheDocument();
+    expect(screen.getByTestId("qualification-policy-version")).toHaveTextContent("—");
+    expect(screen.getByTestId("qualification-evaluated-at")).toHaveTextContent("Not evaluated yet");
+    expect(screen.getByTestId("qualification-evaluated-count")).toHaveTextContent("0");
+    expect(screen.getByTestId("qualification-qualified-count")).toHaveTextContent("0");
+    expect(qualificationCalls).toBe(1);
+    expect(liveStatus.get().effective).toBe("live");
+    expect(liveStatus.get().lastError).toBeUndefined();
+    expect(screen.queryByText(/strict typed error/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/FALLBACK DATA/i)).not.toBeInTheDocument();
   });
 });

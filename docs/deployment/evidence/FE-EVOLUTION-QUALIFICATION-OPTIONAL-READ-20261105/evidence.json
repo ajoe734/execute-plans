@@ -1,0 +1,99 @@
+{
+  "task_id": "FE-EVOLUTION-QUALIFICATION-OPTIONAL-READ-20261105",
+  "title": "演化方向頁的選用讀取打開全站錯誤橫幅：擋住所有 hosted 部署",
+  "repository": "ajoe734/execute-plans",
+  "branch": "task/FE-EVOLUTION-QUALIFICATION-OPTIONAL-READ-20261105",
+  "base_branch": "dev",
+  "base_sha": "038776f445d4fa03ae61b6ad684b8575525a5794",
+  "verification_scope": "functional_local_validation_and_isolated_loopback_fixture_playwright",
+  "root_cause_and_fix": {
+    "root_cause": "src/management/pages/Lists.tsx EvolutionList called mgmt.evolutionQualification.get().catch(() => null) twice (once in loadEvolutionPrograms and once in a redundant useEffect). Because mgmt.evolutionQualification.get() uses mgmtRead/safeAdapt, an unusable response shape (such as [] or emptyListEnvelope('ancillary') { data: [], items: [] } in e2e/06-entity-registry.spec.ts) caused safeAdapt to throw 'live adapter contract mismatch (strict mode): adapter returned no data', and strictLiveRead in src/lib/bff-v1/domainReads.ts called liveStatus.reportFallback('strict: ...') before rethrowing, opening the global STRICT TYPED ERROR and FALLBACK DATA banners.",
+    "fix": [
+      "Switched EvolutionList in src/management/pages/Lists.tsx to read qualification once via mgmt.evolutionQualification.getLiveOnly().catch(() => undefined) in loadEvolutionPrograms and removed the duplicate useEffect call.",
+      "Updated adaptEvolutionQualificationReport in src/lib/bff-v1/management.ts to require at least one qualification report field or decision item so unusable object shapes (such as { items: [], meta: {} } or {}) also return null and resolve to undefined through liveOnlyRead/optionalAdapt without reporting fallback.",
+      "Preserved paths.mgmtEvolutionQualification and the strict mgmt.evolutionQualification.get contract unchanged."
+    ]
+  },
+  "acceptance": {
+    "1_e2e_06_entity_registry_f07_and_wider_fixture_suite": {
+      "status": "passed",
+      "details": "e2e/06-entity-registry.spec.ts F07 ('renders all 12 registry surfaces from fixture-backed list routes') passes for all 12 registries (including evolution-programs) in 13.0s against the local isolated loopback candidate with e2e/06-entity-registry.spec.ts completely unchanged (4 passed, 1 skipped, 0 failed). Also ran the wider 16-spec Integration Gate fixture suite against the isolated loopback candidate and recorded results below.",
+      "playwright_runs": {
+        "e2e_06_entity_registry": {
+          "command": "npx playwright test e2e/06-entity-registry.spec.ts --project=chromium --retries=0 --trace=off --reporter=list",
+          "target": "http://127.0.0.1:44173 (scripts/serve-release-candidate.mjs dist built via scripts/build-e2e-server.mjs)",
+          "passed": 4,
+          "skipped": 1,
+          "failed": 0,
+          "f07_all_12_registries_duration_ms": 13000,
+          "spec_file_modified": false
+        },
+        "e2e_01_startup_session_pull_request_context": {
+          "command": "PANTHEON_RELEASE_GATE_CONTEXT=pull_request npx playwright test e2e/01-startup-session.spec.ts --project=chromium --grep-invert 'asserts MeResponse tenant/env/user/capabilities shape' --retries=0 --trace=off --reporter=list",
+          "target": "http://127.0.0.1:44175",
+          "passed": 3,
+          "skipped": 0,
+          "failed": 0
+        },
+        "integration_gate_16_spec_fixture_suite": {
+          "command": "npx playwright test e2e/01-startup-session.spec.ts e2e/02-control-room.spec.ts e2e/03-execution-loop.spec.ts e2e/04b-optimization-loop.spec.ts e2e/06-entity-registry.spec.ts e2e/07-high-risk-confirm.spec.ts e2e/08-create-intent.spec.ts e2e/08-sse-reconnect.spec.ts e2e/09-strict-vs-hybrid.spec.ts e2e/10-rollback-saga.spec.ts e2e/11-handoff-sla.spec.ts e2e/12-approvals.spec.ts e2e/13-agora.spec.ts e2e/16-audit-correlation.spec.ts e2e/17-a11y-v5.spec.ts e2e/18-perf.spec.ts --project=chromium --grep-invert 'asserts MeResponse tenant/env/user/capabilities shape' --retries=0 --trace=off --reporter=list",
+          "target": "http://127.0.0.1:44174",
+          "passed": 46,
+          "skipped": 11,
+          "notes_on_hosted_and_out_of_scope_specs": [
+            "F07 entity registry (all 4 loopback tests in e2e/06-entity-registry.spec.ts) and all 8 @approval-local tests in e2e/12-approvals.spec.ts passed in the wider suite.",
+            "F12 @approval-hosted ('F12 authenticated approval owner readback' in e2e/12-approvals.spec.ts) requires a hosted BFF target (PANTHEON_BFF_BASE_URL) and is excluded on loopback by playwright.config.ts grepInvert /@approval-hosted/ or fails locally when invoked without a hosted BFF, as noted in the task brief.",
+            "e2e/07-high-risk-confirm.spec.ts makes unintercepted browser requests to https://api.dev.mvl-cap.tw/bff/me which fails with net::ERR_FAILED in the offline local worker sandbox without external network access.",
+            "e2e/18-perf.spec.ts:1204 ('warns when LineageGraph receives more than 500 nodes') looks for the legacy unlocalized English string '/Lineage has 506 nodes \\(> 500\\); server-side layout \\/ clustered summary required\\./i' which was replaced with localized lineage.overServerNotice in commit 2291fb194 (PR #929 FE-MGMT-CATALOG-LEGIBILITY-20261105); both files are outside this task's artifact contract."
+          ]
+        }
+      }
+    },
+    "2_unusable_qualification_shape_renders_list_without_error_or_fallback_banner": {
+      "status": "passed",
+      "details": "When /bff/management/evolution-qualification returns an array body [] or an unusable envelope ({ data: [], items: [] }, { items: [], meta: {} }, {}), EvolutionList still renders the evolution programs list, liveStatus remains effective='live' with lastError=undefined, neither STRICT TYPED ERROR nor FALLBACK DATA appears, and the qualification card renders its existing not-evaluated state ('—', 'Not evaluated yet', 0 evaluated, 0 qualified)."
+    },
+    "3_valid_qualification_report_and_existing_adapter_contract_drift_tests": {
+      "status": "passed",
+      "details": "A valid qualification report renders policy_version, evaluated_at, evaluated and qualified counts, and failing-criterion counts on the page; existing evolutionQualification adapter tests in src/lib/bff-v1/__tests__/management.test.ts and contract-drift tests in src/lib/bff-v1/__tests__/contract-drift.test.ts stay green."
+    },
+    "4_live_only_read_and_optional_adapt_used_with_strict_get_preserved": {
+      "status": "passed",
+      "details": "EvolutionList uses mgmt.evolutionQualification.getLiveOnly() (which goes through liveOnlyRead and optionalAdapt(adaptEvolutionQualificationReport)). The strict mgmt.evolutionQualification.get contract is preserved unchanged, and no new fallback mechanism or per-page liveStatus manipulation was added."
+    },
+    "5_component_tests_for_array_body_valid_report_and_strict_isolation": {
+      "status": "passed",
+      "details": "Added component tests in src/management/pages/EvolutionProgramsQualification.test.tsx and src/management/pages/ObjectListPage.test.tsx rendering EvolutionList with LiveStatusBanner and TopBar data-source state for both an array body [] and a valid qualification report, asserting banner absence and single qualification request, plus verifying other pages/strict readers keep their strict behavior."
+    }
+  },
+  "commands_executed": [
+    {
+      "command": "npx vitest run src/lib/bff-v1/__tests__/management.test.ts src/lib/bff-v1/__tests__/contract-drift.test.ts src/management/pages/ObjectListPage.test.tsx src/management/pages/EvolutionProgramsQualification.test.tsx src/management/pages/EvolutionDetail.test.tsx",
+      "exit_code": 0,
+      "summary": "5 test files passed, 105 tests passed"
+    },
+    {
+      "command": "npm run typecheck",
+      "exit_code": 0,
+      "summary": "tsc -p tsconfig.app.json --noEmit passed with 0 errors"
+    },
+    {
+      "command": "node scripts/build-e2e-server.mjs",
+      "exit_code": 0,
+      "summary": "Production E2E candidate bundle built with SAFE_BUILD_MODE (VITE_BFF_MODE=live, VITE_BFF_FALLBACK=strict)"
+    },
+    {
+      "command": "npx playwright test e2e/06-entity-registry.spec.ts --project=chromium --retries=0 --trace=off --reporter=list",
+      "exit_code": 0,
+      "summary": "4 passed (including F07 all 12 registries in 13.0s), 1 skipped, 0 failed"
+    }
+  ],
+  "scoped_artifacts": [
+    "src/lib/bff-v1/management.ts",
+    "src/lib/bff-v1/__tests__/management.test.ts",
+    "src/management/pages/Lists.tsx",
+    "src/management/pages/ObjectListPage.test.tsx",
+    "src/management/pages/EvolutionProgramsQualification.test.tsx",
+    "docs/deployment/evidence/FE-EVOLUTION-QUALIFICATION-OPTIONAL-READ-20261105/evidence.json"
+  ]
+}

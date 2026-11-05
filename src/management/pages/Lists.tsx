@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { ObjectListPage } from "./ObjectListPage";
 import {
   lists,
@@ -501,25 +501,10 @@ export const EvolutionList = () => {
   const loadEvolutionPrograms = useCallback(async () => {
     const [envelope, qualReport] = await Promise.all([
       asEntityLoader<EvolutionProgram>(lists.evolution)(),
-      mgmt.evolutionQualification.get().catch(() => null),
+      mgmt.evolutionQualification.getLiveOnly().catch(() => undefined),
     ]);
-    if (qualReport) {
-      setQualification(qualReport);
-    }
+    setQualification(qualReport ?? null);
     return envelope;
-  }, []);
-
-  useEffect(() => {
-    let active = true;
-    mgmt.evolutionQualification
-      .get()
-      .then((report) => {
-        if (active && report) setQualification(report);
-      })
-      .catch(() => {});
-    return () => {
-      active = false;
-    };
   }, []);
 
   const policyVersion = qualification?.policy_version || "—";

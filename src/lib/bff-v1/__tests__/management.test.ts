@@ -465,6 +465,7 @@ describe("mgmt façade (PM-Live)", () => {
     expect(await mgmt.quarterlyRanking.formulaLiveOnly()).toBeUndefined();
     expect(await mgmt.performanceAttribution.listLiveOnly("persona", "30d")).toEqual([]);
     expect(await mgmt.operationsReadModel.getLiveOnly("persona-alpha", "30d")).toBeUndefined();
+    expect(await mgmt.evolutionQualification.getLiveOnly()).toBeUndefined();
   });
 
   it("adapts live Trading Pulse aggregate without falling back to legacy rows", () => {
@@ -2919,6 +2920,43 @@ describe("evolutionQualification BFF contract", () => {
     expect(report.evaluated).toBe(649);
     expect(report.qualified).toBe(0);
     expect(report.counts_by_first_failing_criterion.real_threshold_signal).toBe(649);
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+    liveStatus._reset();
+  });
+
+  it("getLiveOnly treats unusable shapes as undefined in strict mode without moving liveStatus to fallback while get keeps its strict contract", async () => {
+    expect(adaptEvolutionQualificationReport([])).toBeNull();
+    expect(adaptEvolutionQualificationReport({ data: [], items: [] })).toBeNull();
+    expect(adaptEvolutionQualificationReport({ items: [], meta: {} })).toBeNull();
+    expect(adaptEvolutionQualificationReport({})).toBeNull();
+
+    vi.stubEnv("VITE_BFF_MODE", "live");
+    vi.stubEnv("VITE_BFF_FALLBACK", "strict");
+    liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
+
+    const bodies: unknown[] = [[], { data: [], items: [] }, { items: [], meta: {} }];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
+      const next = bodies.shift() ?? [];
+      return new Response(JSON.stringify(next), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+
+    for (let i = 0; i < 3; i += 1) {
+      const optionalReport = await mgmt.evolutionQualification.getLiveOnly();
+      expect(optionalReport).toBeUndefined();
+      expect(liveStatus.get().effective).toBe("live");
+      expect(liveStatus.get().lastError).toBeUndefined();
+    }
+
+    await expect(mgmt.evolutionQualification.get()).rejects.toThrow(
+      /live adapter contract mismatch \(strict mode\): adapter returned no data/,
+    );
+    expect(liveStatus.get().effective).toBe("mock");
+    expect(liveStatus.get().lastError).toMatch(/strict: live adapter contract mismatch/);
+
     vi.unstubAllEnvs();
     vi.restoreAllMocks();
     liveStatus._reset();
