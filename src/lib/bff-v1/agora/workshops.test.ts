@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { onBffUnauthorized, resetSessionTransportForTests } from "@/lib/auth/sessionExpiry";
 import { bffFetch, detectBaseUrl } from "../client";
 import { clearAuthProvider, setAuthProvider } from "../headers";
+import { SSE_RECONNECT_BACKOFF_MS } from "../sse/protocol";
 import {
   getWorkshop,
   getWorkshopWithEtag,
@@ -528,9 +529,12 @@ describe("openWorkshopStream", () => {
     // Simulate EventSource error (e.g. access cookie expired)
     sources[0].onerror?.(new Event("error"));
 
-    await vi.waitFor(() => {
-      expect(sources).toHaveLength(2);
-    });
+    await vi.waitFor(
+      () => {
+        expect(sources).toHaveLength(2);
+      },
+      { timeout: 2_500 },
+    );
     expect(sources[0].close).toHaveBeenCalled();
     expect(fetchMock).toHaveBeenCalledWith(
       "https://api.dev.mvl-cap.tw/bff/auth/refresh",
@@ -676,11 +680,14 @@ describe("openWorkshopStream transient refresh failure", () => {
     expect(sources).toHaveLength(3);
     expect(onError).toHaveBeenCalledTimes(2);
 
-    // BFF back: refresh succeeds and reconnects immediately
+    // third pre-open failure: backoff grows (~5s) before reconnecting and opening when BFF is back
     bffUp = true;
     sources[2].onerror?.(new Event("error"));
     await vi.advanceTimersByTimeAsync(0);
+    expect(sources).toHaveLength(3);
+    await vi.advanceTimersByTimeAsync(6_100);
     expect(sources).toHaveLength(4);
+    sources[3].listeners.open?.();
 
     cleanup();
   });
@@ -766,6 +773,160 @@ describe("openWorkshopStream transient refresh failure", () => {
     await vi.advanceTimersByTimeAsync(60_000);
     expect(sources).toHaveLength(1);
     expect(onError).toHaveBeenCalled();
+
+    cleanup();
+  });
+
+  it("probes POST /bff/auth/refresh at most once during 30s of pre-open failures with 200 refresh and bounds reconnects by the backoff schedule", async () => {
+    vi.useFakeTimers();
+    resetSessionTransportForTests();
+    clearAuthProvider();
+    vi.mocked(detectBaseUrl).mockReturnValue("https://api.dev.mvl-cap.tw");
+
+    const sources: Array<{
+      url: string;
+      close: ReturnType<typeof vi.fn>;
+      onerror: ((e: Event) => void) | null;
+      listeners: Record<string, () => void>;
+      addEventListener: (type: string, fn: () => void) => void;
+    }> = [];
+    vi.stubGlobal(
+      "EventSource",
+      vi.fn((url: string) => {
+        const listeners: Record<string, () => void> = {};
+        const instance = {
+          url,
+          close: vi.fn(),
+          onerror: null,
+          listeners,
+          addEventListener: (type: string, fn: () => void) => {
+            listeners[type] = fn;
+          },
+        };
+        sources.push(instance);
+        queueMicrotask(() => {
+          instance.onerror?.(new Event("error"));
+        });
+        return instance;
+      }),
+    );
+
+    let refreshCalls = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).endsWith("/bff/auth/refresh")) {
+        refreshCalls += 1;
+      }
+      return new Response(
+        JSON.stringify({ authenticated: true, expires_at: "2026-11-05T19:00:00Z" }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const onError = vi.fn();
+    const cleanup = openWorkshopStream("ws-001", undefined, { onError });
+    await vi.advanceTimersByTimeAsync(30_000);
+
+    const reconnectCount = sources.length - 1;
+    expect(refreshCalls).toBe(1);
+    expect(reconnectCount).toBe(4);
+    expect(reconnectCount).toBeLessThanOrEqual(SSE_RECONNECT_BACKOFF_MS.length);
+    // First failure refreshed (no onError), subsequent 4 failures in streak skipped refresh and reported onError.
+    expect(onError).toHaveBeenCalledTimes(4);
+
+    cleanup();
+  });
+
+  it("resets backoff attempt and refresh-probe streak only when a workshop stream actually opens, then allows one refresh probe on a later pre-open failure", async () => {
+    vi.useFakeTimers();
+    resetSessionTransportForTests();
+    clearAuthProvider();
+    vi.mocked(detectBaseUrl).mockReturnValue("https://api.dev.mvl-cap.tw");
+
+    const sources: Array<{
+      url: string;
+      close: ReturnType<typeof vi.fn>;
+      onerror: ((e: Event) => void) | null;
+      listeners: Record<string, () => void>;
+      addEventListener: (type: string, fn: () => void) => void;
+    }> = [];
+    vi.stubGlobal(
+      "EventSource",
+      vi.fn((url: string) => {
+        const listeners: Record<string, () => void> = {};
+        const instance = {
+          url,
+          close: vi.fn(),
+          onerror: null,
+          listeners,
+          addEventListener: (type: string, fn: () => void) => {
+            listeners[type] = fn;
+          },
+        };
+        sources.push(instance);
+        return instance;
+      }),
+    );
+
+    let refreshCalls = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        refreshCalls += 1;
+        return new Response(JSON.stringify({ authenticated: true }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }),
+    );
+
+    const onOpen = vi.fn();
+    const onError = vi.fn();
+    const cleanup = openWorkshopStream("ws-001", undefined, { onOpen, onError });
+    expect(sources).toHaveLength(1);
+
+    // Streak 1, pre-open failure #1: probes refresh once and backs off with attempt=0 (~1s), NOT immediate reconnect
+    sources[0].onerror?.(new Event("error"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(refreshCalls).toBe(1);
+    expect(sources).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(1_300);
+    expect(sources).toHaveLength(2);
+
+    // Streak 1, pre-open failure #2: no second refresh probe; backs off with attempt=1 (~2s)
+    sources[1].onerror?.(new Event("error"));
+    await vi.advanceTimersByTimeAsync(1_300);
+    expect(refreshCalls).toBe(1);
+    expect(sources).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(1_300);
+    expect(sources).toHaveLength(3);
+    expect(onError).toHaveBeenCalledTimes(1);
+
+    // Stream 2 actually opens -> resets attempt=0 and refreshProbedInStreak=false
+    sources[2].listeners.open?.();
+    expect(onOpen).toHaveBeenCalledTimes(1);
+
+    // Post-open drop on stream 2: reconnects with attempt=0 (~1s) and no refresh probe
+    sources[2].onerror?.(new Event("error"));
+    await vi.advanceTimersByTimeAsync(1_300);
+    expect(refreshCalls).toBe(1);
+    expect(sources).toHaveLength(4);
+
+    // Streak 2, pre-open failure on stream 3: starts a new streak and probes refresh once again (refreshCalls -> 2), using attempt=1 (~2s)
+    sources[3].onerror?.(new Event("error"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(refreshCalls).toBe(2);
+    expect(sources).toHaveLength(4);
+    await vi.advanceTimersByTimeAsync(1_300);
+    expect(sources).toHaveLength(4);
+    await vi.advanceTimersByTimeAsync(1_300);
+    expect(sources).toHaveLength(5);
+
+    // Streak 2, second pre-open failure on stream 4: no extra refresh probe in streak 2
+    sources[4].onerror?.(new Event("error"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(refreshCalls).toBe(2);
+    expect(onError).toHaveBeenCalledTimes(2);
 
     cleanup();
   });
