@@ -276,7 +276,7 @@ export const EvolutionDetail = () => {
     try {
       const receipt = await runActionSafe(input, { successTitle });
       if (!receipt.ok) {
-        setActionError(receipt.error.message || t("toast.failed"));
+        setActionError(receipt.message || t("toast.failed"));
         await refreshProgram();
         return false;
       }

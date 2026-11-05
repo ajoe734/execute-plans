@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -1503,5 +1503,315 @@ describe("ObjectListPage", () => {
     expect(banner).toHaveAttribute("data-failed-source", "registry");
     expect(banner).toHaveTextContent(/Partial artifact catalog — failed source: registry/i);
     expect(banner).toHaveTextContent("Artifact catalog is degraded because registry owner read failed.");
+  });
+
+  it("renders qualification summary from GET /bff/management/evolution-qualification with 649 evaluated and 0 qualified in both locales and explains why there are zero programs", async () => {
+    const { useLiveListV1: actualUseLiveListV1 } = await vi.importActual<typeof import("@/lib/bff-v1")>("@/lib/bff-v1");
+    mocks.useLiveListV1.mockImplementation(actualUseLiveListV1);
+
+    const hostedQualificationReport = {
+      data: {
+        tenant_id: "default",
+        sweep_id: "evo-qual-sweep-20261105-0001",
+        policy_version: "evolution-qualification.v1",
+        evaluated_at: "2026-11-05T00:00:00Z",
+        evaluated: 649,
+        qualified: 0,
+        drafted: 0,
+        counts_by_first_failing_criterion: {
+          real_threshold_signal: 649,
+        },
+        failure_reason: null,
+        items: [
+          {
+            decision_id: "evo-sweep-agent-000b205c0ef9-0000",
+            sweep_id: "evo-qual-sweep-20261105-0001",
+            tenant_id: "default",
+            target_type: "infra_component",
+            target_id: "infra-component-agent-finding-000b205c0ef9",
+            metric_name: "incident_followup_required",
+            qualified: false,
+            first_failing_criterion: "real_threshold_signal",
+            failure_reason: "metric incident_followup_required is not a numeric threshold breach",
+            policy_version: "evolution-qualification.v1",
+            evaluated_at: "2026-11-05T00:00:00Z",
+            program_id: null,
+            criteria: [],
+          },
+        ],
+        total: 649,
+        limit: 50,
+        offset: 0,
+      },
+      meta: { snapshot_at: "2026-11-05T00:00:00Z" },
+    };
+
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("/bff/management/evolution-qualification")) {
+        return new Response(JSON.stringify(hostedQualificationReport), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (url.includes("/bff/evolution-programs")) {
+        return new Response(
+          JSON.stringify({
+            data: [],
+            items: [],
+            total: 0,
+            total_complete: true,
+            cursor: { next: null },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return new Response(JSON.stringify({ data: [], items: [] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+
+    await i18n.changeLanguage("en-US");
+    const { unmount } = render(
+      <I18nextProvider i18n={i18n}>
+        <TooltipProvider>
+          <MemoryRouter initialEntries={["/management/evolution"]}>
+            <Routes>
+              <Route path="/management/evolution" element={<EvolutionList />} />
+            </Routes>
+          </MemoryRouter>
+        </TooltipProvider>
+      </I18nextProvider>,
+    );
+
+    const summary = await screen.findByTestId("evolution-qualification-summary");
+    expect(summary).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByTestId("qualification-policy-version")).toHaveTextContent(
+        "evolution-qualification.v1",
+      );
+      expect(screen.getByTestId("qualification-evaluated-at")).toHaveTextContent(
+        "2026-11-05T00:00:00Z",
+      );
+      expect(screen.getByTestId("qualification-evaluated-count")).toHaveTextContent("649");
+      expect(screen.getByTestId("qualification-qualified-count")).toHaveTextContent("0");
+      expect(
+        screen.getByTestId("qualification-criterion-count-real_threshold_signal"),
+      ).toHaveTextContent("649");
+    });
+
+    expect(screen.getByTestId("qualification-criterion-real_threshold_signal")).toHaveTextContent(
+      "Real threshold signal",
+    );
+    expect(screen.getByTestId("qualification-criterion-real_target")).toHaveTextContent(
+      "Real target",
+    );
+    expect(screen.getByTestId("qualification-criterion-persistent_breach")).toHaveTextContent(
+      "Persistent breach",
+    );
+    expect(screen.getByTestId("qualification-criterion-fresh_evidence")).toHaveTextContent(
+      "Fresh evidence",
+    );
+    expect(screen.getByTestId("qualification-criterion-executable_action")).toHaveTextContent(
+      "Executable action",
+    );
+    expect(screen.getByTestId("qualification-criterion-no_open_duplicate")).toHaveTextContent(
+      "No open duplicate",
+    );
+
+    const zeroExplanation = screen.getByTestId("evolution-zero-programs-explanation");
+    expect(zeroExplanation).toHaveTextContent("Why there are 0 evolution programs");
+    expect(zeroExplanation).toHaveTextContent(
+      /649 proposals were evaluated under policy evolution-qualification\.v1.*0 qualified/i,
+    );
+    unmount();
+
+    // Verify zh-TW locale labels
+    await i18n.changeLanguage("zh-TW");
+    const { unmount: unmountZh } = render(
+      <I18nextProvider i18n={i18n}>
+        <TooltipProvider>
+          <MemoryRouter initialEntries={["/management/evolution"]}>
+            <Routes>
+              <Route path="/management/evolution" element={<EvolutionList />} />
+            </Routes>
+          </MemoryRouter>
+        </TooltipProvider>
+      </I18nextProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("qualification-evaluated-count")).toHaveTextContent("649");
+    });
+    expect(screen.getByTestId("qualification-criterion-real_threshold_signal")).toHaveTextContent(
+      "真實門檻訊號",
+    );
+    expect(screen.getByTestId("qualification-criterion-real_target")).toHaveTextContent(
+      "真實演化目標",
+    );
+    expect(screen.getByTestId("qualification-criterion-persistent_breach")).toHaveTextContent(
+      "持續性突破門檻",
+    );
+    expect(screen.getByTestId("qualification-criterion-fresh_evidence")).toHaveTextContent(
+      "新鮮證據時效",
+    );
+    expect(screen.getByTestId("qualification-criterion-executable_action")).toHaveTextContent(
+      "可執行研究動作",
+    );
+    expect(screen.getByTestId("qualification-criterion-no_open_duplicate")).toHaveTextContent(
+      "無進行中重複方案",
+    );
+    expect(screen.getByTestId("evolution-zero-programs-explanation")).toHaveTextContent(
+      "目前沒有演化方案的原因",
+    );
+    unmountZh();
+    await i18n.changeLanguage("en-US");
+  });
+
+  it("renders EvolutionList with name, status, origin, source decision count, run count, and updated at columns, removes legacy generation/population/fitness/progress columns, and marks automatic under_review programs as waiting for human review", async () => {
+    const { useLiveListV1: actualUseLiveListV1 } = await vi.importActual<typeof import("@/lib/bff-v1")>("@/lib/bff-v1");
+    mocks.useLiveListV1.mockImplementation(actualUseLiveListV1);
+
+    const programsPayload = {
+      data: [
+        {
+          id: "evp-auto-001",
+          program_id: "evp-auto-001",
+          name: "Auto Drawdown Breach Program",
+          status: "under_review",
+          state: "under_review",
+          origin: "auto_qualified",
+          source_decision_ids: [
+            "evo-sweep-agent-000b205c0ef9-0000",
+            "evo-sweep-agent-000b205c0ef9-0001",
+          ],
+          run_ids: [],
+          updated_at: "2026-11-05T01:00:00Z",
+          updatedAt: "2026-11-05T01:00:00Z",
+        },
+        {
+          id: "evp-manual-002",
+          program_id: "evp-manual-002",
+          name: "Manual Operator Program",
+          status: "active",
+          state: "active",
+          origin: "manual",
+          source_decision_ids: [],
+          run_ids: ["resrun-001"],
+          updated_at: "2026-11-05T02:00:00Z",
+          updatedAt: "2026-11-05T02:00:00Z",
+        },
+      ],
+      items: [
+        {
+          id: "evp-auto-001",
+          program_id: "evp-auto-001",
+          name: "Auto Drawdown Breach Program",
+          status: "under_review",
+          state: "under_review",
+          origin: "auto_qualified",
+          source_decision_ids: [
+            "evo-sweep-agent-000b205c0ef9-0000",
+            "evo-sweep-agent-000b205c0ef9-0001",
+          ],
+          run_ids: [],
+          updated_at: "2026-11-05T01:00:00Z",
+          updatedAt: "2026-11-05T01:00:00Z",
+        },
+        {
+          id: "evp-manual-002",
+          program_id: "evp-manual-002",
+          name: "Manual Operator Program",
+          status: "active",
+          state: "active",
+          origin: "manual",
+          source_decision_ids: [],
+          run_ids: ["resrun-001"],
+          updated_at: "2026-11-05T02:00:00Z",
+          updatedAt: "2026-11-05T02:00:00Z",
+        },
+      ],
+      total: 2,
+      total_complete: true,
+      cursor: { next: null },
+    };
+
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("/bff/evolution-programs")) {
+        return new Response(JSON.stringify(programsPayload), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (url.includes("/bff/management/evolution-qualification")) {
+        return new Response(
+          JSON.stringify({
+            data: {
+              tenant_id: "default",
+              sweep_id: "evo-qual-sweep-20261105-0002",
+              policy_version: "evolution-qualification.v1",
+              evaluated_at: "2026-11-05T01:00:00Z",
+              evaluated: 650,
+              qualified: 1,
+              drafted: 1,
+              counts_by_first_failing_criterion: { real_threshold_signal: 649 },
+              items: [],
+              total: 650,
+              limit: 50,
+              offset: 0,
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return new Response(JSON.stringify({ data: [], items: [] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+
+    await i18n.changeLanguage("en-US");
+    render(
+      <I18nextProvider i18n={i18n}>
+        <TooltipProvider>
+          <MemoryRouter initialEntries={["/management/evolution"]}>
+            <Routes>
+              <Route path="/management/evolution" element={<EvolutionList />} />
+            </Routes>
+          </MemoryRouter>
+        </TooltipProvider>
+      </I18nextProvider>,
+    );
+
+    expect(await screen.findByText("Auto Drawdown Breach Program")).toBeInTheDocument();
+    expect(screen.getByText("Manual Operator Program")).toBeInTheDocument();
+
+    const headers = screen.getAllByRole("columnheader").map((th) => th.textContent?.trim());
+    expect(headers).toEqual([
+      "Name",
+      "Status",
+      "Origin",
+      "Source decisions",
+      "Runs",
+      "Updated at",
+    ]);
+    expect(headers).not.toContain("Version");
+    expect(headers).not.toContain("Members");
+    expect(headers).not.toContain("Performance");
+    expect(headers).not.toContain("Progress");
+
+    expect(screen.getByTestId("evolution-origin-evp-auto-001")).toHaveTextContent("Automatic");
+    expect(screen.getByTestId("evolution-waiting-review-evp-auto-001")).toHaveTextContent(
+      "Waiting for human review",
+    );
+    expect(screen.getByTestId("evolution-source-decision-count-evp-auto-001")).toHaveTextContent("2");
+    expect(screen.getByTestId("evolution-run-count-evp-auto-001")).toHaveTextContent("0");
+
+    expect(screen.getByTestId("evolution-origin-evp-manual-002")).toHaveTextContent("Manual");
+    expect(screen.queryByTestId("evolution-waiting-review-evp-manual-002")).not.toBeInTheDocument();
+    expect(screen.getByTestId("evolution-source-decision-count-evp-manual-002")).toHaveTextContent("0");
+    expect(screen.getByTestId("evolution-run-count-evp-manual-002")).toHaveTextContent("1");
   });
 });

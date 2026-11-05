@@ -564,12 +564,7 @@ export const EvolutionList = () => {
       liveKinds={["Evolution", "Promotion"]}
       createBehavior={{ kind: "drawer", entity: "evolutionProgram" }}
       alwaysRenderSummary
-      emptyTableMessage={
-        <div className="space-y-1 text-left" data-testid="evolution-empty-table-explanation">
-          <div className="font-medium text-foreground">{t("evolution.qualification.zeroProgramsTitle")}</div>
-          <div className="text-xs text-muted-foreground">{zeroExplanationText}</div>
-        </div>
-      }
+      emptyTableMessage={`${t("evolution.qualification.zeroProgramsTitle")} — ${zeroExplanationText}`}
       summary={(visibleRows) => (
         <Card className="p-4 space-y-3" data-testid="evolution-qualification-summary">
           <div className="flex flex-wrap items-center justify-between gap-2">

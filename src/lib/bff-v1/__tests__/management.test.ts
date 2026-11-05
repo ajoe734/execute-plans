@@ -18,6 +18,7 @@ import {
   adaptPortfolioExposureMonitor,
   adaptPortfolioHoldingRows,
   adaptQuarterlyRankingRows,
+  adaptEvolutionQualificationReport,
   defaultTradingPulseModel,
   mgmt,
 } from "@/lib/bff-v1/management";
@@ -2387,5 +2388,141 @@ describe("Cockpit child read contracts (actual-shaped owner payloads)", () => {
       personaId: "p1", personaName: "One", currentRank: 1, tier: "A",
       links: { manageHref: "/management/personas/p1" },
     });
+  });
+});
+
+describe("evolutionQualification BFF contract", () => {
+  const hostedZeroQualifiedPayload = {
+    data: {
+      tenant_id: "default",
+      sweep_id: "evo-qual-sweep-20261105-0001",
+      policy_version: "evolution-qualification.v1",
+      evaluated_at: "2026-11-05T00:00:00Z",
+      evaluated: 649,
+      qualified: 0,
+      drafted: 0,
+      counts_by_first_failing_criterion: {
+        real_threshold_signal: 649,
+      },
+      failure_reason: null,
+      items: [
+        {
+          decision_id: "evo-sweep-agent-000b205c0ef9-0000",
+          sweep_id: "evo-qual-sweep-20261105-0001",
+          tenant_id: "default",
+          target_type: "infra_component",
+          target_id: "infra-component-agent-finding-000b205c0ef9",
+          metric_name: "incident_followup_required",
+          qualified: false,
+          first_failing_criterion: "real_threshold_signal",
+          failure_reason: "metric incident_followup_required is not a numeric threshold breach",
+          policy_version: "evolution-qualification.v1",
+          evaluated_at: "2026-11-05T00:00:00Z",
+          program_id: null,
+          criteria: [
+            {
+              criterion: "real_threshold_signal",
+              result: "failed",
+              observed: { metric_name: "incident_followup_required", action_type: "flag_for_review" },
+              threshold: "numeric metric with finite observed_value and threshold_value",
+              reason: "metric incident_followup_required is not a numeric threshold breach",
+            },
+            {
+              criterion: "real_target",
+              result: "failed",
+              observed: { target_type: "infra_component", target_id: "infra-component-agent-finding-000b205c0ef9" },
+              threshold: "resolvable persona, strategy, or runtime target",
+              reason: "target_type infra_component is not an evolution target",
+            },
+            {
+              criterion: "persistent_breach",
+              result: "failed",
+              observed: 0,
+              threshold: 2,
+              reason: "fewer than 2 distinct breach observations",
+            },
+            {
+              criterion: "fresh_evidence",
+              result: "passed",
+              observed: "2026-11-05T00:00:00Z",
+              threshold: "<= 24h",
+              reason: null,
+            },
+            {
+              criterion: "executable_action",
+              result: "failed",
+              observed: "flag_for_review",
+              threshold: "executable research/mutation action",
+              reason: "flag_for_review does not specify an executable evolution mutation",
+            },
+            {
+              criterion: "no_open_duplicate",
+              result: "passed",
+              observed: 0,
+              threshold: 0,
+              reason: null,
+            },
+          ],
+        },
+      ],
+      total: 649,
+      limit: 50,
+      offset: 0,
+    },
+    meta: {
+      snapshot_at: "2026-11-05T00:00:00Z",
+    },
+  };
+
+  it("adapts GET /bff/management/evolution-qualification hosted 649/0 report and all six criteria", () => {
+    const report = adaptEvolutionQualificationReport(hostedZeroQualifiedPayload);
+    expect(report).not.toBeNull();
+    expect(report?.policy_version).toBe("evolution-qualification.v1");
+    expect(report?.evaluated_at).toBe("2026-11-05T00:00:00Z");
+    expect(report?.evaluated).toBe(649);
+    expect(report?.qualified).toBe(0);
+    expect(report?.counts_by_first_failing_criterion).toEqual({
+      real_threshold_signal: 649,
+    });
+    expect(report?.items).toHaveLength(1);
+    expect(report?.items[0].decision_id).toBe("evo-sweep-agent-000b205c0ef9-0000");
+    expect(report?.items[0].criteria.map((c) => c.criterion)).toEqual([
+      "real_threshold_signal",
+      "real_target",
+      "persistent_breach",
+      "fresh_evidence",
+      "executable_action",
+      "no_open_duplicate",
+    ]);
+  });
+
+  it("fetches GET /bff/management/evolution-qualification in live mode with query filters", async () => {
+    vi.stubEnv("VITE_BFF_MODE", "live");
+    vi.stubEnv("VITE_BFF_FALLBACK", "strict");
+    liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
+    const seenUrls: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      seenUrls.push(String(input));
+      return new Response(JSON.stringify(hostedZeroQualifiedPayload), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+
+    const report = await mgmt.evolutionQualification.get({
+      qualified: false,
+      offset: 0,
+      pageSize: 50,
+    });
+
+    expect(seenUrls).toEqual([
+      "/bff/management/evolution-qualification?qualified=false&offset=0&page_size=50",
+    ]);
+    expect(report.evaluated).toBe(649);
+    expect(report.qualified).toBe(0);
+    expect(report.counts_by_first_failing_criterion.real_threshold_signal).toBe(649);
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+    liveStatus._reset();
   });
 });

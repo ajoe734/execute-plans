@@ -101,7 +101,7 @@ interface Props<T extends BaseObject> {
   /** Render summary even when visibleRows is empty. */
   alwaysRenderSummary?: boolean;
   /** Optional custom empty message rendered inside DataTable when visibleRows is empty. */
-  emptyTableMessage?: ReactNode;
+  emptyTableMessage?: string;
 }
 
 interface PartialDataSurfaceInfo {
