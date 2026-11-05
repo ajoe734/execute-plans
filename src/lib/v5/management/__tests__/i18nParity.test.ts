@@ -147,6 +147,32 @@ describe("Pack PM-i18n parity", () => {
     }
   });
 
+  it("includes Alpha Factory replication card, empty-state, and unavailable keys in both locales and removes legacy replicated note", () => {
+    const alphaFactoryKeys = [
+      "alphaFactory.source.surface",
+      "alphaFactory.empty.noCandidateSource",
+      "alphaFactory.unavailable.title",
+      "alphaFactory.unavailable.description",
+      "alphaFactory.card.strategyId",
+      "alphaFactory.card.approver",
+      "alphaFactory.card.approvedAt",
+      "alphaFactory.card.queueStatus",
+      "alphaFactory.card.attemptCount",
+      "alphaFactory.card.lastRevalidationAt",
+      "alphaFactory.card.experimentRunCount",
+      "alphaFactory.card.authorityTask",
+      "alphaFactory.card.openStrategy",
+      "alphaFactory.card.openExperiment",
+      "alphaFactory.card.notReported",
+    ];
+    for (const k of alphaFactoryKeys) {
+      expect(enKeys.has(k), `en missing ${k}`).toBe(true);
+      expect(zhKeys.has(k), `zh missing ${k}`).toBe(true);
+    }
+    expect(enKeys.has("alphaFactory.replicated.note")).toBe(false);
+    expect(zhKeys.has("alphaFactory.replicated.note")).toBe(false);
+  });
+
   it("includes all evolution program qualification, list column, origin, human review, governance gate, and runs keys in both locales", () => {
     const evolutionProgramReviewKeys = [
       "lifecycle.evolution.stopped",

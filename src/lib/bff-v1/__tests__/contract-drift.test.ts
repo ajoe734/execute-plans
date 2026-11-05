@@ -78,6 +78,10 @@ describe("BFF v1 contract drift", () => {
 
     expect(paths.researchTasks()).toBe("/bff/research-tasks");
     expect(paths.researchTask("rtask-20261023-008")).toBe("/bff/research-tasks/rtask-20261023-008");
+    expect(paths.alphaFactory()).toBe("/bff/alpha-factory");
+    expect(paths.alphaFactory({ lane: "replicated", page: 1, page_size: 20 })).toBe(
+      "/bff/alpha-factory?lane=replicated&page=1&page_size=20",
+    );
     expect(paths.mgmtEvolutionQualification()).toBe("/bff/management/evolution-qualification");
     expect(paths.mgmtEvolutionQualification({ qualified: false, offset: 0, pageSize: 50 })).toBe(
       "/bff/management/evolution-qualification?qualified=false&offset=0&page_size=50",
