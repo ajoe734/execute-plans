@@ -7,7 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import i18n from "@/i18n";
 import { liveStatus } from "@/lib/bff-v1/liveStatus";
 import { ObjectListPage, resolveObjectRowHref } from "./ObjectListPage";
-import { ArtifactsList, CapitalPoolsList, EvolutionList, ResearchList } from "./Lists";
+import { ArtifactsList, CapitalPoolsList, EvolutionList, ResearchList, StrategiesList } from "./Lists";
 import type { CreateBehavior } from "@/lib/writeIntents/types";
 import capitalPoolsFixture from "@/lib/bff-v1/__tests__/fixtures/hosted-20261020/capital-pools.json";
 
@@ -89,9 +89,11 @@ describe("ObjectListPage", () => {
     renderObjectList();
 
     const status = screen.getByRole("status");
-    expect(status).toHaveTextContent("strict typed error");
+    expect(status).toHaveTextContent("Strategies is temporarily unavailable");
     expect(status).toHaveTextContent("Injected F15 5xx");
-    expect(status).toHaveTextContent("seed fallback blocked");
+    expect(status).not.toHaveTextContent("strict typed error");
+    expect(status).not.toHaveTextContent("seed fallback blocked");
+    expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
   });
 
   it("does not label governed 4xx list errors as strict seed-fallback blocks", () => {
@@ -582,8 +584,11 @@ describe("ObjectListPage", () => {
     );
 
     const status = await screen.findByRole("status");
-    expect(status).toHaveTextContent("strict typed error");
+    expect(status).toHaveTextContent("Capital Pools is temporarily unavailable");
     expect(status).toHaveTextContent("Page 2 of /bff/capital-pools returned HTTP 503");
+    expect(status).not.toHaveTextContent("strict typed error");
+    expect(status).not.toHaveTextContent("seed fallback blocked");
+    expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Formal (0)" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Paper (0)" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Archived (0)" })).toBeInTheDocument();
@@ -1016,8 +1021,12 @@ describe("ObjectListPage", () => {
     );
 
     const unavailableStatus = await screen.findByRole("status");
-    expect(unavailableStatus).toHaveTextContent("No data yet");
+    expect(unavailableStatus).toHaveTextContent("Research & Experiments is temporarily unavailable");
     expect(unavailableStatus).toHaveTextContent("research_tasks query failed: HTTPStatusError");
+    expect(unavailableStatus).not.toHaveTextContent("No data yet");
+    expect(unavailableStatus).not.toHaveTextContent("strict typed error");
+    expect(unavailableStatus).not.toHaveTextContent("seed fallback blocked");
+    expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
     expect(screen.queryByText("無結果")).not.toBeInTheDocument();
     expect(screen.queryByText("No results")).not.toBeInTheDocument();
     expect(screen.queryByText(/No research work has run yet/i)).not.toBeInTheDocument();
@@ -1049,8 +1058,12 @@ describe("ObjectListPage", () => {
     );
 
     const failedStatus = await screen.findByRole("status");
-    expect(failedStatus).toHaveTextContent("strict typed error");
+    expect(failedStatus).toHaveTextContent("Research & Experiments is temporarily unavailable");
     expect(failedStatus).toHaveTextContent("research-executor upstream 503");
+    expect(failedStatus).not.toHaveTextContent("strict typed error");
+    expect(failedStatus).not.toHaveTextContent("seed fallback blocked");
+    expect(failedStatus).not.toHaveTextContent("No data yet");
+    expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
     expect(screen.queryByText("無結果")).not.toBeInTheDocument();
     expect(screen.queryByText("No results")).not.toBeInTheDocument();
     unmountFailed();
@@ -1813,5 +1826,108 @@ describe("ObjectListPage", () => {
     expect(screen.queryByTestId("evolution-waiting-review-evp-manual-002")).not.toBeInTheDocument();
     expect(screen.getByTestId("evolution-source-decision-count-evp-manual-002")).toHaveTextContent("0");
     expect(screen.getByTestId("evolution-run-count-evp-manual-002")).toHaveTextContent("1");
+  });
+
+  it("shows a loading state while the first read is in flight (never 無結果 / No results), shows localized unavailable wording with retry on network failure or HTTP 504 (never strict typed error / seed fallback / 尚無資料), and shows 無結果 only after a successful read with zero rows", async () => {
+    const { useLiveListV1: actualUseLiveListV1 } = await vi.importActual<typeof import("@/lib/bff-v1")>("@/lib/bff-v1");
+    mocks.useLiveListV1.mockImplementation(actualUseLiveListV1);
+    vi.stubEnv("VITE_BFF_MODE", "live");
+    vi.stubEnv("VITE_BFF_FALLBACK", "strict");
+    liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
+
+    let rejectFirstRead!: (reason?: unknown) => void;
+    let resolveThirdRead!: (response: Response) => void;
+    let callCount = 0;
+
+    vi.spyOn(globalThis, "fetch").mockImplementation(() => {
+      callCount += 1;
+      if (callCount === 1) {
+        return new Promise<Response>((_resolve, reject) => {
+          rejectFirstRead = reject;
+        });
+      }
+      if (callCount === 2) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              error: {
+                code: "BACKEND_UNAVAILABLE",
+                message: "HTTP 504 Gateway Timeout on /bff/strategies",
+              },
+            }),
+            { status: 504, headers: { "Content-Type": "application/json" } },
+          ),
+        );
+      }
+      return new Promise<Response>((resolve) => {
+        resolveThirdRead = resolve;
+      });
+    });
+
+    await i18n.changeLanguage("zh-TW");
+    const { unmount } = render(
+      <I18nextProvider i18n={i18n}>
+        <TooltipProvider>
+          <MemoryRouter initialEntries={["/management/strategies"]}>
+            <Routes>
+              <Route path="/management/strategies" element={<StrategiesList />} />
+            </Routes>
+          </MemoryRouter>
+        </TooltipProvider>
+      </I18nextProvider>,
+    );
+
+    // 1. While the first read is in flight: shows loading state and never 無結果 / 尚無資料
+    expect(screen.getByTestId("data-table-loading")).toHaveTextContent("載入中…");
+    expect(screen.queryByText("無結果")).not.toBeInTheDocument();
+    expect(screen.queryByText("No results")).not.toBeInTheDocument();
+    expect(screen.queryByText("尚無資料")).not.toBeInTheDocument();
+
+    // 2. Network failure ("Failed to fetch") -> localized unavailable state with retry action
+    rejectFirstRead(new TypeError("Failed to fetch"));
+    const networkFailedStatus = await screen.findByRole("status");
+    expect(networkFailedStatus).toHaveTextContent("目前無法載入策略與 Alpha");
+    expect(networkFailedStatus).toHaveTextContent("無法從伺服器取得資料（網路連線失敗），請重試。");
+    expect(networkFailedStatus).not.toHaveTextContent("尚無資料");
+    expect(networkFailedStatus).not.toHaveTextContent("strict typed error");
+    expect(networkFailedStatus).not.toHaveTextContent("seed fallback");
+    expect(screen.queryByText("無結果")).not.toBeInTheDocument();
+
+    // 3. Retry triggers second read (HTTP 504) -> localized unavailable state with retry action
+    fireEvent.click(screen.getByRole("button", { name: "重試" }));
+    await waitFor(() => {
+      expect(screen.getByRole("status")).toHaveTextContent("HTTP 504 Gateway Timeout on /bff/strategies");
+    });
+    const gatewayTimeoutStatus = screen.getByRole("status");
+    expect(gatewayTimeoutStatus).toHaveTextContent("目前無法載入策略與 Alpha");
+    expect(gatewayTimeoutStatus).not.toHaveTextContent("尚無資料");
+    expect(gatewayTimeoutStatus).not.toHaveTextContent("strict typed error");
+    expect(gatewayTimeoutStatus).not.toHaveTextContent("seed fallback");
+    expect(screen.queryByText("無結果")).not.toBeInTheDocument();
+
+    // 4. Retry triggers third read: while in flight shows loading state, then resolves with 0 rows -> shows 無結果
+    fireEvent.click(screen.getByRole("button", { name: "重試" }));
+    expect(await screen.findByTestId("data-table-loading")).toHaveTextContent("載入中…");
+    expect(screen.queryByText("無結果")).not.toBeInTheDocument();
+
+    resolveThirdRead(
+      new Response(
+        JSON.stringify({
+          data: [],
+          items: [],
+          total: 0,
+          total_complete: true,
+          cursor: { next: null },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    expect(await screen.findByTestId("data-table-empty")).toHaveTextContent("無結果");
+    expect(screen.queryByTestId("data-table-loading")).not.toBeInTheDocument();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+
+    unmount();
+    await i18n.changeLanguage("en-US");
   });
 });

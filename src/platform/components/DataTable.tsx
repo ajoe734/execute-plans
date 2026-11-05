@@ -16,12 +16,14 @@ export interface Column<T> {
 export type DataTableDensity = "comfortable" | "compact" | "dense";
 
 export function DataTable<T extends { id: string }>({
-  rows, columns, onRowClick, empty, density = "comfortable", fillViewport = false,
+  rows, columns, onRowClick, empty, loading = false, loadingText, density = "comfortable", fillViewport = false,
 }: {
   rows: T[];
   columns: Column<T>[];
   onRowClick?: (row: T) => void;
   empty?: string;
+  loading?: boolean;
+  loadingText?: string;
   density?: DataTableDensity;
   fillViewport?: boolean;
 }) {
@@ -53,7 +55,16 @@ export function DataTable<T extends { id: string }>({
           </TableHeader>
           <TableBody>
             {rows.length === 0 ? (
-              <TableRow><TableCell colSpan={columns.length} className="text-center text-muted-foreground py-8">{empty ?? "—"}</TableCell></TableRow>
+              <TableRow>
+                <TableCell
+                  colSpan={columns.length}
+                  aria-busy={loading || undefined}
+                  data-testid={loading ? "data-table-loading" : "data-table-empty"}
+                  className="text-center text-muted-foreground py-8"
+                >
+                  {loading ? (loadingText ?? "Loading…") : (empty ?? "—")}
+                </TableCell>
+              </TableRow>
             ) : rows.map((row) => (
               <TableRow
                 key={row.id}

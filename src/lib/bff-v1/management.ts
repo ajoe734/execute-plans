@@ -834,16 +834,16 @@ export interface ManagementEvidenceSummary {
   by_link_type: Record<string, number>;
   byCredibilityTier: Record<string, number>;
   by_credibility_tier: Record<string, number>;
-  traceableEvidence: number;
-  traceable_evidence: number;
+  traceableEvidence: number | null;
+  traceable_evidence: number | null;
   unresolvedSourceEvidence: number;
   unresolved_source_evidence: number;
   incompleteEvidence: number;
   incomplete_evidence: number;
-  needsAttentionEvidence: number;
-  needs_attention_evidence: number;
-  openOperationEvidence: number;
-  open_operation_evidence: number;
+  needsAttentionEvidence: number | null;
+  needs_attention_evidence: number | null;
+  openOperationEvidence: number | null;
+  open_operation_evidence: number | null;
   byActionabilityState: Record<string, number>;
   by_actionability_state: Record<string, number>;
   byActionabilitySeverity: Record<string, number>;
@@ -1259,14 +1259,40 @@ function adaptEvidenceCredibility(value: unknown): ManagementEvidenceCredibility
   };
 }
 
-function adaptEvidenceResolvedLink(value: unknown): ManagementEvidenceResolvedLink {
+function nullableFiniteNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
+function isOfficialReferenceSource(sourceType?: string | null, sourceRef?: unknown): boolean {
+  const normalizedType = typeof sourceType === "string" ? sourceType.trim().toLowerCase() : "";
+  if (normalizedType === "official_reference") return true;
+  const normalizedRef = typeof sourceRef === "string" ? sourceRef.trim().toLowerCase() : "";
+  return normalizedRef.startsWith("tw-official://");
+}
+
+function adaptEvidenceResolvedLink(
+  value: unknown,
+  opts?: { isOfficialReference?: boolean },
+): ManagementEvidenceResolvedLink {
   const record = isObject(value) ? value : {};
-  const availability = asString(record.availability, "unavailable");
   const routeHref = nullableString(record.routeHref ?? record.route_href);
-  const displayLabel = asString(
-    record.displayLabel ?? record.display_label,
-    availability === "unavailable" ? "Source unavailable" : "Open source",
-  );
+  const rawAvailability = asString(record.availability, "unavailable");
+  const isOfficialNoInternalLink = Boolean(opts?.isOfficialReference && !routeHref);
+  const availability =
+    isOfficialNoInternalLink && rawAvailability === "unavailable"
+      ? "no_internal_link"
+      : rawAvailability;
+  const rawDisplayLabel = asString(record.displayLabel ?? record.display_label);
+  const displayLabel = isOfficialNoInternalLink
+    ? !rawDisplayLabel || /^source unavailable$/i.test(rawDisplayLabel)
+      ? "No internal link"
+      : rawDisplayLabel
+    : rawDisplayLabel || (availability === "unavailable" ? "Source unavailable" : "Open source");
   const openInNewTab = asBoolean(record.openInNewTab ?? record.open_in_new_tab, availability === "external");
   return {
     availability,
@@ -1578,7 +1604,9 @@ function adaptEvidenceListItem(value: unknown): ManagementEvidenceListItem | nul
       value.citationLabel,
     refId,
   );
-  const sourceType = asString(
+  const rawSourceRef =
+    value.sourceRef ?? value.source_ref ?? sourceDocument.sourceRef ?? sourceDocument.source_ref;
+  const inferredSourceType = asString(
     value.sourceType ??
       value.source_type ??
       sourceDocument.sourceType ??
@@ -1587,6 +1615,9 @@ function adaptEvidenceListItem(value: unknown): ManagementEvidenceListItem | nul
       metadata.sourceClass,
     "unknown",
   );
+  const isOfficialReference = isOfficialReferenceSource(inferredSourceType, rawSourceRef);
+  const sourceType =
+    inferredSourceType === "unknown" && isOfficialReference ? "official_reference" : inferredSourceType;
   const capturedAt = optionalString(
     value.capturedAt ??
       value.captured_at ??
@@ -1600,7 +1631,9 @@ function adaptEvidenceListItem(value: unknown): ManagementEvidenceListItem | nul
   const linkType = asString(value.linkType ?? value.link_type ?? value.item_type ?? value.itemType, "unknown");
   const linkedObjectSummary = adaptEvidenceLinkedObjectSummary(value.linkedObjectSummary ?? value.linked_object_summary);
   const linkedObjectLink = adaptEvidenceLinkedObjectLink(value.linkedObjectLink ?? value.linked_object_link);
-  const resolvedLink = adaptEvidenceResolvedLink(value.resolvedLink ?? value.resolved_link);
+  const resolvedLink = adaptEvidenceResolvedLink(value.resolvedLink ?? value.resolved_link, {
+    isOfficialReference,
+  });
   const routeHref = optionalString(value.routeHref ?? value.route_href);
   const managementHref = optionalString(value.managementHref ?? value.management_href);
   const allowedActions = adaptEvidenceAllowedActions(value.allowedActions ?? value.allowed_actions);
@@ -1673,7 +1706,10 @@ function buildEvidenceSummary(items: ManagementEvidenceListItem[]): ManagementEv
   const traceableEvidence = byActionabilityState.traceable ?? 0;
   const unresolvedSourceEvidence = byActionabilityState.unresolved_source ?? 0;
   const incompleteEvidence = byActionabilityState.incomplete ?? 0;
-  const needsAttentionEvidence = Math.max(items.length - traceableEvidence, 0);
+  const needsAttentionEvidence = items.filter((item) => {
+    const state = String(item.actionability?.state ?? "unknown").trim().toLowerCase();
+    return Boolean(state) && !["unknown", "traceable", "ok", "resolved", "none"].includes(state);
+  }).length;
   const openOperationEvidence = items.filter((item) => {
     const status = String(item.operation?.status ?? "none").toLowerCase();
     return !["", "none", "resolved"].includes(status) && !item.redacted;
@@ -1726,6 +1762,12 @@ function adaptEvidenceSummary(
       ...computed,
       totalEvidence: fallbackTotal,
       total_evidence: fallbackTotal,
+      traceableEvidence: null,
+      traceable_evidence: null,
+      needsAttentionEvidence: null,
+      needs_attention_evidence: null,
+      openOperationEvidence: null,
+      open_operation_evidence: null,
     };
   }
   const bySourceType = asCountRecord(value.bySourceType ?? value.by_source_type);
@@ -1742,13 +1784,14 @@ function adaptEvidenceSummary(
     value.verifiedEvidence ?? value.verified_evidence ?? value.verifiedCount ?? value.verified_count,
     computed.verifiedEvidence,
   );
-  const needsAttentionEvidence = asFiniteNumber(
-    value.needsAttentionEvidence ?? value.needs_attention_evidence ?? value.needsAttentionCount ?? value.needs_attention_count,
-    computed.needsAttentionEvidence,
+  const traceableEvidence = nullableFiniteNumber(
+    value.traceableEvidence ?? value.traceable_evidence ?? value.traceableCount ?? value.traceable_count,
   );
-  const openOperationEvidence = asFiniteNumber(
+  const needsAttentionEvidence = nullableFiniteNumber(
+    value.needsAttentionEvidence ?? value.needs_attention_evidence ?? value.needsAttentionCount ?? value.needs_attention_count,
+  );
+  const openOperationEvidence = nullableFiniteNumber(
     value.openOperationEvidence ?? value.open_operation_evidence ?? value.openOperationsCount ?? value.open_operations_count,
-    computed.openOperationEvidence,
   );
   return {
     totalEvidence,
@@ -1767,8 +1810,8 @@ function adaptEvidenceSummary(
     by_link_type: Object.keys(byLinkType).length ? byLinkType : computed.byLinkType,
     byCredibilityTier: Object.keys(byCredibilityTier).length ? byCredibilityTier : computed.byCredibilityTier,
     by_credibility_tier: Object.keys(byCredibilityTier).length ? byCredibilityTier : computed.byCredibilityTier,
-    traceableEvidence: asFiniteNumber(value.traceableEvidence ?? value.traceable_evidence, computed.traceableEvidence),
-    traceable_evidence: asFiniteNumber(value.traceable_evidence ?? value.traceableEvidence, computed.traceableEvidence),
+    traceableEvidence,
+    traceable_evidence: traceableEvidence,
     unresolvedSourceEvidence: asFiniteNumber(value.unresolvedSourceEvidence ?? value.unresolved_source_evidence, computed.unresolvedSourceEvidence),
     unresolved_source_evidence: asFiniteNumber(value.unresolved_source_evidence ?? value.unresolvedSourceEvidence, computed.unresolvedSourceEvidence),
     incompleteEvidence: asFiniteNumber(value.incompleteEvidence ?? value.incomplete_evidence, computed.incompleteEvidence),
@@ -1974,6 +2017,13 @@ export function adaptManagementEvidenceDetail(raw: unknown): ManagementEvidenceD
   const refId = asString(data.refId ?? data.ref_id ?? data.id);
   if (!refId) return null;
   const sourceDocument = adaptEvidenceSourceDocument(data.sourceDocument ?? data.source_document, refId);
+  const rawSourceDoc = isObject(data.sourceDocument ?? data.source_document)
+    ? ((data.sourceDocument ?? data.source_document) as Record<string, unknown>)
+    : {};
+  const isOfficialReference = isOfficialReferenceSource(
+    sourceDocument.sourceType ?? asString(data.sourceType ?? data.source_type),
+    rawSourceDoc.sourceRef ?? rawSourceDoc.source_ref ?? data.sourceRef ?? data.source_ref,
+  );
   const linkedObjectSummary = adaptEvidenceLinkedObjectSummary(data.linkedObjectSummary ?? data.linked_object_summary);
   const linkedObjectLink = adaptEvidenceLinkedObjectLink(data.linkedObjectLink ?? data.linked_object_link);
   const linkedDecisions = firstArray<unknown>(data.linkedDecisions, data.linked_decisions)
@@ -1987,6 +2037,9 @@ export function adaptManagementEvidenceDetail(raw: unknown): ManagementEvidenceD
   const auditEvents = firstArray<unknown>(data.auditEvents, data.audit_events)
     .map(adaptEvidenceAuditEvent)
     .filter((item): item is ManagementEvidenceAuditEvent => Boolean(item));
+  const resolvedLink = adaptEvidenceResolvedLink(data.resolvedLink ?? data.resolved_link, {
+    isOfficialReference,
+  });
   return {
     refId,
     ref_id: refId,
@@ -1996,8 +2049,8 @@ export function adaptManagementEvidenceDetail(raw: unknown): ManagementEvidenceD
     linkType,
     link_type: linkType,
     credibility: adaptEvidenceCredibility(data.credibility),
-    resolvedLink: adaptEvidenceResolvedLink(data.resolvedLink ?? data.resolved_link),
-    resolved_link: adaptEvidenceResolvedLink(data.resolvedLink ?? data.resolved_link),
+    resolvedLink,
+    resolved_link: resolvedLink,
     linkedObjectSummary,
     linked_object_summary: linkedObjectSummary,
     linkedObjectLink,

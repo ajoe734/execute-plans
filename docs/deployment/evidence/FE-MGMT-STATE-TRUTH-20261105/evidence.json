@@ -1,0 +1,104 @@
+{
+  "task_id": "FE-MGMT-STATE-TRUTH-20261105",
+  "title": "Management lists show no results while loading and no data after a failure",
+  "repository": "ajoe734/execute-plans",
+  "branch": "task/FE-MGMT-STATE-TRUTH-20261105",
+  "base_branch": "dev",
+  "verification_scope": "functional_local_validation",
+  "acceptance_criteria": {
+    "1_initial_read_in_flight_shows_loading_never_no_results": {
+      "status": "passed",
+      "files": [
+        "src/lib/bff-v1/useLiveListV1.ts",
+        "src/platform/components/DataTable.tsx",
+        "src/management/pages/ObjectListPage.tsx",
+        "src/management/pages/ObjectListPage.test.tsx"
+      ],
+      "details": "ObjectListPage reads loading from useLiveListV1, computes isInitialLoading = Boolean(loading) && rows.length === 0, suppresses empty states while the initial/retry read is in flight, and passes loading + localized loadingText to DataTable. Verified with a deferred pending loader test asserting '載入中…' is rendered and neither '無結果' / 'No results' nor '尚無資料' is shown."
+    },
+    "2_failed_read_shows_localized_unavailable_state_with_retry_and_no_raw_jargon": {
+      "status": "passed",
+      "files": [
+        "src/management/pages/ObjectListPage.tsx",
+        "src/i18n/locales/zh-TW.ts",
+        "src/i18n/locales/en-US.ts",
+        "src/management/pages/ObjectListPage.test.tsx"
+      ],
+      "details": "When isDegradedEmpty is true, ObjectListPage renders common.listUnavailableTitle and common.listUnavailableWithReason / common.listUnavailableDesc with a localized retry CTA wired to refresh(), translating raw 'Failed to fetch' network errors into common.networkFailureReason and stripping raw 'strict typed error' and 'seed fallback blocked' strings."
+    },
+    "3_zero_rows_empty_state_only_after_successful_read": {
+      "status": "passed",
+      "files": [
+        "src/management/pages/ObjectListPage.tsx",
+        "src/platform/components/DataTable.tsx",
+        "src/management/pages/ObjectListPage.test.tsx"
+      ],
+      "details": "Configured emptyState, scope emptyStateForScope, zero-row summary blocks, and DataTable empty text ('無結果' / 'No results') only render after loading is false and the read is not degraded."
+    },
+    "4_evidence_cards_no_data_when_omitted_and_unknown_actionability_never_needs_attention": {
+      "status": "passed",
+      "files": [
+        "src/lib/bff-v1/management.ts",
+        "src/management/pages/oversight/_core.tsx",
+        "src/lib/bff-v1/__tests__/management.test.ts",
+        "src/management/pages/oversight/EvidenceExplorerPage.test.tsx"
+      ],
+      "details": "adaptEvidenceSummary preserves null for traceableEvidence, needsAttentionEvidence, and openOperationEvidence unless the BFF summary supplies a finite number instead of falling back to current-page counts. buildEvidenceSummary excludes unknown/traceable/ok/resolved/none actionability states from needsAttentionEvidence. EvidenceExplorerList renders common.noData ('無資料' / 'No data') when those summary fields are null."
+    },
+    "5_official_reference_without_route_href_shows_localized_no_internal_link": {
+      "status": "passed",
+      "files": [
+        "src/lib/bff-v1/management.ts",
+        "src/management/pages/oversight/_core.tsx",
+        "src/i18n/locales/zh-TW.ts",
+        "src/i18n/locales/en-US.ts",
+        "src/lib/bff-v1/__tests__/management.test.ts",
+        "src/management/pages/oversight/EvidenceExplorerPage.test.tsx"
+      ],
+      "details": "Official reference evidence rows (source_type === 'official_reference' or source_ref starting with 'tw-official://') whose resolved_link has no route_href adapt to availability 'no_internal_link' and displayLabel 'No internal link', and render localized mgmt.evidence.noInternalLink ('無內部連結' / 'No internal link') instead of 'Source unavailable'."
+    },
+    "6_test_integrity_and_changed_assertion_justification": {
+      "status": "passed",
+      "changed_assertions": [
+        {
+          "file": "src/management/pages/ObjectListPage.test.tsx",
+          "test": "surfaces strict live typed errors instead of looking like an empty seed page",
+          "previous_assertion": "Asserted status contained raw 'strict typed error' and 'seed fallback blocked'.",
+          "updated_assertion": "Asserts status contains localized unavailable title ('Strategies is temporarily unavailable'), the backend reason ('Injected F15 5xx'), a 'Retry' button, and explicitly asserts neither 'strict typed error' nor 'seed fallback blocked' is shown.",
+          "justification": "Acceptance #2 requires failed reads to show plain localized unavailable wording with a retry action and no raw 'strict typed error' or 'seed fallback' text."
+        },
+        {
+          "file": "src/management/pages/ObjectListPage.test.tsx",
+          "test": "shows the degraded error state with no rows and never a partial list or paper-hidden empty text when page 2 fails through the real useLiveListV1 hook",
+          "previous_assertion": "Asserted status contained raw 'strict typed error'.",
+          "updated_assertion": "Asserts status contains 'Capital Pools is temporarily unavailable', the HTTP 503 failure message, a 'Retry' button, and explicitly asserts neither 'strict typed error' nor 'seed fallback blocked' is shown.",
+          "justification": "Acceptance #2 replaces raw 'strict typed error' text on failed list reads with localized unavailable wording and a retry button."
+        },
+        {
+          "file": "src/management/pages/ObjectListPage.test.tsx",
+          "test": "shows degraded error state for meta.surfaces.research_tasks unavailable or failed read, never 無結果, and shows healthy empty state when no research work has run yet",
+          "previous_assertion": "Asserted unavailableStatus contained 'No data yet' (common.awaitingData) and failedStatus contained 'strict typed error'.",
+          "updated_assertion": "Asserts both unavailableStatus and failedStatus contain 'Research & Experiments is temporarily unavailable', the respective failure reasons, a 'Retry' button, and explicitly asserts 'No data yet', 'strict typed error', and 'seed fallback blocked' are not shown.",
+          "justification": "Task brief and Acceptance #2 specifically prohibit showing common.awaitingData ('尚無資料' / 'No data yet') or raw 'strict typed error' on failed/unavailable reads."
+        }
+      ]
+    }
+  },
+  "commands_executed": [
+    {
+      "command": "./node_modules/.bin/vitest run src/management/pages/ObjectListPage.test.tsx src/lib/bff-v1/__tests__/management.test.ts src/management/pages/oversight/EvidenceExplorerPage.test.tsx src/lib/v5/management/__tests__/i18nParity.test.ts src/management/pages/oversight/LiveOnlyFallbacks.test.tsx",
+      "exit_code": 0,
+      "summary": "5 test files passed, 129 tests passed"
+    },
+    {
+      "command": "npm run typecheck:app && npm run typecheck:agora",
+      "exit_code": 0,
+      "summary": "App and Agora TypeScript checks passed with zero errors"
+    },
+    {
+      "command": "VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build",
+      "exit_code": 0,
+      "summary": "Production bundle built cleanly"
+    }
+  ]
+}
