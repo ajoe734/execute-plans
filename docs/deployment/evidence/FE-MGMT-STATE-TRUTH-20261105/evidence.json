@@ -4,6 +4,7 @@
   "repository": "ajoe734/execute-plans",
   "branch": "task/FE-MGMT-STATE-TRUTH-20261105",
   "base_branch": "dev",
+  "base_sha": "9e9191f16cdf76a9fc357bf0f211fd2149d1eee8",
   "verification_scope": "functional_local_validation",
   "acceptance_criteria": {
     "1_initial_read_in_flight_shows_loading_never_no_results": {
@@ -86,9 +87,9 @@
   },
   "commands_executed": [
     {
-      "command": "./node_modules/.bin/vitest run src/management/pages/ObjectListPage.test.tsx src/lib/bff-v1/__tests__/management.test.ts src/management/pages/oversight/EvidenceExplorerPage.test.tsx src/lib/v5/management/__tests__/i18nParity.test.ts src/management/pages/oversight/LiveOnlyFallbacks.test.tsx",
+      "command": "./node_modules/.bin/vitest run src/management/pages/ObjectListPage.test.tsx src/lib/bff-v1/__tests__/management.test.ts src/management/pages/oversight/EvidenceExplorerPage.test.tsx src/lib/v5/management/__tests__/i18nParity.test.ts src/management/pages/oversight/LiveOnlyFallbacks.test.tsx src/management/pages/oversight/PerformanceAttribution.test.tsx src/management/pages/v5/useV5Live.test.tsx",
       "exit_code": 0,
-      "summary": "5 test files passed, 129 tests passed"
+      "summary": "7 test files passed, 157 tests passed (including merged SSE926 and Attribution928 regressions)"
     },
     {
       "command": "npm run typecheck:app && npm run typecheck:agora",
