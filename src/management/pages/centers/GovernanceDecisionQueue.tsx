@@ -36,12 +36,21 @@ interface GovernanceDecisionQueueProps {
 export const GovernanceDecisionQueue = ({ kinds, titleKey, subtitleKey }: GovernanceDecisionQueueProps) => {
   const { t } = useTranslation();
   const location = useLocation();
-  const { data: items, loading } = useV5Live((signal) => mgmt.humanInbox.list({ signal }), [], { cacheKey: "oversight.humanInbox" });
+  const { data: items, loading, error = null } = useV5Live(
+    (signal) => mgmt.humanInbox.list({ signal }),
+    [],
+    { cacheKey: "oversight.humanInbox" },
+  );
 
   const queueItems = useMemo(
     () => (items ?? []).filter((item: HumanInboxItem) => kinds.includes(item.kind)),
     [items, kinds],
   );
+  const surfaces = items?.meta?.surfaces ?? {};
+  const isDegraded = Object.values(surfaces).some(
+    (surface) => surface.status === "degraded" || surface.status === "unavailable",
+  );
+  const isQueueUnavailable = !loading && (Boolean(error) || isDegraded);
 
   const returnUrl = encodeURIComponent(location.pathname + location.search);
 
@@ -51,6 +60,11 @@ export const GovernanceDecisionQueue = ({ kinds, titleKey, subtitleKey }: Govern
         <h2 className="text-sm font-semibold text-foreground">{t(titleKey)}</h2>
         <p className="text-xs text-muted-foreground">{t(subtitleKey)}</p>
       </div>
+      {isQueueUnavailable && queueItems.length > 0 && (
+        <p className="text-xs text-status-warning">
+          {t("mgmt.inbox.degradedQueueDesc", "Live queue status is degraded. Some items might be missing or delayed due to a downstream timeout.")}
+        </p>
+      )}
       <ul className="space-y-2">
         {queueItems.map((item) => {
           const state = deriveGovernanceDecisionState(item);
@@ -78,7 +92,11 @@ export const GovernanceDecisionQueue = ({ kinds, titleKey, subtitleKey }: Govern
         })}
         {queueItems.length === 0 && (
           <li className="p-3 text-center text-sm text-muted-foreground">
-            {loading ? t("governanceDecisions.queue.loading") : t("governanceDecisions.queue.none")}
+            {loading
+              ? t("governanceDecisions.queue.loading")
+              : isQueueUnavailable
+              ? t("mgmt.inbox.degradedEmptyBody", "No items visible in this degraded view. Try refreshing.")
+              : t("governanceDecisions.queue.none")}
           </li>
         )}
       </ul>

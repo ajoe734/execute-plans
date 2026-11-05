@@ -84,7 +84,7 @@ export const HumanGateDetailPage = () => {
   const hasSignatures = item.signatures.length > 0;
   const hasDecisionHistory = item.decisionHistory.length > 0;
   const hasEvidence = item.evidenceRefs.length > 0;
-  const personaId = personaIdFromDetail(item.id, item.links?.manageHref);
+  const personaId = item.personaId ?? personaIdFromDetail(item.id, item.links?.manageHref);
   const reviewId = item.reviewId ?? (item.id.startsWith("promotion_review:") ? item.id.slice("promotion_review:".length) : "");
   const isPromotionReview = item.kind === "promotion_review" && Boolean(reviewId);
   const promotionTargetKey = item.reviewType === "canary_to_live"

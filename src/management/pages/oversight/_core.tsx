@@ -1345,14 +1345,23 @@ export const HumanInboxPage = () => {
   const targetFocus = (searchParams.get("target_id") ?? searchParams.get("holding_id"))?.trim() ?? "";
   const runtimeFocus = searchParams.get("runtime_id")?.trim() ?? "";
   const targetTypeFocus = searchParams.get("target_type")?.trim() ?? (targetFocus ? "target" : "");
-  const { data, loading, error = null, refresh } = useV5Live<HumanInboxList>(() => {
+  const { data, loading, error = null, refresh } = useV5Live<HumanInboxList>((signal) => {
     const controller = new AbortController();
+    const onOuterAbort = () => controller.abort(signal?.reason);
+    if (signal?.aborted) {
+      controller.abort(signal.reason);
+    } else {
+      signal?.addEventListener("abort", onOuterAbort, { once: true });
+    }
     const timer = setTimeout(
       () => controller.abort(new DOMException("Human inbox request timed out", "TimeoutError")),
       5000,
     );
-    return mgmt.humanInbox.list({ signal: controller.signal }).finally(() => clearTimeout(timer));
-  }, []);
+    return mgmt.humanInbox.list({ signal: controller.signal }).finally(() => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", onOuterAbort);
+    });
+  }, [], { cacheKey: "oversight.humanInbox" });
   const sorted = useMemo(
     () => [...(data ?? [])].sort((a, b) => humanInboxRank(b.kind) - humanInboxRank(a.kind)),
     [data],
@@ -1364,6 +1373,14 @@ export const HumanInboxPage = () => {
   const isInitialPending = loading && !data && !error;
   const isTransportUnavailable = Boolean(error);
   const isDegradedQueue = !loading && !error && isDegraded;
+  const returnedCount = (data ?? []).length;
+  const pageTotal = data?.page_info?.total ?? data?.pageInfo?.total;
+  const hasPartialTotal =
+    !loading &&
+    !error &&
+    typeof pageTotal === "number" &&
+    Number.isFinite(pageTotal) &&
+    pageTotal > returnedCount;
 
   const hasTargetContext = Boolean(targetFocus || runtimeFocus);
   const focusTokens = useMemo(
@@ -1405,6 +1422,11 @@ export const HumanInboxPage = () => {
         <p className="text-sm text-muted-foreground">
           {t("mgmt.inbox.subtitleFmt", { count: HUMAN_INBOX_KINDS.length })}
         </p>
+        {hasPartialTotal && (
+          <p className="mt-1 text-xs text-muted-foreground" data-testid="inbox-partial-count">
+            {t("mgmt.inbox.shownOfTotalFmt", { shown: returnedCount, total: pageTotal })}
+          </p>
+        )}
       </header>
       {hasTargetContext && (
         <Card className="border-primary/30 bg-primary/5 p-3 text-sm">
