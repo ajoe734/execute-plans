@@ -78,4 +78,44 @@ describe("Pack PM-i18n parity", () => {
       expect(zhKeys.has(k), `zh missing ${k}`).toBe(true);
     }
   });
+
+  it("includes evolution journal history, auto_proposal_counts, evidence_class, and degraded keys in both locales", () => {
+    const evolutionJournalKeys = [
+      "mgmt.evolution.viewHistory",
+      "mgmt.evolution.viewAutoProposals",
+      "mgmt.evolution.viewAll",
+      "mgmt.evolution.showAutoProposals",
+      "mgmt.evolution.showHistory",
+      "mgmt.evolution.autoProposalsSummaryFmt",
+      "mgmt.evolution.autoProposalsTotal",
+      "mgmt.evolution.incidentFollowup",
+      "mgmt.evolution.incidentSeverity",
+      "mgmt.evolution.postmortemDraft",
+      "mgmt.evolution.filteredSummaryFmt",
+      "mgmt.evolution.summaryDecisions",
+      "mgmt.evolution.summaryMutationReviews",
+      "mgmt.evolution.summaryPostmortems",
+      "mgmt.evolution.summaryRollbacks",
+      "mgmt.evolution.summaryFreezeOrders",
+      "mgmt.evolution.emptyHistoryTitle",
+      "mgmt.evolution.emptyHistoryWithProposalsFmt",
+      "mgmt.evolution.emptyAutoProposals",
+      "mgmt.evolution.evidenceClass",
+      "mgmt.evolution.evidenceClasses.threshold_signal",
+      "mgmt.evolution.evidenceClasses.incident_followup",
+      "mgmt.evolution.evidenceClasses.incident_severity",
+      "mgmt.evolution.evidenceClasses.unclassified",
+      "mgmt.evolution.degradedTitle",
+      "mgmt.evolution.degradedBody",
+      "mgmt.evolution.retry",
+      "mgmt.evolution.pager.rangeFmt",
+      "mgmt.evolution.pager.pageFmt",
+      "mgmt.evolution.pager.previous",
+      "mgmt.evolution.pager.next",
+    ];
+    for (const k of evolutionJournalKeys) {
+      expect(enKeys.has(k), `en missing ${k}`).toBe(true);
+      expect(zhKeys.has(k), `zh missing ${k}`).toBe(true);
+    }
+  });
 });

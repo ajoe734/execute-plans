@@ -1,3 +1,13 @@
+export type EvolutionJournalView = "history" | "auto_proposals" | "all";
+
+export function normalizeEvolutionJournalView(value: string | null | undefined): EvolutionJournalView {
+  const clean = value?.trim().toLowerCase() ?? "";
+  if (clean === "auto_proposals" || clean === "all" || clean === "history") {
+    return clean;
+  }
+  return "history";
+}
+
 export interface EvolutionJournalEntry {
   id: string;
   title?: string;
@@ -7,8 +17,24 @@ export interface EvolutionJournalEntry {
   entry_type?: string;
   source_id?: string;
   action_type?: string;
+  evidence_class?: string;
+  evidenceClass?: string;
+  persona_id?: string;
+  personaId?: string;
+  route?: string;
   target?: { type?: string; id?: string; version?: string } | null;
-  record?: { evidence_refs?: unknown };
+  decision?: Record<string, unknown> | null;
+  mutation_review?: Record<string, unknown> | null;
+  record?: { evidence_refs?: unknown; [key: string]: unknown } | null;
+}
+
+function safeSerialize(value: unknown): string {
+  if (!value || typeof value !== "object") return "";
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return "";
+  }
 }
 
 function evolutionEntryText(e: EvolutionJournalEntry): string {
@@ -25,8 +51,16 @@ function evolutionEntryText(e: EvolutionJournalEntry): string {
     e.entry_type,
     e.source_id,
     e.action_type,
+    e.evidence_class,
+    e.evidenceClass,
+    e.persona_id,
+    e.personaId,
+    e.route,
     target,
     evidenceRefs,
+    safeSerialize(e.decision),
+    safeSerialize(e.mutation_review),
+    safeSerialize(e.record),
   ].filter(Boolean).join(" ").toLowerCase();
 }
 

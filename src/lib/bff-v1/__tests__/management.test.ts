@@ -117,6 +117,125 @@ describe("mgmt façade (PM-Live)", () => {
     );
   });
 
+  it("forwards view, page_size, and page_token to /bff/management/evolution-journal and adapts summary, auto_proposal_counts, page_info, and evidence_class", async () => {
+    liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
+      jsonResponse({
+        data: {
+          id: "management_evolution_journal",
+          items: [
+            {
+              id: "evolution_decision:evo-sweep-agent-000b205c0ef9-0000",
+              entry_type: "evolution_decision",
+              source_id: "evo-sweep-agent-000b205c0ef9-0000",
+              title: "Evolution decision · flag_for_review",
+              summary: "Candidate artifact infra-component-agent-finding-000b205c0ef9",
+              status: "proposed",
+              action_type: "flag_for_review",
+              risk_level: "low",
+              evidence_class: "incident_followup",
+              target: {
+                type: "candidate_artifact",
+                id: "infra-component-agent-finding-000b205c0ef9",
+              },
+              occurred_at: "2026-11-04T01:00:00Z",
+              created_at: "2026-11-04T01:00:00Z",
+              record: {
+                decision_id: "evo-sweep-agent-000b205c0ef9-0000",
+                target_type: "candidate_artifact",
+                target_id: "infra-component-agent-finding-000b205c0ef9",
+                risk_level: "low",
+                linked_incident_id: "agent-000b205c0ef9-0000",
+                action_type: "flag_for_review",
+                decision_state: "proposed",
+                status: "proposed",
+                evidence_class: "incident_followup",
+                threshold_snapshots: [
+                  {
+                    breached: true,
+                    comparator: "gte",
+                    metric_name: "incident_followup_required",
+                    observed_value: 1,
+                    threshold_value: 1,
+                    policy_source: "EVOLUTION_REVIEW_AND_THRESHOLDS.md section 7.5",
+                    signal_type: "manual_review",
+                    window: "active-incident",
+                  },
+                ],
+              },
+            },
+          ],
+          summary: {
+            total_items: 6,
+            returned_items: 1,
+            decision_count: 2,
+            mutation_review_count: 2,
+            postmortem_count: 2,
+            rollback_count: 0,
+            freeze_order_count: 0,
+            pending_review_count: 2,
+            active_freeze_count: 0,
+            completed_rollback_count: 0,
+            by_type: { evolution_decision: 2, mutation_review: 2, postmortem: 2 },
+            by_status: { proposed: 4, draft: 2 },
+            by_risk_level: { low: 2, medium: 2, unknown: 2 },
+          },
+          auto_proposal_counts: {
+            incident_followup: 1,
+            incident_severity: 1,
+            postmortem_draft: 2,
+            total: 4,
+          },
+        },
+        page_info: {
+          next_page_token: "20",
+          page_size: 20,
+          total: 6,
+        },
+        meta: {
+          snapshot_at: "2026-11-04T02:00:00Z",
+          surfaces: {
+            evolution_decisions: { status: "ok", source: "live" },
+            postmortems: { status: "ok", source: "live" },
+          },
+        },
+      }),
+    );
+
+    const out = await mgmt.evolutionJournal.list<{ id: string; evidence_class?: string }>(() => [], {
+      view: "auto_proposals",
+      pageSize: 20,
+      pageToken: "20",
+    });
+
+    expect(String(fetchSpy.mock.calls[0][0])).toBe(
+      "/bff/management/evolution-journal?view=auto_proposals&page_size=20&page_token=20",
+    );
+    expect(out).toHaveLength(1);
+    expect(out[0].id).toBe("evolution_decision:evo-sweep-agent-000b205c0ef9-0000");
+    expect(out[0].evidence_class).toBe("incident_followup");
+    expect(out.autoProposalCounts).toEqual({
+      incident_followup: 1,
+      incident_severity: 1,
+      postmortem_draft: 2,
+      total: 4,
+      incidentFollowup: 1,
+      incidentSeverity: 1,
+      postmortemDraft: 2,
+    });
+    expect(out.auto_proposal_counts).toEqual(out.autoProposalCounts);
+    expect(out.summary?.total_items).toBe(6);
+    expect(out.summary?.decision_count).toBe(2);
+    expect(out.pageInfo).toEqual({
+      next_page_token: "20",
+      nextPageToken: "20",
+      page_size: 20,
+      pageSize: 20,
+      total: 6,
+    });
+    expect(out.meta?.surfaces?.evolution_decisions?.status).toBe("ok");
+  });
+
   it("recommendations live read follows next_page_token past the first page", async () => {
     liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
     const page = (id: string, next: string | null) => jsonResponse({ data: [{ personaId: id, rank: 1 }], page_info: { next_page_token: next } });
