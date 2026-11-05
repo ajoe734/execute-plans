@@ -34,6 +34,7 @@ const RUN_LIVE_BFF_CONTRACT =
   process.env.RUN_LIVE_BFF_CONTRACTS === "1";
 
 const SNAPSHOT_AT = "2026-05-13T14:10:00Z";
+const EVOLUTION_QUALIFICATION_PATH = "/bff/management/evolution-qualification";
 const MISSING_ID = "missing-fe-int-gate-b06";
 const SERVING_MOCK_BANNER =
   /serving[-\s]?mock|mock data|fallback data|hybrid fallback active|seed fallback active|資料來源：seed/i;
@@ -583,6 +584,163 @@ const ME_RESPONSE = {
   },
 };
 
+const EVOLUTION_QUALIFICATION_RESPONSE = {
+  data: {
+    tenant_id: "tenant-fe-gate",
+    sweep_id: "evo-qual-sweep-b06-0001",
+    policy_version: "evolution-qualification.v1",
+    evaluated_at: SNAPSHOT_AT,
+    evaluated: 6,
+    qualified: 1,
+    drafted: 1,
+    counts_by_first_failing_criterion: {
+      real_threshold_signal: 2,
+      real_target: 1,
+      persistent_breach: 1,
+      fresh_evidence: 0,
+      executable_action: 1,
+      no_open_duplicate: 0,
+    },
+    failure_reason: null,
+    items: [
+      {
+        decision_id: "evo-sweep-b06-decision-0001",
+        sweep_id: "evo-qual-sweep-b06-0001",
+        tenant_id: "tenant-fe-gate",
+        target_type: "strategy",
+        target_id: "strategy-b06-momentum",
+        metric_name: "max_drawdown",
+        qualified: true,
+        first_failing_criterion: null,
+        failure_reason: null,
+        policy_version: "evolution-qualification.v1",
+        evaluated_at: SNAPSHOT_AT,
+        program_id: "evolution-b06-program",
+        criteria: [
+          {
+            criterion: "real_threshold_signal",
+            result: "passed",
+            observed: 0.017,
+            threshold: 0.015,
+            reason: null,
+          },
+          {
+            criterion: "real_target",
+            result: "passed",
+            observed: "strategy:strategy-b06-momentum",
+            threshold: "resolvable_target",
+            reason: null,
+          },
+          {
+            criterion: "persistent_breach",
+            result: "passed",
+            observed: 2,
+            threshold: 2,
+            reason: null,
+          },
+          {
+            criterion: "fresh_evidence",
+            result: "passed",
+            observed: SNAPSHOT_AT,
+            threshold: "<= 24h",
+            reason: null,
+          },
+          {
+            criterion: "executable_action",
+            result: "passed",
+            observed: "tighten_drawdown_stop",
+            threshold: "executable_research_action",
+            reason: null,
+          },
+          {
+            criterion: "no_open_duplicate",
+            result: "passed",
+            observed: 0,
+            threshold: 0,
+            reason: null,
+          },
+        ],
+      },
+      {
+        decision_id: "evo-sweep-b06-decision-0002",
+        sweep_id: "evo-qual-sweep-b06-0001",
+        tenant_id: "tenant-fe-gate",
+        target_type: "infra_component",
+        target_id: "infra-component-b06-finding",
+        metric_name: "incident_followup_required",
+        qualified: false,
+        first_failing_criterion: "real_threshold_signal",
+        failure_reason: "metric incident_followup_required is not a numeric threshold breach",
+        policy_version: "evolution-qualification.v1",
+        evaluated_at: SNAPSHOT_AT,
+        program_id: null,
+        criteria: [
+          {
+            criterion: "real_threshold_signal",
+            result: "failed",
+            observed: {
+              metric_name: "incident_followup_required",
+              action_type: "flag_for_review",
+            },
+            threshold: "numeric metric with finite observed_value and threshold_value",
+            reason: "metric incident_followup_required is not a numeric threshold breach",
+          },
+          {
+            criterion: "real_target",
+            result: "failed",
+            observed: {
+              target_type: "infra_component",
+              target_id: "infra-component-b06-finding",
+            },
+            threshold: "resolvable persona, strategy, or runtime target",
+            reason: "target_type infra_component is not an evolution target",
+          },
+          {
+            criterion: "persistent_breach",
+            result: "failed",
+            observed: 0,
+            threshold: 2,
+            reason: "fewer than 2 distinct breach observations",
+          },
+          {
+            criterion: "fresh_evidence",
+            result: "passed",
+            observed: SNAPSHOT_AT,
+            threshold: "<= 24h",
+            reason: null,
+          },
+          {
+            criterion: "executable_action",
+            result: "failed",
+            observed: "flag_for_review",
+            threshold: "executable research/mutation action",
+            reason: "flag_for_review does not specify an executable evolution mutation",
+          },
+          {
+            criterion: "no_open_duplicate",
+            result: "passed",
+            observed: 0,
+            threshold: 0,
+            reason: null,
+          },
+        ],
+      },
+    ],
+    total: 6,
+    limit: 50,
+    offset: 0,
+  },
+  meta: {
+    snapshot_at: SNAPSHOT_AT,
+    surfaces: {
+      evolution_qualification: {
+        status: "ok",
+        source: "fe-int-gate-b06",
+      },
+    },
+  },
+};
+
 function corsHeaders(route: Route): Record<string, string> {
   const origin = route.request().headers().origin ?? "*";
   return {
@@ -828,6 +986,12 @@ async function installRegistryRoutes(page: Page, calls = new Set<string>()): Pro
       return;
     }
 
+    if (path === EVOLUTION_QUALIFICATION_PATH && request.method() === "GET") {
+      calls.add(EVOLUTION_QUALIFICATION_PATH);
+      await fulfillJson(route, EVOLUTION_QUALIFICATION_RESPONSE);
+      return;
+    }
+
     for (const registry of REGISTRIES) {
       if (path === registry.listPath && request.method() === "GET") {
         calls.add(registry.listPath);
@@ -1009,6 +1173,28 @@ test.describe("F07 entity registry", () => {
 
     for (const registry of REGISTRIES) {
       await gotoRegistry(page, registry);
+      if (registry.key === "evolution-programs") {
+        await expect(page.getByTestId("evolution-qualification-summary")).toBeVisible();
+        await expect(page.getByTestId("qualification-policy-version")).toHaveText(
+          "evolution-qualification.v1",
+        );
+        await expect(page.getByTestId("qualification-evaluated-at")).toHaveText(SNAPSHOT_AT);
+        await expect(page.getByTestId("qualification-evaluated-count")).toHaveText("6");
+        await expect(page.getByTestId("qualification-qualified-count")).toHaveText("1");
+        await expect(page.getByTestId("qualification-drafted-count")).toHaveText("1");
+        await expect(
+          page.getByTestId("qualification-criterion-count-real_threshold_signal"),
+        ).toHaveText("2");
+        await expect(
+          page.getByTestId("qualification-criterion-count-real_target"),
+        ).toHaveText("1");
+        await expect(
+          page.getByTestId("qualification-criterion-count-persistent_breach"),
+        ).toHaveText("1");
+        await expect(
+          page.getByTestId("qualification-criterion-count-executable_action"),
+        ).toHaveText("1");
+      }
       const text = await bodyText(page);
       expect(text, `${registry.key} should not render a seed fallback banner`).not.toMatch(
         SERVING_MOCK_BANNER,
@@ -1019,6 +1205,10 @@ test.describe("F07 entity registry", () => {
     for (const registry of REGISTRIES) {
       expect(calls.has(registry.listPath), `${registry.key} list route should be read`).toBe(true);
     }
+    expect(
+      calls.has(EVOLUTION_QUALIFICATION_PATH),
+      "evolution qualification route should be read",
+    ).toBe(true);
     expect(failures, "registry pages should not emit console/page errors").toEqual([]);
   });
 
