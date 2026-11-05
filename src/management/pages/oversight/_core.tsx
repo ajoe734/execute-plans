@@ -36,6 +36,7 @@ import {
   type ManagementEvidenceListItem,
   type ManagementEvidenceMeta,
   type ManagementEvidenceOperation,
+  type ManagementEvidenceOverview,
   type ManagementEvidenceRelationships,
   type ManagementEvidenceResolvedLink,
   type ManagementEvidenceTask,
@@ -2333,7 +2334,7 @@ const EvidenceResolvedLinkAction = ({ link }: { link: ManagementEvidenceResolved
 };
 
 const EvidenceMetric = ({ label, value }: { label: string; value: ReactNode }) => (
-  <div className="rounded-md border border-border bg-background px-4 py-3">
+  <div className="rounded-md border border-border bg-background px-4 py-3" data-testid="evidence-metric-card">
     <dt className="text-xs font-medium uppercase text-muted-foreground">{label}</dt>
     <dd className="mt-1 text-2xl font-semibold text-foreground">{value}</dd>
   </div>
@@ -2675,9 +2676,18 @@ const EvidenceExplorerList = () => {
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const journeyFocus = searchParams.get("journey_id")?.trim() ?? "";
-  const { data, loading } = useV5Live((signal) => mgmt.evidence.overviewLiveOnly({ signal }), [], {
-    cacheKey: "oversight.evidence.overview",
-  });
+  const initialPageToken = searchParams.get("page_token")?.trim() ?? "";
+  const [pageTokens, setPageTokens] = useState<string[]>(initialPageToken ? ["", initialPageToken] : [""]);
+  const currentPageToken = pageTokens[pageTokens.length - 1] || undefined;
+  const currentPage = pageTokens.length;
+
+  const { data, loading } = useV5Live(
+    (signal) => mgmt.evidence.overviewLiveOnly({ pageToken: currentPageToken, signal }),
+    [currentPageToken],
+    {
+      cacheKey: "oversight.evidence.overview",
+    },
+  );
   useEffect(() => {
     if (!loading) markRoutePrimaryReady(location.pathname);
   }, [loading, location.pathname]);
@@ -2693,18 +2703,100 @@ const EvidenceExplorerList = () => {
       </section>
     );
   }
-  if (!data) {
-    return (
-      <section className="p-6 space-y-4" aria-label={t("mgmt.evidence.title")} data-testid="evidence-route-unavailable">
-        <header>
-          <h1 className="text-2xl font-semibold text-foreground">{t("mgmt.evidence.title")}</h1>
-          <p className="text-sm text-muted-foreground">{t("mgmt.evidence.unavailableTitle")}</p>
-        </header>
-      </section>
-    );
-  }
-  const model = data;
+  const model: ManagementEvidenceOverview = data ?? {
+    items: [],
+    data: [],
+    summary: {
+      totalEvidence: 0,
+      total_evidence: 0,
+      returnedEvidence: 0,
+      returned_evidence: 0,
+      visibleEvidence: 0,
+      visible_evidence: 0,
+      redactedEvidence: 0,
+      redacted_evidence: 0,
+      verifiedEvidence: 0,
+      verified_evidence: 0,
+      bySourceType: {},
+      by_source_type: {},
+      byLinkType: {},
+      by_link_type: {},
+      byCredibilityTier: {},
+      by_credibility_tier: {},
+      traceableEvidence: 0,
+      traceable_evidence: 0,
+      unresolvedSourceEvidence: 0,
+      unresolved_source_evidence: 0,
+      incompleteEvidence: 0,
+      incomplete_evidence: 0,
+      needsAttentionEvidence: 0,
+      needs_attention_evidence: 0,
+      openOperationEvidence: 0,
+      open_operation_evidence: 0,
+      byActionabilityState: {},
+      by_actionability_state: {},
+      byActionabilitySeverity: {},
+      by_actionability_severity: {},
+      byOperationStatus: {},
+      by_operation_status: {},
+    },
+    facets: {
+      sourceTypes: {},
+      source_types: {},
+      linkTypes: {},
+      link_types: {},
+      credibilityTiers: {},
+      credibility_tiers: {},
+      actionabilityStates: {},
+      actionability_states: {},
+      actionabilitySeverity: {},
+      actionability_severity: {},
+      operationStatuses: {},
+      operation_statuses: {},
+    },
+    pageInfo: {
+      nextPageToken: null,
+      next_page_token: null,
+      hasMore: false,
+      has_more: false,
+      total: 0,
+      pageSize: 0,
+      page_size: 0,
+    },
+    page_info: {
+      nextPageToken: null,
+      next_page_token: null,
+      hasMore: false,
+      has_more: false,
+      total: 0,
+      pageSize: 0,
+      page_size: 0,
+    },
+    pagination: {
+      nextPageToken: null,
+      next_page_token: null,
+      hasMore: false,
+      has_more: false,
+      total: 0,
+      pageSize: 0,
+      page_size: 0,
+    },
+    meta: {
+      surfaces: {
+        management_evidence: { status: "unavailable", source: "live_transport" },
+      },
+      redactedEvidenceCount: 0,
+      redacted_evidence_count: 0,
+    },
+  };
   const rows = model.items;
+  const primarySurfaceStatus = evidenceSurfaceStatus(model.meta, "management_evidence");
+  const managementEvidenceOk = Boolean(data) && primarySurfaceStatus.toLowerCase() === "ok";
+  const unavailableMetricValue = t("mgmt.evidence.unavailableValue", { defaultValue: "Unavailable" });
+  const totalShown = model.pageInfo.total ?? model.page_info.total ?? model.summary.totalEvidence;
+  const nextPageToken = model.pageInfo.nextPageToken ?? model.page_info.next_page_token ?? null;
+  const canGoPrev = pageTokens.length > 1;
+  const canGoNext = Boolean(nextPageToken);
 
   return (
     <section className="flex h-full min-h-0 flex-col gap-4 overflow-hidden p-6" aria-label={t("mgmt.evidence.title")} data-testid="evidence-route-ready">
@@ -2727,14 +2819,14 @@ const EvidenceExplorerList = () => {
           </div>
         </Card>
       )}
-      <dl className="grid shrink-0 gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        <EvidenceMetric label={t("mgmt.evidence.total")} value={model.summary.totalEvidence} />
-        <EvidenceMetric label={t("mgmt.evidence.traceable")} value={model.summary.traceableEvidence} />
-        <EvidenceMetric label={t("mgmt.evidence.needsAttention")} value={model.summary.needsAttentionEvidence} />
-        <EvidenceMetric label={t("mgmt.evidence.verified")} value={model.summary.verifiedEvidence} />
-        <EvidenceMetric label={t("mgmt.evidence.openOperations")} value={model.summary.openOperationEvidence} />
+      <dl className="grid shrink-0 gap-3 sm:grid-cols-2 xl:grid-cols-5" data-testid="evidence-metrics">
+        <EvidenceMetric label={t("mgmt.evidence.total")} value={managementEvidenceOk ? totalShown : unavailableMetricValue} />
+        <EvidenceMetric label={t("mgmt.evidence.traceable")} value={managementEvidenceOk ? model.summary.traceableEvidence : unavailableMetricValue} />
+        <EvidenceMetric label={t("mgmt.evidence.needsAttention")} value={managementEvidenceOk ? model.summary.needsAttentionEvidence : unavailableMetricValue} />
+        <EvidenceMetric label={t("mgmt.evidence.verified")} value={managementEvidenceOk ? model.summary.verifiedEvidence : unavailableMetricValue} />
+        <EvidenceMetric label={t("mgmt.evidence.openOperations")} value={managementEvidenceOk ? model.summary.openOperationEvidence : unavailableMetricValue} />
       </dl>
-      <Card className="flex min-h-0 flex-1 overflow-hidden">
+      <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <ManagementTableScroll
           className="min-h-0 flex-1"
           testId="evidence-explorer-table-scroll"
@@ -2773,7 +2865,9 @@ const EvidenceExplorerList = () => {
                     )}
                     <div className="mt-1 break-all font-mono text-xs text-muted-foreground">{e.refId}</div>
                     <div className="mt-1 text-xs text-muted-foreground">
-                      {evidenceLabel(e.sourceType)} · {evidenceLabel(e.linkType)}
+                      <span data-testid="evidence-row-source-type" title={e.sourceType}>{evidenceLabel(e.sourceType)}</span>
+                      {" · "}
+                      <span title={e.linkType}>{evidenceLabel(e.linkType)}</span>
                     </div>
                   </td>
                   <td className="px-3 py-3">
@@ -2821,7 +2915,9 @@ const EvidenceExplorerList = () => {
                       <Badge variant="outline" className="mt-2">{t("mgmt.evidence.redacted")}</Badge>
                     )}
                   </td>
-                  <td className="px-3 py-3 text-muted-foreground">{evidenceTimestamp(e.capturedAt ?? e.captured_at)}</td>
+                  <td className="px-3 py-3 text-muted-foreground" data-testid="evidence-row-captured-at" title={e.capturedAt ?? e.captured_at ?? undefined}>
+                    {evidenceTimestamp(e.capturedAt ?? e.captured_at)}
+                  </td>
                   <td className="px-3 py-3 text-right">
                     {detailHref && (
                       <Button asChild size="sm" variant="outline">
@@ -2833,15 +2929,63 @@ const EvidenceExplorerList = () => {
               );
             })}
             {rows.length === 0 && !loading && (
-              <tr data-testid="evidence-route-empty">
-                <td className="px-3 py-6 text-center text-muted-foreground" colSpan={8}>
-                  {t("mgmt.evidence.noRows")}
-                </td>
-              </tr>
+              managementEvidenceOk ? (
+                <tr data-testid="evidence-route-empty">
+                  <td className="px-3 py-6 text-center text-muted-foreground" colSpan={8}>
+                    {t("mgmt.evidence.noRows")}
+                  </td>
+                </tr>
+              ) : (
+                <tr data-testid="evidence-route-unavailable">
+                  <td className="px-3 py-6 text-center text-muted-foreground" colSpan={8}>
+                    {t("mgmt.evidence.unavailableRows")}
+                  </td>
+                </tr>
+              )
             )}
           </tbody>
         </table>
         </ManagementTableScroll>
+        {managementEvidenceOk && (rows.length > 0 || canGoPrev || canGoNext) && (
+          <div
+            className="flex shrink-0 items-center justify-between border-t border-border px-4 py-3 text-xs text-muted-foreground"
+            data-testid="evidence-pagination"
+          >
+            <span>
+              {t("mgmt.evidence.pager.pageFmt", {
+                page: currentPage,
+                total: totalShown,
+                defaultValue: `Page ${currentPage} · Total ${totalShown}`,
+              })}
+            </span>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={!canGoPrev || loading}
+                data-testid="evidence-pagination-prev"
+                onClick={() => setPageTokens((prev) => (prev.length > 1 ? prev.slice(0, -1) : prev))}
+              >
+                {t("mgmt.evidence.pager.previous", { defaultValue: "Previous" })}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={!canGoNext || loading}
+                data-testid="evidence-pagination-next"
+                onClick={() => {
+                  if (nextPageToken) {
+                    setPageTokens((prev) => [...prev, nextPageToken]);
+                  }
+                }}
+              >
+                {t("mgmt.evidence.pager.next", { defaultValue: "Next" })}
+              </Button>
+            </div>
+          </div>
+        )}
       </Card>
     </section>
   );

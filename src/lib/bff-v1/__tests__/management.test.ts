@@ -830,6 +830,183 @@ describe("mgmt façade (PM-Live)", () => {
     expect(out?.items[0] as unknown as Record<string, unknown>).not.toHaveProperty("sourceRef");
   });
 
+  it("adapts bounded BFF /bff/management/evidence envelope with top-level page_info, meta, and mapped source_ingest_evidence_items rows", async () => {
+    liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
+    const requestedUrls: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      requestedUrls.push(url);
+      const isSecondPage = url.includes("page_token=20");
+      return jsonResponse({
+        data: {
+          id: "management-evidence",
+          items: [
+            isSecondPage
+              ? {
+                  id: "evitem-tw_price_daily-2330-2026-11-01-def456",
+                  ref_id: "evitem-tw_price_daily-2330-2026-11-01-def456",
+                  evidence_item_id: "evitem-tw_price_daily-2330-2026-11-01-def456",
+                  title: "TW official tw_price_daily TWSE 2330 2026-11-01",
+                  citation_label: "TW official tw_price_daily TWSE 2330 2026-11-01",
+                  source_type: "official_reference",
+                  captured_at: "2026-11-01T14:35:00+08:00",
+                  available_time: "2026-11-01T14:35:00+08:00",
+                  event_time: "2026-11-01T00:00:00+08:00",
+                  item_type: "tw_price_daily",
+                  link_type: "tw_price_daily",
+                  metadata: { source_class: "official_reference" },
+                  credibility: { tier: "producer_record", verified: true },
+                }
+              : {
+                  id: "evitem-tw_price_daily-0050-2026-11-01-abc123",
+                  ref_id: "evitem-tw_price_daily-0050-2026-11-01-abc123",
+                  evidence_item_id: "evitem-tw_price_daily-0050-2026-11-01-abc123",
+                  title: "TW official tw_price_daily TWSE 0050 2026-11-01",
+                  citation_label: "TW official tw_price_daily TWSE 0050 2026-11-01",
+                  source_type: "official_reference",
+                  captured_at: "2026-11-01T14:30:00+08:00",
+                  available_time: "2026-11-01T14:30:00+08:00",
+                  event_time: "2026-11-01T00:00:00+08:00",
+                  item_type: "tw_price_daily",
+                  link_type: "tw_price_daily",
+                  metadata: { source_class: "official_reference" },
+                  credibility: { tier: "producer_record", verified: true },
+                },
+          ],
+          summary: {
+            total_evidence: 614,
+            returned_evidence: 1,
+            visible_evidence: 1,
+            redacted_evidence: 0,
+            verified_evidence: 1,
+            by_source_type: { official_reference: 1 },
+            by_link_type: { tw_price_daily: 1 },
+            by_credibility_tier: { producer_record: 1 },
+            traceable_evidence: 0,
+            unresolved_source_evidence: 0,
+            incomplete_evidence: 0,
+            needs_attention_evidence: 0,
+            open_operation_evidence: 0,
+            by_actionability_state: {},
+            by_actionability_severity: {},
+            by_operation_status: {},
+          },
+          facets: {
+            source_types: { official_reference: 1 },
+            link_types: { tw_price_daily: 1 },
+            credibility_tiers: { producer_record: 1 },
+            actionability_states: {},
+            actionability_severity: {},
+            operation_statuses: {},
+          },
+        },
+        page_info: {
+          next_page_token: isSecondPage ? "40" : "20",
+          total: 614,
+          page_size: 20,
+        },
+        meta: {
+          snapshot_at: "2026-11-04T00:00:00Z",
+          surfaces: {
+            management_evidence: { status: "ok", source: "service_store" },
+            evidence_refs: { status: "ok", source: "service_store" },
+          },
+          redacted_evidence_count: 0,
+        },
+      });
+    });
+
+    const firstPage = await mgmt.evidence.overviewLiveOnly();
+    expect(firstPage?.items[0]).toMatchObject({
+      refId: "evitem-tw_price_daily-0050-2026-11-01-abc123",
+      title: "TW official tw_price_daily TWSE 0050 2026-11-01",
+      sourceType: "official_reference",
+      source_type: "official_reference",
+      capturedAt: "2026-11-01T14:30:00+08:00",
+      captured_at: "2026-11-01T14:30:00+08:00",
+      linkType: "tw_price_daily",
+    });
+    expect(firstPage?.pageInfo).toMatchObject({
+      nextPageToken: "20",
+      next_page_token: "20",
+      hasMore: true,
+      has_more: true,
+      total: 614,
+      pageSize: 20,
+      page_size: 20,
+    });
+    expect(firstPage?.summary.totalEvidence).toBe(614);
+    expect(firstPage?.meta.surfaces.management_evidence.status).toBe("ok");
+
+    const secondPage = await mgmt.evidence.overviewLiveOnly({ pageToken: "20" });
+    expect(requestedUrls[1]).toContain("/bff/management/evidence?page_token=20");
+    expect(secondPage?.items[0].title).toBe("TW official tw_price_daily TWSE 2330 2026-11-01");
+    expect(secondPage?.pageInfo.nextPageToken).toBe("40");
+    expect(secondPage?.pageInfo.total).toBe(614);
+  });
+
+  it("preserves top-level unavailable surface status when BFF /bff/management/evidence read fails", () => {
+    const out = adaptManagementEvidenceOverview({
+      data: {
+        id: "management-evidence",
+        items: [],
+        summary: {
+          total_evidence: null,
+          returned_evidence: null,
+          visible_evidence: null,
+          redacted_evidence: null,
+          verified_evidence: null,
+          by_source_type: {},
+          by_link_type: {},
+          by_credibility_tier: {},
+          traceable_evidence: null,
+          unresolved_source_evidence: null,
+          incomplete_evidence: null,
+          needs_attention_evidence: null,
+          open_operation_evidence: null,
+          by_actionability_state: {},
+          by_actionability_severity: {},
+          by_operation_status: {},
+        },
+        facets: {
+          source_types: {},
+          link_types: {},
+          credibility_tiers: {},
+          actionability_states: {},
+          actionability_severity: {},
+          operation_statuses: {},
+        },
+      },
+      page_info: {
+        next_page_token: null,
+        total: null,
+        page_size: 20,
+      },
+      meta: {
+        snapshot_at: "2026-11-04T00:00:00Z",
+        surfaces: {
+          management_evidence: {
+            status: "unavailable",
+            source: "service_store",
+            reason: "source_ingest_evidence_items_unavailable",
+          },
+          evidence_refs: {
+            status: "unavailable",
+            source: "service_store",
+            reason: "source_ingest_evidence_items_unavailable",
+          },
+        },
+        redacted_evidence_count: null,
+      },
+    });
+
+    expect(out?.meta.surfaces.management_evidence).toMatchObject({
+      status: "unavailable",
+      source: "service_store",
+      reason: "source_ingest_evidence_items_unavailable",
+    });
+  });
+
   it("adapts knowledge evidence detail without exposing opaque storage refs", () => {
     const out = adaptManagementEvidenceDetail({
       ref_id: "evref-note-001",

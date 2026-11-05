@@ -2608,7 +2608,7 @@ export default {
   },
   knowledge: {
     subtitle: "Insights captured from operator activity. Promote into artifacts, postmortems, or research tasks.",
-    empty: "Inbox zero.", selectHint: "Select an insight.",
+    empty: "Inbox zero.", unavailable: "Knowledge inbox unavailable.", selectHint: "Select an insight.",
     promoteArtifact: "Promote → Artifact", promotePostmortem: "Promote → Postmortem", promoteResearch: "Promote → Research Task",
     dismiss: "Dismiss", dismissed: "Insight dismissed", promotedTo: "Promoted to {{target}}",
   },
@@ -3631,6 +3631,13 @@ export default {
         failed: "Evidence operation failed",
       },
       noRows: "No evidence refs.",
+      unavailableRows: "Evidence surface is unavailable; evidence records could not be loaded.",
+      unavailableValue: "Unavailable",
+      pager: {
+        previous: "Previous",
+        next: "Next",
+        pageFmt: "Page {{page}} · Total {{total}}",
+      },
       noLinkedDecisions: "No BFF-linked decisions for this evidence ref.",
       redactedDecision: "Redacted decision",
       sourceNote: "Source note",

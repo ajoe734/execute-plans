@@ -586,6 +586,7 @@ export interface ManagementEvidenceSurface {
   status: string;
   source?: string;
   message?: string;
+  reason?: string;
 }
 
 export interface ManagementEvidenceMeta {
@@ -1079,6 +1080,7 @@ const asString = (value: unknown, fallback = ""): string => {
 };
 
 const asFiniteNumber = (value: unknown, fallback = 0): number => {
+  if (value === null || value === undefined || value === "") return fallback;
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
 };
@@ -1148,7 +1150,8 @@ function adaptEvidenceSurface(value: unknown): ManagementEvidenceSurface {
     return {
       status: asString(value.status ?? value.state, "unknown"),
       source: optionalString(value.source),
-      message: optionalString(value.message ?? value.summary),
+      message: optionalString(value.message ?? value.summary ?? value.reason),
+      reason: optionalString(value.reason),
     };
   }
   return { status: asString(value, "unknown") };
@@ -1488,15 +1491,38 @@ function adaptEvidenceListItem(value: unknown): ManagementEvidenceListItem | nul
     : isObject(value.source_document)
       ? value.source_document
       : {};
-  const refId = asString(value.refId ?? value.ref_id ?? value.id);
+  const metadata = isObject(value.metadata) ? value.metadata : {};
+  const refId = asString(value.refId ?? value.ref_id ?? value.evidence_item_id ?? value.evidenceItemId ?? value.id);
   if (!refId) return null;
   const title = asString(
-    value.title ?? value.displayLabel ?? value.display_label ?? sourceDocument.title,
+    value.title ??
+      value.displayLabel ??
+      value.display_label ??
+      sourceDocument.title ??
+      value.citation_label ??
+      value.citationLabel,
     refId,
   );
-  const sourceType = asString(value.sourceType ?? value.source_type ?? sourceDocument.sourceType ?? sourceDocument.source_type, "unknown");
-  const capturedAt = optionalString(value.capturedAt ?? value.captured_at ?? sourceDocument.capturedAt ?? sourceDocument.captured_at);
-  const linkType = asString(value.linkType ?? value.link_type, "unknown");
+  const sourceType = asString(
+    value.sourceType ??
+      value.source_type ??
+      sourceDocument.sourceType ??
+      sourceDocument.source_type ??
+      metadata.source_class ??
+      metadata.sourceClass,
+    "unknown",
+  );
+  const capturedAt = optionalString(
+    value.capturedAt ??
+      value.captured_at ??
+      sourceDocument.capturedAt ??
+      sourceDocument.captured_at ??
+      value.available_time ??
+      value.availableTime ??
+      value.event_time ??
+      value.eventTime,
+  );
+  const linkType = asString(value.linkType ?? value.link_type ?? value.item_type ?? value.itemType, "unknown");
   const linkedObjectSummary = adaptEvidenceLinkedObjectSummary(value.linkedObjectSummary ?? value.linked_object_summary);
   const linkedObjectLink = adaptEvidenceLinkedObjectLink(value.linkedObjectLink ?? value.linked_object_link);
   const resolvedLink = adaptEvidenceResolvedLink(value.resolvedLink ?? value.resolved_link);
@@ -1613,26 +1639,53 @@ function buildEvidenceSummary(items: ManagementEvidenceListItem[]): ManagementEv
   };
 }
 
-function adaptEvidenceSummary(value: unknown, items: ManagementEvidenceListItem[]): ManagementEvidenceSummary {
-  if (!isObject(value)) return buildEvidenceSummary(items);
+function adaptEvidenceSummary(
+  value: unknown,
+  items: ManagementEvidenceListItem[],
+  pageInfo?: ManagementEvidencePageInfo,
+): ManagementEvidenceSummary {
   const computed = buildEvidenceSummary(items);
+  const fallbackTotal = pageInfo?.total ?? computed.totalEvidence;
+  if (!isObject(value)) {
+    return {
+      ...computed,
+      totalEvidence: fallbackTotal,
+      total_evidence: fallbackTotal,
+    };
+  }
   const bySourceType = asCountRecord(value.bySourceType ?? value.by_source_type);
   const byLinkType = asCountRecord(value.byLinkType ?? value.by_link_type);
   const byCredibilityTier = asCountRecord(value.byCredibilityTier ?? value.by_credibility_tier);
   const byActionabilityState = asCountRecord(value.byActionabilityState ?? value.by_actionability_state);
   const byActionabilitySeverity = asCountRecord(value.byActionabilitySeverity ?? value.by_actionability_severity);
   const byOperationStatus = asCountRecord(value.byOperationStatus ?? value.by_operation_status);
+  const totalEvidence = asFiniteNumber(
+    pageInfo?.total ?? value.totalEvidence ?? value.total_evidence ?? value.totalItems ?? value.total_items,
+    fallbackTotal,
+  );
+  const verifiedEvidence = asFiniteNumber(
+    value.verifiedEvidence ?? value.verified_evidence ?? value.verifiedCount ?? value.verified_count,
+    computed.verifiedEvidence,
+  );
+  const needsAttentionEvidence = asFiniteNumber(
+    value.needsAttentionEvidence ?? value.needs_attention_evidence ?? value.needsAttentionCount ?? value.needs_attention_count,
+    computed.needsAttentionEvidence,
+  );
+  const openOperationEvidence = asFiniteNumber(
+    value.openOperationEvidence ?? value.open_operation_evidence ?? value.openOperationsCount ?? value.open_operations_count,
+    computed.openOperationEvidence,
+  );
   return {
-    totalEvidence: asFiniteNumber(value.totalEvidence ?? value.total_evidence, computed.totalEvidence),
-    total_evidence: asFiniteNumber(value.total_evidence ?? value.totalEvidence, computed.totalEvidence),
+    totalEvidence,
+    total_evidence: totalEvidence,
     returnedEvidence: asFiniteNumber(value.returnedEvidence ?? value.returned_evidence, computed.returnedEvidence),
     returned_evidence: asFiniteNumber(value.returned_evidence ?? value.returnedEvidence, computed.returnedEvidence),
     visibleEvidence: asFiniteNumber(value.visibleEvidence ?? value.visible_evidence, computed.visibleEvidence),
     visible_evidence: asFiniteNumber(value.visible_evidence ?? value.visibleEvidence, computed.visibleEvidence),
     redactedEvidence: asFiniteNumber(value.redactedEvidence ?? value.redacted_evidence, computed.redactedEvidence),
     redacted_evidence: asFiniteNumber(value.redacted_evidence ?? value.redactedEvidence, computed.redactedEvidence),
-    verifiedEvidence: asFiniteNumber(value.verifiedEvidence ?? value.verified_evidence, computed.verifiedEvidence),
-    verified_evidence: asFiniteNumber(value.verified_evidence ?? value.verifiedEvidence, computed.verifiedEvidence),
+    verifiedEvidence,
+    verified_evidence: verifiedEvidence,
     bySourceType: Object.keys(bySourceType).length ? bySourceType : computed.bySourceType,
     by_source_type: Object.keys(bySourceType).length ? bySourceType : computed.bySourceType,
     byLinkType: Object.keys(byLinkType).length ? byLinkType : computed.byLinkType,
@@ -1645,10 +1698,10 @@ function adaptEvidenceSummary(value: unknown, items: ManagementEvidenceListItem[
     unresolved_source_evidence: asFiniteNumber(value.unresolved_source_evidence ?? value.unresolvedSourceEvidence, computed.unresolvedSourceEvidence),
     incompleteEvidence: asFiniteNumber(value.incompleteEvidence ?? value.incomplete_evidence, computed.incompleteEvidence),
     incomplete_evidence: asFiniteNumber(value.incomplete_evidence ?? value.incompleteEvidence, computed.incompleteEvidence),
-    needsAttentionEvidence: asFiniteNumber(value.needsAttentionEvidence ?? value.needs_attention_evidence, computed.needsAttentionEvidence),
-    needs_attention_evidence: asFiniteNumber(value.needs_attention_evidence ?? value.needsAttentionEvidence, computed.needsAttentionEvidence),
-    openOperationEvidence: asFiniteNumber(value.openOperationEvidence ?? value.open_operation_evidence, computed.openOperationEvidence),
-    open_operation_evidence: asFiniteNumber(value.open_operation_evidence ?? value.openOperationEvidence, computed.openOperationEvidence),
+    needsAttentionEvidence,
+    needs_attention_evidence: needsAttentionEvidence,
+    openOperationEvidence,
+    open_operation_evidence: openOperationEvidence,
     byActionabilityState: Object.keys(byActionabilityState).length ? byActionabilityState : computed.byActionabilityState,
     by_actionability_state: Object.keys(byActionabilityState).length ? byActionabilityState : computed.byActionabilityState,
     byActionabilitySeverity: Object.keys(byActionabilitySeverity).length ? byActionabilitySeverity : computed.byActionabilitySeverity,
@@ -1682,11 +1735,19 @@ function adaptEvidenceFacets(value: unknown, summary: ManagementEvidenceSummary)
   };
 }
 
-function adaptEvidencePageInfo(value: unknown, items: ManagementEvidenceListItem[]): ManagementEvidencePageInfo {
+function adaptEvidencePageInfo(
+  value: unknown,
+  items: ManagementEvidenceListItem[],
+  summaryValue?: unknown,
+): ManagementEvidencePageInfo {
   const record = isObject(value) ? value : {};
+  const summaryRecord = isObject(summaryValue) ? summaryValue : {};
   const nextPageToken = nullableString(record.nextPageToken ?? record.next_page_token);
   const pageSize = asFiniteNumber(record.pageSize ?? record.page_size, items.length);
-  const total = asFiniteNumber(record.total, items.length);
+  const total = asFiniteNumber(
+    record.total ?? summaryRecord.totalEvidence ?? summaryRecord.total_evidence ?? summaryRecord.totalItems ?? summaryRecord.total_items,
+    items.length,
+  );
   const hasMore = asBoolean(record.hasMore ?? record.has_more, Boolean(nextPageToken));
   return {
     nextPageToken,
@@ -1715,6 +1776,7 @@ function evidenceEnvelope(raw: unknown): Record<string, unknown> | unknown[] | n
 export function adaptManagementEvidenceOverview(raw: unknown): ManagementEvidenceOverview | null {
   const container = evidenceEnvelope(raw);
   if (!container) return null;
+  const root = isObject(raw) ? raw : {};
   const record = isObject(container) ? container : {};
   const rawItems = firstArray<unknown>(
     isObject(record) ? record.items : undefined,
@@ -1723,10 +1785,14 @@ export function adaptManagementEvidenceOverview(raw: unknown): ManagementEvidenc
     container,
   );
   const items = rawItems.map(adaptEvidenceListItem).filter((item): item is ManagementEvidenceListItem => Boolean(item));
-  const summary = adaptEvidenceSummary(isObject(record) ? record.summary : undefined, items);
-  const facets = adaptEvidenceFacets(isObject(record) ? record.facets : undefined, summary);
-  const pageInfo = adaptEvidencePageInfo(isObject(record) ? (record.page_info ?? record.pagination) : undefined, items);
-  const meta = adaptEvidenceMeta(isObject(record) ? record.meta : undefined);
+  const rawSummary = record.summary ?? root.summary;
+  const rawPageInfo =
+    record.page_info ?? record.pageInfo ?? record.pagination ?? root.page_info ?? root.pageInfo ?? root.pagination;
+  const pageInfo = adaptEvidencePageInfo(rawPageInfo, items, rawSummary);
+  const summary = adaptEvidenceSummary(rawSummary, items, pageInfo);
+  const facets = adaptEvidenceFacets(record.facets ?? root.facets, summary);
+  const rawMeta = isObject(record.meta) && Object.keys(record.meta).length > 0 ? record.meta : (root.meta ?? record.meta);
+  const meta = adaptEvidenceMeta(rawMeta);
   return {
     items,
     data: items,
@@ -1889,7 +1955,7 @@ export function adaptManagementEvidenceDetail(raw: unknown): ManagementEvidenceD
     redacted: asBoolean(data.redacted, false),
     requiredCapability: optionalString(data.requiredCapability ?? data.required_capability),
     reason: optionalString(data.reason),
-    meta: adaptEvidenceMeta(data.meta),
+    meta: adaptEvidenceMeta(data.meta ?? (isObject(raw) ? raw.meta : undefined)),
   };
 }
 
@@ -4183,14 +4249,41 @@ export const mgmt = {
     list: <T>(seedFn: () => T[]): Promise<T[]> =>
       mgmtRead("mgmt.evidence.list", { method: "GET", path: paths.mgmtEvidenceExplorer() }, seedFn, adaptArrayPassthrough<T>),
     overview: (
-      seedFn: () => ManagementEvidenceOverview = defaultManagementEvidenceOverview,
-    ): Promise<ManagementEvidenceOverview> =>
-      mgmtRead("mgmt.evidence.overview", { method: "GET", path: paths.mgmtEvidenceExplorer() }, seedFn, adaptManagementEvidenceOverview),
-    overviewLiveOnly: (opts?: { signal?: AbortSignal }): Promise<ManagementEvidenceOverview | undefined> =>
-      liveOnlyRead<ManagementEvidenceOverview>(
-        { method: "GET", path: paths.mgmtEvidenceExplorer(), signal: opts?.signal },
+      seedFnOrOpts:
+        | (() => ManagementEvidenceOverview)
+        | { pageToken?: string | null; page_token?: string | null; pageSize?: number; page_size?: number; signal?: AbortSignal } = defaultManagementEvidenceOverview,
+      maybeOpts?: { pageToken?: string | null; page_token?: string | null; pageSize?: number; page_size?: number; signal?: AbortSignal },
+    ): Promise<ManagementEvidenceOverview> => {
+      const seedFn = typeof seedFnOrOpts === "function" ? seedFnOrOpts : defaultManagementEvidenceOverview;
+      const opts = typeof seedFnOrOpts === "function" ? maybeOpts : seedFnOrOpts;
+      const params = new URLSearchParams();
+      const pageSize = opts?.pageSize ?? opts?.page_size;
+      const pageToken = opts?.pageToken ?? opts?.page_token;
+      if (pageSize !== undefined) params.set("page_size", String(pageSize));
+      if (pageToken) params.set("page_token", String(pageToken));
+      const query = params.toString();
+      const path = `${paths.mgmtEvidenceExplorer()}${query ? `?${query}` : ""}`;
+      return mgmtRead("mgmt.evidence.overview", { method: "GET", path, signal: opts?.signal }, seedFn, adaptManagementEvidenceOverview);
+    },
+    overviewLiveOnly: (opts?: {
+      pageToken?: string | null;
+      page_token?: string | null;
+      pageSize?: number;
+      page_size?: number;
+      signal?: AbortSignal;
+    }): Promise<ManagementEvidenceOverview | undefined> => {
+      const params = new URLSearchParams();
+      const pageSize = opts?.pageSize ?? opts?.page_size;
+      const pageToken = opts?.pageToken ?? opts?.page_token;
+      if (pageSize !== undefined) params.set("page_size", String(pageSize));
+      if (pageToken) params.set("page_token", String(pageToken));
+      const query = params.toString();
+      const path = `${paths.mgmtEvidenceExplorer()}${query ? `?${query}` : ""}`;
+      return liveOnlyRead<ManagementEvidenceOverview>(
+        { method: "GET", path, signal: opts?.signal },
         adaptManagementEvidenceOverview,
-      ),
+      );
+    },
     detail: (
       refId: string,
       seedFn: () => ManagementEvidenceDetail = () => defaultManagementEvidenceDetail(refId),
