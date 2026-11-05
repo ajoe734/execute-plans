@@ -479,6 +479,29 @@ export function adaptRunActionCommandResponse(
   raw: BackendCommandResponse,
   opts: CommandRunActionOptions,
 ): CommandRunActionEnvelope {
+  const rawAny = (raw ?? {}) as unknown as Record<string, unknown>;
+  const dataAny = (raw?.data ?? {}) as unknown as Record<string, unknown>;
+  const receiptAny = (raw?.data?.receipt ?? {}) as unknown as Record<string, unknown>;
+  const rawStatus = String(receiptAny.status ?? dataAny.status ?? raw?.status ?? "").toLowerCase();
+  const rawError =
+    (receiptAny.error as Record<string, unknown> | undefined) ??
+    (dataAny.error as Record<string, unknown> | undefined) ??
+    (rawAny.error as Record<string, unknown> | undefined);
+  if (rawStatus === "failed" || rawStatus === "rejected" || rawError) {
+    const message =
+      (typeof rawError?.message === "string" && rawError.message.trim()) ||
+      (typeof dataAny.message === "string" && dataAny.message.trim()) ||
+      (typeof rawAny.message === "string" && rawAny.message.trim()) ||
+      "Command rejected by owner";
+    const code =
+      (typeof rawError?.code === "string" && rawError.code.trim()) ||
+      "STATE_CONFLICT";
+    throw makeBffError({
+      code: code as any,
+      message,
+      correlationId: opts.correlationId,
+    });
+  }
   const commandId = commandReceiptId(raw);
   const idempotencyKey = idempotencyFrom(raw, opts.idempotencyKey);
   const legacy = opts.legacy ?? {
@@ -1409,6 +1432,84 @@ export async function stopEvolutionProgram(
   refuseStrictLiveWrite(correlationId);
 }
 
+export async function submitEvolutionProgramReview(
+  programId: string,
+  memo?: string,
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope> {
+  const correlationId = opts.correlationId ?? newCorrelationId();
+  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+  const reason = (memo ?? "").trim() || "Submit evolution program for review";
+  if (await liveWriteGated()) {
+    return runAction(
+      {
+        kind: "Evolution",
+        id: programId,
+        action: "submit_evolution_review",
+        memo: reason,
+        reason,
+      },
+      { ...opts, correlationId, idempotencyKey },
+    );
+  }
+  refuseStrictLiveWrite(correlationId);
+}
+
+export async function approveEvolutionProgram(
+  programId: string,
+  memo?: string,
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope> {
+  const correlationId = opts.correlationId ?? newCorrelationId();
+  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+  const reason = (memo ?? "").trim() || "Approve evolution program";
+  if (await liveWriteGated()) {
+    return runAction(
+      {
+        kind: "Evolution",
+        id: programId,
+        action: "approve_program",
+        memo: reason,
+        reason,
+      },
+      { ...opts, correlationId, idempotencyKey },
+    );
+  }
+  refuseStrictLiveWrite(correlationId);
+}
+
+export async function rejectEvolutionProgram(
+  programId: string,
+  reason: string,
+  opts: RunActionOptions = {},
+): Promise<RunActionEnvelope> {
+  const correlationId = opts.correlationId ?? newCorrelationId();
+  const idempotencyKey = opts.idempotencyKey ?? mintIdemKey();
+  const cleanReason = String(reason ?? "").trim();
+  if (!cleanReason) {
+    throw makeBffError({
+      code: "VALIDATION_FAILED",
+      message: "reject_program requires a non-empty reason",
+      correlationId,
+    });
+  }
+  if (await liveWriteGated()) {
+    return runAction(
+      {
+        kind: "Evolution",
+        id: programId,
+        action: "reject_program",
+        memo: cleanReason,
+        reason: cleanReason,
+        params: { reason: cleanReason },
+        payload: { reason: cleanReason },
+      },
+      { ...opts, correlationId, idempotencyKey },
+    );
+  }
+  refuseStrictLiveWrite(correlationId);
+}
+
 export async function promoteCandidate(
   programId: string,
   candidateId: string,
@@ -2013,6 +2114,9 @@ export const bffWrites = {
   resumeEvolutionProgram,
   pauseEvolutionProgram,
   stopEvolutionProgram,
+  submitEvolutionProgramReview,
+  approveEvolutionProgram,
+  rejectEvolutionProgram,
   promoteCandidate,
   freezeGeneration,
   unfreezeGeneration,

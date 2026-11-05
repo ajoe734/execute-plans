@@ -262,6 +262,28 @@ export const paths = {
     const query = params.toString();
     return `${BASE}/management/evolution-journal${query ? `?${query}` : ""}`;
   },
+  mgmtEvolutionQualification: (
+    filters: {
+      qualified?: boolean;
+      offset?: number;
+      pageSize?: number;
+      page_size?: number;
+    } = {},
+  ) => {
+    const params = new URLSearchParams();
+    if (typeof filters.qualified === "boolean") {
+      params.set("qualified", String(filters.qualified));
+    }
+    if (typeof filters.offset === "number" && Number.isFinite(filters.offset) && filters.offset >= 0) {
+      params.set("offset", String(filters.offset));
+    }
+    const pageSize = filters.pageSize ?? filters.page_size;
+    if (typeof pageSize === "number" && Number.isFinite(pageSize) && pageSize > 0) {
+      params.set("page_size", String(pageSize));
+    }
+    const query = params.toString();
+    return `${BASE}/management/evolution-qualification${query ? `?${query}` : ""}`;
+  },
   mgmtEvidenceExplorer: () => `${BASE}/management/evidence`,
   mgmtEvidenceRef: (id: string) => `${BASE}/management/evidence/${enc(id)}`,
   /** MGMT-LOAD-003 — cheap shell badge counts + session/transport, no full lists. */

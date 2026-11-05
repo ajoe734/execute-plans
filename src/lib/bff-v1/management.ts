@@ -60,6 +60,12 @@ import {
   isBffAcceptedAttributionDimension,
   normalizePerformanceAttributionRow,
 } from "@/lib/v5/management/performanceAttribution";
+import {
+  EVOLUTION_QUALIFICATION_CRITERIA,
+  type EvolutionQualificationCriterionRow,
+  type EvolutionQualificationDecisionItem,
+  type EvolutionQualificationReport,
+} from "./dto";
 
 export type ManagementDataConfidence = "formal" | "partial" | "fallback" | "degraded" | "unavailable";
 
@@ -3749,6 +3755,98 @@ export function adaptEvolutionJournalList<T = Record<string, unknown>>(raw: unkn
   return list;
 }
 
+function adaptEvolutionQualificationCriterionRow(raw: unknown): EvolutionQualificationCriterionRow | null {
+  if (!isObject(raw)) return null;
+  const criterion = asString(raw.criterion);
+  if (!criterion) return null;
+  return {
+    criterion,
+    result: asString(raw.result, "not_evaluated"),
+    observed: raw.observed ?? null,
+    threshold: raw.threshold ?? null,
+    reason: nullableString(raw.reason),
+  };
+}
+
+function adaptEvolutionQualificationDecisionItem(raw: unknown): EvolutionQualificationDecisionItem | null {
+  if (!isObject(raw)) return null;
+  const decisionId = asString(raw.decision_id ?? raw.decisionId);
+  if (!decisionId) return null;
+  const criteria = firstArray<unknown>(raw.criteria)
+    .map(adaptEvolutionQualificationCriterionRow)
+    .filter((row): row is EvolutionQualificationCriterionRow => Boolean(row));
+  return {
+    decision_id: decisionId,
+    sweep_id: nullableString(raw.sweep_id ?? raw.sweepId),
+    tenant_id: nullableString(raw.tenant_id ?? raw.tenantId),
+    target_type: nullableString(raw.target_type ?? raw.targetType),
+    target_id: nullableString(raw.target_id ?? raw.targetId),
+    metric_name: nullableString(raw.metric_name ?? raw.metricName),
+    qualified: asBoolean(raw.qualified, false),
+    first_failing_criterion: nullableString(raw.first_failing_criterion ?? raw.firstFailingCriterion),
+    failure_reason: nullableString(raw.failure_reason ?? raw.failureReason),
+    policy_version: nullableString(raw.policy_version ?? raw.policyVersion),
+    evaluated_at: nullableString(raw.evaluated_at ?? raw.evaluatedAt),
+    program_id: nullableString(raw.program_id ?? raw.programId),
+    criteria,
+  };
+}
+
+export function adaptEvolutionQualificationReport(raw: unknown): EvolutionQualificationReport | null {
+  const data = unwrap(raw);
+  if (!isObject(data)) return null;
+  const items = firstArray<unknown>(data.items)
+    .map(adaptEvolutionQualificationDecisionItem)
+    .filter((item): item is EvolutionQualificationDecisionItem => Boolean(item));
+  const rawCounts = isObject(data.counts_by_first_failing_criterion ?? data.countsByFirstFailingCriterion)
+    ? (data.counts_by_first_failing_criterion ?? data.countsByFirstFailingCriterion) as Record<string, unknown>
+    : {};
+  const countsByFirstFailingCriterion: Record<string, number> = {};
+  for (const key of EVOLUTION_QUALIFICATION_CRITERIA) {
+    if (key in rawCounts) {
+      countsByFirstFailingCriterion[key] = asFiniteNumber(rawCounts[key], 0);
+    }
+  }
+  for (const [key, value] of Object.entries(rawCounts)) {
+    if (!(key in countsByFirstFailingCriterion)) {
+      countsByFirstFailingCriterion[key] = asFiniteNumber(value, 0);
+    }
+  }
+  const evaluated = asFiniteNumber(data.evaluated, items.length);
+  const qualified = asFiniteNumber(data.qualified, items.filter((item) => item.qualified).length);
+  return {
+    tenant_id: nullableString(data.tenant_id ?? data.tenantId),
+    sweep_id: nullableString(data.sweep_id ?? data.sweepId),
+    policy_version: nullableString(data.policy_version ?? data.policyVersion),
+    evaluated_at: nullableString(data.evaluated_at ?? data.evaluatedAt),
+    evaluated,
+    qualified,
+    drafted: asFiniteNumber(data.drafted, 0),
+    counts_by_first_failing_criterion: countsByFirstFailingCriterion,
+    failure_reason: nullableString(data.failure_reason ?? data.failureReason),
+    items,
+    total: asFiniteNumber(data.total, evaluated),
+    limit: asFiniteNumber(data.limit, 50),
+    offset: asFiniteNumber(data.offset, 0),
+  };
+}
+
+export const defaultEvolutionQualificationSeed = (): EvolutionQualificationReport => ({
+  tenant_id: null,
+  sweep_id: null,
+  policy_version: "evolution-qualification.v1",
+  evaluated_at: null,
+  evaluated: 0,
+  qualified: 0,
+  drafted: 0,
+  counts_by_first_failing_criterion: {},
+  failure_reason: "no_qualification_has_run",
+  items: [],
+  total: 0,
+  limit: 50,
+  offset: 0,
+});
+
 export function adaptPerformanceAttributionRows(raw: unknown): PerformanceAttributionRow[] | null {
   const data = unwrap(raw);
   const rawRows = adaptArrayPassthrough<unknown>(raw) ??
@@ -4572,6 +4670,47 @@ export const mgmt = {
         { method: "GET", path: paths.mgmtEvolutionJournal(opts), signal: opts?.signal },
         seedFn as () => EvolutionJournalList<T>,
         adaptEvolutionJournalList<T>,
+      ),
+  },
+
+  evolutionQualification: {
+    get: (
+      seedFnOrOpts?:
+        | (() => EvolutionQualificationReport)
+        | {
+            signal?: AbortSignal;
+            qualified?: boolean;
+            offset?: number;
+            pageSize?: number;
+            page_size?: number;
+          },
+      maybeOpts?: {
+        signal?: AbortSignal;
+        qualified?: boolean;
+        offset?: number;
+        pageSize?: number;
+        page_size?: number;
+      },
+    ): Promise<EvolutionQualificationReport> => {
+      const seedFn = typeof seedFnOrOpts === "function" ? seedFnOrOpts : defaultEvolutionQualificationSeed;
+      const opts = typeof seedFnOrOpts === "function" ? maybeOpts : seedFnOrOpts;
+      return mgmtRead(
+        "mgmt.evolutionQualification.get",
+        { method: "GET", path: paths.mgmtEvolutionQualification(opts), signal: opts?.signal },
+        seedFn,
+        adaptEvolutionQualificationReport,
+      );
+    },
+    getLiveOnly: (opts?: {
+      signal?: AbortSignal;
+      qualified?: boolean;
+      offset?: number;
+      pageSize?: number;
+      page_size?: number;
+    }): Promise<EvolutionQualificationReport | undefined> =>
+      liveOnlyRead<EvolutionQualificationReport>(
+        { method: "GET", path: paths.mgmtEvolutionQualification(opts), signal: opts?.signal },
+        adaptEvolutionQualificationReport,
       ),
   },
 

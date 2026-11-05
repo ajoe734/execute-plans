@@ -3,8 +3,13 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { paths } from "../paths";
+import { queryKeys } from "../queryKeys";
 import { ERROR_CODES } from "@/lib/v4/errorCodes";
-import { ACTION_COMMAND_STATUSES, EVIDENCE_CAPABILITY_MAP } from "../dto";
+import {
+  ACTION_COMMAND_STATUSES,
+  EVIDENCE_CAPABILITY_MAP,
+  EVOLUTION_QUALIFICATION_CRITERIA,
+} from "../dto";
 import { SSE_CHANNELS } from "../sse/channels";
 import {
   AGORA_CAPABILITIES,
@@ -76,6 +81,22 @@ describe("BFF v1 contract drift", () => {
     expect(paths.alphaFactory()).toBe("/bff/alpha-factory");
     expect(paths.alphaFactory({ lane: "replicated", page: 1, page_size: 20 })).toBe(
       "/bff/alpha-factory?lane=replicated&page=1&page_size=20",
+    );
+    expect(paths.mgmtEvolutionQualification()).toBe("/bff/management/evolution-qualification");
+    expect(paths.mgmtEvolutionQualification({ qualified: false, offset: 0, pageSize: 50 })).toBe(
+      "/bff/management/evolution-qualification?qualified=false&offset=0&page_size=50",
+    );
+    expect(paths.evolutionProgramRuns("evp-001")).toBe("/bff/evolution-programs/evp-001/runs");
+    expect(EVOLUTION_QUALIFICATION_CRITERIA).toEqual([
+      "real_threshold_signal",
+      "real_target",
+      "persistent_breach",
+      "fresh_evidence",
+      "executable_action",
+      "no_open_duplicate",
+    ]);
+    expect(queryKeys.oversight.evolutionQualification({ tenantId: "default", mode: "live" })).toContain(
+      "evolutionQualification",
     );
   });
 
