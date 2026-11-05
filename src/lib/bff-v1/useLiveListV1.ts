@@ -68,6 +68,7 @@ export function useLiveListV1<T>(
   };
 
   const mountedRef = useRef(true);
+  const requestSeqRef = useRef(0);
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -76,15 +77,20 @@ export function useLiveListV1<T>(
   }, []);
 
   const refresh = () => {
+    const seq = ++requestSeqRef.current;
     setLoading(true);
+    setEnv((prev) => (prev.items.length === 0 && prev.meta ? { ...prev, meta: undefined } : prev));
     void loaderRef.current().then((next) => {
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || seq !== requestSeqRef.current) return;
       setEnv(next);
       setPending(0);
       setLoading(false);
     }).catch((err) => {
-      if (!mountedRef.current) return;
-      if (isAbortError(err)) return;
+      if (!mountedRef.current || seq !== requestSeqRef.current) return;
+      if (isAbortError(err)) {
+        setLoading(false);
+        return;
+      }
       setEnv(degradedEnv(err));
       setPending(0);
       setLoading(false);

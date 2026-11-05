@@ -2812,4 +2812,99 @@ describe("evolutionQualification BFF contract", () => {
     vi.restoreAllMocks();
     liveStatus._reset();
   });
+
+  it("keeps traceable, needsAttention, and openOperation summary values null when omitted by BFF summary, never counts unknown actionability as needing attention, and labels official_reference rows without route_href as having no internal link", () => {
+    const items = Array.from({ length: 20 }, (_, idx) => ({
+      id: `evitem-tw_price_daily-0050-2026-11-05-${String(idx).padStart(2, "0")}`,
+      ref_id: `evitem-tw_price_daily-0050-2026-11-05-${String(idx).padStart(2, "0")}`,
+      evidence_item_id: `evitem-tw_price_daily-0050-2026-11-05-${String(idx).padStart(2, "0")}`,
+      title: `TW official tw_price_daily TWSE 0050 2026-11-05 #${idx + 1}`,
+      citation_label: `TW official tw_price_daily TWSE 0050 2026-11-05 #${idx + 1}`,
+      source_type: "official_reference",
+      source_ref: "tw-official://tw_price_daily/TWSE/0050/2026-11-05/3ec7b3e4e9083086",
+      captured_at: "2026-11-05T14:30:00+08:00",
+      available_time: "2026-11-05T14:30:00+08:00",
+      event_time: "2026-11-05T00:00:00+08:00",
+      item_type: "tw_price_daily",
+      link_type: "tw_price_daily",
+      metadata: { source_class: "official_reference" },
+      credibility: { tier: "producer_record", verified: true },
+      resolved_link: {
+        availability: "unavailable",
+        route_href: null,
+        display_label: "Source unavailable",
+        open_in_new_tab: false,
+      },
+      actionability: {
+        state: "unknown",
+        severity: "info",
+        reasons: [],
+        can_trace: false,
+        can_open_source: false,
+        can_open_linked_object: false,
+      },
+      operation: {
+        status: "none",
+        task_refs: [],
+        command_refs: [],
+        audit_refs: [],
+        events: [],
+      },
+    }));
+
+    const out = adaptManagementEvidenceOverview({
+      data: {
+        id: "management-evidence",
+        items,
+        summary: {
+          total_evidence: 518,
+          returned_evidence: 20,
+          visible_evidence: 518,
+          redacted_evidence: 0,
+          verified_evidence: 518,
+          by_source_type: { official_reference: 518 },
+          by_link_type: { tw_price_daily: 518 },
+          by_credibility_tier: { producer_record: 518 },
+        },
+        facets: {
+          source_types: { official_reference: 518 },
+          link_types: { tw_price_daily: 518 },
+          credibility_tiers: { producer_record: 518 },
+        },
+      },
+      page_info: {
+        next_page_token: "20",
+        total: 518,
+        page_size: 20,
+      },
+      meta: {
+        snapshot_at: "2026-11-05T06:30:00Z",
+        surfaces: {
+          management_evidence: { status: "ok", source: "service_store" },
+          evidence_refs: { status: "ok", source: "service_store" },
+        },
+        redacted_evidence_count: 0,
+      },
+    });
+
+    expect(out?.summary.totalEvidence).toBe(518);
+    expect(out?.summary.verifiedEvidence).toBe(518);
+    expect(out?.summary.traceableEvidence).toBeNull();
+    expect(out?.summary.needsAttentionEvidence).toBeNull();
+    expect(out?.summary.openOperationEvidence).toBeNull();
+    expect(out?.summary.byActionabilityState).toEqual({ unknown: 20 });
+
+    for (const item of out?.items ?? []) {
+      expect(item.resolvedLink).toEqual({
+        availability: "no_internal_link",
+        routeHref: null,
+        route_href: null,
+        displayLabel: "No internal link",
+        display_label: "No internal link",
+        openInNewTab: false,
+        open_in_new_tab: false,
+      });
+      expect(item.resolvedLink.displayLabel).not.toBe("Source unavailable");
+    }
+  });
 });
