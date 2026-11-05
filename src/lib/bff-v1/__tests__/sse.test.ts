@@ -3,8 +3,8 @@ import { onBffUnauthorized, resetSessionTransportForTests } from "@/lib/auth/ses
 import { liveStatus } from "@/lib/bff-v1/liveStatus";
 import { subscribe, publish } from "@/lib/bff-v1/sse/bridge";
 import { isSseEvent, SSE_SCHEMA_VERSION } from "@/lib/bff-v1/sse/channels";
-import { extractSseFrames, parseSseFrames } from "@/lib/bff-v1/sse/protocol";
-import { connectLiveSse, fetchSse } from "@/lib/bff-v1/sse/liveSse";
+import { extractSseFrames, parseSseFrames, SSE_RECONNECT_BACKOFF_MS } from "@/lib/bff-v1/sse/protocol";
+import { _resetLiveSse, connectLiveSse, fetchSse } from "@/lib/bff-v1/sse/liveSse";
 import { setAuthProvider, clearAuthProvider } from "@/lib/bff-v1/headers";
 
 describe("VI-A C5 — SSE typed envelope (schemaVersion=1)", () => {
@@ -64,6 +64,7 @@ describe("SD-AGC-04 — SSE Frame Parser", () => {
 
 describe("SD-AGC-04 — fetchSse transport", () => {
   afterEach(() => {
+    _resetLiveSse();
     clearAuthProvider();
     vi.restoreAllMocks();
   });
@@ -243,6 +244,7 @@ describe("SD-AGC-04 — fetchSse transport", () => {
   });
 
   it("connectLiveSse cookie EventSource reconnects after refresh and does not mark fallback on refresh failure", async () => {
+    vi.useFakeTimers();
     resetSessionTransportForTests();
     clearAuthProvider();
     liveStatus._reset({ mode: "live", effective: "live", baseUrl: "https://bff.example.test" });
@@ -255,15 +257,20 @@ describe("SD-AGC-04 — fetchSse transport", () => {
       close: ReturnType<typeof vi.fn>;
       onmessage: ((e: MessageEvent) => void) | null;
       onerror: ((e: Event) => void) | null;
+      listeners: Record<string, () => void>;
       addEventListener: ReturnType<typeof vi.fn>;
     }> = [];
     const EventSourceMock = vi.fn((url: string) => {
+      const listeners: Record<string, () => void> = {};
       const instance = {
         url,
         close: vi.fn(),
         onmessage: null,
         onerror: null,
-        addEventListener: vi.fn(),
+        listeners,
+        addEventListener: vi.fn((type: string, fn: () => void) => {
+          listeners[type] = fn;
+        }),
       };
       sources.push(instance);
       return instance;
@@ -290,34 +297,41 @@ describe("SD-AGC-04 — fetchSse transport", () => {
     });
     expect(sources).toHaveLength(1);
 
-    // 1st error: refresh succeeds -> EventSource reconnects
+    // 1st error: refresh succeeds -> EventSource reconnects after backoff (not zero-delay)
     sources[0].onerror?.(new Event("error"));
-    await vi.waitFor(() => {
-      expect(sources).toHaveLength(2);
-    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(sources).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(1_300);
+    expect(sources).toHaveLength(2);
     expect(unauthorizedListener).not.toHaveBeenCalled();
 
-    // 2nd error: refresh fails -> unauthorized listener notified, liveStatus stays "live" (not fallback)
-    refreshShouldSucceed = false;
+    // Stream opens (resets streak), then drops and fails before open in a new streak when refresh fails -> unauthorized listener notified, liveStatus stays "live" (not fallback)
+    sources[1].listeners.open?.();
     sources[1].onerror?.(new Event("error"));
-    await vi.waitFor(() => {
-      expect(unauthorizedListener).toHaveBeenCalledWith(
-        expect.objectContaining({ confirmed: true }),
-      );
-    });
-    expect(sources).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(1_300);
+    expect(sources).toHaveLength(3);
+
+    refreshShouldSucceed = false;
+    sources[2].onerror?.(new Event("error"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(unauthorizedListener).toHaveBeenCalledWith(
+      expect.objectContaining({ confirmed: true }),
+    );
+    expect(sources).toHaveLength(3);
     expect(liveStatus.get().effective).toBe("live");
 
     unsub();
     close();
     resetSessionTransportForTests();
     liveStatus._reset();
+    vi.useRealTimers();
   });
 });
 
 
 describe("transient refresh failure reconnect (cookie EventSource)", () => {
   afterEach(() => {
+    _resetLiveSse();
     vi.useRealTimers();
     vi.unstubAllGlobals();
     resetSessionTransportForTests();
@@ -383,11 +397,14 @@ describe("transient refresh failure reconnect (cookie EventSource)", () => {
     await vi.advanceTimersByTimeAsync(1_600);
     expect(sources).toHaveLength(3);
 
-    // BFF back: the next pre-open error refreshes and reconnects immediately
+    // third pre-open failure: backoff grows (~5s) before reconnecting and opening when BFF is back
     bffUp = true;
     sources[2].onerror?.(new Event("error"));
     await vi.advanceTimersByTimeAsync(0);
+    expect(sources).toHaveLength(3);
+    await vi.advanceTimersByTimeAsync(6_100);
     expect(sources).toHaveLength(4);
+    sources[3].listeners.open?.();
     expect(unauthorizedListener).not.toHaveBeenCalled();
 
     unsub();
@@ -438,6 +455,153 @@ describe("transient refresh failure reconnect (cookie EventSource)", () => {
     expect(unauthorizedListener).toHaveBeenCalledWith(expect.objectContaining({ confirmed: true }));
 
     unsub();
+    close();
+  });
+
+  it("probes POST /bff/auth/refresh at most once during 30s of pre-open failures with 200 refresh and bounds reconnects by the backoff schedule", async () => {
+    vi.useFakeTimers();
+    resetSessionTransportForTests();
+    clearAuthProvider();
+    liveStatus._reset({ mode: "live", effective: "live", baseUrl: "https://bff.example.test" });
+
+    const sources: Array<{
+      url: string;
+      close: ReturnType<typeof vi.fn>;
+      onerror: ((e: Event) => void) | null;
+      listeners: Record<string, () => void>;
+      addEventListener: (type: string, fn: () => void) => void;
+    }> = [];
+    vi.stubGlobal(
+      "EventSource",
+      vi.fn((url: string) => {
+        const listeners: Record<string, () => void> = {};
+        const instance = {
+          url,
+          close: vi.fn(),
+          onerror: null,
+          listeners,
+          addEventListener: (type: string, fn: () => void) => {
+            listeners[type] = fn;
+          },
+        };
+        sources.push(instance);
+        // Simulate stream failing before open on every connection attempt.
+        queueMicrotask(() => {
+          instance.onerror?.(new Event("error"));
+        });
+        return instance;
+      }),
+    );
+
+    let refreshCalls = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).endsWith("/bff/auth/refresh")) {
+        refreshCalls += 1;
+      }
+      return new Response(
+        JSON.stringify({ authenticated: true, expires_at: "2026-11-05T19:00:00Z" }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const close = connectLiveSse({ channels: ["strategy"] });
+    await vi.advanceTimersByTimeAsync(30_000);
+
+    const reconnectCount = sources.length - 1;
+    expect(refreshCalls).toBe(1);
+    expect(reconnectCount).toBe(4);
+    expect(reconnectCount).toBeLessThanOrEqual(SSE_RECONNECT_BACKOFF_MS.length);
+
+    close();
+  });
+
+  it("resets backoff attempt and refresh-probe streak only when a stream actually opens, then allows one refresh probe on a later pre-open failure", async () => {
+    vi.useFakeTimers();
+    resetSessionTransportForTests();
+    clearAuthProvider();
+    liveStatus._reset({ mode: "live", effective: "live", baseUrl: "https://bff.example.test" });
+
+    const sources: Array<{
+      url: string;
+      close: ReturnType<typeof vi.fn>;
+      onerror: ((e: Event) => void) | null;
+      listeners: Record<string, () => void>;
+      addEventListener: (type: string, fn: () => void) => void;
+    }> = [];
+    vi.stubGlobal(
+      "EventSource",
+      vi.fn((url: string) => {
+        const listeners: Record<string, () => void> = {};
+        const instance = {
+          url,
+          close: vi.fn(),
+          onerror: null,
+          listeners,
+          addEventListener: (type: string, fn: () => void) => {
+            listeners[type] = fn;
+          },
+        };
+        sources.push(instance);
+        return instance;
+      }),
+    );
+
+    let refreshCalls = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        refreshCalls += 1;
+        return new Response(JSON.stringify({ authenticated: true }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }),
+    );
+
+    const close = connectLiveSse({ channels: ["strategy"] });
+    expect(sources).toHaveLength(1);
+
+    // Streak 1, pre-open failure #1: probes refresh once and backs off with attempt=0 (~1s), NOT immediate reconnect
+    sources[0].onerror?.(new Event("error"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(refreshCalls).toBe(1);
+    expect(sources).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(1_300);
+    expect(sources).toHaveLength(2);
+
+    // Streak 1, pre-open failure #2: no second refresh probe; backs off with attempt=1 (~2s, proving refresh did not reset attempt)
+    sources[1].onerror?.(new Event("error"));
+    await vi.advanceTimersByTimeAsync(1_300);
+    expect(refreshCalls).toBe(1);
+    expect(sources).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(1_300);
+    expect(sources).toHaveLength(3);
+
+    // Stream 2 actually opens -> resets attempt=0 and refreshProbedInStreak=false
+    sources[2].listeners.open?.();
+
+    // Post-open drop on stream 2: reconnects with attempt=0 (~1s) and no refresh probe
+    sources[2].onerror?.(new Event("error"));
+    await vi.advanceTimersByTimeAsync(1_300);
+    expect(refreshCalls).toBe(1);
+    expect(sources).toHaveLength(4);
+
+    // Streak 2, pre-open failure on stream 3: starts a new streak and probes refresh once again (refreshCalls -> 2), using attempt=1 (~2s)
+    sources[3].onerror?.(new Event("error"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(refreshCalls).toBe(2);
+    expect(sources).toHaveLength(4);
+    await vi.advanceTimersByTimeAsync(1_300);
+    expect(sources).toHaveLength(4);
+    await vi.advanceTimersByTimeAsync(1_300);
+    expect(sources).toHaveLength(5);
+
+    // Streak 2, second pre-open failure on stream 4: no extra refresh probe in streak 2
+    sources[4].onerror?.(new Event("error"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(refreshCalls).toBe(2);
+
     close();
   });
 });

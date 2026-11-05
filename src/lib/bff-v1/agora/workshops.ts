@@ -506,6 +506,7 @@ export function openWorkshopStream(
   let currentLastEventId = options?.lastEventId;
   let source: EventSource | null = null;
   let attempt = 0;
+  let refreshProbedInStreak = false;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
   const buildStreamUrl = () => {
@@ -521,6 +522,7 @@ export function openWorkshopStream(
     es.addEventListener("open", () => {
       everOpened = true;
       attempt = 0;
+      refreshProbedInStreak = false;
       if (!closed) options?.onOpen?.();
     });
     let errorHandled = false;
@@ -541,14 +543,21 @@ export function openWorkshopStream(
         scheduleBackoff();
         return;
       }
+      if (refreshProbedInStreak) {
+        // Pre-open failure streak already probed refresh once: report error and
+        // reconnect with growing backoff without probing refresh again.
+        options?.onError?.(new Error("EventSource connection error"));
+        scheduleBackoff();
+        return;
+      }
+      refreshProbedInStreak = true;
       void refreshBffSessionOutcome({
         baseUrl,
         reportOnFailure: true,
       }).then((outcome) => {
         if (closed) return;
         if (outcome === "refreshed") {
-          attempt = 0;
-          connectEventSource();
+          scheduleBackoff();
           return;
         }
         options?.onError?.(new Error("EventSource connection error"));

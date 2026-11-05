@@ -28,6 +28,7 @@ import {
 
 let current: { close: () => void } | null = null;
 let attempt = 0;
+let refreshProbedInStreak = false;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let lastEventId: string | undefined;
 
@@ -112,7 +113,6 @@ export function fetchSse(options: FetchSseOptions): FetchSseController {
   const offRefreshed = onBffSessionRefreshed(() => {
     if (closed || !awaitingAuthRefresh) return;
     awaitingAuthRefresh = false;
-    attempt = 0;
     clearTimer();
     void connect();
   });
@@ -285,6 +285,7 @@ export function connectLiveSse(init: SseConnectInit = {}): () => void {
       autoReconnect: true,
       onOpen: () => {
         attempt = 0;
+        refreshProbedInStreak = false;
         realtime.markLiveOpen();
         liveStatus.reportSuccess();
       },
@@ -313,6 +314,8 @@ export function connectLiveSse(init: SseConnectInit = {}): () => void {
       close: () => {
         controller.close();
         current = null;
+        attempt = 0;
+        refreshProbedInStreak = false;
       },
     };
     return current.close;
@@ -329,6 +332,7 @@ export function connectLiveSse(init: SseConnectInit = {}): () => void {
   es.addEventListener("open", () => {
     everOpened = true;
     attempt = 0;
+    refreshProbedInStreak = false;
     realtime.markLiveOpen();
     liveStatus.reportSuccess();
   });
@@ -342,6 +346,12 @@ export function connectLiveSse(init: SseConnectInit = {}): () => void {
     }
   });
 
+  const scheduleReconnect = () => {
+    if (!isLiveModeConfigured()) return;
+    clearTimer();
+    reconnectTimer = setTimeout(() => connectLiveSse(init), nextBackoffMs(attempt++, true));
+  };
+
   let errorHandled = false;
   const handleError = () => {
     if (errorHandled) return;
@@ -350,29 +360,21 @@ export function connectLiveSse(init: SseConnectInit = {}): () => void {
     if (closedByCaller) return;
     try { es.close(); } catch { /* noop */ }
     current = null;
-    if (everOpened) {
-      // The stream was healthy before it dropped, so this is a transient
-      // disconnect rather than an expired session: reconnect with backoff
-      // instead of probing /bff/auth/refresh on every drop.
-      if (isLiveModeConfigured()) {
-        clearTimer();
-        reconnectTimer = setTimeout(() => connectLiveSse(init), nextBackoffMs(attempt++, true));
-      }
+    if (everOpened || refreshProbedInStreak) {
+      // Either the stream was healthy before it dropped (transient disconnect)
+      // or this pre-open failure streak already probed /bff/auth/refresh once:
+      // reconnect with growing backoff without probing refresh again.
+      scheduleReconnect();
       return;
     }
+    refreshProbedInStreak = true;
     void refreshBffSessionOutcome({
       baseUrl: base,
       reportOnFailure: true,
     }).then((outcome) => {
       if (closedByCaller || !isLiveModeConfigured()) return;
-      if (outcome === "refreshed") {
-        attempt = 0;
-        clearTimer();
-        connectLiveSse(init);
-      } else if (outcome === "transient") {
-        // BFF unreachable / restarting: keep retrying with growing backoff.
-        clearTimer();
-        reconnectTimer = setTimeout(() => connectLiveSse(init), nextBackoffMs(attempt++, true));
+      if (outcome === "refreshed" || outcome === "transient") {
+        scheduleReconnect();
       }
       // auth_rejected: session-expired flow owns recovery; no reconnect.
     });
@@ -380,35 +382,36 @@ export function connectLiveSse(init: SseConnectInit = {}): () => void {
   es.addEventListener("error", handleError);
   es.onerror = handleError;
 
-  function cleanup(scheduleReconnect = false) {
-    try { es.close(); } catch { /* noop */ }
-    current = null;
-    if (scheduleReconnect && isLiveModeConfigured()) {
-      const delay = nextBackoffMs(attempt++, true);
-      clearTimer();
-      reconnectTimer = setTimeout(() => connectLiveSse(init), delay);
-    }
-  }
-
-  current = {
+  const instance = {
     close: () => {
       closedByCaller = true;
       clearTimer();
-      cleanup(false);
+      try { es.close(); } catch { /* noop */ }
+      const active = current;
+      current = null;
+      if (active && active !== instance) {
+        active.close();
+      }
+      attempt = 0;
+      refreshProbedInStreak = false;
     },
   };
-  return current.close;
+  current = instance;
+  return instance.close;
 }
 
 export function disconnectLiveSse(): void {
   if (current) current.close();
   clearTimer();
+  attempt = 0;
+  refreshProbedInStreak = false;
 }
 
 /** Test helper. */
 export function _resetLiveSse(): void {
   disconnectLiveSse();
   attempt = 0;
+  refreshProbedInStreak = false;
   lastEventId = undefined;
 }
 
