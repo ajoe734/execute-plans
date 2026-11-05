@@ -160,6 +160,27 @@ export const paths = {
   hookRegistry: () => `${BASE}/hooks`,
   lineage: (rootId?: string) =>
     `${BASE}/lineage${rootId ? `?root_id=${enc(rootId)}` : ""}`,
+  alphaFactory: (
+    filters: {
+      lane?: "discovered" | "scaffolded" | "replicated" | string;
+      page?: number;
+      pageSize?: number;
+      page_size?: number;
+    } = {},
+  ) => {
+    const params = new URLSearchParams();
+    const lane = filters.lane?.trim();
+    if (lane) params.set("lane", lane);
+    if (typeof filters.page === "number" && Number.isFinite(filters.page) && filters.page > 0) {
+      params.set("page", String(filters.page));
+    }
+    const pageSize = filters.page_size ?? filters.pageSize;
+    if (typeof pageSize === "number" && Number.isFinite(pageSize) && pageSize > 0) {
+      params.set("page_size", String(pageSize));
+    }
+    const query = params.toString();
+    return `${BASE}/alpha-factory${query ? `?${query}` : ""}`;
+  },
   mgmtDataSources: () => `${BASE}/management/data-sources`,
   mgmtDataSourcesCatalog: () => `${BASE}/management/data-sources/catalog`,
   mgmtDataSourceDetail: (id: string) => `${BASE}/management/data-sources/${enc(id)}`,

@@ -1,61 +1,139 @@
-import type { Strategy } from "@/lib/bff-v1";
+import {
+  MOCK_ALPHA_FACTORY_ENVELOPE,
+  MOCK_DISCOVERED,
+  MOCK_REPLICATED,
+  MOCK_SCAFFOLDED,
+  normalizeAlphaFactoryEnvelope,
+  type AlphaFactoryCard,
+  type AlphaFactoryData,
+  type AlphaFactoryEnvelope,
+  type AlphaFactoryLaneId,
+  type AlphaFactoryMeta,
+} from "@/lib/bff-v1/alphaFactory";
 
-export interface AlphaFactoryCard {
-  id: string;
-  name: string;
-  risk: Strategy["risk"];
-  alpha?: string;
-  sharpe?: number | null;
-  note: string;
-}
+export {
+  MOCK_ALPHA_FACTORY_ENVELOPE,
+  MOCK_DISCOVERED,
+  MOCK_REPLICATED,
+  MOCK_SCAFFOLDED,
+  type AlphaFactoryCard,
+  type AlphaFactoryData,
+  type AlphaFactoryEnvelope,
+  type AlphaFactoryLaneId,
+  type AlphaFactoryMeta,
+};
 
 export const ALPHA_FACTORY_COLUMNS = ["discovered", "scaffolded", "replicated"] as const;
-export type AlphaFactoryColumn = typeof ALPHA_FACTORY_COLUMNS[number];
-export type AlphaFactoryBuckets = Record<AlphaFactoryColumn, AlphaFactoryCard[]>;
+export type AlphaFactoryColumn = (typeof ALPHA_FACTORY_COLUMNS)[number];
+
+export interface AlphaFactoryBuckets extends Record<AlphaFactoryColumn, AlphaFactoryCard[]> {
+  discovered: AlphaFactoryCard[];
+  scaffolded: AlphaFactoryCard[];
+  replicated: AlphaFactoryCard[];
+  discoveredReason: string | null;
+}
+
 export type AlphaFactorySourceKey = "mock" | "fallback" | "live" | "degraded" | "unverified";
 
 export function classifyAlphaFactorySource(
   live: { mode: "mock" | "live"; effective: "mock" | "live" },
   meta: unknown,
+  error?: unknown,
 ): AlphaFactorySourceKey {
-  if (live.mode === "mock") return "mock";
-  if (live.effective === "mock") return "fallback";
+  if (error) return "degraded";
 
   const record = asRecord(meta);
   const surfaces = asRecord(record?.surfaces);
+  const alphaSurface = asRecord(surfaces?.alpha_factory);
+  if (alphaSurface && !surfaceIsLive(alphaSurface)) {
+    return "degraded";
+  }
+
+  if (live.mode === "mock") {
+    if (alphaSurface && surfaceIsLive(alphaSurface) && String(alphaSurface.source ?? "") !== "mock_seed") {
+      return "live";
+    }
+    return "mock";
+  }
+  if (live.effective === "mock") return "fallback";
+
   if (!record || !surfaces || Object.keys(surfaces).length === 0) return "unverified";
   if (record.staleness || record.degradation) return "degraded";
+  if (surfaces.alpha_factory !== undefined) {
+    return surfaceIsLive(surfaces.alpha_factory) ? "live" : "degraded";
+  }
   for (const surface of Object.values(surfaces)) {
     if (!surfaceIsLive(surface)) return "degraded";
   }
   return "live";
 }
 
-export function buildAlphaFactoryBuckets(
-  strategies: Strategy[],
-  opts: {
-    includeMockFixtures: boolean;
-    includeReplicated: boolean;
-    t: (key: string) => string;
-  },
-): AlphaFactoryBuckets {
-  const replicated: AlphaFactoryCard[] = opts.includeReplicated ? strategies.slice(0, 4).map((s) => ({
-    id: s.id, name: s.name, risk: s.risk, alpha: s.alpha, sharpe: s.sharpe, note: opts.t("alphaFactory.replicated.note"),
-  })) : [];
-  const scaffolded: AlphaFactoryCard[] = opts.includeMockFixtures ? [
-    { id: "cand_011", name: "Short-vol carry (BTC)", risk: "medium", alpha: "vol.carry", sharpe: 1.42, note: opts.t("alphaFactory.scaffolded.note") },
-    { id: "cand_012", name: "Cross-venue funding arb", risk: "low", alpha: "fund.arb", sharpe: 1.18, note: opts.t("alphaFactory.scaffolded.note") },
-    { id: "cand_013", name: "Sector rotation (US tech)", risk: "high", alpha: "rot.us", sharpe: 0.88, note: opts.t("alphaFactory.scaffolded.note") },
-  ] : [];
-  const discovered: AlphaFactoryCard[] = opts.includeMockFixtures ? [
-    { id: "disc_021", name: "Liquidity-shock divergence", risk: "low", note: opts.t("alphaFactory.discovered.note") },
-    { id: "disc_022", name: "Macro surprise momentum", risk: "medium", note: opts.t("alphaFactory.discovered.note") },
-    { id: "disc_023", name: "Stablecoin flow imbalance", risk: "medium", note: opts.t("alphaFactory.discovered.note") },
-    { id: "disc_024", name: "Options skew reversion", risk: "low", note: opts.t("alphaFactory.discovered.note") },
-    { id: "disc_025", name: "On-chain whale accumulation", risk: "high", note: opts.t("alphaFactory.discovered.note") },
-  ] : [];
+function toEnvelopeInput(
+  source: AlphaFactoryEnvelope | AlphaFactoryData | readonly unknown[] | null | undefined,
+  includeMockFixtures: boolean,
+): unknown {
+  if (source === null || source === undefined) {
+    if (includeMockFixtures) {
+      return MOCK_ALPHA_FACTORY_ENVELOPE;
+    }
+    return {
+      data: {
+        discovered: [],
+        scaffolded: [],
+        replicated: [],
+        reason: null,
+        discovered_reason: null,
+      },
+      items: [],
+    };
+  }
+  if (Array.isArray(source)) {
+    const normalizedFromArray = normalizeAlphaFactoryEnvelope({ items: source });
+    if (
+      includeMockFixtures &&
+      normalizedFromArray.items.length === 0 &&
+      normalizedFromArray.data.discovered_reason === null
+    ) {
+      return MOCK_ALPHA_FACTORY_ENVELOPE;
+    }
+    return { items: source };
+  }
+  if (typeof source === "object" && "data" in source) {
+    return source;
+  }
+  return { data: source };
+}
 
-  return { discovered, scaffolded, replicated };
+export function buildAlphaFactoryBuckets(
+  source?: AlphaFactoryEnvelope | AlphaFactoryData | readonly unknown[] | null,
+  opts: {
+    includeMockFixtures?: boolean;
+    includeReplicated?: boolean;
+    t?: (key: string) => string;
+  } = {},
+): AlphaFactoryBuckets {
+  const includeMockFixtures = opts.includeMockFixtures ?? false;
+  const includeReplicated = opts.includeReplicated ?? true;
+
+  if (!includeReplicated && !includeMockFixtures) {
+    return {
+      discovered: [],
+      scaffolded: [],
+      replicated: [],
+      discoveredReason: null,
+    };
+  }
+
+  const envelope = normalizeAlphaFactoryEnvelope(toEnvelopeInput(source, includeMockFixtures));
+
+  return {
+    discovered: envelope.data.discovered.filter((card) => card.lane === "discovered"),
+    scaffolded: envelope.data.scaffolded.filter((card) => card.lane === "scaffolded"),
+    replicated: includeReplicated
+      ? envelope.data.replicated.filter((card) => card.lane === "replicated")
+      : [],
+    discoveredReason: envelope.data.discovered_reason,
+  };
 }
 
 function surfaceIsLive(surface: unknown): boolean {
@@ -63,7 +141,7 @@ function surfaceIsLive(surface: unknown): boolean {
   const record = asRecord(surface);
   if (!record) return false;
   const source = String(record.source ?? "").toLowerCase();
-  if (["local_snapshot", "missing", "unverifiable"].includes(source)) return false;
+  if (["local_snapshot", "missing", "unverifiable", "unavailable"].includes(source)) return false;
   const status = String(record.status ?? record.state ?? "ok").toLowerCase();
   if (!["ok", "fresh", "live"].includes(status)) return false;
   return !record.staleness && !record.degradation;
@@ -71,6 +149,6 @@ function surfaceIsLive(surface: unknown): boolean {
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? value as Record<string, unknown>
+    ? (value as Record<string, unknown>)
     : null;
 }
