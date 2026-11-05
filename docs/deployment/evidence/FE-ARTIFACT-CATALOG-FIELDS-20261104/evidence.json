@@ -1,0 +1,77 @@
+{
+  "task_id": "FE-ARTIFACT-CATALOG-FIELDS-20261104",
+  "captured_at": "2026-11-05T05:21:00Z",
+  "repository": "ajoe734/execute-plans",
+  "base_branch": "dev",
+  "base_commit": "9bc0229b1",
+  "prerequisites": {
+    "ARTIFACT-CATALOG-REGISTRY-20261104": {
+      "status": "done",
+      "merge_commit": "0967aca9df3c90970f5da24eadd698213770f41b"
+    },
+    "FE-STRATEGY-METRICS-TRUTH-20261104": {
+      "status": "done",
+      "merge_commit": "2d2859ac29641ca69dd394c471164b7cd92674d0"
+    }
+  },
+  "acceptance_verification": {
+    "1_list_fields_pagination_and_free_string_kind": {
+      "status": "passed",
+      "summary": "lists.artifacts uses strictLivePaginatedListLoader with pageSize=100 (matching FastAPI GET /bff/artifacts le=100) and normalizeArtifactFields so every page is fetched via page_token and every row is reachable. Artifact.kind is typed as a free string (string) in src/lib/bff-v1/dto.ts and src/lib/writeIntents/types.ts. ArtifactsList renders source_kind, kind, version, state, risk, size, hash, owner, and updatedAt for both real row shapes (reg-bundle-001 with kind='execution_bundle' and res-run-output-001 with kind='factor_eval_report').",
+      "real_row_shapes_tested": [
+        {
+          "id": "reg-bundle-001",
+          "name": "strat-persona-bundle-001",
+          "kind": "execution_bundle",
+          "version": "1.0.1",
+          "state": "approved",
+          "risk": "low",
+          "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa0001",
+          "owner": "gov-approver-alpha",
+          "updatedAt": "2026-11-04T12:01:00Z",
+          "source_kind": "registry"
+        },
+        {
+          "id": "res-run-output-001",
+          "name": "Qlib Alpha158 Factor Evaluation Output",
+          "kind": "factor_eval_report",
+          "version": null,
+          "state": null,
+          "risk": null,
+          "hash": "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+          "owner": "research-worker-qlib",
+          "updatedAt": "2026-11-04T17:00:00Z",
+          "source_kind": "research_run_output"
+        }
+      ]
+    },
+    "2_research_output_null_fields_and_no_fabricated_size_or_format": {
+      "status": "passed",
+      "summary": "normalizeArtifactFields preserves null for version, state, and risk on research_run_output rows (and does not overwrite state: null with status: ''). ArtifactsList, StrategyDetail, and ArtifactDetail render t('common.noData') ('No data' / '無資料') when version, state, risk, sizeMb, or format are null or omitted, and never print '0 MB', 'vnull', or derive Format ('ONNX'/'Parquet'/'OCI'/'PDF') from kind."
+    },
+    "3_source_kind_visible_label_and_filter": {
+      "status": "passed",
+      "summary": "ArtifactsList displays a visible source_kind badge ('registry' or 'research_run_output') in the Source column and provides a scopeConfig filter bar ('All sources', 'Registry bundle', 'Research output') synced with ?source_kind= in the URL."
+    },
+    "4_detail_page_both_sources_and_honest_actions": {
+      "status": "passed",
+      "summary": "ArtifactDetail opens for both registry IDs (reg-bundle-001) and research IDs (res-run-output-001), renders source-specific owner metadata and linkage fields, and disables unsupported Download, Retire, and Rollback actions via NonProductionActionButton unless explicitly advertised by the owner. ArtifactDiffPanel and ArtifactRollbackPanel handle version: null without crashing or fabricating fake prior versions and display compare_unavailable_reason."
+    },
+    "5_degraded_artifact_list_partial_data_banner_and_test_integrity": {
+      "status": "passed",
+      "summary": "ObjectListPage inspects meta.surfaces for degraded partial-data surfaces (including artifact_list) and renders data-testid='partial-data-banner' naming the failed source (e.g. 'registry') and displaying the surface message while keeping surviving rows visible. No existing test was weakened or deleted, and zero existing assertions were modified."
+    }
+  },
+  "changed_test_assertions": [],
+  "validation_commands": [
+    {
+      "command": "./node_modules/.bin/tsc --noEmit",
+      "exit_code": 0
+    },
+    {
+      "command": "./node_modules/.bin/vitest run src/management/pages/ObjectListPage.test.tsx src/management/pages/ArtifactDetail.test.tsx src/lib/bff-v1/__tests__/strictLiveReadOffline.test.ts src/lib/bff-v1/__tests__/contract-drift.test.ts src/management/__tests__/fullOperationAssembly.test.tsx",
+      "exit_code": 0,
+      "summary": "5 test files passed, 49 tests passed (including 4 new tests covering real registry and research artifact list/detail/degraded-banner contracts)"
+    }
+  ]
+}

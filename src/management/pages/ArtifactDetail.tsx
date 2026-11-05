@@ -15,6 +15,7 @@ import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
 import { DataTable } from "@/platform/components/DataTable";
 import { AuditTimeline } from "@/platform/components/AuditTimeline";
 import { StatusBadge } from "@/platform/components/StatusBadge";
+import { NonProductionActionButton } from "@/management/components/NonProductionActionButton";
 import { ArtifactDiffPanel } from "@/management/components/detail/ArtifactDiffPanel";
 import { ArtifactRollbackPanel } from "@/management/components/detail/ArtifactRollbackPanel";
 
@@ -71,17 +72,96 @@ export const ArtifactDetail = () => {
     );
   }
 
+  const noData = t("common.noData");
+  const sourceKind =
+    typeof (a.source_kind ?? a.sourceKind) === "string"
+      ? String(a.source_kind ?? a.sourceKind).trim()
+      : "";
+  const kindText = typeof a.kind === "string" ? a.kind.trim() : "";
+  const versionText = typeof a.version === "string" ? a.version.trim() : "";
+  const stateText = typeof a.state === "string" ? a.state.trim() : "";
+  const riskText = typeof a.risk === "string" ? a.risk.trim() : "";
+  const ownerText = typeof a.owner === "string" ? a.owner.trim() : "";
+  const hashText = typeof a.hash === "string" ? a.hash.trim() : "";
+  const formatText = typeof a.format === "string" ? a.format.trim() : "";
+  const hasSize = typeof a.sizeMb === "number" && Number.isFinite(a.sizeMb);
+
+  const kindLabel = kindText || noData;
+  const versionLabel = versionText || noData;
+  const stateLabel = stateText || noData;
+  const riskLabel = riskText || noData;
+  const ownerLabel = ownerText || noData;
+  const hashLabel = hashText || noData;
+  const sizeLabel = hasSize ? `${a.sizeMb.toLocaleString()} MB` : noData;
+  const formatLabel = formatText || noData;
+
+  const storageRefObj =
+    a.storage_ref && typeof a.storage_ref === "object" && !Array.isArray(a.storage_ref)
+      ? a.storage_ref
+      : a.saved_output?.storage_ref &&
+          typeof a.saved_output.storage_ref === "object" &&
+          !Array.isArray(a.saved_output.storage_ref)
+        ? a.saved_output.storage_ref
+        : undefined;
+  const storagePath =
+    (typeof a.storage_ref === "string" && a.storage_ref.trim()) ||
+    (typeof storageRefObj?.path === "string" && storageRefObj.path.trim()) ||
+    (typeof storageRefObj?.uri === "string" && storageRefObj.uri.trim()) ||
+    (typeof a.saved_output?.storage_ref === "string" && a.saved_output.storage_ref.trim()) ||
+    "";
+  const storageBackend =
+    (typeof storageRefObj?.backend === "string" && storageRefObj.backend.trim()) || "";
+
+  const canDownload = Boolean(
+    a.allowedActions?.canDownload || a.availableActions?.includes("download"),
+  );
+  const canRetire = Boolean(
+    a.allowedActions?.canRetire ||
+      a.availableActions?.includes("retire") ||
+      a.availableActions?.includes("archive"),
+  );
+
+  const subtitleParts = [
+    sourceKind || null,
+    kindLabel,
+    versionText ? `v${versionText}` : null,
+  ].filter(Boolean);
+
+  const upstreamExperimentOrTaskId =
+    (typeof a.sourceExperimentId === "string" && a.sourceExperimentId.trim()) ||
+    (typeof a.research_linkage?.task_id === "string" && a.research_linkage.task_id.trim()) ||
+    (typeof a.saved_output?.task_id === "string" && a.saved_output.task_id.trim()) ||
+    "";
+
   return (
     <>
       <ObjectDetailLayout
         object={a}
-        subtitle={`${a.kind} · v${a.version}`}
+        subtitle={subtitleParts.join(" · ")}
         actions={
           <>
-            <Button size="sm" variant="outline"><Download className="h-4 w-4 mr-1" />{t("artifact.download")}</Button>
-            <Button size="sm" variant="destructive" onClick={() => setRetireOpen(true)}>
-              <Trash2 className="h-4 w-4 mr-1" />Retire
-            </Button>
+            {canDownload ? (
+              <Button size="sm" variant="outline">
+                <Download className="h-4 w-4 mr-1" />
+                {t("artifact.download")}
+              </Button>
+            ) : (
+              <NonProductionActionButton size="sm" variant="outline" status="no executing owner">
+                <Download className="h-4 w-4 mr-1" />
+                {t("artifact.download")}
+              </NonProductionActionButton>
+            )}
+            {canRetire ? (
+              <Button size="sm" variant="destructive" onClick={() => setRetireOpen(true)}>
+                <Trash2 className="h-4 w-4 mr-1" />
+                {t("actions.retire")}
+              </Button>
+            ) : (
+              <NonProductionActionButton size="sm" variant="destructive" status="no executing owner">
+                <Trash2 className="h-4 w-4 mr-1" />
+                {t("actions.retire")}
+              </NonProductionActionButton>
+            )}
           </>
         }
         tabs={[
@@ -90,14 +170,66 @@ export const ArtifactDetail = () => {
             content: (
               <>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <StatCard label="Kind" value={(a.kind ?? "").toUpperCase()} />
-                  <StatCard label={t("table.version")} value={a.version} />
-                  <StatCard label="Size" value={`${(a.sizeMb ?? 0).toLocaleString()} MB`} />
-                  <StatCard label={t("table.owner")} value={a.owner} />
+                  <StatCard label={t("artifact.sourceKind", { defaultValue: "Source" })} value={sourceKind || noData} />
+                  <StatCard label={t("table.kind", { defaultValue: "Kind" })} value={kindLabel} />
+                  <StatCard label={t("table.version")} value={versionLabel} />
+                  <StatCard label={t("common.state")} value={stateLabel} />
+                  <StatCard label={t("common.risk")} value={riskLabel} />
+                  <StatCard label={t("detail.label.size", { defaultValue: "Size" })} value={sizeLabel} />
+                  <StatCard label={t("detail.label.format", { defaultValue: "Format" })} value={formatLabel} />
+                  <StatCard label={t("table.owner")} value={ownerLabel} />
                 </div>
                 <Section title={t("detail.section.hash")}>
-                  <pre className="text-mono text-sm bg-muted p-3 rounded-md overflow-x-auto">{a.hash}</pre>
+                  <pre className="text-mono text-sm bg-muted p-3 rounded-md overflow-x-auto">{hashLabel}</pre>
                 </Section>
+                {(sourceKind === "registry" || a.registry_id || a.strategy_id) && (
+                  <Section title={t("artifact.sources.registry", { defaultValue: "Registry bundle" })}>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                      <Field label={t("artifact.detail.registryId", { defaultValue: "Registry ID" })} value={a.registry_id || a.id} mono />
+                      <Field label={t("artifact.detail.artifactId", { defaultValue: "Artifact ID" })} value={a.artifact_id || noData} mono />
+                      <Field label={t("artifact.detail.strategyId", { defaultValue: "Strategy ID" })} value={a.strategy_id || noData} mono />
+                      <Field label={t("artifact.detail.producerRunId", { defaultValue: "Producer run" })} value={a.producer_run_id || noData} mono />
+                      <Field label={t("artifact.detail.approvalDecisionId", { defaultValue: "Approval decision" })} value={a.approval_decision_id || noData} mono />
+                      <Field label={t("artifact.detail.storagePath", { defaultValue: "Storage path" })} value={storagePath || noData} mono />
+                    </div>
+                  </Section>
+                )}
+                {(sourceKind === "research_run_output" || a.saved_output || a.research_linkage) && (
+                  <Section title={t("artifact.sources.research_run_output", { defaultValue: "Research output" })}>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                      <Field
+                        label={t("artifact.detail.runId", { defaultValue: "Run ID" })}
+                        value={a.research_linkage?.run_id || a.saved_output?.run_id || noData}
+                        mono
+                      />
+                      <Field
+                        label={t("artifact.detail.taskId", { defaultValue: "Task ID" })}
+                        value={a.research_linkage?.task_id || a.saved_output?.task_id || noData}
+                        mono
+                      />
+                      <Field
+                        label={t("artifact.detail.stageId", { defaultValue: "Stage" })}
+                        value={a.research_linkage?.stage_id || a.saved_output?.stage_type || noData}
+                        mono
+                      />
+                      <Field
+                        label={t("artifact.detail.receiptId", { defaultValue: "Receipt ID" })}
+                        value={a.saved_output?.receipt_id || noData}
+                        mono
+                      />
+                      <Field
+                        label={t("artifact.detail.runStatus", { defaultValue: "Run status" })}
+                        value={a.saved_output?.run_status || noData}
+                        mono
+                      />
+                      <Field
+                        label={t("artifact.detail.storagePath", { defaultValue: "Storage path" })}
+                        value={storagePath || noData}
+                        mono
+                      />
+                    </div>
+                  </Section>
+                )}
               </>
             ),
           },
@@ -107,15 +239,15 @@ export const ArtifactDetail = () => {
           },
           {
             value: "lineage", label: t("section.lineage"),
-            content: a.sourceExperimentId ? (
+            content: upstreamExperimentOrTaskId ? (
               <Section>
                 <div
                   className="flex items-center justify-between p-3 rounded-md bg-muted hover:bg-muted/70 cursor-pointer"
-                  onClick={() => navigate(`/management/research/${a.sourceExperimentId}`)}
+                  onClick={() => navigate(`/management/research/${upstreamExperimentOrTaskId}`)}
                 >
                   <div>
                     <div className="text-xs uppercase text-muted-foreground">{t("artifact.sourceExperiment")}</div>
-                    <div className="text-mono text-sm">{a.sourceExperimentId}</div>
+                    <div className="text-mono text-sm">{upstreamExperimentOrTaskId}</div>
                   </div>
                   <span className="text-xs text-muted-foreground">View →</span>
                 </div>
@@ -142,9 +274,16 @@ export const ArtifactDetail = () => {
             content: (
               <Section>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                  <Field label="Format" value={a.kind === "model" ? "ONNX" : a.kind === "dataset" ? "Parquet" : a.kind === "container" ? "OCI" : "PDF"} mono />
-                  <Field label={t("table.created")} value={safeDateTime(a.updatedAt, "date")} mono />
-                  <Field label="License" value="Internal" mono />
+                  <Field label={t("detail.label.format", { defaultValue: "Format" })} value={formatLabel} mono />
+                  <Field label={t("detail.label.size", { defaultValue: "Size" })} value={sizeLabel} mono />
+                  <Field label={t("artifact.sourceKind", { defaultValue: "Source" })} value={sourceKind || noData} mono />
+                  <Field label={t("artifact.detail.storageBackend", { defaultValue: "Storage backend" })} value={storageBackend || noData} mono />
+                  <Field label={t("artifact.detail.storagePath", { defaultValue: "Storage path" })} value={storagePath || noData} mono />
+                  <Field
+                    label={t("table.created")}
+                    value={a.created_at || a.updatedAt ? safeDateTime(a.created_at || a.updatedAt, "date") : noData}
+                    mono
+                  />
                 </div>
               </Section>
             ),
@@ -153,17 +292,19 @@ export const ArtifactDetail = () => {
         ]}
       />
 
-      <HighRiskConfirm
-        open={retireOpen}
-        onOpenChange={setRetireOpen}
-        title={`Retire Artifact — ${a.name}`}
-        description={t("detail.confirm.retireArtifact")}
-        confirmToken="RETIRE"
-        destructive
-        onConfirm={async (memo) => {
-          await runActionSafe({ kind: "Artifact", id: a.id, action: "archive", memo }, { successTitle: "Retirement requested" });
-        }}
-      />
+      {canRetire && (
+        <HighRiskConfirm
+          open={retireOpen}
+          onOpenChange={setRetireOpen}
+          title={`Retire Artifact — ${a.name}`}
+          description={t("detail.confirm.retireArtifact")}
+          confirmToken="RETIRE"
+          destructive
+          onConfirm={async (memo) => {
+            await runActionSafe({ kind: "Artifact", id: a.id, action: "archive", memo }, { successTitle: "Retirement requested" });
+          }}
+        />
+      )}
     </>
   );
 };

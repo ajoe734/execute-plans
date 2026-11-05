@@ -127,20 +127,163 @@ export function normalizeBaseObjectFields<T>(raw: T | undefined): T | undefined 
 
 const ARTIFACT_FIELD_ALIASES: Record<string, string[]> = {
   kind: ["kind", "artifact_type", "type"],
-  sourceExperimentId: ["sourceExperimentId", "produced_by_experiment_id"],
+  sourceExperimentId: ["sourceExperimentId", "produced_by_experiment_id", "source_experiment_id"],
+};
+
+const recordFiniteNumber = (record: UnknownRecord | undefined, ...keys: string[]): number | undefined => {
+  if (!record) return undefined;
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+  }
+  return undefined;
 };
 
 export function normalizeArtifactFields<T>(raw: T | undefined): T | undefined {
+  const inputRecord = asRecord(raw);
+  if (!inputRecord) return raw;
   const base = normalizeBaseObjectFields(raw);
-  const record = asRecord(base);
-  if (!record) return base;
+  const record = asRecord(base) ?? inputRecord;
   const patched: UnknownRecord = { ...record };
+
+  const savedOutput = asRecord(inputRecord.saved_output);
+  const researchLinkage = asRecord(inputRecord.research_linkage);
+  const evalSummary = asRecord(inputRecord.evaluation_summary);
+  const runRecord = asRecord(inputRecord.run);
+
+  const id = recordString(inputRecord, "id", "registry_id", "artifact_id", "plan_id", "experiment_id");
+  if (id !== undefined) {
+    patched.id = id;
+  }
+
+  const name = recordString(inputRecord, "name", "title", "label", "strategy_id", "artifact_id", "id");
+  if (name !== undefined && !(typeof patched.name === "string" && patched.name.trim())) {
+    patched.name = name;
+  }
+
+  const sourceKind = recordString(inputRecord, "source_kind", "sourceKind");
+  if (sourceKind !== undefined) {
+    patched.source_kind = sourceKind;
+    patched.sourceKind = sourceKind;
+  }
+
   for (const [canonical, aliases] of Object.entries(ARTIFACT_FIELD_ALIASES)) {
     const current = patched[canonical];
     if (typeof current === "string" && current.trim()) continue;
-    const value = recordString(record, ...aliases);
+    const value = recordString(inputRecord, ...aliases);
     if (value !== undefined) patched[canonical] = value;
   }
+
+  if (!(typeof patched.kind === "string" && patched.kind.trim())) {
+    const fallbackKind = recordString(savedOutput, "artifact_family", "stage_type");
+    if (fallbackKind !== undefined) patched.kind = fallbackKind;
+  }
+
+  if (!(typeof patched.sourceExperimentId === "string" && patched.sourceExperimentId.trim())) {
+    const fallbackExperimentId =
+      recordString(researchLinkage, "task_id", "run_id") ??
+      recordString(savedOutput, "task_id", "run_id");
+    if (fallbackExperimentId !== undefined) {
+      patched.sourceExperimentId = fallbackExperimentId;
+    }
+  }
+
+  const explicitVersion = recordString(inputRecord, "version", "artifact_version");
+  if (explicitVersion !== undefined) {
+    patched.version = explicitVersion;
+  } else if (
+    (Object.prototype.hasOwnProperty.call(inputRecord, "version") && inputRecord.version === null) ||
+    sourceKind === "research_run_output"
+  ) {
+    patched.version = null;
+  }
+
+  const explicitState = recordString(inputRecord, "state", "artifact_state");
+  if (explicitState !== undefined) {
+    patched.state = explicitState;
+  } else if (
+    (Object.prototype.hasOwnProperty.call(inputRecord, "state") && inputRecord.state === null) ||
+    sourceKind === "research_run_output"
+  ) {
+    patched.state = null;
+  } else if (!(typeof patched.state === "string" && patched.state.trim())) {
+    const fallbackState = recordString(inputRecord, "status", "lifecycle_state", "lifecycleState");
+    if (fallbackState !== undefined) patched.state = fallbackState;
+  }
+
+  const explicitRisk =
+    recordString(inputRecord, "risk", "risk_level", "riskLevel") ??
+    recordString(evalSummary, "risk_level", "riskLevel", "risk");
+  if (explicitRisk !== undefined) {
+    patched.risk = explicitRisk;
+  } else if (
+    (Object.prototype.hasOwnProperty.call(inputRecord, "risk") && inputRecord.risk === null) ||
+    sourceKind === "research_run_output"
+  ) {
+    patched.risk = null;
+  }
+
+  const hash =
+    recordString(inputRecord, "hash", "checksum", "artifact_digest", "digest") ??
+    recordString(savedOutput, "checksum", "hash", "digest") ??
+    recordString(runRecord, "artifact_digest", "checksum", "hash");
+  if (hash !== undefined) {
+    patched.hash = hash;
+  }
+
+  const owner = recordString(
+    inputRecord,
+    "owner",
+    "approver",
+    "author",
+    "created_by",
+    "owner_id",
+    "ownerId",
+    "owned_by",
+    "owner_tenant",
+  );
+  if (owner !== undefined) {
+    patched.owner = owner;
+  } else if (Object.prototype.hasOwnProperty.call(inputRecord, "owner") && inputRecord.owner === null) {
+    patched.owner = null;
+  }
+
+  if (!(typeof patched.updatedAt === "string" && patched.updatedAt.trim())) {
+    const updatedAt =
+      recordString(
+        inputRecord,
+        "updatedAt",
+        "updated_at",
+        "approved_at",
+        "created_at",
+        "last_updated_at",
+        "lastUpdatedAt",
+      ) ?? recordString(savedOutput, "completed_at", "updated_at", "created_at");
+    if (updatedAt !== undefined) {
+      patched.updatedAt = updatedAt;
+    }
+  }
+
+  const sizeMb = recordFiniteNumber(inputRecord, "sizeMb", "size_mb");
+  if (sizeMb !== undefined) {
+    patched.sizeMb = sizeMb;
+  } else if (
+    (Object.prototype.hasOwnProperty.call(inputRecord, "sizeMb") && inputRecord.sizeMb === null) ||
+    (Object.prototype.hasOwnProperty.call(inputRecord, "size_mb") && inputRecord.size_mb === null)
+  ) {
+    patched.sizeMb = null;
+  }
+
+  const format = recordString(inputRecord, "format", "artifact_format");
+  if (format !== undefined) {
+    patched.format = format;
+  } else if (
+    (Object.prototype.hasOwnProperty.call(inputRecord, "format") && inputRecord.format === null) ||
+    (Object.prototype.hasOwnProperty.call(inputRecord, "artifact_format") && inputRecord.artifact_format === null)
+  ) {
+    patched.format = null;
+  }
+
   return patched as T;
 }
 
@@ -154,11 +297,59 @@ export const strictLiveDetailArtifact = <T>(
 ): Promise<T | undefined> =>
   strictLiveDetail<T>(helperName, path).then(normalizeArtifactFields);
 
-export const strictLiveListArtifact = <T>(
+const ARTIFACT_LIST_PAGE_SIZE = 100;
+const MAX_ARTIFACT_LIST_PAGES = 100;
+
+const nextArtifactPageToken = (body: unknown): string | undefined => {
+  const record = asRecord(body);
+  const data = asRecord(record?.data);
+  const meta = asRecord(record?.meta);
+  const cursor = asRecord(record?.cursor) ?? asRecord(data?.cursor) ?? asRecord(meta?.cursor);
+  const pageInfo = asRecord(record?.page_info) ?? asRecord(data?.page_info) ?? asRecord(meta?.page_info);
+  return recordString(cursor, "next", "next_cursor") ?? recordString(pageInfo, "next_cursor", "next_page_token");
+};
+
+export const strictLiveListArtifact = async <T>(
   helperName: string,
   path: string,
-): Promise<T[]> =>
-  strictLiveList<T>(helperName, path).then(normalizeArtifactList);
+): Promise<T[]> => {
+  const allItems: T[] = [];
+  const seenIds = new Set<string>();
+  const seenTokens = new Set<string>();
+  let pageToken: string | undefined;
+
+  for (let page = 0; page < MAX_ARTIFACT_LIST_PAGES; page += 1) {
+    const rawBody = await strictLiveRead<unknown>(
+      helperName,
+      {
+        method: "GET",
+        path,
+        query: pageToken
+          ? { page_size: ARTIFACT_LIST_PAGE_SIZE, page_token: pageToken }
+          : { page_size: ARTIFACT_LIST_PAGE_SIZE },
+      },
+      (body) => body,
+    );
+    const pageItems = normalizeArtifactList(liveItemsFrom<T>(rawBody));
+    for (const item of pageItems) {
+      const itemRecord = asRecord(item);
+      const itemId = recordString(itemRecord, "id");
+      if (itemId) {
+        if (seenIds.has(itemId)) continue;
+        seenIds.add(itemId);
+      }
+      allItems.push(item);
+    }
+    const nextToken = nextArtifactPageToken(rawBody);
+    if (!nextToken || seenTokens.has(nextToken)) {
+      break;
+    }
+    seenTokens.add(nextToken);
+    pageToken = nextToken;
+  }
+
+  return allItems;
+};
 
 export function normalizeBaseObjectList<T>(rows: T[]): T[] {
   return rows.map((row) => normalizeBaseObjectFields(row) as T);

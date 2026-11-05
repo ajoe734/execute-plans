@@ -621,12 +621,104 @@ export interface ResearchTask extends ResearchExperiment {
   runs?: ResearchTaskRun[];
 }
 
+export type ArtifactSourceKind = "registry" | "research_run_output" | (string & {});
+
+export interface ArtifactLineageVersion {
+  id?: string;
+  version?: string;
+  hash?: string;
+  checksum?: string;
+  created_at?: string;
+  updated_at?: string;
+  [key: string]: unknown;
+}
+
+export interface ArtifactLineage {
+  lineage_id?: string | null;
+  version_count?: number;
+  versions?: ArtifactLineageVersion[];
+  source_run_ids?: string[];
+  source_strategy_spec_id?: string | null;
+  [key: string]: unknown;
+}
+
+export interface ArtifactStorageRef {
+  backend?: string;
+  path?: string;
+  uri?: string;
+  [key: string]: unknown;
+}
+
+export interface ArtifactEvaluationSummary {
+  sharpe?: number | null;
+  max_drawdown?: number | null;
+  risk_level?: RiskLevel | (string & {}) | null;
+  [key: string]: unknown;
+}
+
+export interface ArtifactSavedOutput {
+  run_id?: string | null;
+  task_id?: string | null;
+  receipt_id?: string | null;
+  checksum?: string | null;
+  storage_ref?: string | ArtifactStorageRef | null;
+  provenance?: Record<string, unknown> | null;
+  run_status?: string | null;
+  completed_at?: string | null;
+  artifact_family?: string | null;
+  stage_type?: string | null;
+  tenant_id?: string | null;
+  [key: string]: unknown;
+}
+
+export interface ArtifactResearchLinkage {
+  run_id?: string | null;
+  task_id?: string | null;
+  stage_id?: string | null;
+  [key: string]: unknown;
+}
+
+export interface ArtifactAllowedActions {
+  canCompare?: boolean;
+  canDownload?: boolean;
+  canRetire?: boolean;
+  canRollback?: boolean;
+  [key: string]: unknown;
+}
+
 export interface Artifact extends BaseObject {
-  kind: "model" | "dataset" | "report" | "container";
-  version: string;
+  kind: string;
+  version: string | null;
   sourceExperimentId?: string;
-  sizeMb: number;
+  sizeMb?: number | null;
+  format?: string | null;
   hash: string;
+  source_kind?: ArtifactSourceKind;
+  sourceKind?: ArtifactSourceKind;
+  registry_id?: string | null;
+  artifact_id?: string | null;
+  artifact_type?: string | null;
+  strategy_id?: string | null;
+  artifact_state?: string | null;
+  status?: string | null;
+  checksum?: string | null;
+  producer_run_id?: string | null;
+  approver?: string | null;
+  approved_at?: string | null;
+  approval_decision_id?: string | null;
+  author?: string | null;
+  created_by?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  owner_tenant?: string | null;
+  lineage?: ArtifactLineage | null;
+  storage_ref?: ArtifactStorageRef | string | null;
+  evaluation_summary?: ArtifactEvaluationSummary | null;
+  metadata?: Record<string, unknown> | null;
+  saved_output?: ArtifactSavedOutput | null;
+  research_linkage?: ArtifactResearchLinkage | null;
+  allowedActions?: ArtifactAllowedActions | null;
+  compare_unavailable_reason?: string | null;
 }
 
 export interface JobAllowedActions {

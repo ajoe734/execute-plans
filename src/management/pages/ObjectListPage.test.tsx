@@ -7,7 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import i18n from "@/i18n";
 import { liveStatus } from "@/lib/bff-v1/liveStatus";
 import { ObjectListPage, resolveObjectRowHref } from "./ObjectListPage";
-import { CapitalPoolsList, EvolutionList, ResearchList } from "./Lists";
+import { ArtifactsList, CapitalPoolsList, EvolutionList, ResearchList } from "./Lists";
 import type { CreateBehavior } from "@/lib/writeIntents/types";
 import capitalPoolsFixture from "@/lib/bff-v1/__tests__/fixtures/hosted-20261020/capital-pools.json";
 
@@ -1271,5 +1271,237 @@ describe("ObjectListPage", () => {
     expect(i18n.getFixedT("zh-TW")("mgmt.dataSources.realWritesRequired")).toBe(
       "實體寫入已停用（唯讀模式）。",
     );
+  });
+
+  it("renders GET /bff/artifacts across pages for both registry bundles and research run outputs with real kind, version, state, risk, hash, source_kind label/filter, no 0 MB fabrication, and reachable detail links", async () => {
+    const { useLiveListV1: actualUseLiveListV1 } = await vi.importActual<typeof import("@/lib/bff-v1")>("@/lib/bff-v1");
+    mocks.useLiveListV1.mockImplementation(actualUseLiveListV1);
+
+    const registryRow = {
+      id: "reg-bundle-001",
+      registry_id: "reg-bundle-001",
+      artifact_id: "art-exec-bundle-001",
+      strategy_id: "strat-persona-bundle-001",
+      name: "strat-persona-bundle-001",
+      kind: "execution_bundle",
+      artifact_type: "execution_bundle",
+      version: "1.0.1",
+      state: "approved",
+      artifact_state: "approved",
+      risk: "low",
+      hash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa0001",
+      checksum: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa0001",
+      owner: "gov-approver-alpha",
+      approver: "gov-approver-alpha",
+      updatedAt: "2026-11-04T12:01:00Z",
+      updated_at: "2026-11-04T12:01:00Z",
+      source_kind: "registry",
+    };
+
+    const researchRow = {
+      id: "res-run-output-001",
+      artifact_id: "res-run-output-001",
+      name: "Qlib Alpha158 Factor Evaluation Output",
+      title: "Qlib Alpha158 Factor Evaluation Output",
+      kind: "factor_eval_report",
+      artifact_type: "factor_eval_report",
+      version: null,
+      state: null,
+      status: "",
+      risk: null,
+      hash: "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+      checksum: "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+      owner: "research-worker-qlib",
+      author: "research-worker-qlib",
+      created_by: "research-worker-qlib",
+      updatedAt: "2026-11-04T17:00:00Z",
+      updated_at: "2026-11-04T17:00:00Z",
+      source_kind: "research_run_output",
+    };
+
+    const fetchUrls: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      fetchUrls.push(url);
+      if (url.includes("page_token=1")) {
+        return new Response(
+          JSON.stringify({
+            data: [researchRow],
+            items: [researchRow],
+            total: 2,
+            total_complete: true,
+            cursor: { next: null },
+            page_info: { page_size: 100, total: 2, has_more: false, next_page_token: null },
+            meta: {
+              snapshot_at: "2026-11-04T18:00:00Z",
+              total_complete: true,
+              surfaces: {
+                artifact_list: { status: "ok", source: "registry+research" },
+              },
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return new Response(
+        JSON.stringify({
+          data: [registryRow],
+          items: [registryRow],
+          total: 2,
+          total_complete: true,
+          cursor: { next: "1" },
+          page_info: { page_size: 100, total: 2, has_more: true, next_page_token: "1" },
+          meta: {
+            snapshot_at: "2026-11-04T18:00:00Z",
+            total_complete: true,
+            surfaces: {
+              artifact_list: { status: "ok", source: "registry+research" },
+            },
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    });
+
+    function LocationProbe() {
+      const loc = useLocation();
+      return <output data-testid="artifact-location">{loc.pathname}{loc.search}</output>;
+    }
+
+    render(
+      <I18nextProvider i18n={i18n}>
+        <TooltipProvider>
+          <MemoryRouter initialEntries={["/management/artifacts"]}>
+            <Routes>
+              <Route
+                path="/management/artifacts"
+                element={(
+                  <>
+                    <ArtifactsList />
+                    <LocationProbe />
+                  </>
+                )}
+              />
+              <Route path="/management/artifacts/:id" element={<LocationProbe />} />
+            </Routes>
+          </MemoryRouter>
+        </TooltipProvider>
+      </I18nextProvider>,
+    );
+
+    const regCell = await screen.findByText("strat-persona-bundle-001");
+    const resCell = await screen.findByText("Qlib Alpha158 Factor Evaluation Output");
+    expect(fetchUrls.some((u) => u.includes("/bff/artifacts?page_size=100"))).toBe(true);
+    expect(fetchUrls.some((u) => u.includes("page_token=1"))).toBe(true);
+
+    const regTr = regCell.closest("tr");
+    expect(regTr).not.toBeNull();
+    expect(regTr).toHaveTextContent("registry");
+    expect(regTr).toHaveTextContent("execution_bundle");
+    expect(regTr).toHaveTextContent("1.0.1");
+    expect(regTr).toHaveTextContent("Approved");
+    expect(regTr).toHaveTextContent("Low");
+    expect(regTr).toHaveTextContent("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa0001");
+    expect(regTr).toHaveTextContent("gov-approver-alpha");
+    expect(regTr).toHaveTextContent("No data");
+    expect(regTr).not.toHaveTextContent("0 MB");
+
+    const resTr = resCell.closest("tr");
+    expect(resTr).not.toBeNull();
+    expect(resTr).toHaveTextContent("research_run_output");
+    expect(resTr).toHaveTextContent("factor_eval_report");
+    expect(resTr).toHaveTextContent("sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08");
+    expect(resTr).toHaveTextContent("research-worker-qlib");
+    expect(resTr).not.toHaveTextContent("0 MB");
+    expect(resTr).not.toHaveTextContent("Unavailable");
+    expect(resTr?.textContent?.match(/No data/g)?.length).toBeGreaterThanOrEqual(4);
+
+    // Filter by source_kind
+    const registryScopeBtn = screen.getByRole("button", { name: "Registry bundle (1)" });
+    const researchScopeBtn = screen.getByRole("button", { name: "Research output (1)" });
+    const allScopeBtn = screen.getByRole("button", { name: "All sources (2)" });
+    expect(allScopeBtn).toHaveAttribute("aria-pressed", "true");
+
+    fireEvent.click(registryScopeBtn);
+    expect(screen.getByText("strat-persona-bundle-001")).toBeInTheDocument();
+    expect(screen.queryByText("Qlib Alpha158 Factor Evaluation Output")).not.toBeInTheDocument();
+
+    fireEvent.click(researchScopeBtn);
+    expect(screen.getByText("Qlib Alpha158 Factor Evaluation Output")).toBeInTheDocument();
+    expect(screen.queryByText("strat-persona-bundle-001")).not.toBeInTheDocument();
+
+    fireEvent.click(allScopeBtn);
+    expect(screen.getByText("strat-persona-bundle-001")).toBeInTheDocument();
+    expect(screen.getByText("Qlib Alpha158 Factor Evaluation Output")).toBeInTheDocument();
+
+    // Every row is reachable
+    fireEvent.click(screen.getByText("Qlib Alpha158 Factor Evaluation Output"));
+    expect(screen.getByTestId("artifact-location")).toHaveTextContent("/management/artifacts/res-run-output-001");
+  });
+
+  it("shows a partial-data banner naming the failed source when artifact_list surface is degraded while rendering surviving rows", async () => {
+    const { useLiveListV1: actualUseLiveListV1 } = await vi.importActual<typeof import("@/lib/bff-v1")>("@/lib/bff-v1");
+    mocks.useLiveListV1.mockImplementation(actualUseLiveListV1);
+
+    const researchRow = {
+      id: "res-run-output-001",
+      artifact_id: "res-run-output-001",
+      name: "Qlib Alpha158 Factor Evaluation Output",
+      kind: "factor_eval_report",
+      version: null,
+      state: null,
+      risk: null,
+      hash: "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+      owner: "research-worker-qlib",
+      updatedAt: "2026-11-04T17:00:00Z",
+      source_kind: "research_run_output",
+    };
+
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          data: [researchRow],
+          items: [researchRow],
+          total: 1,
+          total_complete: false,
+          cursor: { next: null },
+          page_info: { page_size: 100, total: 1, has_more: false, next_page_token: null },
+          meta: {
+            snapshot_at: "2026-11-04T18:00:00Z",
+            total_complete: false,
+            surfaces: {
+              artifact_list: {
+                status: "degraded",
+                source: "research",
+                failed_source: "registry",
+                failed_sources: ["registry"],
+                degraded_sources: ["registry"],
+                message: "Artifact catalog is degraded because registry owner read failed.",
+              },
+            },
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    render(
+      <I18nextProvider i18n={i18n}>
+        <TooltipProvider>
+          <MemoryRouter initialEntries={["/management/artifacts"]}>
+            <Routes>
+              <Route path="/management/artifacts" element={<ArtifactsList />} />
+            </Routes>
+          </MemoryRouter>
+        </TooltipProvider>
+      </I18nextProvider>,
+    );
+
+    expect(await screen.findByText("Qlib Alpha158 Factor Evaluation Output")).toBeInTheDocument();
+    const banner = screen.getByTestId("partial-data-banner");
+    expect(banner).toBeInTheDocument();
+    expect(banner).toHaveAttribute("data-failed-source", "registry");
+    expect(banner).toHaveTextContent(/Partial artifact catalog — failed source: registry/i);
+    expect(banner).toHaveTextContent("Artifact catalog is degraded because registry owner read failed.");
   });
 });

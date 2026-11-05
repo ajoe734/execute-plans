@@ -1,4 +1,4 @@
-// Artifact diff vs previous version — mock side-by-side metadata diff.
+// Artifact diff vs previous version — renders real lineage versions when provided by the owner.
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import type { Artifact } from "@/lib/bff-v1";
@@ -12,20 +12,89 @@ interface DiffRow {
   changed: boolean;
 }
 
-const buildDiff = (a: Artifact): DiffRow[] => {
-  const prevVersion = a.version.replace(/(\d+)$/, (_, n) => String(Math.max(0, parseInt(n, 10) - 1)));
-  return [
-    { field: "version", before: prevVersion, after: a.version, changed: true },
-    { field: "size", before: `${(a.sizeMb * 0.92).toFixed(0)} MB`, after: `${a.sizeMb} MB`, changed: true },
-    { field: "hash", before: a.hash.slice(0, 12) + "…", after: a.hash.slice(0, 12) + "…", changed: true },
-    { field: "kind", before: a.kind, after: a.kind, changed: false },
-    { field: "owner", before: a.owner, after: a.owner, changed: false },
+const buildDiff = (a: Artifact, noData: string): DiffRow[] | null => {
+  if (a.allowedActions?.canCompare === false) return null;
+  const versions = Array.isArray(a.lineage?.versions) ? a.lineage.versions : [];
+  if (versions.length < 2) return null;
+
+  const current = versions[0];
+  const previous = versions[1];
+  const currentVersion =
+    (typeof current?.version === "string" && current.version.trim()) ||
+    (typeof a.version === "string" && a.version.trim()) ||
+    noData;
+  const prevVersion =
+    (typeof previous?.version === "string" && previous.version.trim()) || noData;
+  const currentHash =
+    (typeof current?.hash === "string" && current.hash.trim()) ||
+    (typeof current?.checksum === "string" && current.checksum.trim()) ||
+    (typeof a.hash === "string" && a.hash.trim()) ||
+    noData;
+  const prevHash =
+    (typeof previous?.hash === "string" && previous.hash.trim()) ||
+    (typeof previous?.checksum === "string" && previous.checksum.trim()) ||
+    noData;
+
+  const rows: DiffRow[] = [
+    {
+      field: "version",
+      before: prevVersion,
+      after: currentVersion,
+      changed: prevVersion !== currentVersion,
+    },
+    {
+      field: "hash",
+      before: prevHash,
+      after: currentHash,
+      changed: prevHash !== currentHash,
+    },
+    {
+      field: "kind",
+      before: a.kind || noData,
+      after: a.kind || noData,
+      changed: false,
+    },
+    {
+      field: "owner",
+      before: a.owner || noData,
+      after: a.owner || noData,
+      changed: false,
+    },
   ];
+
+  if (typeof a.sizeMb === "number" && Number.isFinite(a.sizeMb)) {
+    rows.splice(1, 0, {
+      field: "size",
+      before: `${a.sizeMb} MB`,
+      after: `${a.sizeMb} MB`,
+      changed: false,
+    });
+  }
+
+  return rows;
 };
 
 export const ArtifactDiffPanel = ({ artifact }: { artifact: Artifact }) => {
   const t = useT();
-  const rows = buildDiff(artifact);
+  const noData = t("common.noData");
+  const rows = buildDiff(artifact, noData);
+
+  if (!rows) {
+    const unavailableReason =
+      typeof artifact.compare_unavailable_reason === "string" &&
+      artifact.compare_unavailable_reason.trim().length > 0
+        ? artifact.compare_unavailable_reason.trim()
+        : t("artifact.diff.unavailable", {
+            defaultValue: "No version diff is available for this artifact.",
+          });
+    return (
+      <Card className="p-4 space-y-2" data-testid="artifact-diff-unavailable">
+        <div className="text-sm font-semibold">{t("artifact.diff.title")}</div>
+        <div className="text-xs text-muted-foreground">{unavailableReason}</div>
+      </Card>
+    );
+  }
+
   const changed = rows.filter((r) => r.changed).length;
 
   return (
