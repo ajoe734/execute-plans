@@ -1098,3 +1098,89 @@ export interface RebalanceOverride {
   proposedBy: string;
   proposedAt: string;
 }
+
+// ---------- Alpha Factory Replication Read (/bff/alpha-factory) ----------
+
+export type AlphaFactoryLaneId = "discovered" | "scaffolded" | "replicated";
+
+export interface AlphaFactoryCard {
+  id: string;
+  admission_id: string | null;
+  tenant_id: string | null;
+  lane: AlphaFactoryLaneId;
+  strategy_id: string | null;
+  strategy_spec_id: string | null;
+  spec_version: string | null;
+  checksum: string | null;
+  approval_decision_id: string | null;
+  approver: string | null;
+  approved_at: string | null;
+  requested_by: string | null;
+  review_ref: string | null;
+  mode: string | null;
+  created_at: string | null;
+  status: string | null;
+  admission_status: string | null;
+  queue_status: string | null;
+  enqueued_at: string | null;
+  enqueued_by: string | null;
+  attempt_count: number | null;
+  max_attempts: number | null;
+  experiment_task_id: string | null;
+  experiment_run_ids: string[] | null;
+  authority_task_id: string | null;
+  authority_run_ids: string[] | null;
+  last_revalidation_at: string | null;
+  last_error: string | null;
+  sharpe?: number | null;
+  risk?: RiskLevel | null;
+}
+
+export interface AlphaFactoryLane {
+  id: AlphaFactoryLaneId;
+  label?: string;
+  reason?: string | null;
+  items: AlphaFactoryCard[];
+}
+
+export interface AlphaFactoryPageInfo {
+  page: number;
+  page_size: number;
+  total: number;
+  next_page_token: string | null;
+}
+
+export interface AlphaFactoryMeta extends ManagementListMeta {
+  snapshot_at?: string;
+  surfaces?: {
+    alpha_factory?: ManagementSurfaceState;
+    [key: string]: ManagementSurfaceState | undefined;
+  };
+  filters?: {
+    lane?: AlphaFactoryLaneId | null;
+  };
+  discovered?: {
+    reason?: string | null;
+  };
+}
+
+export interface AlphaFactoryData {
+  id: string;
+  snapshotAt: string | null;
+  snapshot_at: string | null;
+  reason: string | null;
+  discovered_reason: string | null;
+  lanes: AlphaFactoryLane[];
+  discovered: AlphaFactoryCard[];
+  scaffolded: AlphaFactoryCard[];
+  replicated: AlphaFactoryCard[];
+  items: AlphaFactoryCard[];
+}
+
+export interface AlphaFactoryEnvelope {
+  data: AlphaFactoryData;
+  items: AlphaFactoryCard[];
+  page_info: AlphaFactoryPageInfo;
+  meta: AlphaFactoryMeta;
+}
+

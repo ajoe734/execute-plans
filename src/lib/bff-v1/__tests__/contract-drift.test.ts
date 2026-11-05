@@ -73,6 +73,10 @@ describe("BFF v1 contract drift", () => {
 
     expect(paths.researchTasks()).toBe("/bff/research-tasks");
     expect(paths.researchTask("rtask-20261023-008")).toBe("/bff/research-tasks/rtask-20261023-008");
+    expect(paths.alphaFactory()).toBe("/bff/alpha-factory");
+    expect(paths.alphaFactory({ lane: "replicated", page: 1, page_size: 20 })).toBe(
+      "/bff/alpha-factory?lane=replicated&page=1&page_size=20",
+    );
   });
 
   it("ActionCommandStatus is a named schema and does not contain requires_* success states", () => {
