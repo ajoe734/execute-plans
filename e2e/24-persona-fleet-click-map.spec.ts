@@ -351,17 +351,37 @@ async function installMockFixture(page: Page): Promise<void> {
         return;
       }
     }
-    if (path.startsWith("/bff/research-experiments/")) {
-      const id = path.substring("/bff/research-experiments/".length);
+    if (path.startsWith("/bff/research-tasks/") || path.startsWith("/bff/research-experiments/")) {
+      const id = path.startsWith("/bff/research-tasks/")
+        ? path.substring("/bff/research-tasks/".length)
+        : path.substring("/bff/research-experiments/".length);
       if (id === "exp-formal") {
         await fulfillJson(route, {
           data: {
             id: "exp-formal",
+            task_id: "exp-formal",
             name: "Formal Experiment",
+            objective: "Formal Experiment objective",
             framework: "dspy",
             status: "completed",
             state: "completed",
-            risk: "medium"
+            run_count: 1,
+            created_by: "operator-click-map",
+            created_at: "2026-04-20T09:00:00Z",
+            updated_at: "2026-04-20T09:00:00Z",
+            runs: [
+              {
+                run_id: "run-exp-formal-1",
+                status: "completed",
+                adapter: "stub",
+                dispatch_mode: "stub",
+                requested_mode: "stub",
+                created_by: "operator-click-map",
+                created_at: "2026-04-20T09:00:00Z",
+                updated_at: "2026-04-20T09:00:00Z",
+                events: [],
+              },
+            ],
           }
         });
         return;

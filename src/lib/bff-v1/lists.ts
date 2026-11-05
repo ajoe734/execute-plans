@@ -20,7 +20,9 @@ import {
 } from "./eventTimestamps";
 import { normalizeCapitalPool } from "./capitalPools";
 import { normalizeBaseObjectFields } from "./domainReads";
+import { normalizeEvolutionProgram } from "./evolution";
 import { normalizeJobFields } from "./operations";
+import { normalizeResearchTask } from "./research";
 
 /**
  * Pack D D22 list-class taxonomy. Drives `totalCountExact` + whether
@@ -93,6 +95,7 @@ export function normalizeLiveListResponse<T>(payload: unknown, cls: ListClass): 
     (Array.isArray(record?.items) && record.items) ||
     (Array.isArray(record?.data) && record.data) ||
     (Array.isArray(data?.items) && data.items) ||
+    (Array.isArray(record?.tasks) && record.tasks) ||
     (Array.isArray(record?.alerts) && record.alerts) ||
     (Array.isArray(record?.incidents) && record.incidents) ||
     (Array.isArray(record?.approvals) && record.approvals) ||
@@ -441,8 +444,8 @@ export const lists = {
   rankingFormulas: strictLiveListLoader(paths.rankingFormulas(),    LIST_CLASS_BY_KEY.rankingFormulas, normalizeBaseObjectFields),
   rebalances:      strictLiveListLoader(paths.rebalances(),         LIST_CLASS_BY_KEY.rebalances, normalizeBaseObjectFields),
   deployments:     strictLiveListLoader(paths.deployments(),        LIST_CLASS_BY_KEY.deployments, normalizeBaseObjectFields),
-  evolution:       strictLiveListLoader(paths.evolutionPrograms(),  LIST_CLASS_BY_KEY.evolution, normalizeBaseObjectFields),
-  research:        strictLiveListLoader(paths.researchExperiments(),LIST_CLASS_BY_KEY.research, normalizeBaseObjectFields),
+  evolution:       strictLiveListLoader(paths.evolutionPrograms(),  LIST_CLASS_BY_KEY.evolution, normalizeEvolutionProgram),
+  research:        strictLiveListLoader(paths.researchTasks(),      LIST_CLASS_BY_KEY.research, normalizeResearchTask),
   artifacts:       strictLiveListLoader(paths.artifacts(),          LIST_CLASS_BY_KEY.artifacts),
   tools:           strictLiveListLoader(paths.tools(),              LIST_CLASS_BY_KEY.tools, normalizeBaseObjectFields),
   mcpServers:      strictLiveListLoader(paths.mcpServers(),         LIST_CLASS_BY_KEY.mcpServers, normalizeBaseObjectFields),

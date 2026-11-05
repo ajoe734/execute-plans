@@ -16,6 +16,7 @@ export const SEEDED_IDS = {
   rankingFormula: "ranking-formula-dev",
   rebalance: "rebalance-dev",
   researchExperiment: "research-experiment-dev",
+  researchTask: "research-task-dev",
   strategy: "strategy-dev",
   tenant: "tenant-dev",
 } as const;
@@ -29,6 +30,7 @@ export const REBALANCE_DEV_ID = SEEDED_IDS.rebalance;
 export const DEPLOYMENT_DEV_ID = SEEDED_IDS.deployment;
 export const EVOLUTION_PROGRAM_DEV_ID = SEEDED_IDS.evolutionProgram;
 export const RESEARCH_EXPERIMENT_DEV_ID = SEEDED_IDS.researchExperiment;
+export const RESEARCH_TASK_DEV_ID = SEEDED_IDS.researchTask;
 export const ARTIFACT_DEV_ID = SEEDED_IDS.artifact;
 export const APPROVAL_DEV_ID = SEEDED_IDS.approval;
 export const INTERVENTION_DEV_ID = SEEDED_IDS.intervention;
