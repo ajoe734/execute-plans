@@ -55,7 +55,11 @@ import type {
   PerformanceAttributionRow, AttributionDimension, AttributionPeriod,
   PerformanceAttributionResult,
 } from "@/lib/v5/management/performanceAttribution";
-import { adaptAttributionPeriodState } from "@/lib/v5/management/performanceAttribution";
+import {
+  adaptAttributionPeriodState,
+  isBffAcceptedAttributionDimension,
+  normalizePerformanceAttributionRow,
+} from "@/lib/v5/management/performanceAttribution";
 
 export type ManagementDataConfidence = "formal" | "partial" | "fallback" | "degraded" | "unavailable";
 
@@ -3745,12 +3749,16 @@ export function adaptEvolutionJournalList<T = Record<string, unknown>>(raw: unkn
   return list;
 }
 
-export function adaptPerformanceAttributionResult(raw: unknown): PerformanceAttributionResult {
+export function adaptPerformanceAttributionRows(raw: unknown): PerformanceAttributionRow[] | null {
   const data = unwrap(raw);
-  const rows = adaptArrayPassthrough<PerformanceAttributionRow>(raw) ??
-    (isObject(data) ? asArray<PerformanceAttributionRow>(data.rows) : null) ??
-    (isObject(raw) ? asArray<PerformanceAttributionRow>(raw.items) : null) ??
-    [];
+  const rawRows = adaptArrayPassthrough<unknown>(raw) ??
+    (isObject(data) ? asArray<unknown>(data.rows) : null) ??
+    (isObject(raw) ? asArray<unknown>(raw.items) : null);
+  return rawRows ? rawRows.map(normalizePerformanceAttributionRow) : null;
+}
+
+export function adaptPerformanceAttributionResult(raw: unknown): PerformanceAttributionResult {
+  const rows = adaptPerformanceAttributionRows(raw) ?? [];
   return { rows, period: adaptAttributionPeriodState(raw) };
 }
 
@@ -4837,10 +4845,22 @@ export const mgmt = {
   performanceAttribution: {
     /** Rows plus the period the BFF actually applied (meta.period). */
     getLiveOnly: (
-      dimension?: AttributionDimension,
+      dimension?: AttributionDimension | string,
       period?: AttributionPeriod,
       opts?: { signal?: AbortSignal },
     ): Promise<PerformanceAttributionResult> => {
+      if (dimension !== undefined && !isBffAcceptedAttributionDimension(dimension)) {
+        return Promise.resolve({
+          rows: [],
+          period: {
+            requested: period,
+            windowed: false,
+            reason: "unsupported_attribution_dimension",
+            message: `Dimension "${dimension}" is not supported by the BFF.`,
+            source: "missing",
+          },
+        });
+      }
       if (detectMode() === "mock") {
         return Promise.resolve({ rows: [], period: adaptAttributionPeriodState(undefined) });
       }
@@ -4851,20 +4871,28 @@ export const mgmt = {
       );
     },
     listLiveOnly: (
-      dimension?: AttributionDimension,
+      dimension?: AttributionDimension | string,
       period?: AttributionPeriod,
       opts?: { signal?: AbortSignal },
-    ): Promise<PerformanceAttributionRow[]> =>
-      liveOnlyList<PerformanceAttributionRow>(
+    ): Promise<PerformanceAttributionRow[]> => {
+      if (dimension !== undefined && !isBffAcceptedAttributionDimension(dimension)) {
+        return Promise.resolve([]);
+      }
+      return liveOnlyList<PerformanceAttributionRow>(
         { method: "GET", path: paths.mgmtPerformanceAttribution(dimension, period), signal: opts?.signal },
-        adaptArrayPassthrough<PerformanceAttributionRow>,
-      ),
+        adaptPerformanceAttributionRows,
+      );
+    },
     list: (
-      dimension: AttributionDimension | undefined,
+      dimension: AttributionDimension | string | undefined,
       period: AttributionPeriod | undefined,
       seedFn: () => PerformanceAttributionRow[],
-    ): Promise<PerformanceAttributionRow[]> =>
-      mgmtRead("mgmt.performanceAttribution.list", { method: "GET", path: paths.mgmtPerformanceAttribution(dimension, period) }, seedFn, adaptArrayPassthrough<PerformanceAttributionRow>),
+    ): Promise<PerformanceAttributionRow[]> => {
+      if (dimension !== undefined && !isBffAcceptedAttributionDimension(dimension)) {
+        return Promise.resolve([]);
+      }
+      return mgmtRead("mgmt.performanceAttribution.list", { method: "GET", path: paths.mgmtPerformanceAttribution(dimension, period) }, seedFn, adaptPerformanceAttributionRows);
+    },
   },
 
   operationsReadModel: {
