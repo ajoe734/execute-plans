@@ -98,6 +98,10 @@ interface Props<T extends BaseObject> {
   scopeConfig?: ObjectListScopeConfig<T>;
   /** Optional aggregate summary rendered above the data grid. */
   summary?: (rows: T[]) => ReactNode;
+  /** Render summary even when visibleRows is empty. */
+  alwaysRenderSummary?: boolean;
+  /** Optional custom empty message rendered inside DataTable when visibleRows is empty. */
+  emptyTableMessage?: string;
 }
 
 interface PartialDataSurfaceInfo {
@@ -165,7 +169,7 @@ function extractSurfaceMessage(meta: unknown): string | undefined {
 }
 
 export function ObjectListPage<T extends BaseObject>({
-  title, loader, basePath, listHref, rowHref, nameCell, columns: customColumns, extraColumns = [], liveKinds = [], createBehavior, focusParam, focusLabel, focusMatch, emptyState, scopeConfig, summary,
+  title, loader, basePath, listHref, rowHref, nameCell, columns: customColumns, extraColumns = [], liveKinds = [], createBehavior, focusParam, focusLabel, focusMatch, emptyState, scopeConfig, summary, alwaysRenderSummary = false, emptyTableMessage,
 }: Props<T>) {
   const t = useT();
   const navigate = useNavigate();
@@ -440,7 +444,7 @@ export function ObjectListPage<T extends BaseObject>({
             </div>
           </Card>
         )}
-        {summary && visibleRows.length > 0 && <div className="mb-4">{summary(visibleRows)}</div>}
+        {summary && (alwaysRenderSummary || visibleRows.length > 0) && <div className="mb-4">{summary(visibleRows)}</div>}
         {pending > 0 && (
           <button
             onClick={refresh}
@@ -526,7 +530,7 @@ export function ObjectListPage<T extends BaseObject>({
           <DataTable
             rows={visibleRows}
             columns={columns}
-            empty={t("common.noResults")}
+            empty={emptyTableMessage ?? t("common.noResults")}
             onRowClick={hasClickableRows
               ? (r) => {
                 const href = resolveObjectRowHref(r, basePath, rowHref);

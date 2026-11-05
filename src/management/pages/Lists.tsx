@@ -1,10 +1,18 @@
+import { useCallback, useEffect, useState } from "react";
 import { ObjectListPage } from "./ObjectListPage";
-import { lists } from "@/lib/bff-v1";
+import {
+  lists,
+  mgmt,
+  EVOLUTION_QUALIFICATION_CRITERIA,
+  type EvolutionQualificationReport,
+} from "@/lib/bff-v1";
+import { normalizeEvolutionOriginKind } from "@/lib/bff-v1/evolution";
 import { useT } from "@/platform/hooks";
 import { safeDateTime } from "@/lib/utils";
 import type { Strategy, Persona, CapitalPool, RankingFormula, Rebalance, Deployment, EvolutionProgram, ResearchTask, Artifact, ListEnvelope, RiskLevel } from "@/lib/bff-v1";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { RiskBadge } from "@/platform/components/RiskBadge";
+import { Card } from "@/components/ui/card";
 
 // `lists.*` loaders are generically typed by `strictLiveListLoader<T>` in
 // src/lib/bff-v1/lists.ts; when the passed `adaptItem` is itself generic
@@ -488,17 +496,223 @@ export const DeploymentsList = () => {
 
 export const EvolutionList = () => {
   const t = useT();
+  const [qualification, setQualification] = useState<EvolutionQualificationReport | null>(null);
+
+  const loadEvolutionPrograms = useCallback(async () => {
+    const [envelope, qualReport] = await Promise.all([
+      asEntityLoader<EvolutionProgram>(lists.evolution)(),
+      mgmt.evolutionQualification.get().catch(() => null),
+    ]);
+    if (qualReport) {
+      setQualification(qualReport);
+    }
+    return envelope;
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    mgmt.evolutionQualification
+      .get()
+      .then((report) => {
+        if (active && report) setQualification(report);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const policyVersion = qualification?.policy_version || "—";
+  const evaluatedAtDisplay = qualification?.evaluated_at || t("evolution.qualification.notEvaluatedYet");
+  const evaluatedCount = qualification?.evaluated ?? 0;
+  const qualifiedCount = qualification?.qualified ?? 0;
+  const failingCounts = qualification?.counts_by_first_failing_criterion ?? {};
+  const criterionOrder = Array.from(
+    new Set([
+      ...EVOLUTION_QUALIFICATION_CRITERIA,
+      ...Object.keys(failingCounts),
+    ]),
+  );
+
+  const buildZeroProgramsExplanation = () => {
+    if (evaluatedCount > 0 && qualifiedCount === 0) {
+      return t("evolution.qualification.zeroProgramsQualifiedZero", {
+        evaluated: evaluatedCount,
+        policyVersion,
+        evaluatedAt: evaluatedAtDisplay,
+      });
+    }
+    if (!qualification || (evaluatedCount === 0 && qualification.failure_reason === "no_qualification_has_run")) {
+      return t("evolution.qualification.zeroProgramsNoSweep", {
+        policyVersion,
+      });
+    }
+    return t("evolution.qualification.zeroProgramsWithQualified", {
+      qualified: qualifiedCount,
+      evaluated: evaluatedCount,
+      policyVersion,
+    });
+  };
+
+  const zeroExplanationText = buildZeroProgramsExplanation();
+
   return (
     <ObjectListPage<EvolutionProgram>
       title={t("nav.evolution")}
-      loader={asEntityLoader<EvolutionProgram>(lists.evolution)}
-      basePath="/management/evolution" liveKinds={["Evolution","Promotion"]}
+      loader={loadEvolutionPrograms}
+      basePath="/management/evolution"
+      liveKinds={["Evolution", "Promotion"]}
       createBehavior={{ kind: "drawer", entity: "evolutionProgram" }}
-      extraColumns={[
-        { key: "gen", header: t("table.version"), cell: (r) => <span className="text-mono text-xs">G{r.generation}</span> },
-        { key: "pop", header: t("section.members"), cell: (r) => <span className="text-mono text-xs">{r.population}</span> },
-        { key: "fit", header: t("section.performance"), cell: (r) => <span className="text-mono text-xs">{fix(r.bestFitness)}</span> },
-        { key: "prog", header: t("table.progress"), cell: (r) => <span className="text-mono text-xs">{pct(r.progress)}</span> },
+      alwaysRenderSummary
+      emptyTableMessage={`${t("evolution.qualification.zeroProgramsTitle")} — ${zeroExplanationText}`}
+      summary={(visibleRows) => (
+        <Card className="p-4 space-y-3" data-testid="evolution-qualification-summary">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold">{t("evolution.qualification.summaryTitle")}</h2>
+            <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
+              <span>
+                {t("evolution.qualification.policyVersion")}:{" "}
+                <span className="text-mono text-foreground" data-testid="qualification-policy-version">
+                  {policyVersion}
+                </span>
+              </span>
+              <span>
+                {t("evolution.qualification.evaluatedAt")}:{" "}
+                <span className="text-mono text-foreground" data-testid="qualification-evaluated-at">
+                  {evaluatedAtDisplay}
+                </span>
+              </span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <div className="rounded-md border border-border/60 bg-muted/20 p-2.5">
+              <div className="text-xs text-muted-foreground">{t("evolution.qualification.evaluated")}</div>
+              <div className="text-lg font-semibold text-mono" data-testid="qualification-evaluated-count">
+                {evaluatedCount}
+              </div>
+            </div>
+            <div className="rounded-md border border-border/60 bg-muted/20 p-2.5">
+              <div className="text-xs text-muted-foreground">{t("evolution.qualification.qualified")}</div>
+              <div className="text-lg font-semibold text-mono" data-testid="qualification-qualified-count">
+                {qualifiedCount}
+              </div>
+            </div>
+            <div className="rounded-md border border-border/60 bg-muted/20 p-2.5">
+              <div className="text-xs text-muted-foreground">{t("evolution.qualification.drafted")}</div>
+              <div className="text-lg font-semibold text-mono" data-testid="qualification-drafted-count">
+                {qualification?.drafted ?? 0}
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div className="text-xs font-medium text-muted-foreground mb-1.5">
+              {t("evolution.qualification.failingByCriterion")}
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2" data-testid="qualification-failing-criteria">
+              {criterionOrder.map((criterion) => {
+                const count = failingCounts[criterion] ?? 0;
+                const label = t(`evolution.qualification.criteria.${criterion}`, { defaultValue: criterion });
+                return (
+                  <div
+                    key={criterion}
+                    data-testid={`qualification-criterion-${criterion}`}
+                    className="flex items-center justify-between rounded border border-border/50 px-2.5 py-1.5 text-xs"
+                  >
+                    <span className="text-foreground">
+                      {label} <span className="text-mono text-muted-foreground">({criterion})</span>
+                    </span>
+                    <span className="text-mono font-semibold" data-testid={`qualification-criterion-count-${criterion}`}>
+                      {count}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {visibleRows.length === 0 && (
+            <div
+              data-testid="evolution-zero-programs-explanation"
+              className="rounded-md border border-status-warning/40 bg-status-warning/10 p-3 text-xs space-y-1"
+            >
+              <div className="font-semibold text-foreground">{t("evolution.qualification.zeroProgramsTitle")}</div>
+              <div className="text-muted-foreground">{zeroExplanationText}</div>
+            </div>
+          )}
+        </Card>
+      )}
+      columns={[
+        {
+          key: "name",
+          header: t("evolution.columns.name"),
+          cell: (r) => <div className="font-medium text-foreground">{r.name}</div>,
+        },
+        {
+          key: "status",
+          header: t("evolution.columns.status"),
+          cell: (r) => <StatusBadge state={r.status || r.state} />,
+        },
+        {
+          key: "origin",
+          header: t("evolution.columns.origin"),
+          cell: (r) => {
+            const originKind = normalizeEvolutionOriginKind(r.originKind ?? r.origin);
+            const rawStatus = String(r.status || r.state || "").toLowerCase();
+            const isUnderReview = rawStatus === "under_review" || rawStatus === "review";
+            const isWaitingForHumanReview = originKind === "automatic" && isUnderReview;
+            return (
+              <div className="flex flex-wrap items-center gap-1.5" data-testid={`evolution-origin-${r.id}`}>
+                <Badge variant="outline" className="text-mono text-xs">
+                  {t(`evolution.origin.${originKind}`)}
+                </Badge>
+                {isWaitingForHumanReview && (
+                  <Badge
+                    variant="secondary"
+                    data-testid={`evolution-waiting-review-${r.id}`}
+                    className="border-status-warning/40 bg-status-warning/15 text-status-warning text-xs"
+                  >
+                    {t("evolution.waitingForHumanReview")}
+                  </Badge>
+                )}
+              </div>
+            );
+          },
+        },
+        {
+          key: "sourceDecisions",
+          header: t("evolution.columns.sourceDecisionCount"),
+          cell: (r) => {
+            const count = (r.sourceDecisionIds ?? r.source_decision_ids ?? []).length;
+            return (
+              <span className="text-mono text-xs" data-testid={`evolution-source-decision-count-${r.id}`}>
+                {count}
+              </span>
+            );
+          },
+        },
+        {
+          key: "runs",
+          header: t("evolution.columns.runCount"),
+          cell: (r) => {
+            const count = (r.runIds ?? r.run_ids ?? []).length;
+            return (
+              <span className="text-mono text-xs" data-testid={`evolution-run-count-${r.id}`}>
+                {count}
+              </span>
+            );
+          },
+        },
+        {
+          key: "updated",
+          header: t("evolution.columns.updatedAt"),
+          cell: (r) => (
+            <span className="text-mono text-xs text-muted-foreground">
+              {safeDateTime(r.updatedAt || r.updated_at)}
+            </span>
+          ),
+        },
       ]}
     />
   );

@@ -1,6 +1,11 @@
 import type {
   EvolutionCandidate,
   EvolutionProgram,
+  EvolutionProgramQualification,
+  EvolutionProgramRejection,
+  EvolutionProgramReview,
+  EvolutionProgramRunLink,
+  EvolutionQualificationCriterionRow,
   EvolutionRun,
   FitnessFormula,
   MutationRule,
@@ -29,6 +34,100 @@ export interface EvolutionProgramWriteOptions {
   correlationId?: string;
 }
 
+export function normalizeEvolutionOriginKind(rawOrigin: unknown): "automatic" | "manual" {
+  const value = typeof rawOrigin === "string" ? rawOrigin.trim().toLowerCase() : "";
+  return value === "auto_qualified" || value === "automatic" ? "automatic" : "manual";
+}
+
+function stringListFrom(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((item) => (typeof item === "string" ? item.trim() : ""))
+    .filter((item) => item.length > 0);
+}
+
+function normalizeQualification(raw: unknown): EvolutionProgramQualification | null {
+  const record = asRecord(raw);
+  if (!record) return null;
+  const rawCriteria = Array.isArray(record.criteria) ? record.criteria : [];
+  const criteria: EvolutionQualificationCriterionRow[] = rawCriteria
+    .map((item): EvolutionQualificationCriterionRow | null => {
+      const row = asRecord(item);
+      if (!row) return null;
+      const criterion = recordString(row, "criterion") ?? "";
+      if (!criterion) return null;
+      return {
+        criterion,
+        result: recordString(row, "result") ?? "not_evaluated",
+        observed: row.observed ?? null,
+        threshold: row.threshold ?? null,
+        reason: recordString(row, "reason") ?? null,
+      };
+    })
+    .filter((row): row is EvolutionQualificationCriterionRow => row !== null);
+  const policyVersion = recordString(record, "policy_version", "policyVersion") ?? null;
+  const evaluatedAt = recordString(record, "evaluated_at", "evaluatedAt") ?? null;
+  const decisionId = recordString(record, "decision_id", "decisionId") ?? null;
+  const targetId = recordString(record, "target_id", "targetId") ?? null;
+  const metricName = recordString(record, "metric_name", "metricName") ?? null;
+  return {
+    ...record,
+    policy_version: policyVersion,
+    policyVersion,
+    evaluated_at: evaluatedAt,
+    evaluatedAt,
+    decision_id: decisionId,
+    decisionId,
+    target_id: targetId,
+    targetId,
+    metric_name: metricName,
+    metricName,
+    qualified: typeof record.qualified === "boolean" ? record.qualified : undefined,
+    first_failing_criterion: recordString(record, "first_failing_criterion", "firstFailingCriterion") ?? null,
+    failure_reason: recordString(record, "failure_reason", "failureReason") ?? null,
+    criteria,
+  };
+}
+
+function normalizeReview(raw: unknown): EvolutionProgramReview | null {
+  const record = asRecord(raw);
+  if (!record) return null;
+  const approvalId = recordString(record, "approval_id", "approvalId") ?? null;
+  const approvalRevision =
+    typeof (record.approval_revision ?? record.approvalRevision) === "number"
+      ? Number(record.approval_revision ?? record.approvalRevision)
+      : null;
+  const submittedBy = recordString(record, "submitted_by", "submittedBy") ?? null;
+  const submittedAt = recordString(record, "submitted_at", "submittedAt") ?? null;
+  return {
+    ...record,
+    approval_id: approvalId,
+    approvalId,
+    approval_revision: approvalRevision,
+    approvalRevision,
+    submitted_by: submittedBy,
+    submittedBy,
+    submitted_at: submittedAt,
+    submittedAt,
+  };
+}
+
+function normalizeRejection(raw: unknown): EvolutionProgramRejection | null {
+  const record = asRecord(raw);
+  if (!record) return null;
+  const reason = recordString(record, "reason") ?? null;
+  const rejectedBy = recordString(record, "rejected_by", "rejectedBy") ?? null;
+  const rejectedAt = recordString(record, "rejected_at", "rejectedAt") ?? null;
+  return {
+    ...record,
+    reason,
+    rejected_by: rejectedBy,
+    rejectedBy,
+    rejected_at: rejectedAt,
+    rejectedAt,
+  };
+}
+
 export function normalizeEvolutionProgram(raw: unknown): EvolutionProgram | undefined {
   const record = asRecord(raw);
   if (!record) return undefined;
@@ -36,17 +135,17 @@ export function normalizeEvolutionProgram(raw: unknown): EvolutionProgram | unde
   const id = recordString(record, "id", "program_id", "programId", "evolution_program_id") ?? "";
   if (!id) return undefined;
   const name = recordString(record, "name", "title") ?? id;
-  const rawState = recordString(record, "state", "status", "lifecycle_state", "lifecycleState") ?? "draft";
+  const rawStatus = recordString(record, "status", "state", "lifecycle_state", "lifecycleState") ?? "draft";
   const state: EvolutionProgram["state"] =
-    rawState === "deployed" || rawState === "active" || rawState === "running"
+    rawStatus === "deployed" || rawStatus === "active" || rawStatus === "running"
       ? "deployed"
-      : rawState === "review" || rawState === "under_review"
+      : rawStatus === "review" || rawStatus === "under_review"
         ? "review"
-        : rawState === "approved" || rawState === "completed"
+        : rawStatus === "approved" || rawStatus === "completed"
           ? "approved"
-          : rawState === "paused"
+          : rawStatus === "paused"
             ? "paused"
-            : rawState === "retired" || rawState === "archived"
+            : rawStatus === "retired" || rawStatus === "archived"
               ? "retired"
               : "draft";
   const rawRisk = recordString(record, "risk", "risk_level", "riskLevel");
@@ -56,6 +155,7 @@ export function normalizeEvolutionProgram(raw: unknown): EvolutionProgram | unde
       : "low";
   const owner = recordString(record, "owner", "created_by", "createdBy", "owner_id", "tenant_id") ?? "";
   const updatedAt = recordString(record, "updatedAt", "updated_at", "createdAt", "created_at") ?? "";
+  const createdAt = recordString(record, "createdAt", "created_at") ?? undefined;
   const parentAlpha = recordString(record, "parentAlpha", "parent_alpha", "strategy_id", "strategyId") ?? "";
   const generation = typeof record.generation === "number" && Number.isFinite(record.generation) ? record.generation : 0;
   const population = typeof record.population === "number" && Number.isFinite(record.population) ? record.population : 0;
@@ -66,20 +166,118 @@ export function normalizeEvolutionProgram(raw: unknown): EvolutionProgram | unde
         ? record.best_fitness
         : 0;
   const progress = typeof record.progress === "number" && Number.isFinite(record.progress) ? record.progress : 0;
+  const rawOrigin = recordString(record, "origin") ?? "manual";
+  const originKind = normalizeEvolutionOriginKind(record.originKind ?? rawOrigin);
+  const sourceDecisionIds = stringListFrom(record.source_decision_ids ?? record.sourceDecisionIds);
+  const runIds = stringListFrom(record.run_ids ?? record.runIds);
+  const runLinks = Array.isArray(record.run_links ?? record.runLinks)
+    ? ((record.run_links ?? record.runLinks) as EvolutionProgramRunLink[])
+    : [];
+  const hasExplicitAllowedActions =
+    Array.isArray(record.allowedActions) ||
+    Array.isArray(record.allowed_actions) ||
+    Array.isArray(record.availableActions) ||
+    Array.isArray(record.available_actions);
+  const allowedActions = hasExplicitAllowedActions
+    ? stringListFrom(
+        record.allowedActions ??
+          record.allowed_actions ??
+          record.availableActions ??
+          record.available_actions,
+      )
+    : undefined;
+  const qualification = normalizeQualification(record.qualification);
+  const review = normalizeReview(record.review);
+  const approval = asRecord(record.approval) ?? null;
+  const rejection = normalizeRejection(record.rejection);
 
   return {
     ...(base as Partial<EvolutionProgram>),
     id,
+    program_id: recordString(record, "program_id", "programId") ?? id,
+    programId: id,
     name,
+    status: rawStatus,
     state,
     risk,
     owner,
     updatedAt,
+    updated_at: recordString(record, "updated_at", "updatedAt") ?? updatedAt,
+    ...(createdAt ? { createdAt, created_at: createdAt } : {}),
     parentAlpha,
     generation,
     population,
     bestFitness,
     progress,
+    origin: rawOrigin,
+    originKind,
+    source_decision_ids: sourceDecisionIds,
+    sourceDecisionIds,
+    run_ids: runIds,
+    runIds,
+    run_links: runLinks,
+    runLinks,
+    qualification,
+    review,
+    approval,
+    rejection,
+    ...(allowedActions !== undefined
+      ? {
+          allowedActions,
+          allowed_actions: allowedActions,
+          availableActions: allowedActions,
+        }
+      : {}),
+  };
+}
+
+export function normalizeEvolutionRun(raw: unknown, fallbackProgramId = ""): EvolutionRun | undefined {
+  const record = asRecord(raw);
+  if (!record) return undefined;
+  const id = recordString(record, "id", "run_id", "runId") ?? "";
+  if (!id) return undefined;
+  const programId = recordString(record, "programId", "program_id") ?? fallbackProgramId;
+  const decisionId = recordString(record, "decisionId", "decision_id") ?? null;
+  const status = (recordString(record, "status", "state") ?? "unknown") as EvolutionRun["status"];
+  const downstreamStatus = recordString(record, "downstreamStatus", "downstream_status") ?? null;
+  const linkedAt = recordString(record, "linkedAt", "linked_at") ?? undefined;
+  const startedAt =
+    recordString(record, "startedAt", "started_at", "linked_at", "linkedAt", "created_at", "createdAt") ?? "";
+  const finishedAt = recordString(record, "finishedAt", "finished_at", "completed_at", "completedAt") ?? undefined;
+  const generation = typeof record.generation === "number" && Number.isFinite(record.generation) ? record.generation : 0;
+  const bestFitness =
+    typeof record.bestFitness === "number" && Number.isFinite(record.bestFitness)
+      ? record.bestFitness
+      : typeof record.best_fitness === "number" && Number.isFinite(record.best_fitness)
+        ? record.best_fitness
+        : 0;
+  const candidates = typeof record.candidates === "number" && Number.isFinite(record.candidates) ? record.candidates : 0;
+  const detail =
+    asRecord(record.detail) ??
+    (typeof record.detail === "string" ? record.detail : null);
+  const source = recordString(record, "source") ?? null;
+
+  return {
+    ...(record as Partial<EvolutionRun>),
+    id,
+    run_id: recordString(record, "run_id", "runId", "id") ?? id,
+    runId: id,
+    programId,
+    program_id: recordString(record, "program_id", "programId") ?? programId,
+    decisionId,
+    decision_id: decisionId,
+    status,
+    downstreamStatus,
+    downstream_status: downstreamStatus,
+    detail,
+    source,
+    linkedAt,
+    linked_at: linkedAt,
+    startedAt,
+    ...(finishedAt ? { finishedAt } : {}),
+    generation,
+    bestFitness,
+    candidates,
   };
 }
 
@@ -142,25 +340,17 @@ async function fetchLiveEvolutionRuns(helperName: string): Promise<EvolutionRun[
   );
   const batches = await Promise.all(
     programIds.map((programId) =>
-      strictLiveRead<UnknownRecord[]>(
+      strictLiveRead<EvolutionRun[]>(
         helperName,
         { method: "GET", path: paths.evolutionProgramRuns(programId) },
         (body) =>
-          liveItemsFrom<UnknownRecord>(body)
-            .map((run) => {
-              const runId = recordString(run, "id", "run_id", "runId");
-              if (!runId) return null;
-              return {
-                ...run,
-                id: runId,
-                programId: recordString(run, "programId", "program_id") ?? programId,
-              };
-            })
-            .filter((run) => run !== null),
+          liveItemsFrom<unknown>(body)
+            .map((run) => normalizeEvolutionRun(run, programId))
+            .filter((run): run is EvolutionRun => Boolean(run)),
       ),
     ),
   );
-  return batches.flat() as unknown as EvolutionRun[];
+  return batches.flat();
 }
 
 export async function listEvolutionRuns(): Promise<EvolutionRun[]> {
@@ -168,7 +358,11 @@ export async function listEvolutionRuns(): Promise<EvolutionRun[]> {
 }
 
 export async function getEvolutionRunsForProgram(programId: string): Promise<EvolutionRun[]> {
-  return strictLiveList("evolutionRuns.forProgram", paths.evolutionProgramRuns(programId));
+  return strictLiveList("evolutionRuns.forProgram", paths.evolutionProgramRuns(programId), (body) =>
+    liveItemsFrom<unknown>(body)
+      .map((item) => normalizeEvolutionRun(item, programId))
+      .filter((item): item is EvolutionRun => Boolean(item)),
+  );
 }
 
 export async function getEvolutionCandidatesForRun(runId: string): Promise<EvolutionCandidate[]> {
