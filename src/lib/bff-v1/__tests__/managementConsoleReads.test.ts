@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   adaptKnowledge,
+  adaptLineageEdge,
+  adaptLineageNode,
   managementConsoleReads,
   toKnowledgeKind,
   toKnowledgeRisk,
@@ -171,5 +173,228 @@ describe("managementConsoleReads — knowledge inbox truth (FE-EVIDENCE-KNOWLEDG
     const unavailableEnvelope = await managementConsoleReads.knowledgeInbox();
     expect(unavailableEnvelope.items).toEqual([]);
     expect(unavailableEnvelope.meta.status).toBe("unavailable");
+  });
+});
+
+describe("managementConsoleReads — registry lineage graph truth (FE-LINEAGE-REGISTRY-GRAPH-20261104)", () => {
+  const FD = "fd1281847a3b1c6a9735";
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    liveStatus._reset();
+  });
+
+  it("adapts registry lineage nodes and from/to edges without inventing risk, state, or Artifact fallback for unknown types", () => {
+    const specNode = adaptLineageNode({
+      id: `reg-strategy-spec-persona-${FD}`,
+      label: `reg-strategy-spec-persona-${FD}`,
+      type: "Strategy",
+      state: "draft",
+      artifact_id: `reg-strategy-spec-persona-${FD}`,
+      artifact_type: "Strategy",
+    });
+    expect(specNode).toEqual({
+      id: `reg-strategy-spec-persona-${FD}`,
+      label: `reg-strategy-spec-persona-${FD}`,
+      type: "Strategy",
+      state: "draft",
+      risk: undefined,
+      highlight: false,
+    });
+
+    const fallbackArtifactTypeNode = adaptLineageNode({
+      id: "feature-05246",
+      label: "feature-05246",
+      artifact_id: "feature-05246",
+      artifact_type: "feature_set",
+      state: "draft",
+    });
+    expect(fallbackArtifactTypeNode.type).toBe("feature_set");
+    expect(fallbackArtifactTypeNode.risk).toBeUndefined();
+
+    const typelessNode = adaptLineageNode({
+      id: "orphan-parent-001",
+      label: "orphan-parent-001",
+      artifact_id: "orphan-parent-001",
+      artifact_type: "",
+    });
+    expect(typelessNode.type).toBe("unknown");
+
+    const edge = adaptLineageEdge({
+      id: `reg-strategy-spec-persona-${FD}|source_strategy_spec|artifact-persona-paper-${FD}`,
+      from: `reg-strategy-spec-persona-${FD}`,
+      to: `artifact-persona-paper-${FD}`,
+      label: "source_strategy_spec",
+      edge_type: "source_strategy_spec",
+      from_artifact_id: `reg-strategy-spec-persona-${FD}`,
+      to_artifact_id: `artifact-persona-paper-${FD}`,
+    });
+    expect(edge).toEqual({
+      from: `reg-strategy-spec-persona-${FD}`,
+      to: `artifact-persona-paper-${FD}`,
+      label: "source_strategy_spec",
+    });
+  });
+
+  it("reads /bff/lineage with root_id, preserves has_more and separates ok empty from unavailable", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: {
+              id: "lineage",
+              nodes: [
+                {
+                  id: `reg-strategy-spec-persona-${FD}`,
+                  label: `reg-strategy-spec-persona-${FD}`,
+                  type: "Strategy",
+                  state: "draft",
+                  artifact_id: `reg-strategy-spec-persona-${FD}`,
+                  artifact_type: "Strategy",
+                },
+                {
+                  id: `artifact-persona-paper-${FD}`,
+                  label: `artifact-persona-paper-${FD}`,
+                  type: "Artifact",
+                  state: "approved",
+                  artifact_id: `artifact-persona-paper-${FD}`,
+                  artifact_type: "Artifact",
+                },
+              ],
+              edges: [
+                {
+                  id: `reg-strategy-spec-persona-${FD}|source_strategy_spec|artifact-persona-paper-${FD}`,
+                  from: `reg-strategy-spec-persona-${FD}`,
+                  to: `artifact-persona-paper-${FD}`,
+                  label: "source_strategy_spec",
+                  edge_type: "source_strategy_spec",
+                  from_artifact_id: `reg-strategy-spec-persona-${FD}`,
+                  to_artifact_id: `artifact-persona-paper-${FD}`,
+                },
+              ],
+              status: "ok",
+              source: "service_client",
+            },
+            items: [
+              {
+                id: `reg-strategy-spec-persona-${FD}|source_strategy_spec|artifact-persona-paper-${FD}`,
+                from: `reg-strategy-spec-persona-${FD}`,
+                to: `artifact-persona-paper-${FD}`,
+                label: "source_strategy_spec",
+              },
+            ],
+            page_info: {
+              next_page_token: null,
+              total: 1,
+              page_size: 1,
+              returned: 1,
+              has_more: true,
+            },
+            meta: {
+              snapshot_at: "2026-11-04T00:00:00Z",
+              status: "ok",
+              source: "service_client",
+              surfaces: {
+                lineage: { status: "ok", source: "service_client" },
+              },
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: {
+              id: "lineage",
+              nodes: [],
+              edges: [],
+              status: "ok",
+              source: "service_client",
+            },
+            items: [],
+            page_info: {
+              next_page_token: null,
+              total: 0,
+              page_size: 0,
+              returned: 0,
+              has_more: false,
+            },
+            meta: {
+              snapshot_at: "2026-11-04T00:00:00Z",
+              status: "ok",
+              source: "service_client",
+              surfaces: {
+                lineage: { status: "ok", source: "service_client" },
+              },
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: {
+              id: "lineage",
+              nodes: [],
+              edges: [],
+              status: "unavailable",
+              source: "unavailable",
+            },
+            items: [],
+            page_info: {
+              next_page_token: null,
+              total: 0,
+              page_size: 0,
+              returned: 0,
+              has_more: false,
+            },
+            meta: {
+              snapshot_at: "2026-11-04T00:00:00Z",
+              status: "unavailable",
+              source: "unavailable",
+              surfaces: {
+                lineage: { status: "unavailable", source: "unavailable" },
+              },
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+
+    vi.stubGlobal("fetch", fetchMock);
+    liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
+
+    const cappedGraph = await managementConsoleReads.lineage(`strategy-persona-${FD}`);
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      `/bff/lineage?root_id=strategy-persona-${FD}`,
+      expect.any(Object),
+    );
+    expect(cappedGraph.nodes).toHaveLength(2);
+    expect(cappedGraph.edges).toEqual([
+      {
+        from: `reg-strategy-spec-persona-${FD}`,
+        to: `artifact-persona-paper-${FD}`,
+        label: "source_strategy_spec",
+      },
+    ]);
+    expect(cappedGraph.has_more).toBe(true);
+    expect(cappedGraph.page_info?.has_more).toBe(true);
+    expect(cappedGraph.meta.status).toBe("ok");
+
+    const emptyGraph = await managementConsoleReads.lineage();
+    expect(emptyGraph.nodes).toEqual([]);
+    expect(emptyGraph.edges).toEqual([]);
+    expect(emptyGraph.has_more).toBe(false);
+    expect(emptyGraph.meta.status).toBe("ok");
+
+    const unavailableGraph = await managementConsoleReads.lineage();
+    expect(unavailableGraph.nodes).toEqual([]);
+    expect(unavailableGraph.edges).toEqual([]);
+    expect(unavailableGraph.has_more).toBe(false);
+    expect(unavailableGraph.meta.status).toBe("unavailable");
   });
 });

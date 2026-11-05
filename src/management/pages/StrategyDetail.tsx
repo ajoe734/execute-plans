@@ -14,7 +14,7 @@ import { DataTable } from "@/platform/components/DataTable";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { RiskBadge } from "@/platform/components/RiskBadge";
 import { bffWrites } from "@/lib/bff-v1/writes";
-import { bffV1, runActionSafe } from "@/lib/bff-v1";
+import { bffV1, managementConsoleReads, runActionSafe, type LineageRead } from "@/lib/bff-v1";
 import { useLiveDetail } from "@/lib/bff-v1/useLiveDetail";
 import { NonProductionActionButton } from "@/management/components/NonProductionActionButton";
 import { useT } from "@/platform/hooks";
@@ -58,6 +58,7 @@ export const StrategyDetail = () => {
   const [activeTr, setActiveTr] = useState<Transition<StrategyState> | null>(null);
   const [watchers, setWatchers] = useState<Watcher[]>([]);
   const [journal, setJournal] = useState<DecisionJournalEntry[]>([]);
+  const [lineage, setLineage] = useState<LineageRead | null>(null);
   const [loadErrors, setLoadErrors] = useState<string[]>([]);
 
   const { data: s, setData: setS, loading, isError } = useLiveDetail<Strategy>(
@@ -68,7 +69,7 @@ export const StrategyDetail = () => {
         request.catch(() => { failures.push(label); return fallback; });
       setLoadErrors([]);
       let stratError: unknown;
-      const [strat, j, a, ap, al, inc, ar, ex, ev, w, dj] = await Promise.all([
+      const [strat, j, a, ap, al, inc, ar, ex, ev, w, dj, lin] = await Promise.all([
         bffV1.strategies.get(entityId).catch((err) => {
           stratError = err;
           failures.push("Strategy");
@@ -80,6 +81,13 @@ export const StrategyDetail = () => {
         read("Research", bffV1.research.list(), []), read("Evolution", bffV1.evolution.list(), []),
         read("Watchers", bffV1.watchers.forSubject("Strategy", entityId), []),
         read("Decision journal", bffV1.decisionJournal.forSubject("Strategy", entityId), []),
+        managementConsoleReads.lineage(entityId).catch(() => ({
+          nodes: [],
+          edges: [],
+          meta: { status: "unavailable", source: "frontend_empty_read", surfaces: {} },
+          page_info: { total: 0, page_size: 0, has_more: false },
+          has_more: false,
+        })),
       ]);
       setLoadErrors(failures);
       setJobs(j);
@@ -92,6 +100,7 @@ export const StrategyDetail = () => {
       setEvolutions(ev.filter((e) => e.parentAlpha === strat?.alpha));
       setWatchers(w);
       setJournal(dj);
+      setLineage(lin);
       if (!strat && stratError) {
         throw stratError;
       }
@@ -448,19 +457,14 @@ export const StrategyDetail = () => {
           {
             value: "lineage", label: t("section.lineage"),
             content: (() => {
-              const nodes: LineageNode[] = [
-                { id: "alpha_src", label: s.alpha, type: "Alpha", state: "deployed", risk: "low" },
-                { id: s.capitalPoolId, label: s.capitalPoolId, type: "CapitalPool", state: "deployed", risk: "medium" },
-                { id: s.id, label: s.name, type: "Strategy", state: s.state, risk: s.risk, highlight: true },
-                ...(s.personaIds ?? []).map((p) => ({ id: p, label: p, type: "Persona", state: "deployed", risk: "low" as const })),
-                { id: `dp_${s.id}`, label: `${s.id} → live`, type: "Deployment", state: "deployed", risk: s.risk },
-              ];
-              const edges: LineageEdge[] = [
-                { from: "alpha_src", to: s.id, label: "alpha" },
-                { from: s.capitalPoolId, to: s.id, label: "capital" },
-                ...(s.personaIds ?? []).map((p) => ({ from: p, to: s.id, label: "persona" })),
-                { from: s.id, to: `dp_${s.id}`, label: "deploys" },
-              ];
+              const nodes: LineageNode[] = (lineage?.nodes ?? []).map((node) => ({
+                ...node,
+                highlight: node.highlight || node.id === s.id,
+              }));
+              const nodeIds = new Set(nodes.map((node) => node.id));
+              const edges: LineageEdge[] = (lineage?.edges ?? []).filter(
+                (edge) => nodeIds.has(edge.from) && nodeIds.has(edge.to),
+              );
               return (
                 <LineageGraph nodes={nodes} edges={edges} onSelect={(n) => useInspector.getState().open({
                   id: n.id, type: n.type, name: n.label, state: n.state, risk: n.risk,

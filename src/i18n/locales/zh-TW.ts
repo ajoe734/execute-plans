@@ -2616,6 +2616,8 @@ export default {
   lineageExplorer: {
     subtitle: "跨物件血緣，可依型別篩選。選一個根節點追蹤上下游。",
     root: "根節點", filter: "篩選", filterPh: "依 ID 或名稱篩選", types: "型別",
+    unavailable: "血緣服務不可用。",
+    hasMore: "預設血緣圖已達上限（has_more）：請輸入根節點 ID 檢視特定子圖。",
   },
   knowledge: {
     subtitle: "從營運活動匯集的洞察。可升級為 Artifact、Postmortem 或研究任務。",
