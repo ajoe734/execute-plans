@@ -26,7 +26,7 @@
     }
   ],
   "status": "in_progress",
-  "timestamp": "2026-11-05T04:58:00Z",
+  "timestamp": "2026-11-05T05:15:00Z",
   "scope": {
     "delivered": [
       "Added canonical path builder paths.alphaFactory in src/lib/bff-v1/paths.ts and Alpha Factory replication DTO contracts (AlphaFactoryLaneId, AlphaFactoryCard, AlphaFactoryLane, AlphaFactoryPageInfo, AlphaFactoryMeta, AlphaFactoryData, AlphaFactoryEnvelope) in src/lib/bff-v1/dto.ts.",
@@ -34,7 +34,8 @@
       "Updated src/management/pages/phase2/alphaFactoryData.ts so buildAlphaFactoryBuckets consumes /bff/alpha-factory replication lanes instead of strategies.slice(0, 4), removes alphaFactory.replicated.note, and classifyAlphaFactorySource classifies meta.surfaces.alpha_factory status unavailable or transport errors as degraded.",
       "Updated src/management/pages/phase2/AlphaFactoryBoard.tsx to read GET /bff/alpha-factory via alphaFactory.get, render strategy_id, approver, approved_at, queue_status, attempt_count, last_revalidation_at, and experiment_run_ids.length with a not-reported marker for null values, omit Sharpe and risk badges unless supplied by the BFF, link authority_task_id to /management/experiments/<authority_task_id> and strategy_id to /management/strategies/<strategy_id> with encodeURIComponent, retain the open-strategy-list button, and show the degraded error state without empty columns when meta.surfaces.alpha_factory is unavailable or the read fails.",
       "Updated src/i18n/locales/zh-TW.ts and src/i18n/locales/en-US.ts to remove alphaFactory.replicated.note and the text claiming the BFF does not expose the candidate list, and added bilingual labels for no_candidate_source, unavailable surface, and replication card fields.",
-      "Added unit and component tests in src/lib/bff-v1/__tests__/alphaFactory.test.ts, src/management/pages/phase2/alphaFactoryData.test.ts, src/management/pages/phase2/AlphaFactoryBoard.test.tsx, src/lib/bff-v1/__tests__/contract-drift.test.ts, src/lib/bff-v1/__tests__/strictLiveReadOffline.test.ts, and src/lib/v5/management/__tests__/i18nParity.test.ts."
+      "Added unit and component tests in src/lib/bff-v1/__tests__/alphaFactory.test.ts, src/management/pages/phase2/alphaFactoryData.test.ts, src/management/pages/phase2/AlphaFactoryBoard.test.tsx, src/lib/bff-v1/__tests__/contract-drift.test.ts, src/lib/bff-v1/__tests__/strictLiveReadOffline.test.ts, and src/lib/v5/management/__tests__/i18nParity.test.ts.",
+      "Migrated the AlphaFactoryBoardPage regression test in src/management/pages/StrategyDetail.metrics.test.tsx to GET /bff/alpha-factory with genuine quoted payload shapes, proving unreplicated strategy exclusion (strat-not-running-05), identifier rendering without empty-alpha separators, and real null/unreported markers while preserving all StrategyDetail null-vs-zero tests."
     ],
     "changed_assertions": [
       {
@@ -46,6 +47,11 @@
         "file": "src/management/pages/phase2/alphaFactoryData.test.ts",
         "test": "preserves null sharpe on replicated records when supplied and omits sharpe when not supplied",
         "justification": "Updated input from a Strategy list row to an AlphaFactoryEnvelope record since buildAlphaFactoryBuckets no longer reads Strategy list rows (AC1/AC2/AC4)."
+      },
+      {
+        "file": "src/management/pages/StrategyDetail.metrics.test.tsx",
+        "test": "AlphaFactoryBoardPage excludes unreplicated strategy list rows, renders Not reported for null replication fields and explicit null sharpe, and omits empty alpha separator",
+        "justification": "Migrated from mocking only lists.strategies and expecting unreplicated strat-not-running-05 on AlphaFactoryBoardPage to mocking alphaFactory.get with genuine quoted /bff/alpha-factory payloads (adm-replicated-2330 with sharpe: null and adm-pending-2454 with null replication fields) while retaining the lists.strategies mock to prove unreplicated strategies are excluded (AC1/AC2), genuine strategy_id and strategy_spec_id render without empty-alpha separators, and null fields and explicit null sharpe render 'Not reported' instead of '0.00' (AC4)."
       }
     ]
   },
@@ -65,7 +71,8 @@
       "status": "passed",
       "verified_by": [
         "src/management/pages/phase2/AlphaFactoryBoard.test.tsx > reads GET /bff/alpha-factory, never reads lists.strategies, and proves a strategy with no replication record never appears on the board",
-        "src/management/pages/phase2/alphaFactoryData.test.ts > never places a strategy list row without a replication record onto the board"
+        "src/management/pages/phase2/alphaFactoryData.test.ts > never places a strategy list row without a replication record onto the board",
+        "src/management/pages/StrategyDetail.metrics.test.tsx > AlphaFactoryBoardPage excludes unreplicated strategy list rows, renders Not reported for null replication fields and explicit null sharpe, and omits empty alpha separator"
       ]
     },
     {
@@ -118,7 +125,18 @@
       "status": "passed",
       "verified_by": [
         "src/management/pages/phase2/AlphaFactoryBoard.test.tsx",
+        "src/management/pages/StrategyDetail.metrics.test.tsx",
         "src/lib/v5/management/__tests__/i18nParity.test.ts > includes Alpha Factory replication card, empty-state, and unavailable keys in both locales and removes legacy replicated note"
+      ]
+    },
+    {
+      "criterion": 9,
+      "description": "vitest and tsc and the production build pass",
+      "status": "passed",
+      "verified_by": [
+        "npx vitest run",
+        "npm run typecheck:app && ./node_modules/.bin/tsc -p tsconfig.agora.json --noEmit",
+        "npm run build"
       ]
     }
   ]
