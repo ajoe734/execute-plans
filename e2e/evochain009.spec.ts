@@ -26,6 +26,7 @@ type EvolutionJournalItem = {
   id?: string;
   target?: { id?: string };
   route?: string;
+  evidence_class?: string;
 };
 
 type FleetResponseBody = { data?: { items?: FleetPersona[] } };
@@ -34,6 +35,13 @@ type JournalEnvelope = {
   data?: {
     id?: string;
     items?: EvolutionJournalItem[];
+    summary?: Record<string, unknown>;
+    auto_proposal_counts?: {
+      incident_followup?: number;
+      incident_severity?: number;
+      postmortem_draft?: number;
+      total?: number;
+    };
   };
   page_info?: {
     next_page_token?: string | null;
@@ -198,8 +206,8 @@ test("capture evolution journal fallback-state hosted evidence", async ({ page, 
   let nextPageToken: string | null | undefined = undefined;
 
   do {
-    const url = `${BFF_BASE}/bff/management/evolution-journal` +
-      (nextPageToken ? `?page_token=${encodeURIComponent(nextPageToken)}` : "");
+    const url = `${BFF_BASE}/bff/management/evolution-journal?view=all` +
+      (nextPageToken ? `&page_token=${encodeURIComponent(nextPageToken)}` : "");
 
     const journalPage = await fetchJsonWithRetry<JournalResponseBody>(
       request,
@@ -237,7 +245,7 @@ test("capture evolution journal fallback-state hosted evidence", async ({ page, 
     if (!hasJournalEntry) {
       // Query candidate persona filter on the BFF to confirm it's truly empty (double check/fail closed)
       try {
-        const filterUrl = `${BFF_BASE}/bff/management/evolution-journal?persona=${encodeURIComponent(id)}`;
+        const filterUrl = `${BFF_BASE}/bff/management/evolution-journal?view=history&persona=${encodeURIComponent(id)}`;
         const filterData = await fetchJsonWithRetry<JournalResponseBody>(
           request,
           filterUrl,
@@ -297,6 +305,7 @@ test("capture evolution journal fallback-state hosted evidence", async ({ page, 
   // and hardcoded (not i18n-translated), so they are stable to assert on.
   const fallbackHeadline = page.getByText(/Persona Fleet status summary/i);
   await expect(fallbackHeadline).toBeVisible({ timeout: 20000 });
+  await expect(page.getByTestId("evolution-auto-proposals-summary")).toBeVisible();
 
   const fallbackFocusBanner = page.getByText(/fleet summary fallback/i);
   await expect(fallbackFocusBanner).toBeVisible();

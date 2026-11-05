@@ -91,7 +91,13 @@ export const queryKeys = {
     personaIntentTraces: (id?: string, scope?: Partial<QueryScope>) => ["pantheon", getActiveQueryScope(scope), "oversight", "personaIntentTraces", id ?? "list"] as const,
     tradingPulse: (scope?: Partial<QueryScope>) => ["pantheon", getActiveQueryScope(scope), "oversight", "tradingPulse"] as const,
     tradingPulseRankings: (scope?: Partial<QueryScope>) => ["pantheon", getActiveQueryScope(scope), "oversight", "tradingPulseRankings"] as const,
-    evolutionJournal: (scope?: Partial<QueryScope>) => ["pantheon", getActiveQueryScope(scope), "oversight", "evolutionJournal"] as const,
+    evolutionJournal: (filterOrScope?: string | Partial<QueryScope>, maybeScope?: Partial<QueryScope>) => {
+      const filter = typeof filterOrScope === "string" ? filterOrScope : undefined;
+      const scope = typeof filterOrScope === "string" ? maybeScope : filterOrScope;
+      return filter
+        ? (["pantheon", getActiveQueryScope(scope), "oversight", "evolutionJournal", filter] as const)
+        : (["pantheon", getActiveQueryScope(scope), "oversight", "evolutionJournal"] as const);
+    },
     evidence: (scope?: Partial<QueryScope>) => ["pantheon", getActiveQueryScope(scope), "oversight", "evidence"] as const,
     humanInbox: (scope?: Partial<QueryScope>) => ["pantheon", getActiveQueryScope(scope), "oversight", "humanInbox"] as const,
     humanGateDetail: (id?: string, scope?: Partial<QueryScope>) => ["pantheon", getActiveQueryScope(scope), "oversight", "humanGateDetail", id ?? "none"] as const,

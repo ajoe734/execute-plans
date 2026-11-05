@@ -195,8 +195,18 @@ test.describe("Persona Fleet live linked-page contract", () => {
     if (fleetRow.last_mutation_kind === "unavailable") {
       await expect(mutationLink).toHaveCount(0);
     } else {
+      const journalRead = page.waitForResponse((response) => {
+        const url = new URL(response.url());
+        return url.pathname === "/bff/management/evolution-journal"
+          && url.searchParams.get("view") === "history"
+          && response.request().method() === "GET"
+          && response.status() === 200;
+      }, { timeout: 30_000 });
       await mutationLink.click();
+      await journalRead;
       const body = page.locator("body");
+      await expect(page.getByTestId("evolution-auto-proposals-summary")).toBeVisible();
+      await expect(page.getByTestId("evolution-view-toggle")).toBeVisible();
       await expect(body).not.toContainText(/mutation\s*[：:]\s*nan/i);
       await expect(body).not.toContainText(/Action\s+\d{4}-\d{2}-\d{2}/i);
       if (fleetRow.last_mutation_kind === "fleet_summary") {

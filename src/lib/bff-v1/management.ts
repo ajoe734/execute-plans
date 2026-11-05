@@ -2325,6 +2325,10 @@ function normalizeEvolutionHref(value: unknown): string | null {
     if (url.origin !== "https://pantheon.invalid" || url.pathname !== "/management/evolution-journal") {
       return null;
     }
+    const view = url.searchParams.get("view");
+    if (view !== null && !["all", "history", "auto_proposals"].includes(view.trim().toLowerCase())) {
+      return null;
+    }
     const persona = url.searchParams.get("persona");
     if (persona && INVALID_MUTATION_REFERENCE_TOKENS.has(persona.trim().toLowerCase())) return null;
     for (const key of ["mutation_review", "decision", "item"]) {
@@ -3440,10 +3444,208 @@ export function adaptTradingPulseOverview(raw: unknown): ManagementTradingPulseM
 // ---------- PM-7 Persona Fleet / PM-11 Evolution / PM-1 Evidence ----------
 // All three are array-of-row view-models. Adapters share shape.
 
+export type ManagementEvolutionJournalView = "all" | "history" | "auto_proposals";
+export type ManagementEvolutionJournalEvidenceClass =
+  | "threshold_signal"
+  | "incident_followup"
+  | "incident_severity"
+  | "unclassified";
+
+export interface ManagementEvolutionJournalAutoProposalCounts {
+  incident_followup: number;
+  incident_severity: number;
+  postmortem_draft: number;
+  total: number;
+  incidentFollowup: number;
+  incidentSeverity: number;
+  postmortemDraft: number;
+}
+
+export interface ManagementEvolutionJournalSummary {
+  total_items: number;
+  totalItems: number;
+  returned_items: number;
+  returnedItems: number;
+  decision_count: number;
+  decisionCount: number;
+  mutation_review_count: number;
+  mutationReviewCount: number;
+  postmortem_count: number;
+  postmortemCount: number;
+  rollback_count: number;
+  rollbackCount: number;
+  freeze_order_count: number;
+  freezeOrderCount: number;
+  pending_review_count: number;
+  pendingReviewCount: number;
+  active_freeze_count: number;
+  activeFreezeCount: number;
+  completed_rollback_count: number;
+  completedRollbackCount: number;
+  latest_at?: string | null;
+  latestAt?: string | null;
+  by_type: Record<string, number>;
+  byType: Record<string, number>;
+  by_status: Record<string, number>;
+  byStatus: Record<string, number>;
+  by_risk_level: Record<string, number>;
+  byRiskLevel: Record<string, number>;
+}
+
+export interface ManagementEvolutionJournalPageInfo {
+  next_page_token: string | null;
+  nextPageToken: string | null;
+  page_size: number;
+  pageSize: number;
+  total: number;
+}
+
+export interface ManagementEvolutionJournalMeta {
+  snapshot_at?: string;
+  snapshotAt?: string;
+  surfaces?: Record<string, { status: string; source?: string; message?: string; reason?: string }>;
+}
+
+export type EvolutionJournalList<T = Record<string, unknown>> = T[] & {
+  summary?: ManagementEvolutionJournalSummary;
+  autoProposalCounts?: ManagementEvolutionJournalAutoProposalCounts;
+  auto_proposal_counts?: ManagementEvolutionJournalAutoProposalCounts;
+  pageInfo?: ManagementEvolutionJournalPageInfo;
+  page_info?: ManagementEvolutionJournalPageInfo;
+  meta?: ManagementEvolutionJournalMeta;
+};
+
 function adaptArrayPassthrough<T>(raw: unknown): T[] | null {
   const data = unwrap(raw);
   return asArray<T>(data) ??
          (isObject(data) ? asArray<T>(data.items) : null);
+}
+
+export function adaptEvolutionJournalList<T = Record<string, unknown>>(raw: unknown): EvolutionJournalList<T> | null {
+  const arr = adaptArrayPassthrough<T>(raw);
+  if (!arr) return null;
+  const list = [...arr] as EvolutionJournalList<T>;
+  const rawArr = arr as EvolutionJournalList<T>;
+  const data = unwrap(raw);
+  const envelope = isObject(raw) ? raw : {};
+
+  const rawSummary = (isObject(data) && isObject(data.summary) ? data.summary : undefined)
+    ?? (isObject(envelope.summary) ? envelope.summary : undefined)
+    ?? (isObject(rawArr.summary) ? (rawArr.summary as unknown as Record<string, unknown>) : undefined);
+  if (rawSummary) {
+    const totalItems = asFiniteNumber(rawSummary.total_items ?? rawSummary.totalItems, list.length);
+    const returnedItems = asFiniteNumber(rawSummary.returned_items ?? rawSummary.returnedItems, list.length);
+    const decisionCount = asFiniteNumber(rawSummary.decision_count ?? rawSummary.decisionCount, 0);
+    const mutationReviewCount = asFiniteNumber(rawSummary.mutation_review_count ?? rawSummary.mutationReviewCount, 0);
+    const postmortemCount = asFiniteNumber(rawSummary.postmortem_count ?? rawSummary.postmortemCount, 0);
+    const rollbackCount = asFiniteNumber(rawSummary.rollback_count ?? rawSummary.rollbackCount, 0);
+    const freezeOrderCount = asFiniteNumber(rawSummary.freeze_order_count ?? rawSummary.freezeOrderCount, 0);
+    const pendingReviewCount = asFiniteNumber(rawSummary.pending_review_count ?? rawSummary.pendingReviewCount, 0);
+    const activeFreezeCount = asFiniteNumber(rawSummary.active_freeze_count ?? rawSummary.activeFreezeCount, 0);
+    const completedRollbackCount = asFiniteNumber(rawSummary.completed_rollback_count ?? rawSummary.completedRollbackCount, 0);
+    const latestAt = nullableString(rawSummary.latest_at ?? rawSummary.latestAt);
+    const byType = asCountRecord(rawSummary.by_type ?? rawSummary.byType);
+    const byStatus = asCountRecord(rawSummary.by_status ?? rawSummary.byStatus);
+    const byRiskLevel = asCountRecord(rawSummary.by_risk_level ?? rawSummary.byRiskLevel);
+    list.summary = {
+      total_items: totalItems,
+      totalItems,
+      returned_items: returnedItems,
+      returnedItems,
+      decision_count: decisionCount,
+      decisionCount,
+      mutation_review_count: mutationReviewCount,
+      mutationReviewCount,
+      postmortem_count: postmortemCount,
+      postmortemCount,
+      rollback_count: rollbackCount,
+      rollbackCount,
+      freeze_order_count: freezeOrderCount,
+      freezeOrderCount,
+      pending_review_count: pendingReviewCount,
+      pendingReviewCount,
+      active_freeze_count: activeFreezeCount,
+      activeFreezeCount,
+      completed_rollback_count: completedRollbackCount,
+      completedRollbackCount,
+      latest_at: latestAt,
+      latestAt,
+      by_type: byType,
+      byType,
+      by_status: byStatus,
+      byStatus,
+      by_risk_level: byRiskLevel,
+      byRiskLevel,
+    };
+  }
+
+  const rawCounts = (isObject(data) && isObject(data.auto_proposal_counts ?? data.autoProposalCounts)
+    ? (data.auto_proposal_counts ?? data.autoProposalCounts) as Record<string, unknown>
+    : undefined)
+    ?? (isObject(envelope.auto_proposal_counts ?? envelope.autoProposalCounts)
+      ? (envelope.auto_proposal_counts ?? envelope.autoProposalCounts) as Record<string, unknown>
+      : undefined)
+    ?? (isObject(rawArr.auto_proposal_counts ?? rawArr.autoProposalCounts)
+      ? (rawArr.auto_proposal_counts ?? rawArr.autoProposalCounts) as unknown as Record<string, unknown>
+      : undefined);
+  if (rawCounts) {
+    const incidentFollowup = asFiniteNumber(rawCounts.incident_followup ?? rawCounts.incidentFollowup, 0);
+    const incidentSeverity = asFiniteNumber(rawCounts.incident_severity ?? rawCounts.incidentSeverity, 0);
+    const postmortemDraft = asFiniteNumber(rawCounts.postmortem_draft ?? rawCounts.postmortemDraft, 0);
+    const total = asFiniteNumber(rawCounts.total, incidentFollowup + incidentSeverity + postmortemDraft);
+    const counts: ManagementEvolutionJournalAutoProposalCounts = {
+      incident_followup: incidentFollowup,
+      incident_severity: incidentSeverity,
+      postmortem_draft: postmortemDraft,
+      total,
+      incidentFollowup,
+      incidentSeverity,
+      postmortemDraft,
+    };
+    list.autoProposalCounts = counts;
+    list.auto_proposal_counts = counts;
+  }
+
+  const rawPageInfo = (isObject(envelope.page_info ?? envelope.pageInfo)
+    ? (envelope.page_info ?? envelope.pageInfo) as Record<string, unknown>
+    : undefined)
+    ?? (isObject(data) && isObject(data.page_info ?? data.pageInfo)
+      ? (data.page_info ?? data.pageInfo) as Record<string, unknown>
+      : undefined)
+    ?? (isObject(rawArr.page_info ?? rawArr.pageInfo)
+      ? (rawArr.page_info ?? rawArr.pageInfo) as unknown as Record<string, unknown>
+      : undefined);
+  if (rawPageInfo) {
+    const nextPageToken = nullableString(rawPageInfo.next_page_token ?? rawPageInfo.nextPageToken);
+    const pageSize = asFiniteNumber(rawPageInfo.page_size ?? rawPageInfo.pageSize, 20);
+    const total = asFiniteNumber(rawPageInfo.total, list.summary?.total_items ?? list.length);
+    const pageInfo: ManagementEvolutionJournalPageInfo = {
+      next_page_token: nextPageToken,
+      nextPageToken,
+      page_size: pageSize,
+      pageSize,
+      total,
+    };
+    list.pageInfo = pageInfo;
+    list.page_info = pageInfo;
+  }
+
+  const rawMeta = (isObject(envelope.meta) ? envelope.meta : undefined)
+    ?? (isObject(data) && isObject(data.meta) ? data.meta : undefined)
+    ?? (isObject(rawArr.meta) ? (rawArr.meta as unknown as Record<string, unknown>) : undefined);
+  if (rawMeta) {
+    const rawSurfaces = isObject(rawMeta.surfaces) ? rawMeta.surfaces : {};
+    const surfaces = Object.fromEntries(
+      Object.entries(rawSurfaces).map(([key, item]) => [key, adaptEvidenceSurface(item)]),
+    );
+    list.meta = {
+      snapshot_at: optionalString(rawMeta.snapshot_at ?? rawMeta.snapshotAt),
+      snapshotAt: optionalString(rawMeta.snapshotAt ?? rawMeta.snapshot_at),
+      surfaces,
+    };
+  }
+
+  return list;
 }
 
 export function adaptPerformanceAttributionResult(raw: unknown): PerformanceAttributionResult {
@@ -4240,9 +4442,22 @@ export const mgmt = {
   evolutionJournal: {
     list: <T>(
       seedFn: () => T[],
-      opts?: { signal?: AbortSignal; persona?: string; mutationReview?: string; decision?: string },
-    ): Promise<T[]> =>
-      mgmtRead("mgmt.evolutionJournal.list", { method: "GET", path: paths.mgmtEvolutionJournal(opts), signal: opts?.signal }, seedFn, adaptArrayPassthrough<T>),
+      opts?: {
+        signal?: AbortSignal;
+        view?: ManagementEvolutionJournalView | string;
+        persona?: string;
+        mutationReview?: string;
+        decision?: string;
+        pageSize?: number;
+        pageToken?: string | null;
+      },
+    ): Promise<EvolutionJournalList<T>> =>
+      mgmtRead(
+        "mgmt.evolutionJournal.list",
+        { method: "GET", path: paths.mgmtEvolutionJournal(opts), signal: opts?.signal },
+        seedFn as () => EvolutionJournalList<T>,
+        adaptEvolutionJournalList<T>,
+      ),
   },
 
   evidence: {
