@@ -53,6 +53,15 @@ const fmtHoldingMoney = (n?: number | null, currency?: string | null) => {
     return `${code} ${fmtNum(amount)}`;
   }
 };
+const fmtMarkDate = (value?: string | null): string | null => {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+  const isoPrefix = trimmed.match(/^\d{4}-\d{2}-\d{2}/);
+  if (isoPrefix) return isoPrefix[0];
+  const parsed = Date.parse(trimmed);
+  if (Number.isFinite(parsed)) return new Date(parsed).toISOString().slice(0, 10);
+  return trimmed;
+};
 
 const CONFIDENCE_TONE: Record<string, string> = {
   ok: "bg-status-success/15 text-status-success border-status-success/30",
@@ -287,12 +296,22 @@ export const PortfolioBookPage = ({ embedded = false }: { embedded?: boolean } =
             <header className="px-4 py-2 border-b border-border">
               <h2 className="text-sm font-semibold text-foreground">{t("mgmt.portfolio.holdingsTitle")}</h2>
             </header>
-            <ManagementTableScroll minScrollWidth={1280}>
-              <table className="w-full min-w-[1280px] text-sm">
+            <ManagementTableScroll minScrollWidth={1520}>
+              <table className="w-full min-w-[1520px] text-sm">
                 <thead className="text-left text-xs uppercase tracking-wider text-muted-foreground border-b border-border">
                   <tr>
-                    {["Holding", "Stage / capital scope", "Runtime / broker", "Market value", "Unrealized PnL", "Source confidence", "Risk", "Actions"].map((heading) => (
-                      <th key={heading} className="px-3 py-2">{heading}</th>
+                    {[
+                      "Holding",
+                      "Stage / capital scope",
+                      "Runtime / broker",
+                      t("mgmt.portfolio.quantity", { defaultValue: "Quantity" }),
+                      t("mgmt.portfolio.marketValue", { defaultValue: "Market value" }),
+                      t("mgmt.portfolio.unrealizedPnl", { defaultValue: "Unrealized PnL" }),
+                      "Source confidence",
+                      "Risk",
+                      "Actions",
+                    ].map((heading) => (
+                      <th key={heading} className="px-3 py-2 whitespace-nowrap">{heading}</th>
                     ))}
                   </tr>
                 </thead>
@@ -300,39 +319,94 @@ export const PortfolioBookPage = ({ embedded = false }: { embedded?: boolean } =
                   {monitor.items.map((row) => {
                     const incident = incidentsByHolding.get(row.holdingId);
                     const humanReviewHref = incident?.links.human_review ?? row.links.human_review;
+                    const hasQuantity = typeof row.quantity === "number" && Number.isFinite(row.quantity);
+                    const isShortPosition = hasQuantity && (row.quantity as number) < 0;
+                    const hasUnrealizedPnl = typeof row.unrealizedPnl === "number" && Number.isFinite(row.unrealizedPnl);
+                    const lastMarkDate = fmtMarkDate(row.lastMarkAt);
+                    const isStaleRow = row.markStatus === "stale" || row.telemetryStale;
+                    const effectiveSourceStatus = isStaleRow && row.sourceStatus === "ok" ? "stale" : row.sourceStatus;
+                    const noAverageCostLabel = t("mgmt.portfolio.noAverageCost", { defaultValue: "Source reports no average cost" });
                     return (
                       <tr key={row.holdingId} className="border-b border-border/50 align-top" data-testid="portfolio-holding">
-                        <td className="px-3 py-3">
+                        <td className="px-3 py-3 whitespace-nowrap">
                           <div className="font-mono text-foreground">{row.symbol}</div>
                           <div className="text-xs text-muted-foreground">{row.holdingId}</div>
                         </td>
-                        <td className="px-3 py-3">
+                        <td className="px-3 py-3 whitespace-nowrap">
                           <Badge variant="outline">{row.deploymentStage || "unknown"}</Badge>
                           <div className="mt-1 text-xs text-muted-foreground">
                             {scopeLabel(row.capitalScope.scopeKind, row.capitalScope.scopeId)}
                           </div>
                         </td>
-                        <td className="px-3 py-3 font-mono text-xs">
+                        <td className="px-3 py-3 font-mono text-xs whitespace-nowrap">
                           <div>{row.runtimeId || "Unknown runtime"}</div>
                           <div>{row.brokerId || "Unknown broker"}</div>
                         </td>
-                        <td className="px-3 py-3 font-mono">{fmtHoldingMoney(row.marketValue, row.currency)}</td>
-                        <td className={`px-3 py-3 font-mono ${(row.unrealizedPnl ?? 0) < 0 ? "text-status-failed" : "text-status-success"}`}>
-                          {fmtHoldingMoney(row.unrealizedPnl, row.currency)}
-                        </td>
-                        <td className="px-3 py-3">
-                          <Badge variant="outline" className={tone(row.sourceStatus)}>{row.sourceStatus}</Badge>
-                          {row.telemetryStale ? (
-                            <div className="mt-1 text-xs text-status-warning">Stale telemetry</div>
+                        <td className="px-3 py-3 font-mono whitespace-nowrap">
+                          <div>{fmtNum(row.quantity)}</div>
+                          {isShortPosition ? (
+                            <div className="mt-0.5 font-sans text-xs text-muted-foreground">
+                              {t("mgmt.portfolio.shortPosition", { defaultValue: "Short position" })}
+                            </div>
                           ) : null}
-                          <div className="mt-1 text-xs text-muted-foreground">
-                            {row.sourceIssues.map((issue) => issue.code).join(", ") || "No reported source issue"}
-                          </div>
                         </td>
-                        <td className="px-3 py-3">
+                        <td className="px-3 py-3 font-mono whitespace-nowrap">
+                          {row.markStatus === "stale" ? (
+                            <span className="font-sans text-xs text-status-warning">
+                              {lastMarkDate
+                                ? t("mgmt.portfolio.markStaleWithDateFmt", {
+                                    date: lastMarkDate,
+                                    defaultValue: `Price stale (last mark ${lastMarkDate})`,
+                                  })
+                                : t("mgmt.portfolio.markStale", { defaultValue: "Price stale" })}
+                            </span>
+                          ) : row.markStatus === "unavailable" ? (
+                            <span className="font-sans text-xs text-muted-foreground">
+                              {t("mgmt.portfolio.markUnavailable", { defaultValue: "No price available" })}
+                            </span>
+                          ) : (
+                            fmtHoldingMoney(row.marketValue, row.currency)
+                          )}
+                        </td>
+                        <td
+                          className={`px-3 py-3 font-mono whitespace-nowrap ${
+                            hasUnrealizedPnl
+                              ? (row.unrealizedPnl as number) < 0
+                                ? "text-status-failed"
+                                : "text-status-success"
+                              : "text-muted-foreground"
+                          }`}
+                        >
+                          {hasUnrealizedPnl ? (
+                            fmtHoldingMoney(row.unrealizedPnl, row.currency)
+                          ) : (
+                            <span aria-label={noAverageCostLabel} title={noAverageCostLabel}>
+                              <span aria-hidden="true">—</span>
+                              <span className="sr-only"> {noAverageCostLabel}</span>
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-3 py-3 whitespace-nowrap">
+                          <Badge variant="outline" className={tone(effectiveSourceStatus)}>{effectiveSourceStatus}</Badge>
+                          {isStaleRow ? (
+                            <div className="mt-1 text-xs text-status-warning">
+                              {t("mgmt.portfolio.staleTelemetry", { defaultValue: "Stale telemetry" })}
+                            </div>
+                          ) : null}
+                          {row.sourceIssues.length > 0 ? (
+                            <div className="mt-1 text-xs text-muted-foreground">
+                              {row.sourceIssues.map((issue) => issue.code).join(", ")}
+                            </div>
+                          ) : !isStaleRow ? (
+                            <div className="mt-1 text-xs text-muted-foreground">
+                              {t("mgmt.portfolio.noReportedSourceIssue", { defaultValue: "No reported source issue" })}
+                            </div>
+                          ) : null}
+                        </td>
+                        <td className="px-3 py-3 whitespace-nowrap">
                           <Badge variant="outline" className={tone(row.riskState)}>{row.riskState}</Badge>
                         </td>
-                        <td className="px-3 py-3">
+                        <td className="px-3 py-3 whitespace-nowrap">
                           <div className="flex flex-col items-start gap-1">
                             {row.links.persona_fleet ? (
                               <Link className="text-primary hover:underline" to={row.links.persona_fleet}>Persona Fleet</Link>
@@ -350,7 +424,7 @@ export const PortfolioBookPage = ({ embedded = false }: { embedded?: boolean } =
                   })}
                   {monitor.items.length === 0 ? (
                     <tr>
-                      <td className="px-3 py-8 text-center text-muted-foreground" colSpan={8}>
+                      <td className="px-3 py-8 text-center text-muted-foreground" colSpan={9}>
                         {monitor.surfaceStatus === "unavailable"
                           ? "Portfolio holdings source is unavailable."
                           : "No holdings match the current filters."}

@@ -4808,6 +4808,8 @@ export function adaptPortfolioHoldingRows(raw: unknown): HoldingRow[] | null {
       sector: asString(item.sector) || undefined,
       region: asString(item.region) || undefined,
       currency: asString(item.currency),
+      markStatus: optionalString(item.mark_status ?? item.markStatus),
+      lastMarkAt: nullableString(item.last_mark_at ?? item.lastMarkAt),
       updatedAt: asString(item.last_mark_at ?? item.updated_at ?? item.updatedAt),
       links: {
         manageHref: runtimeId
@@ -4856,10 +4858,13 @@ function adaptPortfolioHoldingMonitorRow(item: Record<string, unknown>): Portfol
     capitalPoolId: asString(item.capital_pool_id) || undefined,
     brokerId: asString(item.broker_id) || undefined,
     symbol: asString(item.symbol ?? instrument.symbol, "—"),
+    side: optionalString(item.side),
     currency: nullableString(item.currency ?? instrument.currency),
     quantity: optionalFiniteNumber(item.quantity),
     marketValue: optionalFiniteNumber(item.market_value),
     unrealizedPnl: optionalFiniteNumber(item.unrealized_pnl),
+    markStatus: optionalString(item.mark_status ?? item.markStatus),
+    lastMarkAt: nullableString(item.last_mark_at ?? item.lastMarkAt),
     deploymentStage: asString(item.deployment_stage, "unknown"),
     sourceStatus: asString(item.source_status, "unavailable"),
     telemetryStale: item.telemetry_stale === true,

@@ -1,0 +1,157 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "FE-HOLDINGS-QUANTITY-STALE-REASON-20261105",
+  "taskId": "FE-HOLDINGS-QUANTITY-STALE-REASON-20261105",
+  "title": "Holdings table hides quantity and shows a bare dash when the price is stale",
+  "owner": "Antigravity",
+  "reviewer": "Claude",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-HOLDINGS-QUANTITY-STALE-REASON-20261105",
+  "status": "ready-for-independent-exact-head-review",
+  "real_bff_rows_tested": {
+    "source": "GET /bff/management/portfolio-book/holdings on hosted 2026-11-05",
+    "stale_row": {
+      "id": "rt-482f3e28:2317.TWSE",
+      "symbol": "2317.TWSE",
+      "side": "short",
+      "quantity": -1,
+      "average_price": null,
+      "mark_price": null,
+      "market_value": null,
+      "notional": null,
+      "unrealized_pnl": null,
+      "realized_pnl": null,
+      "total_pnl": 0,
+      "currency": null,
+      "source_status": "ok",
+      "source_issues": [],
+      "telemetry_available": true,
+      "telemetry_stale": true,
+      "mark_status": "stale",
+      "last_mark_at": "2026-10-29T00:00:00Z"
+    },
+    "healthy_row": {
+      "id": "rt-c98e4223:2317.TWSE",
+      "symbol": "2317.TWSE",
+      "side": "short",
+      "quantity": -2,
+      "average_price": null,
+      "mark_price": 240,
+      "market_value": -480,
+      "notional": 480,
+      "unrealized_pnl": null,
+      "total_pnl": 0,
+      "currency": null,
+      "source_status": "ok",
+      "source_issues": [],
+      "telemetry_stale": false,
+      "mark_status": "available",
+      "last_mark_at": "2026-11-04T00:00:00Z"
+    }
+  },
+  "scope": {
+    "delivered": [
+      "Added PortfolioMarkStatus, side, markStatus, and lastMarkAt to PortfolioHoldingMonitorRow and markStatus/lastMarkAt to HoldingRow in src/lib/v5/management/portfolio.ts.",
+      "Updated adaptPortfolioHoldingMonitorRow and adaptPortfolioHoldingRows in src/lib/bff-v1/management.ts to adapt mark_status, last_mark_at, and side from BFF holding rows without recomputing market_value from stale prices or inventing a currency.",
+      "Added the Quantity column to the holdings table in src/management/pages/oversight/PortfolioBook.tsx showing the signed BFF quantity for every row, rendering Short position / 空頭部位 for negative quantities, and rendering the dash — (never 0) when quantity is missing.",
+      "Updated the Market value cell in src/management/pages/oversight/PortfolioBook.tsx to state Price stale (last mark YYYY-MM-DD) / 報價過期（最後報價 YYYY-MM-DD） when mark_status is stale, No price available / 無可用報價 when mark_status is unavailable, and preserve fmtHoldingMoney for rows with mark_status available.",
+      "Updated the Source confidence cell in src/management/pages/oversight/PortfolioBook.tsx so rows with mark_status === 'stale' or telemetry_stale === true render a warning-toned stale badge instead of a success-toned ok badge and omit the contradicting 'No reported source issue' line, while healthy rows keep their ok badge and 'No reported source issue' display.",
+      "Updated the Unrealized PnL cell in src/management/pages/oversight/PortfolioBook.tsx so null/unavailable unrealized_pnl keeps the visual dash — while exposing accessible text (aria-label, title, and sr-only text) stating 'Source reports no average cost' / '來源未提供平均成本'.",
+      "Added bilingual i18n keys (shortPosition, markStale, markStaleWithDateFmt, markUnavailable, noAverageCost, staleTelemetry, noReportedSourceIssue) in src/i18n/locales/en-US.ts and src/i18n/locales/zh-TW.ts with 1:1 parity.",
+      "Configured horizontal table scroll width (minScrollWidth={1520}, min-w-[1520px], whitespace-nowrap cells/headers) in src/management/pages/oversight/PortfolioBook.tsx and verified horizontal scrolling with zero column overlap at a 1440px viewport in e2e/19-management-persona-100-flows.spec.ts."
+    ],
+    "not_changed": [
+      "Did not modify any backend or BFF code.",
+      "Did not recompute market_value from stale prices or fill in a default currency when currency is null."
+    ]
+  },
+  "acceptance_verification": [
+    {
+      "criterion": 1,
+      "description": "The holdings table has a quantity column showing the signed BFF quantity for every row including rows with a stale price; a negative quantity reads as a short position; a missing quantity shows the existing dash and never zero",
+      "status": "passed",
+      "verified_by": [
+        "src/management/pages/oversight/PortfolioBook.test.tsx > renders signed quantity, stale/unavailable market value reasons, consistent source confidence, and accessible null unrealized_pnl text in en-US and zh-TW for the real 2026-11-05 BFF rows",
+        "e2e/19-management-persona-100-flows.spec.ts > portfolio book holdings table renders quantity, stale mark reason, and scrolls horizontally without column overlap at 1440px in en-US and zh-TW"
+      ]
+    },
+    {
+      "criterion": 2,
+      "description": "When mark_status is stale the market value cell states the price is stale and shows the last_mark_at date instead of a bare dash; when mark_status is unavailable it states no price is available; a row with mark_status available keeps its current value and format",
+      "status": "passed",
+      "verified_by": [
+        "src/management/pages/oversight/PortfolioBook.test.tsx > renders signed quantity, stale/unavailable market value reasons, consistent source confidence, and accessible null unrealized_pnl text in en-US and zh-TW for the real 2026-11-05 BFF rows",
+        "src/lib/bff-v1/__tests__/management-pm12.test.ts > adapts mark_status, last_mark_at, side, and signed quantity from the real 2026-11-05 hosted BFF rows without recomputing stale market_value or filling currency"
+      ]
+    },
+    {
+      "criterion": 3,
+      "description": "A row with mark_status stale or telemetry_stale true no longer shows No reported source issue and no longer shows a success-toned ok badge in the source confidence cell; a healthy row keeps its current ok display",
+      "status": "passed",
+      "verified_by": [
+        "src/management/pages/oversight/PortfolioBook.test.tsx > renders signed quantity, stale/unavailable market value reasons, consistent source confidence, and accessible null unrealized_pnl text in en-US and zh-TW for the real 2026-11-05 BFF rows",
+        "e2e/19-management-persona-100-flows.spec.ts > portfolio book holdings table renders quantity, stale mark reason, and scrolls horizontally without column overlap at 1440px in en-US and zh-TW"
+      ]
+    },
+    {
+      "criterion": 4,
+      "description": "A null unrealized_pnl keeps the dash and exposes accessible text saying the source reports no average cost; a real value keeps its current format",
+      "status": "passed",
+      "verified_by": [
+        "src/management/pages/oversight/PortfolioBook.test.tsx > renders signed quantity, stale/unavailable market value reasons, consistent source confidence, and accessible null unrealized_pnl text in en-US and zh-TW for the real 2026-11-05 BFF rows"
+      ]
+    },
+    {
+      "criterion": 5,
+      "description": "New user-visible text exists in zh-TW and en-US; the table still scrolls horizontally with no column overlap at a 1440 pixel wide viewport",
+      "status": "passed",
+      "verified_by": [
+        "src/lib/v5/management/__tests__/i18nParity.test.ts > includes portfolio book loading, refresh, and error keys in both locales",
+        "src/management/pages/oversight/PortfolioBook.test.tsx > renders signed quantity, stale/unavailable market value reasons, consistent source confidence, and accessible null unrealized_pnl text in en-US and zh-TW for the real 2026-11-05 BFF rows",
+        "e2e/19-management-persona-100-flows.spec.ts > portfolio book holdings table renders quantity, stale mark reason, and scrolls horizontally without column overlap at 1440px in en-US and zh-TW"
+      ]
+    },
+    {
+      "criterion": 6,
+      "description": "Tests use the real BFF rows given in the task; the application type check and existing portfolio tests stay green; no existing test is weakened or deleted and any changed assertion is justified in evidence",
+      "status": "passed",
+      "changed_assertion_justification": "In src/management/pages/oversight/PortfolioBook.test.tsx ('formats explicit holding currencies in their native unit, labels null currency as 幣別未提供 without claiming USD, and keeps unavailable money as —'), inserting the new Quantity column at column index 3 shifted the Market value column from cells[3] to cells[4] and the Unrealized PnL column from cells[4] to cells[5]. All existing Market value and Unrealized PnL assertions were preserved verbatim at cells[4] and cells[5], and new assertions on cells[3] (Quantity: -2 Short position, -2 Short position, 10) were added. In src/lib/bff-v1/__tests__/management.test.ts, mark_status: 'available' and markStatus/lastMarkAt assertions were added to the existing adaptPortfolioHoldingRows test without removing or weakening any existing assertion. In e2e/19-management-persona-100-flows.spec.ts, the /bff/management/portfolio-book/holdings fixture was enriched with the real 2026-11-05 stale and healthy rows and a new portfolio book holdings table test was added without modifying any existing test assertions."
+    }
+  ],
+  "artifacts": [
+    "src/management/pages/oversight/PortfolioBook.tsx",
+    "src/management/pages/oversight/PortfolioBook.test.tsx",
+    "src/lib/v5/management/portfolio.ts",
+    "src/lib/bff-v1/management.ts",
+    "src/lib/bff-v1/__tests__/management-pm12.test.ts",
+    "src/lib/bff-v1/__tests__/management.test.ts",
+    "src/lib/v5/management/__tests__/i18nParity.test.ts",
+    "src/i18n/locales/zh-TW.ts",
+    "src/i18n/locales/en-US.ts",
+    "e2e/19-management-persona-100-flows.spec.ts",
+    "docs/deployment/evidence/FE-HOLDINGS-QUANTITY-STALE-REASON-20261105/evidence.json"
+  ],
+  "validation": {
+    "vitest": {
+      "command": "./node_modules/.bin/vitest run src/management/pages/oversight/PortfolioBook.test.tsx src/lib/bff-v1/__tests__/management-pm12.test.ts src/lib/bff-v1/__tests__/management.test.ts src/lib/v5/management/__tests__/i18nParity.test.ts src/lib/v5/management/__tests__/pm12.test.ts src/management/pages/oversight/LiveOnlyFallbacks.test.tsx",
+      "exit_code": 0,
+      "result": "6 test files passed, 133 tests passed"
+    },
+    "typecheck": {
+      "command": "npm run typecheck:app && ./node_modules/.bin/tsc -p tsconfig.agora.json --noEmit",
+      "exit_code": 0,
+      "result": "0 errors"
+    },
+    "eslint": {
+      "command": "./node_modules/.bin/eslint src/management/pages/oversight/PortfolioBook.tsx src/management/pages/oversight/PortfolioBook.test.tsx src/lib/v5/management/portfolio.ts src/lib/bff-v1/management.ts src/lib/bff-v1/__tests__/management-pm12.test.ts src/lib/bff-v1/__tests__/management.test.ts src/lib/v5/management/__tests__/i18nParity.test.ts src/i18n/locales/zh-TW.ts src/i18n/locales/en-US.ts e2e/19-management-persona-100-flows.spec.ts",
+      "exit_code": 0,
+      "result": "0 errors, 0 warnings"
+    },
+    "playwright": {
+      "command": "./node_modules/.bin/playwright test e2e/19-management-persona-100-flows.spec.ts -g 'portfolio book holdings table' && ./node_modules/.bin/playwright test e2e/20-portfolio-book-monitor.spec.ts",
+      "exit_code": 0,
+      "result": "2 passed"
+    }
+  }
+}

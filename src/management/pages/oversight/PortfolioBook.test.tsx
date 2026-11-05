@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -202,17 +202,218 @@ describe("PortfolioBookPage monitor", () => {
     expect(rows).toHaveLength(3);
 
     const nullCurrencyCells = within(rows[0]).getAllByRole("cell");
-    expect(nullCurrencyCells[3]).toHaveTextContent("-4,770 (幣別未提供)");
-    expect(nullCurrencyCells[3].textContent).not.toMatch(/\$|USD|TWD|NT\$/);
-    expect(nullCurrencyCells[4]).toHaveTextContent("—");
+    expect(nullCurrencyCells[3]).toHaveTextContent("-2");
+    expect(nullCurrencyCells[3]).toHaveTextContent("Short position");
+    expect(nullCurrencyCells[4]).toHaveTextContent("-4,770 (幣別未提供)");
+    expect(nullCurrencyCells[4].textContent).not.toMatch(/\$|USD|TWD|NT\$/);
+    expect(nullCurrencyCells[5]).toHaveTextContent("—");
 
     const twdCells = within(rows[1]).getAllByRole("cell");
-    expect(twdCells[3]).toHaveTextContent("-NT$4,770");
-    expect(twdCells[4]).toHaveTextContent("-NT$120");
+    expect(twdCells[3]).toHaveTextContent("-2");
+    expect(twdCells[3]).toHaveTextContent("Short position");
+    expect(twdCells[4]).toHaveTextContent("-NT$4,770");
+    expect(twdCells[5]).toHaveTextContent("-NT$120");
 
     const usdCells = within(rows[2]).getAllByRole("cell");
-    expect(usdCells[3]).toHaveTextContent("$1,926");
-    expect(usdCells[4]).toHaveTextContent("—");
+    expect(usdCells[3]).toHaveTextContent("10");
+    expect(usdCells[4]).toHaveTextContent("$1,926");
+    expect(usdCells[5]).toHaveTextContent("—");
+  });
+
+  it("renders signed quantity, stale/unavailable market value reasons, consistent source confidence, and accessible null unrealized_pnl text in en-US and zh-TW for the real 2026-11-05 BFF rows", async () => {
+    const monitor = adaptPortfolioHoldingsMonitor({
+      data: {
+        summary: {
+          holding_count: 4,
+          incident_count: 0,
+          source_coverage: {
+            source_row_count: 4,
+            runtime_count: 4,
+            telemetry_runtime_count: 4,
+            stale_row_count: 1,
+            missing_binding_count: 0,
+            degraded_source_count: 0,
+          },
+        },
+        items: [
+          {
+            id: "rt-482f3e28:2317.TWSE",
+            symbol: "2317.TWSE",
+            side: "short",
+            quantity: -1,
+            average_price: null,
+            mark_price: null,
+            market_value: null,
+            notional: null,
+            unrealized_pnl: null,
+            realized_pnl: null,
+            total_pnl: 0,
+            currency: null,
+            source_status: "ok",
+            source_issues: [],
+            telemetry_available: true,
+            telemetry_stale: true,
+            mark_status: "stale",
+            last_mark_at: "2026-10-29T00:00:00Z",
+          },
+          {
+            id: "rt-c98e4223:2317.TWSE",
+            symbol: "2317.TWSE",
+            side: "short",
+            quantity: -2,
+            average_price: null,
+            mark_price: 240,
+            market_value: -480,
+            notional: 480,
+            unrealized_pnl: null,
+            total_pnl: 0,
+            currency: null,
+            source_status: "ok",
+            source_issues: [],
+            telemetry_stale: false,
+            mark_status: "available",
+            last_mark_at: "2026-11-04T00:00:00Z",
+          },
+          {
+            id: "rt-unavail:2330.TWSE",
+            symbol: "2330.TWSE",
+            side: "long",
+            quantity: null,
+            average_price: 900,
+            mark_price: null,
+            market_value: null,
+            notional: null,
+            unrealized_pnl: 350,
+            currency: "TWD",
+            source_status: "unavailable",
+            source_issues: [{ code: "MISSING_MARK", message: "Mark unavailable" }],
+            telemetry_stale: false,
+            mark_status: "unavailable",
+            last_mark_at: null,
+          },
+          {
+            id: "rt-telstale:0050.TWSE",
+            symbol: "0050.TWSE",
+            side: "long",
+            quantity: 1,
+            average_price: null,
+            mark_price: 190,
+            market_value: 190,
+            notional: 190,
+            unrealized_pnl: null,
+            currency: "TWD",
+            source_status: "ok",
+            source_issues: [],
+            telemetry_stale: true,
+            mark_status: "available",
+            last_mark_at: "2026-11-04T00:00:00Z",
+          },
+        ],
+      },
+      meta: {
+        incidents: [],
+        surfaces: { portfolio_book_holdings: { status: "partial" } },
+      },
+    });
+
+    mocks.useV5Live.mockReturnValue({
+      loading: false,
+      refresh: vi.fn(),
+      data: monitor,
+    });
+
+    await act(async () => {
+      await i18n.changeLanguage("en-US");
+    });
+    const view = renderPage();
+
+    expect(screen.getByRole("columnheader", { name: "Quantity" })).toBeInTheDocument();
+    const scroller = view.container.querySelector('[data-management-table-scrollbar="native"]');
+    expect(scroller).toBeInTheDocument();
+    const table = scroller?.querySelector("table");
+    expect(table).toHaveClass("min-w-[1520px]");
+    const headerCells = within(table as HTMLElement).getAllByRole("columnheader");
+    expect(headerCells).toHaveLength(9);
+    for (const th of headerCells) {
+      expect(th).toHaveClass("whitespace-nowrap");
+    }
+    const rows = screen.getAllByTestId("portfolio-holding");
+    expect(rows).toHaveLength(4);
+
+    // Row 0: real stale row rt-482f3e28:2317.TWSE
+    const staleCells = within(rows[0]).getAllByRole("cell");
+    expect(staleCells[3]).toHaveTextContent("-1");
+    expect(staleCells[3]).toHaveTextContent("Short position");
+    expect(staleCells[4]).toHaveTextContent("Price stale (last mark 2026-10-29)");
+    expect(staleCells[4]).not.toHaveTextContent("—");
+    expect(staleCells[5]).toHaveTextContent("—");
+    expect(within(staleCells[5]).getByLabelText("Source reports no average cost")).toBeInTheDocument();
+    expect(staleCells[6]).toHaveTextContent("stale");
+    expect(staleCells[6]).toHaveTextContent("Stale telemetry");
+    expect(staleCells[6]).not.toHaveTextContent("No reported source issue");
+    expect(staleCells[6].querySelector(".bg-status-success\\/15")).toBeNull();
+    expect(within(staleCells[6]).queryByText("ok")).not.toBeInTheDocument();
+
+    // Row 1: real healthy row rt-c98e4223:2317.TWSE
+    const healthyCells = within(rows[1]).getAllByRole("cell");
+    expect(healthyCells[3]).toHaveTextContent("-2");
+    expect(healthyCells[3]).toHaveTextContent("Short position");
+    expect(healthyCells[4]).toHaveTextContent("-480 (幣別未提供)");
+    expect(healthyCells[5]).toHaveTextContent("—");
+    expect(within(healthyCells[5]).getByLabelText("Source reports no average cost")).toBeInTheDocument();
+    expect(within(healthyCells[6]).getByText("ok")).toHaveClass("text-status-success");
+    expect(healthyCells[6]).toHaveTextContent("No reported source issue");
+
+    // Row 2: unavailable mark and missing quantity
+    const unavailCells = within(rows[2]).getAllByRole("cell");
+    expect(unavailCells[3]).toHaveTextContent("—");
+    expect(unavailCells[3]).not.toHaveTextContent("0");
+    expect(unavailCells[4]).toHaveTextContent("No price available");
+    expect(unavailCells[4]).not.toHaveTextContent("—");
+    expect(unavailCells[5]).toHaveTextContent("NT$350");
+
+    // Row 3: telemetry_stale true with mark_status available
+    const telStaleCells = within(rows[3]).getAllByRole("cell");
+    expect(telStaleCells[3]).toHaveTextContent("1");
+    expect(telStaleCells[4]).toHaveTextContent("NT$190");
+    expect(telStaleCells[6]).toHaveTextContent("stale");
+    expect(telStaleCells[6]).toHaveTextContent("Stale telemetry");
+    expect(telStaleCells[6]).not.toHaveTextContent("No reported source issue");
+    expect(within(telStaleCells[6]).queryByText("ok")).not.toBeInTheDocument();
+
+    // Verify zh-TW localization of all new user-visible text
+    await act(async () => {
+      await i18n.changeLanguage("zh-TW");
+    });
+    view.rerender(
+      <I18nextProvider i18n={i18n}>
+        <MemoryRouter initialEntries={["/management/portfolio-book"]}>
+          <Routes>
+            <Route path="/management/portfolio-book" element={<PortfolioBookPage />} />
+          </Routes>
+        </MemoryRouter>
+      </I18nextProvider>,
+    );
+
+    expect(screen.getByRole("columnheader", { name: "數量" })).toBeInTheDocument();
+    const zhRows = screen.getAllByTestId("portfolio-holding");
+    const zhStaleCells = within(zhRows[0]).getAllByRole("cell");
+    expect(zhStaleCells[3]).toHaveTextContent("-1");
+    expect(zhStaleCells[3]).toHaveTextContent("空頭部位");
+    expect(zhStaleCells[4]).toHaveTextContent("報價過期（最後報價 2026-10-29）");
+    expect(within(zhStaleCells[5]).getByLabelText("來源未提供平均成本")).toBeInTheDocument();
+    expect(zhStaleCells[6]).toHaveTextContent("Telemetry 過期");
+    expect(zhStaleCells[6]).not.toHaveTextContent("無回報來源問題");
+
+    const zhHealthyCells = within(zhRows[1]).getAllByRole("cell");
+    expect(zhHealthyCells[6]).toHaveTextContent("無回報來源問題");
+
+    const zhUnavailCells = within(zhRows[2]).getAllByRole("cell");
+    expect(zhUnavailCells[4]).toHaveTextContent("無可用報價");
+
+    await act(async () => {
+      await i18n.changeLanguage("en-US");
+    });
   });
 
   it("shows a loading state while the first holdings response is pending and never renders zero coverage cards or a Source: unavailable badge", () => {

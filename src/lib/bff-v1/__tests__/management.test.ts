@@ -379,6 +379,7 @@ describe("mgmt façade (PM-Live)", () => {
           mark_price: 15300,
           market_value: 30600,
           unrealized_pnl: 200,
+          mark_status: "available",
           last_mark_at: "2026-07-10T00:00:00Z",
         }],
       },
@@ -398,6 +399,8 @@ describe("mgmt façade (PM-Live)", () => {
       runtimeId: "runtime-alpha",
       symbol: "TXF",
       marketValue: 30600,
+      markStatus: "available",
+      lastMarkAt: "2026-07-10T00:00:00Z",
     });
   });
 
