@@ -4271,6 +4271,21 @@ export function adaptEvolutionQualificationReport(raw: unknown): EvolutionQualif
   const items = firstArray<unknown>(data.items)
     .map(adaptEvolutionQualificationDecisionItem)
     .filter((item): item is EvolutionQualificationDecisionItem => Boolean(item));
+  const hasReportFields =
+    "evaluated" in data ||
+    "qualified" in data ||
+    "policy_version" in data ||
+    "policyVersion" in data ||
+    "counts_by_first_failing_criterion" in data ||
+    "countsByFirstFailingCriterion" in data ||
+    "sweep_id" in data ||
+    "sweepId" in data ||
+    "evaluated_at" in data ||
+    "evaluatedAt" in data ||
+    "failure_reason" in data ||
+    "failureReason" in data ||
+    items.length > 0;
+  if (!hasReportFields) return null;
   const rawCounts = isObject(data.counts_by_first_failing_criterion ?? data.countsByFirstFailingCriterion)
     ? (data.counts_by_first_failing_criterion ?? data.countsByFirstFailingCriterion) as Record<string, unknown>
     : {};
