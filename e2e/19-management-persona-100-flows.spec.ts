@@ -399,24 +399,88 @@ const portfolioHoldings = [
     assetClass: "fund",
     avgPrice: 545,
     capitalPoolId: CAPITAL_POOL_ID,
+    capital_scope: { stage: "paper", scope_kind: "paper_ledger", scope_id: CAPITAL_POOL_ID },
     currency: "USD",
+    deployment_stage: "paper",
     exposurePct: 0.055,
     holdingId: "holding-mgmt100-spy",
+    holding_id: "holding-mgmt100-spy",
+    last_mark_at: SNAPSHOT_AT,
     links: { manageHref: `/management/capital/${CAPITAL_POOL_ID}` },
     markPrice: 550,
+    mark_price: 550,
+    mark_status: "available",
     marketValue: 55_000,
+    market_value: 55_000,
     notional: 55_000,
     personaId: PERSONA_ID,
+    persona_id: PERSONA_ID,
     pnlPct: 0.009,
     quantity: 100,
     realizedPnl: 0,
+    risk_state: "paper_exposure",
     runtimeId: RUNTIME_ID,
+    runtime_id: RUNTIME_ID,
     side: "long",
+    source_issues: [],
+    source_status: "ok",
     strategyId: STRATEGY_ID,
     symbol: "SPY",
+    telemetry_stale: false,
     unrealizedPnl: 500,
+    unrealized_pnl: 500,
     updatedAt: SNAPSHOT_AT,
     weightPct: 0.055,
+  },
+  {
+    id: "rt-482f3e28:2317.TWSE",
+    holding_id: "rt-482f3e28:2317.TWSE",
+    runtime_id: "rt-482f3e28",
+    symbol: "2317.TWSE",
+    side: "short",
+    quantity: -1,
+    average_price: null,
+    mark_price: null,
+    market_value: null,
+    notional: null,
+    unrealized_pnl: null,
+    realized_pnl: null,
+    total_pnl: 0,
+    currency: null,
+    deployment_stage: "paper",
+    source_status: "ok",
+    source_issues: [],
+    telemetry_available: true,
+    telemetry_stale: true,
+    risk_state: "stale_telemetry",
+    mark_status: "stale",
+    last_mark_at: "2026-10-29T00:00:00Z",
+    capital_scope: { stage: "paper", scope_kind: "paper_ledger", scope_id: null },
+    links: {},
+  },
+  {
+    id: "rt-c98e4223:2317.TWSE",
+    holding_id: "rt-c98e4223:2317.TWSE",
+    runtime_id: "rt-c98e4223",
+    symbol: "2317.TWSE",
+    side: "short",
+    quantity: -2,
+    average_price: null,
+    mark_price: 240,
+    market_value: -480,
+    notional: 480,
+    unrealized_pnl: null,
+    total_pnl: 0,
+    currency: null,
+    deployment_stage: "paper",
+    source_status: "ok",
+    source_issues: [],
+    telemetry_stale: false,
+    risk_state: "paper_exposure",
+    mark_status: "available",
+    last_mark_at: "2026-11-04T00:00:00Z",
+    capital_scope: { stage: "paper", scope_kind: "paper_ledger", scope_id: null },
+    links: {},
   },
 ];
 
@@ -838,7 +902,30 @@ function responseFor(method: string, path: string, body: unknown): { body: unkno
   if (pathname === "/bff/management/portfolio-book/holdings") {
     return {
       status: 200,
-      body: envelope(portfolioHoldings, path),
+      body: envelope(
+        {
+          items: portfolioHoldings,
+          summary: {
+            holding_count: portfolioHoldings.length,
+            incident_count: 0,
+            source_coverage: {
+              source_row_count: portfolioHoldings.length,
+              runtime_count: 3,
+              telemetry_runtime_count: 3,
+              stale_row_count: 1,
+              missing_binding_count: 0,
+              degraded_source_count: 0,
+            },
+          },
+        },
+        path,
+        {
+          incidents: [],
+          surfaces: {
+            portfolio_book_holdings: { status: "partial" },
+          },
+        },
+      ),
     };
   }
   if (pathname === "/bff/management/persona-league" || pathname === "/bff/persona-league" || pathname === "/bff/management/persona-league/rankings") {
@@ -1298,4 +1385,97 @@ test("runs 88 management/persona/trading interaction flows", async ({ page }) =>
   expect(counts.monitor).toBeGreaterThanOrEqual(25);
   expect(counts.adjust).toBeGreaterThanOrEqual(20);
   expect(counts.feedback).toBeGreaterThanOrEqual(8);
+});
+
+test("portfolio book holdings table renders quantity, stale mark reason, and scrolls horizontally without column overlap at 1440px in en-US and zh-TW", async ({ page }) => {
+  test.skip(
+    targetsExternalE2eEnvironment(),
+    "route-mocked fixture coverage is loopback-only; hosted candidates use live acceptance specs",
+  );
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const hits: BffHit[] = [];
+  await installBffFixture(page, hits);
+  await installOidcDevLogin(page, {
+    goto: false,
+    roles: ["operator", "reviewer", "approver"],
+    token: LOCAL_FIXTURE_AUTH_TOKEN,
+  });
+
+  for (const locale of ["en-US", "zh-TW"] as const) {
+    await page.addInitScript((lang) => {
+      window.localStorage.setItem("pantheon.locale", lang);
+    }, locale);
+    await page.goto(frontendUrl("/management/portfolio-book"));
+    await expect(page.getByTestId("portfolio-holding")).toHaveCount(3);
+
+    const staleRow = page.getByTestId("portfolio-holding").filter({ hasText: "rt-482f3e28:2317.TWSE" });
+    const healthyRow = page.getByTestId("portfolio-holding").filter({ hasText: "rt-c98e4223:2317.TWSE" });
+
+    if (locale === "en-US") {
+      await expect(staleRow).toContainText("-1");
+      await expect(staleRow).toContainText("Short position");
+      await expect(staleRow).toContainText("Price stale (last mark 2026-10-29)");
+      await expect(staleRow).not.toContainText("No reported source issue");
+      await expect(healthyRow).toContainText("-2");
+      await expect(healthyRow).toContainText("-480 (幣別未提供)");
+      await expect(healthyRow).toContainText("No reported source issue");
+    } else {
+      await expect(staleRow).toContainText("-1");
+      await expect(staleRow).toContainText("空頭部位");
+      await expect(staleRow).toContainText("報價過期（最後報價 2026-10-29）");
+      await expect(staleRow).not.toContainText("無回報來源問題");
+      await expect(healthyRow).toContainText("-2");
+      await expect(healthyRow).toContainText("-480 (幣別未提供)");
+      await expect(healthyRow).toContainText("無回報來源問題");
+    }
+
+    const layoutMetrics = await page.evaluate(() => {
+      const scroller = document.querySelector<HTMLElement>('[data-management-table-scrollbar="native"]');
+      const table = scroller?.querySelector("table");
+      if (!scroller || !table) {
+        return { found: false, scrollWidth: 0, clientWidth: 0, scrolledLeft: 0, headerOverlaps: 1, cellOverlaps: 1 };
+      }
+
+      const checkNoOverlap = () => {
+        let headerOverlaps = 0;
+        const ths = Array.from(table.querySelectorAll("thead th"));
+        for (let i = 1; i < ths.length; i += 1) {
+          const prev = ths[i - 1].getBoundingClientRect();
+          const curr = ths[i].getBoundingClientRect();
+          if (prev.right > curr.left + 0.5) headerOverlaps += 1;
+        }
+        let cellOverlaps = 0;
+        const rows = Array.from(table.querySelectorAll("tbody tr"));
+        for (const tr of rows) {
+          const tds = Array.from(tr.querySelectorAll("td"));
+          for (let i = 1; i < tds.length; i += 1) {
+            const prev = tds[i - 1].getBoundingClientRect();
+            const curr = tds[i].getBoundingClientRect();
+            if (prev.right > curr.left + 0.5) cellOverlaps += 1;
+          }
+        }
+        return { headerOverlaps, cellOverlaps };
+      };
+
+      scroller.scrollLeft = 0;
+      const before = checkNoOverlap();
+      scroller.scrollLeft = Math.max(120, scroller.scrollWidth - scroller.clientWidth);
+      const after = checkNoOverlap();
+
+      return {
+        found: true,
+        scrollWidth: scroller.scrollWidth,
+        clientWidth: scroller.clientWidth,
+        scrolledLeft: scroller.scrollLeft,
+        headerOverlaps: before.headerOverlaps + after.headerOverlaps,
+        cellOverlaps: before.cellOverlaps + after.cellOverlaps,
+      };
+    });
+
+    expect(layoutMetrics.found).toBe(true);
+    expect(layoutMetrics.scrollWidth).toBeGreaterThan(layoutMetrics.clientWidth);
+    expect(layoutMetrics.scrolledLeft).toBeGreaterThan(0);
+    expect(layoutMetrics.headerOverlaps).toBe(0);
+    expect(layoutMetrics.cellOverlaps).toBe(0);
+  }
 });

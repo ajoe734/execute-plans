@@ -4023,6 +4023,13 @@ export default {
       refreshingNotice: "正在重新整理即時持倉，目前顯示上一次載入的數值。",
       loadErrorBody: "無法載入即時資金持倉資料。本頁不顯示 seed、demo 或非正式 fallback 資料。",
       retry: "重試",
+      shortPosition: "空頭部位",
+      markStale: "報價過期",
+      markStaleWithDateFmt: "報價過期（最後報價 {{date}}）",
+      markUnavailable: "無可用報價",
+      noAverageCost: "來源未提供平均成本",
+      staleTelemetry: "Telemetry 過期",
+      noReportedSourceIssue: "無回報來源問題",
       confidence: {
         formal: "正式歸因",
         partial: "部分資料",

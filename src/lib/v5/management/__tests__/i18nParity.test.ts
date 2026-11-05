@@ -76,6 +76,13 @@ describe("Pack PM-i18n parity", () => {
       "mgmt.portfolio.refreshingNotice",
       "mgmt.portfolio.loadErrorBody",
       "mgmt.portfolio.retry",
+      "mgmt.portfolio.shortPosition",
+      "mgmt.portfolio.markStale",
+      "mgmt.portfolio.markStaleWithDateFmt",
+      "mgmt.portfolio.markUnavailable",
+      "mgmt.portfolio.noAverageCost",
+      "mgmt.portfolio.staleTelemetry",
+      "mgmt.portfolio.noReportedSourceIssue",
     ];
     for (const k of portfolioStateKeys) {
       expect(enKeys.has(k), `en missing ${k}`).toBe(true);

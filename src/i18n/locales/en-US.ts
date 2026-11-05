@@ -4042,6 +4042,13 @@ export default {
       refreshingNotice: "Refreshing live holdings; showing last loaded values.",
       loadErrorBody: "Failed to load live portfolio holdings. This page does not render seed, demo, or non-production fallback data.",
       retry: "Retry",
+      shortPosition: "Short position",
+      markStale: "Price stale",
+      markStaleWithDateFmt: "Price stale (last mark {{date}})",
+      markUnavailable: "No price available",
+      noAverageCost: "Source reports no average cost",
+      staleTelemetry: "Stale telemetry",
+      noReportedSourceIssue: "No reported source issue",
       confidence: {
         formal: "Formal attribution",
         partial: "Partial data",

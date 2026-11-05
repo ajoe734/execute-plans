@@ -7,6 +7,7 @@ export type PortfolioStatus = "ok" | "watch" | "breach" | "frozen";
 export type AssetClass =
   | "equity" | "futures" | "option" | "fx" | "crypto" | "fund" | "cash" | "other";
 export type HoldingSide = "long" | "short" | "flat";
+export type PortfolioMarkStatus = "available" | "stale" | "unavailable" | string;
 
 export interface PortfolioSummary {
   asOf: string;
@@ -101,6 +102,8 @@ export interface HoldingRow {
   sector?: string;
   region?: string;
   currency: string;
+  markStatus?: PortfolioMarkStatus;
+  lastMarkAt?: string | null;
   updatedAt: string;
   links: ManagementLinkSet;
 }
@@ -136,10 +139,13 @@ export interface PortfolioHoldingMonitorRow {
   capitalPoolId?: string;
   brokerId?: string;
   symbol: string;
+  side?: HoldingSide | string;
   currency?: string | null;
   quantity?: number;
   marketValue?: number;
   unrealizedPnl?: number;
+  markStatus?: PortfolioMarkStatus;
+  lastMarkAt?: string | null;
   deploymentStage: string;
   sourceStatus: PortfolioSourceStatus;
   telemetryStale: boolean;
