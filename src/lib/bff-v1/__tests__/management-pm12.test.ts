@@ -1,7 +1,12 @@
 // 2026-05-22 PM-12 facade tests.
 import { describe, it, expect } from "vitest";
 import { mgmt } from "@/lib/bff-v1";
-import { adaptPortfolioHoldingsMonitor, adaptQuarterlyRankingRows } from "@/lib/bff-v1/management";
+import {
+  adaptPerformanceAttributionResult,
+  adaptPerformanceAttributionRows,
+  adaptPortfolioHoldingsMonitor,
+  adaptQuarterlyRankingRows,
+} from "@/lib/bff-v1/management";
 import { paths } from "@/lib/bff-v1/paths";
 import { defaultPortfolioBook, defaultPortfolioPools, defaultPortfolioHoldings } from "@/lib/v5/management/portfolio";
 import { defaultPersonaLeague } from "@/lib/v5/management/personaLeague";
@@ -234,5 +239,162 @@ describe("PM12 mgmt facade — mock branch returns seed", () => {
       undefined, "30d", () => defaultPerformanceAttribution(),
     );
     expect(out.length).toBeGreaterThan(0);
+  });
+});
+
+describe("performance attribution live adapter and dimension guard", () => {
+  it("normalizes BFF pool, asset, and regime rows and preserves unknown dimensions without falling back to persona", () => {
+    const result = adaptPerformanceAttributionResult({
+      data: {
+        items: [
+          {
+            id: "attribution:pool:pool-hosted-all12:latest",
+            dimension: "pool",
+            dimension_key: "pool-hosted-all12",
+            label: "persona-strat-hosted-all12-h12-01a11-20261023-9aeb-src-e018ff6d0eb8 paper pool",
+            period: "latest",
+            data_confidence: "formal",
+            source_status: "available",
+            rank: 1,
+            metrics: { total_pnl: 15420, pnl_contribution_pct: 0.24, worst_drawdown: 0.04 },
+            total_pnl: 15420,
+            pnl_contribution_pct: 0.24,
+            notional_weight: 0.35,
+            runtime_count: 1,
+            holding_count: 2,
+            source_refs: {
+              runtime_ids: ["runtime-hosted-all12"],
+              capital_pool_ids: ["pool-hosted-all12"],
+              persona_ids: ["persona-strat-hosted-all12"],
+              strategy_ids: ["strat-hosted-all12"],
+            },
+            links: {
+              runtime: "/bff/runtimes/runtime-hosted-all12",
+              capital_pool: "/bff/capital-pools/pool-hosted-all12",
+              persona: "/bff/personas/persona-strat-hosted-all12",
+              strategy: "/bff/strategies/strat-hosted-all12",
+            },
+          },
+          {
+            id: "attribution:asset:2330.TW:latest",
+            dimension: "asset",
+            dimension_key: "2330.TW",
+            label: "2330.TW",
+            period: "latest",
+            data_confidence: "formal",
+            source_status: "available",
+            rank: 1,
+            metrics: { total_pnl: 8910, pnl_contribution_pct: 0.14, worst_drawdown: 0.02 },
+            total_pnl: 8910,
+            pnl_contribution_pct: 0.14,
+            notional_weight: 0.22,
+            runtime_count: 1,
+            holding_count: 1,
+            source_refs: {
+              runtime_ids: ["runtime-hosted-all12"],
+              capital_pool_ids: ["pool-hosted-all12"],
+              persona_ids: ["persona-strat-hosted-all12"],
+              strategy_ids: ["strat-hosted-all12"],
+            },
+            links: {},
+          },
+          {
+            id: "attribution:regime:unknown:latest",
+            dimension: "regime",
+            dimension_key: "unknown",
+            label: "unknown",
+            period: "latest",
+            data_confidence: "formal",
+            source_status: "available",
+            rank: 1,
+            metrics: { total_pnl: 64200, pnl_contribution_pct: 1.0, worst_drawdown: 0.06 },
+            total_pnl: 64200,
+            pnl_contribution_pct: 1.0,
+            notional_weight: 1.0,
+            runtime_count: 11,
+            holding_count: 4,
+            source_refs: {},
+            links: {},
+          },
+          {
+            id: "attribution:custom_factor:val-1:latest",
+            dimension: "custom_factor",
+            dimension_key: "val-1",
+            label: "Value Factor",
+            period: "latest",
+            data_confidence: "formal",
+            source_status: "available",
+            rank: 1,
+            metrics: { total_pnl: 1200, pnl_contribution_pct: 0.02, worst_drawdown: 0.01 },
+            total_pnl: 1200,
+            pnl_contribution_pct: 0.02,
+            notional_weight: 0.05,
+            runtime_count: 1,
+            holding_count: 1,
+            source_refs: {},
+            links: {},
+          },
+        ],
+      },
+      meta: {
+        period: {
+          requested: "latest",
+          applied: "latest",
+          windowed: false,
+          basis: "latest_runtime_telemetry_snapshot",
+        },
+      },
+    });
+
+    expect(result?.rows).toHaveLength(4);
+    expect(result?.rows[0]).toEqual(expect.objectContaining({
+      dimension: "capital_pool",
+      key: "pool-hosted-all12",
+      label: "persona-strat-hosted-all12-h12-01a11-20261023-9aeb-src-e018ff6d0eb8 paper pool",
+      links: expect.objectContaining({
+        manageHref: "/management/governance-decisions?tab=capital&capital_id=pool-hosted-all12",
+      }),
+    }));
+    expect(result?.rows[1]).toEqual(expect.objectContaining({
+      dimension: "symbol",
+      key: "2330.TW",
+      label: "2330.TW",
+      links: expect.objectContaining({
+        manageHref: "/management/evidence",
+      }),
+    }));
+    expect(result?.rows[2]).toEqual(expect.objectContaining({
+      dimension: "market_regime",
+      key: "unknown",
+      label: "unknown",
+      links: expect.objectContaining({
+        manageHref: "/management/evidence",
+      }),
+    }));
+    expect(result?.rows[3]).toEqual(expect.objectContaining({
+      dimension: "custom_factor",
+      key: "val-1",
+      label: "Value Factor",
+      links: expect.objectContaining({
+        manageHref: "/management/evidence",
+      }),
+    }));
+    expect(adaptPerformanceAttributionRows({ data: { items: [{ dimension: "pool", dimension_key: "pool-1", label: "Pool 1" }] } })?.[0]?.dimension).toBe("capital_pool");
+  });
+
+  it("short-circuits unsupported BFF dimensions before issuing a transport request", async () => {
+    for (const unsupported of ["asset_class", "sector", "region", "research_backend", "quarter"] as const) {
+      await expect(mgmt.performanceAttribution.getLiveOnly(unsupported, "latest")).resolves.toEqual({
+        rows: [],
+        period: {
+          requested: "latest",
+          windowed: false,
+          reason: "unsupported_attribution_dimension",
+          message: `Dimension "${unsupported}" is not supported by the BFF.`,
+          source: "missing",
+        },
+      });
+      await expect(mgmt.performanceAttribution.listLiveOnly(unsupported, "latest")).resolves.toEqual([]);
+    }
   });
 });
