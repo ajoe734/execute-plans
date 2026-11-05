@@ -2605,6 +2605,8 @@ export default {
   lineageExplorer: {
     subtitle: "Cross-entity lineage with type filters. Pick a root and follow upstream/downstream provenance.",
     root: "Root entity", filter: "Filter", filterPh: "Filter by id or label", types: "Types",
+    unavailable: "Lineage surface unavailable.",
+    hasMore: "Default graph capped (has_more): enter a root entity ID to inspect a specific lineage subgraph.",
   },
   knowledge: {
     subtitle: "Insights captured from operator activity. Promote into artifacts, postmortems, or research tasks.",

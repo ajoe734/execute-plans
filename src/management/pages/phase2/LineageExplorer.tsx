@@ -15,7 +15,7 @@ import { resolveEntity, decisionsHref, auditHref } from "@/lib/entityLinks";
 import { GitBranch, BookMarked, ArrowUpRight } from "lucide-react";
 import { useV5Live } from "@/management/pages/v5/useV5Live";
 
-const TYPES = ["Strategy", "Persona", "Artifact", "CapitalPool", "Experiment"] as const;
+const TYPES = ["Strategy", "Persona", "Artifact", "CapitalPool", "Experiment", "Dataset"] as const;
 
 export const LineageExplorerPage = () => {
   const t = useT();
@@ -23,36 +23,57 @@ export const LineageExplorerPage = () => {
   const [params, setParams] = useSearchParams();
   const initialRoot = params.get("root") ?? "";
   const [rootId, setRootId] = useState<string>(initialRoot);
+  const trimmedRootId = rootId.trim();
   const [filter, setFilter] = useState("");
   const [selected, setSelected] = useState<LineageNode | null>(null);
   const [enabled, setEnabled] = useState<Record<string, boolean>>(
-    () => Object.fromEntries(TYPES.map((t) => [t, true])),
+    () => Object.fromEntries(TYPES.map((typ) => [typ, true])),
   );
-  const { data } = useV5Live(
-    (signal) => managementConsoleReads.lineage(rootId || undefined, { signal }),
-    [rootId],
-    { cacheKey: `phase2.lineage.${rootId || "root"}` },
+  const { data, loading, error } = useV5Live(
+    (signal) => managementConsoleReads.lineage(trimmedRootId || undefined, { signal }),
+    [trimmedRootId],
+    { cacheKey: `phase2.lineage.${trimmedRootId || "root"}` },
   );
 
   useEffect(() => {
-    if (!rootId) return;
-    if (params.get("root") === rootId) return;
+    const currentRoot = params.get("root") ?? "";
+    if (currentRoot === trimmedRootId) return;
     const p = new URLSearchParams(params);
-    p.set("root", rootId);
+    if (trimmedRootId) {
+      p.set("root", trimmedRootId);
+    } else {
+      p.delete("root");
+    }
     setParams(p, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rootId]);
+  }, [trimmedRootId]);
+
+  const metaStatus = (
+    data?.meta?.status ??
+    data?.meta?.surfaces?.lineage?.status ??
+    ""
+  ).toLowerCase();
+  const isUnavailable =
+    !loading &&
+    (Boolean(error) || !data || metaStatus === "unavailable" || metaStatus === "error" || metaStatus === "failed");
+  const hasMore = Boolean(!isUnavailable && (data?.has_more ?? data?.page_info?.has_more));
 
   const { nodes, edges } = useMemo<{ nodes: LineageNode[]; edges: LineageEdge[] }>(() => {
     const all: LineageNode[] = (data?.nodes ?? []).map((node) => ({
       ...node,
-      highlight: node.highlight || (!!rootId && node.id === rootId),
+      highlight: node.highlight || (!!trimmedRootId && node.id === trimmedRootId),
     }));
     const e: LineageEdge[] = data?.edges ?? [];
-    const filtered = all.filter((n) => enabled[n.type] !== false && (!filter || n.label.toLowerCase().includes(filter.toLowerCase()) || n.id.includes(filter)));
+    const filtered = all.filter(
+      (n) =>
+        enabled[n.type] !== false &&
+        (!filter ||
+          n.label.toLowerCase().includes(filter.toLowerCase()) ||
+          n.id.toLowerCase().includes(filter.toLowerCase())),
+    );
     const ids = new Set(filtered.map((n) => n.id));
     return { nodes: filtered, edges: e.filter((edge) => ids.has(edge.from) && ids.has(edge.to)) };
-  }, [data, rootId, filter, enabled]);
+  }, [data, trimmedRootId, filter, enabled]);
 
   const selectedResolved = selected ? resolveEntity(selected.id) : null;
 
@@ -64,41 +85,75 @@ export const LineageExplorerPage = () => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
             <div className="space-y-1.5">
               <div className="text-xs uppercase tracking-wider text-muted-foreground">{t("lineageExplorer.root")}</div>
-              <Input value={rootId} onChange={(e) => setRootId(e.target.value)} placeholder={t("lineageExplorer.root")} />
+              <Input
+                aria-label={t("lineageExplorer.root")}
+                value={rootId}
+                onChange={(e) => setRootId(e.target.value)}
+                placeholder={t("lineageExplorer.root")}
+              />
             </div>
             <div className="space-y-1.5">
               <div className="text-xs uppercase tracking-wider text-muted-foreground">{t("lineageExplorer.filter")}</div>
-              <Input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder={t("lineageExplorer.filterPh")} />
+              <Input
+                aria-label={t("lineageExplorer.filter")}
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+                placeholder={t("lineageExplorer.filterPh")}
+              />
             </div>
             <div className="space-y-1.5">
               <div className="text-xs uppercase tracking-wider text-muted-foreground">{t("lineageExplorer.types")}</div>
               <div className="flex flex-wrap gap-1.5">
                 {TYPES.map((typ) => (
-                  <button key={typ} onClick={() => setEnabled((p) => ({ ...p, [typ]: !p[typ] }))}>
+                  <button
+                    key={typ}
+                    type="button"
+                    aria-pressed={enabled[typ] !== false}
+                    onClick={() => setEnabled((p) => ({ ...p, [typ]: !p[typ] }))}
+                  >
                     <Badge variant={enabled[typ] ? "default" : "outline"} className="cursor-pointer">{typ}</Badge>
                   </button>
                 ))}
               </div>
             </div>
           </div>
+          {hasMore && (
+            <div
+              role="status"
+              data-testid="lineage-has-more"
+              className="rounded-md border border-status-warning/30 bg-status-warning/10 px-3 py-2 text-xs text-status-warning"
+            >
+              {t("lineageExplorer.hasMore")}
+            </div>
+          )}
         </Card>
         <Card className="p-2">
-          <LineageGraph nodes={nodes} edges={edges} height={420} onSelect={(n) => {
-            setSelected(n);
-            const r = resolveEntity(n.id);
-            useInspector.getState().open({
-              id: n.id, type: n.type, name: n.label, state: n.state, risk: n.risk,
-              href: r?.route,
-              meta: [
-                ...(n.state ? [{ label: "State", value: n.state }] : []),
-                ...(n.risk ? [{ label: "Risk", value: n.risk }] : []),
-              ],
-              lineage: {
-                upstream: edges.filter((e) => e.to === n.id).map((e) => e.from),
-                downstream: edges.filter((e) => e.from === n.id).map((e) => e.to),
-              },
-            });
-          }} />
+          {!loading && isUnavailable ? (
+            <div
+              role="alert"
+              data-testid="lineage-unavailable"
+              className="rounded-md border border-dashed border-border p-8 text-center text-sm text-muted-foreground"
+            >
+              {t("lineageExplorer.unavailable")}
+            </div>
+          ) : (
+            <LineageGraph nodes={nodes} edges={edges} height={420} onSelect={(n) => {
+              setSelected(n);
+              const r = resolveEntity(n.id);
+              useInspector.getState().open({
+                id: n.id, type: n.type, name: n.label, state: n.state, risk: n.risk,
+                href: r?.route,
+                meta: [
+                  ...(n.state ? [{ label: "State", value: n.state }] : []),
+                  ...(n.risk ? [{ label: "Risk", value: n.risk }] : []),
+                ],
+                lineage: {
+                  upstream: edges.filter((e) => e.to === n.id).map((e) => e.from),
+                  downstream: edges.filter((e) => e.from === n.id).map((e) => e.to),
+                },
+              });
+            }} />
+          )}
         </Card>
         {selected && (
           <Card className="p-4">
