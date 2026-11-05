@@ -1,0 +1,125 @@
+{
+  "schema_version": "pantheon.fe-alpha-factory-replication.v1",
+  "task_id": "FE-ALPHA-FACTORY-REPLICATION-20261104",
+  "taskId": "FE-ALPHA-FACTORY-REPLICATION-20261104",
+  "title": "Alpha 工廠改顯示真實重現紀錄，移除策略列表前 4 筆的假資料",
+  "owner": "Antigravity",
+  "reviewer": "Claude",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-ALPHA-FACTORY-REPLICATION-20261104",
+  "prerequisites": [
+    {
+      "task_id": "ALPHA-FACTORY-REPLICATION-READ-20261104",
+      "pantheon_merge_commit": "ef0e4677c1d9419709028aec486aac647c26ed6a",
+      "status": "done"
+    },
+    {
+      "task_id": "FE-RESEARCH-TASKS-PROGRAM-CREATE-20261104",
+      "execute_plans_merge_commit": "ba741df43008556be52f222b609f26990e29bf10",
+      "status": "done"
+    },
+    {
+      "task_id": "FE-STRATEGY-METRICS-TRUTH-20261104",
+      "execute_plans_merge_commit": "52fbfe1408d5426a31099c3e872cd373bf92a07f",
+      "status": "done"
+    }
+  ],
+  "status": "in_progress",
+  "timestamp": "2026-11-05T04:58:00Z",
+  "scope": {
+    "delivered": [
+      "Added canonical path builder paths.alphaFactory in src/lib/bff-v1/paths.ts and Alpha Factory replication DTO contracts (AlphaFactoryLaneId, AlphaFactoryCard, AlphaFactoryLane, AlphaFactoryPageInfo, AlphaFactoryMeta, AlphaFactoryData, AlphaFactoryEnvelope) in src/lib/bff-v1/dto.ts.",
+      "Implemented typed GET /bff/alpha-factory client in src/lib/bff-v1/alphaFactory.ts with normalizeAlphaFactoryCard, normalizeAlphaFactoryEnvelope, getAlphaFactory, and unified mock fixtures (MOCK_REPLICATED, MOCK_SCAFFOLDED, MOCK_DISCOVERED, MOCK_ALPHA_FACTORY_ENVELOPE) using the real hosted record shapes from ALPHA-FACTORY-REPLICATION-READ-20261104.",
+      "Updated src/management/pages/phase2/alphaFactoryData.ts so buildAlphaFactoryBuckets consumes /bff/alpha-factory replication lanes instead of strategies.slice(0, 4), removes alphaFactory.replicated.note, and classifyAlphaFactorySource classifies meta.surfaces.alpha_factory status unavailable or transport errors as degraded.",
+      "Updated src/management/pages/phase2/AlphaFactoryBoard.tsx to read GET /bff/alpha-factory via alphaFactory.get, render strategy_id, approver, approved_at, queue_status, attempt_count, last_revalidation_at, and experiment_run_ids.length with a not-reported marker for null values, omit Sharpe and risk badges unless supplied by the BFF, link authority_task_id to /management/experiments/<authority_task_id> and strategy_id to /management/strategies/<strategy_id> with encodeURIComponent, retain the open-strategy-list button, and show the degraded error state without empty columns when meta.surfaces.alpha_factory is unavailable or the read fails.",
+      "Updated src/i18n/locales/zh-TW.ts and src/i18n/locales/en-US.ts to remove alphaFactory.replicated.note and the text claiming the BFF does not expose the candidate list, and added bilingual labels for no_candidate_source, unavailable surface, and replication card fields.",
+      "Added unit and component tests in src/lib/bff-v1/__tests__/alphaFactory.test.ts, src/management/pages/phase2/alphaFactoryData.test.ts, src/management/pages/phase2/AlphaFactoryBoard.test.tsx, src/lib/bff-v1/__tests__/contract-drift.test.ts, src/lib/bff-v1/__tests__/strictLiveReadOffline.test.ts, and src/lib/v5/management/__tests__/i18nParity.test.ts."
+    ],
+    "changed_assertions": [
+      {
+        "file": "src/management/pages/phase2/alphaFactoryData.test.ts",
+        "test": "keeps fixture candidates available in configured mock mode with the unified AlphaFactoryCard shape",
+        "justification": "Updated from checking legacy MOCK_DISCOVERED > 0 and strategies.slice(0, 4) to checking the unified AlphaFactoryCard mock fixtures (MOCK_REPLICATED, MOCK_SCAFFOLDED, and MOCK_DISCOVERED=[] with discoveredReason='no_candidate_source') per AC1, AC3, and AC7."
+      },
+      {
+        "file": "src/management/pages/phase2/alphaFactoryData.test.ts",
+        "test": "preserves null sharpe on replicated records when supplied and omits sharpe when not supplied",
+        "justification": "Updated input from a Strategy list row to an AlphaFactoryEnvelope record since buildAlphaFactoryBuckets no longer reads Strategy list rows (AC1/AC2/AC4)."
+      }
+    ]
+  },
+  "acceptance_verification": [
+    {
+      "criterion": 1,
+      "description": "AlphaFactoryBoard reads GET /bff/alpha-factory through a typed client and no longer reads the strategy list; the first-four slice of the strategy list and the fixed note saying a strategy was replicated are removed",
+      "status": "passed",
+      "verified_by": [
+        "src/lib/bff-v1/__tests__/alphaFactory.test.ts > fetches GET /bff/alpha-factory with real Pantheon client headers and normalizes lanes, null fields, and surface metadata",
+        "src/management/pages/phase2/AlphaFactoryBoard.test.tsx > reads GET /bff/alpha-factory, never reads lists.strategies, and proves a strategy with no replication record never appears on the board"
+      ]
+    },
+    {
+      "criterion": 2,
+      "description": "The replicated column shows only items the BFF places in lane replicated and the scaffolded column shows only lane scaffolded; a test with a real strategy list present proves a strategy that has no replication record never appears on the board",
+      "status": "passed",
+      "verified_by": [
+        "src/management/pages/phase2/AlphaFactoryBoard.test.tsx > reads GET /bff/alpha-factory, never reads lists.strategies, and proves a strategy with no replication record never appears on the board",
+        "src/management/pages/phase2/alphaFactoryData.test.ts > never places a strategy list row without a replication record onto the board"
+      ]
+    },
+    {
+      "criterion": 3,
+      "description": "The discovered column shows an empty state in both locales saying there is no candidate source yet when the payload reason is no_candidate_source; the text saying the BFF does not provide the list is removed",
+      "status": "passed",
+      "verified_by": [
+        "src/management/pages/phase2/AlphaFactoryBoard.test.tsx > reads GET /bff/alpha-factory, never reads lists.strategies, and proves a strategy with no replication record never appears on the board",
+        "src/management/pages/phase2/AlphaFactoryBoard.test.tsx > renders zh-TW labels, no_candidate_source empty state, and not-reported markers"
+      ]
+    },
+    {
+      "criterion": 4,
+      "description": "A card shows strategy_id and approver and approved_at and queue status and attempt_count and last_revalidation_at and the experiment run count; no Sharpe or risk badge is rendered unless the BFF supplies that field and a null value shows a not-reported marker",
+      "status": "passed",
+      "verified_by": [
+        "src/management/pages/phase2/AlphaFactoryBoard.test.tsx > reads GET /bff/alpha-factory, never reads lists.strategies, and proves a strategy with no replication record never appears on the board",
+        "src/management/pages/phase2/AlphaFactoryBoard.test.tsx > renders zh-TW labels, no_candidate_source empty state, and not-reported markers"
+      ]
+    },
+    {
+      "criterion": 5,
+      "description": "A card with authority_task_id links to /management/experiments/<authority_task_id>",
+      "status": "passed",
+      "verified_by": [
+        "src/management/pages/phase2/AlphaFactoryBoard.test.tsx > reads GET /bff/alpha-factory, never reads lists.strategies, and proves a strategy with no replication record never appears on the board"
+      ]
+    },
+    {
+      "criterion": 6,
+      "description": "meta.surfaces.alpha_factory status unavailable or a failed read shows the existing degraded error state and never empty columns; the page source banner reflects that surface",
+      "status": "passed",
+      "verified_by": [
+        "src/management/pages/phase2/AlphaFactoryBoard.test.tsx > shows the degraded error state and never empty columns when meta.surfaces.alpha_factory status is unavailable",
+        "src/management/pages/phase2/AlphaFactoryBoard.test.tsx > shows the degraded error state and never empty columns when the /bff/alpha-factory read fails"
+      ]
+    },
+    {
+      "criterion": 7,
+      "description": "Mock mode fixtures use the same card shape so mock and live render through one code path",
+      "status": "passed",
+      "verified_by": [
+        "src/management/pages/phase2/AlphaFactoryBoard.test.tsx > renders mock mode fixtures through the same card shape and code path",
+        "src/management/pages/phase2/alphaFactoryData.test.ts > keeps fixture candidates available in configured mock mode with the unified AlphaFactoryCard shape"
+      ]
+    },
+    {
+      "criterion": 8,
+      "description": "Tests cover all three columns and the unavailable state and the null fields using the real shapes quoted in the task next field; both locales carry every new label",
+      "status": "passed",
+      "verified_by": [
+        "src/management/pages/phase2/AlphaFactoryBoard.test.tsx",
+        "src/lib/v5/management/__tests__/i18nParity.test.ts > includes Alpha Factory replication card, empty-state, and unavailable keys in both locales and removes legacy replicated note"
+      ]
+    }
+  ]
+}
