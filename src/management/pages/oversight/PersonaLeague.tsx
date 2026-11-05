@@ -139,38 +139,27 @@ export const PersonaLeaguePage = ({ embedded = false }: { embedded?: boolean }) 
   // 2. Sort Rows
   const sortedRows = useMemo(() => {
     if (sortField) {
+      const finiteOrNull = (v: number | null | undefined): number | null =>
+        typeof v === "number" && Number.isFinite(v) ? v : null;
       return [...filteredRows].sort((a, b) => {
-        let valA: number = 0;
-        let valB: number = 0;
-
-        switch (sortField) {
-          case "rank":
-            valA = a.currentRank;
-            valB = b.currentRank;
-            // Rank ascending is normally "better"
-            return sortOrder === "asc" ? valA - valB : valB - valA;
-          case "score":
-            valA = Number.isFinite(a.score) ? a.score : -999;
-            valB = Number.isFinite(b.score) ? b.score : -999;
-            break;
-          case "pnl":
-            valA = Number.isFinite(a.pnl30d) ? a.pnl30d : -99999999;
-            valB = Number.isFinite(b.pnl30d) ? b.pnl30d : -99999999;
-            break;
-          case "sharpe":
-            valA = Number.isFinite(a.sharpe) ? a.sharpe : -99;
-            valB = Number.isFinite(b.sharpe) ? b.sharpe : -99;
-            break;
-          case "drawdown":
-            valA = Number.isFinite(a.maxDrawdown) ? a.maxDrawdown : 99; // Less negative is better
-            valB = Number.isFinite(b.maxDrawdown) ? b.maxDrawdown : 99;
-            break;
-          case "interventions":
-            valA = a.humanInterventions ?? 0;
-            valB = b.humanInterventions ?? 0;
-            break;
+        if (sortField === "rank") {
+          return sortOrder === "asc" ? a.currentRank - b.currentRank : b.currentRank - a.currentRank;
         }
-
+        const pick = (r: PersonaLeagueRow): number | null => {
+          switch (sortField) {
+            case "score": return finiteOrNull(r.score);
+            case "pnl": return finiteOrNull(r.pnl30d);
+            case "sharpe": return finiteOrNull(r.sharpe);
+            case "drawdown": return finiteOrNull(r.maxDrawdown);
+            case "interventions": return finiteOrNull(r.humanInterventions ?? 0);
+            default: return null;
+          }
+        };
+        const valA = pick(a);
+        const valB = pick(b);
+        if (valA === null && valB === null) return a.currentRank - b.currentRank;
+        if (valA === null) return 1;
+        if (valB === null) return -1;
         return sortOrder === "asc" ? valA - valB : valB - valA;
       });
     }
@@ -542,7 +531,13 @@ export const PersonaLeaguePage = ({ embedded = false }: { embedded?: boolean }) 
   );
 
   function RowFragment({ r, expanded, onToggle }: { r: PersonaLeagueRow; expanded: boolean; onToggle: () => void }) {
-    const isPnlNegative = (r.pnl30d ?? 0) < 0;
+    const hasPnl30d = typeof r.pnl30d === "number" && Number.isFinite(r.pnl30d);
+    const hasDrawdown = typeof r.maxDrawdown === "number" && Number.isFinite(r.maxDrawdown);
+    const pnlClass = !hasPnl30d
+      ? "text-muted-foreground"
+      : r.pnl30d < 0
+      ? "text-rose-500"
+      : "text-emerald-700 dark:text-emerald-300";
 
     return (
       <>
@@ -570,11 +565,11 @@ export const PersonaLeaguePage = ({ embedded = false }: { embedded?: boolean }) 
             </Badge>
           </td>
           <td className="px-3 py-3 font-mono text-foreground font-semibold">{fmtNum(r.score, 1)}</td>
-          <td className={`px-3 py-3 font-mono font-medium ${isPnlNegative ? "text-rose-500" : "text-emerald-700 dark:text-emerald-300"}`}>
+          <td className={`px-3 py-3 font-mono font-medium ${pnlClass}`}>
             {fmtUsd(r.pnl30d)}
           </td>
           <td className="px-3 py-3 font-mono">{fmtNum(r.sharpe)}</td>
-          <td className="px-3 py-3 font-mono text-rose-500">{fmtPct(r.maxDrawdown)}</td>
+          <td className={`px-3 py-3 font-mono ${hasDrawdown ? "text-rose-500" : "text-muted-foreground"}`}>{fmtPct(r.maxDrawdown)}</td>
           <td className="px-3 py-3 font-mono">{fmtNum(r.humanInterventions, 0)}</td>
           <td className="px-3 py-3">
             <ProposalCell proposal={savedProposal(r.personaId)} />

@@ -39,8 +39,8 @@ export interface PersonaReadiness {
   reasons: PersonaHealthReason[];
   /** Optional happy-path telemetry. */
   activeSessions?: number;
-  pnl?: number;
-  drawdown?: number;
+  pnl?: number | null;
+  drawdown?: number | null;
 }
 
 const STAGE_ORDER: PersonaStageKey[] = ["lifecycle", "binding", "plan", "approval", "runtime"];
@@ -78,8 +78,8 @@ interface PersonaManagementShape {
       reasons?: string[];
       latest_telemetry_at?: string;
       latestTelemetryAt?: string;
-      pnl?: number;
-      drawdown?: number;
+      pnl?: number | null;
+      drawdown?: number | null;
       activeSessions?: number;
     };
   };

@@ -312,9 +312,14 @@ export interface Strategy extends BaseObject {
   alpha: string;
   capitalPoolId: string;
   personaIds: string[];
-  pnl30d: number;
-  sharpe: number;
-  drawdown: number;
+  pnl?: number | null;
+  pnl30d: number | null;
+  sharpe: number | null;
+  drawdown: number | null;
+  totalTrades?: number | null;
+  metricsAsOf?: string | null;
+  metricsResolution?: "fresh" | "missing" | "ambiguous" | "unavailable" | string | null;
+  metricsPersonaId?: string | null;
 }
 
 export interface Persona extends BaseObject {

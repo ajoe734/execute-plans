@@ -127,19 +127,33 @@ export const StrategyDetail = () => {
 
   const params: { key: string; value: string; note: string }[] = [];
   const paperLive: { metric: string; paper: string; live: string; delta: string }[] = [];
+  const noData = t("common.noData");
+  const alphaRaw = s.alpha?.trim() || "";
+  const alphaDisplay = alphaRaw || noData;
+  const poolDisplay = s.capitalPoolId?.trim() || noData;
+  const personasDisplay = (s.personaIds ?? []).filter(Boolean).join(", ") || noData;
+  const subtitle = alphaRaw ? `${alphaRaw} · ${s.id}` : s.id;
+  const hasPnl = typeof s.pnl === "number" && Number.isFinite(s.pnl);
+  const hasPnl30d = typeof s.pnl30d === "number" && Number.isFinite(s.pnl30d);
+  const hasSharpe = typeof s.sharpe === "number" && Number.isFinite(s.sharpe);
+  const hasDrawdown = typeof s.drawdown === "number" && Number.isFinite(s.drawdown);
+  const metricsAsOfText = s.metricsAsOf?.trim() || "";
+  const pnlTone = !hasPnl || s.pnl === 0 ? "default" : s.pnl > 0 ? "success" : "danger";
+  const pnl30dTone = !hasPnl30d || s.pnl30d === 0 ? "default" : s.pnl30d > 0 ? "success" : "danger";
+  const drawdownTone = !hasDrawdown || s.drawdown === 0 ? "default" : "warning";
 
   return (
     <>
       {loadErrors.length > 0 && <div role="alert" className="px-6 py-3 text-sm text-status-warning">Some strategy data could not be loaded: {loadErrors.join(", ")}.</div>}
       <ObjectDetailLayout
         object={s}
-        subtitle={`${s.alpha} · ${s.id}`}
+        subtitle={subtitle}
         actions={
           <>
             <Button size="sm" variant="ghost" onClick={() => useInspector.getState().open({
               id: s.id, type: "Strategy", name: s.name, state: s.state, risk: s.risk,
               owner: s.owner, updatedAt: s.updatedAt, availableActions: s.availableActions,
-              meta: [{ label: "Alpha", value: s.alpha }, { label: "Pool", value: s.capitalPoolId }],
+              meta: [{ label: "Alpha", value: alphaDisplay }, { label: "Pool", value: poolDisplay }],
             })}>
               <Inbox className="h-4 w-4 mr-1" />Inspect
             </Button>
@@ -176,16 +190,34 @@ export const StrategyDetail = () => {
                     />
                   </div>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <Field label="Alpha" value={s.alpha} mono />
-                    <Field label={t("nav.capital")} value={s.capitalPoolId} mono />
-                    <Field label={t("nav.personas")} value={(s.personaIds ?? []).join(", ")} mono />
+                    <Field label="Alpha" value={alphaDisplay} mono />
+                    <Field label={t("nav.capital")} value={poolDisplay} mono />
+                    <Field label={t("nav.personas")} value={personasDisplay} mono />
                     <Field label={t("table.updated")} value={safeDateTime(s.updatedAt)} mono />
                   </div>
                 </Section>
-                <div className="grid grid-cols-3 gap-4 mt-4">
-                  <StatCard label="PnL 30d" value={`${((s.pnl30d ?? 0) * 100).toFixed(2)}%`} tone={(s.pnl30d ?? 0) >= 0 ? "success" : "danger"} />
-                  <StatCard label={t("table.sharpe")} value={(s.sharpe ?? 0).toFixed(2)} />
-                  <StatCard label={t("table.drawdown")} value={`${((s.drawdown ?? 0) * 100).toFixed(2)}%`} tone="warning" />
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
+                  <StatCard
+                    label={t("strategyDetail.cumulativePaperPnl")}
+                    value={hasPnl ? s.pnl.toFixed(2) : noData}
+                    hint={metricsAsOfText ? t("strategyDetail.metricsAsOf", { asOf: metricsAsOfText }) : undefined}
+                    tone={pnlTone}
+                  />
+                  <StatCard
+                    label="PnL 30d"
+                    value={hasPnl30d ? `${(s.pnl30d * 100).toFixed(2)}%` : noData}
+                    tone={pnl30dTone}
+                  />
+                  <StatCard
+                    label={t("table.sharpe")}
+                    value={hasSharpe ? s.sharpe.toFixed(2) : noData}
+                    tone="default"
+                  />
+                  <StatCard
+                    label={t("table.drawdown")}
+                    value={hasDrawdown ? `${(s.drawdown * 100).toFixed(2)}%` : noData}
+                    tone={drawdownTone}
+                  />
                 </div>
                 <div className="grid gap-4 md:grid-cols-3 mt-4">
                   <LinkedBlock
@@ -224,7 +256,7 @@ export const StrategyDetail = () => {
               <>
                 <Section title={t("strategyDetail.specTitle")}>
                   <p className="text-sm leading-relaxed text-muted-foreground">
-                    {t("strategyDetail.specBody", { alpha: s.alpha })}
+                    {t("strategyDetail.specBody", { alpha: alphaDisplay })}
                   </p>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-2">
                     <Field label={t("strategyDetail.universe")} value="Top-50 perp by 30d ADV" />
@@ -426,7 +458,7 @@ export const StrategyDetail = () => {
               />
             ) : (
               <Card className="p-8 text-center">
-                <div className="text-sm text-muted-foreground mb-3">{t("strategyDetail.noEvolution", { alpha: s.alpha })}</div>
+                <div className="text-sm text-muted-foreground mb-3">{t("strategyDetail.noEvolution", { alpha: alphaDisplay })}</div>
                 <Button size="sm" variant="outline" onClick={() => nav("/management/evolution")}>
                   {t("strategyDetail.startEvolution")} <ArrowRight className="ml-1 h-3 w-3" />
                 </Button>

@@ -55,12 +55,12 @@ export interface PersonaLeagueRow {
   scoreBreakdown: PersonaLeagueScoreBreakdown;
   pnlToday: number;
   pnl7d: number;
-  pnl30d: number;
+  pnl30d: number | null;
   pnlQuarter: number;
   pnlYtd: number;
-  sharpe: number;
+  sharpe: number | null;
   sortino?: number;
-  maxDrawdown: number;
+  maxDrawdown: number | null;
   winRate: number;
   hitRate?: number;
   turnover: number;
@@ -100,22 +100,43 @@ export function sortByPreset(
   rows: readonly PersonaLeagueRow[],
   preset: PersonaLeaguePreset,
 ): PersonaLeagueRow[] {
-  const k = (r: PersonaLeagueRow): number => {
+  const finiteOrNull = (v: number | null | undefined): number | null =>
+    typeof v === "number" && Number.isFinite(v) ? v : null;
+  const k = (r: PersonaLeagueRow): number | null => {
     switch (preset) {
-      case "pnl": return r.pnl30d;
-      case "risk_adjusted": return r.sharpe;
-      case "execution_quality": return r.scoreBreakdown.executionQualityScore;
-      case "consistency": return -Math.abs(r.maxDrawdown);
-      case "improvement": return r.scoreBreakdown.improvementScore;
-      case "risk_penalty": return -r.scoreBreakdown.hardPenalty;
-      case "human_intervention": return -r.humanInterventions;
-      case "evolution_effectiveness":
-        return r.improvedMutations - r.degradedMutations;
+      case "pnl": return finiteOrNull(r.pnl30d);
+      case "risk_adjusted": return finiteOrNull(r.sharpe);
+      case "execution_quality": return finiteOrNull(r.scoreBreakdown?.executionQualityScore);
+      case "consistency": {
+        const dd = finiteOrNull(r.maxDrawdown);
+        return dd === null ? null : -Math.abs(dd);
+      }
+      case "improvement": return finiteOrNull(r.scoreBreakdown?.improvementScore);
+      case "risk_penalty": {
+        const hp = finiteOrNull(r.scoreBreakdown?.hardPenalty);
+        return hp === null ? null : -hp;
+      }
+      case "human_intervention": {
+        const hi = finiteOrNull(r.humanInterventions);
+        return hi === null ? null : -hi;
+      }
+      case "evolution_effectiveness": {
+        const imp = finiteOrNull(r.improvedMutations);
+        const deg = finiteOrNull(r.degradedMutations);
+        return imp === null || deg === null ? null : imp - deg;
+      }
       case "overall":
-      default: return r.score;
+      default: return finiteOrNull(r.score);
     }
   };
-  return [...rows].sort((a, b) => k(b) - k(a));
+  return [...rows].sort((a, b) => {
+    const ka = k(a);
+    const kb = k(b);
+    if (ka === null && kb === null) return (a.currentRank ?? 0) - (b.currentRank ?? 0);
+    if (ka === null) return 1;
+    if (kb === null) return -1;
+    return kb - ka;
+  });
 }
 
 export function tierDistribution(rows: readonly PersonaLeagueRow[]): Record<PersonaLeagueTier, number> {

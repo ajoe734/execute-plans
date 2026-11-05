@@ -14,7 +14,7 @@
     "status": "done"
   },
   "dev_integration": {
-    "merged_origin_dev_commit": "9529c069b0a151bc2be508a263c91c21cb0e9fbd",
+    "merged_origin_dev_commit": "52fbfe1408d5426a31099c3e872cd373bf92a07f",
     "prior_pr917_head_commit": "bc32272ef09c7c5843c73cef3fa4f67c0a0fd593",
     "resolved_admitted_conflicts": [
       "src/lib/bff-v1/management.ts",
@@ -27,7 +27,7 @@
     "unadmitted_file_conflicts": []
   },
   "status": "ready_for_review",
-  "timestamp": "2026-11-05T04:27:30Z",
+  "timestamp": "2026-11-05T04:29:30Z",
   "scope": {
     "delivered": [
       "Added SUPPORTED_ATTRIBUTION_DIMENSIONS, UNSUPPORTED_ATTRIBUTION_DIMENSIONS, BFF_ATTRIBUTION_DIMENSION_ALIASES (exact 23 accepted names from services/control-plane/bff/management_read_models/ranking_router.py _PM12_ATTRIBUTION_DIMENSION_ALIASES), BFF_ACCEPTED_ATTRIBUTION_DIMENSIONS, isSupportedAttributionDimension, normalizeSupportedAttributionDimension, isBffAcceptedAttributionDimension, normalizeAttributionDimension, and normalizePerformanceAttributionRow in src/lib/v5/management/performanceAttribution.ts.",

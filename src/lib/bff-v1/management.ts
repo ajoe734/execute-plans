@@ -80,15 +80,15 @@ export interface ManagementOperationsReadModel {
   };
   dataConfidence: ManagementDataConfidence;
   performance: {
-    pnl?: number;
-    pnlPct?: number;
-    drawdownPct?: number;
-    riskPct?: number;
-    sharpe?: number;
-    rank?: number;
-    score?: number;
-    performanceDelta?: number;
-    sourceContribution?: number;
+    pnl?: number | null;
+    pnlPct?: number | null;
+    drawdownPct?: number | null;
+    riskPct?: number | null;
+    sharpe?: number | null;
+    rank?: number | null;
+    score?: number | null;
+    performanceDelta?: number | null;
+    sourceContribution?: number | null;
   };
   sources: Array<{
     sourceName: string;
@@ -315,11 +315,11 @@ export interface ManagementPersonaFleetCapitalPool {
 }
 
 export interface ManagementPersonaFleetPerformanceSummary {
-  pnl?: number;
-  sharpe?: number;
-  maxDrawdown?: number;
-  violationCount?: number;
-  totalTrades?: number;
+  pnl?: number | null;
+  sharpe?: number | null;
+  maxDrawdown?: number | null;
+  violationCount?: number | null;
+  totalTrades?: number | null;
   source?: string;
   telemetryRuntimeCount?: number;
   latestTelemetryAt?: string;
@@ -3831,6 +3831,7 @@ export function adaptPersonaLeagueRankedRows(raw: unknown): PersonaLeagueRow[] |
       : buildLinkSet({ primary: { kind: "persona", id: personaId } });
     const previous = nullableNumber(record.previousRank ?? record.previous_rank);
     const delta = nullableNumber(record.rankDelta ?? record.rank_delta);
+    const metrics = isObject(record.metrics) ? record.metrics : {};
     return [{
       ...(record as object),
       personaId,
@@ -3840,6 +3841,9 @@ export function adaptPersonaLeagueRankedRows(raw: unknown): PersonaLeagueRow[] |
       previousRank: previous ?? undefined,
       rankDelta: delta ?? undefined,
       tier: asString(record.tier, "watch") as PersonaLeagueRow["tier"],
+      pnl30d: nullableNumber(record.pnl30d ?? record.pnl_30d ?? metrics.pnl30d ?? metrics.pnl_30d),
+      sharpe: nullableNumber(record.sharpe ?? record.sharpeRatio ?? record.sharpe_ratio ?? metrics.sharpe),
+      maxDrawdown: nullableNumber(record.maxDrawdown ?? record.max_drawdown ?? record.drawdown ?? metrics.drawdown),
       eligible: typeof record.eligible === "boolean" ? record.eligible : undefined,
       exclusionReason: asString(record.exclusionReason ?? record.exclusion_reason) || undefined,
       links,
