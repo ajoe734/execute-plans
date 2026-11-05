@@ -149,7 +149,7 @@ const defaulters: { [K in CreatableEntity]: Defaulter<K> } = {
     kind: i.kind,
     version: i.version,
     sourceExperimentId: i.sourceExperimentId,
-    sizeMb: i.sizeMb ?? 0,
+    ...(typeof i.sizeMb === "number" && Number.isFinite(i.sizeMb) ? { sizeMb: i.sizeMb } : {}),
     hash: i.hash ?? "pending",
   }),
 };

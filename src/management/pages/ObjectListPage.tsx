@@ -100,6 +100,55 @@ interface Props<T extends BaseObject> {
   summary?: (rows: T[]) => ReactNode;
 }
 
+interface PartialDataSurfaceInfo {
+  surfaceKey: string;
+  status: string;
+  source?: string;
+  failedSources: string[];
+  message?: string;
+}
+
+function extractPartialDataSurface(meta: unknown): PartialDataSurfaceInfo | undefined {
+  if (!meta || typeof meta !== "object" || Array.isArray(meta)) return undefined;
+  const surfaces = (meta as { surfaces?: unknown }).surfaces;
+  if (!surfaces || typeof surfaces !== "object" || Array.isArray(surfaces)) return undefined;
+  for (const [surfaceKey, rawSurface] of Object.entries(surfaces as Record<string, unknown>)) {
+    if (!rawSurface || typeof rawSurface !== "object" || Array.isArray(rawSurface)) continue;
+    const s = rawSurface as Record<string, unknown>;
+    const status = typeof s.status === "string" ? s.status.trim().toLowerCase() : "";
+    if (status !== "degraded" && status !== "partial") continue;
+    const failedSet = new Set<string>();
+    if (typeof s.failed_source === "string" && s.failed_source.trim()) {
+      failedSet.add(s.failed_source.trim());
+    }
+    for (const listKey of ["failed_sources", "degraded_sources"] as const) {
+      const arr = s[listKey];
+      if (Array.isArray(arr)) {
+        for (const item of arr) {
+          if (typeof item === "string" && item.trim()) failedSet.add(item.trim());
+        }
+      }
+    }
+    const message =
+      typeof s.message === "string" && s.message.trim()
+        ? s.message.trim()
+        : typeof s.reason === "string" && s.reason.trim()
+          ? s.reason.trim()
+          : undefined;
+    const source = typeof s.source === "string" && s.source.trim() ? s.source.trim() : undefined;
+    if (failedSet.size > 0 || surfaceKey === "artifact_list") {
+      return {
+        surfaceKey,
+        status,
+        source,
+        failedSources: Array.from(failedSet),
+        message,
+      };
+    }
+  }
+  return undefined;
+}
+
 function extractSurfaceMessage(meta: unknown): string | undefined {
   if (!meta || typeof meta !== "object" || Array.isArray(meta)) return undefined;
   const surfaces = (meta as { surfaces?: unknown }).surfaces;
@@ -133,6 +182,7 @@ export function ObjectListPage<T extends BaseObject>({
   const { items: rows, pending, refresh, meta } = useLiveListV1<T>(loader, liveKinds, { auto: false });
   const [drawerOpen, setDrawerOpen] = useState(false);
   const degradation = extractDegradation(meta);
+  const partialDataSurface = extractPartialDataSurface(meta);
   const liveStatus = useLiveStatusSnapshot();
   const strictFallbackBlocked = degradation.strictFallbackBlocked || liveStatus.typedError;
   const degradationReason = degradation.reason || extractSurfaceMessage(meta);
@@ -156,6 +206,9 @@ export function ObjectListPage<T extends BaseObject>({
       const scope = scopeConfig.classify(row);
       scopeCounts[scope] = (scopeCounts[scope] ?? 0) + 1;
     }
+    if (Object.prototype.hasOwnProperty.call(scopeCounts, "all")) {
+      scopeCounts.all = rows.length;
+    }
   }
 
   const rawScopeParam = scopeConfig
@@ -166,12 +219,12 @@ export function ObjectListPage<T extends BaseObject>({
     ? scopeConfig.classify(allFocusedRows[0])
     : undefined;
   const activeScope = scopeConfig
-    ? (explicitScope && (!focusedScope || allFocusedRows.some((row) => scopeConfig.classify(row) === explicitScope))
+    ? (explicitScope && (explicitScope === "all" || !focusedScope || allFocusedRows.some((row) => scopeConfig.classify(row) === explicitScope))
       ? explicitScope
       : (focusedScope ?? explicitScope ?? scopeConfig.defaultScope))
     : undefined;
 
-  const scopedRows = scopeConfig && activeScope
+  const scopedRows = scopeConfig && activeScope && activeScope !== "all"
     ? rows.filter((row) => scopeConfig.classify(row) === activeScope)
     : rows;
 
@@ -351,6 +404,7 @@ export function ObjectListPage<T extends BaseObject>({
                   variant={selected ? "default" : "outline"}
                   aria-pressed={selected}
                   data-capital-scope={option.id}
+                  data-scope={option.id}
                   data-scope-count={count}
                   onClick={() => selectScope(option.id)}
                 >
@@ -359,6 +413,32 @@ export function ObjectListPage<T extends BaseObject>({
               );
             })}
           </div>
+        )}
+        {partialDataSurface && (
+          <Card
+            role="status"
+            data-testid="partial-data-banner"
+            data-surface={partialDataSurface.surfaceKey}
+            data-failed-source={partialDataSurface.failedSources.join(",")}
+            className="mb-3 border-status-warning/40 bg-status-warning/10 p-3 text-sm"
+          >
+            <div className="flex flex-col gap-1">
+              <div className="font-medium text-foreground">
+                {t("artifact.degradedBanner.title", {
+                  failedSources:
+                    partialDataSurface.failedSources.length > 0
+                      ? partialDataSurface.failedSources.join(", ")
+                      : t("common.unavailable", { defaultValue: "unknown" }),
+                  defaultValue: `Partial artifact catalog — failed source: ${
+                    partialDataSurface.failedSources.join(", ") || "unknown"
+                  }`,
+                })}
+              </div>
+              {partialDataSurface.message && (
+                <div className="text-xs text-muted-foreground">{partialDataSurface.message}</div>
+              )}
+            </div>
+          </Card>
         )}
         {summary && visibleRows.length > 0 && <div className="mb-4">{summary(visibleRows)}</div>}
         {pending > 0 && (

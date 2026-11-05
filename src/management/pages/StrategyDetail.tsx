@@ -432,9 +432,19 @@ export const StrategyDetail = () => {
                 columns={[
                   { key: "id", header: t("table.id"), cell: (r) => <span className="text-mono text-xs">{r.id}</span> },
                   { key: "name", header: t("table.name"), cell: (r) => <div className="font-medium">{r.name}</div> },
-                  { key: "kind", header: t("table.kind"), cell: (r) => <Badge variant="outline" className="text-[10px] uppercase">{r.kind}</Badge> },
-                  { key: "ver", header: t("table.version"), cell: (r) => <span className="text-mono text-xs">{r.version}</span> },
-                  { key: "size", header: t("strategyDetail.size"), cell: (r) => <span className="text-mono text-xs">{(r.sizeMb ?? 0).toFixed(1)} MB</span> },
+                  { key: "kind", header: t("table.kind"), cell: (r) => <Badge variant="outline" className="text-[10px]">{r.kind || noData}</Badge> },
+                  { key: "ver", header: t("table.version"), cell: (r) => <span className="text-mono text-xs">{r.version || noData}</span> },
+                  {
+                    key: "size",
+                    header: t("strategyDetail.size"),
+                    cell: (r) => (
+                      <span className="text-mono text-xs">
+                        {typeof r.sizeMb === "number" && Number.isFinite(r.sizeMb)
+                          ? `${r.sizeMb.toFixed(1)} MB`
+                          : noData}
+                      </span>
+                    ),
+                  },
                 ]}
                 empty={t("empty.noResults")}
               />
