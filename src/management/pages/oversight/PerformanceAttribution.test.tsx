@@ -1,9 +1,14 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import i18n from "@/i18n";
+import {
+  BFF_ACCEPTED_ATTRIBUTION_DIMENSIONS,
+  SUPPORTED_ATTRIBUTION_DIMENSIONS,
+  UNSUPPORTED_ATTRIBUTION_DIMENSIONS,
+} from "@/lib/v5/management/performanceAttribution";
 import { PerformanceAttributionPage } from "./PerformanceAttribution";
 
 const mocks = vi.hoisted(() => ({
@@ -370,5 +375,564 @@ describe("PerformanceAttributionPage", () => {
       "The BFF did not confirm that the 30 days window was applied",
     );
     expect(screen.getByTestId("attribution-applied-period")).toHaveTextContent("Applied period: not confirmed by BFF");
+  });
+
+  it("renders Capital pool, Symbol, and Market regime labels for real BFF pool, asset, and regime rows instead of Persona", async () => {
+    const hostedPoolRow = {
+      id: "attribution:pool:pool-hosted-all12:latest",
+      dimension: "pool",
+      dimension_key: "pool-hosted-all12",
+      label: "persona-strat-hosted-all12-h12-01a11-20261023-9aeb-src-e018ff6d0eb8 paper pool",
+      period: "latest",
+      data_confidence: "formal",
+      source_status: "available",
+      rank: 1,
+      metrics: {
+        total_pnl: 15420,
+        realized_pnl: 8200,
+        unrealized_pnl: 7220,
+        pnl_contribution_pct: 0.24,
+        notional_weight: 0.35,
+        worst_drawdown: 0.04,
+        sharpe: 1.42,
+        win_rate: 0.61,
+        violation_count: 0,
+        fill_count: 14,
+      },
+      total_pnl: 15420,
+      pnl_contribution_pct: 0.24,
+      notional_weight: 0.35,
+      runtime_count: 1,
+      holding_count: 2,
+      source_refs: {
+        runtime_ids: ["runtime-hosted-all12"],
+        capital_pool_ids: ["pool-hosted-all12"],
+        persona_ids: ["persona-strat-hosted-all12"],
+        strategy_ids: ["strat-hosted-all12"],
+      },
+      links: {
+        runtime: "/bff/runtimes/runtime-hosted-all12",
+        capital_pool: "/bff/capital-pools/pool-hosted-all12",
+        persona: "/bff/personas/persona-strat-hosted-all12",
+        strategy: "/bff/strategies/strat-hosted-all12",
+      },
+    };
+    const hostedAssetRow = {
+      id: "attribution:asset:2330.TW:latest",
+      dimension: "asset",
+      dimension_key: "2330.TW",
+      label: "2330.TW",
+      period: "latest",
+      data_confidence: "formal",
+      source_status: "available",
+      rank: 1,
+      metrics: {
+        total_pnl: 8910,
+        realized_pnl: 3100,
+        unrealized_pnl: 5810,
+        pnl_contribution_pct: 0.14,
+        notional_weight: 0.22,
+        worst_drawdown: 0.02,
+        sharpe: 1.18,
+        win_rate: 0.58,
+        violation_count: 0,
+        fill_count: 6,
+      },
+      total_pnl: 8910,
+      pnl_contribution_pct: 0.14,
+      notional_weight: 0.22,
+      runtime_count: 1,
+      holding_count: 1,
+      source_refs: {
+        runtime_ids: ["runtime-hosted-all12"],
+        capital_pool_ids: ["pool-hosted-all12"],
+        persona_ids: ["persona-strat-hosted-all12"],
+        strategy_ids: ["strat-hosted-all12"],
+      },
+      links: {
+        runtime: "/bff/runtimes/runtime-hosted-all12",
+        capital_pool: "/bff/capital-pools/pool-hosted-all12",
+        persona: "/bff/personas/persona-strat-hosted-all12",
+        strategy: "/bff/strategies/strat-hosted-all12",
+      },
+    };
+    const hostedRegimeRow = {
+      id: "attribution:regime:unknown:latest",
+      dimension: "regime",
+      dimension_key: "unknown",
+      label: "unknown",
+      period: "latest",
+      data_confidence: "formal",
+      source_status: "available",
+      rank: 1,
+      metrics: {
+        total_pnl: 64200,
+        realized_pnl: 24000,
+        unrealized_pnl: 40200,
+        pnl_contribution_pct: 1.0,
+        notional_weight: 1.0,
+        worst_drawdown: 0.06,
+        sharpe: 1.35,
+        win_rate: 0.6,
+        violation_count: 0,
+        fill_count: 42,
+      },
+      total_pnl: 64200,
+      pnl_contribution_pct: 1.0,
+      notional_weight: 1.0,
+      runtime_count: 11,
+      holding_count: 4,
+      source_refs: {
+        runtime_ids: ["runtime-hosted-all12"],
+        capital_pool_ids: ["pool-hosted-all12"],
+        persona_ids: ["persona-strat-hosted-all12"],
+        strategy_ids: ["strat-hosted-all12"],
+      },
+      links: {
+        runtime: "/bff/runtimes/runtime-hosted-all12",
+        capital_pool: "/bff/capital-pools/pool-hosted-all12",
+        persona: "/bff/personas/persona-strat-hosted-all12",
+        strategy: "/bff/strategies/strat-hosted-all12",
+      },
+    };
+
+    mockAttributionOnly(attributionResult([hostedPoolRow, hostedAssetRow, hostedRegimeRow]));
+
+    const { unmount } = renderPage("/management/performance-attribution?period=latest");
+
+    const table = screen.getByRole("table");
+    const poolCell = within(table).getByText(
+      "persona-strat-hosted-all12-h12-01a11-20261023-9aeb-src-e018ff6d0eb8 paper pool",
+    );
+    const poolTr = poolCell.closest("tr")!;
+    expect(within(poolTr).getByText("Capital pool")).toBeInTheDocument();
+    expect(within(poolTr).queryByText("Persona")).not.toBeInTheDocument();
+
+    const assetCell = within(table).getByText("2330.TW");
+    const assetTr = assetCell.closest("tr")!;
+    expect(within(assetTr).getByText("Symbol")).toBeInTheDocument();
+    expect(within(assetTr).queryByText("Persona")).not.toBeInTheDocument();
+
+    const regimeCell = within(table).getByText("unknown");
+    const regimeTr = regimeCell.closest("tr")!;
+    expect(within(regimeTr).getByText("Market regime")).toBeInTheDocument();
+    expect(within(regimeTr).queryByText("Persona")).not.toBeInTheDocument();
+
+    unmount();
+
+    await i18n.changeLanguage("zh-TW");
+    try {
+      renderPage("/management/performance-attribution?period=latest");
+      const zhTable = screen.getByRole("table");
+      expect(within(zhTable).getByText("資金池")).toBeInTheDocument();
+      expect(within(zhTable).getByText("代號")).toBeInTheDocument();
+      expect(within(zhTable).getByText("市場 regime")).toBeInTheDocument();
+      expect(within(zhTable).queryByText("Persona")).not.toBeInTheDocument();
+    } finally {
+      await i18n.changeLanguage("en-US");
+    }
+  });
+
+  it("preserves exact dimension counts across the 50-row hosted payload (persona 11, strategy 11, pool 11, asset 4, broker 1, runtime 11, regime 1)", () => {
+    const makeHostedRow = (dimension: string, index: number, keyOverride?: string, labelOverride?: string) => ({
+      id: `attribution:${dimension}:${keyOverride ?? `${dimension}-${index}`}:latest`,
+      dimension,
+      dimension_key: keyOverride ?? `${dimension}-${index}`,
+      label: labelOverride ?? `${dimension}-label-${index}`,
+      period: "latest",
+      data_confidence: "formal",
+      source_status: "available",
+      rank: index + 1,
+      metrics: {
+        total_pnl: 1000 - index * 10,
+        pnl_contribution_pct: 0.02,
+        notional_weight: 0.02,
+        worst_drawdown: 0.01,
+      },
+      total_pnl: 1000 - index * 10,
+      pnl_contribution_pct: 0.02,
+      notional_weight: 0.02,
+      runtime_count: 1,
+      holding_count: 1,
+      source_refs: {
+        runtime_ids: [`runtime-${index}`],
+        capital_pool_ids: [`pool-${index}`],
+        persona_ids: [`persona-${index}`],
+        strategy_ids: [`strategy-${index}`],
+      },
+      links: {
+        runtime: `/bff/runtimes/runtime-${index}`,
+        capital_pool: `/bff/capital-pools/pool-${index}`,
+        persona: `/bff/personas/persona-${index}`,
+        strategy: `/bff/strategies/strategy-${index}`,
+      },
+    });
+
+    const rows = [
+      ...Array.from({ length: 11 }, (_, i) => makeHostedRow("persona", i)),
+      ...Array.from({ length: 11 }, (_, i) => makeHostedRow("strategy", i)),
+      ...Array.from({ length: 11 }, (_, i) =>
+        makeHostedRow(
+          "pool",
+          i,
+          `pool-${i}`,
+          i === 0 ? "persona-strat-hosted-all12-h12-01a11-20261023-9aeb-src-e018ff6d0eb8 paper pool" : `pool-label-${i}`,
+        ),
+      ),
+      ...Array.from({ length: 4 }, (_, i) =>
+        makeHostedRow("asset", i, i === 0 ? "2330.TW" : `asset-${i}`, i === 0 ? "2330.TW" : `asset-${i}`),
+      ),
+      makeHostedRow("broker", 0, "paper", "paper"),
+      ...Array.from({ length: 11 }, (_, i) => makeHostedRow("runtime", i)),
+      makeHostedRow("regime", 0, "unknown", "unknown"),
+    ];
+    expect(rows).toHaveLength(50);
+
+    mockAttributionOnly(attributionResult(rows));
+    renderPage("/management/performance-attribution?period=latest");
+
+    const table = screen.getByRole("table");
+    expect(within(table).getAllByText("Persona")).toHaveLength(11);
+    expect(within(table).getAllByText("Strategy")).toHaveLength(11);
+    expect(within(table).getAllByText("Capital pool")).toHaveLength(11);
+    expect(within(table).getAllByText("Symbol")).toHaveLength(4);
+    expect(within(table).getAllByText("Broker")).toHaveLength(1);
+    expect(within(table).getAllByText("Runtime")).toHaveLength(11);
+    expect(within(table).getAllByText("Market regime")).toHaveLength(1);
+  });
+
+  it("keeps unknown BFF dimensions as their raw dimension label with no persona link", () => {
+    const unknownRow = {
+      id: "attribution:custom_desk_bucket:desk-tw-1:latest",
+      dimension: "custom_desk_bucket",
+      dimension_key: "desk-tw-1",
+      label: "Desk TW Bucket 1",
+      period: "latest",
+      data_confidence: "formal",
+      source_status: "available",
+      rank: 1,
+      metrics: {
+        total_pnl: 4200,
+        pnl_contribution_pct: 0.08,
+        notional_weight: 0.1,
+        worst_drawdown: 0.01,
+      },
+      total_pnl: 4200,
+      pnl_contribution_pct: 0.08,
+      notional_weight: 0.1,
+      runtime_count: 1,
+      holding_count: 1,
+      source_refs: {
+        runtime_ids: ["runtime-1"],
+        capital_pool_ids: ["pool-1"],
+        persona_ids: ["persona-1"],
+        strategy_ids: ["strategy-1"],
+      },
+      links: {
+        runtime: "/bff/runtimes/runtime-1",
+        capital_pool: "/bff/capital-pools/pool-1",
+        persona: "/bff/personas/persona-1",
+        strategy: "/bff/strategies/strategy-1",
+      },
+    };
+
+    mockAttributionOnly(attributionResult([unknownRow]));
+    renderPage("/management/performance-attribution?period=latest");
+
+    const table = screen.getByRole("table");
+    const rowEl = within(table).getByText("Desk TW Bucket 1").closest("tr")!;
+    expect(within(rowEl).getByText("custom_desk_bucket")).toBeInTheDocument();
+    expect(within(rowEl).queryByText("Persona")).not.toBeInTheDocument();
+
+    const manageLink = within(rowEl).getByRole("link", { name: "Manage →" });
+    expect(manageLink).toHaveAttribute("href", "/management/evidence");
+    expect(manageLink.getAttribute("href")).not.toContain("/management/personas/");
+  });
+
+  it("routes Manage links by normalized dimension and honors explicit BFF links when present", () => {
+    const rows = [
+      {
+        id: "attribution:pool:pool-hosted-all12:latest",
+        dimension: "pool",
+        dimension_key: "pool-hosted-all12",
+        label: "persona-strat-hosted-all12-h12-01a11-20261023-9aeb-src-e018ff6d0eb8 paper pool",
+        period: "latest",
+        data_confidence: "formal",
+        source_status: "available",
+        rank: 1,
+        metrics: { total_pnl: 15420, pnl_contribution_pct: 0.24, worst_drawdown: 0.04 },
+        total_pnl: 15420,
+        pnl_contribution_pct: 0.24,
+        notional_weight: 0.35,
+        runtime_count: 1,
+        holding_count: 2,
+        source_refs: {
+          runtime_ids: ["runtime-hosted-all12"],
+          capital_pool_ids: ["pool-hosted-all12"],
+          persona_ids: ["persona-strat-hosted-all12"],
+          strategy_ids: ["strat-hosted-all12"],
+        },
+        links: {
+          runtime: "/bff/runtimes/runtime-hosted-all12",
+          capital_pool: "/bff/capital-pools/pool-hosted-all12",
+          persona: "/bff/personas/persona-strat-hosted-all12",
+          strategy: "/bff/strategies/strat-hosted-all12",
+        },
+      },
+      {
+        id: "attribution:asset:2330.TW:latest",
+        dimension: "asset",
+        dimension_key: "2330.TW",
+        label: "2330.TW",
+        period: "latest",
+        data_confidence: "formal",
+        source_status: "available",
+        rank: 1,
+        metrics: { total_pnl: 8910, pnl_contribution_pct: 0.14, worst_drawdown: 0.02 },
+        total_pnl: 8910,
+        pnl_contribution_pct: 0.14,
+        notional_weight: 0.22,
+        runtime_count: 1,
+        holding_count: 1,
+        source_refs: {
+          runtime_ids: ["runtime-hosted-all12"],
+          capital_pool_ids: ["pool-hosted-all12"],
+          persona_ids: ["persona-strat-hosted-all12"],
+          strategy_ids: ["strat-hosted-all12"],
+        },
+        links: {
+          runtime: "/bff/runtimes/runtime-hosted-all12",
+          capital_pool: "/bff/capital-pools/pool-hosted-all12",
+          persona: "/bff/personas/persona-strat-hosted-all12",
+          strategy: "/bff/strategies/strat-hosted-all12",
+        },
+      },
+      {
+        id: "attribution:pool:pool-custom-link:latest",
+        dimension: "pool",
+        dimension_key: "pool-custom-link",
+        label: "Custom Linked Pool",
+        period: "latest",
+        data_confidence: "formal",
+        source_status: "available",
+        rank: 2,
+        metrics: { total_pnl: 5100, pnl_contribution_pct: 0.09, worst_drawdown: 0.01 },
+        total_pnl: 5100,
+        pnl_contribution_pct: 0.09,
+        notional_weight: 0.15,
+        runtime_count: 1,
+        holding_count: 1,
+        source_refs: {
+          runtime_ids: ["runtime-hosted-all12"],
+          capital_pool_ids: ["pool-custom-link"],
+          persona_ids: ["persona-strat-hosted-all12"],
+          strategy_ids: ["strat-hosted-all12"],
+        },
+        links: {
+          manage_href: "/management/promotion-allocation?tab=quarterly-capital&capital_id=pool-custom-link",
+        },
+      },
+    ];
+
+    mockAttributionOnly(attributionResult(rows));
+    renderPage("/management/performance-attribution?period=latest");
+
+    const table = screen.getByRole("table");
+    const poolRow = within(table)
+      .getByText("persona-strat-hosted-all12-h12-01a11-20261023-9aeb-src-e018ff6d0eb8 paper pool")
+      .closest("tr")!;
+    expect(within(poolRow).getByRole("link", { name: "Manage →" })).toHaveAttribute(
+      "href",
+      "/management/governance-decisions?tab=capital&capital_id=pool-hosted-all12",
+    );
+
+    const assetRow = within(table).getByText("2330.TW").closest("tr")!;
+    const assetLink = within(assetRow).getByRole("link", { name: "Manage →" });
+    expect(assetLink).toHaveAttribute("href", "/management/evidence");
+    expect(assetLink.getAttribute("href")).not.toContain("/management/personas/");
+
+    const customPoolRow = within(table).getByText("Custom Linked Pool").closest("tr")!;
+    expect(within(customPoolRow).getByRole("link", { name: "Manage →" })).toHaveAttribute(
+      "href",
+      "/management/promotion-allocation?tab=quarterly-capital&capital_id=pool-custom-link",
+    );
+  });
+
+  it("counts only true persona rows in the persona-focused view and totals even when pool, asset, and regime rows share source_refs.persona_ids", () => {
+    const sharedSourceRefs = {
+      runtime_ids: ["runtime-hosted-all12"],
+      capital_pool_ids: ["pool-hosted-all12"],
+      persona_ids: ["persona-strat-hosted-all12"],
+      strategy_ids: ["strat-hosted-all12"],
+    };
+    const rows = [
+      {
+        id: "attribution:persona:persona-strat-hosted-all12:latest",
+        dimension: "persona",
+        dimension_key: "persona-strat-hosted-all12",
+        label: "Hosted Persona All12",
+        period: "latest",
+        data_confidence: "formal",
+        source_status: "available",
+        rank: 1,
+        metrics: { total_pnl: 15420, pnl_contribution_pct: 0.24, worst_drawdown: 0.04 },
+        total_pnl: 15420,
+        pnl_contribution_pct: 0.24,
+        notional_weight: 0.35,
+        runtime_count: 1,
+        holding_count: 2,
+        source_refs: sharedSourceRefs,
+        links: {},
+      },
+      {
+        id: "attribution:pool:pool-hosted-all12:latest",
+        dimension: "pool",
+        dimension_key: "pool-hosted-all12",
+        label: "persona-strat-hosted-all12-h12-01a11-20261023-9aeb-src-e018ff6d0eb8 paper pool",
+        period: "latest",
+        data_confidence: "formal",
+        source_status: "available",
+        rank: 1,
+        metrics: { total_pnl: 15420, pnl_contribution_pct: 0.24, worst_drawdown: 0.04 },
+        total_pnl: 15420,
+        pnl_contribution_pct: 0.24,
+        notional_weight: 0.35,
+        runtime_count: 1,
+        holding_count: 2,
+        source_refs: sharedSourceRefs,
+        links: {},
+      },
+      {
+        id: "attribution:asset:2330.TW:latest",
+        dimension: "asset",
+        dimension_key: "2330.TW",
+        label: "2330.TW",
+        period: "latest",
+        data_confidence: "formal",
+        source_status: "available",
+        rank: 1,
+        metrics: { total_pnl: 8910, pnl_contribution_pct: 0.14, worst_drawdown: 0.02 },
+        total_pnl: 8910,
+        pnl_contribution_pct: 0.14,
+        notional_weight: 0.22,
+        runtime_count: 1,
+        holding_count: 1,
+        source_refs: sharedSourceRefs,
+        links: {},
+      },
+      {
+        id: "attribution:regime:unknown:latest",
+        dimension: "regime",
+        dimension_key: "unknown",
+        label: "unknown",
+        period: "latest",
+        data_confidence: "formal",
+        source_status: "available",
+        rank: 1,
+        metrics: { total_pnl: 64200, pnl_contribution_pct: 1.0, worst_drawdown: 0.06 },
+        total_pnl: 64200,
+        pnl_contribution_pct: 1.0,
+        notional_weight: 1.0,
+        runtime_count: 11,
+        holding_count: 4,
+        source_refs: sharedSourceRefs,
+        links: {},
+      },
+      {
+        id: "attribution:custom_unknown:custom-1:latest",
+        dimension: "custom_unknown",
+        dimension_key: "custom-1",
+        label: "Custom Unknown Row",
+        period: "latest",
+        data_confidence: "formal",
+        source_status: "available",
+        rank: 1,
+        metrics: { total_pnl: 1000, pnl_contribution_pct: 0.01, worst_drawdown: 0.01 },
+        total_pnl: 1000,
+        pnl_contribution_pct: 0.01,
+        notional_weight: 0.01,
+        runtime_count: 1,
+        holding_count: 1,
+        source_refs: sharedSourceRefs,
+        links: {},
+      },
+    ];
+
+    mockAttributionOnly(attributionResult(rows));
+    renderPage("/management/performance-attribution?persona=persona-strat-hosted-all12");
+
+    expect(
+      screen.getByText("Focused persona: persona-strat-hosted-all12 · 1 matching attribution row(s)"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Hosted Persona All12")).toBeInTheDocument();
+    expect(
+      screen.queryByText("persona-strat-hosted-all12-h12-01a11-20261023-9aeb-src-e018ff6d0eb8 paper pool"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("2330.TW")).not.toBeInTheDocument();
+    expect(screen.queryByText("Custom Unknown Row")).not.toBeInTheDocument();
+  });
+
+  it("offers only BFF-accepted dimensions in the filter and shows an unsupported notice instead of a transport error for unsupported dimensions", () => {
+    const bffAcceptedFromTask = new Set([
+      "persona",
+      "personas",
+      "strategy",
+      "strategies",
+      "capital_pool",
+      "capital_pools",
+      "capitalpool",
+      "capitalpools",
+      "pool",
+      "pools",
+      "asset",
+      "assets",
+      "instrument",
+      "instruments",
+      "symbol",
+      "symbols",
+      "broker",
+      "brokers",
+      "runtime",
+      "runtimes",
+      "regime",
+      "regimes",
+      "market_regime",
+    ]);
+
+    expect(new Set(BFF_ACCEPTED_ATTRIBUTION_DIMENSIONS)).toEqual(bffAcceptedFromTask);
+    for (const offered of SUPPORTED_ATTRIBUTION_DIMENSIONS) {
+      expect(bffAcceptedFromTask.has(offered)).toBe(true);
+    }
+    for (const unsupported of UNSUPPORTED_ATTRIBUTION_DIMENSIONS) {
+      expect(bffAcceptedFromTask.has(unsupported)).toBe(false);
+    }
+
+    mockAttributionOnly(attributionResult([]));
+    const { unmount } = renderPage("/management/performance-attribution");
+
+    const dimensionSelect = screen.getByRole("combobox", { name: "Dimension" });
+    const optionValues = within(dimensionSelect)
+      .getAllByRole("option")
+      .map((opt) => (opt as HTMLOptionElement).value);
+
+    expect(optionValues).toEqual(["all", ...SUPPORTED_ATTRIBUTION_DIMENSIONS]);
+    for (const offered of optionValues.filter((v) => v !== "all")) {
+      expect(bffAcceptedFromTask.has(offered)).toBe(true);
+    }
+    for (const removed of ["asset_class", "sector", "region", "research_backend", "quarter"]) {
+      expect(optionValues).not.toContain(removed);
+    }
+
+    unmount();
+
+    renderPage("/management/performance-attribution?dimension=asset_class");
+    expect(screen.getByTestId("attribution-unsupported-dimension")).toHaveTextContent(
+      'Dimension "asset_class" is not supported by the BFF; choose persona, strategy, capital pool, symbol, broker, runtime, or market regime.',
+    );
+    expect(mocks.useV5Live).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.anything(),
+      { cacheKey: "oversight.performanceAttribution.unsupported.asset_class.latest" },
+    );
   });
 });

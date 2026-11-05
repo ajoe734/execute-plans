@@ -3,6 +3,10 @@
 import { describe, it, expect } from "vitest";
 import en from "@/i18n/locales/en-US";
 import zh from "@/i18n/locales/zh-TW";
+import {
+  SUPPORTED_ATTRIBUTION_DIMENSIONS,
+  UNSUPPORTED_ATTRIBUTION_DIMENSIONS,
+} from "@/lib/v5/management/performanceAttribution";
 
 function flatten(obj: Record<string, unknown>, prefix = "", out: Set<string> = new Set()): Set<string> {
   for (const [k, v] of Object.entries(obj)) {
@@ -76,6 +80,23 @@ describe("Pack PM-i18n parity", () => {
     for (const k of portfolioStateKeys) {
       expect(enKeys.has(k), `en missing ${k}`).toBe(true);
       expect(zhKeys.has(k), `zh missing ${k}`).toBe(true);
+    }
+  });
+
+  it("includes BFF-supported attribution dimension labels and excludes unsupported 422 dimensions in both locales", () => {
+    expect(enKeys.has("mgmt.attribution.unsupportedDimensionNoticeFmt")).toBe(true);
+    expect(zhKeys.has("mgmt.attribution.unsupportedDimensionNoticeFmt")).toBe(true);
+
+    for (const d of [...SUPPORTED_ATTRIBUTION_DIMENSIONS, "pool", "asset", "instrument", "regime"]) {
+      const k = `mgmt.attribution.dimensions.${d}`;
+      expect(enKeys.has(k), `en missing ${k}`).toBe(true);
+      expect(zhKeys.has(k), `zh missing ${k}`).toBe(true);
+    }
+
+    for (const unsupported of UNSUPPORTED_ATTRIBUTION_DIMENSIONS) {
+      const k = `mgmt.attribution.dimensions.${unsupported}`;
+      expect(enKeys.has(k), `en should not include unsupported ${k}`).toBe(false);
+      expect(zhKeys.has(k), `zh should not include unsupported ${k}`).toBe(false);
     }
   });
 });

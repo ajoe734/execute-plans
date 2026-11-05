@@ -1,0 +1,109 @@
+{
+  "schema_version": "pantheon.fe-attribution-dimension-labels.v1",
+  "task_id": "FE-ATTRIBUTION-DIMENSION-LABELS-20261105",
+  "taskId": "FE-ATTRIBUTION-DIMENSION-LABELS-20261105",
+  "title": "Performance attribution labels pools and symbols as Persona and offers filters the BFF rejects",
+  "owner": "Antigravity2",
+  "reviewer": "Claude",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-ATTRIBUTION-DIMENSION-LABELS-20261105",
+  "prerequisite": {
+    "task_id": "FE-EVIDENCE-KNOWLEDGE-TRUTH-20261104",
+    "execute_plans_merge_commit": "466a4639b34a16da327d9869ee5e1c25ffe71a12",
+    "status": "done"
+  },
+  "status": "ready_for_review",
+  "timestamp": "2026-11-05T02:44:00Z",
+  "scope": {
+    "delivered": [
+      "Added SUPPORTED_ATTRIBUTION_DIMENSIONS, UNSUPPORTED_ATTRIBUTION_DIMENSIONS, BFF_ATTRIBUTION_DIMENSION_ALIASES (exact 23 accepted names from services/control-plane/bff/management_read_models/ranking_router.py _PM12_ATTRIBUTION_DIMENSION_ALIASES), BFF_ACCEPTED_ATTRIBUTION_DIMENSIONS, isSupportedAttributionDimension, normalizeSupportedAttributionDimension, isBffAcceptedAttributionDimension, normalizeAttributionDimension, and normalizePerformanceAttributionRow in src/lib/v5/management/performanceAttribution.ts.",
+      "Mapped BFF dimension aliases (pool/pools/capitalpool/capitalpools/capital_pools -> capital_pool, asset/assets/instrument/instruments/symbols -> symbol, regime/regimes -> market_regime, personas -> persona, strategies -> strategy, brokers -> broker, runtimes -> runtime) in normalizeAttributionDimension and buildAttributionLinks so pool rows receive capital pool links (/management/governance-decisions?tab=capital&capital_id=...), asset and regime rows receive evidence fallback (/management/evidence) with no persona link, unknown dimensions preserve their raw dimension string and receive no persona link, and explicit links fields from the BFF win when present.",
+      "Updated adaptPerformanceAttributionResult and added adaptPerformanceAttributionRows in src/lib/bff-v1/management.ts to normalize BFF attribution rows, and guarded mgmt.performanceAttribution.getLiveOnly, listLiveOnly, and list with isBffAcceptedAttributionDimension so unsupported dimensions (asset_class, sector, region, research_backend, quarter) never trigger a 422 BFF transport request.",
+      "Updated PerformanceAttributionPage in src/management/pages/oversight/PerformanceAttribution.tsx to use normalizePerformanceAttributionRow, render dimension filter <select> options exclusively from SUPPORTED_ATTRIBUTION_DIMENSIONS (removing asset_class, sector, region, research_backend, and quarter), surface a clear unsupported-dimension notice (data-testid=attribution-unsupported-dimension) when an unsupported dimension query param is requested without issuing a BFF request, render unknown row dimensions as their raw dimension label without falling back to persona, and ensure the persona-focused view and totals count only true persona rows.",
+      "Updated bilingual i18n dictionaries in src/i18n/locales/en-US.ts and src/i18n/locales/zh-TW.ts to add mgmt.attribution.unsupportedDimensionNoticeFmt and BFF alias keys (pool, asset, instrument, regime) while removing unsupported 422 dimension keys (asset_class, sector, region, research_backend, quarter).",
+      "Added unit and component tests in src/management/pages/oversight/PerformanceAttribution.test.tsx, src/lib/bff-v1/__tests__/management-pm12.test.ts, and src/lib/v5/management/__tests__/i18nParity.test.ts using the real BFF row shapes and 50-row hosted distribution from the task brief."
+    ],
+    "not_changed": [
+      "Preserved ATTRIBUTION_DIMENSIONS 12-item legacy type/array export so existing out-of-scope pm12.test.ts assertions remain green without modification.",
+      "Did not weaken, delete, or alter any existing test assertion."
+    ]
+  },
+  "acceptance_verification": [
+    {
+      "criterion": 1,
+      "description": "A BFF row with dimension pool shows the capital pool label and a row with dimension asset shows the symbol label and a row with dimension regime shows the market regime label; no such row is labelled Persona; tests use the real BFF rows given in the task",
+      "status": "passed",
+      "verified_by": [
+        "src/management/pages/oversight/PerformanceAttribution.test.tsx > renders Capital pool, Symbol, and Market regime labels for real BFF pool, asset, and regime rows instead of Persona",
+        "src/management/pages/oversight/PerformanceAttribution.test.tsx > preserves exact dimension counts across the 50-row hosted payload (persona 11, strategy 11, pool 11, asset 4, broker 1, runtime 11, regime 1)",
+        "src/lib/bff-v1/__tests__/management-pm12.test.ts > normalizes BFF pool, asset, and regime rows and preserves unknown dimensions without falling back to persona"
+      ]
+    },
+    {
+      "criterion": 2,
+      "description": "A row with a dimension the frontend does not know keeps that raw dimension as its label and gets no persona link; an unknown dimension never falls back to persona",
+      "status": "passed",
+      "verified_by": [
+        "src/management/pages/oversight/PerformanceAttribution.test.tsx > keeps unknown BFF dimensions as their raw dimension label with no persona link",
+        "src/lib/bff-v1/__tests__/management-pm12.test.ts > normalizes BFF pool, asset, and regime rows and preserves unknown dimensions without falling back to persona"
+      ]
+    },
+    {
+      "criterion": 3,
+      "description": "Manage links follow the normalized dimension: a pool row opens the capital pool page and an asset row has no persona link; a links field from the BFF still wins when present",
+      "status": "passed",
+      "verified_by": [
+        "src/management/pages/oversight/PerformanceAttribution.test.tsx > routes Manage links by normalized dimension and honors explicit BFF links when present",
+        "src/lib/bff-v1/__tests__/management-pm12.test.ts > normalizes BFF pool, asset, and regime rows and preserves unknown dimensions without falling back to persona"
+      ]
+    },
+    {
+      "criterion": 4,
+      "description": "The persona-focused view and its totals count only true persona rows",
+      "status": "passed",
+      "verified_by": [
+        "src/management/pages/oversight/PerformanceAttribution.test.tsx > counts only true persona rows in the persona-focused view and totals even when pool, asset, and regime rows share source_refs.persona_ids"
+      ]
+    },
+    {
+      "criterion": 5,
+      "description": "The dimension filter offers only dimensions the BFF accepts and every offered option returns 200; asset_class and sector and region and research_backend and quarter are removed or show a clear unsupported state instead of a transport error; a test checks the offered list against the accepted names given in the task",
+      "status": "passed",
+      "verified_by": [
+        "src/management/pages/oversight/PerformanceAttribution.test.tsx > offers only BFF-accepted dimensions in the filter and shows an unsupported notice instead of a transport error for unsupported dimensions",
+        "src/lib/bff-v1/__tests__/management-pm12.test.ts > short-circuits unsupported BFF dimensions before issuing a transport request",
+        "src/lib/v5/management/__tests__/i18nParity.test.ts > includes BFF-supported attribution dimension labels and excludes unsupported 422 dimensions in both locales"
+      ]
+    },
+    {
+      "criterion": 6,
+      "description": "The application type check and existing attribution tests stay green; no existing test is weakened or deleted and any changed assertion is justified in evidence",
+      "status": "passed",
+      "justification": "Zero existing tests or assertions were modified, weakened, or deleted. All 102 pre-existing tests across PerformanceAttribution.test.tsx, performanceAttribution.test.ts, pm12.test.ts, management-pm12.test.ts, management.test.ts, and i18nParity.test.ts pass unchanged alongside 9 newly added tests (111 total passing tests across those 6 suites)."
+    }
+  ],
+  "artifacts": [
+    "src/management/pages/oversight/PerformanceAttribution.tsx",
+    "src/management/pages/oversight/PerformanceAttribution.test.tsx",
+    "src/lib/v5/management/performanceAttribution.ts",
+    "src/lib/bff-v1/management.ts",
+    "src/lib/bff-v1/__tests__/management-pm12.test.ts",
+    "src/lib/v5/management/__tests__/i18nParity.test.ts",
+    "src/i18n/locales/zh-TW.ts",
+    "src/i18n/locales/en-US.ts",
+    "docs/deployment/evidence/FE-ATTRIBUTION-DIMENSION-LABELS-20261105/evidence.json"
+  ],
+  "validation": {
+    "typecheck": {
+      "command": "./node_modules/.bin/tsc -p tsconfig.app.json --noEmit && ./node_modules/.bin/tsc -p tsconfig.agora.json --noEmit",
+      "exit_code": 0
+    },
+    "unit_and_component_tests": {
+      "command": "./node_modules/.bin/vitest run src/management/pages/oversight/PerformanceAttribution.test.tsx src/lib/v5/management/__tests__/performanceAttribution.test.ts src/lib/v5/management/__tests__/pm12.test.ts src/lib/bff-v1/__tests__/management-pm12.test.ts src/lib/bff-v1/__tests__/management.test.ts src/lib/v5/management/__tests__/i18nParity.test.ts",
+      "exit_code": 0,
+      "test_files_passed": 6,
+      "tests_passed": 111
+    }
+  }
+}
