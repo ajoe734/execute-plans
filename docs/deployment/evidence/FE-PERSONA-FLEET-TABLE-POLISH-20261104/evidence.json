@@ -1,0 +1,160 @@
+{
+  "schema_version": "pantheon.task-review-evidence.v1",
+  "task_id": "FE-PERSONA-FLEET-TABLE-POLISH-20261104",
+  "owner": "Antigravity",
+  "reviewer": "Claude",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-PERSONA-FLEET-TABLE-POLISH-20261104",
+  "status": "ready-for-independent-exact-head-review",
+  "base_FE_dev": "466a4639b34a16da327d9869ee5e1c25ffe71a12",
+  "scope": {
+    "adopted": [
+      "src/management/pages/oversight/_core.tsx: replace translucent frozen Persona cell background classes (`bg-muted/40`, `bg-primary/10`, `group-hover:bg-primary/15`) with opaque `color-mix(in oklab, ..., hsl(var(--card)))` classes so the frozen cell has computed background alpha = 1 in default, hovered, focused, and focused-plus-hovered states while keeping a visible opaque highlight matching its row.",
+      "src/management/pages/oversight/_core.tsx: add `whitespace-nowrap` to all Persona Fleet table header cells and explicit minimum widths (`min-w-[110px]` on perfDelta and humanNeeded, `min-w-[130px]` on lastMutation, `min-w-[140px]` on actions) plus `whitespace-nowrap` on the corresponding body cells and mutation date link/span so headers render on one line in both zh-TW and en-US (header row height 32.5px <= 48px at 1440x900) and body mutation dates never wrap.",
+      "src/management/pages/oversight/_core.tsx: add fleet-table-scoped trailing horizontal clearance (`contentClassName=\"pb-4 pr-4\"` on `ManagementTableScroll` and `pl-3 pr-7` on the Actions `th`/`td`) so that with real scrollbars enabled and the table scrolled fully right, the actions header text and action button right edges sit inside the viewport inner right edge (`left + clientLeft + clientWidth = 1400`).",
+      "src/management/pages/oversight/PersonaFleetPage.test.tsx: assert opaque `color-mix` classes on default/hovered and focused/focused-hovered frozen Persona cells, one-line header/body cell classes, and right-edge padding classes.",
+      "e2e/24-persona-fleet-click-map.spec.ts: launch a real-scrollbar Chromium instance (`ignoreDefaultArgs: ['--hide-scrollbars']`) at a 1440x900 viewport and assert computed background alpha = 1 and distinct opaque RGB highlights across default, hovered, focused, and focused-plus-hovered frozen Persona cells while scrolled horizontally, single-line rendering and <= 48px header row height in both zh-TW and en-US, single-line body mutation dates across all 20 rows, and right-edge clearance inside `left + clientLeft + clientWidth`."
+    ],
+    "not_changed": [
+      "src/platform/components/PinnedHorizontalScroll.tsx: unchanged; a Persona Fleet table-scoped fix in `src/management/pages/oversight/_core.tsx` resolved the right-edge scrollbar overlap without altering the shared scroller used by 22 files, and no new table component or second scroll wrapper was added.",
+      "Data scope, rank, and owner behaviors delivered by FE-PERSONA-FLEET-TABLE-LAYOUT-20261103 and evidence/knowledge bindings delivered by FE-EVIDENCE-KNOWLEDGE-TRUTH-20261104 remain untouched.",
+      "No BFF or Pantheon backend source changes."
+    ]
+  },
+  "measured_values": {
+    "viewport": {
+      "width": 1440,
+      "height": 900,
+      "browser_launch": "chromium.launch({ ignoreDefaultArgs: ['--hide-scrollbars'] })"
+    },
+    "frozen_persona_cell_states": {
+      "default": {
+        "scrollLeft": 260,
+        "backgroundColor": "rgb(255, 255, 255)",
+        "alpha": 1,
+        "canvasAlpha": 1,
+        "rgb": "255,255,255"
+      },
+      "hovered": {
+        "scrollLeft": 245,
+        "backgroundColor": "oklab(0.980717 -0.000112218 -0.00162157)",
+        "alpha": 1,
+        "canvasAlpha": 1,
+        "rgb": "248,249,250"
+      },
+      "focused": {
+        "scrollLeft": 260,
+        "backgroundColor": "oklab(0.925283 -0.0004003 -0.00531721)",
+        "alpha": 1,
+        "canvasAlpha": 1,
+        "rgb": "228,230,234"
+      },
+      "focused_plus_hovered": {
+        "scrollLeft": 245,
+        "backgroundColor": "oklab(0.887928 -0.000623234 -0.00798586)",
+        "alpha": 1,
+        "canvasAlpha": 1,
+        "rgb": "215,218,223"
+      }
+    },
+    "zh_TW": {
+      "headerRowHeight": 32.5,
+      "perfDeltaHeader": {
+        "text": "Δ 績效",
+        "width": 110,
+        "height": 32.5,
+        "whiteSpace": "nowrap",
+        "lineCount": 1
+      },
+      "lastMutationHeader": {
+        "text": "最近 mutation",
+        "width": 130,
+        "height": 32.5,
+        "whiteSpace": "nowrap",
+        "lineCount": 1
+      },
+      "humanNeededHeader": {
+        "text": "需要人類",
+        "width": 110,
+        "height": 32.5,
+        "whiteSpace": "nowrap",
+        "lineCount": 1
+      },
+      "bodyMutationRowCount": 20,
+      "maxBodyMutationLineCount": 1,
+      "sampleBodyMutationDates": [
+        "2026-07-10",
+        "2026-11-01",
+        "2026-11-01"
+      ],
+      "rightEdge": {
+        "offsetWidth": 1150,
+        "clientWidth": 1120,
+        "clientLeft": 15,
+        "scrollWidth": 2117,
+        "maxScrollLeft": 982,
+        "innerRight": 1400,
+        "lastThRight": 1398.6,
+        "actionsHeaderTextRight": 1370.6,
+        "actionButtonRight": 1370.6
+      }
+    },
+    "en_US": {
+      "headerRowHeight": 32.5,
+      "perfDeltaHeader": {
+        "text": "Δ Performance",
+        "width": 137.8,
+        "height": 32.5,
+        "whiteSpace": "nowrap",
+        "lineCount": 1
+      },
+      "lastMutationHeader": {
+        "text": "Last mutation",
+        "width": 130,
+        "height": 32.5,
+        "whiteSpace": "nowrap",
+        "lineCount": 1
+      },
+      "humanNeededHeader": {
+        "text": "Human needed",
+        "width": 129.2,
+        "height": 32.5,
+        "whiteSpace": "nowrap",
+        "lineCount": 1
+      },
+      "bodyMutationRowCount": 20,
+      "maxBodyMutationLineCount": 1,
+      "sampleBodyMutationDates": [
+        "2026-07-10",
+        "2026-11-01",
+        "2026-11-01"
+      ],
+      "rightEdge": {
+        "offsetWidth": 1150,
+        "clientWidth": 1120,
+        "clientLeft": 15,
+        "scrollWidth": 2200,
+        "maxScrollLeft": 1065,
+        "innerRight": 1400,
+        "lastThRight": 1399.2,
+        "actionsHeaderTextRight": 1371.2,
+        "actionButtonRight": 1371.2
+      }
+    }
+  },
+  "changed_lines": {
+    "src/management/pages/oversight/_core.tsx": "+17/-17 (net 0)",
+    "src/management/pages/oversight/PersonaFleetPage.test.tsx": "+41/-2 (net +39)",
+    "e2e/24-persona-fleet-click-map.spec.ts": "+257/-0 (net +257)",
+    "production_total": "+17/-17 (net 0)"
+  },
+  "production_net_lines": 0,
+  "validation": {
+    "unit_tests": "passed: npx vitest run src/management/pages/oversight/_core.test.ts src/management/pages/oversight/PersonaFleetPage.test.tsx src/lib/v5/management/__tests__/i18nParity.test.ts (3 files, 82/82 passed)",
+    "e2e_playwright": "passed: npx playwright test e2e/24-persona-fleet-click-map.spec.ts (3/3 passed)",
+    "typecheck_app": "passed: npm run typecheck:app (tsc -p tsconfig.app.json --noEmit, 0 errors)",
+    "typecheck_agora": "passed: npm run typecheck:agora (tsc -p tsconfig.agora.json --noEmit, 0 errors)",
+    "eslint": "passed: npx eslint src/management/pages/oversight/_core.tsx src/management/pages/oversight/_core.test.ts src/management/pages/oversight/PersonaFleetPage.test.tsx e2e/24-persona-fleet-click-map.spec.ts (0 errors, 0 warnings)"
+  }
+}

@@ -1080,11 +1080,26 @@ describe("PersonaFleetPage", () => {
     const noneRowCells = noneRow.querySelectorAll("td");
 
     expect(thead).toHaveClass("sticky", "top-0", "z-30");
-    expect(headerCells[0]).toHaveClass("sticky", "left-0", "z-40", "min-w-[280px]");
+    expect(headerCells[0]).toHaveClass("sticky", "left-0", "z-40", "min-w-[280px]", "whitespace-nowrap");
     expect(headerCells[1]).toHaveClass("min-w-[180px]", "whitespace-nowrap");
-    expect(noneRowCells[0]).toHaveClass("sticky", "left-0", "z-10", "min-w-[280px]");
+    expect(headerCells[8]).toHaveClass("min-w-[110px]", "whitespace-nowrap");
+    expect(headerCells[9]).toHaveClass("min-w-[130px]", "whitespace-nowrap");
+    expect(headerCells[10]).toHaveClass("min-w-[110px]", "whitespace-nowrap");
+    expect(headerCells[12]).toHaveClass("min-w-[140px]", "whitespace-nowrap", "pr-7");
+    expect(noneRowCells[0]).toHaveClass(
+      "sticky",
+      "left-0",
+      "z-10",
+      "min-w-[280px]",
+      "bg-card",
+      "group-hover:bg-[color-mix(in_oklab,hsl(var(--muted))_40%,hsl(var(--card)))]",
+    );
     expect(noneRowCells[1]).toHaveClass("min-w-[180px]", "whitespace-nowrap");
     expect(noneRowCells[1]).toHaveTextContent("pantheon-dev-operator-a");
+    expect(noneRowCells[8]).toHaveClass("min-w-[110px]", "whitespace-nowrap");
+    expect(noneRowCells[9]).toHaveClass("min-w-[130px]", "whitespace-nowrap");
+    expect(noneRowCells[10]).toHaveClass("min-w-[110px]", "whitespace-nowrap");
+    expect(noneRowCells[12]).toHaveClass("min-w-[140px]", "whitespace-nowrap", "pr-7");
 
     expect(screen.getByTestId("fleet-data-scope-persona-none-review")).toHaveClass("shrink-0", "whitespace-nowrap");
     expect(screen.getByTestId("fleet-purpose-persona-none-review")).toHaveClass("shrink-0", "whitespace-nowrap");
@@ -1097,5 +1112,29 @@ describe("PersonaFleetPage", () => {
     const realRow = screen.getByText("Real Review Persona").closest("tr")!;
     const realRankCell = realRow.querySelectorAll("td")[5]!;
     expect(realRankCell).toHaveTextContent("pending human review");
+  });
+
+  it("uses opaque color-mix highlight classes on focused frozen Persona cells", () => {
+    mockFleet({
+      data: [
+        fleetRow("persona-focused-alpha", "Focused Alpha Persona"),
+      ],
+      loading: false,
+      refresh: vi.fn(),
+    });
+
+    renderFleet("/management/persona-fleet?persona=persona-focused-alpha");
+
+    const focusedRow = screen.getByText("Focused Alpha Persona").closest("tr")!;
+    const frozenCell = focusedRow.querySelectorAll("td")[0]!;
+    expect(frozenCell).toHaveClass(
+      "sticky",
+      "left-0",
+      "z-10",
+      "bg-[color-mix(in_oklab,hsl(var(--primary))_10%,hsl(var(--card)))]",
+      "group-hover:bg-[color-mix(in_oklab,hsl(var(--primary))_15%,hsl(var(--card)))]",
+    );
+    expect(frozenCell.className).not.toContain("bg-primary/10");
+    expect(frozenCell.className).not.toContain("group-hover:bg-primary/15");
   });
 });
