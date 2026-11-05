@@ -35,6 +35,7 @@ import {
   type HumanInboxItem,
   type HumanInboxKind,
   type HumanInboxList,
+  type HumanInboxPageInfo,
 } from "@/lib/v5/management/humanInbox";
 import type { ManagementLinkSet } from "@/lib/v5/management/links";
 import type { PersonaIntentTrace, PersonaIntentVisibility } from "@/lib/v5/management/personaIntent";
@@ -2889,6 +2890,9 @@ const allowedActionsCanDecide = (raw: unknown, fallback: boolean): boolean => {
   if (typeof allowed.can_approve === "boolean" || typeof allowed.can_reject === "boolean") {
     return Boolean(allowed.can_approve || allowed.can_reject);
   }
+  if (Object.keys(allowed).length > 0) {
+    return false;
+  }
   return fallback;
 };
 
@@ -2918,19 +2922,37 @@ const inferInboxRequiredRole = (it: Record<string, unknown>, kind: HumanInboxKin
 };
 
 const adaptInboxRecord = (it: Record<string, unknown>): HumanInboxItem | null => {
-  const rawKind = it.kind ?? it.inboxType ?? it.inbox_type ?? it.source_type ?? it.sourceType;
+  const inferredKind =
+    it.incident_id !== undefined || it.incident_cluster_id !== undefined
+      ? "incident"
+      : it.decision_id !== undefined || it.decision_state !== undefined
+        ? "approval"
+        : undefined;
+  const rawKind = it.kind ?? it.inboxType ?? it.inbox_type ?? it.source_type ?? it.sourceType ?? inferredKind;
   const kind = normalizeInboxKind(rawKind);
   const fallbackReviewId = asString(it.reviewId ?? it.review_id ?? it.source_id);
+  const fallbackIncidentId = asString(it.incident_id ?? it.source_id ?? it.sourceId);
+  const fallbackDecisionId = asString(it.approval_decision_id ?? it.decision_id);
   const id = asString(
     it.id ?? it.inbox_id ?? it.inboxId,
-    kind === "promotion_review" && fallbackReviewId ? `promotion_review:${fallbackReviewId}` : "",
+    kind === "promotion_review" && fallbackReviewId
+      ? `promotion_review:${fallbackReviewId}`
+      : kind === "incident" && fallbackIncidentId
+        ? `incident:${fallbackIncidentId}`
+        : kind === "approval" && fallbackDecisionId
+          ? `approval:${fallbackDecisionId}`
+          : "",
   );
   if (!id) return null;
-  const actionState = asString(it.action_state ?? it.actionState ?? it.status);
-  const canDecide = asBoolean(
-    it.canDecide ?? it.can_decide,
-    allowedActionsCanDecide(it.allowedActions ?? it.allowed_actions, true),
-  );
+  const status = asOptionalString(it.status ?? it.decision_state ?? it.state);
+  const actionState = asString(it.action_state ?? it.actionState ?? status);
+  const defaultCanDecide = kind !== "readiness_blocker" && kind !== "incident";
+  const canDecide = kind === "incident"
+    ? false
+    : asBoolean(
+        it.canDecide ?? it.can_decide,
+        allowedActionsCanDecide(it.allowedActions ?? it.allowed_actions, defaultCanDecide),
+      );
   const canProceed = asBoolean(
     it.canProceed ?? it.can_proceed,
     actionState ? !actionStateBlocksProceed(actionState) : true,
@@ -2938,26 +2960,51 @@ const adaptInboxRecord = (it: Record<string, unknown>): HumanInboxItem | null =>
   const personaId = asOptionalString(it.personaId ?? it.persona_id);
   const reviewId = asOptionalString(it.reviewId ?? it.review_id ?? it.source_id);
   const reviewType = asOptionalString(it.reviewType ?? it.review_type);
-  const sourceId = asOptionalString(it.sourceId ?? it.source_id ?? reviewId);
+  const incidentTargetId = kind === "incident"
+    ? (asString(it.incident_id ?? it.source_id ?? it.sourceId) || (id.startsWith("incident:") ? id.slice("incident:".length) : id))
+    : "";
+  const approvalTargetId = kind === "approval"
+    ? (asString(it.approval_decision_id ?? it.decision_id) || (id.startsWith("approval:") ? id.slice("approval:".length) : ""))
+    : "";
+  const sourceId = asOptionalString(
+    it.sourceId ??
+      it.source_id ??
+      (kind === "incident" ? incidentTargetId : undefined) ??
+      (kind === "approval" ? approvalTargetId : undefined) ??
+      reviewId,
+  );
   const decisionHref = asOptionalString(it.decisionHref ?? it.decision_href);
   const blockingReasons = asInboxStringList(it.blockingReasons ?? it.blocking_reasons ?? it.reasons);
   const route = kind === "promotion_review" && personaId
     ? inboxPersonaManageHref(personaId)
-    : it.route ?? it.manageHref ?? (isObject(it.target) ? it.target.route : undefined);
+    : it.route ??
+      it.href ??
+      it.manageHref ??
+      (isObject(it.target) ? it.target.route : undefined) ??
+      (kind === "incident" && incidentTargetId ? `/management/incidents/${encodeURIComponent(incidentTargetId)}` : undefined) ??
+      (kind === "approval" && approvalTargetId ? `/management/approvals?approval=${encodeURIComponent(approvalTargetId)}` : undefined);
   const allowedActions = adaptInboxAllowedActions(it.allowedActions ?? it.allowed_actions, canDecide);
+  const summary = asOptionalString(it.summary ?? it.evidence_summary ?? it.rationale);
+  const approvalTargetType = kind === "approval" ? asOptionalString(it.decision_type ?? it.target_type) : undefined;
+  const title = asString(
+    it.title ??
+      (approvalTargetType ? `${approvalTargetType} approval` : undefined) ??
+      summary ??
+      id,
+  );
   return {
     id,
     kind,
-    title: asString(it.title ?? it.summary ?? id),
-    summary: asOptionalString(it.summary),
-    requiredRole: asString(it.requiredRole ?? it.required_role ?? it.submitted_by, inferInboxRequiredRole(it, kind)),
+    title,
+    summary,
+    requiredRole: asString(it.requiredRole ?? it.required_role ?? it.actor_role ?? it.submitted_by, inferInboxRequiredRole(it, kind)),
     consequenceIfApproved: asString(it.consequenceIfApproved ?? it.consequence_if_approved ?? ""),
     consequenceIfRejected: asString(it.consequenceIfRejected ?? it.consequence_if_rejected ?? ""),
     consequenceIfIgnored: asString(it.consequenceIfIgnored ?? it.consequence_if_ignored ?? ""),
     ttlSec: typeof it.ttlSec === "number" ? it.ttlSec : typeof it.ttl_sec === "number" ? it.ttl_sec : undefined,
     canDecide,
     canProceed,
-    status: asOptionalString(it.status),
+    status,
     sourceId,
     personaId,
     reviewId,
@@ -3010,6 +3057,50 @@ const adaptDecisionHistory = (raw: unknown): HumanInboxDecisionRecord[] => {
   }));
 };
 
+const extractHumanInboxMeta = (raw: unknown, data?: unknown): HumanInboxList["meta"] => {
+  if (isObject(raw) && isObject(raw.meta)) {
+    return raw.meta as HumanInboxList["meta"];
+  }
+  if (isObject(data) && isObject(data.meta)) {
+    return data.meta as HumanInboxList["meta"];
+  }
+  return undefined;
+};
+
+const extractHumanInboxPageInfo = (raw: unknown, data?: unknown): HumanInboxPageInfo | undefined => {
+  const candidates = [
+    isObject(raw) ? raw.page_info : undefined,
+    isObject(raw) ? raw.pageInfo : undefined,
+    isObject(data) ? data.page_info : undefined,
+    isObject(data) ? data.pageInfo : undefined,
+  ];
+  for (const candidate of candidates) {
+    if (isObject(candidate)) {
+      const totalRaw = candidate.total;
+      const pageSizeRaw = candidate.page_size ?? candidate.pageSize;
+      const nextTokenRaw = candidate.next_page_token ?? candidate.nextPageToken;
+      const total = typeof totalRaw === "number" && Number.isFinite(totalRaw)
+        ? totalRaw
+        : typeof totalRaw === "string" && totalRaw.trim() !== "" && Number.isFinite(Number(totalRaw))
+          ? Number(totalRaw)
+          : undefined;
+      const pageSize = typeof pageSizeRaw === "number" && Number.isFinite(pageSizeRaw)
+        ? pageSizeRaw
+        : typeof pageSizeRaw === "string" && pageSizeRaw.trim() !== "" && Number.isFinite(Number(pageSizeRaw))
+          ? Number(pageSizeRaw)
+          : undefined;
+      const nextPageToken = typeof nextTokenRaw === "string" ? nextTokenRaw : nextTokenRaw === null ? null : undefined;
+      return {
+        ...(candidate as HumanInboxPageInfo),
+        ...(total !== undefined ? { total } : {}),
+        ...(pageSize !== undefined ? { page_size: pageSize, pageSize } : {}),
+        ...(nextPageToken !== undefined ? { next_page_token: nextPageToken, nextPageToken } : {}),
+      };
+    }
+  }
+  return undefined;
+};
+
 export function adaptHumanInboxList(raw: unknown): HumanInboxList | null {
   const data = unwrap(raw);
   const arr =
@@ -3017,8 +3108,14 @@ export function adaptHumanInboxList(raw: unknown): HumanInboxList | null {
     (isObject(data) ? asArray<Record<string, unknown>>(data.items) : null);
   if (!arr) return null;
   const items: HumanInboxList = arr.map(adaptInboxRecord).filter((it): it is HumanInboxItem => it !== null);
-  if (isObject(data) && data.meta) {
-    items.meta = isObject(data.meta) ? data.meta : undefined;
+  const meta = extractHumanInboxMeta(raw, data);
+  if (meta) {
+    items.meta = meta;
+  }
+  const pageInfo = extractHumanInboxPageInfo(raw, data);
+  if (pageInfo) {
+    items.page_info = pageInfo;
+    items.pageInfo = pageInfo;
   }
   return items;
 }
@@ -4319,8 +4416,14 @@ export const mgmt = {
           const adapted = adaptHumanInboxList(raw);
           if (adapted) return adapted;
           const empty = emptyHumanInbox();
-          if (isObject(raw) && raw.meta) {
-            empty.meta = isObject(raw.meta) ? raw.meta : undefined;
+          const meta = extractHumanInboxMeta(raw);
+          if (meta) {
+            empty.meta = meta;
+          }
+          const pageInfo = extractHumanInboxPageInfo(raw);
+          if (pageInfo) {
+            empty.page_info = pageInfo;
+            empty.pageInfo = pageInfo;
           }
           return empty;
         },

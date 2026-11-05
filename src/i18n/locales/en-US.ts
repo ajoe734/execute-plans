@@ -3535,6 +3535,8 @@ export default {
       emptyBody: "No Human Inbox items currently require review.",
       focusEmptyBodyFmt: "No Human Inbox items currently require review for {{persona}}.",
       degradedEmptyBody: "No confirmed items loaded. Note: This does not mean the inbox is empty, as some sources timed out.",
+      degradedQueueDesc: "Live queue status is degraded. Some items might be missing or delayed due to a downstream timeout.",
+      shownOfTotalFmt: "Showing {{shown}} of {{total}} items",
       promotionDecision: "Promotion decision",
       rationaleLabel: "Rationale",
       approveCanary: "Approve Canary",

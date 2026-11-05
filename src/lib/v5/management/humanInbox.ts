@@ -4,6 +4,7 @@ import type { ManagementLinkSet } from "./links";
 
 export type HumanInboxKind =
   | "approval"
+  | "incident"
   | "sentinel"
   | "ask"
   | "intervention"
@@ -16,7 +17,7 @@ export type HumanInboxKind =
   | "promotion_review"; // 2026-07-03 PPLG — paper/canary promotion human review
 
 export const HUMAN_INBOX_KINDS: readonly HumanInboxKind[] = [
-  "approval", "sentinel", "ask", "intervention", "readiness_blocker",
+  "approval", "incident", "sentinel", "ask", "intervention", "readiness_blocker",
   "policy_violation", "rollback_request", "capital_breach", "broker_disconnect",
   "ranking_recommendation", "promotion_review",
 ] as const;
@@ -60,12 +61,28 @@ export interface HumanInboxItem {
 export interface HumanInboxSurfaceStatus {
   status?: string;
   reason?: string;
+  source?: string;
+  message?: string;
+  snapshot_at?: string;
+  snapshotAt?: string;
+}
+
+export interface HumanInboxPageInfo {
+  next_page_token?: string | null;
+  nextPageToken?: string | null;
+  total?: number;
+  page_size?: number;
+  pageSize?: number;
 }
 
 export type HumanInboxList = HumanInboxItem[] & {
   meta?: {
+    snapshot_at?: string;
+    snapshotAt?: string;
     surfaces?: Record<string, HumanInboxSurfaceStatus>;
   };
+  page_info?: HumanInboxPageInfo;
+  pageInfo?: HumanInboxPageInfo;
 };
 
 export interface HumanInboxDecisionRecord {
@@ -91,6 +108,7 @@ export function humanInboxRank(kind: HumanInboxKind): number {
     case "promotion_review": return 7.5;
     case "rollback_request": return 7;
     case "sentinel": return 6;
+    case "incident": return 5.5;
     case "broker_disconnect": return 5;
     case "readiness_blocker": return 4;
     case "intervention": return 3;
