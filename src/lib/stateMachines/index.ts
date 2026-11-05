@@ -118,6 +118,7 @@ export const evolutionMachine: StateMachine<EvolutionState> = {
   transitions: [
     { from: "draft", to: "under_review", action: "submit_evolution_review", requiresApproval: true, uiPattern: "review_workflow" },
     { from: "under_review", to: "active", action: "approve_program", requiresApproval: true, risk: "medium" },
+    { from: "under_review", to: "retired", action: "reject_program", requiresApproval: true, risk: "medium" },
     { from: "active", to: "paused", action: "pause_program", risk: "low" },
     { from: "paused", to: "active", action: "resume_program", risk: "low" },
     { from: "active", to: "stopped", action: "stop", risk: "high", uiPattern: "high_risk_modal" },
