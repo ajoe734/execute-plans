@@ -1231,6 +1231,117 @@ describe("mgmt façade (PM-Live)", () => {
     });
   });
 
+  it("adapts pending incident rows to canProceed true while honoring explicit can_proceed false and keeping non-incident pending rows canProceed false", () => {
+    const realPendingIncidentRow = {
+      id: "incident:inc-deployment-comp-deployment-saga-plan-persona-paper-abb0434d691076cbc08c",
+      inboxType: "incident",
+      source_type: "incident",
+      status: "open",
+      action_state: "pending",
+      priority: "critical",
+      created_at: "2026-10-29T13:14:36Z",
+      route: "/management/incidents/inc-deployment-comp-deployment-saga-plan-persona-paper-abb0434d691076cbc08c",
+      allowedActions: {
+        canReview: true,
+        canRemediate: true,
+      },
+      title: "Deployment compensation entered safe mode for deployment-saga-plan-persona-paper-abb0434d691076cbc08c",
+    };
+
+    const explicitBlockedIncidentRow = {
+      ...realPendingIncidentRow,
+      id: "incident:inc-deployment-comp-explicit-blocked",
+      can_proceed: false,
+    };
+
+    const pendingApprovalRow = {
+      id: "approval:dec-pending-001",
+      inboxType: "approval",
+      source_type: "approval",
+      status: "open",
+      action_state: "pending",
+      title: "Pending approval gate",
+      route: "/management/approvals?approval=dec-pending-001",
+    };
+
+    const pendingReadinessBlockerRow = {
+      id: "readiness_blocker:persona:persona-pending-001",
+      inboxType: "readiness_blocker",
+      source_type: "readiness_blocker",
+      status: "open",
+      action_state: "pending",
+      title: "Pending readiness blocker",
+      route: "/management/persona-fleet?persona=persona-pending-001",
+    };
+
+    const listOut = adaptHumanInboxList({
+      data: {
+        id: "human_inbox",
+        items: [
+          realPendingIncidentRow,
+          explicitBlockedIncidentRow,
+          pendingApprovalRow,
+          pendingReadinessBlockerRow,
+        ],
+      },
+    });
+
+    expect(listOut).toHaveLength(4);
+    expect(listOut?.[0]).toMatchObject({
+      id: "incident:inc-deployment-comp-deployment-saga-plan-persona-paper-abb0434d691076cbc08c",
+      kind: "incident",
+      title: "Deployment compensation entered safe mode for deployment-saga-plan-persona-paper-abb0434d691076cbc08c",
+      status: "open",
+      canProceed: true,
+      canDecide: false,
+      requiredRole: "",
+      personaId: undefined,
+      summary: undefined,
+      allowedActions: {
+        canDecide: false,
+        canApprove: false,
+        canReject: false,
+      },
+      links: {
+        manageHref: "/management/incidents/inc-deployment-comp-deployment-saga-plan-persona-paper-abb0434d691076cbc08c",
+      },
+    });
+    expect(listOut?.[1]).toMatchObject({
+      id: "incident:inc-deployment-comp-explicit-blocked",
+      kind: "incident",
+      canProceed: false,
+      canDecide: false,
+    });
+    expect(listOut?.[2]).toMatchObject({
+      id: "approval:dec-pending-001",
+      kind: "approval",
+      canProceed: false,
+    });
+    expect(listOut?.[3]).toMatchObject({
+      id: "readiness_blocker:persona:persona-pending-001",
+      kind: "readiness_blocker",
+      canProceed: false,
+    });
+
+    const detailOut = adaptHumanInboxDetail({
+      data: {
+        item: realPendingIncidentRow,
+      },
+    });
+    expect(detailOut).toMatchObject({
+      id: "incident:inc-deployment-comp-deployment-saga-plan-persona-paper-abb0434d691076cbc08c",
+      kind: "incident",
+      canProceed: true,
+      canDecide: false,
+      requiredRole: "",
+      personaId: undefined,
+      summary: undefined,
+      links: {
+        manageHref: "/management/incidents/inc-deployment-comp-deployment-saga-plan-persona-paper-abb0434d691076cbc08c",
+      },
+    });
+  });
+
   it("does not POST promotion review decisions when real writes are disabled", async () => {
     process.env.VITE_BFF_REAL_WRITES = "false";
     liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
