@@ -284,6 +284,8 @@ const PAGED_FLEET_ROWS = [
     persona_purpose: "trading",
     data_scope: "regular",
     perfDelta: null,
+    lastMutation: "2026-11-01",
+    lastMutationLabel: "2026-11-01",
   })),
 ];
 
@@ -698,5 +700,260 @@ test.describe("MGMT-OPS-010 Persona Fleet Click-Map Regression", () => {
     }
     await expect(page.getByText("Generated 129")).toBeVisible({ timeout: 15_000 });
     await expect(next).toBeDisabled();
+  });
+
+  test("asserts opaque frozen cell alpha, one-line headers and dates in zh-TW and en-US, and right-edge clearance with real scrollbars at 1440x900", async ({
+    browser,
+  }) => {
+    const realScrollbarBrowser = await browser.browserType().launch({
+      ignoreDefaultArgs: ["--hide-scrollbars"],
+    });
+    try {
+      const context = await realScrollbarBrowser.newContext({
+        viewport: { width: 1440, height: 900 },
+      });
+      const page = await context.newPage();
+      await installMockFixture(page);
+      await installOidcDevLogin(page, {
+        goto: false,
+        roles: ["operator", "reviewer", "approver"],
+        tenantId: "pantheon-dev",
+        token: LOCAL_FIXTURE_AUTH_TOKEN,
+      });
+
+      const measureFrozenCell = async () =>
+        page.evaluate(() => {
+          const container = document.querySelector('[data-testid="persona-fleet-table-scroll"]');
+          const viewport =
+            container?.querySelector<HTMLElement>('[data-management-table-scrollbar="native"]') ??
+            (container as HTMLElement | null);
+          const cell = viewport?.querySelector<HTMLTableCellElement>("tbody tr:first-child td:first-child");
+          if (!viewport || !cell) {
+            return { backgroundColor: "", alpha: 0, canvasAlpha: 0, rgb: "", scrollLeft: 0 };
+          }
+          cell.getAnimations().forEach((anim) => anim.finish());
+          const backgroundColor = window.getComputedStyle(cell).backgroundColor;
+          let alpha = 1;
+          if (backgroundColor === "transparent") {
+            alpha = 0;
+          } else {
+            const slashMatch = backgroundColor.match(/\/\s*([0-9.]+%?)\s*\)/);
+            const rgbaMatch = backgroundColor.match(/^rgba\(\s*[^,]+,\s*[^,]+,\s*[^,]+,\s*([0-9.]+)\s*\)$/);
+            if (slashMatch) {
+              const raw = slashMatch[1]!;
+              alpha = raw.endsWith("%") ? parseFloat(raw) / 100 : parseFloat(raw);
+            } else if (rgbaMatch) {
+              alpha = parseFloat(rgbaMatch[1]!);
+            }
+          }
+          const canvas = document.createElement("canvas");
+          canvas.width = 1;
+          canvas.height = 1;
+          const ctx = canvas.getContext("2d")!;
+          ctx.clearRect(0, 0, 1, 1);
+          ctx.fillStyle = backgroundColor;
+          ctx.fillRect(0, 0, 1, 1);
+          const data = ctx.getImageData(0, 0, 1, 1).data;
+          return {
+            backgroundColor,
+            alpha,
+            canvasAlpha: Number((data[3]! / 255).toFixed(4)),
+            rgb: `${data[0]},${data[1]},${data[2]}`,
+            scrollLeft: viewport.scrollLeft,
+          };
+        });
+
+      const measureLayoutAndRightEdge = async () =>
+        page.evaluate(() => {
+          const container = document.querySelector('[data-testid="persona-fleet-table-scroll"]');
+          const viewport =
+            container?.querySelector<HTMLElement>('[data-management-table-scrollbar="native"]') ??
+            (container as HTMLElement | null);
+          if (!viewport) throw new Error("missing persona-fleet-table-scroll viewport");
+
+          const headerRow = viewport.querySelector<HTMLTableRowElement>("thead tr")!;
+          const ths = Array.from(viewport.querySelectorAll<HTMLTableCellElement>("thead th"));
+          const measureCellLines = (el: HTMLElement) => {
+            const range = document.createRange();
+            range.selectNodeContents(el);
+            const rects = Array.from(range.getClientRects()).filter((r) => r.width > 0 && r.height > 0);
+            const distinctTops = new Set(rects.map((r) => Math.round(r.top)));
+            return {
+              text: (el.textContent ?? "").trim(),
+              width: Number(el.getBoundingClientRect().width.toFixed(1)),
+              height: Number(el.getBoundingClientRect().height.toFixed(1)),
+              whiteSpace: window.getComputedStyle(el).whiteSpace,
+              lineCount: Math.max(1, distinctTops.size),
+            };
+          };
+
+          const perfDeltaHeader = measureCellLines(ths[8]!);
+          const lastMutationHeader = measureCellLines(ths[9]!);
+          const humanNeededHeader = measureCellLines(ths[10]!);
+          const headerRowHeight = Number(headerRow.getBoundingClientRect().height.toFixed(1));
+
+          const bodyRows = Array.from(viewport.querySelectorAll<HTMLTableRowElement>("tbody tr"));
+          const bodyMutationCells = bodyRows.map((tr) => {
+            const td = tr.querySelectorAll<HTMLTableCellElement>("td")[9]!;
+            const target = td.querySelector<HTMLElement>("a, span") ?? td;
+            return measureCellLines(target);
+          });
+
+          viewport.scrollLeft = viewport.scrollWidth;
+          const viewportRect = viewport.getBoundingClientRect();
+          const innerRight = Number((viewportRect.left + viewport.clientLeft + viewport.clientWidth).toFixed(1));
+          const lastTh = ths[ths.length - 1]!;
+          const lastThRight = Number(lastTh.getBoundingClientRect().right.toFixed(1));
+          const headerTextRange = document.createRange();
+          headerTextRange.selectNodeContents(lastTh);
+          const actionsHeaderTextRight = Number(headerTextRange.getBoundingClientRect().right.toFixed(1));
+
+          const actionButtons = bodyRows
+            .map((tr) => tr.querySelector<HTMLElement>("td:last-child a, td:last-child button"))
+            .filter((el): el is HTMLElement => Boolean(el));
+          const actionButtonRight = Number(
+            Math.max(...actionButtons.map((btn) => btn.getBoundingClientRect().right)).toFixed(1),
+          );
+
+          return {
+            headerRowHeight,
+            perfDeltaHeader,
+            lastMutationHeader,
+            humanNeededHeader,
+            bodyMutationRowCount: bodyMutationCells.length,
+            maxBodyMutationLineCount: Math.max(...bodyMutationCells.map((c) => c.lineCount)),
+            sampleBodyMutationDates: bodyMutationCells.slice(0, 3).map((c) => c.text),
+            rightEdge: {
+              offsetWidth: viewport.offsetWidth,
+              clientWidth: viewport.clientWidth,
+              clientLeft: viewport.clientLeft,
+              scrollWidth: viewport.scrollWidth,
+              maxScrollLeft: viewport.scrollLeft,
+              innerRight,
+              lastThRight,
+              actionsHeaderTextRight,
+              actionButtonRight,
+            },
+          };
+        });
+
+      await page.goto(frontendUrl("/management/persona-fleet"), {
+        waitUntil: "domcontentloaded",
+        timeout: 30_000,
+      });
+      await expect(page.getByText("Formal Persona")).toBeVisible({ timeout: 15_000 });
+
+      // 1. Measure zh-TW one-line headers, body mutation dates, and real-scrollbar right edge
+      const zhMetrics = await measureLayoutAndRightEdge();
+      expect(zhMetrics.headerRowHeight).toBeLessThanOrEqual(48);
+      expect(zhMetrics.perfDeltaHeader.text).toBe("Δ 績效");
+      expect(zhMetrics.perfDeltaHeader.whiteSpace).toBe("nowrap");
+      expect(zhMetrics.perfDeltaHeader.lineCount).toBe(1);
+      expect(zhMetrics.lastMutationHeader.text).toBe("最近 mutation");
+      expect(zhMetrics.lastMutationHeader.whiteSpace).toBe("nowrap");
+      expect(zhMetrics.lastMutationHeader.lineCount).toBe(1);
+      expect(zhMetrics.humanNeededHeader.text).toBe("需要人類");
+      expect(zhMetrics.humanNeededHeader.whiteSpace).toBe("nowrap");
+      expect(zhMetrics.humanNeededHeader.lineCount).toBe(1);
+      expect(zhMetrics.bodyMutationRowCount).toBe(20);
+      expect(zhMetrics.maxBodyMutationLineCount).toBe(1);
+      expect(zhMetrics.sampleBodyMutationDates).toEqual(["2026-07-10", "2026-11-01", "2026-11-01"]);
+
+      expect(zhMetrics.rightEdge.offsetWidth).toBeGreaterThan(zhMetrics.rightEdge.clientWidth);
+      expect(zhMetrics.rightEdge.maxScrollLeft).toBeGreaterThan(0);
+      expect(zhMetrics.rightEdge.actionsHeaderTextRight).toBeLessThanOrEqual(zhMetrics.rightEdge.innerRight);
+      expect(zhMetrics.rightEdge.actionButtonRight).toBeLessThanOrEqual(zhMetrics.rightEdge.innerRight);
+
+      // 2. Measure frozen Persona cell background alpha and opaque highlight in default and hovered states while scrolled horizontally
+      await page.locator("h1").first().hover();
+      await page.evaluate(() => {
+        const container = document.querySelector('[data-testid="persona-fleet-table-scroll"]');
+        const viewport =
+          container?.querySelector<HTMLElement>('[data-management-table-scrollbar="native"]') ??
+          (container as HTMLElement | null);
+        if (viewport) viewport.scrollLeft = 260;
+      });
+      const defaultState = await measureFrozenCell();
+      expect(defaultState.scrollLeft).toBeGreaterThan(0);
+      expect(defaultState.alpha).toBe(1);
+      expect(defaultState.canvasAlpha).toBe(1);
+
+      await page.locator("tbody tr:first-child td:first-child").hover();
+      const hoveredState = await measureFrozenCell();
+      expect(hoveredState.scrollLeft).toBeGreaterThan(0);
+      expect(hoveredState.alpha).toBe(1);
+      expect(hoveredState.canvasAlpha).toBe(1);
+      expect(hoveredState.rgb).not.toBe(defaultState.rgb);
+
+      // 3. Switch locale to en-US and verify one-line headers, header height <= 48px, and right edge
+      await page.evaluate(() => {
+        window.localStorage.setItem("pantheon.locale", "en-US");
+      });
+      await page.goto(frontendUrl("/management/persona-fleet"), {
+        waitUntil: "domcontentloaded",
+        timeout: 30_000,
+      });
+      await expect(page.getByRole("columnheader", { name: "Δ Performance" })).toBeVisible({ timeout: 15_000 });
+      const enMetrics = await measureLayoutAndRightEdge();
+      expect(enMetrics.headerRowHeight).toBeLessThanOrEqual(48);
+      expect(enMetrics.perfDeltaHeader.text).toBe("Δ Performance");
+      expect(enMetrics.perfDeltaHeader.whiteSpace).toBe("nowrap");
+      expect(enMetrics.perfDeltaHeader.lineCount).toBe(1);
+      expect(enMetrics.lastMutationHeader.text).toBe("Last mutation");
+      expect(enMetrics.lastMutationHeader.whiteSpace).toBe("nowrap");
+      expect(enMetrics.lastMutationHeader.lineCount).toBe(1);
+      expect(enMetrics.humanNeededHeader.text).toBe("Human needed");
+      expect(enMetrics.humanNeededHeader.whiteSpace).toBe("nowrap");
+      expect(enMetrics.humanNeededHeader.lineCount).toBe(1);
+      expect(enMetrics.maxBodyMutationLineCount).toBe(1);
+      expect(enMetrics.rightEdge.actionsHeaderTextRight).toBeLessThanOrEqual(enMetrics.rightEdge.innerRight);
+      expect(enMetrics.rightEdge.actionButtonRight).toBeLessThanOrEqual(enMetrics.rightEdge.innerRight);
+
+      // 4. Measure focused and focused-plus-hovered frozen Persona cell states while scrolled horizontally
+      await page.goto(frontendUrl("/management/persona-fleet?persona=persona-formal-mut"), {
+        waitUntil: "domcontentloaded",
+        timeout: 30_000,
+      });
+      await expect(page.getByText("Formal Persona")).toBeVisible({ timeout: 15_000 });
+      await page.locator("h1").first().hover();
+      await page.evaluate(() => {
+        const container = document.querySelector('[data-testid="persona-fleet-table-scroll"]');
+        const viewport =
+          container?.querySelector<HTMLElement>('[data-management-table-scrollbar="native"]') ??
+          (container as HTMLElement | null);
+        if (viewport) viewport.scrollLeft = 260;
+      });
+      const focusedState = await measureFrozenCell();
+      expect(focusedState.scrollLeft).toBeGreaterThan(0);
+      expect(focusedState.alpha).toBe(1);
+      expect(focusedState.canvasAlpha).toBe(1);
+      expect(focusedState.rgb).not.toBe(defaultState.rgb);
+      expect(focusedState.rgb).not.toBe(hoveredState.rgb);
+
+      await page.locator("tbody tr:first-child td:first-child").hover();
+      const focusedHoveredState = await measureFrozenCell();
+      expect(focusedHoveredState.scrollLeft).toBeGreaterThan(0);
+      expect(focusedHoveredState.alpha).toBe(1);
+      expect(focusedHoveredState.canvasAlpha).toBe(1);
+      expect(focusedHoveredState.rgb).not.toBe(defaultState.rgb);
+      expect(focusedHoveredState.rgb).not.toBe(focusedState.rgb);
+
+      console.log(
+        "FE-PERSONA-FLEET-TABLE-POLISH-20261104 measurements:",
+        JSON.stringify({
+          frozenCellStates: {
+            default: defaultState,
+            hovered: hoveredState,
+            focused: focusedState,
+            focusedPlusHovered: focusedHoveredState,
+          },
+          zhTW: zhMetrics,
+          enUS: enMetrics,
+        }),
+      );
+      await context.close();
+    } finally {
+      await realScrollbarBrowser.close();
+    }
   });
 });
