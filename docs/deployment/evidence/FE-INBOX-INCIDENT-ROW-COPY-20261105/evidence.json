@@ -1,0 +1,129 @@
+{
+  "schema_version": "pantheon.fe-inbox-incident-row-copy.v1",
+  "task_id": "FE-INBOX-INCIDENT-ROW-COPY-20261105",
+  "taskId": "FE-INBOX-INCIDENT-ROW-COPY-20261105",
+  "title": "An open incident in the human inbox says it cannot proceed and its detail page prints nan",
+  "owner": "Antigravity",
+  "reviewer": "Claude",
+  "target_repo": "execute-plans",
+  "repository": "ajoe734/execute-plans",
+  "merge_target": "dev",
+  "base_branch": "dev",
+  "branch": "task/FE-INBOX-INCIDENT-ROW-COPY-20261105",
+  "base_commit": "68246b25f5d969b90710ad480f855df6df52de43",
+  "base_sha": "68246b25f5d969b90710ad480f855df6df52de43",
+  "verification_scope": "functional_local_validation",
+  "status": "ready_for_review",
+  "timestamp": "2026-11-05T19:49:00Z",
+  "real_bff_row_used": {
+    "id": "incident:inc-deployment-comp-deployment-saga-plan-persona-paper-abb0434d691076cbc08c",
+    "inboxType": "incident",
+    "source_type": "incident",
+    "status": "open",
+    "action_state": "pending",
+    "priority": "critical",
+    "created_at": "2026-10-29T13:14:36Z",
+    "route": "/management/incidents/inc-deployment-comp-deployment-saga-plan-persona-paper-abb0434d691076cbc08c",
+    "allowedActions": {
+      "canReview": true,
+      "canRemediate": true
+    },
+    "title": "Deployment compensation entered safe mode for deployment-saga-plan-persona-paper-abb0434d691076cbc08c"
+  },
+  "scope": {
+    "delivered": [
+      "Updated actionStateBlocksProceed and adaptInboxRecord in src/lib/bff-v1/management.ts so that an incident row with action_state 'pending' does not block proceed by default (adapting to canProceed: true), while still honoring an explicit can_proceed: false / canProceed: false from the BFF and keeping non-incident rows with action_state 'pending' at canProceed: false.",
+      "Updated HumanGateDetailPage in src/management/pages/oversight/HumanGateDetail.tsx to render '—' and never 'nan' when Persona or Summary has no value, and to omit mgmt.inbox.headerSubtitleFmt (empty required role label and decision type) in the header of an incident item.",
+      "Added unit and component tests in src/lib/bff-v1/__tests__/management.test.ts, src/management/pages/oversight/HumanGateDetail.test.tsx, and src/management/pages/oversight/HumanInboxPage.test.tsx using the exact real BFF projector incident row."
+    ],
+    "not_changed": [
+      "Did not modify backend services, BFF routes, or locale files.",
+      "Did not change canProceed computation for approvals, readiness blockers, or promotion reviews.",
+      "Did not weaken, delete, or modify any existing test or assertion."
+    ]
+  },
+  "acceptance_verification": [
+    {
+      "criterion": 1,
+      "description": "An incident row with action_state pending adapts to canProceed true through the real adapter and shows no cannot proceed badge on the inbox page or the detail page",
+      "status": "passed",
+      "verified_by": [
+        "src/lib/bff-v1/__tests__/management.test.ts > adapts pending incident rows to canProceed true while honoring explicit can_proceed false and keeping non-incident pending rows canProceed false",
+        "src/management/pages/oversight/HumanInboxPage.test.tsx > shows no cannot proceed badge for a pending incident row from the real BFF projector while showing the badge for an explicit can_proceed false incident and a pending non-incident row",
+        "src/management/pages/oversight/HumanGateDetail.test.tsx > renders a pending incident row from the real BFF projector with canProceed true, no cannot proceed card, dashes instead of nan for missing persona and summary, and no empty role or decision type in the header"
+      ]
+    },
+    {
+      "criterion": 2,
+      "description": "An explicit can_proceed false from the BFF on an incident row still shows the badge; a non incident row with action_state pending keeps its current value",
+      "status": "passed",
+      "verified_by": [
+        "src/lib/bff-v1/__tests__/management.test.ts > adapts pending incident rows to canProceed true while honoring explicit can_proceed false and keeping non-incident pending rows canProceed false",
+        "src/management/pages/oversight/HumanInboxPage.test.tsx > shows no cannot proceed badge for a pending incident row from the real BFF projector while showing the badge for an explicit can_proceed false incident and a pending non-incident row",
+        "src/management/pages/oversight/HumanGateDetail.test.tsx > renders a pending incident row from the real BFF projector with canProceed true, no cannot proceed card, dashes instead of nan for missing persona and summary, and no empty role or decision type in the header"
+      ]
+    },
+    {
+      "criterion": 3,
+      "description": "The detail page shows a dash and never nan in the persona and summary fields when the item has no value",
+      "status": "passed",
+      "verified_by": [
+        "src/management/pages/oversight/HumanGateDetail.test.tsx > renders a pending incident row from the real BFF projector with canProceed true, no cannot proceed card, dashes instead of nan for missing persona and summary, and no empty role or decision type in the header"
+      ]
+    },
+    {
+      "criterion": 4,
+      "description": "The detail page header for an incident shows no empty required role label and no decision type",
+      "status": "passed",
+      "verified_by": [
+        "src/management/pages/oversight/HumanGateDetail.test.tsx > renders a pending incident row from the real BFF projector with canProceed true, no cannot proceed card, dashes instead of nan for missing persona and summary, and no empty role or decision type in the header"
+      ]
+    },
+    {
+      "criterion": 5,
+      "description": "An incident row keeps canDecide false and no approve or reject control and its manage link still opens the incident page",
+      "status": "passed",
+      "verified_by": [
+        "src/lib/bff-v1/__tests__/management.test.ts > adapts pending incident rows to canProceed true while honoring explicit can_proceed false and keeping non-incident pending rows canProceed false",
+        "src/management/pages/oversight/HumanInboxPage.test.tsx > shows no cannot proceed badge for a pending incident row from the real BFF projector while showing the badge for an explicit can_proceed false incident and a pending non-incident row",
+        "src/management/pages/oversight/HumanGateDetail.test.tsx > renders a pending incident row from the real BFF projector with canProceed true, no cannot proceed card, dashes instead of nan for missing persona and summary, and no empty role or decision type in the header"
+      ]
+    },
+    {
+      "criterion": 6,
+      "description": "Tests use the real BFF row given in the task; the application type check and existing inbox tests stay green; no existing test is weakened or deleted and any changed assertion is justified in evidence",
+      "status": "passed",
+      "changed_assertion_justification": "Zero existing tests or assertions were modified, weakened, or deleted. All 81 pre-existing tests across src/lib/bff-v1/__tests__/management.test.ts (63), src/management/pages/oversight/HumanGateDetail.test.tsx (8), and src/management/pages/oversight/HumanInboxPage.test.tsx (10) pass unchanged alongside the 3 newly added tests (84 total passing tests).",
+      "verified_by": [
+        "src/lib/bff-v1/__tests__/management.test.ts",
+        "src/management/pages/oversight/HumanGateDetail.test.tsx",
+        "src/management/pages/oversight/HumanInboxPage.test.tsx"
+      ]
+    }
+  ],
+  "artifacts": [
+    "src/lib/bff-v1/management.ts",
+    "src/lib/bff-v1/__tests__/management.test.ts",
+    "src/management/pages/oversight/HumanGateDetail.tsx",
+    "src/management/pages/oversight/HumanGateDetail.test.tsx",
+    "src/management/pages/oversight/HumanInboxPage.test.tsx",
+    "docs/deployment/evidence/FE-INBOX-INCIDENT-ROW-COPY-20261105/evidence.json"
+  ],
+  "validation": {
+    "vitest": {
+      "command": "./node_modules/.bin/vitest run src/lib/bff-v1/__tests__/management.test.ts src/management/pages/oversight/HumanGateDetail.test.tsx src/management/pages/oversight/HumanInboxPage.test.tsx",
+      "exit_code": 0,
+      "result": "3 test files passed, 84 tests passed"
+    },
+    "typecheck": {
+      "command": "npm run typecheck:app && npm run typecheck:agora",
+      "exit_code": 0,
+      "result": "0 errors"
+    },
+    "eslint": {
+      "command": "./node_modules/.bin/eslint src/lib/bff-v1/management.ts src/lib/bff-v1/__tests__/management.test.ts src/management/pages/oversight/HumanGateDetail.tsx src/management/pages/oversight/HumanGateDetail.test.tsx src/management/pages/oversight/HumanInboxPage.test.tsx",
+      "exit_code": 0,
+      "result": "0 errors"
+    }
+  }
+}

@@ -3001,10 +3001,14 @@ const inboxLinks = (
   };
 };
 
-const actionStateBlocksProceed = (actionState: string): boolean =>
-  ["pending", "proposed", "blocked", "unable_to_continue", "cannot_proceed", "needs_human_approval"].includes(
+const actionStateBlocksProceed = (actionState: string, kind?: HumanInboxKind): boolean => {
+  if (kind === "incident" && actionState === "pending") {
+    return false;
+  }
+  return ["pending", "proposed", "blocked", "unable_to_continue", "cannot_proceed", "needs_human_approval"].includes(
     actionState,
   );
+};
 
 const allowedActionsCanDecide = (raw: unknown, fallback: boolean): boolean => {
   const allowed = isObject(raw) ? raw : null;
@@ -3082,7 +3086,7 @@ const adaptInboxRecord = (it: Record<string, unknown>): HumanInboxItem | null =>
       );
   const canProceed = asBoolean(
     it.canProceed ?? it.can_proceed,
-    actionState ? !actionStateBlocksProceed(actionState) : true,
+    actionState ? !actionStateBlocksProceed(actionState, kind) : true,
   );
   const personaId = asOptionalString(it.personaId ?? it.persona_id);
   const reviewId = asOptionalString(it.reviewId ?? it.review_id ?? it.source_id);

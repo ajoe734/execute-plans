@@ -513,4 +513,99 @@ describe("HumanInboxPage", () => {
     expect(screen.queryByText(/Showing .* of .* items/)).not.toBeInTheDocument();
     expect(screen.queryByTestId("inbox-partial-count")).not.toBeInTheDocument();
   });
+
+  it("shows no cannot proceed badge for a pending incident row from the real BFF projector while showing the badge for an explicit can_proceed false incident and a pending non-incident row", async () => {
+    const realPendingIncidentRow = {
+      id: "incident:inc-deployment-comp-deployment-saga-plan-persona-paper-abb0434d691076cbc08c",
+      inboxType: "incident",
+      source_type: "incident",
+      status: "open",
+      action_state: "pending",
+      priority: "critical",
+      created_at: "2026-10-29T13:14:36Z",
+      route: "/management/incidents/inc-deployment-comp-deployment-saga-plan-persona-paper-abb0434d691076cbc08c",
+      allowedActions: {
+        canReview: true,
+        canRemediate: true,
+      },
+      title: "Deployment compensation entered safe mode for deployment-saga-plan-persona-paper-abb0434d691076cbc08c",
+    };
+
+    const pendingIncidentOnly = adaptHumanInboxList({
+      data: {
+        id: "human_inbox",
+        items: [realPendingIncidentRow],
+      },
+    })!;
+
+    expect(pendingIncidentOnly).toHaveLength(1);
+    expect(pendingIncidentOnly[0].canProceed).toBe(true);
+    expect(pendingIncidentOnly[0].canDecide).toBe(false);
+
+    mocks.useV5Live.mockReturnValue({
+      data: pendingIncidentOnly,
+      loading: false,
+      error: null,
+      refresh: vi.fn(),
+    });
+
+    await i18n.changeLanguage("en-US");
+    const { unmount } = renderInbox();
+
+    expect(screen.getByText(realPendingIncidentRow.title)).toBeInTheDocument();
+    expect(screen.queryByText("cannot proceed")).not.toBeInTheDocument();
+    expect(screen.queryByText(/required role:/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /approve|reject/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open action page" })).toHaveAttribute(
+      "href",
+      realPendingIncidentRow.route,
+    );
+    unmount();
+
+    await i18n.changeLanguage("zh-TW");
+    const { unmount: unmountZh } = renderInbox();
+    expect(screen.getByText(realPendingIncidentRow.title)).toBeInTheDocument();
+    expect(screen.queryByText("無法繼續")).not.toBeInTheDocument();
+    expect(screen.queryByText(/需要角色/)).not.toBeInTheDocument();
+    unmountZh();
+
+    await i18n.changeLanguage("en-US");
+    const mixedList = adaptHumanInboxList({
+      data: {
+        id: "human_inbox",
+        items: [
+          realPendingIncidentRow,
+          {
+            ...realPendingIncidentRow,
+            id: "incident:inc-explicit-cannot-proceed",
+            title: "Explicitly blocked incident",
+            can_proceed: false,
+          },
+          {
+            id: "approval:dec-pending-gate",
+            inboxType: "approval",
+            source_type: "approval",
+            status: "open",
+            action_state: "pending",
+            title: "Pending approval gate",
+            route: "/management/approvals?approval=dec-pending-gate",
+          },
+        ],
+      },
+    })!;
+
+    expect(mixedList[0].canProceed).toBe(true);
+    expect(mixedList[1].canProceed).toBe(false);
+    expect(mixedList[2].canProceed).toBe(false);
+
+    mocks.useV5Live.mockReturnValue({
+      data: mixedList,
+      loading: false,
+      error: null,
+      refresh: vi.fn(),
+    });
+
+    renderInbox();
+    expect(screen.getAllByText("cannot proceed")).toHaveLength(2);
+  });
 });
