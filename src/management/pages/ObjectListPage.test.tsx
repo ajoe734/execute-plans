@@ -7,7 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import i18n from "@/i18n";
 import { liveStatus } from "@/lib/bff-v1/liveStatus";
 import { ObjectListPage, resolveObjectRowHref } from "./ObjectListPage";
-import { CapitalPoolsList } from "./Lists";
+import { CapitalPoolsList, EvolutionList, ResearchList } from "./Lists";
 import type { CreateBehavior } from "@/lib/writeIntents/types";
 import capitalPoolsFixture from "@/lib/bff-v1/__tests__/fixtures/hosted-20261020/capital-pools.json";
 
@@ -30,6 +30,7 @@ function stubLiveEnv() {
   vi.stubEnv("NODE_ENV", "development");
   vi.stubEnv("VITE_BFF_MODE", "live");
   vi.stubEnv("VITE_BFF_FALLBACK", "strict");
+  vi.stubEnv("VITE_BFF_REAL_WRITES", "true");
   liveStatus._reset({ mode: "live", effective: "live", baseUrl: "https://bff.example.test" });
 }
 
@@ -811,5 +812,464 @@ describe("ObjectListPage", () => {
     fireEvent.click(rowCell);
     expect(screen.getByTestId("location")).toHaveTextContent("/management/artifacts");
     expect(screen.getByTestId("location")).not.toHaveTextContent("/management/artifacts/undefined");
+  });
+
+  it("renders GET /bff/research-tasks rows with name, status, latest run, run count, created by, and updated at; removes duplicate status, risk, metric, value, and owner columns; marks stub/manual runs as non-real; disables research create with workflow explanation in both locales; and navigates to /management/experiments/<task_id>", async () => {
+    const { useLiveListV1: actualUseLiveListV1 } = await vi.importActual<typeof import("@/lib/bff-v1")>("@/lib/bff-v1");
+    mocks.useLiveListV1.mockImplementation(actualUseLiveListV1);
+
+    const researchTasksPayload = {
+      items: [
+        {
+          id: "rtask-20261023-008",
+          task_id: "rtask-20261023-008",
+          name: "VectorBT Factor Validation",
+          objective: "Evaluate cross-sectional factor stability across TW50 universe",
+          status: "completed",
+          task_type: "factor_eval",
+          created_by: "research-worker",
+          created_at: "2026-10-23T11:00:00Z",
+          updated_at: "2026-10-23T12:00:00Z",
+          run_count: 2,
+          latest_run: {
+            run_id: "rrun-20261023-002",
+            status: "completed",
+            adapter: "vectorbt",
+            dispatch_mode: "real",
+            requested_mode: "real",
+            created_by: "research-worker",
+            created_at: "2026-10-23T11:45:00Z",
+          },
+        },
+        {
+          id: "rtask-exp-sic-30bcef4d067e4c0111fc28cfe8101a7b",
+          task_id: "rtask-exp-sic-30bcef4d067e4c0111fc28cfe8101a7b",
+          name: "SIC Hypothesis Task",
+          objective: "Check SIC industry momentum hypothesis",
+          status: "queued",
+          task_type: "hypothesis_test",
+          created_by: "operator",
+          created_at: "2026-10-24T08:00:00Z",
+          updated_at: "2026-10-24T09:00:00Z",
+          run_count: 1,
+          latest_run: {
+            run_id: "rrun-20261024-stub",
+            status: "completed",
+            adapter: "stub",
+            dispatch_mode: "stub",
+            requested_mode: "stub",
+            created_by: "operator",
+            created_at: "2026-10-24T08:30:00Z",
+          },
+        },
+        {
+          id: "rtask-20261023-manual",
+          task_id: "rtask-20261023-manual",
+          name: "Manual Check Task",
+          objective: "Manual inspection record",
+          status: "completed",
+          task_type: "manual_check",
+          created_by: "operator-lead",
+          created_at: "2026-10-23T09:00:00Z",
+          updated_at: "2026-10-23T10:00:00Z",
+          run_count: 1,
+          latest_run: {
+            run_id: "rrun-20261023-001",
+            status: "completed",
+            adapter: "manual",
+            dispatch_mode: "manual",
+            requested_mode: "manual",
+            created_by: "operator-lead",
+            created_at: "2026-10-23T09:30:00Z",
+          },
+        },
+      ],
+      meta: {
+        surfaces: {
+          research_tasks: { status: "ok", source: "research-executor" },
+        },
+      },
+      page_info: { next_page_token: null, total: 3 },
+    };
+
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify(researchTasksPayload), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    function LocationProbe() {
+      const loc = useLocation();
+      return <output data-testid="location">{loc.pathname}{loc.search}</output>;
+    }
+
+    render(
+      <I18nextProvider i18n={i18n}>
+        <TooltipProvider>
+          <MemoryRouter initialEntries={["/management/experiments"]}>
+            <Routes>
+              <Route
+                path="/management/experiments"
+                element={(
+                  <>
+                    <ResearchList />
+                    <LocationProbe />
+                  </>
+                )}
+              />
+              <Route path="/management/experiments/:id" element={<LocationProbe />} />
+            </Routes>
+          </MemoryRouter>
+        </TooltipProvider>
+      </I18nextProvider>,
+    );
+
+    expect(await screen.findByText("VectorBT Factor Validation")).toBeInTheDocument();
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(String(fetchSpy.mock.calls[0][0])).toContain("/bff/research-tasks");
+
+    // Verify exact table column headers and removal of duplicate status, risk, metric, value, and owner columns
+    const columnHeaders = screen.getAllByRole("columnheader").map((th) => th.textContent?.trim());
+    expect(columnHeaders).toEqual([
+      "Name",
+      "Status",
+      "Latest run",
+      "Run count",
+      "Created by",
+      "Last updated",
+    ]);
+    expect(columnHeaders).not.toContain("State");
+    expect(columnHeaders).not.toContain("Risk");
+    expect(columnHeaders).not.toContain("Metric");
+    expect(columnHeaders).not.toContain("Value");
+    expect(columnHeaders).not.toContain("Owner");
+
+    // Verify real vs stub/manual run rendering
+    const realRow = screen.getByText("VectorBT Factor Validation").closest("tr");
+    expect(realRow).toHaveTextContent("rrun-20261023-002");
+    expect(realRow).toHaveTextContent("vectorbt / real");
+    expect(realRow).not.toHaveTextContent("Non-real execution");
+
+    const stubRow = screen.getByText("SIC Hypothesis Task").closest("tr");
+    expect(stubRow).toHaveTextContent("rrun-20261024-stub");
+    expect(stubRow).toHaveTextContent("stub / stub");
+    expect(stubRow).toHaveTextContent("Non-real execution (stub / stub)");
+
+    const manualRow = screen.getByText("Manual Check Task").closest("tr");
+    expect(manualRow).toHaveTextContent("rrun-20261023-001");
+    expect(manualRow).toHaveTextContent("manual / manual");
+    expect(manualRow).toHaveTextContent("Non-real execution (manual / manual)");
+
+    // Verify research create button stays disabled with workflow reason and never mentions "no typed durable BFF owner"
+    const createBtn = screen.getByRole("button", { name: /^create$/i });
+    expect(createBtn).toBeDisabled();
+    expect(createBtn).toHaveAttribute(
+      "title",
+      "Research items are generated by research workflows; manual creation is disabled because no executor consumes manually created rows yet.",
+    );
+    expect(screen.queryByText(/no typed durable BFF owner/i)).not.toBeInTheDocument();
+    expect(
+      i18n.getFixedT("zh-TW")("research.createDisabledReason"),
+    ).toBe("研究項目由研究工作流自動建立；手動建立因尚無執行者處理而維持關閉。");
+
+    // Clicking a row navigates to /management/experiments/<task_id>
+    fireEvent.click(screen.getByText("VectorBT Factor Validation"));
+    expect(screen.getByTestId("location")).toHaveTextContent(
+      "/management/experiments/rtask-20261023-008",
+    );
+  });
+
+  it("shows degraded error state for meta.surfaces.research_tasks unavailable or failed read, never 無結果, and shows healthy empty state when no research work has run yet", async () => {
+    const { useLiveListV1: actualUseLiveListV1 } = await vi.importActual<typeof import("@/lib/bff-v1")>("@/lib/bff-v1");
+    mocks.useLiveListV1.mockImplementation(actualUseLiveListV1);
+
+    // 1. Surface status: "unavailable"
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          items: [],
+          meta: {
+            surfaces: {
+              research_tasks: {
+                status: "unavailable",
+                source: "research-executor",
+                message: "research_tasks query failed: HTTPStatusError",
+              },
+            },
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    const { unmount } = render(
+      <I18nextProvider i18n={i18n}>
+        <TooltipProvider>
+          <MemoryRouter initialEntries={["/management/experiments"]}>
+            <Routes>
+              <Route path="/management/experiments" element={<ResearchList />} />
+            </Routes>
+          </MemoryRouter>
+        </TooltipProvider>
+      </I18nextProvider>,
+    );
+
+    const unavailableStatus = await screen.findByRole("status");
+    expect(unavailableStatus).toHaveTextContent("No data yet");
+    expect(unavailableStatus).toHaveTextContent("research_tasks query failed: HTTPStatusError");
+    expect(screen.queryByText("無結果")).not.toBeInTheDocument();
+    expect(screen.queryByText("No results")).not.toBeInTheDocument();
+    expect(screen.queryByText(/No research work has run yet/i)).not.toBeInTheDocument();
+    unmount();
+
+    // 2. Failed read (HTTP 503)
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          error: {
+            code: "BACKEND_UNAVAILABLE",
+            message: "research-executor upstream 503",
+          },
+        }),
+        { status: 503, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    const { unmount: unmountFailed } = render(
+      <I18nextProvider i18n={i18n}>
+        <TooltipProvider>
+          <MemoryRouter initialEntries={["/management/experiments"]}>
+            <Routes>
+              <Route path="/management/experiments" element={<ResearchList />} />
+            </Routes>
+          </MemoryRouter>
+        </TooltipProvider>
+      </I18nextProvider>,
+    );
+
+    const failedStatus = await screen.findByRole("status");
+    expect(failedStatus).toHaveTextContent("strict typed error");
+    expect(failedStatus).toHaveTextContent("research-executor upstream 503");
+    expect(screen.queryByText("無結果")).not.toBeInTheDocument();
+    expect(screen.queryByText("No results")).not.toBeInTheDocument();
+    unmountFailed();
+
+    // 3. Healthy empty list
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          items: [],
+          meta: {
+            surfaces: {
+              research_tasks: {
+                status: "ok",
+                source: "research-executor",
+              },
+            },
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    render(
+      <I18nextProvider i18n={i18n}>
+        <TooltipProvider>
+          <MemoryRouter initialEntries={["/management/experiments"]}>
+            <Routes>
+              <Route path="/management/experiments" element={<ResearchList />} />
+            </Routes>
+          </MemoryRouter>
+        </TooltipProvider>
+      </I18nextProvider>,
+    );
+
+    const emptyStatus = await screen.findByRole("status");
+    expect(emptyStatus).toHaveTextContent("No research tasks yet");
+    expect(emptyStatus).toHaveTextContent("No research work has run yet.");
+    expect(screen.queryByText("無結果")).not.toBeInTheDocument();
+    expect(i18n.getFixedT("zh-TW")("research.emptyState.title")).toBe("尚無研究任務");
+    expect(i18n.getFixedT("zh-TW")("research.emptyState.description")).toContain("目前尚未執行任何研究工作");
+  });
+
+  it("creates an evolution program with only name and Idempotency-Key, reads it back as draft from GET /bff/evolution-programs with no optimistic row, and keeps name while displaying 422, 403, and 503 errors in the drawer", async () => {
+    const { useLiveListV1: actualUseLiveListV1 } = await vi.importActual<typeof import("@/lib/bff-v1")>("@/lib/bff-v1");
+    mocks.useLiveListV1.mockImplementation(actualUseLiveListV1);
+
+    let persistedPrograms: Array<Record<string, unknown>> = [];
+    const postCalls: Array<{ body: Record<string, unknown>; idempotencyKey: string | null }> = [];
+    let nextPostResponse: () => Response = () =>
+      new Response(JSON.stringify({ error: { code: "UNKNOWN_ERROR", message: "unconfigured" } }), { status: 500 });
+
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const parsed = new URL(url, "http://localhost");
+      const method = (init?.method ?? "GET").toUpperCase();
+      if (parsed.pathname === "/bff/evolution-programs" && method === "GET") {
+        return new Response(
+          JSON.stringify({
+            items: persistedPrograms,
+            meta: { surfaces: { evolution_programs: { status: "ok" } } },
+            page_info: { next_page_token: null, total: persistedPrograms.length },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (parsed.pathname === "/bff/evolution-programs" && method === "POST") {
+        const headers = new Headers(init?.headers);
+        const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+        postCalls.push({
+          body,
+          idempotencyKey: headers.get("Idempotency-Key"),
+        });
+        return nextPostResponse();
+      }
+      return new Response(JSON.stringify({ items: [], meta: {} }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+
+    render(
+      <I18nextProvider i18n={i18n}>
+        <TooltipProvider>
+          <MemoryRouter initialEntries={["/management/evolution"]}>
+            <Routes>
+              <Route path="/management/evolution" element={<EvolutionList />} />
+            </Routes>
+          </MemoryRouter>
+        </TooltipProvider>
+      </I18nextProvider>,
+    );
+
+    const openDrawerBtn = await screen.findByRole("button", { name: /^create$/i });
+    expect(openDrawerBtn).toBeEnabled();
+    fireEvent.click(openDrawerBtn);
+
+    // Drawer shows only the Name field; parentAlpha and population are removed
+    const nameInput = await screen.findByLabelText(/name/i);
+    expect(nameInput).toBeInTheDocument();
+    expect(screen.queryByLabelText(/parent alpha/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/population/i)).not.toBeInTheDocument();
+
+    fireEvent.change(nameInput, { target: { value: "Cross-Sectional Alpha v2" } });
+
+    // 1. 422 error shows in drawer and keeps entered name
+    nextPostResponse = () =>
+      new Response(
+        JSON.stringify({
+          error: {
+            code: "VALIDATION_FAILED",
+            message: "422 Unprocessable Entity: extra fields not permitted",
+          },
+        }),
+        { status: 422, headers: { "Content-Type": "application/json" } },
+      );
+
+    const submitButtons = screen.getAllByRole("button", { name: /^create$/i });
+    const drawerSubmitBtn = submitButtons[submitButtons.length - 1];
+    fireEvent.click(drawerSubmitBtn);
+
+    expect(await screen.findByTestId("entity-create-error")).toHaveTextContent(
+      "422 Unprocessable Entity: extra fields not permitted",
+    );
+    expect(nameInput).toHaveValue("Cross-Sectional Alpha v2");
+
+    // 2. 403 error shows in drawer and keeps entered name
+    nextPostResponse = () =>
+      new Response(
+        JSON.stringify({
+          error: {
+            code: "PERMISSION_DENIED",
+            message: "403 Forbidden: tenant scope mismatch",
+          },
+        }),
+        { status: 403, headers: { "Content-Type": "application/json" } },
+      );
+
+    fireEvent.click(drawerSubmitBtn);
+    expect(await screen.findByTestId("entity-create-error")).toHaveTextContent(
+      "403 Forbidden: tenant scope mismatch",
+    );
+    expect(nameInput).toHaveValue("Cross-Sectional Alpha v2");
+
+    // 3. 503 error shows in drawer and keeps entered name
+    nextPostResponse = () =>
+      new Response(
+        JSON.stringify({
+          error: {
+            code: "BACKEND_UNAVAILABLE",
+            message: "503 Service Unavailable: evolution store unreachable",
+          },
+        }),
+        { status: 503, headers: { "Content-Type": "application/json" } },
+      );
+
+    fireEvent.click(drawerSubmitBtn);
+    expect(await screen.findByTestId("entity-create-error")).toHaveTextContent(
+      "503 Service Unavailable: evolution store unreachable",
+    );
+    expect(nameInput).toHaveValue("Cross-Sectional Alpha v2");
+
+    // 4. Successful 201 create sends only { name } + Idempotency-Key and reads back from GET /bff/evolution-programs as draft
+    nextPostResponse = () => {
+      const createdRow = {
+        program_id: "evo-prog-20261104-001",
+        name: "Cross-Sectional Alpha v2",
+        status: "draft",
+        updated_at: "2026-11-04T15:00:00Z",
+      };
+      persistedPrograms = [createdRow];
+      return new Response(JSON.stringify({ data: createdRow }), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      });
+    };
+
+    fireEvent.click(drawerSubmitBtn);
+
+    const createdCell = await screen.findByText("Cross-Sectional Alpha v2");
+    const createdRowEl = createdCell.closest("tr");
+    expect(createdRowEl).not.toBeNull();
+    expect(createdRowEl).toHaveTextContent(/draft/i);
+
+    expect(postCalls.length).toBe(4);
+    for (const call of postCalls) {
+      expect(call.body).toEqual({ name: "Cross-Sectional Alpha v2" });
+      expect(Object.keys(call.body)).toEqual(["name"]);
+      expect(call.idempotencyKey).toBeTruthy();
+    }
+  });
+
+  it("keeps the create button disabled with the read-only reason when the deployment profile disables real writes", () => {
+    vi.stubEnv("VITE_BFF_REAL_WRITES", "false");
+    mocks.useLiveListV1.mockReturnValue({
+      items: [],
+      pending: 0,
+      refresh: vi.fn(),
+      meta: {},
+    });
+
+    render(
+      <I18nextProvider i18n={i18n}>
+        <TooltipProvider>
+          <MemoryRouter initialEntries={["/management/evolution"]}>
+            <Routes>
+              <Route path="/management/evolution" element={<EvolutionList />} />
+            </Routes>
+          </MemoryRouter>
+        </TooltipProvider>
+      </I18nextProvider>,
+    );
+
+    const createBtn = screen.getByRole("button", { name: /^create$/i });
+    expect(createBtn).toBeDisabled();
+    expect(createBtn).toHaveAttribute("title", "Real writes are disabled (read-only mode).");
+    fireEvent.click(createBtn);
+    expect(screen.queryByLabelText(/name/i)).not.toBeInTheDocument();
+    expect(i18n.getFixedT("zh-TW")("mgmt.dataSources.realWritesRequired")).toBe(
+      "實體寫入已停用（唯讀模式）。",
+    );
   });
 });

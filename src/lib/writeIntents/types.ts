@@ -23,6 +23,7 @@ export type CreatableEntity = (typeof CREATABLE_ENTITIES)[number];
  */
 export const DURABLE_CREATE_OWNERS = {
   persona: "POST /bff/management/personas/create-paper-bundle",
+  evolutionProgram: "POST /bff/evolution-programs",
 } as const satisfies Partial<Record<CreatableEntity, string>>;
 
 export type DurableCreateEntity = keyof typeof DURABLE_CREATE_OWNERS;
@@ -120,8 +121,6 @@ export interface DeploymentCreateInput extends BaseCreateInput {
 }
 
 export interface EvolutionProgramCreateInput extends BaseCreateInput {
-  parentAlpha: string;
-  population: number;
   fitnessFormulaId?: string;
 }
 

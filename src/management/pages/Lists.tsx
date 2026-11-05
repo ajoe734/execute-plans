@@ -1,7 +1,8 @@
 import { ObjectListPage } from "./ObjectListPage";
 import { lists } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
-import type { Strategy, Persona, CapitalPool, RankingFormula, Rebalance, Deployment, EvolutionProgram, ResearchExperiment, Artifact, ListEnvelope } from "@/lib/bff-v1";
+import { safeDateTime } from "@/lib/utils";
+import type { Strategy, Persona, CapitalPool, RankingFormula, Rebalance, Deployment, EvolutionProgram, ResearchTask, Artifact, ListEnvelope } from "@/lib/bff-v1";
 
 // `lists.*` loaders are generically typed by `strictLiveListLoader<T>` in
 // src/lib/bff-v1/lists.ts; when the passed `adaptItem` is itself generic
@@ -424,18 +425,92 @@ export const EvolutionList = () => {
   );
 };
 
+function isNonRealRun(adapter?: string, dispatchMode?: string): boolean {
+  const a = String(adapter ?? "").trim().toLowerCase();
+  const d = String(dispatchMode ?? "").trim().toLowerCase();
+  return a === "stub" || a === "manual" || d === "stub" || d === "manual";
+}
+
 export const ResearchList = () => {
   const t = useT();
   return (
-    <ObjectListPage<ResearchExperiment>
+    <ObjectListPage<ResearchTask>
       title={t("nav.research")}
-      loader={asEntityLoader<ResearchExperiment>(lists.research)}
-      basePath="/management/experiments" liveKinds={["Research"]}
-      createBehavior={{ kind: "drawer", entity: "researchExperiment" }}
-      extraColumns={[
-        { key: "status", header: t("table.status"), cell: (r) => <span className="text-mono text-xs uppercase">{r.status}</span> },
-        { key: "metric", header: t("table.metric"), cell: (r) => <span className="text-mono text-xs">{r.metric}</span> },
-        { key: "val", header: t("table.value"), cell: (r) => <span className="text-mono text-xs">{fix(r.metricValue)}</span> },
+      loader={asEntityLoader<ResearchTask>(lists.research)}
+      basePath="/management/experiments"
+      liveKinds={["Research"]}
+      createBehavior={{ kind: "disabled", reasonI18nKey: "research.createDisabledReason" }}
+      emptyState={{
+        title: t("research.emptyState.title"),
+        description: t("research.emptyState.description"),
+      }}
+      columns={[
+        {
+          key: "name",
+          header: t("common.name"),
+          cell: (r) => <div className="font-medium">{r.name}</div>,
+        },
+        {
+          key: "status",
+          header: t("table.status"),
+          cell: (r) => <span className="text-mono text-xs uppercase">{r.status || r.state}</span>,
+        },
+        {
+          key: "latestRun",
+          header: t("research.table.latestRun"),
+          cell: (r) => {
+            const latest = r.latestRun ?? r.latest_run;
+            const runId = latest?.runId ?? latest?.run_id ?? "";
+            const runStatus = latest?.status ?? "";
+            const adapter = latest?.adapter ?? "";
+            const dispatchMode = latest?.dispatchMode ?? latest?.dispatch_mode ?? "";
+            if (!runId && !runStatus && !adapter && !dispatchMode) {
+              return <span className="text-xs text-muted-foreground">{t("research.noRunsYet")}</span>;
+            }
+            const nonReal = isNonRealRun(adapter, dispatchMode);
+            return (
+              <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                {runId && <span className="text-mono">{runId}</span>}
+                {runStatus && <span className="text-mono uppercase text-muted-foreground">{runStatus}</span>}
+                {(adapter || dispatchMode) && (
+                  <Badge variant="outline" className="font-mono text-[11px]">
+                    {[adapter, dispatchMode].filter(Boolean).join(" / ")}
+                  </Badge>
+                )}
+                {nonReal && (
+                  <Badge
+                    variant="outline"
+                    className="border-status-warning/40 bg-status-warning/10 text-status-warning text-[11px]"
+                  >
+                    {t("research.nonRealRunBadge", {
+                      adapter: adapter || "—",
+                      dispatchMode: dispatchMode || "—",
+                    })}
+                  </Badge>
+                )}
+              </div>
+            );
+          },
+        },
+        {
+          key: "runCount",
+          header: t("research.table.runCount"),
+          cell: (r) => <span className="text-mono text-xs">{r.runCount ?? r.run_count ?? 0}</span>,
+        },
+        {
+          key: "createdBy",
+          header: t("research.table.createdBy"),
+          cell: (r) => <span className="text-mono text-xs">{r.createdBy || r.created_by || "—"}</span>,
+        },
+        {
+          key: "updated",
+          header: t("common.updated"),
+          cell: (r) => (
+            <span className="text-mono text-xs text-muted-foreground">
+              {safeDateTime(r.updatedAt || r.updated_at)}
+            </span>
+          ),
+        },
       ]}
     />
   );

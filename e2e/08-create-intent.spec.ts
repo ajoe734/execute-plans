@@ -288,14 +288,7 @@ const CREATE_INTENTS: CreateIntentFixture[] = [
     requiredField: "name",
     status: 201,
     payload: {
-      id: "evolution-program-f08-create",
       name: "F08 Evolution Program",
-      strategy_id: STRATEGY_DEV_ID,
-      status: "draft",
-      params: {
-        populationSize: 8,
-        maxGenerations: 2,
-      },
     },
   },
   {
@@ -450,6 +443,10 @@ function commandResponse(
 }
 
 function requestBodyIsValid(fixture: CreateIntentFixture, body: JsonRecord): boolean {
+  if (fixture.resource === "evolution-programs") {
+    const extraKeys = Object.keys(body).filter((key) => key !== "name" && body[key] !== undefined && body[key] !== null && String(body[key]).trim() !== "");
+    if (extraKeys.length > 0) return false;
+  }
   const value = body[fixture.requiredField];
   if (typeof value === "string") return value.trim().length > 0;
   return value !== undefined && value !== null;
@@ -716,6 +713,11 @@ test.describe("F08 create write intents", () => {
       mode: "plan_only",
       strategy_id: STRATEGY_DEV_ID,
     });
+
+    const evolutionProgram = requests.find((item) => item.path === "/bff/evolution-programs");
+    expect(evolutionProgram?.body).toEqual({
+      name: "F08 Evolution Program",
+    });
   });
 
   test("returns VALIDATION_FAILED.fieldErrors for invalid create intents", async ({
@@ -761,10 +763,13 @@ test.describe("F08 create write intents", () => {
 
     const runId = process.env.FE_INT_GATE_RUN_ID || `${Date.now()}`;
     for (const fixture of CREATE_INTENTS) {
-      const payload = {
-        ...fixture.payload,
-        id: `${fixture.payload.id ?? SEEDED_RESOURCE_IDS[fixture.resource]}-${runId}`,
-      };
+      const payload =
+        fixture.resource === "evolution-programs"
+          ? { name: `${String(fixture.payload.name ?? "F08 Evolution Program")} ${runId}` }
+          : {
+              ...fixture.payload,
+              id: `${fixture.payload.id ?? SEEDED_RESOURCE_IDS[fixture.resource]}-${runId}`,
+            };
       const result = await postLiveCreateIntent(request, fixture, `live-${runId}`, payload);
       expect([201, 202], `${fixture.resource} live HTTP status`).toContain(result.status);
       const body = recordAt(result.body, `${fixture.resource} live CommandResponse`);
