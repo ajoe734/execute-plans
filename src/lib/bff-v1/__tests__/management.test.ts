@@ -536,6 +536,290 @@ describe("mgmt façade (PM-Live)", () => {
     expect(out?.meta.coverage).toMatchObject({ missingMonitoringRuntimeIds: ["rt-live-1"] });
   });
 
+  it("normalizes Trading Pulse card details, metric_coverage, coverage, and retired_runtime_count for both snake_case and camelCase", () => {
+    const snakeCaseOut = adaptTradingPulseOverview({
+      data: {
+        id: "management-trading-pulse",
+        summary: {
+          runtime_count: 90,
+          retired_runtime_count: 113,
+          telemetry_coverage_count: 81,
+          monitoring_coverage_count: 79,
+          row_health_degraded_count: 12,
+          row_health_status_counts: { ok: 78, degraded: 12 },
+          total_pnl: 1450.5,
+          worst_drawdown: 0.042,
+          average_fill_rate: 0.964,
+          worst_slippage_bps: 4.25,
+          baseline_comparison_count: 76,
+          baseline_breached_count: 0,
+          by_status: { active: 1, running: 89 },
+          by_stage: { paper: 88, live_running: 2 },
+          by_baseline_status: { ok: 72, watch: 4, breached: 0 },
+          coverage: {
+            runtime_count: 90,
+            telemetry_coverage_count: 81,
+          },
+        },
+        cards: [
+          {
+            card_id: "runtime-status",
+            label: "Runtime Status",
+            value: 90,
+            details: {
+              by_status: { active: 1, running: 89 },
+              by_stage: { paper: 88, live_running: 2 },
+            },
+          },
+          {
+            card_id: "row-health",
+            label: "Row Health",
+            value: 12,
+            details: {
+              row_health_status_counts: { ok: 78, degraded: 12 },
+              degraded_runtime_ids: ["rt-paper-01", "rt-paper-02"],
+            },
+          },
+          {
+            card_id: "pnl",
+            label: "P&L",
+            value: 1450.5,
+            details: {
+              telemetry_coverage_count: 81,
+              metric_coverage: {
+                available_count: 81,
+                missing_count: 9,
+                missing_runtime_ids: ["rt-paper-05"],
+              },
+            },
+          },
+          {
+            card_id: "drawdown",
+            label: "Worst Drawdown",
+            value: 0.042,
+            details: {
+              metric_coverage: {
+                available_count: 80,
+                missing_count: 10,
+                missing_runtime_ids: ["rt-paper-05", "rt-paper-06"],
+              },
+            },
+          },
+          {
+            card_id: "execution-quality",
+            label: "Execution Quality",
+            value: 0.964,
+            details: {
+              worst_slippage_bps: 4.25,
+              metric_coverage: {
+                available_count: 77,
+                missing_count: 13,
+                missing_runtime_ids: ["rt-paper-05", "rt-paper-06", "rt-paper-07"],
+              },
+            },
+          },
+          {
+            card_id: "baseline-comparison",
+            label: "Baseline Comparison",
+            value: 0,
+            details: {
+              baseline_comparison_count: 76,
+              by_baseline_status: { ok: 72, watch: 4, breached: 0 },
+              missing_baseline_runtime_ids: ["rt-paper-03", "rt-paper-04"],
+            },
+          },
+        ],
+        runtime_rows: [],
+      },
+      meta: {
+        snapshot_at: "2026-11-05T12:00:00Z",
+        surfaces: {
+          management_trading_pulse: { status: "degraded", source: "bff_composed" },
+        },
+        coverage: {
+          monitoring_coverage_count: 79,
+          paper_runtime_count: 88,
+          baseline_comparison_count: 76,
+          row_health_degraded_count: 12,
+          row_health_status_counts: { ok: 78, degraded: 12 },
+          missing_telemetry_runtime_ids: ["rt-paper-05"],
+          missing_monitoring_runtime_ids: ["rt-paper-06"],
+          missing_baseline_runtime_ids: ["rt-paper-03", "rt-paper-04"],
+          degraded_runtime_ids: ["rt-paper-01", "rt-paper-02"],
+          metric_coverage: {
+            pnl: {
+              available_count: 81,
+              missing_count: 9,
+              missing_runtime_ids: ["rt-paper-05"],
+            },
+          },
+        },
+      },
+    });
+
+    expect(snakeCaseOut?.summary.retiredRuntimeCount).toBe(113);
+    expect(snakeCaseOut?.summary.coverage).toMatchObject({
+      runtimeCount: 90,
+      telemetryCoverageCount: 81,
+      monitoringCoverageCount: 79,
+      paperRuntimeCount: 88,
+      baselineComparisonCount: 76,
+      rowHealthDegradedCount: 12,
+      rowHealthStatusCounts: { ok: 78, degraded: 12 },
+      missingTelemetryRuntimeIds: ["rt-paper-05"],
+      missingMonitoringRuntimeIds: ["rt-paper-06"],
+      missingBaselineRuntimeIds: ["rt-paper-03", "rt-paper-04"],
+      degradedRuntimeIds: ["rt-paper-01", "rt-paper-02"],
+      metricCoverage: {
+        pnl: {
+          availableCount: 81,
+          missingCount: 9,
+          missingRuntimeIds: ["rt-paper-05"],
+        },
+      },
+    });
+    expect(snakeCaseOut?.cards[0].details).toMatchObject({
+      byStatus: { active: 1, running: 89 },
+      byStage: { paper: 88, live_running: 2 },
+    });
+    expect(snakeCaseOut?.cards[1].details).toMatchObject({
+      rowHealthStatusCounts: { ok: 78, degraded: 12 },
+      degradedRuntimeIds: ["rt-paper-01", "rt-paper-02"],
+    });
+    expect(snakeCaseOut?.cards[2].details).toMatchObject({
+      telemetryCoverageCount: 81,
+      metricCoverage: {
+        availableCount: 81,
+        missingCount: 9,
+        missingRuntimeIds: ["rt-paper-05"],
+      },
+    });
+    expect(snakeCaseOut?.cards[3].details).toMatchObject({
+      metricCoverage: {
+        availableCount: 80,
+        missingCount: 10,
+        missingRuntimeIds: ["rt-paper-05", "rt-paper-06"],
+      },
+    });
+    expect(snakeCaseOut?.cards[4].details).toMatchObject({
+      worstSlippageBps: 4.25,
+      metricCoverage: {
+        availableCount: 77,
+        missingCount: 13,
+        missingRuntimeIds: ["rt-paper-05", "rt-paper-06", "rt-paper-07"],
+      },
+    });
+    expect(snakeCaseOut?.cards[5].details).toMatchObject({
+      baselineComparisonCount: 76,
+      byBaselineStatus: { ok: 72, watch: 4, breached: 0 },
+      missingBaselineRuntimeIds: ["rt-paper-03", "rt-paper-04"],
+    });
+
+    const camelCaseOut = adaptTradingPulseOverview({
+      data: {
+        id: "management-trading-pulse",
+        summary: {
+          runtimeCount: 10,
+          retiredRuntimeCount: 5,
+          telemetryCoverageCount: 9,
+          monitoringCoverageCount: 8,
+          baselineComparisonCount: 7,
+          coverage: {
+            runtimeCount: 10,
+            telemetryCoverageCount: 9,
+          },
+        },
+        cards: [
+          {
+            cardId: "runtime-status",
+            label: "Runtime Status",
+            value: 10,
+            details: {
+              byStatus: { running: 10 },
+              byStage: { paper: 10 },
+              rowHealthStatusCounts: { ok: 9, degraded: 1 },
+              degradedRuntimeIds: ["rt-1"],
+              telemetryCoverageCount: 9,
+              metricCoverage: {
+                availableCount: 9,
+                missingCount: 1,
+                missingRuntimeIds: ["rt-10"],
+              },
+              worstSlippageBps: 1.5,
+              baselineComparisonCount: 7,
+              byBaselineStatus: { ok: 7 },
+              missingBaselineRuntimeIds: ["rt-8", "rt-9", "rt-10"],
+            },
+          },
+        ],
+        runtimeRows: [],
+      },
+      meta: {
+        snapshotAt: "2026-11-05T12:00:00Z",
+        surfaces: {
+          management_trading_pulse: { status: "ok", source: "bff_composed" },
+        },
+        coverage: {
+          monitoringCoverageCount: 8,
+          paperRuntimeCount: 10,
+          baselineComparisonCount: 7,
+          rowHealthDegradedCount: 1,
+          rowHealthStatusCounts: { ok: 9, degraded: 1 },
+          missingTelemetryRuntimeIds: ["rt-10"],
+          missingMonitoringRuntimeIds: ["rt-9", "rt-10"],
+          missingBaselineRuntimeIds: ["rt-8", "rt-9", "rt-10"],
+          degradedRuntimeIds: ["rt-1"],
+        },
+      },
+    });
+
+    expect(camelCaseOut?.summary.retiredRuntimeCount).toBe(5);
+    expect(camelCaseOut?.summary.coverage).toMatchObject({
+      runtimeCount: 10,
+      telemetryCoverageCount: 9,
+      monitoringCoverageCount: 8,
+      paperRuntimeCount: 10,
+      baselineComparisonCount: 7,
+    });
+    expect(camelCaseOut?.cards[0].details).toMatchObject({
+      byStatus: { running: 10 },
+      byStage: { paper: 10 },
+      rowHealthStatusCounts: { ok: 9, degraded: 1 },
+      degradedRuntimeIds: ["rt-1"],
+      telemetryCoverageCount: 9,
+      metricCoverage: {
+        availableCount: 9,
+        missingCount: 1,
+        missingRuntimeIds: ["rt-10"],
+      },
+      worstSlippageBps: 1.5,
+      baselineComparisonCount: 7,
+      byBaselineStatus: { ok: 7 },
+      missingBaselineRuntimeIds: ["rt-8", "rt-9", "rt-10"],
+    });
+
+    const absentCoverageOut = adaptTradingPulseOverview({
+      data: {
+        id: "management-trading-pulse",
+        summary: {
+          runtime_count: 10,
+        },
+        cards: [],
+        runtime_rows: [],
+      },
+      meta: {
+        snapshot_at: "2026-11-05T12:00:00Z",
+        surfaces: {},
+        coverage: {},
+      },
+    });
+
+    expect(absentCoverageOut?.summary.retiredRuntimeCount).toBeUndefined();
+    expect(absentCoverageOut?.summary.coverage?.telemetryCoverageCount).toBeUndefined();
+    expect(absentCoverageOut?.summary.coverage?.monitoringCoverageCount).toBeUndefined();
+    expect(absentCoverageOut?.summary.coverage?.baselineComparisonCount).toBeUndefined();
+  });
+
   it("adapts legacy Trading Pulse rows as degraded local snapshots", () => {
     const out = adaptTradingPulseOverview({
       data: [
