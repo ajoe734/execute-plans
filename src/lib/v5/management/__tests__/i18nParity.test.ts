@@ -247,4 +247,9 @@ describe("Pack PM-i18n parity", () => {
       expect(zhKeys.has(k), `zh missing ${k}`).toBe(true);
     }
   });
+
+  it("includes Trading Pulse retired runtime exclusion key in both locales", () => {
+    expect(enKeys.has("mgmt.pulse.retiredExcludedFmt")).toBe(true);
+    expect(zhKeys.has("mgmt.pulse.retiredExcludedFmt")).toBe(true);
+  });
 });

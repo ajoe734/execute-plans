@@ -3712,6 +3712,7 @@ export default {
       updated: "更新",
       rankingsLabel: "交易脈動排行",
       noRows: "無資料。",
+      retiredExcludedFmt: "已排除已退役：{{count}}",
     },
     evolution: {
       title: "演化日誌",

@@ -3731,6 +3731,7 @@ export default {
       updated: "Updated",
       rankingsLabel: "Trading Pulse Rankings",
       noRows: "No rows.",
+      retiredExcludedFmt: "Excluded retired: {{count}}",
     },
     evolution: {
       title: "Evolution Journal",

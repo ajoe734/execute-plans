@@ -480,12 +480,75 @@ export interface ManagementTradingPulseSurface {
   [key: string]: unknown;
 }
 
+export interface ManagementTradingPulseMetricCoverageEntry {
+  availableCount?: number;
+  available_count?: number;
+  missingCount?: number;
+  missing_count?: number;
+  runtimeCount?: number;
+  runtime_count?: number;
+  missingRuntimeIds?: string[];
+  missing_runtime_ids?: string[];
+  [key: string]: unknown;
+}
+
+export interface ManagementTradingPulseCoverage {
+  runtimeCount?: number;
+  runtime_count?: number;
+  paperRuntimeCount?: number;
+  paper_runtime_count?: number;
+  telemetryCoverageCount?: number;
+  telemetry_coverage_count?: number;
+  monitoringCoverageCount?: number;
+  monitoring_coverage_count?: number;
+  baselineComparisonCount?: number;
+  baseline_comparison_count?: number;
+  rowHealthDegradedCount?: number;
+  row_health_degraded_count?: number;
+  retiredRuntimeCount?: number;
+  retired_runtime_count?: number;
+  rowHealthStatusCounts?: Record<string, number>;
+  row_health_status_counts?: Record<string, number>;
+  missingTelemetryRuntimeIds?: string[];
+  missing_telemetry_runtime_ids?: string[];
+  missingMonitoringRuntimeIds?: string[];
+  missing_monitoring_runtime_ids?: string[];
+  missingBaselineRuntimeIds?: string[];
+  missing_baseline_runtime_ids?: string[];
+  degradedRuntimeIds?: string[];
+  degraded_runtime_ids?: string[];
+  metricCoverage?: Record<string, ManagementTradingPulseMetricCoverageEntry>;
+  metric_coverage?: Record<string, ManagementTradingPulseMetricCoverageEntry>;
+  [key: string]: unknown;
+}
+
 export interface ManagementTradingPulseSummary {
   runtimeCount: number;
   telemetryCoverageCount: number;
+  monitoringCoverageCount?: number;
+  monitoring_coverage_count?: number;
+  paperRuntimeCount?: number;
+  paper_runtime_count?: number;
+  retiredRuntimeCount?: number;
+  retired_runtime_count?: number;
   baselineComparisonCount: number;
   baselineBreachedCount: number;
   baselineWatchCount: number;
+  rowHealthDegradedCount?: number;
+  row_health_degraded_count?: number;
+  rowHealthStatusCounts?: Record<string, number>;
+  row_health_status_counts?: Record<string, number>;
+  missingTelemetryRuntimeIds?: string[];
+  missing_telemetry_runtime_ids?: string[];
+  missingMonitoringRuntimeIds?: string[];
+  missing_monitoring_runtime_ids?: string[];
+  missingBaselineRuntimeIds?: string[];
+  missing_baseline_runtime_ids?: string[];
+  degradedRuntimeIds?: string[];
+  degraded_runtime_ids?: string[];
+  metricCoverage?: Record<string, ManagementTradingPulseMetricCoverageEntry>;
+  metric_coverage?: Record<string, ManagementTradingPulseMetricCoverageEntry>;
+  coverage?: ManagementTradingPulseCoverage;
   totalPnl: number | null;
   worstDrawdown: number | null;
   averageFillRate: number | null;
@@ -578,6 +641,7 @@ export interface ManagementTradingPulseMeta {
   snapshotAt?: string;
   snapshot_at?: string;
   surfaces: Record<string, ManagementTradingPulseSurface>;
+  coverage?: ManagementTradingPulseCoverage;
   [key: string]: unknown;
 }
 
@@ -3256,7 +3320,159 @@ function normalizeTradingPulseSurface(value: unknown): ManagementTradingPulseSur
   };
 }
 
-function normalizeTradingPulseMeta(value: unknown): ManagementTradingPulseMeta {
+const TRADING_PULSE_COVERAGE_NUMBER_KEYS = [
+  ["runtimeCount", "runtime_count"],
+  ["paperRuntimeCount", "paper_runtime_count"],
+  ["telemetryCoverageCount", "telemetry_coverage_count"],
+  ["monitoringCoverageCount", "monitoring_coverage_count"],
+  ["baselineComparisonCount", "baseline_comparison_count"],
+  ["rowHealthDegradedCount", "row_health_degraded_count"],
+  ["retiredRuntimeCount", "retired_runtime_count"],
+  ["availableCount", "available_count"],
+  ["missingCount", "missing_count"],
+] as const;
+
+const TRADING_PULSE_COVERAGE_LIST_KEYS = [
+  ["missingTelemetryRuntimeIds", "missing_telemetry_runtime_ids"],
+  ["missingMonitoringRuntimeIds", "missing_monitoring_runtime_ids"],
+  ["missingBaselineRuntimeIds", "missing_baseline_runtime_ids"],
+  ["degradedRuntimeIds", "degraded_runtime_ids"],
+] as const;
+
+function normalizeTradingPulseMetricCoverageEntry(
+  value: unknown,
+): ManagementTradingPulseMetricCoverageEntry | undefined {
+  if (!isObject(value)) return undefined;
+  const out: ManagementTradingPulseMetricCoverageEntry = { ...value };
+  const availableCount = asNullableNumber(value.availableCount ?? value.available_count);
+  const missingCount = asNullableNumber(value.missingCount ?? value.missing_count);
+  const runtimeCount = asNullableNumber(value.runtimeCount ?? value.runtime_count);
+  const rawMissingIds = value.missingRuntimeIds ?? value.missing_runtime_ids;
+  if (availableCount !== null) {
+    out.availableCount = availableCount;
+    out.available_count = availableCount;
+  } else {
+    delete out.availableCount;
+    delete out.available_count;
+  }
+  if (missingCount !== null) {
+    out.missingCount = missingCount;
+    out.missing_count = missingCount;
+  } else {
+    delete out.missingCount;
+    delete out.missing_count;
+  }
+  if (runtimeCount !== null) {
+    out.runtimeCount = runtimeCount;
+    out.runtime_count = runtimeCount;
+  } else {
+    delete out.runtimeCount;
+    delete out.runtime_count;
+  }
+  if (Array.isArray(rawMissingIds)) {
+    const missingRuntimeIds = asStringArray(rawMissingIds);
+    out.missingRuntimeIds = missingRuntimeIds;
+    out.missing_runtime_ids = missingRuntimeIds;
+  } else {
+    delete out.missingRuntimeIds;
+    delete out.missing_runtime_ids;
+  }
+  return out;
+}
+
+function normalizeTradingPulseMetricCoverageMap(
+  value: unknown,
+): Record<string, ManagementTradingPulseMetricCoverageEntry> | undefined {
+  if (!isObject(value)) return undefined;
+  const entries: Array<[string, ManagementTradingPulseMetricCoverageEntry]> = [];
+  for (const [metric, entry] of Object.entries(value)) {
+    const normalized = normalizeTradingPulseMetricCoverageEntry(entry);
+    if (normalized) {
+      entries.push([metric, normalized]);
+    }
+  }
+  return Object.fromEntries(entries);
+}
+
+function normalizeTradingPulseCoverage(
+  primaryCoverage: unknown,
+  secondaryCoverage?: unknown,
+  summaryFallback?: unknown,
+): ManagementTradingPulseCoverage | undefined {
+  const covPrimary = isObject(primaryCoverage) ? primaryCoverage : null;
+  const covSecondary = isObject(secondaryCoverage) ? secondaryCoverage : null;
+  const sumFallback = isObject(summaryFallback) ? summaryFallback : null;
+  const sources = [covPrimary, covSecondary, sumFallback].filter(
+    (item): item is Record<string, unknown> => item !== null,
+  );
+  if (sources.length === 0) return undefined;
+
+  const pick = (camelKey: string, snakeKey: string): unknown => {
+    for (const source of sources) {
+      if (source[camelKey] !== undefined && source[camelKey] !== null) return source[camelKey];
+      if (source[snakeKey] !== undefined && source[snakeKey] !== null) return source[snakeKey];
+    }
+    return undefined;
+  };
+
+  const out: ManagementTradingPulseCoverage = {
+    ...(covSecondary ?? {}),
+    ...(covPrimary ?? {}),
+  };
+
+  for (const [camelKey, snakeKey] of TRADING_PULSE_COVERAGE_NUMBER_KEYS) {
+    const num = asNullableNumber(pick(camelKey, snakeKey));
+    if (num !== null) {
+      out[camelKey] = num;
+      out[snakeKey] = num;
+    } else {
+      delete out[camelKey];
+      delete out[snakeKey];
+    }
+  }
+
+  const rawRowHealthCounts = pick("rowHealthStatusCounts", "row_health_status_counts");
+  if (isObject(rawRowHealthCounts)) {
+    const counts = asCountRecord(rawRowHealthCounts);
+    out.rowHealthStatusCounts = counts;
+    out.row_health_status_counts = counts;
+  } else {
+    delete out.rowHealthStatusCounts;
+    delete out.row_health_status_counts;
+  }
+
+  for (const [camelKey, snakeKey] of TRADING_PULSE_COVERAGE_LIST_KEYS) {
+    const rawList = pick(camelKey, snakeKey);
+    if (Array.isArray(rawList)) {
+      const list = asStringArray(rawList);
+      out[camelKey] = list;
+      out[snakeKey] = list;
+    } else {
+      delete out[camelKey];
+      delete out[snakeKey];
+    }
+  }
+
+  const rawMetricCoverage = pick("metricCoverage", "metric_coverage");
+  const metricCoverage = normalizeTradingPulseMetricCoverageMap(rawMetricCoverage);
+  if (metricCoverage !== undefined) {
+    out.metricCoverage = metricCoverage;
+    out.metric_coverage = metricCoverage;
+  } else {
+    delete out.metricCoverage;
+    delete out.metric_coverage;
+  }
+
+  if (Object.keys(out).length === 0 && !covPrimary && !covSecondary) {
+    return undefined;
+  }
+  return out;
+}
+
+function normalizeTradingPulseMeta(
+  value: unknown,
+  coverageOverride?: ManagementTradingPulseCoverage,
+): ManagementTradingPulseMeta {
   const record = isObject(value) ? value : {};
   const snapshotAt = asString(record.snapshotAt ?? record.snapshot_at);
   const surfacesRecord = isObject(record.surfaces) ? record.surfaces : {};
@@ -3266,21 +3482,77 @@ function normalizeTradingPulseMeta(value: unknown): ManagementTradingPulseMeta {
       normalizeTradingPulseSurface(surface),
     ]),
   );
+  const coverage = coverageOverride ?? normalizeTradingPulseCoverage(record.coverage);
   return {
     ...record,
     snapshotAt,
     snapshot_at: snapshotAt,
     surfaces,
+    ...(coverage !== undefined ? { coverage } : {}),
   };
 }
 
-function normalizeTradingPulseSummary(value: unknown): ManagementTradingPulseSummary {
+function normalizeTradingPulseSummary(
+  value: unknown,
+  coverageOverride?: ManagementTradingPulseCoverage,
+): ManagementTradingPulseSummary {
   const record = isObject(value) ? value : {};
-  return {
+  const coverage = coverageOverride ?? normalizeTradingPulseCoverage(record.coverage, undefined, record);
+  const monitoringCoverageCount = asNullableNumber(
+    record.monitoringCoverageCount ?? record.monitoring_coverage_count ?? coverage?.monitoringCoverageCount,
+  );
+  const paperRuntimeCount = asNullableNumber(
+    record.paperRuntimeCount ?? record.paper_runtime_count ?? coverage?.paperRuntimeCount,
+  );
+  const retiredRuntimeCount = asNullableNumber(
+    record.retiredRuntimeCount ?? record.retired_runtime_count,
+  );
+  const rowHealthDegradedCount = asNullableNumber(
+    record.rowHealthDegradedCount ?? record.row_health_degraded_count ?? coverage?.rowHealthDegradedCount,
+  );
+  const rawRowHealthStatusCounts =
+    record.rowHealthStatusCounts ?? record.row_health_status_counts ?? coverage?.rowHealthStatusCounts;
+  const rowHealthStatusCounts = isObject(rawRowHealthStatusCounts)
+    ? asCountRecord(rawRowHealthStatusCounts)
+    : undefined;
+  const rawMissingTelemetry =
+    record.missingTelemetryRuntimeIds ?? record.missing_telemetry_runtime_ids ?? coverage?.missingTelemetryRuntimeIds;
+  const missingTelemetryRuntimeIds = Array.isArray(rawMissingTelemetry)
+    ? asStringArray(rawMissingTelemetry)
+    : undefined;
+  const rawMissingMonitoring =
+    record.missingMonitoringRuntimeIds ?? record.missing_monitoring_runtime_ids ?? coverage?.missingMonitoringRuntimeIds;
+  const missingMonitoringRuntimeIds = Array.isArray(rawMissingMonitoring)
+    ? asStringArray(rawMissingMonitoring)
+    : undefined;
+  const rawMissingBaseline =
+    record.missingBaselineRuntimeIds ?? record.missing_baseline_runtime_ids ?? coverage?.missingBaselineRuntimeIds;
+  const missingBaselineRuntimeIds = Array.isArray(rawMissingBaseline)
+    ? asStringArray(rawMissingBaseline)
+    : undefined;
+  const rawDegradedIds =
+    record.degradedRuntimeIds ?? record.degraded_runtime_ids ?? coverage?.degradedRuntimeIds;
+  const degradedRuntimeIds = Array.isArray(rawDegradedIds)
+    ? asStringArray(rawDegradedIds)
+    : undefined;
+  const metricCoverage =
+    normalizeTradingPulseMetricCoverageMap(record.metricCoverage ?? record.metric_coverage)
+    ?? coverage?.metricCoverage;
+
+  const out: ManagementTradingPulseSummary = {
     ...record,
-    runtimeCount: asFiniteNumber(record.runtimeCount ?? record.runtime_count, 0),
-    telemetryCoverageCount: asFiniteNumber(record.telemetryCoverageCount ?? record.telemetry_coverage_count, 0),
-    baselineComparisonCount: asFiniteNumber(record.baselineComparisonCount ?? record.baseline_comparison_count, 0),
+    runtimeCount: asFiniteNumber(
+      record.runtimeCount ?? record.runtime_count ?? coverage?.runtimeCount,
+      0,
+    ),
+    telemetryCoverageCount: asFiniteNumber(
+      record.telemetryCoverageCount ?? record.telemetry_coverage_count ?? coverage?.telemetryCoverageCount,
+      0,
+    ),
+    baselineComparisonCount: asFiniteNumber(
+      record.baselineComparisonCount ?? record.baseline_comparison_count ?? coverage?.baselineComparisonCount,
+      0,
+    ),
     baselineBreachedCount: asFiniteNumber(record.baselineBreachedCount ?? record.baseline_breached_count, 0),
     baselineWatchCount: asFiniteNumber(record.baselineWatchCount ?? record.baseline_watch_count, 0),
     totalPnl: asNullableNumber(record.totalPnl ?? record.total_pnl),
@@ -3291,14 +3563,149 @@ function normalizeTradingPulseSummary(value: unknown): ManagementTradingPulseSum
     byStatus: asCountRecord(record.byStatus ?? record.by_status),
     byStage: asCountRecord(record.byStage ?? record.by_stage),
     byBaselineStatus: asCountRecord(record.byBaselineStatus ?? record.by_baseline_status),
+    ...(coverage !== undefined ? { coverage } : {}),
   };
+
+  if (monitoringCoverageCount !== null) {
+    out.monitoringCoverageCount = monitoringCoverageCount;
+    out.monitoring_coverage_count = monitoringCoverageCount;
+  } else {
+    delete out.monitoringCoverageCount;
+    delete out.monitoring_coverage_count;
+  }
+  if (paperRuntimeCount !== null) {
+    out.paperRuntimeCount = paperRuntimeCount;
+    out.paper_runtime_count = paperRuntimeCount;
+  } else {
+    delete out.paperRuntimeCount;
+    delete out.paper_runtime_count;
+  }
+  if (retiredRuntimeCount !== null) {
+    out.retiredRuntimeCount = retiredRuntimeCount;
+    out.retired_runtime_count = retiredRuntimeCount;
+  } else {
+    delete out.retiredRuntimeCount;
+    delete out.retired_runtime_count;
+  }
+  if (rowHealthDegradedCount !== null) {
+    out.rowHealthDegradedCount = rowHealthDegradedCount;
+    out.row_health_degraded_count = rowHealthDegradedCount;
+  } else {
+    delete out.rowHealthDegradedCount;
+    delete out.row_health_degraded_count;
+  }
+  if (rowHealthStatusCounts !== undefined) {
+    out.rowHealthStatusCounts = rowHealthStatusCounts;
+    out.row_health_status_counts = rowHealthStatusCounts;
+  }
+  if (missingTelemetryRuntimeIds !== undefined) {
+    out.missingTelemetryRuntimeIds = missingTelemetryRuntimeIds;
+    out.missing_telemetry_runtime_ids = missingTelemetryRuntimeIds;
+  }
+  if (missingMonitoringRuntimeIds !== undefined) {
+    out.missingMonitoringRuntimeIds = missingMonitoringRuntimeIds;
+    out.missing_monitoring_runtime_ids = missingMonitoringRuntimeIds;
+  }
+  if (missingBaselineRuntimeIds !== undefined) {
+    out.missingBaselineRuntimeIds = missingBaselineRuntimeIds;
+    out.missing_baseline_runtime_ids = missingBaselineRuntimeIds;
+  }
+  if (degradedRuntimeIds !== undefined) {
+    out.degradedRuntimeIds = degradedRuntimeIds;
+    out.degraded_runtime_ids = degradedRuntimeIds;
+  }
+  if (metricCoverage !== undefined) {
+    out.metricCoverage = metricCoverage;
+    out.metric_coverage = metricCoverage;
+  }
+
+  return out;
+}
+
+function normalizeTradingPulseCardDetails(value: unknown): Record<string, unknown> {
+  if (!isObject(value)) return {};
+  const out: Record<string, unknown> = { ...value };
+
+  if (isObject(value.byStatus ?? value.by_status)) {
+    const byStatus = asCountRecord(value.byStatus ?? value.by_status);
+    out.byStatus = byStatus;
+    out.by_status = byStatus;
+  }
+  if (isObject(value.byStage ?? value.by_stage)) {
+    const byStage = asCountRecord(value.byStage ?? value.by_stage);
+    out.byStage = byStage;
+    out.by_stage = byStage;
+  }
+  if (isObject(value.rowHealthStatusCounts ?? value.row_health_status_counts)) {
+    const rowHealthStatusCounts = asCountRecord(
+      value.rowHealthStatusCounts ?? value.row_health_status_counts,
+    );
+    out.rowHealthStatusCounts = rowHealthStatusCounts;
+    out.row_health_status_counts = rowHealthStatusCounts;
+  }
+  if (Array.isArray(value.degradedRuntimeIds ?? value.degraded_runtime_ids)) {
+    const degradedRuntimeIds = asStringArray(
+      value.degradedRuntimeIds ?? value.degraded_runtime_ids,
+    );
+    out.degradedRuntimeIds = degradedRuntimeIds;
+    out.degraded_runtime_ids = degradedRuntimeIds;
+  }
+  if ("telemetryCoverageCount" in value || "telemetry_coverage_count" in value) {
+    const telemetryCoverageCount = asNullableNumber(
+      value.telemetryCoverageCount ?? value.telemetry_coverage_count,
+    );
+    out.telemetryCoverageCount = telemetryCoverageCount;
+    out.telemetry_coverage_count = telemetryCoverageCount;
+  }
+  if ("metricCoverage" in value || "metric_coverage" in value) {
+    const metricCoverage = normalizeTradingPulseMetricCoverageEntry(
+      value.metricCoverage ?? value.metric_coverage,
+    );
+    if (metricCoverage !== undefined) {
+      out.metricCoverage = metricCoverage;
+      out.metric_coverage = metricCoverage;
+    } else {
+      out.metricCoverage = null;
+      out.metric_coverage = null;
+    }
+  }
+  if ("worstSlippageBps" in value || "worst_slippage_bps" in value) {
+    const worstSlippageBps = asNullableNumber(
+      value.worstSlippageBps ?? value.worst_slippage_bps,
+    );
+    out.worstSlippageBps = worstSlippageBps;
+    out.worst_slippage_bps = worstSlippageBps;
+  }
+  if ("baselineComparisonCount" in value || "baseline_comparison_count" in value) {
+    const baselineComparisonCount = asNullableNumber(
+      value.baselineComparisonCount ?? value.baseline_comparison_count,
+    );
+    out.baselineComparisonCount = baselineComparisonCount;
+    out.baseline_comparison_count = baselineComparisonCount;
+  }
+  if (isObject(value.byBaselineStatus ?? value.by_baseline_status)) {
+    const byBaselineStatus = asCountRecord(
+      value.byBaselineStatus ?? value.by_baseline_status,
+    );
+    out.byBaselineStatus = byBaselineStatus;
+    out.by_baseline_status = byBaselineStatus;
+  }
+  if (Array.isArray(value.missingBaselineRuntimeIds ?? value.missing_baseline_runtime_ids)) {
+    const missingBaselineRuntimeIds = asStringArray(
+      value.missingBaselineRuntimeIds ?? value.missing_baseline_runtime_ids,
+    );
+    out.missingBaselineRuntimeIds = missingBaselineRuntimeIds;
+    out.missing_baseline_runtime_ids = missingBaselineRuntimeIds;
+  }
+
+  return out;
 }
 
 function normalizeTradingPulseCard(value: unknown): ManagementTradingPulseCard | null {
   if (!isObject(value)) return null;
   const cardId = asString(value.cardId ?? value.card_id ?? value.id);
   const label = asString(value.label, cardId || "Metric");
-  const details = isObject(value.details) ? value.details : {};
+  const details = normalizeTradingPulseCardDetails(value.details);
   return {
     ...value,
     cardId: cardId || label.toLowerCase().replace(/\s+/g, "-"),
@@ -3488,7 +3895,16 @@ export function adaptTradingPulseOverview(raw: unknown): ManagementTradingPulseM
   const root = isObject(raw) ? raw : null;
   const data = root && "data" in root ? root.data : raw;
   const dataRecord = isObject(data) ? data : null;
-  const meta = normalizeTradingPulseMeta(root?.meta ?? dataRecord?.meta);
+  const rawMeta = root?.meta ?? dataRecord?.meta;
+  const rawSummary = dataRecord?.summary ?? root?.summary;
+  const rawSummaryRecord = isObject(rawSummary) ? rawSummary : undefined;
+  const rawMetaRecord = isObject(rawMeta) ? rawMeta : undefined;
+  const coverage = normalizeTradingPulseCoverage(
+    rawSummaryRecord?.coverage,
+    rawMetaRecord?.coverage,
+    rawSummaryRecord,
+  );
+  const meta = normalizeTradingPulseMeta(rawMeta, coverage);
 
   const legacyRows = asArray<Record<string, unknown>>(data);
   if (legacyRows && legacyRows.some((row) => "surface" in row && "current" in row)) {
@@ -3523,7 +3939,7 @@ export function adaptTradingPulseOverview(raw: unknown): ManagementTradingPulseM
     dataRecord.rankings,
     root?.rankings,
   );
-  const summary = normalizeTradingPulseSummary(dataRecord.summary ?? root?.summary);
+  const summary = normalizeTradingPulseSummary(rawSummary, coverage);
 
   if (
     cards.length === 0

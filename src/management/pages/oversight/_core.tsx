@@ -1656,6 +1656,7 @@ const pulseRecord = (value: unknown): Record<string, unknown> =>
   value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 
 const pulseNumber = (value: unknown): number | null => {
+  if (value === null || value === undefined || value === "" || typeof value === "boolean") return null;
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
 };
@@ -1821,12 +1822,20 @@ const TradingPulseCoverageSummary = ({ model }: { model: ManagementTradingPulseM
   const missingMonitoring = pulseStringList(coverage.missingMonitoringRuntimeIds ?? coverage.missing_monitoring_runtime_ids);
   const missingBaseline = pulseStringList(coverage.missingBaselineRuntimeIds ?? coverage.missing_baseline_runtime_ids);
   const degradedRows = pulseStringList(coverage.degradedRuntimeIds ?? coverage.degraded_runtime_ids);
+  const retiredCount = pulseNumber(model.summary.retiredRuntimeCount);
+  const statusDetail = compactCounts(model.summary.byStatus);
+  const retiredDetail = retiredCount !== null
+    ? t("mgmt.pulse.retiredExcludedFmt", { count: formatPulseValue(retiredCount, "runtime-status") })
+    : null;
+  const runtimeDetail = retiredDetail
+    ? (statusDetail === "—" ? retiredDetail : `${statusDetail} · ${retiredDetail}`)
+    : statusDetail;
   return (
     <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
       <CoverageStat
         label={t("mgmt.pulse.runtimeRows")}
         value={formatPulseValue(coverage.runtimeCount ?? model.summary.runtimeCount, "runtime-status")}
-        detail={compactCounts(model.summary.byStatus)}
+        detail={runtimeDetail}
       />
       <CoverageStat
         label={t("mgmt.pulse.telemetryCoverage")}
