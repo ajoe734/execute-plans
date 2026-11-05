@@ -817,6 +817,15 @@ function classifyArtifactSourceScope(row: Artifact): ArtifactScopeTab {
   return "registry";
 }
 
+/** Shorten `sha256:38fb8f49…2e008e`; the full value stays available via title. */
+export function shortenHash(hash: string): string {
+  const idx = hash.indexOf(":");
+  const prefix = idx >= 0 ? hash.slice(0, idx + 1) : "";
+  const digest = idx >= 0 ? hash.slice(idx + 1) : hash;
+  if (digest.length <= 16) return hash;
+  return `${prefix}${digest.slice(0, 8)}…${digest.slice(-6)}`;
+}
+
 export const ArtifactsList = () => {
   const t = useT();
   const noData = t("common.noData");
@@ -841,11 +850,13 @@ export const ArtifactsList = () => {
       columns={[
         {
           key: "name",
+          minWidth: 180,
           header: t("common.name"),
           cell: (r) => <div className="font-medium">{r.name || r.id}</div>,
         },
         {
           key: "source",
+          minWidth: 90,
           header: t("artifact.sourceKind", { defaultValue: t("table.source") }),
           cell: (r) => {
             const sourceKind = typeof (r.source_kind ?? r.sourceKind) === "string"
@@ -856,97 +867,111 @@ export const ArtifactsList = () => {
                 {sourceKind}
               </Badge>
             ) : (
-              <span className="text-mono text-xs text-muted-foreground">{noData}</span>
+              <span className="text-mono text-xs text-muted-foreground whitespace-nowrap">{noData}</span>
             );
           },
         },
         {
           key: "kind",
+          minWidth: 150,
           header: t("table.kind"),
           cell: (r) => {
             const kind = typeof r.kind === "string" ? r.kind.trim() : "";
             return kind ? (
               <span className="text-mono text-xs">{kind}</span>
             ) : (
-              <span className="text-mono text-xs text-muted-foreground">{noData}</span>
+              <span className="text-mono text-xs text-muted-foreground whitespace-nowrap">{noData}</span>
             );
           },
         },
         {
           key: "ver",
+          minWidth: 70,
           header: t("table.version"),
           cell: (r) => {
             const version = typeof r.version === "string" ? r.version.trim() : "";
             return version ? (
               <span className="text-mono text-xs">{version}</span>
             ) : (
-              <span className="text-mono text-xs text-muted-foreground">{noData}</span>
+              <span className="text-mono text-xs text-muted-foreground whitespace-nowrap">{noData}</span>
             );
           },
         },
         {
           key: "state",
+          minWidth: 90,
           header: t("common.state"),
           cell: (r) => {
             const state = typeof r.state === "string" ? r.state.trim() : "";
             return state ? (
-              <StatusBadge state={state} />
+              <span className="inline-flex whitespace-nowrap"><StatusBadge state={state} /></span>
             ) : (
-              <span className="text-mono text-xs text-muted-foreground">{noData}</span>
+              <span className="text-mono text-xs text-muted-foreground whitespace-nowrap">{noData}</span>
             );
           },
         },
         {
           key: "risk",
+          minWidth: 80,
           header: t("common.risk"),
           cell: (r) => {
             const risk = typeof r.risk === "string" ? r.risk.trim() : "";
             return risk ? (
-              <RiskBadge level={risk as RiskLevel} />
+              <span className="inline-flex whitespace-nowrap"><RiskBadge level={risk as RiskLevel} /></span>
             ) : (
-              <span className="text-mono text-xs text-muted-foreground">{noData}</span>
+              <span className="text-mono text-xs text-muted-foreground whitespace-nowrap">{noData}</span>
             );
           },
         },
         {
           key: "size",
+          minWidth: 90,
           header: t("detail.label.size", { defaultValue: "Size" }),
           cell: (r) =>
             hasNumber(r.sizeMb) ? (
-              <span className="text-mono text-xs">{`${loc(r.sizeMb)} MB`}</span>
+              <span className="text-mono text-xs whitespace-nowrap">{`${loc(r.sizeMb)} MB`}</span>
             ) : (
-              <span className="text-mono text-xs text-muted-foreground">{noData}</span>
+              <span className="text-mono text-xs text-muted-foreground whitespace-nowrap">{noData}</span>
             ),
         },
         {
           key: "hash",
+          minWidth: 170,
           header: t("detail.section.hash", { defaultValue: "Hash" }),
           cell: (r) => {
             const hash = typeof r.hash === "string" ? r.hash.trim() : "";
             return hash ? (
-              <span className="text-mono text-xs text-muted-foreground">{hash}</span>
+              <span
+                className="text-mono text-xs text-muted-foreground whitespace-nowrap cursor-help"
+                title={hash}
+                data-full-hash={hash}
+              >
+                {shortenHash(hash)}
+              </span>
             ) : (
-              <span className="text-mono text-xs text-muted-foreground">{noData}</span>
+              <span className="text-mono text-xs text-muted-foreground whitespace-nowrap">{noData}</span>
             );
           },
         },
         {
           key: "owner",
+          minWidth: 190,
           header: t("common.owner"),
           cell: (r) => {
             const owner = typeof r.owner === "string" ? r.owner.trim() : "";
             return owner ? (
-              <span className="text-mono text-xs">{owner}</span>
+              <span className="text-mono text-xs break-all" title={owner}>{owner}</span>
             ) : (
-              <span className="text-mono text-xs text-muted-foreground">{noData}</span>
+              <span className="text-mono text-xs text-muted-foreground whitespace-nowrap">{noData}</span>
             );
           },
         },
         {
           key: "updated",
+          minWidth: 150,
           header: t("common.updated"),
           cell: (r) => (
-            <span className="text-mono text-xs text-muted-foreground">
+            <span className="text-mono text-xs text-muted-foreground whitespace-nowrap">
               {safeDateTime(r.updatedAt)}
             </span>
           ),

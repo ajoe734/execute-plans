@@ -1414,7 +1414,12 @@ describe("ObjectListPage", () => {
     expect(regTr).toHaveTextContent("1.0.1");
     expect(regTr).toHaveTextContent("Approved");
     expect(regTr).toHaveTextContent("Low");
-    expect(regTr).toHaveTextContent("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa0001");
+    // FE-MGMT-CATALOG-LEGIBILITY-20261105: hash is shortened in the cell; the full value is still exposed via title.
+    expect(regTr.querySelector('[data-full-hash="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa0001"]')).toHaveAttribute(
+      "title",
+      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa0001",
+    );
+    expect(regTr).toHaveTextContent("aaaaaaaa…aa0001");
     expect(regTr).toHaveTextContent("gov-approver-alpha");
     expect(regTr).toHaveTextContent("No data");
     expect(regTr).not.toHaveTextContent("0 MB");
@@ -1423,7 +1428,11 @@ describe("ObjectListPage", () => {
     expect(resTr).not.toBeNull();
     expect(resTr).toHaveTextContent("research_run_output");
     expect(resTr).toHaveTextContent("factor_eval_report");
-    expect(resTr).toHaveTextContent("sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08");
+    expect(resTr.querySelector('[data-full-hash="sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"]')).toHaveAttribute(
+      "title",
+      "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+    );
+    expect(resTr).toHaveTextContent("sha256:9f86d081…f00a08");
     expect(resTr).toHaveTextContent("research-worker-qlib");
     expect(resTr).not.toHaveTextContent("0 MB");
     expect(resTr).not.toHaveTextContent("Unavailable");

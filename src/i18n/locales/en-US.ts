@@ -852,6 +852,8 @@ export default {
     collapse: "Collapse",
   },
   lineage: {
+    overClientNotice: "This lineage has {{count}} nodes (more than {{limit}}) and may render slowly. Narrow the scope or pick a root node.",
+    overServerNotice: "This lineage has {{count}} nodes (more than {{limit}}). Use the server-side clustered summary view instead.",
     title: "Data Lineage",
     legendUpstream: "Upstream",
     legendDownstream: "Downstream",
@@ -2783,6 +2785,7 @@ export default {
     subtitle: "Searchable archive of incident postmortems. Linked back to source incidents.",
     search: "Search title or incident…",
     incident: "Incident", author: "Author", resolved: "Resolved",
+    time: "Time", publishedAt: "Published", createdAt: "Created",
     rootCause: "Root cause", impact: "Impact", followUps: "Follow-ups",
     statusFilter: "Filter status",
     status: {
