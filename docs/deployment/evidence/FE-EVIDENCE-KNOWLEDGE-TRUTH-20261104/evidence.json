@@ -14,10 +14,10 @@
     "status": "done"
   },
   "status": "ready_for_review",
-  "timestamp": "2026-11-04T04:11:00Z",
+  "timestamp": "2026-11-05T01:37:30Z",
   "scope": {
     "delivered": [
-      "Updated EvidenceExplorerList in src/management/pages/oversight/_core.tsx to check whether the management_evidence surface is ok; when management_evidence is not ok (unavailable, degraded, or unreturned), the five metric cards render Unavailable instead of numeric 0 and the empty-table row renders a distinct unavailable message (evidence-route-unavailable) instead of the no-rows message, while a true empty ok response continues to render 0 in the five metric cards and the no-rows message (evidence-route-empty).",
+      "Updated EvidenceExplorerList in src/management/pages/oversight/_core.tsx (importing ManagementEvidenceOverview from @/lib/bff-v1/management) to check whether the management_evidence surface is ok; when management_evidence is not ok (unavailable, degraded, or unreturned), the five metric cards render Unavailable instead of numeric 0 and the empty-table row renders a distinct unavailable message (evidence-route-unavailable) instead of the no-rows message, while a true empty ok response continues to render 0 in the five metric cards and the no-rows message (evidence-route-empty).",
       "Updated adaptManagementEvidenceOverview and adaptEvidenceListItem in src/lib/bff-v1/management.ts to map BFF /bff/management/evidence rows from EVIDENCE-OWNER-LIST-BOUNDED-20261104 (title / citation_label, source_type / metadata.source_class, captured_at / available_time / event_time, top-level page_info, top-level meta.surfaces, and null-safe asFiniteNumber).",
       "Added page_info pagination support in mgmt.evidence.overviewLiveOnly and EvidenceExplorerList so operators can reach rows beyond the first page via page_info.next_page_token while displaying page_info.total as the Total metric.",
       "Removed fabricated defaults in src/lib/bff-v1/managementConsoleReads.ts (adaptKnowledge, toKnowledgeKind, toKnowledgeRisk): kind is read from inboxType without defaulting to research_note, source is read from sourceDataset without defaulting to pantheon-bff, missing risk remains undefined instead of defaulting to low, and missing timestamp remains empty string instead of fabricating a timestamp.",
@@ -100,7 +100,7 @@
   ],
   "validation": {
     "typecheck": {
-      "command": "./node_modules/.bin/tsc --noEmit",
+      "command": "./node_modules/.bin/tsc -p tsconfig.app.json --noEmit && ./node_modules/.bin/tsc -p tsconfig.agora.json --noEmit",
       "exit_code": 0
     },
     "unit_and_component_tests": {
