@@ -30,6 +30,7 @@ import { findMetric } from "@/lib/v4/metricRegistry";
 import { Badge } from "@/components/ui/badge";
 
 const num = (value: unknown): number => (typeof value === "number" && Number.isFinite(value) ? value : 0);
+const hasNumber = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
 
 export const CapitalPoolDetail = () => {
   const { id } = useParams();
@@ -229,7 +230,18 @@ export const CapitalPoolDetail = () => {
                   { key: "name", header: t("nav.strategies"), cell: (r) => <div className="font-medium">{r.name}</div> },
                   { key: "state", header: t("table.state"), cell: (r) => <StatusBadge state={r.state} /> },
                   { key: "risk", header: t("table.risk"), cell: (r) => <RiskBadge level={r.risk} /> },
-                  { key: "pnl", header: "PnL 30d", cell: (r) => <span className={`text-mono text-xs ${r.pnl30d >= 0 ? "text-status-success" : "text-status-failed"}`}>{(r.pnl30d * 100).toFixed(2)}%</span> },
+                  {
+                    key: "pnl",
+                    header: "PnL 30d",
+                    cell: (r) => {
+                      if (!hasNumber(r.pnl30d)) {
+                        return <span className="text-mono text-xs text-muted-foreground">{t("common.noData")}</span>;
+                      }
+                      const toneClass =
+                        r.pnl30d === 0 ? "text-foreground" : r.pnl30d > 0 ? "text-status-success" : "text-status-failed";
+                      return <span className={`text-mono text-xs ${toneClass}`}>{(r.pnl30d * 100).toFixed(2)}%</span>;
+                    },
+                  },
                 ]}
                 empty={t("empty.noResults")}
               />
@@ -244,15 +256,36 @@ export const CapitalPoolDetail = () => {
           // ── v3 §13 — Performance ──
           {
             value: "performance", label: t("section.performance", { defaultValue: "Performance" }),
-            content: (
-              <Section title={t("section.performance", { defaultValue: "Performance" })}>
-                <div className="grid grid-cols-3 gap-4">
-                  <StatCard label="PnL 30d" value={`${(strats.reduce((a, s) => a + s.pnl30d, 0) * 100).toFixed(2)}%`} tone="success" />
-                  <StatCard label={t("table.sharpe")} value={(strats.reduce((a, s) => a + s.sharpe, 0) / Math.max(1, strats.length)).toFixed(2)} />
-                  <StatCard label={t("table.drawdown")} value={`${(Math.min(...strats.map((s) => s.drawdown), 0) * 100).toFixed(2)}%`} tone="warning" />
-                </div>
-              </Section>
-            ),
+            content: (() => {
+              const noData = t("common.noData");
+              const pnl30dValues = strats.map((s) => s.pnl30d).filter(hasNumber);
+              const sharpeValues = strats.map((s) => s.sharpe).filter(hasNumber);
+              const drawdownValues = strats.map((s) => s.drawdown).filter(hasNumber);
+              const totalPnl30d = pnl30dValues.length > 0 ? pnl30dValues.reduce((a, v) => a + v, 0) : null;
+              const avgSharpe = sharpeValues.length > 0 ? sharpeValues.reduce((a, v) => a + v, 0) / sharpeValues.length : null;
+              const worstDrawdown = drawdownValues.length > 0 ? Math.min(...drawdownValues) : null;
+              return (
+                <Section title={t("section.performance", { defaultValue: "Performance" })}>
+                  <div className="grid grid-cols-3 gap-4">
+                    <StatCard
+                      label="PnL 30d"
+                      value={totalPnl30d !== null ? `${(totalPnl30d * 100).toFixed(2)}%` : noData}
+                      tone={totalPnl30d === null || totalPnl30d === 0 ? "default" : totalPnl30d > 0 ? "success" : "danger"}
+                    />
+                    <StatCard
+                      label={t("table.sharpe")}
+                      value={avgSharpe !== null ? avgSharpe.toFixed(2) : noData}
+                      tone="default"
+                    />
+                    <StatCard
+                      label={t("table.drawdown")}
+                      value={worstDrawdown !== null ? `${(worstDrawdown * 100).toFixed(2)}%` : noData}
+                      tone={worstDrawdown === null || worstDrawdown === 0 ? "default" : "warning"}
+                    />
+                  </div>
+                </Section>
+              );
+            })(),
           },
 
           // ── v3 §13 — Ranking Inputs ──
@@ -263,9 +296,33 @@ export const CapitalPoolDetail = () => {
                 rows={strats.map((s) => ({ id: s.id, name: s.name, sharpe: s.sharpe, dd: s.drawdown, pnl: s.pnl30d }))}
                 columns={[
                   { key: "name", header: t("table.name"), cell: (r) => <div className="font-medium">{r.name}</div> },
-                  { key: "sharpe", header: t("table.sharpe"), cell: (r) => <span className="text-mono text-xs">{(r.sharpe ?? 0).toFixed(2)}</span> },
-                  { key: "dd", header: t("table.drawdown"), cell: (r) => <span className="text-mono text-xs">{(r.dd * 100).toFixed(2)}%</span> },
-                  { key: "pnl", header: "PnL 30d", cell: (r) => <span className="text-mono text-xs">{(r.pnl * 100).toFixed(2)}%</span> },
+                  {
+                    key: "sharpe",
+                    header: t("table.sharpe"),
+                    cell: (r) => (
+                      <span className={`text-mono text-xs ${hasNumber(r.sharpe) ? "text-foreground" : "text-muted-foreground"}`}>
+                        {hasNumber(r.sharpe) ? r.sharpe.toFixed(2) : t("common.noData")}
+                      </span>
+                    ),
+                  },
+                  {
+                    key: "dd",
+                    header: t("table.drawdown"),
+                    cell: (r) => (
+                      <span className={`text-mono text-xs ${hasNumber(r.dd) ? "text-foreground" : "text-muted-foreground"}`}>
+                        {hasNumber(r.dd) ? `${(r.dd * 100).toFixed(2)}%` : t("common.noData")}
+                      </span>
+                    ),
+                  },
+                  {
+                    key: "pnl",
+                    header: "PnL 30d",
+                    cell: (r) => (
+                      <span className={`text-mono text-xs ${hasNumber(r.pnl) ? "text-foreground" : "text-muted-foreground"}`}>
+                        {hasNumber(r.pnl) ? `${(r.pnl * 100).toFixed(2)}%` : t("common.noData")}
+                      </span>
+                    ),
+                  },
                 ]}
                 empty={t("empty.noResults")}
               />

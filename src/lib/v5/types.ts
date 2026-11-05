@@ -99,8 +99,8 @@ export interface StrategyExecutionHealth {
   score: number;
   formulaVersion: "v0-mock";
   inputs: StrategyHealthInputs;
-  pnl30d: number;
-  drawdown: number;
+  pnl30d: number | null;
+  drawdown: number | null;
   openFindings: number;
   updatedAt: string;
 }

@@ -114,6 +114,7 @@ const currencyBreakdown = (rows: CapitalPool[], pick: (row: CapitalPool) => numb
 
 export const StrategiesList = () => {
   const t = useT();
+  const noData = t("common.noData");
   return (
     <ObjectListPage<Strategy>
       title={t("nav.strategies")}
@@ -121,9 +122,85 @@ export const StrategiesList = () => {
       basePath="/management/strategies" liveKinds={["Strategy"]}
       createBehavior={{ kind: "drawer", entity: "strategy" }}
       extraColumns={[
-        { key: "alpha", header: "Alpha", cell: (r) => <span className="text-mono text-xs">{r.alpha}</span> },
-        { key: "pnl", header: "PnL 30d", cell: (r) => <span className={`text-mono text-xs ${num(r.pnl30d) >= 0 ? "text-status-success" : "text-status-failed"}`}>{pct(r.pnl30d, 2)}</span> },
-        { key: "sharpe", header: t("table.sharpe"), cell: (r) => <span className="text-mono text-xs">{fix(r.sharpe)}</span> },
+        {
+          key: "alpha",
+          header: "Alpha",
+          cell: (r) => {
+            const alphaText = r.alpha?.trim() || "";
+            return (
+              <span className={`text-mono text-xs ${alphaText ? "text-foreground" : "text-muted-foreground"}`}>
+                {alphaText || noData}
+              </span>
+            );
+          },
+        },
+        {
+          key: "capitalPool",
+          header: t("nav.capital"),
+          cell: (r) => {
+            const poolText = r.capitalPoolId?.trim() || "";
+            return (
+              <span className={`text-mono text-xs ${poolText ? "text-foreground" : "text-muted-foreground"}`}>
+                {poolText || noData}
+              </span>
+            );
+          },
+        },
+        {
+          key: "cumulativePnl",
+          header: t("strategyDetail.cumulativePaperPnl"),
+          cell: (r) => {
+            if (!hasNumber(r.pnl)) {
+              return <span className="text-mono text-xs text-muted-foreground">{noData}</span>;
+            }
+            const toneClass =
+              r.pnl === 0 ? "text-foreground" : r.pnl > 0 ? "text-status-success" : "text-status-failed";
+            const asOf = r.metricsAsOf?.trim() || "";
+            return (
+              <div className="flex flex-col">
+                <span className={`text-mono text-xs ${toneClass}`}>{r.pnl.toFixed(2)}</span>
+                {asOf && (
+                  <span className="text-[11px] text-muted-foreground">
+                    {t("strategyDetail.metricsAsOf", { asOf })}
+                  </span>
+                )}
+              </div>
+            );
+          },
+        },
+        {
+          key: "pnl",
+          header: "PnL 30d",
+          cell: (r) => {
+            if (!hasNumber(r.pnl30d)) {
+              return <span className="text-mono text-xs text-muted-foreground">{noData}</span>;
+            }
+            const toneClass =
+              r.pnl30d === 0 ? "text-foreground" : r.pnl30d > 0 ? "text-status-success" : "text-status-failed";
+            return <span className={`text-mono text-xs ${toneClass}`}>{`${(r.pnl30d * 100).toFixed(2)}%`}</span>;
+          },
+        },
+        {
+          key: "sharpe",
+          header: t("table.sharpe"),
+          cell: (r) =>
+            hasNumber(r.sharpe) ? (
+              <span className="text-mono text-xs text-foreground">{r.sharpe.toFixed(2)}</span>
+            ) : (
+              <span className="text-mono text-xs text-muted-foreground">{noData}</span>
+            ),
+        },
+        {
+          key: "drawdown",
+          header: t("table.drawdown"),
+          cell: (r) => {
+            if (!hasNumber(r.drawdown)) {
+              return <span className="text-mono text-xs text-muted-foreground">{noData}</span>;
+            }
+            const toneClass = r.drawdown === 0 ? "text-foreground" : "text-status-warning";
+            return <span className={`text-mono text-xs ${toneClass}`}>{`${(r.drawdown * 100).toFixed(2)}%`}</span>;
+          },
+        },
       ]}
     />
   );

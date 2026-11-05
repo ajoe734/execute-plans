@@ -34,9 +34,22 @@ export interface StrategyListFilter {
 
 export const STRATEGY_LIST_SORT_KEYS = [
   "name", "lifecycleStatus", "reviewStatus", "deploymentStatus",
-  "riskLevel", "sharpe", "drawdown", "pnl30d", "updatedAt", "openAlerts",
+  "riskLevel", "pnl", "sharpe", "drawdown", "pnl30d", "updatedAt", "openAlerts",
 ] as const;
 export type StrategyListSortKey = typeof STRATEGY_LIST_SORT_KEYS[number];
+
+export function compareNullableStrategyMetric(
+  a: number | null | undefined,
+  b: number | null | undefined,
+  direction: "asc" | "desc" = "desc",
+): number {
+  const hasA = typeof a === "number" && Number.isFinite(a);
+  const hasB = typeof b === "number" && Number.isFinite(b);
+  if (!hasA && !hasB) return 0;
+  if (!hasA) return 1;
+  if (!hasB) return -1;
+  return direction === "asc" ? a - b : b - a;
+}
 
 // ───────── G36 — Run Experiment input ─────────
 export interface RunExperimentRequest {
