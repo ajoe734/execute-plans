@@ -115,6 +115,8 @@ export const paths = {
   search: () => `${BASE}/search`,
 
   // ---- Research ----
+  researchTasks: () => `${BASE}/research-tasks`,
+  researchTask: (id: string) => `${BASE}/research-tasks/${enc(id)}`,
   researchExperiments: () => `${BASE}/research-experiments`,
   researchExperiment: (id: string) => `${BASE}/research-experiments/${enc(id)}`,
   researchExperimentActions: (id: string, action: string) => `${BASE}/research-experiments/${enc(id)}/actions/${enc(action)}`,

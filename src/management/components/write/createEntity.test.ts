@@ -1,6 +1,9 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { writeOverlay } from "@/lib/bff-v1/writeOverlay";
 import { createPersona } from "@/lib/bff-v1/personas";
+import { createEvolutionProgram } from "@/lib/bff-v1/evolution";
+import * as createDefaults from "@/lib/writeIntents/createDefaults";
+import { DURABLE_CREATE_OWNERS, durableCreateOwner, hasDurableCreateOwner } from "@/lib/writeIntents/types";
 import {
   createEntityFromInput,
   deleteEntity,
@@ -22,6 +25,24 @@ vi.mock("@/lib/bff-v1/personas", () => ({
     archetype: payload.archetype ?? "generalist",
     routedStrategies: 0,
     successRate: 0,
+  })),
+}));
+
+vi.mock("@/lib/bff-v1/evolution", () => ({
+  createEvolutionProgram: vi.fn(async (payload: { name: string }) => ({
+    id: "evo-program-001",
+    programId: "evo-program-001",
+    name: payload.name,
+    owner: "—",
+    state: "draft",
+    status: "draft",
+    risk: "medium",
+    updatedAt: "2026-11-04T00:00:00Z",
+    parentAlpha: "",
+    generation: 0,
+    population: 0,
+    bestFitness: 0,
+    progress: 0,
   })),
 }));
 
@@ -65,6 +86,43 @@ describe("createEntityFromInput", () => {
     );
     expect(addSpy).not.toHaveBeenCalled();
     expect(writeOverlay.list("persona")).toHaveLength(0);
+  });
+
+  it("registers evolutionProgram in DURABLE_CREATE_OWNERS and sends only name without buildEntity defaults", async () => {
+    expect(DURABLE_CREATE_OWNERS.evolutionProgram).toBe("POST /bff/evolution-programs");
+    expect(hasDurableCreateOwner("evolutionProgram")).toBe(true);
+    expect(durableCreateOwner("evolutionProgram")).toBe("POST /bff/evolution-programs");
+    expect(hasDurableCreateOwner("researchExperiment")).toBe(false);
+
+    const addSpy = vi.spyOn(writeOverlay, "add");
+    const buildSpy = vi.spyOn(createDefaults, "buildEntity");
+
+    const result = await createEntityFromInput(
+      "evolutionProgram",
+      {
+        name: "  Cross-Sectional Alpha Direction  ",
+        owner: "should-not-be-sent",
+        memo: "should-not-be-sent",
+      },
+      { idempotencyKey: "idem-evo-001" },
+    );
+
+    expect(result.persistence).toBe("bff");
+    expect(result.entity).toBe("evolutionProgram");
+    expect(result.data).toMatchObject({
+      id: "evo-program-001",
+      name: "Cross-Sectional Alpha Direction",
+      state: "draft",
+      status: "draft",
+    });
+    expect(createEvolutionProgram).toHaveBeenCalledTimes(1);
+    expect(createEvolutionProgram).toHaveBeenCalledWith(
+      { name: "Cross-Sectional Alpha Direction" },
+      { idempotencyKey: "idem-evo-001" },
+    );
+    expect(buildSpy).not.toHaveBeenCalled();
+    expect(addSpy).not.toHaveBeenCalled();
+    expect(writeOverlay.list("evolutionProgram")).toHaveLength(0);
   });
 
   it("fail-closes a non-persona create instead of writing an overlay", async () => {

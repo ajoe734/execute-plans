@@ -1,3 +1,4 @@
+import { createEvolutionProgram } from "@/lib/bff-v1/evolution";
 import { createPersona } from "@/lib/bff-v1/personas";
 import { buildEntity } from "@/lib/writeIntents/createDefaults";
 import {
@@ -39,7 +40,20 @@ export async function createEntityFromInput<K extends CreatableEntity>(
   input: CreateInputMap[K],
   opts: CreateEntityOptions = {},
 ): Promise<CreateEntityResult> {
-  if (durableCreateOwner(entity) === undefined || entity !== "persona") {
+  if (durableCreateOwner(entity) === undefined) {
+    throw new UnsupportedEntityMutationError(entity, "create");
+  }
+
+  if (entity === "evolutionProgram") {
+    const evoInput = input as CreateInputMap["evolutionProgram"];
+    const data = await createEvolutionProgram(
+      { name: String(evoInput.name ?? "").trim() },
+      { idempotencyKey: opts.idempotencyKey },
+    );
+    return { entity, data: data as unknown as Record<string, unknown>, persistence: "bff" };
+  }
+
+  if (entity !== "persona") {
     throw new UnsupportedEntityMutationError(entity, "create");
   }
 

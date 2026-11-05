@@ -17,6 +17,7 @@ import {
   createWidgetRevisionProposal,
   decideOnEvent,
   getTradingRoomWorkspace,
+  getTradingRoomWorkspaceByStrategyWithMeta,
   getTradingRoomWorkspaceWithMeta,
   getTradingRoomWorkspaceProposal,
   getTradingRoomPerformanceAttribution,
@@ -894,6 +895,39 @@ describe("Trading Room workspace proposal routes", () => {
     expect(fetchMock.mock.calls[0][1].method).toBe("GET");
     expect(result.workspace.id).toBe("workspace-001");
     expect(result.etag).toBe('"workspace-etag-v1"');
+  });
+
+  it("looks up the scoped saved workspace with exact URL encoding, ETag and session", async () => {
+    setAuthProvider({ getToken: () => "tok-1", getTenantId: () => "ten-1" });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        ok({ data: mockWorkspace }, 200, { ETag: '"ws-etag"' }),
+      );
+    globalThis.fetch = fetchMock;
+
+    const result = await getTradingRoomWorkspaceByStrategyWithMeta(
+      "strat/1",
+      "v 1&x=2",
+      BASE,
+    );
+
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      `${BASE}/bff/agora/strategies/strat%2F1/trading-room/workspace?strategy_version=v%201%26x%3D2`,
+    );
+    expect(fetchMock.mock.calls[0][1].method).toBe("GET");
+    expect(fetchMock.mock.calls[0][1].credentials).toBe("include");
+    expect(result.workspace.id).toBe("workspace-001");
+    expect(result.etag).toBe('"ws-etag"');
+  });
+
+  it.each([404, 403, 503])("rejects scoped lookup with typed BffError on %s", async (status) => {
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValue(bffErrorResponse(status, "RESOURCE_NOT_FOUND", "x"));
+    await expect(
+      getTradingRoomWorkspaceByStrategyWithMeta("s", "v", BASE),
+    ).rejects.toMatchObject({ status });
   });
 
   it("normalizes canonical BFF availability in accepted workspaces", async () => {

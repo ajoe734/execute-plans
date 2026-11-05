@@ -91,7 +91,7 @@ const blankInput = (entity: CreatableEntity): Record<string, unknown> => {
     case "rankingFormula": return { ...base, expression: "" };
     case "rebalance": return { ...base, quarter: "", targetPoolId: "", proposedDelta: 0 };
     case "deployment": return { ...base, strategyId: "", artifactId: "", target: "research", version: "" };
-    case "evolutionProgram": return { ...base, parentAlpha: "", population: 10 };
+    case "evolutionProgram": return { name: "" };
     case "researchExperiment": return { ...base, hypothesis: "", metric: "" };
     case "artifact": return { ...base, kind: "model", version: "" };
     default: return base;
@@ -173,12 +173,7 @@ function entityFields(entity: CreatableEntity): FieldDef[] {
         memo,
       ];
     case "evolutionProgram":
-      return [
-        baseName, owner,
-        { name: "parentAlpha", labelKey: "parentAlpha", type: "text", required: true },
-        { name: "population", labelKey: "population", type: "number", required: true },
-        memo,
-      ];
+      return [baseName];
     case "researchExperiment":
       return [
         baseName, owner,
@@ -220,6 +215,7 @@ export const EntityCreateDrawer = ({ entity, open, onOpenChange, onCreated, mode
   };
   const [form, setForm] = useState<Record<string, unknown>>(seedForm);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [submitError, setSubmitError] = useState<string | null>(null);
   // C3 — stable idempotencyKey per drawer-open; reset when drawer reopens.
   const idemRef = useRef<string>(idempotencyKey());
   const lastSubmitAtRef = useRef<number>(0);
@@ -230,6 +226,7 @@ export const EntityCreateDrawer = ({ entity, open, onOpenChange, onCreated, mode
     if (open) {
       setForm(seedForm());
       setErrors({});
+      setSubmitError(null);
       idemRef.current = idempotencyKey();
       lastSubmitAtRef.current = 0;
       setCooldownMs(0);
@@ -246,10 +243,14 @@ export const EntityCreateDrawer = ({ entity, open, onOpenChange, onCreated, mode
   }, [cooldownMs]);
 
   const fields = useMemo(() => entityFields(entity), [entity]);
-  const setField = (k: string, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
+  const setField = (k: string, v: unknown) => {
+    setSubmitError(null);
+    setForm((f) => ({ ...f, [k]: v }));
+  };
 
   const submit = async () => {
     if (submitting) return;
+    setSubmitError(null);
     const now = Date.now();
     const sinceLast = now - lastSubmitAtRef.current;
     if (lastSubmitAtRef.current > 0 && sinceLast < CONFIRM_COOLDOWN_MS) {
@@ -268,6 +269,7 @@ export const EntityCreateDrawer = ({ entity, open, onOpenChange, onCreated, mode
       setErrors(mapped);
       return;
     }
+    setErrors({});
     setSubmitting(true);
     try {
       const result =
@@ -284,9 +286,11 @@ export const EntityCreateDrawer = ({ entity, open, onOpenChange, onCreated, mode
       onOpenChange(false);
     } catch (err) {
       onCreateFailed?.(err);
+      const message = err instanceof Error ? err.message : String(err);
+      setSubmitError(message);
       toast({
         title: t("errors.UNKNOWN_ERROR"),
-        description: err instanceof Error ? err.message : String(err),
+        description: message,
         variant: "destructive",
       });
     } finally {
@@ -420,6 +424,15 @@ export const EntityCreateDrawer = ({ entity, open, onOpenChange, onCreated, mode
 
         <div className="space-y-3 py-4">
           {fields.map(renderField)}
+          {submitError && (
+            <div
+              role="alert"
+              data-testid="entity-create-error"
+              className="rounded-md border border-status-failed/40 bg-status-failed/10 px-3 py-2 text-xs text-status-failed"
+            >
+              {submitError}
+            </div>
+          )}
         </div>
 
         <SheetFooter>
