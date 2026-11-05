@@ -824,20 +824,20 @@ export const PersonaFleetPage = () => {
           testId="persona-fleet-table-scroll"
           minScrollWidth={1840}
           showPinnedScrollbar={false}
-          contentClassName="pb-4"
+          contentClassName="pb-4 pr-4"
           viewportClassName="h-full min-h-0 overflow-auto pb-4"
         >
         <table className="w-full min-w-[1840px] text-sm">
           <thead className="sticky top-0 z-30 border-b border-border bg-card text-left text-xs uppercase tracking-wider text-muted-foreground">
             <tr>
-              <th className="sticky left-0 z-40 min-w-[280px] bg-card px-3 py-2 border-r border-border/50 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.15)]">{t("mgmt.fleet.persona")}</th><th className="min-w-[180px] whitespace-nowrap px-3 py-2">{t("mgmt.fleet.owner")}</th>
-              <th className="px-3 py-2">{t("mgmt.fleet.ooda")}</th><th className="px-3 py-2">{t("mgmt.fleet.autonomy")}</th>
-              <th className="px-3 py-2">{t("mgmt.fleet.capital")}</th><th className="px-3 py-2">{t("mgmt.fleet.rank")}</th>
-              <th className="px-3 py-2">{t("mgmt.fleet.dataSources")}</th><th className="px-3 py-2">{t("mgmt.fleet.research")}</th>
-              <th className="px-3 py-2">{t("mgmt.fleet.perfDelta")}</th><th className="px-3 py-2">{t("mgmt.fleet.lastMutation")}</th>
-              <th className="px-3 py-2">{t("mgmt.fleet.humanNeeded")}</th>
-              <th className="px-3 py-2">{t("mgmt.fleet.state")}</th>
-              <th className="px-3 py-2 text-right">{t("mgmt.fleet.actions")}</th>
+              <th className="sticky left-0 z-40 min-w-[280px] whitespace-nowrap bg-card px-3 py-2 border-r border-border/50 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.15)]">{t("mgmt.fleet.persona")}</th><th className="min-w-[180px] whitespace-nowrap px-3 py-2">{t("mgmt.fleet.owner")}</th>
+              <th className="whitespace-nowrap px-3 py-2">{t("mgmt.fleet.ooda")}</th><th className="whitespace-nowrap px-3 py-2">{t("mgmt.fleet.autonomy")}</th>
+              <th className="whitespace-nowrap px-3 py-2">{t("mgmt.fleet.capital")}</th><th className="whitespace-nowrap px-3 py-2">{t("mgmt.fleet.rank")}</th>
+              <th className="whitespace-nowrap px-3 py-2">{t("mgmt.fleet.dataSources")}</th><th className="whitespace-nowrap px-3 py-2">{t("mgmt.fleet.research")}</th>
+              <th className="min-w-[110px] whitespace-nowrap px-3 py-2">{t("mgmt.fleet.perfDelta")}</th><th className="min-w-[130px] whitespace-nowrap px-3 py-2">{t("mgmt.fleet.lastMutation")}</th>
+              <th className="min-w-[110px] whitespace-nowrap px-3 py-2">{t("mgmt.fleet.humanNeeded")}</th>
+              <th className="whitespace-nowrap px-3 py-2">{t("mgmt.fleet.state")}</th>
+              <th className="min-w-[140px] whitespace-nowrap py-2 pl-3 pr-7 text-right">{t("mgmt.fleet.actions")}</th>
             </tr>
           </thead>
 
@@ -883,7 +883,7 @@ export const PersonaFleetPage = () => {
                   key={r.personaId}
                   className={"group border-b border-border/50 hover:bg-muted/30 " + (retired ? "opacity-60 " : "") + (focused ? "bg-primary/5" : "")}
                 >
-                  <td className={"sticky left-0 z-10 min-w-[280px] border-r border-border/50 px-3 py-2 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.15)] transition-colors " + (focused ? "bg-primary/10 group-hover:bg-primary/15" : "bg-card group-hover:bg-muted/40")}>
+                  <td className={"sticky left-0 z-10 min-w-[280px] border-r border-border/50 px-3 py-2 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.15)] transition-colors " + (focused ? "bg-[color-mix(in_oklab,hsl(var(--primary))_10%,hsl(var(--card)))] group-hover:bg-[color-mix(in_oklab,hsl(var(--primary))_15%,hsl(var(--card)))]" : "bg-card group-hover:bg-[color-mix(in_oklab,hsl(var(--muted))_40%,hsl(var(--card)))]")}>
                     {personaHref ? (
                       <Link
                         to={personaHref}
@@ -1171,7 +1171,7 @@ export const PersonaFleetPage = () => {
 	                    </div>
 	                    )}
 	                  </td>
-                  <td className={"px-3 py-2 " + (
+                  <td className={"min-w-[110px] whitespace-nowrap px-3 py-2 " + (
                     Number.isFinite(r.perfDelta)
                       ? (r.perfDelta >= 0 ? "text-status-success" : "text-status-failed")
                       : "text-muted-foreground"
@@ -1199,22 +1199,22 @@ export const PersonaFleetPage = () => {
                       </span>
                     )}
                   </td>
-                  <td className="px-3 py-2 text-muted-foreground">
+                  <td className="min-w-[130px] whitespace-nowrap px-3 py-2 text-muted-foreground">
                     {mutationHref ? (
                       <Link
                         to={mutationHref}
                         aria-label={`${r.personaId} mutation history`}
-                        className={fieldLinkClass("text-muted-foreground hover:text-primary")}
+                        className={fieldLinkClass("whitespace-nowrap text-muted-foreground hover:text-primary")}
                       >
                         {r.lastMutationKind === "fleet_summary" ? (r.lastMutationLabel || r.lastMutation || "無正式 mutation") : (r.lastMutationLabel || r.lastMutation || "—")}
                       </Link>
                     ) : (
-                      <span className="text-muted-foreground">
+                      <span className="whitespace-nowrap text-muted-foreground">
                         {r.lastMutationKind === "unavailable" ? "無資料" : (r.lastMutation || "—")}
                       </span>
                     )}
                   </td>
-                  <td className="px-3 py-2">
+                  <td className="min-w-[110px] whitespace-nowrap px-3 py-2">
                     {r.humanNeeded
                       ? (
                         <OptionalFleetLink
@@ -1246,7 +1246,7 @@ export const PersonaFleetPage = () => {
                         )
                       )}
                   </td>
-                  <td className="px-3 py-2">
+                  <td className="whitespace-nowrap px-3 py-2">
                     {stateLabel && (() => {
                       const stateHref = r.humanNeeded ? humanGateHref : personaHref;
                       return (
@@ -1271,7 +1271,7 @@ export const PersonaFleetPage = () => {
                       );
                     })()}
                   </td>
-                  <td className="px-3 py-2 text-right">
+                  <td className="min-w-[140px] whitespace-nowrap py-2 pl-3 pr-7 text-right">
                     {!retired && (
                       primaryAction.href ? (
                         <Button
