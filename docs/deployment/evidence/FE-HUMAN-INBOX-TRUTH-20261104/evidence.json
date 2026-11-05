@@ -13,7 +13,7 @@
     "status": "done"
   },
   "status": "ready_for_review",
-  "timestamp": "2026-11-05T02:41:30Z",
+  "timestamp": "2026-11-05T03:45:00Z",
   "scope": {
     "delivered": [
       "Updated adaptHumanInboxList and mgmt.humanInbox.list in src/lib/bff-v1/management.ts to preserve top-level BFF meta.surfaces and page_info (falling back to data.meta / data.page_info when nested) for both empty and non-empty lists.",
@@ -117,7 +117,7 @@
   ],
   "validation": {
     "typecheck": {
-      "command": "./node_modules/.bin/tsc -p tsconfig.app.json --noEmit && ./node_modules/.bin/tsc -p tsconfig.agora.json --noEmit",
+      "command": "npm run typecheck:app && ./node_modules/.bin/tsc -p tsconfig.agora.json --noEmit",
       "exit_code": 0
     },
     "unit_and_component_tests": {

@@ -2,6 +2,7 @@ import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { emitV5Event } from "@/lib/bff-v1";
 import { adaptHumanInboxList } from "@/lib/bff-v1/management";
+import type { HumanInboxList } from "@/lib/v5/management/humanInbox";
 import { __resetV5LiveCacheForTests, useV5Live } from "./useV5Live";
 
 interface TestData {
@@ -381,7 +382,7 @@ describe("useV5Live cache", () => {
     })!;
 
     const loader = vi
-      .fn()
+      .fn<() => Promise<HumanInboxList>>()
       .mockResolvedValueOnce(emptyDegraded)
       .mockResolvedValueOnce(nonEmptyDegraded);
 
