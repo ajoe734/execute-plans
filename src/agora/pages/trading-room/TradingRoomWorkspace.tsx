@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import {
   acceptTradingRoomWorkspaceProposalWithMeta,
   createTradingRoomWorkspaceProposal,
+  getTradingRoomWorkspaceByStrategyWithMeta,
   type TradingRoomAggregate,
   type TradingRoomStrategyEntry,
   type TradingDecisionEvent,
@@ -399,6 +400,9 @@ export function TradingRoomWorkspace({
   const [workspaceResult, setWorkspaceResult] = useState<TradingRoomWorkspaceResult | null>(null);
   const [accepting, setAccepting] = useState(false);
   const [mobilePane, setMobilePane] = useState<"decisions" | "workspace">("decisions");
+  // Revision created by an explicit user regeneration: skip the saved-workspace
+  // restore for that revision only (StrictMode-safe: never consumed/reset).
+  const regenerateRevisionRef = useRef<number | null>(null);
 
   useEffect(() => {
     setWorkspaceResult(null);
@@ -420,7 +424,10 @@ export function TradingRoomWorkspace({
     setProposalLoading(true);
     setMobilePane("workspace");
 
-    createTradingRoomWorkspaceProposal(
+    const skipRestore = regenerateRevisionRef.current === proposalRevision;
+
+    const generatePreview = () =>
+      createTradingRoomWorkspaceProposal(
       strategyId,
       {
         personalizationHints: {
@@ -433,9 +440,31 @@ export function TradingRoomWorkspace({
         tradingRoomReady: routeTradingRoomReady || aggregateTradingRoomReady,
       },
       { idempotencyKey: newUUID() },
-    )
-      .then((nextProposal) => {
+    );
+
+    // Restore the saved private workspace from the scoped owner first; only a
+    // genuine 404 (or explicit regeneration) falls through to a new preview.
+    const restoreOrGenerate = skipRestore
+      ? generatePreview().then((nextProposal) => ({ nextProposal }))
+      : getTradingRoomWorkspaceByStrategyWithMeta(strategyId, resolvedStrategyVersion).then(
+          (saved) => ({ saved }),
+          (err) => {
+            if (err instanceof BffError && err.status === 404) {
+              return generatePreview().then((nextProposal) => ({ nextProposal }));
+            }
+            throw err;
+          },
+        );
+
+    restoreOrGenerate
+      .then((outcome) => {
         if (cancelled) return;
+        if ("saved" in outcome) {
+          setWorkspaceResult(outcome.saved);
+          setProposalLoading(false);
+          return;
+        }
+        const { nextProposal } = outcome;
         setProposal(nextProposal);
         setSelectedPreviewViewId(nextProposal.views[0]?.id ?? null);
         setProposalLoading(false);
@@ -491,7 +520,15 @@ export function TradingRoomWorkspace({
     }
   }
 
+  function retryProposal() {
+    setWorkspaceResult(null);
+    setProposal(null);
+    setSelectedPreviewViewId(null);
+    setProposalRevision((prev) => prev + 1);
+  }
+
   function regenerateProposal() {
+    regenerateRevisionRef.current = proposalRevision + 1;
     setWorkspaceResult(null);
     setProposal(null);
     setSelectedPreviewViewId(null);
@@ -602,7 +639,7 @@ export function TradingRoomWorkspace({
               <div>
                 <button
                   data-testid="trading-room-proposal-retry"
-                  onClick={regenerateProposal}
+                  onClick={retryProposal}
                   style={{
                     background: "#171b22",
                     border: "1px solid #2a2e38",
