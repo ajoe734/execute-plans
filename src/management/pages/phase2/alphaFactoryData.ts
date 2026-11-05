@@ -5,7 +5,7 @@ export interface AlphaFactoryCard {
   name: string;
   risk: Strategy["risk"];
   alpha?: string;
-  sharpe?: number;
+  sharpe?: number | null;
   note: string;
 }
 

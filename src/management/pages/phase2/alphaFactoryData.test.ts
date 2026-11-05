@@ -43,6 +43,23 @@ describe("buildAlphaFactoryBuckets", () => {
     expect(buckets.scaffolded.length).toBeGreaterThan(0);
     expect(buckets.replicated).toHaveLength(1);
   });
+
+  it("preserves null sharpe on replicated strategies without coercing to zero", () => {
+    const nullSharpeStrategy: Strategy = {
+      ...strategy,
+      id: "strat-paper-running-01",
+      pnl30d: null,
+      sharpe: null,
+      drawdown: 0,
+    };
+    const buckets = buildAlphaFactoryBuckets([nullSharpeStrategy], {
+      includeMockFixtures: false,
+      includeReplicated: true,
+      t,
+    });
+    expect(buckets.replicated).toHaveLength(1);
+    expect(buckets.replicated[0].sharpe).toBeNull();
+  });
 });
 
 describe("classifyAlphaFactorySource", () => {

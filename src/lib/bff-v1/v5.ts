@@ -58,8 +58,15 @@ const asString = (value: unknown, fallback = ""): string => {
 };
 
 const asNumber = (value: unknown, fallback = 0): number => {
+  if (value === null || value === undefined || value === "") return fallback;
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
+};
+
+const asNullableNumber = (value: unknown): number | null => {
+  if (value === null || value === undefined || value === "") return null;
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : null;
 };
 
 const asStringArray = (value: unknown): string[] => {
@@ -464,8 +471,8 @@ export function adaptBffStrategyHealth(value: unknown, index = 0): StrategyExecu
       lifecycleConsistency: score,
       sentinelIncidentPenalty: Math.max(0, 100 - score),
     },
-    pnl30d: asNumber(item.pnl30d ?? item.pnl_30d, 0),
-    drawdown: asNumber(item.drawdown, 0),
+    pnl30d: asNullableNumber(item.pnl30d ?? item.pnl_30d),
+    drawdown: asNullableNumber(item.drawdown),
     openFindings: asNumber(item.openFindings ?? item.open_findings, 0),
     updatedAt: isoFrom(item.updatedAt ?? item.updated_at),
   };

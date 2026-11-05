@@ -490,7 +490,7 @@ export default {
   },
   common: {
     owner: "負責人", updated: "更新時間", state: "狀態", name: "名稱", createNotConfigured: "尚未設定建立流程",
-    actions: "動作", noResults: "無結果", loading: "載入中…",
+    actions: "動作", noResults: "無結果", noData: "無資料", loading: "載入中…",
     awaitingData: "尚無資料",
     awaitingDataDesc: "此功能目前沒有資料——後端正常，但上游尚未為它產出（等待建置）。",
     all: "全部", back: "返回", risk: "風險", successRate: "成功率", none: "無",
@@ -2601,6 +2601,8 @@ export default {
     startEvolution: "開始演化程式",
     noGovernance: "此策略尚無治理請求。",
     costsTab: "成本與滑價",
+    cumulativePaperPnl: "累計模擬損益",
+    metricsAsOf: "統計截至 {{asOf}}",
   },
   settings: {
     subtitle: "個人偏好、工作區、整合、語言、佈景與功能旗標。",

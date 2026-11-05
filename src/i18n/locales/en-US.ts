@@ -499,7 +499,7 @@ export default {
   },
   common: {
     owner: "Owner", updated: "Last updated", state: "State", name: "Name", createNotConfigured: "Create flow not configured",
-    actions: "Actions", noResults: "No results", loading: "Loading…",
+    actions: "Actions", noResults: "No results", noData: "No data", loading: "Loading…",
     awaitingData: "No data yet",
     awaitingDataDesc: "This surface has no data yet — the backend is reachable but upstream is not producing for it.",
     all: "All", back: "Back", risk: "Risk", successRate: "Success", none: "None",
@@ -2619,6 +2619,8 @@ export default {
     startEvolution: "Start an evolution program",
     noGovernance: "No governance requests linked to this strategy.",
     costsTab: "Costs & Slippage",
+    cumulativePaperPnl: "Cumulative Paper PnL",
+    metricsAsOf: "As of {{asOf}}",
   },
   settings: {
     subtitle: "Personal preferences, workspace, integrations, locale, theme, and feature flags.",

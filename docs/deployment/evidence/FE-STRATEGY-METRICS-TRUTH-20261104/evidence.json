@@ -1,0 +1,248 @@
+{
+  "schema_version": "pantheon.fe-strategy-metrics-truth.v1",
+  "task_id": "FE-STRATEGY-METRICS-TRUTH-20261104",
+  "taskId": "FE-STRATEGY-METRICS-TRUTH-20261104",
+  "title": "Strategy pages must show no data for null metrics and real absolute PnL",
+  "owner": "Antigravity2",
+  "reviewer": "Claude",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-STRATEGY-METRICS-TRUTH-20261104",
+  "prerequisites": [
+    {
+      "task_id": "STRATEGY-METRICS-TRUTH-20261104",
+      "pantheon_merge_commit": "7469788b7446ccac87ed9ba8a1e64a09fffefcaf",
+      "status": "done"
+    },
+    {
+      "task_id": "FE-LINEAGE-REGISTRY-GRAPH-20261104",
+      "execute_plans_merge_commit": "ffe38be5ef2ca59eb6ccd7c89ac90f3cd2f9ade8",
+      "status": "done"
+    },
+    {
+      "task_id": "FE-CAPITAL-PAPER-POOL-VIEW-20261104",
+      "execute_plans_merge_commit": "49cd30de5651f95102cda1839999eb6b9c5d4d3d",
+      "status": "done"
+    }
+  ],
+  "status": "ready_for_review",
+  "timestamp": "2026-11-05T03:22:00Z",
+  "scope": {
+    "delivered": [
+      "Updated Strategy DTO in src/lib/bff-v1/dto.ts so pnl, pnl30d, sharpe, drawdown, totalTrades, metricsAsOf, metricsResolution, and metricsPersonaId accept null.",
+      "Updated StrategyDetail in src/management/pages/StrategyDetail.tsx to display the absolute cumulative paper PnL from s.pnl with s.metricsAsOf hint (without multiplying by 100 or labeling as % or 30d), show t('common.noData') with neutral tone ('default' / text-foreground) for null metrics while preserving real zero (0.00 / 0.00% with neutral tone), show t('common.noData') when alpha, capitalPoolId, or personaIds is empty, and omit the leading ' · ' separator in the header subtitle when alpha is empty.",
+      "Updated StrategiesList in src/management/pages/Lists.tsx to stop using num/fix/pct helpers that turn missing values into 0, and instead render Alpha, Capital Pools, Cumulative Paper PnL (with metricsAsOf), PnL 30d, Sharpe, and Drawdown with t('common.noData') and neutral tone (text-muted-foreground) when missing/null while preserving real 0.00 / 0.00%.",
+      "Updated every consumer of pnl30d, sharpe, and drawdown typed as number to accept null and avoid NaN or treating null as 0 across src/lib/v5/types.ts, src/lib/v5/adapters/strategy.ts, src/lib/bff-v1/v5.ts, src/lib/v5/management/portfolio.ts, src/lib/v5/management/personaLeague.ts, src/management/pages/oversight/PersonaLeague.tsx, src/lib/bff-v1/management.ts, src/lib/v3/medium-low/B3-console.ts, src/management/lib/personaReadiness.ts, src/management/pages/phase2/alphaFactoryData.ts, src/management/pages/phase2/AlphaFactoryBoard.tsx, src/management/pages/CapitalPoolDetail.tsx, src/lib/writeIntents/createDefaults.ts, and src/mocks/seed.ts.",
+      "Added bilingual i18n strings in src/i18n/locales/en-US.ts and src/i18n/locales/zh-TW.ts for common.noData, strategyDetail.cumulativePaperPnl, and strategyDetail.metricsAsOf.",
+      "Created src/management/pages/StrategyDetail.metrics.test.tsx and extended src/management/pages/CapitalPoolDetail.test.tsx and src/management/pages/phase2/alphaFactoryData.test.ts using the canonical BFF row shapes from STRATEGY-METRICS-TRUTH-20261104 (strat-paper-running-01, strat-neg-pnl-02, strat-zero-pnl-03, strat-not-running-05)."
+    ],
+    "not_changed": [
+      "The StrategyDetail Performance tab series getter (bffV1.performanceSeries.forStrategy) remains out of scope as specified in the task brief.",
+      "No existing test or assertion was weakened, deleted, or modified."
+    ],
+    "changed_assertions": []
+  },
+  "consumers": [
+    {
+      "file": "src/lib/bff-v1/dto.ts",
+      "symbol": "Strategy",
+      "metrics": ["pnl", "pnl30d", "sharpe", "drawdown", "totalTrades", "metricsAsOf", "metricsResolution", "metricsPersonaId"],
+      "result": "Typed as number | null (and string | null for metadata) matching the STRATEGY-METRICS-TRUTH-20261104 BFF payload."
+    },
+    {
+      "file": "src/lib/v5/types.ts",
+      "symbol": "StrategyExecutionHealth",
+      "metrics": ["pnl30d", "drawdown"],
+      "result": "Typed as number | null so execution health records preserve null when window telemetry is unavailable."
+    },
+    {
+      "file": "src/lib/v5/adapters/strategy.ts",
+      "symbol": "adaptStrategyHealth",
+      "metrics": ["pnl30d", "drawdown"],
+      "result": "Checks Number.isFinite before computing performance and executionQuality inputs; when null, sets performance=0 and executionQuality=0 (distinct from real 0 which yields performance=50 and executionQuality=80), preserves pnl30d: null and drawdown: null, and produces a finite health score without NaN."
+    },
+    {
+      "file": "src/lib/bff-v1/v5.ts",
+      "symbol": "adaptBffStrategyHealth",
+      "metrics": ["pnl30d", "drawdown"],
+      "result": "Uses asNullableNumber instead of asNumber(..., 0) so null or missing pnl30d/drawdown remain null rather than 0; also hardened asNumber so null falls back to fallback instead of Number(null)===0."
+    },
+    {
+      "file": "src/lib/v5/management/portfolio.ts",
+      "symbol": "PortfolioSummary, CapitalPoolSummaryRow, composePortfolioSummary",
+      "metrics": ["pnl30d", "drawdown"],
+      "result": "Filters pools to finite pnl30d before summing (returning null when no pool has finite pnl30d instead of 0) and filters pools to finite drawdown before selecting worstPool (returning undefined highestRiskPoolId when all drawdowns are null)."
+    },
+    {
+      "file": "src/lib/v5/management/personaLeague.ts",
+      "symbol": "PersonaLeagueRow, sortByPreset",
+      "metrics": ["pnl30d", "sharpe", "maxDrawdown"],
+      "result": "Accepts number | null and sorts rows with null metrics after all finite rows (including negative values), never producing NaN or treating null as 0."
+    },
+    {
+      "file": "src/management/pages/oversight/PersonaLeague.tsx",
+      "symbol": "PersonaLeague, RowFragment",
+      "metrics": ["pnl30d", "sharpe", "maxDrawdown"],
+      "result": "Table column sorting places null metrics last in both ascending and descending order without sentinel coercion, and RowFragment renders neutral text-muted-foreground when pnl30d or maxDrawdown is null."
+    },
+    {
+      "file": "src/lib/bff-v1/management.ts",
+      "symbol": "ManagementOperationsReadModel.performance, ManagementPersonaFleetPerformanceSummary, adaptPersonaLeagueRankedRows",
+      "metrics": ["pnl", "pnl30d", "sharpe", "maxDrawdown", "drawdownPct"],
+      "result": "Typed as number | null and normalized via nullableNumber in adaptPersonaLeagueRankedRows so null metrics are preserved as null."
+    },
+    {
+      "file": "src/lib/v3/medium-low/B3-console.ts",
+      "symbol": "STRATEGY_LIST_SORT_KEYS, compareNullableStrategyMetric",
+      "metrics": ["pnl", "pnl30d", "sharpe", "drawdown"],
+      "result": "Added 'pnl' sort key and compareNullableStrategyMetric comparator that sorts null/missing metrics after finite numbers without treating null as 0 or producing NaN."
+    },
+    {
+      "file": "src/management/lib/personaReadiness.ts",
+      "symbol": "PersonaReadiness, derivePersonaReadiness",
+      "metrics": ["pnl", "drawdown"],
+      "result": "Typed as number | null and preserved as null when health telemetry reports null."
+    },
+    {
+      "file": "src/management/pages/phase2/alphaFactoryData.ts",
+      "symbol": "AlphaFactoryCard, buildAlphaFactoryBuckets",
+      "metrics": ["sharpe"],
+      "result": "AlphaFactoryCard.sharpe accepts number | null and buildAlphaFactoryBuckets preserves null sharpe from Strategy rows."
+    },
+    {
+      "file": "src/management/pages/phase2/AlphaFactoryBoard.tsx",
+      "symbol": "AlphaFactoryBoard",
+      "metrics": ["sharpe"],
+      "result": "Checks typeof c.sharpe === 'number' && Number.isFinite(c.sharpe) before calling toFixed(2), rendering t('common.noData') when sharpe is null and omitting the ' · ' separator when alpha is empty."
+    },
+    {
+      "file": "src/management/pages/StrategyDetail.tsx",
+      "symbol": "StrategyDetail",
+      "metrics": ["pnl", "pnl30d", "sharpe", "drawdown", "metricsAsOf"],
+      "result": "Renders Cumulative Paper PnL (s.pnl with metricsAsOf hint), PnL 30d, Sharpe, and Drawdown StatCards; shows t('common.noData') with neutral default tone when null and preserves real 0.00 / 0.00% with neutral default tone; shows t('common.noData') for empty alpha/capitalPoolId/personaIds and omits leading separator when alpha is empty."
+    },
+    {
+      "file": "src/management/pages/Lists.tsx",
+      "symbol": "StrategiesList",
+      "metrics": ["pnl", "pnl30d", "sharpe", "drawdown", "metricsAsOf"],
+      "result": "Renders Alpha, Capital Pools, Cumulative Paper PnL (with metricsAsOf), PnL 30d, Sharpe, and Drawdown columns using hasNumber checks instead of num/fix/pct, showing t('common.noData') with neutral text-muted-foreground when null and preserving real 0.00 / 0.00%."
+    },
+    {
+      "file": "src/management/pages/CapitalPoolDetail.tsx",
+      "symbol": "CapitalPoolDetail (strategies, performance, rankingInputs tabs)",
+      "metrics": ["pnl30d", "sharpe", "drawdown"],
+      "result": "Filters strategies to finite metric values before computing pool Performance rollups (showing t('common.noData') with default tone when all strategies in the pool have null for a metric instead of 0.00 / 0.00% / NaN) and shows t('common.noData') in Strategies and Ranking Inputs tables when a metric is null."
+    },
+    {
+      "file": "src/lib/writeIntents/createDefaults.ts",
+      "symbol": "buildEntity('strategy')",
+      "metrics": ["pnl", "pnl30d", "sharpe", "drawdown"],
+      "result": "Initializes newly created draft strategies with pnl: null, pnl30d: null, sharpe: null, drawdown: null instead of 0."
+    },
+    {
+      "file": "src/mocks/seed.ts",
+      "symbol": "strategies",
+      "metrics": ["pnl", "pnl30d", "sharpe", "drawdown", "metricsAsOf", "metricsResolution"],
+      "result": "Populates realistic cumulative paper pnl and metricsAsOf on active mock strategies and sets pnl: null, pnl30d: null, sharpe: null, drawdown: null on draft strategy stg_005."
+    }
+  ],
+  "acceptance_verification": [
+    {
+      "criterion": 1,
+      "description": "The StrategyDetail overview shows no data for a null metric instead of 0.00 and uses the neutral tone; a real zero from the owner still shows zero",
+      "status": "passed",
+      "verified_by": [
+        "src/management/pages/StrategyDetail.metrics.test.tsx > renders positive cumulative paper PnL with metricsAsOf, preserves real zero drawdown, and shows No data with neutral tone for null PnL 30d and Sharpe",
+        "src/management/pages/StrategyDetail.metrics.test.tsx > preserves real zero cumulative paper PnL as 0.00 with neutral tone rather than No data",
+        "src/management/pages/StrategyDetail.metrics.test.tsx > shows No data for all null metrics and empty alpha/capitalPoolId, and omits leading separator in header when alpha is empty"
+      ]
+    },
+    {
+      "criterion": 2,
+      "description": "The overview shows the absolute cumulative paper PnL from pnl with metricsAsOf and does not multiply it by 100 or label it as a percentage or as 30 day; the PnL 30d and Sharpe cards show no data while the BFF returns null",
+      "status": "passed",
+      "verified_by": [
+        "src/management/pages/StrategyDetail.metrics.test.tsx > renders positive cumulative paper PnL with metricsAsOf, preserves real zero drawdown, and shows No data with neutral tone for null PnL 30d and Sharpe",
+        "src/management/pages/StrategyDetail.metrics.test.tsx > renders negative cumulative paper PnL with danger tone and non-zero drawdown with warning tone"
+      ]
+    },
+    {
+      "criterion": 3,
+      "description": "The strategy list columns follow the same rules and no longer use helpers that turn a missing value into zero",
+      "status": "passed",
+      "verified_by": [
+        "src/management/pages/StrategyDetail.metrics.test.tsx > renders StrategiesList columns with No data for null metrics and empty alpha/capital pool, and preserves real 0.00"
+      ]
+    },
+    {
+      "criterion": 4,
+      "description": "Every consumer of pnl30d and sharpe and drawdown typed as number accepts null; scores or rollups derived from them neither produce NaN nor treat a missing value as zero and each consumer is listed in evidence with its result",
+      "status": "passed",
+      "verified_by": [
+        "src/management/pages/StrategyDetail.metrics.test.tsx > adaptStrategyHealth accepts null pnl30d and drawdown without NaN and distinguishes null from 0",
+        "src/management/pages/StrategyDetail.metrics.test.tsx > adaptBffStrategyHealth preserves null pnl30d and drawdown instead of coercing to 0",
+        "src/management/pages/StrategyDetail.metrics.test.tsx > composePortfolioSummary returns null pnl30d and undefined highestRiskPoolId when pool metrics are null",
+        "src/management/pages/StrategyDetail.metrics.test.tsx > sortByPreset and adaptPersonaLeagueRankedRows keep null metrics last and never treat null as 0",
+        "src/management/pages/StrategyDetail.metrics.test.tsx > compareNullableStrategyMetric places null metrics after negative and zero numbers",
+        "src/management/pages/StrategyDetail.metrics.test.tsx > derivePersonaReadiness and buildEntity preserve null strategy/persona metrics",
+        "src/management/pages/StrategyDetail.metrics.test.tsx > AlphaFactoryBoardPage renders No data for replicated strategy with null sharpe and omits empty alpha separator",
+        "src/management/pages/CapitalPoolDetail.test.tsx > shows No data for null strategy metrics in CapitalPoolDetail tabs instead of 0.00 or NaN",
+        "src/management/pages/phase2/alphaFactoryData.test.ts > preserves null sharpe on replicated strategies without coercing to zero"
+      ]
+    },
+    {
+      "criterion": 5,
+      "description": "An empty alpha or capital pool shows no data and the header no longer prints a leading separator when alpha is empty",
+      "status": "passed",
+      "verified_by": [
+        "src/management/pages/StrategyDetail.metrics.test.tsx > shows No data for all null metrics and empty alpha/capitalPoolId, and omits leading separator in header when alpha is empty",
+        "src/management/pages/StrategyDetail.metrics.test.tsx > renders StrategiesList columns with No data for null metrics and empty alpha/capital pool, and preserves real 0.00"
+      ]
+    },
+    {
+      "criterion": 6,
+      "description": "No existing test is weakened or deleted to pass and any changed assertion is justified in evidence",
+      "status": "passed",
+      "justification": "Zero existing tests or assertions were modified, weakened, or deleted. All pre-existing assertions in StrategyDetail.tradeJourneys.test.tsx, CapitalPoolDetail.test.tsx, alphaFactoryData.test.ts, fullOperationAssembly.test.tsx, StrictLiveManagementSurfaces.test.tsx, and contract-drift.test.ts pass unchanged."
+    }
+  ],
+  "artifacts": [
+    "src/lib/bff-v1/dto.ts",
+    "src/lib/bff-v1/v5.ts",
+    "src/lib/bff-v1/management.ts",
+    "src/lib/v3/medium-low/B3-console.ts",
+    "src/lib/v5/adapters/strategy.ts",
+    "src/lib/v5/management/personaLeague.ts",
+    "src/lib/v5/management/portfolio.ts",
+    "src/lib/v5/types.ts",
+    "src/lib/writeIntents/createDefaults.ts",
+    "src/management/pages/StrategyDetail.tsx",
+    "src/management/pages/StrategyDetail.metrics.test.tsx",
+    "src/management/pages/StrategyDetail.tradeJourneys.test.tsx",
+    "src/management/pages/Lists.tsx",
+    "src/management/pages/CapitalPoolDetail.tsx",
+    "src/management/pages/CapitalPoolDetail.test.tsx",
+    "src/management/pages/oversight/PersonaLeague.tsx",
+    "src/management/pages/phase2/AlphaFactoryBoard.tsx",
+    "src/management/pages/phase2/alphaFactoryData.ts",
+    "src/management/pages/phase2/alphaFactoryData.test.ts",
+    "src/management/lib/personaReadiness.ts",
+    "src/management/__tests__/fullOperationAssembly.test.tsx",
+    "src/management/components/detail/__tests__/StrictLiveManagementSurfaces.test.tsx",
+    "src/mocks/seed.ts",
+    "src/i18n/locales/zh-TW.ts",
+    "src/i18n/locales/en-US.ts",
+    "src/lib/bff-v1/__tests__/contract-drift.test.ts",
+    "docs/deployment/evidence/FE-STRATEGY-METRICS-TRUTH-20261104/evidence.json"
+  ],
+  "validation": {
+    "typecheck": {
+      "command": "./node_modules/.bin/tsc -p tsconfig.app.json --noEmit && ./node_modules/.bin/tsc -p tsconfig.agora.json --noEmit",
+      "exit_code": 0
+    },
+    "unit_and_component_tests": {
+      "command": "./node_modules/.bin/vitest run src/management/pages/StrategyDetail.metrics.test.tsx src/management/pages/StrategyDetail.tradeJourneys.test.tsx src/management/pages/CapitalPoolDetail.test.tsx src/management/pages/phase2/alphaFactoryData.test.ts src/management/__tests__/fullOperationAssembly.test.tsx src/management/components/detail/__tests__/StrictLiveManagementSurfaces.test.tsx src/lib/bff-v1/__tests__/contract-drift.test.ts src/lib/v5/management/__tests__/i18nParity.test.ts src/lib/v5/management/__tests__/pm12.test.ts src/lib/bff-v1/__tests__/v5PureTransforms.test.ts",
+      "exit_code": 0
+    }
+  }
+}

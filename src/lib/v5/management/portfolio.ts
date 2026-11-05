@@ -20,7 +20,7 @@ export interface PortfolioSummary {
   realizedPnl: number;
   pnlToday: number;
   pnl7d: number;
-  pnl30d: number;
+  pnl30d: number | null;
   var95: number;
   cvar95?: number;
   activeCapitalPools: number;
@@ -69,8 +69,8 @@ export interface CapitalPoolSummaryRow {
   riskBudgetPct: number;
   pnlToday: number;
   pnl7d: number;
-  pnl30d: number;
-  drawdown: number;
+  pnl30d: number | null;
+  drawdown: number | null;
   activeStrategies: number;
   activePersonas: number;
   activeRuntimes: number;
@@ -303,15 +303,24 @@ export function composePortfolioSummary(
   const realizedPnl = holdings.reduce((s, h) => s + h.realizedPnl, 0);
   const pnlToday = pools.reduce((s, p) => s + p.pnlToday, 0);
   const pnl7d = pools.reduce((s, p) => s + p.pnl7d, 0);
-  const pnl30d = pools.reduce((s, p) => s + p.pnl30d, 0);
+  const pnl30dPools = pools.filter(
+    (p): p is CapitalPoolSummaryRow & { pnl30d: number } =>
+      typeof p.pnl30d === "number" && Number.isFinite(p.pnl30d),
+  );
+  const pnl30d = pnl30dPools.length > 0 ? pnl30dPools.reduce((s, p) => s + p.pnl30d, 0) : null;
   const top = holdings.reduce<HoldingRow | undefined>(
     (a, b) => (!a || b.exposurePct > a.exposurePct ? b : a),
     undefined,
   );
-  const worstPool = pools.reduce<CapitalPoolSummaryRow | undefined>(
-    (a, b) => (!a || b.drawdown < a.drawdown ? b : a),
-    undefined,
-  );
+  const worstPool = pools
+    .filter(
+      (p): p is CapitalPoolSummaryRow & { drawdown: number } =>
+        typeof p.drawdown === "number" && Number.isFinite(p.drawdown),
+    )
+    .reduce<(CapitalPoolSummaryRow & { drawdown: number }) | undefined>(
+      (a, b) => (!a || b.drawdown < a.drawdown ? b : a),
+      undefined,
+    );
   return {
     asOf: "2026-05-22T14:00:00Z",
     baseCurrency: "USD",
