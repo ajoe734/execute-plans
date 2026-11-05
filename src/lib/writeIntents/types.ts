@@ -131,10 +131,10 @@ export interface ResearchExperimentCreateInput extends BaseCreateInput {
 }
 
 export interface ArtifactCreateInput extends BaseCreateInput {
-  kind: "model" | "dataset" | "report" | "container";
+  kind: string;
   version: string;
   sourceExperimentId?: string;
-  sizeMb?: number;
+  sizeMb?: number | null;
   hash?: string;
 }
 
