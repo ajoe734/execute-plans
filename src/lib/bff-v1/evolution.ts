@@ -6,10 +6,13 @@ import type {
   MutationRule,
   PromotionRecord,
 } from "./dto";
+import { bffFetch } from "./client";
 import { paths } from "./paths";
 import {
   asRecord,
+  liveDetailFrom,
   liveItemsFrom,
+  normalizeBaseObjectFields,
   recordString,
   strictLiveDetail,
   strictLiveList,
@@ -17,12 +20,111 @@ import {
   type UnknownRecord,
 } from "./domainReads";
 
+export interface EvolutionProgramCreatePayload {
+  name: string;
+}
+
+export interface EvolutionProgramWriteOptions {
+  idempotencyKey?: string;
+  correlationId?: string;
+}
+
+export function normalizeEvolutionProgram(raw: unknown): EvolutionProgram | undefined {
+  const record = asRecord(raw);
+  if (!record) return undefined;
+  const base = normalizeBaseObjectFields(record) ?? record;
+  const id = recordString(record, "id", "program_id", "programId", "evolution_program_id") ?? "";
+  if (!id) return undefined;
+  const name = recordString(record, "name", "title") ?? id;
+  const rawState = recordString(record, "state", "status", "lifecycle_state", "lifecycleState") ?? "draft";
+  const state: EvolutionProgram["state"] =
+    rawState === "deployed" || rawState === "active" || rawState === "running"
+      ? "deployed"
+      : rawState === "review" || rawState === "under_review"
+        ? "review"
+        : rawState === "approved" || rawState === "completed"
+          ? "approved"
+          : rawState === "paused"
+            ? "paused"
+            : rawState === "retired" || rawState === "archived"
+              ? "retired"
+              : "draft";
+  const rawRisk = recordString(record, "risk", "risk_level", "riskLevel");
+  const risk: EvolutionProgram["risk"] =
+    rawRisk === "low" || rawRisk === "medium" || rawRisk === "high" || rawRisk === "critical"
+      ? rawRisk
+      : "low";
+  const owner = recordString(record, "owner", "created_by", "createdBy", "owner_id", "tenant_id") ?? "";
+  const updatedAt = recordString(record, "updatedAt", "updated_at", "createdAt", "created_at") ?? "";
+  const parentAlpha = recordString(record, "parentAlpha", "parent_alpha", "strategy_id", "strategyId") ?? "";
+  const generation = typeof record.generation === "number" && Number.isFinite(record.generation) ? record.generation : 0;
+  const population = typeof record.population === "number" && Number.isFinite(record.population) ? record.population : 0;
+  const bestFitness =
+    typeof record.bestFitness === "number" && Number.isFinite(record.bestFitness)
+      ? record.bestFitness
+      : typeof record.best_fitness === "number" && Number.isFinite(record.best_fitness)
+        ? record.best_fitness
+        : 0;
+  const progress = typeof record.progress === "number" && Number.isFinite(record.progress) ? record.progress : 0;
+
+  return {
+    ...(base as Partial<EvolutionProgram>),
+    id,
+    name,
+    state,
+    risk,
+    owner,
+    updatedAt,
+    parentAlpha,
+    generation,
+    population,
+    bestFitness,
+    progress,
+  };
+}
+
 export async function listEvolutionPrograms(): Promise<EvolutionProgram[]> {
-  return strictLiveList("evolution.list", paths.evolutionPrograms());
+  return strictLiveList("evolution.list", paths.evolutionPrograms(), (body) =>
+    liveItemsFrom<unknown>(body)
+      .map((item) => normalizeEvolutionProgram(item))
+      .filter((item): item is EvolutionProgram => Boolean(item)),
+  );
 }
 
 export async function getEvolutionProgram(id: string): Promise<EvolutionProgram | undefined> {
-  return strictLiveDetail("evolution.get", paths.evolutionProgram(id));
+  return strictLiveDetail("evolution.get", paths.evolutionProgram(id), (body) =>
+    normalizeEvolutionProgram(liveDetailFrom<unknown>(body)),
+  );
+}
+
+export async function createEvolutionProgram(
+  payload: EvolutionProgramCreatePayload,
+  opts: EvolutionProgramWriteOptions = {},
+): Promise<EvolutionProgram> {
+  const trimmedName = payload.name.trim();
+  const raw = await bffFetch<unknown>({
+    method: "POST",
+    path: paths.evolutionPrograms(),
+    body: { name: trimmedName },
+    idempotencyKey: opts.idempotencyKey,
+    correlationId: opts.correlationId,
+  });
+  const detail = liveDetailFrom<unknown>(raw) ?? raw;
+  const normalized = normalizeEvolutionProgram(detail);
+  if (normalized) return normalized;
+  return {
+    id: "",
+    name: trimmedName,
+    state: "draft",
+    risk: "low",
+    owner: "",
+    updatedAt: "",
+    parentAlpha: "",
+    generation: 0,
+    population: 0,
+    bestFitness: 0,
+    progress: 0,
+  };
 }
 
 async function fetchLiveEvolutionRuns(helperName: string): Promise<EvolutionRun[]> {
@@ -237,6 +339,7 @@ export async function getEvolutionConstraintsForProgram(programId: string): Prom
 export const evolution = {
   list: listEvolutionPrograms,
   get: getEvolutionProgram,
+  create: createEvolutionProgram,
 };
 
 export const evolutionRuns = {

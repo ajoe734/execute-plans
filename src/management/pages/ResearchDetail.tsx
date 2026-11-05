@@ -1,14 +1,16 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { bffV1, mgmt, runActionSafe, BffError } from "@/lib/bff-v1";
 import { useLiveDetail } from "@/lib/bff-v1/useLiveDetail";
 import { useT } from "@/platform/hooks";
-import type { AuditEvent, ResearchExperiment } from "@/lib/bff-v1";
+import { safeDateTime } from "@/lib/utils";
+import type { AuditEvent, ResearchTask } from "@/lib/bff-v1";
 import type { ManagementPersonaFleetRow, ManagementResearchProject } from "@/lib/bff-v1/management";
-import { Beaker, Package, Ban, RotateCcw, Archive, AlertTriangle, Inbox } from "lucide-react";
+import { Package, Ban, RotateCcw, Archive, AlertTriangle, Inbox } from "lucide-react";
 import { toast } from "sonner";
 import { ObjectDetailLayout, Section, Field } from "./ObjectDetailLayout";
 import { StatCard } from "@/platform/components/StatCard";
@@ -16,7 +18,7 @@ import { HighRiskConfirm } from "@/platform/components/HighRiskConfirm";
 import { DataTable } from "@/platform/components/DataTable";
 import { AuditTimeline } from "@/platform/components/AuditTimeline";
 
-type ResearchExperimentLive = ResearchExperiment & {
+type ResearchExperimentLive = ResearchTask & {
   experimentId?: string;
   experiment_id?: string;
   framework?: string;
@@ -30,6 +32,12 @@ type ResearchExperimentLive = ResearchExperiment & {
   deploymentStage?: string;
   deployment_stage?: string;
 };
+
+function isNonRealRun(adapter?: string, dispatchMode?: string): boolean {
+  const a = String(adapter ?? "").trim().toLowerCase();
+  const d = String(dispatchMode ?? "").trim().toLowerCase();
+  return a === "stub" || a === "manual" || d === "stub" || d === "manual";
+}
 
 type ResearchContext = {
   persona?: ManagementPersonaFleetRow;
@@ -45,7 +53,7 @@ function uniq(values: Array<string | undefined>): string[] {
 }
 
 function experimentIdOf(x: ResearchExperimentLive): string {
-  return x.experimentId ?? x.experiment_id ?? x.id;
+  return x.taskId ?? x.task_id ?? x.experimentId ?? x.experiment_id ?? x.id;
 }
 
 function researchContextFor(experiment: ResearchExperimentLive, rows: ManagementPersonaFleetRow[]): ResearchContext {
@@ -318,12 +326,71 @@ export const ResearchDetail = () => {
               <>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <StatCard label={t("table.status")} value={(x.status ?? "").toUpperCase()} />
-                  <StatCard label="Attempt" value={`#${x.attempt_number ?? x.attemptNumber ?? 1}`} />
-                  <StatCard label={x.metric} value={(x.metricValue ?? 0).toFixed(3)} tone="success" />
-                  <StatCard label={t("table.owner")} value={x.owner} />
+                  <StatCard
+                    label={t("research.table.runCount")}
+                    value={String(x.runCount ?? x.run_count ?? (x.runs ? x.runs.length : 0))}
+                  />
+                  <StatCard
+                    label={t("research.table.createdBy")}
+                    value={x.createdBy || x.created_by || x.owner || "—"}
+                  />
+                  <StatCard
+                    label={t("research.detail.taskType")}
+                    value={x.taskType || x.task_type || x.metric || "—"}
+                  />
                 </div>
-                <Section title={t("detail.section.hypothesis")}>
-                  <p className="text-sm leading-relaxed">{x.hypothesis}</p>
+                <Section title={t("research.detail.objective")}>
+                  <p className="text-sm leading-relaxed">{x.objective || x.hypothesis || "—"}</p>
+                </Section>
+                <Section title={t("research.detail.runsTitle")}>
+                  {Array.isArray(x.runs) && x.runs.length > 0 ? (
+                    <div className="space-y-3" data-testid="research-task-runs">
+                      {x.runs.map((run) => {
+                        const runId = run.runId ?? run.run_id;
+                        const adapter = run.adapter ?? "";
+                        const dispatchMode = run.dispatchMode ?? run.dispatch_mode ?? "";
+                        const requestedMode = run.requestedMode ?? run.requested_mode ?? "";
+                        const createdBy = run.createdBy ?? run.created_by ?? "";
+                        const createdAt = run.createdAt ?? run.created_at ?? "";
+                        const nonReal = isNonRealRun(adapter, dispatchMode);
+                        return (
+                          <div
+                            key={runId}
+                            data-testid={`research-task-run-${runId}`}
+                            className="rounded-md border p-3 space-y-2"
+                          >
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="font-mono text-sm font-medium">{runId}</span>
+                                <Badge variant="outline" className="font-mono uppercase text-xs">
+                                  {run.status}
+                                </Badge>
+                              </div>
+                              {nonReal && (
+                                <Badge
+                                  variant="outline"
+                                  className="border-status-warning/40 bg-status-warning/10 text-status-warning text-xs"
+                                >
+                                  {t("research.detail.nonRealExecution")} ({adapter || "—"} / {dispatchMode || "—"})
+                                </Badge>
+                              )}
+                            </div>
+                            <div className="grid grid-cols-2 gap-3 md:grid-cols-4 text-xs">
+                              <Field label={t("research.detail.adapter")} value={adapter || "—"} mono />
+                              <Field label={t("research.detail.dispatchMode")} value={dispatchMode || "—"} mono />
+                              <Field label={t("research.detail.requestedMode")} value={requestedMode || "—"} mono />
+                              <Field label={t("research.detail.createdBy")} value={createdBy || "—"} mono />
+                              <Field label={t("research.detail.createdAt")} value={safeDateTime(createdAt)} mono />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="text-sm text-muted-foreground py-2">
+                      {t("research.detail.noRuns")}
+                    </div>
+                  )}
                 </Section>
                 {(x.cancellation_fence || x.cancellationFence || x.parent_experiment_id || x.parentExperimentId || x.is_archived || x.isArchived || x.invalidated_reason || x.invalidatedReason) && (
                   <Section title="Experiment Lineage & Governance State">

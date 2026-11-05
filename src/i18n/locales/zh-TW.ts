@@ -2508,7 +2508,36 @@ export default {
     promotion: { title: "升級閘門", candidate: "候選", fitnessLift: "適應度提升", target: "目標", promote: "升級候選", queued: "升級已排入" },
   },
   ranking: { expression: "公式" },
-  research: { rerun: "重新執行" },
+  research: {
+    rerun: "重新執行",
+    createDisabledReason:
+      "研究項目由研究工作流自動建立；手動建立因尚無執行者處理而維持關閉。",
+    noRunsYet: "尚無執行紀錄",
+    nonRealRunBadge: "非真實執行（{{adapter}} / {{dispatchMode}}）",
+    table: {
+      latestRun: "最近執行",
+      runCount: "執行次數",
+      createdBy: "建立者",
+    },
+    emptyState: {
+      title: "尚無研究任務",
+      description: "目前尚未執行任何研究工作。研究工作流啟動後，研究任務會顯示於此。",
+    },
+    detail: {
+      objective: "研究目標",
+      runsTitle: "任務執行紀錄",
+      noRuns: "此研究任務尚無執行紀錄。",
+      runId: "執行 ID",
+      adapter: "Adapter",
+      dispatchMode: "派送模式",
+      requestedMode: "請求模式",
+      createdBy: "建立者",
+      createdAt: "建立時間",
+      taskType: "任務類型",
+      sourceRefs: "來源參照",
+      nonRealExecution: "Stub / 手動紀錄 — 非真實執行",
+    },
+  },
   qa: {
     markAll: "全部勾選", reset: "重設",
     persistTitle: "Mock BFF 持久化",

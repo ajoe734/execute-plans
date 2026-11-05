@@ -481,6 +481,62 @@ export interface EvolutionProgram extends BaseObject {
   action_receipts?: Array<Record<string, unknown>>;
 }
 
+export interface ResearchTaskLatestRun {
+  runId: string;
+  run_id?: string;
+  adapter: string;
+  dispatchMode: string;
+  dispatch_mode?: string;
+  status: string;
+  requestedMode?: string;
+  requested_mode?: string;
+  createdAt?: string;
+  created_at?: string;
+}
+
+export interface ResearchTaskRunEvent {
+  eventId?: string;
+  event_id?: string | null;
+  eventType?: string;
+  event_type?: string | null;
+  actorId?: string;
+  actor_id?: string | null;
+  createdAt?: string;
+  created_at?: string | null;
+  details?: Record<string, unknown>;
+}
+
+export interface ResearchTaskRun {
+  id: string;
+  runId: string;
+  run_id?: string;
+  taskId?: string;
+  task_id?: string;
+  adapter: string;
+  dispatchMode: string;
+  dispatch_mode?: string;
+  requestedMode?: string;
+  requested_mode?: string;
+  status: string;
+  createdBy?: string;
+  created_by?: string | null;
+  createdAt?: string;
+  created_at?: string | null;
+  parameters?: Record<string, unknown>;
+  inputRefs?: Record<string, unknown>;
+  input_refs?: Record<string, unknown>;
+  artifactRefs?: string[];
+  artifact_refs?: string[];
+  proposalRefs?: string[];
+  proposal_refs?: string[];
+  registryWritebacks?: Record<string, unknown>;
+  registry_writebacks?: Record<string, unknown>;
+  productionActivation?: Record<string, unknown>;
+  production_activation?: Record<string, unknown>;
+  rejection?: unknown;
+  events?: ResearchTaskRunEvent[];
+}
+
 export interface ResearchExperimentAllowedActions {
   canCancel?: boolean;
   canRetry?: boolean;
@@ -533,6 +589,31 @@ export interface ResearchExperiment extends BaseObject {
   };
   allowedActions?: ResearchExperimentAllowedActions;
   action_receipts?: Array<Record<string, unknown>>;
+}
+
+export interface ResearchTask extends ResearchExperiment {
+  taskId: string;
+  task_id?: string;
+  title?: string | null;
+  objective?: string | null;
+  status: string;
+  taskType?: string | null;
+  task_type?: string | null;
+  createdBy: string;
+  created_by?: string | null;
+  createdAt?: string;
+  created_at?: string | null;
+  updated_at?: string | null;
+  sourceRefs: string[];
+  source_refs?: string[];
+  runCount: number;
+  run_count?: number;
+  latestRun: ResearchTaskLatestRun | null;
+  latest_run?: ResearchTaskLatestRun | null;
+  constraints?: Record<string, unknown>;
+  idempotencyKey?: string | null;
+  idempotency_key?: string | null;
+  runs?: ResearchTaskRun[];
 }
 
 export interface Artifact extends BaseObject {

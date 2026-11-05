@@ -80,8 +80,6 @@ const validators: { [K in CreatableEntity]: (input: CreateInputMap[K]) => Valida
   evolutionProgram: (i: EvolutionProgramCreateInput) => {
     const errors: Record<string, string> = {};
     requireName(i.name, errors);
-    if (!i.parentAlpha?.trim()) errors.parentAlpha = "required";
-    if (!(i.population > 0)) errors.population = "must be > 0";
     return { ok: Object.keys(errors).length === 0, errors };
   },
   researchExperiment: (i: ResearchExperimentCreateInput) => {

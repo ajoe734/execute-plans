@@ -49,9 +49,9 @@ const cases: AnyCase[] = [
   },
   {
     entity: "evolutionProgram",
-    valid: { name: "OK Evo", parentAlpha: "alpha-x", population: 10 },
-    invalid: { name: "OK Evo", parentAlpha: "alpha-x", population: 0 },
-    expectErrorKey: "population",
+    valid: { name: "OK Evo" },
+    invalid: { name: "" },
+    expectErrorKey: "name",
   },
   {
     entity: "researchExperiment",
