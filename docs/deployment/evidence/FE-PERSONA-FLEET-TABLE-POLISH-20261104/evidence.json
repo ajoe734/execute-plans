@@ -7,7 +7,7 @@
   "merge_target": "dev",
   "branch": "task/FE-PERSONA-FLEET-TABLE-POLISH-20261104",
   "status": "ready-for-independent-exact-head-review",
-  "base_FE_dev": "466a4639b34a16da327d9869ee5e1c25ffe71a12",
+  "base_FE_dev": "ffe38be5ef2ca59eb6ccd7c89ac90f3cd2f9ade8",
   "scope": {
     "adopted": [
       "src/management/pages/oversight/_core.tsx: replace translucent frozen Persona cell background classes (`bg-muted/40`, `bg-primary/10`, `group-hover:bg-primary/15`) with opaque `color-mix(in oklab, ..., hsl(var(--card)))` classes so the frozen cell has computed background alpha = 1 in default, hovered, focused, and focused-plus-hovered states while keeping a visible opaque highlight matching its row.",
