@@ -84,7 +84,9 @@ export const HumanGateDetailPage = () => {
   const hasSignatures = item.signatures.length > 0;
   const hasDecisionHistory = item.decisionHistory.length > 0;
   const hasEvidence = item.evidenceRefs.length > 0;
-  const personaId = item.personaId ?? personaIdFromDetail(item.id, item.links?.manageHref);
+  const rawPersonaId = item.personaId ?? personaIdFromDetail(item.id, item.links?.manageHref);
+  const personaId = rawPersonaId && rawPersonaId.trim().toLowerCase() !== "nan" ? rawPersonaId : undefined;
+  const summaryValue = item.summary && item.summary.trim().toLowerCase() !== "nan" ? item.summary : undefined;
   const reviewId = item.reviewId ?? (item.id.startsWith("promotion_review:") ? item.id.slice("promotion_review:".length) : "");
   const isPromotionReview = item.kind === "promotion_review" && Boolean(reviewId);
   const promotionTargetKey = item.reviewType === "canary_to_live"
@@ -122,9 +124,17 @@ export const HumanGateDetailPage = () => {
       <header className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="text-2xl font-semibold text-foreground">{item.title}</h1>
-          <p className="text-sm text-muted-foreground">
-            {t("mgmt.inbox.headerSubtitleFmt", { role: item.requiredRole, decision: item.decisionType })}
-          </p>
+          {item.kind === "incident" ? (
+            item.requiredRole ? (
+              <p className="text-sm text-muted-foreground">
+                {t("mgmt.inbox.requiredRoleFmt", { role: item.requiredRole })}
+              </p>
+            ) : null
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              {t("mgmt.inbox.headerSubtitleFmt", { role: item.requiredRole, decision: item.decisionType })}
+            </p>
+          )}
         </div>
         <Button asChild variant="outline" size="sm">
           <Link to={returnUrl}>{t("mgmt.inbox.backToInbox")}</Link>
@@ -147,12 +157,12 @@ export const HumanGateDetailPage = () => {
                 >
                   {personaId}
                 </Link>
-              ) : "nan"}
+              ) : "—"}
             </dd>
           </div>
           <div>
             <dt className="text-muted-foreground">Summary</dt>
-            <dd className="text-foreground">{item.summary || "nan"}</dd>
+            <dd className="text-foreground">{summaryValue || "—"}</dd>
           </div>
         </dl>
       </Card>

@@ -407,4 +407,100 @@ describe("HumanGateDetailPage", () => {
       "/management/approvals?approval=dec-capital-pool-activation-001",
     );
   });
+
+  it("renders a pending incident row from the real BFF projector with canProceed true, no cannot proceed card, dashes instead of nan for missing persona and summary, and no empty role or decision type in the header", async () => {
+    const realPendingIncidentRow = {
+      id: "incident:inc-deployment-comp-deployment-saga-plan-persona-paper-abb0434d691076cbc08c",
+      inboxType: "incident",
+      source_type: "incident",
+      status: "open",
+      action_state: "pending",
+      priority: "critical",
+      created_at: "2026-10-29T13:14:36Z",
+      route: "/management/incidents/inc-deployment-comp-deployment-saga-plan-persona-paper-abb0434d691076cbc08c",
+      allowedActions: {
+        canReview: true,
+        canRemediate: true,
+      },
+      title: "Deployment compensation entered safe mode for deployment-saga-plan-persona-paper-abb0434d691076cbc08c",
+    };
+
+    const incidentDetail = adaptHumanInboxDetail({
+      data: {
+        item: realPendingIncidentRow,
+      },
+    })!;
+
+    expect(incidentDetail.kind).toBe("incident");
+    expect(incidentDetail.canProceed).toBe(true);
+    expect(incidentDetail.canDecide).toBe(false);
+    expect(incidentDetail.personaId).toBeUndefined();
+    expect(incidentDetail.summary).toBeUndefined();
+
+    mocks.useV5Live.mockReturnValue({
+      data: incidentDetail,
+      loading: false,
+      refresh: vi.fn(),
+    });
+
+    await i18n.changeLanguage("en-US");
+    const { unmount } = renderDetail(realPendingIncidentRow.id);
+
+    expect(
+      screen.getByRole("heading", {
+        name: realPendingIncidentRow.title,
+      }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Cannot proceed/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Required role:/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Decision type:/i)).not.toBeInTheDocument();
+    expect(screen.queryByText("single")).not.toBeInTheDocument();
+    expect(screen.queryByText("nan")).not.toBeInTheDocument();
+
+    const personaDt = screen.getByText("Persona");
+    const summaryDt = screen.getByText("Summary");
+    expect(personaDt.parentElement?.querySelector("dd")).toHaveTextContent("—");
+    expect(summaryDt.parentElement?.querySelector("dd")).toHaveTextContent("—");
+
+    expect(screen.queryByRole("button", { name: /approve|reject/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open action page" })).toHaveAttribute(
+      "href",
+      realPendingIncidentRow.route,
+    );
+    unmount();
+
+    await i18n.changeLanguage("zh-TW");
+    const { unmount: unmountZh } = renderDetail(realPendingIncidentRow.id);
+
+    expect(screen.queryByText("無法繼續")).not.toBeInTheDocument();
+    expect(screen.queryByText(/需要角色/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/決策類型/)).not.toBeInTheDocument();
+    expect(screen.queryByText("single")).not.toBeInTheDocument();
+    expect(screen.queryByText("nan")).not.toBeInTheDocument();
+    expect(screen.getByText("Persona").parentElement?.querySelector("dd")).toHaveTextContent("—");
+    expect(screen.getByText("Summary").parentElement?.querySelector("dd")).toHaveTextContent("—");
+    unmountZh();
+
+    await i18n.changeLanguage("en-US");
+    const explicitCannotProceedIncident = adaptHumanInboxDetail({
+      data: {
+        item: {
+          ...realPendingIncidentRow,
+          can_proceed: false,
+          blocking_reasons: ["Safe mode lock held by operator"],
+        },
+      },
+    })!;
+
+    expect(explicitCannotProceedIncident.canProceed).toBe(false);
+    mocks.useV5Live.mockReturnValue({
+      data: explicitCannotProceedIncident,
+      loading: false,
+      refresh: vi.fn(),
+    });
+
+    renderDetail(realPendingIncidentRow.id);
+    expect(screen.getByRole("heading", { name: "Cannot proceed" })).toBeInTheDocument();
+    expect(screen.getByText("Safe mode lock held by operator")).toBeInTheDocument();
+  });
 });
