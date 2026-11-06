@@ -376,7 +376,9 @@ describe("strategies BFF client", () => {
     );
     const forPersona = await listStrategiesForPersona("persona-be19a1fac471247f2b2a");
     expect(forPersona).toHaveLength(1);
-    expect(forPersona[0].personaIds).toContain("persona-be19a1fac471247f2b2a");
+    // The BFF DTO is returned as-is: no persona_id -> personaIds alias synthesis.
+    expect(forPersona[0]).toEqual(page2Rows[0]);
+    expect("personaIds" in forPersona[0]).toBe(false);
     expect(String(fetchSpy.mock.calls[2][0])).toBe(
       "https://bff.example/bff/strategies?persona_id=persona-be19a1fac471247f2b2a&page_size=200",
     );

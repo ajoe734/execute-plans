@@ -71,6 +71,10 @@ describe("PersonaCapitalBindingTab", () => {
 
     expect(await screen.findByText("pool-persona-paper-298e138c136c9840b0e4")).toBeInTheDocument();
     expect(screen.getByText(/strategy-persona-298e138c136c9840b0e4/)).toBeInTheDocument();
+    expect("persona_id" in (strategies[0] as unknown as Record<string, unknown>)).toBe(false);
+    expect("persona_ids" in (strategies[0] as unknown as Record<string, unknown>)).toBe(false);
+    expect("personaId" in (strategies[0] as unknown as Record<string, unknown>)).toBe(false);
+    expect("capital_pool_id" in (strategies[0] as unknown as Record<string, unknown>)).toBe(false);
   });
 
   it("renders Unavailable instead of No results found when capital pools or persona strategies read fails", async () => {

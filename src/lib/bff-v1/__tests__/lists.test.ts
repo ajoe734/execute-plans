@@ -159,8 +159,9 @@ describe("VI-1 lists facade", () => {
       name: "Pantheon Dev Paper Release 42123862167 Attempt 1",
       state: "approved",
       risk: "low",
+      alpha: "alpha.tw.2330",
       capitalPoolId: "pool-persona-paper-59b2143dcecf205acbf1",
-      capital_pool_id: "pool-persona-paper-59b2143dcecf205acbf1",
+      personaIds: ["persona-be19a1fac471247f2b2a"],
     };
 
     const fetchUrls: string[] = [];
@@ -280,6 +281,49 @@ describe("VI-1 lists facade", () => {
       "plan-persona-paper-298e138c136c9840b0e4",
     ]);
     expect(deploymentsEnv.cursor).toEqual({});
+  });
+
+  it("rejects with BACKEND_UNAVAILABLE and returns no partial rows when lists.personas encounters a repeated next_page_token cycle", async () => {
+    vi.stubEnv("MODE", "development");
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("VITE_BFF_MODE", "live");
+    vi.stubEnv("VITE_BFF_FALLBACK", "strict");
+    liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
+
+    const fetchUrls: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      fetchUrls.push(url);
+      if (url === "/bff/personas?page_size=200") {
+        return new Response(
+          JSON.stringify({
+            data: [{ id: "persona-p1", name: "Persona Page 1" }],
+            page_info: { page_size: 200, total: 2, next_page_token: "200" },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (url === "/bff/personas?page_size=200&page_token=200") {
+        return new Response(
+          JSON.stringify({
+            data: [{ id: "persona-c6ef44745087d11cc138", name: "Persona Page 2" }],
+            page_info: { page_size: 200, total: 2, next_page_token: "200" },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    await expect(lists.personas()).rejects.toMatchObject({
+      code: "BACKEND_UNAVAILABLE",
+      message: expect.stringContaining('repeated next_page_token="200"'),
+    });
+    expect(fetchUrls).toEqual([
+      "/bff/personas?page_size=200",
+      "/bff/personas?page_size=200&page_token=200",
+    ]);
+    expect(liveStatus.get().lastError).toContain('repeated next_page_token="200"');
   });
 });
 

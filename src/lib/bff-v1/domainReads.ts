@@ -368,15 +368,19 @@ export async function collectPaginatedListPages<T>(
       allItems.push(item);
     }
     const nextToken = extractNextToken(rawBody)?.trim() || undefined;
-    if (!nextToken || seenTokens.has(nextToken)) {
+    if (!nextToken) {
       break;
     }
-    if (page + 1 >= maxPages) {
-      const message = `${helperName} reached pagination cap (${maxPages} pages) for ${path} with next_page_token="${nextToken}" still present`;
-      liveStatus.reportFallback(`strict: ${message}`);
+    const paginationErrorMessage = seenTokens.has(nextToken)
+      ? `${helperName} encountered repeated next_page_token="${nextToken}" for ${path}`
+      : page + 1 >= maxPages
+        ? `${helperName} reached pagination cap (${maxPages} pages) for ${path} with next_page_token="${nextToken}" still present`
+        : undefined;
+    if (paginationErrorMessage) {
+      liveStatus.reportFallback(`strict: ${paginationErrorMessage}`);
       throw makeBffError({
         code: "BACKEND_UNAVAILABLE",
-        message,
+        message: paginationErrorMessage,
       });
     }
     seenTokens.add(nextToken);

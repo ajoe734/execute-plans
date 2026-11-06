@@ -3,10 +3,6 @@ import { bffFetch } from "./client";
 import { makeBffError } from "./errors";
 import { paths } from "./paths";
 import {
-  asRecord,
-  liveItemsFrom,
-  normalizeBaseObjectFields,
-  recordString,
   strictLiveDetail,
   strictLivePaginatedList,
 } from "./domainReads";
@@ -93,40 +89,11 @@ export async function createStrategy(
   return data;
 }
 
-export function normalizeStrategyRecord(raw: unknown): Strategy {
-  const base = normalizeBaseObjectFields(raw as Strategy);
-  const record = asRecord(base) ?? {};
-  const rawPersonaIds = Array.isArray(record.personaIds)
-    ? record.personaIds
-    : Array.isArray(record.persona_ids)
-      ? record.persona_ids
-      : [];
-  const personaIds = rawPersonaIds
-    .map((id) => (typeof id === "string" ? id.trim() : ""))
-    .filter((id) => id.length > 0);
-  const singlePersonaId = recordString(record, "persona_id", "personaId");
-  if (singlePersonaId && !personaIds.includes(singlePersonaId)) {
-    personaIds.push(singlePersonaId);
-  }
-  const capitalPoolId = recordString(record, "capitalPoolId", "capital_pool_id") ?? "";
-  const alpha = recordString(record, "alpha") ?? "";
-  return {
-    ...(record as unknown as Strategy),
-    personaIds,
-    capitalPoolId,
-    alpha,
-  };
-}
-
-export function normalizeStrategyList(body: unknown): Strategy[] {
-  return liveItemsFrom<unknown>(body).map(normalizeStrategyRecord);
-}
-
 export async function listNonDraftStrategies(): Promise<Strategy[]> {
   return strictLivePaginatedList<Strategy>(
     "strategies.listNonDraft",
     paths.strategies(),
-    normalizeStrategyList,
+    undefined,
     { query: { exclude_state: "draft" } },
   );
 }
@@ -137,15 +104,13 @@ export async function listStrategiesForPersona(personaId: string): Promise<Strat
   return strictLivePaginatedList<Strategy>(
     "strategies.listForPersona",
     paths.strategies(),
-    normalizeStrategyList,
+    undefined,
     { query: { persona_id: normalizedPersonaId } },
   );
 }
 
 export async function getStrategy(id: string): Promise<Strategy | undefined> {
-  return strictLiveDetail<Strategy>("strategies.get", paths.strategy(id)).then((item) =>
-    item ? normalizeStrategyRecord(item) : undefined,
-  );
+  return strictLiveDetail<Strategy>("strategies.get", paths.strategy(id));
 }
 
 export const strategies = {
