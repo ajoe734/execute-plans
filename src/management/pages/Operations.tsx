@@ -216,7 +216,7 @@ export const AlertsPage = () => {
           {active && (
             <>
               <SheetHeader>
-                <div className="flex items-center gap-2 mb-2"><RiskBadge level={active.severity} /><span className="text-mono text-xs text-muted-foreground">{active.id}</span></div>
+                <div className="flex items-center gap-2 mb-2"><RiskBadge level={active.severity} /><span className="min-w-0 break-all text-mono text-xs text-muted-foreground">{active.id}</span></div>
                 <SheetTitle>{active.title}</SheetTitle>
                 <SheetDescription>{active.description ?? t("empty.noDescription")}</SheetDescription>
               </SheetHeader>
@@ -295,7 +295,7 @@ export const IncidentsPage = () => {
                 <div className="flex items-center gap-2 mb-2">
                   <RiskBadge level={active.severity} />
                   <StatusBadge state={active.status === "resolved" ? "success" : active.status === "mitigating" ? "running" : "warning"} />
-                  <span className="text-mono text-xs text-muted-foreground">{active.id}</span>
+                  <span className="min-w-0 break-all text-mono text-xs text-muted-foreground">{active.id}</span>
                 </div>
                 <SheetTitle>{active.title}</SheetTitle>
                 <SheetDescription>{active.description ?? ""}</SheetDescription>
@@ -473,7 +473,7 @@ export const ApprovalsPage = () => {
                 <div className="flex items-center gap-2 mb-2">
                   <RiskBadge level={active.riskLevel} />
                   <StatusBadge state={active.state} />
-                  <span className="text-mono text-xs text-muted-foreground">{active.id}</span>
+                  <span className="min-w-0 break-all text-mono text-xs text-muted-foreground">{active.id}</span>
                 </div>
                 <SheetTitle>{active.subject}</SheetTitle>
                 <SheetDescription className="text-mono text-xs">{active.kind}</SheetDescription>

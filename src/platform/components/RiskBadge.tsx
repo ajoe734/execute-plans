@@ -15,10 +15,10 @@ export const RiskBadge = ({ level }: { level?: RiskLevel }) => {
   const t = useT();
   if (!level || !(level in map)) {
     return (
-      <Badge variant="outline" className="font-medium bg-muted text-muted-foreground border-dashed">
+      <Badge variant="outline" className="font-medium whitespace-nowrap bg-muted text-muted-foreground border-dashed">
         {t("risk.unavailable", { defaultValue: "Unavailable" })}
       </Badge>
     );
   }
-  return <Badge variant="outline" className={cn("font-medium", map[level])}>{t(`risk.${level}`, { defaultValue: level })}</Badge>;
+  return <Badge variant="outline" className={cn("font-medium whitespace-nowrap", map[level])}>{t(`risk.${level}`, { defaultValue: level })}</Badge>;
 };

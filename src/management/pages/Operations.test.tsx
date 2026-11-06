@@ -816,6 +816,54 @@ describe("Approval callers: Operations ApprovalsPage", () => {
     expect(await screen.findByText(zhTW.page.approvalsPendingEmpty)).toBeInTheDocument();
     expect(zhTW.page.approvalsPendingEmpty).toMatch(/已決策.*全部/);
   });
+
+  it("wraps the full 68-character id with min-w-0 and break-all in the approval drawer and all Operations sheet headers without truncation while keeping StatusBadge and RiskBadge whitespace-nowrap", async () => {
+    m.list.mockResolvedValue([]);
+    m.listDecisions.mockResolvedValue([normalizeApprovalFields(realDecidedBase)]);
+
+    const { unmount } = render(<MemoryRouter><ApprovalsPage /></MemoryRouter>);
+    fireEvent.click(screen.getByRole("button", { name: "filter.all" }));
+    const targetCell = await screen.findByText(realDecidedBase.target_id);
+
+    const tableStatusBadge = screen.getByText("status.approved");
+    const tableRiskBadge = screen.getByText("risk.low");
+    expect(tableStatusBadge).toHaveClass("whitespace-nowrap");
+    expect(tableRiskBadge).toHaveClass("whitespace-nowrap");
+
+    fireEvent.click(targetCell);
+
+    const approvalIdSpan = await screen.findByText(realDecidedBase.decision_id);
+    expect(realDecidedBase.decision_id).toHaveLength(68);
+    expect(approvalIdSpan.tagName).toBe("SPAN");
+    expect(approvalIdSpan).toHaveTextContent(realDecidedBase.decision_id);
+    expect(approvalIdSpan.textContent).not.toContain("...");
+    expect(approvalIdSpan.textContent).not.toContain("…");
+    expect(approvalIdSpan).toHaveClass("min-w-0", "break-all", "text-mono", "text-xs", "text-muted-foreground");
+    expect(approvalIdSpan).not.toHaveClass("truncate", "text-ellipsis");
+
+    const statusBadges = screen.getAllByText("status.approved");
+    const riskBadges = screen.getAllByText("risk.low");
+    expect(statusBadges).toHaveLength(2);
+    expect(riskBadges).toHaveLength(2);
+    for (const badge of [...statusBadges, ...riskBadges]) {
+      expect(badge).toHaveClass("whitespace-nowrap");
+    }
+    unmount();
+
+    const alertRender = render(<MemoryRouter><AlertsPage /></MemoryRouter>);
+    fireEvent.click(await screen.findByText("Margin threshold 80% reached"));
+    const alertIdSpan = await screen.findByText("alt-201");
+    expect(alertIdSpan).toHaveClass("min-w-0", "break-all", "text-mono", "text-xs", "text-muted-foreground");
+    expect(alertIdSpan).not.toHaveClass("truncate", "text-ellipsis");
+    alertRender.unmount();
+
+    const incidentRender = render(<MemoryRouter><IncidentsPage /></MemoryRouter>);
+    fireEvent.click(await screen.findByText("Market feed latency spike"));
+    const incidentIdSpan = await screen.findByText("inc-301");
+    expect(incidentIdSpan).toHaveClass("min-w-0", "break-all", "text-mono", "text-xs", "text-muted-foreground");
+    expect(incidentIdSpan).not.toHaveClass("truncate", "text-ellipsis");
+    incidentRender.unmount();
+  });
 });
 
 describe("GovernanceReview", () => {
