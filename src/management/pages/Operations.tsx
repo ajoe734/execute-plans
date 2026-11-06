@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { safeDateTime } from "@/lib/utils";
 import { useSearchParams } from "react-router-dom";
 import { PageBody, PageHeader } from "@/platform/components/PageHeader";
@@ -22,6 +22,7 @@ import { X } from "lucide-react";
 import { BffError } from "@/lib/bff-v1/errors";
 import { normalizeApprovalFields } from "@/lib/bff-v1/operations";
 import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { ServerPager, useServerPageCursor } from "@/platform/components/ServerPager";
 import { getSharedQueryClient, queryKeys, resetSharedQueryClientForTests } from "@/lib/bff-v1/queryKeys";
 
 type ListLoader<T> = (signal?: AbortSignal) => Promise<{ items: T[] }>;
@@ -119,23 +120,89 @@ export function useCachedOperationList<T>(
   return [rows, setRows, refresh];
 }
 
+export const OPERATION_PAGE_SIZE = 20;
+
+interface PagedEnvelope {
+  items: unknown[];
+  cursor?: { next?: string };
+  estimatedTotal?: number;
+}
+
+type PagedLoader = (query: { page_size: number; page_token?: string }) => Promise<PagedEnvelope>;
+
+interface PagedPage<T> {
+  items: T[];
+  next?: string;
+  total?: number;
+}
+
+/** Server-paged operation list. The cache key includes the page token so each
+ *  page is cached independently and a page never overwrites another. */
+function usePagedOperationList<T>(baseKey: string, loader: PagedLoader) {
+  const qc = useClient();
+  const [cursor, setCursor] = useServerPageCursor(baseKey);
+  const pageToken = cursor.currentToken;
+  const queryKey = queryKeys.resource(`${baseKey}:page_token=${pageToken ?? ""}`, []);
+
+  const query = useQuery<PagedPage<T>>({
+    queryKey,
+    queryFn: async () => {
+      const env = await loader({
+        page_size: OPERATION_PAGE_SIZE,
+        ...(pageToken ? { page_token: pageToken } : {}),
+      });
+      return {
+        items: env.items as T[],
+        next: env.cursor?.next?.trim() || undefined,
+        total: typeof env.estimatedTotal === "number" ? env.estimatedTotal : undefined,
+      };
+    },
+    staleTime: OPERATION_LIST_CACHE_TTL_MS,
+  }, qc);
+
+  const [rows, setRowsState] = useState<T[]>(() => query.data?.items ?? []);
+  useEffect(() => {
+    setRowsState(query.data?.items ?? []);
+  }, [query.data]);
+
+  const setRows: Dispatch<SetStateAction<T[]>> = useCallback((action) => {
+    setRowsState((prev) => {
+      const next = typeof action === "function" ? (action as (p: T[]) => T[])(prev) : action;
+      qc.setQueryData<PagedPage<T>>(queryKey, (old) => (old ? { ...old, items: next } : old));
+      return next;
+    });
+  }, [qc, queryKey]);
+
+  return { rows, setRows, cursor, setCursor, page: query.data, loading: query.isFetching, isFirstPage: !pageToken };
+}
+
 export const JobsPage = () => {
   const t = useT();
-  const [rows, setRows] = useCachedOperationList<Job>("operations.jobs", asEntityListLoader<Job>(lists.jobs));
+  const { rows, setRows, cursor, setCursor, page, loading, isFirstPage } = usePagedOperationList<Job>(
+    "operations.jobs",
+    (q) => lists.jobs(q) as Promise<PagedEnvelope>,
+  );
   const [liveCount, setLiveCount] = useState(0);
+  // Realtime events belong to the newest rows, so they are only merged into the
+  // first page; later pages keep their server row set and count untouched.
+  const isFirstPageRef = useRef(isFirstPage);
+  isFirstPageRef.current = isFirstPage;
   useEffect(() => {
+    let off: (() => void) | undefined;
+    let disposed = false;
     import("@/lib/bff-v1").then(({ realtime }) => {
-      const off = realtime.on("job", (p) => {
+      if (disposed) return;
+      off = realtime.on("job", (p) => {
         const e = p as { jobId: string; kind: string; status: Job["status"]; owner: string; ts: string };
-        setRows((rs) => {
-          const next = [{ id: e.jobId, kind: e.kind, status: e.status, owner: e.owner, startedAt: e.ts }, ...rs].slice(0, 50);
-          updateCachedListItems<Job>("operations.jobs", () => next);
-          return next;
-        });
         setLiveCount((c) => c + 1);
-      });
-      return off;
+        if (!isFirstPageRef.current) return;
+        setRows((rs) => [
+          { id: e.jobId, kind: e.kind, status: e.status, owner: e.owner, startedAt: e.ts },
+          ...rs.filter((r) => r.id !== e.jobId),
+        ].slice(0, OPERATION_PAGE_SIZE));
+      }) ?? undefined;
     });
+    return () => { disposed = true; off?.(); };
   }, [setRows]);
   return (
     <>
@@ -148,6 +215,20 @@ export const JobsPage = () => {
           { key: "owner", header: t("table.owner"), cell: (r) => r.owner },
           { key: "started", header: t("table.started"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{safeDateTime(r.startedAt)}</span> },
         ]} />
+        {page && (
+          <ServerPager
+            cursor={cursor}
+            setCursor={setCursor}
+            pageSize={OPERATION_PAGE_SIZE}
+            total={page.total}
+            visibleCount={rows.length}
+            nextToken={page.next}
+            loading={loading}
+            testIdPrefix="jobs"
+            ariaLabel={t("ui.pagination.jobsLabel")}
+            enableJumpToLast={false}
+          />
+        )}
       </PageBody>
     </>
   );
@@ -250,7 +331,10 @@ export const AlertsPage = () => {
 
 export const IncidentsPage = () => {
   const t = useT();
-  const [rows, setRows] = useCachedOperationList<Incident>("operations.incidents", lists.incidents);
+  const { rows, setRows, cursor, setCursor, page, loading } = usePagedOperationList<Incident>(
+    "operations.incidents",
+    (q) => lists.incidents(q) as Promise<PagedEnvelope>,
+  );
   const [active, setActive] = useState<Incident | null>(null);
   const [resolveOpen, setResolveOpen] = useState(false);
 
@@ -264,11 +348,7 @@ export const IncidentsPage = () => {
       silent: true,
     });
     if (!receipt.ok) return;
-    setRows((rs) => {
-      const next = rs.map((r) => r.id === id ? { ...r, status } : r);
-      updateCachedListItems<Incident>("operations.incidents", () => next);
-      return next;
-    });
+    setRows((rs) => rs.map((r) => r.id === id ? { ...r, status } : r));
     setActive((a) => a && a.id === id ? { ...a, status } : a);
     toast.success(t("toast.incidentAdvanced", { id, status }), {
       description: commandReceiptDescription(receipt),
@@ -285,6 +365,20 @@ export const IncidentsPage = () => {
           { key: "status", header: t("table.status"), cell: (r) => <StatusBadge state={r.status === "resolved" ? "success" : r.status === "mitigating" ? "running" : "warning"} /> },
           { key: "opened", header: t("table.opened"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{safeDateTime(r.openedAt)}</span> },
         ]} />
+        {page && (
+          <ServerPager
+            cursor={cursor}
+            setCursor={setCursor}
+            pageSize={OPERATION_PAGE_SIZE}
+            total={page.total}
+            visibleCount={rows.length}
+            nextToken={page.next}
+            loading={loading}
+            testIdPrefix="incidents"
+            ariaLabel={t("ui.pagination.incidentsLabel")}
+            enableJumpToLast={false}
+          />
+        )}
       </PageBody>
 
       <Sheet open={!!active} onOpenChange={(o) => !o && setActive(null)}>

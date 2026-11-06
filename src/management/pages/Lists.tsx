@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { ObjectListPage } from "./ObjectListPage";
+import { ServerPager, freshServerPageCursor, useServerPageCursor } from "@/platform/components/ServerPager";
 import {
   lists,
   mgmt,
@@ -209,22 +210,7 @@ export const StrategiesList = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const activeFilter = normalizeStrategyFilterParam(searchParams.get("state"));
 
-  const [pageCursorState, setPageCursorState] = useState<{
-    filter: string;
-    currentToken: string | undefined;
-    prevTokens: Array<string | undefined>;
-    pageIndex: number;
-  }>({
-    filter: activeFilter,
-    currentToken: undefined,
-    prevTokens: [],
-    pageIndex: 0,
-  });
-
-  const effectivePageCursor =
-    pageCursorState.filter === activeFilter
-      ? pageCursorState
-      : { filter: activeFilter, currentToken: undefined, prevTokens: [], pageIndex: 0 };
+  const [effectivePageCursor, setPageCursorState] = useServerPageCursor(activeFilter);
 
   const loadStrategiesPage = useCallback(() => {
     const query = resolveStrategyListQuery(activeFilter, effectivePageCursor.currentToken, STRATEGY_PAGE_SIZE);
@@ -235,12 +221,7 @@ export const StrategiesList = () => {
 
   const selectStateFilter = (targetFilter: string) => {
     const normalized = normalizeStrategyFilterParam(targetFilter);
-    setPageCursorState({
-      filter: normalized,
-      currentToken: undefined,
-      prevTokens: [],
-      pageIndex: 0,
-    });
+    setPageCursorState(freshServerPageCursor(normalized));
     const nextParams = new URLSearchParams(searchParams);
     if (normalized === "default") {
       nextParams.delete("state");
@@ -339,147 +320,18 @@ export const StrategiesList = () => {
       }}
       bottomControls={(ctx) => {
         if (ctx.isInitialLoading || ctx.isDegradedEmpty) return null;
-        const total =
-          typeof ctx.estimatedTotal === "number" && Number.isFinite(ctx.estimatedTotal)
-            ? ctx.estimatedTotal
-            : ctx.visibleRows.length;
-        const parsedTokenOffset =
-          effectivePageCursor.currentToken && /^\d+$/.test(effectivePageCursor.currentToken)
-            ? Number(effectivePageCursor.currentToken)
-            : effectivePageCursor.pageIndex * STRATEGY_PAGE_SIZE;
-        const rangeStart = ctx.visibleRows.length > 0 ? parsedTokenOffset + 1 : 0;
-        const rangeEnd = ctx.visibleRows.length > 0 ? parsedTokenOffset + ctx.visibleRows.length : 0;
-        const currentPage = Math.floor(parsedTokenOffset / STRATEGY_PAGE_SIZE) + 1;
-        const totalPages = Math.max(1, Math.ceil(total / STRATEGY_PAGE_SIZE));
-        const hasPrevPage = effectivePageCursor.prevTokens.length > 0 || parsedTokenOffset > 0;
-        const nextToken = ctx.cursor?.next?.trim() || undefined;
-        const hasNextPage = Boolean(nextToken);
-        const lastPageOffset =
-          total > STRATEGY_PAGE_SIZE ? Math.floor((total - 1) / STRATEGY_PAGE_SIZE) * STRATEGY_PAGE_SIZE : 0;
-        const canJumpToLastPage = hasNextPage && lastPageOffset > parsedTokenOffset;
-
-        const goToFirstPage = () => {
-          setPageCursorState({
-            filter: activeFilter,
-            currentToken: undefined,
-            prevTokens: [],
-            pageIndex: 0,
-          });
-        };
-
-        const goToPrevPage = () => {
-          if (effectivePageCursor.prevTokens.length > 0) {
-            const nextPrevTokens = effectivePageCursor.prevTokens.slice(0, -1);
-            const prevToken = effectivePageCursor.prevTokens[effectivePageCursor.prevTokens.length - 1];
-            setPageCursorState({
-              filter: activeFilter,
-              currentToken: prevToken,
-              prevTokens: nextPrevTokens,
-              pageIndex: Math.max(0, effectivePageCursor.pageIndex - 1),
-            });
-            return;
-          }
-          if (parsedTokenOffset > 0) {
-            const prevOffset = Math.max(0, parsedTokenOffset - STRATEGY_PAGE_SIZE);
-            const prevToken = prevOffset > 0 ? String(prevOffset) : undefined;
-            setPageCursorState({
-              filter: activeFilter,
-              currentToken: prevToken,
-              prevTokens: [],
-              pageIndex: Math.floor(prevOffset / STRATEGY_PAGE_SIZE),
-            });
-          }
-        };
-
-        const goToNextPage = () => {
-          if (!nextToken) return;
-          setPageCursorState({
-            filter: activeFilter,
-            currentToken: nextToken,
-            prevTokens: [...effectivePageCursor.prevTokens, effectivePageCursor.currentToken],
-            pageIndex: effectivePageCursor.pageIndex + 1,
-          });
-        };
-
-        const goToLastPage = () => {
-          if (!canJumpToLastPage) return;
-          const lastToken = String(lastPageOffset);
-          setPageCursorState({
-            filter: activeFilter,
-            currentToken: lastToken,
-            prevTokens: [...effectivePageCursor.prevTokens, effectivePageCursor.currentToken],
-            pageIndex: Math.floor(lastPageOffset / STRATEGY_PAGE_SIZE),
-          });
-        };
-
         return (
-          <nav
-            aria-label={t("strategy.list.pagination.label")}
-            data-testid="strategy-list-pagination"
-            data-total={total}
-            data-page-size={STRATEGY_PAGE_SIZE}
-            data-page-token={effectivePageCursor.currentToken ?? ""}
-            className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-3 text-xs text-muted-foreground"
-          >
-            <div data-testid="strategy-list-total">
-              {ctx.visibleRows.length > 0
-                ? t("strategy.list.pagination.showingRange", {
-                    start: rangeStart,
-                    end: rangeEnd,
-                    total,
-                  })
-                : t("strategy.list.pagination.totalCount", { total })}
-            </div>
-            <div className="flex items-center gap-2">
-              <span data-testid="strategy-list-page-indicator">
-                {t("strategy.list.pagination.pageOf", { page: currentPage, totalPages })}
-              </span>
-              {hasPrevPage && parsedTokenOffset >= STRATEGY_PAGE_SIZE * 2 && (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  data-testid="strategy-page-first"
-                  disabled={ctx.loading}
-                  onClick={goToFirstPage}
-                >
-                  {t("strategy.list.pagination.first")}
-                </Button>
-              )}
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                data-testid="strategy-page-prev"
-                disabled={!hasPrevPage || ctx.loading}
-                onClick={goToPrevPage}
-              >
-                {t("ui.pagination.prev")}
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                data-testid="strategy-page-next"
-                disabled={!hasNextPage || ctx.loading}
-                onClick={goToNextPage}
-              >
-                {t("ui.pagination.next")}
-              </Button>
-              {canJumpToLastPage && (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  data-testid="strategy-page-last"
-                  disabled={ctx.loading}
-                  onClick={goToLastPage}
-                >
-                  {t("strategy.list.pagination.last")}
-                </Button>
-              )}
-            </div>
-          </nav>
+          <ServerPager
+            cursor={effectivePageCursor}
+            setCursor={setPageCursorState}
+            pageSize={STRATEGY_PAGE_SIZE}
+            total={ctx.estimatedTotal}
+            visibleCount={ctx.visibleRows.length}
+            nextToken={ctx.cursor?.next}
+            loading={ctx.loading}
+            testIdPrefix="strategy"
+            ariaLabel={t("strategy.list.pagination.label")}
+          />
         );
       }}
       extraColumns={[
