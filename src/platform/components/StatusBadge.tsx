@@ -20,14 +20,14 @@ export const StatusBadge = ({ state }: { state?: string }) => {
   const t = useT();
   if (!state) {
     return (
-      <Badge variant="outline" className="font-medium bg-muted text-muted-foreground border-dashed">
+      <Badge variant="outline" className="font-medium whitespace-nowrap bg-muted text-muted-foreground border-dashed">
         {t("status.unavailable", { defaultValue: "Unavailable" })}
       </Badge>
     );
   }
   const key = `status.${state}`;
   return (
-    <Badge variant="outline" className={cn("font-medium", map[state] ?? "bg-muted text-muted-foreground")}>
+    <Badge variant="outline" className={cn("font-medium whitespace-nowrap", map[state] ?? "bg-muted text-muted-foreground")}>
       {t(key, { defaultValue: state })}
     </Badge>
   );
