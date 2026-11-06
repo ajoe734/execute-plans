@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { expect, test, type Page, type Route } from "@playwright/test";
 import {
   installContainedLoopbackAuth,
@@ -14,6 +14,17 @@ const OWNER = "pantheon-dev-paper-provisioner";
 const RECORDS = JSON.parse(
   readFileSync(new URL("./fixtures/artifact-hosted-273.json", import.meta.url), "utf8"),
 ) as Array<Record<string, unknown>>;
+
+// Genuine strategies capture (reads[1].body of management-candidate-reads-1793964736780.json).
+// Not a repo fixture (only the Artifact fixture is admitted); the strategy test skips when absent.
+const STRATEGY_CAPTURE =
+  process.env.STRATEGY_CAPTURE_PATH ||
+  "/tmp/pantheon-dev-operable-20261104/management-candidate-reads-1793964736780.json";
+function loadStrategies(): Record<string, unknown> | null {
+  if (!existsSync(STRATEGY_CAPTURE)) return null;
+  const body = (JSON.parse(readFileSync(STRATEGY_CAPTURE, "utf8")) as { reads: Array<{ body: unknown }> }).reads[1].body;
+  return (typeof body === "string" ? JSON.parse(body) : body) as Record<string, unknown>;
+}
 
 function frontendUrl(path = "/"): string {
   const base =
@@ -51,7 +62,7 @@ function envelope(items: unknown[], total = items.length, next?: string): Record
   };
 }
 
-async function installRoutes(page: Page): Promise<void> {
+async function installRoutes(page: Page, strategies?: Record<string, unknown> | null): Promise<void> {
   await installContainedLoopbackAuth(page);
   await page.route("**/*", async (route) => {
     const request = route.request();
@@ -66,6 +77,9 @@ async function installRoutes(page: Page): Promise<void> {
     if (path === "/bff/events/stream") {
       await route.fulfill({ status: 200, contentType: "text/event-stream", headers: corsHeaders(route), body: ": connected\n\n" });
       return;
+    }
+    if (strategies && path === "/bff/strategies") {
+      return fulfillJson(route, strategies);
     }
     if (path === "/bff/artifacts") {
       const url = new URL(request.url());
@@ -132,4 +146,42 @@ test.describe("FE-ARTIFACT-HOSTED-WIDTH-20261106 Artifact list width", () => {
       await context.close();
     });
   }
+
+  test("strategy owner cell stays readable at 1600 (shared DataTable regression)", async ({ browser }) => {
+    const strategies = loadStrategies();
+    test.skip(!strategies, "genuine strategies capture not available");
+    const context = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
+    const page = await context.newPage();
+    await installRoutes(page, strategies);
+    await page.goto(frontendUrl("/management/strategies"), { waitUntil: "domcontentloaded", timeout: 30_000 });
+    await expect(page.locator("tbody tr").first()).toBeVisible({ timeout: 30_000 });
+    const m = await page.evaluate(() => {
+      const scroller = document.querySelector<HTMLElement>("[data-management-table-scrollbar='native']")!;
+      const ths = Array.from(document.querySelectorAll("thead th"));
+      const rows = Array.from(document.querySelectorAll<HTMLElement>("tbody tr"));
+      const ownerIdx = ths.findIndex((th) => /owner|負責|擁有/i.test(th.textContent || ""));
+      const ownerTd = ownerIdx >= 0 ? rows[0].children[ownerIdx] as HTMLElement : null;
+      return {
+        rows: rows.length,
+        headers: ths.map((th) => (th.textContent || "").trim()),
+        clientWidth: scroller.clientWidth,
+        scrollWidth: scroller.scrollWidth,
+        lastRight: ths[ths.length - 1].getBoundingClientRect().right,
+        viewportWidth: window.innerWidth,
+        maxRowHeight: Math.max(...rows.map((r) => r.getBoundingClientRect().height)),
+        ownerText: ownerTd?.textContent?.trim() ?? null,
+        ownerWidth: ownerTd ? Math.round(ownerTd.getBoundingClientRect().width) : null,
+        ownerHeight: ownerTd ? Math.round(ownerTd.getBoundingClientRect().height) : null,
+      };
+    });
+    console.log(`STRATEGY_GEOMETRY@1600 ${JSON.stringify(m)}`);
+    expect(m.rows).toBeGreaterThan(0);
+    expect(m.ownerText).toBe("pantheon-bff");
+    // Shared-column regression: the Strategies table already scrolls horizontally at 1600 (11 columns, unchanged by this task);
+    // assert only that the owner cell stays unstacked/readable and rows stay within 72px.
+    expect(m.ownerHeight).toBeLessThanOrEqual(72);
+    expect(m.ownerWidth).toBeGreaterThanOrEqual(110);
+    expect(m.maxRowHeight).toBeLessThanOrEqual(72);
+    await context.close();
+  });
 });
