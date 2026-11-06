@@ -55,6 +55,7 @@ export const CapitalPoolDetail = () => {
     { kinds: ["capitalPools"] },
   );
   const [strats, setStrats] = useState<Strategy[]>([]);
+  const [stratsStatus, setStratsStatus] = useState<"loading" | "ready" | "error">("loading");
   const [rebalances, setRebalances] = useState<Rebalance[]>([]);
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
   const [audit, setAudit] = useState<AuditEvent[]>([]);
@@ -62,9 +63,66 @@ export const CapitalPoolDetail = () => {
 
   useEffect(() => {
     let cancelled = false;
+    if (!c) {
+      setStrats([]);
+      setStratsStatus("loading");
+      return;
+    }
+    const pool = c;
+    setStrats([]);
+    setStratsStatus("loading");
+
+    const poolIds = new Set(
+      [id, pool.id, pool.poolId, pool.pool_id].filter((value): value is string => Boolean(value)),
+    );
+    const rawPool = pool as unknown as Record<string, unknown>;
+    const isPaper =
+      rawPool.capitalMode === "paper" ||
+      rawPool.capital_mode === "paper" ||
+      rawPool.capitalScope === "paper" ||
+      rawPool.capital_scope === "paper" ||
+      (id || "").startsWith("paper-ledger-") ||
+      (id || "").startsWith("pool-crypto-paper");
+
+    // Strategy rows own their loading/error state so a slow or failed
+    // unrelated read never produces a false "no results".
+    bffV1.strategies
+      .listNonDraft()
+      .then(async (allStrategies) => {
+        if (cancelled) return;
+        const direct = allStrategies.filter((s) => poolIds.has(s.capitalPoolId));
+        if (!isPaper) {
+          setStrats(direct);
+          setStratsStatus("ready");
+          return;
+        }
+        if (direct.length > 0) {
+          // Show directly bound rows now; fleet-derived rows are merged after.
+          setStrats(direct);
+          setStratsStatus("ready");
+        }
+        const fleetRows = await mgmt.personaFleet.get().catch(() => [] as unknown[]);
+        if (cancelled) return;
+        const boundPersonaIds = getPersonaIdsForPoolId(id || "", fleetRows as unknown as ManagementPersonaFleetRow[]);
+        setStrats(
+          allStrategies.filter((s) => poolIds.has(s.capitalPoolId) || s.personaIds.some((pId) => boundPersonaIds.has(pId))),
+        );
+        setStratsStatus("ready");
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setStrats([]);
+        setStratsStatus("error");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [c, id]);
+
+  useEffect(() => {
+    let cancelled = false;
 
     async function loadRelated(pool: CapitalPool) {
-      setStrats([]);
       setRebalances([]);
       setApprovals([]);
       setAudit([]);
@@ -74,33 +132,13 @@ export const CapitalPoolDetail = () => {
       );
       const mentionsPool = (value?: string) => Boolean(value && Array.from(poolIds).some((poolId) => value.includes(poolId)));
 
-      const [allStrategies, allRebalances, allApprovals, allAudit, fleetRows] = await Promise.all([
-        bffV1.strategies.listNonDraft().catch((): Strategy[] => []),
+      const [allRebalances, allApprovals, allAudit] = await Promise.all([
         bffV1.rebalances.list().catch((): Rebalance[] => []),
         bffV1.approvals.list().catch((): ApprovalRequest[] => []),
         bffV1.audit.list().catch((): AuditEvent[] => []),
-        mgmt.personaFleet.get().catch(() => [] as unknown[]),
       ]);
       if (cancelled) return;
 
-      const boundPersonaIds = getPersonaIdsForPoolId(id || "", fleetRows as unknown as ManagementPersonaFleetRow[]);
-      const rawPool = pool as unknown as Record<string, unknown>;
-      const boundStrats = allStrategies.filter((s) => {
-        if (poolIds.has(s.capitalPoolId)) return true;
-        const isPaper =
-          rawPool.capitalMode === "paper" ||
-          rawPool.capital_mode === "paper" ||
-          rawPool.capitalScope === "paper" ||
-          rawPool.capital_scope === "paper" ||
-          (id || "").startsWith("paper-ledger-") ||
-          (id || "").startsWith("pool-crypto-paper");
-        if (isPaper) {
-          return s.personaIds.some((pId) => boundPersonaIds.has(pId));
-        }
-        return false;
-      });
-
-      setStrats(boundStrats);
       setRebalances(allRebalances.filter((r) => poolIds.has(r.targetPoolId)));
       setApprovals(allApprovals.filter((a) => mentionsPool(a.subject) || (a.kind ?? "").includes("capital")));
       setAudit(allAudit.filter((x) => poolIds.has(x.target) || x.action?.startsWith("capital.") || x.action?.startsWith("rebalance.")));
@@ -109,7 +147,6 @@ export const CapitalPoolDetail = () => {
     if (c) {
       void loadRelated(c);
     } else {
-      setStrats([]);
       setRebalances([]);
       setApprovals([]);
       setAudit([]);
@@ -222,8 +259,16 @@ export const CapitalPoolDetail = () => {
           },
           {
             value: "strategies", label: t("nav.strategies"),
-            content: (
+            content: stratsStatus === "error" ? (
+              <EmptyState
+                icon={<Inbox className="h-8 w-8" />}
+                title={t("common.listUnavailableTitle", { label: t("nav.strategies") })}
+                description={t("common.listUnavailableDesc")}
+              />
+            ) : (
               <DataTable
+                loading={stratsStatus === "loading"}
+                loadingText={t("common.loading")}
                 rows={strats}
                 onRowClick={(r) => navigate(`/management/strategies/${r.id}`)}
                 columns={[
