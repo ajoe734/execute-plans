@@ -34,7 +34,7 @@ export default {
     agora: "Agora 交易台",
   },
   ui: {
-    pagination: { prev: "上一頁", next: "下一頁", more: "更多頁", prevAria: "前往上一頁", nextAria: "前往下一頁" },
+    pagination: { prev: "上一頁", next: "下一頁", more: "更多頁", prevAria: "前往上一頁", nextAria: "前往下一頁", jobsLabel: "工作佇列分頁", incidentsLabel: "事件列表分頁" },
     a11y: { close: "關閉", toggleSidebar: "切換側邊欄" },
     loading: "載入中…",
   },

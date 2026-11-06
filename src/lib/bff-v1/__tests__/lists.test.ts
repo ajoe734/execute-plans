@@ -212,6 +212,43 @@ describe("VI-1 lists facade", () => {
     });
   });
 
+  it("forwards page_size and page_token for lists.jobs and lists.incidents, surfaces page_info.total, and keeps the unparameterised request unchanged", async () => {
+    vi.stubEnv("MODE", "development");
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("VITE_BFF_MODE", "live");
+    vi.stubEnv("VITE_BFF_FALLBACK", "strict");
+    liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
+
+    const fetchUrls: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      fetchUrls.push(url);
+      const isJobs = url.startsWith("/bff/jobs");
+      return new Response(
+        JSON.stringify({
+          items: [isJobs ? { id: "job-1", kind: "backtest", status: "running", owner: "o", startedAt: "2026-11-06T00:00:00Z" } : { id: "inc-1", title: "t", severity: "high", status: "open", openedAt: "2026-11-06T00:00:00Z" }],
+          page_info: { page_size: 20, total: isJobs ? 1521 : 2644, next_page_token: "20" },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    });
+
+    const jobs = await lists.jobs({ page_size: 20, page_token: "20" });
+    const incidents = await lists.incidents({ page_size: 20, page_token: "40" });
+    await lists.jobs();
+    await lists.incidents();
+    expect(fetchUrls).toEqual([
+      "/bff/jobs?page_size=20&page_token=20",
+      "/bff/incidents?page_size=20&page_token=40",
+      "/bff/jobs",
+      "/bff/incidents",
+    ]);
+    expect(jobs.estimatedTotal).toBe(1521);
+    expect(jobs.cursor.next).toBe("20");
+    expect(incidents.estimatedTotal).toBe(2644);
+    expect(incidents.cursor.next).toBe("20");
+  });
+
   it("loads all pages for lists.personas, lists.capitalPools, lists.runtimes, and lists.deployments via shared pagination helper", async () => {
     vi.stubEnv("MODE", "development");
     vi.stubEnv("NODE_ENV", "development");
