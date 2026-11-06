@@ -2211,11 +2211,46 @@ export const EvolutionJournalPage = () => {
   const degradedSurfaces = useMemo(() => {
     const entries = Object.entries(journalMeta?.surfaces ?? {});
     return entries.filter(([, surface]) =>
-      ["degraded", "unavailable", "error", "failed"].includes(String(surface?.status ?? "").toLowerCase()),
+      ["degraded", "unavailable", "error", "failed", "unknown"].includes(String(surface?.status ?? "").toLowerCase()),
     );
   }, [journalMeta]);
-  const isReadFailed =
-    Boolean(error) || (!loading && data === undefined && !isFleetSummary) || degradedSurfaces.length > 0;
+  const hasDegradedSurfaces = degradedSurfaces.length > 0;
+  const isReadFailed = Boolean(error) || (!loading && data === undefined && !isFleetSummary);
+
+  const isJournalSurfaceDegraded = (surfaceKey: string): boolean => {
+    const status = String(journalMeta?.surfaces?.[surfaceKey]?.status ?? "").trim().toLowerCase();
+    return ["degraded", "unavailable", "error", "failed", "unknown"].includes(status);
+  };
+
+  const formatJournalSurfaceCount = (surfaceKey: string, count: number | null | undefined): string => {
+    const surface = journalMeta?.surfaces?.[surfaceKey];
+    const status = String(surface?.status ?? "").trim().toLowerCase();
+    if (["degraded", "unavailable", "error", "failed", "unknown"].includes(status)) {
+      return t("mgmt.evolution.summarySourceUnknownFmt", { status: surface?.status || "unavailable" });
+    }
+    if (count === null || count === undefined || !Number.isFinite(count)) {
+      return t("mgmt.evolution.summarySourceUnknown", { defaultValue: "unknown" });
+    }
+    return String(count);
+  };
+
+  const incidentFollowupDisplay = formatJournalSurfaceCount(
+    "evolution_decisions",
+    autoProposalCounts.incident_followup,
+  );
+  const incidentSeverityDisplay = formatJournalSurfaceCount(
+    "evolution_decisions",
+    autoProposalCounts.incident_severity,
+  );
+  const postmortemDraftDisplay = formatJournalSurfaceCount(
+    "postmortems",
+    autoProposalCounts.postmortem_draft,
+  );
+  const autoProposalTotalDisplay = isJournalSurfaceDegraded("evolution_decisions")
+    ? formatJournalSurfaceCount("evolution_decisions", null)
+    : isJournalSurfaceDegraded("postmortems")
+      ? formatJournalSurfaceCount("postmortems", null)
+      : String(autoProposalCounts.total);
 
   const switchView = (nextView: EvolutionJournalView) => {
     const next = new URLSearchParams(searchParams);
@@ -2283,24 +2318,24 @@ export const EvolutionJournalPage = () => {
             <div className="space-y-1">
               <div className="text-foreground">
                 {t("mgmt.evolution.autoProposalsSummaryFmt", {
-                  total: autoProposalCounts.total,
-                  incidentFollowup: autoProposalCounts.incident_followup,
-                  incidentSeverity: autoProposalCounts.incident_severity,
-                  postmortemDraft: autoProposalCounts.postmortem_draft,
+                  total: autoProposalTotalDisplay,
+                  incidentFollowup: incidentFollowupDisplay,
+                  incidentSeverity: incidentSeverityDisplay,
+                  postmortemDraft: postmortemDraftDisplay,
                 })}
               </div>
               <div className="flex flex-wrap items-center gap-1.5 text-xs">
                 <Badge variant="outline" data-testid="auto-proposal-total">
-                  {t("mgmt.evolution.autoProposalsTotal")}: {autoProposalCounts.total}
+                  {t("mgmt.evolution.autoProposalsTotal")}: {autoProposalTotalDisplay}
                 </Badge>
                 <Badge variant="outline" data-testid="auto-proposal-incident-followup">
-                  {t("mgmt.evolution.incidentFollowup")}: {autoProposalCounts.incident_followup}
+                  {t("mgmt.evolution.incidentFollowup")}: {incidentFollowupDisplay}
                 </Badge>
                 <Badge variant="outline" data-testid="auto-proposal-incident-severity">
-                  {t("mgmt.evolution.incidentSeverity")}: {autoProposalCounts.incident_severity}
+                  {t("mgmt.evolution.incidentSeverity")}: {incidentSeverityDisplay}
                 </Badge>
                 <Badge variant="outline" data-testid="auto-proposal-postmortem-draft">
-                  {t("mgmt.evolution.postmortemDraft")}: {autoProposalCounts.postmortem_draft}
+                  {t("mgmt.evolution.postmortemDraft")}: {postmortemDraftDisplay}
                 </Badge>
               </div>
             </div>
@@ -2324,6 +2359,15 @@ export const EvolutionJournalPage = () => {
               <Badge variant="outline" data-testid="evolution-active-view-badge">
                 {viewBadgeLabel}
               </Badge>
+              {hasDegradedSurfaces && (
+                <Badge
+                  variant="outline"
+                  data-testid="evolution-partial-read-badge"
+                  className="bg-status-warning/15 text-status-warning border-status-warning/30"
+                >
+                  {t("mgmt.evolution.partialReadBadge")}
+                </Badge>
+              )}
               <span className="text-foreground">
                 {t("mgmt.evolution.filteredSummaryFmt", {
                   total: filteredTotal,
@@ -2333,11 +2377,26 @@ export const EvolutionJournalPage = () => {
             </div>
             {summary && (
               <div className="flex flex-wrap items-center gap-2">
-                <span>{t("mgmt.evolution.summaryDecisions")}: {summary.decision_count}</span>
-                <span>{t("mgmt.evolution.summaryMutationReviews")}: {summary.mutation_review_count}</span>
-                <span>{t("mgmt.evolution.summaryPostmortems")}: {summary.postmortem_count}</span>
-                <span>{t("mgmt.evolution.summaryRollbacks")}: {summary.rollback_count}</span>
-                <span>{t("mgmt.evolution.summaryFreezeOrders")}: {summary.freeze_order_count}</span>
+                <span data-testid="evolution-summary-decisions">
+                  {t("mgmt.evolution.summaryDecisions")}:{" "}
+                  {formatJournalSurfaceCount("evolution_decisions", summary.decision_count)}
+                </span>
+                <span data-testid="evolution-summary-mutation-reviews">
+                  {t("mgmt.evolution.summaryMutationReviews")}:{" "}
+                  {formatJournalSurfaceCount("mutation_review", summary.mutation_review_count)}
+                </span>
+                <span data-testid="evolution-summary-postmortems">
+                  {t("mgmt.evolution.summaryPostmortems")}:{" "}
+                  {formatJournalSurfaceCount("postmortems", summary.postmortem_count)}
+                </span>
+                <span data-testid="evolution-summary-rollbacks">
+                  {t("mgmt.evolution.summaryRollbacks")}:{" "}
+                  {formatJournalSurfaceCount("rollbacks", summary.rollback_count)}
+                </span>
+                <span data-testid="evolution-summary-freeze-orders">
+                  {t("mgmt.evolution.summaryFreezeOrders")}:{" "}
+                  {formatJournalSurfaceCount("freeze_orders", summary.freeze_order_count)}
+                </span>
               </div>
             )}
           </div>
@@ -2363,7 +2422,7 @@ export const EvolutionJournalPage = () => {
           {t("common.loading", { defaultValue: "Loading..." })}
         </Card>
       )}
-      {isReadFailed && (
+      {(isReadFailed || hasDegradedSurfaces) && (
         <Card
           className="border-status-failed/30 bg-status-failed/10 p-4 text-sm space-y-2"
           role="alert"
@@ -2373,7 +2432,9 @@ export const EvolutionJournalPage = () => {
             <AlertCircle className="h-5 w-5" />
             <span className="font-semibold">{t("mgmt.evolution.degradedTitle")}</span>
           </div>
-          <p className="text-muted-foreground">{t("mgmt.evolution.degradedBody")}</p>
+          <p className="text-muted-foreground">
+            {isReadFailed ? t("mgmt.evolution.degradedBody") : t("mgmt.evolution.partialReadBody")}
+          </p>
           {degradedSurfaces.length > 0 && (
             <div className="text-xs text-muted-foreground">
               {degradedSurfaces.map(([key, surface]) => `${key}: ${surface.status}`).join(" · ")}
@@ -2387,7 +2448,7 @@ export const EvolutionJournalPage = () => {
           </div>
         </Card>
       )}
-      {!loading && !isReadFailed && visibleRows.length === 0 && (
+      {!loading && !isReadFailed && !hasDegradedSurfaces && visibleRows.length === 0 && (
         activeView === "history" && !hasFocus ? (
           <Card className="p-4 text-sm space-y-2" data-testid="evolution-history-empty">
             <div className="font-medium text-foreground">{t("mgmt.evolution.emptyHistoryTitle")}</div>

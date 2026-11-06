@@ -800,4 +800,287 @@ describe("EvolutionJournalPage Rendering", () => {
     expect(screen.queryByText(/No evolution has been executed yet/i)).not.toBeInTheDocument();
     surfaceView.unmount();
   });
+
+  it("keeps verified six rows, 2530 auto-proposal counters, active view badge, and toggle visible on ancillary partial reads while marking unavailable freeze_orders/rollbacks as unknown instead of 0", async () => {
+    const partialReadHistoryEnvelope = {
+      data: {
+        id: "management_evolution_journal",
+        items: [
+          {
+            id: "mutation_review:evo-sweep-inc-drift-87d6930c62ee",
+            entry_type: "mutation_review",
+            source_id: "evo-sweep-inc-drift-87d6930c62ee",
+            title: "Mutation review: evo-sweep-inc-drift-87d6930c62ee",
+            summary:
+              "Daily evolution sweep derived a governed freeze proposal from incident inc-drift-87d6930c62ee. The proposal is review-gated and has no runtime, broker, or capital-binding side effects.",
+            status: "approved",
+            risk_level: "medium",
+            action_type: "freeze",
+            target: {
+              type: "candidate_artifact",
+              id: "hosted-all12-h12-claude-20261027-4923-execution-artifact",
+              version: "1.0.0",
+            },
+            occurred_at: "2026-11-03T01:58:28Z",
+            evidence_class: "incident_severity",
+            origin: "unknown",
+          },
+          {
+            id: "evolution_decision:evo-sweep-inc-drift-87d6930c62ee",
+            entry_type: "evolution_decision",
+            source_id: "evo-sweep-inc-drift-87d6930c62ee",
+            title: "Freeze decision",
+            summary:
+              "Daily evolution sweep derived a governed freeze proposal from incident inc-drift-87d6930c62ee. The proposal is review-gated and has no runtime, broker, or capital-binding side effects.",
+            status: "approved",
+            risk_level: "medium",
+            action_type: "freeze",
+            target: {
+              type: "candidate_artifact",
+              id: "hosted-all12-h12-claude-20261027-4923-execution-artifact",
+              version: "1.0.0",
+            },
+            occurred_at: "2026-11-03T01:58:28Z",
+            evidence_class: "incident_severity",
+            origin: "unknown",
+          },
+          {
+            id: "mutation_review:evo-h12-01a11-20261023-9aeb-duplicate-execution-usera",
+            entry_type: "mutation_review",
+            source_id: "evo-h12-01a11-20261023-9aeb-duplicate-execution-usera",
+            title: "Mutation review: evo-h12-01a11-20261023-9aeb-duplicate-execution-usera",
+            summary:
+              "Create a governed freeze proposal from postmortem pm-inc-drift-994a6db8a4bb for incident inc-drift-994a6db8a4bb. The proposal is review-gated and does not mutate runtime, broker, or capital-binding state.",
+            status: "executed",
+            risk_level: "medium",
+            action_type: "freeze",
+            target: {
+              type: "candidate_artifact",
+              id: "hosted-all12-h12-01a11-20261023-9aeb-execution-artifact",
+              version: "1.0.0",
+            },
+            occurred_at: "2026-10-26T16:11:17Z",
+            evidence_class: "incident_severity",
+            origin: "unknown",
+          },
+          {
+            id: "evolution_decision:evo-h12-01a11-20261023-9aeb-duplicate-execution-usera",
+            entry_type: "evolution_decision",
+            source_id: "evo-h12-01a11-20261023-9aeb-duplicate-execution-usera",
+            title: "Freeze decision",
+            summary:
+              "Create a governed freeze proposal from postmortem pm-inc-drift-994a6db8a4bb for incident inc-drift-994a6db8a4bb. The proposal is review-gated and does not mutate runtime, broker, or capital-binding state.",
+            status: "executed",
+            risk_level: "medium",
+            action_type: "freeze",
+            target: {
+              type: "candidate_artifact",
+              id: "hosted-all12-h12-01a11-20261023-9aeb-execution-artifact",
+              version: "1.0.0",
+            },
+            occurred_at: "2026-10-26T16:11:17Z",
+            evidence_class: "incident_severity",
+            origin: "unknown",
+          },
+          {
+            id: "mutation_review:evo-h12-01a11-20261023-9aeb-duplicate-execution",
+            entry_type: "mutation_review",
+            source_id: "evo-h12-01a11-20261023-9aeb-duplicate-execution",
+            title: "Mutation review: evo-h12-01a11-20261023-9aeb-duplicate-execution",
+            summary:
+              "Create a governed freeze proposal from incident inc-drift-994a6db8a4bb. The proposal is review-gated and does not mutate runtime, broker, or capital-binding state.",
+            status: "canceled",
+            risk_level: "medium",
+            action_type: "freeze",
+            target: {
+              type: "candidate_artifact",
+              id: "hosted-all12-h12-01a11-20261023-9aeb-execution-artifact",
+              version: "1.0.0",
+            },
+            occurred_at: "2026-10-26T11:42:21Z",
+            evidence_class: "incident_severity",
+            origin: "unknown",
+          },
+          {
+            id: "evolution_decision:evo-h12-01a11-20261023-9aeb-duplicate-execution",
+            entry_type: "evolution_decision",
+            source_id: "evo-h12-01a11-20261023-9aeb-duplicate-execution",
+            title: "Freeze decision",
+            summary:
+              "Create a governed freeze proposal from incident inc-drift-994a6db8a4bb. The proposal is review-gated and does not mutate runtime, broker, or capital-binding state.",
+            status: "canceled",
+            risk_level: "medium",
+            action_type: "freeze",
+            target: {
+              type: "candidate_artifact",
+              id: "hosted-all12-h12-01a11-20261023-9aeb-execution-artifact",
+              version: "1.0.0",
+            },
+            occurred_at: "2026-10-26T11:42:21Z",
+            evidence_class: "incident_severity",
+            origin: "unknown",
+          },
+        ],
+        summary: {
+          total_items: 6,
+          returned_items: 6,
+          decision_count: 3,
+          mutation_review_count: 3,
+          postmortem_count: 0,
+          rollback_count: 0,
+          freeze_order_count: 0,
+          pending_review_count: 0,
+          active_freeze_count: 0,
+          completed_rollback_count: 0,
+          latest_at: "2026-11-03T01:58:28Z",
+          by_type: { mutation_review: 3, evolution_decision: 3 },
+          by_status: { approved: 2, executed: 2, canceled: 2 },
+          by_risk_level: { medium: 6 },
+        },
+        auto_proposal_counts: {
+          incident_followup: 433,
+          incident_severity: 9,
+          postmortem_draft: 2088,
+          total: 2530,
+        },
+      },
+      page_info: {
+        next_page_token: null,
+        total: 6,
+        page_size: 20,
+      },
+      meta: {
+        snapshot_at: "2026-11-06T00:06:51Z",
+        surfaces: {
+          evolution_decisions: { status: "ok", source: "service" },
+          postmortems: { status: "ok", source: "service_client" },
+          freeze_orders: {
+            status: "unavailable",
+            source: "missing",
+            staleness: { served_from: "unverifiable", last_known_at: "2026-11-06T00:06:51Z" },
+          },
+          rollbacks: {
+            status: "unavailable",
+            source: "missing",
+            staleness: { served_from: "unverifiable", last_known_at: "2026-11-06T00:06:51Z" },
+          },
+          approval_decisions: { status: "ok", source: "service" },
+          personas: { status: "ok", source: "store" },
+          persona_bindings: { status: "ok", source: "service" },
+          runtime_bindings: { status: "ok", source: "service" },
+          incidents: { status: "ok", source: "service_client" },
+          mutation_review: { status: "ok", source: "bff_composed", snapshot_at: "2026-11-06T00:06:51Z" },
+          management_evolution_journal: {
+            status: "degraded",
+            source: "bff_composed",
+            message: "Evolution journal partially degraded",
+            snapshot_at: "2026-11-06T00:06:51Z",
+          },
+        },
+        composition_sources: [
+          "evolution_decisions",
+          "postmortems",
+          "mutation_review",
+          "rollbacks",
+          "freeze_orders",
+        ],
+      },
+    };
+
+    mocks.useV5Live.mockImplementation((loader) => {
+      if (loader.toString().includes("evolutionJournal")) {
+        return { data: partialReadHistoryEnvelope, loading: false, error: null };
+      }
+      return { data: [], loading: false, error: null };
+    });
+
+    const LocationProbe = () => {
+      const location = useLocation();
+      return <div data-testid="location-probe">{`${location.pathname}${location.search}`}</div>;
+    };
+
+    await i18n.changeLanguage("zh-TW");
+    const zhView = render(
+      <I18nextProvider i18n={i18n}>
+        <MemoryRouter initialEntries={["/management/evolution-journal"]}>
+          <LocationProbe />
+          <Routes>
+            <Route path="/management/evolution-journal" element={<EvolutionJournalPage />} />
+          </Routes>
+        </MemoryRouter>
+      </I18nextProvider>,
+    );
+
+    // 1. Degraded alert remains visible with partial-read explanation and degraded surface list
+    expect(screen.getByTestId("evolution-journal-degraded")).toHaveTextContent("演化日誌讀取降級");
+    expect(screen.getByTestId("evolution-journal-degraded")).toHaveTextContent(
+      "部分演化日誌輔助資料面暫時無法讀取",
+    );
+    expect(screen.getByTestId("evolution-journal-degraded")).toHaveTextContent(
+      "freeze_orders: unavailable · rollbacks: unavailable · management_evolution_journal: degraded",
+    );
+
+    // 2. All 2530 healthy-source auto-proposal counters and toggle remain visible
+    expect(screen.getByTestId("evolution-auto-proposals-summary")).toHaveTextContent(
+      "自動提案：共 2530 筆（事件後續追蹤：433 筆、重大事件門檻：9 筆、事後檢討草稿：2088 筆）",
+    );
+    expect(screen.getByTestId("auto-proposal-total")).toHaveTextContent("2530");
+    expect(screen.getByTestId("auto-proposal-incident-followup")).toHaveTextContent("433");
+    expect(screen.getByTestId("auto-proposal-incident-severity")).toHaveTextContent("9");
+    expect(screen.getByTestId("auto-proposal-postmortem-draft")).toHaveTextContent("2088");
+
+    // 3. Active view badge, partial-read badge, and honest per-source summary counts are visible
+    expect(screen.getByTestId("evolution-active-view-badge")).toHaveTextContent("真實演化歷史");
+    expect(screen.getByTestId("evolution-partial-read-badge")).toHaveTextContent("部分讀取（已驗證來源）");
+    expect(screen.getByTestId("evolution-summary-decisions")).toHaveTextContent("演化決策: 3");
+    expect(screen.getByTestId("evolution-summary-mutation-reviews")).toHaveTextContent("突變審核: 3");
+    expect(screen.getByTestId("evolution-summary-postmortems")).toHaveTextContent("事後檢討: 0");
+    expect(screen.getByTestId("evolution-summary-rollbacks")).toHaveTextContent("回滾: 未知 (unavailable)");
+    expect(screen.getByTestId("evolution-summary-freeze-orders")).toHaveTextContent("凍結令: 未知 (unavailable)");
+    expect(screen.getByTestId("evolution-journal-summary")).not.toHaveTextContent("回滾: 0");
+    expect(screen.getByTestId("evolution-journal-summary")).not.toHaveTextContent("凍結令: 0");
+
+    // 4. All 6 existing rows and pager remain visible
+    expect(screen.getByText("mutation_review:evo-sweep-inc-drift-87d6930c62ee")).toBeInTheDocument();
+    expect(screen.getByText("evolution_decision:evo-sweep-inc-drift-87d6930c62ee")).toBeInTheDocument();
+    expect(
+      screen.getByText("mutation_review:evo-h12-01a11-20261023-9aeb-duplicate-execution-usera"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("evolution_decision:evo-h12-01a11-20261023-9aeb-duplicate-execution-usera"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("mutation_review:evo-h12-01a11-20261023-9aeb-duplicate-execution"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("evolution_decision:evo-h12-01a11-20261023-9aeb-duplicate-execution"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("evolution-journal-pager")).toHaveTextContent("顯示第 1–6 筆，共 6 筆");
+
+    // 5. View toggle switches to view=auto_proposals
+    fireEvent.click(screen.getByTestId("evolution-view-toggle"));
+    expect(screen.getByTestId("location-probe")).toHaveTextContent(
+      "/management/evolution-journal?view=auto_proposals",
+    );
+    zhView.unmount();
+
+    await i18n.changeLanguage("en-US");
+    const enView = renderJournal("/management/evolution-journal");
+    expect(screen.getByTestId("evolution-active-view-badge")).toHaveTextContent("Evolution history");
+    expect(screen.getByTestId("evolution-partial-read-badge")).toHaveTextContent(
+      "Partial read (verified sources)",
+    );
+    expect(screen.getByTestId("evolution-summary-decisions")).toHaveTextContent("Decisions: 3");
+    expect(screen.getByTestId("evolution-summary-mutation-reviews")).toHaveTextContent("Mutation reviews: 3");
+    expect(screen.getByTestId("evolution-summary-postmortems")).toHaveTextContent("Postmortems: 0");
+    expect(screen.getByTestId("evolution-summary-rollbacks")).toHaveTextContent(
+      "Rollbacks: unknown (unavailable)",
+    );
+    expect(screen.getByTestId("evolution-summary-freeze-orders")).toHaveTextContent(
+      "Freeze orders: unknown (unavailable)",
+    );
+    expect(screen.getByTestId("evolution-journal-summary")).not.toHaveTextContent("Rollbacks: 0");
+    expect(screen.getByTestId("evolution-journal-summary")).not.toHaveTextContent("Freeze orders: 0");
+    enView.unmount();
+  });
 });
