@@ -263,6 +263,78 @@ describe("collectPaginatedListPages and all-pages domain reads", () => {
     expect(MAX_PAGINATED_LIST_PAGES).toBeGreaterThanOrEqual(20);
   });
 
+  it("fails through the same strict fallback and BACKEND_UNAVAILABLE error path on a two-page next_page_token cycle and returns no partial rows", async () => {
+    enableStrictLiveMode();
+
+    const fetchUrls: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      fetchUrls.push(url);
+
+      if (url === `/bff/personas?page_size=${PAGINATED_LIST_PAGE_SIZE}`) {
+        return new Response(
+          JSON.stringify({
+            data: [
+              {
+                id: "persona-be19a1fac471247f2b2a",
+                name: "青禾｜2330 台股 Paper 學習 R2",
+                owner: "operator",
+                state: "approved",
+                risk: "low",
+              },
+            ],
+            page_info: { page_size: PAGINATED_LIST_PAGE_SIZE, total: 2, next_page_token: "200" },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+
+      if (url === `/bff/personas?page_size=${PAGINATED_LIST_PAGE_SIZE}&page_token=200`) {
+        return new Response(
+          JSON.stringify({
+            data: [
+              {
+                id: "persona-c6ef44745087d11cc138",
+                name: "Retired Provisioning Audit Persona",
+                owner: "operator",
+                state: "retired",
+                risk: "low",
+              },
+            ],
+            page_info: { page_size: PAGINATED_LIST_PAGE_SIZE, total: 2, next_page_token: "200" },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+
+      throw new Error(`Unexpected fetch URL: ${url}`);
+    });
+
+    let returnedRows: unknown;
+    await expect(
+      bffV1.personas.list().then((rows) => {
+        returnedRows = rows;
+        return rows;
+      }),
+    ).rejects.toSatisfy((error: unknown) => {
+      expect(error).toBeInstanceOf(BffError);
+      if (error instanceof BffError) {
+        expect(error.code).toBe("BACKEND_UNAVAILABLE");
+        expect(error.message).toContain("personas.list");
+        expect(error.message).toContain('repeated next_page_token="200"');
+      }
+      return true;
+    });
+
+    expect(returnedRows).toBeUndefined();
+    expect(fetchUrls).toEqual([
+      `/bff/personas?page_size=${PAGINATED_LIST_PAGE_SIZE}`,
+      `/bff/personas?page_size=${PAGINATED_LIST_PAGE_SIZE}&page_token=200`,
+    ]);
+    expect(liveStatus.get().lastError).toContain("strict:");
+    expect(liveStatus.get().lastError).toContain('repeated next_page_token="200"');
+  });
+
   it("removes first-page unfiltered bffV1.strategies.list and exposes listNonDraft and listForPersona across pages", async () => {
     enableStrictLiveMode();
 
@@ -278,7 +350,19 @@ describe("collectPaginatedListPages and all-pages domain reads", () => {
       if (url === `/bff/strategies?exclude_state=draft&page_size=${PAGINATED_LIST_PAGE_SIZE}`) {
         return new Response(
           JSON.stringify({
-            data: [{ id: "strategy-non-draft-1", name: "Approved 1", state: "approved", risk: "low" }],
+            data: [
+              {
+                id: "strategy-non-draft-1",
+                name: "Approved 1",
+                owner: "operator",
+                updatedAt: "2026-10-18T17:20:36.224810Z",
+                state: "approved",
+                risk: "low",
+                alpha: "alpha.v1",
+                capitalPoolId: "pool-1",
+                personaIds: ["persona-1"],
+              },
+            ],
             page_info: { page_size: PAGINATED_LIST_PAGE_SIZE, total: 26, next_page_token: "nd2" },
           }),
           { status: 200, headers: { "Content-Type": "application/json" } },
@@ -291,10 +375,13 @@ describe("collectPaginatedListPages and all-pages domain reads", () => {
               {
                 id: "strategy-persona-298e138c136c9840b0e4",
                 name: "青禾｜2330 台股 Paper 學習 R2 Paper Strategy",
+                owner: "operator",
+                updatedAt: "2026-10-18T17:20:36.224810Z",
                 state: "approved",
                 risk: "low",
-                persona_id: "persona-be19a1fac471247f2b2a",
-                capital_pool_id: "pool-persona-paper-298e138c136c9840b0e4",
+                alpha: "alpha.tw.2330",
+                personaIds: ["persona-be19a1fac471247f2b2a"],
+                capitalPoolId: "pool-persona-paper-298e138c136c9840b0e4",
               },
             ],
             page_info: { page_size: PAGINATED_LIST_PAGE_SIZE, total: 26, next_page_token: null },
@@ -312,10 +399,13 @@ describe("collectPaginatedListPages and all-pages domain reads", () => {
               {
                 id: "strategy-persona-298e138c136c9840b0e4",
                 name: "青禾｜2330 台股 Paper 學習 R2 Paper Strategy",
+                owner: "operator",
+                updatedAt: "2026-10-18T17:20:36.224810Z",
                 state: "approved",
                 risk: "low",
-                persona_id: "persona-be19a1fac471247f2b2a",
-                capital_pool_id: "pool-persona-paper-298e138c136c9840b0e4",
+                alpha: "alpha.tw.2330",
+                personaIds: ["persona-be19a1fac471247f2b2a"],
+                capitalPoolId: "pool-persona-paper-298e138c136c9840b0e4",
               },
             ],
             page_info: { page_size: PAGINATED_LIST_PAGE_SIZE, total: 1, next_page_token: null },
@@ -337,6 +427,7 @@ describe("collectPaginatedListPages and all-pages domain reads", () => {
     expect(forPersona).toHaveLength(1);
     expect(forPersona[0]).toMatchObject({
       id: "strategy-persona-298e138c136c9840b0e4",
+      alpha: "alpha.tw.2330",
       capitalPoolId: "pool-persona-paper-298e138c136c9840b0e4",
       personaIds: ["persona-be19a1fac471247f2b2a"],
     });
@@ -348,34 +439,166 @@ describe("collectPaginatedListPages and all-pages domain reads", () => {
     ]);
   });
 
-  it("queries GET /bff/incidents with non-terminal status filter when requested", async () => {
+  it("returns BFF strategy DTOs without persona_ids/persona_id/personaId/capital_pool_id alias synthesis and without replacing null with empty strings", async () => {
     enableStrictLiveMode();
+
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      if (url === `/bff/strategies?exclude_state=draft&page_size=${PAGINATED_LIST_PAGE_SIZE}`) {
+        return new Response(
+          JSON.stringify({
+            data: [
+              {
+                id: "strategy-persona-298e138c136c9840b0e4",
+                strategy_id: "strategy-persona-298e138c136c9840b0e4",
+                name: "青禾｜2330 台股 Paper 學習 R2 Paper Strategy",
+                owner: "operator",
+                updatedAt: "2026-10-18T17:20:36.224810Z",
+                state: "approved",
+                risk: "low",
+                alpha: "alpha.tw.2330",
+                capitalPoolId: "pool-persona-paper-298e138c136c9840b0e4",
+                personaIds: ["persona-be19a1fac471247f2b2a"],
+                pnl30d: null,
+                sharpe: null,
+                drawdown: null,
+              },
+              {
+                id: "strategy-null-fields",
+                name: "Null Fields Strategy",
+                owner: "operator",
+                updatedAt: "2026-10-18T17:20:36.224810Z",
+                state: "approved",
+                risk: "low",
+                alpha: null,
+                capitalPoolId: null,
+                personaIds: [],
+                persona_id: "legacy-alias-should-not-populate-personaIds",
+                persona_ids: ["legacy-alias-should-not-populate-personaIds"],
+                personaId: "legacy-alias-should-not-populate-personaIds",
+                capital_pool_id: "legacy-alias-should-not-populate-capitalPoolId",
+              },
+            ],
+            page_info: { page_size: PAGINATED_LIST_PAGE_SIZE, total: 2, next_page_token: null },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (url === "/bff/strategies/strategy-null-fields") {
+        return new Response(
+          JSON.stringify({
+            data: {
+              id: "strategy-null-fields",
+              name: "Null Fields Strategy",
+              owner: "operator",
+              updatedAt: "2026-10-18T17:20:36.224810Z",
+              state: "approved",
+              risk: "low",
+              alpha: null,
+              capitalPoolId: null,
+              personaIds: [],
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      throw new Error(`Unexpected fetch URL: ${url}`);
+    });
+
+    const rows = await bffV1.strategies.listNonDraft();
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatchObject({
+      id: "strategy-persona-298e138c136c9840b0e4",
+      alpha: "alpha.tw.2330",
+      capitalPoolId: "pool-persona-paper-298e138c136c9840b0e4",
+      personaIds: ["persona-be19a1fac471247f2b2a"],
+      pnl30d: null,
+      sharpe: null,
+      drawdown: null,
+    });
+    expect("persona_id" in (rows[0] as unknown as Record<string, unknown>)).toBe(false);
+    expect("persona_ids" in (rows[0] as unknown as Record<string, unknown>)).toBe(false);
+    expect("personaId" in (rows[0] as unknown as Record<string, unknown>)).toBe(false);
+    expect("capital_pool_id" in (rows[0] as unknown as Record<string, unknown>)).toBe(false);
+
+    expect(rows[1].personaIds).toEqual([]);
+    expect(rows[1].capitalPoolId).toBeNull();
+    expect(rows[1].alpha).toBeNull();
+
+    const detail = await bffV1.strategies.get("strategy-null-fields");
+    expect(detail?.capitalPoolId).toBeNull();
+    expect(detail?.alpha).toBeNull();
+    expect(detail?.personaIds).toEqual([]);
+  });
+
+  it("queries GET /bff/incidents with non-terminal status filter across all pages when requested while keeping unfiltered bffV1.incidents.list single-page", async () => {
+    enableStrictLiveMode();
+
+    const encodedStatus = encodeURIComponent(NON_TERMINAL_INCIDENT_STATUS_FILTER);
+    const page1Incidents = Array.from({ length: 20 }, (_, idx) => ({
+      incident_id: `inc-open-${idx + 1}`,
+      severity: "high",
+      status: idx % 2 === 0 ? "open" : "investigating",
+      summary: `Open breach ${idx + 1}`,
+      detected_at: "2026-10-18T00:00:00Z",
+    }));
+    const page2Incidents = [
+      {
+        incident_id: "inc-open-21",
+        severity: "critical",
+        status: "mitigating",
+        summary: "Open breach 21",
+        detected_at: "2026-10-18T01:00:00Z",
+      },
+    ];
 
     const fetchUrls: string[] = [];
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
       fetchUrls.push(url);
-      return new Response(
-        JSON.stringify({
-          incidents: [
-            {
-              incident_id: "inc-open-1",
-              severity: "high",
-              status: "open",
-              summary: "Open breach",
-              detected_at: "2026-10-18T00:00:00Z",
-            },
-          ],
-        }),
-        { status: 200, headers: { "Content-Type": "application/json" } },
-      );
+      if (url === `/bff/incidents?status=${encodedStatus}&page_size=${PAGINATED_LIST_PAGE_SIZE}`) {
+        return new Response(
+          JSON.stringify({
+            incidents: page1Incidents,
+            page_info: { page_size: 20, total: 21, next_page_token: "20" },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (
+        url ===
+        `/bff/incidents?status=${encodedStatus}&page_size=${PAGINATED_LIST_PAGE_SIZE}&page_token=20`
+      ) {
+        return new Response(
+          JSON.stringify({
+            incidents: page2Incidents,
+            page_info: { page_size: 20, total: 21, next_page_token: null },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (url === "/bff/incidents") {
+        return new Response(
+          JSON.stringify({
+            incidents: [page1Incidents[0]],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      throw new Error(`Unexpected fetch URL: ${url}`);
     });
 
     const incidents = await bffV1.incidents.list({ status: NON_TERMINAL_INCIDENT_STATUS_FILTER });
-    expect(incidents).toHaveLength(1);
+    expect(incidents).toHaveLength(21);
     expect(incidents[0].id).toBe("inc-open-1");
+    expect(incidents[20].id).toBe("inc-open-21");
+
+    const unfiltered = await bffV1.incidents.list();
+    expect(unfiltered).toHaveLength(1);
     expect(fetchUrls).toEqual([
-      `/bff/incidents?status=${encodeURIComponent(NON_TERMINAL_INCIDENT_STATUS_FILTER)}`,
+      `/bff/incidents?status=${encodedStatus}&page_size=${PAGINATED_LIST_PAGE_SIZE}`,
+      `/bff/incidents?status=${encodedStatus}&page_size=${PAGINATED_LIST_PAGE_SIZE}&page_token=20`,
+      "/bff/incidents",
     ]);
   });
 

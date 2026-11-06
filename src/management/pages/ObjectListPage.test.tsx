@@ -288,12 +288,18 @@ describe("ObjectListPage", () => {
   it("states how many paper and archived pools exist on the formal empty state, links to the paper scope, and translates new labels in both locales", async () => {
     const { useLiveListV1: actualUseLiveListV1 } = await vi.importActual<typeof import("@/lib/bff-v1")>("@/lib/bff-v1");
     mocks.useLiveListV1.mockImplementation(actualUseLiveListV1);
-    vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
-      new Response(JSON.stringify(capitalPoolsFixture), {
+    // Serve the captured first page once; follow-up page_token reads get a terminal empty page
+    // (a real server never repeats the same token, and repeated tokens now fail closed).
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const body = new URL(url, "http://localhost").searchParams.get("page_token")
+        ? { data: [], page_info: { next_page_token: null, total: 0 } }
+        : capitalPoolsFixture;
+      return new Response(JSON.stringify(body), {
         status: 200,
         headers: { "Content-Type": "application/json" },
-      }),
-    );
+      });
+    });
 
     function LocationProbe() {
       const loc = useLocation();
