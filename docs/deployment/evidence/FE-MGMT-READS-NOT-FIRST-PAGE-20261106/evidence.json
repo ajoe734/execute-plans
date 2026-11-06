@@ -126,6 +126,11 @@
           "file": "src/management/pages/RankingFormulaDetail.test.tsx",
           "change": "Replaced vi.spyOn(bffV1.strategies, 'list') with assertion that bffV1.strategies.listNonDraft is not called, plus AC 8 tests",
           "reason": "AC 2 removed bffV1.strategies.list and AC 8 requires RankingFormulaDetail never to compute browser-side strategy scores."
+        },
+        {
+          "file": "src/lib/bff-v1/strategies.test.ts",
+          "change": "Updated listStrategies import and bare /bff/strategies URL assertion to listNonDraftStrategies (/bff/strategies?exclude_state=draft&page_size=200) and added multi-page listNonDraft / listStrategiesForPersona assertions while preserving all PR944 strict canonical draft creation, owner-state, id, envelope, auth, idempotency, and error tests unchanged",
+          "reason": "AC 2 removed the unfiltered first-page listStrategies export and replaced it with all-pages listNonDraftStrategies (exclude_state=draft) and listStrategiesForPersona (persona_id)."
         }
       ]
     }
@@ -143,7 +148,7 @@
     }
   },
   "verification_commands": [
-    "./node_modules/.bin/vitest run src/lib/bff-v1/__tests__/domainReads.allPages.test.ts src/lib/bff-v1/__tests__/lists.test.ts src/lib/bff-v1/__tests__/seedTaxonomy.test.ts src/components/data/MockDataBadge.test.tsx src/test/bootstrapMockOrdering.test.tsx src/management/pages/Lists.test.tsx src/management/pages/RiskCenter.test.tsx src/management/pages/PersonaDetail.test.ts src/management/components/detail/PersonaCapitalBindingTab.test.tsx src/management/pages/CapitalPoolDetail.test.tsx src/management/pages/IncidentDetail.tradeJourneys.test.tsx src/management/pages/RankingFormulaDetail.test.tsx src/management/pages/ToolDetail.test.tsx src/lib/v5/management/__tests__/i18nParity.test.ts",
+    "./node_modules/.bin/vitest run src/lib/bff-v1/strategies.test.ts src/lib/bff-v1/__tests__/domainReads.allPages.test.ts src/lib/bff-v1/__tests__/lists.test.ts src/lib/bff-v1/__tests__/seedTaxonomy.test.ts src/components/data/MockDataBadge.test.tsx src/test/bootstrapMockOrdering.test.tsx src/management/pages/Lists.test.tsx src/management/pages/RiskCenter.test.tsx src/management/pages/PersonaDetail.test.ts src/management/components/detail/PersonaCapitalBindingTab.test.tsx src/management/pages/CapitalPoolDetail.test.tsx src/management/pages/IncidentDetail.tradeJourneys.test.tsx src/management/pages/RankingFormulaDetail.test.tsx src/management/pages/ToolDetail.test.tsx src/lib/v5/management/__tests__/i18nParity.test.ts",
     "./node_modules/.bin/tsc -p tsconfig.app.json --noEmit"
   ]
 }

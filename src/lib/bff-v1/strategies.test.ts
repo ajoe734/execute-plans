@@ -1,7 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BffError } from "./errors";
 import { liveStatus } from "./liveStatus";
-import { createStrategy, getStrategy, listStrategies, strategies } from "./strategies";
+import {
+  createStrategy,
+  getStrategy,
+  listNonDraftStrategies,
+  listStrategiesForPersona,
+  strategies,
+} from "./strategies";
 import { writeOverlay } from "./writeOverlay";
 
 describe("strategies BFF client", () => {
@@ -244,7 +250,7 @@ describe("strategies BFF client", () => {
     }
   });
 
-  it("preserves strategies.list and strategies.get behavior unchanged", async () => {
+  it("loads non-draft strategies with exclude_state=draft across pages and preserves strategies.get behavior", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch");
     fetchSpy.mockResolvedValueOnce(
       new Response(
@@ -262,13 +268,16 @@ describe("strategies BFF client", () => {
               personaIds: ["persona-1"],
             },
           ],
+          meta: { page: 1, page_size: 200, total: 1 },
         }),
         { status: 200, headers: { "Content-Type": "application/json" } },
       ),
     );
 
-    const listed = await listStrategies();
-    expect(String(fetchSpy.mock.calls[0][0])).toBe("https://bff.example/bff/strategies");
+    const listed = await listNonDraftStrategies();
+    expect(String(fetchSpy.mock.calls[0][0])).toBe(
+      "https://bff.example/bff/strategies?exclude_state=draft&page_size=200",
+    );
     expect(listed).toHaveLength(1);
     expect(listed[0].id).toBe("strat-existing-1");
 
@@ -297,5 +306,80 @@ describe("strategies BFF client", () => {
     );
     expect(detail?.id).toBe("strategy-20261106-a1b2c3d4");
     expect(detail?.state).toBe("draft");
+  });
+
+  it("paginates non-draft and persona-scoped strategy reads across multiple pages with bounded page cap enforcement", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    const page1Rows = Array.from({ length: 200 }, (_, idx) => ({
+      id: `strat-p1-${idx + 1}`,
+      name: `Strategy ${idx + 1}`,
+      owner: "quant",
+      updatedAt: "2026-11-06T00:00:00Z",
+      state: "approved",
+      risk: "low",
+      alpha: "alpha_1",
+      capitalPoolId: "pool-1",
+      personaIds: ["persona-1"],
+    }));
+    const page2Rows = [
+      {
+        id: "strategy-persona-298e138c136c9840b0e4",
+        name: "Page 2 Persona Strategy",
+        owner: "quant",
+        updatedAt: "2026-11-06T00:00:00Z",
+        state: "approved",
+        risk: "low",
+        alpha: "alpha_2",
+        capital_pool_id: "pool-persona-paper-298e138c136c9840b0e4",
+        persona_id: "persona-be19a1fac471247f2b2a",
+      },
+    ];
+
+    fetchSpy
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: page1Rows,
+            page_info: { page_size: 200, total: 201, next_page_token: "200" },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: page2Rows,
+            page_info: { page_size: 200, total: 201, next_page_token: null },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+
+    const allNonDraft = await strategies.listNonDraft();
+    expect(allNonDraft).toHaveLength(201);
+    expect(allNonDraft[200].id).toBe("strategy-persona-298e138c136c9840b0e4");
+    expect(String(fetchSpy.mock.calls[0][0])).toBe(
+      "https://bff.example/bff/strategies?exclude_state=draft&page_size=200",
+    );
+    expect(String(fetchSpy.mock.calls[1][0])).toBe(
+      "https://bff.example/bff/strategies?exclude_state=draft&page_size=200&page_token=200",
+    );
+
+    fetchSpy.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          data: page2Rows,
+          page_info: { page_size: 200, total: 1, next_page_token: null },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    const forPersona = await listStrategiesForPersona("persona-be19a1fac471247f2b2a");
+    expect(forPersona).toHaveLength(1);
+    expect(forPersona[0].personaIds).toContain("persona-be19a1fac471247f2b2a");
+    expect(String(fetchSpy.mock.calls[2][0])).toBe(
+      "https://bff.example/bff/strategies?persona_id=persona-be19a1fac471247f2b2a&page_size=200",
+    );
+    expect((strategies as Record<string, unknown>).list).toBeUndefined();
   });
 });
