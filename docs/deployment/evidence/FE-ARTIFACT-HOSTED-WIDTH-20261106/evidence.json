@@ -1,0 +1,64 @@
+{
+  "task": "FE-ARTIFACT-HOSTED-WIDTH-20261106",
+  "scope": "source + local route-mocked browser regression only; no hosted deploy/validation performed",
+  "fixture": "e2e/fixtures/artifact-hosted-273.json (genuine 273 Artifact records, pages 100/100/73, unmodified)",
+  "cause": "Column.minWidth only summed into the scroll-area/table min-width; auto table layout ignored it per column, so nowrap hash/updated plus unbreakable kind/source values (evidence_synthesis_result, research_run_output) and p-4 cell padding made natural width 1415px > 1280 client width.",
+  "before": {
+    "1600": {
+      "clientWidth": 1280,
+      "scrollWidth": 1415,
+      "updatedRightEdge": 1695,
+      "viewport": 1600
+    },
+    "1366": {
+      "clientWidth": 1046,
+      "scrollWidth": 1415
+    }
+  },
+  "after": {
+    "1600": {
+      "clientWidth": 1280,
+      "scrollWidth": 1280,
+      "updatedRightEdge": 1560,
+      "maxRowHeight": 57
+    },
+    "1366": {
+      "clientWidth": 1046,
+      "scrollWidth": 1277,
+      "horizontalScroll": true,
+      "maxRowHeight": 57
+    }
+  },
+  "owner": "pantheon-dev-paper-provisioner kept in full (data-full-owner/title), truncated, row height 57px",
+  "rows": 273,
+  "columns": 10,
+  "fix": "DataTable applies explicit Column.minWidth to header cells; Artifact columns use px-3 and tuned minWidths; kind/source values may wrap anywhere.",
+  "verification": [
+    "e2e/artifact-hosted-width.spec.ts 2 passed",
+    "vitest DataTable/Lists/ObjectListPage 34 passed",
+    "npm run typecheck passed",
+    "e2e/artifact-hosted-width.spec.ts 3 passed (incl. strategy owner geometry)"
+  ],
+  "not_done": [
+    "real CI, independent review, deploy and hosted 1600/1366 validation remain open",
+    "Strategies list horizontal overflow at 1600 is pre-existing and untouched"
+  ],
+  "strategy_owner_1600": {
+    "source": "genuine management-candidate-reads-1793964736780.json reads[1].body (100 strategies, route-mocked, not committed as fixture: only the Artifact fixture is admitted)",
+    "before_DataTable_change": {
+      "ownerWidth": 124,
+      "ownerHeight": 49,
+      "maxRowHeight": 48.7,
+      "scrollWidth": 1720,
+      "clientWidth": 1280
+    },
+    "after_DataTable_change": {
+      "ownerWidth": 125,
+      "ownerHeight": 49,
+      "maxRowHeight": 48.7,
+      "scrollWidth": 1720,
+      "clientWidth": 1280
+    },
+    "note": "Strategies table (11 columns) already scrolls horizontally at 1600 before and after; pre-existing, out of Artifact scope, not claimed fixed. Owner cell unchanged/readable. Spec skips if capture path absent (STRATEGY_CAPTURE_PATH)."
+  }
+}

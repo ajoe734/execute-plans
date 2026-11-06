@@ -1187,20 +1187,22 @@ export const ArtifactsList = () => {
       columns={[
         {
           key: "name",
-          minWidth: 180,
+          minWidth: 170,
+          className: "px-3",
           header: t("common.name"),
           cell: (r) => <div className="font-medium line-clamp-2 break-words" title={r.name || r.id}>{r.name || r.id}</div>,
         },
         {
           key: "source",
-          minWidth: 90,
+          minWidth: 130,
+          className: "px-3",
           header: t("artifact.sourceKind", { defaultValue: t("table.source") }),
           cell: (r) => {
             const sourceKind = typeof (r.source_kind ?? r.sourceKind) === "string"
               ? String(r.source_kind ?? r.sourceKind).trim()
               : "";
             return sourceKind ? (
-              <Badge variant="outline" data-source-kind={sourceKind} className="font-mono text-[11px]">
+              <Badge variant="outline" data-source-kind={sourceKind} className="font-mono text-[11px] whitespace-normal text-left [overflow-wrap:anywhere]">
                 {sourceKind}
               </Badge>
             ) : (
@@ -1210,12 +1212,13 @@ export const ArtifactsList = () => {
         },
         {
           key: "kind",
-          minWidth: 130,
+          minWidth: 120,
+          className: "px-3",
           header: t("table.kind"),
           cell: (r) => {
             const kind = typeof r.kind === "string" ? r.kind.trim() : "";
             return kind ? (
-              <span className="text-mono text-xs">{kind}</span>
+              <span className="text-mono text-xs [overflow-wrap:anywhere]" title={kind}>{kind}</span>
             ) : (
               <span className="text-mono text-xs text-muted-foreground whitespace-nowrap">{noData}</span>
             );
@@ -1224,6 +1227,7 @@ export const ArtifactsList = () => {
         {
           key: "ver",
           minWidth: 70,
+          className: "px-3",
           header: t("table.version"),
           cell: (r) => {
             const version = typeof r.version === "string" ? r.version.trim() : "";
@@ -1237,6 +1241,7 @@ export const ArtifactsList = () => {
         {
           key: "state",
           minWidth: 90,
+          className: "px-3",
           header: t("common.state"),
           cell: (r) => {
             const state = typeof r.state === "string" ? r.state.trim() : "";
@@ -1250,6 +1255,7 @@ export const ArtifactsList = () => {
         {
           key: "risk",
           minWidth: 80,
+          className: "px-3",
           header: t("common.risk"),
           cell: (r) => {
             const risk = typeof r.risk === "string" ? r.risk.trim() : "";
@@ -1263,6 +1269,7 @@ export const ArtifactsList = () => {
         {
           key: "size",
           minWidth: 90,
+          className: "px-3",
           header: t("detail.label.size", { defaultValue: "Size" }),
           cell: (r) =>
             hasNumber(r.sizeMb) ? (
@@ -1274,6 +1281,7 @@ export const ArtifactsList = () => {
         {
           key: "hash",
           minWidth: 150,
+          className: "px-3",
           header: t("detail.section.hash", { defaultValue: "Hash" }),
           cell: (r) => {
             const hash = typeof r.hash === "string" ? r.hash.trim() : "";
@@ -1293,6 +1301,7 @@ export const ArtifactsList = () => {
         {
           key: "owner",
           minWidth: 120,
+          className: "px-3",
           header: t("common.owner"),
           cell: (r) => {
             const owner = typeof r.owner === "string" ? r.owner.trim() : "";
@@ -1306,6 +1315,7 @@ export const ArtifactsList = () => {
         {
           key: "updated",
           minWidth: 150,
+          className: "px-3",
           header: t("common.updated"),
           cell: (r) => (
             <span className="text-mono text-xs text-muted-foreground whitespace-nowrap">
