@@ -796,6 +796,9 @@ describe("EvolutionJournalPage Rendering", () => {
     const surfaceView = renderJournal("/management/evolution-journal");
     expect(screen.getByTestId("evolution-journal-degraded")).toBeInTheDocument();
     expect(screen.getByText(/postmortems: unavailable/i)).toBeInTheDocument();
+    expect(screen.queryByTestId("evolution-auto-proposals-summary")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("evolution-journal-summary")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("evolution-partial-read-badge")).not.toBeInTheDocument();
     expect(screen.queryByTestId("evolution-history-empty")).not.toBeInTheDocument();
     expect(screen.queryByText(/No evolution has been executed yet/i)).not.toBeInTheDocument();
     surfaceView.unmount();
@@ -1032,6 +1035,9 @@ describe("EvolutionJournalPage Rendering", () => {
     // 3. Active view badge, partial-read badge, and honest per-source summary counts are visible
     expect(screen.getByTestId("evolution-active-view-badge")).toHaveTextContent("真實演化歷史");
     expect(screen.getByTestId("evolution-partial-read-badge")).toHaveTextContent("部分讀取（已驗證來源）");
+    expect(screen.getByTestId("evolution-journal-summary")).toHaveTextContent(
+      "已驗證來源篩選結果：共 6 筆（本頁 6 筆，未含未知來源）",
+    );
     expect(screen.getByTestId("evolution-summary-decisions")).toHaveTextContent("演化決策: 3");
     expect(screen.getByTestId("evolution-summary-mutation-reviews")).toHaveTextContent("突變審核: 3");
     expect(screen.getByTestId("evolution-summary-postmortems")).toHaveTextContent("事後檢討: 0");
@@ -1069,6 +1075,9 @@ describe("EvolutionJournalPage Rendering", () => {
     expect(screen.getByTestId("evolution-active-view-badge")).toHaveTextContent("Evolution history");
     expect(screen.getByTestId("evolution-partial-read-badge")).toHaveTextContent(
       "Partial read (verified sources)",
+    );
+    expect(screen.getByTestId("evolution-journal-summary")).toHaveTextContent(
+      "Verified-source items: 6 (returned 6, excluding unknown sources)",
     );
     expect(screen.getByTestId("evolution-summary-decisions")).toHaveTextContent("Decisions: 3");
     expect(screen.getByTestId("evolution-summary-mutation-reviews")).toHaveTextContent("Mutation reviews: 3");

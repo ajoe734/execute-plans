@@ -4046,22 +4046,22 @@ export interface ManagementEvolutionJournalSummary {
   totalItems: number;
   returned_items: number;
   returnedItems: number;
-  decision_count: number | null;
-  decisionCount: number | null;
-  mutation_review_count: number | null;
-  mutationReviewCount: number | null;
-  postmortem_count: number | null;
-  postmortemCount: number | null;
-  rollback_count: number | null;
-  rollbackCount: number | null;
-  freeze_order_count: number | null;
-  freezeOrderCount: number | null;
-  pending_review_count: number | null;
-  pendingReviewCount: number | null;
-  active_freeze_count: number | null;
-  activeFreezeCount: number | null;
-  completed_rollback_count: number | null;
-  completedRollbackCount: number | null;
+  decision_count: number;
+  decisionCount: number;
+  mutation_review_count: number;
+  mutationReviewCount: number;
+  postmortem_count: number;
+  postmortemCount: number;
+  rollback_count: number;
+  rollbackCount: number;
+  freeze_order_count: number;
+  freezeOrderCount: number;
+  pending_review_count: number;
+  pendingReviewCount: number;
+  active_freeze_count: number;
+  activeFreezeCount: number;
+  completed_rollback_count: number;
+  completedRollbackCount: number;
   latest_at?: string | null;
   latestAt?: string | null;
   by_type: Record<string, number>;
@@ -4101,33 +4101,6 @@ function adaptArrayPassthrough<T>(raw: unknown): T[] | null {
          (isObject(data) ? asArray<T>(data.items) : null);
 }
 
-const DEGRADED_JOURNAL_SURFACE_STATUSES = new Set([
-  "degraded",
-  "unavailable",
-  "error",
-  "failed",
-  "unknown",
-]);
-
-function isJournalSurfaceDegraded(
-  surfaces: Record<string, { status: string }> | undefined,
-  surfaceKey: string,
-): boolean {
-  const status = String(surfaces?.[surfaceKey]?.status ?? "").trim().toLowerCase();
-  return DEGRADED_JOURNAL_SURFACE_STATUSES.has(status);
-}
-
-function adaptJournalSurfaceCount(
-  rawValue: unknown,
-  surfaces: Record<string, { status: string }> | undefined,
-  surfaceKey: string,
-): number | null {
-  if (isJournalSurfaceDegraded(surfaces, surfaceKey) || rawValue === null) {
-    return null;
-  }
-  return asFiniteNumber(rawValue, 0);
-}
-
 export function adaptEvolutionJournalList<T = Record<string, unknown>>(raw: unknown): EvolutionJournalList<T> | null {
   const arr = adaptArrayPassthrough<T>(raw);
   if (!arr) return null;
@@ -4136,68 +4109,20 @@ export function adaptEvolutionJournalList<T = Record<string, unknown>>(raw: unkn
   const data = unwrap(raw);
   const envelope = isObject(raw) ? raw : {};
 
-  const rawMeta = (isObject(envelope.meta) ? envelope.meta : undefined)
-    ?? (isObject(data) && isObject(data.meta) ? data.meta : undefined)
-    ?? (isObject(rawArr.meta) ? (rawArr.meta as unknown as Record<string, unknown>) : undefined);
-  let adaptedSurfaces: Record<string, { status: string; source?: string; message?: string; reason?: string }> | undefined;
-  if (rawMeta) {
-    const rawSurfaces = isObject(rawMeta.surfaces) ? rawMeta.surfaces : {};
-    adaptedSurfaces = Object.fromEntries(
-      Object.entries(rawSurfaces).map(([key, item]) => [key, adaptEvidenceSurface(item)]),
-    );
-    list.meta = {
-      snapshot_at: optionalString(rawMeta.snapshot_at ?? rawMeta.snapshotAt),
-      snapshotAt: optionalString(rawMeta.snapshotAt ?? rawMeta.snapshot_at),
-      surfaces: adaptedSurfaces,
-    };
-  }
-
   const rawSummary = (isObject(data) && isObject(data.summary) ? data.summary : undefined)
     ?? (isObject(envelope.summary) ? envelope.summary : undefined)
     ?? (isObject(rawArr.summary) ? (rawArr.summary as unknown as Record<string, unknown>) : undefined);
   if (rawSummary) {
     const totalItems = asFiniteNumber(rawSummary.total_items ?? rawSummary.totalItems, list.length);
     const returnedItems = asFiniteNumber(rawSummary.returned_items ?? rawSummary.returnedItems, list.length);
-    const decisionCount = adaptJournalSurfaceCount(
-      rawSummary.decision_count ?? rawSummary.decisionCount,
-      adaptedSurfaces,
-      "evolution_decisions",
-    );
-    const mutationReviewCount = adaptJournalSurfaceCount(
-      rawSummary.mutation_review_count ?? rawSummary.mutationReviewCount,
-      adaptedSurfaces,
-      "mutation_review",
-    );
-    const postmortemCount = adaptJournalSurfaceCount(
-      rawSummary.postmortem_count ?? rawSummary.postmortemCount,
-      adaptedSurfaces,
-      "postmortems",
-    );
-    const rollbackCount = adaptJournalSurfaceCount(
-      rawSummary.rollback_count ?? rawSummary.rollbackCount,
-      adaptedSurfaces,
-      "rollbacks",
-    );
-    const freezeOrderCount = adaptJournalSurfaceCount(
-      rawSummary.freeze_order_count ?? rawSummary.freezeOrderCount,
-      adaptedSurfaces,
-      "freeze_orders",
-    );
-    const pendingReviewCount = adaptJournalSurfaceCount(
-      rawSummary.pending_review_count ?? rawSummary.pendingReviewCount,
-      adaptedSurfaces,
-      "mutation_review",
-    );
-    const activeFreezeCount = adaptJournalSurfaceCount(
-      rawSummary.active_freeze_count ?? rawSummary.activeFreezeCount,
-      adaptedSurfaces,
-      "freeze_orders",
-    );
-    const completedRollbackCount = adaptJournalSurfaceCount(
-      rawSummary.completed_rollback_count ?? rawSummary.completedRollbackCount,
-      adaptedSurfaces,
-      "rollbacks",
-    );
+    const decisionCount = asFiniteNumber(rawSummary.decision_count ?? rawSummary.decisionCount, 0);
+    const mutationReviewCount = asFiniteNumber(rawSummary.mutation_review_count ?? rawSummary.mutationReviewCount, 0);
+    const postmortemCount = asFiniteNumber(rawSummary.postmortem_count ?? rawSummary.postmortemCount, 0);
+    const rollbackCount = asFiniteNumber(rawSummary.rollback_count ?? rawSummary.rollbackCount, 0);
+    const freezeOrderCount = asFiniteNumber(rawSummary.freeze_order_count ?? rawSummary.freezeOrderCount, 0);
+    const pendingReviewCount = asFiniteNumber(rawSummary.pending_review_count ?? rawSummary.pendingReviewCount, 0);
+    const activeFreezeCount = asFiniteNumber(rawSummary.active_freeze_count ?? rawSummary.activeFreezeCount, 0);
+    const completedRollbackCount = asFiniteNumber(rawSummary.completed_rollback_count ?? rawSummary.completedRollbackCount, 0);
     const latestAt = nullableString(rawSummary.latest_at ?? rawSummary.latestAt);
     const byType = asCountRecord(rawSummary.by_type ?? rawSummary.byType);
     const byStatus = asCountRecord(rawSummary.by_status ?? rawSummary.byStatus);
@@ -4283,6 +4208,21 @@ export function adaptEvolutionJournalList<T = Record<string, unknown>>(raw: unkn
     };
     list.pageInfo = pageInfo;
     list.page_info = pageInfo;
+  }
+
+  const rawMeta = (isObject(envelope.meta) ? envelope.meta : undefined)
+    ?? (isObject(data) && isObject(data.meta) ? data.meta : undefined)
+    ?? (isObject(rawArr.meta) ? (rawArr.meta as unknown as Record<string, unknown>) : undefined);
+  if (rawMeta) {
+    const rawSurfaces = isObject(rawMeta.surfaces) ? rawMeta.surfaces : {};
+    const surfaces = Object.fromEntries(
+      Object.entries(rawSurfaces).map(([key, item]) => [key, adaptEvidenceSurface(item)]),
+    );
+    list.meta = {
+      snapshot_at: optionalString(rawMeta.snapshot_at ?? rawMeta.snapshotAt),
+      snapshotAt: optionalString(rawMeta.snapshotAt ?? rawMeta.snapshot_at),
+      surfaces,
+    };
   }
 
   return list;

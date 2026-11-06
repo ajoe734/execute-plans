@@ -3748,6 +3748,7 @@ export default {
       incidentSeverity: "重大事件門檻",
       postmortemDraft: "事後檢討草稿",
       filteredSummaryFmt: "篩選結果：共 {{total}} 筆（本頁 {{returned}} 筆）",
+      partialFilteredSummaryFmt: "已驗證來源篩選結果：共 {{total}} 筆（本頁 {{returned}} 筆，未含未知來源）",
       summaryDecisions: "演化決策",
       summaryMutationReviews: "突變審核",
       summaryPostmortems: "事後檢討",

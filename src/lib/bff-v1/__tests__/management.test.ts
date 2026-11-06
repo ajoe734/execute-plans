@@ -18,7 +18,6 @@ import {
   adaptPortfolioExposureMonitor,
   adaptPortfolioHoldingRows,
   adaptQuarterlyRankingRows,
-  adaptEvolutionJournalList,
   adaptEvolutionQualificationReport,
   defaultTradingPulseModel,
   mgmt,
@@ -236,78 +235,6 @@ describe("mgmt façade (PM-Live)", () => {
       total: 6,
     });
     expect(out.meta?.surfaces?.evolution_decisions?.status).toBe("ok");
-  });
-
-  it("maps unavailable freeze_orders and rollbacks surfaces to null summary counts while keeping verified healthy counts", () => {
-    const out = adaptEvolutionJournalList({
-      data: {
-        id: "management_evolution_journal",
-        items: [
-          { id: "mutation_review:evo-sweep-inc-drift-87d6930c62ee", entry_type: "mutation_review" },
-          { id: "evolution_decision:evo-sweep-inc-drift-87d6930c62ee", entry_type: "evolution_decision" },
-          { id: "mutation_review:evo-h12-01a11-20261023-9aeb-duplicate-execution-usera", entry_type: "mutation_review" },
-          { id: "evolution_decision:evo-h12-01a11-20261023-9aeb-duplicate-execution-usera", entry_type: "evolution_decision" },
-          { id: "mutation_review:evo-h12-01a11-20261023-9aeb-duplicate-execution", entry_type: "mutation_review" },
-          { id: "evolution_decision:evo-h12-01a11-20261023-9aeb-duplicate-execution", entry_type: "evolution_decision" },
-        ],
-        summary: {
-          total_items: 6,
-          returned_items: 6,
-          decision_count: 3,
-          mutation_review_count: 3,
-          postmortem_count: 0,
-          rollback_count: 0,
-          freeze_order_count: 0,
-          pending_review_count: 0,
-          active_freeze_count: 0,
-          completed_rollback_count: 0,
-          latest_at: "2026-11-03T01:58:28Z",
-          by_type: { mutation_review: 3, evolution_decision: 3 },
-          by_status: { approved: 2, executed: 2, canceled: 2 },
-          by_risk_level: { medium: 6 },
-        },
-        auto_proposal_counts: {
-          incident_followup: 433,
-          incident_severity: 9,
-          postmortem_draft: 2088,
-          total: 2530,
-        },
-      },
-      page_info: {
-        next_page_token: null,
-        total: 6,
-        page_size: 20,
-      },
-      meta: {
-        snapshot_at: "2026-11-06T00:06:51Z",
-        surfaces: {
-          evolution_decisions: { status: "ok", source: "service" },
-          postmortems: { status: "ok", source: "service_client" },
-          freeze_orders: { status: "unavailable", source: "missing" },
-          rollbacks: { status: "unavailable", source: "missing" },
-          mutation_review: { status: "ok", source: "bff_composed" },
-          management_evolution_journal: { status: "degraded", source: "bff_composed" },
-        },
-      },
-    });
-
-    expect(out).toHaveLength(6);
-    expect(out?.summary?.decision_count).toBe(3);
-    expect(out?.summary?.mutation_review_count).toBe(3);
-    expect(out?.summary?.postmortem_count).toBe(0);
-    expect(out?.summary?.rollback_count).toBeNull();
-    expect(out?.summary?.completed_rollback_count).toBeNull();
-    expect(out?.summary?.freeze_order_count).toBeNull();
-    expect(out?.summary?.active_freeze_count).toBeNull();
-    expect(out?.autoProposalCounts).toEqual({
-      incident_followup: 433,
-      incident_severity: 9,
-      postmortem_draft: 2088,
-      total: 2530,
-      incidentFollowup: 433,
-      incidentSeverity: 9,
-      postmortemDraft: 2088,
-    });
   });
 
   it("recommendations live read follows next_page_token past the first page", async () => {

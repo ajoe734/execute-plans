@@ -3767,6 +3767,7 @@ export default {
       incidentSeverity: "Incident severity",
       postmortemDraft: "Postmortem drafts",
       filteredSummaryFmt: "Filtered items: {{total}} (returned {{returned}})",
+      partialFilteredSummaryFmt: "Verified-source items: {{total}} (returned {{returned}}, excluding unknown sources)",
       summaryDecisions: "Decisions",
       summaryMutationReviews: "Mutation reviews",
       summaryPostmortems: "Postmortems",

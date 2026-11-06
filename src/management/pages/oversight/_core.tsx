@@ -2215,7 +2215,18 @@ export const EvolutionJournalPage = () => {
     );
   }, [journalMeta]);
   const hasDegradedSurfaces = degradedSurfaces.length > 0;
-  const isReadFailed = Boolean(error) || (!loading && data === undefined && !isFleetSummary);
+  const hasHealthyJournalSource = useMemo(() => {
+    const surfaces = journalMeta?.surfaces;
+    const hasOkSource = ["evolution_decisions", "postmortems", "mutation_review", "rollbacks", "freeze_orders"].some(
+      (key) => String(surfaces?.[key]?.status ?? "").trim().toLowerCase() === "ok",
+    );
+    return hasOkSource || rows.length > 0 || autoProposalCounts.total > 0;
+  }, [autoProposalCounts.total, journalMeta, rows.length]);
+  const isPartialRead = !error && hasDegradedSurfaces && hasHealthyJournalSource;
+  const isReadFailed =
+    Boolean(error) ||
+    (!loading && data === undefined && !isFleetSummary) ||
+    (hasDegradedSurfaces && !hasHealthyJournalSource);
 
   const isJournalSurfaceDegraded = (surfaceKey: string): boolean => {
     const status = String(journalMeta?.surfaces?.[surfaceKey]?.status ?? "").trim().toLowerCase();
@@ -2359,7 +2370,7 @@ export const EvolutionJournalPage = () => {
               <Badge variant="outline" data-testid="evolution-active-view-badge">
                 {viewBadgeLabel}
               </Badge>
-              {hasDegradedSurfaces && (
+              {isPartialRead && (
                 <Badge
                   variant="outline"
                   data-testid="evolution-partial-read-badge"
@@ -2369,10 +2380,15 @@ export const EvolutionJournalPage = () => {
                 </Badge>
               )}
               <span className="text-foreground">
-                {t("mgmt.evolution.filteredSummaryFmt", {
-                  total: filteredTotal,
-                  returned: returnedCount,
-                })}
+                {t(
+                  isPartialRead
+                    ? "mgmt.evolution.partialFilteredSummaryFmt"
+                    : "mgmt.evolution.filteredSummaryFmt",
+                  {
+                    total: filteredTotal,
+                    returned: returnedCount,
+                  },
+                )}
               </span>
             </div>
             {summary && (
