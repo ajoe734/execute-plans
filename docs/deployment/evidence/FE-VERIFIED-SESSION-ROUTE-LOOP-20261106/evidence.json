@@ -1,0 +1,29 @@
+{
+  "task": "FE-VERIFIED-SESSION-ROUTE-LOOP-20261106",
+  "scope": "source-only; no hosted/Stage verification performed",
+  "root_cause": "ProtectedRoute required bffSession.readiness.authReady === true while AuthPage redirects any verified bffSession to the protected route; viewer with authReady=false looped auth<->protected (blank screen).",
+  "fix": "ProtectedRoute admits any bffSession (set only after strict BFF identity+readiness readback: authenticated, bearer/cookie, non-stub). Absent session still redirects to auth.",
+  "unchanged": [
+    "BFF role/capability enforcement",
+    "tenant isolation",
+    "write boundaries",
+    "backend readiness semantics"
+  ],
+  "tests": "vitest src/lib/auth + src/pages/Auth.test.tsx: 6 files, 66 passed",
+  "regression": [
+    "verified viewer + authReady=false admitted",
+    "no bffSession (even with first-factor token) rejected",
+    "loading state unchanged"
+  ],
+  "original_failed_evidence_retained": {
+    "stage_run_id": "42145201460",
+    "note": "Run conclusion is success; it is NOT itself browser-failure proof. Full original failed browser artifact paths are held in the governed task/native note (03:27Z) and were not modified or re-fetched by this source-only worker.",
+    "observed": "Original failure was reported from Stage browser run: viewer reaches blank screen / auth<->protected redirect loop.",
+    "readiness_response_body": "NOT captured; authReady=false for the viewer is code-derived (ProtectedRoute required readiness.authReady===true), not observed from a retained response body."
+  },
+  "hosted_verification": "not performed (pending CI/independent review/Stage by owners)",
+  "observed_vs_code_derived": {
+    "observed": "blank screen/redirect loop as reported by Stage browser run",
+    "code_derived": "verified /me 200 + authReady=false cause, via ProtectedRoute vs AuthPage redirect logic; reproduced only in unit regression"
+  }
+}
