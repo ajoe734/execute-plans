@@ -503,6 +503,8 @@ export interface ManagementTradingPulseCoverage {
   monitoring_coverage_count?: number;
   baselineComparisonCount?: number;
   baseline_comparison_count?: number;
+  baselineRequiredCount?: number;
+  baseline_required_count?: number;
   rowHealthDegradedCount?: number;
   row_health_degraded_count?: number;
   retiredRuntimeCount?: number;
@@ -532,6 +534,8 @@ export interface ManagementTradingPulseSummary {
   retiredRuntimeCount?: number;
   retired_runtime_count?: number;
   baselineComparisonCount: number;
+  baselineRequiredCount?: number;
+  baseline_required_count?: number;
   baselineBreachedCount: number;
   baselineWatchCount: number;
   rowHealthDegradedCount?: number;
@@ -3383,6 +3387,7 @@ const TRADING_PULSE_COVERAGE_NUMBER_KEYS = [
   ["telemetryCoverageCount", "telemetry_coverage_count"],
   ["monitoringCoverageCount", "monitoring_coverage_count"],
   ["baselineComparisonCount", "baseline_comparison_count"],
+  ["baselineRequiredCount", "baseline_required_count"],
   ["rowHealthDegradedCount", "row_health_degraded_count"],
   ["retiredRuntimeCount", "retired_runtime_count"],
   ["availableCount", "available_count"],
@@ -3561,6 +3566,9 @@ function normalizeTradingPulseSummary(
   const paperRuntimeCount = asNullableNumber(
     record.paperRuntimeCount ?? record.paper_runtime_count ?? coverage?.paperRuntimeCount,
   );
+  const baselineRequiredCount = asNullableNumber(
+    record.baselineRequiredCount ?? record.baseline_required_count ?? coverage?.baselineRequiredCount,
+  );
   const retiredRuntimeCount = asNullableNumber(
     record.retiredRuntimeCount ?? record.retired_runtime_count,
   );
@@ -3636,6 +3644,13 @@ function normalizeTradingPulseSummary(
   } else {
     delete out.paperRuntimeCount;
     delete out.paper_runtime_count;
+  }
+  if (baselineRequiredCount !== null) {
+    out.baselineRequiredCount = baselineRequiredCount;
+    out.baseline_required_count = baselineRequiredCount;
+  } else {
+    delete out.baselineRequiredCount;
+    delete out.baseline_required_count;
   }
   if (retiredRuntimeCount !== null) {
     out.retiredRuntimeCount = retiredRuntimeCount;
@@ -3739,6 +3754,13 @@ function normalizeTradingPulseCardDetails(value: unknown): Record<string, unknow
     );
     out.baselineComparisonCount = baselineComparisonCount;
     out.baseline_comparison_count = baselineComparisonCount;
+  }
+  if ("baselineRequiredCount" in value || "baseline_required_count" in value) {
+    const baselineRequiredCount = asNullableNumber(
+      value.baselineRequiredCount ?? value.baseline_required_count,
+    );
+    out.baselineRequiredCount = baselineRequiredCount;
+    out.baseline_required_count = baselineRequiredCount;
   }
   if (isObject(value.byBaselineStatus ?? value.by_baseline_status)) {
     const byBaselineStatus = asCountRecord(
