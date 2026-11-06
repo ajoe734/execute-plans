@@ -17,13 +17,25 @@
   ],
   "original_failed_evidence_retained": {
     "stage_run_id": "42145201460",
-    "note": "Run conclusion is success; it is NOT itself browser-failure proof. Full original failed browser artifact paths are held in the governed task/native note (03:27Z) and were not modified or re-fetched by this source-only worker.",
-    "observed": "Original failure was reported from Stage browser run: viewer reaches blank screen / auth<->protected redirect loop.",
-    "readiness_response_body": "NOT captured; authReady=false for the viewer is code-derived (ProtectedRoute required readiness.authReady===true), not observed from a retained response body."
+    "note": "Stage run 42145201460 conclusion is success and is not itself browser-failure proof; the failure proof is the retained browser results artifact above (passed=false, viewer actual_UI_logout TimeoutError). Source-only worker did not modify or re-fetch it.",
+    "observed": "In the original QA window the viewer got /bff/me 200 and refresh /bff/me 200 but the UI logout step timed out (passed=false). Blank-screen/redirect-loop evidence comes from later diagnostics, not that window. Formal foreign-tenant PASS is NOT claimed.",
+    "readiness_response_body": "NOT captured; authReady=false for the viewer is code-derived (ProtectedRoute required readiness.authReady===true), not observed from a retained response body.",
+    "artifact_path": "/tmp/pantheon-codex-01a11-review-20261023/post-dev-existing-staging-source-resumption-20261026/actual-stage-browser-42145201460-1793930233842/actual-secret-free-browser-results.json",
+    "artifact_sha256": "58482016b53af76f661f3eae08c493fae17fe23d82751ddd79b571a48598da5a",
+    "actual_window_utc": "2026-11-06T01:57:13.842Z..2026-11-06T01:57:46.543Z",
+    "sanitized_observed_facts": {
+      "viewer_bff_me": 200,
+      "roles": [
+        "viewer"
+      ],
+      "refresh_bff_me": 200,
+      "viewer:actual_UI_logout": "TimeoutError",
+      "passed": false
+    }
   },
   "hosted_verification": "not performed (pending CI/independent review/Stage by owners)",
   "observed_vs_code_derived": {
-    "observed": "blank screen/redirect loop as reported by Stage browser run",
-    "code_derived": "verified /me 200 + authReady=false cause, via ProtectedRoute vs AuthPage redirect logic; reproduced only in unit regression"
+    "observed": "Original QA window: viewer /bff/me 200, refresh 200, actual_UI_logout TimeoutError. Blank screen/redirect loop: later diagnostic evidence, distinct from original window.",
+    "code_derived": "authReady=false (readiness body not saved) and loop cause via ProtectedRoute vs AuthPage redirect logic; reproduced only in unit regression"
   }
 }
