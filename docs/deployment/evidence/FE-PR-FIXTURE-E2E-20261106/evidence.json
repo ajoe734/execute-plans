@@ -6,7 +6,7 @@
   "repository": "ajoe734/execute-plans",
   "branch": "task/FE-PR-FIXTURE-E2E-20261106",
   "base_branch": "dev",
-  "base_commit_sha": "bdf2a6640f1fed5fee2d14106325770727ca7684",
+  "base_commit_sha": "f0c49025fde2b707c219c1cea5f7beb42366d965",
   "verification_scope": "isolated_loopback_fixture_playwright_in_pr_component_merge_gate_and_release_gate",
   "shared_fixture_e2e_definition": {
     "runner_script": "scripts/run-fixture-e2e.mjs",
@@ -35,7 +35,8 @@
     "grep_invert": "asserts MeResponse tenant/env/user/capabilities shape",
     "retries": 0,
     "trace": "off",
-    "isolated_env": {
+    "serve_mode_env": {
+      "PANTHEON_RELEASE_GATE_CONTEXT": "pull_request",
       "PANTHEON_HOSTED_E2E": "",
       "FE_INT_GATE_LIVE_BFF": "",
       "F08_CREATE_INTENT_LIVE_BFF": "",
@@ -43,6 +44,32 @@
       "VITE_BFF_FALLBACK": "strict",
       "BFF_FALLBACK": "strict",
       "VITE_BFF_DEV_BEARER_TOKEN": ""
+    },
+    "no_serve_mode_env_behavior": "passes caller environment through unchanged (no PANTHEON_RELEASE_GATE_CONTEXT default, no credential deletion, no PANTHEON_BFF_BASE_URL rewrite)"
+  },
+  "release_gate_hard_path_survival_proof": {
+    "unit_level_env_proof": {
+      "test_file": "src/test/paired-release-workflow.test.ts",
+      "test_name": "preserves the release gate fixture_e2e non-PR hard-gate context and caller environment under --no-serve",
+      "verified_invariants": [
+        ".github/workflows/pantheon-integration-gate.yml job env and fixture_e2e step env do not set PANTHEON_RELEASE_GATE_CONTEXT or pull_request",
+        "buildFixtureE2eEnv(callerEnv, baseUrl, { serve: false }) returns callerEnv unchanged",
+        "PANTHEON_RELEASE_GATE_CONTEXT remains undefined when caller did not set it",
+        "PANTHEON_BFF_BASE_URL remains the caller's BFF URL without loopback rewrite",
+        "caller credentials (BFF_AUTH_TOKEN, PANTHEON_BFF_SMOKE_BEARER_TOKEN, PANTHEON_BFF_OPERATOR_A_TOKEN) are untouched"
+      ]
+    },
+    "no_serve_hard_gate_spec_run": {
+      "command": "env -u PANTHEON_RELEASE_GATE_CONTEXT -u GITHUB_EVENT_NAME -u PANTHEON_SSE_EVENTSOURCE_HARD_GATE PANTHEON_FE_BASE_URL=http://127.0.0.1:4173 FRONTEND_BASE_URL=http://127.0.0.1:4173 PLAYWRIGHT_BASE_URL=http://127.0.0.1:4173 PANTHEON_SSE_ORIGIN_URL=http://127.0.0.1:4173 PANTHEON_BFF_BASE_URL=http://127.0.0.1:4173 PANTHEON_HOSTED_E2E=\"\" FE_INT_GATE_LIVE_BFF=\"\" F08_CREATE_INTENT_LIVE_BFF=\"\" RUN_LIVE_BFF_CONTRACTS=\"\" VITE_BFF_FALLBACK=strict BFF_FALLBACK=strict VITE_BFF_DEV_BEARER_TOKEN=\"\" npm run e2e:fixture -- --no-serve",
+      "exit_code": 1,
+      "failing_test": "[chromium] › e2e/01-startup-session.spec.ts:338:3 › F01 startup session › opens the browser-native SSE EventSource stream",
+      "observed_error": "Error: Error: page.evaluate: Error: EventSource closed before opening — expect(received).toBeTruthy() Received: undefined at e2e/01-startup-session.spec.ts:423:31",
+      "playwright_summary": "1 failed, 11 skipped, 48 passed (2.0m)"
+    },
+    "pr_command_still_passes": {
+      "command": "npm run e2e:fixture",
+      "exit_code": 0,
+      "playwright_summary": "11 skipped, 49 passed (2.0m)"
     }
   },
   "red_proof": {
@@ -67,53 +94,53 @@
       "command": "npm run e2e:fixture",
       "exit_code": 0,
       "failing_tests": [],
-      "playwright_summary": "11 skipped, 49 passed (3.0m)"
+      "playwright_summary": "11 skipped, 49 passed (2.0m)"
     }
   },
   "three_consecutive_local_runs_on_task_head": [
     {
       "run_number": 1,
       "command": "npm run e2e:fixture",
-      "started_at": "2026-11-06T02:39:39Z",
-      "completed_at": "2026-11-06T02:41:50Z",
-      "wall_clock_duration_seconds": 131,
+      "started_at": "2026-11-06T03:14:08Z",
+      "completed_at": "2026-11-06T03:16:12Z",
+      "wall_clock_duration_seconds": 124,
       "exit_code": 0,
-      "playwright_summary": "11 skipped, 49 passed (2.1m)"
+      "playwright_summary": "11 skipped, 49 passed (2.0m)"
     },
     {
       "run_number": 2,
       "command": "npm run e2e:fixture",
-      "started_at": "2026-11-06T02:41:50Z",
-      "completed_at": "2026-11-06T02:45:22Z",
-      "wall_clock_duration_seconds": 212,
+      "started_at": "2026-11-06T03:16:22Z",
+      "completed_at": "2026-11-06T03:18:22Z",
+      "wall_clock_duration_seconds": 119,
       "exit_code": 0,
-      "playwright_summary": "11 skipped, 49 passed (3.4m)"
+      "playwright_summary": "11 skipped, 49 passed (2.0m)"
     },
     {
       "run_number": 3,
       "command": "npm run e2e:fixture",
-      "started_at": "2026-11-06T02:45:22Z",
-      "completed_at": "2026-11-06T02:47:30Z",
-      "wall_clock_duration_seconds": 128,
+      "started_at": "2026-11-06T03:18:39Z",
+      "completed_at": "2026-11-06T03:20:52Z",
+      "wall_clock_duration_seconds": 133,
       "exit_code": 0,
-      "playwright_summary": "11 skipped, 49 passed (2.1m)"
+      "playwright_summary": "11 skipped, 49 passed (2.2m)"
     }
   ],
   "real_pull_request_run": {
     "pr_number": 936,
     "pr_url": "https://github.com/ajoe734/execute-plans/pull/936",
-    "evaluated_head_sha": "d40663bab12d70ccaaa53baa2e158749c120b89f",
+    "evaluated_head_sha": "57eaf85d878116f9eae2659cee7da83167cb8021",
     "workflow_name": "Branch CI Gate",
-    "workflow_run_id": 42151605011,
-    "workflow_run_url": "https://github.com/ajoe734/execute-plans/actions/runs/42151605011",
+    "workflow_run_id": 42156119946,
+    "workflow_run_url": "https://github.com/ajoe734/execute-plans/actions/runs/42156119946",
     "job_name": "Component merge gate",
-    "job_id": 127676033637,
-    "job_url": "https://github.com/ajoe734/execute-plans/actions/runs/42151605011/job/127676033637",
+    "job_id": 127690625318,
+    "job_url": "https://github.com/ajoe734/execute-plans/actions/runs/42156119946/job/127690625318",
     "step_name": "Release gate isolated fixture Playwright E2E",
     "step_number": 15,
-    "step_started_at": "2026-11-06T02:45:02Z",
-    "step_completed_at": "2026-11-06T02:46:23Z",
-    "step_measured_duration_seconds": 81,
+    "step_started_at": "2026-11-06T03:27:27Z",
+    "step_completed_at": "2026-11-06T03:28:46Z",
+    "step_measured_duration_seconds": 79,
     "step_conclusion": "success",
     "playwright_summary": "Running 60 tests using 1 worker — 11 skipped, 49 passed (1.3m)"
   },
@@ -121,23 +148,23 @@
     "publish_promote_planner": {
       "command": "python3 scripts/git/test_publish_promote.py",
       "exit_code": 0,
-      "summary": "Ran 12 tests in 0.007s — OK"
+      "summary": "Ran 12 tests in 0.011s — OK"
     },
     "vitest_workflow_guards": {
       "command": "npx vitest run src/test/paired-release-workflow.test.ts src/test/deploy-safe-defaults.test.ts src/test/aggregate-release-gate-hard-gates.test.ts src/test/full-app-typecheck-contract.test.ts",
       "exit_code": 0,
-      "summary": "4 test files passed, 80 tests passed (paired-release-workflow.test.ts: 27 passed, deploy-safe-defaults.test.ts: 25 passed, aggregate-release-gate-hard-gates.test.ts: 22 passed, full-app-typecheck-contract.test.ts: 6 passed)"
+      "summary": "4 test files passed, 81 tests passed (paired-release-workflow.test.ts: 28 passed, deploy-safe-defaults.test.ts: 25 passed, aggregate-release-gate-hard-gates.test.ts: 22 passed, full-app-typecheck-contract.test.ts: 6 passed)"
     }
   },
   "acceptance_criteria_verification": {
     "1": "passed — Component merge gate (component-merge) in .github/workflows/branch-ci.yml runs 'Release gate isolated fixture Playwright E2E' (npm run e2e:fixture) against the locally built dist/ bundle on loopback (127.0.0.1) for every pull request; no new required status check name added and branch protection unchanged.",
     "2": "passed — scripts/run-fixture-e2e.mjs is the single canonical definition of the 16 spec files (FIXTURE_E2E_SPECS), --project=chromium (FIXTURE_E2E_PROJECT), --grep-invert 'asserts MeResponse tenant/env/user/capabilities shape' (FIXTURE_E2E_GREP_INVERT), --retries=0 (FIXTURE_E2E_RETRIES), and --trace=off (FIXTURE_E2E_TRACE), invoked by both the pull request step in .github/workflows/branch-ci.yml and the release gate step (id: fixture_e2e) in .github/workflows/pantheon-integration-gate.yml.",
-    "3": "passed — the pull request step uses no repository secrets or hosted credentials, leaves PANTHEON_HOSTED_E2E, FE_INT_GATE_LIVE_BFF, F08_CREATE_INTENT_LIVE_BFF, and RUN_LIVE_BFF_CONTRACTS empty, and strips any ambient bearer token env vars in buildFixtureE2eEnv.",
+    "3": "passed — the pull request step uses no repository secrets or hosted credentials, leaves PANTHEON_HOSTED_E2E, FE_INT_GATE_LIVE_BFF, F08_CREATE_INTENT_LIVE_BFF, and RUN_LIVE_BFF_CONTRACTS empty, sets PANTHEON_RELEASE_GATE_CONTEXT=pull_request explicitly in branch-ci.yml and in serve mode, and strips any ambient bearer token env vars in buildFixtureE2eEnv when serving.",
     "4": "passed — the pull request step in .github/workflows/branch-ci.yml is not continue-on-error and has no failure allowlist; scripts/run-fixture-e2e.mjs propagates Playwright's non-zero exit code directly.",
-    "5": "passed — .github/workflows/pantheon-integration-gate.yml keeps step id: fixture_e2e, PLAYWRIGHT_JSON_OUTPUT_FILE=$PANTHEON_AUDIT_OUT_DIR/playwright-results.json, --output $PANTHEON_AUDIT_OUT_DIR/playwright-output, --reporter=list,json, tee to $PANTHEON_AUDIT_OUT_DIR/playwright-fixture-e2e.log, and scripts/aggregate-release-gate.mjs behavior; the hosted Playwright desktop E2E step (id: e2e) is unchanged.",
+    "5": "passed — .github/workflows/pantheon-integration-gate.yml keeps step id: fixture_e2e, PLAYWRIGHT_JSON_OUTPUT_FILE=$PANTHEON_AUDIT_OUT_DIR/playwright-results.json, --output $PANTHEON_AUDIT_OUT_DIR/playwright-output, --reporter=list,json, tee to $PANTHEON_AUDIT_OUT_DIR/playwright-fixture-e2e.log, and scripts/aggregate-release-gate.mjs behavior; under --no-serve buildFixtureE2eEnv passes the caller environment through unchanged so the release gate F01 SSE EventSource hard gate remains active; the hosted Playwright desktop E2E step (id: e2e) is unchanged.",
     "6": "passed — zero files under e2e/ were skipped, loosened, or edited (git diff origin/dev -- e2e/ is empty).",
     "7": "passed — Red proof recorded above: npm run e2e:fixture fails on F07 (e2e/06-entity-registry.spec.ts 'renders all 12 registry surfaces from fixture-backed list routes', exit code 1, '1 failed, 11 skipped, 48 passed (2.0m)') with PR #932 fix reverted, fails on F18 (e2e/18-perf.spec.ts 'warns when LineageGraph receives more than 500 nodes', exit code 1, '1 failed, 11 skipped, 48 passed (2.2m)') with PR #933 fix reverted, and passes with both fixes present (exit code 0, '11 skipped, 49 passed').",
     "8": "passed — three consecutive local runs on the task head and the real pull request run on GitHub Actions both pass and are recorded with measured durations.",
-    "9": "passed — all workflow guard tests in the artifact contract pass (test_publish_promote.py: 12 passed; paired-release-workflow.test.ts, deploy-safe-defaults.test.ts, aggregate-release-gate-hard-gates.test.ts, full-app-typecheck-contract.test.ts: 80 passed) and guard updates only reflect the shared definition in scripts/run-fixture-e2e.mjs."
+    "9": "passed — all workflow guard tests in the artifact contract pass (test_publish_promote.py: 12 passed; paired-release-workflow.test.ts, deploy-safe-defaults.test.ts, aggregate-release-gate-hard-gates.test.ts, full-app-typecheck-contract.test.ts: 81 passed) and guard updates only reflect the shared definition in scripts/run-fixture-e2e.mjs."
   }
 }
