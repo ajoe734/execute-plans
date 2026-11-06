@@ -2736,6 +2736,8 @@ export default {
   strategyDetail: {
     spec: "Spec & Parameters",
     specTitle: "Strategy specification",
+    specBodyNoAlpha: "Edits to spec or parameters create a draft revision and route through governance before deployment.",
+    artifactsUnavailable: "Artifacts unavailable",
     specBody: "Alpha {{alpha}} drives this strategy. Edits to spec or parameters create a draft revision and route through governance before deployment.",
     universe: "Universe", execMode: "Execution mode", benchmark: "Benchmark",
     params: "Parameters",

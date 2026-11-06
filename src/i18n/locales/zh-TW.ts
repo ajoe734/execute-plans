@@ -2718,6 +2718,8 @@ export default {
   strategyDetail: {
     spec: "規格與參數",
     specTitle: "策略規格",
+    specBodyNoAlpha: "修改規格或參數會建立草稿版本,並經治理審查後才能部署。",
+    artifactsUnavailable: "Artifact 資料暫時無法取得",
     specBody: "本策略由 Alpha {{alpha}} 驅動。修改規格或參數會建立草稿版本,並經治理審查後才能部署。",
     universe: "標的範圍", execMode: "執行模式", benchmark: "基準",
     params: "參數",
