@@ -1,0 +1,13 @@
+{
+  "task": "FE-STRATEGY-DETAIL-TRUTH-20261106",
+  "status": "ready_for_review",
+  "source_contract": "Existing merged BFF contract: GET /bff/strategies/{id} returns typed data.spec (routes/detail.py include_spec=True; routes/common.py _project_strategy_spec_detail). No new BFF endpoint.",
+  "done": {
+    "spec_tab": "Universe = metadata.market + traits.instruments (fallback market_scope universe/symbols/markets); Execution mode = execution_profile.execution_mode_hint/mode (fallback metadata.execution_context); Benchmark = evaluation_plan.benchmark only. Absent -> common.noData. Top-50 perp, VWAP / 5min slices, BTC-PERP removed.",
+    "performance_tab": "Hardcoded BTC/ETH/SP500 selector removed; benchmark label from spec evaluation_plan.benchmark, else no data and no benchmark line.",
+    "artifact_tab": "Only catalog rows whose id is a lineage Artifact node of the strategy; failed artifact/lineage read -> unavailable, zero rows.",
+    "alpha_sentence": "Empty alpha uses strategyDetail.specBodyNoAlpha.",
+    "types": "dto.ts: StrategySpecDetail + Strategy.spec (typed consumption of existing data.spec)",
+    "tests": "StrategyDetail.spec.test.tsx: artifact isolation (298e/59b2), failed reads, no hardcoded strings, and real spec shape for strategy-persona-298e138c136c9840b0e4 (TW, 2330.TWSE, benchmark) reaching the page. No existing test modified or removed. vitest StrategyDetail*/detail/bff-v1: 68 files, 724 tests pass; tsc -p tsconfig.app.json clean."
+  }
+}
