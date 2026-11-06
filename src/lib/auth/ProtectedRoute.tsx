@@ -16,9 +16,11 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // Provider readiness governs provider-dependent features, not browser
-  // authentication. A strict BFF authReady readback is the route boundary.
-  if (!bffSession || bffSession.readiness.authReady !== true) {
+  // bffSession is only set after strict BFF identity + readiness readback
+  // (authenticated, bearer/cookie, non-stub). Business readiness (authReady,
+  // operator/workshop) governs feature access, not browser authentication;
+  // requiring it here loops a verified viewer between /auth and protected routes.
+  if (!bffSession) {
     const from = `${loc.pathname}${loc.search}${loc.hash}`;
     const authPath = loc.pathname === "/agora" || loc.pathname.startsWith("/agora/")
       ? "/agora/auth"
