@@ -1,0 +1,90 @@
+{
+  "task_id": "FE-MGMT-CATALOG-LEGIBILITY-20261105",
+  "repository": "ajoe734/execute-plans",
+  "branch": "task/FE-MGMT-CATALOG-LEGIBILITY-20261105",
+  "base_branch": "dev",
+  "verification_scope": "functional_local_validation (no hosted/VM access; hosted verification deferred to operator acceptance task)",
+  "browser_measurement": {
+    "method": "local headless Chromium via Playwright, temporary harness (deleted) rendering the real DataTable/StatusBadge/RiskBadge/LineageGraph components with the real artifact row shape and a 10-node real-shape lineage fixture; harness had no app sidebar so available width is the full viewport minus 32px padding; fixture had 15 edges (not the 16 of the hosted graph).",
+    "widths": {
+      "1366": {
+        "badge_line_counts": {
+          "registry": 1,
+          "已核准": 1,
+          "低": 1,
+          "無資料": 1,
+          "sha256:38fb8f49…8e008e": 1,
+          "2026/11/5 17:28": 1,
+          "草稿": 1
+        },
+        "horizontal_scroll": false,
+        "table_scroll_width": 1334,
+        "table_client_width": 1334,
+        "column_widths_px": [
+          "Name:263",
+          "Source:49",
+          "Kind:154",
+          "Version:52",
+          "State:48",
+          "Risk:31",
+          "Size:48",
+          "Hash:212",
+          "Owner:289",
+          "Updated:145"
+        ],
+        "lineage_secondary_ids_inside_node_rect_getBBox": true,
+        "lineage_secondary_id_max_right_px": 227,
+        "node_width_px": 248,
+        "edge_label_bbox_overlaps": 0,
+        "edge_labels": 15
+      },
+      "1600": {
+        "badge_line_counts": {
+          "registry": 1,
+          "已核准": 1,
+          "低": 1,
+          "無資料": 1,
+          "sha256:38fb8f49…8e008e": 1,
+          "2026/11/5 17:28": 1,
+          "草稿": 1
+        },
+        "horizontal_scroll": false,
+        "table_scroll_width": 1568,
+        "table_client_width": 1568,
+        "column_widths_px": [
+          "Name:263",
+          "Source:49",
+          "Kind:154",
+          "Version:52",
+          "State:48",
+          "Risk:31",
+          "Size:48",
+          "Hash:212",
+          "Owner:289",
+          "Updated:145"
+        ],
+        "lineage_secondary_ids_inside_node_rect_getBBox": true,
+        "lineage_secondary_id_max_right_px": 227,
+        "node_width_px": 248,
+        "edge_label_bbox_overlaps": 0,
+        "edge_labels": 15
+      }
+    }
+  },
+  "acceptance": {
+    "1": "passed - state/risk/size/draft badges render on exactly 1 line at 1366 and 1600 (Badge base now whitespace-nowrap shrink-0; size cell nowrap). Unit test asserts Draft badge nowrap in PostmortemLibrary.test.tsx.",
+    "2": "passed - hash cell shows sha256:38fb8f49…8e008e with full value in title/data-full-hash; owner and updated columns visible with no horizontal scroll at 1600 and 1366 (DataTable Column.minWidth added; Artifact columns declare widths).",
+    "3": "passed - time column header is neutral 'Time/時間'; each cell is labelled Created/建立 or Published/發佈 (data-time-kind); detail field label follows. Test with real pm-infra-bff-1c619cdd05621fa6fabe2316 draft row.",
+    "4": "passed - NODE_W 248, text fitted with fitText (middle-ellipsis for ids, full id in <title> and data-full-id); getBBox shows max right edge 227px < 248-10 in browser; LineageGraph.test.tsx asserts the same with a getBBox estimate for rooted (ids up to 60 chars) and 240-node default shapes.",
+    "5": "passed - placeEdgeLabels nudges colliding labels; 0 overlapping edge-label bboxes in browser; test asserts no overprint over 16-edge rooted fixture.",
+    "6": "passed - notice localized via lineage.overClientNotice/overServerNotice in zh-TW and en-US; no 'virtualized rendering recommended' developer text.",
+    "7": "passed - no test deleted or weakened. One assertion changed in ObjectListPage.test.tsx (artifacts list): full hash visible text -> shortened visible text plus assertion that the full hash is exposed in title/data-full-hash; required by AC2 and still checks the same data."
+  },
+  "tests": "vitest src/platform src/management src/components: all pass (first run had 4 load-induced 5s timeouts in PersonaFleetPage, passing on rerun); tsc --noEmit clean.",
+  "new_tests": [
+    "src/platform/components/LineageGraph.test.tsx",
+    "src/management/pages/Lists.hash.test.tsx",
+    "PostmortemLibrary.test.tsx draft-time test"
+  ],
+  "deviations": "Badge nowrap is applied via wrappers in Lists.tsx and a className in PostmortemLibrary.tsx (shared Badge component left untouched, outside contract). shortenHash test lives in the scoped Lists.test.tsx. The browser measurement was taken with the earlier global Badge nowrap; wrapper-based nowrap inherits white-space identically. BLOCKER: src/management/pages/ObjectListPage.test.tsx asserts the full artifact hash as visible text and must change to meet AC2; it is not in the artifact contract."
+}

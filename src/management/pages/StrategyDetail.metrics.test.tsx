@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import i18n from "@/i18n";
 import { bffV1, lists, type ListEnvelope, type Strategy } from "@/lib/bff-v1";
+import { alphaFactory, normalizeAlphaFactoryEnvelope } from "@/lib/bff-v1/alphaFactory";
 import { adaptPersonaLeagueRankedRows } from "@/lib/bff-v1/management";
 import { adaptBffStrategyHealth } from "@/lib/bff-v1/v5";
 import { compareNullableStrategyMetric } from "@/lib/v3/medium-low/B3-console";
@@ -379,7 +380,17 @@ describe("FE-STRATEGY-METRICS-TRUTH-20261104 null-metric consumer truth", () => 
     expect(draftStrategy.drawdown).toBeNull();
   });
 
-  it("AlphaFactoryBoardPage renders No data for replicated strategy with null sharpe and omits empty alpha separator", async () => {
+  // Migrated in FE-ALPHA-FACTORY-REPLICATION-20261104 (AC1/AC2/AC4):
+  // - Changed source assertion: AlphaFactoryBoardPage now reads GET /bff/alpha-factory via alphaFactory.get
+  //   instead of lists.strategies, and excludes unreplicated strategy list rows (strat-not-running-05 /
+  //   "Unstarted Candidate Strategy").
+  // - Changed identifier assertion: verifies genuine /bff/alpha-factory strategy_id and strategy_spec_id
+  //   rendering (strat-tw-official:tw_price_daily:TWSE:2330:... and 2454) without any trailing "·" empty-alpha separator.
+  // - Changed null-metric assertion: verifies real null/unreported marker ("Not reported", never "0.00")
+  //   both when sharpe: null is explicitly supplied on a replicated record (adm-replicated-2330) and when
+  //   replication fields (queue_status, attempt_count, experiment_run_ids, last_revalidation_at) are null
+  //   while sharpe is omitted on a scaffolded record (adm-pending-2454).
+  it("AlphaFactoryBoardPage excludes unreplicated strategy list rows, renders Not reported for null replication fields and explicit null sharpe, and omits empty alpha separator", async () => {
     const items = [REAL_BFF_STRATEGY_ROWS["strat-not-running-05"]];
     const envelope: ListEnvelope<Strategy> = {
       items,
@@ -389,7 +400,93 @@ describe("FE-STRATEGY-METRICS-TRUTH-20261104 null-metric consumer truth", () => 
       totalCountExact: true,
       meta: { surfaces: { strategies: { status: "ok", source: "service_store" } } },
     };
-    vi.spyOn(lists, "strategies").mockResolvedValue(envelope);
+    const strategiesSpy = vi.spyOn(lists, "strategies").mockResolvedValue(envelope);
+
+    const replicatedWithNullSharpe = {
+      id: "adm-replicated-2330",
+      admission_id: "adm-replicated-2330",
+      tenant_id: "default",
+      lane: "replicated",
+      strategy_id: "strat-tw-official:tw_price_daily:TWSE:2330:e4b598d99f084c19-60f9c8a78715",
+      strategy_spec_id: "reg-strategy-spec-tw-official:tw_price_daily:TWSE:2330:e4b598d99f084c19-da7cb8297afb",
+      spec_version: "1.0.0",
+      checksum: "sha256:2330",
+      approval_decision_id: "apr-2330",
+      approver: "pantheon-dev-approver",
+      approved_at: "2026-08-14T01:00:00Z",
+      requested_by: "pantheon-dev-operator",
+      review_ref: "mrev-2330",
+      mode: "paper",
+      created_at: "2026-08-14T01:05:00Z",
+      status: "admitted",
+      admission_status: "admitted",
+      queue_status: "completed",
+      enqueued_at: "2026-08-14T01:06:00Z",
+      enqueued_by: "pantheon-dev-operator",
+      attempt_count: 1,
+      max_attempts: 2,
+      experiment_task_id: "rtask-20260814-001",
+      experiment_run_ids: ["rrun-20260814-001", "rrun-20260901-004"],
+      authority_task_id: "rtask-20261015-002",
+      authority_run_ids: ["rrun-20261015-002"],
+      last_revalidation_at: "2026-10-15T08:30:00Z",
+      last_error: null,
+      sharpe: null,
+    };
+
+    const scaffoldedWithNullFields = {
+      id: "adm-pending-2454",
+      admission_id: "adm-pending-2454",
+      tenant_id: "default",
+      lane: "scaffolded",
+      strategy_id: "strat-tw-official:tw_price_daily:TWSE:2454:1122334455667788-aabbccddeeff",
+      strategy_spec_id: null,
+      spec_version: "1.0.0",
+      checksum: "sha256:2454",
+      approval_decision_id: "apr-2454",
+      approver: "pantheon-dev-approver",
+      approved_at: "2026-08-16T03:00:00Z",
+      requested_by: "pantheon-dev-operator",
+      review_ref: "mrev-2454",
+      mode: "paper",
+      created_at: "2026-08-16T03:05:00Z",
+      status: "admitted",
+      admission_status: "admitted",
+      queue_status: null,
+      enqueued_at: null,
+      enqueued_by: null,
+      attempt_count: null,
+      max_attempts: null,
+      experiment_task_id: null,
+      experiment_run_ids: null,
+      authority_task_id: null,
+      authority_run_ids: null,
+      last_revalidation_at: null,
+      last_error: null,
+    };
+
+    const alphaFactorySpy = vi.spyOn(alphaFactory, "get").mockResolvedValue(
+      normalizeAlphaFactoryEnvelope({
+        data: {
+          id: "alpha-factory",
+          snapshot_at: "2026-11-04T00:00:00Z",
+          reason: "no_candidate_source",
+          discovered_reason: "no_candidate_source",
+          discovered: [],
+          scaffolded: [scaffoldedWithNullFields],
+          replicated: [replicatedWithNullSharpe],
+          items: [replicatedWithNullSharpe, scaffoldedWithNullFields],
+        },
+        items: [replicatedWithNullSharpe, scaffoldedWithNullFields],
+        page_info: { page: 1, page_size: 20, total: 2, next_page_token: null },
+        meta: {
+          snapshot_at: "2026-11-04T00:00:00Z",
+          surfaces: { alpha_factory: { status: "ok", source: "research_orchestrator" } },
+          filters: { lane: null },
+          discovered: { reason: "no_candidate_source" },
+        },
+      }),
+    );
 
     render(
       <I18nextProvider i18n={i18n}>
@@ -399,9 +496,43 @@ describe("FE-STRATEGY-METRICS-TRUTH-20261104 null-metric consumer truth", () => 
       </I18nextProvider>,
     );
 
-    expect(await screen.findByText("Unstarted Candidate Strategy")).toBeInTheDocument();
-    expect(screen.getByText("strat-not-running-05")).toBeInTheDocument();
-    expect(screen.queryByText(/strat-not-running-05 ·/)).not.toBeInTheDocument();
-    expect(screen.getByText("No data")).toBeInTheDocument();
+    const repCard = await screen.findByTestId("alpha-factory-card-adm-replicated-2330");
+    const pendingCard = screen.getByTestId("alpha-factory-card-adm-pending-2454");
+
+    expect(alphaFactorySpy).toHaveBeenCalledTimes(1);
+    expect(strategiesSpy).not.toHaveBeenCalled();
+
+    // Unreplicated strategy from lists.strategies is excluded from AlphaFactoryBoardPage
+    expect(screen.queryByText("Unstarted Candidate Strategy")).not.toBeInTheDocument();
+    expect(screen.queryByText("strat-not-running-05")).not.toBeInTheDocument();
+
+    // Genuine /bff/alpha-factory identifiers render without any empty-alpha "·" separator
+    expect(
+      within(repCard).getAllByText(
+        "strat-tw-official:tw_price_daily:TWSE:2330:e4b598d99f084c19-60f9c8a78715",
+      ).length,
+    ).toBeGreaterThanOrEqual(1);
+    expect(
+      within(repCard).getByText(
+        "reg-strategy-spec-tw-official:tw_price_daily:TWSE:2330:e4b598d99f084c19-da7cb8297afb",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        /strat-tw-official:tw_price_daily:TWSE:2330:e4b598d99f084c19-60f9c8a78715\s*·/,
+      ),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        /strat-tw-official:tw_price_daily:TWSE:2454:1122334455667788-aabbccddeeff\s*·/,
+      ),
+    ).not.toBeInTheDocument();
+
+    // Null Sharpe when explicitly supplied renders "Not reported" (never "0.00"), and null card fields render "Not reported"
+    expect(within(repCard).getByText("Not reported")).toBeInTheDocument();
+    expect(within(repCard).queryByText("0.00")).not.toBeInTheDocument();
+    expect(within(pendingCard).getAllByText("Not reported")).toHaveLength(4);
+    expect(within(pendingCard).queryByText(/Sharpe/i)).not.toBeInTheDocument();
+    expect(screen.queryByText("0.00")).not.toBeInTheDocument();
   });
 });

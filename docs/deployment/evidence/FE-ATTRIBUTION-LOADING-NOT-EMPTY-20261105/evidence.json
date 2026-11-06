@@ -1,0 +1,116 @@
+{
+  "schema_version": "pantheon.fe-attribution-loading-not-empty.v1",
+  "task_id": "FE-ATTRIBUTION-LOADING-NOT-EMPTY-20261105",
+  "taskId": "FE-ATTRIBUTION-LOADING-NOT-EMPTY-20261105",
+  "title": "Performance attribution shows no data while its read is loading or after it failed",
+  "owner": "Antigravity2",
+  "reviewer": "Claude",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-ATTRIBUTION-LOADING-NOT-EMPTY-20261105",
+  "base_commit": "32504d62a8dce655d07ce7040596e2002417dc9c",
+  "status": "ready_for_review",
+  "timestamp": "2026-11-05T19:04:30Z",
+  "real_bff_row_used": {
+    "id": "pm12-performance-attribution-persona-persona-be19a1fac471247f2b2a",
+    "dimension": "persona",
+    "dimension_key": "persona-be19a1fac471247f2b2a",
+    "label": "青禾｜2330 台股 Paper 學習 R2",
+    "period": "latest",
+    "data_confidence": "formal",
+    "source_status": "ok",
+    "rank": 1
+  },
+  "scope": {
+    "delivered": [
+      "Updated PerformanceAttributionPage in src/management/pages/oversight/PerformanceAttribution.tsx to read loading, refreshing, and error from useV5Live for the performance-attribution query (oversight.performanceAttribution.<dimension>.<period>).",
+      "Rendered t('ui.loading') in the table empty state while an attribution read is in flight (isAttributionLoading) and t('errors.BACKEND_UNAVAILABLE') when an attribution read fails (isAttributionError), reserving t('mgmt.pulse.noRows') strictly for completed reads with zero rows.",
+      "Updated the focused-persona status banner in src/management/pages/oversight/PerformanceAttribution.tsx to treat an in-flight formal attribution read as loading ((isAttributionLoading || operationsLoading) && !focusResolved) while preserving the existing operations read model and Persona Fleet row fallback behavior.",
+      "Added 5 tests in src/management/pages/oversight/PerformanceAttribution.test.tsx exercising the real useV5Live hook with pending/rejected/resolved loaders and the real hosted BFF row (pm12-performance-attribution-persona-persona-be19a1fac471247f2b2a) across en-US and zh-TW, dimension/period filter transitions while in flight, and focused-persona fallback from both Persona Fleet and operationsReadModel."
+    ],
+    "not_changed": [
+      "Did not modify backend services, BFF routes, or add any client timeout.",
+      "Did not modify locale files; reused existing ui.loading and errors.BACKEND_UNAVAILABLE i18n keys.",
+      "Did not weaken, delete, or modify any existing test or assertion."
+    ]
+  },
+  "acceptance_verification": [
+    {
+      "criterion": 1,
+      "description": "While the first attribution read is in flight the table shows the existing loading text and never the no rows text; a test holds the loader pending and asserts this",
+      "status": "passed",
+      "verified_by": [
+        "src/management/pages/oversight/PerformanceAttribution.test.tsx > PerformanceAttributionPage > loading, error, and filter-transition states with real BFF row > while the first attribution read is in flight the table shows the existing loading text and never the no rows text"
+      ]
+    },
+    {
+      "criterion": 2,
+      "description": "A failed attribution read shows an unavailable message and not the no rows text; a test rejects the loader and asserts this",
+      "status": "passed",
+      "verified_by": [
+        "src/management/pages/oversight/PerformanceAttribution.test.tsx > PerformanceAttributionPage > loading, error, and filter-transition states with real BFF row > a failed attribution read shows an unavailable message and not the no rows text"
+      ]
+    },
+    {
+      "criterion": 3,
+      "description": "Only a successful read with zero rows shows the no rows text; a read with rows renders them unchanged",
+      "status": "passed",
+      "verified_by": [
+        "src/management/pages/oversight/PerformanceAttribution.test.tsx > PerformanceAttributionPage > loading, error, and filter-transition states with real BFF row > only a successful read with zero rows shows the no rows text while a read with rows renders them unchanged"
+      ]
+    },
+    {
+      "criterion": 4,
+      "description": "Changing the dimension or the period while a read is in flight never shows the no rows text before that read finishes; a test covers this",
+      "status": "passed",
+      "verified_by": [
+        "src/management/pages/oversight/PerformanceAttribution.test.tsx > PerformanceAttributionPage > loading, error, and filter-transition states with real BFF row > changing the dimension or the period while a read is in flight never shows the no rows text before that read finishes"
+      ]
+    },
+    {
+      "criterion": 5,
+      "description": "The focused persona fallback from the fleet row and the operations read model keep their current behavior",
+      "status": "passed",
+      "verified_by": [
+        "src/management/pages/oversight/PerformanceAttribution.test.tsx > PerformanceAttributionPage > shows a Persona Fleet summary row when attribution rows miss but fleet has the persona",
+        "src/management/pages/oversight/PerformanceAttribution.test.tsx > PerformanceAttributionPage > loading, error, and filter-transition states with real BFF row > preserves the focused persona fallback from both the fleet row and the operations read model"
+      ]
+    },
+    {
+      "criterion": 6,
+      "description": "Tests use the real BFF row given in the task; the application type check and existing attribution tests stay green; no existing test is weakened or deleted and any changed assertion is justified in evidence",
+      "status": "passed",
+      "changed_assertion_justification": "Zero existing tests or assertions were modified, weakened, or deleted. All 14 pre-existing tests in src/management/pages/oversight/PerformanceAttribution.test.tsx pass unchanged alongside the 5 newly added tests (19 total passing tests in PerformanceAttribution.test.tsx, plus 55 passing tests across related attribution and useV5Live test suites).",
+      "verified_by": [
+        "src/management/pages/oversight/PerformanceAttribution.test.tsx",
+        "src/lib/v5/management/__tests__/performanceAttribution.test.ts",
+        "src/lib/v5/management/__tests__/pm12.test.ts",
+        "src/lib/bff-v1/__tests__/management-pm12.test.ts",
+        "src/lib/v5/management/__tests__/i18nParity.test.ts",
+        "src/management/pages/v5/useV5Live.test.tsx"
+      ]
+    }
+  ],
+  "artifacts": [
+    "src/management/pages/oversight/PerformanceAttribution.tsx",
+    "src/management/pages/oversight/PerformanceAttribution.test.tsx",
+    "docs/deployment/evidence/FE-ATTRIBUTION-LOADING-NOT-EMPTY-20261105/evidence.json"
+  ],
+  "validation": {
+    "vitest": {
+      "command": "./node_modules/.bin/vitest run src/management/pages/oversight/PerformanceAttribution.test.tsx src/lib/v5/management/__tests__/performanceAttribution.test.ts src/lib/v5/management/__tests__/pm12.test.ts src/lib/bff-v1/__tests__/management-pm12.test.ts src/lib/v5/management/__tests__/i18nParity.test.ts src/management/pages/v5/useV5Live.test.tsx",
+      "exit_code": 0,
+      "result": "6 test files passed, 74 tests passed"
+    },
+    "typecheck": {
+      "command": "npm run typecheck:app && ./node_modules/.bin/tsc -p tsconfig.agora.json --noEmit",
+      "exit_code": 0,
+      "result": "0 errors"
+    },
+    "eslint": {
+      "command": "./node_modules/.bin/eslint src/management/pages/oversight/PerformanceAttribution.tsx src/management/pages/oversight/PerformanceAttribution.test.tsx",
+      "exit_code": 0,
+      "result": "0 errors, 0 warnings"
+    }
+  }
+}

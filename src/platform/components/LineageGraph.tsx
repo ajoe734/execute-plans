@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import type { RiskLevel } from "@/lib/bff-v1";
 import { LINEAGE_NODE_LIMITS } from "@/lib/v4/uiBudgets";
+import { useT } from "@/platform/hooks";
 
 export interface LineageNode {
   id: string;
@@ -25,7 +26,45 @@ interface Props {
   onSelect?: (n: LineageNode) => void;
 }
 
-const NODE_W = 168;
+export const NODE_W = 248;
+/** Horizontal padding inside a node; text must fit within NODE_W - 2 * NODE_PAD_X. */
+export const NODE_PAD_X = 10;
+const LABEL_CHAR_PX = 7.2;   // 12px proportional/CJK-safe upper bound
+const MONO_CHAR_PX = 6.2;    // 10px monospace upper bound
+const EDGE_LABEL_H = 12;
+const EDGE_LABEL_CHAR_PX = 6.2;
+
+/** Truncate with a trailing ellipsis so estimated width fits `maxPx`. */
+export function fitText(text: string, maxPx: number, charPx: number, middle = false): string {
+  const max = Math.max(4, Math.floor(maxPx / charPx));
+  if (text.length <= max) return text;
+  if (!middle) return text.slice(0, max - 1) + "…";
+  const head = Math.ceil((max - 1) * 0.6);
+  const tail = max - 1 - head;
+  return text.slice(0, head) + "…" + text.slice(text.length - tail);
+}
+
+/** Place edge labels at curve midpoints, nudging vertically until no two overlap. */
+export function placeEdgeLabels(
+  items: { key: number; cx: number; cy: number; label: string }[],
+): Map<number, { x: number; y: number }> {
+  const placed: { x: number; y: number; w: number }[] = [];
+  const out = new Map<number, { x: number; y: number }>();
+  for (const it of items) {
+    const w = it.label.length * EDGE_LABEL_CHAR_PX;
+    let y = it.cy - 4;
+    for (let step = 0; step < 200; step++) {
+      const hit = placed.some((q) => Math.abs(q.x - it.cx) < (q.w + w) / 2 + 2 && Math.abs(q.y - y) < EDGE_LABEL_H);
+      if (!hit) break;
+      // alternate below/above: +h, -h, +2h, -2h ...
+      const k = Math.floor(step / 2) + 1;
+      y = it.cy - 4 + (step % 2 === 0 ? 1 : -1) * k * EDGE_LABEL_H;
+    }
+    placed.push({ x: it.cx, y, w });
+    out.set(it.key, { x: it.cx, y });
+  }
+  return out;
+}
 const NODE_H = 56;
 const COL_GAP = 64;
 const ROW_GAP = 24;
@@ -100,6 +139,23 @@ function layout(nodes: LineageNode[], edges: LineageEdge[]) {
 export const LineageGraph = ({ nodes, edges, height: minH = 280, onSelect }: Props) => {
   const { positions, width, height } = useMemo(() => layout(nodes, edges), [nodes, edges]);
   const h = Math.max(minH, height);
+  const t = useT();
+  const textMaxPx = NODE_W - 2 * NODE_PAD_X;
+
+  const labelPos = useMemo(() => {
+    const items: { key: number; cx: number; cy: number; label: string }[] = [];
+    edges.forEach((e, i) => {
+      const a = positions.get(e.from); const b = positions.get(e.to);
+      if (!a || !b || !e.label) return;
+      items.push({
+        key: i,
+        cx: (a.x + NODE_W + b.x) / 2,
+        cy: (a.y + b.y) / 2 + NODE_H / 2,
+        label: e.label,
+      });
+    });
+    return placeEdgeLabels(items);
+  }, [edges, positions]);
 
   if (nodes.length === 0) {
     return (
@@ -126,8 +182,16 @@ export const LineageGraph = ({ nodes, edges, height: minH = 280, onSelect }: Pro
             : "bg-status-warning/10 text-status-warning border-status-warning/30"}`}
         >
           {overServer
-            ? `Lineage has ${nodes.length} nodes (> ${LINEAGE_NODE_LIMITS.serverLayoutThreshold}); server-side layout / clustered summary required.`
-            : `Lineage has ${nodes.length} nodes (> ${LINEAGE_NODE_LIMITS.clientLayoutMax}); switching to virtualized rendering recommended.`}
+            ? t("lineage.overServerNotice", {
+                count: nodes.length,
+                limit: LINEAGE_NODE_LIMITS.serverLayoutThreshold,
+                defaultValue: "This lineage has {{count}} nodes (more than {{limit}}). Use the server-side clustered summary view instead.",
+              })
+            : t("lineage.overClientNotice", {
+                count: nodes.length,
+                limit: LINEAGE_NODE_LIMITS.clientLayoutMax,
+                defaultValue: "This lineage has {{count}} nodes (more than {{limit}}) and may render slowly. Narrow the scope or pick a root node.",
+              })}
         </div>
       )}
       <svg width={Math.max(width, 600)} height={h} className="block">
@@ -140,6 +204,7 @@ export const LineageGraph = ({ nodes, edges, height: minH = 280, onSelect }: Pro
         {edges.map((e, i) => {
           const a = positions.get(e.from); const b = positions.get(e.to);
           if (!a || !b) return null;
+          const lp = labelPos.get(i);
           const x1 = a.x + NODE_W; const y1 = a.y + NODE_H / 2;
           const x2 = b.x; const y2 = b.y + NODE_H / 2;
           const cx = (x1 + x2) / 2;
@@ -154,7 +219,9 @@ export const LineageGraph = ({ nodes, edges, height: minH = 280, onSelect }: Pro
             >
               <path d={d} fill="none" stroke="hsl(var(--muted-foreground))" strokeWidth="1.25" markerEnd="url(#lin-arrow)" opacity={0.6} />
               {e.label && (
-                <text x={cx} y={(y1 + y2) / 2 - 4} fontSize="10" textAnchor="middle"
+                <text x={lp?.x ?? cx} y={lp?.y ?? (y1 + y2) / 2 - 4} fontSize="10" textAnchor="middle"
+                  data-edge-label-text={e.label}
+                  stroke="hsl(var(--background))" strokeWidth={3} paintOrder="stroke"
                   className="fill-muted-foreground" style={{ fontFamily: "ui-monospace, monospace" }}>
                   {e.label}
                 </text>
@@ -180,13 +247,16 @@ export const LineageGraph = ({ nodes, edges, height: minH = 280, onSelect }: Pro
                 fill={fill}
                 stroke={n.highlight ? "hsl(var(--primary))" : "hsl(var(--border))"}
                 strokeWidth={n.highlight ? 1.6 : 1} />
-              <text x={10} y={18} fontSize="10" className="fill-muted-foreground"
-                style={{ fontFamily: "ui-monospace, monospace" }}>{typeLabel}{n.state ? ` · ${n.state}` : ""}</text>
-              <text x={10} y={36} fontSize="12" className="fill-foreground" fontWeight={500}>
-                {n.label.length > 22 ? n.label.slice(0, 21) + "…" : n.label}
+              <title>{`${n.label}\n${n.id}`}</title>
+              <text x={NODE_PAD_X} y={18} fontSize="10" className="fill-muted-foreground"
+                style={{ fontFamily: "ui-monospace, monospace" }}>{fitText(`${typeLabel}${n.state ? ` · ${n.state}` : ""}`, textMaxPx, MONO_CHAR_PX)}</text>
+              <text x={NODE_PAD_X} y={36} fontSize="12" className="fill-foreground" fontWeight={500}
+                data-node-label>
+                {fitText(n.label, textMaxPx, LABEL_CHAR_PX)}
               </text>
-              <text x={10} y={50} fontSize="10" className="fill-muted-foreground"
-                style={{ fontFamily: "ui-monospace, monospace" }}>{n.id}</text>
+              <text x={NODE_PAD_X} y={50} fontSize="10" className="fill-muted-foreground"
+                data-node-secondary-id data-full-id={n.id}
+                style={{ fontFamily: "ui-monospace, monospace" }}>{fitText(n.id, textMaxPx, MONO_CHAR_PX, true)}</text>
             </g>
           );
         })}

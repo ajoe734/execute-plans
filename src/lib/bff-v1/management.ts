@@ -60,6 +60,12 @@ import {
   isBffAcceptedAttributionDimension,
   normalizePerformanceAttributionRow,
 } from "@/lib/v5/management/performanceAttribution";
+import {
+  EVOLUTION_QUALIFICATION_CRITERIA,
+  type EvolutionQualificationCriterionRow,
+  type EvolutionQualificationDecisionItem,
+  type EvolutionQualificationReport,
+} from "./dto";
 
 export type ManagementDataConfidence = "formal" | "partial" | "fallback" | "degraded" | "unavailable";
 
@@ -474,12 +480,75 @@ export interface ManagementTradingPulseSurface {
   [key: string]: unknown;
 }
 
+export interface ManagementTradingPulseMetricCoverageEntry {
+  availableCount?: number;
+  available_count?: number;
+  missingCount?: number;
+  missing_count?: number;
+  runtimeCount?: number;
+  runtime_count?: number;
+  missingRuntimeIds?: string[];
+  missing_runtime_ids?: string[];
+  [key: string]: unknown;
+}
+
+export interface ManagementTradingPulseCoverage {
+  runtimeCount?: number;
+  runtime_count?: number;
+  paperRuntimeCount?: number;
+  paper_runtime_count?: number;
+  telemetryCoverageCount?: number;
+  telemetry_coverage_count?: number;
+  monitoringCoverageCount?: number;
+  monitoring_coverage_count?: number;
+  baselineComparisonCount?: number;
+  baseline_comparison_count?: number;
+  rowHealthDegradedCount?: number;
+  row_health_degraded_count?: number;
+  retiredRuntimeCount?: number;
+  retired_runtime_count?: number;
+  rowHealthStatusCounts?: Record<string, number>;
+  row_health_status_counts?: Record<string, number>;
+  missingTelemetryRuntimeIds?: string[];
+  missing_telemetry_runtime_ids?: string[];
+  missingMonitoringRuntimeIds?: string[];
+  missing_monitoring_runtime_ids?: string[];
+  missingBaselineRuntimeIds?: string[];
+  missing_baseline_runtime_ids?: string[];
+  degradedRuntimeIds?: string[];
+  degraded_runtime_ids?: string[];
+  metricCoverage?: Record<string, ManagementTradingPulseMetricCoverageEntry>;
+  metric_coverage?: Record<string, ManagementTradingPulseMetricCoverageEntry>;
+  [key: string]: unknown;
+}
+
 export interface ManagementTradingPulseSummary {
   runtimeCount: number;
   telemetryCoverageCount: number;
+  monitoringCoverageCount?: number;
+  monitoring_coverage_count?: number;
+  paperRuntimeCount?: number;
+  paper_runtime_count?: number;
+  retiredRuntimeCount?: number;
+  retired_runtime_count?: number;
   baselineComparisonCount: number;
   baselineBreachedCount: number;
   baselineWatchCount: number;
+  rowHealthDegradedCount?: number;
+  row_health_degraded_count?: number;
+  rowHealthStatusCounts?: Record<string, number>;
+  row_health_status_counts?: Record<string, number>;
+  missingTelemetryRuntimeIds?: string[];
+  missing_telemetry_runtime_ids?: string[];
+  missingMonitoringRuntimeIds?: string[];
+  missing_monitoring_runtime_ids?: string[];
+  missingBaselineRuntimeIds?: string[];
+  missing_baseline_runtime_ids?: string[];
+  degradedRuntimeIds?: string[];
+  degraded_runtime_ids?: string[];
+  metricCoverage?: Record<string, ManagementTradingPulseMetricCoverageEntry>;
+  metric_coverage?: Record<string, ManagementTradingPulseMetricCoverageEntry>;
+  coverage?: ManagementTradingPulseCoverage;
   totalPnl: number | null;
   worstDrawdown: number | null;
   averageFillRate: number | null;
@@ -572,6 +641,7 @@ export interface ManagementTradingPulseMeta {
   snapshotAt?: string;
   snapshot_at?: string;
   surfaces: Record<string, ManagementTradingPulseSurface>;
+  coverage?: ManagementTradingPulseCoverage;
   [key: string]: unknown;
 }
 
@@ -764,16 +834,16 @@ export interface ManagementEvidenceSummary {
   by_link_type: Record<string, number>;
   byCredibilityTier: Record<string, number>;
   by_credibility_tier: Record<string, number>;
-  traceableEvidence: number;
-  traceable_evidence: number;
+  traceableEvidence: number | null;
+  traceable_evidence: number | null;
   unresolvedSourceEvidence: number;
   unresolved_source_evidence: number;
   incompleteEvidence: number;
   incomplete_evidence: number;
-  needsAttentionEvidence: number;
-  needs_attention_evidence: number;
-  openOperationEvidence: number;
-  open_operation_evidence: number;
+  needsAttentionEvidence: number | null;
+  needs_attention_evidence: number | null;
+  openOperationEvidence: number | null;
+  open_operation_evidence: number | null;
   byActionabilityState: Record<string, number>;
   by_actionability_state: Record<string, number>;
   byActionabilitySeverity: Record<string, number>;
@@ -1189,14 +1259,40 @@ function adaptEvidenceCredibility(value: unknown): ManagementEvidenceCredibility
   };
 }
 
-function adaptEvidenceResolvedLink(value: unknown): ManagementEvidenceResolvedLink {
+function nullableFiniteNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
+function isOfficialReferenceSource(sourceType?: string | null, sourceRef?: unknown): boolean {
+  const normalizedType = typeof sourceType === "string" ? sourceType.trim().toLowerCase() : "";
+  if (normalizedType === "official_reference") return true;
+  const normalizedRef = typeof sourceRef === "string" ? sourceRef.trim().toLowerCase() : "";
+  return normalizedRef.startsWith("tw-official://");
+}
+
+function adaptEvidenceResolvedLink(
+  value: unknown,
+  opts?: { isOfficialReference?: boolean },
+): ManagementEvidenceResolvedLink {
   const record = isObject(value) ? value : {};
-  const availability = asString(record.availability, "unavailable");
   const routeHref = nullableString(record.routeHref ?? record.route_href);
-  const displayLabel = asString(
-    record.displayLabel ?? record.display_label,
-    availability === "unavailable" ? "Source unavailable" : "Open source",
-  );
+  const rawAvailability = asString(record.availability, "unavailable");
+  const isOfficialNoInternalLink = Boolean(opts?.isOfficialReference && !routeHref);
+  const availability =
+    isOfficialNoInternalLink && rawAvailability === "unavailable"
+      ? "no_internal_link"
+      : rawAvailability;
+  const rawDisplayLabel = asString(record.displayLabel ?? record.display_label);
+  const displayLabel = isOfficialNoInternalLink
+    ? !rawDisplayLabel || /^source unavailable$/i.test(rawDisplayLabel)
+      ? "No internal link"
+      : rawDisplayLabel
+    : rawDisplayLabel || (availability === "unavailable" ? "Source unavailable" : "Open source");
   const openInNewTab = asBoolean(record.openInNewTab ?? record.open_in_new_tab, availability === "external");
   return {
     availability,
@@ -1508,7 +1604,9 @@ function adaptEvidenceListItem(value: unknown): ManagementEvidenceListItem | nul
       value.citationLabel,
     refId,
   );
-  const sourceType = asString(
+  const rawSourceRef =
+    value.sourceRef ?? value.source_ref ?? sourceDocument.sourceRef ?? sourceDocument.source_ref;
+  const inferredSourceType = asString(
     value.sourceType ??
       value.source_type ??
       sourceDocument.sourceType ??
@@ -1517,6 +1615,9 @@ function adaptEvidenceListItem(value: unknown): ManagementEvidenceListItem | nul
       metadata.sourceClass,
     "unknown",
   );
+  const isOfficialReference = isOfficialReferenceSource(inferredSourceType, rawSourceRef);
+  const sourceType =
+    inferredSourceType === "unknown" && isOfficialReference ? "official_reference" : inferredSourceType;
   const capturedAt = optionalString(
     value.capturedAt ??
       value.captured_at ??
@@ -1530,7 +1631,9 @@ function adaptEvidenceListItem(value: unknown): ManagementEvidenceListItem | nul
   const linkType = asString(value.linkType ?? value.link_type ?? value.item_type ?? value.itemType, "unknown");
   const linkedObjectSummary = adaptEvidenceLinkedObjectSummary(value.linkedObjectSummary ?? value.linked_object_summary);
   const linkedObjectLink = adaptEvidenceLinkedObjectLink(value.linkedObjectLink ?? value.linked_object_link);
-  const resolvedLink = adaptEvidenceResolvedLink(value.resolvedLink ?? value.resolved_link);
+  const resolvedLink = adaptEvidenceResolvedLink(value.resolvedLink ?? value.resolved_link, {
+    isOfficialReference,
+  });
   const routeHref = optionalString(value.routeHref ?? value.route_href);
   const managementHref = optionalString(value.managementHref ?? value.management_href);
   const allowedActions = adaptEvidenceAllowedActions(value.allowedActions ?? value.allowed_actions);
@@ -1603,7 +1706,10 @@ function buildEvidenceSummary(items: ManagementEvidenceListItem[]): ManagementEv
   const traceableEvidence = byActionabilityState.traceable ?? 0;
   const unresolvedSourceEvidence = byActionabilityState.unresolved_source ?? 0;
   const incompleteEvidence = byActionabilityState.incomplete ?? 0;
-  const needsAttentionEvidence = Math.max(items.length - traceableEvidence, 0);
+  const needsAttentionEvidence = items.filter((item) => {
+    const state = String(item.actionability?.state ?? "unknown").trim().toLowerCase();
+    return Boolean(state) && !["unknown", "traceable", "ok", "resolved", "none"].includes(state);
+  }).length;
   const openOperationEvidence = items.filter((item) => {
     const status = String(item.operation?.status ?? "none").toLowerCase();
     return !["", "none", "resolved"].includes(status) && !item.redacted;
@@ -1656,6 +1762,12 @@ function adaptEvidenceSummary(
       ...computed,
       totalEvidence: fallbackTotal,
       total_evidence: fallbackTotal,
+      traceableEvidence: null,
+      traceable_evidence: null,
+      needsAttentionEvidence: null,
+      needs_attention_evidence: null,
+      openOperationEvidence: null,
+      open_operation_evidence: null,
     };
   }
   const bySourceType = asCountRecord(value.bySourceType ?? value.by_source_type);
@@ -1672,13 +1784,14 @@ function adaptEvidenceSummary(
     value.verifiedEvidence ?? value.verified_evidence ?? value.verifiedCount ?? value.verified_count,
     computed.verifiedEvidence,
   );
-  const needsAttentionEvidence = asFiniteNumber(
-    value.needsAttentionEvidence ?? value.needs_attention_evidence ?? value.needsAttentionCount ?? value.needs_attention_count,
-    computed.needsAttentionEvidence,
+  const traceableEvidence = nullableFiniteNumber(
+    value.traceableEvidence ?? value.traceable_evidence ?? value.traceableCount ?? value.traceable_count,
   );
-  const openOperationEvidence = asFiniteNumber(
+  const needsAttentionEvidence = nullableFiniteNumber(
+    value.needsAttentionEvidence ?? value.needs_attention_evidence ?? value.needsAttentionCount ?? value.needs_attention_count,
+  );
+  const openOperationEvidence = nullableFiniteNumber(
     value.openOperationEvidence ?? value.open_operation_evidence ?? value.openOperationsCount ?? value.open_operations_count,
-    computed.openOperationEvidence,
   );
   return {
     totalEvidence,
@@ -1697,8 +1810,8 @@ function adaptEvidenceSummary(
     by_link_type: Object.keys(byLinkType).length ? byLinkType : computed.byLinkType,
     byCredibilityTier: Object.keys(byCredibilityTier).length ? byCredibilityTier : computed.byCredibilityTier,
     by_credibility_tier: Object.keys(byCredibilityTier).length ? byCredibilityTier : computed.byCredibilityTier,
-    traceableEvidence: asFiniteNumber(value.traceableEvidence ?? value.traceable_evidence, computed.traceableEvidence),
-    traceable_evidence: asFiniteNumber(value.traceable_evidence ?? value.traceableEvidence, computed.traceableEvidence),
+    traceableEvidence,
+    traceable_evidence: traceableEvidence,
     unresolvedSourceEvidence: asFiniteNumber(value.unresolvedSourceEvidence ?? value.unresolved_source_evidence, computed.unresolvedSourceEvidence),
     unresolved_source_evidence: asFiniteNumber(value.unresolved_source_evidence ?? value.unresolvedSourceEvidence, computed.unresolvedSourceEvidence),
     incompleteEvidence: asFiniteNumber(value.incompleteEvidence ?? value.incomplete_evidence, computed.incompleteEvidence),
@@ -1904,6 +2017,13 @@ export function adaptManagementEvidenceDetail(raw: unknown): ManagementEvidenceD
   const refId = asString(data.refId ?? data.ref_id ?? data.id);
   if (!refId) return null;
   const sourceDocument = adaptEvidenceSourceDocument(data.sourceDocument ?? data.source_document, refId);
+  const rawSourceDoc = isObject(data.sourceDocument ?? data.source_document)
+    ? ((data.sourceDocument ?? data.source_document) as Record<string, unknown>)
+    : {};
+  const isOfficialReference = isOfficialReferenceSource(
+    sourceDocument.sourceType ?? asString(data.sourceType ?? data.source_type),
+    rawSourceDoc.sourceRef ?? rawSourceDoc.source_ref ?? data.sourceRef ?? data.source_ref,
+  );
   const linkedObjectSummary = adaptEvidenceLinkedObjectSummary(data.linkedObjectSummary ?? data.linked_object_summary);
   const linkedObjectLink = adaptEvidenceLinkedObjectLink(data.linkedObjectLink ?? data.linked_object_link);
   const linkedDecisions = firstArray<unknown>(data.linkedDecisions, data.linked_decisions)
@@ -1917,6 +2037,9 @@ export function adaptManagementEvidenceDetail(raw: unknown): ManagementEvidenceD
   const auditEvents = firstArray<unknown>(data.auditEvents, data.audit_events)
     .map(adaptEvidenceAuditEvent)
     .filter((item): item is ManagementEvidenceAuditEvent => Boolean(item));
+  const resolvedLink = adaptEvidenceResolvedLink(data.resolvedLink ?? data.resolved_link, {
+    isOfficialReference,
+  });
   return {
     refId,
     ref_id: refId,
@@ -1926,8 +2049,8 @@ export function adaptManagementEvidenceDetail(raw: unknown): ManagementEvidenceD
     linkType,
     link_type: linkType,
     credibility: adaptEvidenceCredibility(data.credibility),
-    resolvedLink: adaptEvidenceResolvedLink(data.resolvedLink ?? data.resolved_link),
-    resolved_link: adaptEvidenceResolvedLink(data.resolvedLink ?? data.resolved_link),
+    resolvedLink,
+    resolved_link: resolvedLink,
     linkedObjectSummary,
     linked_object_summary: linkedObjectSummary,
     linkedObjectLink,
@@ -2878,10 +3001,14 @@ const inboxLinks = (
   };
 };
 
-const actionStateBlocksProceed = (actionState: string): boolean =>
-  ["pending", "proposed", "blocked", "unable_to_continue", "cannot_proceed", "needs_human_approval"].includes(
+const actionStateBlocksProceed = (actionState: string, kind?: HumanInboxKind): boolean => {
+  if (kind === "incident" && actionState === "pending") {
+    return false;
+  }
+  return ["pending", "proposed", "blocked", "unable_to_continue", "cannot_proceed", "needs_human_approval"].includes(
     actionState,
   );
+};
 
 const allowedActionsCanDecide = (raw: unknown, fallback: boolean): boolean => {
   const allowed = isObject(raw) ? raw : null;
@@ -2959,7 +3086,7 @@ const adaptInboxRecord = (it: Record<string, unknown>): HumanInboxItem | null =>
       );
   const canProceed = asBoolean(
     it.canProceed ?? it.can_proceed,
-    actionState ? !actionStateBlocksProceed(actionState) : true,
+    actionState ? !actionStateBlocksProceed(actionState, kind) : true,
   );
   const personaId = asOptionalString(it.personaId ?? it.persona_id);
   const reviewId = asOptionalString(it.reviewId ?? it.review_id ?? it.source_id);
@@ -3250,7 +3377,159 @@ function normalizeTradingPulseSurface(value: unknown): ManagementTradingPulseSur
   };
 }
 
-function normalizeTradingPulseMeta(value: unknown): ManagementTradingPulseMeta {
+const TRADING_PULSE_COVERAGE_NUMBER_KEYS = [
+  ["runtimeCount", "runtime_count"],
+  ["paperRuntimeCount", "paper_runtime_count"],
+  ["telemetryCoverageCount", "telemetry_coverage_count"],
+  ["monitoringCoverageCount", "monitoring_coverage_count"],
+  ["baselineComparisonCount", "baseline_comparison_count"],
+  ["rowHealthDegradedCount", "row_health_degraded_count"],
+  ["retiredRuntimeCount", "retired_runtime_count"],
+  ["availableCount", "available_count"],
+  ["missingCount", "missing_count"],
+] as const;
+
+const TRADING_PULSE_COVERAGE_LIST_KEYS = [
+  ["missingTelemetryRuntimeIds", "missing_telemetry_runtime_ids"],
+  ["missingMonitoringRuntimeIds", "missing_monitoring_runtime_ids"],
+  ["missingBaselineRuntimeIds", "missing_baseline_runtime_ids"],
+  ["degradedRuntimeIds", "degraded_runtime_ids"],
+] as const;
+
+function normalizeTradingPulseMetricCoverageEntry(
+  value: unknown,
+): ManagementTradingPulseMetricCoverageEntry | undefined {
+  if (!isObject(value)) return undefined;
+  const out: ManagementTradingPulseMetricCoverageEntry = { ...value };
+  const availableCount = asNullableNumber(value.availableCount ?? value.available_count);
+  const missingCount = asNullableNumber(value.missingCount ?? value.missing_count);
+  const runtimeCount = asNullableNumber(value.runtimeCount ?? value.runtime_count);
+  const rawMissingIds = value.missingRuntimeIds ?? value.missing_runtime_ids;
+  if (availableCount !== null) {
+    out.availableCount = availableCount;
+    out.available_count = availableCount;
+  } else {
+    delete out.availableCount;
+    delete out.available_count;
+  }
+  if (missingCount !== null) {
+    out.missingCount = missingCount;
+    out.missing_count = missingCount;
+  } else {
+    delete out.missingCount;
+    delete out.missing_count;
+  }
+  if (runtimeCount !== null) {
+    out.runtimeCount = runtimeCount;
+    out.runtime_count = runtimeCount;
+  } else {
+    delete out.runtimeCount;
+    delete out.runtime_count;
+  }
+  if (Array.isArray(rawMissingIds)) {
+    const missingRuntimeIds = asStringArray(rawMissingIds);
+    out.missingRuntimeIds = missingRuntimeIds;
+    out.missing_runtime_ids = missingRuntimeIds;
+  } else {
+    delete out.missingRuntimeIds;
+    delete out.missing_runtime_ids;
+  }
+  return out;
+}
+
+function normalizeTradingPulseMetricCoverageMap(
+  value: unknown,
+): Record<string, ManagementTradingPulseMetricCoverageEntry> | undefined {
+  if (!isObject(value)) return undefined;
+  const entries: Array<[string, ManagementTradingPulseMetricCoverageEntry]> = [];
+  for (const [metric, entry] of Object.entries(value)) {
+    const normalized = normalizeTradingPulseMetricCoverageEntry(entry);
+    if (normalized) {
+      entries.push([metric, normalized]);
+    }
+  }
+  return Object.fromEntries(entries);
+}
+
+function normalizeTradingPulseCoverage(
+  primaryCoverage: unknown,
+  secondaryCoverage?: unknown,
+  summaryFallback?: unknown,
+): ManagementTradingPulseCoverage | undefined {
+  const covPrimary = isObject(primaryCoverage) ? primaryCoverage : null;
+  const covSecondary = isObject(secondaryCoverage) ? secondaryCoverage : null;
+  const sumFallback = isObject(summaryFallback) ? summaryFallback : null;
+  const sources = [covPrimary, covSecondary, sumFallback].filter(
+    (item): item is Record<string, unknown> => item !== null,
+  );
+  if (sources.length === 0) return undefined;
+
+  const pick = (camelKey: string, snakeKey: string): unknown => {
+    for (const source of sources) {
+      if (source[camelKey] !== undefined && source[camelKey] !== null) return source[camelKey];
+      if (source[snakeKey] !== undefined && source[snakeKey] !== null) return source[snakeKey];
+    }
+    return undefined;
+  };
+
+  const out: ManagementTradingPulseCoverage = {
+    ...(covSecondary ?? {}),
+    ...(covPrimary ?? {}),
+  };
+
+  for (const [camelKey, snakeKey] of TRADING_PULSE_COVERAGE_NUMBER_KEYS) {
+    const num = asNullableNumber(pick(camelKey, snakeKey));
+    if (num !== null) {
+      out[camelKey] = num;
+      out[snakeKey] = num;
+    } else {
+      delete out[camelKey];
+      delete out[snakeKey];
+    }
+  }
+
+  const rawRowHealthCounts = pick("rowHealthStatusCounts", "row_health_status_counts");
+  if (isObject(rawRowHealthCounts)) {
+    const counts = asCountRecord(rawRowHealthCounts);
+    out.rowHealthStatusCounts = counts;
+    out.row_health_status_counts = counts;
+  } else {
+    delete out.rowHealthStatusCounts;
+    delete out.row_health_status_counts;
+  }
+
+  for (const [camelKey, snakeKey] of TRADING_PULSE_COVERAGE_LIST_KEYS) {
+    const rawList = pick(camelKey, snakeKey);
+    if (Array.isArray(rawList)) {
+      const list = asStringArray(rawList);
+      out[camelKey] = list;
+      out[snakeKey] = list;
+    } else {
+      delete out[camelKey];
+      delete out[snakeKey];
+    }
+  }
+
+  const rawMetricCoverage = pick("metricCoverage", "metric_coverage");
+  const metricCoverage = normalizeTradingPulseMetricCoverageMap(rawMetricCoverage);
+  if (metricCoverage !== undefined) {
+    out.metricCoverage = metricCoverage;
+    out.metric_coverage = metricCoverage;
+  } else {
+    delete out.metricCoverage;
+    delete out.metric_coverage;
+  }
+
+  if (Object.keys(out).length === 0 && !covPrimary && !covSecondary) {
+    return undefined;
+  }
+  return out;
+}
+
+function normalizeTradingPulseMeta(
+  value: unknown,
+  coverageOverride?: ManagementTradingPulseCoverage,
+): ManagementTradingPulseMeta {
   const record = isObject(value) ? value : {};
   const snapshotAt = asString(record.snapshotAt ?? record.snapshot_at);
   const surfacesRecord = isObject(record.surfaces) ? record.surfaces : {};
@@ -3260,21 +3539,77 @@ function normalizeTradingPulseMeta(value: unknown): ManagementTradingPulseMeta {
       normalizeTradingPulseSurface(surface),
     ]),
   );
+  const coverage = coverageOverride ?? normalizeTradingPulseCoverage(record.coverage);
   return {
     ...record,
     snapshotAt,
     snapshot_at: snapshotAt,
     surfaces,
+    ...(coverage !== undefined ? { coverage } : {}),
   };
 }
 
-function normalizeTradingPulseSummary(value: unknown): ManagementTradingPulseSummary {
+function normalizeTradingPulseSummary(
+  value: unknown,
+  coverageOverride?: ManagementTradingPulseCoverage,
+): ManagementTradingPulseSummary {
   const record = isObject(value) ? value : {};
-  return {
+  const coverage = coverageOverride ?? normalizeTradingPulseCoverage(record.coverage, undefined, record);
+  const monitoringCoverageCount = asNullableNumber(
+    record.monitoringCoverageCount ?? record.monitoring_coverage_count ?? coverage?.monitoringCoverageCount,
+  );
+  const paperRuntimeCount = asNullableNumber(
+    record.paperRuntimeCount ?? record.paper_runtime_count ?? coverage?.paperRuntimeCount,
+  );
+  const retiredRuntimeCount = asNullableNumber(
+    record.retiredRuntimeCount ?? record.retired_runtime_count,
+  );
+  const rowHealthDegradedCount = asNullableNumber(
+    record.rowHealthDegradedCount ?? record.row_health_degraded_count ?? coverage?.rowHealthDegradedCount,
+  );
+  const rawRowHealthStatusCounts =
+    record.rowHealthStatusCounts ?? record.row_health_status_counts ?? coverage?.rowHealthStatusCounts;
+  const rowHealthStatusCounts = isObject(rawRowHealthStatusCounts)
+    ? asCountRecord(rawRowHealthStatusCounts)
+    : undefined;
+  const rawMissingTelemetry =
+    record.missingTelemetryRuntimeIds ?? record.missing_telemetry_runtime_ids ?? coverage?.missingTelemetryRuntimeIds;
+  const missingTelemetryRuntimeIds = Array.isArray(rawMissingTelemetry)
+    ? asStringArray(rawMissingTelemetry)
+    : undefined;
+  const rawMissingMonitoring =
+    record.missingMonitoringRuntimeIds ?? record.missing_monitoring_runtime_ids ?? coverage?.missingMonitoringRuntimeIds;
+  const missingMonitoringRuntimeIds = Array.isArray(rawMissingMonitoring)
+    ? asStringArray(rawMissingMonitoring)
+    : undefined;
+  const rawMissingBaseline =
+    record.missingBaselineRuntimeIds ?? record.missing_baseline_runtime_ids ?? coverage?.missingBaselineRuntimeIds;
+  const missingBaselineRuntimeIds = Array.isArray(rawMissingBaseline)
+    ? asStringArray(rawMissingBaseline)
+    : undefined;
+  const rawDegradedIds =
+    record.degradedRuntimeIds ?? record.degraded_runtime_ids ?? coverage?.degradedRuntimeIds;
+  const degradedRuntimeIds = Array.isArray(rawDegradedIds)
+    ? asStringArray(rawDegradedIds)
+    : undefined;
+  const metricCoverage =
+    normalizeTradingPulseMetricCoverageMap(record.metricCoverage ?? record.metric_coverage)
+    ?? coverage?.metricCoverage;
+
+  const out: ManagementTradingPulseSummary = {
     ...record,
-    runtimeCount: asFiniteNumber(record.runtimeCount ?? record.runtime_count, 0),
-    telemetryCoverageCount: asFiniteNumber(record.telemetryCoverageCount ?? record.telemetry_coverage_count, 0),
-    baselineComparisonCount: asFiniteNumber(record.baselineComparisonCount ?? record.baseline_comparison_count, 0),
+    runtimeCount: asFiniteNumber(
+      record.runtimeCount ?? record.runtime_count ?? coverage?.runtimeCount,
+      0,
+    ),
+    telemetryCoverageCount: asFiniteNumber(
+      record.telemetryCoverageCount ?? record.telemetry_coverage_count ?? coverage?.telemetryCoverageCount,
+      0,
+    ),
+    baselineComparisonCount: asFiniteNumber(
+      record.baselineComparisonCount ?? record.baseline_comparison_count ?? coverage?.baselineComparisonCount,
+      0,
+    ),
     baselineBreachedCount: asFiniteNumber(record.baselineBreachedCount ?? record.baseline_breached_count, 0),
     baselineWatchCount: asFiniteNumber(record.baselineWatchCount ?? record.baseline_watch_count, 0),
     totalPnl: asNullableNumber(record.totalPnl ?? record.total_pnl),
@@ -3285,14 +3620,149 @@ function normalizeTradingPulseSummary(value: unknown): ManagementTradingPulseSum
     byStatus: asCountRecord(record.byStatus ?? record.by_status),
     byStage: asCountRecord(record.byStage ?? record.by_stage),
     byBaselineStatus: asCountRecord(record.byBaselineStatus ?? record.by_baseline_status),
+    ...(coverage !== undefined ? { coverage } : {}),
   };
+
+  if (monitoringCoverageCount !== null) {
+    out.monitoringCoverageCount = monitoringCoverageCount;
+    out.monitoring_coverage_count = monitoringCoverageCount;
+  } else {
+    delete out.monitoringCoverageCount;
+    delete out.monitoring_coverage_count;
+  }
+  if (paperRuntimeCount !== null) {
+    out.paperRuntimeCount = paperRuntimeCount;
+    out.paper_runtime_count = paperRuntimeCount;
+  } else {
+    delete out.paperRuntimeCount;
+    delete out.paper_runtime_count;
+  }
+  if (retiredRuntimeCount !== null) {
+    out.retiredRuntimeCount = retiredRuntimeCount;
+    out.retired_runtime_count = retiredRuntimeCount;
+  } else {
+    delete out.retiredRuntimeCount;
+    delete out.retired_runtime_count;
+  }
+  if (rowHealthDegradedCount !== null) {
+    out.rowHealthDegradedCount = rowHealthDegradedCount;
+    out.row_health_degraded_count = rowHealthDegradedCount;
+  } else {
+    delete out.rowHealthDegradedCount;
+    delete out.row_health_degraded_count;
+  }
+  if (rowHealthStatusCounts !== undefined) {
+    out.rowHealthStatusCounts = rowHealthStatusCounts;
+    out.row_health_status_counts = rowHealthStatusCounts;
+  }
+  if (missingTelemetryRuntimeIds !== undefined) {
+    out.missingTelemetryRuntimeIds = missingTelemetryRuntimeIds;
+    out.missing_telemetry_runtime_ids = missingTelemetryRuntimeIds;
+  }
+  if (missingMonitoringRuntimeIds !== undefined) {
+    out.missingMonitoringRuntimeIds = missingMonitoringRuntimeIds;
+    out.missing_monitoring_runtime_ids = missingMonitoringRuntimeIds;
+  }
+  if (missingBaselineRuntimeIds !== undefined) {
+    out.missingBaselineRuntimeIds = missingBaselineRuntimeIds;
+    out.missing_baseline_runtime_ids = missingBaselineRuntimeIds;
+  }
+  if (degradedRuntimeIds !== undefined) {
+    out.degradedRuntimeIds = degradedRuntimeIds;
+    out.degraded_runtime_ids = degradedRuntimeIds;
+  }
+  if (metricCoverage !== undefined) {
+    out.metricCoverage = metricCoverage;
+    out.metric_coverage = metricCoverage;
+  }
+
+  return out;
+}
+
+function normalizeTradingPulseCardDetails(value: unknown): Record<string, unknown> {
+  if (!isObject(value)) return {};
+  const out: Record<string, unknown> = { ...value };
+
+  if (isObject(value.byStatus ?? value.by_status)) {
+    const byStatus = asCountRecord(value.byStatus ?? value.by_status);
+    out.byStatus = byStatus;
+    out.by_status = byStatus;
+  }
+  if (isObject(value.byStage ?? value.by_stage)) {
+    const byStage = asCountRecord(value.byStage ?? value.by_stage);
+    out.byStage = byStage;
+    out.by_stage = byStage;
+  }
+  if (isObject(value.rowHealthStatusCounts ?? value.row_health_status_counts)) {
+    const rowHealthStatusCounts = asCountRecord(
+      value.rowHealthStatusCounts ?? value.row_health_status_counts,
+    );
+    out.rowHealthStatusCounts = rowHealthStatusCounts;
+    out.row_health_status_counts = rowHealthStatusCounts;
+  }
+  if (Array.isArray(value.degradedRuntimeIds ?? value.degraded_runtime_ids)) {
+    const degradedRuntimeIds = asStringArray(
+      value.degradedRuntimeIds ?? value.degraded_runtime_ids,
+    );
+    out.degradedRuntimeIds = degradedRuntimeIds;
+    out.degraded_runtime_ids = degradedRuntimeIds;
+  }
+  if ("telemetryCoverageCount" in value || "telemetry_coverage_count" in value) {
+    const telemetryCoverageCount = asNullableNumber(
+      value.telemetryCoverageCount ?? value.telemetry_coverage_count,
+    );
+    out.telemetryCoverageCount = telemetryCoverageCount;
+    out.telemetry_coverage_count = telemetryCoverageCount;
+  }
+  if ("metricCoverage" in value || "metric_coverage" in value) {
+    const metricCoverage = normalizeTradingPulseMetricCoverageEntry(
+      value.metricCoverage ?? value.metric_coverage,
+    );
+    if (metricCoverage !== undefined) {
+      out.metricCoverage = metricCoverage;
+      out.metric_coverage = metricCoverage;
+    } else {
+      out.metricCoverage = null;
+      out.metric_coverage = null;
+    }
+  }
+  if ("worstSlippageBps" in value || "worst_slippage_bps" in value) {
+    const worstSlippageBps = asNullableNumber(
+      value.worstSlippageBps ?? value.worst_slippage_bps,
+    );
+    out.worstSlippageBps = worstSlippageBps;
+    out.worst_slippage_bps = worstSlippageBps;
+  }
+  if ("baselineComparisonCount" in value || "baseline_comparison_count" in value) {
+    const baselineComparisonCount = asNullableNumber(
+      value.baselineComparisonCount ?? value.baseline_comparison_count,
+    );
+    out.baselineComparisonCount = baselineComparisonCount;
+    out.baseline_comparison_count = baselineComparisonCount;
+  }
+  if (isObject(value.byBaselineStatus ?? value.by_baseline_status)) {
+    const byBaselineStatus = asCountRecord(
+      value.byBaselineStatus ?? value.by_baseline_status,
+    );
+    out.byBaselineStatus = byBaselineStatus;
+    out.by_baseline_status = byBaselineStatus;
+  }
+  if (Array.isArray(value.missingBaselineRuntimeIds ?? value.missing_baseline_runtime_ids)) {
+    const missingBaselineRuntimeIds = asStringArray(
+      value.missingBaselineRuntimeIds ?? value.missing_baseline_runtime_ids,
+    );
+    out.missingBaselineRuntimeIds = missingBaselineRuntimeIds;
+    out.missing_baseline_runtime_ids = missingBaselineRuntimeIds;
+  }
+
+  return out;
 }
 
 function normalizeTradingPulseCard(value: unknown): ManagementTradingPulseCard | null {
   if (!isObject(value)) return null;
   const cardId = asString(value.cardId ?? value.card_id ?? value.id);
   const label = asString(value.label, cardId || "Metric");
-  const details = isObject(value.details) ? value.details : {};
+  const details = normalizeTradingPulseCardDetails(value.details);
   return {
     ...value,
     cardId: cardId || label.toLowerCase().replace(/\s+/g, "-"),
@@ -3482,7 +3952,16 @@ export function adaptTradingPulseOverview(raw: unknown): ManagementTradingPulseM
   const root = isObject(raw) ? raw : null;
   const data = root && "data" in root ? root.data : raw;
   const dataRecord = isObject(data) ? data : null;
-  const meta = normalizeTradingPulseMeta(root?.meta ?? dataRecord?.meta);
+  const rawMeta = root?.meta ?? dataRecord?.meta;
+  const rawSummary = dataRecord?.summary ?? root?.summary;
+  const rawSummaryRecord = isObject(rawSummary) ? rawSummary : undefined;
+  const rawMetaRecord = isObject(rawMeta) ? rawMeta : undefined;
+  const coverage = normalizeTradingPulseCoverage(
+    rawSummaryRecord?.coverage,
+    rawMetaRecord?.coverage,
+    rawSummaryRecord,
+  );
+  const meta = normalizeTradingPulseMeta(rawMeta, coverage);
 
   const legacyRows = asArray<Record<string, unknown>>(data);
   if (legacyRows && legacyRows.some((row) => "surface" in row && "current" in row)) {
@@ -3517,7 +3996,7 @@ export function adaptTradingPulseOverview(raw: unknown): ManagementTradingPulseM
     dataRecord.rankings,
     root?.rankings,
   );
-  const summary = normalizeTradingPulseSummary(dataRecord.summary ?? root?.summary);
+  const summary = normalizeTradingPulseSummary(rawSummary, coverage);
 
   if (
     cards.length === 0
@@ -3748,6 +4227,113 @@ export function adaptEvolutionJournalList<T = Record<string, unknown>>(raw: unkn
 
   return list;
 }
+
+function adaptEvolutionQualificationCriterionRow(raw: unknown): EvolutionQualificationCriterionRow | null {
+  if (!isObject(raw)) return null;
+  const criterion = asString(raw.criterion);
+  if (!criterion) return null;
+  return {
+    criterion,
+    result: asString(raw.result, "not_evaluated"),
+    observed: raw.observed ?? null,
+    threshold: raw.threshold ?? null,
+    reason: nullableString(raw.reason),
+  };
+}
+
+function adaptEvolutionQualificationDecisionItem(raw: unknown): EvolutionQualificationDecisionItem | null {
+  if (!isObject(raw)) return null;
+  const decisionId = asString(raw.decision_id ?? raw.decisionId);
+  if (!decisionId) return null;
+  const criteria = firstArray<unknown>(raw.criteria)
+    .map(adaptEvolutionQualificationCriterionRow)
+    .filter((row): row is EvolutionQualificationCriterionRow => Boolean(row));
+  return {
+    decision_id: decisionId,
+    sweep_id: nullableString(raw.sweep_id ?? raw.sweepId),
+    tenant_id: nullableString(raw.tenant_id ?? raw.tenantId),
+    target_type: nullableString(raw.target_type ?? raw.targetType),
+    target_id: nullableString(raw.target_id ?? raw.targetId),
+    metric_name: nullableString(raw.metric_name ?? raw.metricName),
+    qualified: asBoolean(raw.qualified, false),
+    first_failing_criterion: nullableString(raw.first_failing_criterion ?? raw.firstFailingCriterion),
+    failure_reason: nullableString(raw.failure_reason ?? raw.failureReason),
+    policy_version: nullableString(raw.policy_version ?? raw.policyVersion),
+    evaluated_at: nullableString(raw.evaluated_at ?? raw.evaluatedAt),
+    program_id: nullableString(raw.program_id ?? raw.programId),
+    criteria,
+  };
+}
+
+export function adaptEvolutionQualificationReport(raw: unknown): EvolutionQualificationReport | null {
+  const data = unwrap(raw);
+  if (!isObject(data)) return null;
+  const items = firstArray<unknown>(data.items)
+    .map(adaptEvolutionQualificationDecisionItem)
+    .filter((item): item is EvolutionQualificationDecisionItem => Boolean(item));
+  const hasReportFields =
+    "evaluated" in data ||
+    "qualified" in data ||
+    "policy_version" in data ||
+    "policyVersion" in data ||
+    "counts_by_first_failing_criterion" in data ||
+    "countsByFirstFailingCriterion" in data ||
+    "sweep_id" in data ||
+    "sweepId" in data ||
+    "evaluated_at" in data ||
+    "evaluatedAt" in data ||
+    "failure_reason" in data ||
+    "failureReason" in data ||
+    items.length > 0;
+  if (!hasReportFields) return null;
+  const rawCounts = isObject(data.counts_by_first_failing_criterion ?? data.countsByFirstFailingCriterion)
+    ? (data.counts_by_first_failing_criterion ?? data.countsByFirstFailingCriterion) as Record<string, unknown>
+    : {};
+  const countsByFirstFailingCriterion: Record<string, number> = {};
+  for (const key of EVOLUTION_QUALIFICATION_CRITERIA) {
+    if (key in rawCounts) {
+      countsByFirstFailingCriterion[key] = asFiniteNumber(rawCounts[key], 0);
+    }
+  }
+  for (const [key, value] of Object.entries(rawCounts)) {
+    if (!(key in countsByFirstFailingCriterion)) {
+      countsByFirstFailingCriterion[key] = asFiniteNumber(value, 0);
+    }
+  }
+  const evaluated = asFiniteNumber(data.evaluated, items.length);
+  const qualified = asFiniteNumber(data.qualified, items.filter((item) => item.qualified).length);
+  return {
+    tenant_id: nullableString(data.tenant_id ?? data.tenantId),
+    sweep_id: nullableString(data.sweep_id ?? data.sweepId),
+    policy_version: nullableString(data.policy_version ?? data.policyVersion),
+    evaluated_at: nullableString(data.evaluated_at ?? data.evaluatedAt),
+    evaluated,
+    qualified,
+    drafted: asFiniteNumber(data.drafted, 0),
+    counts_by_first_failing_criterion: countsByFirstFailingCriterion,
+    failure_reason: nullableString(data.failure_reason ?? data.failureReason),
+    items,
+    total: asFiniteNumber(data.total, evaluated),
+    limit: asFiniteNumber(data.limit, 50),
+    offset: asFiniteNumber(data.offset, 0),
+  };
+}
+
+export const defaultEvolutionQualificationSeed = (): EvolutionQualificationReport => ({
+  tenant_id: null,
+  sweep_id: null,
+  policy_version: "evolution-qualification.v1",
+  evaluated_at: null,
+  evaluated: 0,
+  qualified: 0,
+  drafted: 0,
+  counts_by_first_failing_criterion: {},
+  failure_reason: "no_qualification_has_run",
+  items: [],
+  total: 0,
+  limit: 50,
+  offset: 0,
+});
 
 export function adaptPerformanceAttributionRows(raw: unknown): PerformanceAttributionRow[] | null {
   const data = unwrap(raw);
@@ -4294,6 +4880,8 @@ export function adaptPortfolioHoldingRows(raw: unknown): HoldingRow[] | null {
       sector: asString(item.sector) || undefined,
       region: asString(item.region) || undefined,
       currency: asString(item.currency),
+      markStatus: optionalString(item.mark_status ?? item.markStatus),
+      lastMarkAt: nullableString(item.last_mark_at ?? item.lastMarkAt),
       updatedAt: asString(item.last_mark_at ?? item.updated_at ?? item.updatedAt),
       links: {
         manageHref: runtimeId
@@ -4342,10 +4930,13 @@ function adaptPortfolioHoldingMonitorRow(item: Record<string, unknown>): Portfol
     capitalPoolId: asString(item.capital_pool_id) || undefined,
     brokerId: asString(item.broker_id) || undefined,
     symbol: asString(item.symbol ?? instrument.symbol, "—"),
+    side: optionalString(item.side),
     currency: nullableString(item.currency ?? instrument.currency),
     quantity: optionalFiniteNumber(item.quantity),
     marketValue: optionalFiniteNumber(item.market_value),
     unrealizedPnl: optionalFiniteNumber(item.unrealized_pnl),
+    markStatus: optionalString(item.mark_status ?? item.markStatus),
+    lastMarkAt: nullableString(item.last_mark_at ?? item.lastMarkAt),
     deploymentStage: asString(item.deployment_stage, "unknown"),
     sourceStatus: asString(item.source_status, "unavailable"),
     telemetryStale: item.telemetry_stale === true,
@@ -4572,6 +5163,47 @@ export const mgmt = {
         { method: "GET", path: paths.mgmtEvolutionJournal(opts), signal: opts?.signal },
         seedFn as () => EvolutionJournalList<T>,
         adaptEvolutionJournalList<T>,
+      ),
+  },
+
+  evolutionQualification: {
+    get: (
+      seedFnOrOpts?:
+        | (() => EvolutionQualificationReport)
+        | {
+            signal?: AbortSignal;
+            qualified?: boolean;
+            offset?: number;
+            pageSize?: number;
+            page_size?: number;
+          },
+      maybeOpts?: {
+        signal?: AbortSignal;
+        qualified?: boolean;
+        offset?: number;
+        pageSize?: number;
+        page_size?: number;
+      },
+    ): Promise<EvolutionQualificationReport> => {
+      const seedFn = typeof seedFnOrOpts === "function" ? seedFnOrOpts : defaultEvolutionQualificationSeed;
+      const opts = typeof seedFnOrOpts === "function" ? maybeOpts : seedFnOrOpts;
+      return mgmtRead(
+        "mgmt.evolutionQualification.get",
+        { method: "GET", path: paths.mgmtEvolutionQualification(opts), signal: opts?.signal },
+        seedFn,
+        adaptEvolutionQualificationReport,
+      );
+    },
+    getLiveOnly: (opts?: {
+      signal?: AbortSignal;
+      qualified?: boolean;
+      offset?: number;
+      pageSize?: number;
+      page_size?: number;
+    }): Promise<EvolutionQualificationReport | undefined> =>
+      liveOnlyRead<EvolutionQualificationReport>(
+        { method: "GET", path: paths.mgmtEvolutionQualification(opts), signal: opts?.signal },
+        adaptEvolutionQualificationReport,
       ),
   },
 

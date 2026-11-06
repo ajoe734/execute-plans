@@ -98,6 +98,10 @@ interface Props<T extends BaseObject> {
   scopeConfig?: ObjectListScopeConfig<T>;
   /** Optional aggregate summary rendered above the data grid. */
   summary?: (rows: T[]) => ReactNode;
+  /** Render summary even when visibleRows is empty. */
+  alwaysRenderSummary?: boolean;
+  /** Optional custom empty message rendered inside DataTable when visibleRows is empty. */
+  emptyTableMessage?: string;
 }
 
 interface PartialDataSurfaceInfo {
@@ -164,8 +168,25 @@ function extractSurfaceMessage(meta: unknown): string | undefined {
   return undefined;
 }
 
+function cleanUnavailableReason(
+  rawReason: string | undefined,
+  t: (key: string, opts?: Record<string, unknown>) => string,
+): string | undefined {
+  if (!rawReason) return undefined;
+  const cleaned = rawReason
+    .replace(/^strict\s*typed\s*error\s*[·:-]?\s*/i, "")
+    .replace(/\s*[·:-]?\s*seed\s*fallback\s*(?:blocked|armed|disabled)?$/i, "")
+    .replace(/^strict:\s*/i, "")
+    .trim();
+  if (!cleaned) return undefined;
+  if (/^(failed to fetch|networkerror.*|live read failed|live bff unavailable)$/i.test(cleaned)) {
+    return t("common.networkFailureReason", { defaultValue: "Network connection failed" });
+  }
+  return cleaned;
+}
+
 export function ObjectListPage<T extends BaseObject>({
-  title, loader, basePath, listHref, rowHref, nameCell, columns: customColumns, extraColumns = [], liveKinds = [], createBehavior, focusParam, focusLabel, focusMatch, emptyState, scopeConfig, summary,
+  title, loader, basePath, listHref, rowHref, nameCell, columns: customColumns, extraColumns = [], liveKinds = [], createBehavior, focusParam, focusLabel, focusMatch, emptyState, scopeConfig, summary, alwaysRenderSummary = false, emptyTableMessage,
 }: Props<T>) {
   const t = useT();
   const navigate = useNavigate();
@@ -179,16 +200,26 @@ export function ObjectListPage<T extends BaseObject>({
   const focusId = focusParamList
     .map((param) => searchParams.get(param)?.trim() ?? "")
     .find((val) => val.length > 0) ?? "";
-  const { items: rows, pending, refresh, meta } = useLiveListV1<T>(loader, liveKinds, { auto: false });
+  const { items: rows, pending, refresh, meta, loading } = useLiveListV1<T>(loader, liveKinds, { auto: false });
+  const isInitialLoading = Boolean(loading) && rows.length === 0;
   const [drawerOpen, setDrawerOpen] = useState(false);
   const degradation = extractDegradation(meta);
   const partialDataSurface = extractPartialDataSurface(meta);
   const liveStatus = useLiveStatusSnapshot();
   const strictFallbackBlocked = degradation.strictFallbackBlocked || liveStatus.typedError;
-  const degradationReason = degradation.reason || extractSurfaceMessage(meta);
-  const degradedDescription = degradation.degraded && strictFallbackBlocked
-    ? `strict typed error · ${degradationReason || liveStatus.fallbackReason || "live BFF unavailable"} · seed fallback blocked`
-    : degradationReason;
+  const rawDegradationReason =
+    degradation.reason ||
+    extractSurfaceMessage(meta) ||
+    (degradation.degraded && strictFallbackBlocked ? liveStatus.fallbackReason : undefined);
+  const cleanedDegradationReason = cleanUnavailableReason(rawDegradationReason, t);
+  const degradedDescription = cleanedDegradationReason
+    ? t("common.listUnavailableWithReason", {
+        reason: cleanedDegradationReason,
+        defaultValue: `Unable to load data from the server (${cleanedDegradationReason}). Please retry.`,
+      })
+    : t("common.listUnavailableDesc", {
+        defaultValue: "Unable to load data from the server. Please retry.",
+      });
 
   const matchesFocus = (row: T, targetFocusId: string): boolean =>
     focusMatch ? focusMatch(row, targetFocusId) : row.id === targetFocusId;
@@ -261,10 +292,10 @@ export function ObjectListPage<T extends BaseObject>({
     setSearchParams(nextParams);
   };
 
-  const isDegradedEmpty = rows.length === 0 && degradation.degraded;
-  const resolvedEmptyState = !isDegradedEmpty && scopeConfig && activeScope && scopeConfig.emptyStateForScope
+  const isDegradedEmpty = !isInitialLoading && rows.length === 0 && degradation.degraded;
+  const resolvedEmptyState = !isInitialLoading && !isDegradedEmpty && scopeConfig && activeScope && scopeConfig.emptyStateForScope
     ? (scopeConfig.emptyStateForScope(activeScope, scopeCounts, buildScopeHref) ?? emptyState)
-    : emptyState;
+    : (!isInitialLoading && !isDegradedEmpty ? emptyState : undefined);
 
   const defaultColumns: Column<T>[] = [
     {
@@ -440,7 +471,7 @@ export function ObjectListPage<T extends BaseObject>({
             </div>
           </Card>
         )}
-        {summary && visibleRows.length > 0 && <div className="mb-4">{summary(visibleRows)}</div>}
+        {summary && ((!isInitialLoading && !isDegradedEmpty && alwaysRenderSummary) || visibleRows.length > 0) && <div className="mb-4">{summary(visibleRows)}</div>}
         {pending > 0 && (
           <button
             onClick={refresh}
@@ -450,7 +481,7 @@ export function ObjectListPage<T extends BaseObject>({
             {t("realtime.newUpdates", { count: pending, defaultValue: `${pending} new update(s) — click to refresh` })}
           </button>
         )}
-        {focusId && (
+        {focusId && !isInitialLoading && !isDegradedEmpty && (
           <Card className={"mb-3 p-3 text-sm " + (focusMatched
             ? "border-primary/30 bg-primary/5"
             : "border-status-warning/30 bg-status-warning/10")}
@@ -481,7 +512,7 @@ export function ObjectListPage<T extends BaseObject>({
             </div>
           </Card>
         )}
-        {visibleRows.length === 0 && (isDegradedEmpty || resolvedEmptyState) ? (
+        {!isInitialLoading && visibleRows.length === 0 && (isDegradedEmpty || resolvedEmptyState) ? (
           <div
             onClick={(event) => {
               if (isDegradedEmpty || !resolvedEmptyState?.actionTo) return;
@@ -496,16 +527,15 @@ export function ObjectListPage<T extends BaseObject>({
               icon={resolvedEmptyState?.icon ?? <Inbox className="h-8 w-8" />}
               title={
                 isDegradedEmpty
-                  ? t("common.awaitingData", { defaultValue: "No data yet" })
+                  ? t("common.listUnavailableTitle", {
+                      label: title,
+                      defaultValue: `${title} is temporarily unavailable`,
+                    })
                   : resolvedEmptyState?.title ?? t("common.noResults")
               }
               description={
                 isDegradedEmpty
-                  ? degradedDescription ||
-                    t("common.awaitingDataDesc", {
-                      defaultValue:
-                        "This surface has no data yet — the backend is reachable but upstream is not producing for it.",
-                    })
+                  ? degradedDescription
                   : resolvedEmptyState?.description ||
                     t("common.awaitingDataDesc", {
                       defaultValue:
@@ -513,12 +543,17 @@ export function ObjectListPage<T extends BaseObject>({
                     })
               }
               cta={
-                !isDegradedEmpty && resolvedEmptyState?.actionLabel && resolvedEmptyState?.actionTo
+                isDegradedEmpty
                   ? {
-                    label: resolvedEmptyState.actionLabel,
-                    href: resolvedEmptyState.actionTo,
-                  }
-                  : undefined
+                      label: t("common.retry", { defaultValue: "Retry" }),
+                      onClick: refresh,
+                    }
+                  : resolvedEmptyState?.actionLabel && resolvedEmptyState?.actionTo
+                    ? {
+                        label: resolvedEmptyState.actionLabel,
+                        href: resolvedEmptyState.actionTo,
+                      }
+                    : undefined
               }
             />
           </div>
@@ -526,7 +561,9 @@ export function ObjectListPage<T extends BaseObject>({
           <DataTable
             rows={visibleRows}
             columns={columns}
-            empty={t("common.noResults")}
+            loading={isInitialLoading}
+            loadingText={t("common.loading")}
+            empty={emptyTableMessage ?? t("common.noResults")}
             onRowClick={hasClickableRows
               ? (r) => {
                 const href = resolveObjectRowHref(r, basePath, rowHref);

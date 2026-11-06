@@ -1,0 +1,94 @@
+{
+  "task_id": "FE-TRADING-PULSE-DETAIL-FIELDS-20261105",
+  "owner": "Antigravity",
+  "reviewer": "Claude",
+  "repository": "ajoe734/execute-plans",
+  "branch": "task/FE-TRADING-PULSE-DETAIL-FIELDS-20261105",
+  "merge_target": "dev",
+  "hosted_verification_claimed": false,
+  "hosted_verification_note": "Verified locally via Vitest unit/component/adapter/i18n tests, TypeScript typecheck, Vite production build, isolated loopback fixture Playwright E2E, and a headless Chromium browser route-mock verification of /management/trading-pulse.",
+  "summary": "Normalize snake_case and camelCase Trading Pulse card detail fields (by_status, by_stage, row_health_status_counts, degraded_runtime_ids, telemetry_coverage_count, metric_coverage with available_count/missing_count/missing_runtime_ids, worst_slippage_bps, baseline_comparison_count, by_baseline_status, missing_baseline_runtime_ids), summary/meta.coverage fields (telemetry_coverage_count, monitoring_coverage_count, paper_runtime_count, baseline_comparison_count, row_health_degraded_count, row_health_status_counts, missing_telemetry_runtime_ids, missing_monitoring_runtime_ids, missing_baseline_runtime_ids, degraded_runtime_ids, metric_coverage), and summary.retired_runtime_count in src/lib/bff-v1/management.ts without adding per-field snake_case fallbacks in _core.tsx; render excluded retired runtime count on the runtime coverage tile in both zh-TW and en-US when summary.retired_runtime_count is present while rendering nothing extra when absent; preserve dash rendering when coverage counts are genuinely absent.",
+  "scoped_artifacts": [
+    "src/lib/bff-v1/management.ts",
+    "src/lib/bff-v1/__tests__/management.test.ts",
+    "src/management/pages/oversight/_core.tsx",
+    "src/management/pages/oversight/TradingPulsePage.test.tsx",
+    "src/i18n/locales/zh-TW.ts",
+    "src/i18n/locales/en-US.ts",
+    "src/lib/v5/management/__tests__/i18nParity.test.ts",
+    "docs/deployment/evidence/FE-TRADING-PULSE-DETAIL-FIELDS-20261105/evidence.json"
+  ],
+  "acceptance_criteria": {
+    "1_card_detail_fields_render_real_values": "verified: Given the snake_case BFF payload, all six Trading Pulse cards render real values for by_status, by_stage, row_health_status_counts, degraded_runtime_ids, telemetry_coverage_count, metric_coverage (available_count/missing_count/missing_runtime_ids), worst_slippage_bps, baseline_comparison_count, by_baseline_status, and missing_baseline_runtime_ids instead of dashes",
+    "2_data_coverage_tiles_and_absent_dash": "verified: Data coverage tiles for telemetry (81/90), monitoring (79/88), and baseline (76/90) render counts merged from summary and meta.coverage instead of a dash when supplied by the BFF, and still render '—' when genuinely absent",
+    "3_adapter_normalization_only": "verified: Field normalization lives in src/lib/bff-v1/management.ts (normalizeTradingPulseCardDetails, normalizeTradingPulseMetricCoverageEntry, normalizeTradingPulseCoverage, normalizeTradingPulseSummary, normalizeTradingPulseMeta) accepting both camelCase and snake_case; src/management/pages/oversight/_core.tsx adds no new per-field snake_case fallbacks",
+    "4_retired_runtime_count_display": "verified: When summary.retired_runtime_count is present, the runtime tile appends 'Excluded retired: <count>' in en-US and '已排除已退役：<count>' in zh-TW; when absent, nothing extra renders",
+    "5_page_and_adapter_tests": "verified: src/management/pages/oversight/TradingPulsePage.test.tsx renders a payload with exact snake_case BFF field names and asserts all rendered card detail lines, coverage tiles, absent-value dashes, and retired_runtime_count in en-US and zh-TW; src/lib/bff-v1/__tests__/management.test.ts covers both snake_case and camelCase inputs",
+    "6_live_only_states_and_existing_suites_green": "verified: Live-only unavailable and loading states on TradingPulsePage are unchanged, and existing Vitest suites plus isolated loopback fixture Playwright E2E specs pass without new skips or weakened assertions"
+  },
+  "browser_route_mock_observation": {
+    "route": "GET /bff/management/trading-pulse",
+    "page_url": "/management/trading-pulse",
+    "en_US": {
+      "coverage_tiles": [
+        "Runtime rows: 90 | active: 1 · running: 89 · Excluded retired: 113",
+        "Telemetry coverage (degraded): 81/90 | Missing: rt-paper-05",
+        "Monitoring coverage (degraded): 79/88 | Missing: rt-paper-06",
+        "Baseline coverage (degraded): 76/90 | Missing: rt-paper-03, rt-paper-04",
+        "Row health (degraded): 12 | ok: 78 · degraded: 12 · rt-paper-01, rt-paper-02"
+      ],
+      "cards": [
+        "Runtime Status: 90 | Status: active: 1 · running: 89 | Stage: paper: 88 · live_running: 2",
+        "Row Health: 12 | Row health: ok: 78 · degraded: 12 | Degraded rows: rt-paper-01, rt-paper-02",
+        "P&L: 1,450.5 | Telemetry coverage: 81 | Metric coverage: 81/90",
+        "Worst Drawdown: 0.042 | Metric coverage: 80/90",
+        "Execution Quality: 0.964 | Worst slippage bps: 4.25 | Metric coverage: 77/90",
+        "Baseline Comparison: 0 | Baseline coverage: 76 | Baseline status: ok: 72 · watch: 4 · breached: 0 | Missing: rt-paper-03, rt-paper-04"
+      ]
+    },
+    "zh_TW": {
+      "coverage_tiles": [
+        "Runtime 明細: 90 | active: 1 · running: 89 · 已排除已退役：113",
+        "Telemetry 覆蓋 (degraded): 81/90 | 缺: rt-paper-05",
+        "Monitoring 覆蓋 (degraded): 79/88 | 缺: rt-paper-06",
+        "Baseline 覆蓋 (degraded): 76/90 | 缺: rt-paper-03, rt-paper-04",
+        "Row health (degraded): 12 | ok: 78 · degraded: 12 · rt-paper-01, rt-paper-02"
+      ],
+      "cards": [
+        "Runtime Status: 90 | 狀態: active: 1 · running: 89 | 階段: paper: 88 · live_running: 2",
+        "Row Health: 12 | Row health: ok: 78 · degraded: 12 | 降級 rows: rt-paper-01, rt-paper-02",
+        "P&L: 1,450.5 | Telemetry 覆蓋: 81 | Metric 覆蓋: 81/90",
+        "Worst Drawdown: 0.042 | Metric 覆蓋: 80/90",
+        "Execution Quality: 0.964 | 最差滑價 bps: 4.25 | Metric 覆蓋: 77/90",
+        "Baseline Comparison: 0 | Baseline 覆蓋: 76 | 基準狀態: ok: 72 · watch: 4 · breached: 0 | 缺: rt-paper-03, rt-paper-04"
+      ]
+    }
+  },
+  "changed_test_assertions_justification": [],
+  "verification": {
+    "unit_and_component_tests": {
+      "command": "./node_modules/.bin/vitest run src/lib/bff-v1/__tests__/management.test.ts src/management/pages/oversight/TradingPulsePage.test.tsx src/management/pages/oversight/LiveOnlyFallbacks.test.tsx src/lib/v5/management/__tests__/revamp-2026-05-20.test.ts src/management/components/detail/OwnerFacts.test.tsx src/lib/v5/management/__tests__/i18nParity.test.ts",
+      "status": "passed",
+      "test_files": 6,
+      "tests_passed": 122
+    },
+    "contract_drift": {
+      "command": "npm run test:contract",
+      "status": "passed",
+      "tests_passed": 7
+    },
+    "typecheck": {
+      "command": "npm run typecheck:app && npm run typecheck:agora",
+      "status": "passed"
+    },
+    "production_build": {
+      "command": "VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build",
+      "status": "passed"
+    },
+    "playwright_loopback_e2e": {
+      "command": "./node_modules/.bin/playwright test e2e/02-control-room.spec.ts e2e/03-execution-loop.spec.ts e2e/04b-optimization-loop.spec.ts e2e/08-create-intent.spec.ts e2e/08-sse-reconnect.spec.ts e2e/09-strict-vs-hybrid.spec.ts e2e/10-rollback-saga.spec.ts e2e/11-handoff-sla.spec.ts e2e/12-approvals.spec.ts e2e/13-agora.spec.ts e2e/16-audit-correlation.spec.ts e2e/17-a11y-v5.spec.ts e2e/18-perf.spec.ts e2e/21-management-canonical-reads.spec.ts --project=chromium --retries=0",
+      "status": "passed",
+      "tests_passed": 47
+    }
+  }
+}

@@ -1,0 +1,61 @@
+{
+  "task_id": "FE-EVOLUTION-PROGRAM-REVIEW-20261104",
+  "owner": "Antigravity",
+  "reviewer": "Claude",
+  "repository": "ajoe734/execute-plans",
+  "branch": "task/FE-EVOLUTION-PROGRAM-REVIEW-20261104",
+  "merge_target": "dev",
+  "hosted_verification_claimed": false,
+  "hosted_verification_note": "Hosted verification is performed later by the operator acceptance task EVOLUTION-RESEARCH-HOSTED-ACCEPT-20261104; this artifact records functional, unit, contract, i18n parity, typecheck, and production build evidence only.",
+  "summary": "Wire /management/evolution (EvolutionList) to GET /bff/management/evolution-qualification so the page displays the qualification summary (policy_version, evaluated_at, evaluated, qualified, and counts by failing criterion in both en-US and zh-TW) and explains why 0 programs exist when 0 decisions qualify instead of showing only empty table text; replace unowned generation/population/bestFitness/progress columns with owner fields (name, status, origin, source decision count, run count, updated at) and mark automatic under_review programs as waiting for human review; update /management/evolution/:id (EvolutionDetail) to display all six qualification criteria (real_threshold_signal, real_target, persistent_breach, fresh_evidence, executable_action, no_open_duplicate) with observed, threshold, result, and policy_version, link each source decision to /management/evolution-journal?decision=<id>, gate approve/reject on owner allowedActions, bind approve to the governance approval state (blocking approve with a link to /management/governance until the bound approval is approved) and require a reason for reject, read back the program from the owner after every action with no optimistic state while showing owner errors as returned, and render real run ids and statuses (including failed runs) from GET /bff/evolution-programs/{program_id}/runs with an explicit notice when a manual program has no source decisions; add the reject_program edge (under_review -> retired) to the evolution state machine.",
+  "scoped_artifacts": [
+    "src/management/pages/Lists.tsx",
+    "src/management/pages/EvolutionDetail.tsx",
+    "src/management/pages/EvolutionDetail.test.tsx",
+    "src/lib/stateMachines/index.ts",
+    "src/lib/stateMachines/stateMachines.test.ts",
+    "src/lib/bff-v1/evolution.ts",
+    "src/lib/bff-v1/writes.ts",
+    "src/lib/bff-v1/management.ts",
+    "src/lib/bff-v1/paths.ts",
+    "src/lib/bff-v1/dto.ts",
+    "src/lib/bff-v1/queryKeys.ts",
+    "src/lib/bff-v1/__tests__/contract-drift.test.ts",
+    "src/lib/bff-v1/__tests__/management.test.ts",
+    "src/management/pages/ObjectListPage.tsx",
+    "src/management/pages/ObjectListPage.test.tsx",
+    "src/i18n/locales/zh-TW.ts",
+    "src/i18n/locales/en-US.ts",
+    "src/lib/v5/management/__tests__/i18nParity.test.ts",
+    "docs/deployment/evidence/FE-EVOLUTION-PROGRAM-REVIEW-20261104/evidence.json"
+  ],
+  "acceptance_criteria": {
+    "1_evolution_qualification_summary_and_zero_program_explanation": "verified: /management/evolution fetches GET /bff/management/evolution-qualification and renders policy_version, evaluated_at, evaluated, qualified, and counts for all six failing criteria in both en-US and zh-TW; when zero programs exist, the page renders an explicit explanation detailing the failing criteria counts (e.g. 649 evaluated, 0 qualified due to real_threshold_signal=649) instead of showing only empty table text",
+    "2_owner_list_columns": "verified: EvolutionList renders only owner-backed columns (name, status, origin, source decision count, run count, updated at); unowned generation, population, bestFitness, and progress columns are removed",
+    "3_origin_and_waiting_for_human_review_marker": "verified: Origin is normalized and displayed as automatic or manual; an automatic program in under_review is visibly badged as waiting for human review",
+    "4_six_criteria_and_source_decision_links": "verified: EvolutionDetail renders all six criteria (real_threshold_signal, real_target, persistent_breach, fresh_evidence, executable_action, no_open_duplicate) with observed, threshold, result, and policy_version, and links each source decision id to /management/evolution-journal?decision=<id>",
+    "5_allowed_actions_governance_gate_and_reject_reason": "verified: Approve and Reject render only when owner allowedActions include approve_program / reject_program; Approve displays the bound governance approval id and status and remains disabled with a link to /management/governance until the governance approval is approved; Reject requires a non-empty reason",
+    "6_owner_readback_no_optimistic_state_and_error_display": "verified: submit_review, approve_program, and reject_program re-fetch GET /bff/evolution-programs/{program_id} and GET /bff/evolution-programs/{program_id}/runs after command execution with no optimistic state mutation, and surface any owner error message as returned in an error alert",
+    "7_real_runs_panel_and_manual_no_work_notice": "verified: EvolutionDetail fetches GET /bff/evolution-programs/{program_id}/runs and renders real run_id, status (showing failed runs as failed with failure error text), adapter, dispatch_mode, and source_decision_id; manual programs with zero source decisions display an explicit notice that approval starts no work",
+    "8_state_machine_reject_program_edge": "verified: evolutionMachine includes { from: 'under_review', to: 'retired', action: 'reject_program', requiresApproval: true, risk: 'medium' } and stateMachines.test.ts verifies that under_review -> retired is valid and other edges remain invalid",
+    "9_tests_and_i18n_parity": "verified: unit and component tests in ObjectListPage.test.tsx, EvolutionDetail.test.tsx, stateMachines.test.ts, contract-drift.test.ts, management.test.ts, and i18nParity.test.ts cover the qualification summary, zero-program explanation, all six criteria rows, approve/reject actions, blocked approve gate, runs panel, and 100% locale parity across en-US and zh-TW",
+    "10_vitest_tsc_and_production_build": "verified: vitest, tsc -p tsconfig.app.json --noEmit, and vite build pass"
+  },
+  "changed_test_assertions_justification": [],
+  "verification": {
+    "unit_and_contract_tests": {
+      "command": "./node_modules/.bin/vitest run src/lib/stateMachines/stateMachines.test.ts src/lib/bff-v1/__tests__/contract-drift.test.ts src/lib/bff-v1/__tests__/management.test.ts src/lib/v5/management/__tests__/i18nParity.test.ts src/management/pages/ObjectListPage.test.tsx src/management/pages/EvolutionDetail.test.tsx",
+      "status": "passed",
+      "test_files": 6,
+      "tests_passed": 134
+    },
+    "typecheck": {
+      "command": "npm run typecheck",
+      "status": "passed"
+    },
+    "production_build": {
+      "command": "VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build",
+      "status": "passed"
+    }
+  }
+}

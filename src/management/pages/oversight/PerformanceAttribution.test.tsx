@@ -1,13 +1,16 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import i18n from "@/i18n";
+import { mgmt } from "@/lib/bff-v1";
 import {
   BFF_ACCEPTED_ATTRIBUTION_DIMENSIONS,
+  normalizePerformanceAttributionRow,
   SUPPORTED_ATTRIBUTION_DIMENSIONS,
   UNSUPPORTED_ATTRIBUTION_DIMENSIONS,
+  type PerformanceAttributionResult,
 } from "@/lib/v5/management/performanceAttribution";
 import { PerformanceAttributionPage } from "./PerformanceAttribution";
 
@@ -934,5 +937,333 @@ describe("PerformanceAttributionPage", () => {
       expect.anything(),
       { cacheKey: "oversight.performanceAttribution.unsupported.asset_class.latest" },
     );
+  });
+
+  describe("loading, error, and filter-transition states with real BFF row", () => {
+    const REAL_HOSTED_PERSONA_ROW = {
+      id: "pm12-performance-attribution-persona-persona-be19a1fac471247f2b2a",
+      dimension: "persona",
+      dimension_key: "persona-be19a1fac471247f2b2a",
+      label: "青禾｜2330 台股 Paper 學習 R2",
+      period: "latest",
+      data_confidence: "formal",
+      source_status: "ok",
+      rank: 1,
+    };
+
+    async function enableRealUseV5Live() {
+      const actual = await vi.importActual<typeof import("@/management/pages/v5/useV5Live")>(
+        "@/management/pages/v5/useV5Live",
+      );
+      actual.__resetV5LiveCacheForTests();
+      mocks.useV5Live.mockImplementation(actual.useV5Live);
+      vi.spyOn(mgmt.personaFleet, "get").mockResolvedValue([]);
+      vi.spyOn(mgmt.portfolioBook, "holdingsLiveOnly").mockResolvedValue([]);
+      vi.spyOn(mgmt.operationsReadModel, "getLiveOnly").mockResolvedValue(undefined);
+      return actual;
+    }
+
+    it("while the first attribution read is in flight the table shows the existing loading text and never the no rows text", async () => {
+      const actual = await enableRealUseV5Live();
+      let resolvePending!: (value: PerformanceAttributionResult) => void;
+      const getLiveOnlySpy = vi
+        .spyOn(mgmt.performanceAttribution, "getLiveOnly")
+        .mockImplementation(
+          () =>
+            new Promise<PerformanceAttributionResult>((resolve) => {
+              resolvePending = resolve;
+            }),
+        );
+
+      try {
+        const { unmount } = renderPage("/management/performance-attribution?period=latest");
+
+        expect(getLiveOnlySpy).toHaveBeenCalledWith(undefined, "latest", expect.any(Object));
+        const table = screen.getByRole("table");
+        expect(within(table).getByText("Loading…")).toBeInTheDocument();
+        expect(within(table).queryByText("No rows.")).not.toBeInTheDocument();
+        expect(within(table).queryByText("Backend temporarily unavailable")).not.toBeInTheDocument();
+
+        unmount();
+        actual.__resetV5LiveCacheForTests();
+
+        await act(async () => {
+          await i18n.changeLanguage("zh-TW");
+        });
+        renderPage("/management/performance-attribution?period=latest");
+        const zhTable = screen.getByRole("table");
+        expect(within(zhTable).getByText("載入中…")).toBeInTheDocument();
+        expect(within(zhTable).queryByText("無資料。")).not.toBeInTheDocument();
+        expect(within(zhTable).queryByText("後端暫時無法使用")).not.toBeInTheDocument();
+
+        await act(async () => {
+          resolvePending({
+            rows: [normalizePerformanceAttributionRow(REAL_HOSTED_PERSONA_ROW)],
+            period: LATEST_PERIOD,
+          });
+        });
+
+        await waitFor(() => {
+          expect(within(zhTable).getByText("青禾｜2330 台股 Paper 學習 R2")).toBeInTheDocument();
+        });
+        expect(within(zhTable).queryByText("載入中…")).not.toBeInTheDocument();
+        expect(within(zhTable).queryByText("無資料。")).not.toBeInTheDocument();
+      } finally {
+        await act(async () => {
+          await i18n.changeLanguage("en-US");
+        });
+        actual.__resetV5LiveCacheForTests();
+        vi.restoreAllMocks();
+      }
+    });
+
+    it("a failed attribution read shows an unavailable message and not the no rows text", async () => {
+      const actual = await enableRealUseV5Live();
+      const getLiveOnlySpy = vi
+        .spyOn(mgmt.performanceAttribution, "getLiveOnly")
+        .mockRejectedValue(new Error("BACKEND_UNAVAILABLE"));
+
+      try {
+        const { unmount } = renderPage("/management/performance-attribution?period=latest");
+
+        expect(getLiveOnlySpy).toHaveBeenCalledWith(undefined, "latest", expect.any(Object));
+        const table = screen.getByRole("table");
+        await waitFor(() => {
+          expect(within(table).getByText("Backend temporarily unavailable")).toBeInTheDocument();
+        });
+        expect(within(table).queryByText("No rows.")).not.toBeInTheDocument();
+        expect(within(table).queryByText("Loading…")).not.toBeInTheDocument();
+
+        unmount();
+        actual.__resetV5LiveCacheForTests();
+
+        await act(async () => {
+          await i18n.changeLanguage("zh-TW");
+        });
+        renderPage("/management/performance-attribution?period=latest");
+        const zhTable = screen.getByRole("table");
+        await waitFor(() => {
+          expect(within(zhTable).getByText("後端暫時無法使用")).toBeInTheDocument();
+        });
+        expect(within(zhTable).queryByText("無資料。")).not.toBeInTheDocument();
+        expect(within(zhTable).queryByText("載入中…")).not.toBeInTheDocument();
+      } finally {
+        await act(async () => {
+          await i18n.changeLanguage("en-US");
+        });
+        actual.__resetV5LiveCacheForTests();
+        vi.restoreAllMocks();
+      }
+    });
+
+    it("only a successful read with zero rows shows the no rows text while a read with rows renders them unchanged", async () => {
+      const actual = await enableRealUseV5Live();
+      const getLiveOnlySpy = vi
+        .spyOn(mgmt.performanceAttribution, "getLiveOnly")
+        .mockResolvedValueOnce({ rows: [], period: LATEST_PERIOD })
+        .mockResolvedValueOnce({
+          rows: [normalizePerformanceAttributionRow(REAL_HOSTED_PERSONA_ROW)],
+          period: LATEST_PERIOD,
+        });
+
+      try {
+        const { unmount } = renderPage("/management/performance-attribution?period=latest");
+        const emptyTable = screen.getByRole("table");
+        await waitFor(() => {
+          expect(within(emptyTable).getByText("No rows.")).toBeInTheDocument();
+        });
+        expect(within(emptyTable).queryByText("Loading…")).not.toBeInTheDocument();
+        expect(within(emptyTable).queryByText("Backend temporarily unavailable")).not.toBeInTheDocument();
+
+        unmount();
+        actual.__resetV5LiveCacheForTests();
+
+        renderPage("/management/performance-attribution?period=latest");
+        const populatedTable = screen.getByRole("table");
+        await waitFor(() => {
+          expect(within(populatedTable).getByText("青禾｜2330 台股 Paper 學習 R2")).toBeInTheDocument();
+        });
+        expect(getLiveOnlySpy).toHaveBeenCalledTimes(2);
+        const rowEl = within(populatedTable).getByText("青禾｜2330 台股 Paper 學習 R2").closest("tr")!;
+        expect(within(rowEl).getByText("Persona")).toBeInTheDocument();
+        expect(within(rowEl).getByRole("link", { name: "Manage →" })).toHaveAttribute(
+          "href",
+          "/management/personas/persona-be19a1fac471247f2b2a",
+        );
+        expect(within(populatedTable).queryByText("No rows.")).not.toBeInTheDocument();
+        expect(within(populatedTable).queryByText("Loading…")).not.toBeInTheDocument();
+        expect(within(populatedTable).queryByText("Backend temporarily unavailable")).not.toBeInTheDocument();
+      } finally {
+        actual.__resetV5LiveCacheForTests();
+        vi.restoreAllMocks();
+      }
+    });
+
+    it("changing the dimension or the period while a read is in flight never shows the no rows text before that read finishes", async () => {
+      const actual = await enableRealUseV5Live();
+      const resolvers: Array<(value: PerformanceAttributionResult) => void> = [];
+      const getLiveOnlySpy = vi
+        .spyOn(mgmt.performanceAttribution, "getLiveOnly")
+        .mockImplementation(
+          () =>
+            new Promise<PerformanceAttributionResult>((resolve) => {
+              resolvers.push(resolve);
+            }),
+        );
+
+      try {
+        renderPage("/management/performance-attribution?period=latest");
+
+        const table = screen.getByRole("table");
+        expect(getLiveOnlySpy).toHaveBeenLastCalledWith(undefined, "latest", expect.any(Object));
+        expect(within(table).getByText("Loading…")).toBeInTheDocument();
+        expect(within(table).queryByText("No rows.")).not.toBeInTheDocument();
+
+        // Change dimension while the initial read is still in flight
+        fireEvent.change(screen.getByRole("combobox", { name: "Dimension" }), {
+          target: { value: "persona" },
+        });
+        expect(getLiveOnlySpy).toHaveBeenLastCalledWith("persona", "latest", expect.any(Object));
+        expect(within(table).getByText("Loading…")).toBeInTheDocument();
+        expect(within(table).queryByText("No rows.")).not.toBeInTheDocument();
+
+        // Change period while the persona read is still in flight
+        fireEvent.change(screen.getByRole("combobox", { name: "Period" }), {
+          target: { value: "30d" },
+        });
+        expect(getLiveOnlySpy).toHaveBeenLastCalledWith("persona", "30d", expect.any(Object));
+        expect(within(table).getByText("Loading…")).toBeInTheDocument();
+        expect(within(table).queryByText("No rows.")).not.toBeInTheDocument();
+
+        // Finish the in-flight read for persona + 30d with the real BFF row
+        await act(async () => {
+          resolvers[resolvers.length - 1]({
+            rows: [normalizePerformanceAttributionRow(REAL_HOSTED_PERSONA_ROW)],
+            period: LATEST_ONLY_PERIOD,
+          });
+        });
+
+        await waitFor(() => {
+          expect(within(table).getByText("青禾｜2330 台股 Paper 學習 R2")).toBeInTheDocument();
+        });
+        expect(within(table).queryByText("Loading…")).not.toBeInTheDocument();
+        expect(within(table).queryByText("No rows.")).not.toBeInTheDocument();
+
+        // Switch dimension again to strategy (new read in flight) — must show Loading… and never No rows. before it finishes
+        fireEvent.change(screen.getByRole("combobox", { name: "Dimension" }), {
+          target: { value: "strategy" },
+        });
+        expect(getLiveOnlySpy).toHaveBeenLastCalledWith("strategy", "30d", expect.any(Object));
+        expect(within(table).getByText("Loading…")).toBeInTheDocument();
+        expect(within(table).queryByText("No rows.")).not.toBeInTheDocument();
+
+        // Resolve the strategy read with zero rows — only now may No rows. appear
+        await act(async () => {
+          resolvers[resolvers.length - 1]({
+            rows: [],
+            period: LATEST_ONLY_PERIOD,
+          });
+        });
+
+        await waitFor(() => {
+          expect(within(table).getByText("No rows.")).toBeInTheDocument();
+        });
+        expect(within(table).queryByText("Loading…")).not.toBeInTheDocument();
+      } finally {
+        actual.__resetV5LiveCacheForTests();
+        vi.restoreAllMocks();
+      }
+    });
+
+    it("preserves the focused persona fallback from both the fleet row and the operations read model", () => {
+      // 1. Direct Persona Fleet row fallback when formal attribution misses and operationsReadModel is unavailable
+      mocks.useV5Live
+        .mockReturnValueOnce({
+          data: attributionResult([]),
+          loading: false,
+          refresh: vi.fn(),
+        })
+        .mockReturnValueOnce({
+          data: [
+            {
+              personaId: REAL_HOSTED_PERSONA_ROW.dimension_key,
+              personaName: REAL_HOSTED_PERSONA_ROW.label,
+              owner: "pantheon-dev-browser",
+              ooda: "Act",
+              autonomy: "supervised",
+              perfDelta: 0.084,
+              humanNeeded: false,
+              lastMutation: "2026-11-05",
+              runtimeId: "runtime-2330-r2",
+              capitalPoolId: "pool-2330-r2",
+              performanceSummary: {
+                pnl: 18500,
+                maxDrawdown: 0.031,
+              },
+            },
+          ],
+          loading: false,
+          refresh: vi.fn(),
+        })
+        .mockReturnValueOnce({ data: [], loading: false, refresh: vi.fn() })
+        .mockReturnValueOnce({ data: undefined, loading: false, refresh: vi.fn() });
+
+      const { unmount } = renderPage(
+        `/management/performance-attribution?dimension=persona&persona=${REAL_HOSTED_PERSONA_ROW.dimension_key}`,
+      );
+
+      expect(screen.getByText("Fallback summary")).toBeInTheDocument();
+      expect(
+        screen.getByText(`${REAL_HOSTED_PERSONA_ROW.label} · Persona Fleet summary`),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText("No formal attribution matched. Showing the Persona Fleet summary; missing fields are rendered as —."),
+      ).toBeInTheDocument();
+      expect(screen.queryByText("No rows.")).not.toBeInTheDocument();
+
+      unmount();
+
+      // 2. Operations read model fallback when formal attribution misses and operationsReadModel is available
+      mocks.useV5Live
+        .mockReturnValueOnce({
+          data: attributionResult([]),
+          loading: false,
+          refresh: vi.fn(),
+        })
+        .mockReturnValueOnce({ data: [], loading: false, refresh: vi.fn() })
+        .mockReturnValueOnce({ data: [], loading: false, refresh: vi.fn() })
+        .mockReturnValueOnce({
+          data: {
+            identity: {
+              personaId: REAL_HOSTED_PERSONA_ROW.dimension_key,
+              personaLabel: REAL_HOSTED_PERSONA_ROW.label,
+              runtimeIds: ["runtime-2330-r2"],
+              paperLedgerIds: [],
+              capitalPoolIds: ["pool-2330-r2"],
+              sleeveIds: [],
+              strategyIds: ["strategy-2330-r2"],
+              artifactIds: [],
+              brokerIds: [],
+              period: "latest",
+              asOf: "2026-11-05T00:00:00Z",
+            },
+            dataConfidence: "fallback",
+            performance: { pnl: 18500, pnlPct: 0.084, drawdownPct: 0.031 },
+            sources: [{ sourceName: "persona_fleet", sourceStatus: "ok", sourceRowCount: 1 }],
+            diagnostics: [],
+          },
+          loading: false,
+          refresh: vi.fn(),
+        });
+
+      renderPage(
+        `/management/performance-attribution?dimension=persona&persona=${REAL_HOSTED_PERSONA_ROW.dimension_key}`,
+      );
+
+      expect(
+        screen.getByText(`${REAL_HOSTED_PERSONA_ROW.label} · operations summary`),
+      ).toBeInTheDocument();
+      expect(screen.queryByText("No rows.")).not.toBeInTheDocument();
+    });
   });
 });

@@ -18,6 +18,7 @@ import {
   adaptPortfolioExposureMonitor,
   adaptPortfolioHoldingRows,
   adaptQuarterlyRankingRows,
+  adaptEvolutionQualificationReport,
   defaultTradingPulseModel,
   mgmt,
 } from "@/lib/bff-v1/management";
@@ -378,6 +379,7 @@ describe("mgmt façade (PM-Live)", () => {
           mark_price: 15300,
           market_value: 30600,
           unrealized_pnl: 200,
+          mark_status: "available",
           last_mark_at: "2026-07-10T00:00:00Z",
         }],
       },
@@ -397,6 +399,8 @@ describe("mgmt façade (PM-Live)", () => {
       runtimeId: "runtime-alpha",
       symbol: "TXF",
       marketValue: 30600,
+      markStatus: "available",
+      lastMarkAt: "2026-07-10T00:00:00Z",
     });
   });
 
@@ -461,6 +465,7 @@ describe("mgmt façade (PM-Live)", () => {
     expect(await mgmt.quarterlyRanking.formulaLiveOnly()).toBeUndefined();
     expect(await mgmt.performanceAttribution.listLiveOnly("persona", "30d")).toEqual([]);
     expect(await mgmt.operationsReadModel.getLiveOnly("persona-alpha", "30d")).toBeUndefined();
+    expect(await mgmt.evolutionQualification.getLiveOnly()).toBeUndefined();
   });
 
   it("adapts live Trading Pulse aggregate without falling back to legacy rows", () => {
@@ -533,6 +538,290 @@ describe("mgmt façade (PM-Live)", () => {
     });
     expect(out?.meta.surfaces.paper_live_drift.status).toBe("degraded");
     expect(out?.meta.coverage).toMatchObject({ missingMonitoringRuntimeIds: ["rt-live-1"] });
+  });
+
+  it("normalizes Trading Pulse card details, metric_coverage, coverage, and retired_runtime_count for both snake_case and camelCase", () => {
+    const snakeCaseOut = adaptTradingPulseOverview({
+      data: {
+        id: "management-trading-pulse",
+        summary: {
+          runtime_count: 90,
+          retired_runtime_count: 113,
+          telemetry_coverage_count: 81,
+          monitoring_coverage_count: 79,
+          row_health_degraded_count: 12,
+          row_health_status_counts: { ok: 78, degraded: 12 },
+          total_pnl: 1450.5,
+          worst_drawdown: 0.042,
+          average_fill_rate: 0.964,
+          worst_slippage_bps: 4.25,
+          baseline_comparison_count: 76,
+          baseline_breached_count: 0,
+          by_status: { active: 1, running: 89 },
+          by_stage: { paper: 88, live_running: 2 },
+          by_baseline_status: { ok: 72, watch: 4, breached: 0 },
+          coverage: {
+            runtime_count: 90,
+            telemetry_coverage_count: 81,
+          },
+        },
+        cards: [
+          {
+            card_id: "runtime-status",
+            label: "Runtime Status",
+            value: 90,
+            details: {
+              by_status: { active: 1, running: 89 },
+              by_stage: { paper: 88, live_running: 2 },
+            },
+          },
+          {
+            card_id: "row-health",
+            label: "Row Health",
+            value: 12,
+            details: {
+              row_health_status_counts: { ok: 78, degraded: 12 },
+              degraded_runtime_ids: ["rt-paper-01", "rt-paper-02"],
+            },
+          },
+          {
+            card_id: "pnl",
+            label: "P&L",
+            value: 1450.5,
+            details: {
+              telemetry_coverage_count: 81,
+              metric_coverage: {
+                available_count: 81,
+                missing_count: 9,
+                missing_runtime_ids: ["rt-paper-05"],
+              },
+            },
+          },
+          {
+            card_id: "drawdown",
+            label: "Worst Drawdown",
+            value: 0.042,
+            details: {
+              metric_coverage: {
+                available_count: 80,
+                missing_count: 10,
+                missing_runtime_ids: ["rt-paper-05", "rt-paper-06"],
+              },
+            },
+          },
+          {
+            card_id: "execution-quality",
+            label: "Execution Quality",
+            value: 0.964,
+            details: {
+              worst_slippage_bps: 4.25,
+              metric_coverage: {
+                available_count: 77,
+                missing_count: 13,
+                missing_runtime_ids: ["rt-paper-05", "rt-paper-06", "rt-paper-07"],
+              },
+            },
+          },
+          {
+            card_id: "baseline-comparison",
+            label: "Baseline Comparison",
+            value: 0,
+            details: {
+              baseline_comparison_count: 76,
+              by_baseline_status: { ok: 72, watch: 4, breached: 0 },
+              missing_baseline_runtime_ids: ["rt-paper-03", "rt-paper-04"],
+            },
+          },
+        ],
+        runtime_rows: [],
+      },
+      meta: {
+        snapshot_at: "2026-11-05T12:00:00Z",
+        surfaces: {
+          management_trading_pulse: { status: "degraded", source: "bff_composed" },
+        },
+        coverage: {
+          monitoring_coverage_count: 79,
+          paper_runtime_count: 88,
+          baseline_comparison_count: 76,
+          row_health_degraded_count: 12,
+          row_health_status_counts: { ok: 78, degraded: 12 },
+          missing_telemetry_runtime_ids: ["rt-paper-05"],
+          missing_monitoring_runtime_ids: ["rt-paper-06"],
+          missing_baseline_runtime_ids: ["rt-paper-03", "rt-paper-04"],
+          degraded_runtime_ids: ["rt-paper-01", "rt-paper-02"],
+          metric_coverage: {
+            pnl: {
+              available_count: 81,
+              missing_count: 9,
+              missing_runtime_ids: ["rt-paper-05"],
+            },
+          },
+        },
+      },
+    });
+
+    expect(snakeCaseOut?.summary.retiredRuntimeCount).toBe(113);
+    expect(snakeCaseOut?.summary.coverage).toMatchObject({
+      runtimeCount: 90,
+      telemetryCoverageCount: 81,
+      monitoringCoverageCount: 79,
+      paperRuntimeCount: 88,
+      baselineComparisonCount: 76,
+      rowHealthDegradedCount: 12,
+      rowHealthStatusCounts: { ok: 78, degraded: 12 },
+      missingTelemetryRuntimeIds: ["rt-paper-05"],
+      missingMonitoringRuntimeIds: ["rt-paper-06"],
+      missingBaselineRuntimeIds: ["rt-paper-03", "rt-paper-04"],
+      degradedRuntimeIds: ["rt-paper-01", "rt-paper-02"],
+      metricCoverage: {
+        pnl: {
+          availableCount: 81,
+          missingCount: 9,
+          missingRuntimeIds: ["rt-paper-05"],
+        },
+      },
+    });
+    expect(snakeCaseOut?.cards[0].details).toMatchObject({
+      byStatus: { active: 1, running: 89 },
+      byStage: { paper: 88, live_running: 2 },
+    });
+    expect(snakeCaseOut?.cards[1].details).toMatchObject({
+      rowHealthStatusCounts: { ok: 78, degraded: 12 },
+      degradedRuntimeIds: ["rt-paper-01", "rt-paper-02"],
+    });
+    expect(snakeCaseOut?.cards[2].details).toMatchObject({
+      telemetryCoverageCount: 81,
+      metricCoverage: {
+        availableCount: 81,
+        missingCount: 9,
+        missingRuntimeIds: ["rt-paper-05"],
+      },
+    });
+    expect(snakeCaseOut?.cards[3].details).toMatchObject({
+      metricCoverage: {
+        availableCount: 80,
+        missingCount: 10,
+        missingRuntimeIds: ["rt-paper-05", "rt-paper-06"],
+      },
+    });
+    expect(snakeCaseOut?.cards[4].details).toMatchObject({
+      worstSlippageBps: 4.25,
+      metricCoverage: {
+        availableCount: 77,
+        missingCount: 13,
+        missingRuntimeIds: ["rt-paper-05", "rt-paper-06", "rt-paper-07"],
+      },
+    });
+    expect(snakeCaseOut?.cards[5].details).toMatchObject({
+      baselineComparisonCount: 76,
+      byBaselineStatus: { ok: 72, watch: 4, breached: 0 },
+      missingBaselineRuntimeIds: ["rt-paper-03", "rt-paper-04"],
+    });
+
+    const camelCaseOut = adaptTradingPulseOverview({
+      data: {
+        id: "management-trading-pulse",
+        summary: {
+          runtimeCount: 10,
+          retiredRuntimeCount: 5,
+          telemetryCoverageCount: 9,
+          monitoringCoverageCount: 8,
+          baselineComparisonCount: 7,
+          coverage: {
+            runtimeCount: 10,
+            telemetryCoverageCount: 9,
+          },
+        },
+        cards: [
+          {
+            cardId: "runtime-status",
+            label: "Runtime Status",
+            value: 10,
+            details: {
+              byStatus: { running: 10 },
+              byStage: { paper: 10 },
+              rowHealthStatusCounts: { ok: 9, degraded: 1 },
+              degradedRuntimeIds: ["rt-1"],
+              telemetryCoverageCount: 9,
+              metricCoverage: {
+                availableCount: 9,
+                missingCount: 1,
+                missingRuntimeIds: ["rt-10"],
+              },
+              worstSlippageBps: 1.5,
+              baselineComparisonCount: 7,
+              byBaselineStatus: { ok: 7 },
+              missingBaselineRuntimeIds: ["rt-8", "rt-9", "rt-10"],
+            },
+          },
+        ],
+        runtimeRows: [],
+      },
+      meta: {
+        snapshotAt: "2026-11-05T12:00:00Z",
+        surfaces: {
+          management_trading_pulse: { status: "ok", source: "bff_composed" },
+        },
+        coverage: {
+          monitoringCoverageCount: 8,
+          paperRuntimeCount: 10,
+          baselineComparisonCount: 7,
+          rowHealthDegradedCount: 1,
+          rowHealthStatusCounts: { ok: 9, degraded: 1 },
+          missingTelemetryRuntimeIds: ["rt-10"],
+          missingMonitoringRuntimeIds: ["rt-9", "rt-10"],
+          missingBaselineRuntimeIds: ["rt-8", "rt-9", "rt-10"],
+          degradedRuntimeIds: ["rt-1"],
+        },
+      },
+    });
+
+    expect(camelCaseOut?.summary.retiredRuntimeCount).toBe(5);
+    expect(camelCaseOut?.summary.coverage).toMatchObject({
+      runtimeCount: 10,
+      telemetryCoverageCount: 9,
+      monitoringCoverageCount: 8,
+      paperRuntimeCount: 10,
+      baselineComparisonCount: 7,
+    });
+    expect(camelCaseOut?.cards[0].details).toMatchObject({
+      byStatus: { running: 10 },
+      byStage: { paper: 10 },
+      rowHealthStatusCounts: { ok: 9, degraded: 1 },
+      degradedRuntimeIds: ["rt-1"],
+      telemetryCoverageCount: 9,
+      metricCoverage: {
+        availableCount: 9,
+        missingCount: 1,
+        missingRuntimeIds: ["rt-10"],
+      },
+      worstSlippageBps: 1.5,
+      baselineComparisonCount: 7,
+      byBaselineStatus: { ok: 7 },
+      missingBaselineRuntimeIds: ["rt-8", "rt-9", "rt-10"],
+    });
+
+    const absentCoverageOut = adaptTradingPulseOverview({
+      data: {
+        id: "management-trading-pulse",
+        summary: {
+          runtime_count: 10,
+        },
+        cards: [],
+        runtime_rows: [],
+      },
+      meta: {
+        snapshot_at: "2026-11-05T12:00:00Z",
+        surfaces: {},
+        coverage: {},
+      },
+    });
+
+    expect(absentCoverageOut?.summary.retiredRuntimeCount).toBeUndefined();
+    expect(absentCoverageOut?.summary.coverage?.telemetryCoverageCount).toBeUndefined();
+    expect(absentCoverageOut?.summary.coverage?.monitoringCoverageCount).toBeUndefined();
+    expect(absentCoverageOut?.summary.coverage?.baselineComparisonCount).toBeUndefined();
   });
 
   it("adapts legacy Trading Pulse rows as degraded local snapshots", () => {
@@ -939,6 +1228,117 @@ describe("mgmt façade (PM-Live)", () => {
       evidenceRefs: ["evidence:pool-canary-tw-equity:readiness"],
       links: {
         manageHref: "/management/approvals?approval=dec-capital-pool-activation-001",
+      },
+    });
+  });
+
+  it("adapts pending incident rows to canProceed true while honoring explicit can_proceed false and keeping non-incident pending rows canProceed false", () => {
+    const realPendingIncidentRow = {
+      id: "incident:inc-deployment-comp-deployment-saga-plan-persona-paper-abb0434d691076cbc08c",
+      inboxType: "incident",
+      source_type: "incident",
+      status: "open",
+      action_state: "pending",
+      priority: "critical",
+      created_at: "2026-10-29T13:14:36Z",
+      route: "/management/incidents/inc-deployment-comp-deployment-saga-plan-persona-paper-abb0434d691076cbc08c",
+      allowedActions: {
+        canReview: true,
+        canRemediate: true,
+      },
+      title: "Deployment compensation entered safe mode for deployment-saga-plan-persona-paper-abb0434d691076cbc08c",
+    };
+
+    const explicitBlockedIncidentRow = {
+      ...realPendingIncidentRow,
+      id: "incident:inc-deployment-comp-explicit-blocked",
+      can_proceed: false,
+    };
+
+    const pendingApprovalRow = {
+      id: "approval:dec-pending-001",
+      inboxType: "approval",
+      source_type: "approval",
+      status: "open",
+      action_state: "pending",
+      title: "Pending approval gate",
+      route: "/management/approvals?approval=dec-pending-001",
+    };
+
+    const pendingReadinessBlockerRow = {
+      id: "readiness_blocker:persona:persona-pending-001",
+      inboxType: "readiness_blocker",
+      source_type: "readiness_blocker",
+      status: "open",
+      action_state: "pending",
+      title: "Pending readiness blocker",
+      route: "/management/persona-fleet?persona=persona-pending-001",
+    };
+
+    const listOut = adaptHumanInboxList({
+      data: {
+        id: "human_inbox",
+        items: [
+          realPendingIncidentRow,
+          explicitBlockedIncidentRow,
+          pendingApprovalRow,
+          pendingReadinessBlockerRow,
+        ],
+      },
+    });
+
+    expect(listOut).toHaveLength(4);
+    expect(listOut?.[0]).toMatchObject({
+      id: "incident:inc-deployment-comp-deployment-saga-plan-persona-paper-abb0434d691076cbc08c",
+      kind: "incident",
+      title: "Deployment compensation entered safe mode for deployment-saga-plan-persona-paper-abb0434d691076cbc08c",
+      status: "open",
+      canProceed: true,
+      canDecide: false,
+      requiredRole: "",
+      personaId: undefined,
+      summary: undefined,
+      allowedActions: {
+        canDecide: false,
+        canApprove: false,
+        canReject: false,
+      },
+      links: {
+        manageHref: "/management/incidents/inc-deployment-comp-deployment-saga-plan-persona-paper-abb0434d691076cbc08c",
+      },
+    });
+    expect(listOut?.[1]).toMatchObject({
+      id: "incident:inc-deployment-comp-explicit-blocked",
+      kind: "incident",
+      canProceed: false,
+      canDecide: false,
+    });
+    expect(listOut?.[2]).toMatchObject({
+      id: "approval:dec-pending-001",
+      kind: "approval",
+      canProceed: false,
+    });
+    expect(listOut?.[3]).toMatchObject({
+      id: "readiness_blocker:persona:persona-pending-001",
+      kind: "readiness_blocker",
+      canProceed: false,
+    });
+
+    const detailOut = adaptHumanInboxDetail({
+      data: {
+        item: realPendingIncidentRow,
+      },
+    });
+    expect(detailOut).toMatchObject({
+      id: "incident:inc-deployment-comp-deployment-saga-plan-persona-paper-abb0434d691076cbc08c",
+      kind: "incident",
+      canProceed: true,
+      canDecide: false,
+      requiredRole: "",
+      personaId: undefined,
+      summary: undefined,
+      links: {
+        manageHref: "/management/incidents/inc-deployment-comp-deployment-saga-plan-persona-paper-abb0434d691076cbc08c",
       },
     });
   });
@@ -2387,5 +2787,273 @@ describe("Cockpit child read contracts (actual-shaped owner payloads)", () => {
       personaId: "p1", personaName: "One", currentRank: 1, tier: "A",
       links: { manageHref: "/management/personas/p1" },
     });
+  });
+});
+
+describe("evolutionQualification BFF contract", () => {
+  const hostedZeroQualifiedPayload = {
+    data: {
+      tenant_id: "default",
+      sweep_id: "evo-qual-sweep-20261105-0001",
+      policy_version: "evolution-qualification.v1",
+      evaluated_at: "2026-11-05T00:00:00Z",
+      evaluated: 649,
+      qualified: 0,
+      drafted: 0,
+      counts_by_first_failing_criterion: {
+        real_threshold_signal: 649,
+      },
+      failure_reason: null,
+      items: [
+        {
+          decision_id: "evo-sweep-agent-000b205c0ef9-0000",
+          sweep_id: "evo-qual-sweep-20261105-0001",
+          tenant_id: "default",
+          target_type: "infra_component",
+          target_id: "infra-component-agent-finding-000b205c0ef9",
+          metric_name: "incident_followup_required",
+          qualified: false,
+          first_failing_criterion: "real_threshold_signal",
+          failure_reason: "metric incident_followup_required is not a numeric threshold breach",
+          policy_version: "evolution-qualification.v1",
+          evaluated_at: "2026-11-05T00:00:00Z",
+          program_id: null,
+          criteria: [
+            {
+              criterion: "real_threshold_signal",
+              result: "failed",
+              observed: { metric_name: "incident_followup_required", action_type: "flag_for_review" },
+              threshold: "numeric metric with finite observed_value and threshold_value",
+              reason: "metric incident_followup_required is not a numeric threshold breach",
+            },
+            {
+              criterion: "real_target",
+              result: "failed",
+              observed: { target_type: "infra_component", target_id: "infra-component-agent-finding-000b205c0ef9" },
+              threshold: "resolvable persona, strategy, or runtime target",
+              reason: "target_type infra_component is not an evolution target",
+            },
+            {
+              criterion: "persistent_breach",
+              result: "failed",
+              observed: 0,
+              threshold: 2,
+              reason: "fewer than 2 distinct breach observations",
+            },
+            {
+              criterion: "fresh_evidence",
+              result: "passed",
+              observed: "2026-11-05T00:00:00Z",
+              threshold: "<= 24h",
+              reason: null,
+            },
+            {
+              criterion: "executable_action",
+              result: "failed",
+              observed: "flag_for_review",
+              threshold: "executable research/mutation action",
+              reason: "flag_for_review does not specify an executable evolution mutation",
+            },
+            {
+              criterion: "no_open_duplicate",
+              result: "passed",
+              observed: 0,
+              threshold: 0,
+              reason: null,
+            },
+          ],
+        },
+      ],
+      total: 649,
+      limit: 50,
+      offset: 0,
+    },
+    meta: {
+      snapshot_at: "2026-11-05T00:00:00Z",
+    },
+  };
+
+  it("adapts GET /bff/management/evolution-qualification hosted 649/0 report and all six criteria", () => {
+    const report = adaptEvolutionQualificationReport(hostedZeroQualifiedPayload);
+    expect(report).not.toBeNull();
+    expect(report?.policy_version).toBe("evolution-qualification.v1");
+    expect(report?.evaluated_at).toBe("2026-11-05T00:00:00Z");
+    expect(report?.evaluated).toBe(649);
+    expect(report?.qualified).toBe(0);
+    expect(report?.counts_by_first_failing_criterion).toEqual({
+      real_threshold_signal: 649,
+    });
+    expect(report?.items).toHaveLength(1);
+    expect(report?.items[0].decision_id).toBe("evo-sweep-agent-000b205c0ef9-0000");
+    expect(report?.items[0].criteria.map((c) => c.criterion)).toEqual([
+      "real_threshold_signal",
+      "real_target",
+      "persistent_breach",
+      "fresh_evidence",
+      "executable_action",
+      "no_open_duplicate",
+    ]);
+  });
+
+  it("fetches GET /bff/management/evolution-qualification in live mode with query filters", async () => {
+    vi.stubEnv("VITE_BFF_MODE", "live");
+    vi.stubEnv("VITE_BFF_FALLBACK", "strict");
+    liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
+    const seenUrls: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      seenUrls.push(String(input));
+      return new Response(JSON.stringify(hostedZeroQualifiedPayload), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+
+    const report = await mgmt.evolutionQualification.get({
+      qualified: false,
+      offset: 0,
+      pageSize: 50,
+    });
+
+    expect(seenUrls).toEqual([
+      "/bff/management/evolution-qualification?qualified=false&offset=0&page_size=50",
+    ]);
+    expect(report.evaluated).toBe(649);
+    expect(report.qualified).toBe(0);
+    expect(report.counts_by_first_failing_criterion.real_threshold_signal).toBe(649);
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+    liveStatus._reset();
+  });
+
+  it("getLiveOnly treats unusable shapes as undefined in strict mode without moving liveStatus to fallback while get keeps its strict contract", async () => {
+    expect(adaptEvolutionQualificationReport([])).toBeNull();
+    expect(adaptEvolutionQualificationReport({ data: [], items: [] })).toBeNull();
+    expect(adaptEvolutionQualificationReport({ items: [], meta: {} })).toBeNull();
+    expect(adaptEvolutionQualificationReport({})).toBeNull();
+
+    vi.stubEnv("VITE_BFF_MODE", "live");
+    vi.stubEnv("VITE_BFF_FALLBACK", "strict");
+    liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
+
+    const bodies: unknown[] = [[], { data: [], items: [] }, { items: [], meta: {} }];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
+      const next = bodies.shift() ?? [];
+      return new Response(JSON.stringify(next), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+
+    for (let i = 0; i < 3; i += 1) {
+      const optionalReport = await mgmt.evolutionQualification.getLiveOnly();
+      expect(optionalReport).toBeUndefined();
+      expect(liveStatus.get().effective).toBe("live");
+      expect(liveStatus.get().lastError).toBeUndefined();
+    }
+
+    await expect(mgmt.evolutionQualification.get()).rejects.toThrow(
+      /live adapter contract mismatch \(strict mode\): adapter returned no data/,
+    );
+    expect(liveStatus.get().effective).toBe("mock");
+    expect(liveStatus.get().lastError).toMatch(/strict: live adapter contract mismatch/);
+
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+    liveStatus._reset();
+  });
+
+  it("keeps traceable, needsAttention, and openOperation summary values null when omitted by BFF summary, never counts unknown actionability as needing attention, and labels official_reference rows without route_href as having no internal link", () => {
+    const items = Array.from({ length: 20 }, (_, idx) => ({
+      id: `evitem-tw_price_daily-0050-2026-11-05-${String(idx).padStart(2, "0")}`,
+      ref_id: `evitem-tw_price_daily-0050-2026-11-05-${String(idx).padStart(2, "0")}`,
+      evidence_item_id: `evitem-tw_price_daily-0050-2026-11-05-${String(idx).padStart(2, "0")}`,
+      title: `TW official tw_price_daily TWSE 0050 2026-11-05 #${idx + 1}`,
+      citation_label: `TW official tw_price_daily TWSE 0050 2026-11-05 #${idx + 1}`,
+      source_type: "official_reference",
+      source_ref: "tw-official://tw_price_daily/TWSE/0050/2026-11-05/3ec7b3e4e9083086",
+      captured_at: "2026-11-05T14:30:00+08:00",
+      available_time: "2026-11-05T14:30:00+08:00",
+      event_time: "2026-11-05T00:00:00+08:00",
+      item_type: "tw_price_daily",
+      link_type: "tw_price_daily",
+      metadata: { source_class: "official_reference" },
+      credibility: { tier: "producer_record", verified: true },
+      resolved_link: {
+        availability: "unavailable",
+        route_href: null,
+        display_label: "Source unavailable",
+        open_in_new_tab: false,
+      },
+      actionability: {
+        state: "unknown",
+        severity: "info",
+        reasons: [],
+        can_trace: false,
+        can_open_source: false,
+        can_open_linked_object: false,
+      },
+      operation: {
+        status: "none",
+        task_refs: [],
+        command_refs: [],
+        audit_refs: [],
+        events: [],
+      },
+    }));
+
+    const out = adaptManagementEvidenceOverview({
+      data: {
+        id: "management-evidence",
+        items,
+        summary: {
+          total_evidence: 518,
+          returned_evidence: 20,
+          visible_evidence: 518,
+          redacted_evidence: 0,
+          verified_evidence: 518,
+          by_source_type: { official_reference: 518 },
+          by_link_type: { tw_price_daily: 518 },
+          by_credibility_tier: { producer_record: 518 },
+        },
+        facets: {
+          source_types: { official_reference: 518 },
+          link_types: { tw_price_daily: 518 },
+          credibility_tiers: { producer_record: 518 },
+        },
+      },
+      page_info: {
+        next_page_token: "20",
+        total: 518,
+        page_size: 20,
+      },
+      meta: {
+        snapshot_at: "2026-11-05T06:30:00Z",
+        surfaces: {
+          management_evidence: { status: "ok", source: "service_store" },
+          evidence_refs: { status: "ok", source: "service_store" },
+        },
+        redacted_evidence_count: 0,
+      },
+    });
+
+    expect(out?.summary.totalEvidence).toBe(518);
+    expect(out?.summary.verifiedEvidence).toBe(518);
+    expect(out?.summary.traceableEvidence).toBeNull();
+    expect(out?.summary.needsAttentionEvidence).toBeNull();
+    expect(out?.summary.openOperationEvidence).toBeNull();
+    expect(out?.summary.byActionabilityState).toEqual({ unknown: 20 });
+
+    for (const item of out?.items ?? []) {
+      expect(item.resolvedLink).toEqual({
+        availability: "no_internal_link",
+        routeHref: null,
+        route_href: null,
+        displayLabel: "No internal link",
+        display_label: "No internal link",
+        openInNewTab: false,
+        open_in_new_tab: false,
+      });
+      expect(item.resolvedLink.displayLabel).not.toBe("Source unavailable");
+    }
   });
 });

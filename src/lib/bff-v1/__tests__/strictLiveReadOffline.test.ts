@@ -4,6 +4,7 @@
 // every other live read to mock seed via withLiveOrMock's offline path.
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { capitalPools, liveStatus, BffError } from "@/lib/bff-v1";
+import { alphaFactory } from "@/lib/bff-v1/alphaFactory";
 
 describe("strictLiveRead — real backend errors do not take the app offline", () => {
   const realFetch = globalThis.fetch;
@@ -37,5 +38,12 @@ describe("strictLiveRead — real backend errors do not take the app offline", (
     globalThis.fetch = vi.fn().mockResolvedValue(new Response("boom", { status: 503 }));
     await expect(capitalPools.get("pool-x")).rejects.toBeInstanceOf(BffError);
     expect(liveStatus.get().effective).toBe("mock");
+  });
+
+  it("alphaFactory.get in live mode rejects on 5xx without returning mock fixtures and reports strict fallback", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(new Response("upstream unavailable", { status: 503 }));
+    await expect(alphaFactory.get()).rejects.toBeInstanceOf(BffError);
+    expect(liveStatus.get().effective).toBe("mock");
+    expect(liveStatus.get().lastError).toMatch(/^strict:/);
   });
 });
