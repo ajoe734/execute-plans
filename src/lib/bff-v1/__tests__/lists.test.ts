@@ -211,6 +211,76 @@ describe("VI-1 lists facade", () => {
       },
     });
   });
+
+  it("loads all pages for lists.personas, lists.capitalPools, lists.runtimes, and lists.deployments via shared pagination helper", async () => {
+    vi.stubEnv("MODE", "development");
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("VITE_BFF_MODE", "live");
+    vi.stubEnv("VITE_BFF_FALLBACK", "strict");
+    liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
+
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      if (url === "/bff/personas?page_size=200") {
+        return new Response(
+          JSON.stringify({
+            data: [{ id: "persona-p1", name: "Persona Page 1" }],
+            page_info: { page_size: 200, total: 2, next_page_token: "200" },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (url === "/bff/personas?page_size=200&page_token=200") {
+        return new Response(
+          JSON.stringify({
+            data: [{ id: "persona-c6ef44745087d11cc138", name: "Retired Provisioning Persona" }],
+            page_info: { page_size: 200, total: 2, next_page_token: null },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (url === "/bff/deployments?page_size=200") {
+        return new Response(
+          JSON.stringify({
+            data: [{ plan_id: "plan-p1", target_stage: "paper", artifact_version: "1", status: "active" }],
+            page_info: { page_size: 200, total: 2, next_page_token: "200" },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (url === "/bff/deployments?page_size=200&page_token=200") {
+        return new Response(
+          JSON.stringify({
+            data: [
+              {
+                plan_id: "plan-persona-paper-298e138c136c9840b0e4",
+                target_stage: "paper",
+                artifact_version: "1",
+                status: "active",
+              },
+            ],
+            page_info: { page_size: 200, total: 2, next_page_token: null },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    const personasEnv = await lists.personas();
+    expect(personasEnv.items.map((p) => (p as { id: string }).id)).toEqual([
+      "persona-p1",
+      "persona-c6ef44745087d11cc138",
+    ]);
+    expect(personasEnv.cursor).toEqual({});
+
+    const deploymentsEnv = await lists.deployments();
+    expect(deploymentsEnv.items.map((d) => (d as { id: string }).id)).toEqual([
+      "plan-p1",
+      "plan-persona-paper-298e138c136c9840b0e4",
+    ]);
+    expect(deploymentsEnv.cursor).toEqual({});
+  });
 });
 
 describe("VI-1 useLiveListV1", () => {

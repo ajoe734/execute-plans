@@ -49,7 +49,8 @@ describe("MockDataBadge", () => {
   });
 
   it("does not badge live_required helpers", () => {
-    expect(getMockDataBadgeModel("bff.strategies.list", liveSnapshot)).toBeNull();
+    expect(getMockDataBadgeModel("bff.strategies.listNonDraft", liveSnapshot)).toBeNull();
+    expect(getMockDataBadgeModel("bff.strategies.listForPersona", liveSnapshot)).toBeNull();
   });
 
   it("uses the taxonomy model in the rendered badge", () => {

@@ -19,7 +19,14 @@ import {
   normalizeIncidentTimestampFields,
 } from "./eventTimestamps";
 import { normalizeCapitalPool } from "./capitalPools";
-import { normalizeArtifactFields, normalizeBaseObjectFields } from "./domainReads";
+import {
+  collectPaginatedListPages,
+  MAX_PAGINATED_LIST_PAGES,
+  normalizeArtifactFields,
+  normalizeBaseObjectFields,
+  normalizeDeploymentFields,
+  PAGINATED_LIST_PAGE_SIZE,
+} from "./domainReads";
 import { normalizeEvolutionProgram } from "./evolution";
 import { normalizeJobFields } from "./operations";
 import { normalizeResearchTask } from "./research";
@@ -270,53 +277,35 @@ function strictLiveListLoader<T>(
   };
 }
 
-const MAX_PAGINATED_LIST_PAGES = 100;
-const PAGINATED_LIST_PAGE_SIZE = 200;
 const ARTIFACT_PAGINATED_LIST_PAGE_SIZE = 100;
 
 function strictLivePaginatedListLoader<T extends { id?: string }>(
   path: string,
   cls: ListClass,
-  adaptItem?: (value: unknown) => T | undefined,
+  adaptItem?: (value: unknown, index: number) => T | undefined,
   pageSize: number = PAGINATED_LIST_PAGE_SIZE,
 ): () => Promise<ListEnvelope<T>> {
   const adaptItems = (items: unknown[]): T[] => adaptItem
-    ? items.map((item) => adaptItem(item)).filter((item): item is T => Boolean(item))
+    ? items.map((item, index) => adaptItem(item, index)).filter((item): item is T => Boolean(item))
     : items as T[];
   return async () => {
-    const allItems: T[] = [];
-    const seenIds = new Set<string>();
-    const seenTokens = new Set<string>();
     let firstEnv: ListEnvelope<unknown> | undefined;
     let lastEnv: ListEnvelope<unknown> | undefined;
-    let pageToken: string | undefined;
 
-    for (let page = 0; page < MAX_PAGINATED_LIST_PAGES; page += 1) {
-      const data = await bffFetch<unknown>({
-        method: "GET",
-        path,
-        query: pageToken
-          ? { page_size: pageSize, page_token: pageToken }
-          : { page_size: pageSize },
-      });
-      const env = normalizeLiveListResponse<unknown>(data, cls);
-      if (!firstEnv) firstEnv = env;
-      lastEnv = env;
-      for (const item of adaptItems(env.items)) {
-        const itemId = typeof item?.id === "string" ? item.id.trim() : "";
-        if (itemId) {
-          if (seenIds.has(itemId)) continue;
-          seenIds.add(itemId);
-        }
-        allItems.push(item);
-      }
-      const nextToken = env.cursor.next?.trim();
-      if (!nextToken || seenTokens.has(nextToken)) {
-        break;
-      }
-      seenTokens.add(nextToken);
-      pageToken = nextToken;
-    }
+    const allItems = await collectPaginatedListPages<T>({
+      helperName: `lists:${path}`,
+      path,
+      pageSize,
+      maxPages: MAX_PAGINATED_LIST_PAGES,
+      fetchPage: (req) => bffFetch<unknown>(req),
+      extractPageItems: (data) => {
+        const env = normalizeLiveListResponse<unknown>(data, cls);
+        if (!firstEnv) firstEnv = env;
+        lastEnv = env;
+        return adaptItems(env.items);
+      },
+      extractNextToken: () => lastEnv?.cursor.next?.trim() || undefined,
+    });
 
     const baseEnv = lastEnv ?? firstEnv ?? normalizeLiveListResponse<unknown>([], cls);
     return {
@@ -414,7 +403,7 @@ function normalizeRuntimeKind(value: unknown): Runtime["kind"] {
   return (raw ?? "") as Runtime["kind"];
 }
 
-function adaptRuntimeRow(value: unknown, index: number): RuntimeListItem | null {
+export function adaptRuntimeRow(value: unknown, index: number): RuntimeListItem | null {
   const row = asRecord(value);
   if (!row) return null;
   const metadata = asRecord(row.metadata);
@@ -472,10 +461,11 @@ function strictLiveRuntimeListLoader(
   path: string,
   cls: ListClass = "entityRegistry",
 ): () => Promise<ListEnvelope<RuntimeListItem>> {
-  return async () => {
-    const data = await bffFetch<unknown>({ method: "GET", path });
-    return normalizeRuntimeListResponse(data, cls);
-  };
+  return strictLivePaginatedListLoader<RuntimeListItem>(
+    path,
+    cls,
+    (item, index) => adaptRuntimeRow(item, index) ?? undefined,
+  );
 }
 
 /** Per-entity list-class map (Pack D D22).
@@ -508,11 +498,11 @@ export const LIST_CLASS_BY_KEY = {
  *  live adapters. */
 export const lists = {
   strategies:      strictLiveStrategyListLoader(LIST_CLASS_BY_KEY.strategies, normalizeBaseObjectFields),
-  personas:        strictLiveListLoader(paths.personas(),           LIST_CLASS_BY_KEY.personas, normalizeBaseObjectFields),
+  personas:        strictLivePaginatedListLoader(paths.personas(),    LIST_CLASS_BY_KEY.personas, normalizeBaseObjectFields),
   capitalPools:    strictLivePaginatedListLoader(paths.capitalPools(), LIST_CLASS_BY_KEY.capitalPools, normalizeCapitalPool),
   rankingFormulas: strictLiveListLoader(paths.rankingFormulas(),    LIST_CLASS_BY_KEY.rankingFormulas, normalizeBaseObjectFields),
   rebalances:      strictLiveListLoader(paths.rebalances(),         LIST_CLASS_BY_KEY.rebalances, normalizeBaseObjectFields),
-  deployments:     strictLiveListLoader(paths.deployments(),        LIST_CLASS_BY_KEY.deployments, normalizeBaseObjectFields),
+  deployments:     strictLivePaginatedListLoader(paths.deployments(), LIST_CLASS_BY_KEY.deployments, normalizeDeploymentFields),
   evolution:       strictLiveListLoader(paths.evolutionPrograms(),  LIST_CLASS_BY_KEY.evolution, normalizeEvolutionProgram),
   research:        strictLiveListLoader(paths.researchTasks(),      LIST_CLASS_BY_KEY.research, normalizeResearchTask),
   artifacts:       strictLivePaginatedListLoader(

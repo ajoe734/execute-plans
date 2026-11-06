@@ -104,11 +104,11 @@ export const recordString = (record: UnknownRecord | undefined, ...keys: string[
 };
 
 const BASE_OBJECT_FIELD_ALIASES: Record<string, string[]> = {
-  id: ["id", "plan_id", "experiment_id", "artifact_id", "pool_id", "channel_id", "incident_id"],
-  name: ["name", "title", "label", "experiment_name", "plan_name", "pool_name", "plan_id"],
+  id: ["id", "persona_id", "strategy_id", "plan_id", "experiment_id", "artifact_id", "pool_id", "channel_id", "incident_id"],
+  name: ["name", "display_name", "displayName", "title", "label", "experiment_name", "plan_name", "pool_name", "plan_id", "persona_id", "strategy_id"],
   owner: ["owner", "owner_id", "ownerId", "owned_by", "created_by"],
   updatedAt: ["updatedAt", "updated_at", "last_updated_at", "lastUpdatedAt", "created_at"],
-  state: ["state", "status", "lifecycle_state", "lifecycleState"],
+  state: ["state", "status", "lifecycle_state", "lifecycleState", "lifecycle_status", "lifecycleStatus"],
   risk: ["risk", "risk_level", "riskLevel"],
 };
 
@@ -298,61 +298,172 @@ export const strictLiveDetailArtifact = <T>(
   strictLiveDetail<T>(helperName, path).then(normalizeArtifactFields);
 
 const ARTIFACT_LIST_PAGE_SIZE = 100;
-const MAX_ARTIFACT_LIST_PAGES = 100;
+export const MAX_PAGINATED_LIST_PAGES = 100;
+export const PAGINATED_LIST_PAGE_SIZE = 200;
 
-const nextArtifactPageToken = (body: unknown): string | undefined => {
+export const nextListPageToken = (body: unknown): string | undefined => {
   const record = asRecord(body);
   const data = asRecord(record?.data);
   const meta = asRecord(record?.meta);
   const cursor = asRecord(record?.cursor) ?? asRecord(data?.cursor) ?? asRecord(meta?.cursor);
   const pageInfo = asRecord(record?.page_info) ?? asRecord(data?.page_info) ?? asRecord(meta?.page_info);
-  return recordString(cursor, "next", "next_cursor") ?? recordString(pageInfo, "next_cursor", "next_page_token");
+  const token =
+    recordString(cursor, "next", "next_cursor") ??
+    recordString(pageInfo, "next_cursor", "next_page_token");
+  return token?.trim() || undefined;
 };
 
-export const strictLiveListArtifact = async <T>(
-  helperName: string,
-  path: string,
-): Promise<T[]> => {
+export interface PaginatedPagesOptions<T> {
+  helperName: string;
+  path: string;
+  query?: Record<string, string | number | boolean | undefined>;
+  pageSize?: number;
+  maxPages?: number;
+  fetchPage?: (req: BffRequest) => Promise<unknown>;
+  extractPageItems: (rawPage: unknown) => T[];
+  extractNextToken?: (rawPage: unknown) => string | undefined;
+  onPage?: (rawPage: unknown, pageIndex: number) => void;
+}
+
+export async function collectPaginatedListPages<T>(
+  options: PaginatedPagesOptions<T>,
+): Promise<T[]> {
+  const {
+    helperName,
+    path,
+    query,
+    pageSize = PAGINATED_LIST_PAGE_SIZE,
+    maxPages = MAX_PAGINATED_LIST_PAGES,
+    fetchPage = (req) => strictLiveRead<unknown>(helperName, req, (body) => body),
+    extractPageItems,
+    extractNextToken = nextListPageToken,
+    onPage,
+  } = options;
+
   const allItems: T[] = [];
   const seenIds = new Set<string>();
   const seenTokens = new Set<string>();
   let pageToken: string | undefined;
 
-  for (let page = 0; page < MAX_ARTIFACT_LIST_PAGES; page += 1) {
-    const rawBody = await strictLiveRead<unknown>(
-      helperName,
-      {
-        method: "GET",
-        path,
-        query: pageToken
-          ? { page_size: ARTIFACT_LIST_PAGE_SIZE, page_token: pageToken }
-          : { page_size: ARTIFACT_LIST_PAGE_SIZE },
+  for (let page = 0; page < maxPages; page += 1) {
+    const rawBody = await fetchPage({
+      method: "GET",
+      path,
+      query: {
+        ...query,
+        page_size: pageSize,
+        ...(pageToken ? { page_token: pageToken } : {}),
       },
-      (body) => body,
-    );
-    const pageItems = normalizeArtifactList(liveItemsFrom<T>(rawBody));
+    });
+    onPage?.(rawBody, page);
+    const pageItems = extractPageItems(rawBody);
     for (const item of pageItems) {
       const itemRecord = asRecord(item);
-      const itemId = recordString(itemRecord, "id");
+      const itemId = recordString(itemRecord, "id")?.trim();
       if (itemId) {
         if (seenIds.has(itemId)) continue;
         seenIds.add(itemId);
       }
       allItems.push(item);
     }
-    const nextToken = nextArtifactPageToken(rawBody);
+    const nextToken = extractNextToken(rawBody)?.trim() || undefined;
     if (!nextToken || seenTokens.has(nextToken)) {
       break;
+    }
+    if (page + 1 >= maxPages) {
+      const message = `${helperName} reached pagination cap (${maxPages} pages) for ${path} with next_page_token="${nextToken}" still present`;
+      liveStatus.reportFallback(`strict: ${message}`);
+      throw makeBffError({
+        code: "BACKEND_UNAVAILABLE",
+        message,
+      });
     }
     seenTokens.add(nextToken);
     pageToken = nextToken;
   }
 
   return allItems;
-};
+}
+
+export const strictLivePaginatedList = <T>(
+  helperName: string,
+  path: string,
+  adaptLive?: (body: unknown) => T[],
+  options?: {
+    query?: Record<string, string | number | boolean | undefined>;
+    pageSize?: number;
+    maxPages?: number;
+  },
+): Promise<T[]> =>
+  collectPaginatedListPages<T>({
+    helperName,
+    path,
+    query: options?.query,
+    pageSize: options?.pageSize,
+    maxPages: options?.maxPages,
+    extractPageItems: adaptLive ?? liveItemsFrom<T>,
+  });
+
+export const strictLiveListArtifact = async <T>(
+  helperName: string,
+  path: string,
+): Promise<T[]> =>
+  strictLivePaginatedList<T>(
+    helperName,
+    path,
+    (rawBody) => normalizeArtifactList(liveItemsFrom<T>(rawBody)),
+    { pageSize: ARTIFACT_LIST_PAGE_SIZE, maxPages: MAX_PAGINATED_LIST_PAGES },
+  );
 
 export function normalizeBaseObjectList<T>(rows: T[]): T[] {
   return rows.map((row) => normalizeBaseObjectFields(row) as T);
+}
+
+const DEPLOYMENT_FIELD_ALIASES: Record<string, string[]> = {
+  target: ["target", "target_stage", "current_stage"],
+  artifactId: ["artifactId", "artifact_id"],
+  version: ["version", "artifact_version"],
+  strategyId: ["strategyId", "strategy_id"],
+  planId: ["planId", "plan_id", "id"],
+  sponsorPersonaId: ["sponsorPersonaId", "sponsor_persona_id"],
+};
+
+export function normalizeDeploymentFields<T>(raw: T | undefined): T | undefined {
+  const inputRecord = asRecord(raw);
+  if (!inputRecord) return raw;
+  const base = normalizeBaseObjectFields(raw);
+  const record = asRecord(base) ?? inputRecord;
+  const patched: UnknownRecord = { ...record };
+  const id = recordString(inputRecord, "id", "plan_id", "planId", "deployment_id");
+  if (id !== undefined) {
+    patched.id = id;
+  }
+  const name = recordString(
+    inputRecord,
+    "name",
+    "display_name",
+    "displayName",
+    "title",
+    "label",
+    "plan_name",
+    "plan_id",
+    "planId",
+    "id",
+  );
+  if (name !== undefined) {
+    patched.name = name;
+  }
+  for (const [canonical, aliases] of Object.entries(DEPLOYMENT_FIELD_ALIASES)) {
+    const current = patched[canonical];
+    if (typeof current === "string" && current.trim()) continue;
+    const value = recordString(inputRecord, ...aliases);
+    if (value !== undefined) patched[canonical] = value;
+  }
+  return patched as T;
+}
+
+export function normalizeDeploymentList<T>(rows: T[]): T[] {
+  return rows.map((row) => normalizeDeploymentFields(row) as T);
 }
 
 export const strictLiveDetailNormalized = <T>(
@@ -366,3 +477,19 @@ export const strictLiveListNormalized = <T>(
   path: string,
 ): Promise<T[]> =>
   strictLiveList<T>(helperName, path).then(normalizeBaseObjectList);
+
+export const strictLivePaginatedListNormalized = <T>(
+  helperName: string,
+  path: string,
+  options?: {
+    query?: Record<string, string | number | boolean | undefined>;
+    pageSize?: number;
+    maxPages?: number;
+  },
+): Promise<T[]> =>
+  strictLivePaginatedList<T>(
+    helperName,
+    path,
+    (body) => normalizeBaseObjectList(liveItemsFrom<T>(body)),
+    options,
+  );

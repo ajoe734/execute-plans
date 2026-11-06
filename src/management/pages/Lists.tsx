@@ -831,6 +831,7 @@ export const RebalancesList = () => {
 
 export const DeploymentsList = () => {
   const t = useT();
+  const noData = t("common.noData");
   return (
     <ObjectListPage<Deployment>
       title={t("nav.deployments")}
@@ -838,8 +839,8 @@ export const DeploymentsList = () => {
       basePath="/management/deployments" liveKinds={["Deployment","DeploymentStage"]}
       createBehavior={{ kind: "drawer", entity: "deployment" }}
       extraColumns={[
-        { key: "tgt", header: t("table.target"), cell: (r) => <span className="text-mono text-xs uppercase">{r.target}</span> },
-        { key: "ver", header: t("table.version"), cell: (r) => <span className="text-mono text-xs">{r.version}</span> },
+        { key: "tgt", header: t("table.target"), cell: (r) => <span className="text-mono text-xs uppercase">{r.target || noData}</span> },
+        { key: "ver", header: t("table.version"), cell: (r) => <span className="text-mono text-xs">{r.version || noData}</span> },
       ]}
     />
   );

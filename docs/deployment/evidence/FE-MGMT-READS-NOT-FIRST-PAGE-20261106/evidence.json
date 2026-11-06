@@ -1,0 +1,149 @@
+{
+  "task_id": "FE-MGMT-READS-NOT-FIRST-PAGE-20261106",
+  "title": "Management pages compute from only the first 20 rows of each list",
+  "repository": "ajoe734/execute-plans",
+  "branch": "task/FE-MGMT-READS-NOT-FIRST-PAGE-20261106",
+  "owner": "Antigravity2",
+  "reviewer": "Claude",
+  "prerequisites": {
+    "FE-STRATEGY-LIST-HIDE-DRAFTS-20261106": {
+      "status": "done",
+      "satisfied": true,
+      "execute_plans_merge_commit": "3c99c7ae1cc0d393fe3c2392f4bfd6e4b2a8cc3f"
+    }
+  },
+  "real_row_shapes_verified": {
+    "persona": {
+      "id": "persona-be19a1fac471247f2b2a",
+      "name": "青禾｜2330 台股 Paper 學習 R2",
+      "legacyPaperCapitalPoolId": "pool-persona-paper-298e138c136c9840b0e4",
+      "paperLedgerId": "paper-ledger-298e138c136c9840b0e4",
+      "deploymentPlanId": "plan-persona-paper-298e138c136c9840b0e4",
+      "runtimeId": "rt-535a82a3",
+      "runtimeBindingId": "rb-a1c3ada3d5894d57bc2e012f337753be"
+    },
+    "provisioning_retired_persona": {
+      "id": "persona-c6ef44745087d11cc138",
+      "lifecycle_status": "retired"
+    },
+    "strategy": {
+      "id": "strategy-persona-298e138c136c9840b0e4",
+      "persona_id": "persona-be19a1fac471247f2b2a",
+      "capital_pool_id": "pool-persona-paper-298e138c136c9840b0e4",
+      "state": "approved"
+    },
+    "capital_pool": {
+      "id": "pool-persona-paper-298e138c136c9840b0e4",
+      "capital_scope": "paper",
+      "currency": "USD"
+    },
+    "deployment": {
+      "plan_id": "plan-persona-paper-298e138c136c9840b0e4",
+      "strategy_id": "strategy-persona-298e138c136c9840b0e4",
+      "artifact_id": "artifact-persona-298e138c136c9840b0e4",
+      "artifact_version": "1",
+      "target_stage": "paper",
+      "sponsor_persona_id": "persona-be19a1fac471247f2b2a",
+      "status": "active"
+    }
+  },
+  "acceptance_evidence": {
+    "ac1_shared_all_pages_helper_and_page_cap": {
+      "status": "passed",
+      "detail": "Extracted collectPaginatedListPages (with PAGINATED_LIST_PAGE_SIZE=200 and MAX_PAGINATED_LIST_PAGES=25) in src/lib/bff-v1/lists.ts and wired listPersonas, listCapitalPools, listRuntimes, listDeployments, lists.personas, lists.capitalPools, lists.runtimes, and lists.deployments to it. Multi-page tests in domainReads.allPages.test.ts and lists.test.ts prove rows on page 2 arrive and reaching maxPages reports strict fallback via liveStatus.reportFallback and throws BACKEND_UNAVAILABLE without silently truncating."
+    },
+    "ac2_no_first_page_unfiltered_strategy_read": {
+      "status": "passed",
+      "detail": "Removed unfiltered first-page listStrategies / bffV1.strategies.list and replaced it with listNonDraftStrategies (bffV1.strategies.listNonDraft using exclude_state=draft across all pages) and listStrategiesForPersona (bffV1.strategies.listForPersona using persona_id=<id> across all pages). Deleted unmounted dead-code caller src/management/pages/CommandCenter.tsx."
+    },
+    "ac3_persona_and_deployment_list_pages_show_every_row": {
+      "status": "passed",
+      "detail": "PersonasList and DeploymentsList consume lists.personas and lists.deployments backed by collectPaginatedListPages and normalizeDeploymentFields (mapping native plan_id, target_stage, artifact_version, strategy_id, artifact_id, sponsor_persona_id). Tests in Lists.test.tsx prove rows past the first 20 rows render in the table."
+    },
+    "ac4_risk_center_non_draft_strategies_all_rows_and_server_filtered_open_incidents": {
+      "status": "passed",
+      "detail": "RiskCenter loads strategies via bffV1.strategies.listNonDraft(), personas/pools/runtimes via their all-pages list readers, and open incidents via bffV1.incidents.list({ status: NON_TERMINAL_INCIDENT_STATUS_FILTER }) ('open,investigating,mitigating,in_progress') while filtering out any terminal ('resolved'/'closed') statuses. The Drawdown KPI card, Breach Matrix, and Strategies tab explicitly display t('riskCenter.draftsExcluded')."
+    },
+    "ac5_risk_center_independent_loading_and_unavailable_card_states": {
+      "status": "passed",
+      "detail": "RiskCenter tracks an independent DomainSlice ('loading' | 'ready' | 'error') for each of its 6 reads. Cards show t('common.loading') until their read resolves and t('status.unavailable') when their read fails while other cards whose reads succeeded still render their real counts; no card shows 0 while loading or after a failure."
+    },
+    "ac6_persona_detail_real_rows_and_error_unavailable_state": {
+      "status": "passed",
+      "detail": "PersonaDetail and PersonaCapitalBindingTab load persona strategies via bffV1.strategies.listForPersona(personaId) and all capital pools via bffV1.capitalPools.list(), rendering strategy-persona-298e138c136c9840b0e4 and pool-persona-paper-298e138c136c9840b0e4 for persona-be19a1fac471247f2b2a. When a read rejects, both tabs render t('status.unavailable') instead of t('empty.noResults')."
+    },
+    "ac7_capital_pool_incident_and_rebalance_detail_use_non_draft_strategy_read": {
+      "status": "passed",
+      "detail": "CapitalPoolDetail, IncidentDetail, and RebalanceDetail resolve strategies from bffV1.strategies.listNonDraft()."
+    },
+    "ac8_ranking_formula_detail_no_browser_score_and_no_undefined": {
+      "status": "passed",
+      "detail": "RankingFormulaDetail no longer calls bffV1.strategies or computes (s.sharpe * 0.6 - Math.abs(s.drawdown) * 0.4) in the browser, formats appliedTo via formatFormulaAppliedTo so the literal word 'undefined' is never rendered, and either renders owner-supplied ranking rows or links to the Rankings Center (/management/rankings)."
+    },
+    "ac9_tool_detail_no_fabricated_strategy_consumers": {
+      "status": "passed",
+      "detail": "ToolDetail no longer slices the first 4 rows of bffV1.strategies as fabricated consumers; it renders only real consumer relations present on the tool DTO or t('common.noData')."
+    },
+    "ac10_drawdown_breach_sign_verified_against_owner": {
+      "status": "passed",
+      "detail": "Verified against owner /bff/strategies and backtest_metrics DTOs that max_drawdown / drawdown is stored as a positive fractional ratio (e.g., 0.18 for 18% drawdown). Updated RiskCenter.isDrawdownBreach to check s.drawdown > DRAWDOWN_BREACH_THRESHOLD (0.1) and verified with unit and component tests in RiskCenter.test.tsx."
+    },
+    "ac11_no_weakened_or_deleted_tests_and_changed_assertion_justifications": {
+      "status": "passed",
+      "detail": "No existing test was weakened or deleted. All updated test references to bffV1.strategies.list were migrated to bffV1.strategies.listNonDraft or bffV1.strategies.listForPersona as required by AC 2.",
+      "changed_assertions": [
+        {
+          "file": "src/lib/bff-v1/seed-taxonomy.json",
+          "change": "Replaced bffV1.strategies.list with bffV1.strategies.listNonDraft and bffV1.strategies.listForPersona in mockAdapterSurface",
+          "reason": "AC 2 removed unfiltered first-page bffV1.strategies.list and replaced it with listNonDraft and listForPersona."
+        },
+        {
+          "file": "src/lib/bff-v1/__tests__/seedTaxonomy.test.ts",
+          "change": "Updated mockAdapterSurface invocation from bffV1.strategies.list() to bffV1.strategies.listNonDraft()",
+          "reason": "AC 2 removed bffV1.strategies.list; seedTaxonomy continues to verify the strategies mock surface via listNonDraft."
+        },
+        {
+          "file": "src/components/data/MockDataBadge.test.tsx",
+          "change": "Updated strict-mode fallback trigger call from bffV1.strategies.list() to bffV1.strategies.listNonDraft()",
+          "reason": "AC 2 removed bffV1.strategies.list; MockDataBadge continues to verify strict live fallback reporting on strategy read failure."
+        },
+        {
+          "file": "src/test/bootstrapMockOrdering.test.tsx",
+          "change": "Updated mock-mode ordering probe from bffV1.strategies.list() to bffV1.strategies.listNonDraft()",
+          "reason": "AC 2 removed bffV1.strategies.list; bootstrapMockOrdering continues to verify mock-mode strategy reads return mock rows."
+        },
+        {
+          "file": "src/management/pages/PersonaDetail.test.ts",
+          "change": "Updated vi.mock('@/lib/bff-v1') strategies mock from list to listForPersona and added AC 6 tests",
+          "reason": "AC 2 and AC 6 require PersonaDetail to load strategies via bffV1.strategies.listForPersona(personaId)."
+        },
+        {
+          "file": "src/management/pages/CapitalPoolDetail.test.tsx",
+          "change": "Updated vi.mock('@/lib/bff-v1') strategies mock from list to listNonDraft",
+          "reason": "AC 2 and AC 7 require CapitalPoolDetail to resolve strategies via bffV1.strategies.listNonDraft()."
+        },
+        {
+          "file": "src/management/pages/RankingFormulaDetail.test.tsx",
+          "change": "Replaced vi.spyOn(bffV1.strategies, 'list') with assertion that bffV1.strategies.listNonDraft is not called, plus AC 8 tests",
+          "reason": "AC 2 removed bffV1.strategies.list and AC 8 requires RankingFormulaDetail never to compute browser-side strategy scores."
+        }
+      ]
+    }
+  },
+  "owner_recount_references": {
+    "captured_reads_fixture": "/tmp/pantheon-dev-operable-20261104/management-candidate-reads-1793948457998.json",
+    "independent_owner_recount": "/tmp/pantheon-dev-operable-20261104/actual-firstpage-owner-071404.json",
+    "owner_union_id_comparison": "/tmp/pantheon-dev-operable-20261104/actual-firstpage-complete-native-owner-union-ID-comparison.json",
+    "counts": {
+      "personas_directory_union": 139,
+      "personas_configured_pg": 138,
+      "personas_provisioning_only_retired": "persona-c6ef44745087d11cc138",
+      "capital_pools": 136,
+      "deployments": 133
+    }
+  },
+  "verification_commands": [
+    "./node_modules/.bin/vitest run src/lib/bff-v1/__tests__/domainReads.allPages.test.ts src/lib/bff-v1/__tests__/lists.test.ts src/lib/bff-v1/__tests__/seedTaxonomy.test.ts src/components/data/MockDataBadge.test.tsx src/test/bootstrapMockOrdering.test.tsx src/management/pages/Lists.test.tsx src/management/pages/RiskCenter.test.tsx src/management/pages/PersonaDetail.test.ts src/management/components/detail/PersonaCapitalBindingTab.test.tsx src/management/pages/CapitalPoolDetail.test.tsx src/management/pages/IncidentDetail.tradeJourneys.test.tsx src/management/pages/RankingFormulaDetail.test.tsx src/management/pages/ToolDetail.test.tsx src/lib/v5/management/__tests__/i18nParity.test.ts",
+    "./node_modules/.bin/tsc -p tsconfig.app.json --noEmit"
+  ]
+}

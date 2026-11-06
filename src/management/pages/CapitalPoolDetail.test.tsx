@@ -28,7 +28,7 @@ vi.mock("@/lib/bff-v1", async (importOriginal) => {
     bffV1: {
       ...actual.bffV1,
       capitalPools: { ...actual.bffV1.capitalPools, get: mocks.capitalGet },
-      strategies: { ...actual.bffV1.strategies, list: mocks.strategiesList },
+      strategies: { ...actual.bffV1.strategies, listNonDraft: mocks.strategiesList },
       rebalances: { ...actual.bffV1.rebalances, list: mocks.rebalancesList },
       approvals: { ...actual.bffV1.approvals, list: mocks.approvalsList },
       audit: { ...actual.bffV1.audit, list: mocks.auditList },
