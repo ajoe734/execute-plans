@@ -216,6 +216,61 @@ describe("BFF and GCP Identity immutable runtime environment selection", () => {
     expect(isDevLoginHost("localhost")).toBe(false);
   });
 
+  it("honours explicit trusted VITE_BFF_REAL_WRITES on Prod/Stage only, never from storage, build env or absence", () => {
+    const runtimeWindow = window as unknown as Record<string, unknown>;
+    const cases: Array<[string, PublicDeploymentRuntimeConfigInput, string]> = [
+      ["https://app.mvl-cap.tw/", PRODUCTION_RUNTIME_CONFIG, "production"],
+      ["https://app.stg.mvl-cap.tw/", STAGING_RUNTIME_CONFIG, "staging"],
+    ];
+    for (const [url, base] of cases) {
+      Object.defineProperty(window, "location", {
+        configurable: true,
+        value: new URL(url),
+      });
+      window.sessionStorage.setItem("pantheon.integration.realWrites", "true");
+      window.localStorage.setItem("pantheon.e2e.realWrites", "true");
+      process.env.VITE_BFF_REAL_WRITES = "true"; // build env true
+
+      // absent key -> read-only despite build env true and storage
+      runtimeWindow[PUBLIC_RUNTIME_CONFIG_GLOBAL_KEY] = base;
+      resetDeploymentRuntimeAuditForTests();
+      expect(readBffEnv().VITE_BFF_REAL_WRITES).toBe("false");
+
+      // explicit false -> read-only despite build env true
+      runtimeWindow[PUBLIC_RUNTIME_CONFIG_GLOBAL_KEY] = {
+        ...base,
+        VITE_BFF_REAL_WRITES: "false",
+      };
+      resetDeploymentRuntimeAuditForTests();
+      expect(readBffEnv().VITE_BFF_REAL_WRITES).toBe("false");
+
+      // explicit trusted true -> consumed; other safety flags unchanged
+      delete process.env.VITE_BFF_REAL_WRITES;
+      runtimeWindow[PUBLIC_RUNTIME_CONFIG_GLOBAL_KEY] = {
+        ...base,
+        VITE_BFF_REAL_WRITES: "true",
+      };
+      resetDeploymentRuntimeAuditForTests();
+      const env = readBffEnv();
+      expect(env.VITE_BFF_REAL_WRITES).toBe("true");
+      expect(env.VITE_BFF_ALLOW_DEV_STUB_WRITES).toBe("false");
+      expect(env.VITE_BFF_EMBEDDED_BEARER_TOKEN).toBe("false");
+      expect(env.VITE_BFF_FALLBACK).toBe("strict");
+      expect(isDevRuntimeWriteGateHost()).toBe(false);
+
+      // invalid value rejected via existing error path
+      runtimeWindow[PUBLIC_RUNTIME_CONFIG_GLOBAL_KEY] = {
+        ...base,
+        VITE_BFF_REAL_WRITES: "TRUE",
+      };
+      resetDeploymentRuntimeAuditForTests();
+      expect(() => readBffEnv()).toThrow(DeploymentRuntimeConfigError);
+      window.sessionStorage.clear();
+      window.localStorage.clear();
+    }
+    delete process.env.VITE_BFF_REAL_WRITES;
+  });
+
   it("preserves local and Dev write/fallback/dev-login compatibility", () => {
     // Localhost compatibility without external runtime-config.js
     Object.defineProperty(window, "location", {
