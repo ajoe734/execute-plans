@@ -344,18 +344,42 @@ test.describe("FE-APPROVAL-BADGE-LAYOUT-20261106 Approvals badge and drawer id l
         const headerBadgeRow = idSpan.locator("..");
         const drawerRiskBadge = headerBadgeRow.locator("> div").nth(0);
         const drawerStatusBadge = headerBadgeRow.locator("> div").nth(1);
+        const closeButton = dialog.locator("> button").first();
+        await expect(closeButton).toBeVisible();
 
         const dialogBox = await dialog.boundingBox();
         const idBox = await idSpan.boundingBox();
         const drawerStatusBox = await drawerStatusBadge.boundingBox();
         const drawerRiskBox = await drawerRiskBadge.boundingBox();
+        const closeButtonBox = await closeButton.boundingBox();
 
         expect(dialogBox).not.toBeNull();
         expect(idBox).not.toBeNull();
         expect(drawerStatusBox).not.toBeNull();
         expect(drawerRiskBox).not.toBeNull();
+        expect(closeButtonBox).not.toBeNull();
 
         const layoutMetrics = await page.evaluate((expectedId) => {
+          const round2 = (n: number) => Number(n.toFixed(2));
+          const toRect = (r: DOMRect) => ({
+            x: round2(r.x),
+            y: round2(r.y),
+            width: round2(r.width),
+            height: round2(r.height),
+            top: round2(r.top),
+            right: round2(r.right),
+            bottom: round2(r.bottom),
+            left: round2(r.left),
+          });
+          const rectsIntersect = (
+            a: { left: number; right: number; top: number; bottom: number },
+            b: { left: number; right: number; top: number; bottom: number },
+          ) =>
+            a.left < b.right &&
+            a.right > b.left &&
+            a.top < b.bottom &&
+            a.bottom > b.top;
+
           const measureLines = (el: HTMLElement) => {
             const range = document.createRange();
             range.selectNodeContents(el);
@@ -385,13 +409,45 @@ test.describe("FE-APPROVAL-BADGE-LAYOUT-20261106 Approvals badge and drawer id l
 
           const sheetEl = document.querySelector<HTMLElement>('[role="dialog"]')!;
           const sheetRect = sheetEl.getBoundingClientRect();
+          const closeBtnEl = Array.from(sheetEl.children).find(
+            (el): el is HTMLButtonElement => el.tagName === "BUTTON",
+          )!;
+          const closeBtnRect = toRect(closeBtnEl.getBoundingClientRect());
           const idEl = Array.from(sheetEl.querySelectorAll<HTMLElement>("span")).find(
             (el) => el.textContent === expectedId,
           )!;
           const headerRow = idEl.parentElement!;
+          const headerRowStyle = window.getComputedStyle(headerRow);
           const badgeDivs = headerRow.querySelectorAll<HTMLElement>(":scope > div");
           const drawerRiskEl = badgeDivs[0]!;
           const drawerStatusEl = badgeDivs[1]!;
+
+          const idRange = document.createRange();
+          idRange.selectNodeContents(idEl);
+          const idLineRects = Array.from(idRange.getClientRects())
+            .filter((r) => r.width > 0 && r.height > 0)
+            .map((r, lineIndex) => {
+              const lineRect = toRect(r);
+              const intersects = rectsIntersect(lineRect, closeBtnRect);
+              const intersectionWidthPx = intersects
+                ? round2(
+                    Math.max(0, Math.min(lineRect.right, closeBtnRect.right) - Math.max(lineRect.left, closeBtnRect.left)),
+                  )
+                : 0;
+              const intersectionHeightPx = intersects
+                ? round2(
+                    Math.max(0, Math.min(lineRect.bottom, closeBtnRect.bottom) - Math.max(lineRect.top, closeBtnRect.top)),
+                  )
+                : 0;
+              return {
+                lineIndex,
+                ...lineRect,
+                horizontalClearanceToCloseButtonPx: round2(closeBtnRect.left - lineRect.right),
+                intersectionWidthPx,
+                intersectionHeightPx,
+                intersectsCloseButton: intersects,
+              };
+            });
 
           return {
             viewport: {
@@ -409,9 +465,14 @@ test.describe("FE-APPROVAL-BADGE-LAYOUT-20261106 Approvals badge and drawer id l
               right: Number(sheetRect.right.toFixed(2)),
               width: Number(sheetRect.width.toFixed(2)),
             },
+            headerBadgeRow: {
+              paddingRight: headerRowStyle.paddingRight,
+            },
+            closeButton: closeBtnRect,
             drawerRiskBadge: measureLines(drawerRiskEl),
             drawerStatusBadge: measureLines(drawerStatusEl),
             drawerIdSpan: measureLines(idEl),
+            drawerIdLines: idLineRects,
           };
         }, APPROVAL_68_CHAR_ID);
 
@@ -432,6 +493,16 @@ test.describe("FE-APPROVAL-BADGE-LAYOUT-20261106 Approvals badge and drawer id l
           layoutMetrics.viewport.documentClientWidth,
         );
 
+        expect(layoutMetrics.closeButton.width).toBeGreaterThan(0);
+        expect(layoutMetrics.closeButton.height).toBeGreaterThan(0);
+        expect(layoutMetrics.drawerIdLines.length).toBeGreaterThanOrEqual(2);
+        for (const line of layoutMetrics.drawerIdLines) {
+          expect(line.intersectsCloseButton).toBe(false);
+          expect(line.intersectionWidthPx).toBe(0);
+          expect(line.intersectionHeightPx).toBe(0);
+          expect(line.right).toBeLessThanOrEqual(layoutMetrics.closeButton.left);
+        }
+
         measurementsByViewport[String(width)] = {
           boundingBoxes: {
             tableRiskBadge: tableRiskBox,
@@ -439,6 +510,7 @@ test.describe("FE-APPROVAL-BADGE-LAYOUT-20261106 Approvals badge and drawer id l
             drawerRiskBadge: drawerRiskBox,
             drawerStatusBadge: drawerStatusBox,
             drawerIdSpan: idBox,
+            closeButton: closeButtonBox,
             sheetDialog: dialogBox,
             idRightEdge,
             sheetRightEdge,

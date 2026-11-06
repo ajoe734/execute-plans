@@ -216,7 +216,7 @@ export const AlertsPage = () => {
           {active && (
             <>
               <SheetHeader>
-                <div className="flex items-center gap-2 mb-2"><RiskBadge level={active.severity} /><span className="min-w-0 break-all text-mono text-xs text-muted-foreground">{active.id}</span></div>
+                <div className="flex items-center gap-2 mb-2 pr-6"><RiskBadge level={active.severity} /><span className="min-w-0 break-all text-mono text-xs text-muted-foreground">{active.id}</span></div>
                 <SheetTitle>{active.title}</SheetTitle>
                 <SheetDescription>{active.description ?? t("empty.noDescription")}</SheetDescription>
               </SheetHeader>
@@ -292,7 +292,7 @@ export const IncidentsPage = () => {
           {active && (
             <>
               <SheetHeader>
-                <div className="flex items-center gap-2 mb-2">
+                <div className="flex items-center gap-2 mb-2 pr-6">
                   <RiskBadge level={active.severity} />
                   <StatusBadge state={active.status === "resolved" ? "success" : active.status === "mitigating" ? "running" : "warning"} />
                   <span className="min-w-0 break-all text-mono text-xs text-muted-foreground">{active.id}</span>
@@ -470,7 +470,7 @@ export const ApprovalsPage = () => {
           {active && (
             <>
               <SheetHeader>
-                <div className="flex items-center gap-2 mb-2">
+                <div className="flex items-center gap-2 mb-2 pr-6">
                   <RiskBadge level={active.riskLevel} />
                   <StatusBadge state={active.state} />
                   <span className="min-w-0 break-all text-mono text-xs text-muted-foreground">{active.id}</span>
