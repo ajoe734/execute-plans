@@ -10,7 +10,7 @@
 // (jobs, runtimes, alerts, incidents, approvals, audit, mcpTools) so all
 // canonical Management read surfaces have a real adapter when live mode is on.
 
-import type { Alert, Incident, Runtime } from "./dto";
+import type { Alert, Incident } from "./dto";
 import type { ListEnvelope } from "./dto";
 import { bffFetch } from "./client";
 import { paths } from "./paths";
@@ -20,12 +20,16 @@ import {
 } from "./eventTimestamps";
 import { normalizeCapitalPool } from "./capitalPools";
 import {
+  adaptRuntimeRow,
   collectPaginatedListPages,
   MAX_PAGINATED_LIST_PAGES,
   normalizeArtifactFields,
   normalizeBaseObjectFields,
   normalizeDeploymentFields,
+  numberFrom,
   PAGINATED_LIST_PAGE_SIZE,
+  stringFrom,
+  type RuntimeListItem,
 } from "./domainReads";
 import { normalizeEvolutionProgram } from "./evolution";
 import { normalizeJobFields } from "./operations";
@@ -70,24 +74,6 @@ const asRecord = (value: unknown): Record<string, unknown> | null =>
   typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : null;
-
-const stringFrom = (...values: unknown[]): string | undefined => {
-  for (const value of values) {
-    if (typeof value === "string" && value.trim().length > 0) return value.trim();
-  }
-  return undefined;
-};
-
-const numberFrom = (...values: unknown[]): number | undefined => {
-  for (const value of values) {
-    if (typeof value === "number" && Number.isFinite(value)) return value;
-    if (typeof value === "string" && value.trim().length > 0) {
-      const parsed = Number(value);
-      if (Number.isFinite(parsed)) return parsed;
-    }
-  }
-  return undefined;
-};
 
 export function normalizeLiveListResponse<T>(payload: unknown, cls: ListClass): ListEnvelope<T> {
   const rule = LIST_CLASS_RULES[cls];
@@ -359,91 +345,6 @@ function strictLiveIncidentListLoader(
   return async () => {
     const data = await bffFetch<unknown>({ method: "GET", path });
     return normalizeIncidentListResponse(data, cls);
-  };
-}
-
-export type RuntimeListItem = Runtime & {
-  runtimeId?: string;
-  runtime_id?: string;
-  runtimeBindingId?: string;
-  runtime_binding_id?: string;
-  personaId?: string;
-  persona_id?: string;
-  artifactId?: string;
-  artifact_id?: string;
-  planId?: string;
-  plan_id?: string;
-  runtimeKind?: string;
-  runtime_kind?: string;
-  deploymentStage?: string;
-  deployment_stage?: string;
-};
-
-const runtimeRatioFrom = (...values: unknown[]): number => {
-  const value = numberFrom(...values);
-  if (value === undefined) return Number.NaN;
-  return value > 1 && value <= 100 ? value / 100 : value;
-};
-
-const runtimePercentFrom = (...values: unknown[]): number => {
-  const value = numberFrom(...values);
-  if (value === undefined) return Number.NaN;
-  return value >= 0 && value <= 1 ? value * 100 : value;
-};
-
-function normalizeRuntimeEnv(value: unknown): Runtime["env"] {
-  const raw = stringFrom(value)?.toLowerCase();
-  if (raw === "live" || raw === "paper" || raw === "research") return raw;
-  return "" as Runtime["env"];
-}
-
-function normalizeRuntimeKind(value: unknown): Runtime["kind"] {
-  const raw = stringFrom(value)?.toLowerCase();
-  if (raw === "executor" || raw === "mcp" || raw === "scheduler" || raw === "ingest") return raw;
-  return (raw ?? "") as Runtime["kind"];
-}
-
-export function adaptRuntimeRow(value: unknown, index: number): RuntimeListItem | null {
-  const row = asRecord(value);
-  if (!row) return null;
-  const metadata = asRecord(row.metadata);
-  const runtimeId = stringFrom(row.runtimeId, row.runtime_id, row.runtime, row.runtime_name);
-  const runtimeBindingId = stringFrom(row.runtimeBindingId, row.runtime_binding_id, row.bindingId, row.binding_id, row.id);
-  const id = runtimeId ?? runtimeBindingId ?? stringFrom(row.id) ?? `runtime-${index + 1}`;
-  const name = stringFrom(row.name, row.displayName, row.display_name, runtimeId, runtimeBindingId) ?? id;
-  const personaId = stringFrom(row.personaId, row.persona_id, metadata?.personaId, metadata?.persona_id);
-  const artifactId = stringFrom(row.artifactId, row.artifact_id);
-  const planId = stringFrom(row.planId, row.plan_id, row.deploymentPlanId, row.deployment_plan_id);
-  const runtimeKind = stringFrom(row.kind, row.runtimeKind, row.runtime_kind, row.deploymentMode, row.deployment_mode);
-  const env = normalizeRuntimeEnv(row.env ?? row.executionMode ?? row.execution_mode ?? row.deploymentStage ?? row.deployment_stage ?? row.deploymentMode ?? row.deployment_mode);
-
-  return {
-    ...(row as Partial<RuntimeListItem>),
-    id,
-    name,
-    kind: normalizeRuntimeKind(runtimeKind),
-    env,
-    status: (stringFrom(row.status, row.state) ?? "") as Runtime["status"],
-    cpu: runtimeRatioFrom(row.cpu, row.cpuPct, row.cpu_pct, row.cpuUtilization, row.cpu_utilization),
-    memory: runtimeRatioFrom(row.memory, row.mem, row.memoryPct, row.memory_pct, row.memoryUtilization, row.memory_utilization),
-    latencyP95Ms: numberFrom(row.latencyP95Ms, row.latency_p95_ms, row.p95LatencyMs, row.p95_latency_ms) ?? Number.NaN,
-    uptimePct: runtimePercentFrom(row.uptimePct, row.uptime_pct, row.uptimePercent, row.uptime_percent),
-    region: stringFrom(row.region, row.zone, row.cluster, row.tenantId, row.tenant_id) ?? "",
-    updatedAt: stringFrom(row.updatedAt, row.updated_at, row.effectiveAt, row.effective_at, row.createdAt, row.created_at) ?? "",
-    runtimeId,
-    runtime_id: runtimeId,
-    runtimeBindingId,
-    runtime_binding_id: runtimeBindingId,
-    personaId,
-    persona_id: personaId,
-    artifactId,
-    artifact_id: artifactId,
-    planId,
-    plan_id: planId,
-    runtimeKind,
-    runtime_kind: runtimeKind,
-    deploymentStage: stringFrom(row.deploymentStage, row.deployment_stage),
-    deployment_stage: stringFrom(row.deploymentStage, row.deployment_stage),
   };
 }
 

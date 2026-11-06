@@ -50,7 +50,7 @@
   "acceptance_evidence": {
     "ac1_shared_all_pages_helper_and_page_cap": {
       "status": "passed",
-      "detail": "Extracted collectPaginatedListPages (with PAGINATED_LIST_PAGE_SIZE=200 and MAX_PAGINATED_LIST_PAGES=25) in src/lib/bff-v1/lists.ts and wired listPersonas, listCapitalPools, listRuntimes, listDeployments, lists.personas, lists.capitalPools, lists.runtimes, and lists.deployments to it. Multi-page tests in domainReads.allPages.test.ts and lists.test.ts prove rows on page 2 arrive and reaching maxPages reports strict fallback via liveStatus.reportFallback and throws BACKEND_UNAVAILABLE without silently truncating."
+      "detail": "Extracted collectPaginatedListPages (with PAGINATED_LIST_PAGE_SIZE=200 and MAX_PAGINATED_LIST_PAGES=100) and adaptRuntimeRow into the shared leaf module src/lib/bff-v1/domainReads.ts and wired listPersonas, listCapitalPools, listRuntimes, listDeployments, lists.personas, lists.capitalPools, lists.runtimes, and lists.deployments to it with zero import cycles in productionImportGraph.test.ts. Multi-page tests in domainReads.allPages.test.ts and lists.test.ts prove rows on page 2 arrive and reaching maxPages reports strict fallback via liveStatus.reportFallback and throws BACKEND_UNAVAILABLE without silently truncating."
     },
     "ac2_no_first_page_unfiltered_strategy_read": {
       "status": "passed",
@@ -148,7 +148,7 @@
     }
   },
   "verification_commands": [
-    "./node_modules/.bin/vitest run src/lib/bff-v1/strategies.test.ts src/lib/bff-v1/__tests__/domainReads.allPages.test.ts src/lib/bff-v1/__tests__/lists.test.ts src/lib/bff-v1/__tests__/seedTaxonomy.test.ts src/components/data/MockDataBadge.test.tsx src/test/bootstrapMockOrdering.test.tsx src/management/pages/Lists.test.tsx src/management/pages/RiskCenter.test.tsx src/management/pages/PersonaDetail.test.ts src/management/components/detail/PersonaCapitalBindingTab.test.tsx src/management/pages/CapitalPoolDetail.test.tsx src/management/pages/IncidentDetail.tradeJourneys.test.tsx src/management/pages/RankingFormulaDetail.test.tsx src/management/pages/ToolDetail.test.tsx src/lib/v5/management/__tests__/i18nParity.test.ts",
+    "./node_modules/.bin/vitest run src/lib/bff-v1/__tests__/productionImportGraph.test.ts src/lib/bff-v1/__tests__/detailNormalization.test.ts src/lib/bff-v1/strategies.test.ts src/lib/bff-v1/__tests__/domainReads.allPages.test.ts src/lib/bff-v1/__tests__/lists.test.ts src/lib/bff-v1/__tests__/seedTaxonomy.test.ts src/components/data/MockDataBadge.test.tsx src/test/bootstrapMockOrdering.test.tsx src/management/pages/Lists.test.tsx src/management/pages/RiskCenter.test.tsx src/management/pages/PersonaDetail.test.ts src/management/components/detail/PersonaCapitalBindingTab.test.tsx src/management/pages/CapitalPoolDetail.test.tsx src/management/pages/IncidentDetail.tradeJourneys.test.tsx src/management/pages/RankingFormulaDetail.test.tsx src/management/pages/ToolDetail.test.tsx src/lib/v5/management/__tests__/i18nParity.test.ts",
     "./node_modules/.bin/tsc -p tsconfig.app.json --noEmit"
   ]
 }

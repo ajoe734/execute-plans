@@ -8,6 +8,7 @@ import type {
 } from "./dto";
 import { paths } from "./paths";
 import {
+  adaptRuntimeRow,
   detailPath,
   liveItemsFrom,
   strictLiveDetail,
@@ -15,7 +16,6 @@ import {
   strictLivePaginatedList,
   strictLiveRead,
 } from "./domainReads";
-import { adaptRuntimeRow } from "./lists";
 import {
   normalizeAlertTimestampFields,
   normalizeAlertTimestampList,
