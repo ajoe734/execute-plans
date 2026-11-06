@@ -351,4 +351,202 @@ describe("TradingPulsePage snake_case BFF contract and coverage rendering", () =
       screen.getByText("This page does not render seed, demo, or non-production fallback data."),
     ).toBeInTheDocument();
   });
+
+  it("covers all four Baseline coverage tile states and row baseline status badges in en-US and zh-TW", async () => {
+    // State 1: baseline_required_count > 0 and covered (denominator uses baseline_required_count instead of runtime_count)
+    // Also includes rows with ok, not_required, and unavailable statuses to verify row badge rendering
+    const coveredMixedPayload = {
+      ...SNAKE_CASE_BFF_TRADING_PULSE_PAYLOAD,
+      data: {
+        ...SNAKE_CASE_BFF_TRADING_PULSE_PAYLOAD.data,
+        summary: {
+          ...SNAKE_CASE_BFF_TRADING_PULSE_PAYLOAD.data.summary,
+          runtime_count: 4,
+          baseline_comparison_count: 1,
+          baseline_required_count: 1,
+          by_baseline_status: { ok: 1, not_required: 3 },
+          missing_baseline_runtime_ids: [],
+          coverage: {
+            runtime_count: 4,
+            telemetry_coverage_count: 4,
+            baseline_comparison_count: 1,
+            baseline_required_count: 1,
+            missing_baseline_runtime_ids: [],
+          },
+        },
+        runtime_rows: [
+          {
+            runtime_id: "rt-live-01",
+            runtime_binding_id: "rb-live-01",
+            persona_id: "persona-live",
+            deployment_stage: "live",
+            status: "active",
+            telemetry_summary: { metrics: { pnl: 500, fill_rate: 0.99, total_trades: 10 } },
+            row_health: { status: "ok", degraded_checks: [] },
+            baseline_comparison: { runtime_id: "rt-live-01", status: "ok", metric_count: 4, breached_metric_count: 0 },
+          },
+          {
+            runtime_id: "rt-paper-01",
+            runtime_binding_id: "rb-paper-01",
+            persona_id: "persona-paper-1",
+            deployment_stage: "paper",
+            status: "active",
+            telemetry_summary: { metrics: { pnl: 120, fill_rate: 0.95, total_trades: 6 } },
+            row_health: { status: "ok", degraded_checks: [] },
+            baseline_comparison: { runtime_id: "rt-paper-01", status: "not_required", metric_count: 0, breached_metric_count: 0 },
+          },
+          {
+            runtime_id: "rt-live-02",
+            runtime_binding_id: "rb-live-02",
+            persona_id: "persona-live-2",
+            deployment_stage: "live",
+            status: "active",
+            telemetry_summary: { metrics: { pnl: -20, fill_rate: 0.91, total_trades: 3 } },
+            row_health: { status: "degraded", degraded_checks: ["paper_live_drift"] },
+            baseline_comparison: { runtime_id: "rt-live-02", status: "unavailable", metric_count: 0, breached_metric_count: 0 },
+          },
+        ],
+      },
+      meta: {
+        ...SNAKE_CASE_BFF_TRADING_PULSE_PAYLOAD.meta,
+        coverage: {
+          ...SNAKE_CASE_BFF_TRADING_PULSE_PAYLOAD.meta.coverage,
+          runtime_count: 4,
+          baseline_comparison_count: 1,
+          baseline_required_count: 1,
+          missing_baseline_runtime_ids: [],
+        },
+      },
+    };
+
+    mockTradingPulseModel(coveredMixedPayload);
+    const state1View = renderPage(<TradingPulsePage />);
+    const state1Tile = screen.getByText("Baseline coverage").closest("div.rounded-md") as HTMLElement;
+    expect(within(state1Tile).getByText("1/1")).toBeInTheDocument();
+    expect(within(state1Tile).getByText("ok")).toBeInTheDocument();
+    expect(within(state1Tile).queryByText("degraded")).not.toBeInTheDocument();
+    expect(within(state1Tile).getByText("Missing: —")).toBeInTheDocument();
+
+    // Row badge assertions in en-US: not_required shows neutral localized badge; unavailable keeps warning tone
+    const paperRowEn = screen.getByText("rt-paper-01").closest("tr") as HTMLElement;
+    const notRequiredBadgeEn = within(paperRowEn).getByText("Not required");
+    expect(notRequiredBadgeEn).toHaveClass("bg-muted", "text-muted-foreground", "border-border");
+    expect(within(paperRowEn).queryByText("not_required")).not.toBeInTheDocument();
+
+    const unavailableRowEn = screen.getByText("rt-live-02").closest("tr") as HTMLElement;
+    const unavailableBadgeEn = within(unavailableRowEn).getByText("unavailable");
+    expect(unavailableBadgeEn).toHaveClass("bg-status-warning/15", "text-status-warning", "border-status-warning/30");
+    state1View.unmount();
+
+    // State 2: baseline_required_count is absent (older BFF fallback to runtime_count)
+    mockTradingPulseModel(SNAKE_CASE_BFF_TRADING_PULSE_PAYLOAD);
+    const state2View = renderPage(<TradingPulsePage />);
+    const state2Tile = screen.getByText("Baseline coverage").closest("div.rounded-md") as HTMLElement;
+    expect(within(state2Tile).getByText("76/90")).toBeInTheDocument();
+    expect(within(state2Tile).getByText("degraded")).toBeInTheDocument();
+    expect(within(state2Tile).getByText("Missing: rt-paper-03, rt-paper-04")).toBeInTheDocument();
+    state2View.unmount();
+
+    // State 3: baseline_required_count is 0 (all-paper fleet without reports -> localized not-required text, no degraded badge)
+    const allPaperPayload = {
+      ...SNAKE_CASE_BFF_TRADING_PULSE_PAYLOAD,
+      data: {
+        ...SNAKE_CASE_BFF_TRADING_PULSE_PAYLOAD.data,
+        summary: {
+          ...SNAKE_CASE_BFF_TRADING_PULSE_PAYLOAD.data.summary,
+          runtime_count: 4,
+          baseline_comparison_count: 0,
+          baseline_required_count: 0,
+          by_baseline_status: { not_required: 4 },
+          missing_baseline_runtime_ids: [],
+          coverage: {
+            runtime_count: 4,
+            baseline_comparison_count: 0,
+            baseline_required_count: 0,
+            missing_baseline_runtime_ids: [],
+          },
+        },
+        runtime_rows: [
+          {
+            runtime_id: "rt-paper-01",
+            runtime_binding_id: "rb-paper-01",
+            persona_id: "persona-alpha",
+            deployment_stage: "paper",
+            status: "active",
+            telemetry_summary: { metrics: { pnl: 1450.5, fill_rate: 0.964, total_trades: 18 } },
+            row_health: { status: "ok", degraded_checks: [] },
+            baseline_comparison: { runtime_id: "rt-paper-01", status: "not_required", metric_count: 0, breached_metric_count: 0 },
+          },
+        ],
+      },
+      meta: {
+        ...SNAKE_CASE_BFF_TRADING_PULSE_PAYLOAD.meta,
+        coverage: {
+          ...SNAKE_CASE_BFF_TRADING_PULSE_PAYLOAD.meta.coverage,
+          runtime_count: 4,
+          baseline_comparison_count: 0,
+          baseline_required_count: 0,
+          missing_baseline_runtime_ids: [],
+        },
+      },
+    };
+
+    mockTradingPulseModel(allPaperPayload);
+    const state3EnView = renderPage(<TradingPulsePage />);
+    const state3EnTile = screen.getByText("Baseline coverage").closest("div.rounded-md") as HTMLElement;
+    expect(within(state3EnTile).getByText("Not required")).toBeInTheDocument();
+    expect(within(state3EnTile).queryByText("0/4")).not.toBeInTheDocument();
+    expect(within(state3EnTile).queryByText("0/0")).not.toBeInTheDocument();
+    expect(within(state3EnTile).queryByText("degraded")).not.toBeInTheDocument();
+    expect(within(state3EnTile).getByText("ok")).toBeInTheDocument();
+    state3EnView.unmount();
+
+    await i18n.changeLanguage("zh-TW");
+    const state3ZhView = renderPage(<TradingPulsePage />);
+    const state3ZhTile = screen.getByText("Baseline 覆蓋").closest("div.rounded-md") as HTMLElement;
+    expect(within(state3ZhTile).getByText("不需比較")).toBeInTheDocument();
+    expect(within(state3ZhTile).queryByText("0/4")).not.toBeInTheDocument();
+    expect(within(state3ZhTile).queryByText("degraded")).not.toBeInTheDocument();
+    const paperRowZh = screen.getByText("rt-paper-01").closest("tr") as HTMLElement;
+    const notRequiredBadgeZh = within(paperRowZh).getByText("不需比較");
+    expect(notRequiredBadgeZh).toHaveClass("bg-muted", "text-muted-foreground", "border-border");
+    state3ZhView.unmount();
+
+    // State 4: baseline_required_count > 0 with non-empty missing_baseline_runtime_ids stays degraded and lists missing ids
+    await i18n.changeLanguage("en-US");
+    const missingRequiredPayload = {
+      ...coveredMixedPayload,
+      data: {
+        ...coveredMixedPayload.data,
+        summary: {
+          ...coveredMixedPayload.data.summary,
+          baseline_comparison_count: 1,
+          baseline_required_count: 2,
+          missing_baseline_runtime_ids: ["rt-live-02"],
+          coverage: {
+            runtime_count: 4,
+            baseline_comparison_count: 1,
+            baseline_required_count: 2,
+            missing_baseline_runtime_ids: ["rt-live-02"],
+          },
+        },
+      },
+      meta: {
+        ...coveredMixedPayload.meta,
+        coverage: {
+          ...coveredMixedPayload.meta.coverage,
+          runtime_count: 4,
+          baseline_comparison_count: 1,
+          baseline_required_count: 2,
+          missing_baseline_runtime_ids: ["rt-live-02"],
+        },
+      },
+    };
+    mockTradingPulseModel(missingRequiredPayload);
+    renderPage(<TradingPulsePage />);
+    const state4Tile = screen.getByText("Baseline coverage").closest("div.rounded-md") as HTMLElement;
+    expect(within(state4Tile).getByText("1/2")).toBeInTheDocument();
+    expect(within(state4Tile).getByText("degraded")).toBeInTheDocument();
+    expect(within(state4Tile).getByText("Missing: rt-live-02")).toBeInTheDocument();
+  });
 });
