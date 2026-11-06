@@ -7,7 +7,7 @@
   "target_repo": "execute-plans",
   "merge_target": "dev",
   "branch": "task/FE-HOLDINGS-COST-PRICE-COLUMNS-20261106",
-  "base_sha": "a0393c7a8870c255e886dcace492b48e8ad73a11",
+  "base_sha": "117b734870ea6bccd63c9347c29e0dbd1a840bd7",
   "status": "ready_for_review",
   "hosted_verification": {
     "status": "deferred_to_downstream_task",
