@@ -20,12 +20,16 @@ export class DeploymentRuntimeConfigError extends Error {
   }
 }
 
+export type PublicRealWritesPosture = "true" | "false";
+
 export interface PublicDeploymentRuntimeConfigInput {
   schemaVersion: 1 | typeof PUBLIC_RUNTIME_CONFIG_SCHEMA;
   environment: PublicDeploymentEnvironment;
   configRef: string;
   configSha256?: string;
   bffBaseUrl: string;
+  /** Optional explicit operator write posture; strictly "true" | "false". Absent = read-only. */
+  VITE_BFF_REAL_WRITES?: PublicRealWritesPosture;
   gcpIdentity: {
     apiKey: string;
     projectId: string;
@@ -41,11 +45,13 @@ export interface ValidatedDeploymentRuntimeConfig {
   readonly configRef: string;
   readonly configSha256: string;
   readonly bffBaseUrl: string;
+  /** Present only when the trusted runtime config explicitly carried the key. */
+  readonly VITE_BFF_REAL_WRITES?: PublicRealWritesPosture;
   readonly gcpIdentity: Readonly<PublicGcpIdentityRuntimeConfig>;
   readonly safeDefaults: Readonly<{
     VITE_BFF_MODE: "live";
     VITE_BFF_FALLBACK: "strict";
-    VITE_BFF_REAL_WRITES: "false";
+    VITE_BFF_REAL_WRITES: PublicRealWritesPosture;
     VITE_BFF_ALLOW_DEV_STUB_WRITES: "false";
     VITE_BFF_EMBEDDED_BEARER_TOKEN: "false";
   }>;
@@ -72,6 +78,7 @@ const PERMITTED_TOP_LEVEL_KEYS = new Set([
   "configSha256",
   "bffBaseUrl",
   "gcpIdentity",
+  "VITE_BFF_REAL_WRITES",
 ]);
 
 const PERMITTED_ENVIRONMENTS = new Set<PublicDeploymentEnvironment>([
@@ -84,7 +91,7 @@ const PERMITTED_ENVIRONMENTS = new Set<PublicDeploymentEnvironment>([
 const SAFE_RUNTIME_DEFAULTS = Object.freeze({
   VITE_BFF_MODE: "live" as const,
   VITE_BFF_FALLBACK: "strict" as const,
-  VITE_BFF_REAL_WRITES: "false" as const,
+  VITE_BFF_REAL_WRITES: "false" as PublicRealWritesPosture,
   VITE_BFF_ALLOW_DEV_STUB_WRITES: "false" as const,
   VITE_BFF_EMBEDDED_BEARER_TOKEN: "false" as const,
 });
@@ -381,8 +388,13 @@ export function canonicalDeploymentConfigPayload(config: {
   configRef: string;
   bffBaseUrl: string;
   gcpIdentity: PublicGcpIdentityRuntimeConfig;
+  VITE_BFF_REAL_WRITES?: PublicRealWritesPosture;
 }): string {
   return JSON.stringify({
+    // Only an explicit key joins the digest; legacy payload bytes stay identical.
+    ...(config.VITE_BFF_REAL_WRITES !== undefined
+      ? { VITE_BFF_REAL_WRITES: config.VITE_BFF_REAL_WRITES }
+      : {}),
     bffBaseUrl: config.bffBaseUrl,
     configRef: config.configRef,
     environment: config.environment,
@@ -402,6 +414,7 @@ export function computeDeploymentConfigSha256(config: {
   configRef: string;
   bffBaseUrl: string;
   gcpIdentity: PublicGcpIdentityRuntimeConfig;
+  VITE_BFF_REAL_WRITES?: PublicRealWritesPosture;
 }): string {
   return `sha256:${sha256Hex(canonicalDeploymentConfigPayload(config))}`;
 }
@@ -470,6 +483,17 @@ export function validateDeploymentRuntimeConfig(
 
   const bffBaseUrl = validateBffBaseUrl(record.bffBaseUrl, environment);
 
+  let realWrites: PublicRealWritesPosture | undefined;
+  if ("VITE_BFF_REAL_WRITES" in record) {
+    const rawRealWrites = record.VITE_BFF_REAL_WRITES;
+    if (rawRealWrites !== "true" && rawRealWrites !== "false") {
+      throw new DeploymentRuntimeConfigError(
+        "VITE_BFF_REAL_WRITES must be the string 'true' or 'false' when provided",
+      );
+    }
+    realWrites = rawRealWrites;
+  }
+
   let gcpIdentity: PublicGcpIdentityRuntimeConfig;
   try {
     gcpIdentity = validatePublicGcpIdentityRuntimeConfig(record.gcpIdentity, {
@@ -489,6 +513,7 @@ export function validateDeploymentRuntimeConfig(
     configRef: rawConfigRef,
     bffBaseUrl,
     gcpIdentity,
+    ...(realWrites !== undefined ? { VITE_BFF_REAL_WRITES: realWrites } : {}),
   });
 
   let configSha256 = computedSha256;
@@ -519,8 +544,12 @@ export function validateDeploymentRuntimeConfig(
     configRef: rawConfigRef,
     configSha256,
     bffBaseUrl,
+    ...(realWrites !== undefined ? { VITE_BFF_REAL_WRITES: realWrites } : {}),
     gcpIdentity: Object.freeze({ ...gcpIdentity }),
-    safeDefaults: SAFE_RUNTIME_DEFAULTS,
+    safeDefaults:
+      realWrites === "true"
+        ? Object.freeze({ ...SAFE_RUNTIME_DEFAULTS, VITE_BFF_REAL_WRITES: "true" as const })
+        : SAFE_RUNTIME_DEFAULTS,
   });
 }
 

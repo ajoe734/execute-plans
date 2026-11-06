@@ -156,6 +156,110 @@ describe("deploymentRuntime public configuration contract", () => {
     );
   });
 
+  describe("optional VITE_BFF_REAL_WRITES public write posture", () => {
+    const LEGACY_PRODUCTION_PAYLOAD =
+      '{"bffBaseUrl":"https://api.mvl-cap.tw","configRef":"'
+      + PRODUCTION_CONFIG.configRef
+      + '","environment":"production","gcpIdentity":'
+      + JSON.stringify({
+        apiKey: PRODUCTION_CONFIG.gcpIdentity.apiKey,
+        audience: PRODUCTION_CONFIG.gcpIdentity.audience,
+        authDomain: PRODUCTION_CONFIG.gcpIdentity.authDomain,
+        issuer: PRODUCTION_CONFIG.gcpIdentity.issuer,
+        projectId: PRODUCTION_CONFIG.gcpIdentity.projectId,
+      })
+      + ',"schemaVersion":'
+      + JSON.stringify(PUBLIC_RUNTIME_CONFIG_SCHEMA)
+      + "}";
+
+    it("keeps legacy payload bytes and digest identical when the key is absent", () => {
+      const validated = validateDeploymentRuntimeConfig(PRODUCTION_CONFIG, {
+        hostname: "app.mvl-cap.tw",
+      });
+      expect(canonicalDeploymentConfigPayload(validated)).toBe(
+        LEGACY_PRODUCTION_PAYLOAD,
+      );
+      expect(validated.configSha256).toBe(
+        computeDeploymentConfigSha256(validated),
+      );
+      expect("VITE_BFF_REAL_WRITES" in validated).toBe(false);
+      expect(validated.safeDefaults.VITE_BFF_REAL_WRITES).toBe("false");
+    });
+
+    it("accepts explicit false (read-only) and explicit true, folding only explicit keys into the digest", () => {
+      const legacy = validateDeploymentRuntimeConfig(PRODUCTION_CONFIG, {
+        hostname: "app.mvl-cap.tw",
+      });
+      const off = validateDeploymentRuntimeConfig(
+        { ...PRODUCTION_CONFIG, VITE_BFF_REAL_WRITES: "false" },
+        { hostname: "app.mvl-cap.tw" },
+      );
+      const on = validateDeploymentRuntimeConfig(
+        { ...PRODUCTION_CONFIG, VITE_BFF_REAL_WRITES: "true" },
+        { hostname: "app.mvl-cap.tw" },
+      );
+      expect(off.safeDefaults.VITE_BFF_REAL_WRITES).toBe("false");
+      expect(on.safeDefaults.VITE_BFF_REAL_WRITES).toBe("true");
+      expect(on.safeDefaults.VITE_BFF_ALLOW_DEV_STUB_WRITES).toBe("false");
+      expect(on.safeDefaults.VITE_BFF_EMBEDDED_BEARER_TOKEN).toBe("false");
+      expect(on.safeDefaults.VITE_BFF_MODE).toBe("live");
+      expect(on.safeDefaults.VITE_BFF_FALLBACK).toBe("strict");
+      expect(new Set([legacy.configSha256, off.configSha256, on.configSha256]).size).toBe(3);
+      expect(canonicalDeploymentConfigPayload(on)).toContain('"VITE_BFF_REAL_WRITES":"true"');
+
+      // digest verification covers the explicit key
+      expect(() =>
+        validateDeploymentRuntimeConfig(
+          {
+            ...PRODUCTION_CONFIG,
+            VITE_BFF_REAL_WRITES: "true",
+            configSha256: legacy.configSha256,
+          },
+          { hostname: "app.mvl-cap.tw" },
+        ),
+      ).toThrow(/configSha256 mismatch/u);
+      expect(
+        validateDeploymentRuntimeConfig(
+          {
+            ...STAGING_CONFIG,
+            VITE_BFF_REAL_WRITES: "true",
+            configSha256: computeDeploymentConfigSha256({
+              environment: "staging",
+              configRef: STAGING_CONFIG.configRef,
+              bffBaseUrl: STAGING_CONFIG.bffBaseUrl,
+              VITE_BFF_REAL_WRITES: "true",
+              gcpIdentity: {
+                apiKey: STAGING_CONFIG.gcpIdentity.apiKey,
+                projectId: STAGING_CONFIG.gcpIdentity.projectId,
+                authDomain: STAGING_CONFIG.gcpIdentity.authDomain,
+                issuer: STAGING_CONFIG.gcpIdentity.issuer!,
+                audience: STAGING_CONFIG.gcpIdentity.audience!,
+              },
+            }),
+          },
+          { hostname: "app.stg.mvl-cap.tw" },
+        ).safeDefaults.VITE_BFF_REAL_WRITES,
+      ).toBe("true");
+    });
+
+    it("rejects non-string or non-canonical values and still rejects unknown keys", () => {
+      for (const bad of [true, false, 1, null, "TRUE", "yes", "1", " true", ""]) {
+        expect(() =>
+          validateDeploymentRuntimeConfig(
+            { ...PRODUCTION_CONFIG, VITE_BFF_REAL_WRITES: bad },
+            { hostname: "app.mvl-cap.tw" },
+          ),
+        ).toThrow(DeploymentRuntimeConfigError);
+      }
+      expect(() =>
+        validateDeploymentRuntimeConfig(
+          { ...PRODUCTION_CONFIG, realWrites: "true" },
+          { hostname: "app.mvl-cap.tw" },
+        ),
+      ).toThrow(/unsupported or forbidden override key/u);
+    });
+  });
+
   it("rejects tampered configSha256 digests", () => {
     expect(() =>
       validateDeploymentRuntimeConfig(
@@ -206,10 +310,6 @@ describe("deploymentRuntime public configuration contract", () => {
       {
         ...STAGING_CONFIG,
         clientSecret: "super-secret",
-      },
-      {
-        ...STAGING_CONFIG,
-        VITE_BFF_REAL_WRITES: "true",
       },
       {
         ...STAGING_CONFIG,
