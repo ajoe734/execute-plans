@@ -1,0 +1,128 @@
+{
+  "task_id": "FE-MGMT-READS-CORRECTIONS-20261106",
+  "title": "Correct three defects left by the complete list reads change",
+  "repository": "ajoe734/execute-plans",
+  "branch": "task/FE-MGMT-READS-CORRECTIONS-20261106",
+  "owner": "Antigravity2",
+  "reviewer": "Claude",
+  "real_row_shapes_verified": {
+    "persona": {
+      "id": "persona-be19a1fac471247f2b2a",
+      "name": "青禾｜2330 台股 Paper 學習 R2",
+      "legacyPaperCapitalPoolId": "pool-persona-paper-298e138c136c9840b0e4",
+      "paperLedgerId": "paper-ledger-298e138c136c9840b0e4",
+      "deploymentPlanId": "plan-persona-paper-298e138c136c9840b0e4",
+      "runtimeId": "rt-535a82a3",
+      "runtimeBindingId": "rb-a1c3ada3d5894d57bc2e012f337753be"
+    },
+    "provisioning_retired_persona": {
+      "id": "persona-c6ef44745087d11cc138",
+      "lifecycle_status": "retired"
+    },
+    "strategy_bff_dto": {
+      "id": "strategy-persona-298e138c136c9840b0e4",
+      "strategy_id": "strategy-persona-298e138c136c9840b0e4",
+      "name": "青禾｜2330 台股 Paper 學習 R2 Paper Strategy",
+      "owner": "operator",
+      "updatedAt": "2026-10-18T17:20:36.224810Z",
+      "state": "approved",
+      "risk": "low",
+      "alpha": "alpha.tw.2330",
+      "capitalPoolId": "pool-persona-paper-298e138c136c9840b0e4",
+      "personaIds": [
+        "persona-be19a1fac471247f2b2a"
+      ]
+    },
+    "capital_pool": {
+      "id": "pool-persona-paper-298e138c136c9840b0e4",
+      "capital_scope": "paper",
+      "currency": "USD"
+    },
+    "deployment": {
+      "plan_id": "plan-persona-paper-298e138c136c9840b0e4",
+      "strategy_id": "strategy-persona-298e138c136c9840b0e4",
+      "artifact_id": "artifact-persona-298e138c136c9840b0e4",
+      "artifact_version": "1",
+      "target_stage": "paper",
+      "sponsor_persona_id": "persona-be19a1fac471247f2b2a",
+      "status": "active"
+    }
+  },
+  "acceptance_evidence": {
+    "ac1_repeated_next_page_token_fails_through_page_cap_error_path_with_no_partial_rows": {
+      "status": "passed",
+      "detail": "Updated collectPaginatedListPages in src/lib/bff-v1/domainReads.ts so seenTokens.has(nextToken) fails through the exact same liveStatus.reportFallback('strict: ...') and throw makeBffError({ code: 'BACKEND_UNAVAILABLE', message }) error path as reaching maxPages, returning no partial rows. Two-page cycle tests in src/lib/bff-v1/__tests__/domainReads.allPages.test.ts and src/lib/bff-v1/__tests__/lists.test.ts prove that when page 1 and page 2 both return next_page_token='200', the read rejects with BffError (code='BACKEND_UNAVAILABLE'), reports strict fallback, and returns no partial rows."
+    },
+    "ac2_risk_center_open_incident_count_with_21_open_incidents_and_status_filter_on_every_page": {
+      "status": "passed",
+      "detail": "Updated listIncidents in src/lib/bff-v1/operations.ts to reuse strictLivePaginatedList<Incident> when a status filter is supplied (as used by RiskCenter.tsx via NON_TERMINAL_INCIDENT_STATUS_FILTER and listOpenIncidents), keeping status=open,investigating,mitigating,in_progress on every paginated GET (/bff/incidents?status=...&page_size=200 and /bff/incidents?status=...&page_size=200&page_token=20). Unfiltered bffV1.incidents.list() and lists.incidents (used by the general incidents page) remain untouched. Tests in domainReads.allPages.test.ts and RiskCenter.test.tsx prove that 21 open incidents across two pages produce an Open Incidents KPI count of 21 and render the 21st open incident."
+    },
+    "ac3_strategy_reads_return_bff_dto_without_aliases_or_null_to_empty_string_coercion": {
+      "status": "passed",
+      "detail": "Removed normalizeStrategyRecord and normalizeStrategyList from src/lib/bff-v1/strategies.ts so listNonDraftStrategies, listStrategiesForPersona, and getStrategy return the BFF DTO emitted by services/control-plane/bff/strategies/routes/common.py directly without fabricating persona_ids, persona_id, personaId, or capital_pool_id aliases and without coercing null fields to empty strings. Tests in domainReads.allPages.test.ts, PersonaDetail.test.ts, CapitalPoolDetail.test.tsx, and PersonaCapitalBindingTab.test.tsx verify real rows with personaIds, capitalPoolId, and alpha still reach every caller."
+    },
+    "ac4_owner_read_counts_and_no_second_pager_rule_unchanged": {
+      "status": "passed",
+      "detail": "All paginated reads continue to flow through the single shared collectPaginatedListPages helper in src/lib/bff-v1/domainReads.ts; no second pagination mechanism was added and owner read counts remain unchanged."
+    },
+    "ac5_no_weakened_or_deleted_tests_and_changed_assertion_justifications": {
+      "status": "passed",
+      "detail": "No existing test was weakened or deleted. All changed assertions are justified below.",
+      "changed_assertions": [
+        {
+          "file": "src/lib/bff-v1/__tests__/domainReads.allPages.test.ts",
+          "change": "Updated strategy fixture rows in 'removes first-page unfiltered bffV1.strategies.list and exposes listNonDraft and listForPersona across pages' from synthetic persona_id/capital_pool_id aliases to the real BFF DTO fields personaIds, capitalPoolId, and alpha emitted by services/control-plane/bff/strategies/routes/common.py",
+          "reason": "AC 3 removes the persona_ids, persona_id, personaId, and capital_pool_id aliases from strategy reads because the BFF DTO already emits personaIds, capitalPoolId, and alpha."
+        },
+        {
+          "file": "src/lib/bff-v1/__tests__/domainReads.allPages.test.ts",
+          "change": "Updated 'queries GET /bff/incidents with non-terminal status filter when requested' fetchUrls assertion from single-page ['/bff/incidents?status=...'] to multi-page ['/bff/incidents?status=...&page_size=200', '/bff/incidents?status=...&page_size=200&page_token=20', '/bff/incidents'] with 21 open incidents across 2 pages plus an unfiltered single-page check",
+          "reason": "AC 2 requires status-filtered incident reads for Risk Center to paginate across all pages using the shared all-pages reader while preserving the status filter on every page read and leaving unfiltered incident reads untouched."
+        },
+        {
+          "file": "src/lib/bff-v1/__tests__/lists.test.ts",
+          "change": "Updated realApprovedRow in 'requests GET /bff/strategies with exclude_state, state, page_size, and page_token and preserves state_counts and next_page_token' to include BFF DTO fields alpha and personaIds and omit synthetic capital_pool_id alias",
+          "reason": "AC 3 aligns strategy test fixtures with the real BFF DTO shape (personaIds, capitalPoolId, alpha) without synthetic alias fields."
+        },
+        {
+          "file": "src/lib/bff-v1/strategies.test.ts",
+          "change": "Replaced expect(forPersona[0].personaIds).toContain(persona) with expect(forPersona[0]).toEqual(page2Rows[0]) and personaIds-absent check",
+          "reason": "AC 3 removes persona_id -> personaIds alias synthesis; the old assertion depended on the removed normalization. The row is now asserted to pass through unchanged."
+        },
+        {
+          "file": "src/management/pages/PersonaDetail.test.ts",
+          "change": "Added assertions (new, none removed): alpha rendered on the routes tab and alias keys absent from the BFF row",
+          "reason": "AC 3: real rows' alpha reaches callers; alpha is rendered by the routes tab, not the ownership tab."
+        },
+        {
+          "file": "src/management/pages/DeploymentDetail.test.tsx",
+          "change": "fetch mock now serves the captured fixture only for the first page and a terminal empty page for page_token requests; no assertion changed",
+          "reason": "The mock returned the same page (with next_page_token) for every request; with AC 1 a repeated token fails closed, so the unrealistic mock is corrected to behave like a real server. Outside the listed scoped artifacts but required by AC 1."
+        },
+        {
+          "file": "src/management/pages/ObjectListPage.test.tsx",
+          "change": "fetch mock now serves the captured fixture only for the first page and a terminal empty page for page_token requests; no assertion changed",
+          "reason": "The mock returned the same page (with next_page_token) for every request; with AC 1 a repeated token fails closed, so the unrealistic mock is corrected to behave like a real server. Outside the listed scoped artifacts but required by AC 1."
+        }
+      ]
+    }
+  },
+  "owner_recount_references": {
+    "captured_reads_fixture": "/tmp/pantheon-dev-operable-20261104/management-candidate-reads-1793948457998.json",
+    "independent_owner_recount": "/tmp/pantheon-dev-operable-20261104/actual-firstpage-owner-071404.json",
+    "owner_union_id_comparison": "/tmp/pantheon-dev-operable-20261104/actual-firstpage-complete-native-owner-union-ID-comparison.json",
+    "counts": {
+      "personas_directory_union": 139,
+      "personas_configured_pg": 138,
+      "personas_provisioning_only_retired": "persona-c6ef44745087d11cc138",
+      "capital_pools": 136,
+      "deployments": 133
+    }
+  },
+  "verification_commands": [
+    "./node_modules/.bin/tsc -p tsconfig.app.json --noEmit",
+    "./node_modules/.bin/vitest run src/lib/bff-v1/__tests__/domainReads.allPages.test.ts src/lib/bff-v1/__tests__/lists.test.ts src/management/pages/RiskCenter.test.tsx src/management/pages/PersonaDetail.test.ts src/management/pages/CapitalPoolDetail.test.tsx src/management/components/detail/PersonaCapitalBindingTab.test.tsx",
+    "npx tsc --noEmit -p tsconfig.app.json (exit 0)",
+    "npx vitest run on all touched/affected files: pass. Full suite solo: only src/test/public-build-auth-contract.test.ts fails (22), also failing on the unmodified base head (environment, unrelated)."
+  ]
+}

@@ -260,5 +260,14 @@ describe("CapitalPoolDetail", () => {
 
     await screen.findByText("Paper Pool With Null Window Metrics");
     expect(screen.queryByText(/NaN/)).not.toBeInTheDocument();
+    expect(mocks.strategiesList).toHaveBeenCalledTimes(1);
+    const loadedStrategy = (await mocks.strategiesList.mock.results[0].value)[0] as Record<string, unknown>;
+    expect(loadedStrategy.capitalPoolId).toBe(poolId);
+    expect(loadedStrategy.personaIds).toEqual(["persona-paper-running-01"]);
+    expect(loadedStrategy.alpha).toBe("alpha.momo.v1");
+    expect("capital_pool_id" in loadedStrategy).toBe(false);
+    expect("persona_id" in loadedStrategy).toBe(false);
+    expect("persona_ids" in loadedStrategy).toBe(false);
+    expect("personaId" in loadedStrategy).toBe(false);
   });
 });

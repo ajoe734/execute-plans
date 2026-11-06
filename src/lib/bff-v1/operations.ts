@@ -98,12 +98,19 @@ export async function listIncidents(options?: ListIncidentsOptions): Promise<Inc
     : typeof rawStatus === "string"
       ? rawStatus.trim()
       : "";
+  if (statusQuery) {
+    return strictLivePaginatedList<Incident>(
+      "incidents.list",
+      paths.incidents(),
+      (body) => normalizeIncidentTimestampList(liveItemsFrom<Incident>(body)),
+      { query: { status: statusQuery } },
+    );
+  }
   return strictLiveRead<Incident[]>(
     "incidents.list",
     {
       method: "GET",
       path: paths.incidents(),
-      ...(statusQuery ? { query: { status: statusQuery } } : {}),
     },
     liveItemsFrom<Incident>,
   ).then(normalizeIncidentTimestampList);

@@ -7,6 +7,7 @@ import i18n from "@/i18n";
 import {
   bffV1,
   NON_TERMINAL_INCIDENT_STATUS_FILTER,
+  PAGINATED_LIST_PAGE_SIZE,
   type Alert,
   type CapitalPool,
   type Incident,
@@ -14,6 +15,7 @@ import {
   type Runtime,
   type Strategy,
 } from "@/lib/bff-v1";
+import { liveStatus } from "@/lib/bff-v1/liveStatus";
 import { DRAWDOWN_BREACH_THRESHOLD, isDrawdownBreach, RiskCenter } from "./RiskCenter";
 
 function renderRiskCenter() {
@@ -33,6 +35,8 @@ describe("RiskCenter", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+    liveStatus._reset();
   });
 
   describe("drawdown breach sign check against owner-stored fractional ratio", () => {
@@ -265,5 +269,102 @@ describe("RiskCenter", () => {
 
     expect(within(incidentsCard).queryByText("0")).not.toBeInTheDocument();
     expect(within(drawdownCard).queryByText("0")).not.toBeInTheDocument();
+  });
+
+  it("counts all 21 open incidents across two paginated BFF pages and preserves the non-terminal status filter on every page read", async () => {
+    vi.stubEnv("MODE", "development");
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("VITE_BFF_MODE", "live");
+    vi.stubEnv("VITE_BFF_FALLBACK", "strict");
+    liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
+
+    const encodedStatus = encodeURIComponent(NON_TERMINAL_INCIDENT_STATUS_FILTER);
+    const page1OpenIncidents = Array.from({ length: 20 }, (_, idx) => ({
+      incident_id: `inc-open-${idx + 1}`,
+      severity: idx % 2 === 0 ? "high" : "medium",
+      status: (["open", "investigating", "mitigating", "in_progress"] as const)[idx % 4],
+      summary: `Open Incident ${idx + 1}`,
+      detected_at: "2026-10-18T17:20:36.224810Z",
+    }));
+    const page2OpenIncidents = [
+      {
+        incident_id: "inc-open-21",
+        severity: "critical",
+        status: "open",
+        summary: "Open Incident 21 Beyond First Page",
+        detected_at: "2026-10-18T18:20:36.224810Z",
+      },
+    ];
+
+    const incidentUrls: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      if (url.startsWith("/bff/incidents")) {
+        incidentUrls.push(url);
+      }
+      if (url === `/bff/incidents?status=${encodedStatus}&page_size=${PAGINATED_LIST_PAGE_SIZE}`) {
+        return new Response(
+          JSON.stringify({
+            incidents: page1OpenIncidents,
+            page_info: { page_size: 20, total: 21, next_page_token: "20" },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (
+        url ===
+        `/bff/incidents?status=${encodedStatus}&page_size=${PAGINATED_LIST_PAGE_SIZE}&page_token=20`
+      ) {
+        return new Response(
+          JSON.stringify({
+            incidents: page2OpenIncidents,
+            page_info: { page_size: 20, total: 21, next_page_token: null },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      throw new Error(`Unexpected fetch URL: ${url}`);
+    });
+
+    vi.spyOn(bffV1.strategies, "listNonDraft").mockResolvedValue([
+      {
+        id: "strategy-persona-298e138c136c9840b0e4",
+        name: "青禾｜2330 台股 Paper 學習 R2 Paper Strategy",
+        owner: "operator",
+        updatedAt: "2026-10-18T17:20:36.224810Z",
+        state: "approved",
+        risk: "low",
+        alpha: "alpha.tw.2330",
+        capitalPoolId: "pool-persona-paper-298e138c136c9840b0e4",
+        personaIds: ["persona-be19a1fac471247f2b2a"],
+        pnl30d: null,
+        sharpe: null,
+        drawdown: null,
+      },
+    ]);
+    vi.spyOn(bffV1.personas, "list").mockResolvedValue([]);
+    vi.spyOn(bffV1.capitalPools, "list").mockResolvedValue([]);
+    vi.spyOn(bffV1.runtimes, "list").mockResolvedValue([]);
+    vi.spyOn(bffV1.tools, "list").mockResolvedValue([]);
+    vi.spyOn(bffV1.mcpServers, "list").mockResolvedValue([]);
+    vi.spyOn(bffV1.skills, "list").mockResolvedValue([]);
+    vi.spyOn(bffV1.alerts, "list").mockResolvedValue([]);
+
+    renderRiskCenter();
+
+    const incidentsCard = await screen.findByTestId("risk-card-incidents");
+    await waitFor(() => {
+      expect(within(incidentsCard).getByText("21")).toBeInTheDocument();
+    });
+
+    expect(incidentUrls).toEqual([
+      `/bff/incidents?status=${encodedStatus}&page_size=${PAGINATED_LIST_PAGE_SIZE}`,
+      `/bff/incidents?status=${encodedStatus}&page_size=${PAGINATED_LIST_PAGE_SIZE}&page_token=20`,
+    ]);
+
+    const incidentsTab = screen.getByRole("tab", { name: /Incident/i });
+    fireEvent.mouseDown(incidentsTab);
+    fireEvent.click(incidentsTab);
+    expect(await screen.findByText("Open Incident 21 Beyond First Page")).toBeInTheDocument();
   });
 });

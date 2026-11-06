@@ -386,6 +386,20 @@ describe("PersonaDetail", () => {
         await screen.findByText("青禾｜2330 台股 Paper 學習 R2 Paper Strategy"),
       ).toBeInTheDocument();
       expect(screen.getByText("strategy-persona-298e138c136c9840b0e4")).toBeInTheDocument();
+      const routesTab = screen
+        .getAllByRole("tab")
+        .find((tab) => (tab.getAttribute("id") ?? "").endsWith("trigger-routes"));
+      expect(routesTab).toBeDefined();
+      fireEvent.pointerDown(routesTab!);
+      fireEvent.mouseDown(routesTab!);
+      fireEvent.pointerUp(routesTab!);
+      fireEvent.mouseUp(routesTab!);
+      fireEvent.click(routesTab!);
+      expect(await screen.findByText("alpha.tw.2330")).toBeInTheDocument();
+      expect("persona_id" in (realStrategy as unknown as Record<string, unknown>)).toBe(false);
+      expect("persona_ids" in (realStrategy as unknown as Record<string, unknown>)).toBe(false);
+      expect("personaId" in (realStrategy as unknown as Record<string, unknown>)).toBe(false);
+      expect("capital_pool_id" in (realStrategy as unknown as Record<string, unknown>)).toBe(false);
     });
 
     it("renders unavailable and not no results when strategyOwnership or capitalBinding read fails", async () => {

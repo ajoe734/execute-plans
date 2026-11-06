@@ -256,9 +256,17 @@ export function normalizeEvolutionRun(raw: unknown, fallbackProgramId = ""): Evo
     asRecord(record.detail) ??
     (typeof record.detail === "string" ? record.detail : null);
   const source = recordString(record, "source") ?? null;
+  const baselineMetrics = asRecord(record.baseline_metrics) as EvolutionRun["baseline_metrics"] | undefined;
+  const candidateMetrics = asRecord(record.candidate_metrics) as EvolutionRun["candidate_metrics"] | undefined;
 
   return {
     ...(record as Partial<EvolutionRun>),
+    outcome: recordString(record, "outcome") ?? null,
+    outcome_reason: recordString(record, "outcome_reason") ?? null,
+    candidate_artifact_id: recordString(record, "candidate_artifact_id") ?? null,
+    baseline_metrics: baselineMetrics ?? null,
+    candidate_metrics: candidateMetrics ?? null,
+    session_id: recordString(record, "session_id") ?? null,
     id,
     run_id: recordString(record, "run_id", "runId", "id") ?? id,
     runId: id,
