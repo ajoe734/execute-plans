@@ -1,0 +1,19 @@
+{
+  "task_id": "FE-EVOLUTION-RUN-OUTCOME-20261106",
+  "scope": "functional evidence only; hosted verification belongs to EVOLUTION-RESEARCH-HOSTED-ACCEPT-20261104",
+  "contract_source": "pantheon dev 6998d37 (PR #7003) services/control-plane/bff/BFF_API_CONTRACT.md 'retrain run outcome'; metric keys sharpe_ratio/total_return/max_drawdown from services/training-session tests",
+  "fields_used": ["outcome", "outcome_reason", "candidate_artifact_id", "baseline_metrics", "candidate_metrics", "session_id"],
+  "behavior": {
+    "outcome_labels": "candidate_created, no_candidate, evaluation_rejected, failed, running in en-US and zh-TW",
+    "unsuccessful_completion": "no_candidate and evaluation_rejected show an explicit 'not a successful evolution' notice",
+    "missing_outcome": "raw status shown plus 'no evaluation result is recorded'",
+    "metrics": "baseline vs candidate sharpe_ratio, total_return, max_drawdown; null/missing shown as 'Not reported', never 0",
+    "artifact": "candidate_artifact_id links to /management/artifacts/{id}; no promote action added"
+  },
+  "validation": {
+    "tsc": "npx tsc --noEmit: no errors",
+    "vitest": "EvolutionDetail.test.tsx, src/lib/bff-v1, i18nParity.test.ts: 65 files / 719 tests passed",
+    "assertions_changed": "none; no existing test weakened or deleted"
+  },
+  "worker_notes": "No VM/SSH access used. Local checkout origin/dev was stale for the contract; contract read from GitHub dev (merge 6998d37). Branch base a45bbf1ee is an ancestor-consistent origin/dev at fetch time."
+}

@@ -76,6 +76,18 @@ function formatCriterionValue(value: unknown): string {
   }
 }
 
+const RUN_METRIC_ROWS = [
+  { key: "sharpe_ratio", labelKey: "evolution.runs.metricSharpe" },
+  { key: "total_return", labelKey: "evolution.runs.metricTotalReturn" },
+  { key: "max_drawdown", labelKey: "evolution.runs.metricMaxDrawdown" },
+] as const;
+
+/** A missing, null or non-finite metric is "not reported" (null); it is never coerced to zero. */
+function runMetricValue(metrics: EvolutionRun["baseline_metrics"], key: string): number | null {
+  const value = metrics ? metrics[key] : null;
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
 function formatRunDetail(detail: unknown): string {
   if (!detail) return "—";
   if (typeof detail === "string") return detail;
@@ -392,7 +404,9 @@ export const EvolutionDetail = () => {
                   <th className="py-2 pr-3 font-medium">{t("evolution.runs.runId")}</th>
                   <th className="py-2 pr-3 font-medium">{t("evolution.runs.status")}</th>
                   <th className="py-2 pr-3 font-medium">{t("evolution.runs.decisionId")}</th>
+                  <th className="py-2 pr-3 font-medium">{t("evolution.runs.outcomeHeader")}</th>
                   <th className="py-2 pr-3 font-medium">{t("evolution.runs.downstreamStatus")}</th>
+                  <th className="py-2 pr-3 font-medium">{t("evolution.runs.metricsHeader")}</th>
                   <th className="py-2 pr-3 font-medium">{t("evolution.runs.detail")}</th>
                   <th className="py-2 font-medium">{t("evolution.runs.linkedAt")}</th>
                 </tr>
@@ -403,6 +417,16 @@ export const EvolutionDetail = () => {
                   const statusStr = String(r.status || "unknown");
                   const isFailed = statusStr.toLowerCase() === "failed";
                   const decisionId = r.decision_id ?? r.decisionId ?? null;
+                  const outcome = r.outcome ?? null;
+                  const outcomeKey =
+                    outcome ?? (statusStr.toLowerCase() === "failed" || statusStr.toLowerCase() === "running" ? statusStr.toLowerCase() : null);
+                  const outcomeLabel =
+                    outcomeKey && ["candidate_created", "no_candidate", "evaluation_rejected", "failed", "running"].includes(outcomeKey)
+                      ? t(`evolution.runs.outcomeLabel.${outcomeKey}`)
+                      : outcomeKey;
+                  const isUnsuccessfulCompletion = outcome === "no_candidate" || outcome === "evaluation_rejected";
+                  const hasMetrics = Boolean(r.baseline_metrics || r.candidate_metrics);
+                  const candidateArtifactId = r.candidate_artifact_id ?? null;
                   return (
                     <tr
                       key={runId}
@@ -439,8 +463,104 @@ export const EvolutionDetail = () => {
                           "—"
                         )}
                       </td>
+                      <td className="py-2 pr-3" data-testid={`evolution-run-outcome-${runId}`}>
+                        {outcome ? (
+                          <div className="space-y-1">
+                            <Badge
+                              variant={outcome === "candidate_created" ? "default" : "outline"}
+                              data-testid={`evolution-run-outcome-label-${runId}`}
+                              data-outcome={outcome}
+                              className="text-[10px]"
+                            >
+                              {outcomeLabel}
+                            </Badge>
+                            {isUnsuccessfulCompletion && (
+                              <div
+                                className="text-status-warning"
+                                data-testid={`evolution-run-outcome-notice-${runId}`}
+                              >
+                                {t(
+                                  outcome === "no_candidate"
+                                    ? "evolution.runs.noCandidateNotice"
+                                    : "evolution.runs.evaluationRejectedNotice",
+                                )}
+                              </div>
+                            )}
+                            {r.outcome_reason && (
+                              <div
+                                className="text-muted-foreground"
+                                data-testid={`evolution-run-outcome-reason-${runId}`}
+                              >
+                                {t("evolution.runs.reason")}: {r.outcome_reason}
+                              </div>
+                            )}
+                            {candidateArtifactId && (
+                              <div>
+                                {t("evolution.runs.candidateArtifact")}:{" "}
+                                <Link
+                                  to={`/management/artifacts/${encodeURIComponent(candidateArtifactId)}`}
+                                  data-testid={`evolution-run-candidate-artifact-${runId}`}
+                                  className="text-primary underline hover:opacity-80 text-mono"
+                                >
+                                  {candidateArtifactId}
+                                </Link>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="space-y-1">
+                            {outcomeLabel && (
+                              <Badge
+                                variant={statusStr.toLowerCase() === "failed" ? "destructive" : "outline"}
+                                data-testid={`evolution-run-outcome-label-${runId}`}
+                                className="text-[10px]"
+                              >
+                                {outcomeLabel}
+                              </Badge>
+                            )}
+                            <div
+                              className="text-muted-foreground"
+                              data-testid={`evolution-run-no-evaluation-${runId}`}
+                            >
+                              {t("evolution.runs.noEvaluationRecorded")}
+                            </div>
+                          </div>
+                        )}
+                      </td>
                       <td className="py-2 pr-3 text-mono">
                         {r.downstream_status ?? r.downstreamStatus ?? "—"}
+                      </td>
+                      <td className="py-2 pr-3" data-testid={`evolution-run-metrics-${runId}`}>
+                        {hasMetrics ? (
+                          <table className="text-mono">
+                            <thead>
+                              <tr className="text-muted-foreground">
+                                <th />
+                                <th className="pr-3 font-medium text-left">{t("evolution.runs.metricBaseline")}</th>
+                                <th className="font-medium text-left">{t("evolution.runs.metricCandidate")}</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {RUN_METRIC_ROWS.map(({ key, labelKey }) => {
+                                const baseline = runMetricValue(r.baseline_metrics, key);
+                                const candidate = runMetricValue(r.candidate_metrics, key);
+                                return (
+                                  <tr key={key}>
+                                    <td className="pr-3 text-muted-foreground">{t(labelKey)}</td>
+                                    <td className="pr-3" data-testid={`evolution-run-metric-${runId}-${key}-baseline`}>
+                                      {baseline === null ? t("evolution.runs.metricNotReported") : baseline}
+                                    </td>
+                                    <td data-testid={`evolution-run-metric-${runId}-${key}-candidate`}>
+                                      {candidate === null ? t("evolution.runs.metricNotReported") : candidate}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        ) : (
+                          "—"
+                        )}
                       </td>
                       <td className="py-2 pr-3 text-mono text-muted-foreground">
                         {formatRunDetail(r.detail)}
