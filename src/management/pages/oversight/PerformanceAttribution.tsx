@@ -15,9 +15,17 @@ import type {
 import { useV5Live } from "@/management/pages/v5/useV5Live";
 import type { HoldingRow } from "@/lib/v5/management/portfolio";
 import {
-  ATTRIBUTION_DIMENSIONS, buildAttributionLinks, confirmedAppliedPeriod,
+  SUPPORTED_ATTRIBUTION_DIMENSIONS,
+  confirmedAppliedPeriod,
   DATED_ATTRIBUTION_SOURCE_UNAVAILABLE,
-  type AttributionDimension, type AttributionPeriod, type PerformanceAttributionRow,
+  isSupportedAttributionDimension,
+  normalizePerformanceAttributionRow,
+  normalizeSupportedAttributionDimension,
+  type AttributionDimension,
+  type AttributionPeriod,
+  type PerformanceAttributionRow,
+  type RawAttributionSourceRefs,
+  type SupportedAttributionDimension,
 } from "@/lib/v5/management/performanceAttribution";
 
 const MISSING = "—";
@@ -36,48 +44,8 @@ const confidenceTone = (confidence: ManagementDataConfidence): string =>
       ? "border-status-warning/40 bg-status-warning/10 text-status-warning"
       : "border-status-failed/40 bg-status-failed/10 text-status-failed";
 
-type RawLinks = {
-  manageHref?: unknown;
-  manage_href?: unknown;
-};
-
-type RawMetrics = {
-  totalPnl?: unknown;
-  total_pnl?: unknown;
-  pnlContributionPct?: unknown;
-  pnl_contribution_pct?: unknown;
-  riskContributionPct?: unknown;
-  risk_contribution_pct?: unknown;
-  drawdownContributionPct?: unknown;
-  drawdown_contribution_pct?: unknown;
-  worstDrawdown?: unknown;
-  worst_drawdown?: unknown;
-};
-
-type RawSourceRefs = {
-  personaIds?: unknown;
-  persona_ids?: unknown;
-};
-
-type RawAttributionRow = Partial<PerformanceAttributionRow> & {
-  dimension?: unknown;
-  key?: unknown;
-  dimensionKey?: unknown;
-  dimension_key?: unknown;
-  label?: unknown;
-  total_pnl?: unknown;
-  pnl_contribution_pct?: unknown;
-  risk_contribution_pct?: unknown;
-  drawdown_contribution_pct?: unknown;
-  metrics?: RawMetrics | null;
-  evidence_refs?: unknown;
-  links?: RawLinks | null;
-  sourceRefs?: RawSourceRefs | null;
-  source_refs?: RawSourceRefs | null;
-};
-
 type AttributionViewRow = PerformanceAttributionRow & {
-  sourceRefs?: RawSourceRefs | null;
+  sourceRefs?: RawAttributionSourceRefs | null;
 };
 
 type RawPersonaFleetRow = ManagementPersonaFleetRow & {
@@ -194,48 +162,22 @@ function stringArray(value: unknown): string[] {
     : [];
 }
 
-function isAttributionDimension(value: unknown): value is AttributionDimension {
-  return typeof value === "string" && ATTRIBUTION_DIMENSIONS.includes(value as AttributionDimension);
-}
-
 function isAttributionPeriod(value: unknown): value is AttributionPeriod {
   return typeof value === "string" && PERIODS.includes(value as AttributionPeriod);
 }
 
-function selectedDimensionFromQuery(value: string | null, personaFocus: string): AttributionDimension | "all" {
-  if (personaFocus) return "persona";
-  return isAttributionDimension(value) ? value : "all";
-}
+type SelectedDimensionState = {
+  dimension: SupportedAttributionDimension | "all";
+  unsupportedDimension?: string;
+};
 
-function normalizePerformanceAttributionRow(raw: unknown): AttributionViewRow {
-  const r = raw as RawAttributionRow;
-  const metrics = r.metrics ?? {};
-  const dimension = isAttributionDimension(r.dimension) ? r.dimension : "persona";
-  const key = cleanDataText(r.key, r.dimensionKey, r.dimension_key, r.label) ?? "unknown";
-  const label = cleanDataText(r.label, key) ?? MISSING;
-  const links: RawLinks = r.links ?? {};
-  const manageHref = cleanText(links.manageHref, links.manage_href) ?? buildAttributionLinks(dimension, key).manageHref;
-
-  return {
-    ...r,
-    dimension,
-    key,
-    label,
-    pnlContribution: finiteNumber(r.pnlContribution, r.total_pnl, metrics.totalPnl, metrics.total_pnl),
-    pnlContributionPct: finiteNumber(r.pnlContributionPct, r.pnl_contribution_pct, metrics.pnlContributionPct, metrics.pnl_contribution_pct),
-    riskContributionPct: finiteNumber(r.riskContributionPct, r.risk_contribution_pct, metrics.riskContributionPct, metrics.risk_contribution_pct),
-    drawdownContributionPct: finiteNumber(
-      r.drawdownContributionPct,
-      r.drawdown_contribution_pct,
-      metrics.drawdownContributionPct,
-      metrics.drawdown_contribution_pct,
-      metrics.worstDrawdown,
-      metrics.worst_drawdown,
-    ),
-    evidenceRefs: stringArray(r.evidenceRefs ?? r.evidence_refs),
-    links: { ...buildAttributionLinks(dimension, key), ...links, manageHref },
-    sourceRefs: r.sourceRefs ?? r.source_refs,
-  };
+function selectedDimensionFromQuery(value: string | null, personaFocus: string): SelectedDimensionState {
+  if (personaFocus) return { dimension: "persona" };
+  const raw = cleanDataText(value);
+  if (!raw || raw.toLowerCase() === "all") return { dimension: "all" };
+  const normalized = normalizeSupportedAttributionDimension(raw);
+  if (normalized) return { dimension: normalized };
+  return { dimension: "all", unsupportedDimension: raw };
 }
 
 function sourceRefPersonaIds(row: AttributionViewRow): string[] {
@@ -517,18 +459,27 @@ export const PerformanceAttributionPage = ({ embedded = false }: { embedded?: bo
   const [searchParams, setSearchParams] = useSearchParams();
   const personaFocus = (searchParams.get("persona_id") ?? searchParams.get("persona"))?.trim() ?? "";
   const entityFocus = searchParams.get("entity")?.trim() ?? "";
-  const dimension = selectedDimensionFromQuery(searchParams.get("dimension"), personaFocus);
+  const { dimension, unsupportedDimension } = selectedDimensionFromQuery(
+    searchParams.get("dimension"),
+    personaFocus,
+  );
   const periodParam = searchParams.get("period");
   const period: AttributionPeriod = isAttributionPeriod(periodParam) ? periodParam : "latest";
 
   const { data } = useV5Live(
-    (signal) => mgmt.performanceAttribution.getLiveOnly(
-      dimension === "all" ? undefined : dimension,
-      period,
-      { signal },
-    ),
-    [dimension, period],
-    { cacheKey: `oversight.performanceAttribution.${dimension}.${period}` },
+    (signal) => unsupportedDimension
+      ? Promise.resolve(undefined)
+      : mgmt.performanceAttribution.getLiveOnly(
+          dimension === "all" ? undefined : dimension,
+          period,
+          { signal },
+        ),
+    [dimension, period, unsupportedDimension],
+    {
+      cacheKey: unsupportedDimension
+        ? `oversight.performanceAttribution.unsupported.${unsupportedDimension}.${period}`
+        : `oversight.performanceAttribution.${dimension}.${period}`,
+    },
   );
   const { data: fleetRows } = useV5Live((signal) => mgmt.personaFleet.get({}, { signal }), [], { cacheKey: "oversight.personaFleet" });
   const { data: holdings } = useV5Live((signal) => mgmt.portfolioBook.holdingsLiveOnly({ signal }), [], { cacheKey: "oversight.portfolioBook.holdings" });
@@ -539,7 +490,10 @@ export const PerformanceAttributionPage = ({ embedded = false }: { embedded?: bo
     [personaFocus, period],
     { cacheKey: personaFocus ? `oversight.operationsReadModel.${personaFocus}.${period}` : "oversight.operationsReadModel.none" },
   );
-  const allRows = useMemo(() => (data?.rows ?? []).map(normalizePerformanceAttributionRow), [data]);
+  const allRows = useMemo(
+    () => (unsupportedDimension ? [] : (data?.rows ?? []).map(normalizePerformanceAttributionRow)),
+    [data, unsupportedDimension],
+  );
   // Applied period comes from the BFF response, never from the selector.
   const periodState = data?.period;
   const appliedPeriod = periodState ? confirmedAppliedPeriod(periodState) : undefined;
@@ -604,7 +558,10 @@ export const PerformanceAttributionPage = ({ embedded = false }: { embedded?: bo
     const next = new URLSearchParams(searchParams);
     if (nextDimension === "all") next.delete("dimension");
     else next.set("dimension", nextDimension);
-    if (nextDimension !== "persona") next.delete("persona");
+    if (nextDimension !== "persona") {
+      next.delete("persona");
+      next.delete("persona_id");
+    }
     next.delete("entity");
     setSearchParams(next, { replace: true });
   };
@@ -631,7 +588,7 @@ export const PerformanceAttributionPage = ({ embedded = false }: { embedded?: bo
             aria-label={t("mgmt.attribution.dimension")}
           >
             <option value="all">{t("mgmt.attribution.allDimensions")}</option>
-            {ATTRIBUTION_DIMENSIONS.map((d) => (
+            {SUPPORTED_ATTRIBUTION_DIMENSIONS.map((d) => (
               <option key={d} value={d}>{t(`mgmt.attribution.dimensions.${d}`, { defaultValue: d })}</option>
             ))}
           </select>
@@ -667,6 +624,15 @@ export const PerformanceAttributionPage = ({ embedded = false }: { embedded?: bo
             {periodState?.reason === DATED_ATTRIBUTION_SOURCE_UNAVAILABLE || appliedPeriod === "latest"
               ? t("mgmt.attribution.periodLatestSnapshotNotice")
               : t("mgmt.attribution.periodUnconfirmedNoticeFmt", { period: periodLabel(period) })}
+          </p>
+        ) : null}
+        {unsupportedDimension ? (
+          <p
+            role="status"
+            className="max-w-sm text-right text-xs text-status-warning"
+            data-testid="attribution-unsupported-dimension"
+          >
+            {t("mgmt.attribution.unsupportedDimensionNoticeFmt", { dimension: unsupportedDimension })}
           </p>
         ) : null}
         </div>
@@ -760,7 +726,13 @@ export const PerformanceAttributionPage = ({ embedded = false }: { embedded?: bo
           <tbody>
             {rows.map((r) => (
               <tr key={`${r.dimension}-${r.key}`} className="border-b border-border/50">
-                <td className="px-3 py-2"><Badge variant="outline">{t(`mgmt.attribution.dimensions.${r.dimension}`, { defaultValue: r.dimension })}</Badge></td>
+                <td className="px-3 py-2">
+                  <Badge variant="outline">
+                    {isSupportedAttributionDimension(r.dimension)
+                      ? t(`mgmt.attribution.dimensions.${r.dimension}`, { defaultValue: r.dimension })
+                      : r.dimension}
+                  </Badge>
+                </td>
                 <td className="px-3 py-2 font-mono">{r.label}</td>
                 <td className={`px-3 py-2 font-mono ${r.pnlContribution < 0 ? "text-status-failed" : "text-status-success"}`}>{fmtUsd(r.pnlContribution)}</td>
                 <td className={`px-3 py-2 font-mono ${r.pnlContributionPct < 0 ? "text-status-failed" : "text-status-success"}`}>{fmtPct(r.pnlContributionPct)}</td>

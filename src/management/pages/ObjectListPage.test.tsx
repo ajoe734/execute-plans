@@ -7,7 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import i18n from "@/i18n";
 import { liveStatus } from "@/lib/bff-v1/liveStatus";
 import { ObjectListPage, resolveObjectRowHref } from "./ObjectListPage";
-import { CapitalPoolsList } from "./Lists";
+import { ArtifactsList, CapitalPoolsList, EvolutionList, ResearchList } from "./Lists";
 import type { CreateBehavior } from "@/lib/writeIntents/types";
 import capitalPoolsFixture from "@/lib/bff-v1/__tests__/fixtures/hosted-20261020/capital-pools.json";
 
@@ -30,6 +30,7 @@ function stubLiveEnv() {
   vi.stubEnv("NODE_ENV", "development");
   vi.stubEnv("VITE_BFF_MODE", "live");
   vi.stubEnv("VITE_BFF_FALLBACK", "strict");
+  vi.stubEnv("VITE_BFF_REAL_WRITES", "true");
   liveStatus._reset({ mode: "live", effective: "live", baseUrl: "https://bff.example.test" });
 }
 
@@ -811,5 +812,696 @@ describe("ObjectListPage", () => {
     fireEvent.click(rowCell);
     expect(screen.getByTestId("location")).toHaveTextContent("/management/artifacts");
     expect(screen.getByTestId("location")).not.toHaveTextContent("/management/artifacts/undefined");
+  });
+
+  it("renders GET /bff/research-tasks rows with name, status, latest run, run count, created by, and updated at; removes duplicate status, risk, metric, value, and owner columns; marks stub/manual runs as non-real; disables research create with workflow explanation in both locales; and navigates to /management/experiments/<task_id>", async () => {
+    const { useLiveListV1: actualUseLiveListV1 } = await vi.importActual<typeof import("@/lib/bff-v1")>("@/lib/bff-v1");
+    mocks.useLiveListV1.mockImplementation(actualUseLiveListV1);
+
+    const researchTasksPayload = {
+      items: [
+        {
+          id: "rtask-20261023-008",
+          task_id: "rtask-20261023-008",
+          name: "VectorBT Factor Validation",
+          objective: "Evaluate cross-sectional factor stability across TW50 universe",
+          status: "completed",
+          task_type: "factor_eval",
+          created_by: "research-worker",
+          created_at: "2026-10-23T11:00:00Z",
+          updated_at: "2026-10-23T12:00:00Z",
+          run_count: 2,
+          latest_run: {
+            run_id: "rrun-20261023-002",
+            status: "completed",
+            adapter: "vectorbt",
+            dispatch_mode: "real",
+            requested_mode: "real",
+            created_by: "research-worker",
+            created_at: "2026-10-23T11:45:00Z",
+          },
+        },
+        {
+          id: "rtask-exp-sic-30bcef4d067e4c0111fc28cfe8101a7b",
+          task_id: "rtask-exp-sic-30bcef4d067e4c0111fc28cfe8101a7b",
+          name: "SIC Hypothesis Task",
+          objective: "Check SIC industry momentum hypothesis",
+          status: "queued",
+          task_type: "hypothesis_test",
+          created_by: "operator",
+          created_at: "2026-10-24T08:00:00Z",
+          updated_at: "2026-10-24T09:00:00Z",
+          run_count: 1,
+          latest_run: {
+            run_id: "rrun-20261024-stub",
+            status: "completed",
+            adapter: "stub",
+            dispatch_mode: "stub",
+            requested_mode: "stub",
+            created_by: "operator",
+            created_at: "2026-10-24T08:30:00Z",
+          },
+        },
+        {
+          id: "rtask-20261023-manual",
+          task_id: "rtask-20261023-manual",
+          name: "Manual Check Task",
+          objective: "Manual inspection record",
+          status: "completed",
+          task_type: "manual_check",
+          created_by: "operator-lead",
+          created_at: "2026-10-23T09:00:00Z",
+          updated_at: "2026-10-23T10:00:00Z",
+          run_count: 1,
+          latest_run: {
+            run_id: "rrun-20261023-001",
+            status: "completed",
+            adapter: "manual",
+            dispatch_mode: "manual",
+            requested_mode: "manual",
+            created_by: "operator-lead",
+            created_at: "2026-10-23T09:30:00Z",
+          },
+        },
+      ],
+      meta: {
+        surfaces: {
+          research_tasks: { status: "ok", source: "research-executor" },
+        },
+      },
+      page_info: { next_page_token: null, total: 3 },
+    };
+
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify(researchTasksPayload), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    function LocationProbe() {
+      const loc = useLocation();
+      return <output data-testid="location">{loc.pathname}{loc.search}</output>;
+    }
+
+    render(
+      <I18nextProvider i18n={i18n}>
+        <TooltipProvider>
+          <MemoryRouter initialEntries={["/management/experiments"]}>
+            <Routes>
+              <Route
+                path="/management/experiments"
+                element={(
+                  <>
+                    <ResearchList />
+                    <LocationProbe />
+                  </>
+                )}
+              />
+              <Route path="/management/experiments/:id" element={<LocationProbe />} />
+            </Routes>
+          </MemoryRouter>
+        </TooltipProvider>
+      </I18nextProvider>,
+    );
+
+    expect(await screen.findByText("VectorBT Factor Validation")).toBeInTheDocument();
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(String(fetchSpy.mock.calls[0][0])).toContain("/bff/research-tasks");
+
+    // Verify exact table column headers and removal of duplicate status, risk, metric, value, and owner columns
+    const columnHeaders = screen.getAllByRole("columnheader").map((th) => th.textContent?.trim());
+    expect(columnHeaders).toEqual([
+      "Name",
+      "Status",
+      "Latest run",
+      "Run count",
+      "Created by",
+      "Last updated",
+    ]);
+    expect(columnHeaders).not.toContain("State");
+    expect(columnHeaders).not.toContain("Risk");
+    expect(columnHeaders).not.toContain("Metric");
+    expect(columnHeaders).not.toContain("Value");
+    expect(columnHeaders).not.toContain("Owner");
+
+    // Verify real vs stub/manual run rendering
+    const realRow = screen.getByText("VectorBT Factor Validation").closest("tr");
+    expect(realRow).toHaveTextContent("rrun-20261023-002");
+    expect(realRow).toHaveTextContent("vectorbt / real");
+    expect(realRow).not.toHaveTextContent("Non-real execution");
+
+    const stubRow = screen.getByText("SIC Hypothesis Task").closest("tr");
+    expect(stubRow).toHaveTextContent("rrun-20261024-stub");
+    expect(stubRow).toHaveTextContent("stub / stub");
+    expect(stubRow).toHaveTextContent("Non-real execution (stub / stub)");
+
+    const manualRow = screen.getByText("Manual Check Task").closest("tr");
+    expect(manualRow).toHaveTextContent("rrun-20261023-001");
+    expect(manualRow).toHaveTextContent("manual / manual");
+    expect(manualRow).toHaveTextContent("Non-real execution (manual / manual)");
+
+    // Verify research create button stays disabled with workflow reason and never mentions "no typed durable BFF owner"
+    const createBtn = screen.getByRole("button", { name: /^create$/i });
+    expect(createBtn).toBeDisabled();
+    expect(createBtn).toHaveAttribute(
+      "title",
+      "Research items are generated by research workflows; manual creation is disabled because no executor consumes manually created rows yet.",
+    );
+    expect(screen.queryByText(/no typed durable BFF owner/i)).not.toBeInTheDocument();
+    expect(
+      i18n.getFixedT("zh-TW")("research.createDisabledReason"),
+    ).toBe("研究項目由研究工作流自動建立；手動建立因尚無執行者處理而維持關閉。");
+
+    // Clicking a row navigates to /management/experiments/<task_id>
+    fireEvent.click(screen.getByText("VectorBT Factor Validation"));
+    expect(screen.getByTestId("location")).toHaveTextContent(
+      "/management/experiments/rtask-20261023-008",
+    );
+  });
+
+  it("shows degraded error state for meta.surfaces.research_tasks unavailable or failed read, never 無結果, and shows healthy empty state when no research work has run yet", async () => {
+    const { useLiveListV1: actualUseLiveListV1 } = await vi.importActual<typeof import("@/lib/bff-v1")>("@/lib/bff-v1");
+    mocks.useLiveListV1.mockImplementation(actualUseLiveListV1);
+
+    // 1. Surface status: "unavailable"
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          items: [],
+          meta: {
+            surfaces: {
+              research_tasks: {
+                status: "unavailable",
+                source: "research-executor",
+                message: "research_tasks query failed: HTTPStatusError",
+              },
+            },
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    const { unmount } = render(
+      <I18nextProvider i18n={i18n}>
+        <TooltipProvider>
+          <MemoryRouter initialEntries={["/management/experiments"]}>
+            <Routes>
+              <Route path="/management/experiments" element={<ResearchList />} />
+            </Routes>
+          </MemoryRouter>
+        </TooltipProvider>
+      </I18nextProvider>,
+    );
+
+    const unavailableStatus = await screen.findByRole("status");
+    expect(unavailableStatus).toHaveTextContent("No data yet");
+    expect(unavailableStatus).toHaveTextContent("research_tasks query failed: HTTPStatusError");
+    expect(screen.queryByText("無結果")).not.toBeInTheDocument();
+    expect(screen.queryByText("No results")).not.toBeInTheDocument();
+    expect(screen.queryByText(/No research work has run yet/i)).not.toBeInTheDocument();
+    unmount();
+
+    // 2. Failed read (HTTP 503)
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          error: {
+            code: "BACKEND_UNAVAILABLE",
+            message: "research-executor upstream 503",
+          },
+        }),
+        { status: 503, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    const { unmount: unmountFailed } = render(
+      <I18nextProvider i18n={i18n}>
+        <TooltipProvider>
+          <MemoryRouter initialEntries={["/management/experiments"]}>
+            <Routes>
+              <Route path="/management/experiments" element={<ResearchList />} />
+            </Routes>
+          </MemoryRouter>
+        </TooltipProvider>
+      </I18nextProvider>,
+    );
+
+    const failedStatus = await screen.findByRole("status");
+    expect(failedStatus).toHaveTextContent("strict typed error");
+    expect(failedStatus).toHaveTextContent("research-executor upstream 503");
+    expect(screen.queryByText("無結果")).not.toBeInTheDocument();
+    expect(screen.queryByText("No results")).not.toBeInTheDocument();
+    unmountFailed();
+
+    // 3. Healthy empty list
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          items: [],
+          meta: {
+            surfaces: {
+              research_tasks: {
+                status: "ok",
+                source: "research-executor",
+              },
+            },
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    render(
+      <I18nextProvider i18n={i18n}>
+        <TooltipProvider>
+          <MemoryRouter initialEntries={["/management/experiments"]}>
+            <Routes>
+              <Route path="/management/experiments" element={<ResearchList />} />
+            </Routes>
+          </MemoryRouter>
+        </TooltipProvider>
+      </I18nextProvider>,
+    );
+
+    const emptyStatus = await screen.findByRole("status");
+    expect(emptyStatus).toHaveTextContent("No research tasks yet");
+    expect(emptyStatus).toHaveTextContent("No research work has run yet.");
+    expect(screen.queryByText("無結果")).not.toBeInTheDocument();
+    expect(i18n.getFixedT("zh-TW")("research.emptyState.title")).toBe("尚無研究任務");
+    expect(i18n.getFixedT("zh-TW")("research.emptyState.description")).toContain("目前尚未執行任何研究工作");
+  });
+
+  it("creates an evolution program with only name and Idempotency-Key, reads it back as draft from GET /bff/evolution-programs with no optimistic row, and keeps name while displaying 422, 403, and 503 errors in the drawer", async () => {
+    const { useLiveListV1: actualUseLiveListV1 } = await vi.importActual<typeof import("@/lib/bff-v1")>("@/lib/bff-v1");
+    mocks.useLiveListV1.mockImplementation(actualUseLiveListV1);
+
+    let persistedPrograms: Array<Record<string, unknown>> = [];
+    const postCalls: Array<{ body: Record<string, unknown>; idempotencyKey: string | null }> = [];
+    let nextPostResponse: () => Response = () =>
+      new Response(JSON.stringify({ error: { code: "UNKNOWN_ERROR", message: "unconfigured" } }), { status: 500 });
+
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const parsed = new URL(url, "http://localhost");
+      const method = (init?.method ?? "GET").toUpperCase();
+      if (parsed.pathname === "/bff/evolution-programs" && method === "GET") {
+        return new Response(
+          JSON.stringify({
+            items: persistedPrograms,
+            meta: { surfaces: { evolution_programs: { status: "ok" } } },
+            page_info: { next_page_token: null, total: persistedPrograms.length },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (parsed.pathname === "/bff/evolution-programs" && method === "POST") {
+        const headers = new Headers(init?.headers);
+        const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+        postCalls.push({
+          body,
+          idempotencyKey: headers.get("Idempotency-Key"),
+        });
+        return nextPostResponse();
+      }
+      return new Response(JSON.stringify({ items: [], meta: {} }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+
+    render(
+      <I18nextProvider i18n={i18n}>
+        <TooltipProvider>
+          <MemoryRouter initialEntries={["/management/evolution"]}>
+            <Routes>
+              <Route path="/management/evolution" element={<EvolutionList />} />
+            </Routes>
+          </MemoryRouter>
+        </TooltipProvider>
+      </I18nextProvider>,
+    );
+
+    const openDrawerBtn = await screen.findByRole("button", { name: /^create$/i });
+    expect(openDrawerBtn).toBeEnabled();
+    fireEvent.click(openDrawerBtn);
+
+    // Drawer shows only the Name field; parentAlpha and population are removed
+    const nameInput = await screen.findByLabelText(/name/i);
+    expect(nameInput).toBeInTheDocument();
+    expect(screen.queryByLabelText(/parent alpha/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/population/i)).not.toBeInTheDocument();
+
+    fireEvent.change(nameInput, { target: { value: "Cross-Sectional Alpha v2" } });
+
+    // 1. 422 error shows in drawer and keeps entered name
+    nextPostResponse = () =>
+      new Response(
+        JSON.stringify({
+          error: {
+            code: "VALIDATION_FAILED",
+            message: "422 Unprocessable Entity: extra fields not permitted",
+          },
+        }),
+        { status: 422, headers: { "Content-Type": "application/json" } },
+      );
+
+    const submitButtons = screen.getAllByRole("button", { name: /^create$/i });
+    const drawerSubmitBtn = submitButtons[submitButtons.length - 1];
+    fireEvent.click(drawerSubmitBtn);
+
+    expect(await screen.findByTestId("entity-create-error")).toHaveTextContent(
+      "422 Unprocessable Entity: extra fields not permitted",
+    );
+    expect(nameInput).toHaveValue("Cross-Sectional Alpha v2");
+
+    // 2. 403 error shows in drawer and keeps entered name
+    nextPostResponse = () =>
+      new Response(
+        JSON.stringify({
+          error: {
+            code: "PERMISSION_DENIED",
+            message: "403 Forbidden: tenant scope mismatch",
+          },
+        }),
+        { status: 403, headers: { "Content-Type": "application/json" } },
+      );
+
+    fireEvent.click(drawerSubmitBtn);
+    expect(await screen.findByTestId("entity-create-error")).toHaveTextContent(
+      "403 Forbidden: tenant scope mismatch",
+    );
+    expect(nameInput).toHaveValue("Cross-Sectional Alpha v2");
+
+    // 3. 503 error shows in drawer and keeps entered name
+    nextPostResponse = () =>
+      new Response(
+        JSON.stringify({
+          error: {
+            code: "BACKEND_UNAVAILABLE",
+            message: "503 Service Unavailable: evolution store unreachable",
+          },
+        }),
+        { status: 503, headers: { "Content-Type": "application/json" } },
+      );
+
+    fireEvent.click(drawerSubmitBtn);
+    expect(await screen.findByTestId("entity-create-error")).toHaveTextContent(
+      "503 Service Unavailable: evolution store unreachable",
+    );
+    expect(nameInput).toHaveValue("Cross-Sectional Alpha v2");
+
+    // 4. Successful 201 create sends only { name } + Idempotency-Key and reads back from GET /bff/evolution-programs as draft
+    nextPostResponse = () => {
+      const createdRow = {
+        program_id: "evo-prog-20261104-001",
+        name: "Cross-Sectional Alpha v2",
+        status: "draft",
+        updated_at: "2026-11-04T15:00:00Z",
+      };
+      persistedPrograms = [createdRow];
+      return new Response(JSON.stringify({ data: createdRow }), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      });
+    };
+
+    fireEvent.click(drawerSubmitBtn);
+
+    const createdCell = await screen.findByText("Cross-Sectional Alpha v2");
+    const createdRowEl = createdCell.closest("tr");
+    expect(createdRowEl).not.toBeNull();
+    expect(createdRowEl).toHaveTextContent(/draft/i);
+
+    expect(postCalls.length).toBe(4);
+    for (const call of postCalls) {
+      expect(call.body).toEqual({ name: "Cross-Sectional Alpha v2" });
+      expect(Object.keys(call.body)).toEqual(["name"]);
+      expect(call.idempotencyKey).toBeTruthy();
+    }
+  });
+
+  it("keeps the create button disabled with the read-only reason when the deployment profile disables real writes", () => {
+    vi.stubEnv("VITE_BFF_REAL_WRITES", "false");
+    mocks.useLiveListV1.mockReturnValue({
+      items: [],
+      pending: 0,
+      refresh: vi.fn(),
+      meta: {},
+    });
+
+    render(
+      <I18nextProvider i18n={i18n}>
+        <TooltipProvider>
+          <MemoryRouter initialEntries={["/management/evolution"]}>
+            <Routes>
+              <Route path="/management/evolution" element={<EvolutionList />} />
+            </Routes>
+          </MemoryRouter>
+        </TooltipProvider>
+      </I18nextProvider>,
+    );
+
+    const createBtn = screen.getByRole("button", { name: /^create$/i });
+    expect(createBtn).toBeDisabled();
+    expect(createBtn).toHaveAttribute("title", "Real writes are disabled (read-only mode).");
+    fireEvent.click(createBtn);
+    expect(screen.queryByLabelText(/name/i)).not.toBeInTheDocument();
+    expect(i18n.getFixedT("zh-TW")("mgmt.dataSources.realWritesRequired")).toBe(
+      "實體寫入已停用（唯讀模式）。",
+    );
+  });
+
+  it("renders GET /bff/artifacts across pages for both registry bundles and research run outputs with real kind, version, state, risk, hash, source_kind label/filter, no 0 MB fabrication, and reachable detail links", async () => {
+    const { useLiveListV1: actualUseLiveListV1 } = await vi.importActual<typeof import("@/lib/bff-v1")>("@/lib/bff-v1");
+    mocks.useLiveListV1.mockImplementation(actualUseLiveListV1);
+
+    const registryRow = {
+      id: "reg-bundle-001",
+      registry_id: "reg-bundle-001",
+      artifact_id: "art-exec-bundle-001",
+      strategy_id: "strat-persona-bundle-001",
+      name: "strat-persona-bundle-001",
+      kind: "execution_bundle",
+      artifact_type: "execution_bundle",
+      version: "1.0.1",
+      state: "approved",
+      artifact_state: "approved",
+      risk: "low",
+      hash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa0001",
+      checksum: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa0001",
+      owner: "gov-approver-alpha",
+      approver: "gov-approver-alpha",
+      updatedAt: "2026-11-04T12:01:00Z",
+      updated_at: "2026-11-04T12:01:00Z",
+      source_kind: "registry",
+    };
+
+    const researchRow = {
+      id: "res-run-output-001",
+      artifact_id: "res-run-output-001",
+      name: "Qlib Alpha158 Factor Evaluation Output",
+      title: "Qlib Alpha158 Factor Evaluation Output",
+      kind: "factor_eval_report",
+      artifact_type: "factor_eval_report",
+      version: null,
+      state: null,
+      status: "",
+      risk: null,
+      hash: "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+      checksum: "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+      owner: "research-worker-qlib",
+      author: "research-worker-qlib",
+      created_by: "research-worker-qlib",
+      updatedAt: "2026-11-04T17:00:00Z",
+      updated_at: "2026-11-04T17:00:00Z",
+      source_kind: "research_run_output",
+    };
+
+    const fetchUrls: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      fetchUrls.push(url);
+      if (url.includes("page_token=1")) {
+        return new Response(
+          JSON.stringify({
+            data: [researchRow],
+            items: [researchRow],
+            total: 2,
+            total_complete: true,
+            cursor: { next: null },
+            page_info: { page_size: 100, total: 2, has_more: false, next_page_token: null },
+            meta: {
+              snapshot_at: "2026-11-04T18:00:00Z",
+              total_complete: true,
+              surfaces: {
+                artifact_list: { status: "ok", source: "registry+research" },
+              },
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return new Response(
+        JSON.stringify({
+          data: [registryRow],
+          items: [registryRow],
+          total: 2,
+          total_complete: true,
+          cursor: { next: "1" },
+          page_info: { page_size: 100, total: 2, has_more: true, next_page_token: "1" },
+          meta: {
+            snapshot_at: "2026-11-04T18:00:00Z",
+            total_complete: true,
+            surfaces: {
+              artifact_list: { status: "ok", source: "registry+research" },
+            },
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    });
+
+    function LocationProbe() {
+      const loc = useLocation();
+      return <output data-testid="artifact-location">{loc.pathname}{loc.search}</output>;
+    }
+
+    render(
+      <I18nextProvider i18n={i18n}>
+        <TooltipProvider>
+          <MemoryRouter initialEntries={["/management/artifacts"]}>
+            <Routes>
+              <Route
+                path="/management/artifacts"
+                element={(
+                  <>
+                    <ArtifactsList />
+                    <LocationProbe />
+                  </>
+                )}
+              />
+              <Route path="/management/artifacts/:id" element={<LocationProbe />} />
+            </Routes>
+          </MemoryRouter>
+        </TooltipProvider>
+      </I18nextProvider>,
+    );
+
+    const regCell = await screen.findByText("strat-persona-bundle-001");
+    const resCell = await screen.findByText("Qlib Alpha158 Factor Evaluation Output");
+    expect(fetchUrls.some((u) => u.includes("/bff/artifacts?page_size=100"))).toBe(true);
+    expect(fetchUrls.some((u) => u.includes("page_token=1"))).toBe(true);
+
+    const regTr = regCell.closest("tr");
+    expect(regTr).not.toBeNull();
+    expect(regTr).toHaveTextContent("registry");
+    expect(regTr).toHaveTextContent("execution_bundle");
+    expect(regTr).toHaveTextContent("1.0.1");
+    expect(regTr).toHaveTextContent("Approved");
+    expect(regTr).toHaveTextContent("Low");
+    expect(regTr).toHaveTextContent("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa0001");
+    expect(regTr).toHaveTextContent("gov-approver-alpha");
+    expect(regTr).toHaveTextContent("No data");
+    expect(regTr).not.toHaveTextContent("0 MB");
+
+    const resTr = resCell.closest("tr");
+    expect(resTr).not.toBeNull();
+    expect(resTr).toHaveTextContent("research_run_output");
+    expect(resTr).toHaveTextContent("factor_eval_report");
+    expect(resTr).toHaveTextContent("sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08");
+    expect(resTr).toHaveTextContent("research-worker-qlib");
+    expect(resTr).not.toHaveTextContent("0 MB");
+    expect(resTr).not.toHaveTextContent("Unavailable");
+    expect(resTr?.textContent?.match(/No data/g)?.length).toBeGreaterThanOrEqual(4);
+
+    // Filter by source_kind
+    const registryScopeBtn = screen.getByRole("button", { name: "Registry bundle (1)" });
+    const researchScopeBtn = screen.getByRole("button", { name: "Research output (1)" });
+    const allScopeBtn = screen.getByRole("button", { name: "All sources (2)" });
+    expect(allScopeBtn).toHaveAttribute("aria-pressed", "true");
+
+    fireEvent.click(registryScopeBtn);
+    expect(screen.getByText("strat-persona-bundle-001")).toBeInTheDocument();
+    expect(screen.queryByText("Qlib Alpha158 Factor Evaluation Output")).not.toBeInTheDocument();
+
+    fireEvent.click(researchScopeBtn);
+    expect(screen.getByText("Qlib Alpha158 Factor Evaluation Output")).toBeInTheDocument();
+    expect(screen.queryByText("strat-persona-bundle-001")).not.toBeInTheDocument();
+
+    fireEvent.click(allScopeBtn);
+    expect(screen.getByText("strat-persona-bundle-001")).toBeInTheDocument();
+    expect(screen.getByText("Qlib Alpha158 Factor Evaluation Output")).toBeInTheDocument();
+
+    // Every row is reachable
+    fireEvent.click(screen.getByText("Qlib Alpha158 Factor Evaluation Output"));
+    expect(screen.getByTestId("artifact-location")).toHaveTextContent("/management/artifacts/res-run-output-001");
+  });
+
+  it("shows a partial-data banner naming the failed source when artifact_list surface is degraded while rendering surviving rows", async () => {
+    const { useLiveListV1: actualUseLiveListV1 } = await vi.importActual<typeof import("@/lib/bff-v1")>("@/lib/bff-v1");
+    mocks.useLiveListV1.mockImplementation(actualUseLiveListV1);
+
+    const researchRow = {
+      id: "res-run-output-001",
+      artifact_id: "res-run-output-001",
+      name: "Qlib Alpha158 Factor Evaluation Output",
+      kind: "factor_eval_report",
+      version: null,
+      state: null,
+      risk: null,
+      hash: "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+      owner: "research-worker-qlib",
+      updatedAt: "2026-11-04T17:00:00Z",
+      source_kind: "research_run_output",
+    };
+
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          data: [researchRow],
+          items: [researchRow],
+          total: 1,
+          total_complete: false,
+          cursor: { next: null },
+          page_info: { page_size: 100, total: 1, has_more: false, next_page_token: null },
+          meta: {
+            snapshot_at: "2026-11-04T18:00:00Z",
+            total_complete: false,
+            surfaces: {
+              artifact_list: {
+                status: "degraded",
+                source: "research",
+                failed_source: "registry",
+                failed_sources: ["registry"],
+                degraded_sources: ["registry"],
+                message: "Artifact catalog is degraded because registry owner read failed.",
+              },
+            },
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    render(
+      <I18nextProvider i18n={i18n}>
+        <TooltipProvider>
+          <MemoryRouter initialEntries={["/management/artifacts"]}>
+            <Routes>
+              <Route path="/management/artifacts" element={<ArtifactsList />} />
+            </Routes>
+          </MemoryRouter>
+        </TooltipProvider>
+      </I18nextProvider>,
+    );
+
+    expect(await screen.findByText("Qlib Alpha158 Factor Evaluation Output")).toBeInTheDocument();
+    const banner = screen.getByTestId("partial-data-banner");
+    expect(banner).toBeInTheDocument();
+    expect(banner).toHaveAttribute("data-failed-source", "registry");
+    expect(banner).toHaveTextContent(/Partial artifact catalog — failed source: registry/i);
+    expect(banner).toHaveTextContent("Artifact catalog is degraded because registry owner read failed.");
   });
 });

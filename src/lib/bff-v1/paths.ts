@@ -115,6 +115,8 @@ export const paths = {
   search: () => `${BASE}/search`,
 
   // ---- Research ----
+  researchTasks: () => `${BASE}/research-tasks`,
+  researchTask: (id: string) => `${BASE}/research-tasks/${enc(id)}`,
   researchExperiments: () => `${BASE}/research-experiments`,
   researchExperiment: (id: string) => `${BASE}/research-experiments/${enc(id)}`,
   researchExperimentActions: (id: string, action: string) => `${BASE}/research-experiments/${enc(id)}/actions/${enc(action)}`,
@@ -217,11 +219,25 @@ export const paths = {
   mgmtPromotionReviewDecision: (id: string) => `${BASE}/management/promotion-reviews/${enc(id)}/decisions`,
   mgmtTradingPulse: () => `${BASE}/management/trading-pulse`,
   mgmtTradingRankings: () => `${BASE}/management/trading-pulse/rankings`,
-  mgmtEvolutionJournal: (filters: { persona?: string; mutationReview?: string; decision?: string } = {}) => {
+  mgmtEvolutionJournal: (
+    filters: {
+      view?: "all" | "history" | "auto_proposals" | string;
+      persona?: string;
+      mutationReview?: string;
+      decision?: string;
+      pageSize?: number;
+      pageToken?: string | null;
+    } = {},
+  ) => {
     const params = new URLSearchParams();
+    if (filters.view) params.set("view", filters.view);
     if (filters.persona) params.set("persona", filters.persona);
     if (filters.mutationReview) params.set("mutation_review", filters.mutationReview);
     if (filters.decision) params.set("decision", filters.decision);
+    if (typeof filters.pageSize === "number" && Number.isFinite(filters.pageSize) && filters.pageSize > 0) {
+      params.set("page_size", String(filters.pageSize));
+    }
+    if (filters.pageToken) params.set("page_token", filters.pageToken);
     const query = params.toString();
     return `${BASE}/management/evolution-journal${query ? `?${query}` : ""}`;
   },

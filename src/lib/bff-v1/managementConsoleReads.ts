@@ -29,6 +29,8 @@ export type { ManagementListMeta, ManagementSurfaceState } from "./dto";
 export interface ManagementPageInfo {
   total?: number;
   page_size?: number;
+  returned?: number;
+  has_more?: boolean;
   totalCountExact?: boolean;
   next_page_token?: string | null;
   [key: string]: unknown;
@@ -101,8 +103,8 @@ export interface KnowledgeInsightRecord {
   id: string;
   title: string;
   source: string;
-  kind: "research_note" | "signal_review" | "committee_memo" | "alert_observation";
-  risk: "low" | "medium" | "high";
+  kind: string;
+  risk?: "low" | "medium" | "high";
   ts: string;
   body: string;
 }
@@ -126,6 +128,8 @@ export interface LineageRead {
   nodes: LineageNodeRecord[];
   edges: LineageEdgeRecord[];
   meta: ManagementListMeta;
+  page_info?: ManagementPageInfo;
+  has_more?: boolean;
 }
 
 const isRecord = (value: unknown): value is UnknownRecord =>
@@ -190,16 +194,32 @@ const envelopeRecords = (raw: unknown): UnknownRecord[] => {
 
 const envelopeMeta = (raw: unknown, surface: string): ManagementListMeta => {
   const root = asRecord(raw);
+  const data = asRecord(root?.data);
   const meta = asRecord(root?.meta) ?? {};
+  const surfaces = asRecord(meta.surfaces);
+  const surfaceEntry = surfaces?.[surface] ?? surfaces?.[`${surface}_inbox`];
+  const surfaceRecord = asRecord(surfaceEntry);
+  const hasExplicitItemsArray =
+    surface === "knowledge" &&
+    Object.keys(meta).length === 0 &&
+    (Array.isArray(raw) || Array.isArray(root?.items) || Array.isArray(data?.items));
+  const hasExplicitLineageGraph =
+    surface === "lineage" &&
+    Object.keys(meta).length === 0 &&
+    data?.status === undefined &&
+    (Array.isArray(data?.nodes) || Array.isArray(root?.nodes));
+  const fallbackStatus = hasExplicitItemsArray || hasExplicitLineageGraph ? "ok" : "unavailable";
+  const status = asString(meta.status, surfaceRecord?.status, surfaceEntry, data?.status) ?? fallbackStatus;
+  const source = asString(meta.source, surfaceRecord?.source, data?.source) ?? "frontend_empty_read";
   return {
-    status: asString(meta.status) ?? "unavailable",
-    source: asString(meta.source) ?? "frontend_empty_read",
+    status,
+    source,
     surfaces: {
       [surface]: {
-        status: asString(asRecord(meta.surfaces)?.[surface]) ?? asString(meta.status) ?? "unavailable",
-        source: asString(meta.source) ?? "frontend_empty_read",
+        status: asString(surfaceRecord?.status, surfaceEntry, meta.status, data?.status) ?? status,
+        source,
       },
-      ...(asRecord(meta.surfaces) as Record<string, ManagementSurfaceState> | undefined),
+      ...(surfaces as Record<string, ManagementSurfaceState> | undefined),
     },
     ...meta,
   };
@@ -557,41 +577,52 @@ const adaptHook = (record: UnknownRecord, index: number): HookRecord => ({
   firedToday: asNumber(record.firedToday ?? record.fired_today, 0),
 });
 
-const toKnowledgeKind = (value: unknown): KnowledgeInsightRecord["kind"] => {
+export const toKnowledgeKind = (value: unknown): KnowledgeInsightRecord["kind"] =>
+  asString(value) ?? "";
+
+export const toKnowledgeRisk = (value: unknown): KnowledgeInsightRecord["risk"] => {
   const normalized = asString(value)?.toLowerCase();
-  if (normalized === "signal_review" || normalized === "committee_memo" || normalized === "alert_observation") return normalized;
-  return "research_note";
+  if (normalized === "high" || normalized === "medium" || normalized === "low") return normalized;
+  return undefined;
 };
 
-const toKnowledgeRisk = (value: unknown): KnowledgeInsightRecord["risk"] => {
-  const normalized = asString(value)?.toLowerCase();
-  return normalized === "high" || normalized === "medium" ? normalized : "low";
+export const adaptKnowledge = (record: UnknownRecord, index = 0): KnowledgeInsightRecord => {
+  const content = asRecord(record.content);
+  return {
+    id: asString(record.id, record.note_id, record.insight_id, record.entry_id, record.item_id) ?? `knowledge-${index + 1}`,
+    title: asString(record.title, record.name, record.headline, content?.title, content?.headline) ?? `Knowledge item ${index + 1}`,
+    source: asString(record.sourceDataset, record.source_dataset, record.source, record.source_ref, record.origin) ?? "",
+    kind: toKnowledgeKind(record.inboxType ?? record.inbox_type ?? record.kind ?? record.knowledge_type),
+    risk: toKnowledgeRisk(record.risk ?? record.risk_level),
+    ts: asString(record.ts, record.updated_at, record.updatedAt, record.created_at, record.createdAt, record.timestamp) ?? "",
+    body: asString(record.body, record.summary, record.description, record.excerpt, content?.summary, content?.body, content?.lesson) ?? "",
+  };
 };
 
-const adaptKnowledge = (record: UnknownRecord, index: number): KnowledgeInsightRecord => ({
-  id: asString(record.id, record.insight_id, record.item_id) ?? `knowledge-${index + 1}`,
-  title: asString(record.title, record.name, record.headline) ?? `Knowledge item ${index + 1}`,
-  source: asString(record.source, record.source_ref, record.origin) ?? "pantheon-bff",
-  kind: toKnowledgeKind(record.kind ?? record.knowledge_type),
-  risk: toKnowledgeRisk(record.risk ?? record.risk_level),
-  ts: asString(record.ts, record.created_at, record.updated_at, record.timestamp) ?? "",
-  body: asString(record.body, record.summary, record.description, record.excerpt) ?? "",
-});
+const VALID_LINEAGE_RISK_LEVELS = new Set<RiskLevel>(["info", "low", "medium", "high", "critical"]);
 
-const adaptLineageNode = (record: UnknownRecord, index: number): LineageNodeRecord => ({
-  id: asString(record.id, record.node_id, record.artifact_id, record.ref) ?? `node-${index + 1}`,
-  label: asString(record.label, record.name, record.title, record.id) ?? `Node ${index + 1}`,
-  type: asString(record.type, record.kind, record.artifact_type, record.entity_type) ?? "Artifact",
-  state: asString(record.state, record.status),
-  risk: asString(record.risk, record.risk_level) as RiskLevel | undefined,
-  highlight: asBoolean(record.highlight, false),
-});
+export const toLineageRisk = (value: unknown): RiskLevel | undefined => {
+  const normalized = asString(value)?.toLowerCase() as RiskLevel | undefined;
+  return normalized && VALID_LINEAGE_RISK_LEVELS.has(normalized) ? normalized : undefined;
+};
 
-const adaptLineageEdge = (record: UnknownRecord): LineageEdgeRecord | undefined => {
-  const from = asString(record.from, record.source, record.source_id, record.from_id, record.upstream);
-  const to = asString(record.to, record.target, record.target_id, record.to_id, record.downstream);
+export const adaptLineageNode = (record: UnknownRecord, index = 0): LineageNodeRecord => {
+  const id = asString(record.id, record.node_id, record.artifact_id, record.ref) ?? `node-${index + 1}`;
+  return {
+    id,
+    label: asString(record.label, record.name, record.title, id) ?? `Node ${index + 1}`,
+    type: asString(record.type, record.kind, record.artifact_type, record.entity_type) ?? "unknown",
+    state: asString(record.state, record.artifact_state, record.status),
+    risk: toLineageRisk(record.risk ?? record.risk_level),
+    highlight: asBoolean(record.highlight, false),
+  };
+};
+
+export const adaptLineageEdge = (record: UnknownRecord): LineageEdgeRecord | undefined => {
+  const from = asString(record.from, record.source, record.source_id, record.from_id, record.from_artifact_id, record.upstream);
+  const to = asString(record.to, record.target, record.target_id, record.to_id, record.to_artifact_id, record.downstream);
   if (!from || !to) return undefined;
-  return { from, to, label: asString(record.label, record.relation, record.kind, record.type) };
+  return { from, to, label: asString(record.label, record.edge_type, record.relation, record.kind, record.type) };
 };
 
 export const managementConsoleReads = {
@@ -621,12 +652,23 @@ export const managementConsoleReads = {
       (raw) => {
         const root = asRecord(raw);
         const data = asRecord(root?.data);
-        const nodes = recordsFrom(data?.nodes, root?.nodes, root?.items)
+        const nodes = recordsFrom(data?.nodes, root?.nodes)
           .map(adaptLineageNode);
-        const edges = recordsFrom(data?.edges, root?.edges)
+        const edges = recordsFrom(data?.edges, root?.edges, root?.items)
           .map(adaptLineageEdge)
           .filter((edge): edge is LineageEdgeRecord => Boolean(edge));
-        return { nodes, edges, meta: envelopeMeta(raw, "lineage") };
+        const pageInfo = envelopePageInfo(raw, edges.length);
+        const hasMore = asBoolean(
+          pageInfo.has_more ?? data?.has_more ?? root?.has_more,
+          false,
+        );
+        return {
+          nodes,
+          edges,
+          meta: envelopeMeta(raw, "lineage"),
+          page_info: { ...pageInfo, has_more: hasMore },
+          has_more: hasMore,
+        };
       },
     ),
 

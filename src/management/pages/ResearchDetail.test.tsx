@@ -183,6 +183,128 @@ describe("ResearchDetail", () => {
 
     await waitFor(() => expect(screen.getByText("Promote to Strategy")).toBeInTheDocument());
   });
+
+  it("renders objective and every run from GET /bff/research-tasks/{task_id}, marking stub and manual runs as non-real executions", async () => {
+    mocks.researchGet.mockResolvedValue({
+      id: "rtask-20261023-008",
+      taskId: "rtask-20261023-008",
+      task_id: "rtask-20261023-008",
+      name: "VectorBT Factor Validation",
+      objective: "Evaluate cross-sectional factor stability across TW50 universe",
+      hypothesis: "Evaluate cross-sectional factor stability across TW50 universe",
+      status: "completed",
+      state: "approved",
+      risk: "low",
+      owner: "research-worker",
+      createdBy: "research-worker",
+      created_by: "research-worker",
+      updatedAt: "2026-10-23T12:00:00Z",
+      updated_at: "2026-10-23T12:00:00Z",
+      taskType: "factor_eval",
+      task_type: "factor_eval",
+      runCount: 3,
+      run_count: 3,
+      metric: "factor_eval",
+      metricValue: 0,
+      runs: [
+        {
+          run_id: "rrun-20261023-001",
+          runId: "rrun-20261023-001",
+          status: "completed",
+          adapter: "manual",
+          dispatch_mode: "manual",
+          dispatchMode: "manual",
+          requested_mode: "manual",
+          requestedMode: "manual",
+          created_by: "operator-lead",
+          createdBy: "operator-lead",
+          created_at: "2026-10-23T09:30:00Z",
+          createdAt: "2026-10-23T09:30:00Z",
+        },
+        {
+          run_id: "rrun-20261023-002",
+          runId: "rrun-20261023-002",
+          status: "completed",
+          adapter: "vectorbt",
+          dispatch_mode: "real",
+          dispatchMode: "real",
+          requested_mode: "real",
+          requestedMode: "real",
+          created_by: "research-worker",
+          createdBy: "research-worker",
+          created_at: "2026-10-23T11:45:00Z",
+          createdAt: "2026-10-23T11:45:00Z",
+        },
+        {
+          run_id: "rrun-20261024-stub",
+          runId: "rrun-20261024-stub",
+          status: "completed",
+          adapter: "stub",
+          dispatch_mode: "stub",
+          dispatchMode: "stub",
+          requested_mode: "stub",
+          requestedMode: "stub",
+          created_by: "operator",
+          createdBy: "operator",
+          created_at: "2026-10-24T08:30:00Z",
+          createdAt: "2026-10-24T08:30:00Z",
+        },
+      ],
+    });
+    mocks.auditList.mockResolvedValue([]);
+    mocks.personaFleetGet.mockResolvedValue([]);
+
+    render(
+      <I18nextProvider i18n={i18n}>
+        <MemoryRouter initialEntries={["/management/experiments/rtask-20261023-008"]}>
+          <Routes>
+            <Route path="/management/experiments/:id" element={<ResearchDetail />} />
+          </Routes>
+        </MemoryRouter>
+      </I18nextProvider>,
+    );
+
+    expect(
+      await screen.findByText("Evaluate cross-sectional factor stability across TW50 universe"),
+    ).toBeInTheDocument();
+
+    const manualRunCard = screen.getByTestId("research-task-run-rrun-20261023-001");
+    expect(manualRunCard).toHaveTextContent("rrun-20261023-001");
+    expect(manualRunCard).toHaveTextContent("manual");
+    expect(manualRunCard).toHaveTextContent("Stub / manual record — not a real execution (manual / manual)");
+
+    const realRunCard = screen.getByTestId("research-task-run-rrun-20261023-002");
+    expect(realRunCard).toHaveTextContent("rrun-20261023-002");
+    expect(realRunCard).toHaveTextContent("vectorbt");
+    expect(realRunCard).toHaveTextContent("real");
+    expect(realRunCard).not.toHaveTextContent("Stub / manual record — not a real execution");
+
+    const stubRunCard = screen.getByTestId("research-task-run-rrun-20261024-stub");
+    expect(stubRunCard).toHaveTextContent("rrun-20261024-stub");
+    expect(stubRunCard).toHaveTextContent("stub");
+    expect(stubRunCard).toHaveTextContent("Stub / manual record — not a real execution (stub / stub)");
+  });
+
+  it("shows the existing not-found state when GET /bff/research-tasks/{task_id} returns 404", async () => {
+    mocks.researchGet.mockResolvedValue(undefined);
+    mocks.auditList.mockResolvedValue([]);
+    mocks.personaFleetGet.mockResolvedValue([]);
+
+    render(
+      <I18nextProvider i18n={i18n}>
+        <MemoryRouter initialEntries={["/management/experiments/rtask-missing-404"]}>
+          <Routes>
+            <Route path="/management/experiments/:id" element={<ResearchDetail />} />
+          </Routes>
+        </MemoryRouter>
+      </I18nextProvider>,
+    );
+
+    expect(await screen.findByText("Experiment Not Found")).toBeInTheDocument();
+    expect(
+      screen.getByText("Experiment detail for ID rtask-missing-404 is not available in the live contract."),
+    ).toBeInTheDocument();
+  });
 });
 
 const sampleSkill: Skill = {

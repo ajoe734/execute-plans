@@ -14,7 +14,7 @@ import { Plus, RefreshCw, Inbox } from "lucide-react";
 import { useT } from "@/platform/hooks";
 import { safeDateTime } from "@/lib/utils";
 import type { BaseObject } from "@/lib/bff-v1";
-import { useLiveStatusSnapshot } from "@/lib/bff-v1/liveTransport";
+import { realWritesEnabled, useLiveStatusSnapshot } from "@/lib/bff-v1/liveTransport";
 import { useLiveListV1, extractDegradation, type ListEnvelope } from "@/lib/bff-v1";
 import { EmptyState } from "@/components/ui/empty-state";
 import { hasDurableCreateOwner, type CreateBehavior } from "@/lib/writeIntents/types";
@@ -79,6 +79,7 @@ interface Props<T extends BaseObject> {
   listHref?: string;
   rowHref?: (row: T) => string;
   nameCell?: (row: T) => ReactNode;
+  columns?: Column<T>[];
   extraColumns?: Column<T>[];
   /** Realtime data:{kind} events that should refresh this list. */
   liveKinds?: string[];
@@ -99,8 +100,72 @@ interface Props<T extends BaseObject> {
   summary?: (rows: T[]) => ReactNode;
 }
 
+interface PartialDataSurfaceInfo {
+  surfaceKey: string;
+  status: string;
+  source?: string;
+  failedSources: string[];
+  message?: string;
+}
+
+function extractPartialDataSurface(meta: unknown): PartialDataSurfaceInfo | undefined {
+  if (!meta || typeof meta !== "object" || Array.isArray(meta)) return undefined;
+  const surfaces = (meta as { surfaces?: unknown }).surfaces;
+  if (!surfaces || typeof surfaces !== "object" || Array.isArray(surfaces)) return undefined;
+  for (const [surfaceKey, rawSurface] of Object.entries(surfaces as Record<string, unknown>)) {
+    if (!rawSurface || typeof rawSurface !== "object" || Array.isArray(rawSurface)) continue;
+    const s = rawSurface as Record<string, unknown>;
+    const status = typeof s.status === "string" ? s.status.trim().toLowerCase() : "";
+    if (status !== "degraded" && status !== "partial") continue;
+    const failedSet = new Set<string>();
+    if (typeof s.failed_source === "string" && s.failed_source.trim()) {
+      failedSet.add(s.failed_source.trim());
+    }
+    for (const listKey of ["failed_sources", "degraded_sources"] as const) {
+      const arr = s[listKey];
+      if (Array.isArray(arr)) {
+        for (const item of arr) {
+          if (typeof item === "string" && item.trim()) failedSet.add(item.trim());
+        }
+      }
+    }
+    const message =
+      typeof s.message === "string" && s.message.trim()
+        ? s.message.trim()
+        : typeof s.reason === "string" && s.reason.trim()
+          ? s.reason.trim()
+          : undefined;
+    const source = typeof s.source === "string" && s.source.trim() ? s.source.trim() : undefined;
+    if (failedSet.size > 0 || surfaceKey === "artifact_list") {
+      return {
+        surfaceKey,
+        status,
+        source,
+        failedSources: Array.from(failedSet),
+        message,
+      };
+    }
+  }
+  return undefined;
+}
+
+function extractSurfaceMessage(meta: unknown): string | undefined {
+  if (!meta || typeof meta !== "object" || Array.isArray(meta)) return undefined;
+  const surfaces = (meta as { surfaces?: unknown }).surfaces;
+  if (!surfaces || typeof surfaces !== "object" || Array.isArray(surfaces)) return undefined;
+  for (const surface of Object.values(surfaces as Record<string, unknown>)) {
+    if (!surface || typeof surface !== "object" || Array.isArray(surface)) continue;
+    const s = surface as Record<string, unknown>;
+    if (s.status === "unavailable" || s.status === "degraded") {
+      if (typeof s.message === "string" && s.message.trim()) return s.message.trim();
+      if (typeof s.reason === "string" && s.reason.trim()) return s.reason.trim();
+    }
+  }
+  return undefined;
+}
+
 export function ObjectListPage<T extends BaseObject>({
-  title, loader, basePath, listHref, rowHref, nameCell, extraColumns = [], liveKinds = [], createBehavior, focusParam, focusLabel, focusMatch, emptyState, scopeConfig, summary,
+  title, loader, basePath, listHref, rowHref, nameCell, columns: customColumns, extraColumns = [], liveKinds = [], createBehavior, focusParam, focusLabel, focusMatch, emptyState, scopeConfig, summary,
 }: Props<T>) {
   const t = useT();
   const navigate = useNavigate();
@@ -117,11 +182,13 @@ export function ObjectListPage<T extends BaseObject>({
   const { items: rows, pending, refresh, meta } = useLiveListV1<T>(loader, liveKinds, { auto: false });
   const [drawerOpen, setDrawerOpen] = useState(false);
   const degradation = extractDegradation(meta);
+  const partialDataSurface = extractPartialDataSurface(meta);
   const liveStatus = useLiveStatusSnapshot();
   const strictFallbackBlocked = degradation.strictFallbackBlocked || liveStatus.typedError;
+  const degradationReason = degradation.reason || extractSurfaceMessage(meta);
   const degradedDescription = degradation.degraded && strictFallbackBlocked
-    ? `strict typed error · ${degradation.reason || liveStatus.fallbackReason || "live BFF unavailable"} · seed fallback blocked`
-    : degradation.reason;
+    ? `strict typed error · ${degradationReason || liveStatus.fallbackReason || "live BFF unavailable"} · seed fallback blocked`
+    : degradationReason;
 
   const matchesFocus = (row: T, targetFocusId: string): boolean =>
     focusMatch ? focusMatch(row, targetFocusId) : row.id === targetFocusId;
@@ -139,6 +206,9 @@ export function ObjectListPage<T extends BaseObject>({
       const scope = scopeConfig.classify(row);
       scopeCounts[scope] = (scopeCounts[scope] ?? 0) + 1;
     }
+    if (Object.prototype.hasOwnProperty.call(scopeCounts, "all")) {
+      scopeCounts.all = rows.length;
+    }
   }
 
   const rawScopeParam = scopeConfig
@@ -149,12 +219,12 @@ export function ObjectListPage<T extends BaseObject>({
     ? scopeConfig.classify(allFocusedRows[0])
     : undefined;
   const activeScope = scopeConfig
-    ? (explicitScope && (!focusedScope || allFocusedRows.some((row) => scopeConfig.classify(row) === explicitScope))
+    ? (explicitScope && (explicitScope === "all" || !focusedScope || allFocusedRows.some((row) => scopeConfig.classify(row) === explicitScope))
       ? explicitScope
       : (focusedScope ?? explicitScope ?? scopeConfig.defaultScope))
     : undefined;
 
-  const scopedRows = scopeConfig && activeScope
+  const scopedRows = scopeConfig && activeScope && activeScope !== "all"
     ? rows.filter((row) => scopeConfig.classify(row) === activeScope)
     : rows;
 
@@ -196,7 +266,7 @@ export function ObjectListPage<T extends BaseObject>({
     ? (scopeConfig.emptyStateForScope(activeScope, scopeCounts, buildScopeHref) ?? emptyState)
     : emptyState;
 
-  const columns: Column<T>[] = [
+  const defaultColumns: Column<T>[] = [
     {
       key: "name",
       header: t("common.name"),
@@ -209,6 +279,7 @@ export function ObjectListPage<T extends BaseObject>({
     { key: "owner", header: t("common.owner"), cell: (r) => <span className="text-mono text-xs">{r.owner}</span> },
     { key: "updated", header: t("common.updated"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{safeDateTime(r.updatedAt)}</span> },
   ];
+  const columns = customColumns ?? defaultColumns;
 
   const renderCreateAction = () => {
     if (!createBehavior) {
@@ -226,16 +297,18 @@ export function ObjectListPage<T extends BaseObject>({
       );
     }
     if (createBehavior.kind === "disabled") {
+      const reason = t(createBehavior.reasonI18nKey, { defaultValue: createBehavior.reasonI18nKey });
       return (
         <Tooltip>
           <TooltipTrigger asChild>
-            <span tabIndex={0}>
-              <Button size="sm" disabled>
+            <span tabIndex={0} title={reason}>
+              <Button size="sm" disabled title={reason}>
                 <Plus className="h-4 w-4 mr-1" />{t("actions.create")}
               </Button>
+              <span className="sr-only">{reason}</span>
             </span>
           </TooltipTrigger>
-          <TooltipContent>{t(createBehavior.reasonI18nKey, { defaultValue: createBehavior.reasonI18nKey })}</TooltipContent>
+          <TooltipContent>{reason}</TooltipContent>
         </Tooltip>
       );
     }
@@ -258,11 +331,28 @@ export function ObjectListPage<T extends BaseObject>({
         </span>
       );
     }
+    const buttonLabel = createBehavior.entity === "persona" ? "Create Paper Persona" : t("actions.create");
+    if (!realWritesEnabled()) {
+      const reason = t("mgmt.dataSources.realWritesRequired");
+      return (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span tabIndex={0} title={reason}>
+              <Button size="sm" disabled title={reason}>
+                <Plus className="h-4 w-4 mr-1" />{buttonLabel}
+              </Button>
+              <span className="sr-only">{reason}</span>
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>{reason}</TooltipContent>
+        </Tooltip>
+      );
+    }
     // drawer
     return (
       <>
         <Button size="sm" onClick={() => setDrawerOpen(true)}>
-          <Plus className="h-4 w-4 mr-1" />{createBehavior.entity === "persona" ? "Create Paper Persona" : t("actions.create")}
+          <Plus className="h-4 w-4 mr-1" />{buttonLabel}
         </Button>
         <EntityCreateDrawer
           entity={createBehavior.entity}
@@ -314,6 +404,7 @@ export function ObjectListPage<T extends BaseObject>({
                   variant={selected ? "default" : "outline"}
                   aria-pressed={selected}
                   data-capital-scope={option.id}
+                  data-scope={option.id}
                   data-scope-count={count}
                   onClick={() => selectScope(option.id)}
                 >
@@ -322,6 +413,32 @@ export function ObjectListPage<T extends BaseObject>({
               );
             })}
           </div>
+        )}
+        {partialDataSurface && (
+          <Card
+            role="status"
+            data-testid="partial-data-banner"
+            data-surface={partialDataSurface.surfaceKey}
+            data-failed-source={partialDataSurface.failedSources.join(",")}
+            className="mb-3 border-status-warning/40 bg-status-warning/10 p-3 text-sm"
+          >
+            <div className="flex flex-col gap-1">
+              <div className="font-medium text-foreground">
+                {t("artifact.degradedBanner.title", {
+                  failedSources:
+                    partialDataSurface.failedSources.length > 0
+                      ? partialDataSurface.failedSources.join(", ")
+                      : t("common.unavailable", { defaultValue: "unknown" }),
+                  defaultValue: `Partial artifact catalog — failed source: ${
+                    partialDataSurface.failedSources.join(", ") || "unknown"
+                  }`,
+                })}
+              </div>
+              {partialDataSurface.message && (
+                <div className="text-xs text-muted-foreground">{partialDataSurface.message}</div>
+              )}
+            </div>
+          </Card>
         )}
         {summary && visibleRows.length > 0 && <div className="mb-4">{summary(visibleRows)}</div>}
         {pending > 0 && (
@@ -383,12 +500,17 @@ export function ObjectListPage<T extends BaseObject>({
                   : resolvedEmptyState?.title ?? t("common.noResults")
               }
               description={
-                (isDegradedEmpty ? degradedDescription : undefined) ||
-                resolvedEmptyState?.description ||
-                t("common.awaitingDataDesc", {
-                  defaultValue:
-                    "This surface has no data yet — the backend is reachable but upstream is not producing for it.",
-                })
+                isDegradedEmpty
+                  ? degradedDescription ||
+                    t("common.awaitingDataDesc", {
+                      defaultValue:
+                        "This surface has no data yet — the backend is reachable but upstream is not producing for it.",
+                    })
+                  : resolvedEmptyState?.description ||
+                    t("common.awaitingDataDesc", {
+                      defaultValue:
+                        "This surface has no data yet — the backend is reachable but upstream is not producing for it.",
+                    })
               }
               cta={
                 !isDegradedEmpty && resolvedEmptyState?.actionLabel && resolvedEmptyState?.actionTo

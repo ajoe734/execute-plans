@@ -42,7 +42,11 @@ function layout(nodes: LineageNode[], edges: LineageEdge[]) {
   // Compute depth = longest path from a root to this node.
   const incoming = new Map<string, number>();
   nodes.forEach((n) => incoming.set(n.id, 0));
-  edges.forEach((e) => incoming.set(e.to, (incoming.get(e.to) ?? 0) + 1));
+  edges.forEach((e) => {
+    if (incoming.has(e.from) && incoming.has(e.to)) {
+      incoming.set(e.to, (incoming.get(e.to) ?? 0) + 1);
+    }
+  });
 
   const depth = new Map<string, number>();
   const queue: string[] = [];
@@ -54,12 +58,17 @@ function layout(nodes: LineageNode[], edges: LineageEdge[]) {
     adj.get(e.from)!.push(e.to);
   });
 
+  const maxDepth = Math.max(nodes.length, 1);
   while (queue.length) {
     const u = queue.shift()!;
     const du = depth.get(u) ?? 0;
+    if (du >= maxDepth) continue;
     for (const v of adj.get(u) ?? []) {
-      depth.set(v, Math.max(depth.get(v) ?? 0, du + 1));
-      queue.push(v);
+      if (!incoming.has(v)) continue;
+      if (du + 1 > (depth.get(v) ?? -1)) {
+        depth.set(v, du + 1);
+        queue.push(v);
+      }
     }
   }
   // Fallback for cycles / disconnected
@@ -94,7 +103,10 @@ export const LineageGraph = ({ nodes, edges, height: minH = 280, onSelect }: Pro
 
   if (nodes.length === 0) {
     return (
-      <div className="rounded-md border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
+      <div
+        data-testid="lineage-empty"
+        className="rounded-md border border-dashed border-border p-8 text-center text-sm text-muted-foreground"
+      >
         No lineage available.
       </div>
     );
@@ -105,7 +117,7 @@ export const LineageGraph = ({ nodes, edges, height: minH = 280, onSelect }: Pro
   const overServer = nodes.length > LINEAGE_NODE_LIMITS.serverLayoutThreshold;
 
   return (
-    <div className="rounded-md border border-border bg-muted/20 overflow-auto">
+    <div data-testid="lineage-graph" className="rounded-md border border-border bg-muted/20 overflow-auto">
       {(overClient || overServer) && (
         <div
           role="status"
@@ -133,7 +145,13 @@ export const LineageGraph = ({ nodes, edges, height: minH = 280, onSelect }: Pro
           const cx = (x1 + x2) / 2;
           const d = `M ${x1} ${y1} C ${cx} ${y1}, ${cx} ${y2}, ${x2} ${y2}`;
           return (
-            <g key={i}>
+            <g
+              key={i}
+              data-testid={`lineage-edge-${e.from}-${e.to}`}
+              data-edge-from={e.from}
+              data-edge-to={e.to}
+              data-edge-label={e.label ?? ""}
+            >
               <path d={d} fill="none" stroke="hsl(var(--muted-foreground))" strokeWidth="1.25" markerEnd="url(#lin-arrow)" opacity={0.6} />
               {e.label && (
                 <text x={cx} y={(y1 + y2) / 2 - 4} fontSize="10" textAnchor="middle"
@@ -147,9 +165,15 @@ export const LineageGraph = ({ nodes, edges, height: minH = 280, onSelect }: Pro
 
         {nodes.map((n) => {
           const p = positions.get(n.id); if (!p) return null;
-          const fill = n.risk ? riskFill[n.risk] : "hsl(var(--card))";
+          const fill = n.risk ? (riskFill[n.risk] ?? "hsl(var(--card))") : "hsl(var(--card))";
+          const typeLabel = n.type || "unknown";
           return (
             <g key={n.id} transform={`translate(${p.x},${p.y})`}
+               data-testid={`lineage-node-${n.id}`}
+               data-node-id={n.id}
+               data-node-type={typeLabel}
+               data-node-state={n.state ?? ""}
+               data-node-risk={n.risk ?? ""}
                className={onSelect ? "cursor-pointer" : ""}
                onClick={() => onSelect?.(n)}>
               <rect width={NODE_W} height={NODE_H} rx={6}
@@ -157,7 +181,7 @@ export const LineageGraph = ({ nodes, edges, height: minH = 280, onSelect }: Pro
                 stroke={n.highlight ? "hsl(var(--primary))" : "hsl(var(--border))"}
                 strokeWidth={n.highlight ? 1.6 : 1} />
               <text x={10} y={18} fontSize="10" className="fill-muted-foreground"
-                style={{ fontFamily: "ui-monospace, monospace" }}>{n.type}{n.state ? ` · ${n.state}` : ""}</text>
+                style={{ fontFamily: "ui-monospace, monospace" }}>{typeLabel}{n.state ? ` · ${n.state}` : ""}</text>
               <text x={10} y={36} fontSize="12" className="fill-foreground" fontWeight={500}>
                 {n.label.length > 22 ? n.label.slice(0, 21) + "…" : n.label}
               </text>

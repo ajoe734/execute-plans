@@ -1,0 +1,106 @@
+{
+  "schema_version": "pantheon.fe-lineage-registry-graph.v1",
+  "task_id": "FE-LINEAGE-REGISTRY-GRAPH-20261104",
+  "taskId": "FE-LINEAGE-REGISTRY-GRAPH-20261104",
+  "title": "Lineage page must render registry graph and strategy tab must stop inventing nodes",
+  "owner": "Antigravity",
+  "reviewer": "Claude",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-LINEAGE-REGISTRY-GRAPH-20261104",
+  "prerequisites": [
+    {
+      "task_id": "REGISTRY-LINEAGE-OWNER-READ-20261104",
+      "pantheon_merge_commit": "dbf8874f1373956dc1029cf471e6462d1839212d",
+      "status": "done"
+    },
+    {
+      "task_id": "FE-EVIDENCE-KNOWLEDGE-TRUTH-20261104",
+      "execute_plans_merge_commit": "466a4639b34a16da327d9869ee5e1c25ffe71a12",
+      "status": "done"
+    }
+  ],
+  "status": "ready_for_review",
+  "timestamp": "2026-11-05T02:13:30Z",
+  "scope": {
+    "delivered": [
+      "Updated adaptLineageNode, adaptLineageEdge, and managementConsoleReads.lineage in src/lib/bff-v1/managementConsoleReads.ts so nodes are read from data.nodes/root.nodes (not root.items, which carries edges in /bff/lineage), edges are read from data.edges/root.edges/root.items with from/to/label mapping, adaptLineageNode preserves record.type ?? record.kind ?? record.artifact_type ?? record.entity_type ?? 'unknown' without defaulting missing types to 'Artifact' or fabricating risk, and page_info / has_more / meta.status are returned.",
+      "Updated LineageGraph in src/platform/components/LineageGraph.tsx to harden DAG BFS layering against cycles or missing endpoints and expose stable data-testid and data-* attributes on nodes, edges, and the empty state.",
+      "Updated LineageExplorerPage in src/management/pages/phase2/LineageExplorer.tsx to add Dataset to TYPES (Strategy, Persona, Artifact, CapitalPool, Experiment, Dataset), keep unknown node types visible and labelled when toggling known types, separate an unavailable lineage surface (data-testid='lineage-unavailable') from a real empty graph (data-testid='lineage-empty'), display a capped-graph notice (data-testid='lineage-has-more') when has_more is true, and reload managementConsoleReads.lineage(trimmedRootId) when entering a root id.",
+      "Updated StrategyDetail in src/management/pages/StrategyDetail.tsx so useLiveDetail fetches managementConsoleReads.lineage(entityId) with the strategy id as root and the Lineage tab renders the real registry lineage nodes and edges without fabricating alpha_src, CapitalPool/Persona nodes with constant deployed state or constant low/medium risk, or a dp_<id> '<id> → live' Deployment node, showing the empty lineage state when a strategy has no lineage.",
+      "Added bilingual i18n strings in src/i18n/locales/en-US.ts and src/i18n/locales/zh-TW.ts for lineageExplorer.unavailable and lineageExplorer.hasMore.",
+      "Added unit and component tests in src/lib/bff-v1/__tests__/managementConsoleReads.test.ts, src/management/pages/phase2/LineageExplorer.test.tsx, and src/management/pages/StrategyDetail.lineage.test.tsx using the real REGISTRY-LINEAGE-OWNER-READ-20261104 payload shapes (fd1281847a3b1c6a9735 corpus and strategy-persona-fd1281847a3b1c6a9735 root)."
+    ],
+    "not_changed": [
+      "Did not weaken, delete, or alter any existing test assertion across StrategyDetail.tradeJourneys.test.tsx, StrictLiveManagementSurfaces.test.tsx, fullOperationAssembly.test.tsx, managementConsoleReads.test.ts, or contract-drift.test.ts."
+    ],
+    "changed_assertions": []
+  },
+  "acceptance_verification": [
+    {
+      "criterion": 1,
+      "description": "The lineage page renders nodes and edges from the BFF payload and a test uses the real payload shape with from and to edges",
+      "status": "passed",
+      "verified_by": [
+        "src/lib/bff-v1/__tests__/managementConsoleReads.test.ts > adapts registry lineage nodes and from/to edges without defaulting missing type to Artifact or reading root.items as nodes",
+        "src/management/pages/phase2/LineageExplorer.test.tsx > renders nodes and from/to edges from the real BFF registry lineage payload"
+      ]
+    },
+    {
+      "criterion": 2,
+      "description": "Type toggles filter Strategy and Persona and Artifact and CapitalPool and Experiment and Dataset nodes and hiding a type removes its edges; a node with an unknown type is still visible and labelled",
+      "status": "passed",
+      "verified_by": [
+        "src/management/pages/phase2/LineageExplorer.test.tsx > filters Strategy, Persona, Artifact, CapitalPool, Experiment, and Dataset nodes and removes incident edges while keeping unknown types visible and labelled"
+      ]
+    },
+    {
+      "criterion": 3,
+      "description": "The page separates an unavailable surface from a real empty graph and shows has_more when the default graph is capped; entering a root id reloads that root",
+      "status": "passed",
+      "verified_by": [
+        "src/lib/bff-v1/__tests__/managementConsoleReads.test.ts > preserves lineage surface status for ok, empty, and unavailable envelopes",
+        "src/management/pages/phase2/LineageExplorer.test.tsx > separates an unavailable surface from a real empty graph, shows has_more when the default graph is capped, and reloads when entering a root id"
+      ]
+    },
+    {
+      "criterion": 4,
+      "description": "The StrategyDetail lineage tab reads the same lineage read with the strategy id as root and no longer builds nodes with constant deployed state or constant low risk or a fabricated live deployment node; a strategy with no lineage shows the empty state",
+      "status": "passed",
+      "verified_by": [
+        "src/management/pages/StrategyDetail.lineage.test.tsx > reads managementConsoleReads.lineage with the strategy id as root and does not fabricate deployed/low/live nodes",
+        "src/management/pages/StrategyDetail.lineage.test.tsx > shows the empty lineage state when a strategy has no lineage"
+      ]
+    },
+    {
+      "criterion": 5,
+      "description": "No existing test is weakened or deleted to pass and any changed assertion is justified in evidence",
+      "status": "passed",
+      "justification": "Zero existing tests or assertions were modified, weakened, or deleted. All 36 pre-existing tests across managementConsoleReads.test.ts (3), StrategyDetail.tradeJourneys.test.tsx (1), StrictLiveManagementSurfaces.test.tsx (9), fullOperationAssembly.test.tsx (16), and contract-drift.test.ts (7) pass unchanged alongside 7 newly added lineage tests (43 total passing tests across 7 test files)."
+    }
+  ],
+  "artifacts": [
+    "src/lib/bff-v1/managementConsoleReads.ts",
+    "src/lib/bff-v1/__tests__/managementConsoleReads.test.ts",
+    "src/management/pages/phase2/LineageExplorer.tsx",
+    "src/management/pages/phase2/LineageExplorer.test.tsx",
+    "src/platform/components/LineageGraph.tsx",
+    "src/management/pages/StrategyDetail.tsx",
+    "src/management/pages/StrategyDetail.lineage.test.tsx",
+    "src/i18n/locales/zh-TW.ts",
+    "src/i18n/locales/en-US.ts",
+    "docs/deployment/evidence/FE-LINEAGE-REGISTRY-GRAPH-20261104/evidence.json"
+  ],
+  "validation": {
+    "typecheck": {
+      "command": "./node_modules/.bin/tsc -p tsconfig.app.json --noEmit && ./node_modules/.bin/tsc -p tsconfig.agora.json --noEmit",
+      "exit_code": 0
+    },
+    "unit_and_component_tests": {
+      "command": "./node_modules/.bin/vitest run src/lib/bff-v1/__tests__/managementConsoleReads.test.ts src/management/pages/phase2/LineageExplorer.test.tsx src/management/pages/StrategyDetail.lineage.test.tsx src/management/pages/StrategyDetail.tradeJourneys.test.tsx src/management/components/detail/__tests__/StrictLiveManagementSurfaces.test.tsx src/management/__tests__/fullOperationAssembly.test.tsx src/lib/bff-v1/__tests__/contract-drift.test.ts",
+      "exit_code": 0,
+      "test_files_passed": 7,
+      "tests_passed": 43
+    }
+  }
+}

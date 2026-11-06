@@ -312,9 +312,14 @@ export interface Strategy extends BaseObject {
   alpha: string;
   capitalPoolId: string;
   personaIds: string[];
-  pnl30d: number;
-  sharpe: number;
-  drawdown: number;
+  pnl?: number | null;
+  pnl30d: number | null;
+  sharpe: number | null;
+  drawdown: number | null;
+  totalTrades?: number | null;
+  metricsAsOf?: string | null;
+  metricsResolution?: "fresh" | "missing" | "ambiguous" | "unavailable" | string | null;
+  metricsPersonaId?: string | null;
 }
 
 export interface Persona extends BaseObject {
@@ -481,6 +486,62 @@ export interface EvolutionProgram extends BaseObject {
   action_receipts?: Array<Record<string, unknown>>;
 }
 
+export interface ResearchTaskLatestRun {
+  runId: string;
+  run_id?: string;
+  adapter: string;
+  dispatchMode: string;
+  dispatch_mode?: string;
+  status: string;
+  requestedMode?: string;
+  requested_mode?: string;
+  createdAt?: string;
+  created_at?: string;
+}
+
+export interface ResearchTaskRunEvent {
+  eventId?: string;
+  event_id?: string | null;
+  eventType?: string;
+  event_type?: string | null;
+  actorId?: string;
+  actor_id?: string | null;
+  createdAt?: string;
+  created_at?: string | null;
+  details?: Record<string, unknown>;
+}
+
+export interface ResearchTaskRun {
+  id: string;
+  runId: string;
+  run_id?: string;
+  taskId?: string;
+  task_id?: string;
+  adapter: string;
+  dispatchMode: string;
+  dispatch_mode?: string;
+  requestedMode?: string;
+  requested_mode?: string;
+  status: string;
+  createdBy?: string;
+  created_by?: string | null;
+  createdAt?: string;
+  created_at?: string | null;
+  parameters?: Record<string, unknown>;
+  inputRefs?: Record<string, unknown>;
+  input_refs?: Record<string, unknown>;
+  artifactRefs?: string[];
+  artifact_refs?: string[];
+  proposalRefs?: string[];
+  proposal_refs?: string[];
+  registryWritebacks?: Record<string, unknown>;
+  registry_writebacks?: Record<string, unknown>;
+  productionActivation?: Record<string, unknown>;
+  production_activation?: Record<string, unknown>;
+  rejection?: unknown;
+  events?: ResearchTaskRunEvent[];
+}
+
 export interface ResearchExperimentAllowedActions {
   canCancel?: boolean;
   canRetry?: boolean;
@@ -535,12 +596,129 @@ export interface ResearchExperiment extends BaseObject {
   action_receipts?: Array<Record<string, unknown>>;
 }
 
+export interface ResearchTask extends ResearchExperiment {
+  taskId: string;
+  task_id?: string;
+  title?: string | null;
+  objective?: string | null;
+  status: string;
+  taskType?: string | null;
+  task_type?: string | null;
+  createdBy: string;
+  created_by?: string | null;
+  createdAt?: string;
+  created_at?: string | null;
+  updated_at?: string | null;
+  sourceRefs: string[];
+  source_refs?: string[];
+  runCount: number;
+  run_count?: number;
+  latestRun: ResearchTaskLatestRun | null;
+  latest_run?: ResearchTaskLatestRun | null;
+  constraints?: Record<string, unknown>;
+  idempotencyKey?: string | null;
+  idempotency_key?: string | null;
+  runs?: ResearchTaskRun[];
+}
+
+export type ArtifactSourceKind = "registry" | "research_run_output" | (string & {});
+
+export interface ArtifactLineageVersion {
+  id?: string;
+  version?: string;
+  hash?: string;
+  checksum?: string;
+  created_at?: string;
+  updated_at?: string;
+  [key: string]: unknown;
+}
+
+export interface ArtifactLineage {
+  lineage_id?: string | null;
+  version_count?: number;
+  versions?: ArtifactLineageVersion[];
+  source_run_ids?: string[];
+  source_strategy_spec_id?: string | null;
+  [key: string]: unknown;
+}
+
+export interface ArtifactStorageRef {
+  backend?: string;
+  path?: string;
+  uri?: string;
+  [key: string]: unknown;
+}
+
+export interface ArtifactEvaluationSummary {
+  sharpe?: number | null;
+  max_drawdown?: number | null;
+  risk_level?: RiskLevel | (string & {}) | null;
+  [key: string]: unknown;
+}
+
+export interface ArtifactSavedOutput {
+  run_id?: string | null;
+  task_id?: string | null;
+  receipt_id?: string | null;
+  checksum?: string | null;
+  storage_ref?: string | ArtifactStorageRef | null;
+  provenance?: Record<string, unknown> | null;
+  run_status?: string | null;
+  completed_at?: string | null;
+  artifact_family?: string | null;
+  stage_type?: string | null;
+  tenant_id?: string | null;
+  [key: string]: unknown;
+}
+
+export interface ArtifactResearchLinkage {
+  run_id?: string | null;
+  task_id?: string | null;
+  stage_id?: string | null;
+  [key: string]: unknown;
+}
+
+export interface ArtifactAllowedActions {
+  canCompare?: boolean;
+  canDownload?: boolean;
+  canRetire?: boolean;
+  canRollback?: boolean;
+  [key: string]: unknown;
+}
+
 export interface Artifact extends BaseObject {
-  kind: "model" | "dataset" | "report" | "container";
-  version: string;
+  kind: string;
+  version: string | null;
   sourceExperimentId?: string;
-  sizeMb: number;
+  sizeMb?: number | null;
+  format?: string | null;
   hash: string;
+  source_kind?: ArtifactSourceKind;
+  sourceKind?: ArtifactSourceKind;
+  registry_id?: string | null;
+  artifact_id?: string | null;
+  artifact_type?: string | null;
+  strategy_id?: string | null;
+  artifact_state?: string | null;
+  status?: string | null;
+  checksum?: string | null;
+  producer_run_id?: string | null;
+  approver?: string | null;
+  approved_at?: string | null;
+  approval_decision_id?: string | null;
+  author?: string | null;
+  created_by?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  owner_tenant?: string | null;
+  lineage?: ArtifactLineage | null;
+  storage_ref?: ArtifactStorageRef | string | null;
+  evaluation_summary?: ArtifactEvaluationSummary | null;
+  metadata?: Record<string, unknown> | null;
+  saved_output?: ArtifactSavedOutput | null;
+  research_linkage?: ArtifactResearchLinkage | null;
+  allowedActions?: ArtifactAllowedActions | null;
+  compare_unavailable_reason?: string | null;
 }
 
 export interface JobAllowedActions {

@@ -1,0 +1,88 @@
+{
+  "task_id": "FE-RESEARCH-TASKS-PROGRAM-CREATE-20261104",
+  "owner": "Antigravity",
+  "reviewer": "Claude",
+  "repository": "ajoe734/execute-plans",
+  "branch": "task/FE-RESEARCH-TASKS-PROGRAM-CREATE-20261104",
+  "merge_target": "dev",
+  "hosted_verification_claimed": false,
+  "hosted_verification_note": "Hosted verification is performed later by the operator acceptance task EVOLUTION-RESEARCH-HOSTED-ACCEPT-20261104; this artifact records functional, unit, contract, i18n parity, typecheck, and production build evidence only.",
+  "summary": "Wire /management/experiments (ResearchList) and /management/experiments/:id (ResearchDetail) to GET /bff/research-tasks and GET /bff/research-tasks/{task_id}; remove duplicate status, risk, metric, value, and owner columns; display real adapter and dispatch_mode with an explicit non-real badge for stub/manual runs; surface degraded error state when meta.surfaces.research_tasks is unavailable or read fails without showing 無結果, and show a clear empty state when no research work has run yet; keep the research create button disabled with a localized reason explaining research items come from research workflows and manual creation has no executor yet (replacing 'no typed durable BFF owner'); enable evolutionProgram durable creation on POST /bff/evolution-programs sending only { name } with Idempotency-Key, remove parentAlpha and population from the evolutionProgram create drawer/types/validator, read back the created program as draft from GET /bff/evolution-programs without an optimistic row, preserve entered name while displaying 422/403/503 errors in the drawer, and keep the create button disabled with the read-only reason when VITE_BFF_REAL_WRITES=false.",
+  "scoped_artifacts": [
+    "src/management/pages/Lists.tsx",
+    "src/management/pages/ObjectListPage.tsx",
+    "src/management/pages/ObjectListPage.test.tsx",
+    "src/management/pages/ResearchDetail.tsx",
+    "src/management/pages/ResearchDetail.test.tsx",
+    "src/management/__tests__/fullOperationAssembly.test.tsx",
+    "src/lib/bff-v1/research.ts",
+    "src/lib/bff-v1/evolution.ts",
+    "src/lib/bff-v1/lists.ts",
+    "src/lib/bff-v1/paths.ts",
+    "src/lib/bff-v1/dto.ts",
+    "src/lib/bff-v1/__tests__/contract-drift.test.ts",
+    "src/lib/bff-v1/__tests__/strictLiveReadOffline.test.ts",
+    "src/lib/bff-v1/__tests__/seedTaxonomy.test.ts",
+    "src/lib/writeIntents/types.ts",
+    "src/lib/writeIntents/createDefaults.ts",
+    "src/lib/writeIntents/validation.ts",
+    "src/lib/writeIntents/__tests__/validation.matrix.test.ts",
+    "src/management/components/write/EntityCreateDrawer.tsx",
+    "src/management/components/write/createEntity.ts",
+    "src/management/components/write/createEntity.test.ts",
+    "e2e/06-entity-registry.spec.ts",
+    "e2e/08-create-intent.spec.ts",
+    "e2e/helpers/fixtures.ts",
+    "e2e/24-persona-fleet-click-map.spec.ts",
+    "src/i18n/locales/zh-TW.ts",
+    "src/i18n/locales/en-US.ts",
+    "src/lib/v5/management/__tests__/i18nParity.test.ts",
+    "docs/deployment/evidence/FE-RESEARCH-TASKS-PROGRAM-CREATE-20261104/evidence.json"
+  ],
+  "acceptance_criteria": {
+    "1_research_list_columns_and_route": "verified: /management/experiments reads GET /bff/research-tasks and renders Name, Status, Latest run, Run count, Created by, and Updated at; duplicate status, risk, metric, value, and owner columns are removed",
+    "2_stub_or_manual_run_honesty": "verified: stub and manual runs display their real adapter and dispatch_mode alongside the non-real execution warning badge (research.nonRealRunBadge) in both list and detail views",
+    "3_research_detail_objective_runs_and_404": "verified: clicking a row navigates to /management/experiments/<task_id>; ResearchDetail fetches GET /bff/research-tasks/{task_id} and renders objective and every run from runs[]; 404 renders the existing not-found state",
+    "4_research_tasks_unavailable_vs_healthy_empty": "verified: meta.surfaces.research_tasks status of unavailable or a failed read renders the degraded error state and never common.noResults (無結果); a healthy empty list renders research.emptyState explaining no research work has run yet",
+    "5_research_create_disabled_reason": "verified: ResearchList uses createBehavior={{ kind: 'disabled', reasonI18nKey: 'research.createDisabledReason' }} in both en-US and zh-TW explaining research items come from research workflows and manual creation has no executor yet; 'no typed durable BFF owner' does not appear on this page",
+    "6_evolution_program_durable_create_name_only": "verified: DURABLE_CREATE_OWNERS includes evolutionProgram ('POST /bff/evolution-programs'), createEvolutionProgram sends only { name } with Idempotency-Key without buildEntity defaults, and EntityCreateDrawer / EvolutionProgramCreateInput / validators.evolutionProgram only include name (parentAlpha and population removed)",
+    "7_evolution_program_readback_and_error_handling": "verified: successful create triggers reload() reading back the new program as draft from GET /bff/evolution-programs without an optimistic row; 422, 403, and 503 errors render inside the drawer alert while preserving the entered name",
+    "8_readonly_profile_disables_create_button": "verified: when !realWritesEnabled() (VITE_BFF_REAL_WRITES=false), ObjectListPage disables the durable create button and displays mgmt.dataSources.realWritesRequired instead of opening the drawer",
+    "9_unit_and_i18n_coverage": "verified: unit/component tests in ObjectListPage.test.tsx, ResearchDetail.test.tsx, createEntity.test.ts, contract-drift.test.ts, seedTaxonomy.test.ts, validation.matrix.test.ts, and i18nParity.test.ts cover all new behaviors and verify 100% locale key parity across en-US and zh-TW",
+    "10_vitest_tsc_build_and_e2e_specs": "verified: vitest, tsc -p tsconfig.app.json --noEmit, and vite build pass, and e2e/06-entity-registry.spec.ts, e2e/08-create-intent.spec.ts, e2e/24-persona-fleet-click-map.spec.ts, and e2e/helpers/fixtures.ts are updated for the new routes and payloads"
+  },
+  "changed_test_assertions_justification": [
+    {
+      "file": "src/lib/writeIntents/__tests__/validation.matrix.test.ts",
+      "reason": "Updated the evolutionProgram matrix row from requiring parentAlpha and population > 0 to requiring only name ({ valid: { name: 'OK Evo' }, invalid: { name: '' }, expectErrorKey: 'name' }) per AC6, which removes parentAlpha and population from EvolutionProgramCreateInput and POST /bff/evolution-programs."
+    },
+    {
+      "file": "e2e/06-entity-registry.spec.ts",
+      "reason": "Updated the /management/experiments registry fixture listPath from /bff/research-experiments to /bff/research-tasks and surface from research_experiments to research_tasks with real ResearchTask record fields per AC1 and AC3."
+    },
+    {
+      "file": "e2e/08-create-intent.spec.ts",
+      "reason": "Updated the evolution-programs create-intent fixture payload to { name: 'F08 Evolution Program' } (removing id, strategy_id, status, and params) and enforced that POST /bff/evolution-programs sends only name per AC6 (BFF rejects any other non-empty field with 422)."
+    },
+    {
+      "file": "e2e/24-persona-fleet-click-map.spec.ts",
+      "reason": "Updated the /management/experiments/exp-formal detail route mock to serve GET /bff/research-tasks/exp-formal with ResearchTask detail fields (task_id, objective, runs) per AC3."
+    }
+  ],
+  "verification": {
+    "unit_and_contract_tests": {
+      "command": "npx vitest run src/lib/writeIntents/__tests__/validation.matrix.test.ts src/lib/v5/management/__tests__/i18nParity.test.ts src/management/components/write/createEntity.test.ts src/lib/bff-v1/__tests__/contract-drift.test.ts src/lib/bff-v1/__tests__/seedTaxonomy.test.ts src/lib/bff-v1/__tests__/strictLiveReadOffline.test.ts src/management/__tests__/fullOperationAssembly.test.tsx src/management/pages/ObjectListPage.test.tsx src/management/pages/ResearchDetail.test.tsx",
+      "status": "passed",
+      "test_files": 9,
+      "tests_passed": 96
+    },
+    "typecheck": {
+      "command": "npm run typecheck",
+      "status": "passed"
+    },
+    "production_build": {
+      "command": "VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build",
+      "status": "passed"
+    }
+  }
+}

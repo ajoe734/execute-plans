@@ -14,7 +14,7 @@ import { DataTable } from "@/platform/components/DataTable";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { RiskBadge } from "@/platform/components/RiskBadge";
 import { bffWrites } from "@/lib/bff-v1/writes";
-import { bffV1, runActionSafe } from "@/lib/bff-v1";
+import { bffV1, managementConsoleReads, runActionSafe, type LineageRead } from "@/lib/bff-v1";
 import { useLiveDetail } from "@/lib/bff-v1/useLiveDetail";
 import { NonProductionActionButton } from "@/management/components/NonProductionActionButton";
 import { useT } from "@/platform/hooks";
@@ -58,6 +58,7 @@ export const StrategyDetail = () => {
   const [activeTr, setActiveTr] = useState<Transition<StrategyState> | null>(null);
   const [watchers, setWatchers] = useState<Watcher[]>([]);
   const [journal, setJournal] = useState<DecisionJournalEntry[]>([]);
+  const [lineage, setLineage] = useState<LineageRead | null>(null);
   const [loadErrors, setLoadErrors] = useState<string[]>([]);
 
   const { data: s, setData: setS, loading, isError } = useLiveDetail<Strategy>(
@@ -68,7 +69,7 @@ export const StrategyDetail = () => {
         request.catch(() => { failures.push(label); return fallback; });
       setLoadErrors([]);
       let stratError: unknown;
-      const [strat, j, a, ap, al, inc, ar, ex, ev, w, dj] = await Promise.all([
+      const [strat, j, a, ap, al, inc, ar, ex, ev, w, dj, lin] = await Promise.all([
         bffV1.strategies.get(entityId).catch((err) => {
           stratError = err;
           failures.push("Strategy");
@@ -80,6 +81,13 @@ export const StrategyDetail = () => {
         read("Research", bffV1.research.list(), []), read("Evolution", bffV1.evolution.list(), []),
         read("Watchers", bffV1.watchers.forSubject("Strategy", entityId), []),
         read("Decision journal", bffV1.decisionJournal.forSubject("Strategy", entityId), []),
+        managementConsoleReads.lineage(entityId).catch(() => ({
+          nodes: [],
+          edges: [],
+          meta: { status: "unavailable", source: "frontend_empty_read", surfaces: {} },
+          page_info: { total: 0, page_size: 0, has_more: false },
+          has_more: false,
+        })),
       ]);
       setLoadErrors(failures);
       setJobs(j);
@@ -92,6 +100,7 @@ export const StrategyDetail = () => {
       setEvolutions(ev.filter((e) => e.parentAlpha === strat?.alpha));
       setWatchers(w);
       setJournal(dj);
+      setLineage(lin);
       if (!strat && stratError) {
         throw stratError;
       }
@@ -118,19 +127,33 @@ export const StrategyDetail = () => {
 
   const params: { key: string; value: string; note: string }[] = [];
   const paperLive: { metric: string; paper: string; live: string; delta: string }[] = [];
+  const noData = t("common.noData");
+  const alphaRaw = s.alpha?.trim() || "";
+  const alphaDisplay = alphaRaw || noData;
+  const poolDisplay = s.capitalPoolId?.trim() || noData;
+  const personasDisplay = (s.personaIds ?? []).filter(Boolean).join(", ") || noData;
+  const subtitle = alphaRaw ? `${alphaRaw} · ${s.id}` : s.id;
+  const hasPnl = typeof s.pnl === "number" && Number.isFinite(s.pnl);
+  const hasPnl30d = typeof s.pnl30d === "number" && Number.isFinite(s.pnl30d);
+  const hasSharpe = typeof s.sharpe === "number" && Number.isFinite(s.sharpe);
+  const hasDrawdown = typeof s.drawdown === "number" && Number.isFinite(s.drawdown);
+  const metricsAsOfText = s.metricsAsOf?.trim() || "";
+  const pnlTone = !hasPnl || s.pnl === 0 ? "default" : s.pnl > 0 ? "success" : "danger";
+  const pnl30dTone = !hasPnl30d || s.pnl30d === 0 ? "default" : s.pnl30d > 0 ? "success" : "danger";
+  const drawdownTone = !hasDrawdown || s.drawdown === 0 ? "default" : "warning";
 
   return (
     <>
       {loadErrors.length > 0 && <div role="alert" className="px-6 py-3 text-sm text-status-warning">Some strategy data could not be loaded: {loadErrors.join(", ")}.</div>}
       <ObjectDetailLayout
         object={s}
-        subtitle={`${s.alpha} · ${s.id}`}
+        subtitle={subtitle}
         actions={
           <>
             <Button size="sm" variant="ghost" onClick={() => useInspector.getState().open({
               id: s.id, type: "Strategy", name: s.name, state: s.state, risk: s.risk,
               owner: s.owner, updatedAt: s.updatedAt, availableActions: s.availableActions,
-              meta: [{ label: "Alpha", value: s.alpha }, { label: "Pool", value: s.capitalPoolId }],
+              meta: [{ label: "Alpha", value: alphaDisplay }, { label: "Pool", value: poolDisplay }],
             })}>
               <Inbox className="h-4 w-4 mr-1" />Inspect
             </Button>
@@ -167,16 +190,34 @@ export const StrategyDetail = () => {
                     />
                   </div>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <Field label="Alpha" value={s.alpha} mono />
-                    <Field label={t("nav.capital")} value={s.capitalPoolId} mono />
-                    <Field label={t("nav.personas")} value={(s.personaIds ?? []).join(", ")} mono />
+                    <Field label="Alpha" value={alphaDisplay} mono />
+                    <Field label={t("nav.capital")} value={poolDisplay} mono />
+                    <Field label={t("nav.personas")} value={personasDisplay} mono />
                     <Field label={t("table.updated")} value={safeDateTime(s.updatedAt)} mono />
                   </div>
                 </Section>
-                <div className="grid grid-cols-3 gap-4 mt-4">
-                  <StatCard label="PnL 30d" value={`${((s.pnl30d ?? 0) * 100).toFixed(2)}%`} tone={(s.pnl30d ?? 0) >= 0 ? "success" : "danger"} />
-                  <StatCard label={t("table.sharpe")} value={(s.sharpe ?? 0).toFixed(2)} />
-                  <StatCard label={t("table.drawdown")} value={`${((s.drawdown ?? 0) * 100).toFixed(2)}%`} tone="warning" />
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
+                  <StatCard
+                    label={t("strategyDetail.cumulativePaperPnl")}
+                    value={hasPnl ? s.pnl.toFixed(2) : noData}
+                    hint={metricsAsOfText ? t("strategyDetail.metricsAsOf", { asOf: metricsAsOfText }) : undefined}
+                    tone={pnlTone}
+                  />
+                  <StatCard
+                    label="PnL 30d"
+                    value={hasPnl30d ? `${(s.pnl30d * 100).toFixed(2)}%` : noData}
+                    tone={pnl30dTone}
+                  />
+                  <StatCard
+                    label={t("table.sharpe")}
+                    value={hasSharpe ? s.sharpe.toFixed(2) : noData}
+                    tone="default"
+                  />
+                  <StatCard
+                    label={t("table.drawdown")}
+                    value={hasDrawdown ? `${(s.drawdown * 100).toFixed(2)}%` : noData}
+                    tone={drawdownTone}
+                  />
                 </div>
                 <div className="grid gap-4 md:grid-cols-3 mt-4">
                   <LinkedBlock
@@ -215,7 +256,7 @@ export const StrategyDetail = () => {
               <>
                 <Section title={t("strategyDetail.specTitle")}>
                   <p className="text-sm leading-relaxed text-muted-foreground">
-                    {t("strategyDetail.specBody", { alpha: s.alpha })}
+                    {t("strategyDetail.specBody", { alpha: alphaDisplay })}
                   </p>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-2">
                     <Field label={t("strategyDetail.universe")} value="Top-50 perp by 30d ADV" />
@@ -391,9 +432,19 @@ export const StrategyDetail = () => {
                 columns={[
                   { key: "id", header: t("table.id"), cell: (r) => <span className="text-mono text-xs">{r.id}</span> },
                   { key: "name", header: t("table.name"), cell: (r) => <div className="font-medium">{r.name}</div> },
-                  { key: "kind", header: t("table.kind"), cell: (r) => <Badge variant="outline" className="text-[10px] uppercase">{r.kind}</Badge> },
-                  { key: "ver", header: t("table.version"), cell: (r) => <span className="text-mono text-xs">{r.version}</span> },
-                  { key: "size", header: t("strategyDetail.size"), cell: (r) => <span className="text-mono text-xs">{(r.sizeMb ?? 0).toFixed(1)} MB</span> },
+                  { key: "kind", header: t("table.kind"), cell: (r) => <Badge variant="outline" className="text-[10px]">{r.kind || noData}</Badge> },
+                  { key: "ver", header: t("table.version"), cell: (r) => <span className="text-mono text-xs">{r.version || noData}</span> },
+                  {
+                    key: "size",
+                    header: t("strategyDetail.size"),
+                    cell: (r) => (
+                      <span className="text-mono text-xs">
+                        {typeof r.sizeMb === "number" && Number.isFinite(r.sizeMb)
+                          ? `${r.sizeMb.toFixed(1)} MB`
+                          : noData}
+                      </span>
+                    ),
+                  },
                 ]}
                 empty={t("empty.noResults")}
               />
@@ -417,7 +468,7 @@ export const StrategyDetail = () => {
               />
             ) : (
               <Card className="p-8 text-center">
-                <div className="text-sm text-muted-foreground mb-3">{t("strategyDetail.noEvolution", { alpha: s.alpha })}</div>
+                <div className="text-sm text-muted-foreground mb-3">{t("strategyDetail.noEvolution", { alpha: alphaDisplay })}</div>
                 <Button size="sm" variant="outline" onClick={() => nav("/management/evolution")}>
                   {t("strategyDetail.startEvolution")} <ArrowRight className="ml-1 h-3 w-3" />
                 </Button>
@@ -448,19 +499,14 @@ export const StrategyDetail = () => {
           {
             value: "lineage", label: t("section.lineage"),
             content: (() => {
-              const nodes: LineageNode[] = [
-                { id: "alpha_src", label: s.alpha, type: "Alpha", state: "deployed", risk: "low" },
-                { id: s.capitalPoolId, label: s.capitalPoolId, type: "CapitalPool", state: "deployed", risk: "medium" },
-                { id: s.id, label: s.name, type: "Strategy", state: s.state, risk: s.risk, highlight: true },
-                ...(s.personaIds ?? []).map((p) => ({ id: p, label: p, type: "Persona", state: "deployed", risk: "low" as const })),
-                { id: `dp_${s.id}`, label: `${s.id} → live`, type: "Deployment", state: "deployed", risk: s.risk },
-              ];
-              const edges: LineageEdge[] = [
-                { from: "alpha_src", to: s.id, label: "alpha" },
-                { from: s.capitalPoolId, to: s.id, label: "capital" },
-                ...(s.personaIds ?? []).map((p) => ({ from: p, to: s.id, label: "persona" })),
-                { from: s.id, to: `dp_${s.id}`, label: "deploys" },
-              ];
+              const nodes: LineageNode[] = (lineage?.nodes ?? []).map((node) => ({
+                ...node,
+                highlight: node.highlight || node.id === s.id,
+              }));
+              const nodeIds = new Set(nodes.map((node) => node.id));
+              const edges: LineageEdge[] = (lineage?.edges ?? []).filter(
+                (edge) => nodeIds.has(edge.from) && nodeIds.has(edge.to),
+              );
               return (
                 <LineageGraph nodes={nodes} edges={edges} onSelect={(n) => useInspector.getState().open({
                   id: n.id, type: n.type, name: n.label, state: n.state, risk: n.risk,

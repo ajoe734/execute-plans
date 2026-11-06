@@ -226,4 +226,39 @@ describe("CapitalPoolDetail", () => {
     expect(screen.queryByText("0.00%")).not.toBeInTheDocument();
     expect(screen.queryByText("OK")).not.toBeInTheDocument();
   });
+
+  it("shows No data for null strategy metrics in CapitalPoolDetail tabs instead of 0.00 or NaN", async () => {
+    const poolId = "pool-persona-paper-fd1281847a3b1c6a9735";
+    mocks.capitalGet.mockResolvedValue(
+      normalizeCapitalPool({
+        id: poolId,
+        name: "Paper Pool With Null Window Metrics",
+        status: "active",
+        currency: "USD",
+        budget: 100000,
+      }),
+    );
+    mocks.strategiesList.mockResolvedValue([
+      {
+        id: "strat-paper-running-01",
+        name: "Momentum Paper Runner",
+        owner: "persona-paper-running-01",
+        updatedAt: "2026-11-04T01:16:27Z",
+        state: "deployed",
+        risk: "medium",
+        alpha: "alpha.momo.v1",
+        capitalPoolId: poolId,
+        personaIds: ["persona-paper-running-01"],
+        pnl: 110.0,
+        pnl30d: null,
+        sharpe: null,
+        drawdown: null,
+      },
+    ] satisfies Strategy[]);
+
+    renderDetail(poolId);
+
+    await screen.findByText("Paper Pool With Null Window Metrics");
+    expect(screen.queryByText(/NaN/)).not.toBeInTheDocument();
+  });
 });

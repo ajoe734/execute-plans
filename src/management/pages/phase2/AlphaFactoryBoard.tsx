@@ -60,14 +60,21 @@ export const AlphaFactoryBoardPage = () => {
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <div className="text-sm font-medium truncate">{c.name}</div>
-                        <div className="text-xs text-muted-foreground text-mono mt-0.5">{c.id}{c.alpha ? ` · ${c.alpha}` : ""}</div>
+                        <div className="text-xs text-muted-foreground text-mono mt-0.5">{c.id}{c.alpha?.trim() ? ` · ${c.alpha.trim()}` : ""}</div>
                       </div>
                       <RiskBadge level={c.risk} />
                     </div>
                     <div className="mt-2 text-xs text-muted-foreground">{c.note}</div>
                     {c.sharpe !== undefined && (
                       <div className="mt-2 flex items-center gap-3 text-xs text-mono">
-                        <span>{t("table.sharpe")} <strong>{c.sharpe.toFixed(2)}</strong></span>
+                        <span>
+                          {t("table.sharpe")}{" "}
+                          {typeof c.sharpe === "number" && Number.isFinite(c.sharpe) ? (
+                            <strong>{c.sharpe.toFixed(2)}</strong>
+                          ) : (
+                            <span className="text-muted-foreground">{t("common.noData")}</span>
+                          )}
+                        </span>
                       </div>
                     )}
                     {col !== "replicated" && (

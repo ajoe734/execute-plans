@@ -3,6 +3,10 @@
 import { describe, it, expect } from "vitest";
 import en from "@/i18n/locales/en-US";
 import zh from "@/i18n/locales/zh-TW";
+import {
+  SUPPORTED_ATTRIBUTION_DIMENSIONS,
+  UNSUPPORTED_ATTRIBUTION_DIMENSIONS,
+} from "@/lib/v5/management/performanceAttribution";
 
 function flatten(obj: Record<string, unknown>, prefix = "", out: Set<string> = new Set()): Set<string> {
   for (const [k, v] of Object.entries(obj)) {
@@ -74,6 +78,63 @@ describe("Pack PM-i18n parity", () => {
       "mgmt.portfolio.retry",
     ];
     for (const k of portfolioStateKeys) {
+      expect(enKeys.has(k), `en missing ${k}`).toBe(true);
+      expect(zhKeys.has(k), `zh missing ${k}`).toBe(true);
+    }
+  });
+
+  it("includes BFF-supported attribution dimension labels and excludes unsupported 422 dimensions in both locales", () => {
+    expect(enKeys.has("mgmt.attribution.unsupportedDimensionNoticeFmt")).toBe(true);
+    expect(zhKeys.has("mgmt.attribution.unsupportedDimensionNoticeFmt")).toBe(true);
+
+    for (const d of [...SUPPORTED_ATTRIBUTION_DIMENSIONS, "pool", "asset", "instrument", "regime"]) {
+      const k = `mgmt.attribution.dimensions.${d}`;
+      expect(enKeys.has(k), `en missing ${k}`).toBe(true);
+      expect(zhKeys.has(k), `zh missing ${k}`).toBe(true);
+    }
+
+    for (const unsupported of UNSUPPORTED_ATTRIBUTION_DIMENSIONS) {
+      const k = `mgmt.attribution.dimensions.${unsupported}`;
+      expect(enKeys.has(k), `en should not include unsupported ${k}`).toBe(false);
+      expect(zhKeys.has(k), `zh should not include unsupported ${k}`).toBe(false);
+    }
+  });
+
+  it("includes evolution journal history, auto_proposal_counts, evidence_class, and degraded keys in both locales", () => {
+    const evolutionJournalKeys = [
+      "mgmt.evolution.viewHistory",
+      "mgmt.evolution.viewAutoProposals",
+      "mgmt.evolution.viewAll",
+      "mgmt.evolution.showAutoProposals",
+      "mgmt.evolution.showHistory",
+      "mgmt.evolution.autoProposalsSummaryFmt",
+      "mgmt.evolution.autoProposalsTotal",
+      "mgmt.evolution.incidentFollowup",
+      "mgmt.evolution.incidentSeverity",
+      "mgmt.evolution.postmortemDraft",
+      "mgmt.evolution.filteredSummaryFmt",
+      "mgmt.evolution.summaryDecisions",
+      "mgmt.evolution.summaryMutationReviews",
+      "mgmt.evolution.summaryPostmortems",
+      "mgmt.evolution.summaryRollbacks",
+      "mgmt.evolution.summaryFreezeOrders",
+      "mgmt.evolution.emptyHistoryTitle",
+      "mgmt.evolution.emptyHistoryWithProposalsFmt",
+      "mgmt.evolution.emptyAutoProposals",
+      "mgmt.evolution.evidenceClass",
+      "mgmt.evolution.evidenceClasses.threshold_signal",
+      "mgmt.evolution.evidenceClasses.incident_followup",
+      "mgmt.evolution.evidenceClasses.incident_severity",
+      "mgmt.evolution.evidenceClasses.unclassified",
+      "mgmt.evolution.degradedTitle",
+      "mgmt.evolution.degradedBody",
+      "mgmt.evolution.retry",
+      "mgmt.evolution.pager.rangeFmt",
+      "mgmt.evolution.pager.pageFmt",
+      "mgmt.evolution.pager.previous",
+      "mgmt.evolution.pager.next",
+    ];
+    for (const k of evolutionJournalKeys) {
       expect(enKeys.has(k), `en missing ${k}`).toBe(true);
       expect(zhKeys.has(k), `zh missing ${k}`).toBe(true);
     }

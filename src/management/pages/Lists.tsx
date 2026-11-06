@@ -1,7 +1,10 @@
 import { ObjectListPage } from "./ObjectListPage";
 import { lists } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
-import type { Strategy, Persona, CapitalPool, RankingFormula, Rebalance, Deployment, EvolutionProgram, ResearchExperiment, Artifact, ListEnvelope } from "@/lib/bff-v1";
+import { safeDateTime } from "@/lib/utils";
+import type { Strategy, Persona, CapitalPool, RankingFormula, Rebalance, Deployment, EvolutionProgram, ResearchTask, Artifact, ListEnvelope, RiskLevel } from "@/lib/bff-v1";
+import { StatusBadge } from "@/platform/components/StatusBadge";
+import { RiskBadge } from "@/platform/components/RiskBadge";
 
 // `lists.*` loaders are generically typed by `strictLiveListLoader<T>` in
 // src/lib/bff-v1/lists.ts; when the passed `adaptItem` is itself generic
@@ -113,6 +116,7 @@ const currencyBreakdown = (rows: CapitalPool[], pick: (row: CapitalPool) => numb
 
 export const StrategiesList = () => {
   const t = useT();
+  const noData = t("common.noData");
   return (
     <ObjectListPage<Strategy>
       title={t("nav.strategies")}
@@ -120,9 +124,85 @@ export const StrategiesList = () => {
       basePath="/management/strategies" liveKinds={["Strategy"]}
       createBehavior={{ kind: "drawer", entity: "strategy" }}
       extraColumns={[
-        { key: "alpha", header: "Alpha", cell: (r) => <span className="text-mono text-xs">{r.alpha}</span> },
-        { key: "pnl", header: "PnL 30d", cell: (r) => <span className={`text-mono text-xs ${num(r.pnl30d) >= 0 ? "text-status-success" : "text-status-failed"}`}>{pct(r.pnl30d, 2)}</span> },
-        { key: "sharpe", header: t("table.sharpe"), cell: (r) => <span className="text-mono text-xs">{fix(r.sharpe)}</span> },
+        {
+          key: "alpha",
+          header: "Alpha",
+          cell: (r) => {
+            const alphaText = r.alpha?.trim() || "";
+            return (
+              <span className={`text-mono text-xs ${alphaText ? "text-foreground" : "text-muted-foreground"}`}>
+                {alphaText || noData}
+              </span>
+            );
+          },
+        },
+        {
+          key: "capitalPool",
+          header: t("nav.capital"),
+          cell: (r) => {
+            const poolText = r.capitalPoolId?.trim() || "";
+            return (
+              <span className={`text-mono text-xs ${poolText ? "text-foreground" : "text-muted-foreground"}`}>
+                {poolText || noData}
+              </span>
+            );
+          },
+        },
+        {
+          key: "cumulativePnl",
+          header: t("strategyDetail.cumulativePaperPnl"),
+          cell: (r) => {
+            if (!hasNumber(r.pnl)) {
+              return <span className="text-mono text-xs text-muted-foreground">{noData}</span>;
+            }
+            const toneClass =
+              r.pnl === 0 ? "text-foreground" : r.pnl > 0 ? "text-status-success" : "text-status-failed";
+            const asOf = r.metricsAsOf?.trim() || "";
+            return (
+              <div className="flex flex-col">
+                <span className={`text-mono text-xs ${toneClass}`}>{r.pnl.toFixed(2)}</span>
+                {asOf && (
+                  <span className="text-[11px] text-muted-foreground">
+                    {t("strategyDetail.metricsAsOf", { asOf })}
+                  </span>
+                )}
+              </div>
+            );
+          },
+        },
+        {
+          key: "pnl",
+          header: "PnL 30d",
+          cell: (r) => {
+            if (!hasNumber(r.pnl30d)) {
+              return <span className="text-mono text-xs text-muted-foreground">{noData}</span>;
+            }
+            const toneClass =
+              r.pnl30d === 0 ? "text-foreground" : r.pnl30d > 0 ? "text-status-success" : "text-status-failed";
+            return <span className={`text-mono text-xs ${toneClass}`}>{`${(r.pnl30d * 100).toFixed(2)}%`}</span>;
+          },
+        },
+        {
+          key: "sharpe",
+          header: t("table.sharpe"),
+          cell: (r) =>
+            hasNumber(r.sharpe) ? (
+              <span className="text-mono text-xs text-foreground">{r.sharpe.toFixed(2)}</span>
+            ) : (
+              <span className="text-mono text-xs text-muted-foreground">{noData}</span>
+            ),
+        },
+        {
+          key: "drawdown",
+          header: t("table.drawdown"),
+          cell: (r) => {
+            if (!hasNumber(r.drawdown)) {
+              return <span className="text-mono text-xs text-muted-foreground">{noData}</span>;
+            }
+            const toneClass = r.drawdown === 0 ? "text-foreground" : "text-status-warning";
+            return <span className={`text-mono text-xs ${toneClass}`}>{`${(r.drawdown * 100).toFixed(2)}%`}</span>;
+          },
+        },
       ]}
     />
   );
@@ -424,36 +504,239 @@ export const EvolutionList = () => {
   );
 };
 
+function isNonRealRun(adapter?: string, dispatchMode?: string): boolean {
+  const a = String(adapter ?? "").trim().toLowerCase();
+  const d = String(dispatchMode ?? "").trim().toLowerCase();
+  return a === "stub" || a === "manual" || d === "stub" || d === "manual";
+}
+
 export const ResearchList = () => {
   const t = useT();
   return (
-    <ObjectListPage<ResearchExperiment>
+    <ObjectListPage<ResearchTask>
       title={t("nav.research")}
-      loader={asEntityLoader<ResearchExperiment>(lists.research)}
-      basePath="/management/experiments" liveKinds={["Research"]}
-      createBehavior={{ kind: "drawer", entity: "researchExperiment" }}
-      extraColumns={[
-        { key: "status", header: t("table.status"), cell: (r) => <span className="text-mono text-xs uppercase">{r.status}</span> },
-        { key: "metric", header: t("table.metric"), cell: (r) => <span className="text-mono text-xs">{r.metric}</span> },
-        { key: "val", header: t("table.value"), cell: (r) => <span className="text-mono text-xs">{fix(r.metricValue)}</span> },
+      loader={asEntityLoader<ResearchTask>(lists.research)}
+      basePath="/management/experiments"
+      liveKinds={["Research"]}
+      createBehavior={{ kind: "disabled", reasonI18nKey: "research.createDisabledReason" }}
+      emptyState={{
+        title: t("research.emptyState.title"),
+        description: t("research.emptyState.description"),
+      }}
+      columns={[
+        {
+          key: "name",
+          header: t("common.name"),
+          cell: (r) => <div className="font-medium">{r.name}</div>,
+        },
+        {
+          key: "status",
+          header: t("table.status"),
+          cell: (r) => <span className="text-mono text-xs uppercase">{r.status || r.state}</span>,
+        },
+        {
+          key: "latestRun",
+          header: t("research.table.latestRun"),
+          cell: (r) => {
+            const latest = r.latestRun ?? r.latest_run;
+            const runId = latest?.runId ?? latest?.run_id ?? "";
+            const runStatus = latest?.status ?? "";
+            const adapter = latest?.adapter ?? "";
+            const dispatchMode = latest?.dispatchMode ?? latest?.dispatch_mode ?? "";
+            if (!runId && !runStatus && !adapter && !dispatchMode) {
+              return <span className="text-xs text-muted-foreground">{t("research.noRunsYet")}</span>;
+            }
+            const nonReal = isNonRealRun(adapter, dispatchMode);
+            return (
+              <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                {runId && <span className="text-mono">{runId}</span>}
+                {runStatus && <span className="text-mono uppercase text-muted-foreground">{runStatus}</span>}
+                {(adapter || dispatchMode) && (
+                  <Badge variant="outline" className="font-mono text-[11px]">
+                    {[adapter, dispatchMode].filter(Boolean).join(" / ")}
+                  </Badge>
+                )}
+                {nonReal && (
+                  <Badge
+                    variant="outline"
+                    className="border-status-warning/40 bg-status-warning/10 text-status-warning text-[11px]"
+                  >
+                    {t("research.nonRealRunBadge", {
+                      adapter: adapter || "—",
+                      dispatchMode: dispatchMode || "—",
+                    })}
+                  </Badge>
+                )}
+              </div>
+            );
+          },
+        },
+        {
+          key: "runCount",
+          header: t("research.table.runCount"),
+          cell: (r) => <span className="text-mono text-xs">{r.runCount ?? r.run_count ?? 0}</span>,
+        },
+        {
+          key: "createdBy",
+          header: t("research.table.createdBy"),
+          cell: (r) => <span className="text-mono text-xs">{r.createdBy || r.created_by || "—"}</span>,
+        },
+        {
+          key: "updated",
+          header: t("common.updated"),
+          cell: (r) => (
+            <span className="text-mono text-xs text-muted-foreground">
+              {safeDateTime(r.updatedAt || r.updated_at)}
+            </span>
+          ),
+        },
       ]}
     />
   );
 };
 
+type ArtifactScopeTab = "all" | "registry" | "research_run_output";
+
+function classifyArtifactSourceScope(row: Artifact): ArtifactScopeTab {
+  const raw = String(row.source_kind ?? row.sourceKind ?? "").trim().toLowerCase();
+  if (raw === "research_run_output" || raw === "research") return "research_run_output";
+  return "registry";
+}
+
 export const ArtifactsList = () => {
   const t = useT();
+  const noData = t("common.noData");
   return (
     <ObjectListPage<Artifact>
       title={t("nav.artifacts")}
       loader={asEntityLoader<Artifact>(lists.artifacts)}
-      basePath="/management/artifacts" liveKinds={["Artifact"]}
+      basePath="/management/artifacts"
+      liveKinds={["Artifact"]}
       createBehavior={{ kind: "drawer", entity: "artifact" }}
-      extraColumns={[
-        { key: "kind", header: t("table.kind"), cell: (r) => <span className="text-mono text-xs uppercase">{r.kind}</span> },
-        { key: "ver", header: t("table.version"), cell: (r) => <span className="text-mono text-xs">{r.version}</span> },
-        { key: "size", header: "Size (MB)", cell: (r) => <span className="text-mono text-xs">{loc(r.sizeMb)}</span> },
-        { key: "hash", header: "Hash", cell: (r) => <span className="text-mono text-xs text-muted-foreground">{r.hash}</span> },
+      scopeConfig={{
+        paramName: "source_kind",
+        defaultScope: "all",
+        groupLabel: t("artifact.sources.groupLabel", { defaultValue: "Artifact source filter" }),
+        options: [
+          { id: "all", label: t("artifact.sources.all", { defaultValue: "All sources" }) },
+          { id: "registry", label: t("artifact.sources.registry", { defaultValue: "Registry bundle" }) },
+          { id: "research_run_output", label: t("artifact.sources.research_run_output", { defaultValue: "Research output" }) },
+        ],
+        classify: classifyArtifactSourceScope,
+      }}
+      columns={[
+        {
+          key: "name",
+          header: t("common.name"),
+          cell: (r) => <div className="font-medium">{r.name || r.id}</div>,
+        },
+        {
+          key: "source",
+          header: t("artifact.sourceKind", { defaultValue: t("table.source") }),
+          cell: (r) => {
+            const sourceKind = typeof (r.source_kind ?? r.sourceKind) === "string"
+              ? String(r.source_kind ?? r.sourceKind).trim()
+              : "";
+            return sourceKind ? (
+              <Badge variant="outline" data-source-kind={sourceKind} className="font-mono text-[11px]">
+                {sourceKind}
+              </Badge>
+            ) : (
+              <span className="text-mono text-xs text-muted-foreground">{noData}</span>
+            );
+          },
+        },
+        {
+          key: "kind",
+          header: t("table.kind"),
+          cell: (r) => {
+            const kind = typeof r.kind === "string" ? r.kind.trim() : "";
+            return kind ? (
+              <span className="text-mono text-xs">{kind}</span>
+            ) : (
+              <span className="text-mono text-xs text-muted-foreground">{noData}</span>
+            );
+          },
+        },
+        {
+          key: "ver",
+          header: t("table.version"),
+          cell: (r) => {
+            const version = typeof r.version === "string" ? r.version.trim() : "";
+            return version ? (
+              <span className="text-mono text-xs">{version}</span>
+            ) : (
+              <span className="text-mono text-xs text-muted-foreground">{noData}</span>
+            );
+          },
+        },
+        {
+          key: "state",
+          header: t("common.state"),
+          cell: (r) => {
+            const state = typeof r.state === "string" ? r.state.trim() : "";
+            return state ? (
+              <StatusBadge state={state} />
+            ) : (
+              <span className="text-mono text-xs text-muted-foreground">{noData}</span>
+            );
+          },
+        },
+        {
+          key: "risk",
+          header: t("common.risk"),
+          cell: (r) => {
+            const risk = typeof r.risk === "string" ? r.risk.trim() : "";
+            return risk ? (
+              <RiskBadge level={risk as RiskLevel} />
+            ) : (
+              <span className="text-mono text-xs text-muted-foreground">{noData}</span>
+            );
+          },
+        },
+        {
+          key: "size",
+          header: t("detail.label.size", { defaultValue: "Size" }),
+          cell: (r) =>
+            hasNumber(r.sizeMb) ? (
+              <span className="text-mono text-xs">{`${loc(r.sizeMb)} MB`}</span>
+            ) : (
+              <span className="text-mono text-xs text-muted-foreground">{noData}</span>
+            ),
+        },
+        {
+          key: "hash",
+          header: t("detail.section.hash", { defaultValue: "Hash" }),
+          cell: (r) => {
+            const hash = typeof r.hash === "string" ? r.hash.trim() : "";
+            return hash ? (
+              <span className="text-mono text-xs text-muted-foreground">{hash}</span>
+            ) : (
+              <span className="text-mono text-xs text-muted-foreground">{noData}</span>
+            );
+          },
+        },
+        {
+          key: "owner",
+          header: t("common.owner"),
+          cell: (r) => {
+            const owner = typeof r.owner === "string" ? r.owner.trim() : "";
+            return owner ? (
+              <span className="text-mono text-xs">{owner}</span>
+            ) : (
+              <span className="text-mono text-xs text-muted-foreground">{noData}</span>
+            );
+          },
+        },
+        {
+          key: "updated",
+          header: t("common.updated"),
+          cell: (r) => (
+            <span className="text-mono text-xs text-muted-foreground">
+              {safeDateTime(r.updatedAt)}
+            </span>
+          ),
+        },
       ]}
     />
   );

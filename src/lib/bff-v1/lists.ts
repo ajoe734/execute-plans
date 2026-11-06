@@ -19,8 +19,10 @@ import {
   normalizeIncidentTimestampFields,
 } from "./eventTimestamps";
 import { normalizeCapitalPool } from "./capitalPools";
-import { normalizeBaseObjectFields } from "./domainReads";
+import { normalizeArtifactFields, normalizeBaseObjectFields } from "./domainReads";
+import { normalizeEvolutionProgram } from "./evolution";
 import { normalizeJobFields } from "./operations";
+import { normalizeResearchTask } from "./research";
 
 /**
  * Pack D D22 list-class taxonomy. Drives `totalCountExact` + whether
@@ -93,6 +95,7 @@ export function normalizeLiveListResponse<T>(payload: unknown, cls: ListClass): 
     (Array.isArray(record?.items) && record.items) ||
     (Array.isArray(record?.data) && record.data) ||
     (Array.isArray(data?.items) && data.items) ||
+    (Array.isArray(record?.tasks) && record.tasks) ||
     (Array.isArray(record?.alerts) && record.alerts) ||
     (Array.isArray(record?.incidents) && record.incidents) ||
     (Array.isArray(record?.approvals) && record.approvals) ||
@@ -139,10 +142,13 @@ export function normalizeLiveListResponse<T>(payload: unknown, cls: ListClass): 
   const exactFlag = [
     record?.totalCountExact,
     record?.total_count_exact,
+    record?.total_complete,
     data?.totalCountExact,
     data?.total_count_exact,
+    data?.total_complete,
     meta?.totalCountExact,
     meta?.total_count_exact,
+    meta?.total_complete,
   ].find((v) => typeof v === "boolean");
 
   const totalCountExact = typeof exactFlag === "boolean" ? exactFlag : rule.totalCountExact;
@@ -206,11 +212,13 @@ function strictLiveListLoader<T>(
 
 const MAX_PAGINATED_LIST_PAGES = 100;
 const PAGINATED_LIST_PAGE_SIZE = 200;
+const ARTIFACT_PAGINATED_LIST_PAGE_SIZE = 100;
 
 function strictLivePaginatedListLoader<T extends { id?: string }>(
   path: string,
   cls: ListClass,
   adaptItem?: (value: unknown) => T | undefined,
+  pageSize: number = PAGINATED_LIST_PAGE_SIZE,
 ): () => Promise<ListEnvelope<T>> {
   const adaptItems = (items: unknown[]): T[] => adaptItem
     ? items.map((item) => adaptItem(item)).filter((item): item is T => Boolean(item))
@@ -228,8 +236,8 @@ function strictLivePaginatedListLoader<T extends { id?: string }>(
         method: "GET",
         path,
         query: pageToken
-          ? { page_size: PAGINATED_LIST_PAGE_SIZE, page_token: pageToken }
-          : { page_size: PAGINATED_LIST_PAGE_SIZE },
+          ? { page_size: pageSize, page_token: pageToken }
+          : { page_size: pageSize },
       });
       const env = normalizeLiveListResponse<unknown>(data, cls);
       if (!firstEnv) firstEnv = env;
@@ -256,6 +264,10 @@ function strictLivePaginatedListLoader<T extends { id?: string }>(
       cursor: {},
       items: allItems,
       pageSize: allItems.length,
+      totalCountExact:
+        firstEnv?.totalCountExact === false || lastEnv?.totalCountExact === false
+          ? false
+          : baseEnv.totalCountExact,
       estimatedTotal:
         typeof baseEnv.estimatedTotal === "number"
           ? Math.max(baseEnv.estimatedTotal, allItems.length)
@@ -441,9 +453,14 @@ export const lists = {
   rankingFormulas: strictLiveListLoader(paths.rankingFormulas(),    LIST_CLASS_BY_KEY.rankingFormulas, normalizeBaseObjectFields),
   rebalances:      strictLiveListLoader(paths.rebalances(),         LIST_CLASS_BY_KEY.rebalances, normalizeBaseObjectFields),
   deployments:     strictLiveListLoader(paths.deployments(),        LIST_CLASS_BY_KEY.deployments, normalizeBaseObjectFields),
-  evolution:       strictLiveListLoader(paths.evolutionPrograms(),  LIST_CLASS_BY_KEY.evolution, normalizeBaseObjectFields),
-  research:        strictLiveListLoader(paths.researchExperiments(),LIST_CLASS_BY_KEY.research, normalizeBaseObjectFields),
-  artifacts:       strictLiveListLoader(paths.artifacts(),          LIST_CLASS_BY_KEY.artifacts),
+  evolution:       strictLiveListLoader(paths.evolutionPrograms(),  LIST_CLASS_BY_KEY.evolution, normalizeEvolutionProgram),
+  research:        strictLiveListLoader(paths.researchTasks(),      LIST_CLASS_BY_KEY.research, normalizeResearchTask),
+  artifacts:       strictLivePaginatedListLoader(
+    paths.artifacts(),
+    LIST_CLASS_BY_KEY.artifacts,
+    normalizeArtifactFields,
+    ARTIFACT_PAGINATED_LIST_PAGE_SIZE,
+  ),
   tools:           strictLiveListLoader(paths.tools(),              LIST_CLASS_BY_KEY.tools, normalizeBaseObjectFields),
   mcpServers:      strictLiveListLoader(paths.mcpServers(),         LIST_CLASS_BY_KEY.mcpServers, normalizeBaseObjectFields),
   mcpTools:        strictLiveListLoader(paths.mcpTools(),           LIST_CLASS_BY_KEY.mcpTools, normalizeBaseObjectFields),

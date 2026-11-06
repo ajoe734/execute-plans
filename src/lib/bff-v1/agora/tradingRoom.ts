@@ -1164,6 +1164,29 @@ export async function getTradingRoomWorkspaceWithMeta(
   return extractWorkspaceResult(responseBody, res.headers.get("ETag"));
 }
 
+/**
+ * Read the caller's saved workspace for a strategy/version from the existing
+ * tenant/user-scoped owner lookup. Rejects with a typed BffError (404 when none).
+ */
+export async function getTradingRoomWorkspaceByStrategyWithMeta(
+  strategyId: string,
+  strategyVersion: string,
+  baseUrl?: string,
+): Promise<TradingRoomWorkspaceResult> {
+  const base = resolvedBase(baseUrl);
+  const url = `${base}/bff/agora/strategies/${encodeURIComponent(strategyId)}/trading-room/workspace?strategy_version=${encodeURIComponent(strategyVersion)}`;
+  const res = await bffSessionFetch(url, {
+    method: "GET",
+    credentials: "include",
+    headers: { Accept: "application/json", ...authHeaders() },
+  });
+  if (!res.ok) {
+    await throwTypedBffError(res, "GET", url);
+  }
+  const responseBody = await parseJson(res);
+  return extractWorkspaceResult(responseBody, res.headers.get("ETag"));
+}
+
 /** Apply controlled layout operations, creating a new workspace dashboard version. */
 export async function patchTradingRoomWorkspaceLayout(
   workspaceId: string,

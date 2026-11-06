@@ -1,0 +1,150 @@
+{
+  "schema_version": "pantheon.fe-evolution-journal-history.v1",
+  "task_id": "FE-EVOLUTION-JOURNAL-HISTORY-20261104",
+  "taskId": "FE-EVOLUTION-JOURNAL-HISTORY-20261104",
+  "title": "演化日誌預設只顯示真實演化歷史，自動提案收進可展開的彙總",
+  "owner": "Antigravity2",
+  "reviewer": "Claude",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-EVOLUTION-JOURNAL-HISTORY-20261104",
+  "prerequisites": [
+    {
+      "task_id": "EVOLUTION-JOURNAL-EVIDENCE-CLASS-20261104",
+      "pantheon_merge_commit": "f5bf7cc002f8c7a3384096e03786e1be8b8878f4",
+      "pantheon_source_commit": "c01e5ce0f56e86317f29029a69385120c502a0f6",
+      "status": "done"
+    },
+    {
+      "task_id": "FE-EVIDENCE-KNOWLEDGE-TRUTH-20261104",
+      "execute_plans_merge_commit": "466a4639b9e3f452d3637ca9a0e4cfdc06934bc8",
+      "status": "done"
+    }
+  ],
+  "status": "ready_for_review",
+  "timestamp": "2026-11-05T03:42:00Z",
+  "scope": {
+    "delivered": [
+      "Extended paths.mgmtEvolutionJournal in src/lib/bff-v1/paths.ts to support view ('all' | 'history' | 'auto_proposals'), pageSize (page_size), and pageToken (page_token) alongside persona, mutationReview (mutation_review), and decision.",
+      "Updated queryKeys.oversight.evolutionJournal in src/lib/bff-v1/queryKeys.ts to accept an optional view/filter key while preserving backward compatibility when called with only a scope.",
+      "Added adaptEvolutionJournalList<T> and typed EvolutionJournalList<T> in src/lib/bff-v1/management.ts (reusing the existing mgmt.evolutionJournal.list method without adding a second client or store) to preserve array row access while attaching summary, auto_proposal_counts / autoProposalCounts, page_info / pageInfo, and meta from the BFF /bff/management/evolution-journal response.",
+      "Extended normalizeEvolutionHref in src/lib/bff-v1/management.ts to validate optional view query parameters ('all', 'history', 'auto_proposals').",
+      "Added normalizeEvolutionJournalView (defaulting to 'history') and extended EvolutionJournalEntry / evolutionEntryText in src/management/pages/oversight/evolutionJournalFocus.ts to index evidence_class, persona_id, route, decision, mutation_review, and record fields so filterEvolutionJournalRowsForFocus matches deep links across all real BFF shapes.",
+      "Updated EvolutionJournalPage in src/management/pages/oversight/_core.tsx to: (1) request view=history by default and reflect filtered summary and page_info pagination; (2) render the auto_proposal_counts summary line (total, incident_followup, incident_severity, postmortem_draft) in both locales with a control that switches between view=auto_proposals and view=history while persisting view in the URL; (3) render the empty-history state when view=history is empty stating no evolution has been executed yet and how many automatic proposals are waiting; (4) render evidence_class badges and metadata fields on journal rows so incident_followup and incident_severity are distinguishable from threshold_signal; (5) render the degraded error state on failed or surface-degraded reads and never show the empty history text when a read fails.",
+      "Added symmetric en-US and zh-TW locale keys under mgmt.evolution.* in src/i18n/locales/en-US.ts and src/i18n/locales/zh-TW.ts and verified 1:1 parity in src/lib/v5/management/__tests__/i18nParity.test.ts.",
+      "Updated e2e/evochain009.spec.ts, e2e/25-persona-fleet-live-linked-pages.spec.ts, and e2e/24-persona-fleet-click-map.spec.ts to align with view=history default, auto_proposal_counts summary, and evidence_class rendering."
+    ],
+    "not_changing": [
+      "Pantheon BFF / owner services (already delivered in EVOLUTION-JOURNAL-EVIDENCE-CLASS-20261104).",
+      "Hosted environment verification (owned by downstream operator acceptance task EVOLUTION-RESEARCH-HOSTED-ACCEPT-20261104)."
+    ]
+  },
+  "acceptance_criteria": [
+    {
+      "criterion": 1,
+      "description": "/management/evolution-journal requests view=history by default and pagination and summary reflect that filtered set",
+      "status": "passed",
+      "verified_by": [
+        "src/management/pages/oversight/EvolutionJournalPage.test.tsx > requests view=history by default, renders filtered summary and pagination, and switches to view=auto_proposals and back keeping view in URL across both locales",
+        "src/management/pages/oversight/EvolutionJournalPage.test.tsx > refetches the scoped query on a mounted focus change and clearing, without reusing cached prior data"
+      ]
+    },
+    {
+      "criterion": 2,
+      "description": "A summary line shows auto_proposal_counts total and its incident_followup and incident_severity and postmortem_draft counts with labels in both locales and a control switches to view=auto_proposals and back; the chosen view is kept in the URL so it can be linked and reloaded",
+      "status": "passed",
+      "verified_by": [
+        "src/management/pages/oversight/EvolutionJournalPage.test.tsx > requests view=history by default, renders filtered summary and pagination, and switches to view=auto_proposals and back keeping view in URL across both locales",
+        "src/lib/bff-v1/__tests__/management.test.ts > forwards view, page_size, and page_token to /bff/management/evolution-journal and adapts summary, auto_proposal_counts, page_info, and evidence_class"
+      ]
+    },
+    {
+      "criterion": 3,
+      "description": "When history is empty the page says no evolution has been executed yet and states how many automatic proposals are waiting instead of showing a blank list",
+      "status": "passed",
+      "verified_by": [
+        "src/management/pages/oversight/EvolutionJournalPage.test.tsx > shows empty history message stating no evolution has been executed yet and how many automatic proposals are waiting in both locales"
+      ]
+    },
+    {
+      "criterion": 4,
+      "description": "A link carrying decision or mutation_review or persona still opens that record under any view; tests cover each and evolutionJournalFocus keeps working",
+      "status": "passed",
+      "verified_by": [
+        "src/management/pages/oversight/EvolutionJournalPage.test.tsx > opens deep links carrying decision, mutation_review, or persona under any view (history, auto_proposals, all)",
+        "src/management/pages/oversight/_core.test.ts > matches real BFF decision, mutation_review, and persona records across nested record/mutation_review fields"
+      ]
+    },
+    {
+      "criterion": 5,
+      "description": "Auto proposal rows show their evidence_class so a reader can tell an incident follow-up from a threshold signal",
+      "status": "passed",
+      "verified_by": [
+        "src/management/pages/oversight/EvolutionJournalPage.test.tsx > requests view=history by default, renders filtered summary and pagination, and switches to view=auto_proposals and back keeping view in URL across both locales"
+      ]
+    },
+    {
+      "criterion": 6,
+      "description": "A failed read shows the existing degraded error state and never the empty history text",
+      "status": "passed",
+      "verified_by": [
+        "src/management/pages/oversight/EvolutionJournalPage.test.tsx > shows degraded error state on a failed or surface-degraded read and never shows the empty history text"
+      ]
+    },
+    {
+      "criterion": 7,
+      "description": "Tests cover the default request and the view switch and the empty history text and the deep link using the real item shapes from the BFF contract; both locales carry every new label",
+      "status": "passed",
+      "verified_by": [
+        "src/management/pages/oversight/EvolutionJournalPage.test.tsx",
+        "src/lib/bff-v1/__tests__/management.test.ts",
+        "src/management/pages/oversight/_core.test.ts",
+        "src/lib/v5/management/__tests__/i18nParity.test.ts"
+      ],
+      "changed_assertions_justification": "No existing test was weakened or deleted. In src/management/pages/oversight/EvolutionJournalPage.test.tsx, two assertions in pre-existing focus tests were updated to reflect Acceptance Criterion 1 (default view=history and pagination): (1) in 'requests the server-filtered journal and re-keys deps when focus changes or clears', useV5Live deps now include activeView ('history') and pageToken ('') alongside [personaFocus, serverMutationReview, serverDecision]; (2) in 'refetches the scoped query on a mounted focus change and clearing, without reusing cached prior data', the initial default request URL assertion was updated from /evolution-journal$/ to /evolution-journal\\?view=history$/ because /management/evolution-journal now requests view=history by default."
+    },
+    {
+      "criterion": 8,
+      "description": "vitest and tsc and the production build pass and the listed e2e specs are updated",
+      "status": "passed",
+      "verified_by": [
+        "./node_modules/.bin/vitest run src/lib/bff-v1/__tests__/management.test.ts src/management/pages/oversight/_core.test.ts src/management/pages/oversight/EvolutionJournalPage.test.tsx src/lib/v5/management/__tests__/i18nParity.test.ts",
+        "./node_modules/.bin/tsc --noEmit",
+        "npm run build"
+      ]
+    }
+  ],
+  "scoped_artifacts": [
+    "src/management/pages/oversight/_core.tsx",
+    "src/management/pages/oversight/_core.test.ts",
+    "src/management/pages/oversight/EvolutionJournalPage.test.tsx",
+    "src/management/pages/oversight/evolutionJournalFocus.ts",
+    "src/lib/bff-v1/management.ts",
+    "src/lib/bff-v1/__tests__/management.test.ts",
+    "src/lib/bff-v1/paths.ts",
+    "src/lib/bff-v1/queryKeys.ts",
+    "e2e/evochain009.spec.ts",
+    "e2e/25-persona-fleet-live-linked-pages.spec.ts",
+    "e2e/24-persona-fleet-click-map.spec.ts",
+    "src/i18n/locales/zh-TW.ts",
+    "src/i18n/locales/en-US.ts",
+    "src/lib/v5/management/__tests__/i18nParity.test.ts",
+    "docs/deployment/evidence/FE-EVOLUTION-JOURNAL-HISTORY-20261104/evidence.json"
+  ],
+  "validation": {
+    "vitest": {
+      "command": "./node_modules/.bin/vitest run src/lib/bff-v1/__tests__/management.test.ts src/management/pages/oversight/_core.test.ts src/management/pages/oversight/EvolutionJournalPage.test.tsx src/lib/v5/management/__tests__/i18nParity.test.ts",
+      "exit_code": 0,
+      "test_files_passed": 4,
+      "tests_passed": 112
+    },
+    "tsc": {
+      "command": "./node_modules/.bin/tsc --noEmit",
+      "exit_code": 0
+    },
+    "production_build": {
+      "command": "VITE_GCP_IDENTITY_API_KEY=AIzaSyA12345678901234567890123456789012 VITE_GCP_IDENTITY_PROJECT_ID=pantheon-dev-20260902 VITE_GCP_IDENTITY_AUTH_DOMAIN=pantheon-dev-20260902.firebaseapp.com VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build",
+      "exit_code": 0
+    }
+  }
+}

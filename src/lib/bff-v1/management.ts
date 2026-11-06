@@ -35,6 +35,7 @@ import {
   type HumanInboxItem,
   type HumanInboxKind,
   type HumanInboxList,
+  type HumanInboxPageInfo,
 } from "@/lib/v5/management/humanInbox";
 import type { ManagementLinkSet } from "@/lib/v5/management/links";
 import type { PersonaIntentTrace, PersonaIntentVisibility } from "@/lib/v5/management/personaIntent";
@@ -54,7 +55,11 @@ import type {
   PerformanceAttributionRow, AttributionDimension, AttributionPeriod,
   PerformanceAttributionResult,
 } from "@/lib/v5/management/performanceAttribution";
-import { adaptAttributionPeriodState } from "@/lib/v5/management/performanceAttribution";
+import {
+  adaptAttributionPeriodState,
+  isBffAcceptedAttributionDimension,
+  normalizePerformanceAttributionRow,
+} from "@/lib/v5/management/performanceAttribution";
 
 export type ManagementDataConfidence = "formal" | "partial" | "fallback" | "degraded" | "unavailable";
 
@@ -75,15 +80,15 @@ export interface ManagementOperationsReadModel {
   };
   dataConfidence: ManagementDataConfidence;
   performance: {
-    pnl?: number;
-    pnlPct?: number;
-    drawdownPct?: number;
-    riskPct?: number;
-    sharpe?: number;
-    rank?: number;
-    score?: number;
-    performanceDelta?: number;
-    sourceContribution?: number;
+    pnl?: number | null;
+    pnlPct?: number | null;
+    drawdownPct?: number | null;
+    riskPct?: number | null;
+    sharpe?: number | null;
+    rank?: number | null;
+    score?: number | null;
+    performanceDelta?: number | null;
+    sourceContribution?: number | null;
   };
   sources: Array<{
     sourceName: string;
@@ -310,11 +315,11 @@ export interface ManagementPersonaFleetCapitalPool {
 }
 
 export interface ManagementPersonaFleetPerformanceSummary {
-  pnl?: number;
-  sharpe?: number;
-  maxDrawdown?: number;
-  violationCount?: number;
-  totalTrades?: number;
+  pnl?: number | null;
+  sharpe?: number | null;
+  maxDrawdown?: number | null;
+  violationCount?: number | null;
+  totalTrades?: number | null;
   source?: string;
   telemetryRuntimeCount?: number;
   latestTelemetryAt?: string;
@@ -586,6 +591,7 @@ export interface ManagementEvidenceSurface {
   status: string;
   source?: string;
   message?: string;
+  reason?: string;
 }
 
 export interface ManagementEvidenceMeta {
@@ -1079,6 +1085,7 @@ const asString = (value: unknown, fallback = ""): string => {
 };
 
 const asFiniteNumber = (value: unknown, fallback = 0): number => {
+  if (value === null || value === undefined || value === "") return fallback;
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
 };
@@ -1148,7 +1155,8 @@ function adaptEvidenceSurface(value: unknown): ManagementEvidenceSurface {
     return {
       status: asString(value.status ?? value.state, "unknown"),
       source: optionalString(value.source),
-      message: optionalString(value.message ?? value.summary),
+      message: optionalString(value.message ?? value.summary ?? value.reason),
+      reason: optionalString(value.reason),
     };
   }
   return { status: asString(value, "unknown") };
@@ -1488,15 +1496,38 @@ function adaptEvidenceListItem(value: unknown): ManagementEvidenceListItem | nul
     : isObject(value.source_document)
       ? value.source_document
       : {};
-  const refId = asString(value.refId ?? value.ref_id ?? value.id);
+  const metadata = isObject(value.metadata) ? value.metadata : {};
+  const refId = asString(value.refId ?? value.ref_id ?? value.evidence_item_id ?? value.evidenceItemId ?? value.id);
   if (!refId) return null;
   const title = asString(
-    value.title ?? value.displayLabel ?? value.display_label ?? sourceDocument.title,
+    value.title ??
+      value.displayLabel ??
+      value.display_label ??
+      sourceDocument.title ??
+      value.citation_label ??
+      value.citationLabel,
     refId,
   );
-  const sourceType = asString(value.sourceType ?? value.source_type ?? sourceDocument.sourceType ?? sourceDocument.source_type, "unknown");
-  const capturedAt = optionalString(value.capturedAt ?? value.captured_at ?? sourceDocument.capturedAt ?? sourceDocument.captured_at);
-  const linkType = asString(value.linkType ?? value.link_type, "unknown");
+  const sourceType = asString(
+    value.sourceType ??
+      value.source_type ??
+      sourceDocument.sourceType ??
+      sourceDocument.source_type ??
+      metadata.source_class ??
+      metadata.sourceClass,
+    "unknown",
+  );
+  const capturedAt = optionalString(
+    value.capturedAt ??
+      value.captured_at ??
+      sourceDocument.capturedAt ??
+      sourceDocument.captured_at ??
+      value.available_time ??
+      value.availableTime ??
+      value.event_time ??
+      value.eventTime,
+  );
+  const linkType = asString(value.linkType ?? value.link_type ?? value.item_type ?? value.itemType, "unknown");
   const linkedObjectSummary = adaptEvidenceLinkedObjectSummary(value.linkedObjectSummary ?? value.linked_object_summary);
   const linkedObjectLink = adaptEvidenceLinkedObjectLink(value.linkedObjectLink ?? value.linked_object_link);
   const resolvedLink = adaptEvidenceResolvedLink(value.resolvedLink ?? value.resolved_link);
@@ -1613,26 +1644,53 @@ function buildEvidenceSummary(items: ManagementEvidenceListItem[]): ManagementEv
   };
 }
 
-function adaptEvidenceSummary(value: unknown, items: ManagementEvidenceListItem[]): ManagementEvidenceSummary {
-  if (!isObject(value)) return buildEvidenceSummary(items);
+function adaptEvidenceSummary(
+  value: unknown,
+  items: ManagementEvidenceListItem[],
+  pageInfo?: ManagementEvidencePageInfo,
+): ManagementEvidenceSummary {
   const computed = buildEvidenceSummary(items);
+  const fallbackTotal = pageInfo?.total ?? computed.totalEvidence;
+  if (!isObject(value)) {
+    return {
+      ...computed,
+      totalEvidence: fallbackTotal,
+      total_evidence: fallbackTotal,
+    };
+  }
   const bySourceType = asCountRecord(value.bySourceType ?? value.by_source_type);
   const byLinkType = asCountRecord(value.byLinkType ?? value.by_link_type);
   const byCredibilityTier = asCountRecord(value.byCredibilityTier ?? value.by_credibility_tier);
   const byActionabilityState = asCountRecord(value.byActionabilityState ?? value.by_actionability_state);
   const byActionabilitySeverity = asCountRecord(value.byActionabilitySeverity ?? value.by_actionability_severity);
   const byOperationStatus = asCountRecord(value.byOperationStatus ?? value.by_operation_status);
+  const totalEvidence = asFiniteNumber(
+    pageInfo?.total ?? value.totalEvidence ?? value.total_evidence ?? value.totalItems ?? value.total_items,
+    fallbackTotal,
+  );
+  const verifiedEvidence = asFiniteNumber(
+    value.verifiedEvidence ?? value.verified_evidence ?? value.verifiedCount ?? value.verified_count,
+    computed.verifiedEvidence,
+  );
+  const needsAttentionEvidence = asFiniteNumber(
+    value.needsAttentionEvidence ?? value.needs_attention_evidence ?? value.needsAttentionCount ?? value.needs_attention_count,
+    computed.needsAttentionEvidence,
+  );
+  const openOperationEvidence = asFiniteNumber(
+    value.openOperationEvidence ?? value.open_operation_evidence ?? value.openOperationsCount ?? value.open_operations_count,
+    computed.openOperationEvidence,
+  );
   return {
-    totalEvidence: asFiniteNumber(value.totalEvidence ?? value.total_evidence, computed.totalEvidence),
-    total_evidence: asFiniteNumber(value.total_evidence ?? value.totalEvidence, computed.totalEvidence),
+    totalEvidence,
+    total_evidence: totalEvidence,
     returnedEvidence: asFiniteNumber(value.returnedEvidence ?? value.returned_evidence, computed.returnedEvidence),
     returned_evidence: asFiniteNumber(value.returned_evidence ?? value.returnedEvidence, computed.returnedEvidence),
     visibleEvidence: asFiniteNumber(value.visibleEvidence ?? value.visible_evidence, computed.visibleEvidence),
     visible_evidence: asFiniteNumber(value.visible_evidence ?? value.visibleEvidence, computed.visibleEvidence),
     redactedEvidence: asFiniteNumber(value.redactedEvidence ?? value.redacted_evidence, computed.redactedEvidence),
     redacted_evidence: asFiniteNumber(value.redacted_evidence ?? value.redactedEvidence, computed.redactedEvidence),
-    verifiedEvidence: asFiniteNumber(value.verifiedEvidence ?? value.verified_evidence, computed.verifiedEvidence),
-    verified_evidence: asFiniteNumber(value.verified_evidence ?? value.verifiedEvidence, computed.verifiedEvidence),
+    verifiedEvidence,
+    verified_evidence: verifiedEvidence,
     bySourceType: Object.keys(bySourceType).length ? bySourceType : computed.bySourceType,
     by_source_type: Object.keys(bySourceType).length ? bySourceType : computed.bySourceType,
     byLinkType: Object.keys(byLinkType).length ? byLinkType : computed.byLinkType,
@@ -1645,10 +1703,10 @@ function adaptEvidenceSummary(value: unknown, items: ManagementEvidenceListItem[
     unresolved_source_evidence: asFiniteNumber(value.unresolved_source_evidence ?? value.unresolvedSourceEvidence, computed.unresolvedSourceEvidence),
     incompleteEvidence: asFiniteNumber(value.incompleteEvidence ?? value.incomplete_evidence, computed.incompleteEvidence),
     incomplete_evidence: asFiniteNumber(value.incomplete_evidence ?? value.incompleteEvidence, computed.incompleteEvidence),
-    needsAttentionEvidence: asFiniteNumber(value.needsAttentionEvidence ?? value.needs_attention_evidence, computed.needsAttentionEvidence),
-    needs_attention_evidence: asFiniteNumber(value.needs_attention_evidence ?? value.needsAttentionEvidence, computed.needsAttentionEvidence),
-    openOperationEvidence: asFiniteNumber(value.openOperationEvidence ?? value.open_operation_evidence, computed.openOperationEvidence),
-    open_operation_evidence: asFiniteNumber(value.open_operation_evidence ?? value.openOperationEvidence, computed.openOperationEvidence),
+    needsAttentionEvidence,
+    needs_attention_evidence: needsAttentionEvidence,
+    openOperationEvidence,
+    open_operation_evidence: openOperationEvidence,
     byActionabilityState: Object.keys(byActionabilityState).length ? byActionabilityState : computed.byActionabilityState,
     by_actionability_state: Object.keys(byActionabilityState).length ? byActionabilityState : computed.byActionabilityState,
     byActionabilitySeverity: Object.keys(byActionabilitySeverity).length ? byActionabilitySeverity : computed.byActionabilitySeverity,
@@ -1682,11 +1740,19 @@ function adaptEvidenceFacets(value: unknown, summary: ManagementEvidenceSummary)
   };
 }
 
-function adaptEvidencePageInfo(value: unknown, items: ManagementEvidenceListItem[]): ManagementEvidencePageInfo {
+function adaptEvidencePageInfo(
+  value: unknown,
+  items: ManagementEvidenceListItem[],
+  summaryValue?: unknown,
+): ManagementEvidencePageInfo {
   const record = isObject(value) ? value : {};
+  const summaryRecord = isObject(summaryValue) ? summaryValue : {};
   const nextPageToken = nullableString(record.nextPageToken ?? record.next_page_token);
   const pageSize = asFiniteNumber(record.pageSize ?? record.page_size, items.length);
-  const total = asFiniteNumber(record.total, items.length);
+  const total = asFiniteNumber(
+    record.total ?? summaryRecord.totalEvidence ?? summaryRecord.total_evidence ?? summaryRecord.totalItems ?? summaryRecord.total_items,
+    items.length,
+  );
   const hasMore = asBoolean(record.hasMore ?? record.has_more, Boolean(nextPageToken));
   return {
     nextPageToken,
@@ -1715,6 +1781,7 @@ function evidenceEnvelope(raw: unknown): Record<string, unknown> | unknown[] | n
 export function adaptManagementEvidenceOverview(raw: unknown): ManagementEvidenceOverview | null {
   const container = evidenceEnvelope(raw);
   if (!container) return null;
+  const root = isObject(raw) ? raw : {};
   const record = isObject(container) ? container : {};
   const rawItems = firstArray<unknown>(
     isObject(record) ? record.items : undefined,
@@ -1723,10 +1790,14 @@ export function adaptManagementEvidenceOverview(raw: unknown): ManagementEvidenc
     container,
   );
   const items = rawItems.map(adaptEvidenceListItem).filter((item): item is ManagementEvidenceListItem => Boolean(item));
-  const summary = adaptEvidenceSummary(isObject(record) ? record.summary : undefined, items);
-  const facets = adaptEvidenceFacets(isObject(record) ? record.facets : undefined, summary);
-  const pageInfo = adaptEvidencePageInfo(isObject(record) ? (record.page_info ?? record.pagination) : undefined, items);
-  const meta = adaptEvidenceMeta(isObject(record) ? record.meta : undefined);
+  const rawSummary = record.summary ?? root.summary;
+  const rawPageInfo =
+    record.page_info ?? record.pageInfo ?? record.pagination ?? root.page_info ?? root.pageInfo ?? root.pagination;
+  const pageInfo = adaptEvidencePageInfo(rawPageInfo, items, rawSummary);
+  const summary = adaptEvidenceSummary(rawSummary, items, pageInfo);
+  const facets = adaptEvidenceFacets(record.facets ?? root.facets, summary);
+  const rawMeta = isObject(record.meta) && Object.keys(record.meta).length > 0 ? record.meta : (root.meta ?? record.meta);
+  const meta = adaptEvidenceMeta(rawMeta);
   return {
     items,
     data: items,
@@ -1889,7 +1960,7 @@ export function adaptManagementEvidenceDetail(raw: unknown): ManagementEvidenceD
     redacted: asBoolean(data.redacted, false),
     requiredCapability: optionalString(data.requiredCapability ?? data.required_capability),
     reason: optionalString(data.reason),
-    meta: adaptEvidenceMeta(data.meta),
+    meta: adaptEvidenceMeta(data.meta ?? (isObject(raw) ? raw.meta : undefined)),
   };
 }
 
@@ -2257,6 +2328,10 @@ function normalizeEvolutionHref(value: unknown): string | null {
   try {
     const url = new URL(href, "https://pantheon.invalid");
     if (url.origin !== "https://pantheon.invalid" || url.pathname !== "/management/evolution-journal") {
+      return null;
+    }
+    const view = url.searchParams.get("view");
+    if (view !== null && !["all", "history", "auto_proposals"].includes(view.trim().toLowerCase())) {
       return null;
     }
     const persona = url.searchParams.get("persona");
@@ -2819,6 +2894,9 @@ const allowedActionsCanDecide = (raw: unknown, fallback: boolean): boolean => {
   if (typeof allowed.can_approve === "boolean" || typeof allowed.can_reject === "boolean") {
     return Boolean(allowed.can_approve || allowed.can_reject);
   }
+  if (Object.keys(allowed).length > 0) {
+    return false;
+  }
   return fallback;
 };
 
@@ -2848,19 +2926,37 @@ const inferInboxRequiredRole = (it: Record<string, unknown>, kind: HumanInboxKin
 };
 
 const adaptInboxRecord = (it: Record<string, unknown>): HumanInboxItem | null => {
-  const rawKind = it.kind ?? it.inboxType ?? it.inbox_type ?? it.source_type ?? it.sourceType;
+  const inferredKind =
+    it.incident_id !== undefined || it.incident_cluster_id !== undefined
+      ? "incident"
+      : it.decision_id !== undefined || it.decision_state !== undefined
+        ? "approval"
+        : undefined;
+  const rawKind = it.kind ?? it.inboxType ?? it.inbox_type ?? it.source_type ?? it.sourceType ?? inferredKind;
   const kind = normalizeInboxKind(rawKind);
   const fallbackReviewId = asString(it.reviewId ?? it.review_id ?? it.source_id);
+  const fallbackIncidentId = asString(it.incident_id ?? it.source_id ?? it.sourceId);
+  const fallbackDecisionId = asString(it.approval_decision_id ?? it.decision_id);
   const id = asString(
     it.id ?? it.inbox_id ?? it.inboxId,
-    kind === "promotion_review" && fallbackReviewId ? `promotion_review:${fallbackReviewId}` : "",
+    kind === "promotion_review" && fallbackReviewId
+      ? `promotion_review:${fallbackReviewId}`
+      : kind === "incident" && fallbackIncidentId
+        ? `incident:${fallbackIncidentId}`
+        : kind === "approval" && fallbackDecisionId
+          ? `approval:${fallbackDecisionId}`
+          : "",
   );
   if (!id) return null;
-  const actionState = asString(it.action_state ?? it.actionState ?? it.status);
-  const canDecide = asBoolean(
-    it.canDecide ?? it.can_decide,
-    allowedActionsCanDecide(it.allowedActions ?? it.allowed_actions, true),
-  );
+  const status = asOptionalString(it.status ?? it.decision_state ?? it.state);
+  const actionState = asString(it.action_state ?? it.actionState ?? status);
+  const defaultCanDecide = kind !== "readiness_blocker" && kind !== "incident";
+  const canDecide = kind === "incident"
+    ? false
+    : asBoolean(
+        it.canDecide ?? it.can_decide,
+        allowedActionsCanDecide(it.allowedActions ?? it.allowed_actions, defaultCanDecide),
+      );
   const canProceed = asBoolean(
     it.canProceed ?? it.can_proceed,
     actionState ? !actionStateBlocksProceed(actionState) : true,
@@ -2868,26 +2964,51 @@ const adaptInboxRecord = (it: Record<string, unknown>): HumanInboxItem | null =>
   const personaId = asOptionalString(it.personaId ?? it.persona_id);
   const reviewId = asOptionalString(it.reviewId ?? it.review_id ?? it.source_id);
   const reviewType = asOptionalString(it.reviewType ?? it.review_type);
-  const sourceId = asOptionalString(it.sourceId ?? it.source_id ?? reviewId);
+  const incidentTargetId = kind === "incident"
+    ? (asString(it.incident_id ?? it.source_id ?? it.sourceId) || (id.startsWith("incident:") ? id.slice("incident:".length) : id))
+    : "";
+  const approvalTargetId = kind === "approval"
+    ? (asString(it.approval_decision_id ?? it.decision_id) || (id.startsWith("approval:") ? id.slice("approval:".length) : ""))
+    : "";
+  const sourceId = asOptionalString(
+    it.sourceId ??
+      it.source_id ??
+      (kind === "incident" ? incidentTargetId : undefined) ??
+      (kind === "approval" ? approvalTargetId : undefined) ??
+      reviewId,
+  );
   const decisionHref = asOptionalString(it.decisionHref ?? it.decision_href);
   const blockingReasons = asInboxStringList(it.blockingReasons ?? it.blocking_reasons ?? it.reasons);
   const route = kind === "promotion_review" && personaId
     ? inboxPersonaManageHref(personaId)
-    : it.route ?? it.manageHref ?? (isObject(it.target) ? it.target.route : undefined);
+    : it.route ??
+      it.href ??
+      it.manageHref ??
+      (isObject(it.target) ? it.target.route : undefined) ??
+      (kind === "incident" && incidentTargetId ? `/management/incidents/${encodeURIComponent(incidentTargetId)}` : undefined) ??
+      (kind === "approval" && approvalTargetId ? `/management/approvals?approval=${encodeURIComponent(approvalTargetId)}` : undefined);
   const allowedActions = adaptInboxAllowedActions(it.allowedActions ?? it.allowed_actions, canDecide);
+  const summary = asOptionalString(it.summary ?? it.evidence_summary ?? it.rationale);
+  const approvalTargetType = kind === "approval" ? asOptionalString(it.decision_type ?? it.target_type) : undefined;
+  const title = asString(
+    it.title ??
+      (approvalTargetType ? `${approvalTargetType} approval` : undefined) ??
+      summary ??
+      id,
+  );
   return {
     id,
     kind,
-    title: asString(it.title ?? it.summary ?? id),
-    summary: asOptionalString(it.summary),
-    requiredRole: asString(it.requiredRole ?? it.required_role ?? it.submitted_by, inferInboxRequiredRole(it, kind)),
+    title,
+    summary,
+    requiredRole: asString(it.requiredRole ?? it.required_role ?? it.actor_role ?? it.submitted_by, inferInboxRequiredRole(it, kind)),
     consequenceIfApproved: asString(it.consequenceIfApproved ?? it.consequence_if_approved ?? ""),
     consequenceIfRejected: asString(it.consequenceIfRejected ?? it.consequence_if_rejected ?? ""),
     consequenceIfIgnored: asString(it.consequenceIfIgnored ?? it.consequence_if_ignored ?? ""),
     ttlSec: typeof it.ttlSec === "number" ? it.ttlSec : typeof it.ttl_sec === "number" ? it.ttl_sec : undefined,
     canDecide,
     canProceed,
-    status: asOptionalString(it.status),
+    status,
     sourceId,
     personaId,
     reviewId,
@@ -2940,6 +3061,50 @@ const adaptDecisionHistory = (raw: unknown): HumanInboxDecisionRecord[] => {
   }));
 };
 
+const extractHumanInboxMeta = (raw: unknown, data?: unknown): HumanInboxList["meta"] => {
+  if (isObject(raw) && isObject(raw.meta)) {
+    return raw.meta as HumanInboxList["meta"];
+  }
+  if (isObject(data) && isObject(data.meta)) {
+    return data.meta as HumanInboxList["meta"];
+  }
+  return undefined;
+};
+
+const extractHumanInboxPageInfo = (raw: unknown, data?: unknown): HumanInboxPageInfo | undefined => {
+  const candidates = [
+    isObject(raw) ? raw.page_info : undefined,
+    isObject(raw) ? raw.pageInfo : undefined,
+    isObject(data) ? data.page_info : undefined,
+    isObject(data) ? data.pageInfo : undefined,
+  ];
+  for (const candidate of candidates) {
+    if (isObject(candidate)) {
+      const totalRaw = candidate.total;
+      const pageSizeRaw = candidate.page_size ?? candidate.pageSize;
+      const nextTokenRaw = candidate.next_page_token ?? candidate.nextPageToken;
+      const total = typeof totalRaw === "number" && Number.isFinite(totalRaw)
+        ? totalRaw
+        : typeof totalRaw === "string" && totalRaw.trim() !== "" && Number.isFinite(Number(totalRaw))
+          ? Number(totalRaw)
+          : undefined;
+      const pageSize = typeof pageSizeRaw === "number" && Number.isFinite(pageSizeRaw)
+        ? pageSizeRaw
+        : typeof pageSizeRaw === "string" && pageSizeRaw.trim() !== "" && Number.isFinite(Number(pageSizeRaw))
+          ? Number(pageSizeRaw)
+          : undefined;
+      const nextPageToken = typeof nextTokenRaw === "string" ? nextTokenRaw : nextTokenRaw === null ? null : undefined;
+      return {
+        ...(candidate as HumanInboxPageInfo),
+        ...(total !== undefined ? { total } : {}),
+        ...(pageSize !== undefined ? { page_size: pageSize, pageSize } : {}),
+        ...(nextPageToken !== undefined ? { next_page_token: nextPageToken, nextPageToken } : {}),
+      };
+    }
+  }
+  return undefined;
+};
+
 export function adaptHumanInboxList(raw: unknown): HumanInboxList | null {
   const data = unwrap(raw);
   const arr =
@@ -2947,8 +3112,14 @@ export function adaptHumanInboxList(raw: unknown): HumanInboxList | null {
     (isObject(data) ? asArray<Record<string, unknown>>(data.items) : null);
   if (!arr) return null;
   const items: HumanInboxList = arr.map(adaptInboxRecord).filter((it): it is HumanInboxItem => it !== null);
-  if (isObject(data) && data.meta) {
-    items.meta = isObject(data.meta) ? data.meta : undefined;
+  const meta = extractHumanInboxMeta(raw, data);
+  if (meta) {
+    items.meta = meta;
+  }
+  const pageInfo = extractHumanInboxPageInfo(raw, data);
+  if (pageInfo) {
+    items.page_info = pageInfo;
+    items.pageInfo = pageInfo;
   }
   return items;
 }
@@ -3374,18 +3545,220 @@ export function adaptTradingPulseOverview(raw: unknown): ManagementTradingPulseM
 // ---------- PM-7 Persona Fleet / PM-11 Evolution / PM-1 Evidence ----------
 // All three are array-of-row view-models. Adapters share shape.
 
+export type ManagementEvolutionJournalView = "all" | "history" | "auto_proposals";
+export type ManagementEvolutionJournalEvidenceClass =
+  | "threshold_signal"
+  | "incident_followup"
+  | "incident_severity"
+  | "unclassified";
+
+export interface ManagementEvolutionJournalAutoProposalCounts {
+  incident_followup: number;
+  incident_severity: number;
+  postmortem_draft: number;
+  total: number;
+  incidentFollowup: number;
+  incidentSeverity: number;
+  postmortemDraft: number;
+}
+
+export interface ManagementEvolutionJournalSummary {
+  total_items: number;
+  totalItems: number;
+  returned_items: number;
+  returnedItems: number;
+  decision_count: number;
+  decisionCount: number;
+  mutation_review_count: number;
+  mutationReviewCount: number;
+  postmortem_count: number;
+  postmortemCount: number;
+  rollback_count: number;
+  rollbackCount: number;
+  freeze_order_count: number;
+  freezeOrderCount: number;
+  pending_review_count: number;
+  pendingReviewCount: number;
+  active_freeze_count: number;
+  activeFreezeCount: number;
+  completed_rollback_count: number;
+  completedRollbackCount: number;
+  latest_at?: string | null;
+  latestAt?: string | null;
+  by_type: Record<string, number>;
+  byType: Record<string, number>;
+  by_status: Record<string, number>;
+  byStatus: Record<string, number>;
+  by_risk_level: Record<string, number>;
+  byRiskLevel: Record<string, number>;
+}
+
+export interface ManagementEvolutionJournalPageInfo {
+  next_page_token: string | null;
+  nextPageToken: string | null;
+  page_size: number;
+  pageSize: number;
+  total: number;
+}
+
+export interface ManagementEvolutionJournalMeta {
+  snapshot_at?: string;
+  snapshotAt?: string;
+  surfaces?: Record<string, { status: string; source?: string; message?: string; reason?: string }>;
+}
+
+export type EvolutionJournalList<T = Record<string, unknown>> = T[] & {
+  summary?: ManagementEvolutionJournalSummary;
+  autoProposalCounts?: ManagementEvolutionJournalAutoProposalCounts;
+  auto_proposal_counts?: ManagementEvolutionJournalAutoProposalCounts;
+  pageInfo?: ManagementEvolutionJournalPageInfo;
+  page_info?: ManagementEvolutionJournalPageInfo;
+  meta?: ManagementEvolutionJournalMeta;
+};
+
 function adaptArrayPassthrough<T>(raw: unknown): T[] | null {
   const data = unwrap(raw);
   return asArray<T>(data) ??
          (isObject(data) ? asArray<T>(data.items) : null);
 }
 
-export function adaptPerformanceAttributionResult(raw: unknown): PerformanceAttributionResult {
+export function adaptEvolutionJournalList<T = Record<string, unknown>>(raw: unknown): EvolutionJournalList<T> | null {
+  const arr = adaptArrayPassthrough<T>(raw);
+  if (!arr) return null;
+  const list = [...arr] as EvolutionJournalList<T>;
+  const rawArr = arr as EvolutionJournalList<T>;
   const data = unwrap(raw);
-  const rows = adaptArrayPassthrough<PerformanceAttributionRow>(raw) ??
-    (isObject(data) ? asArray<PerformanceAttributionRow>(data.rows) : null) ??
-    (isObject(raw) ? asArray<PerformanceAttributionRow>(raw.items) : null) ??
-    [];
+  const envelope = isObject(raw) ? raw : {};
+
+  const rawSummary = (isObject(data) && isObject(data.summary) ? data.summary : undefined)
+    ?? (isObject(envelope.summary) ? envelope.summary : undefined)
+    ?? (isObject(rawArr.summary) ? (rawArr.summary as unknown as Record<string, unknown>) : undefined);
+  if (rawSummary) {
+    const totalItems = asFiniteNumber(rawSummary.total_items ?? rawSummary.totalItems, list.length);
+    const returnedItems = asFiniteNumber(rawSummary.returned_items ?? rawSummary.returnedItems, list.length);
+    const decisionCount = asFiniteNumber(rawSummary.decision_count ?? rawSummary.decisionCount, 0);
+    const mutationReviewCount = asFiniteNumber(rawSummary.mutation_review_count ?? rawSummary.mutationReviewCount, 0);
+    const postmortemCount = asFiniteNumber(rawSummary.postmortem_count ?? rawSummary.postmortemCount, 0);
+    const rollbackCount = asFiniteNumber(rawSummary.rollback_count ?? rawSummary.rollbackCount, 0);
+    const freezeOrderCount = asFiniteNumber(rawSummary.freeze_order_count ?? rawSummary.freezeOrderCount, 0);
+    const pendingReviewCount = asFiniteNumber(rawSummary.pending_review_count ?? rawSummary.pendingReviewCount, 0);
+    const activeFreezeCount = asFiniteNumber(rawSummary.active_freeze_count ?? rawSummary.activeFreezeCount, 0);
+    const completedRollbackCount = asFiniteNumber(rawSummary.completed_rollback_count ?? rawSummary.completedRollbackCount, 0);
+    const latestAt = nullableString(rawSummary.latest_at ?? rawSummary.latestAt);
+    const byType = asCountRecord(rawSummary.by_type ?? rawSummary.byType);
+    const byStatus = asCountRecord(rawSummary.by_status ?? rawSummary.byStatus);
+    const byRiskLevel = asCountRecord(rawSummary.by_risk_level ?? rawSummary.byRiskLevel);
+    list.summary = {
+      total_items: totalItems,
+      totalItems,
+      returned_items: returnedItems,
+      returnedItems,
+      decision_count: decisionCount,
+      decisionCount,
+      mutation_review_count: mutationReviewCount,
+      mutationReviewCount,
+      postmortem_count: postmortemCount,
+      postmortemCount,
+      rollback_count: rollbackCount,
+      rollbackCount,
+      freeze_order_count: freezeOrderCount,
+      freezeOrderCount,
+      pending_review_count: pendingReviewCount,
+      pendingReviewCount,
+      active_freeze_count: activeFreezeCount,
+      activeFreezeCount,
+      completed_rollback_count: completedRollbackCount,
+      completedRollbackCount,
+      latest_at: latestAt,
+      latestAt,
+      by_type: byType,
+      byType,
+      by_status: byStatus,
+      byStatus,
+      by_risk_level: byRiskLevel,
+      byRiskLevel,
+    };
+  }
+
+  const rawCounts = (isObject(data) && isObject(data.auto_proposal_counts ?? data.autoProposalCounts)
+    ? (data.auto_proposal_counts ?? data.autoProposalCounts) as Record<string, unknown>
+    : undefined)
+    ?? (isObject(envelope.auto_proposal_counts ?? envelope.autoProposalCounts)
+      ? (envelope.auto_proposal_counts ?? envelope.autoProposalCounts) as Record<string, unknown>
+      : undefined)
+    ?? (isObject(rawArr.auto_proposal_counts ?? rawArr.autoProposalCounts)
+      ? (rawArr.auto_proposal_counts ?? rawArr.autoProposalCounts) as unknown as Record<string, unknown>
+      : undefined);
+  if (rawCounts) {
+    const incidentFollowup = asFiniteNumber(rawCounts.incident_followup ?? rawCounts.incidentFollowup, 0);
+    const incidentSeverity = asFiniteNumber(rawCounts.incident_severity ?? rawCounts.incidentSeverity, 0);
+    const postmortemDraft = asFiniteNumber(rawCounts.postmortem_draft ?? rawCounts.postmortemDraft, 0);
+    const total = asFiniteNumber(rawCounts.total, incidentFollowup + incidentSeverity + postmortemDraft);
+    const counts: ManagementEvolutionJournalAutoProposalCounts = {
+      incident_followup: incidentFollowup,
+      incident_severity: incidentSeverity,
+      postmortem_draft: postmortemDraft,
+      total,
+      incidentFollowup,
+      incidentSeverity,
+      postmortemDraft,
+    };
+    list.autoProposalCounts = counts;
+    list.auto_proposal_counts = counts;
+  }
+
+  const rawPageInfo = (isObject(envelope.page_info ?? envelope.pageInfo)
+    ? (envelope.page_info ?? envelope.pageInfo) as Record<string, unknown>
+    : undefined)
+    ?? (isObject(data) && isObject(data.page_info ?? data.pageInfo)
+      ? (data.page_info ?? data.pageInfo) as Record<string, unknown>
+      : undefined)
+    ?? (isObject(rawArr.page_info ?? rawArr.pageInfo)
+      ? (rawArr.page_info ?? rawArr.pageInfo) as unknown as Record<string, unknown>
+      : undefined);
+  if (rawPageInfo) {
+    const nextPageToken = nullableString(rawPageInfo.next_page_token ?? rawPageInfo.nextPageToken);
+    const pageSize = asFiniteNumber(rawPageInfo.page_size ?? rawPageInfo.pageSize, 20);
+    const total = asFiniteNumber(rawPageInfo.total, list.summary?.total_items ?? list.length);
+    const pageInfo: ManagementEvolutionJournalPageInfo = {
+      next_page_token: nextPageToken,
+      nextPageToken,
+      page_size: pageSize,
+      pageSize,
+      total,
+    };
+    list.pageInfo = pageInfo;
+    list.page_info = pageInfo;
+  }
+
+  const rawMeta = (isObject(envelope.meta) ? envelope.meta : undefined)
+    ?? (isObject(data) && isObject(data.meta) ? data.meta : undefined)
+    ?? (isObject(rawArr.meta) ? (rawArr.meta as unknown as Record<string, unknown>) : undefined);
+  if (rawMeta) {
+    const rawSurfaces = isObject(rawMeta.surfaces) ? rawMeta.surfaces : {};
+    const surfaces = Object.fromEntries(
+      Object.entries(rawSurfaces).map(([key, item]) => [key, adaptEvidenceSurface(item)]),
+    );
+    list.meta = {
+      snapshot_at: optionalString(rawMeta.snapshot_at ?? rawMeta.snapshotAt),
+      snapshotAt: optionalString(rawMeta.snapshotAt ?? rawMeta.snapshot_at),
+      surfaces,
+    };
+  }
+
+  return list;
+}
+
+export function adaptPerformanceAttributionRows(raw: unknown): PerformanceAttributionRow[] | null {
+  const data = unwrap(raw);
+  const rawRows = adaptArrayPassthrough<unknown>(raw) ??
+    (isObject(data) ? asArray<unknown>(data.rows) : null) ??
+    (isObject(raw) ? asArray<unknown>(raw.items) : null);
+  return rawRows ? rawRows.map(normalizePerformanceAttributionRow) : null;
+}
+
+export function adaptPerformanceAttributionResult(raw: unknown): PerformanceAttributionResult {
+  const rows = adaptPerformanceAttributionRows(raw) ?? [];
   return { rows, period: adaptAttributionPeriodState(raw) };
 }
 
@@ -3458,6 +3831,7 @@ export function adaptPersonaLeagueRankedRows(raw: unknown): PersonaLeagueRow[] |
       : buildLinkSet({ primary: { kind: "persona", id: personaId } });
     const previous = nullableNumber(record.previousRank ?? record.previous_rank);
     const delta = nullableNumber(record.rankDelta ?? record.rank_delta);
+    const metrics = isObject(record.metrics) ? record.metrics : {};
     return [{
       ...(record as object),
       personaId,
@@ -3467,6 +3841,9 @@ export function adaptPersonaLeagueRankedRows(raw: unknown): PersonaLeagueRow[] |
       previousRank: previous ?? undefined,
       rankDelta: delta ?? undefined,
       tier: asString(record.tier, "watch") as PersonaLeagueRow["tier"],
+      pnl30d: nullableNumber(record.pnl30d ?? record.pnl_30d ?? metrics.pnl30d ?? metrics.pnl_30d),
+      sharpe: nullableNumber(record.sharpe ?? record.sharpeRatio ?? record.sharpe_ratio ?? metrics.sharpe),
+      maxDrawdown: nullableNumber(record.maxDrawdown ?? record.max_drawdown ?? record.drawdown ?? metrics.drawdown),
       eligible: typeof record.eligible === "boolean" ? record.eligible : undefined,
       exclusionReason: asString(record.exclusionReason ?? record.exclusion_reason) || undefined,
       links,
@@ -4051,8 +4428,14 @@ export const mgmt = {
           const adapted = adaptHumanInboxList(raw);
           if (adapted) return adapted;
           const empty = emptyHumanInbox();
-          if (isObject(raw) && raw.meta) {
-            empty.meta = isObject(raw.meta) ? raw.meta : undefined;
+          const meta = extractHumanInboxMeta(raw);
+          if (meta) {
+            empty.meta = meta;
+          }
+          const pageInfo = extractHumanInboxPageInfo(raw);
+          if (pageInfo) {
+            empty.page_info = pageInfo;
+            empty.pageInfo = pageInfo;
           }
           return empty;
         },
@@ -4174,23 +4557,63 @@ export const mgmt = {
   evolutionJournal: {
     list: <T>(
       seedFn: () => T[],
-      opts?: { signal?: AbortSignal; persona?: string; mutationReview?: string; decision?: string },
-    ): Promise<T[]> =>
-      mgmtRead("mgmt.evolutionJournal.list", { method: "GET", path: paths.mgmtEvolutionJournal(opts), signal: opts?.signal }, seedFn, adaptArrayPassthrough<T>),
+      opts?: {
+        signal?: AbortSignal;
+        view?: ManagementEvolutionJournalView | string;
+        persona?: string;
+        mutationReview?: string;
+        decision?: string;
+        pageSize?: number;
+        pageToken?: string | null;
+      },
+    ): Promise<EvolutionJournalList<T>> =>
+      mgmtRead(
+        "mgmt.evolutionJournal.list",
+        { method: "GET", path: paths.mgmtEvolutionJournal(opts), signal: opts?.signal },
+        seedFn as () => EvolutionJournalList<T>,
+        adaptEvolutionJournalList<T>,
+      ),
   },
 
   evidence: {
     list: <T>(seedFn: () => T[]): Promise<T[]> =>
       mgmtRead("mgmt.evidence.list", { method: "GET", path: paths.mgmtEvidenceExplorer() }, seedFn, adaptArrayPassthrough<T>),
     overview: (
-      seedFn: () => ManagementEvidenceOverview = defaultManagementEvidenceOverview,
-    ): Promise<ManagementEvidenceOverview> =>
-      mgmtRead("mgmt.evidence.overview", { method: "GET", path: paths.mgmtEvidenceExplorer() }, seedFn, adaptManagementEvidenceOverview),
-    overviewLiveOnly: (opts?: { signal?: AbortSignal }): Promise<ManagementEvidenceOverview | undefined> =>
-      liveOnlyRead<ManagementEvidenceOverview>(
-        { method: "GET", path: paths.mgmtEvidenceExplorer(), signal: opts?.signal },
+      seedFnOrOpts:
+        | (() => ManagementEvidenceOverview)
+        | { pageToken?: string | null; page_token?: string | null; pageSize?: number; page_size?: number; signal?: AbortSignal } = defaultManagementEvidenceOverview,
+      maybeOpts?: { pageToken?: string | null; page_token?: string | null; pageSize?: number; page_size?: number; signal?: AbortSignal },
+    ): Promise<ManagementEvidenceOverview> => {
+      const seedFn = typeof seedFnOrOpts === "function" ? seedFnOrOpts : defaultManagementEvidenceOverview;
+      const opts = typeof seedFnOrOpts === "function" ? maybeOpts : seedFnOrOpts;
+      const params = new URLSearchParams();
+      const pageSize = opts?.pageSize ?? opts?.page_size;
+      const pageToken = opts?.pageToken ?? opts?.page_token;
+      if (pageSize !== undefined) params.set("page_size", String(pageSize));
+      if (pageToken) params.set("page_token", String(pageToken));
+      const query = params.toString();
+      const path = `${paths.mgmtEvidenceExplorer()}${query ? `?${query}` : ""}`;
+      return mgmtRead("mgmt.evidence.overview", { method: "GET", path, signal: opts?.signal }, seedFn, adaptManagementEvidenceOverview);
+    },
+    overviewLiveOnly: (opts?: {
+      pageToken?: string | null;
+      page_token?: string | null;
+      pageSize?: number;
+      page_size?: number;
+      signal?: AbortSignal;
+    }): Promise<ManagementEvidenceOverview | undefined> => {
+      const params = new URLSearchParams();
+      const pageSize = opts?.pageSize ?? opts?.page_size;
+      const pageToken = opts?.pageToken ?? opts?.page_token;
+      if (pageSize !== undefined) params.set("page_size", String(pageSize));
+      if (pageToken) params.set("page_token", String(pageToken));
+      const query = params.toString();
+      const path = `${paths.mgmtEvidenceExplorer()}${query ? `?${query}` : ""}`;
+      return liveOnlyRead<ManagementEvidenceOverview>(
+        { method: "GET", path, signal: opts?.signal },
         adaptManagementEvidenceOverview,
-      ),
+      );
+    },
     detail: (
       refId: string,
       seedFn: () => ManagementEvidenceDetail = () => defaultManagementEvidenceDetail(refId),
@@ -4422,10 +4845,22 @@ export const mgmt = {
   performanceAttribution: {
     /** Rows plus the period the BFF actually applied (meta.period). */
     getLiveOnly: (
-      dimension?: AttributionDimension,
+      dimension?: AttributionDimension | string,
       period?: AttributionPeriod,
       opts?: { signal?: AbortSignal },
     ): Promise<PerformanceAttributionResult> => {
+      if (dimension !== undefined && !isBffAcceptedAttributionDimension(dimension)) {
+        return Promise.resolve({
+          rows: [],
+          period: {
+            requested: period,
+            windowed: false,
+            reason: "unsupported_attribution_dimension",
+            message: `Dimension "${dimension}" is not supported by the BFF.`,
+            source: "missing",
+          },
+        });
+      }
       if (detectMode() === "mock") {
         return Promise.resolve({ rows: [], period: adaptAttributionPeriodState(undefined) });
       }
@@ -4436,20 +4871,28 @@ export const mgmt = {
       );
     },
     listLiveOnly: (
-      dimension?: AttributionDimension,
+      dimension?: AttributionDimension | string,
       period?: AttributionPeriod,
       opts?: { signal?: AbortSignal },
-    ): Promise<PerformanceAttributionRow[]> =>
-      liveOnlyList<PerformanceAttributionRow>(
+    ): Promise<PerformanceAttributionRow[]> => {
+      if (dimension !== undefined && !isBffAcceptedAttributionDimension(dimension)) {
+        return Promise.resolve([]);
+      }
+      return liveOnlyList<PerformanceAttributionRow>(
         { method: "GET", path: paths.mgmtPerformanceAttribution(dimension, period), signal: opts?.signal },
-        adaptArrayPassthrough<PerformanceAttributionRow>,
-      ),
+        adaptPerformanceAttributionRows,
+      );
+    },
     list: (
-      dimension: AttributionDimension | undefined,
+      dimension: AttributionDimension | string | undefined,
       period: AttributionPeriod | undefined,
       seedFn: () => PerformanceAttributionRow[],
-    ): Promise<PerformanceAttributionRow[]> =>
-      mgmtRead("mgmt.performanceAttribution.list", { method: "GET", path: paths.mgmtPerformanceAttribution(dimension, period) }, seedFn, adaptArrayPassthrough<PerformanceAttributionRow>),
+    ): Promise<PerformanceAttributionRow[]> => {
+      if (dimension !== undefined && !isBffAcceptedAttributionDimension(dimension)) {
+        return Promise.resolve([]);
+      }
+      return mgmtRead("mgmt.performanceAttribution.list", { method: "GET", path: paths.mgmtPerformanceAttribution(dimension, period) }, seedFn, adaptPerformanceAttributionRows);
+    },
   },
 
   operationsReadModel: {
