@@ -248,6 +248,7 @@ jobs:
       # definition, so a browser fixture regression fails the PR instead.
       - name: Release gate isolated fixture Playwright E2E
         env:
+          PANTHEON_RELEASE_GATE_CONTEXT: pull_request
           PANTHEON_HOSTED_E2E: ""
           FE_INT_GATE_LIVE_BFF: ""
           F08_CREATE_INTENT_LIVE_BFF: ""

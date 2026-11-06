@@ -75,7 +75,14 @@ export function buildFixtureE2ePlaywrightArgs({
   return args;
 }
 
-export function buildFixtureE2eEnv(baseEnv, baseUrl, { bffBaseUrl = "" } = {}) {
+export function buildFixtureE2eEnv(
+  baseEnv,
+  baseUrl,
+  { bffBaseUrl = "", serve = true } = {},
+) {
+  if (!serve) {
+    return { ...baseEnv };
+  }
   const resolvedBffBaseUrl =
     bffBaseUrl || baseEnv.PANTHEON_BFF_BASE_URL || baseUrl;
   const env = {
@@ -239,7 +246,10 @@ async function main() {
       outputDir: options.outputDir,
       reporter: options.reporter,
     });
-    const env = buildFixtureE2eEnv(process.env, baseUrl, { bffBaseUrl });
+    const env = buildFixtureE2eEnv(process.env, baseUrl, {
+      bffBaseUrl,
+      serve: options.serve,
+    });
     const npxBin = process.platform === "win32" ? "npx.cmd" : "npx";
     const result = spawnSync(npxBin, args, {
       env,

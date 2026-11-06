@@ -124,9 +124,18 @@ describe("paired Pantheon release workflow", () => {
     ]) {
       expect(prFixtureStep).toContain(`${emptyVar}: ""`);
     }
+    expect(prFixtureStep).toContain("PANTHEON_RELEASE_GATE_CONTEXT: pull_request");
     expect(prFixtureStep).toContain("VITE_BFF_FALLBACK: strict");
     expect(prFixtureStep).toContain("BFF_FALLBACK: strict");
 
+    const gateJob = integrationWorkflow.slice(
+      integrationWorkflow.indexOf("  integration-gate:"),
+      integrationWorkflow.indexOf("  authorized-write-proof:"),
+    );
+    const gateJobEnv = gateJob.slice(
+      gateJob.indexOf("    env:\n"),
+      gateJob.indexOf("    steps:\n"),
+    );
     const releaseStart = integrationWorkflow.indexOf(
       "      - name: Release-gate Playwright evidence against exact candidate\n",
     );
@@ -137,6 +146,10 @@ describe("paired Pantheon release workflow", () => {
     const releaseFixtureStep = integrationWorkflow.slice(releaseStart, releaseEnd);
     expect(releaseFixtureStep).toContain("id: fixture_e2e");
     expect(releaseFixtureStep).toContain("npm run e2e:fixture -- \\");
+    expect(releaseFixtureStep).toContain("--no-serve");
+    expect(gateJobEnv).not.toContain("PANTHEON_RELEASE_GATE_CONTEXT");
+    expect(releaseFixtureStep).not.toContain("PANTHEON_RELEASE_GATE_CONTEXT");
+    expect(releaseFixtureStep).not.toContain("pull_request");
     expect(prFixtureStep).not.toContain("--project=");
     expect(prFixtureStep).not.toContain("--grep-invert");
     expect(prFixtureStep).not.toContain("--retries=");
@@ -167,11 +180,72 @@ describe("paired Pantheon release workflow", () => {
       "http://127.0.0.1:4173",
     );
     expect(isolatedEnv.PANTHEON_FE_BASE_URL).toBe("http://127.0.0.1:4173");
+    expect(isolatedEnv.PANTHEON_BFF_BASE_URL).toBe("http://127.0.0.1:4173");
+    expect(isolatedEnv.PANTHEON_RELEASE_GATE_CONTEXT).toBe("pull_request");
     expect(isolatedEnv.PANTHEON_HOSTED_E2E).toBe("");
     expect(isolatedEnv.FE_INT_GATE_LIVE_BFF).toBe("");
     expect(isolatedEnv.F08_CREATE_INTENT_LIVE_BFF).toBe("");
     expect(isolatedEnv.RUN_LIVE_BFF_CONTRACTS).toBe("");
     expect(isolatedEnv.BFF_AUTH_TOKEN).toBeUndefined();
+  });
+
+  it("preserves the release gate fixture_e2e non-PR hard-gate context and caller environment under --no-serve", () => {
+    const gateJob = integrationWorkflow.slice(
+      integrationWorkflow.indexOf("  integration-gate:"),
+      integrationWorkflow.indexOf("  authorized-write-proof:"),
+    );
+    const gateJobEnv = gateJob.slice(
+      gateJob.indexOf("    env:\n"),
+      gateJob.indexOf("    steps:\n"),
+    );
+    const releaseStart = integrationWorkflow.indexOf(
+      "      - name: Release-gate Playwright evidence against exact candidate\n",
+    );
+    const releaseEnd = integrationWorkflow.indexOf(
+      "\n      - name: Frontend browser BFF probe\n",
+      releaseStart,
+    );
+    const releaseFixtureStep = integrationWorkflow.slice(releaseStart, releaseEnd);
+
+    expect(gateJobEnv).not.toContain("PANTHEON_RELEASE_GATE_CONTEXT");
+    expect(releaseFixtureStep).not.toContain("PANTHEON_RELEASE_GATE_CONTEXT");
+    expect(releaseFixtureStep).not.toContain("pull_request");
+    expect(releaseFixtureStep).toContain("--no-serve");
+
+    const releaseFixtureStepEnv = Object.fromEntries(
+      [
+        ...releaseFixtureStep.matchAll(
+          /^ {10}([A-Z0-9_]+): (?:"([^"]*)"|([^\n]+))$/gmu,
+        ),
+      ].map(([, key, quoted, bare]) => [key, quoted ?? bare.trim()]),
+    );
+    const gateCallerEnv = {
+      GITHUB_EVENT_NAME: "workflow_dispatch",
+      PANTHEON_BFF_BASE_URL: "https://api.dev.mvl-cap.tw",
+      BFF_AUTH_TOKEN: "caller-token-preserved",
+      PANTHEON_BFF_SMOKE_BEARER_TOKEN: "smoke-token-preserved",
+      PANTHEON_BFF_OPERATOR_A_TOKEN: "operator-token-preserved",
+      ...releaseFixtureStepEnv,
+    };
+    const noServeEnv = buildFixtureE2eEnv(
+      gateCallerEnv,
+      "http://127.0.0.1:4173",
+      { serve: false },
+    );
+    expect(noServeEnv).toEqual(gateCallerEnv);
+    expect(noServeEnv.PANTHEON_RELEASE_GATE_CONTEXT).toBeUndefined();
+    expect(
+      noServeEnv.GITHUB_EVENT_NAME === "pull_request" ||
+        noServeEnv.PANTHEON_RELEASE_GATE_CONTEXT === "pull_request",
+    ).toBe(false);
+    expect(noServeEnv.PANTHEON_BFF_BASE_URL).toBe("https://api.dev.mvl-cap.tw");
+    expect(noServeEnv.BFF_AUTH_TOKEN).toBe("caller-token-preserved");
+    expect(noServeEnv.PANTHEON_BFF_SMOKE_BEARER_TOKEN).toBe(
+      "smoke-token-preserved",
+    );
+    expect(noServeEnv.PANTHEON_BFF_OPERATOR_A_TOKEN).toBe(
+      "operator-token-preserved",
+    );
   });
 
   it("uses the current dev variables and origin for candidate browser requests", () => {
