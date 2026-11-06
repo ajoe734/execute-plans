@@ -4,7 +4,7 @@
 // either when the operator expands the drawer or on an idle callback after
 // primary route content has rendered — never both, and never
 // racing TopBar's shell-summary badge count for the same /bff/jobs request.
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { create } from "zustand";
 import { realtime } from "@/lib/bff-v1";
 import { lists, useLiveStatus } from "@/lib/bff-v1";
@@ -22,7 +22,22 @@ interface RunningJob {
   owner: string;
   startedAt: string;
   status: "queued" | "running" | "success" | "failed" | "warning" | "paused" | "pending";
-  progress: number; // 0..1
+  /** 0..1 reported by the server; undefined when the backend gave no number. */
+  progress?: number;
+}
+
+/** Normalise a server-reported progress value to 0..1. Values in (1, 100] are
+ *  treated as percentages. Anything non-numeric yields undefined — never invent one. */
+export function toProgressFraction(value: unknown): number | undefined {
+  const n = typeof value === "number" ? value : typeof value === "string" && value.trim() !== "" ? Number(value) : NaN;
+  if (!Number.isFinite(n) || n < 0) return undefined;
+  return n <= 1 ? n : Math.min(n, 100) / 100;
+}
+
+function resolveProgress(status: RunningJob["status"], reported: unknown): number | undefined {
+  const fraction = toProgressFraction(reported);
+  if (fraction !== undefined) return fraction;
+  return status === "success" ? 1 : undefined;
 }
 
 interface JobDrawerState {
@@ -46,7 +61,7 @@ export const useJobDrawer = create<JobDrawerState>((set) => ({
   upsert: (j) => set((s) => {
     const i = s.jobs.findIndex((x) => x.id === j.id);
     const next = [...s.jobs];
-    if (i >= 0) next[i] = { ...next[i], ...j };
+    if (i >= 0) next[i] = { ...next[i], ...j, progress: j.progress ?? next[i].progress };
     else next.unshift(j);
     return { jobs: next.slice(0, 30) };
   }),
@@ -60,7 +75,6 @@ export const JobProgressDrawer = () => {
   const t = useT();
   const live = useLiveStatus();
   const { expanded, toggle, jobs, upsert, remove, setAll, hydrated, markHydrated } = useJobDrawer();
-  const [tick, setTick] = useState(0);
   const isMockData = live.effective === "mock";
 
   // Lazy hydrate the full job list: on drawer open, or on idle otherwise.
@@ -69,10 +83,12 @@ export const JobProgressDrawer = () => {
     const hydrate = () => {
       if (useJobDrawer.getState().hydrated) return;
       markHydrated();
-      void lists.jobs().then((env) => setAll(
-        (env.items as Array<{ id: string; kind: string; owner: string; startedAt: string; status: RunningJob["status"] }>).map((r) => ({
+      // Newest-first first page, sized to the drawer's tracked-job cap. Only list-row
+      // fields are read here; job detail is deliberately not taken from list rows.
+      void lists.jobs({ page_size: 30 }).then((env) => setAll(
+        (env.items as Array<{ id: string; kind: string; owner: string; startedAt: string; status: RunningJob["status"]; progress?: unknown }>).map((r) => ({
           id: r.id, kind: r.kind, owner: r.owner, startedAt: r.startedAt,
-          status: r.status, progress: r.status === "success" ? 1 : Math.random() * 0.6 + 0.2,
+          status: r.status, progress: resolveProgress(r.status, r.progress),
         })),
       )).catch(() => setAll([]));
     };
@@ -87,29 +103,15 @@ export const JobProgressDrawer = () => {
   // Subscribe to realtime job events
   useEffect(() => {
     const off = realtime.on("job", (p) => {
-      const e = p as { jobId: string; kind: string; owner: string; ts: string; status: RunningJob["status"] };
+      const e = p as { jobId: string; kind: string; owner: string; ts: string; status: RunningJob["status"]; progress?: unknown };
+      const progress = resolveProgress(e.status, e.progress);
+      upsert({ id: e.jobId, kind: e.kind, owner: e.owner, startedAt: e.ts, status: e.status, progress });
       if (e.status === "success" || e.status === "failed") {
-        upsert({ id: e.jobId, kind: e.kind, owner: e.owner, startedAt: e.ts, status: e.status, progress: 1 });
         setTimeout(() => remove(e.jobId), 6000);
-      } else {
-        upsert({ id: e.jobId, kind: e.kind, owner: e.owner, startedAt: e.ts, status: e.status, progress: 0.1 });
       }
     });
     return () => { off?.(); };
   }, [upsert, remove]);
-
-  // Animate progress for running jobs
-  useEffect(() => {
-    const i = setInterval(() => setTick((n) => n + 1), 1000);
-    return () => clearInterval(i);
-  }, []);
-  useEffect(() => {
-    useJobDrawer.setState((s) => ({
-      jobs: s.jobs.map((j) =>
-        j.status === "running" ? { ...j, progress: Math.min(0.97, j.progress + 0.02 + Math.random() * 0.03) } : j,
-      ),
-    }));
-  }, [tick]);
 
   const running = jobs.filter((j) => j.status === "running" || j.status === "queued" || j.status === "pending");
   if (jobs.length === 0) return null;
@@ -136,7 +138,20 @@ export const JobProgressDrawer = () => {
               <span className="text-mono text-[10px] text-muted-foreground w-32 truncate">{j.id}</span>
               <span className="text-mono text-xs w-44 truncate">{j.kind}</span>
               <Badge variant="outline" className="text-[10px]">{j.owner}</Badge>
-              <Progress value={j.progress * 100} className="flex-1 h-1.5" />
+              {j.progress !== undefined ? (
+                <Progress value={j.progress * 100} className="flex-1 h-1.5" />
+              ) : j.status === "running" || j.status === "queued" || j.status === "pending" ? (
+                <div
+                  data-testid="job-progress-indeterminate"
+                  role="progressbar"
+                  aria-busy="true"
+                  className="flex-1 h-1.5 rounded-full bg-secondary overflow-hidden"
+                >
+                  <div className="h-full w-1/3 animate-pulse rounded-full bg-primary/60" />
+                </div>
+              ) : (
+                <div className="flex-1" />
+              )}
               <StatusBadge state={j.status} />
               <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => remove(j.id)}>
                 <X className="h-3.5 w-3.5" />

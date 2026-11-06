@@ -34,7 +34,7 @@ export default {
     agora: "Agora Trading Desk",
   },
   ui: {
-    pagination: { prev: "Previous", next: "Next", more: "More pages", prevAria: "Go to previous page", nextAria: "Go to next page" },
+    pagination: { prev: "Previous", next: "Next", more: "More pages", prevAria: "Go to previous page", nextAria: "Go to next page", jobsLabel: "Jobs list pagination", incidentsLabel: "Incidents list pagination" },
     a11y: { close: "Close", toggleSidebar: "Toggle Sidebar" },
     loading: "Loading…",
   },
