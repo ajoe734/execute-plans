@@ -18,7 +18,7 @@
     "deferred": "No safe direct live replacement. In strict live the helper must be hidden, disabled, or return an explicit empty/unavailable state unless a later task adds a canonical BFF route or parent DTO."
   },
   "category_counts": {
-    "live_required": 62,
+    "live_required": 63,
     "mock_only_dev": 4,
     "deprecated": 2,
     "deferred": 15
@@ -144,19 +144,34 @@
       "notes": "No direct callers were found outside the write facade/tests."
     },
     {
-      "name": "bff.strategies.list",
+      "name": "bff.strategies.listNonDraft",
       "category": "live_required",
       "seed_source": "seed.strategies",
       "live_routes": [
-        "GET /bff/strategies"
+        "GET /bff/strategies?exclude_state=draft"
       ],
-      "replacement": "managementClient.strategies.list or lists.strategies",
+      "replacement": "strategies.listNonDraft or lists.strategies",
       "follow_up_tasks": [
         "BFF-CONSOL-016",
         "BFF-CONSOL-025"
       ],
       "priority": "P0",
-      "notes": "Core Management Console family."
+      "notes": "Core Management Console family; paginated non-draft strategy read."
+    },
+    {
+      "name": "bff.strategies.listForPersona",
+      "category": "live_required",
+      "seed_source": "seed.strategies",
+      "live_routes": [
+        "GET /bff/strategies?persona_id={id}"
+      ],
+      "replacement": "strategies.listForPersona",
+      "follow_up_tasks": [
+        "BFF-CONSOL-016",
+        "BFF-CONSOL-025"
+      ],
+      "priority": "P0",
+      "notes": "Core Management Console family; paginated persona-scoped strategy read."
     },
     {
       "name": "bff.strategies.get",

@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { resolvePersonaForDetail } from "./personaDetailData";
 import { PersonaDetail, personaHumanInboxUrl, personaWorkshopEntryUrl } from "./PersonaDetail";
-import type { Persona } from "@/lib/bff-v1";
+import { bffV1, type CapitalPool, type Persona, type Strategy } from "@/lib/bff-v1";
 import { getPersona, runPersonaAction } from "@/lib/bff-v1/personas";
 import * as writes from "@/lib/bff-v1/writes";
 
@@ -14,7 +14,8 @@ vi.mock("@/lib/bff-v1", async (importOriginal) => {
     ...actual,
     bffV1: {
       ...actual.bffV1,
-      strategies: { ...actual.bffV1.strategies, list: vi.fn().mockResolvedValue([]) },
+      capitalPools: { ...actual.bffV1.capitalPools, list: vi.fn().mockResolvedValue([]) },
+      strategies: { ...actual.bffV1.strategies, listForPersona: vi.fn().mockResolvedValue([]) },
       audit: { ...actual.bffV1.audit, list: vi.fn().mockResolvedValue([]) },
     },
   };
@@ -31,6 +32,8 @@ vi.mock("@/lib/bff-v1/personas", async (importOriginal) => {
 describe("PersonaDetail", () => {
   beforeEach(() => {
     vi.mocked(getPersona).mockReset();
+    vi.mocked(bffV1.strategies.listForPersona).mockReset().mockResolvedValue([]);
+    vi.mocked(bffV1.capitalPools.list).mockReset().mockResolvedValue([]);
   });
 
   it("resolves persona detail from the BFF persona endpoint", async () => {
@@ -294,5 +297,130 @@ describe("PersonaDetail", () => {
         expect(screen.queryByText("research_only")).not.toBeInTheDocument();
       },
     );
+  });
+
+  describe("persona-be19a1fac471247f2b2a capital binding and strategy ownership tabs", () => {
+    const realPersona: Persona = {
+      id: "persona-be19a1fac471247f2b2a",
+      name: "青禾｜2330 台股 Paper 學習 R2",
+      owner: "operator",
+      updatedAt: "2026-10-18T17:20:36.224810Z",
+      state: "approved",
+      lifecycleStatus: "paper_active",
+      risk: "low",
+      archetype: "quant",
+      routedStrategies: 1,
+      successRate: 0.56,
+    };
+
+    const realStrategy: Strategy = {
+      id: "strategy-persona-298e138c136c9840b0e4",
+      name: "青禾｜2330 台股 Paper 學習 R2 Paper Strategy",
+      owner: "operator",
+      updatedAt: "2026-10-18T17:20:36.224810Z",
+      state: "approved",
+      risk: "low",
+      alpha: "alpha.tw.2330",
+      capitalPoolId: "pool-persona-paper-298e138c136c9840b0e4",
+      personaIds: ["persona-be19a1fac471247f2b2a"],
+      pnl30d: null,
+      sharpe: null,
+      drawdown: null,
+    };
+
+    const realPool: CapitalPool = {
+      id: "pool-persona-paper-298e138c136c9840b0e4",
+      name: "pool-persona-paper-298e138c136c9840b0e4",
+      owner: "treasury",
+      updatedAt: "2026-10-18T17:20:36.224810Z",
+      state: "approved",
+      risk: "low",
+      currency: "USD",
+      allocated: Number.NaN,
+      utilized: Number.NaN,
+      riskBudget: Number.NaN,
+    };
+
+    it("renders strategy-persona-298e138c136c9840b0e4 and pool-persona-paper-298e138c136c9840b0e4 on capitalBinding and strategyOwnership tabs", async () => {
+      vi.mocked(getPersona).mockResolvedValue(realPersona);
+      vi.mocked(bffV1.strategies.listForPersona).mockResolvedValue([realStrategy]);
+      const pools = Array.from({ length: 25 }, (_, index) =>
+        index === 24
+          ? realPool
+          : {
+              ...realPool,
+              id: `pool-other-${index + 1}`,
+              name: `Other Pool ${index + 1}`,
+            },
+      );
+      vi.mocked(bffV1.capitalPools.list).mockResolvedValue(pools);
+
+      const selectTab = async (tabNamePattern: RegExp) => {
+        const tab = await screen.findByRole("tab", { name: tabNamePattern });
+        fireEvent.pointerDown(tab);
+        fireEvent.mouseDown(tab);
+        fireEvent.pointerUp(tab);
+        fireEvent.mouseUp(tab);
+        fireEvent.click(tab);
+      };
+
+      render(
+        createElement(
+          MemoryRouter,
+          { initialEntries: ["/management/personas/persona-be19a1fac471247f2b2a"] },
+          createElement(
+            Routes,
+            null,
+            createElement(Route, { path: "/management/personas/:id", element: createElement(PersonaDetail) }),
+          ),
+        ),
+      );
+
+      await selectTab(/資金綁定|Capital Binding/i);
+      expect(await screen.findByText("pool-persona-paper-298e138c136c9840b0e4")).toBeInTheDocument();
+      expect(screen.getByText(/strategy-persona-298e138c136c9840b0e4/)).toBeInTheDocument();
+      expect(bffV1.strategies.listForPersona).toHaveBeenCalledWith("persona-be19a1fac471247f2b2a");
+
+      await selectTab(/策略歸屬|Strategy Ownership/i);
+      expect(
+        await screen.findByText("青禾｜2330 台股 Paper 學習 R2 Paper Strategy"),
+      ).toBeInTheDocument();
+      expect(screen.getByText("strategy-persona-298e138c136c9840b0e4")).toBeInTheDocument();
+    });
+
+    it("renders unavailable and not no results when strategyOwnership or capitalBinding read fails", async () => {
+      vi.mocked(getPersona).mockResolvedValue(realPersona);
+      vi.mocked(bffV1.strategies.listForPersona).mockRejectedValue(new Error("strategy read failed"));
+      vi.mocked(bffV1.capitalPools.list).mockRejectedValue(new Error("capital read failed"));
+
+      const selectTab = async (tabNamePattern: RegExp) => {
+        const tab = await screen.findByRole("tab", { name: tabNamePattern });
+        fireEvent.pointerDown(tab);
+        fireEvent.mouseDown(tab);
+        fireEvent.pointerUp(tab);
+        fireEvent.mouseUp(tab);
+        fireEvent.click(tab);
+      };
+
+      render(
+        createElement(
+          MemoryRouter,
+          { initialEntries: ["/management/personas/persona-be19a1fac471247f2b2a"] },
+          createElement(
+            Routes,
+            null,
+            createElement(Route, { path: "/management/personas/:id", element: createElement(PersonaDetail) }),
+          ),
+        ),
+      );
+
+      await selectTab(/策略歸屬|Strategy Ownership/i);
+      expect(await screen.findByText(/^(無資料|Unavailable)$/i)).toBeInTheDocument();
+      expect(screen.queryByText(/^(查無結果|No results found\.?)$/i)).not.toBeInTheDocument();
+
+      await selectTab(/資金綁定|Capital Binding/i);
+      expect(await screen.findByText(/^(無資料|Unavailable)$/i)).toBeInTheDocument();
+      expect(screen.queryByText(/^(查無結果|No results found\.?)$/i)).not.toBeInTheDocument();
+    });
   });
 });

@@ -1,6 +1,6 @@
 import type { CapitalPool, LifecycleState, RiskLevel } from "./dto";
 import { paths } from "./paths";
-import { strictLiveDetail, strictLiveList } from "./domainReads";
+import { liveItemsFrom, strictLiveDetail, strictLivePaginatedList } from "./domainReads";
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -187,7 +187,11 @@ export function normalizeCapitalPools(values: unknown[]): CapitalPool[] {
 }
 
 export async function listCapitalPools(): Promise<CapitalPool[]> {
-  return strictLiveList<unknown>("capitalPools.list", paths.capitalPools()).then(normalizeCapitalPools);
+  return strictLivePaginatedList<CapitalPool>(
+    "capitalPools.list",
+    paths.capitalPools(),
+    (body) => normalizeCapitalPools(liveItemsFrom<unknown>(body)),
+  );
 }
 
 export async function getCapitalPool(id: string): Promise<CapitalPool | undefined> {

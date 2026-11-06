@@ -8,9 +8,13 @@ import type {
 } from "./dto";
 import { paths } from "./paths";
 import {
+  adaptRuntimeRow,
   detailPath,
+  liveItemsFrom,
   strictLiveDetail,
   strictLiveList,
+  strictLivePaginatedList,
+  strictLiveRead,
 } from "./domainReads";
 import {
   normalizeAlertTimestampFields,
@@ -52,7 +56,14 @@ export async function getJob(id: string): Promise<Job | undefined> {
 }
 
 export async function listRuntimes(): Promise<Runtime[]> {
-  return strictLiveList("runtimes.list", paths.runtimes());
+  return strictLivePaginatedList<Runtime>(
+    "runtimes.list",
+    paths.runtimes(),
+    (body) =>
+      liveItemsFrom<unknown>(body)
+        .map((item, index) => adaptRuntimeRow(item, index))
+        .filter((row): row is NonNullable<ReturnType<typeof adaptRuntimeRow>> => row !== null),
+  );
 }
 
 export async function getRuntime(id: string): Promise<Runtime | undefined> {
@@ -67,8 +78,39 @@ export async function getAlert(id: string): Promise<Alert | undefined> {
   return strictLiveDetail<Alert>("alerts.get", detailPath(paths.alerts(), id)).then(normalizeAlertTimestampFields);
 }
 
-export async function listIncidents(): Promise<Incident[]> {
-  return strictLiveList<Incident>("incidents.list", paths.incidents()).then(normalizeIncidentTimestampList);
+export const NON_TERMINAL_INCIDENT_STATUSES = [
+  "open",
+  "investigating",
+  "mitigating",
+  "in_progress",
+] as const;
+
+export const NON_TERMINAL_INCIDENT_STATUS_FILTER = NON_TERMINAL_INCIDENT_STATUSES.join(",");
+
+export interface ListIncidentsOptions {
+  status?: string | readonly string[];
+}
+
+export async function listIncidents(options?: ListIncidentsOptions): Promise<Incident[]> {
+  const rawStatus = options?.status;
+  const statusQuery = Array.isArray(rawStatus)
+    ? rawStatus.map((s) => String(s).trim()).filter(Boolean).join(",")
+    : typeof rawStatus === "string"
+      ? rawStatus.trim()
+      : "";
+  return strictLiveRead<Incident[]>(
+    "incidents.list",
+    {
+      method: "GET",
+      path: paths.incidents(),
+      ...(statusQuery ? { query: { status: statusQuery } } : {}),
+    },
+    liveItemsFrom<Incident>,
+  ).then(normalizeIncidentTimestampList);
+}
+
+export async function listOpenIncidents(): Promise<Incident[]> {
+  return listIncidents({ status: NON_TERMINAL_INCIDENT_STATUS_FILTER });
 }
 
 export async function getIncident(id: string): Promise<Incident | undefined> {
@@ -181,6 +223,7 @@ export const alerts = {
 
 export const incidents = {
   list: listIncidents,
+  listOpen: listOpenIncidents,
   get: getIncident,
 };
 

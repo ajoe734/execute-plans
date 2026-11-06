@@ -115,7 +115,9 @@ export const PersonaDetail = () => {
     { kinds: ["personas"] },
   );
   const [routed, setRouted] = useState<Strategy[]>([]);
+  const [routedState, setRoutedState] = useState<"loading" | "ready" | "error">("loading");
   const [audit, setAudit] = useState<AuditEvent[]>([]);
+  const [auditState, setAuditState] = useState<"loading" | "ready" | "error">("loading");
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [retireOpen, setRetireOpen] = useState(false);
   const [interactionBusy, setInteractionBusy] = useState<string | null>(null);
@@ -129,21 +131,50 @@ export const PersonaDetail = () => {
     let cancelled = false;
     if (!id) {
       setRouted([]);
+      setRoutedState("ready");
       setAudit([]);
+      setAuditState("ready");
       return;
     }
 
     setRouted([]);
+    setRoutedState("loading");
     setAudit([]);
+    setAuditState("loading");
 
-    Promise.all([
-      bffV1.strategies.list().catch(() => [] as Strategy[]),
-      bffV1.audit.list().catch(() => [] as AuditEvent[]),
-    ]).then(([allStrategies, allAudit]) => {
-      if (cancelled) return;
-      setRouted(allStrategies.filter((s) => s.personaIds.includes(id)));
-      setAudit(allAudit.filter((x) => x.target === id));
-    });
+    bffV1.strategies
+      .listForPersona(id)
+      .then((personaStrategies) => {
+        if (cancelled) return;
+        setRouted(
+          personaStrategies.filter(
+            (s) =>
+              s.personaIds.length === 0 ||
+              s.personaIds.includes(id) ||
+              (s as { persona_id?: string; personaId?: string }).persona_id === id ||
+              (s as { persona_id?: string; personaId?: string }).personaId === id,
+          ),
+        );
+        setRoutedState("ready");
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setRouted([]);
+        setRoutedState("error");
+      });
+
+    bffV1.audit
+      .list()
+      .then((allAudit) => {
+        if (cancelled) return;
+        setAudit(allAudit.filter((x) => x.target === id));
+        setAuditState("ready");
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setAudit([]);
+        setAuditState("error");
+      });
 
     return () => { cancelled = true; };
   }, [id]);
@@ -387,12 +418,44 @@ export const PersonaDetail = () => {
           { value: "identity", label: t("phase13.persona.tabs.identity"), content: <PersonaIdentityTab p={p} /> },
           { value: "workspace", label: t("phase13.persona.tabs.workspace"), content: <PersonaWorkspaceTab personaId={p.id} /> },
           { value: "capitalBinding", label: t("phase13.persona.tabs.capitalBinding"), content: <PersonaCapitalBindingTab personaId={p.id} /> },
-          { value: "strategyOwnership", label: t("phase13.persona.tabs.strategyOwnership"), content: <PersonaStrategyOwnershipTab personaId={p.id} strategies={routed} /> },
+          {
+            value: "strategyOwnership",
+            label: t("phase13.persona.tabs.strategyOwnership"),
+            content:
+              routedState === "ready" ? (
+                <div className="space-y-2">
+                  <PersonaStrategyOwnershipTab personaId={p.id} strategies={routed} />
+                  {routed.length > 0 && (
+                    <div
+                      className="flex flex-wrap gap-2 text-mono text-xs text-muted-foreground"
+                      data-testid="persona-owned-strategy-ids"
+                    >
+                      {routed.map((s) => (
+                        <span key={s.id}>{s.id}</span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <DataTable
+                  rows={[]}
+                  loading={routedState === "loading"}
+                  columns={[
+                    { key: "name", header: t("nav.strategies"), cell: () => null },
+                    { key: "ownership", header: t("phase13.persona.ownership.type"), cell: () => null },
+                    { key: "state", header: t("table.state"), cell: () => null },
+                    { key: "risk", header: t("table.risk"), cell: () => null },
+                  ]}
+                  empty={routedState === "error" ? t("status.unavailable") : t("empty.noResults")}
+                />
+              ),
+          },
           {
             value: "routes", label: t("section.permissions"),
             content: (
               <DataTable
                 rows={routed}
+                loading={routedState === "loading"}
                 onRowClick={(r) => navigate(`/management/strategies/${r.id}`)}
                 columns={[
                   { key: "name", header: t("nav.strategies"), cell: (r) => <div className="font-medium">{r.name}</div> },
@@ -400,7 +463,7 @@ export const PersonaDetail = () => {
                   { key: "state", header: t("table.state"), cell: (r) => <StatusBadge state={r.state} /> },
                   { key: "risk", header: t("table.risk"), cell: (r) => <RiskBadge level={r.risk} /> },
                 ]}
-                empty={t("empty.noResults")}
+                empty={routedState === "error" ? t("status.unavailable") : t("empty.noResults")}
               />
             ),
           },
@@ -449,11 +512,16 @@ export const PersonaDetail = () => {
           {
             value: "audit", label: t("nav.audit"),
             content: (
-              <DataTable rows={audit} columns={[
-                { key: "ts", header: t("table.time"), cell: (r) => <span className="text-mono text-xs">{safeDateTime(r.ts)}</span> },
-                { key: "actor", header: t("table.actor"), cell: (r) => r.actor },
-                { key: "action", header: t("table.action"), cell: (r) => <span className="text-mono text-xs">{r.action}</span> },
-              ]} empty={t("empty.noResults")} />
+              <DataTable
+                rows={audit}
+                loading={auditState === "loading"}
+                columns={[
+                  { key: "ts", header: t("table.time"), cell: (r) => <span className="text-mono text-xs">{safeDateTime(r.ts)}</span> },
+                  { key: "actor", header: t("table.actor"), cell: (r) => r.actor },
+                  { key: "action", header: t("table.action"), cell: (r) => <span className="text-mono text-xs">{r.action}</span> },
+                ]}
+                empty={auditState === "error" ? t("status.unavailable") : t("empty.noResults")}
+              />
             ),
           },
         ]}

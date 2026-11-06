@@ -910,6 +910,7 @@ export default {
   },
   riskCenter: {
     subtitle: "Aggregated risk view across capital, strategies, personas, runtimes, and capabilities.",
+    draftsExcluded: "Draft strategies excluded",
     kpi: {
       openIncidents: "Open incidents",
       runtimeWarn: "Runtime warnings",

@@ -13,26 +13,35 @@ export function bootstrapMockAdapters(): void {
   bootstrapped = true;
 
   // GET /bff/strategies — default mock list
-  registerMock("GET", paths.strategies(), () =>
-    list({
-      items: [
-        {
-          id: "stg_001",
-          name: "stg_001",
-          strategyId: "stg_001",
-          strategy_id: "stg_001",
-          capitalPoolId: "pool_001",
-          status: "active",
-          state: "deployed",
-          risk: "low",
-        } as never,
-      ],
+  registerMock("GET", paths.strategies(), (req) => {
+    const baseItems = [
+      {
+        id: "stg_001",
+        name: "stg_001",
+        strategyId: "stg_001",
+        strategy_id: "stg_001",
+        capitalPoolId: "pool_001",
+        personaIds: ["ps_001"],
+        status: "active",
+        state: "deployed",
+        risk: "low",
+      } as never,
+    ];
+    const excludeState = typeof req.query?.exclude_state === "string" ? req.query.exclude_state.trim() : "";
+    const personaId = typeof req.query?.persona_id === "string" ? req.query.persona_id.trim() : "";
+    const items = baseItems.filter((item: { state?: string; personaIds?: string[] }) => {
+      if (excludeState && item.state === excludeState) return false;
+      if (personaId && !(item.personaIds ?? []).includes(personaId)) return false;
+      return true;
+    });
+    return list({
+      items,
       cursor: {},
       pageSize: 50,
-      estimatedTotal: 1,
+      estimatedTotal: items.length,
       totalCountExact: true,
-    }),
-  );
+    });
+  });
 
   // POST /bff/strategies/{id}/actions/{action}
   // Final C.1 demonstration: missing confirm token → 428 APPROVAL_REQUIRED / CONFIRM_TOKEN_REQUIRED

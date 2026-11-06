@@ -67,7 +67,7 @@ export const RebalanceDetail = () => {
     if (!id) return;
     bffV1.approvals.list().then((all) => setApprovals(all.filter((a) => (a.subject ?? "").includes(id) || (a.kind ?? "").includes("rebalance")))).catch(() => {});
     bffV1.audit.list().then((all) => setAudit(all.filter((a) => a.target === id || a.action?.startsWith("rebalance.")))).catch(() => {});
-    bffV1.strategies.list().then(setStrategies).catch(() => {});
+    bffV1.strategies.listNonDraft().then(setStrategies).catch(() => {});
   }, [id]);
 
   const transitions = useMemo(

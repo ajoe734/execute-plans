@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import { bffV1 } from "@/lib/bff-v1";
 import { useLiveDetail } from "@/lib/bff-v1/useLiveDetail";
@@ -23,6 +23,26 @@ const STATE_MAP: Record<string, ToolState> = {
   restricted: "restricted", deprecated: "deprecated", blocked: "blocked", retired: "retired",
 };
 
+function extractToolConsumerStrategies(tool: Tool | undefined): Strategy[] {
+  if (!tool) return [];
+  const raw = tool as Tool & {
+    consumers?: unknown;
+    consumerStrategies?: unknown;
+    consumer_strategies?: unknown;
+  };
+  const candidate = Array.isArray(raw.consumers)
+    ? raw.consumers
+    : Array.isArray(raw.consumerStrategies)
+      ? raw.consumerStrategies
+      : Array.isArray(raw.consumer_strategies)
+        ? raw.consumer_strategies
+        : [];
+  return candidate.filter(
+    (item): item is Strategy =>
+      Boolean(item && typeof item === "object" && typeof (item as { id?: unknown }).id === "string"),
+  );
+}
+
 export const ToolDetail = () => {
   const { id } = useParams();
   const t = useT();
@@ -32,14 +52,15 @@ export const ToolDetail = () => {
     (entityId) => bffV1.tools.get(entityId),
     { kinds: ["tools"] },
   );
-  const [consumers, setConsumers] = useState<Strategy[]>([]);
   const [audit, setAudit] = useState<AuditEvent[]>([]);
 
   useEffect(() => {
     if (!id) return;
-    bffV1.strategies.list().then((s) => setConsumers(s.slice(0, 4))).catch(() => {});
     bffV1.audit.list().then((a) => setAudit(a.filter((x) => x.target === id || x.action?.startsWith("tool.")))).catch(() => {});
   }, [id]);
+
+  const consumers = useMemo(() => extractToolConsumerStrategies(tool), [tool]);
+
   if (loading) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
   if (!tool) {
     if (isError) {
@@ -105,13 +126,24 @@ export const ToolDetail = () => {
           { value: "schema", label: t("tool.tab.schema"), content: <ToolSchemaPanel tool={tool} /> },
           { value: "sandbox", label: t("tool.tab.sandbox"), content: <ToolSandboxPanel tool={tool} /> },
           { value: "activity", label: t("tool.tab.activity"), content: <ActivityMonitor scope={tool.id} /> },
-          { value: "consumers", label: t("nav.strategies"), content: (
-            <DataTable rows={consumers} onRowClick={(r) => nav(`/management/strategies/${r.id}`)} columns={[
-              { key: "name", header: t("table.name"), cell: (r) => <div className="font-medium">{r.name}</div> },
-              { key: "alpha", header: "Alpha", cell: (r) => <span className="text-mono text-xs">{r.alpha}</span> },
-              { key: "state", header: t("table.state"), cell: (r) => <StatusBadge state={r.state} /> },
-            ]} empty={t("empty.noResults")} />
-          )},
+          {
+            value: "consumers",
+            label: t("nav.strategies"),
+            content: (
+              <div data-testid="tool-consumers-tab">
+                <DataTable
+                  rows={consumers}
+                  onRowClick={(r) => nav(`/management/strategies/${r.id}`)}
+                  columns={[
+                    { key: "name", header: t("table.name"), cell: (r) => <div className="font-medium">{r.name}</div> },
+                    { key: "alpha", header: "Alpha", cell: (r) => <span className="text-mono text-xs">{r.alpha}</span> },
+                    { key: "state", header: t("table.state"), cell: (r) => <StatusBadge state={r.state} /> },
+                  ]}
+                  empty={t("common.noData")}
+                />
+              </div>
+            ),
+          },
           { value: "audit", label: t("nav.audit"), content: <AuditTimeline entries={audit} /> },
         ]}
       />

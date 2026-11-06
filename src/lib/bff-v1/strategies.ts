@@ -2,7 +2,14 @@ import type { ManagementListMeta, Strategy } from "./dto";
 import { bffFetch } from "./client";
 import { makeBffError } from "./errors";
 import { paths } from "./paths";
-import { strictLiveDetail, strictLiveList } from "./domainReads";
+import {
+  asRecord,
+  liveItemsFrom,
+  normalizeBaseObjectFields,
+  recordString,
+  strictLiveDetail,
+  strictLivePaginatedList,
+} from "./domainReads";
 
 export interface StrategyCreatePayload {
   name: string;
@@ -86,16 +93,64 @@ export async function createStrategy(
   return data;
 }
 
-export async function listStrategies(): Promise<Strategy[]> {
-  return strictLiveList("strategies.list", paths.strategies());
+export function normalizeStrategyRecord(raw: unknown): Strategy {
+  const base = normalizeBaseObjectFields(raw as Strategy);
+  const record = asRecord(base) ?? {};
+  const rawPersonaIds = Array.isArray(record.personaIds)
+    ? record.personaIds
+    : Array.isArray(record.persona_ids)
+      ? record.persona_ids
+      : [];
+  const personaIds = rawPersonaIds
+    .map((id) => (typeof id === "string" ? id.trim() : ""))
+    .filter((id) => id.length > 0);
+  const singlePersonaId = recordString(record, "persona_id", "personaId");
+  if (singlePersonaId && !personaIds.includes(singlePersonaId)) {
+    personaIds.push(singlePersonaId);
+  }
+  const capitalPoolId = recordString(record, "capitalPoolId", "capital_pool_id") ?? "";
+  const alpha = recordString(record, "alpha") ?? "";
+  return {
+    ...(record as unknown as Strategy),
+    personaIds,
+    capitalPoolId,
+    alpha,
+  };
+}
+
+export function normalizeStrategyList(body: unknown): Strategy[] {
+  return liveItemsFrom<unknown>(body).map(normalizeStrategyRecord);
+}
+
+export async function listNonDraftStrategies(): Promise<Strategy[]> {
+  return strictLivePaginatedList<Strategy>(
+    "strategies.listNonDraft",
+    paths.strategies(),
+    normalizeStrategyList,
+    { query: { exclude_state: "draft" } },
+  );
+}
+
+export async function listStrategiesForPersona(personaId: string): Promise<Strategy[]> {
+  const normalizedPersonaId = String(personaId ?? "").trim();
+  if (!normalizedPersonaId) return [];
+  return strictLivePaginatedList<Strategy>(
+    "strategies.listForPersona",
+    paths.strategies(),
+    normalizeStrategyList,
+    { query: { persona_id: normalizedPersonaId } },
+  );
 }
 
 export async function getStrategy(id: string): Promise<Strategy | undefined> {
-  return strictLiveDetail("strategies.get", paths.strategy(id));
+  return strictLiveDetail<Strategy>("strategies.get", paths.strategy(id)).then((item) =>
+    item ? normalizeStrategyRecord(item) : undefined,
+  );
 }
 
 export const strategies = {
-  list: listStrategies,
+  listNonDraft: listNonDraftStrategies,
+  listForPersona: listStrategiesForPersona,
   get: getStrategy,
   create: createStrategy,
 };
