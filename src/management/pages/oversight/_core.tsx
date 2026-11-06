@@ -1822,6 +1822,14 @@ const TradingPulseCoverageSummary = ({ model }: { model: ManagementTradingPulseM
   const missingMonitoring = pulseStringList(coverage.missingMonitoringRuntimeIds ?? coverage.missing_monitoring_runtime_ids);
   const missingBaseline = pulseStringList(coverage.missingBaselineRuntimeIds ?? coverage.missing_baseline_runtime_ids);
   const degradedRows = pulseStringList(coverage.degradedRuntimeIds ?? coverage.degraded_runtime_ids);
+  const baselineRequired = pulseNumber(coverage.baselineRequiredCount);
+  const baselineCoverageValue = baselineRequired === 0
+    ? t("mgmt.pulse.notRequired")
+    : coverageCount(
+        coverage,
+        "baselineComparisonCount",
+        baselineRequired !== null ? "baselineRequiredCount" : "runtimeCount",
+      );
   const retiredCount = pulseNumber(model.summary.retiredRuntimeCount);
   const statusDetail = compactCounts(model.summary.byStatus);
   const retiredDetail = retiredCount !== null
@@ -1851,7 +1859,7 @@ const TradingPulseCoverageSummary = ({ model }: { model: ManagementTradingPulseM
       />
       <CoverageStat
         label={t("mgmt.pulse.baselineCoverage")}
-        value={coverageCount(coverage, "baselineComparisonCount")}
+        value={baselineCoverageValue}
         detail={`${t("mgmt.pulse.missing")}: ${shortList(missingBaseline)}`}
         status={missingBaseline.length > 0 ? "degraded" : "ok"}
       />
@@ -1933,6 +1941,7 @@ const RuntimeRowsPanel = ({ rows }: { rows: ManagementTradingPulseRuntimeRow[] }
             ) : rows.map((row) => {
               const checks = rowHealthChecks(row);
               const personaId = pulsePersonaId(row);
+              const baselineStatus = row.baselineComparison?.status ?? row.baseline_comparison?.status;
               return (
               <tr key={row.runtimeId || row.runtime_id} className="border-b border-border/60 last:border-0">
                 <td className="py-2 pr-3 font-mono text-foreground">{row.runtimeId || row.runtime_id || "—"}</td>
@@ -1949,8 +1958,8 @@ const RuntimeRowsPanel = ({ rows }: { rows: ManagementTradingPulseRuntimeRow[] }
                 <td className="py-2 pr-3">{formatPulseValue(row.metrics.fill_rate ?? row.metrics.fillRate, "execution-quality")}</td>
                 <td className="py-2 pr-3">{formatPulseValue(row.metrics.total_trades ?? row.metrics.totalTrades, "runtime-status")}</td>
                 <td className="py-2 pr-3">
-                  <Badge variant="outline" className={statusTone(row.baselineComparison?.status ?? row.baseline_comparison?.status)}>
-                    {row.baselineComparison?.status ?? row.baseline_comparison?.status ?? "—"}
+                  <Badge variant="outline" className={statusTone(baselineStatus)}>
+                    {baselineStatus === "not_required" ? t("mgmt.pulse.notRequired") : (baselineStatus ?? "—")}
                   </Badge>
                 </td>
                 <td className="max-w-[220px] py-2 pr-3 text-muted-foreground">
