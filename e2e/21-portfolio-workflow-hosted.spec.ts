@@ -91,6 +91,8 @@ for (const viewport of [
     expect(holdings.map((row) => row.holding_id)).toEqual(captured.data.items.map((row) => row.holding_id));
 
     await expect(page.getByRole("heading", { name: /Performance Center|績效中心/ }).first()).toBeVisible();
+    await expect(page.getByRole("columnheader", { name: /^(Avg entry|進場均價)$/ })).toBeVisible();
+    await expect(page.getByRole("columnheader", { name: /^(Last close|最新收盤價)$/ })).toBeVisible();
     await expect(page.getByTestId("portfolio-holding")).toHaveCount(holdings.length);
     await expect(page.getByTestId("portfolio-incident")).toHaveCount(Number(summary.incident_count));
     await expect(page.getByText("Holdings").locator("..").getByText(String(summary.holding_count), { exact: true })).toBeVisible();
