@@ -1,0 +1,13 @@
+{
+  "task_id": "INTEGRATION-UNBLOCK-FE-OPS-JOBS-INCIDENTS-PAGING-20261106-CI-RED-1322CD2BCBF5",
+  "source_task": "FE-OPS-JOBS-INCIDENTS-PAGING-20261106",
+  "source_pr": 950,
+  "root_cause": "Source commit ea7af1c3ad lacked LLM-Agent/Task-ID/Reviewer trailers and had a 97-char subject, so 'Commit trailers' failed. 'Component merge gate' was then skipped, which made 'Smoke acceptance' fail (it requires the merge gate to succeed). Smoke failure is a consequence, not an independent defect.",
+  "fix": "Source change (ServerPager, jobs/incidents server paging, JobProgressDrawer real progress, i18n, tests) restated unchanged from origin/dev as a single commit on this repair branch with compliant subject and trailers. Source PR #950 to be superseded.",
+  "source_evidence_summary": {
+    "baselines_measured_before": { "jobs_total": 1521, "incidents_total": 2644, "rows_shown": 20 },
+    "drawer": "Math.random and fixed progress values removed; numeric progress or indeterminate bar.",
+    "not_verified": "Hosted verification deferred to the operator acceptance task."
+  },
+  "scope_note": "scripts/git/auto_integrator.py is a Pantheon-repo file and does not exist in this repository; no change made to it."
+}

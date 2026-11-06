@@ -243,6 +243,34 @@ function strictLiveStrategyListLoader<T extends { state?: unknown }>(
   };
 }
 
+export type PagedListQueryOptions = Pick<
+  StrategyListQueryOptions,
+  "pageSize" | "page_size" | "pageToken" | "page_token"
+>;
+
+/** Like strictLiveListLoader, but forwards page_size/page_token when supplied.
+ *  Called with no options (or a non-options argument such as an AbortSignal) it
+ *  issues the same unparameterised request as before, so existing callers are
+ *  unchanged. */
+function strictLivePagedQueryListLoader<T>(
+  path: string,
+  cls: ListClass,
+  adaptItem?: (value: unknown) => T | undefined,
+  normalizeEnvelope?: (payload: unknown, cls: ListClass) => ListEnvelope<T>,
+): (options?: PagedListQueryOptions) => Promise<ListEnvelope<T>> {
+  const adaptItems = (items: unknown[]): T[] => adaptItem
+    ? items.map((item) => adaptItem(item)).filter((item): item is T => Boolean(item))
+    : items as T[];
+  return async (options?: PagedListQueryOptions) => {
+    const query = buildStrategyListQuery(options);
+    const data = await bffFetch<unknown>({ method: "GET", path, ...(query ? { query } : {}) });
+    if (normalizeEnvelope) return normalizeEnvelope(data, cls);
+    const env = normalizeLiveListResponse<unknown>(data, cls);
+    const items = adaptItems(env.items);
+    return { ...env, items, pageSize: items.length };
+  };
+}
+
 function strictLiveListLoader<T>(
   path: string,
   cls: ListClass,
@@ -338,16 +366,6 @@ function strictLiveAlertListLoader(
   };
 }
 
-function strictLiveIncidentListLoader(
-  path: string,
-  cls: ListClass = "governanceQueue",
-): () => Promise<ListEnvelope<Incident>> {
-  return async () => {
-    const data = await bffFetch<unknown>({ method: "GET", path });
-    return normalizeIncidentListResponse(data, cls);
-  };
-}
-
 export function normalizeRuntimeListResponse(payload: unknown, cls: ListClass = "entityRegistry"): ListEnvelope<RuntimeListItem> {
   const env = normalizeLiveListResponse<unknown>(payload, cls);
   return {
@@ -417,10 +435,10 @@ export const lists = {
   mcpTools:        strictLiveListLoader(paths.mcpTools(),           LIST_CLASS_BY_KEY.mcpTools, normalizeBaseObjectFields),
   skills:          strictLiveListLoader(paths.skills(),             LIST_CLASS_BY_KEY.skills, normalizeBaseObjectFields),
   channels:        strictLiveListLoader(paths.channels(),           LIST_CLASS_BY_KEY.channels, normalizeBaseObjectFields),
-  jobs:            strictLiveListLoader(paths.jobs(),               LIST_CLASS_BY_KEY.jobs, normalizeJobFields),
+  jobs:            strictLivePagedQueryListLoader(paths.jobs(),     LIST_CLASS_BY_KEY.jobs, normalizeJobFields),
   runtimes:        strictLiveRuntimeListLoader(paths.runtimes(),    LIST_CLASS_BY_KEY.runtimes),
   alerts:          strictLiveAlertListLoader(paths.alerts(),        LIST_CLASS_BY_KEY.alerts),
-  incidents:       strictLiveIncidentListLoader(paths.incidents(),  LIST_CLASS_BY_KEY.incidents),
+  incidents:       strictLivePagedQueryListLoader<Incident>(paths.incidents(), LIST_CLASS_BY_KEY.incidents, undefined, normalizeIncidentListResponse),
   approvals:       strictLiveListLoader(paths.approvals(),          LIST_CLASS_BY_KEY.approvals, normalizeBaseObjectFields),
   audit:           strictLiveListLoader(paths.audit(),              LIST_CLASS_BY_KEY.audit, normalizeBaseObjectFields),
 } as const satisfies Record<string, () => Promise<ListEnvelope<unknown>>>;
