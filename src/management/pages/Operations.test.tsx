@@ -864,6 +864,49 @@ describe("Approval callers: Operations ApprovalsPage", () => {
     expect(incidentIdSpan).not.toHaveClass("truncate", "text-ellipsis");
     incidentRender.unmount();
   });
+
+  it("reserves right padding (pr-6) for the sheet close button on the header row in the approval drawer and all three Operations sheet headers while keeping the full 68-character id without truncation", async () => {
+    m.list.mockResolvedValue([]);
+    m.listDecisions.mockResolvedValue([normalizeApprovalFields(realDecidedBase)]);
+
+    const approvalRender = render(<MemoryRouter><ApprovalsPage /></MemoryRouter>);
+    fireEvent.click(screen.getByRole("button", { name: "filter.all" }));
+    fireEvent.click(await screen.findByText(realDecidedBase.target_id));
+
+    const approvalDialog = await screen.findByRole("dialog");
+    const approvalIdSpan = await screen.findByText(realDecidedBase.decision_id);
+    expect(approvalIdSpan.textContent).toBe(realDecidedBase.decision_id);
+    expect(approvalIdSpan.textContent).toHaveLength(68);
+    expect(approvalIdSpan.textContent).not.toContain("...");
+    expect(approvalIdSpan.textContent).not.toContain("…");
+    expect(approvalIdSpan).toHaveClass("min-w-0", "break-all", "text-mono", "text-xs", "text-muted-foreground");
+    expect(approvalIdSpan).not.toHaveClass("truncate", "text-ellipsis");
+    expect(approvalIdSpan.parentElement).not.toBeNull();
+    expect(approvalIdSpan.parentElement).toHaveClass("flex", "items-center", "gap-2", "mb-2", "pr-6");
+
+    const sheetCloseBtn = Array.from(approvalDialog.children).find((el) => el.tagName === "BUTTON");
+    expect(sheetCloseBtn).toBeDefined();
+    expect(sheetCloseBtn).toHaveClass("absolute", "right-4", "top-4");
+    approvalRender.unmount();
+
+    const alertRender = render(<MemoryRouter><AlertsPage /></MemoryRouter>);
+    fireEvent.click(await screen.findByText("Margin threshold 80% reached"));
+    const alertIdSpan = await screen.findByText("alt-201");
+    expect(alertIdSpan.textContent).toBe("alt-201");
+    expect(alertIdSpan).toHaveClass("min-w-0", "break-all");
+    expect(alertIdSpan).not.toHaveClass("truncate", "text-ellipsis");
+    expect(alertIdSpan.parentElement).toHaveClass("flex", "items-center", "gap-2", "mb-2", "pr-6");
+    alertRender.unmount();
+
+    const incidentRender = render(<MemoryRouter><IncidentsPage /></MemoryRouter>);
+    fireEvent.click(await screen.findByText("Market feed latency spike"));
+    const incidentIdSpan = await screen.findByText("inc-301");
+    expect(incidentIdSpan.textContent).toBe("inc-301");
+    expect(incidentIdSpan).toHaveClass("min-w-0", "break-all");
+    expect(incidentIdSpan).not.toHaveClass("truncate", "text-ellipsis");
+    expect(incidentIdSpan.parentElement).toHaveClass("flex", "items-center", "gap-2", "mb-2", "pr-6");
+    incidentRender.unmount();
+  });
 });
 
 describe("GovernanceReview", () => {
