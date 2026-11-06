@@ -7,7 +7,7 @@
   "target_repo": "execute-plans",
   "merge_target": "dev",
   "branch": "task/FE-HOLDINGS-COST-PRICE-COLUMNS-20261106",
-  "base_sha": "bdf2a6640f1fed5fee2d14106325770727ca7684",
+  "base_sha": "f0c49025fde2b707c219c1cea5f7beb42366d965",
   "status": "ready_for_review",
   "hosted_verification": {
     "status": "deferred_to_downstream_task",
@@ -59,13 +59,13 @@
     "browser_launch": "chromium.launch({ ignoreDefaultArgs: ['--hide-scrollbars'] })",
     "screenshots": {
       "zh_TW": {
-        "file": "test-results/20-portfolio-book-monitor--cec14-x-and-real-scrollbars-shown-chromium/holdings-cost-price-1440-zh-TW.png",
-        "sha256": "586d22ca074596f83f8cb22fa76d604513a52f1f4f7f87bd577a37c95c3680a6",
-        "bytes": 169474,
+        "file": "test-results/20-portfolio-book-monitor--b5557--six-filters-through-reload-chromium/holdings-cost-price-1440-zh-TW.png",
+        "sha256": "227eaf95b7d683d3d385fc12b9fb732d9230f434e1752697fb6ebecf0cf4b30d",
+        "bytes": 169473,
         "scrollbars_shown": true
       },
       "en_US": {
-        "file": "test-results/20-portfolio-book-monitor--cec14-x-and-real-scrollbars-shown-chromium/holdings-cost-price-1440-en-US.png",
+        "file": "test-results/20-portfolio-book-monitor--b5557--six-filters-through-reload-chromium/holdings-cost-price-1440-en-US.png",
         "sha256": "b545eb001c1549915fbb4f7a573deb6bfae501bdaf5a356aec460531c09c9be0",
         "bytes": 165227,
         "scrollbars_shown": true
@@ -117,7 +117,13 @@
       "command": "./node_modules/.bin/vitest run src/management/pages/oversight/PortfolioBook.test.tsx src/lib/bff-v1/__tests__/management-pm12.test.ts src/lib/bff-v1/__tests__/management.test.ts src/lib/bff-v1/__tests__/contract-drift.test.ts src/lib/v5/management/__tests__/i18nParity.test.ts",
       "exit_code": 0,
       "test_files_passed": 5,
-      "tests_passed": 112
+      "tests_passed": 113
+    },
+    "public_build_auth_contract": {
+      "command": "./node_modules/.bin/vitest run src/test/public-build-auth-contract.test.ts",
+      "exit_code": 0,
+      "test_files_passed": 1,
+      "tests_passed": 82
     },
     "typecheck": {
       "command": "npm run typecheck:app && ./node_modules/.bin/tsc -p tsconfig.agora.json --noEmit",
@@ -128,10 +134,11 @@
       "exit_code": 0
     },
     "playwright": {
-      "command": "./node_modules/.bin/playwright test e2e/20-portfolio-book-monitor.spec.ts e2e/21-portfolio-workflow-hosted.spec.ts e2e/19-management-persona-100-flows.spec.ts -g 'renders every degraded incident|renders 2026-11-06 BFF holdings|hosted Portfolio Book|portfolio book holdings table'",
+      "command": "./node_modules/.bin/playwright test e2e/20-portfolio-book-monitor.spec.ts e2e/21-portfolio-workflow-hosted.spec.ts e2e/19-management-persona-100-flows.spec.ts -g 'renders every degraded incident|hosted Portfolio Book|portfolio book holdings table'",
       "exit_code": 0,
-      "tests_passed": 3,
-      "tests_skipped_hosted_only": 2
+      "tests_passed": 2,
+      "tests_skipped_hosted_only": 2,
+      "note": "e2e/20-portfolio-book-monitor.spec.ts keeps a single top-level test() block and runs the 2026-11-06 BFF holdings 1440px real-scrollbar verification inside a test.step() so src/test/public-build-auth-contract.test.ts:600 sees 2 skipped across e2e/20-portfolio-book-monitor.spec.ts + e2e/22-persona-trade-journal.spec.ts under an external frontend target."
     }
   }
 }

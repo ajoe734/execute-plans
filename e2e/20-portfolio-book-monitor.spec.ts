@@ -49,111 +49,6 @@ const holdings = Array.from({ length: 14 }, (_, index) => ({
   },
 }));
 
-test("renders every degraded incident and persists all six filters through reload", async ({ page }) => {
-  test.skip(
-    targetsExternalE2eEnvironment(),
-    "route-mocked fixture coverage is loopback-only; hosted candidates use live acceptance specs",
-  );
-  const requests: string[] = [];
-  await installOidcDevLogin(page, {
-    goto: false,
-    token: LOCAL_FIXTURE_AUTH_TOKEN,
-  });
-  await page.route("**/bff/management/portfolio-book/holdings**", async (route) => {
-    requests.push(route.request().url());
-    await route.fulfill({
-      contentType: "application/json",
-      body: JSON.stringify({
-        data: {
-          items: holdings,
-          summary: {
-            holding_count: 14,
-            incident_count: 14,
-            source_coverage: {
-              source_row_count: 4, runtime_count: 14, telemetry_runtime_count: 4,
-              stale_row_count: 1, missing_binding_count: 10, degraded_source_count: 14,
-            },
-          },
-        },
-        meta: {
-          incidents: holdings.map((row) => ({
-            id: `incident-${row.holding_id}`,
-            severity: "high",
-            message: "Authoritative source is missing",
-            risk_state: row.risk_state,
-            source_status: row.source_status,
-            source_issues: row.source_issues,
-            identity: { portfolio_id: row.holding_id },
-            links: row.links,
-          })),
-          surfaces: {
-            portfolio_book_holdings: { status: "degraded", message: "row-level coverage incidents" },
-          },
-        },
-      }),
-    });
-  });
-
-  await page.goto(
-    "/management/portfolio-book?deployment_stage=canary&broker_id=broker-1&runtime_id=runtime-1&source_status=degraded&stale_telemetry=false&risk_state=missing_binding",
-  );
-
-  await expect(page.getByTestId("portfolio-incident")).toHaveCount(14);
-  await expect(page.getByTestId("portfolio-holding")).toHaveCount(14);
-  await expect(page.getByText("Source: degraded").first()).toBeVisible();
-  await expect(page.getByText("Unknown capital scope").first()).toBeVisible();
-  for (const label of ["Stage", "Broker", "Runtime", "Source status", "Stale telemetry", "Risk state"]) {
-    await expect(page.getByLabel(label)).not.toHaveValue("");
-  }
-
-  const initialRequestParams = new URL(requests.at(-1)!).searchParams;
-  const initialExpected = {
-    deployment_stage: "canary", broker_id: "broker-1", runtime_id: "runtime-1",
-    source_status: "degraded", stale_telemetry: "false", risk_state: "missing_binding",
-  };
-  for (const [key, value] of Object.entries(initialExpected)) {
-    expect(initialRequestParams.get(key)).toBe(value);
-  }
-
-  await page.getByLabel("Stage").selectOption("live");
-  await page.getByLabel("Broker").selectOption("");
-  await page.getByLabel("Runtime").selectOption("");
-  await page.getByLabel("Source status").selectOption("stale");
-  await page.getByLabel("Stale telemetry").selectOption("true");
-  await page.getByLabel("Risk state").selectOption("stale_telemetry");
-
-  await expect(page).toHaveURL(/deployment_stage=live/);
-  await expect(page).toHaveURL(/source_status=stale/);
-  await expect(page).toHaveURL(/stale_telemetry=true/);
-  await expect(page).toHaveURL(/risk_state=stale_telemetry/);
-  await expect(page).not.toHaveURL(/broker_id=/);
-  await expect(page).not.toHaveURL(/runtime_id=/);
-
-  await page.reload();
-  for (const [label, value] of [
-    ["Stage", "live"], ["Broker", ""], ["Runtime", ""],
-    ["Source status", "stale"], ["Stale telemetry", "true"], ["Risk state", "stale_telemetry"],
-  ]) {
-    await expect(page.getByLabel(label)).toHaveValue(value);
-  }
-
-  const requestParams = new URL(requests.at(-1)!).searchParams;
-  const expected = {
-    deployment_stage: "live", source_status: "stale",
-    stale_telemetry: "true", risk_state: "stale_telemetry",
-  };
-  for (const [key, value] of Object.entries(expected)) {
-    expect(requestParams.get(key)).toBe(value);
-  }
-  expect(requestParams.has("broker_id")).toBe(false);
-  expect(requestParams.has("runtime_id")).toBe(false);
-
-  await expect(page.getByText(/formal attribution|covered/i)).toHaveCount(0);
-
-  const humanReviewLinks = page.getByRole("link", { name: "Human Review" });
-  await expect(humanReviewLinks.first()).toHaveAttribute("href", /\/management\/human-inbox\?/);
-});
-
 const REAL_BFF_HOLDINGS_PRE_TELEMETRY_20261106 = [
   {
     holding_id: "rt-535a82a3:2330.TWSE",
@@ -293,253 +188,354 @@ const REAL_BFF_HOLDINGS_POST_TELEMETRY_20261106 = [
   },
 ];
 
-test("renders 2026-11-06 BFF holdings shapes with Holding..Unrealized PnL visible at 1440px and real scrollbars shown", async ({
+test("renders every degraded incident and persists all six filters through reload", async ({
+  page,
   browser,
 }, testInfo) => {
   test.skip(
     targetsExternalE2eEnvironment(),
     "route-mocked fixture coverage is loopback-only; hosted candidates use live acceptance specs",
   );
-
-  const realScrollbarBrowser = await browser.browserType().launch({
-    ignoreDefaultArgs: ["--hide-scrollbars"],
+  const requests: string[] = [];
+  await installOidcDevLogin(page, {
+    goto: false,
+    token: LOCAL_FIXTURE_AUTH_TOKEN,
+  });
+  await page.route("**/bff/management/portfolio-book/holdings**", async (route) => {
+    requests.push(route.request().url());
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        data: {
+          items: holdings,
+          summary: {
+            holding_count: 14,
+            incident_count: 14,
+            source_coverage: {
+              source_row_count: 4, runtime_count: 14, telemetry_runtime_count: 4,
+              stale_row_count: 1, missing_binding_count: 10, degraded_source_count: 14,
+            },
+          },
+        },
+        meta: {
+          incidents: holdings.map((row) => ({
+            id: `incident-${row.holding_id}`,
+            severity: "high",
+            message: "Authoritative source is missing",
+            risk_state: row.risk_state,
+            source_status: row.source_status,
+            source_issues: row.source_issues,
+            identity: { portfolio_id: row.holding_id },
+            links: row.links,
+          })),
+          surfaces: {
+            portfolio_book_holdings: { status: "degraded", message: "row-level coverage incidents" },
+          },
+        },
+      }),
+    });
   });
 
-  try {
-    let activeItems = REAL_BFF_HOLDINGS_PRE_TELEMETRY_20261106;
-    const context = await realScrollbarBrowser.newContext({
-      viewport: { width: 1440, height: 900 },
-    });
-    const page = await context.newPage();
-    await installOidcDevLogin(page, {
-      goto: false,
-      token: LOCAL_FIXTURE_AUTH_TOKEN,
+  await page.goto(
+    "/management/portfolio-book?deployment_stage=canary&broker_id=broker-1&runtime_id=runtime-1&source_status=degraded&stale_telemetry=false&risk_state=missing_binding",
+  );
+
+  await expect(page.getByTestId("portfolio-incident")).toHaveCount(14);
+  await expect(page.getByTestId("portfolio-holding")).toHaveCount(14);
+  await expect(page.getByText("Source: degraded").first()).toBeVisible();
+  await expect(page.getByText("Unknown capital scope").first()).toBeVisible();
+  for (const label of ["Stage", "Broker", "Runtime", "Source status", "Stale telemetry", "Risk state"]) {
+    await expect(page.getByLabel(label)).not.toHaveValue("");
+  }
+
+  const initialRequestParams = new URL(requests.at(-1)!).searchParams;
+  const initialExpected = {
+    deployment_stage: "canary", broker_id: "broker-1", runtime_id: "runtime-1",
+    source_status: "degraded", stale_telemetry: "false", risk_state: "missing_binding",
+  };
+  for (const [key, value] of Object.entries(initialExpected)) {
+    expect(initialRequestParams.get(key)).toBe(value);
+  }
+
+  await page.getByLabel("Stage").selectOption("live");
+  await page.getByLabel("Broker").selectOption("");
+  await page.getByLabel("Runtime").selectOption("");
+  await page.getByLabel("Source status").selectOption("stale");
+  await page.getByLabel("Stale telemetry").selectOption("true");
+  await page.getByLabel("Risk state").selectOption("stale_telemetry");
+
+  await expect(page).toHaveURL(/deployment_stage=live/);
+  await expect(page).toHaveURL(/source_status=stale/);
+  await expect(page).toHaveURL(/stale_telemetry=true/);
+  await expect(page).toHaveURL(/risk_state=stale_telemetry/);
+  await expect(page).not.toHaveURL(/broker_id=/);
+  await expect(page).not.toHaveURL(/runtime_id=/);
+
+  await page.reload();
+  for (const [label, value] of [
+    ["Stage", "live"], ["Broker", ""], ["Runtime", ""],
+    ["Source status", "stale"], ["Stale telemetry", "true"], ["Risk state", "stale_telemetry"],
+  ]) {
+    await expect(page.getByLabel(label)).toHaveValue(value);
+  }
+
+  const requestParams = new URL(requests.at(-1)!).searchParams;
+  const expected = {
+    deployment_stage: "live", source_status: "stale",
+    stale_telemetry: "true", risk_state: "stale_telemetry",
+  };
+  for (const [key, value] of Object.entries(expected)) {
+    expect(requestParams.get(key)).toBe(value);
+  }
+  expect(requestParams.has("broker_id")).toBe(false);
+  expect(requestParams.has("runtime_id")).toBe(false);
+
+  await expect(page.getByText(/formal attribution|covered/i)).toHaveCount(0);
+
+  const humanReviewLinks = page.getByRole("link", { name: "Human Review" });
+  await expect(humanReviewLinks.first()).toHaveAttribute("href", /\/management\/human-inbox\?/);
+
+  await test.step("renders 2026-11-06 BFF holdings shapes with Holding..Unrealized PnL visible at 1440px and real scrollbars shown", async () => {
+    const realScrollbarBrowser = await browser.browserType().launch({
+      ignoreDefaultArgs: ["--hide-scrollbars"],
     });
 
-    await page.route("**/bff/management/portfolio-book/holdings**", async (route) => {
-      await route.fulfill({
-        contentType: "application/json",
-        body: JSON.stringify({
-          data: {
-            items: activeItems,
-            summary: {
-              holding_count: activeItems.length,
-              incident_count: 0,
-              source_coverage: {
-                source_row_count: activeItems.length,
-                runtime_count: activeItems.length,
-                telemetry_runtime_count: activeItems.length,
-                stale_row_count: 0,
-                missing_binding_count: 0,
-                degraded_source_count: 0,
+    try {
+      let activeItems = REAL_BFF_HOLDINGS_PRE_TELEMETRY_20261106;
+      const context = await realScrollbarBrowser.newContext({
+        viewport: { width: 1440, height: 900 },
+      });
+      const holdingsPage = await context.newPage();
+      await installOidcDevLogin(holdingsPage, {
+        goto: false,
+        token: LOCAL_FIXTURE_AUTH_TOKEN,
+      });
+
+      await holdingsPage.route("**/bff/management/portfolio-book/holdings**", async (route) => {
+        await route.fulfill({
+          contentType: "application/json",
+          body: JSON.stringify({
+            data: {
+              items: activeItems,
+              summary: {
+                holding_count: activeItems.length,
+                incident_count: 0,
+                source_coverage: {
+                  source_row_count: activeItems.length,
+                  runtime_count: activeItems.length,
+                  telemetry_runtime_count: activeItems.length,
+                  stale_row_count: 0,
+                  missing_binding_count: 0,
+                  degraded_source_count: 0,
+                },
               },
             },
-          },
-          meta: {
-            incidents: [],
-            surfaces: {
-              portfolio_book_holdings: { status: "ok", message: "ok" },
+            meta: {
+              incidents: [],
+              surfaces: {
+                portfolio_book_holdings: { status: "ok", message: "ok" },
+              },
             },
-          },
-        }),
+          }),
+        });
       });
-    });
 
-    // 1. Pre-telemetry shape (zh-TW): null currency, null average_price, null PnL
-    await page.addInitScript(() => {
-      if (!window.localStorage.getItem("pantheon.locale")) {
-        window.localStorage.setItem("pantheon.locale", "zh-TW");
-      }
-    });
-    await page.goto(frontendUrl("/management/performance?tab=overview"));
-    await expect(page.getByTestId("portfolio-holding")).toHaveCount(4);
+      // 1. Pre-telemetry shape (zh-TW): null currency, null average_price, null PnL
+      await holdingsPage.addInitScript(() => {
+        if (!window.localStorage.getItem("pantheon.locale")) {
+          window.localStorage.setItem("pantheon.locale", "zh-TW");
+        }
+      });
+      await holdingsPage.goto(frontendUrl("/management/performance?tab=overview"));
+      await expect(holdingsPage.getByTestId("portfolio-holding")).toHaveCount(4);
 
-    const preRow0050 = page.getByTestId("portfolio-holding").filter({ hasText: "rt-8b0d8649:0050.TWSE" });
-    await expect(preRow0050.locator("td").nth(1)).toContainText("-5");
-    await expect(preRow0050.locator("td").nth(1)).toContainText("空頭部位");
-    await expect(preRow0050.locator("td").nth(2)).toHaveText("— 來源未提供平均成本");
-    await expect(preRow0050.locator("td").nth(3)).toContainText("97.15");
-    await expect(preRow0050.locator("td").nth(3)).toContainText("截至 2026-11-05");
-    await expect(preRow0050.locator("td").nth(4)).toHaveText("-485.75 (幣別未提供)");
-    await expect(preRow0050.locator("td").nth(5)).toHaveText("— 來源未提供平均成本");
+      const preRow0050 = holdingsPage.getByTestId("portfolio-holding").filter({ hasText: "rt-8b0d8649:0050.TWSE" });
+      await expect(preRow0050.locator("td").nth(1)).toContainText("-5");
+      await expect(preRow0050.locator("td").nth(1)).toContainText("空頭部位");
+      await expect(preRow0050.locator("td").nth(2)).toHaveText("— 來源未提供平均成本");
+      await expect(preRow0050.locator("td").nth(3)).toContainText("97.15");
+      await expect(preRow0050.locator("td").nth(3)).toContainText("截至 2026-11-05");
+      await expect(preRow0050.locator("td").nth(4)).toHaveText("-485.75 (幣別未提供)");
+      await expect(preRow0050.locator("td").nth(5)).toHaveText("— 來源未提供平均成本");
 
-    // 2. Post-telemetry shape (zh-TW and en-US) + 1440px column visibility + scrollbar screenshot
-    activeItems = REAL_BFF_HOLDINGS_POST_TELEMETRY_20261106;
-    const evidenceByLocale: Record<string, unknown> = {};
+      // 2. Post-telemetry shape (zh-TW and en-US) + 1440px column visibility + scrollbar screenshot
+      activeItems = REAL_BFF_HOLDINGS_POST_TELEMETRY_20261106;
+      const evidenceByLocale: Record<string, unknown> = {};
 
-    for (const locale of ["zh-TW", "en-US"] as const) {
-      await page.evaluate((lang) => {
-        window.localStorage.setItem("pantheon.locale", lang);
-      }, locale);
-      await page.reload({ waitUntil: "domcontentloaded" });
-      await expect(page.getByTestId("portfolio-holding")).toHaveCount(4);
+      for (const locale of ["zh-TW", "en-US"] as const) {
+        await holdingsPage.evaluate((lang) => {
+          window.localStorage.setItem("pantheon.locale", lang);
+        }, locale);
+        await holdingsPage.reload({ waitUntil: "domcontentloaded" });
+        await expect(holdingsPage.getByTestId("portfolio-holding")).toHaveCount(4);
 
-      const row2330 = page.getByTestId("portfolio-holding").filter({ hasText: "rt-535a82a3:2330.TWSE" });
-      const row0050 = page.getByTestId("portfolio-holding").filter({ hasText: "rt-8b0d8649:0050.TWSE" });
-      const row2317 = page.getByTestId("portfolio-holding").filter({ hasText: "rt-c98e4223:2317.TWSE" });
-      const row2330Tw = page.getByTestId("portfolio-holding").filter({ hasText: "rt-342d76ff:2330.TW" });
+        const row2330 = holdingsPage.getByTestId("portfolio-holding").filter({ hasText: "rt-535a82a3:2330.TWSE" });
+        const row0050 = holdingsPage.getByTestId("portfolio-holding").filter({ hasText: "rt-8b0d8649:0050.TWSE" });
+        const row2317 = holdingsPage.getByTestId("portfolio-holding").filter({ hasText: "rt-c98e4223:2317.TWSE" });
+        const row2330Tw = holdingsPage.getByTestId("portfolio-holding").filter({ hasText: "rt-342d76ff:2330.TW" });
 
-      if (locale === "zh-TW") {
-        await expect(row2330.locator("td").nth(2)).toHaveText("NT$2,299");
-        await expect(row2330.locator("td").nth(3)).toContainText("NT$2,240");
-        await expect(row2330.locator("td").nth(3)).toContainText("截至 2026-11-05");
-        await expect(row2330.locator("td").nth(4)).toHaveText("-NT$11,200");
-        await expect(row2330.locator("td").nth(5)).toHaveText("NT$295 (+2.57%)");
+        if (locale === "zh-TW") {
+          await expect(row2330.locator("td").nth(2)).toHaveText("NT$2,299");
+          await expect(row2330.locator("td").nth(3)).toContainText("NT$2,240");
+          await expect(row2330.locator("td").nth(3)).toContainText("截至 2026-11-05");
+          await expect(row2330.locator("td").nth(4)).toHaveText("-NT$11,200");
+          await expect(row2330.locator("td").nth(5)).toHaveText("NT$295 (+2.57%)");
 
-        await expect(row0050.locator("td").nth(2)).toHaveText("NT$101.33");
-        await expect(row0050.locator("td").nth(3)).toContainText("NT$97.15");
-        await expect(row0050.locator("td").nth(4)).toHaveText("-NT$485.75");
-        await expect(row0050.locator("td").nth(5)).toHaveText("NT$20.90 (+4.13%)");
+          await expect(row0050.locator("td").nth(2)).toHaveText("NT$101.33");
+          await expect(row0050.locator("td").nth(3)).toContainText("NT$97.15");
+          await expect(row0050.locator("td").nth(4)).toHaveText("-NT$485.75");
+          await expect(row0050.locator("td").nth(5)).toHaveText("NT$20.90 (+4.13%)");
 
-        await expect(row2317.locator("td").nth(2)).toHaveText("NT$240.17");
-        await expect(row2317.locator("td").nth(3)).toContainText("NT$235");
-        await expect(row2317.locator("td").nth(4)).toHaveText("-NT$705");
-        await expect(row2317.locator("td").nth(5)).toContainText("NT$15.50 (+2.15%)");
-        await expect(row2317.locator("td").nth(5)).toContainText("已實現 -NT$5.50");
+          await expect(row2317.locator("td").nth(2)).toHaveText("NT$240.17");
+          await expect(row2317.locator("td").nth(3)).toContainText("NT$235");
+          await expect(row2317.locator("td").nth(4)).toHaveText("-NT$705");
+          await expect(row2317.locator("td").nth(5)).toContainText("NT$15.50 (+2.15%)");
+          await expect(row2317.locator("td").nth(5)).toContainText("已實現 -NT$5.50");
 
-        await expect(row2330Tw.locator("td").nth(2)).toHaveText("NT$2,240");
-        await expect(row2330Tw.locator("td").nth(5)).toHaveText("NT$0 (0.00%)");
-      } else {
-        await expect(row2330.locator("td").nth(2)).toHaveText("NT$2,299");
-        await expect(row2330.locator("td").nth(3)).toContainText("NT$2,240");
-        await expect(row2330.locator("td").nth(3)).toContainText("As of 2026-11-05");
-        await expect(row2317.locator("td").nth(5)).toContainText("NT$15.50 (+2.15%)");
-        await expect(row2317.locator("td").nth(5)).toContainText("Realized -NT$5.50");
-      }
-
-      const metrics = await page.evaluate(() => {
-        const sidebar = document.querySelector<HTMLElement>("nav");
-        const sidebarRect = sidebar?.getBoundingClientRect();
-        const scroller = document.querySelector<HTMLElement>('[data-management-table-scrollbar="native"]');
-        const pinned = document.querySelector<HTMLElement>('[data-management-table-scrollbar="pinned"]');
-        const table = scroller?.querySelector("table");
-        if (!scroller || !table) {
-          throw new Error("missing holdings table scroller");
+          await expect(row2330Tw.locator("td").nth(2)).toHaveText("NT$2,240");
+          await expect(row2330Tw.locator("td").nth(5)).toHaveText("NT$0 (0.00%)");
+        } else {
+          await expect(row2330.locator("td").nth(2)).toHaveText("NT$2,299");
+          await expect(row2330.locator("td").nth(3)).toContainText("NT$2,240");
+          await expect(row2330.locator("td").nth(3)).toContainText("As of 2026-11-05");
+          await expect(row2317.locator("td").nth(5)).toContainText("NT$15.50 (+2.15%)");
+          await expect(row2317.locator("td").nth(5)).toContainText("Realized -NT$5.50");
         }
 
-        scroller.scrollLeft = 0;
-        const scrollerRect = scroller.getBoundingClientRect();
-        const ths = Array.from(table.querySelectorAll("thead th"));
-        const columnsAtZero = ths.map((th, idx) => {
-          const r = th.getBoundingClientRect();
+        const metrics = await holdingsPage.evaluate(() => {
+          const sidebar = document.querySelector<HTMLElement>("nav");
+          const sidebarRect = sidebar?.getBoundingClientRect();
+          const scroller = document.querySelector<HTMLElement>('[data-management-table-scrollbar="native"]');
+          const pinned = document.querySelector<HTMLElement>('[data-management-table-scrollbar="pinned"]');
+          const table = scroller?.querySelector("table");
+          if (!scroller || !table) {
+            throw new Error("missing holdings table scroller");
+          }
+
+          scroller.scrollLeft = 0;
+          const scrollerRect = scroller.getBoundingClientRect();
+          const ths = Array.from(table.querySelectorAll("thead th"));
+          const columnsAtZero = ths.map((th, idx) => {
+            const r = th.getBoundingClientRect();
+            return {
+              index: idx,
+              header: (th.textContent ?? "").trim(),
+              left: Number(r.left.toFixed(2)),
+              right: Number(r.right.toFixed(2)),
+              width: Number(r.width.toFixed(2)),
+              fullyVisible: r.left >= scrollerRect.left - 0.5 && r.right <= scrollerRect.right + 0.5,
+            };
+          });
+
+          const firstSixHeadersVisible = columnsAtZero.slice(0, 6).every((col) => col.fullyVisible);
+          const firstSixCellsVisible = Array.from(table.querySelectorAll("tbody tr")).every((tr) =>
+            Array.from(tr.querySelectorAll("td"))
+              .slice(0, 6)
+              .every((td) => {
+                const r = td.getBoundingClientRect();
+                return r.left >= scrollerRect.left - 0.5 && r.right <= scrollerRect.right + 0.5;
+              }),
+          );
+
+          let overlapsAtZero = 0;
+          for (let i = 1; i < ths.length; i += 1) {
+            if (ths[i - 1]!.getBoundingClientRect().right > ths[i]!.getBoundingClientRect().left + 0.5) {
+              overlapsAtZero += 1;
+            }
+          }
+
+          scroller.scrollLeft = scroller.scrollWidth - scroller.clientWidth;
+          const maxScrollLeft = scroller.scrollLeft;
+          const columnsAtMaxScroll = ths.map((th, idx) => {
+            const r = th.getBoundingClientRect();
+            return {
+              index: idx,
+              header: (th.textContent ?? "").trim(),
+              left: Number(r.left.toFixed(2)),
+              right: Number(r.right.toFixed(2)),
+              width: Number(r.width.toFixed(2)),
+              fullyVisible: r.left >= scrollerRect.left - 0.5 && r.right <= scrollerRect.right + 0.5,
+            };
+          });
+
+          let overlapsAtMax = 0;
+          for (let i = 1; i < ths.length; i += 1) {
+            if (ths[i - 1]!.getBoundingClientRect().right > ths[i]!.getBoundingClientRect().left + 0.5) {
+              overlapsAtMax += 1;
+            }
+          }
+
+          // Return to scrollLeft = 0 for the primary 1440px screenshot showing Holding..Unrealized PnL
+          scroller.scrollLeft = 0;
+          if (pinned) pinned.scrollLeft = 0;
+
+          const pinnedRect = pinned?.getBoundingClientRect();
           return {
-            index: idx,
-            header: (th.textContent ?? "").trim(),
-            left: Number(r.left.toFixed(2)),
-            right: Number(r.right.toFixed(2)),
-            width: Number(r.width.toFixed(2)),
-            fullyVisible: r.left >= scrollerRect.left - 0.5 && r.right <= scrollerRect.right + 0.5,
+            viewport: { width: window.innerWidth, height: window.innerHeight },
+            sidebar: sidebarRect
+              ? {
+                  left: Number(sidebarRect.left.toFixed(2)),
+                  right: Number(sidebarRect.right.toFixed(2)),
+                  width: Number(sidebarRect.width.toFixed(2)),
+                }
+              : null,
+            scroller: {
+              left: Number(scrollerRect.left.toFixed(2)),
+              right: Number(scrollerRect.right.toFixed(2)),
+              clientWidth: scroller.clientWidth,
+              offsetWidth: scroller.offsetWidth,
+              scrollWidth: scroller.scrollWidth,
+              maxScrollLeft: Number(maxScrollLeft.toFixed(2)),
+            },
+            pinnedScrollbar: pinned
+              ? {
+                  height: Number((pinnedRect?.height ?? 0).toFixed(2)),
+                  clientHeight: pinned.clientHeight,
+                  offsetHeight: pinned.offsetHeight,
+                  scrollWidth: pinned.scrollWidth,
+                }
+              : null,
+            firstSixVisibleAtZero: firstSixHeadersVisible && firstSixCellsVisible,
+            remainingReachableAtMaxScroll: columnsAtMaxScroll.slice(6).every((col) => col.fullyVisible),
+            overlapsAtZero,
+            overlapsAtMax,
+            columnsAtZero,
+            columnsAtMaxScroll,
           };
         });
 
-        const firstSixHeadersVisible = columnsAtZero.slice(0, 6).every((col) => col.fullyVisible);
-        const firstSixCellsVisible = Array.from(table.querySelectorAll("tbody tr")).every((tr) =>
-          Array.from(tr.querySelectorAll("td"))
-            .slice(0, 6)
-            .every((td) => {
-              const r = td.getBoundingClientRect();
-              return r.left >= scrollerRect.left - 0.5 && r.right <= scrollerRect.right + 0.5;
-            }),
-        );
+        expect(metrics.sidebar).not.toBeNull();
+        expect(metrics.sidebar!.width).toBeGreaterThan(200);
+        expect(metrics.firstSixVisibleAtZero).toBe(true);
+        expect(metrics.remainingReachableAtMaxScroll).toBe(true);
+        expect(metrics.overlapsAtZero).toBe(0);
+        expect(metrics.overlapsAtMax).toBe(0);
 
-        let overlapsAtZero = 0;
-        for (let i = 1; i < ths.length; i += 1) {
-          if (ths[i - 1]!.getBoundingClientRect().right > ths[i]!.getBoundingClientRect().left + 0.5) {
-            overlapsAtZero += 1;
-          }
-        }
-
-        scroller.scrollLeft = scroller.scrollWidth - scroller.clientWidth;
-        const maxScrollLeft = scroller.scrollLeft;
-        const columnsAtMaxScroll = ths.map((th, idx) => {
-          const r = th.getBoundingClientRect();
-          return {
-            index: idx,
-            header: (th.textContent ?? "").trim(),
-            left: Number(r.left.toFixed(2)),
-            right: Number(r.right.toFixed(2)),
-            width: Number(r.width.toFixed(2)),
-            fullyVisible: r.left >= scrollerRect.left - 0.5 && r.right <= scrollerRect.right + 0.5,
-          };
+        const screenshotPath = testInfo.outputPath(`holdings-cost-price-1440-${locale}.png`);
+        const buffer = await holdingsPage.screenshot({ path: screenshotPath, fullPage: false });
+        const sha256 = crypto.createHash("sha256").update(buffer).digest("hex");
+        await testInfo.attach(`holdings-cost-price-1440-${locale}`, {
+          body: buffer,
+          contentType: "image/png",
         });
 
-        let overlapsAtMax = 0;
-        for (let i = 1; i < ths.length; i += 1) {
-          if (ths[i - 1]!.getBoundingClientRect().right > ths[i]!.getBoundingClientRect().left + 0.5) {
-            overlapsAtMax += 1;
-          }
-        }
-
-        // Return to scrollLeft = 0 for the primary 1440px screenshot showing Holding..Unrealized PnL
-        scroller.scrollLeft = 0;
-        if (pinned) pinned.scrollLeft = 0;
-
-        const pinnedRect = pinned?.getBoundingClientRect();
-        return {
-          viewport: { width: window.innerWidth, height: window.innerHeight },
-          sidebar: sidebarRect
-            ? {
-                left: Number(sidebarRect.left.toFixed(2)),
-                right: Number(sidebarRect.right.toFixed(2)),
-                width: Number(sidebarRect.width.toFixed(2)),
-              }
-            : null,
-          scroller: {
-            left: Number(scrollerRect.left.toFixed(2)),
-            right: Number(scrollerRect.right.toFixed(2)),
-            clientWidth: scroller.clientWidth,
-            offsetWidth: scroller.offsetWidth,
-            scrollWidth: scroller.scrollWidth,
-            maxScrollLeft: Number(maxScrollLeft.toFixed(2)),
+        evidenceByLocale[locale] = {
+          ...metrics,
+          screenshot: {
+            file: `holdings-cost-price-1440-${locale}.png`,
+            sha256,
+            bytes: buffer.byteLength,
+            viewport: { width: 1440, height: 900 },
+            scrollbarsShown: true,
+            ignoreDefaultArgs: ["--hide-scrollbars"],
           },
-          pinnedScrollbar: pinned
-            ? {
-                height: Number((pinnedRect?.height ?? 0).toFixed(2)),
-                clientHeight: pinned.clientHeight,
-                offsetHeight: pinned.offsetHeight,
-                scrollWidth: pinned.scrollWidth,
-              }
-            : null,
-          firstSixVisibleAtZero: firstSixHeadersVisible && firstSixCellsVisible,
-          remainingReachableAtMaxScroll: columnsAtMaxScroll.slice(6).every((col) => col.fullyVisible),
-          overlapsAtZero,
-          overlapsAtMax,
-          columnsAtZero,
-          columnsAtMaxScroll,
         };
-      });
+      }
 
-      expect(metrics.sidebar).not.toBeNull();
-      expect(metrics.sidebar!.width).toBeGreaterThan(200);
-      expect(metrics.firstSixVisibleAtZero).toBe(true);
-      expect(metrics.remainingReachableAtMaxScroll).toBe(true);
-      expect(metrics.overlapsAtZero).toBe(0);
-      expect(metrics.overlapsAtMax).toBe(0);
-
-      const screenshotPath = testInfo.outputPath(`holdings-cost-price-1440-${locale}.png`);
-      const buffer = await page.screenshot({ path: screenshotPath, fullPage: false });
-      const sha256 = crypto.createHash("sha256").update(buffer).digest("hex");
-      await testInfo.attach(`holdings-cost-price-1440-${locale}`, {
-        body: buffer,
-        contentType: "image/png",
-      });
-
-      evidenceByLocale[locale] = {
-        ...metrics,
-        screenshot: {
-          file: `holdings-cost-price-1440-${locale}.png`,
-          sha256,
-          bytes: buffer.byteLength,
-          viewport: { width: 1440, height: 900 },
-          scrollbarsShown: true,
-          ignoreDefaultArgs: ["--hide-scrollbars"],
-        },
-      };
+      console.log("HOLDINGS_1440_EVIDENCE:", JSON.stringify(evidenceByLocale));
+      await context.close();
+    } finally {
+      await realScrollbarBrowser.close();
     }
-
-    console.log("HOLDINGS_1440_EVIDENCE:", JSON.stringify(evidenceByLocale));
-    await context.close();
-  } finally {
-    await realScrollbarBrowser.close();
-  }
+  });
 });
