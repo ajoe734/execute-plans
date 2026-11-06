@@ -243,6 +243,20 @@ jobs:
       - name: Bundle credential scan
         run: npm run scan:bundle-credentials
 
+      # Same isolated loopback fixture Playwright suite as the Pantheon FE-BFF
+      # Integration Gate's `fixture_e2e` step, through the single shared runner
+      # definition, so a browser fixture regression fails the PR instead.
+      - name: Release gate isolated fixture Playwright E2E
+        env:
+          PANTHEON_HOSTED_E2E: ""
+          FE_INT_GATE_LIVE_BFF: ""
+          F08_CREATE_INTENT_LIVE_BFF: ""
+          RUN_LIVE_BFF_CONTRACTS: ""
+          VITE_BFF_FALLBACK: strict
+          BFF_FALLBACK: strict
+          VITE_BFF_DEV_BEARER_TOKEN: ""
+        run: npm run e2e:fixture
+
   smoke-alias:
     name: Smoke acceptance
     runs-on: ubuntu-24.04

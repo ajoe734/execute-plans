@@ -1,0 +1,67 @@
+{
+  "task_id": "FE-PR-FIXTURE-E2E-20261106",
+  "title": "前端回歸每次都到 Root 才被擋：把本機 fixture E2E 放進 PR 的 Component merge gate",
+  "owner": "Antigravity",
+  "reviewer": "Claude",
+  "repository": "ajoe734/execute-plans",
+  "branch": "task/FE-PR-FIXTURE-E2E-20261106",
+  "base_branch": "dev",
+  "base_commit_sha": "bdf2a6640f1fed5fee2d14106325770727ca7684",
+  "verification_scope": "isolated_loopback_fixture_playwright_in_pr_component_merge_gate_and_release_gate",
+  "shared_fixture_e2e_definition": {
+    "runner_script": "scripts/run-fixture-e2e.mjs",
+    "npm_script": "npm run e2e:fixture",
+    "pr_workflow": ".github/workflows/branch-ci.yml (job: component-merge / Component merge gate, step: Release gate isolated fixture Playwright E2E)",
+    "release_gate_workflow": ".github/workflows/pantheon-integration-gate.yml (job: integration-gate, step id: fixture_e2e / Release-gate Playwright evidence against exact candidate)",
+    "specs": [
+      "e2e/01-startup-session.spec.ts",
+      "e2e/02-control-room.spec.ts",
+      "e2e/03-execution-loop.spec.ts",
+      "e2e/04b-optimization-loop.spec.ts",
+      "e2e/06-entity-registry.spec.ts",
+      "e2e/07-high-risk-confirm.spec.ts",
+      "e2e/08-create-intent.spec.ts",
+      "e2e/08-sse-reconnect.spec.ts",
+      "e2e/09-strict-vs-hybrid.spec.ts",
+      "e2e/10-rollback-saga.spec.ts",
+      "e2e/11-handoff-sla.spec.ts",
+      "e2e/12-approvals.spec.ts",
+      "e2e/13-agora.spec.ts",
+      "e2e/16-audit-correlation.spec.ts",
+      "e2e/17-a11y-v5.spec.ts",
+      "e2e/18-perf.spec.ts"
+    ],
+    "project": "chromium",
+    "grep_invert": "asserts MeResponse tenant/env/user/capabilities shape",
+    "retries": 0,
+    "trace": "off",
+    "isolated_env": {
+      "PANTHEON_HOSTED_E2E": "",
+      "FE_INT_GATE_LIVE_BFF": "",
+      "F08_CREATE_INTENT_LIVE_BFF": "",
+      "RUN_LIVE_BFF_CONTRACTS": "",
+      "VITE_BFF_FALLBACK": "strict",
+      "BFF_FALLBACK": "strict",
+      "VITE_BFF_DEV_BEARER_TOKEN": ""
+    }
+  },
+  "red_proof": {
+    "f18_pr_933_fix_reverted": {
+      "reverted_commit": "bf99ab9816b4c2cd6ba0bd69fb446e889f663215 (PR #933 merge a8206a2d333f5c9b148bf4db9d6431bbe7042102)",
+      "command": "npm run e2e:fixture",
+      "exit_code": 1,
+      "failing_test": "[chromium] › e2e/18-perf.spec.ts:1204:3 › F18 perf and stability soft-fail budgets › warns when LineageGraph receives more than 500 nodes",
+      "observed_error": "Error: expect(locator).toBeVisible() failed — Locator: getByText(/Lineage has 506 nodes \\(> 500\\); server-side layout \\/ clustered summary required\\./i) — Expected: visible, Timeout: 10000ms, Error: element(s) not found",
+      "playwright_summary": "1 failed, 11 skipped, 48 passed (2.2m)"
+    },
+    "f07_pr_932_fix_reverted": {
+      "status": "running"
+    },
+    "both_fixes_present": {
+      "command": "npm run e2e:fixture",
+      "exit_code": 0,
+      "failing_tests": [],
+      "playwright_summary": "11 skipped, 49 passed (3.0m)"
+    }
+  }
+}
