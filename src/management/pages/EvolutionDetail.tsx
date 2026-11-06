@@ -164,7 +164,9 @@ export const EvolutionDetail = () => {
     void loadAuxData(id);
   }, [id, loadAuxData]);
 
-  if (loading) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
+  // Only block on the full placeholder for the initial load; background refreshes
+  // (e.g. after an owner action) must keep the mounted detail and selected tab.
+  if (loading && !e) return <div className="p-6 text-muted-foreground">{t("common.loading")}</div>;
   if (!e) {
     return (
       <>
@@ -883,6 +885,15 @@ export const EvolutionDetail = () => {
             value: "constraints", label: t("evolution.tabs.constraints"),
             content: (
               <Section title={t("evolution.constraints.title")}>
+                {actionError && (
+                  <Card
+                    role="alert"
+                    data-testid="evolution-constraint-action-error"
+                    className="mb-3 border-status-failed/50 bg-status-failed/10 p-3 text-xs text-status-failed font-medium"
+                  >
+                    {actionError}
+                  </Card>
+                )}
                 <ul className="space-y-1.5 text-sm mb-3">
                   {programConstraints.length === 0 && <li className="text-xs text-muted-foreground">{t("evolution.constraints.empty")}</li>}
                   {programConstraints.map((c) => (
