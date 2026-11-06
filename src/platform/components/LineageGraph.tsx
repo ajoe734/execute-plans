@@ -78,6 +78,9 @@ const riskFill: Record<RiskLevel, string> = {
 };
 
 function layout(nodes: LineageNode[], edges: LineageEdge[]) {
+  // Column gap must hold the widest edge label so labels never sit under nodes.
+  const maxLabelPx = edges.reduce((m, e) => Math.max(m, (e.label?.length ?? 0) * EDGE_LABEL_CHAR_PX), 0);
+  const colGap = Math.max(COL_GAP, Math.ceil(maxLabelPx) + 24);
   // Compute depth = longest path from a root to this node.
   const incoming = new Map<string, number>();
   nodes.forEach((n) => incoming.set(n.id, 0));
@@ -125,7 +128,7 @@ function layout(nodes: LineageNode[], edges: LineageEdge[]) {
   let width = 0, height = 0;
   [...layers.keys()].sort((a, b) => a - b).forEach((d) => {
     const col = layers.get(d)!;
-    const x = d * (NODE_W + COL_GAP) + 16;
+    const x = d * (NODE_W + colGap) + 16;
     col.forEach((n, i) => {
       const y = i * (NODE_H + ROW_GAP) + 16;
       positions.set(n.id, { x, y });
@@ -133,11 +136,11 @@ function layout(nodes: LineageNode[], edges: LineageEdge[]) {
       height = Math.max(height, y + NODE_H + 16);
     });
   });
-  return { positions, width, height };
+  return { positions, width, height, colGap };
 }
 
 export const LineageGraph = ({ nodes, edges, height: minH = 280, onSelect }: Props) => {
-  const { positions, width, height } = useMemo(() => layout(nodes, edges), [nodes, edges]);
+  const { positions, width, height, colGap } = useMemo(() => layout(nodes, edges), [nodes, edges]);
   const h = Math.max(minH, height);
   const t = useT();
   const textMaxPx = NODE_W - 2 * NODE_PAD_X;
@@ -149,13 +152,15 @@ export const LineageGraph = ({ nodes, edges, height: minH = 280, onSelect }: Pro
       if (!a || !b || !e.label) return;
       items.push({
         key: i,
-        cx: (a.x + NODE_W + b.x) / 2,
-        cy: (a.y + b.y) / 2 + NODE_H / 2,
+        // Always in the gap right after the source column (nodes only exist in columns),
+        // so multi-column edges cannot put the label over an intermediate node.
+        cx: a.x + NODE_W + colGap / 2,
+        cy: a.y + NODE_H / 2 + (b.y - a.y) * 0.1,
         label: e.label,
       });
     });
     return placeEdgeLabels(items);
-  }, [edges, positions]);
+  }, [edges, positions, colGap]);
 
   if (nodes.length === 0) {
     return (

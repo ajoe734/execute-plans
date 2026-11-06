@@ -307,7 +307,7 @@ export function ObjectListPage<T extends BaseObject>({
     { key: "state", header: t("common.state"), cell: (r) => <StatusBadge state={r.state} /> },
     { key: "risk", header: t("common.risk"), cell: (r) => <RiskBadge level={r.risk} /> },
     ...extraColumns,
-    { key: "owner", header: t("common.owner"), cell: (r) => <span className="text-mono text-xs">{r.owner}</span> },
+    { key: "owner", header: t("common.owner"), minWidth: 120, cell: (r) => <span className="text-mono text-xs block max-w-[120px] truncate whitespace-nowrap" title={r.owner} data-full-owner={r.owner}>{r.owner}</span> },
     { key: "updated", header: t("common.updated"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{safeDateTime(r.updatedAt)}</span> },
   ];
   const columns = customColumns ?? defaultColumns;

@@ -837,7 +837,7 @@ export const ArtifactsList = () => {
           key: "name",
           minWidth: 180,
           header: t("common.name"),
-          cell: (r) => <div className="font-medium">{r.name || r.id}</div>,
+          cell: (r) => <div className="font-medium line-clamp-2 break-words" title={r.name || r.id}>{r.name || r.id}</div>,
         },
         {
           key: "source",
@@ -858,7 +858,7 @@ export const ArtifactsList = () => {
         },
         {
           key: "kind",
-          minWidth: 150,
+          minWidth: 130,
           header: t("table.kind"),
           cell: (r) => {
             const kind = typeof r.kind === "string" ? r.kind.trim() : "";
@@ -921,7 +921,7 @@ export const ArtifactsList = () => {
         },
         {
           key: "hash",
-          minWidth: 170,
+          minWidth: 150,
           header: t("detail.section.hash", { defaultValue: "Hash" }),
           cell: (r) => {
             const hash = typeof r.hash === "string" ? r.hash.trim() : "";
@@ -940,12 +940,12 @@ export const ArtifactsList = () => {
         },
         {
           key: "owner",
-          minWidth: 190,
+          minWidth: 120,
           header: t("common.owner"),
           cell: (r) => {
             const owner = typeof r.owner === "string" ? r.owner.trim() : "";
             return owner ? (
-              <span className="text-mono text-xs break-all" title={owner}>{owner}</span>
+              <span className="text-mono text-xs block max-w-[120px] truncate whitespace-nowrap" title={owner} data-full-owner={owner}>{owner}</span>
             ) : (
               <span className="text-mono text-xs text-muted-foreground whitespace-nowrap">{noData}</span>
             );
