@@ -6,7 +6,8 @@
   "repository": "ajoe734/execute-plans",
   "branch": "task/FE-PR-FIXTURE-E2E-20261106",
   "base_branch": "dev",
-  "base_commit_sha": "f0c49025fde2b707c219c1cea5f7beb42366d965",
+  "base_commit_sha": "a0393c7a8870c255e886dcace492b48e8ad73a11",
+  "prior_approved_head_sha_reference_only": "da56954e777d24ba6cd204759a505355078d4573",
   "verification_scope": "isolated_loopback_fixture_playwright_in_pr_component_merge_gate_and_release_gate",
   "shared_fixture_e2e_definition": {
     "runner_script": "scripts/run-fixture-e2e.mjs",
@@ -101,48 +102,59 @@
     {
       "run_number": 1,
       "command": "npm run e2e:fixture",
-      "started_at": "2026-11-06T03:14:08Z",
-      "completed_at": "2026-11-06T03:16:12Z",
-      "wall_clock_duration_seconds": 124,
+      "started_at": "2026-11-06T04:09:08Z",
+      "completed_at": "2026-11-06T04:11:04Z",
+      "wall_clock_duration_seconds": 116,
       "exit_code": 0,
-      "playwright_summary": "11 skipped, 49 passed (2.0m)"
+      "playwright_summary": "11 skipped, 49 passed (1.9m)"
     },
     {
       "run_number": 2,
       "command": "npm run e2e:fixture",
-      "started_at": "2026-11-06T03:16:22Z",
-      "completed_at": "2026-11-06T03:18:22Z",
-      "wall_clock_duration_seconds": 119,
+      "started_at": "2026-11-06T04:11:04Z",
+      "completed_at": "2026-11-06T04:13:30Z",
+      "wall_clock_duration_seconds": 146,
       "exit_code": 0,
-      "playwright_summary": "11 skipped, 49 passed (2.0m)"
+      "playwright_summary": "11 skipped, 49 passed (2.4m)"
     },
     {
       "run_number": 3,
       "command": "npm run e2e:fixture",
-      "started_at": "2026-11-06T03:18:39Z",
-      "completed_at": "2026-11-06T03:20:52Z",
-      "wall_clock_duration_seconds": 133,
+      "started_at": "2026-11-06T04:13:30Z",
+      "completed_at": "2026-11-06T04:15:56Z",
+      "wall_clock_duration_seconds": 146,
       "exit_code": 0,
-      "playwright_summary": "11 skipped, 49 passed (2.2m)"
+      "playwright_summary": "11 skipped, 49 passed (2.4m)"
     }
   ],
   "real_pull_request_run": {
     "pr_number": 936,
     "pr_url": "https://github.com/ajoe734/execute-plans/pull/936",
-    "evaluated_head_sha": "57eaf85d878116f9eae2659cee7da83167cb8021",
+    "evaluated_head_sha": "da56954e777d24ba6cd204759a505355078d4573",
     "workflow_name": "Branch CI Gate",
-    "workflow_run_id": 42156119946,
-    "workflow_run_url": "https://github.com/ajoe734/execute-plans/actions/runs/42156119946",
+    "workflow_run_id": 42158178527,
+    "workflow_run_url": "https://github.com/ajoe734/execute-plans/actions/runs/42158178527",
     "job_name": "Component merge gate",
-    "job_id": 127690625318,
-    "job_url": "https://github.com/ajoe734/execute-plans/actions/runs/42156119946/job/127690625318",
+    "job_id": 127697548780,
+    "job_url": "https://github.com/ajoe734/execute-plans/actions/runs/42158178527/job/127697548780",
     "step_name": "Release gate isolated fixture Playwright E2E",
     "step_number": 15,
-    "step_started_at": "2026-11-06T03:27:27Z",
-    "step_completed_at": "2026-11-06T03:28:46Z",
-    "step_measured_duration_seconds": 79,
+    "step_started_at": "2026-11-06T03:50:32Z",
+    "step_completed_at": "2026-11-06T03:52:02Z",
+    "step_measured_duration_seconds": 90,
     "step_conclusion": "success",
-    "playwright_summary": "Running 60 tests using 1 worker — 11 skipped, 49 passed (1.3m)"
+    "playwright_summary": "Running 60 tests using 1 worker — 11 skipped, 49 passed (1.5m)",
+    "initial_pull_request_run": {
+      "evaluated_head_sha": "57eaf85d878116f9eae2659cee7da83167cb8021",
+      "workflow_run_id": 42156119946,
+      "job_id": 127690625318,
+      "step_number": 15,
+      "step_started_at": "2026-11-06T03:27:27Z",
+      "step_completed_at": "2026-11-06T03:28:46Z",
+      "step_measured_duration_seconds": 79,
+      "step_conclusion": "success",
+      "playwright_summary": "Running 60 tests using 1 worker — 11 skipped, 49 passed (1.3m)"
+    }
   },
   "workflow_guard_tests": {
     "publish_promote_planner": {
