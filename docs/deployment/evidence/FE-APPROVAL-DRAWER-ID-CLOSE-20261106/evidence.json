@@ -1,0 +1,391 @@
+{
+  "schema_version": "pantheon.fe-approval-drawer-id-close.v1",
+  "task_id": "FE-APPROVAL-DRAWER-ID-CLOSE-20261106",
+  "taskId": "FE-APPROVAL-DRAWER-ID-CLOSE-20261106",
+  "title": "The wrapped id in the operations drawers still collides with the close button",
+  "owner": "Antigravity",
+  "reviewer": "Claude",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-APPROVAL-DRAWER-ID-CLOSE-20261106",
+  "base_sha": "815c33a00938f998327f093c172628a7ba35c2d9",
+  "status": "ready_for_review",
+  "timestamp": "2026-11-06T03:57:30Z",
+  "hosted_verification": {
+    "status": "not_run",
+    "note": "Hosted readback is performed by the operator's coordinator after deploy; this evidence claims local unit, typecheck, and Playwright browser layout verification only."
+  },
+  "root_cause": {
+    "summary": "SheetContent in src/components/ui/sheet.tsx uses p-6 (24px padding) while SheetPrimitive.Close is positioned at absolute right-4 top-4 (16px from the top and right edges, spanning x 1408..1424 and y 16..32 at 1440 viewport). Without extra right padding on the SheetHeader flex row holding the badges and id in src/management/pages/Operations.tsx, the row extended to 24px from the sheet right edge (x 1416 at 1440 viewport), causing the first wrapped line of the 68-character approval id (x 1053..1414, y 25..39) to overlap the close button by 6px wide and 7px high."
+  },
+  "scope": {
+    "delivered": [
+      "Added pr-6 to the flex row holding the badges and id in all three SheetHeader sections of src/management/pages/Operations.tsx (AlertsPage line 219, IncidentsPage line 295, ApprovalsPage line 473) while keeping min-w-0 and break-all on the id span with the full id intact in the DOM.",
+      "Added unit test coverage in src/management/pages/Operations.test.tsx verifying that all three Operations sheet header badge+id rows reserve right padding (pr-6) for the close button, the full 68-character id stays in the DOM without truncation or ellipsis, and the shared SheetClose remains at right-4 top-4.",
+      "Extended e2e/approvals-badge-layout.spec.ts (preserving every existing assertion) to measure each rendered line of the 68-character id text via document.createRange() + selectNodeContents() + getClientRects() and the close button rectangle at viewport widths 1440 and 1280, asserting that no id line intersects the close button rectangle."
+    ],
+    "not_changing": [
+      "src/components/ui/sheet.tsx is unchanged because other callers depend on the shared Sheet layout.",
+      "Existing Operations and governance tests remain untouched and green."
+    ]
+  },
+  "scoped_artifacts": [
+    "src/management/pages/Operations.tsx",
+    "src/management/pages/Operations.test.tsx",
+    "e2e/approvals-badge-layout.spec.ts",
+    "docs/deployment/evidence/FE-APPROVAL-DRAWER-ID-CLOSE-20261106/evidence.json"
+  ],
+  "validation": {
+    "vitest": {
+      "command": "./node_modules/.bin/vitest run src/platform/components/StatusBadge.test.tsx src/management/pages/Operations.test.tsx src/lib/bff-v1/__tests__/approval-readback.test.ts src/lib/bff-v1/agora/governance.test.ts src/management/pages/centers/GovernanceDecisionQueue.test.tsx src/management/pages/centers/GovernanceDecisionsPage.test.tsx src/test/governance-owner-readonly-detail.test.tsx",
+      "exit_code": 0,
+      "test_files_passed": 7,
+      "tests_passed": 104
+    },
+    "tsc": {
+      "command": "npm run typecheck:app && ./node_modules/.bin/tsc --noEmit",
+      "exit_code": 0
+    },
+    "playwright_layout_spec": {
+      "command": "./node_modules/.bin/playwright test e2e/approvals-badge-layout.spec.ts",
+      "exit_code": 0,
+      "tests_passed": 1,
+      "scrollbars_visible": true,
+      "ignore_default_args": [
+        "--hide-scrollbars"
+      ],
+      "approval_id": "apv-07db6c62179bfb41bcb790001c955022535fe863aa003a8458e1eea8d62c7574",
+      "approval_id_length": 68,
+      "measurements": {
+        "1440": {
+          "boundingBoxes": {
+            "tableRiskBadge": {
+              "x": 1059.484375,
+              "y": 249.25,
+              "width": 34,
+              "height": 22
+            },
+            "tableStatusBadge": {
+              "x": 1128.734375,
+              "y": 249.25,
+              "width": 58,
+              "height": 22
+            },
+            "drawerRiskBadge": {
+              "x": 945,
+              "y": 29,
+              "width": 34,
+              "height": 22
+            },
+            "drawerStatusBadge": {
+              "x": 987,
+              "y": 29,
+              "width": 58,
+              "height": 22
+            },
+            "drawerIdSpan": {
+              "x": 1053,
+              "y": 24,
+              "width": 339,
+              "height": 32
+            },
+            "closeButton": {
+              "x": 1408,
+              "y": 16,
+              "width": 16,
+              "height": 16
+            },
+            "sheetDialog": {
+              "x": 920,
+              "y": 0,
+              "width": 520,
+              "height": 900
+            },
+            "idRightEdge": 1392,
+            "sheetRightEdge": 1440,
+            "rightClearancePx": 48
+          },
+          "computed": {
+            "viewport": {
+              "innerWidth": 1440,
+              "innerHeight": 900,
+              "documentScrollWidth": 1440,
+              "documentClientWidth": 1440,
+              "bodyScrollWidth": 1440,
+              "bodyClientWidth": 1440
+            },
+            "tableRiskBadge": {
+              "text": "低",
+              "width": 34,
+              "height": 22,
+              "left": 1059.48,
+              "right": 1093.48,
+              "whiteSpace": "nowrap",
+              "wordBreak": "normal",
+              "minWidth": "0px",
+              "lineCount": 1
+            },
+            "tableStatusBadge": {
+              "text": "已核准",
+              "width": 58,
+              "height": 22,
+              "left": 1128.73,
+              "right": 1186.73,
+              "whiteSpace": "nowrap",
+              "wordBreak": "normal",
+              "minWidth": "0px",
+              "lineCount": 1
+            },
+            "sheet": {
+              "left": 920,
+              "right": 1440,
+              "width": 520
+            },
+            "headerBadgeRow": {
+              "paddingRight": "24px"
+            },
+            "closeButton": {
+              "x": 1408,
+              "y": 16,
+              "width": 16,
+              "height": 16,
+              "top": 16,
+              "right": 1424,
+              "bottom": 32,
+              "left": 1408
+            },
+            "drawerRiskBadge": {
+              "text": "低",
+              "width": 34,
+              "height": 22,
+              "left": 945,
+              "right": 979,
+              "whiteSpace": "nowrap",
+              "wordBreak": "normal",
+              "minWidth": "auto",
+              "lineCount": 1
+            },
+            "drawerStatusBadge": {
+              "text": "已核准",
+              "width": 58,
+              "height": 22,
+              "left": 987,
+              "right": 1045,
+              "whiteSpace": "nowrap",
+              "wordBreak": "normal",
+              "minWidth": "auto",
+              "lineCount": 1
+            },
+            "drawerIdSpan": {
+              "text": "apv-07db6c62179bfb41bcb790001c955022535fe863aa003a8458e1eea8d62c7574",
+              "width": 339,
+              "height": 32,
+              "left": 1053,
+              "right": 1392,
+              "whiteSpace": "normal",
+              "wordBreak": "break-all",
+              "minWidth": "0px",
+              "lineCount": 2
+            },
+            "drawerIdLines": [
+              {
+                "lineIndex": 0,
+                "x": 1053,
+                "y": 25,
+                "width": 332.34,
+                "height": 14,
+                "top": 25,
+                "right": 1385.34,
+                "bottom": 39,
+                "left": 1053,
+                "horizontalClearanceToCloseButtonPx": 22.66,
+                "intersectionWidthPx": 0,
+                "intersectionHeightPx": 0,
+                "intersectsCloseButton": false
+              },
+              {
+                "lineIndex": 1,
+                "x": 1053,
+                "y": 41,
+                "width": 158.95,
+                "height": 14,
+                "top": 41,
+                "right": 1211.95,
+                "bottom": 55,
+                "left": 1053,
+                "horizontalClearanceToCloseButtonPx": 196.05,
+                "intersectionWidthPx": 0,
+                "intersectionHeightPx": 0,
+                "intersectsCloseButton": false
+              }
+            ]
+          }
+        },
+        "1280": {
+          "boundingBoxes": {
+            "tableRiskBadge": {
+              "x": 934.109375,
+              "y": 253.5,
+              "width": 34,
+              "height": 22
+            },
+            "tableStatusBadge": {
+              "x": 1000.109375,
+              "y": 253.5,
+              "width": 58,
+              "height": 22
+            },
+            "drawerRiskBadge": {
+              "x": 785,
+              "y": 29,
+              "width": 34,
+              "height": 22
+            },
+            "drawerStatusBadge": {
+              "x": 827,
+              "y": 29,
+              "width": 58,
+              "height": 22
+            },
+            "drawerIdSpan": {
+              "x": 893,
+              "y": 24,
+              "width": 339,
+              "height": 32
+            },
+            "closeButton": {
+              "x": 1248,
+              "y": 16,
+              "width": 16,
+              "height": 16
+            },
+            "sheetDialog": {
+              "x": 760,
+              "y": 0,
+              "width": 520,
+              "height": 900
+            },
+            "idRightEdge": 1232,
+            "sheetRightEdge": 1280,
+            "rightClearancePx": 48
+          },
+          "computed": {
+            "viewport": {
+              "innerWidth": 1280,
+              "innerHeight": 900,
+              "documentScrollWidth": 1280,
+              "documentClientWidth": 1280,
+              "bodyScrollWidth": 1280,
+              "bodyClientWidth": 1280
+            },
+            "tableRiskBadge": {
+              "text": "低",
+              "width": 34,
+              "height": 22,
+              "left": 934.11,
+              "right": 968.11,
+              "whiteSpace": "nowrap",
+              "wordBreak": "normal",
+              "minWidth": "0px",
+              "lineCount": 1
+            },
+            "tableStatusBadge": {
+              "text": "已核准",
+              "width": 58,
+              "height": 22,
+              "left": 1000.11,
+              "right": 1058.11,
+              "whiteSpace": "nowrap",
+              "wordBreak": "normal",
+              "minWidth": "0px",
+              "lineCount": 1
+            },
+            "sheet": {
+              "left": 760,
+              "right": 1280,
+              "width": 520
+            },
+            "headerBadgeRow": {
+              "paddingRight": "24px"
+            },
+            "closeButton": {
+              "x": 1248,
+              "y": 16,
+              "width": 16,
+              "height": 16,
+              "top": 16,
+              "right": 1264,
+              "bottom": 32,
+              "left": 1248
+            },
+            "drawerRiskBadge": {
+              "text": "低",
+              "width": 34,
+              "height": 22,
+              "left": 785,
+              "right": 819,
+              "whiteSpace": "nowrap",
+              "wordBreak": "normal",
+              "minWidth": "auto",
+              "lineCount": 1
+            },
+            "drawerStatusBadge": {
+              "text": "已核准",
+              "width": 58,
+              "height": 22,
+              "left": 827,
+              "right": 885,
+              "whiteSpace": "nowrap",
+              "wordBreak": "normal",
+              "minWidth": "auto",
+              "lineCount": 1
+            },
+            "drawerIdSpan": {
+              "text": "apv-07db6c62179bfb41bcb790001c955022535fe863aa003a8458e1eea8d62c7574",
+              "width": 339,
+              "height": 32,
+              "left": 893,
+              "right": 1232,
+              "whiteSpace": "normal",
+              "wordBreak": "break-all",
+              "minWidth": "0px",
+              "lineCount": 2
+            },
+            "drawerIdLines": [
+              {
+                "lineIndex": 0,
+                "x": 893,
+                "y": 25,
+                "width": 332.34,
+                "height": 14,
+                "top": 25,
+                "right": 1225.34,
+                "bottom": 39,
+                "left": 893,
+                "horizontalClearanceToCloseButtonPx": 22.66,
+                "intersectionWidthPx": 0,
+                "intersectionHeightPx": 0,
+                "intersectsCloseButton": false
+              },
+              {
+                "lineIndex": 1,
+                "x": 893,
+                "y": 41,
+                "width": 158.95,
+                "height": 14,
+                "top": 41,
+                "right": 1051.95,
+                "bottom": 55,
+                "left": 893,
+                "horizontalClearanceToCloseButtonPx": 196.05,
+                "intersectionWidthPx": 0,
+                "intersectionHeightPx": 0,
+                "intersectsCloseButton": false
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}
