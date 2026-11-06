@@ -2369,4 +2369,182 @@ describe("ObjectListPage", () => {
     expect(shouldNavigateOnCreatedEntity("persona")).toBe(true);
     expect(shouldNavigateOnCreatedEntity("evolutionProgram")).toBe(false);
   });
+
+  it("creates a draft strategy from /management/strategies via POST /bff/strategies, navigates to /management/strategies/<server-id>, and renders its detail page on navigation and direct URL reload", async () => {
+    const { useLiveListV1: actualUseLiveListV1 } = await vi.importActual<typeof import("@/lib/bff-v1")>("@/lib/bff-v1");
+    mocks.useLiveListV1.mockImplementation(actualUseLiveListV1);
+    stubLiveEnv();
+
+    const serverCreatedStrategy = {
+      id: "strategy-20261106-c0ffee01",
+      strategy_id: "strategy-20261106-c0ffee01",
+      name: "Mean Reversion Intraday Draft",
+      owner: "ops@mvl-cap.tw",
+      updatedAt: "2026-11-06T07:15:00Z",
+      state: "draft",
+      risk: "medium",
+      alpha: "alpha_mr_intraday_v1",
+      capitalPoolId: "pool-paper-01",
+      personaIds: ["persona-alpha-01"],
+      pnl: null,
+      pnl30d: null,
+      sharpe: null,
+      drawdown: null,
+      totalTrades: null,
+      metricsAsOf: null,
+      metricsResolution: "missing",
+      metricsPersonaId: null,
+      availableActions: ["edit", "submit", "retire"],
+      labelKey: "strategy.strategy-20261106-c0ffee01",
+    };
+
+    const capturedCalls: Array<{ method: string; url: string; headers: Record<string, string>; body?: unknown }> = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const method = (init?.method ?? "GET").toUpperCase();
+      const headers = (init?.headers ?? {}) as Record<string, string>;
+      const body = typeof init?.body === "string" ? JSON.parse(init.body) : undefined;
+      capturedCalls.push({ method, url, headers, body });
+
+      if (method === "POST" && url.endsWith("/bff/strategies")) {
+        return new Response(
+          JSON.stringify({
+            data: serverCreatedStrategy,
+            meta: { snapshot_at: "2026-11-06T07:15:00Z" },
+          }),
+          { status: 201, headers: { "Content-Type": "application/json" } },
+        );
+      }
+
+      if (method === "GET" && url.includes("/bff/strategies/strategy-20261106-c0ffee01")) {
+        return new Response(
+          JSON.stringify({
+            data: serverCreatedStrategy,
+            meta: { snapshot_at: "2026-11-06T07:15:00Z" },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+
+      if (method === "GET" && url.includes("/bff/strategies")) {
+        return new Response(
+          JSON.stringify({
+            data: [],
+            items: [],
+            meta: {
+              state_counts: {
+                total: 4764,
+                default_view: 0,
+                draft: 4764,
+                review: 0,
+                approved: 0,
+                paper_running: 0,
+                deployed: 0,
+                paused: 0,
+                retired: 0,
+                failed: 0,
+              },
+            },
+            page_info: { page_size: 20, total: 0, next_page_token: null },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+
+      return new Response(
+        JSON.stringify({ data: [], items: [], meta: {} }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    });
+
+    function LocationProbe() {
+      const loc = useLocation();
+      return <output data-testid="strategy-create-location">{loc.pathname}{loc.search}</output>;
+    }
+
+    await i18n.changeLanguage("en-US");
+    const { unmount } = render(
+      <I18nextProvider i18n={i18n}>
+        <TooltipProvider>
+          <MemoryRouter initialEntries={["/management/strategies"]}>
+            <Routes>
+              <Route
+                path="/management/strategies"
+                element={(
+                  <>
+                    <StrategiesList />
+                    <LocationProbe />
+                  </>
+                )}
+              />
+              <Route
+                path="/management/strategies/:id"
+                element={(
+                  <>
+                    <StrategyDetail />
+                    <LocationProbe />
+                  </>
+                )}
+              />
+            </Routes>
+          </MemoryRouter>
+        </TooltipProvider>
+      </I18nextProvider>,
+    );
+
+    const createButtons = await screen.findAllByRole("button", { name: /^Create$/i });
+    expect(createButtons[0]).toBeEnabled();
+    fireEvent.click(createButtons[0]);
+
+    // Fill the Strategy create drawer fields
+    const nameInput = await screen.findByLabelText(/Name/i);
+    const alphaInput = screen.getByLabelText(/Alpha/i);
+    const poolInput = screen.getByLabelText(/Capital Pool/i);
+    const personasInput = screen.getByLabelText(/Persona IDs/i);
+
+    fireEvent.change(nameInput, { target: { value: "Mean Reversion Intraday Draft" } });
+    fireEvent.change(alphaInput, { target: { value: "alpha_mr_intraday_v1" } });
+    fireEvent.change(poolInput, { target: { value: "pool-paper-01" } });
+    fireEvent.change(personasInput, { target: { value: "persona-alpha-01" } });
+    fireEvent.keyDown(personasInput, { key: "Enter" });
+
+    const allCreateButtons = screen.getAllByRole("button", { name: /^Create$/i });
+    const submitBtn = allCreateButtons[allCreateButtons.length - 1];
+    fireEvent.click(submitBtn);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("strategy-create-location")).toHaveTextContent(
+        "/management/strategies/strategy-20261106-c0ffee01",
+      );
+    });
+
+    const postCall = capturedCalls.find((c) => c.method === "POST" && c.url.endsWith("/bff/strategies"));
+    expect(postCall).toBeDefined();
+    expect(postCall?.headers["Idempotency-Key"]).toMatch(/\S+/);
+    expect(postCall?.body).toEqual({
+      name: "Mean Reversion Intraday Draft",
+      alpha: "alpha_mr_intraday_v1",
+      capitalPoolId: "pool-paper-01",
+      personaIds: ["persona-alpha-01"],
+      state: "draft",
+    });
+
+    expect(await screen.findByText("Mean Reversion Intraday Draft")).toBeInTheDocument();
+    unmount();
+
+    // Verify direct URL reload of the newly created draft strategy
+    render(
+      <I18nextProvider i18n={i18n}>
+        <TooltipProvider>
+          <MemoryRouter initialEntries={["/management/strategies/strategy-20261106-c0ffee01"]}>
+            <Routes>
+              <Route path="/management/strategies/:id" element={<StrategyDetail />} />
+            </Routes>
+          </MemoryRouter>
+        </TooltipProvider>
+      </I18nextProvider>,
+    );
+
+    expect(await screen.findByText("Mean Reversion Intraday Draft")).toBeInTheDocument();
+  });
 });

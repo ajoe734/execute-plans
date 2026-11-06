@@ -9,7 +9,7 @@ import { StatusBadge } from "@/platform/components/StatusBadge";
 import { RiskBadge } from "@/platform/components/RiskBadge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Plus, RefreshCw, Inbox } from "lucide-react";
 import { useT } from "@/platform/hooks";
 import { safeDateTime } from "@/lib/utils";
@@ -337,32 +337,36 @@ export function ObjectListPage<T extends BaseObject>({
   const renderCreateAction = () => {
     if (!createBehavior) {
       return (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span tabIndex={0}>
-              <Button size="sm" disabled>
-                <Plus className="h-4 w-4 mr-1" />{t("actions.create")}
-              </Button>
-            </span>
-          </TooltipTrigger>
-          <TooltipContent>{t("common.createNotConfigured")}</TooltipContent>
-        </Tooltip>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span tabIndex={0}>
+                <Button size="sm" disabled>
+                  <Plus className="h-4 w-4 mr-1" />{t("actions.create")}
+                </Button>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>{t("common.createNotConfigured")}</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       );
     }
     if (createBehavior.kind === "disabled") {
       const reason = t(createBehavior.reasonI18nKey, { defaultValue: createBehavior.reasonI18nKey });
       return (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span tabIndex={0} title={reason}>
-              <Button size="sm" disabled title={reason}>
-                <Plus className="h-4 w-4 mr-1" />{t("actions.create")}
-              </Button>
-              <span className="sr-only">{reason}</span>
-            </span>
-          </TooltipTrigger>
-          <TooltipContent>{reason}</TooltipContent>
-        </Tooltip>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span tabIndex={0} title={reason}>
+                <Button size="sm" disabled title={reason}>
+                  <Plus className="h-4 w-4 mr-1" />{t("actions.create")}
+                </Button>
+                <span className="sr-only">{reason}</span>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>{reason}</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       );
     }
     if (createBehavior.kind === "redirect") {
@@ -388,17 +392,19 @@ export function ObjectListPage<T extends BaseObject>({
     if (!realWritesEnabled()) {
       const reason = t("mgmt.dataSources.realWritesRequired");
       return (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span tabIndex={0} title={reason}>
-              <Button size="sm" disabled title={reason}>
-                <Plus className="h-4 w-4 mr-1" />{buttonLabel}
-              </Button>
-              <span className="sr-only">{reason}</span>
-            </span>
-          </TooltipTrigger>
-          <TooltipContent>{reason}</TooltipContent>
-        </Tooltip>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span tabIndex={0} title={reason}>
+                <Button size="sm" disabled title={reason}>
+                  <Plus className="h-4 w-4 mr-1" />{buttonLabel}
+                </Button>
+                <span className="sr-only">{reason}</span>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>{reason}</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       );
     }
     // drawer
