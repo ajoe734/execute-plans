@@ -453,6 +453,7 @@ export default {
     pending: "Pending", running: "Running", success: "Success",
     warning: "Warning", failed: "Failed", paused: "Paused",
     draft: "Draft", review: "In Review", approved: "Approved",
+    paper_running: "Paper Running", canary_running: "Canary Running", live_running: "Live Running",
     rejected: "Rejected", revoked: "Revoked", superseded: "Superseded",
     active: "Active", deployed: "Deployed", retired: "Retired", candidate: "Candidate", unavailable: "Unavailable",
   },
@@ -817,6 +818,24 @@ export default {
     sweep: {
       run: "Run parameter sweep",
       queued: "Parameter sweep queued",
+    },
+    list: {
+      filter: {
+        groupLabel: "Strategy state filter",
+        default: "Default (hide drafts)",
+      },
+      hiddenDraftsWithCount: "{{count}} draft strategies are hidden by default.",
+      hiddenDraftsNoCount: "Draft strategies are hidden by default.",
+      showDraftsWithCount: "Show drafts ({{count}})",
+      showDraftsNoCount: "Show drafts",
+      pagination: {
+        label: "Strategy list pagination",
+        showingRange: "Showing {{start}}–{{end}} of {{total}}",
+        totalCount: "Total: {{total}}",
+        pageOf: "Page {{page}} of {{totalPages}}",
+        first: "First",
+        last: "Last",
+      },
     },
   },
   runtime: {

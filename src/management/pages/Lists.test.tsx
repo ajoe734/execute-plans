@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { shortenHash } from "./Lists";
+import {
+  extractStrategyStateCounts,
+  normalizeStrategyFilterParam,
+  resolveStrategyListQuery,
+  shortenHash,
+} from "./Lists";
 
 describe("shortenHash", () => {
   it("shortens the real artifact sha256 and keeps prefix", () => {
@@ -12,5 +17,66 @@ describe("shortenHash", () => {
   });
   it("leaves short values alone", () => {
     expect(shortenHash("abc123")).toBe("abc123");
+  });
+});
+
+describe("StrategiesList state filter and query helpers", () => {
+  it("maps default, all, and explicit DTO state filters to BFF query options", () => {
+    expect(normalizeStrategyFilterParam(null)).toBe("default");
+    expect(normalizeStrategyFilterParam("")).toBe("default");
+    expect(normalizeStrategyFilterParam("default")).toBe("default");
+    expect(normalizeStrategyFilterParam("approved")).toBe("approved");
+    expect(normalizeStrategyFilterParam("paper_running")).toBe("paper_running");
+    expect(normalizeStrategyFilterParam("all")).toBe("all");
+
+    expect(resolveStrategyListQuery("default")).toEqual({
+      exclude_state: "draft",
+      page_size: 20,
+    });
+    expect(resolveStrategyListQuery("all", "20")).toEqual({
+      page_size: 20,
+      page_token: "20",
+    });
+    expect(resolveStrategyListQuery("approved", "40")).toEqual({
+      state: "approved",
+      page_size: 20,
+      page_token: "40",
+    });
+  });
+
+  it("extracts defaultCount, allCount, and per-state counts from meta.state_counts and returns null when state_counts is null", () => {
+    const counts = extractStrategyStateCounts({
+      state_counts: {
+        draft: 4764,
+        review: 1,
+        approved: 133,
+        paper_running: 0,
+        canary_running: 0,
+        live_running: 0,
+        deployed: 0,
+        paused: 0,
+        retired: 2,
+      },
+    });
+    expect(counts).toEqual({
+      byState: {
+        draft: 4764,
+        review: 1,
+        approved: 133,
+        paper_running: 0,
+        canary_running: 0,
+        live_running: 0,
+        deployed: 0,
+        paused: 0,
+        retired: 2,
+      },
+      defaultCount: 134,
+      allCount: 4898,
+      draftCount: 4764,
+    });
+
+    expect(extractStrategyStateCounts({ state_counts: null })).toBeNull();
+    expect(extractStrategyStateCounts({})).toBeNull();
+    expect(extractStrategyStateCounts(null)).toBeNull();
   });
 });

@@ -19,6 +19,7 @@ export interface UseLiveListV1Result<T> {
   pageSize: number;
   estimatedTotal?: number;
   totalCountExact: boolean;
+  cursor?: ListEnvelope<T>["cursor"];
   meta?: unknown;
   refresh: () => void;
   loading: boolean;
@@ -27,9 +28,11 @@ export interface UseLiveListV1Result<T> {
 export function useLiveListV1<T>(
   loader: () => Promise<ListEnvelope<T>>,
   kinds: string[],
-  opts: { auto?: boolean } = {},
+  opts: { auto?: boolean; reloadKey?: string } = {},
 ): UseLiveListV1Result<T> {
   const auto = opts.auto ?? true;
+  const reloadKey = opts.reloadKey ?? "";
+  const prevReloadKeyRef = useRef(reloadKey);
   const [env, setEnv] = useState<ListEnvelope<T>>({
     items: [], cursor: {}, pageSize: 0, totalCountExact: true,
   });
@@ -98,6 +101,20 @@ export function useLiveListV1<T>(
   };
 
   useEffect(() => {
+    const keyChanged = prevReloadKeyRef.current !== reloadKey;
+    prevReloadKeyRef.current = reloadKey;
+    if (keyChanged) {
+      setEnv((prev) => ({
+        items: [],
+        cursor: {},
+        pageSize: 0,
+        totalCountExact: true,
+        meta:
+          prev.meta && typeof prev.meta === "object" && !Array.isArray(prev.meta) && "state_counts" in prev.meta
+            ? { state_counts: (prev.meta as Record<string, unknown>).state_counts }
+            : undefined,
+      }));
+    }
     refresh();
     const off = realtime.on("data", (p) => {
       const kind = (p as { kind?: string } | undefined)?.kind;
@@ -115,7 +132,7 @@ export function useLiveListV1<T>(
     });
     return () => { off?.(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [kinds.join("|"), auto]);
+  }, [kinds.join("|"), auto, reloadKey]);
 
   return {
     items: env.items,
@@ -123,6 +140,7 @@ export function useLiveListV1<T>(
     pageSize: env.pageSize,
     estimatedTotal: env.estimatedTotal,
     totalCountExact: env.totalCountExact,
+    cursor: env.cursor,
     meta: env.meta,
     refresh,
     loading,

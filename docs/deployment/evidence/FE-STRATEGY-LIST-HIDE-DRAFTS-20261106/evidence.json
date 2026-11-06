@@ -1,0 +1,61 @@
+{
+  "task_id": "FE-STRATEGY-LIST-HIDE-DRAFTS-20261106",
+  "title": "Strategy list hides drafts by default with a state filter and server paging",
+  "repository": "ajoe734/execute-plans",
+  "branch": "task/FE-STRATEGY-LIST-HIDE-DRAFTS-20261106",
+  "owner": "Antigravity",
+  "reviewer": "Claude",
+  "prerequisites": {
+    "BFF-STRATEGY-LIST-DEFAULT-VIEW-20261106": {
+      "status": "done",
+      "satisfied": true,
+      "pantheon_commit": "9e96cbc5e4b21d20a6d2428b017e1e3ae2d1effc"
+    },
+    "FE-ARTIFACT-TABLE-OWNER-WIDTH-20261106": {
+      "status": "done",
+      "satisfied": true,
+      "execute_plans_merge_commit": "979294ceb37870186088a6934041c35f8e50c14a"
+    }
+  },
+  "real_row_shape_verified": {
+    "id": "strategy-persona-59b2143dcecf205acbf1",
+    "name": "Pantheon Dev Paper Release 42123862167 Attempt 1",
+    "state": "approved",
+    "risk": "low",
+    "capitalPoolId": "pool-persona-paper-59b2143dcecf205acbf1"
+  },
+  "acceptance_evidence": {
+    "ac1_default_excludes_drafts": {
+      "status": "passed",
+      "detail": "Opening /management/strategies with no query requests GET /bff/strategies?exclude_state=draft&page_size=20 and renders no draft rows."
+    },
+    "ac2_state_control_counts_and_query_param": {
+      "status": "passed",
+      "detail": "State filter control offers default (hide drafts), approved, review, retired, draft, and all (plus active CommandCenter DTO state query links such as paper_running) with counts derived from meta.state_counts, sends the selected filter to the BFF, and persists state=<value> in the URL query parameter."
+    },
+    "ac3_hidden_drafts_banner_and_null_counts": {
+      "status": "passed",
+      "detail": "Default view displays a banner stating how many draft strategies are hidden with a one-click Show drafts button that switches to state=draft; when meta.state_counts is null, the control and banner still work and never invent a count."
+    },
+    "ac4_server_paging_and_total": {
+      "status": "passed",
+      "detail": "StrategiesList pages through GET /bff/strategies using page_size=20 and page_token (Next, Previous, First, Last), displays page_info.total (including 4898 in the all view), reaches row 4898 via page_token=4880, and never fetches multiple pages at once."
+    },
+    "ac5_separate_loading_error_empty_states": {
+      "status": "passed",
+      "detail": "Loading, degraded read failure, and truly empty filter states remain distinct on ObjectListPage, and other lists sharing ObjectListPage are unchanged."
+    },
+    "ac6_draft_direct_url_and_create_navigation": {
+      "status": "blocked_by_contract_gap",
+      "detail": "Direct URL /management/strategies/<draft-id> remains reachable and ObjectListPage onCreated now navigates to /management/strategies/<id> for strategy as well as persona. However, at origin/dev strategy is absent from DURABLE_CREATE_OWNERS in src/lib/writeIntents/types.ts (so ObjectListPage disables the Create button with 'Create disabled: strategy has no typed durable BFF owner.') and createEntityFromInput in src/management/components/write/createEntity.ts throws UnsupportedEntityMutationError('strategy', 'create') with no createStrategy method in src/lib/bff-v1/strategies.ts; none of those three files are in the artifacts contract."
+    },
+    "ac7_no_weakened_or_deleted_tests": {
+      "status": "passed",
+      "detail": "Zero existing tests were weakened, modified, or deleted; 8 new unit/integration tests were added across contract-drift.test.ts, lists.test.ts, Lists.test.tsx, and ObjectListPage.test.tsx."
+    }
+  },
+  "verification_commands": [
+    "./node_modules/.bin/vitest run src/lib/bff-v1/__tests__/contract-drift.test.ts src/lib/bff-v1/__tests__/lists.test.ts src/management/pages/Lists.test.tsx src/management/pages/ObjectListPage.test.tsx src/management/pages/StrategyDetail.metrics.test.tsx src/management/pages/EvolutionProgramsQualification.test.tsx src/lib/v5/management/__tests__/i18nParity.test.ts",
+    "./node_modules/.bin/tsc -p tsconfig.app.json --noEmit"
+  ]
+}
