@@ -44,7 +44,35 @@ export const paths = {
   actions: () => `${BASE}/actions`,
 
   // ---- Strategies / Personas / etc. (resource paths still canonical) ----
-  strategies: () => `${BASE}/strategies`,
+  strategies: (
+    filters: {
+      state?: string;
+      excludeState?: string;
+      exclude_state?: string;
+      personaId?: string;
+      persona_id?: string;
+      pageSize?: number;
+      page_size?: number;
+      pageToken?: string | null;
+      page_token?: string | null;
+    } = {},
+  ) => {
+    const params = new URLSearchParams();
+    const state = filters.state?.trim();
+    const excludeState = (filters.exclude_state ?? filters.excludeState)?.trim();
+    const personaId = (filters.persona_id ?? filters.personaId)?.trim();
+    const pageSize = filters.page_size ?? filters.pageSize;
+    const pageToken = (filters.page_token ?? filters.pageToken)?.trim();
+    if (state) params.set("state", state);
+    if (excludeState) params.set("exclude_state", excludeState);
+    if (personaId) params.set("persona_id", personaId);
+    if (typeof pageSize === "number" && Number.isFinite(pageSize) && pageSize > 0) {
+      params.set("page_size", String(pageSize));
+    }
+    if (pageToken) params.set("page_token", pageToken);
+    const query = params.toString();
+    return `${BASE}/strategies${query ? `?${query}` : ""}`;
+  },
   strategy: (id: string) => `${BASE}/strategies/${enc(id)}`,
   /** @deprecated Use `paths.action("strategy", id, action)`. Kept for in-process mocks. */
   strategyAction: (id: string, action: string) => `${BASE}/strategies/${enc(id)}/actions/${enc(action)}`,

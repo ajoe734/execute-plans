@@ -76,6 +76,13 @@ describe("BFF v1 contract drift", () => {
       expect(openApi, `OpenAPI must include ${p}`).toContain(p);
     }
 
+    expect(paths.strategies()).toBe("/bff/strategies");
+    expect(paths.strategies({ exclude_state: "draft", page_size: 20 })).toBe(
+      "/bff/strategies?exclude_state=draft&page_size=20",
+    );
+    expect(paths.strategies({ state: "approved", pageSize: 20, pageToken: "20" })).toBe(
+      "/bff/strategies?state=approved&page_size=20&page_token=20",
+    );
     expect(paths.researchTasks()).toBe("/bff/research-tasks");
     expect(paths.researchTask("rtask-20261023-008")).toBe("/bff/research-tasks/rtask-20261023-008");
     expect(paths.alphaFactory()).toBe("/bff/alpha-factory");

@@ -145,6 +145,72 @@ describe("VI-1 lists facade", () => {
     expect(Number.isNaN(env.items[0].latencyP95Ms)).toBe(true);
     expect(Number.isNaN(env.items[0].uptimePct)).toBe(true);
   });
+
+  it("requests GET /bff/strategies with exclude_state, state, page_size, and page_token and preserves state_counts and next_page_token", async () => {
+    vi.stubEnv("MODE", "development");
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("VITE_BFF_MODE", "live");
+    vi.stubEnv("VITE_BFF_FALLBACK", "strict");
+    liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
+
+    const realApprovedRow = {
+      id: "strategy-persona-59b2143dcecf205acbf1",
+      strategy_id: "strategy-persona-59b2143dcecf205acbf1",
+      name: "Pantheon Dev Paper Release 42123862167 Attempt 1",
+      state: "approved",
+      risk: "low",
+      capitalPoolId: "pool-persona-paper-59b2143dcecf205acbf1",
+      capital_pool_id: "pool-persona-paper-59b2143dcecf205acbf1",
+    };
+
+    const fetchUrls: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      fetchUrls.push(url);
+      return new Response(
+        JSON.stringify({
+          data: [realApprovedRow],
+          items: [realApprovedRow],
+          meta: {
+            state_counts: {
+              draft: 4764,
+              review: 1,
+              approved: 133,
+              paper_running: 0,
+              canary_running: 0,
+              live_running: 0,
+              deployed: 0,
+              paused: 0,
+              retired: 2,
+            },
+          },
+          page_info: { page_size: 20, total: 134, next_page_token: "20" },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    });
+
+    const env = await lists.strategies({ exclude_state: "draft", page_size: 20, page_token: "20" });
+    expect(fetchUrls).toEqual(["/bff/strategies?exclude_state=draft&page_size=20&page_token=20"]);
+    expect(env.items).toHaveLength(1);
+    expect(env.items[0]).toMatchObject({
+      id: "strategy-persona-59b2143dcecf205acbf1",
+      name: "Pantheon Dev Paper Release 42123862167 Attempt 1",
+      state: "approved",
+      risk: "low",
+      capitalPoolId: "pool-persona-paper-59b2143dcecf205acbf1",
+    });
+    expect(env.estimatedTotal).toBe(134);
+    expect(env.cursor.next).toBe("20");
+    expect(env.meta).toMatchObject({
+      state_counts: {
+        draft: 4764,
+        review: 1,
+        approved: 133,
+        retired: 2,
+      },
+    });
+  });
 });
 
 describe("VI-1 useLiveListV1", () => {
@@ -207,5 +273,39 @@ describe("VI-1 useLiveListV1", () => {
     });
     expect(liveStatus.get().effective).toBe("mock");
     expect(liveStatus.get().lastError).toContain("strict:");
+  });
+
+  it("reloads when reloadKey changes and exposes cursor on the hook result", async () => {
+    const loader = vi.fn()
+      .mockResolvedValueOnce({
+        items: [{ id: "strategy-persona-59b2143dcecf205acbf1" }],
+        cursor: { next: "20" },
+        pageSize: 1,
+        estimatedTotal: 134,
+        totalCountExact: true,
+        meta: { state_counts: { approved: 133, review: 1, draft: 4764, retired: 2 } },
+      })
+      .mockResolvedValueOnce({
+        items: [{ id: "strategy-persona-59b2143dcecf205acbf1-page2" }],
+        cursor: {},
+        pageSize: 1,
+        estimatedTotal: 134,
+        totalCountExact: true,
+        meta: { state_counts: { approved: 133, review: 1, draft: 4764, retired: 2 } },
+      });
+
+    const { result, rerender } = renderHook(
+      ({ reloadKey }) => useLiveListV1(loader, ["Strategy"], { auto: false, reloadKey }),
+      { initialProps: { reloadKey: "strategies:default:" } },
+    );
+
+    await waitFor(() => expect(result.current.items).toEqual([{ id: "strategy-persona-59b2143dcecf205acbf1" }]));
+    expect(result.current.cursor?.next).toBe("20");
+    expect(result.current.estimatedTotal).toBe(134);
+
+    rerender({ reloadKey: "strategies:default:20" });
+    await waitFor(() => expect(result.current.items).toEqual([{ id: "strategy-persona-59b2143dcecf205acbf1-page2" }]));
+    expect(result.current.cursor?.next).toBeUndefined();
+    expect(loader).toHaveBeenCalledTimes(2);
   });
 });

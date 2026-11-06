@@ -444,6 +444,7 @@ export default {
     pending: "待處理", running: "執行中", success: "成功",
     warning: "警告", failed: "失敗", paused: "暫停",
     draft: "草稿", review: "審查中", approved: "已核准",
+    paper_running: "模擬執行中", canary_running: "金絲雀執行中", live_running: "正式執行中",
     rejected: "已駁回", revoked: "已撤銷", superseded: "已取代",
     active: "啟用", deployed: "已部署", retired: "已退役", candidate: "候選", unavailable: "無資料",
   },
@@ -802,6 +803,24 @@ export default {
     sweep: {
       run: "執行參數掃描",
       queued: "參數掃描已排入",
+    },
+    list: {
+      filter: {
+        groupLabel: "策略狀態篩選",
+        default: "預設（隱藏草稿）",
+      },
+      hiddenDraftsWithCount: "預設已隱藏 {{count}} 筆草稿策略。",
+      hiddenDraftsNoCount: "預設已隱藏草稿策略。",
+      showDraftsWithCount: "顯示草稿（{{count}}）",
+      showDraftsNoCount: "顯示草稿",
+      pagination: {
+        label: "策略列表分頁",
+        showingRange: "顯示第 {{start}}–{{end}} 筆，共 {{total}} 筆",
+        totalCount: "共 {{total}} 筆",
+        pageOf: "第 {{page}} / {{totalPages}} 頁",
+        first: "第一頁",
+        last: "最後一頁",
+      },
     },
   },
   runtime: {

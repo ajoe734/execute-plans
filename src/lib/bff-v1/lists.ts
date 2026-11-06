@@ -190,6 +190,66 @@ export function asListEnvelope<T>(
   return () => loader().then((xs) => envelope(xs, cls));
 }
 
+export interface StrategyListQueryOptions {
+  state?: string;
+  excludeState?: string;
+  exclude_state?: string;
+  personaId?: string;
+  persona_id?: string;
+  pageSize?: number;
+  page_size?: number;
+  pageToken?: string | null;
+  page_token?: string | null;
+}
+
+function buildStrategyListQuery(
+  options?: StrategyListQueryOptions,
+): Record<string, string | number | undefined> | undefined {
+  if (!options) return undefined;
+  const query: Record<string, string | number | undefined> = {};
+  const state = options.state?.trim();
+  const excludeState = (options.exclude_state ?? options.excludeState)?.trim();
+  const personaId = (options.persona_id ?? options.personaId)?.trim();
+  const pageSize = options.page_size ?? options.pageSize;
+  const pageToken = (options.page_token ?? options.pageToken)?.trim();
+  if (state) query.state = state;
+  if (excludeState) query.exclude_state = excludeState;
+  if (personaId) query.persona_id = personaId;
+  if (typeof pageSize === "number" && Number.isFinite(pageSize) && pageSize > 0) {
+    query.page_size = pageSize;
+  }
+  if (pageToken) query.page_token = pageToken;
+  return Object.keys(query).length > 0 ? query : undefined;
+}
+
+function strictLiveStrategyListLoader<T extends { state?: unknown }>(
+  cls: ListClass,
+  adaptItem?: (value: unknown) => T | undefined,
+): (options?: StrategyListQueryOptions) => Promise<ListEnvelope<T>> {
+  const adaptItems = (items: unknown[]): T[] => adaptItem
+    ? items.map((item) => adaptItem(item)).filter((item): item is T => Boolean(item))
+    : items as T[];
+  return async (options?: StrategyListQueryOptions) => {
+    const query = buildStrategyListQuery(options);
+    const excludeState = (options?.exclude_state ?? options?.excludeState)?.trim().toLowerCase();
+    const data = await bffFetch<unknown>({
+      method: "GET",
+      path: paths.strategies(),
+      ...(query ? { query } : {}),
+    });
+    const env = normalizeLiveListResponse<unknown>(data, cls);
+    const adapted = adaptItems(env.items);
+    const items = excludeState
+      ? adapted.filter((item) => String(item?.state ?? "").trim().toLowerCase() !== excludeState)
+      : adapted;
+    return {
+      ...env,
+      items,
+      pageSize: items.length,
+    };
+  };
+}
+
 function strictLiveListLoader<T>(
   path: string,
   cls: ListClass,
@@ -447,7 +507,7 @@ export const LIST_CLASS_BY_KEY = {
  *  BFF-LUV-FE-002 covers all Management Console route families with real
  *  live adapters. */
 export const lists = {
-  strategies:      strictLiveListLoader(paths.strategies(),         LIST_CLASS_BY_KEY.strategies, normalizeBaseObjectFields),
+  strategies:      strictLiveStrategyListLoader(LIST_CLASS_BY_KEY.strategies, normalizeBaseObjectFields),
   personas:        strictLiveListLoader(paths.personas(),           LIST_CLASS_BY_KEY.personas, normalizeBaseObjectFields),
   capitalPools:    strictLivePaginatedListLoader(paths.capitalPools(), LIST_CLASS_BY_KEY.capitalPools, normalizeCapitalPool),
   rankingFormulas: strictLiveListLoader(paths.rankingFormulas(),    LIST_CLASS_BY_KEY.rankingFormulas, normalizeBaseObjectFields),

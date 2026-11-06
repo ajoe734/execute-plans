@@ -7,8 +7,9 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { LiveStatusBanner } from "@/components/layout/LiveStatusBanner";
 import i18n from "@/i18n";
 import { liveStatus } from "@/lib/bff-v1/liveStatus";
-import { ObjectListPage, resolveObjectRowHref } from "./ObjectListPage";
+import { ObjectListPage, resolveObjectRowHref, shouldNavigateOnCreatedEntity } from "./ObjectListPage";
 import { ArtifactsList, CapitalPoolsList, EvolutionList, ResearchList, StrategiesList } from "./Lists";
+import { StrategyDetail } from "./StrategyDetail";
 import type { CreateBehavior } from "@/lib/writeIntents/types";
 import capitalPoolsFixture from "@/lib/bff-v1/__tests__/fixtures/hosted-20261020/capital-pools.json";
 
@@ -2009,5 +2010,541 @@ describe("ObjectListPage", () => {
     expect(liveStatus.get().lastError).toBeUndefined();
     expect(screen.queryByText(/strict typed error/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/FALLBACK DATA/i)).not.toBeInTheDocument();
+  });
+
+  it("requests exclude_state=draft by default on /management/strategies, shows hidden draft count with one-click Show drafts action, filters via BFF with state query param (default, approved, review, retired, draft, all, and CommandCenter DTO states), and pages one server page at a time up to row 4898", async () => {
+    const { useLiveListV1: actualUseLiveListV1 } = await vi.importActual<typeof import("@/lib/bff-v1")>("@/lib/bff-v1");
+    mocks.useLiveListV1.mockImplementation(actualUseLiveListV1);
+    stubLiveEnv();
+
+    const realApprovedRow = {
+      id: "strategy-persona-59b2143dcecf205acbf1",
+      strategy_id: "strategy-persona-59b2143dcecf205acbf1",
+      name: "Pantheon Dev Paper Release 42123862167 Attempt 1",
+      state: "approved",
+      risk: "low",
+      capitalPoolId: "pool-persona-paper-59b2143dcecf205acbf1",
+      capital_pool_id: "pool-persona-paper-59b2143dcecf205acbf1",
+      owner: "persona-59b2143dcecf205acbf1",
+      updated_at: "2026-11-06T01:00:00Z",
+    };
+    const realReviewRow = {
+      ...realApprovedRow,
+      id: "strategy-persona-59b2143dcecf205acbf1-review",
+      strategy_id: "strategy-persona-59b2143dcecf205acbf1-review",
+      name: "Pantheon Dev Paper Release 42123862167 Review Candidate",
+      state: "review",
+    };
+    const realRetiredRow = {
+      ...realApprovedRow,
+      id: "strategy-persona-59b2143dcecf205acbf1-retired",
+      strategy_id: "strategy-persona-59b2143dcecf205acbf1-retired",
+      name: "Pantheon Dev Paper Release 42123862167 Retired",
+      state: "retired",
+    };
+    const realDraftRow = {
+      ...realApprovedRow,
+      id: "strategy-persona-59b2143dcecf205acbf1-draft",
+      strategy_id: "strategy-persona-59b2143dcecf205acbf1-draft",
+      name: "Pantheon Dev Paper Release 42123862167 Draft",
+      state: "draft",
+    };
+    const realLastPageRow = {
+      ...realDraftRow,
+      id: "strategy-persona-59b2143dcecf205acbf1-4898",
+      strategy_id: "strategy-persona-59b2143dcecf205acbf1-4898",
+      name: "Pantheon Dev Paper Release 42123862167 Row 4898",
+    };
+
+    const hostedStateCounts = {
+      draft: 4764,
+      review: 1,
+      approved: 133,
+      paper_running: 0,
+      canary_running: 0,
+      live_running: 0,
+      deployed: 0,
+      paused: 0,
+      retired: 2,
+    };
+
+    const requestedUrls: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      requestedUrls.push(url);
+      const parsed = new URL(url, "http://localhost");
+      const state = parsed.searchParams.get("state");
+      const excludeState = parsed.searchParams.get("exclude_state");
+      const pageToken = parsed.searchParams.get("page_token");
+
+      if (excludeState === "draft") {
+        return new Response(
+          JSON.stringify({
+            data: [realApprovedRow, realReviewRow],
+            items: [realApprovedRow, realReviewRow],
+            meta: { state_counts: hostedStateCounts },
+            page_info: { page_size: 20, total: 134, next_page_token: "20" },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (state === "approved") {
+        return new Response(
+          JSON.stringify({
+            data: [realApprovedRow],
+            items: [realApprovedRow],
+            meta: { state_counts: hostedStateCounts },
+            page_info: { page_size: 20, total: 133, next_page_token: "20" },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (state === "review") {
+        return new Response(
+          JSON.stringify({
+            data: [realReviewRow],
+            items: [realReviewRow],
+            meta: { state_counts: hostedStateCounts },
+            page_info: { page_size: 20, total: 1, next_page_token: null },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (state === "retired") {
+        return new Response(
+          JSON.stringify({
+            data: [realRetiredRow],
+            items: [realRetiredRow],
+            meta: { state_counts: hostedStateCounts },
+            page_info: { page_size: 20, total: 2, next_page_token: null },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (state === "draft") {
+        return new Response(
+          JSON.stringify({
+            data: [realDraftRow],
+            items: [realDraftRow],
+            meta: { state_counts: hostedStateCounts },
+            page_info: { page_size: 20, total: 4764, next_page_token: "20" },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      // All view (no state, no exclude_state)
+      if (!state && !excludeState) {
+        if (pageToken === "20") {
+          return new Response(
+            JSON.stringify({
+              data: [{ ...realApprovedRow, id: "strategy-persona-59b2143dcecf205acbf1-p2", name: "Pantheon Dev Paper Release Page 2" }],
+              items: [{ ...realApprovedRow, id: "strategy-persona-59b2143dcecf205acbf1-p2", name: "Pantheon Dev Paper Release Page 2" }],
+              meta: { state_counts: hostedStateCounts },
+              page_info: { page_size: 20, total: 4898, next_page_token: "40" },
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          );
+        }
+        if (pageToken === "4880") {
+          return new Response(
+            JSON.stringify({
+              data: [realLastPageRow],
+              items: [realLastPageRow],
+              meta: { state_counts: hostedStateCounts },
+              page_info: { page_size: 20, total: 4898, next_page_token: null },
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          );
+        }
+        return new Response(
+          JSON.stringify({
+            data: [realApprovedRow, realDraftRow],
+            items: [realApprovedRow, realDraftRow],
+            meta: { state_counts: hostedStateCounts },
+            page_info: { page_size: 20, total: 4898, next_page_token: "20" },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+
+      return new Response(
+        JSON.stringify({
+          data: [],
+          items: [],
+          meta: { state_counts: hostedStateCounts },
+          page_info: { page_size: 20, total: 0, next_page_token: null },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    });
+
+    function LocationProbe() {
+      const loc = useLocation();
+      return <output data-testid="strategy-location">{loc.pathname}{loc.search}</output>;
+    }
+
+    await i18n.changeLanguage("en-US");
+    render(
+      <I18nextProvider i18n={i18n}>
+        <TooltipProvider>
+          <MemoryRouter initialEntries={["/management/strategies"]}>
+            <Routes>
+              <Route
+                path="/management/strategies"
+                element={(
+                  <>
+                    <StrategiesList />
+                    <LocationProbe />
+                  </>
+                )}
+              />
+            </Routes>
+          </MemoryRouter>
+        </TooltipProvider>
+      </I18nextProvider>,
+    );
+
+    // AC 1: Default view requests exclude_state=draft and shows no draft row
+    expect(await screen.findByText("Pantheon Dev Paper Release 42123862167 Attempt 1")).toBeInTheDocument();
+    expect(requestedUrls).toEqual(["/bff/strategies?exclude_state=draft&page_size=20"]);
+    expect(screen.queryByText("Pantheon Dev Paper Release 42123862167 Draft")).not.toBeInTheDocument();
+
+    // AC 2: State control offers default, approved, review, retired, draft, and all with counts from meta.state_counts
+    expect(screen.getByRole("button", { name: "Default (hide drafts) (134)" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Approved (133)" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: "In Review (1)" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: "Retired (2)" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: "Draft (4764)" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: "All (4898)" })).toHaveAttribute("aria-pressed", "false");
+
+    // AC 3: Default view states how many drafts are hidden with one-click action to see them
+    const hiddenBanner = screen.getByTestId("strategy-hidden-drafts-banner");
+    expect(hiddenBanner).toHaveTextContent("4764 draft strategies are hidden by default.");
+    const showDraftsBtn = screen.getByTestId("strategy-show-drafts-button");
+    expect(showDraftsBtn).toHaveTextContent("Show drafts (4764)");
+
+    // Clicking Show drafts switches to state=draft in URL and fetches state=draft from BFF
+    fireEvent.click(showDraftsBtn);
+    expect(await screen.findByText("Pantheon Dev Paper Release 42123862167 Draft")).toBeInTheDocument();
+    expect(screen.getByTestId("strategy-location")).toHaveTextContent("/management/strategies?state=draft");
+    expect(requestedUrls[requestedUrls.length - 1]).toBe("/bff/strategies?state=draft&page_size=20");
+    expect(screen.queryByTestId("strategy-hidden-drafts-banner")).not.toBeInTheDocument();
+
+    // Switch to retired
+    fireEvent.click(screen.getByRole("button", { name: "Retired (2)" }));
+    expect(await screen.findByText("Pantheon Dev Paper Release 42123862167 Retired")).toBeInTheDocument();
+    expect(screen.getByTestId("strategy-location")).toHaveTextContent("/management/strategies?state=retired");
+    expect(requestedUrls[requestedUrls.length - 1]).toBe("/bff/strategies?state=retired&page_size=20");
+
+    // Switch to all view and verify server paging through 4898 rows without loading all pages at once (AC 4)
+    const callCountBeforeAll = requestedUrls.length;
+    fireEvent.click(screen.getByRole("button", { name: "All (4898)" }));
+    expect(await screen.findByText("Pantheon Dev Paper Release 42123862167 Attempt 1")).toBeInTheDocument();
+    expect(screen.getByTestId("strategy-location")).toHaveTextContent("/management/strategies?state=all");
+    // Only 1 request was made for page 1 of all view
+    expect(requestedUrls.length - callCountBeforeAll).toBe(1);
+    expect(requestedUrls[requestedUrls.length - 1]).toBe("/bff/strategies?page_size=20");
+    expect(screen.getByTestId("strategy-list-total")).toHaveTextContent("Showing 1–2 of 4898");
+    expect(screen.getByTestId("strategy-list-page-indicator")).toHaveTextContent("Page 1 of 245");
+
+    // Next page sends page_token=20
+    fireEvent.click(screen.getByTestId("strategy-page-next"));
+    expect(await screen.findByText("Pantheon Dev Paper Release Page 2")).toBeInTheDocument();
+    expect(requestedUrls[requestedUrls.length - 1]).toBe("/bff/strategies?page_size=20&page_token=20");
+    expect(screen.getByTestId("strategy-list-page-indicator")).toHaveTextContent("Page 2 of 245");
+
+    // Last page sends page_token=4880 and reaches row 4898 in 1 click without fetching intermediate pages
+    const callCountBeforeLast = requestedUrls.length;
+    fireEvent.click(screen.getByTestId("strategy-page-last"));
+    expect(await screen.findByText("Pantheon Dev Paper Release 42123862167 Row 4898")).toBeInTheDocument();
+    expect(requestedUrls.length - callCountBeforeLast).toBe(1);
+    expect(requestedUrls[requestedUrls.length - 1]).toBe("/bff/strategies?page_size=20&page_token=4880");
+    expect(screen.getByTestId("strategy-list-page-indicator")).toHaveTextContent("Page 245 of 245");
+    expect(screen.getByTestId("strategy-page-next")).toBeDisabled();
+  });
+
+  it("handles meta.state_counts: null without inventing counts, lands on CommandCenter state=<value> query links, and keeps drafts reachable by direct URL while navigating on strategy onCreated", async () => {
+    const { useLiveListV1: actualUseLiveListV1 } = await vi.importActual<typeof import("@/lib/bff-v1")>("@/lib/bff-v1");
+    mocks.useLiveListV1.mockImplementation(actualUseLiveListV1);
+    stubLiveEnv();
+
+    const realApprovedRow = {
+      id: "strategy-persona-59b2143dcecf205acbf1",
+      strategy_id: "strategy-persona-59b2143dcecf205acbf1",
+      name: "Pantheon Dev Paper Release 42123862167 Attempt 1",
+      state: "approved",
+      risk: "low",
+      capitalPoolId: "pool-persona-paper-59b2143dcecf205acbf1",
+      capital_pool_id: "pool-persona-paper-59b2143dcecf205acbf1",
+    };
+
+    const requestedUrls: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      requestedUrls.push(url);
+      if (url.includes("/bff/strategies/strategy-persona-59b2143dcecf205acbf1-draft")) {
+        return new Response(
+          JSON.stringify({
+            data: {
+              ...realApprovedRow,
+              id: "strategy-persona-59b2143dcecf205acbf1-draft",
+              strategy_id: "strategy-persona-59b2143dcecf205acbf1-draft",
+              name: "Pantheon Dev Paper Release 42123862167 Draft",
+              state: "draft",
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return new Response(
+        JSON.stringify({
+          data: [realApprovedRow],
+          items: [realApprovedRow],
+          meta: { state_counts: null },
+          page_info: { page_size: 20, total: 1, next_page_token: null },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    });
+
+    const { unmount } = render(
+      <I18nextProvider i18n={i18n}>
+        <TooltipProvider>
+          <MemoryRouter initialEntries={["/management/strategies"]}>
+            <Routes>
+              <Route path="/management/strategies" element={<StrategiesList />} />
+            </Routes>
+          </MemoryRouter>
+        </TooltipProvider>
+      </I18nextProvider>,
+    );
+
+    expect(await screen.findByText("Pantheon Dev Paper Release 42123862167 Attempt 1")).toBeInTheDocument();
+    // When state_counts is null, buttons show labels only with no invented count
+    expect(screen.getByRole("button", { name: "Default (hide drafts)" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Approved" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "In Review" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Retired" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Draft" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "All" })).toBeInTheDocument();
+    expect(screen.getByTestId("strategy-hidden-drafts-banner")).toHaveTextContent(
+      "Draft strategies are hidden by default.",
+    );
+    expect(screen.getByTestId("strategy-show-drafts-button")).toHaveTextContent(/^Show drafts$/);
+    unmount();
+
+    // CommandCenter deep link with state=paper_running lands on that filter and sends state=paper_running to BFF
+    const { unmount: unmountCmd } = render(
+      <I18nextProvider i18n={i18n}>
+        <TooltipProvider>
+          <MemoryRouter initialEntries={["/management/strategies?state=paper_running"]}>
+            <Routes>
+              <Route path="/management/strategies" element={<StrategiesList />} />
+            </Routes>
+          </MemoryRouter>
+        </TooltipProvider>
+      </I18nextProvider>,
+    );
+
+    expect(await screen.findByText("Pantheon Dev Paper Release 42123862167 Attempt 1")).toBeInTheDocument();
+    expect(requestedUrls[requestedUrls.length - 1]).toBe("/bff/strategies?state=paper_running&page_size=20");
+    expect(screen.getByRole("button", { name: "Paper Running" })).toHaveAttribute("aria-pressed", "true");
+    unmountCmd();
+
+    // Direct URL to a draft strategy remains reachable (AC 6)
+    render(
+      <I18nextProvider i18n={i18n}>
+        <TooltipProvider>
+          <MemoryRouter initialEntries={["/management/strategies/strategy-persona-59b2143dcecf205acbf1-draft"]}>
+            <Routes>
+              <Route path="/management/strategies/:id" element={<StrategyDetail />} />
+            </Routes>
+          </MemoryRouter>
+        </TooltipProvider>
+      </I18nextProvider>,
+    );
+
+    expect(await screen.findByText("Pantheon Dev Paper Release 42123862167 Draft")).toBeInTheDocument();
+    expect(shouldNavigateOnCreatedEntity("strategy")).toBe(true);
+    expect(shouldNavigateOnCreatedEntity("persona")).toBe(true);
+    expect(shouldNavigateOnCreatedEntity("evolutionProgram")).toBe(false);
+  });
+
+  it("creates a draft strategy from /management/strategies via POST /bff/strategies, navigates to /management/strategies/<server-id>, and renders its detail page on navigation and direct URL reload", async () => {
+    const { useLiveListV1: actualUseLiveListV1 } = await vi.importActual<typeof import("@/lib/bff-v1")>("@/lib/bff-v1");
+    mocks.useLiveListV1.mockImplementation(actualUseLiveListV1);
+    stubLiveEnv();
+
+    const serverCreatedStrategy = {
+      id: "strategy-20261106-c0ffee01",
+      strategy_id: "strategy-20261106-c0ffee01",
+      name: "Mean Reversion Intraday Draft",
+      owner: "ops@mvl-cap.tw",
+      updatedAt: "2026-11-06T07:15:00Z",
+      state: "draft",
+      risk: "medium",
+      alpha: "alpha_mr_intraday_v1",
+      capitalPoolId: "pool-paper-01",
+      personaIds: ["persona-alpha-01"],
+      pnl: null,
+      pnl30d: null,
+      sharpe: null,
+      drawdown: null,
+      totalTrades: null,
+      metricsAsOf: null,
+      metricsResolution: "missing",
+      metricsPersonaId: null,
+      availableActions: ["edit", "submit", "retire"],
+      labelKey: "strategy.strategy-20261106-c0ffee01",
+    };
+
+    const capturedCalls: Array<{ method: string; url: string; headers: Record<string, string>; body?: unknown }> = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const method = (init?.method ?? "GET").toUpperCase();
+      const headers = (init?.headers ?? {}) as Record<string, string>;
+      const body = typeof init?.body === "string" ? JSON.parse(init.body) : undefined;
+      capturedCalls.push({ method, url, headers, body });
+
+      if (method === "POST" && url.endsWith("/bff/strategies")) {
+        return new Response(
+          JSON.stringify({
+            data: serverCreatedStrategy,
+            meta: { snapshot_at: "2026-11-06T07:15:00Z" },
+          }),
+          { status: 201, headers: { "Content-Type": "application/json" } },
+        );
+      }
+
+      if (method === "GET" && url.includes("/bff/strategies/strategy-20261106-c0ffee01")) {
+        return new Response(
+          JSON.stringify({
+            data: serverCreatedStrategy,
+            meta: { snapshot_at: "2026-11-06T07:15:00Z" },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+
+      if (method === "GET" && url.includes("/bff/strategies")) {
+        return new Response(
+          JSON.stringify({
+            data: [],
+            items: [],
+            meta: {
+              state_counts: {
+                total: 4764,
+                default_view: 0,
+                draft: 4764,
+                review: 0,
+                approved: 0,
+                paper_running: 0,
+                deployed: 0,
+                paused: 0,
+                retired: 0,
+                failed: 0,
+              },
+            },
+            page_info: { page_size: 20, total: 0, next_page_token: null },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+
+      return new Response(
+        JSON.stringify({ data: [], items: [], meta: {} }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    });
+
+    function LocationProbe() {
+      const loc = useLocation();
+      return <output data-testid="strategy-create-location">{loc.pathname}{loc.search}</output>;
+    }
+
+    await i18n.changeLanguage("en-US");
+    const { unmount } = render(
+      <I18nextProvider i18n={i18n}>
+        <TooltipProvider>
+          <MemoryRouter initialEntries={["/management/strategies"]}>
+            <Routes>
+              <Route
+                path="/management/strategies"
+                element={(
+                  <>
+                    <StrategiesList />
+                    <LocationProbe />
+                  </>
+                )}
+              />
+              <Route
+                path="/management/strategies/:id"
+                element={(
+                  <>
+                    <StrategyDetail />
+                    <LocationProbe />
+                  </>
+                )}
+              />
+            </Routes>
+          </MemoryRouter>
+        </TooltipProvider>
+      </I18nextProvider>,
+    );
+
+    const createButtons = await screen.findAllByRole("button", { name: /^Create$/i });
+    expect(createButtons[0]).toBeEnabled();
+    fireEvent.click(createButtons[0]);
+
+    // Fill the Strategy create drawer fields
+    const nameInput = await screen.findByLabelText(/Name/i);
+    const alphaInput = screen.getByLabelText(/Alpha/i);
+    const poolInput = screen.getByLabelText(/Capital Pool/i);
+    const personasInput = screen.getByLabelText(/Persona IDs/i);
+
+    fireEvent.change(nameInput, { target: { value: "Mean Reversion Intraday Draft" } });
+    fireEvent.change(alphaInput, { target: { value: "alpha_mr_intraday_v1" } });
+    fireEvent.change(poolInput, { target: { value: "pool-paper-01" } });
+    fireEvent.change(personasInput, { target: { value: "persona-alpha-01" } });
+    fireEvent.keyDown(personasInput, { key: "Enter" });
+
+    const allCreateButtons = screen.getAllByRole("button", { name: /^Create$/i });
+    const submitBtn = allCreateButtons[allCreateButtons.length - 1];
+    fireEvent.click(submitBtn);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("strategy-create-location")).toHaveTextContent(
+        "/management/strategies/strategy-20261106-c0ffee01",
+      );
+    });
+
+    const postCall = capturedCalls.find((c) => c.method === "POST" && c.url.endsWith("/bff/strategies"));
+    expect(postCall).toBeDefined();
+    expect(postCall?.headers["Idempotency-Key"]).toMatch(/\S+/);
+    expect(postCall?.body).toEqual({
+      name: "Mean Reversion Intraday Draft",
+      alpha: "alpha_mr_intraday_v1",
+      capitalPoolId: "pool-paper-01",
+      personaIds: ["persona-alpha-01"],
+      state: "draft",
+    });
+
+    expect(await screen.findByText("Mean Reversion Intraday Draft")).toBeInTheDocument();
+    unmount();
+
+    // Verify direct URL reload of the newly created draft strategy
+    render(
+      <I18nextProvider i18n={i18n}>
+        <TooltipProvider>
+          <MemoryRouter initialEntries={["/management/strategies/strategy-20261106-c0ffee01"]}>
+            <Routes>
+              <Route path="/management/strategies/:id" element={<StrategyDetail />} />
+            </Routes>
+          </MemoryRouter>
+        </TooltipProvider>
+      </I18nextProvider>,
+    );
+
+    expect(await screen.findByText("Mean Reversion Intraday Draft")).toBeInTheDocument();
   });
 });

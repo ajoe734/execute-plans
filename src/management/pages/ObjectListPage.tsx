@@ -9,7 +9,7 @@ import { StatusBadge } from "@/platform/components/StatusBadge";
 import { RiskBadge } from "@/platform/components/RiskBadge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Plus, RefreshCw, Inbox } from "lucide-react";
 import { useT } from "@/platform/hooks";
 import { safeDateTime } from "@/lib/utils";
@@ -25,6 +25,10 @@ export function hasValidObjectRowId(row: { id?: unknown } | null | undefined): r
   if (!row || typeof row.id !== "string") return false;
   const trimmed = row.id.trim();
   return trimmed.length > 0 && trimmed !== "undefined" && trimmed !== "null";
+}
+
+export function shouldNavigateOnCreatedEntity(entity: string | undefined): boolean {
+  return entity === "persona" || entity === "strategy";
 }
 
 export function resolveObjectRowHref<T extends BaseObject>(
@@ -71,6 +75,18 @@ export interface ObjectListScopeConfig<T, S extends string = string> {
   ) => ObjectListEmptyStateConfig | undefined;
 }
 
+export interface ObjectListRenderContext<T extends BaseObject> {
+  rows: T[];
+  visibleRows: T[];
+  meta: unknown;
+  estimatedTotal?: number;
+  pageSize: number;
+  cursor?: ListEnvelope<T>["cursor"];
+  loading: boolean;
+  isInitialLoading: boolean;
+  isDegradedEmpty: boolean;
+}
+
 interface Props<T extends BaseObject> {
   title: string;
   /** VI-1: now returns a ListEnvelope. Use bffV1.lists.* or asListEnvelope(). */
@@ -102,6 +118,12 @@ interface Props<T extends BaseObject> {
   alwaysRenderSummary?: boolean;
   /** Optional custom empty message rendered inside DataTable when visibleRows is empty. */
   emptyTableMessage?: string;
+  /** Optional key that triggers useLiveListV1 reload when server filter or page changes. */
+  reloadKey?: string;
+  /** Optional controls rendered above the table/summary. */
+  topControls?: (ctx: ObjectListRenderContext<T>) => ReactNode;
+  /** Optional controls rendered below the table. */
+  bottomControls?: (ctx: ObjectListRenderContext<T>) => ReactNode;
 }
 
 interface PartialDataSurfaceInfo {
@@ -186,7 +208,7 @@ function cleanUnavailableReason(
 }
 
 export function ObjectListPage<T extends BaseObject>({
-  title, loader, basePath, listHref, rowHref, nameCell, columns: customColumns, extraColumns = [], liveKinds = [], createBehavior, focusParam, focusLabel, focusMatch, emptyState, scopeConfig, summary, alwaysRenderSummary = false, emptyTableMessage,
+  title, loader, basePath, listHref, rowHref, nameCell, columns: customColumns, extraColumns = [], liveKinds = [], createBehavior, focusParam, focusLabel, focusMatch, emptyState, scopeConfig, summary, alwaysRenderSummary = false, emptyTableMessage, reloadKey, topControls, bottomControls,
 }: Props<T>) {
   const t = useT();
   const navigate = useNavigate();
@@ -200,7 +222,7 @@ export function ObjectListPage<T extends BaseObject>({
   const focusId = focusParamList
     .map((param) => searchParams.get(param)?.trim() ?? "")
     .find((val) => val.length > 0) ?? "";
-  const { items: rows, pending, refresh, meta, loading } = useLiveListV1<T>(loader, liveKinds, { auto: false });
+  const { items: rows, pending, refresh, meta, loading, estimatedTotal, pageSize = 0, cursor } = useLiveListV1<T>(loader, liveKinds, { auto: false, reloadKey });
   const isInitialLoading = Boolean(loading) && rows.length === 0;
   const [drawerOpen, setDrawerOpen] = useState(false);
   const degradation = extractDegradation(meta);
@@ -315,32 +337,36 @@ export function ObjectListPage<T extends BaseObject>({
   const renderCreateAction = () => {
     if (!createBehavior) {
       return (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span tabIndex={0}>
-              <Button size="sm" disabled>
-                <Plus className="h-4 w-4 mr-1" />{t("actions.create")}
-              </Button>
-            </span>
-          </TooltipTrigger>
-          <TooltipContent>{t("common.createNotConfigured")}</TooltipContent>
-        </Tooltip>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span tabIndex={0}>
+                <Button size="sm" disabled>
+                  <Plus className="h-4 w-4 mr-1" />{t("actions.create")}
+                </Button>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>{t("common.createNotConfigured")}</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       );
     }
     if (createBehavior.kind === "disabled") {
       const reason = t(createBehavior.reasonI18nKey, { defaultValue: createBehavior.reasonI18nKey });
       return (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span tabIndex={0} title={reason}>
-              <Button size="sm" disabled title={reason}>
-                <Plus className="h-4 w-4 mr-1" />{t("actions.create")}
-              </Button>
-              <span className="sr-only">{reason}</span>
-            </span>
-          </TooltipTrigger>
-          <TooltipContent>{reason}</TooltipContent>
-        </Tooltip>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span tabIndex={0} title={reason}>
+                <Button size="sm" disabled title={reason}>
+                  <Plus className="h-4 w-4 mr-1" />{t("actions.create")}
+                </Button>
+                <span className="sr-only">{reason}</span>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>{reason}</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       );
     }
     if (createBehavior.kind === "redirect") {
@@ -366,17 +392,19 @@ export function ObjectListPage<T extends BaseObject>({
     if (!realWritesEnabled()) {
       const reason = t("mgmt.dataSources.realWritesRequired");
       return (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span tabIndex={0} title={reason}>
-              <Button size="sm" disabled title={reason}>
-                <Plus className="h-4 w-4 mr-1" />{buttonLabel}
-              </Button>
-              <span className="sr-only">{reason}</span>
-            </span>
-          </TooltipTrigger>
-          <TooltipContent>{reason}</TooltipContent>
-        </Tooltip>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span tabIndex={0} title={reason}>
+                <Button size="sm" disabled title={reason}>
+                  <Plus className="h-4 w-4 mr-1" />{buttonLabel}
+                </Button>
+                <span className="sr-only">{reason}</span>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>{reason}</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       );
     }
     // drawer
@@ -390,7 +418,7 @@ export function ObjectListPage<T extends BaseObject>({
           open={drawerOpen}
           onOpenChange={(v) => { setDrawerOpen(v); if (!v) refresh(); }}
           onCreated={(created) => {
-            if (createBehavior.entity === "persona" && hasValidObjectRowId(created)) {
+            if (shouldNavigateOnCreatedEntity(createBehavior.entity) && hasValidObjectRowId(created)) {
               navigate(`${basePath}/${encodeURIComponent(created.id.trim())}`);
             } else {
               refresh();
@@ -412,6 +440,18 @@ export function ObjectListPage<T extends BaseObject>({
         />
       </>
     );
+  };
+
+  const renderContext: ObjectListRenderContext<T> = {
+    rows,
+    visibleRows,
+    meta,
+    estimatedTotal,
+    pageSize,
+    cursor,
+    loading: Boolean(loading),
+    isInitialLoading,
+    isDegradedEmpty,
   };
 
   return (
@@ -445,6 +485,7 @@ export function ObjectListPage<T extends BaseObject>({
             })}
           </div>
         )}
+        {topControls?.(renderContext)}
         {partialDataSurface && (
           <Card
             role="status"
@@ -573,6 +614,7 @@ export function ObjectListPage<T extends BaseObject>({
             fillViewport
           />
         )}
+        {bottomControls?.(renderContext)}
       </PageBody>
     </>
   );
