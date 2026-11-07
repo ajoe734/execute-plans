@@ -1,0 +1,254 @@
+[
+ {
+  "w": 1366,
+  "h": 768,
+  "page": "doc",
+  "clearance": "before",
+  "pager": [
+   1283,
+   708,
+   1342,
+   744
+  ],
+  "ai": [
+   1302,
+   704,
+   1350,
+   752
+  ],
+  "intersects": true,
+  "scrollers": "DIV:1620/707",
+  "docHScroll": false
+ },
+ {
+  "w": 1366,
+  "h": 768,
+  "page": "doc",
+  "clearance": "after",
+  "pager": [
+   1283,
+   628,
+   1342,
+   664
+  ],
+  "ai": [
+   1302,
+   704,
+   1350,
+   752
+  ],
+  "intersects": false,
+  "scrollers": "DIV:1700/707",
+  "docHScroll": false
+ },
+ {
+  "w": 1366,
+  "h": 768,
+  "page": "fill",
+  "clearance": "before",
+  "pager": [
+   1283,
+   708,
+   1342,
+   744
+  ],
+  "ai": [
+   1302,
+   704,
+   1350,
+   752
+  ],
+  "intersects": true,
+  "scrollers": "DIV:2000/611",
+  "docHScroll": false
+ },
+ {
+  "w": 1366,
+  "h": 768,
+  "page": "fill",
+  "clearance": "after",
+  "pager": [
+   1283,
+   628,
+   1342,
+   664
+  ],
+  "ai": [
+   1302,
+   704,
+   1350,
+   752
+  ],
+  "intersects": false,
+  "scrollers": "DIV:2000/531",
+  "docHScroll": false
+ },
+ {
+  "w": 1366,
+  "h": 768,
+  "page": "evidence",
+  "clearance": "before",
+  "pager": [
+   1283,
+   708,
+   1342,
+   744
+  ],
+  "ai": [
+   1302,
+   704,
+   1350,
+   752
+  ],
+  "intersects": true,
+  "scrollers": "DIV:2000/616",
+  "docHScroll": false
+ },
+ {
+  "w": 1366,
+  "h": 768,
+  "page": "evidence",
+  "clearance": "after",
+  "pager": [
+   1283,
+   628,
+   1342,
+   664
+  ],
+  "ai": [
+   1302,
+   704,
+   1350,
+   752
+  ],
+  "intersects": false,
+  "scrollers": "DIV:2000/536",
+  "docHScroll": false
+ },
+ {
+  "w": 1600,
+  "h": 900,
+  "page": "doc",
+  "clearance": "before",
+  "pager": [
+   1517,
+   840,
+   1576,
+   876
+  ],
+  "ai": [
+   1536,
+   836,
+   1584,
+   884
+  ],
+  "intersects": true,
+  "scrollers": "DIV:1620/839",
+  "docHScroll": false
+ },
+ {
+  "w": 1600,
+  "h": 900,
+  "page": "doc",
+  "clearance": "after",
+  "pager": [
+   1517,
+   760,
+   1576,
+   796
+  ],
+  "ai": [
+   1536,
+   836,
+   1584,
+   884
+  ],
+  "intersects": false,
+  "scrollers": "DIV:1700/839",
+  "docHScroll": false
+ },
+ {
+  "w": 1600,
+  "h": 900,
+  "page": "fill",
+  "clearance": "before",
+  "pager": [
+   1517,
+   840,
+   1576,
+   876
+  ],
+  "ai": [
+   1536,
+   836,
+   1584,
+   884
+  ],
+  "intersects": true,
+  "scrollers": "DIV:2000/743",
+  "docHScroll": false
+ },
+ {
+  "w": 1600,
+  "h": 900,
+  "page": "fill",
+  "clearance": "after",
+  "pager": [
+   1517,
+   760,
+   1576,
+   796
+  ],
+  "ai": [
+   1536,
+   836,
+   1584,
+   884
+  ],
+  "intersects": false,
+  "scrollers": "DIV:2000/663",
+  "docHScroll": false
+ },
+ {
+  "w": 1600,
+  "h": 900,
+  "page": "evidence",
+  "clearance": "before",
+  "pager": [
+   1517,
+   840,
+   1576,
+   876
+  ],
+  "ai": [
+   1536,
+   836,
+   1584,
+   884
+  ],
+  "intersects": true,
+  "scrollers": "DIV:2000/748",
+  "docHScroll": false
+ },
+ {
+  "w": 1600,
+  "h": 900,
+  "page": "evidence",
+  "clearance": "after",
+  "pager": [
+   1517,
+   760,
+   1576,
+   796
+  ],
+  "ai": [
+   1536,
+   836,
+   1584,
+   884
+  ],
+  "intersects": false,
+  "scrollers": "DIV:2000/668",
+  "docHScroll": false
+ }
+]

@@ -16,10 +16,13 @@ describe("PageBody bottom clearance", () => {
     );
   });
 
-  it("fill mode does not reserve clearance", () => {
+  it("fill mode keeps its height and reserves clearance as inner padding", () => {
     const { container } = render(<PageBody fill>x</PageBody>);
     const el = container.firstElementChild as HTMLElement;
     expect(el.dataset.pageBodyMode).toBe("fill");
-    expect(el.className).not.toContain("page-body-bottom-clearance");
+    expect(el.className).toContain("flex-1");
+    expect(el.className).toContain("overflow-hidden");
+    expect(el.className).toContain("pb-[calc(1rem+var(--page-body-bottom-clearance,0px))]");
+    expect(el.className).not.toContain("after:");
   });
 });
