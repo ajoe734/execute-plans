@@ -1,22 +1,30 @@
 import "@testing-library/jest-dom/vitest";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import i18n from "@/i18n";
 import {
   bffV1,
+  managementConsoleReads,
   NON_TERMINAL_INCIDENT_STATUS_FILTER,
   PAGINATED_LIST_PAGE_SIZE,
   type Alert,
+  type ApprovalRequest,
   type CapitalPool,
   type Incident,
+  type Job,
   type Persona,
   type Runtime,
   type Strategy,
 } from "@/lib/bff-v1";
 import { liveStatus } from "@/lib/bff-v1/liveStatus";
+import { LiveStatusBanner } from "@/components/layout/LiveStatusBanner";
+import { NotificationCenter, useNotificationCenter } from "@/platform/components/NotificationCenter";
+import { EvolutionDetail } from "./EvolutionDetail";
+import { IncidentDetail } from "./IncidentDetail";
 import { DRAWDOWN_BREACH_THRESHOLD, isDrawdownBreach, RiskCenter } from "./RiskCenter";
+import { StrategyDetail } from "./StrategyDetail";
 
 function renderRiskCenter() {
   return render(
@@ -366,5 +374,420 @@ describe("RiskCenter", () => {
     fireEvent.mouseDown(incidentsTab);
     fireEvent.click(incidentsTab);
     expect(await screen.findByText("Open Incident 21 Beyond First Page")).toBeInTheDocument();
+  });
+
+  describe("alerts timeout_fallback vs healthy/degraded-composed payloads (FE-ALERTS-NOT-EMPTY-20261107)", () => {
+    const timeoutFallbackPayload = {
+      alerts: [],
+      summary: {
+        total_active: 0,
+        highest_severity: null,
+        by_severity: { critical: 0, high: 0, medium: 0, low: 0, info: 0 },
+        by_category: { incident: 0, runtime: 0, risk: 0, governance: 0 },
+      },
+      meta: {
+        snapshot_at: "2026-11-07T00:00:00Z",
+        acknowledgement_supported: true,
+        surfaces: {
+          alerts: {
+            status: "degraded",
+            source: "timeout_fallback",
+            message: "Alert aggregation timed out under concurrent read fanout; degraded empty response returned.",
+            reason: "read_timeout",
+          },
+        },
+      },
+    };
+
+    const realAlertRow = {
+      alert_id: "alert-incident-inc-001",
+      severity: "critical",
+      category: "incident",
+      raised_at: "2026-04-18T06:05:00Z",
+      summary: "Active incident: Unexpected drawdown in persona-alpha.",
+      target_ref: {
+        surface_id: "PKT-002",
+        label: "Open incident response",
+        href: "/management/incidents/inc-001",
+        target_id: "inc-001",
+      },
+    };
+
+    it("shows the existing error state in the RiskCenter alert table when GET /bff/alerts returns timeout_fallback while other slices still render and no site-wide banner opens", async () => {
+      vi.stubEnv("MODE", "development");
+      vi.stubEnv("NODE_ENV", "development");
+      vi.stubEnv("VITE_BFF_MODE", "live");
+      vi.stubEnv("VITE_BFF_FALLBACK", "strict");
+      liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
+
+      vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+        const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+        if (url === "/bff/alerts") {
+          return new Response(JSON.stringify(timeoutFallbackPayload), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        throw new Error(`Unexpected fetch URL: ${url}`);
+      });
+
+      vi.spyOn(bffV1.strategies, "listNonDraft").mockResolvedValue([
+        {
+          id: "strategy-persona-298e138c136c9840b0e4",
+          name: "青禾｜2330 台股 Paper 學習 R2 Paper Strategy",
+          owner: "operator",
+          updatedAt: "2026-10-18T17:20:36.224810Z",
+          state: "approved",
+          risk: "high",
+          alpha: "alpha.tw.2330",
+          capitalPoolId: "pool-persona-paper-298e138c136c9840b0e4",
+          personaIds: ["persona-be19a1fac471247f2b2a"],
+          pnl30d: 0.04,
+          sharpe: 1.5,
+          drawdown: 0.18,
+        },
+      ]);
+      vi.spyOn(bffV1.personas, "list").mockResolvedValue([]);
+      vi.spyOn(bffV1.capitalPools, "list").mockResolvedValue([
+        {
+          id: "pool-persona-paper-298e138c136c9840b0e4",
+          name: "Primary Paper Pool",
+          owner: "treasury",
+          updatedAt: "2026-10-18T17:20:36.224810Z",
+          state: "approved",
+          risk: "medium",
+          currency: "USD",
+          allocated: 1_000_000,
+          utilized: 950_000,
+          riskBudget: 0.05,
+        },
+      ]);
+      vi.spyOn(bffV1.runtimes, "list").mockResolvedValue([]);
+      vi.spyOn(bffV1.tools, "list").mockResolvedValue([]);
+      vi.spyOn(bffV1.mcpServers, "list").mockResolvedValue([]);
+      vi.spyOn(bffV1.skills, "list").mockResolvedValue([]);
+      vi.spyOn(bffV1.incidents, "list").mockResolvedValue([
+        {
+          id: "inc-open-1",
+          title: "Active Drawdown Incident",
+          severity: "high",
+          status: "open",
+          openedAt: "2026-10-18T17:20:36.224810Z",
+          affected: ["strategy-persona-298e138c136c9840b0e4"],
+          timeline: [],
+        },
+      ]);
+
+      const { container } = render(
+        <I18nextProvider i18n={i18n}>
+          <MemoryRouter initialEntries={["/management/risk"]}>
+            <LiveStatusBanner />
+            <RiskCenter />
+          </MemoryRouter>
+        </I18nextProvider>,
+      );
+
+      const incidentsCard = await screen.findByTestId("risk-card-incidents");
+      const utilCard = screen.getByTestId("risk-card-utilization");
+      const drawdownCard = screen.getByTestId("risk-card-drawdown");
+      await waitFor(() => {
+        expect(within(incidentsCard).getByText("1")).toBeInTheDocument();
+        expect(within(utilCard).getByText("1")).toBeInTheDocument();
+        expect(within(drawdownCard).getByText("1")).toBeInTheDocument();
+      });
+
+      expect(screen.getByText("Primary Paper Pool")).toBeInTheDocument();
+
+      const incidentsTab = screen.getByRole("tab", { name: /Incident/i });
+      fireEvent.mouseDown(incidentsTab);
+      fireEvent.click(incidentsTab);
+
+      expect(await screen.findByText("Active Drawdown Incident")).toBeInTheDocument();
+      const emptyCell = await screen.findByTestId("data-table-empty");
+      expect(emptyCell).toHaveTextContent("Unavailable");
+      expect(emptyCell).not.toHaveTextContent("No results found.");
+
+      expect(liveStatus.get().effective).toBe("live");
+      expect(liveStatus.get().lastError).toBeUndefined();
+      expect(container.textContent).not.toMatch(/strict typed error|seed fallback|資料來源：seed/i);
+    });
+
+    it("shows empty state for a healthy zero-alert response and renders real alert rows when a contributing surface is degraded", async () => {
+      vi.stubEnv("MODE", "development");
+      vi.stubEnv("NODE_ENV", "development");
+      vi.stubEnv("VITE_BFF_MODE", "live");
+      vi.stubEnv("VITE_BFF_FALLBACK", "strict");
+      liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
+
+      const healthyZeroPayload = {
+        alerts: [],
+        summary: {
+          total_active: 0,
+          highest_severity: null,
+          by_severity: { critical: 0, high: 0, medium: 0, low: 0, info: 0 },
+          by_category: { incident: 0, runtime: 0, risk: 0, governance: 0 },
+        },
+        meta: {
+          snapshot_at: "2026-11-07T00:00:00Z",
+          acknowledgement_supported: true,
+          surfaces: {
+            alerts: { status: "ok", source: "bff_composed" },
+          },
+        },
+      };
+
+      const degradedComposedPayload = {
+        alerts: [realAlertRow],
+        summary: {
+          total_active: 1,
+          highest_severity: "critical",
+          by_severity: { critical: 1, high: 0, medium: 0, low: 0, info: 0 },
+          by_category: { incident: 1, runtime: 0, risk: 0, governance: 0 },
+        },
+        meta: {
+          snapshot_at: "2026-11-07T00:00:00Z",
+          acknowledgement_supported: true,
+          surfaces: {
+            alerts: {
+              status: "degraded",
+              source: "bff_composed",
+              message: "Operator alert feed is available, but one or more contributing surfaces are degraded.",
+            },
+          },
+        },
+      };
+
+      const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+        new Response(JSON.stringify(healthyZeroPayload), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+
+      vi.spyOn(bffV1.strategies, "listNonDraft").mockResolvedValue([]);
+      vi.spyOn(bffV1.personas, "list").mockResolvedValue([]);
+      vi.spyOn(bffV1.capitalPools, "list").mockResolvedValue([]);
+      vi.spyOn(bffV1.runtimes, "list").mockResolvedValue([]);
+      vi.spyOn(bffV1.tools, "list").mockResolvedValue([]);
+      vi.spyOn(bffV1.mcpServers, "list").mockResolvedValue([]);
+      vi.spyOn(bffV1.skills, "list").mockResolvedValue([]);
+      vi.spyOn(bffV1.incidents, "list").mockResolvedValue([
+        {
+          id: "inc-open-1",
+          title: "Open Incident Row",
+          severity: "high",
+          status: "open",
+          openedAt: "2026-10-18T17:20:36.224810Z",
+          affected: [],
+          timeline: [],
+        },
+      ]);
+
+      const firstRender = renderRiskCenter();
+      const incidentsTab = screen.getByRole("tab", { name: /Incident/i });
+      fireEvent.mouseDown(incidentsTab);
+      fireEvent.click(incidentsTab);
+
+      expect(await screen.findByText("Open Incident Row")).toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.getByTestId("data-table-empty")).toHaveTextContent("No results found.");
+      });
+      firstRender.unmount();
+
+      fetchSpy.mockResolvedValueOnce(
+        new Response(JSON.stringify(degradedComposedPayload), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+
+      renderRiskCenter();
+      const incidentsTab2 = screen.getByRole("tab", { name: /Incident/i });
+      fireEvent.mouseDown(incidentsTab2);
+      fireEvent.click(incidentsTab2);
+
+      expect(
+        await screen.findByText("Active incident: Unexpected drawdown in persona-alpha."),
+      ).toBeInTheDocument();
+      expect(screen.getByText("incident")).toBeInTheDocument();
+    });
+
+    it("keeps NotificationCenter approvals/jobs/incidents and StrategyDetail, IncidentDetail, and EvolutionDetail rendering when only GET /bff/alerts fell back", async () => {
+      vi.stubEnv("MODE", "development");
+      vi.stubEnv("NODE_ENV", "development");
+      vi.stubEnv("VITE_BFF_MODE", "live");
+      vi.stubEnv("VITE_BFF_FALLBACK", "strict");
+      liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
+
+      vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+        const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+        if (url === "/bff/alerts") {
+          return new Response(JSON.stringify(timeoutFallbackPayload), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        if (url.includes("/bff/evolution-programs/evo-001")) {
+          return new Response(
+            JSON.stringify({
+              data: {
+                id: "evo-001",
+                name: "Alpha Evolution Program",
+                targetId: "strategy-001",
+                status: "running",
+                originKind: "manual",
+                allowedActions: [],
+              },
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          );
+        }
+        return new Response(JSON.stringify({ data: [], items: [] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      });
+
+      vi.spyOn(bffV1.approvals, "list").mockResolvedValue([
+        {
+          id: "apv-101",
+          kind: "StrategyPromotion",
+          subject: "Promote Strategy 001",
+          requester: "operator",
+          riskLevel: "medium",
+          state: "pending",
+          createdAt: "2026-11-07T00:00:00Z",
+        } as ApprovalRequest,
+      ]);
+      vi.spyOn(bffV1.jobs, "list").mockResolvedValue([
+        {
+          id: "job-101",
+          kind: "backtest",
+          status: "running",
+          owner: "operator",
+          startedAt: "2026-11-07T00:00:00Z",
+        } as Job,
+      ]);
+      vi.spyOn(bffV1.incidents, "list").mockResolvedValue([
+        {
+          id: "inc-101",
+          title: "Feed Latency Spike",
+          severity: "high",
+          status: "open",
+          openedAt: "2026-11-07T00:00:00Z",
+        } as Incident,
+      ]);
+
+      act(() => {
+        useNotificationCenter.getState().setOpen(true);
+      });
+
+      const ncRender = render(
+        <I18nextProvider i18n={i18n}>
+          <MemoryRouter>
+            <NotificationCenter />
+          </MemoryRouter>
+        </I18nextProvider>,
+      );
+
+      const approvalsTab = await screen.findByRole("tab", { name: /Approvals/i });
+      fireEvent.mouseDown(approvalsTab);
+      fireEvent.click(approvalsTab);
+      expect(await screen.findByText("Promote Strategy 001")).toBeInTheDocument();
+
+      const jobsTab = screen.getByRole("tab", { name: /work items/i });
+      fireEvent.mouseDown(jobsTab);
+      fireEvent.click(jobsTab);
+      expect(await screen.findByText("backtest")).toBeInTheDocument();
+
+      const incidentsTab = screen.getByRole("tab", { name: /Incidents/i });
+      fireEvent.mouseDown(incidentsTab);
+      fireEvent.click(incidentsTab);
+      expect(await screen.findByText("Feed Latency Spike")).toBeInTheDocument();
+
+      act(() => {
+        useNotificationCenter.getState().setOpen(false);
+      });
+      ncRender.unmount();
+
+      // StrategyDetail still renders
+      vi.spyOn(bffV1.strategies, "get").mockResolvedValue({
+        id: "strategy-001",
+        name: "Resilient Strategy 001",
+        alpha: "alpha-001",
+        state: "approved",
+        risk: "low",
+        owner: "operator",
+        capitalPoolId: "pool-001",
+        personaIds: ["persona-001"],
+        pnl30d: 0.02,
+        sharpe: 1.4,
+        drawdown: 0.03,
+        updatedAt: "2026-11-07T00:00:00Z",
+      } as Strategy);
+      vi.spyOn(bffV1.audit, "list").mockResolvedValue([]);
+      vi.spyOn(bffV1.artifacts, "list").mockResolvedValue([]);
+      vi.spyOn(bffV1.research, "list").mockResolvedValue([]);
+      vi.spyOn(bffV1.evolution, "list").mockResolvedValue([]);
+      vi.spyOn(bffV1.watchers, "forSubject").mockResolvedValue([]);
+      vi.spyOn(bffV1.decisionJournal, "forSubject").mockResolvedValue([]);
+      vi.spyOn(managementConsoleReads, "lineage").mockResolvedValue({
+        nodes: [],
+        edges: [],
+        meta: { status: "ok", source: "service_client", surfaces: {} },
+        page_info: { total: 0, page_size: 0, has_more: false },
+        has_more: false,
+      });
+
+      const stratRender = render(
+        <I18nextProvider i18n={i18n}>
+          <MemoryRouter initialEntries={["/management/strategies/strategy-001"]}>
+            <Routes>
+              <Route path="/management/strategies/:id" element={<StrategyDetail />} />
+            </Routes>
+          </MemoryRouter>
+        </I18nextProvider>,
+      );
+      expect(await screen.findByText("Resilient Strategy 001")).toBeInTheDocument();
+      stratRender.unmount();
+
+      // IncidentDetail still renders
+      vi.spyOn(bffV1.incidents, "get").mockResolvedValue({
+        id: "inc-101",
+        title: "Feed Latency Spike",
+        severity: "high",
+        status: "open",
+        openedAt: "2026-11-07T00:00:00Z",
+        affected: [],
+        timeline: [],
+      } as Incident);
+      vi.spyOn(bffV1.strategies, "listNonDraft").mockResolvedValue([]);
+      vi.spyOn(bffV1.runtimes, "list").mockResolvedValue([]);
+
+      const incRender = render(
+        <I18nextProvider i18n={i18n}>
+          <MemoryRouter initialEntries={["/management/incidents/inc-101"]}>
+            <Routes>
+              <Route path="/management/incidents/:id" element={<IncidentDetail />} />
+            </Routes>
+          </MemoryRouter>
+        </I18nextProvider>,
+      );
+      expect(await screen.findByText("Feed Latency Spike")).toBeInTheDocument();
+      incRender.unmount();
+
+      // EvolutionDetail still renders
+      const evoRender = render(
+        <I18nextProvider i18n={i18n}>
+          <MemoryRouter initialEntries={["/management/evolution/evo-001"]}>
+            <Routes>
+              <Route path="/management/evolution/:id" element={<EvolutionDetail />} />
+            </Routes>
+          </MemoryRouter>
+        </I18nextProvider>,
+      );
+      expect(await screen.findByText("Alpha Evolution Program")).toBeInTheDocument();
+      evoRender.unmount();
+    });
   });
 });

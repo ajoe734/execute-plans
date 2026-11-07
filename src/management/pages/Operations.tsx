@@ -26,7 +26,7 @@ import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-quer
 import { ServerPager, useServerPageCursor } from "@/platform/components/ServerPager";
 import { getSharedQueryClient, queryKeys, resetSharedQueryClientForTests } from "@/lib/bff-v1/queryKeys";
 
-type ListLoader<T> = (signal?: AbortSignal) => Promise<{ items: T[]; meta?: Record<string, unknown> }>;
+type ListLoader<T> = (signal?: AbortSignal) => Promise<{ items: T[]; meta?: unknown }>;
 
 // `lists.*` loaders resolve their generic item type to `unknown` inside
 // src/lib/bff-v1/lists.ts (the adaptItem passed there, e.g.
@@ -35,7 +35,7 @@ type ListLoader<T> = (signal?: AbortSignal) => Promise<{ items: T[]; meta?: Reco
 // entity; we re-assert it here at the consumption boundary rather than
 // editing the shared, out-of-scope lists.ts file.
 const asEntityListLoader = <T,>(
-  loader: (signal?: AbortSignal) => Promise<{ items: unknown[]; meta?: Record<string, unknown> }>,
+  loader: (signal?: AbortSignal) => Promise<{ items: unknown[]; meta?: unknown }>,
 ): ListLoader<T> => loader as unknown as ListLoader<T>;
 
 export const OPERATION_LIST_CACHE_TTL_MS = 60_000;

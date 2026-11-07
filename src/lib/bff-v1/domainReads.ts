@@ -627,7 +627,6 @@ export function assertAlertsNotTimeoutFallback(payload: unknown): void {
   throw makeBffError({
     code: "BACKEND_UNAVAILABLE",
     message,
-    status: 503,
     details: surface,
   });
 }

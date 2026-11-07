@@ -24,6 +24,11 @@ import {
 } from "@/lib/bff-v1/management";
 import { paths } from "@/lib/bff-v1/paths";
 import { liveStatus } from "@/lib/bff-v1/liveStatus";
+import {
+  assertAlertsNotTimeoutFallback,
+  isAlertsTimeoutFallback,
+  normalizeAlertList,
+} from "@/lib/bff-v1/domainReads";
 import { composeCockpit, defaultCockpitSeed } from "@/lib/v5/management/cockpit";
 import { defaultPulseRankings } from "@/lib/v5/management/tradingRankings";
 
@@ -3154,5 +3159,78 @@ describe("evolutionQualification BFF contract", () => {
       });
       expect(item.resolvedLink.displayLabel).not.toBe("Source unavailable");
     }
+  });
+
+  it("keys alert timeout fallback detection on meta.surfaces.alerts.source === timeout_fallback and normalizes real BFF alert rows (FE-ALERTS-NOT-EMPTY-20261107)", () => {
+    for (const reason of ["read_timeout", "read_saturated", "read_error"]) {
+      const fallbackBody = {
+        alerts: [],
+        summary: {
+          total_active: 0,
+          highest_severity: null,
+          by_severity: { critical: 0, high: 0, medium: 0, low: 0, info: 0 },
+          by_category: { incident: 0, runtime: 0, risk: 0, governance: 0 },
+        },
+        meta: {
+          snapshot_at: "2026-11-07T00:00:00Z",
+          acknowledgement_supported: true,
+          surfaces: {
+            alerts: {
+              status: "degraded",
+              source: "timeout_fallback",
+              message: "Alert aggregation timed out under concurrent read fanout; degraded empty response returned.",
+              reason,
+            },
+          },
+        },
+      };
+      expect(isAlertsTimeoutFallback(fallbackBody)).toBe(true);
+      expect(() => assertAlertsNotTimeoutFallback(fallbackBody)).toThrow(
+        "Alert aggregation timed out under concurrent read fanout; degraded empty response returned.",
+      );
+    }
+
+    const degradedComposedWithRealRows = {
+      alerts: [
+        {
+          alert_id: "alert-incident-inc-001",
+          severity: "critical",
+          category: "incident",
+          raised_at: "2026-04-18T06:05:00Z",
+          summary: "Active incident: Unexpected drawdown in persona-alpha.",
+          target_ref: {
+            surface_id: "PKT-002",
+            label: "Open incident response",
+            href: "/management/incidents/inc-001",
+            target_id: "inc-001",
+          },
+        },
+      ],
+      meta: {
+        snapshot_at: "2026-11-07T00:00:00Z",
+        acknowledgement_supported: true,
+        surfaces: {
+          alerts: {
+            status: "degraded",
+            source: "bff_composed",
+            message: "Operator alert feed is available, but one or more contributing surfaces are degraded.",
+          },
+        },
+      },
+    };
+    expect(isAlertsTimeoutFallback(degradedComposedWithRealRows)).toBe(false);
+    expect(() => assertAlertsNotTimeoutFallback(degradedComposedWithRealRows)).not.toThrow();
+
+    const normalized = normalizeAlertList(degradedComposedWithRealRows.alerts);
+    expect(normalized).toHaveLength(1);
+    expect(normalized[0]).toMatchObject({
+      id: "alert-incident-inc-001",
+      title: "Active incident: Unexpected drawdown in persona-alpha.",
+      severity: "critical",
+      source: "incident",
+      openedAt: "2026-04-18T06:05:00Z",
+      relatedTarget: "inc-001",
+      acknowledged: false,
+    });
   });
 });

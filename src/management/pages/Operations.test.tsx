@@ -18,7 +18,9 @@ import { GovernanceReview } from "./GovernanceReview";
 import { GovernanceQueuePage } from "./phase2/GovernanceQueue";
 import { setAuthProvider, clearAuthProvider } from "@/lib/bff-v1/headers";
 import { getSharedQueryClient, clearScopedQueries } from "@/lib/bff-v1/queryKeys";
-import { lists } from "@/lib/bff-v1";
+import { lists, normalizeAlertListResponse } from "@/lib/bff-v1";
+import { liveStatus } from "@/lib/bff-v1/liveStatus";
+import { LiveStatusBanner } from "@/components/layout/LiveStatusBanner";
 import type { Job, Alert, Incident } from "@/lib/bff-v1";
 
 const m = vi.hoisted(() => ({
@@ -1117,5 +1119,241 @@ describe("Jobs and incidents server paging (FE-OPS-JOBS-INCIDENTS-PAGING-2026110
     await waitFor(() => expect(m.toast.success).toHaveBeenCalled());
     // mitigating renders as the "running" status badge; the open row showed the warning badge.
     expect(screen.getAllByText("status.running").length).toBeGreaterThan(0);
+  });
+});
+
+describe("AlertsPage timeout_fallback vs healthy/degraded-composed payloads (FE-ALERTS-NOT-EMPTY-20261107)", () => {
+  const buildTimeoutFallbackPayload = (reason: string = "read_timeout") => ({
+    alerts: [],
+    summary: {
+      total_active: 0,
+      highest_severity: null,
+      by_severity: { critical: 0, high: 0, medium: 0, low: 0, info: 0 },
+      by_category: { incident: 0, runtime: 0, risk: 0, governance: 0 },
+    },
+    meta: {
+      snapshot_at: "2026-11-07T00:00:00Z",
+      acknowledgement_supported: true,
+      surfaces: {
+        alerts: {
+          status: "degraded",
+          source: "timeout_fallback",
+          message: "Alert aggregation timed out under concurrent read fanout; degraded empty response returned.",
+          reason,
+        },
+      },
+    },
+  });
+
+  const realAlertRow = {
+    alert_id: "alert-incident-inc-001",
+    severity: "critical",
+    category: "incident",
+    raised_at: "2026-04-18T06:05:00Z",
+    summary: "Active incident: Unexpected drawdown in persona-alpha.",
+    target_ref: {
+      surface_id: "PKT-002",
+      label: "Open incident response",
+      href: "/management/incidents/inc-001",
+      target_id: "inc-001",
+    },
+  };
+
+  beforeEach(() => {
+    __resetOperationListCacheForTests();
+    clearAuthProvider();
+    vi.clearAllMocks();
+    m.translate = null;
+    vi.stubEnv("MODE", "development");
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("VITE_BFF_MODE", "live");
+    vi.stubEnv("VITE_BFF_FALLBACK", "strict");
+    liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
+  });
+
+  afterEach(() => {
+    cleanup();
+    __resetOperationListCacheForTests();
+    clearAuthProvider();
+    m.translate = null;
+    vi.unstubAllEnvs();
+    liveStatus._reset();
+    (lists.alerts as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({ items: mockAlerts });
+  });
+
+  it("shows an unavailable state and not the empty no-alerts state on /management/alerts for timeout_fallback across read_timeout, read_saturated, and read_error without opening the site-wide banner", async () => {
+    const enUS = (await import("@/i18n/locales/en-US")).default;
+    const zhTW = (await import("@/i18n/locales/zh-TW")).default;
+    const alertsMock = lists.alerts as unknown as ReturnType<typeof vi.fn>;
+
+    for (const [localeDict, reason] of [
+      [enUS, "read_timeout"],
+      [zhTW, "read_saturated"],
+      [enUS, "read_error"],
+    ] as const) {
+      __resetOperationListCacheForTests();
+      m.translate = (key: string) => {
+        const [ns, field] = key.split(".");
+        const dict = localeDict as unknown as Record<string, Record<string, string>>;
+        return dict[ns]?.[field] ?? key;
+      };
+      alertsMock.mockResolvedValueOnce(normalizeAlertListResponse(buildTimeoutFallbackPayload(reason)));
+
+      const { container, unmount } = render(
+        <MemoryRouter initialEntries={["/management/alerts"]}>
+          <LiveStatusBanner />
+          <AlertsPage />
+        </MemoryRouter>,
+      );
+
+      const alertBanner = await screen.findByRole("alert");
+      expect(alertBanner).toHaveTextContent(localeDict.page.alertsUnavailable);
+      expect(alertBanner).toHaveTextContent(
+        "Alert aggregation timed out under concurrent read fanout; degraded empty response returned.",
+      );
+      expect(screen.queryByText(localeDict.page.alertsEmpty)).toBeNull();
+      expect(screen.queryByText(localeDict.empty.noResults)).toBeNull();
+      expect(screen.queryByTestId("data-table-empty")).toBeNull();
+      expect(liveStatus.get().effective).toBe("live");
+      expect(liveStatus.get().lastError).toBeUndefined();
+      expect(container.textContent).not.toMatch(/strict typed error|seed fallback|資料來源：seed/i);
+      unmount();
+    }
+  });
+
+  it("does not replace rows cached from an earlier success with the empty list when a subsequent read returns timeout_fallback", async () => {
+    const enUS = (await import("@/i18n/locales/en-US")).default;
+    m.translate = (key: string) => {
+      const [ns, field] = key.split(".");
+      const dict = enUS as unknown as Record<string, Record<string, string>>;
+      return dict[ns]?.[field] ?? key;
+    };
+
+    const alertsMock = lists.alerts as unknown as ReturnType<typeof vi.fn>;
+    alertsMock
+      .mockResolvedValueOnce(
+        normalizeAlertListResponse({
+          alerts: [realAlertRow],
+          summary: {
+            total_active: 1,
+            highest_severity: "critical",
+            by_severity: { critical: 1, high: 0, medium: 0, low: 0, info: 0 },
+            by_category: { incident: 1, runtime: 0, risk: 0, governance: 0 },
+          },
+          meta: {
+            snapshot_at: "2026-11-07T00:00:00Z",
+            acknowledgement_supported: true,
+            surfaces: {
+              alerts: { status: "ok", source: "bff_composed" },
+            },
+          },
+        }),
+      )
+      .mockResolvedValueOnce(normalizeAlertListResponse(buildTimeoutFallbackPayload("read_timeout")));
+
+    render(
+      <MemoryRouter initialEntries={["/management/alerts"]}>
+        <AlertsPage />
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByText("Active incident: Unexpected drawdown in persona-alpha."),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).toBeNull();
+
+    await act(async () => {
+      await getSharedQueryClient().invalidateQueries();
+    });
+
+    const alertBanner = await screen.findByRole("alert");
+    expect(alertBanner).toHaveTextContent(enUS.page.alertsUnavailable);
+    expect(
+      screen.getByText("Active incident: Unexpected drawdown in persona-alpha."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(enUS.page.alertsEmpty)).toBeNull();
+  });
+
+  it("shows the empty state for a healthy zero-alert response and renders real rows when a contributing surface is degraded", async () => {
+    const enUS = (await import("@/i18n/locales/en-US")).default;
+    m.translate = (key: string) => {
+      const [ns, field] = key.split(".");
+      const dict = enUS as unknown as Record<string, Record<string, string>>;
+      return dict[ns]?.[field] ?? key;
+    };
+
+    const alertsMock = lists.alerts as unknown as ReturnType<typeof vi.fn>;
+    alertsMock.mockResolvedValueOnce(
+      normalizeAlertListResponse({
+        alerts: [],
+        summary: {
+          total_active: 0,
+          highest_severity: null,
+          by_severity: { critical: 0, high: 0, medium: 0, low: 0, info: 0 },
+          by_category: { incident: 0, runtime: 0, risk: 0, governance: 0 },
+        },
+        meta: {
+          snapshot_at: "2026-11-07T00:00:00Z",
+          acknowledgement_supported: true,
+          surfaces: {
+            alerts: { status: "ok", source: "bff_composed" },
+          },
+        },
+      }),
+    );
+
+    const healthyEmptyRender = render(
+      <MemoryRouter initialEntries={["/management/alerts"]}>
+        <AlertsPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText(enUS.page.alertsEmpty)).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).toBeNull();
+    healthyEmptyRender.unmount();
+
+    __resetOperationListCacheForTests();
+    alertsMock.mockResolvedValueOnce(
+      normalizeAlertListResponse({
+        alerts: [realAlertRow],
+        summary: {
+          total_active: 1,
+          highest_severity: "critical",
+          by_severity: { critical: 1, high: 0, medium: 0, low: 0, info: 0 },
+          by_category: { incident: 1, runtime: 0, risk: 0, governance: 0 },
+        },
+        meta: {
+          snapshot_at: "2026-11-07T00:00:00Z",
+          acknowledgement_supported: true,
+          surfaces: {
+            alerts: {
+              status: "degraded",
+              source: "bff_composed",
+              message: "Operator alert feed is available, but one or more contributing surfaces are degraded.",
+            },
+            telemetry_summary: {
+              status: "degraded",
+              source: "service_store",
+              message: "Telemetry summary missing for one or more runtimes.",
+            },
+          },
+        },
+      }),
+    );
+
+    render(
+      <MemoryRouter initialEntries={["/management/alerts"]}>
+        <AlertsPage />
+      </MemoryRouter>,
+    );
+
+    const rowTitle = await screen.findByText("Active incident: Unexpected drawdown in persona-alpha.");
+    expect(rowTitle).toBeInTheDocument();
+    expect(screen.getByText("incident")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).toBeNull();
+
+    fireEvent.click(rowTitle);
+    expect(await screen.findByText("alert-incident-inc-001")).toBeInTheDocument();
+    expect(screen.getByText("inc-001")).toBeInTheDocument();
   });
 });
