@@ -1,0 +1,177 @@
+{
+  "task_id": "FE-REVIEW-GATE-DOCS-20261107",
+  "title": "Correct the execute-plans documentation of the canonical review gate and its branch protection",
+  "owner": "Antigravity",
+  "reviewer": "Claude",
+  "target_repo": "ajoe734/execute-plans",
+  "depends_on": [
+    "OPS-REVIEW-GATE-QUIET-20261107"
+  ],
+  "recorded_at_utc": "2026-11-07T08:45:40Z",
+  "upstream_dependency": {
+    "task_id": "OPS-REVIEW-GATE-QUIET-20261107",
+    "repository": "ajoe734/pantheon",
+    "status": "done",
+    "approved_head_sha": "875fb136f340b8f1b6bde118081c860dd3c1c319",
+    "merge_commit_sha": "3b57d8e4eab41cf9daf7b8f9b30a4c01bd08561c",
+    "summary": "Makes scripts/git/canonical_review_gate_ci.py in ajoe734/pantheon publish no status (logs a workflow notice, makes no GitHub API call, and exits 0) while review_gate.github_review_bridge_required is false in .orchestrator/config.json."
+  },
+  "changes": [
+    "docs/conventions/GIT_WORKFLOW.md: updated section 6 table row for 'Pantheon canonical review gate' to state that it is not a required check; updated section 6 branch protection summary to match the 2026-11-07 GitHub API read-back on dev (3 required status checks: 'Commit trailers', 'Generated files guard', 'Component merge gate'; pull request required with 0 approvals; up-to-date base enforced with strict: true; admin enforcement off with enforce_admins.enabled: false) and removed the stale 4-check claim and app_id: null description for 'Pantheon canonical review gate'; opened section 6.1 with a status note stating that the verifier in ajoe734/pantheon publishes no status while review_gate.github_review_bridge_required is false, that task-store exact-head approval is the merge authority, and pointing to docs/conventions/GIT_WORKFLOW.md in ajoe734/pantheon for the operator decision and restore steps, while keeping the remaining description in section 6.1 (including the historical rollout notes for pull request 747) as the mechanism that applies when the policy is true.",
+    ".github/workflows/pantheon-canonical-review-gate.yml: updated only the header comment to remove the stale claim that execute-plans/dev carries the same required status context and to document that the shared verifier from ajoe734/pantheon@dev publishes no status while review_gate.github_review_bridge_required is false; name, triggers (on), permissions, concurrency, and jobs stay byte-identical."
+  ],
+  "unchanged_boundaries": [
+    "No source code, test, or build configuration changes.",
+    "src/test/pantheon-canonical-review-workflow.test.ts is unchanged and passes all 26 tests.",
+    "Workflow triggers, permissions, concurrency, and jobs in .github/workflows/pantheon-canonical-review-gate.yml are byte-identical to HEAD.",
+    "No deployment is needed."
+  ],
+  "branch_protection_readback_2026_11_07": {
+    "ajoe734/execute-plans": {
+      "dev": {
+        "command": "gh api repos/ajoe734/execute-plans/branches/dev/protection",
+        "required_status_checks": {
+          "strict": true,
+          "contexts": [
+            "Commit trailers",
+            "Generated files guard",
+            "Component merge gate"
+          ],
+          "checks": [
+            {
+              "context": "Commit trailers",
+              "app_id": 15368
+            },
+            {
+              "context": "Generated files guard",
+              "app_id": 15368
+            },
+            {
+              "context": "Component merge gate",
+              "app_id": 15368
+            }
+          ]
+        },
+        "required_pull_request_reviews": {
+          "dismiss_stale_reviews": false,
+          "require_code_owner_reviews": false,
+          "require_last_push_approval": false,
+          "required_approving_review_count": 0
+        },
+        "required_signatures": {
+          "enabled": false
+        },
+        "enforce_admins": {
+          "enabled": false
+        },
+        "required_linear_history": {
+          "enabled": false
+        },
+        "allow_force_pushes": {
+          "enabled": false
+        },
+        "allow_deletions": {
+          "enabled": false
+        },
+        "block_creations": {
+          "enabled": false
+        },
+        "required_conversation_resolution": {
+          "enabled": false
+        },
+        "lock_branch": {
+          "enabled": false
+        },
+        "allow_fork_syncing": {
+          "enabled": false
+        }
+      },
+      "main": {
+        "command": "gh api repos/ajoe734/execute-plans/branches/main/protection",
+        "required_status_checks": {
+          "strict": true,
+          "contexts": [
+            "Commit trailers",
+            "Generated files guard",
+            "Smoke acceptance"
+          ],
+          "checks": [
+            {
+              "context": "Commit trailers",
+              "app_id": 15368
+            },
+            {
+              "context": "Generated files guard",
+              "app_id": 15368
+            },
+            {
+              "context": "Smoke acceptance",
+              "app_id": 15368
+            }
+          ]
+        },
+        "required_pull_request_reviews": {
+          "dismiss_stale_reviews": false,
+          "require_code_owner_reviews": false,
+          "require_last_push_approval": false,
+          "required_approving_review_count": 0
+        },
+        "required_signatures": {
+          "enabled": false
+        },
+        "enforce_admins": {
+          "enabled": false
+        },
+        "required_linear_history": {
+          "enabled": false
+        },
+        "allow_force_pushes": {
+          "enabled": false
+        },
+        "allow_deletions": {
+          "enabled": false
+        },
+        "block_creations": {
+          "enabled": false
+        },
+        "required_conversation_resolution": {
+          "enabled": false
+        },
+        "lock_branch": {
+          "enabled": false
+        },
+        "allow_fork_syncing": {
+          "enabled": false
+        }
+      }
+    }
+  },
+  "validation": [
+    {
+      "command": "gh api repos/ajoe734/execute-plans/branches/dev/protection",
+      "exit_code": 0,
+      "result": "required_status_checks.strict=true, contexts=['Commit trailers', 'Generated files guard', 'Component merge gate'] (all app_id=15368), required_pull_request_reviews.required_approving_review_count=0, enforce_admins.enabled=false, allow_force_pushes.enabled=false, allow_deletions.enabled=false"
+    },
+    {
+      "command": "gh api repos/ajoe734/execute-plans/branches/main/protection",
+      "exit_code": 0,
+      "result": "required_status_checks.strict=true, contexts=['Commit trailers', 'Generated files guard', 'Smoke acceptance'] (all app_id=15368), required_pull_request_reviews.required_approving_review_count=0, enforce_admins.enabled=false, allow_force_pushes.enabled=false, allow_deletions.enabled=false"
+    },
+    {
+      "command": "npx vitest run src/test/pantheon-canonical-review-workflow.test.ts",
+      "exit_code": 0,
+      "result": "Test Files 1 passed (1), Tests 26 passed (26)"
+    },
+    {
+      "command": "python3 -c 'import subprocess; head_lines = subprocess.check_output([\"git\", \"show\", \"HEAD:.github/workflows/pantheon-canonical-review-gate.yml\"], text=True).splitlines(True); cur_lines = open(\".github/workflows/pantheon-canonical-review-gate.yml\", encoding=\"utf-8\").readlines(); assert head_lines[:2] == cur_lines[:2]; head_on = head_lines.index(\"on:\\n\"); cur_on = cur_lines.index(\"on:\\n\"); assert all(l.startswith(\"#\") for l in cur_lines[2:cur_on-1]); assert cur_lines[cur_on-1] == \"\\n\"; assert \"\".join(head_lines[head_on:]) == \"\".join(cur_lines[cur_on:]); print(\"OK: byte-identical triggers, permissions, concurrency, and jobs\")'",
+      "exit_code": 0,
+      "result": "OK: byte-identical triggers, permissions, concurrency, and jobs"
+    },
+    {
+      "command": "git diff --name-only HEAD -- src/",
+      "exit_code": 0,
+      "result": "(empty output; src/test/pantheon-canonical-review-workflow.test.ts and all src/ files unchanged)"
+    }
+  ],
+  "post_merge_observation": "Observing a real pull request after merge was not done; the coordinator will observe the next real pull request after merge."
+}
