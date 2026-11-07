@@ -257,5 +257,9 @@ describe("Pack PM-i18n parity", () => {
     expect(zhKeys.has("mgmt.pulse.retiredExcludedFmt")).toBe(true);
     expect(enKeys.has("mgmt.pulse.notRequired")).toBe(true);
     expect(zhKeys.has("mgmt.pulse.notRequired")).toBe(true);
+    expect(enKeys.has("mgmt.pulse.sharpeBuildingBadge")).toBe(true);
+    expect(zhKeys.has("mgmt.pulse.sharpeBuildingBadge")).toBe(true);
+    expect(enKeys.has("mgmt.pulse.sharpeBuildingHistory")).toBe(true);
+    expect(zhKeys.has("mgmt.pulse.sharpeBuildingHistory")).toBe(true);
   });
 });

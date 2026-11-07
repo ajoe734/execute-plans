@@ -3764,6 +3764,8 @@ export default {
       noRows: "無資料。",
       retiredExcludedFmt: "已排除已退役：{{count}}",
       notRequired: "不需比較",
+      sharpeBuildingBadge: "累積中",
+      sharpeBuildingHistory: "樣本累積中：至少需要 10 個交易日的日報酬才會計算 Sharpe",
     },
     evolution: {
       title: "演化日誌",
