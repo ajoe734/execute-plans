@@ -176,7 +176,7 @@ describe("derivePersonaReadiness", () => {
   );
 
   it("never infers 5/5 readiness from paper_running or flat Persona IDs when persona-management data is absent", () => {
-    const flatPaperPersona: Persona = {
+    const flatPaperPersona = {
       id: "persona-be19a1fac471247f2b2a",
       name: "青禾｜2330 台股 Paper 學習 R2",
       owner: "tenant-default",
@@ -194,7 +194,7 @@ describe("derivePersonaReadiness", () => {
       deploymentPlanId: "plan-persona-paper-298e138c136c9840b0e4",
       runtimeBindingId: "rb-a1c3ada3d5894d57bc2e012f337753be",
       runtimeId: "rt-535a82a3",
-    };
+    } as unknown as Persona;
 
     const readiness = derivePersonaReadiness(flatPaperPersona);
 
@@ -328,6 +328,84 @@ describe("derivePersonaReadiness", () => {
       done: false,
       status: "retired",
       blockedReason: "runtime_status_attention",
+    });
+  });
+
+  it("does not treat statusless runtimeBindings as active or infer 5/5 readiness without positive runtime state", () => {
+    const readiness = derivePersonaReadiness({
+      data: {
+        persona: {
+          id: "persona-statusless-rb",
+          lifecycle_state: "paper_running",
+          metadata: {
+            approval_decision_id: "apv-1",
+            provisioning_authoritative_readback: {
+              deployment: {
+                plan_id: "plan-1",
+                saga_status: "completed",
+                progress_status: "completed",
+              },
+            },
+          },
+        },
+        bindings: [{ id: "pcb-1", status: "active", approval_decision_id: "apv-1" }],
+        deploymentPlans: [],
+        approvals: [],
+        runtimeBindings: [{ id: "rb-1", runtime_id: "rt-1", plan_id: "plan-1" }],
+      },
+      meta: {
+        surfaces: {
+          persona_bindings: { status: "ok", count: 1 },
+          deployment_plans: { status: "unavailable", count: 0 },
+          approvals: { status: "unavailable", count: 0 },
+          persona_health: { status: "ok", count: 1 },
+        },
+      },
+    });
+
+    expect(readiness.completed).toBe(2);
+    expect(readiness.nextStage).toBe("plan");
+    expect(readiness.stages).toEqual([
+      { key: "lifecycle", done: true, status: "done", blockedReason: undefined },
+      { key: "binding", done: true, status: "done", blockedReason: undefined },
+      { key: "plan", done: false, status: "unavailable", blockedReason: "no_deployment_plan" },
+      { key: "approval", done: false, status: "unavailable", blockedReason: "no_approval" },
+      { key: "runtime", done: false, status: "not_started", blockedReason: "no_runtime_binding" },
+    ]);
+  });
+
+  it("honors explicit runtime_bindings or persona_health surface unavailability even when runtimeBindings is populated", () => {
+    const readiness = derivePersonaReadiness({
+      data: {
+        persona: {
+          id: "persona-runtime-surface-unavailable",
+          lifecycle_state: "paper_running",
+        },
+        bindings: [{ id: "pcb-1", status: "active" }],
+        deploymentPlans: [{ id: "plan-1", status: "approved", approval_decision_id: "apv-1" }],
+        approvals: [{ id: "apv-1", state: "decided", outcome: "approved" }],
+        runtimeBindings: [
+          { id: "rb-1", runtime_id: "rt-1", plan_id: "plan-1", status: "active" },
+        ],
+      },
+      meta: {
+        surfaces: {
+          persona_bindings: { status: "ok", count: 1 },
+          deployment_plans: { status: "ok", count: 1 },
+          approvals: { status: "ok", count: 1 },
+          runtime_bindings: { status: "unavailable", count: 0 },
+          persona_health: { status: "unavailable", count: 0 },
+        },
+      },
+    });
+
+    expect(readiness.completed).toBe(4);
+    expect(readiness.nextStage).toBe("runtime");
+    expect(readiness.stages[4]).toEqual({
+      key: "runtime",
+      done: false,
+      status: "unavailable",
+      blockedReason: "no_runtime_binding",
     });
   });
 

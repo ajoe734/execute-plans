@@ -451,7 +451,7 @@ describe("PersonaDetail", () => {
         deploymentPlanId: "plan-persona-paper-298e138c136c9840b0e4",
         runtimeBindingId: "rb-a1c3ada3d5894d57bc2e012f337753be",
         runtimeId: "rt-535a82a3",
-      });
+      } as unknown as Persona);
       vi.mocked(getPersonaManagement).mockResolvedValue({
         data: {
           persona: {
@@ -559,7 +559,7 @@ describe("PersonaDetail", () => {
         deploymentPlanId: "plan-persona-paper-298e138c136c9840b0e4",
         runtimeBindingId: "rb-a1c3ada3d5894d57bc2e012f337753be",
         runtimeId: "rt-535a82a3",
-      });
+      } as unknown as Persona);
       vi.mocked(getPersonaManagement).mockRejectedValue(new Error("persona-management unavailable"));
 
       render(

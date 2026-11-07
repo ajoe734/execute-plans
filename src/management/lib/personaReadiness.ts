@@ -382,31 +382,34 @@ export function derivePersonaReadiness(
 
   // 2. Capital Binding stage — requires an actual active binding in `wrapped.bindings`.
   const rawBindings = Array.isArray(wrapped?.bindings) ? wrapped.bindings : undefined;
-  const activeBindings = (rawBindings ?? [])
-    .map(asRecord)
-    .filter((b): b is Record<string, unknown> => {
-      if (!b) return false;
-      const bStatus = normStr(b.status) || normStr(b.state) || normStr(b.validity);
-      if (bStatus && INACTIVE_BINDING_STATES.has(bStatus)) return false;
-      const pool = asRecord(b.capital_pool) ?? asRecord(b.capitalPool);
-      const poolStatus = normStr(pool?.status) || normStr(pool?.state);
-      if (poolStatus && INACTIVE_POOL_STATES.has(poolStatus)) return false;
-      return true;
-    });
-
-  const bindingDone = activeBindings.length > 0;
   const bindingUnavailable =
     !wrapped ||
     managementUnavailable ||
     rawBindings === undefined ||
     isSurfaceUnavailable(["persona_bindings", "capital_pool_bindings"]);
+  const activeBindings = bindingUnavailable
+    ? []
+    : (rawBindings ?? [])
+        .map(asRecord)
+        .filter((b): b is Record<string, unknown> => {
+          if (!b) return false;
+          const bStatus = normStr(b.status) || normStr(b.state) || normStr(b.validity);
+          if (!bStatus || INACTIVE_BINDING_STATES.has(bStatus)) return false;
+          const pool = asRecord(b.capital_pool) ?? asRecord(b.capitalPool);
+          const poolStatus = normStr(pool?.status) || normStr(pool?.state);
+          if (poolStatus && INACTIVE_POOL_STATES.has(poolStatus)) return false;
+          return true;
+        });
+
+  const bindingDone = activeBindings.length > 0;
   const bindingStatus: PersonaStageStatus = bindingDone
     ? "done"
     : bindingUnavailable
       ? "unavailable"
       : "not_created";
 
-  // Inspect runtimeBindings early so we can also cross-verify authoritative deployment readback.
+  // Inspect runtimeBindings and runtime surface availability early so we can also
+  // cross-verify authoritative deployment readback against positive current runtime state.
   const rawRuntimeBindings = Array.isArray(wrapped?.runtimeBindings)
     ? wrapped.runtimeBindings
     : undefined;
@@ -414,24 +417,60 @@ export function derivePersonaReadiness(
     .map(asRecord)
     .filter((rb): rb is Record<string, unknown> => Boolean(rb));
 
-  const activeRuntimeBindings = runtimeBindingRecords.filter((rb) => {
-    const tokens = extractRuntimeStateTokens(rb);
-    if (tokens.length === 0) return true;
-    if (tokens.some((t) => PAUSED_RUNTIME_STATES.has(t) || RETIRED_RUNTIME_STATES.has(t))) {
-      return false;
-    }
-    return tokens.some((t) => ACTIVE_RUNTIME_STATES.has(t));
-  });
+  const explicitRuntimeTokens = extractRuntimeStateTokens(explicitRuntime);
+  const readbackPaperWorker = asRecord(authReadback?.paper_worker);
+  const readbackRuntimeBinding = asRecord(authReadback?.runtime_binding);
+  const readbackRuntimeTokens = [
+    ...extractRuntimeStateTokens(readbackPaperWorker),
+    ...extractRuntimeStateTokens(readbackRuntimeBinding),
+  ];
+
+  const explicitPaused = explicitRuntimeTokens.some((t) => PAUSED_RUNTIME_STATES.has(t));
+  const explicitRetired = explicitRuntimeTokens.some((t) => RETIRED_RUNTIME_STATES.has(t));
+  const readbackPaused = readbackRuntimeTokens.some((t) => PAUSED_RUNTIME_STATES.has(t));
+  const readbackRetired = readbackRuntimeTokens.some((t) => RETIRED_RUNTIME_STATES.has(t));
+  const runtimeHaltedByOverride =
+    explicitPaused ||
+    explicitRetired ||
+    ((readbackPaused || readbackRetired) &&
+      !explicitRuntimeTokens.some((t) => ACTIVE_RUNTIME_STATES.has(t)));
+
+  const runtimeUnavailable =
+    !wrapped ||
+    managementUnavailable ||
+    rawRuntimeBindings === undefined ||
+    isSurfaceUnavailable(["runtime_bindings", "persona_health"]);
+
+  const activeRuntimeBindings =
+    runtimeUnavailable || runtimeHaltedByOverride
+      ? []
+      : runtimeBindingRecords.filter((rb) => {
+          const tokens = extractRuntimeStateTokens(rb);
+          if (tokens.length === 0) return false;
+          if (
+            tokens.some((t) => PAUSED_RUNTIME_STATES.has(t) || RETIRED_RUNTIME_STATES.has(t))
+          ) {
+            return false;
+          }
+          return tokens.some((t) => ACTIVE_RUNTIME_STATES.has(t));
+        });
 
   // 3. Deployment Plan stage — from `wrapped.deploymentPlans` or cross-verified owner readback.
   const rawPlans = Array.isArray(wrapped?.deploymentPlans) ? wrapped.deploymentPlans : undefined;
-  const validPlans = (rawPlans ?? [])
-    .map(asRecord)
-    .filter((p): p is Record<string, unknown> => {
-      if (!p) return false;
-      const pStatus = normStr(p.status) || normStr(p.state);
-      return !pStatus || !INACTIVE_PLAN_STATES.has(pStatus);
-    });
+  const planSurfaceUnavailable = isSurfaceUnavailable(["deployment_plans"]);
+  const validPlans = planSurfaceUnavailable
+    ? []
+    : (rawPlans ?? [])
+        .map(asRecord)
+        .filter((p): p is Record<string, unknown> => {
+          if (!p) return false;
+          const pStatus =
+            normStr(p.status) ||
+            normStr(p.state) ||
+            normStr(p.saga_status) ||
+            normStr(p.progress_status);
+          return Boolean(pStatus) && !INACTIVE_PLAN_STATES.has(pStatus);
+        });
 
   const readbackDeployment = asRecord(authReadback?.deployment);
   const readbackPlanId = nonEmptyStr(readbackDeployment?.plan_id);
@@ -440,6 +479,7 @@ export function derivePersonaReadiness(
     normStr(readbackDeployment?.progress_status) ||
     normStr(readbackDeployment?.status);
   const authoritativePlanDone =
+    !runtimeUnavailable &&
     Boolean(readbackPlanId) &&
     COMPLETED_DEPLOYMENT_READBACK_STATES.has(readbackPlanState) &&
     bindingDone &&
@@ -454,7 +494,7 @@ export function derivePersonaReadiness(
     !wrapped ||
     managementUnavailable ||
     rawPlans === undefined ||
-    isSurfaceUnavailable(["deployment_plans"]);
+    planSurfaceUnavailable;
   const planStatus: PersonaStageStatus = planDone
     ? "done"
     : planUnavailable
@@ -464,20 +504,23 @@ export function derivePersonaReadiness(
   // 4. Governance Approval stage — handles `state: "decided"` + `outcome: "approved"`,
   // approved deployment plans, or cross-verified owner readback.
   const rawApprovals = Array.isArray(wrapped?.approvals) ? wrapped.approvals : undefined;
-  const approvedInList = (rawApprovals ?? [])
-    .map(asRecord)
-    .some((a) => {
-      if (!a) return false;
-      const outcome = normStr(a.decision) || normStr(a.outcome) || normStr(a.resolution);
-      const state = normStr(a.state) || normStr(a.status) || normStr(a.decision_state);
-      if (APPROVED_DECISION_VALUES.has(outcome) || APPROVED_DECISION_VALUES.has(state)) {
-        return true;
-      }
-      if (state === "decided" && outcome && APPROVED_DECISION_VALUES.has(outcome)) {
-        return true;
-      }
-      return false;
-    });
+  const approvalSurfaceUnavailable = isSurfaceUnavailable(["approvals"]);
+  const approvedInList =
+    !approvalSurfaceUnavailable &&
+    (rawApprovals ?? [])
+      .map(asRecord)
+      .some((a) => {
+        if (!a) return false;
+        const outcome = normStr(a.decision) || normStr(a.outcome) || normStr(a.resolution);
+        const state = normStr(a.state) || normStr(a.status) || normStr(a.decision_state);
+        if (APPROVED_DECISION_VALUES.has(outcome) || APPROVED_DECISION_VALUES.has(state)) {
+          return true;
+        }
+        if (state === "decided" && outcome && APPROVED_DECISION_VALUES.has(outcome)) {
+          return true;
+        }
+        return false;
+      });
 
   const approvedInPlan = validPlans.some((p) => {
     const pStatus = normStr(p.status) || normStr(p.state);
@@ -503,51 +546,48 @@ export function derivePersonaReadiness(
     !wrapped ||
     managementUnavailable ||
     rawApprovals === undefined ||
-    isSurfaceUnavailable(["approvals"]);
+    approvalSurfaceUnavailable;
   const approvalStatus: PersonaStageStatus = approvalDone
     ? "done"
     : approvalUnavailable
       ? "unavailable"
       : "not_submitted";
 
-  // 5. Runtime stage — checks actual runtime / binding state, distinguishing paused and retired.
-  const explicitRuntimeTokens = extractRuntimeStateTokens(explicitRuntime);
-  const readbackPaperWorker = asRecord(authReadback?.paper_worker);
-  const readbackRuntimeBinding = asRecord(authReadback?.runtime_binding);
-  const readbackRuntimeTokens = [
-    ...extractRuntimeStateTokens(readbackPaperWorker),
-    ...extractRuntimeStateTokens(readbackRuntimeBinding),
-  ];
+  // 5. Runtime stage — checks actual runtime / binding state, distinguishing paused and retired,
+  // and honoring explicit surface unavailability before declaring runtime done.
   const allBindingTokens = runtimeBindingRecords.flatMap(extractRuntimeStateTokens);
-
-  const explicitPaused = explicitRuntimeTokens.some((t) => PAUSED_RUNTIME_STATES.has(t));
-  const explicitRetired = explicitRuntimeTokens.some((t) => RETIRED_RUNTIME_STATES.has(t));
-  const readbackPaused = readbackRuntimeTokens.some((t) => PAUSED_RUNTIME_STATES.has(t));
-  const readbackRetired = readbackRuntimeTokens.some((t) => RETIRED_RUNTIME_STATES.has(t));
   const bindingsPaused =
+    !runtimeUnavailable &&
     runtimeBindingRecords.length > 0 &&
     activeRuntimeBindings.length === 0 &&
     allBindingTokens.some((t) => PAUSED_RUNTIME_STATES.has(t));
   const bindingsRetired =
+    !runtimeUnavailable &&
     runtimeBindingRecords.length > 0 &&
     activeRuntimeBindings.length === 0 &&
     allBindingTokens.some((t) => RETIRED_RUNTIME_STATES.has(t));
-
-  const runtimeUnavailable =
-    !wrapped ||
-    managementUnavailable ||
-    rawRuntimeBindings === undefined ||
-    isSurfaceUnavailable(["runtime_bindings", "persona_health"]);
 
   let runtimeDone = false;
   let runtimeStatus: PersonaStageStatus = "not_started";
   let runtimeBlockedReason: string | undefined = "no_runtime_binding";
 
-  if (explicitPaused || bindingsPaused || (readbackPaused && !explicitRuntimeTokens.some((t) => ACTIVE_RUNTIME_STATES.has(t)))) {
+  if (runtimeUnavailable) {
+    runtimeDone = false;
+    runtimeStatus = "unavailable";
+    runtimeBlockedReason = "no_runtime_binding";
+  } else if (
+    explicitPaused ||
+    bindingsPaused ||
+    (readbackPaused && !explicitRuntimeTokens.some((t) => ACTIVE_RUNTIME_STATES.has(t)))
+  ) {
     runtimeDone = false;
     runtimeStatus = "paused";
     runtimeBlockedReason = "runtime_status_attention";
-  } else if (explicitRetired || bindingsRetired || (readbackRetired && !explicitRuntimeTokens.some((t) => ACTIVE_RUNTIME_STATES.has(t)))) {
+  } else if (
+    explicitRetired ||
+    bindingsRetired ||
+    (readbackRetired && !explicitRuntimeTokens.some((t) => ACTIVE_RUNTIME_STATES.has(t)))
+  ) {
     runtimeDone = false;
     runtimeStatus = "retired";
     runtimeBlockedReason = "runtime_status_attention";
@@ -555,10 +595,6 @@ export function derivePersonaReadiness(
     runtimeDone = true;
     runtimeStatus = "done";
     runtimeBlockedReason = undefined;
-  } else if (runtimeUnavailable) {
-    runtimeDone = false;
-    runtimeStatus = "unavailable";
-    runtimeBlockedReason = "no_runtime_binding";
   } else {
     runtimeDone = false;
     runtimeStatus = "not_started";
@@ -619,8 +655,8 @@ export function derivePersonaReadiness(
     normStr(personaMeta?.capital_mode),
     normStr(personaMeta?.deployment_stage),
     normStr(personaMeta?.execution_mode),
-    normStr(flat?.capitalMode),
-    normStr(flat?.deploymentStage),
+    normStr(flatRec?.capitalMode),
+    normStr(flatRec?.deploymentStage),
     normStr(flatRec?.capital_mode),
     normStr(flatRec?.deployment_stage),
     normStr(activeRuntimeBindings[0]?.deployment_mode),
@@ -645,7 +681,8 @@ export function derivePersonaReadiness(
     nonEmptyStr(runtimeBindingRecords[0]?.runtime_id) ??
     nonEmptyStr(readbackRuntimeBinding?.runtime_id) ??
     nonEmptyStr(personaMeta?.runtime_id) ??
-    nonEmptyStr(flat?.runtimeId);
+    nonEmptyStr(flatRec?.runtimeId) ??
+    nonEmptyStr(flatRec?.runtime_id);
 
   return {
     stages,
