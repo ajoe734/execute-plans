@@ -3785,6 +3785,7 @@ export default {
       notRequired: "Not required",
       sharpeBuildingBadge: "Building",
       sharpeBuildingHistory: "Building history: Sharpe needs at least 10 daily returns",
+      sharpeShortSampleCaption: "Rolling 20-day short sample; for reference only",
     },
     evolution: {
       title: "Evolution Journal",

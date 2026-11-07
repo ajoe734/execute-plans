@@ -2022,18 +2022,25 @@ const RankingBlocks = () => {
               {t(isSharpeLeaders ? "mgmt.pulse.sharpeBuildingHistory" : "mgmt.pulse.noRows")}
             </p>
           ) : (
-            <ul className="mt-2 space-y-1 text-xs">
-              {(b.rows ?? []).map((r) => (
-                <li key={r.subjectId} className="flex items-center justify-between gap-2">
-                  <Link to={r.links?.manageHref ?? "#"} className="font-mono text-primary underline-offset-4 hover:underline">
-                    {r.subjectLabel}
-                  </Link>
-                  <span className="text-muted-foreground">
-                    {r.metric}: <span className="text-foreground">{formatPulseValue(r.metricValue)}{r.metricUnit ?? ""}</span>
-                  </span>
-                </li>
-              ))}
-            </ul>
+            <>
+              <ul className="mt-2 space-y-1 text-xs">
+                {(b.rows ?? []).map((r) => (
+                  <li key={r.subjectId} className="flex items-center justify-between gap-2">
+                    <Link to={r.links?.manageHref ?? "#"} className="font-mono text-primary underline-offset-4 hover:underline">
+                      {r.subjectLabel}
+                    </Link>
+                    <span className="text-muted-foreground">
+                      {r.metric}: <span className="text-foreground">{formatPulseValue(r.metricValue)}{r.metricUnit ?? ""}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              {isSharpeLeaders && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {t("mgmt.pulse.sharpeShortSampleCaption")}
+                </p>
+              )}
+            </>
           )}
         </Card>
         );
