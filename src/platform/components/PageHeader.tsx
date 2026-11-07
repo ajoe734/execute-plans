@@ -77,7 +77,7 @@ export const PageBody = ({
     className={cn(
       fill
         ? "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden p-4 sm:p-6"
-        : "min-w-0 space-y-6 overflow-x-hidden p-4 sm:p-6",
+        : "min-w-0 space-y-6 overflow-x-hidden p-4 after:block after:h-[var(--page-body-bottom-clearance,0px)] after:content-[''] sm:p-6",
       className,
     )}
     data-page-body-mode={fill ? "fill" : "document"}

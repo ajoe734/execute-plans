@@ -32,7 +32,9 @@ export const ManagementLayout = () => {
   return (
     <>
       <SideNav groups={groups} />
-      <main className="flex h-full min-h-0 w-full flex-1 min-w-0 max-w-full flex-col overflow-y-auto overflow-x-hidden">
+      <main
+        className="flex h-full min-h-0 w-full flex-1 min-w-0 max-w-full flex-col overflow-y-auto overflow-x-hidden [--page-body-bottom-clearance:5rem]"
+      >
         <ErrorBoundary key={useLocation().pathname} scope="Management page">
           <Outlet />
         </ErrorBoundary>

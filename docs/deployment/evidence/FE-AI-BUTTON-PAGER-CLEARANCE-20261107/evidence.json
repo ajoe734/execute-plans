@@ -1,0 +1,18 @@
+{
+  "task_id": "FE-AI-BUTTON-PAGER-CLEARANCE-20261107",
+  "change": {
+    "src/management/ManagementLayout.tsx": "main sets --page-body-bottom-clearance:5rem (80px = 48px button + 16px offset + gap)",
+    "src/platform/components/PageHeader.tsx": "document-mode PageBody gets an after: spacer of var(--page-body-bottom-clearance,0px); fill mode unchanged"
+  },
+  "functional_evidence": {
+    "unit_tests": "src/platform/components/PageHeader.test.tsx (new): document mode carries the clearance spacer with 0px default; fill mode has none",
+    "suite": "vitest src/platform/components + src/management: 71 files, 668 tests passed; tsc --noEmit clean",
+    "tests_changed_or_weakened": "none; no existing test modified or deleted"
+  },
+  "acceptance_coverage": {
+    "1": "Spacer is inside the real scroller on jobs/incidents/postmortems (PageBody). Strategies/evidence scroll on html per the brief, where the same in-flow spacer extends document height. getBoundingClientRect measurement at 1366x768 and 1600x900 NOT taken here: no hosted/browser access in this task; deferred to operator acceptance task.",
+    "2": "Fill mode class list unchanged (asserted in test); before/after browser measurement deferred to operator acceptance.",
+    "3": "Variable defaults to 0px and is set only on ManagementLayout main, so other layouts are unaffected.",
+    "4": "FloatingAgentPanel.tsx not modified; no width added, so no horizontal scroll source."
+  }
+}
