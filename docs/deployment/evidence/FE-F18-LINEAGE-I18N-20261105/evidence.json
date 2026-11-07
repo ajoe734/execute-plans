@@ -1,0 +1,91 @@
+{
+  "task_id": "FE-F18-LINEAGE-I18N-20261105",
+  "title": "Align F18 lineage warning assertion with current localization",
+  "owner": "Antigravity",
+  "reviewer": "Codex",
+  "repository": "ajoe734/execute-plans",
+  "branch": "task/FE-F18-LINEAGE-I18N-20261105",
+  "base_branch": "dev",
+  "base_commit_sha": "cd38fc23a08241e6ada3c922b98d54cbe0be4275",
+  "verification_scope": "contained_loopback_fixture_e2e_only (explicitly excludes any hosted dev acceptance claim; no SSH, VM, credential reads, authentication flows, service restarts, deployment, or hosted business/provider/model/research/broker/capital actions)",
+  "failure_correlation": {
+    "prior_frozen_evidence_reference": {
+      "pr_number": 932,
+      "evidence_blob_sha": "84a9b3a5d05fc97f91f67830ca3208b201ff8b14",
+      "evidence_path": "docs/deployment/evidence/FE-EVOLUTION-QUALIFICATION-OPTIONAL-READ-20261105/evidence.json",
+      "failing_spec": "e2e/18-perf.spec.ts:1204 F18 perf and stability soft-fail budgets > warns when LineageGraph receives more than 500 nodes"
+    },
+    "pre_edit_local_reproduction": {
+      "commit_sha": "cd38fc23a08241e6ada3c922b98d54cbe0be4275",
+      "command": "VITE_BFF_MODE=live VITE_BFF_BASE_URL=http://127.0.0.1:8000 BFF_BASE_URL=http://127.0.0.1:8000 VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npx playwright test e2e/18-perf.spec.ts --project=chromium -g \"warns when LineageGraph receives more than 500 nodes\" --retries=0 --trace=off --reporter=list",
+      "exit_code": 1,
+      "passed_count": 0,
+      "failed_count": 1,
+      "skipped_count": 0,
+      "observed_error": "Error: expect(locator).toBeVisible() failed — Locator: getByText(/Lineage has 506 nodes \\(> 500\\); server-side layout \\/ clustered summary required\\./i) — Expected: visible, Timeout: 10000ms, Error: element(s) not found at e2e/18-perf.spec.ts:1220:7",
+      "observed_visible_dom_status": "血緣圖共 506 個節點（超過 500），需改用伺服器端分群摘要檢視。",
+      "observed_configured_locale": "zh-TW"
+    },
+    "root_cause": "In commit 2291fb1940ae60cab89c743f4cd3047a45c75ae7 (PR #929 FE-MGMT-CATALOG-LEGIBILITY-20261105), src/platform/components/LineageGraph.tsx:185 localized the >500-node server-layout threshold warning via t('lineage.overServerNotice', { count: nodes.length, limit: LINEAGE_NODE_LIMITS.serverLayoutThreshold }). In zh-TW (src/i18n/locales/zh-TW.ts:841, the default locale in src/i18n/index.ts when localStorage 'pantheon.locale' is unset), this renders '血緣圖共 506 個節點（超過 500），需改用伺服器端分群摘要檢視。' (and in en-US at src/i18n/locales/en-US.ts:856 renders 'This lineage has 506 nodes (more than 500). Use the server-side clustered summary view instead.'). e2e/18-perf.spec.ts:1212 and 1218 still waited for / asserted the obsolete pre-localization English literal '/Lineage has 506 nodes \\(> 500\\); server-side layout \\/ clustered summary required\\./i'."
+  },
+  "fix_summary": {
+    "modified_files": [
+      "e2e/18-perf.spec.ts",
+      "docs/deployment/evidence/FE-F18-LINEAGE-I18N-20261105/evidence.json"
+    ],
+    "production_files_modified": [],
+    "changes": [
+      "Updated only the 'warns when LineageGraph receives more than 500 nodes' test in e2e/18-perf.spec.ts to retire the stale literal '/Lineage has 506 nodes/i' and '/Lineage has 506 nodes \\(> 500\\); server-side layout \\/ clustered summary required\\./i'.",
+      "Resolved the configured locale from window.localStorage.getItem('pantheon.locale') || 'zh-TW' using the existing contained loopback and locale setup, and asserted exact visibility of the full current localized warning with 506 nodes and the 500-node server-layout threshold ('血緣圖共 506 個節點（超過 500），需改用伺服器端分群摘要檢視。' for zh-TW; 'This lineage has 506 nodes (more than 500). Use the server-side clustered summary view instead.' for en-US).",
+      "Preserved the 506-node fixture, canonical /bff/lineage request counter assertion (counters.lineage > 0), zero page/console error assertion (failures === []), and all other F18 performance budgets and assertions unchanged."
+    ]
+  },
+  "post_edit_verification": {
+    "repaired_case_standalone": {
+      "command": "VITE_BFF_MODE=live VITE_BFF_BASE_URL=http://127.0.0.1:8000 BFF_BASE_URL=http://127.0.0.1:8000 VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npx playwright test e2e/18-perf.spec.ts --project=chromium -g \"warns when LineageGraph receives more than 500 nodes\" --retries=0 --trace=off --reporter=list",
+      "exit_code": 0,
+      "passed_count": 1,
+      "failed_count": 0,
+      "skipped_count": 0,
+      "results": [
+        "PASS: F18 perf and stability soft-fail budgets > warns when LineageGraph receives more than 500 nodes"
+      ]
+    },
+    "complete_f18_fixture_suite_loopback_candidate": {
+      "build_command": "node scripts/build-e2e-server.mjs",
+      "candidate_server": "PANTHEON_CANDIDATE_SERVER_INFO=/tmp/fe-f18-full-candidate-info.json node scripts/serve-release-candidate.mjs --root dist --port 0",
+      "test_command": "PANTHEON_FE_BASE_URL=http://127.0.0.1:39977 VITE_BFF_MODE=live VITE_BFF_BASE_URL=http://127.0.0.1:8000 BFF_BASE_URL=http://127.0.0.1:8000 VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npx playwright test e2e/18-perf.spec.ts --project=chromium --retries=0 --trace=off --reporter=list",
+      "exit_code": 0,
+      "passed_count": 4,
+      "failed_count": 0,
+      "skipped_count": 0,
+      "duration_seconds": 37.8,
+      "results": [
+        "PASS: F18 perf and stability soft-fail budgets > keeps Cockpit load and SSE rerender proxy within soft budgets (31.8s)",
+        "PASS: F18 perf and stability soft-fail budgets > keeps entity registry first page budget and DataTable density stable (1.9s)",
+        "PASS: F18 perf and stability soft-fail budgets > keeps incident list load within soft budget (1.5s)",
+        "PASS: F18 perf and stability soft-fail budgets > warns when LineageGraph receives more than 500 nodes (1.3s)"
+      ]
+    },
+    "typecheck_and_unit_tests": {
+      "typecheck_command": "npm run typecheck",
+      "typecheck_exit_code": 0,
+      "vitest_command": "npx vitest run src/platform/components/LineageGraph.test.tsx src/test/aggregate-release-gate-playwright-classification.test.ts",
+      "vitest_exit_code": 0
+    },
+    "wider_suite_and_hosted_distinction": [
+      "These results are strict live-shaped contained loopback fixture verification only and are explicitly distinguished from hosted dev acceptance.",
+      "Unrelated wider-suite limitations retained honestly: e2e/07-high-risk-confirm.spec.ts (F09) makes unintercepted browser calls to https://api.dev.mvl-cap.tw/bff/me that fail offline in an isolated local worker sandbox, and e2e/12-approvals.spec.ts @approval-hosted (F12) is an opt-in hosted BFF test excluded on loopback by playwright.config.ts grepInvert /@approval-hosted/.",
+      "Active sole-publisher release and frozen pair (Root 42115244240, BE 0cd59ab286b7ad4d7c742993215cb39919cce580 / FE 038776f445d4fa03ae61b6ad684b8575525a5794) were left completely untouched."
+    ]
+  },
+  "acceptance_criteria_verification": {
+    "1": "passed — reproduced exact existing F18 'warns when LineageGraph receives more than 500 nodes' failure on current dev SHA cd38fc23a08241e6ada3c922b98d54cbe0be4275 before editing, correlating obsolete English expectation with visible zh-TW status '血緣圖共 506 個節點（超過 500），需改用伺服器端分群摘要檢視。'.",
+    "2": "passed — updated only the e2e/18-perf.spec.ts warning case using existing contained loopback and locale setup, asserting exact full warning for the configured locale with 506 nodes and 500 server-layout threshold while preserving visible warning, counters.lineage > 0, and failures === [].",
+    "3": "passed — kept 506-node fixture and all other F18 budgets/assertions intact; retired stale literal expectation without adding compatibility text to production, skipping tests, broadening expected message across locales, or relaxing thresholds/timeouts.",
+    "4": "passed — ran the exact repaired case (1 passed, 0 failed, 0 skipped) and complete F18 fixture suite (4 passed, 0 failed, 0 skipped) on a strict live-shaped contained loopback candidate; distinguished from hosted acceptance and retained unrelated wider-suite limitations.",
+    "5": "passed — changed only e2e/18-perf.spec.ts and docs/deployment/evidence/FE-F18-LINEAGE-I18N-20261105/evidence.json; all production TS and locale files unchanged.",
+    "6": "passed — prepared on clean current-dev branch task/FE-F18-LINEAGE-I18N-20261105 for PR delivery and independent exact-head review by Codex.",
+    "7": "passed — local functional test maintenance only; active sole-publisher release and frozen pair untouched; no SSH, VM, credential reads, auth flows, service restarts, deployment, or hosted business/provider/model/research/broker/capital actions."
+  }
+}

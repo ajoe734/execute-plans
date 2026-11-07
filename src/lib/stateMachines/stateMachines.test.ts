@@ -16,6 +16,9 @@ import {
   resumeEvolutionProgram,
   pauseEvolutionProgram,
   stopEvolutionProgram,
+  submitEvolutionProgramReview,
+  approveEvolutionProgram,
+  rejectEvolutionProgram,
   freezeGeneration,
   unfreezeGeneration,
   promoteCandidate,
@@ -109,6 +112,33 @@ describe("state machines", () => {
 
       const retFromStopped = findTransition(evolutionMachine, "stopped", "retire_program");
       expect(retFromStopped?.to).toBe("retired");
+    });
+
+    it("reject_program transitions under_review → retired and other edges stay invalid", () => {
+      const rej = findTransition(evolutionMachine, "under_review", "reject_program");
+      expect(rej).toBeDefined();
+      expect(rej?.from).toBe("under_review");
+      expect(rej?.to).toBe("retired");
+      expect(rej?.requiresApproval).toBe(true);
+      expect(rej?.risk).toBe("medium");
+      expect(canTransition(evolutionMachine, "under_review", "retired")).toBe(true);
+      expect(nextStates(evolutionMachine, "under_review")).toEqual(
+        expect.arrayContaining(["active", "retired"]),
+      );
+
+      // reject_program stays invalid from all non-under_review states
+      for (const state of ["draft", "active", "paused", "stopped", "completed", "retired"] as const) {
+        expect(findTransition(evolutionMachine, state, "reject_program")).toBeUndefined();
+      }
+
+      // under_review cannot transition to paused, stopped, completed, or draft
+      for (const invalidTarget of ["draft", "paused", "stopped", "completed"] as const) {
+        expect(canTransition(evolutionMachine, "under_review", invalidTarget)).toBe(false);
+      }
+
+      // draft still cannot jump directly to active or retired
+      expect(canTransition(evolutionMachine, "draft", "active")).toBe(false);
+      expect(canTransition(evolutionMachine, "draft", "retired")).toBe(false);
     });
   });
 });
@@ -335,6 +365,29 @@ describe("evolution lifecycle write actions & command payload wiring", () => {
       expect(res.data.actionId).toBe("cmd_evo_123");
       expect(lastCommandBody.action).toBe("stop");
       expect(lastCommandBody.target).toEqual({ type: "EvolutionProgram", id: "prog-001" });
+    });
+
+    it("submitEvolutionProgramReview, approveEvolutionProgram, and rejectEvolutionProgram post governed commands and require reject reason", async () => {
+      const subRes = await submitEvolutionProgramReview("prog-001", "submit for review");
+      expect(subRes.ok).toBe(true);
+      expect(lastCommandBody.action).toBe("submit_evolution_review");
+      expect(lastCommandBody.target).toEqual({ type: "EvolutionProgram", id: "prog-001" });
+
+      const appRes = await approveEvolutionProgram("prog-001", "approved after governance gate");
+      expect(appRes.ok).toBe(true);
+      expect(lastCommandBody.action).toBe("approve_program");
+      expect(lastCommandBody.target).toEqual({ type: "EvolutionProgram", id: "prog-001" });
+
+      await expect(rejectEvolutionProgram("prog-001", "   ")).rejects.toMatchObject({
+        name: "BffError",
+        code: "VALIDATION_FAILED",
+      });
+
+      const rejRes = await rejectEvolutionProgram("prog-001", "threshold breach not reproducible");
+      expect(rejRes.ok).toBe(true);
+      expect(lastCommandBody.action).toBe("reject_program");
+      expect(lastCommandBody.target).toEqual({ type: "EvolutionProgram", id: "prog-001" });
+      expect(lastCommandBody.params.reason).toBe("threshold breach not reproducible");
     });
 
     it("freezeGeneration and unfreezeGeneration execute successfully and post commands", async () => {

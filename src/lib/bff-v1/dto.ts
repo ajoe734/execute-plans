@@ -413,7 +413,105 @@ export interface Runtime {
   plan_id?: string;
 }
 
+export const EVOLUTION_QUALIFICATION_CRITERIA = [
+  "real_threshold_signal",
+  "real_target",
+  "persistent_breach",
+  "fresh_evidence",
+  "executable_action",
+  "no_open_duplicate",
+] as const;
+
+export type EvolutionQualificationCriterionId = (typeof EVOLUTION_QUALIFICATION_CRITERIA)[number];
+
+export interface EvolutionQualificationCriterionRow {
+  criterion: EvolutionQualificationCriterionId | (string & {});
+  result: "passed" | "failed" | "not_evaluated" | (string & {});
+  observed: unknown;
+  threshold: unknown;
+  reason?: string | null;
+}
+
+export interface EvolutionProgramQualification {
+  policy_version?: string | null;
+  policyVersion?: string | null;
+  evaluated_at?: string | null;
+  evaluatedAt?: string | null;
+  decision_id?: string | null;
+  decisionId?: string | null;
+  target_id?: string | null;
+  targetId?: string | null;
+  metric_name?: string | null;
+  metricName?: string | null;
+  qualified?: boolean;
+  first_failing_criterion?: string | null;
+  failure_reason?: string | null;
+  criteria: EvolutionQualificationCriterionRow[];
+}
+
+export interface EvolutionQualificationDecisionItem {
+  decision_id: string;
+  sweep_id?: string | null;
+  tenant_id?: string | null;
+  target_type?: string | null;
+  target_id?: string | null;
+  metric_name?: string | null;
+  qualified: boolean;
+  first_failing_criterion?: string | null;
+  failure_reason?: string | null;
+  policy_version?: string | null;
+  evaluated_at?: string | null;
+  program_id?: string | null;
+  criteria: EvolutionQualificationCriterionRow[];
+}
+
+export interface EvolutionQualificationReport {
+  tenant_id?: string | null;
+  sweep_id?: string | null;
+  policy_version: string | null;
+  evaluated_at: string | null;
+  evaluated: number;
+  qualified: number;
+  drafted?: number;
+  counts_by_first_failing_criterion: Record<string, number>;
+  failure_reason?: string | null;
+  items: EvolutionQualificationDecisionItem[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface EvolutionProgramReview {
+  approval_id?: string | null;
+  approvalId?: string | null;
+  approval_revision?: number | null;
+  approvalRevision?: number | null;
+  submitted_by?: string | null;
+  submittedBy?: string | null;
+  submitted_at?: string | null;
+  submittedAt?: string | null;
+}
+
+export interface EvolutionProgramRejection {
+  reason?: string | null;
+  rejected_by?: string | null;
+  rejectedBy?: string | null;
+  rejected_at?: string | null;
+  rejectedAt?: string | null;
+}
+
+export interface EvolutionProgramRunLink {
+  run_id: string;
+  decision_id?: string | null;
+  status: string;
+  downstream_status?: string | null;
+  detail?: Record<string, unknown> | string | null;
+  linked_at?: string | null;
+}
+
 export interface EvolutionProgram extends BaseObject {
+  program_id?: string;
+  programId?: string;
   generation: number;
   population: number;
   bestFitness: number;
@@ -421,6 +519,27 @@ export interface EvolutionProgram extends BaseObject {
   progress: number;
   revision?: number;
   status?: EvolutionProgramStatus | string;
+  origin?: "manual" | "auto_qualified" | "automatic" | (string & {});
+  originKind?: "automatic" | "manual";
+  source_decision_ids?: string[];
+  sourceDecisionIds?: string[];
+  run_ids?: string[];
+  runIds?: string[];
+  run_links?: EvolutionProgramRunLink[];
+  runLinks?: EvolutionProgramRunLink[];
+  qualification?: EvolutionProgramQualification | null;
+  review?: EvolutionProgramReview | null;
+  approval?: Record<string, unknown> | null;
+  rejection?: EvolutionProgramRejection | null;
+  allowedActions?: string[];
+  allowed_actions?: string[];
+  created_at?: string;
+  createdAt?: string;
+  updated_at?: string;
+  created_by?: string;
+  createdBy?: string;
+  updated_by?: string;
+  updatedBy?: string;
   is_frozen?: boolean;
   isFrozen?: boolean;
   freeze_records?: Array<{
@@ -997,11 +1116,23 @@ export interface MemoryUpdate {
 
 export interface EvolutionRun {
   id: string;
+  run_id?: string;
+  runId?: string;
   programId: string;
+  program_id?: string;
+  decisionId?: string | null;
+  decision_id?: string | null;
   generation: number;
   startedAt: string;
+  started_at?: string;
+  linkedAt?: string;
+  linked_at?: string;
   finishedAt?: string;
-  status: RunState;
+  status: RunState | "queued" | "completed" | "unknown" | (string & {});
+  downstreamStatus?: string | null;
+  downstream_status?: string | null;
+  detail?: Record<string, unknown> | string | null;
+  source?: string | null;
   bestFitness: number;
   candidates: number;
 }
@@ -1190,3 +1321,89 @@ export interface RebalanceOverride {
   proposedBy: string;
   proposedAt: string;
 }
+
+// ---------- Alpha Factory Replication Read (/bff/alpha-factory) ----------
+
+export type AlphaFactoryLaneId = "discovered" | "scaffolded" | "replicated";
+
+export interface AlphaFactoryCard {
+  id: string;
+  admission_id: string | null;
+  tenant_id: string | null;
+  lane: AlphaFactoryLaneId;
+  strategy_id: string | null;
+  strategy_spec_id: string | null;
+  spec_version: string | null;
+  checksum: string | null;
+  approval_decision_id: string | null;
+  approver: string | null;
+  approved_at: string | null;
+  requested_by: string | null;
+  review_ref: string | null;
+  mode: string | null;
+  created_at: string | null;
+  status: string | null;
+  admission_status: string | null;
+  queue_status: string | null;
+  enqueued_at: string | null;
+  enqueued_by: string | null;
+  attempt_count: number | null;
+  max_attempts: number | null;
+  experiment_task_id: string | null;
+  experiment_run_ids: string[] | null;
+  authority_task_id: string | null;
+  authority_run_ids: string[] | null;
+  last_revalidation_at: string | null;
+  last_error: string | null;
+  sharpe?: number | null;
+  risk?: RiskLevel | null;
+}
+
+export interface AlphaFactoryLane {
+  id: AlphaFactoryLaneId;
+  label?: string;
+  reason?: string | null;
+  items: AlphaFactoryCard[];
+}
+
+export interface AlphaFactoryPageInfo {
+  page: number;
+  page_size: number;
+  total: number;
+  next_page_token: string | null;
+}
+
+export interface AlphaFactoryMeta extends ManagementListMeta {
+  snapshot_at?: string;
+  surfaces?: {
+    alpha_factory?: ManagementSurfaceState;
+    [key: string]: ManagementSurfaceState | undefined;
+  };
+  filters?: {
+    lane?: AlphaFactoryLaneId | null;
+  };
+  discovered?: {
+    reason?: string | null;
+  };
+}
+
+export interface AlphaFactoryData {
+  id: string;
+  snapshotAt: string | null;
+  snapshot_at: string | null;
+  reason: string | null;
+  discovered_reason: string | null;
+  lanes: AlphaFactoryLane[];
+  discovered: AlphaFactoryCard[];
+  scaffolded: AlphaFactoryCard[];
+  replicated: AlphaFactoryCard[];
+  items: AlphaFactoryCard[];
+}
+
+export interface AlphaFactoryEnvelope {
+  data: AlphaFactoryData;
+  items: AlphaFactoryCard[];
+  page_info: AlphaFactoryPageInfo;
+  meta: AlphaFactoryMeta;
+}
+

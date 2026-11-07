@@ -172,6 +172,99 @@ describe("portfolio holdings live monitor adapter", () => {
       unrealizedPnl: undefined,
     }));
   });
+
+  it("adapts mark_status, last_mark_at, side, and signed quantity from the real 2026-11-05 hosted BFF rows without recomputing stale market_value or filling currency", () => {
+    const result = adaptPortfolioHoldingsMonitor({
+      data: {
+        summary: {
+          holding_count: 2,
+          incident_count: 0,
+          source_coverage: {
+            source_row_count: 2,
+            runtime_count: 2,
+            telemetry_runtime_count: 2,
+            stale_row_count: 1,
+            missing_binding_count: 0,
+            degraded_source_count: 0,
+          },
+        },
+        items: [
+          {
+            id: "rt-482f3e28:2317.TWSE",
+            symbol: "2317.TWSE",
+            side: "short",
+            quantity: -1,
+            average_price: null,
+            mark_price: null,
+            market_value: null,
+            notional: null,
+            unrealized_pnl: null,
+            realized_pnl: null,
+            total_pnl: 0,
+            currency: null,
+            source_status: "ok",
+            source_issues: [],
+            telemetry_available: true,
+            telemetry_stale: true,
+            mark_status: "stale",
+            last_mark_at: "2026-10-29T00:00:00Z",
+          },
+          {
+            id: "rt-c98e4223:2317.TWSE",
+            symbol: "2317.TWSE",
+            side: "short",
+            quantity: -2,
+            average_price: null,
+            mark_price: 240,
+            market_value: -480,
+            notional: 480,
+            unrealized_pnl: null,
+            total_pnl: 0,
+            currency: null,
+            source_status: "ok",
+            source_issues: [],
+            telemetry_stale: false,
+            mark_status: "available",
+            last_mark_at: "2026-11-04T00:00:00Z",
+          },
+        ],
+      },
+      meta: {
+        incidents: [],
+        surfaces: { portfolio_book_holdings: { status: "partial" } },
+      },
+    });
+
+    expect(result?.items).toHaveLength(2);
+    expect(result?.items[0]).toEqual(expect.objectContaining({
+      holdingId: "rt-482f3e28:2317.TWSE",
+      symbol: "2317.TWSE",
+      side: "short",
+      quantity: -1,
+      marketValue: undefined,
+      unrealizedPnl: undefined,
+      currency: null,
+      sourceStatus: "ok",
+      sourceIssues: [],
+      telemetryStale: true,
+      markStatus: "stale",
+      lastMarkAt: "2026-10-29T00:00:00Z",
+    }));
+    expect(result?.items[1]).toEqual(expect.objectContaining({
+      holdingId: "rt-c98e4223:2317.TWSE",
+      symbol: "2317.TWSE",
+      side: "short",
+      quantity: -2,
+      marketValue: -480,
+      unrealizedPnl: undefined,
+      currency: null,
+      sourceStatus: "ok",
+      sourceIssues: [],
+      telemetryStale: false,
+      markStatus: "available",
+      lastMarkAt: "2026-11-04T00:00:00Z",
+    }));
+  });
 });
 
 describe("quarterly ranking live adapter", () => {

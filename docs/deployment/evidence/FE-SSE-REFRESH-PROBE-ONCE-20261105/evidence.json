@@ -1,0 +1,107 @@
+{
+  "task_id": "FE-SSE-REFRESH-PROBE-ONCE-20261105",
+  "owner": "Antigravity",
+  "reviewer": "Claude",
+  "repository": "ajoe734/execute-plans",
+  "branch": "task/FE-SSE-REFRESH-PROBE-ONCE-20261105",
+  "merge_target": "dev",
+  "hosted_verification_claimed": false,
+  "hosted_verification_note": "Verified locally via Vitest unit suites (liveSse, agora/workshops, sessionExpiry, bff-v1), TypeScript typecheck, contract drift check, production bundle build + credential scan, isolated loopback fixture Playwright E2E, and a 30-second headless Chromium reproduction against the built bundle.",
+  "bff_code_changed": false,
+  "session_expiry_rules_changed": false,
+  "summary": "Cap pre-open SSE failure session-refresh probes to at most one POST /bff/auth/refresh per failure streak in both src/lib/bff-v1/sse/liveSse.ts (module-level refreshProbedInStreak beside attempt) and src/lib/bff-v1/agora/workshops.ts (openWorkshopStream closure refreshProbedInStreak beside attempt). Reset attempt and refreshProbedInStreak only when a stream actually opens (or on explicit caller teardown in liveSse), and schedule reconnects after a successful refresh using the exponential backoff schedule instead of resetting attempt to 0 and reconnecting immediately.",
+  "scoped_artifacts": [
+    "src/lib/bff-v1/sse/liveSse.ts",
+    "src/lib/bff-v1/__tests__/sse.test.ts",
+    "src/lib/bff-v1/agora/workshops.ts",
+    "src/lib/bff-v1/agora/workshops.test.ts",
+    "src/lib/bff-v1/sse/protocol.ts",
+    "docs/deployment/evidence/FE-SSE-REFRESH-PROBE-ONCE-20261105/evidence.json"
+  ],
+  "reproduction_before_and_after": {
+    "method": "Intercept GET /bff/events/stream in headless Chromium so every connection attempt fails before open (HTTP 502) and answer POST /bff/auth/refresh with HTTP 200 over a 30-second window.",
+    "before_fix": {
+      "window_seconds": 30,
+      "refresh_post_count": 2626,
+      "stream_request_count": 2627,
+      "cause": "On outcome === 'refreshed', both liveSse.ts and agora/workshops.ts set attempt = 0 and reconnected immediately (0ms delay), probing POST /bff/auth/refresh on every subsequent pre-open failure in a tight loop."
+    },
+    "after_fix": {
+      "window_seconds": 30,
+      "elapsed_ms": 30207,
+      "refresh_post_count": 1,
+      "stream_request_count": 5,
+      "reconnect_count": 4,
+      "refresh_offsets_ms": [
+        830
+      ],
+      "stream_offsets_ms": [
+        792,
+        2079,
+        3841,
+        9782,
+        19104
+      ],
+      "backoff_schedule_ms": [
+        1000,
+        2000,
+        5000,
+        10000,
+        30000
+      ],
+      "jitter_range": [
+        0.8,
+        1.2
+      ]
+    }
+  },
+  "acceptance_criteria": {
+    "1_at_most_one_refresh_per_pre_open_failure_streak": "verified: Both connectLiveSse (src/lib/bff-v1/sse/liveSse.ts) and openWorkshopStream (src/lib/bff-v1/agora/workshops.ts) gate refreshBffSessionOutcome on !everOpened && !refreshProbedInStreak, sending at most one POST /bff/auth/refresh per pre-open failure streak and reconnecting with backoff and no refresh on subsequent failures in the streak",
+    "2_backoff_attempt_resets_only_on_open": "verified: attempt is reset to 0 only when the stream actually opens (EventSource 'open' listener or fetchSse onOpen) or on explicit liveSse teardown; outcome === 'refreshed' no longer resets attempt and schedules reconnect via nextBackoffMs(attempt++, true)",
+    "3_thirty_second_pre_open_failure_test": "verified: Unit tests in src/lib/bff-v1/__tests__/sse.test.ts and src/lib/bff-v1/agora/workshops.test.ts simulate 30 seconds of pre-open failures with POST /bff/auth/refresh returning 200 and assert exactly 1 refresh call and 4 reconnects (5 total stream attempts, bounded by SSE_RECONNECT_BACKOFF_MS.length)",
+    "4_new_streak_after_open_probes_refresh_again": "verified: Unit tests in both sse.test.ts and workshops.test.ts verify that opening a stream resets attempt and refreshProbedInStreak, a post-open drop reconnects with backoff and no refresh, and a subsequent pre-open failure on the reconnected stream starts a new streak and probes POST /bff/auth/refresh once again",
+    "5_auth_rejected_transient_and_post_open_drop_preserved": "verified: Refresh 401/403 (auth_rejected) schedules no reconnect and triggers session-expired handling; transient refresh failure reconnects with backoff; post-open stream drop reconnects with backoff and never probes refresh",
+    "6_existing_suites_and_loopback_e2e_green": "verified: All 66 bff-v1/auth Vitest files (716 tests) and isolated loopback fixture Playwright E2E specs pass without new skips or weakened assertions"
+  },
+  "changed_test_assertions_justification": [
+    {
+      "files": [
+        "src/lib/bff-v1/__tests__/sse.test.ts",
+        "src/lib/bff-v1/agora/workshops.test.ts"
+      ],
+      "reason": "Updated prior #902 tests that explicitly asserted immediate 0ms reconnect on outcome === 'refreshed' to assert that reconnect is scheduled via the backoff timer as required by AC 1 and AC 2."
+    }
+  ],
+  "verification": {
+    "unit_tests": {
+      "command": "./node_modules/.bin/vitest run src/lib/bff-v1 src/lib/auth",
+      "status": "passed",
+      "test_files": 66,
+      "tests_passed": 716
+    },
+    "deploy_safety_tests": {
+      "command": "./node_modules/.bin/vitest run src/test/deploy-safe-defaults.test.ts src/test/paired-release-workflow.test.ts src/test/admitted-dev-pair.test.ts",
+      "status": "passed",
+      "test_files": 3,
+      "tests_passed": 55
+    },
+    "contract_drift": {
+      "command": "PANTHEON_CONTRACT_ROOT=/home/chloe_ong_dev_cctech_support_com/code/pantheon npm run test:contract",
+      "status": "passed",
+      "tests_passed": 7
+    },
+    "typecheck": {
+      "command": "npm run typecheck:app && npm run typecheck:agora",
+      "status": "passed"
+    },
+    "production_build_and_credential_scan": {
+      "command": "VITE_BFF_MODE=live VITE_BFF_BASE_URL=https://api.dev.mvl-cap.tw VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npm run build && npm run scan:bundle-credentials",
+      "status": "passed"
+    },
+    "playwright_loopback_e2e": {
+      "command": "VITE_BFF_FALLBACK=strict ./node_modules/.bin/playwright test e2e/02-control-room.spec.ts e2e/03-execution-loop.spec.ts e2e/04b-optimization-loop.spec.ts e2e/08-create-intent.spec.ts e2e/08-sse-reconnect.spec.ts e2e/09-strict-vs-hybrid.spec.ts e2e/10-rollback-saga.spec.ts e2e/11-handoff-sla.spec.ts e2e/12-approvals.spec.ts e2e/13-agora.spec.ts e2e/16-audit-correlation.spec.ts e2e/17-a11y-v5.spec.ts e2e/18-perf.spec.ts e2e/21-management-canonical-reads.spec.ts --project=chromium --retries=0",
+      "status": "passed",
+      "tests_passed": 41
+    }
+  }
+}

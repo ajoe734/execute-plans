@@ -1656,6 +1656,7 @@ const pulseRecord = (value: unknown): Record<string, unknown> =>
   value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 
 const pulseNumber = (value: unknown): number | null => {
+  if (value === null || value === undefined || value === "" || typeof value === "boolean") return null;
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
 };
@@ -1821,12 +1822,20 @@ const TradingPulseCoverageSummary = ({ model }: { model: ManagementTradingPulseM
   const missingMonitoring = pulseStringList(coverage.missingMonitoringRuntimeIds ?? coverage.missing_monitoring_runtime_ids);
   const missingBaseline = pulseStringList(coverage.missingBaselineRuntimeIds ?? coverage.missing_baseline_runtime_ids);
   const degradedRows = pulseStringList(coverage.degradedRuntimeIds ?? coverage.degraded_runtime_ids);
+  const retiredCount = pulseNumber(model.summary.retiredRuntimeCount);
+  const statusDetail = compactCounts(model.summary.byStatus);
+  const retiredDetail = retiredCount !== null
+    ? t("mgmt.pulse.retiredExcludedFmt", { count: formatPulseValue(retiredCount, "runtime-status") })
+    : null;
+  const runtimeDetail = retiredDetail
+    ? (statusDetail === "—" ? retiredDetail : `${statusDetail} · ${retiredDetail}`)
+    : statusDetail;
   return (
     <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
       <CoverageStat
         label={t("mgmt.pulse.runtimeRows")}
         value={formatPulseValue(coverage.runtimeCount ?? model.summary.runtimeCount, "runtime-status")}
-        detail={compactCounts(model.summary.byStatus)}
+        detail={runtimeDetail}
       />
       <CoverageStat
         label={t("mgmt.pulse.telemetryCoverage")}
@@ -2202,11 +2211,57 @@ export const EvolutionJournalPage = () => {
   const degradedSurfaces = useMemo(() => {
     const entries = Object.entries(journalMeta?.surfaces ?? {});
     return entries.filter(([, surface]) =>
-      ["degraded", "unavailable", "error", "failed"].includes(String(surface?.status ?? "").toLowerCase()),
+      ["degraded", "unavailable", "error", "failed", "unknown"].includes(String(surface?.status ?? "").toLowerCase()),
     );
   }, [journalMeta]);
+  const hasDegradedSurfaces = degradedSurfaces.length > 0;
+  const hasHealthyJournalSource = useMemo(() => {
+    const surfaces = journalMeta?.surfaces;
+    const hasOkSource = ["evolution_decisions", "postmortems", "mutation_review", "rollbacks", "freeze_orders"].some(
+      (key) => String(surfaces?.[key]?.status ?? "").trim().toLowerCase() === "ok",
+    );
+    return hasOkSource || rows.length > 0 || autoProposalCounts.total > 0;
+  }, [autoProposalCounts.total, journalMeta, rows.length]);
+  const isPartialRead = !error && hasDegradedSurfaces && hasHealthyJournalSource;
   const isReadFailed =
-    Boolean(error) || (!loading && data === undefined && !isFleetSummary) || degradedSurfaces.length > 0;
+    Boolean(error) ||
+    (!loading && data === undefined && !isFleetSummary) ||
+    (hasDegradedSurfaces && !hasHealthyJournalSource);
+
+  const isJournalSurfaceDegraded = (surfaceKey: string): boolean => {
+    const status = String(journalMeta?.surfaces?.[surfaceKey]?.status ?? "").trim().toLowerCase();
+    return ["degraded", "unavailable", "error", "failed", "unknown"].includes(status);
+  };
+
+  const formatJournalSurfaceCount = (surfaceKey: string, count: number | null | undefined): string => {
+    const surface = journalMeta?.surfaces?.[surfaceKey];
+    const status = String(surface?.status ?? "").trim().toLowerCase();
+    if (["degraded", "unavailable", "error", "failed", "unknown"].includes(status)) {
+      return t("mgmt.evolution.summarySourceUnknownFmt", { status: surface?.status || "unavailable" });
+    }
+    if (count === null || count === undefined || !Number.isFinite(count)) {
+      return t("mgmt.evolution.summarySourceUnknown", { defaultValue: "unknown" });
+    }
+    return String(count);
+  };
+
+  const incidentFollowupDisplay = formatJournalSurfaceCount(
+    "evolution_decisions",
+    autoProposalCounts.incident_followup,
+  );
+  const incidentSeverityDisplay = formatJournalSurfaceCount(
+    "evolution_decisions",
+    autoProposalCounts.incident_severity,
+  );
+  const postmortemDraftDisplay = formatJournalSurfaceCount(
+    "postmortems",
+    autoProposalCounts.postmortem_draft,
+  );
+  const autoProposalTotalDisplay = isJournalSurfaceDegraded("evolution_decisions")
+    ? formatJournalSurfaceCount("evolution_decisions", null)
+    : isJournalSurfaceDegraded("postmortems")
+      ? formatJournalSurfaceCount("postmortems", null)
+      : String(autoProposalCounts.total);
 
   const switchView = (nextView: EvolutionJournalView) => {
     const next = new URLSearchParams(searchParams);
@@ -2274,24 +2329,24 @@ export const EvolutionJournalPage = () => {
             <div className="space-y-1">
               <div className="text-foreground">
                 {t("mgmt.evolution.autoProposalsSummaryFmt", {
-                  total: autoProposalCounts.total,
-                  incidentFollowup: autoProposalCounts.incident_followup,
-                  incidentSeverity: autoProposalCounts.incident_severity,
-                  postmortemDraft: autoProposalCounts.postmortem_draft,
+                  total: autoProposalTotalDisplay,
+                  incidentFollowup: incidentFollowupDisplay,
+                  incidentSeverity: incidentSeverityDisplay,
+                  postmortemDraft: postmortemDraftDisplay,
                 })}
               </div>
               <div className="flex flex-wrap items-center gap-1.5 text-xs">
                 <Badge variant="outline" data-testid="auto-proposal-total">
-                  {t("mgmt.evolution.autoProposalsTotal")}: {autoProposalCounts.total}
+                  {t("mgmt.evolution.autoProposalsTotal")}: {autoProposalTotalDisplay}
                 </Badge>
                 <Badge variant="outline" data-testid="auto-proposal-incident-followup">
-                  {t("mgmt.evolution.incidentFollowup")}: {autoProposalCounts.incident_followup}
+                  {t("mgmt.evolution.incidentFollowup")}: {incidentFollowupDisplay}
                 </Badge>
                 <Badge variant="outline" data-testid="auto-proposal-incident-severity">
-                  {t("mgmt.evolution.incidentSeverity")}: {autoProposalCounts.incident_severity}
+                  {t("mgmt.evolution.incidentSeverity")}: {incidentSeverityDisplay}
                 </Badge>
                 <Badge variant="outline" data-testid="auto-proposal-postmortem-draft">
-                  {t("mgmt.evolution.postmortemDraft")}: {autoProposalCounts.postmortem_draft}
+                  {t("mgmt.evolution.postmortemDraft")}: {postmortemDraftDisplay}
                 </Badge>
               </div>
             </div>
@@ -2315,20 +2370,49 @@ export const EvolutionJournalPage = () => {
               <Badge variant="outline" data-testid="evolution-active-view-badge">
                 {viewBadgeLabel}
               </Badge>
+              {isPartialRead && (
+                <Badge
+                  variant="outline"
+                  data-testid="evolution-partial-read-badge"
+                  className="bg-status-warning/15 text-status-warning border-status-warning/30"
+                >
+                  {t("mgmt.evolution.partialReadBadge")}
+                </Badge>
+              )}
               <span className="text-foreground">
-                {t("mgmt.evolution.filteredSummaryFmt", {
-                  total: filteredTotal,
-                  returned: returnedCount,
-                })}
+                {t(
+                  isPartialRead
+                    ? "mgmt.evolution.partialFilteredSummaryFmt"
+                    : "mgmt.evolution.filteredSummaryFmt",
+                  {
+                    total: filteredTotal,
+                    returned: returnedCount,
+                  },
+                )}
               </span>
             </div>
             {summary && (
               <div className="flex flex-wrap items-center gap-2">
-                <span>{t("mgmt.evolution.summaryDecisions")}: {summary.decision_count}</span>
-                <span>{t("mgmt.evolution.summaryMutationReviews")}: {summary.mutation_review_count}</span>
-                <span>{t("mgmt.evolution.summaryPostmortems")}: {summary.postmortem_count}</span>
-                <span>{t("mgmt.evolution.summaryRollbacks")}: {summary.rollback_count}</span>
-                <span>{t("mgmt.evolution.summaryFreezeOrders")}: {summary.freeze_order_count}</span>
+                <span data-testid="evolution-summary-decisions">
+                  {t("mgmt.evolution.summaryDecisions")}:{" "}
+                  {formatJournalSurfaceCount("evolution_decisions", summary.decision_count)}
+                </span>
+                <span data-testid="evolution-summary-mutation-reviews">
+                  {t("mgmt.evolution.summaryMutationReviews")}:{" "}
+                  {formatJournalSurfaceCount("mutation_review", summary.mutation_review_count)}
+                </span>
+                <span data-testid="evolution-summary-postmortems">
+                  {t("mgmt.evolution.summaryPostmortems")}:{" "}
+                  {formatJournalSurfaceCount("postmortems", summary.postmortem_count)}
+                </span>
+                <span data-testid="evolution-summary-rollbacks">
+                  {t("mgmt.evolution.summaryRollbacks")}:{" "}
+                  {formatJournalSurfaceCount("rollbacks", summary.rollback_count)}
+                </span>
+                <span data-testid="evolution-summary-freeze-orders">
+                  {t("mgmt.evolution.summaryFreezeOrders")}:{" "}
+                  {formatJournalSurfaceCount("freeze_orders", summary.freeze_order_count)}
+                </span>
               </div>
             )}
           </div>
@@ -2354,7 +2438,7 @@ export const EvolutionJournalPage = () => {
           {t("common.loading", { defaultValue: "Loading..." })}
         </Card>
       )}
-      {isReadFailed && (
+      {(isReadFailed || hasDegradedSurfaces) && (
         <Card
           className="border-status-failed/30 bg-status-failed/10 p-4 text-sm space-y-2"
           role="alert"
@@ -2364,7 +2448,9 @@ export const EvolutionJournalPage = () => {
             <AlertCircle className="h-5 w-5" />
             <span className="font-semibold">{t("mgmt.evolution.degradedTitle")}</span>
           </div>
-          <p className="text-muted-foreground">{t("mgmt.evolution.degradedBody")}</p>
+          <p className="text-muted-foreground">
+            {isReadFailed ? t("mgmt.evolution.degradedBody") : t("mgmt.evolution.partialReadBody")}
+          </p>
           {degradedSurfaces.length > 0 && (
             <div className="text-xs text-muted-foreground">
               {degradedSurfaces.map(([key, surface]) => `${key}: ${surface.status}`).join(" · ")}
@@ -2378,7 +2464,7 @@ export const EvolutionJournalPage = () => {
           </div>
         </Card>
       )}
-      {!loading && !isReadFailed && visibleRows.length === 0 && (
+      {!loading && !isReadFailed && !hasDegradedSurfaces && visibleRows.length === 0 && (
         activeView === "history" && !hasFocus ? (
           <Card className="p-4 text-sm space-y-2" data-testid="evolution-history-empty">
             <div className="font-medium text-foreground">{t("mgmt.evolution.emptyHistoryTitle")}</div>
@@ -2576,14 +2662,38 @@ const EvidenceSurfaceBanner = ({ meta, primaryKey }: { meta?: ManagementEvidence
   );
 };
 
-const EvidenceResolvedLinkAction = ({ link }: { link: ManagementEvidenceResolvedLink }) => {
+const isOfficialReferenceWithoutInternalLink = (
+  link: ManagementEvidenceResolvedLink,
+  sourceType?: string | null,
+): boolean => {
+  const href = link.routeHref ?? link.route_href;
+  if (href) return false;
+  if (link.availability === "no_internal_link") return true;
+  if (String(sourceType ?? "").trim().toLowerCase() === "official_reference") return true;
+  return /^no internal link$/i.test(String(link.displayLabel ?? link.display_label ?? "").trim());
+};
+
+const EvidenceResolvedLinkAction = ({
+  link,
+  sourceType,
+}: {
+  link: ManagementEvidenceResolvedLink;
+  sourceType?: string | null;
+}) => {
   const { t } = useTranslation();
   const href = link.routeHref ?? link.route_href;
-  const label = link.displayLabel || link.display_label || t("mgmt.evidence.openResolvedSource");
+  const officialNoInternalLink = isOfficialReferenceWithoutInternalLink(link, sourceType);
+  const rawLabel = link.displayLabel || link.display_label;
+  const label = officialNoInternalLink
+    ? t("mgmt.evidence.noInternalLink", { defaultValue: "No internal link" })
+    : rawLabel || t("mgmt.evidence.openResolvedSource");
+  const badgeText = officialNoInternalLink
+    ? t("mgmt.evidence.externalSourceBadge", { defaultValue: "external source" })
+    : evidenceLabel(link.availability);
   if (!href) {
     return (
       <div className="flex flex-col gap-1">
-        <Badge variant="outline" className="w-fit">{evidenceLabel(link.availability)}</Badge>
+        <Badge variant="outline" className="w-fit">{badgeText}</Badge>
         <span className="text-xs text-muted-foreground">{label}</span>
       </div>
     );
@@ -3068,6 +3178,9 @@ const EvidenceExplorerList = () => {
   const primarySurfaceStatus = evidenceSurfaceStatus(model.meta, "management_evidence");
   const managementEvidenceOk = Boolean(data) && primarySurfaceStatus.toLowerCase() === "ok";
   const unavailableMetricValue = t("mgmt.evidence.unavailableValue", { defaultValue: "Unavailable" });
+  const noDataMetricValue = t("common.noData", { defaultValue: "No data" });
+  const summaryMetricValue = (val: number | null | undefined): ReactNode =>
+    typeof val === "number" && Number.isFinite(val) ? val : noDataMetricValue;
   const totalShown = model.pageInfo.total ?? model.page_info.total ?? model.summary.totalEvidence;
   const nextPageToken = model.pageInfo.nextPageToken ?? model.page_info.next_page_token ?? null;
   const canGoPrev = pageTokens.length > 1;
@@ -3096,10 +3209,10 @@ const EvidenceExplorerList = () => {
       )}
       <dl className="grid shrink-0 gap-3 sm:grid-cols-2 xl:grid-cols-5" data-testid="evidence-metrics">
         <EvidenceMetric label={t("mgmt.evidence.total")} value={managementEvidenceOk ? totalShown : unavailableMetricValue} />
-        <EvidenceMetric label={t("mgmt.evidence.traceable")} value={managementEvidenceOk ? model.summary.traceableEvidence : unavailableMetricValue} />
-        <EvidenceMetric label={t("mgmt.evidence.needsAttention")} value={managementEvidenceOk ? model.summary.needsAttentionEvidence : unavailableMetricValue} />
+        <EvidenceMetric label={t("mgmt.evidence.traceable")} value={managementEvidenceOk ? summaryMetricValue(model.summary.traceableEvidence) : unavailableMetricValue} />
+        <EvidenceMetric label={t("mgmt.evidence.needsAttention")} value={managementEvidenceOk ? summaryMetricValue(model.summary.needsAttentionEvidence) : unavailableMetricValue} />
         <EvidenceMetric label={t("mgmt.evidence.verified")} value={managementEvidenceOk ? model.summary.verifiedEvidence : unavailableMetricValue} />
-        <EvidenceMetric label={t("mgmt.evidence.openOperations")} value={managementEvidenceOk ? model.summary.openOperationEvidence : unavailableMetricValue} />
+        <EvidenceMetric label={t("mgmt.evidence.openOperations")} value={managementEvidenceOk ? summaryMetricValue(model.summary.openOperationEvidence) : unavailableMetricValue} />
       </dl>
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <ManagementTableScroll
@@ -3170,7 +3283,7 @@ const EvidenceExplorerList = () => {
                     </div>
                   </td>
                   <td className="px-3 py-3">
-                    <EvidenceResolvedLinkAction link={e.resolvedLink} />
+                    <EvidenceResolvedLinkAction link={e.resolvedLink} sourceType={e.sourceType ?? e.source_type} />
                   </td>
                   <td className="px-3 py-3">
                     {linkedObjectHref ? (
@@ -3479,8 +3592,23 @@ const EvidenceDetailView = ({ refId }: { refId: string }) => {
           <Card className="p-4">
             <h2 className="text-base font-semibold text-foreground">{t("mgmt.evidence.resolution")}</h2>
             <dl className="mt-3 space-y-3">
-              <EvidenceField label={t("mgmt.evidence.availability")} value={evidenceLabel(detail.resolvedLink.availability)} />
-              <dd><EvidenceResolvedLinkAction link={detail.resolvedLink} /></dd>
+              <EvidenceField
+                label={t("mgmt.evidence.availability")}
+                value={
+                  isOfficialReferenceWithoutInternalLink(
+                    detail.resolvedLink,
+                    detail.sourceDocument.sourceType ?? detail.sourceDocument.source_type,
+                  )
+                    ? t("mgmt.evidence.externalSourceBadge", { defaultValue: "external source" })
+                    : evidenceLabel(detail.resolvedLink.availability)
+                }
+              />
+              <dd>
+                <EvidenceResolvedLinkAction
+                  link={detail.resolvedLink}
+                  sourceType={detail.sourceDocument.sourceType ?? detail.sourceDocument.source_type}
+                />
+              </dd>
             </dl>
           </Card>
           <Card className="p-4">

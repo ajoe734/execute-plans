@@ -1,0 +1,81 @@
+{
+  "task_id": "FE-EVO-QUAL-FIXTURE-E2E-20261105",
+  "title": "Repair Evolution qualification fixture for the existing F07 gate",
+  "owner": "Antigravity",
+  "reviewer": "Claude",
+  "repository": "ajoe734/execute-plans",
+  "branch": "task/FE-EVO-QUAL-FIXTURE-E2E-20261105",
+  "base_branch": "dev",
+  "base_commit_sha": "2291fb1940ae60cab89c743f4cd3047a45c75ae7",
+  "verification_scope": "contained_loopback_fixture_e2e_only (distinguished from hosted dev acceptance; no VM/SSH/hosted deployment or live business writes claimed)",
+  "failure_correlation": {
+    "ci_gate_failure_reference": {
+      "workflow_run_id": 42106104249,
+      "artifact_id": 13452759915,
+      "preserved_failure_proof": "/tmp/pantheon-dev-operable-20261104/actual-existing421061-F07-fixture-failure.json",
+      "preserved_aggregate_summary": "/tmp/pantheon-dev-operable-20261104/actual-existing421061-release-gate-summary.json",
+      "failing_spec": "e2e/06-entity-registry.spec.ts:1001 F07 entity registry > renders all 12 registry surfaces from fixture-backed list routes"
+    },
+    "pre_edit_local_reproduction": {
+      "commit_sha": "2291fb1940ae60cab89c743f4cd3047a45c75ae7",
+      "command": "VITE_BFF_MODE=live VITE_BFF_BASE_URL=http://127.0.0.1:8000 BFF_BASE_URL=http://127.0.0.1:8000 VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npx playwright test e2e/06-entity-registry.spec.ts --project=chromium -g \"renders all 12 registry surfaces from fixture-backed list routes\"",
+      "exit_code": 1,
+      "observed_error": "Error: evolution-programs should not render a seed fallback banner — Received string included 'STRICT TYPED ERROR / strict: live adapter contract mismatch (strict mode): adapter returned no data · seed fallback blocked' and 'FALLBACK DATA'"
+    },
+    "root_cause": "EvolutionList (/management/evolution) fetches both GET /bff/evolution-programs and GET /bff/management/evolution-qualification (via mgmt.evolutionQualification.get -> mgmtRead -> strictLiveRead + safeAdapt(adaptEvolutionQualificationReport)). In e2e/06-entity-registry.spec.ts, installRegistryRoutes had no handler for /bff/management/evolution-qualification, so the request fell through to the /bff/* catch-all returning emptyListEnvelope('ancillary') with data: []. adaptEvolutionQualificationReport requires unwrap(raw) to be a non-array object and returned null, causing safeAdapt in strict live mode (VITE_BFF_MODE=live, VITE_BFF_FALLBACK=strict) to throw 'live adapter contract mismatch (strict mode): adapter returned no data' and strictLiveRead to mark global fallback/error state."
+  },
+  "fix_summary": {
+    "modified_files": [
+      "e2e/06-entity-registry.spec.ts",
+      "docs/deployment/evidence/FE-EVO-QUAL-FIXTURE-E2E-20261105/evidence.json"
+    ],
+    "fixture_contract_added": {
+      "route": "GET /bff/management/evolution-qualification",
+      "policy_version": "evolution-qualification.v1",
+      "evaluated_at": "2026-05-13T14:10:00Z",
+      "evaluated": 6,
+      "qualified": 1,
+      "drafted": 1,
+      "counts_by_first_failing_criterion": {
+        "real_threshold_signal": 2,
+        "real_target": 1,
+        "persistent_breach": 1,
+        "fresh_evidence": 0,
+        "executable_action": 1,
+        "no_open_duplicate": 0
+      },
+      "decision_items_count": 2
+    },
+    "assertions_added": [
+      "calls.has('/bff/management/evolution-qualification') === true",
+      "evolution-qualification-summary visible on /management/evolution",
+      "qualification-policy-version === 'evolution-qualification.v1'",
+      "qualification-evaluated-at === '2026-05-13T14:10:00Z'",
+      "qualification-evaluated-count === '6', qualification-qualified-count === '1', qualification-drafted-count === '1'",
+      "qualification-criterion-count-real_threshold_signal === '2', real_target === '1', persistent_breach === '1', executable_action === '1'",
+      "Original 12 registry surfaces traversal, no SERVING_MOCK_BANNER, and no CRASH_TEXT assertions preserved intact"
+    ]
+  },
+  "post_edit_verification": {
+    "command": "VITE_BFF_MODE=live VITE_BFF_BASE_URL=http://127.0.0.1:8000 BFF_BASE_URL=http://127.0.0.1:8000 VITE_BFF_FALLBACK=strict VITE_BFF_REAL_WRITES=false npx playwright test e2e/06-entity-registry.spec.ts --project=chromium",
+    "exit_code": 0,
+    "passed_count": 4,
+    "skipped_count": 1,
+    "results": [
+      "PASS: F07 entity registry > renders all 12 registry surfaces from fixture-backed list routes (18.6s)",
+      "PASS: F07 entity registry > keeps every registry ListResponse exact-counted (721ms)",
+      "PASS: F07 entity registry > returns RESOURCE_NOT_FOUND envelopes for missing registry details (472ms)",
+      "PASS: F07 entity registry > projects ActionDescriptor endpoints to canonical /bff/v1/commands path (405ms)",
+      "SKIP: F07 entity registry > live BFF registry probes preserve F07 response contracts (opt-in live BFF probe)"
+    ]
+  },
+  "acceptance_criteria_verification": {
+    "1": "passed — reproduced exact F07 12-registry test failure on commit 2291fb1940ae60cab89c743f4cd3047a45c75ae7 before editing and correlated evolution-programs STRICT TYPED ERROR / FALLBACK DATA with /bff/management/evolution-qualification falling through to emptyListEnvelope('ancillary').",
+    "2": "passed — extended installRegistryRoutes in e2e/06-entity-registry.spec.ts with GET /bff/management/evolution-qualification returning a live-shaped EvolutionQualificationReport envelope (policy_version, evaluated_at, evaluated/qualified/drafted counts, counts_by_first_failing_criterion, and 6-criterion decision items); no production stub data introduced.",
+    "3": "passed — preserved all 12 surfaces traversal and strict SERVING_MOCK_BANNER / CRASH_TEXT assertions intact; added explicit calls.has('/bff/management/evolution-qualification') and rendered summary testid assertions.",
+    "4": "passed — ran the previously failing all-12 test and the full e2e/06-entity-registry.spec.ts suite under VITE_BFF_MODE=live VITE_BFF_FALLBACK=strict with contained loopback origins (4 passed, 1 opt-in live probe skipped).",
+    "5": "passed — changed only e2e/06-entity-registry.spec.ts and docs/deployment/evidence/FE-EVO-QUAL-FIXTURE-E2E-20261105/evidence.json.",
+    "6": "passed — preserved actual failure evidence references and explicitly distinguished contained loopback fixture functional evidence from hosted dev acceptance.",
+    "7": "passed — no SSH, VM, key reads, deployment, hosted business writes, provider/model/research/broker/capital actions, or changes to closed Pattern/Persona/Teaching contracts."
+  }
+}

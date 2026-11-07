@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 
@@ -108,6 +108,30 @@ describe("PostmortemLibraryPage", () => {
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
+  });
+
+  it("FE-MGMT-CATALOG-LEGIBILITY: a draft shows its created time labelled Created (never as closed) and badges do not wrap", async () => {
+    const row = buildRealPostmortemRecord(1, {
+      postmortem_id: "pm-infra-bff-1c619cdd05621fa6fabe2316",
+      status: "draft",
+      created_at: "2026-11-05T17:25:40Z",
+    });
+    vi.spyOn(transport, "bffFetch").mockResolvedValue({
+      data: [{ ...row, published_at: null }],
+      page_info: { total: 1, page_size: 50, next_page_token: null },
+      meta: { total: 1, surfaces: { postmortems: { status: "ok", source: "service_client" } } },
+    } as never);
+
+    renderLibrary();
+
+    const idCell = await screen.findByText("pm-infra-bff-1c619cdd05621fa6fabe2316");
+    const tr = idCell.closest("tr")!;
+    const time = tr.querySelector("[data-time-kind]")!;
+    expect(time.getAttribute("data-time-kind")).toBe("created");
+    expect(time.textContent).toContain("Created");
+    expect(screen.queryByText("Resolved")).not.toBeInTheDocument();
+    const badge = within(tr).getByText("Draft");
+    expect(badge.className).toContain("whitespace-nowrap");
   });
 
   it("AC1: reads pages through page_size and page_token so every row is reachable and shows page_info.total", async () => {

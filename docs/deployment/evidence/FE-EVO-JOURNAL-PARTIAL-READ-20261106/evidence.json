@@ -1,0 +1,63 @@
+{
+  "schema_version": "pantheon.fe-evo-journal-partial-read.v1",
+  "task_id": "FE-EVO-JOURNAL-PARTIAL-READ-20261106",
+  "taskId": "FE-EVO-JOURNAL-PARTIAL-READ-20261106",
+  "title": "Keep verified Evolution journal counts visible on partial reads",
+  "owner": "Antigravity",
+  "reviewer": "Codex",
+  "target_repo": "execute-plans",
+  "merge_target": "dev",
+  "branch": "task/FE-EVO-JOURNAL-PARTIAL-READ-20261106",
+  "base_sha": "a8206a2d333f5c9b148bf4db9d6431bbe7042102",
+  "preserved_history_commits": [
+    "7fb328984e89c3ca3247351337a9c7e1083dded7",
+    "044b069be56e6f54da5ff2cb31f1babf6050eff8"
+  ],
+  "pr_number": 934,
+  "status": "ready_for_review",
+  "timestamp": "2026-11-06T00:54:00Z",
+  "root_cause": {
+    "observed_payload": "/tmp/pantheon-dev-operable-20261104/evolution-ui-kkSWfo/journal-response.json (captured 2026-11-06T00:06:51Z)",
+    "observed_dom": "/tmp/pantheon-dev-operable-20261104/evolution-ui-kkSWfo/journal-visible.txt",
+    "summary": "In GET /bff/management/evolution-journal?view=history, the BFF returned 200 OK with 6 real history rows (3 mutation_review, 3 evolution_decision), 2530 auto-proposal counts from healthy evolution_decisions and postmortems surfaces (incident_followup=433, incident_severity=9, postmortem_draft=2088), while ancillary surfaces freeze_orders and rollbacks reported status='unavailable' and management_evolution_journal reported status='degraded'. EvolutionJournalPage in src/management/pages/oversight/_core.tsx computed isReadFailed = Boolean(error) || (!loading && data === undefined && !isFleetSummary) || degradedSurfaces.length > 0, treating any degraded ancillary surface as a whole-page read failure and hiding evolution-auto-proposals-summary (the 2530 auto-proposal counters and evolution-view-toggle), evolution-journal-summary (including evolution-active-view-badge), and evolution-journal-pager. In addition, EvolutionJournalPage rendered summary.rollback_count (0) and summary.freeze_order_count (0) as numeric 0 even when meta.surfaces.rollbacks and meta.surfaces.freeze_orders were unavailable."
+  },
+  "scope": {
+    "delivered": [
+      "Updated EvolutionJournalPage in src/management/pages/oversight/_core.tsx to distinguish partial reads (where at least one journal source surface is healthy or verified rows/auto-proposal counts are returned alongside degraded ancillary surfaces) from wholly failed reads (transport error, missing data, or all journal source surfaces failed with zero rows/proposals). Wholly failed reads continue to suppress summary cards and empty-history text while showing degradedBody.",
+      "On partial reads, kept evolution-auto-proposals-summary (with all 2530 healthy-source counters and evolution-view-toggle), evolution-journal-summary (with evolution-active-view-badge, evolution-partial-read-badge, honest partial total via partialFilteredSummaryFmt, and per-source summary counts), the 6 journal rows, and evolution-journal-pager visible while preserving the evolution-journal-degraded alert and surface provenance.",
+      "Formatted per-source summary counts and auto-proposal counters in EvolutionJournalPage via formatJournalSurfaceCount so healthy surfaces render their verified counts (Decisions: 3, Mutation reviews: 3, Postmortems: 0, Auto proposals: 2530) while unavailable surfaces render honest unknown status labels ('unknown (unavailable)' / '未知 (unavailable)') instead of 0.",
+      "Added symmetric en-US and zh-TW locale keys (partialFilteredSummaryFmt, summarySourceUnknown, summarySourceUnknownFmt, partialReadBadge, partialReadBody) under mgmt.evolution in src/i18n/locales/en-US.ts and src/i18n/locales/zh-TW.ts.",
+      "Added component tests in src/management/pages/oversight/EvolutionJournalPage.test.tsx covering both the wholly-failed surface suppression behavior and the exact captured 00:06 partial-read payload and DOM expectations across zh-TW and en-US."
+    ],
+    "not_changing": [
+      "No global shared read failure relaxation or shared BFF DTO/adapter changes.",
+      "Pantheon BFF / owner services (accepted live BFF commit 0cd59ab286b7ad4d7c742993215cb39919cce580 is unchanged).",
+      "No deployment or business write actions."
+    ]
+  },
+  "scoped_artifacts": [
+    "src/management/pages/oversight/_core.tsx",
+    "src/management/pages/oversight/EvolutionJournalPage.test.tsx",
+    "src/i18n/locales/en-US.ts",
+    "src/i18n/locales/zh-TW.ts",
+    "docs/deployment/evidence/FE-EVO-JOURNAL-PARTIAL-READ-20261106/evidence.json"
+  ],
+  "validation": {
+    "vitest": {
+      "command": "./node_modules/.bin/vitest run src/management/pages/oversight/_core.test.ts src/management/pages/oversight/EvolutionJournalPage.test.tsx src/lib/v5/management/__tests__/i18nParity.test.ts",
+      "exit_code": 0,
+      "test_files_passed": 3,
+      "tests_passed": 60
+    },
+    "tsc": {
+      "command": "npm run typecheck:app && ./node_modules/.bin/tsc --noEmit",
+      "exit_code": 0
+    },
+    "production_build": {
+      "command": "node scripts/build-e2e-server.mjs && npm run scan:bundle-credentials",
+      "exit_code": 0,
+      "bundle_digest": "738b85d7f9676862542e4160aa75af5ee707d1889f3d29c0bce136553182171a",
+      "limitations": "Validated in task worktree against shared execute-plans node_modules toolchain; no hosted deployment or browser write actions executed."
+    }
+  }
+}

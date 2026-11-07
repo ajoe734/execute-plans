@@ -1,13 +1,14 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { LiveStatusBanner } from "@/components/layout/LiveStatusBanner";
 import i18n from "@/i18n";
 import { liveStatus } from "@/lib/bff-v1/liveStatus";
 import { ObjectListPage, resolveObjectRowHref } from "./ObjectListPage";
-import { ArtifactsList, CapitalPoolsList, EvolutionList, ResearchList } from "./Lists";
+import { ArtifactsList, CapitalPoolsList, EvolutionList, ResearchList, StrategiesList } from "./Lists";
 import type { CreateBehavior } from "@/lib/writeIntents/types";
 import capitalPoolsFixture from "@/lib/bff-v1/__tests__/fixtures/hosted-20261020/capital-pools.json";
 
@@ -89,9 +90,11 @@ describe("ObjectListPage", () => {
     renderObjectList();
 
     const status = screen.getByRole("status");
-    expect(status).toHaveTextContent("strict typed error");
+    expect(status).toHaveTextContent("Strategies is temporarily unavailable");
     expect(status).toHaveTextContent("Injected F15 5xx");
-    expect(status).toHaveTextContent("seed fallback blocked");
+    expect(status).not.toHaveTextContent("strict typed error");
+    expect(status).not.toHaveTextContent("seed fallback blocked");
+    expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
   });
 
   it("does not label governed 4xx list errors as strict seed-fallback blocks", () => {
@@ -582,8 +585,11 @@ describe("ObjectListPage", () => {
     );
 
     const status = await screen.findByRole("status");
-    expect(status).toHaveTextContent("strict typed error");
+    expect(status).toHaveTextContent("Capital Pools is temporarily unavailable");
     expect(status).toHaveTextContent("Page 2 of /bff/capital-pools returned HTTP 503");
+    expect(status).not.toHaveTextContent("strict typed error");
+    expect(status).not.toHaveTextContent("seed fallback blocked");
+    expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Formal (0)" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Paper (0)" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Archived (0)" })).toBeInTheDocument();
@@ -1016,8 +1022,12 @@ describe("ObjectListPage", () => {
     );
 
     const unavailableStatus = await screen.findByRole("status");
-    expect(unavailableStatus).toHaveTextContent("No data yet");
+    expect(unavailableStatus).toHaveTextContent("Research & Experiments is temporarily unavailable");
     expect(unavailableStatus).toHaveTextContent("research_tasks query failed: HTTPStatusError");
+    expect(unavailableStatus).not.toHaveTextContent("No data yet");
+    expect(unavailableStatus).not.toHaveTextContent("strict typed error");
+    expect(unavailableStatus).not.toHaveTextContent("seed fallback blocked");
+    expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
     expect(screen.queryByText("無結果")).not.toBeInTheDocument();
     expect(screen.queryByText("No results")).not.toBeInTheDocument();
     expect(screen.queryByText(/No research work has run yet/i)).not.toBeInTheDocument();
@@ -1049,8 +1059,12 @@ describe("ObjectListPage", () => {
     );
 
     const failedStatus = await screen.findByRole("status");
-    expect(failedStatus).toHaveTextContent("strict typed error");
+    expect(failedStatus).toHaveTextContent("Research & Experiments is temporarily unavailable");
     expect(failedStatus).toHaveTextContent("research-executor upstream 503");
+    expect(failedStatus).not.toHaveTextContent("strict typed error");
+    expect(failedStatus).not.toHaveTextContent("seed fallback blocked");
+    expect(failedStatus).not.toHaveTextContent("No data yet");
+    expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
     expect(screen.queryByText("無結果")).not.toBeInTheDocument();
     expect(screen.queryByText("No results")).not.toBeInTheDocument();
     unmountFailed();
@@ -1401,7 +1415,12 @@ describe("ObjectListPage", () => {
     expect(regTr).toHaveTextContent("1.0.1");
     expect(regTr).toHaveTextContent("Approved");
     expect(regTr).toHaveTextContent("Low");
-    expect(regTr).toHaveTextContent("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa0001");
+    // FE-MGMT-CATALOG-LEGIBILITY-20261105: hash is shortened in the cell; the full value is still exposed via title.
+    expect(regTr.querySelector('[data-full-hash="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa0001"]')).toHaveAttribute(
+      "title",
+      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa0001",
+    );
+    expect(regTr).toHaveTextContent("aaaaaaaa…aa0001");
     expect(regTr).toHaveTextContent("gov-approver-alpha");
     expect(regTr).toHaveTextContent("No data");
     expect(regTr).not.toHaveTextContent("0 MB");
@@ -1410,7 +1429,11 @@ describe("ObjectListPage", () => {
     expect(resTr).not.toBeNull();
     expect(resTr).toHaveTextContent("research_run_output");
     expect(resTr).toHaveTextContent("factor_eval_report");
-    expect(resTr).toHaveTextContent("sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08");
+    expect(resTr.querySelector('[data-full-hash="sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"]')).toHaveAttribute(
+      "title",
+      "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+    );
+    expect(resTr).toHaveTextContent("sha256:9f86d081…f00a08");
     expect(resTr).toHaveTextContent("research-worker-qlib");
     expect(resTr).not.toHaveTextContent("0 MB");
     expect(resTr).not.toHaveTextContent("Unavailable");
@@ -1503,5 +1526,488 @@ describe("ObjectListPage", () => {
     expect(banner).toHaveAttribute("data-failed-source", "registry");
     expect(banner).toHaveTextContent(/Partial artifact catalog — failed source: registry/i);
     expect(banner).toHaveTextContent("Artifact catalog is degraded because registry owner read failed.");
+  });
+
+  it("renders qualification summary from GET /bff/management/evolution-qualification with 649 evaluated and 0 qualified in both locales and explains why there are zero programs", async () => {
+    const { useLiveListV1: actualUseLiveListV1 } = await vi.importActual<typeof import("@/lib/bff-v1")>("@/lib/bff-v1");
+    mocks.useLiveListV1.mockImplementation(actualUseLiveListV1);
+
+    const hostedQualificationReport = {
+      data: {
+        tenant_id: "default",
+        sweep_id: "evo-qual-sweep-20261105-0001",
+        policy_version: "evolution-qualification.v1",
+        evaluated_at: "2026-11-05T00:00:00Z",
+        evaluated: 649,
+        qualified: 0,
+        drafted: 0,
+        counts_by_first_failing_criterion: {
+          real_threshold_signal: 649,
+        },
+        failure_reason: null,
+        items: [
+          {
+            decision_id: "evo-sweep-agent-000b205c0ef9-0000",
+            sweep_id: "evo-qual-sweep-20261105-0001",
+            tenant_id: "default",
+            target_type: "infra_component",
+            target_id: "infra-component-agent-finding-000b205c0ef9",
+            metric_name: "incident_followup_required",
+            qualified: false,
+            first_failing_criterion: "real_threshold_signal",
+            failure_reason: "metric incident_followup_required is not a numeric threshold breach",
+            policy_version: "evolution-qualification.v1",
+            evaluated_at: "2026-11-05T00:00:00Z",
+            program_id: null,
+            criteria: [],
+          },
+        ],
+        total: 649,
+        limit: 50,
+        offset: 0,
+      },
+      meta: { snapshot_at: "2026-11-05T00:00:00Z" },
+    };
+
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("/bff/management/evolution-qualification")) {
+        return new Response(JSON.stringify(hostedQualificationReport), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (url.includes("/bff/evolution-programs")) {
+        return new Response(
+          JSON.stringify({
+            data: [],
+            items: [],
+            total: 0,
+            total_complete: true,
+            cursor: { next: null },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return new Response(JSON.stringify({ data: [], items: [] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+
+    await i18n.changeLanguage("en-US");
+    const { unmount } = render(
+      <I18nextProvider i18n={i18n}>
+        <TooltipProvider>
+          <MemoryRouter initialEntries={["/management/evolution"]}>
+            <Routes>
+              <Route path="/management/evolution" element={<EvolutionList />} />
+            </Routes>
+          </MemoryRouter>
+        </TooltipProvider>
+      </I18nextProvider>,
+    );
+
+    const summary = await screen.findByTestId("evolution-qualification-summary");
+    expect(summary).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByTestId("qualification-policy-version")).toHaveTextContent(
+        "evolution-qualification.v1",
+      );
+      expect(screen.getByTestId("qualification-evaluated-at")).toHaveTextContent(
+        "2026-11-05T00:00:00Z",
+      );
+      expect(screen.getByTestId("qualification-evaluated-count")).toHaveTextContent("649");
+      expect(screen.getByTestId("qualification-qualified-count")).toHaveTextContent("0");
+      expect(
+        screen.getByTestId("qualification-criterion-count-real_threshold_signal"),
+      ).toHaveTextContent("649");
+    });
+
+    expect(screen.getByTestId("qualification-criterion-real_threshold_signal")).toHaveTextContent(
+      "Real threshold signal",
+    );
+    expect(screen.getByTestId("qualification-criterion-real_target")).toHaveTextContent(
+      "Real target",
+    );
+    expect(screen.getByTestId("qualification-criterion-persistent_breach")).toHaveTextContent(
+      "Persistent breach",
+    );
+    expect(screen.getByTestId("qualification-criterion-fresh_evidence")).toHaveTextContent(
+      "Fresh evidence",
+    );
+    expect(screen.getByTestId("qualification-criterion-executable_action")).toHaveTextContent(
+      "Executable action",
+    );
+    expect(screen.getByTestId("qualification-criterion-no_open_duplicate")).toHaveTextContent(
+      "No open duplicate",
+    );
+
+    const zeroExplanation = screen.getByTestId("evolution-zero-programs-explanation");
+    expect(zeroExplanation).toHaveTextContent("Why there are 0 evolution programs");
+    expect(zeroExplanation).toHaveTextContent(
+      /649 proposals were evaluated under policy evolution-qualification\.v1.*0 qualified/i,
+    );
+    unmount();
+
+    // Verify zh-TW locale labels
+    await i18n.changeLanguage("zh-TW");
+    const { unmount: unmountZh } = render(
+      <I18nextProvider i18n={i18n}>
+        <TooltipProvider>
+          <MemoryRouter initialEntries={["/management/evolution"]}>
+            <Routes>
+              <Route path="/management/evolution" element={<EvolutionList />} />
+            </Routes>
+          </MemoryRouter>
+        </TooltipProvider>
+      </I18nextProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("qualification-evaluated-count")).toHaveTextContent("649");
+    });
+    expect(screen.getByTestId("qualification-criterion-real_threshold_signal")).toHaveTextContent(
+      "真實門檻訊號",
+    );
+    expect(screen.getByTestId("qualification-criterion-real_target")).toHaveTextContent(
+      "真實演化目標",
+    );
+    expect(screen.getByTestId("qualification-criterion-persistent_breach")).toHaveTextContent(
+      "持續性突破門檻",
+    );
+    expect(screen.getByTestId("qualification-criterion-fresh_evidence")).toHaveTextContent(
+      "新鮮證據時效",
+    );
+    expect(screen.getByTestId("qualification-criterion-executable_action")).toHaveTextContent(
+      "可執行研究動作",
+    );
+    expect(screen.getByTestId("qualification-criterion-no_open_duplicate")).toHaveTextContent(
+      "無進行中重複方案",
+    );
+    expect(screen.getByTestId("evolution-zero-programs-explanation")).toHaveTextContent(
+      "目前沒有演化方案的原因",
+    );
+    unmountZh();
+    await i18n.changeLanguage("en-US");
+  });
+
+  it("renders EvolutionList with name, status, origin, source decision count, run count, and updated at columns, removes legacy generation/population/fitness/progress columns, and marks automatic under_review programs as waiting for human review", async () => {
+    const { useLiveListV1: actualUseLiveListV1 } = await vi.importActual<typeof import("@/lib/bff-v1")>("@/lib/bff-v1");
+    mocks.useLiveListV1.mockImplementation(actualUseLiveListV1);
+
+    const programsPayload = {
+      data: [
+        {
+          id: "evp-auto-001",
+          program_id: "evp-auto-001",
+          name: "Auto Drawdown Breach Program",
+          status: "under_review",
+          state: "under_review",
+          origin: "auto_qualified",
+          source_decision_ids: [
+            "evo-sweep-agent-000b205c0ef9-0000",
+            "evo-sweep-agent-000b205c0ef9-0001",
+          ],
+          run_ids: [],
+          updated_at: "2026-11-05T01:00:00Z",
+          updatedAt: "2026-11-05T01:00:00Z",
+        },
+        {
+          id: "evp-manual-002",
+          program_id: "evp-manual-002",
+          name: "Manual Operator Program",
+          status: "active",
+          state: "active",
+          origin: "manual",
+          source_decision_ids: [],
+          run_ids: ["resrun-001"],
+          updated_at: "2026-11-05T02:00:00Z",
+          updatedAt: "2026-11-05T02:00:00Z",
+        },
+      ],
+      items: [
+        {
+          id: "evp-auto-001",
+          program_id: "evp-auto-001",
+          name: "Auto Drawdown Breach Program",
+          status: "under_review",
+          state: "under_review",
+          origin: "auto_qualified",
+          source_decision_ids: [
+            "evo-sweep-agent-000b205c0ef9-0000",
+            "evo-sweep-agent-000b205c0ef9-0001",
+          ],
+          run_ids: [],
+          updated_at: "2026-11-05T01:00:00Z",
+          updatedAt: "2026-11-05T01:00:00Z",
+        },
+        {
+          id: "evp-manual-002",
+          program_id: "evp-manual-002",
+          name: "Manual Operator Program",
+          status: "active",
+          state: "active",
+          origin: "manual",
+          source_decision_ids: [],
+          run_ids: ["resrun-001"],
+          updated_at: "2026-11-05T02:00:00Z",
+          updatedAt: "2026-11-05T02:00:00Z",
+        },
+      ],
+      total: 2,
+      total_complete: true,
+      cursor: { next: null },
+    };
+
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("/bff/evolution-programs")) {
+        return new Response(JSON.stringify(programsPayload), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (url.includes("/bff/management/evolution-qualification")) {
+        return new Response(
+          JSON.stringify({
+            data: {
+              tenant_id: "default",
+              sweep_id: "evo-qual-sweep-20261105-0002",
+              policy_version: "evolution-qualification.v1",
+              evaluated_at: "2026-11-05T01:00:00Z",
+              evaluated: 650,
+              qualified: 1,
+              drafted: 1,
+              counts_by_first_failing_criterion: { real_threshold_signal: 649 },
+              items: [],
+              total: 650,
+              limit: 50,
+              offset: 0,
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return new Response(JSON.stringify({ data: [], items: [] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+
+    await i18n.changeLanguage("en-US");
+    render(
+      <I18nextProvider i18n={i18n}>
+        <TooltipProvider>
+          <MemoryRouter initialEntries={["/management/evolution"]}>
+            <Routes>
+              <Route path="/management/evolution" element={<EvolutionList />} />
+            </Routes>
+          </MemoryRouter>
+        </TooltipProvider>
+      </I18nextProvider>,
+    );
+
+    expect(await screen.findByText("Auto Drawdown Breach Program")).toBeInTheDocument();
+    expect(screen.getByText("Manual Operator Program")).toBeInTheDocument();
+
+    const headers = screen.getAllByRole("columnheader").map((th) => th.textContent?.trim());
+    expect(headers).toEqual([
+      "Name",
+      "Status",
+      "Origin",
+      "Source decisions",
+      "Runs",
+      "Updated at",
+    ]);
+    expect(headers).not.toContain("Version");
+    expect(headers).not.toContain("Members");
+    expect(headers).not.toContain("Performance");
+    expect(headers).not.toContain("Progress");
+
+    expect(screen.getByTestId("evolution-origin-evp-auto-001")).toHaveTextContent("Automatic");
+    expect(screen.getByTestId("evolution-waiting-review-evp-auto-001")).toHaveTextContent(
+      "Waiting for human review",
+    );
+    expect(screen.getByTestId("evolution-source-decision-count-evp-auto-001")).toHaveTextContent("2");
+    expect(screen.getByTestId("evolution-run-count-evp-auto-001")).toHaveTextContent("0");
+
+    expect(screen.getByTestId("evolution-origin-evp-manual-002")).toHaveTextContent("Manual");
+    expect(screen.queryByTestId("evolution-waiting-review-evp-manual-002")).not.toBeInTheDocument();
+    expect(screen.getByTestId("evolution-source-decision-count-evp-manual-002")).toHaveTextContent("0");
+    expect(screen.getByTestId("evolution-run-count-evp-manual-002")).toHaveTextContent("1");
+  });
+
+  it("shows a loading state while the first read is in flight (never 無結果 / No results), shows localized unavailable wording with retry on network failure or HTTP 504 (never strict typed error / seed fallback / 尚無資料), and shows 無結果 only after a successful read with zero rows", async () => {
+    const { useLiveListV1: actualUseLiveListV1 } = await vi.importActual<typeof import("@/lib/bff-v1")>("@/lib/bff-v1");
+    mocks.useLiveListV1.mockImplementation(actualUseLiveListV1);
+    vi.stubEnv("VITE_BFF_MODE", "live");
+    vi.stubEnv("VITE_BFF_FALLBACK", "strict");
+    liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
+
+    let rejectFirstRead!: (reason?: unknown) => void;
+    let resolveThirdRead!: (response: Response) => void;
+    let callCount = 0;
+
+    vi.spyOn(globalThis, "fetch").mockImplementation(() => {
+      callCount += 1;
+      if (callCount === 1) {
+        return new Promise<Response>((_resolve, reject) => {
+          rejectFirstRead = reject;
+        });
+      }
+      if (callCount === 2) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              error: {
+                code: "BACKEND_UNAVAILABLE",
+                message: "HTTP 504 Gateway Timeout on /bff/strategies",
+              },
+            }),
+            { status: 504, headers: { "Content-Type": "application/json" } },
+          ),
+        );
+      }
+      return new Promise<Response>((resolve) => {
+        resolveThirdRead = resolve;
+      });
+    });
+
+    await i18n.changeLanguage("zh-TW");
+    const { unmount } = render(
+      <I18nextProvider i18n={i18n}>
+        <TooltipProvider>
+          <MemoryRouter initialEntries={["/management/strategies"]}>
+            <Routes>
+              <Route path="/management/strategies" element={<StrategiesList />} />
+            </Routes>
+          </MemoryRouter>
+        </TooltipProvider>
+      </I18nextProvider>,
+    );
+
+    // 1. While the first read is in flight: shows loading state and never 無結果 / 尚無資料
+    expect(screen.getByTestId("data-table-loading")).toHaveTextContent("載入中…");
+    expect(screen.queryByText("無結果")).not.toBeInTheDocument();
+    expect(screen.queryByText("No results")).not.toBeInTheDocument();
+    expect(screen.queryByText("尚無資料")).not.toBeInTheDocument();
+
+    // 2. Network failure ("Failed to fetch") -> localized unavailable state with retry action
+    rejectFirstRead(new TypeError("Failed to fetch"));
+    const networkFailedStatus = await screen.findByRole("status");
+    expect(networkFailedStatus).toHaveTextContent("目前無法載入策略與 Alpha");
+    expect(networkFailedStatus).toHaveTextContent("無法從伺服器取得資料（網路連線失敗），請重試。");
+    expect(networkFailedStatus).not.toHaveTextContent("尚無資料");
+    expect(networkFailedStatus).not.toHaveTextContent("strict typed error");
+    expect(networkFailedStatus).not.toHaveTextContent("seed fallback");
+    expect(screen.queryByText("無結果")).not.toBeInTheDocument();
+
+    // 3. Retry triggers second read (HTTP 504) -> localized unavailable state with retry action
+    fireEvent.click(screen.getByRole("button", { name: "重試" }));
+    await waitFor(() => {
+      expect(screen.getByRole("status")).toHaveTextContent("HTTP 504 Gateway Timeout on /bff/strategies");
+    });
+    const gatewayTimeoutStatus = screen.getByRole("status");
+    expect(gatewayTimeoutStatus).toHaveTextContent("目前無法載入策略與 Alpha");
+    expect(gatewayTimeoutStatus).not.toHaveTextContent("尚無資料");
+    expect(gatewayTimeoutStatus).not.toHaveTextContent("strict typed error");
+    expect(gatewayTimeoutStatus).not.toHaveTextContent("seed fallback");
+    expect(screen.queryByText("無結果")).not.toBeInTheDocument();
+
+    // 4. Retry triggers third read: while in flight shows loading state, then resolves with 0 rows -> shows 無結果
+    fireEvent.click(screen.getByRole("button", { name: "重試" }));
+    expect(await screen.findByTestId("data-table-loading")).toHaveTextContent("載入中…");
+    expect(screen.queryByText("無結果")).not.toBeInTheDocument();
+
+    resolveThirdRead(
+      new Response(
+        JSON.stringify({
+          data: [],
+          items: [],
+          total: 0,
+          total_complete: true,
+          cursor: { next: null },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    expect(await screen.findByTestId("data-table-empty")).toHaveTextContent("無結果");
+    expect(screen.queryByTestId("data-table-loading")).not.toBeInTheDocument();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+
+    unmount();
+    await i18n.changeLanguage("en-US");
+  });
+
+  it("renders EvolutionList when /bff/management/evolution-qualification returns an array body without opening STRICT TYPED ERROR or FALLBACK DATA banners and fetches qualification only once", async () => {
+    const { useLiveListV1: actualUseLiveListV1 } = await vi.importActual<typeof import("@/lib/bff-v1")>("@/lib/bff-v1");
+    mocks.useLiveListV1.mockImplementation(actualUseLiveListV1);
+    stubLiveEnv();
+
+    let qualificationCalls = 0;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("/bff/management/evolution-qualification")) {
+        qualificationCalls += 1;
+        return new Response(JSON.stringify([]), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (url.includes("/bff/evolution-programs")) {
+        return new Response(
+          JSON.stringify({
+            data: [
+              {
+                id: "evp-array-qual-001",
+                program_id: "evp-array-qual-001",
+                name: "Resilient Evolution Program",
+                status: "active",
+                state: "active",
+                origin: "manual",
+                source_decision_ids: [],
+                run_ids: ["run-1"],
+                updated_at: "2026-11-05T02:00:00Z",
+              },
+            ],
+            total: 1,
+            total_complete: true,
+            cursor: { next: null },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return new Response(JSON.stringify({ data: [], items: [] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+
+    await i18n.changeLanguage("en-US");
+    render(
+      <I18nextProvider i18n={i18n}>
+        <TooltipProvider>
+          <MemoryRouter initialEntries={["/management/evolution"]}>
+            <LiveStatusBanner />
+            <Routes>
+              <Route path="/management/evolution" element={<EvolutionList />} />
+            </Routes>
+          </MemoryRouter>
+        </TooltipProvider>
+      </I18nextProvider>,
+    );
+
+    expect(await screen.findByText("Resilient Evolution Program")).toBeInTheDocument();
+    expect(screen.getByTestId("qualification-policy-version")).toHaveTextContent("—");
+    expect(screen.getByTestId("qualification-evaluated-at")).toHaveTextContent("Not evaluated yet");
+    expect(screen.getByTestId("qualification-evaluated-count")).toHaveTextContent("0");
+    expect(screen.getByTestId("qualification-qualified-count")).toHaveTextContent("0");
+    expect(qualificationCalls).toBe(1);
+    expect(liveStatus.get().effective).toBe("live");
+    expect(liveStatus.get().lastError).toBeUndefined();
+    expect(screen.queryByText(/strict typed error/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/FALLBACK DATA/i)).not.toBeInTheDocument();
   });
 });

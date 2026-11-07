@@ -249,7 +249,7 @@ function fallbackAttributionRowFromFleet(
 }
 
 function attributionRowFromReadModel(
-  model: ManagementOperationsReadModel | undefined,
+  model: ManagementOperationsReadModel | null | undefined,
   personaFocus: string,
 ): AttributionViewRow | null {
   if (!model || model.dataConfidence === "unavailable") return null;
@@ -466,9 +466,14 @@ export const PerformanceAttributionPage = ({ embedded = false }: { embedded?: bo
   const periodParam = searchParams.get("period");
   const period: AttributionPeriod = isAttributionPeriod(periodParam) ? periodParam : "latest";
 
-  const { data } = useV5Live(
+  const {
+    data,
+    loading: attributionLoading,
+    refreshing: attributionRefreshing,
+    error: attributionError = null,
+  } = useV5Live(
     (signal) => unsupportedDimension
-      ? Promise.resolve(undefined)
+      ? Promise.resolve(null)
       : mgmt.performanceAttribution.getLiveOnly(
           dimension === "all" ? undefined : dimension,
           period,
@@ -485,11 +490,13 @@ export const PerformanceAttributionPage = ({ embedded = false }: { embedded?: bo
   const { data: holdings } = useV5Live((signal) => mgmt.portfolioBook.holdingsLiveOnly({ signal }), [], { cacheKey: "oversight.portfolioBook.holdings" });
   const { data: operationsReadModel, loading: operationsLoading } = useV5Live(
     (signal) => personaFocus
-      ? mgmt.operationsReadModel.getLiveOnly(personaFocus, period === "latest" ? undefined : period, { signal })
-      : Promise.resolve(undefined),
+      ? mgmt.operationsReadModel.getLiveOnly(personaFocus, period === "latest" ? undefined : period, { signal }).then((res) => res ?? null)
+      : Promise.resolve(null),
     [personaFocus, period],
     { cacheKey: personaFocus ? `oversight.operationsReadModel.${personaFocus}.${period}` : "oversight.operationsReadModel.none" },
   );
+  const isAttributionLoading = !unsupportedDimension && Boolean(attributionLoading || attributionRefreshing);
+  const isAttributionError = !unsupportedDimension && !isAttributionLoading && Boolean(attributionError);
   const allRows = useMemo(
     () => (unsupportedDimension ? [] : (data?.rows ?? []).map(normalizePerformanceAttributionRow)),
     [data, unsupportedDimension],
@@ -647,7 +654,7 @@ export const PerformanceAttributionPage = ({ embedded = false }: { embedded?: bo
                   {t(`mgmt.attribution.confidence.${dataConfidence}`)}
                 </Badge>
                 <span className="text-foreground">
-                  {operationsLoading && !focusResolved
+                  {(isAttributionLoading || operationsLoading) && !focusResolved
                     ? t("mgmt.attribution.focusLoadingPersonaFmt", { persona: personaFocus })
                     : dataConfidence === "formal" && focus.matched
                       ? t("mgmt.attribution.focusedPersonaFmt", { persona: personaFocus, count: rows.length })
@@ -744,7 +751,15 @@ export const PerformanceAttributionPage = ({ embedded = false }: { embedded?: bo
               </tr>
             ))}
             {rows.length === 0 && (
-              <tr><td className="px-3 py-4 text-center text-muted-foreground" colSpan={7}>{t("mgmt.pulse.noRows")}</td></tr>
+              <tr>
+                <td className="px-3 py-4 text-center text-muted-foreground" colSpan={7}>
+                  {isAttributionLoading
+                    ? t("ui.loading")
+                    : isAttributionError
+                      ? t("errors.BACKEND_UNAVAILABLE")
+                      : t("mgmt.pulse.noRows")}
+                </td>
+              </tr>
             )}
           </tbody>
         </table>

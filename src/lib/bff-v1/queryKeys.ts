@@ -98,6 +98,8 @@ export const queryKeys = {
         ? (["pantheon", getActiveQueryScope(scope), "oversight", "evolutionJournal", filter] as const)
         : (["pantheon", getActiveQueryScope(scope), "oversight", "evolutionJournal"] as const);
     },
+    evolutionQualification: (scope?: Partial<QueryScope>) =>
+      ["pantheon", getActiveQueryScope(scope), "oversight", "evolutionQualification"] as const,
     evidence: (scope?: Partial<QueryScope>) => ["pantheon", getActiveQueryScope(scope), "oversight", "evidence"] as const,
     humanInbox: (scope?: Partial<QueryScope>) => ["pantheon", getActiveQueryScope(scope), "oversight", "humanInbox"] as const,
     humanGateDetail: (id?: string, scope?: Partial<QueryScope>) => ["pantheon", getActiveQueryScope(scope), "oversight", "humanGateDetail", id ?? "none"] as const,
