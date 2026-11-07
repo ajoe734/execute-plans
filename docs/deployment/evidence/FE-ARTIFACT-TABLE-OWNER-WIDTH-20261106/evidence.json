@@ -1,0 +1,54 @@
+{
+  "task": "FE-ARTIFACT-TABLE-OWNER-WIDTH-20261106",
+  "scope": "LOCAL source candidate (this task branch head) rendered against genuine captured rows. NOT a hosted candidate / new accepted pair. Hosted acceptance remains MGMT-READ-TRUTH-HOSTED-ACCEPTANCE-20261104.",
+  "changes": {
+    "owner_cell": "Lists.tsx Artifact owner and ObjectListPage default owner column: single-line truncate, max-w 120px, minWidth 120, full value in title and data-full-owner (was break-all, 7-line stack)",
+    "artifact_name_cell": "Artifact name clamped to 2 lines (line-clamp-2) with full name in title; two genuine rows (strat-hosted-all12-h12-*-src-*) previously wrapped to 3 lines / 77px",
+    "artifact_min_widths": "kind 150->130, hash 170->150, owner 190->120",
+    "lineage": "column gap grows to widest edge label + 24px; labels anchored in the gap after the source column so multi-column edges cannot land on an intermediate node. No label hidden or altered."
+  },
+  "measurement_method": {
+    "fixture": "genuine hosted rows captured from authenticated GET /bff/artifacts?page_size=100, /bff/strategies?page_size=100, /bff/lineage?root_id=strategy-persona-fd1281847a3b1c6a9735 (HTTP 200); fixture sha256 6acd58862304dcb21128c670ff836f86e390fead1d09150a996506c6d4bd6e1f; source pair bdf2a664/0cc4d38f pair_id 4eb0ccf1 before and after. Raw dataset NOT committed (private, temp).",
+    "browser": "Playwright chromium headless 1223, real repository CSS, real PlatformShell + ManagementLayout (actual sidebar geometry), real ArtifactsList/StrategiesList/ObjectListPage/DataTable/LineageGraph; loader fed through the BFF mock-resolver seam with the genuine response bodies; no auth stub/MFA/prod login claimed. Temporary harness deleted, not committed.",
+    "viewports": [1600, 1366],
+    "caveat": "Shell shows MOCK DATA/SEED banner because the resolver seam runs in mock mode; geometry is unaffected."
+  },
+  "measured": {
+    "artifact_list_1600": {
+      "rows": 100, "owner_cells_with_full_value": 100,
+      "max_row_height_px": 57, "rows_over_72px": 0,
+      "owner_value": "pantheon-dev-paper-provisioner", "owner_title_equals_full_value": true,
+      "owner_box_px": "120 x 16", "owner_lines": 1,
+      "updated_column_right_edge_px": 1560, "viewport_px": 1600,
+      "horizontal_scroll": false,
+      "before_fix_reference": "table 1317px vs 1280px scroller (horizontal scroll), updated right edge 1597px, 2 rows 77px"
+    },
+    "artifact_list_1366": {
+      "max_row_height_px": 57, "owner_lines": 1, "owner_title_equals_full_value": true,
+      "scroller_scrollWidth_vs_clientWidth": "1277 vs 1046 (horizontal scroll, allowed)"
+    },
+    "strategy_list_1600": {
+      "rows": 100, "max_row_height_px": 48.7, "owner_value": "pantheon-bff", "owner_lines": 1,
+      "scroller_scrollWidth_vs_clientWidth": "1720 vs 1280",
+      "note": "Strategy list already scrolls horizontally at 1600 (wider column set, minWidth sum unchanged by this task); recorded per AC3, not a regression. Row height unchanged."
+    },
+    "strategy_list_1366": { "max_row_height_px": 48.7, "owner_lines": 1 },
+    "lineage_rooted_graph": {
+      "root": "strategy-persona-fd1281847a3b1c6a9735",
+      "nodes_measured": 10, "edge_labels_measured": 16,
+      "label_vs_node_rect_intersections_1600": 0,
+      "label_vs_node_rect_intersections_1366": 0,
+      "label_vs_label_overlaps": 0,
+      "method": "getBoundingClientRect of every [data-edge-label-text] vs every [data-node-id] rect"
+    }
+  },
+  "verified": {
+    "vitest": "Lists.test.tsx + ObjectListPage.test.tsx + LineageGraph.test.tsx: 3 files, 31 tests passed",
+    "typecheck": "tsc -p tsconfig.app.json --noEmit clean",
+    "existing_tests": "none weakened or deleted; one LineageGraph label-vs-node test added in the prior commit"
+  },
+  "not_verified": {
+    "hosted_layout": "Final actual hosted layout after a new exact pair remains under MGMT-READ-TRUTH-HOSTED-ACCEPTANCE-20261104; not claimed here.",
+    "strategy_list_no_hscroll_at_1600": "Not required by AC; strategy list still scrolls horizontally."
+  }
+}

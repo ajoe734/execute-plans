@@ -2,6 +2,7 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { writeOverlay } from "@/lib/bff-v1/writeOverlay";
 import { createPersona } from "@/lib/bff-v1/personas";
 import { createEvolutionProgram } from "@/lib/bff-v1/evolution";
+import { createStrategy } from "@/lib/bff-v1/strategies";
 import * as createDefaults from "@/lib/writeIntents/createDefaults";
 import { DURABLE_CREATE_OWNERS, durableCreateOwner, hasDurableCreateOwner } from "@/lib/writeIntents/types";
 import {
@@ -44,6 +45,39 @@ vi.mock("@/lib/bff-v1/evolution", () => ({
     bestFitness: 0,
     progress: 0,
   })),
+}));
+
+vi.mock("@/lib/bff-v1/strategies", () => ({
+  createStrategy: vi.fn(
+    async (payload: {
+      name: string;
+      alpha: string;
+      capitalPoolId: string;
+      personaIds: string[];
+      owner?: string;
+    }) => ({
+      id: "strategy-20261106-8f9e0a1b",
+      strategy_id: "strategy-20261106-8f9e0a1b",
+      name: payload.name.trim(),
+      owner: payload.owner && payload.owner !== "you" ? payload.owner : "ops@mvl-cap.tw",
+      updatedAt: "2026-11-06T07:00:00Z",
+      state: "draft",
+      risk: "medium",
+      alpha: payload.alpha.trim(),
+      capitalPoolId: payload.capitalPoolId.trim(),
+      personaIds: payload.personaIds.map((id) => id.trim()).filter(Boolean),
+      pnl: null,
+      pnl30d: null,
+      sharpe: null,
+      drawdown: null,
+      totalTrades: null,
+      metricsAsOf: null,
+      metricsResolution: "missing",
+      metricsPersonaId: null,
+      availableActions: ["edit", "submit", "retire"],
+      labelKey: "strategy.strategy-20261106-8f9e0a1b",
+    }),
+  ),
 }));
 
 describe("createEntityFromInput", () => {
@@ -178,5 +212,82 @@ describe("createEntityFromInput", () => {
 
     expect(updateSpy).not.toHaveBeenCalled();
     expect(deleteSpy).not.toHaveBeenCalled();
+  });
+
+  it("registers strategy in DURABLE_CREATE_OWNERS and dispatches draft creation via POST /bff/strategies without buildEntity or overlay", async () => {
+    expect(DURABLE_CREATE_OWNERS.strategy).toBe("POST /bff/strategies");
+    expect(hasDurableCreateOwner("strategy")).toBe(true);
+    expect(durableCreateOwner("strategy")).toBe("POST /bff/strategies");
+    expect(hasDurableCreateOwner("capitalPool")).toBe(false);
+    expect(hasDurableCreateOwner("rankingFormula")).toBe(false);
+    expect(hasDurableCreateOwner("rebalance")).toBe(false);
+    expect(hasDurableCreateOwner("deployment")).toBe(false);
+    expect(hasDurableCreateOwner("researchExperiment")).toBe(false);
+    expect(hasDurableCreateOwner("artifact")).toBe(false);
+
+    const addSpy = vi.spyOn(writeOverlay, "add");
+    const buildSpy = vi.spyOn(createDefaults, "buildEntity");
+
+    const result = await createEntityFromInput(
+      "strategy",
+      {
+        name: "  Momentum Draft Strategy  ",
+        owner: "you",
+        alpha: "  alpha_mom_v2  ",
+        capitalPoolId: "  pool-paper-01  ",
+        personaIds: [" persona-1 ", "persona-2", ""],
+      },
+      { idempotencyKey: "idem-strategy-001" },
+    );
+
+    expect(result.persistence).toBe("bff");
+    expect(result.entity).toBe("strategy");
+    expect(result.data).toMatchObject({
+      id: "strategy-20261106-8f9e0a1b",
+      name: "Momentum Draft Strategy",
+      state: "draft",
+      alpha: "alpha_mom_v2",
+      capitalPoolId: "pool-paper-01",
+      personaIds: ["persona-1", "persona-2"],
+      pnl: null,
+      pnl30d: null,
+      sharpe: null,
+      drawdown: null,
+    });
+    expect(createStrategy).toHaveBeenCalledTimes(1);
+    expect(createStrategy).toHaveBeenCalledWith(
+      {
+        name: "  Momentum Draft Strategy  ",
+        owner: "you",
+        alpha: "  alpha_mom_v2  ",
+        capitalPoolId: "  pool-paper-01  ",
+        personaIds: [" persona-1 ", "persona-2", ""],
+      },
+      { idempotencyKey: "idem-strategy-001" },
+    );
+    expect(buildSpy).not.toHaveBeenCalled();
+    expect(addSpy).not.toHaveBeenCalled();
+    expect(writeOverlay.list("strategy")).toHaveLength(0);
+  });
+
+  it("does not fall back to an overlay when strategy creation fails", async () => {
+    const addSpy = vi.spyOn(writeOverlay, "add");
+    vi.mocked(createStrategy).mockRejectedValueOnce(new Error("409 IDEMPOTENCY_CONFLICT"));
+
+    await expect(
+      createEntityFromInput(
+        "strategy",
+        {
+          name: "Duplicate Strategy",
+          alpha: "alpha_1",
+          capitalPoolId: "pool-1",
+          personaIds: ["persona-1"],
+        },
+        { idempotencyKey: "idem-strategy-dup" },
+      ),
+    ).rejects.toThrow("409 IDEMPOTENCY_CONFLICT");
+
+    expect(addSpy).not.toHaveBeenCalled();
+    expect(writeOverlay.list("strategy")).toHaveLength(0);
   });
 });

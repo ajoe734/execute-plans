@@ -49,7 +49,7 @@ window.__PANTHEON_DEPLOYMENT_CONFIG__ = {
 
 ### 3.1 Permitted Keys and Types
 
-- **Top-level allowlist**: `schemaVersion`, `environment`, `configRef`, `configSha256`, `bffBaseUrl`, `gcpIdentity`. Any unknown key or runtime flag override (`VITE_BFF_REAL_WRITES`, `VITE_BFF_FALLBACK`, `VITE_BFF_MODE`, `VITE_BFF_DEV_BEARER_TOKEN`, etc.) is rejected with `DeploymentRuntimeConfigError`.
+- **Top-level allowlist**: `schemaVersion`, `environment`, `configRef`, `configSha256`, `bffBaseUrl`, `gcpIdentity`, and the optional `VITE_BFF_REAL_WRITES` (see §3.5). Any unknown key or other runtime flag override (`VITE_BFF_FALLBACK`, `VITE_BFF_MODE`, `VITE_BFF_DEV_BEARER_TOKEN`, etc.) is rejected with `DeploymentRuntimeConfigError`.
 - **`gcpIdentity` allowlist**: `apiKey`, `projectId`, `authDomain`, `issuer`, `audience`.
 - **`schemaVersion`**: `"pantheon.fe.public-runtime-config.v1"` (or `1`).
 - **`environment`**: `"local" | "dev" | "staging" | "production"`. Must match the serving browser hostname category:
@@ -84,6 +84,8 @@ window.__PANTHEON_DEPLOYMENT_CONFIG__ = {
 - When `configSha256` is supplied in `/runtime-config.js`, `validateDeploymentRuntimeConfig` verifies that it matches the computed canonical digest and fails closed on mismatch.
 - Validated runtime metadata (`schemaVersion`, `environment`, `configRef`, `configSha256`, `bffBaseUrl`, and non-key `gcpIdentity` fields) is recorded in memory and retrievable via `getActiveDeploymentRuntimeAudit()`, and exposed in `readBffEnv()` as `VITE_PANTHEON_DEPLOYMENT_ENV`, `VITE_PANTHEON_CONFIG_REF`, and `VITE_PANTHEON_CONFIG_SHA256`.
 
+- **Optional `VITE_BFF_REAL_WRITES`**: when present, the canonical payload additionally carries `"VITE_BFF_REAL_WRITES":"true"|"false"` (keys sorted, so it leads the object). When absent the payload bytes and `configSha256` are identical to the legacy form; nothing is injected for older deployments.
+
 ### 3.4 Safe Runtime Defaults and Fail-Closed Posture
 
 - Outside localhost tests and the existing explicitly authorized Dev behavior (`app.dev.mvl-cap.tw` / `localhost`), runtime configuration enforces:
@@ -94,6 +96,13 @@ window.__PANTHEON_DEPLOYMENT_CONFIG__ = {
   - `VITE_BFF_EMBEDDED_BEARER_TOKEN = "false"`
 - Browser storage (`sessionStorage` / `localStorage`) and query-string overrides are ignored when `environment` is `"staging"` or `"production"`, and `isDevRuntimeWriteGateHost()`, `isRuntimeFallbackHost()`, and `isDevLoginHost()` all return `false`.
 - On any non-Dev, non-loopback host (including `app.stg.mvl-cap.tw` and `app.mvl-cap.tw`), missing or invalid `/runtime-config.js` throws `DeploymentRuntimeConfigError` before BFF or GCP Identity initialization, refusing to fall back to build-time Dev configuration.
+
+### 3.5 Explicit Public Write Posture (`VITE_BFF_REAL_WRITES`)
+
+- `VITE_BFF_REAL_WRITES` is the operator's explicit product-write posture. It is optional and accepts only the strings `"true"` or `"false"`; any other type or value (booleans, `"TRUE"`, `"1"`, empty) is rejected with `DeploymentRuntimeConfigError`.
+- **Default is read-only**: a missing key yields `"false"`, and an explicit `"false"` stays read-only even when the build env says `true`. Only an explicit `"true"` delivered through the trusted, schema- and `configSha256`-validated runtime config lets the existing write gates (`liveWriteGated`, `realWritesEnabled`) proceed. Write-on is never inferred from roles, capabilities or build profile.
+- Staging and production still ignore browser-storage/query overrides; `VITE_BFF_ALLOW_DEV_STUB_WRITES`, `VITE_BFF_EMBEDDED_BEARER_TOKEN` stay `"false"`, mode stays `live`, fallback stays `strict`.
+- The Pantheon producer must emit this same field; the baseline runtime config does not inherit a candidate's value. This change is consumer capability only: it modifies no deployment variables, Prod/Stage resources or product data, and does not by itself enable writes anywhere.
 
 ---
 

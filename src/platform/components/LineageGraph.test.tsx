@@ -103,3 +103,28 @@ describe("LineageGraph legibility", () => {
     expect(fitText("short", 100, 6.2)).toBe("short");
   });
 });
+
+describe("LineageGraph edge labels stay in column gaps", () => {
+  afterEach(() => cleanup());
+  it("places long and multi-column edge labels outside every node rectangle (x-range)", () => {
+    const ns: LineageNode[] = ["a", "b", "c"].map((id) => ({ id, label: id, type: "T" }));
+    const es: LineageEdge[] = [
+      { from: "a", to: "b", label: "source_strategy_spec" },
+      { from: "b", to: "c", label: "capital_pool" },
+      { from: "a", to: "c", label: "source_strategy_spec" },
+    ];
+    const { container } = render(<I18nextProvider i18n={i18n}><LineageGraph nodes={ns} edges={es} /></I18nextProvider>);
+    const rects = [...container.querySelectorAll("[data-node-id]")].map((g) => {
+      const m = /translate\(([-\d.]+),/.exec(g.getAttribute("transform") ?? "")!;
+      const x = Number(m[1]);
+      return [x, x + NODE_W];
+    });
+    const texts = [...container.querySelectorAll("[data-edge-label-text]")];
+    expect(texts.length).toBe(3);
+    for (const t of texts) {
+      const cx = Number(t.getAttribute("x"));
+      const half = (t.getAttribute("data-edge-label-text")!.length * 6.2) / 2;
+      for (const [l, r] of rects) expect(cx + half <= l || cx - half >= r).toBe(true);
+    }
+  });
+});

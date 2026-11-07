@@ -1,0 +1,65 @@
+{
+  "task_id": "FE-STRATEGY-LIST-HIDE-DRAFTS-20261106",
+  "title": "Strategy list hides drafts by default with a state filter and server paging",
+  "repository": "ajoe734/execute-plans",
+  "branch": "task/FE-STRATEGY-LIST-HIDE-DRAFTS-20261106",
+  "owner": "Antigravity",
+  "reviewer": "Claude",
+  "prerequisites": {
+    "BFF-STRATEGY-LIST-DEFAULT-VIEW-20261106": {
+      "status": "done",
+      "satisfied": true,
+      "pantheon_commit": "9e96cbc5e4b21d20a6d2428b017e1e3ae2d1effc"
+    },
+    "FE-ARTIFACT-TABLE-OWNER-WIDTH-20261106": {
+      "status": "done",
+      "satisfied": true,
+      "execute_plans_merge_commit": "979294ceb37870186088a6934041c35f8e50c14a"
+    }
+  },
+  "real_row_shape_verified": {
+    "id": "strategy-persona-59b2143dcecf205acbf1",
+    "name": "Pantheon Dev Paper Release 42123862167 Attempt 1",
+    "state": "approved",
+    "risk": "low",
+    "capitalPoolId": "pool-persona-paper-59b2143dcecf205acbf1"
+  },
+  "acceptance_evidence": {
+    "ac1_default_excludes_drafts": {
+      "status": "passed",
+      "detail": "Opening /management/strategies with no query requests GET /bff/strategies?exclude_state=draft&page_size=20 and renders no draft rows."
+    },
+    "ac2_state_control_counts_and_query_param": {
+      "status": "passed",
+      "detail": "State filter control offers default (hide drafts), approved, review, retired, draft, and all (plus active CommandCenter DTO state query links such as paper_running) with counts derived from meta.state_counts, sends the selected filter to the BFF, and persists state=<value> in the URL query parameter."
+    },
+    "ac3_hidden_drafts_banner_and_null_counts": {
+      "status": "passed",
+      "detail": "Default view displays a banner stating how many draft strategies are hidden with a one-click Show drafts button that switches to state=draft; when meta.state_counts is null, the control and banner still work and never invent a count."
+    },
+    "ac4_server_paging_and_total": {
+      "status": "passed",
+      "detail": "StrategiesList pages through GET /bff/strategies using page_size=20 and page_token (Next, Previous, First, Last), displays page_info.total (including 4898 in the all view), reaches row 4898 via page_token=4880, and never fetches multiple pages at once."
+    },
+    "ac5_separate_loading_error_empty_states": {
+      "status": "passed",
+      "detail": "Loading, degraded read failure, and truly empty filter states remain distinct on ObjectListPage, and other lists sharing ObjectListPage are unchanged."
+    },
+    "ac6_draft_direct_url_and_create_navigation": {
+      "status": "passed",
+      "detail": "Direct URL /management/strategies/<draft-id> remains reachable via GET /bff/strategies/<id>. Registered strategy: 'POST /bff/strategies' in DURABLE_CREATE_OWNERS, implemented createStrategy in src/lib/bff-v1/strategies.ts against the existing backend StrategiesService.create_strategy contract using typed canonical bffFetch<{ data: Strategy; meta?: ManagementListMeta }> (normalizing allowed request fields once, forcing only request state: 'draft', sending Idempotency-Key header, omitting 'you' placeholder owner, validating actual nonempty canonical data.id and actual data.state === 'draft' without alias/raw-envelope/defaulted-state fallbacks or action blacklists, and returning the owner DTO unchanged while preserving listStrategies/getStrategy unchanged), wired createEntityFromInput('strategy', ...) without duplicated normalization, buildEntity, or writeOverlay, and verified end-to-end drawer creation on /management/strategies navigating to /management/strategies/<server-id> and surviving direct URL reload."
+    },
+    "ac7_no_weakened_or_deleted_tests": {
+      "status": "passed",
+      "detail": "Zero pre-existing tests on origin/dev were weakened, modified, or deleted; 19 new unit/integration tests were added across strategies.test.ts, createEntity.test.ts, contract-drift.test.ts, lists.test.ts, Lists.test.tsx, and ObjectListPage.test.tsx (9 test files, 92 tests passing). In newly added strategies.test.ts and createEntity.test.ts (from audit ref ff95d7314fb02686ef5cad3dbf664ffa1ee80849, anchored on 6ff8e5d5c19820a33c73238269c431e59f6755d2), response fixtures were aligned to the actual current StrategiesService.create_strategy owner DTO and newly written client-side action-blacklist filtering / metric-nulling fallback / duplicated-normalization assertions were replaced with strict unchanged owner-DTO return assertions plus missing-state ({ data: { id: 's' } }) and malformed-canonical-data regressions per Codex review."
+    }
+  },
+  "audit_references": {
+    "anchor_commit": "6ff8e5d5c19820a33c73238269c431e59f6755d2",
+    "prior_create_commit": "ff95d7314fb02686ef5cad3dbf664ffa1ee80849"
+  },
+  "verification_commands": [
+    "./node_modules/.bin/vitest run src/lib/bff-v1/strategies.test.ts src/management/components/write/createEntity.test.ts src/lib/bff-v1/__tests__/contract-drift.test.ts src/lib/bff-v1/__tests__/lists.test.ts src/management/pages/Lists.test.tsx src/management/pages/ObjectListPage.test.tsx src/management/pages/StrategyDetail.metrics.test.tsx src/management/pages/EvolutionProgramsQualification.test.tsx src/lib/v5/management/__tests__/i18nParity.test.ts",
+    "./node_modules/.bin/tsc -p tsconfig.app.json --noEmit"
+  ]
+}

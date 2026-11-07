@@ -1,0 +1,13 @@
+{
+  "task": "FE-EVO-SAVED-CONSTRAINT-VISIBILITY-20261106",
+  "root_cause": "EvolutionDetail returned the full loading placeholder whenever useLiveDetail.loading, and executeLoad(false) sets status=loading on background refresh. After create_constraint, refreshProgram unmounted ObjectDetailLayout, resetting the uncontrolled Tabs to Overview while readback was in flight. Reproduced with a held owner readback; the same test fails on the unfixed source.",
+  "not_proven": "Historic hosted 60s timeout was not captured with DOM/tab evidence; the accepted-command commit race was not separately reproduced. The fix removes the proven unmount path only.",
+  "fix": [
+    "Show the full loading placeholder only when no program data is loaded (loading && !e).",
+    "Render the owner action error inside the Constraints tab so a failed save is visible there (previously only in Overview)."
+  ],
+  "unchanged": "useLiveDetail, runActionSafe, owner source of truth; no optimistic constraint; no polling/sleep.",
+  "tests": "vitest src/management/pages/EvolutionDetail*: 8 passed (6 existing + 2 new in EvolutionDetail.savedConstraint.test.tsx); tsc --noEmit clean",
+  "limits": "Source-only; no hosted replay, SSH, or workflow dispatch. Exact head recorded in the task commit/PR.",
+  "hosted_followup": "Root publisher owns deployment and read-only hosted readback of the same saved program."
+}

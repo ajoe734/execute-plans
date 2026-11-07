@@ -1,5 +1,6 @@
 import { createEvolutionProgram } from "@/lib/bff-v1/evolution";
 import { createPersona } from "@/lib/bff-v1/personas";
+import { createStrategy } from "@/lib/bff-v1/strategies";
 import { buildEntity } from "@/lib/writeIntents/createDefaults";
 import {
   durableCreateOwner,
@@ -50,6 +51,14 @@ export async function createEntityFromInput<K extends CreatableEntity>(
       { name: String(evoInput.name ?? "").trim() },
       { idempotencyKey: opts.idempotencyKey },
     );
+    return { entity, data: data as unknown as Record<string, unknown>, persistence: "bff" };
+  }
+
+  if (entity === "strategy") {
+    const strategyInput = input as CreateInputMap["strategy"];
+    const data = await createStrategy(strategyInput, {
+      idempotencyKey: opts.idempotencyKey,
+    });
     return { entity, data: data as unknown as Record<string, unknown>, persistence: "bff" };
   }
 

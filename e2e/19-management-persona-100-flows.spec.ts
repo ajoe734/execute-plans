@@ -1412,19 +1412,27 @@ test("portfolio book holdings table renders quantity, stale mark reason, and scr
     const healthyRow = page.getByTestId("portfolio-holding").filter({ hasText: "rt-c98e4223:2317.TWSE" });
 
     if (locale === "en-US") {
+      await expect(page.getByRole("columnheader", { name: "Avg entry" })).toBeVisible();
+      await expect(page.getByRole("columnheader", { name: "Last close" })).toBeVisible();
       await expect(staleRow).toContainText("-1");
       await expect(staleRow).toContainText("Short position");
       await expect(staleRow).toContainText("Price stale (last mark 2026-10-29)");
       await expect(staleRow).not.toContainText("No reported source issue");
       await expect(healthyRow).toContainText("-2");
+      await expect(healthyRow).toContainText("240");
+      await expect(healthyRow).toContainText("As of 2026-11-04");
       await expect(healthyRow).toContainText("-480 (幣別未提供)");
       await expect(healthyRow).toContainText("No reported source issue");
     } else {
+      await expect(page.getByRole("columnheader", { name: "進場均價" })).toBeVisible();
+      await expect(page.getByRole("columnheader", { name: "最新收盤價" })).toBeVisible();
       await expect(staleRow).toContainText("-1");
       await expect(staleRow).toContainText("空頭部位");
       await expect(staleRow).toContainText("報價過期（最後報價 2026-10-29）");
       await expect(staleRow).not.toContainText("無回報來源問題");
       await expect(healthyRow).toContainText("-2");
+      await expect(healthyRow).toContainText("240");
+      await expect(healthyRow).toContainText("截至 2026-11-04");
       await expect(healthyRow).toContainText("-480 (幣別未提供)");
       await expect(healthyRow).toContainText("無回報來源問題");
     }
@@ -1433,7 +1441,17 @@ test("portfolio book holdings table renders quantity, stale mark reason, and scr
       const scroller = document.querySelector<HTMLElement>('[data-management-table-scrollbar="native"]');
       const table = scroller?.querySelector("table");
       if (!scroller || !table) {
-        return { found: false, scrollWidth: 0, clientWidth: 0, scrolledLeft: 0, headerOverlaps: 1, cellOverlaps: 1 };
+        return {
+          found: false,
+          scrollWidth: 0,
+          clientWidth: 0,
+          scrolledLeft: 0,
+          headerOverlaps: 1,
+          cellOverlaps: 1,
+          firstSixVisibleAtZero: false,
+          columnsAtZero: [],
+          scrollerRect: { left: 0, right: 0 },
+        };
       }
 
       const checkNoOverlap = () => {
@@ -1458,9 +1476,35 @@ test("portfolio book holdings table renders quantity, stale mark reason, and scr
       };
 
       scroller.scrollLeft = 0;
+      const scrollerRect = scroller.getBoundingClientRect();
+      const thsAtZero = Array.from(table.querySelectorAll("thead th"));
+      const columnsAtZero = thsAtZero.map((th, idx) => {
+        const r = th.getBoundingClientRect();
+        return {
+          index: idx,
+          header: (th.textContent ?? "").trim(),
+          left: Math.round(r.left * 100) / 100,
+          right: Math.round(r.right * 100) / 100,
+          width: Math.round(r.width * 100) / 100,
+          fullyVisible: r.left >= scrollerRect.left - 0.5 && r.right <= scrollerRect.right + 0.5,
+        };
+      });
+      const firstSixHeadersVisible = columnsAtZero.slice(0, 6).every((col) => col.fullyVisible);
+      const firstSixCellsVisible = Array.from(table.querySelectorAll("tbody tr")).every((tr) =>
+        Array.from(tr.querySelectorAll("td"))
+          .slice(0, 6)
+          .every((td) => {
+            const r = td.getBoundingClientRect();
+            return r.left >= scrollerRect.left - 0.5 && r.right <= scrollerRect.right + 0.5;
+          }),
+      );
       const before = checkNoOverlap();
       scroller.scrollLeft = Math.max(120, scroller.scrollWidth - scroller.clientWidth);
       const after = checkNoOverlap();
+      const lastThRect = thsAtZero[thsAtZero.length - 1]?.getBoundingClientRect();
+      const lastColumnReachable = Boolean(
+        lastThRect && lastThRect.right <= scroller.getBoundingClientRect().right + 1,
+      );
 
       return {
         found: true,
@@ -1469,10 +1513,19 @@ test("portfolio book holdings table renders quantity, stale mark reason, and scr
         scrolledLeft: scroller.scrollLeft,
         headerOverlaps: before.headerOverlaps + after.headerOverlaps,
         cellOverlaps: before.cellOverlaps + after.cellOverlaps,
+        firstSixVisibleAtZero: firstSixHeadersVisible && firstSixCellsVisible,
+        lastColumnReachable,
+        columnsAtZero,
+        scrollerRect: {
+          left: Math.round(scrollerRect.left * 100) / 100,
+          right: Math.round(scrollerRect.right * 100) / 100,
+        },
       };
     });
 
     expect(layoutMetrics.found).toBe(true);
+    expect(layoutMetrics.firstSixVisibleAtZero).toBe(true);
+    expect(layoutMetrics.lastColumnReachable).toBe(true);
     expect(layoutMetrics.scrollWidth).toBeGreaterThan(layoutMetrics.clientWidth);
     expect(layoutMetrics.scrolledLeft).toBeGreaterThan(0);
     expect(layoutMetrics.headerOverlaps).toBe(0);

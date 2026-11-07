@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { paths } from "../paths";
+import { normalizeEvolutionRun } from "../evolution";
 import { queryKeys } from "../queryKeys";
 import { ERROR_CODES } from "@/lib/v4/errorCodes";
 import {
@@ -76,6 +77,13 @@ describe("BFF v1 contract drift", () => {
       expect(openApi, `OpenAPI must include ${p}`).toContain(p);
     }
 
+    expect(paths.strategies()).toBe("/bff/strategies");
+    expect(paths.strategies({ exclude_state: "draft", page_size: 20 })).toBe(
+      "/bff/strategies?exclude_state=draft&page_size=20",
+    );
+    expect(paths.strategies({ state: "approved", pageSize: 20, pageToken: "20" })).toBe(
+      "/bff/strategies?state=approved&page_size=20&page_token=20",
+    );
     expect(paths.researchTasks()).toBe("/bff/research-tasks");
     expect(paths.researchTask("rtask-20261023-008")).toBe("/bff/research-tasks/rtask-20261023-008");
     expect(paths.alphaFactory()).toBe("/bff/alpha-factory");
@@ -212,5 +220,37 @@ describe("BFF v1 contract drift", () => {
 
     expect(workspaceProposal.views[0].widgets[0].id).toBe(widget.id);
     expect(revision.proposedSpec.title).toBe("Winner Branch Score Heatmap");
+  });
+});
+
+describe("Evolution run outcome fields (BFF_API_CONTRACT.md retrain run outcome)", () => {
+  it("passes the six structured fields through and never defaults them", () => {
+    const run = normalizeEvolutionRun({
+      run_id: "resrun-1",
+      status: "completed",
+      outcome: "candidate_created",
+      outcome_reason: "ok",
+      candidate_artifact_id: "art-1",
+      baseline_metrics: { sharpe_ratio: 0.8, sharpe_defined: true },
+      candidate_metrics: { sharpe_ratio: 1.2, sharpe_defined: true },
+      session_id: "ts-1",
+    }, "evp-1");
+    expect(run).toMatchObject({
+      outcome: "candidate_created",
+      outcome_reason: "ok",
+      candidate_artifact_id: "art-1",
+      baseline_metrics: { sharpe_ratio: 0.8 },
+      candidate_metrics: { sharpe_ratio: 1.2 },
+      session_id: "ts-1",
+    });
+    const bare = normalizeEvolutionRun({ run_id: "resrun-2", status: "queued" }, "evp-1");
+    expect(bare).toMatchObject({
+      outcome: null,
+      outcome_reason: null,
+      candidate_artifact_id: null,
+      baseline_metrics: null,
+      candidate_metrics: null,
+      session_id: null,
+    });
   });
 });

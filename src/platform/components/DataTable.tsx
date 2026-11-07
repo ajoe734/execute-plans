@@ -10,7 +10,11 @@ export interface Column<T> {
   header: string;
   cell: (row: T) => ReactNode;
   className?: string;
-  /** Minimum column width in px used to size the scroll area (default 160). */
+  /**
+   * Minimum column width in px (scroll-area sizing defaults to 160). When set
+   * explicitly it is also applied to the column header so auto table layout cannot squeeze the
+   * column below it (the table scrolls horizontally instead).
+   */
   minWidth?: number;
 }
 
@@ -51,7 +55,7 @@ export function DataTable<T extends { id: string }>({
           <TableHeader className="sticky top-0 z-10 bg-card">
             <TableRow className="bg-muted/40 hover:bg-muted/40">
               {columns.map((c) => (
-                <TableHead key={c.key} className={"text-xs uppercase tracking-wider whitespace-nowrap " + (c.className ?? "")}>{c.header}</TableHead>
+                <TableHead key={c.key} style={c.minWidth === undefined ? undefined : { minWidth: c.minWidth }} className={"text-xs uppercase tracking-wider whitespace-nowrap " + (c.className ?? "")}>{c.header}</TableHead>
               ))}
             </TableRow>
           </TableHeader>

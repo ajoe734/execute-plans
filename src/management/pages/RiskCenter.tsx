@@ -10,7 +10,7 @@ import { StatusBadge } from "@/platform/components/StatusBadge";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { bffV1 } from "@/lib/bff-v1";
+import { bffV1, NON_TERMINAL_INCIDENT_STATUS_FILTER } from "@/lib/bff-v1";
 import type {
   Strategy, Persona, CapitalPool, Runtime, Tool, McpServer, Skill,
   Alert, Incident, RiskLevel,
@@ -26,24 +26,126 @@ const safeFixed = (n: number, d = 2) => (Number.isFinite(n) ? n.toFixed(d) : "�
 const safePct = (n: number, d = 1) => (Number.isFinite(n) ? `${(n * 100).toFixed(d)}%` : "—");
 const safeRound = (n: number) => (Number.isFinite(n) ? `${Math.round(n)}` : "—");
 
+export const DRAWDOWN_BREACH_THRESHOLD = 0.1;
+
+/**
+ * Owner contract (`services/execution/lean_runtime/performance_telemetry.py` and
+ * `services/control-plane/bff/incidents/service.py`):
+ * `drawdown_pct` / `drawdown` is stored as a non-negative fractional ratio
+ * `(peak - portfolio_value) / peak` in `[0.0, 1.0]` (e.g. `0.18` = 18% drawdown),
+ * with incident thresholds at `0.05` (medium), `0.10` (high), and `0.15` (critical).
+ */
+export function isDrawdownBreach(
+  input: number | { drawdown?: number | null } | null | undefined,
+  threshold: number = DRAWDOWN_BREACH_THRESHOLD,
+): boolean {
+  const drawdown =
+    typeof input === "object" && input !== null ? input.drawdown : input;
+  return typeof drawdown === "number" && Number.isFinite(drawdown) && drawdown > threshold;
+}
+
+const isNonTerminalIncident = (i: Incident): boolean =>
+  String(i.status) !== "resolved" && String(i.status) !== "closed";
+
+type SliceStatus = "loading" | "ready" | "error";
+
+interface DomainSlice<T> {
+  status: SliceStatus;
+  items: T[];
+}
+
+const initialSlice = <T,>(): DomainSlice<T> => ({
+  status: "loading",
+  items: [],
+});
+
+function combineSliceStatuses(statuses: readonly SliceStatus[]): SliceStatus {
+  if (statuses.some((s) => s === "error")) return "error";
+  if (statuses.some((s) => s === "loading")) return "loading";
+  return "ready";
+}
+
 export const RiskCenter = () => {
   const t = useT();
   const navigate = useNavigate();
-  const [data, setData] = useState<{
-    strategies: Strategy[]; personas: Persona[]; pools: CapitalPool[];
-    runtimes: Runtime[]; tools: Tool[]; mcp: McpServer[]; skills: Skill[];
-    alerts: Alert[]; incidents: Incident[];
-  }>({ strategies: [], personas: [], pools: [], runtimes: [], tools: [], mcp: [], skills: [], alerts: [], incidents: [] });
+  const [strategiesSlice, setStrategiesSlice] = useState<DomainSlice<Strategy>>(initialSlice);
+  const [personasSlice, setPersonasSlice] = useState<DomainSlice<Persona>>(initialSlice);
+  const [poolsSlice, setPoolsSlice] = useState<DomainSlice<CapitalPool>>(initialSlice);
+  const [runtimesSlice, setRuntimesSlice] = useState<DomainSlice<Runtime>>(initialSlice);
+  const [toolsSlice, setToolsSlice] = useState<DomainSlice<Tool>>(initialSlice);
+  const [mcpSlice, setMcpSlice] = useState<DomainSlice<McpServer>>(initialSlice);
+  const [skillsSlice, setSkillsSlice] = useState<DomainSlice<Skill>>(initialSlice);
+  const [alertsSlice, setAlertsSlice] = useState<DomainSlice<Alert>>(initialSlice);
+  const [incidentsSlice, setIncidentsSlice] = useState<DomainSlice<Incident>>(initialSlice);
 
   useEffect(() => {
-    Promise.all([
-      bffV1.strategies.list(), bffV1.personas.list(), bffV1.capitalPools.list(),
-      bffV1.runtimes.list(), bffV1.tools.list(), bffV1.mcpServers.list(), bffV1.skills.list(),
-      bffV1.alerts.list(), bffV1.incidents.list(),
-    ]).then(([strategies, personas, pools, runtimes, tools, mcp, skills, alerts, incidents]) =>
-      setData({ strategies, personas, pools, runtimes, tools, mcp, skills, alerts, incidents }),
+    let cancelled = false;
+
+    const loadSlice = <T,>(
+      loader: () => Promise<T[]>,
+      setter: (slice: DomainSlice<T>) => void,
+    ) => {
+      setter(initialSlice());
+      loader()
+        .then((items) => {
+          if (!cancelled) setter({ status: "ready", items });
+        })
+        .catch(() => {
+          if (!cancelled) setter({ status: "error", items: [] });
+        });
+    };
+
+    loadSlice(() => bffV1.strategies.listNonDraft(), setStrategiesSlice);
+    loadSlice(() => bffV1.personas.list(), setPersonasSlice);
+    loadSlice(() => bffV1.capitalPools.list(), setPoolsSlice);
+    loadSlice(() => bffV1.runtimes.list(), setRuntimesSlice);
+    loadSlice(() => bffV1.tools.list(), setToolsSlice);
+    loadSlice(() => bffV1.mcpServers.list(), setMcpSlice);
+    loadSlice(() => bffV1.skills.list(), setSkillsSlice);
+    loadSlice(() => bffV1.alerts.list(), setAlertsSlice);
+    loadSlice(
+      () => bffV1.incidents.list({ status: NON_TERMINAL_INCIDENT_STATUS_FILTER }),
+      setIncidentsSlice,
     );
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
+
+  const data = useMemo(
+    () => ({
+      strategies: strategiesSlice.items,
+      personas: personasSlice.items,
+      pools: poolsSlice.items,
+      runtimes: runtimesSlice.items,
+      tools: toolsSlice.items,
+      mcp: mcpSlice.items,
+      skills: skillsSlice.items,
+      alerts: alertsSlice.items,
+      incidents: incidentsSlice.items,
+    }),
+    [
+      strategiesSlice.items,
+      personasSlice.items,
+      poolsSlice.items,
+      runtimesSlice.items,
+      toolsSlice.items,
+      mcpSlice.items,
+      skillsSlice.items,
+      alertsSlice.items,
+      incidentsSlice.items,
+    ],
+  );
+
+  const objectCountsStatus = combineSliceStatuses([
+    strategiesSlice.status,
+    personasSlice.status,
+    poolsSlice.status,
+    toolsSlice.status,
+    mcpSlice.status,
+    skillsSlice.status,
+  ]);
 
   const summary = useMemo(() => {
     const all = [
@@ -51,30 +153,127 @@ export const RiskCenter = () => {
     ];
     const counts: Record<RiskLevel, number> = { info: 0, low: 0, medium: 0, high: 0, critical: 0 };
     all.forEach((o) => { counts[o.risk] = (counts[o.risk] ?? 0) + 1; });
-    const utilBreaches = data.pools.filter((p) => p.utilized / p.allocated > 0.9).length;
-    const drawdownBreaches = data.strategies.filter((s) => s.drawdown < -0.1).length;
+    const utilBreaches = data.pools.filter((p) => p.allocated > 0 && p.utilized / p.allocated > 0.9).length;
+    const drawdownBreaches = data.strategies.filter((s) => isDrawdownBreach(s.drawdown)).length;
     const runtimeWarnings = data.runtimes.filter((r) => r.status === "warning" || r.status === "failed").length;
-    const openIncidents = data.incidents.filter((i) => i.status !== "resolved").length;
+    const openIncidents = data.incidents.filter(isNonTerminalIncident).length;
     return { counts, utilBreaches, drawdownBreaches, runtimeWarnings, openIncidents };
   }, [data]);
+
+  const cardDisplay = (
+    status: SliceStatus,
+    value: number,
+    readyTone: "default" | "warning" | "danger" | "success",
+  ): { value: string | number; tone: "default" | "warning" | "danger" | "success" } => {
+    if (status === "loading") {
+      return { value: t("common.loading"), tone: "default" };
+    }
+    if (status === "error") {
+      return { value: t("status.unavailable"), tone: "danger" };
+    }
+    return { value, tone: readyTone };
+  };
+
+  const openIncidentsCard = cardDisplay(
+    incidentsSlice.status,
+    summary.openIncidents,
+    summary.openIncidents > 0 ? "danger" : "success",
+  );
+  const runtimeWarnCard = cardDisplay(
+    runtimesSlice.status,
+    summary.runtimeWarnings,
+    summary.runtimeWarnings > 0 ? "warning" : "default",
+  );
+  const utilBreachCard = cardDisplay(
+    poolsSlice.status,
+    summary.utilBreaches,
+    summary.utilBreaches > 0 ? "warning" : "default",
+  );
+  const ddBreachCard = cardDisplay(
+    strategiesSlice.status,
+    summary.drawdownBreaches,
+    summary.drawdownBreaches > 0 ? "danger" : "default",
+  );
+  const criticalObjectsCard = cardDisplay(
+    objectCountsStatus,
+    summary.counts.critical,
+    summary.counts.critical > 0 ? "danger" : "default",
+  );
+  const highObjectsCard = cardDisplay(
+    objectCountsStatus,
+    summary.counts.high,
+    summary.counts.high > 0 ? "warning" : "default",
+  );
+
+  const tableEmptyForSlice = (status: SliceStatus) =>
+    status === "error" ? t("status.unavailable") : t("empty.noResults");
 
   return (
     <>
       <PageHeader title={t("nav.riskCenter")} subtitle={t("riskCenter.subtitle")} />
       <PageBody>
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-          <StatCard label={t("riskCenter.kpi.openIncidents")} value={summary.openIncidents} tone={summary.openIncidents > 0 ? "danger" : "success"} />
-          <StatCard label={t("riskCenter.kpi.runtimeWarn")} value={summary.runtimeWarnings} tone={summary.runtimeWarnings > 0 ? "warning" : "default"} />
-          <StatCard label={t("riskCenter.kpi.utilBreach")} value={summary.utilBreaches} tone={summary.utilBreaches > 0 ? "warning" : "default"} />
-          <StatCard label={t("riskCenter.kpi.ddBreach")} value={summary.drawdownBreaches} tone={summary.drawdownBreaches > 0 ? "danger" : "default"} />
-          <StatCard label={t("riskCenter.kpi.criticalObjects")} value={summary.counts.critical} tone={summary.counts.critical > 0 ? "danger" : "default"} />
-          <StatCard label={t("riskCenter.kpi.highObjects")} value={summary.counts.high} tone={summary.counts.high > 0 ? "warning" : "default"} />
+          <div data-testid="risk-card-incidents">
+            <StatCard
+              label={t("riskCenter.kpi.openIncidents")}
+              value={openIncidentsCard.value}
+              tone={openIncidentsCard.tone}
+            />
+          </div>
+          <div data-testid="risk-card-degraded">
+            <StatCard
+              label={t("riskCenter.kpi.runtimeWarn")}
+              value={runtimeWarnCard.value}
+              tone={runtimeWarnCard.tone}
+            />
+          </div>
+          <div data-testid="risk-card-utilization">
+            <StatCard
+              label={t("riskCenter.kpi.utilBreach")}
+              value={utilBreachCard.value}
+              tone={utilBreachCard.tone}
+            />
+          </div>
+          <div data-testid="risk-card-drawdown">
+            <StatCard
+              label={t("riskCenter.kpi.ddBreach")}
+              value={ddBreachCard.value}
+              hint={t("riskCenter.draftsExcluded")}
+              tone={ddBreachCard.tone}
+            />
+          </div>
+          <div data-testid="risk-card-critical">
+            <StatCard
+              label={t("riskCenter.kpi.criticalObjects")}
+              value={criticalObjectsCard.value}
+              tone={criticalObjectsCard.tone}
+            />
+          </div>
+          <div data-testid="risk-card-high">
+            <StatCard
+              label={t("riskCenter.kpi.highObjects")}
+              value={highObjectsCard.value}
+              tone={highObjectsCard.tone}
+            />
+          </div>
         </div>
 
         {/* Breach matrix */}
         <Card className="p-4">
-          <div className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">{t("riskCenter.matrix.title")}</div>
-          <BreachMatrix data={data} />
+          <div className="flex items-center justify-between mb-3">
+            <div className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+              {t("riskCenter.matrix.title")}
+            </div>
+            <div className="text-xs text-muted-foreground" data-testid="risk-matrix-drafts-excluded">
+              {t("riskCenter.draftsExcluded")}
+            </div>
+          </div>
+          <BreachMatrix
+            strategiesSlice={strategiesSlice}
+            poolsSlice={poolsSlice}
+            runtimesSlice={runtimesSlice}
+            toolsSlice={toolsSlice}
+          />
         </Card>
 
         <Tabs defaultValue="capital">
@@ -90,6 +289,8 @@ export const RiskCenter = () => {
           <TabsContent value="capital" className="mt-4">
             <DataTable
               rows={data.pools}
+              loading={poolsSlice.status === "loading"}
+              empty={tableEmptyForSlice(poolsSlice.status)}
               onRowClick={(r) => navigate(`/management/promotion-allocation?tab=quarterly-capital&capital_id=${encodeURIComponent(r.id)}`)}
               columns={[
                 { key: "name", header: t("table.name"), cell: (r) => <span className="font-medium">{r.name}</span> },
@@ -104,14 +305,19 @@ export const RiskCenter = () => {
             />
           </TabsContent>
 
-          <TabsContent value="strategy" className="mt-4">
+          <TabsContent value="strategy" className="mt-4 space-y-2">
+            <div className="text-xs text-muted-foreground" data-testid="risk-strategies-drafts-excluded">
+              {t("riskCenter.draftsExcluded")}
+            </div>
             <DataTable
               rows={[...data.strategies].sort((a, b) => RISK_WEIGHT[b.risk] - RISK_WEIGHT[a.risk])}
+              loading={strategiesSlice.status === "loading"}
+              empty={tableEmptyForSlice(strategiesSlice.status)}
               onRowClick={(r) => navigate(`/management/strategies/${r.id}`)}
               columns={[
                 { key: "name", header: t("nav.strategies"), cell: (r) => <span className="font-medium">{r.name}</span> },
                 { key: "state", header: t("table.state"), cell: (r) => <StatusBadge state={r.state} /> },
-                { key: "dd", header: t("table.drawdown"), cell: (r) => <span className={`text-mono text-xs ${r.drawdown < -0.1 ? "text-risk-critical" : ""}`}>{safePct(r.drawdown, 1)}</span> },
+                { key: "dd", header: t("table.drawdown"), cell: (r) => <span className={`text-mono text-xs ${isDrawdownBreach(r.drawdown) ? "text-risk-critical" : ""}`}>{safePct(r.drawdown, 1)}</span> },
                 { key: "sharpe", header: t("table.sharpe"), cell: (r) => <span className="text-mono text-xs">{safeFixed(r.sharpe, 2)}</span> },
                 { key: "risk", header: t("table.risk"), cell: (r) => <RiskBadge level={r.risk} /> },
               ]}
@@ -121,6 +327,8 @@ export const RiskCenter = () => {
           <TabsContent value="persona" className="mt-4">
             <DataTable
               rows={data.personas}
+              loading={personasSlice.status === "loading"}
+              empty={tableEmptyForSlice(personasSlice.status)}
               onRowClick={(r) => navigate(`/management/personas/${r.id}`)}
               columns={[
                 { key: "name", header: t("nav.personas"), cell: (r) => <span className="font-medium">{r.name}</span> },
@@ -135,6 +343,8 @@ export const RiskCenter = () => {
           <TabsContent value="runtime" className="mt-4">
             <DataTable
               rows={data.runtimes}
+              loading={runtimesSlice.status === "loading"}
+              empty={tableEmptyForSlice(runtimesSlice.status)}
               onRowClick={() => navigate("/management/runtimes")}
               columns={[
                 { key: "name", header: t("nav.runtimes"), cell: (r) => <span className="font-medium">{r.name}</span> },
@@ -152,6 +362,8 @@ export const RiskCenter = () => {
               <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">{t("nav.tools")}</div>
               <DataTable
                 rows={[...data.tools].sort((a, b) => RISK_WEIGHT[b.risk] - RISK_WEIGHT[a.risk])}
+                loading={toolsSlice.status === "loading"}
+                empty={tableEmptyForSlice(toolsSlice.status)}
                 onRowClick={(r) => navigate(`/management/tools/${r.id}`)}
                 columns={[
                   { key: "name", header: t("table.name"), cell: (r) => <span className="font-medium">{r.name}</span> },
@@ -165,6 +377,8 @@ export const RiskCenter = () => {
               <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">{t("nav.mcp")}</div>
               <DataTable
                 rows={data.mcp}
+                loading={mcpSlice.status === "loading"}
+                empty={tableEmptyForSlice(mcpSlice.status)}
                 onRowClick={(r) => navigate(`/management/mcp/${r.id}`)}
                 columns={[
                   { key: "name", header: t("table.name"), cell: (r) => <span className="font-medium">{r.name}</span> },
@@ -178,6 +392,8 @@ export const RiskCenter = () => {
               <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">{t("nav.skills")}</div>
               <DataTable
                 rows={data.skills}
+                loading={skillsSlice.status === "loading"}
+                empty={tableEmptyForSlice(skillsSlice.status)}
                 onRowClick={(r) => navigate(`/management/skills/${r.id}`)}
                 columns={[
                   { key: "name", header: t("table.name"), cell: (r) => <span className="font-medium">{r.name}</span> },
@@ -191,7 +407,9 @@ export const RiskCenter = () => {
 
           <TabsContent value="incidents" className="mt-4 space-y-4">
             <DataTable
-              rows={data.incidents}
+              rows={data.incidents.filter(isNonTerminalIncident)}
+              loading={incidentsSlice.status === "loading"}
+              empty={tableEmptyForSlice(incidentsSlice.status)}
               onRowClick={(r) => navigate(`/management/incidents/${r.id}`)}
               columns={[
                 { key: "sev", header: t("table.severity"), cell: (r) => <RiskBadge level={r.severity} /> },
@@ -202,6 +420,8 @@ export const RiskCenter = () => {
             />
             <DataTable
               rows={data.alerts.filter((a) => !a.acknowledged)}
+              loading={alertsSlice.status === "loading"}
+              empty={tableEmptyForSlice(alertsSlice.status)}
               onRowClick={() => navigate("/management/alerts")}
               columns={[
                 { key: "sev", header: t("table.severity"), cell: (r) => <RiskBadge level={r.severity} /> },
@@ -218,15 +438,55 @@ export const RiskCenter = () => {
   );
 };
 
-const BreachMatrix = ({ data }: { data: { strategies: Strategy[]; pools: CapitalPool[]; runtimes: Runtime[]; tools: Tool[] } }) => {
+const BreachMatrix = ({
+  strategiesSlice,
+  poolsSlice,
+  runtimesSlice,
+  toolsSlice,
+}: {
+  strategiesSlice: DomainSlice<Strategy>;
+  poolsSlice: DomainSlice<CapitalPool>;
+  runtimesSlice: DomainSlice<Runtime>;
+  toolsSlice: DomainSlice<Tool>;
+}) => {
   const t = useT();
   const rows = [
-    { label: t("riskCenter.tab.strategy"), counts: bucket(data.strategies.map((s) => s.risk)) },
-    { label: t("riskCenter.tab.capital"), counts: bucket(data.pools.map((p) => p.risk)) },
-    { label: t("riskCenter.tab.runtime"), counts: bucket(data.runtimes.map((r) => (r.status === "failed" ? "critical" : r.status === "warning" ? "high" : "low") as RiskLevel)) },
-    { label: t("nav.tools"), counts: bucket(data.tools.map((tl) => tl.risk)) },
+    {
+      key: "strategy",
+      label: `${t("riskCenter.tab.strategy")} (${t("riskCenter.draftsExcluded")})`,
+      status: strategiesSlice.status,
+      counts: bucket(strategiesSlice.items.map((s) => s.risk)),
+    },
+    {
+      key: "capital",
+      label: t("riskCenter.tab.capital"),
+      status: poolsSlice.status,
+      counts: bucket(poolsSlice.items.map((p) => p.risk)),
+    },
+    {
+      key: "runtime",
+      label: t("riskCenter.tab.runtime"),
+      status: runtimesSlice.status,
+      counts: bucket(
+        runtimesSlice.items.map(
+          (r) => (r.status === "failed" ? "critical" : r.status === "warning" ? "high" : "low") as RiskLevel,
+        ),
+      ),
+    },
+    {
+      key: "tools",
+      label: t("nav.tools"),
+      status: toolsSlice.status,
+      counts: bucket(toolsSlice.items.map((tl) => tl.risk)),
+    },
   ];
-  const cell = (n: number, level: RiskLevel) => {
+  const cell = (status: SliceStatus, n: number, level: RiskLevel) => {
+    if (status === "loading") {
+      return <span className="text-mono text-xs text-muted-foreground">{t("common.loading")}</span>;
+    }
+    if (status === "error") {
+      return <span className="text-mono text-xs text-status-failed">{t("status.unavailable")}</span>;
+    }
     if (n === 0) return <span className="text-mono text-xs text-muted-foreground">—</span>;
     return <span className={`text-mono text-sm font-semibold ${level === "critical" ? "text-risk-critical" : level === "high" ? "text-risk-high" : level === "medium" ? "text-risk-medium" : "text-risk-low"}`}>{n}</span>;
   };
@@ -238,13 +498,13 @@ const BreachMatrix = ({ data }: { data: { strategies: Strategy[]; pools: Capital
       <div className="text-xs uppercase tracking-wider text-risk-high">{t("risk.high")}</div>
       <div className="text-xs uppercase tracking-wider text-risk-critical">{t("risk.critical")}</div>
       {rows.map((r) => (
-        <Fragment key={r.label}>
+        <div key={r.key} className="contents" data-testid={`breach-matrix-row-${r.key}`}>
           <div className="font-medium">{r.label}</div>
-          <div>{cell(r.counts.low, "low")}</div>
-          <div>{cell(r.counts.medium, "medium")}</div>
-          <div>{cell(r.counts.high, "high")}</div>
-          <div>{cell(r.counts.critical, "critical")}</div>
-        </Fragment>
+          <div>{cell(r.status, r.counts.low, "low")}</div>
+          <div>{cell(r.status, r.counts.medium, "medium")}</div>
+          <div>{cell(r.status, r.counts.high, "high")}</div>
+          <div>{cell(r.status, r.counts.critical, "critical")}</div>
+        </div>
       ))}
     </div>
   );
@@ -252,6 +512,12 @@ const BreachMatrix = ({ data }: { data: { strategies: Strategy[]; pools: Capital
 
 const bucket = (levels: RiskLevel[]) => {
   const acc = { low: 0, medium: 0, high: 0, critical: 0 };
-  levels.forEach((l) => { acc[l] += 1; });
+  levels.forEach((l) => {
+    if (l in acc) {
+      acc[l as keyof typeof acc] += 1;
+    }
+  });
   return acc;
 };
+
+export default RiskCenter;

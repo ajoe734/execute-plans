@@ -40,7 +40,14 @@ describe("Deployments list & detail BFF contract alignment", () => {
   });
 
   it("navigates to /management/deployments/:plan_id instead of artifact_id when clicking a deployment list row", async () => {
-    vi.spyOn(globalThis, "fetch").mockImplementation(async () => jsonResponse(deploymentsFixture));
+    // Serve the captured first page once; follow-up page_token reads get a terminal empty page
+    // (a real server never repeats the same token, and repeated tokens now fail closed).
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      return new URL(url, "http://localhost").searchParams.get("page_token")
+        ? jsonResponse({ data: [], page_info: { next_page_token: null, total: 0 } })
+        : jsonResponse(deploymentsFixture);
+    });
 
     render(
       <I18nextProvider i18n={i18n}>

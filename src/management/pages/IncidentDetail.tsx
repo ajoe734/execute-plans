@@ -91,7 +91,7 @@ export const IncidentDetail = () => {
     if (!id) return;
     Promise.all([
       bffV1.alerts.list().catch(() => [] as Alert[]),
-      bffV1.strategies.list().catch(() => [] as Strategy[]),
+      bffV1.strategies.listNonDraft().catch(() => [] as Strategy[]),
       bffV1.runtimes.list().catch(() => [] as Runtime[]),
     ]).then(([a, s, r]) => {
       setAlerts(a);

@@ -2,7 +2,7 @@ import type { Persona } from "./dto";
 import { bffFetch } from "./client";
 import { BffError } from "./errors";
 import { paths } from "./paths";
-import { strictLiveList } from "./domainReads";
+import { strictLivePaginatedListNormalized } from "./domainReads";
 import { runAction } from "./writes";
 
 type BffEnvelope<T> = { data?: T; meta?: unknown } | T;
@@ -75,7 +75,7 @@ export async function createPersona(
 }
 
 export async function listPersonas(): Promise<Persona[]> {
-  return strictLiveList("personas.list", paths.personas());
+  return strictLivePaginatedListNormalized("personas.list", paths.personas());
 }
 
 export async function getPersona(id: string): Promise<Persona | undefined> {
