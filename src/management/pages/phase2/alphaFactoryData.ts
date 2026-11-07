@@ -62,7 +62,8 @@ export function classifyAlphaFactorySource(
   if (surfaces.alpha_factory !== undefined) {
     return surfaceIsLive(surfaces.alpha_factory) ? "live" : "degraded";
   }
-  for (const surface of Object.values(surfaces)) {
+  for (const [key, surface] of Object.entries(surfaces)) {
+    if (key === "alpha_factory_strategy_state") continue;
     if (!surfaceIsLive(surface)) return "degraded";
   }
   return "live";
