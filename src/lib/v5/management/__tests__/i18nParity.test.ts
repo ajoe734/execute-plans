@@ -275,4 +275,39 @@ describe("Pack PM-i18n parity", () => {
     expect(en.page.alertsUnavailable).toBe("Alerts are temporarily unavailable.");
     expect(zh.page.alertsUnavailable).toBe("暫時無法取得警報資料。");
   });
+
+  it("includes strategy operational view, rule, and read-only parameter keys in both locales", () => {
+    const strategyKeys = [
+      "strategy.params.readOnlyHint",
+      "strategy.params.adjustableSection",
+      "strategy.params.immutableSection",
+      "strategy.params.currentValue",
+      "strategy.params.allowedRange",
+      "strategy.params.step",
+      "strategy.params.fixed",
+      "strategy.operationalStatus.running",
+      "strategy.operationalStatus.idle",
+      "strategy.operationalStatus.retired",
+      "strategy.operationalStatus.unbound",
+      "strategy.operationalStatus.unknown",
+      "strategy.list.column.operationalStatus",
+      "strategy.list.column.symbols",
+      "strategy.list.hiddenDraftsAndRetiredPersonasWithCounts",
+      "strategy.list.hiddenRetiredPersonasWithCount",
+      "strategyDetail.specTitleField",
+      "strategyDetail.objective",
+      "strategyDetail.operationalStatusLabel",
+      "strategyDetail.boundPersonasLabel",
+      "strategyDetail.personaStateMissing",
+      "strategyDetail.rulesSectionTitle",
+      "strategyDetail.rulesUnavailable",
+      "strategyDetail.rulesEmpty",
+      "strategyDetail.ruleRole.trading",
+      "strategyDetail.ruleRole.rollback_baseline",
+    ];
+    for (const k of strategyKeys) {
+      expect(enKeys.has(k), `en missing ${k}`).toBe(true);
+      expect(zhKeys.has(k), `zh missing ${k}`).toBe(true);
+    }
+  });
 });

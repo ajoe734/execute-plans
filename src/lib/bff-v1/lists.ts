@@ -246,11 +246,12 @@ function strictLiveStrategyListLoader<T extends { state?: unknown; operationalSt
       asRecord(record?.page_info) ??
       asRecord(asRecord(record?.data)?.page_info) ??
       asRecord(asRecord(record?.meta)?.page_info);
+    const envMeta = asRecord(env.meta);
     const meta =
-      env.meta || rawPageInfo
+      envMeta || rawPageInfo
         ? {
-            ...(env.meta ?? {}),
-            ...(rawPageInfo && env.meta?.page_info === undefined
+            ...(envMeta ?? {}),
+            ...(rawPageInfo && envMeta?.page_info === undefined
               ? { page_info: rawPageInfo }
               : {}),
           }

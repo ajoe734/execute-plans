@@ -2088,8 +2088,18 @@ describe("ObjectListPage", () => {
           JSON.stringify({
             data: [realApprovedRow, realReviewRow],
             items: [realApprovedRow, realReviewRow],
-            meta: { state_counts: hostedStateCounts },
-            page_info: { page_size: 20, total: 134, next_page_token: "20" },
+            meta: {
+              state_counts: hostedStateCounts,
+              operational_counts: {
+                running: 5,
+                idle: 0,
+                retired: 134,
+                unbound: 2,
+                unknown: 0,
+              },
+              hidden_retired_persona_count: 134,
+            },
+            page_info: { page_size: 20, total: 7, next_page_token: null },
           }),
           { status: 200, headers: { "Content-Type": "application/json" } },
         );
@@ -2210,30 +2220,35 @@ describe("ObjectListPage", () => {
       </I18nextProvider>,
     );
 
-    // AC 1: Default view requests exclude_state=draft and shows no draft row
+    // AC 1: Default view requests exclude_state=draft&hide_retired_personas=true and shows no draft row
     expect(await screen.findByText("Pantheon Dev Paper Release 42123862167 Attempt 1")).toBeInTheDocument();
-    expect(requestedUrls).toEqual(["/bff/strategies?exclude_state=draft&page_size=20"]);
+    expect(requestedUrls).toEqual([
+      "/bff/strategies?exclude_state=draft&hide_retired_personas=true&page_size=20",
+    ]);
     expect(screen.queryByText("Pantheon Dev Paper Release 42123862167 Draft")).not.toBeInTheDocument();
 
-    // AC 2: State control offers default, approved, review, retired, draft, and all with counts from meta.state_counts
-    expect(screen.getByRole("button", { name: "Default (hide drafts) (134)" })).toHaveAttribute("aria-pressed", "true");
+    // AC 1 & AC 2: Default count comes from page_info.total (7); other tabs keep their counts from meta.state_counts
+    expect(screen.getByRole("button", { name: "Default (hide drafts) (7)" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "Approved (133)" })).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByRole("button", { name: "In Review (1)" })).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByRole("button", { name: "Retired (2)" })).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByRole("button", { name: "Draft (4764)" })).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByRole("button", { name: "All (4898)" })).toHaveAttribute("aria-pressed", "false");
 
-    // AC 3: Default view states how many drafts are hidden with one-click action to see them
+    // AC 1: Default view states both hidden draft count and hidden retired-persona count
     const hiddenBanner = screen.getByTestId("strategy-hidden-drafts-banner");
-    expect(hiddenBanner).toHaveTextContent("4764 draft strategies are hidden by default.");
+    expect(hiddenBanner).toHaveTextContent(
+      "4764 draft strategies and 134 strategies with retired personas are hidden by default.",
+    );
     const showDraftsBtn = screen.getByTestId("strategy-show-drafts-button");
     expect(showDraftsBtn).toHaveTextContent("Show drafts (4764)");
 
-    // Clicking Show drafts switches to state=draft in URL and fetches state=draft from BFF
+    // Clicking Show drafts switches to state=draft in URL and fetches state=draft from BFF; Default button has no un-reported count
     fireEvent.click(showDraftsBtn);
     expect(await screen.findByText("Pantheon Dev Paper Release 42123862167 Draft")).toBeInTheDocument();
     expect(screen.getByTestId("strategy-location")).toHaveTextContent("/management/strategies?state=draft");
     expect(requestedUrls[requestedUrls.length - 1]).toBe("/bff/strategies?state=draft&page_size=20");
+    expect(screen.getByRole("button", { name: "Default (hide drafts)" })).toHaveAttribute("aria-pressed", "false");
     expect(screen.queryByTestId("strategy-hidden-drafts-banner")).not.toBeInTheDocument();
 
     // Switch to retired
@@ -2307,7 +2322,7 @@ describe("ObjectListPage", () => {
           data: [realApprovedRow],
           items: [realApprovedRow],
           meta: { state_counts: null },
-          page_info: { page_size: 20, total: 1, next_page_token: null },
+          page_info: { page_size: 20, next_page_token: null },
         }),
         { status: 200, headers: { "Content-Type": "application/json" } },
       );

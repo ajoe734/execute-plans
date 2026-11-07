@@ -27,6 +27,9 @@ const REAL_BFF_STRATEGY_ROWS: Record<string, Strategy> = {
     alpha: "alpha.momo.v1",
     capitalPoolId: "pool-persona-paper-fd1281847a3b1c6a9735",
     personaIds: ["persona-paper-running-01"],
+    personaStates: [{ personaId: "persona-paper-running-01", state: "paper_running" }],
+    operationalStatus: "running",
+    symbols: ["2330.TW"],
     owner: "persona-paper-running-01",
     state: "deployed",
     lifecycleStatus: "paper",
@@ -260,7 +263,7 @@ describe("FE-STRATEGY-METRICS-TRUTH-20261104 StrategyDetail & StrategiesList", (
     expect(screen.getByText("0.01%")).toHaveClass("text-status-warning");
 
     const notRunningRow = screen.getByText("Unstarted Candidate Strategy").closest("tr") as HTMLElement;
-    expect(within(notRunningRow).getAllByText("No data")).toHaveLength(6);
+    expect(within(notRunningRow).getAllByText("No data")).toHaveLength(8);
   });
 });
 

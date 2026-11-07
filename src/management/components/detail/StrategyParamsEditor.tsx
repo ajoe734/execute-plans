@@ -1,69 +1,137 @@
-// Inline editor for strategy parameters. Edits create a draft revision (mock).
-import { useState } from "react";
 import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import type { Strategy } from "@/lib/bff-v1";
-import { runActionSafe } from "@/lib/bff-v1";
+import type { Strategy, StrategyRule } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
 
-interface ParamRow { key: string; value: string; note: string; }
+function selectTradingRule(rules: StrategyRule[]): StrategyRule | undefined {
+  return rules.find((rule) => rule.role === "trading") ?? rules[0];
+}
 
-export const StrategyParamsEditor = ({ strategy, initial }: { strategy: Strategy; initial: ParamRow[] }) => {
+function formatRuleParamValue(value: unknown, fallback: string): string {
+  if (Array.isArray(value)) {
+    const parts = value.map((item) => String(item).trim()).filter(Boolean);
+    return parts.length > 0 ? parts.join(", ") : fallback;
+  }
+  if (value === null || value === undefined || value === "") {
+    return fallback;
+  }
+  if (typeof value === "object") {
+    return JSON.stringify(value);
+  }
+  return String(value);
+}
+
+export const StrategyParamsEditor = ({ strategy }: { strategy: Strategy }) => {
   const t = useT();
-  const [rows, setRows] = useState<ParamRow[]>(initial);
-  const [original] = useState<ParamRow[]>(initial);
-  const dirty = rows.some((r, i) => r.value !== original[i]?.value);
+  const noData = t("common.noData");
 
-  const update = (i: number, value: string) => {
-    setRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, value } : r)));
-  };
+  if (strategy.rules === null) {
+    return (
+      <Card data-testid="strategy-params-unavailable" className="p-4 text-sm text-muted-foreground">
+        {t("strategyDetail.rulesUnavailable")}
+      </Card>
+    );
+  }
 
-  const submit = async () => {
-    const changes = rows
-      .map((r, i) => ({ ...r, prev: original[i]?.value }))
-      .filter((r) => r.value !== r.prev);
-    await runActionSafe({
-      kind: "Strategy",
-      id: strategy.id,
-      action: "update_params",
-      memo: changes.map((c) => `${c.key}: ${c.prev} → ${c.value}`).join("; "),
-    }, {
-      successTitle: t("strategy.params.draftCreated"),
-    });
-  };
+  if (!Array.isArray(strategy.rules) || strategy.rules.length === 0) {
+    return (
+      <Card data-testid="strategy-params-empty" className="p-4 text-sm text-muted-foreground">
+        {t("strategyDetail.rulesEmpty")}
+      </Card>
+    );
+  }
+
+  const tradingRule = selectTradingRule(strategy.rules);
+  const parameters =
+    tradingRule?.parameters && typeof tradingRule.parameters === "object"
+      ? tradingRule.parameters
+      : {};
+  const adjustableControls = Array.isArray(tradingRule?.adjustableControls)
+    ? tradingRule.adjustableControls
+    : [];
+  const immutableParameters = Array.isArray(tradingRule?.immutableParameters)
+    ? tradingRule.immutableParameters
+    : [];
 
   return (
-    <Card className="p-4 space-y-3">
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="text-sm font-semibold">{t("strategy.params.title")}</div>
-          <div className="text-xs text-muted-foreground">{t("strategy.params.hint")}</div>
+    <Card data-testid="strategy-params-readonly" className="p-4 space-y-4">
+      <div>
+        <div className="text-sm font-semibold">{t("strategy.params.title")}</div>
+        <div className="text-xs text-muted-foreground">{t("strategy.params.readOnlyHint")}</div>
+      </div>
+
+      {adjustableControls.length > 0 && (
+        <div className="space-y-2" data-testid="strategy-params-adjustable-list">
+          <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            {t("strategy.params.adjustableSection")}
+          </div>
+          {adjustableControls.map((control) => {
+            const currentValue = formatRuleParamValue(
+              control.current_value !== undefined
+                ? control.current_value
+                : parameters[control.parameter_key],
+              noData,
+            );
+            const minText = formatRuleParamValue(control.allowed_range?.min, noData);
+            const maxText = formatRuleParamValue(control.allowed_range?.max, noData);
+            const stepText = formatRuleParamValue(control.step, noData);
+            return (
+              <div
+                key={control.parameter_key}
+                data-testid={`strategy-param-adjustable-${control.parameter_key}`}
+                className="grid grid-cols-1 md:grid-cols-12 gap-2 items-center rounded border border-border/60 p-2.5 text-xs"
+              >
+                <code className="md:col-span-4 text-mono bg-muted px-2 py-1 rounded truncate">
+                  {control.parameter_key}
+                </code>
+                <span className="md:col-span-3 text-mono font-medium text-foreground">
+                  {t("strategy.params.currentValue", { value: currentValue })}
+                </span>
+                <span className="md:col-span-3 text-mono text-muted-foreground">
+                  {t("strategy.params.allowedRange", { min: minText, max: maxText })}
+                </span>
+                <span className="md:col-span-2 text-mono text-muted-foreground">
+                  {t("strategy.params.step", { step: stepText })}
+                </span>
+              </div>
+            );
+          })}
         </div>
-        {dirty && <Badge variant="outline" className="text-[10px] uppercase text-status-warning border-status-warning/40">● {t("skill.prompt.unsaved")}</Badge>}
-      </div>
-      <div className="space-y-2">
-        {rows.map((r, i) => {
-          const changed = r.value !== original[i]?.value;
-          return (
-            <div key={r.key} className="grid grid-cols-12 gap-3 items-center">
-              <code className="col-span-3 text-mono text-xs bg-muted px-2 py-1 rounded truncate">{r.key}</code>
-              <div className="col-span-3">
-                <Input value={r.value} onChange={(e) => update(i, e.target.value)} className={`h-8 text-mono text-xs ${changed ? "border-status-warning" : ""}`} />
+      )}
+
+      {immutableParameters.length > 0 && (
+        <div className="space-y-2" data-testid="strategy-params-immutable-list">
+          <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            {t("strategy.params.immutableSection")}
+          </div>
+          {immutableParameters.map((paramKey) => {
+            const valueText = formatRuleParamValue(parameters[paramKey], noData);
+            return (
+              <div
+                key={paramKey}
+                data-testid={`strategy-param-immutable-${paramKey}`}
+                className="grid grid-cols-1 md:grid-cols-12 gap-2 items-center rounded border border-border/60 p-2.5 text-xs"
+              >
+                <code className="md:col-span-4 text-mono bg-muted px-2 py-1 rounded truncate">
+                  {paramKey}
+                </code>
+                <span className="md:col-span-6 text-mono text-foreground break-all">
+                  {valueText}
+                </span>
+                <div className="md:col-span-2 flex md:justify-end">
+                  <Badge
+                    variant="outline"
+                    data-testid={`strategy-param-fixed-${paramKey}`}
+                    className="text-[11px] border-muted text-muted-foreground"
+                  >
+                    {t("strategy.params.fixed")}
+                  </Badge>
+                </div>
               </div>
-              <div className="col-span-2 text-mono text-[11px] text-muted-foreground">
-                {changed ? `← ${original[i]?.value}` : ""}
-              </div>
-              <div className="col-span-4 text-xs text-muted-foreground">{r.note}</div>
-            </div>
-          );
-        })}
-      </div>
-      <div className="flex justify-end gap-2 pt-2">
-        <Button size="sm" variant="outline" onClick={() => setRows(original)} disabled={!dirty}>{t("actions.reset")}</Button>
-        <Button size="sm" onClick={submit} disabled={!dirty}>{t("strategy.params.submit")}</Button>
-      </div>
+            );
+          })}
+        </div>
+      )}
     </Card>
   );
 };

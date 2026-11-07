@@ -1,7 +1,8 @@
 import "@testing-library/jest-dom/vitest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
+import i18n from "@/i18n";
 import { StrategyDetail } from "./StrategyDetail";
 import { bffV1, managementConsoleReads, type Artifact, type Strategy } from "@/lib/bff-v1";
 
@@ -120,5 +121,308 @@ describe("StrategyDetail spec & artifacts truth (FE-STRATEGY-DETAIL-TRUTH-202611
     expect(text).toContain("paper");
     expect(text).toContain("0050.TWSE");
     expect(text).not.toMatch(/Top-50 perp|VWAP \/ 5min|BTC-PERP/);
+  });
+
+  it("shows operationalStatus and bound persona link with state next to the lifecycle stepper, and shows title, hypothesis, objective, plain-language rule sentence, rollback baseline label, unsupported rule kind, and read-only parameters with no edit/submit controls", async () => {
+    await i18n.changeLanguage("zh-TW");
+    vi.spyOn(bffV1.artifacts, "list").mockResolvedValue([]);
+    const realReleaseStrategy: Strategy = {
+      id: "strategy-persona-b9f9e2e4d44cdd44d160",
+      name: "Pantheon Dev Paper Release 42345302114 Attempt 1",
+      owner: "persona-22582e56e0ad8a4f0ca7",
+      updatedAt: "2026-11-07T07:40:00Z",
+      state: "approved",
+      risk: "low",
+      alpha: "",
+      capitalPoolId: "pool-persona-paper-b9f9e2e4d44cdd44d160",
+      personaIds: ["persona-22582e56e0ad8a4f0ca7"],
+      personaStates: [{ personaId: "persona-22582e56e0ad8a4f0ca7", state: "paper_running" }],
+      operationalStatus: "running",
+      symbols: ["2330.TW"],
+      pnl: 0,
+      pnl30d: 0,
+      sharpe: null,
+      drawdown: null,
+      totalTrades: 0,
+      metricsAsOf: "2026-11-07T07:40:00Z",
+      metricsResolution: "fresh",
+      metricsPersonaId: "persona-22582e56e0ad8a4f0ca7",
+      availableActions: ["archive"],
+      labelKey: "strategy.strategy-persona-b9f9e2e4d44cdd44d160",
+      lifecycleStatus: "approved",
+      spec: {
+        spec_version_id: "reg-strategy-spec-persona-b9f9e2e4d44cdd44d160",
+        spec_version: "1.0.0",
+        title: "Pantheon Dev Paper Release 42345302114 Attempt 1",
+        hypothesis: "Paper-only lifecycle verification in dev",
+        objective: "Verify close-to-close momentum execution in dev",
+        market_scope: { symbols: ["2330.TW"], asset_classes: ["equity"], frequency: "1d" },
+        execution_profile: {
+          signal_schema_version: "1.0",
+          quantity_type: "SHARES",
+          rebalance_cadence: "1d bar close, paper only",
+          execution_mode_hint: "paper",
+        },
+        evaluation_plan: { metrics: ["sharpe", "max_drawdown"] },
+        metadata: { market: "TW", execution_context: "paper" },
+      },
+      rules: [
+        {
+          registryId: "artifact-persona-paper-b9f9e2e4d44cdd44d160",
+          version: "1.0.0",
+          role: "trading",
+          strategyLogic: {
+            kind: "close_to_close_momentum",
+            lookback_parameter: "lookback_bars",
+            threshold_parameter: "momentum_threshold",
+            positive_action: "BUY",
+            non_positive_action: "SELL",
+          },
+          parameters: {
+            market: "TW",
+            symbols: ["2330.TW"],
+            data_source: "source-ingest:paper/persona-bootstrap",
+            bar_frequency: "1d",
+            lookback_bars: 2,
+            quantity_type: "SHARES",
+            order_quantity: 1,
+            momentum_threshold: 0,
+            zero_momentum_action: "SELL",
+          },
+          adjustableControls: [
+            {
+              parameter_key: "lookback_bars",
+              value_type: "integer",
+              current_value: 2,
+              allowed_range: { min: 2, max: 60 },
+              step: 1,
+            },
+            {
+              parameter_key: "momentum_threshold",
+              value_type: "number",
+              current_value: 0.0,
+              allowed_range: { min: 0.0, max: 0.05 },
+              step: 0.001,
+            },
+          ],
+          immutableParameters: [
+            "symbols",
+            "bar_frequency",
+            "data_source",
+            "order_quantity",
+            "quantity_type",
+            "zero_momentum_action",
+            "market",
+          ],
+        },
+        {
+          registryId: "artifact-persona-paper-baseline-b9f9e2e4d44cdd44d160",
+          version: "1.0.0",
+          role: "rollback_baseline",
+          strategyLogic: {
+            kind: "close_to_close_momentum",
+            lookback_parameter: "lookback_bars",
+            threshold_parameter: "momentum_threshold",
+            positive_action: "HOLD",
+            non_positive_action: "HOLD",
+          },
+          parameters: {
+            market: "TW",
+            symbols: ["2330.TW"],
+            data_source: "source-ingest:paper/persona-bootstrap",
+            bar_frequency: "1d",
+            lookback_bars: 2,
+            quantity_type: "SHARES",
+            order_quantity: 0,
+            momentum_threshold: 0,
+            zero_momentum_action: "HOLD",
+          },
+          adjustableControls: [],
+          immutableParameters: [
+            "symbols",
+            "bar_frequency",
+            "data_source",
+            "order_quantity",
+            "quantity_type",
+            "zero_momentum_action",
+            "market",
+          ],
+        },
+        {
+          registryId: "artifact-persona-paper-unsupported-b9f9e2e4d44cdd44d160",
+          version: "1.0.0",
+          role: "trading",
+          strategyLogic: {
+            kind: "custom_grid_maker",
+          },
+          parameters: {},
+          adjustableControls: [],
+          immutableParameters: [],
+        },
+      ],
+    };
+
+    vi.spyOn(bffV1.strategies, "get").mockResolvedValue(realReleaseStrategy);
+    render(
+      <MemoryRouter initialEntries={["/management/strategies/strategy-persona-b9f9e2e4d44cdd44d160"]}>
+        <Routes>
+          <Route path="/management/strategies/:id" element={<StrategyDetail />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    const statusBadge = await screen.findByTestId("strategy-detail-operational-status");
+    expect(statusBadge).toHaveAttribute("data-operational-status", "running");
+    expect(statusBadge).toHaveTextContent(/運行中|Running/);
+
+    const personaLink = screen.getByTestId("strategy-bound-persona-persona-22582e56e0ad8a4f0ca7");
+    expect(personaLink).toHaveAttribute("href", "/management/personas/persona-22582e56e0ad8a4f0ca7");
+    expect(personaLink).toHaveAttribute("data-persona-state", "paper_running");
+    expect(personaLink).toHaveTextContent("persona-22582e56e0ad8a4f0ca7");
+
+    click(await screen.findByRole("tab", { name: /^(Spec|規格)/i }));
+
+    expect(await screen.findByTestId("strategy-spec-title")).toHaveTextContent(
+      "Pantheon Dev Paper Release 42345302114 Attempt 1",
+    );
+    expect(screen.getByTestId("strategy-spec-hypothesis")).toHaveTextContent(
+      "Paper-only lifecycle verification in dev",
+    );
+    expect(screen.getByTestId("strategy-spec-objective")).toHaveTextContent(
+      "Verify close-to-close momentum execution in dev",
+    );
+
+    const tradingRuleCard = screen.getByTestId(
+      "strategy-rule-artifact-persona-paper-b9f9e2e4d44cdd44d160",
+    );
+    expect(within(tradingRuleCard).getByTestId("strategy-rule-text")).toHaveTextContent(
+      "每根日K 收盤時，比較最新收盤價與 1 根前的收盤價：漲幅大於 0% 就買進 1 股，否則賣出 1 股。",
+    );
+
+    const baselineRuleCard = screen.getByTestId(
+      "strategy-rule-artifact-persona-paper-baseline-b9f9e2e4d44cdd44d160",
+    );
+    expect(within(baselineRuleCard).getByTestId("strategy-rule-text")).toHaveAttribute(
+      "data-rule-kind",
+      "rollback_baseline",
+    );
+    expect(within(baselineRuleCard).getByTestId("strategy-rule-text")).toHaveTextContent(
+      "不送單回滾基準（正負向皆不動作，下單數量 0）",
+    );
+
+    const unsupportedRuleCard = screen.getByTestId(
+      "strategy-rule-artifact-persona-paper-unsupported-b9f9e2e4d44cdd44d160",
+    );
+    expect(within(unsupportedRuleCard).getByTestId("strategy-rule-text")).toHaveAttribute(
+      "data-rule-kind",
+      "unsupported",
+    );
+    expect(within(unsupportedRuleCard).getByTestId("strategy-rule-text")).toHaveTextContent(
+      "不支援的規則類型：custom_grid_maker",
+    );
+
+    const paramsCard = screen.getByTestId("strategy-params-readonly");
+    expect(within(paramsCard).queryByRole("textbox")).not.toBeInTheDocument();
+    expect(within(paramsCard).queryByRole("button")).not.toBeInTheDocument();
+
+    const lookbackRow = screen.getByTestId("strategy-param-adjustable-lookback_bars");
+    expect(lookbackRow).toHaveTextContent("lookback_bars");
+    expect(lookbackRow).toHaveTextContent("2");
+    expect(lookbackRow).toHaveTextContent("2 – 60");
+    expect(lookbackRow).toHaveTextContent("1");
+
+    const thresholdRow = screen.getByTestId("strategy-param-adjustable-momentum_threshold");
+    expect(thresholdRow).toHaveTextContent("momentum_threshold");
+    expect(thresholdRow).toHaveTextContent("0");
+    expect(thresholdRow).toHaveTextContent("0 – 0.05");
+    expect(thresholdRow).toHaveTextContent("0.001");
+
+    for (const fixedKey of [
+      "symbols",
+      "bar_frequency",
+      "data_source",
+      "order_quantity",
+      "quantity_type",
+      "zero_momentum_action",
+      "market",
+    ]) {
+      expect(screen.getByTestId(`strategy-param-immutable-${fixedKey}`)).toBeInTheDocument();
+      expect(screen.getByTestId(`strategy-param-fixed-${fixedKey}`)).toHaveTextContent(/固定|Fixed/);
+    }
+  });
+
+  it("renders rules unavailable when rules is null, no rule recorded when rules is empty, and persona state could not be read when operationalStatus is unknown", async () => {
+    await i18n.changeLanguage("en-US");
+    vi.spyOn(bffV1.artifacts, "list").mockResolvedValue([]);
+    const rulesNullAndUnknownPersona: Strategy = {
+      id: "strategy-persona-b9f9e2e4d44cdd44d160",
+      name: "Pantheon Dev Paper Release 42345302114 Attempt 1",
+      owner: "persona-22582e56e0ad8a4f0ca7",
+      updatedAt: "2026-11-07T07:40:00Z",
+      state: "approved",
+      risk: "low",
+      alpha: "",
+      capitalPoolId: "pool-persona-paper-b9f9e2e4d44cdd44d160",
+      personaIds: ["persona-22582e56e0ad8a4f0ca7"],
+      personaStates: [{ personaId: "persona-22582e56e0ad8a4f0ca7", state: "unknown" }],
+      operationalStatus: "unknown",
+      symbols: ["2330.TW"],
+      pnl: null,
+      pnl30d: null,
+      sharpe: null,
+      drawdown: null,
+      rules: null,
+    };
+
+    vi.spyOn(bffV1.strategies, "get").mockResolvedValueOnce(rulesNullAndUnknownPersona);
+    const { unmount } = render(
+      <MemoryRouter initialEntries={["/management/strategies/strategy-persona-b9f9e2e4d44cdd44d160"]}>
+        <Routes>
+          <Route path="/management/strategies/:id" element={<StrategyDetail />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    const statusBadge = await screen.findByTestId("strategy-detail-operational-status");
+    expect(statusBadge).toHaveAttribute("data-operational-status", "unknown");
+    expect(statusBadge).toHaveTextContent("Persona state could not be read");
+
+    click(await screen.findByRole("tab", { name: /^(Spec|規格)/i }));
+    expect(await screen.findByTestId("strategy-rules-unavailable")).toHaveTextContent(
+      "Trading rules unavailable (execution bundle read failed).",
+    );
+    expect(screen.getByTestId("strategy-params-unavailable")).toHaveTextContent(
+      "Trading rules unavailable (execution bundle read failed).",
+    );
+    unmount();
+
+    vi.spyOn(bffV1.strategies, "get").mockResolvedValueOnce({
+      ...rulesNullAndUnknownPersona,
+      id: "strat-tw-official:tw_price_daily:TWSE:2330:e4b598d99f084c19-60f9c8a78715",
+      personaIds: [],
+      personaStates: [],
+      operationalStatus: "unbound",
+      rules: [],
+    });
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          "/management/strategies/strat-tw-official:tw_price_daily:TWSE:2330:e4b598d99f084c19-60f9c8a78715",
+        ]}
+      >
+        <Routes>
+          <Route path="/management/strategies/:id" element={<StrategyDetail />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    click(await screen.findByRole("tab", { name: /^(Spec|規格)/i }));
+    expect(await screen.findByTestId("strategy-rules-empty")).toHaveTextContent(
+      "No trading rule is recorded for this strategy.",
+    );
+    expect(screen.getByTestId("strategy-params-empty")).toHaveTextContent(
+      "No trading rule is recorded for this strategy.",
+    );
   });
 });
