@@ -2696,6 +2696,17 @@ export default {
     promotion: { title: "升級閘門", candidate: "候選", fitnessLift: "適應度提升", target: "目標", promote: "升級候選", queued: "升級已排入" },
   },
   ranking: { expression: "公式" },
+  rankingFormula: {
+    version: "版本", scoreField: "計分欄位", components: "組成項目", weight: "權重",
+    basis: "計分依據", policy: "政策", changeControl: "變更管制", versionPolicy: "版本政策",
+    requiresEvidence: "需要治理佐證", yes: "是", no: "否", authority: "權限",
+    evidenceRefs: "治理佐證參照", noData: "無資料", effectiveAt: "生效時間",
+    changeType: "變更類型", description: "說明", weights: "權重",
+    basisLabels: { latest_available_persona_league_metrics_with_quarter_window: "最新可用的角色聯賽指標（季度視窗）" },
+    policyLabels: { read_only_governance_advisory: "唯讀治理建議" },
+    versionPolicyLabels: { formula_version_changes_require_governance_evidence: "公式版本變更需附治理佐證" },
+    changeTypeLabels: { baseline: "基準版本" },
+  },
   research: {
     rerun: "重新執行",
     createDisabledReason:

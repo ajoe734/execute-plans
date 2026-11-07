@@ -392,9 +392,44 @@ export interface CapitalPool extends BaseObject {
   summary?: string;
 }
 
+export interface RankingFormulaComponent {
+  key: string;
+  label?: string;
+  weight?: number;
+}
+
+export interface RankingFormulaVersionHistoryEntry {
+  id?: string;
+  version?: string;
+  formula_version?: string;
+  effective_at?: string;
+  change_type?: string;
+  description?: string;
+  governance_evidence_refs?: string[];
+}
+
+export interface RankingFormulaChangeControl {
+  version_policy?: string;
+  requires_governance_evidence?: boolean;
+  governance_evidence_refs?: string[];
+  authority?: string;
+}
+
 export interface RankingFormula extends BaseObject {
-  expression: string;
-  appliedTo: number;
+  /** Legacy fields: the live BFF does not currently return these. */
+  expression?: string;
+  appliedTo?: number;
+  formula_id?: string;
+  version?: string;
+  formula_version?: string;
+  weights?: Record<string, number>;
+  score_field?: string;
+  components?: RankingFormulaComponent[];
+  basis?: string;
+  policy?: string;
+  governance_evidence_refs?: string[];
+  version_history?: RankingFormulaVersionHistoryEntry[];
+  change_control?: RankingFormulaChangeControl;
 }
 
 export interface RebalanceLine {

@@ -2714,6 +2714,17 @@ export default {
     promotion: { title: "Promotion gate", candidate: "Candidate", fitnessLift: "Fitness lift", target: "Target", promote: "Promote candidate", queued: "Promotion queued" },
   },
   ranking: { expression: "Expression" },
+  rankingFormula: {
+    version: "Version", scoreField: "Score field", components: "Components", weight: "Weight",
+    basis: "Basis", policy: "Policy", changeControl: "Change control", versionPolicy: "Version policy",
+    requiresEvidence: "Requires governance evidence", yes: "Yes", no: "No", authority: "Authority",
+    evidenceRefs: "Governance evidence references", noData: "No data", effectiveAt: "Effective at",
+    changeType: "Change type", description: "Description", weights: "Weights",
+    basisLabels: { latest_available_persona_league_metrics_with_quarter_window: "Latest available persona league metrics (quarter window)" },
+    policyLabels: { read_only_governance_advisory: "Read-only governance advisory" },
+    versionPolicyLabels: { formula_version_changes_require_governance_evidence: "Formula version changes require governance evidence" },
+    changeTypeLabels: { baseline: "Baseline" },
+  },
   research: {
     rerun: "Re-run",
     createDisabledReason:

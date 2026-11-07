@@ -21,12 +21,13 @@ interface Props<T extends BaseObject> {
   tabs: DetailTab[];
   defaultTab?: string;
   env?: "research" | "paper" | "live";
+  headerOmit?: { state?: boolean; risk?: boolean; owner?: boolean; updated?: boolean };
 }
 
-export function ObjectDetailLayout<T extends BaseObject>({ object, state, risk, subtitle, actions, tabs, defaultTab, env }: Props<T>) {
+export function ObjectDetailLayout<T extends BaseObject>({ object, state, risk, subtitle, actions, tabs, defaultTab, env, headerOmit }: Props<T>) {
   return (
     <>
-      <EntityHeader object={object} state={state} risk={risk} subtitle={subtitle} actions={actions} env={env} />
+      <EntityHeader object={object} state={state} risk={risk} subtitle={subtitle} actions={actions} env={env} omit={headerOmit} />
       <PageBody>
         <Tabs defaultValue={defaultTab ?? tabs[0].value}>
           <TabsList>

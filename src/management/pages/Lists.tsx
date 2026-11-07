@@ -11,6 +11,7 @@ import {
 } from "@/lib/bff-v1";
 import { normalizeEvolutionOriginKind } from "@/lib/bff-v1/evolution";
 import { useT } from "@/platform/hooks";
+import { formulaVersion, formulaWeightSummary } from "./RankingFormulaDetail";
 import { safeDateTime } from "@/lib/utils";
 import type { Strategy, Persona, CapitalPool, RankingFormula, Rebalance, Deployment, EvolutionProgram, ResearchTask, Artifact, ListEnvelope, RiskLevel } from "@/lib/bff-v1";
 import { StatusBadge } from "@/platform/components/StatusBadge";
@@ -631,9 +632,14 @@ export const RankingFormulasList = () => {
         title: t("governanceDecisions.formulaEmptyState.title"),
         description: t("governanceDecisions.formulaEmptyState.description"),
       }}
-      extraColumns={[
-        { key: "expr", header: t("section.parameters"), cell: (r) => <code className="text-mono text-xs bg-muted px-1.5 py-0.5 rounded">{r.expression}</code> },
-        { key: "applied", header: t("section.relatedObjects"), cell: (r) => <span className="text-mono text-xs">{r.appliedTo}</span> },
+      columns={[
+        { key: "name", header: t("common.name"), cell: (r) => <div className="font-medium">{r.name || r.id}</div> },
+        { key: "version", header: t("rankingFormula.version"), cell: (r) => <span className="text-mono text-xs">{formulaVersion(r) ?? t("rankingFormula.noData")}</span> },
+        { key: "weights", header: t("rankingFormula.weights"), cell: (r) => (
+          <span className="text-mono text-xs">
+            {formulaWeightSummary(r) ?? (r.expression ? r.expression : t("rankingFormula.noData"))}
+          </span>
+        ) },
       ]}
     />
   );
