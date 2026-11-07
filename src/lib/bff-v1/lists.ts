@@ -15,7 +15,6 @@ import type { ListEnvelope } from "./dto";
 import { bffFetch } from "./client";
 import { paths } from "./paths";
 import {
-  normalizeAlertTimestampFields,
   normalizeIncidentTimestampFields,
 } from "./eventTimestamps";
 import { normalizeCapitalPool } from "./capitalPools";
@@ -23,6 +22,7 @@ import {
   adaptRuntimeRow,
   collectPaginatedListPages,
   MAX_PAGINATED_LIST_PAGES,
+  normalizeAlertFields,
   normalizeArtifactFields,
   normalizeBaseObjectFields,
   normalizeDeploymentFields,
@@ -344,7 +344,7 @@ export function normalizeAlertListResponse(payload: unknown, cls: ListClass = "r
   const env = normalizeLiveListResponse<Alert>(payload, cls);
   return {
     ...env,
-    items: env.items.map((row) => normalizeAlertTimestampFields(row) as Alert),
+    items: env.items.map((row) => normalizeAlertFields(row) as Alert),
   };
 }
 

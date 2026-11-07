@@ -1237,6 +1237,8 @@ export default {
   page: {
     jobsSubtitle: "Work queue for jobs and workflows. {{count}} streamed event(s) since page load.",
     alertsSubtitle: "Raw alerts from monitors and thresholds. Acknowledge to claim ownership; escalate to an incident when coordination is needed.",
+    alertsEmpty: "No active alerts.",
+    alertsUnavailable: "Alerts are temporarily unavailable.",
     incidentsSubtitle: "Incidents are formal coordinated issues. Each incident has a commander and timeline.",
     approvalsSubtitle: "Multi-stage governance inbox. High-risk actions require typed confirmation.",
     approvalsPendingEmpty: "No pending approvals. Decided records are under the All filter.",

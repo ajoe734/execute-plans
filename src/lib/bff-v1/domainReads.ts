@@ -1,6 +1,7 @@
 import { bffFetch, type BffRequest } from "./client";
 import type { Runtime } from "./dto";
 import { BffError, isAbortError, makeBffError } from "./errors";
+import { normalizeAlertTimestampFields } from "./eventTimestamps";
 import { liveStatus } from "./liveStatus";
 
 export const delay = <T>(v: T, ms = 220): Promise<T> => new Promise<T>((r) => setTimeout(() => r(v), ms));
@@ -601,3 +602,73 @@ export const strictLivePaginatedListNormalized = <T>(
     (body) => normalizeBaseObjectList(liveItemsFrom<T>(body)),
     options,
   );
+
+export function getAlertsTimeoutFallbackSurface(payload: unknown): UnknownRecord | undefined {
+  const record = asRecord(payload);
+  if (!record) return undefined;
+  const meta = asRecord(record.meta) ?? record;
+  const surfaces = asRecord(meta.surfaces);
+  const alertsSurface = asRecord(surfaces?.alerts);
+  if (!alertsSurface) return undefined;
+  const source = stringFrom(alertsSurface.source)?.toLowerCase();
+  return source === "timeout_fallback" ? alertsSurface : undefined;
+}
+
+export function isAlertsTimeoutFallback(payload: unknown): boolean {
+  return getAlertsTimeoutFallbackSurface(payload) !== undefined;
+}
+
+export function assertAlertsNotTimeoutFallback(payload: unknown): void {
+  const surface = getAlertsTimeoutFallbackSurface(payload);
+  if (!surface) return;
+  const message =
+    stringFrom(surface.message) ??
+    "Alert aggregation timed out under concurrent read fanout; degraded empty response returned.";
+  throw makeBffError({
+    code: "BACKEND_UNAVAILABLE",
+    message,
+    status: 503,
+    details: surface,
+  });
+}
+
+export function normalizeAlertFields<T>(raw: T | undefined): T | undefined {
+  const base = normalizeAlertTimestampFields(raw);
+  const record = asRecord(base);
+  if (!record) return base;
+  const patched: UnknownRecord = { ...record };
+
+  const source = stringFrom(patched.source, record.category);
+  if (source !== undefined) {
+    patched.source = source;
+  }
+
+  if (!stringFrom(patched.openedAt)) {
+    const raisedAt = stringFrom(record.raisedAt, record.raised_at);
+    if (raisedAt && !Number.isNaN(Date.parse(raisedAt))) {
+      patched.openedAt = raisedAt;
+    }
+  }
+
+  const targetRefRecord = asRecord(record.target_ref) ?? asRecord(record.targetRef);
+  const relatedTarget = stringFrom(
+    patched.relatedTarget,
+    record.related_target,
+    targetRefRecord?.target_id,
+    targetRefRecord?.targetId,
+    typeof record.target_ref === "string" ? record.target_ref : undefined,
+  );
+  if (relatedTarget !== undefined) {
+    patched.relatedTarget = relatedTarget;
+  }
+
+  if (typeof patched.acknowledged !== "boolean") {
+    patched.acknowledged = false;
+  }
+
+  return patched as T;
+}
+
+export function normalizeAlertList<T>(rows: T[]): T[] {
+  return rows.map((row) => normalizeAlertFields(row) as T);
+}

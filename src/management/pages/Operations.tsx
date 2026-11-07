@@ -8,6 +8,7 @@ import { RiskBadge } from "@/platform/components/RiskBadge";
 import { bffV1, lists, runActionSafe } from "@/lib/bff-v1";
 import { bffWrites } from "@/lib/bff-v1/writes";
 import { commandReceiptDescription } from "@/lib/bff-v1/commandReceipt";
+import { assertAlertsNotTimeoutFallback, normalizeAlertFields } from "@/lib/bff-v1/domainReads";
 import { normalizeAlertTimestampFields } from "@/lib/bff-v1/eventTimestamps";
 import type { Job, Alert, Incident, ApprovalRequest, AuditEvent } from "@/lib/bff-v1";
 import { useT } from "@/platform/hooks";
@@ -25,7 +26,7 @@ import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-quer
 import { ServerPager, useServerPageCursor } from "@/platform/components/ServerPager";
 import { getSharedQueryClient, queryKeys, resetSharedQueryClientForTests } from "@/lib/bff-v1/queryKeys";
 
-type ListLoader<T> = (signal?: AbortSignal) => Promise<{ items: T[] }>;
+type ListLoader<T> = (signal?: AbortSignal) => Promise<{ items: T[]; meta?: Record<string, unknown> }>;
 
 // `lists.*` loaders resolve their generic item type to `unknown` inside
 // src/lib/bff-v1/lists.ts (the adaptItem passed there, e.g.
@@ -33,8 +34,9 @@ type ListLoader<T> = (signal?: AbortSignal) => Promise<{ items: T[] }>;
 // to `unknown` at that call site). The runtime shape is the concrete
 // entity; we re-assert it here at the consumption boundary rather than
 // editing the shared, out-of-scope lists.ts file.
-const asEntityListLoader = <T,>(loader: (signal?: AbortSignal) => Promise<{ items: unknown[] }>): ListLoader<T> =>
-  loader as unknown as ListLoader<T>;
+const asEntityListLoader = <T,>(
+  loader: (signal?: AbortSignal) => Promise<{ items: unknown[]; meta?: Record<string, unknown> }>,
+): ListLoader<T> => loader as unknown as ListLoader<T>;
 
 export const OPERATION_LIST_CACHE_TTL_MS = 60_000;
 
@@ -51,7 +53,10 @@ export function __resetOperationListCacheForTests(): void {
 }
 
 const loadListItems = <T,>(loader: ListLoader<T>, signal?: AbortSignal) =>
-  loader(signal).then((envelope) => envelope.items);
+  loader(signal).then((envelope) => {
+    assertAlertsNotTimeoutFallback(envelope);
+    return envelope.items;
+  });
 
 export async function loadCachedListItems<T>(
   cacheKey: string,
@@ -81,10 +86,16 @@ export function updateCachedListItems<T>(cacheKey: string, updater: (items: T[])
   qc.setQueryData<T[]>(queryKey, (old) => (old ? updater(old) : old));
 }
 
+export interface CachedOperationListState {
+  isError: boolean;
+  error: unknown;
+  isLoading: boolean;
+}
+
 export function useCachedOperationList<T>(
   cacheKey: string,
   loader: ListLoader<T>,
-): [T[], Dispatch<SetStateAction<T[]>>, () => Promise<void>] {
+): [T[], Dispatch<SetStateAction<T[]>>, () => Promise<void>, CachedOperationListState] {
   const qc = useClient();
   const queryKey = queryKeys.resource(cacheKey, []);
 
@@ -95,9 +106,12 @@ export function useCachedOperationList<T>(
       return items;
     },
     staleTime: OPERATION_LIST_CACHE_TTL_MS,
+    retry: false,
   }, qc);
 
-  const [rows, setRowsState] = useState<T[]>(() => (query.data ?? []) as T[]);
+  const [rows, setRowsState] = useState<T[]>(
+    () => (query.data ?? qc.getQueryData<T[]>(queryKey) ?? []) as T[],
+  );
 
   useEffect(() => {
     if (query.data !== undefined) {
@@ -117,7 +131,16 @@ export function useCachedOperationList<T>(
     await qc.refetchQueries({ queryKey }, { throwOnError: true });
   }, [qc, queryKey]);
 
-  return [rows, setRows, refresh];
+  return [
+    rows,
+    setRows,
+    refresh,
+    {
+      isError: query.isError,
+      error: query.error,
+      isLoading: query.isPending && rows.length === 0,
+    },
+  ];
 }
 
 export const OPERATION_PAGE_SIZE = 20;
@@ -236,12 +259,15 @@ export const JobsPage = () => {
 
 export const AlertsPage = () => {
   const t = useT();
-  const [rows, setRows] = useCachedOperationList<Alert>("operations.alerts", lists.alerts);
+  const [rows, setRows, , { isError, error, isLoading }] = useCachedOperationList<Alert>(
+    "operations.alerts",
+    lists.alerts,
+  );
   const [active, setActive] = useState<Alert | null>(null);
   useEffect(() => {
     import("@/lib/bff-v1").then(({ realtime }) => {
       const off = realtime.on("alert", (p) => {
-        const alert = normalizeAlertTimestampFields(p as Alert) ?? (p as Alert);
+        const alert = normalizeAlertFields(p as Alert) ?? normalizeAlertTimestampFields(p as Alert) ?? (p as Alert);
         setRows((rs) => {
           const next = [alert, ...rs];
           updateCachedListItems<Alert>("operations.alerts", () => next);
@@ -280,16 +306,32 @@ export const AlertsPage = () => {
     <>
       <PageHeader title={t("nav.alerts")} subtitle={t("page.alertsSubtitle")} />
       <PageBody>
-        <DataTable rows={rows} onRowClick={(r) => setActive(r)} columns={[
-          { key: "sev", header: t("table.severity"), cell: (r) => <RiskBadge level={r.severity} /> },
-          { key: "title", header: t("table.title"), cell: (r) => <div className="font-medium">{r.title}</div> },
-          { key: "src", header: t("table.source"), cell: (r) => <span className="text-mono text-xs">{r.source}</span> },
-          { key: "opened", header: t("table.opened"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{safeDateTime(r.openedAt)}</span> },
-          { key: "ack", header: t("table.status"), cell: (r) => r.acknowledged ? <span className="text-status-success text-xs">✓ {t("table_actions.acknowledged")}</span> : <span className="text-status-warning text-xs">{t("table_actions.open")}</span> },
-          { key: "act", header: "", cell: (r) => !r.acknowledged && (
-            <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); ack(r.id); }}>{t("table_actions.acknowledge")}</Button>
-          )},
-        ]} />
+        {isError && (
+          <Card role="alert" className="p-6 border-destructive/40 bg-destructive/5 text-destructive text-sm">
+            <div>{t("page.alertsUnavailable")}</div>
+            {error instanceof Error && error.message && (
+              <div className="text-mono text-xs mt-1">{error.message}</div>
+            )}
+          </Card>
+        )}
+        {(!isError || rows.length > 0) && (
+          <DataTable
+            rows={rows}
+            loading={isLoading}
+            empty={t("page.alertsEmpty")}
+            onRowClick={(r) => setActive(r)}
+            columns={[
+              { key: "sev", header: t("table.severity"), cell: (r) => <RiskBadge level={r.severity} /> },
+              { key: "title", header: t("table.title"), cell: (r) => <div className="font-medium">{r.title}</div> },
+              { key: "src", header: t("table.source"), cell: (r) => <span className="text-mono text-xs">{r.source}</span> },
+              { key: "opened", header: t("table.opened"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{safeDateTime(r.openedAt)}</span> },
+              { key: "ack", header: t("table.status"), cell: (r) => r.acknowledged ? <span className="text-status-success text-xs">✓ {t("table_actions.acknowledged")}</span> : <span className="text-status-warning text-xs">{t("table_actions.open")}</span> },
+              { key: "act", header: "", cell: (r) => !r.acknowledged && (
+                <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); ack(r.id); }}>{t("table_actions.acknowledge")}</Button>
+              )},
+            ]}
+          />
+        )}
       </PageBody>
 
       <Sheet open={!!active} onOpenChange={(o) => !o && setActive(null)}>

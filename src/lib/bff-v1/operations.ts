@@ -9,16 +9,17 @@ import type {
 import { paths } from "./paths";
 import {
   adaptRuntimeRow,
+  assertAlertsNotTimeoutFallback,
   detailPath,
   liveItemsFrom,
+  normalizeAlertFields,
+  normalizeAlertList,
   strictLiveDetail,
   strictLiveList,
   strictLivePaginatedList,
   strictLiveRead,
 } from "./domainReads";
 import {
-  normalizeAlertTimestampFields,
-  normalizeAlertTimestampList,
   normalizeIncidentTimestampFields,
   normalizeIncidentTimestampList,
 } from "./eventTimestamps";
@@ -71,11 +72,17 @@ export async function getRuntime(id: string): Promise<Runtime | undefined> {
 }
 
 export async function listAlerts(): Promise<Alert[]> {
-  return strictLiveList<Alert>("alerts.list", paths.alerts()).then(normalizeAlertTimestampList);
+  const body = await strictLiveRead<unknown>(
+    "alerts.list",
+    { method: "GET", path: paths.alerts() },
+    (raw) => raw,
+  );
+  assertAlertsNotTimeoutFallback(body);
+  return normalizeAlertList(liveItemsFrom<Alert>(body));
 }
 
 export async function getAlert(id: string): Promise<Alert | undefined> {
-  return strictLiveDetail<Alert>("alerts.get", detailPath(paths.alerts(), id)).then(normalizeAlertTimestampFields);
+  return strictLiveDetail<Alert>("alerts.get", detailPath(paths.alerts(), id)).then(normalizeAlertFields);
 }
 
 export const NON_TERMINAL_INCIDENT_STATUSES = [
