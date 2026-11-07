@@ -1,0 +1,65 @@
+{
+  "schema_version": "pantheon.fe-ops-list-degraded-notice.v1",
+  "task_id": "FE-OPS-LIST-DEGRADED-NOTICE-20261107",
+  "title": "Jobs and incidents hide a degraded read and show a smaller total as fact",
+  "owner": "Antigravity2",
+  "reviewer": "Claude",
+  "repository": "ajoe734/execute-plans",
+  "target_repo": "execute-plans",
+  "branch": "task/FE-OPS-LIST-DEGRADED-NOTICE-20261107",
+  "merge_target": "dev",
+  "base_sha": "257c5132c2b373f5f6662c39fc32de3c6239ca62",
+  "hosted_verification_claimed": false,
+  "hosted_verification_note": "Hosted verification was not run. Per the task brief, hosted verification is deferred to the operator acceptance task; only local functional and typecheck verification was executed.",
+  "scoped_artifacts": [
+    "src/management/pages/Operations.tsx",
+    "src/management/pages/Operations.test.tsx",
+    "src/management/pages/ObjectListPage.tsx",
+    "src/lib/bff-v1/degradation.ts",
+    "src/i18n/locales/zh-TW.ts",
+    "src/i18n/locales/en-US.ts",
+    "docs/deployment/evidence/FE-OPS-LIST-DEGRADED-NOTICE-20261107/evidence.json"
+  ],
+  "acceptance_criteria": {
+    "1_jobs_degraded_notice_plain_language_sources": "verified: usePagedOperationList in src/management/pages/Operations.tsx preserves ListEnvelope.meta on PagedPage<T>. JobsPage inspects extractDegradation(page?.meta) and extractDegradedSources(page?.meta) and renders OperationDegradedNotice (data-testid='ops-list-degraded-notice', role='status') stating that the list and total count are incomplete and naming degraded known sources (source_ingestion, research_orchestrator, research_worker_gateway, training_session, policy_learning) in plain language in both en-US and zh-TW without engineering terms, falling back to a generic sentence for unknown sources.",
+    "2_healthy_sources_no_notice_unchanged_layout": "verified: When every source is healthy (meta.surfaces.job_list.status === 'ok' / meta.surfaces.incidents.status === 'ok'), extractDegradation returns { degraded: false }, neither OperationUnavailableState nor OperationDegradedNotice renders, and the DataTable + ServerPager layout is unchanged.",
+    "3_incidents_page_shows_same_degraded_notice": "verified: IncidentsPage shares usePagedOperationList and OperationDegradedNotice with JobsPage and renders the same notice when GET /bff/incidents returns a degraded envelope.",
+    "4_degraded_with_page_token_past_reduced_total": "verified: When the envelope is degraded and the current page returns zero items (e.g. page_token='60' past reduced total 44), OperationDegradedNotice and ServerPager render while DataTable is hidden so no empty list message appears and the previous page control (jobs-page-prev / incidents-page-prev) remains enabled and navigates back.",
+    "5_failed_read_shows_unavailable_with_retry_never_empty_table": "verified: usePagedOperationList configures useQuery with retry: false and exposes isError, error, and retry. When a read fails (isError or surface status 'unavailable'), JobsPage and IncidentsPage reuse OperationUnavailableState (matching AlertsPage's role='alert' card presentation) with a Retry button and cleaned reason, and never render an empty DataTable.",
+    "6_row_content_paging_and_realtime_merge_behave_as_before": "verified: Existing server paging and first-page-only realtime job merge behaviour are preserved and verified by all existing tests in src/management/pages/Operations.test.tsx.",
+    "7_no_existing_test_weakened_or_deleted": "verified: No existing test or assertion was weakened or deleted; 5 new tests covering AC1-AC6 with real BFF job and incident row shapes and envelopes were added to src/management/pages/Operations.test.tsx."
+  },
+  "changed_assertions": "None. All existing tests and assertions in Operations.test.tsx are preserved unchanged.",
+  "verification": {
+    "typecheck": {
+      "command": "./node_modules/.bin/tsc --noEmit",
+      "exit_code": 0,
+      "status": "passed"
+    },
+    "eslint": {
+      "command": "./node_modules/.bin/eslint src/lib/bff-v1/degradation.ts src/management/pages/ObjectListPage.tsx src/management/pages/Operations.tsx src/management/pages/Operations.test.tsx src/i18n/locales/en-US.ts src/i18n/locales/zh-TW.ts",
+      "exit_code": 0,
+      "status": "passed",
+      "errors": 0
+    },
+    "vitest_affected_suites": {
+      "command": "./node_modules/.bin/vitest run src/lib/bff-v1/__tests__/degradation.test.ts src/lib/v5/management/__tests__/i18nParity.test.ts src/management/pages/Operations.test.tsx",
+      "exit_code": 0,
+      "status": "passed",
+      "test_files": 3,
+      "tests_passed": 66,
+      "breakdown": {
+        "src/lib/bff-v1/__tests__/degradation.test.ts": 7,
+        "src/lib/v5/management/__tests__/i18nParity.test.ts": 11,
+        "src/management/pages/Operations.test.tsx": 48
+      }
+    },
+    "vitest_object_list_page": {
+      "command": "./node_modules/.bin/vitest run src/management/pages/ObjectListPage.test.tsx",
+      "exit_code": 0,
+      "status": "passed",
+      "test_files": 1,
+      "tests_passed": 27
+    }
+  }
+}

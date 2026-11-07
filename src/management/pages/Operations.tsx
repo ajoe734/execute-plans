@@ -5,7 +5,15 @@ import { PageBody, PageHeader } from "@/platform/components/PageHeader";
 import { DataTable } from "@/platform/components/DataTable";
 import { StatusBadge } from "@/platform/components/StatusBadge";
 import { RiskBadge } from "@/platform/components/RiskBadge";
-import { bffV1, lists, runActionSafe } from "@/lib/bff-v1";
+import {
+  bffV1,
+  cleanUnavailableReason,
+  extractDegradation,
+  extractDegradedSources,
+  extractSurfaceMessage,
+  lists,
+  runActionSafe,
+} from "@/lib/bff-v1";
 import { bffWrites } from "@/lib/bff-v1/writes";
 import { commandReceiptDescription } from "@/lib/bff-v1/commandReceipt";
 import { assertAlertsNotTimeoutFallback, normalizeAlertFields } from "@/lib/bff-v1/domainReads";
@@ -149,6 +157,7 @@ interface PagedEnvelope {
   items: unknown[];
   cursor?: { next?: string };
   estimatedTotal?: number;
+  meta?: unknown;
 }
 
 type PagedLoader = (query: { page_size: number; page_token?: string }) => Promise<PagedEnvelope>;
@@ -157,13 +166,134 @@ interface PagedPage<T> {
   items: T[];
   next?: string;
   total?: number;
+  meta?: unknown;
+}
+
+const KNOWN_OPERATION_SOURCE_I18N: Readonly<Record<string, { key: string; defaultLabel: string }>> = {
+  source_ingestion: {
+    key: "page.opsSourceDataCollection",
+    defaultLabel: "data collection",
+  },
+  research_orchestrator: {
+    key: "page.opsSourceResearchScheduling",
+    defaultLabel: "research scheduling",
+  },
+  research_worker_gateway: {
+    key: "page.opsSourceResearchExecution",
+    defaultLabel: "research execution",
+  },
+  training_session: {
+    key: "page.opsSourceModelTraining",
+    defaultLabel: "model training",
+  },
+  policy_learning: {
+    key: "page.opsSourceStrategyLearning",
+    defaultLabel: "strategy learning",
+  },
+};
+
+function formatOperationDegradedMessage(
+  meta: unknown,
+  t: (key: string, opts?: Record<string, unknown>) => string,
+): string {
+  const degradedSources = extractDegradedSources(meta);
+  const knownLabels: string[] = [];
+  let allKnown = degradedSources.length > 0;
+  for (const src of degradedSources) {
+    const entry = KNOWN_OPERATION_SOURCE_I18N[src];
+    if (!entry) {
+      allKnown = false;
+      break;
+    }
+    const translated = t(entry.key, { defaultValue: entry.defaultLabel });
+    knownLabels.push(translated === entry.key ? entry.defaultLabel : translated);
+  }
+  if (allKnown && knownLabels.length > 0) {
+    const sepRaw = t("page.opsSourceSeparator", { defaultValue: ", " });
+    const sep = sepRaw === "page.opsSourceSeparator" ? ", " : sepRaw;
+    const sourcesText = knownLabels.join(sep);
+    const defaultWithSources = `This list and its total count are incomplete because ${sourcesText} records could not be loaded.`;
+    const raw = t("page.opsListDegradedWithSources", {
+      sources: sourcesText,
+      defaultValue: defaultWithSources,
+    });
+    if (raw === "page.opsListDegradedWithSources") return defaultWithSources;
+    return raw.replace(/\{\{\s*sources\s*\}\}/g, sourcesText);
+  }
+  const defaultGeneric =
+    "This list and its total count are incomplete because some records could not be loaded.";
+  const raw = t("page.opsListDegradedGeneric", { defaultValue: defaultGeneric });
+  return raw === "page.opsListDegradedGeneric" ? defaultGeneric : raw;
+}
+
+function OperationDegradedNotice({ meta }: { meta: unknown }) {
+  const t = useT();
+  const message = formatOperationDegradedMessage(meta, t);
+  return (
+    <Card
+      role="status"
+      data-testid="ops-list-degraded-notice"
+      className="mb-3 p-4 border-status-warning/40 bg-status-warning/10 text-foreground text-sm"
+    >
+      <div>{message}</div>
+    </Card>
+  );
+}
+
+function OperationUnavailableState({
+  title,
+  reason,
+  onRetry,
+  retryLabel,
+}: {
+  title: string;
+  reason?: string;
+  onRetry?: () => void;
+  retryLabel?: string;
+}) {
+  return (
+    <Card role="alert" className="p-6 border-destructive/40 bg-destructive/5 text-destructive text-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div>{title}</div>
+          {reason && (
+            <div className="text-mono text-xs mt-1">{reason}</div>
+          )}
+        </div>
+        {onRetry && (
+          <Button type="button" size="sm" variant="outline" onClick={onRetry}>
+            {retryLabel}
+          </Button>
+        )}
+      </div>
+    </Card>
+  );
 }
 
 /** Server-paged operation list. The cache key includes the page token so each
  *  page is cached independently and a page never overwrites another. */
 function usePagedOperationList<T>(baseKey: string, loader: PagedLoader) {
   const qc = useClient();
+  const [searchParams] = useSearchParams();
+  const urlPageToken = searchParams.get("page_token")?.trim() || undefined;
   const [cursor, setCursor] = useServerPageCursor(baseKey);
+  const [seededUrlToken, setSeededUrlToken] = useState<string | undefined>(undefined);
+  if (
+    urlPageToken &&
+    seededUrlToken !== urlPageToken &&
+    !cursor.currentToken &&
+    cursor.pageIndex === 0 &&
+    cursor.prevTokens.length === 0
+  ) {
+    const parsed = /^\d+$/.test(urlPageToken) ? Number(urlPageToken) : OPERATION_PAGE_SIZE;
+    setSeededUrlToken(urlPageToken);
+    setCursor({
+      key: baseKey,
+      currentToken: urlPageToken,
+      prevTokens: [],
+      pageIndex: Math.max(1, Math.floor(parsed / OPERATION_PAGE_SIZE)),
+    });
+  }
   const pageToken = cursor.currentToken;
   const queryKey = queryKeys.resource(`${baseKey}:page_token=${pageToken ?? ""}`, []);
 
@@ -178,9 +308,11 @@ function usePagedOperationList<T>(baseKey: string, loader: PagedLoader) {
         items: env.items as T[],
         next: env.cursor?.next?.trim() || undefined,
         total: typeof env.estimatedTotal === "number" ? env.estimatedTotal : undefined,
+        meta: env.meta,
       };
     },
     staleTime: OPERATION_LIST_CACHE_TTL_MS,
+    retry: false,
   }, qc);
 
   const [rows, setRowsState] = useState<T[]>(() => query.data?.items ?? []);
@@ -196,15 +328,31 @@ function usePagedOperationList<T>(baseKey: string, loader: PagedLoader) {
     });
   }, [qc, queryKey]);
 
-  return { rows, setRows, cursor, setCursor, page: query.data, loading: query.isFetching, isFirstPage: !pageToken };
+  const retry = useCallback(async () => {
+    await query.refetch();
+  }, [query]);
+
+  return {
+    rows,
+    setRows,
+    cursor,
+    setCursor,
+    page: query.data,
+    loading: query.isFetching,
+    isFirstPage: !pageToken,
+    isError: query.isError,
+    error: query.error,
+    retry,
+  };
 }
 
 export const JobsPage = () => {
   const t = useT();
-  const { rows, setRows, cursor, setCursor, page, loading, isFirstPage } = usePagedOperationList<Job>(
-    "operations.jobs",
-    (q) => lists.jobs(q) as Promise<PagedEnvelope>,
-  );
+  const { rows, setRows, cursor, setCursor, page, loading, isFirstPage, isError, error, retry } =
+    usePagedOperationList<Job>(
+      "operations.jobs",
+      (q) => lists.jobs(q) as Promise<PagedEnvelope>,
+    );
   const [liveCount, setLiveCount] = useState(0);
   // Realtime events belong to the newest rows, so they are only merged into the
   // first page; later pages keep their server row set and count untouched.
@@ -227,18 +375,38 @@ export const JobsPage = () => {
     });
     return () => { disposed = true; off?.(); };
   }, [setRows]);
+  const degradation = extractDegradation(page?.meta);
+  const isUnavailable = isError || degradation.level === "unavailable";
+  const isDegraded = !isUnavailable && degradation.degraded;
+  const rawUnavailableReason =
+    (error instanceof Error && error.message ? error.message : undefined) ||
+    degradation.reason ||
+    extractSurfaceMessage(page?.meta);
+  const unavailableReason = cleanUnavailableReason(rawUnavailableReason, t);
+  const showTable = !isUnavailable && (!isDegraded || rows.length > 0);
   return (
     <>
       <PageHeader title={t("nav.jobs")} subtitle={t("page.jobsSubtitle", { count: liveCount })} />
       <PageBody>
-        <DataTable rows={rows} columns={[
-          { key: "id", header: t("table.id"), cell: (r) => <span className="text-mono text-xs">{r.id}</span> },
-          { key: "kind", header: t("table.kind"), cell: (r) => r.kind },
-          { key: "status", header: t("table.status"), cell: (r) => <StatusBadge state={r.status} /> },
-          { key: "owner", header: t("table.owner"), cell: (r) => r.owner },
-          { key: "started", header: t("table.started"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{safeDateTime(r.startedAt)}</span> },
-        ]} />
-        {page && (
+        {isUnavailable && (
+          <OperationUnavailableState
+            title={t("page.jobsUnavailable", { defaultValue: "Jobs are temporarily unavailable." })}
+            reason={unavailableReason}
+            onRetry={() => { void retry(); }}
+            retryLabel={t("common.retry", { defaultValue: "Retry" })}
+          />
+        )}
+        {isDegraded && <OperationDegradedNotice meta={page?.meta} />}
+        {showTable && (
+          <DataTable rows={rows} columns={[
+            { key: "id", header: t("table.id"), cell: (r) => <span className="text-mono text-xs">{r.id}</span> },
+            { key: "kind", header: t("table.kind"), cell: (r) => r.kind },
+            { key: "status", header: t("table.status"), cell: (r) => <StatusBadge state={r.status} /> },
+            { key: "owner", header: t("table.owner"), cell: (r) => r.owner },
+            { key: "started", header: t("table.started"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{safeDateTime(r.startedAt)}</span> },
+          ]} />
+        )}
+        {page && !isUnavailable && (
           <ServerPager
             cursor={cursor}
             setCursor={setCursor}
@@ -307,12 +475,10 @@ export const AlertsPage = () => {
       <PageHeader title={t("nav.alerts")} subtitle={t("page.alertsSubtitle")} />
       <PageBody>
         {isError && (
-          <Card role="alert" className="p-6 border-destructive/40 bg-destructive/5 text-destructive text-sm">
-            <div>{t("page.alertsUnavailable")}</div>
-            {error instanceof Error && error.message && (
-              <div className="text-mono text-xs mt-1">{error.message}</div>
-            )}
-          </Card>
+          <OperationUnavailableState
+            title={t("page.alertsUnavailable")}
+            reason={error instanceof Error && error.message ? error.message : undefined}
+          />
         )}
         {(!isError || rows.length > 0) && (
           <DataTable
@@ -373,10 +539,11 @@ export const AlertsPage = () => {
 
 export const IncidentsPage = () => {
   const t = useT();
-  const { rows, setRows, cursor, setCursor, page, loading } = usePagedOperationList<Incident>(
-    "operations.incidents",
-    (q) => lists.incidents(q) as Promise<PagedEnvelope>,
-  );
+  const { rows, setRows, cursor, setCursor, page, loading, isError, error, retry } =
+    usePagedOperationList<Incident>(
+      "operations.incidents",
+      (q) => lists.incidents(q) as Promise<PagedEnvelope>,
+    );
   const [active, setActive] = useState<Incident | null>(null);
   const [resolveOpen, setResolveOpen] = useState(false);
 
@@ -397,17 +564,38 @@ export const IncidentsPage = () => {
     });
   };
 
+  const degradation = extractDegradation(page?.meta);
+  const isUnavailable = isError || degradation.level === "unavailable";
+  const isDegraded = !isUnavailable && degradation.degraded;
+  const rawUnavailableReason =
+    (error instanceof Error && error.message ? error.message : undefined) ||
+    degradation.reason ||
+    extractSurfaceMessage(page?.meta);
+  const unavailableReason = cleanUnavailableReason(rawUnavailableReason, t);
+  const showTable = !isUnavailable && (!isDegraded || rows.length > 0);
+
   return (
     <>
       <PageHeader title={t("nav.incidents")} subtitle={t("page.incidentsSubtitle")} />
       <PageBody>
-        <DataTable rows={rows} onRowClick={(r) => setActive(r)} columns={[
-          { key: "sev", header: t("table.severity"), cell: (r) => <RiskBadge level={r.severity} /> },
-          { key: "title", header: t("table.title"), cell: (r) => <div className="font-medium">{r.title}</div> },
-          { key: "status", header: t("table.status"), cell: (r) => <StatusBadge state={r.status === "resolved" ? "success" : r.status === "mitigating" ? "running" : "warning"} /> },
-          { key: "opened", header: t("table.opened"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{safeDateTime(r.openedAt)}</span> },
-        ]} />
-        {page && (
+        {isUnavailable && (
+          <OperationUnavailableState
+            title={t("page.incidentsUnavailable", { defaultValue: "Incidents are temporarily unavailable." })}
+            reason={unavailableReason}
+            onRetry={() => { void retry(); }}
+            retryLabel={t("common.retry", { defaultValue: "Retry" })}
+          />
+        )}
+        {isDegraded && <OperationDegradedNotice meta={page?.meta} />}
+        {showTable && (
+          <DataTable rows={rows} onRowClick={(r) => setActive(r)} columns={[
+            { key: "sev", header: t("table.severity"), cell: (r) => <RiskBadge level={r.severity} /> },
+            { key: "title", header: t("table.title"), cell: (r) => <div className="font-medium">{r.title}</div> },
+            { key: "status", header: t("table.status"), cell: (r) => <StatusBadge state={r.status === "resolved" ? "success" : r.status === "mitigating" ? "running" : "warning"} /> },
+            { key: "opened", header: t("table.opened"), cell: (r) => <span className="text-mono text-xs text-muted-foreground">{safeDateTime(r.openedAt)}</span> },
+          ]} />
+        )}
+        {page && !isUnavailable && (
           <ServerPager
             cursor={cursor}
             setCursor={setCursor}

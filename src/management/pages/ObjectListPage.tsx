@@ -15,7 +15,13 @@ import { useT } from "@/platform/hooks";
 import { safeDateTime } from "@/lib/utils";
 import type { BaseObject } from "@/lib/bff-v1";
 import { realWritesEnabled, useLiveStatusSnapshot } from "@/lib/bff-v1/liveTransport";
-import { useLiveListV1, extractDegradation, type ListEnvelope } from "@/lib/bff-v1";
+import {
+  useLiveListV1,
+  extractDegradation,
+  extractSurfaceMessage,
+  cleanUnavailableReason,
+  type ListEnvelope,
+} from "@/lib/bff-v1";
 import { EmptyState } from "@/components/ui/empty-state";
 import { hasDurableCreateOwner, type CreateBehavior } from "@/lib/writeIntents/types";
 import { EntityCreateDrawer } from "@/management/components/write/EntityCreateDrawer";
@@ -173,38 +179,6 @@ function extractPartialDataSurface(meta: unknown): PartialDataSurfaceInfo | unde
     }
   }
   return undefined;
-}
-
-function extractSurfaceMessage(meta: unknown): string | undefined {
-  if (!meta || typeof meta !== "object" || Array.isArray(meta)) return undefined;
-  const surfaces = (meta as { surfaces?: unknown }).surfaces;
-  if (!surfaces || typeof surfaces !== "object" || Array.isArray(surfaces)) return undefined;
-  for (const surface of Object.values(surfaces as Record<string, unknown>)) {
-    if (!surface || typeof surface !== "object" || Array.isArray(surface)) continue;
-    const s = surface as Record<string, unknown>;
-    if (s.status === "unavailable" || s.status === "degraded") {
-      if (typeof s.message === "string" && s.message.trim()) return s.message.trim();
-      if (typeof s.reason === "string" && s.reason.trim()) return s.reason.trim();
-    }
-  }
-  return undefined;
-}
-
-function cleanUnavailableReason(
-  rawReason: string | undefined,
-  t: (key: string, opts?: Record<string, unknown>) => string,
-): string | undefined {
-  if (!rawReason) return undefined;
-  const cleaned = rawReason
-    .replace(/^strict\s*typed\s*error\s*[·:-]?\s*/i, "")
-    .replace(/\s*[·:-]?\s*seed\s*fallback\s*(?:blocked|armed|disabled)?$/i, "")
-    .replace(/^strict:\s*/i, "")
-    .trim();
-  if (!cleaned) return undefined;
-  if (/^(failed to fetch|networkerror.*|live read failed|live bff unavailable)$/i.test(cleaned)) {
-    return t("common.networkFailureReason", { defaultValue: "Network connection failed" });
-  }
-  return cleaned;
 }
 
 export function ObjectListPage<T extends BaseObject>({

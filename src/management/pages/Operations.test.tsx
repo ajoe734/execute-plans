@@ -13,12 +13,17 @@ import {
   __resetOperationListCacheForTests,
 } from "./Operations";
 import { BffError } from "@/lib/bff-v1/errors";
-import { normalizeApprovalFields } from "@/lib/bff-v1/operations";
+import { normalizeApprovalFields, normalizeJobFields } from "@/lib/bff-v1/operations";
 import { GovernanceReview } from "./GovernanceReview";
 import { GovernanceQueuePage } from "./phase2/GovernanceQueue";
 import { setAuthProvider, clearAuthProvider } from "@/lib/bff-v1/headers";
 import { getSharedQueryClient, clearScopedQueries } from "@/lib/bff-v1/queryKeys";
-import { lists, normalizeAlertListResponse } from "@/lib/bff-v1";
+import {
+  lists,
+  normalizeAlertListResponse,
+  normalizeIncidentListResponse,
+  normalizeLiveListResponse,
+} from "@/lib/bff-v1";
 import { liveStatus } from "@/lib/bff-v1/liveStatus";
 import { LiveStatusBanner } from "@/components/layout/LiveStatusBanner";
 import type { Job, Alert, Incident } from "@/lib/bff-v1";
@@ -1355,5 +1360,440 @@ describe("AlertsPage timeout_fallback vs healthy/degraded-composed payloads (FE-
     fireEvent.click(rowTitle);
     expect(await screen.findByText("alert-incident-inc-001")).toBeInTheDocument();
     expect(screen.getByText("inc-001")).toBeInTheDocument();
+  });
+});
+
+describe("Jobs and incidents degraded notice and unavailable state (FE-OPS-LIST-DEGRADED-NOTICE-20261107)", () => {
+  const realJobRow = (nativeId: string = "run-001", source: string = "research_orchestrator") => ({
+    job_id: `job-orchestrator-${nativeId}`,
+    id: `job-orchestrator-${nativeId}`,
+    native_id: nativeId,
+    source,
+    job_type: source,
+    status: "running",
+    attempt_number: 1,
+    parent_run_id: null,
+    root_run_id: null,
+    cancellation_fence: null,
+    created_at: "2026-11-07T00:00:00Z",
+    updated_at: "2026-11-07T00:01:00Z",
+    started_at: "2026-11-07T00:00:05Z",
+    completed_at: null,
+    progress: null,
+    logs: null,
+    allowedActions: {
+      canCancel: true,
+      canRetry: false,
+      canArchive: false,
+      canPromote: false,
+    },
+  });
+
+  const realIncidentRow = (id: string = "inc-real-001", title: string = "Production latency spike") => ({
+    id,
+    incident_id: id,
+    title,
+    severity: "critical",
+    status: "open",
+    created_at: "2026-09-30T00:00:00Z",
+    opened_at: "2026-09-30T00:00:00Z",
+  });
+
+  const normalizeRealJobsEnvelope = (payload: unknown) => {
+    const env = normalizeLiveListResponse<unknown>(payload, "loopRun");
+    const items = env.items.map((item) => normalizeJobFields(item) as Job);
+    return { ...env, items, pageSize: items.length };
+  };
+
+  const buildDegradedJobsPayload = ({
+    items = [realJobRow("run-001")],
+    nextPageToken = "20" as string | null,
+    total = 44,
+    degradedSources = { source_ingestion: "unreachable" } as Record<string, string>,
+  } = {}) => {
+    const diagText = Object.entries(degradedSources)
+      .map(([k, v]) => `${k}=${v}`)
+      .join(", ");
+    const message = `Partial job source degradation (${diagText}).`;
+    return {
+      items,
+      data: items,
+      page_info: { next_page_token: nextPageToken, total },
+      meta: {
+        snapshot_at: "2026-11-07T00:00:00Z",
+        version: "v1",
+        surfaces: {
+          job_list: {
+            status: "degraded",
+            source: "bff_composed",
+            degraded_sources: degradedSources,
+            message,
+          },
+        },
+        total,
+        degradation: {
+          reason: message,
+        },
+      },
+    };
+  };
+
+  const buildHealthyJobsPayload = ({
+    items = [realJobRow("run-001")],
+    nextPageToken = "20" as string | null,
+    total = 1524,
+  } = {}) => ({
+    items,
+    data: items,
+    page_info: { next_page_token: nextPageToken, total },
+    meta: {
+      snapshot_at: "2026-11-07T00:00:00Z",
+      version: "v1",
+      surfaces: {
+        job_list: {
+          status: "ok",
+          source: "bff_composed",
+        },
+      },
+      total,
+    },
+  });
+
+  const buildDegradedIncidentsPayload = ({
+    items = [realIncidentRow("inc-real-001", "Production latency spike")],
+    nextPageToken = "20" as string | null,
+    total = 12,
+  } = {}) => ({
+    data: items,
+    items,
+    page_info: { next_page_token: nextPageToken, total },
+    meta: {
+      snapshot_at: "2026-11-07T00:00:00Z",
+      version: "v1",
+      surfaces: {
+        incidents: {
+          status: "degraded",
+          source: "service_store",
+          message: "Incident list is degraded and may be stale.",
+        },
+      },
+      total,
+      degradation: {
+        reason: "Incident list is degraded and may be stale.",
+      },
+    },
+  });
+
+  const bindLocale = (localeDict: Record<string, unknown>) => {
+    m.translate = (key: string, params?: Record<string, unknown>) => {
+      const parts = key.split(".");
+      let cur: unknown = localeDict;
+      for (const p of parts) {
+        if (cur && typeof cur === "object" && p in (cur as Record<string, unknown>)) {
+          cur = (cur as Record<string, unknown>)[p];
+        } else {
+          cur = undefined;
+          break;
+        }
+      }
+      let str = typeof cur === "string" ? cur : (typeof params?.defaultValue === "string" ? params.defaultValue : key);
+      if (params) {
+        for (const [k, v] of Object.entries(params)) {
+          if (k === "defaultValue") continue;
+          str = str.replace(new RegExp(`\\{\\{\\s*${k}\\s*\\}\\}`, "g"), String(v ?? ""));
+        }
+      }
+      return str;
+    };
+  };
+
+  beforeEach(() => {
+    __resetOperationListCacheForTests();
+    clearAuthProvider();
+    vi.clearAllMocks();
+    m.translate = null;
+  });
+
+  afterEach(() => {
+    cleanup();
+    __resetOperationListCacheForTests();
+    clearAuthProvider();
+    m.translate = null;
+    (lists.jobs as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({ items: mockJobs });
+    (lists.incidents as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({ items: mockIncidents });
+  });
+
+  it("shows a visible notice that the list and total are incomplete and names the unavailable source in plain language without engineering terms", async () => {
+    const enUS = (await import("@/i18n/locales/en-US")).default as unknown as Record<string, unknown>;
+    const zhTW = (await import("@/i18n/locales/zh-TW")).default as unknown as Record<string, unknown>;
+    const jobsMock = lists.jobs as unknown as ReturnType<typeof vi.fn>;
+
+    const sourceExpectations = [
+      ["source_ingestion", "data collection", "資料收集"],
+      ["research_orchestrator", "research scheduling", "研究排程"],
+      ["research_worker_gateway", "research execution", "研究執行"],
+      ["training_session", "model training", "模型訓練"],
+      ["policy_learning", "strategy learning", "策略學習"],
+    ] as const;
+
+    for (const [sourceKey, enPhrase, zhPhrase] of sourceExpectations) {
+      for (const [localeDict, expectedPhrase] of [
+        [enUS, enPhrase],
+        [zhTW, zhPhrase],
+      ] as const) {
+        __resetOperationListCacheForTests();
+        bindLocale(localeDict);
+        jobsMock.mockResolvedValueOnce(
+          normalizeRealJobsEnvelope(
+            buildDegradedJobsPayload({
+              items: [realJobRow("run-001", "research_orchestrator")],
+              nextPageToken: "20",
+              total: 44,
+              degradedSources: { [sourceKey]: "unreachable" },
+            }),
+          ),
+        );
+
+        const { unmount } = render(
+          <MemoryRouter initialEntries={["/management/jobs"]}>
+            <JobsPage />
+          </MemoryRouter>,
+        );
+
+        expect(await screen.findByText("job-orchestrator-run-001")).toBeInTheDocument();
+        const notice = screen.getByTestId("ops-list-degraded-notice");
+        expect(notice).toBeVisible();
+        expect(notice).toHaveTextContent(expectedPhrase);
+        expect(notice.textContent).toMatch(/incomplete|不完整/i);
+        expect(notice.textContent).toMatch(/total|總筆數/i);
+        // Must not leak engineering terms in the notice
+        expect(notice.textContent).not.toMatch(
+          /source_ingestion|research_orchestrator|research_worker_gateway|training_session|policy_learning|bff_composed|unreachable|ingestion|orchestrator|gateway/i,
+        );
+        expect(screen.getByTestId("jobs-list-pagination")).toHaveAttribute("data-total", "44");
+        unmount();
+      }
+    }
+
+    // Unknown source falls back to generic sentence without engineering terms
+    __resetOperationListCacheForTests();
+    bindLocale(enUS);
+    jobsMock.mockResolvedValueOnce(
+      normalizeRealJobsEnvelope(
+        buildDegradedJobsPayload({
+          items: [realJobRow("run-002")],
+          nextPageToken: null,
+          total: 44,
+          degradedSources: { unknown_internal_pipe: "unreachable" },
+        }),
+      ),
+    );
+    render(
+      <MemoryRouter initialEntries={["/management/jobs"]}>
+        <JobsPage />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByText("job-orchestrator-run-002")).toBeInTheDocument();
+    const genericNotice = screen.getByTestId("ops-list-degraded-notice");
+    expect(genericNotice).toHaveTextContent(
+      "This list and its total count are incomplete because some records could not be loaded.",
+    );
+    expect(genericNotice.textContent).not.toMatch(/unknown_internal_pipe|unreachable/i);
+  });
+
+  it("shows no notice and leaves layout unchanged when every source is healthy", async () => {
+    const enUS = (await import("@/i18n/locales/en-US")).default as unknown as Record<string, unknown>;
+    bindLocale(enUS);
+    const jobsMock = lists.jobs as unknown as ReturnType<typeof vi.fn>;
+    jobsMock.mockResolvedValueOnce(
+      normalizeRealJobsEnvelope(
+        buildHealthyJobsPayload({
+          items: [realJobRow("run-100")],
+          nextPageToken: "20",
+          total: 1524,
+        }),
+      ),
+    );
+
+    render(
+      <MemoryRouter initialEntries={["/management/jobs"]}>
+        <JobsPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("job-orchestrator-run-100")).toBeInTheDocument();
+    expect(screen.queryByTestId("ops-list-degraded-notice")).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getByTestId("jobs-list-pagination")).toHaveAttribute("data-total", "1524");
+  });
+
+  it("shows the same notice on the incidents page for a degraded incidents envelope", async () => {
+    const enUS = (await import("@/i18n/locales/en-US")).default as unknown as Record<string, unknown>;
+    const zhTW = (await import("@/i18n/locales/zh-TW")).default as unknown as Record<string, unknown>;
+    const incidentsMock = lists.incidents as unknown as ReturnType<typeof vi.fn>;
+
+    for (const [localeDict, expectedNotice] of [
+      [enUS, "This list and its total count are incomplete because some records could not be loaded."],
+      [zhTW, "由於部分來源紀錄暫時無法讀取，此清單與總筆數不完整。"],
+    ] as const) {
+      __resetOperationListCacheForTests();
+      bindLocale(localeDict);
+      incidentsMock.mockResolvedValueOnce(
+        normalizeIncidentListResponse(
+          buildDegradedIncidentsPayload({
+            items: [realIncidentRow("inc-real-001", "Production latency spike")],
+            nextPageToken: "20",
+            total: 12,
+          }),
+        ),
+      );
+
+      const { unmount } = render(
+        <MemoryRouter initialEntries={["/management/incidents"]}>
+          <IncidentsPage />
+        </MemoryRouter>,
+      );
+
+      expect(await screen.findByText("Production latency spike")).toBeInTheDocument();
+      const notice = screen.getByTestId("ops-list-degraded-notice");
+      expect(notice).toBeVisible();
+      expect(notice).toHaveTextContent(expectedNotice);
+      expect(screen.getByTestId("incidents-list-pagination")).toHaveAttribute("data-total", "12");
+      unmount();
+    }
+  });
+
+  it("with a degraded envelope and a page token past the reduced total, shows the notice and not an empty list message and keeps the previous page control enabled", async () => {
+    const enUS = (await import("@/i18n/locales/en-US")).default as unknown as Record<string, unknown>;
+    bindLocale(enUS);
+    const jobsMock = lists.jobs as unknown as ReturnType<typeof vi.fn>;
+
+    jobsMock.mockImplementation(async (q?: { page_token?: string }) => {
+      if (q?.page_token === "60") {
+        return normalizeRealJobsEnvelope(
+          buildDegradedJobsPayload({
+            items: [],
+            nextPageToken: null,
+            total: 44,
+            degradedSources: { source_ingestion: "unreachable" },
+          }),
+        );
+      }
+      return normalizeRealJobsEnvelope(
+        buildHealthyJobsPayload({
+          items: [realJobRow("run-page-1")],
+          nextPageToken: "60",
+          total: 1524,
+        }),
+      );
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/management/jobs"]}>
+        <JobsPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("job-orchestrator-run-page-1")).toBeInTheDocument();
+    expect(screen.queryByTestId("ops-list-degraded-notice")).toBeNull();
+
+    fireEvent.click(screen.getByTestId("jobs-page-next"));
+
+    const notice = await screen.findByTestId("ops-list-degraded-notice");
+    expect(notice).toBeVisible();
+    expect(notice).toHaveTextContent(
+      "This list and its total count are incomplete because data collection records could not be loaded.",
+    );
+    expect(screen.queryByTestId("data-table-empty")).toBeNull();
+    expect(screen.queryByText("No results found.")).toBeNull();
+    expect(screen.queryByText("—")).toBeNull();
+
+    const prevBtn = screen.getByTestId("jobs-page-prev");
+    expect(prevBtn).not.toBeDisabled();
+    fireEvent.click(prevBtn);
+    expect(await screen.findByText("job-orchestrator-run-page-1")).toBeInTheDocument();
+  });
+
+  it("shows an unavailable state with a retry and never an empty table when a read fails on JobsPage or IncidentsPage", async () => {
+    const enUS = (await import("@/i18n/locales/en-US")).default as unknown as Record<string, unknown>;
+    bindLocale(enUS);
+    const jobsMock = lists.jobs as unknown as ReturnType<typeof vi.fn>;
+    const incidentsMock = lists.incidents as unknown as ReturnType<typeof vi.fn>;
+
+    jobsMock
+      .mockRejectedValueOnce(
+        new BffError(503, {
+          error: {
+            code: "BACKEND_UNAVAILABLE",
+            message: "Job source read failed",
+            i18nKey: "errors.BACKEND_UNAVAILABLE",
+            retryable: true,
+            userActionable: false,
+            correlationId: "abc",
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        normalizeRealJobsEnvelope(
+          buildHealthyJobsPayload({
+            items: [realJobRow("run-recovered")],
+            nextPageToken: null,
+            total: 1,
+          }),
+        ),
+      );
+
+    const jobsRender = render(
+      <MemoryRouter initialEntries={["/management/jobs"]}>
+        <JobsPage />
+      </MemoryRouter>,
+    );
+
+    const jobsAlert = await screen.findByRole("alert");
+    expect(jobsAlert).toHaveTextContent("Jobs are temporarily unavailable.");
+    expect(jobsAlert).toHaveTextContent("Job source read failed");
+    expect(screen.queryByTestId("data-table-empty")).toBeNull();
+    expect(screen.queryByRole("table")).toBeNull();
+
+    const jobsRetryBtn = screen.getByRole("button", { name: "Retry" });
+    fireEvent.click(jobsRetryBtn);
+
+    expect(await screen.findByText("job-orchestrator-run-recovered")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).toBeNull();
+    jobsRender.unmount();
+
+    // Incidents failed read + retry recovery
+    __resetOperationListCacheForTests();
+    incidentsMock
+      .mockRejectedValueOnce(new Error("Incidents upstream timeout"))
+      .mockResolvedValueOnce(
+        normalizeIncidentListResponse({
+          data: [realIncidentRow("inc-real-009", "Recovered incident row")],
+          items: [realIncidentRow("inc-real-009", "Recovered incident row")],
+          page_info: { next_page_token: null, total: 1 },
+          meta: {
+            snapshot_at: "2026-11-07T00:00:00Z",
+            version: "v1",
+            surfaces: { incidents: { status: "ok", source: "service_store" } },
+            total: 1,
+          },
+        }),
+      );
+
+    render(
+      <MemoryRouter initialEntries={["/management/incidents"]}>
+        <IncidentsPage />
+      </MemoryRouter>,
+    );
+
+    const incAlert = await screen.findByRole("alert");
+    expect(incAlert).toHaveTextContent("Incidents are temporarily unavailable.");
+    expect(incAlert).toHaveTextContent("Incidents upstream timeout");
+    expect(screen.queryByTestId("data-table-empty")).toBeNull();
+    expect(screen.queryByRole("table")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(await screen.findByText("Recovered incident row")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 });
