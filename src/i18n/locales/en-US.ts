@@ -3783,6 +3783,8 @@ export default {
       noRows: "No rows.",
       retiredExcludedFmt: "Excluded retired: {{count}}",
       notRequired: "Not required",
+      sharpeBuildingBadge: "Building",
+      sharpeBuildingHistory: "Building history: Sharpe needs at least 10 daily returns",
     },
     evolution: {
       title: "Evolution Journal",
