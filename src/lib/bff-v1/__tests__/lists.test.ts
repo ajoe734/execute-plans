@@ -165,14 +165,16 @@ describe("VI-1 lists facade", () => {
     liveStatus._reset({ mode: "live", effective: "live", baseUrl: "" });
 
     const realApprovedRow = {
-      id: "strategy-persona-59b2143dcecf205acbf1",
-      strategy_id: "strategy-persona-59b2143dcecf205acbf1",
-      name: "Pantheon Dev Paper Release 42123862167 Attempt 1",
+      id: "strategy-persona-b9f9e2e4d44cdd44d160",
+      name: "Pantheon Dev Paper Release 42345302114 Attempt 1",
       state: "approved",
       risk: "low",
-      alpha: "alpha.tw.2330",
-      capitalPoolId: "pool-persona-paper-59b2143dcecf205acbf1",
-      personaIds: ["persona-be19a1fac471247f2b2a"],
+      alpha: "",
+      capitalPoolId: "pool-persona-paper-b9f9e2e4d44cdd44d160",
+      personaIds: ["persona-22582e56e0ad8a4f0ca7"],
+      personaStates: [{ personaId: "persona-22582e56e0ad8a4f0ca7", state: "paper_running" }],
+      operationalStatus: "running",
+      symbols: ["2330.TW"],
     };
 
     const fetchUrls: string[] = [];
@@ -185,42 +187,62 @@ describe("VI-1 lists facade", () => {
           items: [realApprovedRow],
           meta: {
             state_counts: {
-              draft: 4764,
+              draft: 3217,
               review: 1,
-              approved: 133,
+              approved: 140,
               paper_running: 0,
               canary_running: 0,
               live_running: 0,
               deployed: 0,
               paused: 0,
-              retired: 2,
+              retired: 1556,
             },
+            operational_counts: {
+              running: 5,
+              idle: 0,
+              retired: 134,
+              unbound: 2,
+              unknown: 0,
+            },
+            hidden_retired_persona_count: 134,
           },
-          page_info: { page_size: 20, total: 134, next_page_token: "20" },
+          page_info: { page_size: 20, total: 7, next_page_token: null },
         }),
         { status: 200, headers: { "Content-Type": "application/json" } },
       );
     });
 
-    const env = await lists.strategies({ exclude_state: "draft", page_size: 20, page_token: "20" });
-    expect(fetchUrls).toEqual(["/bff/strategies?exclude_state=draft&page_size=20&page_token=20"]);
+    const env = await lists.strategies({
+      exclude_state: "draft",
+      hide_retired_personas: true,
+      page_size: 20,
+      page_token: "20",
+    });
+    expect(fetchUrls).toEqual([
+      "/bff/strategies?exclude_state=draft&hide_retired_personas=true&page_size=20&page_token=20",
+    ]);
     expect(env.items).toHaveLength(1);
     expect(env.items[0]).toMatchObject({
-      id: "strategy-persona-59b2143dcecf205acbf1",
-      name: "Pantheon Dev Paper Release 42123862167 Attempt 1",
+      id: "strategy-persona-b9f9e2e4d44cdd44d160",
+      name: "Pantheon Dev Paper Release 42345302114 Attempt 1",
       state: "approved",
       risk: "low",
-      capitalPoolId: "pool-persona-paper-59b2143dcecf205acbf1",
+      capitalPoolId: "pool-persona-paper-b9f9e2e4d44cdd44d160",
+      operationalStatus: "running",
+      personaStates: [{ personaId: "persona-22582e56e0ad8a4f0ca7", state: "paper_running" }],
+      symbols: ["2330.TW"],
     });
-    expect(env.estimatedTotal).toBe(134);
-    expect(env.cursor.next).toBe("20");
+    expect(env.estimatedTotal).toBe(7);
+    expect(env.cursor.next).toBeUndefined();
     expect(env.meta).toMatchObject({
       state_counts: {
-        draft: 4764,
+        draft: 3217,
         review: 1,
-        approved: 133,
-        retired: 2,
+        approved: 140,
+        retired: 1556,
       },
+      hidden_retired_persona_count: 134,
+      page_info: { page_size: 20, total: 7, next_page_token: null },
     });
   });
 
