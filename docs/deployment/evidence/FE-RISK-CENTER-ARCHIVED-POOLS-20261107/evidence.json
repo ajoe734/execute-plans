@@ -1,0 +1,82 @@
+{
+  "task_id": "FE-RISK-CENTER-ARCHIVED-POOLS-20261107",
+  "title": "Risk center counts 136 archived capital pools as live low-risk pools",
+  "repository": "ajoe734/execute-plans",
+  "branch": "task/FE-RISK-CENTER-ARCHIVED-POOLS-20261107",
+  "owner": "Antigravity2",
+  "reviewer": "Claude",
+  "prerequisites": {
+    "FE-STRATEGY-OPERATIONAL-VIEW-20261107": {
+      "status": "done",
+      "satisfied": true,
+      "execute_plans_commit": "d3de20a7b"
+    }
+  },
+  "hosted_verification": {
+    "status": "not_run",
+    "statement": "Hosted verification was not run in this task; this file records functional unit, typecheck, and lint evidence only. The coordinator verifies the hosted page in a real browser after deployment."
+  },
+  "acceptance_evidence": {
+    "ac1_single_read_and_retired_exclusion_across_all_risk_center_views": {
+      "status": "passed",
+      "detail": "RiskCenter reads capital pools once through bffV1.capitalPools.list() and partitions poolsSlice in activePoolsSlice so every pool with pool.state === 'retired' is dropped before rows reach the capital tab DataTable (data.pools), the BreachMatrix capital row (activePoolsSlice), the utilization breach KPI card (summary.utilBreaches), and the critical/high object KPI cards (summary.counts)."
+    },
+    "ac2_uses_normalizeCapitalPool_derived_state_only": {
+      "status": "passed",
+      "detail": "The retired check in RiskCenter.tsx tests pool.state === 'retired', relying solely on the normalized state that normalizeCapitalPool in src/lib/bff-v1/capitalPools.ts already derives from status ('archived' and 'retired' -> 'retired'); no second status mapping or string list was added."
+    },
+    "ac3_active_suspended_and_statusless_pools_kept_archived_and_retired_dropped": {
+      "status": "passed",
+      "detail": "Pools with status 'active' (state: undefined), 'suspended' (state: 'paused'), or no status (state: undefined) stay in the capital table, breach matrix capital row, utilization breach card, and critical/high object cards, while 'archived' and 'retired' pools are excluded; covered by dedicated unit test in src/management/pages/RiskCenter.test.tsx."
+    },
+    "ac4_capital_tab_and_breach_matrix_excluded_note_with_count": {
+      "status": "passed",
+      "detail": "Both the capital tab (data-testid='risk-capital-archived-pools-excluded') and the breach matrix header/capital row (data-testid='risk-matrix-archived-pools-excluded' and breach-matrix-row-capital) render the archived capital pools excluded note in the same pattern as riskCenter.draftsExcluded, displaying the excluded count when poolsSlice.status === 'ready'."
+    },
+    "ac5_real_142_row_fixture_and_uncommitted_filter_removal_failure_proof": {
+      "status": "passed",
+      "detail": "A test in src/management/pages/RiskCenter.test.tsx feeds 142 raw rows with the exact 19 BFF keys from next (approval_digest, pool_id, tenant_id, name, owner_id, owner_type, status, created_at, description, currency, budget, risk_policy_ref, single_runtime_enforced, updated_at, metadata, idempotent_replay, id, capital_pool_id, risk_limits; no state key), including 136 archived rows (with pool-persona-paper-722683662ad5b1bff909 '衡岳｜台股 Paper 操盤學習 paper pool'), 5 active rows, and 1 suspended row, asserting 6 table rows, a matrix capital low count of 6, and an excluded note count of 136 in both en-US and zh-TW. With the pool.state === 'retired' filter temporarily removed in RiskCenter.tsx, running './node_modules/.bin/vitest run src/management/pages/RiskCenter.test.tsx -t \"feeds 142 rows\"' failed with exit code 1 (Expected element to have text content: 'Archived capital pools excluded (136)', Received: 'Archived capital pools excluded (0)', with all 142 rows reaching activePoolsSlice). The filter removal was reverted immediately and was not committed."
+    },
+    "ac6_failed_and_pending_pool_reads_preserve_loading_and_unavailable_states": {
+      "status": "passed",
+      "detail": "When bffV1.capitalPools.list() is pending, RiskCenter shows 'Loading…' on the utilization breach card and breach matrix capital row and renders 'Archived capital pools excluded' without '0'. When bffV1.capitalPools.list() rejects, RiskCenter shows 'Unavailable' on the utilization breach card, critical/high object cards, breach matrix capital cells, and capital table empty state, and never shows '0'."
+    },
+    "ac7_other_callers_and_slices_unchanged": {
+      "status": "passed",
+      "detail": "src/lib/bff-v1/capitalPools.ts, PersonaCapitalBindingTab.tsx, Lists.tsx, and the persona, runtime, and strategy slices of RiskCenter.tsx are untouched; PersonaCapitalBindingTab.test.tsx, Lists.test.tsx, and capitalPools.test.ts all pass unchanged."
+    },
+    "ac8_locale_strings_and_i18n_parity": {
+      "status": "passed",
+      "detail": "riskCenter.archivedPoolsExcluded and riskCenter.archivedPoolsExcludedWithCount exist in both src/i18n/locales/en-US.ts and src/i18n/locales/zh-TW.ts, and src/lib/v5/management/__tests__/i18nParity.test.ts passes with a new assertion and no existing assertion weakened."
+    },
+    "ac9_typecheck_lint_and_tests_pass_hosted_not_run": {
+      "status": "passed",
+      "detail": "Repository typechecks (tsconfig.json, tsconfig.app.json, tsconfig.agora.json), eslint on all touched TypeScript files, and all affected Vitest suites exited 0. Hosted verification was not run."
+    }
+  },
+  "negative_test_verification": {
+    "description": "Temporarily removed the pool.state === 'retired' filter in src/management/pages/RiskCenter.tsx (setting activeItems = [...poolsSlice.items] and excludedCount = 0) and ran the 142-row test before restoring the filter.",
+    "command": "./node_modules/.bin/vitest run src/management/pages/RiskCenter.test.tsx -t \"feeds 142 rows\"",
+    "exit_code_with_filter_removed": 1,
+    "failure_summary": "AssertionError: Expected element [data-testid='risk-capital-archived-pools-excluded'] to have text content 'Archived capital pools excluded (136)', received 'Archived capital pools excluded (0)' (and all 142 rows remained in activePoolsSlice instead of 6).",
+    "exit_code_after_filter_restored": 0,
+    "filter_removal_committed": false
+  },
+  "verification_results": [
+    {
+      "command": "./node_modules/.bin/tsc --noEmit && ./node_modules/.bin/tsc -p tsconfig.app.json --noEmit && ./node_modules/.bin/tsc -p tsconfig.agora.json --noEmit",
+      "exit_code": 0,
+      "summary": "0 TypeScript errors across root, app, and agora configs"
+    },
+    {
+      "command": "./node_modules/.bin/eslint src/management/pages/RiskCenter.tsx src/management/pages/RiskCenter.test.tsx src/i18n/locales/en-US.ts src/i18n/locales/zh-TW.ts src/lib/v5/management/__tests__/i18nParity.test.ts",
+      "exit_code": 0,
+      "summary": "0 errors (1 pre-existing react-refresh warning on isDrawdownBreach export in RiskCenter.tsx)"
+    },
+    {
+      "command": "./node_modules/.bin/vitest run src/management/pages/RiskCenter.test.tsx src/lib/v5/management/__tests__/i18nParity.test.ts src/lib/bff-v1/__tests__/capitalPools.test.ts src/management/components/detail/PersonaCapitalBindingTab.test.tsx src/management/pages/Lists.test.tsx",
+      "exit_code": 0,
+      "summary": "5 test files passed, 41 tests passed (RiskCenter.test.tsx: 11 passed; i18nParity.test.ts: 13 passed; capitalPools.test.ts: 7 passed; PersonaCapitalBindingTab.test.tsx: 2 passed; Lists.test.tsx: 8 passed)"
+    }
+  ]
+}
