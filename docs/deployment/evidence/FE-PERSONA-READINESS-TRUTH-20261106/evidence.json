@@ -1,0 +1,80 @@
+{
+  "task_id": "FE-PERSONA-READINESS-TRUTH-20261106",
+  "title": "Show authoritative Paper Persona readiness instead of false 0-of-5 onboarding",
+  "repository": "ajoe734/execute-plans",
+  "branch": "task/FE-PERSONA-READINESS-TRUTH-20261106",
+  "delivery_scope": "source_only",
+  "hosted_completion_claim": false,
+  "root_cause": {
+    "observed_defect": "PersonaDetail rendered PersonaReadinessCard with only the flat Persona DTO from GET /bff/personas/{id} instead of GET /api/v1/operator/persona-management/{id}. derivePersonaReadiness only accepted paper_owner/live_owner/active as active lifecycles (rejecting paper_running), required approval.state === 'approved' (failing on owner decisions with state: 'decided' and outcome: 'approved'), did not cross-verify provisioning_authoritative_readback when BFF deploymentPlans/approvals sub-surfaces were empty, synthesized UI health status/reasons, and rendered missing/unavailable sub-surfaces as 'not created' (未建立).",
+    "repair_summary": [
+      "Added getPersonaManagement(id) in src/lib/bff-v1/personas.ts targeting GET /api/v1/operator/persona-management/{id} and wired PersonaDetail.tsx to pass the authoritative management envelope and unavailability state to PersonaReadinessCard.",
+      "Updated derivePersonaReadiness in src/management/lib/personaReadiness.ts to recognize canonical active lifecycles (including paper_running and paper_active), cross-verify authoritative owner readback alongside active capital bindings and runtime bindings, never infer 5/5 readiness from paper_running or flat Persona IDs alone, preserve unavailable stage status when surfaces are missing/unavailable instead of falsely rendering not_created, reflect paused/retired runtime status, and use BFF health status/reasons directly without UI synthesis.",
+      "Updated PersonaReadinessCard.tsx and zh-TW/en-US locales to display Paper runtime status with runtime ID on 5/5 Paper personas and distinct unavailable/paused/retired stage labels."
+    ]
+  },
+  "verified_cohort": [
+    {
+      "persona_id": "persona-be19a1fac471247f2b2a",
+      "name": "青禾｜2330 台股 Paper 學習 R2",
+      "lifecycle_state": "paper_running",
+      "capital_mode": "paper",
+      "paper_ledger_id": "paper-ledger-298e138c136c9840b0e4",
+      "persona_capital_binding_id": "pcb-persona-paper-298e138c136c9840b0e4",
+      "deployment_plan_id": "plan-persona-paper-298e138c136c9840b0e4",
+      "approval_decision_id": "apv-persona-paper-artifact-298e138c136c9840b0e4",
+      "runtime_binding_id": "rb-a1c3ada3d5894d57bc2e012f337753be",
+      "runtime_id": "rt-535a82a3",
+      "readiness_result": "5/5 (done, mode=paper, health=healthy)"
+    },
+    {
+      "persona_id": "persona-d9363cffc0efbbbcbeb9",
+      "name": "澄川｜2317 台股 Paper 學習",
+      "lifecycle_state": "paper_running",
+      "capital_mode": "paper",
+      "paper_ledger_id": "paper-ledger-8ae996980eeccb80d928",
+      "persona_capital_binding_id": "pcb-persona-paper-8ae996980eeccb80d928",
+      "deployment_plan_id": "plan-persona-paper-8ae996980eeccb80d928",
+      "approval_decision_id": "apv-persona-paper-artifact-8ae996980eeccb80d928",
+      "runtime_binding_id": "rb-eda9b9a3379d4fb5a09f0e8432c84f20",
+      "runtime_id": "rt-c98e4223",
+      "readiness_result": "5/5 (done, mode=paper, health=healthy)"
+    },
+    {
+      "persona_id": "persona-9d4fb3f44cbc5e7cb84f",
+      "name": "衡岳｜0050 台股 Paper 學習",
+      "lifecycle_state": "paper_running",
+      "capital_mode": "paper",
+      "paper_ledger_id": "paper-ledger-01390a4b72713295b001",
+      "persona_capital_binding_id": "pcb-persona-paper-01390a4b72713295b001",
+      "deployment_plan_id": "plan-persona-paper-01390a4b72713295b001",
+      "approval_decision_id": "apv-persona-paper-artifact-01390a4b72713295b001",
+      "runtime_binding_id": "rb-fd733d7c192f45898bbe0e90c8555878",
+      "runtime_id": "rt-8b0d8649",
+      "readiness_result": "5/5 (done, mode=paper, health=healthy)"
+    }
+  ],
+  "scoped_artifacts": [
+    "src/management/pages/PersonaDetail.tsx",
+    "src/management/pages/PersonaDetail.test.ts",
+    "src/management/components/persona/PersonaReadinessCard.tsx",
+    "src/management/lib/personaReadiness.ts",
+    "src/management/lib/personaReadiness.test.ts",
+    "src/lib/bff-v1/personas.ts",
+    "src/i18n/locales/zh-TW.ts",
+    "src/i18n/locales/en-US.ts",
+    "docs/deployment/evidence/FE-PERSONA-READINESS-TRUTH-20261106/evidence.json"
+  ],
+  "validation": {
+    "vitest": {
+      "command": "./node_modules/.bin/vitest run src/management/lib/personaReadiness.test.ts src/management/pages/PersonaDetail.test.ts src/management/pages/StrategyDetail.metrics.test.tsx",
+      "test_files_passed": 3,
+      "tests_passed": 36,
+      "status": "passed"
+    },
+    "typecheck": {
+      "command": "./node_modules/.bin/tsc --noEmit",
+      "status": "passed"
+    }
+  }
+}

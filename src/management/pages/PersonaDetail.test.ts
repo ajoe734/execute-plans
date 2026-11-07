@@ -5,7 +5,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { resolvePersonaForDetail } from "./personaDetailData";
 import { PersonaDetail, personaHumanInboxUrl, personaWorkshopEntryUrl } from "./PersonaDetail";
 import { bffV1, type CapitalPool, type Persona, type Strategy } from "@/lib/bff-v1";
-import { getPersona, runPersonaAction } from "@/lib/bff-v1/personas";
+import { getPersona, getPersonaManagement, runPersonaAction } from "@/lib/bff-v1/personas";
 import * as writes from "@/lib/bff-v1/writes";
 
 vi.mock("@/lib/bff-v1", async (importOriginal) => {
@@ -26,12 +26,14 @@ vi.mock("@/lib/bff-v1/personas", async (importOriginal) => {
   return {
     ...actual,
     getPersona: vi.fn(),
+    getPersonaManagement: vi.fn().mockResolvedValue(undefined),
   };
 });
 
 describe("PersonaDetail", () => {
   beforeEach(() => {
     vi.mocked(getPersona).mockReset();
+    vi.mocked(getPersonaManagement).mockReset().mockResolvedValue(undefined);
     vi.mocked(bffV1.strategies.listForPersona).mockReset().mockResolvedValue([]);
     vi.mocked(bffV1.capitalPools.list).mockReset().mockResolvedValue([]);
   });
@@ -435,6 +437,147 @@ describe("PersonaDetail", () => {
       await selectTab(/資金綁定|Capital Binding/i);
       expect(await screen.findByText(/^(無資料|Unavailable)$/i)).toBeInTheDocument();
       expect(screen.queryByText(/^(查無結果|No results found\.?)$/i)).not.toBeInTheDocument();
+    });
+
+    it("renders authoritative 5/5 Paper Persona readiness instead of false 0/5 onboarding when persona-management returns verified Paper bundle state", async () => {
+      vi.mocked(getPersona).mockResolvedValue({
+        ...realPersona,
+        state: "paper_running",
+        lifecycleStatus: "paper_running",
+        capitalMode: "paper",
+        deploymentStage: "paper",
+        paperLedgerId: "paper-ledger-298e138c136c9840b0e4",
+        legacyPaperCapitalPoolId: "pool-persona-paper-298e138c136c9840b0e4",
+        deploymentPlanId: "plan-persona-paper-298e138c136c9840b0e4",
+        runtimeBindingId: "rb-a1c3ada3d5894d57bc2e012f337753be",
+        runtimeId: "rt-535a82a3",
+      });
+      vi.mocked(getPersonaManagement).mockResolvedValue({
+        data: {
+          persona: {
+            id: "persona-be19a1fac471247f2b2a",
+            name: "青禾｜2330 台股 Paper 學習 R2",
+            lifecycle_state: "draft",
+            status: "active",
+            metadata: {
+              lifecycle_state: "paper_running",
+              capital_mode: "paper",
+              deployment_stage: "paper",
+              paper_ledger_id: "paper-ledger-298e138c136c9840b0e4",
+              persona_capital_binding_id: "pcb-persona-paper-298e138c136c9840b0e4",
+              deployment_plan_id: "plan-persona-paper-298e138c136c9840b0e4",
+              approval_decision_id: "apv-persona-paper-artifact-298e138c136c9840b0e4",
+              runtime_binding_id: "rb-a1c3ada3d5894d57bc2e012f337753be",
+              runtime_id: "rt-535a82a3",
+              provisioning_authoritative_readback: {
+                deployment: {
+                  plan_id: "plan-persona-paper-298e138c136c9840b0e4",
+                  saga_status: "completed",
+                  progress_status: "completed",
+                },
+                runtime_binding: {
+                  runtime_binding_id: "rb-a1c3ada3d5894d57bc2e012f337753be",
+                  runtime_id: "rt-535a82a3",
+                  plan_id: "plan-persona-paper-298e138c136c9840b0e4",
+                  status: "active",
+                  deployment_mode: "paper",
+                },
+                paper_worker: {
+                  runtime_id: "rt-535a82a3",
+                  status: "active",
+                  paper_runtime_state: "active",
+                },
+              },
+            },
+          },
+          bindings: [
+            {
+              id: "pcb-persona-paper-298e138c136c9840b0e4",
+              status: "active",
+              approval_decision_id: "apv-persona-paper-298e138c136c9840b0e4",
+              capital_pool: {
+                id: "pool-persona-paper-298e138c136c9840b0e4",
+                status: "active",
+              },
+            },
+          ],
+          deploymentPlans: [],
+          approvals: [],
+          runtimeBindings: [
+            {
+              id: "rb-a1c3ada3d5894d57bc2e012f337753be",
+              runtime_id: "rt-535a82a3",
+              plan_id: "plan-persona-paper-298e138c136c9840b0e4",
+              status: "active",
+              deployment_mode: "paper",
+            },
+          ],
+          health: {
+            status: "healthy",
+            reasons: [],
+            activeSessions: 0,
+          },
+        },
+        meta: {
+          surfaces: {
+            persona_bindings: { status: "ok", count: 1 },
+            deployment_plans: { status: "unavailable", count: 0 },
+            approvals: { status: "unavailable", count: 0 },
+            persona_health: { status: "ok", count: 1 },
+          },
+        },
+      });
+
+      render(
+        createElement(
+          MemoryRouter,
+          { initialEntries: ["/management/personas/persona-be19a1fac471247f2b2a"] },
+          createElement(
+            Routes,
+            null,
+            createElement(Route, { path: "/management/personas/:id", element: createElement(PersonaDetail) }),
+          ),
+        ),
+      );
+
+      expect(await screen.findByText(/5\/5 · persona-be19a1fac471247f2b2a/)).toBeInTheDocument();
+      expect(screen.getByText(/Paper runtime · 0 個 active session/i)).toBeInTheDocument();
+      expect(screen.getByText(/rt-535a82a3/)).toBeInTheDocument();
+      expect(screen.queryByText(/0\/5 · persona-be19a1fac471247f2b2a/)).not.toBeInTheDocument();
+      expect(screen.queryByText("未建立")).not.toBeInTheDocument();
+      expect(getPersonaManagement).toHaveBeenCalledWith("persona-be19a1fac471247f2b2a");
+    });
+
+    it("renders unavailable instead of not-created and does not infer 5/5 from flat IDs when persona-management is unavailable", async () => {
+      vi.mocked(getPersona).mockResolvedValue({
+        ...realPersona,
+        state: "paper_running",
+        lifecycleStatus: "paper_running",
+        capitalMode: "paper",
+        deploymentStage: "paper",
+        paperLedgerId: "paper-ledger-298e138c136c9840b0e4",
+        deploymentPlanId: "plan-persona-paper-298e138c136c9840b0e4",
+        runtimeBindingId: "rb-a1c3ada3d5894d57bc2e012f337753be",
+        runtimeId: "rt-535a82a3",
+      });
+      vi.mocked(getPersonaManagement).mockRejectedValue(new Error("persona-management unavailable"));
+
+      render(
+        createElement(
+          MemoryRouter,
+          { initialEntries: ["/management/personas/persona-be19a1fac471247f2b2a"] },
+          createElement(
+            Routes,
+            null,
+            createElement(Route, { path: "/management/personas/:id", element: createElement(PersonaDetail) }),
+          ),
+        ),
+      );
+
+      expect(await screen.findByText(/1\/5 · persona-be19a1fac471247f2b2a/)).toBeInTheDocument();
+      expect(screen.getAllByText(/^(暫無資料|unavailable)$/i).length).toBeGreaterThanOrEqual(4);
+      expect(screen.queryByText("未建立")).not.toBeInTheDocument();
+      expect(screen.queryByText(/5\/5 · persona-be19a1fac471247f2b2a/)).not.toBeInTheDocument();
     });
   });
 });
