@@ -3210,7 +3210,7 @@ const EvidenceExplorerList = () => {
   const canGoNext = Boolean(nextPageToken);
 
   return (
-    <section className="flex h-full min-h-0 flex-col gap-4 overflow-hidden p-6 pb-[calc(1.5rem+var(--page-body-bottom-clearance,0px))]" aria-label={t("mgmt.evidence.title")} data-testid="evidence-route-ready">
+    <section className="flex h-full min-h-0 flex-col gap-4 overflow-hidden p-6" aria-label={t("mgmt.evidence.title")} data-testid="evidence-route-ready">
       <header className="shrink-0">
         <h1 className="text-2xl font-semibold text-foreground">{t("mgmt.evidence.title")}</h1>
         <p className="text-sm text-muted-foreground">{t("mgmt.evidence.subtitle")}</p>
