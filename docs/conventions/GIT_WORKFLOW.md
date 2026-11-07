@@ -109,19 +109,15 @@ Provided by `.github/workflows/branch-ci.yml` and `.github/workflows/pantheon-ca
 | `Generated files guard`         | Reject build/audit artifacts from the diff                       |
 | `Component merge gate`          | Focused tests, contract checks, typecheck, and build             |
 | `Smoke acceptance`              | Fail-closed compatibility context over the component merge gate  |
-| `Pantheon canonical review gate`| Verify exact-head review proof via single trusted backend verifier|
+| `Pantheon canonical review gate`| Not required (`dev` / `main`); verifies exact-head review proof via single trusted backend verifier when `review_gate.github_review_bridge_required` is `true` (publishes no status while `false`; see §6.1) |
 
-Branch protection requires PRs and an up-to-date base (`strict: true`). `dev` requires
-four status checks: `Commit trailers` (app_id: 15368), `Generated files guard` (app_id: 15368),
-`Component merge gate` (app_id: 15368), and `Pantheon canonical review gate`.
-In current execute-plans branch protection, `Pantheon canonical review gate` is bound with
-`app_id: null` (unlike Pantheon's app_id 15368), while status updates are posted by the GitHub
-Actions runner (`GITHUB_TOKEN`). The historical `main` protection still requires
-`Commit trailers`, `Generated files guard`, and `Smoke acceptance`; the latter
-is emitted only after `Component merge gate` succeeds, so it cannot weaken the
-underlying gate. Force push and branch deletion remain blocked.
+Verified via `gh api repos/ajoe734/execute-plans/branches/dev/protection` on 2026-11-07 (`docs/deployment/evidence/FE-REVIEW-GATE-DOCS-20261107/evidence.json`): branch protection on `dev` enforces a pull request (`required_pull_request_reviews` present with `required_approving_review_count: 0`, so zero approvals are required), an up-to-date base (`strict: true`), and admin enforcement off (`enforce_admins.enabled: false`). `dev` requires three status checks: `Commit trailers` (app_id: 15368), `Generated files guard` (app_id: 15368), and `Component merge gate` (app_id: 15368). `Pantheon canonical review gate` is not a required check on `dev` or `main`. The `main` branch protection (`gh api repos/ajoe734/execute-plans/branches/main/protection`) likewise enforces a pull request with zero approvals required (`required_approving_review_count: 0`), an up-to-date base (`strict: true`), admin enforcement off (`enforce_admins.enabled: false`), and three required status checks: `Commit trailers` (app_id: 15368), `Generated files guard` (app_id: 15368), and `Smoke acceptance` (app_id: 15368); the latter is emitted only after `Component merge gate` succeeds, so it cannot weaken the underlying gate. Force push (`allow_force_pushes.enabled: false`) and branch deletion (`allow_deletions.enabled: false`) remain blocked.
 
 ### 6.1 Canonical Review Gate
+
+> **Status note (`review_gate.github_review_bridge_required: false`):** The shared verifier (`scripts/git/canonical_review_gate_ci.py`) in `ajoe734/pantheon` publishes no status while the policy `review_gate.github_review_bridge_required` is `false` (it logs a workflow notice, makes no GitHub API call, and exits `0`), and task-store exact-head approval is the merge authority. See `docs/conventions/GIT_WORKFLOW.md` (§7.2) in `ajoe734/pantheon` for the operator decision and restore steps.
+
+When `review_gate.github_review_bridge_required` is `true`, the following mechanism applies:
 
 The canonical review gate (`.github/workflows/pantheon-canonical-review-gate.yml`) runs
 via `pull_request_target` (executing trusted base wrapper code) on `dev` and `main` branches
