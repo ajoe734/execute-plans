@@ -264,4 +264,15 @@ describe("Pack PM-i18n parity", () => {
     expect(enKeys.has("mgmt.pulse.sharpeShortSampleCaption")).toBe(true);
     expect(zhKeys.has("mgmt.pulse.sharpeShortSampleCaption")).toBe(true);
   });
+
+  it("includes alerts page empty and unavailable keys in both locales", () => {
+    expect(enKeys.has("page.alertsEmpty")).toBe(true);
+    expect(zhKeys.has("page.alertsEmpty")).toBe(true);
+    expect(enKeys.has("page.alertsUnavailable")).toBe(true);
+    expect(zhKeys.has("page.alertsUnavailable")).toBe(true);
+    expect(en.page.alertsEmpty).toBe("No active alerts.");
+    expect(zh.page.alertsEmpty).toBe("目前沒有警報。");
+    expect(en.page.alertsUnavailable).toBe("Alerts are temporarily unavailable.");
+    expect(zh.page.alertsUnavailable).toBe("暫時無法取得警報資料。");
+  });
 });

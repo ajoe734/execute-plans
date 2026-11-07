@@ -1219,6 +1219,8 @@ export default {
   page: {
     jobsSubtitle: "工作佇列：追蹤 jobs / workflow 的執行狀態；載入頁面後新增 {{count}} 筆串流事件。",
     alertsSubtitle: "原始警報：monitor 或 threshold 直接觸發的 raw signal。確認代表接手；需要跨人協調時升級為事件。",
+    alertsEmpty: "目前沒有警報。",
+    alertsUnavailable: "暫時無法取得警報資料。",
     incidentsSubtitle: "事件（Incidents）：已成立且需協調追蹤的正式問題。每個事件設有指揮官與時間軸。",
     approvalsSubtitle: "多階段治理收件匣。高風險動作需輸入確認字串。",
     approvalsPendingEmpty: "目前沒有待處理審批，已決策紀錄請切換至「全部」篩選檢視。",
