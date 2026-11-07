@@ -918,6 +918,8 @@ export default {
   riskCenter: {
     subtitle: "整合資金、策略、Persona、Runtime 與能力的風險視圖。",
     draftsExcluded: "不含草稿策略",
+    archivedPoolsExcluded: "不含已封存資金池",
+    archivedPoolsExcludedWithCount: "不含已封存資金池（已排除 {{count}} 筆）",
     kpi: {
       openIncidents: "未結案事件",
       runtimeWarn: "執行環境警示",

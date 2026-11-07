@@ -310,4 +310,16 @@ describe("Pack PM-i18n parity", () => {
       expect(zhKeys.has(k), `zh missing ${k}`).toBe(true);
     }
   });
+
+  it("includes risk center archived capital pool exclusion keys in both locales", () => {
+    const riskCenterKeys = [
+      "riskCenter.draftsExcluded",
+      "riskCenter.archivedPoolsExcluded",
+      "riskCenter.archivedPoolsExcludedWithCount",
+    ];
+    for (const k of riskCenterKeys) {
+      expect(enKeys.has(k), `en missing ${k}`).toBe(true);
+      expect(zhKeys.has(k), `zh missing ${k}`).toBe(true);
+    }
+  });
 });
