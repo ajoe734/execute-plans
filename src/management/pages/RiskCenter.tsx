@@ -113,11 +113,32 @@ export const RiskCenter = () => {
     };
   }, []);
 
+  const { activePoolsSlice, archivedPoolsExcludedCount } = useMemo(() => {
+    const activeItems: CapitalPool[] = [];
+    let excludedCount = 0;
+    for (const pool of poolsSlice.items) {
+      if (pool.state === "retired") {
+        excludedCount += 1;
+      } else {
+        activeItems.push(pool);
+      }
+    }
+    return {
+      activePoolsSlice: { status: poolsSlice.status, items: activeItems },
+      archivedPoolsExcludedCount: excludedCount,
+    };
+  }, [poolsSlice]);
+
+  const archivedPoolsNote =
+    poolsSlice.status === "ready"
+      ? t("riskCenter.archivedPoolsExcludedWithCount", { count: archivedPoolsExcludedCount })
+      : t("riskCenter.archivedPoolsExcluded");
+
   const data = useMemo(
     () => ({
       strategies: strategiesSlice.items,
       personas: personasSlice.items,
-      pools: poolsSlice.items,
+      pools: activePoolsSlice.items,
       runtimes: runtimesSlice.items,
       tools: toolsSlice.items,
       mcp: mcpSlice.items,
@@ -128,7 +149,7 @@ export const RiskCenter = () => {
     [
       strategiesSlice.items,
       personasSlice.items,
-      poolsSlice.items,
+      activePoolsSlice.items,
       runtimesSlice.items,
       toolsSlice.items,
       mcpSlice.items,
@@ -264,13 +285,19 @@ export const RiskCenter = () => {
             <div className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
               {t("riskCenter.matrix.title")}
             </div>
-            <div className="text-xs text-muted-foreground" data-testid="risk-matrix-drafts-excluded">
-              {t("riskCenter.draftsExcluded")}
+            <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+              <div data-testid="risk-matrix-drafts-excluded">
+                {t("riskCenter.draftsExcluded")}
+              </div>
+              <div data-testid="risk-matrix-archived-pools-excluded">
+                {archivedPoolsNote}
+              </div>
             </div>
           </div>
           <BreachMatrix
             strategiesSlice={strategiesSlice}
-            poolsSlice={poolsSlice}
+            poolsSlice={activePoolsSlice}
+            archivedPoolsNote={archivedPoolsNote}
             runtimesSlice={runtimesSlice}
             toolsSlice={toolsSlice}
           />
@@ -286,7 +313,10 @@ export const RiskCenter = () => {
             <TabsTrigger value="incidents">{t("riskCenter.tab.incidents")}</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="capital" className="mt-4">
+          <TabsContent value="capital" className="mt-4 space-y-2">
+            <div className="text-xs text-muted-foreground" data-testid="risk-capital-archived-pools-excluded">
+              {archivedPoolsNote}
+            </div>
             <DataTable
               rows={data.pools}
               loading={poolsSlice.status === "loading"}
@@ -441,11 +471,13 @@ export const RiskCenter = () => {
 const BreachMatrix = ({
   strategiesSlice,
   poolsSlice,
+  archivedPoolsNote,
   runtimesSlice,
   toolsSlice,
 }: {
   strategiesSlice: DomainSlice<Strategy>;
   poolsSlice: DomainSlice<CapitalPool>;
+  archivedPoolsNote: string;
   runtimesSlice: DomainSlice<Runtime>;
   toolsSlice: DomainSlice<Tool>;
 }) => {
@@ -459,7 +491,7 @@ const BreachMatrix = ({
     },
     {
       key: "capital",
-      label: t("riskCenter.tab.capital"),
+      label: `${t("riskCenter.tab.capital")} (${archivedPoolsNote})`,
       status: poolsSlice.status,
       counts: bucket(poolsSlice.items.map((p) => p.risk)),
     },

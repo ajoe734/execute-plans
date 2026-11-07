@@ -8,6 +8,8 @@ import {
   bffV1,
   managementConsoleReads,
   NON_TERMINAL_INCIDENT_STATUS_FILTER,
+  normalizeCapitalPool,
+  normalizeCapitalPools,
   PAGINATED_LIST_PAGE_SIZE,
   type Alert,
   type ApprovalRequest,
@@ -788,6 +790,309 @@ describe("RiskCenter", () => {
       );
       expect(await screen.findByText("Alpha Evolution Program")).toBeInTheDocument();
       evoRender.unmount();
+    });
+  });
+
+  describe("archived and retired capital pool exclusion (FE-RISK-CENTER-ARCHIVED-POOLS-20261107)", () => {
+    const REAL_CAPITAL_POOL_ROW_KEYS = [
+      "approval_digest",
+      "pool_id",
+      "tenant_id",
+      "name",
+      "owner_id",
+      "owner_type",
+      "status",
+      "created_at",
+      "description",
+      "currency",
+      "budget",
+      "risk_policy_ref",
+      "single_runtime_enforced",
+      "updated_at",
+      "metadata",
+      "idempotent_replay",
+      "id",
+      "capital_pool_id",
+      "risk_limits",
+    ] as const;
+
+    type RealRawCapitalPoolRow = Record<(typeof REAL_CAPITAL_POOL_ROW_KEYS)[number], unknown>;
+
+    function buildRealRawCapitalPoolRow(overrides: {
+      id: string;
+      name: string;
+      status: string | null | undefined;
+      currency?: string;
+      budget?: number | null;
+      single_runtime_enforced?: boolean;
+    }): RealRawCapitalPoolRow {
+      return {
+        approval_digest: "sha256:722683662ad5b1bff909722683662ad5b1bff909722683662ad5b1bff9090000",
+        pool_id: overrides.id,
+        tenant_id: "default",
+        name: overrides.name,
+        owner_id: "persona-722683662ad5b1bff909",
+        owner_type: "persona",
+        status: overrides.status,
+        created_at: "2026-10-18T17:20:36.224810Z",
+        description: null,
+        currency: overrides.currency ?? "TWD",
+        budget: overrides.budget !== undefined ? overrides.budget : null,
+        risk_policy_ref: "policy-default",
+        single_runtime_enforced: overrides.single_runtime_enforced ?? true,
+        updated_at: "2026-10-18T17:20:36.224810Z",
+        metadata: {},
+        idempotent_replay: false,
+        id: overrides.id,
+        capital_pool_id: overrides.id,
+        risk_limits: null,
+      };
+    }
+
+    it("feeds 142 rows with the exact real BFF key set (136 archived, 5 active, 1 suspended) and asserts 6 table rows, matrix capital count of 6, and note count of 136", async () => {
+      const archivedRows: RealRawCapitalPoolRow[] = Array.from({ length: 136 }, (_, idx) =>
+        idx === 0
+          ? buildRealRawCapitalPoolRow({
+              id: "pool-persona-paper-722683662ad5b1bff909",
+              name: "衡岳｜台股 Paper 操盤學習 paper pool",
+              status: "archived",
+              currency: "TWD",
+              budget: null,
+              single_runtime_enforced: true,
+            })
+          : buildRealRawCapitalPoolRow({
+              id: `pool-persona-paper-archived-${idx + 1}`,
+              name: `Archived Persona Paper Pool ${idx + 1}`,
+              status: "archived",
+              currency: "TWD",
+              budget: null,
+              single_runtime_enforced: true,
+            }),
+      );
+
+      const activeRows: RealRawCapitalPoolRow[] = Array.from({ length: 5 }, (_, idx) =>
+        buildRealRawCapitalPoolRow({
+          id: `pool-persona-paper-active-${idx + 1}`,
+          name: `Active Persona Pool ${idx + 1}`,
+          status: "active",
+          currency: "TWD",
+          budget: 1_000_000,
+          single_runtime_enforced: true,
+        }),
+      );
+
+      const suspendedRows: RealRawCapitalPoolRow[] = [
+        buildRealRawCapitalPoolRow({
+          id: "pool-persona-paper-suspended-1",
+          name: "Suspended Persona Pool 1",
+          status: "suspended",
+          currency: "TWD",
+          budget: 500_000,
+          single_runtime_enforced: true,
+        }),
+      ];
+
+      const rawRows: RealRawCapitalPoolRow[] = [...archivedRows, ...activeRows, ...suspendedRows];
+      expect(rawRows).toHaveLength(142);
+
+      const expectedSortedKeys = [...REAL_CAPITAL_POOL_ROW_KEYS].sort();
+      for (const row of rawRows) {
+        expect(Object.keys(row).sort()).toEqual(expectedSortedKeys);
+        expect("state" in row).toBe(false);
+      }
+
+      const normalizedPools = normalizeCapitalPools(rawRows);
+      expect(normalizedPools).toHaveLength(142);
+
+      const poolsSpy = vi.spyOn(bffV1.capitalPools, "list").mockResolvedValue(normalizedPools);
+      vi.spyOn(bffV1.strategies, "listNonDraft").mockResolvedValue([]);
+      vi.spyOn(bffV1.personas, "list").mockResolvedValue([]);
+      vi.spyOn(bffV1.runtimes, "list").mockResolvedValue([]);
+      vi.spyOn(bffV1.tools, "list").mockResolvedValue([]);
+      vi.spyOn(bffV1.mcpServers, "list").mockResolvedValue([]);
+      vi.spyOn(bffV1.skills, "list").mockResolvedValue([]);
+      vi.spyOn(bffV1.alerts, "list").mockResolvedValue([]);
+      vi.spyOn(bffV1.incidents, "list").mockResolvedValue([]);
+
+      renderRiskCenter();
+
+      await waitFor(() => {
+        expect(poolsSpy).toHaveBeenCalledTimes(1);
+      });
+
+      const capitalNote = await screen.findByTestId("risk-capital-archived-pools-excluded");
+      const matrixNote = screen.getByTestId("risk-matrix-archived-pools-excluded");
+      await waitFor(() => {
+        expect(capitalNote).toHaveTextContent("Archived capital pools excluded (136)");
+        expect(matrixNote).toHaveTextContent("Archived capital pools excluded (136)");
+      });
+
+      const capitalMatrixRow = screen.getByTestId("breach-matrix-row-capital");
+      expect(capitalMatrixRow).toHaveTextContent("Capital (Archived capital pools excluded (136))");
+      expect(within(capitalMatrixRow).getByText("6")).toBeInTheDocument();
+      expect(within(capitalMatrixRow).queryByText("142")).not.toBeInTheDocument();
+
+      const tableRows = screen.getAllByRole("row").slice(1); // exclude header row
+      expect(tableRows).toHaveLength(6);
+      for (let i = 1; i <= 5; i += 1) {
+        expect(screen.getByText(`Active Persona Pool ${i}`)).toBeInTheDocument();
+      }
+      expect(screen.getByText("Suspended Persona Pool 1")).toBeInTheDocument();
+      expect(screen.queryByText("衡岳｜台股 Paper 操盤學習 paper pool")).not.toBeInTheDocument();
+
+      await act(async () => {
+        await i18n.changeLanguage("zh-TW");
+      });
+      expect(screen.getByTestId("risk-capital-archived-pools-excluded")).toHaveTextContent(
+        "不含已封存資金池（已排除 136 筆）",
+      );
+      expect(screen.getByTestId("risk-matrix-archived-pools-excluded")).toHaveTextContent(
+        "不含已封存資金池（已排除 136 筆）",
+      );
+    });
+
+    it("keeps pools with status active, suspended, or no status in every view and excludes archived and retired pools from the table, matrix, utilization breach card, and critical/high cards", async () => {
+      const rawActive = buildRealRawCapitalPoolRow({
+        id: "pool-active",
+        name: "Active Pool Kept",
+        status: "active",
+        budget: 1_000_000,
+      });
+      const rawSuspended = buildRealRawCapitalPoolRow({
+        id: "pool-suspended",
+        name: "Suspended Pool Kept",
+        status: "suspended",
+        budget: 1_000_000,
+      });
+      const rawNoStatus = buildRealRawCapitalPoolRow({
+        id: "pool-no-status",
+        name: "No-Status Pool Kept",
+        status: null,
+        budget: 1_000_000,
+      });
+      const rawArchived = buildRealRawCapitalPoolRow({
+        id: "pool-archived",
+        name: "Archived Pool Dropped",
+        status: "archived",
+        budget: 1_000_000,
+      });
+      const rawRetired = buildRealRawCapitalPoolRow({
+        id: "pool-retired",
+        name: "Retired Pool Dropped",
+        status: "retired",
+        budget: 1_000_000,
+      });
+
+      const normActive = normalizeCapitalPool(rawActive)!;
+      const normSuspended = normalizeCapitalPool(rawSuspended)!;
+      const normNoStatus = normalizeCapitalPool(rawNoStatus)!;
+      const normArchived = normalizeCapitalPool(rawArchived)!;
+      const normRetired = normalizeCapitalPool(rawRetired)!;
+
+      expect(normActive.state).toBeUndefined();
+      expect(normSuspended.state).toBe("paused");
+      expect(normNoStatus.state).toBeUndefined();
+      expect(normArchived.state).toBe("retired");
+      expect(normRetired.state).toBe("retired");
+
+      const poolsForView: CapitalPool[] = [
+        { ...normActive, allocated: 1_000_000, utilized: 950_000, risk: "high" },
+        { ...normSuspended, allocated: 1_000_000, utilized: 500_000, risk: "critical" },
+        { ...normNoStatus, allocated: 1_000_000, utilized: 200_000, risk: "low" },
+        { ...normArchived, allocated: 1_000_000, utilized: 990_000, risk: "critical" },
+        { ...normRetired, allocated: 1_000_000, utilized: 980_000, risk: "high" },
+      ];
+
+      vi.spyOn(bffV1.capitalPools, "list").mockResolvedValue(poolsForView);
+      vi.spyOn(bffV1.strategies, "listNonDraft").mockResolvedValue([]);
+      vi.spyOn(bffV1.personas, "list").mockResolvedValue([]);
+      vi.spyOn(bffV1.runtimes, "list").mockResolvedValue([]);
+      vi.spyOn(bffV1.tools, "list").mockResolvedValue([]);
+      vi.spyOn(bffV1.mcpServers, "list").mockResolvedValue([]);
+      vi.spyOn(bffV1.skills, "list").mockResolvedValue([]);
+      vi.spyOn(bffV1.alerts, "list").mockResolvedValue([]);
+      vi.spyOn(bffV1.incidents, "list").mockResolvedValue([]);
+
+      renderRiskCenter();
+
+      await waitFor(() => {
+        expect(screen.getByTestId("risk-capital-archived-pools-excluded")).toHaveTextContent(
+          "Archived capital pools excluded (2)",
+        );
+      });
+
+      // Capital tab table keeps active, suspended, and no-status pools and drops archived + retired
+      const tableRows = screen.getAllByRole("row").slice(1);
+      expect(tableRows).toHaveLength(3);
+      expect(screen.getByText("Active Pool Kept")).toBeInTheDocument();
+      expect(screen.getByText("Suspended Pool Kept")).toBeInTheDocument();
+      expect(screen.getByText("No-Status Pool Kept")).toBeInTheDocument();
+      expect(screen.queryByText("Archived Pool Dropped")).not.toBeInTheDocument();
+      expect(screen.queryByText("Retired Pool Dropped")).not.toBeInTheDocument();
+
+      // Utilization breach card counts only Active Pool Kept (1), not the two retired >90% pools
+      const utilCard = screen.getByTestId("risk-card-utilization");
+      expect(within(utilCard).getByText("1")).toBeInTheDocument();
+
+      // Critical and High object cards count only the non-retired pools (1 critical, 1 high)
+      const criticalCard = screen.getByTestId("risk-card-critical");
+      const highCard = screen.getByTestId("risk-card-high");
+      expect(within(criticalCard).getByText("1")).toBeInTheDocument();
+      expect(within(highCard).getByText("1")).toBeInTheDocument();
+
+      // Breach matrix capital row shows 1 low, 1 high, 1 critical (total 3, excluding the 2 retired pools)
+      const capitalMatrixRow = screen.getByTestId("breach-matrix-row-capital");
+      expect(capitalMatrixRow).toHaveTextContent("Capital (Archived capital pools excluded (2))");
+      expect(within(capitalMatrixRow).getAllByText("1")).toHaveLength(3);
+    });
+
+    it("shows loading state on pending pool read and unavailable state on failed pool read without ever showing 0", async () => {
+      vi.spyOn(bffV1.strategies, "listNonDraft").mockResolvedValue([]);
+      vi.spyOn(bffV1.personas, "list").mockResolvedValue([]);
+      vi.spyOn(bffV1.runtimes, "list").mockResolvedValue([]);
+      vi.spyOn(bffV1.tools, "list").mockResolvedValue([]);
+      vi.spyOn(bffV1.mcpServers, "list").mockResolvedValue([]);
+      vi.spyOn(bffV1.skills, "list").mockResolvedValue([]);
+      vi.spyOn(bffV1.alerts, "list").mockResolvedValue([]);
+      vi.spyOn(bffV1.incidents, "list").mockResolvedValue([]);
+
+      const poolsSpy = vi.spyOn(bffV1.capitalPools, "list").mockReturnValue(new Promise(() => {}));
+
+      const pendingRender = renderRiskCenter();
+
+      const utilCardPending = screen.getByTestId("risk-card-utilization");
+      expect(within(utilCardPending).getByText("Loading…")).toBeInTheDocument();
+      expect(within(utilCardPending).queryByText("0")).not.toBeInTheDocument();
+      expect(screen.getByTestId("risk-capital-archived-pools-excluded")).toHaveTextContent(
+        "Archived capital pools excluded",
+      );
+      expect(screen.getByTestId("risk-capital-archived-pools-excluded").textContent).not.toContain("0");
+      expect(screen.getByTestId("risk-matrix-archived-pools-excluded").textContent).not.toContain("0");
+
+      pendingRender.unmount();
+
+      poolsSpy.mockRejectedValue(new Error("capital pools read failed"));
+      renderRiskCenter();
+
+      const utilCardError = await screen.findByTestId("risk-card-utilization");
+      const criticalCardError = screen.getByTestId("risk-card-critical");
+      const highCardError = screen.getByTestId("risk-card-high");
+      const capitalMatrixRow = screen.getByTestId("breach-matrix-row-capital");
+
+      await waitFor(() => {
+        expect(within(utilCardError).getByText("Unavailable")).toBeInTheDocument();
+        expect(within(criticalCardError).getByText("Unavailable")).toBeInTheDocument();
+        expect(within(highCardError).getByText("Unavailable")).toBeInTheDocument();
+        expect(within(capitalMatrixRow).getAllByText("Unavailable")).toHaveLength(4);
+        expect(screen.getByTestId("data-table-empty")).toHaveTextContent("Unavailable");
+      });
+
+      expect(within(utilCardError).queryByText("0")).not.toBeInTheDocument();
+      expect(within(criticalCardError).queryByText("0")).not.toBeInTheDocument();
+      expect(within(highCardError).queryByText("0")).not.toBeInTheDocument();
+      expect(within(capitalMatrixRow).queryByText("0")).not.toBeInTheDocument();
+      expect(screen.getByTestId("risk-capital-archived-pools-excluded").textContent).not.toContain("0");
+      expect(screen.getByTestId("risk-matrix-archived-pools-excluded").textContent).not.toContain("0");
     });
   });
 });
